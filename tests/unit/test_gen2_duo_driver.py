@@ -575,3 +575,18 @@ def test_party_cursor_reads_the_source_geometry():
     assert FI.party_cursor(as_lua(rows)) == 1
     rows[2][0] = "▶"
     assert FI.party_cursor(as_lua(rows)) is None   # two cursors / an odd row: refused
+
+
+def test_move_list_reads_the_source_geometry_under_the_move_info_box():
+    """The live U1d stall screen (2026-09-23): MoveInfoBox's border overwrote the move Textbox corner."""
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    FI = lua.execute(FAINT_INPUTS.read_text(encoding="utf-8"))
+    screen = [" " * 20] * 12 + ["└─────────┘────────┐", "│   │▶SCRATCH      │", "│   │ LEER         │",
+                                "│   │ -            │", "│   │ -            │", "└───└──────────────┘"]
+    as_lua = lambda rows: lua.table_from([lua.table_from(list(r)) for r in rows])
+    got = FI.move_list(as_lua(screen))
+    assert list(got["items"].values()) == ["SCRATCH", "LEER"] and got["cursor"] == 1 and got["columns"] == 1
+    screen[13], screen[14] = "│   │ SCRATCH      │", "│   │▶LEER         │"   # 1-based rows 14, 15
+    assert FI.move_list(as_lua(screen))["cursor"] == 2
+    screen[13] = "│   │▶SCRATCH      │"
+    assert FI.move_list(as_lua(screen)) is None   # two cursors: refused

@@ -36,7 +36,13 @@
 --]]
 local FI = {}
 FI.UI_KINDS = {"move_menu", "battle_party", "battle_mon_menu"}
-FI.MENU_KINDS = {move_menu=true, battle_mon_menu=true}   -- boxed menus: SG.parse_menu reads them
+FI.MENU_KINDS = {battle_mon_menu=true}   -- boxed: SG.parse_menu reads it
+-- The battle move list, by SOURCE geometry (not the boxed parser: MoveInfoBox is drawn after the move
+-- Textbox and overwrites its top-left corner, live U1d run 2026-09-23). MoveSelectionScreen, battle type:
+-- Textbox at hlcoord 4, 17-NUM_MOVES-1; ListMoves names at hlcoord 6, 17-NUM_MOVES one per row; cursor
+-- w2DMenuCursorInitX 5, rows from 17-NUM_MOVES (C engine/battle/core.asm:5361-5395; G :5074-5107 identical).
+-- 1-based screen: rows 14..17, cursor column 6, names from column 7; an empty slot prints "-".
+FI.MOVE_LIST = {row=14, rows=4, cursor_col=6, name_col=7}
 -- Status moves a Route 29 catch knows at L2-4 (O15 F1/F2: Hoothoot GROWL, Rattata TAIL WHIP; Totodile LEER).
 FI.PASSIVE_MOVES = {"GROWL", "TAIL WHIP", "SAND-ATTACK", "DEFENSE CURL", "FORESIGHT", "LEER", "SPLASH"}
 FI.MAX_BATTLES = 3
@@ -66,6 +72,30 @@ function FI.party_cursor(rows)
         end
     end
     return found
+end
+
+-- Pure: the move list -> {items, cursor, columns=1} or nil (no single ▶ on a named move row).
+function FI.move_list(rows)
+    local g, items, cursor = FI.MOVE_LIST, {}, nil
+    for i = 0, g.rows - 1 do
+        local row = rows[g.row + i]
+        if type(row) ~= "table" then return nil end
+        local name = {}
+        for x = g.name_col, #row do
+            local cell = row[x]
+            if cell == "│" or (cell == " " and (row[x + 1] == " " or row[x + 1] == "│")) then break end
+            name[#name + 1] = cell
+        end
+        local label = table.concat(name)
+        if label == "" or label == "-" then break end   -- ListMoves: the moves end at the first "-"
+        items[#items + 1] = label
+        if row[g.cursor_col] == "▶" then
+            if cursor then return nil end
+            cursor = #items
+        end
+    end
+    if not cursor then return nil end
+    return {items=items, cursor=cursor, columns=1}
 end
 
 -- Pure point -> buttons, phase. point adds: fainted, active_slot, party_hp (0-based slot -> hp), party_cursor.
@@ -188,6 +218,11 @@ function FI.new(ctx, SG, F, opts)
         local party = ctx.reads.read_party()
         for _, m in ipairs(party and party.mons or {}) do point.party_hp[m.slot] = m.hp end
         if point.ui and point.ui.kind == "battle_party" then point.party_cursor = FI.party_cursor(SG.screen(ctx)) end
+        if point.ui and point.ui.kind == "move_menu" then
+            local list = FI.move_list(SG.screen(ctx))
+            if list then point.ui.items, point.ui.cursor, point.ui.columns = list.items, list.cursor, list.columns
+            else point.input_ready = false end
+        end
         return point
     end
     local budget = F.BUDGET
