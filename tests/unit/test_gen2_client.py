@@ -1020,17 +1020,20 @@ def falsify_production(check, swaps):
         check(production(swaps=swaps))
 
 
-def test_production_registers_exactly_the_u1_proven_sites_and_the_u2_kinds():
-    world = production()
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_production_registers_exactly_the_u1_proven_sites_and_the_u2_kinds(title):
+    world = production(title)
     parts = world.parts
     assert parts.production_admitted is True and parts.qualification == "PHYSICAL_RECEIPTED"
-    proven = json.loads((RECEIPTS / "crystal.engine_sites.json").read_text())["proven"]
+    assert parts.title == title and parts.data.admission.gate.state == "ADMITTED"
+    proven = json.loads((RECEIPTS / f"{title}.engine_sites.json").read_text())["proven"]
     status = world.client.signals.status(world.client.signals)
     assert status.evidence_level == "PHYSICAL" and status.runtime_authorized is True
     assert sorted(status.registered_sites.values()) == sorted(proven)
     assert sorted(parts.write_scope.kinds.keys()) == ["box_deposit", "party_hp"]
-    pc = CHECKPOINT["crystal"]["primary"]["execution_before"]["pc"]
+    pc = CHECKPOINT[title]["primary"]["execution_before"]["pc"]
     assert world.emu.callbacks["SLink-gen2-checkpoint"].addr == pc
+    assert len(world.hello()["party"]) == 1  # the title's own checkpoint hold arms the hello
     world.client.stop(world.client)
     assert world.emu.callbacks["SLink-gen2-checkpoint"] is None
 
@@ -1115,10 +1118,14 @@ def test_production_key_agrees_with_the_python_codec_on_the_same_record():
         'string.format("%04X:%04X:%02X", mon.ot_id, mon.dv_word, mon.species_id)')))
 
 
-@pytest.mark.parametrize("title", ["gold", "silver"])
-def test_gold_and_silver_cartridges_refuse_production(title):
-    with pytest.raises(Refused, match="G1 PENDING"):
-        production(title)
+@pytest.mark.parametrize("title,name,other", [
+    ("silver", "silver.engine_sites.json", "gold.engine_sites.json"),  # U1 is per title
+    ("gold", "gold.engine_sites.json", "silver.engine_sites.json"),
+    ("crystal", "crystal.write_window.json", "gold.write_window.json"),  # only Silver follows Gold's U2
+])
+def test_each_title_admits_only_with_its_own_receipts(title, name, other):
+    with pytest.raises(Refused, match="PHYSICAL proof refused"):
+        production(title, files={f"/receipts/{name}": (RECEIPTS / other).read_text()})
 
 
 @pytest.mark.parametrize("name,path,value", [
@@ -1163,23 +1170,24 @@ end
 """
 
 
-@pytest.mark.parametrize("title", ["crystal", "gold"])
-def test_run_lua_exposes_the_production_client_only_for_an_admitted_cartridge(title):
+@pytest.mark.parametrize("title,artifact", [("crystal", None), ("gold", None), ("silver", None),
+                                            ("crystal", "pokecrystal11")])
+def test_run_lua_exposes_the_production_client_only_for_an_admitted_cartridge(title, artifact):
     """The H1 duo driver's contract: SLINK_GEN2_CLIENT / SLINK_GEN2_PARTS (production_admitted),
-    the client's own onframeend tick; nil for a refused cartridge."""
+    the client's own onframeend tick; nil for a refused cartridge (Crystal 1.1 is BUILD_ONLY)."""
     profile = json.loads((ROOT / f"data/games/gen2_{title}/profile.json").read_text())["titles"][title]
     repo = "pokecrystal" if title == "crystal" else "pokegold"
-    rom = (ROOT / f".cache/gen2-build/{repo}/{profile['artifact']}.gbc").read_bytes()
+    rom = (ROOT / f".cache/gen2-build/{repo}/{artifact or profile['artifact']}.gbc").read_bytes()
     lua = LuaRuntime(unpack_returned_tuples=True)
     logs = lua.table()
     frames, callbacks = lua.execute(RUN_HOST)(rom, ROOT.as_posix(), logs)
     g = lua.globals()
-    if title == "crystal":
+    if artifact is None:
         assert g.SLINK_GEN2_PARTS.production_admitted is True
-        assert g.SLINK_GEN2_PARTS.qualification == "PHYSICAL_RECEIPTED" and g.SLINK_GEN2_PARTS.title == "crystal"
+        assert g.SLINK_GEN2_PARTS.qualification == "PHYSICAL_RECEIPTED" and g.SLINK_GEN2_PARTS.title == title
         assert lua.eval("rawequal")(g.SLINK_GEN2_PARTS.client, g.SLINK_GEN2_CLIENT) and len(frames) == 1
-        assert callbacks["SLink-gen2-checkpoint"] == CHECKPOINT["crystal"]["primary"]["execution_before"]["pc"]
+        assert callbacks["SLink-gen2-checkpoint"] == CHECKPOINT[title]["primary"]["execution_before"]["pc"]
         assert any("PRODUCTION" in line for line in logs.values())
     else:
         assert g.SLINK_GEN2_CLIENT is None and g.SLINK_GEN2_PARTS is None and len(frames) == 0
-        assert any("refused" in line and "PENDING" in line for line in logs.values())
+        assert any("refused" in line and "BUILD_ONLY" in line for line in logs.values())

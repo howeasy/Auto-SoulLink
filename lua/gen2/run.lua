@@ -2,8 +2,8 @@
 --
 -- Builds the graph through Entry.build only: the cartridge must be admitted by its actual
 -- sha1 (G1 ADMITTED, owner ruling O-22, with its U1/U2 PHYSICAL receipts re-validated at
--- load). Today that is Crystal 1.0; Gold/Silver (G1 PENDING), an unknown hash or a non-Gen 2
--- cartridge is refused here with a console line and no client. Everything game-related is
+-- load): Crystal 1.0, Gold, Silver. Anything else (Crystal 1.1, an unknown hash, a non-Gen 2
+-- cartridge) is refused here with a console line and no client. Everything game-related is
 -- built by lua/gen2/entry.lua; this file only supplies the BizHawk-shaped live io, the
 -- LuaSocket transport, the HUD and the frame loop.
 --

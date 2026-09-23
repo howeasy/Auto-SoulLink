@@ -4,8 +4,8 @@
 -- the same MODEL graph (model_only IO, MODEL_PROBE signals, an injected checkpoint).
 -- build is production: admit() passes only a SELECTED, BUILT row whose G1 gate is ADMITTED
 -- (owner ruling O-22) AND whose shipped PHYSICAL receipts re-validate now (U1 engine sites,
--- U2 write windows, each bound to its committed fixture-qualification report). Today that
--- is Crystal 1.0 only; Gold/Silver stay G1 PENDING and ship no receipts.
+-- U2 write windows, each bound to its committed fixture-qualification report): Crystal 1.0,
+-- Gold and Silver (O-22; Silver's U2 is Gold's receipt, O-23). Crystal 1.1 stays BUILD_ONLY.
 -- Either graph stays runtime_started=false until client:start().
 local Entry = {}
 
@@ -79,6 +79,25 @@ Entry.RECEIPT_FILES = {
         qualifications={
             crystal_battle="data/games/gen2_crystal/receipts/crystal_battle.qualification.json",
             crystal_town="data/games/gen2_crystal/receipts/crystal_town.qualification.json",
+        },
+    },
+    gen2_gold={
+        engine_sites="data/games/gen2_gold/receipts/gold.engine_sites.json",
+        write_window="data/games/gen2_gold/receipts/gold.write_window.json",
+        qualifications={
+            gold_battle="data/games/gen2_gold/receipts/gold_battle.qualification.json",
+            gold_town="data/games/gen2_gold/receipts/gold_town.qualification.json",
+        },
+    },
+    -- O-23: Silver's U2 proof is Gold's write-window receipt (gen2_write_safety M.RECEIPT_TITLE),
+    -- valid only while the checkpoint rows stay identical; its U1 proof is its own.
+    gen2_silver={
+        engine_sites="data/games/gen2_silver/receipts/silver.engine_sites.json",
+        write_window="data/games/gen2_silver/receipts/gold.write_window.json",
+        qualifications={
+            silver_battle="data/games/gen2_silver/receipts/silver_battle.qualification.json",
+            gold_battle="data/games/gen2_silver/receipts/gold_battle.qualification.json",
+            gold_town="data/games/gen2_silver/receipts/gold_town.qualification.json",
         },
     },
 }

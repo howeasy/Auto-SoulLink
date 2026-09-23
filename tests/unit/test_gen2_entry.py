@@ -70,10 +70,11 @@ def test_all_current_generated_pack_files_are_literal_entry_dependencies():
 
 
 @pytest.mark.parametrize("title", ["gold", "silver"])
-def test_built_pending_catalogs_cannot_admit_production(title):
+def test_gold_and_silver_admit_behind_their_own_receipts(title):
     world = World(title)
-    decision, reason = world.entry.admit(world.args())
-    assert decision is None and "BUILT" in reason and "PENDING" in reason
+    decision = world.entry.admit(world.args())
+    assert not isinstance(decision, tuple), decision
+    assert (decision.title, decision.pack, decision.rom_sha1) == (title, f"gen2_{title}", world.profile["rom_sha1"])
     assert world.writes == []
 
 
@@ -90,14 +91,15 @@ def test_crystal_is_admitted_only_behind_its_shipped_receipts():
         end""")
     decision, reason = world.entry.admit(world.args())
     assert decision is None and "write_window" in reason
-    assert set(dict(world.entry.RECEIPT_FILES.items())) == {"gen2_crystal"}  # nothing else can be admitted
+    assert set(dict(world.entry.RECEIPT_FILES.items())) == {"gen2_crystal", "gen2_gold", "gen2_silver"}
 
 
-def test_committed_matrices_admit_crystal_alone_under_o22_and_regenerate():
+def test_committed_matrices_admit_all_three_under_o22_and_regenerate():
     gates = {t: json.loads((ROOT / f"data/games/gen2_{t}/admission.json").read_text())["gate"]
              for t in ("crystal", "gold", "silver")}
     assert gates == {"crystal": {"id": "G1", "state": "ADMITTED", "authority": "O-22"},
-                     "gold": {"id": "G1", "state": "PENDING"}, "silver": {"id": "G1", "state": "PENDING"}}
+                     "gold": {"id": "G1", "state": "ADMITTED", "authority": "O-22"},
+                     "silver": {"id": "G1", "state": "ADMITTED", "authority": "O-22+O-23"}}
     sys.path.insert(0, str(ROOT / "tools"))
     import gen_gen2_admission as generator
     assert generator.main(["--provenance", str(ROOT / "data/gen2/build_provenance.json"), "--check"]) == 0
@@ -134,9 +136,11 @@ def test_shipped_receipts_are_the_committed_fixture_bytes_and_decode_alike_in_lu
             return [normal(v) for v in value]
         return value
 
-    files = dict(world.entry.RECEIPT_FILES.gen2_crystal.items())
-    paths = [files["engine_sites"], files["write_window"], *dict(files["qualifications"].items()).values()]
-    assert len(paths) == 4
+    paths = []
+    for pack in world.entry.RECEIPT_FILES.values():
+        files = dict(pack.items())
+        paths += [files["engine_sites"], files["write_window"], *dict(files["qualifications"].items()).values()]
+    assert len(paths) == 13
     for rel in paths:
         shipped = ROOT / rel
         assert shipped.read_bytes() == (ROOT / "tests/fixtures/gen2/receipts" / shipped.name).read_bytes(), rel
@@ -169,9 +173,9 @@ def test_candidate_build_wires_existing_read_write_rom_modules_without_activatio
 
 
 def test_production_build_stays_closed_and_candidate_build_is_explicit():
-    world = World("gold")
+    world = World("crystal", "pokecrystal11")
     result, reason = world.entry.build(world.args())
-    assert result is None and "PENDING" in reason
+    assert result is None and "BUILD_ONLY" in reason
     world = World()
     world.image = bytes([world.image[0] ^ 1]) + world.image[1:]
     result, reason = world.entry.build(world.args())

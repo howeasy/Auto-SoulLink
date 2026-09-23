@@ -42,8 +42,8 @@ TITLE_OUTPUTS = {
 RGBDS_BINARIES = ("rgbasm", "rgblink", "rgbfix", "rgbgfx")
 # Owner ruling O-22 (docs/gen2/REVIEW_RECORD.md): a title's G1 gate opens only after its U1
 # engine-site and U2 write-window receipts pass PHYSICAL (data/games/<pack>/receipts/).
-# Gold/Silver have no U1 receipt yet: they stay PENDING.
-G1_ADMITTED = {"crystal": "O-22"}
+# O-23: Silver's U2 gate is Gold's write-window receipt while the checkpoint rows stay identical.
+G1_ADMITTED = {"crystal": "O-22", "gold": "O-22", "silver": "O-22+O-23"}
 
 
 def _gate(title: str, built: bool) -> dict:
