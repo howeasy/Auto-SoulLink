@@ -1,4 +1,4 @@
-# Gen 2 implementation resume (updated 2026-09-23, session 7: FIRST PHYSICAL Gen 2 DUO PASS (C<->C link); all three titles in production; paused for compaction)
+# Gen 2 implementation resume (updated 2026-09-23, session 8: ALL THREE O-16 PAIRS LINKED PHYSICALLY (C<->C, G<->S, C<->G); next = the gen2_faint duo = first physical production WRITE)
 
 ## Who coordinates
 
@@ -38,7 +38,44 @@ This note summarises it; it is not a second ledger.
   COMMITTED fixture with its original played receipt (no replay); `run_fixtures.py` (session scratchpad;
   replay + qualify + stage). Staged inputs as in the runbook.
 
-## Done this session (7) — toward the first PHYSICAL Gen 2 duo
+## Done this session (8) — every O-16 pair linked physically
+
+- **MILESTONE `8363d262`: G<->S and C<->G `link` PASS** (first attempt each; drivers PASS, SAVE_WITNESS, PYDEC PASS).
+  G<->S: Gold A 6DB1:C4A6:A3 HOOTHOOT <-> Silver B F5D0:C78C:13 RATTATA. C<->G: Crystal A 354D:B541:13 RATTATA <->
+  Gold B 2B42:C4A6:A3 HOOTHOOT. Receipts `tests/fixtures/gen2/receipts/duo_link_{gs,cg}_*`, registered in
+  `tests/gen2_release_requirements.json` (H4 matrix `python tools/verify_gen2_release.py --duo-matrix`). Run from a
+  detached lane worktree with `.cache/gen2-build` COPIED in (not junctioned); that works for Gen 2.
+- Landed:
+  - `3d6f09d1`: static-canon (OMP), title-independent static area ids.
+  - `f6bb495a`: H1b driver for Gold/Silver.
+  - `0a9eb50e`: H3b pairings `gen2_gold_silver` / `gen2_crystal_gold` (Codex); production route, override removed.
+  - `a1a5f8ea`: H2b oracle, per-side title.
+  - `49a5c69d`: a pre-U5 persisted run is REFUSED (UnsafeGameMigration), because legacy gift/daycare area ids
+    differ from gen2_gsc's.
+  - `abec68c0`: H4 duo matrix.
+  - `55107069`: P3b.8a manifest + extracted-bundle boot + census `docs/gen2/reviews/P3B8_CUTOVER_CENSUS_2026-09-23.md`.
+  - `6cafd2b1`: U3 nit.
+  - `c5275252`: O13 witness test.
+- Reviews: U5 guard APPROVE; U3/U3b APPROVE (214/214).
+- Reviews still open: O16 (cx-4373a801) REQUEST CHANGES on H4 + H2b.
+  - The PYDEC receipt names nothing, so a copy passes.
+  - `fixture_sha256` is unchecked.
+  - Gold and Silver saves are layout-identical.
+  - Fixes are routed: Codex (oracle/lane, H5) and H4b (matrix). The 3 pairs' pydec receipts get re-run after.
+- Gen 1 (owner: "You own Gen1 in the sense you have to make it work in the shared framework YOU created"):
+  - `3941198c` + `a32dc385`: a battle-held force_faint keeps its arrival place ahead of a later memorialize
+    (OMP O12; Gen 3 684bbb7a is the same shape; folds into lua/core at convergence). Gen 2 is not affected.
+  - `44bf25d6`: the Gen 1 SFX gate case A was stale after f6229e77 (notify code 4 = $8F on CHAN8). Live
+    red/blue town PASS.
+- Owner ruling **O-24** (`830289e7`): server-side force_faint repair (re-issue when a DEAD-linked mon shows alive;
+  bounded; dead stays dead). The card is in flight.
+- Owner/Gen 3 ruling: shared layers converge after Gen 3 G4. Don't add lua/core-duplicating modules.
+- Facts: `docs/gen2/reviews/OMP_O15_FAINT_FACTS_2026-09-23.md` (Growl-spam faint, MIN_DAMAGE 2 -> <=7 hits;
+  switch-in route; per-title addresses).
+- **Blocker found for gen2_faint:** production registers only U1-proven sites, and `battle_faint` is not proven.
+  Card U1d (Opus) is proving it live per title.
+
+## Done in session 7 — toward the first PHYSICAL Gen 2 duo
 
 - **U1 PHYSICAL on all three titles**: Crystal `7c08529`, Gold `eac806c`, Silver `92318de`
   (`tests/fixtures/gen2/receipts/{title}.engine_sites.json`; U1-GS `9a2643c7` made the gate per-title; each title
@@ -118,17 +155,19 @@ This note summarises it; it is not a second ledger.
 
 ## Next, in order
 
-1. **MILESTONE REACHED — first PHYSICAL Gen 2 duo PASS** (`bfc7ccc`, clean tree at `9147014d`):
-   `python tools/e2e_duo.py --game gen2_new --scenario link --lane gen2-cc-link --keep-data` -> `link: PASS`. Server
-   linked route_29 A D34C:B541:A3 HOOTHOOT <-> B ACED:AC24:13 RATTATA (alive); both drivers PASS; save-witness +
-   independent link oracle PYDEC PASS. Receipts `tests/fixtures/gen2/receipts/duo_link_cc_{a,b,pydec}_result.txt`.
-   (Run 1 formed the link; oracle over-counted mon_stats -> fixed `855c91e`. Run 2 void: uncommitted U3b edits.)
-2. Reviews: U3/U3b (`1f07f71e`, `3352cab3`: all three titles production) and U5 (`9147014d`: slink.lua routes
-   crystal/gold/silver to gen2/run.lua, server rows -> gen2_gsc, crystal_ap legacy, Gen 2 release manifest) —
-   slink-adapter-guard for U5. Carry from U5: a pre-cutover persisted run keeps Gen2CrystalAdapter silently
-   (state.py:905-913, server.py:1406) -> migration before P3b.8. The duo's process-local routing override can go now.
-3. G<->S duo and the C<->G `link` (O-16) (driver + lane need Gold/Silver battle fixtures in the launch env); OMP
-   static-canon-impl cherry-pick + review; H2b; the H4 lane closure; gen2-M1 Gen 1 duo A/B.
+1. In flight:
+   - U1d `battle_faint` PHYSICAL receipts (needs the emulator lane).
+   - H1c driver + Codex H5 lane/oracle for `gen2_faint` (plus the O16 oracle fixes and lane-scoped result files).
+   - H4b: live-new-gates lane + O16 matrix fixes.
+   - SRV-O24 server force_faint repair.
+2. Then run the live `gen2_faint` duo per pair (the first physical production WRITE: party_faint -> party_hp at the
+   U2 checkpoint). Re-run the `link` pydec receipts under the new note, and register everything in the matrix.
+3. Carries:
+   - P3b.7 scenarios beyond link/faint (ball_gate, boxed_capture, ...; `duo-pairs` stays UNIMPLEMENTED).
+   - P3b.8 deletions wait for the owner (crystal_ap still uses the legacy client/adapter).
+   - `tools/verify_profile_addresses.py` needs its own card.
+   - `test_gen2_adapter.py` REPLACE is pending.
+   - gen2-M1.
 
 ## Runbook (exact commands; run from this worktree root)
 
