@@ -1,0 +1,27 @@
+
+========== scenario: link_gen3 ==========
+[duo] link_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] server up: tcp=61374 http=61375 data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_4a_91z89
+[duo] cleared 5 stale artifact(s) for link_gen3: e2e_link_gen3_a_attempt1_result.txt, e2e_link_gen3_a_result.txt, e2e_link_gen3_b_attempt1_result.txt, e2e_link_gen3_b_result.txt, e2e_link_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=714E23F9:99DE0D8A b=3E7AF532:1C600D89
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): 714E23F9:99DE0D8A <-> 3E7AF532:1C600D89 on route_1, alive
+[duo] SAVE_WITNESS_SHA256 inst=a site=e0c52d3a11518ef4a17b17421b34fbd9ae3263d5f03e793dc631e69c69526a86 file=e0c52d3a11518ef4a17b17421b34fbd9ae3263d5f03e793dc631e69c69526a86 match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=2ed42f3a5d551775341ace952b61f1d21a9fd3bfe95026aeb9d04166de0a3385 file=2ed42f3a5d551775341ace952b61f1d21a9fd3bfe95026aeb9d04166de0a3385 match=true saves=1 counter=4->5 rtc=normalized
+[duo] BAG_BALLS baseline=4 final=3 throws=1 inst=a
+[duo] BAG_BALLS baseline=2 final=1 throws=1 inst=b
+[duo] link: 714E23F9:99DE0D8A <-> 3E7AF532:1C600D89 alive on route_1 and saved once in each party
+[duo] PYDEC: PASS asserted scenario facts
+[duo] link_gen3: a=PASS b=PASS
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\link_gen3_a_gen3_new.jsonl
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\link_gen3_b_gen3_new.jsonl
+
+========== summary ==========
+  link_gen3: PASS (attempt 1 of 3)
