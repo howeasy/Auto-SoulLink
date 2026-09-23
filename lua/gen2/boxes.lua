@@ -209,4 +209,321 @@ function B.new(profile, gate)
     return self
 end
 
+-- ── CartRAM gate + command executor ─────────────────────────────────────────────────────
+-- The U2 write kind a box plan needs: the active sBox (current box) is box_deposit / box_withdraw,
+-- any other sBoxN is backing_box. Active edits revert on a reset before SAVE (Continue's LoadBox);
+-- backing edits are plain SRAM, durable at once (C engine/menus/save.asm:266-296,596-601; G :273,543).
+function B.kind_of(profile, requirements)
+    local span = requirements.before_spans[1]
+    if span.address == profile.derived.active_box_flat then
+        return requirements.operation == "withdraw" and "box_withdraw" or "box_deposit"
+    end
+    return "backing_box"
+end
+
+-- The injected gate B.new commits through: preflight re-proves the held checkpoint for the plan's
+-- kind, the observed box state and the preimage; execute writes the one span behind the shared permit.
+-- p = {Permit, profile, io (read_range/write_u8/bank_valid/domain_size), check(kind), lifetime, provenance}.
+function B.cart_gate(p)
+    local io, profile = p.io, p.profile
+    local d = profile.derived
+    local regions = {{d.active_box_flat, d.active_box_copy_length}}
+    for _, row in ipairs(profile.storage_boxes) do regions[#regions + 1] = {row.flat, row.length} end
+    local permit = p.Permit.new({
+        write_u8 = function(addr, value) io.write_u8(addr, value, "CartRAM") end,
+        domains = {CartRAM = {
+            bounds = function(addr, n)
+                for _, r in ipairs(regions) do if addr >= r[1] and addr + n <= r[1] + r[2] then return true end end
+                return false
+            end,
+            -- ponytail: CartRAM is linear in BizHawk's domain; the held checkpoint is re-proven per span
+            -- in preflight/execute, not per byte (the evaluator re-reads its anchors every call).
+            mapped = function() return true end, pointer_stable = function() return true end}},
+        lifetime = p.lifetime,
+        provenance = p.provenance,
+    })
+    local function wram(source)
+        if io.bank_valid(source.bank, source.address, 1) ~= true then return nil end
+        return io.read_range(source.address, 1, "System Bus")[1]
+    end
+    local gate = {}
+    function gate.preflight(req)
+        local kind = B.kind_of(profile, req)
+        if p.check(kind) ~= true then return nil, "checkpoint refused write kind " .. kind end
+        local s = req.state_sources
+        if wram(s.current_box) ~= req.observed_state.current_box
+           or wram(s.saved_at_least_once) ~= req.observed_state.saved_at_least_once then
+            return nil, "observed box state changed"
+        end
+        if io.domain_size("CartRAM") < 32768 then return nil, "CartRAM smaller than 32 KiB" end
+        for _, span in ipairs(req.before_spans) do
+            local live = io.read_range(span.address, #span.bytes, "CartRAM")
+            for i = 1, #span.bytes do if live[i] ~= span.bytes[i] then return nil, "box preimage changed" end end
+        end
+        return {mapping_qualified=true, domain="CartRAM", domain_size=32768, kind=kind}
+    end
+    function gate.execute(ticket, spans)
+        assert(p.check(ticket.kind) == true, "checkpoint lost before the box write")
+        local span = spans[1]
+        permit:scope("box-" .. ticket.kind, nil, function()
+            permit:write_batch({{domain="CartRAM", addr=span.address, bytes=span.bytes}})
+        end)
+        return {status="written", completed=#span.bytes}
+    end
+    return gate
+end
+
+-- box_mon / party_mon / memorialize as the native PC performs them (C/G engine/pokemon/move_mon.asm):
+-- deposit = RestorePPOfDepositedPokemon (:711-775) then append; withdraw = append the 32-byte record,
+-- CalcMonStats with stat exp (:1402-1618), status 0, HP = max HP (:640-690); RemoveMonFromPartyOrBox
+-- (:1222-1370) compacts the fixed arrays. Party first on withdraw, box first on deposit (Gen 1 order).
+-- A key found both in the party and in a box is a reset-interrupted command: it completes only when
+-- the two records match in full (every byte, PP counts excepted; OT, nickname, species marker) and
+-- refuses otherwise. p = {profile, reads, key(mon), writes (write_party_block), box (B.new), io,
+-- base_stats(species), move_pp(move), mail = {[item]=true}, covers(kind)}. Returns true | nil, why.
+function B.executor(p)
+    local profile, reads, io = p.profile, p.reads, p.io
+    local c, d, ram = profile.constants, profile.derived, profile.ram
+    local MEMORIAL, CAP, STRIDE, NAME = c.NUM_BOXES - 1, c.PARTY_LENGTH, c.PARTYMON_STRUCT_LENGTH, c.NAME_LENGTH
+    local P = {records = CAP + 2, ots = CAP + 2 + CAP * STRIDE}
+    P.nicks = P.ots + CAP * NAME
+    local X = {records = ram.sBoxMon1 - ram.sBox, ots = ram.sBoxMonOTs - ram.sBox, nicks = ram.sBoxMonNicknames - ram.sBox}
+    local function refuse(why) error(why, 0) end
+    local function need(...)
+        for _, kind in ipairs({...}) do
+            if p.covers(kind) ~= true then refuse("unproven write kind " .. kind .. " (no PHYSICAL receipt)") end
+        end
+    end
+    local function wram_byte(name)
+        assert(io.bank_valid(profile.ram_bank[name], ram[name], 1) == true, name .. ": WRAM bank unavailable")
+        return io.read_range(ram[name], 1, "System Bus")[1]
+    end
+    local function from_hex(h)
+        local out = {}
+        for i = 1, #h, 2 do out[#out + 1] = tonumber(h:sub(i, i + 1), 16) end
+        return out
+    end
+    local function find(list, key)
+        local hit
+        for _, m in ipairs(list) do
+            if not m.is_egg and p.key(m) == key then
+                if hit then refuse("ambiguous duplicate key") end
+                hit = m.slot
+            end
+        end
+        return hit
+    end
+    local function party()
+        local r, why = reads.read_party()
+        if not r then refuse("party unreadable: " .. tostring(why)) end
+        return from_hex(r.raw_hex), r.mons
+    end
+    local function load_box(index, cur)
+        local active = index == cur
+        local flat = active and d.active_box_flat or profile.storage_boxes[index + 1].flat
+        local raw = {}
+        for i, b in ipairs(io.read_range(flat, active and d.active_box_copy_length or c.BOX_LENGTH, "CartRAM")) do raw[i] = b end
+        local decoded, why = (active and reads.decode_active_box_block or reads.decode_box_block)(raw)
+        if not decoded then refuse("box " .. (index + 1) .. " unreadable: " .. tostring(why)) end
+        return {index = index, raw = raw, list = decoded.mons, active = active}
+    end
+    local function boxed(key, cur)
+        local found
+        for index = 0, c.NUM_BOXES - 1 do
+            local b = load_box(index, cur)
+            local slot = find(b.list, key)
+            if slot then
+                if found then refuse("ambiguous duplicate boxed key") end
+                b.slot, found = slot, b
+            end
+        end
+        return found
+    end
+    local function state(cur) return {current_box = cur, saved_at_least_once = wram_byte("wSavedAtLeastOnce")} end
+    local function current()
+        local cur, why = reads.read_current_box_num()
+        if cur == nil then refuse("current box unreadable: " .. tostring(why)) end
+        return cur
+    end
+
+    -- 1-based raw accessors: party record i of slot s is praw[P.records + s*STRIDE + i].
+    local function prec(raw, s) local out = {} for i = 1, STRIDE do out[i] = raw[P.records + s * STRIDE + i] end return out end
+    local function pname(raw, base, s) local out = {} for i = 1, NAME do out[i] = raw[base + s * NAME + i] end return out end
+    local function brec(b, s) local out = {} for i = 1, c.BOXMON_STRUCT_LENGTH do out[i] = b.raw[X.records + s * c.BOXMON_STRUCT_LENGTH + i] end return out end
+    local function bname(b, base, s) local out = {} for i = 1, NAME do out[i] = b.raw[base + s * NAME + i] end return out end
+
+    local function same(praw, ps, b)
+        local pr, br = prec(praw, ps), brec(b, b.slot)
+        if praw[2 + ps] ~= b.raw[2 + b.slot] then return false end
+        for i = 1, c.BOXMON_STRUCT_LENGTH do
+            local pp = i > c.MON_PP and i <= c.MON_PP + c.NUM_MOVES
+            if (pp and math.floor(pr[i] / 64) ~= math.floor(br[i] / 64)) or (not pp and pr[i] ~= br[i]) then return false end
+        end
+        local a1, a2 = pname(praw, P.ots, ps), bname(b, X.ots, b.slot)
+        local n1, n2 = pname(praw, P.nicks, ps), bname(b, X.nicks, b.slot)
+        for i = 1, NAME do if a1[i] ~= a2[i] or n1[i] ~= n2[i] then return false end end
+        return true
+    end
+    local function mail(item) return p.mail[item] == true end
+    -- RemoveMonFromPartyOrBox also shifts sPartyMail (:1336-1370); SLink never writes party mail, so a
+    -- removal refuses while the removed mon or any later one holds mail (the native PC refuses mail too).
+    local function no_mail_from(praw, s)
+        for slot = s, praw[1] - 1 do
+            if mail(praw[P.records + slot * STRIDE + c.MON_ITEM + 1]) then
+                refuse("mail holder in the party (party mail is never shifted; T-3)")
+            end
+        end
+    end
+    local function removed(raw, s)
+        local count, out = raw[1], {}
+        for i, b in ipairs(raw) do out[i] = b end
+        out[1] = count - 1
+        for position = s + 2, count + 1 do out[position] = raw[position + 1] end
+        if s == CAP - 1 then
+            out[P.ots + s * NAME + 1] = 255
+        else
+            for _, f in ipairs({{P.records, STRIDE}, {P.ots, NAME}, {P.nicks, NAME}}) do
+                for position = f[1] + s * f[2] + 1, f[1] + (CAP - 1) * f[2] do out[position] = raw[position + f[2]] end
+            end
+        end
+        return out
+    end
+    local function write_party(bytes)
+        p.writes:arm("box-party")
+        local ok, err = pcall(p.writes.write_party_block, p.writes, bytes)
+        p.writes:disarm()
+        if not ok then error(err, 0) end
+    end
+    local function payload(praw, s)
+        local rec = prec(praw, s)
+        local out = {}
+        for i = 1, c.BOXMON_STRUCT_LENGTH do out[i] = rec[i] end
+        for m = 1, c.NUM_MOVES do
+            local move = out[c.MON_MOVES + m]
+            if move == 0 then break end
+            local base, ups = p.move_pp(move), math.floor(out[c.MON_PP + m] / 64)
+            out[c.MON_PP + m] = ups * 64 + base + ups * math.min(math.floor(base / 5), 7)
+        end
+        return {bytes = out, ot = pname(praw, P.ots, s), nickname = pname(praw, P.nicks, s),
+                species_marker = praw[2 + s]}
+    end
+    local function party_record(b)
+        local rec = brec(b, b.slot)
+        local level, species = rec[c.MON_LEVEL + 1], rec[c.MON_SPECIES + 1]
+        local base = p.base_stats(species)
+        local dv1, dv2 = rec[c.MON_DVS + 1], rec[c.MON_DVS + 2]
+        local atk, def, spd, spc = math.floor(dv1 / 16), dv1 % 16, math.floor(dv2 / 16), dv2 % 16
+        local hp_dv = (atk % 2) * 8 + (def % 2) * 4 + (spd % 2) * 2 + spc % 2
+        local function statexp(offset) return rec[offset + 1] * 256 + rec[offset + 2] end
+        local rows = {{base.hp, hp_dv, c.MON_HP_EXP}, {base.attack, atk, c.MON_ATK_EXP},
+                      {base.defense, def, c.MON_DEF_EXP}, {base.speed, spd, c.MON_SPD_EXP},
+                      {base.special_attack, spc, c.MON_SPC_EXP}, {base.special_defense, spc, c.MON_SPC_EXP}}
+        local out = {}
+        for i = 1, STRIDE do out[i] = rec[i] or 0 end
+        out[c.MON_STATUS + 1], out[c.MON_STATUS + 2] = 0, 0
+        for i, row in ipairs(rows) do
+            -- GetSquareRoot: the first b in 1..254 with b*b >= stat exp, else 255.
+            local e, root = statexp(row[3]), 255
+            for b = 1, 254 do if b * b >= e then root = b; break end end
+            local v = math.floor(((row[1] + row[2]) * 2 + math.floor(root / 4)) * level / 100)
+            v = math.min(999, v + (i == 1 and level + 10 or 5))
+            local at = c.MON_MAXHP + (i - 1) * 2
+            out[at + 1], out[at + 2] = math.floor(v / 256), v % 256
+        end
+        out[c.MON_HP + 1], out[c.MON_HP + 2] = out[c.MON_MAXHP + 1], out[c.MON_MAXHP + 2]
+        return out, bname(b, X.ots, b.slot), bname(b, X.nicks, b.slot), b.raw[2 + b.slot]
+    end
+    local function inserted(raw, rec, ot, nick, marker)
+        local n, out = raw[1], {}
+        for i, b in ipairs(raw) do out[i] = b end
+        out[1], out[2 + n], out[3 + n] = n + 1, marker, 255
+        for i = 1, STRIDE do out[P.records + n * STRIDE + i] = rec[i] end
+        for i = 1, NAME do out[P.ots + n * NAME + i], out[P.nicks + n * NAME + i] = ot[i], nick[i] end
+        return out
+    end
+    local function commit(plan) p.box.commit(plan) end
+
+    local ops = {}
+    function ops.deposit(key)
+        local cur = current()
+        local praw, pmons = party()
+        local ps, hit = find(pmons, key), boxed(key, cur)
+        if not ps then
+            if hit then return true end
+            refuse("key not in party")
+        end
+        if praw[1] <= 1 then refuse("last party mon") end
+        if hit then
+            if not hit.active or not same(praw, ps, hit) then refuse("key exists in both party and box") end
+            need("party_collection")
+            no_mail_from(praw, ps)
+            write_party(removed(praw, ps))
+            return true
+        end
+        no_mail_from(praw, ps)
+        local b = load_box(cur, cur)
+        if #b.list >= c.MONS_PER_BOX then refuse("current box full") end
+        need("party_collection", "box_deposit")
+        commit(p.box.plan_deposit(state(cur), cur, b.raw, payload(praw, ps)))
+        write_party(removed(praw, ps))
+        return true
+    end
+    function ops.withdraw(key)
+        local cur = current()
+        local praw, pmons = party()
+        local ps, hit = find(pmons, key), boxed(key, cur)
+        local kind = hit and (hit.active and "box_withdraw" or "backing_box")
+        if ps then
+            if not hit then return true end
+            if not same(praw, ps, hit) then refuse("key exists in both party and box") end
+            need(kind)
+            commit(p.box.plan_withdraw(state(cur), hit.index, hit.raw, hit.slot))
+            return true
+        end
+        if not hit then refuse("key not boxed") end
+        if praw[1] >= CAP then refuse("party full") end
+        local rec, ot, nick, marker = party_record(hit)
+        if mail(rec[c.MON_ITEM + 1]) then refuse("boxed mon holds mail (T-3)") end
+        need("party_collection", kind)
+        write_party(inserted(praw, rec, ot, nick, marker))
+        commit(p.box.plan_withdraw(state(cur), hit.index, hit.raw, hit.slot))
+        return true
+    end
+    function ops.memorialize(key)
+        local cur = current()
+        local praw, pmons = party()
+        local ps, mem = find(pmons, key), load_box(MEMORIAL, cur)
+        mem.slot = find(mem.list, key)
+        if not ps then
+            if mem.slot then return true end
+            refuse("key not in party")
+        end
+        if praw[1] <= 1 then refuse("last party mon") end
+        no_mail_from(praw, ps)
+        if mem.slot then
+            if not same(praw, ps, mem) then refuse("key exists in both party and memorial box") end
+            need("party_collection")
+            write_party(removed(praw, ps))
+            return true
+        end
+        if #mem.list >= c.MONS_PER_BOX then refuse("memorial box full") end
+        need("party_collection", mem.active and "box_deposit" or "backing_box")
+        local st = state(cur)
+        commit(mem.active and p.box.plan_deposit(st, MEMORIAL, mem.raw, payload(praw, ps))
+               or p.box.plan_memorial(st, mem.raw, payload(praw, ps)))
+        write_party(removed(praw, ps))
+        return true
+    end
+
+    local self = {memorial_box = MEMORIAL}
+    for name, fn in pairs(ops) do
+        self[name] = function(key)
+            local ok, result = pcall(fn, key)
+            if ok then return result end
+            return nil, tostring(result)
+        end
+    end
+    return self
+end
+
 return B

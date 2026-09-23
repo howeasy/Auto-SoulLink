@@ -227,3 +227,34 @@ def test_profile_field_or_bank_contradictions_have_no_guessed_fallback():
             del profile["ram"]["wPartyMon1HP"]
         with pytest.raises(LuaError):
             World(profile=profile)
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_party_block_rewrite_covers_exactly_wpartycount_through_the_nicknames(title):
+    """box ops rewrite the whole party collection (count, species list, records, OTs, nicknames):
+    permit operation party_collection, never one byte past wPartyMonNicknamesEnd."""
+    world = World(title)
+    ram = world.profile["ram"]
+    start, end = ram["wPartyCount"], ram["wPartyMonNicknamesEnd"]
+    assert end - start == 428
+    seen = []
+    world.binder = world.lua.eval("dofile")((ROOT / "lua/gen2/writes.lua").as_posix()).new(
+        world.lua.table_from(world.profile, recursive=True),
+        world.lua.eval("function(e, b) return {write_u8=function(a,v,d) return e(a,v,d) end, bank_valid=function(k,a,n) return b(k,a,n) end} end")(
+            world.emit, world.bank_valid),
+        world.lua.eval("dofile")((ROOT / "lua/write_permit.lua").as_posix()),
+        world.lua.eval("""function(seen) return {
+            authorize=function(operation) seen(operation) return true end,
+            pointer_stable=function() return true end,
+            lifetime={capture=function() return 1 end, valid=function() return true end},
+            provenance=function() return {site='MODEL'} end} end""")(seen.append))
+    world.call("arm", "model_block")
+    world.call("write_party_block", world.lua.table(*[i % 256 for i in range(428)]))
+    assert seen == ["party_collection"]
+    assert [a for a, _v, _d in world.writes] == list(range(start, end))
+    world.call("arm", "model_block")
+    for bad in (world.lua.table(*([0] * 427)), world.lua.table(*([0] * 429))):
+        with pytest.raises(LuaError):
+            world.call("write_party_block", bad)
+        world.call("arm", "model_block")
+    assert len(world.writes) == 428

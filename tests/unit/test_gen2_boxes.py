@@ -324,3 +324,304 @@ def test_inspect_only_preflight_succeeds_and_execute_receives_fresh_sealed_copy(
     end""")(w.state)
     assert w.obj.commit(w.plan("memorial", current=0, target=13)).status == "written"
     assert w.state.writes == 1102
+
+
+# ── the box executor (box_mon / party_mon / memorialize) over reads + writes + the CartRAM gate ──
+# SOURCE: C/G engine/pokemon/move_mon.asm SendGetMonIntoFromBox :480-710 (withdraw: CalcMonStats,
+# status 0, HP = max HP; deposit: RestorePPOfDepositedPokemon :711-775), RemoveMonFromPartyOrBox
+# :1222-1370, CalcMonStatC :1424-1618, GetSquareRoot engine/math/get_square_root.asm, ComputeMaxPP
+# engine/items/item_effects.asm:2752-2798. The stat/PP oracle below is independent Python.
+EXEC = r"""
+return function(root, profile, sys, cart, covers, held, base, pp, mail)
+    local Permit = dofile(root .. "/lua/write_permit.lua")
+    local B = dofile(root .. "/lua/gen2/boxes.lua")
+    local io = {cart_ram_linear = true}
+    function io.read_range(a, n, d)
+        local src = d == "CartRAM" and cart or sys
+        local out = {}
+        for i = 1, n do out[i] = src[a + i - 1] end
+        return out
+    end
+    function io.write_u8(a, v, d) (d == "CartRAM" and cart or sys)[a] = v end
+    function io.bank_valid(bank, a, n) return (a < 0xD000 and bank == 0) or (a >= 0xD000 and bank == 1) end
+    function io.domain_size(d) return d == "CartRAM" and 0x8000 or 0x10000 end
+    local reads = assert(dofile(root .. "/lua/gen2/reads.lua").new(profile, io))
+    local lifetime = {capture = function() return 1 end, valid = function() return held() end}
+    local writes = dofile(root .. "/lua/gen2/writes.lua").new(profile, io, Permit, {
+        authorize = function(op) return held() and op == "party_collection" and covers("party_collection") end,
+        pointer_stable = function() return true end, lifetime = lifetime,
+        provenance = function() return {site = "test"} end})
+    local gate = B.cart_gate({Permit = Permit, profile = profile, io = io, lifetime = lifetime,
+        check = function(kind) return held() and covers(kind) end,
+        provenance = function() return {site = "test"} end})
+    local box = B.new(profile, gate)
+    local key = function(m) return string.format("%04X:%04X:%02X", m.dv_word, m.ot_id, m.species_id) end
+    return B.executor({profile = profile, reads = reads, key = key, writes = writes, box = box, io = io,
+        base_stats = function(s) return base end, move_pp = function(m) return pp end, mail = mail,
+        covers = covers})
+end
+"""
+
+
+def mon48(species=25, dvs=0x2AAA, ot=0x1234, level=20, item=0, moves=(33, 45, 0, 0), pp=(3, 0x41, 0, 0),
+          exp=8000, statexp=(100, 200, 300, 400, 500)):
+    raw = bytearray(48)
+    raw[0], raw[1], raw[31] = species, item, level
+    raw[2:6] = bytes(moves)
+    raw[6:8] = ot.to_bytes(2, "big")
+    raw[8:11] = exp.to_bytes(3, "big")
+    for i, value in enumerate(statexp):
+        raw[11 + 2 * i:13 + 2 * i] = value.to_bytes(2, "big")
+    raw[21:23] = dvs.to_bytes(2, "big")
+    raw[23:27] = bytes(pp)
+    raw[34:36], raw[36:38] = (7).to_bytes(2, "big"), (60).to_bytes(2, "big")
+    return bytes(raw)
+
+
+def sqrt_ceil(value):
+    return next((b for b in range(1, 255) if b * b >= value), 255)
+
+
+def oracle_stats(raw, base, level):
+    dvs = int.from_bytes(raw[21:23], "big")
+    atk, dfn, spd, spc = dvs >> 12, (dvs >> 8) & 15, (dvs >> 4) & 15, dvs & 15
+    hp_dv = (atk & 1) << 3 | (dfn & 1) << 2 | (spd & 1) << 1 | (spc & 1)
+    exps = [int.from_bytes(raw[11 + 2 * i:13 + 2 * i], "big") for i in range(5)]
+    rows = [(base[0], hp_dv, exps[0]), (base[1], atk, exps[1]), (base[2], dfn, exps[2]),
+            (base[3], spd, exps[3]), (base[4], spc, exps[4]), (base[5], spc, exps[4])]
+    out = []
+    for i, (b, dv, e) in enumerate(rows):
+        v = ((b + dv) * 2 + sqrt_ceil(e) // 4) * level // 100
+        out.append(min(999, v + (level + 10 if i == 0 else 5)))
+    return out
+
+
+class Exec:
+    BASE = (45, 49, 65, 45, 65, 65)
+
+    def __init__(self, title="crystal", party=(), boxes=None, current=0, saved=1, kinds=None, pp=35):
+        self.profile = json.loads((ROOT / f"data/games/gen2_{title}/profile.json").read_text())["titles"][title]
+        p, d = self.profile, self.profile["derived"]
+        self.lua = LuaRuntime(unpack_returned_tuples=True)
+        self.sys, self.cart = self.lua.table(), self.lua.table()
+        for a in range(0xC000, 0xE000):
+            self.sys[a] = 0
+        for a in range(0x8000):
+            self.cart[a] = 0
+        self.kinds = set(kinds if kinds is not None else
+                         ("party_collection", "box_deposit", "box_withdraw", "backing_box"))
+        self.held = True
+        self.sys[p["ram"]["wCurBox"]], self.sys[p["ram"]["wSavedAtLeastOnce"]] = current, saved
+        self.poke_sys(p["ram"]["wPartyCount"], self.party_block(list(party)))
+        self.current = current
+        for index in range(14):
+            mons = (boxes or {}).get(index, [])
+            if index == current:
+                self.poke_cart(d["active_box_flat"], self.box_block(mons)[:1102])
+            else:
+                self.poke_cart(p["storage_boxes"][index]["flat"], self.box_block(mons))
+        self.base = self.lua.table_from(dict(zip(
+            ("hp", "attack", "defense", "speed", "special_attack", "special_defense"), self.BASE)))
+        self.ex = self.lua.execute(EXEC)(ROOT.as_posix(), self.lua.table_from(p, recursive=True), self.sys,
+                                         self.cart, lambda k: k in self.kinds, lambda: self.held, self.base, pp,
+                                         self.lua.table_from({0x9E: True}))
+
+    def poke_sys(self, a, data):
+        for i, b in enumerate(data):
+            self.sys[a + i] = b
+
+    def poke_cart(self, a, data):
+        for i, b in enumerate(data):
+            self.cart[a + i] = b
+
+    @staticmethod
+    def names(i):
+        return bytes([0x80 + i, 0x50] + [0] * 9), bytes([0x90 + i, 0x50] + [0] * 9)
+
+    def party_block(self, mons):
+        raw = bytearray(428)
+        raw[0], raw[len(mons) + 1] = len(mons), 255
+        for i, m in enumerate(mons):
+            raw[1 + i] = m[0]
+            raw[8 + 48 * i:56 + 48 * i] = m
+            ot, nick = self.names(m[0] % 16)
+            raw[296 + 11 * i:307 + 11 * i], raw[362 + 11 * i:373 + 11 * i] = ot, nick
+        return raw
+
+    def box_block(self, mons):
+        raw = bytearray([0] * 1104)
+        raw[0], raw[len(mons) + 1] = len(mons), 255
+        for i, m in enumerate(mons):
+            raw[1 + i] = m[0]
+            raw[22 + 32 * i:54 + 32 * i] = m[:32]
+            ot, nick = self.names(m[0] % 16)
+            raw[662 + 11 * i:673 + 11 * i], raw[882 + 11 * i:893 + 11 * i] = ot, nick
+        return raw
+
+    def snapshot(self):
+        return (bytes(self.sys[a] for a in range(0xC000, 0xE000)), bytes(self.cart[a] for a in range(0x8000)))
+
+    def party(self):
+        a = self.profile["ram"]["wPartyCount"]
+        return bytes(self.sys[a + i] for i in range(428))
+
+    def box(self, index):
+        d = self.profile
+        flat = d["derived"]["active_box_flat"] if index == self.current else d["storage_boxes"][index]["flat"]
+        return bytes(self.cart[flat + i] for i in range(1102))
+
+    def run(self, op, m):
+        key = "%04X:%04X:%02X" % (int.from_bytes(m[21:23], "big"), int.from_bytes(m[6:8], "big"), m[0])
+        result = self.ex[op](key)
+        return result if isinstance(result, tuple) else (result, None)
+
+
+def test_box_mon_deposits_into_the_current_box_with_native_pp_and_compacts_the_party():
+    lead, catch = mon48(), mon48(species=19, dvs=0x7AAA, pp=(0x41, 0x02, 0, 0))
+    w = Exec(party=[lead, catch], boxes={0: [mon48(species=16)]})
+    assert w.run("deposit", catch) == (True, None)
+    party, box = w.party(), w.box(0)
+    assert party[0] == 1 and party[1:3] == bytes([25, 255]) and party[8:56] == lead
+    assert box[0] == 2 and box[1:4] == bytes([16, 19, 255])
+    expected = bytearray(catch[:32])
+    expected[23:27] = bytes([0x40 | (35 + 7), 35, 0, 0])   # ComputeMaxPP: base + ups*min(base//5, 7)
+    assert box[54:86] == bytes(expected)
+    assert box[673:684] == Exec.names(19 % 16)[0] and box[893:904] == Exec.names(19 % 16)[1]
+
+
+def test_party_mon_withdraws_from_the_active_box_with_native_stats_full_hp_and_status_0():
+    lead, boxed = mon48(), mon48(species=19, dvs=0xF3C5, level=37)
+    w = Exec(party=[lead], boxes={0: [mon48(species=16), boxed]})
+    assert w.run("withdraw", boxed) == (True, None)
+    party, box = w.party(), w.box(0)
+    assert party[0] == 2 and party[1:4] == bytes([25, 19, 255])
+    record = party[56:104]
+    stats = oracle_stats(boxed, Exec.BASE, 37)
+    assert record[:32] == boxed[:32] and record[32:34] == b"\0\0"
+    assert int.from_bytes(record[34:36], "big") == stats[0]
+    assert [int.from_bytes(record[36 + 2 * i:38 + 2 * i], "big") for i in range(6)] == stats
+    assert box[0] == 1 and box[1:3] == bytes([16, 255])
+
+
+def test_party_mon_from_another_box_writes_only_that_backing_box():
+    lead, boxed = mon48(), mon48(species=19, dvs=0x7AAA)
+    w = Exec(party=[lead], boxes={4: [boxed]}, kinds={"party_collection", "backing_box"})
+    active_before = w.box(0)
+    assert w.run("withdraw", boxed) == (True, None)
+    assert w.box(4)[0] == 0 and w.box(0) == active_before and w.party()[0] == 2
+
+
+def test_memorialize_goes_to_sbox14_or_to_the_active_copy_when_box_14_is_current():
+    lead, dead = mon48(), mon48(species=19, dvs=0x7AAA)
+    w = Exec(party=[lead, dead], kinds={"party_collection", "backing_box"})
+    assert w.run("memorialize", dead) == (True, None)
+    assert w.box(13)[0] == 1 and w.box(13)[1] == 19 and w.party()[0] == 1
+    w = Exec(party=[lead, dead], current=13, kinds={"party_collection", "box_deposit"})
+    assert w.run("memorialize", dead) == (True, None)
+    assert w.box(13)[0] == 1 and w.party()[0] == 1
+
+
+def test_memorialize_after_a_reset_finishes_by_removing_only_the_party_copy():
+    """Reset before save: sBox14 kept the memorial (plain SRAM) while the party reverted. A full-record
+    match completes it with a party-only write; any other record under the same key refuses."""
+    lead, dead = mon48(), mon48(species=19, dvs=0x7AAA)
+    stored = bytearray(dead)
+    stored[23:27] = bytes([35, 0x40 | 42, 0, 0])          # the deposit transform (PP restored, PP Up kept)
+    w = Exec(party=[lead, dead], boxes={13: [bytes(stored)]}, kinds={"party_collection"})
+    cart = w.snapshot()[1]
+    assert w.run("memorialize", dead) == (True, None)
+    assert w.party()[0] == 1 and w.snapshot()[1] == cart
+    other = bytearray(stored)
+    other[1] = 0x10                                       # same key, another held item
+    w = Exec(party=[lead, dead], boxes={13: [bytes(other)]})
+    before = w.snapshot()
+    ok, why = w.run("memorialize", dead)
+    assert ok is None and "both" in why and w.snapshot() == before
+
+
+@pytest.mark.parametrize("op,party,boxes,reason", [
+    ("deposit", "lead", {}, "last party mon"),
+    ("memorialize", "lead", {}, "last party mon"),
+    ("deposit", "mail", {}, "mail"),
+    ("deposit", "two", {0: ["x"] * 20}, "current box full"),
+    ("memorialize", "two", {13: ["x"] * 20}, "memorial box full"),
+    ("withdraw", "six", {0: ["catch"]}, "party full"),
+    ("withdraw", "lead", {}, "key not boxed"),
+])
+def test_refusals_write_nothing(op, party, boxes, reason):
+    lead, catch = mon48(), mon48(species=19, dvs=0x7AAA)
+    mail = mon48(species=19, dvs=0x7AAA, item=0x9E)
+    parties = {"lead": [lead], "two": [lead, catch], "mail": [lead, mail],
+               "six": [lead] + [mon48(species=20 + i, dvs=0x1000 * i) for i in range(5)]}
+    fill = {k: [catch if v == "catch" else mon48(species=40 + i, dvs=0x2000 + i) for i, v in enumerate(vs)]
+            for k, vs in boxes.items()}
+    w = Exec(party=parties[party], boxes=fill)
+    before = w.snapshot()
+    target = mail if party == "mail" else lead if party == "lead" and op != "withdraw" else catch
+    ok, why = w.run(op, target)
+    assert ok is None and reason in why and w.snapshot() == before
+
+
+@pytest.mark.parametrize("op,kind", [("deposit", "box_deposit"), ("withdraw", "box_withdraw"),
+                                     ("withdraw", "backing_box"), ("memorialize", "backing_box"),
+                                     ("deposit", "party_collection")])
+def test_an_unproven_write_kind_refuses_before_any_byte(op, kind):
+    lead, catch = mon48(), mon48(species=19, dvs=0x7AAA)
+    party = [lead] if op == "withdraw" else [lead, catch]
+    boxes = {4 if kind == "backing_box" else 0: [catch]} if op == "withdraw" else {}
+    kinds = {"party_collection", "box_deposit", "box_withdraw", "backing_box"} - {kind}
+    w = Exec(party=party, boxes=boxes, kinds=kinds)
+    before = w.snapshot()
+    ok, why = w.run(op, catch)
+    assert ok is None and kind in why and w.snapshot() == before
+
+
+def test_outside_the_held_checkpoint_nothing_is_written():
+    lead, catch = mon48(), mon48(species=19, dvs=0x7AAA)
+    w = Exec(party=[lead, catch])
+    w.held = False
+    before = w.snapshot()
+    ok, _ = w.run("deposit", catch)
+    assert ok is None and w.snapshot() == before
+
+
+def test_repeats_are_idempotent_and_touch_nothing():
+    lead, catch = mon48(), mon48(species=19, dvs=0x7AAA)
+    w = Exec(party=[lead], boxes={0: [catch]})
+    before = w.snapshot()
+    assert w.run("deposit", catch) == (True, None) and w.snapshot() == before
+    w = Exec(party=[lead, catch])
+    before = w.snapshot()
+    assert w.run("withdraw", catch) == (True, None) and w.snapshot() == before
+
+
+def test_party_mon_after_a_reset_finishes_by_removing_only_the_box_copy():
+    lead, catch = mon48(), mon48(species=19, dvs=0x7AAA)
+    w = Exec(party=[lead, catch], boxes={4: [catch]})
+    party = w.party()
+    assert w.run("withdraw", catch) == (True, None)
+    assert w.box(4)[0] == 0 and w.party() == party
+
+
+@pytest.mark.parametrize("slot", [0, 1, 5])
+def test_party_removal_compacts_like_remove_mon_from_party_or_box(slot):
+    """Records/OTs/nicknames shift through the fixed arrays; removing slot 5 only marks its OT $FF."""
+    mons = [mon48(species=20 + i, dvs=0x1111 * (i + 1)) for i in range(6)]
+    w = Exec(party=mons)
+    before = w.party()
+    assert w.run("deposit", mons[slot]) == (True, None)
+    after = w.party()
+    expect = bytearray(before)
+    expect[0] = 5
+    species = list(before[1:8])
+    del species[slot]
+    expect[1:7] = bytes(species)
+    if slot == 5:
+        expect[296 + 55] = 0xFF
+        expect[6] = 255
+    else:
+        for base, width in ((8, 48), (296, 11), (362, 11)):
+            region = bytearray(before[base:base + 6 * width])
+            region[slot * width:5 * width] = before[base + (slot + 1) * width:base + 6 * width]
+            expect[base:base + 6 * width] = region
+    assert after == bytes(expect)

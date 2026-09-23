@@ -40,10 +40,17 @@ function W.new(profile, io, Permit, policy)
     assert(d.party_struct_size == c.PARTYMON_STRUCT_LENGTH and d.party_capacity == c.PARTY_LENGTH,
            "derived party geometry disagrees with source constants")
     local base, bank = ram.wPartyMons, banks.wPartyMons
-    local length = c.PARTYMON_STRUCT_LENGTH * c.PARTY_LENGTH
-    assert(integer(base, 0xC000, 0xDFFF) and integer(bank, 0, 7), "party WRAM coordinates required")
-    assert((base < 0xD000 and bank == 0 and base + length <= 0xD000)
-           or (base >= 0xD000 and bank >= 1 and base + length <= 0xE000),
+    -- The permit domain is the whole party block wPartyCount..wPartyMonNicknamesEnd (C/G
+    -- ram/wram.asm wPokemonData): the box executor rewrites count, species list, records and names.
+    local block = ram.wPartyCount
+    local block_length = c.PARTY_LENGTH * (c.PARTYMON_STRUCT_LENGTH + c.NAME_LENGTH + c.MON_NAME_LENGTH)
+                         + c.PARTY_LENGTH + 2
+    assert(integer(base, 0xC000, 0xDFFF) and integer(bank, 0, 7) and integer(block, 0xC000, 0xDFFF),
+           "party WRAM coordinates required")
+    assert(base == block + c.PARTY_LENGTH + 2 and banks.wPartyCount == bank
+           and ram.wPartyMonNicknamesEnd == block + block_length, "party block geometry disagrees")
+    assert((block < 0xD000 and bank == 0 and block + block_length <= 0xD000)
+           or (block >= 0xD000 and bank >= 1 and block + block_length <= 0xE000),
            "party storage crosses its declared WRAM bank window")
     for name, offset in pairs({wPartyMon1=0, wPartyMon1Status=c.MON_STATUS, wPartyMon1HP=c.MON_HP}) do
         assert(ram[name] == base + offset and banks[name] == bank, "profile field/bank contradiction: " .. name)
@@ -55,7 +62,7 @@ function W.new(profile, io, Permit, policy)
         write_u8 = io.write_u8,
         domains = {
             ["System Bus"] = {
-                bounds = function(addr, n) return addr >= base and addr + n <= base + length end,
+                bounds = function(addr, n) return addr >= block and addr + n <= block + block_length end,
                 -- Same explicit platform mapping seam as gen2/reads.lua. There is
                 -- no assumed DMG mode, selected WRAM bank or bank-switch fallback.
                 mapped = function(addr, n) return io.bank_valid(bank, addr, n) == true end,
@@ -127,6 +134,16 @@ function W.new(profile, io, Permit, policy)
                 {domain="System Bus", addr=status, bytes={0}},
                 {domain="System Bus", addr=hp, bytes={0, 0}},
             })
+        end)
+    end
+
+    -- The whole party block (box executor, lua/gen2/boxes.lua). The executor composes the block from
+    -- the live read in the same held frame; ownership (receipt kind party_collection) is the policy's.
+    function self:write_party_block(bytes)
+        return gate:guard(function()
+            assert(Permit.sequence_length(bytes, "party block") == block_length, "party block length mismatch")
+            authorized("party_collection", {length=block_length})
+            return gate:write_bytes("System Bus", block, bytes)
         end)
     end
 
