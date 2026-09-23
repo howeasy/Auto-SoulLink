@@ -101,6 +101,29 @@ _LUA_GEN1 = [
     "panel.lua",
 ]
 
+# lua/gen3/ — the rewritten Gen 3 (FRLG) client. run.lua is what lua/slink.lua's Gen 3 route
+# dofiles; everything else is pulled in by entry.lua's composition root (mirrors _LUA_GEN1).
+# shadow_run.lua is P3's observer-only bootstrap (not reachable from a production launcher)
+# and deliberately excluded, same as the Gen 1 manifest excludes nothing analogous to it.
+_LUA_GEN3 = [
+    "run.lua",
+    "entry.lua",
+    "client.lua",
+    "reads.lua",
+    "signals.lua",
+    "writes.lua",
+    "safety.lua",
+    "boxes.lua",
+]
+
+# lua/core/ — the shared client core (session/identity/deferred) Gen 3 binds first (P4 C4-1);
+# Gen 1 re-binds later. lua/gen1/* stays on its own copies until then.
+_LUA_CORE = [
+    "session.lua",
+    "identity.lua",
+    "deferred.lua",
+]
+
 # lua/clients/
 _LUA_CLIENTS = [
     "gen2_crystal_client.lua",
@@ -156,6 +179,22 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
     "gen3_frlge": [
         "gen3_frlge_areas.lua",
         "gen3_frlge_locations.lua",
+        # Read by lua/gen3/entry.lua Entry.PACK_FILES[*].area_map for BOTH gen3 packs (RR is a
+        # FireRed map hack sharing this table): "group:num" -> area id.
+        "area_map.json",
+    ],
+    "gen3_frlg": [
+        # Read by lua/gen3/entry.lua Entry.build: memory profile, engine signal sites (also
+        # read by Entry.admit/admission_table for every pack, so gen3_rr's ship too even on a
+        # gen3_frlg cartridge) and the write checkpoint.
+        "profile.json",
+        "engine_signals.json",
+        "write_checkpoint.json",
+    ],
+    "gen3_rr": [
+        "profile.json",
+        "engine_signals.json",
+        "write_checkpoint.json",
     ],
     "gen4_hgsspt": [
         "gen4_hgsspt_areas.lua",
@@ -354,6 +393,8 @@ def build_release(
     required: list[Path] = (
         [REPO_ROOT / "lua" / f for f in _LUA_ROOT]
         + [REPO_ROOT / "lua" / "gen1" / f for f in _LUA_GEN1]
+        + [REPO_ROOT / "lua" / "gen3" / f for f in _LUA_GEN3]
+        + [REPO_ROOT / "lua" / "core" / f for f in _LUA_CORE]
         + [REPO_ROOT / "lua" / "clients" / f for f in _LUA_CLIENTS]
         + [REPO_ROOT / "lua" / "games" / f for f in _LUA_GAMES]
         + [
@@ -414,6 +455,14 @@ def build_release(
         for fname in _LUA_GEN1:
             zf.write(REPO_ROOT / "lua" / "gen1" / fname, prefix + f"lua/gen1/{fname}")
             print(f"  [added]   {prefix}lua/gen1/{fname}")
+
+        for fname in _LUA_GEN3:
+            zf.write(REPO_ROOT / "lua" / "gen3" / fname, prefix + f"lua/gen3/{fname}")
+            print(f"  [added]   {prefix}lua/gen3/{fname}")
+
+        for fname in _LUA_CORE:
+            zf.write(REPO_ROOT / "lua" / "core" / fname, prefix + f"lua/core/{fname}")
+            print(f"  [added]   {prefix}lua/core/{fname}")
 
         for fname in _LUA_CLIENTS:
             zf.write(REPO_ROOT / "lua" / "clients" / fname, prefix + f"lua/clients/{fname}")

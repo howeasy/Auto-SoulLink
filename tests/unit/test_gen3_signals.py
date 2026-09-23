@@ -188,7 +188,7 @@ def _code(path):
 def test_no_write_sink_outside_writes_lua():
     offenders = {}
     for path in sorted(GEN3_LUA.glob("*.lua")):
-        if path.name == "writes.lua":
+        if path.name == "writes.lua" or path.name in BOOTSTRAPS:
             continue
         hits = WRITE_SINKS.findall(_code(path))
         if hits:

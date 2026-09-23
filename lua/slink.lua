@@ -81,6 +81,56 @@ do
     end
 end
 
+-- ── Gen 3 route ──────────────────────────────────────────────────────────────
+-- FireRed/LeafGreen admitted as pack gen3_frlg by HASH or ANCHORS run under lua/gen3/, the
+-- rewritten client. Header-only admissions (an unpinned cartridge whose header merely says
+-- BPRE/BPGE), Radical Red (gen3_rr, until G5), Emerald, Archipelago and any other GBA
+-- cartridge fall through to game_detect -> the old client exactly as today (owner rulings
+-- 2026-09-23, docs/gen3/PLAN.md §0). `admitted_by ~= "header"` matters: RR carries FireRed's
+-- header code, so an unpinned RR build must not be routed here and refused by the site check.
+--
+-- TODO(lua/gen3/entry.lua): once entry.lua defines Entry.ROUTED (the P5 card that adds
+-- gen3_rr to it), read that instead of the local set below; until then this is the routed
+-- set's one home.
+local _GEN3_ROUTED_PACKS = { gen3_frlg = true }
+do
+    local sys_ok, sys = pcall(function() return emu.getsystemid() end)
+    if sys_ok and sys == "GBA" then
+        -- Admission itself is isolated in a pcall: a refusal (or, defensively, any admission
+        -- error) must fall through to game_detect exactly like an unrecognised cartridge,
+        -- never crash the launcher. The BizHawk-version guard below is deliberately OUTSIDE
+        -- this pcall so it propagates like the Gen 1 route's does.
+        local admit_ok, Entry, admitted = pcall(function()
+            local E = dofile(_dir .. "gen3/entry.lua")
+            if not E then return nil end
+            local function rom_read(off, n)
+                local t = {}
+                for i = 1, n do t[i] = memory.read_u8(off + i - 1, "ROM") end
+                return t
+            end
+            local hash = gameinfo and gameinfo.getromhash and gameinfo.getromhash() or ""
+            local ok_hc, header_code = pcall(E.header_code, rom_read)
+            local a = E.admit({ root = _dir .. "..", json = dofile(_dir .. "json_codec.lua"),
+                                rom_hash = hash, rom_read = rom_read,
+                                header_code = ok_hc and header_code or "" })
+            return E, a
+        end)
+        local routed_set = admit_ok and Entry and (Entry.ROUTED or _GEN3_ROUTED_PACKS) or nil
+        if admit_ok and Entry and admitted and routed_set[admitted.pack]
+           and admitted.admitted_by ~= "header" then
+            -- The engine hooks are only proven on 2.11.x (same guard as the Gen 1 route,
+            -- slink.lua Gen 1 block above).
+            local ver = tostring(client.getversion and client.getversion() or "?")
+            local maj, min = ver:match("^(%d+)%.(%d+)")
+            if not maj or tonumber(maj) * 100 + tonumber(min) < 211 then
+                error("[SLink] BizHawk " .. ver .. " is too old for Gen 3 -- install BizHawk 2.11 or newer", 0)
+            end
+            dofile(_dir .. "gen3/run.lua")
+            return
+        end
+    end
+end
+
 -- Detect which game is loaded
 package.loaded["game_detect"]       = nil
 local game_detect = require("game_detect")
