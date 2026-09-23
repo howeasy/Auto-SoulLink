@@ -714,6 +714,11 @@ play = PL.bind(H, {
 local function warp_to(cp, dir, budget, dest, label)
     local ok, why = play.enter_warp(cp, dir, budget)
     if not ok then G.finish(false, label .. ": warp_failed: " .. tostring(why)); return end
+    -- enter_warp returns once the new map is on the field, which for an exterior door is
+    -- BEFORE the scripted step off the door tile (field_fadetransition.c:357): FR run 25b read
+    -- the Viridian mart door (36,19), not (36,20). Let the player come to rest on the
+    -- destination first; a wrong landing still fails below, just after the budget.
+    play.wait_at(cp, dest.x, dest.y, 120)
     verify_destination(cp, label, dest)
 end
 

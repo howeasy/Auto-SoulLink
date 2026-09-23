@@ -55,7 +55,7 @@ G = {
     finish=function(ok,msg) if not ok then error(msg,0) end end,
     shot=function() end, idle=function() end,
     tap=function() F.taps=F.taps+1; if F.on_tap then F.on_tap() end end,
-    advance=function() F.frame=F.frame+1 end,
+    advance=function() F.frame=F.frame+1; if F.on_frame then F.on_frame() end end,
     pred_ok=function() return true end,
 }
 joypad={set=function() end}
@@ -555,3 +555,18 @@ def test_pc_deposit_preconditions_bind_the_withdraw_cursor(machine, bad):
         put_mon(fake, fake.storage + 4, 100)
     with pytest.raises(LuaError, match="pc_box_cursor|pc_box_slot"):
         mod.pc_deposit_target(mod.owned_snapshot("before"))
+
+
+def test_door_exit_is_judged_after_the_step_off_the_door(machine):
+    # FR run 25b: the map changed while the player still stood on the Viridian mart door
+    # (36,19); the exterior exit's scripted step lands on (36,20) a few frames later.
+    lua, mod, fake = machine
+    dest = mod.DEST["mart_exit"]
+    lua.execute("""
+        D.play.enter_warp=function() return true end
+        F.place(3,1,36,19)
+        local t0=F.frame
+        F.on_frame=function() if F.frame>=t0+20 then F.place(3,1,36,20) end end
+    """)
+    mod.warp_to(fake.cp, "Down", 30, dest, "mart exit")
+    lua.execute("F.on_frame=nil")
