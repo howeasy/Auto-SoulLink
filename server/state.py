@@ -66,10 +66,23 @@ SYNC_COMMANDS = ("party_mon", "box_mon", "memorialize")
 # answer cannot disable drift repair for that key for the rest of the run.
 SYNC_INFLIGHT_RECONCILES = 6
 # Owner ruling O-24: DEATH_COMMANDS have no ack, so a lost one is repaired from the party
-# snapshot instead (_repair_lost_faints).  A delivered death command gets the same
-# SYNC_INFLIGHT_RECONCILES re-issue window (death_inflight), and each key gets at most
-# this many re-issues per incident before the server stops and logs an error.
+# snapshot instead (_repair_lost_faints).  Unit: out-of-battle reconciler passes, one per
+# tick; every Gen 1/2/3 client ticks every 30 frames (~0.5 s).
+#
+# FAINT_REPAIR_RECONCILES is the re-issue window after a death command is delivered.  It is
+# long (~60 s) on purpose: Gen 1 and Gen 2 hold a delivered force_faint OUT of battle until
+# their overworld checkpoint passes, which a player in the PC, a menu or a script can keep
+# closed for a long time.  A short window would spend the budget on a client that is merely
+# waiting.  ~60 s is above any ordinary hold; a longer one costs at most one idempotent
+# duplicate per window, never a wrong kill.
+FAINT_REPAIR_RECONCILES = 120
+# Re-issues per incident before the repair stalls (logged as an error, and listed on the
+# status payload as faint_repair_stalled) ...
 FAINT_REPAIR_BUDGET = 3
+# ... and the stall is a pause, not a verdict: after this cool-down (~5 min) the budget is
+# refilled, so a genuine loss later on (a client that wiped its deferred queue) is still
+# repaired.  A key is never permanently disabled.
+FAINT_REPAIR_COOLDOWN = 600
 
 
 # Not StrEnum: these values are interpolated into JSON, templates and log lines,
@@ -164,11 +177,16 @@ class SoulLinkState:
         # nothing of ours is on the wire, and the hello path re-queues what is still outstanding.
         self.sync_inflight: dict[str, dict[tuple[str, str], int]] = {"a": {}, "b": {}}
         # DEATH_COMMANDS delivered to each player, as {player: {monKey: reconciler_passes_remaining}}.
-        # Same window as sync_inflight, but there is no answer to clear it and it does not count
-        # down during a battle (the client holds an active battler's faint until battle end).
+        # Shaped like sync_inflight, but FAINT_REPAIR_RECONCILES long, there is no answer to clear
+        # it, and it does not count down during a battle (the client holds an active battler's
+        # faint until battle end).
         self.death_inflight: dict[str, dict[str, int]] = {"a": {}, "b": {}}
         # O-24 re-issues spent per key ({player: {monKey: n}}); cleared when the key reads HP 0.
         self.faint_repairs: dict[str, dict[str, int]] = {"a": {}, "b": {}}
+        # Keys whose repair budget is spent, as {player: {monKey: cool-down passes remaining}}.
+        # On the status payload; the budget refills when the cool-down runs out.  All three are
+        # in-memory only: reset/rollback build a fresh state, and a restart re-helloes.
+        self.faint_repair_stalled: dict[str, dict[str, int]] = {"a": {}, "b": {}}
         # Last persistence error, or "" when the most recent save succeeded. Surfaced on the
         # dashboard: a run that has silently stopped saving looks identical to one that is fine.
         self.save_failed: str = ""
@@ -2318,7 +2336,7 @@ class SoulLinkState:
             if c.get("cmd") in SYNC_COMMANDS and c.get("key"):
                 self.sync_inflight[player_id][(c["key"], c["cmd"])] = SYNC_INFLIGHT_RECONCILES
             elif c.get("cmd") in DEATH_COMMANDS and c.get("key"):
-                self.death_inflight[player_id][c["key"]] = SYNC_INFLIGHT_RECONCILES
+                self.death_inflight[player_id][c["key"]] = FAINT_REPAIR_RECONCILES
 
     def _ack_inflight(self, player_id: str, key: str) -> None:
         """Forget every in-flight SYNC_COMMAND for key — the client has answered."""
@@ -2362,34 +2380,49 @@ class SoulLinkState:
     def _repair_lost_faints(self, player_id: str, party: list, in_battle: bool) -> None:
         """Owner ruling O-24: re-issue a DEATH_COMMAND the client never applied.
 
-        The evidence is game-agnostic -- the party snapshot every client sends, `key` and
-        `hp` per mon.  A key there at HP > 0 whose link is not ALIVE is a dead mon walking:
-        either the force_faint was lost, or the player revived it; dead stays dead either
-        way.  Boxed/memorialized mons are not in the snapshot, so they never qualify.
+        On for every generation, as ruled -- there is no per-game switch.  The evidence is
+        the party snapshot every client sends, `key` and `hp` per mon.  A key there at
+        HP > 0 whose link is not ALIVE is a dead mon walking: either the force_faint was
+        lost, or the player revived it (or withdrew a memorialized one); dead stays dead.
+        Only the PARTY is visible: a dead mon in a box never qualifies, so a lost faint on a
+        mon that was then deposited is not repaired here.
+
+        The re-issue is always plain force_faint, even in Explode Mode: the Explosion is a
+        battle-time cue, and both commands leave the mon at zero HP.
 
         Deduped by _has_pending_command: a death command still queued (the snapshot that
-        races the original) or delivered within death_inflight's window is not repeated.
-        The window counts only out-of-battle passes, so a faint the client holds to battle
-        end is not re-sent mid-battle.  Bounded by FAINT_REPAIR_BUDGET per incident.
+        races the original) or delivered within death_inflight's FAINT_REPAIR_RECONCILES
+        window is not repeated.  Only out-of-battle passes count, so a faint held to battle
+        end is not re-sent mid-battle.  FAINT_REPAIR_BUDGET re-issues per incident, then
+        the key stalls (error log + faint_repair_stalled) for FAINT_REPAIR_COOLDOWN passes
+        and its budget refills.
         """
         inflight = self.death_inflight[player_id]
+        spent = self.faint_repairs[player_id]
+        stalled = self.faint_repair_stalled[player_id]
         if not in_battle:
             for key in list(inflight):
                 inflight[key] -= 1
                 if inflight[key] <= 0:
                     del inflight[key]
+            for key in list(stalled):
+                stalled[key] -= 1
+                if stalled[key] <= 0:
+                    del stalled[key]
+                    spent.pop(key, None)
+                    log.warning(f"[{player_id}] {key} faint repair cool-down over — budget refilled")
         if self.run_over:
             return
-        spent = self.faint_repairs[player_id]
         for mon in party:
             key, hp = mon.get("key"), mon.get("hp")
             if not key or not isinstance(hp, (int, float)):
                 continue                      # no hp on the wire = no evidence
             if hp <= 0:
                 spent.pop(key, None)          # the kill landed; a later revive is a new incident
+                stalled.pop(key, None)
                 continue
             entry = self._key_index.get(key)
-            if entry is None or entry.status == LinkStatus.ALIVE:
+            if entry is None or entry.status == LinkStatus.ALIVE or key in stalled:
                 continue
             half = entry.a if player_id == "a" else entry.b
             if half is None or half.key != key or self._is_quarantined(player_id, key):
@@ -2398,10 +2431,10 @@ class SoulLinkState:
                 continue
             n = spent.get(key, 0)
             if n >= FAINT_REPAIR_BUDGET:
-                if n == FAINT_REPAIR_BUDGET:
-                    spent[key] = n + 1        # log the give-up once, not every tick
-                    log.error(f"[{player_id}] {key} is dead but still alive in party after "
-                              f"{FAINT_REPAIR_BUDGET} re-issued force_faint — giving up")
+                stalled[key] = FAINT_REPAIR_COOLDOWN
+                log.error(f"[{player_id}] {key} is dead but still alive in party after "
+                          f"{FAINT_REPAIR_BUDGET} re-issued force_faint — stalled, budget "
+                          f"refills in {FAINT_REPAIR_COOLDOWN} passes")
                 continue
             spent[key] = n + 1
             self.queued_commands[player_id].append(

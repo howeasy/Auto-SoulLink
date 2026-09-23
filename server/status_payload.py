@@ -79,5 +79,6 @@ def empty_status_payload() -> dict:
         "attempts_count": 0,
         "bonus_keys": {"a": [], "b": []},
         "pending_bonus": {"a": [], "b": []},
+        "faint_repair_stalled": {"a": [], "b": []},
         "badge_slugs": [],
     }
