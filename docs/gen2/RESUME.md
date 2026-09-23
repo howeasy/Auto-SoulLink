@@ -1,87 +1,65 @@
-# Gen 2 implementation resume (updated 2026-09-22, third stopping point)
+# Gen 2 implementation resume (updated 2026-09-23, session 4 in progress)
 
 ## Who coordinates
 
-**Claude is the Gen 2 orchestrator** (owner ruling 2026-09-22, confirmed after Codex returned).
-Codex is a worker/reviewer under Claude's dispatch. The coordinator session now works from THIS
-worktree (`gen2-foundation`). Workers in session 3: up to 3 Opus 5.5 / Sonnet / Haiku subagents
-(model set explicitly), OMP live `Gen2-Base` for coding/review, Codex live thread `Gen2-Part2`.
-Only the coordinator edits the sole ledger: the sweep `RC_MASTER_GUIDE.md` checkpoint plus
-`WORKTREE_REGISTER.md`. This note summarises it; it is not a second ledger.
+**Claude is the Gen 2 orchestrator** (owner ruling 2026-09-22). Session 4 coordinator: Claude
+session 5efbb71c, working from THIS worktree. Workers: up to 3 Haiku / Opus 5.5 / Sonnet
+subagents at a time (model set explicitly), OMP live `Gen2-Base` (coding + review, one card at a
+time), Codex live thread **`Gen2-Part2`** (NOT "Gen 3 Part 2", which is the Gen 3 lane; owner
+correction 2026-09-23). Only the coordinator edits the sole ledger:
+`C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md` (checkpoint) and `WORKTREE_REGISTER.md`
+there (the sweep worktree is gone). This note summarises it; it is not a second ledger.
 
-### Codex (`Gen2-Part2`)
+### Peer channels
 
-- It acknowledged the coordinator ruling and works read-only on cards from Claude.
-- **Dispatch channel:** the magi bridge refuses live `request`s to this thread (NO_LIVE_PEER even
-  when listed idle), but `note`s are delivered. Send the whole card as a `note` (with a `queueKey`);
-  Codex replies with one note naming the card. There is no bridge taskId, so no `outcome` call.
-- Codex cards this session: R4 second pass + supplement, R5 (P3a review). D1 was cancelled.
+- **Codex `Gen2-Part2`:** live `request`s are refused (NO_LIVE_PEER); send cards as `note`s with a
+  `queueKey`. Codex's own approval review may block its reply notes to Claude: read its answer with
+  `kind: transcript` (`peer: Gen2-Part2`). Codex implements and reviews; subagents allowed.
+- **OMP `Gen2-Base`:** `request` with `delivery: live, wait: false`; always `outcome` each task.
+- **Subagents** that end their turn waiting on a background pytest show as not running; they wake
+  on completion. Say so rather than calling them active.
 
 ## Where things are
 
-- Implementation: `E:/Google Drive/SLink/.claude/worktrees/gen2-foundation`, branch
-  `codex/gen2-foundation`. HEAD is in the ledger (`source_head`). Nothing pushed since P1
-  (`93ccb8e`); no master merge. Local master moved to `43590d1` (another session, "gen1 live-run
-  fixes"): rebase/merge planning is a pre-merge task.
-- Planning docs: the root checkout's `claude/gen2-planning-kickoff-a18801` (`9c7e7ac`) is
-  historical; THIS file supersedes it. The old planning worktree was deleted (owner, 2026-09-22).
-- ROM dumps and staged/built cartridges live in this worktree (all gitignored): Gen 1 + Gen 2
-  dumps at the root, `patch/build/gen1_pure*.gbc`, `patch/gen1/build/slink_{red,blue}.gb`,
-  `.cache/pret`, `.cache/gen2-build`. The temporary lane worktrees `g1master`/`g2lane` were deleted.
-- Worktrees now: root, `gen1-rby-code-sweep-8d06e2` (ledger), `gen2-foundation`,
-  `gen3-migration-planning-5d8e45`. Consolidation record: `WORKTREE_REGISTER.md` (2026-09-22);
-  archives in `.cache/snapshots/` (root checkout).
+- Branch `codex/gen2-foundation`, not pushed since P1 (`93ccb8e`). Local master (`c411b2f`) is
+  merged INTO the branch (`5d0a41b`, `1ad7fd7`); master itself is 19 ahead of origin, unpushed.
+- **Pinned pret sources are `.cache/gen2-build/{pokecrystal,pokegold}`** (7a7881d / 656583c).
+  `.cache/pret` holds OTHER commits (3438c70 / e78abb8): never cite it.
+- Staged (gitignored): Gen 1/2 dumps at the root; `patch/build/gen1_pure*_overlay.gbc` re-applied
+  from master's UPS (sha1 == `data/purergb/overlay_provenance.json`); `.cache/purergb` is a
+  JUNCTION to the root pinned pureRGB checkout (remove with `os.rmdir` on the junction only).
+  Root `.cache/slink-upr/PokeRandoZX.jar` is the notify-SFX (patch 0009) jar (owner);
+  the old one is `PokeRandoZX-pre0009-2026-09-21.jar`.
+- Uncommitted work under review: per-card patches in `.cache/snapshots/gen2-session4-2026-09-23/`.
 
-## Done (see commit bodies and docs/gen2/reviews/)
+## Done this session (commit bodies + docs/gen2/reviews/ carry the evidence)
 
-Session 3:
-- `9160358` **P3a.1**: every Gen 2 title spelling -> one foundation `gen2_gsc`; legacy adapter
-  routing unchanged until the G3 cutover; 153 pairing-matrix tests. Review R5 (Codex):
-  `R5_P3A_REVIEW_2026-09-22.md`. **P3a.2 (Gen 2 hello conformance) is OPEN.** Coverage map
-  re-pinned to `protocol.md` `ed384146` (`6ed5f35`).
-- `41e3ea5` **R4 fixes (N10)** for `R4_CODEX_REVIEW_2026-09-22.md` (two Codex passes + supplement):
-  inspect gate compares badge fields, reaches the overworld through the qualify boot stage (a
-  CONTINUE confirm screen no longer counts), keeps 100% speed, binds identity to the
-  qualification receipt, validates dump provenance; re-save oracle preserves map-object script
-  pointers, constrains daily flags / RTC flags to source-legal transitions, requires the native
-  re-save witness; a non-+1 frame step abandons the timeline (epoch, queued batches, latches).
-  Finding 2 (phone timers) was REFUTED (unsaved `wMapStatus`). Not yet independently reviewed.
-- `ed6a69f` first-play source check (OMP): **the route cannot answer map-script text boxes**
-  (`PromptButton`/`WaitButton`) or the weekday picker, so a live play stalls at Mom's first text.
-  Card gen2-N11 fixes it before any live play.
-- Owner rulings: legacy `crystal_ap` + ordinary Gen 2 legacy pairing now refused (O-8, recorded
-  at G3a); Gen 1 verification DEFERRED to pre-merge.
+- `5d0a41b` / `1ad7fd7` merge master (one conflict: Gen 1 hook-latch logging re-expressed on the
+  shared `hook_registry` `status()`); the post-merge suite's 30 failures all fixed or explained.
+- `e2586c6` **P3a.2** Gen 2 hello conformance (shared schema, `protocol.md` §8.1); `e09d0a9` cites.
+- `6a55f99` owner ruling **O-21** (Crystal Tin Tower Suicune = `legend_245`) + R6 review record.
+- `f5b23cc` O-21 in the Crystal static pack/adapter (SOURCE only; runtime capture = card N12b);
+  legacy `Gen2CrystalAdapter.encounter_table` reads the pack per hello title.
+- `40d614f` **N14a** (R6 #6 full-chain receipt gate; S2 rewind cancels queued work).
+- `ca0888b` **N15** server: only a MISSING `artifact_kind` defaults to clean.
+- Cross-title areas: only `battle_tower` is Crystal-only (no acquisitions); owner: fine as-is.
 
-Session 2: `0211c7c` N3 review, `acde60f` N3 fixes (BizHawk has no pair registers), `cfbcbba`
-qualification callbacks + `qualify()`, `c03c15f` inspect gate, `f86c061` R3 review, `0f2b3bc`
-R3 fixes, `2df48a0` + `c42061d` fishing (`fishing_water`; OPEN until a fixture fishes).
-Session 1: commits `5824258`..`463bc71` (Gen 1 rebind repaired, Gen 2 reads/wire/tooling/client).
+## In flight / next, in order (the owner check-in is AFTER step 3)
 
-## Physical evidence so far
-
-- Gen 1 at frozen `463bc71`: 8/10 lanes PASS (live-new-gates, inspect-purergb, apex-purergb,
-  live-trade-gates, inspect-purergb-overlay, live-trade-gates-purergb, apex-refusal-purergb,
-  live-gates). duo-pairs / duo-pairs-purergb fail a DIFFERENT random subset each run (loaded:
-  rival_swap+2; quiet: whiteout, pc_ops; idle: ball_gate, admit_randomized, species_clause,
-  poison, rival_swap), and isolated `whiteout_new`+`pc_ops_new` PASS on both master `8f6a986` and
-  the branch: a flake pattern, not a proven regression. Settle before merge (card gen2-M1).
-- No Gen 2 live run yet.
-
-## Next actions, in order
-
-1. **gen2-N11** route origins: add `PromptButton`, `WaitButton` and the weekday-picker loop as
-   route origins answered with A in `lua/tests/gen2_scripted_play.lua` (qualify keeps refusing
-   them), a pure test for script-state observations, real `has_existing_save`. No blind
-   press-A fallback. See `docs/gen2/reviews/OMP_FIRST_PLAY_ASSUMPTIONS_2026-09-22.md`.
-2. Independent review of `41e3ea5` (R4 fixes) and N11.
-3. **gen2-N2** first live Gen 2 play (crystal_town) from a frozen lane worktree, then `qualify()`,
-   then write `tests/fixtures/gen2/receipts/<name>.qualification.json` (the inspect gate needs it;
-   check whether the staged fixture is the candidate or the re-saved copy, see `41e3ea5` body).
-4. **gen2-P3a2** Gen 2 hello conformance + `docs/protocol.md` section 8 answers (Codex is a natural
-   author or reviewer); re-pin the coverage map after any protocol edit.
-5. The other seven fixtures, the live inspect gate run, the Gen 2 duo harness (not started).
-6. Pre-merge: gen2-M1 (Gen 1 duo flake vs regression: whole duo lanes on master vs branch under
-   identical idle conditions) and reconcile with local master `43590d1`.
+1. Commit after review: **N11+N11b** route origins (`PromptButton.input_wait_loop`,
+   `JoyWaitAorB`, `SetDayOfWeek.loop2`, yes/no at `_YesNoBox` so the `PlaceYesNoBox` save prompt
+   is seen; real `has_existing_save`; qualify answers `prompt_button` only in the save phase);
+   **N13** registry read-only site view (no per-hit copy); **N13b** Gen 1/2 signals reject path
+   allocates nothing; **N14c** R7 follow-ups.
+2. After the `lua/gen2/client.lua` commits: re-pin `protocol.md` client cites (+N) and the
+   coverage-map sha; rewrite the §2.2 server.py:1321 note (fixed by `ca0888b`).
+3. **gen2-N2 first live Gen 2 play**: commit N11 first, freeze a lane worktree, junction only
+   `.cache/gen2-build`, `mkdir tests/fixtures/gen2/receipts`, run_play crystal_town (300%), then
+   `qualify()` (100%), stage the CANDIDATE SaveRAM, write the receipt (OMP preflight READY,
+   cx-2e09cd35; budgets unmeasured: a stall costs the 1200 s timeout). **Then stop and check in.**
+4. Queued: N14b strict re-save rules (facts card with Codex); N12b static-capture runtime path
+   (design OMP cx-4f13cf07); gen2-M1 Gen 1 duo A/B after N13/N13b (isolated discriminator master
+   99.3 s vs branch 112.8 s); other fixtures; Gen 2 duo harness.
 
 ## Runbook (exact commands; run from this worktree root)
 
