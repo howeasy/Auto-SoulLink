@@ -867,7 +867,7 @@
      "symbol": "InitWildBattle"
     }
    },
-   "symbols_sha256": "ae040c82552c2b6c63b1194d784fcca1d77876ba32753f412bd3c9e0636144b5"
+   "symbols_sha256": "4ecca508901d939926ce8ebc9ac507ca82d33bb8876ede6ee904a6d380eb6511"
   },
   "puregreen": {
    "addresses": {
@@ -1733,7 +1733,7 @@
      "symbol": "InitWildBattle"
     }
    },
-   "symbols_sha256": "3c9d7cbdfd75d858a71b5812ece65e3ca0bf84017ebf3337adca055d75b5c729"
+   "symbols_sha256": "ca0c1244aa44f490c8d5e49e9a9a1f94ecc7b12c539a9b26679f296336389e8d"
   },
   "purered": {
    "addresses": {
@@ -2599,7 +2599,7 @@
      "symbol": "InitWildBattle"
     }
    },
-   "symbols_sha256": "43e33fe27eb8e9b2c00e71667ac300d6cc2ebde023eac4653cbf579677845641"
+   "symbols_sha256": "d79a02f50aa1a6e6ca6e893a772bec92cecd1d49091411630158bc90578c7adc"
   }
  }
 }
