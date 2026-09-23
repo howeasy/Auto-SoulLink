@@ -50,7 +50,7 @@ U.OBSERVE = 30
 U.BUDGET = {max_frames=60000, max_phase_frames=15000, settle_frames=4}
 U.TEXT_KINDS = {text=true, prompt_button=true, wait_button=true}
 U.MODES = {town="town", battle="battle", reload="town",   -- mode -> required fixture target
-           boxes="battle", boxes_reset="battle", boxes_reload="battle"}
+           boxes="battle", boxes_reset="battle", boxes_reload="battle", hello="battle"}
 U.DIRECTIONS = {{"Up", 0, -1}, {"Left", -1, 0}, {"Down", 0, 1}, {"Right", 1, 0}}
 U.REPULSE = 60
 local fmt = string.format
@@ -380,6 +380,9 @@ function U.main(api, getenv, SG, IG)
             effective_wram_bank=effective_wram_bank,
         })
 
+    if mode == "hello" then
+        return U.hello_main({api=api, ctx=ctx, SG=SG, IG=IG, log=log, check=check, finish=finish, title=title})
+    end
     if U.BOX_MODES[mode] then
         return U.box_main({api=api, ctx=ctx, SG=SG, IG=IG, log=log, check=check, finish=finish, profile=profile,
             mode=mode, Safety=Safety, primary=primary, pack=pack, title=title, evidence=evidence, getenv=getenv,
@@ -933,6 +936,78 @@ function U.box_main(e)
     if mode == "boxes_reload" and played then log("DUMP " .. json.encode(IG.dump(api, profile))) end
     run.result = e.failures() == 0 and "PASS" or "FAIL"
     log("U2_RUN " .. json.encode(run))
+    return finish()
+end
+
+-- ── card gen2-hello-flap: the PRODUCTION client (lua/gen2/run.lua, unmodified) across a wild battle ─────
+-- hello   <title>_battle: arrival, then run.lua is loaded with a counting stand-in transport (always
+--         connected; every line it is handed is recorded) and a no-op HUD, so the production graph hellos
+--         at its own checkpoint hold; then the battle inputs (walk the grass, stay in the battle, RUN).
+--         Evidence: HELLO frames (exactly one), battle frames, and the frames whose frame-end SVBK was not 1
+--         (the known-positive control: the mapping flip that made the client re-hello, C
+--         engine/battle_anims/anim_commands.asm:1413, bg_effects.asm:2562,2589).
+function U.hello_main(e)
+    local api, ctx, SG, IG, log, check, finish = e.api, e.ctx, e.SG, e.IG, e.log, e.check, e.finish
+    local arrived, detail, state = IG.arrive(ctx, SG)
+    if not check("post-CONTINUE overworld arrival", arrived, detail) then
+        state.release()
+        return finish("no arrival")
+    end
+    local lines, frames = {}, {}
+    package.loaded.connector = {init=function() end, pump=function() end, receive=function() return nil end,
+        connected=function() return true end, disconnect=function() end,
+        send=function(line)
+            lines[#lines + 1] = line
+            if line:find('"event":"hello"', 1, true) then frames[#frames + 1] = api.framecount() end
+            return true
+        end}
+    package.loaded.hud = setmetatable({}, {__index=function() return function() end end})
+    SLINK_PLAYER = "a"
+    local loaded, why = pcall(dofile, ctx.root .. "/lua/gen2/run.lua")
+    if not check("production client admitted and started", loaded and SLINK_GEN2_CLIENT ~= nil, why) then
+        state.release()
+        return finish("no client")
+    end
+    local battle_frames, off_bank, battle_hellos = 0, 0, 0
+    local base = SG.qualify_observer(ctx)
+    local driver = U.driver("battle", ctx.facts.maps)
+    local stay = 0
+    local function observe()
+        local point = base()
+        -- the driver's liveness clock: frames since the client's own hello (sent at ITS checkpoint hold)
+        point.accepted = #frames >= 1 and api.framecount() - frames[1] + 1 or 0
+        point.map_status, point.game_paused = 2, 0
+        if integer(point.battle_mode, 1, 255) then
+            battle_frames, stay = battle_frames + 1, stay + 1
+            if api.read_u8(0xFF70, "System Bus") % 8 > 1 then off_bank = off_bank + 1 end
+        end
+        point.window_frames, point.battle_attempted = stay, stay >= 600   -- ~10 s in the battle, then RUN
+        if point.ui and point.ui.kind == "battle_menu" then
+            local menu = SG.parse_menu(SG.screen(ctx), ctx.obs.screen.width, ctx.obs.screen.height, SG.BATTLE_MENU_GRID)
+            if menu then point.ui.items, point.ui.cursor, point.ui.columns = menu.items, menu.cursor, menu.columns
+            else point.input_ready = false end
+        end
+        return point
+    end
+    local idle = {}
+    for _, name in ipairs(SG.BUTTONS) do idle[name] = false end
+    local host = ctx.Host.new({step=SG.button_step(ctx), frame=api.framecount, idle=idle})
+    local played, outcome = pcall(host.run, {name="hello-" .. e.title, terminal=driver.terminal,
+        max_frames=U.BUDGET.max_frames, max_phase_frames=U.BUDGET.max_phase_frames, settle_frames=30,
+        terminal_idle=true}, function()
+            local point = observe()
+            local buttons, phase = driver.step(point)
+            if buttons == nil then error(phase, 0) end
+            return buttons, phase, point
+        end)
+    state.release()
+    if SLINK_GEN2_CLIENT then pcall(function() SLINK_GEN2_CLIENT:stop() end) end
+    local record = {hello_frames=ctx.json.array(frames), sent=#lines, battle_frames=battle_frames,
+                    off_bank_battle_frames=off_bank}
+    log("HELLO_COUNT " .. ctx.json.encode(record))
+    check("walk -> wild battle -> RUN -> overworld", played, not played and outcome or nil)
+    check("the battle ran with WRAMX unmapped at frame end (the flap condition occurred)", off_bank > 0, off_bank)
+    check("exactly one hello across the battle", #frames == 1, #frames)
     return finish()
 end
 

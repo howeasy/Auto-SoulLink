@@ -415,6 +415,24 @@ def test_box_runs(title, emuhawk):  # noqa: F811 - pytest fixture
     print(f"{title}: write kinds {scope['kinds']}")
 
 
+@pytest.mark.parametrize("title", ["crystal"])
+def test_hello_once_across_a_wild_battle(title, emuhawk):  # noqa: F811 - pytest fixture
+    """gen2-hello-flap exit evidence: the unmodified production client (lua/gen2/run.lua) sends exactly one
+    hello across a wild battle whose frame-end SVBK flips off bank 1 (the flap condition, counted)."""
+    from tools import gen2_fixtures
+    spec = gen2_fixtures.BY_NAME[f"{title}_battle"]
+    reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
+              or live.receipt_missing_reason(spec.name))
+    if reason:
+        pytest.skip(reason)
+    fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
+    staged = fixture.read_bytes()
+    _, text = _run(spec, fixture, staged, "hello", f"{title}_hello", "hello-flap")
+    record = live.tag_json(text, "HELLO_COUNT")
+    assert len(record["hello_frames"]) == 1 and record["off_bank_battle_frames"] > 0, record
+    print(f"{title}: {record}")
+
+
 @pytest.fixture(scope="module")
 def emuhawk():
     from gen1_playthrough import EMUHAWK

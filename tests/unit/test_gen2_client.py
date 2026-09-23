@@ -1372,3 +1372,26 @@ def test_an_unproven_write_kind_is_nacked_with_the_kind_and_writes_nothing(cmd, 
     (refusal,) = world.sent(nack)
     assert refusal["key"] == codec_key(other) and "party_collection" in refusal["reason"]
     assert world.written() == []
+
+
+def test_one_hello_across_a_battle_whose_animations_switch_the_wram_bank():
+    """gen2-hello-flap (LIVE2 C<->C reconnect: HELLO_AGAIN every 30-80 frames in a wild battle). Battle
+    animations select SVBK = BANK(wBGPals1) = 5 (C engine/battle_anims/anim_commands.asm:1413,
+    bg_effects.asm:2562,2589); a frame-end read then finds WRAMX unmapped. That is no identity change."""
+    def check(world):
+        world.hello()
+        generation = world.client.hello_session.status(world.client.hello_session).generation
+        world.field("wBattleMode", 1)
+        for _ in range(4):
+            world.emu.wram_bank = 5
+            world.frames(1)
+            world.emu.wram_bank = 1
+            world.frames(3)
+        assert len(world.sent("hello")) == 1
+        assert world.client.hello_session.status(world.client.hello_session).generation == generation
+        world.field("wPlayerID", 0x4321, 2)   # a real identity change still re-hellos
+        world.frames(2)
+        assert len(world.sent("hello")) == 2
+
+    falsify(check, mutant("lua/gen2/client.lua", (
+        "if io.bank_valid(profile.ram_bank.wPlayerID, profile.ram.wPlayerID, 1) ~= true then return end", "")))
