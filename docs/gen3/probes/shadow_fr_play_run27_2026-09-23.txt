@@ -1,0 +1,29 @@
+# FR runs 26-27 (2026-09-23), coordinator lane, FR ROM, observer on
+## run 26 at 78f2a29e from viridian_pc (slink_fr_route1_faint.State): FAIL incidental_battle action menu never came up. The state had been saved MID-BATTLE on the forced send-out party menu -> C3-36
+## run 27a at 4f511a1e from route1_faint (slink_fr_route1_catch.State)
+phase start frame=1 title=firered
+phase resume frame=1 from=route1_faint
+phase field frame=635 map=(3,0)
+phase shadow frame=635 observer started admitted_by=hash
+phase leg-state frame=42855 route1_faint <- E:/Howard/Bizhawk/GBA/State/slink_fr_route1_catch.State
+phase leg-start frame=42855 route1_faint
+RESULT: FAIL route1_faint: the grass loop stalled on Right at (13,38) (stalled)
+## run 27b at 904ad4d3 from route1_faint (slink_fr_route1_catch.State)
+phase start frame=1 title=firered
+phase resume frame=1 from=route1_faint
+phase field frame=635 map=(3,0)
+phase shadow frame=635 observer started admitted_by=hash
+phase leg-state frame=42855 route1_faint <- E:/Howard/Bizhawk/GBA/State/slink_fr_route1_catch.State
+phase leg-start frame=42855 route1_faint
+phase encounter-found frame=43159 route1_faint: cycle 4 mid-step Up at (12,38)
+phase battle-state-saved frame=43159 E:/Howard/Bizhawk/GBA/State/slink_fr_battle.State
+phase fainted frame=45730 playerFaintCounter=1
+phase leg-state-saved frame=45730 route1_faint -> E:/Howard/Bizhawk/GBA/State/slink_fr_route1_faint.State
+phase leg-done frame=45730 route1_faint
+phase leg-start frame=45730 viridian_pc_deposit_withdraw
+phase encounter frame=46418 #1 during step Up at (16,17)
+phase encounter-done frame=48695 #1 resolved at (16,17)
+phase encounter frame=48951 #2 during step Up at (16,7)
+phase encounter-done frame=50867 #2 resolved at (16,7)
+RESULT: FAIL viridian_pc deposit: pc_target: party slot 1 PID was not the single departure
+## 27b note: stuck screenshot shows the PC top menu 'Which PC should be accessed?': the deposit input route never reached box storage, so nothing departed (oracle refused correctly)
