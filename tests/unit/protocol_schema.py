@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import re
 
+from server.adapters import foundation_for_rom_type
+
 KEY_RE = re.compile(r"^[0-9A-F]{4}:[0-9A-F]{4}:[0-9A-F]{2}$|^[0-9A-F]{8}:[0-9A-F]{8}$", re.I)
 HEX_RE = re.compile(r"^(?:[0-9A-Fa-f]{2})*$")
 
@@ -66,6 +68,17 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
 EVENTS["safe"] = ({}, dict(EVENTS["tick"][1]))
 
 ENVELOPE = {"event": "str", "player": "str", "seq": "int"}
+
+# docs/protocol.md §2.1/§2.2 step 1': the hello's pairing fields. The server DERIVES the
+# foundation from rom_type (foundation_for_rom_type -- its own table, reused, not restated) and
+# refuses a declared one that disagrees; a PRESENT artifact_kind must be one of these. Clients
+# of a foundation in HELLO_DECLARES must also send both fields (their clients always do); Gen 3's
+# reference client sends neither (§2.1), so it has no row. Data, not a game_id branch.
+ARTIFACT_KINDS = ("clean", "overlay", "rand", "rand_overlay", "named", "companion")
+HELLO_DECLARES = frozenset({
+    "gen1_rby", "gen1_purergb",  # lua/gen1/client.lua:154, :1567; lua/gen1/entry.lua:395
+    "gen2_gsc",                  # lua/gen2/client.lua:55, :614
+})
 
 # docs/protocol.md §3.2: the `reason` values a client may send; unknown ones are still accepted
 KEY_CHANGE_REASONS = ("nature_change", "evolution", "npc_trade", "trade_undo", "transform", "apex_chip")
@@ -175,7 +188,22 @@ def validate_event(msg: dict, *, strict: bool = False) -> list[str]:
         problems.append("envelope: player must be 'a' or 'b'")
     if problems:
         return problems
-    return _validate("event", msg["event"], EVENTS, msg, extra_ok=not strict)
+    problems = _validate("event", msg["event"], EVENTS, msg, extra_ok=not strict)
+    return problems + _hello_pairing(msg) if msg["event"] == "hello" else problems
+
+
+def _hello_pairing(msg: dict) -> list[str]:
+    rom_type = msg.get("rom_type")
+    derived = foundation_for_rom_type(rom_type) if isinstance(rom_type, str) else None
+    if derived is None:
+        return [f"hello: rom_type {rom_type!r} is not one the server routes"]
+    problems = [f"hello: a {derived} client must declare {f!r}"
+                for f in ("foundation", "artifact_kind") if derived in HELLO_DECLARES and f not in msg]
+    if "foundation" in msg and msg["foundation"] != derived:
+        problems.append(f"hello: foundation {msg['foundation']!r} but rom_type {rom_type!r} is {derived!r}")
+    if "artifact_kind" in msg and msg["artifact_kind"] not in ARTIFACT_KINDS:
+        problems.append(f"hello: artifact_kind {msg['artifact_kind']!r} not in {ARTIFACT_KINDS}")
+    return problems
 
 
 def validate_command(cmd: dict, *, strict: bool = False) -> list[str]:
