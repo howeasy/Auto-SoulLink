@@ -252,9 +252,12 @@ def link_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_save
                                f"{want['species']}/{want['level']} -- altered links.json")
 
     # Nothing else in the persisted document may reference either newly-captured key: a second
-    # occurrence would mean the server accepted something the two saves don't show.
+    # occurrence would mean the server accepted something the two saves don't show. `mon_stats` is
+    # excluded: it is per-mon bookkeeping keyed by every party mon's key (starters included), not an
+    # acceptance (first physical C<->C duo 2026-09-23: the only other hit was mon_stats).
+    accepted_text = json.dumps({k: v for k, v in document.items() if k != "mon_stats"})
     for inst in ("a", "b"):
-        occurrences = raw_links_text.count(decoded[inst]["key"])
+        occurrences = accepted_text.count(decoded[inst]["key"])
         if occurrences != 1:
             raise RuntimeError(f"{inst}: key {decoded[inst]['key']} appears {occurrences} times "
                                f"in links.json, expected exactly once (the formed link) -- the "

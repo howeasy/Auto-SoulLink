@@ -393,6 +393,15 @@ def test_altered_links_json_species_refused(good_case, tmp_path):
         oracles.link_oracle(results, data_dir=data_dir)
 
 
+def test_mon_stats_bookkeeping_for_the_new_keys_is_not_an_extra_acceptance(good_case, tmp_path):
+    """The server keys mon_stats by every party mon (seen on the first physical C<->C duo)."""
+    results, data_dir, decoded = good_case
+    document = json.loads((Path(data_dir) / "links.json").read_text(encoding="utf-8"))
+    document["mon_stats"] = {decoded[i]["key"]: {"kills": 0} for i in ("a", "b")}
+    (Path(data_dir) / "links.json").write_text(json.dumps(document), encoding="utf-8")
+    oracles.link_oracle(results, data_dir=data_dir)
+
+
 def test_duplicate_key_elsewhere_in_links_json_refused(good_case, tmp_path):
     """The server accepted (or leaked) a key the two saves don't independently show twice."""
     results, data_dir, decoded = good_case
