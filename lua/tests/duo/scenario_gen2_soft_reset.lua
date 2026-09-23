@@ -50,10 +50,11 @@ S.GO_FRAMES = 54000
 S.ENABLED_FRAMES = 240        -- writes enabled before the chord (the first live validations)
 S.CHORD_GATE_FRAMES = 3600
 S.RESET_FRAMES = 120
-S.RESET_DELTA = {30, 60}      -- DelayFrames 32 + Init, from the chord's first frame
+S.RESET_DELTA = {30, 60}      -- DelayFrames 32 + Init, from the chord's first frame; measured 38 (C<->C f0ccabf2, C<->G 89013a4d)
 S.WITHHOLD_FRAMES = 600       -- no input while the client withdraws the hello and pauses writes
 S.HELLO_CLEARED_MAX = 180
-S.PAUSE_DELTA = {180, 420}    -- MAX_INVALID validations, 60 frames apart
+S.PAUSE_DELTA = {180, 420}    -- MAX_INVALID validations, 60 frames apart; measured 321 / 317 after the reset (C<->C / C<->G)
+-- measured, not bounded: re-hello (HELLO_AGAIN) 3298 and REBOOTED/WRITES_RESUMED 3328 frames after the reset (both pairs)
 S.RESUME_FRAMES = 600
 S.REHELLO_FRAMES = 1200
 S.PARTNER_FRAMES = 54000
