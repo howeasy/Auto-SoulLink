@@ -1152,3 +1152,34 @@ def test_viridian_pc_recovers_from_a_whiteout_into_its_own_center(machine):
     with pytest.raises(LuaError, match="stop"):
         leg.resume(fake.cp)
     assert fake.paths[1] == "center_heal_spot_to_pc"      # resume starts inside the Center
+
+
+def test_pc_exit_answers_continue_box_with_b_not_a(machine):
+    # FR run 28b: B in storage opens "Continue BOX operations?" (Task_OnBPressed, cursor on
+    # YES); A there keeps the box open, and the old exit loop pressed A forever. pret
+    # pokemon_storage_system_tasks.c:1988-2035: B on the prompt exits.
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000; F.field=false; F.stage='storage'; F.a_in_box=0
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,0)
+        F.w32(0x03005090,0x0808D2BD); F.w8(0x03005090+4,1)
+        G.pred_ok=function(_,name)
+            if name=='script_context_status' or name=='field_controls_locked' then return F.field end
+            return true
+        end
+        F.on_tap=function(button)
+            if F.stage=='storage' and button=='B' then
+                F.stage='prompt'; F.w32(0x03005090,0x0808ECE5); F.w8(F.pcstore,2)
+            elseif F.stage=='prompt' and button=='A' then
+                F.a_in_box=F.a_in_box+1; F.stage='storage'; F.w32(0x03005090,0x0808D2BD); F.w8(F.pcstore,0)
+            elseif F.stage=='prompt' and button=='B' then
+                F.stage='script'; F.w32(0x03005090,0)
+            elseif F.stage=='script' and button=='A' then
+                F.stage='owner'; F.w32(0x03005090,0x0809CC99); F.w8(0x0203ADE4+4,3)
+            elseif F.stage=='owner' and button=='B' then
+                F.stage='field'; F.w32(0x03005090,0); F.w16(0x020370D0,127); F.field=true
+            end
+        end
+    """)
+    assert mod.PC.leave(fake.cp, "exit") is True
+    assert fake.a_in_box == 0 and fake.stage == "field"

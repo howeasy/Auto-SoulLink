@@ -1365,6 +1365,9 @@ local PC_ON_SELECTED = 0x0808D879
 local PC_DEPOSIT_MENU = 0x0808DD89
 local PC_WITHDRAW_MON = 0x0808DC9D
 local PC_RELEASE_MON = 0x0808DECD
+-- Task_OnBPressed (pokemon_storage_system_tasks.c:1988-2035): B in storage asks "Continue BOX
+-- operations?" with the cursor on YES (ShowYesNoWindow(0)); B on that prompt EXITS, A stays.
+local PC_ON_B_PRESSED = 0x0808ECE5
 local PC_MENU_CURSOR = 0x0203ADE4 + 2
 local PC_MENU_MAX_CURSOR = 0x0203ADE4 + 4 -- src/menu.c:9-25
 local PC_RESULT = 0x020370D0 -- sym:231 gSpecialVar_Result, VAR_RESULT
@@ -1623,6 +1626,11 @@ local function leave_storage(cp, label)
         local storage = pc_storage()
         if pc_task(PC_STORAGE_MAIN) and storage and memory.read_u8(storage) == 0 then
             G.tap("B", 3, 13)
+        elseif pc_task(PC_ON_B_PRESSED) then
+            -- the Continue-BOX yes/no: never A (YES keeps the box open; FR run 28b looped here)
+            if storage and memory.read_u8(storage) == 2 then G.tap("B", 3, 13) else G.advance() end
+        elseif pc_task(PC_STORAGE_MAIN) or pc_task(PC_ON_SELECTED) or pc_task(PC_DEPOSIT_MENU) then
+            G.advance()      -- a storage task still owns input: A here would act inside the box
         elseif not G.pred_ok(cp, "script_context_status") then
             G.tap("A", 3, 13) -- PC script's message boxes before the owner list
         else
