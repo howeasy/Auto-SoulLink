@@ -1,0 +1,25 @@
+
+========== scenario: linked_faint_active_gen3 ==========
+[duo] linked_faint_active_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] server up: tcp=61361 http=61362 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_vh21ro9o
+[duo] cleared 7 stale artifact(s) for linked_faint_active_gen3: e2e_linked_faint_active_gen3_a_1_witness.bin, e2e_linked_faint_active_gen3_a_attempt1_result.txt, e2e_linked_faint_active_gen3_a_result.txt, e2e_linked_faint_active_gen3_b_1_witness.bin, e2e_linked_faint_active_gen3_b_attempt1_result.txt, e2e_linked_faint_active_gen3_b_result.txt, e2e_linked_faint_active_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 2D356A90:99DE0D8A <-> BC73F9B0:1C600D89
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] SAVE_WITNESS_SHA256 inst=a site=bdf976876ffa2b23deb2deb36c9be7450d831dc93835de207eef5ad4b973f19c file=bdf976876ffa2b23deb2deb36c9be7450d831dc93835de207eef5ad4b973f19c match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=39af6046c631e88bbadf8fac58884f0e2da88af901cb24c8d026f354678dbe09 file=39af6046c631e88bbadf8fac58884f0e2da88af901cb24c8d026f354678dbe09 match=true saves=1 counter=4->5 rtc=normalized
+[duo] linked_faint_active: engine faint 2D356A90:99DE0D8A -> held active BC73F9B0:1C600D89 -> switched out -> HP 0 in battle; both memorials saved
+[duo] PYDEC: PASS asserted scenario facts
+[duo] linked_faint_active_gen3: a=PASS b=PASS
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\linked_faint_active_gen3_a_gen3_new.jsonl
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\linked_faint_active_gen3_b_gen3_new.jsonl
+
+========== summary ==========
+  linked_faint_active_gen3: PASS (attempt 1 of 1)
