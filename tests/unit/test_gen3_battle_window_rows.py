@@ -135,20 +135,26 @@ class World:
         put(s["gPartyMenu"][0] + 8, menu_type, 1)
         put(s["gPartyMenu"][0] + 9, slot, 1)
         put(s["gPartyMenu"][0] + 11, action, 1)
-        put(s["gPlayerParty"][0] + slot * 100, 0xABCD0000 + slot, 4)
+        put(s["gPlayerParty"][0] + slot * 100, 0xABCD0000 + slot, 4)          # personality
+        put(s["gPlayerParty"][0] + slot * 100 + 4, 0x12340000 + slot, 4)      # otId
         put(s["gBagMenuState"][0] + 4, bag_location, 1)
         put(s["gTrainerBattleOpponent_A"][0], trainer, 2)
 
-    def sample(self, reason="battle_faint"):
-        extra = self.lua.table_from({"map": "3.19", "pos": "12,37"})
+    def sample(self, reason="battle_faint", balls=None):
+        fields = {"map": "3.19", "pos": "12,37"}
+        if balls is not None:
+            fields["balls"] = balls
+        extra = self.lua.table_from(fields)
         return self.ctx.sample(self.ctx, self.safety, reason, None, extra)
 
     def run(self, name, states, reason="battle_faint"):
         """Feed one sample per state dict; return (status, why, acc)."""
         acc = self.R.row(self.ctx, name)
         for st in states:
+            st = dict(st)
+            balls = st.pop("balls", None)
             self.set(**st)
-            self.R.feed(acc, self.sample(reason))
+            self.R.feed(acc, self.sample(reason, balls))
         status, why = self.R.verdict(acc)
         return status, why, acc
 
@@ -364,7 +370,7 @@ def test_n5_voluntary_party_menu(title):
 def test_n6_summary_from_battle_party(title):
     status, why, acc = World(title).run("N6", [summary(title)] * 60)
     assert status == "PASS", why
-    assert acc.first.slot_key == 0xABCD0001
+    assert acc.first.slot_key == "ABCD0001:12340001"          # personality:otId
     assert World(title).run("N6", [summary(title, in_battle=False, pm=(0, 0, 1))] * 60)[0] == "UNREACHED"
     assert World(title).run("N6", [summary(title, in_battle=False)] * 60)[0] == "UNREACHED"   # stale menu
 
@@ -399,7 +405,8 @@ def test_n7_commit_admitted_fails():
             p("firered", "PlayerBufferRunCommand")
         next(c for c in pack["battle"]["clauses"] if c["name"] == "battle_exec_flags_input")["expect"] = 0
     chosen = committed("firered", chosen0=2, ret=(0x22, 1, 0, 1))
-    status, why, _ = World("firered", pack_edit=swap).run("N7", [chosen, dict(chosen, party=(1, 1, 0, 0))])
+    seq = [party_menu("firered"), chosen, dict(chosen, party=(1, 1, 0, 0))]
+    status, why, _ = World("firered", pack_edit=swap).run("N7", seq)
     assert status == "FAIL" and "admitted" in why
 
 
@@ -419,7 +426,7 @@ def test_n8_bag_closed_without_item_is_unreached():
 
 def test_n8_ball_missed_reopens():
     used = committed("firered", chosen0=1, ret=(0x23, 4, 0, 0))
-    status, _, acc = World("firered").run("N8", [used] * 3 + [draw("firered")])
+    status, _, acc = World("firered").run("N8", [bag("firered")] + [used] * 3 + [draw("firered")])
     assert status == "PASS" and acc.st.ended == "reopened"
 
 
@@ -433,7 +440,8 @@ def test_n9_run_commit_then_ran(title):
 
 def test_n9_failed_escape_is_not_ended():
     ran = committed("firered", ret=(0x21, 3, 0, 0))
-    status, why, _ = World("firered").run("N9", [ran] * 4 + [draw("firered")] + [parked("firered")] * 5)
+    status, why, _ = World("firered").run("N9", [parked("firered")] + [ran] * 4 + [draw("firered")]
+                                          + [parked("firered")] * 5)
     assert status == "UNREACHED" and "terminal" in why
 
 
@@ -481,3 +489,85 @@ def test_wrong_reason_samples_fail():
                                                   "ctrl0": p("firered", "HandleInputChooseAction", OAK)}],
                                           reason="battle_commit")
     assert status == "FAIL" and "not taken for battle_faint" in why
+
+
+# ── OMP review fixes (2B-OBS follow-up) ─────────────────────────────────────────────────────
+@pytest.mark.parametrize("title", TITLES)
+def test_n5_faint_replacement_choose_mon_is_not_voluntary(title):
+    """battle_main.c:3117,:3214-3218: NOTHING_FAINTED (13) + PARTY_ACTION_CHOOSE_MON."""
+    assert World(title).run("N5", [party_menu(title, pm=(1, 0, 1), chosen0=13)] * 60)[0] == "UNREACHED"
+    assert World(title).run("N5", [party_menu(title, pm=(1, 1, 1))] * 60)[0] == "UNREACHED"
+    assert "list-waiting frames only" in World(title).R.by_name["N5"].note
+
+
+def test_n8_receipt_carries_the_ball_delta():
+    w = World("firered")
+    used = committed("firered", chosen0=1, ret=(0x23, 4, 0, 0))
+    seq = [bag("firered", balls=5)] * 3 + [dict(used, balls=4)] * 2 + [dict(used, outcome=7, balls=4)]
+    status, why, acc = w.run("N8", seq)
+    assert status == "PASS", why
+    meta = w.lua.table_from({"row": "N8", "hashes": w.lua.table_from(HASHES)})
+    line = w.ctx.receipt(w.ctx, acc.terminal, meta, acc)
+    assert line.endswith("balls_before=5 balls_now=4 ball_delta=-1"), line
+    assert "ball_delta" not in w.ctx.receipt(w.ctx, acc.terminal, meta)        # no acc, no row fields
+
+
+def test_slot_key_is_personality_and_ot_id_in_the_receipt():
+    w = World("firered")
+    w.set(**summary("firered"))
+    line = w.ctx.receipt(w.ctx, w.sample(), w.lua.table_from({"row": "N6", "hashes": w.lua.table_from(HASHES)}))
+    assert "slot_key=ABCD0001:12340001" in line
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_n9_stale_run_return_never_arms(title):
+    ran = committed(title, ret=(0x21, 3, 0, 0))
+    # loaded mid-turn: a stale RUN return with the run-command controller, then outcome RAN
+    status, _, acc = World(title).run("N9", [ran] * 4 + [dict(ran, outcome=4)])
+    assert status == "UNREACHED" and acc.windows == 0
+    # stale RUN, the menu, then a fresh commit: exactly one window and one terminal
+    seq = [ran] * 4 + [parked(title)] * 3 + [ran] * 2 + [dict(ran, outcome=4)]
+    status, why, acc = World(title).run("N9", seq)
+    assert (status, acc.windows, acc.samples, acc.terminals) == ("PASS", 1, 2, 1), why
+
+
+def test_n9_run_again_after_a_failed_escape_rearms_on_identical_bytes():
+    run_ret = (0x21, 3, 0, 0)
+    ran = committed("firered", ret=run_ret)
+    # after the failed escape the reopened menu still holds the old RUN bytes; the new RUN is identical
+    menu = [dict(draw("firered"), ret=run_ret)] + [{"ret": run_ret}] * 2
+    seq = [parked("firered")] + [ran] * 2 + menu + [ran] * 2 + [dict(ran, outcome=4)]
+    status, why, acc = World("firered").run("N9", seq)
+    assert (status, acc.windows, acc.terminals) == ("PASS", 2, 1), why
+
+
+def test_n9_changed_return_arms_without_a_sampled_menu_frame():
+    """Sampling gap: the menu frame was not fed, but gBattleBufferB[0] changed -> fresh."""
+    fight_then = committed("firered", ret=(0x21, 0, 0, 0))
+    ran = committed("firered", ret=(0x21, 3, 0, 0))
+    status, why, acc = World("firered").run("N9", [fight_then, ran, dict(ran, outcome=4)])
+    assert (status, acc.windows) == ("PASS", 1), why
+
+
+def test_n7_n8_stale_returns_never_arm():
+    chosen = committed("firered", chosen0=2, ret=(0x22, 1, 0, 1))
+    status, _, acc = World("firered").run("N7", [chosen] * 3 + [dict(chosen, party=(1, 1, 0, 0))])
+    assert status == "UNREACHED" and acc.windows == 0
+    used = committed("firered", chosen0=1, ret=(0x23, 4, 0, 0))
+    status, _, acc = World("firered").run("N8", [used] * 3 + [dict(used, outcome=7)])
+    assert status == "UNREACHED" and acc.windows == 0
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_pack_task_layout_matches_the_sym(title):
+    """struct Task (include/task.h:15-22): func +0, isActive +4; NUM_TASKS 16 (task.h:10)."""
+    num_tasks = 16
+    size = None
+    for line in (PRET / f"poke{title}.sym").read_text(encoding="utf-8").splitlines():
+        parts = line.split()
+        if len(parts) == 4 and parts[3] == "gTasks":
+            addr, size = int(parts[0], 16), int(parts[2], 16)
+    tasks = json.loads((ROOT / "data/games/gen3_frlg/write_checkpoint.json").read_text())[title]["tasks"]
+    assert size == 0x280 and tasks["address"] == addr
+    assert (tasks["count"], tasks["struct_size"]) == (num_tasks, size // num_tasks)
+    assert (tasks["func_offset"], tasks["is_active_offset"]) == (0, 4)

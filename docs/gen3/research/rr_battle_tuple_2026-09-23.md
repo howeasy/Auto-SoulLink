@@ -134,7 +134,7 @@ is clear at that moment. If the opponent's bit were still set, the frame would b
 ## 5. Proposed corrected RR clause set
 
 Replace `battle_exec_flags_idle` and add a controller pin. This makes the RR set carry the same seven names as
-FR/LG, so `lua/tests/gen3_battle_window_rows.lua` (which needs all seven, `R.ALIASES`) can run on RR unchanged.
+FR/LG. `lua/tests/gen3_battle_window_rows.lua` stays FR/LG only (its syms/spans refuse RR; RR's controllers are CFRU addresses); an RR syms/spans path for it is future G5 work.
 
 | name | address | test | RR provenance (no FR code symbol asserted) |
 |---|---|---|---|
@@ -190,7 +190,7 @@ Each of these must fail against today's pack (`battle_exec_flags_idle`) and pass
    - (h) Bit-24 CFRU mode after commit: ctrl0 `0x090ACD8D`, exec 0 → refuse.
 3. **`battle_commit` on the RR pack** with state 2b (the commit frame) and battler 0 → refuse. The commit guard
    alone (comm = 1 < 3) passes today, so the refusal must come from the new clauses.
-4. **G5 physical rows, both RR artifacts.** Use `gen3_battle_window_rows.lua` rows with the RR pack. The
+4. **G5 physical rows, both RR artifacts.** `gen3_battle_window_rows.lua` is FR/LG only; its rows need an RR syms/spans path (future G5 work) before they run on the RR pack. The
    `mkstates_gen3` kind `battle` states are enough. Cover:
    - a parked wild menu, at least 300 frames, all admitted;
    - the A frame on FIGHT, BAG, POKéMON and RUN, each refused;

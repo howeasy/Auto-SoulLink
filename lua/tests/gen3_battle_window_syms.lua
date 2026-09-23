@@ -31,6 +31,13 @@ M.entries = {
     PLAYER_CHOOSE_TARGET = { symbol = "HandleInputChooseTarget", thumb = true,
                              object = "src/battle_controller_player.o",
                              firered = 0x0802E675, leafgreen = 0x0802E675 },
+    -- the party-menu / bag waits battler 0 leaves on a committed switch / item (N7/N8 freshness)
+    PLAYER_WAIT_FOR_MON_SELECTION = { symbol = "WaitForMonSelection", thumb = true,
+                                      object = "src/battle_controller_player.o",
+                                      firered = 0x08030685, leafgreen = 0x08030685 },
+    PLAYER_COMPLETE_WHEN_CHOSE_ITEM = { symbol = "CompleteWhenChoseItem", thumb = true,
+                                        object = "src/battle_controller_player.o",
+                                        firered = 0x0803073D, leafgreen = 0x0803073D },
     OLDMAN_INPUT_CHOOSE_ACTION = { symbol = "HandleInputChooseAction", thumb = true,
                                    object = "src/battle_controller_oak_old_man.o",
                                    firered = 0x080E763D, leafgreen = 0x080E7615 },

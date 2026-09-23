@@ -94,7 +94,8 @@ function R.sample(ctx, safety, reason, args, extra)
     local regs = ctx.deps.regs and ctx.deps.regs() or {}
     local s = {reason = reason, ok = ok == true, why = tostring(why), failed = failed, fset = fset,
                v = {}, t = {}, frame = ctx.deps.frame and ctx.deps.frame() or nil,
-               r15 = regs.R15, cpsr = regs.CPSR, map = extra and extra.map, pos = extra and extra.pos}
+               r15 = regs.R15, cpsr = regs.CPSR, map = extra and extra.map, pos = extra and extra.pos,
+               extra = extra or {}}
     -- the tuple: raw (masked) value per clause; truth = present and not in safety's failures
     for _, a in ipairs(R.ALIASES) do
         local spec = ctx.clause[a[2]]
@@ -129,7 +130,9 @@ function R.sample(ctx, safety, reason, args, extra)
         if rd(ctx, base + t.is_active_offset, 1) ~= 0 then s.tasks[rd(ctx, base + t.func_offset, 4)] = true end
     end
     if s.pm_slot < K.PARTY_SIZE then     -- the key of the mon the party menu/summary points at
-        s.slot_key = rd(ctx, T.PARTY_BASE + s.pm_slot * PARTY_MON_SIZE, 4)
+        -- personality:otId, struct BoxPokemon +0/+4 (pret include/pokemon.h:105-108)
+        local base = T.PARTY_BASE + s.pm_slot * PARTY_MON_SIZE
+        s.slot_key = string.format("%08X:%08X", rd(ctx, base, 4), rd(ctx, base + 4, 4))
     end
     return s
 end
@@ -142,6 +145,13 @@ local function reopened(s, c)   -- battler 0's action menu is being offered agai
     return s.ctrl[0] == c.T.HANDLE_INPUT_CHOOSE_ACTION or s.ctrl[0] == c.W.PLAYER_ACTION_AFTER_DMA3
 end
 local function always() return true end
+-- A commit arms only on a FRESH return: the previous fed sample had battler 0 on the row's menu
+-- controller, or gBattleBufferB[0][0..1] changed since it. A stale buffer (state loaded mid-turn,
+-- the return of an earlier choice) never arms. The controller edge is needed as well as the byte
+-- change: RUN after a failed escape rewrites identical bytes (0x21, 3).
+local function fresh(s, prev, menu)
+    return prev ~= nil and (prev.ctrl[0] == menu or prev.ret[0] ~= s.ret[0] or prev.ret[1] ~= s.ret[1])
+end
 
 R.ROWS = {
     {name = "N1", note = "action-menu DMA/draw controller, then the distinct input controller",
@@ -158,7 +168,11 @@ R.ROWS = {
                 and not s.tasks[c.T.TASK_ANIMATE_WIN0V] and not s.fade and s.in_battle
                 and s.bag_location == K.ITEMMENULOCATION_BATTLE and s.chosen0 == K.B_ACTION_USE_ITEM
         end},
-    {name = "N5", note = "voluntary party menu (CHOOSE_MON, not the forced SEND_OUT)",
+    -- Forced routes excluded: the faint send-out is PARTY_ACTION_SEND_OUT, and the faint-replacement
+    -- choice emits CHOOSE_MON with gChosenActionByBattler = B_ACTION_NOTHING_FAINTED (13), which the
+    -- chosen0 == SWITCH conjunct refuses (pret battle_main.c:3117, :3214-3218).
+    {name = "N5", note = "voluntary party menu (CHOOSE_MON, chosen SWITCH, not the forced routes); "
+            .. "counts list-waiting frames only: the selection window reassigns the task (party_menu.c:3113)",
         must_fail = {"battle_comm_0", "battle_input_controller"}, floor = 60,
         arm = function(s, _, c)
             return s.cb2 == c.T.CB2_UPDATE_PARTY_MENU and s.tasks[c.T.TASK_CHOOSE_MON] == true
@@ -174,8 +188,9 @@ R.ROWS = {
         end},
     {name = "N7", note = "switch committed (CHOSENMONRETURNVALUE) until the replacement is active",
         must_fail = {"battle_input_controller"}, floor = 1,
-        arm = function(s, st, c)
-            if s.chosen0 == K.B_ACTION_SWITCH and s.ret[0] == K.CONTROLLER_CHOSENMONRETURNVALUE
+        arm = function(s, st, c, prev)
+            if fresh(s, prev, c.W.PLAYER_WAIT_FOR_MON_SELECTION)
+                and s.chosen0 == K.B_ACTION_SWITCH and s.ret[0] == K.CONTROLLER_CHOSENMONRETURNVALUE
                 and s.ret[1] < K.PARTY_SIZE and s.ctrl[0] == c.W.PLAYER_BUFFER_RUN_COMMAND
                 and s.party[0] ~= s.ret[1] then
                 st.selected, st.from = s.ret[1], s.party[0]
@@ -187,9 +202,9 @@ R.ROWS = {
         done = function(s, st) return s.party[0] == st.selected end},
     {name = "N8", note = "item committed (ONERETURNVALUE, nonzero item) until outcome or reopen",
         must_fail = {"battle_input_controller"}, floor = 1,
-        arm = function(s, st, c)
+        arm = function(s, st, c, prev)
             local item = s.ret[1] | (s.ret[2] << 8)
-            if s.chosen0 == K.B_ACTION_USE_ITEM and s.ret[0] == K.CONTROLLER_ONERETURNVALUE and item ~= 0
+            if fresh(s, prev, c.W.PLAYER_COMPLETE_WHEN_CHOSE_ITEM) and s.chosen0 == K.B_ACTION_USE_ITEM and s.ret[0] == K.CONTROLLER_ONERETURNVALUE and item ~= 0
                 and s.ctrl[0] == c.W.PLAYER_BUFFER_RUN_COMMAND then
                 st.item = item
                 return true
@@ -202,11 +217,19 @@ R.ROWS = {
             elseif reopened(s, c) then st.ended = "reopened"
             else return false end
             return true
+        end,
+        -- the quantity comes from the caller (sample extra.balls: the ball pocket count it read);
+        -- baseline = the first sample this row was fed, so the bag must be sampled before the throw
+        receipt_fields = function(acc, s)
+            local before, now = acc.fed_first and acc.fed_first.extra.balls, s.extra.balls
+            local delta = (before and now) and tostring(now - before) or "unknown"
+            return {"balls_before=" .. tostring(before), "balls_now=" .. tostring(now), "ball_delta=" .. delta}
         end},
     {name = "N9", note = "RUN committed until gBattleOutcome == B_OUTCOME_RAN",
         must_fail = {"battle_input_controller"}, floor = 1,
-        arm = function(s, _, c)
-            return s.ret[0] == K.CONTROLLER_TWORETURNVALUES and s.ret[1] == K.B_ACTION_RUN
+        arm = function(s, _, c, prev)
+            return fresh(s, prev, c.T.HANDLE_INPUT_CHOOSE_ACTION)
+                and s.ret[0] == K.CONTROLLER_TWORETURNVALUES and s.ret[1] == K.B_ACTION_RUN
                 and s.ctrl[0] == c.W.PLAYER_BUFFER_RUN_COMMAND and s.outcome == 0
         end,
         hold = function(s, _, c) return not reopened(s, c) end,   -- a failed escape reopens
@@ -248,21 +271,28 @@ local function judge(acc, s)
 end
 
 --- Feed one sample. Returns "qualified", "done", "closed" or nil (not this row's state).
-function R.feed(acc, s)
+local function step(acc, s, prev)
     local spec, st, c = acc.spec, acc.st, acc.ctx
     if acc.open then
         if spec.done and spec.done(s, st, c) then
             acc.open, acc.terminals, acc.terminal = false, acc.terminals + 1, s
             return "done"
         end
-        if not (spec.hold or spec.arm)(s, st, c) then acc.open = false; return "closed" end
-    elseif spec.arm(s, st, c) then
+        if not (spec.hold or spec.arm)(s, st, c, prev) then acc.open = false; return "closed" end
+    elseif spec.arm(s, st, c, prev) then
         acc.open, acc.windows = true, acc.windows + 1
     else
         return nil
     end
     judge(acc, s)
     return "qualified"
+end
+
+function R.feed(acc, s)
+    acc.fed_first = acc.fed_first or s
+    local prev = acc.prev
+    acc.prev = s
+    return step(acc, s, prev)
 end
 
 --- "PASS" | "FAIL" | "UNREACHED", why. Never PASS on zero qualifying samples (§5 rule 4).
@@ -303,8 +333,9 @@ end
 local HASHES = {"rom", "fixture", "pack", "source", "state"}
 
 --- One sample as a full receipt line. meta = {row=, hashes={rom,fixture,pack,source,state},
---- state_path=, prep=}; a missing hash is an error, never a blank field.
-function R.receipt(ctx, s, meta)
+--- state_path=, prep=}; a missing hash is an error, never a blank field. With the row's
+--- accumulator, the row's own receipt_fields(acc, s) are appended (N8: the ball-count delta).
+function R.receipt(ctx, s, meta, acc)
     local parts = {"BWSAMPLE", tostring(meta.row), "title=" .. ctx.title, "reason=" .. s.reason}
     for _, h in ipairs(HASHES) do
         local v = meta.hashes and meta.hashes[h]
@@ -331,7 +362,10 @@ function R.receipt(ctx, s, meta)
     add("ctrl", table.concat(ctrl, ",")); add("comm", table.concat(comm, ","))
     add("party", table.concat(party, ",")); add("outcome", s.outcome)
     add("chosen0", s.chosen0); add("bufB0", table.concat(ret, ","))
-    add("cb2", hex(s.cb2)); add("in_battle", s.in_battle); add("slot_key", s.slot_key and hex(s.slot_key) or "-")
+    add("cb2", hex(s.cb2)); add("in_battle", s.in_battle); add("slot_key", s.slot_key or "-")
+    if acc and acc.spec.receipt_fields then
+        for _, field in ipairs(acc.spec.receipt_fields(acc, s)) do parts[#parts + 1] = field end
+    end
     return table.concat(parts, " ")
 end
 
