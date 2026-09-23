@@ -8,7 +8,9 @@
   the ABI-2 VBlank build got wrong, each asserting the EXACT id that lands on CHAN5:
 
   town fixture (Oak's Lab, audio bank $1F):
-    A. the shipped client turns a `play_sound 25` reply into the request (config native_sounds);
+    A. the shipped client turns a `play_sound 25` reply into the request (config native_sounds):
+       code 4 notify = START_MENU $8F on CHAN8 on a cartridge that advertises SLINK_CAP_SFX_NOTIFY
+       (f6229e77), else code 1 = GET_ITEM_2 $89 on CHAN5;
     B. busy channel: a second request is held while the first still owns CHAN5, then plays;
     C. the START menu (the bridge fires from the menu's own DelayFrame loop);
     D. fade + bank change: walking out of the lab into Pallet Town fades the lab music
@@ -43,6 +45,7 @@ local ALARM = t.facts.COMPANION.low_health_alarm_flag_addr   -- bit 7: the alarm
 local CADENCE = t.facts.TUNING.input_cadence
 local MAP = t.facts.MAP
 local CAP_SFX = 0x01
+local CAP_SFX_NOTIFY = 0x04   -- f6229e77: the ROM knows code 4 (START_MENU, CHAN8-only)
 -- slink.asm SlinkSfxService table, per audio bank: (header address - SFX_Headers_N) / 3.
 local TABLE = {
     [0x02] = { 0x89, 0xA5, 0x8C },   -- GET_ITEM_2, DENIED, TINK
@@ -149,19 +152,24 @@ if map == MAP.OAKS_LAB then
     local bank = read(AUDIO_ROM_BANK)
     t.check("the lab fixture stands in audio bank $1F", bank == 0x1F, fmt("wAudioROMBank=$%02X", bank))
     t.check("the SFX channels are quiet before the matrix", wait_quiet(), channels())
+    -- the client's own mapping (panel.lua sfx_code_for): notify-capable -> 4 on CHAN8, else 1 on CHAN5
+    local notify = read(CAPS) & CAP_SFX_NOTIFY ~= 0
+    local code, want, chan, chan_name = 1, 0x89, CHAN5, "CHAN5"
+    if notify then code, want, chan, chan_name = 4, 0x8F, CHANNEL_SOUND_IDS + 7, "CHAN8" end
     reply({ cmd = "play_sound", sound = 25 })
     local wrote, played = nil, nil
     for f = 1, 20 do
         step(nil)
-        if wrote == nil and read(SFX_REQUEST) == 1 then wrote = f end
-        if wrote and read(SFX_REQUEST) == 0 then played = read(CHAN5) break end
+        if wrote == nil and read(SFX_REQUEST) == code then wrote = f end
+        if wrote and read(SFX_REQUEST) == 0 then played = read(chan) break end
     end
     if wrote == nil and played == nil then
         -- the write and the play can land inside one frame from Lua's point of view
-        played = read(CHAN5)
+        played = read(chan)
     end
-    t.check("A: the client turned play_sound 25 into request code 1 and the ROM played $89",
-            played == 0x89, fmt("wrote_at=%s CHAN5=$%02X channels %s", tostring(wrote), played or 0, channels()))
+    t.check(fmt("A: the client turned play_sound 25 into request code %d and the ROM played $%02X on %s",
+                code, want, chan_name),
+            played == want, fmt("wrote_at=%s %s=$%02X channels %s", tostring(wrote), chan_name, played or 0, channels()))
     t.check("A: quiet again", wait_quiet(), channels())
 
     -- ── B. busy channel: the second request is held until the first finishes ─────────
