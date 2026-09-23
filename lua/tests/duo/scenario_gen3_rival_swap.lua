@@ -1,20 +1,22 @@
--- scenario_gen3_rival_swap.lua — rival_swap_gen3 (RR only, PLAN §14 P5, card C5-5).
+-- scenario_gen3_rival_swap.lua — rival_swap_gen3 (RR only): a BLOCKED NEGATIVE CONTROL.
 --
--- BLOCKED like the other "battle"-target RR scenarios (tests/fixtures/gen3/rr_battle{,_b}.sav do
--- not exist yet, GAMES["gen3_rr_new"]'s comment) and carrying the same RR walking/symbol-reuse
--- risk (SCENARIOS["rival_swap_gen3"]'s comment) -- written for structural correctness, not yet
--- exercised.
+-- NOT a qualification of the rival swap (Codex C4-6b finding 6). The runner sends a DUMMY blob
+-- (100 zero bytes, not a real party), and lua/gen3/native.lua answers refresh_failed because
+-- entry.lua's refresh_enemy has no write window in the battle's first frames yet (commit
+-- 9505648b; the window is OMP card C4-8's design, docs/gen3/research/rival_swap_refresh_window.md).
+-- What this characterizes is only the refusal path: the command reaches a real battle and is
+-- answered with the documented error instead of hanging or writing. The swap stays BLOCKED until
+-- a valid team is sent and refreshed in battle; SCENARIOS["rival_swap_gen3"]["control"] says so.
 --
--- A idles; B walks into a real battle (ctx.hunt, the same Route-1-shaped grass hunt the FRLG
--- scenarios use) and parks at the action menu -- no input, so pressing A cannot pre-empt the
--- server's command. Once B logs READY_IN_BATTLE the runner
+-- Also blocked on tests/fixtures/gen3/rr_battle{,_b}.sav (not built yet) and on RR walking/battle
+-- symbols reused from FR (SCENARIOS' comment).
+--
+-- A idles; B walks into a real battle and parks at the action menu -- no input, so pressing A
+-- cannot pre-empt the server's command. Once B logs READY_IN_BATTLE the runner
 -- (orchestrate_rival_swap_gen3) queues replace_rival_team over the debug API.
--- lua/gen3/native.lua:243-244 always answers refresh_failed today (entry.lua's refresh_enemy has
--- no write window in the battle's first frames yet, commit 9505648b) -- that is the DOCUMENTED,
--- EXPECTED outcome this scenario asserts, not a bug it is chasing.
 return function(ctx)
     if ctx.player == "a" then
-        if not ctx.wait_go(300) then return false, "no go-file" end
+        if not ctx.wait_go(nil, 300) then return false, "no go-file" end
         if not ctx.wait_until(ctx.partner_done, 300, "B's result") then
             return false, "B never finished"
         end
@@ -37,5 +39,5 @@ return function(ctx)
         return false, "expected error=refresh_failed, got " .. tostring(reply.error)
     end
     ctx.run_away("rival_swap")
-    return true, "rival_team_replaced error=refresh_failed (expected: no refresh window yet)"
+    return true, "NEGATIVE CONTROL: dummy team refused with refresh_failed (swap BLOCKED, not qualified)"
 end

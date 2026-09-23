@@ -13,6 +13,7 @@ local function a_side(ctx, linked)
     ctx.walk_to_pc("whiteout a")
     local gone, why = ctx.pc_deposit("whiteout a deposit")
     if gone ~= linked then return false, "the deposit moved " .. tostring(gone or why) .. ", not " .. linked end
+    if not ctx.observe_boxed(linked) then return false, linked .. " was never read back boxed after the deposit" end
     ctx.log("DEPOSITED_FOR_REBUILD " .. linked)
     if not ctx.wait_go("BOTH_BOXED", 1800) then return false, "the runner never wrote BOTH_BOXED" end
     local ok, err = ctx.try(function()
@@ -34,19 +35,21 @@ local function a_side(ctx, linked)
     if not ctx.wait_received("party_mon", linked, 900) then return false, "no rebuild party_mon" end
     if not ctx.wait_sent("sync_retrieve_done", linked, 600) then return false, "the rebuild withdraw was not acknowledged" end
     if not ctx.wait_received("rebuild_done", nil, 300) then return false, "no rebuild_done" end
-    if not ctx.find(linked) then return false, linked .. " is not back in the party" end
+    if not ctx.observe_returned(linked) then return false, linked .. " was never read back in the party (and out of every box)" end
     return true
 end
 
 local function b_side(ctx, linked)
     if not ctx.wait_received("box_mon", linked, 1800) then return false, "no mirrored box_mon" end
     if not ctx.wait_sent("stats_cache", linked, 300) then return false, "the mirrored deposit was not acknowledged" end
+    -- the ACK is the client's word; the cartridge must show it (Codex C4-6b finding 2)
+    if not ctx.observe_boxed(linked) then return false, "stats_cache sent but " .. linked .. " was never read back boxed" end
     ctx.log("MIRROR_DEPOSITED " .. linked)
     ctx.log("DEPOSITED_FOR_REBUILD " .. linked)
     if not ctx.wait_go("BOTH_BOXED", 1800) then return false, "the runner never wrote BOTH_BOXED" end
     if not ctx.wait_received("party_mon", linked, 1800) then return false, "no rebuild party_mon" end
     if not ctx.wait_sent("sync_retrieve_done", linked, 600) then return false, "the rebuild withdraw was not acknowledged" end
-    if not ctx.find(linked) then return false, linked .. " is not back in the party" end
+    if not ctx.observe_returned(linked) then return false, "sync_retrieve_done sent but " .. linked .. " was never read back in the party" end
     ctx.log("MIRROR_WITHDRAWN " .. linked)
     return true
 end

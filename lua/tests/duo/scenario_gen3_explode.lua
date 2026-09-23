@@ -1,102 +1,84 @@
--- scenario_gen3_explode.lua — explode_gen3 (RR only, PLAN §14 P5, card C5-5).
+-- scenario_gen3_explode.lua — explode_gen3 (RR only; server --explode-mode).
 --
--- BLOCKED like the other "battle"-target RR scenarios (tests/fixtures/gen3/rr_battle{,_b}.sav do
--- not exist), and further on a fixture this row cannot supply at all: B needs to already be
--- positioned in a trainer's sightline (the OLD client's row used slink_prebattle.State for
--- exactly this), which "battle" (a grass encounter fixture) is not. Written for structural
--- correctness, not yet exercised.
---
--- Ported behaviour-for-behaviour from the OLD RR duo driver's scenario_explode.lua (trusted RR
--- addresses, docs/gen3/PLAN.md §0 "old RR client addresses trusted"): a coerced move only
--- EXECUTES if the foe also commits an action, so B drives itself into a REAL battle (not a
--- frozen state) and parks at the action menu with NO input (pressing A would commit our own
--- move and pre-empt the Explosion). A zeroes its own linked mon's HP directly
--- (ctx.zero_hp, duo_gen3_main.lua) once released; the overworld watcher reads that as a faint
--- and the client sends `faint`, which the server (--explode-mode) answers by queuing
--- force_explode to B instead of force_faint. lua/gen3/client.lua's explode_step (Variant-3)
--- stamps Explosion into the move slot and skips the menu; the engine then runs the turn for
--- real. PASS bar for B is the battle reaching an OUTCOME (gBattleOutcome ~= 0) -- the original
--- native controller-swap bug was a SOFTLOCK in an open menu that never resolved.
-local gBattleMons    = 0x02023BE4
-local BM_MOVES       = 0x0C
-local BM_HP          = 0x28
-local BM_MAXHP       = 0x2C
-local gBattleOutcome = 0x02023E8A
-local CTRL           = 0x03004FE0      -- gBattlerControllerFuncs[0]
-local ACTION_MENU    = 0x0802E439      -- action-select controller (old driver, re-validated then)
-local MOVE_EXPLOSION = 153
+-- Scripted normal inputs only (Codex C4-6b finding 5: the old port's direct HP poke is gone).
+-- The runner links the two party LEADS and releases A only once B reports READY_ACTIVE.
+--   A: a wild battle on the fixture's grass, choosing only a no-damage move until its linked
+--      lead faints -- a natural engine faint (ENGINE_FAINT_SITE) the client reports as `faint`;
+--      the server answers with force_explode for B's partner (Explode Mode) instead of
+--      force_faint. The rest of A's battle is the scripted-play battle policy; A saves after its
+--      own memorial.
+--   B: parked on the action menu with the linked lead as battler 0 (no input: pressing A would
+--      commit our own move). The KEYED force_explode must arrive, and then the ENGINE must
+--      execute Explosion for that battler: gBattleResults.lastUsedMovePlayer, which
+--      HandleAction_UseMove stamps with the move it starts executing and battle start resets
+--      (pret src/battle_main.c:2316,4021-4022), must read MOVE_EXPLOSION after the command and
+--      not before it. A stamped move slot alone (the old bar) proves the commit write, not the
+--      execution. B then finishes the battle, waits for its memorial and saves.
+-- BLOCKED like the other "battle"-target RR scenarios (tests/fixtures/gen3/rr_battle{,_b}.sav
+-- are not built) and on the lastUsedMovePlayer offset being FR's (+0x22) on RR, unverified.
+local fmt = string.format
+local MOVE_EXPLOSION = 153           -- pret include/constants/moves.h
 
-return function(ctx)
-    local log = ctx.log
-
-    if ctx.player == "a" then
-        if not ctx.wait_go() then return false, "no go-file" end
-        local linked = ctx.linked()
-        if not linked then return false, "the go-file names no LINKED key" end
-        if not ctx.find(linked) then return false, "the linked key " .. linked .. " is not in the party" end
-        ctx.frames(120)
-        if not ctx.zero_hp(linked) then return false, "could not zero " .. linked .. "'s HP" end
-        log("wrote HP=0 to " .. linked .. " -- partner's mon must now Explode")
-        if not ctx.wait_sent("memorialize_done", linked, 1800) then
-            return false, "own mon never memorialized"
+local function a_side(ctx, linked)
+    if not ctx.hunt("explode a") then return false, "no wild encounter" end
+    local fainted, why = ctx.lose_active(linked, "explode a")
+    if not fainted then return false, "the linked lead did not faint: " .. tostring(why) end
+    ctx.log("LINKED_FAINTED " .. linked)
+    if ctx.in_battle() then
+        local ok, err = ctx.try(ctx.play.fight_through, ctx.cp, 4000)
+        if not ok and not (type(err) == "table" and err.whiteout) then
+            return false, "after the faint: " .. tostring(err)
         end
-        local ok, why = ctx.save("explode")
-        if not ok then return false, why end
-        return true, "faint sent + own mon memorialized"
     end
+    ctx.play.wait_scene_settled(ctx.cp, 3000)
+    if ctx.sent("faint", linked) == 0 then return false, "the client never sent faint for " .. linked end
+    if not ctx.wait_sent("memorialize_done", linked, 1800) then return false, "own mon never memorialized" end
+    local ok, why2 = ctx.save("explode")
+    if not ok then return false, why2 end
+    return true, "natural faint of the active linked " .. linked
+end
 
-    -- ── B: drive into a live battle, advance the intro to the ACTION MENU ──────────
-    local function loaded()  return memory.read_u16_le(gBattleMons + BM_MAXHP) > 0 end
-    local function at_menu() return memory.read_u32_le(CTRL) == ACTION_MENU end
-    local function bmon_hp()  return memory.read_u16_le(gBattleMons + BM_HP) end
-    local function bmon_mv0() return memory.read_u16_le(gBattleMons + BM_MOVES) end
-
-    local step = 0
-    local reached = ctx.wait_until(function()
-        if at_menu() then joypad.set({}); return true end
-        step = step + 1
-        if not loaded() then
-            if step <= 60 then joypad.set({ Down = true })
-            elseif step % 2 == 0 then joypad.set({ A = true })
-            else joypad.set({}) end
-        else
-            if step % 2 == 0 then joypad.set({ A = true }) else joypad.set({}) end
+local function b_side(ctx, linked)
+    if not ctx.hunt("explode b") then return false, "no wild encounter" end
+    if ctx.SP.verify_fight_cursor(ctx.cp, "incidental_battle") ~= "fight" then
+        return false, "never reached the action menu"
+    end
+    if ctx.battler_slot() ~= 0 then return false, "the linked lead is not battler 0" end
+    local before = ctx.last_used_move_player()
+    if before == MOVE_EXPLOSION then return false, "lastUsedMovePlayer already reads Explosion" end
+    ctx.log(fmt("READY_ACTIVE %s last_used=%d", linked, before))
+    if not ctx.wait_received("force_explode", linked, 1500) then
+        return false, "no keyed force_explode for " .. linked
+    end
+    local executed = ctx.wait_until(function()
+        return ctx.last_used_move_player() == MOVE_EXPLOSION or nil
+    end, 180, "the engine to execute Explosion")
+    if not executed then
+        return false, fmt("the engine never executed Explosion (lastUsedMovePlayer=%d)", ctx.last_used_move_player())
+    end
+    ctx.log(fmt("EXPLOSION_EXECUTED %s battler_slot=%d last_used=%d", linked, ctx.battler_slot(),
+                ctx.last_used_move_player()))
+    if ctx.in_battle() then
+        local ok, err = ctx.try(ctx.play.fight_through, ctx.cp, 4000)
+        if not ok and not (type(err) == "table" and err.whiteout) then
+            return false, "after the Explosion: " .. tostring(err)
         end
-        return nil
-    end, 300, "battle action menu")
-    joypad.set({})
-    if not reached then
-        return false, string.format("never reached the action menu (loaded=%s)", tostring(loaded()))
     end
-    log(string.format("IN_BATTLE at action menu: bHP=%d move0=%d", bmon_hp(), bmon_mv0()))
-
-    if not ctx.wait_go(300) then return false, "no go-file after reaching the menu" end
-
-    local stamped = ctx.wait_until(function()
-        return bmon_mv0() == MOVE_EXPLOSION or nil
-    end, 300, "force_explode to stamp Explosion")
-    if not stamped then
-        return false, "force_explode never stamped Explosion (move0=" .. bmon_mv0() .. ")"
-    end
-    log("Explosion stamped into move slot 0 + menu skipped (Variant-3)")
-
-    local mash = 0
-    local outcome = ctx.wait_until(function()
-        local o = memory.read_u8(gBattleOutcome)
-        if o ~= 0 then joypad.set({}); return o end
-        mash = mash + 1
-        if mash % 3 == 0 then joypad.set({ A = true }) else joypad.set({}) end
-        return nil
-    end, 300, "battle to resolve (outcome ~= 0)")
-    joypad.set({})
-    if not outcome then
-        return false, string.format("battle never resolved (bHP=%d — softlock?)", bmon_hp())
-    end
-    log(string.format("resolved: outcome=%d bHP=%d", outcome, bmon_hp()))
-    if not ctx.wait_sent("memorialize_done", nil, 1800) then
-        return false, "partner's mon never memorialized after the Explosion"
+    ctx.log(fmt("resolved: outcome=%d", ctx.battle_outcome()))
+    ctx.play.wait_scene_settled(ctx.cp, 3000)
+    if not ctx.wait_sent("memorialize_done", linked, 1800) then
+        return false, "the partner never memorialized after the Explosion"
     end
     local ok, why = ctx.save("explode")
     if not ok then return false, why end
-    return true, string.format("Explosion executed + battle resolved (outcome=%d)", outcome)
+    return true, "keyed force_explode executed natively"
+end
+
+return function(ctx)
+    if not ctx.wait_go(nil, 1800) then return false, "no go-file" end
+    local linked = ctx.linked()
+    local lead = linked and ctx.find(linked)
+    if not lead or lead.slot ~= 0 then return false, "the LINKED key must be the party lead" end
+    if ctx.player == "a" then return a_side(ctx, linked) end
+    return b_side(ctx, linked)
 end

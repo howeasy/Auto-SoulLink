@@ -157,6 +157,20 @@ local function dump_witness()
     local wf = assert(io.open(ROOT .. "/" .. rel, "wb"), "cannot open " .. rel)
     wf:write(blob)          -- overwritten on every save: the file is this attempt's FINAL save
     wf:close()
+    -- RR: the live EWRAM range the extension writer copies verbatim into sectors 30-31
+    -- (D.ext_addr/D.ext_size from gen3_codec via the stub), read at the same save boundary, so
+    -- the harness can prove the saved extension is THIS state (Codex C4-6b finding 4).
+    if D.ext_addr and D.ext_size then
+        local ext = {}
+        for off = 0, D.ext_size - 4, 4 do
+            ext[#ext + 1] = string.pack("<I4", memory.read_u32_le(D.ext_addr + off, "System Bus"))
+        end
+        local erel = rel:gsub("%.bin$", "_ext.bin")
+        local ef = assert(io.open(ROOT .. "/" .. erel, "wb"), "cannot open " .. erel)
+        ef:write(table.concat(ext))
+        ef:close()
+        log(fmt("SAVE_WITNESS_EXT path=%s bytes=%d saves=%d", erel, D.ext_size, witness_saves))
+    end
     log(fmt("SAVE_WITNESS_DUMP path=%s bytes=%d saves=%d frame=%d counter=%d", rel, #blob,
             witness_saves, emu.framecount(), G.save_counter(dom)))
 end
@@ -377,14 +391,46 @@ event.onframeend(function()
     end
 end, "SLink-duo-gen3-hp0")
 function ctx.hp0(key) return hp0[key] end
---- explode_gen3 (RR only): zero a party mon's HP directly, mirroring the old RR driver's own RAM
---- poke (scenario_explode.lua) -- the overworld watcher reads this as a faint and the client
---- sends `faint`, same as an engine-driven one. False if `key` is not currently in the party.
-function ctx.zero_hp(key)
-    local m = ctx.find(key)
-    if not m then return false end
-    memory.write_u16_le(reader.party_base() + m.slot * MON_SIZE + HP_OFF, 0, "System Bus")
-    return true
+
+--- Where `key` is boxed right now ("box:slot", zero-based), or nil: every box of the title's
+--- pack (derived.BOXES_PER_STORE) read through the same reads.lua read_box the client uses.
+function ctx.boxed(key)
+    for box = 0, (profile.derived.BOXES_PER_STORE or 0) - 1 do
+        for _, m in ipairs(reader.read_box(box) or {}) do
+            if m.has_species == 1 and reader.key(m) == key then return fmt("%d:%d", box, m.slot) end
+        end
+    end
+end
+--- The physical half of a deposit/withdraw ACK (Codex C4-6b finding 2): an ACK on the wire is
+--- the client's word; these read the cartridge. BOXED_OBSERVED = absent from the party AND
+--- present in a box; RETURNED_OBSERVED = in the party AND in no box.
+function ctx.observe_boxed(key, secs)
+    local at = ctx.wait_until(function()
+        return (not ctx.find(key)) and ctx.boxed(key) or nil
+    end, secs or 60, "BOXED_OBSERVED " .. key)
+    if at then log(fmt("BOXED_OBSERVED %s box=%s", key, at)) end
+    return at
+end
+function ctx.observe_returned(key, secs)
+    local m = ctx.wait_until(function()
+        local mon = ctx.find(key)
+        return mon and not ctx.boxed(key) and mon or nil
+    end, secs or 60, "RETURNED_OBSERVED " .. key)
+    if m then log(fmt("RETURNED_OBSERVED %s slot=%d", key, m.slot)) end
+    return m
+end
+--- gBattleResults.lastUsedMovePlayer (pret include/battle.h: +0x22), which HandleAction_UseMove
+--- stamps with gCurrentMove as the engine starts EXECUTING a player move (pret src/battle_main.c
+--- :4021-4022) and battle start resets to MOVE_NONE (:2316). Base address from the pack
+--- (ram.BATTLE_RESULTS_ADDR, pinned for both packs); on RR the +0x22 layout is FR's, unverified.
+function ctx.last_used_move_player()
+    return memory.read_u16_le(profile.ram.BATTLE_RESULTS_ADDR + 0x22, "System Bus")
+end
+function ctx.battle_outcome() return memory.read_u8(S.gBattleOutcome) end
+--- The client's own trade FSM phase (lua/gen3/client.lua st.trade_apply.phase), nil when idle.
+function ctx.trade_phase()
+    local t = session.state and session.state.trade_apply
+    return t and t.phase or nil
 end
 
 -- ── battle input (pret battle_controller_player.c / party_menu.c, symbols above) ─────────

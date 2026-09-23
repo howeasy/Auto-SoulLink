@@ -11,11 +11,13 @@ local function a_side(ctx, linked)
     ctx.walk_to_pc("boxsync a")
     local gone, why = ctx.pc_deposit("boxsync a deposit")
     if gone ~= linked then return false, "the deposit moved " .. tostring(gone or why) .. ", not " .. linked end
+    if not ctx.observe_boxed(linked) then return false, linked .. " was never read back boxed after the deposit" end
     ctx.log("DEPOSITED " .. linked)
     if not ctx.wait_sent("party_to_box", linked, 120) then return false, "no party_to_box for " .. linked end
     if not ctx.wait_go("ALLOW_WITHDRAW", 1200) then return false, "the runner never allowed the withdraw" end
     local back, why2 = ctx.pc_withdraw("boxsync a withdraw")
     if back ~= linked then return false, "the withdraw returned " .. tostring(back or why2) .. ", not " .. linked end
+    if not ctx.observe_returned(linked) then return false, linked .. " was never read back in the party after the withdraw" end
     ctx.log("WITHDRAWN " .. linked)
     if not ctx.wait_sent("box_to_party", linked, 120) then return false, "no box_to_party for " .. linked end
     return true
@@ -26,13 +28,14 @@ local function b_side(ctx, linked)
     if not ctx.wait_sent("stats_cache", linked, 300) then
         return false, "the mirrored deposit was not acknowledged (stats_cache)"
     end
-    if ctx.find(linked) then return false, "stats_cache sent but " .. linked .. " is still in the party" end
+    -- the ACK is the client's word; the cartridge must show it (Codex C4-6b finding 2)
+    if not ctx.observe_boxed(linked) then return false, "stats_cache sent but " .. linked .. " was never read back boxed" end
     ctx.log("MIRROR_DEPOSITED " .. linked)
     if not ctx.wait_received("party_mon", linked, 1500) then return false, "no mirrored party_mon" end
     if not ctx.wait_sent("sync_retrieve_done", linked, 300) then
         return false, "the mirrored withdraw was not acknowledged (sync_retrieve_done)"
     end
-    if not ctx.find(linked) then return false, "sync_retrieve_done sent but " .. linked .. " is not in the party" end
+    if not ctx.observe_returned(linked) then return false, "sync_retrieve_done sent but " .. linked .. " was never read back in the party" end
     ctx.log("MIRROR_WITHDRAWN " .. linked)
     return true
 end

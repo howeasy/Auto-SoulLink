@@ -70,7 +70,10 @@ def _blocks(party, boxes, balls):
     sb1[codec.SB1_PARTY_COUNT_OFFSET] = len(party)
     for i, mon in enumerate(party):
         at = codec.SB1_PARTY_OFFSET + i * codec.PARTY_MON_SIZE
-        sb1[at:at + codec.PARTY_MON_SIZE] = codec.encode_party_mon(mon)
+        raw = bytearray(codec.encode_party_mon(mon))
+        if mon.get("flip_checksum"):
+            raw[0x1C] ^= 0x01            # one bit of the stored secure checksum
+        sb1[at:at + codec.PARTY_MON_SIZE] = raw
     if balls:
         sb1[0x430:0x432] = (4).to_bytes(2, "little")                 # ITEM_POKE_BALL
         sb1[0x432:0x434] = (balls ^ 0xBEEF).to_bytes(2, "little")
@@ -402,9 +405,12 @@ def test_capture_problems_and_ball_count(pair):
     fixture, _ = pair
     caught = _saved(fixture, 3, [STARTER, PIDGEY, CATCH], balls=3)
     key = _key(CATCH)
-    assert duo.gen3_capture_problems("a", _decoded(caught), _decoded(fixture), key, 19) == []
-    assert any("species" in p for p in
-               duo.gen3_capture_problems("a", _decoded(caught), _decoded(fixture), key, 16))
+    sent = {"species_id": 19, "level": 5, "held_item_id": 0, "nickname": "MON"}
+    assert duo.gen3_capture_problems("a", _decoded(caught), _decoded(fixture), key, sent) == []
+    assert any("species" in p for p in duo.gen3_capture_problems(
+        "a", _decoded(caught), _decoded(fixture), key, dict(sent, species_id=16)))
+    assert any("level" in p for p in duo.gen3_capture_problems(
+        "a", _decoded(caught), _decoded(fixture), key, dict(sent, level=7)))
     assert duo.gen3_ball_count(fixture) == 4 and duo.gen3_ball_count(caught) == 3
 
 
@@ -468,8 +474,10 @@ def test_boxsync_oracle_reads_the_keyed_ack_order(monkeypatch, tmp_path):
                           [{"a": {"key": k}, "b": {"key": "B"}, "status": "alive"}])
     run._link_keys = {"a": k, "b": "B"}
     monkeypatch.setattr(run, "_gen3_flushed", lambda inst: saved)
-    receipts = {"a": f"TX party_to_box {k} {{}}\nTX box_to_party {k} {{}}\n",
-                "b": "RX box_mon key=B\nTX stats_cache B {}\nRX party_mon key=B\nTX sync_retrieve_done B {}\n"}
+    receipts = {"a": (f"TX party_to_box {k} {{}}\nBOXED_OBSERVED {k} box=0:0\n"
+                      f"TX box_to_party {k} {{}}\nRETURNED_OBSERVED {k} slot=1\n"),
+                "b": ("RX box_mon key=B\nTX stats_cache B {}\nBOXED_OBSERVED B box=0:0\n"
+                      "RX party_mon key=B\nTX sync_retrieve_done B {}\nRETURNED_OBSERVED B slot=1\n")}
     # B's key is not in the synthetic save: the round-trip helper must say so
     with pytest.raises(RuntimeError, match="b: B appears 0x"):
         run.assert_boxsync_gen3_saved(receipts)
@@ -500,22 +508,46 @@ def test_link_oracle_counts_the_thrown_balls(monkeypatch, tmp_path):
 
 
 # ── RR-only oracles (P5, card C5-5) ─────────────────────────────────────────────────────────
-def test_native_absent_oracle_positive_and_negative():
+def _native_absent_receipts(ka="KA", kb="KB"):
+    a = ("RX apply_trade\n"
+         f"[client] [SLink-gen3] apply_trade received for {ka}: queued for the native trade\n"
+         "[client] [SLink-gen3] write native 0x0203F800 +100 frame 9\n"
+         "TRADE_PHASE scene\nNATIVE_STAGED phase=scene writes=3\nWRITES 3\n")
+    b = ("RX apply_trade\n"
+         f"[client] [SLink-gen3] apply_trade refused: no trade path on this cartridge (nothing written) {kb}\n"
+         "PROBE_SETTLED writes=0\nWRITES 0\n")
+    return {"a": a, "b": b}
+
+
+def test_native_absent_oracle_needs_a_native_stage_and_a_clean_refusal():
+    """Finding 6: the same VALID trade proves the companion's success and the clean refusal."""
     run = _oracle_run("native_absent_gen3", game="gen3_rr_new")
     notes = []
     run._pydec_note = notes.append
-    receipts = dict.fromkeys(("a", "b"), "RX apply_trade key=00000000:00000000\nWRITES 0\n")
+    run._native_absent_keys = {"a": "KA", "b": "KB"}
+    receipts = _native_absent_receipts()
     run.assert_native_absent_gen3_saved(receipts)
-    assert notes and "native_absent" in notes[-1]
-    bad = dict(receipts, b="RX apply_trade key=00000000:00000000\nWRITES 1\n")
-    with pytest.raises(RuntimeError, match="WRITES 0"):
-        run.assert_native_absent_gen3_saved(bad)
-    missing = dict(receipts, a="WRITES 0\n")   # no RX apply_trade at all
-    with pytest.raises(RuntimeError, match="RX apply_trade"):
-        run.assert_native_absent_gen3_saved(missing)
+    assert notes and "staged the valid trade" in notes[-1]
+    # the old probe's outcome -- both sides refuse, nobody writes -- is now a FAIL on A
+    both_refuse = dict(receipts, a=receipts["b"].replace("KB", "KA"))
+    with pytest.raises(RuntimeError, match="write native"):
+        run.assert_native_absent_gen3_saved(both_refuse)
+    unstaged = dict(receipts, a=receipts["a"].replace("NATIVE_STAGED phase=scene writes=3\n", ""))
+    with pytest.raises(RuntimeError, match="NATIVE_STAGED"):
+        run.assert_native_absent_gen3_saved(unstaged)
+    clean_wrote = dict(receipts, b=receipts["b"] + "[client] [SLink-gen3] write overworld 0x1 +2 frame 3\n")
+    with pytest.raises(RuntimeError, match="forbidden"):
+        run.assert_native_absent_gen3_saved(clean_wrote)
 
 
-def test_rival_swap_oracle_asserts_the_documented_refresh_failed_limit():
+def test_rival_swap_is_only_a_negative_characterization():
+    """Finding 6: rival_swap is a BLOCKED NEGATIVE CONTROL (a dummy team refused), labelled so in
+    the registry, the oracle's PYDEC line and the run summary -- never a qualification pass."""
+    control = duo.SCENARIOS["rival_swap_gen3"].get("control", "")
+    assert "BLOCKED" in control and "negative" in control
+    assert "CONTROL, not a qualification pass" in duo.summary_lines(
+        {"rival_swap_gen3": (True, 1)}, "gen3_rr_new")[0]
+    assert "CONTROL" not in duo.summary_lines({"faint_cmd_gen3": (True, 1)}, "gen3_rr_new")[0]
     run = _oracle_run("rival_swap_gen3", game="gen3_rr_new")
     notes = []
     run._pydec_note = notes.append
@@ -523,18 +555,13 @@ def test_rival_swap_oracle_asserts_the_documented_refresh_failed_limit():
     run._gen3_saved = lambda inst: a_untouched
     run._gen3_fixture_saved = lambda inst: a_untouched
     b_receipt = ("READY_IN_BATTLE\nRX replace_rival_team\n"
-                'TX rival_team_replaced - {"error":"refresh_failed","species_ids":[],"trainer_id":0}\n')
-    receipts = {"a": "", "b": b_receipt}
-    run.assert_rival_swap_gen3_saved(receipts)
-    assert notes and "refresh_failed" in notes[-1]
-    # A successful swap (a future refresh_enemy landing) is NOT this scenario's expected outcome:
-    # the oracle names it, it does not silently accept a "better" reply.
-    ok_reply = dict(receipts, b=b_receipt.replace("refresh_failed", "ok"))
+                 'TX rival_team_replaced - {"error":"refresh_failed","species_ids":[],"trainer_id":0}\n')
+    run.assert_rival_swap_gen3_saved({"a": "", "b": b_receipt})
+    assert notes and "NEGATIVE CONTROL (not qualification)" in notes[-1]
     with pytest.raises(RuntimeError, match="expected 'refresh_failed'"):
-        run.assert_rival_swap_gen3_saved(ok_reply)
-    no_marker = dict(receipts, b=b_receipt.replace("READY_IN_BATTLE\n", ""))
+        run.assert_rival_swap_gen3_saved({"a": "", "b": b_receipt.replace("refresh_failed", "ok")})
     with pytest.raises(RuntimeError, match="READY_IN_BATTLE"):
-        run.assert_rival_swap_gen3_saved(no_marker)
+        run.assert_rival_swap_gen3_saved({"a": "", "b": b_receipt.replace("READY_IN_BATTLE\n", "")})
 
 
 # ── per-game dispatch: ROM, battery, config, stub ──────────────────────────────────────────
@@ -785,27 +812,60 @@ function FAKE(scenario, player, phase, spec)
     ctx.frames = function() end
     ctx.wait_until = function(pred) return pred() end
     ctx.mash_until = function(pred) return pred() end
-    ctx.wait_go = function() return true end
+    -- wait_go(marker, secs): a non-string marker is a caller bug (wait_go(300) waited for a
+    -- line reading "300"), so the fake refuses it instead of answering true (finding 7).
+    ctx.wait_go = function(marker, secs)
+        if marker ~= nil and type(marker) ~= "string" then
+            error("wait_go(marker, secs): marker must be a string or nil, got " .. type(marker), 0)
+        end
+        if secs ~= nil and type(secs) ~= "number" then
+            error("wait_go(marker, secs): secs must be a number or nil", 0)
+        end
+        return true
+    end
     ctx.go_has = function() return true end
     ctx.linked = function() return spec.linked or "K1" end
     ctx.partner_done = function() return true end
     ctx.party = function() return party end
-    local gone = {}   -- a mirrored deposit leaves the party until the mirrored withdraw
+    -- gone: a deposit leaves the party until the withdraw; boxed: where the fake PC holds it;
+    -- used: gBattleResults.lastUsedMovePlayer; writes: the armed-sink write count
+    local gone, boxed, used, writes = {}, {}, 0, spec.writes or 0
     ctx.find = function(k) for _, m in ipairs(party) do if m.key == k and not gone[k] then return m end end end
     ctx.sent = function(event) if event == "box_mon_failed" or event == "sync_retrieve_failed" then return 0 end return spec.sent or 1 end
     ctx.received = function(cmd) if cmd == "force_faint" and player == "a" then return 0 end return 1 end
     ctx.wait_sent = function(event, key)
-        if event == "stats_cache" then gone[key] = true end
-        if event == "sync_retrieve_done" then gone[key] = nil end
+        if event == "stats_cache" and not spec.noop_deposit then gone[key] = true; boxed[key] = true end
+        if event == "sync_retrieve_done" then gone[key] = nil; boxed[key] = nil end
         return true
     end
-    ctx.wait_received = function() return spec.received ~= false end
+    ctx.wait_received = function(cmd)
+        if cmd == "force_explode" and spec.executes ~= false then used = 153 end
+        -- the companion's native stage writes; the clean side writes only what spec.writes says
+        if cmd == "apply_trade" then writes = writes + (player == "a" and 3 or (spec.writes or 0)) end
+        return spec.received ~= false
+    end
     ctx.last_sent = function(event)
         if event == "rival_team_replaced" then return spec.rival_reply or { error = "refresh_failed" } end
         return { area_id = "route_1", species_id = 16 }
     end
     ctx.await_turn = function() return spec.turn or "action" end
-    ctx.zero_hp = function() return spec.zero_hp_ok ~= false end
+    -- boxes: a key the client deposited is boxed unless spec.noop_deposit models a deposit that
+    -- ACKed without moving the record (Codex C4-6b finding 2's falsifier)
+    ctx.boxed = function(k) return boxed[k] and "0:0" or nil end
+    ctx.observe_boxed = function(k)
+        if ctx.find(k) or not boxed[k] then return nil end
+        logs[#logs + 1] = "BOXED_OBSERVED " .. k .. " box=0:0"
+        return "0:0"
+    end
+    ctx.observe_returned = function(k)
+        local m = ctx.find(k)
+        if not m or boxed[k] then return nil end
+        logs[#logs + 1] = "RETURNED_OBSERVED " .. k .. " slot=" .. m.slot
+        return m
+    end
+    ctx.last_used_move_player = function() return used end
+    ctx.battle_outcome = function() return 1 end
+    ctx.trade_phase = function() return spec.trade_phase or "scene" end
     ctx.hp0 = function() return spec.hp0 end
     ctx.battle_hold = function() return { why = "active battler" } end
     ctx.save = function() return true end
@@ -818,10 +878,10 @@ function FAKE(scenario, player, phase, spec)
     ctx.battler_slot = function() return 0 end
     ctx.walk_to_pc = function() end
     ctx.walk_pc_to_grass = function() end
-    ctx.pc_deposit = function() return spec.linked or "K1" end
-    ctx.pc_withdraw = function() return spec.linked or "K1" end
+    ctx.pc_deposit = function() local k = spec.linked or "K1"; gone[k] = true; boxed[k] = true; return k end
+    ctx.pc_withdraw = function() local k = spec.linked or "K1"; gone[k] = nil; boxed[k] = nil; return k end
     ctx.try = function(fn, ...) return pcall(fn, ...) end
-    ctx.writes = function() return spec.writes or 0 end
+    ctx.writes = function() return writes end
     ctx.wrong_save_hud = function() return true end
     ctx.SP = { verify_fight_cursor = function() return "fight" end }
     ctx.play = { fight_through = function() return true end, wait_scene_settled = function() return true end,
@@ -864,21 +924,27 @@ def _run_module(lua, scenario, player, phase, spec):
      {"linked": "K0", "hp0": "lua:{frame=9,in_battle=true,battler=false}"},
      ["READY_ACTIVE K0", "ACTIVE_HOLD K0 why=active battler", "SWITCHED_OUT K0",
       "BENCH_HP0_IN_BATTLE K0"]),
-    ("boxsync", "a", "initial", {}, ["DEPOSITED K1", "WITHDRAWN K1"]),
-    ("boxsync", "b", "initial", {}, ["MIRROR_DEPOSITED K1", "MIRROR_WITHDRAWN K1"]),
-    ("whiteout", "a", "initial", {}, ["DEPOSITED_FOR_REBUILD K1", "WHITED_OUT at here"]),
-    ("whiteout", "b", "initial", {}, ["DEPOSITED_FOR_REBUILD K1", "MIRROR_WITHDRAWN K1"]),
+    ("boxsync", "a", "initial", {}, ["BOXED_OBSERVED K1", "DEPOSITED K1", "RETURNED_OBSERVED K1",
+                                     "WITHDRAWN K1"]),
+    ("boxsync", "b", "initial", {}, ["BOXED_OBSERVED K1", "MIRROR_DEPOSITED K1",
+                                     "RETURNED_OBSERVED K1", "MIRROR_WITHDRAWN K1"]),
+    ("whiteout", "a", "initial", {}, ["BOXED_OBSERVED K1", "DEPOSITED_FOR_REBUILD K1",
+                                      "WHITED_OUT at here"]),
+    ("whiteout", "b", "initial", {}, ["BOXED_OBSERVED K1", "DEPOSITED_FOR_REBUILD K1",
+                                      "RETURNED_OBSERVED K1", "MIRROR_WITHDRAWN K1"]),
     ("link", "a", "initial", {}, ["CAUGHT K9"]),
     ("deadzone", "a", "initial", {}, ["NO_CATCH area=route_1 species=16"]),
     ("deadzone", "b", "initial", {"hp0": "lua:{frame=1,in_battle=false}"}, ["CAUGHT K9", "RETIRED K9"]),
     ("reconnect", "b", "initial", {}, ["RECONNECT_READY b"]),
     ("reconnect", "a", "same_save", {}, ["RECONNECT_HELLO same_save count=1"]),
     ("reconnect", "a", "wrong_save", {}, ["RECONNECT_HELLO wrong_save count=1"]),
-    # RR-only (P5, card C5-5): explode is not covered here (its B half polls raw memory/joypad
-    # globals this harness does not stub -- see the card's final report).
+    # RR-only: explode now reads the engine through ctx (no raw memory/joypad), so it runs here.
+    ("explode", "a", "initial", {"linked": "K0"}, ["LINKED_FAINTED K0"]),
+    ("explode", "b", "initial", {"linked": "K0"},
+     ["READY_ACTIVE K0 last_used=0", "EXPLOSION_EXECUTED K0 battler_slot=0 last_used=153"]),
     ("rival_swap", "b", "initial", {}, ["READY_IN_BATTLE"]),
     ("rival_swap", "a", "initial", {}, []),
-    ("native_absent", "a", "initial", {}, ["PROBE_SETTLED writes=0"]),
+    ("native_absent", "a", "initial", {}, ["TRADE_PHASE scene", "NATIVE_STAGED phase=scene writes=3"]),
     ("native_absent", "b", "initial", {}, ["PROBE_SETTLED writes=0"]),
 ])
 def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spec, markers):
@@ -896,8 +962,267 @@ def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spe
     ("reconnect", "a", "initial", {}, "the runner never killed A"),
     ("rival_swap", "b", "initial", {"turn": "party"}, "never reached the action menu"),
     ("rival_swap", "b", "initial", {"rival_reply": "lua:{error='ok'}"}, "expected error=refresh_failed"),
-    ("native_absent", "b", "initial", {"received": "lua:false"}, "probe never arrived"),
+    ("native_absent", "b", "initial", {"received": "lua:false"}, "apply_trade never arrived"),
+    ("native_absent", "b", "initial", {"writes": 1}, "the clean cartridge wrote 1 time(s)"),
+    ("native_absent", "a", "initial", {"trade_phase": "fallback"}, "the native stage failed"),
+    # finding 2's falsifier: the mirrored deposit ACKed (stats_cache) but moved nothing
+    ("whiteout", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
+    ("boxsync", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
+    # finding 5: force_explode delivered but the engine never executed Explosion
+    ("explode", "b", "initial", {"linked": "K0", "executes": "lua:false"}, "never executed Explosion"),
 ])
 def test_scenario_modules_fail_with_a_named_reason(lua, scenario, player, phase, spec, reason):
     ok, passed, msg, _ = _run_module(lua, scenario, player, phase, spec)
     assert ok and passed is False and reason in msg, msg
+
+# ── Codex C4-6b: the falsifiers, one block per finding ────────────────────────────────────
+# finding 1: RR saves decode as RR everywhere an oracle reads them
+def _rr_run(scenario="faint_cmd_gen3"):
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.scenario, run.game = scenario, "gen3_rr_new"
+    run.cfg, run.gcfg = dict(duo.SCENARIOS[scenario]), dict(duo.GAMES["gen3_rr_new"])
+    return run
+
+
+def test_rr_rows_decode_saves_with_the_rr_layout(monkeypatch):
+    image = _rr_saved(_rr_fixture(), 3)
+    run = _rr_run()
+    monkeypatch.setattr(run, "_gen3_flushed", lambda inst: image)
+    monkeypatch.setattr(run, "_gen3_fixture_bytes", lambda inst: image)
+    party, _ = run._gen3_saved("a")
+    assert [duo.gen3_key(m) for m in party] == [f"{RR_MON[1]:08X}:{RR_MON[2]:08X}"]
+    assert party[0]["species"] == RR_MON[0] and party[0]["checksum_ok"] is None
+    assert run._gen3_fixture_saved("a")[0][0]["checksum_ok"] is None
+
+
+def test_record_validity_is_the_cartridges_own():
+    """Vanilla demands the secure checksum; RR (CFRU, no checksum) must not be failed for the
+    None it decodes with, nor pass a record decoded with a vanilla verdict."""
+    rr_mon = {"checksum_ok": None, "has_species": 1, "is_bad_egg": 0, "species": 277, "level": 5}
+    assert duo.gen3_record_problems("x", rr_mon, rr=True) == []
+    assert duo.gen3_record_problems("x", rr_mon, rr=False)          # the old "is not True" rule
+    assert duo.gen3_record_problems("x", dict(rr_mon, checksum_ok=True), rr=True)
+    assert duo.gen3_record_problems("x", dict(rr_mon, has_species=0), rr=True)
+    assert duo.gen3_record_problems("x", dict(rr_mon, level=0), rr=True)
+
+
+def _rr_with_balls(count):
+    """An RR image whose EWRAM bag (ram.BALL_POCKET_ADDR, inside the sectors 30-31 extension)
+    holds `count` Poke Balls in plaintext."""
+    image = bytearray(_rr_saved(_rr_fixture(), 3))
+    with open(duo.GEN3_RR_PROFILE, encoding="utf-8") as handle:
+        addr = json.load(handle)["titles"]["radical_red"]["ram"]["BALL_POCKET_ADDR"]
+    off = addr - codec.RR_EXT_ADDR
+    sector, within = codec.RR_EXT_SECTORS[off // codec.CHUNK_SIZE_CFRU], off % codec.CHUNK_SIZE_CFRU
+    at = sector * codec.SECTOR_SIZE + within
+    image[at:at + 4] = (4).to_bytes(2, "little") + count.to_bytes(2, "little")
+    return bytes(image)
+
+
+def test_rr_ball_count_reads_the_plaintext_ewram_bag():
+    assert duo.gen3_ball_count(_rr_with_balls(7), "radical_red") == 7
+    assert duo.gen3_ball_count(_rr_with_balls(0), "radical_red") == 0
+
+
+def test_rr_wrong_save_is_parsed_with_the_rr_layout(monkeypatch, tmp_path):
+    image = _rr_saved(_rr_fixture(), 3)
+    path = tmp_path / "wrong.sav"
+    path.write_bytes(image)
+    run = _rr_run("reconnect_gen3")
+    monkeypatch.setattr(run, "_gen3_fixture_bytes", lambda inst: image)
+    # the same trainer id: refused by the TRAINER rule, not by a vanilla qualify of an RR image
+    with pytest.raises(RuntimeError, match="carries A's own trainer id"):
+        run._gen3_wrong_save(str(path))
+
+
+# finding 3: record integrity -- checksum and every invariant field, an explicit whitelist
+def test_round_trip_refuses_a_flipped_checksum_bit(pair):
+    fixture, _ = pair
+    flipped = _saved(fixture, 3, [STARTER, dict(PIDGEY, flip_checksum=True)])
+    problems = duo.gen3_round_trip_problems("a", _decoded(flipped), _decoded(fixture), _key(PIDGEY))
+    assert any("secure checksum fails" in p for p in problems), problems
+
+
+@pytest.mark.parametrize("field, value", [
+    ("moves", [33, 0, 0, 0]),
+    ("ivs", dict(PIDGEY["ivs"], speed=31)),
+    ("held_item", 13),
+    ("nickname", "OTHER"),
+    ("ot_name", "BLUE"),
+    ("ability_num", 1),
+    ("evs", dict(PIDGEY["evs"], attack=4)),
+    ("met_location", 1),
+])
+def test_round_trip_names_every_changed_invariant(pair, field, value):
+    fixture, _ = pair
+    changed = _saved(fixture, 3, [STARTER, dict(PIDGEY, **{field: value})])
+    problems = duo.gen3_round_trip_problems("a", _decoded(changed), _decoded(fixture), _key(PIDGEY))
+    assert any(f"('{field}'," in p for p in problems), problems
+
+
+def test_round_trip_allows_exactly_the_whitelisted_changes(pair):
+    """HP, status, PP (and the checksum over it), mail and friendship are what a deposit,
+    withdraw or walk legitimately change; nothing else is."""
+    fixture, _ = pair
+    healed = dict(PIDGEY, hp=3, status=8, pp=[20, 30, 0, 0], friendship=90)
+    saved = _saved(fixture, 3, [STARTER, healed])
+    assert duo.gen3_round_trip_problems("a", _decoded(saved), _decoded(fixture), _key(PIDGEY)) == []
+    whitelist = {"hp", "status", "mail", "pp", "friendship", "checksum"}
+    assert whitelist == duo.GEN3_RECORD_MUTABLE
+
+
+def test_memorial_record_keeps_the_fixture_invariants(pair):
+    fixture, _ = pair
+    item = _saved(fixture, 3, [STARTER],
+                  {(13, 0): dict(_mon(PIDGEY["personality"], party=False, species=16), held_item=13)})
+    problems = duo.gen3_memorial_problems("b", _decoded(item), _decoded(fixture), _key(PIDGEY), 13)
+    assert any("('held_item'," in p for p in problems), problems
+
+
+def test_capture_record_must_be_valid_for_the_cartridge(pair):
+    fixture, _ = pair
+    caught = _saved(fixture, 3, [STARTER, PIDGEY, dict(CATCH, flip_checksum=True)], balls=3)
+    problems = duo.gen3_capture_problems("a", _decoded(caught), _decoded(fixture), _key(CATCH),
+                                         {"species_id": 19})
+    assert any("secure checksum fails" in p for p in problems), problems
+
+
+def test_rr_box_trip_ignores_only_what_cfru_compression_drops():
+    was = {"species": 277, "contest": [1, 2, 3, 4, 5, 6], "unknown": 7, "ribbons": 0x10, "moves": [1]}
+    now = {"species": 277, "contest": [0] * 6, "unknown": 0, "ribbons": 0x80000010, "moves": [1]}
+    assert duo.gen3_record_diff(was, now, rr=True) == []
+    assert duo.gen3_record_diff(was, now, rr=False)                  # vanilla keeps them
+    assert duo.gen3_record_diff(was, dict(now, ribbons=0x80000011), rr=True)
+
+
+# finding 2: whiteout/boxsync need the cartridge read back, not just the ACK
+def _whiteout_receipts(k):
+    a = (f"BOXED_OBSERVED {k} box=0:0\nTX whiteout - {{}}\nWHITED_OUT at here\n"
+         "RX rebuild_start text=REBUILDING\n"
+         f"RX party_mon key={k}\nTX sync_retrieve_done {k} {{}}\nRX rebuild_done\n"
+         f"RETURNED_OBSERVED {k} slot=1\n")
+    b = (f"RX box_mon key={k}\nTX stats_cache {k} {{}}\nBOXED_OBSERVED {k} box=0:0\n"
+         f"RX party_mon key={k}\nTX sync_retrieve_done {k} {{}}\nRETURNED_OBSERVED {k} slot=1\n")
+    return {"a": a, "b": b}
+
+
+def test_whiteout_oracle_refuses_a_noop_deposit(monkeypatch, tmp_path):
+    fixture = _fixture([STARTER, PIDGEY])
+    saved = _saved(fixture, 3, [STARTER, PIDGEY])
+    k = _key(PIDGEY)
+    run, notes = _oracle_stub(monkeypatch, tmp_path, "whiteout_gen3", {"a": saved, "b": saved},
+                              fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "alive"}])
+    run._link_keys = {"a": k, "b": k}
+    receipts = _whiteout_receipts(k)
+    run.assert_whiteout_gen3_saved(receipts)
+    assert notes and "whiteout" in notes[-1]
+    # the ACKs and the final saved party are all there; only the physical read-back is missing
+    noop = dict(receipts, b=receipts["b"].replace(f"BOXED_OBSERVED {k} box=0:0\n", ""))
+    with pytest.raises(RuntimeError, match="BOXED_OBSERVED"):
+        run.assert_whiteout_gen3_saved(noop)
+    never_back = dict(receipts, b=receipts["b"].replace(f"RETURNED_OBSERVED {k} slot=1\n", ""))
+    with pytest.raises(RuntimeError, match="RETURNED_OBSERVED"):
+        run.assert_whiteout_gen3_saved(never_back)
+
+
+# finding 4: RR extension freshness is proven against live RAM or stated OPEN
+def test_rr_extension_is_open_unless_the_live_ram_copy_matches():
+    fixture = _rr_fixture(ext_byte=0x00)
+    saved = _rr_saved(fixture, 3, ext_byte=0x11)
+    assert duo.check_gen3_witness(saved, saved, fixture, saves=1, rr=True)["extension"] == "OPEN"
+    live = bytes([0x11]) * codec.RR_EXT_SIZE
+    facts = duo.check_gen3_witness(saved, saved, fixture, saves=1, rr=True, ext_ram=live)
+    assert facts["extension"] == "LIVE_RAM_MATCH"
+    # a stale extension: flash still holds the previous state while RAM moved on
+    stale = bytes([0x22]) * codec.RR_EXT_SIZE
+    with pytest.raises(RuntimeError, match="extension sector 30 is not the live EWRAM"):
+        duo.check_gen3_witness(saved, saved, fixture, saves=1, rr=True, ext_ram=stale)
+    with pytest.raises(RuntimeError, match="live extension RAM copy is 4 bytes"):
+        duo.check_gen3_witness(saved, saved, fixture, saves=1, rr=True, ext_ram=b"\0" * 4)
+    assert duo.check_gen3_witness(*_pair_vanilla(), saves=1)["extension"] is None
+
+
+def _pair_vanilla():
+    fixture = _fixture([STARTER, PIDGEY])
+    saved = _saved(fixture, 3, [STARTER, PIDGEY])
+    return saved, saved, fixture
+
+
+def test_rr_witness_method_reports_the_extension_verdict(tmp_path, monkeypatch):
+    fixture = _rr_fixture(ext_byte=0x00)
+    saved = _rr_saved(fixture, 3, ext_byte=0x11)
+    run, receipts, notes, build = _witness_run(tmp_path, monkeypatch, (fixture, saved))
+    run.game, run.gcfg = "gen3_rr_new", dict(duo.GAMES["gen3_rr_new"])
+    run.check_save_witness_gen3(receipts)
+    assert all("extension_30_31=OPEN" in n for n in notes), notes
+    notes.clear()
+    for inst in ("a", "b"):
+        (build / f"e2e_faint_cmd_gen3_{inst}_1_witness_ext.bin").write_bytes(
+            bytes([0x11]) * codec.RR_EXT_SIZE)
+    run.check_save_witness_gen3(receipts)
+    assert all("extension_30_31=LIVE_RAM_MATCH" in n for n in notes), notes
+
+
+# finding 5: explode needs a keyed command and the engine's execution, not a stamped slot
+def _explode_receipts(ka, kb):
+    return {"a": (f"ENGINE_FAINT_SITE frame=10\nTX faint {ka} {{}}\n"
+                  f"TX memorialize_done {ka} {{}}\n"),
+            "b": (f"READY_ACTIVE {kb} last_used=0\nRX force_explode key={kb}\n"
+                  f"EXPLOSION_EXECUTED {kb} battler_slot=0 last_used=153\n"
+                  f"TX memorialize_done {kb} {{}}\n")}
+
+
+def test_explode_oracle_needs_the_engine_to_execute_the_keyed_command(monkeypatch, tmp_path):
+    fixture = _fixture([STARTER, PIDGEY])
+    saved = _saved(fixture, 3, [PIDGEY], {(13, 0): _mon(STARTER["personality"], party=False)})
+    k = _key(STARTER)
+    run, notes = _oracle_stub(monkeypatch, tmp_path, "faint_cmd_gen3", {"a": saved, "b": saved},
+                              fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "memorial",
+                                         "cause": "battle"}])
+    run._link_keys = {"a": k, "b": k}
+    (tmp_path / "slink.log").write_text(f"[a] faint → force_explode b:{k}\n", encoding="utf-8")
+    receipts = _explode_receipts(k, k)
+    run.assert_explode_gen3_saved(receipts)
+    assert notes and "Explosion executed" in notes[-1]
+    stamped_only = dict(receipts, b=receipts["b"].replace(
+        f"EXPLOSION_EXECUTED {k} battler_slot=0 last_used=153\n", "Explosion stamped into move slot 0\n"))
+    with pytest.raises(RuntimeError, match="EXPLOSION_EXECUTED"):
+        run.assert_explode_gen3_saved(stamped_only)
+    unkeyed = dict(receipts, b=receipts["b"].replace(f"RX force_explode key={k}", "RX force_explode"))
+    with pytest.raises(RuntimeError, match="force_explode"):
+        run.assert_explode_gen3_saved(unkeyed)
+    poked = dict(receipts, a=receipts["a"].replace("ENGINE_FAINT_SITE frame=10\n", ""))
+    with pytest.raises(RuntimeError, match="ENGINE_FAINT_SITE"):
+        run.assert_explode_gen3_saved(poked)
+
+
+def test_no_driver_pokes_game_memory():
+    """Scripted normal inputs only: no scenario module or the driver writes the cartridge."""
+    texts = [DRIVER.read_text(encoding="utf-8")] + [
+        f.read_text(encoding="utf-8") for f in (REPO / "lua" / "tests" / "duo").glob("scenario_gen3_*.lua")]
+    for text in texts:
+        assert not re.search(r"memory\.write", text)
+        assert "zero_hp" not in text
+
+
+# finding 7: wait_go's first argument is the MARKER
+def test_no_scenario_passes_seconds_as_the_wait_go_marker():
+    for f in (REPO / "lua" / "tests" / "duo").glob("scenario_gen3_*.lua"):
+        assert not re.search(r"wait_go\(\s*\d", f.read_text(encoding="utf-8")), f.name
+
+
+# the wire-log label: the gen3 battery rows run the NEW client
+def test_wire_logs_are_labelled_by_client(monkeypatch, tmp_path):
+    for game, label in (("gen3_frlg", "new_client"), ("gen3_rr_new", "new_client"),
+                        ("gen3_rr", "old_client")):
+        run = duo.DuoRun.__new__(duo.DuoRun)
+        run.scenario, run.game, run.gcfg = "faint_cmd_gen3", game, dict(duo.GAMES[game])
+        run.args = argparse.Namespace(wire_log=True)
+        run.data_dir = str(tmp_path / game)
+        wire = Path(run.data_dir) / "wire"
+        wire.mkdir(parents=True)
+        (wire / "wire_a.jsonl").write_text("{}\n", encoding="utf-8")
+        out = tmp_path / f"out_{game}"
+        monkeypatch.setattr(duo, "WIRE_FIXTURES", str(out))
+        landed = run.collect_wire_logs()
+        assert [Path(x).name for x in landed] == [f"faint_cmd_gen3_a_{label}.jsonl"], game
