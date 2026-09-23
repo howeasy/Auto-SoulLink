@@ -56,7 +56,10 @@ CART_RAM_BYTES = 0x8000
 REACQUIRE = {"town": [("idle", "start_menu"), ("face", "talk"), ("to_save", "save"), ("post_save", "exit"),
                       ("post_warp", "done")],
              "reload": [("idle", "done")],
-             "battle": [("idle", "walk"), ("post_battle", "done")]}
+             "battle": [("idle", "walk"), ("post_battle", "done")],
+             "boxes": [("idle", "walk"), ("post_save", "ops")],
+             "boxes_reset": [("idle", "ops"), ("post_save", "done")],
+             "boxes_reload": [("idle", "done")]}
 
 
 def receipt_path(title: str, *, repo: Path = REPO) -> Path:
