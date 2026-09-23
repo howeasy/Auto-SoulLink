@@ -1442,6 +1442,26 @@ def gen3_capture_problems(label, saved, fixture, key, sent=None, rr=False, limit
 # Paths a run itself rewrites (the wire goldens `--wire-log` refreshes): never "dirty source".
 GEN3_IDENTITY_EXCLUDE = ("tests/fixtures/gen3/wire/",)
 
+def gen3_dirty_paths(porcelain_z):
+    """The dirty paths of `git status --porcelain=v1 -z` output, NUL-separated and unquoted. A
+    rename/copy record ("R" or "C" in XY) is `XY new\0old\0`: BOTH paths are reported, and the
+    record is excluded only when BOTH lie under GEN3_IDENTITY_EXCLUDE (Codex, 86245d1e: a
+    wire-fixture -> server/ rename used to read as one excluded path)."""
+    out, fields, i = [], porcelain_z.split("\0"), 0
+    while i < len(fields):
+        record = fields[i]
+        i += 1
+        if len(record) < 4:
+            continue
+        status, paths = record[:2], [record[3:]]
+        if "R" in status or "C" in status:
+            paths.append(fields[i])
+            i += 1
+        if not all(path.startswith(GEN3_IDENTITY_EXCLUDE) for path in paths):
+            out.extend(paths)
+    return out
+
+
 # While a Gen 3 oracle runs, DuoRun._run_oracle points this at a list: gen3_receipt_problems
 # appends (label, line) for every receipt line a required/ordered pattern matched, and the runner
 # copies them into the PYDEC receipt (Codex receipt audit 2026-09-23: the receipt must carry
@@ -5208,8 +5228,8 @@ class DuoRun:
         packs = " ".join(f"{name}={sha(os.path.join(pack, name))}"
                          for name in ("write_checkpoint.json", "profile.json"))
         head = git("rev-parse", "HEAD").strip()
-        dirty = [line[3:].strip('"') for line in git("status", "--porcelain", "--untracked-files=all").splitlines()
-                 if line[3:].strip('"') and not line[3:].strip('"').startswith(GEN3_IDENTITY_EXCLUDE)]
+        dirty = gen3_dirty_paths(git("status", "--porcelain=v1", "-z", "--untracked-files=all",
+                                     "--ignore-submodules=none"))
         self._gen3_source_dirty = dirty
         shown = f" dirty=[{','.join(dirty[:20])}{',...' if len(dirty) > 20 else ''}]" if dirty else ""
         return f"IDENTITY {sides} {packs} source={head}{'+dirty' if dirty else ''}{shown}"
@@ -5829,7 +5849,9 @@ class DuoRun:
             for label, line in consumed:
                 if (label, line) not in seen:
                     seen.add((label, line))
-                    self._pydec_note(f"MARKER {label}: {line[:400]}")
+                    # the WHOLE line: CENTER_STATE / WRITE_IN_CENTER / CONTROL_REFUSED carry their
+                    # tail predicates and keyed-write/ACK suffix past 400 chars (Codex, 86245d1e)
+                    self._pydec_note(f"MARKER {label}: {line}")
 
     def _note_result_lines(self, texts):
         """Each side's own RESULT line, verbatim, beside the runner's verdict (Gen 3 rows)."""

@@ -35,6 +35,13 @@
 local fmt = string.format
 
 local DEST_2F = { group = 5, num = 5, x = 2, y = 6 }
+-- pret include/constants/vars.h:176; PalletTown_ProfessorOaksLab/scripts.inc:658 sets it to 1
+-- with the Pokedex. At 1, the 2F's ON_FRAME table (cable_club.inc CableClub_OnFrame) runs
+-- CableClub_EventScript_Tutorial on arrival: lockall, TEALA's msgbox, Movement_PlayerApproach-
+-- Counter (walk_up x2: (2,6) -> (2,4)), a second msgbox, then the var -> 2. Live FR r6 stalled
+-- stepping Up into that lockall ("First, I need to show you this ...").
+local VAR_MAP_SCENE_POKEMON_CENTER_TEALA = 0x407C
+local TUTORIAL_END = { x = 2, y = 4 }
 
 local function a_side(ctx, linked)
     local SP, cp, G, play = ctx.SP, ctx.cp, ctx.G, ctx.play
@@ -58,8 +65,27 @@ local function a_side(ctx, linked)
 
     ctx.walk_to_pc("center_controls a")
     play.follow(cp, "center_pc_to_escalator", "center_controls a")
+    local teala = ctx.game_var(VAR_MAP_SCENE_POKEMON_CENTER_TEALA)
     SP.warp_to(cp, "Left", 30, DEST_2F, "center_controls a escalator")
-    play.follow(cp, "center2f_to_direct_corner", "center_controls a")
+    if teala == 1 then
+        if not ctx.wait_until(script_live, 10, "CableClub_EventScript_Tutorial") then
+            return false, "the 2F tutorial (VAR_MAP_SCENE_POKEMON_CENTER_TEALA=1) never started"
+        end
+        if not ctx.mash_until(function() return not script_live() and ctx.on_field() end, 120, "A") then
+            return false, "the 2F tutorial never ended"
+        end
+        ctx.frames(30)
+        local x, y = G.pos(cp)
+        local after = ctx.game_var(VAR_MAP_SCENE_POKEMON_CENTER_TEALA)
+        ctx.log(fmt("TEALA_TUTORIAL var=1->%s at=(%d,%d)", tostring(after), x, y))
+        if after ~= 2 or x ~= TUTORIAL_END.x or y ~= TUTORIAL_END.y then
+            return false, fmt("the 2F tutorial did not end at (%d,%d) with the var at 2", TUTORIAL_END.x, TUTORIAL_END.y)
+        end
+        play.follow(cp, "center2f_counter_to_direct_corner", "center_controls a")
+    else
+        ctx.log(fmt("TEALA_TUTORIAL var=%s skipped", tostring(teala)))
+        play.follow(cp, "center2f_to_direct_corner", "center_controls a")
+    end
     G.tap("Up", 3, 20)                                   -- face the counter (10,3): no step
     G.tap("A", 3, 13)
     if not ctx.wait_until(script_live, 10, "the Direct Corner attendant's script") then

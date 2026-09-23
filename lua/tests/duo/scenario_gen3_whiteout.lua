@@ -32,6 +32,31 @@ local function a_side(ctx, linked)
     if not ctx.observe_boxed(linked) then return false, linked .. " was never read back boxed after the deposit" end
     ctx.log("DEPOSITED_FOR_REBUILD " .. linked)
     if not ctx.wait_go("BOTH_BOXED", 1800) then return false, "the runner never wrote BOTH_BOXED" end
+    -- (1)+(2) armed BEFORE the walk: the lone starter can faint in an incidental battle ON the
+    -- walk, and playlib then fights, whites out, mashes through the heal script (the rebuild
+    -- lands) and only then raises -- live gen3_lgfr r6: the three rebuild writes at frame 16729,
+    -- the whiteout raised at 16793, the hook armed after both. Both watchers run every frame
+    -- whoever drives it. The landing sample needs the whiteout already SENT (the walk out of the
+    -- Center crosses (7,4) too), which is also strictly before the write: the rebuild's
+    -- party_mon only answers that whiteout.
+    local dest = ctx.SP.whiteout_destination(ctx.cp)    -- lastHealLocation -> Center 5.4 (7,4)
+    if not dest then return false, "no whiteout destination" end
+    local function overworld_writes()
+        local n = 0
+        for _, w in ipairs(ctx.write_lines()) do if w.reason == "overworld" then n = n + 1 end end
+        return n
+    end
+    local ow0 = overworld_writes()
+    local land                                          -- { line, missing, snap, ow }
+    ctx.watch(function()
+        if ctx.sent("whiteout") == 0 or not at(ctx, dest) then return false end
+        local line, missing, snap = ctx.center_state()
+        if #missing > 0 then return false end
+        land = { line = line, missing = missing, snap = snap, ow = overworld_writes() }
+        return true
+    end)
+    local wline, wmissing, wat
+    ctx.on_write("overworld", function() wline, wmissing, wat = ctx.center_state() end)
     local ok, err = ctx.try(function()
         ctx.walk_pc_to_grass("whiteout a")
         if not ctx.hunt("whiteout a") then error("no wild encounter", 0) end
@@ -46,30 +71,19 @@ local function a_side(ctx, linked)
     if not ctx.mash_until(function() return ctx.sent("whiteout") > 0 end, 180, "A") then
         return false, "the client never sent whiteout"
     end
-    -- (1) the landing, before the rebuild can land: nothing is pressed here, and the checkpoint
-    -- stays shut until the after-whiteout heal script (which waits for A) has ended
-    local dest = ctx.SP.whiteout_destination(ctx.cp)    -- Viridian Center 1F 5.4 (7,4)
-    if not dest then return false, "no whiteout destination" end
-    local writes0 = ctx.writes()
-    local line, missing, land
-    ctx.wait_until(function()
-        if not at(ctx, dest) then return nil end
-        line, missing, land = ctx.center_state()
-        return #missing == 0
-    end, 30, "the Center landing with the Union Room background set")
-    if not line then return false, "never landed on the Center tile " .. dest.x .. "," .. dest.y end
-    ctx.log(fmt("CENTER_STATE %s writes_since_whiteout=%d", line, ctx.writes() - writes0))
-    if #missing > 0 then
-        return false, "the Union Room background set is absent at the Center landing ("
-                   .. table.concat(missing, ",") .. "): this receipt would not prove the widened allow-list"
+    ctx.wait_until(function() return land end, 30, "the Center landing with the Union Room background set")
+    if not land then
+        local _, missing = ctx.center_state()
+        return false, fmt("the Union Room background set is absent at the Center landing %d.%d (%d,%d) "
+                          .. "after the whiteout (missing now: %s): this receipt would not prove the "
+                          .. "widened allow-list", dest.group, dest.num, dest.x, dest.y,
+                          table.concat(missing, ","))
     end
-    for _, b in ipairs(land.bad) do
+    ctx.log(fmt("CENTER_STATE %s overworld_writes_before=%d", land.line, land.ow - ow0))
+    for _, b in ipairs(land.snap.bad) do
         if b:find("^pointer:") then return false, "CENTER_STATE: insane " .. b end
     end
-    if ctx.writes() ~= writes0 then return false, "a write landed before CENTER_STATE was taken" end
-    -- (2) the state in the very frame the first overworld write lands
-    local wline, wmissing, wat
-    ctx.on_write("overworld", function() wline, wmissing, wat = ctx.center_state() end)
+    if land.ow ~= ow0 then return false, "a write landed before CENTER_STATE was taken" end
     ctx.play.wait_scene_settled(ctx.cp, 6000)          -- the heal-location landing and its text
     ctx.log("WHITED_OUT at " .. ctx.play.where(ctx.cp))
     if not ctx.wait_received("party_mon", linked, 900) then return false, "no rebuild party_mon" end
@@ -95,7 +109,7 @@ local function a_side(ctx, linked)
     end
     if #wmissing > 0 then return false, "the Union Room set was gone when the write landed" end
     if #wat.bad > 0 then return false, "the write landed off the checkpoint: " .. table.concat(wat.bad, ",") end
-    for name, v in pairs(land.ptrs) do
+    for name, v in pairs(land.snap.ptrs) do
         if wat.ptrs[name] ~= v then return false, "pointer moved between the landing and the write: " .. name end
     end
     if not at(ctx, dest) then return false, "the player moved before the ACK" end

@@ -709,6 +709,12 @@ local PATHS = {
         map = "PokemonCenter_2F", from = { 2, 6 }, to = { 10, 4 },
         dirs = { "Up","Up","Right","Right","Right","Right","Right","Right","Right","Right" },
     },
+    -- --map 5.5 --bfs 2,4 10,4: from where CableClub_EventScript_Tutorial leaves the player
+    -- (Movement_PlayerApproachCounter, walk_up x2 from the arrival (2,6)).
+    center2f_counter_to_direct_corner = {
+        map = "PokemonCenter_2F", from = { 2, 4 }, to = { 10, 4 },
+        dirs = { "Right","Right","Right","Right","Right","Right","Right","Right" },
+    },
     center2f_direct_corner_to_union_room = {
         map = "PokemonCenter_2F", from = { 10, 4 }, to = { 6, 4 },
         dirs = { "Left","Left","Left","Left" },

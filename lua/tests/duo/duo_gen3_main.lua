@@ -455,6 +455,13 @@ function ctx.mutable_bytes()
     return party, box
 end
 function ctx.party_base() return reader.party_base() end
+--- A script variable (0x4000..), read through gSaveBlock1Ptr + SB1_VARS_OFFSET (pret
+--- include/global.h SaveBlock1 vars; the pack's derived offset). nil while the pointer is insane.
+function ctx.game_var(id)
+    local sb1 = memory.read_u32_le(cp.pointers.gSaveBlock1Ptr.address, "System Bus")
+    if sb1 < 0x02000000 or sb1 >= 0x02040000 then return nil end
+    return memory.read_u16_le(sb1 + profile.derived.SB1_VARS_OFFSET + (id - 0x4000) * 2, "System Bus")
+end
 function ctx.wrong_save_hud() return wrong_save_hud end
 --- The session's held in-battle write for `key` (lua/core/session.lua battle_pending), if any.
 function ctx.battle_hold(key)
@@ -475,10 +482,20 @@ end
 -- time it is seen alive and then at HP 0.
 ctx.hp0_tag = "FORCED_HP0"
 local alive, hp0 = {}, {}
+-- ctx.watch(fn): fn() runs at the end of EVERY frame, after run.lua's frame end (so after any
+-- client write of that frame), whatever the driver is doing -- including inside a helper that
+-- advances frames itself (playlib's incidental battle, which can settle a whole whiteout and its
+-- heal script before it returns: live gen3_lgfr whiteout_gen3 r6). A truthy return removes it.
+local watchers = {}
+function ctx.watch(fn) watchers[#watchers + 1] = fn end
 -- Plaintext fields only (PID/OTID at +0/+4, hp at +0x56 of struct Pokemon, pret
 -- include/pokemon.h): no per-frame decryption.
 local PARTY_COUNT_ADDR, MON_SIZE, HP_OFF = profile.ram.PARTY_COUNT_ADDR, Reads.PARTY_MON_SIZE, 0x56
 event.onframeend(function()
+    for i = #watchers, 1, -1 do
+        local ok, done = pcall(watchers[i])
+        if not ok or done then table.remove(watchers, i) end
+    end
     local count, base = memory.read_u8(PARTY_COUNT_ADDR, "System Bus"), reader.party_base()
     if not base or count > 6 then return end
     for slot = 0, count - 1 do

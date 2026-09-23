@@ -855,11 +855,20 @@ function FAKE(scenario, player, phase, spec)
         end
     end
     ctx.frames = function() end
-    ctx.wait_until = function(pred) return pred() end
+    local watchers, write_armed, teala = {}, nil, spec.teala or 1
+    local function run_watchers()
+        for i = #watchers, 1, -1 do if watchers[i]() then table.remove(watchers, i) end end
+    end
+    ctx.watch = function(fn) watchers[#watchers + 1] = fn end
+    ctx.wait_until = function(pred) run_watchers(); return pred() end
     ctx.mash_until = function(pred)
         local v = pred()
         if v then return v end
         released = true                        -- the mashed A closes the open script
+        if scenario == "center_controls" and teala == 1 then
+            teala = 2                          -- CableClub_EventScript_Tutorial walked (2,6)->(2,4)
+            here_at(5, 5, 2, 4)
+        end
         return pred()
     end
     -- wait_go(marker, secs): a non-string marker is a caller bug (wait_go(300) waited for a
@@ -947,7 +956,14 @@ function FAKE(scenario, player, phase, spec)
     ctx.walk_pc_to_grass = function() end
     ctx.pc_deposit = function() local k = spec.linked or "K1"; gone[k] = true; boxed[k] = true; return k end
     ctx.pc_withdraw = function() local k = spec.linked or "K1"; gone[k] = nil; boxed[k] = nil; return k end
-    ctx.try = function(fn, ...) return pcall(fn, ...) end
+    ctx.try = function(fn, ...)
+        local r = table.pack(pcall(fn, ...))
+        if scenario == "whiteout" and player == "a" then
+            run_watchers()                     -- the landing, while the heal script still runs
+            if write_armed then local w = write_armed; write_armed = nil; w() end  -- the rebuild
+        end
+        return table.unpack(r, 1, r.n)
+    end
     ctx.writes = function() return writes end
     ctx.wrong_save_hud = function() return true end
     local CENTER = { group = 5, num = 4, x = 7, y = 4 }
@@ -956,6 +972,7 @@ function FAKE(scenario, player, phase, spec)
                  ptrs = { gSaveBlock1Ptr = 0x02025000 } }
     end
     local here = snap(CENTER)
+    function here_at(g, n, x, y) here = snap({ group = g, num = n, x = x, y = y }) end
     ctx.SP = { verify_fight_cursor = function() return "fight" end,
                whiteout_destination = function() return CENTER end, warp_to = function() end }
     -- a script is live from a talk (A tap) until A mashes it closed (mash_until)
@@ -967,12 +984,18 @@ function FAKE(scenario, player, phase, spec)
         return string.format("map=%d.%d at=(%d,%d) frame=7 tasks=[] preds=[]", here.group, here.num,
                              here.x, here.y), missing, here
     end
+    -- the write fires once, at its moment (inside ctx.try for whiteout A); a hook armed after
+    -- it never sees it -- HEAD's order, which the live gen3_lgfr r6 run exposed
     ctx.on_write = function(_, fn)
-        if spec.write_at == "outside" then here = snap({ group = 3, num = 1, x = 26, y = 27 }) end
-        if spec.off_checkpoint then here = snap(CENTER, { "cpu" }) end
-        fn()
-        here = snap(CENTER)
+        local function fire()
+            if spec.write_at == "outside" then here = snap({ group = 3, num = 1, x = 26, y = 27 }) end
+            if spec.off_checkpoint then here = snap(CENTER, { "cpu" }) end
+            fn()
+            here = snap(CENTER)
+        end
+        if scenario == "whiteout" and player == "a" then write_armed = fire else fire() end
     end
+    ctx.game_var = function() return teala end
     ctx.write_hook_errors = function() return {} end
     ctx.party_base = function() return 0x02024284 end
     -- the rebuild's keyed record: K1 reads back in slot 1 -> party_base + 100
@@ -1018,7 +1041,8 @@ function FAKE(scenario, player, phase, spec)
         assert(load(HOLD_SRC, "hold_probe", "t", env))()
     end
     ctx.play = { fight_through = function() return true end, wait_scene_settled = function() return true end,
-                 where = function() return "here" end, follow = function() end }
+                 where = function() return "here" end,
+                 follow = function(_, name) logs[#logs + 1] = "FOLLOW " .. name end }
     local fn = dofile(SCENARIO_DIR .. "/scenario_gen3_" .. scenario .. ".lua")
     local ok, pass, msg = pcall(fn, ctx)
     return ok, pass, tostring(ok and msg or pass), table.concat(logs, "\n")
@@ -2476,7 +2500,7 @@ def _identity_run(monkeypatch, tmp_path, status="", fail=None):
 
 
 def test_identity_marks_any_tracked_change_dirty_and_the_oracle_rejects_it(monkeypatch, tmp_path):
-    run = _identity_run(monkeypatch, tmp_path, status=" M server/state.py\n M tests/fixtures/gen3/wire/x.jsonl\n")
+    run = _identity_run(monkeypatch, tmp_path, status=" M server/state.py\0 M tests/fixtures/gen3/wire/x.jsonl\0")
     line = run._gen3_identity()
     assert line.endswith("source=" + "a" * 40 + "+dirty dirty=[server/state.py]"), line
     run.cfg = dict(duo.SCENARIOS["whiteout_gen3"])
@@ -2484,7 +2508,7 @@ def test_identity_marks_any_tracked_change_dirty_and_the_oracle_rejects_it(monke
     monkeypatch.setattr(run, "check_save_witness_gen3", lambda results: None)
     with pytest.raises(RuntimeError, match=r"\+dirty \(server/state.py\)"):
         run._run_oracle({"a": "", "b": ""})
-    clean = _identity_run(monkeypatch, tmp_path, status=" M tests/fixtures/gen3/wire/x.jsonl\n")
+    clean = _identity_run(monkeypatch, tmp_path, status=" M tests/fixtures/gen3/wire/x.jsonl\0")
     assert clean._gen3_identity().endswith("source=" + "a" * 40)
     assert clean._gen3_source_dirty == []
 
@@ -2494,3 +2518,89 @@ def test_identity_fails_closed_on_a_git_error(monkeypatch, tmp_path, step):
     run = _identity_run(monkeypatch, tmp_path, fail=step)
     with pytest.raises(RuntimeError, match="IDENTITY: git .* failed"):
         run._gen3_identity()
+
+
+# ── C4-6o: live r6 at 059da756 ──────────────────────────────────────────────────────────────
+def test_the_whiteout_hooks_catch_a_rebuild_that_lands_inside_the_walk(lua):
+    """gen3_lgfr r6: the lone starter fainted in an incidental battle ON the walk; playlib settled
+    the whiteout and the heal script (the rebuild wrote at frame 16729) before it raised at
+    16793, and the write hook -- armed after -- saw nothing. Armed before the walk, both the
+    landing sample and the write frame are caught."""
+    ok, passed, msg, logs = _run_module(lua, "whiteout", "a", "initial", {})
+    assert ok and passed is True, msg
+    assert "CENTER_STATE map=5.4 at=(7,4)" in logs and "overworld_writes_before=0" in logs
+    assert "WRITE_IN_CENTER map=5.4 at=(7,4)" in logs and "record=0x020242E8+100@7" in logs
+
+
+@pytest.mark.parametrize("teala, path, marker", [
+    (1, "FOLLOW center2f_counter_to_direct_corner", "TEALA_TUTORIAL var=1->2 at=(2,4)"),
+    (2, "FOLLOW center2f_to_direct_corner", "TEALA_TUTORIAL var=2 skipped"),
+])
+def test_center_controls_waits_out_the_2f_tutorial(lua, teala, path, marker):
+    """FR r6 stalled on "step Up" at (2,6): VAR_MAP_SCENE_POKEMON_CENTER_TEALA (0x407C) is 1
+    after the Pokedex, so CableClub_OnFrame runs the tutorial (lockall, walk_up x2 to (2,4))."""
+    ok, passed, msg, logs = _run_module(lua, "center_controls", "a", "initial", {"teala": teala})
+    assert ok and passed is True, msg
+    assert path in logs and marker in logs, logs
+
+
+def test_the_tutorial_var_and_its_path_are_pret_facts():
+    from gba_map import load
+
+    rom = REPO / "patch" / "build" / "gen3_Pokemon_-_FireRed_Version_(USA).gba"
+    if not rom.is_file():
+        pytest.skip("no staged FR ROM")
+    m = load(str(rom), sym_path=str(REPO / "data" / "gen3" / "pret" / "pokefirered.sym")).map(5, 5)
+    assert m.bfs((2, 4), (10, 4)) == ["Right"] * 8
+    text = (REPO / "lua" / "tests" / "duo" / "scenario_gen3_center_controls.lua").read_text(encoding="utf-8")
+    assert "VAR_MAP_SCENE_POKEMON_CENTER_TEALA = 0x407C" in text
+
+
+# ── C4-6o addendum: Codex on 86245d1e ───────────────────────────────────────────────────────
+def test_a_long_marker_survives_whole_into_the_receipt(monkeypatch, tmp_path):
+    fixture = _fixture([STARTER, PIDGEY])
+    saved = _saved(fixture, 3, [STARTER, PIDGEY])
+    k = _key(PIDGEY)
+    run, notes = _oracle_stub(monkeypatch, tmp_path, "whiteout_gen3", {"a": saved, "b": saved},
+                              fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "alive"}])
+    run._link_keys = {"a": k, "b": k}
+    run.cfg = dict(duo.SCENARIOS["whiteout_gen3"])
+    run.game = "gen3_frlg"
+    monkeypatch.setattr(run, "check_save_witness_gen3", lambda results: None)
+    preds = ",".join(f"pred{i}=0x{i:X}" for i in range(40)) + ",soft_reset_disabled=0x0"
+    keyed = f" | keyed {k} slot=1 record=0x020242E8+100@7 | ack map=5.4 at=(7,4) frame=8"
+    receipts = _whiteout_receipts(k)
+    long_write = f"WRITE_IN_CENTER map=5.4 at=(7,4) frame=7 preds=[{preds}]{keyed}"
+    assert len(long_write) > 400
+    receipts["a"] = receipts["a"].replace("WRITE_IN_CENTER map=5.4 at=(7,4)\n", long_write + "\n")
+    run._run_oracle(receipts)
+    assert f"MARKER a: {long_write}" in notes, [n for n in notes if "WRITE_IN_CENTER" in n]
+
+
+@pytest.mark.parametrize("status, dirty", [
+    # a move OUT of the excluded wire dir into server/: both ends reported, dirty
+    ("R  server/new.py\0tests/fixtures/gen3/wire/old.jsonl\0", ["server/new.py", "tests/fixtures/gen3/wire/old.jsonl"]),
+    # a move INTO the wire dir from server/: dirty too
+    ("R  tests/fixtures/gen3/wire/new.jsonl\0server/old.py\0", ["tests/fixtures/gen3/wire/new.jsonl", "server/old.py"]),
+    # both ends inside the wire dir: excluded
+    ("R  tests/fixtures/gen3/wire/b.jsonl\0tests/fixtures/gen3/wire/a.jsonl\0", []),
+    # -z never quotes: a name with a space is one path
+    ("?? lua/tests/duo/my scenario.lua\0 M tools/e2e_duo.py\0", ["lua/tests/duo/my scenario.lua", "tools/e2e_duo.py"]),
+    ("", []),
+])
+def test_gen3_dirty_paths_parses_porcelain_z_renames_both_ends(status, dirty):
+    assert duo.gen3_dirty_paths(status) == dirty
+
+
+def test_identity_asks_git_for_z_records_and_submodules(monkeypatch, tmp_path):
+    seen = []
+    run = _identity_run(monkeypatch, tmp_path)
+    real = duo.subprocess.run
+
+    def spy(cmd, **kw):
+        seen.append(cmd)
+        return real(cmd, **kw)
+    monkeypatch.setattr(duo.subprocess, "run", spy)
+    run._gen3_identity()
+    status = [c for c in seen if "status" in c][0]
+    assert "-z" in status and "--porcelain=v1" in status and "--ignore-submodules=none" in status
