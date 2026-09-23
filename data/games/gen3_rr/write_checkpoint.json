@@ -62,6 +62,72 @@
         "symbol": "TrySavingData"
       }
     },
+    "battle": {
+      "clauses": [
+        {
+          "address": 50352004,
+          "compare": "eq_rom",
+          "expect": 134299713,
+          "expect_symbol": "HANDLE_TURN_ACTION_SELECTION_ADDR",
+          "name": "battle_main_func",
+          "offset": 0,
+          "source": "profile.ram.BATTLE_MAIN_FUNC_ADDR + profile.rom.HANDLE_TURN_ACTION_SELECTION_ADDR (CFRU code pin)",
+          "symbol": "BATTLE_MAIN_FUNC_ADDR",
+          "width": 4
+        },
+        {
+          "address": 33701506,
+          "compare": "eq",
+          "expect": 1,
+          "name": "battle_comm_0",
+          "offset": 0,
+          "source": "profile.ram.BATTLE_COMM_ADDR (old client production path)",
+          "symbol": "BATTLE_COMM_ADDR",
+          "width": 1
+        },
+        {
+          "address": 33696588,
+          "compare": "eq",
+          "expect": 0,
+          "mask": 2,
+          "name": "battle_not_link",
+          "offset": 0,
+          "source": "profile.ram.BATTLE_TYPE_ADDR (old client production path)",
+          "symbol": "BATTLE_TYPE_ADDR",
+          "width": 4
+        },
+        {
+          "address": 33700836,
+          "compare": "nonzero",
+          "name": "battle_engine_loaded",
+          "offset": 44,
+          "source": "profile.ram.BATTLE_MONS_ADDR (old client production path)",
+          "symbol": "BATTLE_MONS_ADDR",
+          "width": 2
+        },
+        {
+          "address": 33701514,
+          "compare": "eq",
+          "expect": 0,
+          "name": "battle_outcome_open",
+          "offset": 0,
+          "source": "profile.ram.BATTLE_OUTCOME_ADDR (old client production path)",
+          "symbol": "BATTLE_OUTCOME_ADDR",
+          "width": 1
+        }
+      ],
+      "commit_guard": {
+        "address": 33701506,
+        "compare": "lt",
+        "indexed_by": "battler",
+        "offset": 0,
+        "source": "profile.ram.BATTLE_COMM_ADDR (old client production path)",
+        "symbol": "BATTLE_COMM_ADDR",
+        "value": 3,
+        "width": 1
+      },
+      "version": "gen3-battle-v1"
+    },
     "cpu": {
       "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt",
       "mode": 31,
@@ -69,6 +135,88 @@
       "pc_max": 16383,
       "pc_min": 0,
       "thumb": 0
+    },
+    "native": {
+      "abi": 1,
+      "abi_off": 4,
+      "base": 33814528,
+      "busy": 1,
+      "info": 33815876,
+      "info_ack_off": 2,
+      "info_drawn_off": 1,
+      "opcode_off": 6,
+      "sig": 1263422547,
+      "source": "profile.native + patch/src/ADDRESSES.md:59-77",
+      "spans": [
+        {
+          "key": "BASE",
+          "size": 64,
+          "start": 33814528,
+          "what": "mailbox ABI v1"
+        },
+        {
+          "key": "SW",
+          "size": 8,
+          "start": 33814592,
+          "what": "SwapState"
+        },
+        {
+          "key": "GH",
+          "size": 44,
+          "start": 33814608,
+          "what": "GhostState"
+        },
+        {
+          "key": "CALC_OFF",
+          "size": 1,
+          "start": 33814744,
+          "what": "SLINK_CALC_OFF"
+        },
+        {
+          "key": "TEXT_BUF",
+          "size": 256,
+          "start": 33814784,
+          "what": "SLINK_TEXT_BUF"
+        },
+        {
+          "key": "BLOB_BUF",
+          "size": 600,
+          "start": 33815040,
+          "what": "SLINK_BLOB_BUF"
+        },
+        {
+          "key": "MENU_BUF",
+          "size": 112,
+          "start": 33815696,
+          "what": "SLINK_MENU_BUF"
+        },
+        {
+          "key": "BATTLE_NOTIF",
+          "size": 8,
+          "start": 33815808,
+          "what": "BattleNotif"
+        },
+        {
+          "key": "GHOST_PAL_BUF",
+          "size": 32,
+          "start": 33815648,
+          "what": "GHOST_PAL_BUF"
+        },
+        {
+          "key": "EVR",
+          "size": 52,
+          "start": 33815824,
+          "what": "EvRing"
+        },
+        {
+          "key": "INFO",
+          "size": 264,
+          "start": 33815876,
+          "what": "SlinkInfo"
+        }
+      ],
+      "status_off": 10,
+      "version": "gen3-native-v1"
     },
     "pointers": {
       "gPokemonStoragePtr": {
@@ -170,6 +318,98 @@
         "symbol": "gSoftResetDisabled",
         "width": 1
       }
+    },
+    "sound": {
+      "fields": [
+        {
+          "name": "songHeader",
+          "offset": 0,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "status",
+          "offset": 4,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "trackCount",
+          "offset": 8,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "priority",
+          "offset": 9,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "clock",
+          "offset": 12,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "tracks",
+          "offset": 44,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "ident",
+          "offset": 52,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "flags",
+          "offset": 0,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "bendRange",
+          "offset": 15,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "volX",
+          "offset": 19,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "lfoSpeed",
+          "offset": 25,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "chan",
+          "offset": 32,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "cmdPtr",
+          "offset": 64,
+          "on": "track",
+          "size": 4
+        }
+      ],
+      "ident_magic": 1752395091,
+      "ident_off": 52,
+      "iwram_max": 50364416,
+      "iwram_min": 50331648,
+      "player_head_off": 36,
+      "player_next_off": 60,
+      "source": "old client lua/memory_gba.lua:1945-1996 (SOUND_INFO_PTR + the linked-list walk)",
+      "track0_off": 0,
+      "tracks_off": 44,
+      "version": "gen3-sound-v1"
     },
     "sym": "pokefirered.sym",
     "tasks": {

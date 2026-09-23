@@ -40,6 +40,101 @@ P.STATES = {
         artifacts={["firered/clean"]=true, ["radical_red/companion"]=true}},
 }
 
+-- C4-B2: the battle / native / sound reasons. Declarative: each row names the savestate to load
+-- (env override first), the normal inputs that reach the state, the reason and args the sample
+-- passes to safety:check, and a witness read DIRECTLY from the pack's addresses (an independent
+-- read path, not independent evidence -- the same caveat the script row carries). The generic
+-- runner below drives them after the seven core phases, so the signed receipts stay valid.
+-- state env -> default savestate; inputs are {tap=btn,frames=,gap=} / {idle=n} / {mash=n}.
+P.REASON_ROWS = {
+    {name="battle_input_wild", terminal="battle_main_func==HandleTurnActionSelectionState and "
+        .. "gBattleCommunication[0]==1", expectation="positive", min_samples=60,
+        reason="battle_faint", witness="battle_input",
+        state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
+        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true,
+                   ["radical_red/companion"]=true},
+        note="wild encounter parked at the action menu; no input"},
+    {name="battle_input_trainer", terminal="battle_main_func==HandleTurnActionSelectionState and "
+        .. "gBattleCommunication[0]==1", expectation="positive", min_samples=60,
+        reason="battle_commit", args={battler=0}, witness="battle_input",
+        state_env="SLINK_CHECKPOINT_TRAINER_BATTLE_STATE", state="slink_pretrainer.State",
+        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true},
+        note="trainer battle parked at the action menu; battler 0 is uncommitted so the guard holds"},
+    {name="battle_move_menu", terminal="gBattleCommunication[0]==2",
+        expectation="negative", expect_clauses={battle_comm_0=true},
+        reason="battle_faint", witness="battle_comm_eq", witness_value=2,
+        state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
+        inputs={{tap="A",frames=3,gap=13},{idle=120}},
+        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true},
+        note="A on FIGHT opens the move submenu (STATE_WAIT_ACTION_CASE_CHOSEN)"},
+    {name="battle_animation", terminal="gBattleControllerExecFlags~=0",
+        expectation="negative", expect_clauses={battle_exec_flags_idle=true, battle_main_func=true},
+        reason="battle_faint", witness="battle_exec_busy",
+        state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
+        inputs={{tap="A",frames=3,gap=13},{tap="A",frames=3,gap=13},{idle=30}},
+        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true},
+        note="two A presses commit a move; the animation holds the exec flags. FR/LG only: the "
+            .. "RR pack has no gBattleControllerExecFlags address (reported UNVERIFIED)"},
+    {name="battle_faint_prompt", terminal="gBattleMainFunc ~= HandleTurnActionSelectionState",
+        expectation="negative", expect_clauses={battle_main_func=true, battle_exec_flags_idle=true},
+        reason="battle_faint", witness="battle_not_input",
+        state_env="SLINK_CHECKPOINT_FAINT_STATE", state="slink_prefaint.State",
+        inputs={{mash=160}},
+        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true},
+        note="mash to the forced send-out prompt after a faint"},
+    {name="battle_intro", terminal="gBattleMainFunc ~= HandleTurnActionSelectionState",
+        expectation="negative", expect_clauses={battle_main_func=true, battle_exec_flags_idle=true},
+        reason="battle_faint", witness="battle_not_input",
+        state_env="SLINK_CHECKPOINT_INTRO_STATE", state="slink_preintro.State",
+        inputs={},
+        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true},
+        note="battle intro parked before the first action menu"},
+    {name="battle_link", terminal="gBattleTypeFlags & 2",
+        expectation="negative", expect_clauses={battle_not_link=true},
+        reason="battle_faint", witness="battle_link",
+        state_env="SLINK_CHECKPOINT_LINK_STATE", state="slink_prelink.State",
+        inputs={}, artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true},
+        note="link battle at the input wait; FR/LG only (RR link entry is a CFRU unknown)"},
+    {name="battle_over", terminal="gBattleOutcome~=0",
+        expectation="negative", expect_clauses={battle_outcome_open=true, battle_engine_loaded=true},
+        reason="battle_faint", witness="battle_resolved",
+        state_env="SLINK_CHECKPOINT_POSTBATTLE_STATE", state="slink_postbattle.State",
+        inputs={}, artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true,
+                              ["radical_red/companion"]=true},
+        note="the state saved after a resolved battle"},
+    {name="battle_commit_state3", terminal="gBattleCommunication[0]>=3",
+        expectation="negative", expect_clauses={battle_commit_guard=true},
+        reason="battle_commit", args={battler=0}, witness="battle_comm_ge", witness_value=3,
+        state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
+        inputs={{tap="A",frames=3,gap=13},{tap="A",frames=3,gap=13},{tap="A",frames=3,gap=13},
+                {idle=240}},
+        artifacts={["firered/clean"]=true, ["radical_red/companion"]=true},
+        note="the commit guard: a committed battler (3/4) must refuse the Variant-3 pre-fill"},
+    {name="native_idle_field", terminal="companion beacon present and mailbox idle",
+        expectation="positive", min_samples=60, reason="native", witness="native_idle",
+        state_env="SLINK_STATE", state="slink_overworld.State", inputs={},
+        artifacts={["radical_red/companion"]=true},
+        note="the native reason outside battle"},
+    {name="native_idle_battle", terminal="companion beacon present and mailbox idle in battle",
+        expectation="positive", min_samples=60, reason="native", witness="native_idle",
+        state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State", inputs={},
+        artifacts={["radical_red/companion"]=true},
+        note="the rival-swap frame: native must be postable mid-battle"},
+    {name="native_absent", terminal="no native block in this pack",
+        expectation="negative", expect_clauses={native_present=true},
+        reason="native", witness="always",
+        state_env="SLINK_STATE", state="slink_overworld.State", inputs={},
+        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true},
+        note="the reason must refuse on a build with no companion"},
+    {name="sound_driver", terminal="m4a SE1 ident == ID_NUMBER",
+        expectation="positive", min_samples=60, reason="sound", witness="sound_driver",
+        state_env="SLINK_STATE", state="slink_overworld.State", inputs={},
+        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true},
+        note="the sound reason on a live driver; native_busy is model-only (the probe posts no op)"},
+}
+for _, spec in ipairs(P.REASON_ROWS) do P.STATES[#P.STATES + 1] = spec end
+P.REASON_BASE = #P.STATES - #P.REASON_ROWS + 1
+
 -- Witness addresses. Neither witness calls safety; each reads one engine variable. The script
 -- witness reads the SAME byte as the script_context_status predicate: an independent read path,
 -- not independent evidence. The pc_menu witness (a gTasks func) is a different variable.
@@ -212,7 +307,7 @@ function P.run()
         local row = {name=spec.name, terminal=spec.terminal, expectation=spec.expectation,
             expect_clauses=spec.expect_clauses, min_samples=spec.min_samples,
             samples=0, yes=0, no=0, irq=0, non_irq_samples=0, non_irq_yes=0,
-            reached=false, reason="-", witness=witness}
+            reached=false, reason="-", witness=witness, write_reason=spec.reason, args=spec.args}
         rows[index], active = row, row
         G.phase("probe-state", row.name .. " terminal=" .. row.terminal)
         return row
@@ -222,7 +317,7 @@ function P.run()
         -- Executed by onframeend, never from an exec hook. Raw R15/CPSR are reported,
         -- not fabricated as BIOS/0x1F. A core sampling mismatch fails the idle gate.
         if active.witness() then
-            local ok, reason = safety:check()
+            local ok, reason = safety:check(nil, active.write_reason, active.args)
             local regs = deps.regs()
             P.tally(active, ok, reason, safety.last_clauses, regs.CPSR)
             active.r15, active.cpsr, active.frame = regs.R15, regs.CPSR, deps.frame()
@@ -354,6 +449,68 @@ function P.run()
             else row.reason = where end
             active = nil
             back_out()
+        end
+
+        -- ── C4-B2 reason rows: one generic runner, declarative specs ──────────────────────
+        local function clause_of(name)
+            for _, c in ipairs(assert(cp.battle, "no battle block").clauses) do
+                if c.name == name then
+                    return c.address + (c.offset or 0), c.width, c
+                end
+            end
+        end
+        local comm_a, comm_w = clause_of("battle_comm_0")
+        local main_a, main_w, main_c = clause_of("battle_main_func")
+        local flags_a, flags_w = clause_of("battle_exec_flags_idle")
+        local type_a, type_w = clause_of("battle_not_link")
+        local out_a, out_w = clause_of("battle_outcome_open")
+        local native = cp.native
+        local sound = cp.sound
+        local sound_player = sound and sound.player_se1 and sound.player_se1.address
+        local function w32(a) return memory.read_u32_le(a) end
+        local function w16(a) return memory.read_u16_le(a) end
+        local function w8(a) return memory.read_u8(a) end
+        local WIT = {
+            always = function() return true end,
+            battle_input = function()
+                return main_c ~= nil and w32(main_a) == main_c.expect and w8(comm_a) == 1
+            end,
+            battle_not_input = function()
+                return main_c ~= nil and w32(main_a) ~= main_c.expect
+            end,
+            battle_comm_eq = function(spec) return function() return w8(comm_a) == spec.witness_value end end,
+            battle_comm_ge = function(spec) return function() return w8(comm_a) >= spec.witness_value end end,
+            battle_exec_busy = function() return w32(flags_a) ~= 0 end,
+            battle_link = function() return w32(type_a) & 2 ~= 0 end,
+            battle_resolved = function() return w8(out_a) ~= 0 end,
+            native_idle = function()
+                return native ~= nil and w32(native.base) == native.sig
+            end,
+            sound_driver = function()
+                return sound_player ~= nil
+                    and w32(sound_player + sound.ident_off) == sound.ident_magic
+            end,
+        }
+        for i = P.REASON_BASE, #P.STATES do
+            if plan[i] then
+                local spec = P.STATES[i]
+                load(os.getenv(spec.state_env) or spec.state)
+                local build = WIT[spec.witness]
+                row = begin(i, build(spec))
+                for _, step in ipairs(spec.inputs or {}) do
+                    if step.tap then G.tap(step.tap, step.frames or 3, step.gap or 13)
+                    elseif step.idle then G.idle(step.idle)
+                    elseif step.mash then G.mash(step.mash, function() return row.witness() end) end
+                end
+                local held = 0
+                for _ = 1, spec.hold or 180 do
+                    if row.witness() then held = held + 1 end
+                    G.advance()
+                end
+                row.reached = held > 0
+                if not row.reached then row.reason = "state witness never held" end
+                active = nil
+            end
         end
 
         if plan[9] then

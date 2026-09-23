@@ -545,7 +545,7 @@ def test_pointer_move_after_arm_refuses_the_first_box_write():
     def ptr():
         return int.from_bytes(cart.raw(pointer, 4), "little")
 
-    def check(_, snapshot, reason):
+    def check(_, snapshot, reason, args=None):  # writes.lua passes the arm args through (C4-B2)
         return ptr() == snapshot.ptr, "storage pointer moved"
 
     writes_mod = cart.lua.execute((LUA / "writes.lua").read_text(encoding="utf-8"))

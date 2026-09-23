@@ -228,3 +228,114 @@ def test_generator_check_passes_on_the_committed_files() -> None:
     out = subprocess.run([sys.executable, "tools/gen_gen3_write_checkpoint.py", "--check"],
                          cwd=G.ROOT, capture_output=True, text=True)
     assert out.returncode == 0, out.stdout + out.stderr
+
+
+# ── C4-B2: the battle / native / sound blocks ────────────────────────────────────────────────
+# The overworld section above is the G3-signed predicate and must not move; these blocks are
+# additive and every emitted value must carry its source.
+
+OVERWORLD_KEYS = ("version", "sym", "anchors", "predicates", "tasks", "cpu", "pointers")
+OVERWORLD_PREDICATES = ("callback1", "callback2", "field_controls_locked", "in_battle",
+                        "link_callback", "link_players_received", "link_transferring",
+                        "palette_fade_active", "save_dialog_cb", "script_context_status",
+                        "soft_reset_disabled")
+FR_BATTLE_CLAUSES = ("battle_main_func", "battle_comm_0", "battle_exec_flags_idle",
+                     "battle_not_link", "battle_engine_loaded", "battle_outcome_open")
+RR_BATTLE_CLAUSES = ("battle_main_func", "battle_comm_0", "battle_not_link",
+                     "battle_engine_loaded", "battle_outcome_open")
+
+
+@pytest.mark.parametrize("pack,title", PACK_TITLES)
+def test_overworld_section_is_untouched_by_the_new_blocks(pack: str, title: str) -> None:
+    block = load(pack)[title]
+    for key in OVERWORLD_KEYS:
+        assert key in block, f"{pack}/{title} lost {key}"
+    assert block["version"] == "gen3-overworld-v1"
+    assert tuple(sorted(block["predicates"])) == tuple(sorted(OVERWORLD_PREDICATES))
+    assert block["cpu"]["mode"] == 0x1F
+    assert set(block["battle"]) == {"clauses", "commit_guard", "version"}
+    assert "sound" in block
+
+
+@pytest.mark.parametrize("pack,title", PACK_TITLES)
+def test_battle_clauses_carry_a_source_and_a_comparison(pack: str, title: str) -> None:
+    block = load(pack)[title]["battle"]
+    assert block["version"] == "gen3-battle-v1"
+    for clause in block["clauses"]:
+        assert clause["source"], f"{pack}/{title} {clause['name']} has no source"
+        assert clause["width"] in (1, 2, 4)
+        assert clause["compare"] in ("eq", "eq_symbol", "eq_rom", "nonzero")
+        if clause["compare"] != "nonzero":
+            assert "expect" in clause
+        assert clause["address"] > 0
+    guard = block["commit_guard"]
+    assert guard["compare"] == "lt" and guard["value"] == 3 and guard["indexed_by"] == "battler"
+    assert guard["source"]
+
+
+@pytest.mark.parametrize("pack,title", [("gen3_frlg", "firered"), ("gen3_frlg", "leafgreen")])
+def test_frlg_battle_addresses_are_the_sym_values(pack: str, title: str) -> None:
+    block = load(pack)[title]["battle"]
+    syms = G.parse_sym(G.SYM_DIR / G.PACKS[pack][title][0])
+    assert tuple(c["name"] for c in block["clauses"]) == FR_BATTLE_CLAUSES
+    for clause in block["clauses"]:
+        assert syms[clause["symbol"]][0] == clause["address"], clause["name"]
+    main = next(c for c in block["clauses"] if c["name"] == "battle_main_func")
+    assert main["expect"] == syms["HandleTurnActionSelectionState"][0] | 1
+
+
+def test_rr_battle_clauses_are_rr_facts_not_sym_assertions() -> None:
+    profile = json.loads((G.ROOT / "data/games/gen3_rr/profile.json").read_text(encoding="utf-8"))
+    ram = profile["titles"]["radical_red"]["ram"]
+    rom = profile["titles"]["radical_red"]["rom"]
+    block = load("gen3_rr")["radical_red"]["battle"]
+    assert tuple(c["name"] for c in block["clauses"]) == RR_BATTLE_CLAUSES
+    for clause in block["clauses"]:
+        assert clause["address"] == ram[clause["symbol"]], clause["name"]
+        assert "profile.ram." in clause["source"]
+    main = next(c for c in block["clauses"] if c["name"] == "battle_main_func")
+    assert main["expect"] == rom["HANDLE_TURN_ACTION_SELECTION_ADDR"] == 0x08014041
+    assert main["expect_symbol"] == "HANDLE_TURN_ACTION_SELECTION_ADDR"
+    # the one clause with no RR-PROD source at all stays out, and is reported by the generator
+    assert "battle_exec_flags_idle" not in {c["name"] for c in block["clauses"]}
+
+
+def test_native_block_is_the_profile_and_stays_inside_ewram() -> None:
+    profile = json.loads((G.ROOT / "data/games/gen3_rr/profile.json").read_text(encoding="utf-8"))
+    nat = profile["native"]
+    block = load("gen3_rr")["radical_red"]
+    assert "native" not in load("gen3_frlg")["firered"], "FR has no companion arena"
+    n = block["native"]
+    assert (n["base"], n["sig"], n["abi"], n["info"]) == (nat["BASE"], nat["SIG"], nat["ABI"], nat["INFO"])
+    assert (n["opcode_off"], n["status_off"], n["busy"]) == (6, 10, 1)
+    assert (n["info_drawn_off"], n["info_ack_off"]) == (1, 2)
+    spans = sorted((s["start"], s["size"]) for s in n["spans"])
+    for start, size in spans:
+        assert start >= 0x02000000 and start + size <= 0x02040000, hex(start)
+    for (s1, n1), (s2, _) in zip(spans, spans[1:], strict=False):
+        assert s1 + n1 <= s2, "arena spans overlap"
+    assert any(s["key"] == "BASE" and s["size"] == 64 for s in n["spans"])
+    assert any(s["key"] == "BLOB_BUF" and s["size"] == 600 for s in n["spans"])
+
+
+@pytest.mark.parametrize("pack,title", PACK_TITLES)
+def test_sound_block_names_the_m4a_fields_it_may_write(pack: str, title: str) -> None:
+    block = load(pack)[title]["sound"]
+    assert block["ident_magic"] == 0x68736D53
+    assert block["ident_off"] == 0x34 and block["tracks_off"] == 0x2C
+    assert (block["iwram_min"], block["iwram_max"]) == (0x03000000, 0x03008000)
+    assert block["player_head_off"] == 0x24 and block["player_next_off"] == 0x3C
+    fields = {f["name"]: f for f in block["fields"]}
+    # exactly the fields the old client's M.playSE pokes (lua/memory_gba.lua:2003-2055)
+    assert set(fields) == {"songHeader", "status", "trackCount", "priority", "clock", "tracks",
+                           "ident", "flags", "bendRange", "volX", "lfoSpeed", "chan", "cmdPtr"}
+    for name, field in fields.items():
+        limit = 0x50 if field["on"] == "player" else 0x50
+        assert field["offset"] + field["size"] <= limit, name
+        assert field["size"] in (1, 2, 4)
+    assert {f["on"] for f in block["fields"]} == {"player", "track"}
+    if pack == "gen3_frlg":
+        syms = G.parse_sym(G.SYM_DIR / G.PACKS[pack][title][0])
+        assert block["player_se1"]["address"] == syms["gMPlayInfo_SE1"][0]
+        assert block["sound_info"]["address"] == syms["gSoundInfo"][0]
+        assert block["sound_info_ptr"]["address"] == syms["SOUND_INFO_PTR"][0]

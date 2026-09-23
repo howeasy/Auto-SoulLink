@@ -12,16 +12,16 @@ function W.new(deps)
     local window
     local self = {log = {}}
     function self:disarm() window = nil end
-    function self:arm(reason, allow)
+    function self:arm(reason, allow, args)
         window = nil
         assert(reasons[reason], "unknown arm reason")
         assert(type(allow) == "function", "explicit range allow predicate required")
         local frame = uint(deps.frame(), 9007199254740991)
         local snapshot, err = safety:snapshot()
         assert(snapshot, err)
-        local ok, why = safety:check(snapshot, reason)
+        local ok, why = safety:check(snapshot, reason, args)
         assert(ok == true, why)
-        window = {reason = reason, allow = allow, frame = frame, snapshot = snapshot}
+        window = {reason = reason, allow = allow, frame = frame, snapshot = snapshot, args = args}
     end
     function self:write_bytes(addr, bytes)
         assert(window, "write refused: no armed write window")
@@ -34,7 +34,7 @@ function W.new(deps)
         for i = 1, n do copy[i] = uint(bytes[i], 255) end
         assert(deps.frame() == window.frame, "write window expired")
         assert(window.allow(addr, n) == true, "write outside allow range")
-        local ok, why = safety:check(window.snapshot, window.reason)
+        local ok, why = safety:check(window.snapshot, window.reason, window.args)
         assert(ok == true, why)
         -- No reads/callbacks between final revalidation and the first write.
         for i = 1, n do deps.io.write_u8(addr + i - 1, copy[i], "System Bus") end

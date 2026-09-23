@@ -401,8 +401,16 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
     else:  # fail-closed: no task base, no allow-list
         out["tasks"]["allowed_overworld_tasks"] = {}
 
+    profile = json.loads((ROOT / "data" / "games" / pack / "profile.json").read_text("utf-8"))
+    out["battle"], battle_dropped = battle_block(title, syms, is_rr, profile)
+    unverified += [f"battle {row}" for row in battle_dropped]
     if is_rr:
-        profile = json.loads((ROOT / "data" / "games" / pack / "profile.json").read_text("utf-8"))
+        native = native_block(profile)
+        if native is not None:
+            out["native"] = native
+    out["sound"] = sound_block(syms, is_rr)
+
+    if is_rr:
         ram = profile["titles"][title]["ram"]
         # Card C3-33: the three pointers come out of the ROM's own setter, not out of the old
         # client's legacy profile (whose 0x03003840/0x03003838 are literal-pool constants inside
@@ -432,6 +440,172 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
         for name in ("gSaveBlock1Ptr", "gSaveBlock2Ptr", "gPokemonStoragePtr"):
             out["pointers"][name] = {"symbol": name, "address": syms[name][0], "source": sym_file}
     return out, unverified
+
+
+# ── C4-B2: the battle / native / sound blocks ────────────────────────────────────────────────
+# The overworld block above stays the G3-signed predicate.  These are the *additional* reason
+# sets the design (docs/gen3/research/battle_write_predicate.md) specifies.  Every emitted value
+# carries a source: FR/LG from the title's own .sym, RR from RR-PROD facts only (the profile's
+# ram keys and the old client's constants) -- a FireRed sym address is never asserted for RR.
+#
+# compare semantics (safety.lua evaluates them):
+#   eq       value == expect                (mask applied first when given)
+#   eq_symbol  the symbol's address | 1     (a Thumb function pointer, as gMain stores them)
+#   nonzero  value ~= 0
+#   lt       value <  value_field           (the commit guard; indexed by args.battler)
+
+BATTLE_CLAUSES_FRLG = (
+    ("battle_main_func", "gBattleMainFunc", 0, 4, None, "eq_symbol", "HandleTurnActionSelectionState"),
+    ("battle_comm_0", "gBattleCommunication", 0, 1, None, "eq", 1),
+    ("battle_exec_flags_idle", "gBattleControllerExecFlags", 0, 4, None, "eq", 0),
+    ("battle_not_link", "gBattleTypeFlags", 0, 4, 0x02, "eq", 0),
+    ("battle_engine_loaded", "gBattleMons", 0x2C, 2, None, "nonzero", None),
+    ("battle_outcome_open", "gBattleOutcome", 0, 1, None, "eq", 0),
+)
+BATTLE_CLAUSES_RR = (
+    # (name, profile.ram key, offset, width, mask, compare, expect)
+    # The expect for battle_main_func is a ROM pin, not a FireRed sym value: CFRU's
+    # HandleTurnActionSelectionState is byte-anchored at 0x08014041 (profile.rom
+    # HANDLE_TURN_ACTION_SELECTION_ADDR; the expanded code at file 0x1070626/28 loads the pools
+    # 0x03004F84 / 0x08014041 and stores the callback).  Read, never retyped.
+    ("battle_main_func", "BATTLE_MAIN_FUNC_ADDR", 0, 4, None, "eq_rom", "HANDLE_TURN_ACTION_SELECTION_ADDR"),
+    ("battle_comm_0", "BATTLE_COMM_ADDR", 0, 1, None, "eq", 1),
+    ("battle_not_link", "BATTLE_TYPE_ADDR", 0, 4, 0x02, "eq", 0),
+    ("battle_engine_loaded", "BATTLE_MONS_ADDR", 0x2C, 2, None, "nonzero", None),
+    ("battle_outcome_open", "BATTLE_OUTCOME_ADDR", 0, 1, None, "eq", 0),
+)
+# The RR clause set is deliberately smaller: gBattleMainFunc's *expect* is a FireRed code address
+# (INFER for CFRU) and gBattleControllerExecFlags has no RR-PROD source at all.  Both are reported
+# instead of emitted, so a reader can see what the RR predicate does not yet carry.
+BATTLE_DROPPED_RR = (
+    "battle_exec_flags_idle: gBattleControllerExecFlags has no RR-PROD address (not in "
+    "profile.ram, not read by the old client)",
+)
+BATTLE_COMMIT_GUARD = {"symbol": "gBattleCommunication", "offset": 0, "width": 1, "compare": "lt",
+                       "value": 3, "indexed_by": "battler"}
+BATTLE_COMMIT_GUARD_RR = {"symbol": "BATTLE_COMM_ADDR", "offset": 0, "width": 1, "compare": "lt",
+                          "value": 3, "indexed_by": "battler"}
+BATTLE_SOURCE_FRLG = "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c"
+BATTLE_SOURCE_RR = "profile.ram.%s (old client production path)"
+
+# The companion arena, from profile.native (addresses) + patch/src/ADDRESSES.md:59-77 (sizes).
+# safety.lua checks every native write lands inside one of these spans.
+NATIVE_ARENA = (
+    ("BASE", 64, "mailbox ABI v1"),
+    ("SW", 8, "SwapState"),
+    ("GH", 44, "GhostState"),
+    ("CALC_OFF", 1, "SLINK_CALC_OFF"),
+    ("TEXT_BUF", 256, "SLINK_TEXT_BUF"),
+    ("BLOB_BUF", 600, "SLINK_BLOB_BUF"),
+    ("MENU_BUF", 112, "SLINK_MENU_BUF"),
+    ("BATTLE_NOTIF", 8, "BattleNotif"),
+    ("GHOST_PAL_BUF", 32, "GHOST_PAL_BUF"),
+    ("EVR", 52, "EvRing"),
+    ("INFO", 264, "SlinkInfo"),
+)
+NATIVE_LAYOUT = {"opcode_off": 6, "status_off": 10, "busy": 1, "abi_off": 4,
+                 "info_drawn_off": 1, "info_ack_off": 2}
+NATIVE_SOURCE = "profile.native + patch/src/ADDRESSES.md:59-77"
+
+# m4a: the exact fields the old client's M.playSE pokes (lua/memory_gba.lua:2003-2055).  The
+# clause set is {the driver is up (ident magic), the player/track are in IWRAM}; no save or
+# transition clause is needed -- a Lua write lands between frames, so the engine cannot observe a
+# half-written player, and the ISR skips a player whose ident is the lock value by design
+# (pret include/gba/m4a_internal.h:185-188, src/m4a.c:50-66,209-215).
+SOUND_FIELDS = (
+    ("songHeader", 0x00, 4), ("status", 0x04, 4), ("trackCount", 0x08, 1),
+    ("priority", 0x09, 1), ("clock", 0x0C, 4), ("tracks", 0x2C, 4), ("ident", 0x34, 4),
+    ("flags", 0x00, 4, "track"), ("bendRange", 0x0F, 1, "track"), ("volX", 0x13, 1, "track"),
+    ("lfoSpeed", 0x19, 1, "track"), ("chan", 0x20, 4, "track"), ("cmdPtr", 0x40, 4, "track"),
+)
+SOUND_CONSTANTS = {"sound_info_ptr": "SOUND_INFO_PTR", "sound_info": "gSoundInfo",
+                   "player_se1": "gMPlayInfo_SE1", "ident_magic": 0x68736D53,
+                   "player_head_off": 0x24, "player_next_off": 0x3C,
+                   "iwram_min": 0x03000000, "iwram_max": 0x03008000}
+SOUND_SOURCE_FRLG = "pokefirered.sym/pokeleafgreen.sym; pret include/gba/m4a_internal.h"
+SOUND_SOURCE_RR = "old client lua/memory_gba.lua:1945-1996 (SOUND_INFO_PTR + the linked-list walk)"
+
+
+def battle_block(title: str, syms, is_rr: bool, profile: dict | None) -> tuple[dict, list[str]]:
+    dropped: list[str] = []
+    clauses = []
+    if is_rr:
+        ram = (profile or {}).get("titles", {}).get(title, {}).get("ram", {})
+        for name, key, offset, width, mask, compare, expect in BATTLE_CLAUSES_RR:
+            if ram.get(key) is None:
+                dropped.append(f"{name}: profile.ram.{key} absent")
+                continue
+            entry = {"name": name, "symbol": key, "address": ram[key], "offset": offset,
+                     "width": width, "compare": compare,
+                     "source": BATTLE_SOURCE_RR % key}
+            if mask is not None:
+                entry["mask"] = mask
+            if compare == "eq_rom":
+                rom_key = expect
+                value = (profile or {}).get("titles", {}).get(title, {}).get("rom", {}).get(rom_key)
+                if value is None:
+                    dropped.append(f"{name}: profile.rom.{rom_key} absent")
+                    continue
+                entry["expect_symbol"] = rom_key
+                entry["expect"] = value
+                entry["source"] = f"profile.ram.{key} + profile.rom.{rom_key} (CFRU code pin)"
+            elif expect is not None:
+                entry["expect"] = expect
+            clauses.append(entry)
+        guard = dict(BATTLE_COMMIT_GUARD_RR)
+        guard["address"] = ram.get("BATTLE_COMM_ADDR")
+        guard["source"] = BATTLE_SOURCE_RR % "BATTLE_COMM_ADDR"
+        dropped += list(BATTLE_DROPPED_RR)
+    else:
+        for name, symbol, offset, width, mask, compare, expect in BATTLE_CLAUSES_FRLG:
+            entry = {"name": name, "symbol": symbol, "address": syms[symbol][0], "offset": offset,
+                     "width": width, "compare": compare, "source": BATTLE_SOURCE_FRLG}
+            if mask is not None:
+                entry["mask"] = mask
+            if compare == "eq_symbol":
+                entry["expect_symbol"] = expect
+                entry["expect"] = syms[expect][0] | 1
+            elif expect is not None:
+                entry["expect"] = expect
+            clauses.append(entry)
+        guard = dict(BATTLE_COMMIT_GUARD)
+        guard["address"] = syms["gBattleCommunication"][0]
+        guard["source"] = BATTLE_SOURCE_FRLG
+    return {"version": "gen3-battle-v1", "clauses": clauses, "commit_guard": guard}, dropped
+
+
+def native_block(profile: dict | None) -> dict | None:
+    if not profile or not isinstance(profile.get("native"), dict):
+        return None
+    nat = profile["native"]
+    spans = []
+    for key, size, what in NATIVE_ARENA:
+        if nat.get(key) is None:
+            continue
+        spans.append({"key": key, "start": nat[key], "size": size, "what": what})
+    entry = {"version": "gen3-native-v1", "base": nat.get("BASE"), "sig": nat.get("SIG"),
+             "abi": nat.get("ABI"), "info": nat.get("INFO"), "spans": spans, "source": NATIVE_SOURCE}
+    entry.update(NATIVE_LAYOUT)
+    return entry
+
+
+def sound_block(syms, is_rr: bool) -> dict:
+    constants = dict(SOUND_CONSTANTS)
+    out = {"version": "gen3-sound-v1",
+           "ident_magic": constants["ident_magic"], "tracks_off": 0x2C,
+           "player_head_off": constants["player_head_off"],
+           "player_next_off": constants["player_next_off"],
+           "iwram_min": constants["iwram_min"], "iwram_max": constants["iwram_max"],
+           "ident_off": 0x34, "track0_off": 0x00,
+           "fields": [{"name": n, "offset": o, "size": s, "on": (t[0] if t else "player")}
+                      for row in SOUND_FIELDS for n, o, s, *t in [row]],
+           "source": SOUND_SOURCE_RR if is_rr else SOUND_SOURCE_FRLG}
+    if not is_rr:
+        for key in ("sound_info_ptr", "sound_info", "player_se1"):
+            symbol = constants[key]
+            if symbol in syms:
+                out[key] = {"symbol": symbol, "address": syms[symbol][0], "source": "sym"}
+    return out
 
 
 def build(pack: str) -> tuple[dict, list[str]]:

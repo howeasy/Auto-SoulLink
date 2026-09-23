@@ -54,11 +54,36 @@ class World:
             base = t["address"] + i * t["struct_size"]
             g.put(base + t["func_offset"], fn | 1, 4)
             g.put(base + t["is_active_offset"], 1, 1)
+        guard = self.pack["battle"]["commit_guard"]
+        for slot in range(4):   # the guard is indexed by battler; all four must be readable and < 3
+            g.put(guard["address"] + guard.get("offset", 0) + slot, 0, guard["width"])
+        for spec in self.pack["battle"]["clauses"]:
+            # after the guard: battle_comm_0 shares the guard's address, and 1 is < 3 for both
+            value = 1 if spec["compare"] == "nonzero" else spec["expect"]
+            g.put(spec["address"] + spec.get("offset", 0), value, spec["width"])
+        if "native" in self.pack:
+            n = self.pack["native"]
+            g.put(n["base"], n["sig"], 4)
+            g.put(n["base"] + n["abi_off"], n["abi"], 2)
+            g.put(n["base"] + n["opcode_off"], 0, 2)
+            g.put(n["base"] + n["status_off"], 2, 2)          # ST_OK, not ST_BUSY
+            g.put(n["info"] + n["info_drawn_off"], 1, 1)
+            g.put(n["info"] + n["info_ack_off"], 1, 1)
+        snd = self.pack["sound"]
+        if "player_se1" in snd:
+            g.put(snd["player_se1"]["address"] + snd["ident_off"], snd["ident_magic"], 4)
+            g.put(snd["player_se1"]["address"] + snd["tracks_off"], 0x03005000, 4)
         module = self.lua.execute((ROOT / "lua/gen3/safety.lua").read_text(encoding="utf-8"))
         self.safety = module.new(self.lua.table_from(self.pack, recursive=True), g.deps, kind)
 
     def check(self, snapshot=None):
         return self.safety.check(self.safety, snapshot)[0]
+
+    def check_reason(self, reason, args=None):
+        """(ok, reason_string, sorted clause keys) for one reason; the probe reads the same three."""
+        result = self.safety.check(self.safety, None, reason,
+                                   self.lua.table_from(args or {}, recursive=True))
+        return bool(result[0]), result[1], list(self.safety.last_clauses.values())
 
 
 @pytest.mark.parametrize("title,kind", [("firered", "clean"), ("leafgreen", "clean"),
@@ -159,3 +184,164 @@ def test_pointer_movement_refuses_before_write():
     with pytest.raises(lupa.LuaError, match="pointer moved"):
         writer.write_u16(writer, 0x02010000, 0)
     assert len(g.writes) == 0
+
+
+# ── C4-B2: the reason dispatch ────────────────────────────────────────────────────────────────
+# The overworld path is the G3-signed predicate and must not move: nil and "overworld" return the
+# same result, the same message and the same clause keys as each other, and each clause is still
+# independently detectable by name.  The battle/native/sound sets are additive.
+
+OVERWORLD_KEYS = ["callback1", "callback2", "field_controls_locked", "in_battle", "link_callback",
+                  "link_players_received", "link_transferring", "palette_fade_active",
+                  "save_dialog_cb", "script_context_status", "soft_reset_disabled"]
+
+
+@pytest.mark.parametrize("reason", [None, "overworld"])
+def test_overworld_accept_is_message_identical(reason):
+    w = World()
+    ok, why, clauses = w.check_reason(reason)
+    assert ok is True
+    assert why == "verified overworld checkpoint"
+    assert clauses == []
+
+
+@pytest.mark.parametrize("name", OVERWORLD_KEYS)
+def test_overworld_clause_attribution_unchanged(name):
+    """One broken predicate still names exactly itself, for nil and for "overworld"."""
+    w = World()
+    p = w.pack["predicates"][name]
+    w.lua.globals().put(p["address"] + p["offset"], p.get("mask", p["expect"] ^ 1), p["width"])
+    for reason in (None, "overworld"):
+        ok, why, clauses = w.check_reason(reason)
+        assert ok is False and clauses == [name] and name in why
+
+
+@pytest.mark.parametrize("key,break_it", [
+    ("cpu", lambda w: w.lua.execute("cpu.R15 = 452; cpu.CPSR = 16")),
+    ("task", lambda w: w.lua.globals().put(w.pack["tasks"]["address"] + w.pack["tasks"]["func_offset"], 0x08000001, 4)),
+    ("native", lambda w: w.lua.execute("idle = false")),
+    ("pointer", lambda w: w.lua.globals().put(w.pack["pointers"]["gSaveBlock1Ptr"]["address"], 2, 4)),
+])
+def test_overworld_non_predicate_clauses_unchanged(key, break_it):
+    w = World()
+    break_it(w)
+    ok, why, clauses = w.check_reason("overworld")
+    assert ok is False and clauses == [key]
+
+
+def test_unknown_reason_refuses_by_name():
+    w = World()
+    ok, why, clauses = w.check_reason("memorial_rename")
+    assert ok is False and clauses == ["reason"] and "memorial_rename" in why
+
+
+BATTLE_KEYS = ["battle_main_func", "battle_comm_0", "battle_exec_flags_idle", "battle_not_link",
+               "battle_engine_loaded", "battle_outcome_open"]
+
+
+@pytest.mark.parametrize("title,kind,keys", [
+    ("firered", "clean", BATTLE_KEYS),
+    ("radical_red", "companion", [k for k in BATTLE_KEYS if k != "battle_exec_flags_idle"]),
+])
+def test_battle_input_accepts_and_names_each_broken_clause(title, kind, keys):
+    w = World(title, kind)
+    for reason in ("battle_faint", "battle_commit"):
+        ok, why, clauses = w.check_reason(reason, {"battler": 0})
+        assert ok is True and clauses == [] and reason in why
+    for name in keys:
+        spec = next(c for c in w.pack["battle"]["clauses"] if c["name"] == name)
+        w2 = World(title, kind)
+        if spec["compare"] == "nonzero":
+            w2.lua.globals().put(spec["address"] + spec.get("offset", 0), 0, spec["width"])
+        elif spec.get("mask"):
+            w2.lua.globals().put(spec["address"] + spec.get("offset", 0), spec["mask"], spec["width"])
+        else:
+            w2.lua.globals().put(spec["address"] + spec.get("offset", 0), spec["expect"] ^ 1, spec["width"])
+        ok, why, clauses = w2.check_reason("battle_faint")
+        assert ok is False and clauses == [name] and name in why
+
+
+def test_battle_commit_guard_is_named_and_fail_closed():
+    """The guard reads gBattleCommunication[battler]; battler 0 shares the byte with the
+    battle_comm_0 clause, so the guard-only cases use battler 2."""
+    w = World("firered", "clean")
+    guard = w.pack["battle"]["commit_guard"]
+    assert w.check_reason("battle_commit", {"battler": 2})[0] is True
+    w.lua.globals().put(guard["address"] + guard.get("offset", 0) + 2, 3, guard["width"])
+    ok, why, clauses = w.check_reason("battle_commit", {"battler": 2})
+    assert ok is False and clauses == ["battle_commit_guard"] and "committed" in why
+    for bad in (None, -1, 4, 1.5, "2"):
+        ok, why, clauses = w.check_reason("battle_commit", {"battler": bad})
+        assert ok is False and clauses == ["battle_commit_guard"], bad
+    # a non-committed battler must not be refused by the guard
+    assert w.check_reason("battle_faint", {"battler": 4})[0] is True
+
+
+def test_native_clauses_and_attribution():
+    w = World("radical_red", "companion")
+    n = w.pack["native"]
+    ok, why, clauses = w.check_reason("native")
+    assert ok is True and clauses == []
+    w2 = World("radical_red", "companion")
+    w2.lua.globals().put(n["base"] + n["status_off"], n["busy"], 2)
+    ok, why, clauses = w2.check_reason("native")
+    assert ok is False and clauses == ["native_idle"] and "busy" in why
+    w3 = World("radical_red", "companion")
+    w3.lua.globals().put(n["base"] + n["opcode_off"], 16, 2)
+    assert w3.check_reason("native")[2] == ["native_idle"]
+    w4 = World("radical_red", "companion")
+    w4.lua.globals().put(n["base"], n["sig"] ^ 1, 4)
+    assert w4.check_reason("native")[2] == ["native_present"]
+    w5 = World("radical_red", "companion")
+    w5.lua.globals().put(n["info"] + n["info_ack_off"], 0, 1)
+    assert w5.check_reason("native")[2] == ["native_idle"]
+
+
+@pytest.mark.parametrize("title,kind", [("firered", "clean"), ("radical_red", "clean")])
+def test_native_absent_or_clean_artifact_refuses_by_name(title, kind):
+    w = World(title, kind)
+    ok, why, clauses = w.check_reason("native")
+    assert ok is False and clauses == ["native_present"]
+
+
+def test_sound_clauses_and_attribution():
+    w = World("firered", "clean")
+    snd = w.pack["sound"]
+    player = snd["player_se1"]["address"]
+    ok, why, clauses = w.check_reason("sound")
+    assert ok is True and clauses == []
+    w2 = World("firered", "clean")
+    w2.lua.globals().put(player + snd["ident_off"], snd["ident_magic"] ^ 1, 4)
+    ok, why, clauses = w2.check_reason("sound")
+    assert ok is False and clauses == ["sound_player_ready"]
+    w3 = World("firered", "clean")
+    w3.lua.globals().put(player + snd["tracks_off"], 0x02000000, 4)   # not IWRAM
+    assert w3.check_reason("sound")[2] == ["sound_addresses_in_iwram"]
+    # an explicit player/track from the caller wins over the pack's static one
+    w4 = World("firered", "clean")
+    w4.lua.globals().put(0x03006000 + snd["ident_off"], snd["ident_magic"], 4)
+    assert w4.check_reason("sound", {"player": 0x03006000, "track": 0x03007000})[0] is True
+    # the RR pack carries no static player: the caller must resolve one
+    rr = World("radical_red", "companion")
+    assert rr.check_reason("sound")[2] == ["sound_player_ready"]
+    rr.lua.globals().put(0x03006000 + rr.pack["sound"]["ident_off"], rr.pack["sound"]["ident_magic"], 4)
+    assert rr.check_reason("sound", {"player": 0x03006000, "track": 0x03007000})[0] is True
+
+
+def test_writes_arm_passes_args_through():
+    """writes:arm(reason, allow, args) must reach safety:check with the args (the commit guard)."""
+    w = World("firered", "clean")
+    g = w.lua.globals()
+    guard = w.pack["battle"]["commit_guard"]
+    g.put(guard["address"] + guard.get("offset", 0) + 1, 3, guard["width"])   # battler 1 = committed
+    g.deps.safety = w.safety
+    module = w.lua.execute((ROOT / "lua/gen3/writes.lua").read_text(encoding="utf-8"))
+    writer = module.new(g.deps)
+    with pytest.raises(lupa.LuaError, match="committed past the guard"):
+        writer.arm(writer, "battle_commit", w.lua.eval("function() return true end"),
+                   w.lua.table_from({"battler": 1}, recursive=True))
+    g.put(guard["address"] + guard.get("offset", 0) + 1, 1, guard["width"])
+    writer.arm(writer, "battle_commit", w.lua.eval("function() return true end"),
+               w.lua.table_from({"battler": 1}, recursive=True))
+    writer.write_u16(writer, 0x02024284 + 0x56, 0)
+    assert len(g.writes) == 2

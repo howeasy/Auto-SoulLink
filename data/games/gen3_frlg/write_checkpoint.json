@@ -47,6 +47,82 @@
         "symbol": "TrySavingData"
       }
     },
+    "battle": {
+      "clauses": [
+        {
+          "address": 50352004,
+          "compare": "eq_symbol",
+          "expect": 134299713,
+          "expect_symbol": "HandleTurnActionSelectionState",
+          "name": "battle_main_func",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleMainFunc",
+          "width": 4
+        },
+        {
+          "address": 33701506,
+          "compare": "eq",
+          "expect": 1,
+          "name": "battle_comm_0",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleCommunication",
+          "width": 1
+        },
+        {
+          "address": 33700808,
+          "compare": "eq",
+          "expect": 0,
+          "name": "battle_exec_flags_idle",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleControllerExecFlags",
+          "width": 4
+        },
+        {
+          "address": 33696588,
+          "compare": "eq",
+          "expect": 0,
+          "mask": 2,
+          "name": "battle_not_link",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleTypeFlags",
+          "width": 4
+        },
+        {
+          "address": 33700836,
+          "compare": "nonzero",
+          "name": "battle_engine_loaded",
+          "offset": 44,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleMons",
+          "width": 2
+        },
+        {
+          "address": 33701514,
+          "compare": "eq",
+          "expect": 0,
+          "name": "battle_outcome_open",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleOutcome",
+          "width": 1
+        }
+      ],
+      "commit_guard": {
+        "address": 33701506,
+        "compare": "lt",
+        "indexed_by": "battler",
+        "offset": 0,
+        "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+        "symbol": "gBattleCommunication",
+        "value": 3,
+        "width": 1
+      },
+      "version": "gen3-battle-v1"
+    },
     "cpu": {
       "census": "docs/gen3/probes/census_fr_overworld_2026-09-21.txt",
       "mode": 31,
@@ -156,6 +232,113 @@
         "width": 1
       }
     },
+    "sound": {
+      "fields": [
+        {
+          "name": "songHeader",
+          "offset": 0,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "status",
+          "offset": 4,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "trackCount",
+          "offset": 8,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "priority",
+          "offset": 9,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "clock",
+          "offset": 12,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "tracks",
+          "offset": 44,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "ident",
+          "offset": 52,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "flags",
+          "offset": 0,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "bendRange",
+          "offset": 15,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "volX",
+          "offset": 19,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "lfoSpeed",
+          "offset": 25,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "chan",
+          "offset": 32,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "cmdPtr",
+          "offset": 64,
+          "on": "track",
+          "size": 4
+        }
+      ],
+      "ident_magic": 1752395091,
+      "ident_off": 52,
+      "iwram_max": 50364416,
+      "iwram_min": 50331648,
+      "player_head_off": 36,
+      "player_next_off": 60,
+      "player_se1": {
+        "address": 50361152,
+        "source": "sym",
+        "symbol": "gMPlayInfo_SE1"
+      },
+      "sound_info": {
+        "address": 50356048,
+        "source": "sym",
+        "symbol": "gSoundInfo"
+      },
+      "sound_info_ptr": {
+        "address": 50364400,
+        "source": "sym",
+        "symbol": "SOUND_INFO_PTR"
+      },
+      "source": "pokefirered.sym/pokeleafgreen.sym; pret include/gba/m4a_internal.h",
+      "track0_off": 0,
+      "tracks_off": 44,
+      "version": "gen3-sound-v1"
+    },
     "sym": "pokefirered.sym",
     "tasks": {
       "address": 50352272,
@@ -219,6 +402,82 @@
         "rom_offset": 893752,
         "symbol": "TrySavingData"
       }
+    },
+    "battle": {
+      "clauses": [
+        {
+          "address": 50352004,
+          "compare": "eq_symbol",
+          "expect": 134299713,
+          "expect_symbol": "HandleTurnActionSelectionState",
+          "name": "battle_main_func",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleMainFunc",
+          "width": 4
+        },
+        {
+          "address": 33701506,
+          "compare": "eq",
+          "expect": 1,
+          "name": "battle_comm_0",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleCommunication",
+          "width": 1
+        },
+        {
+          "address": 33700808,
+          "compare": "eq",
+          "expect": 0,
+          "name": "battle_exec_flags_idle",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleControllerExecFlags",
+          "width": 4
+        },
+        {
+          "address": 33696588,
+          "compare": "eq",
+          "expect": 0,
+          "mask": 2,
+          "name": "battle_not_link",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleTypeFlags",
+          "width": 4
+        },
+        {
+          "address": 33700836,
+          "compare": "nonzero",
+          "name": "battle_engine_loaded",
+          "offset": 44,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleMons",
+          "width": 2
+        },
+        {
+          "address": 33701514,
+          "compare": "eq",
+          "expect": 0,
+          "name": "battle_outcome_open",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleOutcome",
+          "width": 1
+        }
+      ],
+      "commit_guard": {
+        "address": 33701506,
+        "compare": "lt",
+        "indexed_by": "battler",
+        "offset": 0,
+        "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+        "symbol": "gBattleCommunication",
+        "value": 3,
+        "width": 1
+      },
+      "version": "gen3-battle-v1"
     },
     "cpu": {
       "mode": 31,
@@ -326,6 +585,113 @@
         "symbol": "gSoftResetDisabled",
         "width": 1
       }
+    },
+    "sound": {
+      "fields": [
+        {
+          "name": "songHeader",
+          "offset": 0,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "status",
+          "offset": 4,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "trackCount",
+          "offset": 8,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "priority",
+          "offset": 9,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "clock",
+          "offset": 12,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "tracks",
+          "offset": 44,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "ident",
+          "offset": 52,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "flags",
+          "offset": 0,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "bendRange",
+          "offset": 15,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "volX",
+          "offset": 19,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "lfoSpeed",
+          "offset": 25,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "chan",
+          "offset": 32,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "cmdPtr",
+          "offset": 64,
+          "on": "track",
+          "size": 4
+        }
+      ],
+      "ident_magic": 1752395091,
+      "ident_off": 52,
+      "iwram_max": 50364416,
+      "iwram_min": 50331648,
+      "player_head_off": 36,
+      "player_next_off": 60,
+      "player_se1": {
+        "address": 50361152,
+        "source": "sym",
+        "symbol": "gMPlayInfo_SE1"
+      },
+      "sound_info": {
+        "address": 50356048,
+        "source": "sym",
+        "symbol": "gSoundInfo"
+      },
+      "sound_info_ptr": {
+        "address": 50364400,
+        "source": "sym",
+        "symbol": "SOUND_INFO_PTR"
+      },
+      "source": "pokefirered.sym/pokeleafgreen.sym; pret include/gba/m4a_internal.h",
+      "track0_off": 0,
+      "tracks_off": 44,
+      "version": "gen3-sound-v1"
     },
     "sym": "pokeleafgreen.sym",
     "tasks": {
