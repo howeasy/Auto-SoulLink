@@ -19,9 +19,13 @@
 
   FRAME ALIGNMENT (5.13/B-9): every accepted hit records emu.framecount() inside the callback and the
   frame the main loop armed (framecount before the frameadvance that ran it); they must be equal. At
-  capture_party (right after predef TryAddMonToParty) the callback reads wPartyCount: the main loop saw
-  N before that frame, the callback sees N+1 (the RAM effect is already there) and the main loop sees
-  N+1 after the frame returns. This capture RAM effect IS the frame-alignment control: it substitutes
+  capture_party (right after predef TryAddMonToParty) the callback reads wPartyCount: N at the wild_ready
+  hit (battle_party), N+1 inside the callback (the RAM effect is already there) and N+1 to the main loop
+  after the frame returns. TryAddMonToParty increments wPartyCount in its first instructions and then runs
+  GeneratePartyMonStats (move_mon.asm:3-19, :94-264), so the increment may land frames BEFORE the callback
+  (live U1 rerun: pre_party == callback_party). The main loop samples wPartyCount after every frame and
+  records the first frame it changed (party_changed <= callback; the receipt states the distance). This
+  capture RAM effect IS the frame-alignment control: it substitutes
   plan 5.13's "DMG Gen 1 pin" (coordinator-accepted, card gen2-U1b). Each accepted hit also records the
   MEASURED PC register and hROMBank byte (never the anchor echo), checked against the pinned bank/PC.
   The receipt's evidence_level is PHYSICAL only when the api is this script's own BizHawk binding.
@@ -287,8 +291,9 @@ function F.verdict(record)
     need(record.aligned >= 1 and record.misaligned == 0,
          fmt("callback frame != armed frame on %d of %d hits", record.misaligned, record.aligned + record.misaligned))
     local a = record.align
-    need(a ~= nil and a.callback == a.armed and integer(a.pre_party, 0, 5) and a.callback_party == a.pre_party + 1
-         and a.post_party == a.callback_party, "capture_party RAM effect is not aligned to the callback frame")
+    need(a ~= nil and a.callback == a.armed and integer(a.battle_party, 0, 5) and a.callback_party == a.battle_party + 1
+         and a.post_party == a.callback_party and integer(a.party_changed, 0, 2^53) and a.party_changed <= a.callback,
+         "capture_party RAM effect is not aligned to the callback frame")
     local sites, previous = record.sites, 0
     for _, name in ipairs(F.EXPECT) do
         local site, found = sites[name], nil
@@ -406,22 +411,33 @@ function F.probe(ctx, pack, decoy_site)
                 if logged[name] and #s.log < F.HIT_LOG then
                     s.log[#s.log + 1] = {seq=record.seq, frame=hit.frame, armed=probe.armed}
                 end
+                if name == "wild_ready" and record.battle_party == nil then
+                    record.battle_party = ctx.sym("wPartyCount")[1]   -- the party before any capture
+                end
                 if name == "capture_party" and record.align == nil then
                     record.align = {armed=probe.armed, callback=hit.frame, pre_party=probe.pre_party,
-                                    callback_party=ctx.sym("wPartyCount")[1]}
+                                    battle_party=record.battle_party, callback_party=ctx.sym("wPartyCount")[1]}
                 end
             end
             return nil
         end})
     assert(service, "engine-site probe refused to arm: " .. tostring(why))
-    -- The main loop's frameadvance, wrapped: the armed frame and wPartyCount either side of it.
+    -- The main loop's frameadvance, wrapped: the armed frame, wPartyCount either side of it, and the
+    -- first frame after wild_ready whose end shows a different wPartyCount (the capture's RAM effect).
     local api = ctx.api
     local advance = api.advance
     function api.advance()
-        probe.armed, probe.pre_party = api.framecount(), ctx.sym("wPartyCount")[1]
+        local frame = api.framecount()
+        probe.armed, probe.pre_party = frame, ctx.sym("wPartyCount")[1]
         advance()
         probe.armed = nil
-        if record.align and record.align.post_party == nil then record.align.post_party = ctx.sym("wPartyCount")[1] end
+        local party = ctx.sym("wPartyCount")[1]
+        if record.battle_party ~= nil and record.party_changed == nil and party ~= record.battle_party then
+            record.party_changed = frame
+        end
+        if record.align and record.align.post_party == nil then
+            record.align.post_party, record.align.party_changed = party, record.party_changed
+        end
     end
     function probe.release()
         api.advance = advance
@@ -625,9 +641,12 @@ function F.main(api, getenv, SG)
         fixture_sha256=q.stage_fingerprint, qualification_attempt_id=ctx.u1.qualification_attempt_id,
         harness_write_scopes=json.array({}), bank_check="live",
         frame_alignment={passed=true, rule="callback emu.framecount() == the frame being emulated (armed); "
-            .. "the site's RAM effect is visible inside the callback and to the main loop at armed+1",
-            armed=a.armed, callback=a.callback, pre_party=a.pre_party, callback_party=a.callback_party,
-            post_party=a.post_party, aligned_hits=record.aligned, misaligned_hits=record.misaligned},
+            .. "wPartyCount is battle_party at wild_ready, battle_party+1 inside the capture_party callback and "
+            .. "to the main loop at armed+1; it first changed at party_changed <= callback",
+            armed=a.armed, callback=a.callback, pre_party=a.pre_party, battle_party=a.battle_party,
+            callback_party=a.callback_party, post_party=a.post_party, party_changed=a.party_changed,
+            effect_to_callback_frames=a.callback - a.party_changed,
+            aligned_hits=record.aligned, misaligned_hits=record.misaligned},
         negatives=record.negatives, decoy={bank=ctx.u1.decoy.bank, addr=ctx.u1.decoy.addr, raw=record.decoy.raw,
             accepted=record.decoy.accepted, bank_rejects=record.decoy.bank_rejects},
         sites=sites, proven=json.array(proven), absent=json.array(F.ABSENT)}

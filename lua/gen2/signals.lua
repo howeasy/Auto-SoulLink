@@ -140,7 +140,10 @@ function S.qualified_sites(title, pack, receipt)
     local a, d = receipt.frame_alignment, receipt.decoy
     if receipt.bank_check ~= "live" or type(a) ~= "table" or a.passed ~= true
        or not integer(a.armed,0,COUNT) or a.callback ~= a.armed
-       or not integer(a.pre_party,0,5) or a.callback_party ~= a.pre_party+1 or a.post_party ~= a.callback_party
+       -- TryAddMonToParty bumps wPartyCount before GeneratePartyMonStats (C move_mon.asm:3-19), frames ahead of
+       -- the capture_party site: the baseline is the wild_ready party, the change frame at or before the callback.
+       or not integer(a.battle_party,0,5) or a.callback_party ~= a.battle_party+1 or a.post_party ~= a.callback_party
+       or not integer(a.party_changed,0,COUNT) or a.party_changed > a.callback
        or not integer(a.aligned_hits,1,COUNT) or a.misaligned_hits ~= 0 then
         return nil,"qualification receipt lacks the live bank check or the frame-alignment measurements"
     end

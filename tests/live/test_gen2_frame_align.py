@@ -123,7 +123,8 @@ def verify(text: str, pack: dict) -> dict:
     align = tag_json(text, "ALIGN")
     a = align["align"]
     assert align["misaligned"] == 0 and align["aligned"] >= len(EXPECT), align
-    assert a["callback"] == a["armed"] and a["callback_party"] == a["pre_party"] + 1 == a["post_party"], a
+    assert a["callback"] == a["armed"] and a["callback_party"] == a["battle_party"] + 1 == a["post_party"], a
+    assert a["party_changed"] <= a["callback"] and a["effect_to_callback_frames"] == a["callback"] - a["party_changed"], a
     decoy = tag_json(text, "DECOY")
     assert decoy["raw"] >= 1 and decoy["accepted"] == 0 and decoy["bank_rejects"] == decoy["raw"], decoy
     negatives = tag_json(text, "NEGATIVES")

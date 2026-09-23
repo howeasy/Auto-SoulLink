@@ -884,8 +884,9 @@ def receipt(world, proven=U1_EXPECT):
             "input_mode": "normal_buttons", "harness_write_scopes": [], "fixture_sha256": FIXTURE_SHA256,
             "qualification_attempt_id": json.loads(QUALIFICATION.read_text())["attempt_id"],
             "bank_check": "live",
-            "frame_alignment": {"passed": True, "armed": 102, "callback": 102, "pre_party": 1, "callback_party": 2,
-                                "post_party": 2, "aligned_hits": 5, "misaligned_hits": 0},
+            "frame_alignment": {"passed": True, "armed": 102, "callback": 102, "pre_party": 2, "battle_party": 1,
+                                "callback_party": 2, "post_party": 2, "party_changed": 97,
+                                "aligned_hits": 5, "misaligned_hits": 0},
             "decoy": {"bank": 0x7F, "addr": 0x6974, "raw": 40, "accepted": 0, "bank_rejects": 40},
             "negatives": {name: "refused" for name in U1_NEGATIVES}, "sites": sites, "proven": list(proven)}
 
@@ -931,6 +932,8 @@ def test_gold_and_silver_refuse_production_even_with_a_matching_receipt(title):
 RAW_FAULTS = {  # U1b: the summary flags stay "passed"; only the raw measurements are wrong
     "callback_frame": ("frame_alignment", "callback", 103), "ram_effect": ("frame_alignment", "post_party", 1),
     "callback_party": ("frame_alignment", "callback_party", 1), "misaligned": ("frame_alignment", "misaligned_hits", 1),
+    "battle_party": ("frame_alignment", "battle_party", 2), "no_change_frame": ("frame_alignment", "party_changed", None),
+    "effect_after_callback": ("frame_alignment", "party_changed", 103),
     "decoy_accepted": ("decoy", "accepted", 1), "decoy_silent": ("decoy", "raw", 0),
     "decoy_bank_rejects": ("decoy", "bank_rejects", 39), "fixture": (None, "fixture", "crystal_town"),
     "core_mode": (None, "core_mode", "DMG"), "input_mode": (None, "input_mode", "poke"),
@@ -1083,7 +1086,8 @@ def u1_record(fault=None):
                        "log": [{"seq": seq, "frame": 100 + seq, "armed": 100 + seq}]}
     sites["capture_box"] = {"bank": 3, "addr": 0x6b44, "hits": 0, "log": []}
     record = {"accept_errors": 0, "aligned": 5, "misaligned": 0, "sites": sites,
-              "align": {"armed": 102, "callback": 102, "pre_party": 1, "callback_party": 2, "post_party": 2},
+              "align": {"armed": 102, "callback": 102, "pre_party": 1, "battle_party": 1, "callback_party": 2,
+                        "post_party": 2, "party_changed": 102},
               "decoy": {"raw": 40, "accepted": 0, "bank_rejects": 40},
               "negatives": {name: "refused" for name in U1_NEGATIVES}}
     if fault == "misaligned":
@@ -1092,6 +1096,14 @@ def u1_record(fault=None):
         record["align"]["post_party"] = 1
     elif fault == "callback_frame":
         record["align"]["callback"] = 103
+    elif fault == "callback_sees_n":   # the callback frame shows the pre-capture count
+        record["align"]["callback_party"] = record["align"]["post_party"] = 1
+    elif fault == "effect_after_callback":
+        record["align"]["party_changed"] = 103
+    elif fault == "no_change_frame":
+        del record["align"]["party_changed"]
+    elif fault == "early_effect":   # live U1 rerun: TryAddMonToParty bumped the count frames before the site
+        record["align"]["pre_party"], record["align"]["party_changed"] = 2, 97
     elif fault == "box_fired":
         sites["capture_box"]["hits"] = 1
     elif fault == "decoy_accepted":
@@ -1123,7 +1135,14 @@ def test_the_u1_verdict_proves_the_expected_sites_in_engine_order():
     assert list(problems.values()) == [] and tuple(proven.values()) == U1_EXPECT
 
 
-@pytest.mark.parametrize("fault", ["misaligned", "ram_effect", "callback_frame", "box_fired", "decoy_accepted",
+def test_the_u1_verdict_accepts_a_capture_count_bumped_frames_before_the_site():
+    lua, gate = u1_gate()
+    problems, proven = gate.verdict(lua.table_from(u1_record("early_effect"), recursive=True))
+    assert list(problems.values()) == [] and tuple(proven.values()) == U1_EXPECT
+
+
+@pytest.mark.parametrize("fault", ["misaligned", "ram_effect", "callback_frame", "callback_sees_n",
+                                   "effect_after_callback", "no_change_frame", "box_fired", "decoy_accepted",
                                    "decoy_silent", "decoy_bank_rejects", "off_pin", "order", "missing",
                                    "wrong_bank", "twice", "negative", "registry"])
 def test_the_u1_verdict_refuses_every_negative_control(fault):
@@ -1267,6 +1286,7 @@ def test_the_u1_probe_and_negatives_run_on_the_shared_binders(fault):
     align = record.align
     assert (align.armed, align.callback, align.pre_party, align.callback_party, align.post_party) == (
         align.armed, align.armed, 1, 2, 2)
+    assert (align.battle_party, align.party_changed) == (1, align.armed)   # the count changed on the catch frame
     assert list(problems.values()) == [] and tuple(proven.values()) == U1_EXPECT
 
 
