@@ -625,3 +625,129 @@ def test_party_removal_compacts_like_remove_mon_from_party_or_box(slot):
             region[slot * width:5 * width] = before[base + (slot + 1) * width:base + 6 * width]
             expect[base:base + 6 * width] = region
     assert after == bytes(expect)
+
+
+# ── gen2-box-durability (OMP BOX review F1/F2/F4): the crash control ─────────────────────────────────
+# A reset before a native SAVE: WRAM reloads the SAVED party (sPokemonData), Continue's LoadBox copies the
+# current box's backing slot over the active sBox (C engine/menus/save.asm:596-601), every other backing
+# slot keeps whatever SLink wrote (plain SRAM). Every intermediate state must be a duplicate, never a loss.
+class Cart(Exec):
+    def save(self):
+        """_SaveGameData: the party into sPokemonData, SaveBox the active sBox into its backing slot."""
+        self.saved_party = self.party()
+        flat = self.profile["storage_boxes"][self.current]["flat"]
+        self.poke_cart(flat, self.box(self.current))
+
+    def reset(self):
+        self.poke_sys(self.profile["ram"]["wPartyCount"], self.saved_party)
+        flat = self.profile["storage_boxes"][self.current]["flat"]
+        self.poke_cart(self.profile["derived"]["active_box_flat"], bytes(self.cart[flat + i] for i in range(1102)))
+
+    def copies(self, m):
+        """How many places (party slots + box slots, the active copy standing for the current box) hold m."""
+        def holds(raw, count_at, first, stride, n):
+            return sum(1 for s in range(raw[count_at]) if raw[first + s * stride:first + s * stride + 32][:23] == m[:23])
+        n = holds(self.party(), 0, 8, 48, 6)
+        for index in range(14):
+            n += holds(self.box(index), 0, 22, 32, 20)
+        return n
+
+
+def cart(**kw):
+    w = Cart(**kw)
+    w.save()
+    return w
+
+
+def settle(w, m, **opts):
+    key = "%04X:%04X:%02X" % (int.from_bytes(m[21:23], "big"), int.from_bytes(m[6:8], "big"), m[0])
+    result = w.ex.settle(key)
+    return result if isinstance(result, tuple) else (result, None)
+
+
+def withdraw(w, m, defer):
+    key = "%04X:%04X:%02X" % (int.from_bytes(m[21:23], "big"), int.from_bytes(m[6:8], "big"), m[0])
+    result = w.ex.withdraw(key, w.lua.table_from({"defer_backing": defer}))
+    return result if isinstance(result, tuple) else (result, None)
+
+
+@pytest.mark.parametrize("op", ["deposit", "withdraw_active", "withdraw_backing", "memorialize"])
+def test_a_reset_before_the_save_never_loses_the_mon(op):
+    lead, mon = mon48(), mon48(species=19, dvs=0x7AAA)
+    party, boxes = ([lead, mon], {}) if op in ("deposit", "memorialize") else \
+        ([lead], {0 if op == "withdraw_active" else 4: [mon]})
+    w = cart(party=party, boxes=boxes)
+    if op.startswith("withdraw"):
+        ok, _ = withdraw(w, mon, True)
+    else:
+        ok, _ = w.run(op, mon)
+    # the deferred backing withdraw is a duplicate (party + box) until the save witness; all else is one copy
+    assert ok is True and w.copies(mon) == (2 if op == "withdraw_backing" else 1)
+    w.reset()
+    assert w.copies(mon) >= 1, "the mon exists nowhere after the reset"
+    if op == "memorialize":          # the duplicate completes on the re-issue (full-record match)
+        assert w.copies(mon) == 2 and w.run("memorialize", mon) == (True, None)
+    assert w.copies(mon) == 1
+
+
+def test_a_backing_withdraw_removes_the_box_copy_only_after_the_save_witness():
+    lead, mon = mon48(), mon48(species=19, dvs=0x7AAA)
+    w = cart(party=[lead], boxes={4: [mon]})
+    ok, note = withdraw(w, mon, True)
+    assert ok is True and "deferred" in note
+    assert w.party()[0] == 2 and w.box(4)[0] == 1          # a duplicate until the save
+    w.save()
+    assert settle(w, mon) == (True, None)
+    assert w.box(4)[0] == 0 and w.copies(mon) == 1
+    w.reset()                                              # the save held the party copy
+    assert w.copies(mon) == 1
+    # a reset BETWEEN the save and the removal leaves a duplicate that settles the same way
+    w = cart(party=[lead], boxes={4: [mon]})
+    withdraw(w, mon, True)
+    w.save()
+    w.reset()
+    assert w.copies(mon) == 2 and settle(w, mon) == (True, None) and w.copies(mon) == 1
+    # a reset BEFORE the save: the mon is back in the box only; settling is a no-op
+    w = cart(party=[lead], boxes={4: [mon]})
+    withdraw(w, mon, True)
+    w.reset()
+    before = w.snapshot()
+    assert settle(w, mon) == (True, None) and w.snapshot() == before and w.copies(mon) == 1
+
+
+def test_an_immediate_backing_withdraw_is_the_loss_the_deferral_prevents():
+    """Known-positive control for the crash test: the undeferred order loses the mon on a reset."""
+    lead, mon = mon48(), mon48(species=19, dvs=0x7AAA)
+    w = cart(party=[lead], boxes={4: [mon]})
+    assert withdraw(w, mon, False)[0] is True
+    w.reset()
+    assert w.copies(mon) == 0
+
+
+def test_box_mon_completes_against_a_duplicate_in_any_box():
+    """F4: the durable copy is in a non-current box (the player changed boxes): remove the party copy."""
+    lead, mon = mon48(), mon48(species=19, dvs=0x7AAA)
+    w = cart(party=[lead, mon], boxes={4: [mon]})
+    cart_before = w.snapshot()[1]
+    assert w.run("deposit", mon) == (True, None)
+    assert w.party()[0] == 1 and w.snapshot()[1] == cart_before and w.copies(mon) == 1
+
+
+def test_memorializing_a_mon_whose_withdraw_is_unsaved_removes_its_box_source_too():
+    lead, mon = mon48(), mon48(species=19, dvs=0x7AAA)
+    w = cart(party=[lead], boxes={4: [mon]})
+    withdraw(w, mon, True)                                  # pending: party + box 5
+    assert w.run("memorialize", mon) == (True, None)
+    assert w.box(4)[0] == 0 and w.box(13)[0] == 1 and w.copies(mon) == 1
+    w.reset()
+    assert w.copies(mon) == 1
+
+
+def test_deposit_pp_restore_stops_at_the_first_empty_move_like_the_native_loop():
+    """RestorePPOfDepositedPokemon (C/G move_mon.asm:711-766): `.loop ld a, [hli]; and a; jr z, .done` ends at
+    the FIRST zero move; later PP bytes are left untouched, even behind a nonzero move."""
+    lead = mon48()
+    odd = mon48(species=19, dvs=0x7AAA, moves=(33, 0, 45, 10), pp=(0x83, 7, 9, 11))
+    w = Exec(party=[lead, odd], pp=35)
+    assert w.run("deposit", odd) == (True, None)
+    assert w.box(0)[22 + 23:22 + 27] == bytes([0x80 | (35 + 2 * 7), 7, 9, 11])

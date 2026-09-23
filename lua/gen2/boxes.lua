@@ -366,7 +366,9 @@ function B.executor(p)
     end
     local function mail(item) return p.mail[item] == true end
     -- RemoveMonFromPartyOrBox also shifts sPartyMail (:1336-1370); SLink never writes party mail, so a
-    -- removal refuses while the removed mon or any later one holds mail (the native PC refuses mail too).
+    -- removal refuses while the removed mon or any later one holds mail. Stricter than the native PC,
+    -- which refuses only a selected mail holder (C engine/pokemon/bills_pc.asm:1595-1616,
+    -- PCString_RemoveMail) and SHIFTS sPartyMail for the rest (move_mon.asm:1336-1370). (OMP BOX F5)
     local function no_mail_from(praw, s)
         for slot = s, praw[1] - 1 do
             if mail(praw[P.records + slot * STRIDE + c.MON_ITEM + 1]) then
@@ -407,6 +409,9 @@ function B.executor(p)
         return {bytes = out, ot = pname(praw, P.ots, s), nickname = pname(praw, P.nicks, s),
                 species_marker = praw[2 + s]}
     end
+    -- ponytail (OMP BOX F3): the level is the record's byte, not CalcLevel(exp) (move_mon.asm:649-655);
+    -- they differ only for a glitched exp/level pair. The pad byte after MON_STATUS is zeroed too (the
+    -- native leaves it); a byte-wise oracle against a native withdraw must mask +33.
     local function party_record(b)
         local rec = brec(b, b.slot)
         local level, species = rec[c.MON_LEVEL + 1], rec[c.MON_SPECIES + 1]
@@ -454,7 +459,9 @@ function B.executor(p)
         end
         if praw[1] <= 1 then refuse("last party mon") end
         if hit then
-            if not hit.active or not same(praw, ps, hit) then refuse("key exists in both party and box") end
+            -- a reset-interrupted deposit, or the box copy saved into another slot by a box change (F4):
+            -- the box holds the intended copy, so the party copy goes, in any box, on a full-record match
+            if not same(praw, ps, hit) then refuse("key exists in both party and box") end
             need("party_collection")
             no_mail_from(praw, ps)
             write_party(removed(praw, ps))
@@ -468,7 +475,12 @@ function B.executor(p)
         write_party(removed(praw, ps))
         return true
     end
-    function ops.withdraw(key)
+    -- Durability (OMP BOX review F1): a backing sBoxN is plain SRAM, durable at once, while the party is
+    -- WRAM until the next native SAVE. Removing the box copy before that save loses the mon on a reset
+    -- (the saved party lacks it, the slot lost it). With opts.defer_backing the party copy is written now
+    -- and the box copy stays (a duplicate, never a loss); the caller settles it after the save witness.
+    -- An active-sBox withdraw needs no deferral: LoadBox restores the active copy from its backing slot.
+    function ops.withdraw(key, opts)
         local cur = current()
         local praw, pmons = party()
         local ps, hit = find(pmons, key), boxed(key, cur)
@@ -486,6 +498,21 @@ function B.executor(p)
         if mail(rec[c.MON_ITEM + 1]) then refuse("boxed mon holds mail (T-3)") end
         need("party_collection", kind)
         write_party(inserted(praw, rec, ot, nick, marker))
+        if not hit.active and type(opts) == "table" and opts.defer_backing == true then
+            return true, "backing removal deferred to the save witness"
+        end
+        commit(p.box.plan_withdraw(state(cur), hit.index, hit.raw, hit.slot))
+        return true
+    end
+    -- After a native SAVE witnessed the party: drop the box copy of a party mon (full-record match), the
+    -- deferred half of a backing withdraw. No party copy (a reset before the save) or no box copy: nothing.
+    function ops.settle(key)
+        local cur = current()
+        local praw, pmons = party()
+        local ps, hit = find(pmons, key), boxed(key, cur)
+        if not ps or not hit then return true end
+        if not same(praw, ps, hit) then refuse("key exists in both party and box") end
+        need(hit.active and "box_withdraw" or "backing_box")
         commit(p.box.plan_withdraw(state(cur), hit.index, hit.raw, hit.slot))
         return true
     end
@@ -507,19 +534,25 @@ function B.executor(p)
             return true
         end
         if #mem.list >= c.MONS_PER_BOX then refuse("memorial box full") end
+        -- A box copy of this mon elsewhere is an unsettled deferred withdraw's source: it goes too, after
+        -- the memorial and the party (a reset in between leaves a duplicate, never a loss).
+        local source = boxed(key, cur)
+        if source and not same(praw, ps, source) then refuse("key exists in both party and box") end
         need("party_collection", mem.active and "box_deposit" or "backing_box")
+        if source then need(source.active and "box_withdraw" or "backing_box") end
         local st = state(cur)
         commit(mem.active and p.box.plan_deposit(st, MEMORIAL, mem.raw, payload(praw, ps))
                or p.box.plan_memorial(st, mem.raw, payload(praw, ps)))
         write_party(removed(praw, ps))
+        if source then commit(p.box.plan_withdraw(state(cur), source.index, source.raw, source.slot)) end
         return true
     end
 
     local self = {memorial_box = MEMORIAL}
     for name, fn in pairs(ops) do
-        self[name] = function(key)
-            local ok, result = pcall(fn, key)
-            if ok then return result end
+        self[name] = function(key, opts)
+            local ok, result, note = pcall(fn, key, opts)
+            if ok then return result, note end
             return nil, tostring(result)
         end
     end

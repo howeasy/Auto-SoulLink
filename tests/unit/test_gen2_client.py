@@ -1395,3 +1395,20 @@ def test_one_hello_across_a_battle_whose_animations_switch_the_wram_bank():
 
     falsify(check, mutant("lua/gen2/client.lua", (
         "if io.bank_valid(profile.ram_bank.wPlayerID, profile.ram.wPlayerID, 1) ~= true then return end", "")))
+
+
+def test_a_backing_box_withdraw_settles_its_box_copy_only_after_the_native_save():
+    """gen2-box-durability F1: the backing slot is durable SRAM, the party is not until SAVE. The client acks
+    the withdraw at once (the mon IS in the party) and removes the box copy only after save_completed."""
+    lead, boxed = mon(), mon(species=19, dvs=0x7AAA)
+    world = box_world([lead])
+    flat = world.profile["storage_boxes"][4]["flat"]
+    world.emu.poke("CartRAM", flat, world.lua.table_from(list(collection([boxed], 20, 32))))
+    world.checkpoint_ok = True
+    world.reply({"cmd": "party_mon", "key": codec_key(boxed)})
+    world.frames(3)
+    assert [m["key"] for m in world.sent("sync_retrieve_done")] == [codec_key(boxed)]
+    assert party_count(world) == 2 and storage(world, 4)[0] == 1     # a duplicate until the save
+    world.fire("save_completed")
+    world.frames(3)
+    assert storage(world, 4)[0] == 0 and party_count(world) == 2

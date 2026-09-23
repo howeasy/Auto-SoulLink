@@ -72,6 +72,9 @@ function Client.new(p)
         pending_rescan = false, key_alias = nil, retired_alias = {},
         -- Gen 2: messages observed before this connection's hello (see send)
         held = {}, held_full = false, last_frame = nil,
+        -- Gen 2 (gen2-box-durability): backing withdraws whose box copy waits for a native SAVE
+        -- ({key, armed}); a pending SaveBox after an active-box edit (OMP BOX F2, recorded, not blocking)
+        settle = {}, box_save_pending = false,
     }
 
     -- ── outbound ─────────────────────────────────────────────────────────────────────
@@ -437,9 +440,19 @@ function Client.new(p)
 
     -- Deferred queue: one command per frame, only at the verified checkpoint, inside the permit.
     function self:run_deferred()
-        if #self.deferred == 0 or not self.writes_enabled or not net.connected() then return end
+        local armed
+        for i, s in ipairs(self.settle) do if s.armed then armed = armed or i end end
+        if (#self.deferred == 0 and not armed) or not self.writes_enabled or not net.connected() then return end
         local safe = safety.check(PARTY_HP)
         if not safe then return end
+        if armed then
+            -- one op per hold: the saved party now holds the mon, so its backing copy goes (full-record
+            -- match); a reset before the save left it in the box only, and settle is a no-op
+            local s = table.remove(self.settle, armed)
+            local done, why = boxes.settle(s.key)
+            log("[SLink-gen2] box copy settle " .. s.key .. ": " .. (done and "done" or tostring(why)))
+            return
+        end
         local cmd = table.remove(self.deferred, 1)
         if BOX_NACK[cmd.cmd] then return self:run_box(cmd) end
         local slot, mon, _, why = find_party_slot(cmd.key)
@@ -484,6 +497,9 @@ function Client.new(p)
             if mon then send("stats_cache", { key = cmd.key, stats = { level = mon.level, maxHP = mon.max_hp } }) end
             local done, why = boxes.deposit(phys)
             if done then
+                -- F2: the active sBox half persists only at SaveBox (a native save or box change); a reset
+                -- before it reverts the deposit, which the reconnect reconcile heals. Recorded, not blocking.
+                self.box_save_pending = true
                 self.pending_rescan = true
                 hud.show("↓ " .. name .. " boxed", 100, 180, 255, 200)
             else
@@ -492,7 +508,14 @@ function Client.new(p)
                 hud.show("X Box fail: " .. name, 255, 80, 80, 240)
             end
         elseif cmd.cmd == "party_mon" then
-            local done, why = boxes.withdraw(phys)
+            local done, why = boxes.withdraw(phys, { defer_backing = true })
+            if done and why then
+                -- F1: the backing copy stays until a native SAVE persists the party (never a loss)
+                self.settle[#self.settle + 1] = { key = phys, armed = false }
+                log("[SLink-gen2] party_mon " .. cmd.key .. ": " .. why)
+            elseif done then
+                self.box_save_pending = true
+            end
             if done then
                 self.pending_rescan = true
                 send("sync_retrieve_done", { key = cmd.key })
@@ -601,6 +624,10 @@ function Client.new(p)
             if not had then announce_nuzlocke_start() end
         elseif k == "save_completed" then
             if io.saveram then pcall(io.saveram) end
+            -- the native save persisted the party: deferred backing removals may run (gen2-box-durability)
+            for _, s in ipairs(self.settle) do s.armed = true end
+            if self.box_save_pending then log("[SLink-gen2] box edits persisted by the native save") end
+            self.box_save_pending = false
         elseif k == "soft_reset" or k == "new_game" then
             self:boundary("reset", "save_reset")
         elseif k == "continue_confirmed" then
