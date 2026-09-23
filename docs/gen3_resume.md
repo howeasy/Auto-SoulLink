@@ -43,6 +43,8 @@ Shadow lane invocation: `SLINK_SHADOW=1 python tools/e2e_duo.py --game gen3_rr -
 
 > SYNC 2026-09-22: master merged into this branch as ff9b9b95 (29 commits, clean) and again as 40f7e3ca after the owner-requested pureRGB fix on master (c411b2f3: six overlay symbol pins recomputed on LF bytes; f6229e77 had hashed a CRLF checkout). Both checkouts' LF-pinned files rewritten from their blobs (no content change). Remaining unit failures in this worktree are environment-only (pret cache lives at the repo root). Nothing pushed.
 
+> OWNER RULING 2026-09-22: peer ghost removed from the Gen 3 RC and deferred post-RC (PLAN §0/§10, requirements 'Not in this release'). P5 drops ghost.lua and the ghost scenario; RR duo set is eight.
+
 ## Next actions (in order)
 
 0. (checkpoint 6) (a) save_via_menu: dismiss the final "saved the game" message (A until the dialog callback clears) before the 600-frame close check; RR r7 save shows the save completed but the dialog stayed up. (b) FR whiteout recovery must read the destination from SaveBlock1 lastHealLocation, not opts.heal_map (FR run 24 warped to the Viridian Center); then FR run 25 from slink_fr_parcel_fetch.State to deliver the parcel, then catch. (c) FR story oracles from R12 (starter species, rival outcome + lab flag, parcel_fetch key-pocket grant, exact warp destinations, target-bound FR PC ops with box readback). (d) Independent reviews pending: C3-28 RR oracles, C3-27 save oracle, C3-26 parcel. (e) AP header " AP" suffix: confirm on an AP-patched dump.

@@ -176,6 +176,8 @@ same reachability context), never bytes alone.
 
 ## Not in this release
 
+- **Peer ghost (RR)**: removed from the Gen 3 RC and deferred until post-RC (owner ruling 2026-09-22, PLAN §0). N-2 and the `ghost` scenario are not RC rows; the RR companion scenario set is eight.
+
 Archipelago FRLG (title `firered_ap` kept unadmitted, `†UNVERIFIED` "TODO VERIFY" fields carried
 from `games/gen3_frlge.lua:154-170`); Emerald (title `emerald` kept unadmitted, needs its own
 `gen3_emerald` pack — today it silently resolves FireRed area ids, an encounter-rule bug, not
