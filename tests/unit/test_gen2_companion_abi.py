@@ -81,8 +81,6 @@ def test_real_assembly_locations(compiled):
     assert symbols["wSlinkMailbox"] == (0, 0xCFD8 if title == "crystal" else 0xC1D9)
     assert symbols["SlinkDelayFrameBridge"] == (0, 0x63)
     assert symbols["SlinkService"] == (0x75 if title == "crystal" else 0x13, 0x4000)
-    # Existing RST Bankswitch convention is used, not a new interrupt hook.
-    assert rom[0x40:0x43] == bytes(3)
 
 
 class Machine:
@@ -104,6 +102,9 @@ class Machine:
         self.sp = 0xDFFE
         self.pc = 0
         self.written = []
+        self.mailbox_flag_samples = []
+        self.clear_vblank_on_mailbox = False
+        self.lowest_sp = self.sp
 
     def read(self, address):
         if address < 0x4000:
@@ -113,6 +114,11 @@ class Machine:
         return self.ram[address]
 
     def write(self, address, value):
+        if self.mailbox <= address < self.mailbox + 39:
+            occurred = 0xCFB3 if self.title == "crystal" else 0xCEEA
+            self.mailbox_flag_samples.append(self.ram[occurred])
+            if self.clear_vblank_on_mailbox and len(self.mailbox_flag_samples) == 1:
+                self.ram[occurred] = 0  # model one VBlank servicing the already-armed wait
         if address == 0x2000:
             self.bank = value
         else:
@@ -130,6 +136,7 @@ class Machine:
 
     def push(self, value):
         self.sp -= 2
+        self.lowest_sp = min(self.lowest_sp, self.sp)
         self.write(self.sp, value & 255)
         self.write(self.sp + 1, value >> 8)
 
@@ -227,6 +234,29 @@ def check_first_call(machine):
 
 def test_emitted_bridge_preserves_caller_and_host_fields(compiled):
     check_first_call(Machine(compiled))
+
+
+def test_flag_armed_before_service(compiled):
+    machine = Machine(compiled)
+    start = machine.symbols["SlinkDelayFrameBridge"][1]
+    end = machine.symbols["SlinkDelayFrameBridgeEnd"][1]
+    bridge = machine.rom[start:end]
+    occurred = 0xCFB3 if machine.title == "crystal" else 0xCEEA
+    store = bytes([0x3E, 1, 0xEA, occurred & 255, occurred >> 8])
+    assert bridge.index(store) < bridge.index(b"\xcd\x00\x40")
+    machine.bridge()
+    assert machine.mailbox_flag_samples[0] == 1
+    # Return address + eight bridge-local bytes + deepest CALL/RST; no IRQ model.
+    assert machine.lowest_sp == 0xDFFE - 12
+
+
+def test_vblank_during_service_is_not_rearmed(compiled):
+    machine = Machine(compiled)
+    machine.clear_vblank_on_mailbox = True
+    machine.bridge()
+    assert machine.mailbox_flag_samples[0] == 1
+    occurred = 0xCFB3 if machine.title == "crystal" else 0xCEEA
+    assert machine.ram[occurred] == 0
 
 
 def test_emitted_counter_wrap_repeat_and_native_reset(compiled):

@@ -27,9 +27,12 @@ ASSERT wSlinkMailbox + SLINK_MAILBOX_SIZE <= $d000
 
 SECTION "SLink DelayFrame Bridge", ROM0[$0063]
 SlinkDelayFrameBridge::
+	; Arm the native wait BEFORE servicing: a VBlank during the service must
+	; satisfy this DelayFrame, not be discarded by rearming the flag afterward.
+	ld a, 1
+	ld [wVBlankOccurred], a
 	push af
 	push bc
-	push de
 	push hl
 	ldh a, [hROMBank]
 	push af
@@ -39,15 +42,14 @@ SlinkDelayFrameBridge::
 	pop af
 	rst Bankswitch
 	pop hl
-	pop de
 	pop bc
 	pop af
-	; Replay DelayFrame's displaced five bytes; preserve its original flags.
-	ld a, 1
-	ld [wVBlankOccurred], a
 	ret
 SlinkDelayFrameBridgeEnd::
 ASSERT SlinkDelayFrameBridgeEnd <= $0100
+; Eight local stack bytes (AF, BC, HL, bank); the service does not touch DE.
+; Nested calls/IRQs add more: worst-case live minimum SP during battle/link
+; remains unmeasured and must be qualified before expanding this service.
 
 SECTION "SLink Service", ROMX[$4000], BANK[SLINK_SERVICE_BANK]
 SlinkService::
