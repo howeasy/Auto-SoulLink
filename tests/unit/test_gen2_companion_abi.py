@@ -23,26 +23,52 @@ def rgbds(name):
     pytest.skip("RGBDS compiler required for companion assembly MODEL checks")
 
 
-def assemble(tmp_path, title, extra=""):
+PANEL_NAMES = ("GetSGBLayout", "ClearBGPalettes", "ClearTilemap", "ByteFill", "PlaceString",
+               "WaitBGMap2", "WaitBGMap", "SetDefaultBGPAndOBP", "DelayFrame", "JoyTextDelay",
+               "hInMenu", "hBGMapMode", "hJoyDown", "hJoyPressed", "wAttrmap", "wTilemap")
+
+
+def native_symbols(title):
+    rows = {}
+    for line in (ROOT / "data/gen2" / f"{title}_slink.sym").read_text().splitlines():
+        if line and not line.startswith(";") and ":" in line.split()[0]:
+            location, name = line.split()
+            bank, address = location.split(":")
+            rows[name] = (int(bank, 16), int(address, 16))
+    return rows
+
+
+def assemble(tmp_path, title, extra="", *, panel=False, panel_dir=None):
     crystal = title == "crystal"
     include = tmp_path / "engine/slink"
     include.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ROOT / "patch/gb/slink_abi.inc", include / "slink_abi.inc")
+    panel_source = panel_dir or ROOT / "patch/gen2/src"
+    native = native_symbols(title) if panel else {}
+    panel_defs = "".join(f"DEF {name} EQU ${native[name][1]:04x}\n" for name in PANEL_NAMES) if panel else ""
+    prelude = ""
+    if panel:
+        repo = ROOT / ".cache/gen2-build" / ("pokecrystal" if crystal else "pokegold")
+        prelude = f'INCLUDE "{repo.as_posix()}/includes.asm"\n'
     source = tmp_path / "probe.asm"
     source.write_text(
         ("" if crystal else f"DEF _{title.upper()} EQU 1\n")
+        + prelude + panel_defs
         + f"DEF hVBlankCounter EQU ${0xFF9B if crystal else 0xFF9D:04x}\n"
         + f"DEF wVBlankOccurred EQU ${0xCFB3 if crystal else 0xCEEA:04x}\n"
-        + f"DEF hROMBank EQU ${0xFF9D if crystal else 0xFF9F:04x}\nDEF rROMB EQU $2000\n"
-        + 'CHARMAP "S", $92\nCHARMAP "L", $8b\nCHARMAP "N", $8d\nCHARMAP "K", $8a\n'
+        + f"DEF hROMBank EQU ${0xFF9D if crystal else 0xFF9F:04x}\n"
+        + ("" if panel else 'DEF rROMB EQU $2000\nCHARMAP "S", $92\nCHARMAP "L", $8b\nCHARMAP "N", $8d\nCHARMAP "K", $8a\n')
         + 'SECTION "Bankswitch", ROM0[$10]\nBankswitch::\n'
         + "ldh [hROMBank], a\nld [rROMB], a\nret\n"
         + f'INCLUDE "patch/gen2/src/slink_mailbox_{"crystal" if crystal else "goldsilver"}.asm"\n'
         + 'INCLUDE "patch/gb/slink_abi.inc"\n'
-        + 'INCLUDE "patch/gen2/src/slink.asm"\n' + extra,
+        + (f'INCLUDE "{panel_source.as_posix()}/panel_flags.asm"\n' if panel else "")
+        + 'INCLUDE "patch/gen2/src/slink.asm"\n'
+        + (f'INCLUDE "{panel_source.as_posix()}/panel.asm"\n' if panel else "") + extra,
         encoding="utf-8")
     obj, rom, sym = (tmp_path / name for name in ("probe.o", "probe.gb", "probe.sym"))
     result = subprocess.run([rgbds("rgbasm"), "-I", str(tmp_path) + "/",
+                             *(["-I", str(repo) + "/"] if panel else []),
                              "-I", str(ROOT) + "/", "-o", str(obj),
                              str(source)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
@@ -146,9 +172,15 @@ class Machine:
         return value
 
     def bridge(self):
+        self.run("SlinkDelayFrameBridge")
+
+    def helper(self, address):
+        return False
+
+    def run(self, symbol):
         self.push(0xFFFF)
-        self.pc = self.symbols["SlinkDelayFrameBridge"][1]
-        for _ in range(256):
+        self.pc = self.symbols[symbol][1]
+        for _ in range(10000):
             if self.pc == 0xFFFF:
                 return
             op = self.fetch()
@@ -161,11 +193,12 @@ class Machine:
                 hi, lo = {0xF1: "af", 0xC1: "bc", 0xD1: "de", 0xE1: "hl"}[op]
                 value = self.pop()
                 self.r[hi], self.r[lo] = value >> 8, value & 255
-            elif op == 0x3E:
-                self.r["a"] = self.fetch()
-            elif op == 0x21:
+            elif op in (0x3E, 0x06):
+                self.r["a" if op == 0x3E else "b"] = self.fetch()
+            elif op in (0x21, 0x01, 0x11):
                 value = self.word()
-                self.r["h"], self.r["l"] = value >> 8, value & 255
+                hi, lo = {0x21: "hl", 0x01: "bc", 0x11: "de"}[op]
+                self.r[hi], self.r[lo] = value >> 8, value & 255
             elif op in (0x77, 0x22):
                 hl = self.r["h"] << 8 | self.r["l"]
                 self.write(hl, self.r["a"])
@@ -176,11 +209,22 @@ class Machine:
                 self.write(0xFF00 + self.fetch() if op == 0xE0 else self.word(), self.r["a"])
             elif op in (0xF0, 0xFA):
                 self.r["a"] = self.read(0xFF00 + self.fetch() if op == 0xF0 else self.word())
-            elif op in (0x47, 0x4F, 0x78):
-                dst, src = {0x47: ("b", "a"), 0x4F: ("c", "a"), 0x78: ("a", "b")}[op]
+            elif op in (0x47, 0x4F, 0x78, 0x79):
+                dst, src = {0x47: ("b", "a"), 0x4F: ("c", "a"),
+                            0x78: ("a", "b"), 0x79: ("a", "c")}[op]
                 self.r[dst] = self.r[src]
             elif op == 0xAF:
                 self.r["a"], self.r["f"] = 0, 0x80
+            elif op == 0xE6:
+                self.r["a"] &= self.fetch()
+                self.r["f"] = 0x80 if self.r["a"] == 0 else 0
+            elif op in (0x3C, 0x05):
+                reg, delta = ("a", 1) if op == 0x3C else ("b", -1)
+                self.r[reg] = (self.r[reg] + delta) & 255
+                self.r["f"] = (self.r["f"] & 0x10) | (0x80 if self.r[reg] == 0 else 0)
+            elif op == 0xB8:
+                value = self.r["a"] - self.r["b"]
+                self.r["f"] = (0x80 if value == 0 else 0) | (0x10 if value < 0 else 0)
             elif op in (0x91, 0x81, 0xCE, 0xFE):
                 operand = self.fetch() if op in (0xCE, 0xFE) else self.r["c"]
                 subtract = op in (0x91, 0xFE)
@@ -190,16 +234,23 @@ class Machine:
                 self.r["f"] = (0x80 if value & 255 == 0 else 0) | (0x10 if value < 0 or value > 255 else 0)
                 if op != 0xFE:
                     self.r["a"] = value & 255
-            elif op in (0x18, 0x28):
+            elif op in (0x18, 0x28, 0x20, 0x38):
                 offset = self.fetch()
-                if op == 0x18 or self.r["f"] & 0x80:
+                take = {0x18: True, 0x28: bool(self.r["f"] & 0x80),
+                        0x20: not self.r["f"] & 0x80, 0x38: bool(self.r["f"] & 0x10)}[op]
+                if take:
                     self.pc += offset if offset < 128 else offset - 256
             elif op in (0xCD, 0xD7):
                 address = self.word() if op == 0xCD else 0x10
+                if self.helper(address):
+                    continue
                 self.push(self.pc)
                 self.pc = address
             elif op == 0xC9:
                 self.pc = self.pop()
+            elif op == 0xC8:
+                if self.r["f"] & 0x80:
+                    self.pc = self.pop()
             else:
                 raise AssertionError(f"unsupported opcode {op:02x} at {self.pc - 1:04x}")
         raise AssertionError("companion did not return in bounded instruction budget")
@@ -308,3 +359,169 @@ def test_emitted_negative_controls(compiled, mutation):
     machine.rom = bytes(rom)
     with pytest.raises(AssertionError):
         check_first_call(machine)
+
+
+@pytest.fixture(params=["crystal", "gold", "silver"])
+def compiled_panel(request, tmp_path):
+    return request.param, *assemble(tmp_path, request.param, panel=True)
+
+
+def test_panel_caps_are_enabled_only_with_panel_overlay(compiled_panel):
+    machine = Machine(compiled_panel)
+    machine.bridge()
+    assert machine.ram[machine.mailbox + 8] == 2
+
+
+class PanelMachine(Machine):
+    """Native UI helpers are intercepted; this is sequencing/state MODEL evidence only."""
+
+    def __init__(self, compiled, *, buttons=(1, 1), host=True):
+        super().__init__(compiled)
+        self.native = native_symbols(self.title)
+        self.helpers = {self.native[name][1]: name for name in PANEL_NAMES if name[0].isupper()}
+        self.bank = self.symbols["SlinkPanel"][0]
+        self.ram[self.bank_address] = self.bank
+        self.buttons = buttons
+        self.host = host
+        self.frames = 0
+        self.observed_closed = False
+        self.hidden = True  # handler has called FadeToMenu
+        self.transferred = False
+        self.input_reads = 0
+        self.events = []
+        self.pages = []
+        self.ram[self.address("hInMenu")] = 7
+        self.ram[self.mailbox + 9] = 1  # hostile stale state must be explicitly closed
+
+    def address(self, name):
+        return self.native[name][1]
+
+    def tick(self, count=1):
+        for _ in range(count):
+            self.frames += 1
+            state = self.ram[self.mailbox + 9]
+            if state == 0:
+                self.observed_closed = True
+            if state == 1 and self.host and self.observed_closed:
+                assert self.hidden, "host painted on a visible panel"
+                page = self.ram[self.mailbox + 10]
+                self.ram[self.address("wTilemap"):self.address("wTilemap") + 360] = bytes([0x80 + page]) * 360
+                self.events.append("host_tiles")
+                self.ram[self.address("wAttrmap"):self.address("wAttrmap") + 360] = bytes(360)
+                self.events.append("host_attrs")
+                self.ram[self.mailbox + 11] = 2
+                self.ram[self.mailbox + 9] = 2
+                self.events.append("host_staged")
+
+    def helper(self, address):
+        name = self.helpers.get(address)
+        if name is None:
+            return False
+        self.events.append(name)
+        if name == "GetSGBLayout":
+            self.tick(4)  # native CGB Diploma ApplyAttrmap waits four LCD frames
+        elif name == "ClearBGPalettes":
+            self.hidden, self.transferred = True, False
+            self.tick(4)
+        elif name == "ClearTilemap":
+            start = self.address("wTilemap")
+            self.ram[start:start + 360] = bytes([0x7F]) * 360
+            self.tick(4)
+        elif name == "ByteFill":
+            start = self.r["h"] << 8 | self.r["l"]
+            count = self.r["b"] << 8 | self.r["c"]
+            assert start == self.address("wAttrmap") and count == 360
+            self.ram[start:start + count] = bytes([self.r["a"]]) * count
+        elif name == "PlaceString":
+            # Native glyph rendering is outside this model; pointer/content boundary checked.
+            src = self.r["d"] << 8 | self.r["e"]
+            text = []
+            for i in range(32):
+                value = self.read(src + i)
+                if value == 0x50:
+                    break
+                text.append(value)
+            else:
+                raise AssertionError("fallback string has no native terminator")
+            dst = self.r["h"] << 8 | self.r["l"]
+            assert self.address("wTilemap") <= dst < self.address("wTilemap") + 360
+            self.ram[dst:dst + len(text)] = bytes(text)
+        elif name == "DelayFrame":
+            self.tick()
+        elif name in ("WaitBGMap", "WaitBGMap2"):
+            assert self.hidden and self.ram[self.mailbox + 9] in (0, 2)
+            self.transferred = name == "WaitBGMap2"
+            self.tick(8 if self.transferred else 4)
+        elif name == "SetDefaultBGPAndOBP":
+            assert self.transferred, "palette revealed without CGB attribute+tile transfer"
+            assert self.ram[self.mailbox + 9] in (0, 2), "visible fallback still permits host writes"
+            self.hidden = False
+            self.pages.append(self.ram[self.mailbox + 10])
+            self.input_reads = 0
+        elif name == "JoyTextDelay":
+            assert not self.hidden
+            self.input_reads += 1
+            key = 0 if self.input_reads == 1 else self.buttons[len(self.pages) - 1]
+            self.ram[self.address("hJoyDown")] = key
+            self.ram[self.address("hJoyPressed")] = key
+            self.r.update(a=0xED, b=0xD2, c=0xF7)  # clobber: caller must read input AFTER call
+        else:
+            raise AssertionError(f"unexpected helper {name}")
+        return True
+
+
+def check_panel(machine, expected_pages):
+    machine.run("SlinkPanel")
+    assert machine.pages == expected_pages
+    assert machine.ram[machine.mailbox + 9:machine.mailbox + 12] == bytes(3)
+    assert machine.ram[machine.address("hInMenu")] == 7
+    assert machine.sp == 0xDFFE
+    allowed = {machine.mailbox + 9, machine.mailbox + 10, machine.mailbox + 11,
+               machine.address("hInMenu"), machine.address("hBGMapMode")}
+    assert set(machine.written) <= allowed | set(range(0xDFE0, 0xDFFE))
+    if machine.host:
+        assert machine.observed_closed
+        assert machine.events.count("host_staged") == len(expected_pages)
+        for position, name in enumerate(machine.events):
+            if name == "host_staged":
+                assert machine.events[position - 2:position] == ["host_tiles", "host_attrs"]
+
+
+def test_compiled_panel_stages_two_pages_then_a_closes(compiled_panel):
+    check_panel(PanelMachine(compiled_panel), [0, 1])
+
+
+@pytest.mark.parametrize("button", [2, 8])
+def test_compiled_panel_b_or_start_closes_first_page(compiled_panel, button):
+    check_panel(PanelMachine(compiled_panel, buttons=(button,)), [0])
+
+
+def test_compiled_panel_timeout_closes_lease_before_reveal(compiled_panel):
+    machine = PanelMachine(compiled_panel, buttons=(1,), host=False)
+    check_panel(machine, [0])
+    assert machine.events.count("DelayFrame") == 92  # ninety polls plus release/press
+    assert "host_staged" not in machine.events
+
+
+@pytest.mark.parametrize("mutation", ["no_attrs", "timeout_open", "no_closed"])
+def test_compiled_panel_mutations_are_refused(compiled_panel, mutation):
+    machine = PanelMachine(compiled_panel, buttons=(1,), host=mutation != "timeout_open")
+    rom = bytearray(machine.rom)
+    bank, address = machine.symbols["SlinkPanel"]
+    start = bank * 0x4000 + address - 0x4000
+    if mutation == "no_attrs":
+        old = machine.address("WaitBGMap2")
+        pos = rom.index(bytes([0xCD, old & 255, old >> 8]), start)
+        new = machine.address("WaitBGMap")
+        rom[pos + 1:pos + 3] = new.to_bytes(2, "little")
+    elif mutation == "timeout_open":
+        ready = bank * 0x4000 + machine.symbols["SlinkPanel.ready"][1] - 0x4000
+        assert rom[ready - 3] == 0xEA
+        rom[ready - 3:ready] = bytes(3)
+    else:
+        state = machine.mailbox + 9
+        pos = rom.index(bytes([0xEA, state & 255, state >> 8]), start)
+        rom[pos:pos + 3] = bytes(3)
+    machine.rom = bytes(rom)
+    with pytest.raises(AssertionError):
+        check_panel(machine, [0])

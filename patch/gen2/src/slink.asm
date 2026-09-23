@@ -1,4 +1,4 @@
-; P4.1c SOURCE skeleton, O-27 D1/D5/D6. No sound, panel or trade capability yet.
+; O-27 D1/D5/D6 main-thread service. Panel authority requires its complete overlay.
 ; Included by the source-overlay builder, after its title-specific WRAM reservation.
 INCLUDE "engine/slink/slink_abi.inc"
 
@@ -65,7 +65,11 @@ SlinkService::
 	ld [hli], a
 	ld a, SLINK_ABI_VERSION
 	ld [hl], a
+IF DEF(SLINK_PANEL_ENABLED)
+	ld a, SLINK_CAP_PANEL
+ELSE
 	xor a
+ENDC
 	ld [wSlinkMailbox + SLINK_OFS_CAPS], a
 
 	; Sample the engine's own clock. Only selected VBlank handlers advance it;
@@ -103,4 +107,4 @@ SlinkServiceEnd::
 ; Native Init clears the whole WRAM0 mailbox on boot/reset (Crystal init.asm:66-75,
 ; G/S :59-68). Reset first runs 32 DelayFrames before that clear. NewGame's narrower
 ; ResetWRAM excludes the mailbox. Future request/lease services need their own
-; new-run lifecycle; this caps-zero skeleton neither consumes nor grants requests.
+; new-run lifecycle; this service never consumes sound or trade requests.
