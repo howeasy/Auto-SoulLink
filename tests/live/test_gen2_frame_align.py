@@ -12,6 +12,11 @@ production path (S.new -> S.qualified_sites) accepts:
 
     tests/fixtures/gen2/receipts/crystal.engine_sites.json
 
+FRAME-ALIGNMENT CONTROL: the capture RAM effect (the callback sees wPartyCount N+1, the main loop N
+before and N+1 after) substitutes plan 5.13's "DMG Gen 1 pin" (coordinator-accepted, card gen2-U1b).
+Hit PC/bank are the MEASURED PC register and hROMBank byte, never the binder's anchor echo; the receipt
+binds the staged fixture bytes and the qualification attempt (signals.bind_fixture_qualification).
+
 Skipped without EmuHawk, the pinned build, the fixture or its qualification receipt (the release runner
 counts a skip as a failure).
 """
@@ -51,7 +56,7 @@ PACK_UI = {"pack_items": "BattlePack.ItemsPocketMenu", "pack_balls": "BattlePack
            "item_submenu": "ItemSubmenu"}
 
 
-def u1_facts(ctx, facts) -> dict:
+def u1_facts(ctx, facts, qualification_attempt_id: str) -> dict:
     """Pack-UI origins and the wrong-bank decoy: the overworld tick PC in the highest bank that carries
     no symbol and only zero bytes there (never executed), so a hit can only be the real bank's code."""
     tick = facts["observer"]["overworld_tick"]
@@ -70,7 +75,8 @@ def u1_facts(ctx, facts) -> dict:
     # 1113-1115, data/text/common_3.asm:1250-1255), not the gift-side "received?" text the route facts bind.
     anchor = "Give a nickname to"
     assert f'text "{anchor}"' in ctx.read_source("data/text/common_3.asm"), "catch nickname anchor left the source"
-    return {"pack_ui": pack_ui, "decoy": decoy, "prompts": {"catch_nickname": [anchor]}}
+    return {"pack_ui": pack_ui, "decoy": decoy, "prompts": {"catch_nickname": [anchor]},
+            "qualification_attempt_id": qualification_attempt_id}
 
 
 def tag_json(text: str, tag: str):
@@ -83,7 +89,7 @@ def verify(text: str, pack: dict) -> dict:
     summary = tag_json(text, "HIT_SUMMARY")
     for name, row in summary.items():
         if row["hits"]:
-            assert (row["pc"], row["bank"]) == (sites[name]["addr"], sites[name]["bank"]), (name, row)
+            assert (row["pc"], row["bank"], row["off_pin"]) == (sites[name]["addr"], sites[name]["bank"], 0), (name, row)
     previous = 0
     for name in EXPECT:
         log = summary.get(name, {}).get("log") or []
@@ -98,7 +104,7 @@ def verify(text: str, pack: dict) -> dict:
     assert align["misaligned"] == 0 and align["aligned"] >= len(EXPECT), align
     assert a["callback"] == a["armed"] and a["callback_party"] == a["pre_party"] + 1 == a["post_party"], a
     decoy = tag_json(text, "DECOY")
-    assert decoy["raw"] >= 1 and decoy["accepted"] == 0, decoy
+    assert decoy["raw"] >= 1 and decoy["accepted"] == 0 and decoy["bank_rejects"] == decoy["raw"], decoy
     negatives = tag_json(text, "NEGATIVES")
     assert negatives["control"] == "bound", negatives
     assert "differ from the ROM" in negatives["wrong_pack_byte"], negatives
@@ -110,6 +116,7 @@ def verify(text: str, pack: dict) -> dict:
     assert (receipt["rom_sha1"], receipt["pack_commit"], receipt["pack_specs_sha256"]) == (
         source["rom_sha1"], source["commit"], pack["specs_sha256"])
     assert sorted(receipt["proven"]) == sorted(EXPECT) and receipt["harness_write_scopes"] == []
+    assert receipt["evidence_level"] == "PHYSICAL" and receipt["decoy"]["bank_rejects"] == receipt["decoy"]["raw"]
     return receipt
 
 
@@ -126,7 +133,9 @@ def test_crystal_engine_sites_fire_at_their_routines(emuhawk):  # noqa: F811
     live.qualified_identity(spec.name, staged)   # the staged bytes are the qualified candidate
     ctx = gen2_source_data.load_context(spec.title, root=REPO)
     env = live.inspect_env(spec, staged)
-    env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, gen2_fixtures.route_facts(spec.title, REPO)))
+    qualification = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
+    env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, gen2_fixtures.route_facts(spec.title, REPO),
+                                                     qualification["attempt_id"]))
     passed, path, text = run_gate(GATE, rom_key=spec.title, target=spec.target, timeout=1200,
                                   saveram_dir=str(REPO / ".cache/gen2-fixtures/u1-hook-proof" / spec.name),
                                   fixture_path=str(fixture), speed_percent=300, env_overrides=env)
@@ -135,5 +144,6 @@ def test_crystal_engine_sites_fire_at_their_routines(emuhawk):  # noqa: F811
 
     pack = json.loads((REPO / "data/games/gen2_crystal/engine_signals.json").read_text(encoding="utf-8"))
     receipt = verify(text, pack)
-    receipt["fixture_sha256"] = hashlib.sha256(staged).hexdigest()
+    assert receipt["fixture_sha256"] == hashlib.sha256(staged).hexdigest(), "receipt names other fixture bytes"
+    assert receipt["qualification_attempt_id"] == qualification["attempt_id"]
     RECEIPT.write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")

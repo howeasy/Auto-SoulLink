@@ -725,6 +725,38 @@
               "addr": 26779,
               "expected_hex": "4cc268530f2e008a280f1b00"
             },
+            "script_spans": [
+              {
+                "symbol": "Script_BattleWhiteout",
+                "bank": 4,
+                "addr": 26766,
+                "end": 26773
+              },
+              {
+                "symbol": "OverworldWhiteoutScript",
+                "bank": 4,
+                "addr": 26773,
+                "end": 26779
+              },
+              {
+                "symbol": "Script_Whiteout",
+                "bank": 4,
+                "addr": 26779,
+                "end": 26815
+              },
+              {
+                "symbol": "Script_Whiteout.bug_contest",
+                "bank": 4,
+                "addr": 26815,
+                "end": 26818
+              },
+              {
+                "symbol": "Script_Whiteout.WhitedOutText",
+                "bank": 4,
+                "addr": 26818,
+                "end": 26823
+              }
+            ],
             "runtime_guard_qualification": "OPEN"
           },
           "point_symbols": {

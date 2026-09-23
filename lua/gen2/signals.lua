@@ -107,11 +107,16 @@ S.RECEIPT_SCHEMA = "gen2-engine-site-receipt-v1"
 S.PHYSICAL_TITLES = {crystal=true}
 S.RECEIPT_NEGATIVES = {"wrong_pack_byte","script_bytecode_arm","wrong_bank_hit"}
 
+local COUNT = 9007199254740991
+local function hex64(value) return type(value) == "string" and #value == 64 and value:match("^%x+$") ~= nil end
+
 -- The proven site set of a PHYSICAL receipt, or nil,why. Pure: the caller decodes the file.
--- A site is proven only when the receipt names it and recorded a live hit at exactly the
--- bank/PC/bytes the pack pins, and the receipt belongs to this title, ROM and pack with the
--- frame-alignment probe and every negative control passed. A proven site whose acquisition
--- predecessor is unproven is dropped too (it could never publish).
+-- Summary flags are never trusted: alignment, RAM effect and decoy verdicts are recomputed
+-- from the receipt's raw measurements. A site is proven only when the receipt names it and
+-- recorded a live hit at exactly the bank/PC/bytes the pack pins, and the receipt belongs to
+-- this title, ROM, pack and qualified battle fixture (normal buttons, CGB, no harness write).
+-- A proven site none of whose ANY-mode predecessors is proven is dropped (it could never
+-- publish); an ALL-mode site needs every predecessor proven.
 function S.qualified_sites(title, pack, receipt)
     if not S.PHYSICAL_TITLES[title] then
         return nil,"Gen 2 runtime signal qualification is OPEN for " .. tostring(title) .. ": no PHYSICAL receipt path"
@@ -121,14 +126,26 @@ function S.qualified_sites(title, pack, receipt)
         return nil,"PHYSICAL engine-site qualification receipt required"
     end
     local data = type(pack) == "table" and type(pack.titles) == "table" and pack.titles[title]
-    if not data or type(pack.source) ~= "table" or receipt.title ~= title
+    if type(data) ~= "table" or type(data.sites) ~= "table" or type(pack.source) ~= "table" or receipt.title ~= title
        or receipt.rom_sha1 ~= pack.source.rom_sha1 or receipt.pack_commit ~= pack.source.commit
        or type(pack.specs_sha256) ~= "string" or receipt.pack_specs_sha256 ~= pack.specs_sha256 then
         return nil,"qualification receipt belongs to another title, ROM or engine-site pack"
     end
-    if receipt.bank_check ~= "live" or type(receipt.frame_alignment) ~= "table"
-       or receipt.frame_alignment.passed ~= true then
-        return nil,"qualification receipt lacks the live bank check or the frame-alignment probe"
+    if receipt.fixture ~= title .. "_battle" or receipt.core_mode ~= "CGB" or receipt.input_mode ~= "normal_buttons"
+       or type(receipt.harness_write_scopes) ~= "table" or next(receipt.harness_write_scopes) ~= nil
+       or not hex64(receipt.fixture_sha256) or type(receipt.attempt_id) ~= "string" or receipt.attempt_id == ""
+       or type(receipt.qualification_attempt_id) ~= "string" or receipt.qualification_attempt_id == "" then
+        return nil,"qualification receipt is not a normal-button CGB run of the qualified battle fixture"
+    end
+    local a, d = receipt.frame_alignment, receipt.decoy
+    if receipt.bank_check ~= "live" or type(a) ~= "table" or a.passed ~= true
+       or not integer(a.armed,0,COUNT) or a.callback ~= a.armed
+       or not integer(a.pre_party,0,5) or a.callback_party ~= a.pre_party+1 or a.post_party ~= a.callback_party
+       or not integer(a.aligned_hits,1,COUNT) or a.misaligned_hits ~= 0 then
+        return nil,"qualification receipt lacks the live bank check or the frame-alignment measurements"
+    end
+    if type(d) ~= "table" or not integer(d.raw,1,COUNT) or d.accepted ~= 0 or d.bank_rejects ~= d.raw then
+        return nil,"qualification receipt wrong-bank decoy did not fire raw and reject every hit by bank"
     end
     for _,name in ipairs(S.RECEIPT_NEGATIVES) do
         if type(receipt.negatives) ~= "table" or receipt.negatives[name] ~= "refused" then
@@ -141,9 +158,10 @@ function S.qualified_sites(title, pack, receipt)
     local proven = {}
     for _,name in ipairs(receipt.proven) do
         local site, hit = data.sites[name], receipt.sites[name]
-        if type(site) ~= "table" or type(hit) ~= "table" or not integer(hit.hits,1,9007199254740991)
+        if type(site) ~= "table" or type(site.guards) ~= "table" or type(hit) ~= "table"
+           or not integer(hit.hits,1,COUNT)
            or hit.bank ~= site.bank or hit.addr ~= site.addr or hit.pc ~= site.addr
-           or hit.expected_hex ~= site.expected_hex or not integer(hit.first_frame,0,9007199254740991) then
+           or hit.expected_hex ~= site.expected_hex or not integer(hit.first_frame,0,COUNT) then
             return nil,"qualification receipt site differs from the pack or has no live hit: " .. tostring(name)
         end
         proven[name] = true
@@ -153,8 +171,12 @@ function S.qualified_sites(title, pack, receipt)
         changed = false
         for name in pairs(proven) do
             local prior = data.sites[name].guards.requires_prior
-            for _,start in ipairs(prior and prior.site_ids or {}) do
-                if not proven[start] and proven[name] then proven[name], changed = nil, true end
+            if type(prior) == "table" then
+                local all, found = prior.mode == "ALL", 0
+                for _,start in ipairs(type(prior.site_ids) == "table" and prior.site_ids or {}) do
+                    if proven[start] then found = found+1 end
+                end
+                if found == 0 or (all and found ~= #prior.site_ids) then proven[name], changed = nil, true end
             end
         end
     end
@@ -162,12 +184,39 @@ function S.qualified_sites(title, pack, receipt)
     return proven
 end
 
+-- U3 binding: true when a PHYSICAL engine-site receipt ran on exactly the fixture bytes a
+-- passed full-chain fixture qualification report (tests/fixtures/gen2/receipts/<fixture>.qualification.json,
+-- decoded by the caller) recorded, from that report's attempt; else nil,why. Pure.
+function S.bind_fixture_qualification(receipt, qualification)
+    if type(receipt) ~= "table" or type(qualification) ~= "table" then return nil,"receipt and qualification report required" end
+    if qualification.schema ~= "fixture-qualification-v1" or qualification.passed ~= true
+       or type(qualification.errors) ~= "table" or next(qualification.errors) ~= nil then
+        return nil,"fixture qualification report did not pass"
+    end
+    if type(qualification.attempt_id) ~= "string" or qualification.attempt_id ~= receipt.qualification_attempt_id then
+        return nil,"engine-site receipt names another qualification attempt"
+    end
+    local rows = qualification.fixtures
+    local row = type(rows) == "table" and #rows == 1 and rows[1]
+    local artifact = type(row) == "table" and type(row.artifacts) == "table" and row.artifacts.fixture
+    local provenance = type(row) == "table" and row.provenance
+    if type(artifact) ~= "table" or type(provenance) ~= "table" or row.passed ~= true or row.name ~= receipt.fixture
+       or provenance.title ~= receipt.title or provenance.rom_sha1 ~= receipt.rom_sha1 then
+        return nil,"qualification report has no passed row for the receipt's fixture, title and ROM"
+    end
+    if not hex64(receipt.fixture_sha256) or artifact.sha256 ~= receipt.fixture_sha256 then
+        return nil,"engine-site receipt ran on other fixture bytes than the qualified ones"
+    end
+    return true
+end
+
 local build
 function S.new(options)
     if type(options) ~= "table" or options.runtime_qualification == nil then
         return nil,"explicit Gen 2 runtime qualification is required"
     end
-    local proven, why = S.qualified_sites(options.title, options.pack, options.runtime_qualification)
+    local ok, proven, why = pcall(S.qualified_sites, options.title, options.pack, options.runtime_qualification)
+    if not ok then return nil,"malformed Gen 2 qualification input: " .. tostring(proven) end
     if not proven then return nil,why end
     local ok,result,reason,failed = pcall(build,options,proven)
     if not ok then return nil,tostring(result) end
@@ -243,6 +292,12 @@ function build(options, proven)
                    "invalid script-bytecode range")
             scripts[#scripts+1] = {bank=script.bank,lo=script.addr,hi=script.addr+#script.expected_hex//2}
         end
+        -- Generated label-to-next-label script spans (the whole script, not just the checked prefix).
+        for _,span in ipairs(type(site.guards) == "table" and site.guards.script_spans or {}) do
+            assert(integer(span.bank,0,255) and integer(span.addr,0,65535) and integer(span["end"],span.addr+1,65536),
+                   "invalid script-bytecode span")
+            scripts[#scripts+1] = {bank=span.bank,lo=span.addr,hi=span["end"]}
+        end
     end
     for _,name in ipairs(ids) do
         local site = data.sites[name]
@@ -281,7 +336,14 @@ function build(options, proven)
         if prior then
             assert(prior.mode == "ANY" and prior.scope == "current_operation" and prior.consume_once == true
                    and type(prior.site_ids) == "table" and #prior.site_ids > 0,"invalid acquisition latch contract")
-            for _,start in ipairs(prior.site_ids) do assert(by_id[start],"missing acquisition predecessor") end
+            -- ANY mode: every predecessor is a pack site and at least one is registered (a PHYSICAL
+            -- receipt may leave the others unregistered; their latches then never open).
+            local registered = false
+            for _,start in ipairs(prior.site_ids) do
+                assert(data.sites[start],"missing acquisition predecessor")
+                registered = registered or by_id[start] ~= nil
+            end
+            assert(registered,"no registered acquisition predecessor")
             local invalidations = {}
             for _,reason in ipairs(prior.invalidate_on or {}) do invalidations[reason] = true end
             for reason in pairs(BOUNDARIES) do assert(invalidations[reason],"missing acquisition invalidation") end

@@ -21,7 +21,10 @@
   frame the main loop armed (framecount before the frameadvance that ran it); they must be equal. At
   capture_party (right after predef TryAddMonToParty) the callback reads wPartyCount: the main loop saw
   N before that frame, the callback sees N+1 (the RAM effect is already there) and the main loop sees
-  N+1 after the frame returns.
+  N+1 after the frame returns. This capture RAM effect IS the frame-alignment control: it substitutes
+  plan 5.13's "DMG Gen 1 pin" (coordinator-accepted, card gen2-U1b). Each accepted hit also records the
+  MEASURED PC register and hROMBank byte (never the anchor echo), checked against the pinned bank/PC.
+  The receipt's evidence_level is PHYSICAL only when the api is this script's own BizHawk binding.
 
   NEGATIVES (each with a known-positive control): a one-byte-wrong pack refuses at load (the unmutated
   pack binds on the same ROM); an arm moved onto Script_Whiteout bytecode refuses in the binder (the
@@ -202,11 +205,13 @@ function F.verdict(record)
         end
         need(found ~= nil, name .. " did not fire after the previous expected site")
         if found then previous = found.seq end
-        need(site ~= nil and site.pc == site.addr and site.hit_bank == site.bank, name .. " hit off its pinned bank/PC")
+        need(site ~= nil and site.pc == site.addr and site.hit_bank == site.bank and site.off_pin == 0,
+             name .. " hit off its pinned bank/PC (measured)")
     end
     need(sites.capture_party and sites.capture_party.hits == 1, "capture_party must fire exactly once")
     for _, name in ipairs(F.ABSENT) do need(sites[name] and sites[name].hits == 0, name .. " fired on a party < 6 catch") end
-    need(record.decoy.raw >= 1 and record.decoy.accepted == 0, "wrong-bank decoy: no raw fire or an accepted hit")
+    need(record.decoy.raw >= 1 and record.decoy.accepted == 0 and record.decoy.bank_rejects == record.decoy.raw,
+         "wrong-bank decoy: no raw fire, an accepted hit, or a hit not rejected by bank")
     for _, name in ipairs({"wrong_pack_byte", "script_bytecode_arm", "wrong_bank_hit"}) do
         need(record.negatives[name] == "refused", "negative control not refused: " .. name)
     end
@@ -252,7 +257,7 @@ function F.probe(ctx, pack, decoy_site)
     for _, name in ipairs(names) do
         local site = sites[name]
         record.sites[name] = {bank=site.bank, addr=site.addr, expected_hex=site.expected_hex, symbol=site.symbol,
-                              raw=0, bank_rejects=0, hits=0, log={}}
+                              raw=0, bank_rejects=0, hits=0, off_pin=0, log={}}
         local id = fmt("bank%03d_pc%04X", site.bank, site.addr)
         if not groups[id] then
             groups[id] = {id=id, members={}}
@@ -296,13 +301,16 @@ function F.probe(ctx, pack, decoy_site)
                 end
                 return nil
             end
+            -- Measured, not the binder's anchor echo: the live PC register and the hROMBank byte.
+            local pc, bank = ctx.api.register("PC"), ctx.api.read_u8(ctx.profile.hram.hROMBank, "System Bus")
             if probe.armed == hit.frame then record.aligned = record.aligned + 1
             else record.misaligned = record.misaligned + 1 end
             record.seq = record.seq + 1
             for _, name in ipairs(prepared.members) do
                 local s = record.sites[name]
                 s.hits = s.hits + 1
-                if s.first_frame == nil then s.first_frame, s.pc, s.hit_bank = hit.frame, hit.pc, hit.bank end
+                if pc ~= s.addr or bank ~= s.bank then s.off_pin = s.off_pin + 1 end
+                if s.first_frame == nil then s.first_frame, s.pc, s.hit_bank = hit.frame, pc, bank end
                 if logged[name] and #s.log < F.HIT_LOG then
                     s.log[#s.log + 1] = {seq=record.seq, frame=hit.frame, armed=probe.armed}
                 end
@@ -381,7 +389,10 @@ function F.negatives(ctx, Signals, wrapper, pack)
     return out, detail
 end
 
+local live_api   -- set only by this file's own BizHawk entry below; a library caller cannot claim it
+
 function F.main(api, getenv, SG)
+    local evidence = (live_api ~= nil and api == live_api) and "PHYSICAL" or "MODEL"
     local root = getenv("SLINK_ROOT") or SLINK_ROOT or "."
     local lines, failures = {}, 0
     local function log(s)
@@ -476,7 +487,7 @@ function F.main(api, getenv, SG)
     for name, s in pairs(record.sites) do
         if s.raw > 0 then
             summary[name] = {hits=s.hits, raw=s.raw, bank_rejects=s.bank_rejects, first_frame=s.first_frame,
-                             pc=s.pc, bank=s.hit_bank, log=s.log}
+                             pc=s.pc, bank=s.hit_bank, off_pin=s.off_pin, log=s.log}
         end
     end
     log("HIT_SUMMARY " .. json.encode(json.object(summary)))
@@ -499,16 +510,17 @@ function F.main(api, getenv, SG)
         sites[name] = {bank=s.bank, addr=s.addr, expected_hex=s.expected_hex, symbol=s.symbol, hits=0, raw=s.raw}
     end
     local a = record.align
-    local receipt = {schema=Signals.RECEIPT_SCHEMA, title="crystal", evidence_level="PHYSICAL", result="PASS",
+    local receipt = {schema=Signals.RECEIPT_SCHEMA, title="crystal", evidence_level=evidence, result="PASS",
         rom_sha1=pack.source.rom_sha1, pack_commit=pack.source.commit, pack_specs_sha256=pack.specs_sha256,
         fixture=case.name, attempt_id=case.attempt_id, core_mode="CGB", input_mode="normal_buttons",
+        fixture_sha256=q.stage_fingerprint, qualification_attempt_id=ctx.u1.qualification_attempt_id,
         harness_write_scopes=json.array({}), bank_check="live",
         frame_alignment={passed=true, rule="callback emu.framecount() == the frame being emulated (armed); "
             .. "the site's RAM effect is visible inside the callback and to the main loop at armed+1",
             armed=a.armed, callback=a.callback, pre_party=a.pre_party, callback_party=a.callback_party,
             post_party=a.post_party, aligned_hits=record.aligned, misaligned_hits=record.misaligned},
         negatives=record.negatives, decoy={bank=ctx.u1.decoy.bank, addr=ctx.u1.decoy.addr, raw=record.decoy.raw,
-            accepted=record.decoy.accepted},
+            accepted=record.decoy.accepted, bank_rejects=record.decoy.bank_rejects},
         sites=sites, proven=json.array(proven), absent=json.array(F.ABSENT)}
 
     -- The production gate on this very ROM: the receipt registers exactly the proven sites; Gold refuses.
@@ -545,6 +557,7 @@ local ROOT = SLINK_ROOT or os.getenv("SLINK_ROOT")
 assert(ROOT, "SLINK_ROOT unset -- launch via tools/run_gb_gate.py")
 local SG = F.scripted_gate(ROOT)
 local api = SG.bizhawk()
+live_api = api
 F.main(api, os.getenv, SG)
 api.exit()
 error("slink-gate-finished", 0)   -- client.exit() is asynchronous; stop here for real

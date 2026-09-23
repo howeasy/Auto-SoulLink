@@ -1,5 +1,6 @@
 """Explicit MODEL-only hook probes; no emulator or physical qualification."""
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -867,6 +868,10 @@ U1_EXPECT = ("wild_ready", "capture_party", "capture_party_finalized", "battle_e
 U1_NEGATIVES = ("wrong_pack_byte", "script_bytecode_arm", "wrong_bank_hit")
 
 
+QUALIFICATION = ROOT / "tests/fixtures/gen2/receipts/crystal_battle.qualification.json"
+FIXTURE_SHA256 = hashlib.sha256((ROOT / "tests/fixtures/gen2/crystal_battle.SaveRAM").read_bytes()).hexdigest()
+
+
 def receipt(world, proven=U1_EXPECT):
     sites = {name: {"bank": world.sites[name]["bank"], "addr": world.sites[name]["addr"],
                     "pc": world.sites[name]["addr"], "expected_hex": world.sites[name]["expected_hex"],
@@ -875,7 +880,13 @@ def receipt(world, proven=U1_EXPECT):
     return {"schema": "gen2-engine-site-receipt-v1", "title": world.title, "evidence_level": "PHYSICAL",
             "result": "PASS", "rom_sha1": world.pack["source"]["rom_sha1"],
             "pack_commit": world.pack["source"]["commit"], "pack_specs_sha256": world.pack["specs_sha256"],
-            "bank_check": "live", "frame_alignment": {"passed": True},
+            "fixture": f"{world.title}_battle", "attempt_id": "inspect-crystal_battle", "core_mode": "CGB",
+            "input_mode": "normal_buttons", "harness_write_scopes": [], "fixture_sha256": FIXTURE_SHA256,
+            "qualification_attempt_id": json.loads(QUALIFICATION.read_text())["attempt_id"],
+            "bank_check": "live",
+            "frame_alignment": {"passed": True, "armed": 102, "callback": 102, "pre_party": 1, "callback_party": 2,
+                                "post_party": 2, "aligned_hits": 5, "misaligned_hits": 0},
+            "decoy": {"bank": 0x7F, "addr": 0x6974, "raw": 40, "accepted": 0, "bank_rejects": 40},
             "negatives": {name: "refused" for name in U1_NEGATIVES}, "sites": sites, "proven": list(proven)}
 
 
@@ -917,8 +928,19 @@ def test_gold_and_silver_refuse_production_even_with_a_matching_receipt(title):
     assert binder is None and "OPEN" in why and world.callbacks == {}
 
 
+RAW_FAULTS = {  # U1b: the summary flags stay "passed"; only the raw measurements are wrong
+    "callback_frame": ("frame_alignment", "callback", 103), "ram_effect": ("frame_alignment", "post_party", 1),
+    "callback_party": ("frame_alignment", "callback_party", 1), "misaligned": ("frame_alignment", "misaligned_hits", 1),
+    "decoy_accepted": ("decoy", "accepted", 1), "decoy_silent": ("decoy", "raw", 0),
+    "decoy_bank_rejects": ("decoy", "bank_rejects", 39), "fixture": (None, "fixture", "crystal_town"),
+    "core_mode": (None, "core_mode", "DMG"), "input_mode": (None, "input_mode", "poke"),
+    "harness_write": (None, "harness_write_scopes", ["party"]), "fixture_sha": (None, "fixture_sha256", None),
+    "attempt": (None, "attempt_id", None), "qualification_attempt": (None, "qualification_attempt_id", ""),
+}
+
+
 @pytest.mark.parametrize("fault", ["schema", "rom", "specs", "pc", "bank", "bytes", "no_hits", "alignment",
-                                   "negative", "unknown_site", "model_authority", "model_io"])
+                                   "negative", "unknown_site", "model_authority", "model_io", *RAW_FAULTS])
 def test_a_faulty_receipt_or_model_authority_registers_nothing(fault):
     world = World()
     qualification = receipt(world)
@@ -943,6 +965,9 @@ def test_a_faulty_receipt_or_model_authority_registers_nothing(fault):
         qualification["negatives"]["wrong_bank_hit"] = "NOT refused"
     elif fault == "unknown_site":
         qualification["proven"].append("not_a_site")
+    elif fault in RAW_FAULTS:
+        table, field, value = RAW_FAULTS[fault]
+        (qualification[table] if table else qualification)[field] = value
     binder, why = production(world, qualification,
                              authority="MODEL_PROBE" if fault == "model_authority" else "PHYSICAL_RUNTIME",
                              model_io=fault == "model_io")
@@ -954,6 +979,73 @@ def test_a_proven_final_without_its_proven_insertion_is_not_registered():
     binder, why = production(world, receipt(world, ("wild_ready", "capture_party_finalized")))
     assert binder is not None, why
     assert list(binder.status(binder).registered_sites.values()) == ["wild_ready"]
+
+
+def test_any_mode_keeps_a_site_with_one_proven_predecessor_and_all_mode_needs_every_one():
+    world = World()
+    prior = world.sites["gift_party_finalized"]["guards"]["requires_prior"]
+    prior["site_ids"] = ["gift_begin", "wild_ready"]
+    proven_names = ("wild_ready", "gift_party_finalized")
+    qualification = receipt(world, proven_names)
+
+    def proven():
+        result = world.module.qualified_sites("crystal", world.lua.table_from(world.pack, recursive=True),
+                                              world.lua.table_from(qualification, recursive=True))
+        result = result[0] if isinstance(result, tuple) else result
+        return sorted(result.keys())
+
+    assert proven() == sorted(proven_names)   # ANY: wild_ready is proven, gift_begin need not be
+    prior["mode"] = "ALL"
+    assert proven() == ["wild_ready"]
+
+
+@pytest.mark.parametrize("fault", ["no_sites", "no_guards", "sites_not_table"])
+def test_malformed_pack_input_is_a_refusal_value_not_a_throw(fault):
+    world = World()
+    if fault == "no_sites":
+        del world.pack["titles"]["crystal"]["sites"]
+    elif fault == "no_guards":
+        del world.sites["capture_party"]["guards"]
+    else:
+        world.pack["titles"]["crystal"]["sites"] = "junk"
+    binder, why = production(world, receipt(world))
+    assert binder is None and why and world.callbacks == {}
+
+
+def test_bind_fixture_qualification_names_the_qualified_bytes_and_attempt():
+    world = World()
+    report = json.loads(QUALIFICATION.read_text())
+
+    def bind(qualification_receipt, qualification=report):
+        result = world.module.bind_fixture_qualification(
+            world.lua.table_from(qualification_receipt, recursive=True),
+            world.lua.table_from(qualification, recursive=True))
+        return result if isinstance(result, tuple) else (result, None)
+
+    assert bind(receipt(world)) == (True, None)
+    for field, value in (("fixture_sha256", "0" * 64), ("qualification_attempt_id", "other-attempt"),
+                         ("fixture", "crystal_town"), ("rom_sha1", "0" * 40)):
+        bad = receipt(world)
+        bad[field] = value
+        ok, why = bind(bad)
+        assert ok is None and why, field
+    ok, why = bind(receipt(world), {**report, "passed": False})
+    assert ok is None and why
+
+
+def test_an_arm_inside_a_script_span_is_refused_whatever_symbol_it_claims():
+    """U1b: 04:64E0 lies in Script_Whiteout bytecode past the 13-byte checked prefix."""
+    world = World()
+    spans = world.sites["whiteout_before_heal"]["guards"]["script_spans"]
+    assert [(row["symbol"], row["bank"], row["addr"]) for row in spans[:3]] == [
+        ("Script_BattleWhiteout", 4, 0x64C1), ("OverworldWhiteoutScript", 4, 0x64C8), ("Script_Whiteout", 4, 0x64CE)]
+    site = world.sites["capture_party"]
+    site.update(bank=4, addr=0x64E0, symbol="SomeCpuRoutine", expected_hex="c9",
+                rom_offset=4 * 0x4000 + 0x64E0 - 0x4000)
+    world.rom[site["rom_offset"]] = 0xC9
+    result = world.module.new_model(world.options())
+    assert isinstance(result, tuple) and result[0] is None and "script bytecode" in result[1]
+    assert world.callbacks == {}
 
 
 def test_an_arm_on_script_bytecode_is_refused_by_address_whatever_it_claims():
@@ -987,12 +1079,13 @@ def u1_record(fault=None):
     sites, seq = {}, 0
     for name in U1_EXPECT:
         seq += 1
-        sites[name] = {"bank": 3, "addr": 0x4000 + seq, "pc": 0x4000 + seq, "hit_bank": 3, "hits": 1,
+        sites[name] = {"bank": 3, "addr": 0x4000 + seq, "pc": 0x4000 + seq, "hit_bank": 3, "hits": 1, "off_pin": 0,
                        "log": [{"seq": seq, "frame": 100 + seq, "armed": 100 + seq}]}
     sites["capture_box"] = {"bank": 3, "addr": 0x6b44, "hits": 0, "log": []}
     record = {"accept_errors": 0, "aligned": 5, "misaligned": 0, "sites": sites,
               "align": {"armed": 102, "callback": 102, "pre_party": 1, "callback_party": 2, "post_party": 2},
-              "decoy": {"raw": 40, "accepted": 0}, "negatives": {name: "refused" for name in U1_NEGATIVES}}
+              "decoy": {"raw": 40, "accepted": 0, "bank_rejects": 40},
+              "negatives": {name: "refused" for name in U1_NEGATIVES}}
     if fault == "misaligned":
         record["misaligned"] = 1
     elif fault == "ram_effect":
@@ -1005,6 +1098,10 @@ def u1_record(fault=None):
         record["decoy"]["accepted"] = 1
     elif fault == "decoy_silent":
         record["decoy"]["raw"] = 0
+    elif fault == "decoy_bank_rejects":
+        record["decoy"]["bank_rejects"] = 39
+    elif fault == "off_pin":
+        sites["battle_end"]["off_pin"] = 1
     elif fault == "order":
         sites["save_completed"]["log"][0]["seq"] = 3
     elif fault == "missing":
@@ -1027,8 +1124,8 @@ def test_the_u1_verdict_proves_the_expected_sites_in_engine_order():
 
 
 @pytest.mark.parametrize("fault", ["misaligned", "ram_effect", "callback_frame", "box_fired", "decoy_accepted",
-                                   "decoy_silent", "order", "missing", "wrong_bank", "twice", "negative",
-                                   "registry"])
+                                   "decoy_silent", "decoy_bank_rejects", "off_pin", "order", "missing",
+                                   "wrong_bank", "twice", "negative", "registry"])
 def test_the_u1_verdict_refuses_every_negative_control(fault):
     lua, gate = u1_gate()
     problems, proven = gate.verdict(lua.table_from(u1_record(fault), recursive=True))
@@ -1099,9 +1196,12 @@ def test_the_u1_driver_throws_a_ball_and_refuses_a_battle_without_a_catch():
     assert buttons is None and "without a catch" in why
 
 
-def test_the_u1_probe_and_negatives_run_on_the_shared_binders():
+@pytest.mark.parametrize("fault", [None, "echo_pc", "echo_bank"])
+def test_the_u1_probe_and_negatives_run_on_the_shared_binders(fault):
     """The live gate's own arming, frame bookkeeping and load-time negatives, on the pack-faithful
-    fake ROM: aligned hits in engine order, the capture RAM effect, a decoy that never passes."""
+    fake ROM: aligned hits in engine order, the capture RAM effect, a decoy that never passes.
+    U1b faults: a binder that echoes its anchor without checking lets battle_end fire off its PC or
+    bank; the probe's MEASURED PC/hROMBank must still expose it."""
     world = World()
     lua = world.lua
     lua.execute("SLINK_GEN2_GATE_LIBRARY = true")
@@ -1122,9 +1222,14 @@ def test_the_u1_probe_and_negatives_run_on_the_shared_binders():
     api = lua.table(read_u8=world.io.read_u8, read_range=world.io.read_range, register=world.io.register,
                     framecount=world.io.framecount, on_bus_exec=world.io.on_bus_exec,
                     unregister=world.io.unregister, advance=advance)
+    binding = world.gb if fault is None else lua.eval("""function(GB) return {new=function(io, config)
+        local b = GB.new(io, config)
+        function b:context(site) return {pc=site.pc, bank=site.bank, sp=0, frame=io.framecount()} end
+        return b
+    end} end""")(world.gb)
     ctx = lua.table(api=api, root=ROOT.as_posix(), reads=world.reads, sym=sym,
                     env=lua.table(title="crystal"), profile=lua.table_from(world.p, recursive=True),
-                    Binding=world.gb)
+                    Binding=binding)
     wrapper, pack = lua.table_from(world.profile, recursive=True), lua.table_from(world.pack, recursive=True)
     negatives, detail = gate.negatives(ctx, world.module, wrapper, pack)
     assert detail.control == "bound", detail.control
@@ -1144,7 +1249,8 @@ def test_the_u1_probe_and_negatives_run_on_the_shared_binders():
         world.fire("capture_party")
 
     for action in (lambda: world.fire("wild_ready"), fire_decoy, catch,
-                   lambda: world.fire("capture_party_finalized"), lambda: world.fire("battle_end"),
+                   lambda: world.fire("capture_party_finalized"),
+                   lambda: world.fire("battle_end", wrong_pc=fault == "echo_pc", wrong_shadow=fault == "echo_bank"),
                    lambda: world.fire("save_completed")):
         schedule.append(action)
         ctx.api.advance()
@@ -1152,10 +1258,13 @@ def test_the_u1_probe_and_negatives_run_on_the_shared_binders():
     record = probe.record
     record.negatives = negatives
     record.negatives.wrong_bank_hit = "refused"
-    assert (record.decoy.raw, record.decoy.accepted) == (1, 0)
+    assert world.callbacks == {}
+    problems, proven = gate.verdict(record)
+    if fault:
+        assert any("battle_end hit off its pinned" in p for p in problems.values()) and len(proven) == 0
+        return
+    assert (record.decoy.raw, record.decoy.accepted, record.decoy.bank_rejects) == (1, 0, 1)
     align = record.align
     assert (align.armed, align.callback, align.pre_party, align.callback_party, align.post_party) == (
         align.armed, align.armed, 1, 2, 2)
-    problems, proven = gate.verdict(record)
     assert list(problems.values()) == [] and tuple(proven.values()) == U1_EXPECT
-    assert world.callbacks == {}

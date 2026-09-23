@@ -22,6 +22,8 @@ REQUIRED_SIGNALS = (
     "soft_reset", "egg_hatch", "gift_static", "roamer_capture", "contest_capture",
 )
 SPEC_PATH = Path("data/gen2/engine_site_specs.json")
+# engine/events/whiteout.asm script entry labels: script bytecode/text a bus-exec site may never overlap.
+SCRIPT_LABELS = ("Script_BattleWhiteout", "OverworldWhiteoutScript", "Script_Whiteout")
 _R8 = {name: index for index, name in enumerate(("b", "c", "d", "e", "h", "l", "[hl]", "a"))}
 _R16 = {"bc": 0, "de": 1, "hl": 2, "sp": 3}
 
@@ -282,6 +284,24 @@ def _whiteout_guards(ctx, read):
             cursor += len(pattern)
         return cursor
 
+    # Every whiteout.asm script label (and its local labels) spans to the next label of its
+    # bank in the pinned .sym: bytecode/text, never a bus-exec site whatever symbol claims it.
+    rom_labels = sorted({s.address for s in ctx.symbols.values()
+                         if s.bank == symbol.bank and (0x4000 if s.bank else 0) <= s.address < 0x8000})
+    spans = []
+    for label in SCRIPT_LABELS:
+        if not re.search(rf"^{label}::?\s*$", script, re.MULTILINE):
+            raise ValueError(f"script label {label} left engine/events/whiteout.asm")
+        for name in sorted(n for n in ctx.symbols if n == label or n.startswith(label + ".")):
+            start = ctx.symbol(name)
+            if start.bank != symbol.bank:
+                raise ValueError(f"script label {name} is outside the whiteout script bank")
+            end = next((a for a in rom_labels if a > start.address), None)
+            if end is None:
+                raise ValueError(f"script label {name} has no following label")
+            spans.append({"symbol": name, "bank": start.bank, "addr": start.address, "end": end})
+    spans.sort(key=lambda row: row["addr"])
+
     script_return = return_after_prefix("engine/overworld/scripting.asm", "Script_special", 5)
     farcall_return = return_after_prefix("home/farcall.asm", "FarCall_hl", 6)
     return {"required": True, "combine": "ALL", "registers": {"DE": special_index("HealParty")},
@@ -298,6 +318,7 @@ def _whiteout_guards(ctx, read):
                  "byte_order": "little", "value": symbol.address + len(expected)}],
             "script_context": {"symbol": "Script_Whiteout", "bank": symbol.bank,
                                "addr": symbol.address, "expected_hex": expected.hex()},
+            "script_spans": spans,
             "runtime_guard_qualification": "OPEN"}
 
 
