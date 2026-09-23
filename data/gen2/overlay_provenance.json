@@ -36,7 +36,8 @@
     "sources_sha256": {
       "slink.asm": "37928b7edc7ec33b6e2cc9d557978df775d480db38d91f438638a65680f4e66c",
       "slink_mailbox_crystal.asm": "5a882542b8c4471b276d20bbc2e76d9846e50bb6d98fa284229d9c09713f6b3e",
-      "slink_mailbox_goldsilver.asm": "bf28873ff54e02d698ffc5d59ee9ec1acfd951e602589ea7e706d24618863517"
+      "slink_mailbox_goldsilver.asm": "bf28873ff54e02d698ffc5d59ee9ec1acfd951e602589ea7e706d24618863517",
+      "patch/gb/slink_abi.inc": "d155374b87efcc69ac43ab5cbd0fb03a7be70f765266d76b94aa818d60dc9fac"
     }
   },
   "toolchain": {
