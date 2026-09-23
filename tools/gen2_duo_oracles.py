@@ -1136,6 +1136,37 @@ def _clause_captures(results, boot_saveram, kind):
     return decoded
 
 
+def _deposited_record(party_hex, layout):
+    """Native deposit projection; every byte except restored PP must equal the party prefix.
+
+    Both pins: move_mon.asm:711-766 stops at the first zero move and retains PP-Up
+    bits. ComputeMaxPP (G/S item_effects.asm:2736-2782; C:2752-2798) caps each
+    PP-Up increment at seven, so base 40 with three PP Ups restores 61, not 64.
+    """
+    raw = bytearray(_hex_bytes(party_hex, layout.party_size, "deposited party")[:layout.box_mon_size])
+    pack = json.loads((REPO_ROOT / f"data/games/gen2_{layout.title}/moves.json").read_text(encoding="utf-8"))
+    _clause_need(pack.get("schema") == "gen2-moves-v1" and pack.get("title") == layout.title
+                 and pack.get("source") == layout.profile["source"], "deposit move pack title/source differs")
+    rows = pack.get("moves")
+    _clause_need(isinstance(rows, list) and all(isinstance(row, dict) and type(row.get("id")) is int for row in rows),
+                 "deposit move table malformed")
+    moves = {row["id"]: row for row in rows}
+    _clause_need(len(moves) == len(rows) and set(moves) == set(range(1, 252)), "deposit move table has duplicate/missing/invalid ids")
+    for slot in range(layout.constants["NUM_MOVES"]):
+        move = raw[layout.constants["MON_MOVES"] + slot]
+        if move == 0:
+            break  # The native routine leaves this and all later PP bytes untouched.
+        _clause_need(move in moves, f"deposit move {move} missing from pinned table")
+        base = moves[move].get("pp")
+        _clause_need(type(base) is int and 1 <= base <= 63, "deposit base PP malformed")
+        offset = layout.constants["MON_PP"] + slot
+        packed = raw[offset]
+        maximum = base + (packed >> 6) * min(base // 5, 7)
+        _clause_need(maximum <= 63, "deposit restored PP overflows packed PP bits")
+        raw[offset] = (packed & 0xC0) | maximum
+    return bytes(raw)
+
+
 def _clause_rejection(results, decoded, document, events, kind):
     from server.adapters import gen2_codec as codec
 
@@ -1208,7 +1239,8 @@ def _clause_rejection(results, decoded, document, events, kind):
         box = layout.constants["NUM_BOXES"] - 1
         _clause_need(ending == "memorial" and ack.get("event") == "memorialize_done" and ack.get("box") == box
                      and own["place"] == box and rejected.get("box") == box and rejected.get("in_party") is False
-                     and own["mon"]["raw_hex"] == by_key[key]["raw_hex"][:layout.box_mon_size * 2], "memorial not independently saved in final box")
+                     and own["mon"]["raw_hex"] == _deposited_record(by_key[key]["raw_hex"], layout).hex(),
+                     "memorial not independently saved in final box")
     _clause_need(key not in document["pending_memorials"].get(reject, []), "memorial acknowledgement not settled")
     return {**_verified_facts(decoded, "route_29", "clause_observed"), "clause": kind, "rejected": reject, "ending": ending}
 

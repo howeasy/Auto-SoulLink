@@ -1425,6 +1425,94 @@ def test_clause_memorial_requires_saved_final_box(clause_case, box_number):
             oracles.clause_oracle(results, **kwargs)
 
 
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_deposit_pp_real_sentret_record(title):
+    # h10-gs-type-run2: Gold 22BA:C4A6:A1, PARTY_HP_WRITE slot 1 -> saved sBox14.
+    party = "a10021000000c4a60000080000000000000000000022ba22000000460000000200000000000d00060006000600060007"
+    box = "a10021000000c4a60000080000000000000000000022ba230000004600000002"
+    assert oracles._deposited_record(party, codec.for_foundation(title)).hex() == box
+
+
+@pytest.mark.parametrize("ups", [0, 1, 2, 3])
+def test_deposit_pp_up_bits_and_40_pp_cap(ups):
+    layout = codec.for_foundation("gold")
+    raw = bytearray.fromhex("a10021000000c4a60000080000000000000000000022ba22000000460000000200000000000d00060006000600060007")
+    raw[layout.constants["MON_MOVES"]] = 45  # Growl: base PP 40 in the pinned move pack.
+    raw[layout.constants["MON_PP"]] = ups * 64 + 1
+    expected = bytes(raw[:layout.box_mon_size])
+    expected = expected[:23] + bytes([ups * 64 + 40 + ups * 7]) + expected[24:]
+    assert oracles._deposited_record(raw.hex(), layout) == expected
+
+
+def test_deposit_pp_stops_at_first_zero_move():
+    layout = codec.for_foundation("silver")
+    raw = bytearray(48)
+    raw[layout.constants["MON_MOVES"]:layout.constants["MON_MOVES"] + 4] = bytes([33, 0, 45, 33])
+    raw[layout.constants["MON_PP"]:layout.constants["MON_PP"] + 4] = bytes([34, 0xC1, 2, 3])
+    expected = bytes(raw[:layout.box_mon_size])
+    expected = expected[:23] + bytes([35]) + expected[24:]
+    assert oracles._deposited_record(raw.hex(), layout) == expected
+
+
+@pytest.mark.parametrize("move", [252, 253, 254, 255])
+def test_deposit_pp_rejects_unknown_move(move):
+    layout = codec.for_foundation("gold")
+    raw = bytearray(48)
+    raw[layout.constants["MON_MOVES"]] = move
+    with pytest.raises(RuntimeError, match="move"):
+        oracles._deposited_record(raw.hex(), layout)
+
+
+@pytest.mark.parametrize("fault", [None, "pp", "pp_up", "non_pp"])
+def test_memorial_deposit_restores_consumed_pp_exactly(clause_case, fault):
+    test_clause_memorial_requires_saved_final_box(clause_case, 13)
+    results, kwargs = clause_case
+    layout = codec.for_foundation("crystal")
+    write = oracles._last_tagged(results["b"], "PARTY_HP_WRITE")
+    at = layout.party_size * write["slot"] + layout.constants["MON_PP"]
+    for field in ("before_party_hex", "after_party_hex"):
+        record = bytearray.fromhex(write[field])
+        assert record[at] == 35  # The modeled starter-derived capture knows Scratch, base PP 35.
+        record[at] = 34
+        write[field] = record.hex()
+    results["b"] = _replace_tag(results["b"], "PARTY_HP_WRITE", write)
+    if fault:
+        witness = oracles._last_tagged(results["b"], "SAVE_WITNESS")
+        path = Path(witness["saveram_path"])
+        raw = bytearray(path.read_bytes())
+        at = layout.storage_boxes[13][0] + layout.addresses["sBoxMon1"] - layout.addresses["sBox"]
+        at += layout.constants["MON_ITEM" if fault == "non_pp" else "MON_PP"]
+        raw[at] ^= 0x40 if fault == "pp_up" else 1
+        path.write_bytes(raw)
+        _refresh_faint_hash(results, "b")
+        with pytest.raises(RuntimeError, match="memorial"):
+            oracles.clause_oracle(results, **kwargs)
+    else:
+        oracles.clause_oracle(results, **kwargs)
+
+
+@pytest.mark.parametrize("fault", ["title", "source", "duplicate", "boolean_pp", "zero_pp", "overflow_pp"])
+def test_deposit_pp_refuses_malformed_pack(monkeypatch, fault):
+    layout = codec.for_foundation("gold")
+    path = ROOT / "data/games/gen2_gold/moves.json"
+    pack = json.loads(path.read_text())
+    raw = bytearray(48)
+    raw[layout.constants["MON_MOVES"]] = 33
+    raw[layout.constants["MON_PP"]] = 0xC1
+    if fault == "title":
+        pack["title"] = "crystal"
+    elif fault == "source":
+        pack["source"]["rom_sha1"] = "0" * 40
+    elif fault == "duplicate":
+        pack["moves"].append(pack["moves"][0])
+    else:
+        next(row for row in pack["moves"] if row["id"] == 33)["pp"] = {"boolean_pp": True, "zero_pp": 0, "overflow_pp": 63}[fault]
+    read = Path.read_text
+    monkeypatch.setattr(Path, "read_text", lambda self, *args, **kwargs: json.dumps(pack) if self == path else read(self, *args, **kwargs))
+    with pytest.raises(RuntimeError, match="deposit"):
+        oracles._deposited_record(raw.hex(), layout)
+
+
 def test_type_clause_valid_clean_pair_is_retry_not_release(tmp_path):
     results, data_dir, _ = _clause_base(tmp_path, (187, 19))
     pin = codec.for_foundation("crystal").profile["titles"]["crystal"]["rom_sha1"]
