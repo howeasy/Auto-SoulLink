@@ -102,8 +102,10 @@ function M.applyProfile(prof, profile_name)
         M[k] = nil
     end
     -- Reset defaults that must not be nil
-    M.OUTCOME_CAUGHT = 6  -- vanilla/AP default
-    M.OUTCOME_RAN    = 3  -- B_OUTCOME_RAN (vanilla/AP=3; CFRU=4 — profile overrides)
+    -- pret pokefirered include/constants/battle.h:79,82 (B_OUTCOME_RAN 4, B_OUTCOME_CAUGHT 7): the
+    -- same values as CFRU/RR. The old 6/3 defaults were MON_FLED/DREW and misread every vanilla catch.
+    M.OUTCOME_CAUGHT = 7
+    M.OUTCOME_RAN    = 4
     M.BOXES_PER_STORE = 14
     M.PARTY_IN_SB1 = false
     M.BAG_IN_EWRAM = false
@@ -373,7 +375,7 @@ end
 M.MON_SIZE         = 0x64        -- sizeof(struct Pokemon) = 100 bytes
 
 -- Battle type bit masks and outcome constants
--- OUTCOME_CAUGHT is profile-dependent: vanilla/AP=6, CFRU/RR=7.
+-- Outcome values are pret B_OUTCOME_* (include/constants/battle.h:76-85), identical in vanilla and CFRU/RR.
 -- Default is set here; initProfile() overrides if the profile specifies a value.
 M.BATTLE_TYPE_TRAINER_MASK  = 0x08        -- bit 3: standard trainer battles
 M.BATTLE_TYPE_FIRST_MASK    = 0x10        -- bit 4: first rival battle (also a trainer)
@@ -388,8 +390,8 @@ M.BATTLE_TYPE_MOCK_BATTLE   = 0x1000000   -- scripted mock battle
 M.BATTLE_TYPE_BORROWED_MASK = 0x1010000   -- Poké Dude | Mock Battle
 M.OUTCOME_WON               = 1           -- B_OUTCOME_WON_BATTLE
 M.OUTCOME_LOST              = 2           -- B_OUTCOME_LOST_BATTLE (whiteout)
-M.OUTCOME_RAN               = 3           -- B_OUTCOME_RAN (vanilla/AP); CFRU inserts DREW=3, shifting RAN to 4
-M.OUTCOME_CAUGHT            = 6           -- B_OUTCOME_CAUGHT_MON (vanilla/AP default)
+M.OUTCOME_RAN               = 4           -- B_OUTCOME_RAN (3 is B_OUTCOME_DREW)
+M.OUTCOME_CAUGHT            = 7           -- B_OUTCOME_CAUGHT (6 is B_OUTCOME_MON_FLED)
 
 -- gBattleMons struct layout (profile-independent sizes/offsets)
 M.BATTLE_MON_SIZE            = 0x58        -- sizeof(struct BattlePokemon) = 88 bytes
