@@ -141,6 +141,15 @@ invariant (PLAN §5.3 "no mailbox transaction in flight") and is owned by P5, no
 
 ## 3. The idle-overworld task allow-list
 
+> **Amended 2026-09-23 (C4-UR, owner ruling PLAN §0 "Writes inside Pokemon Centers").** The list now also
+> admits the rev-0 Union Room *background* set that every Center 1F starts on resume (`CableClub_OnResume` ->
+> `special InitUnionRoom`, cable_club.inc:1120-1122): `Task_InitUnionRoom` (union_room.c:3515-3604),
+> `Task_SearchForChildOrParent` (:3714-3745), `Task_UnionRoomListen` (link_rfu_2.c:505-564). A 395-function call
+> closure touches no party/PC/save state; every step into a real link session adds a task or predicate that stays
+> refused. FR/RR 0x081199FC/0x08119D34/0x080F8B34, LG 0x081199D4/0x08119D0C/0x080F8B0C. Source of truth:
+> `tools/gen_gen3_write_checkpoint.py` `CENTER_UNION_ROOM_TASKS`; falsifiers `tests/unit/test_gen3_center_tasks.py`.
+> PHYSICAL receipt (write landing inside a Center) is a G4 item (RR at G5). The section below describes the original set.
+
 ### 3.1 Resolving the census set
 
 The P1 census sampled 1800 frame-ends of RR standing idle in the overworld and saw exactly one

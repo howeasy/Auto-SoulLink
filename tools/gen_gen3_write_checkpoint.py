@@ -123,7 +123,25 @@ WITNESS = {
 # both reached from Overworld resume (src/overworld.c:2118-2121, 2444-2446).  Task_WeatherInit
 # is deliberately absent: it is the transient that becomes Task_WeatherMain, and an in-flight
 # initialiser is not an idle frame.
-ALLOWED_TASKS = ("Task_RunPerStepCallback", "Task_RunTimeBasedEvents", "Task_WeatherMain")
+#
+# C4-UR (owner ruling PLAN s0 "Writes inside Pokemon Centers"): every Center 1F's ON_RESUME is
+# CableClub_OnResume -> special InitUnionRoom (data/scripts/cable_club.inc:1120-1122), which
+# leaves the rev-0 Union Room *background* set running: Task_InitUnionRoom (src/union_room.c:
+# 3515-3604, parks in state 3 forever), Task_SearchForChildOrParent (:3714-3745) and
+# Task_UnionRoomListen (src/link_rfu_2.c:505-564, via :2727-2742).  None of them, nor anything
+# they reach, names gPlayerParty/gPlayerPartyCount/gPokemonStoragePtr or a save/flash routine;
+# their save-block access is read-only (link_rfu_3.c:850-873, :1178-1192, link_rfu_2.c:2151-2154).
+# Every step out of "background only" creates a task that stays OFF this list (Task_PlayerExchange
+# /Chat link_rfu_2.c:539-559, Task_TryConnectToUnionRoomParent :2519, Task_RunUnionRoom
+# union_room.c:2579-2584, Task_StartActivity, Task_TryBecomeLinkLeader/Task_TryJoinLinkGroup)
+# or trips a predicate (gReceivedRemoteLinkPlayers, callback1/2, script lock).
+CENTER_UNION_ROOM_TASKS = ("Task_InitUnionRoom", "Task_SearchForChildOrParent", "Task_UnionRoomListen")
+ALLOWED_TASKS = ("Task_RunPerStepCallback", "Task_RunTimeBasedEvents", "Task_WeatherMain") \
+    + CENTER_UNION_ROOM_TASKS
+ALLOWED_TASKS_SOURCE = ("pret c75f3523: src/field_tasks.c:84-94, src/field_weather.c:146-170; "
+                        "Center 1F Union Room background (C4-UR): data/scripts/cable_club.inc:1120-1122, "
+                        "src/union_room.c:3515-3604,3714-3745, src/link_rfu_2.c:505-564,2727-2742; "
+                        "RR: FR body byte-identical at the same address in every RR ROM")
 
 # include/task.h: struct Task { TaskFunc func; bool8 isActive; u8 prev, next, priority; s16 data[16]; }
 TASK_STRUCT_SIZE = 0x28
@@ -392,7 +410,7 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
         "predicates": predicates,
         "tasks": {"symbol": "gTasks", "struct_size": TASK_STRUCT_SIZE, "count": TASK_COUNT,
                   "func_offset": 0, "is_active_offset": 4,
-                  "allowed_overworld_tasks": allowed},
+                  "allowed_overworld_tasks": allowed, "source": ALLOWED_TASKS_SOURCE},
         "cpu": cpu_clause(title, syms, is_rr),
         "pointers": {},
     }
