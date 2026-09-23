@@ -65,6 +65,11 @@ SYNC_COMMANDS = ("party_mon", "box_mon", "memorialize")
 # the duplicate.  The window ages out rather than latching so that a genuinely dropped
 # answer cannot disable drift repair for that key for the rest of the run.
 SYNC_INFLIGHT_RECONCILES = 6
+# Owner ruling O-24: DEATH_COMMANDS have no ack, so a lost one is repaired from the party
+# snapshot instead (_repair_lost_faints).  A delivered death command gets the same
+# SYNC_INFLIGHT_RECONCILES re-issue window (death_inflight), and each key gets at most
+# this many re-issues per incident before the server stops and logs an error.
+FAINT_REPAIR_BUDGET = 3
 
 
 # Not StrEnum: these values are interpolated into JSON, templates and log lines,
@@ -158,6 +163,12 @@ class SoulLinkState:
         # carries one), counted down by the reconciler itself.  In-memory only: after a restart
         # nothing of ours is on the wire, and the hello path re-queues what is still outstanding.
         self.sync_inflight: dict[str, dict[tuple[str, str], int]] = {"a": {}, "b": {}}
+        # DEATH_COMMANDS delivered to each player, as {player: {monKey: reconciler_passes_remaining}}.
+        # Same window as sync_inflight, but there is no answer to clear it and it does not count
+        # down during a battle (the client holds an active battler's faint until battle end).
+        self.death_inflight: dict[str, dict[str, int]] = {"a": {}, "b": {}}
+        # O-24 re-issues spent per key ({player: {monKey: n}}); cleared when the key reads HP 0.
+        self.faint_repairs: dict[str, dict[str, int]] = {"a": {}, "b": {}}
         # Last persistence error, or "" when the most recent save succeeded. Surfaced on the
         # dashboard: a run that has silently stopped saving looks identical to one that is fine.
         self.save_failed: str = ""
@@ -427,7 +438,7 @@ class SoulLinkState:
                 # in the Lua diff loop — without this, a phantom deposit propagates
                 # a real box_mon to the partner and the Soul Link party-sync rule
                 # silently breaks until something else forces correction.
-                self._reconcile_party_keys(player_id, party)
+                self._reconcile_party_keys(player_id, party, in_battle=bool(msg.get("in_battle")))
 
         cmds = self.queued_commands[player_id][:]
         self.queued_commands[player_id].clear()
@@ -2306,6 +2317,8 @@ class SoulLinkState:
         for c in delivered:
             if c.get("cmd") in SYNC_COMMANDS and c.get("key"):
                 self.sync_inflight[player_id][(c["key"], c["cmd"])] = SYNC_INFLIGHT_RECONCILES
+            elif c.get("cmd") in DEATH_COMMANDS and c.get("key"):
+                self.death_inflight[player_id][c["key"]] = SYNC_INFLIGHT_RECONCILES
 
     def _ack_inflight(self, player_id: str, key: str) -> None:
         """Forget every in-flight SYNC_COMMAND for key — the client has answered."""
@@ -2331,6 +2344,8 @@ class SoulLinkState:
         delivered and is still unanswered (in flight on the client — see sync_inflight)."""
         if any((key, c) in self.sync_inflight[player_id] for c in cmds):
             return True
+        if key in self.death_inflight[player_id] and any(c in DEATH_COMMANDS for c in cmds):
+            return True
         return any(
             c.get("key") == key and c.get("cmd") in cmds
             for c in self.queued_commands[player_id]
@@ -2344,7 +2359,57 @@ class SoulLinkState:
                 return True
         return False
 
-    def _reconcile_party_keys(self, player_id: str, party: list) -> None:
+    def _repair_lost_faints(self, player_id: str, party: list, in_battle: bool) -> None:
+        """Owner ruling O-24: re-issue a DEATH_COMMAND the client never applied.
+
+        The evidence is game-agnostic -- the party snapshot every client sends, `key` and
+        `hp` per mon.  A key there at HP > 0 whose link is not ALIVE is a dead mon walking:
+        either the force_faint was lost, or the player revived it; dead stays dead either
+        way.  Boxed/memorialized mons are not in the snapshot, so they never qualify.
+
+        Deduped by _has_pending_command: a death command still queued (the snapshot that
+        races the original) or delivered within death_inflight's window is not repeated.
+        The window counts only out-of-battle passes, so a faint the client holds to battle
+        end is not re-sent mid-battle.  Bounded by FAINT_REPAIR_BUDGET per incident.
+        """
+        inflight = self.death_inflight[player_id]
+        if not in_battle:
+            for key in list(inflight):
+                inflight[key] -= 1
+                if inflight[key] <= 0:
+                    del inflight[key]
+        if self.run_over:
+            return
+        spent = self.faint_repairs[player_id]
+        for mon in party:
+            key, hp = mon.get("key"), mon.get("hp")
+            if not key or not isinstance(hp, (int, float)):
+                continue                      # no hp on the wire = no evidence
+            if hp <= 0:
+                spent.pop(key, None)          # the kill landed; a later revive is a new incident
+                continue
+            entry = self._key_index.get(key)
+            if entry is None or entry.status == LinkStatus.ALIVE:
+                continue
+            half = entry.a if player_id == "a" else entry.b
+            if half is None or half.key != key or self._is_quarantined(player_id, key):
+                continue
+            if self._has_pending_command(player_id, key, *DEATH_COMMANDS):
+                continue
+            n = spent.get(key, 0)
+            if n >= FAINT_REPAIR_BUDGET:
+                if n == FAINT_REPAIR_BUDGET:
+                    spent[key] = n + 1        # log the give-up once, not every tick
+                    log.error(f"[{player_id}] {key} is dead but still alive in party after "
+                              f"{FAINT_REPAIR_BUDGET} re-issued force_faint — giving up")
+                continue
+            spent[key] = n + 1
+            self.queued_commands[player_id].append(
+                {"cmd": "force_faint", "key": key, "nickname": half.nickname or ""})
+            log.warning(f"[{player_id}] {key} is dead but alive in party (hp={hp}) — "
+                        f"re-issued force_faint ({n + 1}/{FAINT_REPAIR_BUDGET})")
+
+    def _reconcile_party_keys(self, player_id: str, party: list, in_battle: bool = False) -> None:
         """
         Repair `party_keys[player_id]` to match Lua's actual party snapshot.
 
@@ -2383,6 +2448,7 @@ class SoulLinkState:
 
         # This pass is a real chance for the client to have answered what we sent it.
         self._expire_inflight(player_id)
+        self._repair_lost_faints(player_id, party, in_battle)
 
         actual_keys = {mon.get("key", "") for mon in party if mon.get("key")}
         tracked_keys = self.party_keys[player_id]
