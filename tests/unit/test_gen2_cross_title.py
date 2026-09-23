@@ -285,6 +285,24 @@ def _binding_snapshot(srv):
 
 
 @pytest.mark.asyncio
+async def test_hello_without_rom_type_preserves_accepted_binding(tmp_path, cutover):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        await send(_hello("a", _cart("Crystal")))
+        await send(_hello("b", _cart("Gold")))
+        before = _binding_snapshot(srv)
+        # The TCP boundary refuses missing rom_type; direct dispatch must not erase
+        # an accepted binding either (legacy/internal callers can reach this path).
+        msg = _hello("b", {})
+        srv._dispatch("b", msg)
+        assert not msg.get("_rejected")
+        assert _binding_snapshot(srv) == before
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("rejection", ["identity", "admission"])
 async def test_rejected_hello_preserves_player_binding(tmp_path, cutover, rejection):
     srv = SLinkServer(data_dir=str(tmp_path))
@@ -336,6 +354,8 @@ async def test_state_replacement_drops_previous_generation_binding(
             response = await srv.handle_debug_rollback(AsyncMock(json=AsyncMock(return_value={"slot": 1})))
         assert response.status == 200
         assert srv._player_adapters == {}
+        await close()
+        send, close = await _session(srv)
         await send(_hello("a", _cart(first)))
         await send(_hello("b", _cart(second)))
         assert srv.state.rom_type == first
@@ -394,13 +414,16 @@ async def test_replaced_state_rebinds_title_sensitive_capture_rules(tmp_path, cu
         # An old socket must not mutate the replacement run before another accepted hello.
         before = deepcopy((srv.state.pending_captures, srv.state.links,
                            srv.state.party_keys, srv.party_details, srv._mon_cache))
-        stale_reply = await send({"event": "capture", "player": "b",
-                                  "area_id": "static_799_131", "key": "1234:7B0B:83",
-                                  "species_id": 131, "level": 20, "gift": False})
+        # _session decodes the response as JSON, so EOF surfaces as JSONDecodeError.
+        with pytest.raises((ConnectionError, json.JSONDecodeError)):
+            await send({"event": "capture", "player": "b",
+                        "area_id": "static_799_131", "key": "1234:7B0B:83",
+                        "species_id": 131, "level": 20, "gift": False})
         after = (srv.state.pending_captures, srv.state.links,
                  srv.state.party_keys, srv.party_details, srv._mon_cache)
-        assert stale_reply["commands"] == [{"cmd": "noop"}]
         assert after == before
+        await close()
+        send, close = await _session(srv)
         await send(_hello("a", _cart("Crystal")))
         await send(_hello("b", _cart("Gold"), party=[
             {"key": "1234:7B0B:01", "species_id": 1, "level": 5}]))

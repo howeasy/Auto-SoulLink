@@ -350,6 +350,8 @@ class SLinkServer:
         self._rom_type_rejected: set[str] = set()
         # Track live connections: player_id → {rom_type, last_event, connected}
         self.connected_players: dict[str, dict] = {}
+        self._client_connections: set[asyncio.StreamWriter] = set()
+        self._client_writers: dict[str, set[asyncio.StreamWriter]] = {}
         # Per-player display data (updated from events, used only for status page)
         self.player_area: dict[str, str] = {"a": "", "b": ""}
         self.player_area_id: dict[str, str] = {"a": "", "b": ""}  # raw area_id for state lookups
@@ -1241,17 +1243,22 @@ class SLinkServer:
             self._sse_clients.discard(q)
         return resp
 
+    def _disconnect_clients(self):
+        """Make state replacement visible to clients through their reconnect/hello path."""
+        for writer in tuple(self._client_connections):
+            writer.close()
+
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         peer = writer.get_extra_info("peername")
         log.info(f"Client connected: {peer}")
-        player_id_for_conn: str | None = None
+        self._client_connections.add(writer)
         # Per-CONNECTION session state. The seq counter used to be per-slot
         # (`self._last_seq`), which outlived the socket it described — see the guards below.
         last_seq = -1
         hello_seen = False
         no_hello_warned = False
         try:
-            while True:
+            while not writer.is_closing():
                 try:
                     raw = await reader.readuntil(b"\n")
                 except asyncio.IncompleteReadError:
@@ -1272,6 +1279,10 @@ class SLinkServer:
                     except (asyncio.IncompleteReadError, asyncio.LimitOverrunError):
                         break
                     continue
+                # A reset may close this socket while readuntil is suspended. Buffered
+                # events (including hello) must not enter the replacement run.
+                if writer.is_closing():
+                    break
                 line = raw.decode("utf-8", errors="replace").strip()
                 if not line:
                     continue
@@ -1288,9 +1299,9 @@ class SLinkServer:
                     await self._respond(writer, [{"cmd": "noop"}])
                     continue
 
-                # Track which player owns this connection.
-                if player_id_for_conn is None:
-                    player_id_for_conn = player_id
+                # Retain overlapping connections until each closes, including a socket
+                # carrying multiple player slots. Reset/rollback must disconnect all of them.
+                self._client_writers.setdefault(player_id, set()).add(writer)
 
                 # Update connection info
                 prev_conn = self.connected_players.get(player_id, {})
@@ -1458,11 +1469,17 @@ class SLinkServer:
             pass
         finally:
             log.info(f"Client disconnected: {peer}")
-            if player_id_for_conn:
-                info = self.connected_players.get(player_id_for_conn, {})
-                info["connected"] = False
-                self.connected_players[player_id_for_conn] = info
-                self._notify_sse()  # Push disconnect status to browsers
+            self._client_connections.discard(writer)
+            for player_id, writers in list(self._client_writers.items()):
+                if writer not in writers:
+                    continue
+                writers.discard(writer)
+                if not writers:
+                    self._client_writers.pop(player_id)
+                    info = self.connected_players.get(player_id)
+                    if info is not None:
+                        info["connected"] = False
+                        self._notify_sse()
             try:
                 writer.close()
                 await writer.wait_closed()
@@ -1790,7 +1807,7 @@ class SLinkServer:
 
             # Publish only after admission and save identity accepted this hello. A refused
             # cartridge must not replace the last accepted player's acquisition/display data.
-            self._bind_player_adapter(player_id, rom)
+            self._bind_player_adapter(player_id, msg.get("rom_type", ""))
             self._log_event(player_id, "hello",
                             f"Connected ({rom}, {party_n} mons)", loc or area)
             self.player_area[player_id] = loc or area
@@ -4336,6 +4353,7 @@ class SLinkServer:
                          os.path.join(backup_dir, "events.pre_rollback.json"))
         # Restore links.json and reload state
         shutil.copy2(backup_links, self.state._links_path)
+        self._disconnect_clients()
         self.state = SoulLinkState.load(
             data_dir=self._data_dir,
             species_lock=self.state.species_lock,
@@ -4352,7 +4370,8 @@ class SLinkServer:
         self.adapter = self.state.adapter
         self._player_adapters = {}
         self.state.player_adapter_for = self.adapter_for
-        # Existing sockets keep their hello gate; require re-admission into the new state.
+        # Closed clients reconnect and re-hello; no open socket can silently lose events
+        # behind this pending admission gate.
         self.admission = {pid: {"state": "contract_pending", "reason": "run restored; awaiting hello"}
                           for pid in VALID_PLAYERS}
         if self.state.artifact_kind:
@@ -4374,6 +4393,7 @@ class SLinkServer:
 
     async def handle_reset_api(self, request):
         """POST /api/reset — wipe all Soul Link state and start a fresh run."""
+        self._disconnect_clients()
         links_path = self.state._links_path
         if os.path.exists(links_path):
             os.remove(links_path)
