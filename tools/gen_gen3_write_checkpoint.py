@@ -475,7 +475,7 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
         out["tasks"]["allowed_overworld_tasks"] = {}
 
     profile = json.loads((ROOT / "data" / "games" / pack / "profile.json").read_text("utf-8"))
-    out["battle"], battle_dropped = battle_block(title, syms, is_rr, profile)
+    out["battle"], battle_dropped = battle_block(title, syms, is_rr, profile, roms)
     unverified += [f"battle {row}" for row in battle_dropped]
     if not is_rr:  # four HandleInputChooseAction spellings; parse_sym must have kept the player's
         lo, hi = text_span(SYM_DIR / sym_file.replace(".sym", ".map"), PLAYER_CONTROLLER_OBJ)
@@ -560,13 +560,24 @@ BATTLE_CLAUSES_RR = (
     # 0x03004F84 / 0x08014041 and stores the callback).  Read, never retyped.
     ("battle_main_func", "BATTLE_MAIN_FUNC_ADDR", 0, 4, None, "eq_rom", "HANDLE_TURN_ACTION_SELECTION_ADDR"),
     ("battle_comm_0", "BATTLE_COMM_ADDR", 0, 1, None, "eq", 1),
-    ("battle_exec_flags_idle", "BATTLE_CONTROLLER_EXEC_FLAGS_ADDR", 0, 4, None, "eq", 0),
+    # C5-RR-BW (docs/gen3/research/rr_battle_tuple_2026-09-23.md §1): CFRU's input handler keeps
+    # battler 0's exec bit set for the whole parked menu and clears it (PlayerBufferExecCompleted)
+    # in the same call that commits the choice -- so the FR/LG C4-BW shape, flags == 1.
+    ("battle_exec_flags_input", "BATTLE_CONTROLLER_EXEC_FLAGS_ADDR", 0, 4, None, "eq", 1),
+    ("battle_input_controller", None, 0, 4, None, "eq", None),   # rr_input_controller()
     ("battle_not_link", "BATTLE_TYPE_ADDR", 0, 4, 0x02, "eq", 0),
     ("battle_engine_loaded", "BATTLE_MONS_ADDR", 0x2C, 2, None, "nonzero", None),
     ("battle_outcome_open", "BATTLE_OUTCOME_ADDR", 0, 1, None, "eq", 0),
 )
 # Both RR callback and controller-exec word are now ROM-pinned in profile.json.
 BATTLE_DROPPED_RR = ()
+# C5-RR-BW: the parked controller pin, read out of the RR bytes.  HandleChooseActionAfterDma3 is
+# the FR body RR keeps verbatim (pool included) and the one store of the parked pointer:
+# `ldr r1,=gBattlerControllerFuncs` at +0x18 (0x08032BAC), `ldr r1,=<controller>` at +0x22
+# (0x08032BB6), str.  CFRU detours 0x0802E438 to its own body, so the pin is that ROM literal,
+# never `eq_symbol HandleInputChooseAction` (whose RR body differs).  Any byte change -- pool word
+# included -- drops the clause and lists it as unverified.
+RR_INPUT_CONTROLLER = ("HandleChooseActionAfterDma3", 0x18, 0x22)
 BATTLE_COMMIT_GUARD = {"symbol": "gBattleCommunication", "offset": 0, "width": 1, "compare": "lt",
                        "value": 3, "indexed_by": "battler"}
 BATTLE_COMMIT_GUARD_RR = {"symbol": "BATTLE_COMM_ADDR", "offset": 0, "width": 1, "compare": "lt",
@@ -612,12 +623,46 @@ SOUND_SOURCE_FRLG = "pokefirered.sym/pokeleafgreen.sym; pret include/gba/m4a_int
 SOUND_SOURCE_RR = "old client lua/memory_gba.lua:1945-1996 (SOUND_INFO_PTR + the linked-list walk)"
 
 
-def battle_block(title: str, syms, is_rr: bool, profile: dict | None) -> tuple[dict, list[str]]:
+def ldr_literal(rom: bytes, site: int) -> int | None:
+    """The word a Thumb `ldr rN,[pc,#imm8*4]` at site loads, else None."""
+    op = int.from_bytes(body(rom, site, 2), "little")
+    if op & 0xF800 != 0x4800:
+        return None
+    return struct.unpack_from("<I", body(rom, ((site + 4) & ~3) + (op & 0xFF) * 4, 4))[0]
+
+
+def rr_input_controller(syms, roms: dict[str, bytes] | None) -> tuple[dict | None, str]:
+    """(the battle_input_controller clause, "") from the RR pool, or (None, why it is unproven)."""
+    fn, addr_at, value_at = RR_INPUT_CONTROLLER
+    if not roms or "_fr" not in roms or fn not in syms:
+        return None, "no RR ROMs to prove it against"
+    if not verify_code(syms, roms, fn):
+        return None, f"{fn} @ {syms[fn][0]:#010x} differs from FR in an RR ROM"
+    start = syms[fn][0]
+    rom = roms["clean"]
+    address, value = ldr_literal(rom, start + addr_at), ldr_literal(rom, start + value_at)
+    if address is None or value is None:
+        return None, f"{fn}: no ldr at +{addr_at:#x}/+{value_at:#x}"
+    return {"name": "battle_input_controller", "symbol": "gBattlerControllerFuncs",
+            "address": address, "offset": 0, "width": 4, "compare": "eq", "expect": value,
+            "source": f"rom:{fn} @ 0x{start:08X} (FR-identical in every RR ROM): address "
+                      f"LDR@0x{start + addr_at:08X}, value LDR@0x{start + value_at:08X}"}, ""
+
+
+def battle_block(title: str, syms, is_rr: bool, profile: dict | None,
+                 roms: dict[str, bytes] | None = None) -> tuple[dict, list[str]]:
     dropped: list[str] = []
     clauses = []
     if is_rr:
         ram = (profile or {}).get("titles", {}).get(title, {}).get("ram", {})
         for name, key, offset, width, mask, compare, expect in BATTLE_CLAUSES_RR:
+            if name == "battle_input_controller":
+                entry, why = rr_input_controller(syms, roms)
+                if entry is None:
+                    dropped.append(f"{name}: {why}")
+                else:
+                    clauses.append(entry)
+                continue
             if ram.get(key) is None:
                 dropped.append(f"{name}: profile.ram.{key} absent")
                 continue

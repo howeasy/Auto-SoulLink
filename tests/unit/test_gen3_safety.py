@@ -320,8 +320,7 @@ def test_unknown_reason_refuses_by_name():
 
 BATTLE_KEYS = ["battle_main_func", "battle_comm_0", "battle_exec_flags_input", "battle_input_controller",
                "battle_not_link", "battle_engine_loaded", "battle_outcome_open"]
-RR_BATTLE_KEYS = ["battle_main_func", "battle_comm_0", "battle_not_link", "battle_engine_loaded",
-                  "battle_outcome_open"]
+RR_BATTLE_KEYS = BATTLE_KEYS  # C5-RR-BW: the FR/LG seven
 
 
 @pytest.mark.parametrize("title,kind,keys", [
@@ -411,16 +410,48 @@ def test_battle_faint_refuses_every_other_battler0_state(title, state, comm, fla
     assert ok is False and clauses == refused_by, (state, clauses)
 
 
-def test_rr_battle_window_is_unchanged_and_fail_closed():
-    """RR keeps flags == 0 until its own gBattlerControllerFuncs / CFRU pins exist."""
-    w = World("radical_red", "companion")
-    names = [c["name"] for c in w.pack["battle"]["clauses"]]
-    assert "battle_input_controller" not in names and "battle_exec_flags_input" not in names
-    flags = next(c for c in w.pack["battle"]["clauses"] if c["name"] == "battle_exec_flags_idle")
-    assert flags["expect"] == 0
-    w.lua.globals().put(flags["address"], 1, 4)          # the parked menu stays refused on RR
-    ok, why, clauses = w.check_reason("battle_faint")
-    assert ok is False and clauses == ["battle_exec_flags_idle"]
+# ── C5-RR-BW: RR's window is the parked menu too (docs/gen3/research/rr_battle_tuple_2026-09-23.md) ──
+# Addresses and controller values are the spec's byte facts, never read from the pack under test:
+# gBattleCommunication 0x02023E82, gBattleControllerExecFlags 0x02023BC8, gBattlerControllerFuncs
+# 0x03004FE0.  CFRU's input handler keeps exec bit 0 set while parked and clears it inside the
+# commit call, which also stores PlayerBufferRunCommand (0x0802E3B5).
+def rr_battle_world(kind, comm, flags, controller):
+    w = World("radical_red", kind)
+    g = w.lua.globals()
+    g.put(0x02023E82, comm, 1)
+    g.put(0x02023BC8, flags, 4)
+    g.put(0x03004FE0, controller, 4)
+    return w
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+def test_rr_battle_faint_admits_the_parked_action_menu(kind):
+    ok, why, clauses = rr_battle_world(kind, 1, 1, 0x0802E439).check_reason("battle_faint")
+    assert ok is True and clauses == [], why
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+@pytest.mark.parametrize("state,comm,flags,controller,refused_by", [
+    ("commit_frame", 1, 0, 0x0802E3B5, ["battle_exec_flags_input", "battle_input_controller"]),
+    ("menu_draw", 1, 1, 0x08032B95, ["battle_input_controller"]),
+    ("l_subui_open", 1, 1, 0x090A9E41, ["battle_input_controller"]),
+    # post-L-window spelling: fail-closed until safety.lua grows an `in` compare (spec §5)
+    ("l_subui_returned", 1, 1, 0x090A9EA1, ["battle_input_controller"]),
+    ("opponent_bit_pending", 1, 3, 0x0802E439, ["battle_exec_flags_input"]),
+    ("doubles_battler2", 4, 4, 0x0802E3B5,
+     ["battle_comm_0", "battle_exec_flags_input", "battle_input_controller"]),
+    ("bit24_after_commit", 1, 0, 0x090ACD8D, ["battle_exec_flags_input", "battle_input_controller"]),
+])
+def test_rr_battle_faint_refuses_every_other_battler0_state(kind, state, comm, flags, controller, refused_by):
+    ok, why, clauses = rr_battle_world(kind, comm, flags, controller).check_reason("battle_faint")
+    assert ok is False and clauses == refused_by, (state, clauses)
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+def test_rr_battle_commit_refuses_the_commit_frame(kind):
+    """comm 1 < 3 passes the guard; the refusal must come from the new clauses."""
+    ok, why, clauses = rr_battle_world(kind, 1, 0, 0x0802E3B5).check_reason("battle_commit", {"battler": 0})
+    assert ok is False and clauses == ["battle_exec_flags_input", "battle_input_controller"], clauses
 
 
 def test_battle_commit_guard_is_named_and_fail_closed():

@@ -339,12 +339,13 @@ def test_rr_exec_flags_checkpoint_reads_the_new_profile_pin():
 
     profile = _load("gen3_rr")
     block, dropped = battle_block("radical_red", {}, True, profile)
-    clause = next(c for c in block["clauses"] if c["name"] == "battle_exec_flags_idle")
-    assert (clause["address"], clause["width"], clause["expect"]) == (0x02023BC8, 4, 0)
-    assert "rom:" in clause["source"] and not dropped
+    clause = next(c for c in block["clauses"] if c["name"] == "battle_exec_flags_input")
+    assert (clause["address"], clause["width"], clause["expect"]) == (0x02023BC8, 4, 1)
+    # no ROMs passed: only the ROM-pool controller pin is unproven (C5-RR-BW)
+    assert "rom:" in clause["source"] and [d.split(":")[0] for d in dropped] == ["battle_input_controller"]
     profile["titles"]["radical_red"]["ram"]["BATTLE_CONTROLLER_EXEC_FLAGS_ADDR"] = 123456
     block, _ = battle_block("radical_red", {}, True, profile)
-    assert next(c for c in block["clauses"] if c["name"] == "battle_exec_flags_idle")["address"] == 123456
+    assert next(c for c in block["clauses"] if c["name"] == "battle_exec_flags_input")["address"] == 123456
 
 
 def test_leafgreen_base_stats_address_comes_from_its_own_symbol():

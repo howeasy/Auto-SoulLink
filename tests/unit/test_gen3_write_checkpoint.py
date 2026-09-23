@@ -270,10 +270,10 @@ OVERWORLD_PREDICATES = ("callback1", "callback2", "field_controls_locked", "in_b
 FR_BATTLE_CLAUSES = ("battle_main_func", "battle_comm_0", "battle_exec_flags_input",
                      "battle_input_controller", "battle_not_link", "battle_engine_loaded",
                      "battle_outcome_open")
-# RR's exec-flags clause is pinned from the RR binary (gen3-RR-execflags). C4-BW left RR on the
-# old flags == 0 clause (fail-closed) until its gBattlerControllerFuncs / CFRU input pins exist.
-RR_BATTLE_CLAUSES = ("battle_main_func", "battle_comm_0", "battle_exec_flags_idle",
-                     "battle_not_link", "battle_engine_loaded", "battle_outcome_open")
+# C5-RR-BW: RR carries the FR/LG seven -- CFRU keeps battler 0's exec bit set while the action
+# menu is parked (docs/gen3/research/rr_battle_tuple_2026-09-23.md §1), so flags == 0 admitted only
+# the frame after a committed choice.
+RR_BATTLE_CLAUSES = FR_BATTLE_CLAUSES
 
 
 @pytest.mark.parametrize("pack,title", PACK_TITLES)
@@ -330,13 +330,37 @@ def test_rr_battle_clauses_are_rr_facts_not_sym_assertions() -> None:
     block = load("gen3_rr")["radical_red"]["battle"]
     assert tuple(c["name"] for c in block["clauses"]) == RR_BATTLE_CLAUSES
     for clause in block["clauses"]:
+        if clause["name"] == "battle_input_controller":
+            continue  # read out of the ROM pool, below
         assert clause["address"] == ram[clause["symbol"]], clause["name"]
         assert "profile.ram." in clause["source"]
     main = next(c for c in block["clauses"] if c["name"] == "battle_main_func")
     assert main["expect"] == rom["HANDLE_TURN_ACTION_SELECTION_ADDR"] == 0x08014041
     assert main["expect_symbol"] == "HANDLE_TURN_ACTION_SELECTION_ADDR"
-    flags = next(c for c in block["clauses"] if c["name"] == "battle_exec_flags_idle")
-    assert "rom:" in flags["source"] and flags["expect"] == 0 and flags["width"] == 4
+    flags = next(c for c in block["clauses"] if c["name"] == "battle_exec_flags_input")
+    assert "rom:" in flags["source"] and (flags["address"], flags["expect"], flags["width"]) == (0x02023BC8, 1, 4)
+    ctrl = next(c for c in block["clauses"] if c["name"] == "battle_input_controller")
+    assert (ctrl["address"], ctrl["offset"], ctrl["width"], ctrl["compare"], ctrl["expect"]) ==         (0x03004FE0, 0, 4, "eq", 0x0802E439)
+    assert "LDR@0x08032BB6" in ctrl["source"] and "LDR@0x08032BAC" in ctrl["source"]
+    assert "expect_symbol" not in ctrl  # a ROM literal, never the FR HandleInputChooseAction symbol
+
+
+def test_rr_input_controller_drops_when_its_pool_word_changes(monkeypatch) -> None:
+    """Flip one byte of the LDR@0x08032BB6 pool word (0x08032BD0) in the companion: fail-closed."""
+    real = G.load_rom
+
+    def mutated(pack, title, kind):
+        rom = real(pack, title, kind)
+        if kind != "companion":
+            return rom
+        at = 0x08032BD0 - G.ROM_BASE
+        return rom[:at] + bytes([rom[at] ^ 0xFF]) + rom[at + 1:]
+
+    monkeypatch.setattr(G, "load_rom", mutated)
+    out, unverified = G.build_title("gen3_rr", "radical_red", "pokefirered.sym", ("clean", "companion"))
+    names = [c["name"] for c in out["battle"]["clauses"]]
+    assert "battle_input_controller" not in names
+    assert any("battle_input_controller" in row for row in unverified), unverified
 
 
 def test_native_block_is_the_profile_and_stays_inside_ewram() -> None:
