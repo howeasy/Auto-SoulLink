@@ -153,49 +153,52 @@ Every byte SLink writes to a cartridge lands in one of these, and nowhere else:
 ## Gen 2 — run these
 
 ```bash
-pytest tests/unit/ -q                                    # same suite; Gen 2 needs no emulator either
-python tools/verify_profile_addresses.py                 # Crystal + Gold/Silver vs pret decomps
-SLINK_LIVE=1 pytest tests/live/test_gen2_gates.py -q     # 2 gates, Crystal only
-SLINK_E2E=1 pytest tests/e2e/test_duo_gen2.py -q         # 3 duo scenarios, two Crystal instances
+pytest tests/unit/ -q                                                  # same suite; Gen 2 needs no emulator either
+SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py \
+                    tests/live/test_gen2_frame_align.py \
+                    tests/live/test_gen2_write_windows.py -q            # inspect, frame-align, write windows; per title
+SLINK_E2E=1 pytest tests/e2e/test_duo_gen2_new.py -q                    # two-instance link scenarios, Crystal/Gold/Silver pairings
 ```
 
-`--scenario all` is filtered by `--game` and names what it drops, so `--game gen2 --scenario
-all` runs exactly the three above. It did not always: the per-scenario `games` key sat in the
-runner declared, documented and read by nothing but `tests/e2e/test_duo.py`, so `all` expanded
-to the whole table and launched Gen 3-only scenarios against a Game Boy, where they died on a
-savestate no GB fixture has. `scenarios_for()` is now the single source of truth for that
-question and `tests/unit/test_e2e_duo_scenario_selection.py` pins it. To see the selection
-without booting anything:
+`--scenario all` is filtered by `--game` and names what it drops, so `--game gen2_new
+--scenario all` runs exactly `link` and `gen2_faint` above, across the Crystal/Gold/Silver
+pairings. It did not always: the per-scenario `games` key sat in the runner declared,
+documented and read by nothing but `tests/e2e/test_duo.py`, so `all` expanded to the whole
+table and launched Gen 3-only scenarios against a Game Boy, where they died on a savestate no
+GB fixture has. `scenarios_for()` is now the single source of truth for that question and
+`tests/unit/test_e2e_duo_scenario_selection.py` pins it. To see the selection without booting
+anything:
 
 ```bash
-python tools/e2e_duo.py --game gen2 --list
+python tools/e2e_duo.py --game gen2_new --list
 ```
 
-**Crystal only, and stated rather than silently skipped.** Gold, Silver and Archipelago
-Crystal have no dumps here, and a live matrix entry that skips reads exactly like one that
-passes. Their addresses are still pret-checked statically; the AP fork has no public repo, so
-only five of its addresses are provable and its profile stays flagged unverified.
+**Crystal and Gold have qualified fixtures; Silver shares Gold's engine-sites receipt (O-23),
+and each has its own town/battle fixtures.** Archipelago Crystal has no dump and is refused
+outright (O-25) rather than gated — a live matrix entry that silently skips reads exactly like
+one that passes, and refusing it is stated, not silent.
 
-The two gates run against `tests/fixtures/gen2/crystal_town.SaveRAM` (rebuild with
-`python tools/gen2_playthrough.py`), whose contents are known exactly because the
-bootstrapper wrote them. The read gate's assertions are deliberately **Gen 2-specific** —
-the held-item byte, the map *group*, the Sp.Atk/Sp.Def split, 14 boxes — because a Gen
-1-shaped read of a Gen 2 cartridge still returns plausible-looking bytes. The writes gate
-mutates a live cartridge: `force_faint`, deposit, withdraw, memorial burial.
+The three live gates run per title against `tests/fixtures/gen2/<title>_{town,battle}.SaveRAM`,
+each bound to a committed qualification receipt
+(`tests/fixtures/gen2/receipts/<title>.qualification.json`). The inspect gate's assertions are
+deliberately **Gen 2-specific** — the held-item byte, the map *group*, the Sp.Atk/Sp.Def split,
+14 boxes — because a Gen 1-shaped read of a Gen 2 cartridge still returns plausible-looking
+bytes. The write-windows gate mutates a live cartridge: party write, box deposit, native
+save/reload, a refused mid-battle write.
 
-The duo E2E runs **two Crystal instances against one dump**, which Gen 1 could not do:
-BizHawk names its SaveRAM file from the gamedb entry (ROM hash, not launch path), so two
-instances of one cartridge resolve to a single file and stamp on each other. Gen 1 dodged
-that by pairing Red with Blue — a constraint on what can be tested together, not a fix.
-Per-instance `saveram_dir` is the fix, and it is the only reason a same-cartridge pairing
+The duo E2E runs **two instances of the same cartridge dump** for a same-title pairing, which
+Gen 1 could not do: BizHawk names its SaveRAM file from the gamedb entry (ROM hash, not launch
+path), so two instances of one cartridge resolve to a single file and stamp on each other. Gen
+1 dodged that by pairing Red with Blue — a constraint on what can be tested together, not a
+fix. Per-instance `saveram_dir` is the fix, and it is the only reason a same-cartridge pairing
 exists at all.
 
-Three scenarios pass, both sides: `faint`, `boxsync`, `memorialize` — the last burying the
-pair in Box 14 (`MEMORIAL_BOX_INDEX` 13, flat CartRAM `0x79E0`), which sits outside Gen 2's
+The memorial box (Box 14, `MEMORIAL_BOX_INDEX` 13, flat CartRAM `0x79E0`) sits outside Gen 2's
 save checksum, so unlike Gen 1 there is no `EmptyAllSRAMBoxes` to defend against. (The
 pre-rewrite Gen 1 client's `M.protectSramBoxes()` correctly no-op'd for Gen 2 on this same
-reasoning; that helper no longer exists at all — `memory_gb.lua` was trimmed to Gen 2 only in
-`9969845`, and Gen 2 never needed it in the first place.)
+reasoning; that helper no longer exists at all — it lived in the legacy shared `memory_gb.lua`,
+trimmed to Gen 2 only in `9969845` and then removed outright once the legacy Gen 2 client was
+replaced by `lua/gen2/` (P3b.8b). Gen 2 never needed it in the first place.)
 
 `playthrough`, `deadzone` and `dupes` do **not** run on Gen 2, and that is a decision, not an
 omission — see "Still open" below.

@@ -6,13 +6,13 @@ ship as variant profiles using pret/pokegold addresses.
 
 ## Status
 
-⚠️ **Partially verified (Crystal)** — feature parity with Gen 3 (Crystal, Gold,
-Silver), and Crystal now runs against a real cartridge dump. Faint propagation,
-party/box sync and memorialize each pass the two-instance duo E2E
-(`SLINK_E2E=1 pytest tests/e2e/test_duo_gen2.py -q`), backed by the headless
-gates in `tests/live/test_gen2_gates.py`. **No playthrough has ever been run**,
-and Gold, Silver and Archipelago Crystal have no ROM dump to gate against —
-their profiles are still address-verified only.
+⚠️ **Partially verified (Crystal, Gold; Silver shares Gold's receipt)** — feature parity with
+Gen 3, and Crystal and Gold now run against real cartridge dumps. Two-instance link scenarios
+pass the duo E2E (`SLINK_E2E=1 pytest tests/e2e/test_duo_gen2_new.py -q`), backed by the
+headless inspect/frame-align/write-window gates (`tests/live/test_gen2_new_gates.py`,
+`test_gen2_frame_align.py`, `test_gen2_write_windows.py`). **No unscripted playthrough has ever
+been run**, and Archipelago Crystal has no ROM dump and is refused outright (O-25) rather than
+gated.
 
 Encounter linking, dead zones and the species clause are enforced server-side
 and are generation-independent, so they are covered by the Gen 1 duo scenarios
@@ -23,10 +23,10 @@ no grass fixture to walk.
 Runtime smoke-test checklist in
 [docs/gen1_gen2_runtime_checks.md](../../../docs/gen1_gen2_runtime_checks.md).
 
-Fixture: `tests/fixtures/gen2/crystal_town.SaveRAM`, a committed battery save
-(not a version-locked savestate) rebuilt with `python tools/gen2_playthrough.py`.
-Two Crystal instances share the one cartridge dump via per-instance SaveRAM
-directories.
+Fixtures: `tests/fixtures/gen2/{crystal,gold,silver}_{town,battle}.SaveRAM`, committed battery
+saves (not version-locked savestates), each bound to a qualification receipt under
+`tests/fixtures/gen2/receipts/`. Two same-title instances share one cartridge dump via
+per-instance SaveRAM directories.
 
 ## Files
 

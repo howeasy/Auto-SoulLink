@@ -83,7 +83,7 @@ _BOX_INITIALIZED = 0x80  # constants/ram_constants.asm:50-52
 # terminated by $FF: engine/items/get_bag_item_quantity.asm:5-17.
 _BAG_COUNT = 0x25C9
 BAG_CAPACITY = 20  # constants/item_constants.asm: MAX_ITEMS
-POKE_BALL = 0x04  # constants/item_constants.asm; lua/games/gen2_crystal.lua:44 notes gen2's differs
+POKE_BALL = 0x04  # constants/item_constants.asm; Gen 2's item id differs (per-generation item table)
 
 # Generated from the cited English charmap rows; alternate graphics modes are
 # deliberately excluded (constants/charmap.asm:65-88,199-386).

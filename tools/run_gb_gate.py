@@ -3,7 +3,7 @@
 
     python tools/run_gb_gate.py lua/tests/test_gen1_inspect_gate.lua
     python tools/run_gb_gate.py lua/tests/test_gen1_inspect_gate.lua --rom yellow --target battle
-    python tools/run_gb_gate.py lua/tests/test_gen2_memory_gate.lua --rom crystal
+    python tools/run_gb_gate.py lua/tests/gen2_inspect_gate.lua --rom crystal
 
 The GB counterpart to tools/run_gate.py, which is bound to the GBA/Radical Red setup. The
 important difference is that these gates need NO SAVESTATE.

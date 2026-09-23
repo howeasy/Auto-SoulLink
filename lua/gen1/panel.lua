@@ -51,7 +51,7 @@ P.SFX_SUCCESS, P.SFX_FAILURE, P.SFX_BOO, P.SFX_NOTIFY = SFX_SUCCESS, SFX_FAILURE
 P.SFX_CODE_FOR_GEN3_ID, P.SFX_QUEUE_MAX = SFX_CODE_FOR_GEN3_ID, SFX_QUEUE_MAX
 P.ROWS, P.COLS, P.MAX_PAGES, P.DEADLINE = ROWS, COLS, MAX_PAGES, DEADLINE
 
---- ASCII -> Gen 1 tile id (memory_gb.lua:1555-1568, verbatim).
+--- ASCII -> Gen 1 tile id (ported verbatim from the old shared memory_gb.lua, since removed).
 --- Verified against the ROM: "POK<e>DEX@" is 8F 8E 8A BA 83 84 97 50, so 'A' is $80; $7F is
 --- the space the menu rows are padded with; digits are the $F6-$FF block. Unmapped characters
 --- become spaces rather than guesses — a wrong tile is a glyph the player has to interpret.

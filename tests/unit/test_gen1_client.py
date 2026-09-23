@@ -1103,7 +1103,7 @@ def _patch_panel(world, state=0, abi=3):
 
 
 def _tiles(text):
-    """panel.lua's _tile_for over a row padded/truncated to 20 (memory_gb.lua:1555-1568)."""
+    """panel.lua's _tile_for over a row padded/truncated to 20 (see lua/gen1/panel.lua's _tile_for)."""
     out = []
     for ch in text.ljust(20)[:20]:
         b = ord(ch)

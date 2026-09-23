@@ -6,12 +6,12 @@ Data files for Gen 1 Pokémon games (Game Boy / Game Boy Color).
 
 🟡 **Partially verified.** The mechanisms are proven against running cartridges; a playthrough
 is not. Every profile address is checked against the pret decomp .sym output by
-[tools/verify_profile_addresses.py](../../../tools/verify_profile_addresses.py), and on top of
+`tests/unit/test_gen1_profile.py`, and on top of
 that:
 
 ```bash
 SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 5: patched + menu row + randomized panel
-SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py -q       # 18: 9 scenarios x 2 ROM pairings
+SLINK_E2E=1 pytest tests/e2e/test_duo_gen1_new.py -q   # 18: 9 scenarios x 2 ROM pairings
 python tools/verify_gen1_release.py                    # all of the above, fail-closed
 ```
 

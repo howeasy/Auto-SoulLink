@@ -27,7 +27,7 @@ CLOSED, AWAIT, STAGED = 0, 1, 2
 COLS, ROWS, TILES = 20, 18, 360
 BLANK = 0x7F
 
-# "SOUL LINK" in the Gen 1 charset: 'A' is $80, space is $7F (memory_gb.lua:1555-1568).
+# "SOUL LINK" in the Gen 1 charset: 'A' is $80, space is $7F (lua/gen1/panel.lua's _tile_for).
 SOUL_LINK = [0x92, 0x8E, 0x94, 0x8B, 0x7F, 0x8B, 0x88, 0x8D, 0x8A]
 
 FAKE_WRITES = """

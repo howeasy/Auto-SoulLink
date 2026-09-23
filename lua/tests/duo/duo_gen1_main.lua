@@ -111,7 +111,7 @@ local deps = Entry.bizhawk_deps()
 -- wrote. Reading later from the scenario coroutine would read it frames afterwards, once the
 -- engine is free to touch SRAM again, which proves nothing about the save itself.
 -- DOMAIN: "CartRAM" — BizHawk's flat 0x8000 image of the cartridge's four 0x2000 SRAM banks
--- (lua/memory_gb.lua:52-56; lua/gen1/entry.lua:54-64 reads the same image).
+-- (lua/gen1/client.lua:91 SRAM_BANK_SIZE; lua/gen1/entry.lua:54-64 reads the same image).
 -- SLICE: 0x498..0x7FFF = 0x7B68 bytes, the slice docs/gen1_requirements.md:72 pins for S-7.
 -- It starts past sSpriteBuffer0/1/2 (3 * SPRITEBUFFERSIZE = 3 * 7*7*8 = 3 * 0x188 = 0x498;
 -- pret ram/sram.asm:1-5, constants/gfx_constants.asm:14) — pic-decompression scratch the engine
