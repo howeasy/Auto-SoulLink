@@ -98,7 +98,7 @@ def put(bus_or_cart, profile, symbol, data, *, cart=False):
     return offset
 
 
-def _fresh_party_record(species_id=158, ot_id=0x1234, level=5):
+def _fresh_party_record(species_id=158, ot_id=0x1234, level=5, dv_word=0x2AAA):
     """A minimal but structurally valid 48-byte party record: enough non-zero DV/level/HP fields
     that decoding produces a real record rather than an all-zero degenerate one."""
     record = bytearray(48)
@@ -107,7 +107,7 @@ def _fresh_party_record(species_id=158, ot_id=0x1234, level=5):
     record[2:6] = bytes((1, 2, 3, 4))  # MON_MOVES
     record[6:8] = ot_id.to_bytes(2, "big")  # MON_OT_ID
     record[8:11] = (135).to_bytes(3, "big")  # MON_EXP
-    record[21:23] = (0x2AAA).to_bytes(2, "big")  # MON_DVS: shiny-and-female-leaning vector
+    record[21:23] = dv_word.to_bytes(2, "big")  # MON_DVS: 0x2AAA is shiny-and-male-leaning
     record[31] = level                 # MON_LEVEL
     record[34:36] = (20).to_bytes(2, "big")   # MON_HP
     record[36:38] = (20).to_bytes(2, "big")   # MON_MAXHP
@@ -116,10 +116,10 @@ def _fresh_party_record(species_id=158, ot_id=0x1234, level=5):
     return bytes(record)
 
 
-def place_one_mon_party(bus, profile, *, species_id=158, ot_id=0x1234):
+def place_one_mon_party(bus, profile, *, species_id=158, ot_id=0x1234, dv_word=0x2AAA):
     put(bus, profile, "wPartyCount", bytes([1]))
     put(bus, profile, "wPartySpecies", bytes([species_id, 255]))
-    put(bus, profile, "wPartyMons", _fresh_party_record(species_id=species_id, ot_id=ot_id))
+    put(bus, profile, "wPartyMons", _fresh_party_record(species_id=species_id, ot_id=ot_id, dv_word=dv_word))
     put(bus, profile, "wPartyMonOTs", bytes([0x80] + [0xAA] * 10))
     put(bus, profile, "wPartyMonNicknames", bytes([0x81] + [0xBB] * 10))
 
@@ -244,9 +244,12 @@ class InspectSim(QualifySim):
     the game on the CONTINUE confirmation screen forever, with the party decodable from the very first
     frame (title and menus included): valid, stable party bytes, never the overworld."""
 
-    def __init__(self, lua, title=TITLE, *, confirm=True, johto=0x03, card_id_col=5):
+    def __init__(self, lua, title=TITLE, *, confirm=True, johto=0x03, card_id_col=5, dv_word=0x2AAA,
+                 force_shiny_marker=False):
         self.confirm, self.johto = confirm, johto
         self.card_id_col = card_id_col
+        self.dv_word = dv_word
+        self.force_shiny_marker = force_shiny_marker
         self.player_id = 0x0034          # 5 digits with a leading zero: "00052"
         self.player_name = "GOLD"
         super().__init__(lua, title, "town")
@@ -256,7 +259,7 @@ class InspectSim(QualifySim):
         self.speeds = []
 
     def load(self):
-        place_one_mon_party(self.wram, self.prof)
+        place_one_mon_party(self.wram, self.prof, dv_word=self.dv_word)
         self.put("wJohtoBadges", [self.johto, 0])
         self.put("wCurBox", [0])
         self.put("wNumBalls", [0, 0xFF])
@@ -373,7 +376,7 @@ class InspectSim(QualifySim):
         gender, shiny = live.gender_and_shiny(dv_word, ratio)
         if gender in ("male", "female"):
             self.rows[0][18] = "♂" if gender == "male" else "♀"
-        if shiny:
+        if shiny or self.force_shiny_marker:
             self.rows[0][19] = "⁂"
         if page == "green":
             self.text_at(0, 8, "ITEM")
@@ -837,3 +840,152 @@ def test_inspect_env_binds_the_boot_stage_to_the_staged_bytes():
     assert qualify["stage"] == "boot" and qualify["stage_fingerprint"] == hashlib.sha256(TOWN).hexdigest()
     assert json.loads(env["SLINK_GEN2_FIXTURE_CASE"])["name"] == spec.name
     assert qualify["facts"]["route_facts_fingerprint"] == json.loads(env["SLINK_GEN2_ROUTE_FACTS"])["fingerprint"]
+
+
+# =================================================================================================
+# Part 3: the tilemap display oracle -- pure logic, and negative controls driven through the sim
+# =================================================================================================
+
+CHARMAP = REPO / "data/games/gen2_crystal/charmap.lua"
+
+
+def lua_call(fn, *args):
+    """Call a Lua function that may return one or two values, normalised to a (value, why) pair."""
+    result = fn(*args)
+    return result if isinstance(result, tuple) else (result, None)
+
+
+def load_charmap(lua):
+    return lua.eval("dofile")(CHARMAP.as_posix())
+
+
+def test_tile_offset_matches_the_w_tilemap_geometry(gate):
+    _lua, G = gate
+    for x, y, width in ((0, 0, 20), (5, 4, 20), (7, 2, 20), (19, 17, 20), (3, 2, 20)):
+        assert G.tile_offset(x, y, width) == y * width + x
+    # The two columns the off-by-one control swaps between are distinct cells.
+    assert G.tile_offset(5, 4, 20) == 85 and G.tile_offset(6, 4, 20) == 86
+
+
+def test_id_text_zero_pads_to_five_digits(gate):
+    _lua, G = gate
+    assert G.id_text(0x0034) == "00052"
+    assert G.id_text(0x0001) == "00001"
+    assert G.id_text(0xFFFF) == "65535"
+
+
+def test_decode_cells_decodes_an_id_row_with_leading_zeros_and_refuses_a_bad_row(gate):
+    lua, G = gate
+    charmap = load_charmap(lua)
+    row = lua.table_from([charmap.encoding[d] for d in "00052"])
+    text, why = lua_call(G.decode_cells, charmap.glyphs, row)
+    assert (text, why) == ("00052", None)
+    assert text == G.id_text(0x0034)
+    # A wrong-length row decodes to its own text and never equals the five-digit expectation.
+    short, _ = lua_call(G.decode_cells, charmap.glyphs, lua.table_from([charmap.encoding[d] for d in "0005"]))
+    assert short == "0005" and short != G.id_text(0x0034) and len(short) != 5
+    # A byte the title charmap does not name is refused, never masked into a glyph.
+    bad, bad_why = lua_call(G.decode_cells, charmap.glyphs, lua.table_from([0x01]))
+    assert bad is None and "no glyph" in bad_why
+
+
+def test_decode_cells_terminated_stops_at_the_at_tile(gate):
+    lua, G = gate
+    charmap = load_charmap(lua)
+    name = lua.table_from([charmap.encoding[c] for c in "GOLD"] + [charmap.encoding["@"]] + [charmap.encoding["0"]] * 3)
+    text, why = lua_call(G.decode_cells_terminated, charmap.glyphs, charmap.encoding["@"], name)
+    assert (text, why) == ("GOLD", None)
+
+
+def test_stats_head_expected_uses_the_blank_tile_for_genderless_and_non_shiny(gate):
+    lua, G = gate
+    charmap = load_charmap(lua)
+    enc, blank = charmap.encoding, charmap.encoding[" "]
+    male = G.stats_head_expected(enc, "male", False)
+    assert male.gender_byte == enc["♂"] and male.shiny_byte == blank and male.blank_byte == blank
+    female = G.stats_head_expected(enc, "female", True)
+    assert female.gender_byte == enc["♀"] and female.shiny_byte == enc["⁂"]
+    genderless = G.stats_head_expected(enc, "genderless", False)
+    assert genderless.gender_byte == blank and genderless.shiny_byte == blank
+    # The non-shiny byte IS the blank tile, not a stale near-miss value.
+    assert G.stats_head_expected(enc, "male", False).shiny_byte != enc["⁂"]
+
+
+def test_item_column_and_expected_text_are_title_keyed(gate):
+    lua, G = gate
+    assert (G.item_column("crystal"), G.item_column("gold"), G.item_column("silver")) == (8, 6, 6)
+    assert G.item_expected({}, 0) == "---"
+    assert G.item_expected(lua.table_from({"5": "Poke Ball"}), 5) == "POKE BALL"
+    assert G.item_expected(lua.table_from({}), 5) is None
+
+
+def test_find_menu_item_matches_the_folded_labels(gate):
+    lua, G = gate
+    items = lua.table_from(["#DEX", "#MON", "PACK", "GOLD", "SAVE", "OPTION", "EXIT"])
+    assert G.find_menu_item(items, "GOLD") == 4
+    assert G.find_menu_item(items, "#MON") == 2
+    assert G.find_menu_item(items, "NOPE") is None
+    assert G.find_menu_item(items, G.normalize_text("#MON")) == 2
+    assert G.normalize_text("POKéMON") == "POKEMON"
+    assert G.find_menu_item(lua.table_from(["SAVE", "Save"]), "SAVE") is None   # ambiguous
+
+
+def run_sim(tmp_path, **kwargs):
+    root = inspect_root(tmp_path)
+    _spec, env = inspect_env(root)
+    sim = InspectSim(LuaRuntime(unpack_returned_tuples=True), **kwargs)
+    return run_top_level(root, env, sim)
+
+
+def test_the_display_pass_is_committed_by_the_sim_and_carries_both_screens(passing_run):
+    """Addendum: the whole display pass runs headless in lupa, and both screens land on the gate's writer."""
+    text, _sim = passing_run
+    card = live.tag_json(text, "GAME_TRAINER_CARD")
+    assert card["id_text"] == card["expected_id_text"] == "00052"
+    assert card["name_text"] == card["expected_name"] == "GOLD"
+    head = live.tag_json(text, "GAME_STATS_HEAD")
+    assert head["gender_byte"] == head["gender_expected"] and head["shiny_byte"] == head["shiny_expected"]
+    assert head["shiny_byte"] == 0x3F                     # the sim's lead mon is shiny
+    item = live.tag_json(text, "GAME_STATS_ITEM")
+    assert item["item_text"] == item["item_expected"] == "---" and item["held_item"] == 0
+
+
+def test_an_off_by_one_card_column_is_a_red_control(tmp_path):
+    """The exact coordinate contract: moving the ID one column right makes the gate go RED with the
+    (5,4) line and the neighbour cells it actually read, not merely 'some failure'."""
+    text = run_sim(tmp_path, card_id_col=6)
+    assert text.strip().splitlines()[-1].startswith("RESULT: FAIL"), text
+    assert "GAME_TRAINER_CARD" in text
+    assert "  [FAIL] Trainer Card (5,4) five digits render wPlayerID" in text
+    assert "0005" in text          # cells (6,4)..(9,4), one column right of the real row
+
+
+def test_a_shiny_marker_on_a_non_shiny_mon_is_a_red_control(tmp_path):
+    """R-5g: a stale (19,0) glyph on a non-shiny mon must fail, not pass on a near-miss byte."""
+    text = run_sim(tmp_path, dv_word=0x0000, force_shiny_marker=True)
+    assert text.strip().splitlines()[-1].startswith("RESULT: FAIL"), text
+    assert "  [FAIL] stats screen (19,0) shiny marker matches the DVs" in text
+
+
+def test_verify_display_refuses_a_non_blank_non_shiny_byte(passing_run):
+    text, _sim = passing_run
+    mutated = retag(text, "GAME_STATS_HEAD", _set(["shiny_byte"], 0x3E))
+    with pytest.raises(AssertionError, match=r"\(19,0\) shiny byte"):
+        live.verify_capture(mutated, profile_wrapper(), TITLE)
+
+
+def test_verify_display_refuses_a_shifted_id_row(passing_run):
+    text, _sim = passing_run
+
+    def shift(record):
+        record["id_digits_hex"] = "7f" + record["id_digits_hex"][:8]
+        return record
+
+    with pytest.raises(AssertionError, match="card ID digits"):
+        live.verify_capture(retag(text, "GAME_TRAINER_CARD", shift), profile_wrapper(), TITLE)
+
+
+def test_verify_display_refuses_a_wrong_item_column(passing_run):
+    text, _sim = passing_run
+    with pytest.raises(AssertionError, match="item is not at"):
+        live.verify_capture(retag(text, "GAME_STATS_ITEM", _set(["item_col"], 6)), profile_wrapper(), TITLE)

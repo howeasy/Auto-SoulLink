@@ -205,12 +205,20 @@ end
 -- cell (x, y) is wTilemap + y*width + x. Coordinates here are 0-based, as hlcoord's are.
 function G.tile_offset(x, y, width) return y * width + x end
 
+-- A byte's readable glyph name, or nil when the charmap only names it as a raw byte ("<$XX>") --
+-- a nameless tile is not rendered text and is refused, never compared as if it were.
+local function charmap_glyph(glyphs, byte)
+    local name = glyphs[byte]
+    if name == nil or name:match("^<%$%x%x>$") then return nil end
+    return name
+end
+
 -- A run of tilemap bytes through a title's charmap (charmap.glyphs: byte -> glyph name). A byte the
 -- charmap does not name is refused, never silently masked.
 function G.decode_cells(glyphs, bytes)
     local out = {}
     for i = 1, #bytes do
-        local name = glyphs[bytes[i]]
+        local name = charmap_glyph(glyphs, bytes[i])
         if name == nil then
             return nil, string.format("tilemap byte $%02X has no glyph in the title charmap", bytes[i])
         end
@@ -224,7 +232,7 @@ function G.decode_cells_terminated(glyphs, terminator, bytes)
     local out = {}
     for i = 1, #bytes do
         if bytes[i] == terminator then break end
-        local name = glyphs[bytes[i]]
+        local name = charmap_glyph(glyphs, bytes[i])
         if name == nil then
             return nil, string.format("name byte $%02X has no glyph in the title charmap", bytes[i])
         end
@@ -277,7 +285,11 @@ end
 -- item .GetItemName returns .ThreeDashes "---" (C :755-757, G :610-614).
 G.ITEM_COLUMN = {crystal = 8, gold = 6, silver = 6}
 G.NO_ITEM_TEXT = "---"
-function G.item_column(title) return assert(G.ITEM_COLUMN[title], "no item column for title " .. tostring(title)) end
+function G.item_column(title)
+    local column = G.ITEM_COLUMN[title]
+    assert(column, "no item column for title " .. tostring(title))
+    return column
+end
 
 -- The expected item-line text: the game's own no-item text, or the title pack's name for `held`
 -- (folded on both sides before comparison). nil when the pack has no such id.
