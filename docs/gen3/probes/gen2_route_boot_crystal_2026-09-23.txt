@@ -1,0 +1,33 @@
+G4 item 6 (Gen 2 part): Crystal still routes to the Gen 2 client through this branch's lua/slink.lua
+lane cut 86245d1e (clean); ROM 'Pokemon - Crystal Version (USA).gbc' md5 9f2922b235a5eeb78d65594e82ef5dde; fixture tests/fixtures/gen2/crystal_town.SaveRAM in a temp GB SaveRAM dir; bootstrap dofiles <lane>/lua/slink.lua; server from the lane
+The legacy tests/e2e/test_duo_gen2.py fails identically on master 7957c24c ('never booted into the overworld from the battery save' on both sides), so it is not caused by the route change; the Gen 2 session's live duos use gen2_new.
+
+--- slink_lua.log ---
+=== SLink Lua boot Wed Sep 23 16:07:00 2026 ===
+[SLink] Console tee -> E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/lua/../slink_lua.log
+[SLink-Crystal] Detected: Crystal / Gold / Silver (variant=crystal) writes=false
+[SLink-Crystal] ROM validation: Map group out of range: 0 (will retry each frame)
+[SLink] TCP connecting to 127.0.0.1:54393 (non-blocking)…
+[SLink-Crystal] Started — player=a target=127.0.0.1:54393
+[SLink-GSC] Running — play normally to trigger events…
+[SLink] TCP connected to 127.0.0.1:54393
+[SLink-Crystal] ✓ Game state valid — starting
+[SLink-Crystal] [TCP] connected to 127.0.0.1:54393
+[SLink-Crystal] Area table loaded: 124 entries
+[SLink-Crystal] [→] seq=1  AUTO: hello
+[SLink-Crystal] party[0] key=9999:18C5:9E lv=5 hp=20/20
+[SLink-Crystal] [←] AUTO 1: hello → resolved_areas
+[SLink-Crystal]   ↳ resolved_areas: 0 areas seeded
+[SLink-Crystal]   ↳ cmd: config
+
+--- server ---
+2026-09-23 16:07:00,340 [INFO] Client connected: ('127.0.0.1', 65117)
+2026-09-23 16:07:00,708 [INFO] [a] hello rom=Crystal area='' party=1
+2026-09-23 16:07:00,710 [INFO] Committed ROM type 'Crystal' for this run
+2026-09-23 16:07:00,710 [INFO] Committed trainer name 'AAAAAAA' for player a
+
+--- legacy duo on master (baseline) ---
+23:[client] [duoB] RESULT: FAIL (never booted into the overworld from the battery save)
+24:RESULT: FAIL (never booted into the overworld from the battery save)
+27:========== summary ==========
+28:  faint: FAIL (attempt 1 of 1)

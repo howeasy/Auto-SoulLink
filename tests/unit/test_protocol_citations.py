@@ -1,14 +1,20 @@
 """docs/protocol.md cites `file.py:<a>-<b>` for the code behind each row. Those numbers drift:
 the file grows, the row keeps pointing at whatever moved into that range, and nothing notices
-because the prose around it is still true. This test notices.
+because the prose around it is still true. This test notices, with two rules (cards C4-CITE and
+C4-CITE2).
 
-The rule (card C4-CITE):
+Rule 1 -- symbols. For every `<name>.py:<a>[-<b>]` citation on a line that also names, in
+backticks, one or more code symbols DEFINED in that file, every line of the cited range must lie
+inside one of those symbols' spans (Python's own AST gives the spans; a three-line tolerance
+covers decorators and docstrings).
 
-  For every `<name>.py:<a>[-<b>]` citation on a line that also names, in backticks, one or more
-  code symbols DEFINED in that file, the cited range must lie inside one of those symbols'
-  spans (Python's own AST gives the spans; a three-line tolerance covers decorators and
-  docstrings). Rows that name no such symbol -- field-name rows, for instance -- are skipped
-  rather than guessed at.
+Rule 2 -- wire events. For a line whose subject (a table row's first cell, else the whole line)
+names exactly one wire event from `tests/unit/protocol_schema.py:EVENTS`, and which carries
+exactly one `server.py`/`state.py` citation, and which names no other symbol defined in that
+file, the citation must contain the event string or lie inside a `_handle_<event>` handler.
+
+Rows neither rule can judge -- several events, no symbol, no event, an incidental mention -- are
+skipped, never guessed. `_INCIDENTAL` records the ones that are skipped for a stated reason.
 
 It is deliberately not a link checker: it never asks whether the row's claim is true, only
 whether the place it points at is still the place it names.
@@ -18,24 +24,35 @@ from __future__ import annotations
 import ast
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 _REPO = Path(__file__).resolve().parents[2]
 DOC = _REPO / "docs" / "protocol.md"
+sys.path.insert(0, str(_REPO / "tests" / "unit"))
 
+import protocol_schema as schema  # noqa: E402
+
+EVENTS = frozenset(schema.EVENTS)
 CITATION = re.compile(r"([A-Za-z_][A-Za-z0-9_]*\.py):(\d+)(?:-(\d+))?")
 BACKTICK = re.compile(r"`([^`\n]+)`")
+IDENT = re.compile(r"_?[A-Za-z]\w*")
 TOLERANCE = 3
 
-# The revision whose docs/protocol.md still carried the pre-sweep drift (the commit this test
-# was written against). The falsifier below skips rather than fails if history has moved on.
-_PRE_FIX_REV = "7e97cb40"   # the doc just before the C4-CITE sweep (pinned: HEAD~1 drifts)
-# Citations the sweep rewrote that THIS checker can see. Its rule needs the row to name a code
-# symbol, so the two rows the card started from (item 15/16, whose rows name wire fields rather
-# than symbols) are skipped by design and cannot be used as the falsifier.
-_KNOWN_DRIFTED = ("server.py:1095-1101", "state.py:900-918", "base.py:495-513")
+# (event, citation) pairs the event rule skips with a reason. Keep this list short and argued:
+# every entry is a row where the event name is mentioned in passing rather than being the row's
+# subject, so no range could satisfy the rule.
+_INCIDENTAL: dict[tuple[str, str], str] = {
+    ("hello", "server.py:1098-1101"):
+        "the RETIRED seq-heuristic row; `hello` appears inside the narrative about the dropped "
+        "first events, and the citation is the dup guard in handle_client",
+}
+
+# The revisions this test is written against, pinned by sha (never HEAD~n).
+PRE_SWEEP_REV = "7e97cb40"    # before the C4-CITE sweep: rule 1 has plenty to say
+PRE_EVENT_REV = "062f812f"    # before this card: rule 2's rows were still stale
 
 
 def _resolve(name: str) -> Path | None:
@@ -46,66 +63,138 @@ def _resolve(name: str) -> Path | None:
     return None
 
 
-def _spans(path: Path) -> dict[str, list[tuple[int, int]]]:
-    """name -> [(first line, last line)] for every function, class and MODULE_CONSTANT."""
+def _symbol_spans(path: Path) -> tuple[dict[str, list[tuple[int, int]]],
+                                       dict[str, list[tuple[int, int]]]]:
+    """(plain, attributes): plain maps a function/class/MODULE_CONSTANT name to its span;
+    attributes maps a `self.<attr>` name to the span of its assignment.
+
+    They are kept apart on purpose. An attribute name is usually also a *field* name on the wire
+    (`party_keys`, `party_size`), and letting those tokens count as symbols would turn field rows
+    into judged rows -- the one thing this checker must not do. Only a qualified token
+    (`SoulLinkState.sync_inflight`) consults the attribute map.
+    """
     tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
-    out: dict[str, list[tuple[int, int]]] = {}
+    plain: dict[str, list[tuple[int, int]]] = {}
+    attrs: dict[str, list[tuple[int, int]]] = {}
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            out.setdefault(node.name, []).append((node.lineno, node.end_lineno or node.lineno))
-        elif isinstance(node, ast.Assign):
-            for target in node.targets:
+            plain.setdefault(node.name, []).append((node.lineno, node.end_lineno or node.lineno))
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            span = (node.lineno, node.end_lineno or node.lineno)
+            for target in targets:
                 if isinstance(target, ast.Name) and re.fullmatch(r"[A-Z][A-Z0-9_]{2,}", target.id):
-                    out.setdefault(target.id, []).append((node.lineno, node.end_lineno or node.lineno))
-    return out
+                    plain.setdefault(target.id, []).append(span)
+                elif isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) \
+                        and target.value.id == "self":
+                    attrs.setdefault(target.attr, []).append(span)
+    return plain, attrs
 
 
-def check_citations(text: str, repo: Path = _REPO) -> list[str]:
+def _covered(start: int, end: int, spans: list[tuple[int, int]]) -> bool:
+    """True when the range sits inside one span, or inside the union of several (a row may cite
+    a block that two adjacent methods make up)."""
+    if any(s <= start and end <= e for s, e in spans):
+        return True
+    return all(any(s <= line <= e for s, e in spans) for line in (start, end))
+
+
+def check_citations(text: str) -> list[str]:
     """Every drifted citation, as a printable string. Empty == clean."""
     problems: list[str] = []
-    span_cache: dict[str, dict[str, list[tuple[int, int]]]] = {}
+    span_cache: dict[str, tuple[dict[str, list[tuple[int, int]]],
+                               dict[str, list[tuple[int, int]]]]] = {}
+    text_cache: dict[str, list[str]] = {}
+
+    def spans_for(path: Path):
+        if str(path) not in span_cache:
+            span_cache[str(path)] = _symbol_spans(path)
+            text_cache[str(path)] = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        return span_cache[str(path)]
+
     for lineno, line in enumerate(text.splitlines(), 1):
+        is_row = line.startswith("|") and len(line.split("|")) > 2
+        subject = line.split("|")[1] if is_row else line
+        events = sorted({t for t in BACKTICK.findall(subject) if t in EVENTS})
+        cites = [m for m in CITATION.finditer(line) if m.group(1) in ("server.py", "state.py")]
+        tokens = [t.strip("()") for t in BACKTICK.findall(line)]
+
         for match in CITATION.finditer(line):
             name, start = match.group(1), int(match.group(2))
             end = int(match.group(3) or match.group(2))
-            path = _resolve(name) if repo == _REPO else None
+            path = _resolve(name)
             if path is None:
-                continue                                  # not a file in this repo: skip, never guess
-            key = str(path)
-            if key not in span_cache:
-                span_cache[key] = _spans(path)
-            spans = span_cache[key]
-            named: list[tuple[str, int, int]] = []
-            for token in BACKTICK.findall(line):
-                token = token.strip("()")
-                if re.fullmatch(r"_?[A-Za-z]\w*", token) and token in spans:
-                    named.extend((token, s, e) for s, e in spans[token])
-            if not named:
-                continue                                  # no identifiable symbol: skip
-            if any(s - TOLERANCE <= start and end <= e + TOLERANCE for _, s, e in named):
                 continue
-            where = ", ".join(f"{t} {s}-{e}" for t, s, e in sorted(set(named)))
-            problems.append(f"docs/protocol.md:{lineno}: {name}:{start}-{end} is outside the "
-                            f"span of the symbol the row names ({where})")
+            spans, attrs = spans_for(path)
+            window = "\n".join(text_cache[str(path)][start - 1:end])
+
+            # rule 1: the symbols this line names must cover the range. A qualified token
+            # (`Class.attr`) consults the attribute map; a bare one never does.
+            named = [(t, s, e) for t in tokens if IDENT.fullmatch(t) and t in spans
+                     for s, e in spans[t]]
+            named += [(t, s, e) for t in tokens if (q := re.fullmatch(r"[A-Z]\w*\.(\w+)", t))
+                      and q.group(1) in attrs for s, e in attrs[q.group(1)]]
+            if named:
+                loose = [(s - TOLERANCE, e + TOLERANCE) for _, s, e in named]
+                if not _covered(start, end, loose):
+                    where = ", ".join(f"{t} {s}-{e}" for t, s, e in sorted(set(named)))
+                    problems.append(
+                        f"docs/protocol.md:{lineno}: {match.group(0)} is outside the span of the "
+                        f"symbol the row names ({where})")
+                continue
+
+            # rule 2: a pure wire-event row must cite that event's handling
+            if len(events) != 1 or len(cites) != 1 or cites[0].group(0) != match.group(0):
+                continue
+            event = events[0]
+            if (event, match.group(0)) in _INCIDENTAL:
+                continue
+            if event not in "\n".join(text_cache[str(path)]):
+                continue
+            handlers = spans.get(f"_handle_{event}") or spans.get("handle_" + event) or []
+            if event in window or _covered(start, end, handlers):
+                continue
+            problems.append(
+                f"docs/protocol.md:{lineno}: {match.group(0)} does not contain the `{event}` "
+                f"event it documents (handlers: {handlers or 'none in this file'})")
     return problems
 
 
-def test_every_cited_range_lies_inside_the_symbol_its_row_names():
+def _doc_at(rev: str) -> str | None:
+    proc = subprocess.run(["git", "show", f"{rev}:docs/protocol.md"], cwd=_REPO,
+                          capture_output=True, text=True, encoding="utf-8", errors="replace")
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def test_every_cited_range_lies_inside_the_symbol_or_event_its_row_names():
     problems = check_citations(DOC.read_text(encoding="utf-8"))
     assert not problems, "drifted citation(s):\n" + "\n".join(problems)
 
 
-def test_the_checker_catches_the_pre_fix_document():
-    """The falsifier: the same check run over the revision before the sweep must find drift.
+def test_the_symbol_rule_catches_the_pre_sweep_document():
+    """Falsifier for rule 1, pinned to the revision before the sweep.
 
-    A checker that cannot fail is not a checker. If the pre-fix revision no longer contains
-    those citations (history moved, the doc was rewritten), skip rather than pretend.
+    A checker that cannot fail is not a checker. If that revision is unavailable or no longer
+    carries the drift, skip rather than pretend.
     """
-    proc = subprocess.run(["git", "show", f"{_PRE_FIX_REV}:docs/protocol.md"],
-                          cwd=_REPO, capture_output=True, text=True, encoding="utf-8",
-                          errors="replace")
-    if proc.returncode != 0 or not any(c in proc.stdout for c in _KNOWN_DRIFTED):
-        pytest.skip(f"{_PRE_FIX_REV}:docs/protocol.md no longer carries the item 15/16 drift")
-    problems = check_citations(proc.stdout)
-    assert problems, "the pre-fix document passed; the checker has no teeth"
-    assert any(c in "\n".join(problems) for c in _KNOWN_DRIFTED), problems
+    text = _doc_at(PRE_SWEEP_REV)
+    if text is None or "server.py:1095-1101" not in text:
+        pytest.skip(f"{PRE_SWEEP_REV}:docs/protocol.md unavailable or already swept")
+    problems = check_citations(text)
+    assert problems, "the pre-sweep document passed; rule 1 has no teeth"
+    assert any("server.py:1095-1101" in p for p in problems), problems
+
+
+def test_the_event_rule_catches_the_pre_event_sweep_document():
+    """Falsifier for rule 2, pinned to the revision before this card.
+
+    The rows this card re-anchored (hello, whiteout, party_to_box, box_to_party, the sync_retrieve
+    pair, the memorialize pair, status, ghost_pos, peer_interact, rival_team_replaced) were all
+    stale there, so rule 2 must report at least one of them.
+    """
+    text = _doc_at(PRE_EVENT_REV)
+    if text is None or "state.py:945-950" not in text:
+        pytest.skip(f"{PRE_EVENT_REV}:docs/protocol.md unavailable or already re-anchored")
+    problems = check_citations(text)
+    assert problems, "the pre-event-sweep document passed; rule 2 has no teeth"
+    assert any("`hello`" in p for p in problems), problems
