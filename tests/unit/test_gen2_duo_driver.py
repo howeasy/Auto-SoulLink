@@ -590,3 +590,33 @@ def test_move_list_reads_the_source_geometry_under_the_move_info_box():
     assert FI.move_list(as_lua(screen))["cursor"] == 2
     screen[13] = "│   │▶SCRATCH      │"
     assert FI.move_list(as_lua(screen)) is None   # two cursors: refused
+
+
+def repeat_write(**changes):
+    """B's half with an O-24 repeat PARTY_HP_WRITE right after the first one."""
+    lines = faint_lines("b")
+    first = json.loads(lines[10][len("PARTY_HP_WRITE "):])
+    again = dict(first, frame=first["frame"] + 90, before_party_hex=first["after_party_hex"])
+    again.update(changes)
+    return lines[:11] + ["PARTY_HP_WRITE " + json.dumps(again)] + lines[11:]
+
+
+def test_faint_verdict_accepts_one_idempotent_repeat_write():
+    problems, receipt = faint_verdict(repeat_write())
+    assert problems == [] and receipt["write"]["frame"] == 3200, problems
+
+
+@pytest.mark.parametrize("changes,match", [
+    ({"after_party_hex": "11" * 288}, "not idempotent"),
+    ({"before_party_hex": "22" * 288}, "not idempotent"),
+    ({"ok": False}, "write failed"),
+], ids=["changed-bytes", "other-preimage", "repeat-failed"])
+def test_faint_verdict_refuses_a_non_idempotent_repeat(changes, match):
+    problems, receipt = faint_verdict(repeat_write(**changes))
+    assert receipt is None and any(match in p for p in problems), problems
+
+
+def test_faint_verdict_refuses_a_third_write():
+    lines = repeat_write()
+    problems, receipt = faint_verdict(lines[:12] + [lines[11]] + lines[12:])
+    assert receipt is None and any("3 PARTY_HP_WRITE" in p for p in problems), problems

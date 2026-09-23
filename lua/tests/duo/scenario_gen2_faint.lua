@@ -180,16 +180,26 @@ function S.verdict(lines, json, link_verdict)
         for _, r in ipairs(rx) do if r.key == key and got == nil then got = r end end
         need(got ~= nil, "no RX force_faint for B's linked key")
         need(got == nil or (link ~= nil and got.at > link.at), "force_faint arrived before LINK_SAVE")
-        local write = one("PARTY_HP_WRITE")
-        if write then
-            local w = write.value
+        -- O-24 (6e9bff5b): the server may re-issue force_faint once for a dead link still showing HP > 0, so
+        -- one idempotent repeat is allowed: its before AND after bytes equal the first write's after bytes.
+        local writes = rows("PARTY_HP_WRITE")
+        need(#writes == 1 or #writes == 2, #writes == 0 and "missing PARTY_HP_WRITE marker"
+             or string.format("%d PARTY_HP_WRITE markers (expected one, or one idempotent repeat)", #writes))
+        local write = writes[1]
+        for _, row in ipairs(writes) do
+            local w = row.value
             need(w.ok == true and w.kind == "party_hp" and w.key == key, "the checkpoint write failed or hit another mon")
             need(type(w.before_party_hex) == "string" and type(w.after_party_hex) == "string"
                  and #w.before_party_hex == #w.after_party_hex and #w.after_party_hex == 2 * 6 * 48, "party bytes missing")
             need(type(w.log) == "table" and #w.log == 2, "the write left no two-span permit receipt")
             need(type(w.checkpoint) == "table" and w.checkpoint.error == nil and type(w.checkpoint.pc) == "number",
                  "checkpoint evidence missing")
-            need(got ~= nil and write.at > got.at, "the write precedes force_faint")
+        end
+        if write then need(got ~= nil and write.at > got.at, "the write precedes force_faint") end
+        if writes[2] and write then
+            local first, again = write.value, writes[2].value
+            need(again.before_party_hex == first.after_party_hex and again.after_party_hex == first.after_party_hex,
+                 "the repeated write is not idempotent")
         end
         need(#bench == 1, #bench == 0 and "missing BENCH_HP_STATUS marker" or "BENCH_HP_STATUS repeated")
         if bench[1] then
