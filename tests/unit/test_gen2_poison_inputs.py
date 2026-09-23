@@ -273,3 +273,21 @@ def test_park_hands_over_on_a_grass_tile_or_in_a_battle():
     d2.step(pt(rt, x=1, y=2, **fainted))
     buttons, phase = d2.step(pt(rt, battle_mode=1, overworld_ready=False, **fainted))
     assert phase == "poisoned"
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_a_committed_receipt_that_proves_poison_faint_carries_a_passing_poison_record(title):
+    """The committed PHYSICAL receipt re-checked through the gate's own pure rules (and the shipped copy is
+    byte-identical)."""
+    import json
+    path = ROOT / f"tests/fixtures/gen2/receipts/{title}.engine_sites.json"
+    receipt = json.loads(path.read_text(encoding="utf-8"))
+    assert path.read_bytes() == (ROOT / f"data/games/gen2_{title}/receipts/{title}.engine_sites.json").read_bytes()
+    if "poison_faint" not in receipt["proven"]:
+        pytest.skip(f"{title} does not prove poison_faint yet")
+    rt = lua()
+    F = frame_align(rt)
+    p = receipt["poison_alignment"]
+    assert F.poison_problem(table(rt, p), p["psn_mask"]) is None
+    assert F.poison_emission_problem(table(rt, {"events": lua_list([p["model_event"]])}), table(rt, p)) is None
+    assert p["psn_mask"] == PSN and receipt["evidence_level"] == "PHYSICAL"
