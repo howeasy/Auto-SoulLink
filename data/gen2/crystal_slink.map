@@ -1,5 +1,5 @@
 SUMMARY:
-	ROM0: 16120 bytes used / 264 free
+	ROM0: 16118 bytes used / 266 free
 	ROMX: 1625907 bytes used / 454861 free in 127 banks
 	SRAM: 48188 bytes used / 17348 free in 8 banks
 	WRAM0: 4083 bytes used / 13 free
@@ -35,10 +35,10 @@ ROM0 bank #0:
 	SECTION: $0058-$005a ($0003 bytes) ["serial"]
 	EMPTY: $005b-$005f ($0005 bytes)
 	SECTION: $0060-$0062 ($0003 bytes) ["joypad"]
-	SECTION: $0063-$007b ($0019 bytes) ["SLink DelayFrame Bridge"]
+	SECTION: $0063-$0079 ($0017 bytes) ["SLink DelayFrame Bridge"]
 	         $0063 = SlinkDelayFrameBridge
-	         $007c = SlinkDelayFrameBridgeEnd
-	EMPTY: $007c-$00ff ($0084 bytes)
+	         $007a = SlinkDelayFrameBridgeEnd
+	EMPTY: $007a-$00ff ($0086 bytes)
 	SECTION: $0100-$014f ($0050 bytes) ["Header"]
 	         $0100 = Start
 	SECTION: $0150-$3fb4 ($3e65 bytes) ["Home"]
@@ -1261,7 +1261,7 @@ ROM0 bank #0:
 	         $3fa2 = Function3f9f.row
 	         $3fa5 = Function3f9f.col
 	EMPTY: $3fb5-$3fff ($004b bytes)
-	TOTAL EMPTY: $0108 bytes
+	TOTAL EMPTY: $010a bytes
 
 ROMX bank #1:
 	SECTION: $4000-$747a ($347b bytes) ["bank1"]

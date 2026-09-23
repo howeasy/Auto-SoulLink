@@ -1,5 +1,5 @@
 SUMMARY:
-	ROM0: 16175 bytes used / 209 free
+	ROM0: 16173 bytes used / 211 free
 	ROMX: 1138989 bytes used / 941779 free in 127 banks
 	SRAM: 31697 bytes used / 1071 free in 4 banks
 	WRAM0: 4096 bytes used / 0 free
@@ -35,10 +35,10 @@ ROM0 bank #0:
 	SECTION: $0058-$005a ($0003 bytes) ["serial"]
 	EMPTY: $005b-$005f ($0005 bytes)
 	SECTION: $0060-$0062 ($0003 bytes) ["joypad"]
-	SECTION: $0063-$007b ($0019 bytes) ["SLink DelayFrame Bridge"]
+	SECTION: $0063-$0079 ($0017 bytes) ["SLink DelayFrame Bridge"]
 	         $0063 = SlinkDelayFrameBridge
-	         $007c = SlinkDelayFrameBridgeEnd
-	EMPTY: $007c-$00ff ($0084 bytes)
+	         $007a = SlinkDelayFrameBridgeEnd
+	EMPTY: $007a-$00ff ($0086 bytes)
 	SECTION: $0100-$014f ($0050 bytes) ["Header"]
 	         $0100 = Start
 	SECTION: $0150-$3fed ($3e9e bytes) ["Home"]
@@ -1252,7 +1252,7 @@ ROM0 bank #0:
 	         $3fda = CheckSFX.playing
 	         $3fdc = TerminateExpBarSound
 	EMPTY: $3fee-$3fff ($0012 bytes)
-	TOTAL EMPTY: $00d1 bytes
+	TOTAL EMPTY: $00d3 bytes
 
 ROMX bank #1:
 	SECTION: $4000-$754d ($354e bytes) ["bank1"]

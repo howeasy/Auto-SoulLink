@@ -1,6 +1,6 @@
 {
   "schema": "gen2-overlay-provenance-v1",
-  "generated": "2026-09-23T22:42:07Z",
+  "generated": "2026-09-23T22:59:42Z",
   "sources": {
     "pokecrystal": {
       "url": "https://github.com/pret/pokecrystal",
@@ -34,7 +34,7 @@
       ]
     },
     "sources_sha256": {
-      "slink.asm": "37928b7edc7ec33b6e2cc9d557978df775d480db38d91f438638a65680f4e66c",
+      "slink.asm": "e36e847cc63ce42ea6e21c15c8d449d19c3b114009b56e33849ab907ff05c88e",
       "slink_mailbox_crystal.asm": "5a882542b8c4471b276d20bbc2e76d9846e50bb6d98fa284229d9c09713f6b3e",
       "slink_mailbox_goldsilver.asm": "bf28873ff54e02d698ffc5d59ee9ec1acfd951e602589ea7e706d24618863517",
       "patch/gb/slink_abi.inc": "d155374b87efcc69ac43ab5cbd0fb03a7be70f765266d76b94aa818d60dc9fac"
@@ -90,16 +90,16 @@
       "slink_title": "crystal",
       "base_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
       "identical_to_clean": false,
-      "sha1": "20bb8fe5c28f27e912f6b768514b9fe1ee34ada8",
-      "md5": "c74016d89e74929c245499a8ae8cc6c0",
-      "header_crc": "4D49",
-      "crc32": "7DE57CB4",
+      "sha1": "8363ee65c88956f803615c0e91958e5b90248bad",
+      "md5": "8a4538d47416ba9e537114c3e30c3653",
+      "header_crc": "4C58",
+      "crc32": "E8764FDD",
       "title": "PM_CRYSTAL\u0000BYTE",
       "size": 2097152,
       "ups": {
         "file": "patch/dist/SLink-Crystal.ups",
-        "size": 164,
-        "sha256": "9b154d08cfdfc6d132b4873e37c4d6793380cdc407a3d5ff8df959fee9bea61c"
+        "size": 162,
+        "sha256": "d767677f1f0f5447762840603aa810890ded8ba3786d4bc319ac7e896f427e27"
       }
     },
     "pokegold": {
@@ -107,16 +107,16 @@
       "slink_title": "gold",
       "base_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
       "identical_to_clean": false,
-      "sha1": "04c2e97db0c478aee51bb9d6dc60518e876c56fb",
-      "md5": "d6364f2344841ac9e9a4f16ccbd86cb1",
-      "header_crc": "A1F3",
-      "crc32": "248AC5E5",
+      "sha1": "5ec6e9b8db69782d8367391d29b389199c3f579a",
+      "md5": "5aa14e4afb17902e173109d46aea89c6",
+      "header_crc": "9F03",
+      "crc32": "96A95BAC",
       "title": "POKEMON_GLDAAUE",
       "size": 2097152,
       "ups": {
         "file": "patch/dist/SLink-Gold.ups",
-        "size": 157,
-        "sha256": "acc839ded53c69056224b80a98bef18cccfa7ca729f3850b6f3291dc31e870a3"
+        "size": 155,
+        "sha256": "96be61e22705f9a3d590fdb66c53b1f975946b42c04e217a3b8e614a45301409"
       }
     },
     "pokesilver": {
@@ -124,25 +124,25 @@
       "slink_title": "silver",
       "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
       "identical_to_clean": false,
-      "sha1": "1a931f753284ca4269bdc25544999814b1482a88",
-      "md5": "db2805316a9cc092e55306a9311822cf",
-      "header_crc": "477E",
-      "crc32": "BDFA0924",
+      "sha1": "1749055406bd39428bc838be6d1327e14da9040e",
+      "md5": "87d00543d1841cf97c60693439d68bbc",
+      "header_crc": "4646",
+      "crc32": "CA871B96",
       "title": "POKEMON_SLVAAXE",
       "size": 2097152,
       "ups": {
         "file": "patch/dist/SLink-Silver.ups",
-        "size": 157,
-        "sha256": "847eb1d5a2d31e342f67535020e1e5bafd80d5210dc441160471ce96955461b2"
+        "size": 155,
+        "sha256": "8c31d58bbfbcff3bec282858a3b3b1494a3a04973981faf99890c64fabcbf75a"
       }
     }
   },
   "symbols": {
-    "crystal_slink.sym": "873cc28b967fa08b848259939a9099eb4c7993d12cb2b7641f3b4afa665ee0c2",
-    "crystal_slink.map": "b8fafa446de692dad4ed56418c1cecee9fab4a46a85da8aa627fb5ee2fa65693",
-    "gold_slink.sym": "409756e7d1af268d3fc97ec3400b6fba8ed85ef3fd36d9b93b22cc9f956bf8d7",
-    "gold_slink.map": "3e6b49a3a22c31b33f78601a04fc1f08d49a3351c64b47075232a0e85e600dc0",
-    "silver_slink.sym": "bc510f3d0f1fa26931683a31908207b7d185d1e5e79ad409015d3352f346bcb5",
-    "silver_slink.map": "1c5bcc7d77678b981b3ef40bfd94207e042fd3be33a6b98c47ec2fce0c528df3"
+    "crystal_slink.sym": "365c5d4ca89ae76a769e89e193705a8c4cd1eb926df0aea8306e4db7b97daf33",
+    "crystal_slink.map": "6fe5a09dbaaf18779b22120b1139c7dd1a57403f03c01debe440b6d6d992a69d",
+    "gold_slink.sym": "1f510282b8c74c4316c4b89aa72333f40ef9923d374c3fd0f1406ec269bb843a",
+    "gold_slink.map": "47a7a9a0dd845745bbf3fd45f443c7b1fe6ba6a135a5ddd951d533b578b5b49c",
+    "silver_slink.sym": "b55ffe1267384dd757327a361c8c6256da985ac914b90bc5fafd5208fbb46a33",
+    "silver_slink.map": "cc56ef30614128a4cdbb94674934ef345a19e7e54f2a42fc3b93dabe02783838"
   }
 }
