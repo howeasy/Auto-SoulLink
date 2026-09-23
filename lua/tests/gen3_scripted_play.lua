@@ -54,20 +54,31 @@ local Syms = dofile(WT .. "/lua/tests/gen3_title_syms.lua")
 -- TITLE (card C4-LG): a SLINK_GEN3_TITLE GLOBAL (the same "global, else env" shape SLINK_ROOT
 -- uses two lines up — a duo driver sets globals, not process env, per BizHawk instance) or env
 -- var, defaulting to "firered" so every existing caller that never set either keeps the exact
--- byte-for-byte FR behaviour this file always had. Syms.for_title refuses loudly for anything
--- else, the address-lookup half of "refuse by name on LG"; the story-only half
--- (LEGS/PATHS/DEST/verify_starter/verify_rival) is guarded in run() below.
+-- byte-for-byte FR behaviour this file always had. Syms.for_title refuses loudly only for an
+-- unrecognized title; an entry radical_red has no proof for (card C4-LG2) is simply absent from
+-- S, so a helper that needs it fails where it is actually used, never here at load. The
+-- story-only half (LEGS/PATHS/DEST/verify_starter/verify_rival) is guarded in run() below.
 local TITLE = SLINK_GEN3_TITLE or os.getenv("SLINK_GEN3_TITLE")
 if not TITLE or TITLE == "" then TITLE = "firered" end
 local S = Syms.for_title(TITLE)
 
-local profile_file = assert(io.open(WT .. "/data/games/gen3_frlg/profile.json", "rb"))
+-- PROFILE PACK (card C4-LG2): radical_red's profile lives under data/games/gen3_rr, not
+-- gen3_frlg's (same split duo_gen3_main.lua already makes for its own pack/checkpoint reads).
+local PROFILE_PACK = TITLE == "radical_red" and "gen3_rr" or "gen3_frlg"
+local profile_file = assert(io.open(WT .. "/data/games/" .. PROFILE_PACK .. "/profile.json", "rb"))
 local profile = assert(JSON.decode(profile_file:read("a"))).titles[TITLE]
 profile_file:close()
-assert(profile, "gen3_scripted_play: no profile." .. TITLE .. " in data/games/gen3_frlg/profile.json")
-assert(profile.admitted and not profile.derived.CFRU_NO_ENCRYPT
-       and profile.derived.BOX_DATA_OFFSET == 4 and profile.derived.BOXES_PER_STORE == 14,
-       TITLE .. " uncompressed box layout is not admitted")
+assert(profile, "gen3_scripted_play: no profile." .. TITLE .. " in data/games/" .. PROFILE_PACK
+             .. "/profile.json")
+if TITLE == "radical_red" then
+    -- RR/CFRU's box layout is compressed (25 boxes, no BOX_DATA_OFFSET) -- the FR/LG
+    -- "uncompressed box layout" invariant below does not apply and must not be asserted here.
+    assert(profile.admitted, "radical_red profile is not admitted")
+else
+    assert(profile.admitted and not profile.derived.CFRU_NO_ENCRYPT
+           and profile.derived.BOX_DATA_OFFSET == 4 and profile.derived.BOXES_PER_STORE == 14,
+           TITLE .. " uncompressed box layout is not admitted")
+end
 local function read_bytes(addr, count)
     local bytes = {}
     for i = 1, count do bytes[i] = memory.read_u8(addr + i - 1) end
@@ -1393,8 +1404,12 @@ local PC_RELEASE_MON = S.PC_RELEASE_MON
 -- only Down+A (YES, case 0) stays in the box. B is pressed because its outcome cannot depend
 -- on where the cursor happens to be.
 local PC_ON_B_PRESSED = S.PC_ON_B_PRESSED
-local PC_MENU_CURSOR = S.PC_MENU_BASE + 2
-local PC_MENU_MAX_CURSOR = S.PC_MENU_BASE + 4 -- src/menu.c:9-25
+-- S.PC_MENU_BASE is absent for radical_red (card C4-LG2: unproven there); the `and` guards the
+-- arithmetic so loading stays nil-safe instead of erroring here at module load. A helper that
+-- then reads a nil PC_MENU_CURSOR/PC_MENU_MAX_CURSOR fails where it is actually called, same as
+-- every other unproven RR constant.
+local PC_MENU_CURSOR = S.PC_MENU_BASE and (S.PC_MENU_BASE + 2)
+local PC_MENU_MAX_CURSOR = S.PC_MENU_BASE and (S.PC_MENU_BASE + 4) -- src/menu.c:9-25
 local PC_RESULT = S.PC_RESULT -- sym:231 gSpecialVar_Result, VAR_RESULT
 local PC_CURSOR_AREA, PC_CURSOR_POS = S.PC_CURSOR_AREA, S.PC_CURSOR_POS
 local PC_STORAGE_PTR = S.PC_STORAGE_PTR -- sym:307; gStorage->state +0, boxOption +1

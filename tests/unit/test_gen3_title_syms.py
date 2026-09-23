@@ -1,9 +1,13 @@
-"""C4-LG: lua/tests/gen3_title_syms.lua's per-title addresses against the pret .sym files.
+"""C4-LG/C4-LG2: lua/tests/gen3_title_syms.lua's per-title addresses.
 
-For every entry, the address the module hands a caller for a title must be exactly the Nth
-(by ascending address) occurrence of that entry's symbol in that title's .sym file, plus
-`offset`, with the Thumb bit (|1) applied last when `thumb` is set. No emulator, no ROM --
-the .sym files and the Lua table are the whole input.
+For firered/leafgreen, the address the module hands a caller must be exactly the Nth (by
+ascending address) occurrence of that entry's symbol in that title's .sym file, plus `offset`,
+with the Thumb bit (|1) applied last when `thumb` is set. radical_red has no .sym file (RR is a
+hand-patched hack of the FR ROM, not a separate pret source tree), so instead every entry that
+carries a radical_red value must carry a non-empty `rr_source` citation, and for_title must
+never error for a missing entry -- it must omit it, so a caller sees a plain nil rather than a
+load-time crash (card C4-LG2: the exact failure a live RR duo hit). No emulator, no ROM -- the
+.sym files and the Lua table are the whole input.
 """
 import re
 from pathlib import Path
@@ -97,9 +101,53 @@ def test_for_title_refuses_an_unknown_title():
     mod = lua.execute(f'return dofile("{SYMS_SCRIPT.as_posix()}")')
     from lupa import LuaError
     with pytest.raises(LuaError):
-        mod.for_title("radical_red")
+        mod.for_title("emerald")
     with pytest.raises(LuaError):
         mod.for_title(None)
+
+
+# ── radical_red (card C4-LG2): no .sym file, proof by citation, missing entries OMITTED ────────
+
+
+def test_for_title_never_errors_for_radical_red(entries):
+    """The exact failure a live RR duo hit: gen3_scripted_play.lua dofiles this module with
+    SLINK_GEN3_TITLE="radical_red" and must not die before writing a single log line."""
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    mod = lua.execute(f'return dofile("{SYMS_SCRIPT.as_posix()}")')
+    out = mod.for_title("radical_red")
+    got = {k: out[k] for k in out}
+    proven = {name: e["radical_red"] for name, e in entries.items() if e.get("radical_red") is not None}
+    assert proven, "no radical_red entries at all -- something regressed the citations below"
+    assert got == proven, "for_title('radical_red') must return exactly the proven entries"
+    # every OTHER entry (no radical_red value) must be silently absent, not nil-in-the-table.
+    for name in entries:
+        if name not in proven:
+            assert name not in got, f"{name}: unproven for RR but present in for_title output"
+
+
+def test_every_radical_red_value_has_a_citation(entries):
+    for name, e in entries.items():
+        rr = e.get("radical_red")
+        if rr is None:
+            assert not e.get("rr_source"), f"{name}: rr_source set but no radical_red value"
+            continue
+        source = e.get("rr_source")
+        assert isinstance(source, str) and source.strip(), f"{name}: radical_red set but no rr_source"
+        assert any(source.startswith(p) for p in (
+            "old-client RR (production-tested):", "docs/gen3/research/", "ROM byte anchor",
+        )), f"{name}: rr_source does not look like one of the card's evidence tiers: {source!r}"
+
+
+def test_radical_red_citations_point_at_real_files(entries):
+    """Every rr_source names a file that exists in this repo (a citation to a file that was
+    never committed is not evidence)."""
+    for name, e in entries.items():
+        source = e.get("rr_source")
+        if not source:
+            continue
+        m = re.search(r"(lua/[\w./]+\.lua|docs/[\w./-]+\.md)", source)
+        assert m, f"{name}: rr_source names no lua/ or docs/ file: {source!r}"
+        assert (ROOT / m.group(1)).is_file(), f"{name}: rr_source file does not exist: {m.group(1)}"
 
 
 def test_symbols_needing_occurrence_actually_have_a_duplicate(entries, sym_tables):

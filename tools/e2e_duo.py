@@ -4785,8 +4785,13 @@ class DuoRun:
                      "area_id": "duo"})
         if not reply.get("ok"):
             raise RuntimeError(f"inject_event faint was refused: {reply}")
+        # handle_event drains A's queue into the HTTP reply (server/state.py:423-424), so A's own
+        # memorialize/game_over would never reach A's socket: hand them back to A's queue.
+        for cmd in reply.get("commands_returned") or []:
+            self.queue_command("a", cmd)
         print(f"[duo] injected A faint {self._link_keys['a']} -> force_faint B "
-              f"{self._link_keys['b']}")
+              f"{self._link_keys['b']}; re-queued to A: "
+              f"{[c.get('cmd') for c in reply.get('commands_returned') or []]}")
 
     def orchestrate_linked_faint_active_gen3(self):
         """The in-battle path (owner ruling 2026-09-23). Link the two ACTIVE starters; B enters a

@@ -684,6 +684,66 @@ def test_every_rr_only_scenario_has_its_module_oracle_and_runner_half():
         assert duo.SCENARIOS[name]["games"] == ("gen3_rr_new",), name
 
 
+# ── load-time pcall wrapping (card C4-LG2) ─────────────────────────────────────────────────
+# A live RR duo (gen3_rr_new faint_cmd_gen3) died silently: SLINK_GEN3_TITLE="radical_red" made
+# gen3_scripted_play.lua's dofile raise, the driver's first log line was its last, no RESULT was
+# ever written, and e2e_duo.py's harness just waited out its 120s MYKEY timeout. Every load-time
+# dofile in the driver's load section must now go through load_or_die, which pcalls and reports
+# "load: <label>: <err>" through finish() (a real RESULT line) instead of letting the raise reach
+# the top level uncaught.
+_LOAD_OR_DIE_FN = re.compile(r"local function load_or_die\(.*?\nend\n", re.S)
+
+
+def test_load_section_wraps_every_helper_dofile_in_load_or_die():
+    text = DRIVER.read_text(encoding="utf-8")
+    fn = _LOAD_OR_DIE_FN.search(text)
+    assert fn, "no local function load_or_die(...) in the driver"
+    assert "pcall(dofile" in fn.group(0) and 'finish(false, "load: "' in fn.group(0), fn.group(0)
+    for rel, label in [("/lua/json_codec.lua", "json_codec.lua"),
+                        ("/lua/tests/gen3_boot_check.lua", "gen3_boot_check.lua"),
+                        ("/lua/tests/gen3_scripted_play.lua", "gen3_scripted_play.lua"),
+                        ("/lua/gen3/reads.lua", "reads.lua")]:
+        assert re.search(rf'load_or_die\("{re.escape(rel)}",\s*"{re.escape(label)}"\)', text), (
+            f"{rel} is not loaded through load_or_die")
+        # and NOT also reachable as a bare, unprotected dofile of the same path in that section.
+        load_section = text[text.index("-- ── receipt, finish, console tee"):text.index("local play = SP.play")]
+        assert f'dofile(ROOT .. "{rel}")' not in load_section.replace("load_or_die(", ""), rel
+
+
+def test_load_or_die_reports_a_failure_through_finish_and_returns_a_success():
+    """Runs the real load_or_die body under lupa with a stub dofile/finish -- not just a text
+    match -- so the actual pcall/finish wiring is exercised, not merely its shape."""
+    from lupa import LuaRuntime
+
+    fn_src = _LOAD_OR_DIE_FN.search(DRIVER.read_text(encoding="utf-8"))
+    assert fn_src
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    load_or_die, calls = lua.execute(r"""
+        local ROOT = "/repo"
+        local calls = {}
+        local function finish(ok, msg) calls[#calls + 1] = {ok, msg}; error("FINISHED_STUB", 0) end
+        local function dofile(path)
+            if path:find("bad", 1, true) then error("boom: " .. path, 0) end
+            return { ok = true, path = path }
+        end
+    """ + fn_src.group(0) + "\n        return load_or_die, calls")
+
+    # success: no finish() call, the loaded module comes back.
+    ok_mod = load_or_die("/lua/good.lua", "good.lua")
+    assert ok_mod["path"] == "/repo/lua/good.lua"
+    assert len(calls) == 0
+
+    # failure: finish(false, "load: <label>: <err>") is called, and the raise past it is caught
+    # here exactly like duo_gen3_main.lua's own outer pcall(scenario, ctx) would catch it.
+    ok, err = lua.globals().pcall(load_or_die, "/lua/bad.lua", "bad.lua")
+    assert not ok
+    assert len(calls) == 1
+    passed, msg = calls[1][1], calls[1][2]
+    assert passed is False
+    assert msg.startswith("load: bad.lua: ") and "boom: /repo/lua/bad.lua" in msg
+
+
 @pytest.mark.parametrize("title", ["firered", "leafgreen"])
 def test_every_pret_symbol_the_driver_reads_exists(title):
     text = DRIVER.read_text(encoding="utf-8")

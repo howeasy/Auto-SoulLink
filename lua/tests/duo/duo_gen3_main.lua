@@ -72,11 +72,22 @@ log(fmt("duo instance %s scenario=%s phase=%s title=%s attempt=%d", D.player, D.
 pcall(memory.usememorydomain, "System Bus")
 pcall(function() client.speedmode(D.speed or 1600) end)
 
-local JSON = dofile(ROOT .. "/lua/json_codec.lua")
-local G = dofile(ROOT .. "/lua/tests/gen3_boot_check.lua")
+-- pcall every load-time dofile (card C4-LG2): an unprotected dofile that errors (e.g.
+-- gen3_scripted_play.lua raising for a title Syms/the profile pack does not recognize) died
+-- after this file's first log line and never wrote a RESULT, so e2e_duo.py's harness had nothing
+-- to read but a 120s MYKEY timeout -- the real reason was on stderr, not in the receipt. finish()
+-- (defined above) already writes RESULT and exits cleanly, so route every one of these through it.
+local function load_or_die(rel, label)
+    local ok, mod = pcall(dofile, ROOT .. rel)
+    if not ok then finish(false, "load: " .. label .. ": " .. tostring(mod)) end
+    return mod
+end
+
+local JSON = load_or_die("/lua/json_codec.lua", "json_codec.lua")
+local G = load_or_die("/lua/tests/gen3_boot_check.lua", "gen3_boot_check.lua")
 SLINK_GEN3_TITLE = D.title   -- the scripted helpers read their per-title addresses from this (C4-LG)
-local SP = dofile(ROOT .. "/lua/tests/gen3_scripted_play.lua")   -- helpers only; never run()
-local Reads = dofile(ROOT .. "/lua/gen3/reads.lua")
+local SP = load_or_die("/lua/tests/gen3_scripted_play.lua", "gen3_scripted_play.lua")   -- helpers only; never run()
+local Reads = load_or_die("/lua/gen3/reads.lua", "reads.lua")
 local play = SP.play
 
 local function read_json(rel)
