@@ -641,7 +641,9 @@ function ctx.catch(label)
         if turn == "party" then return nil, "a forced party menu came up while catching" end
         if ctx.balls() <= 0 then
             ctx.run_away(label)
-            return nil, "hunt ended out-of-balls"
+            -- bare reason: every caller prefixes "hunt ended ", giving the Gen 1 standard's exact
+            -- CAUSE_RNG phrase (tools/e2e_duo.py GEN1_RNG_REASON_CLASS "hunt ended out-of-balls")
+            return nil, "out-of-balls"
         end
         local ok, why = ctx.choose_action(ACTION_BAG)
         if not ok then return nil, why end
@@ -793,6 +795,13 @@ local okload, scenario = pcall(dofile, file)
 if not okload or type(scenario) ~= "function" then
     finish(false, "no scenario module " .. file .. ": " .. tostring(scenario))
 end
+-- --idle-jitter, the Gen 1 standard's retry lever: BizHawk is deterministic, and FRLG's VBlank
+-- advances the RNG once per frame (pret src/main.c:412 Random() in VBlankIntr), so idle frames
+-- before the scenario are what make a retried attempt a different roll. The harness writes the
+-- count (+37 per attempt) and checks the echo (e2e_duo.py jitter_problems).
+local requested, applied = D.idle_jitter or 0, 0
+for _ = 1, requested do emu.frameadvance(); applied = applied + 1 end
+log(fmt("JITTER requested=%d applied=%d attempt=%d", requested, applied, D.attempt or 1))
 local ok, pass, msg = pcall(scenario, ctx)
 if not ok then
     if pass == FINISHED then return end

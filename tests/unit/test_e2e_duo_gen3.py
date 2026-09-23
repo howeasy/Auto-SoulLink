@@ -907,7 +907,10 @@ function FAKE(scenario, player, phase, spec)
     ctx.hp0 = function() return spec.hp0 end
     ctx.battle_hold = function() return { why = "active battler" } end
     ctx.save = function() return true end
-    ctx.catch = function() return "K9" end
+    ctx.catch = function()
+        if spec.catch_why then return nil, spec.catch_why end
+        return "K9"
+    end
     ctx.hunt = function() return true end
     ctx.run_away = function() return true end
     ctx.lose_active = function() return true end
@@ -1589,3 +1592,70 @@ def test_catch_waits_for_bag_input_before_the_throw():
                         catch.index("ctx.wait_until(ctx.bag_input_ready"),
                         catch.index("SP.throw_pokeball_from_bag("))
     assert bag < wait < throw
+
+
+# ── C4-6g: the ball-RNG retry, generalized from the Gen 1 standard ────────────────────────
+OUT_OF_BALLS = "RESULT: FAIL (hunt ended out-of-balls)"
+A_CONSEQUENCE = ("RESULT: FAIL (CONSEQUENCE: the partner finished before the link formed; "
+                 "21EDCA07:1C600D89 stays quarantined in the PC)")
+
+
+def test_the_driver_returns_a_bare_out_of_balls_reason():
+    """The live LG half logged "hunt ended hunt ended out-of-balls": ctx.catch prefixed the phrase
+    and so did its callers, and the doubled phrase matches no cause -- the retry never fired."""
+    text = DRIVER.read_text(encoding="utf-8")
+    catch = text[text.index("function ctx.catch("):text.index("function ctx.lose_active(")]
+    assert 'return nil, "out-of-balls"' in catch
+    assert not re.search(r'return nil, "hunt ended', text)     # no caller-side prefix twice
+    assert duo.classify_gen1_result("RESULT: FAIL (hunt ended hunt ended out-of-balls)") == "FINAL"
+
+
+@pytest.mark.parametrize("scenario", ["link", "deadzone"])
+def test_a_ball_miss_reads_as_the_gen1_cause(lua, scenario):
+    """The scenario's own RESULT over the driver's bare reason is the standard's exact phrase."""
+    ok, passed, msg, _ = _run_module(lua, scenario, "b", "initial", {"catch_why": "out-of-balls"})
+    assert ok and passed is False and msg == "hunt ended out-of-balls", msg
+    assert duo.classify_gen1_result(f"RESULT: FAIL ({msg})") == "CAUSE_RNG"
+
+
+@pytest.mark.parametrize("game", ["gen3_frlg", "gen3_rr_new"])
+def test_gen3_ball_hunts_get_the_gen1_retry_budget(game):
+    assert duo.rng_retry_family(game)
+    assert duo.scenario_attempt_limit("link_gen3", game) == 3
+    assert duo.scenario_attempt_limit("deadzone_gen3", game) == 3
+    for name in ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
+                 "reconnect_gen3"):
+        assert duo.scenario_attempt_limit(name, game) == 1, name     # no ball, nothing to retry
+    # the Gen 1 standard itself is unchanged, cold boot included
+    assert duo.scenario_attempt_limit("ball_gate_new", "gen1_new") == 1
+    assert duo.scenario_attempt_limit("link_new", "gen1_new") == 3
+    assert duo.scenario_attempt_limit("species_clause_new", "gen1_new") == 8
+    assert duo.scenario_attempt_limit("faint", "gen3_rr") == 1       # the old RR client: none
+
+
+def test_gen3_pair_retries_only_on_the_out_of_balls_cause():
+    """Live link_gen3 run 2: B missed both balls; A named the CONSEQUENCE. That pair retries."""
+    assert duo.classify_gen1_result(A_CONSEQUENCE) == "CONSEQUENCE"
+    assert duo.retryable_gen1_rng("gen3_frlg", {"a": A_CONSEQUENCE, "b": OUT_OF_BALLS}, 1, 3)
+    assert duo.retryable_gen1_rng("gen3_frlg", {"a": "RESULT: PASS (ran)", "b": OUT_OF_BALLS}, 2, 3)
+    assert not duo.retryable_gen1_rng("gen3_frlg", {"a": A_CONSEQUENCE, "b": OUT_OF_BALLS}, 3, 3)
+
+
+@pytest.mark.parametrize("b", [
+    None,                                                      # B made no claim at all
+    "RESULT: FAIL (hunt ended no wild encounter)",             # any other cause is FINAL
+    "RESULT: FAIL (hunt ended hunt ended out-of-balls)",       # the old doubled phrase
+    A_CONSEQUENCE,                                             # two consequences, no cause
+])
+def test_a_consequence_never_retries_on_its_own(b):
+    assert not duo.retryable_gen1_rng("gen3_frlg", {"a": A_CONSEQUENCE, "b": b}, 1, 3)
+
+
+def test_the_gen3_driver_echoes_the_idle_jitter():
+    """A retry is only a new roll if its timing differs: FRLG's VBlank advances the RNG every
+    frame (pret src/main.c:412), and the driver must echo the harness's count in the Gen 1
+    format that jitter_problems checks on every double PASS of a retry family."""
+    text = DRIVER.read_text(encoding="utf-8")
+    assert 'log(fmt("JITTER requested=%d applied=%d attempt=%d"' in text
+    assert text.index('JITTER requested=') < text.index("pcall(scenario, ctx)")
+    assert duo.jitter_problems("JITTER requested=37 applied=37 attempt=2\n", 37) == []

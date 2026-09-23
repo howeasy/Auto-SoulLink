@@ -222,9 +222,13 @@ SCENARIOS = {
     "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr_new"),
                       "target": {"a": "battle", "b": "town"}, "frames": 3000000,
                       "oracle": "assert_whiteout_gen3_saved"},
+    # `ball_hunt`: a half throws Poke Balls, so "hunt ended out-of-balls" (the game's catch RNG
+    # on a fixture's few balls) earns the Gen 1 standard's whole-run retry (RNG_RETRY_FAMILIES).
     "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr_new"),
+                  "ball_hunt": True,
                   "target": "battle", "frames": 2500000, "oracle": "assert_link_gen3_saved"},
     "deadzone_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr_new"),
+                      "ball_hunt": True,
                       "target": "battle", "frames": 2500000,
                       "oracle": "assert_deadzone_gen3_saved"},
     "reconnect_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_rr_new"),
@@ -364,6 +368,19 @@ def read_result(scenario, inst):
 
 
 RNG_OUT_OF_BALLS = "RESULT: FAIL (hunt ended out-of-balls)"
+# The scenario families the ball-RNG retry covers: the Gen 1 standard (gen1_new) and the Gen 3
+# rows built on it (card C4-6g). ONE mechanism for all of them -- the cause table, the pair rule
+# (retryable_gen1_rng), the per-attempt idle jitter the driver echoes (jitter_problems) and the
+# attempt budget (scenario_attempt_limit). A Gen 3 scenario opts in with `ball_hunt`: only a
+# half that throws Poke Balls can end on the out-of-balls cause.
+RNG_RETRY_FAMILIES = ("gen1_new", "gen3_frlg", "gen3_rr_new")
+# A partner half's own "I only failed because the other half did" line (the gen3 drivers phrase
+# it "CONSEQUENCE: <what>"). It never retries by itself: the pair still needs a CAUSE_RNG.
+CONSEQUENCE_PREFIX = "CONSEQUENCE: "
+
+
+def rng_retry_family(game) -> bool:
+    return scenario_family(game) in RNG_RETRY_FAMILIES
 # Classification table for RESULT reasons in duo_gen1_main.lua:286-758:
 #   CAUSE_RNG   bare/nested `hunt ended out-of-balls` (the game's only missed ball)
 #   CONSEQUENCE exact linked-capture-not-returned phrases when the other side has CAUSE_RNG
@@ -422,7 +439,10 @@ def classify_gen1_result(text):
         return "PASS"
     if not line.startswith("RESULT: FAIL (") or not line.endswith(")"):
         return "FINAL"
-    return GEN1_RNG_REASON_CLASS.get(line[len("RESULT: FAIL ("):-1], "FINAL")
+    reason = line[len("RESULT: FAIL ("):-1]
+    if reason.startswith(CONSEQUENCE_PREFIX):
+        return "CONSEQUENCE"
+    return GEN1_RNG_REASON_CLASS.get(reason, "FINAL")
 
 
 def _has_exact_rng_miss(text):
@@ -457,7 +477,7 @@ def retryable_gen1_rng(game, results, attempt, limit=2):
     the seam BOTH paths share: `run()`'s GameRngMiss branch calls it after `wait_results`, where
     both halves are present by construction, so only the early-finish path changes.
     """
-    if scenario_family(game) != "gen1_new" or attempt >= limit:
+    if not rng_retry_family(game) or attempt >= limit:
         return False
     classes = [classify_gen1_result(text) for text in results.values()]
     if "CAUSE_RNG" not in classes:
@@ -482,8 +502,14 @@ def scenario_attempt_limit(name, game):
     (`retryable_gen1_rng`); three for species_clause_new, whose PASS may still be a
     coin-flip outcome (see `run_scenario_with_rng_retry`).
     """
-    if scenario_family(game) != "gen1_new" or name == "ball_gate_new":
+    entry = SCENARIOS.get(name, {})
+    # a cold boot replays one fixed NEW GAME: nothing to retry (ball_gate_new)
+    if not rng_retry_family(game) or entry.get("cold_boot"):
         return 1
+    if scenario_family(game) != "gen1_new":
+        # Gen 3: two retries (the Gen 1 default) for a half that throws Poke Balls, else one
+        # attempt -- every other cause is FINAL, so there is nothing a retry could change.
+        return 3 if entry.get("ball_hunt") else 1
     if name == "species_clause_new":
         return 8
     if name == "explode_new":
@@ -5656,7 +5682,7 @@ class DuoRun:
             pb = "RESULT: PASS" in rb
             if pa and pb:
                 self._run_oracle({"a": ra, "b": rb})
-            if pa and pb and scenario_family(getattr(self, "game", "")) == "gen1_new":
+            if pa and pb and rng_retry_family(getattr(self, "game", "")):
                 # Harness finding, not a scenario verdict: the harness wrote the expected count
                 # into the stub, so the driver's echo is checkable without the game. Checked
                 # only on a double PASS so a real failure keeps its own error, not this one.

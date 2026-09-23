@@ -289,8 +289,12 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
             assert not scenario_applies(name, "gen3_rr_new"), name
     for name in GEN3_FRLG_SCENARIOS:
         assert SCENARIOS[name]["games"] == ("gen3_frlg", "gen3_rr_new"), name
-        assert scenario_attempt_limit(name, "gen3_frlg") == 1
-        assert scenario_attempt_limit(name, "gen3_rr_new") == 1
+        # the ball-RNG retry (card C4-6g): only the halves that throw Poke Balls retry
+        expected = 3 if SCENARIOS[name].get("ball_hunt") else 1
+        assert scenario_attempt_limit(name, "gen3_frlg") == expected, name
+        assert scenario_attempt_limit(name, "gen3_rr_new") == expected, name
+    assert {n for n in GEN3_FRLG_SCENARIOS if SCENARIOS[n].get("ball_hunt")} == {
+        "link_gen3", "deadzone_gen3"}
     for name in GEN3_RR_ONLY_SCENARIOS:
         assert SCENARIOS[name]["games"] == ("gen3_rr_new",), name
 
@@ -325,7 +329,8 @@ def test_the_gen3_rr_new_wrapper_lists_the_shared_seven_plus_its_three():
     assert sorted(mod.SCENARIOS_RR) == sorted(GEN3_RR_NEW_SCENARIOS)
     for name in mod.SCENARIOS_RR:
         assert scenario_applies(name, "gen3_rr_new")
-        assert mod.deadline_for_rr(name) == SCENARIOS[name]["timeout"] + 300
+        assert mod.deadline_for_rr(name) == (SCENARIOS[name]["timeout"]
+                                             * scenario_attempt_limit(name, "gen3_rr_new") + 300)
     assert mod.required_fixtures_rr("boxsync_gen3") == ["rr_battle", "rr_town_b"]
     assert mod.required_fixtures_rr("faint_cmd_gen3") == ["rr_town", "rr_town_b"]
 
@@ -337,5 +342,6 @@ def test_the_gen3_wrapper_lists_exactly_the_gen3_frlg_scenarios():
     assert sorted(mod.SCENARIOS) == sorted(GEN3_FRLG_SCENARIOS)
     for name in mod.SCENARIOS:
         assert scenario_applies(name, "gen3_frlg")
-        assert mod.deadline_for(name) == SCENARIOS[name]["timeout"] + 300
+        assert mod.deadline_for(name) == (SCENARIOS[name]["timeout"]
+                                          * scenario_attempt_limit(name, "gen3_frlg") + 300)
     assert mod.required_fixtures("boxsync_gen3") == ["firered_party_battle", "leafgreen_party_town"]
