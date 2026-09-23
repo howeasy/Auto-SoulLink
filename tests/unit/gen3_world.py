@@ -137,6 +137,10 @@ class World:
         # reason the real policy was asked about, recorded at the policy seam.
         self._battle_ok = False
         self.in_battle_state = False
+        # gEnemyPartyCount is never maintained by the engine in battle (pret writes it only from
+        # CalculateEnemyPartyCount, called only from trade.c), so enter_battle leaves it at 0.
+        # Set this to model the ONE non-zero writer: the RR companion patch's rival-swap staging.
+        self.stale_enemy_count = 0
         self.battle_checks: list[str] = []
         self.lua = L = lupa.LuaRuntime(unpack_returned_tuples=True)
         self.io = L.table(
@@ -347,7 +351,7 @@ class World:
         order = [active[0], 0, active[1] if len(active) > 1 else 1, 1]
         for b in range(count):
             self.poke_int(self.ram["BATTLER_PARTY_INDEXES_ADDR"] + 2 * b, order[b], 2)
-        self.poke_int(self.ram["ENEMY_COUNT_ADDR"], len(enemy), 1)
+        self.poke_int(self.ram["ENEMY_COUNT_ADDR"], self.stale_enemy_count, 1)
         for i, rec in enumerate(enemy):
             self.poke(self.ram["ENEMY_BASE"] + i * codec.PARTY_MON_SIZE, self.encode(rec))
         # battler 0 live: the CFRU in-battle detector reads its maxHP (reads.lua read_battle)

@@ -478,18 +478,28 @@ function R.new(profile, io, pointers)
         return { ball_count = total, has_pokeballs = total > 0 }
     end
 
-    -- The enemy party, decoded exactly like r.read_party() (ram.ENEMY_BASE/ENEMY_COUNT_ADDR
-    -- instead of the player's; the enemy array is never save-block-relocated).
+    -- The enemy party, decoded exactly like r.read_party() (ram.ENEMY_BASE instead of the
+    -- player's; the enemy array is never save-block-relocated).
+    --
+    -- Read by OCCUPANCY, never by ram.ENEMY_COUNT_ADDR (gEnemyPartyCount): the engine does not
+    -- maintain that byte in battle. pret writes it only from CalculateEnemyPartyCount
+    -- (pokefirered src/pokemon.c:3756-3767) and calls that only from trade.c:942,1139, so it
+    -- stays at its boot 0 through a wild or a trainer battle and a count-bounded loop returns
+    -- {} -- which is the item-15 violation the live link_gen3/boxsync goldens recorded.
+    -- The array is filled BEFORE the battle flag rises (wild_encounter.c:391-397 GenerateWildMon
+    -- -> StartWildBattle; battle_main.c:707 CreateNPCTrainerParty -> :711 gMain.inBattle = TRUE),
+    -- so this scan is populated on the first in-battle tick. Terminate on species == 0 or
+    -- max_hp == 0: the rule the old client used (lua/memory_gba.lua:1545-1553) and the one the
+    -- companion patch's staging preserves (patch/src/handlers.c:1813-1815 zeroes maxHP on the
+    -- trailing slots). ZeroEnemyPartyMons clears all six slots first in both battle kinds.
     function r.read_enemy_party()
-        if not a.ENEMY_COUNT_ADDR then return nil, "profile has no ram.ENEMY_COUNT_ADDR" end
         if not a.ENEMY_BASE then return nil, "profile has no ram.ENEMY_BASE" end
-        local count = io.read_u8(a.ENEMY_COUNT_ADDR)
-        if count > party_capacity then return nil, "enemy party count exceeds capacity" end
         local out = {}
-        for slot = 0, count - 1 do
+        for slot = 0, party_capacity - 1 do
             local mon, bad = r.decode_party_mon(
                 io.read_bytes(a.ENEMY_BASE + slot * R.PARTY_MON_SIZE, R.PARTY_MON_SIZE))
             if not mon then return nil, bad end
+            if mon.species == 0 or mon.max_hp == 0 then break end
             mon.slot = slot
             out[#out + 1] = mon
         end

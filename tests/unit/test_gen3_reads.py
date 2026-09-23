@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from server.adapters import gen3_codec as codec
+from tests.unit.gen3_world import mon_record
 from tests.unit.test_gen3_entry import FIXTURES, World, lua_to_py
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -496,7 +497,9 @@ def test_read_battle_doubles_battler_mapping_and_enemy_party():
     _, blob = rr_party_bytes()
     mon = codec.decode_party_mon(blob[:codec.PARTY_MON_SIZE], rr=True)
     raw = codec.encode_party_mon(mon, rr=False)
-    world.bus[ram["ENEMY_COUNT_ADDR"]] = 1
+    # ENEMY_COUNT_ADDR is deliberately left at its boot 0: the engine never maintains it in
+    # battle (pret calls CalculateEnemyPartyCount only from trade.c), so a read gated on it
+    # returns {} on hardware. See test_read_enemy_party_scans_occupancy_* below.
     world.poke(ram["ENEMY_BASE"], raw)
 
     battle = lua_to_py(world.parts.reads.read_battle())
@@ -504,3 +507,62 @@ def test_read_battle_doubles_battler_mapping_and_enemy_party():
     assert battle["active_player_battler_slots"] == [0, 1]
     assert len(battle["enemy_party"]) == 1
     assert_same_mon(battle["enemy_party"][0], codec.decode_party_mon(raw))
+
+
+# ── read_enemy_party: occupancy, not gEnemyPartyCount ────────────────────────────────────────
+# Item 15 (docs/protocol.md:548) failed live on the new client: every in-battle tick carried
+# `enemy_party: []`. The cause was the port dropping the old client's scan
+# (lua/memory_gba.lua:1545-1553) for a loop bounded by ram.ENEMY_COUNT_ADDR -- a byte the engine
+# never maintains in battle (pret writes gEnemyPartyCount only from CalculateEnemyPartyCount,
+# src/pokemon.c:3756-3767, called only from trade.c:942,1139). These cases pin the occupancy
+# rule and the tail terminator that replaced it.
+
+def enemy_records(*specs):
+    """Encoded vanilla party records for the enemy array, in slot order."""
+    return [codec.encode_party_mon(mon_record(personality=pid, ot_id=0x0BADF00D, species=sp,
+                                              max_hp=mhp), rr=False)
+            for pid, sp, mhp in specs]
+
+
+def test_read_enemy_party_scans_occupancy_when_the_engine_count_is_zero():
+    """The live FRLG condition: gEnemyPartyCount reads 0 through the whole battle, so the read
+    must find the foe by occupancy or return nothing (this is the item-15 regression)."""
+    world = World(pack="gen3_frlg", title="firered")
+    ram = world.profile["ram"]
+    assert world.bus.get(ram["ENEMY_COUNT_ADDR"], 0) == 0      # boot value, never written
+    (foe,) = enemy_records((0x11223344, 19, 20))
+    world.poke(ram["ENEMY_BASE"], foe)
+
+    battle = lua_to_py(world.parts.reads.read_battle())
+    assert len(battle["enemy_party"]) == 1
+    assert battle["enemy_party"][0]["species"] == 19
+    assert battle["enemy_party"][0]["max_hp"] == 20
+
+
+def test_read_enemy_party_ignores_a_stale_count_below_the_real_party():
+    """A stale non-zero count (the RR patch's staging writes one, handlers.c:1813-1820) must not
+    truncate the team it no longer describes."""
+    world = World(pack="gen3_frlg", title="firered")
+    ram = world.profile["ram"]
+    world.bus[ram["ENEMY_COUNT_ADDR"]] = 1                     # stale: the party below is two
+    world.poke(ram["ENEMY_BASE"], b"".join(enemy_records((0x11223344, 19, 20),
+                                                        (0x55667788, 25, 24))))
+
+    party = lua_to_py(world.parts.reads.read_enemy_party())
+    assert [m["species"] for m in party] == [19, 25]
+    assert [m["slot"] for m in party] == [0, 1]
+
+
+def test_read_enemy_party_stops_at_the_terminator_for_a_two_mon_trainer_party():
+    """ZeroEnemyPartyMons clears all six slots before a trainer party is written, so a two-mon
+    party has a zeroed tail: exactly two, no garbage decode past it. A slot with a species but
+    maxHP 0 terminates too (the companion patch zeroes maxHP on trailing slots, not species)."""
+    world = World(pack="gen3_frlg", title="firered")
+    ram = world.profile["ram"]
+    two = enemy_records((0x11223344, 19, 20), (0x55667788, 25, 24))
+    tail = codec.encode_party_mon(mon_record(personality=0x99AABBCC, ot_id=0x0BADF00D,
+                                             species=31, max_hp=0), rr=False)
+    world.poke(ram["ENEMY_BASE"], b"".join(two + [tail]))
+
+    party = lua_to_py(world.parts.reads.read_enemy_party())
+    assert [m["species"] for m in party] == [19, 25]
