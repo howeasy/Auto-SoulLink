@@ -49,8 +49,10 @@
           <span class="mk-half-nick">{% if h.active %}<span class="mk-active" title="out in battle">⚔</span>{% endif %}{{ h.nickname or h.species_name }}{% if h.shiny %} <span class="shiny-star">✦</span>{% endif %}</span>
           <span class="mk-sub">{{ h.species_name }} · Lv {{ h.level }}</span>
           {% if h.hp is not none and row.section != 'fallen' %}{{ hp(h) }}{% endif %}
-          {% if (h.ability or h.item) and row.section != 'fallen' %}
-            <span class="mk-sub faint">{% if h.ability %}{{ h.ability }}{% endif %}{% if h.item %}<span class="mk-item" title="{{ h.item }}"> ◆ {{ h.item }}</span>{% endif %}</span>
+          {# Fallen rows keep the held item (what to take back out of the memorial box), not the ability. #}
+          {% set show_ability = h.ability and row.section != 'fallen' %}
+          {% if show_ability or h.item %}
+            <span class="mk-sub faint">{% if show_ability %}{{ h.ability }}{% endif %}{% if h.item %}<span class="mk-item" title="{{ h.item }}"> ◆ {{ h.item }}</span>{% endif %}</span>
           {% endif %}
           {% if h.where == 'box' and row.section != 'boxed' %}<span class="mk-sub faint">in box</span>{% endif %}
         </span>

@@ -240,8 +240,12 @@ async def test_the_now_cards_sit_in_the_player_columns(dashboard):
 
 @pytest.mark.asyncio
 async def test_fallen_rows_carry_no_live_numbers(dashboard):
-    """A memorialized pair is a memorial: no HP bar, no ability, no item. The injector's
-    party tick still lists the fainted mon, which is exactly the trap."""
+    """A memorialized pair is a memorial: no HP bar and no ability. The injector's party
+    tick still lists the fainted mon, which is exactly the trap. The held item stays
+    (owner 2026-09-23): it is what gets taken back out of the memorial box."""
     _, dom = dashboard
-    for row in (n for n in dom.find_all("article") if {"mk-pair", "fallen"} <= _classes(n)):
+    fallen = [n for n in dom.find_all("article") if {"mk-pair", "fallen"} <= _classes(n)]
+    for row in fallen:
         assert not [n for n in row.walk() if "mk-hp" in _classes(n)], row.get("id")
+    if any("mk-item" in _classes(n) for n in dom.walk()):  # Gen 1 has no held items
+        assert any("mk-item" in _classes(n) for row in fallen for n in row.walk())
