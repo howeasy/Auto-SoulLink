@@ -100,8 +100,8 @@ This note summarises it; it is not a second ledger.
    PENDING until their U1 (anchor `_2DMenuInterpretJoypad`, title-keyed rows).
 2. U5 launcher/Manager route; then H1/H2/H3 (Gen 2 duo driver + independent oracle + wrapper) for the first
    C<->C `link` duo; static canonical ids (from Codex's design); gen2-M1 Gen 1 duo A/B.
-3. In flight at the stop: OMP gen2-N18 (committed-receipt validator tests, g2omp branch omp/gen2-N18), Codex
-   gen2-static-canon (design). Carries: U2 uncovered controls (textbox, nested menus, battle KO, Cable Club, reset/
+3. Landed at the stop: N18 `8c3b0cd` (every committed PHYSICAL receipt re-validated by its production validator,
+   tamper controls). QUEUED, not started: Codex gen2-static-canon (read-only static id design; re-send it). Carries: U2 uncovered controls (textbox, nested menus, battle KO, Cable Club, reset/
    state-load, corrupt anchor ...); capture_box unproven (full party); PHYSICAL is self-reported by the gate
    (launch through EmuHawk is the guarantee); rollback drops ~1 frame of client events (by design).
 
