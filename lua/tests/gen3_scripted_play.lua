@@ -158,6 +158,22 @@ local function whiteout_destination(cp)
 end
 
 local function verify_destination(cp, label, dest)
+    -- A warp reports the new map before the exit step off the door tile
+    -- (field_fadetransition.c:317-437, Task_ExitDoor / Task_ExitNonAnimDoor): FR runs 25b/25c
+    -- read the mart door (36,19) and the lab door (16,13). Wait, bounded, for the player to
+    -- rest on the destination; a wrong landing still fails after the budget.
+    local stable = 0
+    for _ = 1, 120 do
+        local g, n = G.map(cp)
+        local px, py = G.pos(cp)
+        if g == dest.group and n == dest.num and px == dest.x and py == dest.y then
+            stable = stable + 1
+            if stable >= 4 then break end
+        else
+            stable = 0
+        end
+        G.advance()
+    end
     local group, num = G.map(cp)
     local x, y = G.pos(cp)
     if group ~= dest.group or num ~= dest.num or x ~= dest.x or y ~= dest.y then
@@ -714,11 +730,6 @@ play = PL.bind(H, {
 local function warp_to(cp, dir, budget, dest, label)
     local ok, why = play.enter_warp(cp, dir, budget)
     if not ok then G.finish(false, label .. ": warp_failed: " .. tostring(why)); return end
-    -- enter_warp returns once the new map is on the field, which for an exterior door is
-    -- BEFORE the scripted step off the door tile (field_fadetransition.c:357): FR run 25b read
-    -- the Viridian mart door (36,19), not (36,20). Let the player come to rest on the
-    -- destination first; a wrong landing still fails below, just after the budget.
-    play.wait_at(cp, dest.x, dest.y, 120)
     verify_destination(cp, label, dest)
 end
 

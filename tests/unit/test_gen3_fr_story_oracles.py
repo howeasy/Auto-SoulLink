@@ -570,3 +570,16 @@ def test_door_exit_is_judged_after_the_step_off_the_door(machine):
     """)
     mod.warp_to(fake.cp, "Down", 30, dest, "mart exit")
     lua.execute("F.on_frame=nil")
+
+
+def test_lab_exit_verify_waits_for_the_step_off_the_door(machine):
+    # FR run 25c: route1_catch calls verify_destination straight after enter_warp and read
+    # the lab door (16,13); the exit step lands on (16,14).
+    lua, mod, fake = machine
+    lua.execute("""
+        F.place(3,0,16,13)
+        local t0=F.frame
+        F.on_frame=function() if F.frame>=t0+30 then F.place(3,0,16,14) end end
+    """)
+    assert mod.verify_destination(fake.cp, "route1_catch lab exit", mod.DEST["lab_exit"])
+    lua.execute("F.on_frame=nil")
