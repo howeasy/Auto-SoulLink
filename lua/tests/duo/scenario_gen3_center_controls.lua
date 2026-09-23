@@ -11,12 +11,13 @@
 -- A (the runner queues each probe once A logs CONTROL_LIVE <name>; ctx.hold_probe checks it, and
 -- each control's live() carries its source-pinned WITNESS on every sampled frame):
 --   cable_menu            the global script context parked in CableClub_EventScript_
---                         SelectCableClubRoom with Task_MultichoiceMenu_HandleInput up -- the
---                         Cable Club service menu, which the Direct Corner attendant only
---                         reaches when IsWirelessAdapterConnected returned FALSE (the adapter
---                         branch goes to CableClub_EventScript_DirectCornerSelectService
---                         instead): the script position IS the observation of that result.
---                         Probe box_mon <linked>, held.
+--                         WelcomeToCableClub -- the Direct Corner attendant's no-adapter branch
+--                         -- waiting at the \p of CableClub_Text_WelcomeWhichCableClubService
+--                         ("...CABLE CLUB.\p"): `waitmessage` holds the script there until A,
+--                         so it is a STABLE refusing state (live r8: after 240 frames the script
+--                         sat here, never at the multichoice the old witness demanded). VAR_RESULT
+--                         read there is IsWirelessAdapterConnected's own return (0 = FALSE,
+--                         observed). Probe box_mon <linked>, held.
 --   cable_link            TRADE CENTER -> the party check -> EventScript_AskSaveGame (YES: this
 --                         run's one in-game save, the witness; it lands BEFORE any probe moves a
 --                         byte, so it is no persistence proof of the later deposit/withdraw) ->
@@ -64,9 +65,9 @@ local function a_side(ctx, linked)
         ctx.frames(60)
         return true
     end
-    local function at_service_menu()
-        return ctx.script_at("CableClub_EventScript_SelectCableClubRoom", "CableClub_EventScript_Colosseum"),
-               ctx.task_live("Task_MultichoiceMenu_HandleInput")
+    local function at_welcome()
+        return ctx.script_at("CableClub_EventScript_WelcomeToCableClub",
+                             "CableClub_EventScript_UnusedWelcomeToCableClub")
     end
     local function at_adapter_message()
         return ctx.script_at("CableClub_EventScript_UnionRoomAdapterNotConnected",
@@ -101,21 +102,22 @@ local function a_side(ctx, linked)
     if not ctx.wait_until(script_live, 10, "the Direct Corner attendant's script") then
         return false, "cable_menu: the attendant's script never started"
     end
-    ctx.frames(240)                                      -- message + delay 15 + the multichoice
-    local at, menu = at_service_menu()
-    ctx.log(fmt("WITNESS cable_menu script=CableClub_EventScript_SelectCableClubRoom at=%s "
-                .. "multichoice=%s adapter_connected=%s", tostring(at), tostring(menu),
-                at and "false(observed: the no-adapter branch)" or "unobserved"))
-    if not (at and menu) then
-        return false, "cable_menu: not parked at the Cable Club service multichoice (the no-adapter branch)"
+    -- drive by the witnessed position, not a delay: the no-adapter branch's welcome message
+    if not ctx.wait_until(function() return at_welcome() end, 10, "CableClub_EventScript_WelcomeToCableClub") then
+        ctx.log("WITNESS cable_menu script=CableClub_EventScript_WelcomeToCableClub at=nil adapter_connected=unobserved")
+        return false, "cable_menu: the attendant never entered CableClub_EventScript_WelcomeToCableClub (the no-adapter branch)"
     end
+    local at, result = at_welcome(), ctx.special_result()
+    ctx.log(fmt("WITNESS cable_menu script=CableClub_EventScript_WelcomeToCableClub at=%s var_result=%d "
+                .. "adapter_connected=%s", tostring(at), result,
+                result == 0 and "false(observed: IsWirelessAdapterConnected's VAR_RESULT)" or "TRUE"))
+    if result ~= 0 then return false, "cable_menu: IsWirelessAdapterConnected returned " .. result end
     local clause, why = ctx.hold_probe("cable_menu", "box_mon", linked, function()
-        local a, m = at_service_menu()
-        return script_live() and a ~= nil and m
+        return script_live() and at_welcome() ~= nil
     end, 600)
     if not clause then return false, why end
-    -- TRADE CENTER (row 0), then YES through the save prompts, until the linkup task waits
-    G.tap("A", 3, 13)
+    -- A past the \p, TRADE CENTER (multichoice row 0), then YES through the save prompts, until
+    -- the linkup task waits: every A on this road means "go on", so overshoot is harmless
     local function linking() return ctx.task_live("Task_LinkupAwaitConnection") end
     if not ctx.mash_until(linking, 90, "A") then
         return false, "cable_link: Task_LinkupAwaitConnection never started (save or party check refused?)"
@@ -141,13 +143,15 @@ local function a_side(ctx, linked)
         return false, "union_room_attendant: the script never started"
     end
     ctx.frames(120)
-    at = at_adapter_message()
+    at, result = at_adapter_message(), ctx.special_result()
     ctx.log(fmt("WITNESS union_room_attendant script=CableClub_EventScript_UnionRoomAdapterNotConnected "
-                .. "at=%s adapter_connected=%s", tostring(at),
-                at and "false(observed: the adapter-not-connected branch)" or "unobserved"))
+                .. "at=%s var_result=%d adapter_connected=%s", tostring(at), result,
+                (at and result == 0) and "false(observed: IsWirelessAdapterConnected's VAR_RESULT)"
+                or "unobserved"))
     if not at then
         return false, "union_room_attendant: not in CableClub_EventScript_UnionRoomAdapterNotConnected"
     end
+    if result ~= 0 then return false, "union_room_attendant: IsWirelessAdapterConnected returned " .. result end
     clause, why = ctx.hold_probe("union_room_attendant", "party_mon", linked, function()
         return script_live() and at_adapter_message() ~= nil
     end, 600)

@@ -1019,13 +1019,22 @@ function FAKE(scenario, player, phase, spec)
     ctx.on_field = function() return true end
     local saved = false
     ctx.task_live = function(name)
+        if name == "Task_MultichoiceMenu_HandleInput" then return false end   -- still at the \p
         if name == "Task_LinkupAwaitConnection" and not saved then
             saved = true                       -- the Cable Club save precedes the link wait
             logs[#logs + 1] = "SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5"
         end
         return true
     end
-    ctx.script_at = function() if spec.no_witness then return nil end return "scriptPtr" end
+    ctx.script_at = function(label)
+        if spec.no_witness then return nil end
+        -- live r8: without A the Direct Corner script waits at the welcome text's \p, so it
+        -- is never inside SelectCableClubRoom; the Union Room msgbox caller is on the stack
+        if label == "CableClub_EventScript_WelcomeToCableClub" then return "scriptPtr" end
+        if label == "CableClub_EventScript_UnionRoomAdapterNotConnected" then return "stack[0]" end
+        return nil
+    end
+    ctx.special_result = function() return spec.var_result or 0 end
     -- the deferred queue the REAL ctx.queued/ctx.hold_probe read (HOLD_SRC, from the driver);
     -- spec.queue = "wrong" is Codex's case: the right reason, but only an unrelated party_mon
     local key = spec.linked or "K1"
@@ -2287,8 +2296,8 @@ def test_deadzone_oracle_takes_one_dead_zone_row_per_player(monkeypatch, tmp_pat
 
 
 def _center_controls_receipt(k):
-    return ("WITNESS cable_menu script=CableClub_EventScript_SelectCableClubRoom at=scriptPtr "
-            "multichoice=true adapter_connected=false(observed: the no-adapter branch)\n"
+    return ("WITNESS cable_menu script=CableClub_EventScript_WelcomeToCableClub at=scriptPtr "
+            "var_result=0 adapter_connected=false(observed: IsWirelessAdapterConnected's VAR_RESULT)\n"
             f"CONTROL_LIVE cable_menu {k} map=5.5\nRX box_mon key={k}\n"
             f"CONTROL_REFUSED cable_menu box_mon {k} clause=script_context_status held\n"
             "SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5\n"
@@ -2297,7 +2306,8 @@ def _center_controls_receipt(k):
             f"CONTROL_RELEASED cable_link box_mon {k}\nTX stats_cache {k} {{}}\n"
             f"BOXED_OBSERVED {k} box=0:0\nCONTROL_SETTLED cable_link box_mon {k}\n"
             "WITNESS union_room_attendant script=CableClub_EventScript_UnionRoomAdapterNotConnected "
-            "at=stack[0] adapter_connected=false(observed: the adapter-not-connected branch)\n"
+            "at=stack[0] var_result=0 adapter_connected=false(observed: IsWirelessAdapterConnected's "
+            "VAR_RESULT)\n"
             f"CONTROL_LIVE union_room_attendant {k} map=5.5\nRX party_mon key={k}\n"
             f"CONTROL_REFUSED union_room_attendant party_mon {k} clause=field_controls_locked held\n"
             f"CONTROL_RELEASED union_room_attendant party_mon {k}\nTX sync_retrieve_done {k} {{}}\n"
@@ -2441,7 +2451,7 @@ def test_the_center_controls_emitter_satisfies_its_own_oracle_chain(lua):
 
 def test_center_controls_needs_its_source_pinned_witness(lua):
     ok, passed, msg, _ = _run_module(lua, "center_controls", "a", "initial", {"no_witness": "lua:true"})
-    assert ok and passed is False and "the no-adapter branch" in msg, msg
+    assert ok and passed is False and "(the no-adapter branch)" in msg, msg
 
 
 _HOLD_MODEL = r"""
@@ -2662,3 +2672,35 @@ def test_face_reads_the_low_nibble_and_waits_out_the_step():
     assert list(lua.globals().TAPS.values()) == ["Up"]     # one tap, AFTER the step ended
     lua.execute("BYTE18 = 0x42")                          # movementDirection 4, facingDirection 2
     assert lua.eval("ctx.facing()") == 2
+
+
+# ── C4-6q: live r8 at f5bdbdfc, FR and LG ───────────────────────────────────────────────────
+def test_cable_menu_parks_at_the_welcome_paragraph_and_observes_the_adapter(lua):
+    """r8: 240 frames after the talk the Direct Corner script sat at the \\p of the welcome text
+    (waitmessage waits for A), never inside SelectCableClubRoom -- "not parked at the Cable Club
+    service multichoice" on both titles. The witness is now that wait itself, and VAR_RESULT
+    there (IsWirelessAdapterConnected's return) is read, not inferred."""
+    ok, passed, msg, logs = _run_module(lua, "center_controls", "a", "initial", {})
+    assert ok and passed is True, msg
+    assert ("WITNESS cable_menu script=CableClub_EventScript_WelcomeToCableClub at=scriptPtr var_result=0 "
+            "adapter_connected=false") in logs, logs
+    assert "var_result=0 adapter_connected=false" in logs.split("WITNESS union_room_attendant")[1]
+
+
+def test_an_adapter_that_reports_connected_is_a_named_failure(lua):
+    ok, passed, msg, _ = _run_module(lua, "center_controls", "a", "initial", {"var_result": 1})
+    assert ok and passed is False and "IsWirelessAdapterConnected returned 1" in msg, msg
+
+
+def test_the_welcome_block_is_where_pret_puts_the_wait():
+    """cable_club.inc: WelcomeToCableClub = message(5) waitmessage(1) delay(3) goto(5) end(1), and
+    the next label is UnusedWelcomeToCableClub -- 15 bytes on both titles."""
+    for title in ("firered", "leafgreen"):
+        syms = {}
+        for line in (REPO / "data" / "gen3" / "pret" / f"poke{title}.sym").read_text(encoding="utf-8").splitlines():
+            parts = line.split()
+            if len(parts) == 4:
+                syms.setdefault(parts[3], int(parts[0], 16))
+        span = (syms["CableClub_EventScript_UnusedWelcomeToCableClub"]
+                - syms["CableClub_EventScript_WelcomeToCableClub"])
+        assert span == 15, (title, span)

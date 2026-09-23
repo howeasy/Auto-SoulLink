@@ -142,10 +142,9 @@ local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInpu
                "Task_ReturnToChooseMonAfterText", "gBattleMoves", "Task_DepositMenu", "Task_WithdrawMon",
                "CB2_BagMenuRun", "Task_BagMenu_HandleInput", "Task_AnimateWin0v", "gPaletteFade",
                "Task_LinkupAwaitConnection", "sGlobalScriptContext",
-               "CableClub_EventScript_SelectCableClubRoom", "CableClub_EventScript_Colosseum",
+               "CableClub_EventScript_WelcomeToCableClub", "CableClub_EventScript_UnusedWelcomeToCableClub",
                "CableClub_EventScript_UnionRoomAdapterNotConnected",
-               "CableClub_EventScript_WirelessClubAttendant", "Task_MultichoiceMenu_HandleInput",
-               "gObjectEvents" }
+               "CableClub_EventScript_WirelessClubAttendant", "gSpecialVar_Result", "gObjectEvents" }
 local S = {}
 do
     local want = {}
@@ -617,6 +616,10 @@ local function script_at(read_u8, read_u32, base, lo, hi)
         if r >= lo and r < hi then return "stack[" .. i .. "]" end
     end
 end
+--- gSpecialVar_Result (VAR_RESULT) now. After `specialvar VAR_RESULT, IsWirelessAdapterConnected`
+--- nothing in the no-adapter branches writes it until a multichoice/yesno does, so read while
+--- parked in that branch's message it IS the special's return value.
+function ctx.special_result() return memory.read_u16_le(S.gSpecialVar_Result, "System Bus") end
 --- script_at over the named script labels (SYMS), read now.
 function ctx.script_at(label, next_label)
     return script_at(function(a) return memory.read_u8(a, "System Bus") end,

@@ -1481,8 +1481,8 @@ def center_controls_chain(ka):
     refusal, then CONTROL_RELEASED at the release input BEFORE the probe's ACK and read-back,
     and CONTROL_SETTLED after them (Codex REV-center-receipt-2)."""
     k = re.escape(ka)
-    return [r"(?m)^WITNESS cable_menu script=CableClub_EventScript_SelectCableClubRoom at=\S+ "
-            r"multichoice=true adapter_connected=false",
+    return [r"(?m)^WITNESS cable_menu script=CableClub_EventScript_WelcomeToCableClub at=\S+ "
+            r"var_result=0 adapter_connected=false",
             rf"(?m)^CONTROL_LIVE cable_menu {k} ", gen3_rx("box_mon", ka),
             rf"(?m)^CONTROL_REFUSED cable_menu box_mon {k} clause=\S+ ",
             r"(?m)^SAVE_WITNESS_DUMP ", rf"(?m)^CONTROL_LIVE cable_link {k} ",
@@ -1490,7 +1490,7 @@ def center_controls_chain(ka):
             rf"(?m)^CONTROL_RELEASED cable_link box_mon {k}$", gen3_tx("stats_cache", ka),
             gen3_boxed(ka), rf"(?m)^CONTROL_SETTLED cable_link box_mon {k}$",
             r"(?m)^WITNESS union_room_attendant script=CableClub_EventScript_UnionRoomAdapterNotConnected "
-            r"at=\S+ adapter_connected=false",
+            r"at=\S+ var_result=0 adapter_connected=false",
             rf"(?m)^CONTROL_LIVE union_room_attendant {k} ", gen3_rx("party_mon", ka),
             rf"(?m)^CONTROL_REFUSED union_room_attendant party_mon {k} clause=\S+ ",
             rf"(?m)^CONTROL_RELEASED union_room_attendant party_mon {k}$",
