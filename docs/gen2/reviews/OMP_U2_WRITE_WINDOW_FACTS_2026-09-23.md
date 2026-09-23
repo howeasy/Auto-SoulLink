@@ -18,3 +18,19 @@ Negative controls for U2: START menu open (anchor-not-firing, documented as such
 (`wScriptRunning`), in-battle party-only write (`wBattleMode`), mid-warp (`wMapStatus`), link/serial (`wLinkMode` +
 `hSerialConnectionStatus`), save/PC window (`wGameLogicPaused`). UNVERIFIED: predicate mask/values, the CartRAM
 visibility above, the `ChangeBoxSaveGame`/`LoadBox` label forms, whole-pack G/S parity.
+
+## Follow-up: checkpoint predicate VALUES (OMP gen2-O8, cx-a3f3efb0)
+
+The pack `data/games/gen2_{crystal,gold,silver}/write_checkpoint.json` is source-derived by
+`tools/gen_gen2_write_checkpoint.py:253-345` (`_enum`/`_literal`/`_cite`, snippet + sha per row). All 45
+predicate addresses equal the `.sym` addresses; both anchors' 32-byte `expected_hex` reproduce from the C and G
+ROMs. Values match the engine idle state: `wMapStatus` = `MAPSTATUS_HANDLE` 2, `wMapEventStatus` = `MAPEVENTS_ON` 0,
+`wScriptMode` = `SCRIPT_OFF`, `wScriptFlags` mask `0x0C` (`SCRIPT_RUNNING`|`RUN_DEFERRED_SCRIPT`: **this covers
+script-driven text boxes**, correcting the O7 row above), `wStateFlags` mask `0x80` (scripted movement, bit 7),
+`wJoypadDisable` mask `0xFF` (equivalent: writers set only bits 6/7), `hSerialConnectionStatus` = `$FF`
+(`CONNECTION_NOT_ESTABLISHED`, loaded at init: C `home/init.asm:131-132`, G `:108-109`), `wSavedAtLeastOnce` = 1
+(deliberate first-save prerequisite). A START-menu frame passes all 15 flags: menus are excluded by the anchor.
+Bug-Catching Contest: not in the pack; `STATUSFLAGS2_BUG_CONTEST_TIMER_F` is **bit 2** (C
+`constants/ram_constants.asm:241-245` `const_def` block; G `:235`) — coordinator-verified; O8's "bit 1" count was
+wrong, and N14b's guard (`tools/gen2_fixtures.py:197`) is right. UNVERIFIED: the profile's WRAM bank mapping for
+the 15 symbols at gate time.
