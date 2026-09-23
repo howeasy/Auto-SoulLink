@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=5293:B541:10 b=0DAC:C4A6:A1 area=route_29 titles=crystal/gold status=memorial

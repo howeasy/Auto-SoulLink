@@ -1,0 +1,709 @@
+DUO_GEN2 {"attempt":1,"case":"gold_battle","fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","player":"b","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","scenario":"gen2_faint","title":"gold"}
+CLIENT {"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","save_completed","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  trace @30 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @60 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @90 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @120 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @150 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @180 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @210 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @240 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @270 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @300 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @330 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @360 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @390 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @420 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @450 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @480 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @510 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @540 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @570 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @600 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @630 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @660 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @690 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @720 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @750 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @780 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @810 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @840 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @870 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @900 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @930 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @960 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @990 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1020 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1050 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1080 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1110 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1140 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1170 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1200 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1230 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1260 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1290 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1320 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1350 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1380 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1410 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1440 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1470 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1500 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1530 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1560 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1590 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1620 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1650 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1680 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1710 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1740 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1770 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1800 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1830 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1860 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1890 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1920 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1950 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @1980 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2010 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2040 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2070 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2100 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2130 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2160 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2190 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2220 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2250 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2280 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2310 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2340 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2370 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2400 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2430 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2460 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2490 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2520 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2550 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2580 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2610 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2640 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2670 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2700 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2730 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2760 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2790 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2820 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2850 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2880 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2910 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2940 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @2970 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @3000 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @3030 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @3060 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @3090 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @3120 ui=- seq=- age=- last=- consumed=- tick=- ready=nil items=- cursor=-
+  trace @3150 ui=title seq=1 age=20 last=20 consumed=1 tick=- ready=false items=- cursor=-
+  trace @3180 ui=main_menu seq=2 age=2 last=2 consumed=- tick=- ready=false items=- cursor=-
+  trace @3210 ui=main_menu seq=2 age=32 last=32 consumed=- tick=- ready=false items=- cursor=-
+  phase continue @3218
+  trace @3240 ui=main_menu seq=2 age=62 last=62 consumed=11 tick=- ready=false items=- cursor=-
+  trace-obj @3240 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3270 ui=main_menu seq=2 age=92 last=92 consumed=41 tick=- ready=false items=- cursor=-
+  trace-obj @3270 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3300 ui=continue_confirm seq=11 age=25 last=18 consumed=6 tick=- ready=false items=- cursor=-
+  trace-obj @3300 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3330 ui=continue_confirm seq=11 age=55 last=48 consumed=36 tick=- ready=false items=- cursor=-
+  trace-obj @3330 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":50342,"panel":false,"
+HELLO {"frame":3338,"ot_id":50342}
+  phase loaded @3338
+RX resolved_areas
+RX config
+  trace @3360 ui=continue_confirm seq=11 age=85 last=78 consumed=66 tick=26 ready=nil items=- cursor=-
+  trace-obj @3360 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 EC63:C4A6:9E
+  phase walk @3463
+  trace @3480 ui=continue_confirm seq=11 age=205 last=198 consumed=186 tick=80 ready=nil items=- cursor=-
+  trace-obj @3480 player struct 56,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace-obj @3480 player struct 56,16 wXY 53,12 obj2 struct 56,16 -> 52,12
+  trace @3480 phase=walk ui=- prompt=- ready=nil battle_mode=0 ow=false items=- cursor=- at=-
+  trace @3510 ui=continue_confirm seq=11 age=235 last=228 consumed=216 tick=84 ready=nil items=- cursor=-
+  trace-obj @3510 player struct 57,16 wXY 52,12 obj1 struct 54,16 -> 50,12
+  trace-obj @3510 player struct 57,16 wXY 52,12 obj2 struct 57,16 -> 53,12
+  trace @3510 phase=walk ui=- prompt=- ready=nil battle_mode=0 ow=false items=- cursor=- at=-
+  trace @3540 ui=continue_confirm seq=11 age=265 last=258 consumed=246 tick=86 ready=nil items=- cursor=-
+  trace-obj @3540 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3540 phase=walk ui=- prompt=- ready=nil battle_mode=0 ow=false items=- cursor=- at=-
+  trace @3570 ui=continue_confirm seq=11 age=295 last=288 consumed=276 tick=86 ready=nil items=- cursor=-
+  trace-obj @3570 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3570 phase=walk ui=- prompt=- ready=nil battle_mode=0 ow=false items=- cursor=- at=-
+  trace @3600 ui=continue_confirm seq=11 age=325 last=318 consumed=306 tick=86 ready=nil items=- cursor=-
+  trace-obj @3600 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3600 phase=walk ui=- prompt=- ready=nil battle_mode=0 ow=false items=- cursor=- at=-
+  trace @3630 ui=continue_confirm seq=11 age=355 last=348 consumed=336 tick=86 ready=nil items=- cursor=-
+  trace-obj @3630 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3630 phase=walk ui=- prompt=- ready=nil battle_mode=0 ow=false items=- cursor=- at=-
+  trace @3660 ui=continue_confirm seq=11 age=385 last=378 consumed=366 tick=86 ready=nil items=- cursor=-
+  trace-obj @3660 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3660 phase=walk ui=- prompt=- ready=nil battle_mode=0 ow=false items=- cursor=- at=-
+  trace @3690 ui=continue_confirm seq=11 age=415 last=408 consumed=396 tick=86 ready=nil items=- cursor=-
+  trace-obj @3690 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3690 phase=walk ui=- prompt=- ready=nil battle_mode=0 ow=false items=- cursor=- at=-
+  phase battle @3710
+  trace @3720 ui=continue_confirm seq=11 age=445 last=438 consumed=426 tick=86 ready=nil items=- cursor=-
+  trace-obj @3720 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3720 phase=battle ui=- prompt=- ready=nil battle_mode=1 ow=false items=- cursor=- at=-
+  trace @3750 ui=continue_confirm seq=11 age=475 last=468 consumed=456 tick=86 ready=nil items=- cursor=-
+  trace-obj @3750 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3750 phase=battle ui=- prompt=- ready=nil battle_mode=1 ow=false items=- cursor=- at=-
+  trace @3780 ui=continue_confirm seq=11 age=505 last=498 consumed=486 tick=86 ready=nil items=- cursor=-
+  trace-obj @3780 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3780 phase=battle ui=- prompt=- ready=nil battle_mode=1 ow=false items=- cursor=- at=-
+  trace @3810 ui=continue_confirm seq=11 age=535 last=528 consumed=516 tick=86 ready=nil items=- cursor=-
+  trace-obj @3810 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3810 phase=battle ui=- prompt=- ready=nil battle_mode=1 ow=false items=- cursor=- at=-
+  trace @3840 ui=continue_confirm seq=11 age=565 last=558 consumed=546 tick=86 ready=nil items=- cursor=-
+  trace-obj @3840 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3840 phase=battle ui=- prompt=- ready=nil battle_mode=1 ow=false items=- cursor=- at=-
+  trace @3870 ui=continue_confirm seq=11 age=595 last=588 consumed=576 tick=86 ready=nil items=- cursor=-
+  trace-obj @3870 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3870 phase=battle ui=- prompt=- ready=nil battle_mode=1 ow=false items=- cursor=- at=-
+  trace @3900 ui=continue_confirm seq=11 age=625 last=618 consumed=606 tick=86 ready=nil items=- cursor=-
+  trace-obj @3900 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3900 phase=battle ui=- prompt=- ready=nil battle_mode=1 ow=false items=- cursor=- at=-
+  trace @3930 ui=continue_confirm seq=11 age=655 last=648 consumed=636 tick=86 ready=nil items=- cursor=-
+  trace-obj @3930 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3930 phase=battle ui=- prompt=- ready=nil battle_mode=1 ow=false items=- cursor=- at=-
+  trace @3960 ui=prompt_button seq=95 age=18 last=10 consumed=1 tick=86 ready=false items=- cursor=-
+  trace-obj @3960 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3960 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @3990 ui=prompt_button seq=95 age=48 last=40 consumed=29 tick=86 ready=false items=- cursor=-
+  trace-obj @3990 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @3990 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4020 ui=prompt_button seq=95 age=78 last=70 consumed=59 tick=86 ready=false items=- cursor=-
+  trace-obj @4020 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4020 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4050 ui=prompt_button seq=95 age=108 last=100 consumed=89 tick=86 ready=false items=- cursor=-
+  trace-obj @4050 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4050 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4080 ui=prompt_button seq=95 age=138 last=130 consumed=119 tick=86 ready=false items=- cursor=-
+  trace-obj @4080 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4080 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4110 ui=prompt_button seq=95 age=168 last=160 consumed=149 tick=86 ready=false items=- cursor=-
+  trace-obj @4110 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4110 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4140 ui=prompt_button seq=95 age=198 last=190 consumed=179 tick=86 ready=false items=- cursor=-
+  trace-obj @4140 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4140 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4170 ui=prompt_button seq=95 age=228 last=220 consumed=209 tick=86 ready=false items=- cursor=-
+  trace-obj @4170 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4170 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4200 ui=battle_menu seq=96 age=2 last=2 consumed=- tick=86 ready=false items=- cursor=-
+  trace-obj @4200 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4200 phase=battle ui=battle_menu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4230 ui=battle_menu seq=96 age=32 last=32 consumed=1 tick=86 ready=false items=- cursor=-
+  trace-obj @4230 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4230 phase=battle ui=battle_menu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4260 ui=pack_items seq=97 age=6 last=6 consumed=- tick=86 ready=false items=- cursor=-
+  trace-obj @4260 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4260 phase=battle ui=pack_items prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4290 ui=item_submenu seq=99 age=10 last=10 consumed=1 tick=86 ready=false items=USE|QUIT cursor=1
+  trace-obj @4290 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4290 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=USE|QUIT cursor=1 at=-
+  trace @4320 ui=item_submenu seq=99 age=40 last=40 consumed=3 tick=86 ready=false items=- cursor=-
+  trace-obj @4320 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4320 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4350 ui=item_submenu seq=99 age=70 last=70 consumed=33 tick=86 ready=false items=- cursor=-
+  trace-obj @4350 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4350 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4380 ui=item_submenu seq=99 age=100 last=100 consumed=63 tick=86 ready=false items=- cursor=-
+  trace-obj @4380 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4380 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4410 ui=item_submenu seq=99 age=130 last=130 consumed=93 tick=86 ready=false items=- cursor=-
+  trace-obj @4410 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4410 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4440 ui=item_submenu seq=99 age=160 last=160 consumed=123 tick=86 ready=false items=- cursor=-
+  trace-obj @4440 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4440 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4470 ui=item_submenu seq=99 age=190 last=190 consumed=153 tick=86 ready=false items=- cursor=-
+  trace-obj @4470 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4470 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4500 ui=item_submenu seq=99 age=220 last=220 consumed=183 tick=86 ready=false items=- cursor=-
+  trace-obj @4500 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4500 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4530 ui=item_submenu seq=99 age=250 last=250 consumed=213 tick=86 ready=false items=- cursor=-
+  trace-obj @4530 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4530 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4560 ui=item_submenu seq=99 age=280 last=280 consumed=243 tick=86 ready=false items=- cursor=-
+  trace-obj @4560 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4560 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4590 ui=item_submenu seq=99 age=310 last=310 consumed=273 tick=86 ready=false items=- cursor=-
+  trace-obj @4590 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4590 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4620 ui=item_submenu seq=99 age=340 last=340 consumed=303 tick=86 ready=false items=- cursor=-
+  trace-obj @4620 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4620 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4650 ui=item_submenu seq=99 age=370 last=370 consumed=333 tick=86 ready=false items=- cursor=-
+  trace-obj @4650 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4650 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4680 ui=item_submenu seq=99 age=400 last=400 consumed=363 tick=86 ready=false items=- cursor=-
+  trace-obj @4680 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4680 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4710 ui=item_submenu seq=99 age=430 last=430 consumed=393 tick=86 ready=false items=- cursor=-
+  trace-obj @4710 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4710 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4740 ui=item_submenu seq=99 age=460 last=460 consumed=423 tick=86 ready=false items=- cursor=-
+  trace-obj @4740 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4740 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4770 ui=item_submenu seq=99 age=490 last=490 consumed=453 tick=86 ready=false items=- cursor=-
+  trace-obj @4770 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4770 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4800 ui=item_submenu seq=99 age=520 last=520 consumed=483 tick=86 ready=false items=- cursor=-
+  trace-obj @4800 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4800 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4830 ui=item_submenu seq=99 age=550 last=550 consumed=513 tick=86 ready=false items=- cursor=-
+  trace-obj @4830 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4830 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4860 ui=item_submenu seq=99 age=580 last=580 consumed=543 tick=86 ready=false items=- cursor=-
+  trace-obj @4860 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4860 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4890 ui=item_submenu seq=99 age=610 last=610 consumed=573 tick=86 ready=false items=- cursor=-
+  trace-obj @4890 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4890 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4920 ui=item_submenu seq=99 age=640 last=640 consumed=603 tick=86 ready=false items=- cursor=-
+  trace-obj @4920 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4920 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4950 ui=item_submenu seq=99 age=670 last=670 consumed=633 tick=86 ready=false items=- cursor=-
+  trace-obj @4950 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4950 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @4980 ui=item_submenu seq=99 age=700 last=700 consumed=663 tick=86 ready=false items=- cursor=-
+  trace-obj @4980 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @4980 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5010 ui=item_submenu seq=99 age=730 last=730 consumed=693 tick=86 ready=false items=- cursor=-
+  trace-obj @5010 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5010 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5040 ui=prompt_button seq=108 age=23 last=15 consumed=4 tick=86 ready=false items=- cursor=-
+  trace-obj @5040 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5040 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5070 ui=prompt_button seq=108 age=53 last=45 consumed=34 tick=86 ready=false items=- cursor=-
+  trace-obj @5070 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5070 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5100 ui=prompt_button seq=108 age=83 last=75 consumed=64 tick=86 ready=false items=- cursor=-
+  trace-obj @5100 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5100 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5130 ui=prompt_button seq=108 age=113 last=105 consumed=94 tick=86 ready=false items=- cursor=-
+  trace-obj @5130 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5130 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5160 ui=prompt_button seq=108 age=143 last=135 consumed=124 tick=86 ready=false items=- cursor=-
+  trace-obj @5160 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5160 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5190 ui=prompt_button seq=108 age=173 last=165 consumed=154 tick=86 ready=false items=- cursor=-
+  trace-obj @5190 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5190 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5220 ui=prompt_button seq=108 age=203 last=195 consumed=184 tick=86 ready=false items=- cursor=-
+  trace-obj @5220 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5220 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5250 ui=prompt_button seq=108 age=233 last=225 consumed=214 tick=86 ready=false items=- cursor=-
+  trace-obj @5250 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5250 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5280 ui=prompt_button seq=108 age=263 last=255 consumed=244 tick=86 ready=false items=- cursor=-
+  trace-obj @5280 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5280 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5310 ui=prompt_button seq=108 age=293 last=285 consumed=274 tick=86 ready=false items=- cursor=-
+  trace-obj @5310 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5310 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5340 ui=prompt_button seq=108 age=323 last=315 consumed=304 tick=86 ready=false items=- cursor=-
+  trace-obj @5340 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5340 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+RX hud_show
+RX_TEXT {"cmd":"hud_show","frame":5342,"text":"Partner caught PIDGEY in Route 29"}
+  trace @5370 ui=prompt_button seq=108 age=353 last=345 consumed=334 tick=86 ready=false items=- cursor=-
+  trace-obj @5370 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5370 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5400 ui=prompt_button seq=110 age=383 last=20 consumed=9 tick=86 ready=false items=- cursor=-
+  trace-obj @5400 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5400 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5430 ui=battle_menu seq=111 age=18 last=18 consumed=1 tick=86 ready=false items=FIGHT|<PK><MN>|PACK|RUN cursor=3
+  trace-obj @5430 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5430 phase=battle ui=battle_menu prompt=nil ready=false battle_mode=1 ow=false items=FIGHT|<PK><MN>|PACK|RUN cursor=3 at=-
+  trace @5460 ui=battle_menu seq=111 age=48 last=48 consumed=1 tick=86 ready=false items=- cursor=-
+  trace-obj @5460 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5460 phase=battle ui=battle_menu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5490 ui=pack_balls seq=112 age=8 last=8 consumed=- tick=86 ready=true items=- cursor=-
+  trace-obj @5490 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5490 phase=battle ui=pack_balls prompt=nil ready=true battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5520 ui=item_submenu seq=113 age=29 last=29 consumed=1 tick=86 ready=false items=- cursor=-
+  trace-obj @5520 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5520 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5550 ui=item_submenu seq=113 age=59 last=59 consumed=22 tick=86 ready=false items=- cursor=-
+  trace-obj @5550 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5550 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5580 ui=item_submenu seq=113 age=89 last=89 consumed=52 tick=86 ready=false items=- cursor=-
+  trace-obj @5580 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5580 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5610 ui=item_submenu seq=113 age=119 last=119 consumed=82 tick=86 ready=false items=- cursor=-
+  trace-obj @5610 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5610 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5640 ui=item_submenu seq=113 age=149 last=149 consumed=112 tick=86 ready=false items=- cursor=-
+  trace-obj @5640 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5640 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5670 ui=item_submenu seq=113 age=179 last=179 consumed=142 tick=86 ready=false items=- cursor=-
+  trace-obj @5670 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5670 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5700 ui=item_submenu seq=113 age=209 last=209 consumed=172 tick=86 ready=false items=- cursor=-
+  trace-obj @5700 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5700 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5730 ui=item_submenu seq=113 age=239 last=239 consumed=202 tick=86 ready=false items=- cursor=-
+  trace-obj @5730 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5730 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5760 ui=item_submenu seq=113 age=269 last=269 consumed=232 tick=86 ready=false items=- cursor=-
+  trace-obj @5760 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5760 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5790 ui=item_submenu seq=113 age=299 last=299 consumed=262 tick=86 ready=false items=- cursor=-
+  trace-obj @5790 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5790 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5820 ui=item_submenu seq=113 age=329 last=329 consumed=292 tick=86 ready=false items=- cursor=-
+  trace-obj @5820 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5820 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5850 ui=item_submenu seq=113 age=359 last=359 consumed=322 tick=86 ready=false items=- cursor=-
+  trace-obj @5850 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5850 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5880 ui=item_submenu seq=113 age=389 last=389 consumed=352 tick=86 ready=false items=- cursor=-
+  trace-obj @5880 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5880 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5910 ui=item_submenu seq=113 age=419 last=419 consumed=382 tick=86 ready=false items=- cursor=-
+  trace-obj @5910 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5910 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5940 ui=item_submenu seq=113 age=449 last=449 consumed=412 tick=86 ready=false items=- cursor=-
+  trace-obj @5940 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5940 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @5970 ui=item_submenu seq=113 age=479 last=479 consumed=442 tick=86 ready=false items=- cursor=-
+  trace-obj @5970 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @5970 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6000 ui=item_submenu seq=113 age=509 last=509 consumed=472 tick=86 ready=false items=- cursor=-
+  trace-obj @6000 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6000 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6030 ui=item_submenu seq=113 age=539 last=539 consumed=502 tick=86 ready=false items=- cursor=-
+  trace-obj @6030 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6030 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6060 ui=item_submenu seq=113 age=569 last=569 consumed=532 tick=86 ready=false items=- cursor=-
+  trace-obj @6060 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6060 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6090 ui=item_submenu seq=113 age=599 last=599 consumed=562 tick=86 ready=false items=- cursor=-
+  trace-obj @6090 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6090 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6120 ui=item_submenu seq=113 age=629 last=629 consumed=592 tick=86 ready=false items=- cursor=-
+  trace-obj @6120 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6120 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6150 ui=item_submenu seq=113 age=659 last=659 consumed=622 tick=86 ready=false items=- cursor=-
+  trace-obj @6150 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6150 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6180 ui=item_submenu seq=113 age=689 last=689 consumed=652 tick=86 ready=false items=- cursor=-
+  trace-obj @6180 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6180 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6210 ui=item_submenu seq=113 age=719 last=719 consumed=682 tick=86 ready=false items=- cursor=-
+  trace-obj @6210 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6210 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6240 ui=prompt_button seq=122 age=12 last=4 consumed=1 tick=86 ready=false items=- cursor=-
+  trace-obj @6240 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6240 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6270 ui=prompt_button seq=122 age=42 last=34 consumed=23 tick=86 ready=false items=- cursor=-
+  trace-obj @6270 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6270 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6300 ui=prompt_button seq=122 age=72 last=64 consumed=53 tick=86 ready=false items=- cursor=-
+  trace-obj @6300 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6300 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6330 ui=prompt_button seq=122 age=102 last=94 consumed=83 tick=86 ready=false items=- cursor=-
+  trace-obj @6330 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6330 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6360 ui=prompt_button seq=122 age=132 last=124 consumed=113 tick=86 ready=false items=- cursor=-
+  trace-obj @6360 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6360 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6390 ui=prompt_button seq=122 age=162 last=154 consumed=143 tick=86 ready=false items=- cursor=-
+  trace-obj @6390 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6390 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6420 ui=prompt_button seq=122 age=192 last=184 consumed=173 tick=86 ready=false items=- cursor=-
+  trace-obj @6420 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6420 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6450 ui=prompt_button seq=122 age=222 last=214 consumed=203 tick=86 ready=false items=- cursor=-
+  trace-obj @6450 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6450 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6480 ui=prompt_button seq=122 age=252 last=244 consumed=233 tick=86 ready=false items=- cursor=-
+  trace-obj @6480 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6480 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6510 ui=prompt_button seq=122 age=282 last=274 consumed=263 tick=86 ready=false items=- cursor=-
+  trace-obj @6510 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6510 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6540 ui=prompt_button seq=122 age=312 last=304 consumed=293 tick=86 ready=false items=- cursor=-
+  trace-obj @6540 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6540 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6570 ui=battle_menu seq=123 age=9 last=9 consumed=- tick=86 ready=false items=- cursor=-
+  trace-obj @6570 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6570 phase=battle ui=battle_menu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6600 ui=battle_menu seq=123 age=39 last=39 consumed=16 tick=86 ready=false items=- cursor=-
+  trace-obj @6600 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6600 phase=battle ui=battle_menu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6630 ui=item_submenu seq=125 age=14 last=14 consumed=4 tick=86 ready=false items=USE|QUIT cursor=1
+  trace-obj @6630 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6630 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=USE|QUIT cursor=1 at=-
+  trace @6660 ui=item_submenu seq=125 age=44 last=44 consumed=7 tick=86 ready=false items=- cursor=-
+  trace-obj @6660 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6660 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6690 ui=item_submenu seq=125 age=74 last=74 consumed=37 tick=86 ready=false items=- cursor=-
+  trace-obj @6690 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6690 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6720 ui=item_submenu seq=125 age=104 last=104 consumed=67 tick=86 ready=false items=- cursor=-
+  trace-obj @6720 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6720 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6750 ui=item_submenu seq=125 age=134 last=134 consumed=97 tick=86 ready=false items=- cursor=-
+  trace-obj @6750 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6750 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6780 ui=item_submenu seq=125 age=164 last=164 consumed=127 tick=86 ready=false items=- cursor=-
+  trace-obj @6780 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6780 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6810 ui=item_submenu seq=125 age=194 last=194 consumed=157 tick=86 ready=false items=- cursor=-
+  trace-obj @6810 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6810 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6840 ui=item_submenu seq=125 age=224 last=224 consumed=187 tick=86 ready=false items=- cursor=-
+  trace-obj @6840 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6840 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6870 ui=item_submenu seq=125 age=254 last=254 consumed=217 tick=86 ready=false items=- cursor=-
+  trace-obj @6870 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6870 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6900 ui=item_submenu seq=125 age=284 last=284 consumed=247 tick=86 ready=false items=- cursor=-
+  trace-obj @6900 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6900 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6930 ui=item_submenu seq=125 age=314 last=314 consumed=277 tick=86 ready=false items=- cursor=-
+  trace-obj @6930 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6930 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6960 ui=item_submenu seq=125 age=344 last=344 consumed=307 tick=86 ready=false items=- cursor=-
+  trace-obj @6960 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6960 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @6990 ui=item_submenu seq=125 age=374 last=374 consumed=337 tick=86 ready=false items=- cursor=-
+  trace-obj @6990 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @6990 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7020 ui=item_submenu seq=125 age=404 last=404 consumed=367 tick=86 ready=false items=- cursor=-
+  trace-obj @7020 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7020 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7050 ui=item_submenu seq=125 age=434 last=434 consumed=397 tick=86 ready=false items=- cursor=-
+  trace-obj @7050 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7050 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7080 ui=item_submenu seq=125 age=464 last=464 consumed=427 tick=86 ready=false items=- cursor=-
+  trace-obj @7080 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7080 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7110 ui=item_submenu seq=125 age=494 last=494 consumed=457 tick=86 ready=false items=- cursor=-
+  trace-obj @7110 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7110 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7140 ui=item_submenu seq=125 age=524 last=524 consumed=487 tick=86 ready=false items=- cursor=-
+  trace-obj @7140 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7140 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7170 ui=item_submenu seq=125 age=554 last=554 consumed=517 tick=86 ready=false items=- cursor=-
+  trace-obj @7170 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7170 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7200 ui=item_submenu seq=125 age=584 last=584 consumed=547 tick=86 ready=false items=- cursor=-
+  trace-obj @7200 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7200 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7230 ui=item_submenu seq=125 age=614 last=614 consumed=577 tick=86 ready=false items=- cursor=-
+  trace-obj @7230 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7230 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7260 ui=item_submenu seq=125 age=644 last=644 consumed=607 tick=86 ready=false items=- cursor=-
+  trace-obj @7260 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7260 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7290 ui=item_submenu seq=125 age=674 last=674 consumed=637 tick=86 ready=false items=- cursor=-
+  trace-obj @7290 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7290 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7320 ui=item_submenu seq=125 age=704 last=704 consumed=667 tick=86 ready=false items=- cursor=-
+  trace-obj @7320 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7320 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7350 ui=item_submenu seq=125 age=734 last=734 consumed=697 tick=86 ready=false items=- cursor=-
+  trace-obj @7350 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7350 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7380 ui=item_submenu seq=125 age=764 last=764 consumed=727 tick=86 ready=false items=- cursor=-
+  trace-obj @7380 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7380 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7410 ui=item_submenu seq=125 age=794 last=794 consumed=757 tick=86 ready=false items=- cursor=-
+  trace-obj @7410 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7410 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7440 ui=item_submenu seq=125 age=824 last=824 consumed=787 tick=86 ready=false items=- cursor=-
+  trace-obj @7440 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7440 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7470 ui=item_submenu seq=125 age=854 last=854 consumed=817 tick=86 ready=false items=- cursor=-
+  trace-obj @7470 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7470 phase=battle ui=item_submenu prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7500 ui=prompt_button seq=134 age=16 last=8 consumed=1 tick=86 ready=false items=- cursor=-
+  trace-obj @7500 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7500 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7530 ui=prompt_button seq=134 age=46 last=38 consumed=27 tick=86 ready=false items=- cursor=-
+  trace-obj @7530 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7530 phase=battle ui=prompt_button prompt=nil ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7560 ui=prompt_button seq=134 age=76 last=68 consumed=57 tick=86 ready=false items=- cursor=-
+  trace-obj @7560 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7560 phase=battle ui=prompt_button prompt=catch_nickname ready=false battle_mode=1 ow=false items=- cursor=nil at=-
+  trace @7590 ui=yes_no seq=135 age=29 last=29 consumed=1 tick=86 ready=false items=YES|NO cursor=2
+  trace-obj @7590 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7590 phase=battle ui=yes_no prompt=catch_nickname ready=false battle_mode=1 ow=false items=YES|NO cursor=2 at=-
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":7602,"key":"0DAC:C4A6:A1","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":161}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":15,"in_box":false,"key":"0DAC:C4A6:A1","level":3,"maxHP":15,"nickname":"SENTRET","player":"b","seq":144,"species_id":161,"stats":{"level":3,"maxH
+CAPTURE_SENT {"frame":7602,"key":"0DAC:C4A6:A1","seq":144}
+CAUGHT 0DAC:C4A6:A1
+RX play_sound sound=25
+RX msgbox
+RX_TEXT {"cmd":"msgbox","frame":7605,"text":"PIDGEY and SENTRET linked!"}
+RX party_mon key=0DAC:C4A6:A1
+TX {"event":"safe","player":"b","seq":145}
+  trace @7620 ui=yes_no seq=135 age=59 last=59 consumed=27 tick=86 ready=false items=- cursor=-
+  trace-obj @7620 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7620 phase=battle ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @7650 ui=yes_no seq=135 age=89 last=89 consumed=57 tick=86 ready=false items=- cursor=-
+  trace-obj @7650 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7650 phase=battle ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+TX {"event":"sync_retrieve_done","key":"0DAC:C4A6:A1","player":"b","seq":148}
+  phase save @7662
+  trace @7680 ui=start_menu seq=138 age=17 last=17 consumed=7 tick=137 ready=false items=- cursor=-
+  trace-obj @7680 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7680 phase=save ui=start_menu prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @7710 ui=start_menu seq=138 age=47 last=47 consumed=37 tick=137 ready=true items=POKéMON|PACK|<PO><KE>GEAR|GOLD|SAVE|OPTION|EXIT cursor=2
+  trace-obj @7710 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7710 phase=save ui=start_menu prompt=nil ready=true battle_mode=0 ow=false items=POKéMON|PACK|<PO><KE>GEAR|GOLD|SAVE|OPTION|EXIT cursor=2 at=-
+  trace @7740 ui=start_menu seq=138 age=77 last=77 consumed=67 tick=137 ready=true items=POKéMON|PACK|<PO><KE>GEAR|GOLD|SAVE|OPTION|EXIT cursor=2
+  trace-obj @7740 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7740 phase=save ui=start_menu prompt=nil ready=true battle_mode=0 ow=false items=POKéMON|PACK|<PO><KE>GEAR|GOLD|SAVE|OPTION|EXIT cursor=2 at=-
+  trace @7770 ui=start_menu seq=138 age=107 last=107 consumed=97 tick=137 ready=true items=POKéMON|PACK|<PO><KE>GEAR|GOLD|SAVE|OPTION|EXIT cursor=3
+  trace-obj @7770 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7770 phase=save ui=start_menu prompt=nil ready=true battle_mode=0 ow=false items=POKéMON|PACK|<PO><KE>GEAR|GOLD|SAVE|OPTION|EXIT cursor=3 at=-
+  trace @7800 ui=start_menu seq=138 age=137 last=137 consumed=127 tick=137 ready=true items=POKéMON|PACK|<PO><KE>GEAR|GOLD|SAVE|OPTION|EXIT cursor=3
+  trace-obj @7800 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7800 phase=save ui=start_menu prompt=nil ready=true battle_mode=0 ow=false items=POKéMON|PACK|<PO><KE>GEAR|GOLD|SAVE|OPTION|EXIT cursor=3 at=-
+  trace @7830 ui=start_menu seq=138 age=167 last=167 consumed=157 tick=137 ready=true items=POKéMON|PACK|<PO><KE>GEAR|GOLD|SAVE|OPTION|EXIT cursor=4
+  trace-obj @7830 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7830 phase=save ui=start_menu prompt=nil ready=true battle_mode=0 ow=false items=POKéMON|PACK|<PO><KE>GEAR|GOLD|SAVE|OPTION|EXIT cursor=4 at=-
+  trace @7860 ui=start_menu seq=138 age=197 last=197 consumed=187 tick=137 ready=true items=POKéMON|PACK|<PO><KE>GEAR|GOLD|SAVE|OPTION|EXIT cursor=4
+  trace-obj @7860 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7860 phase=save ui=start_menu prompt=nil ready=true battle_mode=0 ow=false items=POKéMON|PACK|<PO><KE>GEAR|GOLD|SAVE|OPTION|EXIT cursor=4 at=-
+  trace @7890 ui=start_menu seq=138 age=227 last=227 consumed=5 tick=137 ready=false items=- cursor=-
+  trace-obj @7890 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7890 phase=save ui=start_menu prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @7920 ui=start_menu seq=138 age=257 last=257 consumed=35 tick=137 ready=false items=- cursor=-
+  trace-obj @7920 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7920 phase=save ui=start_menu prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @7950 ui=start_menu seq=138 age=287 last=287 consumed=65 tick=137 ready=false items=- cursor=-
+  trace-obj @7950 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7950 phase=save ui=start_menu prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @7980 ui=start_menu seq=138 age=317 last=317 consumed=95 tick=137 ready=false items=- cursor=-
+  trace-obj @7980 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @7980 phase=save ui=start_menu prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @8010 ui=yes_no seq=139 age=29 last=29 consumed=10 tick=137 ready=false items=- cursor=-
+  trace-obj @8010 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @8010 phase=save ui=yes_no prompt=save_confirm ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @8040 ui=yes_no seq=139 age=59 last=59 consumed=40 tick=137 ready=false items=- cursor=-
+  trace-obj @8040 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @8040 phase=save ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @8070 ui=yes_no seq=139 age=89 last=89 consumed=70 tick=137 ready=false items=- cursor=-
+  trace-obj @8070 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @8070 phase=save ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @8100 ui=yes_no seq=139 age=119 last=119 consumed=100 tick=137 ready=false items=- cursor=-
+  trace-obj @8100 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @8100 phase=save ui=yes_no prompt=save_overwrite_text ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @8130 ui=prompt_button seq=145 age=5 last=1 consumed=- tick=137 ready=false items=- cursor=-
+  trace-obj @8130 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @8130 phase=save ui=prompt_button prompt=save_overwrite_text ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @8160 ui=prompt_button seq=149 age=35 last=27 consumed=16 tick=137 ready=false items=- cursor=-
+  trace-obj @8160 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @8160 phase=save ui=prompt_button prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @8190 ui=yes_no seq=150 age=3 last=3 consumed=- tick=137 ready=false items=YES|NO cursor=1
+  trace-obj @8190 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @8190 phase=save ui=yes_no prompt=save_overwrite ready=false battle_mode=0 ow=false items=YES|NO cursor=1 at=-
+  trace @8220 ui=yes_no seq=150 age=33 last=33 consumed=14 tick=137 ready=false items=- cursor=-
+  trace-obj @8220 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @8220 phase=save ui=yes_no prompt=save_overwrite ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @8250 ui=yes_no seq=150 age=63 last=63 consumed=44 tick=137 ready=false items=- cursor=-
+  trace-obj @8250 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @8250 phase=save ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @8280 ui=yes_no seq=150 age=93 last=93 consumed=74 tick=137 ready=false items=- cursor=-
+  trace-obj @8280 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @8280 phase=save ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @8310 ui=yes_no seq=150 age=123 last=123 consumed=104 tick=137 ready=false items=- cursor=-
+  trace-obj @8310 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @8310 phase=save ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @8340 ui=yes_no seq=150 age=153 last=153 consumed=134 tick=137 ready=false items=- cursor=-
+  trace-obj @8340 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @8340 phase=save ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  phase saved @8356
+  trace @8370 ui=yes_no seq=150 age=183 last=183 consumed=164 tick=137 ready=false items=- cursor=-
+  trace-obj @8370 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @8370 phase=saved ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+MYKEY 0 EC63:C4A6:9E
+MYKEY 1 0DAC:C4A6:A1
+LINK_SAVE {"cartram_bytes":32768,"cartram_sha256":"e82a7b5393340049e00f54d2d2ba7ad9aa19ae2e516f3bf73047bbc8b3d98105","client_saves":1,"frame":8386,"gate_saves":1,"key":"0DAC:C4A6:A1","save_completed_frame":8356,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-cg-faint/patch/build/e2e_gen2_faint_gen2-cg-faint_b_link_save.SaveRAM"}
+RX force_faint key=0DAC:C4A6:A1
+RX play_sound sound=26
+RX memorialize key=0DAC:C4A6:A1
+RX game_over
+PARTY_HP_WRITE {"after_party_hex":"9ead0a2b0000c4a600008700000000000000000000ec63231e000046000000050000000c0014000c000c00090009000aa10021000000c4a600001b000000000000000000000dac21000000460000000300000000000f00070007000600070008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","before_party_hex":"9ead0a2b0000c4a600008700000000000000000000ec63231e000046000000050000000c0014000c000c00090009000aa10021000000c4a600001b000000000000000000000dac2100000046000000030000000f000f00070007000600070008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","checkpoint":{"anchor_hex":"cd236ad8a720123e04210444cf380acdcc683807cd636a3802afc9f53e04212244cff137c9","anchors":{"ow_player_input":{"mapped_hex":"cd236ad8a720123e04210444cf380acdcc683807cd636a3802afc9f53e04212244cff137c9","rom_hex":"cd236ad8a720123e04210444cf380acdcc683807cd636a3802afc9f53e04212244cff137c9"},"player_events_caller":{"mapped_hex":"affa5fd1a7c0cd1168cd9767381bcda4673816cd617a3811cd1968380ccd67683807cda7683802afc9","rom_hex":"affa5fd1a7c0cd1168cd9767381bcda4673816cd617a3811cd1968380ccd67683807cda7683802afc9"}},"hrom_bank":37,"pc":26806,"sc":124,"sp":57325,"stack_hex":"8367","state":{"hMapEntryMethod":0,"hSerialConnectionStatus":255,"wBattleMode":0,"wGameLogicPaused":0,"wInputType":0,"wJoypadDisable":0,"wLinkMode":0,"wMapEventStatus":0,"wMapStatus":2,"wSavedAtLeastOnce":1,"wScriptFlags":0,"wScriptMode":0,"wScriptRunning":0,"wScriptStackSize":0,"wStateFlags":1},"svbk":0},"frame":25713,"key":"0DAC:C4A6:A1","kind":"party_hp","log":[{"addr":55930,"artifact":"pokegold","attempted":1,"batch_index":1,"batch_size":2,"completed":1,"domain":"System Bus","evidence":"U2 PHYSICAL receipt","n":1,"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","site":"lua/gen2/entry.lua production","status":"written","title":"gold","why":"overworld"},{"addr":55932,"artifact":"pokegold","attempted":2,"batch_index":2,"batch_size":2,"completed":2,"domain":"System Bus","evidence":"U2 PHYSICAL receipt","n":2,"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","site":"lua/gen2/entry.lua production","status":"written","title":"gold","why":"overworld"}],"ok":true,"slot":1}
+BENCH_HP_STATUS 0000 00
+  phase save @25714
+TX {"event":"memorialize_failed","key":"0DAC:C4A6:A1","player":"b","reason":"unproven write kind party_collection (no PHYSICAL receipt)","seq":751}
+MEMORIAL_ACK {"event":"memorialize_failed","frame":25715,"key":"0DAC:C4A6:A1","reason":"unproven write kind party_collection (no PHYSICAL receipt)"}
+  trace @25740 ui=start_menu seq=8731 age=25 last=25 consumed=15 tick=8730 ready=false items=- cursor=-
+  trace-obj @25740 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @25740 phase=save ui=start_menu prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @25770 ui=start_menu seq=8731 age=55 last=55 consumed=2 tick=8730 ready=false items=- cursor=-
+  trace-obj @25770 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @25770 phase=save ui=start_menu prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @25800 ui=start_menu seq=8731 age=85 last=85 consumed=32 tick=8730 ready=false items=- cursor=-
+  trace-obj @25800 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @25800 phase=save ui=start_menu prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @25830 ui=start_menu seq=8731 age=115 last=115 consumed=62 tick=8730 ready=false items=- cursor=-
+  trace-obj @25830 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @25830 phase=save ui=start_menu prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @25860 ui=start_menu seq=8731 age=145 last=145 consumed=92 tick=8730 ready=false items=- cursor=-
+  trace-obj @25860 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @25860 phase=save ui=start_menu prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @25890 ui=yes_no seq=8732 age=25 last=25 consumed=6 tick=8730 ready=false items=- cursor=-
+  trace-obj @25890 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @25890 phase=save ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @25920 ui=yes_no seq=8732 age=55 last=55 consumed=36 tick=8730 ready=false items=- cursor=-
+  trace-obj @25920 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @25920 phase=save ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @25950 ui=yes_no seq=8732 age=85 last=85 consumed=66 tick=8730 ready=false items=- cursor=-
+  trace-obj @25950 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @25950 phase=save ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @25980 ui=yes_no seq=8732 age=115 last=115 consumed=96 tick=8730 ready=false items=- cursor=-
+  trace-obj @25980 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @25980 phase=save ui=yes_no prompt=save_overwrite_text ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @26010 ui=prompt_button seq=8734 age=1 last=1 consumed=- tick=8730 ready=false items=- cursor=-
+  trace-obj @26010 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @26010 phase=save ui=prompt_button prompt=save_overwrite_text ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @26040 ui=prompt_button seq=8742 age=31 last=23 consumed=12 tick=8730 ready=false items=- cursor=-
+  trace-obj @26040 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @26040 phase=save ui=prompt_button prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @26070 ui=prompt_button seq=8742 age=61 last=53 consumed=42 tick=8730 ready=false items=- cursor=-
+  trace-obj @26070 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @26070 phase=save ui=prompt_button prompt=save_overwrite ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @26100 ui=yes_no seq=8743 age=29 last=29 consumed=10 tick=8730 ready=false items=- cursor=-
+  trace-obj @26100 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @26100 phase=save ui=yes_no prompt=save_overwrite ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @26130 ui=yes_no seq=8743 age=59 last=59 consumed=40 tick=8730 ready=false items=- cursor=-
+  trace-obj @26130 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @26130 phase=save ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @26160 ui=yes_no seq=8743 age=89 last=89 consumed=70 tick=8730 ready=false items=- cursor=-
+  trace-obj @26160 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @26160 phase=save ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @26190 ui=yes_no seq=8743 age=119 last=119 consumed=100 tick=8730 ready=false items=- cursor=-
+  trace-obj @26190 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @26190 phase=save ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  trace @26220 ui=yes_no seq=8743 age=149 last=149 consumed=130 tick=8730 ready=false items=- cursor=-
+  trace-obj @26220 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @26220 phase=save ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+  phase saved @26240
+  trace @26250 ui=yes_no seq=8743 age=179 last=179 consumed=160 tick=8730 ready=false items=- cursor=-
+  trace-obj @26250 player struct 57,16 wXY 53,12 obj1 struct 54,16 -> 50,12
+  trace @26250 phase=saved ui=yes_no prompt=nil ready=false battle_mode=0 ow=false items=- cursor=nil at=-
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"6670fd811fc273bbdf3a2b61cea1943c28ee9a8cf4c4c291fcf5ab8563129a45","client_saves":2,"flushed_matches":true,"frame":26270,"gate_saves":2,"save_completed_frame":26240,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-cg-faint/patch/build/saveram_gen2_faint_gen2-cg-faint_b/Pokemon - Gold Version (USA, Europe).SaveRAM"}
+RECEIPT {"attempt":1,"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":7602,"key":"0DAC:C4A6:A1","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":161},"case":"gold_battle","client":{"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","save_completed","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"},"fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","force_faint_key":"0DAC:C4A6:A1","harness_write_scopes":[],"hello":{"frame":3338,"ot_id":50342},"input_mode":"normal_buttons","key":"0DAC:C4A6:A1","link_save":{"cartram_bytes":32768,"cartram_sha256":"e82a7b5393340049e00f54d2d2ba7ad9aa19ae2e516f3bf73047bbc8b3d98105","client_saves":1,"frame":8386,"gate_saves":1,"key":"0DAC:C4A6:A1","save_completed_frame":8356,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-cg-faint/patch/build/e2e_gen2_faint_gen2-cg-faint_b_link_save.SaveRAM"},"player":"b","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","save":{"cartram_bytes":32768,"cartram_sha256":"6670fd811fc273bbdf3a2b61cea1943c28ee9a8cf4c4c291fcf5ab8563129a45","client_saves":2,"flushed_matches":true,"frame":26270,"gate_saves":2,"save_completed_frame":26240,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-cg-faint/patch/build/saveram_gen2_faint_gen2-cg-faint_b/Pokemon - Gold Version (USA, Europe).SaveRAM"},"scenario":"gen2_faint","schema":"gen2-duo-faint-v1","title":"gold","write":{"frame":25713,"key":"0DAC:C4A6:A1","pc":26806,"slot":1}}
+RESULT: PASS (force_faint applied to 0DAC:C4A6:A1)
