@@ -36,6 +36,46 @@ def test_empty_src_dir_is_the_empty_overlay(tmp_path):
     assert bc.overlay_plan("pokegold", tmp_path, gb_dir) == []
 
 
+@pytest.mark.parametrize("repo", ["pokecrystal", "pokegold"])
+@pytest.mark.parametrize("copies", [0, 1, 2])
+def test_sfx_overlay_requires_exact_reset_hook_and_gates_caps(tmp_path, repo, copies):
+    checkout = _fake_checkout(tmp_path, repo)
+    _write_real_delay_asm(checkout)
+    anchor = "Reset::\n" + ("\tdi\n" if repo == "pokecrystal" else "") + "\tcall InitSound\n"
+    path = checkout / "home/init.asm"
+    path.write_text(anchor * copies + "\txor a\n\tld c, 32\n\tcall DelayFrames\n")
+    src = tmp_path / "src"
+    src.mkdir()
+    for name in ("slink.asm", "sfx.asm"):
+        (src / name).write_text("; fixture\n")
+    if copies != 1:
+        before = (checkout / "main.asm").read_bytes()
+        with pytest.raises(RuntimeError, match="Reset"):
+            bc.apply_overlay(checkout, repo, src, _no_gb_dir(tmp_path))
+        assert (checkout / "main.asm").read_bytes() == before
+    else:
+        bc.apply_overlay(checkout, repo, src, _no_gb_dir(tmp_path))
+        main = (checkout / "main.asm").read_text()
+        assert main.index("DEF SLINK_SFX_ENABLED EQU 1") < main.index('INCLUDE "engine/slink/slink.asm"')
+        assert main.index('/slink.asm"') < main.index('/sfx.asm"')
+        assert "call SlinkResetSoundBridge" in path.read_text()
+        assert "\tld c, 32\n\tcall DelayFrames\n" in path.read_text()
+
+
+def test_sfx_absent_keeps_reset_and_caps_unchanged(tmp_path):
+    checkout = _fake_checkout(tmp_path, "pokecrystal")
+    _write_real_delay_asm(checkout)
+    init = checkout / "home/init.asm"
+    init.write_text("Reset::\n\tdi\n\tcall InitSound\n")
+    before = init.read_bytes()
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "slink.asm").write_text("; fixture\n")
+    bc.apply_overlay(checkout, "pokecrystal", src, _no_gb_dir(tmp_path))
+    assert init.read_bytes() == before
+    assert "SLINK_SFX_ENABLED" not in (checkout / "main.asm").read_text()
+
+
 def test_nonexistent_src_dir_is_also_the_empty_overlay(tmp_path):
     missing = tmp_path / "does-not-exist"
     assert bc.overlay_plan("pokecrystal", missing, _no_gb_dir(tmp_path)) == []

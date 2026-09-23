@@ -26,6 +26,7 @@ def rgbds(name):
 PANEL_NAMES = ("GetSGBLayout", "ClearBGPalettes", "ClearTilemap", "ByteFill", "PlaceString",
                "WaitBGMap2", "WaitBGMap", "SetDefaultBGPAndOBP", "DelayFrame", "JoyTextDelay",
                "hInMenu", "hBGMapMode", "hJoyDown", "hJoyPressed", "wAttrmap", "wTilemap")
+SFX_NAMES = ("CheckSFX", "PlaySFX", "InitSound", "wMusicFade", "wAudioEnd")
 
 
 def native_symbols(title):
@@ -38,16 +39,22 @@ def native_symbols(title):
     return rows
 
 
-def assemble(tmp_path, title, extra="", *, panel=False, panel_dir=None):
+def assemble(tmp_path, title, extra="", *, panel=False, panel_dir=None, sfx=False):
     crystal = title == "crystal"
     include = tmp_path / "engine/slink"
     include.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ROOT / "patch/gb/slink_abi.inc", include / "slink_abi.inc")
     panel_source = panel_dir or ROOT / "patch/gen2/src"
-    native = native_symbols(title) if panel else {}
-    panel_defs = "".join(f"DEF {name} EQU ${native[name][1]:04x}\n" for name in PANEL_NAMES) if panel else ""
+    native = native_symbols(title) if panel or sfx else {}
+    names = (*PANEL_NAMES,) if panel else ()
+    if sfx:
+        names += SFX_NAMES
+    panel_defs = "".join(
+        (f'SECTION "Native {name}", ROM0[${native[name][1]:04x}]\n{name}::\nret\n'
+         if name in ("CheckSFX", "PlaySFX", "InitSound")
+         else f"DEF {name} EQU ${native[name][1]:04x}\n") for name in names)
     prelude = ""
-    if panel:
+    if panel or sfx:
         repo = ROOT / ".cache/gen2-build" / ("pokecrystal" if crystal else "pokegold")
         prelude = f'INCLUDE "{repo.as_posix()}/includes.asm"\n'
     source = tmp_path / "probe.asm"
@@ -57,18 +64,20 @@ def assemble(tmp_path, title, extra="", *, panel=False, panel_dir=None):
         + f"DEF hVBlankCounter EQU ${0xFF9B if crystal else 0xFF9D:04x}\n"
         + f"DEF wVBlankOccurred EQU ${0xCFB3 if crystal else 0xCEEA:04x}\n"
         + f"DEF hROMBank EQU ${0xFF9D if crystal else 0xFF9F:04x}\n"
-        + ("" if panel else 'DEF rROMB EQU $2000\nCHARMAP "S", $92\nCHARMAP "L", $8b\nCHARMAP "N", $8d\nCHARMAP "K", $8a\n')
+        + ("" if panel or sfx else 'DEF rROMB EQU $2000\nCHARMAP "S", $92\nCHARMAP "L", $8b\nCHARMAP "N", $8d\nCHARMAP "K", $8a\n')
         + 'SECTION "Bankswitch", ROM0[$10]\nBankswitch::\n'
         + "ldh [hROMBank], a\nld [rROMB], a\nret\n"
         + f'INCLUDE "patch/gen2/src/slink_mailbox_{"crystal" if crystal else "goldsilver"}.asm"\n'
         + 'INCLUDE "patch/gb/slink_abi.inc"\n'
         + (f'INCLUDE "{panel_source.as_posix()}/panel_flags.asm"\n' if panel else "")
+        + ("DEF SLINK_SFX_ENABLED EQU 1\n" if sfx else "")
         + 'INCLUDE "patch/gen2/src/slink.asm"\n'
-        + (f'INCLUDE "{panel_source.as_posix()}/panel.asm"\n' if panel else "") + extra,
+        + (f'INCLUDE "{panel_source.as_posix()}/panel.asm"\n' if panel else "")
+        + ('INCLUDE "patch/gen2/src/sfx.asm"\n' if sfx else "") + extra,
         encoding="utf-8")
     obj, rom, sym = (tmp_path / name for name in ("probe.o", "probe.gb", "probe.sym"))
     result = subprocess.run([rgbds("rgbasm"), "-I", str(tmp_path) + "/",
-                             *(["-I", str(repo) + "/"] if panel else []),
+                             *(["-I", str(repo) + "/"] if panel or sfx else []),
                              "-I", str(ROOT) + "/", "-o", str(obj),
                              str(source)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
@@ -193,8 +202,8 @@ class Machine:
                 hi, lo = {0xF1: "af", 0xC1: "bc", 0xD1: "de", 0xE1: "hl"}[op]
                 value = self.pop()
                 self.r[hi], self.r[lo] = value >> 8, value & 255
-            elif op in (0x3E, 0x06):
-                self.r["a" if op == 0x3E else "b"] = self.fetch()
+            elif op in (0x3E, 0x06, 0x16):
+                self.r[{0x3E: "a", 0x06: "b", 0x16: "d"}[op]] = self.fetch()
             elif op in (0x21, 0x01, 0x11):
                 value = self.word()
                 hi, lo = {0x21: "hl", 0x01: "bc", 0x11: "de"}[op]
@@ -209,17 +218,25 @@ class Machine:
                 self.write(0xFF00 + self.fetch() if op == 0xE0 else self.word(), self.r["a"])
             elif op in (0xF0, 0xFA):
                 self.r["a"] = self.read(0xFF00 + self.fetch() if op == 0xF0 else self.word())
-            elif op in (0x47, 0x4F, 0x78, 0x79):
+            elif op in (0x47, 0x4F, 0x78, 0x79, 0x5F):
                 dst, src = {0x47: ("b", "a"), 0x4F: ("c", "a"),
-                            0x78: ("a", "b"), 0x79: ("a", "c")}[op]
+                            0x78: ("a", "b"), 0x79: ("a", "c"), 0x5F: ("e", "a")}[op]
                 self.r[dst] = self.r[src]
+            elif op == 0x5E:
+                self.r["e"] = self.read(self.r["h"] << 8 | self.r["l"])
+            elif op == 0x19:
+                value = (self.r["h"] << 8 | self.r["l"]) + (self.r["d"] << 8 | self.r["e"])
+                self.r["h"], self.r["l"] = (value >> 8) & 255, value & 255
+                self.r["f"] = (self.r["f"] & 0x80) | (0x10 if value > 65535 else 0)
             elif op == 0xAF:
                 self.r["a"], self.r["f"] = 0, 0x80
+            elif op == 0xA7:
+                self.r["f"] = 0x80 if self.r["a"] == 0 else 0
             elif op == 0xE6:
                 self.r["a"] &= self.fetch()
                 self.r["f"] = 0x80 if self.r["a"] == 0 else 0
-            elif op in (0x3C, 0x05):
-                reg, delta = ("a", 1) if op == 0x3C else ("b", -1)
+            elif op in (0x3C, 0x05, 0x3D):
+                reg, delta = {0x3C: ("a", 1), 0x05: ("b", -1), 0x3D: ("a", -1)}[op]
                 self.r[reg] = (self.r[reg] + delta) & 255
                 self.r["f"] = (self.r["f"] & 0x10) | (0x80 if self.r[reg] == 0 else 0)
             elif op == 0xB8:
@@ -234,10 +251,11 @@ class Machine:
                 self.r["f"] = (0x80 if value & 255 == 0 else 0) | (0x10 if value < 0 or value > 255 else 0)
                 if op != 0xFE:
                     self.r["a"] = value & 255
-            elif op in (0x18, 0x28, 0x20, 0x38):
+            elif op in (0x18, 0x28, 0x20, 0x38, 0x30):
                 offset = self.fetch()
                 take = {0x18: True, 0x28: bool(self.r["f"] & 0x80),
-                        0x20: not self.r["f"] & 0x80, 0x38: bool(self.r["f"] & 0x10)}[op]
+                        0x20: not self.r["f"] & 0x80, 0x38: bool(self.r["f"] & 0x10),
+                        0x30: not self.r["f"] & 0x10}[op]
                 if take:
                     self.pc += offset if offset < 128 else offset - 256
             elif op in (0xCD, 0xD7):
@@ -246,6 +264,12 @@ class Machine:
                     continue
                 self.push(self.pc)
                 self.pc = address
+            elif op == 0xC3:
+                address = self.word()
+                if self.helper(address):
+                    self.pc = self.pop()  # native tail call returns to this routine's caller
+                else:
+                    self.pc = address
             elif op == 0xC9:
                 self.pc = self.pop()
             elif op == 0xC8:
@@ -525,3 +549,190 @@ def test_compiled_panel_mutations_are_refused(compiled_panel, mutation):
     machine.rom = bytes(rom)
     with pytest.raises(AssertionError):
         check_panel(machine, [0])
+
+
+class SfxMachine(Machine):
+    """Native audio APIs intercepted: dispatch and state assertions, never audible proof."""
+
+    def __init__(self, compiled, *, busy=False, fade=0):
+        super().__init__(compiled)
+        self.native = native_symbols(self.title)
+        self.busy = busy
+        self.ram[self.native["wMusicFade"][1]] = fade
+        self.played = []
+        self.resets = 0
+
+    def helper(self, address):
+        if address == self.native["CheckSFX"][1]:
+            self.r["a"] = 0xD7
+            self.r["f"] = 0x10 if self.busy else 0
+        elif address == self.native["PlaySFX"][1]:
+            self.played.append(self.r["d"] << 8 | self.r["e"])
+        elif address == self.native["InitSound"][1]:
+            self.resets += 1
+        else:
+            return False
+        return True
+
+    def request(self, code):
+        self.ram[self.mailbox + 7] = code
+
+    def state(self):
+        return tuple(self.ram[self.mailbox + offset] for offset in (7, 12, 13))
+
+    def visit(self):
+        before = dict(self.r)
+        self.written = []
+        self.bridge()
+        assert self.r == {**before, "a": 1}, "SFX service changed caller registers/flags"
+        assert self.bank == 7 and self.ram[self.bank_address] == 7
+        assert self.sp == 0xDFFE
+        occurred = 0xCFB3 if self.title == "crystal" else 0xCEEA
+        allowed = set(range(self.mailbox, self.mailbox + 9)) | {
+            self.mailbox + 12, self.mailbox + 13, self.mailbox + 30, self.mailbox + 31,
+            self.bank_address, occurred, 0x2000}
+        assert set(self.written) <= allowed | set(range(0xDFD0, 0xDFFE))
+
+
+@pytest.fixture(params=["crystal", "gold", "silver"])
+def compiled_sfx(request, tmp_path):
+    return request.param, *assemble(tmp_path, request.param, sfx=True)
+
+
+@pytest.mark.parametrize("code,sound", [(1, 0x01), (2, 0x19), (3, 0x24), (4, 0x08)])
+def test_sfx_compiled_semantic_dispatch_once(compiled_sfx, code, sound):
+    machine = SfxMachine(compiled_sfx)
+    machine.request(code)
+    machine.visit()
+    assert machine.played == [sound]
+    assert machine.state() == (0, 0, 0)
+    assert machine.ram[machine.mailbox + 8] == 5
+    machine.visit()
+    assert machine.played == [sound]
+
+
+@pytest.mark.parametrize("busy,fade", [(False, 1), (False, 0x80), (True, 0)])
+def test_sfx_compiled_holds_then_consumes_when_free(compiled_sfx, busy, fade):
+    machine = SfxMachine(compiled_sfx, busy=busy, fade=fade)
+    machine.request(2)
+    machine.visit()
+    assert machine.state() == (2, 1, 1)
+    assert machine.played == []
+    machine.busy = False
+    machine.ram[machine.native["wMusicFade"][1]] = 0
+    machine.visit()
+    assert machine.played == [0x19]
+    assert machine.state() == (0, 0, 0)
+
+
+@pytest.mark.parametrize("busy,fade", [(True, 0), (False, 1)])
+def test_sfx_compiled_frozen_clock_expires_on_visit_240(compiled_sfx, busy, fade):
+    machine = SfxMachine(compiled_sfx, busy=busy, fade=fade)
+    machine.request(3)
+    for count in range(1, 240):
+        machine.visit()
+        assert machine.state() == (3, 1, count)
+        assert machine.played == []
+    machine.visit()
+    assert machine.played == [0x24]
+    assert machine.state() == (0, 0, 0)
+    machine.visit()
+    assert machine.played == [0x24]
+
+
+@pytest.mark.parametrize("age", [239, 240, 255])
+def test_sfx_compiled_hold_count_never_wraps(compiled_sfx, age):
+    machine = SfxMachine(compiled_sfx, busy=True)
+    machine.request(1)
+    machine.ram[machine.mailbox + 12:machine.mailbox + 14] = bytes([1, age])
+    machine.visit()
+    assert machine.state() == (0, 0, 0)
+    assert machine.played == [0x01]
+
+
+@pytest.mark.parametrize("code", [0, 5, 0xFF])
+def test_sfx_compiled_invalid_or_cancelled_request_clears_hold(compiled_sfx, code):
+    machine = SfxMachine(compiled_sfx)
+    machine.ram[machine.mailbox + 12:machine.mailbox + 14] = bytes([1, 31])
+    machine.request(code)
+    machine.visit()
+    assert machine.state() == (0, 0, 0)
+    assert machine.played == []
+
+
+def test_sfx_compiled_reset_drops_reposts_until_native_clear(compiled_sfx):
+    machine = SfxMachine(compiled_sfx)
+    machine.request(1)
+    machine.ram[machine.mailbox + 12:machine.mailbox + 14] = bytes([1, 37])
+    registers = dict(machine.r)
+    machine.run("SlinkResetSoundBridge")
+    assert machine.resets == 1
+    assert machine.r == registers and machine.bank == 7
+    assert machine.state() == (0, 0xFF, 0)
+    for visit in range(32):
+        machine.request(visit % 5)  # includes empty visits: those must retain the latch too
+        machine.visit()
+        assert machine.state() == (0, 0xFF, 0)
+        assert machine.played == []
+    machine.ram[machine.mailbox:machine.mailbox + 32] = bytes(32)
+    machine.request(4)
+    machine.visit()
+    assert machine.played == [0x08]
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_panel_and_sfx_compiled_capabilities_combine(tmp_path, title):
+    machine = SfxMachine((title, *assemble(tmp_path, title, panel=True, sfx=True)))
+    machine.visit()
+    assert machine.ram[machine.mailbox + 8] == 7
+
+
+@pytest.mark.parametrize("mutation", ["mapping", "fade", "busy", "expiry", "reset_latch", "de"])
+def test_sfx_compiled_mutants_cannot_pass(compiled_sfx, mutation):
+    machine = SfxMachine(compiled_sfx, busy=mutation == "busy", fade=1 if mutation == "fade" else 0)
+    rom = bytearray(machine.rom)
+    bank, address = machine.symbols["SlinkSfxService"]
+    start = bank * 0x4000 + address - 0x4000
+    end = bank * 0x4000 + machine.symbols["SlinkSfxServiceEnd"][1] - 0x4000
+    if mutation == "mapping":
+        table = bank * 0x4000 + machine.symbols["SlinkSfxService.sounds"][1] - 0x4000
+        rom[table] = 0x19
+    elif mutation == "fade":
+        fade_address = machine.native["wMusicFade"][1]
+        pos = rom.index(bytes([0xFA, fade_address & 255, fade_address >> 8, 0xA7, 0x20]), start, end)
+        rom[pos + 4:pos + 6] = bytes(2)
+    elif mutation == "busy":
+        check = machine.native["CheckSFX"][1]
+        pos = rom.index(bytes([0xCD, check & 255, check >> 8]), start, end)
+        rom[pos:pos + 3] = bytes(3)
+    elif mutation == "expiry":
+        pos = rom.index(bytes([0xFE, 239]), start, end)
+        rom[pos + 1] = 255
+    elif mutation == "reset_latch":
+        pos = rom.index(bytes([0xFE, 0xFF]), start, end)
+        rom[pos + 1] = 0xFE
+    else:
+        pos = rom.index(bytes([0xD5]), start, end)
+        rom[pos] = 0
+        pos = rom.index(bytes([0xD1]), start, end)
+        rom[pos] = 0
+    machine.rom = bytes(rom)
+    with pytest.raises(AssertionError):
+        if mutation == "reset_latch":
+            machine.run("SlinkResetSoundBridge")
+            machine.request(1)
+            machine.visit()
+            assert machine.played == [] and machine.state() == (0, 0xFF, 0)
+        elif mutation == "expiry":
+            machine.busy = True
+            machine.request(1)
+            for _ in range(240):
+                machine.visit()
+            assert machine.played == [0x01] and machine.state() == (0, 0, 0)
+        else:
+            machine.request(1)
+            machine.visit()
+            if mutation in ("fade", "busy"):
+                assert machine.played == [] and machine.state() == (1, 1, 1)
+            else:
+                assert machine.played == [0x01] and machine.state() == (0, 0, 0)

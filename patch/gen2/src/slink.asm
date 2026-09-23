@@ -47,9 +47,9 @@ SlinkDelayFrameBridge::
 	ret
 SlinkDelayFrameBridgeEnd::
 ASSERT SlinkDelayFrameBridgeEnd <= $0100
-; Eight local stack bytes (AF, BC, HL, bank); the service does not touch DE.
-; Nested calls/IRQs add more: worst-case live minimum SP during battle/link
-; remains unmeasured and must be qualified before expanding this service.
+; Eight local stack bytes (AF, BC, HL, bank); the service preserves DE.
+; Nested calls/IRQs (including native audio) add more. Worst-case live minimum
+; SP during battle/link remains unmeasured; MODEL is not stack qualification.
 
 SECTION "SLink Service", ROMX[$4000], BANK[SLINK_SERVICE_BANK]
 SlinkService::
@@ -65,10 +65,18 @@ SlinkService::
 	ld [hli], a
 	ld a, SLINK_ABI_VERSION
 	ld [hl], a
+IF DEF(SLINK_SFX_ENABLED)
+IF DEF(SLINK_PANEL_ENABLED)
+	ld a, SLINK_CAP_PANEL | SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY
+ELSE
+	ld a, SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY
+ENDC
+ELSE
 IF DEF(SLINK_PANEL_ENABLED)
 	ld a, SLINK_CAP_PANEL
 ELSE
 	xor a
+ENDC
 ENDC
 	ld [wSlinkMailbox + SLINK_OFS_CAPS], a
 
@@ -101,10 +109,15 @@ ENDC
 .remember
 	ld a, b
 	ld [SLINK_LAST_SAMPLE], a
+IF DEF(SLINK_SFX_ENABLED)
+	jp SlinkSfxService
+ELSE
 	ret
+ENDC
 SlinkServiceEnd::
 
 ; Native Init clears the whole WRAM0 mailbox on boot/reset (Crystal init.asm:66-75,
 ; G/S :59-68). Reset first runs 32 DelayFrames before that clear. NewGame's narrower
 ; ResetWRAM excludes the mailbox. Future request/lease services need their own
-; new-run lifecycle; this service never consumes sound or trade requests.
+; new-run lifecycle. The optional sound service has its own reset-entry latch;
+; trade requests are never consumed here.

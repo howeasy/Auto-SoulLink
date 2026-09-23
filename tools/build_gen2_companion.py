@@ -73,6 +73,7 @@ REPO_MAILBOX_STUB = {
 # Card P4.1c: Codex's beacon/ABI/DelayFrame bridge, once it exists.
 OPTIONAL_SHARED_FILES = ["slink.asm"]
 PANEL_FILES = ("panel_flags.asm", "panel.asm", "panel_start.asm")
+SFX_FILE = "sfx.asm"
 
 # The mailbox/panel ABI is shared with Gen 1 (patch/gb/slink_abi.inc), not per-generation source,
 # so it is copied -- never duplicated under patch/gen2 -- from its one committed location. It is
@@ -107,6 +108,21 @@ DELAY_REPLACEMENT = (
     '\tnop\n\tnop\n'
 )
 DELAY_HOOK_TRIGGER = "slink.asm"  # presence of this file in the plan gates the home/delay.asm edit
+RESET_ANCHORS = {
+    "pokecrystal": "Reset::\n\tdi\n\tcall InitSound\n",
+    "pokegold": "Reset::\n\tcall InitSound\n",
+}
+
+
+def _reset_sound_text(checkout: pathlib.Path, repo: str) -> tuple[pathlib.Path, str]:
+    path = checkout / "home/init.asm"
+    text = path.read_text(encoding="utf-8")
+    anchor = RESET_ANCHORS[repo]
+    count = text.count(anchor)
+    if count != 1:
+        raise RuntimeError(f"Reset: expected InitSound anchor exactly once, found {count}")
+    replacement = anchor.replace("call InitSound", "call SlinkResetSoundBridge")
+    return path, text.replace(anchor, replacement, 1)
 
 START_MENU_EDITS = (
     ("\tconst STARTMENUITEM_QUIT     ; 8\n",
@@ -177,6 +193,9 @@ def overlay_plan(
     panel = [name for name in PANEL_FILES if (src_dir / name).is_file()]
     if panel and (len(panel) != len(PANEL_FILES) or not (src_dir / "slink.asm").is_file()):
         raise RuntimeError("panel overlay requires panel_flags.asm, panel.asm, panel_start.asm and slink.asm")
+    sfx = (src_dir / SFX_FILE).is_file()
+    if sfx and not (src_dir / "slink.asm").is_file():
+        raise RuntimeError("SFX overlay requires slink.asm")
     stub = src_dir / REPO_MAILBOX_STUB[repo]
     if stub.is_file():
         plan.append(("slink_mailbox.asm", stub, True))
@@ -192,6 +211,8 @@ def overlay_plan(
     if panel:
         plan += [("panel.asm", src_dir / "panel.asm", True),
                  ("panel_start.asm", src_dir / "panel_start.asm", False)]
+    if sfx:
+        plan.append((SFX_FILE, src_dir / SFX_FILE, True))
     return plan
 
 
@@ -205,6 +226,7 @@ def apply_overlay(
     include_names = [name for name, _path, include in plan if include]
     if "panel.asm" in include_names:
         _start_menu_text(checkout)  # all three anchors validated before any checkout mutation
+    reset_edit = _reset_sound_text(checkout, repo) if SFX_FILE in include_names else None
     main_path = checkout / "main.asm"
     if include_names:
         anchor = MAIN_ANCHORS[repo]
@@ -223,6 +245,7 @@ def apply_overlay(
     if include_names:
         block = "\n".join(
             ['; SLink companion overlay (tools/build_gen2_companion.py)']
+            + (["DEF SLINK_SFX_ENABLED EQU 1"] if SFX_FILE in include_names else [])
             + [f'INCLUDE "{OVERLAY_DST}/{name}"' for name in include_names]
         )
         new_anchor = anchor.replace('\n\n\nSECTION', f'\n\n{block}\n\n\nSECTION', 1)
@@ -231,6 +254,9 @@ def apply_overlay(
         apply_delay_hook(checkout)
     if "panel.asm" in applied:
         apply_start_menu_hook(checkout)
+    if reset_edit is not None:
+        path, text = reset_edit
+        path.write_text(text, encoding="utf-8", newline="\n")
     return applied
 
 
