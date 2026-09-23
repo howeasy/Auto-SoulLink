@@ -1,0 +1,35 @@
+DUO_GEN2 {"attempt":1,"case":"crystal_battle_ot2","fixture_sha256":"e2298243d3b10965b354184f1778d946a0909402c57b4ccaff574f819cfcc6dd","player":"b","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","scenario":"gen2_reconnect","title":"crystal"}
+CLIENT {"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","save_completed","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  phase continue @3180
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":44068,"panel":false,"
+HELLO {"frame":3303,"ot_id":44068}
+  phase loaded @3303
+RX resolved_areas
+RX config
+BOOTED {"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 21BC:AC24:9E
+  phase walk @3491
+  phase battle @3813
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":5454,"key":"4E8C:AC24:A1","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":161}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":13,"in_box":false,"key":"4E8C:AC24:A1","level":2,"maxHP":13,"nickname":"SENTRET","player":"b","seq":46,"species_id":161,"stats":{"level":2,"maxHP
+CAPTURE_SENT {"frame":5454,"key":"4E8C:AC24:A1","seq":46}
+CAUGHT 4E8C:AC24:A1
+RX box_mon key=4E8C:AC24:A1
+TX {"event":"safe","player":"b","seq":48}
+TX {"event":"stats_cache","key":"4E8C:AC24:A1","player":"b","seq":51,"stats":{"level":2,"maxHP":13}}
+  phase save @5521
+RX play_sound sound=25
+RX msgbox
+RX_TEXT {"cmd":"msgbox","frame":5522,"text":"PIDGEY and SENTRET linked!"}
+RX party_mon key=4E8C:AC24:A1
+TX {"event":"sync_retrieve_done","key":"4E8C:AC24:A1","player":"b","seq":52}
+  phase saved @6186
+MYKEY 0 21BC:AC24:9E
+MYKEY 1 4E8C:AC24:A1
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"03ae4554385251f7276ff41f3668a4e393523c113b88f67ba4bde5a3a4b4a6dc","client_saves":1,"flushed_matches":true,"frame":6216,"gate_saves":1,"save_completed_frame":6186,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/saveram_gen2_reconnect_gen2-cc-reconnect_b/Pokemon - Crystal Version (USA, Europe).SaveRAM"}
+RECONNECT_READY {"frame":6216,"key":"4E8C:AC24:A1","phase":"initial","player":"b"}
+B_STAYED {"box_mon":0,"force_faint":0,"frame":18972,"hellos":1}
+RECEIPT {"attempt":1,"booted":{"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":5454,"key":"4E8C:AC24:A1","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":161},"case":"crystal_battle_ot2","client":{"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","save_completed","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"},"fixture_sha256":"e2298243d3b10965b354184f1778d946a0909402c57b4ccaff574f819cfcc6dd","harness_write_scopes":[],"hello":{"frame":3303,"ot_id":44068},"input_mode":"normal_buttons","key":"4E8C:AC24:A1","phase":"initial","player":"b","ready":{"frame":6216,"key":"4E8C:AC24:A1","phase":"initial","player":"b"},"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","save":{"cartram_bytes":32768,"cartram_sha256":"03ae4554385251f7276ff41f3668a4e393523c113b88f67ba4bde5a3a4b4a6dc","client_saves":1,"flushed_matches":true,"frame":6216,"gate_saves":1,"save_completed_frame":6186,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/saveram_gen2_reconnect_gen2-cc-reconnect_b/Pokemon - Crystal Version (USA, Europe).SaveRAM"},"scenario":"gen2_reconnect","schema":"gen2-duo-reconnect-v1","title":"crystal"}
+RESULT: PASS (B remained online through both A relaunches)
