@@ -1250,6 +1250,39 @@ def test_codex_c56c_1_a_queued_but_unposted_trade_does_not_freeze_a_paused_gift(
     assert [c["key"] for c in w.events("capture")] == [KC]
 
 
+def test_codex_c57_a_foreign_sink_write_in_the_same_call_does_not_latch_the_trade():
+    """REV7's counterexample at the client seam. In one pre_pump call a panel/NPC callback moves
+    the sink's byte count while our trade job is held at its arm and its guard has already run --
+    exactly the two inputs the old byte-count latch read. The latch must stay unset, because it
+    reads the posting job's own dispatch receipt (native.lua sets `job.posted` when it publishes
+    that job's opcode, and nothing else does)."""
+    w, blob = trade_world()
+    w.command(cmd="config", overworld_presence=False, pc_trade_npc=True)
+    w.step(3)
+    apply(w, blob)
+    w.step()                                                    # the stage is queued, nothing posted
+    assert w.client.state.trade_apply.posted is not True
+    writes = w.parts.writes
+    before = writes.attempted
+    sends = w.client.send
+    def with_a_foreign_byte(*args):
+        writes.attempted = writes.attempted + 1                 # a foreign writer's byte, this call
+        return sends(*args)
+    w.client.send = with_a_foreign_byte
+    counter = NATIVE["PI_COUNT"]
+    w.poke_int(counter, w._read(counter, 1) + 1, 1)             # the NPC branch sends in this call
+    w.client.writes_enabled, w.client.gate_revoked = False, True   # held: the arm refuses
+    w.step()
+    assert writes.attempted > before, "the counter moved with no trade byte in it"
+    posts = w.client.state.trade_apply.posts
+    assert posts is not None and posts[1]["posted"] is None     # our job was attempted, not published
+    assert w.client.state.trade_apply.posted is not True
+    w.client.writes_enabled, w.client.gate_revoked = True, False
+    w.step()
+    assert mb_op(w) == NATIVE["OP_SET_ENEMY_PARTY"]             # the held job then posts...
+    assert w.client.state.trade_apply.posted is True            # ...and the receipt latches it
+
+
 def test_codex_c56c_1_control_the_same_paused_gift_without_a_trade_is_captured():
     w, _blob = trade_world()
     _paused_gift(w)

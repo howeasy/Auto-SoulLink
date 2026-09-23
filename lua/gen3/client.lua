@@ -467,9 +467,10 @@ function Client.new(p)
         -- a PC trade in flight (and its settle window) swaps a party slot: nothing about it is a
         -- capture, a deposit or a key_change (docs/protocol.md §6.2 item 5, §6.5); the TradeMons
         -- site fires during the native scene and is ignored here
-        -- from the FIRST ACTUAL POST (bytes of an owned op reached the sink), not from the queued
-        -- phase: a post that is refused or held writes nothing, and until something is written
-        -- the party can only change the ordinary way, so ordinary reduction keeps going
+        -- from the FIRST ACTUAL POST (an owned op's own dispatch receipt published its opcode),
+        -- not from the queued phase: a post that is refused or held writes nothing, and until
+        -- something is written the party can only change the ordinary way, so ordinary reduction
+        -- keeps going
         local trading = (st.trade_apply ~= nil and st.trade_apply.posted == true)
                         or io.framecount() < st.trade_settle_until
         if trading then st.trade = nil end
@@ -948,20 +949,23 @@ function Client.new(p)
         end
     end
     -- one native transfer; done(why, result) fires exactly once (native.lua calls it on refusal
-    -- at enqueue too; an argument refusal returns without calling it)
-    local function transfer(step, args, on_done, valid)
+    -- at enqueue too; an argument refusal returns without calling it). The returned job handle is
+    -- this post's own dispatch receipt: `handle.posted` is set when native.lua publishes that
+    -- job's opcode -- and never for a refused, guarded-off or still-queued job.
+    local function transfer(t, step, args, on_done, valid)
         local fired = false
-        local ok, why = native:transfer(step, args, function(w, r) fired = true; on_done(w, r) end, valid)
-        if not ok and not fired then on_done(why or "transfer refused") end
+        local handle, why = native:transfer(step, args, function(w, r) fired = true; on_done(w, r) end, valid)
+        if not handle and not fired then on_done(why or "transfer refused") end
+        if handle then
+            t.posts = t.posts or {}
+            t.posts[#t.posts + 1] = handle
+        end
+        return handle
     end
     -- the dispatch-time guard for a slot op: the offered key must be exactly at t.slot NOW
-    -- (native.lua's service() dispatches at most ONE queued job per call and runs its guard right
-    -- before, so a guard that ran plus sink bytes during that call = our job posted: pre_pump)
-    local function dispatching(t) t.dispatching = true end
     local function slot_guard(t)
         return function()
             if st.trade_apply ~= t then return false, "guard:stale" end
-            dispatching(t)
             local party = party_read()
             if not party then return false, "guard:unreadable" end
             local slot = session.identity:find_party_slot(t.old_key, party)
@@ -973,7 +977,7 @@ function Client.new(p)
     local post_fallback
     local function post_scene(t)
         t.phase, t.scene_frame = "scene", t.scene_frame or io.framecount()
-        transfer("scene", { slot = t.slot }, function(swhy)
+        transfer(t, "scene", { slot = t.slot }, function(swhy)
             if st.trade_apply ~= t or swhy == "guard:stale" then return end
             if not swhy then return trade_readback(t, "native scene complete") end
             if swhy == "guard:moved" then t.slot = t.moved_to; return post_scene(t) end
@@ -994,7 +998,7 @@ function Client.new(p)
     end
     post_fallback = function(t, why)
         t.phase = "fallback"
-        transfer("party", { slot = t.slot, blob_hex = t.blob_hex }, function(fwhy)
+        transfer(t, "party", { slot = t.slot, blob_hex = t.blob_hex }, function(fwhy)
             if st.trade_apply ~= t or fwhy == "guard:stale" then return end
             if not fwhy then return trade_readback(t, "silent swap after " .. why) end
             if fwhy == "guard:moved" then t.slot = t.moved_to; return post_fallback(t, why) end
@@ -1010,14 +1014,13 @@ function Client.new(p)
     local function post_stage(t)
         t.phase = "stage"
         st.known[t.partner_key] = true                             -- never a capture if it lands
-        transfer("enemy", { blobs_hex = { t.blob_hex } }, function(why)
+        transfer(t, "enemy", { blobs_hex = { t.blob_hex } }, function(why)
             if st.trade_apply ~= t or why == "guard:stale" then return end
             if why == "native absent" then return trade_abort(t, "companion absent") end
             if why then return post_fallback(t, "stage " .. why) end
             post_scene(t)
         end, function()
             if st.trade_apply ~= t then return false, "guard:stale" end
-            dispatching(t)
             return true
         end)
     end
@@ -1184,16 +1187,17 @@ function Client.new(p)
     end
     drv.pre_pump = function()
         if not (native and native.service) then return end
-        local t = st.trade_apply
-        if t then t.dispatching = false end
-        local before = writes.attempted or 0
         native:service()
-        -- the trade's first actual post: our guard ran for this call's one dispatch AND bytes
-        -- reached the sink (an arm refused before any byte leaves posted false)
-        if t and st.trade_apply == t and t.dispatching and (writes.attempted or 0) > before then
-            t.posted = true
+        -- the trade's first actual post is the posting job's OWN dispatch receipt (native.lua sets
+        -- `posted` when it publishes that job's opcode). Never infer it from sink bytes: a
+        -- completion callback (the rival swap's refresh_enemy) or a panel/NPC callback can write
+        -- through the same sink in this very call while our job is refused at its guard.
+        local t = st.trade_apply
+        if t and t.posts then
+            for _, handle in ipairs(t.posts) do
+                if handle.posted == true then t.posted = true break end
+            end
         end
-        if t then t.dispatching = false end
     end
 
     local Id = core.Identity.new({ key = key })

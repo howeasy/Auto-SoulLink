@@ -8,6 +8,15 @@
 -- OP_SET_ENEMY_PARTY only copies gEnemyParty (handlers.c:1867-1888).
 -- panel_closed returns (closed, result) for the start-menu-driven panel. Its
 -- caller binds field/script/result facts; no legacy literal address is imported.
+--
+-- DISPATCH RECEIPT (C5-7): the job table is the handle. enqueue/transfer return it, and
+-- service() sets `job.posted = true` on it exactly when that job's opcode is published --
+-- the last byte written, after every stage has landed. A refused, guarded-off, failed or
+-- merely queued job never carries the flag, and a stage-only job (config) has no opcode to
+-- publish, so it carries no receipt either. Callers must read "did my op reach the mailbox"
+-- from this flag, never from a sink byte count: a completion callback (e.g. the rival swap's
+-- refresh_enemy) or a panel/NPC callback can write through the same sink in the same
+-- service() call while the caller's own job is refused at its guard.
 local N = {}
 local O = {abi=4, opcode=6, seq=8, status=10, ack=12, reason=14, args=16, result=48}
 local BUSY, OK, FAIL = 1, 2, 3
@@ -82,7 +91,8 @@ function N.new(profile, deps)
         if poisoned then finish(job, poisoned); return nil, poisoned end
         if #queue >= 64 then finish(job, "native queue full"); return nil, "native queue full" end
         queue[#queue + 1] = job
-        return true
+        -- the job IS the handle: `job.posted` is this job's dispatch receipt (see the header)
+        return job
     end
     local function encode(text, limit)
         local out = {}
@@ -143,6 +153,8 @@ function N.new(profile, deps)
                 writes:write_u16(p.BASE + O.ack, (seq + 65535) % 65536)
                 writes:write_u16(p.BASE + O.seq, seq)
                 writes:write_u16(p.BASE + O.opcode, job.op) -- publish last
+                -- ... and the receipt is the publish's own witness: nothing after it can fail
+                job.posted = true
             end
         end)
         posting = false

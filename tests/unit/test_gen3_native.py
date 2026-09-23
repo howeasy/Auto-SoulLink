@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class World:
-    def __init__(self, present=True, initial_seq=0, kind="companion"):
+    def __init__(self, present=True, initial_seq=0, kind="companion", refresh_enemy=None):
         self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
         self.profile = json.loads((ROOT / "data/games/gen3_rr/profile.json").read_text())
         self.n = self.profile["native"]
@@ -49,7 +49,8 @@ class World:
             io=io, writes=self.writes, reads=self.reads, initial_seq=initial_seq,
             artifact_kind=kind,
             timeout_frames=5, send=lambda event, fields: self.events.append((event, fields)),
-            in_battle=lambda: self.battle, refresh_enemy=lambda *_: True,
+            in_battle=lambda: self.battle,
+            refresh_enemy=refresh_enemy or (lambda *_: True),
             panel_closed=lambda: (True, self.panel_result)))
 
     def put(self, address, value, size=1):
@@ -137,6 +138,99 @@ def test_refused_ui_has_the_exact_cancel_result(operation, cancel):
     assert fields.token == "t"
     assert (fields.slot if event == "mon_chosen" else fields.choice) == cancel
     assert w.native.idle(w.native) is True
+
+
+# ── C5-7: per-job dispatch receipts ───────────────────────────────────────────────────────
+
+def test_a_published_job_carries_its_own_dispatch_receipt():
+    """The job table IS the handle: queued -> no flag, published -> the flag. Nothing infers it."""
+    w = World()
+    handle = w.native.transfer(w.native, "scene", w.lua.table(slot=0), lambda *_: None)
+    assert handle["posted"] is None                              # queued, not posted
+    w.service()
+    assert handle["posted"] is True
+    assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_TRADE_SCENE"]   # the publish the receipt names
+
+
+def test_a_job_queued_behind_another_carries_no_receipt_yet():
+    w = World()
+    first = w.native.play_sound(w.native, 25)
+    second = w.native.transfer(w.native, "scene", w.lua.table(slot=0), lambda *_: None)
+    w.service()
+    assert first["posted"] is True and second["posted"] is None
+    w.ack()
+    w.service()
+    assert second["posted"] is True
+
+
+def test_a_held_arm_sets_no_receipt_and_leaves_the_job_queued():
+    """A refused arm asserts inside dispatch's pcall: the job stays queued (it is not consumed)
+    and its receipt stays unset, so no caller can read it as posted."""
+    w = World()
+    w.safe = False
+    handle = w.native.play_sound(w.native, 25)
+    w.service()
+    assert handle["posted"] is None and w.output == []
+    w.safe = True
+    w.service()
+    assert handle["posted"] is True                              # held, then posted once eligible
+
+
+def test_a_job_dropped_by_its_guard_carries_no_receipt():
+    w = World()
+    seen = []
+    handle = w.native.transfer(w.native, "scene", w.lua.table(slot=0),
+                               lambda why, _r: seen.append(why),
+                               lambda: (False, "guard:moved"))
+    w.service()
+    assert seen == ["guard:moved"] and handle["posted"] is None and w.output == []
+
+
+def test_a_stage_only_job_publishes_nothing_and_so_receipts_nothing():
+    w = World()
+    handle = w.native.config(w.native, w.lua.table(battle_calc=False))
+    w.service()
+    assert handle["posted"] is None and w.output != []           # staged, but no opcode to publish
+
+
+def test_the_codex_counterexample_a_completion_write_does_not_receipt_a_refused_trade_arm():
+    """REV7's counterexample, with the writer real: one service() call runs the rival swap's
+    completion, whose refresh_enemy writes through the sink, and then refuses our guarded trade
+    arm -- so a sink byte moved and a guard ran, the two inputs the byte-count inference read,
+    while our own op was never published."""
+    holder = {}
+
+    def writing_refresh(*_args):
+        w.writes.arm(w.writes, "native", holder["allow"])
+        holder["write"](w.writes)
+        w.writes.disarm(w.writes)
+        return True
+
+    w = World(refresh_enemy=writing_refresh)
+    # writes.lua type-checks the allow predicate, and lupa hands a Python callable over as
+    # userdata (not "function"), so the writer's predicate -- and the write itself, which needs
+    # an explicit self when called from Python -- go through Lua.
+    holder["allow"] = w.lua.eval("function(addr, n) return true end")
+    holder["write"] = w.lua.eval("function(w) w:write_bytes(0x0203F900, {0x5A}) end")
+    for i in range(100):
+        w.bus[w.ram["ENEMY_BASE"] + i] = 0xAB                    # the readback the ack will check
+        w.bus[w.n["BLOB_BUF"] + i] = 0xAB                        # the staged copy it must match
+    w.put(w.ram["ENEMY_COUNT_ADDR"], 1)
+    swap = w.native.replace_rival_team(w.native, w.lua.table(
+        trainer_id=5, blobs_hex=w.lua.table("AB" * 100)))
+    w.service()
+    assert swap["posted"] is True
+    seen = []
+    trade = w.native.transfer(w.native, "scene", w.lua.table(slot=0),
+                              lambda why, _r: seen.append(why),
+                              lambda: (False, "guard:moved"))
+    before = w.writes["attempted"]
+    w.ack()                                                      # the swap completes in this call
+    w.service()
+    assert w.writes["attempted"] > before, "the counterexample needs a real foreign write"
+    assert (0x0203F900, 0x5A) in w.output
+    assert seen == ["guard:moved"], "and a guard that ran and refused, in the same call"
+    assert trade["posted"] is None, "our op was never published, so it cannot read as posted"
 
 
 @pytest.mark.parametrize("lost_ack", [False, True])
