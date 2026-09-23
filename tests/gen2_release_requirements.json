@@ -47,7 +47,20 @@
         "fixtures": {"a": "gold_battle", "b": "silver_battle"},
         "scenarios": ["link"]
       },
-      "proofs": []
+      "proofs": [
+        {
+          "scenario": "link",
+          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario link --lane gen2-gs-link --keep-data",
+          "receipts": {
+            "a": {"path": "tests/fixtures/gen2/receipts/duo_link_gs_a_result.txt",
+                  "sha256": "a9fd071adccdc0e5fc2ea9169f3870aba460549b723a28ba8f9ee6cacc1d43f6"},
+            "b": {"path": "tests/fixtures/gen2/receipts/duo_link_gs_b_result.txt",
+                  "sha256": "a527c6928cc02129d0e73fc9b306d2d27eaf3122e0d4bd97ed62271ce750eda1"},
+            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_link_gs_pydec_result.txt",
+                      "sha256": "3df8a800bd7c74c78c4285710c59c673a3c212d195dde7e7c83aa4b032d6571f"}
+          }
+        }
+      ]
     },
     {
       "id": "duo.crystal.gold",
@@ -60,7 +73,20 @@
         "fixtures": {"a": "crystal_battle", "b": "gold_battle"},
         "scenarios": ["link"]
       },
-      "proofs": []
+      "proofs": [
+        {
+          "scenario": "link",
+          "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario link --lane gen2-cg-link --keep-data",
+          "receipts": {
+            "a": {"path": "tests/fixtures/gen2/receipts/duo_link_cg_a_result.txt",
+                  "sha256": "354a7466dcdf3ce94f03d1b73849648f721b8d2234c20e83f9456a531facb327"},
+            "b": {"path": "tests/fixtures/gen2/receipts/duo_link_cg_b_result.txt",
+                  "sha256": "8c2afc79156ee0ee634c3682c64c452efd758a2fe63bca0eb1f7896694fc93a0"},
+            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_link_cg_pydec_result.txt",
+                      "sha256": "3df8a800bd7c74c78c4285710c59c673a3c212d195dde7e7c83aa4b032d6571f"}
+          }
+        }
+      ]
     }
   ]
 }

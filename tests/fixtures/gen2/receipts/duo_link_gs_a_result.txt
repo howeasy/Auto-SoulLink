@@ -1,0 +1,28 @@
+DUO_GEN2 {"attempt":1,"case":"gold_battle","fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","player":"a","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","scenario":"link","title":"gold"}
+CLIENT {"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  phase continue @3218
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":50342,"panel":false,"
+HELLO {"frame":3338,"ot_id":50342}
+  phase loaded @3338
+RX resolved_areas
+RX config
+BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 EC63:C4A6:9E
+  phase walk @3552
+  phase battle @3827
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":5417,"key":"6DB1:C4A6:A3","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":163}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":17,"in_box":false,"key":"6DB1:C4A6:A3","level":3,"maxHP":17,"nickname":"HOOTHOOT","player":"a","seq":71,"species_id":163,"stats":{"level":3,"maxH
+CAPTURE_SENT {"frame":5417,"key":"6DB1:C4A6:A3","seq":71}
+CAUGHT 6DB1:C4A6:A3
+RX box_mon key=6DB1:C4A6:A3
+TX {"event":"box_mon_failed","key":"6DB1:C4A6:A3","player":"a","reason":"Gen 2 box writer not composed (U2 proves only a current-box deposit)","seq":72}
+TX {"event":"safe","player":"a","seq":73}
+  phase save @5477
+  phase saved @6171
+MYKEY 0 EC63:C4A6:9E
+MYKEY 1 6DB1:C4A6:A3
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"45089aec274e1070242b622b73150b11a438e2ddf636b7f6efd8cafc6bab08ff","client_saves":1,"flushed_matches":true,"frame":6201,"gate_saves":1,"save_completed_frame":6171,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-duo-live-lane/patch/build/saveram_link_gen2-gs-link_a/Pokemon - Gold Version (USA, Europe).SaveRAM"}
+RECEIPT {"attempt":1,"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":5417,"key":"6DB1:C4A6:A3","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":163},"case":"gold_battle","client":{"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"},"fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","harness_write_scopes":[],"hello":{"frame":3338,"ot_id":50342},"input_mode":"normal_buttons","key":"6DB1:C4A6:A3","player":"a","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","save":{"cartram_bytes":32768,"cartram_sha256":"45089aec274e1070242b622b73150b11a438e2ddf636b7f6efd8cafc6bab08ff","client_saves":1,"flushed_matches":true,"frame":6201,"gate_saves":1,"save_completed_frame":6171,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-duo-live-lane/patch/build/saveram_link_gen2-gs-link_a/Pokemon - Gold Version (USA, Europe).SaveRAM"},"scenario":"link","schema":"gen2-duo-link-v1","title":"gold"}
+RESULT: PASS (caught 6DB1:C4A6:A3)
