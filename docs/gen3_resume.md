@@ -2,6 +2,30 @@
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in the sweep worktree's `docs/gen1_reference/RC_MASTER_GUIDE.md` (`E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`). Requirements ledger: `docs/gen3_requirements.md`.
 
+## CHECKPOINT 12 (2026-09-23, after a coordinator crash): Center receipts + the stale-save defect
+
+HEAD 3fefbee7. Clean lane `.claude/worktrees/gen3-lane-clean`.
+- All seven FR<->LG scenarios PASS (ac1a5490 and earlier). The G4 status and the corrected draft are in
+  docs/gen3/G4_status_2026-09-23.md and G4_request_draft.md (1729c72e).
+- Center (G4 2a):
+  - whiteout (write inside the Center + nurse control) PASS FR-as-A and LG-as-A (5a8064f3);
+  - center_controls (Cable Club welcome wait, link wait, no-adapter message) PASS FR-as-A (3fefbee7);
+  - LG center_controls was interrupted by the crash; re-run it.
+- PRODUCT DEFECT FOUND AND FIXED (C4-SAVE):
+  - the checkpoint required sSaveDialogCB==0 and gLinkCallback==0, pointers pret never clears, so after ANY
+    in-game save every overworld write was held for the rest of the session;
+  - the fix is 5923c4dd (link reads sLinkOpen; League lighting allowed on FR/LG) + 0e7f89e7 (save_dialog_cb
+    becomes a witness; one line in safety.lua);
+  - LIVE: on LG a keyed write LANDED after a save;
+  - Codex adversarial review cx-3e10776a is in flight (re-issued).
+- Harness C4-6t in flight:
+  - BizHawk rewind capture crashes EmuHawk (AccessViolation in mGBA SaveStateBinary via Zwinder); disable rewind
+    in the generated configs;
+  - the save helper's second-save dialog detection.
+- Audits: docs/gen3/research/checkpoint_predicate_audit_2026-09-23.md (predicates + persistent-task census).
+- Next: after C4-6t, re-run save_then_write FR+LG and LG center_controls, then the G4 remaining items and the
+  owner's three scope decisions.
+
 ## CHECKPOINT 11 (2026-09-23, in progress): G4 FRLG lane
 
 HEAD c8f0c804; clean lane worktree `.claude/worktrees/gen3-lane-clean` (detached, keep it clean).
