@@ -1,13 +1,19 @@
 # Gen 3 (P4) FRLG RC cutover gate request — G4 evidence assembly
 
 **Status: G4 is not yet signable.** §2 is the current per-item state: items 1, 2 and 4 carry
-citable receipts, item 2a is half-closed (Center writes PASS on both titles, the 2F controls are
-failing under diagnosis), and 2b / 3 / 5 / 6 / 7 / 8 are open, blocked, or rehearsal-only. Three
-scope decisions are open with the owner (§5); the remaining lane work is
-`docs/gen3/G4_status_2026-09-23.md`'s estimate, recomputed 2026-09-23 after the three runs that have
-completed since it was written (the two Center-as-A receipts and the stronger reconnect): about
-**24–30** launches without item 6 and **58–64** with it as written, excluding RNG retries. It rises
-if the owner opts into the optional re-runs or changes item 6.
+citable receipts, item 2a is **PASS on both titles** (the 1F write and the 2F
+controls on FR-as-A and LG-as-A, both archived; LG 2F at clean cut `10e4a702`), and 2b / 3 / 5 / 6 / 7 / 8 are
+open, blocked, or rehearsal-only. §3 is the product defect this cut also has to requalify — the stale-`sSaveDialogCB`
+and `gLinkCallback` clauses that held every overworld write after a save or a cancelled link — fixed
+in C4-SAVE (`5923c4dd` + `0e7f89e7`), with the harness follow-up C4-6t (`10e4a702`), and **proven live on
+both titles** by `save_then_write_gen3` (two saves, a keyed write landing on an idle field, PYDEC PASS;
+receipts @ `0c2f384a`); the rows §3.2 still marks owed are the remainder. Three scope decisions are open with the owner (§6); the remaining lane
+work is `docs/gen3/G4_status_2026-09-23.md`'s estimate, recomputed **2026-09-23**: the runs
+that have completed since the status file (the two Center-as-A receipts, the stronger reconnect,
+**both** `center_controls_gen3` halves, and `save_then_write_gen3` on FR-as-A and LG-as-A) come off it, and §3.2's runnable rows add about two —
+leaving about **22–29** launches without item 6 and **56–63** with it as written, excluding RNG
+retries. It rises if the owner opts into the optional re-runs or
+changes item 6.
 
 Reconciled against `docs/gen3/G4_status_2026-09-23.md` (Codex REV-g4-draft-1 at `cc807cf3`) and
 `docs/gen3/probes/RECEIPT_AUDIT_2026-09-23.md` (Codex REV-receipt-audit-1). Receipts live in
@@ -26,7 +32,7 @@ row, G4 is the gate at which the **owner runs a live FireRed↔LeafGreen duo fro
 
 The gate check the owner sees, per the P4 row's gate-check cell `docs/gen3/PLAN.md:305` (`:297` defines "Gate check" = the receipt set the owner sees): **S**
 
-1. the conformance suite green (65 tests, §3);
+1. the conformance suite green (65 tests, §4);
 2. duo receipts that carry `SAVE_WITNESS_SHA256` **and** a counter delta;
 3. the FR and LG coverage rows closed;
 4. the extracted release zip booting FR on the new client;
@@ -53,7 +59,7 @@ exists but must be re-taken on the frozen final cut; **OPEN** = not started or i
 |---|---|---|---|
 | **1** FR↔LG faint on a clean cut | **DONE** | `duo_frlg_faint_cmd_gen3_clean_2026-09-23b.txt` @ `8deddf23`, cut `d199da32`: `faint_cmd_gen3: a=PASS b=PASS` | nothing; caveat: the receipt proves an *injected-event overworld* faint, not a natural battle faint (audit) **P** |
 | **2** the seven FRLG scenarios | **DONE at their cuts** | link + boxsync @ `d074bda2` (cut `d199da32`); reconnect + wrong-save @ `60a9ce18` (cut `fb255a05`, `source=fb255a05`); deadzone + whiteout @ `ac1a5490` (cut `059da756`); `linked_faint_active_gen3` @ `4ec51ed0` (cut `eaa96787`) — `a=PASS b=PASS`, with `SAVE_WITNESS_SHA256 match=true` and counter deltas on each saving side (reconnect's A does not save) | nothing owed as a gate row: a final frozen-cut re-run of faint/link/boxsync/reconnect is OPTIONAL regression evidence per `RECEIPT_AUDIT_2026-09-23.md` **P** |
-| **2a** writes inside a Pokémon Center | **OPEN** (half-closed) | `center_receipt_whiteout_fr_as_a_2026-09-23.txt` (FR-as-A) and `center_receipt_whiteout_lg_as_a_2026-09-23.txt` (LG-as-A) @ `5a8064f3`, cut `fb255a05`: `whiteout_gen3: a=PASS b=PASS`, "the write landed in the Center", `CONTROL_LIVE nurse map=5.4 at=(7,4)`, `CONTROL_REFUSED nurse box_mon clause=field_controls_locked attempted=0 writes=0 bytes=unchanged`, witness match + counters, PYDEC PASS — FR-as-A and LG-as-A both | the **2F controls** (`center_controls_gen3`) are under diagnosis with a fix live-testing now; the Union-Room entry/return row is the only (b) case here - unreachable while `IsWirelessAdapterConnected` is observed false **P** |
+| **2a** writes inside a Pokémon Center | **DONE on both titles** | 1F write — `center_receipt_whiteout_fr_as_a_2026-09-23.txt` (FR-as-A) and `center_receipt_whiteout_lg_as_a_2026-09-23.txt` (LG-as-A) @ `5a8064f3`, cut `fb255a05`: `whiteout_gen3: a=PASS b=PASS`, "the write landed in the Center", `CONTROL_LIVE nurse map=5.4 at=(7,4)`, `CONTROL_REFUSED nurse box_mon clause=field_controls_locked attempted=0 writes=0 bytes=unchanged`, witness match + counters, PYDEC PASS. 2F controls — `center_controls_fr_as_a_2026-09-23.txt` (FR-as-A, port 55634) @ `3fefbee7`, cut `f5d92327`: `center_controls_gen3: a=PASS b=PASS`, each control's keyed probe refused with a named clause then released and settled, `PYDEC: PASS asserted scenario facts`; `center_controls_lg_as_a_2026-09-23.txt` (LG-as-A) @ `0c2f384a`, clean cut `10e4a702`, rewind off: `center_controls_gen3: a=PASS b=PASS`, same three controls, witness match `saves=1 counter=4->5`, PYDEC PASS. `5923c4dd` + `0e7f89e7` are ancestors of both cuts, so both halves are post-fix | nothing for the gate row. The Union-Room entry/return row stays the (b) case, unreachable while `IsWirelessAdapterConnected` is observed false **P** |
 | **2b** in-battle faint window | **OPEN** | wild parked positive on both titles @ `059da756`; LG active hold to bench HP0 @ `4ec51ed0` | trainer positives, FR active hold, doubles (both slots, partner menu refusal, B-cancel reopen), the boundary negatives, and the Pokedude/old-man/Safari refusals; `battle_link` is the (b) case: a real link battle cannot be produced here **P** |
 | **3** FRLG probe rows | **OPEN** | 16 FR / 14 LG rows PASS, lane `eaa96787`, landed by `059da756` (which also carries the hashed witness-factory fix), receipts `checkpoint_{fr,lg}_clean_frlg_rows_2026-09-23.txt` | `battle_input_trainer` and `battle_faint_prompt` are owed on both titles and are **not** closed by any hardware limit; LG also `script_running` and `battle_commit_state3`; `battle_link` is the (b) case; negative rows must name an expected clause (C3-24) **P** |
 | **4** cold-boot admission | **REHEARSED** | `bootcheck_frlg_rehearsal_keys_2026-09-23.txt` @ `3327720c`, lane cut `fb255a05`: **8/8 PASS** (FR and LG × town/battle × a/b) with the PID:OTID key oracle, counters advancing, 14/14 sectors | re-take on the frozen final cut **P** |
@@ -62,14 +68,93 @@ exists but must be re-taken on the frozen final cut; **OPEN** = not started or i
 | **7** rollback bundle freeze | **OPEN (definition)** | the frozen record exists: `docs/gen3/rollback_bundle.md` @ `2cd9f993` (cut master `7957c24c`, old-client blob shas, the measured companion md5, the rollback procedure and its checklist) | decision (c): does that SHA + manifest count as the freeze, or must a named archive be built and hashed? **S** |
 | **8** owner's own Manager run | **OPEN** | — | two BizHawk instances, the FR↔LG pair, launched from the Manager's run page, exercising link, faint propagation, dead zone, box sync and save/reload by hand. The rows above exist so this run is the confirmation, not the first contact **S** |
 
-What the OPEN rows still need, in lane order (one emulator lane at a time, `PLAN.md:23`/`:297`): the 2F
-controls and the Union-Room row (2a); the 2b matrix; the five probe rows (3); the final boot-check
-(4) and the pinned zip (5); for (2) only the optional frozen-cut re-runs remain, the reconnect
-wrong-save having been re-taken at `fb255a05`. Estimates live in `docs/gen3/G4_status_2026-09-23.md`. **S**
+What the OPEN rows still need, in lane order (one emulator lane at a time, `PLAN.md:23`/`:297`): the
+Union-Room row (2a, a recorded limit); the 2b matrix; the five probe rows (3); the
+final boot-check (4) and the pinned zip (5); for (2) only the optional frozen-cut re-runs remain, the
+reconnect wrong-save having been re-taken at `fb255a05`. The checkpoint change carries its own rows,
+§3.2 — ten, of which the runnable ones not yet DONE are rows 1 (prompts/cancel), 3, 6 and 9 — and the estimate in the header already folds in the runs they
+need. Estimates live in `docs/gen3/G4_status_2026-09-23.md`. **S**
 
 ---
 
-## 3. MODEL evidence
+## 3. The stale-save / link product defect and its fix (C4-SAVE)
+
+Two clauses in the G3-signed checkpoint predicate tested engine pointers the game never clears, so
+each held **every** overworld SLink write for the rest of a session:
+
+- **`save_dialog_cb == 0`.** `sSaveDialogCB` is assigned by every save-dialog step
+  (`start_menu.c:608-842`) and never reset, so after the player's first save it rests on
+  `SaveDialogCB_ReturnSuccess`. Live LG evidence on an idle field:
+  `STALE_SAVE_DIALOG save_dialog_cb=0x0806F9E1:SaveDialogCB_ReturnSuccess(no save dialog task)`,
+  with 404 holds logged in that run (`0e7f89e7`'s message). **P**
+- **`gLinkCallback == 0`.** `gLinkCallback` survives `CloseLink` after a no-partner Cable Club link
+  (`link.c:394/419-426`), so writes stayed held after a cancelled link (live FR `center_controls`
+  r9, `5923c4dd`). **P**
+
+What landed: `0e7f89e7` (C4-SAVE part 2) drops the `save_dialog_cb` key from
+`lua/gen3/safety.lua`'s required list (**one line**) and moves the pointer into a pack `witnesses`
+block the checkpoint never evaluates — read by `gen3_boot_check` (`M.pred` falls back to it) and by
+the probe's dialog row; a mid-save world is still refused by the named clauses (the START-menu task
+allow-list, `field_controls_locked`, `task50_save_game` + script lock + `CONTEXT_WAITING`), while
+the finished-save world is admitted. `5923c4dd` (part 1) makes `link_callback` read `sLinkOpen`
+(set only by `InitLink` via `OpenLink`'s cable branch; cleared by `CloseLink` including the error
+path) and allows `Task_RunPokemonLeagueLightingEffect` on FR/LG (`field_specials.c:2133-2185`,
+palettes only; RR is gated on `InitLink`/`OpenLink`/`CloseLink`/`LinkMain2` staying byte-identical).
+Both commits touch `data/games/gen3_{frlg,rr}/write_checkpoint.json`; 10 falsifiers were red on the
+old packs. **S**
+
+This is a **change to the G3-signed predicate**, so it is re-qualified rather than assumed.
+`docs/gen3/research/checkpoint_predicate_audit_2026-09-23.md` carries the independent audit
+(read-only headless Codex; pret pin `c75f3523`, SLink `328e5ab8`), the persistent-task census, and
+Codex's adversarial review of the fix at `0e7f89e7` (`160c2508`): **runtime fixes RETAINED, no
+unsafe write frame found** in any vanilla save or link path — START save (both overwrite/replace
+prompts, cancel, success and error text, the unlock-to-destroy interval), Cable Club/script save,
+flash-failure recovery, Hall of Fame, `Task_LinkFullSave` and its minigame callers, post-link-battle
+and trade incremental saves, Mystery Gift, chat, e-reader, erase-save — and on link, cable callbacks
+run only behind `sLinkOpen`, with wireless relying on the other exclusions
+(`gReceivedRemoteLinkPlayers` can clear before RFU teardown completes, so it is not a universal
+teardown witness). Two things it does **not** close: the probe's dialog row is rejected as a witness
+(after an earlier save it can pass on a different START submenu) and is routed to C4-6t together
+with the save helper's second-save detection; and RR is not qualified (`HandleSavingData` and
+`RunSaveFailedScreen` differ from FR). **S**/**M**
+
+C4-6t landed at `10e4a702`: the probe's dialog row and the save helper now use one START-menu save
+witness (`gen3_boot_check.start_menu_witness`: wait for `Task_StartMenuHandleInput` with the menu
+callback on `StartCB_HandleInput`, then require *this* A press to move it onto
+`StartCB_Save1`/`StartCB_Save2` under the live task — `start_menu.c:376-392` draws the window before
+input is read, which is why the old helper's second-save A was dropped); RR keeps a
+pointer-must-move fallback. It also forces BizHawk rewind off in every generated run config (§5).
+Falsifiers red on the parent. **S**
+
+### 3.1 Physical evidence so far
+
+| Row | State | Receipt |
+|---|---|---|
+| **A keyed write LANDS after an in-game save, then a second save (FR-as-A and LG-as-A)** | **PASS on both titles.** FR: `WRITE_LANDED box_mon 263620B6:99DE0D8A map=3.1 at=(24,39)` after the first save, second save witnessed, `SAVE_WITNESS_SHA256 match=true saves=2 counter=4->6`. LG: `WRITE_LANDED box_mon F6B6A64D:1C600D89` at the same spot, `match=true saves=2 counter=3->5`. Both on an idle field with every predicate zero (`field_controls_locked=0x0`, `link_callback=0x0`, `script_status=2`), `PYDEC: PASS asserted scenario facts`, attempt 1 of 1, no emulator fault (rewind off). Supersedes the earlier partial LG run (`save_then_write_lg_as_a_partial_2026-09-23.txt` @ `3fefbee7`, whose second save failed in the harness) | `save_then_write_{fr,lg}_as_a_2026-09-23.txt` @ `0c2f384a`, clean cut `10e4a702`; wire goldens `save_then_write_gen3_{a,b}_gen3_new.jsonl` **P** |
+| **FR Center controls (2F): welcome message, cable-link wait, Union Room attendant** | **PASS.** Each control's `CONTROL_LIVE` is source-pinned (`adapter_connected=false` observed) and each keyed probe is `CONTROL_REFUSED` with a named clause, then `CONTROL_RELEASED`/`CONTROL_SETTLED` — the cable-link row on the **new** clause (`link_callback=0x1`, i.e. refused while `sLinkOpen` was set, landed after the cancel), the other two on `field_controls_locked` — and `PYDEC: PASS asserted scenario facts` | `center_controls_fr_as_a_2026-09-23.txt` @ `3fefbee7`, cut `f5d92327` **P** |
+| **LG-as-A Center controls (same clauses)** | **PASS.** `center_controls_gen3: a=PASS b=PASS` — the cable menu, the cable link wait and the Union Room attendant each held a keyed probe and each landed once released; `adapter_connected=false` observed; witness `match=true saves=1 counter=4->5`; `PYDEC: PASS asserted scenario facts`; post-fix | `center_controls_lg_as_a_2026-09-23.txt` @ `0c2f384a`, clean cut `10e4a702` **P** |
+
+### 3.2 Physical rows still owed for this change
+
+Codex's review lists them; each is marked **runnable** on this machine as the harness stands, or a
+**recorded limit** with its reason, so a limit can be signed instead of quietly left open.
+
+| # | Row | Runnable or recorded limit |
+|---|---|---|
+| 1 | START save: first and repeated saves, both overwrite prompts, cancel, success dismissal | **half DONE, half runnable** — first and repeated saves are the §3.1 `saves=2` PASS on both titles; the overwrite prompts, cancel and dismissal need explicit driver steps |
+| 2 | START save: error/recovery (flash failure) | **recorded limit** — needs a forced flash failure the harness cannot inject; statically covered by the audit ("the task persists") |
+| 3 | script / Cable Club save | **runnable** — `center_controls_gen3`'s own save is the Cable Club's (`EventScript_AskSaveGame`); it needs its own witness row |
+| 4 | Hall of Fame | **recorded limit** — needs the Elite Four; unreachable from the town fixture |
+| 5 | link incremental saves (`Task_LinkFullSave`, post-link-battle, trade) | **recorded limit** — needs a real link battle, i.e. the same hardware limit as decision (b) |
+| 6 | cable: open before exchange, null callback while open, established, cancel, disconnect, then resumed writes | **half DONE, half runnable** — cancel → resumed writes is the FR PASS above; *open before exchange* and *null callback while open* (HEAD's own admitted gap) are runnable and owed |
+| 7 | wireless background / exchange / teardown | **recorded limit** — no adapter: both Center receipts observe `adapter_connected=false` (`IsWirelessAdapterConnected`'s VAR_RESULT) |
+| 8 | League rooms: admission, plus refusal in scripts, save and battle | **recorded limit on hardware, static proof in the audit** — `Task_RunPokemonLeagueLightingEffect` persists in the Elite Four rooms (PROVEN on FR/LG, inferred for RR); the rooms are unreachable from the town fixture |
+| 9 | a previously-saved fixture with the START cursor on another submenu, where the dialog witness must stay false | **SOURCE DONE, physical runnable** — the C4-6t witness (`10e4a702`) has unit falsifiers for exactly this; a probe re-run on a saved fixture is owed |
+| 10 | positive recovery writes with readback | **DONE** — §3.1's `save_then_write_gen3` on both titles (keyed write landed, PYDEC PASS) |
+
+---
+
+## 4. MODEL evidence
 
 | Area | Evidence | Tag |
 |---|---|---|
@@ -84,7 +169,7 @@ wrong-save having been re-taken at `fb255a05`. Estimates live in `docs/gen3/G4_s
 
 ---
 
-## 4. Limits carried forward (not signed by G4)
+## 5. Limits carried forward (not signed by G4)
 
 | Limit | Why it is not a G4 row | Tag |
 |---|---|---|
@@ -92,19 +177,22 @@ wrong-save having been re-taken at `fb255a05`. Estimates live in `docs/gen3/G4_s
 | **RR clean artifact** | G3 carried it as deferred and it still has no duo receipt; **LG clean now exists** — fixtures (`0978a5be`, `fc0e45b2`), boot-check 8/8 @ `3327720c` and the FR-as-A and LG-as-A Center receipts @ `5a8064f3` | **S** |
 | `explode_gen3` and `rival_swap_gen3` | labelled **NON-QUALIFYING controls** (`2cace0a9`): their witnesses sit at action-start / an unverified RR offset, so they cannot qualify a row | **S** |
 | The RR extension evidence | OPEN in the harness (`2cace0a9`); the RR save extension is compared to a live-RAM copy or reported OPEN | **S** |
-| The RR cutover, the patch rebuild, `patch/dist/SLink-RR.ups`, `server/patcher.py`'s pin, the companion re-pin | **G5**, not G4 (`docs/gen3/PLAN.md:207`, the P5 row). The C5 stack (`2dc1b750`) is on the tested cut (see §3); only RR native-feature and patch qualification stays at G5 | **S** |
+| The RR cutover, the patch rebuild, `patch/dist/SLink-RR.ups`, `server/patcher.py`'s pin, the companion re-pin | **G5**, not G4 (`docs/gen3/PLAN.md:207`, the P5 row). The C5 stack (`2dc1b750`) is on the tested cut (see §4); only RR native-feature and patch qualification stays at G5 | **S** |
 | Archipelago FRLG, RR native text, the peer ghost | removed from this RC by owner ruling (`PLAN.md` §0, `docs/gen3/TODO.md`) | **S** |
+| **The C4-SAVE checkpoint change on RR** | FR/LG only: the audit finds RR's `HandleSavingData` and `RunSaveFailedScreen` differ from FR, and the four gated link bodies being byte-identical is the generator's gate, not a proof. RR re-qualification is G5, with RR's parked-battle tuple (`docs/gen3/research/checkpoint_predicate_audit_2026-09-23.md` finding 2) | **S**/**M** |
+| **BizHawk's rewind capture crashes the mGBA lanes** | environment, not product: `MainForm.CaptureRewind` → `ZwinderBuffer.Capture` → `MGBAHawk.SaveStateBinary` → `BizInvokeProxyLibmGA.BizStartGetState` threw `System.AccessViolationException` and killed **both** instances of run 61569 (`patch/build/duo_61569_{a,b}.out`). C4-6t disables it in every generated run config (`Rewind.Enabled = false`; BizHawk's own default is `true`, so a config that omits the key would still rewind). **Any EmuHawk launched with the machine's base `E:/Howard/Bizhawk/config.ini` still rewinds** — the fix is per-copy, not machine-wide, and that is worth telling the owner. Runs lost this way are not in the estimate | **P**/**S** |
 | Gen 4/Gen 5 (HGSS/Pt/BW) | out of this release entirely | **S** |
 
 ---
 
-## 5. Owner decisions
+## 6. Owner decisions
 
 ### Settled (recorded; not reopened here)
 
 1. **Center writes are in scope and need their own PHYSICAL receipt on FR and LG** (owner ruling
    2026-09-23; `5ecfae3b`, Codex REV-center-tasks-1 ACCEPT as SOURCE/MODEL). The receipts at
-   `5a8064f3` are the first half of it; the 2F controls are the half that is failing. **S**/**P**
+   `5a8064f3` are the 1F half of it and `3fefbee7` (`center_controls_fr_as_a_2026-09-23.txt`) plus `0c2f384a`
+   (`center_controls_lg_as_a_2026-09-23.txt`) are the 2F half — PASS on both titles. **S**/**P**
 2. **In-battle faint must work on vanilla, with RR parity** (`PLAN.md:16`) — that is why `linked_faint_active_gen3`
    is a required row (now PASS at `4ec51ed0`) and why 2b's matrix is owed rather than optional. **S**/**P**
 3. **The generations converge after G4**: the Gen 1 SFX gate (`44bf25d6`) and the Gen 1 ordering
@@ -131,14 +219,16 @@ wrong-save having been re-taken at `fb255a05`. Estimates live in `docs/gen3/G4_s
 
 ---
 
-## 6. How to verify this draft
+## 7. How to verify this draft
 
 - Every receipt path above exists under `docs/gen3/probes/`; every commit hash is in
-  `git log --oneline`: the scenario receipts land at `8deddf23`, `d074bda2`, `4ec51ed0`, `059da756`, `ac1a5490`, `fb255a05`, `5a8064f3`, `60a9ce18`, `3327720c`.
+  `git log --oneline`: the scenario receipts land at `8deddf23`, `d074bda2`, `4ec51ed0`, `059da756`, `ac1a5490`, `fb255a05`, `5a8064f3`, `60a9ce18`, `3327720c`, `3fefbee7` (FR Center controls + the partial LG save-then-write, cut `f5d92327`), `0c2f384a` (save-then-write FR+LG and LG Center controls, clean cut `10e4a702`), `5923c4dd` / `0e7f89e7` / `160c2508` (C4-SAVE and its adversarial review), `10e4a702` (C4-6t) and `b56c3b50` (the persistent-task census).
 - The per-item status and the open decisions are Codex's reconciliation
   (`docs/gen3/G4_status_2026-09-23.md`) plus the receipts that landed after it (`5a8064f3`,
   `60a9ce18`, `3327720c`); where this draft disagrees it says so rather than quietly restating.
 - The scenario names and the FR↔LG pairing come from `tools/e2e_duo.py` itself (`--list` output;
   the pairing is the `"b": ("leafgreen", "leafgreen_party_{target}")` row).
 - The review verdicts come from the RC ledger's `gen3-P4*` / `gen3-REV*` rows
-  (`C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md`), not from this draft's prose.
+  (`C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md`), not from this draft's prose. §3's audit,
+  census and adversarial review are `docs/gen3/research/checkpoint_predicate_audit_2026-09-23.md`
+  (magi `cx-7e8b52f4`, `cx-45b6df45`, `cx-3e10776a`), likewise read in full rather than paraphrased.
