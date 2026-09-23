@@ -218,19 +218,16 @@ if os.path.exists(_rr_encounters_path):
     with open(_rr_encounters_path, encoding="utf-8") as _f:
         _RR_ENCOUNTERS = json.load(_f)
 
-# RR sprite filename mapping (RR internal ID -> funnotbun sprite filename).
-_RR_SPRITE_FILE: dict[int, str] = {}
-_rr_sprites_path = os.path.join(_DATA_DIR, "rr_sprites.json")
-if os.path.exists(_rr_sprites_path):
-    with open(_rr_sprites_path) as _f:
-        _raw_sprites = json.load(_f)
-        _RR_SPRITE_FILE = {int(k): v for k, v in _raw_sprites.items()}
+# RR front sprites, vendored by tools/gen_rr_sprites.py as server/static/sprites/rr/<id>.png
+# and served same-origin. Keyed by RR's own (CFRU) species ids, not the national dex.
+_RR_SPRITE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                              "static", "sprites", "rr")
+_RR_SPRITE_IDS: frozenset[int] = frozenset(
+    int(f[:-4]) for f in (os.listdir(_RR_SPRITE_DIR) if os.path.isdir(_RR_SPRITE_DIR) else ())
+    if f.endswith(".png") and f[:-4].isdigit())
 
 # Vanilla FRLG item names (embedded — no circular import needed).
 # Source: pret/pokefirered include/constants/items.h
-
-# Species whose funnotbun sprites are tiled spritesheets — skip RR sprite.
-_TILED_SPRITE_BLOCKLIST = frozenset({385})  # Castform (4-form sheet)
 
 # National-dex bounds used for sprite URL resolution.
 _MAX_NATDEX = 1025      # PokeAPI national-dex sprite coverage ceiling
@@ -238,10 +235,9 @@ _GEN3_DEX_CAP = 386     # last Gen III dex no. (Deoxys) — has dedicated FRLG s
 _SPECIES_EGG = 412      # CFRU SPECIES_EGG
 
 
-def _funnotbun_url(rr_file: str) -> str:
-    """funnotbun RR front-sprite URL for a sprite filename (no extension)."""
-    return (f"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io"
-            f"/main/data/species/frontspr/{rr_file}.png")
+def _rr_url(species_id: int) -> str:
+    """Vendored RR front sprite for a CFRU species id."""
+    return f"/static/sprites/rr/{species_id}.png"
 
 
 def _pokeapi_url(dex: int) -> str:
@@ -350,7 +346,7 @@ class Gen3Adapter(GameAdapter):
     # ── GamePresentationAdapter ──────────────────────────────────────────
 
     def sprite_html(self, species_id: int, form: int = 0) -> str:
-        """Generate sprite <img> tag with funnotbun RR sprites + PokeAPI fallback.
+        """Generate sprite <img> tag with vendored RR sprites + PokeAPI fallback.
 
         `form` is accepted for adapter-signature consistency but unused — Gen 3
         only has Unown letters, which share the same sprite.
@@ -364,25 +360,23 @@ class Gen3Adapter(GameAdapter):
                     'src="https://play.pokemonshowdown.com/sprites/gen5/egg.png" '
                     'onerror="this.style.display=\'none\';" alt="Egg">')
 
-        # Primary: funnotbun RR sprite (covers all RR species + forms)
-        if self._is_rr:
-            rr_file = _RR_SPRITE_FILE.get(species_id)
-            if rr_file and species_id not in _TILED_SPRITE_BLOCKLIST:
-                rr_url = _funnotbun_url(rr_file)
-                fallback_url = None
-                form_pid = CFRU_FORM_SPRITE_ID.get(species_id)
-                if form_pid:
-                    fallback_url = _pokeapi_url(form_pid)
-                else:
-                    nat = _to_national(species_id)
-                    if nat and 1 <= nat <= _MAX_NATDEX:
-                        fallback_url = _pokeapi_url(nat)
-                if fallback_url:
-                    return (f'<img class="mon-sprite" crossorigin="anonymous" data-species="{species_id}" src="{rr_url}" '
-                            f'onerror="if(this.src!==\'{fallback_url}\'){{this.src=\'{fallback_url}\';}}else{{this.style.display=\'none\';}}" '
-                            f'alt="">')
-                return (f'<img class="mon-sprite" crossorigin="anonymous" data-species="{species_id}" src="{rr_url}" '
-                        f'onerror="this.style.display=\'none\';" alt="">')
+        # Primary: vendored RR sprite (covers all RR species + forms)
+        if self._is_rr and species_id in _RR_SPRITE_IDS:
+            rr_url = _rr_url(species_id)
+            fallback_url = None
+            form_pid = CFRU_FORM_SPRITE_ID.get(species_id)
+            if form_pid:
+                fallback_url = _pokeapi_url(form_pid)
+            else:
+                nat = _to_national(species_id)
+                if nat and 1 <= nat <= _MAX_NATDEX:
+                    fallback_url = _pokeapi_url(nat)
+            if fallback_url:
+                return (f'<img class="mon-sprite" data-species="{species_id}" src="{rr_url}" '
+                        f'onerror="if(this.src!==\'{fallback_url}\'){{this.src=\'{fallback_url}\';}}else{{this.style.display=\'none\';}}" '
+                        f'alt="">')
+            return (f'<img class="mon-sprite" data-species="{species_id}" src="{rr_url}" '
+                    f'onerror="this.style.display=\'none\';" alt="">')
 
         # PokeAPI fallback: convert CFRU → NatDex for the URL
         form_pid = CFRU_FORM_SPRITE_ID.get(species_id)
@@ -415,15 +409,13 @@ class Gen3Adapter(GameAdapter):
     def sprite_src(self, species_id: int) -> str:
         """Return the best sprite URL for this species.
 
-        For RR runs: funnotbun URL when available (correct CFRU/custom forms).
+        For RR runs: the vendored sprite when there is one (correct CFRU/custom forms).
         Fallback: PokeAPI with CFRU→NatDex conversion.
         """
         if not species_id or species_id < 1:
             return ""
-        if self._is_rr:
-            rr_file = _RR_SPRITE_FILE.get(species_id)
-            if rr_file and species_id not in _TILED_SPRITE_BLOCKLIST:
-                return _funnotbun_url(rr_file)
+        if self._is_rr and species_id in _RR_SPRITE_IDS:
+            return _rr_url(species_id)
         form_pid = CFRU_FORM_SPRITE_ID.get(species_id)
         if form_pid:
             return _pokeapi_url(form_pid)
