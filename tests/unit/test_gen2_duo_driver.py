@@ -38,6 +38,7 @@ ROOT = Path(__file__).resolve().parents[2]
 MAIN = "lua/tests/duo/duo_gen2_main.lua"
 SCENARIO = ROOT / "lua/tests/duo/scenario_gen2_link.lua"
 DRIVER_FILES = (MAIN, "lua/tests/duo/scenario_gen2_link.lua", "lua/tests/duo/gen2_route29_inputs.lua",
+                "lua/tests/duo/scenario_gen2_faint.lua", "lua/tests/duo/gen2_faint_inputs.lua",
                 "lua/tests/test_gen2_scripted_gate.lua", "lua/tests/gen2_frame_align.lua", "lua/gen2/wire.lua")
 KEY = "1A2B:B542:10"
 FAKE_CONNECTOR = """local M = {}
@@ -188,7 +189,12 @@ def grass_start(title):
     raise AssertionError("no Route 29 grass pair")
 
 
-def run_driver(tmp_path, title="crystal", *, admitted=True, go=True, client_title=None, **sim_options):
+FAINT_UI = {"move_menu": "MoveSelectionScreen.interpret_joypad", "battle_party": "PartyMenuSelect",
+            "battle_mon_menu": "BattleMonMenu"}
+
+
+def run_driver(tmp_path, title="crystal", *, admitted=True, go=True, client_title=None, scenario="link",
+               player="a", **sim_options):
     root = make_root(tmp_path, title)
     for rel in DRIVER_FILES:
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -198,6 +204,12 @@ def run_driver(tmp_path, title="crystal", *, admitted=True, go=True, client_titl
     (root / "lua/gen2/run.lua").write_text(FAKE_RUN, encoding="utf-8")
     spec, env = qualify_env(root, title, "battle", "boot")
     sim = DuoSim(LuaRuntime(unpack_returned_tuples=True), title, **sim_options)
+    if scenario != "link":   # the faint route's UI origins (U1d's u1_facts carries the same symbols)
+        from tools.gen2_fixtures import _code_site
+        sim.u1.setdefault("faint_ui", {kind: {k: v for k, v in _code_site(context(title), symbol).items()
+                                              if k != "symbol_offset"} for kind, symbol in FAINT_UI.items()})
+        sim.u1["prompts"].setdefault("next_mon", ["Use next"])
+        sim.sites.update(sim.u1["faint_ui"])
     env["SLINK_GEN2_U1_FACTS"] = json.dumps(sim.u1)
     sim.install(env)
     result, go_file = root / "patch/build/e2e_link_a_result.txt", tmp_path / "go_a.txt"
@@ -206,9 +218,9 @@ def run_driver(tmp_path, title="crystal", *, admitted=True, go=True, client_titl
     glob = sim.lua.globals()
     glob.SLINK_TEST_ADMITTED = admitted
     glob.SLINK_TEST_CLIENT_TITLE = client_title
-    glob.SLINK_HOST, glob.SLINK_PORT, glob.SLINK_PLAYER = "127.0.0.1", 1, "a"
+    glob.SLINK_HOST, glob.SLINK_PORT, glob.SLINK_PLAYER = "127.0.0.1", 1, player
     glob.SLINK_DUO = sim.lua.table_from({
-        "wt": str(root).replace("\\", "/"), "player": "a", "scenario": "link", "game": "gen2_new", "attempt": 1,
+        "wt": str(root).replace("\\", "/"), "player": player, "scenario": scenario, "game": "gen2_new", "attempt": 1,
         "result": str(result).replace("\\", "/"), "partner_result": str(tmp_path / "b.txt").replace("\\", "/"),
         "go_file": str(go_file).replace("\\", "/"), "timeout_frames": 12000, "max_phase_frames": 3000})
     with pytest.raises(LuaError, match="slink-duo-finished"):
@@ -352,5 +364,214 @@ def test_verdict_refuses_a_tampered_or_reordered_sequence(lines, match):
 def test_driver_files_are_lua_syntax_clean():
     check = LuaRuntime().execute("return function(s, n) local f, e = load(s, n); return f and 'ok' or e end")
     for rel in ("lua/tests/duo/duo_gen2_main.lua", "lua/tests/duo/scenario_gen2_link.lua",
-                "lua/tests/duo/gen2_route29_inputs.lua"):
+                "lua/tests/duo/gen2_route29_inputs.lua", "lua/tests/duo/scenario_gen2_faint.lua",
+                "lua/tests/duo/gen2_faint_inputs.lua"):
         assert check((ROOT / rel).read_text(encoding="utf-8"), "@" + rel) == "ok", rel
+
+
+# --- gen2_faint (card gen2-H1c) ------------------------------------------------------------------------
+
+FAINT = ROOT / "lua/tests/duo/scenario_gen2_faint.lua"
+FAINT_INPUTS = ROOT / "lua/tests/duo/gen2_faint_inputs.lua"
+
+
+def test_client_marker_carries_the_registered_sites(tmp_path):
+    lines, _, _ = run_driver(tmp_path)
+    assert tag_json(lines, "CLIENT")["registered_sites"] == []   # the stand-in client composes no binder
+
+
+def test_faint_a_refuses_before_any_input_without_a_registered_battle_faint(tmp_path):
+    lines, sim, _ = run_driver(tmp_path, scenario="gen2_faint")
+    assert lines[-1] == "RESULT: FAIL (production signals lack battle_faint)", lines[-5:]
+    assert not sim.inputs
+
+
+def faint_verdict(lines):
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    json_codec = lua.execute((ROOT / "lua/json_codec.lua").read_text(encoding="utf-8"))
+    link = lua.execute(SCENARIO.read_text(encoding="utf-8"))
+    faint = lua.execute(FAINT.read_text(encoding="utf-8"))
+    problems, receipt = faint.verdict(lua.table_from(lines), json_codec, link.verdict)
+    return list(problems.values()), receipt
+
+
+def faint_lines(player):
+    j = json.dumps
+    base = []
+    for line in happy_lines()[:8]:   # through CAUGHT
+        tag, body = line.split(" ", 1)
+        if tag in ("DUO_GEN2", "CLIENT"):
+            value = json.loads(body)
+            value.update({"player": player, "scenario": "gen2_faint"} if tag == "DUO_GEN2" else
+                         {"registered_sites": ["battle_end", "battle_faint", "capture_party"]})
+            line = f"{tag} {j(value)}"
+        base.append(line)
+    link = "LINK_SAVE " + j({"frame": 1500, "saveram_path": "C:/x/e2e_gen2_faint_a_link_save.SaveRAM",
+                             "saveram_bytes": 32790, "cartram_sha256": "ef" * 32, "cartram_bytes": 32768,
+                             "gate_saves": 1, "client_saves": 1, "save_completed_frame": 1460, "key": KEY})
+    final = "SAVE_WITNESS " + j({"frame": 4000, "save_completed_frame": 3900, "gate_saves": 2, "client_saves": 2,
+                                 "cartram_sha256": "cd" * 32, "cartram_bytes": 32768, "saveram_path": "C:/x/y.SaveRAM",
+                                 "saveram_bytes": 32790, "flushed_matches": True})
+    if player == "a":
+        middle = ["ENGINE_FAINT " + j({"frame": 3000, "site_id": "battle_faint", "cause": "battle", "key": KEY, "slot": 1}),
+                  "FAINT_SENT " + j({"frame": 3001, "key": KEY, "seq": 20})]
+    else:
+        before = "00" * 48 + "10" + "00" * 31 + "0102" + "00" * 14 + "00" * 48 * 4
+        after = "00" * 48 + "10" + "00" * 31 + "0000" + "00" * 14 + "00" * 48 * 4
+        span = {"domain": "System Bus", "status": "written", "why": "overworld", "batch_size": 2}
+        middle = ["RX force_faint key=" + KEY,
+                  "PARTY_HP_WRITE " + j({"frame": 3200, "key": KEY, "slot": 1, "kind": "party_hp", "ok": True,
+                                         "before_party_hex": before, "after_party_hex": after,
+                                         "log": [dict(span, addr=0xDD0F, n=1, batch_index=1),
+                                                 dict(span, addr=0xDD11, n=2, batch_index=2)],
+                                         "checkpoint": {"pc": 27011, "sp": 0xC0FD, "hrom_bank": 37, "svbk": 1,
+                                                        "sc": 0, "stack_hex": "4468", "anchor_hex": "cdf0",
+                                                        "state": {"wMapStatus": 2}}}),
+                  "BENCH_HP_STATUS 0000 00"]
+    return base + [link] + middle + [final]
+
+
+@pytest.mark.parametrize("player", ["a", "b"])
+def test_faint_verdict_passes_each_complete_half(player):
+    problems, receipt = faint_verdict(faint_lines(player))
+    assert problems == [], problems
+    assert receipt["schema"] == "gen2-duo-faint-v1" and receipt["key"] == KEY and receipt["player"] == player
+    assert receipt["link_save"]["saveram_bytes"] == 32790
+
+
+def faint_mutate(player, tag, **changes):
+    out = []
+    for line in faint_lines(player):
+        if line.startswith(tag + " "):
+            value = json.loads(line[len(tag) + 1:])
+            value.update(changes)
+            line = f"{tag} {json.dumps(value)}"
+        out.append(line)
+    return out
+
+
+def drop(player, prefix):
+    return [line for line in faint_lines(player) if not line.startswith(prefix)]
+
+
+def swap(lines, a, b):
+    lines = list(lines)
+    lines[a], lines[b] = lines[b], lines[a]
+    return lines
+
+
+@pytest.mark.parametrize("lines,match", [
+    (faint_mutate("a", "CLIENT", registered_sites=["battle_end"]), "lack battle_faint"),
+    (faint_mutate("a", "ENGINE_FAINT", key="0000:0000:01"), "another mon"),
+    (faint_mutate("a", "ENGINE_FAINT", site_id="poison_faint"), "not battle_faint"),
+    (drop("a", "FAINT_SENT"), "missing FAINT_SENT"),
+    (swap(faint_lines("a"), 9, 10), "faint sent before"),
+    (faint_mutate("a", "SAVE_WITNESS", save_completed_frame=2999), "before the faint was sent"),
+    (faint_mutate("a", "SAVE_WITNESS", gate_saves=1), "no native save after LINK_SAVE"),
+    (drop("a", "LINK_SAVE"), "missing LINK_SAVE"),
+    (faint_mutate("a", "LINK_SAVE", saveram_bytes=32768), "LINK_SAVE incomplete"),
+    (faint_lines("a")[:-1] + [faint_lines("b")[10], faint_lines("a")[-1]], "party was written"),
+    (drop("b", "RX force_faint"), "no RX force_faint"),
+    ([x.replace("RX force_faint key=" + KEY, "RX force_faint key=0000:0000:01") for x in faint_lines("b")],
+     "no RX force_faint"),
+    (faint_mutate("b", "PARTY_HP_WRITE", ok=False), "write failed"),
+    (faint_mutate("b", "PARTY_HP_WRITE", key="0000:0000:01"), "another mon"),
+    (faint_mutate("b", "PARTY_HP_WRITE", log=[{"status": "written"}]), "two-span"),
+    (swap(faint_lines("b"), 9, 10), "write precedes force_faint"),
+    ([x.replace("BENCH_HP_STATUS 0000 00", "BENCH_HP_STATUS 0001 00") for x in faint_lines("b")], "HP 0000"),
+    (drop("b", "BENCH_HP_STATUS"), "missing BENCH_HP_STATUS"),
+    (faint_lines("b")[:-1] + [faint_lines("a")[9], faint_lines("b")[-1]], "own mon fainted"),
+    (faint_mutate("b", "SAVE_WITNESS", save_completed_frame=3100), "before the write"),
+], ids=["no-site", "faint-other-key", "poison-site", "no-send", "send-first", "save-before-send", "no-new-save",
+        "no-link-save", "short-link-save", "a-written", "no-rx", "rx-other-key", "write-failed", "write-other-key",
+        "one-span", "write-first", "hp-left", "no-bench", "b-engine-faint", "save-before-write"])
+def test_faint_verdict_refuses_a_tampered_or_reordered_half(lines, match):
+    problems, receipt = faint_verdict(lines)
+    assert receipt is None and any(match in p for p in problems), problems
+
+
+# --- gen2_faint_inputs.lua: the pure faint route (O15 input plan) --------------------------------------
+
+def faint_driver(target=1):
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    FI = lua.execute(FAINT_INPUTS.read_text(encoding="utf-8"))
+    walk = lua.eval("{walk_direction=function() return 'Left' end}")
+    return lua, FI.driver(walk, lua.table_from({}), lua.table_from({"target": target}))
+
+
+def point(lua, **fields):
+    base = {"battle_mode": 1, "active_slot": 0, "input_ready": True, "fainted": False,
+            "party_hp": {0: 17, 1: 14}, "overworld_ready": False}
+    base.update(fields)
+    return lua.table_from(base, recursive=True)
+
+
+def ui(kind, items=None, cursor=1, columns=1, **extra):
+    out = {"kind": kind, **extra}
+    if items:
+        out.update(items={i + 1: v for i, v in enumerate(items)}, cursor=cursor, columns=columns)
+    return out
+
+
+def press(lua, driver, **fields):
+    """One decision, then the 12-frame hold and its release frame; returns the pressed buttons and phase."""
+    p = point(lua, **fields)
+    buttons, phase = driver.step(p)
+    assert buttons is not None, phase
+    pressed = sorted(k for k, v in buttons.items() if v)
+    for _ in range(12):
+        driver.step(p)
+    return pressed, phase
+
+
+MENU = ["FIGHT", "<PK><MN>", "PACK", "RUN"]
+
+
+def test_faint_route_switches_the_target_in_growls_says_yes_and_runs():
+    lua, d = faint_driver()
+    assert press(lua, d, ui=ui("battle_menu", MENU, 1, 2)) == (["Right"], "battle")      # PKMN by cell
+    assert press(lua, d, ui=ui("battle_menu", MENU, 2, 2))[0] == ["A"]
+    assert press(lua, d, ui=ui("battle_party"), party_cursor=0)[0] == ["Down"]
+    assert press(lua, d, ui=ui("battle_party"), party_cursor=1)[0] == ["A"]
+    assert press(lua, d, ui=ui("battle_mon_menu", ["SWITCH", "STATS", "CANCEL"]))[0] == ["A"]
+    assert press(lua, d, ui=ui("text"), active_slot=1)[0] == ["A"]
+    assert press(lua, d, ui=ui("battle_menu", MENU, 1, 2), active_slot=1)[0] == ["A"]  # FIGHT
+    assert press(lua, d, ui=ui("move_menu", ["TACKLE", "GROWL"]), active_slot=1)[0] == ["Down"]
+    assert press(lua, d, ui=ui("move_menu", ["TACKLE", "GROWL"], 2), active_slot=1)[0] == ["A"]
+    after = {"fainted": True, "active_slot": 1, "party_hp": {0: 17, 1: 0}}
+    assert press(lua, d, ui=ui("yes_no", ["YES", "NO"], prompt="next_mon"), **after)[0] == ["A"]  # YES
+    assert press(lua, d, ui=ui("battle_party"), party_cursor=1, **after)[0] == ["Up"]
+    assert press(lua, d, ui=ui("battle_party"), party_cursor=0, **after)[0] == ["A"]
+    after["active_slot"] = 0
+    assert press(lua, d, ui=ui("battle_menu", MENU, 1, 2), **after)[0] == ["Right"]     # toward RUN
+    assert press(lua, d, ui=ui("battle_menu", MENU, 2, 2), **after)[0] == ["Down"]
+    assert press(lua, d, ui=ui("battle_menu", MENU, 4, 2), **after)[0] == ["A"]
+    del after["active_slot"]
+    buttons, phase = d.step(point(lua, battle_mode=0, overworld_ready=True, **after))
+    assert phase == "fainted" and not any(buttons.values())
+
+
+def test_faint_route_flees_a_splash_only_foe_and_walks_on():
+    lua, d = faint_driver()
+    assert press(lua, d, ui=ui("battle_menu", MENU, 1, 2), foe_harmless=True)[0] == ["Right"]
+    assert press(lua, d, ui=ui("battle_menu", MENU, 2, 2), foe_harmless=True)[0] == ["Down"]   # RUN, not PKMN
+    buttons, phase = d.step(point(lua, battle_mode=0, overworld_ready=True))
+    assert phase == "walk" and buttons["Left"]
+
+
+def test_faint_route_refuses_a_zero_hp_target_without_the_engine_faint():
+    lua, d = faint_driver()
+    press(lua, d, ui=ui("text"))
+    buttons, why = d.step(point(lua, battle_mode=0, overworld_ready=True, party_hp={0: 17, 1: 0}))
+    assert buttons is None and "never observed" in why
+
+
+def test_party_cursor_reads_the_source_geometry():
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    FI = lua.execute(FAINT_INPUTS.read_text(encoding="utf-8"))
+    rows = [[" "] * 20 for _ in range(18)]
+    rows[3][0] = "▶"                  # screen row 3 (0-based) = 1 + 2*1: list entry 1
+    as_lua = lambda r: lua.table_from([lua.table_from(row) for row in r])
+    assert FI.party_cursor(as_lua(rows)) == 1
+    rows[2][0] = "▶"
+    assert FI.party_cursor(as_lua(rows)) is None   # two cursors / an odd row: refused
