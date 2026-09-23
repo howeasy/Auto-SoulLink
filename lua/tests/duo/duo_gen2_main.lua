@@ -370,12 +370,13 @@ function h.hold(buttons, n)
         step(b)
     end
 end
--- The gate's own decoder (never production's): {ot_id, party_count}, or nil while unreadable.
+-- Raw wPlayerID (big-endian) and wPartyCount, read by symbol in their named WRAM bank (never production's
+-- reads, and never a name decode: a zero-filled WRAM has no valid name or party list to decode).
 function h.identity()
-    local okp, player = pcall(ctx.reads.read_player)
-    local okq, party = pcall(ctx.reads.read_party)
-    if not okp or not okq or not player or not party then return nil end
-    return {ot_id=player.ot_id, party_count=party.count}
+    local okp, id = pcall(ctx.sym, "wPlayerID", 0, 2)
+    local okq, count = pcall(ctx.sym, "wPartyCount", 0, 1)
+    if not okp or not okq then return nil end
+    return {ot_id=id[1] * 256 + id[2], party_count=count[1]}
 end
 -- The production writer's permit log length (0 for a stand-in client that composes none).
 function h.write_count() return #((parts.writes or {}).log or {}) end

@@ -861,3 +861,177 @@ def test_reconnect_verdict_passes_each_complete_leg():
 def test_reconnect_verdict_refuses_a_tampered_leg(lines, match):
     problems, receipt = reconnect_verdict(lines)
     assert receipt is None and any(match in p for p in problems), problems
+
+
+# --- soft_reset (C-2 WRAM clear, R-4, W-6) -------------------------------------------------------------
+
+SOFT_RESET = ROOT / "lua/tests/duo/scenario_gen2_soft_reset.lua"
+DRIVER_FILES += ("lua/tests/duo/scenario_gen2_soft_reset.lua",)
+CHORD = {"A", "B", "Select", "Start"}
+
+
+class ResetSim(DuoSim):
+    """UpdateJoypad's soft reset: all four buttons held -> Reset (DelayFrames 32) -> Init zero-fills WRAM ->
+    the title again; CONTINUE reloads the same battery save. No battle on this route."""
+
+    def __init__(self, lua, title="crystal", *, clear_delay=32, **kw):
+        self.resets, self.clear_delay = 0, clear_delay
+        super().__init__(lua, title, **kw)
+
+    def game(self):
+        while True:
+            yield from self.wait(20)
+            self.clear()
+            yield from self.until("Start", "title")
+            yield from self.wait(2)
+            yield from self.menu("main_menu", ["CONTINUE", "NEW GAME", "OPTION"], "CONTINUE")
+            self.fire("continue")
+            self.load()
+            yield from self.wait(20)
+            self.fire("continue_confirm")
+            yield from self.until("A")
+            self.fire("continue_loaded")
+            self.fire("rtc_ok")
+            yield from self.wait(20)
+            self.fire("finish_continue")
+            yield from self.enter(*self.where)
+            while True:
+                self.fire("overworld_tick")
+                got = yield
+                if CHORD <= got.held:
+                    self.resets += 1
+                    yield from self.wait(self.clear_delay)
+                    self.wram[:] = bytes(len(self.wram))
+                    self.clear()
+                    break
+                if "Start" in got.edges:
+                    yield from self.save()
+
+
+def live_party(sim, glob):
+    glob.SLINK_TEST_LIVE = lambda: sim.get("wPartyCount") > 0
+
+
+def chord_gate(tmp_path):
+    (tmp_path / "go_a.txt.chord").write_text("CHORD", encoding="utf-8")
+
+
+def run_reset(tmp_path, *, gate=True, **kw):
+    if gate:
+        chord_gate(tmp_path)
+    return run_driver(tmp_path, scenario="soft_reset", sim_class=ResetSim, setup=live_party,
+                      duo={"timeout_frames": 20000}, **kw)
+
+
+def test_soft_reset_a_resets_withholds_continues_rehellos_and_saves(tmp_path):
+    lines, sim, _ = run_reset(tmp_path)
+    assert lines[-1] == "RESULT: PASS (same-save soft reset: one re-hello, no writes in the cleared window)", \
+        "\n".join(lines[-30:])
+    assert sim.resets == 1 and sim.writes == []
+    assert tag_json(lines, "RESET_SEEN")["delta"] == 33
+    assert 240 <= tag_json(lines, "WRITES_PAUSED")["delta"] <= 300
+    assert tag_json(lines, "REHELLO")["ot_id"] == tag_json(lines, "HELLO")["ot_id"]
+    tags = [line.split(" ", 1)[0] for line in lines]
+    order = [tags.index(t) for t in ("HELLO_AT_CHECKPOINT", "CHORD_GATE", "CHORD", "RESET_SEEN", "WRITES_PAUSED",
+                                     "REBOOTED", "WRITES_RESUMED", "REHELLO", "NO_WRITES_IN_WINDOW", "SAVE_WITNESS",
+                                     "RECEIPT")]
+    assert order == sorted(order)
+    chord = [row for row in sim.inputs if all(row.get(b) for b in CHORD)]
+    assert len(chord) == 4 and all(set(row) <= {"Up", "Down", "Left", "Right", "A", "B", "Start", "Select"}
+                                   for row in sim.inputs)
+
+
+def test_soft_reset_a_waits_for_the_chord_gate(tmp_path):
+    lines, sim, _ = run_reset(tmp_path, gate=False)
+    assert lines[-1] == "RESULT: FAIL (chord gate never released)" and sim.resets == 0
+
+
+def test_soft_reset_a_fails_when_the_chord_clears_nothing(tmp_path):
+    lines, _, _ = run_reset(tmp_path, clear_delay=200)
+    assert lines[-1] == "RESULT: FAIL (the soft reset chord did not clear WRAM)"
+
+
+def test_soft_reset_b_idles_until_the_partner_rehellos(tmp_path):
+    (tmp_path / "b.txt").write_text('REHELLO {"frame": 1}\n', encoding="utf-8")
+    lines, sim, _ = run_driver(tmp_path, scenario="soft_reset", player="b", sim_class=ResetSim, setup=live_party)
+    assert lines[-1] == "RESULT: PASS (idled at the checkpoint across the partner reset)", "\n".join(lines[-20:])
+    assert tag_json(lines, "IDLE_PARTNER")["hellos"] == 1 and sim.resets == 0
+
+
+def soft_verdict(lines):
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    json_codec = lua.execute((ROOT / "lua/json_codec.lua").read_text(encoding="utf-8"))
+    problems, receipt = lua.execute(SOFT_RESET.read_text(encoding="utf-8")).verdict(lua.table_from(lines), json_codec)
+    return list(problems.values()), receipt
+
+
+def soft_lines(player):
+    j = json.dumps
+    base = [line.replace('"player": "a", "scenario": "link"', f'"player": "{player}", "scenario": "soft_reset"')
+            for line in happy_lines()[:5]]
+    save = "SAVE_WITNESS " + j({"frame": 5000, "save_completed_frame": 4900, "gate_saves": 1, "client_saves": 1,
+                                "cartram_sha256": "cd" * 32, "cartram_bytes": 32768, "saveram_path": "C:/x/y.SaveRAM",
+                                "saveram_bytes": 32790, "flushed_matches": True})
+    if player == "b":
+        return base + ["IDLE_PARTNER " + j({"frame": 4000, "hellos": 1}), save]
+    return base + [
+        "HELLO_AT_CHECKPOINT " + j({"frame": 400, "ot_id": 46401, "hellos": 1, "writes_enabled": True}),
+        "CHORD_GATE " + j({"frame": 410}),
+        "CHORD " + j({"frame": 410, "frames": 4}),
+        "RESET_SEEN " + j({"frame": 443, "delta": 33}),
+        "HELLO_CLEARED " + j({"frame": 443, "delta": 0}),
+        "WRITES_PAUSED " + j({"frame": 720, "delta": 277}),
+        "HELLO_AGAIN " + j({"frame": 1400, "ot_id": 46401, "n": 2}),
+        "REBOOTED " + j({"frame": 1420, "map_group": 24, "map_number": 3, "x": 10, "y": 10, "party_count": 1}),
+        "WRITES_RESUMED " + j({"frame": 1440, "delta": 997}),
+        "REHELLO " + j({"frame": 1441, "ot_id": 46401, "hellos": 2}),
+        "NO_WRITES_IN_WINDOW " + j({"writes": 0}),
+        save]
+
+
+def soft_mutate(player, tag, **changes):
+    out = []
+    for line in soft_lines(player):
+        if line.startswith(tag + " "):
+            value = json.loads(line[len(tag) + 1:])
+            value.update(changes)
+            line = f"{tag} {json.dumps(value)}"
+        out.append(line)
+    return out
+
+
+def test_soft_verdict_passes_each_complete_half():
+    for player in ("a", "b"):
+        problems, receipt = soft_verdict(soft_lines(player))
+        assert problems == [] and receipt["schema"] == "gen2-duo-soft-reset-v1" and receipt["player"] == player, problems
+
+
+def soft_drop(player, tag):
+    return [line for line in soft_lines(player) if not line.startswith(tag + " ")]
+
+
+@pytest.mark.parametrize("lines,match", [
+    (soft_mutate("a", "RESET_SEEN", delta=12), "DelayFrames window"),
+    (soft_mutate("a", "RESET_SEEN", delta=90), "DelayFrames window"),
+    (soft_mutate("a", "HELLO_CLEARED", delta=400), "withdrawn too late"),
+    (soft_mutate("a", "WRITES_PAUSED", delta=60), "MAX_INVALID window"),
+    (soft_mutate("a", "REHELLO", ot_id=1), "another OT"),
+    (soft_mutate("a", "HELLO_AGAIN", ot_id=1), "pre-reset OT"),
+    (soft_mutate("a", "NO_WRITES_IN_WINDOW", writes=2), "write landed"),
+    (soft_mutate("a", "HELLO_AT_CHECKPOINT", writes_enabled=False), "writes enabled"),
+    (soft_mutate("a", "SAVE_WITNESS", save_completed_frame=1000), "before the re-hello"),
+    (soft_drop("a", "HELLO_AGAIN"), "missing HELLO_AGAIN"),
+    (soft_drop("a", "CHORD_GATE"), "missing CHORD_GATE"),
+    (soft_drop("a", "REBOOTED"), "missing REBOOTED"),
+    (soft_lines("a")[:10] + [soft_lines("a")[12], soft_lines("a")[10], soft_lines("a")[11]] + soft_lines("a")[13:],
+     "REBOOTED before writes paused"),
+    (soft_lines("a") + [happy_lines()[5]], "was caught"),
+    (soft_lines("b")[:-1] + [soft_lines("a")[5], soft_lines("b")[-1]], "partner printed HELLO_AT_CHECKPOINT"),
+    (soft_mutate("b", "IDLE_PARTNER", hellos=2), "more than once"),
+    (soft_lines("b")[:-2] + [soft_lines("b")[-1], soft_lines("b")[-2]], "before IDLE_PARTNER"),
+], ids=["reset-early", "reset-late", "hello-late", "pause-early", "rehello-ot", "again-ot", "writes", "not-enabled",
+        "save-early", "no-again", "no-gate", "no-reboot", "reboot-before-pause", "caught", "b-chord", "b-rehello",
+        "b-save-first"])
+def test_soft_verdict_refuses_a_tampered_half(lines, match):
+    problems, receipt = soft_verdict(lines)
+    assert receipt is None and any(match in p for p in problems), problems
