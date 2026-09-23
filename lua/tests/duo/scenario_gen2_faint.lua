@@ -27,6 +27,9 @@
                        log=[the permit receipts the call added], checkpoint={pc, sp, hrom_bank, svbk, sc,
                        stack_hex, anchor_hex, state={symbol: raw value}}}   around the production call
        BENCH_HP_STATUS <hp %04X> <status %02X>        (plain text, Gen 1's name) the record read back
+    MEMORIAL_PREIMAGE {frame, key, slot, raw_hex (48-byte party record), ot_raw_hex, nickname_raw_hex,
+                       species_marker}   both; the harness, at the production run_box(memorialize) entry
+    MEMORIAL_ACK {frame, event="memorialize_done", key, box=13}   both; after the preimage, before the final save
     SAVE_WITNESS              the final native save, strictly newer than LINK_SAVE (more gate + client saves)
     RECEIPT {schema "gen2-duo-faint-v1", ...}  PASS only;  RESULT: PASS|FAIL  last line
   S.verdict re-reads these lines (plus the link verdict over the same lines) and is the only way to PASS.
@@ -42,15 +45,30 @@ S.FORCE_FRAMES = 120000    -- B waits this long for force_faint (A's link + fain
 S.SEND_FRAMES = 600        -- A: engine faint -> `faint` on the wire
 S.WRITE_FRAMES = 1800      -- B: force_faint -> the checkpoint write
 S.SETTLE_FRAMES = 120
+S.MEMORIAL_FRAMES = 1800   -- the fainted key's memorialize (server-queued with the faint) -> its ack
+S.MEMORIAL_BOX = 13        -- boxes.memorial_box = NUM_BOXES - 1 (sBox14)
 S.SAVERAM_BYTES = 0x8000 + 22
 S.KEY = "^%x%x%x%x:%x%x%x%x:%x%x$"
 S.LINK = "lua/tests/duo/scenario_gen2_link.lua"
 S.JSON_TAGS = {LINK_SAVE=true, ENGINE_FAINT=true, FAINT_SENT=true, PARTY_HP_WRITE=true, CLIENT=true,
-               DUO_GEN2=true, SAVE_WITNESS=true, ENGINE_CAPTURE=true}
+               DUO_GEN2=true, SAVE_WITNESS=true, ENGINE_CAPTURE=true, MEMORIAL_PREIMAGE=true, MEMORIAL_ACK=true}
 
 local function has(list, value)
     for _, v in ipairs(list or {}) do if v == value then return true end end
     return false
+end
+
+-- B's readback of the forced faint: HP and status of the key's party record. A fast memorialize may already
+-- have boxed it (a native box record has no HP/status): then the actual pre-deposit party record the harness
+-- captured at run_box(memorialize) (MON_STATUS 0x20, MON_HP 0x22 big-endian), never an invented value.
+function S.bench_record(h, key)
+    local _, mon = h.slot_of(key)
+    if mon then return mon.hp, mon.status, "party" end
+    local pre = h.rec.preimage and h.rec.preimage[key]
+    local raw = pre and pre.raw_hex
+    if type(raw) ~= "string" or #raw ~= 96 then return nil, nil, "the linked mon left the party" end
+    local function byte(i) return tonumber(raw:sub(2 * i + 1, 2 * i + 2), 16) end
+    return byte(0x22) * 256 + byte(0x23), byte(0x20), "memorial_preimage"
 end
 
 function S.run(h)
@@ -64,7 +82,7 @@ function S.run(h)
     h.party()
     if not h.wait(function() return h.sent.hello ~= nil end, S.HELLO_FRAMES) then return false, "the client never sent hello" end
     if not h.wait(h.go, S.GO_FRAMES) then return false, "no go-file" end
-    local played, outcome = h.play()
+    local played, outcome = h.play({settled=h.link_settled})
     if not played then return false, "link route failed: " .. tostring(outcome) end
     h.party()
     local key = h.rec.caught
@@ -93,11 +111,17 @@ function S.run(h)
         if not h.wait(function() return h.rec.hp_write ~= nil end, S.WRITE_FRAMES) then
             return false, "the production client never wrote the bench faint"
         end
-        local _, mon = h.slot_of(key)
-        if not mon then return false, "the linked mon left the party" end
-        h.log(string.format("BENCH_HP_STATUS %04X %02X", mon.hp, mon.status))
-        if mon.hp ~= 0 or mon.status ~= 0 then return false, "the bench faint did not zero HP/status" end
+        local hp, status, source = S.bench_record(h, key)
+        if hp == nil then return false, source end
+        h.log(string.format("BENCH_HP_STATUS %04X %02X", hp, status))
+        if hp ~= 0 or status ~= 0 then return false, "the bench faint did not zero HP/status (" .. source .. ")" end
     end
+    -- The server memorializes the fainted key (both sides); the final save must hold the Box 14 record.
+    if not h.wait(function() return h.rec.memorial[key] ~= nil end, S.MEMORIAL_FRAMES) then
+        return false, "no memorialize ack for " .. key
+    end
+    local ack = h.rec.memorial[key]
+    if ack.event ~= "memorialize_done" then return false, "memorialize failed: " .. tostring(ack.reason) end
 
     local resaved, resave_why = h.save()
     if not resaved then return false, "final save failed: " .. tostring(resave_why) end
@@ -155,6 +179,19 @@ function S.verdict(lines, json, link_verdict)
                  and type(s.client_saves) == "number" and type(l.client_saves) == "number" and s.client_saves > l.client_saves,
                  "no native save after LINK_SAVE")
         end
+    end
+    -- both halves: the fainted key's pre-deposit record, then its successful memorial, then the final save
+    local pre
+    for _, r in ipairs(rows("MEMORIAL_PREIMAGE")) do if r.value.key == key then need(pre == nil, "MEMORIAL_PREIMAGE repeated"); pre = pre or r end end
+    need(pre ~= nil and type(pre.value.raw_hex) == "string" and #pre.value.raw_hex == 96, "missing MEMORIAL_PREIMAGE for the linked key")
+    local done
+    for _, r in ipairs(rows("MEMORIAL_ACK")) do
+        if r.value.key == key and r.value.event == "memorialize_done" and r.value.box == S.MEMORIAL_BOX then done = done or r end
+    end
+    need(done ~= nil, "no memorialize_done (box " .. S.MEMORIAL_BOX .. ") for the linked key")
+    if pre and done then
+        need(pre.at < done.at and save ~= nil and done.at < save.at and link ~= nil and pre.at > link.at,
+             "memorial out of order (LINK_SAVE < preimage < ack < final save)")
     end
     local detail = {}
     if player == "a" then
@@ -220,6 +257,7 @@ function S.verdict(lines, json, link_verdict)
     if #problems > 0 then return problems, nil end
     local receipt = link_receipt
     receipt.schema, receipt.link_save = S.RECEIPT_SCHEMA, link.value
+    receipt.memorial = {preimage_frame=pre.value.frame, ack=done.value}
     for k, v in pairs(detail) do receipt[k] = v end
     return problems, receipt
 end

@@ -37,7 +37,7 @@ function S.run(h)
         return false, "the client never sent hello"
     end
     if not h.wait(h.go, S.GO_FRAMES) then return false, "no go-file" end
-    local played, outcome = h.play()
+    local played, outcome = h.play({settled=h.link_settled})
     if not played then return false, "route failed: " .. tostring(outcome) end
     h.party()
     local witnessed, witness_why = h.witness()

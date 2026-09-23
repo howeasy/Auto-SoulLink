@@ -69,8 +69,16 @@ end
 function client:on_event(ev)
     if ev.kind == "capture" then self:send("capture", {key = ev.mon.key, area_id = ev.area_id}) end
 end
-function client:handle_command(cmd) end
+client.deferred, client.settle = {}, {}
+local BOX = {box_mon = true, party_mon = true, memorialize = true}
+function client:handle_command(cmd)
+    if BOX[cmd.cmd] then table.insert(self.deferred, cmd) end
+end
+function client:run_box(cmd)
+    if cmd.cmd == "party_mon" then self:send("sync_retrieve_done", {key = cmd.key}) end
+end
 function client:frame_end()
+    if #self.deferred > 0 and emu.framecount() % 30 == 0 then self:run_box(table.remove(self.deferred, 1)) end
     local live = SLINK_TEST_LIVE == nil or SLINK_TEST_LIVE()
     if not live then self.hello_sent = false end
     if emu.framecount() % 60 == 0 then
@@ -103,14 +111,19 @@ event.onframeend(function() client:frame_end() end)
 class DuoSim(QualifySim):
     """CONTINUE onto Route 29 grass, walk, one wild battle caught with a Poke Ball (NO nickname), save."""
 
-    def __init__(self, lua, title="crystal", *, emit_capture=True, client_save=True):
-        self.emit_capture, self.client_save = emit_capture, client_save
+    def __init__(self, lua, title="crystal", *, emit_capture=True, client_save=True, link_reply=True):
+        self.emit_capture, self.client_save, self.link_reply = emit_capture, client_save, link_reply
         self.frame_hooks, self.caught = [], False
         super().__init__(lua, title, "battle", where=grass_start(title))
         self.u1 = u1_facts(context(title), facts(title), "q-model")
         self.sites.update(self.u1["pack_ui"])
         lua.execute("function SLINK_TEST_PUSH(ev) SLINK_TEST_EVENTS = SLINK_TEST_EVENTS or {};"
                     " table.insert(SLINK_TEST_EVENTS, ev) end")
+        lua.execute("function SLINK_TEST_CMD(c) SLINK_TEST_COMMANDS = SLINK_TEST_COMMANDS or {};"
+                    " table.insert(SLINK_TEST_COMMANDS, c) end")
+
+    def command(self, **cmd):
+        self.lua.globals().SLINK_TEST_CMD(self.lua.table_from(cmd))
 
     def push(self, event):
         self.lua.globals().SLINK_TEST_PUSH(self.lua.table_from(event, recursive=True))
@@ -184,6 +197,8 @@ class DuoSim(QualifySim):
                        "mon": {"key": key, "species_id": species, "level": 3}})
         yield from self.wait(4)
         self.put("wBattleMode", [0])
+        if self.link_reply:   # the partner already waits: the server links at once (state.py:1741)
+            self.command(cmd="msgbox", text="PIDGEY and SENTRET linked!")
         self.on_caught(species, key)
 
     def game(self):
@@ -477,6 +492,10 @@ def faint_lines(player):
                                                         "sc": 0, "stack_hex": "4468", "anchor_hex": "cdf0",
                                                         "state": {"wMapStatus": 2}}}),
                   "BENCH_HP_STATUS 0000 00"]
+    record = "00" * 32 + "0000" + "00" * 14   # 48 bytes: MON_STATUS 0x20 = 0, MON_HP 0x22 = 0
+    middle += ["MEMORIAL_PREIMAGE " + j({"frame": 3300, "key": KEY, "slot": 1, "raw_hex": record,
+                                         "ot_raw_hex": "80" * 11, "nickname_raw_hex": "81" * 11, "species_marker": 16}),
+               "MEMORIAL_ACK " + j({"frame": 3301, "event": "memorialize_done", "key": KEY, "box": 13})]
     return base + [link] + middle + [final]
 
 
@@ -531,12 +550,42 @@ def swap(lines, a, b):
     (drop("b", "BENCH_HP_STATUS"), "missing BENCH_HP_STATUS"),
     (faint_lines("b")[:-1] + [faint_lines("a")[9], faint_lines("b")[-1]], "own mon fainted"),
     (faint_mutate("b", "SAVE_WITNESS", save_completed_frame=3100), "before the write"),
+    (drop("a", "MEMORIAL_PREIMAGE"), "missing MEMORIAL_PREIMAGE"),
+    (drop("b", "MEMORIAL_ACK"), "no memorialize_done"),
+    (faint_mutate("b", "MEMORIAL_ACK", event="memorialize_failed"), "no memorialize_done"),
+    (faint_mutate("a", "MEMORIAL_ACK", box=12), "no memorialize_done"),
+    (faint_mutate("a", "MEMORIAL_PREIMAGE", key="0000:0000:01"), "missing MEMORIAL_PREIMAGE"),
+    (swap(faint_lines("b"), -3, -2), "memorial out of order"),
+    (swap(faint_lines("a"), -2, -1), "memorial out of order"),
 ], ids=["no-site", "faint-other-key", "poison-site", "no-send", "send-first", "save-before-send", "no-new-save",
         "no-link-save", "short-link-save", "a-written", "no-rx", "rx-other-key", "write-failed", "write-other-key",
-        "one-span", "write-first", "hp-left", "no-bench", "b-engine-faint", "save-before-write"])
+        "one-span", "write-first", "hp-left", "no-bench", "b-engine-faint", "save-before-write", "no-preimage",
+        "no-ack", "ack-failed", "ack-other-box", "preimage-other-key", "ack-before-preimage", "save-before-ack"])
 def test_faint_verdict_refuses_a_tampered_or_reordered_half(lines, match):
     problems, receipt = faint_verdict(lines)
     assert receipt is None and any(match in p for p in problems), problems
+
+
+def bench(party_mon=None, preimage=None):
+    """S.bench_record against a stand-in h: the live party (slot_of) or the captured pre-deposit record."""
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    faint = lua.execute(FAINT.read_text(encoding="utf-8"))
+    h = lua.eval("""function(key, mon, pre)
+        return {slot_of=function(k) if mon then return 1, mon end end, rec={preimage={[key]=pre}}}
+    end""")(KEY, lua.table_from(party_mon) if party_mon else None, lua.table_from(preimage) if preimage else None)
+    return faint.bench_record(h, KEY)
+
+
+def test_bench_readback_reads_the_party_while_the_mon_is_there():
+    assert bench({"hp": 0, "status": 0}) == (0, 0, "party")
+
+
+def test_bench_readback_uses_the_memorial_preimage_once_the_mon_is_boxed():
+    """A fast memorialize can box B's target before the readback (native box records carry no HP): the
+    readback binds to the actual pre-deposit party record, MON_STATUS 0x20 / MON_HP 0x22 (big-endian)."""
+    record = "00" * 32 + "08" + "00" + "0003" + "00" * 12
+    assert bench(None, {"raw_hex": record}) == (3, 8, "memorial_preimage")
+    assert bench(None, None)[0] is None
 
 
 # --- gen2_faint_inputs.lua: the pure faint route (O15 input plan) --------------------------------------
@@ -1133,6 +1182,63 @@ DRIVER_FILES += ("lua/tests/duo/gen2_clause.lua", "lua/tests/duo/scenario_gen2_t
                  "lua/tests/duo/scenario_gen2_gender_clause.lua", "lua/tests/duo/scenario_gen2_species_clause.lua")
 RATTATA_KEY = "1A2B:B542:13"
 LINKED_TEXT = "Pidgey and Rattata linked!"
+class LaterLinkSim(DuoSim):
+    """C<->G reconnect RED run 1's order: this side catches FIRST, the server boxes the pending catch
+    (box_mon), and only when the partner catches does it link and withdraw it (msgbox + party_mon), here
+    `link_after` frames after the catch (None: never)."""
+
+    def __init__(self, lua, title="crystal", *, link_after=600, **kw):
+        self.link_after, self.box_log = link_after, []
+        super().__init__(lua, title, link_reply=False, **kw)
+
+    def on_caught(self, species, key):
+        self.command(cmd="box_mon", key=key)
+        left = [self.link_after]
+
+        def later():
+            if left[0] is None:
+                return
+            left[0] -= 1
+            if left[0] == 0:
+                self.command(cmd="msgbox", text="HOPPIP and PIDGEY linked!")
+                self.command(cmd="party_mon", key=key)
+        self.frame_hooks.append(later)
+
+
+def order(lines, *prefixes):
+    return [next(i for i, line in enumerate(lines) if line.startswith(p)) for p in prefixes]
+
+
+def test_reconnect_initial_saves_only_after_its_link_and_box_ops_settled(tmp_path):
+    lines, _, _ = run_driver(tmp_path, scenario="reconnect", player="b", duo={"phase": "initial"},
+                             go_text="GO\nB_DONE\n", sim_class=LaterLinkSim)
+    assert lines[-1].startswith("RESULT: PASS"), "\n".join(lines[-20:])
+    linked, withdrawn, saved, ready = order(lines, 'RX_TEXT {"cmd":"msgbox"', 'TX {"event":"sync_retrieve_done"',
+                                            "SAVE_WITNESS", "RECONNECT_READY")
+    assert linked < withdrawn < saved < ready
+
+
+def test_link_never_saves_while_the_catch_is_unlinked(tmp_path):
+    lines, _, _ = run_driver(tmp_path, sim_class=LaterLinkSim, link_after=None)
+    assert lines[-1].startswith("RESULT: FAIL") and not any(line.startswith("SAVE_WITNESS") for line in lines)
+
+
+def test_memorial_preimage_is_the_party_record_at_the_run_box_entry_once_per_key(tmp_path):
+    probe, _, _ = run_driver(tmp_path / "probe")
+    starter = mykey(probe)
+
+    def memorialize_twice(sim, species, key):
+        sim.command(cmd="memorialize", key=starter)
+        sim.command(cmd="memorialize", key=starter)
+    lines, sim, _ = run_driver(tmp_path / "run", sim_class=ClauseSim, link_reply=True, after_catch=memorialize_twice)
+    rows = [json.loads(line[len("MEMORIAL_PREIMAGE "):]) for line in lines if line.startswith("MEMORIAL_PREIMAGE ")]
+    assert len(rows) == 1, "\n".join(lines[-20:])
+    row = rows[0]
+    assert row["key"] == starter and row["slot"] == 0
+    assert bytes.fromhex(row["raw_hex"]) == bytes(sim.wram[sim.offset("wPartyMon1"):sim.offset("wPartyMon1") + 48])
+    assert row["species_marker"] == sim.get("wPartySpecies") and len(row["ot_raw_hex"]) == len(row["nickname_raw_hex"]) == 22
+
+
 DECOMPS = ROOT / ".cache/gen2-build"
 
 
@@ -1142,12 +1248,8 @@ class ClauseSim(DuoSim):
 
     def __init__(self, lua, title="crystal", *, foes=((16, KEY),), dupe=None, after_catch=None, after_flee=None, **kw):
         self.foes, self.dupe, self.after_catch, self.after_flee, self.battles = list(foes), dupe, after_catch, after_flee, []
+        kw.setdefault("link_reply", False)   # the clause server answers through after_catch/after_flee
         super().__init__(lua, title, **kw)
-        lua.execute("function SLINK_TEST_CMD(c) SLINK_TEST_COMMANDS = SLINK_TEST_COMMANDS or {};"
-                    " table.insert(SLINK_TEST_COMMANDS, c) end")
-
-    def command(self, **cmd):
-        self.lua.globals().SLINK_TEST_CMD(self.lua.table_from(cmd))
 
     def next_foe(self):
         return self.foes[min(len(self.battles), len(self.foes) - 1)]

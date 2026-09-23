@@ -57,7 +57,9 @@
     RESULT: PASS (caught <key>) | RESULT: FAIL (<reason>)                                   last line
   Every scenario may also see: HELLO_AGAIN {frame, ot_id, n} (each later hello; HELLO stays the first),
   RX_TEXT {frame, cmd, text} (hud_show/gui_prompt/msgbox text, after its RX line), MEMORIAL_ACK {frame,
-  event memorialize_done|memorialize_failed, key, box, reason} (the client's reply to a memorialize). An RX
+  event memorialize_done|memorialize_failed, key, box, reason} (the client's reply to a memorialize),
+  MEMORIAL_PREIMAGE {frame, key, slot, raw_hex, ot_raw_hex, nickname_raw_hex, species_marker} (the key's party
+  record at the production run_box(memorialize) entry, first entry per key only). An RX
   line is `RX <cmd>[ key=<k>][ sound=<n>][ area_id=<a>]`. Each scenario's header lists the markers it adds.
   CLIENT also carries registered_sites (the production binder's status().registered_sites after start).
   The faint scenario adds LINK_SAVE, ENGINE_FAINT, FAINT_SENT, PARTY_HP_WRITE and BENCH_HP_STATUS;
@@ -279,6 +281,40 @@ gen2.handle_command = function(self, cmd)
     return _handle(self, cmd)
 end
 
+-- MEMORIAL_PREIMAGE: the key's actual party record at the PRODUCTION run_box(memorialize) entry (inside the
+-- held checkpoint, before the box executor deposits it: a native box record has no HP/status). Once per key.
+rec.preimage = {}
+local _run_box = gen2.run_box
+if _run_box then gen2.run_box = function(self, cmd)
+    if type(cmd) == "table" and cmd.cmd == "memorialize" and type(cmd.key) == "string" and rec.preimage[cmd.key] == nil then
+        local phys = (self.retired_alias or {})[cmd.key] or cmd.key
+        -- By symbol in the WRAM domain (bank-independent), never production's reads; the key as wire.mon_key.
+        local ok, row = pcall(function()
+            local c = ctx.profile.constants
+            local L, N = c.PARTYMON_STRUCT_LENGTH, c.NAME_LENGTH
+            local function hex(bytes)
+                local out = {}
+                for i = 1, #bytes do out[i] = fmt("%02x", bytes[i]) end
+                return table.concat(out)
+            end
+            for slot = 0, math.min(ctx.sym("wPartyCount")[1], c.PARTY_LENGTH) - 1 do
+                local r = ctx.sym("wPartyMon1", slot * L, L)
+                local key = fmt("%02X%02X:%02X%02X:%02X", r[c.MON_DVS + 1], r[c.MON_DVS + 2],
+                                r[c.MON_OT_ID + 1], r[c.MON_OT_ID + 2], r[c.MON_SPECIES + 1])
+                if key == phys then
+                    return {frame=emu.framecount(), key=cmd.key, slot=slot, raw_hex=hex(r),
+                            ot_raw_hex=hex(ctx.sym("wPartyMonOTs", slot * N, N)),
+                            nickname_raw_hex=hex(ctx.sym("wPartyMonNicknames", slot * N, N)),
+                            species_marker=ctx.sym("wPartySpecies", slot, 1)[1]}
+                end
+            end
+        end)
+        if ok and row then rec.preimage[cmd.key] = row; jlog("MEMORIAL_PREIMAGE", row)
+        elseif not ok then log("MEMORIAL_PREIMAGE unreadable: " .. tostring(row)) end
+    end
+    return _run_box(self, cmd)
+end end
+
 -- PARTY_HP_WRITE: the PRODUCTION writer's bench faint, observed around the very call the client makes
 -- (parts.writes IS the client's writes object; run_deferred calls it inside the checkpoint hook). Every
 -- field is read synchronously in the call: raw wPartyMons before/after, the permit log rows it added, and
@@ -413,9 +449,22 @@ function h.party()
         if key then log(fmt("MYKEY %d %s", i - 1, key)) end
     end
 end
-function h.play()
+-- The client has no box op queued or awaiting its save (run_deferred's queue, the deferred backing settles).
+function h.box_idle()
+    return #(gen2.deferred or {}) == 0 and #(gen2.settle or {}) == 0
+end
+-- This side's catch is linked (the server's "<a> and <b> linked!" msgbox, state.py:1493/:1741) and the box
+-- ops the link sent (party_mon withdrawing a boxed pending catch) have run: CartRAM is final before a save.
+function h.link_settled()
+    for _, r in ipairs(rec.rx) do
+        if r.cmd == "msgbox" and type(r.text) == "string" and r.text:sub(-8) == " linked!" then return h.box_idle() end
+    end
+    return false
+end
+-- opts.settled(): hold the save back (still the report gate) until it is true, e.g. h.link_settled.
+function h.play(opts)
     local driver, observe, spec = R.new(ctx, SG, F, {captures=function() return rec.captures end,
-        reported=function() return rec.caught ~= nil end,
+        reported=function() return rec.caught ~= nil end, settled=opts and opts.settled,
         max_frames=math.max(1, timeout - api.framecount()), max_phase_frames=D.max_phase_frames})
     return F.play(host, spec, driver, observe, {log=log, frame=api.framecount,
         screen=function() return SG.screen(ctx) end, where=function() return "-" end,

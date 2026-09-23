@@ -52,7 +52,9 @@ function R.prepare(ctx, SG, u1)
 end
 
 -- opts.captures() -> engine capture events the production client received (capture_party_finalized);
--- opts.reported() -> true once CAUGHT was printed. Returns driver, observe, host spec.
+-- opts.reported() -> true once CAUGHT was printed; opts.settled() (optional) -> true once the save may start
+-- (h.link_settled: linked and no box op left, so no CartRAM edit lands after the witness, C<->G reconnect
+-- RED run 1). Returns driver, observe, host spec.
 function R.new(ctx, SG, F, opts)
     local driver = F.driver(ctx.facts.maps.Route29)
     local base = SG.qualify_observer(ctx)
@@ -62,7 +64,8 @@ function R.new(ctx, SG, F, opts)
         if point.ui and point.ui.kind == "pack_balls" then point.ball_cursor = F.ball_cursor(SG.screen(ctx)) end
         -- The report gate: a finished catch stays in phase "battle" (F.driver idles while the overworld
         -- is not ready) until the capture went out on the wire.
-        if driver.phase == "battle" and point.overworld_ready and opts.captures() >= 1 and not opts.reported() then
+        if driver.phase == "battle" and point.overworld_ready and opts.captures() >= 1
+            and (not opts.reported() or (opts.settled ~= nil and not opts.settled())) then
             point.overworld_ready = false
         end
         return point
