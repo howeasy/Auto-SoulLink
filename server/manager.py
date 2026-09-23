@@ -69,12 +69,12 @@ GAMES = [
     ("gen3_ap", "FireRed · LeafGreen (Archipelago) — not admitted by the SLink client yet", ["firered_ap", "leafgreen_ap"]),
     ("gen3_rr", "Radical Red", ["firered_rr"]),
     ("gen3_e", "Emerald — not admitted by the SLink client yet", ["emerald"]),
-    ("gen4_hgss", "HeartGold · SoulSilver", ["heartgold", "soulsilver"]),
-    ("gen4_pt", "Platinum · Renegade Platinum", ["platinum", "renegade_platinum"]),
-    ("gen5_bw", "Black · White", ["pokemon_black", "pokemon_white"]),
-    ("gen5_bw2", "Black 2 · White 2", ["pokemon_black_2", "pokemon_white_2"]),
+    ("gen4_hgss", "HeartGold · SoulSilver — not admitted by the SLink client yet", ["heartgold", "soulsilver"]),
+    ("gen4_pt", "Platinum · Renegade Platinum — not admitted by the SLink client yet", ["platinum", "renegade_platinum"]),
+    ("gen5_bw", "Black · White — not admitted by the SLink client yet", ["pokemon_black", "pokemon_white"]),
+    ("gen5_bw2", "Black 2 · White 2 — not admitted by the SLink client yet", ["pokemon_black_2", "pokemon_white_2"]),
 ]
-UNADMITTED_GAMES = frozenset({"gen3_ap", "gen3_e"})  # labelled "not admitted"; handle_new refuses them
+UNADMITTED_GAMES = frozenset({"gen3_ap", "gen3_e", "gen4_hgss", "gen4_pt", "gen5_bw", "gen5_bw2"})  # labelled "not admitted"; handle_new refuses them
 GAME_LABELS = {key: label for key, label, _ in GAMES}
 GAME_MEMBERS = {key: members for key, _, members in GAMES}
 # The randomizer contract a Gen 1 game names (upr_settings.FAMILY_*): a pure run takes pure

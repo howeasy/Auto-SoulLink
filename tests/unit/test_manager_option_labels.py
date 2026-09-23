@@ -102,7 +102,8 @@ def test_unadmitted_gen3_variants_carry_the_suffix():
     admitted and have no such suffix."""
     labels = GAME_LABELS
     assert "not admitted by the SLink client yet" in labels["gen3_ap"]
-    assert "not admitted by the SLink client yet" in labels["gen3_e"]
+    for game in ("gen3_e", "gen4_hgss", "gen4_pt", "gen5_bw", "gen5_bw2"):
+        assert "not admitted by the SLink client yet" in labels[game]
     assert "not admitted by the SLink client yet" not in labels["gen3"]
     assert "not admitted by the SLink client yet" not in labels["gen3_rr"]
 
@@ -112,4 +113,4 @@ def test_new_run_form_marks_exactly_the_unadmitted_games():
     from UNADMITTED_GAMES, so the chips and the handle_new refusal cannot drift apart."""
     from server.manager import UNADMITTED_GAMES, new_run_form
     flagged = {g["key"] for g in new_run_form()["games"] if g["unadmitted"]}
-    assert flagged == set(UNADMITTED_GAMES) == {"gen3_ap", "gen3_e"}
+    assert flagged == set(UNADMITTED_GAMES) == {"gen3_ap", "gen3_e", "gen4_hgss", "gen4_pt", "gen5_bw", "gen5_bw2"}
