@@ -505,8 +505,10 @@ function P.run()
             if plan[i] then
                 local spec = P.STATES[i]
                 load(os.getenv(spec.state_env) or spec.state)
+                -- battle_comm_eq/_ge are factories over witness_value; every other WIT entry IS
+                -- the witness (calling it here handed begin() a boolean: C4-PROBE, first FR run)
                 local build = WIT[spec.witness]
-                row = begin(i, build(spec))
+                row = begin(i, spec.witness_value ~= nil and build(spec) or build)
                 for _, step in ipairs(spec.inputs or {}) do
                     if step.tap then G.tap(step.tap, step.frames or 3, step.gap or 13)
                     elseif step.idle then G.idle(step.idle)
