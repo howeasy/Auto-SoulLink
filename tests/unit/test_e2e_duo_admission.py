@@ -971,6 +971,51 @@ def test_synthetic_active_faint_oracle_requires_loop_write_before_engine_site(tm
     print("synthetic active faint: PASS; reversed loop/engine order: FAIL")
 
 
+@pytest.mark.parametrize("cmd", ["force_faint", "force_explode"])
+def test_synthetic_bench_battle_oracle_requires_the_write_inside_the_battle(tmp_path, cmd):
+    scenario = "explode_bench_battle_new" if cmd == "force_explode" else "linked_faint_bench_battle_new"
+    run, _paths, a_text, b_text = _linked_faint_fixture(tmp_path, scenario)
+    key = run._link_keys["b"]
+    (tmp_path / "slink.log").write_text(
+        f"[a] faint → {cmd} b:{key}\npair in route_1 fully memorialized\n", encoding="utf-8")
+    b_text = b_text.replace(f"RX force_faint key={key}\n", "")
+    ready = "READY_BENCH_BATTLE linked_slot=1 active_slot=0 in_battle=1 bench_hp=000F active_hp=0014 moves=21270000\n"
+    rx = f"RX {cmd} key={key} in_battle=1\n"
+    split = "EXPLODE_CMDS force_explode=1 force_faint=0\n" if cmd == "force_explode" else ""
+    zero = (f"BENCH_ZERO_ON_RX key={key} cmd={cmd} in_battle=1 bench_hp=0000 status=00 frames=0 "
+            "loop_heads=0 active_slot=0\n")
+    write = (f"LOOP_HEAD_BENCH_SETTLED key={key} cmd={cmd} in_battle=1 bench_hp=0000 status=00 "
+             "hp_before=0 landed=true moved=false active_slot=0 active_hp=0014 moves=21270000\n")
+    readback = ("BENCH_HP_STATUS_IN_BATTLE 0000 00 in_battle=1 active_slot=0 active_hp=0014->0014 "
+                "starter_hp=0014->0014 moves=21270000->21270000\n")
+    end = "BATTLE_RESULT b 1\n"
+    kwargs = {"active": False, "bench_battle": True, "explode": cmd == "force_explode"}
+    good = ready + rx + split + zero + write + readback + end + b_text
+    run.assert_linked_faint_saved({"a": a_text, "b": good}, **kwargs)
+    # The checkpoint-deferring client: no receipt zero, no loop-head backstop, only the post-battle zero.
+    with pytest.raises(RuntimeError, match="bench zero on receipt"):
+        run.assert_linked_faint_saved({"a": a_text, "b": ready + rx + split + end + b_text}, **kwargs)
+    # The loop-head-only client (6a8958fb): the loop head is what zeroed the slot.
+    loop_only = (f"LOOP_HEAD_BENCH_SETTLED key={key} cmd={cmd} in_battle=1 bench_hp=0000 status=00 "
+                 "hp_before=15 landed=false moved=true active_slot=0 active_hp=0014 moves=21270000\n")
+    with pytest.raises(RuntimeError, match="loop-head bench backstop"):
+        run.assert_linked_faint_saved({"a": a_text, "b": good.replace(write, loop_only)}, **kwargs)
+    # a zero seen only after a loop head ran is not a receipt zero
+    with pytest.raises(RuntimeError, match="bench zero on receipt"):
+        run.assert_linked_faint_saved({"a": a_text, "b": good.replace("loop_heads=0", "loop_heads=1")}, **kwargs)
+    with pytest.raises(RuntimeError, match="out of order"):
+        run.assert_linked_faint_saved({"a": a_text, "b": ready + rx + split + write + zero + readback + end + b_text},
+                                      **kwargs)
+    with pytest.raises(RuntimeError, match="out of order"):
+        run.assert_linked_faint_saved({"a": a_text, "b": ready + rx + split + end + zero + write + readback + b_text},
+                                      **kwargs)
+    with pytest.raises(RuntimeError, match="moves changed or carry EXPLOSION"):
+        run.assert_linked_faint_saved({"a": a_text, "b": good.replace("->21270000", "->99999999")}, **kwargs)
+    with pytest.raises(RuntimeError, match="outside a battle"):
+        run.assert_linked_faint_saved({"a": a_text, "b": good.replace(rx, rx.replace("in_battle=1", "in_battle=0"))},
+                                      **kwargs)
+
+
 @pytest.mark.parametrize(("mode", "faint_after", "expected", "encounters", "start_active"), [
     ("sacrifice", 2, "linked-fainted", 1, False),
     ("sacrifice", 999, "linked-survived-3-battles", 3, False),

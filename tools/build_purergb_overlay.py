@@ -132,7 +132,10 @@ def build(*, repo_dir: pathlib.Path | None = None, rgbds_bin: pathlib.Path | Non
             raise RuntimeError(f"{key}: UPS round trip failed")
         files[DIST / ups_name] = ups
         for ext in ("sym", "map"):
-            files[OUT_DIR / f"{title}_slink.{ext}"] = (checkout / f"{key}.{ext}").read_bytes()
+            # rgbds on Windows writes CRLF; the repo pins these LF (.gitattributes), so the
+            # check, the published bytes and the provenance hashes all use LF (see c411b2f3)
+            files[OUT_DIR / f"{title}_slink.{ext}"] = (
+                (checkout / f"{key}.{ext}").read_bytes().replace(b"\r\n", b"\n"))
         outputs[key] = {
             "filename": spec["filename"], "slink_title": title, "base_sha1": spec["sha1"],
             **rom_facts(data),

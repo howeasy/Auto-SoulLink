@@ -660,6 +660,9 @@ def test_both_captures_create_link(tmp_path, monkeypatch):
     assert state.area_states.get("route_1") == AreaStatus.PENDING_B  # waiting for B to capture
     assert len(state.links) == 0
 
+    notice = [c["text"] for c in state.queued_commands["b"] if c.get("cmd") == "hud_show"]
+    assert notice and notice[-1].startswith("Partner caught ") and " in " in notice[-1], notice
+
     state.handle_event("b", {"event": "capture", "key": "B:2", "area_id": "route_1", "level": 7})
     assert state.area_states.get("route_1") == AreaStatus.LINKED
     assert len(state.links) == 1

@@ -84,6 +84,19 @@ SCENARIOS = {
                                 "target": "battle", "no_setup": True, "frames": 2500000,
                                 "oracle": "assert_linked_faint_saved",
                                 "oracle_kwargs": {"active": True}},
+    # The same linked faint landing while B's linked mon sits on the BENCH of a wild battle
+    # (commit 6a8958fb): the write must land at the next MainInBattleLoop head, inside the battle,
+    # not at the overworld checkpoint after it. The explode twin runs --explode-mode: the server
+    # sends force_explode, which off the field degrades to a plain faint.
+    "linked_faint_bench_battle_new": {"flags": [], "timeout": 1500, "games": ("gen1_new",),
+                                      "target": "battle", "no_setup": True, "frames": 2500000,
+                                      "oracle": "assert_linked_faint_saved",
+                                      "oracle_kwargs": {"active": False, "bench_battle": True}},
+    "explode_bench_battle_new": {"flags": ["--explode-mode"], "timeout": 1500,
+                                 "games": ("gen1_new",), "target": "battle", "no_setup": True,
+                                 "frames": 2500000, "oracle": "assert_linked_faint_saved",
+                                 "oracle_kwargs": {"active": False, "bench_battle": True,
+                                                   "explode": True}},
     "reconnect_new": {"flags": [], "timeout": 900, "games": ("gen1_new",),
                       "target": "battle", "no_setup": True, "frames": 2000000,
                       "oracle": "assert_reconnect_saved"},
@@ -2369,8 +2382,13 @@ class DuoRun:
         rom_path = self._rom_for(inst) if self.gcfg.get("patched_saves_override") else self.cfg["rom"][inst]
         return self._saved_gen1_party(inst, rom=rom_path, save_name=save_name)
 
-    def assert_linked_faint_saved(self, results, *, active, saved_state=None, explode=False):
+    def assert_linked_faint_saved(self, results, *, active, saved_state=None, explode=False,
+                                  bench_battle=False):
         """D-6/W-1/W-2: server cause + both game-loadable memorials and engine receipts.
+
+        `bench_battle` is the bench-in-battle lane (commit 6a8958fb): B's linked mon sits on the
+        bench of a wild battle when the command arrives, and every B marker has to show the write
+        landing INSIDE that battle -- the pre-fix client deferred it to the overworld checkpoint.
 
         `saved_state(inst)` defaults to the clean-title read; explode_new passes the patched
         resolver because it runs the trade-carrying ROMs, whose SaveRAM name and ROM differ.
@@ -2467,11 +2485,64 @@ class DuoRun:
                     or f'"event":"faint","key":"{self._link_keys["b"]}"' not in b_text
                     or "BATTLE_RESULT b " not in b_text):
                 raise RuntimeError("B active write was not followed by engine battle_faint/text")
+        elif bench_battle:
+            self._assert_bench_battle_markers(b_text, expected_cmd)
         elif ("READY_BENCH map=12 x=8 y=31" not in b_text or "BENCH_HP_STATUS 0000 00" not in b_text
               or ("TILEMAP_FNT row=2" not in b_text and
                   "TILEMAP_FNT unavailable: memorialised within " not in b_text)):
             raise RuntimeError("B bench write lacked HP/status and party-menu FNT tile evidence")
         self._pydec_note(f"D-6/W-{2 if active else 1} server battle cause and ordered engine receipts valid")
+
+    def _assert_bench_battle_markers(self, b_text, expected_cmd):
+        """B's in-battle ordering for the bench lanes: held battle -> command received in battle
+        -> bench at 0000/00 within a few frames of RX with NO loop head run yet (the write lands
+        on receipt) -> the next loop head finds the queued backstop already dead and moves no
+        byte -> in-battle readback with the active battler unchanged -> battle end. Each marker
+        is read off the receipt duo_gen1_main.lua's bench_battle_half writes; a loop-head-only
+        client never logs BENCH_ZERO_ON_RX (the driver fails first) and its loop head would be
+        the one that moved the bytes (hp_before != 0, moved=true)."""
+        key = self._link_keys["b"]
+        other = "force_faint" if expected_cmd == "force_explode" else "force_explode"
+        ready = marker(b_text, r"READY_BENCH_BATTLE linked_slot=1 active_slot=0 in_battle=([1-9]\d*) "
+                               r"bench_hp=([0-9A-F]{4})", "B held battle with the linked mon benched")
+        if ready.group(2) == "0000":
+            raise RuntimeError("B's bench slot was already at 0 HP when the battle was held")
+        rx = marker(b_text, rf"RX {expected_cmd} key={re.escape(key)} in_battle=(\d+)",
+                    f"B {expected_cmd} receipt")
+        if rx.group(1) == "0":
+            raise RuntimeError(f"B received {expected_cmd} outside a battle")
+        zero = marker(b_text, rf"BENCH_ZERO_ON_RX key={re.escape(key)} cmd={expected_cmd} "
+                              r"in_battle=([1-9]\d*) bench_hp=0000 status=00 frames=([0-5]) loop_heads=0 "
+                              r"active_slot=0", "B bench zero on receipt")
+        write = marker(b_text, rf"LOOP_HEAD_BENCH_SETTLED key={re.escape(key)} cmd={expected_cmd} "
+                               r"in_battle=([1-9]\d*) bench_hp=0000 status=00 hp_before=0 landed=true "
+                               r"moved=false active_slot=0 ", "B loop-head bench backstop")
+        readback = marker(b_text, r"BENCH_HP_STATUS_IN_BATTLE 0000 00 in_battle=[1-9]\d* active_slot=0 "
+                                  r"active_hp=([0-9A-F]{4})->([0-9A-F]{4}) "
+                                  r"starter_hp=([0-9A-F]{4})->([0-9A-F]{4}) "
+                                  r"moves=([0-9A-F]{8})->([0-9A-F]{8})", "B in-battle bench readback")
+        end = marker(b_text, r"BATTLE_RESULT b \d+", "B battle end")
+        if not (ready.start() < rx.start() < zero.start() < write.start() < readback.start() < end.start()):
+            raise RuntimeError("B bench markers out of order: want READY_BENCH_BATTLE < RX < "
+                               "BENCH_ZERO_ON_RX < LOOP_HEAD_BENCH_SETTLED < BENCH_HP_STATUS_IN_BATTLE "
+                               "< BATTLE_RESULT")
+        if readback.group(1) != readback.group(2) or readback.group(3) != readback.group(4):
+            raise RuntimeError(f"the bench write touched the active battler: {readback.group(0)}")
+        moves = readback.group(6)
+        if readback.group(5) != moves or "99" in (moves[i:i + 2] for i in range(0, 8, 2)):
+            raise RuntimeError(f"the active battler's moves changed or carry EXPLOSION: {readback.group(0)}")
+        for absent in (f"RX {other}", "READY_BENCH map=", "LOOP_HEAD_WRITE", "LOOP_HEAD_EXPLODE"):
+            if absent in b_text:
+                raise RuntimeError(f"B's bench-in-battle receipt carries {absent!r}")
+        if expected_cmd == "force_explode":
+            cmds = marker(b_text, r"EXPLODE_CMDS force_explode=(\d+) force_faint=(\d+)", "B command split")
+            if cmds.groups() != ("1", "0"):
+                raise RuntimeError(f"Explode Mode sent force_explode={cmds.group(1)} "
+                                   f"force_faint={cmds.group(2)}, expected 1 / 0")
+        self._pydec_note(f"bench-in-battle: {expected_cmd} RX in battle, bench 0000/00 "
+                         f"{zero.group(2)} frame(s) after RX with no loop head run, loop-head backstop "
+                         f"in_battle={write.group(1)} moved nothing, before BATTLE_RESULT, active "
+                         f"battler {readback.group(1)} moves {moves} untouched")
 
     def assert_explode_saved(self, results):
         """W-3/D-11: the shared faint half plus the markers only a companion-patched cartridge
@@ -3856,6 +3927,7 @@ class DuoRun:
             elif self.scenario == "dupes":
                 self.assert_species_clause_rejection()
             elif self.scenario in ("link_new", "linked_faint_bench_new", "linked_faint_active_new",
+                                   "linked_faint_bench_battle_new", "explode_bench_battle_new",
                                    "explode_new", "pc_ops_new", "rival_swap_new"):
                 self.go()
                 self.assert_link_new()

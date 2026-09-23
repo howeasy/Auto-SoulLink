@@ -1,0 +1,15 @@
+attempt 1 of 3
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=a site=7403538ec8cb9467d94ff965415483eb3e3e448c4d87a516954baf7c34beb054 file=7403538ec8cb9467d94ff965415483eb3e3e448c4d87a516954baf7c34beb054 match=true saves=2
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+SAVE_WITNESS_SHA256 inst=b site=f69a7d80ff4dc5ee288fcf82fafc9f50a40ba62f524ffd919b040e2e22e6328b file=f69a7d80ff4dc5ee288fcf82fafc9f50a40ba62f524ffd919b040e2e22e6328b match=true saves=2
+server DEAD propagation precedes final MEMORIAL, cause=battle
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+a saved living starter; linked key 83F4:4190:A5 absent from party/current box
+a Box 12 83F4:4190:A5 HP0000/status00; initialized checksums/terminators valid
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+b saved living starter; linked key 5E31:AFB9:A5 absent from party/current box
+b Box 12 5E31:AFB9:A5 HP0000/status00; initialized checksums/terminators valid
+bench-in-battle: force_explode RX in battle, bench 0000/00 0 frame(s) after RX with no loop head run, loop-head backstop in_battle=1 moved nothing, before BATTLE_RESULT, active battler 0010 moves 0A2D0000 untouched
+D-6/W-1 server battle cause and ordered engine receipts valid
+PYDEC: PASS asserted scenario facts

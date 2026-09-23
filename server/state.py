@@ -1725,12 +1725,11 @@ class SoulLinkState:
                 AreaStatus.PENDING_B if player_id == "a" else AreaStatus.PENDING_A,
                 player=player_id, reason="first_capture")
             # Notify partner that a new link opportunity is available.
-            disp = humanize_area_id(area_id)
-            nick = mon.nickname or self.adapter.species_name(mon.species)
-            label = nick or disp
+            disp = self.adapter.area_display_name(area_id) or humanize_area_id(area_id)
+            nick = mon.nickname or self.adapter.species_name(mon.species) or "a mon"
             self.queued_commands[partner].append({
                 "cmd": "hud_show",
-                "text": f">> Got {label}",
+                "text": f"Partner caught {nick} in {disp}",
                 "r": 100, "g": 180, "b": 255,
                 "frames": 300,
             })
