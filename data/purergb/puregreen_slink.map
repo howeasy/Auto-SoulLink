@@ -1,6 +1,6 @@
 SUMMARY:
 	ROM0: 15060 bytes used / 1324 free
-	ROMX: 913556 bytes used / 118636 free in 63 banks
+	ROMX: 913564 bytes used / 118628 free in 63 banks
 	SRAM: 25983 bytes used / 6785 free in 4 banks
 	WRAM0: 4096 bytes used / 0 free
 	WRAMX: 4216 bytes used / 3976 free in 2 banks
@@ -26118,7 +26118,7 @@ ROMX bank #62:
 	EMPTY
 
 ROMX bank #63:
-	SECTION: $4000-$40d3 ($00d4 bytes) ["SLink Hook"]
+	SECTION: $4000-$40db ($00dc bytes) ["SLink Hook"]
 	         $4000 = SlinkHook
 	         $402d = SlinkHook.noCarry
 	         $4037 = SlinkForeground
@@ -26126,134 +26126,134 @@ ROMX bank #63:
 	         $404d = SlinkSfxService.service
 	         $406f = SlinkSfxService.play
 	         $4087 = SlinkSfxService.row
-	         $40a0 = SlinkSfxService.resolved
-	         $40a8 = SlinkSfxService.hold
-	         $40b7 = SlinkSfxService.holding
-	         $40c3 = SlinkSfxService.drop
-	         $40cb = SlinkSfxService.bankAudio1
-	         $40ce = SlinkSfxService.bankAudio2
-	         $40d1 = SlinkSfxService.bankAudio3
-	SECTION: $40d4-$4198 ($00c5 bytes) ["SLink Panel"]
-	         $40d4 = SlinkPanel
-	         $40f2 = SlinkPanel.page
-	         $4128 = SlinkPanel.close
-	         $4149 = SlinkWaitForButton
-	         $414b = SlinkWaitForButton.settle
-	         $4151 = SlinkWaitForButton.wait
-	         $415e = SlinkWaitForStage
-	         $4160 = SlinkWaitForStage.loop
-	         $4172 = SlinkDrawFallback
-	         $4185 = SlinkDrawFallback.title
-	         $418f = SlinkDrawFallback.noData
-	SECTION: $4199-$42be ($0126 bytes) ["SLink foreground trade service"]
-	         $4199 = SlinkTradeService
-	         $41ad = SlinkTradeService.requestState
-	         $41ff = SlinkTradeService.apply
-	         $4202 = SlinkTradeService.publish
-	         $425b = SlinkTradeService.waitForReceipt
-	         $42a7 = SlinkTradeService.magic
-	SECTION: $42bf-$4541 ($0283 bytes) ["SLink Native Trade"]
-	         $42bf = SlinkTradeApply
-	         $444c = SlinkTradeApply.unreachableAppendFailure
-	         $444e = SlinkTradeApply.restore
-	         $446e = SlinkTradeApply.refused
-	         $4473 = SlinkTradeApply.validSpecies
-	         $4481 = SlinkTradeApply.invalidSpecies
-	         $4483 = SlinkTradeSpeciesTable
-	SECTION: $4542-$4a11 ($04d0 bytes) ["SLink trade receptionist"]
-	         $4542 = SlinkReceptionist
-	         $454b = SlinkReceptionist.afterQuery
-	         $45af = SlinkReceptionist.selectionCheck
-	         $45be = SlinkReceptionist.selectionValid
-	         $45c5 = SlinkReceptionist.offerReturned
-	         $45d6 = SlinkReceptionist.offerNotice
-	         $45d9 = SlinkReceptionist.selectedCancel
-	         $45dd = SlinkReceptionist.selectedCable
-	         $45df = SlinkReceptionist.restoreMenus
-	         $4610 = SlinkReceptionist.menusRestored
-	         $4620 = SlinkReceptionist.original
-	         $462d = SlinkReceptionist.query
-	         $4688 = SlinkReceptionist.queryWait
-	         $469c = SlinkReceptionist.queryAcknowledged
-	         $46f6 = SlinkReceptionist.unavailable
-	         $46f8 = SlinkReceptionist.queryReturn
-	         $4724 = SlinkReceptionist.queryHeader
-	         $4734 = SlinkReceptionist.liveSlots
-	         $473c = SlinkReceptionist.liveSlotLoop
-	         $4743 = SlinkReceptionist.skipLiveSlot
-	         $474a = SlinkReceptionist.nextLiveSlot
-	         $4751 = SlinkReceptionist.mainMenu
-	         $4787 = SlinkReceptionist.slinkText
-	         $4793 = SlinkReceptionist.cableText
-	         $479e = SlinkReceptionist.cancelText
-	         $47a5 = SlinkReceptionist.welcomeText
-	         $47bb = SlinkReceptionist.partyMenu
-	         $47c8 = SlinkReceptionist.drawParty
-	         $47d8 = SlinkReceptionist.namesValid
-	         $47f9 = SlinkReceptionist.nameLoop
-	         $480b = SlinkReceptionist.skipName
-	         $4812 = SlinkReceptionist.namePointer
-	         $4825 = SlinkReceptionist.findPhysicalSlot
-	         $482e = SlinkReceptionist.nextPhysical
-	         $4834 = SlinkReceptionist.noSelection
-	         $4837 = SlinkReceptionist.foundPhysical
-	         $4838 = SlinkReceptionist.partyReturn
-	         $4841 = SlinkReceptionist.partyText
-	         $484e = SlinkReceptionist.validNames
-	         $4851 = SlinkReceptionist.validNamesLoop
-	         $485d = SlinkReceptionist.skipValidatedName
-	         $4864 = SlinkReceptionist.nextValidatedName
-	         $4869 = SlinkReceptionist.noLinkedText
-	         $4889 = SlinkReceptionist.offerSentText
-	         $48aa = SlinkReceptionist.offerRejectedText
-	         $48cd = SlinkReceptionist.offerUnknownText
-	         $48ea = SlinkReceptionist.invalidPartyText
-	         $4904 = SlinkReceptionist.selectionChangedText
-	         $4922 = SlinkReceptionist.offer
-	         $4994 = SlinkReceptionist.offerWait
-	         $49de = SlinkReceptionist.offerPending
-	         $49e3 = SlinkReceptionist.offerUnconfirmed
-	         $49e5 = SlinkReceptionist.offerReturn
-	SECTION: $4a12-$4baf ($019e bytes) ["SLink trade UI helpers"]
-	         $4a12 = SlinkTradeUIWaitReleased
-	         $4a12 = SlinkTradeUIWaitReleased.loop
-	         $4a1f = SlinkTradeUINotice
-	         $4a2b = SlinkTradeUIMenuInput
-	         $4a5a = SlinkTradeUIMenuInput.cancel
-	         $4a5d = SlinkTradeUIValidSlot
-	         $4a8d = SlinkTradeUIValidSlot.invalid
-	         $4a8f = SlinkTradeUIValidName
-	         $4a91 = SlinkTradeUIValidName.loop
-	         $4aa7 = SlinkTradeUIValidName.invalid
-	         $4aa9 = SlinkTradeUIValidName.terminator
-	         $4ab0 = SlinkTradeUINameTable
-	SECTION: $4bb0-$4d51 ($01a2 bytes) ["SLink partner trade prompt"]
-	         $4bb0 = SlinkPartnerPrompt
-	         $4cb2 = SlinkPartnerPrompt.choice
-	         $4cbe = SlinkPartnerPrompt.restore
-	         $4d38 = SlinkPartnerPrompt.unavailable
-	         $4d3b = SlinkPartnerPrompt.question
-	SECTION: $4d52-$4e2f ($00de bytes) ["SLink APEX guard"]
-	         $4d52 = SlinkApexGuard
-	         $4d87 = SlinkApexGuard.sramLoop
-	         $4da0 = SlinkApexGuard.bankKnown
-	         $4db5 = SlinkApexGuard.nextBox
-	         $4dbe = SlinkApexGuard.miss
-	         $4dc2 = SlinkApexGuard.sramHit
-	         $4dc5 = SlinkApexGuard.hit
-	         $4dc9 = SlinkApexGuard.closeSram
-	         $4dd1 = SlinkApexGuard.scanBox
-	         $4dd8 = SlinkApexGuard.countOk
-	         $4ddf = SlinkApexGuard.scanList
-	         $4de1 = SlinkApexGuard.scanLoop
-	         $4df4 = SlinkApexGuard.found
-	         $4df7 = SlinkApexGuard.match
-	         $4dff = SlinkApexGuard.compare
-	         $4e10 = SlinkApexGuard.otid
-	         $4e2c = SlinkApexGuard.noMatchPop
-	         $4e2e = SlinkApexGuard.noMatch
-	EMPTY: $4e30-$7fff ($31d0 bytes)
-	TOTAL EMPTY: $31d0 bytes
+	         $40a5 = SlinkSfxService.resolved
+	         $40ad = SlinkSfxService.hold
+	         $40bc = SlinkSfxService.holding
+	         $40c8 = SlinkSfxService.drop
+	         $40d0 = SlinkSfxService.bankAudio1
+	         $40d4 = SlinkSfxService.bankAudio2
+	         $40d8 = SlinkSfxService.bankAudio3
+	SECTION: $40dc-$41a0 ($00c5 bytes) ["SLink Panel"]
+	         $40dc = SlinkPanel
+	         $40fa = SlinkPanel.page
+	         $4130 = SlinkPanel.close
+	         $4151 = SlinkWaitForButton
+	         $4153 = SlinkWaitForButton.settle
+	         $4159 = SlinkWaitForButton.wait
+	         $4166 = SlinkWaitForStage
+	         $4168 = SlinkWaitForStage.loop
+	         $417a = SlinkDrawFallback
+	         $418d = SlinkDrawFallback.title
+	         $4197 = SlinkDrawFallback.noData
+	SECTION: $41a1-$42c6 ($0126 bytes) ["SLink foreground trade service"]
+	         $41a1 = SlinkTradeService
+	         $41b5 = SlinkTradeService.requestState
+	         $4207 = SlinkTradeService.apply
+	         $420a = SlinkTradeService.publish
+	         $4263 = SlinkTradeService.waitForReceipt
+	         $42af = SlinkTradeService.magic
+	SECTION: $42c7-$4549 ($0283 bytes) ["SLink Native Trade"]
+	         $42c7 = SlinkTradeApply
+	         $4454 = SlinkTradeApply.unreachableAppendFailure
+	         $4456 = SlinkTradeApply.restore
+	         $4476 = SlinkTradeApply.refused
+	         $447b = SlinkTradeApply.validSpecies
+	         $4489 = SlinkTradeApply.invalidSpecies
+	         $448b = SlinkTradeSpeciesTable
+	SECTION: $454a-$4a19 ($04d0 bytes) ["SLink trade receptionist"]
+	         $454a = SlinkReceptionist
+	         $4553 = SlinkReceptionist.afterQuery
+	         $45b7 = SlinkReceptionist.selectionCheck
+	         $45c6 = SlinkReceptionist.selectionValid
+	         $45cd = SlinkReceptionist.offerReturned
+	         $45de = SlinkReceptionist.offerNotice
+	         $45e1 = SlinkReceptionist.selectedCancel
+	         $45e5 = SlinkReceptionist.selectedCable
+	         $45e7 = SlinkReceptionist.restoreMenus
+	         $4618 = SlinkReceptionist.menusRestored
+	         $4628 = SlinkReceptionist.original
+	         $4635 = SlinkReceptionist.query
+	         $4690 = SlinkReceptionist.queryWait
+	         $46a4 = SlinkReceptionist.queryAcknowledged
+	         $46fe = SlinkReceptionist.unavailable
+	         $4700 = SlinkReceptionist.queryReturn
+	         $472c = SlinkReceptionist.queryHeader
+	         $473c = SlinkReceptionist.liveSlots
+	         $4744 = SlinkReceptionist.liveSlotLoop
+	         $474b = SlinkReceptionist.skipLiveSlot
+	         $4752 = SlinkReceptionist.nextLiveSlot
+	         $4759 = SlinkReceptionist.mainMenu
+	         $478f = SlinkReceptionist.slinkText
+	         $479b = SlinkReceptionist.cableText
+	         $47a6 = SlinkReceptionist.cancelText
+	         $47ad = SlinkReceptionist.welcomeText
+	         $47c3 = SlinkReceptionist.partyMenu
+	         $47d0 = SlinkReceptionist.drawParty
+	         $47e0 = SlinkReceptionist.namesValid
+	         $4801 = SlinkReceptionist.nameLoop
+	         $4813 = SlinkReceptionist.skipName
+	         $481a = SlinkReceptionist.namePointer
+	         $482d = SlinkReceptionist.findPhysicalSlot
+	         $4836 = SlinkReceptionist.nextPhysical
+	         $483c = SlinkReceptionist.noSelection
+	         $483f = SlinkReceptionist.foundPhysical
+	         $4840 = SlinkReceptionist.partyReturn
+	         $4849 = SlinkReceptionist.partyText
+	         $4856 = SlinkReceptionist.validNames
+	         $4859 = SlinkReceptionist.validNamesLoop
+	         $4865 = SlinkReceptionist.skipValidatedName
+	         $486c = SlinkReceptionist.nextValidatedName
+	         $4871 = SlinkReceptionist.noLinkedText
+	         $4891 = SlinkReceptionist.offerSentText
+	         $48b2 = SlinkReceptionist.offerRejectedText
+	         $48d5 = SlinkReceptionist.offerUnknownText
+	         $48f2 = SlinkReceptionist.invalidPartyText
+	         $490c = SlinkReceptionist.selectionChangedText
+	         $492a = SlinkReceptionist.offer
+	         $499c = SlinkReceptionist.offerWait
+	         $49e6 = SlinkReceptionist.offerPending
+	         $49eb = SlinkReceptionist.offerUnconfirmed
+	         $49ed = SlinkReceptionist.offerReturn
+	SECTION: $4a1a-$4bb7 ($019e bytes) ["SLink trade UI helpers"]
+	         $4a1a = SlinkTradeUIWaitReleased
+	         $4a1a = SlinkTradeUIWaitReleased.loop
+	         $4a27 = SlinkTradeUINotice
+	         $4a33 = SlinkTradeUIMenuInput
+	         $4a62 = SlinkTradeUIMenuInput.cancel
+	         $4a65 = SlinkTradeUIValidSlot
+	         $4a95 = SlinkTradeUIValidSlot.invalid
+	         $4a97 = SlinkTradeUIValidName
+	         $4a99 = SlinkTradeUIValidName.loop
+	         $4aaf = SlinkTradeUIValidName.invalid
+	         $4ab1 = SlinkTradeUIValidName.terminator
+	         $4ab8 = SlinkTradeUINameTable
+	SECTION: $4bb8-$4d59 ($01a2 bytes) ["SLink partner trade prompt"]
+	         $4bb8 = SlinkPartnerPrompt
+	         $4cba = SlinkPartnerPrompt.choice
+	         $4cc6 = SlinkPartnerPrompt.restore
+	         $4d40 = SlinkPartnerPrompt.unavailable
+	         $4d43 = SlinkPartnerPrompt.question
+	SECTION: $4d5a-$4e37 ($00de bytes) ["SLink APEX guard"]
+	         $4d5a = SlinkApexGuard
+	         $4d8f = SlinkApexGuard.sramLoop
+	         $4da8 = SlinkApexGuard.bankKnown
+	         $4dbd = SlinkApexGuard.nextBox
+	         $4dc6 = SlinkApexGuard.miss
+	         $4dca = SlinkApexGuard.sramHit
+	         $4dcd = SlinkApexGuard.hit
+	         $4dd1 = SlinkApexGuard.closeSram
+	         $4dd9 = SlinkApexGuard.scanBox
+	         $4de0 = SlinkApexGuard.countOk
+	         $4de7 = SlinkApexGuard.scanList
+	         $4de9 = SlinkApexGuard.scanLoop
+	         $4dfc = SlinkApexGuard.found
+	         $4dff = SlinkApexGuard.match
+	         $4e07 = SlinkApexGuard.compare
+	         $4e18 = SlinkApexGuard.otid
+	         $4e34 = SlinkApexGuard.noMatchPop
+	         $4e36 = SlinkApexGuard.noMatch
+	EMPTY: $4e38-$7fff ($31c8 bytes)
+	TOTAL EMPTY: $31c8 bytes
 
 VRAM bank #0:
 	EMPTY

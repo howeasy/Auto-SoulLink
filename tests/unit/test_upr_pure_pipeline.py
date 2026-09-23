@@ -1,7 +1,7 @@
 """The randomized-pair pipeline on the pureRGB family (docs/purergb/PLAN.md §6 M5, gate G5).
 
 Mirrors tests/unit/test_upr_pipeline.py for the pure titles. The family runs only on the
-SLink fork jar (4.6.1-slink1): the refusals are tested without Java, everything that needs
+SLink fork jar (4.6.1-slink3): the refusals are tested without Java, everything that needs
 the jar skips when it is absent (build it with tools/build_upr_fork.py; find_upr_jar looks
 in .cache/slink-upr/) or when the pinned pure ROMs are not under patch/build/.
 """
@@ -46,7 +46,7 @@ def _fork_jar() -> str:
     from tests.conftest import find_upr_jar
     jar = find_upr_jar()
     if not jar or not jar_is_fork(jar):
-        pytest.skip("the SLink fork jar (4.6.1-slink2) is not present — tools/build_upr_fork.py")
+        pytest.skip("the SLink fork jar (4.6.1-slink3) is not present — tools/build_upr_fork.py")
     return jar
 
 
@@ -64,17 +64,50 @@ def _settings(tmp_path, cats=ALL_CATEGORIES, **kw):
 
 
 # ── the allowlist, no Java ───────────────────────────────────────────────────────────────
-def test_the_pure_family_turns_every_tweak_off():
-    """pureRGB has instant text natively and the fork offers no tweak; a file that asks for
-    one would be silently trimmed by tweakForRom, so it is refused up front instead."""
+def test_the_pure_family_turns_every_tweak_off_but_lower_case_names():
+    """pureRGB has instant text natively and the fork offers one tweak (lower-case names, a
+    data write the lossless entries re-case in place, revision 3); a file that asks for any
+    other would be silently trimmed by tweakForRom, so it is refused up front by name."""
+    from server.upr_settings import PURE_ALLOWED_TWEAKS, misc_options, option_form
+    assert PURE_ALLOWED_TWEAKS == ("lowercase_names",)
     assert default_spec(FAMILY_VANILLA)["fastest_text"] is True
     assert default_spec(FAMILY_PURE)["fastest_text"] is False
-    spec = family_spec({"fastest_text": True, "pc_potion": True, "wild": "random"}, FAMILY_PURE)
+    assert default_spec(FAMILY_PURE)["lowercase_names"] is False
+    spec = family_spec({"fastest_text": True, "pc_potion": True, "wild": "random", "lowercase_names": True},
+                       FAMILY_PURE)
     assert spec["fastest_text"] is False and spec["pc_potion"] is False and spec["wild"] == "random"
+    assert spec["lowercase_names"] is True
+    on = family_spec(dict.fromkeys(misc_options(), True), FAMILY_PURE)
+    assert {k for k, v in on.items() if v} == {"lowercase_names"}
     parsed = load(build_spec({"fastest_text": True}))
     assert forbidden_enabled(parsed, FAMILY_VANILLA) == []
     assert forbidden_enabled(parsed, FAMILY_PURE) == ["tweaks (FASTEST_TEXT)"]
+    parsed = load(build_spec({"fastest_text": False, "lowercase_names": True}))
+    assert parsed["misc_tweak_names"] == ["LOWER_CASE_POKEMON_NAMES"]
+    assert forbidden_enabled(parsed, FAMILY_PURE) == []
+    parsed = load(build_spec({"fastest_text": True, "lowercase_names": True, "pc_potion": True}))
+    assert forbidden_enabled(parsed, FAMILY_PURE) == ["tweaks (FASTEST_TEXT, RANDOMIZE_PC_POTION)"]
     assert forbidden_enabled(load(build_spec(default_spec(FAMILY_PURE))), FAMILY_PURE) == []
+    rows = {r["key"]: r for r in option_form()}
+    assert rows["lowercase_names"]["pure"] is True
+    assert all(rows[k]["pure"] is False for k in misc_options() if k != "lowercase_names")
+
+
+def test_misc_tweak_bits_are_the_forks():
+    """The settings file carries MiscTweak.java's bit values, not a menu order: an earlier
+    table put LOWER_CASE_POKEMON_NAMES at bit 1 (NERF_X_ACCURACY's), so the tweak never
+    reached the jar. Read the declarations back from the fork source when it is present."""
+    import re
+
+    from server.upr_settings import MISC_TWEAKS
+    assert MISC_TWEAKS["LOWER_CASE_POKEMON_NAMES"] == 1 << 10 and MISC_TWEAKS["FASTEST_TEXT"] == 1 << 3
+    src = os.path.join(_REPO, ".cache", "slink-upr", "src", "com", "dabomstew", "pkrandom", "MiscTweak.java")
+    if os.path.exists(src):
+        with open(src, encoding="utf-8") as f:
+            text = f.read()
+        declared = {name: (1 << int(shift) if shift else 1) for name, _expr, shift in re.findall(
+            r"MiscTweak (\w+) = new MiscTweak\((1(?: << (\d+))?),", text)}
+        assert {n: declared.get(n) for n in MISC_TWEAKS} == MISC_TWEAKS
 
 
 def test_the_pure_family_refuses_what_the_fork_cannot_honour():
@@ -275,7 +308,7 @@ def test_jar_entries_name_what_a_jar_can_randomize(tmp_path):
     old = tmp_path / "old.jar"
     with zipfile.ZipFile(old, "w") as zf:
         zf.writestr("com/dabomstew/pkrandom/config/gen1_offsets.ini",
-                    "[Red (U)]\nGame=POKEMON RED\n[PureRed (U)]\nGame=POKEMON RED\nSlinkForkRevision=2\n")
+                    "[Red (U)]\nGame=POKEMON RED\n[PureRed (U)]\nGame=POKEMON RED\nSlinkForkRevision=3\n")
     assert jar_entries(str(old)) == {"Red (U)", "PureRed (U)"}
     clean = {"foundation": "gen1_purergb", "variant": "purered", "kind": "clean"}
     overlay = {"foundation": "gen1_purergb", "variant": "purered", "kind": "overlay"}
@@ -346,7 +379,7 @@ def test_jar_is_fork_reads_the_entries_not_the_name(tmp_path):
     assert jar_is_fork(str(fake)) is False           # the pure entry without the reviewed revision
     with zipfile.ZipFile(fake, "w") as zf:
         zf.writestr("com/dabomstew/pkrandom/config/gen1_offsets.ini",
-                    "[Red (U)]\n[PureRed (U)]\nLosslessMode=1\nSlinkForkRevision=2\n")
+                    "[Red (U)]\n[PureRed (U)]\nLosslessMode=1\nSlinkForkRevision=3\n")
     assert jar_is_fork(str(fake)) is True
     assert jar_is_fork(str(tmp_path / "missing.jar")) is False
 
@@ -368,13 +401,13 @@ class TestAgainstTheForkJar:
         for pid, src in roms.items():
             out = str(tmp_path / f"{pid}.gbc")
             info = randomize(jar, _settings(tmp_path, set()), src, out)
-            assert info["version"] == "4.6.1-slink2"
+            assert info["version"] == "4.6.1-slink3"
             assert info["sha1"] == _sha1(src), f"{pid}: load->save changed bytes"
 
     def test_a_pair_is_produced_with_different_seeds_and_content(self, tmp_path):
         jar, roms = _fork_jar(), _pure_roms()
         res = prepare_pair(jar, _settings(tmp_path), roms, str(tmp_path / "out"))
-        assert res["upr_version"] == "4.6.1-slink2"
+        assert res["upr_version"] == "4.6.1-slink3"
         assert res["family"] == FAMILY_PURE
         assert set(res["categories"]) == ALL_CATEGORIES
         a, b = res["players"]["a"], res["players"]["b"]
@@ -540,3 +573,68 @@ class TestAgainstTheForkJar:
         randomize(jar, _settings(tmp_path, {"wild"}), roms["a"], out)
         with pytest.raises(UprPipelineError, match="not a clean dump"):
             prepare_pair(jar, _settings(tmp_path), {"a": out, "b": roms["b"]}, str(tmp_path / "out"))
+
+
+def test_a_slink2_jar_is_refused_by_revision(tmp_path):
+    """A slink2 jar carries the pure entries and would silently drop the lower-case-names
+    tweak in tweakForRom; only the revision stamp (3, patch 0008) tells it apart."""
+    import zipfile
+
+    from server.upr_pipeline import jar_fork_revision
+    old = tmp_path / "slink2.jar"
+    with zipfile.ZipFile(old, "w") as zf:
+        zf.writestr("com/dabomstew/pkrandom/config/gen1_offsets.ini",
+                    "[Red (U)]\nGame=POKEMON RED\n[PureRed (U)]\nGame=POKEMON RED\nCRCInHeader=0x929B\n"
+                    "LosslessMode=1\nSlinkForkRevision=2\n")
+    assert jar_fork_revision(str(old)) == 2 and not jar_is_fork(str(old))
+    roms = _pure_roms()
+    with pytest.raises(UprPipelineError, match="fork revision 3"):
+        randomize(str(old), _settings(tmp_path, {"wild"}), roms["a"], str(tmp_path / "o.gbc"))
+
+
+class TestLowerCaseNamesOnTheForkJar:
+    """The one tweak a lossless entry honours (patch 0008): the 190-row name table comes back
+    as the camel rule applied to the clean one, byte for byte, and nothing else moves."""
+
+    @staticmethod
+    def _table(rom: bytes) -> bytes:
+        from tools.upr_write_domain_diff import load_entry, name_table_bytes
+        r = name_table_bytes(load_entry("purered"))
+        return rom[r.start:r.stop]
+
+    def test_the_name_table_is_camel_cased_and_the_audit_is_clean(self, tmp_path):
+        from tools.upr_pure_verify import camel_names, verify
+        jar, roms = _fork_jar(), _pure_roms()
+        spec = {**default_spec(FAMILY_PURE), "starters": "unchanged", "trainers": "unchanged",
+                "lowercase_names": True}
+        settings = tmp_path / "s.rnqs"
+        settings.write_bytes(build_spec(spec))
+        res = prepare_pair(jar, str(settings), roms, str(tmp_path / "out"))
+        info = res["players"]["a"]
+        assert info["spec"]["lowercase_names"] is True
+        assert info["write_domain"]["categories"] == ["names", "wild"]
+        with open(roms["a"], "rb") as f:
+            clean = f.read()
+        with open(info["output"], "rb") as f:
+            out = f.read()
+        assert self._table(out) == camel_names(self._table(clean), 10)
+        assert self._table(out) != self._table(clean)
+        assert out[0xCD5C6 + 0x33 * 10:0xCD5C6 + 0x33 * 10 + 6] == bytes.fromhex("8CA0A6ACA0B1")   # $34 Magmar
+        r = verify("purered", clean, out, spec=info["spec"])
+        assert r["ok"], r["failures"]
+        assert r["changed"]["names"] > 0
+
+    def test_with_the_tweak_off_the_table_is_byte_identical(self, tmp_path):
+        jar, roms = _fork_jar(), _pure_roms()
+        spec = {**default_spec(FAMILY_PURE), "starters": "unchanged", "trainers": "unchanged"}
+        assert spec["lowercase_names"] is False
+        settings = tmp_path / "s.rnqs"
+        settings.write_bytes(build_spec(spec))
+        res = prepare_pair(jar, str(settings), roms, str(tmp_path / "out"))
+        info = res["players"]["a"]
+        assert info["write_domain"]["categories"] == ["wild"]
+        with open(roms["a"], "rb") as f:
+            clean = f.read()
+        with open(info["output"], "rb") as f:
+            out = f.read()
+        assert self._table(out) == self._table(clean)

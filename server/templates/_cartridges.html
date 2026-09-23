@@ -1,23 +1,26 @@
 {#
   _cartridges.html — a Gen 1 run's cartridges: what each player plays. The two picks
   (whatever is in the SLink folder, found on load and again after an upload; anything else
-  through the browser's own file dialog, landing in <repo>/roms/), the SLink companion, and
-  Randomize — whose options (_randomizer_fields.html) unfold below it. Included inside an
-  Alpine scope that carries the `randomizerFields()` mixin (static/randomizer.js): `rform`,
-  `rdraft`, `roms`, `pre`, `usable()`, `romGroups()`, `romNote()`, `companionOk()`,
-  `cartsReady()`, `scanRoms()`, `upload()`. Used by the run creator and by
-  /runs/{id}/cartridges. What the server does with the picks is server/cartridges.py.
+  through the browser's own file dialog, landing in <repo>/roms/) and the SLink companion.
+  Randomize is the next section (_randomize.html). Included inside an Alpine scope that
+  carries the `randomizerFields()` mixin (static/randomizer.js): `rform`, `rdraft`, `roms`,
+  `pre`, `usable()`, `romGroups()`, `romNote()`, `companionOk()`, `cartsReady()`,
+  `scanRoms()`, `upload()`. Used by the run creator and by /runs/{id}/cartridges. What the
+  server does with the picks is server/cartridges.py.
 #}
 <div class="mk-optgrid">
   <template x-for="pid in ['a', 'b']" :key="pid">
     <label class="mk-field"><span x-text="'Player ' + pid.toUpperCase() + ' cartridge'"></span>
       <span class="mk-filerow">
+        {# :selected on each option, not only x-model on the select: the options are
+           rendered by nested templates, after the value is set, and a <select> shows its
+           placeholder until an option claims the value #}
         <select x-model="rdraft['rom_' + pid]">
-          <option value="">— pick a cartridge —</option>
+          <option value="" :selected="!rdraft['rom_' + pid]">— pick a cartridge —</option>
           <template x-for="g in romGroups()" :key="g.label">
             <optgroup :label="g.label">
               <template x-for="r in g.roms" :key="r.path">
-                <option :value="r.path" :disabled="!usable(r)" x-text="romNote(r) + ' — ' + r.name"></option>
+                <option :value="r.path" :selected="rdraft['rom_' + pid] === r.path" :disabled="!usable(r)" x-text="romNote(r) + ' — ' + r.name"></option>
               </template>
             </optgroup>
           </template>
@@ -39,13 +42,6 @@
       <span class="mk-opt-why" x-show="!companionOk().ok" x-text="companionOk().why"></span>
     </span>
   </label>
-  <label class="mk-opt described" :class="rdraft.randomize ? 'on' : ''">
-    <input type="checkbox" x-model="rdraft.randomize">
-    <span class="mk-opt-txt">
-      <span class="mk-opt-name">Randomize</span>
-      <span class="mk-opt-desc">One randomized cartridge per player, built from your own copy of Universal Pokémon Randomizer ZX — same settings, different seeds. The run then admits only those two cartridges. Your ROMs stay on this machine.</span>
-    </span>
-  </label>
 </div>
 
 <div class="mk-preview-rules">
@@ -54,14 +50,4 @@
     <span class="mk-tag" :class="pick(pid) && usable(pick(pid)) ? 'on' : 'off'"
           x-text="pid.toUpperCase() + ': ' + (!pick(pid) ? 'no cartridge' : pick(pid).title)"></span>
   </template>
-  <template x-if="rdraft.randomize && pre">
-    <span class="mk-tag" :class="pre.jar_found && (pre.jar_fork || family !== 'gen1_purergb') ? 'on' : 'off'" x-text="pre.jar_found ? (pre.jar_fork ? 'SLink fork jar (vanilla + pureRGB)' : 'stock jar (vanilla only)') : 'jar not found'"></span>
-  </template>
-  <template x-if="rdraft.randomize && pre">
-    <span class="mk-tag" :class="pre.java_found ? 'on' : 'off'" x-text="pre.java_found ? 'java on PATH' : 'java not on PATH'"></span>
-  </template>
-</div>
-
-<div x-show="rdraft.randomize" style="display:flex;flex-direction:column;gap:var(--space-4)">
-  {% include "_randomizer_fields.html" %}
 </div>

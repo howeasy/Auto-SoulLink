@@ -127,15 +127,6 @@
                     <span class="mk-sub">last: {{ p.last_event }} <span class="num">{{ p.last_seen_label }}</span></span>
                     {% if not p.connected and live %}<span class="mk-tag off">disconnected</span>{% endif %}
                     {% if p.stale %}<span class="mk-tag off stale-warn" title="connected, but nothing heard since">No data · last {{ p.last_seen_label }}</span>{% endif %}
-                    {# the cartridge's companion, as it reported at hello: the panel, and the
-                       sound path when the run asks for native sounds -- a cartridge without
-                       one (unpatched, or Yellow) says so, the HUD still shows everything #}
-                    {% set cp = p.companion or {} %}
-                    {% if cp.panel %}<span class="mk-tag on" title="SLink companion on this cartridge: the START-menu SLINK panel">SLINK panel</span>{% endif %}
-                    {% if status.rules.native_sounds and cp.sfx is not none %}
-                      {% if cp.sfx %}<span class="mk-tag on" title="Notification sounds play through this cartridge's own audio engine">native sound</span>
-                      {% else %}<span class="mk-tag off" title="Native Sounds is on for this run, but this cartridge has no sound path (unpatched, or Yellow). Notifications still show on the HUD.">no native sound on this cartridge</span>{% endif %}
-                    {% endif %}
                   </div>
                   {% set bs = p.battle_state %}
                   {% set mine = p.party_details[board.active[pid]] if board.active[pid] else none %}
@@ -190,8 +181,8 @@
             <ol class="mk-steps">
               {% if roms %}
               <li>This run made each player's cartridge{% if roms_pinned %} — it is randomized, and the run admits no other{% endif %}:
-                <a class="mk-btn" href="{{ roms.a }}">Player A · .gb</a>
-                <a class="mk-btn" href="{{ roms.b }}">Player B · .gb</a></li>
+                <a class="mk-btn" href="{{ roms.a }}">Player A · {{ rom_ext.a }}</a>
+                <a class="mk-btn" href="{{ roms.b }}">Player B · {{ rom_ext.b }}</a></li>
               {% endif %}
               <li>Download a launcher per player:
                 <a class="mk-btn" href="{{ launchers.a }}">Player A · .lua</a>

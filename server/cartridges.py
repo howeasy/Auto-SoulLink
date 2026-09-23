@@ -54,7 +54,12 @@ def _companion(data: bytes, family: str, info: dict) -> bytes:
 
 def provision(run_dir: str, sources: dict[str, str], *, companion: bool,
               randomize: dict | None, jar: str = "") -> dict:
-    """Write a.gb/b.gb under run_dir/roms from two pinned, same-family sources.
+    """Write a.<ext>/b.<ext> under run_dir/roms from two pinned, same-family sources.
+
+    The extension is the SOURCE's: BizHawk picks the system by database hit first and by
+    extension second (PLAN A15), and a randomized or overlay ROM is never in the database,
+    so a pure cartridge named .gb would run on the DMG core in mono. Red/Blue dumps are .gb
+    (the DMG core, where the client is proven), Yellow and pureRGB are .gbc.
 
     Vanilla randomizes clean bytes before structural injection; pureRGB randomizes
     the admitted overlay after UPS application. Only randomized runs get a contract,
@@ -96,7 +101,7 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
 
     directory = Path(run_dir).resolve()
     roms = directory / "roms"
-    outputs = {pid: roms / f"{pid}.gb" for pid in sources}
+    outputs = {pid: roms / f"{pid}{Path(path).suffix.lower() or '.gb'}" for pid, path in sources.items()}
     # Never replace the picked original, including through a symlink or hard link.
     destinations = list(outputs.values())
     if randomize is not None:

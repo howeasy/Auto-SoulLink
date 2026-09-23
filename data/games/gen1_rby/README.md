@@ -40,6 +40,7 @@ Archipelago variants have never been launched. See
 ## Files
 
 - `area_map.json` — Map ID → `{area_id, display name}` source (86 entries; all three games share IDs). Read directly by the new client's closure (`lua/gen1/entry.lua`); no longer generates standalone `.lua` lookup tables (those, and their `gen_gen1_area_map.py` generator, were retired with the legacy client in P8-4b).
+- `map_names.json` — Map ID → name for every map (226; the unused ids left out), from pret's `constants/map_constants.asm` by `python tools/gen_gen1_map_names.py`. The board names a map that is no encounter area with it (the client reports those as `map_<id>`): Viridian City, a gym, a house — not "Map 1".
 - `moves.json` — 165 moves: name, type, power, accuracy, pp, split
 - `trainers.json` — `classes` (class_id → class name) + `named_trainers` (gym leaders, E4, rivals)
 - `encounter_tables.json` — Wild encounter slots, keyed **by game version first**

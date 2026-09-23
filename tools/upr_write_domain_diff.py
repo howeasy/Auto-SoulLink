@@ -12,6 +12,9 @@ inside the allowlist derived from the INI entry for the categories that were ena
                  record when tm_compat is enabled)
     field_items  item bytes of object_event item rows and of hidden-item rows whose give
                  routine is one of HiddenItemRoutineEntries
+    names        the InternalPokemonCount x PokemonNamesLength species-name table (the
+                 lowercase_names tweak, the one tweak a lossless entry honours: a data
+                 write the fork re-cases byte-for-byte, fork revision 3)
 
     python tools/upr_write_domain_diff.py --clean ROM --out ROM --title purered --enable wild [--enable ...]
 
@@ -223,7 +226,13 @@ def catch_rate_bytes(e: dict) -> set[int]:
     return {e["PokemonStatsOffset"] + i * size + 8 for i in range(151)}
 
 
-DOMAINS = ("wild", "starters", "statics", "trainers", "tms", "tm_compat", "field_items", "catch_rate")
+DOMAINS = ("wild", "starters", "statics", "trainers", "tms", "tm_compat", "field_items", "catch_rate",
+           "names")
+
+
+def name_table_bytes(e: dict) -> range:
+    return range(e["PokemonNamesOffset"],
+                 e["PokemonNamesOffset"] + e.get("InternalPokemonCount", 190) * e["PokemonNamesLength"])
 
 
 def domains_for_spec(spec: dict) -> set[str]:
@@ -249,6 +258,8 @@ def domains_for_spec(spec: dict) -> set[str]:
         out.add("tm_compat")
     if g("field_items", "unchanged") != "unchanged":
         out.add("field_items")
+    if g("lowercase_names", False):
+        out.add("names")
     return out
 
 
@@ -280,6 +291,8 @@ def allowlist(title: str, rom: bytes, categories: set[str], ini: pathlib.Path = 
     if "field_items" in categories:
         legal = _rewritable_items()
         out |= {o for o in field_item_bytes(rom, e) if rom[o] in legal}
+    if "names" in categories:
+        out.update(name_table_bytes(e))
     return out
 
 

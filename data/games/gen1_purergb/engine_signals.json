@@ -1,6 +1,6 @@
 {
  "schema": "rby-engine-signal-sites-v1",
- "sha256": "40ee51c131709e81fe10f717f1b5ab759b90663602a76cad5b2df3d1e3741fad",
+ "sha256": "d748ecf4b5939fafd95d2512fdf1beccd1fa9f3337e5303743c6ecc65f4b880b",
  "source_commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
  "titles": {
   "pureblue": {
@@ -867,7 +867,7 @@
      "symbol": "InitWildBattle"
     }
    },
-   "symbols_sha256": "01e5aa730d7fed79c9518de9203eae65e9a7a495884683282117e3965cfbdff8"
+   "symbols_sha256": "2d471a8f7ddc831e0871ed99a27d7781314e8e8c8a3c6fbc3de784c3bd016a14"
   },
   "puregreen": {
    "addresses": {
@@ -1733,7 +1733,7 @@
      "symbol": "InitWildBattle"
     }
    },
-   "symbols_sha256": "db9963d7c351afb4baf8cb512cade6ba190b171ac4372f192dd1d63830c7e180"
+   "symbols_sha256": "ef2a89a6ce4aa72ea9d446d1e696e63e38bc2bda6b24f71194752e6855c1d166"
   },
   "purered": {
    "addresses": {
@@ -2599,7 +2599,7 @@
      "symbol": "InitWildBattle"
     }
    },
-   "symbols_sha256": "eb5bbf4854445b323aa20ba6568f7eae53346cd9d4a17179283ecc7f11d16baf"
+   "symbols_sha256": "483cc3e6c947b6346e26451eb4dcc273bb690319c802ba2e3d13c3d235a56dbc"
   }
  }
 }

@@ -1,0 +1,162 @@
+From b3123c147c410cff9e24ed056d5bc2c380dd073f Mon Sep 17 00:00:00 2001
+From: slink <slink@local>
+Date: Mon, 21 Sep 2026 09:10:56 -0400
+Subject: [PATCH] slink: version 4.6.1-slink3; the lossless entries honour the
+ lower-case-names tweak (SlinkForkRevision=3)
+
+The lossless (pureRGB) entries offered no misc tweak: every other tweak is a code
+write. LOWER_CASE_POKEMON_NAMES is a data write over the species-name table, so a
+lossless entry now offers exactly that one. It is applied as a byte transform in
+place over every InternalPokemonCount row of the table (forms, spirits and
+MissingNo have their own rows), mirroring RomFunctions.camelCase on the Gen 1
+glyphs, written straight into rom[] so nothing is re-encoded; savePokemonStats
+keeps skipping the name write on a lossless entry. The vanilla path is untouched.
+Every pure section declares SlinkForkRevision=3 so the pipeline refuses a slink2
+jar, which would silently drop the tweak in tweakForRom.
+---
+ src/com/dabomstew/pkrandom/Version.java       |  2 +-
+ .../pkrandom/config/gen1_offsets.ini          | 12 +++---
+ .../pkrandom/romhandlers/Gen1RomHandler.java  | 42 ++++++++++++++++++-
+ 3 files changed, 47 insertions(+), 9 deletions(-)
+
+diff --git a/src/com/dabomstew/pkrandom/Version.java b/src/com/dabomstew/pkrandom/Version.java
+index 0cb6a8a..192e418 100644
+--- a/src/com/dabomstew/pkrandom/Version.java
++++ b/src/com/dabomstew/pkrandom/Version.java
+@@ -29,7 +29,7 @@ import java.util.Map;
+ 
+ public class Version {
+     public static final int VERSION = 322; // Increment by 1 for new version. Updated for 4.6.1.
+-    public static final String VERSION_STRING = "4.6.1-slink2"; // slink fork of 4.6.1; VERSION stays 322 so settings files interoperate
++    public static final String VERSION_STRING = "4.6.1-slink3"; // slink fork of 4.6.1; VERSION stays 322 so settings files interoperate
+ 
+     public static final Map<Integer,String> oldVersions = setupVersionsMap();
+ 
+diff --git a/src/com/dabomstew/pkrandom/config/gen1_offsets.ini b/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
+index 3779989..14fed7f 100755
+--- a/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
++++ b/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
+@@ -1195,7 +1195,7 @@ OldRodPairCount=2
+ GoodRodPairCount=4
+ TrainerClassCount=56
+ TrainerRecordGrammars=1
+-SlinkForkRevision=2
++SlinkForkRevision=3
+ TrainerTaggingDisabled=1
+ TradeTableSize=10
+ TradeNameLength=11
+@@ -1278,7 +1278,7 @@ OldRodPairCount=2
+ GoodRodPairCount=4
+ TrainerClassCount=56
+ TrainerRecordGrammars=1
+-SlinkForkRevision=2
++SlinkForkRevision=3
+ TrainerTaggingDisabled=1
+ TradeTableSize=10
+ TradeNameLength=11
+@@ -1361,7 +1361,7 @@ OldRodPairCount=2
+ GoodRodPairCount=4
+ TrainerClassCount=56
+ TrainerRecordGrammars=1
+-SlinkForkRevision=2
++SlinkForkRevision=3
+ TrainerTaggingDisabled=1
+ TradeTableSize=10
+ TradeNameLength=11
+@@ -1444,7 +1444,7 @@ OldRodPairCount=2
+ GoodRodPairCount=4
+ TrainerClassCount=56
+ TrainerRecordGrammars=1
+-SlinkForkRevision=2
++SlinkForkRevision=3
+ TrainerTaggingDisabled=1
+ TradeTableSize=10
+ TradeNameLength=11
+@@ -1527,7 +1527,7 @@ OldRodPairCount=2
+ GoodRodPairCount=4
+ TrainerClassCount=56
+ TrainerRecordGrammars=1
+-SlinkForkRevision=2
++SlinkForkRevision=3
+ TrainerTaggingDisabled=1
+ TradeTableSize=10
+ TradeNameLength=11
+@@ -1610,7 +1610,7 @@ OldRodPairCount=2
+ GoodRodPairCount=4
+ TrainerClassCount=56
+ TrainerRecordGrammars=1
+-SlinkForkRevision=2
++SlinkForkRevision=3
+ TrainerTaggingDisabled=1
+ TradeTableSize=10
+ TradeNameLength=11
+diff --git a/src/com/dabomstew/pkrandom/romhandlers/Gen1RomHandler.java b/src/com/dabomstew/pkrandom/romhandlers/Gen1RomHandler.java
+index d52754f..26ed6b9 100755
+--- a/src/com/dabomstew/pkrandom/romhandlers/Gen1RomHandler.java
++++ b/src/com/dabomstew/pkrandom/romhandlers/Gen1RomHandler.java
+@@ -2228,7 +2228,9 @@ public class Gen1RomHandler extends AbstractGBCRomHandler {
+     @Override
+     public int miscTweaksAvailable() {
+         if (lossless()) {
+-            return 0; // slink: every tweak is a code write; a lossless entry offers none
++            // slink: every other tweak is a code write; the name table is data, re-cased
++            // byte-for-byte in place (applyCamelCaseNamesInPlace), so it is the one offered
++            return MiscTweak.LOWER_CASE_POKEMON_NAMES.getValue();
+         }
+         int available = MiscTweak.LOWER_CASE_POKEMON_NAMES.getValue();
+         available |= MiscTweak.UPDATE_TYPE_EFFECTIVENESS.getValue();
+@@ -2273,7 +2275,11 @@ public class Gen1RomHandler extends AbstractGBCRomHandler {
+         } else if (tweak == MiscTweak.ALLOW_PIKACHU_EVOLUTION) {
+             applyPikachuEvoPatch();
+         } else if (tweak == MiscTweak.LOWER_CASE_POKEMON_NAMES) {
+-            applyCamelCaseNames();
++            if (lossless()) {
++                applyCamelCaseNamesInPlace();
++            } else {
++                applyCamelCaseNames();
++            }
+         } else if (tweak == MiscTweak.UPDATE_TYPE_EFFECTIVENESS) {
+             updateTypeEffectiveness();
+         } else if (tweak == MiscTweak.RANDOMIZE_CATCHING_TUTORIAL) {
+@@ -2286,6 +2292,38 @@ public class Gen1RomHandler extends AbstractGBCRomHandler {
+         return effectivenessUpdated;
+     }
+ 
++    // slink: RomFunctions.camelCase as a byte transform over the whole name table of a
++    // lossless entry (every InternalPokemonCount row: forms, spirits and MissingNo have
++    // their own), written straight into rom[] so nothing is re-encoded; savePokemonStats
++    // keeps skipping the name write on a lossless entry. Glyphs: A-Z $80-$99, a-z $A0-$B9,
++    // the 'x ligatures $BB-$BF/$E4/$E5, the apostrophe $E0, terminator/pad $50.
++    private void applyCamelCaseNamesInPlace() {
++        int offs = romEntry.getValue("PokemonNamesOffset");
++        int nameLength = romEntry.getValue("PokemonNamesLength");
++        int count = romEntry.getValue("InternalPokemonCount");
++        for (int i = 0; i < count; i++) {
++            boolean docap = true;
++            for (int j = 0; j < nameLength; j++) {
++                int at = offs + i * nameLength + j;
++                int b = rom[at] & 0xFF;
++                if (b == 0x50) {
++                    break;
++                }
++                if (b >= 0x80 && b <= 0x99) {
++                    if (!docap) {
++                        rom[at] = (byte) (b + 0x20);
++                    }
++                    docap = false;
++                } else if ((b >= 0xA0 && b <= 0xB9) || (b >= 0xBB && b <= 0xBF) || b == 0xE0 || b == 0xE4
++                        || b == 0xE5) {
++                    docap = false;
++                } else {
++                    docap = true;
++                }
++            }
++        }
++    }
++
+     private void applyBWEXPPatch() {
+         genericIPSPatch("BWXPTweak");
+     }
+-- 
+2.54.0.windows.1
+

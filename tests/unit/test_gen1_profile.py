@@ -10,6 +10,8 @@ import json
 import pathlib
 import sys
 
+import pytest
+
 REPO = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
@@ -23,7 +25,11 @@ def _committed() -> dict:
 
 
 def test_committed_profile_matches_a_fresh_generation():
-    assert PROFILE.read_text(encoding="utf-8") == gen.render(gen.build())
+    try:
+        fresh = gen.render(gen.build())
+    except SystemExit as e:
+        pytest.skip(f"pret source checkout not present: {e}")
+    assert PROFILE.read_text(encoding="utf-8") == fresh
 
 
 def test_sym_files_are_the_pinned_ones():

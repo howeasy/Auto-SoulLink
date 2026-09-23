@@ -174,20 +174,26 @@ FLAGS: dict[str, tuple[int, int]] = {
     "pickupItems_UNCHANGED": (49, 1),
 }
 
-# MiscTweak bit values (MiscTweak.java). The whole set is a big-endian int at bytes 32-35.
+# MiscTweak bit values, in MiscTweak.java's declaration order (ZX 4.6.1; the fork keeps it).
+# The whole set is a big-endian int at bytes 32-35. The values are the file's, not a
+# menu order: an earlier table had eight of its twelve values wrong (LOWER_CASE_POKEMON_NAMES
+# at bit 1 = NERF_X_ACCURACY, FIX_CRIT_RATE at bit 10 = lower-case names, ...); only fastest
+# text (3), running shoes (4), PC potion (5) and Pikachu evolution (6) happened to be right.
+# An .rnqs SLink wrote before this fix carries the OLD bits: re-export it, never remap it.
 MISC_TWEAKS = {
-    "BAN_LUCKY_EGG": 1 << 0,
-    "LOWER_CASE_POKEMON_NAMES": 1 << 1,
-    "NATIONAL_DEX_AT_START": 1 << 2,
+    "BW_EXP_PATCH": 1 << 0,
+    "NERF_X_ACCURACY": 1 << 1,
+    "FIX_CRIT_RATE": 1 << 2,
     "FASTEST_TEXT": 1 << 3,
     "RUNNING_SHOES_INDOORS": 1 << 4,
     "RANDOMIZE_PC_POTION": 1 << 5,
     "ALLOW_PIKACHU_EVOLUTION": 1 << 6,
-    "FORCE_CHALLENGE_MODE": 1 << 7,
-    "BW_EXP_PATCH": 1 << 8,
-    "NERF_X_ACCURACY": 1 << 9,
-    "FIX_CRIT_RATE": 1 << 10,
-    "UPDATE_TYPE_EFFECTIVENESS": 1 << 11,
+    "NATIONAL_DEX_AT_START": 1 << 7,
+    "UPDATE_TYPE_EFFECTIVENESS": 1 << 8,
+    "FORCE_CHALLENGE_MODE": 1 << 9,
+    "LOWER_CASE_POKEMON_NAMES": 1 << 10,
+    "RANDOMIZE_CATCHING_TUTORIAL": 1 << 11,
+    "BAN_LUCKY_EGG": 1 << 12,
 }
 
 # A settings blob that changes nothing, byte by byte. Values are UPR's own field defaults
@@ -302,7 +308,6 @@ OPTIONS: dict[str, dict] = {
     "wild_block_legendaries": {"kind": "bool", "group": "Wild encounters", "label": "No wild legendaries",
                                "default": True, "flag": "blockWildLegendaries"},
     "wild_min_catch_rate": {"kind": "int", "group": "Wild encounters", "label": "Minimum catch rate",
-                            "help": "0 is off; 1 to 5 raises every species to at least that tier",
                             "default": 0, "min": 0, "max": 5, "byte": 50,
                             "flag": "useMinimumCatchRate",                    # bit 0 of byte 16, on when > 0
                             "encode": lambda v: ((v - 1) << 3) if v else 0,
@@ -337,7 +342,7 @@ OPTIONS: dict[str, dict] = {
                               "default": False, "flag": "trainersMatchTypingDistribution"},
     "trainers_levels": dict(_level_mod(36), group="Trainers", label="Trainer level curve", default=0),
     "trainers_force_evolved": {"kind": "int", "group": "Trainers", "label": "Fully evolved from level",
-                               "help": "0 is off", "default": 0, "min": 0, "max": 100, "byte": 14,
+                               "default": 0, "min": 0, "max": 100, "byte": 14,
                                "encode": lambda v: (0x80 | v) if v else 30,   # 30: UPR's default, not forced
                                "decode": lambda b: b & 0x7F if b & 0x80 else 0},
     "trainer_names": {"kind": "bool", "group": "Trainers", "label": "Random trainer names",
@@ -377,18 +382,90 @@ OPTIONS: dict[str, dict] = {
     "update_type_effectiveness": {"kind": "bool", "group": "Tweaks", "label": "Later-gen type chart", "default": False, "misc": "UPDATE_TYPE_EFFECTIVENESS"},
 }
 
+# What each option and each choice means, in the form's words: UPR ZX's own GUI tooltips
+# (the jar's com/dabomstew/pkrandom/newgui/Bundle.properties, keys in the comments),
+# shortened, plus the Soul Link consequence where there is one. Kept beside OPTIONS rather
+# than inside it so the option rows stay the codec they are; option_form() merges these in.
+HELP: dict[str, str] = {
+    "wild": "Which Pokémon appear in the grass, caves and water. The same setting on both cartridges, so the species clause means the same thing for both players.",
+    "wild_restriction": "A rule on top of the wild mode. Under a global 1-to-1 map only None applies.",
+    "wild_block_legendaries": "Legendaries never appear as wild replacements.",                      # wpDontUseLegendaries
+    "wild_min_catch_rate": "0 is off. 1 to 5 raises every species with a lower catch rate to that tier: 1 ≈ 10 % with a Poké Ball at full health, 2 ≈ 17 %, 3 ≈ 27 %, 4 ≈ 34 %, 5 = guaranteed.",  # wpSetMinimumCatchRateSlider
+    "wild_levels": "Raise or lower every wild Pokémon's level by this much.",                       # wpPercentageLevelModifier
+    "starters": "The three starters on the lab table.",                                             # sp*
+    "statics": "The one-off encounters, gifts and purchases: Snorlax, the birds, the Eevee, the fossils…",  # stp*
+    "static_levels": "Raise or lower every static encounter's level by this much.",                # stpPercentageLevelModifier
+    "trainers": "Which Pokémon trainers fight you with.",                                           # tp*
+    "trainers_similar_strength": "Each replacement is of similar power to the original. Other rules, such as type theming, take precedence, so it is not exact.",  # tpSimilarStrength
+    "trainers_rival_starter": "Your rival keeps their starter in every fight, evolved as they progress; the rest of their team is random like everyone else's.",  # tpRivalCarriesStarter
+    "trainers_block_legendaries": "Legendaries never appear on a trainer's team.",                  # tpDontUseLegendaries
+    "trainers_match_typing": "The number of trainers of each type roughly follows how many Pokémon have that type — less repetition, but runs of the same type in a row.",  # tpWeightTypes
+    "trainers_levels": "Raise or lower every trainer Pokémon's level by this much.",               # tpPercentageLevelModifier
+    "trainers_force_evolved": "0 is off. Above it, every trainer Pokémon at or over this level is fully evolved, whatever else is set.",  # tpForceFullyEvolvedAt
+    "trainer_names": "Trainers get new names. In Red / Blue / Yellow only the Gym Leaders and the Elite Four have names to change.",  # tpRandomizeTrainerNames
+    "trainer_class_names": "Trainer classes get new names — a Youngster could become a Misfit.",  # tpRandomizeTrainerClassNames
+    "tms": "Which move each TM teaches. HM moves are never affected, and every TM stays unique.",  # tm*
+    "tm_compat": "Which Pokémon can learn which TMs and HMs.",                                      # thc*
+    "tm_sanity": "A Pokémon can always learn the TM of a move it also learns by levelling up.",     # tmLevelupMoveSanity
+    "tm_keep_field": "TMs with field moves — Dig, Teleport — are left alone; healing moves are not counted.",  # tmKeepFieldMoveTMs
+    "field_items": "The items on the ground and the hidden ones. Key items stay where they are.",  # fi*
+    "field_items_ban_bad": "Berries, mail and other items that do little are left out of the random pool.",  # fiBanBadItems
+    "fastest_text": "Every text box shows with the least delay, whatever the in-game text speed.",  # miscFastestText
+    "pc_potion": "The Potion in your PC at the start becomes another useful item.",                 # miscRandomizePCPotion
+    "lowercase_names": "Pokémon names in Camel Case: VENUSAUR becomes Venusaur.",                  # miscLowerCasePokemonNames
+    "nerf_x_accuracy": "X Accuracy no longer makes sleep, trapping and one-hit-KO moves hit every time.",  # miscNerfXAccuracy
+    "fix_crit_rate": "Critical hits at the later games' 1/16 instead of Gen 1's Speed-based rate; Focus Energy and Dire Hit raise it as intended.",  # miscFixCritRate
+    "update_type_effectiveness": "The type chart as of Gen 6 (Ghost hits Psychic, Ice resists nothing extra…). No Fairy type. Both cartridges get it, so the type clause still means the same on both.",  # miscUpdateTypeEffectiveness
+}
+CHOICE_HELP: dict[tuple[str, str], str] = {
+    ("wild", "unchanged"): "Wild Pokémon stay as the game made them.",
+    ("wild", "random"): "Every encounter slot in every area is random: many different Pokémon per area.",   # wpRandom
+    ("wild", "area"): "Within an area, each species is swapped for one other species in every slot it has: a handful of Pokémon per area.",  # wpArea1To1
+    ("wild", "global"): "Everywhere a species appears in the game it is swapped for one other species. Too restrictive for any other rule but None.",  # wpGlobal1To1
+    ("wild_restriction", "none"): "No extra rule.",
+    ("wild_restriction", "similar"): "Each replacement is of similar power to the original, as far as the map allows.",  # wpARSimilarStrength
+    ("wild_restriction", "catch_em_all"): "Every replacement is a species not used before, so every Pokémon is catchable somewhere.",  # wpARCatchEmAll
+    ("wild_restriction", "type_themed"): "Each area gets one random type and only Pokémon of that type — realistic, or odd (Fire Pokémon while surfing).",  # wpARTypeThemeAreas
+    ("starters", "unchanged"): "Bulbasaur, Charmander, Squirtle.",
+    ("starters", "random"): "Three random Pokémon.",                                                    # spRandomCompletely
+    ("starters", "two_evos"): "Three random Pokémon that each have two evolutions ahead of them, like the real starters.",  # spRandomTwoEvos
+    ("statics", "unchanged"): "Static Pokémon stay as the game made them.",
+    ("statics", "random"): "Any Pokémon can replace any static one — a Mew in the Game Corner is possible.",  # stpRandomCompletely
+    ("statics", "matching"): "Random, but a legendary is always swapped for another legendary.",       # stpSwapLegendariesSwapStandards
+    ("statics", "similar"): "Each static Pokémon is swapped for one of similar strength.",             # stpRandomSimilarStrength
+    ("trainers", "unchanged"): "Trainer teams stay as the game made them.",
+    ("trainers", "random"): "Every trainer Pokémon is random.",                                          # tpRandom
+    ("trainers", "distributed"): "Random, spread so that no species keeps turning up. Similar strength cannot be verified under it.",  # tpRandomEvenDistribution
+    ("trainers", "type_themed"): "Each trainer gets a type and random Pokémon of that type; a gym's trainers share one type.",  # tpTypeThemed
+    ("trainers", "type_themed_gyms"): "Type-themed for the Gym trainers, Leaders and the Elite Four only; everyone else random.",  # tpMain5TypeThemedEliteFourGyms
+    ("tms", "unchanged"): "TMs teach what they always did.",
+    ("tms", "random"): "Each TM teaches a new move.",                                                    # tmRandom
+    ("tm_compat", "unchanged"): "Each Pokémon learns the same TMs it could before — even if the TMs' moves changed, which can get odd.",  # thcUnchanged
+    ("tm_compat", "random"): "Each TM or HM has a 50 % chance of being learnable, whatever the type.",   # thcRandomCompletely
+    ("tm_compat", "prefer_type"): "90 % chance for a TM of the Pokémon's own type, 50 % for Normal moves, 25 % otherwise.",  # thcRandomPreferSameType
+    ("tm_compat", "full"): "Every Pokémon learns every TM and HM. Fun, and possibly too easy.",          # thcFullCompatibility
+    ("field_items", "unchanged"): "Items stay where the game put them.",
+    ("field_items", "random"): "A new random item in every item ball and hidden spot — a Master Ball on Route 1 is possible.",  # fiRandom
+    ("field_items", "shuffle"): "The same items, in a new order: each appears once, somewhere else.",    # fiShuffle
+    ("field_items", "random_even"): "Random, but the randomizer controls how many times each item is placed.",  # fiRandomEvenDistribution
+}
+
 # The six categories older callers speak in. Each is the choice option of the same name;
 # "enabled" means anything but unchanged.
 _CATEGORY_MODES = ("wild", "starters", "statics", "trainers", "tms", "field_items")
 
 # Foundations the pipeline randomizes. The pure family (docs/purergb/PLAN.md §6 M5) runs on
-# the SLink fork's lossless entries, which offer NO misc tweak: every tweak is a code write
-# (fastest text is a C9 at TextDelayFunctionOffset; pureRGB has instant text natively), and
-# the fork's tweakForRom would silently drop one that was asked for, so a settings file for
-# the pure family must not ask.
+# the SLink fork's lossless entries, which offer ONE misc tweak: every other tweak is a code
+# write (fastest text is a C9 at TextDelayFunctionOffset; pureRGB has instant text natively),
+# and the fork's tweakForRom would silently drop one that was asked for, so a settings file
+# for the pure family must not ask.
 FAMILY_VANILLA = "gen1_rby"
 FAMILY_PURE = "gen1_purergb"
 FAMILIES = (FAMILY_VANILLA, FAMILY_PURE)
+# The tweaks a lossless entry honours (fork patch 0008, revision 3): lower-case names is a
+# DATA write over the 190-row species-name table, which the fork re-cases byte-for-byte in
+# place (never through its string path), so nothing else in the cartridge moves.
+PURE_ALLOWED_TWEAKS = ("lowercase_names",)
 # Options the fork cannot honour on a pure entry (review cx-795d1423 #4/#5): the pure INI rows
 # carry TrainerTaggingDisabled=1 (no gym/Elite/rival tags -- pureRGB renumbered every class
 # and the rival is name-substituted at runtime) and omit CanChangeTrainerText (the 56-entry
@@ -403,13 +480,15 @@ def misc_options() -> list[str]:
 
 
 def family_spec(spec: dict, family: str = FAMILY_VANILLA) -> dict:
-    """``spec`` with the family's allowlist applied: the pure family has every tweak off."""
+    """``spec`` with the family's allowlist applied: the pure family has every tweak off
+    except PURE_ALLOWED_TWEAKS, which stay as given."""
     if family not in FAMILIES:
         raise UprSettingsError(f"unknown randomizer family {family!r}")
     out = dict(spec)
     if family == FAMILY_PURE:
         for key in misc_options():
-            out[key] = False              # a DEFAULT flip (fastest text defaults on); the
+            if key not in PURE_ALLOWED_TWEAKS:
+                out[key] = False          # a DEFAULT flip (fastest text defaults on); the
     return out                            # inert options are refused, never coerced
 
 
@@ -425,10 +504,11 @@ def option_form() -> list[dict]:
     out = []
     for key, opt in OPTIONS.items():
         row = {"key": key, "kind": opt["kind"], "group": opt["group"], "label": opt["label"],
-               "default": opt["default"], "help": opt.get("help", ""),
-               "pure": key not in PURE_INERT_BOOLS and "misc" not in opt}
+               "default": opt["default"], "help": HELP.get(key, opt.get("help", "")),
+               "note": opt.get("help", "") if key in HELP else "",
+               "pure": key not in PURE_INERT_BOOLS and ("misc" not in opt or key in PURE_ALLOWED_TWEAKS)}
         if opt["kind"] == "choice":
-            row["choices"] = [{"value": v, "label": lbl,
+            row["choices"] = [{"value": v, "label": lbl, "help": CHOICE_HELP.get((key, v), ""),
                                "pure": not (key == "trainers" and v in PURE_INERT_TRAINER_MODES)}
                               for v, (lbl, _f) in opt["choices"].items()]
         elif opt["kind"] == "int":
@@ -617,7 +697,7 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
     Types and evolutions decide the type and species clauses; move and base-stat changes
     make every cached stat and damage figure wrong. These are the domains the project chose
     NOT to support, so finding one enabled is a refusal, not a warning. For the pure family
-    every misc tweak is forbidden too (see FAMILY_PURE).
+    every misc tweak but PURE_ALLOWED_TWEAKS is forbidden too (see FAMILY_PURE).
     """
     f = parsed["flags"]
     bad = []
@@ -631,9 +711,12 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
     if spec.get("trainers") == "distributed" and spec.get("trainers_similar_strength"):
         bad.append("trainers=distributed with trainers_similar_strength "
                    "(not verifiable: the placement-history filter precedes the strength band)")
-    if family == FAMILY_PURE and parsed.get("misc_tweaks"):
-        bad.append("tweaks (" + ", ".join(parsed.get("misc_tweak_names") or ["unknown"]) + ")")
     if family == FAMILY_PURE:
+        allowed = {OPTIONS[k]["misc"] for k in PURE_ALLOWED_TWEAKS}
+        other = [n for n in parsed.get("misc_tweak_names") or [] if n not in allowed]
+        unnamed = parsed.get("misc_tweaks", 0) & ~sum(MISC_TWEAKS.values())
+        if other or unnamed:
+            bad.append("tweaks (" + ", ".join(other or ["unknown"]) + ")")
         bad += [f"{key} (not implemented for pureRGB entries)" for key in PURE_INERT_BOOLS if spec.get(key)]
         if spec.get("trainers") in PURE_INERT_TRAINER_MODES:
             bad.append(f"trainers={spec['trainers']} (pure entries carry no gym/Elite tags)")

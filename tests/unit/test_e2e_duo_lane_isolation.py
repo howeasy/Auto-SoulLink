@@ -41,6 +41,10 @@ def _run(monkeypatch, tmp_path, **overrides):
     """A DuoRun that writes everything under tmp_path and launches nothing."""
     monkeypatch.setattr(duo, "BUILD", str(tmp_path))
     monkeypatch.setattr(duo, "BIZHAWK_CONFIG", str(_config_file(tmp_path)))
+    # Lane isolation only cares about the stub/config/window bookkeeping, never the ROM path
+    # value; staged_rom just needs to resolve so launch_instance's Popen argv can be built. Real
+    # cartridge dumps are a dev-box artifact, not present on a clean checkout.
+    monkeypatch.setattr(g1, "staged_rom", lambda *_a, **_k: "fake.gb")
     launched = []
     monkeypatch.setattr(duo.subprocess, "Popen", lambda argv, **kw: launched.append(argv))
     run = duo.DuoRun("link_new", _args(**overrides), attempt=1)

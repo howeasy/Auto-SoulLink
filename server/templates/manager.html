@@ -83,6 +83,11 @@
             {% include "_cartridges.html" %}
           </section>
 
+          <section class="mk-zone" x-show="form.gen1_games.includes(draft.game)">
+            <h2 class="mk-h2"><span>Randomizer</span><i></i><em>same settings, different seeds</em></h2>
+            {% include "_randomize.html" %}
+          </section>
+
           <div class="mk-form-actions">
             <button class="mk-btn primary big" :disabled="!draft.name.trim() || busy || (gen1() && !cartsReady())" @click="create()" x-text="busy ? (stage || 'Creating…') : createLabel()"></button>
             <span class="mk-sub" x-show="!draft.name.trim()">Give it a name.</span>
@@ -139,8 +144,8 @@
           <div class="mk-pop" x-show="launchers" x-cloak>
             {% if run.cartridges or run.randomizer %}
             <span class="mk-cap">Cartridges the run made{% if run.randomizer %} — randomized; the run admits no other{% elif run.cartridges and run.cartridges.companion %} — with the SLink companion{% endif %}</span>
-            <a class="mk-btn" href="/api/runs/{{ run.run_id }}/rom/a">Player A · slink_{{ run.safe_name }}_a.gb</a>
-            <a class="mk-btn" href="/api/runs/{{ run.run_id }}/rom/b">Player B · slink_{{ run.safe_name }}_b.gb</a>
+            <a class="mk-btn" href="/api/runs/{{ run.run_id }}/rom/a">Player A · slink_{{ run.safe_name }}_a{{ run.rom_ext.a }}</a>
+            <a class="mk-btn" href="/api/runs/{{ run.run_id }}/rom/b">Player B · slink_{{ run.safe_name }}_b{{ run.rom_ext.b }}</a>
             {% endif %}
             <span class="mk-cap">BizHawk Lua launchers</span>
             <a class="mk-btn" href="/api/runs/{{ run.run_id }}/launcher/a">Player A · slink_{{ run.safe_name }}_a.lua</a>

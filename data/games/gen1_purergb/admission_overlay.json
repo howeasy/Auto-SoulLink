@@ -1,38 +1,38 @@
 {
-  "09230f6eec7c9bb9952655be7a221728959e5ea4": {
-    "base_sha1": "fe4c63a67c8b28770916cc7b1788f9eeb04ccf02",
-    "crc32": "2F4EEA8F",
-    "header_crc": "557F",
-    "header_title": "POKEMON GREEN",
+  "47cb0f81f1d0186cf12093992957a61daf67fcfe": {
+    "base_sha1": "2e94d09c1e16a57eb079404c030f26fdeeac949d",
+    "crc32": "54FC28AF",
+    "header_crc": "248A",
+    "header_title": "POKEMON RED",
     "kind": "overlay",
-    "md5": "391f8199ad58a29e4752a9821bc89386",
-    "profile_id": "gen1_purergb/puregreen",
+    "md5": "0982c4df4b2b9bb747caa1875a951d11",
+    "profile_id": "gen1_purergb/purered",
     "size": 1048576,
-    "title": "puregreen",
-    "ups": "patch/dist/SLink-PureGreen.ups"
+    "title": "purered",
+    "ups": "patch/dist/SLink-PureRed.ups"
   },
-  "35cc27241b1eb3b2414dea87be2bc59ddb5edc64": {
+  "666d22eada8d0fc93e3b1aea52947ced1cf50fbd": {
     "base_sha1": "d419fe244fa17196f7df46ddab47c840e7573652",
-    "crc32": "E5EAEBB4",
-    "header_crc": "5761",
+    "crc32": "C8E3768A",
+    "header_crc": "5E4C",
     "header_title": "POKEMON BLUE",
     "kind": "overlay",
-    "md5": "0ca6e962522f54798b932db324cf9ac7",
+    "md5": "1f4090059291fb9946ea9a87fe9059a0",
     "profile_id": "gen1_purergb/pureblue",
     "size": 1048576,
     "title": "pureblue",
     "ups": "patch/dist/SLink-PureBlue.ups"
   },
-  "feb19385ced0f6dd6fac7cf7348f8914af7553c4": {
-    "base_sha1": "2e94d09c1e16a57eb079404c030f26fdeeac949d",
-    "crc32": "DAD06B16",
-    "header_crc": "1D9F",
-    "header_title": "POKEMON RED",
+  "e403edaaf951b1240ec34cf3763a5f97f1433003": {
+    "base_sha1": "fe4c63a67c8b28770916cc7b1788f9eeb04ccf02",
+    "crc32": "9EA8F4D5",
+    "header_crc": "5C6A",
+    "header_title": "POKEMON GREEN",
     "kind": "overlay",
-    "md5": "57993ada556e6eb7e6e28c2bfdc192dd",
-    "profile_id": "gen1_purergb/purered",
+    "md5": "1879c973bf7897eb5311c1a3bdf9f269",
+    "profile_id": "gen1_purergb/puregreen",
     "size": 1048576,
-    "title": "purered",
-    "ups": "patch/dist/SLink-PureRed.ups"
+    "title": "puregreen",
+    "ups": "patch/dist/SLink-PureGreen.ups"
   }
 }

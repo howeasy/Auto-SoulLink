@@ -142,8 +142,8 @@ def test_the_three_overlay_builds_have_their_own_entries(overlay_entries):
                 assert a == b or ((a >> 14) in (0, 1, 3) and (a >> 14) == (b >> 14)), f"{title}.{k}: {a:#x} -> {b:#x}"
         assert ov["statics"] == clean["statics"]
     e = overlay_entries("purered")
-    # header CRC of the native-sound overlay build (admission_overlay.json purered header_crc)
-    assert e["CRCInHeader"] == 0x1D9F and e["OldRodOffsets"] == [0xDEF8, 0xDEFD]
+    # header CRC of the notify-SFX overlay build (admission_overlay.json purered header_crc)
+    assert e["CRCInHeader"] == 0x248A and e["OldRodOffsets"] == [0xDEF8, 0xDEFD]
 
 
 def test_starter_sites_include_the_hall_of_fame_ball_hide_branch(overlay_entries):
@@ -228,3 +228,12 @@ def test_non_dex_species_are_the_thirteen_opaque_ids():
                     reason="pinned pure / overlay ROMs not present")
 def test_the_committed_ini_is_what_the_generator_produces():
     assert gen.generate(pathlib.Path(_ROMS), pathlib.Path(_OVERLAY_ROMS)) == _INI.read_text(encoding="utf-8")
+
+
+def test_every_pure_section_declares_fork_revision_3():
+    """Fork patch 0008 (4.6.1-slink3): the lossless entries honour the lower-case-names tweak,
+    and server.upr_pipeline.FORK_REVISION_REQUIRED refuses the slink2 jar that would drop it."""
+    from server.upr_pipeline import FORK_REVISION_REQUIRED
+    assert gen.FIXED_KEYS["SlinkForkRevision"] == "3" and FORK_REVISION_REQUIRED == 3
+    for name, body in _sections().items():
+        assert "SlinkForkRevision=3" in body, name

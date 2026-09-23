@@ -68,6 +68,13 @@ do
     if sys_ok and (sys == "GB" or sys == "GBC" or sys == "SGB") then
         local Entry = dofile(_dir .. "gen1/entry.lua")
         if Entry.detect_title(function(addr) return memory.read_u8(addr, "ROM") end) then
+            -- The engine hooks (gen1/signals.lua) are only proven on 2.11.x; on 2.9.1 they
+            -- latched a failure and every capture/battle went unreported (live run 2026-09-22).
+            local ver = tostring(client.getversion and client.getversion() or "?")
+            local maj, min = ver:match("^(%d+)%.(%d+)")
+            if not maj or tonumber(maj) * 100 + tonumber(min) < 211 then
+                error("[SLink] BizHawk " .. ver .. " is too old for Gen 1 -- install BizHawk 2.11 or newer", 0)
+            end
             dofile(_dir .. "gen1/run.lua")
             return
         end

@@ -65,7 +65,7 @@ def test_vanilla_injects_after_randomizing_and_contract_pins_final(tmp_path, mon
         assert player["fingerprint"] == fingerprint_rom(final) == fingerprint_rom(intermediate)
         assert contract["players"][pid]["fingerprint"] == player["fingerprint"]
         assert player["kind"] == "rand_companion"
-        assert Path(player["output"]) == tmp_path / "roms" / f"{pid}.gb"
+        assert Path(player["output"]) == tmp_path / "roms" / f"{pid}.gb"   # a Red/Blue dump is .gb
         assert "output" not in result["randomizer"]["players"][pid]
 
 
@@ -108,6 +108,22 @@ def test_vanilla_modes(tmp_path, monkeypatch, companion, randomize):
         if randomize:
             expected_kind = "rand_companion" if companion else "rand"
         assert player["kind"] == expected_kind
+
+
+def test_a_cartridge_keeps_its_own_extension(tmp_path):
+    """BizHawk picks the system by database hit first and by extension second (PLAN A15),
+    and a cartridge the run made is never in the database: named .gb, a pureRGB cartridge
+    ran on the DMG core in mono (seen by the owner). The output takes the source's
+    extension -- Red/Blue dumps .gb, pureRGB (and Yellow) .gbc."""
+    from server import cartridges
+    result = cartridges.provision(str(tmp_path / "pure"), {"a": _pure("red"), "b": _pure("blue")},
+                                  companion=False, randomize=None)
+    assert [Path(p["output"]).name for p in result["players"].values()] == ["a.gbc", "b.gbc"]
+    red = REPO / "patch" / "build" / "gen1_red.gb"
+    if red.is_file():
+        result = cartridges.provision(str(tmp_path / "vanilla"), {"a": str(red), "b": str(red)},
+                                      companion=False, randomize=None)
+        assert [Path(p["output"]).name for p in result["players"].values()] == ["a.gb", "b.gb"]
 
 
 @pytest.mark.parametrize("title", ["red", "blue", "green"])

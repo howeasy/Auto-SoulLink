@@ -85,6 +85,13 @@ def _game_family(game: str | None) -> str | None:
     return GAME_FAMILY.get(game or "")
 
 
+def _rom_ext(run: dict) -> dict:
+    """Each player's cartridge extension as handed out (.gb until one is made): the download
+    labels name the file the player will load, and BizHawk picks the system by it."""
+    players = (run.get("cartridges") or {}).get("players") or {}
+    return {p: (os.path.splitext(players.get(p, {}).get("output", ""))[1].lower() or ".gb") for p in ("a", "b")}
+
+
 def _legacy_cartridges(run: dict) -> dict | None:
     """A run randomized before the Cartridges step recorded only `randomizer`: the same
     shape for the page, from what it has (the randomizer's outputs are the cartridges)."""
@@ -785,7 +792,8 @@ class RunManager:
                              live=run.get("status") == "running",
                              launcher_url=f"/api/runs/{rid}/launcher/{{player}}",
                              rom_url=f"/api/runs/{rid}/rom/{{player}}" if run.get("cartridges") or run.get("randomizer") else "",
-                             roms_pinned=bool(run.get("randomizer")))
+                             roms_pinned=bool(run.get("randomizer")),
+                             rom_ext=_rom_ext(run))
 
     async def handle_run_board(self, request: web.Request) -> web.Response:
         """GET /runs/{run_id}/board — the `#content` fragment the shell polls."""
@@ -868,6 +876,7 @@ class RunManager:
         r["safe_name"] = re.sub(r"[^\w-]", "_", run.get("name") or rid).strip("_") or rid
         r["game_label"] = GAME_LABELS.get(run.get("game") or "", "")
         r["gen1"] = (run.get("game") or "") in new_run_form()["gen1_games"]
+        r["rom_ext"] = _rom_ext(run)
         return r
 
     async def handle_list(self, request: web.Request) -> web.Response:
@@ -1086,8 +1095,8 @@ class RunManager:
         # Either a settings file the user built in UPR's GUI, the form's spec (every option
         # in upr_settings.OPTIONS), or the six categories older callers speak in -- the last
         # two go through the SAME builder the allowlist is computed from, so a file made here
-        # is by construction one the pipeline admits. A pure pair gets every tweak turned
-        # off (the fork offers none).
+        # is by construction one the pipeline admits. A pure pair gets every code-patching
+        # tweak turned off (the fork offers only lower-case names, a data write).
         if randomize and not settings:
             try:
                 if spec is not None:
@@ -1332,9 +1341,12 @@ class RunManager:
         if not os.path.isfile(path):
             return web.json_response({"ok": False, "error": "ROM file is missing on disk"}, status=404)
         safe_name = re.sub(r"[^\w-]", "_", run.get("name") or run_id).strip("_") or run_id
+        # The cartridge keeps its own extension: BizHawk picks the system by it for a ROM
+        # its database does not know, and a pure cartridge named .gb runs in mono.
+        ext = os.path.splitext(recorded)[1].lower() if recorded else ".gb"
         return web.FileResponse(path, headers={
             "Content-Type": "application/octet-stream",
-            "Content-Disposition": f'attachment; filename="slink_{safe_name}_{player}.gb"',
+            "Content-Disposition": f'attachment; filename="slink_{safe_name}_{player}{ext}"',
         })
 
     # ── Stream pin ─────────────────────────────────────────────────────────────
@@ -1458,13 +1470,23 @@ class RunManager:
         the calc's own files are served verbatim. The bridge inside the page reads
         SLINK_API_BASE (= /runs/{id}) and so talks to that run through handle_run_api."""
         path = request.match_info.get("path", "") or "normal.html"
-        abs_path = calc_files.resolve(path)
         if not path.endswith(".html"):
-            return calc_files.file_response(abs_path)
+            return calc_files.file_response(calc_files.resolve(path))
         runs, run = self._run_or_404(request)
         ctx = self._run_panel_ctx(request, runs, run, panel="calc", label="Calc")
+        try:
+            abs_path = calc_files.resolve(path)
+        except web.HTTPNotFound:
+            # The entry points live in calc/dist, a build product: the page still wears
+            # the chrome and says what to run, rather than 404ing the whole run page.
+            abs_path = None
+            note = ("The calculator is not built on this machine: run <code>cd calc &amp;&amp; npm install "
+                    "&amp;&amp; npm run build</code> (docs/REFERENCE.md, Damage calculator) and reload.")
+            # a stopped run's reason comes first; the build note follows it
+            ctx["unavailable_html"] = note if ctx["available"] else ctx["unavailable_html"] + " " + note
+            ctx["available"] = False
         ctx.update({
-            "calc_body_html": calc_files.page_body(abs_path),
+            "calc_body_html": calc_files.page_body(abs_path) if abs_path else "",
             "calc_mode_label": calc_files.mode_label(path),
             "status_href": f"/runs/{run['run_id']}",
         })

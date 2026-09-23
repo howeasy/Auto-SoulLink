@@ -23,8 +23,8 @@
       <span class="mk-hdr-spacer"></span>
       <a class="mk-btn" href="/runs/{{ run.run_id }}">Back to the board</a>
     </header>
-    <div class="mk-page">
-      <section class="mk-zone" id="randomizer" x-data='randomizerPage({{ run.run_id | tojson }})'>
+    <div class="mk-page" id="randomizer" x-data='randomizerPage({{ run.run_id | tojson }})'>
+      <section class="mk-zone">
         <h2 class="mk-h2"><span>Cartridges</span><i></i><em>what each player plays — the run hands them out</em></h2>
         <div class="mk-card mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
           <template x-if="rform.cartridges">
@@ -38,7 +38,7 @@
                       <td><span x-text="rform.cartridges.players[pid].source_title"></span><span class="mk-sub" x-text="' → ' + kindWords(rform.cartridges.players[pid].kind)"></span></td>
                       <td><code class="num" x-text="rform.cartridges.players[pid].rom_sha1.slice(0, 12)"></code></td>
                       <td x-show="rform.current"><code class="num" x-text="rform.current ? rform.current.players[pid].seed : ''"></code></td>
-                      <td><a class="mk-btn" :href="'/api/runs/' + runId + '/rom/' + pid" x-text="'slink_' + pid + '.gb'"></a></td>
+                      <td><a class="mk-btn" :href="'/api/runs/' + runId + '/rom/' + pid" x-text="'slink_' + pid + (rform.cartridges.players[pid].output.match(/\.[^.]+$/) || ['.gb'])[0]"></a></td>
                     </tr>
                   </template>
                 </tbody>
@@ -51,15 +51,23 @@
           </template>
 
           {% include "_cartridges.html" %}
-
-          <div class="mk-form-actions">
-            <button class="mk-btn primary" :disabled="busy || !cartsReady() || !rdraft.rom_a" @click="build()" x-text="busy ? (rdraft.randomize ? 'Building (a few seconds per ROM)' : 'Preparing…') : (rform.cartridges ? 'Prepare again' : 'Prepare the cartridges')"></button>
-            <span class="mk-sub" x-show="error" x-text="error" style="color:var(--c-dead)"></span>
-            <span class="mk-sub" x-show="!busy && !error && !cartsReady()" x-text="cartsWhy()"></span>
-            <span class="mk-cap">Your randomizer, your ROMs. Nothing leaves this machine.</span>
-          </div>
         </div>
       </section>
+
+      <section class="mk-zone">
+        <h2 class="mk-h2"><span>Randomizer</span><i></i><em>same settings, different seeds</em></h2>
+        <div class="mk-card mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
+          {% include "_randomize.html" %}
+        </div>
+      </section>
+
+      {# the one action, for both sections: it prepares the cartridges, randomized or not #}
+      <div class="mk-form-actions">
+        <button class="mk-btn primary big" :disabled="busy || !cartsReady() || !rdraft.rom_a" @click="build()" x-text="busy ? (rdraft.randomize ? 'Building (a few seconds per ROM)' : 'Preparing…') : (rform.cartridges ? 'Prepare again' : 'Prepare the cartridges')"></button>
+        <span class="mk-sub" x-show="error" x-text="error" style="color:var(--c-dead)"></span>
+        <span class="mk-sub" x-show="!busy && !error && !cartsReady()" x-text="cartsWhy()"></span>
+        <span class="mk-cap">Your randomizer, your ROMs. Nothing leaves this machine.</span>
+      </div>
     </div>
   </main>
 </div>

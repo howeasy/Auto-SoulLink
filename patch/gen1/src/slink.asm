@@ -62,6 +62,7 @@ DEF SLINK_PANEL_PAGES  EQU SLINK_MAILBOX + 11
 
 DEF SLINK_CAP_SFX      EQU 1 << 0
 DEF SLINK_CAP_PANEL    EQU 1 << 1
+DEF SLINK_CAP_SFX_NOTIFY EQU 1 << 2   ; knows SFX code 4 (an older build drops it unplayed)
 
 ; Panel handshake. The client may paint only in AWAIT, and must stop at CLOSED.
 DEF SLINK_PANEL_CLOSED EQU 0
@@ -121,7 +122,7 @@ DEF SLINK_SFX_HOLD_AT  EQU SLINK_MAILBOX + 13   ; frame counter low byte when it
 ; would mean different things in different places. GET_ITEM_2, the longest sound used,
 ; owns CHAN5 for ~180 frames; a second request behind it must outlast that.
 DEF SLINK_SFX_HOLD_MAX EQU 240          ; ~4 s: then play anyway, the engine decides
-DEF SLINK_SFX_CODES    EQU 3            ; 1 success, 2 failure, 3 boo; others are dropped
+DEF SLINK_SFX_CODES    EQU 4            ; 1 success, 2 failure, 3 boo, 4 notify; others dropped
 
 ; Audio engine facts, from data/pret/pokered.sym (Red and Blue identical).
 DEF PlaySound            EQU $23B1     ; home/audio.asm:140; saves/restores the ROM bank itself
@@ -134,11 +135,13 @@ DEF wAudioROMBank        EQU $C0EF     ; $02 / $08 / $1F: which header table the
 ; Sound ids = (header address - SFX_Headers_N) / 3, from the .sym. The first three are the
 ; same number in ALL THREE banks; DENIED exists in $02/$1F only (in $08 that index is a
 ; battle sound), LEVEL_UP in $08 only — and equals CRY_SFX_END, so it still plays while
-; the low-health alarm marks CHAN5 (the alarm writes CRY_SFX_END there).
+; the low-health alarm marks CHAN5 (the alarm writes CRY_SFX_END there). START_MENU is header
+; $41AD in every bank ((($41AD - $4000) / 3) = $8F; one CHAN8 entry, pret SFX_Start_Menu_N).
 DEF SFX_GET_ITEM_2 EQU $89
 DEF SFX_TINK       EQU $8C
 DEF SFX_DENIED     EQU $A5
 DEF SFX_LEVEL_UP   EQU $86
+DEF SFX_START_MENU EQU $8F
 
 SECTION "SLink Hook", ROMX[$4000], BANK[$3F]
 
@@ -157,7 +160,7 @@ SlinkHook::
 	ld [SLINK_MAILBOX + 4], a
 	; Panel and SFX. A client reads this byte rather than inferring features from the ABI
 	; number, which is why adding SFX back (ABI 3 shipped panel-only) needs no ABI bump.
-	ld a, SLINK_CAP_PANEL | SLINK_CAP_SFX
+	ld a, SLINK_CAP_PANEL | SLINK_CAP_SFX | SLINK_CAP_SFX_NOTIFY
 	ld [SLINK_CAPS], a
 
 	; 16-bit little-endian frame counter at +5. `inc [hl]` sets Z on wrap, so carry into
@@ -238,6 +241,10 @@ SlinkSfxService::
 	; the vanilla level-up jingle plays through the alarm. Every code plays that then.
 	; Only meaningful in bank $08: the alarm is ticked from the Audio2 branch alone and
 	; battle end zeroes the flag (engine/battle/end_of_battle.asm .resetVariables).
+	; START_MENU is CHAN8-only, which the alarm never marks, so the notify blip plays as is.
+	ld a, b
+	cp SFX_START_MENU
+	jr z, .resolved
 	ld a, [wAudioROMBank]
 	cp $08
 	jr nz, .resolved
@@ -278,10 +285,10 @@ SlinkSfxService::
 	ld [SLINK_SFX_HOLD], a
 	ret
 
-;               1 success       2 failure    3 boo
-.bank02: db SFX_GET_ITEM_2, SFX_DENIED,  SFX_TINK
-.bank08: db SFX_LEVEL_UP,   SFX_TINK,    SFX_TINK     ; no buzzer in the battle bank
-.bank1F: db SFX_GET_ITEM_2, SFX_DENIED,  SFX_TINK
+;               1 success       2 failure    3 boo      4 notify
+.bank02: db SFX_GET_ITEM_2, SFX_DENIED,  SFX_TINK,  SFX_START_MENU
+.bank08: db SFX_LEVEL_UP,   SFX_TINK,    SFX_TINK,  SFX_START_MENU ; no buzzer in the battle bank
+.bank1F: db SFX_GET_ITEM_2, SFX_DENIED,  SFX_TINK,  SFX_START_MENU
 SlinkSfxServiceEnd::
 ; The panel section is pinned at $4100; this one must stay below it.
 ASSERT SlinkSfxServiceEnd <= $4100

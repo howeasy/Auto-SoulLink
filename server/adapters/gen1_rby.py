@@ -31,6 +31,12 @@ _AREA_BY_MAP = {int(map_id): row["area_id"] for map_id, row in _AREAS.items()}
 _AREA_NAMES: dict[str, str] = {}
 for _row in _AREAS.values():
     _AREA_NAMES.setdefault(_row["area_id"], _row["name"])
+# every map's name (tools/gen_gen1_map_names.py from pret): the client reports a map that is
+# no encounter area as "map_<id>", and the board should say Viridian City, not Map 1
+_MAP_NAMES = {int(key): value for key, value in _json("map_names.json").items()}
+_MAP_ID = re.compile(r"map_(\d+)")
+# an out-of-battle acquisition (starter, gift): the client names it gift_map_<map id>
+_GIFT_MAP_ID = re.compile(r"gift_map_(\d+)\Z")
 _INDEX_JSON = {int(key): int(value)
                for key, value in _json("species_index.json")["index_to_national"].items()}
 _FAMILY = {int(key): int(value) for key, value in _json("evolutions.json")["family"].items()}
@@ -406,6 +412,12 @@ class Gen1Adapter(GameAdapter):
     def area_display_name(self, area_id: str) -> str:
         if area_id in _AREA_NAMES:
             return _AREA_NAMES[area_id]
+        plain = _MAP_ID.fullmatch(area_id)
+        if plain and int(plain[1]) in _MAP_NAMES:
+            return _MAP_NAMES[int(plain[1])]
+        gift = _GIFT_MAP_ID.fullmatch(area_id)
+        if gift:
+            return f"{_MAP_NAMES.get(int(gift[1]), f'Map {gift[1]}')} — Gift"
         static = _STATIC_ID.fullmatch(area_id)
         if static:
             map_id, dex = int(static[1]), int(static[2])

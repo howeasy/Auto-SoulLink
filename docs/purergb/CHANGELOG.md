@@ -26,7 +26,7 @@ Three deliverables sit on top of the rules:
 |---|---|---|
 | Rules on pureRGB | encounter linking, dead zones, faint propagation, party/PC sync, memorials, whiteout, evolution/transform/APEX identity, Explode Mode, rival swap | `lua/gen1/*`, `server/adapters/gen1_purergb.py`, `data/games/gen1_purergb/` |
 | Companion overlay | native Cable Club trade, START-menu SLINK panel, ROM-level APEX collision guard — as **source sections** linked into the pureRGB build | `patch/gen1/purergb/`, `patch/dist/SLink-Pure{Red,Blue,Green}.ups` |
-| Randomized pairs | a lossless fork of Universal Pokémon Randomizer ZX 4.6.1 with pure INI entries, wired into the Manager | `patch/upr/*.patch`, `.cache/slink-upr/PokeRandoZX.jar` (`4.6.1-slink2`, patches 0001–0007) |
+| Randomized pairs | a lossless fork of Universal Pokémon Randomizer ZX 4.6.1 with pure INI entries, wired into the Manager | `patch/upr/*.patch`, `.cache/slink-upr/PokeRandoZX.jar` (`4.6.1-slink3`, patches 0001–0008) |
 
 ---
 
@@ -429,6 +429,7 @@ Read this section if you only play vanilla.
 | 35 | randomizer validation (Codex cx-201b85a7 .. cx-636b45dd) | trainers similar-strength oracle: per-slot theme choice, distinct-BST counting, per-party (not ROM-wide) branch residue, any-alias ownership, force-only reconciliation skipped; distributed+similar not modellable | per-party model, object counting, ROM-wide residue over UPR's trainer index, final-writer alias, reconciliation for every forced split evolution; distributed+similar refused by name |
 | 36 | randomizer validation (master b35f378) | the overlay was rebuilt with the SFX service: staged overlay ROMs and the jar's overlay CRCs went stale | overlay re-staged from the UPS, fork patch 0006, `jar_supports` compares CRCInHeader |
 | 37 | randomizer validation (Codex cx-25b25db1) | a pre-fix fork jar (same version string, same clean CRCs) passed admission | fork patch 0007: `4.6.1-slink2` + `SlinkForkRevision=2`, `FORK_REVISION_REQUIRED` gate |
+| 38 | randomizer tweaks (2026-09-21) | the pure family refused every misc tweak, although lower-case names is a data write; and `MISC_TWEAKS` carried a menu order, not `MiscTweak.java`'s bits (`LOWER_CASE_POKEMON_NAMES` sat on `NERF_X_ACCURACY`'s bit 1, so the tweak never reached the jar for any family) | fork patch 0008: `4.6.1-slink3`, the lossless entries offer exactly `LOWER_CASE_POKEMON_NAMES` and apply it as a byte transform in place over the 190-row name table (`applyCamelCaseNamesInPlace`; forms, spirits and MissingNo re-cased too), `SlinkForkRevision=3`; `PURE_ALLOWED_TWEAKS`, the `names` write domain + verifier category, `MISC_TWEAKS` in declaration order |
 | 34 | randomizer validation (Codex cx-37fe2641) | verifier holes: similar_strength+force_evolved compared the post-evolution BST; global reuse bounded per destination only; wild/themed similar bands unchecked; statics=similar allowed the original | stage-aware ancestor rule, aggregate reuse ≤ pool deficit, area/themed bands, self-exclusion (74 tests); `wild=global+similar` refused by name (not exactly modellable) |
 | 24 | final review (Codex, round 9) | verdict: the wrong-target counterexample is closed; one conservative false-refusal window (same-species party swap sampled mid-transaction) is documented for the owner's acceptance | residual wording in §7 |
 | 23 | final review (Codex, round 8) | an unobserved edit interval (teach A a different move, then teach a same-key/same-nickname twin A's old set, all in the item menu) let the twin become the sole match | every alias is observed on every readable frame (pure pass, no refresh): the zero-match interval latches `lost` |
@@ -547,6 +548,25 @@ refused by name:
   `SlinkForkRevision=2` in every pure section, `FORK_REVISION_REQUIRED`) so the historical pre-fix jar
   is refused before Java. **Codex verdict `cx-f1469e38`: CLOSED within scope** — every option the
   pure family admits is verified per mode (89 verifier tests) or refused by name.
+- **Lower-case names on the pure family** (2026-09-21, fork patch 0008, `4.6.1-slink3`,
+  `SlinkForkRevision=3`): the one misc tweak that is a data write. The lossless entries offer
+  exactly `LOWER_CASE_POKEMON_NAMES`; the fork applies it as a byte transform straight into
+  `rom[]` over all 190 name rows (the same glyph rule as `RomFunctions.camelCase`: MR.MIME → Mr.Mime,
+  FARFETCH'D → Farfetch'd, NIDORAN♀ → Nidoran♀, THE MAW → The Maw, MISSINGNO. → Missingno.), never
+  through its string path, so `savePokemonStats` keeps skipping names on a lossless entry.
+  `server/upr_settings.py`: `PURE_ALLOWED_TWEAKS = ("lowercase_names",)`, every other tweak still
+  refused by name; `tools/upr_write_domain_diff.py` `names` domain and `tools/upr_pure_verify.py`
+  `names` category (output table == `camel_names(clean)` byte-for-byte, or unchanged). Found on the
+  way: `MISC_TWEAKS` had never matched `MiscTweak.java` (defect 38) — eight of its twelve values
+  were wrong (only fastest text, running shoes, PC potion and Pikachu evolution were right), so on
+  vanilla R/B "lower-case names" had sent Nerf X Accuracy, "fix crit rate" lower-case names and
+  "later-gen type chart" the catching-tutorial reroll. Consequences recorded: an `.rnqs` SLink
+  wrote before this fix carries the old bits (re-export it; ordinary UPR files were never wrong);
+  and a save started BEFORE lower-casing keeps uppercase default nicknames, which the engine's
+  case-sensitive default-name checks (`evos_moves.asm:341-346`, `change_mon_species.asm:85-90`)
+  then treat as custom — cosmetic, and moot for a freshly prepared pair. Real-pair evidence: PureRed with `wild=random + lowercase_names`
+  → name table equals the rule, T6 audit `categories=[names, wild]`, 0 stray bytes; tweak off →
+  the table is byte-identical; a `SlinkForkRevision=2` jar is refused with "fork revision 3".
 - **Not claimed**: `prefer_type` beyond its probability-1 bits (the rest is a probability, not
   a per-ROM assertion); `trainers_similar_strength` under `distributed` / `type_themed` pools (the
   band is modelled for `random` only); only PureRed is randomized in the unit tests (the other

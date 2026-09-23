@@ -1,3 +1,13 @@
 # The overlay sources are hashed raw by overlay_provenance.json; keep them LF on every checkout.
 patch/gen1/purergb/** text eol=lf
 patch/upr/*.patch text eol=lf
+
+# These are hashed byte-for-byte against sha256 pins in data/games/gen1_rby/profile.json,
+# data/games/gen1_purergb/profile.json, data/purergb/build_provenance.json and
+# data/purergb/overlay_provenance.json. The pins were computed on LF bytes (CI, and the
+# build tools' own writes); without this, Windows checkouts (core.autocrlf=true) see CRLF
+# and every one of those hash checks mismatches (they passed on the original committer's
+# machine only because autocrlf hadn't corrupted the checkout yet at generation time).
+data/pret/*.sym text eol=lf
+data/purergb/*.sym text eol=lf
+data/purergb/*.map text eol=lf

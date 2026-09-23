@@ -383,6 +383,10 @@ def test_a_gen1_new_run_whose_echo_matches_is_unaffected(runner):
 def test_the_stub_carries_the_attempt_scaled_jitter(runner, tmp_path, monkeypatch):
     """Attempt 1 writes the CLI value; attempt 2 writes it + 37, and the echo must agree."""
     monkeypatch.setattr("gen1_playthrough.write_run_config", lambda *_a, **_k: None)
+    # These tests assert stub/lua content and seeding, never the ROM path itself; staged_rom
+    # only needs to resolve to SOME string so launch_instance's Popen argv can be built. Real
+    # cartridge dumps are a dev-box artifact, not present on a clean checkout.
+    monkeypatch.setattr("gen1_playthrough.staged_rom", lambda *_a, **_k: "fake.gb")
     monkeypatch.setattr(duo.subprocess, "Popen", lambda *_a, **_k: type("P", (), {"pid": 42})())
     runner.cfg = duo.SCENARIOS["link_new"]
     runner.gcfg = dict(duo.GAMES["gen1_new"])
@@ -405,6 +409,10 @@ def test_the_stub_carries_the_scenario_timeout(runner, tmp_path, monkeypatch):
     """The bodies that wait on a partner with a bounded loop read it (poison_new's A half:
     `D.timeout_secs or 2400`), so the harness has to write it into every stub."""
     monkeypatch.setattr("gen1_playthrough.write_run_config", lambda *_a, **_k: None)
+    # These tests assert stub/lua content and seeding, never the ROM path itself; staged_rom
+    # only needs to resolve to SOME string so launch_instance's Popen argv can be built. Real
+    # cartridge dumps are a dev-box artifact, not present on a clean checkout.
+    monkeypatch.setattr("gen1_playthrough.staged_rom", lambda *_a, **_k: "fake.gb")
     monkeypatch.setattr(duo.subprocess, "Popen", lambda *_a, **_k: type("P", (), {"pid": 42})())
     runner.cfg = duo.SCENARIOS["poison_new"]
     runner.gcfg = dict(duo.GAMES["gen1_new"])
@@ -445,6 +453,10 @@ def test_a_only_relaunch_does_not_reseed_the_flushed_save(runner, tmp_path, monk
     Path(duo.BUILD).mkdir()
     runner._seed_instance_save = lambda _inst: pytest.fail("relaunch reseeded SaveRAM")
     monkeypatch.setattr("gen1_playthrough.write_run_config", lambda *_args, **_kw: None)
+    # These tests assert stub/lua content and seeding, never the ROM path itself; staged_rom
+    # only needs to resolve to SOME string so launch_instance's Popen argv can be built. Real
+    # cartridge dumps are a dev-box artifact, not present on a clean checkout.
+    monkeypatch.setattr("gen1_playthrough.staged_rom", lambda *_args, **_kw: "fake.gb")
 
     class FakeProcess:
         pid = 42
@@ -582,6 +594,10 @@ def test_cold_ball_gate_uses_a_fresh_save_directory_without_seeding(runner, tmp_
     Path(duo.BUILD).mkdir(exist_ok=True)
     runner._seed_instance_save = lambda _inst: pytest.fail("cold boot seeded a battery save")
     monkeypatch.setattr("gen1_playthrough.write_run_config", lambda *_args, **_kw: None)
+    # These tests assert stub/lua content and seeding, never the ROM path itself; staged_rom
+    # only needs to resolve to SOME string so launch_instance's Popen argv can be built. Real
+    # cartridge dumps are a dev-box artifact, not present on a clean checkout.
+    monkeypatch.setattr("gen1_playthrough.staged_rom", lambda *_args, **_kw: "fake.gb")
 
     class FakeProcess:
         pid = 42

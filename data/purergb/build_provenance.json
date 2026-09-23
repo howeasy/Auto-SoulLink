@@ -50,11 +50,11 @@
     }
   },
   "symbols": {
-    "pokered.sym": "eb5bbf4854445b323aa20ba6568f7eae53346cd9d4a17179283ecc7f11d16baf",
-    "pokered.map": "5c74f2ec8efff61029ed1c7190edb86e218e43a03749e5a89031890dbbcff984",
-    "pokeblue.sym": "01e5aa730d7fed79c9518de9203eae65e9a7a495884683282117e3965cfbdff8",
-    "pokeblue.map": "41d0bb13ea9e76d2f3aa1ead5bd242260a2abc27733ebae05f7e9b6eb4cd9c65",
-    "pokegreen.sym": "db9963d7c351afb4baf8cb512cade6ba190b171ac4372f192dd1d63830c7e180",
-    "pokegreen.map": "12bec98b81fc3040025943c1de59dafeeaf9d18357f2250c4b267005ac69e79b"
+    "pokered.sym": "483cc3e6c947b6346e26451eb4dcc273bb690319c802ba2e3d13c3d235a56dbc",
+    "pokered.map": "455f8f0269350397db53bbe80a884cc1df0ef3ece3eebdb43dea0bfc6775a1ca",
+    "pokeblue.sym": "2d471a8f7ddc831e0871ed99a27d7781314e8e8c8a3c6fbc3de784c3bd016a14",
+    "pokeblue.map": "f72a62c01d6d3ae8477f0837e67ea7369b9dfec5786287b2e94858706aa22d37",
+    "pokegreen.sym": "ef2a89a6ce4aa72ea9d446d1e696e63e38bc2bda6b24f71194752e6855c1d166",
+    "pokegreen.map": "7ad0441038e5d41f670b8359db5f0772eef1f2026604efa1c1dbb4833cb6f8ec"
   }
 }
