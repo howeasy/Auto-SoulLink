@@ -259,11 +259,16 @@ GEN3_FRLG_SCENARIOS = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_ge
 # client's `gen3_rr` row keeps those -- and trade_abort, a later card).
 GEN3_RR_ONLY_SCENARIOS = ("explode_gen3", "rival_swap_gen3", "native_absent_gen3")
 GEN3_RR_NEW_SCENARIOS = GEN3_FRLG_SCENARIOS + GEN3_RR_ONLY_SCENARIOS
+# C4-6m: G4 item 2a's Center 2F controls run on FR/LG only; gen3_lgfr is the same family with
+# LeafGreen as A, so it selects exactly what gen3_frlg does.
+GEN3_FRLG_ONLY_SCENARIOS = ("center_controls_gen3",)
+GEN3_FRLG_ROWS = ("gen3_frlg", "gen3_lgfr")
 
 
 def test_gen3_frlg_selection_is_exactly_its_seven():
     """PLAN §5.5's FRLG matrix, pinned: `--scenario all --game gen3_frlg` runs these and only these."""
-    assert sorted(scenarios_for("gen3_frlg")) == sorted(GEN3_FRLG_SCENARIOS)
+    for row in GEN3_FRLG_ROWS:
+        assert sorted(scenarios_for(row)) == sorted(GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS), row
 
 
 def test_gen3_rr_new_selection_is_the_seven_shared_plus_its_own_three():
@@ -280,10 +285,10 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
     shared ones (faint/boxsync) and every other row's keys stay out of it."""
     assert "gen3_frlg" in duo_module.OPT_IN_GAMES
     for game in GAMES:
-        if game not in ("gen3_frlg", "gen3_rr_new"):
+        if game not in GEN3_FRLG_ROWS + ("gen3_rr_new",):
             assert not set(scenarios_for(game)) & set(GEN3_RR_NEW_SCENARIOS), game
     for name in SCENARIOS:
-        if name not in GEN3_FRLG_SCENARIOS:
+        if name not in GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS:
             assert not scenario_applies(name, "gen3_frlg"), name
         if name not in GEN3_RR_NEW_SCENARIOS:
             assert not scenario_applies(name, "gen3_rr_new"), name
@@ -297,6 +302,9 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
         "link_gen3", "deadzone_gen3"}
     for name in GEN3_RR_ONLY_SCENARIOS:
         assert SCENARIOS[name]["games"] == ("gen3_rr_new",), name
+    for name in GEN3_FRLG_ONLY_SCENARIOS:
+        assert SCENARIOS[name]["games"] == ("gen3_frlg",), name
+        assert scenario_attempt_limit(name, "gen3_frlg") == 1, name
 
 
 def test_every_gen3_frlg_scenario_declares_an_oracle_that_exists():
@@ -339,7 +347,10 @@ def test_the_gen3_wrapper_lists_exactly_the_gen3_frlg_scenarios():
     sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
     mod = __import__("test_duo_gen3")
     assert mod.GAME == "gen3_frlg"
-    assert sorted(mod.SCENARIOS) == sorted(GEN3_FRLG_SCENARIOS)
+    assert sorted(mod.SCENARIOS) == sorted(GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS)
+    # C4-6m: the LG-as-A row runs the two G4 item 2a A-side receipts
+    assert mod.GAME_LGFR == "gen3_lgfr" and all(scenario_applies(n, "gen3_lgfr") for n in mod.SCENARIOS_LGFR)
+    assert mod.required_fixtures("whiteout_gen3", "gen3_lgfr") == ["leafgreen_party_battle", "firered_party_town"]
     for name in mod.SCENARIOS:
         assert scenario_applies(name, "gen3_frlg")
         assert mod.deadline_for(name) == (SCENARIOS[name]["timeout"]

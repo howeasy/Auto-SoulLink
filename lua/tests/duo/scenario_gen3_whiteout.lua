@@ -51,10 +51,10 @@ local function a_side(ctx, linked)
     local dest = ctx.SP.whiteout_destination(ctx.cp)    -- Viridian Center 1F 5.4 (7,4)
     if not dest then return false, "no whiteout destination" end
     local writes0 = ctx.writes()
-    local line, missing
+    local line, missing, land
     ctx.wait_until(function()
         if not at(ctx, dest) then return nil end
-        line, missing = ctx.center_state()
+        line, missing, land = ctx.center_state()
         return #missing == 0
     end, 30, "the Center landing with the Union Room background set")
     if not line then return false, "never landed on the Center tile " .. dest.x .. "," .. dest.y end
@@ -62,6 +62,9 @@ local function a_side(ctx, linked)
     if #missing > 0 then
         return false, "the Union Room background set is absent at the Center landing ("
                    .. table.concat(missing, ",") .. "): this receipt would not prove the widened allow-list"
+    end
+    for _, b in ipairs(land.bad) do
+        if b:find("^pointer:") then return false, "CENTER_STATE: insane " .. b end
     end
     if ctx.writes() ~= writes0 then return false, "a write landed before CENTER_STATE was taken" end
     -- (2) the state in the very frame the first overworld write lands
@@ -72,17 +75,32 @@ local function a_side(ctx, linked)
     if not ctx.wait_received("party_mon", linked, 900) then return false, "no rebuild party_mon" end
     if not ctx.wait_sent("sync_retrieve_done", linked, 600) then return false, "the rebuild withdraw was not acknowledged" end
     local ack_line = ctx.center_state()
-    local mon = ctx.find(linked)
-    ctx.log(fmt("WRITE_IN_CENTER %s | ack %s slot=%s", tostring(wline), ack_line,
-                mon and tostring(mon.slot) or "absent"))
+    local mon, base = ctx.find(linked), ctx.party_base()
+    -- the KEYED mutation: boxes.lua withdraw writes the whole party record at party_base +
+    -- slot * 100 (Reads.PARTY_MON_SIZE) in that frame; the slot is where the key reads back now
+    local target = mon and base and base + mon.slot * 100
+    local keyed
+    for _, w in ipairs(ctx.write_lines()) do
+        if wat and w.reason == "overworld" and w.frame == wat.frame and w.address == target and w.len == 100 then
+            keyed = w
+        end
+    end
+    ctx.log(fmt("WRITE_IN_CENTER %s | keyed %s slot=%s record=%s | ack %s", tostring(wline), linked,
+                mon and tostring(mon.slot) or "absent",
+                keyed and fmt("0x%08X+%d@%d", keyed.address, keyed.len, keyed.frame) or "none", ack_line))
     if #ctx.write_hook_errors() > 0 then return false, "the write-frame read failed: " .. ctx.write_hook_errors()[1] end
     if not wline then return false, "sync_retrieve_done sent, but no overworld write line was seen" end
     if not (wat.group == dest.group and wat.num == dest.num and wat.x == dest.x and wat.y == dest.y) then
         return false, "the rebuild write landed outside the Center landing tile"
     end
     if #wmissing > 0 then return false, "the Union Room set was gone when the write landed" end
+    if #wat.bad > 0 then return false, "the write landed off the checkpoint: " .. table.concat(wat.bad, ",") end
+    for name, v in pairs(land.ptrs) do
+        if wat.ptrs[name] ~= v then return false, "pointer moved between the landing and the write: " .. name end
+    end
     if not at(ctx, dest) then return false, "the player moved before the ACK" end
     if not mon then return false, linked .. " is not in the party at the ACK" end
+    if not keyed then return false, "no write of " .. linked .. "'s party record in the write frame" end
     if not ctx.wait_received("rebuild_done", nil, 300) then return false, "no rebuild_done" end
     if not ctx.observe_returned(linked) then return false, linked .. " was never read back in the party (and out of every box)" end
     return true, dest
@@ -92,39 +110,19 @@ end
 --- the nurse at (7,2) across the counter (7,3) (MB_COUNTER 0x80: tools/gba_map.py --map 5.4
 --- --find-behaviour 0x80), and CB2_WhiteOut faces the player north, so A at the landing talks
 --- to her through it (field_control_avatar.c:412-415). Her script waits on its first message:
---- it stays live, and a queued write must stay held for as long as it is.
-local CONTROL_FRAMES = 600
+--- it stays live, and the runner's box_mon probe must stay held for as long as it is
+--- (ctx.hold_probe: fresh keyed RX, the exact queued entry, zero attempted bytes, unchanged
+--- party and PC bytes, a failing clause named).
 local function nurse_control(ctx, linked, dest)
     if not at(ctx, dest) then return false, "control: not at the Center landing" end
     ctx.G.tap("A", 3, 13)
-    if not ctx.wait_until(function() return not ctx.G.pred_ok(ctx.cp, "script_context_status") end,
-                          10, "the nurse's script") then
+    local function live() return not ctx.G.pred_ok(ctx.cp, "script_context_status") end
+    if not ctx.wait_until(live, 10, "the nurse's script") then
         return false, "control: the nurse's script never started"
     end
     ctx.frames(60)
-    local writes0, acks0 = ctx.writes(), ctx.sent("stats_cache", linked)
-    ctx.log("CONTROL_LIVE " .. (ctx.center_state()))
-    if not ctx.wait_received("box_mon", linked, 600) then return false, "control: the runner never queued box_mon" end
-    local why
-    for _ = 1, CONTROL_FRAMES do
-        ctx.frames(1)
-        if ctx.G.pred_ok(ctx.cp, "script_context_status") then return false, "control: the nurse's script ended" end
-        if ctx.writes() ~= writes0 then return false, "control: a write landed while the nurse's script was live" end
-        why = ctx.deferred_hold()
-        if not why then return false, "control: box_mon is not held in the deferred queue" end
-    end
-    -- the clause the gate named must be one that is failing right now
-    local clause = why:match("^forbidden state: (%S+)$")
-    if clause and ctx.G.pred_ok(ctx.cp, clause) then clause = nil end
-    if not clause and why == "unknown active task" then clause = "task" end
-    if not clause then return false, "control: the hold names no failing clause (" .. tostring(why) .. ")" end
-    local where = ctx.locate(linked)
-    if not (where and where.party ~= false and where.box == false) then
-        return false, "control: " .. linked .. " moved while the write was held"
-    end
-    if ctx.sent("stats_cache", linked) ~= acks0 then return false, "control: an ACK went out while held" end
-    ctx.log(fmt("CONTROL_REFUSED box_mon %s clause=%s why=%q held_frames=%d writes=0 slot=%d %s", linked,
-                clause, why, CONTROL_FRAMES, where.party, (ctx.center_state())))
+    local clause, why = ctx.hold_probe("nurse", "box_mon", linked, live, 600)
+    if not clause then return false, "control: " .. tostring(why) end
     return true
 end
 

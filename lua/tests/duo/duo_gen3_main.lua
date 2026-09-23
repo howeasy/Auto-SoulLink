@@ -57,13 +57,18 @@ end
 local writes, refused = 0, nil
 -- one-shot hooks on a client write line, by reason (ctx.on_write): they run INSIDE the client's
 -- frame end, i.e. in the very frame the write landed, so what they read is the state it saw
-local write_hooks, write_hook_errors = {}, {}
+local write_hooks, write_hook_errors, write_lines = {}, {}, {}
 console.log = function(s)
     local text = tostring(s)
     _console_log(text)
     if text:find("[SLink-gen3] write ", 1, true) then
         writes = writes + 1
-        local reason = text:match("%[SLink%-gen3%] write (%S+) ")
+        local reason, addr, len, wframe = text:match("%[SLink%-gen3%] write (%S+) 0x(%x+) %+(%d+) frame (%d+)")
+        if reason then
+            write_lines[#write_lines + 1] = { reason = reason, address = tonumber(addr, 16),
+                                              len = tonumber(len), frame = tonumber(wframe) }
+        end
+        reason = reason or text:match("%[SLink%-gen3%] write (%S+) ")
         local hook = reason and write_hooks[reason]
         if hook then
             write_hooks[reason] = nil
@@ -135,7 +140,8 @@ local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInpu
                "gBattleOutcome", "gMain", "gTasks", "gPartyMenu", "CB2_UpdatePartyMenu",
                "Task_HandleChooseMonInput", "Task_HandleSelectionMenuInput",
                "Task_ReturnToChooseMonAfterText", "gBattleMoves", "Task_DepositMenu", "Task_WithdrawMon",
-               "CB2_BagMenuRun", "Task_BagMenu_HandleInput", "Task_AnimateWin0v", "gPaletteFade" }
+               "CB2_BagMenuRun", "Task_BagMenu_HandleInput", "Task_AnimateWin0v", "gPaletteFade",
+               "Task_LinkupAwaitConnection" }
 local S = {}
 do
     local want = {}
@@ -408,12 +414,40 @@ function ctx.writes() return writes end
 --- Run fn(line) once, in the frame of the client's next `write <reason>` line.
 function ctx.on_write(reason, fn) write_hooks[reason] = fn end
 function ctx.write_hook_errors() return write_hook_errors end
---- Why the session's deferred queue is holding its head command (lua/core/deferred.lua
---- Deferred:pending: the gate's refusal, e.g. "forbidden state: script_context_status"), or nil.
-function ctx.deferred_hold()
-    local n, why, _, head = session.deferred:pending(emu.framecount())
-    if n > 0 then return why, head end
+--- Every client write line so far, parsed: { reason, address, len, frame } (entry.lua's format).
+function ctx.write_lines() return write_lines end
+--- The deferred queue's entry for exactly (cmd, key), and the gate's hold reason (lua/core/
+--- deferred.lua Deferred:pending, e.g. "forbidden state: script_context_status"); nil when that
+--- entry is not queued. The head/why alone is not enough: an unrelated queued command would
+--- carry the same reason (Codex review of d199da32, the wrong-head case).
+--- Self-contained (no upvalues) so tests/unit/test_e2e_duo_gen3.py runs this exact body.
+local function queued_entry(items, why, cmd, key)
+    for i, q in ipairs(items) do
+        if q.cmd == cmd and q.key == key then return { index = i, why = why } end
+    end
 end
+function ctx.queued(cmd, key)
+    local _, why = session.deferred:pending(emu.framecount())
+    return queued_entry(session.deferred.items, why, cmd, key)
+end
+--- Bytes the client's write sink has ATTEMPTED (lua/gen3/writes.lua `attempted`, counted before
+--- each external write, via the deferred executor's write_count): independent of log lines.
+function ctx.attempted() return session.deferred.exec.write_count() end
+--- The party region (count byte + six records) and the PC storage (current box + every box's
+--- records), as byte strings: a before/after compare needs no write log at all.
+function ctx.mutable_bytes()
+    local function bytes(addr, n)
+        local out = {}
+        for i = 1, n do out[i] = string.char(memory.read_u8(addr + i - 1, "System Bus")) end
+        return table.concat(out)
+    end
+    local party = bytes(profile.ram.PARTY_COUNT_ADDR, 1) .. bytes(profile.ram.PARTY_BASE, 6 * Reads.PARTY_MON_SIZE)
+    local store = memory.read_u32_le(cp.pointers.gPokemonStoragePtr.address, "System Bus")
+    local d = profile.derived
+    local box = bytes(store, d.BOX_DATA_OFFSET + d.BOXES_PER_STORE * d.MONS_PER_BOX * 80)
+    return party, box
+end
+function ctx.party_base() return reader.party_base() end
 function ctx.wrong_save_hud() return wrong_save_hud end
 --- The session's held in-battle write for `key` (lua/core/session.lua battle_pending), if any.
 function ctx.battle_hold(key)
@@ -545,6 +579,8 @@ local function party_task(fn)
     return false
 end
 function ctx.battler_slot() return memory.read_u16_le(S.gBattlerPartyIndexes) end
+--- Is the pret function `name` (one of SYMS) an active task right now?
+function ctx.task_live(name) return party_task(assert(S[name], "no SYMS entry " .. name)) end
 
 --- Can the bag take a press? pret item_menu.c:1044-1049: Task_BagMenu_HandleInput returns
 --- without reading input while gPaletteFade.active (bit 7 of byte +7, the checkpoint pack's
@@ -577,7 +613,7 @@ ctx.action_menu_up, ctx.party_menu_up = action_menu_up, party_menu_up
 --- value) -- and the Union Room background tasks (C4-UR, 5ecfae3b: every Center 1F runs
 --- CableClub_OnResume -> InitUnionRoom) that are NOT active. Self-contained (no upvalues) so
 --- tests/unit/test_e2e_duo_gen3.py runs this exact body. read(address, width) -> integer.
-local function center_predicates(cp, read)
+local function center_predicates(cp, read, regs)
     local t, active = cp.tasks, {}
     for i = 0, (t.count | 0) - 1 do
         local base = (t.address | 0) + i * (t.struct_size | 0)
@@ -588,7 +624,7 @@ local function center_predicates(cp, read)
         local fn = t.allowed_overworld_tasks[name]
         if not (fn and active[(fn | 0) | 1]) then missing[#missing + 1] = name end
     end
-    local names, parts = {}, {}
+    local names, parts, bad = {}, {}, {}
     for name in pairs(cp.predicates) do names[#names + 1] = name end
     table.sort(names)
     for _, name in ipairs(names) do
@@ -596,23 +632,89 @@ local function center_predicates(cp, read)
         local v = read((p.address | 0) + ((p.offset or 0) | 0), (p.width or 1) | 0)
         if p.mask then v = v & (p.mask | 0) end
         parts[#parts + 1] = string.format("%s=0x%X%s", name, v, v == (p.expect | 0) and "" or "!")
+        if v ~= (p.expect | 0) then bad[#bad + 1] = name end
     end
-    return "preds=[" .. table.concat(parts, ",") .. "]", missing
+    -- the CPU clause the overworld check applies (lua/gen3/safety.lua "cpu"): mode, Thumb, and
+    -- the parked PC range, all from the pack
+    local c, pc, cpsr = cp.cpu, (regs.R15 or -1) | 0, (regs.CPSR or -1) | 0
+    local parked = c ~= nil and cpsr % 32 == (c.mode | 0) and (cpsr >> 5) % 2 == (c.thumb | 0)
+                   and pc >= (c.pc_min | 0) and pc <= (c.pc_max | 0)
+    if not parked then bad[#bad + 1] = "cpu" end
+    -- the pointer snapshot the write is judged against: each a sane, aligned EWRAM address
+    local pnames, ptrs, pparts = {}, {}, {}
+    for name in pairs(cp.pointers) do pnames[#pnames + 1] = name end
+    table.sort(pnames)
+    for _, name in ipairs(pnames) do
+        local v = read(cp.pointers[name].address | 0, 4)
+        ptrs[name] = v
+        pparts[#pparts + 1] = string.format("%s=0x%08X", name, v)
+        if v < 0x02000000 or v >= 0x02040000 or v % 4 ~= 0 then bad[#bad + 1] = "pointer:" .. name end
+    end
+    return string.format("cpu=[R15=0x%08X,CPSR=0x%08X%s] ptrs=[%s] preds=[%s]", pc, cpsr,
+                         parked and "" or "!", table.concat(pparts, ","), table.concat(parts, ",")),
+           missing, bad, ptrs
 end
---- (line, missing Union Room tasks, {group, num, x, y}): map, tile, frame, the FULL active task
---- list (SP.PC.dump) and every predicate, read now.
+--- (line, missing Union Room tasks, {group, num, x, y, frame, bad, ptrs}): map, tile, frame, the
+--- FULL active task list (SP.PC.dump), R15/CPSR, the save/storage pointers and every predicate,
+--- read now; `bad` names each predicate off its expected value, "cpu" off the parked range, and
+--- "pointer:<name>" for an insane pointer.
 function ctx.center_state()
     local g, n = G.map(cp)
     local x, y = G.pos(cp)
-    local preds, missing = center_predicates(cp, function(a, width)
+    local state, missing, bad, ptrs = center_predicates(cp, function(a, width)
         if width == 4 then return memory.read_u32_le(a, "System Bus") end
         if width == 2 then return memory.read_u16_le(a, "System Bus") end
         return memory.read_u8(a, "System Bus")
-    end)
+    end, { R15 = emu.getregister("R15"), CPSR = emu.getregister("CPSR") })
     local dumped, dump = pcall(SP.PC.dump)
-    return fmt("map=%d.%d at=(%d,%d) frame=%d %s %s", g, n, x, y, emu.framecount(),
-               dumped and tostring(dump) or "dump failed: " .. tostring(dump), preds),
-           missing, { group = g, num = n, x = x, y = y }
+    local frame = emu.framecount()
+    return fmt("map=%d.%d at=(%d,%d) frame=%d %s %s", g, n, x, y, frame,
+               dumped and tostring(dump) or "dump failed: " .. tostring(dump), state),
+           missing, { group = g, num = n, x = x, y = y, frame = frame, bad = bad, ptrs = ptrs }
+end
+
+--- G4 item 2a (4)'s negative control, shared by every refusing state (the nurse, the 2F
+--- attendants, the cable link wait): `live()` holds (the state is still up); the runner queues
+--- `cmd` for `key` once it reads CONTROL_LIVE <name>. The probe must arrive FRESH (a keyed RX
+--- after the marker), its EXACT deferred entry must stay queued for `frames` frames, the sink
+--- must attempt nothing (write_count) and the party + PC bytes must not change; the refusing
+--- clause must name a check failing right now. Returns clause, why (or nil, reason).
+-- ponytail: one probe per control; a queue-wide token is not needed while the key is unique
+function ctx.hold_probe(name, cmd, key, live, frames, already_queued)
+    frames = frames or 600
+    local rx0 = ctx.received(cmd, key)
+    local state = ctx.center_state()
+    ctx.log(fmt("CONTROL_LIVE %s %s %s", name, key, state))
+    if not already_queued then
+        if not ctx.wait_until(function() return ctx.received(cmd, key) > rx0 end, 600,
+                              "RX " .. cmd .. " " .. key .. " after CONTROL_LIVE " .. name) then
+            return nil, name .. ": the runner never queued " .. cmd .. " " .. key
+        end
+    end
+    local attempted0, writes0 = ctx.attempted(), ctx.writes()
+    local party0, box0 = ctx.mutable_bytes()
+    local why
+    for i = 1, frames do
+        if not live() then return nil, fmt("%s: the refusing state ended after %d frames", name, i - 1) end
+        local q = ctx.queued(cmd, key)
+        if not q then return nil, fmt("%s: %s %s is not queued (frame %d)", name, cmd, key, i - 1) end
+        why = q.why
+        if ctx.attempted() ~= attempted0 or ctx.writes() ~= writes0 then
+            return nil, name .. ": the sink attempted a write while the state was live"
+        end
+        ctx.frames(1)
+    end
+    local party1, box1 = ctx.mutable_bytes()
+    if party1 ~= party0 then return nil, name .. ": the party bytes changed while held" end
+    if box1 ~= box0 then return nil, name .. ": the PC storage bytes changed while held" end
+    local clause = why and why:match("forbidden state: (%S+)$")
+    if clause and G.pred_ok(cp, clause) then clause = nil end
+    if not clause and why and why:find("unknown active task", 1, true) then clause = "task" end
+    if not clause and why and why:find("CPU outside parked checkpoint", 1, true) then clause = "cpu" end
+    if not clause then return nil, name .. ": the hold names no failing clause (" .. tostring(why) .. ")" end
+    ctx.log(fmt("CONTROL_REFUSED %s %s %s clause=%s held_frames=%d attempted=0 writes=0 bytes=unchanged %s",
+                name, cmd, key, clause, frames, (ctx.center_state())))
+    return clause, why
 end
 
 --- HandleInputChooseAction / HandleInputChooseMove: Left/Right toggle bit 0 of the cursor,

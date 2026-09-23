@@ -844,10 +844,19 @@ function FAKE(scenario, player, phase, spec)
                     { slot = 2, key = "K9", hp = 9, max_hp = 9, species = 19, level = 3 } }
     local ctx = { player = player, phase = phase, fmt = string.format, cp = {}, finished = "done",
                   D = {}, hp0_tag = "FORCED_HP0" }
-    ctx.log = function(s) logs[#logs + 1] = tostring(s) end
+    local probes, released = 0, false          -- released: a talk's script closed (mash_until)
+    ctx.log = function(s)
+        logs[#logs + 1] = tostring(s)
+        if tostring(s):find("^CONTROL_LIVE") then probes = probes + 1 end
+    end
     ctx.frames = function() end
     ctx.wait_until = function(pred) return pred() end
-    ctx.mash_until = function(pred) return pred() end
+    ctx.mash_until = function(pred)
+        local v = pred()
+        if v then return v end
+        released = true                        -- the mashed A closes the open script
+        return pred()
+    end
     -- wait_go(marker, secs): a non-string marker is a caller bug (wait_go(300) waited for a
     -- line reading "300"), so the fake refuses it instead of answering true (finding 7).
     ctx.wait_go = function(marker, secs)
@@ -876,7 +885,12 @@ function FAKE(scenario, player, phase, spec)
         if spec.unsent and spec.unsent:find(event, 1, true) then return 0 end
         return spec.sent or 1
     end
-    ctx.received = function(cmd) if cmd == "force_faint" and player == "a" then return 0 end return 1 end
+    ctx.received = function(cmd)
+        if cmd == "force_faint" and player == "a" then return 0 end
+        if player == "a" and cmd == "box_mon" then return 1 + probes end
+        if player == "a" and cmd == "party_mon" then return 1 + probes end
+        return 1
+    end
     ctx.wait_sent = function(event, key)
         if event == "stats_cache" and not spec.noop_deposit then gone[key] = true; boxed[key] = true end
         if event == "sync_retrieve_done" then gone[key] = nil; boxed[key] = nil end
@@ -931,25 +945,66 @@ function FAKE(scenario, player, phase, spec)
     ctx.writes = function() return writes end
     ctx.wrong_save_hud = function() return true end
     local CENTER = { group = 5, num = 4, x = 7, y = 4 }
-    local here = CENTER
+    local function snap(at, bad)
+        return { group = at.group, num = at.num, x = at.x, y = at.y, frame = 7, bad = bad or {},
+                 ptrs = { gSaveBlock1Ptr = 0x02025000 } }
+    end
+    local here = snap(CENTER)
     ctx.SP = { verify_fight_cursor = function() return "fight" end,
-               whiteout_destination = function() return CENTER end }
+               whiteout_destination = function() return CENTER end, warp_to = function() end }
+    -- a script is live from a talk (A tap) until A mashes it closed (mash_until)
     ctx.G = { map = function() return here.group, here.num end, pos = function() return here.x, here.y end,
-              pred_ok = function() return false end, tap = function() end }
+              pred_ok = function() return released end,
+              tap = function(btn) if btn == "A" then released = false end end }
     ctx.center_state = function()
         local missing = spec.ur_missing and { spec.ur_missing } or {}
-        return "map=5.4 at=(7,4) frame=1 tasks=[] preds=[]", missing, here
+        return string.format("map=%d.%d at=(%d,%d) frame=7 tasks=[] preds=[]", here.group, here.num,
+                             here.x, here.y), missing, here
     end
     ctx.on_write = function(_, fn)
-        if spec.write_at == "outside" then here = { group = 3, num = 1, x = 26, y = 27 } end
+        if spec.write_at == "outside" then here = snap({ group = 3, num = 1, x = 26, y = 27 }) end
+        if spec.off_checkpoint then here = snap(CENTER, { "cpu" }) end
         fn()
-        here = CENTER
+        here = snap(CENTER)
     end
     ctx.write_hook_errors = function() return {} end
-    ctx.deferred_hold = function() if spec.no_hold then return nil end return "forbidden state: script_context_status" end
+    ctx.party_base = function() return 0x02024284 end
+    -- the rebuild's keyed record: K1 reads back in slot 1 -> party_base + 100
+    ctx.write_lines = function()
+        if spec.unkeyed then return { { reason = "overworld", address = 0x02030CFC, len = 80, frame = 7 } } end
+        return { { reason = "overworld", address = 0x02024284 + 100, len = 100, frame = 7 } }
+    end
     ctx.locate = function() return { party = 1, box = false } end
+    ctx.on_field = function() return true end
+    ctx.task_live = function() return true end
+    -- the deferred queue the REAL ctx.queued/ctx.hold_probe read (HOLD_SRC, from the driver);
+    -- spec.queue = "wrong" is Codex's case: the right reason, but only an unrelated party_mon
+    local key = spec.linked or "K1"
+    local items = spec.queue == "wrong" and { { cmd = "party_mon", key = "K7" } }
+                  or { { cmd = "box_mon", key = key }, { cmd = "party_mon", key = key } }
+    local why = spec.why or "...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:73: "
+                            .. "forbidden state: field_controls_locked"
+    local attempted = 0
+    local session = { deferred = { items = items, exec = { write_count = function() return attempted end } } }
+    function session.deferred:pending() return #self.items, why, 0, self.items[1] and self.items[1].cmd end
+    ctx.deferred_hold = function()                      -- HEAD d199da32's accessor (why, head)
+        local _, w, _, head = session.deferred:pending()
+        if #items > 0 then return w, head end
+    end
+    local calls = 0
+    ctx.mutable_bytes = function()
+        calls = calls + 1
+        if spec.bytes_change and calls > 1 then return "P2", "B" end
+        if spec.attempted_change then attempted = attempted + 1 end
+        return "P", "B"
+    end
+    if HOLD_SRC then
+        local env = setmetatable({ ctx = ctx, fmt = string.format, G = ctx.G, cp = ctx.cp, session = session,
+                                   emu = { framecount = function() return 0 end } }, { __index = _G })
+        assert(load(HOLD_SRC, "hold_probe", "t", env))()
+    end
     ctx.play = { fight_through = function() return true end, wait_scene_settled = function() return true end,
-                 where = function() return "here" end }
+                 where = function() return "here" end, follow = function() end }
     local fn = dofile(SCENARIO_DIR .. "/scenario_gen3_" .. scenario .. ".lua")
     local ok, pass, msg = pcall(fn, ctx)
     return ok, pass, tostring(ok and msg or pass), table.concat(logs, "\n")
@@ -963,6 +1018,13 @@ def lua():
 
     runtime = LuaRuntime(unpack_returned_tuples=True)
     runtime.globals().SCENARIO_DIR = str(REPO / "lua" / "tests" / "duo").replace("\\", "/")
+    # the driver's REAL keyed-probe check, when this cut has one (HEAD d199da32 does not)
+    text = DRIVER.read_text(encoding="utf-8")
+    defs = [re.search(_LUA_DEF.format(re.escape(name)), text, re.M | re.S)
+            for name in ("queued_entry", "ctx.queued", "ctx.hold_probe")]
+    defs.append(re.search(r"^function ctx\.attempted\(\) .* end$", text, re.M))
+    if all(defs):
+        runtime.globals().HOLD_SRC = "\n".join(d.group(0) for d in defs)
     runtime.execute(_FAKE_CTX)
     return runtime
 
@@ -995,8 +1057,15 @@ def _run_module(lua, scenario, player, phase, spec):
     ("whiteout", "a", "initial", {}, ["BOXED_OBSERVED K1", "DEPOSITED_FOR_REBUILD K1",
                                       "CENTER_STATE map=5.4 at=(7,4)", "WHITED_OUT at here",
                                       "WRITE_IN_CENTER map=5.4 at=(7,4)",
-                                      "CONTROL_LIVE map=5.4", "CONTROL_REFUSED box_mon K1 "
-                                      "clause=script_context_status"]),
+                                      "CONTROL_LIVE nurse K1 map=5.4",
+                                      "CONTROL_REFUSED nurse box_mon K1 clause=field_controls_locked"]),
+    ("center_controls", "a", "initial", {}, ["CONTROL_LIVE cable_menu K1 ",
+                                             "CONTROL_REFUSED cable_menu box_mon K1 clause=",
+                                             "CONTROL_REFUSED cable_link box_mon K1 clause=",
+                                             "CONTROL_RELEASED cable_link box_mon K1",
+                                             "CONTROL_REFUSED union_room_attendant party_mon K1 clause=",
+                                             "CONTROL_RELEASED union_room_attendant party_mon K1"]),
+    ("center_controls", "b", "initial", {}, []),
     ("whiteout", "b", "initial", {}, ["BOXED_OBSERVED K1", "DEPOSITED_FOR_REBUILD K1",
                                       "RETURNED_OBSERVED K1", "MIRROR_WITHDRAWN K1"]),
     ("link", "a", "initial", {}, ["CAUGHT K9", "RETURNED_OBSERVED K9 slot=2"]),
@@ -1259,8 +1328,8 @@ def _whiteout_receipts(k):
     a = (f"BOXED_OBSERVED {k} box=0:0\nTX whiteout - {{}}\nCENTER_STATE map=5.4 at=(7,4)\n"
          "WHITED_OUT at here\nRX rebuild_start text=REBUILDING\n"
          f"RX party_mon key={k}\nTX sync_retrieve_done {k} {{}}\nWRITE_IN_CENTER map=5.4 at=(7,4)\n"
-         f"RX rebuild_done\nRETURNED_OBSERVED {k} slot=1\nCONTROL_LIVE map=5.4\n"
-         f"RX box_mon key={k}\nCONTROL_REFUSED box_mon {k} clause=script_context_status\n")
+         f"RX rebuild_done\nRETURNED_OBSERVED {k} slot=1\nCONTROL_LIVE nurse {k} map=5.4\n"
+         f"RX box_mon key={k}\nCONTROL_REFUSED nurse box_mon {k} clause=field_controls_locked held\n")
     b = (f"RX box_mon key={k}\nTX stats_cache {k} {{}}\nBOXED_OBSERVED {k} box=0:0\n"
          f"RX party_mon key={k}\nTX sync_retrieve_done {k} {{}}\nRETURNED_OBSERVED {k} slot=1\n")
     return {"a": a, "b": b}
@@ -2001,7 +2070,14 @@ def test_the_attempt_jitter_lands_after_go(tmp_path):
 @pytest.mark.parametrize("spec, why", [
     ({"ur_missing": "Task_UnionRoomListen"}, "Union Room background set is absent"),
     ({"write_at": "outside"}, "landed outside the Center landing tile"),
-    ({"no_hold": "lua:true"}, "control: box_mon is not held"),
+    # Codex's case (review of d199da32): the right hold reason, but the queue holds only an
+    # unrelated party_mon -- the nurse's box_mon probe for K1 is not the thing being held
+    ({"queue": "wrong", "why": "forbidden state: script_context_status"},
+     "control: nurse: box_mon K1 is not queued"),
+    ({"attempted_change": "lua:true"}, "the sink attempted a write"),
+    ({"bytes_change": "lua:true"}, "the party bytes changed while held"),
+    ({"unkeyed": "lua:true"}, "no write of K1's party record in the write frame"),
+    ({"off_checkpoint": "lua:true"}, "the write landed off the checkpoint: cpu"),
 ])
 def test_whiteout_a_proves_the_center_write_or_fails_by_name(lua, spec, why):
     ok, passed, msg, _ = _run_module(lua, "whiteout", "a", "initial", spec)
@@ -2027,13 +2103,29 @@ def test_the_center_predicates_read_the_pack_union_room_set():
     mem[sle["address"]] = 2
     cp_lua = lua.table_from(cp, recursive=True)
     read = lua.eval("function(m) return function(a) return m[a] or 0 end end")(lua.table_from(mem))
-    preds, missing = lua.globals().CENTER_PREDICATES(cp_lua, read)
+    cpu = cp["cpu"]
+    parked = lua.table_from({"R15": cpu["pc_min"], "CPSR": cpu["mode"] | (cpu["thumb"] << 5)})
+    preds, missing, bad, _ = lua.globals().CENTER_PREDICATES(cp_lua, read, parked)
     assert list(missing.values()) == []
     assert "script_context_status=0x2," in preds and "link_players_received=0x0," in preds
     assert "callback1=0x0!" in preds                   # off CB1_Overworld on this bare bus
+    assert f"cpu=[R15=0x{cpu['pc_min']:08X},CPSR=" in preds
+    assert "callback1" in list(bad.values()) and "pointer:gSaveBlock1Ptr" in list(bad.values())
+    # the write-time state: every predicate at its expectation, sane pointers, a parked CPU
+    for pred in cp["predicates"].values():
+        mem[pred["address"] + pred.get("offset", 0)] = pred["expect"]
+    for i, name in enumerate(sorted(cp["pointers"])):
+        mem[cp["pointers"][name]["address"]] = 0x02025000 + 0x100 * i
+    def ok():
+        return lua.eval("function(m) return function(a, w) return m[a] or 0 end end")(lua.table_from(mem))
+    _, _, bad, ptrs = lua.globals().CENTER_PREDICATES(cp_lua, ok(), parked)
+    assert list(bad.values()) == [], list(bad.values())
+    assert ptrs["gSaveBlock1Ptr"] == mem[cp["pointers"]["gSaveBlock1Ptr"]["address"]]
+    off = lua.table_from({"R15": cpu["pc_max"] + 2, "CPSR": cpu["mode"] | (cpu["thumb"] << 5)})
+    _, _, bad, _ = lua.globals().CENTER_PREDICATES(cp_lua, ok(), off)
+    assert list(bad.values()) == ["cpu"]
     mem[tasks + 2 * 40 + 4] = 0                         # Task_UnionRoomListen no longer active
-    read = lua.eval("function(m) return function(a) return m[a] or 0 end end")(lua.table_from(mem))
-    _, missing = lua.globals().CENTER_PREDICATES(cp_lua, read)
+    _, missing, _, _ = lua.globals().CENTER_PREDICATES(cp_lua, ok(), parked)
     assert list(missing.values()) == ["Task_UnionRoomListen"]
 
 
@@ -2083,3 +2175,118 @@ def test_whiteout_oracle_takes_the_servers_party_mon_first_order(monkeypatch, tm
         "RX rebuild_done\n", "RX rebuild_done\n" + start))
     with pytest.raises(RuntimeError, match="rebuild_start"):
         run.assert_whiteout_gen3_saved(late)
+
+
+
+# ── C4-6m: Codex review of d199da32 + the r4 addendum ──────────────────────────────────────
+def test_whiteout_oracle_binds_the_control_to_the_linked_key(monkeypatch, tmp_path):
+    fixture = _fixture([STARTER, PIDGEY])
+    saved = _saved(fixture, 3, [STARTER, PIDGEY])
+    k = _key(PIDGEY)
+    run, _ = _oracle_stub(monkeypatch, tmp_path, "whiteout_gen3", {"a": saved, "b": saved},
+                          fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "alive"}])
+    run._link_keys = {"a": k, "b": k}
+    receipts = _whiteout_receipts(k)
+    other = dict(receipts, a=receipts["a"].replace(f"CONTROL_REFUSED nurse box_mon {k} ",
+                                                   "CONTROL_REFUSED nurse box_mon 00000000:00000000 "))
+    with pytest.raises(RuntimeError, match="CONTROL_REFUSED"):
+        run.assert_whiteout_gen3_saved(other)
+
+
+def test_deadzone_oracle_takes_one_dead_zone_row_per_player(monkeypatch, tmp_path):
+    """server.py:2217-2220 logs dead_zone for the player AND the partner; live deadzone_gen3 r4
+    (684bbb7a) passed both halves and PYDEC refused its two rows."""
+    run = _oracle_run("deadzone_gen3")
+    run._deadzone_b_key = "KB"
+    run._gen3_flush_boundary = lambda: None
+    run._status = lambda: {"area_states": {"route_1": "dead_zone"}}
+    run._links_json = lambda: []
+    run._gen3_saved = lambda inst: ([], {})
+    run._gen3_fixture_saved = lambda inst: ([], {})
+    run._gen3_memorial_box = lambda: 13
+    run._gen3_limits = lambda inst: LIMITS
+    monkeypatch.setattr(duo, "gen3_memorial_problems", lambda *a, **k: [])
+    notes = []
+    run._pydec_note = notes.append
+    rows = [{"type": "dead_zone", "player": "a", "area_id": "route_1"},
+            {"type": "dead_zone", "player": "b", "area_id": "route_1"}]
+    run._reconnect_events = lambda: rows
+    receipts = {"a": 'TX no_catch - {"area_id":"route_1","species_id":16}\n',
+                "b": "FAINTED KB frame=1\nRX memorialize key=KB\nTX memorialize_done KB {}\n"}
+    run.assert_deadzone_gen3_saved(receipts)
+    assert notes and "deadzone" in notes[-1]
+    run._reconnect_events = lambda: rows[:1]
+    with pytest.raises(RuntimeError, match="dead_zone rows per player"):
+        run.assert_deadzone_gen3_saved(receipts)
+
+
+def _center_controls_receipt(k):
+    return (f"CONTROL_LIVE cable_menu {k} map=5.5\nRX box_mon key={k}\n"
+            f"CONTROL_REFUSED cable_menu box_mon {k} clause=script_context_status held\n"
+            "SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5\n"
+            f"CONTROL_LIVE cable_link {k} map=5.5\n"
+            f"CONTROL_REFUSED cable_link box_mon {k} clause=task held\n"
+            f"CONTROL_RELEASED cable_link box_mon {k}\nTX stats_cache {k} {{}}\n"
+            f"BOXED_OBSERVED {k} box=0:0\nCONTROL_LIVE union_room_attendant {k} map=5.5\n"
+            f"RX party_mon key={k}\n"
+            f"CONTROL_REFUSED union_room_attendant party_mon {k} clause=field_controls_locked held\n"
+            f"CONTROL_RELEASED union_room_attendant party_mon {k}\nTX sync_retrieve_done {k} {{}}\n"
+            f"RETURNED_OBSERVED {k} slot=1\n")
+
+
+def test_center_controls_oracle_positive_and_negatives(monkeypatch, tmp_path):
+    fixture = _fixture([STARTER, PIDGEY])
+    saved = _saved(fixture, 3, [STARTER, PIDGEY])
+    k = _key(PIDGEY)
+    run, notes = _oracle_stub(monkeypatch, tmp_path, "center_controls_gen3", {"a": saved, "b": saved},
+                              fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "alive"}])
+    run._link_keys = {"a": k, "b": k}
+    good = {"a": _center_controls_receipt(k), "b": ""}
+    run.assert_center_controls_gen3_saved(good)
+    assert notes and "center_controls" in notes[-1]
+    # the probe arriving BEFORE the state it is supposed to test proves nothing
+    early = f"RX box_mon key={k}\n" + good["a"].replace(f"RX box_mon key={k}\n", "")
+    with pytest.raises(RuntimeError, match="CONTROL_LIVE cable_menu"):
+        run.assert_center_controls_gen3_saved(dict(good, a=early))
+    with pytest.raises(RuntimeError, match="CONTROL_RELEASED union_room_attendant"):
+        run.assert_center_controls_gen3_saved(dict(good, a=good["a"].replace(
+            f"CONTROL_RELEASED union_room_attendant party_mon {k}\n", "")))
+
+
+def test_the_lgfr_row_is_the_frlg_family_with_leafgreen_as_a():
+    row = duo.GAMES["gen3_lgfr"]
+    assert row["game"] == "gen3_frlg" and row["main"] == duo.GAMES["gen3_frlg"]["main"]
+    assert row["sides"]["a"][0] == "leafgreen" and row["sides"]["b"][0] == "firered"
+    assert duo.scenario_applies("whiteout_gen3", "gen3_lgfr")
+    assert duo.scenario_applies("center_controls_gen3", "gen3_lgfr")
+    for _title, stem in row["sides"].values():
+        for target in ("battle", "town"):
+            assert (REPO / "tests" / "fixtures" / "gen3" / (stem.format(target=target) + ".sav")).is_file()
+
+
+def test_the_runner_records_rom_pack_source_and_fixture_identity(monkeypatch, tmp_path):
+    run = _oracle_run("whiteout_gen3")
+    run.gcfg = dict(duo.GAMES["gen3_frlg"])
+    rom, fix = tmp_path / "rom.gba", tmp_path / "fix.sav"
+    rom.write_bytes(b"rom")
+    fix.write_bytes(b"fix")
+    monkeypatch.setattr(run, "_gen3_rom", lambda inst: str(rom))
+    monkeypatch.setattr(run, "_gen3_fixture_path", lambda inst: str(fix))
+    line = run._gen3_identity()
+    assert re.match(r"IDENTITY a=firered:rom=[0-9a-f]{16}:fixture=[0-9a-f]{16} "
+                    r"b=leafgreen:rom=[0-9a-f]{16}:fixture=[0-9a-f]{16} "
+                    r"write_checkpoint\.json=[0-9a-f]{16} profile\.json=[0-9a-f]{16} "
+                    r"source=[0-9a-f]{12}(\+dirty)?$", line), line
+    body = (REPO / "tools" / "e2e_duo.py").read_text(encoding="utf-8")
+    for name in ("orchestrate_whiteout_gen3", "orchestrate_center_controls_gen3"):
+        orch = body[body.index(f"def {name}"):]
+        orch = orch[:orch.index("\n    def ", 10)]
+        assert "self._pydec_note(self._gen3_identity())" in orch, name
+
+
+def test_the_center_controls_runner_queues_each_probe_after_its_marker():
+    body = (REPO / "tools" / "e2e_duo.py").read_text(encoding="utf-8")
+    orch = body[body.index("def orchestrate_center_controls_gen3"):body.index("def orchestrate_whiteout_gen3")]
+    assert orch.index("CONTROL_LIVE cable_menu") < orch.index('"cmd": "box_mon"')
+    assert orch.index("CONTROL_LIVE union_room_attendant") < orch.index('"cmd": "party_mon"')
+    assert "stats_cache" in orch

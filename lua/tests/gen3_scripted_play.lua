@@ -696,6 +696,23 @@ local PATHS = {
         map = "PokemonCenter_1F", from = { 7, 4 }, to = { 11, 2 },
         dirs = { "Right","Right","Right","Right","Up","Up" },
     },
+    -- C4-6m, the Center 2F controls: tools/gba_map.py --map 5.4 --bfs 11,2 2,6 (objects
+    -- blocked; FR == LG). (1,6) is the MB_UP_ESCALATOR 0x6A the next Left step rides.
+    center_pc_to_escalator = {
+        map = "PokemonCenter_1F", from = { 11, 2 }, to = { 2, 6 },
+        dirs = { "Down","Down","Down","Left","Down","Left","Left","Left","Left","Left","Left",
+                 "Left","Left" },
+    },
+    -- --map 5.5 --bfs 2,6 10,4: the escalator arrival (EscalatorWarpInEffect_7 walks EAST off
+    -- (1,6)) to the Direct Corner attendant's counter front; then to the Union Room attendant's.
+    center2f_to_direct_corner = {
+        map = "PokemonCenter_2F", from = { 2, 6 }, to = { 10, 4 },
+        dirs = { "Up","Up","Right","Right","Right","Right","Right","Right","Right","Right" },
+    },
+    center2f_direct_corner_to_union_room = {
+        map = "PokemonCenter_2F", from = { 10, 4 }, to = { 6, 4 },
+        dirs = { "Left","Left","Left","Left" },
+    },
 }
 
 -- ── the Gen 3 binding ────────────────────────────────────────────────────────────────────────

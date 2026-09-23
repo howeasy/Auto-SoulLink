@@ -222,6 +222,12 @@ SCENARIOS = {
     "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr_new"),
                       "target": {"a": "battle", "b": "town"}, "frames": 3000000,
                       "oracle": "assert_whiteout_gen3_saved"},
+    # G4 item 2a (4): the Center 2F negative controls (the nurse rides whiteout_gen3). A walks
+    # from the Route 1 grass to the 2F; its one in-game save is the Cable Club's own
+    # (EventScript_AskSaveGame), so B -- which only idles -- never saves.
+    "center_controls_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg",),
+                             "target": {"a": "battle", "b": "town"}, "frames": 3000000,
+                             "no_save": ("b",), "oracle": "assert_center_controls_gen3_saved"},
     # `ball_hunt`: a half throws Poke Balls, so "hunt ended out-of-balls" (the game's catch RNG
     # on a fixture's few balls) earns the Gen 1 standard's whole-run retry (RNG_RETRY_FAMILIES).
     "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr_new"),
@@ -1578,6 +1584,20 @@ GAMES = {
         "play": "gen3_fixtures",
         "sides": {"a": ("firered", "firered_party_{target}"),
                   "b": ("leafgreen", "leafgreen_party_{target}")},   # FR<->LG, the G4 pairing (fixtures 0978a5be)
+        "uses_savestate": False,
+        "scenario_prefix": "gen3_",
+        "oracle_required": True,
+        "save_witness": "check_save_witness_gen3",
+    },
+    # LeafGreen as A (Codex review of d199da32, G4 item 2a): the gen3_frlg family with the sides
+    # swapped, so every A-side receipt (the whiteout's Center write, the 2F controls) runs on LG.
+    # `game` is the family: duo_gen3_main.lua, the scenario set and the retry rule are gen3_frlg's.
+    "gen3_lgfr": {
+        "main": "lua/tests/duo/duo_gen3_main.lua",
+        "game": "gen3_frlg",
+        "play": "gen3_fixtures",
+        "sides": {"a": ("leafgreen", "leafgreen_party_{target}"),
+                  "b": ("firered", "firered_party_{target}")},
         "uses_savestate": False,
         "scenario_prefix": "gen3_",
         "oracle_required": True,
@@ -5119,17 +5139,58 @@ class DuoRun:
         for inst in ("a", "b"):
             self._append_reconnect_marker(inst, "SAVE")
 
+    def _gen3_identity(self) -> str:
+        """G4 item 2a (1): what this receipt ran on -- each side's ROM and fixture bytes, the pack
+        files, and the source cut (HEAD, +dirty when lua/, tools/ or data/ differ from it)."""
+        import hashlib
+
+        def sha(path):
+            with open(path if os.path.isabs(path) else os.path.join(REPO, path), "rb") as handle:
+                return hashlib.sha256(handle.read()).hexdigest()[:16]
+
+        pack = os.path.join(REPO, "data", "games", "gen3_rr" if self._gen3_rr else "gen3_frlg")
+        sides = " ".join(f"{inst}={self._gen3_title(inst)}:rom={sha(self._gen3_rom(inst))}"
+                         f":fixture={sha(self._gen3_fixture_path(inst))}" for inst in ("a", "b"))
+        packs = " ".join(f"{name}={sha(os.path.join(pack, name))}"
+                         for name in ("write_checkpoint.json", "profile.json"))
+        git = ["git", "-C", REPO]
+        head = subprocess.run(git + ["rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+        dirty = subprocess.run(git + ["status", "--porcelain", "--", "lua", "tools", "data"],
+                               capture_output=True, text=True).stdout.strip()
+        return f"IDENTITY {sides} {packs} source={head[:12]}{'+dirty' if dirty else ''}"
+
+    def orchestrate_center_controls_gen3(self):
+        """G4 item 2a (4) on the Center 2F: each time A parks in a refusing state it logs
+        CONTROL_LIVE <name>, and only then is its keyed probe queued -- box_mon for the Cable Club
+        menu (still held through the link wait), party_mon (with the stats A's own stats_cache
+        reported when the box_mon landed) for the Union Room attendant."""
+        self._gen3_prelude(link_slot=1)
+        self._pydec_note(self._gen3_identity())
+        self.go(self._gen3_linked_lines())
+        ka = self._link_keys["a"]
+        self._gen3_mark("a", rf"^CONTROL_LIVE cable_menu {re.escape(ka)} ", "A parked at the Cable Club menu")
+        self.queue_command("a", {"cmd": "box_mon", "key": ka})
+        self._gen3_mark("a", rf"^CONTROL_LIVE union_room_attendant {re.escape(ka)} ",
+                        "A parked at the Union Room attendant")
+        cached = self._gen3_sent_event(read_result(self.scenario, "a"), "stats_cache", ka) or {}
+        if not cached.get("stats"):
+            raise RuntimeError(f"A never reported stats_cache for {ka}; no party_mon probe to send")
+        self.queue_command("a", {"cmd": "party_mon", "key": ka, "stats": cached["stats"]})
+
     def orchestrate_whiteout_gen3(self):
         """Both halves of the slot-1 pair boxed (A by hand, B by the mirrored box_mon), the
         server's own party_keys agreeing (assert_whiteout_both_boxed, shared with Gen 1), then A
         whites out with its lone starter and the server rebuilds the pair out of both PCs."""
         self._gen3_prelude(link_slot=1)
+        self._pydec_note(self._gen3_identity())
         self.go(self._gen3_linked_lines())
         self.assert_whiteout_both_boxed()
         # G4 item 2a's negative control: after its save A parks in the Center nurse's script, and
         # a queued SLink write must stay HELD there (scenario_gen3_whiteout.lua nurse_control)
-        self._gen3_mark("a", r"^CONTROL_LIVE ", "A parked in the nurse's script (negative control)")
-        self.queue_command("a", {"cmd": "box_mon", "key": self._link_keys["a"]})
+        ka = self._link_keys["a"]
+        self._gen3_mark("a", rf"^CONTROL_LIVE nurse {re.escape(ka)} ",
+                        "A parked in the nurse's script (negative control)")
+        self.queue_command("a", {"cmd": "box_mon", "key": ka})
 
     def orchestrate_link_gen3(self):
         """D-1 on FRLG: both catch on Route 1 and the SERVER pairs them by area (shared check)."""
@@ -5417,6 +5478,33 @@ class DuoRun:
         self._gen3_raise(problems, f"boxsync: {ka} / {kb} deposited and withdrawn, saved once in "
                                    f"party with the fixture record")
 
+    def assert_center_controls_gen3_saved(self, results):
+        """G4 item 2a (4): A's one save (the Cable Club's) holds the linked mon in its party with
+        the fixture record; each keyed probe arrived only after its CONTROL_LIVE, was REFUSED in
+        that state by a named clause, and landed once the state ended (ACK + read-back). The
+        cable probe stays the same box_mon from the menu through the link wait."""
+        self._gen3_flush_boundary()
+        self._gen3_one_link("alive")
+        ka = self._link_keys["a"]
+        k = re.escape(ka)
+        problems = gen3_round_trip_problems("a", self._gen3_saved("a"), self._gen3_fixture_saved("a"),
+                                            ka, rr=self._gen3_rr, limits=self._gen3_limits("a"),
+                                            walked=True)
+        chain = [rf"(?m)^CONTROL_LIVE cable_menu {k} ", gen3_rx("box_mon", ka),
+                 rf"(?m)^CONTROL_REFUSED cable_menu box_mon {k} clause=\S+ ",
+                 r"(?m)^SAVE_WITNESS_DUMP ", rf"(?m)^CONTROL_LIVE cable_link {k} ",
+                 rf"(?m)^CONTROL_REFUSED cable_link box_mon {k} clause=\S+ ",
+                 rf"(?m)^CONTROL_RELEASED cable_link box_mon {k}\b", gen3_tx("stats_cache", ka),
+                 gen3_boxed(ka), rf"(?m)^CONTROL_LIVE union_room_attendant {k} ", gen3_rx("party_mon", ka),
+                 rf"(?m)^CONTROL_REFUSED union_room_attendant party_mon {k} clause=\S+ ",
+                 rf"(?m)^CONTROL_RELEASED union_room_attendant party_mon {k}\b",
+                 gen3_tx("sync_retrieve_done", ka), gen3_returned(ka)]
+        problems += gen3_receipt_problems(
+            "a", results["a"], required=chain, ordered=list(zip(chain, chain[1:], strict=False)),
+            forbidden=[gen3_tx("box_mon_failed", ka), gen3_tx("sync_retrieve_failed", ka)])
+        self._gen3_raise(problems, f"center_controls: {ka} held at the Cable Club menu, the cable "
+                                   f"link wait and the Union Room attendant; landed once released")
+
     def assert_whiteout_gen3_saved(self, results):
         """One whiteout, one rebuild, no deaths: A whited out with the pair boxed on both sides,
         the server rebuilt the pair (rebuild_start, party_mon, rebuild_done on A; party_mon on B),
@@ -5450,8 +5538,8 @@ class DuoRun:
         # queued box_mon held with zero writes while the nurse's script is live. A never ACKs
         # that box_mon (TX stats_cache would be the held write landing).
         center, landed = r"(?m)^CENTER_STATE ", r"(?m)^WRITE_IN_CENTER "
-        control = [gen3_returned(ka), r"(?m)^CONTROL_LIVE ", gen3_rx("box_mon", ka),
-                   r"(?m)^CONTROL_REFUSED box_mon "]
+        control = [gen3_returned(ka), rf"(?m)^CONTROL_LIVE nurse {re.escape(ka)} ", gen3_rx("box_mon", ka),
+                   rf"(?m)^CONTROL_REFUSED nurse box_mon {re.escape(ka)} clause=\S+ "]
         problems += gen3_receipt_problems(
             "a", results["a"], required=chain_a + [start,r"(?m)^WHITED_OUT\b", center, landed] + control,
             ordered=list(zip(chain_a, chain_a[1:], strict=False))
@@ -5513,8 +5601,14 @@ class DuoRun:
         problems = []
         if ((self._status() or {}).get("area_states") or {}).get("route_1") != "dead_zone":
             problems.append("route_1 is not a dead zone after the run")
-        if _event_counts(self._reconnect_events())["dead_zone"] != 1:
-            problems.append("events.json does not carry exactly one dead_zone")
+        # the server logs dead_zone for the player AND the partner (server/server.py:2217-2220):
+        # exactly one row each, never one in total (live deadzone_gen3 attempt 2 on 684bbb7a)
+        rows = {}
+        for row in self._reconnect_events():
+            if row.get("type") == "dead_zone":
+                rows[row.get("player")] = rows.get(row.get("player"), 0) + 1
+        if rows != {"a": 1, "b": 1}:
+            problems.append(f"events.json dead_zone rows per player are {rows}, not one each")
         for entry in self._links_json():
             keys = {(entry.get("a") or {}).get("key"), (entry.get("b") or {}).get("key")}
             if b_key in keys and entry.get("status") == "alive":

@@ -37,7 +37,10 @@ pytestmark = [
 
 GAME = "gen3_frlg"
 SCENARIOS = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
-             "link_gen3", "deadzone_gen3", "reconnect_gen3")
+             "link_gen3", "deadzone_gen3", "reconnect_gen3", "center_controls_gen3")
+# G4 item 2a on LeafGreen: the same family with LG as A (C4-6m), for the A-side Center receipts
+GAME_LGFR = "gen3_lgfr"
+SCENARIOS_LGFR = ("whiteout_gen3", "center_controls_gen3")
 
 
 def deadline_for(scenario):
@@ -45,33 +48,42 @@ def deadline_for(scenario):
     return RUNNER_SCENARIOS[scenario]["timeout"] * scenario_attempt_limit(scenario, GAME) + 300
 
 
-def required_fixtures(scenario):
+def required_fixtures(scenario, game=GAME):
     """The fixture stems this scenario boots, one per instance (the row's sides x the target)."""
     targets = RUNNER_SCENARIOS[scenario].get("target", "town")
-    sides = RUNNER_GAMES[GAME]["sides"]
+    sides = RUNNER_GAMES[game]["sides"]
     return [sides[inst][1].format(target=targets[inst] if isinstance(targets, dict) else targets)
             for inst in ("a", "b")]
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)
 def test_gen3_frlg_duo(scenario):
+    _run_duo(GAME, scenario)
+
+
+@pytest.mark.parametrize("scenario", SCENARIOS_LGFR)
+def test_gen3_lgfr_duo(scenario):
+    _run_duo(GAME_LGFR, scenario)
+
+
+def _run_duo(game, scenario):
     if not os.path.exists(EMUHAWK):
         pytest.fail(f"EmuHawk missing: {EMUHAWK}")
-    for stem in required_fixtures(scenario):
+    for stem in required_fixtures(scenario, game):
         if not os.path.exists(os.path.join(GEN3_FIXTURES, stem + ".sav")):
             pytest.fail(f"fixture missing: tests/fixtures/gen3/{stem}.sav (tools/gen3_fixtures.py)")
     cmd = [sys.executable, os.path.join(REPO, "tools", "e2e_duo.py"),
-           "--game", GAME, "--scenario", scenario]
+           "--game", game, "--scenario", scenario]
     if scenario == "reconnect_gen3" and os.environ.get("SLINK_WRONG_SAVE"):
         cmd.extend(("--wrong-save", os.environ["SLINK_WRONG_SAVE"]))  # default: B's own fixture
     try:
         proc = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True, encoding="utf-8",
                               errors="replace", timeout=deadline_for(scenario))
     except subprocess.TimeoutExpired as exc:
-        pytest.fail(f"{GAME} duo {scenario} exceeded {deadline_for(scenario)} s -- partial "
+        pytest.fail(f"{game} duo {scenario} exceeded {deadline_for(scenario)} s -- partial "
                     f"stdout:\n{(exc.stdout or '')[-4000:]}")
     assert proc.returncode == 0, (
-        f"{GAME} duo {scenario} failed:\n{proc.stdout[-4000:]}\n{proc.stderr[-1000:]}")
+        f"{game} duo {scenario} failed:\n{proc.stdout[-4000:]}\n{proc.stderr[-1000:]}")
 
 
 # ── gen3_rr_new: the same NEW client on Radical Red (P5, card C5-5) ────────────────────────
