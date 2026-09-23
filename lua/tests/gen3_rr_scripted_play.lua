@@ -1015,11 +1015,11 @@ LEGS[#LEGS + 1] = {
             .. "MENU_B_PRESSED for NO/decline; state 3 calls ReleaseMon() -- the "
             .. "pc_release_begin/pc_release pair)",
         "src/pokemon_storage_system_tasks.c:2595-2599 (ShowYesNoWindow(cursorPos): "
-            .. "CreateYesNoMenu then Menu_MoveCursorNoWrapAround(cursorPos) -- pos 1 IS the NO "
-            .. "row; every OTHER ShowYesNoWindow call in this file passes 0 (lines 1620, 1946, "
-            .. "2005), so release is the one prompt that starts on NO on purpose, and "
-            .. "Menu_MoveCursorNoWrapAround does not wrap -- Up is required to reach YES, a "
-            .. "plain A confirms NO and declines the release)",
+            .. "CreateYesNoMenu(..., initialCursorPos = 1) puts EVERY storage yes/no on NO "
+            .. "(include/menu.h:49; gText_YesNo = YES\nNO), then "
+            .. "Menu_MoveCursorNoWrapAround(cursorPos) moves by a DELTA and does not wrap "
+            .. "(src/menu.c:323-334) -- so the release prompt starts on NO: Up is required to "
+            .. "reach YES, and a plain A confirms NO and declines the release)",
         "src/pokemon_storage_system_tasks.c:1307-1339 (states 4/5/6/7: exactly two more JOY_NEW "
             .. "waits -- MSG_WAS_RELEASED then MSG_BYE_BYE -- before CompactPartySlots and the "
             .. "return to Task_PokeStorageMain)",
