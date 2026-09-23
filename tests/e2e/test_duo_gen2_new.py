@@ -19,7 +19,7 @@ pytestmark = [
 ]
 
 GAME = "gen2_new"
-SCENARIOS = ("link", "gen2_faint")
+SCENARIOS = ("link", "gen2_faint", "gen2_admit_wrong_rom")
 LANE = "gen2-cc-link"
 PAIRINGS = {
     GAME: LANE,
@@ -32,7 +32,7 @@ def run_gate(game=GAME, scenario="link"):
     # Qualification must bind both fixtures to the pinned ROM before any process starts.
     assert scenario in SCENARIOS, f"unknown Gen 2 duo scenario: {scenario}"
     lane = PAIRINGS[game].removesuffix("link") + scenario.removeprefix("gen2_")
-    duo.gen2_preflight(repo=REPO, game=game)
+    duo.gen2_preflight(repo=REPO, game=game, scenario=scenario)
     assert Path(duo.EMUHAWK).is_file(), f"EmuHawk missing: {duo.EMUHAWK}"
     receipts = [REPO / "patch" / "build" / f"e2e_{scenario}_{lane}_{side}_result.txt"
                 for side in ("a", "b", "pydec")]

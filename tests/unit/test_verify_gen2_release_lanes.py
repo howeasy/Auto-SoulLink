@@ -380,6 +380,7 @@ def _green_tree(tmp_path):
     source_text = {"a": a_text, "b": b_text}
     for row in doc["requirements"]:
         axes = row["axes"]
+        axes["scenarios"] = ["link"]
         titles = {"a": axes["initiator"], "b": axes["partner"]}
         entries = {}
         for side in ("a", "b"):
@@ -419,23 +420,19 @@ def test_duo_link_lane_is_the_implemented_physical_matrix_lane():
 
 
 def test_committed_matrix_is_red_exactly_where_a_pair_has_no_receipt():
-    """The real tree: a row with no registered proof is red; a receipted row's a/b legs are clean.
-
-    Every receipted row's pydec leg is ALSO currently red (review O16 F1): the committed pydec
-    receipts are still the old content-free "PASS asserted scenario facts" kind, pending Codex's
-    H5 PYDEC line landing on freshly re-run receipts -- that is the one expected gap here."""
+    """Unreceipted cells stay red while newly recorded physical proofs can close their cells."""
     doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
     errors = gate.duo_matrix_errors()
-    assert errors, "the committed matrix cannot be green while the pydec receipts are content-free"
     for row in doc["requirements"]:
         mine = [error for error in errors if error.startswith(row["id"] + "/")]
-        if row["proofs"]:
-            ab_receipt_problems = [error for error in mine
+        for proof in row["proofs"]:
+            cell = row["id"] + "/" + proof["scenario"] + ":"
+            ab_receipt_problems = [error for error in mine if error.startswith(cell)
                                    if "receipt" in error and "pydec receipt does not name" not in error]
             assert not ab_receipt_problems, mine
-            assert any("pydec receipt does not name this cell" in error for error in mine), mine
-        else:
-            assert f"{row['id']}/link: no receipt registered" in " ".join(mine)
+        for scenario in row["axes"]["scenarios"]:
+            if scenario not in {proof["scenario"] for proof in row["proofs"]}:
+                assert f"{row['id']}/{scenario}: no receipt registered" in " ".join(mine)
     assert _row(doc, "duo.crystal.crystal")["proofs"], "the C<->C link PASS receipt is registered"
 
 
@@ -785,3 +782,90 @@ def test_pydec_end_status_is_per_scenario():
     assert errs("link", "memorial") != []
     assert errs("gen2_faint", "dead") == [] and errs("gen2_faint", "memorial") == []
     assert errs("gen2_faint", "alive") != []
+
+
+def _admission_cell(tmp_path):
+    doc = _green_tree(tmp_path)
+    row = _row(doc, "duo.crystal.crystal")
+    proof, axes = row["proofs"][0], row["axes"]
+    lock = json.loads((tmp_path / "data/gen2_sources.lock.json").read_text())["outputs"]
+    rom = lock["pokecrystal11"]["sha1"]
+    text = {}
+    a = tmp_path / proof["receipts"]["a"]["path"]
+    text["a"] = a.read_text().replace('"scenario": "link"', '"scenario": "gen2_admit_wrong_rom"')
+    records = [
+        ("DUO_GEN2", {"player": "b", "scenario": "gen2_admit_wrong_rom", "title": "crystal",
+                       "rom_sha1": rom, "expect_admission": "refused", "attempt": 1}),
+        ("ADMISSION_REFUSED", {"frame": 1, "rom_sha1": rom, "client": False,
+                               "console": "refused (production admission): ROM sha1"}),
+        ("NO_TRAFFIC", {"frame": 601, "frames": 600, "tx": 0}),
+        ("CARTRAM_UNCHANGED", {"before": "a" * 64, "after": "a" * 64}),
+        ("RECEIPT", {"schema": "gen2-duo-admit-wrong-rom-v1", "expect_admission": "refused",
+                     "player": "b", "scenario": "gen2_admit_wrong_rom", "title": "crystal",
+                     "rom_sha1": rom, "attempt": 1}),
+    ]
+    text["b"] = "\n".join(tag + " " + json.dumps(value) for tag, value in records) + "\nRESULT: PASS\n"
+    text["pydec"] = ("PYDEC: PASS scenario=gen2_admit_wrong_rom a=admitted b=refused area=none "
+                     f"titles=crystal/crystal status=refused rom_b={rom}\n")
+    return proof, axes, lock, text
+
+
+def _check_admission_cell(tmp_path, proof, axes, lock, text, scenario="gen2_admit_wrong_rom"):
+    for side, body in text.items():
+        entry = proof["receipts"][side]
+        path = tmp_path / entry["path"]
+        path.write_text(body, encoding="utf-8")
+        entry["sha256"] = _lf_sha(path)
+    return gate._receipt_errors(tmp_path, proof, scenario, axes, lock)
+
+
+def test_wrong_rom_matrix_accepts_only_explicit_refused_half(tmp_path):
+    proof, axes, lock, text = _admission_cell(tmp_path)
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text) == []
+
+
+@pytest.mark.parametrize("mutation", ["no_refusal", "client", "traffic", "cart", "rom", "title",
+    "receipt", "save", "hello", "short_hold", "admitted_save", "pydec_status", "pydec_rom",
+    "pydec_scenario", "pydec_side", "malformed", "malformed_header", "order", "duplicate"])
+def test_wrong_rom_matrix_refuses_rebound_evidence(tmp_path, mutation):
+    proof, axes, lock, text = _admission_cell(tmp_path)
+    if mutation in ("no_refusal", "receipt"):
+        prefix = "ADMISSION_REFUSED " if mutation == "no_refusal" else "RECEIPT "
+        text["b"] = "\n".join(line for line in text["b"].splitlines() if not line.startswith(prefix))
+    elif mutation == "client":
+        text["b"] = text["b"].replace('"client": false', '"client": true')
+    elif mutation == "traffic":
+        text["b"] = text["b"].replace('"tx": 0', '"tx": 1')
+    elif mutation == "cart":
+        text["b"] = text["b"].replace('"after": "' + "a" * 64, '"after": "' + "b" * 64)
+    elif mutation == "rom":
+        text["b"] = text["b"].replace(lock["pokecrystal11"]["sha1"], lock["pokecrystal"]["sha1"])
+    elif mutation == "title":
+        text["b"] = text["b"].replace('"title": "crystal"', '"title": "gold"')
+    elif mutation in ("save", "hello"):
+        text["b"] += ("SAVE_WITNESS" if mutation == "save" else "HELLO") + " {}\n"
+    elif mutation == "short_hold":
+        text["b"] = text["b"].replace('"frames": 600', '"frames": 1')
+    elif mutation == "admitted_save":
+        text["a"] = "\n".join(line for line in text["a"].splitlines() if not line.startswith("SAVE_WITNESS "))
+    elif mutation == "malformed":
+        text["b"] = text["b"].replace('"client": false', '"client": invalid')
+    elif mutation == "malformed_header":
+        text["b"] = text["b"].replace('"player": "b"', '"player": invalid', 1)
+    elif mutation == "order":
+        rows = text["b"].splitlines()
+        rows[1], rows[2] = rows[2], rows[1]
+        text["b"] = "\n".join(rows)
+    elif mutation == "duplicate":
+        text["b"] += next(line for line in text["b"].splitlines() if line.startswith("NO_TRAFFIC ")) + "\n"
+    else:
+        key, value = {"pydec_status": ("status", "alive"), "pydec_rom": ("rom_b", "0" * 40),
+                      "pydec_scenario": ("scenario", "link"), "pydec_side": ("a", "refused")}[mutation]
+        text["pydec"] = _edit_pydec_token(key, value)(text["pydec"])
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text)
+
+
+@pytest.mark.parametrize("scenario", ["link", "gen2_faint"])
+def test_refused_half_exception_does_not_extend_to_capture_scenarios(tmp_path, scenario):
+    proof, axes, lock, text = _admission_cell(tmp_path)
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, scenario)

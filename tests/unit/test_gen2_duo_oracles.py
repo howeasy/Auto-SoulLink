@@ -952,6 +952,105 @@ def test_link_oracle_boot_fixture_checksum_refused(good_case, tmp_path, layout):
         oracles.link_oracle(results, data_dir=str(data_dir), boot_saveram={"a": str(bad_boot)})
 
 
+@pytest.fixture
+def admission_case(tmp_path):
+    layout = codec.for_foundation("crystal")
+    pin = layout.profile["titles"]["crystal"]["rom_sha1"]
+    wrong = "f2f52230b536214ef7c9924f483392993e226cfb"
+    boot = {side: FIXTURES[side] for side in ("a", "b")}
+    paths = {}
+    for side in boot:
+        paths[side] = tmp_path / f"{side}.SaveRAM"
+        paths[side].write_bytes(boot[side].read_bytes())
+    digest = hashlib.sha256(paths["b"].read_bytes()[:CART]).hexdigest()
+    head = {"player": "a", "scenario": "gen2_admit_wrong_rom", "attempt": 1,
+            "title": "crystal", "rom_sha1": pin, "case": "crystal_battle",
+            "fixture_sha256": hashlib.sha256(boot["a"].read_bytes()).hexdigest()}
+    client = {"production_admitted": True, "title": "crystal", "rom_sha1": pin}
+    witness = {"frame": 5000, "save_completed_frame": 4990, "gate_saves": 1,
+               "client_saves": 1, "cartram_sha256": hashlib.sha256(paths["a"].read_bytes()[:CART]).hexdigest(),
+               "cartram_bytes": CART, "saveram_bytes": CART + 22, "saveram_path": str(paths["a"]),
+               "flushed_matches": True}
+    refused = {"player": "b", "scenario": head["scenario"], "attempt": 1, "title": "crystal",
+               "rom_sha1": wrong, "expect_admission": "refused"}
+    refusal = {"frame": 1, "rom_sha1": wrong, "client": False,
+               "console": "[gen2] refused (production admission): ROM sha1"}
+    receipt = {**head, "schema": "gen2-duo-admit-wrong-rom-v1", "expect_admission": "admitted"}
+    def lines(rows):
+        return "\n".join(f"{tag} {json.dumps(value)}" for tag, value in rows) + "\nRESULT: PASS"
+    results = {
+        "a": lines([("DUO_GEN2", head), ("CLIENT", client), ("BOOTED", {"frame": 10}),
+                    ("HELLO", {"frame": 20, "ot_id": OT_IDS["a"]}),
+                    ("HOLD", {"frame": 620, "frames": 600, "hellos": 1}),
+                    ("SAVE_WITNESS", witness), ("RECEIPT", receipt)]),
+        "b": lines([("DUO_GEN2", refused), ("ADMISSION_REFUSED", refusal),
+                    ("NO_TRAFFIC", {"frame": 620, "frames": 600, "tx": 0}),
+                    ("CARTRAM_UNCHANGED", {"before": digest, "after": digest}),
+                    ("RECEIPT", {**refused, "schema": receipt["schema"], "refusal": refusal,
+                                 "cartram_sha256": digest})])}
+    doc = {"links": [], "player_identity": {"a": {"ot_id": str(OT_IDS["a"])}}, "pending_captures": {}}
+    events = [{"type": "hello", "player": "a", "text": "Connected (Crystal)"}]
+    snapshot = {"links": doc, "events": events,
+                "status": {"players": {"a": {"connected": True, "admission": "admitted"}, "b": {}}},
+                "raw": {"_live": {"connected_players": {"a": {"rom_type": "Crystal"}}}}}
+    (tmp_path / "links.json").write_text(json.dumps(doc))
+    (tmp_path / "events.json").write_text(json.dumps(events))
+    return results, {"data_dir": str(tmp_path), "before": deepcopy(snapshot), "after": deepcopy(snapshot),
+                     "boot_saveram": boot, "refused_saveram": paths["b"]}
+
+
+def test_wrong_rom_admission_independent_evidence(admission_case):
+    results, kwargs = admission_case
+    facts = []
+    oracles.admit_wrong_rom_oracle(results, **kwargs, on_verified=facts.append)
+    assert facts[0]["a"] == "admitted" and facts[0]["b"] == "refused"
+    assert facts[0]["status"] == "refused"
+
+
+@pytest.mark.parametrize("fault", ["pin", "role", "missing", "client", "tx", "short_hold", "digest",
+    "disk", "hello_again", "identity", "player", "event", "links", "admitted_party", "fixture_hash"])
+def test_wrong_rom_admission_refuses_mutations(admission_case, fault):
+    results, kwargs = admission_case
+    if fault in ("pin", "role", "fixture_hash"):
+        side = "a" if fault == "fixture_hash" else "b"
+        row = oracles._last_tagged(results[side], "DUO_GEN2")
+        row[{"pin": "rom_sha1", "role": "expect_admission", "fixture_hash": "fixture_sha256"}[fault]] = (
+            "admitted" if fault == "role" else "0" * (64 if fault == "fixture_hash" else 40))
+        results[side] = _replace_tag(results[side], "DUO_GEN2", row)
+    elif fault == "missing":
+        results["b"] = "\n".join(line for line in results["b"].splitlines() if not line.startswith("ADMISSION_REFUSED "))
+    elif fault in ("client", "tx", "hello_again"):
+        side, tag = ("a", "HELLO_AGAIN") if fault == "hello_again" else ("b", fault.upper())
+        results[side] += f"\n{tag} {{}}"
+    elif fault == "short_hold":
+        row = oracles._last_tagged(results["b"], "NO_TRAFFIC")
+        row["frames"] = 1
+        results["b"] = _replace_tag(results["b"], "NO_TRAFFIC", row)
+    elif fault == "digest":
+        results["b"] = _replace_tag(results["b"], "CARTRAM_UNCHANGED", {"before": "0" * 64, "after": "0" * 64})
+    elif fault == "disk":
+        path = Path(kwargs["refused_saveram"])
+        raw = bytearray(path.read_bytes())
+        raw[0] ^= 1
+        path.write_bytes(raw)
+    elif fault == "identity":
+        kwargs["after"]["links"]["player_identity"]["b"] = {"ot_id": "7"}
+    elif fault == "player":
+        kwargs["after"]["raw"]["_live"]["connected_players"]["b"] = {}
+    elif fault == "event":
+        kwargs["after"]["events"].append({"type": "hello", "player": "b"})
+    elif fault == "links":
+        kwargs["after"]["links"]["links"].append({"area_id": "route_29"})
+    else:
+        witness = oracles._last_tagged(results["a"], "SAVE_WITNESS")
+        Path(witness["saveram_path"]).write_bytes(build_capture(codec.for_foundation("crystal"),
+            FIXTURES["a"], ot_id=OT_IDS["a"], species=16)[0])
+        witness["cartram_sha256"] = hashlib.sha256(Path(witness["saveram_path"]).read_bytes()[:CART]).hexdigest()
+        results["a"] = _replace_tag(results["a"], "SAVE_WITNESS", witness)
+    with pytest.raises(RuntimeError):
+        oracles.admit_wrong_rom_oracle(results, **kwargs)
+
+
 def test_missing_links_json_refused(good_case, tmp_path):
     results, _data_dir, _decoded = good_case
     empty_dir = tmp_path / "empty"

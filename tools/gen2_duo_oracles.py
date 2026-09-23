@@ -203,9 +203,13 @@ def check_save_witness(results):
     requires gen2_codec's independent checksum/primary-backup/marker witness to pass. Raises
     RuntimeError naming the instance and field on any refusal; returns None.
     """
+    _check_save_witness(results, ("a", "b"))
+
+
+def _check_save_witness(results, instances):
     from server.adapters import gen2_codec as codec
 
-    for inst in ("a", "b"):
+    for inst in instances:
         text = (results or {}).get(inst) or ""
         witness, _client, title = _boot_marker(inst, text)
 
@@ -626,3 +630,130 @@ def faint_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_sav
             on_verified(facts)
     except (KeyError, TypeError, ValueError, OSError, IndexError) as exc:
         raise RuntimeError(f"faint evidence missing or malformed: {exc}") from exc
+
+
+def _admit_need(condition, reason):
+    if not condition:
+        raise RuntimeError(f"admit_wrong_rom: {reason}")
+
+
+def _admit_markers(results, admitted, refused):
+    _admit_need({admitted, refused} == {"a", "b"}, "explicit admitted/refused roles must be distinct")
+    lock = json.loads((REPO_ROOT / "data/gen2_sources.lock.json").read_text())
+    wrong_pin = lock["outputs"]["pokecrystal11"]["sha1"]
+    heads = {}
+    for inst, role in ((admitted, "admitted"), (refused, "refused")):
+        text = results[inst]
+        head, receipt = _one_marker(text, "DUO_GEN2"), _one_marker(text, "RECEIPT")
+        _admit_need(head.get("player") == inst and head.get("scenario") == "gen2_admit_wrong_rom"
+                    and head.get("expect_admission", "admitted") == role, f"{inst}: header role/scenario differs")
+        for field in ("player", "scenario", "attempt", "title", "rom_sha1"):
+            _admit_need(field in head and receipt.get(field) == head[field], f"{inst}: receipt {field} differs")
+        _admit_need(receipt.get("schema") == "gen2-duo-admit-wrong-rom-v1"
+                    and receipt.get("expect_admission") == role, f"{inst}: receipt role/schema differs")
+        verdicts = [line for line in text.splitlines() if line.startswith("RESULT:")]
+        _admit_need(len(verdicts) == 1 and re.match(r"^RESULT: PASS(?:\s|$)", verdicts[0]), f"{inst}: no sole PASS verdict")
+        heads[inst] = head
+    text = results[refused]
+    head = heads[refused]
+    _admit_need(head.get("title") == "crystal" and head.get("rom_sha1") == wrong_pin,
+                "refused input must be pinned Crystal 1.1")
+    for tag in ("CLIENT", "BOOTED", "MYKEY", "HELLO", "HELLO_AGAIN", "TX", "SAVE_WITNESS", "HOLD", "ENGINE_CAPTURE"):
+        _admit_need(not any(line.startswith(tag + " ") for line in text.splitlines()), f"refused half printed {tag}")
+    refusal, quiet, cart = (_one_marker(text, tag) for tag in ("ADMISSION_REFUSED", "NO_TRAFFIC", "CARTRAM_UNCHANGED"))
+    _admit_need(refusal.get("client") is False and refusal.get("rom_sha1") == wrong_pin
+                and isinstance(refusal.get("console"), str)
+                and ("refused (production admission)" in refusal["console"] or "not a Gen 2 cartridge" in refusal["console"]),
+                "refusal lacks pinned ROM or production refusal line")
+    _admit_need(type(quiet.get("tx")) is int and quiet["tx"] == 0
+                and type(quiet.get("frames")) is int and quiet["frames"] >= 600
+                and _frame(quiet) >= _frame(refusal) + quiet["frames"], "refused hold/traffic differs")
+    _admit_need(text.index("ADMISSION_REFUSED ") < text.index("NO_TRAFFIC ") < text.index("CARTRAM_UNCHANGED "),
+                "refused marker chronology differs")
+    receipt = _one_marker(text, "RECEIPT")
+    _admit_need(receipt.get("refusal") == refusal and receipt.get("cartram_sha256") == cart.get("after"),
+                "refused receipt evidence differs")
+    text = results[admitted]
+    witness, client, title = _boot_marker(admitted, text)
+    from tools.gen2_source_data import load_context
+    _admit_need(client.get("production_admitted") is True
+                and client.get("rom_sha1") == load_context(title, root=REPO_ROOT).source_record()["rom_sha1"],
+                "admitted half lacks production/pinned ROM")
+    hello, hold = _one_marker(text, "HELLO"), _one_marker(text, "HOLD")
+    _one_marker(text, "BOOTED")
+    _admit_need(not any(line.startswith(("HELLO_AGAIN ", "ADMISSION_REFUSED ", "ENGINE_CAPTURE ")) for line in text.splitlines()),
+                "admitted half rehelloed/refused/captured")
+    _admit_need(type(hold.get("hellos")) is int and hold["hellos"] == 1
+                and type(hold.get("frames")) is int and hold["frames"] >= 600
+                and _frame(hold) >= _frame(hello) + hold["frames"]
+                and _frame(witness, "save_completed_frame") > _frame(hold), "admitted hold/save chronology differs")
+    return heads, cart
+
+
+def check_admit_wrong_rom_witness(results, *, boot_saveram, refused_saveram, admitted="a", refused="b"):
+    """Only the admitted role saves; the refused role must retain its independent seed image."""
+    try:
+        _heads, cart = _admit_markers(results, admitted, refused)
+        _check_save_witness(results, (admitted,))
+        boot = Path(boot_saveram[refused]).read_bytes()
+        final = Path(refused_saveram).read_bytes()
+        digest = hashlib.sha256(boot[:CARTRAM_BYTES]).hexdigest()
+        _admit_need(len(boot) == len(final) == SAVERAM_BYTES and boot[:CARTRAM_BYTES] == final[:CARTRAM_BYTES],
+                    "refused disk CartRAM differs from seed")
+        _admit_need(cart.get("before") == cart.get("after") == digest, "refused CartRAM markers differ from seed")
+    except (KeyError, TypeError, ValueError, OSError, IndexError) as exc:
+        raise RuntimeError(f"admit_wrong_rom evidence missing or malformed: {exc}") from exc
+
+
+def admit_wrong_rom_oracle(results, *, data_dir, before, after, boot_saveram, refused_saveram,
+                            admitted="a", refused="b", on_verified=None):
+    """Prove no refused server identity/traffic or save change, with one admitted native save."""
+    from server.adapters import gen2_codec as codec
+
+    try:
+        check_admit_wrong_rom_witness(results, boot_saveram=boot_saveram, refused_saveram=refused_saveram,
+                                      admitted=admitted, refused=refused)
+        duo = _duo_marker(admitted, results[admitted])
+        witness, _, title = _boot_marker(admitted, results[admitted])
+        seed = Path(boot_saveram[admitted]).read_bytes()
+        saved = Path(witness["saveram_path"]).read_bytes()
+        _admit_need(hashlib.sha256(seed).hexdigest() == duo["fixture_sha256"], "admitted fixture hash differs")
+        layout = codec.for_foundation(title)
+        _admit_need(codec.strict_checksum_witness(seed[:CARTRAM_BYTES], layout)["valid"], "admitted seed checksum invalid")
+        old = codec.decode_saved_party(seed[:CARTRAM_BYTES], layout, copy_name="primary")["mons"]
+        new = codec.decode_saved_party(saved[:CARTRAM_BYTES], layout, copy_name="primary")["mons"]
+        _admit_need(old and new == old, "admitted party changed during passive hold")
+        hello_ot = _hello_ot_id(admitted, results[admitted])
+        for label, snapshot in (("before", before), ("after", after)):
+            players = snapshot["status"]["players"]
+            live = snapshot["raw"]["_live"]["connected_players"]
+            doc, events = snapshot["links"], snapshot["events"]
+            _admit_need(isinstance(live, dict) and refused not in live and admitted in live,
+                        f"{label}: refused player row or admitted row missing")
+            active = players[admitted]
+            _admit_need(active.get("connected") is True and active.get("admission") == "admitted"
+                        and not active.get("identity_error"), f"{label}: admitted public status differs")
+            idle = players.get(refused, {})
+            _admit_need(not any(idle.get(field) for field in ("connected", "party_keys", "trainer_name", "current_area_id", "identity_error")),
+                        f"{label}: refused public player adopted state")
+            identities = doc["player_identity"]
+            _admit_need(refused not in identities and str(identities[admitted]["ot_id"]) == str(hello_ot),
+                        f"{label}: server identity lock differs")
+            _admit_need(isinstance(events, list) and all(isinstance(row, dict) for row in events)
+                        and not any(row.get("player") == refused for row in events), f"{label}: refused server event")
+            hellos = [row for row in events if row.get("type") == "hello" and row.get("player") == admitted]
+            _admit_need(len(hellos) == 1 and hellos[0].get("text", "").startswith("Connected ("),
+                        f"{label}: missing sole accepted hello")
+            _admit_need(doc["links"] == [] and doc.get("pending_captures", {}) == {}, f"{label}: unexpected link/capture")
+        _admit_need(before["links"] == after["links"], "links.json changed across passive hold")
+        _admit_need(before["events"] == after["events"], "server events changed across passive hold")
+        for name in ("links", "events"):
+            disk = json.loads((Path(data_dir) / f"{name}.json").read_text(encoding="utf-8"))
+            _admit_need(disk == after[name], f"persisted {name} differs from final snapshot")
+        if on_verified is not None:
+            wrong = _one_marker(results[refused], "DUO_GEN2")
+            on_verified({admitted: "admitted", refused: "refused", "area": "none", "status": "refused",
+                         "titles": "/".join(title if side == admitted else "crystal" for side in ("a", "b")),
+                         f"rom_{refused}": wrong["rom_sha1"]})
+    except (KeyError, TypeError, ValueError, OSError, IndexError) as exc:
+        raise RuntimeError(f"admit_wrong_rom evidence missing or malformed: {exc}") from exc

@@ -268,7 +268,8 @@ def _pydec_tokens(lines: list[str]) -> dict | None:
     return tokens
 
 
-def _pydec_cell_errors(lines: list[str], scenario: str, axes: dict, capture_keys: dict) -> list[str]:
+def _pydec_cell_errors(lines: list[str], scenario: str, axes: dict, capture_keys: dict,
+                       lock: dict | None = None) -> list[str]:
     """The pydec receipt names its own cell, not just a bare PASS (review O16 F1)."""
     tokens = _pydec_tokens(lines)
     if not tokens:
@@ -276,11 +277,56 @@ def _pydec_cell_errors(lines: list[str], scenario: str, axes: dict, capture_keys
     want = {"a": capture_keys.get("a"), "b": capture_keys.get("b"),
             "titles": f"{axes['initiator']}/{axes['partner']}",
             "status": SCENARIO_END_STATUS.get(scenario)}
+    if scenario == "gen2_admit_wrong_rom":
+        want = {"scenario": scenario, "a": "admitted", "b": "refused", "area": "none",
+                "titles": f"{axes['initiator']}/crystal", "status": "refused",
+                "rom_b": (lock or {}).get("pokecrystal11", {}).get("sha1", "")}
     errors = [f"pydec receipt does not name this cell: {key}={tokens.get(key)!r}, want {value!r}"
               for key, value in want.items()
               if value is not None and not (tokens.get(key) in value if isinstance(value, set) else tokens.get(key) == value)]
     if not tokens.get("area"):
         errors.append("pydec receipt does not name this cell: area= is empty or missing")
+    return errors
+
+
+def _refused_receipt_errors(lines: list[str], rom_sha1: str | None) -> list[str]:
+    """Only H7's B half may replace a save with pinned no-client/no-traffic evidence."""
+    rows = {}
+    for tag in ("DUO_GEN2", "ADMISSION_REFUSED", "NO_TRAFFIC", "CARTRAM_UNCHANGED", "RECEIPT"):
+        bodies = [line[len(tag) + 1:] for line in lines if line.startswith(tag + " ")]
+        if len(bodies) != 1:
+            return [f"b refused receipt requires exactly one {tag}"]
+        try:
+            rows[tag] = json.loads(bodies[0])
+        except ValueError:
+            return [f"b refused receipt has malformed {tag}"]
+        if not isinstance(rows[tag], dict):
+            return [f"b refused receipt has malformed {tag}"]
+    errors = []
+    forbidden = ("CLIENT", "BOOTED", "HELLO", "HELLO_AGAIN", "TX", "HOLD", "SAVE_WITNESS", "ENGINE_CAPTURE")
+    if any(line.split(" ", 1)[0] in forbidden for line in lines):
+        errors.append("b refused receipt contains admitted-client activity")
+    refusal, quiet, cart, receipt = (rows[tag] for tag in
+                                    ("ADMISSION_REFUSED", "NO_TRAFFIC", "CARTRAM_UNCHANGED", "RECEIPT"))
+    console = refusal.get("console")
+    if (not rom_sha1 or refusal.get("rom_sha1") != rom_sha1 or refusal.get("client") is not False
+            or not isinstance(console, str) or "refused" not in console):
+        errors.append("b refused receipt has no pinned admission refusal")
+    if quiet.get("tx") != 0 or type(quiet.get("frames")) is not int or quiet["frames"] < 600:
+        errors.append("b refused receipt has no 600-frame traffic-free hold")
+    digest = cart.get("before")
+    if (not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest)
+            or cart.get("after") != digest):
+        errors.append("b refused receipt has no unchanged CartRAM digest")
+    tags = list(rows)
+    positions = [next(i for i, line in enumerate(lines) if line.startswith(tag + " ")) for tag in tags]
+    if positions != sorted(positions):
+        errors.append("b refused receipt markers out of order")
+    head = rows["DUO_GEN2"]
+    if (receipt.get("schema") != "gen2-duo-admit-wrong-rom-v1"
+            or any(receipt.get(key) != head.get(key) for key in
+                   ("player", "scenario", "attempt", "title", "rom_sha1", "expect_admission"))):
+        errors.append("b refused receipt does not bind its header")
     return errors
 
 
@@ -309,11 +355,14 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
         if not verdicts or any(verdict != ["PASS"] for verdict in verdicts):
             errors.append(f"{side} receipt has no {prefix} PASS verdict, or a non-PASS one")
         if side == "pydec":
-            errors.extend(_pydec_cell_errors(lines, scenario, axes, capture_keys))
+            errors.extend(_pydec_cell_errors(lines, scenario, axes, capture_keys, lock))
             continue
         capture_keys[side] = _engine_capture_key(lines)
         title = titles[side]
         lock_key = f"poke{title}"
+        refused = scenario == "gen2_admit_wrong_rom" and side == "b"
+        if refused:
+            title, lock_key = "crystal", "pokecrystal11"
         if lock_key not in lock:
             errors.append(f"{side}: axes title {title!r} has no {lock_key!r} entry in "
                           f"data/gen2_sources.lock.json")
@@ -321,11 +370,19 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
         want = {"player": side, "scenario": scenario, "case": axes["fixtures"][side], "title": title,
                 "rom_sha1": lock[lock_key].get("sha1"),
                 "fixture_sha256": _fixture_sha256(root, axes["fixtures"][side])}
-        header = next((json.loads(line[len("DUO_GEN2 "):]) for line in lines
-                       if line.startswith("DUO_GEN2 ")), None)
-        if header is None or any(header.get(key) != value for key, value in want.items()):
+        if refused:
+            want = {"player": side, "scenario": scenario, "title": title,
+                    "rom_sha1": lock[lock_key].get("sha1"), "expect_admission": "refused"}
+        headers = [line[len("DUO_GEN2 "):] for line in lines if line.startswith("DUO_GEN2 ")]
+        try:
+            header = json.loads(headers[0]) if len(headers) == 1 else None
+        except ValueError:
+            header = None
+        if not isinstance(header, dict) or any(header.get(key) != value for key, value in want.items()):
             errors.append(f"{side} receipt header does not name {want}")
-        if not any(line.startswith("SAVE_WITNESS ") for line in lines):
+        if refused:
+            errors.extend(_refused_receipt_errors(lines, lock[lock_key].get("sha1")))
+        elif not any(line.startswith("SAVE_WITNESS ") for line in lines):
             errors.append(f"{side} receipt has no SAVE_WITNESS line")
     return errors
 

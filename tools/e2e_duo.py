@@ -72,6 +72,9 @@ SCENARIOS = {
                    "no_setup": True, "frames": 432000,
                    "target": {"a": "battle", "b": "battle_ot2"},
                    "oracle": "assert_gen2_faint_saved", "oracle_kwargs": {}},
+    "gen2_admit_wrong_rom": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
+                             "no_setup": True, "frames": 216000,
+                             "oracle": "assert_gen2_admit_wrong_rom", "oracle_kwargs": {}},
     "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     # The old `gen1`/`gen1_yellow` client and its scenario drivers were deleted (deletion plan
@@ -932,7 +935,7 @@ def evidence_contract(game):
     return FAMILY_EVIDENCE[family]
 
 
-def gen2_preflight(*, repo=None, game="gen2_new"):
+def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
     """Bind each side's fixture to its full qualification report and its title's pinned ROM."""
     root = Path(repo or REPO).resolve()
     if REPO not in sys.path:
@@ -946,7 +949,8 @@ def gen2_preflight(*, repo=None, game="gen2_new"):
         raise ValueError(f"not a Gen 2 duo pairing: {game}")
     result = {}
     for inst in ("a", "b"):
-        name = pairing["fixture"][inst]
+        refused = scenario == "gen2_admit_wrong_rom" and inst == "b"
+        name = "crystal_battle_ot2" if refused else pairing["fixture"][inst]
         title = BY_NAME[name].title
         ctx = load_context(title, root=root)
         rom = ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"]
@@ -962,6 +966,12 @@ def gen2_preflight(*, repo=None, game="gen2_new"):
                         "ot_id": ot_id, "qualification": receipt,
                         "qualification_attempt_id": report["attempt_id"],
                         "rom": rom, "rom_sha1": source["rom_sha1"], "title": title}
+        if refused:
+            pin = ctx.lock["outputs"]["pokecrystal11"]
+            wrong_rom = ctx.source_dir / pin["filename"]
+            if hashlib.sha1(wrong_rom.read_bytes()).hexdigest() != pin["sha1"]:
+                raise RuntimeError("b: refused Crystal 1.1 ROM differs from the pinned source")
+            result[inst].update(rom=wrong_rom, rom_sha1=pin["sha1"], expect_admission="refused")
     if result["a"]["ot_id"] == result["b"]["ot_id"] or result["a"]["sha256"] == result["b"]["sha256"]:
         raise RuntimeError("Gen 2 duo requires distinct qualified OTs and fixture bytes")
     return result
@@ -1515,6 +1525,8 @@ class DuoRun:
         env = None
         if self.gcfg.get("launch_profile") == "gen2":
             duo["mutate_otid"] = False
+            if self._gen2_inputs[inst].get("expect_admission") == "refused":
+                duo["expect_admission"] = "refused"
             env = dict(os.environ, SLINK_ROOT=WT_FWD, **self._gen2_plans[inst]["env"],
                        **self._gen2_env[inst])
         if self.gcfg["uses_savestate"]:
@@ -1576,7 +1588,7 @@ class DuoRun:
     def _prepare_gen2_lane(self):
         if not Path(EMUHAWK).is_file():
             raise FileNotFoundError(f"EmuHawk missing for Gen 2 duo: {EMUHAWK}")
-        self._gen2_inputs = gen2_preflight(game=self.game)
+        self._gen2_inputs = gen2_preflight(game=self.game, scenario=self.scenario)
         from run_gb_gate import GENS
 
         from tests.live.test_gen2_frame_align import u1_facts
@@ -1589,6 +1601,17 @@ class DuoRun:
             for inst, row in self._gen2_inputs.items()}
         self._gen2_env = {}
         for inst, row in self._gen2_inputs.items():
+            if row.get("expect_admission") == "refused":
+                plan = self._gen2_plans[inst]
+                database = Path(EMUHAWK).resolve().parent / "gamedb/gamedb_gbc.txt"
+                names = [line.split("\t") for line in database.read_text(encoding="utf-8-sig").splitlines()
+                         if line.split("\t", 1)[0].lower() == row["rom_sha1"]]
+                if len(names) != 1 or len(names[0]) < 4 or names[0][1] != "G" or names[0][3] != "GBC":
+                    raise RuntimeError("refused Crystal 1.1 gamedb binding missing or contradictory")
+                plan.update(rom=row["rom"], rom_sha1=row["rom_sha1"], saveram_name=names[0][2] + ".SaveRAM")
+                plan["env"].update(SLINK_GEN2_ROM_SHA1=row["rom_sha1"], SLINK_GEN2_SAVERAM_NAME=plan["saveram_name"])
+                self._gen2_env[inst] = {}
+                continue
             ctx = gen2_source_data.load_context(row["title"], root=Path(REPO))
             facts = gen2_fixtures.route_facts(row["title"], Path(REPO))
             env = inspect_env(gen2_fixtures.BY_NAME[row["name"]], row["fixture"].read_bytes(),
@@ -1607,13 +1630,33 @@ class DuoRun:
             if not (Path(REPO) / path).is_file():
                 raise FileNotFoundError(f"Gen 2 duo driver missing: {path}")
         oracle = importlib.import_module("gen2_duo_oracles")
-        oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle"}[self.scenario]
-        if not all(callable(getattr(oracle, name, None)) for name in ("check_save_witness", oracle_name)):
+        oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle",
+                       "gen2_admit_wrong_rom": "admit_wrong_rom_oracle"}[self.scenario]
+        witness = "check_admit_wrong_rom_witness" if self.scenario == "gen2_admit_wrong_rom" else "check_save_witness"
+        if not all(callable(getattr(oracle, name, None)) for name in (witness, oracle_name)):
             raise RuntimeError("Gen 2 duo witness/oracle implementation missing")
 
     def check_gen2_save_witness(self, results):
         oracle = importlib.import_module("gen2_duo_oracles")
+        if self.scenario == "gen2_admit_wrong_rom":
+            return oracle.check_admit_wrong_rom_witness(results, **self._gen2_admit_paths())
         return oracle.check_save_witness(results)
+
+    def _gen2_admit_paths(self):
+        plan = self._gen2_plans["b"]
+        return {"boot_saveram": {inst: row["fixture"] for inst, row in self._gen2_inputs.items()},
+                "refused_saveram": Path(plan["directory"]) / plan["saveram_name"]}
+
+    def _gen2_admit_snapshot(self):
+        return {"status": self._status(), "raw": self._raw_state(),
+                "links": json.loads(Path(self.data_dir, "links.json").read_text(encoding="utf-8")),
+                "events": self._reconnect_events()}
+
+    def assert_gen2_admit_wrong_rom(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.admit_wrong_rom_oracle(results, data_dir=self.data_dir,
+            before=self._gen2_admit_before, after=self._gen2_admit_snapshot(),
+            on_verified=self._record_gen2_facts, **self._gen2_admit_paths(), **kwargs)
 
     def assert_gen2_link_saved(self, results, **kwargs):
         oracle = importlib.import_module("gen2_duo_oracles")
@@ -1634,7 +1677,8 @@ class DuoRun:
         if not isinstance(facts, dict) or any(not isinstance(facts.get(key), str)
                                              or not facts[key] for key in fields):
             raise RuntimeError("Gen 2 oracle verified facts missing")
-        if facts["status"] not in ("alive", "dead", "memorial"):
+        allowed = ("refused",) if self.scenario == "gen2_admit_wrong_rom" else ("alive", "dead", "memorial")
+        if facts["status"] not in allowed:
             raise RuntimeError("Gen 2 oracle verified status invalid")
         self._gen2_verified_facts = dict(facts)
 
@@ -4061,14 +4105,17 @@ class DuoRun:
     # ── per-scenario orchestration ───────────────────────────────────────────
     def orchestrate(self):
         if getattr(self, "gcfg", {}).get("launch_profile") == "gen2":
+            admitted = ("a",) if self.scenario == "gen2_admit_wrong_rom" else ("a", "b")
             def both_hellos():
                 players = (self._status() or {}).get("players", {})
                 return all(players.get(inst, {}).get("connected")
                            and players[inst].get("admission") == "admitted"
                            and any(line.startswith("HELLO ") for line in
                                    (read_result(self.artifact_name, inst) or "").splitlines())
-                           for inst in ("a", "b"))
+                            for inst in admitted)
             self.wait_for("both admitted Gen 2 hellos", both_hellos, 300)
+            if self.scenario == "gen2_admit_wrong_rom":
+                self._gen2_admit_before = self._gen2_admit_snapshot()
             self.go()
             return
         if self.scenario == "admit_randomized_new":
@@ -4432,6 +4479,8 @@ class DuoRun:
                 if passed and scenario_family(getattr(self, "game", "")) == "gen2_new":
                     reason = " ".join(f"{key}={self._gen2_verified_facts[key]}"
                                       for key in ("a", "b", "area", "titles", "status"))
+                    if self.scenario == "gen2_admit_wrong_rom":
+                        reason += f" scenario={self.scenario} rom_b={self._gen2_verified_facts['rom_b']}"
                 self._pydec_note(f"PYDEC: {'PASS' if passed else 'FAIL'} {reason}")
             print(f"[duo] {self.scenario}: a={'PASS' if pa else 'FAIL'} "
                   f"b={'PASS' if pb else 'FAIL'}")
@@ -4475,6 +4524,8 @@ def list_lines(game):
     for name in scenarios_for(game):
         targets = (GAMES[game]["fixture"] if GAMES[game].get("launch_profile") == "gen2"
                    else SCENARIOS[name].get("target", "town"))
+        if name == "gen2_admit_wrong_rom":
+            targets = {**targets, "b": "crystal_battle_ot2"}
         shown = (", ".join(f"{inst}:{targets[inst]}" for inst in ("a", "b"))
                  if isinstance(targets, dict) else targets)
         lines.append(f"{name}  attempts={scenario_attempt_limit(name, game)}  targets={shown}")

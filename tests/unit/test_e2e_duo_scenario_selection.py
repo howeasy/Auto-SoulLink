@@ -46,9 +46,73 @@ def test_family_evidence_contracts_are_explicit_and_aliases_share_one():
             assert contract == duo_module.EvidenceContract()
 
 
+@pytest.mark.parametrize("fault", (None, "wrong_rom"))
+def test_gen2_refusal_preflight_binds_crystal11(monkeypatch, tmp_path, fault):
+    import hashlib
+    import json
+    from types import SimpleNamespace
+
+    from tests.live import test_gen2_new_gates as gates
+    from tools import gen2_source_data
+
+    saves = tmp_path / "tests/fixtures/gen2"
+    (saves / "receipts").mkdir(parents=True)
+    for name in ("crystal_battle", "crystal_battle_ot2"):
+        (saves / f"{name}.SaveRAM").write_bytes(name.encode())
+        (saves / "receipts" / f"{name}.qualification.json").write_text(json.dumps({"attempt_id": name}))
+    rom = tmp_path / "pokecrystal.gbc"
+    wrong = tmp_path / "pokecrystal11.gbc"
+    rom.write_bytes(b"admitted")
+    wrong.write_bytes(b"refused")
+    admitted_hash = hashlib.sha1(rom.read_bytes()).hexdigest()
+    refused_hash = hashlib.sha1(wrong.read_bytes()).hexdigest()
+    if fault:
+        wrong.write_bytes(b"different")
+    context = SimpleNamespace(source_dir=tmp_path, artifact="pokecrystal", lock={"outputs": {
+        "pokecrystal": {"filename": rom.name},
+        "pokecrystal11": {"filename": wrong.name, "sha1": refused_hash}}},
+        source_record=lambda: {"rom_sha1": admitted_hash})
+    monkeypatch.setattr(gen2_source_data, "load_context", lambda *args, **kwargs: context)
+    monkeypatch.setattr(gates, "qualified_identity", lambda name, *args, **kwargs: 1 if name == "crystal_battle" else 2)
+    if fault:
+        with pytest.raises(RuntimeError, match="Crystal 1.1 ROM differs"):
+            duo_module.gen2_preflight(repo=tmp_path, scenario="gen2_admit_wrong_rom")
+    else:
+        rows = duo_module.gen2_preflight(repo=tmp_path, scenario="gen2_admit_wrong_rom")
+        assert rows["a"]["rom"] == rom
+        assert rows["b"]["rom"] == wrong
+        assert rows["b"]["rom_sha1"] == refused_hash
+        assert rows["b"]["expect_admission"] == "refused"
+
+
+@pytest.mark.parametrize("admitted", (True, False))
+def test_gen2_refusal_go_requires_only_admitted_a(monkeypatch, admitted):
+    run = object.__new__(DuoRun)
+    run.game, run.scenario = "gen2_new", "gen2_admit_wrong_rom"
+    run.gcfg, run._lane = GAMES[run.game], "cc"
+    run._status = lambda: {"players": {"a": {"connected": True,
+        "admission": "admitted" if admitted else "refused"}}}
+    monkeypatch.setattr(duo_module, "read_result", lambda scenario, side: "HELLO {}" if side == "a" else "")
+    run._gen2_admit_snapshot = lambda: {"baseline": True}
+    released = []
+    run.go = lambda: released.append(True)
+    def wait(label, predicate, timeout):
+        if not predicate():
+            raise RuntimeError("no admitted hello")
+    run.wait_for = wait
+    if admitted:
+        run.orchestrate()
+        assert released == [True]
+        assert run._gen2_admit_before == {"baseline": True}
+    else:
+        with pytest.raises(RuntimeError, match="no admitted hello"):
+            run.orchestrate()
+        assert not released
+
+
 def test_gen2_new_selects_link_and_faint_with_required_evidence():
     assert "gen2_new" in GAMES
-    assert scenarios_for("gen2_new") == ["link", "gen2_faint"]
+    assert scenarios_for("gen2_new") == ["link", "gen2_faint", "gen2_admit_wrong_rom"]
     contract = duo_module.evidence_contract("gen2_new")
     assert contract.require_oracle and contract.witness_validator
     assert callable(getattr(DuoRun, contract.witness_validator, None))
@@ -69,12 +133,13 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
     assert game in GAMES
     assert GAMES[game]["game"] == "gen2_new"
     assert GAMES[game]["fixture"] == fixtures
-    assert scenarios_for(game) == ["link", "gen2_faint"]
+    assert scenarios_for(game) == ["link", "gen2_faint", "gen2_admit_wrong_rom"]
     assert duo_module.evidence_contract(game) is duo_module.evidence_contract("gen2_new")
     assert not GAMES[game].get("server_rom_routes")
     assert duo_list_lines(game) == [
-        f"{scenario}  attempts=1  targets=a:{fixtures['a']}, b:{fixtures['b']}"
-        for scenario in ("link", "gen2_faint")]
+        f"{scenario}  attempts=1  targets=a:{fixtures['a']}, "
+        f"b:{'crystal_battle_ot2' if scenario == 'gen2_admit_wrong_rom' else fixtures['b']}"
+        for scenario in ("link", "gen2_faint", "gen2_admit_wrong_rom")]
 
 
 @pytest.mark.parametrize("game,titles,names", (
@@ -200,7 +265,7 @@ def test_gen2_duo_wrapper_selects_pairing_for_preflight_and_launch(
     monkeypatch.setattr(wrapper.duo, "gen2_preflight", lambda **kw: checked.append(kw))
 
     def run(cmd, **kwargs):
-        assert checked == [{"repo": tmp_path, "game": game}]
+        assert checked == [{"repo": tmp_path, "game": game, "scenario": "link"}]
         assert cmd[-6:] == ["--game", game, "--scenario", "link", "--lane", lane]
         for side in ("a", "b", "pydec"):
             prefix = "PYDEC" if side == "pydec" else "RESULT"
