@@ -160,6 +160,18 @@
           "expected_hex": "C83B0202",
           "rom_offset": 82484
         },
+        "intro_getmons_body": {
+          "expected_hex": "30B5034D2878002804D0012814D02EE0823E0202074C68782070002000210022FAF7EAFF207804F039F92878013028701DE00000C43B020208480268002A16D168780130687006490006000E097888420CD104490448086009E00000C83B0202CC3B0202844F0003213001082A7030BC01BC0047",
+          "rom_offset": 77740
+        },
+        "intro_store_begin": {
+          "expected_hex": "00B500F037F804490020487003490448086001BC00470000823E0202844F0003AD2F0108",
+          "rom_offset": 74688
+        },
+        "intro_store_controllers": {
+          "expected_hex": "80B4194919480860002219488046002318498C46184FFF26184D194C4046614604318C46043901C1D11908783043087050190370101903700132032AEEDDFFF7B9FF10480024046065F0FCF836F078FE00480047992B04090C48047008BC9846F0BC01BC00470000844F0003BD23010811E30208E04F0003D63B0202F83F0202FC3F0202C83B0202542B0202DC3D020230B50448006802210840002804D000F0BBF803E04C2B020200F01EF800F01EFA0B4800684021084000280ED10024094801788C4209DA051C2006000E00211AF12DFD013428788442F6DB30BC01BC00474C2B0202CC3B020210B50C4802680124131C2340002B4FD109490A480860802040021040002817D0074A084911600848037051604470074902206FE04C2B0202844F0003C1230108",
+          "rom_offset": 53884
+        },
         "pp_up_masks": {
           "expected_hex": "030C30C0",
           "rom_offset": 2481825
@@ -188,7 +200,10 @@
         "derived.SHEDINJA_SPECIES_ID": "data/games/gen3_frlge/rr_species.json:\"303\"=\"Shedinja\" (RR species table; CFRU keeps this id unrenumbered)",
         "ram.BATTLE_CONTROLLER_EXEC_FLAGS_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c controller_exec_marker:LDR@0x1725A/0x1727C pools@0x17274/0x17290; OR/STR@0x17266..0x1726A,0x17284..0x1728A; controller_exec_reader:LDR@0x141DC pool@0x14234,word-test@0x141FC..0x14204",
         "ram.SB1_PTR_ADDR": "lua/games/gen3_frlge.lua:264 (the old client's address, kept for parity: it is a literal-pool constant inside IntrMain_Buffer, not the pointer -- the new client reads write_checkpoint.pointers.gSaveBlock1Ptr, which is ROM-derived)",
+        "rom.BATTLE_INTRO_GET_MONS_DATA_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c intro_store_begin:LDR@0x123CC/0x123CE pools@0x123DC/0x123E0 STR@0x123D0 (the tail of BeginBattleIntro); the data-request phase is the intro_getmons_body anchor (0x12FAC)",
         "rom.BATTLE_MOVES_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c calculate_pp:LDR@0x41026 pool@0x4105C",
+        "rom.BEGIN_BATTLE_INTRO_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c intro_store_controllers:LDR@0xD374/0xD376 pools@0xD39C/0xD3A0 STR@0xD378; the BeginBattleIntro body is the intro_store_begin anchor (0x123C0, == FR)",
+        "rom.BEGIN_BATTLE_INTRO_DUMMY_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c intro_store_controllers:LDR@0xD27E/0xD280 pools@0xD2E4/0xD2E8 STR@0xD282",
         "rom.EXPERIENCE_TABLES_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c box_level:LDR@0x3E850 pool@0x3E894",
         "rom.HANDLE_TURN_ACTION_SELECTION_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c action_callback_store:0x1070626..0x107062A; pool@0x10706DC; entry@0x14040 (Thumb)",
         "rom.PP_UP_GET_MASK_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c calculate_pp:LDR@0x41032 pool@0x41060; bytes@0x25DEA1"
@@ -299,7 +314,10 @@
         "TRAINER_OPPONENT_ADDR": 33785518
       },
       "rom": {
+        "BATTLE_INTRO_GET_MONS_DATA_ADDR": 134295469,
         "BATTLE_MOVES_ADDR": 152379856,
+        "BEGIN_BATTLE_INTRO_ADDR": 134292417,
+        "BEGIN_BATTLE_INTRO_DUMMY_ADDR": 134292413,
         "CB2_EVOLUTION_BEGIN_ADDR": 135060761,
         "CB2_EVOLUTION_LOAD_ADDR": 135061737,
         "CB2_EVOLUTION_UPDATE_ADDR": 135063313,
@@ -329,6 +347,9 @@
       "rom_md5": "8529f3a45d32bce4da637976fcf269d4",
       "rom_sha1": "964f951a0fdaf209e4ea1344883ef0d557bb3a80",
       "rom_thumb": [
+        "BATTLE_INTRO_GET_MONS_DATA_ADDR",
+        "BEGIN_BATTLE_INTRO_ADDR",
+        "BEGIN_BATTLE_INTRO_DUMMY_ADDR",
         "CB2_EVOLUTION_BEGIN_ADDR",
         "CB2_EVOLUTION_LOAD_ADDR",
         "CB2_EVOLUTION_UPDATE_ADDR",

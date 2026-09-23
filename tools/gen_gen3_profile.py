@@ -111,6 +111,20 @@ FRLG_SYM_ADDR = {
     ("rom", "PP_UP_GET_MASK_ADDR"): "gPPUpGetMask",
 }
 
+# C5-9: the same three values for the vanilla titles, taken from each title's own .sym.  They are
+# stored Thumb (|1) because that is the form gBattleMainFunc holds and the write_checkpoint pack's
+# `expect_symbol` already produces (syms[symbol][0] | 1).  The symbol's .sym scope letter varies
+# (BeginBattleIntroDummy/BeginBattleIntro are `g`, BattleIntroGetMonsData is `l`), so the lookup
+# below accepts any scope rather than the `g`-only one FRLG_SYM_ADDR uses.
+FRLG_SYM_THUMB_ADDR = {
+    ("rom", "BEGIN_BATTLE_INTRO_ADDR"): "BeginBattleIntro",
+    ("rom", "BEGIN_BATTLE_INTRO_DUMMY_ADDR"): "BeginBattleIntroDummy",
+    ("rom", "BATTLE_INTRO_GET_MONS_DATA_ADDR"): "BattleIntroGetMonsData",
+}
+# _thumb_keys runs inside _title(), before these facts exist, so their keys are declared here.
+INTRO_THUMB_KEYS = ("BEGIN_BATTLE_INTRO_ADDR", "BEGIN_BATTLE_INTRO_DUMMY_ADDR",
+                    "BATTLE_INTRO_GET_MONS_DATA_ADDR")
+
 # ── gen3_rr facts sourced from the OLD client (lua/memory_gba.lua), per the owner's 2026-09-23
 # ruling relayed on card C4-2a: the old RR client is production-tested, so its RAM offsets are
 # acceptable RR evidence where no ROM/pret evidence exists. Every one of these is read from
@@ -166,6 +180,28 @@ RR_ROM_ANCHORS = {
     "action_callback_store": (0x1070626, "2d4b2d4a1a60"),
     "action_callback_pool": (0x10706DC, "844f000341400108"),
     "action_callback_entry": (0x14040, "f0b557464e464546e0b487b00f480021"),
+    # C5-9 (the rival-swap window): every site that installs gBattleMainFunc with a phase value.
+    # Each is a Thumb LDR pair (the gBattleMainFunc pointer, then the value) followed by STR, so
+    # the pool word alone is not evidence -- the store is.  pret: battle_controllers.c:88,113,150,
+    # 175,213 assigns BeginBattleIntro / BeginBattleIntroDummy per battle type, and
+    # BeginBattleIntro's own tail writes BattleIntroGetMonsData|1 (battle_main.c:2196-2200).
+    "intro_store_controllers": (0xD27C,
+        "80b4194919480860002219488046002318498c46184fff26184d194c4046614604318c46"
+        "043901c1d11908783043087050190370101903700132032aeeddfff7b9ff104800240460"
+        "65f0fcf836f078fe00480047992b04090c48047008bc9846f0bc01bc00470000844f0003"
+        "bd23010811e30208e04f0003d63b0202f83f0202fc3f0202c83b0202542b0202dc3d0202"
+        "30b50448006802210840002804d000f0bbf803e04c2b020200f01ef800f01efa0b480068"
+        "4021084000280ed10024094801788c4209da051c2006000e00211af12dfd013428788442"
+        "f6db30bc01bc00474c2b0202cc3b020210b50c4802680124131c2340002b4fd109490a48"
+        "0860802040021040002817d0074a084911600848037051604470074902206fe04c2b0202"
+        "844f0003c1230108"),
+    "intro_store_begin": (0x123C0,
+        "00b500f037f804490020487003490448086001bc00470000823e0202844f0003ad2f0108"),
+    "intro_getmons_body": (0x12FAC,
+        "30b5034d2878002804d0012814d02ee0823e0202074c68782070002000210022faf7eaff"
+        "207804f039f92878013028701de00000c43b020208480268002a16d16878013068700649"
+        "0006000e097888420cd104490448086009e00000c83b0202cc3b0202844f000321300108"
+        "2a7030bc01bc0047"),
 }
 
 
@@ -212,6 +248,18 @@ def rr_rom_facts(rom: bytes | None = None) -> dict:
         raise ValueError("RR trainer reader no longer uses canonical gSaveBlock2Ptr")
     if literal(0x1070626) != 0x03004F84 or read(0x107062A, 2) != 0x601A:
         raise ValueError("RR callback witness no longer stores into gBattleMainFunc")
+    # C5-9: the intro window's callback installs (see RR_ROM_ANCHORS).  Each is LDR-the-pointer,
+    # LDR-the-value, STR -- the same shape as the 0x1070626 witness above -- so the facts are
+    # *stored*, not merely pooled.
+    for ldr_ptr, ldr_val, str_site, label in (
+            (0xD27E, 0xD280, 0xD282, "intro_store_controllers/BeginBattleIntroDummy"),
+            (0xD374, 0xD376, 0xD378, "intro_store_controllers/BeginBattleIntro"),
+            (0x123CC, 0x123CE, 0x123D0, "intro_store_begin/BattleIntroGetMonsData")):
+        if literal(ldr_ptr) != 0x03004F84 or read(str_site, 2) != 0x6008:
+            raise ValueError(f"RR intro callback install no longer stores into gBattleMainFunc "
+                             f"({label} @0x{ldr_ptr:X})")
+        if literal(ldr_val) & 1 == 0:
+            raise ValueError(f"RR intro install is not a Thumb pointer ({label})")
     exec_flags = literal(0x1725A)
     if exec_flags != literal(0x1727C) or exec_flags != literal(0x141DC):
         raise ValueError("RR controller execution-flag writer/reader disagree")
@@ -231,6 +279,14 @@ def rr_rom_facts(rom: bytes | None = None) -> dict:
         ("derived", "BASESTATS_GROWTH_RATE_OFFSET"): (growth_offset, "box_level:LDRB@0x3E85C"),
         ("rom", "HANDLE_TURN_ACTION_SELECTION_ADDR"): (literal(0x1070628),
             "action_callback_store:0x1070626..0x107062A; pool@0x10706DC; entry@0x14040 (Thumb)"),
+        ("rom", "BEGIN_BATTLE_INTRO_ADDR"): (literal(0xD376),
+            "intro_store_controllers:LDR@0xD374/0xD376 pools@0xD39C/0xD3A0 STR@0xD378; "
+            "the BeginBattleIntro body is the intro_store_begin anchor (0x123C0, == FR)"),
+        ("rom", "BEGIN_BATTLE_INTRO_DUMMY_ADDR"): (literal(0xD280),
+            "intro_store_controllers:LDR@0xD27E/0xD280 pools@0xD2E4/0xD2E8 STR@0xD282"),
+        ("rom", "BATTLE_INTRO_GET_MONS_DATA_ADDR"): (literal(0x123CE),
+            "intro_store_begin:LDR@0x123CC/0x123CE pools@0x123DC/0x123E0 STR@0x123D0 (the tail of "
+            "BeginBattleIntro); the data-request phase is the intro_getmons_body anchor (0x12FAC)"),
     }
     return {key: (value, f"rom:patch/build/slink_RR.gba sha1={RR_WITNESS_SHA1} {where}")
             for key, (value, where) in facts.items()}
@@ -536,6 +592,19 @@ def build(pack: str, profiles: dict, source: dict) -> dict:
                 entry[section][name] = int(sym_match[1], 16)
                 entry["_src"][f"{section}.{name}"] = (
                     f"{path}:{_line_of(text, sym_match.start())} ({symbol}; {PRET_PIN})")
+            for (section, name), symbol in FRLG_SYM_THUMB_ADDR.items():
+                sym_matches = list(re.finditer(
+                    rf"^([0-9a-fA-F]{{8}})\s+[glt]\s+[0-9a-fA-F]+\s+{re.escape(symbol)}$", text, re.M))
+                if len(sym_matches) != 1:
+                    sys.exit(f"gen_gen3_profile: {path} must name exactly one {symbol}")
+                sym_match = sym_matches[0]
+                entry[section][name] = int(sym_match[1], 16) | 1
+                entry["_src"][f"{section}.{name}"] = (
+                    f"{path}:{_line_of(text, sym_match.start())} "
+                    f"({symbol}|1, the Thumb form gBattleMainFunc stores; {PRET_PIN})")
+                if name in INTRO_THUMB_KEYS:
+                    entry["rom_thumb"].append(name)
+                    entry["rom_thumb"].sort()
             # C4-3c separately requested correction: the shared legacy vanilla
             # table carries FR's default; LG must publish its own table address.
             if title == "leafgreen":
@@ -585,6 +654,8 @@ def build(pack: str, profiles: dict, source: dict) -> dict:
                 raise ValueError(f"RR binary fact would replace existing {section}.{name}")
             entry[section][name] = value
             entry["_src"][f"{section}.{name}"] = where
+            if section == "rom" and name in INTRO_THUMB_KEYS:
+                entry["rom_thumb"].append(name)
         entry["rom_thumb"].append("HANDLE_TURN_ACTION_SELECTION_ADDR")
         entry["rom_thumb"].sort()
         entry["_rom_anchors"] = {

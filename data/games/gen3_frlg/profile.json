@@ -73,7 +73,10 @@
         "derived.SHEDINJA_SPECIES_ID": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/constants/species.h:312 (SPECIES_SHEDINJA); used by CalculateMonStats' 1-HP exception, src/pokemon.c:2124-2132",
         "ram.POKEMON_STORAGE_BASE": "data/gen3/pret/pokefirered.sym:173 (gPokemonStorage; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
         "ram.TRAINER_OPPONENT_ADDR": "data/gen3/pret/pokefirered.sym:287 (gTrainerBattleOpponent_A; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.BATTLE_INTRO_GET_MONS_DATA_ADDR": "data/gen3/pret/pokefirered.sym:1607 (BattleIntroGetMonsData|1, the Thumb form gBattleMainFunc stores; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
         "rom.BATTLE_MOVES_ADDR": "data/gen3/pret/pokefirered.sym:26905 (gBattleMoves; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.BEGIN_BATTLE_INTRO_ADDR": "data/gen3/pret/pokefirered.sym:1602 (BeginBattleIntro|1, the Thumb form gBattleMainFunc stores; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.BEGIN_BATTLE_INTRO_DUMMY_ADDR": "data/gen3/pret/pokefirered.sym:1601 (BeginBattleIntroDummy|1, the Thumb form gBattleMainFunc stores; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
         "rom.EXPERIENCE_TABLES_ADDR": "data/gen3/pret/pokefirered.sym:26980 (gExperienceTables; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
         "rom.PP_UP_GET_MASK_ADDR": "data/gen3/pret/pokefirered.sym:27396 (gPPUpGetMask; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)"
       },
@@ -144,7 +147,10 @@
       },
       "rom": {
         "BASESTATS_ADDR": 136660868,
+        "BATTLE_INTRO_GET_MONS_DATA_ADDR": 134295469,
         "BATTLE_MOVES_ADDR": 136645636,
+        "BEGIN_BATTLE_INTRO_ADDR": 134292417,
+        "BEGIN_BATTLE_INTRO_DUMMY_ADDR": 134292413,
         "CB2_EVOLUTION_BEGIN_ADDR": 135060761,
         "CB2_EVOLUTION_LOAD_ADDR": 135061737,
         "CB2_EVOLUTION_UPDATE_ADDR": 135063313,
@@ -166,6 +172,9 @@
       },
       "rom_sha1": "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc",
       "rom_thumb": [
+        "BATTLE_INTRO_GET_MONS_DATA_ADDR",
+        "BEGIN_BATTLE_INTRO_ADDR",
+        "BEGIN_BATTLE_INTRO_DUMMY_ADDR",
         "CB2_EVOLUTION_BEGIN_ADDR",
         "CB2_EVOLUTION_LOAD_ADDR",
         "CB2_EVOLUTION_UPDATE_ADDR",
@@ -247,7 +256,10 @@
         "ram.POKEMON_STORAGE_BASE": "data/gen3/pret/pokeleafgreen.sym:173 (gPokemonStorage; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
         "ram.TRAINER_OPPONENT_ADDR": "data/gen3/pret/pokeleafgreen.sym:287 (gTrainerBattleOpponent_A; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
         "rom.BASESTATS_ADDR": "data/gen3/pret/pokeleafgreen.sym:26983 (gSpeciesInfo; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.BATTLE_INTRO_GET_MONS_DATA_ADDR": "data/gen3/pret/pokeleafgreen.sym:1607 (BattleIntroGetMonsData|1, the Thumb form gBattleMainFunc stores; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
         "rom.BATTLE_MOVES_ADDR": "data/gen3/pret/pokeleafgreen.sym:26907 (gBattleMoves; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.BEGIN_BATTLE_INTRO_ADDR": "data/gen3/pret/pokeleafgreen.sym:1602 (BeginBattleIntro|1, the Thumb form gBattleMainFunc stores; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.BEGIN_BATTLE_INTRO_DUMMY_ADDR": "data/gen3/pret/pokeleafgreen.sym:1601 (BeginBattleIntroDummy|1, the Thumb form gBattleMainFunc stores; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
         "rom.EXPERIENCE_TABLES_ADDR": "data/gen3/pret/pokeleafgreen.sym:26982 (gExperienceTables; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
         "rom.PP_UP_GET_MASK_ADDR": "data/gen3/pret/pokeleafgreen.sym:27398 (gPPUpGetMask; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)"
       },
@@ -318,7 +330,10 @@
       },
       "rom": {
         "BASESTATS_ADDR": 136660832,
+        "BATTLE_INTRO_GET_MONS_DATA_ADDR": 134295469,
         "BATTLE_MOVES_ADDR": 136645600,
+        "BEGIN_BATTLE_INTRO_ADDR": 134292417,
+        "BEGIN_BATTLE_INTRO_DUMMY_ADDR": 134292413,
         "CB2_EVOLUTION_BEGIN_ADDR": 135060761,
         "CB2_EVOLUTION_LOAD_ADDR": 135061737,
         "CB2_EVOLUTION_UPDATE_ADDR": 135063313,
@@ -340,6 +355,9 @@
       },
       "rom_sha1": "574fa542ffebb14be69902d1d36f1ec0a4afd71e",
       "rom_thumb": [
+        "BATTLE_INTRO_GET_MONS_DATA_ADDR",
+        "BEGIN_BATTLE_INTRO_ADDR",
+        "BEGIN_BATTLE_INTRO_DUMMY_ADDR",
         "CB2_EVOLUTION_BEGIN_ADDR",
         "CB2_EVOLUTION_LOAD_ADDR",
         "CB2_EVOLUTION_UPDATE_ADDR",

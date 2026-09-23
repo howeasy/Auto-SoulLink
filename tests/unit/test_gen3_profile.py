@@ -155,6 +155,12 @@ def test_vanilla_storage_and_party_facts(name: str) -> None:
         assert key in title["_src"], f"{name}: {key} has no _src citation"
         assert path in title["_src"][key], f"{name}: {key} citation does not name its own .sym file"
         base_src[key] = title["_src"][key]
+    # C5-9: the intro window's Thumb values, each cited from this title's own .sym.
+    for key in ("rom.BEGIN_BATTLE_INTRO_ADDR", "rom.BEGIN_BATTLE_INTRO_DUMMY_ADDR",
+                "rom.BATTLE_INTRO_GET_MONS_DATA_ADDR"):
+        assert key in title["_src"], f"{name}: {key} has no _src citation"
+        assert path in title["_src"][key], f"{name}: {key} citation does not name its own .sym file"
+        base_src[key] = title["_src"][key]
     if name == "leafgreen":
         base_src["rom.BASESTATS_ADDR"] = title["_src"]["rom.BASESTATS_ADDR"]
     assert title["_src"] == base_src
@@ -226,6 +232,9 @@ RR_BINARY_VALUES = {
     ("rom", "PP_UP_GET_MASK_ADDR"): 0x0825DEA1,
     ("derived", "BASESTATS_GROWTH_RATE_OFFSET"): 0x13,
     ("rom", "HANDLE_TURN_ACTION_SELECTION_ADDR"): 0x08014041,
+    ("rom", "BEGIN_BATTLE_INTRO_ADDR"): 0x080123C1,
+    ("rom", "BEGIN_BATTLE_INTRO_DUMMY_ADDR"): 0x080123BD,
+    ("rom", "BATTLE_INTRO_GET_MONS_DATA_ADDR"): 0x08012FAD,
 }
 
 
@@ -237,6 +246,11 @@ def test_rr_rom_pins_are_in_the_generated_profile():
     for (section, key), expected in RR_BINARY_VALUES.items():
         assert title[section][key] == facts[section, key][0] == expected
     assert "HANDLE_TURN_ACTION_SELECTION_ADDR" in title["rom_thumb"]
+    # C5-9: the intro window's values are Thumb pointers, marked so no consumer re-strips bit 0.
+    for key in ("BEGIN_BATTLE_INTRO_ADDR", "BEGIN_BATTLE_INTRO_DUMMY_ADDR",
+                "BATTLE_INTRO_GET_MONS_DATA_ADDR"):
+        assert key in title["rom_thumb"], key
+        assert title["rom"][key] & 1 == 1, key
     # Odd-address byte data must not accidentally become a Thumb function pin.
     assert "PP_UP_GET_MASK_ADDR" not in title["rom_thumb"]
 
@@ -244,7 +258,9 @@ def test_rr_rom_pins_are_in_the_generated_profile():
 @pytest.mark.parametrize("anchor", ["calculate_pp", "box_level", "trainer_id", "pp_up_masks",
                                     "action_callback_store", "action_callback_pool",
                                     "action_callback_entry", "controller_exec_marker",
-                                    "controller_exec_reader", "controller_exec_reader_pool"])
+                                    "controller_exec_reader", "controller_exec_reader_pool",
+                                    "intro_store_controllers", "intro_store_begin",
+                                    "intro_getmons_body"])
 def test_rr_rom_anchor_mutation_refuses_the_facts(anchor):
     from tools.gen_gen3_profile import RR_ROM_ANCHORS, rr_rom_facts
 
@@ -328,6 +344,78 @@ def test_p4_c4_2a_sym_addresses_match_the_titles_own_sym_file(name, symbol, sect
     matches = re.findall(rf"^([0-9a-fA-F]{{8}})\s+g\s+[0-9a-fA-F]+\s+{symbol}$", text, re.M)
     assert len(matches) == 1, f"{path}: expected exactly one {symbol}"
     assert _title(name)[section][key] == int(matches[0], 16)
+
+
+@pytest.mark.parametrize("name,symbol,key", [
+    ("firered", "BeginBattleIntro", "BEGIN_BATTLE_INTRO_ADDR"),
+    ("leafgreen", "BeginBattleIntro", "BEGIN_BATTLE_INTRO_ADDR"),
+    ("firered", "BeginBattleIntroDummy", "BEGIN_BATTLE_INTRO_DUMMY_ADDR"),
+    ("leafgreen", "BeginBattleIntroDummy", "BEGIN_BATTLE_INTRO_DUMMY_ADDR"),
+    ("firered", "BattleIntroGetMonsData", "BATTLE_INTRO_GET_MONS_DATA_ADDR"),
+    ("leafgreen", "BattleIntroGetMonsData", "BATTLE_INTRO_GET_MONS_DATA_ADDR"),
+])
+def test_c59_intro_values_come_from_the_titles_own_sym(name, symbol, key) -> None:
+    """C5-9: independently re-derive each intro value from the title's .sym, in the Thumb form
+    gBattleMainFunc holds (|1), accepting any scope letter (BattleIntroGetMonsData is local)."""
+    path = f"data/gen3/pret/poke{name}.sym"
+    text = (REPO / path).read_text(encoding="utf-8")
+    matches = re.findall(rf"^([0-9a-fA-F]{{8}})\s+[glt]\s+[0-9a-fA-F]+\s+{symbol}$", text, re.M)
+    assert len(matches) == 1, f"{path}: expected exactly one {symbol}"
+    title = _title(name)
+    assert title["rom"][key] == int(matches[0], 16) | 1
+    assert "|1" in title["_src"][f"rom.{key}"]
+
+
+def test_c59_rr_stores_the_intro_values_into_gBattleMainFunc() -> None:
+    """C5-9: RR's evidence is the *store*, not the pool. Each captured site is a Thumb LDR pair
+    (gBattleMainFunc pointer, then the value) followed by STR r0,[r1], so the pool word alone
+    cannot make a fact; the write_checkpoint pack's HANDLE_TURN_ACTION_SELECTION pin uses the
+    same shape (0x1070626)."""
+    from tools.gen_gen3_profile import RR_ROM_ANCHORS
+
+    def window(name: str) -> bytes:
+        off, raw = RR_ROM_ANCHORS[name]
+        return bytes.fromhex(raw)
+
+    controllers, begin, getmons = window("intro_store_controllers"), window("intro_store_begin"), \
+        window("intro_getmons_body")
+    mbf = b"\x84\x4f\x00\x03"                                    # 0x03004F84, gBattleMainFunc
+    for blob, base, ldr_ptr, ldr_val, store in (
+            (controllers, 0xD27C, 0xD27E, 0xD280, 0xD282),
+            (controllers, 0xD27C, 0xD374, 0xD376, 0xD378),
+            (begin, 0x123C0, 0x123CC, 0x123CE, 0x123D0)):
+        at = blob[ldr_ptr - base:ldr_val - base + 2]
+        assert at[1] == 0x49 and at[3] == 0x48, (hex(ldr_ptr), at.hex())
+        assert blob[store - base:store - base + 2] == b"\x08\x60"       # str r0,[r1]
+        # both LDR immediates must resolve to the gBattleMainFunc pool / the value pool
+        for ldr, want in ((ldr_ptr, 0x03004F84), (ldr_val, _title("radical_red")["rom"][
+                {0xD280: "BEGIN_BATTLE_INTRO_DUMMY_ADDR", 0xD376: "BEGIN_BATTLE_INTRO_ADDR",
+                 0x123CE: "BATTLE_INTRO_GET_MONS_DATA_ADDR"}[ldr_val]])):
+            ins = int.from_bytes(blob[ldr - base:ldr - base + 2], "little")
+            pool = ((ldr + 4) & ~3) + (ins & 0xFF) * 4
+            assert blob[pool - base:pool - base + 4] == want.to_bytes(4, "little"), hex(ldr)
+    # the data-request body still reads gBattleCommunication (pool 0x02023E82) and gBattleMainFunc
+    assert getmons.count(mbf) == 1
+    assert getmons.count(b"\x82\x3e\x02\x02") == 1
+
+
+@pytest.mark.parametrize("name,addr,size", [
+    ("BeginBattleIntro", 0x080123C0, 36),
+    ("BeginBattleIntroDummy", 0x080123BC, 2),
+    ("BattleIntroGetMonsData", 0x08012FAC, 116),
+])
+def test_c59_rr_bodies_are_byte_identical_to_fr(name, addr, size) -> None:
+    """C5-9: the strongest RR evidence for the window is that CFRU did not rewrite these three
+    bodies -- so the RR addresses hold the same code the FR .sym names, and the per-battler
+    request index is gBattleCommunication[1] on RR too. (BattleIntroDrawTrainersOrMonsSprites is
+    deliberately NOT in this set: it differs in 26 bytes, the CFRU type/ability branch.)"""
+    rr_path = REPO / "patch/build/slink_RR.gba"
+    fr_path = REPO / "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba"
+    if not (rr_path.exists() and fr_path.exists()):
+        pytest.skip("local copyrighted ROMs absent; the embedded anchors still pin the bytes")
+    rr, fr = rr_path.read_bytes(), fr_path.read_bytes()
+    off = addr - 0x08000000
+    assert rr[off:off + size] == fr[off:off + size], f"{name} differs between RR and FR"
 
 
 def test_p4_c4_2a_engine_constants_match_the_pinned_pret_header() -> None:
