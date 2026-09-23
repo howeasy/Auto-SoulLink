@@ -1,4 +1,4 @@
-# Gen 2 implementation resume (updated 2026-09-23, session 4: first live play passed)
+# Gen 2 implementation resume (updated 2026-09-23, session 4: all eight fixtures qualified)
 
 ## Who coordinates
 
@@ -43,6 +43,11 @@ there (the sweep worktree is gone). This note summarises it; it is not a second 
 - `40d614f` **N14a** (R6 #6 full-chain receipt gate; S2 rewind cancels queued work).
 - `ca0888b` **N15** server: only a MISSING `artifact_kind` defaults to clean.
 - Cross-title areas: only `battle_tower` is Crystal-only (no acquisitions); owner: fine as-is.
+- **`28d26d1` ALL EIGHT FIXTURES PLAYED + QUALIFIED** (4/4 stages each, committed with receipts): Crystal OT 46401
+  (town/battle) and 44068 (_ot2 town/battle), Gold 50342, Silver 51084. The route ran unchanged on Gold/Silver; the only
+  fix was the re-save oracle: Gold/Silver `RestoreOverworldMapTiles` copies the screen tilemap into `sScratch[0:$168]`.
+  **Next when resumed:** live inspect gate on the eight fixtures; N14b strict re-save rules (then re-qualify all eight,
+  ~5 min each via the coordinator driver); gen2-M1 Gen 1 duo A/B; the Gen 2 duo harness (P3b.7).
 - **`398aef4` FIRST LIVE GEN 2 PLAY + QUALIFICATION PASS** (crystal_town, attempt n2-crystal-town-a7;
   route 112 s @300%, qualify 4/4 stages 211 s @100%, player_id 46401). The played save replaced the legacy
   `tests/fixtures/gen2/crystal_town.SaveRAM` (owner); receipt in `tests/fixtures/gen2/receipts/`. Live fixes: 12-frame
