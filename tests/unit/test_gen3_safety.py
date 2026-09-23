@@ -103,6 +103,50 @@ def test_each_forbidden_state(name):
     assert not w.check()
 
 
+def test_two_failed_predicates_report_the_same_reason_regardless_of_pairs_order():
+    """C4-ORDER falsifier: Lua's pairs() traversal order is unspecified, and overworld's
+    predicate loop (safety.lua ~line 69) picks its 'first failure' reason straight from that
+    order. This swaps in a controlled-order pairs() (ascending vs descending key sort) so
+    enumeration order is the ONLY thing that varies between the two runs -- exactly the axis
+    real pairs() leaves unspecified, without depending on any particular Lua build's hash
+    behaviour. Before the fix the reported reason flips between 'forbidden state:
+    palette_fade_active' and 'forbidden state: script_context_status' depending on which
+    order is used; after the fix (ipairs over the module's fixed predicate list) the reason
+    is the same regardless of how pairs() would have ordered them."""
+    w = World()
+    for p_name in ("palette_fade_active", "script_context_status"):
+        p = w.pack["predicates"][p_name]
+        w.lua.globals().put(p["address"] + p["offset"], p.get("mask", p["expect"] ^ 1), p["width"])
+    w.lua.execute("""
+        local real_pairs = pairs
+        local function controlled(order)
+            return function(t)
+                local keys = {}
+                for k in real_pairs(t) do keys[#keys + 1] = k end
+                table.sort(keys, function(a, b)
+                    if order == "asc" then return tostring(a) < tostring(b) else return tostring(a) > tostring(b) end
+                end)
+                local i = 0
+                return function()
+                    i = i + 1
+                    if keys[i] == nil then return nil end
+                    return keys[i], t[keys[i]]
+                end
+            end
+        end
+        asc_pairs = controlled("asc")
+        desc_pairs = controlled("desc")
+    """)
+    g = w.lua.globals()
+    reasons = set()
+    for order_pairs in (g.asc_pairs, g.desc_pairs):
+        g.pairs = order_pairs
+        ok, why, clauses = w.check_reason("overworld")
+        assert ok is False and set(clauses) >= {"palette_fade_active", "script_context_status"}, (why, clauses)
+        reasons.add(why)
+    assert len(reasons) == 1, reasons
+
+
 @pytest.mark.parametrize("r15,cpsr", [(452, 16), (452, 18), (452, 63), (16384, 31)])
 def test_cpu_refuses_other_mode_thumb_or_unparked_pc(r15, cpsr):
     w = World()

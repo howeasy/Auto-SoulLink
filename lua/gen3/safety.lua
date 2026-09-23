@@ -9,6 +9,20 @@ local function uint(v, limit)
     assert(type(v) == "number" and v % 1 == 0 and v >= 0 and v <= limit, "unreadable integer")
     return v
 end
+-- pairs() order is unspecified; anything that turns iteration order into a returned or logged
+-- value (an assert message, a first-failure reason) must walk keys in a fixed order instead.
+-- No canonical order is defined for these string-keyed tables, so alphabetical is the fallback.
+local function sorted_pairs(t)
+    local keys = {}
+    for k in pairs(t) do keys[#keys + 1] = k end
+    table.sort(keys)
+    local i = 0
+    return function()
+        i = i + 1
+        if keys[i] == nil then return nil end
+        return keys[i], t[keys[i]]
+    end
+end
 function S.new(pack, deps, kind)
     local self = {}
     local function read(addr, width, domain)
@@ -21,7 +35,7 @@ function S.new(pack, deps, kind)
         local p, out = assert(pack.pointers), {}
         assert(p.gSaveBlock1Ptr and p.gSaveBlock2Ptr, "missing save pointers")
         assert(p.gPokemonStoragePtr or p.pokemon_storage_base, "missing storage location")
-        for name, spec in pairs(p) do
+        for name, spec in sorted_pairs(p) do
             local value = name == "pokemon_storage_base" and uint(spec.address, 4294967295)
                 or read(spec.address, 4)
             assert(value > 0 and value % 4 == 0, "invalid pointer: " .. name)
@@ -49,7 +63,7 @@ function S.new(pack, deps, kind)
             assert(pack.version == "gen3-overworld-v1", "unsupported checkpoint")
             assert(type(kind) == "string", "artifact kind required")
             for _, name in ipairs(anchors) do assert(pack.anchors[name], "missing anchor: " .. name) end
-            for _, a in pairs(pack.anchors) do
+            for _, a in sorted_pairs(pack.anchors) do
                 local hex = assert(a.expected_hex[kind], "unverified artifact anchor")
                 assert(#hex > 0 and #hex == a.length * 2 and not hex:find("[^%x]"), "invalid anchor bytes")
                 for i = 1, a.length do
@@ -66,7 +80,8 @@ function S.new(pack, deps, kind)
             local good, why = pcall(fn)
             if not good then failed[#failed + 1] = key; first = first or tostring(why) end
         end
-        for name, p in pairs(pack.predicates) do
+        for _, name in ipairs(predicates) do
+            local p = pack.predicates[name]
             clause(name, function()
                 local value = read(p.address + p.offset, p.width)
                 if p.mask then value = value & uint(p.mask, 256 ^ p.width - 1) end
@@ -100,8 +115,8 @@ function S.new(pack, deps, kind)
         clause("pointer", function()
             local current = pointers()
             if snapshot then
-                for name, value in pairs(current) do assert(snapshot[name] == value, "pointer moved: " .. name) end
-                for name in pairs(snapshot) do assert(current[name] ~= nil, "pointer layout changed") end
+                for name, value in sorted_pairs(current) do assert(snapshot[name] == value, "pointer moved: " .. name) end
+                for name in sorted_pairs(snapshot) do assert(current[name] ~= nil, "pointer layout changed") end
             end
         end)
         table.sort(failed)
@@ -118,7 +133,7 @@ function S.new(pack, deps, kind)
         assert(pack.version == "gen3-overworld-v1", "unsupported checkpoint")
         assert(type(kind) == "string", "artifact kind required")
         for _, name in ipairs(anchors) do assert(pack.anchors[name], "missing anchor: " .. name) end
-        for _, a in pairs(pack.anchors) do
+        for _, a in sorted_pairs(pack.anchors) do
             local hex = assert(a.expected_hex[kind], "unverified artifact anchor")
             assert(#hex > 0 and #hex == a.length * 2 and not hex:find("[^%x]"), "invalid anchor bytes")
             for i = 1, a.length do
