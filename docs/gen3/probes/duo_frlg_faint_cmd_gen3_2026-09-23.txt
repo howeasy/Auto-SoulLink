@@ -1,5 +1,6 @@
 # First live FireRed<->LeafGreen duo on the NEW Gen 3 client: gen3_frlg faint_cmd_gen3 -- PASS
 # 2026-09-23 coordinator run at 2121e9ef; A = FireRed (firered_party_town.sav), B = LeafGreen (leafgreen_party_town.sav, 0978a5be); B's client admitted title=leafgreen
+# CUT CAVEAT: the working tree also carried UNCOMMITTED in-flight C5-10/C5-11a edits (lua/gen3/client.lua, native.lua, entry.lua, run.lua, server/state.py, protocol) -- rival-swap identity/opcode work, not on the faint path. Re-run on a clean committed cut before citing this at G4.
 # command: python tools/e2e_duo.py --game gen3_frlg --scenario faint_cmd_gen3 --wire-log
 
 
