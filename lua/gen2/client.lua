@@ -267,6 +267,7 @@ function Client.new(p)
         if self.signals then self.signals:abandon(why) end
         self.faint_latches, self.deferred = {}, {}
         self.battle, self.pending_safe, self.pending_rescan = nil, false, true
+        -- A delayed retirement may be lost after rewinding a key change; retaining its alias could faint another record.
         self.key_alias, self.retired_alias = nil, {}
         drop_held(why)
         -- Hello readiness names the still-open TCP connection and player OT, not a frame epoch;

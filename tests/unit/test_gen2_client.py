@@ -808,3 +808,40 @@ def test_rewind_cancels_a_safe_reply_from_the_abandoned_battle():
     world.field("wBattleMode", 0)  # the loaded state is back in the overworld
     world.frames(1)
     assert world.sent("safe") == []
+
+
+def test_rewind_discards_old_key_alias_before_a_delayed_faint_command():
+    def check(world):
+        old = mon(species=1, dvs=0x3AAA)
+        new = dict(old, species=2)
+        evolve_slot_one(world)
+        world.frames(60)
+        world.reply({"cmd": "key_change_rejected", "old_key": codec_key(old),
+                     "new_key": codec_key(new), "reason": "collision"})
+        world.frames(1)
+        world.emu.frame -= 60
+        world.frames(1)  # the loaded state retains the evolved mon but not the old key's alias
+        world.reply({"cmd": "force_faint", "key": codec_key(old)})
+        world.frames(1)
+        assert world.hp_of(1) == (30, 0) and world.written() == []
+
+    falsify(check, mutant("lua/gen2/client.lua", (
+        "        -- A delayed retirement may be lost after rewinding a key change; retaining its alias could faint another record.\n"
+        "        self.key_alias, self.retired_alias = nil, {}\n",
+        "        -- A delayed retirement may be lost after rewinding a key change; retaining its alias could faint another record.\n")))
+
+
+def test_rewind_refreshes_box_snapshot_before_the_next_tick():
+    def check(world):
+        old, new = mon(species=133, dvs=0x4AAA), mon(species=172, dvs=0x5AAA)
+        world.box([old])
+        assert [e["key"] for e in world.hello()["pc_boxes"]] == [codec_key(old)]
+        world.frames(100)
+        world.emu.frame -= 60
+        world.box([new])  # the restored cartridge has a different active-box record
+        world.frames(31)
+        assert [e["key"] for e in world.sent("tick")[-1]["pc_boxes"]] == [codec_key(new)]
+
+    falsify(check, mutant("lua/gen2/client.lua", (
+        "        self.battle, self.pending_safe, self.pending_rescan = nil, false, true\n",
+        "        self.battle, self.pending_safe, self.pending_rescan = nil, false, false\n")))

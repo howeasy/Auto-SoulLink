@@ -120,7 +120,8 @@ def qualified_identity(name: str, fixture_bytes: bytes, *, repo: Path = REPO) ->
     if report.get("errors") != []:
         raise AssertionError(f"{name}: qualification report has errors")
     rows = report.get("fixtures")
-    if not isinstance(rows, list) or len(rows) != 1 or rows[0].get("name") != name or rows[0].get("passed") is not True:
+    if (not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict)
+            or rows[0].get("name") != name or rows[0].get("passed") is not True):
         raise AssertionError(f"{name}: receipt has no single passed row for this fixture")
     row = rows[0]
     if row.get("problems") != []:
@@ -130,6 +131,16 @@ def qualified_identity(name: str, fixture_bytes: bytes, *, repo: Path = REPO) ->
             or set(provenance) != {"title", "rom_sha1", "scope", "route_facts_sha256"}
             or any(not isinstance(value, str) or not value for value in provenance.values())):
         raise AssertionError(f"{name}: fixture provenance is missing")
+    spec = gen2_fixtures.BY_NAME.get(name)
+    if spec is None or provenance["title"] != spec.title or provenance["scope"] != "candidate fixture":
+        raise AssertionError(f"{name}: fixture title or scope differs from its source plan")
+    source = gen2_source_data.load_context(spec.title, root=repo).source_record()
+    if provenance["rom_sha1"] != source["rom_sha1"]:
+        raise AssertionError(f"{name}: ROM SHA-1 differs from the pinned source")
+    # qualify() records the hash of the complete route-facts dict (including its fingerprint).
+    facts = gen2_fixtures.route_facts(spec.title, repo)
+    if provenance["route_facts_sha256"] != gen2_fixtures._facts_sha256(facts):
+        raise AssertionError(f"{name}: route facts differ from the pinned source")
     outputs = {"qualify": set(), "boot": {"boot:game_witness"},
                "resave": {"resave:fixture", "resave:save_witness", "resave:reload_witness"},
                "post_oracle": set()}
@@ -150,6 +161,7 @@ def qualified_identity(name: str, fixture_bytes: bytes, *, repo: Path = REPO) ->
                              f"(receipt sha256 {recorded})")
     stages = row.get("stages")
     if (not isinstance(stages, list) or len(stages) != len(chain)
+            or any(not isinstance(stage, dict) for stage in stages)
             or [stage.get("stage") for stage in stages] != list(chain)):
         raise AssertionError(f"{name}: receipt has no complete ordered full-chain")
     snapshot = {role: artifacts[role] for role in inputs}
