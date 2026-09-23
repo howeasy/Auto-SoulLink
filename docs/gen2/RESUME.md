@@ -1,4 +1,4 @@
-# Gen 2 implementation resume (updated 2026-09-23, session 4 in progress)
+# Gen 2 implementation resume (updated 2026-09-23, session 4: first live play passed)
 
 ## Who coordinates
 
@@ -43,6 +43,12 @@ there (the sweep worktree is gone). This note summarises it; it is not a second 
 - `40d614f` **N14a** (R6 #6 full-chain receipt gate; S2 rewind cancels queued work).
 - `ca0888b` **N15** server: only a MISSING `artifact_kind` defaults to clean.
 - Cross-title areas: only `battle_tower` is Crystal-only (no acquisitions); owner: fine as-is.
+- **`398aef4` FIRST LIVE GEN 2 PLAY + QUALIFICATION PASS** (crystal_town, attempt n2-crystal-town-a7;
+  route 112 s @300%, qualify 4/4 stages 211 s @100%, player_id 46401). The played save replaced the legacy
+  `tests/fixtures/gen2/crystal_town.SaveRAM` (owner); receipt in `tests/fixtures/gen2/receipts/`. Live fixes: 12-frame
+  press hold (main menu polls every 5+ frames), NPC coords = struct - 4, `ONE_SHOT_KINDS = {continue_confirm}`.
+  Also `acd552c`/`ba46ac9` hook-registry + signal-binder per-hit allocation removed, `7ce1105` static captures,
+  `cfde305` route origins, `209dbae` N14c.
 
 ## In flight / next, in order (the owner check-in is AFTER step 3)
 
@@ -67,6 +73,9 @@ there (the sweep worktree is gone). This note summarises it; it is not a second 
   this worktree: run git commands plainly, without `-C` or `cd` to other checkouts.
 - **Machine load rule:** NO worker/peer test runs while any emulator lane runs (contention voided
   three duo runs). Tell workers "hold tests until lane free", then release them.
+- **Gen 2 live runs: run from THIS worktree at a clean committed HEAD**, not a junctioned lane: `run_gb_gate._gen2_plan`
+  requires the RESOLVED ROM path inside REPO, and a junctioned `.cache/gen2-build` resolves outside. Diagnose stalls with
+  `SLINK_GEN2_TRACE=1` (trace every 30 frames; screen dump on a failed stage in `patch/build/test_gen2_scripted_gate_result.txt`).
 - **Live lanes run from a frozen detached lane worktree** (`git worktree add --detach <path> <sha>`,
   then copy ROMs/`patch/build`/`patch/gen1/build` and junction `.cache/{build-tools,pret,downloads,gen2-build}`,
   copy `.cache/upr`). Remove it by unlinking junctions FIRST (Python `os.rmdir` on each junction),
