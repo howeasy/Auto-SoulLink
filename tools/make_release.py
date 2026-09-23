@@ -249,7 +249,8 @@ SLink in BizHawk. You do **not** need Python — the host handles the server.
 
 | Requirement | Detail |
 |---|---|
-| BizHawk 2.9+ | https://github.com/TASEmulators/BizHawk/releases |
+| BizHawk 2.11+ | https://github.com/TASEmulators/BizHawk/releases (Gen 1 and Gen 3 refuse to start on older versions) |
+| A writable folder | Unzip somewhere you can write (not Program Files): Gen 3 keeps a small session file next to `lua/`. |
 | Your ROM | Gen 1 (Red/Blue/Yellow), Gen 2 (Crystal), Gen 3 (FireRed/LeafGreen/Radical Red), Gen 4 (HeartGold/SoulSilver/Platinum), Gen 5 (Black/White/Black 2/White 2) |
 | LuaSocket DLL | Already in `lua/x64/`. If missing, see the note below. |
 | Launcher script | Download from your host's status page (one click — see Step 1). |
