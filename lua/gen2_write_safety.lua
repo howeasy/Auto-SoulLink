@@ -20,11 +20,17 @@ M.RECEIPT_TITLE = {crystal="crystal", gold="gold", silver="gold"}
 -- A receipt covering another title must come from this pinned ROM (that pack names only its own).
 M.OWNER_ROM_SHA1 = {gold="d8b8a3600a465308c9953dfa04f0081c05bdcb94"}
 M.WRITE_KINDS = {party_hp=true, box_deposit=true}
+-- Card BOX: the kinds a receipt adds only with its three passed box runs (boxes, boxes_reset, boxes_reload):
+-- the whole party block, an active sBox removal, and any non-current sBoxN (the memorial Box 14).
+M.BOX_KINDS = {party_collection=true, box_withdraw=true, backing_box=true}
+M.BOX_MODES = {"boxes", "boxes_reset", "boxes_reload"}
 -- pack physical.required_controls a receipt may declare covered (every run below is required anyway).
 M.COVERED_CONTROLS = {["idle reacquisition"]=true, ["warp/Continue"]=true}
-M.RUNS = {town="_town", reload="_town", battle="_battle"}
+M.RUNS = {town="_town", reload="_town", battle="_battle",
+          boxes="_battle", boxes_reset="_battle", boxes_reload="_battle"}
 -- The only harness scopes that may write bytes, per run (sorted).
-M.TEST_SCOPES = {town={"u2-test-box-write", "u2-test-party-write"}, reload={}, battle={}}
+M.TEST_SCOPES = {town={"u2-test-box-write", "u2-test-party-write"}, reload={}, battle={},
+                 boxes={"u2-box-ops"}, boxes_reset={"u2-box-ops"}, boxes_reload={}}
 -- tools/fixture_qualification.py FULL_CHAIN: the stages a full-scope qualification report ran.
 M.FULL_CHAIN = {"qualify", "boot", "resave", "post_oracle"}
 -- Negative windows per run: minimum frames (at least frames-1 of them open at both edges), the
@@ -41,13 +47,37 @@ M.WINDOWS = {
     },
     reload = {},
     battle = {{name="battle", frames=30, stated={wBattleMode=true}}},
+    boxes = {}, boxes_reset = {}, boxes_reload = {},
 }
 -- Idle reacquisition: the phase entered after each window saw a NEW accepted hold (driver order).
 M.REACQUIRE = {
     town = {{"idle", "start_menu"}, {"face", "talk"}, {"to_save", "save"}, {"post_save", "exit"}, {"post_warp", "done"}},
     reload = {{"idle", "done"}},
     battle = {{"idle", "walk"}, {"post_battle", "done"}},
+    boxes = {{"idle", "walk"}, {"post_save", "ops"}},
+    boxes_reset = {{"idle", "ops"}, {"post_save", "done"}},
+    boxes_reload = {{"idle", "done"}},
 }
+-- The box runs: production-executor ops, one per accepted hold, on the two scripted catches (key 1, key 2).
+-- written = the permit kinds in write order (deposit/memorial: box first; withdraw: party first); party =
+-- the party-count change; box = the ONE region whose bytes change ("active" sBox or the "memorial" sBox14)
+-- and its count change. boxes ends with an unsaved active edit (C1 in sBox) and a backing edit (C2 in
+-- sBox14): its CartRAM is flushed WITHOUT a save and cold-booted as boxes_reset, the reset-before-save
+-- control. There the memorial completes party-only (full-record match), then withdraw(sBox14), box_mon, SAVE.
+M.BOX_OPS = {
+    boxes = {
+        {op="deposit", key=1, written={"box_deposit", "party_collection"}, party=-1, box="active", count=1},
+        {op="withdraw", key=1, written={"party_collection", "box_withdraw"}, party=1, box="active", count=-1},
+        {op="memorialize", key=2, written={"backing_box", "party_collection"}, party=-1, box="memorial", count=1},
+        {op="deposit", key=1, written={"box_deposit", "party_collection"}, party=-1, box="active", count=1},
+    },
+    boxes_reset = {
+        {op="memorialize", key=2, written={"party_collection"}, party=-1},
+        {op="withdraw", key=2, written={"party_collection", "backing_box"}, party=1, box="memorial", count=-1},
+        {op="deposit", key=1, written={"box_deposit", "party_collection"}, party=-1, box="active", count=1},
+    },
+}
+M.PARTY_BLOCK, M.BOX_COPY = 428, 1102
 local COUNT = 9007199254740991
 local REQUIRED = {
     wMapStatus=true, wMapEventStatus=true, wScriptRunning=true, wScriptMode=true,
@@ -176,6 +206,37 @@ function M.run_problem(run, mode, primary)
         if type(save) ~= "table" or save.flushed ~= true or not hex64(save.cartram_sha256) then
             return "native save not flushed"
         end
+    elseif M.BOX_OPS[mode] then
+        local problem = M.box_ops_problem(run, mode)
+        if problem then return problem end
+        local save = run.save
+        if type(save) ~= "table" or save.flushed ~= true or not hex64(save.cartram_sha256) then
+            return "native save not flushed"
+        end
+        if mode == "boxes" then
+            local catch, reset = run.catch, run.reset
+            if type(catch) ~= "table" or not integer(catch.party_before, 1, 4) or catch.party_after ~= catch.party_before + 2 then
+                return "the two scripted catches did not land in the party"
+            end
+            if type(reset) ~= "table" or reset.flushed ~= true or not hex64(reset.cartram_sha256)
+               or reset.cartram_sha256 == save.cartram_sha256 then
+                return "the unsaved post-op CartRAM was not flushed for the reset control"
+            end
+        else
+            local k = run.control
+            if not hex64(run.boot_cartram_sha256) or type(k) ~= "table" or not hexbytes(k.party_hex, M.PARTY_BLOCK)
+               or not hexbytes(k.active_hex, M.BOX_COPY) or not hexbytes(k.backing_hex, M.BOX_COPY)
+               or not hexbytes(k.memorial_hex, M.BOX_COPY) then
+                return "reset control lacks the booted CartRAM hash or the post-CONTINUE bytes"
+            end
+        end
+    elseif mode == "boxes_reload" then
+        local keep = run.persist
+        if not hex64(run.boot_cartram_sha256) or type(keep) ~= "table" or not hexbytes(keep.party_hex, M.PARTY_BLOCK)
+           or not hexbytes(keep.active_hex, M.BOX_COPY) or not hexbytes(keep.backing_hex, M.BOX_COPY)
+           or not hexbytes(keep.memorial_hex, M.BOX_COPY) then
+            return "box reload lacks the booted CartRAM hash or the persisted bytes"
+        end
     elseif mode == "reload" then
         local keep = run.persist
         if not hex64(run.boot_cartram_sha256) or type(keep) ~= "table" or not hexbytes(keep.party_hp_hex, 2)
@@ -183,6 +244,48 @@ function M.run_problem(run, mode, primary)
             return "reload lacks the booted CartRAM hash or the persisted bytes"
         end
     end
+    return nil
+end
+
+-- nil, or why a box run's ops do not prove M.BOX_OPS[mode]: each op ok, written in the stated kind order,
+-- the party count moved by its delta, exactly its one box region changed (count moved), ops chained (each
+-- op's party preimage is the previous op's readback) and the two catch keys distinct. Pure.
+function M.box_ops_problem(run, mode)
+    local want, layout, ops = M.BOX_OPS[mode], run.layout, run.ops
+    if type(layout) ~= "table" or not integer(layout.active_flat, 0, 32768 - M.BOX_COPY)
+       or not integer(layout.memorial_flat, 0, 32768 - M.BOX_COPY) or layout.active_flat == layout.memorial_flat
+       or not integer(layout.current_box, 0, 12) then
+        return "box layout missing, or the memorial box is the current box"
+    end
+    if not plain_array(ops) or #ops ~= #want then return "box ops are not the stated sequence" end
+    local keys = {}
+    for i, w in ipairs(want) do
+        local op = ops[i]
+        local name = "op " .. i .. " " .. w.op
+        if type(op) ~= "table" or op.op ~= w.op or op.ok ~= true or not named(op.key) then return name .. " did not succeed" end
+        keys[w.key] = keys[w.key] or op.key
+        if keys[w.key] ~= op.key then return name .. " targets another key" end
+        local written = op.written
+        local exact = plain_array(written) and #written == #w.written
+        for j, kind in ipairs(w.written) do exact = exact and written[j] == kind end
+        if not exact then return name .. " wrote other kinds than " .. table.concat(w.written, "+") end
+        if not hexbytes(op.party_before_hex, M.PARTY_BLOCK) or not hexbytes(op.party_after_hex, M.PARTY_BLOCK)
+           or tonumber(op.party_after_hex:sub(1, 2), 16) ~= tonumber(op.party_before_hex:sub(1, 2), 16) + w.party then
+            return name .. " did not move the party count by " .. w.party
+        end
+        if i > 1 and op.party_before_hex ~= ops[i - 1].party_after_hex then return name .. " party changed between ops" end
+        local changed = op.changed
+        if not plain_array(changed) or #changed ~= (w.box and 1 or 0) then return name .. " changed other box regions" end
+        if w.box then
+            local c = changed[1]
+            if type(c) ~= "table" or c.flat ~= layout[w.box .. "_flat"] or not hexbytes(c.before_hex, M.BOX_COPY)
+               or not hexbytes(c.after_hex, M.BOX_COPY)
+               or tonumber(c.after_hex:sub(1, 2), 16) ~= tonumber(c.before_hex:sub(1, 2), 16) + w.count then
+                return name .. " did not move the " .. w.box .. " box count by " .. w.count
+            end
+        end
+    end
+    if keys[1] == keys[2] then return "the two catch keys are not distinct" end
     return nil
 end
 
@@ -207,17 +310,17 @@ function M.qualified(pack, title, receipt)
         return nil, "write-window receipt proved other checkpoint rows than this pack's"
     end
     local runs, ids = receipt.runs, {}
-    for _, mode in ipairs({"town", "reload", "battle"}) do
+    local function bound(mode)
         local run = runs[mode]
         if type(run) ~= "table" or run.schema ~= M.RUN_SCHEMA or run.mode ~= mode
            or run.evidence_level ~= "PHYSICAL" or run.result ~= "PASS" then
-            return nil, "write-window receipt " .. mode .. " run is not a passed PHYSICAL gate run"
+            return "write-window receipt " .. mode .. " run is not a passed PHYSICAL gate run"
         end
         if run.title ~= owner or run.rom_sha1 ~= rom or run.pack_commit ~= pack.source.commit
            or run.fixture ~= owner .. M.RUNS[mode] or run.core_mode ~= "CGB" or run.input_mode ~= "normal_buttons"
            or not hex64(run.fixture_sha256) or not named(run.attempt_id) or ids[run.attempt_id]
            or not named(run.qualification_attempt_id) then
-            return nil, "write-window receipt " .. mode .. " run is not bound to this title, ROM, pack and qualified "
+            return "write-window receipt " .. mode .. " run is not bound to this title, ROM, pack and qualified "
                 .. "fixture as a normal-button CGB run with its own attempt"
         end
         ids[run.attempt_id] = true
@@ -225,10 +328,14 @@ function M.qualified(pack, title, receipt)
         local exact = plain_array(scopes) and #scopes == #want
         for i, scope in ipairs(want) do exact = exact and scopes[i] == scope end
         if not exact then
-            return nil, "write-window receipt " .. mode .. " run wrote outside the declared test scopes"
+            return "write-window receipt " .. mode .. " run wrote outside the declared test scopes"
         end
         local problem = M.run_problem(run, mode, data.primary)
-        if problem then return nil, "write-window receipt " .. mode .. " run: " .. problem end
+        if problem then return "write-window receipt " .. mode .. " run: " .. problem end
+    end
+    for _, mode in ipairs({"town", "reload", "battle"}) do
+        local problem = bound(mode)
+        if problem then return nil, problem end
     end
     local town, reload = runs.town, runs.reload
     local box, keep = town.write.box, reload.persist
@@ -252,7 +359,57 @@ function M.qualified(pack, title, receipt)
         if not covered[control] then uncovered[#uncovered + 1] = control end
     end
     table.sort(list)
-    return {kinds=M.WRITE_KINDS, covered=list, uncovered=uncovered}
+    local kinds = {}
+    for kind in pairs(M.WRITE_KINDS) do kinds[kind] = true end
+    if runs.boxes ~= nil or runs.boxes_reset ~= nil or runs.boxes_reload ~= nil then
+        -- All three or the receipt refuses: a partial box proof never falls back to the base kinds.
+        for _, mode in ipairs(M.BOX_MODES) do
+            local problem = bound(mode)
+            if problem then return nil, problem end
+        end
+        local problem = M.box_chain_problem(runs.boxes, runs.boxes_reset, runs.boxes_reload)
+        if problem then return nil, "write-window receipt box runs: " .. problem end
+        for kind in pairs(M.BOX_KINDS) do kinds[kind] = true end
+    end
+    return {kinds=kinds, covered=list, uncovered=uncovered}
+end
+
+-- nil, or why the three box runs are not ONE chain: the reset control cold-booted the unsaved post-op
+-- CartRAM of boxes (active edit gone: party = the saved one, active sBox = its backing slot = the pre-op
+-- bytes; backing edit kept: sBox14 = the memorialize readback), and the reload cold-booted the reset
+-- run's flushed SAVE with exactly its final party, active sBox (= backing slot, SaveBox) and sBox14. Pure.
+function M.box_chain_problem(boxes, reset, reload)
+    local a, b = boxes.ops, reset.ops
+    for _, run in ipairs({reset, reload}) do
+        for _, key in ipairs({"active_flat", "memorial_flat", "current_box"}) do
+            if type(run.layout) ~= "table" or run.layout[key] ~= boxes.layout[key] then
+                return "the runs disagree on the box layout"
+            end
+        end
+        if run.qualification_attempt_id ~= boxes.qualification_attempt_id then return "the runs name other qualifications" end
+    end
+    if reset.boot_cartram_sha256 ~= boxes.reset.cartram_sha256 or reset.fixture_sha256 == boxes.fixture_sha256 then
+        return "the reset control did not cold-boot the unsaved post-op CartRAM"
+    end
+    local k = reset.control
+    if k.party_hex ~= a[1].party_before_hex then return "reset control: the party is not the saved one" end
+    if k.active_hex ~= k.backing_hex or k.active_hex ~= a[1].changed[1].before_hex then
+        return "reset control: the active sBox is not its backing slot's saved bytes"
+    end
+    if k.active_hex == a[4].changed[1].after_hex then return "reset control: the unsaved active edit is indistinguishable" end
+    if k.memorial_hex ~= a[3].changed[1].after_hex or k.memorial_hex == a[3].changed[1].before_hex then
+        return "reset control: the backing (memorial) edit did not survive the reset"
+    end
+    if b[1].party_before_hex ~= k.party_hex then return "reset ops did not start from the control party" end
+    if reload.boot_cartram_sha256 ~= reset.save.cartram_sha256 or reload.fixture_sha256 == reset.fixture_sha256 then
+        return "the reload did not cold-boot the reset run's flushed save"
+    end
+    local keep = reload.persist
+    if keep.party_hex ~= b[3].party_after_hex or keep.active_hex ~= b[3].changed[1].after_hex
+       or keep.backing_hex ~= keep.active_hex or keep.memorial_hex ~= b[2].changed[1].after_hex then
+        return "the reload lacks the saved party, active/backing box or memorial bytes"
+    end
+    return nil
 end
 
 -- U3 binding: true when the receipt's town and battle runs ran on exactly the fixture bytes a passed
@@ -262,8 +419,9 @@ function M.bind_fixture_qualification(receipt, reports)
     if type(receipt) ~= "table" or type(receipt.runs) ~= "table" or type(reports) ~= "table" then
         return nil, "receipt and qualification reports required"
     end
-    for _, mode in ipairs({"town", "battle"}) do
+    for _, mode in ipairs({"town", "battle", "boxes"}) do
         local run = receipt.runs[mode]
+        if mode == "boxes" and run == nil then break end
         local report = type(run) == "table" and reports[run.fixture]
         if type(report) ~= "table" or report.schema ~= "fixture-qualification-v1" or report.passed ~= true
            or type(report.errors) ~= "table" or next(report.errors) ~= nil then
@@ -318,6 +476,9 @@ function M.new(pack, title, io, evaluator, ownership, receipt)
         if not ok then return false, "checkpoint evidence unavailable: " .. tostring(matches) end
         return matches == true, why
     end
+    -- Whether the receipt proved `kind` at all (no checkpoint evaluation): a command needing an unproven
+    -- kind is refused outright instead of waiting for a hold that can never authorize it.
+    function self:covers(kind) return scope ~= nil and scope.kinds[kind] == true end
     function self:inspect_candidate()
         local ok, matches, why = pcall(evaluate)
         return {candidate_match=ok and matches == true, runtime_authorized=false,

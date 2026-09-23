@@ -11,6 +11,7 @@
 --   wire     lua/gen2/wire.lua      decoded record -> docs/protocol.md §4 shapes (refuses eggs)
 --   signals  factory(authority) -> the lua/gen2/signals.lua binder (typed events + latches)
 --   writes   lua/gen2/writes.lua    bench faint behind the shared write permit
+--   boxes    lua/gen2/boxes.lua     B.executor: deposit/withdraw/memorialize (nil: box commands NACK)
 --   safety   checkpoint, :check(kind) -> ok, why (lua/gen2_write_safety.lua: only a U2-receipted
 --            write kind in the held checkpoint frame)
 --   checkpoint_pc  production only: the checkpoint PC hooked for writes + hello readiness
@@ -30,11 +31,11 @@ local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_P
 -- binder links to the map's area (signals.lua final_event: NORMAL 0, FISH 4, TREE 8);
 -- roamer/contest/scripted battles resolve their own namespace or nothing (O-17, O-18).
 local AREA_BATTLE_TYPES = { [0] = true, [4] = true, [8] = true }
--- Gen 2: no box executor is composed (boxes.lua preflight/execute, B-10). The U2 receipt proves
--- only a current-box deposit; none of these is that, so each answers the protocol NACK.
+-- The protocol NACK of each box command (docs/protocol.md §5). The executor (p.boxes, lua/gen2/boxes.lua
+-- B.executor) runs them at the checkpoint; a kind the U2 receipt never proved is refused there, with its name.
 local BOX_NACK = { box_mon = "box_mon_failed", party_mon = "sync_retrieve_failed",
                    memorialize = "memorialize_failed" }
-local BOX_OPEN = "Gen 2 box writer not composed (U2 proves only a current-box deposit)"
+local BOX_OPEN = "Gen 2 box executor not composed"
 -- The U2 write kind whose held checkpoint the hello snapshot and the bench faint wait for.
 local PARTY_HP = "party_hp"
 
@@ -46,7 +47,7 @@ end
 function Client.new(p)
     local HelloSession = assert(p.hello_session, "shared hello_session factory required")
     local ReplyDispatch = assert(p.reply_dispatch, "shared reply_dispatch factory required")
-    local reads, wire, writes, safety = p.reads, p.wire, p.writes, p.safety
+    local reads, wire, writes, safety, boxes = p.reads, p.wire, p.writes, p.safety, p.boxes
     local signals_factory = assert(p.signals, "Gen 2 signals factory required")
     local net, json, hud, io = p.net, p.json, p.hud, p.io
     local profile, sites, area_map = p.profile, p.sites, p.area_map
@@ -369,8 +370,13 @@ function Client.new(p)
             return
         end
         if BOX_NACK[c_] then
-            log("[SLink-gen2] " .. c_ .. " refused: " .. BOX_OPEN .. " " .. tostring(cmd.key))
-            send(BOX_NACK[c_], { key = cmd.key, reason = BOX_OPEN })
+            if not boxes then
+                log("[SLink-gen2] " .. c_ .. " refused: " .. BOX_OPEN .. " " .. tostring(cmd.key))
+                send(BOX_NACK[c_], { key = cmd.key, reason = BOX_OPEN })
+                return
+            end
+            -- Gen 1 parity: queued in arrival order with the faints; run one per checkpoint hold
+            self.deferred[#self.deferred + 1] = { cmd = c_, key = cmd.key, nickname = cmd.nickname }
             return
         end
         if c_ == "replace_rival_team" then
@@ -435,6 +441,7 @@ function Client.new(p)
         local safe = safety.check(PARTY_HP)
         if not safe then return end
         local cmd = table.remove(self.deferred, 1)
+        if BOX_NACK[cmd.cmd] then return self:run_box(cmd) end
         local slot, mon, _, why = find_party_slot(cmd.key)
         if not slot then
             -- the mon left the party before the checkpoint (PC deposit) or its key is ambiguous
@@ -460,6 +467,61 @@ function Client.new(p)
             -- reported as a KO
             log("[SLink-gen2] " .. cmd.cmd .. " refused by the write gate: " .. tostring(err) .. " " .. cmd.key)
             hud.show("X KO refused: " .. nick_label(cmd.key, mon and mon.nickname), 255, 80, 80, 300)
+        end
+    end
+
+    -- One box command inside the held checkpoint (lua/gen1/client.lua run_deferred is the reference):
+    -- stats_cache before a deposit; replies keep cmd.key (what the server tracks) while the executor
+    -- looks the mon up by the key the cartridge holds (a rejected key change's alias). Tail requeues
+    -- (A5): a rebuild's party_mon refused "party full" waits behind the memorials that free a slot,
+    -- bounded by the queue length at its first refusal; a memorial of the last party mon waits for a
+    -- party_mon, or is dropped after game_over.
+    function self:run_box(cmd)
+        local phys = self.retired_alias[cmd.key] or cmd.key
+        local _, mon = find_party_slot(cmd.key)
+        local name = nick_label(cmd.key, cmd.nickname or (mon and mon.nickname))
+        if cmd.cmd == "box_mon" then
+            if mon then send("stats_cache", { key = cmd.key, stats = { level = mon.level, maxHP = mon.max_hp } }) end
+            local done, why = boxes.deposit(phys)
+            if done then
+                self.pending_rescan = true
+                hud.show("↓ " .. name .. " boxed", 100, 180, 255, 200)
+            else
+                log("[SLink-gen2] box_mon refused: " .. tostring(why) .. " " .. cmd.key)
+                send("box_mon_failed", { key = cmd.key, reason = tostring(why) })
+                hud.show("X Box fail: " .. name, 255, 80, 80, 240)
+            end
+        elseif cmd.cmd == "party_mon" then
+            local done, why = boxes.withdraw(phys)
+            if done then
+                self.pending_rescan = true
+                send("sync_retrieve_done", { key = cmd.key })
+                hud.show("↑ " .. name .. " unboxed", 100, 255, 160, 200)
+            elseif why == "party full" and (cmd.full_retries or 0) < (cmd.full_budget or (#self.deferred + 1)) then
+                cmd.full_budget = cmd.full_budget or (#self.deferred + 1)
+                cmd.full_retries = (cmd.full_retries or 0) + 1
+                self.deferred[#self.deferred + 1] = cmd
+                log("[SLink-gen2] party_mon " .. cmd.key .. ": party full, retry " .. cmd.full_retries .. "/"
+                    .. cmd.full_budget .. " after the queue")
+            else
+                log("[SLink-gen2] party_mon refused: " .. tostring(why) .. " " .. cmd.key)
+                send("sync_retrieve_failed", { key = cmd.key, reason = tostring(why) })
+            end
+        else
+            local done, why = boxes.memorialize(phys)
+            if done then
+                self.pending_rescan, self.retired_alias[cmd.key] = true, nil
+                send("memorialize_done", { key = cmd.key, box = boxes.memorial_box })
+                hud.show("† " .. name .. " buried", 255, 140, 40, 300)
+            elseif why == "last party mon" and self.game_over then
+                log("[SLink-gen2] memorialize dropped: last mon after game over " .. cmd.key)
+            elseif why == "last party mon" then
+                self.deferred[#self.deferred + 1] = cmd
+            else
+                log("[SLink-gen2] memorialize refused: " .. tostring(why) .. " " .. cmd.key)
+                send("memorialize_failed", { key = cmd.key, reason = tostring(why) })
+                hud.show("X Mem fail: " .. name, 255, 80, 80, 300)
+            end
         end
     end
 

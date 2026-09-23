@@ -930,3 +930,190 @@ def test_whole_gate_writes_only_inside_accepted_holds(sim_runs):
     assert all(flat <= address < flat + 1102 for domain, address, _ in sim.writes if domain == "CartRAM")
     assert [address for domain, address, _ in sim.writes if domain == "System Bus"] == \
         [PROFILE["crystal"]["ram"]["wPartyMon1HP"], PROFILE["crystal"]["ram"]["wPartyMon1HP"] + 1]
+
+
+# --- card BOX: the three box runs (boxes, boxes_reset, boxes_reload) as ONE chain ------------------------
+
+def _hexfill(length, count, tag):
+    body = hashlib.sha256(tag.encode()).digest() * (length // 32 + 1)
+    return (bytes([count]) + body[:length - 1]).hex()
+
+
+def box_runs(receipt):
+    """Synthetic box-run records (MODEL shape, relabelled PHYSICAL like the others) that satisfy the chain:
+    two catches (party 1 -> 3), four ops, an unsaved flush; the reset control; three ops and a SAVE; the reload."""
+    base = receipt["runs"]["battle"]
+    P = lambda n, t: _hexfill(428, n, "party" + t)                     # noqa: E731
+    X = lambda n, t: _hexfill(1102, n, "box" + t)                      # noqa: E731
+    layout = {"active_flat": 0x2D10, "memorial_flat": 0x79E0, "current_box": 0}
+
+    def run(mode, attempt, phases, **extra):
+        r = {k: copy.deepcopy(base[k]) for k in ("schema", "title", "rom_sha1", "pack_commit", "core_mode",
+                                                  "input_mode", "qualification_attempt_id", "liveness")}
+        r.update(mode=mode, evidence_level="PHYSICAL", result="PASS", fixture=base["fixture"],
+                 fixture_sha256=hashlib.sha256(attempt.encode()).hexdigest() if mode != "boxes"
+                 else base["fixture_sha256"], attempt_id=attempt, layout=dict(layout),
+                 harness_write_scopes=[] if mode == "boxes_reload" else ["u2-box-ops"],
+                 phases=[{"phase": p, "accepted": i + 1, "frame": 100 * i} for i, p in enumerate(phases)],
+                 windows={})
+        r.update(extra)
+        return r
+
+    def op(name, key, written, pb, pa, changed=()):
+        return {"op": name, "key": key, "ok": True, "written": list(written), "party_before_hex": pb,
+                "party_after_hex": pa, "changed": [{"flat": f, "before_hex": b, "after_hex": a} for f, b, a in changed]}
+
+    k1, k2, act, mem = "7AAA:1234:13", "3BBB:1234:10", layout["active_flat"], layout["memorial_flat"]
+    save, reset, final = "a" * 64, "b" * 64, "c" * 64
+    ops = [op("deposit", k1, ["box_deposit", "party_collection"], P(3, "0"), P(2, "1"), [(act, X(0, "e"), X(1, "a1"))]),
+           op("withdraw", k1, ["party_collection", "box_withdraw"], P(2, "1"), P(3, "2"), [(act, X(1, "a1"), X(0, "a2"))]),
+           op("memorialize", k2, ["backing_box", "party_collection"], P(3, "2"), P(2, "3"), [(mem, X(0, "m0"), X(1, "m1"))]),
+           op("deposit", k1, ["box_deposit", "party_collection"], P(2, "3"), P(1, "4"), [(act, X(0, "a2"), X(1, "a3"))])]
+    again = [op("memorialize", k2, ["party_collection"], P(3, "0"), P(2, "g")),
+             op("withdraw", k2, ["party_collection", "backing_box"], P(2, "g"), P(3, "h"), [(mem, X(1, "m1"), X(0, "m2"))]),
+             op("deposit", k1, ["box_deposit", "party_collection"], P(3, "h"), P(2, "i"), [(act, X(0, "e"), X(1, "a4"))])]
+    return {
+        "boxes": run("boxes", "u2-box-crystal", ["idle", "walk", "battle", "save", "saved", "post_save", "ops", "done"],
+                     catch={"party_before": 1, "party_after": 3}, ops=ops,
+                     save={"flushed": True, "cartram_sha256": save}, reset={"flushed": True, "cartram_sha256": reset}),
+        "boxes_reset": run("boxes_reset", "u2-box-crystal-reset", ["idle", "ops", "to_save", "save", "post_save", "done"],
+                           boot_cartram_sha256=reset, ops=again, save={"flushed": True, "cartram_sha256": final},
+                           control={"party_hex": P(3, "0"), "active_hex": X(0, "e"), "backing_hex": X(0, "e"),
+                                    "memorial_hex": X(1, "m1")}),
+        "boxes_reload": run("boxes_reload", "u2-box-crystal-reload", ["idle", "done"], boot_cartram_sha256=final,
+                            persist={"party_hex": P(2, "i"), "active_hex": X(1, "a4"), "backing_hex": X(1, "a4"),
+                                     "memorial_hex": X(0, "m2")}),
+    }
+
+
+def box_receipt(sim_runs, title="crystal"):
+    receipt = receipt_for(sim_runs, title)
+    receipt["runs"].update(box_runs(receipt))
+    return receipt
+
+
+ALL_KINDS = ["backing_box", "box_deposit", "box_withdraw", "party_collection", "party_hp"]
+
+
+def test_the_box_runs_add_exactly_the_box_kinds(sim_runs):
+    scope, why = u2.lua_qualified(pack_of("crystal"), "crystal", box_receipt(sim_runs))
+    assert scope is not None, why
+    assert scope["kinds"] == ALL_KINDS
+    assert u2.lua_qualified(pack_of("crystal"), "crystal", receipt_for(sim_runs, "crystal"))[0]["kinds"] \
+        == ["box_deposit", "party_hp"]
+    candidate = Candidate()
+    for kind in ("party_collection", "box_withdraw", "backing_box"):
+        assert candidate.check(box_receipt(sim_runs), kind)[0] is True
+        assert candidate.check(receipt_for(sim_runs, "crystal"), kind)[0] is False
+
+
+def test_covers_names_the_receipt_kinds_without_evaluating_the_checkpoint(sim_runs):
+    candidate = Candidate()
+    candidate.registers["PC"] += 1        # nowhere near the checkpoint: covers() does not care
+    binder = candidate.binder(box_receipt(sim_runs))
+    assert all(binder.covers(binder, kind) is True for kind in ALL_KINDS)
+    assert binder.covers(binder, "party_species") is False
+    base = candidate.binder(receipt_for(sim_runs, "crystal"))
+    assert base.covers(base, "backing_box") is False and base.covers(base, "party_hp") is True
+    assert candidate.binder().covers(candidate.binder(), "party_hp") is False
+
+
+BOX_FAULTS = {
+    "missing_run": ("runs.boxes_reload", DELETE, "boxes_reload run is not a passed PHYSICAL"),
+    "model_run": ("runs.boxes_reset.evidence_level", "MODEL", "boxes_reset run is not a passed PHYSICAL"),
+    "scope": ("runs.boxes.harness_write_scopes", [], "boxes run wrote outside"),
+    "one_catch": ("runs.boxes.catch.party_after", 2, "two scripted catches"),
+    "unflushed_reset": ("runs.boxes.reset.flushed", False, "reset control"),
+    "reset_is_the_save": ("runs.boxes.reset.cartram_sha256", "a" * 64, "reset control"),
+    "op_failed": ("runs.boxes.ops.2.ok", False, "op 3 memorialize did not succeed"),
+    "op_kind_order": ("runs.boxes.ops.0.written", ["party_collection", "box_deposit"], "op 1 deposit wrote other kinds"),
+    "op_other_key": ("runs.boxes.ops.1.key", "0000:0000:01", "op 2 withdraw targets another key"),
+    "op_party_delta": ("runs.boxes_reset.ops.1.party_after_hex", "02" + "00" * 427, "op 2 withdraw did not move"),
+    "op_two_regions": ("runs.boxes.ops.0.changed", "APPEND", "changed other box regions"),
+    "op_wrong_box": ("runs.boxes.ops.2.changed.0.flat", 0x2D10, "did not move the memorial box"),
+    "finish_wrote_box": ("runs.boxes_reset.ops.0.changed", [{"flat": 0x79E0, "before_hex": "00", "after_hex": "01"}],
+                         "changed other box regions"),
+    "memorial_current": ("runs.boxes.layout.current_box", 13, "memorial box is the current box"),
+    "reset_other_boot": ("runs.boxes_reset.boot_cartram_sha256", "d" * 64, "did not cold-boot the unsaved"),
+    "reset_party_kept": ("runs.boxes_reset.control.party_hex", None, "the party is not the saved one"),
+    "reset_active_kept": ("runs.boxes_reset.control.active_hex", None, "active sBox is not its backing"),
+    "reset_memorial_lost": ("runs.boxes_reset.control.memorial_hex", None, "backing (memorial) edit did not survive"),
+    "reload_other_boot": ("runs.boxes_reload.boot_cartram_sha256", "d" * 64, "did not cold-boot the reset"),
+    "reload_lost_memorial": ("runs.boxes_reload.persist.memorial_hex", None, "reload lacks"),
+    "reload_backing_differs": ("runs.boxes_reload.persist.backing_hex", None, "reload lacks"),
+    "layout_drift": ("runs.boxes_reload.layout.memorial_flat", 0x59E0, "disagree on the box layout"),
+}
+
+
+@pytest.mark.parametrize("fault", sorted(BOX_FAULTS))
+def test_box_run_faults_refuse_the_whole_receipt(sim_runs, fault):
+    receipt = box_receipt(sim_runs)
+    path, value, expected = BOX_FAULTS[fault]
+    if value is None:   # a well-formed but wrong byte image: the pre-op/other state of the same region
+        runs = receipt["runs"]
+        value = {"reset_party_kept": runs["boxes"]["ops"][3]["party_after_hex"],
+                 "reset_active_kept": runs["boxes"]["ops"][3]["changed"][0]["after_hex"],
+                 "reset_memorial_lost": runs["boxes"]["ops"][2]["changed"][0]["before_hex"],
+                 "reload_lost_memorial": runs["boxes"]["ops"][2]["changed"][0]["after_hex"],
+                 "reload_backing_differs": runs["boxes"]["ops"][0]["changed"][0]["before_hex"]}[fault]
+    if value == "APPEND":
+        value = receipt["runs"]["boxes"]["ops"][0]["changed"] + [{"flat": 0x4000, "before_hex": "00", "after_hex": "01"}]
+    if fault == "reset_active_kept":
+        _set(receipt, "runs.boxes_reset.control.backing_hex", value)
+    _set(receipt, path, value)
+    scope, why = u2.lua_qualified(pack_of("crystal"), "crystal", receipt)
+    assert scope is None and expected in why, why
+
+
+FAKE_CATCH = """
+return {driver=function()
+    local d = {terminal="saved", phase="walk", n=0}
+    function d.step(point)
+        d.n = d.n + 1
+        if d.n == 2 then d.phase = "battle" end
+        if d.n == 3 then
+            assert(point.probe_hits.capture_party == 1, "the catch is measured from this catch's own start")
+            d.phase = "save"
+        end
+        if d.n == 4 then d.phase = "saved" end
+        return {}, d.phase
+    end
+    return d
+end}
+"""
+
+
+def test_box_driver_runs_two_catches_then_waits_for_fresh_holds_around_the_ops():
+    lua, U = gate()
+    driver = U.box_driver(lua.execute(FAKE_CATCH), lua.table_from({}))
+    party = [1]
+
+    def step(accepted, **kw):
+        point = {"overworld_ready": True, "accepted": accepted, "party_count": party[0], "ops_done": False, **kw}
+        return driver.step(lua.table_from(point, recursive=True))[1]
+    assert step(0) == "idle" and step(0) == "idle"          # no fresh hold yet
+    assert step(1) == "walk"
+    phases = []
+    for count in (1, 2, 2, 2, 2, 3, 3):   # catch 1: battle, save (+1), saved; catch 2 from its own base
+        party[0] = count
+        phases.append(step(1))
+    assert phases == ["battle", "save", "save", "walk", "battle", "save", "post_save"]
+    assert step(1) == "post_save" and step(2) == "ops"      # a fresh accepted hold after the save
+    assert step(2) == "ops" and step(3, ops_done=True) == "done"
+
+
+def test_the_reset_driver_waits_for_the_ops_before_the_native_save():
+    lua, U = gate()
+    driver = U.driver("boxes_reset", lua.table_from({}))
+
+    def step(**kw):
+        return driver.step(lua.table_from({"overworld_ready": True, "accepted": 0, "window_frames": 0,
+                                           "save_success_counter": 0, **kw}, recursive=True))
+    assert step(accepted=1)[1] == "ops"
+    assert step(accepted=2)[1] == "ops"                     # ops not done yet
+    assert step(accepted=2, ops_done=True)[1] == "ops"      # needs a hold after the ops
+    assert step(accepted=3, ops_done=True)[1] == "to_save"
+    buttons, phase = step(accepted=4, ops_done=True)
+    assert phase == "save" and buttons["Start"] is True
+    assert U.driver("boxes_reload", lua.table_from({})).step(
+        lua.table_from({"overworld_ready": True, "accepted": 1}))[1] == "done"

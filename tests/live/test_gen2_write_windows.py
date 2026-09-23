@@ -202,9 +202,11 @@ def lua_bind(receipt: dict, reports: dict):
 # --- the live gate ------------------------------------------------------------------------------
 
 
-def _run(spec, fixture: Path, staged: bytes, mode: str, lane: str, qualification_attempt_id: str):
+def _run(spec, fixture: Path, staged: bytes, mode: str, lane: str, qualification_attempt_id: str,
+         extra_env: dict | None = None):
     from run_gb_gate import run_gate
     env = live.inspect_env(spec, staged)
+    env.update(extra_env or {})
     case = json.loads(env["SLINK_GEN2_FIXTURE_CASE"])
     case["attempt_id"] = f"u2-{lane}"   # one attempt id per run (M.qualified requires them distinct)
     env["SLINK_GEN2_FIXTURE_CASE"] = json.dumps(case)
@@ -265,6 +267,149 @@ def test_write_windows(title, emuhawk):  # noqa: F811 - pytest fixture
         assert lua_qualified(silver, "silver", receipt)[0] is not None
     receipt_path(title).write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     print(f"{title}: write kinds {scope['kinds']}; covered {scope['covered']}; OPEN {scope['uncovered']}")
+
+
+# --- card BOX: the box runs (boxes, boxes_reset, boxes_reload), added to the committed receipt ------------
+# lua/tests/gen2_write_windows.lua U.box_main: two scripted catches + native saves, the PRODUCTION executor
+# (lua/gen2/boxes.lua) at accepted holds, an UNSAVED flush (the reset-before-save control image), its cold
+# boot + completing ops + a native save, and that save's cold boot. Offsets below come from the pinned .sym.
+PARTY_BLOCK, BOX_COPY = 428, 1102
+
+
+def box_offsets(symbols, current_box: int) -> dict:
+    s = symbols
+    flat = lambda name: sram_flat(s[name].bank, s[name].address)   # noqa: E731
+    return {"party": flat("sPokemonData") + s["wPartyCount"].address - s["wPokemonData"].address,
+            "active": flat("sBox"), "backing": flat(f"sBox{current_box + 1}"), "memorial": flat("sBox14"),
+            "length": s["sBoxEnd"].address - s["sBox"].address}
+
+
+def reset_image(directory: Path, fixture: str) -> Path:
+    return directory / f"{fixture}.u2_reset.SaveRAM"
+
+
+def _image(cart: bytes, off: dict) -> dict:
+    """party / active / backing / memorial hex of one CartRAM image, from the .sym offsets alone."""
+    n = off["length"]
+    return {"party_hex": cart[off["party"]:off["party"] + PARTY_BLOCK].hex(),
+            "active_hex": cart[off["active"]:off["active"] + n].hex(),
+            "backing_hex": cart[off["backing"]:off["backing"] + n].hex(),
+            "memorial_hex": cart[off["memorial"]:off["memorial"] + n].hex()}
+
+
+def _bound_layout(run: dict, symbols) -> dict:
+    off = box_offsets(symbols, run["layout"]["current_box"])
+    assert off["length"] == BOX_COPY, off
+    assert (run["layout"]["active_flat"], run["layout"]["memorial_flat"]) == (off["active"], off["memorial"]), \
+        ("run layout disagrees with the pinned .sym", run["layout"], off)
+    return off
+
+
+def _hashed(image: bytes, digest: str) -> bytes:
+    cart = image[:CART_RAM_BYTES]
+    assert len(cart) == CART_RAM_BYTES and hashlib.sha256(cart).hexdigest() == digest, "flushed image differs"
+    return cart
+
+
+def verify_boxes(text: str, primary: dict, symbols, saved: bytes, reset: bytes) -> dict:
+    """Two catches saved natively; four ops; the unsaved flush holds the active and backing edits in SRAM while
+    the saved party (sPokemonData) and the backing slot of the current box are the pre-op bytes."""
+    run = run_record(text)
+    verify_liveness(run, primary)
+    off, ops = _bound_layout(run, symbols), run["ops"]
+    saved_img = _image(_hashed(saved, run["save"]["cartram_sha256"]), off)
+    assert saved_img["party_hex"] == ops[0]["party_before_hex"] and saved_img["party_hex"][:2] == "03", \
+        "the native save does not hold the lead and both catches"
+    reset_img = _image(_hashed(reset, run["reset"]["cartram_sha256"]), off)
+    assert reset_img["party_hex"] == saved_img["party_hex"], "the unsaved flush changed the saved party"
+    assert reset_img["active_hex"] == ops[3]["changed"][0]["after_hex"], "the active edit is not in SRAM"
+    assert reset_img["backing_hex"] == ops[0]["changed"][0]["before_hex"], "the backing slot was written"
+    assert reset_img["memorial_hex"] == ops[2]["changed"][0]["after_hex"], "the memorial edit is not in sBox14"
+    return run
+
+
+def verify_boxes_reset(text: str, primary: dict, symbols, boxes: dict, candidate: bytes, saved: bytes) -> dict:
+    """The reset control (the unsaved image cold-booted) and the completing ops' native save."""
+    run = run_record(text)
+    verify_liveness(run, primary)
+    assert run["fixture_sha256"] == hashlib.sha256(candidate).hexdigest(), "reset ran on another file"
+    assert run["boot_cartram_sha256"] == hashlib.sha256(candidate[:CART_RAM_BYTES]).hexdigest() \
+        == boxes["reset"]["cartram_sha256"], "reset did not cold-boot the unsaved flush"
+    off, a, b, k = _bound_layout(run, symbols), boxes["ops"], run["ops"], run["control"]
+    assert k["party_hex"] == a[0]["party_before_hex"], "reset: the party is not the saved one"
+    assert k["active_hex"] == k["backing_hex"] == a[0]["changed"][0]["before_hex"], "reset: the active edit survived"
+    assert k["memorial_hex"] == a[2]["changed"][0]["after_hex"], "reset: the backing edit was lost"
+    img = _image(_hashed(saved, run["save"]["cartram_sha256"]), off)
+    assert img["party_hex"] == b[2]["party_after_hex"], "party not saved"
+    assert img["active_hex"] == img["backing_hex"] == b[2]["changed"][0]["after_hex"], "SaveBox did not copy the deposit"
+    assert img["memorial_hex"] == b[1]["changed"][0]["after_hex"], "sBox14 lost the withdraw"
+    return run
+
+
+def verify_boxes_reload(text: str, primary: dict, symbols, reset: dict, candidate: bytes) -> dict:
+    run = run_record(text)
+    verify_liveness(run, primary)
+    assert run["boot_cartram_sha256"] == hashlib.sha256(candidate[:CART_RAM_BYTES]).hexdigest() \
+        == reset["save"]["cartram_sha256"], "reload did not cold-boot the reset run's save"
+    off, b, keep = _bound_layout(run, symbols), reset["ops"], run["persist"]
+    assert keep == {"party_hex": b[2]["party_after_hex"], "active_hex": b[2]["changed"][0]["after_hex"],
+                    "backing_hex": b[2]["changed"][0]["after_hex"], "memorial_hex": b[1]["changed"][0]["after_hex"]}, \
+        "the reload lacks the saved bytes"
+    cart = bytes.fromhex(live.tag_json(text, "DUMP")["cartram"]["hex"])
+    assert _image(cart, off) == keep, "the dumped CartRAM (sPokemonData, sBox, backing, sBox14) disagrees"
+    return run
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_box_runs(title, emuhawk):  # noqa: F811 - pytest fixture
+    """Adds runs boxes/boxes_reset/boxes_reload to the committed <title>.write_window.json and re-qualifies it."""
+    from tools import gen2_fixtures, gen2_source_data
+    from tests.live.test_gen2_frame_align import u1_facts
+    spec = gen2_fixtures.BY_NAME[f"{title}_battle"]
+    reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
+              or live.receipt_missing_reason(spec.name))
+    if reason:
+        pytest.skip(reason)
+    receipt = json.loads(receipt_path(title).read_text(encoding="utf-8"))
+    for mode in ("boxes", "boxes_reset", "boxes_reload"):
+        receipt["runs"].pop(mode, None)
+    fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
+    staged = fixture.read_bytes()
+    live.qualified_identity(spec.name, staged)
+    report = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
+    pack = json.loads((REPO / f"data/games/gen2_{title}/write_checkpoint.json").read_text(encoding="utf-8"))
+    primary = pack["titles"][title]["primary"]
+    ctx = gen2_source_data.load_context(title, root=REPO)
+    q = report["attempt_id"]
+    facts = {"SLINK_GEN2_U1_FACTS": json.dumps(u1_facts(ctx, gen2_fixtures.route_facts(title, REPO), q))}
+
+    directory, text = _run(spec, fixture, staged, "boxes", f"{title}_boxes", q, facts)
+    boxes = verify_boxes(text, primary, ctx.symbols, saved_image(directory, spec.name).read_bytes(),
+                         reset_image(directory, spec.name).read_bytes())
+    candidate = REPO / ".cache/gen2-fixtures/u2-write-windows" / f"{title}_battle.reset_candidate.SaveRAM"
+    shutil.copyfile(reset_image(directory, spec.name), candidate)
+    directory, text = _run(spec, candidate, candidate.read_bytes(), "boxes_reset", f"{title}_boxes_reset", q)
+    reset = verify_boxes_reset(text, primary, ctx.symbols, boxes, candidate.read_bytes(),
+                               saved_image(directory, spec.name).read_bytes())
+    candidate = REPO / ".cache/gen2-fixtures/u2-write-windows" / f"{title}_battle.box_reload_candidate.SaveRAM"
+    shutil.copyfile(saved_image(directory, spec.name), candidate)
+    _, text = _run(spec, candidate, candidate.read_bytes(), "boxes_reload", f"{title}_boxes_reload", q)
+    reload = verify_boxes_reload(text, primary, ctx.symbols, reset, candidate.read_bytes())
+    assert fixture.read_bytes() == staged, f"{spec.name} changed while the gates ran"
+
+    receipt["runs"].update({"boxes": boxes, "boxes_reset": reset, "boxes_reload": reload})
+    scope, why = lua_qualified(pack, title, receipt)
+    assert scope is not None, why
+    assert set(scope["kinds"]) >= {"party_collection", "box_withdraw", "backing_box"}, scope
+    reports = {name: json.loads((REPO / live.RECEIPTS / f"{name}.qualification.json").read_text(encoding="utf-8"))
+               for name in (f"{title}_town", f"{title}_battle")}
+    bound, why = lua_bind(receipt, reports)
+    assert bound is True, why
+    if title == "gold":
+        silver = json.loads((REPO / "data/games/gen2_silver/write_checkpoint.json").read_text(encoding="utf-8"))
+        assert lua_qualified(silver, "silver", receipt)[0] is not None
+    receipt_path(title).write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"{title}: write kinds {scope['kinds']}")
 
 
 @pytest.fixture(scope="module")

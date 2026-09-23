@@ -49,7 +49,8 @@ U.INSPECT_GATE = "lua/tests/gen2_inspect_gate.lua"
 U.OBSERVE = 30
 U.BUDGET = {max_frames=60000, max_phase_frames=15000, settle_frames=4}
 U.TEXT_KINDS = {text=true, prompt_button=true, wait_button=true}
-U.MODES = {town="town", battle="battle", reload="town"}   -- mode -> required fixture target
+U.MODES = {town="town", battle="battle", reload="town",   -- mode -> required fixture target
+           boxes="battle", boxes_reset="battle", boxes_reload="battle"}
 U.DIRECTIONS = {{"Up", 0, -1}, {"Left", -1, 0}, {"Down", 0, 1}, {"Right", 1, 0}}
 U.REPULSE = 60
 local fmt = string.format
@@ -121,6 +122,7 @@ function U.driver(mode, maps)
     -- A native press is HELD 12 frames (gen2_qualify.lua HOLD); overworld walking holds per frame.
     local HOLD, held, hold_left, release = 12, nil, 0, false
     local mark, save_counter, confirmed, waited, here, from = 0, nil, false, 0, nil, nil
+    local ops_mark
     local function press(button)
         release, held, hold_left = true, button, HOLD - 1
         return {[button]=true}, d.phase
@@ -160,7 +162,8 @@ function U.driver(mode, maps)
         if p == "idle" then
             if not idle or point.accepted < 1 or (mode == "town" and not point.write_done) then return {}, p end
             mark = point.accepted
-            if mode == "reload" then go("done"); return {}, d.phase end
+            if mode == "reload" or mode == "boxes_reload" then go("done"); return {}, d.phase end
+            if mode == "boxes_reset" then go("ops"); return {}, d.phase end
             if mode == "battle" then go("walk"); return {}, d.phase end
             go("start_menu")
             return press("Start")
@@ -213,8 +216,14 @@ function U.driver(mode, maps)
             end
             if idle and waited > U.REPULSE then waited = 0; return press("Start") end
             return {}, p
+        elseif p == "ops" then   -- boxes_reset: the checkpoint hook runs the ops; then a fresh hold
+            if point.ops_done then
+                if ops_mark == nil then ops_mark = point.accepted
+                elseif idle and point.accepted > ops_mark then mark = point.accepted; go("to_save") end
+            end
+            return {}, d.phase
         elseif p == "post_save" then
-            if live("exit") then return {}, d.phase end
+            if live(mode == "boxes_reset" and "done" or "exit") then return {}, d.phase end
             if ui and ui.kind == "start_menu" and ready and waited > U.REPULSE then waited = 0; return press("B") end
             return {}, p
         elseif p == "exit" then
@@ -370,6 +379,12 @@ function U.main(api, getenv, SG, IG)
             mapped_rom_bank=function() return api.read_u8(HROM, "System Bus") end,
             effective_wram_bank=effective_wram_bank,
         })
+
+    if U.BOX_MODES[mode] then
+        return U.box_main({api=api, ctx=ctx, SG=SG, IG=IG, log=log, check=check, finish=finish, profile=profile,
+            mode=mode, Safety=Safety, primary=primary, pack=pack, title=title, evidence=evidence, getenv=getenv,
+            HROM=HROM, bank=bank, checkpoint=checkpoint, failures=function() return failures end})
+    end
 
     -- The ONLY authority for a harness write: an accepted hold, inside the checkpoint callback.
     -- Every byte written is charged to the harness scope armed around it (the run record lists them).
@@ -655,6 +670,268 @@ function U.main(api, getenv, SG, IG)
         end
     end
     run.result = failures == 0 and "PASS" or "FAIL"
+    log("U2_RUN " .. json.encode(run))
+    return finish()
+end
+
+-- ── card BOX: the box runs (boxes, boxes_reset, boxes_reload) ────────────────────────────────────
+-- boxes   <title>_battle: two catches by the U1 inputs (lua/tests/gen2_frame_align.lua F.driver: walk the
+--         Route 29 grass, Poke Ball, NO to the nickname, native SAVE; the O-10 ball stack is the fixture's
+--         own), then the PRODUCTION executor (lua/gen2/boxes.lua B.executor, B.cart_gate) runs
+--         Safety.BOX_OPS.boxes, one op per accepted checkpoint hold, and the CartRAM is flushed WITHOUT a
+--         save (<case>.u2_reset.SaveRAM, U.reset_path): an unsaved active-sBox edit plus a backing sBox14 edit.
+-- boxes_reset  that image cold-booted (the reset-before-save control): the party, active sBox, its
+--         backing slot and sBox14 as CONTINUE left them, then Safety.BOX_OPS.boxes_reset and a native SAVE
+--         (<case>.u2_saved.SaveRAM).
+-- boxes_reload that save cold-booted: the persisted party, active sBox, backing slot and sBox14.
+-- The executor's permits authorize only inside an accepted hold (TEST scope u2-box-ops); `written` is the
+-- permit kind of every span in emission order (provenance, not a claim).
+U.BOX_MODES = {boxes=true, boxes_reset=true, boxes_reload=true}
+U.FRAME_ALIGN = "lua/tests/gen2_frame_align.lua"
+U.PACK_KINDS = {"pack_items", "pack_balls", "pack_key", "pack_tmhm", "item_submenu"}
+function U.reset_path(dir, case_name) return dir .. "/" .. case_name .. ".u2_reset.SaveRAM" end
+
+-- Pure driver for mode boxes: idle -> two F.driver catches (each ends in a native save) -> post_save ->
+-- ops (the hook runs them) -> done. point adds accepted, party_count, ops_done.
+function U.box_driver(F, map)
+    local d = {terminal="done", phase="idle"}
+    local catch, inner, base, mark, settle = 0, nil, nil, nil, false
+    function d.step(point)
+        if type(point) ~= "table" then return nil, "observation missing" end
+        local idle = point.overworld_ready == true and point.ui == nil
+        if d.phase == "idle" then
+            mark = mark or point.accepted
+            if idle and point.accepted > mark then d.phase = "walk"; inner = nil end
+            if d.phase == "idle" then return {}, d.phase end
+        end
+        if d.phase == "post_save" then
+            if idle and point.accepted > mark then d.phase = "ops" end
+            return {}, d.phase
+        end
+        if d.phase == "ops" then
+            if point.ops_done then d.phase = d.terminal end
+            return {}, d.phase
+        end
+        if d.phase == d.terminal then return {}, d.phase end
+        if settle then
+            if not idle then return {}, d.phase end
+            settle = false
+        end
+        if inner == nil then
+            catch, inner, base = catch + 1, F.driver(map), point.party_count
+        end
+        point.probe_hits = {capture_party = point.party_count - base}
+        local buttons, phase = inner.step(point)
+        if buttons == nil then return nil, "catch " .. catch .. ": " .. tostring(phase) end
+        if inner.phase == inner.terminal then
+            inner, settle = nil, true
+            if catch == 2 then d.phase, mark = "post_save", point.accepted; return {}, d.phase end
+            return {}, d.phase
+        end
+        d.phase = inner.phase
+        return buttons, d.phase
+    end
+    return d
+end
+
+function U.box_main(e)
+    local api, ctx, SG, IG, log, check, finish = e.api, e.ctx, e.SG, e.IG, e.log, e.check, e.finish
+    local profile, mode, Safety, primary, json = e.profile, e.mode, e.Safety, e.primary, ctx.json
+    local L = function(rel) return dofile(ctx.root .. "/" .. rel) end
+    local Boxes, Writes, Reads, Rom, Wire = L("lua/gen2/boxes.lua"), L("lua/gen2/writes.lua"),
+        L("lua/gen2/reads.lua"), L("lua/gen2/rom.lua"), L("lua/gen2/wire.lua")
+    local F
+    do
+        local previous = SLINK_GEN2_GATE_LIBRARY
+        SLINK_GEN2_GATE_LIBRARY = true
+        local ok, lib = pcall(dofile, ctx.root .. "/" .. U.FRAME_ALIGN)
+        SLINK_GEN2_GATE_LIBRARY = previous
+        assert(ok and type(lib) == "table", "cannot load " .. U.FRAME_ALIGN .. ": " .. tostring(lib))
+        F = lib
+    end
+    if mode == "boxes" then
+        -- The U1 gate's pack-UI origins and catch prompt join this run's UI context before the hooks.
+        local u1 = assert(json.decode(assert(e.getenv("SLINK_GEN2_U1_FACTS"), "SLINK_GEN2_U1_FACTS missing")))
+        for _, kind in ipairs(U.PACK_KINDS) do ctx.facts.ui_origins[kind] = assert(u1.pack_ui[kind], "U1 facts lack " .. kind) end
+        SG.MENU_KINDS.item_submenu = true
+        local prompts = {}
+        for k, v in pairs(ctx.obs.prompts) do prompts[k] = v end
+        for k, v in pairs(ctx.prompts) do prompts[k] = v end
+        for k, v in pairs(u1.prompts) do prompts[k] = v end
+        ctx.prompts = prompts
+    end
+    local d, ram = profile.derived, profile.ram
+    local boot_digest = mode ~= "boxes" and SG.cart_digest(api) or nil
+    local arrived, detail, state = IG.arrive(ctx, SG)
+    if not check("post-CONTINUE overworld arrival", arrived, detail) then
+        state.release()
+        return finish("no arrival")
+    end
+
+    -- The production executor behind TEST-scoped permits: authority = an accepted hold.
+    local in_hold, wrote, written = false, false, {}
+    local function effective_wram_bank()
+        local v = api.read_u8(0xFF70, "System Bus") % 8
+        return v == 0 and 1 or v
+    end
+    local io_ = {cart_ram_linear=true, read_u8=api.read_u8, domain_size=api.domain_size,
+        read_range=function(a, n, dom) return api.read_range(a, n, dom) end,
+        write_u8=function(a, v, dom) wrote = true; api.write_u8(a, v, dom) end,
+        bank_valid=function(b, addr, n)
+            if addr >= 0xC000 and addr + n <= 0xD000 then return b == 0 end
+            return addr >= 0xD000 and addr + n <= 0xE000 and b == effective_wram_bank()
+        end}
+    local lifetime = {capture=api.framecount, valid=function(token) return token == api.framecount() end}
+    local reads = assert(Reads.new(profile, io_))
+    local writes = Writes.new(profile, io_, ctx.Permit, {
+        authorize=function(op) return in_hold and op == "party_collection" end,
+        pointer_stable=function() return true end, lifetime=lifetime,
+        provenance=function() written[#written + 1] = "party_collection"
+            return {site="lua/tests/gen2_write_windows.lua", scope="TEST-ONLY"} end})
+    local gate = Boxes.cart_gate({Permit=ctx.Permit, profile=profile, io=io_, lifetime=lifetime,
+        check=function() return in_hold end,
+        provenance=function(_, _, _, reason) written[#written + 1] = tostring(reason):sub(5)
+            return {site="lua/tests/gen2_write_windows.lua", scope="TEST-ONLY"} end})
+    local pp, mail = {}, {}
+    for _, move in ipairs(read_json(ctx, "data/games/gen2_" .. e.title .. "/moves.json").moves) do pp[move.id] = move.pp end
+    for _, id in ipairs(read_json(ctx, "data/games/gen2_" .. e.title .. "/items.json").mail_ids) do mail[id] = true end
+    local rom = Rom.new(profile, {read_u8=api.read_u8})
+    local exec = Boxes.executor({profile=profile, reads=reads, key=Wire.mon_key, writes=writes,
+        box=Boxes.new(profile, gate), io=io_, base_stats=rom.base_stats, move_pp=function(id) return pp[id] end,
+        mail=mail, covers=function() return true end})
+
+    local regions = {{flat=d.active_box_flat}}
+    for _, row in ipairs(profile.storage_boxes) do regions[#regions + 1] = {flat=row.flat} end
+    local function region(flat) return hex(api.read_range(flat, Safety.BOX_COPY, "CartRAM")) end
+    local function party_hex() return hex(api.read_range(ram.wPartyCount, Safety.PARTY_BLOCK, "System Bus")) end
+    local function snapshot_regions()
+        local out = {}
+        for i, r in ipairs(regions) do out[i] = region(r.flat) end
+        return out
+    end
+    local cur = ctx.sym("wCurBox")[1]
+    local layout = {active_flat=d.active_box_flat, memorial_flat=profile.storage_boxes[14].flat, current_box=cur}
+    local function box_bytes()
+        return {party_hex=party_hex(), active_hex=region(d.active_box_flat),
+                backing_hex=region(profile.storage_boxes[cur + 1].flat), memorial_hex=region(layout.memorial_flat)}
+    end
+    local control = mode == "boxes_reset" and box_bytes() or nil
+    local party_before = ctx.sym("wPartyCount")[1]
+
+    local want = Safety.BOX_OPS[mode] or {}
+    local rec = {accepted=0, raw=0, refused=0, other_bank=0, reasons={}, hits={}, errors={}}
+    local ops, keys, driver = {}, nil, nil
+    local function run_op()
+        local w = want[#ops + 1]
+        if keys == nil then
+            local party = assert(reads.read_party())
+            assert(#party.mons == 3, "the ops need the lead and two catches in the party")
+            keys = {assert(Wire.mon_key(party.mons[2])), assert(Wire.mon_key(party.mons[3]))}
+        end
+        local before, pb = snapshot_regions(), party_hex()
+        written = {}
+        in_hold = true
+        local ok, why = exec[w.op](keys[w.key])
+        in_hold = false
+        local after, changed = snapshot_regions(), json.array({})
+        for i, r in ipairs(regions) do
+            if after[i] ~= before[i] then changed[#changed + 1] = {flat=r.flat, before_hex=before[i], after_hex=after[i]} end
+        end
+        local kinds = json.array({})
+        for _, k in ipairs(written) do kinds[#kinds + 1] = k end
+        ops[#ops + 1] = {op=w.op, key=keys[w.key], ok=ok == true, reason=why or json.null, frame=api.framecount(),
+                         written=kinds, party_before_hex=pb, party_after_hex=party_hex(), changed=changed}
+        if ok ~= true then log("  op " .. #ops .. " " .. w.op .. " refused: " .. tostring(why)) end
+    end
+    local function on_checkpoint()
+        local fine, err = pcall(function()
+            local hit_bank = api.read_u8(e.HROM, "System Bus")
+            if hit_bank ~= e.bank then rec.other_bank = rec.other_bank + 1; return end
+            rec.raw = rec.raw + 1
+            local report = e.checkpoint:inspect_candidate()
+            if report.candidate_match ~= true then
+                rec.refused = rec.refused + 1
+                rec.reasons[report.reason] = (rec.reasons[report.reason] or 0) + 1
+                return
+            end
+            rec.accepted = rec.accepted + 1
+            if #rec.hits < 8 then rec.hits[#rec.hits + 1] = {frame=api.framecount(), pc=api.register("PC"), bank=hit_bank} end
+            if driver and driver.phase == "ops" and #ops < #want and (#ops == 0 or ops[#ops].ok) then run_op() end
+        end)
+        in_hold = false
+        if not fine and #rec.errors < 8 then rec.errors[#rec.errors + 1] = tostring(err) end
+    end
+    local handle = api.on_bus_exec(on_checkpoint, primary.execution_before.pc, "SLink-gen2-u2-box-checkpoint", "System Bus")
+
+    local base = SG.qualify_observer(ctx)
+    local function observe()
+        local point = base()
+        point.accepted, point.party_count = rec.accepted, ctx.sym("wPartyCount")[1]
+        point.ops_done = #ops == #want or (#ops > 0 and not ops[#ops].ok)
+        if point.ui and point.ui.kind == "pack_balls" then point.ball_cursor = F.ball_cursor(SG.screen(ctx)) end
+        if point.ui and point.ui.kind == "battle_menu" then
+            local menu = SG.parse_menu(SG.screen(ctx), ctx.obs.screen.width, ctx.obs.screen.height, SG.BATTLE_MENU_GRID)
+            if menu then point.ui.items, point.ui.cursor, point.ui.columns = menu.items, menu.cursor, menu.columns
+            else point.input_ready = false end
+        end
+        return point
+    end
+    driver = mode == "boxes" and U.box_driver(F, ctx.facts.maps.Route29) or U.driver(mode, ctx.facts.maps)
+    local idle = {}
+    for _, name in ipairs(SG.BUTTONS) do idle[name] = false end
+    local host = ctx.Host.new({step=SG.button_step(ctx), frame=api.framecount, idle=idle})
+    local phases, save, reset, catch = {}, nil, nil, nil
+    local function keep(path)
+        local digest = SG.cart_digest(api)
+        local bytes = SG.flush(ctx, digest)
+        local f = assert(io.open(path, "wb"), "cannot write " .. path)
+        assert(f:write(bytes), "cannot write " .. path)
+        f:close()
+        return {cartram_sha256=digest, flushed=true, frame=api.framecount()}
+    end
+    local played, outcome = pcall(host.run, {name="u2-" .. mode, terminal=driver.terminal,
+        max_frames=U.BUDGET.max_frames * 2, max_phase_frames=24000, settle_frames=30, terminal_idle=true},
+        function(frame)
+            local point = observe()
+            local buttons, phase = driver.step(point)
+            if buttons == nil then
+                log(F.state_line("stall", frame, driver.phase, point, "-"))
+                local shown, rows = pcall(SG.screen, ctx)
+                if shown then for y, row in ipairs(rows) do log(fmt("  screen %02d |%s|", y, table.concat(row))) end end
+                error(phase, 0)
+            end
+            return buttons, phase, point
+        end,
+        function(_, phase, frame)
+            phases[#phases + 1] = {phase=phase, frame=frame, accepted=rec.accepted}
+            if phase == "post_save" then
+                save = keep(U.saved_path(ctx.env.dir, ctx.case.name))
+                catch = {party_before=party_before, party_after=ctx.sym("wPartyCount")[1]}
+            elseif phase == "done" and mode == "boxes" then
+                reset = keep(U.reset_path(ctx.env.dir, ctx.case.name))   -- NO save: the reset control image
+            end
+        end)
+    api.unregister(handle)
+    state.release()
+    check("scripted " .. mode .. " route completed with normal buttons", played, not played and outcome or nil)
+    check("checkpoint callback raised no error", #rec.errors == 0, rec.errors[1])
+    local run = {schema=Safety.RUN_SCHEMA, mode=mode, title=e.title, evidence_level=e.evidence, result="FAIL",
+        rom_sha1=ctx.env.rom_sha1, pack_commit=e.pack.source.commit, fixture=ctx.case.name,
+        fixture_sha256=ctx.qualify.stage_fingerprint, attempt_id=ctx.case.attempt_id,
+        qualification_attempt_id=ctx.u2.qualification_attempt_id, core_mode="CGB", input_mode="normal_buttons",
+        harness_write_scopes=json.array(wrote and {"u2-box-ops"} or {}),
+        liveness={accepted=rec.accepted, raw=rec.raw, refused=rec.refused, other_bank=rec.other_bank,
+                  refusals=json.object(rec.reasons), hits=json.array(rec.hits)},
+        phases=json.array(phases), windows=json.object({}), layout=layout, ops=json.array(ops),
+        save=save or json.null, reset=reset or json.null, catch=mode == "boxes" and catch or json.null,
+        control=control or json.null, boot_cartram_sha256=boot_digest or json.null,
+        persist=(mode == "boxes_reload" and played) and box_bytes() or json.null}
+    if played then
+        local problem = Safety.run_problem(run, mode, primary)
+        check("run record proves the " .. mode .. " controls", problem == nil, problem)
+    end
+    if mode == "boxes_reload" and played then log("DUMP " .. json.encode(IG.dump(api, profile))) end
+    run.result = e.failures() == 0 and "PASS" or "FAIL"
     log("U2_RUN " .. json.encode(run))
     return finish()
 end

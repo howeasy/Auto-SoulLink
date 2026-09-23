@@ -185,8 +185,10 @@ class World:
             rom, self.profile["ram"]["hROMBank"])
         self.checkpoint_ok = False
         self.owned = lambda op, slot: True
-        checkpoint = self.lua.eval("function(f) return {check=function() return f() end} end")(
-            lambda: (self.checkpoint_ok, "stub checkpoint"))
+        self.covered = {"party_hp", "box_deposit", "party_collection", "box_withdraw", "backing_box"}
+        checkpoint = self.lua.eval("function(f, c) return {check=function() return f() end, "
+                                   "covers=function(_, kind) return c(kind) end} end")(
+            lambda: (self.checkpoint_ok, "stub checkpoint"), lambda kind: kind in self.covered)
         entry = self.lua.eval("dofile")((ROOT / "lua/gen2/entry.lua").as_posix())
         if production:
             # Live-shaped IO: not model_only, with the domain list the checkpoint evaluator needs.
@@ -210,6 +212,8 @@ class World:
         self.field("wPlayerID", 0x1234, 2)
         self.party([mon()])
         self.box([])
+        for row in self.profile["storage_boxes"]:   # EraseBoxes: every backing box empty and terminated
+            self.emu.poke("CartRAM", row["flat"], self.lua.table_from([0, 255]))
         self.ram("wNumBalls", [1, 1, 5, 255])
         self.field("wMapGroup", 24)
         self.field("wMapNumber", 3)
@@ -1124,8 +1128,12 @@ def test_production_refuses_what_the_receipts_do_not_cover():
     world.field("wBattleMode", 1)
     world.reply({"cmd": "force_faint", "key": codec_key(active), "nickname": "PIKA"})
     world.frames(2)
+    world.frames(2)
+    assert world.sent("box_mon_failed") == []            # box commands wait for the checkpoint hold
+    world.field("wBattleMode", 0)
+    world.hold()
     (nack,) = world.sent("box_mon_failed")
-    assert "current-box deposit" in nack["reason"]
+    assert "unproven write kind party_collection" in nack["reason"]   # the base receipt: no party block
     assert any(text.startswith("show:KO held") for text in world.shown()) and world.written() == []
 
 
@@ -1220,3 +1228,125 @@ def test_run_lua_exposes_the_production_client_only_for_an_admitted_cartridge(ti
     else:
         assert g.SLINK_GEN2_CLIENT is None and g.SLINK_GEN2_PARTS is None and len(frames) == 0
         assert any("refused" in line and "BUILD_ONLY" in line for line in logs.values())
+
+
+# ── card BOX: box_mon / party_mon / memorialize through the composed executor (MODEL candidate) ───────
+BOX_KINDS = {"party_hp", "box_deposit", "party_collection", "box_withdraw", "backing_box"}
+
+
+def box_world(party, box=(), covered=BOX_KINDS):
+    world = World()
+    world.covered = set(covered)
+    world.field("wSavedAtLeastOnce", 1)
+    world.party(list(party))
+    world.box(list(box))
+    world.hello()
+    world.frames(60)   # a live validation enables writes
+    world.checkpoint_ok = False
+    return world
+
+
+def storage(world, index):
+    flat = world.profile["storage_boxes"][index]["flat"]
+    return [world.io.read_u8(flat + i, "CartRAM") for i in range(1102)]
+
+
+def active(world):
+    flat = world.profile["derived"]["active_box_flat"]
+    return [world.io.read_u8(flat + i, "CartRAM") for i in range(1102)]
+
+
+def party_count(world):
+    return world.io.read_u8(world.profile["ram"]["wPartyCount"])
+
+
+def test_box_mon_deposits_at_the_checkpoint_after_stats_cache():
+    lead, pichu = mon(), mon(species=172, dvs=0x3AAA)
+    world = box_world([lead, pichu])
+    world.reply({"cmd": "box_mon", "key": codec_key(pichu)})
+    world.frames(1)
+    assert party_count(world) == 2 and world.sent("stats_cache") == []   # nothing outside the checkpoint
+    world.checkpoint_ok = True
+    world.frames(1)
+    (cache,) = world.sent("stats_cache")
+    assert cache["key"] == codec_key(pichu) and world.sent("box_mon_failed") == []
+    assert party_count(world) == 1 and active(world)[0:3] == [1, 172, 255]
+    world.frames(30)
+    assert [e["key"] for e in world.sent("tick")[-1]["pc_boxes"]] == [codec_key(pichu)]
+
+
+def test_party_mon_withdraws_and_acks_sync_retrieve_done():
+    lead, boxed = mon(), mon(species=19, dvs=0x7AAA)
+    world = box_world([lead], [boxed])
+    world.checkpoint_ok = True
+    world.reply({"cmd": "party_mon", "key": codec_key(boxed)})
+    world.frames(2)
+    assert [m["key"] for m in world.sent("sync_retrieve_done")] == [codec_key(boxed)]
+    assert party_count(world) == 2 and active(world)[0] == 0
+
+
+def test_memorialize_moves_the_mon_into_box_14_and_acks_with_the_box():
+    lead, dead = mon(), mon(species=19, dvs=0x7AAA, hp=0)
+    world = box_world([lead, dead])
+    world.checkpoint_ok = True
+    world.reply({"cmd": "memorialize", "key": codec_key(dead)})
+    world.frames(2)
+    (done,) = world.sent("memorialize_done")
+    assert done["key"] == codec_key(dead) and done["box"] == 13
+    assert storage(world, 13)[0:3] == [1, 19, 255] and party_count(world) == 1
+
+
+def test_a_whiteout_rebuild_party_mon_waits_behind_the_memorial_that_frees_a_slot():
+    """Gen 1 A5/rebuild rule: party full -> tail requeue (bounded); the memorialize queued after it frees
+    the slot, then the retry lands. sync_retrieve_failed would be final at the server (state.py)."""
+    six = [mon(species=20 + i, dvs=0x1000 * (i + 1)) for i in range(6)]
+    boxed = mon(species=19, dvs=0x7AAA)
+    world = box_world(six, [boxed])
+    world.checkpoint_ok = True
+    world.reply({"cmd": "party_mon", "key": codec_key(boxed)}, {"cmd": "memorialize", "key": codec_key(six[5])})
+    world.frames(4)
+    assert world.sent("sync_retrieve_failed") == []
+    events = [m["event"] for m in world.sent() if m["event"] in ("memorialize_done", "sync_retrieve_done")]
+    assert events == ["memorialize_done", "sync_retrieve_done"]
+
+
+def test_a_genuinely_full_party_still_fails_the_retrieve():
+    six = [mon(species=20 + i, dvs=0x1000 * (i + 1)) for i in range(6)]
+    boxed = mon(species=19, dvs=0x7AAA)
+    world = box_world(six, [boxed])
+    world.checkpoint_ok = True
+    world.reply({"cmd": "party_mon", "key": codec_key(boxed)})
+    world.frames(5)
+    (nack,) = world.sent("sync_retrieve_failed")
+    assert nack["key"] == codec_key(boxed) and "party full" in nack["reason"]
+
+
+def test_the_last_party_mon_memorial_waits_for_the_rebuild_or_drops_after_game_over():
+    lead, boxed = mon(hp=0), mon(species=19, dvs=0x7AAA)
+    world = box_world([lead], [boxed])
+    world.checkpoint_ok = True
+    world.reply({"cmd": "memorialize", "key": codec_key(lead)}, {"cmd": "party_mon", "key": codec_key(boxed)})
+    world.frames(4)
+    events = [m["event"] for m in world.sent() if m["event"] in ("memorialize_done", "sync_retrieve_done",
+                                                                  "memorialize_failed")]
+    assert events == ["sync_retrieve_done", "memorialize_done"]
+    world = box_world([lead])
+    world.checkpoint_ok = True
+    world.reply({"cmd": "game_over"}, {"cmd": "memorialize", "key": codec_key(lead)})
+    world.frames(4)
+    assert world.sent("memorialize_done") == [] and world.sent("memorialize_failed") == []
+    assert party_count(world) == 1
+
+
+@pytest.mark.parametrize("cmd,nack", [("box_mon", "box_mon_failed"), ("party_mon", "sync_retrieve_failed"),
+                                      ("memorialize", "memorialize_failed")])
+def test_an_unproven_write_kind_is_nacked_with_the_kind_and_writes_nothing(cmd, nack):
+    lead, other = mon(), mon(species=19, dvs=0x7AAA)
+    world = box_world([lead] if cmd == "party_mon" else [lead, other], [other] if cmd == "party_mon" else [],
+                      covered={"party_hp", "box_deposit"})
+    world.checkpoint_ok = True
+    world.reply({"cmd": cmd, "key": codec_key(other)})
+    world.frames(2)
+    (refusal,) = world.sent(nack)
+    assert refusal["key"] == codec_key(other) and "party_collection" in refusal["reason"]
+    assert world.written() == []

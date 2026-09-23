@@ -102,8 +102,9 @@ Entry.RECEIPT_FILES = {
     },
 }
 -- Permit operation (lua/gen2/writes.lua) -> the U2 write kind that authorizes it. Anything
--- else (write_party_bytes, active faint, explode) has no receipt kind and is refused.
-Entry.WRITE_KIND = {party_faint="party_hp"}
+-- else (write_party_bytes, active faint, explode) has no receipt kind and is refused. The box
+-- executor's CartRAM spans carry their own kinds (lua/gen2/boxes.lua B.kind_of).
+Entry.WRITE_KIND = {party_faint="party_hp", party_collection="party_collection"}
 local titles = {"crystal", "gold", "silver"}
 local order = {"profile", "admission", "sites", "checkpoint", "area_map", "statics", "encounters",
                "species", "evolutions", "gifts", "moves", "trainers", "map_names", "items", "charmap"}
@@ -336,8 +337,26 @@ local function compose(deps, title, production)
                     return Signals.new_model(options)
                 end
             end
+            -- The box executor (card BOX): box_mon / party_mon / memorialize. Every span re-proves the
+            -- held checkpoint for its own kind; a kind the receipt never proved refuses before a byte.
+            local Boxes, wire = load("lua/gen2/boxes.lua"), load("lua/gen2/wire.lua")
+            local lifetime = production and {capture=function() return io_.framecount() end,
+                                             valid=function(token) return token == io_.framecount() end}
+                             or write_policy.lifetime
+            local gate = Boxes.cart_gate({Permit=Permit, profile=profile, io=io_, lifetime=lifetime,
+                check=function(kind) return checkpoint:check(kind) == true end,
+                provenance=function() return {site="lua/gen2/entry.lua box executor"} end})
+            local pp, mail = {}, {}
+            for _, move in ipairs(data.moves.moves) do pp[move.id] = move.pp end
+            for _, id in ipairs(data.items.mail_ids) do mail[id] = true end
+            local boxes = Boxes.executor({profile=profile, reads=reads, key=wire.mon_key, writes=writes,
+                box=Boxes.new(profile, gate), io=io_, base_stats=rom.base_stats,
+                move_pp=function(id) return assert(pp[id], "unknown move") end, mail=mail,
+                covers=function(kind)
+                    return type(checkpoint.covers) == "function" and checkpoint:covers(kind) == true
+                end})
             client = load("lua/gen2/client.lua").new({
-                reads=reads, wire=load("lua/gen2/wire.lua"), writes=writes, rom=rom,
+                reads=reads, wire=wire, writes=writes, rom=rom, boxes=boxes,
                 safety={check=function(kind) return checkpoint:check(kind) end},
                 signals=signals,
                 -- production only: the held checkpoint PC the client hooks (writes + hello readiness)
