@@ -1,6 +1,28 @@
-# Gen 3 migration — resume note (updated 2026-09-23, checkpoint 10: first live duo on the new client PASS)
+# Gen 3 migration — resume note (updated 2026-09-23, checkpoint 14: owner G4 rulings settled; save rows + probe rows PASS; 2b + G5 RR fixes in flight)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in the sweep worktree's `docs/gen1_reference/RC_MASTER_GUIDE.md` (`E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`). Requirements ledger: `docs/gen3_requirements.md`.
+
+## CHECKPOINT 14 (2026-09-23): G4 owner rulings recorded; the 2b in-battle rows wired and run; G5's RR battle permit fixed in source
+
+Resume from HEAD d8a62085 (see git log). Clean cuts to re-enter from: b261d045 (save rows + A1), b0511ff2 (item 3), e4c30fff (tutorial states).
+**The tree is NOT clean at this checkpoint**: uncommitted edits to lua/gen3/safety.lua, patch/src/handlers.c, tools/e2e_duo.py + lua/tests/duo/duo_gen3_main.lua, tools/gen_gen3_write_checkpoint.py, data/games/gen3_rr/write_checkpoint.json and their tests, plus the untracked lua/tests/gen3_routes.lua + tests/unit/test_gen3_routes.py (the items marked "in flight" below).
+- Owner rulings, all four settled in docs/gen3/G4_request_draft.md §6:
+  - (a) item 6 is split (dd42cde6): 44bf25d6 goes into this cut as **48709f39** (identical patch-id; 44bf25d6 itself is a Gen 2 branch commit, not in this range); 3941198c and the legacy Gen 2 failure stay post-G4 (docs/gen3/research/item6_integration_feasibility_2026-09-23.md, 21234c4f);
+  - (b) the cartridge's own in-game link battle and the Union Room entry are signed limits (f8ad32b6);
+  - (c) the rollback freeze is the SHA + manifest: docs/gen3/rollback_bundle.md @ 2cd9f993 (dd42cde6);
+  - (d) doubles, the target menu and Safari are current-fixture limits — 2b rows D1-D5, N3 and U3 are recorded limits, every other 2b row still runs (dd42cde6).
+- Manager: gen3_ap/gen3_e stay listed but are not creatable (b8e731b2; the whitespace/case bypass closed in ac70cc39); the chips grey out from the form's own flag (05491f55 template, 2eb119d7). Gen 4/5 were first labelled not-admitted (0e869b11) and then removed from GAMES and the New-run form outright (d8a62085, code kept as tag archive/gen4-gen5; a test asserts no gen4/gen5 key is offered).
+- PASS at clean cuts (receipts under docs/gen3/probes/):
+  - save rows 1/3/6/9 re-taken on both titles, plus the 2b A1 FR active hold: c13cf7c7 @ b261d045 (save_then_write_fr|lg_as_a_b261d045, center_controls_fr|lg_as_a_b261d045, linked_faint_active_fr_forced_b261d045);
+  - G4 item 3 probe rows (trainer, faint prompt, LG script_running, LG battle_commit_state3): 03ab26e7 @ b0511ff2 (checkpoint_fr|lg_clean_c4probe2_2026-09-23.txt);
+  - the tutorial states (old man + Pokedude) built by normal inputs on FR and LG: 66d2a802 @ e4c30fff (tutorial_states_fr|lg_2026-09-23.txt).
+- 2b in-battle rows, live lane (coordinator-held; no receipts in the tree yet): every row PASSes on FR+LG except bw_n7_switch, UNREACHED with 0 samples. Root cause found in 0b37e14d: the popup-opening A and the SHIFT A were one held press (gap 0 after a wait that advances no frame), so SHIFT was never chosen and the B pulse cancelled the menu; the popup witness still needs the post-fix re-run. a596b337 adds incremental verdicts and diagnosable misses.
+- Harness and model: C4-ORDER dc855dda + 13b11907; the 2b matrix plan 082b33a9; the rows module db69eca8 with its review fixes (fresh commit arms, N8 receipt fields, personality:otId key) in bdbf5736; the probe wiring 920d46af, fixed by 0b37e14d and a596b337. Carriers and oracles (Codex): 3c35378b..dc7053fc and 7fec95be. T2 is the R-T route's Bug Catcher Rick 102 (082b33a9 §R-T); the prep floor is Lv13 on both titles from the OMP Monte Carlo (071143fb applies the level13 prep; the earlier Lv8 ruling is withdrawn). 2B-INTEGRATE-DUO is in flight with Codex (uncommitted: tools/e2e_duo.py, lua/tests/duo/duo_gen3_main.lua, tests/unit/test_e2e_duo_gen3.py, plus the new lua/tests/gen3_routes.lua + tests/unit/test_gen3_routes.py for the normal-input T2 route).
+- G5 (RR):
+  - save-caller census 76bc4486 (17 PROVEN / 1 INFERRED / 1 OPEN) plus the item 2 battle-tuple scope;
+  - the RR battle permit was UNSAFE (765beb48: CFRU keeps the exec bit set while the menu is parked) and is fixed in 97082a62 (parked-menu permit = exec_flags_input == 1 + a ROM-pool controller pin); the required clause set and the RR battle_commit refusal are in flight in the working tree, uncommitted (safety.lua validates the battle block's clause set; the RR pack gains a `commit_hold` note on battle_commit);
+  - FORCE_MOVE_SLOT 15a274ec is SOURCE ONLY — adversarial review ACCEPT-WITH-FIXES, and its fixes are already in the working tree, uncommitted (the CFRU second spelling 0x090A9EA1 in the gate, the link-battle exclusion, the target bound, a 0-PP refusal with reason 11): the 0-based comm enum (the menu parks at 1, the move menu at 2), comm 3 instead of 4, and the PlayerBufferExecCompleted hand-back. The companion ROM rebuild, the .ups regeneration and the patcher/tool hash re-pins need the owner.
+- Open: the lag-frame CPU clause for battle() is an owner decision; the final-cut re-takes (boot-check, zip); the owner's Manager run.
 
 ## CHECKPOINT 13 (2026-09-23): MILESTONE -- Center receipts + the stale-save fix PASS live on FR and LG
 
