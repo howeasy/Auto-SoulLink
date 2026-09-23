@@ -5,7 +5,7 @@ and `.cache/gen2-build/pokegold` (656583c). Input for a future card that closes 
 `lua/tests/gen2_inspect_gate.lua` + `tests/live/test_gen2_new_gates.py` with a byte oracle over the game's
 own `wTilemap`. Screenshots are not an oracle.
 
-## Tilemap-resident targets (C and G/S coordinates identical)
+## Tilemap-resident targets (C and G/S coordinates identical except the item name)
 
 | Target | Screen / path | hlcoord | Bytes | Cites |
 |---|---|---|---|---|
@@ -13,10 +13,10 @@ own `wTilemap`. Screenshots are not an oracle.
 | Player name | Trainer Card page 1 | (7,2) | charmap | same |
 | Gender symbol | Stats screen (party -> mon -> STATS), any page | (18,0) | ♂ `$EF`, ♀ `$F5` | C `engine/pokemon/stats_screen.asm:443-445,474-486`; G `:307` |
 | Shiny marker (drawn in all three titles) | Stats screen | (19,0) | `⁂` `$3F` (stats tileset tile 14) | C `stats_screen.asm:522-526`, `constants/charmap.asm:97`; G `:545-549` |
-| Held item name | Stats screen GREEN page (`.Item` label at (0,8)) | (8,8) | item name | C `stats_screen.asm:726-733`; G `:567-577` |
+| Held item name (no item: `.ThreeDashes`) | Stats screen GREEN page (`.Item` label at (0,8)) | **C (8,8); G/S (6,8)** | item name | C `stats_screen.asm:726-733`; G `:560-580` (`hlcoord 6, 8` after `.got_item_name`). Correction from gen2-O6 (OMP), coordinator-verified. |
 
-Charmap values are from Crystal `constants/charmap.asm:193,199,201-210`. **Gold/Silver charmap values are
-UNVERIFIED**: re-read `pokegold/constants/charmap.asm` before comparing a Gold/Silver fixture.
+Charmap values are from Crystal `constants/charmap.asm:193,199,201-210`; gen2-O6 re-read `pokegold/constants/charmap.asm`:
+the same bytes (digits `$F6`-`$FF`, ♂ `$EF`, ♀ `$F5`, `⁂` `$3F`, blank `$7F`).
 
 Frame-stable read sites: the per-page joypad states `TrainerCard_Page1_Joypad`/`Page2`/`Page3`
 (C `trainer_card.asm:118,157,205`) and `MonStatsJoypad` (C `stats_screen.asm:117,120`). The tilemap is
