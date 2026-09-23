@@ -28,7 +28,7 @@ def test_required_phase_lanes_and_every_title_are_declared():
         "map-names-generated", "engine-sites-generated", "checkpoint-generated",
         "area-map-generated", "encounters-generated", "statics-generated",
         "trainers-generated", "admission-generated", "coverage-map", "fixtures", "patch-build",
-        "live-gates", "live-new-gates", "live-trade-gates", "duo-pairs", "release-evidence",
+        "live-gates", "live-new-gates", "live-trade-gates", "duo-link", "duo-pairs", "release-evidence",
     ]
     assert gate.manifest_errors() == []
     for title in ("crystal", "gold", "silver"):
@@ -307,3 +307,210 @@ def test_process_start_failure_is_a_lane_failure(monkeypatch):
     ok, detail = gate.run_lane(_lane("unit"), quiet=True)
     assert not ok
     assert "cannot execute lane" in detail
+
+
+# --- H4: the release duo matrix (C<->C, G<->S, C<->G); every gap is RED -------------------------
+
+REPO = Path(__file__).resolve().parents[2]
+_CELL_FIXTURES = {"gen2_new": {"a": "crystal_battle", "b": "crystal_battle_ot2"},
+                  "gen2_gold_silver": {"a": "gold_battle", "b": "silver_battle"},
+                  "gen2_crystal_gold": {"a": "crystal_battle", "b": "gold_battle"}}
+
+
+class _FakeRun:
+    def assert_gen2_link_saved(self, results):  # pragma: no cover - only its presence matters
+        return results
+
+
+def _fake_duo(games=None, scenarios=None, require_oracle=True, family=None):
+    """The slice of tools/e2e_duo.py the matrix reads: GAMES, SCENARIOS, DuoRun, contracts."""
+    if games is None:
+        games = {name: {"fixture": dict(fixtures)} for name, fixtures in _CELL_FIXTURES.items()}
+    scenarios = {"link": {"oracle": "assert_gen2_link_saved"}} if scenarios is None else scenarios
+    family = family or {}
+
+    def contract(game):
+        if family.get(game, "gen2_new") != "gen2_new":
+            raise RuntimeError(f"{game}: no family evidence contract")
+        return SimpleNamespace(require_oracle=require_oracle)
+
+    return SimpleNamespace(
+        GAMES=games, SCENARIOS=scenarios, DuoRun=_FakeRun, evidence_contract=contract,
+        scenario_family=lambda game: family.get(game, "gen2_new" if game in games else game),
+        scenarios_for=lambda game: list(scenarios))
+
+
+def _lf_sha(path):
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def _write_doc(root, doc):
+    (root / gate.DUO_MATRIX).write_text(json.dumps(doc), encoding="utf-8")
+
+
+def _row(doc, rid):
+    return next(row for row in doc["requirements"] if row["id"] == rid)
+
+
+def _green_tree(tmp_path):
+    """A fully receipted matrix built from the committed C<->C receipts: the known positive."""
+    lock = json.loads((REPO / "data/gen2_sources.lock.json").read_text(encoding="utf-8"))
+    (tmp_path / "data").mkdir(exist_ok=True)
+    (tmp_path / "data/gen2_sources.lock.json").write_text(json.dumps(lock), encoding="utf-8")
+    doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
+    receipts = tmp_path / "receipts"
+    receipts.mkdir()
+    for row in doc["requirements"]:
+        axes = row["axes"]
+        titles = {"a": axes["initiator"], "b": axes["partner"]}
+        entries = {}
+        for side in ("a", "b", "pydec"):
+            source = REPO / f"tests/fixtures/gen2/receipts/duo_link_cc_{side}_result.txt"
+            text = source.read_text(encoding="utf-8")
+            if side != "pydec":
+                header = {"attempt": 1, "case": axes["fixtures"][side], "player": side,
+                          "rom_sha1": lock["outputs"][f"poke{titles[side]}"]["sha1"],
+                          "scenario": "link", "title": titles[side]}
+                text = "\n".join("DUO_GEN2 " + json.dumps(header) if line.startswith("DUO_GEN2 ")
+                                 else line for line in text.splitlines()) + "\n"
+            path = receipts / f"{row['id']}_{side}.txt"
+            path.write_text(text, encoding="utf-8", newline="\n")
+            entries[side] = {"path": path.relative_to(tmp_path).as_posix(), "sha256": _lf_sha(path)}
+        row["proofs"] = [{"scenario": "link", "receipts": entries}]
+    (tmp_path / "tests").mkdir(exist_ok=True)
+    _write_doc(tmp_path, doc)
+    return doc
+
+
+def test_duo_link_lane_is_the_implemented_physical_matrix_lane():
+    lane = _lane("duo-link")
+    assert lane.argv[1:] == ["tools/verify_gen2_release.py", "--duo-matrix"]
+    assert "duo-link" not in gate.UNIMPLEMENTED and "duo-link" in gate._SLOW
+    assert gate.REQUIREMENTS["duo-link"] == ["D-1", "C-6g"]
+    assert gate.DUO_MATRIX in gate.PREREQUISITES["duo-link"]
+    assert sorted(gate.DUO_PAIRS) == [("crystal", "crystal"), ("crystal", "gold"), ("gold", "silver")]
+    # The non-link P3b.7 scenarios stay an unimplemented, red lane: nothing reads them as covered.
+    assert "duo-pairs" in gate.UNIMPLEMENTED and "D-2" in gate.REQUIREMENTS["duo-pairs"]
+
+
+def test_committed_matrix_is_red_exactly_where_a_pair_has_no_receipt():
+    """The real tree: a row with no registered proof is red; the receipted C<->C cell is not."""
+    doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
+    errors = gate.duo_matrix_errors()
+    assert errors, "the committed matrix cannot be green while any proof list is empty"
+    for row in doc["requirements"]:
+        mine = [error for error in errors if error.startswith(row["id"] + "/")]
+        if row["proofs"]:
+            assert not [error for error in mine if "receipt" in error], mine
+        else:
+            assert f"{row['id']}/link: no receipt registered" in " ".join(mine)
+    assert _row(doc, "duo.crystal.crystal")["proofs"], "the C<->C link PASS receipt is registered"
+
+
+def test_fully_receipted_matrix_is_the_only_green(tmp_path):
+    _green_tree(tmp_path)
+    assert gate.duo_matrix_errors(tmp_path, _fake_duo()) == []
+
+
+def _raise_no_contract(game):
+    raise RuntimeError(f"{game}: no family evidence contract")
+
+
+# Each gap names its own check, so every check is individually load-bearing (revert-tested).
+_GAPS = {
+    "pair_row_deleted": "release matrix pairs",
+    "pairing_unregistered": "pairing gen2_gold_silver is not a gen2_new row",
+    "extra_gen2_pairing": "gen2_silver_crystal: Gen 2 duo pairing in tools/e2e_duo.py is not in",
+    "wrong_family": "pairing gen2_gold_silver is not a gen2_new row",
+    "fixture_drift": "duo.gold.silver: tools/e2e_duo.py gen2_gold_silver fixtures",
+    "scenario_unregistered": "duo.gold.silver/ball_gate: scenario not registered",
+    "registered_scenario_undeclared": "registered scenario ball_gate is not in the release matrix",
+    "link_undeclared": "required scenario(s) ['link'] not declared",
+    "oracle_missing": "no post-result oracle (None)",
+    "oracle_not_a_method": "no post-result oracle ('assert_nothing')",
+    "oracle_not_required": "evidence contract does not require an oracle",
+    "no_contract": "duo.gold.silver: gen2_gold_silver: no family evidence contract",
+    "proof_emptied": "duo.gold.silver/link: no receipt registered",
+    "receipt_missing": "duo.gold.silver/link: b receipt receipts/duo.gold.silver_b.txt missing",
+    "receipt_unregistered": "duo.gold.silver/link: pydec receipt not registered",
+    "receipt_edited": "duo.gold.silver/link: a receipt receipts/duo.gold.silver_a.txt sha256 differs",
+    "verdict_fail": "duo.gold.silver/link: a receipt has no RESULT: PASS verdict",
+    "pydec_fail": "duo.gold.silver/link: pydec receipt has no PYDEC: PASS verdict",
+    "header_other_title": "duo.gold.silver/link: b receipt header does not name",
+    "header_other_scenario": "duo.gold.silver/link: a receipt header does not name",
+    "no_save_witness": "duo.gold.silver/link: b receipt has no SAVE_WITNESS line",
+}
+
+
+@pytest.mark.parametrize("mutation", list(_GAPS))
+def test_every_matrix_gap_is_red(tmp_path, mutation):
+    doc = _green_tree(tmp_path)
+    duo = _fake_duo()
+    gs = _row(doc, "duo.gold.silver")
+    receipts = gs["proofs"][0]["receipts"]
+
+    def rewrite(side, edit):
+        path = tmp_path / receipts[side]["path"]
+        path.write_text(edit(path.read_text(encoding="utf-8")), encoding="utf-8", newline="\n")
+        receipts[side]["sha256"] = _lf_sha(path)  # re-pinned: only the semantic check can catch it
+
+    if mutation == "pair_row_deleted":
+        doc["requirements"].remove(gs)
+        del duo.GAMES["gen2_gold_silver"]
+    elif mutation == "pairing_unregistered":
+        del duo.GAMES["gen2_gold_silver"]
+    elif mutation == "extra_gen2_pairing":
+        duo.GAMES["gen2_silver_crystal"] = {"fixture": {"a": "silver_battle", "b": "crystal_battle"}}
+    elif mutation == "wrong_family":
+        duo = _fake_duo(family={"gen2_gold_silver": "gen1_new"})
+    elif mutation == "fixture_drift":
+        duo.GAMES["gen2_gold_silver"]["fixture"]["b"] = "silver_town"
+    elif mutation == "scenario_unregistered":
+        gs["axes"]["scenarios"].append("ball_gate")
+    elif mutation == "registered_scenario_undeclared":
+        duo.SCENARIOS["ball_gate"] = {"oracle": "assert_gen2_link_saved"}
+    elif mutation == "link_undeclared":
+        # Dropped from BOTH registry and matrix: otherwise the matrix would be zero cells, green.
+        duo.SCENARIOS.clear()
+        for row in doc["requirements"]:
+            row["axes"]["scenarios"] = []
+    elif mutation == "oracle_missing":
+        duo.SCENARIOS["link"] = {}
+    elif mutation == "oracle_not_a_method":
+        duo.SCENARIOS["link"] = {"oracle": "assert_nothing"}
+    elif mutation == "oracle_not_required":
+        duo = _fake_duo(require_oracle=False)
+    elif mutation == "no_contract":
+        duo.evidence_contract = _raise_no_contract
+    elif mutation == "proof_emptied":
+        gs["proofs"] = []
+    elif mutation == "receipt_missing":
+        (tmp_path / receipts["b"]["path"]).unlink()
+    elif mutation == "receipt_unregistered":
+        del receipts["pydec"]
+    elif mutation == "receipt_edited":
+        path = tmp_path / receipts["a"]["path"]
+        path.write_text(path.read_text(encoding="utf-8") + "X\n", encoding="utf-8")
+    elif mutation == "verdict_fail":
+        rewrite("a", lambda text: text.replace("RESULT: PASS", "RESULT: FAIL"))
+    elif mutation == "pydec_fail":
+        rewrite("pydec", lambda text: text.replace("PYDEC: PASS", "PYDEC: FAIL"))
+    elif mutation == "header_other_title":
+        rewrite("b", lambda text: text.replace('"title": "silver"', '"title": "gold"'))
+    elif mutation == "header_other_scenario":
+        rewrite("a", lambda text: text.replace('"scenario": "link"', '"scenario": "faint"'))
+    elif mutation == "no_save_witness":
+        rewrite("b", lambda text: "\n".join(line for line in text.splitlines()
+                                            if not line.startswith("SAVE_WITNESS ")))
+    _write_doc(tmp_path, doc)
+    errors = gate.duo_matrix_errors(tmp_path, duo)
+    assert any(_GAPS[mutation] in error for error in errors), (mutation, errors)
+
+
+def test_duo_matrix_cli_exit_follows_the_gaps(monkeypatch, capsys):
+    monkeypatch.setattr(gate, "duo_matrix_errors", lambda: ["duo.gold.silver/link: no receipt"])
+    assert gate.main(["--duo-matrix"]) == 1
+    assert "RED  duo.gold.silver/link" in capsys.readouterr().out
+    monkeypatch.setattr(gate, "duo_matrix_errors", lambda: [])
+    assert gate.main(["--duo-matrix"]) == 0
+    assert "RECEIPTED" in capsys.readouterr().out

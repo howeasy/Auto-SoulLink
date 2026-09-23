@@ -3,9 +3,14 @@
 
 --list describes obligations without executing or qualifying them. --quick runs the
 source/MODEL frontier; --lane runs only the named obligations. Neither is a release
-verdict. Fixtures, companion builds, cartridge gates, duos and final evidence closure
-are deliberately unimplemented P3b/P4/P6 bindings and fail when requested, even if a
-file with the future name happens to exist. Enabling them requires their reviewed
+verdict. Fixtures, companion builds, cartridge gates, the non-link duo scenarios and final
+evidence closure are deliberately unimplemented P3b/P4/P6 bindings and fail when requested,
+even if a file with the future name happens to exist.
+
+--duo-matrix (the duo-link lane) checks the release duo matrix of
+tests/gen2_release_requirements.json: C<->C, G<->S and C<->G, every scenario the pairing
+registers in tools/e2e_duo.py, each with its post-result oracle and pinned PASS receipts.
+A missing pair, scenario, oracle or receipt is RED, never green. Enabling them requires their reviewed
 implementation and prerequisite/receipt contracts, not removing a missing-input check.
 
 Every executing lane checks its declared input paths before spawning a command. The
@@ -15,6 +20,8 @@ artifact-admission status; the P3b machine ledger is not generated here.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -119,9 +126,13 @@ LANES = [
     Lane("live-trade-gates", _pytest("tests/live/test_gen2_trade_gates.py"),
          env={"SLINK_LIVE": "1"},
          why="UNIMPLEMENTED P4: native trade, held items, refusal and exact-record reload"),
+    Lane("duo-link", [_PY, "tools/verify_gen2_release.py", "--duo-matrix"],
+         why="PHYSICAL receipts: the C-C, G-S and C-G link matrix of tests/gen2_release_requirements.json;"
+             " a missing pair, scenario, oracle or receipt is red"),
     Lane("duo-pairs", _pytest("tests/e2e/test_duo_gen2_new.py"),
          env={"SLINK_E2E": "1", "SLINK_LIVE": "1"},
-         why="UNIMPLEMENTED P3b/P4: C-C and G-S rules/trade plus C-G link; independent oracles"),
+         why="UNIMPLEMENTED P3b/P4: the C-C and G-S rules/trade scenarios beyond link (link is"
+             " duo-link's matrix); independent oracles"),
     Lane("release-evidence", [],
          why="UNIMPLEMENTED P6: signed applicability, all artifact receipts and two-person review"),
 ]
@@ -143,6 +154,7 @@ REQUIREMENTS = {
         "W-1", "W-2", "W-5", "W-6", "W-7", "C-1",
     ],
     "live-trade-gates": ["T-1", "T-2", "T-3", "T-4"],
+    "duo-link": ["D-1", "C-6g"],
     "duo-pairs": [
         "F-6", "S-2", "S-3", "S-5", "S-6", "S-7", "S-8", "S-9g", "S-10g",
         "W-5", "W-7", "C-2", "C-6g", "D-1", "D-2", "D-3", "D-5", "D-6", "D-7",
@@ -157,13 +169,16 @@ UNIMPLEMENTED = {
     "live-gates": "P4 panel/sound gate and transient-receipt contract",
     "live-new-gates": "P3b.4-P3b.7 engine-site/write/client rows still absent from tests/live/test_gen2_new_gates.py (P3b.3a landed only the inspect rows; see the lane's why=)",
     "live-trade-gates": "P4 trade and held-item persistence/refusal gates",
-    "duo-pairs": "P3b/P4 scenario registry, isolated saves and mandatory witness/oracle pipeline",
+    "duo-pairs": ("P3b.7 scenarios beyond link (ball_gate, boxed_capture, faints, poison, whiteout,"
+                  " pc_ops, changebox, clauses, shiny_bonus, reconnect, soft_reset, evolution,"
+                  " npc_trade, gift, egg_hatch, admit_wrong_rom) are not registered in"
+                  " tools/e2e_duo.py; P4 trade"),
     "release-evidence": "P3b machine ledger plus P6 applicability/artifact/receipt evaluation",
 }
 # --quick is source/MODEL feedback, including the P2 coverage map once bound. All
 # later-phase obligations stay in the full manifest; omitting them grants no release verdict.
 _SLOW = {"fixtures", "patch-build", "live-gates", "live-new-gates",
-         "live-trade-gates", "duo-pairs", "release-evidence"}
+         "live-trade-gates", "duo-link", "duo-pairs", "release-evidence"}
 ALLOWED_SKIPS = ()
 _REQUIRED_LANES = frozenset(REQUIREMENTS)
 _REQUIRED_MAPPINGS = {name: frozenset(ids) for name, ids in REQUIREMENTS.items()}
@@ -197,9 +212,124 @@ PREREQUISITES = {
     "live-gates": (),
     "live-new-gates": (),
     "live-trade-gates": (),
+    "duo-link": ("tests/gen2_release_requirements.json", "tools/e2e_duo.py",
+                 "data/gen2_sources.lock.json"),
     "duo-pairs": (),
     "release-evidence": ("tests/gen2_release_requirements.json",),
 }
+
+
+DUO_MATRIX = "tests/gen2_release_requirements.json"
+# The release matrix itself, (initiator, partner) per O-16. Pinned here so that deleting a row
+# from the JSON cannot shrink the matrix silently.
+DUO_PAIRS = (("crystal", "crystal"), ("crystal", "gold"), ("gold", "silver"))
+DUO_REQUIRED_SCENARIOS = frozenset({"link"})
+
+
+def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: dict) -> list[str]:
+    """One registered proof: pinned bytes, PASS verdicts, and headers naming this exact cell."""
+    errors = []
+    receipts = proof.get("receipts") or {}
+    titles = {"a": axes["initiator"], "b": axes["partner"]}
+    for side in ("a", "b", "pydec"):
+        entry = receipts.get(side)
+        if not entry:
+            errors.append(f"{side} receipt not registered")
+            continue
+        path = root / entry["path"]
+        if not path.is_file():
+            errors.append(f"{side} receipt {entry['path']} missing")
+            continue
+        raw = path.read_bytes().replace(b"\r\n", b"\n")
+        if hashlib.sha256(raw).hexdigest() != entry.get("sha256"):
+            errors.append(f"{side} receipt {entry['path']} sha256 differs from its pin")
+            continue
+        lines = raw.decode("utf-8", errors="replace").splitlines()
+        prefix = "PYDEC:" if side == "pydec" else "RESULT:"
+        verdicts = [line.split()[1:2] for line in lines if line.startswith(prefix)]
+        if not verdicts or any(verdict != ["PASS"] for verdict in verdicts):
+            errors.append(f"{side} receipt has no {prefix} PASS verdict, or a non-PASS one")
+        if side == "pydec":
+            continue
+        title = titles[side]
+        want = {"player": side, "scenario": scenario, "case": axes["fixtures"][side],
+                "title": title, "rom_sha1": lock.get(f"poke{title}", {}).get("sha1")}
+        header = next((json.loads(line[len("DUO_GEN2 "):]) for line in lines
+                       if line.startswith("DUO_GEN2 ")), None)
+        if header is None or any(header.get(key) != value for key, value in want.items()):
+            errors.append(f"{side} receipt header does not name {want}")
+        if not any(line.startswith("SAVE_WITNESS ") for line in lines):
+            errors.append(f"{side} receipt has no SAVE_WITNESS line")
+    return errors
+
+
+def duo_matrix_errors(root: Path | None = None, duo=None) -> list[str]:
+    """Every gap in the release duo matrix, one message per gap; [] only when fully receipted.
+
+    Registry side (tools/e2e_duo.py): every Gen 2 pairing is declared, every scenario it
+    registers is in the matrix, and each has a post-result oracle under a require_oracle
+    evidence contract. Evidence side: each cell has pinned PASS receipts for its own pair."""
+    root = ROOT if root is None else root
+    if duo is None:
+        import e2e_duo as duo
+    doc = json.loads((root / DUO_MATRIX).read_text(encoding="utf-8"))
+    lock = json.loads((root / "data/gen2_sources.lock.json").read_text(encoding="utf-8"))["outputs"]
+    rows = [row for row in doc.get("requirements", []) if row.get("stage") == "live-duos"]
+    errors = []
+    pairs = sorted((row["axes"]["initiator"], row["axes"]["partner"]) for row in rows)
+    if pairs != sorted(DUO_PAIRS):
+        errors.append(f"release matrix pairs {pairs} != required {sorted(DUO_PAIRS)}")
+    declared = {row["axes"]["pairing"] for row in rows}
+    errors.extend(f"{game}: Gen 2 duo pairing in tools/e2e_duo.py is not in the release matrix"
+                  for game in duo.GAMES
+                  if duo.scenario_family(game) == "gen2_new" and game not in declared)
+    for row in rows:
+        rid, axes = row["id"], row["axes"]
+        game, scenarios = axes["pairing"], axes.get("scenarios") or []
+        missing_required = DUO_REQUIRED_SCENARIOS - set(scenarios)
+        if missing_required:
+            errors.append(f"{rid}: required scenario(s) {sorted(missing_required)} not declared")
+        registered = []
+        if game not in duo.GAMES or duo.scenario_family(game) != "gen2_new":
+            errors.append(f"{rid}: pairing {game} is not a gen2_new row in tools/e2e_duo.py")
+        else:
+            registered = duo.scenarios_for(game)
+            if duo.GAMES[game].get("fixture") != axes["fixtures"]:
+                errors.append(f"{rid}: tools/e2e_duo.py {game} fixtures "
+                              f"{duo.GAMES[game].get('fixture')} != matrix {axes['fixtures']}")
+            try:
+                if not duo.evidence_contract(game).require_oracle:
+                    errors.append(f"{rid}: {game} evidence contract does not require an oracle")
+            except RuntimeError as exc:
+                errors.append(f"{rid}: {exc}")
+            errors.extend(f"{rid}: registered scenario {name} is not in the release matrix"
+                          for name in registered if name not in scenarios)
+        proofs = {proof.get("scenario"): proof for proof in row.get("proofs", [])}
+        for name in scenarios:
+            cell = f"{rid}/{name}"
+            if name not in registered:
+                errors.append(f"{cell}: scenario not registered for {game} in tools/e2e_duo.py")
+            else:
+                oracle = duo.SCENARIOS[name].get("oracle")
+                if not oracle or not callable(getattr(duo.DuoRun, oracle, None)):
+                    errors.append(f"{cell}: no post-result oracle ({oracle!r})")
+            if name not in proofs:
+                errors.append(f"{cell}: no receipt registered (an empty proof is a release blocker)")
+                continue
+            errors.extend(f"{cell}: {problem}"
+                          for problem in _receipt_errors(root, proofs[name], name, axes, lock))
+    return errors
+
+
+def _duo_matrix_main() -> int:
+    errors = duo_matrix_errors()
+    for error in errors:
+        print(f"RED  {error}")
+    if errors:
+        print(f"duo matrix: {len(errors)} gap(s); a missing pair/scenario/oracle/receipt is not a pass")
+        return 1
+    print("duo matrix: every pair x scenario cell RECEIPTED")
+    return 0
 
 
 def manifest_errors() -> list[str]:
@@ -250,6 +380,8 @@ def run_lane(lane: Lane, quiet: bool) -> tuple[bool, str]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if (sys.argv[1:] if argv is None else argv) == ["--duo-matrix"]:
+        return _duo_matrix_main()
     errors = manifest_errors()
     if errors:
         print("Gen 2 manifest invalid: " + "; ".join(errors), file=sys.stderr)

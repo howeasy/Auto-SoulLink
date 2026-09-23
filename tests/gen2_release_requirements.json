@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "scope": "US Gold/Silver/Crystal release duo matrix: C<->C, G<->S and the O-16 cross-title C<->G link",
+  "coverage_policy": "A matrix cell passes only on a registered proof whose committed receipts match their pinned sha256 and carry PASS verdicts for the declared pair, fixtures and scenario. Empty proofs are explicit release blockers.",
+  "proof_hash_policy": "Receipt SHA256 normalizes CRLF to LF (Windows checkouts use core.autocrlf).",
+  "stages": [
+    {
+      "id": "live-duos",
+      "description": "Real production clients and server on two cartridges, judged by the independent Gen 2 duo oracle"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "duo.crystal.crystal",
+      "stage": "live-duos",
+      "description": "Crystal A against Crystal B (second OT) through the real server",
+      "axes": {
+        "pairing": "gen2_new",
+        "initiator": "crystal",
+        "partner": "crystal",
+        "fixtures": {"a": "crystal_battle", "b": "crystal_battle_ot2"},
+        "scenarios": ["link"]
+      },
+      "proofs": [
+        {
+          "scenario": "link",
+          "command": "python tools/e2e_duo.py --game gen2_new --scenario link --lane gen2-cc-link --keep-data",
+          "receipts": {
+            "a": {"path": "tests/fixtures/gen2/receipts/duo_link_cc_a_result.txt",
+                  "sha256": "ae50af20cbc357cb490bd6a88d2ae62818fcfff047183526d5165cbcb6b66f3d"},
+            "b": {"path": "tests/fixtures/gen2/receipts/duo_link_cc_b_result.txt",
+                  "sha256": "e9850a6a43a93be44305c5f0f5dcdaa794078579cea4b604e20fd3444a157b3b"},
+            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_link_cc_pydec_result.txt",
+                      "sha256": "3df8a800bd7c74c78c4285710c59c673a3c212d195dde7e7c83aa4b032d6571f"}
+          }
+        }
+      ]
+    },
+    {
+      "id": "duo.gold.silver",
+      "stage": "live-duos",
+      "description": "Gold A against Silver B through the real server",
+      "axes": {
+        "pairing": "gen2_gold_silver",
+        "initiator": "gold",
+        "partner": "silver",
+        "fixtures": {"a": "gold_battle", "b": "silver_battle"},
+        "scenarios": ["link"]
+      },
+      "proofs": []
+    },
+    {
+      "id": "duo.crystal.gold",
+      "stage": "live-duos",
+      "description": "Crystal A against Gold B: cross-title admission through one gen2_gsc foundation (O-16)",
+      "axes": {
+        "pairing": "gen2_crystal_gold",
+        "initiator": "crystal",
+        "partner": "gold",
+        "fixtures": {"a": "crystal_battle", "b": "gold_battle"},
+        "scenarios": ["link"]
+      },
+      "proofs": []
+    }
+  ]
+}

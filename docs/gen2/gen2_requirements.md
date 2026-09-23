@@ -24,8 +24,8 @@ a lane that did not run did not pass.
 Nothing in the pre-rewrite Gen 2 code, data, fixtures, tests or docs counts as evidence
 (brief rule 0.8; the Gen 1 sentence is `docs/gen1_requirements.md:9`).
 
-**Skeleton status:** all evidence cells are unfilled `·` or not applicable `—`. No cell is
-pre-filled. Row ids mirror Gen 1's so the comparison document can be read side by side;
+**Skeleton status:** all evidence cells are unfilled `·` or not applicable `—`, except D-1's
+P cell (`◐`, receipted per cell in `tests/gen2_release_requirements.json`). No cell is pre-filled. Row ids mirror Gen 1's so the comparison document can be read side by side;
 Gen 2-only rows carry a `g` suffix.
 
 ## Pins (to be filled at G0/G1; values here are the candidates the plan proposes)
@@ -130,7 +130,7 @@ for a non-applicable physical oracle; `n/a` is not used.
 
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| D-1 | Encounter link on both sides | SERVER + PYDEC | · | · | · |
+| D-1 | Encounter link on both sides, on the release duo matrix C↔C, G↔S and C↔G (O-16) (`tests/gen2_release_requirements.json`, lane `duo-link`: a missing pair, scenario, oracle or receipt is red). **P ◐:** C↔C `link` PASS, receipts `tests/fixtures/gen2/receipts/duo_link_cc_{a,b,pydec}_result.txt`; G↔S and C↔G OPEN until their receipts land | SERVER + PYDEC | · | · | ◐ |
 | D-2 | Ball gate from the Ball pocket | SERVER | · | · | · |
 | D-3 | Party/box sync + box change (`_ChangeBox` C `engine/pokemon/bills_pc.asm:2224` / G `:2202`; see S-6) | PYDEC | · | · | · |
 | D-5 | Clauses (species / gender / type); shiny bonus pairs (Gen 2 has shinies) | SERVER | · | · | · |
