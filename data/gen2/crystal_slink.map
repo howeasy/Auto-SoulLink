@@ -1,6 +1,6 @@
 SUMMARY:
-	ROM0: 16118 bytes used / 266 free
-	ROMX: 1626141 bytes used / 454627 free in 127 banks
+	ROM0: 16135 bytes used / 249 free
+	ROMX: 1626242 bytes used / 454526 free in 127 banks
 	SRAM: 48188 bytes used / 17348 free in 8 banks
 	WRAM0: 4083 bytes used / 13 free
 	WRAMX: 22978 bytes used / 5694 free in 7 banks
@@ -38,7 +38,11 @@ ROM0 bank #0:
 	SECTION: $0063-$0079 ($0017 bytes) ["SLink DelayFrame Bridge"]
 	         $0063 = SlinkDelayFrameBridge
 	         $007a = SlinkDelayFrameBridgeEnd
-	EMPTY: $007a-$00ff ($0086 bytes)
+	EMPTY: $007a-$007f ($0006 bytes)
+	SECTION: $0080-$0090 ($0011 bytes) ["SLink Sound Reset"]
+	         $0080 = SlinkResetSoundBridge
+	         $0091 = SlinkResetSoundBridgeEnd
+	EMPTY: $0091-$00ff ($006f bytes)
 	SECTION: $0100-$014f ($0050 bytes) ["Header"]
 	         $0100 = Start
 	SECTION: $0150-$3fb4 ($3e65 bytes) ["Home"]
@@ -206,8 +210,8 @@ ROM0 bank #0:
 	         $0a7a = JoyTextDelay.restartframedelay
 	         $0a80 = WaitPressAorB_BlinkCursor
 	         $0a8d = WaitPressAorB_BlinkCursor.loop
-	         $0aa5 = SimpleWaitPressAorB.loop
 	         $0aa5 = SimpleWaitPressAorB
+	         $0aa5 = SimpleWaitPressAorB.loop
 	         $0aaf = PromptButton
 	         $0ac1 = PromptButton.link
 	         $0ac6 = PromptButton.wait_input
@@ -945,8 +949,8 @@ ROM0 bank #0:
 	         $30b4 = SafeLoadTempTilemapToTilemap
 	         $30bf = LoadTempTilemapToTilemap
 	         $30d6 = CopyName1
-	         $30d9 = CopyName2.loop
 	         $30d9 = CopyName2
+	         $30d9 = CopyName2.loop
 	         $30e1 = IsInArray
 	         $30e4 = IsInArray.loop
 	         $30f0 = IsInArray.NotInArray
@@ -977,10 +981,10 @@ ROM0 bank #0:
 	         $31be = CallPointerAt
 	         $31cd = QueueScript
 	         $31cf = FarQueueScript
-	         $31db = CompareBytes
 	         $31db = CompareBytes.loop
-	         $31e4 = CompareBytesLong
+	         $31db = CompareBytes
 	         $31e4 = CompareBytesLong.loop
+	         $31e4 = CompareBytesLong
 	         $31f1 = CompareBytesLong.diff
 	         $31f3 = ClearBGPalettes
 	         $31f6 = WaitBGMap
@@ -1261,7 +1265,7 @@ ROM0 bank #0:
 	         $3fa2 = Function3f9f.row
 	         $3fa5 = Function3f9f.col
 	EMPTY: $3fb5-$3fff ($004b bytes)
-	TOTAL EMPTY: $010a bytes
+	TOTAL EMPTY: $00f9 bytes
 
 ROMX bank #1:
 	SECTION: $4000-$747a ($347b bytes) ["bank1"]
@@ -43290,26 +43294,35 @@ ROMX bank #116:
 	TOTAL EMPTY: $26cf bytes
 
 ROMX bank #117:
-	SECTION: $4000-$4049 ($004a bytes) ["SLink Service"]
+	SECTION: $4000-$404b ($004c bytes) ["SLink Service"]
 	         $4000 = SlinkService
 	         $402f = SlinkService.sample
 	         $4045 = SlinkService.remember
-	         $404a = SlinkServiceEnd
-	SECTION: $404a-$410b ($00c2 bytes) ["SLink Panel"]
-	         $404a = SlinkPanel
-	         $4060 = SlinkPanel.page
-	         $4095 = SlinkPanel.ready
-	         $40c2 = SlinkPanel.close
-	         $40d0 = SlinkPanel.WaitForStage
-	         $40d2 = SlinkPanel.poll
-	         $40df = SlinkPanel.WaitForButton
-	         $40df = SlinkPanel.release
-	         $40eb = SlinkPanel.press
-	         $40f8 = SlinkPanel.title
-	         $4102 = SlinkPanel.fallback
-	         $410c = SlinkPanelEnd
-	EMPTY: $410c-$7fff ($3ef4 bytes)
-	TOTAL EMPTY: $3ef4 bytes
+	         $404c = SlinkServiceEnd
+	SECTION: $404c-$410d ($00c2 bytes) ["SLink Panel"]
+	         $404c = SlinkPanel
+	         $4062 = SlinkPanel.page
+	         $4097 = SlinkPanel.ready
+	         $40c4 = SlinkPanel.close
+	         $40d2 = SlinkPanel.WaitForStage
+	         $40d4 = SlinkPanel.poll
+	         $40e1 = SlinkPanel.WaitForButton
+	         $40e1 = SlinkPanel.release
+	         $40ed = SlinkPanel.press
+	         $40fa = SlinkPanel.title
+	         $4104 = SlinkPanel.fallback
+	         $410e = SlinkPanelEnd
+	SECTION: $410e-$4170 ($0063 bytes) ["SLink Sound Service"]
+	         $410e = SlinkSfxService
+	         $412b = SlinkSfxService.play
+	         $4145 = SlinkSfxService.hold
+	         $4155 = SlinkSfxService.count
+	         $4161 = SlinkSfxService.clear
+	         $4165 = SlinkSfxService.reset_blocked
+	         $416d = SlinkSfxService.sounds
+	         $4171 = SlinkSfxServiceEnd
+	EMPTY: $4171-$7fff ($3e8f bytes)
+	TOTAL EMPTY: $3e8f bytes
 
 ROMX bank #118:
 	EMPTY
