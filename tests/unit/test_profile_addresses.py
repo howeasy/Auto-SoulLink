@@ -7,7 +7,11 @@ pret symbol mapping (see tools/verify_profile_addresses.py PROFILE_TO_PRET)
 is checked; mismatches surface as test failures with a clear "profile=X,
 pret=Y, delta=Z" message.
 
-This replaces the manual Phase 0 address-audit section of gen1_gen2_runtime_checks.md."""
+This replaces the manual Phase 0 address-audit section of gen1_gen2_runtime_checks.md.
+
+Now the only gate on tools/verify_profile_addresses.py: the release verifiers'
+standalone `profile-addresses` lane was removed as redundant (this unit-lane
+test already ran inside both release verifiers' `unit` lane)."""
 
 from __future__ import annotations
 

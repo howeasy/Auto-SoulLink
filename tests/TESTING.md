@@ -910,7 +910,6 @@ fails and is printed.
 | `unit` | the source oracles, the rules, and every table generated from the decomps |
 | `rom-layout` | every flat ROM offset and companion-patch span, against the real dumps |
 | `lua-parse` | every Lua file parses under the runtime the clients actually use |
-| `profile-addresses` | WRAM/SRAM symbols against pret |
 | `patch-build` | the clean dumps still hold what the manifest expects to displace |
 | `live-gates` | real engine behaviour on real cartridges, including the panel on a randomized+injected ROM |
 | `duo-pairs` | every scenario on both pairings, through the real server |
@@ -924,11 +923,13 @@ finishes in 65 seconds idle has been observed timing out at its 1500-second budg
 unit-test run competing for the same cores. That is the emulator being starved, not a defect,
 and the gate cannot tell the two apart.
 
-There is a second verifier the gate calls: `tools/verify_gen1_rom_layout.py`.
-`verify_profile_addresses.py` checks WRAM/SRAM symbols against pret and structurally *cannot*
-check a flat file offset or a patch span — different claims need different evidence. It runs
-29 checks across all three dumps, and a ROM that is absent is reported rather than counted as
-a pass.
+There is a second verifier the gate calls directly: `tools/verify_gen1_rom_layout.py`.
+`verify_profile_addresses.py` checks WRAM/SRAM symbols against pret instead — it structurally
+*cannot* check a flat file offset or a patch span, different claims need different evidence —
+but it is no longer its own release-gate lane; `tests/unit/test_profile_addresses.py` is the
+only gate on it now, inside `unit`, since the release gate's own `unit` lane already ran it.
+It runs 29 checks across all three dumps, and a ROM that is absent is reported rather than
+counted as a pass.
 
 ## State Reset
 

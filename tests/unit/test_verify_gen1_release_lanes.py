@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(_REPO, "tools"))
 
 import verify_gen1_release as gate  # noqa: E402  (tools/ is not a package; the gate is a script)
 
-LANE_ORDER = ["unit", "rom-layout", "lua-parse", "profile-addresses", "profile-generated",
+LANE_ORDER = ["unit", "rom-layout", "lua-parse", "profile-generated",
               "profile-generated-purergb", "statics-generated", "fixtures", "patch-build",
               "live-gates", "live-new-gates", "inspect-purergb", "apex-purergb",
               "live-trade-gates", "inspect-purergb-overlay", "live-trade-gates-purergb",

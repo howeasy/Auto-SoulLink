@@ -446,8 +446,8 @@ They are cited by **marker text**, not line number, because a lane run regenerat
 (`docs/gen1_requirements.md:38`, a7ea4cf entry). A run whose receipts are not committed flips no cell
 (`docs/gen1_requirements.md:38`, H-2 entry). `patch/build/…` paths are gitignored and are not receipts.
 
-**Release runner lanes** (19, `tools/verify_gen1_release.py:98-211`): `unit`, `rom-layout`, `lua-parse`,
-`profile-addresses`, `profile-generated`, `profile-generated-purergb`, `statics-generated`, `fixtures`,
+**Release runner lanes** (18, `tools/verify_gen1_release.py:98-211`): `unit`, `rom-layout`, `lua-parse`,
+`profile-generated`, `profile-generated-purergb`, `statics-generated`, `fixtures`,
 `patch-build` (fast); `live-gates`, `live-new-gates`, `inspect-purergb`, `apex-purergb`,
 `live-trade-gates`, `inspect-purergb-overlay`, `live-trade-gates-purergb`, `apex-refusal-purergb`,
 `duo-pairs`, `duo-pairs-purergb` (slow, `_SLOW` at `:55-57`). "Give it the machine": the emulator lanes are

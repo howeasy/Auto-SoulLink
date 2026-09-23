@@ -25,7 +25,7 @@ python tools/verify_gen1_release.py --list       # lanes + the requirement ids e
 A lane that did not run did not pass: a skip is a failure in this runner, which is why a
 missing ROM, jar or emulator fails the gate rather than shrinking it.
 
-Twelve lanes: `unit`, `rom-layout`, `lua-parse`, `profile-addresses`, `profile-generated`,
+Eleven lanes: `unit`, `rom-layout`, `lua-parse`, `profile-generated`,
 `statics-generated`, `fixtures`, `patch-build` (fast) and `live-gates`, `live-new-gates`,
 `live-trade-gates`, `duo-pairs` (slow, emulator). The two that carry the rewrite:
 
