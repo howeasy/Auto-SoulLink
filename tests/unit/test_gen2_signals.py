@@ -801,3 +801,44 @@ def test_an_abandoned_timeline_discards_finalized_batches_and_retires_latches():
     assert status.drops.abandoned_timeline.count == 1 and "savestate load" in status.drops.abandoned_timeline.reason
     world.fire("capture_party_finalized")  # the resumed timeline has no insertion behind this final
     assert [event.kind for event in world.events(binder)] == []
+
+
+# Every ROMX bank's code runs at $4000-$7FFF, so most hits are some OTHER bank at a site's PC.
+# N13b: that reject path reads nothing held and builds nothing; the held operation is stamped
+# only once the bank matches (the next accepted hit or drain() stamps first, so a deferred
+# operation change is cleared before any latch is read).
+def test_wrong_bank_hits_stamp_nothing_and_allocate_nothing():
+    world = World()
+    stamps = {"n": 0}
+    capture = world.authority.capture
+
+    def counted():
+        stamps["n"] += 1
+        return capture()
+
+    world.authority.capture = counted
+    binder = world.bind()
+    site = world.sites["capture_party"]
+    assert site["addr"] >= 0x4000
+    world.bank, world.shadow, world.reg["PC"] = site["bank"], site["bank"] + 1, site["addr"]
+    fns = world.lua.table(*[cb for cb, address in world.callbacks.values() if address == site["addr"]])
+    k, probe = 500, world.lua.eval("""function(fns, k)
+        for _, fn in ipairs(fns) do fn() end  -- warm-up
+        collectgarbage("collect"); collectgarbage("stop")
+        local before = collectgarbage("count")
+        for _ = 1, k do for _, fn in ipairs(fns) do fn() end end
+        local grown = collectgarbage("count") - before
+        collectgarbage("restart")
+        return grown
+    end""")
+    grown = probe(fns, 4 * k) - probe(fns, k)  # per-hit growth only; lupa's fixed overhead cancels
+    assert stamps["n"] == 0, f"{stamps['n']} held stamps on wrong-bank hits"
+    assert grown < 1.0, f"{grown:.1f} KB allocated by {3 * k} extra wrong-bank hits"
+    assert binder.status(binder).failed is None and world.events(binder) == []
+    # the bank-matched path is unchanged: stamped, latched, finalized once
+    world.fire("capture_party")
+    assert stamps["n"] >= 2  # the drain above, then this hit
+    world.events(binder)
+    world.party([world.mon(nickname=0x82)])
+    world.fire("capture_party_finalized")
+    assert [event.kind for event in world.events(binder)] == ["capture"]

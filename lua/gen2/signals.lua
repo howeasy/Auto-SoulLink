@@ -462,9 +462,15 @@ local function build(options)
                 slot=slot,identity_scope="party_only",global_identity_qualification="OPEN"}
     end
     local function process(prepared)
-        local held = stamp()
+        -- bank first: a wrong-bank hit (the common one) stamps and allocates nothing. Deferring
+        -- the stamp is safe: every accepted hit and drain() stamp before any latch is read.
+        -- ponytail: it also lets binding:context's hard byte/PC assert fire BEFORE a held-invalid
+        -- refusal; safe only while authority.valid() cannot fail (the client epoch authority,
+        -- lua/gen2/client.lua). A physical authority that can report invalid must turn that assert
+        -- into a refusal here, or a transient race latches failed for the whole session.
         local context = binding:context(prepared.anchor)
         if not context then return nil end
+        local held = stamp()
         assert(io.bank_valid(context.bank,context.pc,#prepared.anchor.expected) == true,
                "OPEN: actual mapped ROM bank unavailable")
         local accepted,events,consume,starts,invalidated = {},{},{},{},{}

@@ -324,7 +324,7 @@ function S.bind(dependencies)
         on_fire = on_fire or {}
         local binding = gb.new(io,{bus_domain="System Bus",rom_domain="ROM",bank_domain="System Bus",
                                    bank_address=ram.hLoadedROMBank,pc_register="PC",sp_register="SP"})
-        local kinds, descriptors = {}, {}
+        local kinds, descriptors, specs = {}, {}, {}
         for kind in pairs(sites) do kinds[#kinds+1]=kind end
         table.sort(kinds)
         for _,kind in ipairs(kinds) do
@@ -332,6 +332,9 @@ function S.bind(dependencies)
             for key,value in pairs(sites[kind]) do descriptor[key]=value end
             descriptor.id,descriptor.capture_offset = kind,descriptor.capture_offset or 0
             descriptors[#descriptors+1] = descriptor
+            -- spec + accept built once here: a wrong-bank hit (the common one) allocates nothing
+            local spec=S.KINDS[kind] or {point=generic_point(descriptor)}
+            specs[kind]={spec=spec,accept=spec.filter and function() return spec.filter(io,ram,d) end}
         end
         local service,why,failed = registry.new({
             owner=owner,max_pending=factory.MAX_PENDING,sites=descriptors,
@@ -341,10 +344,11 @@ function S.bind(dependencies)
             unregister=function(handle) return binding:unregister(handle) end,
             valid_handle=function(handle) return binding:valid_handle(handle) end,
             capture=function(site)
-                local spec=S.KINDS[site.id] or {point=generic_point(site)}
+                local bound=specs[site.id]
                 -- master order: bank, then the per-kind filter, then PC/bytes
-                local context=binding:context(site,spec.filter and function() return spec.filter(io,ram,d) end)
+                local context=binding:context(site,bound.accept)
                 if not context then return nil end
+                local spec=bound.spec
                 return {kind=site.id,frame=context.frame,pc=context.pc,bank=context.bank,sp=context.sp,
                         point=spec.point and spec.point(io,ram,d) or nil}
             end,
