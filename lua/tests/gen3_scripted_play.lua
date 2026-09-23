@@ -139,15 +139,21 @@ end
 -- WarpData: s8 group/num/warpId at +0/+1/+2, padding +3, s16 x/y at +4/+6.
 -- This is the OUTDOOR checkpoint, not the whiteout interior! heal_location.c:64-118
 -- maps it through src/data/heal_locations.json:3-19 to house 4.0 (8,5) or Center
--- 5.4 (7,4). Freeze this projection before advancing the battle/whiteout sequence.
+-- 5.4 (7,4). Freeze the raw WarpData before battle; project only on displacement.
 local SB1_LAST_HEAL_OFFSET = 0x1C
-local function whiteout_destination(cp)
+local function last_heal_checkpoint(cp)
     local sb1 = sb1_ptr(cp)
     if not sb1 then G.finish(false, "whiteout_heal_pointer: unreadable SaveBlock1"); return end
     local p = sb1 + SB1_LAST_HEAL_OFFSET
-    local group, num = memory.read_u8(p), memory.read_u8(p + 1)
-    local warp = memory.read_u8(p + 2)
-    local x, y = memory.read_s16_le(p + 4), memory.read_s16_le(p + 6)
+    return {group=memory.read_u8(p), num=memory.read_u8(p + 1),
+            warp=memory.read_u8(p + 2), x=memory.read_s16_le(p + 4),
+            y=memory.read_s16_le(p + 6)}
+end
+
+local function whiteout_destination(cp, checkpoint)
+    local raw = checkpoint or last_heal_checkpoint(cp)
+    if not raw then return nil end
+    local group, num, warp, x, y = raw.group, raw.num, raw.warp, raw.x, raw.y
     if group == 3 and num == 0 and warp == 255 and x == 6 and y == 8 then
         return {group = 4, num = 0, x = 8, y = 5}
     elseif group == 3 and num == 1 and warp == 255 and x == 26 and y == 27 then
@@ -155,6 +161,7 @@ local function whiteout_destination(cp)
     end
     G.finish(false, string.format("whiteout_heal_unsupported: lastHealLocation %d.%d "
              .. "warp=%d (%d,%d)", group, num, warp, x, y))
+    return nil
 end
 
 local function verify_destination(cp, label, dest)
@@ -219,6 +226,7 @@ local function verify_starter()
        or mon.is_egg ~= 0 or mon.is_bad_egg ~= 0 or not mon.checksum_ok then
         G.finish(false, "starter_species: party slot 0 must be a valid Squirtle (7): "
                  .. tostring(why or (mon and mon.species)))
+        return false
     end
 end
 
@@ -233,9 +241,11 @@ local function verify_rival(cp, outcome)
     -- win and loss (flags.h:625). Losing the tutorial is valid; run/catch is not.
     if outcome ~= 1 and outcome ~= 2 then
         G.finish(false, "rival_outcome: expected WON(1) or LOST(2), got " .. tostring(outcome))
+        return false
     end
     if not flag_set(cp, 0x258) or lab_scene_var(cp) ~= 4 then
         G.finish(false, "rival_terminal: FLAG_BEAT_RIVAL_IN_OAKS_LAB and lab scene 4 required")
+        return false
     end
 end
 
@@ -695,16 +705,16 @@ local H = {
     end,
 }
 
-local play, check_whiteout
+local play, check_whiteout, verify_fight_cursor
 play = PL.bind(H, {
     paths          = PATHS,
     -- where the per-leg savestates below land
     state_dir      = os.getenv("SLINK_GEN3_PLAY_STATES_DIR") or "E:/Howard/Bizhawk/GBA/State",
     max_recoveries = 2,
-    -- HOW THIS GAME FIGHTS a battle it did not choose. gActionSelectionCursor resets to 0
-    -- (USE_MOVE) each battle (src/battle_controller_player.c), so A, A is a pinned
-    -- FIGHT -> move-slot-1 selection; A keeps advancing the text afterwards. That is a Gen 3
-    -- fact, so playlib refuses to assume it and takes it from here.
+    -- HOW THIS GAME FIGHTS an incidental battle. FR run 20 showed the action
+    -- cursor is REMEMBERED, including POKEMON(2) after route1_catch; FR run 25e
+    -- opened the party menu and mashed the fainted lead. Witness and steer to
+    -- FIGHT every time the action menu returns, then select move slot 1.
     -- Input policy, not library policy: which button dismisses a textbox and which advances a
     -- scripted scene are per-game facts, same as opts.battle (Codex cx-bc675fa4).
     clear_dialogue = function() for _ = 1, 4 do G.tap("A", 3, 13) end end,
@@ -715,14 +725,39 @@ play = PL.bind(H, {
     menu_back = function(_, gap) G.tap("B", 3, gap or 20) end,
     battle = function(cp, budget)
         local before_map, before_x, before_y = play.map(cp), G.pos(cp)
-        local dest = whiteout_destination(cp)
-        if not play.mash_a(budget or 1200, function() return not H.in_battle(cp) end) then
-            return false
+        local checkpoint = last_heal_checkpoint(cp)
+        if not checkpoint then return false end
+        local turns, taps_per_turn = 32, math.max(1, math.ceil((budget or 1200) / 32))
+        for _ = 1, turns do
+            if not play.in_battle(cp) then break end
+            verify_fight_cursor(cp, "incidental_battle")
+            if not play.in_battle(cp) then break end
+            if not action_menu_up() then
+                G.finish(false, "incidental_battle: action menu disappeared before FIGHT selection")
+                return false
+            end
+            -- Require the witnessed action menu to close under FIGHT before
+            -- the next A selects move slot 1; a dropped press stays bounded.
+            for _ = 1, 4 do
+                if not action_menu_up() then break end
+                G.tap("A", 3, 13)
+            end
+            if action_menu_up() then
+                G.finish(false, "incidental_battle: FIGHT selection did not leave the action menu")
+                return false
+            end
+            G.tap("A", 3, 13)  -- move slot 1
+            -- The stop predicate runs BEFORE each press. An action-menu return
+            -- is never consumed by an unqualified A, even late in the battle.
+            play.mash_a(taps_per_turn, function()
+                return not play.in_battle(cp) or action_menu_up()
+            end)
         end
+        if play.in_battle(cp) then return false end
         if not play.wait_scene_settled(cp, 1800) then return false end
         -- Raise the shared recovery signal here: playlib's static heal_map cannot
         -- express FR's lastHealLocation-dependent respawn projection.
-        check_whiteout(cp, before_map, before_x, before_y, dest)
+        check_whiteout(cp, before_map, before_x, before_y, checkpoint)
         return true
     end,
 })
@@ -785,58 +820,68 @@ local function boxes_unchanged(label, before, after, except)
             local new = after[key]
             if not new or old.box ~= new.box or old.slot ~= new.slot or old.raw ~= new.raw then
                 G.finish(false, label .. ": unrelated_box_changed: " .. key)
+                return false
             end
         end
     end
     for key in pairs(after) do
         if key ~= except and not before[key] then
             G.finish(false, label .. ": unexpected_box_addition: " .. key)
+            return false
         end
     end
+    return true
 end
 
 local function verify_pc_transfer(label, op, before, after, target)
     local a, b = before.party, after.party
     if op == "withdraw" then
         if b.n ~= a.n + 1 or a.keys[target] or not b.keys[target]
-           or not before.boxes[target] or after.boxes[target] then
+           or not before.boxes[target] or not after.mons[target] or after.boxes[target] then
             G.finish(false, label .. ": withdraw_target: selected PID must move box->party")
+            return false
         end
         if after.mons[target].species ~= before.boxes[target].species then
             G.finish(false, label .. ": withdraw_species: selected record changed species")
+            return false
         end
     else
         local gone = play.departed_key(a, b)
         if b.n ~= a.n - 1 or gone ~= target then
             G.finish(false, label .. ": pc_target: party slot 1 PID was not the single departure")
+            return false
         end
         if op == "deposit" then
             local boxed = after.boxes[target]
             if not boxed or boxed.box ~= 0 or boxed.slot ~= 0
                or boxed.species ~= before.mons[target].species then
                 G.finish(false, label .. ": deposit_readback: selected PID not in box 0 slot 0")
+                return false
             end
         elseif op == "release" then
             if after.boxes[target] then
                 G.finish(false, label .. ": release_deposited: selected PID is still boxed")
+                return false
             end
         else
             G.finish(false, label .. ": unknown PC operation")
+            return false
         end
     end
     local ok, why = play.survivors_intact(a, b, target)
-    if not ok then G.finish(false, label .. ": " .. why) end
-    boxes_unchanged(label, before.boxes, after.boxes, op ~= "release" and target or nil)
+    if not ok then G.finish(false, label .. ": " .. why); return false end
+    return boxes_unchanged(label, before.boxes, after.boxes, op ~= "release" and target or nil)
 end
 
 local function pc_deposit_target(before)
-    if before.party.n < 2 then G.finish(false, "pc_target: deposit needs at least two mons") end
+    if before.party.n < 2 then G.finish(false, "pc_target: deposit needs at least two mons"); return nil end
     -- This input route chooses box 0, then withdraws slot 0; bind that cursor to
     -- the selected identity BEFORE pressing buttons, including on resumed runs.
-    if before.current_box ~= 0 then G.finish(false, "pc_box_cursor: current box must be 0") end
+    if before.current_box ~= 0 then G.finish(false, "pc_box_cursor: current box must be 0"); return nil end
     for _, mon in pairs(before.boxes) do
         if mon.box == 0 and mon.slot == 0 then
             G.finish(false, "pc_box_slot: box 0 slot 0 must be empty before deposit")
+            return nil
         end
     end
     return before.party.order[2]
@@ -970,6 +1015,7 @@ end
 --- The house's actual door landing is (6,8); the following verified step reaches (6,9).
 local function recover_to_pallet_town(cp)
     local dest = whiteout_destination(cp)
+    if not dest then return false end
     verify_destination(cp, "whiteout_recovery", dest)
     if dest.group == 4 and dest.num == 0 then
         play.follow(cp, "heal_house_to_door", "whiteout-recovery")
@@ -985,8 +1031,23 @@ local function recover_to_pallet_town(cp)
         play.follow(cp, "pallet_north_to_town_start", "whiteout-recovery")
     else
         G.finish(false, "whiteout_recovery_unsupported: no route for this respawn map")
+        return false
     end
     G.phase("recovered", "back outside at " .. play.at(cp))
+end
+
+-- playlib.run_leg calls recover() OUTSIDE its pcall. Convert a second whiteout
+-- during the long Viridian return walk to a named terminal here; other errors
+-- retain their original failure rather than being recast as whiteouts.
+local function guarded_recovery(cp, label, recover)
+    local ok, err = pcall(recover, cp)
+    if ok then return true end
+    if type(err) == "table" and err.whiteout then
+        G.shot("stuck")
+        G.finish(false, label .. ": whiteout_during_recovery at " .. play.at(cp))
+        return false
+    end
+    error(err, 0)
 end
 
 --- route1_catch and route1_faint own their own battle (hunt_encounter calls play.step with
@@ -997,11 +1058,12 @@ end
 --- its battles must raise the same signal itself, or a whiteout here just runs off the end of
 --- the leg looking like a plain loss. `before_map/x/y` is the position the caller captured right
 --- as the battle started (same convention as handle_encounter's own `before`).
-check_whiteout = function(cp, before_map, before_x, before_y, dest)
+check_whiteout = function(cp, before_map, before_x, before_y, checkpoint)
     local nmap = play.map(cp)
     local x, y = G.pos(cp)
     if nmap ~= before_map or x ~= before_x or y ~= before_y then
-        dest = dest or whiteout_destination(cp)
+        local dest = whiteout_destination(cp, checkpoint)
+        if not dest then return end
         if not verify_destination(cp, "whiteout_landing", dest) then return end
         G.phase("whiteout", string.format(
             "battle displaced the player from map %s (%d,%d) to the heal map %s at %s",
@@ -1027,14 +1089,15 @@ local function wait_for_action_menu(cp, budget)
     return false
 end
 
---- Wait for the menu witness and require the cursor to be sitting on FIGHT(0) -- the default
---- every battle starts on (gActionSelectionCursor resets per battle,
---- src/battle_controller_player.c). route1_catch is about to toggle it to BAG(1) and
---- route1_faint is about to mash A on it; both need to know the press is landing on the menu
+--- Wait for the menu witness and steer the remembered cursor to FIGHT(0).
+--- FR run 20 proved the cursor can start on BAG(1); FR run 25e entered a
+--- party menu from POKEMON(2). The incidental battle policy uses this on
+--- every action-menu return. route1_catch then toggles to BAG(1), while
+--- route1_faint mashes A; both need to know the press is landing on the menu
 --- they think it is, not on the still-open "Wild X appeared!" intro text (FR run 19's bug).
 --- A battle that ends before the menu ever comes up is not a failure -- there is nothing here
 --- for either leg to press.
-local function verify_fight_cursor(cp, label)
+verify_fight_cursor = function(cp, label)
     if not play.in_battle(cp) then return end
     if not wait_for_action_menu(cp, 1200) then
         if play.in_battle(cp) then
@@ -1042,6 +1105,7 @@ local function verify_fight_cursor(cp, label)
             G.finish(false, string.format(
                 "%s: the action menu never came up (gBattlerControllerFuncs[0] never read "
                 .. "HandleInputChooseAction) at %s", label, play.at(cp)))
+            return
         end
         return
     end
@@ -1057,6 +1121,7 @@ local function verify_fight_cursor(cp, label)
         G.shot("stuck")
         G.finish(false, string.format(
             "%s: could not steer the action cursor to FIGHT(0) (reads %d)", label, action_cursor()))
+        return
     end
 end
 
@@ -1078,12 +1143,13 @@ end
 --- fix, applied where a leg fights its own.
 local function resolve_battle_and_check_whiteout(cp, mash_budget)
     local before_map, before_x, before_y = play.map(cp), G.pos(cp)
-    local dest = whiteout_destination(cp)
+    local checkpoint = last_heal_checkpoint(cp)
+    if not checkpoint then return false end
     local resolved = play.mash_a(mash_budget or 160, function() return not play.in_battle(cp) end)
     if resolved and not play.wait_scene_settled(cp, 1800) then
         G.finish(false, "whiteout_settle: post-battle scene never settled"); return false
     end
-    check_whiteout(cp, before_map, before_x, before_y, dest)
+    check_whiteout(cp, before_map, before_x, before_y, checkpoint)
     return resolved
 end
 
@@ -1533,7 +1599,7 @@ LEGS[#LEGS + 1] = {
         play.follow(cp, "lab_entrance_to_oak", "parcel_deliver")
     end,
     -- playlib calls recover() after a whiteout, then resume() instead of run().
-    recover = function(cp) recover_to_pallet_town(cp) end,
+    recover = function(cp) guarded_recovery(cp, "parcel_deliver", recover_to_pallet_town) end,
     run = function(cp)
         -- mart_scene_end_to_exit's start (4,3) is the ApproachCounter movement's computed end
         -- tile (walk_up x4 from the (4,7) entrance), not a BFS/observed tile — the one path
@@ -1741,7 +1807,7 @@ LEGS[#LEGS + 1] = {
     -- playlib calls recover() after our own check_whiteout() raises, then resume() instead of
     -- run(). recover_to_route1_grass leaves the player standing back at the grass origin with
     -- grass_step reset, so resuming is just running the hunt+catch loop again.
-    recover = function(cp) recover_to_route1_grass(cp) end,
+    recover = function(cp) guarded_recovery(cp, "route1_catch", recover_to_route1_grass) end,
     run = function(cp)
         play.follow(cp, "oak_to_lab_exit", "route1_catch")
         -- Same door as leave_lab_for_parcel (5..7,12): a press INTO it, not a plain walk-onto.
@@ -1771,7 +1837,7 @@ LEGS[#LEGS + 1] = {
     -- Same recovery as route1_catch: back to Pallet Town, then to the grass origin, grass_step
     -- reset. Needed here even though resume() below does no hunting of its own -- the NEXT leg
     -- (viridian_pc_deposit_withdraw) still expects to start from the grass, not the heal house.
-    recover = function(cp) recover_to_route1_grass(cp) end,
+    recover = function(cp) guarded_recovery(cp, "route1_faint", recover_to_route1_grass) end,
     run = function(cp)
         local before = player_faints()
         local fainted = false

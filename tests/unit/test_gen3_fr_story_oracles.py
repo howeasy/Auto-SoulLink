@@ -54,7 +54,7 @@ G = {
     phase=function(tag,msg) F.log[#F.log+1]=tag..' '..tostring(msg) end,
     finish=function(ok,msg) if not ok then error(msg,0) end end,
     shot=function() end, idle=function() end,
-    tap=function() F.taps=F.taps+1; if F.on_tap then F.on_tap() end end,
+    tap=function(btn) F.taps=F.taps+1; if F.on_tap then F.on_tap(btn) end end,
     advance=function() F.frame=F.frame+1; if F.on_frame then F.on_frame() end end,
     pred_ok=function() return true end,
 }
@@ -78,10 +78,20 @@ def machine():
 
 
 def test_run24_walker_accepts_viridian_whiteout(machine):
-    """The run-24 failure was in handle_encounter, before recover() was called."""
+    """The battle override signals during fight_through, before recovery runs."""
     lua, _, _ = machine
     ok, signal = lua.execute("""
-        D.play.mash_a=function() F.place(5,4,7,4); return true end
+        F.in_battle=true
+        G.pred_ok=function(_,name)
+            if name=='in_battle' then return not F.in_battle end
+            return true
+        end
+        F.w8(D.ACTION_CURSOR_ADDR,0)
+        F.w32(D.BATTLER_CTRL_ADDR,D.HANDLE_INPUT_CHOOSE_ACTION)
+        F.on_tap=function(button)
+            if button=='A' then F.w32(D.BATTLER_CTRL_ADDR,0) end
+        end
+        D.play.mash_a=function() F.place(5,4,7,4); F.in_battle=false; return true end
         D.play.wait_scene_settled=function() return true end
         return pcall(D.play.handle_encounter,F.cp,nil,'Down',{map=787,x=12,y=38})
     """)
@@ -247,7 +257,7 @@ def test_whiteout_projects_outdoor_checkpoint_to_exact_interior(machine, home):
     assert mod.verify_destination(fake.cp, "whiteout", dest)
     fake.place(expected[0], expected[1], expected[2] + 1, expected[3])
     with pytest.raises(LuaError, match="destination_mismatch"):
-        mod.check_whiteout(fake.cp, 787, 12, 38, dest)
+        mod.check_whiteout(fake.cp, 787, 12, 38)
 
 
 @pytest.mark.parametrize("group,num,x,y", [(3, 2, 17, 26), (5, 4, 7, 4), (3, 1, 26, 28)])
@@ -261,14 +271,94 @@ def test_unknown_or_interior_heal_checkpoint_fails_named(machine, group, num, x,
 def test_whiteout_target_is_frozen_before_battle_advances(machine):
     lua, _, _ = machine
     ok, why = lua.execute("""
+        F.in_battle=true
+        G.pred_ok=function(_,name)
+            if name=='in_battle' then return not F.in_battle end
+            return true
+        end
+        F.w8(D.ACTION_CURSOR_ADDR,0)
+        F.w32(D.BATTLER_CTRL_ADDR,D.HANDLE_INPUT_CHOOSE_ACTION)
+        F.on_tap=function(button)
+            if button=='A' then F.w32(D.BATTLER_CTRL_ADDR,0) end
+        end
         D.play.mash_a=function()
-            F.heal(3,0,6,8); F.place(4,0,8,5); return true
+            F.heal(3,0,6,8); F.place(4,0,8,5); F.in_battle=false; return true
         end
         D.play.wait_scene_settled=function() return true end
         return pcall(D.play.handle_encounter,F.cp,nil,'Down',{map=787,x=12,y=38})
     """)
     assert not ok
     assert "whiteout_landing: destination_mismatch" in why
+
+
+@pytest.mark.parametrize("own_battle", [False, True])
+def test_unknown_heal_checkpoint_does_not_block_an_ordinary_battle(machine, own_battle):
+    lua, mod, fake = machine
+    fake.heal(3, 2, 17, 26)  # a later, valid checkpoint outside this route's known heals
+    lua.execute("""
+        D.play.mash_a=function() return true end
+        D.play.wait_scene_settled=function() return true end
+    """)
+    if own_battle:
+        assert mod.resolve_battle_and_check_whiteout(fake.cp, 160) is True
+    else:
+        mod.play.handle_encounter(fake.cp, None, "Down", lua.table(map=787, x=12, y=38))
+
+
+def test_incidental_battle_resteers_remembered_pokemon_cursor_on_each_turn(machine):
+    lua, mod, fake = machine
+    lua.execute("""
+        F.in_battle=true; F.cursor=2; F.stage='action'; F.actions=0; F.partyA=0
+        F.w8(D.ACTION_CURSOR_ADDR,2)
+        F.w32(D.BATTLER_CTRL_ADDR,D.HANDLE_INPUT_CHOOSE_ACTION)
+        G.pred_ok=function(_,name)
+            if name=='in_battle' then return not F.in_battle end
+            return true
+        end
+        F.on_tap=function(button)
+            if button=='Up' and F.stage=='action' then
+                F.cursor=0; F.w8(D.ACTION_CURSOR_ADDR,0)
+            elseif button=='A' then
+                if F.stage=='action' then
+                    if F.cursor==0 then
+                        F.stage='move'; F.w32(D.BATTLER_CTRL_ADDR,0)
+                    else
+                        F.stage='party'; F.w32(D.BATTLER_CTRL_ADDR,0)
+                    end
+                elseif F.stage=='move' then
+                    F.stage='animation'; F.actions=F.actions+1
+                elseif F.stage=='animation' then
+                    if F.actions>=2 then F.in_battle=false
+                    else
+                        F.stage='action'; F.cursor=2
+                        F.w8(D.ACTION_CURSOR_ADDR,2)
+                        F.w32(D.BATTLER_CTRL_ADDR,D.HANDLE_INPUT_CHOOSE_ACTION)
+                    end
+                elseif F.stage=='party' then F.partyA=F.partyA+1 end
+            end
+        end
+    """)
+    mod.play.handle_encounter(fake.cp, None, "Down", lua.table(map=787, x=12, y=38))
+    assert fake.actions == 2
+    assert fake.partyA == 0
+
+
+def test_unknown_heal_checkpoint_never_reaches_nil_destination_comparison(machine):
+    lua, mod, fake = machine
+    fake.heal(3, 2, 17, 26)
+    fake.place(5, 4, 7, 4)
+    lua.execute("F.fail=nil; G.finish=function(_,message) F.fail=message end")
+    mod.check_whiteout(fake.cp, 787, 12, 38)
+    assert "whiteout_heal_unsupported" in fake.fail
+
+
+@pytest.mark.parametrize("name", ["parcel_deliver", "route1_catch", "route1_faint"])
+def test_second_whiteout_inside_recover_fails_by_name(machine, name):
+    lua, mod, fake = machine
+    fake.place(5, 4, 7, 4)
+    lua.execute("D.play.follow=function() error({whiteout=true},0) end")
+    with pytest.raises(LuaError, match="whiteout_during_recovery"):
+        leg(mod, name).recover(fake.cp)
 
 
 def test_heal_pointer_is_fresh_and_invalid_pointer_fails(machine):
@@ -341,6 +431,73 @@ def test_pc_deposit_without_boxed_target_and_release_disguised_as_deposit_fail(m
     after = mod.owned_snapshot("after")
     with pytest.raises(LuaError, match="release_deposited"):
         mod.verify_pc_transfer("test", "release", before, after, target)
+
+
+@pytest.mark.parametrize("box_slot", [1, 30])
+def test_pc_deposit_requires_target_in_box_zero_slot_zero(machine, box_slot):
+    _, mod, fake = machine
+    init_party(fake)
+    before = mod.owned_snapshot("before")
+    target = before.party.order[2]
+    depart(fake, box=box_slot)
+    after = mod.owned_snapshot("after")
+    assert after.boxes[target].species == before.mons[target].species
+    with pytest.raises(LuaError, match="deposit_readback"):
+        mod.verify_pc_transfer("test", "deposit", before, after, target)
+
+
+def test_pc_withdraw_rejects_same_pid_with_changed_species(machine):
+    _, mod, fake = machine
+    init_party(fake)
+    depart(fake, box=0)
+    mid = mod.owned_snapshot("mid")
+    target = next(iter(mid.boxes))
+    put_mon(fake, fake.storage + 4, 49, species=4)
+    withdraw(fake)
+    after = mod.owned_snapshot("after")
+    assert target in after.mons and mid.boxes[target].species != after.mons[target].species
+    with pytest.raises(LuaError, match="withdraw_species"):
+        mod.verify_pc_transfer("test", "withdraw", mid, after, target)
+
+
+def test_pc_failure_returns_before_accessing_missing_target(machine):
+    lua, mod, fake = machine
+    init_party(fake)
+    depart(fake, box=0)
+    before = mod.owned_snapshot("before")
+    target = next(iter(before.boxes))
+    put_mon(fake, 0x02024284 + 2 * 100, 100)
+    fake.w8(0x02024029, 3)
+    after = mod.owned_snapshot("after")
+    lua.execute("F.fail=nil; G.finish=function(_,message) F.fail=message end")
+    assert mod.verify_pc_transfer("test", "withdraw", before, after, target) is False
+    assert "withdraw_target" in fake.fail
+
+
+def test_nonraising_finish_stops_failed_starter_rival_and_pc_precondition(machine):
+    lua, mod, fake = machine
+    lua.execute("F.failures={}; G.finish=function(_,message) F.failures[#F.failures+1]=message end")
+    assert mod.verify_starter() is False
+    assert len(fake.failures) == 1 and "starter_species" in fake.failures[1]
+    assert mod.verify_rival(fake.cp, 0) is False
+    assert len(fake.failures) == 2 and "rival_outcome" in fake.failures[2]
+    too_small = lua.table(party=lua.table(n=1), current_box=0, boxes=lua.table())
+    assert mod.pc_deposit_target(too_small) is None
+    assert len(fake.failures) == 3 and "pc_target" in fake.failures[3]
+
+
+def test_nonraising_finish_stops_on_first_unrelated_box_change(machine):
+    lua, mod, fake = machine
+    init_party(fake)
+    put_mon(fake, fake.storage + 4 + 80, 100)
+    before = mod.owned_snapshot("before")
+    target = before.party.order[2]
+    depart(fake)
+    fake.w8(fake.storage + 4 + 80 + 8, 1)
+    after = mod.owned_snapshot("after")
+    lua.execute("F.failures={}; G.finish=function(_,message) F.failures[#F.failures+1]=message end")
+    assert mod.verify_pc_transfer("test", "release", before, after, target) is False
+    assert len(fake.failures) == 1 and "unrelated_box_changed" in fake.failures[1]
 
 
 def test_pc_withdraw_round_trip_checks_box_removal_and_party_survivors(machine):
