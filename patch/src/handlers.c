@@ -313,12 +313,19 @@ typedef struct {
 
 /* ---- battle-controller plumbing (RR build-specific, runtime-discovered) ---- */
 #define gBattlerControllerFuncs 0x03004FE0u   /* u32[4] */
-/* action-select controller cycles HandleChooseActionAfterDma3 -> HandleInputChooseAction;
- * MOVE thunk = HandleInputChooseMove slot. Discovered by reading gBattlerControllerFuncs
- * at the live menus (see patch/src/ADDRESSES.md). */
-#define ACTION_CTRL_A           0x0802E439u
-#define ACTION_CTRL_B           0x0802E3B5u
-#define MOVE_CTRL_THUNK         0x0802EA11u
+/* Parked-menu controllers, read from gBattlerControllerFuncs at the live menus (ADDRESSES.md) and
+ * named by the FR .sym (bodies byte-identical at these entries; RR detours the menu bodies to CFRU).
+ * ACTION_CTRL_B is NOT a menu: it is PlayerBufferRunCommand, the idle dispatcher every controller
+ * returns to. Kept for reference only; gating on it matched the post-commit frame (C5-FMS-FIX). */
+#define ACTION_CTRL_A           0x0802E439u   /* HandleInputChooseAction */
+#define ACTION_CTRL_B           0x0802E3B5u   /* PlayerBufferRunCommand (not a menu) */
+#define MOVE_CTRL_THUNK         0x0802EA11u   /* HandleInputChooseMove (thunk -> CFRU 0x090AB8B8) */
+#define PlayerBufferExecCompleted ((void (*)(void))0x0802E33Du)  /* slot = RunCommand, clear exec bit */
+/* gBattleCommunication[b] during HandleTurnActionSelectionState: pret battle_main.c's 0-based enum;
+ * the jump table at 0x0801409C and its case bodies [3]/[4] are byte-identical in FR and RR. */
+#define COMM_WAIT_ACTION_CHOSEN            1u   /* action menu parked (exec bit set)          */
+#define COMM_WAIT_ACTION_CASE_CHOSEN       2u   /* move menu parked                           */
+#define COMM_WAIT_ACTION_CONFIRMED_STANDBY 3u   /* engine emits stop-bounce standby, then ++  */
 
 /* ---- engine globals (validated: SLink RR profile <-> BPRE.ld <-> binary) ---- */
 #define gBattleMons          0x02023BE4u
@@ -591,13 +598,17 @@ static void ack(u16 st, u16 reason)
     MB->opcode  = 0;        /* consumed */
 }
 
-/* Runs in place of the menu controller (we swapped gBattlerControllerFuncs[b] to here),
- * so it's the authoritative writer at the right point in the frame. It sets the
- * chosen-move state the action+move menus would have produced and jumps straight to
- * STATE_WAIT_ACTION_CONFIRMED_STANDBY (4) — the engine then executes the forced move.
- * The two-stage menu emit was abandoned: the buffer-transfer round-trip never completed
- * under repeated calls, and CFRU's move buffer carries a Z-move byte (a stale value made
- * Scratch fire as "Breakneck Blitz"). Jumping to CONFIRMED sidesteps both. */
+/* Runs in place of the menu controller (we swapped gBattlerControllerFuncs[b] to here; BattleMainCB1
+ * calls slot b with gActiveBattler == b), so it's the authoritative writer at the right point in the
+ * frame. It sets the chosen-move state the action+move menus would have produced and jumps straight
+ * to STATE_WAIT_ACTION_CONFIRMED_STANDBY (3): the engine then sends the stop-bounce standby message
+ * and moves to CONFIRMED (4) itself, exactly as after a real menu pick. The two-stage menu emit was
+ * abandoned: the buffer-transfer round-trip never completed under repeated calls, and CFRU's move
+ * buffer carries a Z-move byte (a stale value made Scratch fire as "Breakneck Blitz"). Jumping past
+ * the menus sidesteps both. PlayerBufferExecCompleted hands the slot back to PlayerBufferRunCommand,
+ * as the real menus do on commit: the engine never reassigns a controller slot, so without it the
+ * player's controller stayed this no-op and the first message/animation for battler b hung
+ * (C5-FMS-FIX; the headless gate masked it by clearing the exec flags every frame). */
 static void slink_force_controller(void)
 {
     if (!AM->armed) return;       /* fire once; later calls (same turn) are no-ops */
@@ -607,10 +618,11 @@ static void slink_force_controller(void)
     R16(gChosenMovesByBanks  + b * 2) = move;
     u32 bs = R32(gBattleStruct);
     if (bs) { R8(bs + 0x80 + b) = AM->move_pos; R8(bs + 0x0C + b) = AM->target; }
-    R8(gBattleCommunication + b) = 4;                /* CONFIRMED_STANDBY */
+    R8(gBattleCommunication + b) = COMM_WAIT_ACTION_CONFIRMED_STANDBY;
     u32 mask = (1u << b) | (1u << (b + 4)) | (1u << (b + 8)) | (1u << (b + 12)) | 0xF0000000u;
     R32(gBattleExecBuffer) &= ~mask;
     AM->armed = 0;
+    PlayerBufferExecCompleted();
     MB->status = ST_OK; MB->reason = 0; MB->ack_seq = AM->seq; MB->opcode = 0;
 }
 
@@ -622,8 +634,8 @@ static void drive_force_move(void)
     u32 b = AM->battler;
     volatile u32 *cf = (volatile u32 *)(gBattlerControllerFuncs + b * 4);
     u8 comm = R8(gBattleCommunication + b);
-    if ((comm == 2 && (*cf == ACTION_CTRL_A || *cf == ACTION_CTRL_B)) ||
-        (comm == 3 && *cf == MOVE_CTRL_THUNK)) {
+    if ((comm == COMM_WAIT_ACTION_CHOSEN      && *cf == ACTION_CTRL_A) ||
+        (comm == COMM_WAIT_ACTION_CASE_CHOSEN && *cf == MOVE_CTRL_THUNK)) {
         *cf = ((u32)&slink_force_controller) | 1u;   /* Thumb */
     }
     if (++AM->frames > 600) {
