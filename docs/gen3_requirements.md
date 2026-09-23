@@ -176,6 +176,7 @@ same reachability context), never bytes alone.
 
 ## Not in this release
 
+- **Archipelago FRLG**: deferred until post-RC (owner ruling 2026-09-23, PLAN §0), including the old-client " AP" header check on an AP-patched dump.
 - **Peer ghost (RR)**: removed from the Gen 3 RC and deferred until post-RC (owner ruling 2026-09-22, PLAN §0). N-2 and the `ghost` scenario are not RC rows; the RR companion scenario set is eight.
 
 Archipelago FRLG (title `firered_ap` kept unadmitted, `†UNVERIFIED` "TODO VERIFY" fields carried
