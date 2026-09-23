@@ -595,10 +595,21 @@ function F.poison_model(ctx, Signals, wrapper, pack)
     local only = copy(pack)
     only.titles[title].sites = {poison_faint=only.titles[title].sites.poison_faint}
     local options = binder_options(ctx, wrapper, only, "gen2-u1e-poison-model")
-    options.io.bank_valid = function(bank)
-        return bank == 0 or api.read_u8(ctx.profile.hram.hROMBank, "System Bus") == bank
+    -- The production mapping (lua/gen2/run.lua bank_valid): ROM0/WRAM0/HRAM bank 0, ROMX the hROMBank shadow,
+    -- WRAMX the SVBK bank (0 selects 1). Live run 2: a ROM-only check refused the WRAM guard reads.
+    local function wram_bank()
+        local svbk = api.read_u8(0xFF70, "System Bus") % 8
+        return svbk == 0 and 1 or svbk
     end
-    options.io.stack_valid = function() return true end   -- poison_faint has no stack guard
+    local function bank_valid(bank, addr, n)
+        local last = addr + n - 1
+        if last < 0x4000 or (addr >= 0xC000 and last < 0xD000) or (addr >= 0xFF80 and last < 0xFFFF) then return bank == 0 end
+        if addr >= 0x4000 and last < 0x8000 then return bank == api.read_u8(ctx.profile.hram.hROMBank, "System Bus") end
+        if addr >= 0xD000 and last < 0xE000 then return bank == wram_bank() end
+        return false
+    end
+    options.io.bank_valid = bank_valid
+    options.io.stack_valid = function(sp, n) return bank_valid(sp < 0xD000 and 0 or wram_bank(), sp, n) end
     options.authority.valid = function() return true end
     local model, why = Signals.new_model(options)
     assert(model, "poison model binder refused: " .. tostring(why))

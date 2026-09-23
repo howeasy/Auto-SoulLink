@@ -191,8 +191,20 @@ function PI.driver(F, facts, opts)
         if (self.phase == "tick" or self.phase == "park") and point.poison_fainted == true then self.phase = "park" end
         if self.phase == "park" then
             local buttons, why = walk(hunt, point, {facts.park[1]})
-            if why == "arrived" then self.phase = self.terminal return {}, self.phase end
-            return buttons, why
+            if why ~= "arrived" then return buttons, why end
+            -- The faint text's closetext reloads the tilemap (LoadOverworldTilemap): hand over only once the
+            -- live step permissions show the grass next door again (the faint leg's first step; live run 2).
+            for _, d in ipairs(PI.DIRECTIONS) do
+                local x, y = point.x + d[2], point.y + d[3]
+                if x >= 0 and x < hunt.width and y >= 0 and y < hunt.height and hunt.grid[y * hunt.width + x + 1] == 2
+                   and type(point.can_step) == "table" and point.can_step[d[1]] == true then
+                    self.phase = self.terminal
+                    return {}, self.phase
+                end
+            end
+            waited = waited + 1
+            if waited > PI.WAIT_FRAMES then return nil, "the park tile never showed a steppable grass neighbour" end
+            return {}, self.phase
         end
         if self.phase == "tick" then
             if not on(point, hunt) then return nil, "left the hunt map while poisoned" end

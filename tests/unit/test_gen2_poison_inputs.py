@@ -253,3 +253,18 @@ def test_a_path_blocked_only_by_a_live_object_waits_then_fails_with_the_live_fac
         assert phase == "travel" and not any(buttons.values())
     buttons, why = d.step(pt(rt, **wall))
     assert buttons is None and "objects 0,1 1,2" in why and "can_step" in why
+
+
+def test_park_hands_over_only_once_the_grass_next_door_is_steppable_again():
+    """Crystal live run 2: the faint text's closetext reloads the tilemap; the faint leg's first grass step
+    must not be judged on the stale permissions."""
+    rt = lua()
+    d = driver(rt, load(rt))
+    step(rt, d, map_number=2, x=1, y=1)
+    d.step(pt(rt, x=1, y=1, party={0: {"hp": 9, "status": PSN}}))
+    fainted = {"party": {0: {"hp": 0, "status": 0}}, "poison_fainted": True}
+    closed = {"Up": False, "Down": False, "Left": False, "Right": False}
+    buttons, phase = d.step(pt(rt, x=0, y=2, can_step=closed, **fainted))
+    assert phase == "park" and not any(buttons.values())
+    buttons, phase = d.step(pt(rt, x=0, y=2, **fainted))
+    assert phase == "poisoned"
