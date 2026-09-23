@@ -63,7 +63,7 @@ def cart(title, target, player_id):
     raw = bytearray(0x8000)
 
     def put(symbol, data):
-        address = layout.addresses[symbol]
+        address = layout.addresses[symbol] if symbol in layout.addresses else context(title).symbol(symbol).address
         for region in layout.regions:
             base = layout.addresses[STARTS[region.name]]
             if base <= address and address + len(data) <= base + region.length:
@@ -101,6 +101,16 @@ def cart(title, target, player_id):
     pocket = [f["balls"]["item"], f["balls"]["quantity"]] if target == "battle" else []
     put("wNumBalls", bytes([len(pocket) // 2]))
     put("wBalls", bytes(pocket + [255]))
+    # New-game state the fresh-fixture guards require (C engine/menus/intro_menu.asm:163-183): no roamer
+    # released, Mystery Gift item 0 / unlocked -1; a one-day countdown stamped day 0 (as the played fixtures);
+    # the roamer history already at its CONTINUE fixed point, so an identical re-save is a valid transition.
+    for n in (1, 2, 3):
+        put(f"wRoamMon{n}MapGroup", b"\xff\xff")
+    raw[sram_offset(title, "sMysteryGiftUnlocked")] = 0xFF
+    put("wDailyResetTimer", b"\x01\x00")
+    put("wRoamMons_CurMapNumber", bytes([area["map_number"], area["map_group"]] * 2))
+    if title != "crystal":   # Gold/Silver save the play-time counter already counting (Crystal: unsaved byte)
+        put("wGameTimerPaused", b"\x01")
     for copy_name in ("primary", "backup"):
         for address, value in layout.markers[copy_name]:
             raw[address] = value
@@ -323,7 +333,7 @@ def sram_offset(title, symbol):
     return found.bank * 0x2000 + found.address - 0xA000
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def layout_of(title):
     return codec.Gen2Layout.from_profile(profile(title), title)
 
@@ -585,17 +595,20 @@ def test_resave_scenario_delta_names_preserved_fields_and_allows_source_rewrites
 
 @pytest.mark.parametrize("title", TITLES)
 def test_resave_frees_only_the_mutable_object_fields(title):
-    """CONTINUE never reloads wMapObjects (C home/map.asm:385-415, G :754-784): only NPC struct IDs and the
-    player map object's Y/X move without a script; script pointers, event flags, sprites and masks must not."""
+    """CONTINUE never reloads wMapObjects (C home/map.asm:385-417, G :754-786) nor runs RefreshPlayerCoords
+    (C engine/overworld/player_object.asm:102-123, G :87-108): on a no-movement re-save the NPC struct IDs and the
+    player map object's Y/X are compared byte for byte, like script pointers, event flags, sprites and masks."""
     layout, body = layout_of(title), cart(title, "town", 0x1234)
     moved = bytearray(body)
-    for symbol, data in (("wMap1ObjectStructID", b"\x03"), ("wMap15ObjectStructID", b"\xff"),
-                         ("wPlayerObjectYCoord", b"\x09\x0a"), ("wObjectStructs", b"\x11" * 8),
-                         ("wObjectFollow_Leader", b"\xff\xff"), ("wCmdQueue", b"\x01")):
+    for symbol, data in (("wObjectStructs", b"\x11" * 8), ("wObjectFollow_Leader", b"\xff\xff"), ("wCmdQueue", b"\x01")):
         put_saved(moved, title, symbol, data)
     reseal(moved, title)
     assert g.resave_scenario_delta(body, bytes(moved), layout, title) == []
-    for symbol, data in (("wMap1ObjectScript", b"\x34\x12"), ("wMap1ObjectEventFlag", b"\x01\x00"),
+    # N14b #3a/#3b falsifiers: these were free spans before.
+    for symbol, data in (("wMap1ObjectStructID", b"\x03"), ("wMap2ObjectStructID", b"\xff"),
+                         ("wMap15ObjectStructID", b"\x07"), ("wPlayerObjectYCoord", b"\x09"),
+                         ("wPlayerObjectXCoord", b"\x0a"),
+                         ("wMap1ObjectScript", b"\x34\x12"), ("wMap1ObjectEventFlag", b"\x01\x00"),
                          ("wMap1ObjectSprite", b"\x07"), ("wMap1ObjectHour1", b"\x05"), ("wObjectMasks", b"\xff"),
                          ("wVariableSprites", b"\x09")):
         changed = bytearray(body)
@@ -627,11 +640,13 @@ def with_fields(body, title, *writes):
 def test_resave_daily_reset_fields_follow_check_daily_reset_timer(title):
     """C engine/overworld/time.asm:61-81,99-122,288-306; G :47-67,85-96,243-261."""
     layout, fresh = layout_of(title), cart(title, "town", 0x1234)
+    # A fired reset also resamples Crystal wKenjiBreakTimer from 0 to 3..6 (C :123-142).
+    tick = (("wKenjiBreakTimer", b"\x03"),) if title == "crystal" else ()
     # Falsifier: a re-save that SETS a daily flag (DAILYFLAGS2_UNION_CAVE_LAPRAS_F, C constants/
     # ram_constants.asm:326-329) in both copies with repaired checksums -- the reset only ever clears them.
     lapras = with_fields(fresh, title, ("wDailyFlags2", bytes([1 << 1])))
     assert g.resave_scenario_delta(fresh, lapras, layout, title) == ["wDailyFlags1", "backup wDailyFlags1"]
-    assert g.resave_scenario_delta(fresh, with_fields(lapras, title, ("wDailyResetTimer", b"\x01\x05")),
+    assert g.resave_scenario_delta(fresh, with_fields(lapras, title, ("wDailyResetTimer", b"\x01\x05"), *tick),
                                    layout, title) == ["wDailyFlags1", "backup wDailyFlags1"]
     # A candidate stamped day 10 with its one-day countdown running and the Lapras flag set today.
     body = with_fields(fresh, title, ("wDailyResetTimer", b"\x01\x0a"), ("wDailyFlags2", b"\x02"))
@@ -640,16 +655,37 @@ def test_resave_daily_reset_fields_follow_check_daily_reset_timer(title):
         return g.resave_scenario_delta(body, with_fields(body, title, *writes), layout, title)
 
     assert delta() == []
-    assert delta(("wDailyResetTimer", b"\x01\x0b"), ("wDailyFlags2", b"\x00")) == []   # next day: reset
-    assert delta(("wDailyResetTimer", b"\x01\x0b")) == []                                # flags may stay
+    assert delta(("wDailyResetTimer", b"\x01\x0b"), ("wDailyFlags2", b"\x00"), *tick) == []   # next day: reset
+    # N14b S1b: a fired reset zeroes EVERY byte of the span; a surviving flag is not a mix it may leave.
+    assert delta(("wDailyResetTimer", b"\x01\x0b"), *tick) == ["wDailyFlags1", "backup wDailyFlags1"]
     assert delta(("wDailyFlags2", b"\x00")) == ["wDailyFlags1", "backup wDailyFlags1"]    # no day passed
-    assert delta(("wDailyResetTimer", b"\x00\x0b")) == ["wDailyResetTimer", "backup wDailyResetTimer"]
+    assert delta(("wDailyResetTimer", b"\x00\x0b"), ("wDailyFlags2", b"\x00"), *tick) == [
+        "wDailyResetTimer", "backup wDailyResetTimer"]
     assert delta(("wDailyResetTimer", b"\x02\x0a")) == ["wDailyResetTimer", "backup wDailyResetTimer"]
-    assert delta(("wDailyFlags2", b"\x03"), ("wDailyResetTimer", b"\x01\x0b")) == ["wDailyFlags1", "backup wDailyFlags1"]
+    assert delta(("wDailyFlags2", b"\x03"), ("wDailyResetTimer", b"\x01\x0b"), *tick) == [
+        "wDailyFlags1", "backup wDailyFlags1"]
     # _CalcDaysSince wraps at 140 days: day 139 -> day 0 is one day.
     wrap = with_fields(fresh, title, ("wDailyResetTimer", b"\x01\x8b"), ("wDailyFlags2", b"\x02"))
     assert g.resave_scenario_delta(wrap, with_fields(wrap, title, ("wDailyResetTimer", b"\x01\x00"),
-                                                     ("wDailyFlags2", b"\x00")), layout, title) == []
+                                                     ("wDailyFlags2", b"\x00"), *tick), layout, title) == []
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_resave_day_stamps_must_be_valid_days(title):
+    """N14b S1b: each check stamps wCurDay (C engine/overworld/time.asm:73-81,399-408, G :59-67,354-363); the
+    mod-140 model holds only for stamps 0..139, so a stamp outside that range, before or after, refuses."""
+    layout = layout_of(title)
+    body = with_fields(cart(title, "town", 0x1234), title, ("wDailyResetTimer", b"\x01\x0a"))
+    tick = (("wKenjiBreakTimer", b"\x03"),) if title == "crystal" else ()   # the reset fires in these
+
+    def delta(base, *writes):
+        return g.resave_scenario_delta(base, with_fields(base, title, *writes), layout, title)
+
+    assert delta(body, ("wDailyResetTimer", b"\x01\x8b"), ("wTimerEventStartDay", b"\x8b"), *tick) == []
+    assert delta(body, ("wDailyResetTimer", b"\x01\x8c"), *tick) == ["wDailyResetTimer", "backup wDailyResetTimer"]
+    assert delta(body, ("wTimerEventStartDay", b"\xc8")) == ["wTimerEventStartDay", "backup wTimerEventStartDay"]
+    stale = with_fields(body, title, ("wDailyResetTimer", b"\x01\x91"))
+    assert delta(stale, ("wDailyResetTimer", b"\x01\x0a"), *tick) == ["wDailyResetTimer", "backup wDailyResetTimer"]
 
 
 def test_crystal_kenji_and_map_sign_rules():
@@ -664,11 +700,15 @@ def test_crystal_kenji_and_map_sign_rules():
 
     assert delta(body, day, ("wKenjiBreakTimer", b"\x04"), ("wDailyRematchFlags", b"\x00")) == []
     assert delta(body, ("wKenjiBreakTimer", b"\x04")) == ["wKenjiBreakTimer", "backup wKenjiBreakTimer"]
-    assert delta(body, day, ("wKenjiBreakTimer", b"\x03")) == ["wKenjiBreakTimer", "backup wKenjiBreakTimer"]
+    assert delta(body, day, ("wKenjiBreakTimer", b"\x03"), ("wDailyRematchFlags", b"\x00")) == [
+        "wKenjiBreakTimer", "backup wKenjiBreakTimer"]
     assert delta(body, ("wDailyRematchFlags", b"\x00")) == ["wDailyRematchFlags", "backup wDailyRematchFlags"]
+    # N14b S1b: once the reset fires, 01:DC4C-DC57 must be all zero and Kenji must tick; unchanged is not enough.
+    assert delta(body, day, ("wKenjiBreakTimer", b"\x04")) == ["wDailyRematchFlags", "backup wDailyRematchFlags"]
+    assert delta(body, day, ("wDailyRematchFlags", b"\x00")) == ["wKenjiBreakTimer", "backup wKenjiBreakTimer"]
     one = with_fields(body, title, ("wKenjiBreakTimer", b"\x01"))
     for value, ok in ((3, True), (6, True), (0, False), (7, False)):
-        assert (delta(one, day, ("wKenjiBreakTimer", bytes([value]))) == []) is ok, value
+        assert (delta(one, day, ("wKenjiBreakTimer", bytes([value])), ("wDailyRematchFlags", b"\x00")) == []) is ok, value
     # The second wKenjiBreakTimer byte is never written: it is compared.
     assert set(delta(body, ("wKenjiBreakTimer", b"\x05\x01"))) == {"wKenjiBreakTimer", "backup wKenjiBreakTimer"}
     assert delta(body, ("wMapNameSignFlags", b"\x02")) == []
@@ -684,12 +724,20 @@ def test_gold_silver_timer_counting_and_swarm_rules(title):
     def delta(base, *writes):
         return g.resave_scenario_delta(base, with_fields(base, title, *writes), layout, title)
 
-    assert delta(body, ("wGameTimerPaused", b"\x01")) == []
-    assert delta(body, ("wGameTimerPaused", b"\x03")) == ["wGameTimerPaused", "backup wGameTimerPaused"]
-    assert delta(body, ("wSwarmMapGroup", b"\x00\x00\x00")) == []          # DAILYFLAGS1_SWARM_F clear
+    swarm = ("wSwarmMapGroup", b"\x00\x00\x00")   # DAILYFLAGS1_SWARM_F clear: CheckSwarmFlag zeroes them
+    paused = with_fields(body, title, ("wGameTimerPaused", b"\x00"))
+    assert delta(paused, swarm, ("wGameTimerPaused", b"\x01")) == []
+    # FinishContinueFunction sets the bit on every CONTINUE: an unchanged clear bit is not its transition.
+    assert delta(paused, swarm) == ["wGameTimerPaused", "backup wGameTimerPaused"]
+    assert delta(body, swarm, ("wGameTimerPaused", b"\x03")) == ["wGameTimerPaused", "backup wGameTimerPaused"]
+    assert delta(body, swarm) == []
     assert delta(body, ("wSwarmMapGroup", b"\x00\x04\x01")) == ["wSwarmMapGroup", "backup wSwarmMapGroup"]
+    # CheckTimeEvents reaches CheckSwarmFlag on every overworld frame (G engine/overworld/events.asm:436-453):
+    # stale swarm fields left unchanged with the flag clear cannot survive a CONTINUE.
+    assert delta(body) == ["wSwarmMapGroup", "backup wSwarmMapGroup"]
     swarming = with_fields(body, title, ("wDailyFlags1", bytes([1 << 2])))
-    assert delta(swarming, ("wSwarmMapGroup", b"\x00\x00\x00")) == ["wSwarmMapGroup", "backup wSwarmMapGroup"]
+    assert delta(swarming) == []
+    assert delta(swarming, swarm) == ["wSwarmMapGroup", "backup wSwarmMapGroup"]
 
 
 @pytest.mark.parametrize("title", TITLES)
@@ -700,6 +748,70 @@ def test_resaved_rtc_status_flags_must_be_zero(title):
     flagged[sram_offset(title, "sRTCStatusFlags")] = 1
     assert g.resave_scenario_delta(body, bytes(flagged), layout, title) == ["sRTCStatusFlags"]
     assert g.resave_scenario_delta(bytes(flagged), body, layout, title) == []
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_resave_roam_history_backup_is_required_on_every_continue(title):
+    """N14b S1c: JumpRoamMons -> _BackUpMapIndices runs on every CONTINUE (C engine/menus/intro_menu.asm:372,
+    engine/overworld/wildmons.asm:672-703,743-752; G :283, :677-708,748-757): a stale history left unchanged fails."""
+    layout, spec = layout_of(title), SPEC[f"{title}_town"]
+    body = cart(title, "town", 0x1234)
+    here = get_saved(body, title, "wMapNumber", 1) + get_saved(body, title, "wMapGroup", 1)
+    stale = with_fields(body, title, ("wRoamMons_CurMapNumber", here + bytes([here[0] - 1, here[1]])))
+    assert g.resave_scenario_delta(stale, stale, layout, title) == [
+        "wRoamMons_CurMapNumber", "backup wRoamMons_CurMapNumber"]
+    faithful = bytearray(stale)
+    resave_in_place(faithful, spec)
+    assert get_saved(faithful, title, "wRoamMons_CurMapNumber", 4) == here * 2
+    assert g.resave_scenario_delta(stale, bytes(faithful), layout, title) == []
+
+
+# --- N14b fresh-fixture input guards: unmodelled CONTINUE transitions refuse the candidate ----------
+
+def saved_write(symbol, data):
+    def change(raw, title):
+        put_saved(raw, title, symbol, data)
+    return change
+
+
+def sram_write(symbol, value, offset=0):
+    def change(raw, title):
+        raw[sram_offset(title, symbol) + offset] = value
+    return change
+
+
+@pytest.mark.parametrize("change, match", [
+    (saved_write("wRoamMon1Species", b"\xf3"), "released roamer"),
+    (saved_write("wRoamMon2MapGroup", b"\x0a"), "released roamer"),
+    (saved_write("wRoamMon3MapNumber", b"\x05"), "released roamer"),
+    (saved_write("wPartyMon1PokerusStatus", b"\x13"), "Pokerus"),
+    (sram_write("sMysteryGiftItem", 0x01), "Mystery Gift"),
+    (sram_write("sMysteryGiftUnlocked", 0x00), "Mystery Gift"),
+    (sram_write("sMysteryGiftDecorationsReceived", 0x10, 5), "Mystery Gift"),
+    (sram_write("sRTCStatusFlags", 0x40), "RTC fault"),
+    (saved_write("wStatusFlags2", bytes([1 << 2])), "Bug Contest"),
+])
+@pytest.mark.parametrize("title", TITLES)
+def test_fresh_fixture_input_guards_refuse_unmodelled_state(title, change, match):
+    body = bytearray(cart(title, "town", 0x1234))
+    spec, rom = SPEC[f"{title}_town"], rom_path(title).read_bytes()
+    g.inspect_candidate(bytes(body) + TRAILER, profile(title), rom, spec)
+    change(body, title)
+    reseal(body, title)
+    with pytest.raises(ValueError, match=match):
+        g.inspect_candidate(bytes(body) + TRAILER, profile(title), rom, spec)
+
+
+def test_crystal_battle_tower_carry_refuses_and_other_status_bits_do_not():
+    """C engine/menus/save.asm:286-295,745-753; the played fixtures save wStatusFlags2 = $80 (bit 2 clear)."""
+    body = bytearray(cart("crystal", "town", 0x1234))
+    spec, rom = SPEC["crystal_town"], rom_path("crystal").read_bytes()
+    put_saved(body, "crystal", "wStatusFlags2", b"\xfb")
+    reseal(body, "crystal")
+    g.inspect_candidate(bytes(body) + TRAILER, profile("crystal"), rom, spec)
+    body[sram_offset("crystal", "sBattleTowerChallengeState")] = 4
+    with pytest.raises(ValueError, match="Battle Tower"):
+        g.inspect_candidate(bytes(body) + TRAILER, profile("crystal"), rom, spec)
 
 
 def resave_flags_the_rtc(raw, spec):
@@ -759,8 +871,7 @@ def resave_touches_the_active_box(raw, spec):
     (resave_touches_the_active_box, "must preserve: sBox"),
     # R4 #3 falsifier: a two-copy wMap1ObjectScript rewrite with repaired checksums (C sym 01:d738, G/S 01:d45f).
     (resave_changes("wMap1ObjectScript", b"\x34\x12"), "must preserve: wMap1ObjectScript"),
-    # R4 S1 falsifiers: a flushed sRTCStatusFlags=1, a daily flag set, a roamer index off its backup rule.
-    (resave_flags_the_rtc, "must preserve: sRTCStatusFlags"),
+    # R4 S1 falsifiers: a daily flag set, a roamer index off its backup rule.
     (resave_changes("wDailyFlags2", bytes([1 << 1])), "must preserve: wDailyFlags1"),
     (resave_changes("wRoamMons_LastMapGroup", b"\x2a"), "must preserve: wRoamMons_CurMapNumber"),
 ])
@@ -769,6 +880,13 @@ def test_resave_that_changes_a_preserved_saved_field_fails(tmp_path, resave, mat
     assert not report["passed"] and match in problems(report)
     assert any(row["stages"][-1]["stage"] == "post_oracle" and row["stages"][-1]["status"] == "FAIL"
                for row in report["fixtures"])
+
+
+def test_resave_that_flushes_an_rtc_fault_fails(tmp_path):
+    """R4 S1: a flushed sRTCStatusFlags=1. The N14b input guard in inspect_candidate refuses the re-saved image
+    as soon as the resave stage inspects it, before the post-oracle's RESAVE_ZEROED_SRAM check."""
+    report = full_report(tmp_path, resave=resave_flags_the_rtc)
+    assert not report["passed"] and "RTC fault (sRTCStatusFlags)" in problems(report)
 
 
 @pytest.mark.parametrize("stage, change, match", [

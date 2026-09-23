@@ -113,10 +113,10 @@ BOOT_ZEROED = {"crystal": ("sScratch", ("sScratch", 0x20))}
 # re-save writes the same bytes back (SavePlayerData/SavePokemonData/SaveBox and the backups copy the live WRAM:
 # C engine/menus/save.asm:266-295,498-594, G :273-291,396-536), so every saved byte must equal the candidate:
 # player ID, map, position, party, items and the Ball pocket, event flags, the active and current storage box,
-# mail, options, check values. Scope: the eight early-game fixtures. Saves with active roamers (JumpRoamMons
-# moves them), Pokerus (CheckPokerusTick -> ApplyPokerusTick), Mystery Gift decorations, an RTC overflow
-# (ClearDailyTimers) or Crystal Battle Tower state change compared bytes and REFUSE; they are out of scope, and
-# the answer is a new rule with its own source transition, never a looser span.
+# mail, options, check values. Scope: the eight early-game fixtures. inspect_candidate REFUSES the inputs whose
+# CONTINUE transitions are not modelled (docs/gen2/reviews/N14B_FACTS_CODEX_2026-09-23.md guard table): released
+# roamers, active Pokerus, Mystery Gift state, a recorded RTC fault, Crystal Battle Tower carry, a running Bug
+# Contest timer. A new scope needs a new rule with its own source transition, never a looser span.
 # Free SRAM: the checksums (SaveChecksum C :526, SaveBackupChecksum :583; G :424, :495;
 # strict_checksum_witness still verifies them) and sStackTop (UpdateStackTop C :297, G :294).
 RESAVE_FREE_SRAM = (("sChecksum", ("sChecksum", 2)), ("sBackupChecksum", ("sBackupChecksum", 2)),
@@ -135,16 +135,12 @@ RESAVE_FREE_WRAM = (
     # wXCoord/wYCoord, still compared. Span: wObjectFollow_Leader..wCmdQueue end (C ram/wram.asm:3032-3045,
     # G :2441-2460); the `ds 40` pad above wMapObjects (C :3047, G :2462) is never written, so it stays compared.
     ("wObjectFollow_Leader", ("wMapObjects", -40)),
-    # wMapObjects is NOT reloaded by CONTINUE (LoadMapAttributes_SkipObjects skips ReadObjectEvents: C home/map.asm
-    # :385-415, G :754-784), so its script pointers, event flags, sprites, movement, hours, masks (wObjectMasks)
-    # and wVariableSprites must survive a re-save byte for byte. Only two fields move without a script:
-    #   MAPOBJECT_OBJECT_STRUCT_ID of each NPC map object, set when an NPC enters the visible range
-    #   (CopyMapObjectToObjectStruct.CopyMapObjectToTempObject C engine/overworld/player_object.asm:170-174,
-    #   G :166-170) and reset to -1 when it leaves (DeleteMapObject C/G engine/overworld/map_objects.asm:5-25,
-    #   ApplyDeletionToMapObject C/G home/map_objects.asm:317-326);
-    #   the player map object's Y/X (RefreshPlayerCoords C engine/overworld/player_object.asm:102-122, G :87-107).
-    *((f"wMap{n}ObjectStructID", (f"wMap{n}ObjectStructID", 1)) for n in range(1, 16)),
-    ("wPlayerObjectYCoord", ("wPlayerObjectXCoord", 1)),
+    # wMapObjects is NOT reloaded by CONTINUE (MapSetupScript_Continue -> LoadMapAttributes_SkipObjects skips
+    # ReadObjectEvents: C data/maps/setup_scripts.asm:164-182, home/map.asm:385-417; G :161-179, :754-786), and no
+    # CONTINUE setup script runs RefreshPlayerCoords (C engine/overworld/player_object.asm:102-123, G :87-108) or
+    # re-inits objects (C home/map.asm:568-634, G :937-1005). So all of wMapObjects, the player map object Y/X
+    # and every MAPOBJECT_OBJECT_STRUCT_ID included, survives a no-movement re-save byte for byte; movement,
+    # warps or visibility changes would need their own witness (N14B facts #3a/#3b).
     # LoadMapTimeOfDay in the same script: time-of-day palette state from the RTC.
     ("wTimeOfDayPal", ("wCurTimeOfDay", 1)),
     # CheckTimeEvents every overworld frame (C engine/overworld/events.asm:449-466, G :436-454):
@@ -158,10 +154,11 @@ RESAVE_FREE_WRAM = (
 #   daily_countdown  CheckDailyResetTimer's one-day countdown: minus the days since its stamp, or restarted to 1
 #                    by RestartDailyResetTimer -> InitOneDayCountdown when it runs out (C engine/overworld/time.asm
 #                    :61-81,99-106,288-306; G :47-67,85-92,243-261).
-#   daily_cleared    zeroed only when that reset fires, never set (C :107-122 wDailyFlags1/2, wSwarmFlags,
-#                    wUnusedDailyFlag and the rematch/phone-item/phone-time-of-day flags; G :92-96 wDailyFlags1/2).
+#   daily_cleared    every byte zeroed when that reset fires, otherwise unchanged (C :107-122 wDailyFlags1/2,
+#                    wSwarmFlags, wUnusedDailyFlag and the rematch/phone-item/phone-time-of-day flags; G :92-96
+#                    wDailyFlags1/2).
 #   kenji            Crystal wKenjiBreakTimer's first byte, ticked by the same reset: minus one, or resampled to
-#                    3..6 by SampleKenjiBreakCountdown once it is at or reaches 0 (C :123-142).
+#                    3..6 by SampleKenjiBreakCountdown once it is at or reaches 0 (C :123-142); unchanged otherwise.
 #   map_sign         Crystal: only SHOWN_MAP_NAME_SIGN (bit 1, C constants/ram_constants.asm:138-140) may move:
 #                    FinishContinueFunction sets it (C engine/menus/intro_menu.asm:467-468), the map-sign check
 #                    clears it (C engine/events/map_name_sign.asm:29-31).
@@ -170,10 +167,15 @@ RESAVE_FREE_WRAM = (
 #                    intro_menu.asm:347-348); nothing else moves.
 #   swarm            Gold/Silver: CheckSwarmFlag zeroes wSwarmMapGroup/wSwarmMapNumber/wFishingSwarmFlag every
 #                    overworld frame while DAILYFLAGS1_SWARM_F (bit 2, G constants/ram_constants.asm:301-305) is
-#                    clear (G engine/overworld/events.asm:452 -> engine/events/specials.asm:299-314).
+#                    clear (G engine/overworld/events.asm:452 -> engine/events/specials.asm:299-314); unchanged
+#                    while it is set.
 #   roam_indices     Continue .Check2Pass -> JumpRoamMons (C engine/menus/intro_menu.asm:372, G :283) ends in
-#                    _BackUpMapIndices (C engine/overworld/wildmons.asm:743-752, G :748-757): last := cur,
-#                    cur := (wMapNumber, wMapGroup).
+#                    _BackUpMapIndices (C engine/overworld/wildmons.asm:743-752, G :748-757) on EVERY CONTINUE,
+#                    even with no roamer: last := cur, cur := (wMapNumber, wMapGroup). Stale-but-unchanged fails.
+# Every rule is deterministic because CheckTimeEvents always reaches .do_daily on a qualification CONTINUE
+# (C engine/overworld/events.asm:449-465, G :436-453): wLinkMode is unsaved and 0 (C FinishContinueFunction
+# intro_menu.asm:462; G Init clears all WRAM, home/init.asm:59-68) and inspect_candidate refuses a saved
+# STATUSFLAGS2_BUG_CONTEST_TIMER_F. So no rule has an "unchanged always passes" shortcut.
 RESAVE_RULED_WRAM = {
     "all": (("daily_countdown", "wDailyResetTimer", ("wDailyResetTimer", 1)),
             ("daily_cleared", "wDailyFlags1", ("wDailyFlags2", 1)),
@@ -186,9 +188,13 @@ RESAVE_RULED_WRAM = {
              ("swarm", "wSwarmMapGroup", ("wFishingSwarmFlag", 1))),
 }
 RESAVE_RULED_WRAM["silver"] = RESAVE_RULED_WRAM["gold"]
-# _CalcDaysSince wraps the day difference at 20 * 7 (C engine/overworld/time.asm:399-408, G :354-363).
+# _CalcDaysSince wraps the day difference at 20 * 7 (C engine/overworld/time.asm:399-408, G :354-363). Each check
+# stamps wCurDay into wDailyResetTimer+1 / wTimerEventStartDay. FixTime does NOT reduce wCurDay mod 140 (RTC days
+# + wStartDay, C home/time.asm:169-174, G :162-167), so a stamp of 140+ is possible but breaks the mod-140 model:
+# fresh-fixture stamps outside 0..139 are refused in both images, not asserted impossible.
 DAYS_WRAP = 20 * 7
 SHOWN_MAP_NAME_SIGN_F, GAME_TIMER_COUNTING_F, DAILYFLAGS1_SWARM_F = 1, 0, 2
+STATUSFLAGS2_BUG_CONTEST_TIMER_F = 2   # C constants/ram_constants.asm:246, G :235
 # The WRAM start of each layout.regions copy.
 _REGION_STARTS = {"player": "wPlayerData", "player1": "wPlayerData1", "player2": "wPlayerData2",
                   "player3": "wPlayerData3", "map": "wCurMapData", "pokemon": "wPokemonData"}
@@ -504,7 +510,7 @@ def run_play(spec, binding, *, root=ROOT, runner=None):
 
 
 def _saved_field(raw, layout, symbol, size):
-    address = layout.addresses[symbol]
+    address = symbol if isinstance(symbol, int) else layout.addresses[symbol]
     for region in layout.regions:
         base = layout.addresses[_REGION_STARTS[region.name]]
         if base <= address and address + size <= base + region.length:
@@ -545,6 +551,35 @@ def inspect_candidate(raw, profile, rom, spec):
     _require(pocket[-1] == 255, "saved Ball pocket terminator missing")
     items = [(pocket[index * 2], pocket[index * 2 + 1]) for index in range(count)]
     _require(all(1 <= item < 255 and 1 <= quantity <= 99 for item, quantity in items), "invalid saved Ball slot")
+    # Fresh-fixture input guards (docs/gen2/reviews/N14B_FACTS_CODEX_2026-09-23.md): CONTINUE transitions the
+    # re-save oracle does not model are refused here, where every qualification stage inspects its input.
+    ctx = load_context(spec.title)
+
+    def saved(name, size=1):
+        return _saved_field(raw, layout, ctx.symbol(name).address, size)
+
+    def sram(name, size=1):
+        start, end = _cart_span(ctx, name, (name, size))
+        return raw[start:end]
+
+    # New game: species 0, map group/number GROUP_N_A (C engine/menus/intro_menu.asm:163-173, G :78-88).
+    _require(all(saved(f"wRoamMon{n}Species") + saved(f"wRoamMon{n}MapGroup", 2) == b"\x00\xff\xff" for n in (1, 2, 3)),
+             "fixture has a released roamer (JumpRoamMons would move it)")
+    # ApplyPokerusTick (engine/events/pokerus/apply_pokerus_tick.asm:1-25); the one-mon party is required above.
+    _require(saved("wPartyMon1PokerusStatus")[0] == 0, "fixture party has Pokerus (CheckPokerusTick would tick it)")
+    # New game item 0/unlocked -1 (C intro_menu.asm:175-183, G :90-98); CONTINUE copies received decorations
+    # (C intro_menu.asm:373 -> engine/link/mystery_gift.asm:1327-1348, G :1170-1191); flag_array of 6 bytes.
+    _require(sram("sMysteryGiftItem", 2) == b"\x00\xff" and not any(sram("sMysteryGiftDecorationsReceived", 6)),
+             "fixture has Mystery Gift state")
+    # ClockContinue can clear the daily timers on an RTC fault (C engine/rtc/rtc.asm:116-145, G :139-158). This
+    # refuses a recorded fault only; a fault raised after loading is the live RTC witness's job.
+    _require(sram("sRTCStatusFlags") == b"\x00", "fixture records an RTC fault (sRTCStatusFlags)")
+    # Crystal rewrites BATTLETOWER_RECEIVED_REWARD on load/save (C engine/menus/save.asm:286-295,745-753).
+    _require(spec.title != "crystal" or sram("sBattleTowerChallengeState") == b"\x00",
+             "fixture carries Battle Tower state")
+    # CheckTimeEvents skips the daily path while the Bug Contest timer runs (C events.asm:449-465, G :436-453).
+    _require(not saved("wStatusFlags2")[0] >> STATUSFLAGS2_BUG_CONTEST_TIMER_F & 1,
+             "fixture has the Bug Contest timer running (daily checks would not run)")
     return {"player_id": player_id, "location": location, "position": position, "ball_items": items,
             "party_raw_hex": party["raw_hex"],
             "identity_key": codec.key(mon), "cartram_sha256": hashlib.sha256(raw).hexdigest(),
@@ -676,28 +711,27 @@ def _symbol_namer(ctx):
 
 def _ruled_problems(ctx, title, before, after):
     """Start symbols of RESAVE_RULED_WRAM fields whose re-saved bytes are not their source transition from the
-    candidate's; before/after(symbol, size) read one save copy. An unchanged field always passes."""
+    candidate's, plus day stamps outside 0..DAYS_WRAP-1; before/after(symbol, size) read one save copy."""
     (count_b, day_b), (count_a, day_a) = before("wDailyResetTimer", 2), after("wDailyResetTimer", 2)
+    problems = [symbol for symbol, at in (("wDailyResetTimer", 1), ("wTimerEventStartDay", 0))
+                if not all(read(symbol, at + 1)[at] < DAYS_WRAP for read in (before, after))]
     days = (day_a - day_b) % DAYS_WRAP
     fired = count_b == 0 or days >= count_b   # UpdateTimeRemaining hit 0 (C engine/overworld/time.asm:288-306)
-    problems = []
     for rule, start, end in RESAVE_RULED_WRAM["all"] + RESAVE_RULED_WRAM[title]:
         first, last = _wram_span(ctx, start, end)
         b, a = before(start, last - first), after(start, last - first)
-        if a == b:
-            continue
         if rule == "daily_countdown":
             ok = a[0] == (1 if fired else count_b - days)
         elif rule == "daily_cleared":
-            ok = fired and all(x in (y, 0) for x, y in zip(a, b))
+            ok = not any(a) if fired else a == b
         elif rule == "kenji":
-            ok = fired and (a[0] == b[0] - 1 if b[0] >= 2 else 3 <= a[0] <= 6)
+            ok = (a[0] == b[0] - 1 if b[0] >= 2 else 3 <= a[0] <= 6) if fired else a == b
         elif rule == "map_sign":
             ok = (a[0] ^ b[0]) & ~(1 << SHOWN_MAP_NAME_SIGN_F) & 0xFF == 0
         elif rule == "timer_counting":
             ok = a[0] == b[0] | 1 << GAME_TIMER_COUNTING_F
         elif rule == "swarm":
-            ok = not any(a) and not after("wDailyFlags1", 1)[0] >> DAILYFLAGS1_SWARM_F & 1
+            ok = a == b if after("wDailyFlags1", 1)[0] >> DAILYFLAGS1_SWARM_F & 1 else not any(a)
         else:  # roam_indices
             ok = a == after("wMapNumber", 1) + after("wMapGroup", 1) + b[:2]
         if not ok:
