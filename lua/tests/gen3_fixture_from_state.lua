@@ -42,11 +42,25 @@
 --           short leg back south to Route 1's grass origin (fleeing any encounter), and saves
 --           there. Healthy party, tall grass, a step yields an encounter.
 --
--- Environment: SLINK_ROOT, SLINK_GEN3_CHECKPOINT, SLINK_GEN3_TITLE=firered (gen3_boot_check.lua),
--- SLINK_GEN3_FIXTURE_KIND (battle|town). The caller is responsible for seeding the per-run
--- SaveRAM directory with the right source battery before launch (the accepted-but-unhealed
--- battle fixture for "town", that kind's own healed output for "battle") -- exactly like
--- `boot-check` seeds its own fixture.
+-- TITLE (card C4-LGF): the driver is title-aware. The shared scripted runtime this file dofiles
+-- (gen3_scripted_play.lua) already reads the same "global, else env, else firered" title and
+-- resolves its own per-title symbols/profiles, so this driver only has to pick the title's own
+-- profile entry. FireRed and LeafGreen are one decomp built twice: every DATA symbol the
+-- walk/heal/flee legs touch sits at the identical address in both .sym files
+-- (lua/tests/gen3_title_syms.lua), and DEST/PATHS describe maps the two titles share (Pallet
+-- Town, Route 1, Viridian City). The lane is VANILLA-ONLY and refuses any other title by name --
+-- radical_red's fixture is an imported real save, not something this driver builds.
+--
+-- LG STATUS: INFER, not yet witnessed. Nothing below is FR-specific by construction (no FR-only
+-- address, no FR-only map, no FR-only menu geometry -- the flee/save machinery is shared), but no
+-- LG run has been executed: the first LG pass is what turns this into a receipt
+-- (tests/fixtures/gen3/README.md, "LeafGreen (planned)").
+--
+-- Environment: SLINK_ROOT, SLINK_GEN3_CHECKPOINT, SLINK_GEN3_TITLE=firered (gen3_boot_check.lua;
+-- also selects the profile title here), SLINK_GEN3_FIXTURE_KIND (battle|town). The caller is
+-- responsible for seeding the per-run SaveRAM directory with the right source battery before
+-- launch (the accepted-but-unhealed battle fixture for "town", that kind's own healed output for
+-- "battle") -- exactly like `boot-check` seeds its own fixture.
 
 local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
 assert(WT, "SLINK_ROOT unset — launch via the gen3 fixture/gate tooling")
@@ -55,8 +69,17 @@ local SP = dofile(WT .. "/lua/tests/gen3_scripted_play.lua")   -- read-only; dof
 local play = SP.play
 local Reads = dofile(WT .. "/lua/gen3/reads.lua")
 local JSON = dofile(WT .. "/lua/json_codec.lua")
+-- TITLE first, then that title's own profile entry (both vanilla titles live in the gen3_frlg
+-- pack; see the header comment).
+local TITLE = SLINK_GEN3_TITLE or os.getenv("SLINK_GEN3_TITLE")
+if not TITLE or TITLE == "" then TITLE = "firered" end
+local PARTY_TITLES = { firered = true, leafgreen = true }
+if not PARTY_TITLES[TITLE] then
+    error("gen3_fixture_from_state: title " .. tostring(TITLE) .. " is not drivable by the "
+          .. "vanilla party lane (firered | leafgreen)")
+end
 local profile_file = assert(io.open(WT .. "/data/games/gen3_frlg/profile.json", "rb"))
-local profile = assert(JSON.decode(profile_file:read("a"))).titles.firered
+local profile = assert(JSON.decode(profile_file:read("a"))).titles[TITLE]
 profile_file:close()
 local function read_bytes(addr, count)
     local bytes = {}
@@ -557,7 +580,12 @@ end
 -- ── entry ────────────────────────────────────────────────────────────────────────────────────
 
 local function run()
+    -- The result name MUST stay a literal: tools/run_gate.py finds a gate's result file by
+    -- regex over the script source (G.open("<literal>"), tools/run_gate.py:45), so a
+    -- concatenation here makes the verdict undiscoverable and the lane times out. The title is
+    -- logged through G.phase lines instead.
     G.open("gen3_fixture_from_state")   -- patch/build/gen3_fixture_from_state_result.txt
+    G.phase("title", "SLINK_GEN3_TITLE=" .. tostring(TITLE))
     pcall(client.speedmode, 6399)
     G.budget = 400000   -- a full heal-and-return or Route1->Viridian walk; generous like
                         -- gen3_scripted_play.lua's own play.main budget (900000) for a full run

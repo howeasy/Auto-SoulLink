@@ -400,6 +400,76 @@ def saveram_name(rom_rel: str) -> str:
     return Path(rom_rel).stem.replace("_", " ") + ".SaveRAM"
 
 
+# ---------------------------------------------------------------------------
+# titles (card C4-LGF)
+#
+# The scripted party lane drives VANILLA FireRed and LeafGreen only. Radical Red is refused by
+# name: its fixture is an imported real save and the shared scripted runtime says so itself
+# (lua/tests/gen3_fr_newgame_inputs.lua's header: "Radical Red is NOT driven by this script").
+# `rom` is only a DEFAULT for --rom: the owner keeps the dumps at the main checkout root, one to
+# three parents above a worktree's own repo root (see _rom_candidates).
+# ---------------------------------------------------------------------------
+
+PARTY_TITLES: dict[str, dict[str, object]] = {
+    "firered": {
+        "rom": "Pokemon - FireRed Version (USA).gba",
+        # BizHawk's gamedb knows a clean FR/LG dump: the battery is filed under the gamedb title
+        # (tests/fixtures/gen3/README.md), not under the staged ROM's filename.
+        "saveram": "Pokemon - FireRed Version (USA).SaveRAM",
+        # gen3_fr_newgame_inputs.lua's intro legs are frame-timed and were verified on FR US 1.0
+        # only (its own header banner). LG's intro is the same engine, but nobody has calibrated
+        # its naming screens, so the scripted NEW GAME lane refuses LG by name.
+        "scripted_newgame": True,
+    },
+    "leafgreen": {
+        "rom": "Pokemon - LeafGreen Version (USA).gba",
+        "saveram": "Pokemon - LeafGreen Version (USA).SaveRAM",
+        "scripted_newgame": False,
+    },
+}
+
+
+def _rom_candidates(filename: str) -> list[Path]:
+    """Everywhere a title's dump may live, nearest first: this repo root (the main checkout when
+    the tool runs there, or a worktree's root), then the checkout the worktree belongs to
+    (`<checkout>/.claude/worktrees/<name>` is three levels down)."""
+    roots = [Path(REPO), *Path(REPO).parents[:3]]
+    seen, out = set(), []
+    for root in roots:
+        cand = root / filename
+        if str(cand) not in seen:
+            seen.add(str(cand))
+            out.append(cand)
+    return out
+
+
+def resolve_rom(title: str, rom: str | None) -> str:
+    """--rom if given, else the title's default dump from PARTY_TITLES, searched via
+    _rom_candidates. Raises FileNotFoundError naming every place searched."""
+    if rom:
+        return rom
+    if title not in PARTY_TITLES:
+        raise ValueError(f"title {title!r} is not drivable by the party lane; "
+                         f"admitted: {', '.join(sorted(PARTY_TITLES))}")
+    want = str(PARTY_TITLES[title]["rom"])
+    for cand in _rom_candidates(want):
+        if cand.exists():
+            return str(cand)
+    raise FileNotFoundError(
+        f"{title} ROM {want!r} not found; looked in "
+        + ", ".join(str(c.parent) for c in _rom_candidates(want)) + " -- pass --rom")
+
+
+def _checked_title(args: argparse.Namespace) -> str:
+    """The --title value, validated against PARTY_TITLES with a loud refusal (the party lane is
+    vanilla FR/LG only). Absent --title keeps the historical FireRed behaviour byte-for-byte."""
+    title = getattr(args, "title", None) or "firered"
+    if title not in PARTY_TITLES:
+        raise ValueError(f"title {title!r} is not drivable by the party lane; "
+                         f"admitted: {', '.join(sorted(PARTY_TITLES))}")
+    return title
+
+
 def stage_rom(rom: str) -> str:
     """Copy a ROM to a space-free path under patch/build and return it RELATIVE to the repo.
 
@@ -487,7 +557,7 @@ def boot_check_verdict(before: dict, after: dict) -> tuple[bool, list[str]]:
 
 
 def _launch(script: str, rom_rel: str, run_dir: Path, *, rr: bool, timeout: int,
-            extra_env: dict | None = None) -> tuple[bool, str]:
+            extra_env: dict | None = None, title: str | None = None) -> tuple[bool, str]:
     """Run one Lua driver on the run_gate mechanism with a per-run config + SaveRAM dir."""
     sys.path.insert(0, os.path.join(REPO, "tools"))
     import run_gate
@@ -502,7 +572,8 @@ def _launch(script: str, rom_rel: str, run_dir: Path, *, rr: bool, timeout: int,
     write_gba_run_config(run_gate._SLINK_ORIGINAL_CONFIG, cfg, str(run_dir))
     checkpoint = CHECKPOINTS[rr]
     os.environ["SLINK_GEN3_CHECKPOINT"] = str(checkpoint)
-    os.environ["SLINK_GEN3_TITLE"] = "radical_red" if rr else "firered"
+    # title explicit, else the historical rr/firered mapping
+    os.environ["SLINK_GEN3_TITLE"] = title or ("radical_red" if rr else "firered")
     os.environ.update(extra_env or {})
     # run_gate copies $SLINK_BIZHAWK_CONFIG into its own per-gate ini; pointing that module
     # global at OUR prepared config is how the SaveRAM redirect reaches the emulator.
@@ -544,7 +615,8 @@ def cmd_boot_check(args: argparse.Namespace) -> int:
         seed=codec.split_rtc(data)[0], saveram_name_override=args.saveram_name)
     print(f"seeded {run_dir / battery} from {fixture} (counter={before['counter']})")
 
-    passed, text = _launch(BOOT_CHECK_LUA, rom_rel, run_dir, rr=args.rr, timeout=args.timeout)
+    passed, text = _launch(BOOT_CHECK_LUA, rom_rel, run_dir, rr=args.rr, timeout=args.timeout,
+                           title=getattr(args, "title", None))
     print(text.rstrip())
     if not passed:
         print(f"BOOT-CHECK FAIL {fixture}: the emulator driver did not report PASS",
@@ -569,11 +641,31 @@ def cmd_boot_check(args: argparse.Namespace) -> int:
 
 
 def cmd_make_fr(args: argparse.Namespace) -> int:
+    """The scripted NEW GAME lane. FireRed only: gen3_fr_newgame_inputs.lua's intro legs are
+    frame-timed and were verified on FR US 1.0 (its own header banner), and LG's naming screens
+    have never been calibrated. Refused by name -- before anything is staged or launched -- so a
+    caller who cannot supply a calibrated intro finds out here, not from a mistuned run."""
+    try:
+        title = _checked_title(args)
+    except ValueError as exc:
+        print(f"make-fr FAIL: {exc}", file=sys.stderr)
+        return 1
+    if not PARTY_TITLES[title]["scripted_newgame"]:
+        print(f"make-fr FAIL: {title} has no calibrated scripted NEW GAME. "
+              f"lua/tests/gen3_fr_newgame_inputs.lua's intro legs (copyright/Oak/gender/two "
+              f"naming screens) are placed by elapsed frames and verified on FireRed US 1.0 "
+              f"only; LG's screens are uncalibrated and the driver refuses to guess. For an LG "
+              f"pre-starter save: play the intro by hand (normal inputs) to Pallet Town, save "
+              f"in-game, then `import` it -- see tests/fixtures/gen3/README.md. For a party "
+              f"fixture from such a save: `make-fr-party --title leafgreen --seed <it>`.",
+              file=sys.stderr)
+        return 1
     rom_rel, run_dir, battery = _prepare_run(
-        "make_fr", args.rom, seed=None, saveram_name_override=args.saveram_name)
-    print(f"cold boot: {run_dir} is empty, battery will be {battery}")
+        f"make_fr_{title}", args.rom, seed=None, saveram_name_override=args.saveram_name)
+    print(f"cold boot: {run_dir} is empty, battery will be {battery} (title={title})")
 
-    passed, text = _launch(FR_NEWGAME_LUA, rom_rel, run_dir, rr=False, timeout=args.timeout)
+    passed, text = _launch(FR_NEWGAME_LUA, rom_rel, run_dir, rr=False, timeout=args.timeout,
+                           title=title)
     print(text.rstrip())
     if not passed:
         print("make-fr FAIL: scripted play did not reach its terminals; no fixture written",
@@ -660,7 +752,7 @@ def kill_our_emuhawk() -> None:
 
 
 def _run_fr_party_attempts(name: str, rom: str, saveram_name: str | None, timeout: int,
-                            extra_env: dict, seed: bytes,
+                            extra_env: dict, seed: bytes, title: str = "firered",
                             max_attempts: int = 25) -> tuple[bool, str, Path, str]:
     """Launch FR_PARTY_LUA up to `max_attempts` times under a fresh run_dir/`name`, seeded with
     `seed` (a flash body -- the source battery to cold-boot -> CONTINUE, same plumbing
@@ -684,13 +776,13 @@ def _run_fr_party_attempts(name: str, rom: str, saveram_name: str | None, timeou
         print(f"cold boot: {run_dir} seeded with {len(seed)} bytes, battery will be "
               f"{battery}" + (f" (process attempt {attempt}/{max_attempts})" if attempt > 1 else ""))
         passed, text = _launch(FR_PARTY_LUA, rom_rel, run_dir, rr=False, timeout=timeout,
-                                extra_env=extra_env)
+                                extra_env=extra_env, title=title)
         print(text.rstrip())
         if passed or "RESULT: FAIL" in text:
             break   # a real FAIL verdict is not retried; only a crashed/no-verdict process is
-        print(f"make-fr-party: process attempt {attempt}/{max_attempts} left no RESULT line "
+        print(f"make-party: process attempt {attempt}/{max_attempts} left no RESULT line "
               f"(EmuHawk exited without one); retrying" if attempt < max_attempts else
-              f"make-fr-party: giving up after {max_attempts} process attempts", file=sys.stderr)
+              f"make-party: giving up after {max_attempts} process attempts", file=sys.stderr)
     return passed, text, run_dir, battery
 
 
@@ -707,6 +799,13 @@ def cmd_make_fr_party(args: argparse.Namespace) -> int:
     if not args.out:
         print("make-fr-party FAIL: --out is required", file=sys.stderr)
         return 1
+    try:
+        title = _checked_title(args)
+        rom = resolve_rom(title, args.rom)
+    except (ValueError, FileNotFoundError) as exc:
+        print(f"make-fr-party FAIL: {exc}", file=sys.stderr)
+        return 1
+    saveram = args.saveram_name or str(PARTY_TITLES[title]["saveram"])
     seed_path = Path(args.seed)
     if not seed_path.exists():
         print(f"make-fr-party FAIL: --seed {seed_path} does not exist", file=sys.stderr)
@@ -722,7 +821,8 @@ def cmd_make_fr_party(args: argparse.Namespace) -> int:
     extra_env = {"SLINK_GEN3_FIXTURE_KIND": args.kind}
 
     passed, _text, run_dir, battery = _run_fr_party_attempts(
-        f"make_fr_party_{args.kind}", args.rom, args.saveram_name, args.timeout, extra_env, seed)
+        f"make_fr_party_{title}_{args.kind}", rom, saveram, args.timeout, extra_env, seed,
+        title=title)
     if not passed:
         print("make-fr-party FAIL: the driver did not report PASS", file=sys.stderr)
         return 1
@@ -740,9 +840,9 @@ def cmd_make_fr_party(args: argparse.Namespace) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(body)
     r = qualify_one(body, rr=False)
-    print(f"wrote {out} ({len(body)} bytes) sha256={sha256_hex(body)} slot={r['slot']} "
-          f"counter={r['counter']} trainer={r['trainer_name']!r}#{r['trainer_id']:08X} "
-          f"party={r['party']}")
+    print(f"wrote {out} ({len(body)} bytes) title={title} sha256={sha256_hex(body)} "
+          f"slot={r['slot']} counter={r['counter']} trainer={r['trainer_name']!r}"
+          f"#{r['trainer_id']:08X} party={r['party']}")
     return 0
 
 
@@ -775,22 +875,35 @@ def build_parser() -> argparse.ArgumentParser:
     p_boot.add_argument("--rom", required=True, help="the .gba to boot (staged space-free)")
     p_boot.add_argument("--fixture", required=True)
     p_boot.add_argument("--rr", action="store_true")
+    p_boot.add_argument("--title", default=None,
+                        help="profile title for the run (default: firered, or radical_red with --rr)")
     p_boot.add_argument("--saveram-name", default=None,
                         help="battery filename to seed, when BizHawk's gamedb names it")
     p_boot.add_argument("--timeout", type=int, default=600)
     p_boot.set_defaults(func=cmd_boot_check)
 
-    p_fr = sub.add_parser("make-fr", help="EMULATOR: scripted NEW GAME on FireRed -> fixture")
+    p_fr = sub.add_parser("make-fr", help="EMULATOR: scripted NEW GAME on FireRed -> fixture "
+                                          "(FireRed only; LeafGreen refuses by name)")
     p_fr.add_argument("--rom", required=True)
     p_fr.add_argument("--out", required=True)
+    p_fr.add_argument("--title", default=None,
+                      help="party-lane title (default firered); a title without a calibrated "
+                           "scripted intro refuses by name")
     p_fr.add_argument("--saveram-name", default=None)
     p_fr.add_argument("--timeout", type=int, default=1800)
     p_fr.set_defaults(func=cmd_make_fr)
 
-    p_frp = sub.add_parser("make-fr-party",
-                           help="EMULATOR: cold-boot --seed, walk/heal/flee, save in-game")
-    p_frp.add_argument("--rom", required=True)
+    # `make-party` is the title-aware name; `make-fr-party` stays as the alias every existing
+    # invocation and the README use (same handler, same flags).
+    p_frp = sub.add_parser("make-party", aliases=["make-fr-party"],
+                           help="EMULATOR: cold-boot --seed, walk/heal/flee, save in-game "
+                                "(aliases: make-fr-party)")
+    p_frp.add_argument("--rom", default=None,
+                       help="the ROM to boot (default: the --title's dump at the checkout root)")
     p_frp.add_argument("--out", required=True)
+    p_frp.add_argument("--title", default=None,
+                       help="firered | leafgreen (default firered). LeafGreen is the same "
+                            "engine and the same shared maps; the party driver is title-aware.")
     p_frp.add_argument("--kind", choices=["battle", "town"], required=True)
     p_frp.add_argument("--seed", required=True,
                        help="battery .sav to cold-boot -> CONTINUE (town: the accepted-but-"

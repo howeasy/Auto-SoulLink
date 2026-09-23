@@ -5,9 +5,11 @@ builds them: no ROM, no real save, no emulator. Committed-fixture assertions
 read tests/fixtures/gen3/*.sav directly.
 """
 
+import argparse
 import glob
 import hashlib
 import os
+import re
 import sys
 
 import pytest
@@ -166,6 +168,154 @@ def test_fr_party_battle_and_town_share_trainer_and_party_at_different_positions
     assert [m["level"] for m in rb["party"]] == [m["level"] for m in rt["party"]]
     pb, pt = codec.parse_flash(battle), codec.parse_flash(town)
     assert pb["sb1"][0:6] != pt["sb1"][0:6], "town must stand somewhere other than battle's tile"
+
+
+# --- LeafGreen party lane (card C4-LGF) ------------------------------------------------------
+#
+# No LG fixture is committed yet; the exact emulator commands are in
+# tests/fixtures/gen3/README.md ("LeafGreen (planned)"). What CAN be checked with no emulator is
+# (a) the builder's title plumbing and refusals and (b) -- once a pair exists -- the identical
+# fixture contract the FR pairs must satisfy.
+
+def _lg_fixture(name: str) -> bytes:
+    path = os.path.join(FIXTURES_DIR, name)
+    if not os.path.exists(path):
+        pytest.skip(f"{name} is not built yet (README: LeafGreen (planned))")
+    with open(path, "rb") as f:
+        return f.read()
+
+
+def test_party_lane_admits_only_vanilla_titles():
+    """`--title` is validated against PARTY_TITLES with a loud refusal; an absent flag keeps the
+    historical FireRed behaviour. RR's fixture is an imported real save, and the shared scripted
+    runtime refuses it by name too (lua/tests/gen3_fr_newgame_inputs.lua header)."""
+    assert fx._checked_title(argparse.Namespace()) == "firered"
+    assert fx._checked_title(argparse.Namespace(title=None)) == "firered"
+    assert fx._checked_title(argparse.Namespace(title="leafgreen")) == "leafgreen"
+    for bad in ("radical_red", "rr", "emerald", "firered_ap", ""):
+        if bad == "":
+            assert fx._checked_title(argparse.Namespace(title=bad)) == "firered"
+            continue
+        with pytest.raises(ValueError, match="admitted: firered, leafgreen"):
+            fx._checked_title(argparse.Namespace(title=bad))
+
+
+def test_leafgreen_rom_default_is_the_checkout_root_dump():
+    """--rom wins verbatim; without it the title's dump is searched upward from the repo root
+    (the owner keeps them at the main checkout root -- card C4-LGF)."""
+    assert fx.resolve_rom("leafgreen", "some/elsewhere.gba") == "some/elsewhere.gba"
+    try:
+        path = fx.resolve_rom("leafgreen", None)
+    except FileNotFoundError as exc:
+        pytest.skip(f"LG ROM absent on this host: {exc}")
+    assert os.path.basename(path) == "Pokemon - LeafGreen Version (USA).gba"
+    assert os.path.exists(path)
+
+
+def test_make_fr_refuses_leafgreen_by_name_without_staging_or_launching(monkeypatch, capsys,
+                                                                        tmp_path):
+    """gen3_fr_newgame_inputs.lua's intro legs are frame-timed and FR-verified only, so the
+    scripted NEW GAME lane must refuse LG *before* anything is copied or launched -- and say what
+    to do instead."""
+    def boom(*_a, **_k):
+        raise AssertionError("refused title reached stage_rom/_launch")
+
+    monkeypatch.setattr(fx, "stage_rom", boom)
+    monkeypatch.setattr(fx, "_launch", boom)
+    code = fx.cmd_make_fr(argparse.Namespace(title="leafgreen", rom="ignored.gba",
+                                             out=str(tmp_path / "x.sav"), saveram_name=None,
+                                             timeout=1))
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "no calibrated scripted NEW GAME" in err
+    assert "README.md" in err and "make-fr-party --title leafgreen" in err
+
+
+def test_make_party_wires_the_leafgreen_title_saveram_and_run_dir(monkeypatch, tmp_path):
+    """The LG lane's plumbing with the emulator boundary stubbed: the title reaches the driver,
+    the seed battery is filed under LeafGreen's gamedb name, the run directory is per-title, and
+    the kind still rides SLINK_GEN3_FIXTURE_KIND."""
+    seen: dict = {}
+
+    def fake_attempts(name, rom, saveram_name, timeout, extra_env, seed, title="firered",
+                      max_attempts=25):
+        seen.update(name=name, rom=rom, saveram=saveram_name, title=title, env=dict(extra_env))
+        return False, "RESULT: FAIL (stub)", tmp_path, "stub.SaveRAM"
+
+    monkeypatch.setattr(fx, "_run_fr_party_attempts", fake_attempts)
+    seed = tmp_path / "seed.sav"
+    seed.write_bytes(_build_image(party_mons=[_mon(1, 0x1234, "RED", party=True)]))
+    code = fx.cmd_make_fr_party(argparse.Namespace(
+        title="leafgreen", rom=None, out=str(tmp_path / "out.sav"), kind="town",
+        seed=str(seed), saveram_name=None, timeout=1))
+    assert code == 1                                  # the stub never reported PASS
+    assert seen["title"] == "leafgreen"
+    assert seen["saveram"] == "Pokemon - LeafGreen Version (USA).SaveRAM"
+    assert "leafgreen" in seen["name"] and "town" in seen["name"]
+    assert os.path.basename(seen["rom"]) == "Pokemon - LeafGreen Version (USA).gba"
+    assert seen["env"] == {"SLINK_GEN3_FIXTURE_KIND": "town"}
+
+
+def test_make_party_refuses_an_unknown_title_before_the_seed_is_read(monkeypatch, tmp_path,
+                                                                     capsys):
+    def boom(*_a, **_k):
+        raise AssertionError("refused title reached the emulator lane")
+
+    monkeypatch.setattr(fx, "_run_fr_party_attempts", boom)
+    code = fx.cmd_make_fr_party(argparse.Namespace(
+        title="radical_red", rom=None, out=str(tmp_path / "out.sav"), kind="town",
+        seed=str(tmp_path / "absent.sav"), saveram_name=None, timeout=1))
+    assert code == 1
+    assert "admitted: firered, leafgreen" in capsys.readouterr().err
+
+
+def test_the_party_driver_reads_the_title_and_keeps_a_literal_result_name():
+    """Static contract, no emulator. The driver must resolve its profile title from
+    SLINK_GEN3_TITLE rather than hardcoding firered, refuse titles the vanilla lane does not
+    drive, and keep `G.open("<literal>")`: tools/run_gate.py discovers a gate's result file by
+    regex over the script's own source (tools/run_gate.py:44-59), so a concatenated name makes
+    the verdict undiscoverable and the lane waits out its whole timeout."""
+    with open(os.path.join(REPO, "lua", "tests", "gen3_fixture_from_state.lua"),
+              encoding="utf-8") as handle:
+        src = handle.read()
+    code = "\n".join(line.split("--", 1)[0] for line in src.splitlines())
+    assert 'os.getenv("SLINK_GEN3_TITLE")' in code
+    assert "titles[TITLE]" in code
+    assert "titles.firered" not in code
+    assert re.search(r"PARTY_TITLES\s*=\s*\{[^}]*leafgreen", code)
+    assert re.search(r'G\.open\(\s*"[A-Za-z0-9_]+"\s*\)', code), \
+        "the result name must stay a string literal for tools/run_gate.py"
+
+
+@pytest.mark.parametrize("kind,tile", [("battle", (12, 37)), ("town", (24, 39))])
+def test_lg_party_fixtures_match_the_fr_contract(kind, tile):
+    """Card C4-LGF item 3: the LG pair must satisfy exactly what the FR pair does -- two fully
+    healed mons, the kind's own tile (Route 1 grass 12,37 / Viridian's south tile 24,39).
+    Skipped until the emulator lane builds them."""
+    data = _lg_fixture(f"leafgreen_party_{kind}.sav")
+    result = fx.qualify_one(data, rr=False)
+    assert result["ok"], result["message"]
+    mons = codec.party_from_save(data, rr=False)
+    assert len(mons) == 2
+    for m in mons:
+        assert m["hp"] == m["max_hp"], f"species {m['species']}: hp {m['hp']}/{m['max_hp']}"
+    sb1 = codec.parse_flash(data)["sb1"]
+    assert (sb1[0] | (sb1[1] << 8), sb1[2] | (sb1[3] << 8)) == tile
+
+
+@pytest.mark.parametrize("kind", ["battle", "town"])
+def test_lg_party_b_variant_has_a_distinct_trainer_at_the_same_place(kind):
+    """The B side is a derive-b re-key (the one byte-level derivation this lane allows): same
+    species/order and the same map/tile, different OT identity."""
+    a_body = _lg_fixture(f"leafgreen_party_{kind}.sav")
+    b_body = _lg_fixture(f"leafgreen_party_{kind}_b.sav")
+    ra, rb = fx.qualify_one(a_body, rr=False), fx.qualify_one(b_body, rr=False)
+    assert ra["ok"] and rb["ok"]
+    assert [m["species"] for m in ra["party"]] == [m["species"] for m in rb["party"]]
+    assert ra["trainer_id"] != rb["trainer_id"]
+    assert ra["trainer_name"] != rb["trainer_name"]
+    assert codec.parse_flash(a_body)["sb1"][0:6] == codec.parse_flash(b_body)["sb1"][0:6], \
+        "derive-b never patches position"
 
 
 # --- import: RTC-suffix strip -----------------------------------------------
