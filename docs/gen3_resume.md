@@ -47,6 +47,38 @@ Shadow lane invocation: `SLINK_SHADOW=1 python tools/e2e_duo.py --game gen3_rr -
 
 > OWNER RULING 2026-09-22: peer ghost removed from the Gen 3 RC and deferred post-RC (PLAN §0/§10, requirements 'Not in this release'). P5 drops ghost.lua and the ghost scenario; RR duo set is eight.
 
+## Checkpoint 9 (2026-09-23, owner stop): G3 request ready
+
+- **G3 request draft is ready for the owner**: `docs/gen3/G3_request_draft.md` (5efd1f24). It has a summary at the top. The owner is asked to sign the evidenced FR clean / RR companion G3 cells. The 7 OPEN kinds, 4 PARTIAL rows and deferred LG/RR clean artifacts are carried forward as limits. This is not G4 or RC approval.
+- PHYSICAL this round:
+  - FR runs 28e and 29: viridian_pc deposit/withdraw, pc_release and save PASS, twice, with identical frames. Receipts a2f2fea1, fde19a89. First FR save hook fire.
+  - RR r9 whole lane PASS (checkpoint 8).
+- Landed (all gated):
+  - C3-38 c3560eac: RAM-witnessed PC flow (pins in docs/gen3/research/fr_pc_ram_witnesses.md, OMP O4). Coordinator follow-ups from runs 28a-d:
+    - 0a8d4787: whiteout recover/resume into the Center.
+    - 39fb1bc6: Continue-BOX prompt answered with B. Its comment claimed the prompt starts on YES; it starts on NO, corrected in 37c531f1.
+    - 36457936: PC failure diagnostics.
+    - 259e701e: B out of Task_PCMainMenu, the real 28b-d loop.
+  - C3-39 5efd1f24: G3 draft. Codex.
+  - C3-40 37c531f1: FR PC guard mutation matrix 4/27 -> 27/27 (OMP; Codex ACCEPT).
+  - C3-41 c0c0760b: 13 timeout names witnessed, 0/15 -> 15/15. OMP.
+  - af3f1b16: RR yes/no rationale comment.
+- Owner rulings this session:
+  - Native text removed from the RC and disabled with the code kept (0786894b, d3c69de7; docs/gen3/TODO.md).
+  - AP deferred post-RC (494d3866).
+  - Peer ghost deferred (checkpoint 6).
+- Reviews: C3-36 Opus ACCEPT; C3-38 OMP ACCEPT (top-menu blocker already fixed); C3-40 Codex ACCEPT; C3-33 Sonnet ACCEPT.
+
+## Next actions (in order)
+
+0. (checkpoint 9) (a) OWNER: review and sign G3 from docs/gen3/G3_request_draft.md (PLAN §14.1 ledger row). (b) Queued minors, none blocking:
+   - PC.popup's search can never reach the last popup row (4) within its budget, an off-by-one (OMP C3-41). No current leg uses it.
+   - A focused area=2/option=2 test for the PC.popup mapping (Codex review of 37c531f1).
+   - Optionally, comment the two cursor-guard reachability notes (OMP C3-41 finding 2).
+   (c) After G3: P4 (new client + FRLG cutover), per PLAN §6/§14.
+
+Older (checkpoint 8):
+
 ## Checkpoint 8 (2026-09-23, owner stop)
 
 - Peers: magi restarted, and steer now works for Codex (`magi doctor`: "Codex app steer channel found"). Codex thread "Review Gen 3 Part 2" still returns NO_LIVE_PEER for live REQUESTS, so cards go as steer notes WITH a `queueKey`; Codex replies by note or into the task mailbox (`magi exchange <id>`). OMP "Gen3-2" takes live requests. The hook `~/.claude/hooks/orchestration.py` was fixed: failed deliveries and plain notes no longer mark a peer idle.
@@ -63,7 +95,7 @@ Shadow lane invocation: `SLINK_SHADOW=1 python tools/e2e_duo.py --game gen3_rr -
   - FR census header title=firered (2340cbd9).
   - FR runs 26-27 (e131f747): route1_faint now completes its battle. viridian_pc reaches the Viridian PC after 2 incidental battles, but the deposit input route stalls at the PC top menu ("Which PC should be accessed?"), so nothing departs and the pc_target oracle refuses.
 
-## Next actions (in order)
+## Next actions at checkpoint 8 (superseded by checkpoint 9 above)
 
 0. (checkpoint 8) (a) DONE: Opus ACCEPT of 4f511a1e (C3-36; closes the C3-34 blocker). Queued minors, none blocking:
    - The move-slot A (~:780) and the mash_a stop on party_menu_up (~:784) have no test. The fake should model A on a fainted slot opening the popup first, and "has no energy" appearing only after SEND OUT (party_menu.c:3743-3757).
