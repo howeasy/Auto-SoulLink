@@ -86,9 +86,11 @@ function client:frame_end()
     local queue = SLINK_TEST_EVENTS or {}
     SLINK_TEST_EVENTS = {}
     for _, ev in ipairs(queue) do pcall(self.on_event, self, ev) end
-    local commands = SLINK_TEST_COMMANDS or {}
-    SLINK_TEST_COMMANDS = {}
-    for _, cmd in ipairs(commands) do self:handle_command(cmd) end
+    if self.hello_sent then   -- the server answers a hello
+        local commands = SLINK_TEST_COMMANDS or {}
+        SLINK_TEST_COMMANDS = {}
+        for _, cmd in ipairs(commands) do self:handle_command(cmd) end
+    end
 end
 SLINK_GEN2_CLIENT = client
 local title = SLINK_TEST_CLIENT_TITLE or os.getenv("SLINK_GEN2_TITLE")
@@ -735,4 +737,127 @@ def test_admit_verdict_passes_each_complete_half():
         "rehello", "no-hold", "save-first"])
 def test_admit_verdict_refuses_a_tampered_half(lines, match):
     problems, receipt = admit_verdict(lines)
+    assert receipt is None and any(match in p for p in problems), problems
+
+
+# --- reconnect (C-2, D-14) -----------------------------------------------------------------------------
+
+RECONNECT = ROOT / "lua/tests/duo/scenario_gen2_reconnect.lua"
+DRIVER_FILES += ("lua/tests/duo/scenario_gen2_reconnect.lua",)
+
+
+def mykey(lines):
+    return next(line.split()[2] for line in lines if line.startswith("MYKEY 0 "))
+
+
+def test_reconnect_initial_b_links_saves_and_stays_until_b_done(tmp_path):
+    lines, _, _ = run_driver(tmp_path, scenario="reconnect", player="b", duo={"phase": "initial"},
+                             go_text="GO\nB_DONE\n")
+    assert lines[-1] == "RESULT: PASS (B remained online through both A relaunches)", "\n".join(lines[-20:])
+    assert tag_json(lines, "RECONNECT_READY")["key"] == KEY
+    stayed = tag_json(lines, "B_STAYED")
+    assert (stayed["hellos"], stayed["force_faint"], stayed["box_mon"]) == (1, 0, 0)
+    receipt = tag_json(lines, "RECEIPT")
+    assert receipt["schema"] == "gen2-duo-reconnect-v1" and receipt["phase"] == "initial" and receipt["key"] == KEY
+
+
+def test_reconnect_initial_a_waits_for_the_kill_and_never_passes(tmp_path):
+    lines, _, _ = run_driver(tmp_path, scenario="reconnect", duo={"phase": "initial"})
+    assert tag_json(lines, "RECONNECT_READY")["player"] == "a"
+    assert lines[-1].startswith("RESULT: FAIL") and "timeout" in lines[-1], lines[-1]
+
+
+def test_reconnect_same_save_relaunch_finds_the_linked_key(tmp_path):
+    probe, _, _ = run_driver(tmp_path / "probe", scenario="reconnect",
+                             duo={"phase": "same_save", "expected_key": "0000:0000:01"}, go_text="GO\nA_DONE_SAME")
+    assert probe[-1] == "RESULT: FAIL (same-save relaunch lost the linked key)"
+    key = mykey(probe)
+    lines, sim, _ = run_driver(tmp_path / "run", scenario="reconnect",
+                               duo={"phase": "same_save", "expected_key": key}, go_text="GO\nA_DONE_SAME")
+    assert lines[-1] == "RESULT: PASS (same_save hello observed once)", "\n".join(lines[-20:])
+    back = tag_json(lines, "RECONNECT_HELLO")
+    assert back["linked"] is True and back["hellos"] == 1 and back["expected_key"] == key
+    assert sim.writes == [] and not any(line.startswith("ENGINE_CAPTURE") for line in lines)
+
+
+def wrong_hud(sim, glob):
+    glob.SLINK_TEST_COMMANDS = sim.lua.table_from([sim.lua.table_from(
+        {"cmd": "hud_show", "text": "[x] WRONG SAVE: slot A", "color": sim.lua.table_from([255, 0, 0]),
+         "duration": 600})])
+
+
+def test_reconnect_wrong_save_relaunch_sees_the_wrong_save_hud(tmp_path):
+    lines, _, _ = run_driver(tmp_path, scenario="reconnect", duo={"phase": "wrong_save", "expected_key": KEY},
+                             go_text="GO\nA_DONE_WRONG", setup=wrong_hud)
+    assert lines[-1] == "RESULT: PASS (wrong_save hello observed once)", "\n".join(lines[-20:])
+    assert tag_json(lines, "WRONG_SAVE_HUD")["text"] == "[x] WRONG SAVE: slot A"
+    assert tag_json(lines, "RECONNECT_HELLO")["linked"] is False
+
+
+def test_reconnect_wrong_save_without_the_hud_fails(tmp_path):
+    lines, _, _ = run_driver(tmp_path, scenario="reconnect", duo={"phase": "wrong_save", "expected_key": KEY},
+                             go_text="GO\nA_DONE_WRONG")
+    assert lines[-1] == "RESULT: FAIL (wrong-save relaunch did not receive the WRONG SAVE hud)"
+
+
+def test_reconnect_refuses_an_unknown_phase(tmp_path):
+    lines, sim, _ = run_driver(tmp_path, scenario="reconnect")
+    assert lines[-1] == "RESULT: FAIL (unknown reconnect phase nil)" and not sim.inputs
+
+
+def reconnect_verdict(lines):
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    json_codec = lua.execute((ROOT / "lua/json_codec.lua").read_text(encoding="utf-8"))
+    link = lua.execute(SCENARIO.read_text(encoding="utf-8"))
+    problems, receipt = lua.execute(RECONNECT.read_text(encoding="utf-8")).verdict(
+        lua.table_from(lines), json_codec, link.verdict)
+    return list(problems.values()), receipt
+
+
+def initial_b_lines():
+    j = json.dumps
+    lines = [line.replace('"player": "a", "scenario": "link"', '"player": "b", "scenario": "reconnect"')
+             for line in happy_lines()]
+    return lines + ["RECONNECT_READY " + j({"frame": 1600, "phase": "initial", "player": "b", "key": KEY}),
+                    "RX resolved_areas",
+                    "B_STAYED " + j({"frame": 9000, "hellos": 1, "force_faint": 0, "box_mon": 0})]
+
+
+def relaunch_lines(phase):
+    j = json.dumps
+    lines = [line.replace('"scenario": "link"', '"scenario": "reconnect"') for line in happy_lines()[:5]]
+    lines.append("RECONNECT_HELLO " + j({"frame": 400, "phase": phase, "hellos": 1, "ot_id": 46401,
+                                         "expected_key": KEY, "linked": phase == "same_save"}))
+    if phase == "wrong_save":
+        lines += ["RX hud_show", "RX_TEXT " + j({"frame": 401, "cmd": "hud_show", "text": "[x] WRONG SAVE: slot A"}),
+                  "WRONG_SAVE_HUD " + j({"frame": 402, "text": "[x] WRONG SAVE: slot A"})]
+    return lines
+
+
+def test_reconnect_verdict_passes_each_complete_leg():
+    for lines, phase in ((initial_b_lines(), "initial"), (relaunch_lines("same_save"), "same_save"),
+                         (relaunch_lines("wrong_save"), "wrong_save")):
+        problems, receipt = reconnect_verdict(lines)
+        assert problems == [] and receipt["phase"] == phase and receipt["schema"] == "gen2-duo-reconnect-v1", problems
+
+
+@pytest.mark.parametrize("lines,match", [
+    (initial_b_lines()[:-1] + ["RX force_faint key=" + KEY, initial_b_lines()[-1]], "force_faint/box_mon"),
+    (initial_b_lines() + ["HELLO_AGAIN " + json.dumps({"frame": 1, "ot_id": 46401, "n": 2})], "second hello"),
+    ([x.replace('"hellos": 1, "force_faint"', '"hellos": 2, "force_faint"') for x in initial_b_lines()],
+     "more than once"),
+    ([x for x in initial_b_lines() if not x.startswith("B_STAYED")], "missing B_STAYED"),
+    ([x.replace('"player": "b", "key": "' + KEY, '"player": "b", "key": "0000:0000:01') for x in initial_b_lines()],
+     "another key"),
+    ([x for x in initial_b_lines() if not x.startswith("SAVE_WITNESS")], "missing SAVE_WITNESS"),
+    ([x.replace('"linked": true', '"linked": false') for x in relaunch_lines("same_save")], "lost the linked key"),
+    (relaunch_lines("same_save") + ["RX box_mon key=" + KEY], "force_faint/box_mon"),
+    (relaunch_lines("same_save") + ["HELLO_AGAIN " + json.dumps({"frame": 1, "ot_id": 1, "n": 2})], "second hello"),
+    ([x for x in relaunch_lines("wrong_save") if not x.startswith("RX_TEXT")], "no WRONG SAVE hud"),
+    ([x.replace('"linked": false', '"linked": true') for x in relaunch_lines("wrong_save")], "holds the linked key"),
+    (relaunch_lines("wrong_save")[:1] + relaunch_lines("wrong_save")[2:], "missing CLIENT"),
+], ids=["b-force-faint", "b-rehello", "b-count", "b-no-stay", "ready-key", "no-link-save", "same-lost",
+        "same-box-mon", "same-rehello", "wrong-no-hud", "wrong-linked", "no-client"])
+def test_reconnect_verdict_refuses_a_tampered_leg(lines, match):
+    problems, receipt = reconnect_verdict(lines)
     assert receipt is None and any(match in p for p in problems), problems
