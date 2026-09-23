@@ -32,7 +32,7 @@ from server.pokemon_data import species_name as national_species_name
 
 from . import gen1_codec
 from .base import humanize_area_id
-from .gen1_rby import Gen1Adapter
+from .gen1_rby import _GIFT_MAP_ID, Gen1Adapter
 
 _DATA = Path(__file__).resolve().parents[2] / "data" / "games" / "gen1_purergb"
 
@@ -84,6 +84,7 @@ class Gen1PureRGBAdapter(Gen1Adapter):
 
         area_map = _json("area_map.json")
         self._area_by_map = {int(k): v["area_id"] for k, v in area_map.items()}
+        self._map_names = {int(k): v["name"] for k, v in area_map.items()}
         # First-wins, like Gen1Adapter's own _AREA_NAMES: several map ids share one
         # collapsed area_id (U10's dungeon/town-building collapse), each with its OWN
         # `name` (Pallet Town's area_id also covers Oak's Lab and both rival/player
@@ -290,6 +291,9 @@ class Gen1PureRGBAdapter(Gen1Adapter):
     def area_display_name(self, area_id: str) -> str:
         if area_id in self._area_names:
             return self._area_names[area_id]
+        gift = _GIFT_MAP_ID.fullmatch(area_id)
+        if gift:
+            return f"{self._map_names.get(int(gift[1]), f'Map {gift[1]}')} — Gift"
         static = _STATIC_ID.fullmatch(area_id)
         if static:
             map_id, dex = int(static[1]), int(static[2])

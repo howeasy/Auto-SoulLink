@@ -149,6 +149,13 @@ def test_per_map_gift_ids_are_gift_areas(adapter):
     assert adapter.is_gift_area("gift_map_255")
 
 
+def test_per_map_gift_ids_are_named_by_their_map(adapter):
+    """Live run 2026-09-22: the board showed the starter's area as "Gift Map 40"."""
+    from server.adapters.gen1_purergb import Gen1PureRGBAdapter
+    for a in (adapter, Gen1PureRGBAdapter()):
+        assert a.area_display_name("gift_map_40") == "Oak's Lab — Gift"
+
+
 # P8-2b: `M.GIFT_AREAS` in lua/games/gen1_rby.lua had no counterpart in the rewritten
 # client, which suppresses no_catch on the ENGINE's answer (a battle that never started is
 # not an encounter) rather than on a hardcoded area list -- see

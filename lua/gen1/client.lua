@@ -505,8 +505,9 @@ function Client.new(p)
             end
             if not slot then log("[SLink-gen1] " .. c .. ": key not in party " .. tostring(cmd.key)) return end
             local battle = reads.read_battle()
-            if battle.in_battle ~= 0 and battle.player_mon_number == slot then
-                -- active battler: only the loop head may write (W-2); queue for the hook
+            if battle.in_battle ~= 0 then
+                -- in battle: only the loop head may write (W-2) -- the active battler AND the
+                -- bench, or a bench mon whose partner died stays switchable all battle
                 self.pending_battle_writes[#self.pending_battle_writes + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname }
             else
                 self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname }
@@ -1011,6 +1012,12 @@ function Client.new(p)
                     self.resolved_areas[b.area_id] = true
                 end
             end
+            -- a battle write that never reached a loop head (the battle ended first) is still
+            -- owed: the checkpoint zeroes it, instead of it waiting for some later battle
+            for _, w in ipairs(self.pending_battle_writes) do
+                self.deferred[#self.deferred + 1] = { cmd = "force_faint", key = w.key, nickname = w.nickname }
+            end
+            self.pending_battle_writes = {}
             self.battle = nil
             self.pending_safe = true
         elseif k == "battle_faint" then
@@ -1407,8 +1414,15 @@ function Client.new(p)
                 else
                     keep[#keep + 1] = w
                 end
+            elseif slot and pt.battle_type == 0 and pt.link_state ~= 4 then
+                -- a bench mon (EXPLOSION needs the field, so explode = faint): the loop head is
+                -- between turns, nothing in the engine holds its party struct
+                writes:arm("battle_loop_head")
+                writes:faint_party_slot(slot)
+                writes:disarm()
+                hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360)
             elseif slot then
-                -- switched out meanwhile: a bench write at the next checkpoint is enough
+                -- special/link battle: leave the bench alone until the checkpoint
                 self.deferred[#self.deferred + 1] = { cmd = "force_faint", key = w.key, nickname = w.nickname }
             end
         end
@@ -1903,6 +1917,20 @@ function Client.new(p)
                 self.filter_errors_logged = fs.accept_errors
                 log("[SLink-gen1] signal filter " .. tostring(fs.accept_error) .. " (" .. fs.accept_errors .. " dropped)")
             end
+        end
+        -- The registry latches its first capture/queue failure and drops every later hook: say
+        -- so once, loudly, instead of a run that silently stops seeing captures and battles. A
+        -- synchronous hook handler (the in-battle faint/explode writes) that threw is contained
+        -- as handler_error; log each new one, or a write that never lands leaves no trace.
+        local st = self.signals and self.signals.status and self.signals:status()
+        if st and st.handler_error and st.handler_error ~= self.handler_error_logged then
+            self.handler_error_logged = st.handler_error
+            log("[SLink-gen1] hook handler error: " .. tostring(st.handler_error))
+        end
+        if st and st.failed and not self.signal_failure_shown then
+            self.signal_failure_shown = true
+            log("[SLink-gen1] ENGINE SIGNALS STOPPED: " .. tostring(st.failed))
+            hud.show("SLINK: engine hooks stopped - restart Lua, send slink_lua.log", 255, 60, 60, 1800)
         end
         self:rival_window_tick()
         self:settle_pending_change()

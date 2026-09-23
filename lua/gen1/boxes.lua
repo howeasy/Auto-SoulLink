@@ -392,10 +392,13 @@ function B.new(profile, reads, io)
         -- Reverse reads.decode_name, whose English glyphs come from
         -- constants/charmap.asm:5-196; no lossy ASCII fallback.
         if type(name) ~= "string" then return nil, "nickname must be a string" end
+        -- Literal glyph tiles only ($7F-$BF, $E0-$EB, $EF-$FF, as the trade receptionist's
+        -- SlinkTradeUIValidName checks): pureRGB's charmap also names text-compression codes
+        -- ("an" = $34, "the", "ing", ...), and a greedy match wrote "Rockman" as ...m + $34.
         local tokens, values = {}, {}
-        for b = 0, 255 do
-            local glyph = reads.decode_name({b})
-            if glyph and glyph ~= "" then tokens[#tokens + 1], values[glyph] = glyph, b end
+        for b = 0x7F, 255 do
+            local glyph = (b < 0xC0 or (b >= 0xE0 and b < 0xEC) or b >= 0xEF) and reads.decode_name({b})
+            if glyph and glyph ~= "" and not values[glyph] then tokens[#tokens + 1], values[glyph] = glyph, b end
         end
         table.sort(tokens, function(a, b) return #a > #b end)
         local out = {}

@@ -35,6 +35,8 @@ for _row in _AREAS.values():
 # no encounter area as "map_<id>", and the board should say Viridian City, not Map 1
 _MAP_NAMES = {int(key): value for key, value in _json("map_names.json").items()}
 _MAP_ID = re.compile(r"map_(\d+)")
+# an out-of-battle acquisition (starter, gift): the client names it gift_map_<map id>
+_GIFT_MAP_ID = re.compile(r"gift_map_(\d+)\Z")
 _INDEX_JSON = {int(key): int(value)
                for key, value in _json("species_index.json")["index_to_national"].items()}
 _FAMILY = {int(key): int(value) for key, value in _json("evolutions.json")["family"].items()}
@@ -413,6 +415,9 @@ class Gen1Adapter(GameAdapter):
         plain = _MAP_ID.fullmatch(area_id)
         if plain and int(plain[1]) in _MAP_NAMES:
             return _MAP_NAMES[int(plain[1])]
+        gift = _GIFT_MAP_ID.fullmatch(area_id)
+        if gift:
+            return f"{_MAP_NAMES.get(int(gift[1]), f'Map {gift[1]}')} — Gift"
         static = _STATIC_ID.fullmatch(area_id)
         if static:
             map_id, dex = int(static[1]), int(static[2])

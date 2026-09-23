@@ -107,12 +107,14 @@ def _seed(title, party, active=(), saved=None, *, initialized=True, current=0):
     return wram, cart
 
 
-def _runtime(title, wram, cart):
+def _runtime(title, wram, cart, charmap=None):
     rt = LuaRuntime(unpack_returned_tuples=True)
     load = rt.eval("dofile")
     json_module = load((ROOT / "lua/json_codec.lua").as_posix())
     profile = json_module.decode((ROOT / "data/games/gen1_rby/profile.json").read_text(
         encoding="utf-8"))["titles"][title]
+    if charmap:
+        profile.charmap = load((ROOT / charmap).as_posix())
     reads_module = load((ROOT / "lua/gen1/reads.lua").as_posix())
     scanner_module = load((ROOT / "lua/token_scanner.lua").as_posix())
     writes_module = load((ROOT / "lua/gen1/writes.lua").as_posix())
@@ -562,3 +564,23 @@ def test_nickname_override_uses_english_charmap_not_cached_stats():
     assert boxes.party_mon(key, rt.table_from(BASE), "NIDORAN♂", rt.table_from({"maxHP": 1}))
     assert _party(title, wram)[1]["nickname"] == "NIDORAN♂"
     assert _party(title, wram)[1]["nickname_bytes"] == oracle.encode_name("NIDORAN♂")
+
+
+# The receptionist's SlinkTradeUIValidName (patch/gen1/purergb/overlay/trade_ui.asm) only
+# accepts these literal glyph bytes in a party nickname.
+_LITERAL_GLYPHS = set(range(0x7F, 0xC0)) | set(range(0xE0, 0xEC)) | set(range(0xEF, 0x100))
+
+
+def test_pure_nickname_override_writes_only_literal_glyphs():
+    """Live run 2026-09-22: "Rockman" re-encoded greedily as R-o-c-k-m + $34 (pureRGB's
+    "an" text-compression code), so SLINK TRADE said "Party data cannot be read"."""
+    title = "blue"
+    boxed = _mon(ot_id=233)
+    wram, cart = _seed(title, [_mon(ot_id=1)], saved={11: [boxed]})
+    rt, _, boxes, gate, _ = _runtime(title, wram, cart, "data/games/gen1_purergb/charmap.lua")
+    gate.arm(gate, "overworld")
+    key = oracle.key(oracle.decode_party_mon(boxed["blob"]))
+    assert boxes.party_mon(key, rt.table_from(BASE), "Rockman", rt.table_from({"maxHP": 1}))
+    nick = bytes(_party(title, wram)[1]["nickname_bytes"])
+    body = nick[:nick.index(0x50)]
+    assert len(body) == 7 and set(body) <= _LITERAL_GLYPHS, nick.hex()
