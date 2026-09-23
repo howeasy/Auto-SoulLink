@@ -19,7 +19,8 @@ from server.adapters import (
     foundation_for_rom_type,
     get_adapter,
 )
-from server.server import SLinkServer
+from server.server import _KNOWN_ARTIFACT_KINDS, SLinkServer
+from tests.unit.protocol_schema import ARTIFACT_KINDS
 
 RR = {"rom_type": "firered_rr", "artifact_kind": "companion"}
 RR_CLEAN = {"rom_type": "firered_rr", "artifact_kind": "clean"}
@@ -287,6 +288,40 @@ async def test_a_present_artifact_kind_is_never_coerced_to_clean(tmp_path, bad):
         assert srv.state.artifact_kind == "clean"
     finally:
         await close()
+
+
+def test_the_servers_known_artifact_kinds_match_the_wire_schema():
+    """gen2-N16: one list, pinned both ways so a new kind added to either cannot drift."""
+    assert set(ARTIFACT_KINDS) == _KNOWN_ARTIFACT_KINDS
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_artifact_kind_string_is_refused(tmp_path):
+    """gen2-N16 (carried from N15's ca0888b): N15 only stopped a MISSING/falsey kind from being
+    coerced to "clean" -- a present, non-empty string outside the known set (a typo, or a kind
+    no shipped client sends) still fell through `_kind()`/`pairing_kind()` unchanged and got
+    committed as this run's artifact kind for good.
+    """
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        before = _snapshot(srv)
+        reply = await send(_hello("a", {"rom_type": "firered", "artifact_kind": "bogus"}))
+        assert _refused(reply)
+        assert "Bad artifact_kind" in srv.state.identity_error["a"]
+        assert "bogus" in srv.state.identity_error["a"]
+        assert _snapshot(srv) == before, "a refused hello changed the run"
+        assert not srv.state.rom_type and "a" not in srv.state.player_identity
+        # Fail-closed for a direct caller too, not only through the socket.
+        assert "Bad artifact_kind" in srv._mixed_games_error("a", "firered", "bogus")
+    finally:
+        await close()
+
+
+@pytest.mark.parametrize("kind", sorted(ARTIFACT_KINDS))
+def test_every_known_artifact_kind_still_passes_the_guard(tmp_path, kind):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    assert srv._mixed_games_error("a", "firered", kind) == ""
 
 
 @pytest.mark.asyncio

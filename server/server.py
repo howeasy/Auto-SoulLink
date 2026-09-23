@@ -287,6 +287,13 @@ def _area_tag(name: str) -> str:
 # a class attribute: `_mixed_games_error` is also called unbound on a stub self.
 _FOUNDATION_ABSENT = object()
 
+# Every artifact_kind a hello may declare (docs/protocol.md §2.2). A non-empty string outside
+# this set used to be admitted at face value and committed for the run's lifetime (gen2-N16,
+# carried from N15's ca0888b): _kind()/pairing_kind() would silently pass it through instead
+# of catching a typo'd or made-up kind. Pinned to tests/unit/protocol_schema.py's ARTIFACT_KINDS
+# by test_the_servers_known_artifact_kinds_match_the_wire_schema so the two lists cannot drift.
+_KNOWN_ARTIFACT_KINDS = frozenset({"clean", "overlay", "rand", "rand_overlay", "named", "companion"})
+
 
 class SLinkServer:
     def __init__(self, data_dir: str = None, run_id: str = None,
@@ -534,6 +541,9 @@ class SLinkServer:
         if not isinstance(artifact_kind, str) or not artifact_kind:
             return (f"Bad artifact_kind for slot {player_id.upper()}: expected a string "
                     f"(got {artifact_kind!r})")
+        if artifact_kind not in _KNOWN_ARTIFACT_KINDS:
+            return (f"Bad artifact_kind for slot {player_id.upper()}: {artifact_kind!r} is not "
+                    f"a known kind (expected one of {sorted(_KNOWN_ARTIFACT_KINDS)})")
         want = foundation_for_rom_type(self.state.rom_type) if self.state.rom_type else ""
         if want and got != want:
             return (f"Mixed games: slot {player_id.upper()} runs {got}, "
