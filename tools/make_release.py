@@ -112,7 +112,7 @@ _LUA_GEN1 = [
     "panel.lua",
 ]
 
-# lua/gen2/ — the Gen 2 client (Crystal only, U5 cutover). run.lua is what lua/slink.lua
+# lua/gen2/ — the Gen 2 client (Crystal, Gold and Silver; U5 cutover). run.lua is what lua/slink.lua
 # dofiles; boxes.lua is NOT part of this graph (no box executor is composed, B-10).
 _LUA_GEN2 = [
     "run.lua",
