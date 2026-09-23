@@ -28,3 +28,32 @@ battle_not_link, battle_engine_loaded, and the sound clauses. The CPU parked cla
 Not exhaustively proven: other map-specific persistent tasks. The allow-list is a whitelist, so any persistent task
 started by a map script that leaves the player in control would hold writes the same way. A census of such tasks is
 a follow-up.
+
+## Persistent-task census (headless Codex cx-45b6df45, pret c75f3523)
+
+Nine task functions persist during ordinary field control:
+- the three field tasks (per-step callback, time-based events, weather main);
+- the three Center 1F Union Room background tasks (rev 0);
+- Task_RunPokemonLeagueLightingEffect (5923c4dd);
+- inside the actual Union Room room only, Task_RunUnionRoom and Task_AnimateUnionRoomPlayers. These stay DENIED
+  deliberately: they initiate link activities and write visibility flags.
+
+League lighting is the only additional benign single-player hold, and it is now allowed on FR/LG.
+
+Finite holds, not latches:
+- the map-name popup, about 121 frames plus scrolling (~2.5 s);
+- fanfares, doors, escalators, fishing, surf transitions, item-use chains (Itemfinder, Repel, VS Seeker) and cutscene
+  tasks. Each destroys itself or runs under a lock.
+
+Corrections to earlier claims:
+- The existing per-step task CAN write save-block flags and variables (Icefall Cave STEP_CB_ICE, field_tasks.c:146,243).
+  It is benign for bounded party/PC writes, but it is not save-read-only.
+- ScriptMovement_MoveObjects is destroyed by release/releaseall, not by finishing its movement.
+
+Not proven:
+- absolute completeness (387 CreateTask sites reviewed; this is not a formal reachability proof);
+- RFU exceptional states;
+- RR.
+
+Natural-play task snapshots would settle it: League rooms, Icefall Cave, Center 1F, the Union Room room, map-name
+popups, and returning from item and field-move interactions.
