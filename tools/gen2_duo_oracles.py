@@ -168,8 +168,6 @@ def link_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_save
 
     ot_ids = dict(DEFAULT_OT_IDS if ot_ids is None else ot_ids)
     boot_saveram = dict(DEFAULT_BOOT_SAVERAM if boot_saveram is None else boot_saveram)
-    if ot_ids.get("a") == ot_ids.get("b"):
-        raise RuntimeError(f"OT ids must differ: both sides declare {ot_ids.get('a')}")
 
     decoded = {}
     for inst in ("a", "b"):
@@ -178,6 +176,13 @@ def link_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_save
         capture = _last_tagged(text, "ENGINE_CAPTURE")
         if capture is None:
             raise RuntimeError(f"{inst}: missing ENGINE_CAPTURE marker")
+        if capture.get("site_id") != "capture_party_finalized":
+            raise RuntimeError(f"{inst}: ENGINE_CAPTURE site_id={capture.get('site_id')!r}, "
+                               f"expected 'capture_party_finalized'")
+        if capture.get("acquisition") != "wild" or capture.get("destination") != "party":
+            raise RuntimeError(f"{inst}: ENGINE_CAPTURE acquisition/destination = "
+                               f"{capture.get('acquisition')!r}/{capture.get('destination')!r}, "
+                               f"expected 'wild'/'party'")
         if capture.get("area_id") != area_id:
             raise RuntimeError(f"{inst}: ENGINE_CAPTURE area_id={capture.get('area_id')!r}, "
                                f"expected {area_id!r}")
@@ -207,6 +212,10 @@ def link_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_save
         if capture.get("key") != new_key:
             raise RuntimeError(f"{inst}: ENGINE_CAPTURE key {capture.get('key')!r} disagrees "
                                f"with the flushed save's new party key {new_key!r}")
+        caught_lines = [line for line in text.splitlines() if line.startswith("CAUGHT ")]
+        if not caught_lines or caught_lines[-1][len("CAUGHT "):] != new_key:
+            raise RuntimeError(f"{inst}: CAUGHT line {caught_lines[-1:] or None} does not name "
+                               f"the flushed save's new party key {new_key!r}")
 
         before_pocket, after_pocket = _ball_pocket(boot, layout), _ball_pocket(flushed, layout)
         before_total = sum(qty for _item, qty in before_pocket)
