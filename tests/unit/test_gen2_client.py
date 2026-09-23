@@ -845,3 +845,94 @@ def test_rewind_refreshes_box_snapshot_before_the_next_tick():
     falsify(check, mutant("lua/gen2/client.lua", (
         "        self.battle, self.pending_safe, self.pending_rescan = nil, false, true\n",
         "        self.battle, self.pending_safe, self.pending_rescan = nil, false, false\n")))
+
+
+# ── N12b: a scripted static finalizes at the wild capture sites; the static pack names it ─────
+def static_battle(world, group, number, battle_type, flags=128):
+    world.hello()
+    world.field("wBattleMode", 1)
+    world.field("wMapGroup", group)
+    world.field("wMapNumber", number)
+    world.field("wBattleType", battle_type)
+    world.field("wBattleScriptFlags", flags)  # Script_loadwildmon writes bit 7
+
+
+def static_party_catch(world, group, number, species, battle_type, flags=128):
+    static_battle(world, group, number, battle_type, flags)
+    world.party([mon(), mon(species=species, dvs=0x7AAA)])
+    world.fire("capture_party")
+    world.fire("capture_party_finalized")
+    world.frames(1)
+    return [(c["key"], c["area_id"], c["gift"]) for c in world.sent("capture")]
+
+
+@pytest.mark.parametrize("title,group,number,species,battle_type,flags,area", [
+    ("crystal", 3, 4, 245, 12, 128, "legend_245"),  # Tin Tower Suicune, SUICUNE (O-21)
+    ("crystal", 9, 6, 130, 7, 128, "static_2310_130"),  # red Gyarados, FORCESHINY
+    ("crystal", 10, 3, 185, 0, 128, "static_2563_185"),  # Sudowoodo, NORMAL
+    ("crystal", 3, 49, 100, 9, 128, "static_817_100"),  # Rocket B1F Voltorb trap, TRAP
+    ("crystal", 12, 3, 143, 10, 128, "static_3075_143"),  # Snorlax, FORCEITEM
+    ("crystal", 3, 52, 251, 11, 128, "static_820_251"),  # Celebi, CelebiEvent_SetBattleType
+    ("crystal", 3, 39, 131, 0, 128, "static_807_131"),  # Lapras, NORMAL
+    ("gold", 15, 12, 250, 10, 128, "static_3852_250"),  # Gold's Ho-Oh beside its unselected Silver twin
+    ("crystal", 24, 3, 19, 0, 0, "route_29"),  # control: a natural wild Rattata is unchanged
+])
+def test_a_scripted_static_capture_is_published_under_its_pack_area(title, group, number, species,
+                                                                    battle_type, flags, area):
+    world = World(title)
+    assert static_party_catch(world, group, number, species, battle_type, flags) == [
+        (codec_key(mon(species=species, dvs=0x7AAA)), area, False)]
+    # Gen 1 canon (O-3): a static is its own gift area (static_<map_group*256+map_number>_<species>
+    # or its O-21 legend namespace), never the route's ordinary area
+    adapter = Gen2GSCAdapter(title)
+    assert adapter.is_gift_area(area) == bool(flags) and (not flags or adapter.gift_link_area(area) == area)
+
+
+@pytest.mark.parametrize("title,group,number,species,battle_type", [
+    ("crystal", 24, 3, 19, 3),  # Route 29 catching tutorial
+    ("crystal", 9, 6, 245, 12),  # no static row for this map/species
+    ("crystal", 9, 6, 130, 0),  # the red Gyarados row is FORCESHINY, not NORMAL
+    ("gold", 3, 14, 244, 0),  # Gold's source_unused Burned Tower Entei
+])
+def test_an_unqualified_scripted_static_stays_refused(title, group, number, species, battle_type):
+    world = World(title)
+    assert static_party_catch(world, group, number, species, battle_type) == []
+    assert any("scripted/static" in line for line in world.logs.values())
+
+
+def test_an_unselected_version_row_alone_never_publishes():
+    world = World("gold")
+    for row in world.parts.data.statics.encounters.values():
+        if row.script == "TinTowerHoOh":  # leave only the selected:false Silver twin
+            row.applicability.selected = False
+    assert static_party_catch(world, 15, 12, 250, 10) == []
+
+
+@pytest.mark.parametrize("prior", [20, 19])
+def test_a_box_full_static_never_claims_the_mon_already_first_in_the_box(prior):
+    world = World()
+    static_battle(world, 3, 50, 0)  # a B2F Electrode
+    world.party([mon(dvs=0x1000 + n) for n in range(6)])  # party full: .SendToPC
+    old = [mon(species=101, dvs=0x2000 + n) for n in range(prior)]
+    caught = mon(species=101, dvs=0x7AAA)
+    world.ram("wEnemyMonDVs", [0x7A, 0xAA])
+    # SendMonIntoBox .full leaves the box untouched; otherwise the new record is first
+    world.box(old if prior == 20 else [caught, *old])
+    world.fire("capture_box")
+    world.fire("capture_box_finalized")
+    world.frames(1)
+    captures = [(c["key"], c["area_id"], c["in_box"]) for c in world.sent("capture")]
+    assert captures == ([] if prior == 20 else [(codec_key(caught), "static_818_101", True)])
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_the_adapter_accepts_every_static_area_the_binder_can_publish(title):
+    """The zone rule of lua/gen2/signals.lua final_event over every publishable pack row."""
+    adapter = Gen2GSCAdapter(title)
+    rows = json.loads((ROOT / f"data/games/gen2_{title}/static_encounters.json").read_text())["encounters"]
+    for row in rows:
+        if row["applicability"]["selected"] and not row["source_unused"] and row["kind"] != "tutorial":
+            legend = f"legend_{row['species']}"
+            zone = legend if row["area_id"] == legend else \
+                f"static_{row['map_group'] * 256 + row['map_number']}_{row['species']}"
+            assert adapter.is_gift_area(zone) and adapter.gift_link_area(zone) == zone, (title, row["id"])

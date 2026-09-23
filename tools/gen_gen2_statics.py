@@ -190,6 +190,40 @@ def legend_area_override(ctx, row, species):
     return f"legend_{species}"
 
 
+# Specials whose engine asm writes wBattleType (pokecrystal engine/events/celebi.asm:54,296-299).
+# ponytail: other specials are taken as not writing it; add a row when a pinned script needs one.
+ASM_BATTLE_TYPES = {"CelebiShrineEvent": ("engine/events/celebi.asm", "CelebiEvent_SetBattleType")}
+
+
+def asm_body(text, label):
+    lines = [line for raw in text.splitlines() if (line := code(raw))]
+    start = lines.index(f"{label}:")
+    end = next((i for i in range(start + 1, len(lines)) if re.fullmatch(r"\w+:", lines[i])), len(lines))
+    return lines[start + 1:end]
+
+
+def runtime_battle_type(ctx, row, types):
+    """wBattleType when the catch finalizes: NORMAL (CleanUpBattleRAM) unless the script's
+    loadvar, catchtutorial or a verified asm special writes it."""
+    found = []
+    for _, line in row["block"]:
+        op, _, rest = line.partition(" ")
+        if line.startswith("loadvar VAR_BATTLETYPE,"):
+            found.append(arguments(rest)[1])
+        elif op == "catchtutorial":
+            found.append(rest)
+        elif op == "special" and rest in ASM_BATTLE_TYPES:
+            path, routine = ASM_BATTLE_TYPES[rest]
+            text = ctx.read_source(path)
+            setter = asm_body(text, routine)
+            if f"call {routine}" not in asm_body(text, rest) or len(setter) != 3                     or not setter[0].startswith("ld a, BATTLETYPE_") or setter[1:] != ["ld [wBattleType], a", "ret"]:
+                raise ValueError(f"unverified battle-type special: {rest}")
+            found.append(setter[0].removeprefix("ld a, "))
+    if len(found) > 1:
+        raise ValueError(f"ambiguous runtime battle type: {row['label']}")
+    return types[found[0] if found else "BATTLETYPE_NORMAL"]
+
+
 def public_row(ctx, row, maps):
     location = maps.get(row["map_name"])
     if location is None:
@@ -204,6 +238,7 @@ def public_row(ctx, row, maps):
 def build(ctx):
     """Generate declared wild battles without claiming successful captures."""
     names, commands = values(ctx), command_ids(ctx)
+    types = const_block(ctx.read_source("constants/battle_constants.asm"), "BATTLETYPE_NORMAL")
     maps = {row["map_name"]: row for row in build_area_map(ctx).values()}
     rows = []
     for row in script_rows(ctx, {"loadwildmon"}):
@@ -223,6 +258,7 @@ def build(ctx):
         entry.update(species=species, species_const=row["arguments"][0], level=level,
                      kind="tutorial" if tutorial else "scripted_trap_battle" if trap else "scripted_wild_battle",
                      battle_type=[line for _, line in row["block"] if line.startswith("loadvar VAR_BATTLETYPE,")],
+                     runtime_battle_type=runtime_battle_type(ctx, row, types),
                      source_unused=bool(re.search(rf"^{re.escape(row['label'])}:.*;.*unreferenced", row["source_text"], re.M)),
                      capture_success="OPEN", finalization="OPEN")
         legend_area = legend_area_override(ctx, row, species)

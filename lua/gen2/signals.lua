@@ -6,7 +6,8 @@
 -- new_model(options) requires explicit MODEL_PROBE authority and model_only IO.
 -- Options: title, profile/pack wrappers, Registry, GB, io, reads (gen2/reads),
 -- authority={kind,allow_model_registration,capture,valid}, owner,max_pending,
--- areas (generated area_map), encounters (generated encounter_tables).
+-- areas (generated area_map), encounters (generated encounter_tables),
+-- statics (generated static_encounters).
 -- Authority.capture returns {generation,operation}; valid checks the same held
 -- observation. Operation ids must distinguish native attempts. boundary() is
 -- mandatory on failure/cancel/reset/reload/source change. The model API does not
@@ -75,6 +76,9 @@ local OPERATIONS = {pc_deposit_complete="pc_deposit_begin",pc_withdraw_complete=
     npc_trade_finalized="npc_trade_begin",change_box_loaded="change_box_begin"}
 -- Events that only mean something once a later read settles them: stale ones are dropped.
 local SETTLED = {observation=true,faint=true}
+-- wBattleType values a scripted static can hold at its catch: NORMAL, FORCESHINY, TRAP,
+-- FORCEITEM, CELEBI, SUICUNE (the generated pack resolves each row's own).
+local STATIC_TYPES = {[0]=true,[7]=true,[9]=true,[10]=true,[11]=true,[12]=true}
 local FAINTS = {battle_faint={cause="battle",slot="wCurBattleMon"},poison_faint={cause="poison",slot="wCurPartyMon"}}
 -- Operation starts whose routine has a native failure/cancel branch between start and
 -- completion (DepositPokemon .BoxFull, TryWithdrawPokemon .PartyFull, ChangeBoxSaveGame
@@ -121,6 +125,12 @@ local function build(options)
            "selected profile artifact differs")
     assert(pack.runtime_admission == "NOT_GRANTED" and pack.f3_complete == false,
            "model path requires explicitly unqualified candidate metadata")
+    local statics = options.statics
+    if statics ~= nil then
+        assert(statics.schema == "gen2-static-encounters-v1" and type(statics.encounters) == "table",
+               "generated static-encounter pack required")
+        same_source(statics.source,pack.source)
+    end
     local reads = assert(options.reads,"independent Gen 2 reads binding required")
     assert(callable(reads.read_party) and callable(reads.read_active_box),"party/active-box readers required")
     local Registry, GB = assert(options.Registry), assert(options.GB)
@@ -394,14 +404,40 @@ local function build(options)
         else need(after.mon.key == before.mon.key,"receiver identity changed during acquisition") end
         local acquisition,zone,classifications = rule.acquisition,nil,{}
         local classifier = after.collection == "party" and "roamer_party_finalized" or "roamer_box_finalized"
-        if acquisition == "wild" then
-            -- Script_loadwildmon writes bit 7 in both pinned scripting.asm
-            -- handlers. NORMAL battle type alone does not prove ordinary wild
-            -- origin (many fixed statics use it). No guessed story attribution.
-            need(math.floor(scalar(site,"wBattleScriptFlags")/128)%2 == 0,
-                 "OPEN: scripted/static acquisition caller policy unavailable")
-        end
-        if acquisition == "wild" and accepted[classifier] then
+        -- Script_loadwildmon writes bit 7 in both pinned scripting.asm handlers; a scripted
+        -- static catches through the same PokeBallEffect fork and finalizes here, with
+        -- wBattleType/wBattleScriptFlags still live (cleared only by CleanUpBattleRAM/reloadmap).
+        local scripted = acquisition == "wild" and math.floor(scalar(site,"wBattleScriptFlags")/128)%2 == 1
+        if scripted then
+            -- NORMAL battle type alone does not prove ordinary wild origin (many fixed statics
+            -- use it): only selected source rows sharing (map, species, runtime type) qualify it.
+            local battle_type,group,number = scalar(site,"wBattleType"),scalar(site,"wMapGroup"),scalar(site,"wMapNumber")
+            for _,row in ipairs(statics and STATIC_TYPES[battle_type] and statics.encounters or {}) do
+                if row.map_group == group and row.map_number == number and row.species == after.mon.species_id
+                   and row.runtime_battle_type == battle_type and row.applicability.selected == true then
+                    if row.source_unused ~= false or row.kind == "tutorial" or (zone and zone ~= row.area_id) then
+                        zone = false
+                        break
+                    end
+                    zone = row.area_id
+                end
+            end
+            need(zone,"OPEN: scripted/static acquisition caller policy unavailable")
+            -- Gen 1 canon (O-3, lua/gen1/client.lua static_<map>_<dex>): a static is its own gift
+            -- area and never consumes the route's; a legend_<species> row keeps it (O-21).
+            if zone ~= "legend_" .. after.mon.species_id then
+                zone = string.format("static_%d_%d",group*256+number,after.mon.species_id)
+            end
+            if after.collection == "box" then
+                -- SendMonIntoBox copies wEnemyMonDVs into the new first record; its .full branch
+                -- inserts nothing, leaving a pre-existing mon first and the box count unchanged.
+                -- ponytail: a DV-word match only (~1/65536 false pass if the stale first mon shares DVs); add the unchanged box count if it must be airtight
+                local dvs = memory(point(site,"wEnemyMonDVs"),2)
+                need(after.mon.dv_word == dvs%256*256+math.floor(dvs/256),
+                     "OPEN: box-full static: the first box record is not the caught battle mon")
+            end
+            acquisition = "static"
+        elseif acquisition == "wild" and accepted[classifier] then
             local encounters = options.encounters
             assert(type(encounters) == "table", "OPEN: roamer species policy unavailable")
             same_source(encounters.source,pack.source)

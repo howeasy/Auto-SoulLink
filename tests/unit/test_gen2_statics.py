@@ -76,3 +76,19 @@ def test_check_never_repairs_malformed_output(tmp_path, monkeypatch, packs):
     before = path.stat().st_mtime_ns
     assert generator.main([*argv, "--check"]) == 1
     assert path.read_bytes() == b"{}\n" and path.stat().st_mtime_ns == before
+
+
+def test_runtime_battle_type_is_resolved_per_row(packs, monkeypatch, contexts):
+    """N12b: loadvar, catchtutorial or the verified Celebi asm special; else NORMAL."""
+    for title, pack in packs.items():
+        types = {row["species"]: row["runtime_battle_type"] for row in pack["encounters"]}
+        assert {s: types[s] for s in (130, 19, 185, 100, 101, 250, 131, 143, 249)} == {
+            130: 7, 19: 3, 185: 0, 100: 9, 101: 0, 250: 10, 131: 0, 143: 10, 249: 10}
+        if title == "crystal":
+            assert (types[251], types[245]) == (11, 12)
+        else:
+            assert types[244] == 0
+    monkeypatch.setitem(generator.ASM_BATTLE_TYPES, "CelebiShrineEvent",
+                        ("engine/events/celebi.asm", "CheckCaughtCelebi"))
+    with pytest.raises(ValueError, match="unverified battle-type special"):
+        generator.build(contexts["crystal"])

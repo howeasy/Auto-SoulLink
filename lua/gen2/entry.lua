@@ -227,7 +227,8 @@ function Entry.build_candidate(deps)
                 signals=function(authority)
                     return Signals.new_model({title=title, profile=data.profile, pack=data.sites, io=io_,
                         Registry=Registry, GB=GB, reads=reads, authority=authority, owner="SLink-gen2",
-                        max_pending=64, areas=data.area_map, encounters=data.encounters})
+                        max_pending=64, areas=data.area_map, encounters=data.encounters,
+                        statics=data.statics})
                 end,
                 net=deps.net, json=json, hud=assert(deps.hud, "explicit hud required"), io=io_,
                 profile=profile, sites=data.sites.titles[title].sites, area_map=data.area_map,

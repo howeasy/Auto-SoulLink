@@ -842,3 +842,19 @@ def test_wrong_bank_hits_stamp_nothing_and_allocate_nothing():
     world.party([world.mon(nickname=0x82)])
     world.fire("capture_party_finalized")
     assert [event.kind for event in world.events(binder)] == ["capture"]
+
+
+@pytest.mark.parametrize("fault", [None, "schema", "source"])
+def test_the_static_pack_must_share_the_engine_site_source(fault):
+    """N12b: the static-capture policy binds only a generated pack from the same source build."""
+    world = World()
+    statics = world.read_pack("static_encounters")
+    if fault == "schema":
+        statics["schema"] = "gen2-static-encounters-v0"
+    elif fault == "source":
+        statics["source"]["rom_sha1"] = "0" * 40
+    options = world.options()
+    options.statics = world.lua.table_from(statics, recursive=True)
+    result = world.module.new_model(options)
+    binder = result[0] if isinstance(result, tuple) else result
+    assert (binder is None) == (fault is not None)

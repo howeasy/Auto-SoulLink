@@ -40,6 +40,7 @@
       "level": 40,
       "kind": "scripted_wild_battle",
       "battle_type": [],
+      "runtime_battle_type": 0,
       "source_unused": true,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -75,6 +76,7 @@
       "battle_type": [
         "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCESHINY"
       ],
+      "runtime_battle_type": 7,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -108,6 +110,7 @@
       "level": 5,
       "kind": "tutorial",
       "battle_type": [],
+      "runtime_battle_type": 3,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -141,6 +144,7 @@
       "level": 5,
       "kind": "tutorial",
       "battle_type": [],
+      "runtime_battle_type": 3,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -174,6 +178,7 @@
       "level": 5,
       "kind": "tutorial",
       "battle_type": [],
+      "runtime_battle_type": 3,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -207,6 +212,7 @@
       "level": 20,
       "kind": "scripted_wild_battle",
       "battle_type": [],
+      "runtime_battle_type": 0,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -242,6 +248,7 @@
       "battle_type": [
         "loadvar VAR_BATTLETYPE, BATTLETYPE_TRAP"
       ],
+      "runtime_battle_type": 9,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -277,6 +284,7 @@
       "battle_type": [
         "loadvar VAR_BATTLETYPE, BATTLETYPE_TRAP"
       ],
+      "runtime_battle_type": 9,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -312,6 +320,7 @@
       "battle_type": [
         "loadvar VAR_BATTLETYPE, BATTLETYPE_TRAP"
       ],
+      "runtime_battle_type": 9,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -345,6 +354,7 @@
       "level": 23,
       "kind": "scripted_wild_battle",
       "battle_type": [],
+      "runtime_battle_type": 0,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -378,6 +388,7 @@
       "level": 23,
       "kind": "scripted_wild_battle",
       "battle_type": [],
+      "runtime_battle_type": 0,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -411,6 +422,7 @@
       "level": 23,
       "kind": "scripted_wild_battle",
       "battle_type": [],
+      "runtime_battle_type": 0,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -446,6 +458,7 @@
       "battle_type": [
         "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCEITEM"
       ],
+      "runtime_battle_type": 10,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -481,6 +494,7 @@
       "battle_type": [
         "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCEITEM"
       ],
+      "runtime_battle_type": 10,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -514,6 +528,7 @@
       "level": 20,
       "kind": "scripted_wild_battle",
       "battle_type": [],
+      "runtime_battle_type": 0,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -549,6 +564,7 @@
       "battle_type": [
         "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCEITEM"
       ],
+      "runtime_battle_type": 10,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -584,6 +600,7 @@
       "battle_type": [
         "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCEITEM"
       ],
+      "runtime_battle_type": 10,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
@@ -619,6 +636,7 @@
       "battle_type": [
         "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCEITEM"
       ],
+      "runtime_battle_type": 10,
       "source_unused": false,
       "capture_success": "OPEN",
       "finalization": "OPEN",
