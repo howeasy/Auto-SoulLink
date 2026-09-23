@@ -2329,11 +2329,15 @@ class DuoRun:
                     f.write(f"  {k} = {v},\n")
             f.write("}\n")
             f.write(f'dofile("{WT_FWD}/{self.gcfg["main"]}")\n')
-        p = subprocess.Popen(
-            [EMUHAWK, f"--config=patch/build/duo_cfg_{self.lane}_{inst}.ini",
-             f"--lua=patch/build/duo_{self.lane}_{inst}.lua",
-             self._rom_for(inst)],
-            cwd=REPO)
+        # the emulator's own output (a .NET exception text, a crash) goes to a per-run file: a modal
+        # exception dialog blocks the frame-counted Lua waits, so this is the only witness it leaves
+        # (the child inherits its own handle, so the parent's copy closes after the launch)
+        with open(os.path.join(REPO, "patch", "build", f"duo_{self.lane}_{inst}.out"), "wb") as emu_out:
+            p = subprocess.Popen(
+                [EMUHAWK, f"--config=patch/build/duo_cfg_{self.lane}_{inst}.ini",
+                 f"--lua=patch/build/duo_{self.lane}_{inst}.lua",
+                 self._rom_for(inst)],
+                cwd=REPO, stdout=emu_out, stderr=subprocess.STDOUT)
         self.emus.append(p)
         self.emu_by_inst[inst] = p
         self._launch_times[inst] = time.time()
