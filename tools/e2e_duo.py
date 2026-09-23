@@ -184,6 +184,35 @@ SCENARIOS = {
     "admit_randomized_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
                              "target": "town", "no_setup": True, "frames": 100000,
                              "oracle": "assert_admit_randomized_saved"},
+    # ── NEW Gen 3 client on vanilla FRLG (lua/gen3/*, game "gen3_frlg"; docs/gen3/PLAN.md §5.5,
+    # §6 P4). Keys are `<name>_gen3` because the bare `faint`/`boxsync` belong to the old RR
+    # client; P5 extends each `games` tuple with "gen3_rr" without a rename. Every entry names
+    # its saved-state oracle, and the row's check_save_witness_gen3 runs before it (_run_oracle).
+    # The drivers are lua/tests/duo/scenario_gen3_<name>.lua under duo_gen3_main.lua; the
+    # runner half of each is DuoRun.orchestrate_<key>. `no_save` names a half whose final
+    # receipt legitimately saves nothing (reconnect's A ends on the wrong-save relaunch).
+    #   faint_cmd           server-command/persistence only: an injected faint propagates, B's
+    #                       force_faint lands at the overworld checkpoint, both memorials save.
+    #   linked_faint_active natural engine faint of A's ACTIVE linked mon; B's partner sits
+    #                       active mid-battle (held), is switched out, and must drop to HP 0
+    #                       while the battle is still running (owner ruling 2026-09-23).
+    "faint_cmd_gen3": {"flags": [], "timeout": 900, "games": ("gen3_frlg",), "target": "town",
+                       "frames": 2000000, "oracle": "assert_faint_cmd_gen3_saved"},
+    "linked_faint_active_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg",),
+                                 "target": "battle", "frames": 2500000,
+                                 "oracle": "assert_linked_faint_active_gen3_saved"},
+    "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg",),
+                     "target": {"a": "battle", "b": "town"}, "frames": 2500000,
+                     "oracle": "assert_boxsync_gen3_saved"},
+    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg",),
+                      "target": {"a": "battle", "b": "town"}, "frames": 3000000,
+                      "oracle": "assert_whiteout_gen3_saved"},
+    "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg",), "target": "battle",
+                  "frames": 2500000, "oracle": "assert_link_gen3_saved"},
+    "deadzone_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg",), "target": "battle",
+                      "frames": 2500000, "oracle": "assert_deadzone_gen3_saved"},
+    "reconnect_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",), "target": "town",
+                       "frames": 2000000, "no_save": ("a",), "oracle": "assert_reconnect_gen3_saved"},
     # The four below are Gen 3-only and say so explicitly. They load Radical Red savestates
     # and two of them need the RR companion patch, so there is nothing for a Game Boy to run.
     "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420,
@@ -205,7 +234,7 @@ SCENARIOS = {
 # Titles that never inherit a scenario implicitly. An entry with no `games` key means "every
 # title", which is right for savestate-less shared scenarios like faint/boxsync — but not for
 # `gen1_new`, whose driver runs only the scenarios that name it, so opt-in is the whole rule.
-OPT_IN_GAMES = ("gen1_new",)
+OPT_IN_GAMES = ("gen1_new", "gen3_frlg")
 
 
 def is_pure_pairing(game) -> bool:
@@ -468,7 +497,7 @@ def jitter_problems(text, expected_requested):
 # Scenarios whose verdict needs a LIVE leg to have finished, not just two client RESULT lines:
 # the flag is set only inside the live assert (assert_reconnect_new / assert_admit_randomized_new),
 # and the post-result oracle refuses to describe a save that leg never produced.
-LIVE_LEG_SCENARIOS = ("reconnect_new", "admit_randomized_new")
+LIVE_LEG_SCENARIOS = ("reconnect_new", "admit_randomized_new", "reconnect_gen3")
 
 RECONNECT_GAMEPLAY_EVENTS = ("capture", "linked", "no_catch", "dead_zone")
 
@@ -882,6 +911,236 @@ def saved_money(sram):
     return value
 
 
+# ── Gen 3 (FRLG) new client: titles, the save witness and saved-state readers ─────────────
+# `rom` is the dump's file name, looked up at the repo root and then each parent (a worktree's
+# dumps live in the main checkout, docs/gen3_requirements.md Pins); `saveram` is the name
+# BizHawk's gamedb files a clean dump's battery under (tests/fixtures/gen3/README.md
+# "boot-check") -- never the ROM-derived gen3_fixtures.saveram_name().
+GEN3_TITLES = {
+    "firered": {"rom": "Pokemon - FireRed Version (USA).gba",
+                "saveram": "Pokemon - FireRed Version (USA).SaveRAM"},
+    "leafgreen": {"rom": "Pokemon - LeafGreen Version (USA).gba",
+                  "saveram": "Pokemon - LeafGreen Version (USA).SaveRAM"},
+}
+GEN3_FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen3")
+GEN3_PROFILE = os.path.join(REPO, "data", "games", "gen3_frlg", "profile.json")
+# Receipt lines the Gen 3 driver writes (lua/tests/duo/duo_gen3_main.lua): one per non-tick
+# event it SENDS and one per command it RECEIVES.
+GEN3_TX_RE = r"(?m)^TX {event} {key}(?=\s|$)"   # key "-" for an event that carries none
+GEN3_RX_RE = r"(?m)^RX {cmd} key={key}(?=\s|$)"
+
+
+def gen3_codec():
+    if REPO not in sys.path:
+        sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
+    from server.adapters import gen3_codec as codec
+    return codec
+
+
+def gen3_key(mon) -> str:
+    """The wire key (lua/gen3/reads.lua r.key): PERSONALITY:OTID, eight upper-case hex digits."""
+    return f"{mon['personality']:08X}:{mon['ot_id']:08X}"
+
+
+def gen3_decode(image):
+    """(party, boxes) of a vanilla flash image; `boxes` maps (box, slot) -> mon, occupied only."""
+    codec = gen3_codec()
+    body = codec.split_rtc(image)[0]
+    boxes = {}
+    for box, row in enumerate(codec.boxes_from_save(body)):
+        for slot, mon in enumerate(row):
+            if mon["has_species"] and mon["species"]:
+                boxes[(box, slot)] = mon
+    return codec.party_from_save(body), boxes
+
+
+def gen3_ball_count(image, title="firered") -> int:
+    """The saved POKe BALLS pocket total, the same sum lua/gen3/reads.lua read_balls() makes.
+
+    Offsets come from the pack (profile.json derived SB1_BALL_POCKET_OFFSET/_COUNT and
+    SB2_ENC_KEY_OFFSET); only the quantity is XORed with the low u16 of the encryption key
+    (pret src/item.c:20-29).
+    """
+    codec = gen3_codec()
+    with open(GEN3_PROFILE, encoding="utf-8") as handle:
+        derived = json.load(handle)["titles"][title]["derived"]
+    parsed = codec.parse_flash(codec.split_rtc(image)[0])
+    sb1, sb2 = parsed["sb1"], parsed["sb2"]
+    key_at = derived["SB2_ENC_KEY_OFFSET"]
+    key = int.from_bytes(sb2[key_at:key_at + 2], "little")
+    total = 0
+    for i in range(derived["SB1_BALL_POCKET_COUNT"]):
+        at = derived["SB1_BALL_POCKET_OFFSET"] + i * 4
+        if int.from_bytes(sb1[at:at + 2], "little"):
+            total += int.from_bytes(sb1[at + 2:at + 4], "little") ^ key
+    return total
+
+
+def _gen3_sectors(body, indexes):
+    codec = gen3_codec()
+    return b"".join(body[i * codec.SECTOR_SIZE:(i + 1) * codec.SECTOR_SIZE] for i in indexes)
+
+
+def check_gen3_witness(witness, flushed, fixture, *, saves):
+    """PLAN §5.5's check_save_witness_gen3, on bytes: returns the facts or raises, naming the rule.
+
+    `witness` is the SRAM (flash) domain dumped inside the successful TrySavingData return,
+    `flushed` the battery file BizHawk wrote, `fixture` the save the instance was seeded from,
+    `saves` how many validated save dumps the receipt carries. Hash equality alone would pass an
+    unchanged old save, so every rule below is required:
+      * the witness is a whole, strictly qualifying image (the complete sector set);
+      * the save counter advanced over the fixture's, by exactly `saves` (one per in-game save;
+        a missed dump or an unwitnessed extra save both break it);
+      * untouched regions are byte-equal to the fixture: sectors 28-31 (Hall of Fame / Trainer
+        Tower, never written by SAVE_NORMAL, pret src/save.c HandleSavingData), and after a
+        single save also the slot that save did not write;
+      * the decoded party and boxes equal the flushed battery's;
+      * the flushed body, its optional 16-byte RTC suffix normalized by gen3_codec.split_rtc,
+        is byte-identical to the hook-time image.
+    """
+    import hashlib
+
+    codec = gen3_codec()
+    if len(witness) != codec.FLASH_SIZE:
+        raise RuntimeError(f"the save witness is {len(witness)} bytes, expected "
+                           f"{codec.FLASH_SIZE} (0x{codec.FLASH_SIZE:X})")
+    ok, why = codec.qualify_flash(witness)
+    if not ok:
+        raise RuntimeError(f"the save witness is not a complete save (sector set): {why}")
+    try:
+        body, rtc = codec.split_rtc(flushed)
+        fixture_body = codec.split_rtc(fixture)[0]
+    except ValueError as exc:
+        raise RuntimeError(f"a battery image has an unsupported length: {exc}") from exc
+    before = codec.parse_flash(fixture_body)["counter"]
+    after = codec.parse_flash(witness)["counter"]
+    if after <= before:
+        raise RuntimeError(f"the save counter did not advance over the fixture's "
+                           f"({before} -> {after}): the witness is not a save this run made")
+    if after - before != saves:
+        raise RuntimeError(f"the save counter moved {before} -> {after} but the receipt "
+                           f"witnessed {saves} save(s); a save went unwitnessed or a dump is "
+                           f"missing")
+    per_slot = codec.NUM_SECTORS_PER_SLOT
+    untouched = {"sectors 28-31": range(2 * per_slot, codec.SECTORS_COUNT)}
+    if saves == 1:
+        other = 1 - after % codec.NUM_SAVE_SLOTS
+        untouched[f"the unwritten slot {other}"] = range(other * per_slot, (other + 1) * per_slot)
+    for name, indexes in untouched.items():
+        if _gen3_sectors(witness, indexes) != _gen3_sectors(fixture_body, indexes):
+            raise RuntimeError(f"{name} differ from the fixture; a normal save never writes them")
+    w_party, w_boxes = gen3_decode(witness)
+    f_party, f_boxes = gen3_decode(body)
+    if [gen3_key(m) for m in w_party] != [gen3_key(m) for m in f_party] or w_party != f_party:
+        raise RuntimeError(f"the decoded party differs: witness {[gen3_key(m) for m in w_party]} "
+                           f"vs flushed {[gen3_key(m) for m in f_party]}")
+    if w_boxes != f_boxes:
+        raise RuntimeError(f"the decoded boxes differ: witness {sorted(w_boxes)} vs flushed "
+                           f"{sorted(f_boxes)}")
+    site, file = hashlib.sha256(witness).hexdigest(), hashlib.sha256(body).hexdigest()
+    if site != file:
+        first = next(i for i, (a, b) in enumerate(zip(witness, body, strict=True)) if a != b)
+        raise RuntimeError(f"the save witness does not match the flushed battery: site {site} "
+                           f"vs file {file}; first differing flash offset 0x{first:05X}")
+    return {"site": site, "file": file, "counter": (before, after), "rtc": bool(rtc)}
+
+
+def gen3_memorial_problems(label, saved, fixture, key, memorial_box):
+    """`key` left the party for exactly one slot of the memorial box; nothing else moved."""
+    party, boxes = saved
+    f_party, f_boxes = fixture
+    keys = [gen3_key(m) for m in party]
+    problems = []
+    if key in keys:
+        problems.append(f"{label}: {key} is still in the saved party {keys}")
+    where = sorted(pos for pos, m in boxes.items() if gen3_key(m) == key)
+    if len(where) != 1 or where[0][0] != memorial_box:
+        problems.append(f"{label}: {key} is saved at {where}, not exactly once in the memorial "
+                        f"box {memorial_box}")
+    elif boxes[where[0]]["checksum_ok"] is not True:
+        problems.append(f"{label}: the memorial record for {key} fails its secure checksum")
+    expected = [gen3_key(m) for m in f_party if gen3_key(m) != key]
+    if keys != expected:
+        problems.append(f"{label}: saved party {keys}, expected the fixture's minus {key}: "
+                        f"{expected}")
+    others = {pos: gen3_key(m) for pos, m in boxes.items() if gen3_key(m) != key}
+    if others != {pos: gen3_key(m) for pos, m in f_boxes.items()}:
+        problems.append(f"{label}: boxes other than the memorial slot changed")
+    return problems
+
+
+GEN3_RECORD_FIELDS = ("species", "experience", "level", "max_hp", "attack", "defense", "speed",
+                      "sp_attack", "sp_defense")
+
+
+def gen3_round_trip_problems(label, saved, fixture, key):
+    """`key` is back in the party exactly once, boxed nowhere, with the fixture's record."""
+    party, boxes = saved
+    f_party, f_boxes = fixture
+    keys = [gen3_key(m) for m in party]
+    problems = []
+    if keys.count(key) != 1:
+        problems.append(f"{label}: {key} appears {keys.count(key)}x in the saved party {keys}")
+    if any(gen3_key(m) == key for m in boxes.values()):
+        problems.append(f"{label}: {key} is still (or also) in a saved box")
+    if sorted(keys) != sorted(gen3_key(m) for m in f_party):
+        problems.append(f"{label}: saved party {keys} is not the fixture's membership")
+    if {pos: gen3_key(m) for pos, m in boxes.items()} != {
+            pos: gen3_key(m) for pos, m in f_boxes.items()}:
+        problems.append(f"{label}: the saved boxes are not the fixture's")
+    now = next((m for m in party if gen3_key(m) == key), None)
+    was = next((m for m in f_party if gen3_key(m) == key), None)
+    if now and was:
+        if now["checksum_ok"] is not True:
+            problems.append(f"{label}: the returned {key} fails its secure checksum")
+        changed = [f for f in GEN3_RECORD_FIELDS if now[f] != was[f]]
+        if changed:
+            problems.append(f"{label}: the returned {key} differs from the fixture in "
+                            f"{[(f, was[f], now[f]) for f in changed]}")
+    return problems
+
+
+def gen3_capture_problems(label, saved, fixture, key, species=None):
+    """A caught `key` joined the party once (appended), is boxed nowhere, nothing else moved."""
+    party, boxes = saved
+    f_party, f_boxes = fixture
+    keys = [gen3_key(m) for m in party]
+    expected = [gen3_key(m) for m in f_party] + [key]
+    problems = []
+    if keys != expected:
+        problems.append(f"{label}: saved party {keys}, expected {expected}")
+    if any(gen3_key(m) == key for m in boxes.values()):
+        problems.append(f"{label}: the capture {key} is also saved in a box (duplicate)")
+    if {pos: gen3_key(m) for pos, m in boxes.items()} != {
+            pos: gen3_key(m) for pos, m in f_boxes.items()}:
+        problems.append(f"{label}: the saved boxes are not the fixture's")
+    mon = next((m for m in party if gen3_key(m) == key), None)
+    if mon and species is not None and mon["species"] != species:
+        problems.append(f"{label}: {key} saved as species {mon['species']}, sent as {species}")
+    return problems
+
+
+def gen3_receipt_problems(label, text, required=(), forbidden=(), ordered=()):
+    """Receipt markers: every `required` regex present, no `forbidden` one, each `ordered`
+    (before, after) pair found in that order."""
+    problems = [f"{label}: missing /{p}/" for p in required if not re.search(p, text or "")]
+    problems += [f"{label}: forbidden /{p}/ present" for p in forbidden
+                 if re.search(p, text or "")]
+    for first, second in ordered:
+        a, b = re.search(first, text or ""), re.search(second, text or "")
+        if not a or not b or b.start() <= a.start():
+            problems.append(f"{label}: /{first}/ must precede /{second}/")
+    return problems
+
+
+def gen3_tx(event, key):
+    return GEN3_TX_RE.format(event=re.escape(event), key=re.escape(key))
+
+
+def gen3_rx(cmd, key):
+    return GEN3_RX_RE.format(cmd=re.escape(cmd), key=re.escape(key))
+
+
 # ── Games ────────────────────────────────────────────────────────────────────
 # The duo harness was written for Radical Red and hardcoded to it. Gen 1 differs in three
 # ways that matter, so the per-game bits live here rather than being threaded through:
@@ -983,6 +1242,25 @@ GAMES = {
         "fixture": {"a": "crystal", "b": "crystal"},
         "scenario_prefix": "gen2_",
     },
+    # The NEW Gen 3 client on vanilla FRLG (lua/gen3/run.lua's build, docs/gen3/PLAN.md §5.5).
+    # Battery boot like gen1_new, but through tools/gen3_fixtures.py's GBA config and flash
+    # fixtures, dispatched by `play` (see DuoRun.is_gen3_battery). `sides` is (title, fixture
+    # stem) per instance, the stem formatted with the scenario's per-instance target; the fixture
+    # worker's saves are firered_party_{town,battle}{,_b}.sav. LeafGreen as B is ONE line once
+    # its fixtures exist: "b": ("leafgreen", "leafgreen_party_{target}"). `oracle_required`: a
+    # scenario with no saved-state oracle FAILS here, the Gen 1 rule; `save_witness` is the
+    # method _run_oracle runs first.
+    "gen3_frlg": {
+        "main": "lua/tests/duo/duo_gen3_main.lua",
+        "game": "gen3_frlg",
+        "play": "gen3_fixtures",
+        "sides": {"a": ("firered", "firered_party_{target}"),
+                  "b": ("firered", "firered_party_{target}_b")},
+        "uses_savestate": False,
+        "scenario_prefix": "gen3_",
+        "oracle_required": True,
+        "save_witness": "check_save_witness_gen3",
+    },
 }
 
 
@@ -1007,7 +1285,7 @@ class DuoRun:
         # that wants stable names ("pure-a", "lane3"); the port is the default.
         self._lane = getattr(args, "lane", None)
         self._pydec_path = (os.path.join(BUILD, f"e2e_{scenario}_pydec_result.txt")
-                            if self.is_gen1 else None)
+                            if self.is_gen1 or self.gcfg.get("oracle_required") else None)
         self.server = None
         self.emus = []
         self.emu_by_inst = {}
@@ -1058,6 +1336,66 @@ class DuoRun:
     @property
     def lane_index(self) -> int:
         return lane_ordinal(self.lane)
+
+    @property
+    def is_gen3_battery(self) -> bool:
+        """A row that boots GBA flash fixtures through tools/gen3_fixtures.py (gen3_frlg; P5's
+        battery-boot gen3_rr row joins by naming the same `play`). A property for the same
+        reason as `lane`: the unit tests build DuoRuns with `__new__`."""
+        return (getattr(self, "gcfg", None) or {}).get("play") == "gen3_fixtures"
+
+    # ── Gen 3 per-instance facts (title, fixture, ROM, battery file) ────────────────────
+    def _gen3_title(self, inst) -> str:
+        return self.gcfg["sides"][inst][0]
+
+    def _gen3_fixture_path(self, inst) -> str:
+        stem = self.gcfg["sides"][inst][1].format(target=self._target_for(inst))
+        return os.path.join(GEN3_FIXTURES, stem + ".sav")
+
+    def _gen3_rom(self, inst) -> str:
+        """The instance's ROM, staged to a space-free repo-relative path (gen3_fixtures.stage_rom,
+        the launch rule shared with run_gate). An already-staged copy is used when the dump
+        itself is not reachable from this checkout."""
+        from pathlib import Path
+
+        import gen3_fixtures
+
+        name = GEN3_TITLES[self._gen3_title(inst)]["rom"]
+        for base in (Path(REPO), *Path(REPO).parents):
+            if (base / name).is_file():
+                return gen3_fixtures.stage_rom(str(base / name))
+        staged = f"patch/build/gen3_{Path(name).stem.replace(' ', '_')}{Path(name).suffix}"
+        if os.path.isfile(os.path.join(REPO, staged)):
+            return staged
+        raise FileNotFoundError(f"{name} not found at the repo root or any parent, and no "
+                                f"staged {staged}")
+
+    def _gen3_battery_path(self, inst) -> str:
+        return os.path.join(self._saveram_dir(inst),
+                            GEN3_TITLES[self._gen3_title(inst)]["saveram"])
+
+    def _gen3_flushed(self, inst) -> bytes:
+        """The battery the instance's EmuHawk left, by the gamedb name it was seeded under (or the
+        one other *.SaveRAM in its directory, which gen3_fixtures names the same way)."""
+        from pathlib import Path
+
+        import gen3_fixtures
+
+        seeded = Path(self._gen3_battery_path(inst))
+        found = gen3_fixtures._flushed_saveram(seeded.parent, seeded.name)
+        if found is None:
+            raise RuntimeError(f"{inst}: EmuHawk left no *.SaveRAM in {rel_to_repo(seeded.parent)}")
+        return found.read_bytes()
+
+    def _gen3_fixture_bytes(self, inst) -> bytes:
+        with open(self._gen3_fixture_path(inst), "rb") as handle:
+            return handle.read()
+
+    def _gen3_saved(self, inst):
+        return gen3_decode(self._gen3_flushed(inst))
+
+    def _gen3_fixture_saved(self, inst):
+        return gen3_decode(self._gen3_fixture_bytes(inst))
 
     # ── lifecycle ────────────────────────────────────────────────────────────
     def wait_for(self, desc, pred, timeout, interval=2.0):
@@ -1384,6 +1722,8 @@ class DuoRun:
         it: that returns the same path the GAMES table spells out for the vanilla rows and lets a
         pureRGB fixture key stage from the pinned source lock.
         """
+        if self.is_gen3_battery:
+            return self._gen3_rom(inst)
         patch_key = self._patch_key(inst)
         if patch_key and self.gcfg.get("patched_saves_override"):
             import gen1_playthrough as g1
@@ -1397,6 +1737,15 @@ class DuoRun:
         return self.gcfg["rom"][inst]
 
     def _seed_instance_save(self, inst):
+        if self.is_gen3_battery:
+            # The fixture's flash body (any RTC suffix dropped: BizHawk writes its own), under the
+            # gamedb battery name, in this instance's own directory -- overwritten every launch.
+            codec = gen3_codec()
+            seeded = self._gen3_battery_path(inst)
+            os.makedirs(os.path.dirname(seeded), exist_ok=True)
+            with open(seeded, "wb") as handle:
+                handle.write(codec.split_rtc(self._gen3_fixture_bytes(inst))[0])
+            return seeded
         from run_gb_gate import GENS, seed_saveram
 
         seeded = seed_saveram(self.gcfg["fixture"][inst], self._target_for(inst),
@@ -1426,7 +1775,12 @@ class DuoRun:
     def launch_instance(self, inst, *, phase="initial", seed=True, expected_key=""):
         """Launch one cartridge; reconnect phases keep the existing per-instance SaveRAM."""
         cfg_ini = self.cfg_path(inst)
-        if self.battery_boot:
+        if self.is_gen3_battery:
+            import gen3_fixtures
+
+            # The GBA Save RAM path entry, not the Game Boy one gen1's write_run_config edits.
+            gen3_fixtures.write_gba_run_config(BIZHAWK_CONFIG, cfg_ini, self._saveram_dir(inst))
+        elif self.battery_boot:
             import gen1_playthrough as g1
 
             # purergb pins the config to GBC + not-SGB (PLAN A15); the fixture key names the
@@ -1459,6 +1813,11 @@ class DuoRun:
             # bounded loop (poison_new's A half: `D.timeout_secs or 2400`).
             "timeout_secs": self.cfg["timeout"],
         }
+        if self.is_gen3_battery:
+            # duo_gen3_main.lua resolves lua/tests/duo/scenario_<prefix><name>.lua and reads the
+            # title's pack files and pret symbols by `title`.
+            duo.update({"title": self._gen3_title(inst),
+                        "scenario_prefix": self.gcfg["scenario_prefix"]})
         if self.gcfg["uses_savestate"]:
             ss = self.cfg["savestate"]
             duo["savestate"] = f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}"
@@ -1506,7 +1865,10 @@ class DuoRun:
         print(f"[duo] terminated {inst} pid={p.pid}; server retained")
 
     def start_instances(self):
-        if self.battery_boot:
+        if self.is_gen3_battery:
+            for inst in ("a", "b"):
+                self._gen3_rom(inst)  # staged (and found) before either emulator starts
+        elif self.battery_boot:
             play = importlib.import_module(self.gcfg["play"])
             for key in self.gcfg["fixture"].values():
                 play.staged_rom(key)  # space-free relative ROM paths for BizHawk
@@ -3880,6 +4242,11 @@ class DuoRun:
 
     # ── per-scenario orchestration ───────────────────────────────────────────
     def orchestrate(self):
+        # A scenario with its own runner half (the gen3_frlg set) says so by name; nothing in the
+        # older rows defines one, so their branches below are untouched.
+        own = getattr(self, f"orchestrate_{self.scenario}", None)
+        if own:
+            return own()
         if self.scenario == "admit_randomized_new":
             self.assert_admit_randomized_new()
             self.go()  # passive clients hold for ~600 frames before RESULT: PASS
@@ -4177,6 +4544,485 @@ class DuoRun:
                     f"{site_hash} vs file {file_hash}; first differing SRAM address(es) "
                     f"{[hex(a) for a in diff]}")
 
+    # ── Gen 3 (gen3_frlg): the save witness ────────────────────────────────────────────────
+    def check_save_witness_gen3(self, results):
+        """PLAN §5.5's witness for every gen3_frlg scenario, run by _run_oracle before its oracle.
+
+        The driver dumps the whole SRAM (flash) domain inside the pinned `save` site -- the
+        successful TrySavingData(SAVE_NORMAL) return, gated on R0 == 1 and R5 == 0 and on the
+        signal having validated (lua/tests/duo/duo_gen3_main.lua) -- into this attempt's
+        witness file, overwritten per save, and logs one SAVE_WITNESS_DUMP line per dump. Here:
+        the dump outcomes are read in order (the last attempt must be a successful dump, the
+        ordinals 1..n unbroken), the file must be this attempt's (named as logged, newer than
+        the attempt start), and check_gen3_witness applies the byte rules. One PYDEC line per
+        instance:
+
+            SAVE_WITNESS_SHA256 inst=<a|b> site=<hex> file=<hex> match=true saves=<n> counter=<a>-><b>
+
+        A half named in the scenario's `no_save` must carry no dump at all and is recorded as
+        skipped; every other half that did not save FAILS.
+        """
+        game = getattr(self, "game", "")
+        for process in getattr(self, "emus", []):
+            process.wait(timeout=30)  # the flush boundary: client.exit writes the battery
+        started = getattr(self, "_started", 0)
+        for inst in ("a", "b"):
+            receipt = (results or {}).get(inst) or ""
+            dumps = SAVE_WITNESS_DUMP_RE.findall(receipt)
+            if inst in self.cfg.get("no_save", ()):
+                if dumps:
+                    raise RuntimeError(f"{inst}: declared no_save, but its final receipt dumped "
+                                       f"{len(dumps)} save(s)")
+                self._pydec_note(f"SAVE_WITNESS_SHA256 inst={inst} site=- file=- match=- "
+                                 f"saves=0 skipped (no_save)")
+                continue
+            skipped = re.findall(r"SAVE_WITNESS_DUMP_SKIPPED why=(\S+)", receipt)
+            if not dumps:
+                gate = f" (the dump gate said why={skipped[-1]})" if skipped else ""
+                raise RuntimeError(f"{inst}: the receipt carries no SAVE_WITNESS_DUMP{gate}; every "
+                                   f"{game} scenario half saves unless it is declared no_save")
+            lines = receipt.splitlines()
+            dump_at = [i for i, line in enumerate(lines) if line.startswith("SAVE_WITNESS_DUMP ")]
+            trouble_at = [i for i, line in enumerate(lines) if line.startswith(
+                ("SAVE_WITNESS_DUMP_FAIL", "SAVE_WITNESS_DUMP_SKIPPED"))]
+            if trouble_at and trouble_at[-1] > dump_at[-1]:
+                raise RuntimeError(f"{inst}: the last dump attempt was {lines[trouble_at[-1]]!r}, "
+                                   f"after the last successful dump — the file on disk is an "
+                                   f"earlier save, not this attempt's final one")
+            ordinals = [int(row[2]) for row in dumps]
+            if ordinals != list(range(1, len(ordinals) + 1)):
+                raise RuntimeError(f"{inst}: the dump ordinals are {ordinals}, not 1.."
+                                   f"{len(ordinals)}; a dump line is missing or reordered")
+            path = self._witness_path(inst)
+            logged = os.path.normpath(os.path.join(REPO, dumps[-1][0]))
+            if logged != os.path.normpath(path):
+                raise RuntimeError(f"{inst}: the save witness landed at {dumps[-1][0]!r}, not "
+                                   f"{rel_to_repo(path)!r}")
+            if not os.path.exists(path):
+                raise RuntimeError(f"{inst}: the save witness is missing at {rel_to_repo(path)}")
+            if os.path.getmtime(path) < started:
+                raise RuntimeError(f"{inst}: the save witness {rel_to_repo(path)} predates this "
+                                   f"attempt's start — a leftover, not this run's save")
+            with open(path, "rb") as handle:
+                witness = handle.read()
+            facts = check_gen3_witness(witness, self._gen3_flushed(inst),
+                                       self._gen3_fixture_bytes(inst), saves=len(dumps))
+            self._pydec_note(f"SAVE_WITNESS_SHA256 inst={inst} site={facts['site']} "
+                             f"file={facts['file']} match=true saves={len(dumps)} "
+                             f"counter={facts['counter'][0]}->{facts['counter'][1]}"
+                             + (" rtc=normalized" if facts["rtc"] else ""))
+
+    # ── Gen 3 (gen3_frlg): runner halves ───────────────────────────────────────────────────
+    def _gen3_prelude(self, link_slot=None):
+        """MYKEY from both, both hellos accepted, and -- for the scenarios whose stimulus is not
+        link FORMATION -- one server pair over the boot keys at `link_slot`. The pair is server
+        staging (the debug API), never a cartridge poke; set_pokeballs is the server's nuzlocke
+        gate, which the link scenarios leave to the clients' own bag reads."""
+        ka, kb = self.wait_keys()
+        self._boot_keys = {"a": ka, "b": kb}
+        self.wait_connected()
+        if link_slot is not None:
+            self.set_pokeballs()
+            self.inject_link(ka[link_slot], kb[link_slot])
+            self._link_keys = {"a": ka[link_slot], "b": kb[link_slot]}
+        return ka, kb
+
+    def _gen3_linked_lines(self):
+        return {inst: [f"LINKED {self._link_keys[inst]}"] for inst in ("a", "b")}
+
+    def _gen3_mark(self, inst, pattern, what, timeout=None):
+        """Wait for a driver marker (a regex over the receipt, multiline)."""
+        return self.wait_for(f"{inst}: {what}", lambda: re.search(
+            pattern, read_result(self.scenario, inst) or "", re.M), timeout or self.cfg["timeout"])
+
+    def orchestrate_faint_cmd_gen3(self):
+        """Server-command/persistence-only (PLAN §5.5): link the two slot-1 mons, then inject A's
+        faint through the debug API. The server marks the pair DEAD, queues force_faint to B and
+        memorialize to both; nothing touches either cartridge but the clients."""
+        self._gen3_prelude(link_slot=1)
+        self.go(self._gen3_linked_lines())
+        for inst in ("a", "b"):
+            self._gen3_mark(inst, r"^READY\b", "READY after the go-file", 300)
+        reply = api(self.http_port, "POST", "/api/debug/inject_event",
+                    {"player": "a", "event": "faint", "key": self._link_keys["a"],
+                     "area_id": "duo"})
+        if not reply.get("ok"):
+            raise RuntimeError(f"inject_event faint was refused: {reply}")
+        print(f"[duo] injected A faint {self._link_keys['a']} -> force_faint B "
+              f"{self._link_keys['b']}")
+
+    def orchestrate_linked_faint_active_gen3(self):
+        """The in-battle path (owner ruling 2026-09-23). Link the two ACTIVE starters; B enters a
+        wild battle and parks on its action menu with the linked mon out (READY_ACTIVE); only then
+        is A released to lose its own active linked mon to the wild foe. B's force_faint must be
+        HELD while that mon is the battler and land (HP 0, still in battle) once B switches it
+        out -- the receipts and the oracle read which happened."""
+        self._gen3_prelude(link_slot=0)
+        lines = self._gen3_linked_lines()
+        self._go_one("b", lines["b"])
+        self._gen3_mark("b", r"^READY_ACTIVE ", "READY_ACTIVE (linked mon active at the action menu)")
+        self._go_one("a", lines["a"])
+
+    def orchestrate_boxsync_gen3(self):
+        """A deposits its linked half at the Viridian PC by hand; the server mirrors box_mon to
+        B, whose client deposits at its checkpoint. Only then may A withdraw it, which mirrors
+        party_mon. Both save after the round trip."""
+        self._gen3_prelude(link_slot=1)
+        self.go(self._gen3_linked_lines())
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        self._gen3_mark("a", rf"^DEPOSITED {re.escape(ka)}\b", "hand deposit at the PC")
+        self._gen3_mark("b", rf"^MIRROR_DEPOSITED {re.escape(kb)}\b", "mirrored box_mon deposit")
+        self._append_reconnect_marker("a", "ALLOW_WITHDRAW")
+        self._gen3_mark("a", rf"^WITHDRAWN {re.escape(ka)}\b", "hand withdraw at the PC")
+        self._gen3_mark("b", rf"^MIRROR_WITHDRAWN {re.escape(kb)}\b", "mirrored party_mon withdraw")
+        for inst in ("a", "b"):
+            self._append_reconnect_marker(inst, "SAVE")
+
+    def orchestrate_whiteout_gen3(self):
+        """Both halves of the slot-1 pair boxed (A by hand, B by the mirrored box_mon), the
+        server's own party_keys agreeing (assert_whiteout_both_boxed, shared with Gen 1), then A
+        whites out with its lone starter and the server rebuilds the pair out of both PCs."""
+        self._gen3_prelude(link_slot=1)
+        self.go(self._gen3_linked_lines())
+        self.assert_whiteout_both_boxed()
+
+    def orchestrate_link_gen3(self):
+        """D-1 on FRLG: both catch on Route 1 and the SERVER pairs them by area (shared check)."""
+        self._gen3_prelude()
+        self.go()
+        self.assert_link_new()
+
+    def orchestrate_deadzone_gen3(self):
+        """D-3 on FRLG: A runs, route_1 dead-zones, B's later catch there is retired (shared)."""
+        self._gen3_prelude()
+        self.assert_dead_zone_new()
+
+    def _gen3_wrong_save(self, path):
+        """A real, qualifying vanilla save whose trainer id differs from A's fixture."""
+        codec = gen3_codec()
+        with open(GEN3_PROFILE, encoding="utf-8") as handle:
+            at = json.load(handle)["titles"][self._gen3_title("a")]["derived"]["SB2_OT_ID_OFFSET"]
+
+        def trainer(image):
+            return int.from_bytes(codec.parse_flash(image)["sb2"][at:at + 4], "little")
+
+        with open(path, "rb") as handle:
+            body = codec.split_rtc(handle.read())[0]
+        ok, why = codec.qualify_flash(body)
+        if not ok:
+            raise RuntimeError(f"--wrong-save {path} is not a qualifying save: {why}")
+        own = trainer(codec.split_rtc(self._gen3_fixture_bytes("a"))[0])
+        if trainer(body) == own:
+            raise RuntimeError(f"--wrong-save {path} carries A's own trainer id {own}")
+        return body, trainer(body)
+
+    def orchestrate_reconnect_gen3(self):
+        """C-2 then C-1 on FRLG, with B online throughout: A's EmuHawk is killed and relaunched on
+        the SAME save (accepted, nothing duplicated or re-sent), then on a save with another OT
+        (refused; links.json byte-identical; the cartridge writes nothing and its battery is the
+        seeded bytes afterwards). The wrong save defaults to B's own fixture for A's target."""
+        from pathlib import Path
+
+        self._gen3_prelude(link_slot=1)
+        self.go(self._gen3_linked_lines())
+        for inst in ("a", "b"):
+            self._gen3_mark(inst, rf"^RECONNECT_READY {inst}\b", "hello and link hold", 300)
+        battery = Path(self._gen3_battery_path("a"))
+        self._gen3_before_kill = self._gen3_flushed("a")
+        baseline = {"links": self._reconnect_document(), "events": self._reconnect_events()}
+        shutil.copyfile(self._result_path("a"), os.path.join(self.data_dir, "a_initial_result.txt"))
+
+        def text(path):
+            return Path(path).read_text(encoding="utf-8") if os.path.exists(path) else ""
+
+        self.terminate_instance("a")
+        self.wait_for("A disconnected while B stays online", lambda: (
+            (s := self._status()) and not s["players"]["a"]["connected"]
+            and s["players"]["b"]["connected"]), 45)
+        if self._reconnect_document().get("links") != baseline["links"].get("links"):
+            raise RuntimeError("the live link changed when A's EmuHawk was killed")
+        self.launch_instance("a", phase="same_save", seed=False)
+        same_path = self._phase_result_path("a", "same_save")
+        self.wait_for("same-save A hello",
+                      lambda: "RECONNECT_HELLO same_save count=1" in text(same_path), 300)
+        self.wait_for("server accepts A's same-save party", lambda: (
+            (s := self._status()) and (a := s["players"]["a"]).get("connected")
+            and not a.get("identity_error") and self._link_keys["a"] in (a.get("party_keys") or [])),
+            60)
+        old_hellos = sum(row.get("type") == "hello" and row.get("player") == "a"
+                         for row in baseline["events"])
+        self.wait_for("durable accepted reconnect hello", lambda: sum(
+            row.get("type") == "hello" and row.get("player") == "a"
+            for row in self._reconnect_events()) == old_hellos + 1, 30)
+        same_after = {**self._reconnect_document(), "events": self._reconnect_events(),
+                      "status": self._status() or {}}
+        problems = reconnect_same_problems(baseline["links"], same_after, baseline["events"],
+                                           same_after["events"], self._link_keys["a"],
+                                           baseline["links"]["player_identity"]["a"]["ot_id"])
+        problems += gen3_receipt_problems("a same_save", text(same_path), forbidden=(
+            r"(?m)^RX force_faint ", r"(?m)^RX box_mon ", r"(?m)^RX memorialize "))
+        if problems:
+            raise RuntimeError("C-2 same-save reconnect failed: " + "; ".join(problems))
+        self._pydec_note(f"C-2 same OT accepted; alive link {self._link_keys['a']} / "
+                         f"{self._link_keys['b']}; zero duplicate gameplay events")
+        self._append_reconnect_marker("a", "A_DONE_SAME")
+        self.wait_for("same-save A phase PASS", lambda: "RESULT: PASS" in text(same_path), 60)
+        self.emu_by_inst["a"].wait(timeout=30)
+        self._same_save_artifact = os.path.join(BUILD, f"e2e_{self.scenario}_a_same.SaveRAM")
+        with open(self._same_save_artifact, "wb") as handle:
+            handle.write(self._gen3_flushed("a"))
+        self.terminate_instance("a")
+        self.wait_for("same-save A socket closed before the wrong-save relaunch", lambda: (
+            (s := self._status()) and not s["players"]["a"]["connected"]), 45)
+
+        wrong = getattr(self.args, "wrong_save", None) or self._gen3_fixture_path("b")
+        body, other_ot = self._gen3_wrong_save(wrong)
+        before_wrong_bytes = Path(self.data_dir, "links.json").read_bytes()
+        before_wrong_events = self._reconnect_events()
+        battery.write_bytes(body)
+        self._gen3_wrong_body = body
+        self.launch_instance("a", phase="wrong_save", seed=False)
+        wrong_path = self._phase_result_path("a", "wrong_save")
+        self.wait_for("A wrong-save HUD", lambda: "WRONG_SAVE_HUD " in text(wrong_path), 300)
+        problems = reconnect_wrong_problems(before_wrong_bytes,
+                                            Path(self.data_dir, "links.json").read_bytes(),
+                                            self._status() or {}, before_wrong_events,
+                                            self._reconnect_events())
+        if problems:
+            raise RuntimeError("C-1 wrong-save refusal failed: " + "; ".join(problems))
+        self._pydec_note(f"C-1 wrong OT {other_ot} rejected; links.json byte-identical, no "
+                         f"gameplay events")
+        self._append_reconnect_marker("a", "A_DONE_WRONG")
+        self.wait_for("wrong-save A phase PASS", lambda: "RESULT: PASS" in text(wrong_path), 60)
+        self.emu_by_inst["a"].wait(timeout=30)
+        self._live_complete[self.scenario] = True
+        shutil.copyfile(wrong_path, self._result_path("a"))
+        self._append_reconnect_marker("b", "B_DONE")
+        self.wait_for("B stayed online through reconnect legs", lambda: "RESULT: PASS" in (
+            read_result(self.scenario, "b") or ""), 300)
+
+    # ── Gen 3 (gen3_frlg): saved-state oracles ─────────────────────────────────────────────
+    def _gen3_memorial_box(self) -> int:
+        """MEMORIAL = the last box (lua/gen3/boxes.lua memorial_box = BOXES_PER_STORE - 1)."""
+        with open(GEN3_PROFILE, encoding="utf-8") as handle:
+            derived = json.load(handle)["titles"][self._gen3_title("a")]["derived"]
+        return derived["BOXES_PER_STORE"] - 1
+
+    def _gen3_one_link(self, status, cause=None):
+        """The single persisted links.json row whose halves are this run's linked keys."""
+        want = {self._link_keys["a"], self._link_keys["b"]}
+        rows = [e for e in self._links_json()
+                if {(e.get("a") or {}).get("key"), (e.get("b") or {}).get("key")} == want]
+        if len(rows) != 1:
+            raise RuntimeError(f"expected one persisted link {sorted(want)}, got {rows}")
+        row = rows[0]
+        if row.get("status") != status or (cause and row.get("cause") != cause):
+            raise RuntimeError(f"link {sorted(want)} is {row.get('status')}/{row.get('cause')}, "
+                               f"expected {status}" + (f"/{cause}" if cause else ""))
+        return row
+
+    def _gen3_raise(self, problems, fact):
+        if problems:
+            raise RuntimeError("; ".join(problems))
+        self._pydec_note(fact)
+
+    def _gen3_flush_boundary(self):
+        for process in getattr(self, "emus", []):
+            process.wait(timeout=30)
+
+    def assert_faint_cmd_gen3_saved(self, results):
+        """Both memorials saved: the linked key left each party for the memorial box and nothing
+        else moved; B's key went to HP 0 through an armed OVERWORLD write (the checkpoint), after
+        the force_faint and before its memorialize_done; A got no force_faint."""
+        self._gen3_flush_boundary()
+        self._gen3_one_link("memorial")
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        box = self._gen3_memorial_box()
+        problems = []
+        for inst, key in (("a", ka), ("b", kb)):
+            problems += gen3_memorial_problems(inst, self._gen3_saved(inst),
+                                               self._gen3_fixture_saved(inst), key, box)
+        problems += gen3_receipt_problems(
+            "a", results["a"], required=[gen3_rx("memorialize", ka), gen3_tx("memorialize_done", ka)],
+            forbidden=[r"(?m)^RX force_faint "])
+        forced = rf"(?m)^FORCED_HP0 {re.escape(kb)} .*in_battle=0"
+        problems += gen3_receipt_problems(
+            "b", results["b"],
+            required=[gen3_rx("force_faint", kb), forced, gen3_rx("memorialize", kb),
+                      gen3_tx("memorialize_done", kb)],
+            ordered=[(gen3_rx("force_faint", kb), r"(?m)^\[client\] \[SLink-gen3\] write overworld "),
+                     (r"(?m)^\[client\] \[SLink-gen3\] write overworld ", forced),
+                     (forced, gen3_tx("memorialize_done", kb))])
+        self._gen3_raise(problems, f"faint_cmd: {ka} and {kb} saved once each in box {box + 1}; "
+                                   f"B's HP 0 came from an overworld-armed write")
+
+    def assert_linked_faint_active_gen3_saved(self, results):
+        """W-2 on FRLG, the in-battle path. A: the engine's faint site fired, THEN the client sent
+        faint for the linked key. Server: DEAD by battle, force_faint to B, then MEMORIAL. B: the
+        force_faint arrived while the linked mon was the active battler and was HELD (HP > 0), B
+        switched it out, and its HP reached 0 while the battle was still running -- the owner's
+        in-battle requirement. Both memorials saved."""
+        self._gen3_flush_boundary()
+        self._gen3_one_link("memorial", cause="battle")
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        with open(os.path.join(self.data_dir, "slink.log"), encoding="utf-8") as handle:
+            log_text = handle.read()
+        dead = log_text.find(f"[a] faint → force_faint b:{kb}")
+        memorial = log_text.find("fully memorialized")
+        problems = []
+        if dead < 0 or memorial <= dead:
+            problems.append("server log lacks DEAD propagation (force_faint b) before MEMORIAL")
+        box = self._gen3_memorial_box()
+        for inst, key in (("a", ka), ("b", kb)):
+            problems += gen3_memorial_problems(inst, self._gen3_saved(inst),
+                                               self._gen3_fixture_saved(inst), key, box)
+        site = r"(?m)^ENGINE_FAINT_SITE "
+        problems += gen3_receipt_problems(
+            "a", results["a"], required=[site, gen3_tx("faint", ka), gen3_tx("memorialize_done", ka)],
+            ordered=[(site, gen3_tx("faint", ka))])
+        chain = [rf"(?m)^READY_ACTIVE {re.escape(kb)}\b", gen3_rx("force_faint", kb),
+                 rf"(?m)^ACTIVE_HOLD {re.escape(kb)}\b", rf"(?m)^SWITCHED_OUT {re.escape(kb)}\b",
+                 rf"(?m)^BENCH_HP0_IN_BATTLE {re.escape(kb)}\b", gen3_tx("memorialize_done", kb)]
+        problems += gen3_receipt_problems("b", results["b"], required=chain,
+                                          ordered=list(zip(chain, chain[1:], strict=False)))
+        self._gen3_raise(problems, f"linked_faint_active: engine faint {ka} -> held active {kb} "
+                                   f"-> switched out -> HP 0 in battle; both memorials saved")
+
+    def assert_boxsync_gen3_saved(self, results):
+        """The linked pair made a full round trip on both cartridges: deposit and withdraw by hand
+        on A, mirrored by the server and executed by B's client, keyed ACKs in order, and the
+        saved party holds each half once with the fixture's record (level/stats/exp) and no copy
+        left in any box."""
+        self._gen3_flush_boundary()
+        self._gen3_one_link("alive")
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        problems = []
+        for inst, key in (("a", ka), ("b", kb)):
+            problems += gen3_round_trip_problems(inst, self._gen3_saved(inst),
+                                                 self._gen3_fixture_saved(inst), key)
+        problems += gen3_receipt_problems(
+            "a", results["a"], required=[gen3_tx("party_to_box", ka), gen3_tx("box_to_party", ka)],
+            ordered=[(gen3_tx("party_to_box", ka), gen3_tx("box_to_party", ka))])
+        chain = [gen3_rx("box_mon", kb), gen3_tx("stats_cache", kb), gen3_rx("party_mon", kb),
+                 gen3_tx("sync_retrieve_done", kb)]
+        problems += gen3_receipt_problems(
+            "b", results["b"], required=chain, ordered=list(zip(chain, chain[1:], strict=False)),
+            forbidden=[gen3_tx("box_mon_failed", kb), gen3_tx("sync_retrieve_failed", kb)])
+        self._gen3_raise(problems, f"boxsync: {ka} / {kb} deposited and withdrawn, saved once in "
+                                   f"party with the fixture record")
+
+    def assert_whiteout_gen3_saved(self, results):
+        """One whiteout, one rebuild, no deaths: A whited out with the pair boxed on both sides,
+        the server rebuilt the pair (rebuild_start, party_mon, rebuild_done on A; party_mon on B),
+        each half is back in its saved party with the fixture's record, the pair is still alive
+        and nobody memorialized it."""
+        self._gen3_flush_boundary()
+        self._gen3_one_link("alive")
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        problems = []
+        for inst, key in (("a", ka), ("b", kb)):
+            problems += gen3_round_trip_problems(inst, self._gen3_saved(inst),
+                                                 self._gen3_fixture_saved(inst), key)
+        # TX whiteout, not the driver's WHITED_OUT marker, opens the chain: the rebuild commands
+        # answer the event and can land while the whiteout scene is still playing.
+        chain_a = [gen3_tx("whiteout", "-"), r"(?m)^RX rebuild_start\b", gen3_rx("party_mon", ka),
+                   gen3_tx("sync_retrieve_done", ka), r"(?m)^RX rebuild_done\b"]
+        problems += gen3_receipt_problems(
+            "a", results["a"], required=chain_a + [r"(?m)^WHITED_OUT\b"],
+            ordered=list(zip(chain_a, chain_a[1:], strict=False)),
+            forbidden=[gen3_rx("memorialize", ka), r"(?m)^RX force_faint "])
+        chain_b = [gen3_rx("box_mon", kb), gen3_rx("party_mon", kb), gen3_tx("sync_retrieve_done", kb)]
+        problems += gen3_receipt_problems(
+            "b", results["b"], required=chain_b, ordered=list(zip(chain_b, chain_b[1:], strict=False)),
+            forbidden=[gen3_rx("memorialize", kb), r"(?m)^RX force_faint "])
+        self._gen3_raise(problems, f"whiteout: A whited out, the pair {ka} / {kb} was rebuilt "
+                                   f"from both PCs and saved in party, still alive")
+
+    def _gen3_sent_field(self, text, event, key, field):
+        match = re.search(gen3_tx(event, key) + r".*\"" + field + r"\":(\"[^\"]*\"|-?\d+)", text or "")
+        return json.loads(match.group(1)) if match else None
+
+    def assert_link_gen3_saved(self, results):
+        """D-1 persisted on FRLG: one ALIVE route_1 pair of the two real captures; each capture is
+        in its saved party exactly once (appended, boxed nowhere, species as sent), and each
+        saved POKe BALLS pocket is the fixture's minus the throws that half logged."""
+        self._gen3_flush_boundary()
+        row = self._gen3_one_link("alive")
+        problems = [] if row.get("area_id") == "route_1" else [f"link area {row.get('area_id')!r}"]
+        for inst in ("a", "b"):
+            key, text = self._link_keys[inst], results[inst]
+            species = self._gen3_sent_field(text, "capture", key, "species_id")
+            if self._gen3_sent_field(text, "capture", key, "area_id") != "route_1":
+                problems.append(f"{inst}: no capture of {key} sent for route_1")
+            problems += gen3_capture_problems(inst, self._gen3_saved(inst),
+                                              self._gen3_fixture_saved(inst), key, species)
+            throws = len(re.findall(r"(?m)^THREW \d+", text or ""))
+            title = self._gen3_title(inst)
+            before = gen3_ball_count(self._gen3_fixture_bytes(inst), title)
+            after = gen3_ball_count(self._gen3_flushed(inst), title)
+            self._pydec_note(f"BAG_BALLS baseline={before} final={after} throws={throws} inst={inst}")
+            if throws < 1 or after != before - throws:
+                problems.append(f"{inst}: saved {after} Poke Balls; the fixture had {before} and "
+                                f"the driver logged {throws} throw(s)")
+        self._gen3_raise(problems, f"link: {self._link_keys['a']} <-> {self._link_keys['b']} "
+                                   f"alive on route_1 and saved once in each party")
+
+    def assert_deadzone_gen3_saved(self, results):
+        """D-3 persisted on FRLG: route_1 is a dead zone with exactly one dead_zone event and no
+        alive link; A's saved state is the fixture's (it only ran, and its no_catch named the
+        foe's species); B's catch there was force-fainted and memorialized, saved in the memorial
+        box and nowhere else."""
+        self._gen3_flush_boundary()
+        b_key = self._deadzone_b_key
+        problems = []
+        if ((self._status() or {}).get("area_states") or {}).get("route_1") != "dead_zone":
+            problems.append("route_1 is not a dead zone after the run")
+        if _event_counts(self._reconnect_events())["dead_zone"] != 1:
+            problems.append("events.json does not carry exactly one dead_zone")
+        for entry in self._links_json():
+            keys = {(entry.get("a") or {}).get("key"), (entry.get("b") or {}).get("key")}
+            if b_key in keys and entry.get("status") == "alive":
+                problems.append(f"B's dead-zone catch {b_key} is in an alive link")
+        species = self._gen3_sent_field(results["a"], "no_catch", "-", "species_id")
+        if not species or self._gen3_sent_field(results["a"], "no_catch", "-", "area_id") != "route_1":
+            problems.append("A sent no species-bearing no_catch for route_1")
+        a_party, a_boxes = self._gen3_saved("a")
+        f_party, f_boxes = self._gen3_fixture_saved("a")
+        if [gen3_key(m) for m in a_party] != [gen3_key(m) for m in f_party] or {
+                p: gen3_key(m) for p, m in a_boxes.items()} != {
+                p: gen3_key(m) for p, m in f_boxes.items()}:
+            problems.append("A's saved party/boxes are not the fixture's")
+        problems += gen3_memorial_problems("b", self._gen3_saved("b"), self._gen3_fixture_saved("b"),
+                                           b_key, self._gen3_memorial_box())
+        problems += gen3_receipt_problems(
+            "b", results["b"], required=[rf"(?m)^FAINTED {re.escape(b_key)}\b",
+                                         gen3_rx("memorialize", b_key),
+                                         gen3_tx("memorialize_done", b_key)])
+        self._gen3_raise(problems, f"deadzone: route_1 locked by A's no_catch (species {species}); "
+                                   f"B's {b_key} saved only in the memorial box")
+
+    def assert_reconnect_gen3_saved(self, results):
+        """C-2/C-1 persisted: A never saved and never mutated its battery -- the same-save flush is
+        the pre-kill bytes and the wrong-save flush is exactly the seeded wrong save -- while B's
+        saved party still holds its half of the alive pair."""
+        if not self._live_complete.get(self.scenario):
+            raise RuntimeError("reconnect_gen3's live legs did not complete")
+        self._gen3_flush_boundary()
+        codec = gen3_codec()
+        self._gen3_one_link("alive")
+        problems = []
+        same = self._artifact(self._same_save_artifact, "C-2 same-save battery")
+        if codec.split_rtc(same.read_bytes())[0] != codec.split_rtc(self._gen3_before_kill)[0]:
+            problems.append("A's same-save battery differs from its pre-kill bytes")
+        if codec.split_rtc(self._gen3_flushed("a"))[0] != self._gen3_wrong_body:
+            problems.append("the rejected wrong-save cartridge's battery changed")
+        problems += gen3_receipt_problems("a", results["a"], required=[r"(?m)^WRITES 0$"])
+        b_keys = [gen3_key(m) for m in self._gen3_saved("b")[0]]
+        if self._link_keys["b"] not in b_keys:
+            problems.append(f"B's saved party {b_keys} lacks its linked {self._link_keys['b']}")
+        self._gen3_raise(problems, "reconnect: A's batteries untouched across both relaunches "
+                                   "(zero client writes on the wrong save); B saved its half")
+
     def _run_oracle(self, results):
         """The scenario's post-result oracle, from the SCENARIOS registry.
 
@@ -4186,16 +5032,25 @@ class DuoRun:
         and keep the legacy path, where a client RESULT is the whole verdict.
         """
         method = self.cfg.get("oracle")
+        game = getattr(self, "game", "")
+        # A row that declares `oracle_required` (gen3_frlg) takes the Gen 1 rule, with its own
+        # witness method; gen1_new keeps the S-7 check exactly as before.
+        row = GAMES.get(game, {})
         if not method:
-            if scenario_family(getattr(self, "game", "")) == "gen1_new":
+            if scenario_family(game) == "gen1_new":
                 raise RuntimeError(f"{self.scenario} declares no post-result oracle in SCENARIOS; "
                                    f"a Gen 1 verdict needs a saved-state readback")
+            if row.get("oracle_required"):
+                raise RuntimeError(f"{self.scenario} declares no post-result oracle in SCENARIOS; "
+                                   f"a {game} verdict needs a saved-state readback")
             return
-        if scenario_family(getattr(self, "game", "")) == "gen1_new":
+        if scenario_family(game) == "gen1_new":
             # S-7 runs for EVERY gen1_new scenario, before its own oracle: the save witness is
             # the physical half of the verdict and each scenario's oracle prologue waits on the
             # same flush boundary this check needs.
             self.check_save_witness(results)
+        elif row.get("oracle_required"):
+            getattr(self, row["save_witness"])(results)
         getattr(self, method)(results, **self.cfg.get("oracle_kwargs", {}))
 
     def _live_ok(self) -> bool:
@@ -4402,7 +5257,8 @@ def main():
                     help="extra idle frames before the first hunt; each RNG retry adds 37 per "
                          "attempt")
     ap.add_argument("--wrong-save", default=None,
-                    help="second-OT Red SaveRAM for reconnect_new's fail-closed C-1 leg")
+                    help="second-OT Red SaveRAM for reconnect_new's fail-closed C-1 leg; for "
+                         "reconnect_gen3 a second-OT FR flash save (default: B's own fixture)")
     ap.add_argument("--server-flags", nargs="*", default=[],
                     help="extra flags for server.server")
     ap.add_argument("--wire-log", action="store_true",

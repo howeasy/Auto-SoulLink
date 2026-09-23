@@ -249,3 +249,52 @@ def test_list_lines_carry_the_attempt_limit_and_the_targets():
     assert lines["ball_gate_new"] == "ball_gate_new  attempts=1  targets=town"
     for name in scenarios_for("gen1_new"):
         assert name in lines, name
+
+
+# ── gen3_frlg: the new Gen 3 client on vanilla FRLG (card C4-6a) ────────────────────────────────
+GEN3_FRLG_SCENARIOS = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3",
+                       "whiteout_gen3", "link_gen3", "deadzone_gen3", "reconnect_gen3")
+
+
+def test_gen3_frlg_selection_is_exactly_its_seven():
+    """PLAN §5.5's FRLG matrix, pinned: `--scenario all --game gen3_frlg` runs these and only these."""
+    assert sorted(scenarios_for("gen3_frlg")) == sorted(GEN3_FRLG_SCENARIOS)
+
+
+def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
+    """Opt-in both ways: the `_gen3` keys name only gen3_frlg (P5 adds gen3_rr by extending the
+    tuple, never by renaming), and the savestate-less shared ones (faint/boxsync) and every other
+    row's keys stay out of it."""
+    assert "gen3_frlg" in duo_module.OPT_IN_GAMES
+    for game in GAMES:
+        if game != "gen3_frlg":
+            assert not set(scenarios_for(game)) & set(GEN3_FRLG_SCENARIOS), game
+    for name in SCENARIOS:
+        if name not in GEN3_FRLG_SCENARIOS:
+            assert not scenario_applies(name, "gen3_frlg"), name
+    for name in GEN3_FRLG_SCENARIOS:
+        assert SCENARIOS[name]["games"] == ("gen3_frlg",), name
+        assert scenario_attempt_limit(name, "gen3_frlg") == 1
+
+
+def test_every_gen3_frlg_scenario_declares_an_oracle_that_exists():
+    """The row requires an oracle (a missing one FAILS in _run_oracle), and its witness method
+    exists beside them."""
+    row = GAMES["gen3_frlg"]
+    assert row["oracle_required"] is True
+    assert callable(getattr(DuoRun, row["save_witness"], None))
+    for name in scenarios_for("gen3_frlg"):
+        method = SCENARIOS[name].get("oracle")
+        assert method and callable(getattr(DuoRun, method, None)), name
+        assert method == f"assert_{name}_saved", name
+
+
+def test_the_gen3_wrapper_lists_exactly_the_gen3_frlg_scenarios():
+    sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
+    mod = __import__("test_duo_gen3")
+    assert mod.GAME == "gen3_frlg"
+    assert sorted(mod.SCENARIOS) == sorted(GEN3_FRLG_SCENARIOS)
+    for name in mod.SCENARIOS:
+        assert scenario_applies(name, "gen3_frlg")
+        assert mod.deadline_for(name) == SCENARIOS[name]["timeout"] + 300
+    assert mod.required_fixtures("boxsync_gen3") == ["firered_party_battle", "firered_party_town_b"]

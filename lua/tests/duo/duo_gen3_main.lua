@@ -1,0 +1,634 @@
+-- duo_gen3_main.lua — two-instance live harness for the NEW Gen 3 client (lua/gen3/*) on FRLG.
+--
+-- tools/e2e_duo.py (game "gen3_frlg") generates patch/build/duo_<lane>_{a,b}.lua, which sets
+-- SLINK_HOST/PORT/PLAYER plus SLINK_DUO and dofiles this file. The production client is built
+-- by RUNNING lua/gen3/run.lua itself -- the same admission, Entry.build, connector, HUD and
+-- event.onframeend loop a player gets -- so nothing here can drift from the bootstrap. The
+-- driver only tees three seams before run.lua binds them:
+--   * event.on_bus_exec: the `save` site's hook also dumps the whole SRAM (flash) domain,
+--     INSIDE the callback, once the signal validated and the capture contract holds (R0 == 1,
+--     R5 == SAVE_NORMAL); the `faint` site's hook logs ENGINE_FAINT_SITE when it validates;
+--   * connector.send: every non-tick event as "TX <event> <key|-> <json>";
+--   * the session's handle_command: every command as "RX <cmd> key=<key> ...".
+-- The battery boots through CONTINUE (lua/tests/gen3_boot_check.lua), then the scenario runs
+-- as straight-line code: every frame it advances, run.lua's onframeend runs client:frame_end()
+-- exactly as in production.
+--
+-- Scenarios are per-file modules, lua/tests/duo/scenario_<prefix><name>.lua (prefix from the
+-- GAMES row, "gen3_"; name = the scenario key without its "_gen3" suffix), each returning
+-- function(ctx) -> pass, msg. Inputs are ordinary buttons only; game facts come from the pack
+-- (write_checkpoint.json, profile.json), pret's symbol file for the title
+-- (data/gen3/pret/poke<title>.sym) and the BFS-verified paths of gen3_scripted_play.lua.
+-- Receipt protocol (what e2e_duo.py parses): "MYKEY <slot> <key>", TX/RX lines as above,
+-- SAVE_WITNESS/SAVE_WITNESS_DUMP lines, scenario markers, and a final "RESULT: PASS|FAIL (why)".
+local D = SLINK_DUO
+assert(D and D.wt and D.player and D.scenario and D.result, "SLINK_DUO not configured (run via tools/e2e_duo.py)")
+assert(D.game == "gen3_frlg", "duo_gen3_main only serves game gen3_frlg, got " .. tostring(D.game))
+assert(D.title, "SLINK_DUO.title missing (the GAMES row's sides)")
+
+local ROOT = D.wt
+SLINK_ROOT = ROOT          -- gen3_boot_check.lua / gen3_scripted_play.lua locate the tree by it
+package.path = ROOT .. "/lua/?.lua;" .. package.path
+local fmt = string.format
+local phase = D.phase or "initial"
+
+-- ── receipt, finish, console tee ─────────────────────────────────────────────────────────
+local logf = io.open(D.result, "w")
+local _console_log = console.log
+local finished = false
+local function log(s)
+    _console_log("[duo" .. D.player:upper() .. "] " .. tostring(s))
+    if logf then logf:write(tostring(s) .. "\n"); logf:flush() end
+end
+local FINISHED = "slink-duo-finished"
+local function finish(pass, msg)
+    if finished then error(FINISHED, 0) end
+    finished = true
+    joypad.set({})
+    log("RESULT: " .. (pass and "PASS" or "FAIL") .. (msg and (" (" .. msg .. ")") or ""))
+    if logf then logf:close(); logf = nil end
+    client.exit()             -- async: the error below stops this script from driving further
+    error(FINISHED, 0)
+end
+local writes, refused = 0, nil
+console.log = function(s)
+    local text = tostring(s)
+    _console_log(text)
+    if text:find("[SLink-gen3] write ", 1, true) then writes = writes + 1 end
+    if text:find("[SLink-gen3] refused", 1, true) then refused = text end
+    if logf then logf:write("[client] " .. text .. "\n"); logf:flush() end
+    -- The shared helpers (gen3_boot_check / gen3_scripted_play) end a run with
+    -- G.finish(false, why) -> "[gen3] RESULT: FAIL why": that is this run's verdict too.
+    local helper = text:match("^%[gen3%] RESULT: FAIL ?(.*)$")
+    if helper and not finished then finish(false, "helper: " .. helper) end
+end
+
+log(fmt("duo instance %s scenario=%s phase=%s title=%s attempt=%d", D.player, D.scenario, phase,
+        D.title, D.attempt or 1))
+pcall(memory.usememorydomain, "System Bus")
+pcall(function() client.speedmode(D.speed or 1600) end)
+
+local JSON = dofile(ROOT .. "/lua/json_codec.lua")
+local G = dofile(ROOT .. "/lua/tests/gen3_boot_check.lua")
+local SP = dofile(ROOT .. "/lua/tests/gen3_scripted_play.lua")   -- helpers only; never run()
+local Reads = dofile(ROOT .. "/lua/gen3/reads.lua")
+local play = SP.play
+
+local function read_json(rel)
+    local f = assert(io.open(ROOT .. "/" .. rel, "rb"), "cannot read " .. rel)
+    local raw = f:read("a"); f:close()
+    return assert(JSON.decode(raw), "malformed " .. rel)
+end
+local title = D.title
+local cp = assert(read_json("data/games/gen3_frlg/write_checkpoint.json")[title], "no checkpoint for " .. title)
+local profile = assert(read_json("data/games/gen3_frlg/profile.json").titles[title], "no profile for " .. title)
+G.title, G.budget = title, 5000000
+local function bus_bytes(addr, n)
+    local out = {}
+    for i = 1, n do out[i] = memory.read_u8(addr + i - 1, "System Bus") end
+    return out
+end
+local reader = Reads.new(profile, {
+    read_u8 = function(a) return memory.read_u8(a, "System Bus") end,
+    read_u16 = function(a) return memory.read_u16_le(a, "System Bus") end,
+    read_u32 = function(a) return memory.read_u32_le(a, "System Bus") end,
+    read_bytes = bus_bytes,
+}, cp.pointers)
+
+-- pret's symbols for THIS title (the first definition of a name: HandleInputChooseAction is also
+-- a static in the Oak/old-man and Pokedude controllers, which sort after the player's).
+local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInputChooseMove",
+               "gActionSelectionCursor", "gMoveSelectionCursor", "gBattleMons", "gBattlerPartyIndexes",
+               "gBattleOutcome", "gMain", "gTasks", "gPartyMenu", "CB2_UpdatePartyMenu",
+               "Task_HandleChooseMonInput", "Task_HandleSelectionMenuInput",
+               "Task_ReturnToChooseMonAfterText", "gBattleMoves", "Task_DepositMenu", "Task_WithdrawMon" }
+local S = {}
+do
+    local want = {}
+    for _, n in ipairs(SYMS) do want[n] = true end
+    local path = ROOT .. "/data/gen3/pret/poke" .. title .. ".sym"
+    for line in io.lines(path) do
+        local addr, name = line:match("^(%x+) %a %x+ (%S+)")
+        if name and want[name] and not S[name] then S[name] = tonumber(addr, 16) end
+    end
+    for _, n in ipairs(SYMS) do assert(S[n], "pret symbol " .. n .. " missing from " .. path) end
+end
+
+-- ── seams teed before run.lua binds them ─────────────────────────────────────────────────
+local seen_tx, seen_rx, tx, rx = {}, {}, {}, {}
+local witness_saves, wrong_save_hud = 0, false
+local function dump_witness()
+    witness_saves = witness_saves + 1
+    -- repo-relative: ROOT contains a space, and a `path=` value with one cannot be parsed back
+    local rel = fmt("patch/build/e2e_%s_%s_%d_witness.bin", D.scenario, D.player, D.attempt or 1)
+    local dom = assert(G.flash_domain(), "no flash memory domain")
+    local parts = {}
+    for off = 0, 0x20000 - 4, 4 do parts[#parts + 1] = string.pack("<I4", memory.read_u32_le(off, dom)) end
+    local blob = table.concat(parts)
+    local wf = assert(io.open(ROOT .. "/" .. rel, "wb"), "cannot open " .. rel)
+    wf:write(blob)          -- overwritten on every save: the file is this attempt's FINAL save
+    wf:close()
+    log(fmt("SAVE_WITNESS_DUMP path=%s bytes=%d saves=%d frame=%d counter=%d", rel, #blob,
+            witness_saves, emu.framecount(), G.save_counter(dom)))
+end
+-- "Validated" is observable only as the signal queue growing by one entry of the site's kind
+-- (lua/gen3/signals.lua fire(): every rejection returns before the append).
+local function validated(before, kind)
+    local sigs = SLINK_GEN3_CLIENT and SLINK_GEN3_CLIENT.signals
+    if not sigs then return nil, "no-signals-instance" end
+    if #sigs.pending ~= before + 1 then return nil, fmt("pending-%d-to-%d", before, #sigs.pending) end
+    local sig = sigs.pending[#sigs.pending]
+    if sig.kind ~= kind then return nil, "kind-" .. tostring(sig.kind) end
+    return sig
+end
+local function pending_count()
+    local sigs = SLINK_GEN3_CLIENT and SLINK_GEN3_CLIENT.signals
+    return sigs and #sigs.pending or 0
+end
+local raw_on_bus_exec = event.on_bus_exec
+event.on_bus_exec = function(fn, addr, name, ...)
+    local tag, fire = tostring(name or ""), fn
+    if tag:find("SLink%-gen3%-save$") then
+        fn = function(...)
+            local before = pending_count()
+            fire(...)
+            local sig, why = validated(before, "save")
+            -- the site's capture contract (engine_signals.json): a full save returned OK
+            if sig and not (sig.point and sig.point.R0 == 1 and sig.point.R5 == 0) then
+                sig, why = nil, fmt("r0-%s-r5-%s", tostring(sig.point and sig.point.R0),
+                                    tostring(sig.point and sig.point.R5))
+            end
+            if not sig then log("SAVE_WITNESS_DUMP_SKIPPED why=" .. why) return end
+            local ok, err = pcall(dump_witness)
+            if not ok then log("SAVE_WITNESS_DUMP_FAIL " .. tostring(err)) end
+        end
+    elseif tag:find("SLink%-gen3%-faint$") then
+        fn = function(...)
+            local before = pending_count()
+            fire(...)
+            if validated(before, "faint") then log(fmt("ENGINE_FAINT_SITE frame=%d", emu.framecount())) end
+        end
+    end
+    return raw_on_bus_exec(fn, addr, name, ...)
+end
+
+local C = require("connector")
+local raw_send = C.send
+C.send = function(line)
+    local ok, msg = pcall(JSON.decode, line)
+    local name = ok and type(msg) == "table" and type(msg.event) == "string" and msg.event or "?"
+    seen_tx[name] = (seen_tx[name] or 0) + 1
+    if name ~= "tick" then
+        local key = ok and type(msg) == "table" and type(msg.key) == "string" and msg.key or "-"
+        tx[#tx + 1] = { event = name, key = key, msg = ok and msg or nil }
+        log(fmt("TX %s %s %s", name, key, name == "hello" and line:sub(1, 200) or line))
+    end
+    return raw_send(line)
+end
+
+-- ── the production client: lua/gen3/run.lua, unmodified ──────────────────────────────────
+SLINK_GEN3_CLIENT = nil
+local okrun, errrun = pcall(dofile, ROOT .. "/lua/gen3/run.lua")
+if not okrun then finish(false, "lua/gen3/run.lua raised: " .. tostring(errrun)) end
+local session = SLINK_GEN3_CLIENT
+if not session then finish(false, "run.lua built no client: " .. tostring(refused or "no reason logged")) end
+local raw_handle = session.handle_command
+session.handle_command = function(self, cmd)
+    local c = type(cmd) == "table" and type(cmd.cmd) == "string" and cmd.cmd or "?"
+    local key = type(cmd) == "table" and type(cmd.key) == "string" and cmd.key or nil
+    local text = type(cmd) == "table" and type(cmd.text) == "string" and cmd.text or nil
+    seen_rx[c] = (seen_rx[c] or 0) + 1
+    if c ~= "noop" then
+        rx[#rx + 1] = { cmd = c, key = key }
+        log("RX " .. c .. (key and (" key=" .. key) or "") .. (text and (" text=" .. text) or ""))
+    end
+    if c == "hud_show" and text and text:find("WRONG SAVE", 1, true) then
+        wrong_save_hud = true
+        log("WRONG_SAVE_HUD " .. text)
+    end
+    return raw_handle(self, cmd)
+end
+log(fmt("client built by lua/gen3/run.lua: title=%s player=%s -> %s:%s", title, D.player,
+        tostring(SLINK_HOST), tostring(SLINK_PORT)))
+
+-- ── context ──────────────────────────────────────────────────────────────────────────────
+local ctx = { D = D, player = D.player, phase = phase, log = log, fmt = fmt, G = G, SP = SP,
+              play = play, cp = cp, reader = reader, sym = S, title = title, session = session,
+              finished = FINISHED }
+
+function ctx.frames(n) for _ = 1, n do emu.frameadvance() end end
+--- pred() each frame until truthy (its value) or `secs` of wall clock pass (nil, logged).
+function ctx.wait_until(pred, secs, what)
+    local deadline = os.time() + (secs or 60)
+    while os.time() <= deadline do
+        local v = pred()
+        if v then return v end
+        emu.frameadvance()
+    end
+    log("TIMEOUT waiting for " .. tostring(what))
+    return nil
+end
+local function go_lines()
+    local f = io.open(D.go_file, "r")
+    if not f then return nil end
+    local out = {}
+    for l in f:lines() do out[#out + 1] = l end
+    f:close()
+    return out
+end
+function ctx.go_has(marker)
+    for _, l in ipairs(go_lines() or {}) do if l == marker then return true end end
+    return false
+end
+function ctx.wait_go(marker, secs)
+    marker = marker or "GO"
+    return ctx.wait_until(function() return ctx.go_has(marker) end, secs or 1800, "go-file " .. marker)
+end
+function ctx.linked()
+    for _, l in ipairs(go_lines() or {}) do
+        local k = l:match("^LINKED (%S+)$")
+        if k then return k end
+    end
+end
+function ctx.partner_done()
+    local f = io.open(D.partner_result, "r")
+    if not f then return false end
+    local text = f:read("a"); f:close()
+    return text:find("RESULT:", 1, true) ~= nil
+end
+
+function ctx.party()
+    local mons = reader.read_party()
+    if not mons then return nil end
+    local out = {}
+    for _, m in ipairs(mons) do
+        out[#out + 1] = { slot = m.slot, key = reader.key(m), hp = m.hp, max_hp = m.max_hp,
+                          species = m.species, level = m.level }
+    end
+    return out
+end
+function ctx.find(key)
+    for _, m in ipairs(ctx.party() or {}) do if m.key == key then return m end end
+end
+function ctx.balls()
+    local b = reader.read_balls()
+    return b and b.ball_count or -1
+end
+function ctx.sent(event, key)
+    local n = 0
+    for _, e in ipairs(tx) do if e.event == event and (key == nil or e.key == key) then n = n + 1 end end
+    return n
+end
+function ctx.received(cmd, key)
+    local n = 0
+    for _, c in ipairs(rx) do if c.cmd == cmd and (key == nil or c.key == key) then n = n + 1 end end
+    return n
+end
+--- The last event of this name the client sent, decoded (nil if none).
+function ctx.last_sent(event)
+    for i = #tx, 1, -1 do if tx[i].event == event then return tx[i].msg end end
+end
+--- pred() each frame, pressing `button` on a 16-frame cadence while it is false.
+function ctx.mash_until(pred, secs, button)
+    local n = 0
+    return ctx.wait_until(function()
+        local v = pred()
+        if v then return v end
+        n = n + 1
+        if n % 16 == 0 then joypad.set({ [button or "A"] = true }) end
+    end, secs, "mashing " .. tostring(button or "A"))
+end
+function ctx.wait_sent(event, key, secs)
+    return ctx.wait_until(function() return ctx.sent(event, key) > 0 end, secs or 300,
+                          "TX " .. event .. " " .. tostring(key))
+end
+function ctx.wait_received(cmd, key, secs)
+    return ctx.wait_until(function() return ctx.received(cmd, key) > 0 end, secs or 300,
+                          "RX " .. cmd .. " " .. tostring(key))
+end
+function ctx.writes() return writes end
+function ctx.wrong_save_hud() return wrong_save_hud end
+--- The session's held in-battle write for `key` (lua/core/session.lua battle_pending), if any.
+function ctx.battle_hold(key)
+    for _, e in ipairs(session.battle_pending or {}) do if e.key == key then return e end end
+end
+function ctx.in_battle() return play.in_battle(cp) end
+function ctx.on_field() return play.on_field(cp) end
+--- pcall that lets a finished run keep finishing (a helper's FAIL is already the verdict).
+function ctx.try(fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok and err == FINISHED then error(FINISHED, 0) end
+    return ok, err
+end
+
+-- HP-0 watcher: runs after run.lua's frame_end on every frame, whatever the driver is doing, so
+-- a write the driver was not polling for (a deferred force_faint landing mid-settle, one frame
+-- before its memorialize moves the record out) is still witnessed. One line per key, the first
+-- time it is seen alive and then at HP 0.
+ctx.hp0_tag = "FORCED_HP0"
+local alive, hp0 = {}, {}
+-- Plaintext fields only (PID/OTID at +0/+4, hp at +0x56 of struct Pokemon, pret
+-- include/pokemon.h): no per-frame decryption.
+local PARTY_COUNT_ADDR, MON_SIZE, HP_OFF = profile.ram.PARTY_COUNT_ADDR, Reads.PARTY_MON_SIZE, 0x56
+event.onframeend(function()
+    local count, base = memory.read_u8(PARTY_COUNT_ADDR, "System Bus"), reader.party_base()
+    if not base or count > 6 then return end
+    for slot = 0, count - 1 do
+        local at = base + slot * MON_SIZE
+        local k = fmt("%08X:%08X", memory.read_u32_le(at, "System Bus"), memory.read_u32_le(at + 4, "System Bus"))
+        if memory.read_u16_le(at + HP_OFF, "System Bus") > 0 then
+            alive[k] = true
+        elseif alive[k] and not hp0[k] then
+            local battling = play.in_battle(cp)
+            local battler = battling and memory.read_u16_le(S.gBattlerPartyIndexes) == slot
+            hp0[k] = { frame = emu.framecount(), in_battle = battling, battler = battler }
+            log(fmt("%s %s frame=%d in_battle=%d battler=%d", ctx.hp0_tag, k, emu.framecount(),
+                    battling and 1 or 0, battler and 1 or 0))
+        end
+    end
+end, "SLink-duo-gen3-hp0")
+function ctx.hp0(key) return hp0[key] end
+
+-- ── battle input (pret battle_controller_player.c / party_menu.c, symbols above) ─────────
+local B_OUTCOME_CAUGHT = 7        -- pret include/constants/battle.h
+local ACTION_FIGHT, ACTION_BAG, ACTION_SWITCH, ACTION_RUN = 0, 1, 2, 3
+local function ctrl0() return memory.read_u32_le(S.gBattlerControllerFuncs) end
+local function action_menu_up() return ctrl0() == (S.HandleInputChooseAction | 1) end
+local function move_menu_up() return ctrl0() == (S.HandleInputChooseMove | 1) end
+local function party_menu_up() return memory.read_u32_le(S.gMain + 4) == (S.CB2_UpdatePartyMenu | 1) end
+local function party_task(fn)
+    for i = 0, 15 do
+        local base = S.gTasks + i * 40                   -- sizeof(struct Task), include/task.h
+        if memory.read_u8(base + 4) ~= 0 and memory.read_u32_le(base) == (fn | 1) then return true end
+    end
+    return false
+end
+function ctx.battler_slot() return memory.read_u16_le(S.gBattlerPartyIndexes) end
+ctx.action_menu_up, ctx.party_menu_up = action_menu_up, party_menu_up
+
+--- HandleInputChooseAction / HandleInputChooseMove: Left/Right toggle bit 0 of the cursor,
+--- Up/Down bit 1 (each only in its own direction). Bounded, then read back.
+local function steer(read, target)
+    for _ = 1, 6 do
+        local c = read()
+        if c == target then return true end
+        if (c & 1) ~= (target & 1) then G.tap((c & 1) == 1 and "Left" or "Right", 3, 20)
+        else G.tap((c & 2) == 2 and "Up" or "Down", 3, 20) end
+    end
+    return read() == target
+end
+
+--- Wait for the player's next decision point: "action", "party", "over" (the battle ended) or
+--- nil (timeout). `button` is pressed on a 16-frame cadence, never on a frame the action menu
+--- is up: B for text, the nickname prompt (B = NO, Cmd_trygivecaughtmonnick) and the dex page.
+function ctx.await_turn(secs, button)
+    local n = 0
+    return ctx.wait_until(function()
+        if not play.in_battle(cp) then return "over" end
+        if party_menu_up() then return "party" end
+        if action_menu_up() then return "action" end
+        n = n + 1
+        if button and n % 16 == 0 then joypad.set({ [button] = true }) end
+        return nil
+    end, secs or 120, "the next battle decision")
+end
+
+--- At the action menu (SP.verify_fight_cursor has put the cursor on FIGHT): pick `action`.
+function ctx.choose_action(action)
+    if not action_menu_up() then return false, "action menu not up" end
+    if not steer(function() return memory.read_u8(S.gActionSelectionCursor) end, action) then
+        return false, "action cursor stuck at " .. memory.read_u8(S.gActionSelectionCursor)
+    end
+    G.tap("A", 3, 13)
+    return true
+end
+
+--- The first move of battler 0 with base power 0 and PP left (gBattleMoves[m].power is byte 1 of
+--- the 12-byte struct BattleMove, pret include/pokemon.h), else nil.
+function ctx.status_move_slot()
+    local base = S.gBattleMons                            -- battler 0
+    for slot = 0, 3 do
+        local move = memory.read_u16_le(base + 0x0C + slot * 2)
+        local pp = memory.read_u8(base + 0x24 + slot)
+        if move ~= 0 and pp > 0 and memory.read_u8(S.gBattleMoves + move * 12 + 1) == 0 then return slot end
+    end
+end
+
+--- FIGHT, then move `slot`.
+function ctx.use_move(slot)
+    local ok, why = ctx.choose_action(ACTION_FIGHT)
+    if not ok then return false, why end
+    if not ctx.wait_until(move_menu_up, 10, "the move menu") then return false, "move menu never opened" end
+    if not steer(function() return memory.read_u8(S.gMoveSelectionCursor) end, slot) then
+        return false, "move cursor stuck"
+    end
+    G.tap("A", 3, 13)
+    return true
+end
+
+--- POKeMON -> party `slot` -> SHIFT (popup row 0), then wait for the switch to land.
+function ctx.switch_to(slot)
+    local ok, why = ctx.choose_action(ACTION_SWITCH)
+    if not ok then return false, why end
+    if not ctx.wait_until(function() return party_menu_up() and party_task(S.Task_HandleChooseMonInput) end,
+                          20, "the in-battle party menu") then
+        return false, "the party menu never took input"
+    end
+    for _ = 1, 8 do
+        local at = memory.read_u8(S.gPartyMenu + 9)       -- gPartyMenu.slotId, include/party_menu.h
+        if at == slot then break end
+        G.tap(at < slot and "Down" or "Up", 3, 20)
+    end
+    if memory.read_u8(S.gPartyMenu + 9) ~= slot then return false, "party cursor never reached slot " .. slot end
+    G.tap("A", 3, 20)
+    if not ctx.wait_until(function() return party_task(S.Task_HandleSelectionMenuInput) end, 10, "SHIFT popup") then
+        return false, "the SHIFT/SUMMARY/CANCEL popup never opened"
+    end
+    G.tap("A", 3, 20)                                    -- SHIFT
+    if not ctx.wait_until(function() return ctx.battler_slot() == slot end, 60, "the switch") then
+        return false, "battler 0 never became party slot " .. slot
+    end
+    return true
+end
+
+--- RUN until the battle ends (a failed escape costs a turn and returns to the action menu).
+function ctx.run_away(label)
+    for _ = 1, 10 do
+        local turn = SP.verify_fight_cursor(cp, "incidental_battle")
+        if turn == nil then return true end
+        if turn == "party" then return false, "a forced party menu came up" end
+        local ok, why = ctx.choose_action(ACTION_RUN)
+        if not ok then return false, why end
+        local r = ctx.await_turn(120, "B")
+        if r == "over" then play.wait_scene_settled(cp, 1800) return true end
+        if r ~= "action" then return false, "no decision point after RUN (" .. tostring(r) .. ")" end
+    end
+    return false, label .. ": could not escape in 10 turns"
+end
+
+--- Grass hunt from the pinned Route 1 square (gen3_scripted_play hunt_encounter).
+function ctx.hunt(label) return SP.hunt_encounter(cp, label, 40) end
+
+local boot_keys = {}
+--- Hunt, throw Poke Balls until the catch lands; returns the new party key or nil, why.
+function ctx.catch(label)
+    if not ctx.hunt(label) then return nil, "no wild encounter" end
+    local throws = 0
+    while throws < 8 do
+        local turn = SP.verify_fight_cursor(cp, "incidental_battle")
+        if turn == nil then break end
+        if turn == "party" then return nil, "a forced party menu came up while catching" end
+        if ctx.balls() <= 0 then
+            ctx.run_away(label)
+            return nil, "hunt ended out-of-balls"
+        end
+        local ok, why = ctx.choose_action(ACTION_BAG)
+        if not ok then return nil, why end
+        SP.throw_pokeball_from_bag(cp, label)
+        throws = throws + 1
+        log("THREW " .. throws)
+        local r = ctx.await_turn(180, "B")
+        if r == "over" then break end
+        if r ~= "action" then return nil, "no decision point after the throw (" .. tostring(r) .. ")" end
+    end
+    play.wait_scene_settled(cp, 1800)
+    local outcome = memory.read_u8(S.gBattleOutcome)
+    if outcome ~= B_OUTCOME_CAUGHT then return nil, "the battle ended with outcome " .. outcome end
+    -- The client's own capture event names the key: by the time the field settles the server may
+    -- already have quarantined (box_mon) or retired (dead zone) the record out of the party.
+    local cap = ctx.last_sent("capture")
+    if cap and type(cap.key) == "string" and not boot_keys[cap.key] then return cap.key end
+    for _, m in ipairs(ctx.party() or {}) do
+        if not boot_keys[m.key] then return m.key, m end
+    end
+    return nil, "caught, but no new key in the party"
+end
+
+--- Keep choosing a no-damage move until the ACTIVE `key` faints (a natural engine faint).
+function ctx.lose_active(key, label)
+    local slot = ctx.status_move_slot()
+    log(fmt("LOSE %s status_move_slot=%s", key, tostring(slot)))
+    -- The watcher's record, not a fresh read: a whiteout heals the party at the warp, so by the
+    -- time the battle is gone the fainted mon can read full HP again.
+    local function fainted()
+        local m = ctx.find(key)
+        return ctx.hp0(key) ~= nil or (m ~= nil and m.hp == 0)
+    end
+    for _ = 1, 80 do
+        if fainted() then return true end
+        local turn = SP.verify_fight_cursor(cp, "incidental_battle")
+        if turn ~= "fight" then
+            return fainted(), "battle left the action menu (" .. tostring(turn) .. ")"
+        end
+        local ok, why = ctx.use_move(slot or 0)
+        if not ok then return false, label .. ": " .. why end
+    end
+    return false, label .. ": still standing after 80 turns"
+end
+
+-- ── walking: the BFS-verified PATHS of gen3_scripted_play.lua, plus exact reversals ──────
+local INVERT = { Up = "Down", Down = "Up", Left = "Right", Right = "Left" }
+local function reversed(name, as)
+    local p = assert(SP.PATHS[name], "no PATHS entry " .. name)
+    local dirs = {}
+    for i = #p.dirs, 1, -1 do dirs[#dirs + 1] = INVERT[p.dirs[i]] end
+    SP.PATHS[as] = { map = p.map, from = { p.to[1], p.to[2] }, to = { p.from[1], p.from[2] }, dirs = dirs }
+end
+reversed("pokecenter_entrance_to_pc", "pc_to_pokecenter_entrance")   -- the same tiles, walked back
+
+--- Route 1 grass origin -> facing the Viridian Pokemon Center PC (the viridian_pc leg's walk).
+function ctx.walk_to_pc(label)
+    SP.return_to_grass_origin(cp, label)
+    play.follow(cp, "route1_grass_to_north_edge", label)
+    SP.warp_to(cp, "Up", 30, SP.DEST.viridian_south, label .. " Route1->Viridian")
+    play.follow(cp, "route1_edge_to_pokecenter_door", label)
+    SP.warp_to(cp, "Up", 30, SP.DEST.center, label .. " Center door")
+    play.follow(cp, "pokecenter_entrance_to_pc", label)
+    G.tap("Up", 2, 13)
+end
+
+--- The PC -> the Route 1 grass origin (Center door, Viridian, Route 1 north to south).
+function ctx.walk_pc_to_grass(label)
+    play.follow(cp, "pc_to_pokecenter_entrance", label)
+    SP.warp_to(cp, "Down", 30, SP.DEST.center_exit, label .. " Center exit")
+    play.follow(cp, "pokecenter_door_to_route1_edge", label)
+    SP.warp_to(cp, "Down", 30, SP.DEST.route1_north, label .. " Viridian->Route1")
+    play.follow(cp, "route1_north_to_south_edge", label)
+    play.follow(cp, "route1_south_to_grass_spot", label)
+end
+
+--- DEPOSIT party slot 1 into box 0 (the leg's pinned sequence); returns the key that left.
+function ctx.pc_deposit(label)
+    local before = ctx.party() or {}
+    local PC = SP.PC
+    PC.open(cp, label); PC.mode(label, 1); PC.popup(label, 1, 1, 0)
+    PC.select(label, S.Task_DepositMenu | 1); PC.box(label); PC.leave(cp, label)
+    local after = ctx.party() or {}
+    if #after ~= #before - 1 then return nil, fmt("party %d -> %d after the deposit", #before, #after) end
+    local left = {}
+    for _, m in ipairs(after) do left[m.key] = true end
+    for _, m in ipairs(before) do if not left[m.key] then return m.key end end
+    return nil, "no key left the party"
+end
+
+--- WITHDRAW box 0 slot 0 (the leg's pinned sequence); returns the key that joined.
+function ctx.pc_withdraw(label)
+    local before = ctx.party() or {}
+    local PC = SP.PC
+    G.tap("Up", 2, 13)
+    PC.open(cp, label); PC.mode(label, 0); PC.popup(label, 0, 0, 0)
+    PC.select(label, S.Task_WithdrawMon | 1); PC.withdraw(label); PC.leave(cp, label)
+    local after = ctx.party() or {}
+    local had = {}
+    for _, m in ipairs(before) do had[m.key] = true end
+    for _, m in ipairs(after) do if not had[m.key] then return m.key end end
+    return nil, fmt("party %d -> %d and no new key after the withdraw", #before, #after)
+end
+
+--- In-game SAVE (row search + flash-counter proof, gen3_boot_check save_via_menu), then settle
+--- so the client's save-site flush has run.
+function ctx.save(tag)
+    if not ctx.wait_until(function() return play.on_field(cp) end, 60, "the field before SAVE") then
+        return false, "not on the field to SAVE"
+    end
+    local dom = G.flash_domain()
+    if not dom then return false, "no flash memory domain" end
+    local ok, before, after, why = G.save_via_menu(cp, dom)
+    if not ok then return false, "SAVE failed: " .. tostring(why) end
+    log(fmt("SAVE_WITNESS %s counter=%d->%d", tag, before, after))
+    ctx.frames(30)
+    return true
+end
+
+-- ── boot: battery -> CONTINUE -> field, then the production hello ───────────────────────
+if not G.boot_to_field(cp, 9000) then
+    G.shot(D.scenario .. "_" .. D.player .. "_bootfail")
+    finish(false, "never reached the field from the battery save")
+end
+local booted = ctx.party()
+if not booted then finish(false, "party unreadable after boot") end
+for _, m in ipairs(booted) do
+    boot_keys[m.key] = true
+    log(fmt("MYKEY %d %s", m.slot, m.key))
+    log(fmt("PARTY slot=%d key=%s species=%d level=%d hp=%d/%d", m.slot, m.key, m.species, m.level, m.hp, m.max_hp))
+end
+ctx.boot_keys = boot_keys
+log(fmt("booted frame=%d map=%s balls=%d", emu.framecount(), play.where(cp), ctx.balls()))
+if not ctx.wait_until(function() return seen_tx.hello end, 120, "the client's hello") then
+    finish(false, "the client never sent hello from the field")
+end
+
+-- ── the scenario ─────────────────────────────────────────────────────────────────────────
+local base = D.scenario:gsub("_gen3$", "")
+local file = fmt("%s/lua/tests/duo/scenario_%s%s.lua", ROOT, D.scenario_prefix or "gen3_", base)
+local okload, scenario = pcall(dofile, file)
+if not okload or type(scenario) ~= "function" then
+    finish(false, "no scenario module " .. file .. ": " .. tostring(scenario))
+end
+local ok, pass, msg = pcall(scenario, ctx)
+if not ok then
+    if pass == FINISHED then return end
+    finish(false, "scenario error: " .. tostring(pass))
+end
+log(fmt("WRITES %d", writes))
+finish(pass and true or false, msg)
