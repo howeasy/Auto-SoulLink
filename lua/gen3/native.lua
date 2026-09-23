@@ -203,7 +203,10 @@ function N.new(profile, deps)
     -- transfer("enemy", {blobs_hex={...}}, done): OP_SET_ENEMY_PARTY + BLOB_BUF.
     -- transfer("party", {slot, blob_hex, bump?}, done): OP_SET_PARTY_MON + BLOB_BUF.
     -- transfer("scene", {slot}, done): OP_TRADE_SCENE, no staging.
-    function self:transfer(step, cmd, done)
+    -- valid (optional): a dispatch-time guard, called by service() immediately before this job is
+    -- dispatched (same frame-end callback, CPU stopped); false, why drops the job with done(why).
+    -- The trade FSM uses it to re-locate the offered mon at the moment a slot op actually posts.
+    function self:transfer(step, cmd, done, valid)
         local op, args, stages = nil, {}, {}
         if step == "scene" or step == "party" then
             if not integer(cmd.slot, 5) then return nil, "invalid party slot" end
@@ -227,7 +230,7 @@ function N.new(profile, deps)
                 op, args = assert(p.OP_SET_PARTY_MON), {cmd.slot, cmd.bump and 1 or 0}
             else op, args = assert(p.OP_SET_ENEMY_PARTY), {#rows} end
         else return nil, "unsupported transfer step" end
-        return enqueue({op=op, args=args, stages=stages, done=done})
+        return enqueue({op=op, args=args, stages=stages, done=done, valid=valid})
     end
     function self:replace_rival_team(cmd)
         local trainer = cmd.trainer_id or 0

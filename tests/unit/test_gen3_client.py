@@ -815,6 +815,31 @@ def test_r4_codex2_a_reconnect_between_the_party_write_and_its_hook_still_captur
     assert [c["key"] for c in w.events("capture")] == [KB]
 
 
+def test_rev5_r4_a_mon_added_one_frame_after_the_first_hello_is_still_captured():
+    """Codex REV5: A -> the first hello step (its baseline) -> add B -> one quiet step ->
+    mon_given -> step. The quiet interval started at hello's count, so B is not absorbed."""
+    w = World()
+    w.set_party(party(A))
+    w.step()                                                   # the first hello baselines A
+    assert w.names() == ["hello"]
+    w.set_party(party(A, B))
+    w.step()                                                   # quiet: B's hook is not in yet
+    w.fire("mon_given")
+    w.step()
+    assert [c["key"] for c in w.events("capture")] == [KB]
+
+
+def test_rev5_r4_a_count_change_inside_the_quiet_interval_restarts_it():
+    w = live(pids=(A,))
+    w.set_party(party(A, B))
+    w.step()                                                   # a count change: interval starts
+    w.set_party(party(A, B, C))
+    w.step()                                                   # changed again before it was due
+    w.fire("mon_given")
+    w.step()
+    assert [c["key"] for c in w.events("capture")] == [KB, KC]
+
+
 def test_r4_control_the_first_hello_still_baselines_a_party_it_has_never_seen():
     """The first-ever baseline is still taken by hello when no quiet frame preceded it: a
     later acquisition reports only the new mon."""
@@ -1093,16 +1118,117 @@ def test_trade_lost_scene_ack_waits_the_backstop_then_reconciles_from_the_slot()
     assert mb_op(w) == NATIVE["OP_TRADE_SCENE"]                  # nothing posted after the loss
 
 
-def test_trade_stage_timeout_poisons_native_and_reports_the_slot_as_it_is():
-    """The real native.lua timeout (1800 frames) poisons the mailbox, so the silent swap cannot
-    post either: the slot is read back unchanged and reported (a recorded limit, see report)."""
+def test_trade_stage_timeout_sends_no_trade_done_and_is_left_unresolved():
+    """C5-6b: the real native.lua timeout (1800 frames) poisons the mailbox, so the silent swap
+    cannot post either. The trade failed: NO trade_done, nothing fabricated, nothing purged; the
+    FSM is unresolved (the server watchdog settles it) and says so."""
     w, blob = trade_world()
+    w.break_checkpoint()                                         # queue a box move behind it first
+    w.command(cmd="box_mon", key=KB)
     apply(w, blob)
+    w.step()
+    w.overworld_safe()
     w.step(2)
     assert mb_op(w) == NATIVE["OP_SET_ENEMY_PARTY"]
     w.step(1801)
+    assert w.events("trade_done") == []
+    assert w.client.state.trade_apply is None and w.client.state.trade_unresolved.phase == "unresolved"
+    assert any(h[0] == "show" and "TRADE UNRESOLVED" in h[1] for h in w.hud)
+    assert not any("trade: purged" in line for line in w.logs)    # the queued move was not purged
+
+
+def test_trade_failed_silent_swap_sends_no_trade_done():
+    w, blob = trade_world()
+    apply(w, blob)
+    w.step(2)
+    mb_ack(w)
+    w.step()
+    mb_ack(w, status=FAIL_)                                     # the scene failed, slot untouched
+    w.step()
+    assert mb_op(w) == NATIVE["OP_SET_PARTY_MON"]
+    mb_ack(w, status=FAIL_)                                     # and the silent swap failed too
+    w.step(3)
+    assert w.events("trade_done") == []
+    assert w.client.state.trade_unresolved is not None
+    assert any("silent swap failed" in line for line in w.logs)
+
+
+def test_trade_unreadable_party_at_scene_completion_reports_nothing_then_the_truth():
+    w, blob = trade_world()
+    apply(w, blob)
+    w.command(cmd="box_mon", key=KB)                            # held while the trade is owned
+    w.step(2)
+    mb_ack(w)
+    w.step()
+    swap_in_partner(w)
+    w.poke_int(w.ram["PARTY_COUNT_ADDR"], 7, 1)                 # the party cannot be read back
+    mb_ack(w)
+    w.step(3)
+    assert w.events("trade_done") == []
+    assert w.client.deferred.size(w.client.deferred) == 1      # nothing purged
+    assert w.client.state.trade_apply.phase == "readback"
+    w.poke_int(w.ram["PARTY_COUNT_ADDR"], 2, 1)                 # readable again
+    w.step()
+    assert [d["new_key"] for d in w.events("trade_done")] == [KP]
+    assert w.client.deferred.size(w.client.deferred) == 0      # purged only now, on the fact
+
+
+def test_codex_blocker1_a_reorder_after_the_stage_retargets_the_scene():
+    """Codex REV4 repro: offer B at slot 1 -> op16 staged -> reorder to B slot 0 / A slot 1 ->
+    stage ACK. The scene must post for B's slot 0; bystander A is never traded."""
+    w, blob = trade_world()
+    apply(w, blob, slot=1)
+    w.step(2)
+    assert mb_op(w) == NATIVE["OP_SET_ENEMY_PARTY"]
+    w.set_party([mon_record(B, OT, species=5, nickname="MON1"), mon_record(A, OT, species=4, nickname="MON0")])
+    mb_ack(w)
+    w.step(2)
+    assert mb_op(w) == NATIVE["OP_TRADE_SCENE"]
+    assert w._read(NATIVE["BASE"] + 16, 1) == 0                 # args: B's slot now
+    w.set_party([PARTNER, mon_record(A, OT, species=4, nickname="MON0")])
+    mb_ack(w)
+    w.step()
     (done,) = w.events("trade_done")
-    assert done["new_key"] == KB and w.client.state.trade_apply is None
+    assert (done["slot"], done["new_key"]) == (0, KP)
+
+
+def test_a_reorder_before_the_silent_swap_dispatch_retargets_the_fallback():
+    w, blob = trade_world()
+    apply(w, blob, slot=1)
+    w.step(2)
+    mb_ack(w)
+    w.step()
+    w.set_party([mon_record(B, OT, species=5, nickname="MON1"), mon_record(A, OT, species=4, nickname="MON0")])
+    mb_ack(w, status=FAIL_)                                     # scene failed; B moved meanwhile
+    w.step(2)
+    assert mb_op(w) == NATIVE["OP_SET_PARTY_MON"]
+    assert w._read(NATIVE["BASE"] + 16, 1) == 0                 # the silent swap targets B's slot 0
+
+
+def test_the_offered_mon_leaving_before_the_scene_posts_nothing_for_the_slot():
+    w, blob = trade_world()
+    apply(w, blob, slot=1)
+    w.step(2)
+    w.set_party([mon_record(A, OT, species=4, nickname="MON0")])  # B was boxed meanwhile
+    mb_ack(w)
+    w.step(2)
+    assert mb_op(w) == 0                                         # no scene was posted
+    (done,) = w.events("trade_done")
+    assert (done["new_key"], done["new_species"]) == (KB, 0)     # the authorized "nothing changed"
+
+
+def test_codex_major_a_battle_faint_while_an_apply_waits_is_still_reported():
+    """Codex REV4: apply during a battle (the apply waits, nothing posted) and a real player
+    faint: the faint is reduced normally -- only the owned swap lifecycle freezes diffing."""
+    w, blob = trade_world()
+    w.enter_battle([FOE])
+    apply(w, blob)
+    w.step()
+    assert w.client.state.trade_apply.phase == "wait"
+    w.set_party([mon_record(A, OT, species=4, nickname="MON0", hp=0), mon_record(B, OT, species=5, nickname="MON1")])
+    w.fire("faint")
+    w.step()
+    assert [f["key"] for f in w.events("faint")] == [KA]
 
 
 def test_trade_partner_declining_the_confirm_writes_no_party_byte_and_completes_nothing():

@@ -71,7 +71,7 @@ function Session.new(p)
         player = p.player, seq = 0, frame = 0, hello_sent = false,
         writes_enabled = false, invalid_streak = 0, gate_revoked = false, game_over = false,
         resolved_areas = {}, seeded = false, config = {}, pending_safe = false,
-        battle_pending = {}, pre_hello = {}, signals = nil, signal_failure_shown = false,
+        battle_pending = {}, pre_hello = {}, ack_pending = {}, signals = nil, signal_failure_shown = false,
         game = game, identity = identity, deferred = deferred,
     }
 
@@ -134,6 +134,7 @@ function Session.new(p)
                 -- to the save that is gone, so they die with it (never flushed into the next)
                 self.hello_sent = false
                 self.pre_hello = {}
+                self.ack_pending = {}
                 identity:clear()
                 if game.on_reset then game.on_reset() end
             end
@@ -197,6 +198,43 @@ function Session.new(p)
         self.battle_pending = keep
     end
 
+    -- key_change_ack: local commands follow old -> new ONLY through the alias this client raised
+    -- for exactly that pair when it sent the key_change, and only while that alias still names one
+    -- record. BOTH keys are checked before anything is consumed (a wrong-pair ACK leaves the
+    -- alias pending for the right one), and the mapping is decided only on an OBSERVED party: a
+    -- fresh observation re-applies identity.lua's sticky latches (lost / ambiguous, never
+    -- recomputed away). An unreadable party keeps the ACK pending until it can be observed. The
+    -- migrated flag does not decide it -- migrated=false is a replay OR an old key the server
+    -- never tracked (server/state.py:2557-2571) -- and key membership is never evidence. Without
+    -- a valid alias the commands stay on the old key and resolve (or fail) by name.
+    -- Returns true when the ACK is settled, false while it waits for a readable party.
+    local function apply_ack(cmd)
+        if not cmd.new_key or cmd.new_key == cmd.old_key then return true end
+        local a = identity.pending
+        if not (a and a.old_key == cmd.old_key and a.new_key == cmd.new_key) then
+            log("key_change_ack " .. tostring(cmd.old_key) .. " -> " .. tostring(cmd.new_key)
+                .. ": no valid alias for the pair (" .. (a and "different pair" or "none")
+                .. "); local commands stay on the old key")
+            return true
+        end
+        local party = game.read_party()
+        if not party then return false end
+        identity:observe_one(a, party)
+        identity:ack(cmd.old_key)                          -- consumed only now, for exactly this pair
+        if a.lost or a.ambiguous then
+            log("key_change_ack " .. cmd.old_key .. " -> " .. cmd.new_key .. ": no valid alias for the pair ("
+                .. (a.lost and "lost" or "ambiguous") .. "); local commands stay on the old key")
+            return true
+        end
+        for _, e in ipairs(self.battle_pending) do
+            if e.key == cmd.old_key then e.key, e.migrated_from = cmd.new_key, cmd.old_key end
+        end
+        for _, q in ipairs(deferred.items) do
+            if q.key == cmd.old_key then q.key, q.migrated_from = cmd.new_key, cmd.old_key end
+        end
+        return true
+    end
+
     local function route_force(cmd)
         local c = cmd.cmd
         local entry = { cmd = c, key = cmd.key, nickname = cmd.nickname }
@@ -249,33 +287,7 @@ function Session.new(p)
         elseif c == "unresolve_area" then
             self.resolved_areas[cmd.area_id] = nil
         elseif c == "key_change_ack" then
-            local alias = identity:ack(cmd.old_key)
-            -- Local commands follow old -> new ONLY through the alias this client raised for
-            -- exactly that pair when it sent the key_change, and only while that alias still
-            -- names one record: a fresh observation re-applies identity.lua's sticky latches (a
-            -- departure or a twin since the change = lost / ambiguous, never recomputed away).
-            -- The migrated flag does not decide it -- migrated=false is a replay OR an old key the
-            -- server never tracked (server/state.py:2557-2571) -- and key membership is never
-            -- evidence: an unrelated record can carry the new key. Without a valid alias the
-            -- commands stay on the old key and resolve (or fail) by name at execution.
-            local valid = alias ~= nil and alias.old_key == cmd.old_key and alias.new_key == cmd.new_key
-            if valid then
-                local party = game.read_party()
-                if party then identity:observe_one(alias, party) end
-                valid = not alias.lost and not alias.ambiguous
-            end
-            if cmd.new_key and cmd.new_key ~= cmd.old_key and valid then
-                for _, e in ipairs(self.battle_pending) do
-                    if e.key == cmd.old_key then e.key, e.migrated_from = cmd.new_key, cmd.old_key end
-                end
-                for _, q in ipairs(deferred.items) do
-                    if q.key == cmd.old_key then q.key, q.migrated_from = cmd.new_key, cmd.old_key end
-                end
-            elseif cmd.new_key and cmd.new_key ~= cmd.old_key then
-                log("key_change_ack " .. tostring(cmd.old_key) .. " -> " .. tostring(cmd.new_key)
-                    .. ": no valid alias for the pair (" .. (alias and (alias.lost and "lost" or alias.ambiguous
-                    and "ambiguous" or "different pair") or "none") .. "); local commands stay on the old key")
-            end
+            if not apply_ack(cmd) then self.ack_pending[#self.ack_pending + 1] = cmd end
         elseif c == "key_change_rejected" then
             identity:reject(cmd.old_key, game.read_party())
             log("key_change rejected: " .. tostring(cmd.reason) .. " " .. tostring(cmd.old_key))
@@ -370,6 +382,13 @@ function Session.new(p)
         if identity:active() then
             local party = game.read_party()
             if party then identity:observe(party) end
+        end
+        if #self.ack_pending > 0 then                     -- ACKs held for a readable party
+            local waiting = self.ack_pending
+            self.ack_pending = {}
+            for _, cmd in ipairs(waiting) do
+                if not apply_ack(cmd) then self.ack_pending[#self.ack_pending + 1] = cmd end
+            end
         end
         if self.frame % Session.TICK_INTERVAL == 0 then
             if connected then self:send_tick() end

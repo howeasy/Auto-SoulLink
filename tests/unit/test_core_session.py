@@ -745,6 +745,47 @@ def test_r3_an_ack_for_a_different_pair_does_not_use_the_alias():
     w.command(cmd="key_change_ack", old_key=OLD, new_key=C, migrated=True)   # not our pair
     w.step()
     assert str(w.q["items"][1].key) == OLD
+    # REV5: the wrong-pair ACK must not consume the valid alias; the exact pair still migrates
+    assert w.identity.pending is not None and str(w.identity.pending.new_key) == NEW
+    w.command(cmd="key_change_ack", old_key=OLD, new_key=NEW, migrated=False)
+    w.step()
+    assert str(w.q["items"][1].key) == NEW
+
+
+def test_r3_an_ack_on_an_unreadable_party_waits_to_be_observed():
+    """REV5 caveat: the mapping is decided only on an OBSERVED party. With the party unreadable
+    the ACK is held (nothing migrated, alias kept); once readable it is observed, then applied."""
+    w = World()
+    w.set_party((NEW, 0), (B, 1))
+    w.step_to(60)
+    w.st.checkpoint = False
+    p = w.st.party
+    w.identity.begin_alias(w.identity, OLD, NEW, p[1], p)
+    w.q.push(w.q, w.lua.table_from({"cmd": "memorialize", "key": OLD}))
+    w.st.party_ok = False
+    w.command(cmd="key_change_ack", old_key=OLD, new_key=NEW, migrated=False)
+    w.step(3)
+    assert str(w.q["items"][1].key) == OLD and w.identity.pending is not None
+    w.st.party_ok = True
+    w.step()
+    assert str(w.q["items"][1].key) == NEW and w.identity.pending is None
+
+
+def test_r3_a_held_ack_still_honours_a_departure_seen_while_waiting():
+    w = World()
+    w.set_party((NEW, 0), (B, 1))
+    w.step_to(60)
+    w.st.checkpoint = False
+    p = w.st.party
+    w.identity.begin_alias(w.identity, OLD, NEW, p[1], p)
+    w.q.push(w.q, w.lua.table_from({"cmd": "memorialize", "key": OLD}))
+    w.st.party_ok = False
+    w.command(cmd="key_change_ack", old_key=OLD, new_key=NEW, migrated=False)
+    w.step()
+    w.set_party((B, 1))                                           # the record left meanwhile
+    w.st.party_ok = True
+    w.step()
+    assert str(w.q["items"][1].key) == OLD
 
 
 def test_r2_held_pre_hello_events_die_with_a_save_reset():
