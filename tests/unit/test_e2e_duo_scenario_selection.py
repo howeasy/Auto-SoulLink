@@ -29,6 +29,23 @@ from e2e_duo import (  # noqa: E402
     scenarios_for,
 )
 
+
+def test_family_evidence_contracts_are_explicit_and_aliases_share_one():
+    required = duo_module.evidence_contract("gen1_new")
+    assert required.require_oracle is True
+    assert required.witness_validator == "check_save_witness"
+    for game in GAMES:
+        contract = duo_module.evidence_contract(game)
+        if game.startswith("gen1"):
+            assert contract is required
+        else:
+            assert contract == duo_module.EvidenceContract()
+
+
+def test_unknown_family_does_not_inherit_legacy_evidence():
+    with pytest.raises(RuntimeError, match="evidence contract"):
+        duo_module.evidence_contract("unregistered")
+
 GEN1_NEW_SCENARIOS = ("link_new", "deadzone_new", "linked_faint_bench_new",
                       "linked_faint_active_new", "trade_new", "reconnect_new", "ball_gate_new",
                       "admit_randomized_new", "soft_reset_new", "trade_decline_new",

@@ -33,6 +33,11 @@ import tempfile
 import time
 import urllib.request
 
+if __package__:
+    from .duo_oracle_pipeline import EvidenceContract, run_pipeline, validate_pipeline
+else:
+    from duo_oracle_pipeline import EvidenceContract, run_pipeline, validate_pipeline
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EMUHAWK = "E:/Howard/Bizhawk/EmuHawk.exe"
 BIZHAWK_CONFIG = "E:/Howard/Bizhawk/config.ini"
@@ -906,6 +911,20 @@ def saved_money(sram):
 #     differ from Gen 3. Gen 2 uses the same one.
 #
 # gen3_rr keeps exactly the previous behaviour and stays the default.
+FAMILY_EVIDENCE = {
+    "gen1_new": EvidenceContract("check_save_witness", require_oracle=True),
+    "gen2_crystal": EvidenceContract(),
+    "gen3_rr": EvidenceContract(),
+}
+
+
+def evidence_contract(game):
+    family = scenario_family(game)
+    if family not in FAMILY_EVIDENCE:
+        raise RuntimeError(f"{family}: no family evidence contract")
+    return FAMILY_EVIDENCE[family]
+
+
 GAMES = {
     "gen3_rr": {
         "main": "lua/tests/duo/duo_main.lua",
@@ -1018,7 +1037,7 @@ class DuoRun:
         # that wants stable names ("pure-a", "lane3"); the port is the default.
         self._lane = getattr(args, "lane", None)
         self._pydec_path = (os.path.join(BUILD, f"e2e_{scenario}_pydec_result.txt")
-                            if self.is_gen1 else None)
+                            if evidence_contract(self.game).require_oracle else None)
         self.server = None
         self.emus = []
         self.emu_by_inst = {}
@@ -4204,25 +4223,9 @@ class DuoRun:
                     f"{[hex(a) for a in diff]}")
 
     def _run_oracle(self, results):
-        """The scenario's post-result oracle, from the SCENARIOS registry.
-
-        A gen1_new scenario with no `oracle` entry FAILS: the saved-state readback is the
-        independent half of every Gen 1 verdict, and a scenario that silently skipped it would
-        print PYDEC: PASS on the client's own word. Gen 2/Gen 3 entries carry no `oracle` field
-        and keep the legacy path, where a client RESULT is the whole verdict.
-        """
-        method = self.cfg.get("oracle")
-        if not method:
-            if scenario_family(getattr(self, "game", "")) == "gen1_new":
-                raise RuntimeError(f"{self.scenario} declares no post-result oracle in SCENARIOS; "
-                                   f"a Gen 1 verdict needs a saved-state readback")
-            return
-        if scenario_family(getattr(self, "game", "")) == "gen1_new":
-            # S-7 runs for EVERY gen1_new scenario, before its own oracle: the save witness is
-            # the physical half of the verdict and each scenario's oracle prologue waits on the
-            # same flush boundary this check needs.
-            self.check_save_witness(results)
-        getattr(self, method)(results, **self.cfg.get("oracle_kwargs", {}))
+        """Revalidate the family contract and run its injected evidence stages."""
+        run_pipeline(self, evidence_contract(getattr(self, "game", "gen3_rr")),
+                     self.cfg, results)
 
     def _live_ok(self) -> bool:
         """True when every live leg this scenario needs ran to completion."""
@@ -4238,6 +4241,9 @@ class DuoRun:
                 handle.write(f"attempt {self.attempt} of "
                              f"{scenario_attempt_limit(self.scenario, getattr(self, 'game', ''))}\n")
         try:
+            # Match __init__'s default for bare runners used by lifecycle unit tests.
+            validate_pipeline(self, evidence_contract(getattr(self, "game", "gen3_rr")),
+                              self.cfg)
             if self.scenario == "admit_randomized_new":
                 self.prepare_admit_randomized_new()
             self.start_server()

@@ -68,6 +68,18 @@ def _config_file(tmp_path):
     return path
 
 
+def test_required_family_gets_the_same_pydec_transport(monkeypatch, tmp_path):
+    monkeypatch.setitem(duo.GAMES, "gen2_new", {**duo.GAMES["gen1_new"], "game": "gen2_new"})
+    monkeypatch.setitem(duo.FAMILY_EVIDENCE, "gen2_new",
+                        duo.EvidenceContract("future_witness", require_oracle=True))
+    run = _run(monkeypatch, tmp_path, game="gen2_new")
+    try:
+        assert run._pydec_path == str(tmp_path / "e2e_link_new_pydec_result.txt")
+        assert run.launched == []
+    finally:
+        os.rmdir(run.data_dir)
+
+
 def _launch_both(run):
     for inst in ("a", "b"):
         run.launch_instance(inst, seed=False)
