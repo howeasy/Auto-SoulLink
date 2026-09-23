@@ -1132,7 +1132,7 @@ def test_trade_stage_timeout_sends_no_trade_done_and_is_left_unresolved():
     assert mb_op(w) == NATIVE["OP_SET_ENEMY_PARTY"]
     w.step(1801)
     assert w.events("trade_done") == []
-    assert w.client.state.trade_apply is None and w.client.state.trade_unresolved.phase == "unresolved"
+    assert w.client.state.trade_apply is None and w.client.state.trade_unresolved["tr1"].phase == "unresolved"
     assert any(h[0] == "show" and "TRADE UNRESOLVED" in h[1] for h in w.hud)
     assert not any("trade: purged" in line for line in w.logs)    # the queued move was not purged
 
@@ -1149,7 +1149,7 @@ def test_trade_failed_silent_swap_sends_no_trade_done():
     mb_ack(w, status=FAIL_)                                     # and the silent swap failed too
     w.step(3)
     assert w.events("trade_done") == []
-    assert w.client.state.trade_unresolved is not None
+    assert w.client.state.trade_unresolved["tr1"] is not None
     assert any("silent swap failed" in line for line in w.logs)
 
 
@@ -1215,6 +1215,87 @@ def test_the_offered_mon_leaving_before_the_scene_posts_nothing_for_the_slot():
     assert mb_op(w) == 0                                         # no scene was posted
     (done,) = w.events("trade_done")
     assert (done["new_key"], done["new_species"]) == (KB, 0)     # the authorized "nothing changed"
+
+
+def _paused_gift(w):
+    """The session pauses (native posting refused, zero bytes) and a gift C lands meanwhile."""
+    w.client.writes_enabled, w.client.gate_revoked = False, True
+    w.set_party([mon_record(A, OT, species=4, nickname="MON0"), mon_record(B, OT, species=5, nickname="MON1"),
+                 mon_record(C, OT, species=6, nickname="MON2")])
+    w.fire("mon_given")
+    w.step()
+
+
+def test_codex_c56c_1_a_queued_but_unposted_trade_does_not_freeze_a_paused_gift():
+    """Codex REV6 repro: apply; step (the stage is only QUEUED: opcode 0, no bytes); the session
+    pauses, the party gains C, mon_given fires, step. capture(KC) must be reported -- and stays
+    the only capture after the trade later completes with [A, PARTNER, C]."""
+    w, blob = trade_world()
+    apply(w, blob)
+    w.step()
+    assert mb_op(w) == 0 and w.writes == []
+    _paused_gift(w)
+    assert [c["key"] for c in w.events("capture")] == [KC]
+    assert w.client.state.trade_apply.posted is not True
+    w.client.writes_enabled, w.client.gate_revoked = True, False
+    w.step()
+    assert mb_op(w) == NATIVE["OP_SET_ENEMY_PARTY"] and w.client.state.trade_apply.posted is True
+    mb_ack(w)
+    w.step()
+    w.set_party([mon_record(A, OT, species=4, nickname="MON0"), PARTNER,
+                 mon_record(C, OT, species=6, nickname="MON2")])
+    mb_ack(w)
+    w.step(3)
+    assert [d["new_key"] for d in w.events("trade_done")] == [KP]
+    assert [c["key"] for c in w.events("capture")] == [KC]
+
+
+def test_codex_c56c_1_control_the_same_paused_gift_without_a_trade_is_captured():
+    w, _blob = trade_world()
+    _paused_gift(w)
+    assert [c["key"] for c in w.events("capture")] == [KC]
+
+
+PARTNER2 = mon_record(0x66666666, 0x00008888, species=26, nickname="RAI")
+KP2 = key_of(0x66666666, 0x00008888)
+
+
+def _unresolve_by_a_stage_seq_overwrite(w, blob, token, old_key=KB, slot=1):
+    apply(w, blob, old_key=old_key, slot=slot, token=token)
+    w.step(2)
+    w.poke_int(NATIVE["BASE"] + MB["seq"], 0xBEEF, 2)           # the stage ACK channel is lost
+    w.step(3)
+    assert w.client.state.trade_unresolved[token] is not None
+
+
+def test_codex_c56c_2_a_second_unresolved_trade_never_hides_the_first_ones_late_fact():
+    """Codex REV6 repro: tr1 goes unresolved (a lost ACK poisons the mailbox), tr2 fails its
+    fallback on the poisoned mailbox and is unresolved too; then tr1's real partner mon appears.
+    tr1's trade_done must come. Option chosen: per-transaction records, each watched."""
+    w, blob = trade_world()
+    _unresolve_by_a_stage_seq_overwrite(w, blob, "tr1")
+    blob2 = w.encode(PARTNER2).hex().upper()
+    # the poisoned mailbox fails the checkpoint's native_idle clause, so tr2 waits out the
+    # field-clear limit and then tries its silent swap on the poisoned mailbox
+    w.client.state.trade_limits.field_wait = 5
+    apply(w, blob2, old_key=KA, slot=0, token="tr2")
+    w.step(8)
+    assert w.client.state.trade_unresolved["tr2"] is not None
+    assert w.events("trade_done") == []
+    swap_in_partner(w)                                           # tr1's partner lands after all
+    w.step()
+    assert [(d["token"], d["new_key"]) for d in w.events("trade_done")] == [("tr1", KP)]
+    assert w.client.state.trade_unresolved["tr1"] is None
+    assert w.client.state.trade_unresolved["tr2"] is not None    # still watched, not overwritten
+
+
+def test_codex_c56c_2_control_a_lone_unresolved_trade_reports_its_late_fact():
+    w, blob = trade_world()
+    _unresolve_by_a_stage_seq_overwrite(w, blob, "tr1")
+    assert w.events("trade_done") == []
+    swap_in_partner(w)
+    w.step()
+    assert [(d["token"], d["new_key"]) for d in w.events("trade_done")] == [("tr1", KP)]
 
 
 def test_codex_major_a_battle_faint_while_an_apply_waits_is_still_reported():

@@ -113,7 +113,8 @@ function Client.new(p)
         flags = {},        -- what the signals of this frame said changed
         has_pokeballs = false, last_area = nil, trade = nil, sound_frame = nil, sound_logged = {},
         baselined = false, seen_count = nil, observe_at = nil,
-        trade_apply = nil, trade_settle_until = 0, trade_unresolved = nil,
+        trade_apply = nil, trade_settle_until = 0,
+        trade_unresolved = {},   -- token -> the unresolved transaction, each watched for its own late fact
         -- field_wait: frames an apply waits for a clear field before the silent swap (old client
         -- :2250); backstop: frames after the scene post before a lost ACK is reconciled from the
         -- slot, LONGER than the patch's own ~5400-frame scene timeout (old client :563-566)
@@ -466,7 +467,10 @@ function Client.new(p)
         -- a PC trade in flight (and its settle window) swaps a party slot: nothing about it is a
         -- capture, a deposit or a key_change (docs/protocol.md §6.2 item 5, §6.5); the TradeMons
         -- site fires during the native scene and is ignored here
-        local trading = (st.trade_apply ~= nil and st.trade_apply.phase ~= "wait")
+        -- from the FIRST ACTUAL POST (bytes of an owned op reached the sink), not from the queued
+        -- phase: a post that is refused or held writes nothing, and until something is written
+        -- the party can only change the ordinary way, so ordinary reduction keeps going
+        local trading = (st.trade_apply ~= nil and st.trade_apply.posted == true)
                         or io.framecount() < st.trade_settle_until
         if trading then st.trade = nil end
         if not st.frozen and not trading then
@@ -709,7 +713,7 @@ function Client.new(p)
         st.box_cache, st.boxes_ok, st.battle, st.frozen, st.flags = {}, false, nil, false, {}
         st.last_area, st.trade = nil, nil
         st.baselined, st.seen_count, st.observe_at = false, nil, nil
-        st.trade_apply, st.trade_settle_until, st.trade_unresolved = nil, 0, nil   -- the save is gone
+        st.trade_apply, st.trade_settle_until, st.trade_unresolved = nil, 0, {}   -- the save is gone
     end
 
     -- No wire side effect here (no area_enter, no banner): hello is the connection's first line.
@@ -898,7 +902,7 @@ function Client.new(p)
         local slot = mon and mon.slot or t.slot
         local species = changed and mon.species or 0
         if st.trade_apply == t then st.trade_apply = nil end
-        if st.trade_unresolved == t then st.trade_unresolved = nil end
+        if st.trade_unresolved[t.token] == t then st.trade_unresolved[t.token] = nil end
         st.trade_settle_until = io.framecount() + st.trade_limits.settle
         if changed then
             -- a local key migration only (protocol §6.5): the server re-keys from trade_done
@@ -921,7 +925,8 @@ function Client.new(p)
     end
     local function trade_unresolved(t, why)
         if st.trade_apply ~= t then return end
-        st.trade_apply, st.trade_unresolved = nil, t
+        st.trade_apply = nil
+        st.trade_unresolved[t.token] = t
         t.phase = "unresolved"
         log("TRADE UNRESOLVED: " .. why .. "; no trade_done, nothing purged (the server watchdog settles it)")
         hud.show("TRADE UNRESOLVED: " .. why, 255, 120, 60, 600)
@@ -950,9 +955,13 @@ function Client.new(p)
         if not ok and not fired then on_done(why or "transfer refused") end
     end
     -- the dispatch-time guard for a slot op: the offered key must be exactly at t.slot NOW
+    -- (native.lua's service() dispatches at most ONE queued job per call and runs its guard right
+    -- before, so a guard that ran plus sink bytes during that call = our job posted: pre_pump)
+    local function dispatching(t) t.dispatching = true end
     local function slot_guard(t)
         return function()
             if st.trade_apply ~= t then return false, "guard:stale" end
+            dispatching(t)
             local party = party_read()
             if not party then return false, "guard:unreadable" end
             local slot = session.identity:find_party_slot(t.old_key, party)
@@ -1002,17 +1011,20 @@ function Client.new(p)
         t.phase = "stage"
         st.known[t.partner_key] = true                             -- never a capture if it lands
         transfer("enemy", { blobs_hex = { t.blob_hex } }, function(why)
-            if st.trade_apply ~= t then return end
+            if st.trade_apply ~= t or why == "guard:stale" then return end
             if why == "native absent" then return trade_abort(t, "companion absent") end
             if why then return post_fallback(t, "stage " .. why) end
             post_scene(t)
+        end, function()
+            if st.trade_apply ~= t then return false, "guard:stale" end
+            dispatching(t)
+            return true
         end)
     end
     local function trade_tick()
         local f = io.framecount()
-        local u = st.trade_unresolved
-        if u then
-            -- a later read-back that finds the partner's mon is a fact worth reporting
+        for _, u in pairs(st.trade_unresolved) do
+            -- a later read-back that finds a transaction's partner mon is a fact worth reporting
             local party, got = trade_evidence(u)
             if party and got then trade_report(u, party, got, true, "late read-back: the swap landed") end
         end
@@ -1171,7 +1183,17 @@ function Client.new(p)
         if not ok then sound_refused(tostring(awhy)) end
     end
     drv.pre_pump = function()
-        if native and native.service then native:service() end
+        if not (native and native.service) then return end
+        local t = st.trade_apply
+        if t then t.dispatching = false end
+        local before = writes.attempted or 0
+        native:service()
+        -- the trade's first actual post: our guard ran for this call's one dispatch AND bytes
+        -- reached the sink (an arm refused before any byte leaves posted false)
+        if t and st.trade_apply == t and t.dispatching and (writes.attempted or 0) > before then
+            t.posted = true
+        end
+        if t then t.dispatching = false end
     end
 
     local Id = core.Identity.new({ key = key })
