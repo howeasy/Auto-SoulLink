@@ -1063,7 +1063,7 @@ def test_production_registers_exactly_the_u1_proven_sites_and_the_u2_kinds(title
     status = world.client.signals.status(world.client.signals)
     assert status.evidence_level == "PHYSICAL" and status.runtime_authorized is True
     assert sorted(status.registered_sites.values()) == sorted(proven)
-    assert sorted(parts.write_scope.kinds.keys()) == ["box_deposit", "party_hp"]
+    assert sorted(parts.write_scope.kinds.keys()) == ["backing_box", "box_deposit", "box_withdraw", "party_collection", "party_hp"]
     pc = CHECKPOINT[title]["primary"]["execution_before"]["pc"]
     assert world.emu.callbacks["SLink-gen2-checkpoint"].addr == pc
     assert len(world.hello()["party"]) == 1  # the title's own checkpoint hold arms the hello
@@ -1118,8 +1118,31 @@ def test_production_bench_faint_lands_only_inside_the_checkpoint_hold():
     assert "show:!! PICHU KO'd" in world.shown()
 
 
-def test_production_refuses_what_the_receipts_do_not_cover():
+def test_production_box_mon_lands_only_inside_the_checkpoint_hold():
     world = production()
+    lead, pichu = mon(), mon(species=172, dvs=0x3AAA)
+    world.party([lead, pichu])
+    world.hello()
+    world.frames(60)
+    world.reply({"cmd": "box_mon", "key": codec_key(pichu)})
+    world.frames(130)
+    assert world.written() == [] and world.sent("box_mon_failed") == []
+    world.hold()
+    assert world.sent("box_mon_failed") == [] and [m["key"] for m in world.sent("stats_cache")] == [codec_key(pichu)]
+    flat = world.profile["derived"]["active_box_flat"]
+    assert [world.io.read_u8(flat + i, "CartRAM") for i in range(3)] == [1, 172, 255]
+    assert world.io.read_u8(world.profile["ram"]["wPartyCount"]) == 1
+    receipts = {r["site"] for r in world.parts.writes.log.values()}
+    assert receipts == {"lua/gen2/entry.lua production"}
+
+
+def test_production_refuses_what_the_receipts_do_not_cover():
+    """A receipt without its box runs (the pre-BOX schema) proves only party_hp + box_deposit: every box
+    command NACKs at the hold with the missing kind, and no byte moves."""
+    receipt = json.loads((ROOT / "data/games/gen2_crystal/receipts/crystal.write_window.json").read_text())
+    for mode in ("boxes", "boxes_reset", "boxes_reload"):
+        del receipt["runs"][mode]
+    world = production(files={"/receipts/crystal.write_window.json": json.dumps(receipt)})
     active = mon()
     world.party([active, mon(species=172, dvs=0x3AAA)])
     world.hello()
@@ -1128,12 +1151,11 @@ def test_production_refuses_what_the_receipts_do_not_cover():
     world.field("wBattleMode", 1)
     world.reply({"cmd": "force_faint", "key": codec_key(active), "nickname": "PIKA"})
     world.frames(2)
-    world.frames(2)
     assert world.sent("box_mon_failed") == []            # box commands wait for the checkpoint hold
     world.field("wBattleMode", 0)
     world.hold()
     (nack,) = world.sent("box_mon_failed")
-    assert "unproven write kind party_collection" in nack["reason"]   # the base receipt: no party block
+    assert "unproven write kind party_collection" in nack["reason"]
     assert any(text.startswith("show:KO held") for text in world.shown()) and world.written() == []
 
 
