@@ -21,8 +21,10 @@
 --             every held frame);
 --      row 1: SAVE -> YES -> the overwrite prompt -> SAVE_CANCEL_PROMPT, the same probe held
 --             there -> B cancels back to the menu -> SAVE_CANCEL_MENU_REDRAWN, held again ->
---             CONTROL_RELEASED save_cancel -> B closes the menu -> SAVE_CANCEL_FIELD_FREE ->
---             the party_mon lands (sync_retrieve_done + read back in the party).
+--             CONTROL_RELEASED save_cancel -> B closes the menu -> the party_mon lands in the
+--             first free frame (sync_retrieve_done + read back in the party; its write-frame
+--             witness SAVE_CANCEL_WRITE_FRAME, field free and no START task) and
+--             SAVE_CANCEL_FIELD_FREE, which may log AFTER the ACK of that same frame.
 --   B: idles (no save).
 -- On today's pack step "lands" fails with a named reason: the hold's own clause.
 local fmt = string.format
@@ -143,6 +145,17 @@ local function menu_leg(ctx, linked)
     clause, why = ctx.hold_probe("save_cancel_menu", "party_mon", linked, input_ready, 600, true)
     if not clause then return false, why end
     ctx.log(fmt("CONTROL_RELEASED save_cancel party_mon %s", linked))
+    -- The landing's own frame: the client admits and writes in the FIRST free frame, inside that
+    -- frame's onframeend pump -- before this script's next per-frame check can log FIELD_FREE
+    -- (live 03ab26e7: write + TX, then SAVE_CANCEL_FIELD_FREE). So the witness is read INSIDE the
+    -- write (ctx.on_write runs in the client's frame end, the state the write saw): armed only
+    -- now, after the release, it can fire for no earlier write.
+    local landed
+    ctx.on_write("overworld", function(line)
+        landed = { frame = tonumber(tostring(line):match("frame (%d+)")) or -1,
+                   free = G.pred_ok(cp, "field_controls_locked"),
+                   menu = ctx.task_live("Task_StartMenuHandleInput") }
+    end)
     -- B at the menu: CloseStartMenu -> UnlockPlayerFieldControls (:436-441, :1003-1009)
     G.tap("B", 3, 13)
     if not ctx.wait_until(field_free, 10, "the field free after B closed START") then
@@ -156,6 +169,13 @@ local function menu_leg(ctx, linked)
     end
     if ctx.sent("sync_retrieve_failed", linked) > 0 then return false, "sync_retrieve_failed after the cancel" end
     if not ctx.observe_returned(linked) then return false, linked .. " never read back in the party" end
+    if #ctx.write_hook_errors() > 0 then return false, "the write-frame read failed: " .. ctx.write_hook_errors()[1] end
+    if not landed then return false, "SAVE_CANCEL_WRITE_FRAME: sync_retrieve_done sent, but no overworld write line was seen" end
+    if not landed.free or landed.menu then
+        return false, fmt("SAVE_CANCEL_WRITE_FRAME: the party_mon wrote at frame %d with field_free=%s "
+                          .. "start_menu_task=%s", landed.frame, tostring(landed.free), tostring(landed.menu))
+    end
+    ctx.log(fmt("SAVE_CANCEL_WRITE_FRAME %s frame=%d field_free=true start_menu_task=false", linked, landed.frame))
     ctx.log(fmt("CONTROL_SETTLED save_cancel party_mon %s", linked))
     return true
 end

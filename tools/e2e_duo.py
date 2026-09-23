@@ -1489,8 +1489,9 @@ def save_then_write_chain(ka):
     """save_then_write_gen3's A receipt, in order (scenario_gen3_save_then_write.lua emits it):
     the C4-6s regression, each save's SAVE_DISMISSAL (A press vs the 60-call timeout, read from
     sSaveDialogDelay), then the menu leg -- row 9's witness false off SAVE with a refused probe,
-    row 1's overwrite prompt and redrawn menu each refusing the same probe, and its landing only
-    after B freed the field."""
+    row 1's overwrite prompt and redrawn menu each refusing the same probe, and its landing after
+    the release, with its write-frame witness (field free, no START task, read inside the write).
+    SAVE_CANCEL_FIELD_FREE is NOT in this line: see save_then_write_order."""
     k = re.escape(ka)
     dismissal = r"by=(?:a_press delay=[1-9]\d*|timeout delay=0)$"
     return [r"(?m)^SAVE_WITNESS_DUMP .*saves=1 ", rf"(?m)^SAVE_DISMISSAL save_then_write_1 {dismissal}",
@@ -1505,9 +1506,25 @@ def save_then_write_chain(ka):
             rf"(?m)^CONTROL_REFUSED save_prompt party_mon {k} {_MENU_CLAUSE}",
             rf"(?m)^SAVE_CANCEL_MENU_REDRAWN {k} ",
             rf"(?m)^CONTROL_REFUSED save_cancel_menu party_mon {k} {_MENU_CLAUSE}",
-            rf"(?m)^CONTROL_RELEASED save_cancel party_mon {k}$", rf"(?m)^SAVE_CANCEL_FIELD_FREE {k}$",
+            rf"(?m)^CONTROL_RELEASED save_cancel party_mon {k}$",
             gen3_tx("sync_retrieve_done", ka), gen3_returned(ka),
+            rf"(?m)^SAVE_CANCEL_WRITE_FRAME {k} frame=\d+ field_free=true start_menu_task=false$",
             rf"(?m)^CONTROL_SETTLED save_cancel party_mon {k}$"]
+
+
+def save_then_write_order(ka):
+    """(required, ordered) for the A receipt: the chain in order, plus SAVE_CANCEL_FIELD_FREE
+    between the release and CONTROL_SETTLED only. Live 03ab26e7 (FR and LG): the client admits
+    and writes in the FIRST free frame, inside that frame's onframeend pump, so its write and TX
+    log before the scenario's per-frame check can log FIELD_FREE -- product-correct, and not
+    evidence of anything. What proves the landing waited for the field is the write-frame
+    witness in the chain, read in the write itself; the held refusals before the release prove
+    nothing landed while the field was locked."""
+    chain = save_then_write_chain(ka)
+    released = rf"(?m)^CONTROL_RELEASED save_cancel party_mon {re.escape(ka)}$"
+    free = rf"(?m)^SAVE_CANCEL_FIELD_FREE {re.escape(ka)}$"
+    settled = chain[-1]
+    return [*chain, free], [*zip(chain, chain[1:], strict=False), (released, free), (free, settled)]
 
 
 def save_then_write_forbidden(ka):
@@ -5658,10 +5675,9 @@ class DuoRun:
             problems.append(f"a: the final save still holds {ka} in the party")
         if ka not in [gen3_key(m) for m in boxes.values()]:
             problems.append(f"a: the final save holds {ka} in no box")
-        chain = save_then_write_chain(ka)
-        problems += gen3_receipt_problems(
-            "a", results["a"], required=chain, ordered=list(zip(chain, chain[1:], strict=False)),
-            forbidden=save_then_write_forbidden(ka))
+        required, ordered = save_then_write_order(ka)
+        problems += gen3_receipt_problems("a", results["a"], required=required, ordered=ordered,
+                                          forbidden=save_then_write_forbidden(ka))
         self._gen3_raise(problems, f"save_then_write: {ka} boxed by a keyed write on an idle field after "
                                    f"an in-game save (stale sSaveDialogCB observed); saved twice")
 

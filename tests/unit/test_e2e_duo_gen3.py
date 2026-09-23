@@ -1120,6 +1120,9 @@ function FAKE(scenario, player, phase, spec)
         if spec.held and event == "stats_cache" then return false end
         -- row 1's mirror: the released party_mon never lands once the field is free
         if spec.never_lands and event == "sync_retrieve_done" then return false end
+        if scenario == "save_then_write" and event == "sync_retrieve_done" and write_armed then
+            local w = write_armed; write_armed = nil; w()          -- the landing frame's write
+        end
         logs[#logs + 1] = "TX " .. event .. " " .. tostring(key) .. " {}"
         return true
     end
@@ -1226,6 +1229,11 @@ function FAKE(scenario, player, phase, spec)
     -- the write fires once, at its moment (inside ctx.try for whiteout A); a hook armed after
     -- it never sees it -- HEAD's order, which the live gen3_lgfr r6 run exposed
     ctx.on_write = function(_, fn)
+        if scenario == "save_then_write" then
+            local line = "[SLink-gen3] write overworld 0x020242E8 +100 frame 5626"
+            if spec.write_locked then fn(line) else write_armed = function() fn(line) end end
+            return
+        end
         local function fire()
             if spec.write_at == "outside" then here = snap({ group = 3, num = 1, x = 26, y = 27 }) end
             if spec.off_checkpoint then here = snap(CENTER, { "cpu" }) end
@@ -3050,9 +3058,8 @@ _HELD_ON_SAVE = 'lua:"...lua/gen3/safety.lua:73: forbidden state: save_dialog_cb
 def test_save_then_write_emits_its_own_oracle_chain(lua):
     ok, passed, msg, logs = _run_module(lua, "save_then_write", "a", "initial", {})
     assert ok and passed is True, msg
-    chain = duo.save_then_write_chain("K1")
-    assert duo.gen3_receipt_problems("a", logs, required=chain,
-                                     ordered=list(zip(chain, chain[1:], strict=False))) == [], logs
+    required, ordered = duo.save_then_write_order("K1")
+    assert duo.gen3_receipt_problems("a", logs, required=required, ordered=ordered) == [], logs
 
 
 def test_save_then_write_fails_by_name_while_the_pack_holds_on_save_dialog_cb(lua):
@@ -3084,8 +3091,10 @@ def _save_then_write_receipt(k):
             f"SAVE_CANCEL_MENU_REDRAWN {k} cursor=4 sSaveDialogCB=0x0806F8DD\n"
             f"CONTROL_LIVE save_cancel_menu {k} map=3.1\n"
             f"CONTROL_REFUSED save_cancel_menu party_mon {k} clause=field_controls_locked held\n"
-            f"CONTROL_RELEASED save_cancel party_mon {k}\nSAVE_CANCEL_FIELD_FREE {k}\n"
-            f"TX sync_retrieve_done {k} {{}}\nRETURNED_OBSERVED {k} slot=1\n"
+            f"CONTROL_RELEASED save_cancel party_mon {k}\n"
+            "[client] [SLink-gen3] write overworld 0x020242E8 +100 frame 5626\n"
+            f"TX sync_retrieve_done {k} {{}}\nSAVE_CANCEL_FIELD_FREE {k}\nRETURNED_OBSERVED {k} slot=1\n"
+            f"SAVE_CANCEL_WRITE_FRAME {k} frame=5626 field_free=true start_menu_task=false\n"
             f"CONTROL_SETTLED save_cancel party_mon {k}\n")
 
 
@@ -3175,9 +3184,47 @@ def test_row1_the_cancel_leg_emits_prompt_refusals_and_the_landing(lua):
              "SAVE_CANCEL_MENU_REDRAWN K1 cursor=4 sSaveDialogCB=0x0806F8DD",
              "CONTROL_REFUSED save_cancel_menu party_mon K1 clause=field_controls_locked",
              "CONTROL_RELEASED save_cancel party_mon K1", "SAVE_CANCEL_FIELD_FREE K1",
-             "TX sync_retrieve_done K1", "RETURNED_OBSERVED K1", "CONTROL_SETTLED save_cancel party_mon K1"]
+             "TX sync_retrieve_done K1", "RETURNED_OBSERVED K1",
+             "SAVE_CANCEL_WRITE_FRAME K1 frame=5626 field_free=true start_menu_task=false",
+             "CONTROL_SETTLED save_cancel party_mon K1"]
     at = [logs.find(m) for m in order]
     assert -1 not in at and at == sorted(at), list(zip(order, at))
+
+
+def test_row1_a_write_that_lands_with_the_field_locked_is_red(lua):
+    """The write-frame witness is read inside the write: one landing under the START menu fails."""
+    ok, passed, msg, _ = _run_module(lua, "save_then_write", "a", "initial", {"write_locked": "lua:true"})
+    assert ok and passed is False and msg.startswith(
+        "SAVE_CANCEL_WRITE_FRAME: the party_mon wrote at frame 5626 with field_free=false"), msg
+
+
+def test_row1_oracle_takes_the_same_frame_landing_order(monkeypatch, tmp_path):
+    """Live 03ab26e7 (FR and LG): the client wrote and ACKed in the first free frame, inside its
+    onframeend pump, so SAVE_CANCEL_FIELD_FREE logged AFTER TX sync_retrieve_done. Red on
+    c9e2b695 (its chain demanded FIELD_FREE before TX); TX before the release still fails."""
+    fixture = _fixture([STARTER, PIDGEY])
+    k = _key(PIDGEY)
+    boxed = _saved(fixture, 5, [STARTER], {(0, 0): _mon(PIDGEY["personality"], party=False, species=16)})
+    run, _ = _oracle_stub(monkeypatch, tmp_path, "save_then_write_gen3", {"a": boxed, "b": boxed},
+                          fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "alive"}])
+    run._link_keys = {"a": k, "b": k}
+    receipt = _save_then_write_receipt(k)
+    assert receipt.index(f"TX sync_retrieve_done {k}") < receipt.index(f"SAVE_CANCEL_FIELD_FREE {k}")
+    run.assert_save_then_write_gen3_saved({"a": receipt, "b": ""})
+    released = f"CONTROL_RELEASED save_cancel party_mon {k}\n"
+    early_tx = receipt.replace(f"TX sync_retrieve_done {k} {{}}\n", "").replace(
+        released, f"TX sync_retrieve_done {k} {{}}\n" + released)
+    with pytest.raises(RuntimeError, match="must precede"):
+        run.assert_save_then_write_gen3_saved({"a": early_tx, "b": ""})
+    early_free = receipt.replace(f"SAVE_CANCEL_FIELD_FREE {k}\n", "").replace(
+        released, f"SAVE_CANCEL_FIELD_FREE {k}\n" + released)
+    with pytest.raises(RuntimeError, match="must precede"):
+        run.assert_save_then_write_gen3_saved({"a": early_free, "b": ""})
+    for cut in (f"SAVE_CANCEL_WRITE_FRAME {k} frame=5626 field_free=true start_menu_task=false\n",):
+        with pytest.raises(RuntimeError, match="SAVE_CANCEL_WRITE_FRAME"):
+            run.assert_save_then_write_gen3_saved({"a": receipt.replace(cut, ""), "b": ""})
+    with pytest.raises(RuntimeError, match="SAVE_CANCEL_WRITE_FRAME"):
+        run.assert_save_then_write_gen3_saved({"a": receipt.replace("field_free=true", "field_free=false"), "b": ""})
 
 
 def test_row9_the_old_witness_shape_is_red(lua):
