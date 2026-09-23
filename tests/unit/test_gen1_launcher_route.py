@@ -122,11 +122,12 @@ def test_a_non_gameboy_core_is_untouched_by_the_gen1_route():
     assert "lua/clients/gen3_frlge_client.lua" in loaded, loaded
 
 
-def test_an_unrecognised_gameboy_title_falls_through_to_game_detect():
-    loaded = _run_launcher("slink.lua", "GBC", _rom("POKEMON CRYSTAL"),
-                           detected_game_id="gen2_crystal")
-    assert _NEW_CLIENT not in loaded, loaded
-    assert "lua/clients/gen2_crystal_client.lua" in loaded, loaded
+def test_an_unrecognised_gameboy_title_is_refused_not_routed():
+    """Past the Gen 1 route, a GB header the Gen 2 route does not know either is refused by
+    the launcher (P3b.8: no legacy Gen 2 client is left to fall through to)."""
+    with pytest.raises(lupa.LuaError, match="Unsupported Game Boy cartridge"):
+        _run_launcher("slink.lua", "GBC", _rom("POKEMON CRYSTAL"),
+                      detected_game_id="gen2_crystal")
 
 
 def test_a_failing_system_probe_does_not_route_to_gen1():

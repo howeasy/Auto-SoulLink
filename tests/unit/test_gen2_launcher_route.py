@@ -21,7 +21,6 @@ lupa = pytest.importorskip("lupa", reason="lupa is needed to execute the launche
 _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 _LUA = os.path.join(_REPO, "lua").replace("\\", "/")
 _NEW_CLIENT = "lua/gen2/run.lua"
-_OLD_CLIENT = "lua/clients/gen2_crystal_client.lua"
 _TITLE_OFFSET = 0x134
 
 
@@ -32,7 +31,8 @@ def _rom(title: str) -> bytes:
     return bytes(image)
 
 
-def _run_launcher(system_id: str | None, rom: bytes, detected_game_id: str = "gen3_frlge") -> list[str]:
+def _run_launcher(system_id: str | None, rom: bytes, detected_game_id: str = "gen3_frlge",
+                  loaded: list[str] | None = None) -> list[str]:
     """dofile `lua/slink.lua` with stub BizHawk globals; return the paths it dofile'd.
 
     Only `gen1/entry.lua` and `gen2/entry.lua` are executed for real -- both are pure
@@ -41,7 +41,7 @@ def _run_launcher(system_id: str | None, rom: bytes, detected_game_id: str = "ge
     """
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     g = lua.globals()
-    loaded: list[str] = []
+    loaded = [] if loaded is None else loaded  # a caller's list survives a launcher error
 
     def norm(path: str) -> str:
         rel = os.path.relpath(os.path.normpath(path), _REPO)
@@ -109,13 +109,26 @@ def test_gold_and_silver_headers_also_reach_the_new_client(header):
     _asserts_exactly_one_client(loaded)
 
 
-def test_crystal_ap_keeps_the_legacy_route():
-    """The Archipelago fork's header is "AP_CRYSTAL", not "PM_CRYSTAL" -- Entry.detect_title
-    (gen2) does not recognise it at all (O-8: AP is not admitted in the RC), so it never
-    reaches the new client and falls through to game_detect exactly as before."""
-    loaded = _run_launcher("GBC", _rom("AP_CRYSTAL"), detected_game_id="gen2_crystal")
-    assert _NEW_CLIENT not in loaded, loaded
-    assert _OLD_CLIENT in loaded, loaded
+def test_crystal_ap_is_refused_by_name():
+    """Owner ruling O-25 (docs/gen2/REVIEW_RECORD.md): Archipelago Crystal is REFUSED. Its
+    header is "AP_CRYSTAL", which Entry.detect_title (gen2) does not recognise, and it used
+    to fall through to game_detect and the legacy client. It now stops at the launcher with
+    a message naming it, before game_detect or any client is reached."""
+    loaded: list[str] = []
+    with pytest.raises(lupa.LuaError, match=r"Archipelago Crystal is not supported \(O-25\)"):
+        _run_launcher("GBC", _rom("AP_CRYSTAL"), detected_game_id="gen2_crystal", loaded=loaded)
+    assert not [p for p in loaded if p.endswith("run.lua") or "client" in p], loaded
+
+
+@pytest.mark.parametrize("header", ["POKEMON CRYSTAL", "TETRIS", ""])
+def test_an_unrecognised_gameboy_cartridge_is_refused_before_game_detect(header):
+    """No Game Boy module is left behind game_detect (P3b.8 removed the legacy Gen 2 client),
+    so an unknown GB/GBC header is refused at the launcher with its title, not handed to a
+    registry that can only answer "no module matched"."""
+    loaded: list[str] = []
+    with pytest.raises(lupa.LuaError, match="Unsupported Game Boy cartridge"):
+        _run_launcher("GBC", _rom(header), detected_game_id="gen2_crystal", loaded=loaded)
+    assert not [p for p in loaded if p.endswith("run.lua") or "client" in p], loaded
 
 
 def test_a_non_gameboy_core_is_untouched_by_the_gen2_route():

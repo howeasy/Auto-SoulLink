@@ -87,19 +87,28 @@ end
 -- per-title admission: run.lua itself admits or refuses through Entry.build (Entry.admit
 -- is sha1-first, never by header), so a recognised title always reaches it and an
 -- unadmitted build (a PENDING revision, or any unknown hash) is refused there with no
--- fallback (O-22/O-23, docs/gen2/reviews/OMP_U5_CUTOVER_FACTS_2026-09-23.md). The
--- Archipelago fork's header ("AP_CRYSTAL") is not one of the three titles Entry.detect_title
--- recognises at all (O-8: not admitted in the RC), so it is untouched and keeps the legacy
--- game_detect route below.
+-- fallback (O-22/O-23, docs/gen2/reviews/OMP_U5_CUTOVER_FACTS_2026-09-23.md).
+--
+-- Every other Game Boy cartridge is REFUSED here, by name, before game_detect: the legacy
+-- Gen 2 client that used to catch them is gone (P3b.8), and game_detect holds no Game Boy
+-- module any more. The Archipelago fork's header ("AP_CRYSTAL") gets its own message:
+-- owner ruling O-25 refuses Archipelago Crystal (docs/gen2/REVIEW_RECORD.md).
 do
     local sys_ok, sys = pcall(function() return emu.getsystemid() end)
     if sys_ok and (sys == "GB" or sys == "GBC" or sys == "SGB") then
         local Entry = dofile(_dir .. "gen2/entry.lua")
-        local title = Entry.detect_title(function(addr) return memory.read_u8(addr, "ROM") end)
+        local title, header = Entry.detect_title(function(addr) return memory.read_u8(addr, "ROM") end)
         if title then
             dofile(_dir .. "gen2/run.lua")
             return
         end
+        header = header or ""
+        if header:sub(1, 10) == "AP_CRYSTAL" then
+            error("[SLink] Archipelago Crystal is not supported (O-25) -- load a vanilla "
+                  .. "Gold, Silver or Crystal cartridge", 0)
+        end
+        error("[SLink] Unsupported Game Boy cartridge " .. string.format("%q", header)
+              .. " -- SLink runs Red, Blue, Yellow, Gold, Silver and Crystal", 0)
     end
 end
 
@@ -109,11 +118,9 @@ local game_detect = require("game_detect")
 local detected    = game_detect.detect()
 
 -- Map game_id to client script path
--- No gen1_rby row: the Gen 1 route above returns before this table is reached, so a
--- row here could only ever mis-fire (game_detect's Gen 1 detector is strictly narrower
--- than Entry.detect_title and runs behind the same GB/GBC guard).
+-- No Game Boy rows: the Gen 1 and Gen 2 routes above return or refuse for every GB/GBC/SGB
+-- core before this table is reached (the legacy gen2_crystal row went with P3b.8).
 local _CLIENT_MAP = {
-    gen2_crystal  = "clients/gen2_crystal_client.lua",
     gen3_frlge    = "clients/gen3_frlge_client.lua",
     gen4_hgsspt   = "clients/gen4_hgsspt_client.lua",
     gen5_bw       = "clients/gen5_bw_client.lua",

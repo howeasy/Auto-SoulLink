@@ -6,12 +6,11 @@ spelling, so every Gen 2 pairing is admitted by the generic derived-foundation c
 and the refusal changes nothing.
 
 The runtime adapter was NOT part of this card: `_ROM_TYPE_TO_GAME_ID` kept every Gen 2
-spelling on the legacy `gen2_crystal` adapter until U5, which re-points Crystal's rows to
-`gen2_gsc` (Gold and Silver stay legacy, G1 PENDING). The legacy client is NOT wholly
-unaffected, by design (O-8): `crystal_ap` keeps the legacy foundation, so a legacy
-Crystal/Gold/Silver half beside a legacy `crystal_ap` half, which paired before, is now
-refused in both arrival orders, including on restart of a pre-existing mixed run saved in
-either direction. AP beside AP still pairs.
+spelling on the legacy `gen2_crystal` adapter until U5, which re-pointed Crystal, Gold and
+Silver to `gen2_gsc`. Archipelago Crystal (`crystal_ap` / "Crystal (AP)") is REFUSED by
+owner ruling O-25: it routes to no game_id and no foundation, so its hello is refused on its
+own, beside any Gen 2 half, and whatever it declares. A run persisted under the retired
+legacy adapter is refused at load (tests/unit/test_gen2_persisted_cutover.py).
 """
 from __future__ import annotations
 
@@ -88,11 +87,11 @@ def _gate_snapshot(srv) -> dict:
 def test_every_gen2_spelling_has_its_own_foundation_row_not_the_game_id_fallback():
     """Falsifier: a title-cased alias falling back to the game_id foundation is red.
 
-    Crystal's game_id row moved to `gen2_gsc` at U5; Gold/Silver/AP stay on the legacy
-    `gen2_crystal` adapter, so the totality check spans both rows rather than pinning one.
+    Every routed Gen 2 spelling is on `gen2_gsc` (U5); Archipelago Crystal routes nowhere
+    (O-25), so the totality check is exactly the six admitted spellings.
     """
-    routed = {rt for rt, gid in _ROM_TYPE_TO_GAME_ID.items() if gid in ("gen2_crystal", "gen2_gsc")}
-    assert routed == set(GEN2) | set(AP), "a Gen 2 spelling was added without a pairing row"
+    routed = {rt for rt, gid in _ROM_TYPE_TO_GAME_ID.items() if gid.startswith("gen2")}
+    assert routed == set(GEN2), "a Gen 2 spelling was added without a pairing row"
     for rom_type in GEN2:
         assert _ROM_TYPE_TO_FOUNDATION.get(rom_type) == "gen2_gsc", rom_type
         assert foundation_for_rom_type(rom_type) == "gen2_gsc", rom_type
@@ -107,10 +106,12 @@ def test_the_rom_types_the_new_client_sends_derive_the_foundation_it_declares():
     assert {foundation_for_rom_type(rt) for rt in sent} == {"gen2_gsc"}
 
 
-def test_crystal_ap_is_not_the_gen2_gsc_foundation():
+def test_crystal_ap_routes_to_no_game_and_no_foundation():
+    """O-25: refused, so it has no row anywhere -- not even a legacy one."""
     for rom_type in AP:
-        assert rom_type not in _ROM_TYPE_TO_FOUNDATION
-        assert foundation_for_rom_type(rom_type) not in (None, "gen2_gsc"), rom_type
+        assert rom_type not in _ROM_TYPE_TO_FOUNDATION and rom_type not in _ROM_TYPE_TO_GAME_ID
+        assert foundation_for_rom_type(rom_type) is None, rom_type
+        assert game_id_for_rom_type(rom_type) is None, rom_type
 
 
 # ── the full symmetric Gen 2 matrix: 6 spellings x 6, both arrival orders ────────────────
@@ -195,83 +196,52 @@ async def test_a_refusal_preserves_seeded_run_data_and_every_cache(tmp_path, com
         await close()
 
 
-# ── crystal_ap (O-8) ─────────────────────────────────────────────────────────────────────
+# ── crystal_ap (O-25: refused) ───────────────────────────────────────────────────────────
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("gsc", ["Crystal", "Gold", "Silver"])
-@pytest.mark.parametrize("ap", AP)
-@pytest.mark.parametrize("ap_first", [True, False], ids=["ap_first", "gsc_first"])
-async def test_crystal_ap_is_refused_beside_every_gen2_gsc_half(tmp_path, ap, gsc, ap_first):
-    committed, joining = (ap, gsc) if ap_first else (gsc, ap)
-    srv = SLinkServer(data_dir=str(tmp_path))
-    send, close = await _session(srv)
-    try:
-        assert not _refused(await send(_hello("a", _cart(committed))))
-        before = _gate_snapshot(srv)
-        assert _refused(await send(_hello("b", _cart(joining))))
-        assert "Mixed games" in srv.state.identity_error["b"]
-        assert _deep(srv) == before
-    finally:
-        await close()
+def _unsupported(reply) -> bool:
+    return any(c.get("cmd") == "hud_show" and "UNKNOWN ROM" in c.get("text", "")
+               for c in reply["commands"])
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("declare", [False, True], ids=["omitted", "declared"])
 @pytest.mark.parametrize("ap", AP)
-async def test_crystal_ap_cannot_claim_the_gen2_gsc_foundation(tmp_path, ap):
+async def test_crystal_ap_is_refused_on_its_own_by_name(tmp_path, ap, declare):
     srv = SLinkServer(data_dir=str(tmp_path))
     send, close = await _session(srv)
     try:
         before = _snapshot(srv)
-        assert _refused(await send(_hello("a", _cart(ap, declare=True))))
-        assert "Foundation mismatch" in srv.state.identity_error["a"]
+        assert _unsupported(await send(_hello("a", _cart(ap, declare=declare))))
+        err = srv.state.identity_error["a"]
+        assert "Archipelago Crystal is not supported (O-25)" in err, err
+        assert "a" in srv._rom_type_rejected
         assert _snapshot(srv) == before and not srv.state.rom_type
     finally:
         await close()
 
 
-async def _persist_pre_change_run(tmp_path, saved_first: str) -> None:
-    """A run committed to `saved_first` with a linked pair on disk, as a pre-P3a mixed
-    C/AP run would have left it (the second half was admitted then)."""
+@pytest.mark.asyncio
+@pytest.mark.parametrize("gsc", ["Crystal", "Gold", "Silver"])
+@pytest.mark.parametrize("ap", AP)
+async def test_crystal_ap_is_refused_beside_every_gen2_gsc_half(tmp_path, ap, gsc):
     srv = SLinkServer(data_dir=str(tmp_path))
     send, close = await _session(srv)
     try:
-        assert not _refused(await send(_hello("a", _cart(saved_first))))
-        _seed(srv)
+        assert not _refused(await send(_hello("a", _cart(gsc))))
+        before = _gate_snapshot(srv)
+        assert _unsupported(await send(_hello("b", _cart(ap))))
+        assert "O-25" in srv.state.identity_error["b"]
+        assert _deep(srv) == before
     finally:
         await close()
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("saved_first,joining", [("Crystal", "crystal_ap"),
-                                                 ("crystal_ap", "Crystal"),
-                                                 ("Crystal (AP)", "gold")])
-async def test_a_persisted_mixed_crystal_ap_run_refuses_the_other_half_on_restart(
-        tmp_path, saved_first, joining):
-    await _persist_pre_change_run(tmp_path, saved_first)
-    restarted = SLinkServer(data_dir=str(tmp_path))
-    assert restarted.state.rom_type == saved_first and restarted.state.links
-    before = _deep(restarted)
-    send, close = await _session(restarted)
-    try:
-        assert _refused(await send(_hello("b", _cart(joining))))
-        assert "Mixed games" in restarted.state.identity_error["b"]
-        assert _deep(restarted) == before
-    finally:
-        await close()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("first,second", [("crystal_ap", "Crystal (AP)"),
-                                          ("Crystal (AP)", "crystal_ap")])
-async def test_ap_beside_ap_still_pairs_live_and_after_restart(tmp_path, first, second):
-    await _persist_pre_change_run(tmp_path, first)
-    restarted = SLinkServer(data_dir=str(tmp_path))
-    send, close = await _session(restarted)
-    try:
-        assert not _refused(await send(_hello("b", _cart(second))))
-        assert not restarted.state.identity_error
-    finally:
-        await close()
+def test_the_mixed_games_check_refuses_crystal_ap_as_unsupported_too(tmp_path):
+    """The lock's own derivation (the other refusal site) names O-25 as well."""
+    srv = SLinkServer(data_dir=str(tmp_path))
+    for ap in AP:
+        err = srv._mixed_games_error("b", ap, "clean")
+        assert "Archipelago Crystal is not supported (O-25)" in err, err
 
 
 # ── unknown and contradictory hellos ─────────────────────────────────────────────────────
@@ -353,8 +323,10 @@ async def test_a_restart_re_derives_gen2_gsc_from_every_persisted_spelling(tmp_p
     assert restarted.state.rom_type == persisted
     for rom_type in GEN2:
         assert restarted._mixed_games_error("b", rom_type, "clean") == "", rom_type
-    for rom_type in OTHER_GENS + AP:
+    for rom_type in OTHER_GENS:
         assert "Mixed games" in restarted._mixed_games_error("b", rom_type, "clean"), rom_type
+    for rom_type in AP:
+        assert "O-25" in restarted._mixed_games_error("b", rom_type, "clean"), rom_type
     send, close = await _session(restarted)
     try:
         assert not _refused(await send(_hello("b", _cart("Silver", declare=True))))
@@ -363,18 +335,16 @@ async def test_a_restart_re_derives_gen2_gsc_from_every_persisted_spelling(tmp_p
         await close()
 
 
-# ── the cutover boundary: every admitted Gen 2 title moved, AP did not ────────────────────
+# ── the cutover boundary: every admitted Gen 2 title moved; AP is refused ───────────────
 
-def test_the_u5_cutover_moved_every_admitted_gen2_title_but_not_ap():
-    """P3a.1 changed pairing only; U5 (docs/gen2/reviews/OMP_U5_CUTOVER_FACTS_2026-09-23.md,
-    widened by owner ruling O-23) is the runtime row flip, and it flips Crystal, Gold and
-    Silver together -- their per-title admission (whether a given build gets a client at
-    all) is Entry.admit's job at runtime, not this row. `crystal_ap` stays legacy on purpose
-    (O-8: not admitted in the RC). `gen2_gsc` is registered well before this (U4 title
-    binder, tests/unit/test_gen2_server_bind.py); U5 is what starts routing to it."""
+def test_the_u5_cutover_moved_every_admitted_gen2_title_and_ap_routes_nowhere():
+    """U5 (docs/gen2/reviews/OMP_U5_CUTOVER_FACTS_2026-09-23.md, widened by owner ruling
+    O-23) flipped Crystal, Gold and Silver together -- per-title admission is Entry.admit's
+    job at runtime, not this row. `crystal_ap` is refused (O-25), and P3b.8 removed the
+    legacy `gen2_crystal` adapter, so no row may point at it."""
     for rom_type in GEN2:
         assert game_id_for_rom_type(rom_type) == "gen2_gsc", rom_type
     for rom_type in AP:
-        assert game_id_for_rom_type(rom_type) == "gen2_crystal", rom_type
+        assert game_id_for_rom_type(rom_type) is None, rom_type
     assert "gen2_gsc" in _REGISTRY
-    assert set(_ROM_TYPE_TO_GAME_ID.values()) & {"gen2_crystal", "gen2_gsc"} == {"gen2_crystal", "gen2_gsc"}
+    assert "gen2_crystal" not in set(_ROM_TYPE_TO_GAME_ID.values())

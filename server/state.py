@@ -930,7 +930,7 @@ class SoulLinkState:
                 # when the registry says that specific migration is unsafe.
                 from server.adapters import game_id_for_rom_type, persisted_migration_refusal
                 current_game_id = game_id_for_rom_type(state.rom_type) if state.rom_type else None
-                refusal = persisted_migration_refusal(saved_game_id, current_game_id) if current_game_id else None
+                refusal = persisted_migration_refusal(saved_game_id, current_game_id)
                 if refusal:
                     raise UnsafeGameMigration(f"{state._links_path}: {refusal}")
                 log.warning(f"Saved game_id={saved_game_id!r} differs from adapter "

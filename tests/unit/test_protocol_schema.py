@@ -143,7 +143,7 @@ def test_the_declaring_foundations_are_the_servers_and_gen3_declares_nothing():
     # a Gen 1 hello declares like Gen 2 (lua/gen1/client.lua builds both)
     assert ps.validate_event(dict(_HELLO, rom_type="red"))
     assert ps.validate_event(dict(_HELLO, rom_type="red", foundation="gen1_rby", artifact_kind="clean")) == []
-    # crystal_ap keeps the legacy foundation (O-8): a gen2_gsc claim on it is refused
+    # crystal_ap is refused outright (O-25): a gen2_gsc claim on it is refused too
     assert ps.validate_event(dict(_HELLO, rom_type="crystal_ap", foundation="gen2_gsc"))
     assert ps.validate_event(dict(_HELLO, rom_type="not_a_game"))
 

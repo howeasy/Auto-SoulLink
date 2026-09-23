@@ -64,7 +64,6 @@ GAMES = [
     ("gen1_ap", "Red · Blue (Archipelago)", ["red_ap", "blue_ap"]),
     ("gen1_purergb", "PureRed · PureBlue · PureGreen", ["purered", "pureblue", "puregreen"]),
     ("gen2", "Gold · Silver · Crystal", ["gold", "silver", "crystal"]),
-    ("gen2_ap", "Crystal (Archipelago)", ["crystal_ap"]),
     ("gen3", "FireRed · LeafGreen", ["firered", "leafgreen"]),
     ("gen3_ap", "FireRed · LeafGreen (Archipelago)", ["firered_ap", "leafgreen_ap"]),
     ("gen3_rr", "Radical Red", ["firered_rr"]),

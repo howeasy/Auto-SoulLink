@@ -530,6 +530,7 @@ class SLinkServer:
             GameRulesAdapter,
             adapter_class_for_rom_type,
             foundation_for_rom_type,
+            unrouted_rom_type_reason,
         )
         if not isinstance(rom_type, str) or not rom_type:
             return (f"Missing rom_type for slot {player_id.upper()}: a hello must name the "
@@ -537,7 +538,7 @@ class SLinkServer:
         got = foundation_for_rom_type(rom_type)
         if not got:
             return (f"Unknown rom_type {rom_type!r} for slot {player_id.upper()}: "
-                    f"not a game this server routes")
+                    f"{unrouted_rom_type_reason(rom_type)}")
         if foundation is not _FOUNDATION_ABSENT and foundation != got:
             return (f"Foundation mismatch: slot {player_id.upper()} declares "
                     f"{foundation!r}, but its ROM type {rom_type!r} is {got!r}")
@@ -1339,11 +1340,11 @@ class SLinkServer:
                     # rom_type used to skip the lock entirely and be dispatched into the
                     # committed run. Every shipped client sends one; a hello without one is
                     # not an old client, it is a malformed one.
-                    from server.adapters import game_id_for_rom_type
+                    from server.adapters import game_id_for_rom_type, unrouted_rom_type_reason
                     _rt = msg.get("rom_type", "")
                     if not isinstance(_rt, str) or not _rt or not game_id_for_rom_type(_rt):
                         err = (f"Unknown rom_type {_rt!r} for slot {player_id.upper()}: "
-                               f"not a game this server routes")
+                               f"{unrouted_rom_type_reason(_rt)}")
                         log.warning(f"[{player_id}] REJECTED: {err}")
                         self.state.identity_error[player_id] = err
                         self._rom_type_rejected.add(player_id)
@@ -2542,6 +2543,11 @@ class SLinkServer:
             },
             "pending_bonus": {
                 pid: list(s.pending_bonus.get(pid, []))
+                for pid in ["a", "b"]
+            },
+            # O-24: dead keys still alive in party whose force_faint repair budget is spent.
+            "faint_repair_stalled": {
+                pid: sorted(s.faint_repair_stalled.get(pid, {}))
                 for pid in ["a", "b"]
             },
             "badge_slugs": self.adapter.gym_badge_slugs(s.rom_type or ""),

@@ -75,19 +75,19 @@ def test_the_binder_refuses_what_is_not_an_admitted_gen2_title(kwargs):
 
 def test_the_live_rows_reflect_the_u5_cutover():
     """Row-flip verdict: Crystal, Gold and Silver all flip at U5 (O-22/O-23; the launcher now
-    runs lua/gen2/run.lua for any of them); `crystal_ap` stays on the legacy client (O-8)."""
+    runs lua/gen2/run.lua for any of them); `crystal_ap` is refused and routes nowhere (O-25)."""
     for rom_type in GEN2:
         assert game_id_for_rom_type(rom_type) == "gen2_gsc", rom_type
     for rom_type in AP:
-        assert game_id_for_rom_type(rom_type) == "gen2_crystal", rom_type
+        assert game_id_for_rom_type(rom_type) is None, rom_type
 
 
 def test_after_the_flip_the_class_lookup_answers_pairing_without_a_title(cutover):
     for rom_type in GEN2:
         assert adapter_class_for_rom_type(rom_type) is Gen2GSCAdapter
         assert Gen2GSCAdapter.pairing_kind("clean") == "clean"
-    for rom_type in AP:  # O-8: AP stays on the legacy route
-        assert game_id_for_rom_type(rom_type) == "gen2_crystal"
+    for rom_type in AP:  # O-25: AP is refused, so it has no class either
+        assert adapter_class_for_rom_type(rom_type) is None
 
 
 # ── hello: first hello binds, the run's title is then locked ────────────────────────────
@@ -112,7 +112,7 @@ async def test_first_hello_binds_the_title_and_every_mixed_pairing_keeps_it(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("other", ["red", "Red", "PureRed", "firered", "firered_rr",
-                                   "emerald", *AP])
+                                   "emerald"])
 @pytest.mark.parametrize("gen2_first", [True, False], ids=["gen2_first", "other_first"])
 async def test_after_the_flip_gen2_still_never_pairs_with_another_foundation(
         tmp_path, cutover, other, gen2_first):

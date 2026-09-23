@@ -46,8 +46,9 @@ GB_GBA_MODULES = [
 # Crystal/Gold/Silver cartridge to lua/gen2/run.lua BEFORE game_detect ever runs this legacy
 # module, so these variants' rom_types no longer resolve to this module's own adapter -- they
 # resolve to `gen2_gsc` (docs/gen2/reviews/OMP_U5_CUTOVER_FACTS_2026-09-23.md). `crystal_ap`
-# is unaffected (O-8: not admitted in the RC, stays on the legacy adapter).
-_VARIANT_GAME_ID_OVERRIDE = {"crystal": "gen2_gsc", "gold": "gen2_gsc", "silver": "gen2_gsc"}
+# is REFUSED (O-25) and must route to nothing.
+_VARIANT_GAME_ID_OVERRIDE = {"crystal": "gen2_gsc", "gold": "gen2_gsc", "silver": "gen2_gsc",
+                             "crystal_ap": None}
 
 
 def _load(rel_path):
@@ -88,7 +89,8 @@ def test_every_variant_has_a_display_label(rel_path, expected_game_id):
     missing = [
         f"  {variant!r} -> {mod.rom_type_for_variant(variant)!r}"
         for variant in _variants(mod)
-        if mod.rom_type_for_variant(variant) not in _VARIANT_LABEL
+        if _VARIANT_GAME_ID_OVERRIDE.get(variant, expected_game_id) is not None
+        and mod.rom_type_for_variant(variant) not in _VARIANT_LABEL
     ]
     assert not missing, f"{rel_path} rom_types with no _VARIANT_LABEL entry:\n" + "\n".join(missing)
 
@@ -112,10 +114,9 @@ def test_gen2_non_crystal_variants_are_registered():
     """The specific regression, pinned by name so a revert reads as what it is.
 
     Gold, Silver and Crystal (AP) all routed to None before this fix. U5 (O-22/O-23) later
-    moved Gold and Silver's own row to `gen2_gsc` alongside Crystal; `crystal_ap` stays on
-    the legacy `gen2_crystal` adapter on purpose (O-8). The regression this guards against
-    -- routing to nothing at all -- is the same either way, so this only pins "registered
-    to a real Gen 2 adapter", not which one.
+    moved Gold and Silver's own row to `gen2_gsc` alongside Crystal. Archipelago Crystal is
+    the one DELIBERATE exception: owner ruling O-25 refuses it, so it routes to nothing and
+    the server refuses its hello by name (never a silent default-adapter fallthrough).
     """
     for rom_type in ("Gold", "Silver", "gold", "silver"):
         assert game_id_for_rom_type(rom_type) == "gen2_gsc", (
@@ -123,7 +124,4 @@ def test_gen2_non_crystal_variants_are_registered():
             f"default (Gen 3) adapter and persist the wrong game_id")
         assert variant_label(rom_type), f"{rom_type!r} has no display label"
     for rom_type in ("Crystal (AP)", "crystal_ap"):
-        assert game_id_for_rom_type(rom_type) == "gen2_crystal", (
-            f"{rom_type!r} does not reach the Gen 2 adapter — a run on it would keep the "
-            f"default (Gen 3) adapter and persist the wrong game_id")
-        assert variant_label(rom_type), f"{rom_type!r} has no display label"
+        assert game_id_for_rom_type(rom_type) is None, f"{rom_type!r} is refused (O-25)"
