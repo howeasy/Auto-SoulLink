@@ -187,6 +187,10 @@ def test_a_committed_physical_receipt_still_validates(path):
         # (b) exactly the proven site set the receipt claims: the pack pins each hit and the
         # predecessors are present, so a dropped or inflated claim would surface here
         assert proof["proven"] == sorted(receipt["proven"])
+        # (b2) card gen2-U1d: a proven battle_faint carries its own same-frame record, recomputed here from the
+        # raw measurements (lua/tests/gen2_frame_align.lua F.faint_problem; S.qualified_sites does not read it)
+        if "battle_faint" in receipt["proven"]:
+            assert faint_aligned(receipt.get("faint_alignment")), receipt.get("faint_alignment")
     else:
         assert {run["evidence_level"] for run in receipt["runs"].values()} == {"PHYSICAL"}
         # (b) exactly the controls it declares covered, and the kinds those authorize
@@ -208,6 +212,30 @@ def test_a_committed_physical_receipt_still_validates(path):
         assert sha == hashlib.sha256((FIXTURES / f"{fixture}.SaveRAM").read_bytes()).hexdigest(), fixture
         assert report["fixtures"][0]["artifacts"]["fixture"]["sha256"] == sha, fixture
         assert attempt == report["attempt_id"], fixture
+
+
+def faint_aligned(f):
+    """battle_faint's rule: callback == armed, wCurBattleMon a party slot, the battle mon at HP 0 and the slot's
+    party record that mon (species, DVs) still above 0 in the callback, the copy-back HP 0 on that frame or the next."""
+    def whole(v, lo, hi):
+        return isinstance(v, int) and not isinstance(v, bool) and lo <= v <= hi
+    return (isinstance(f, dict) and whole(f.get("armed"), 0, 2**53) and f.get("callback") == f["armed"]
+            and whole(f.get("party_count"), 1, 6) and whole(f.get("slot"), 0, f["party_count"] - 1)
+            and f.get("battle_hp") == 0 and whole(f.get("battle_species"), 1, 251)
+            and (f.get("party_species"), f.get("party_dvs")) == (f["battle_species"], f.get("battle_dvs"))
+            and whole(f.get("callback_party_hp"), 1, 999)
+            and whole(f.get("hp_zero_frame"), f["callback"], f["callback"] + 1))
+
+
+@pytest.mark.parametrize("field,value", [("callback", 1), ("battle_hp", 3), ("party_species", 0), ("party_dvs", -1),
+                                         ("callback_party_hp", 0), ("hp_zero_frame", 2), ("slot", 2), (None, None)])
+def test_the_faint_rule_refuses_each_broken_measurement(field, value):
+    good = {"armed": 10, "callback": 10, "slot": 0, "party_count": 2, "battle_hp": 0, "battle_species": 158,
+            "battle_dvs": 0x1234, "party_species": 158, "party_dvs": 0x1234, "callback_party_hp": 4,
+            "post_party_hp": 0, "hp_zero_frame": 10}
+    assert faint_aligned(good) and faint_aligned({**good, "hp_zero_frame": 11})
+    bad = None if field is None else {**good, field: good[field] + value if field in ("callback", "hp_zero_frame") else value}
+    assert not faint_aligned(bad)
 
 
 DELETE = object()

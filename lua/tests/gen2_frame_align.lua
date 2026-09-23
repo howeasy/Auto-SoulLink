@@ -22,8 +22,12 @@
     battle    BattleMenu PACK -> the Ball pocket -> POKe BALL -> USE, A through battle text, NO to the
               nickname, repeated until the catch; the battle ends natively
     save      START -> SAVE -> YES -> (overwrite text) -> YES; the native _SaveGameData completion
+    faint     (card gen2-U1d; lua/tests/duo/gen2_faint_inputs.lua, shared with the H1c faint duo) walk into a
+              second wild battle; the lead (party = [starter, catch]) uses a status move until it faints; NO
+              to "Use next #MON?", out to the overworld (no second save)
   Proven sites (F.EXPECT, in this order): wild_ready, capture_party, capture_party_finalized, battle_end,
-  save_completed. capture_box must NOT fire (party < 6: PokeBallEffect takes the TryAddMonToParty fork).
+  save_completed, battle_faint. capture_box must NOT fire (party < 6: PokeBallEffect takes the TryAddMonToParty
+  fork). battle_faint's own alignment rule is F.faint_snapshot / F.faint_problem (receipt faint_alignment).
 
   FRAME ALIGNMENT (5.13/B-9): every accepted hit records emu.framecount() inside the callback and the
   frame the main loop armed (framecount before the frameadvance that ran it); they must be equal. At
@@ -57,7 +61,8 @@
 local F = {}
 F.RESULT = "patch/build/gen2_frame_align_result.txt"
 F.SCRIPTED_GATE = "lua/tests/test_gen2_scripted_gate.lua"
-F.EXPECT = {"wild_ready", "capture_party", "capture_party_finalized", "battle_end", "save_completed"}
+F.EXPECT = {"wild_ready", "capture_party", "capture_party_finalized", "battle_end", "save_completed", "battle_faint"}
+F.FAINT_INPUTS = "lua/tests/duo/gen2_faint_inputs.lua"
 F.ABSENT = {"capture_box"}
 F.PACK_KINDS = {"pack_items", "pack_balls", "pack_key", "pack_tmhm", "item_submenu"}
 -- BattlePack pocket order (engine/items/pack.asm:627-782): items <-> balls <-> key <-> tmhm <-> items.
@@ -293,6 +298,8 @@ function F.verdict(record)
              name .. " hit off its pinned bank/PC (measured)")
     end
     need(sites.capture_party and sites.capture_party.hits == 1, "capture_party must fire exactly once")
+    local faint = F.faint_problem(record.faint)
+    need(faint == nil, tostring(faint))
     for _, name in ipairs(F.ABSENT) do need(sites[name] and sites[name].hits == 0, name .. " fired on a party < 6 catch") end
     need(record.decoy.raw >= 1 and record.decoy.accepted == 0 and record.decoy.bank_rejects == record.decoy.raw,
          "wrong-bank decoy: no raw fire, an accepted hit, or a hit not rejected by bank")
@@ -322,6 +329,40 @@ local function binding(ctx)
         framecount=api.framecount, on_bus_exec=api.on_bus_exec, unregister=api.unregister},
         {bus_domain="System Bus", rom_domain="ROM", bank_domain="System Bus", pc_register="PC", sp_register="SP",
          bank_address=ctx.profile.hram.hROMBank})
+end
+
+-- battle_faint (UpdateFaintedPlayerMon entry, C core.asm:2656-2670, G/S :2551-2565): wCurBattleMon names the
+-- party slot the production faint_event reads (lua/gen2/signals.lua faint_event). The battle copy already reads
+-- HP 0; the party record still holds the last end-of-turn copy (UpdateBattleMonInParty in .NoMoreFaintingConditions,
+-- C core.asm:286-294, G/S :241-249) and reads HP 0 only once this routine's own UpdateBattleMonInParty ran, with
+-- no DelayFrame in between: same frame, or the next when the frame boundary splits the routine. That party
+-- HP 0 is what the client's faint latch settles on (lua/gen2/client.lua settle_faints).
+local function word(bytes) return bytes[1] * 256 + bytes[2] end
+local function party_offset(ctx, slot) return slot * (ctx.profile.ram.wPartyMon2 - ctx.profile.ram.wPartyMon1) end
+function F.party_hp(ctx, slot) return word(ctx.sym("wPartyMon1HP", party_offset(ctx, slot), 2)) end
+function F.faint_snapshot(ctx, armed, callback)
+    local slot = ctx.sym("wCurBattleMon")[1]
+    local off = party_offset(ctx, math.min(slot, 5))
+    return {armed=armed, callback=callback, slot=slot, party_count=ctx.sym("wPartyCount")[1],
+            battle_hp=word(ctx.sym("wBattleMonHP", 0, 2)), battle_species=ctx.sym("wBattleMonSpecies")[1],
+            battle_dvs=word(ctx.sym("wBattleMonDVs", 0, 2)), party_species=ctx.sym("wPartyMon1Species", off)[1],
+            party_dvs=word(ctx.sym("wPartyMon1DVs", off, 2)), callback_party_hp=word(ctx.sym("wPartyMon1HP", off, 2))}
+end
+
+-- Pure: the faint record's frame-alignment rule (nil = aligned, else why).
+function F.faint_problem(f)
+    if type(f) ~= "table" then return "battle_faint recorded no same-frame snapshot" end
+    if not integer(f.armed, 0, 2^53) or f.callback ~= f.armed then return "battle_faint callback frame != armed frame" end
+    if not integer(f.party_count, 1, 6) or not integer(f.slot, 0, f.party_count - 1) then return "wCurBattleMon is not a party slot" end
+    if f.battle_hp ~= 0 then return "the battle mon is not at 0 HP inside the battle_faint callback" end
+    if not integer(f.battle_species, 1, 251) or f.party_species ~= f.battle_species or f.party_dvs ~= f.battle_dvs then
+        return "the wCurBattleMon party record is not the fainting battle mon"
+    end
+    if not integer(f.callback_party_hp, 1, 999) then return "the party record was already copied back at the callback" end
+    if not integer(f.hp_zero_frame, 0, 2^53) or f.hp_zero_frame < f.callback or f.hp_zero_frame > f.callback + 1 then
+        return "the party record did not read HP 0 on the callback frame or the next"
+    end
+    return nil
 end
 
 -- Arm every pack site (grouped by bank:PC like lua/gen2/signals.lua) plus the wrong-bank decoy.
@@ -401,6 +442,7 @@ function F.probe(ctx, pack, decoy_site)
                 if name == "wild_ready" and record.battle_party == nil then
                     record.battle_party = ctx.sym("wPartyCount")[1]   -- the party before any capture
                 end
+                if name == "battle_faint" and record.faint == nil then record.faint = F.faint_snapshot(ctx, probe.armed, hit.frame) end
                 if name == "capture_party" and record.align == nil then
                     record.align = {armed=probe.armed, callback=hit.frame, pre_party=probe.pre_party,
                                     battle_party=record.battle_party, callback_party=ctx.sym("wPartyCount")[1]}
@@ -424,6 +466,12 @@ function F.probe(ctx, pack, decoy_site)
         end
         if record.align and record.align.post_party == nil then
             record.align.post_party, record.align.party_changed = party, record.party_changed
+        end
+        local faint = record.faint
+        if faint and faint.hp_zero_frame == nil and integer(faint.slot, 0, 5) then
+            local hp = F.party_hp(ctx, faint.slot)
+            faint.post_party_hp = faint.post_party_hp or hp
+            if hp == 0 then faint.hp_zero_frame = frame end
         end
     end
     function probe.release()
@@ -541,6 +589,8 @@ function F.main(api, getenv, SG)
     log("NEGATIVES " .. json.encode(detail))
 
     -- Arrival: gen2_qualify.lua "boot" over the scripted gate hooks (the inspect gate's path).
+    local FI = dofile(ctx.root .. "/" .. F.FAINT_INPUTS)
+    FI.prepare(ctx, SG, ctx.u1)   -- before SG.hooks: the move/party UI origins join the watched origins
     local state = SG.hooks(ctx)
     local idle = {}
     for _, name in ipairs(SG.BUTTONS) do idle[name] = false end
@@ -585,17 +635,25 @@ function F.main(api, getenv, SG)
         return table.concat(out, "<")
     end
     local driver = F.driver(ctx.facts.maps.Route29)
+    local diag = {log=log, frame=api.framecount, screen=function() return SG.screen(ctx) end, where=where,
+                  trace=getenv("SLINK_GEN2_TRACE") == "1"}
     local played, outcome = F.play(host, {name="u1-" .. title, terminal=driver.terminal,
         max_frames=F.BUDGET.max_frames, max_phase_frames=F.BUDGET.max_phase_frames,
-        settle_frames=F.BUDGET.settle_frames, terminal_idle=true}, driver, observe,
-        {log=log, frame=api.framecount, screen=function() return SG.screen(ctx) end, where=where,
-         trace=getenv("SLINK_GEN2_TRACE") == "1"})
+        settle_frames=F.BUDGET.settle_frames, terminal_idle=true}, driver, observe, diag)
+    -- The faint leg (the shared H1c inputs): back into the grass, the lead (party [starter, catch]) takes
+    -- the wild mon's hits behind a status move until it faints; NO to "Use next", out to the overworld.
+    if played then
+        local fdriver, fobserve, fspec = FI.new(ctx, SG, F, {
+            fainted=function() return probe.record.sites.battle_faint.hits >= 1 end})
+        played, outcome = F.play(host, fspec, fdriver, fobserve, diag)
+    end
     probe.release()
     state.release()
     local record = probe.record
     record.negatives = negatives
     record.negatives.wrong_bank_hit = (record.decoy.raw >= 1 and record.decoy.accepted == 0) and "refused" or "NOT refused"
-    check("walk -> wild encounter -> Poke Ball catch -> native save", played, not played and outcome or nil)
+    check("walk -> wild encounter -> Poke Ball catch -> native save -> walk -> lead faints", played,
+          not played and outcome or nil)
 
     local summary = {}
     for name, s in pairs(record.sites) do
@@ -606,6 +664,7 @@ function F.main(api, getenv, SG)
     end
     log("HIT_SUMMARY " .. json.encode(json.object(summary)))
     log("ALIGN " .. json.encode({align=record.align or json.null, aligned=record.aligned, misaligned=record.misaligned}))
+    log("FAINT " .. json.encode(record.faint or json.null))
     log("DECOY " .. json.encode({site=ctx.u1.decoy, raw=record.decoy.raw, accepted=record.decoy.accepted,
                                   bank_rejects=record.decoy.bank_rejects}))
     local problems, proven = F.verdict(record)
@@ -636,6 +695,15 @@ function F.main(api, getenv, SG)
             callback_party=a.callback_party, post_party=a.post_party, party_changed=a.party_changed,
             effect_to_callback_frames=a.callback - a.party_changed,
             aligned_hits=record.aligned, misaligned_hits=record.misaligned},
+        faint_alignment={passed=true, rule="battle_faint callback frame == armed; wCurBattleMon is a party slot; "
+            .. "the battle mon reads HP 0 and the slot's party record is that mon (species, DVs) with HP > 0 inside "
+            .. "the callback (before copy-back); the party record reads HP 0 on the callback frame or the next",
+            armed=record.faint.armed, callback=record.faint.callback, slot=record.faint.slot,
+            party_count=record.faint.party_count, battle_hp=record.faint.battle_hp,
+            battle_species=record.faint.battle_species, battle_dvs=record.faint.battle_dvs,
+            party_species=record.faint.party_species, party_dvs=record.faint.party_dvs,
+            callback_party_hp=record.faint.callback_party_hp, post_party_hp=record.faint.post_party_hp,
+            hp_zero_frame=record.faint.hp_zero_frame, copyback_frames=record.faint.hp_zero_frame - record.faint.callback},
         negatives=record.negatives, decoy={bank=ctx.u1.decoy.bank, addr=ctx.u1.decoy.addr, raw=record.decoy.raw,
             accepted=record.decoy.accepted, bank_rejects=record.decoy.bank_rejects},
         sites=sites, proven=json.array(proven), absent=json.array(F.ABSENT)}

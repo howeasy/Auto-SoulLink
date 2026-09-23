@@ -864,7 +864,7 @@ def test_the_static_pack_must_share_the_engine_site_source(fault):
 
 # --- card gen2-U1: PHYSICAL receipt gate for production registration + the live-gate logic ---
 
-U1_EXPECT = ("wild_ready", "capture_party", "capture_party_finalized", "battle_end", "save_completed")
+U1_EXPECT = ("wild_ready", "capture_party", "capture_party_finalized", "battle_end", "save_completed", "battle_faint")
 U1_NEGATIVES = ("wrong_pack_byte", "script_bytecode_arm", "wrong_bank_hit")
 
 
@@ -1118,7 +1118,10 @@ def u1_record(fault=None):
               "align": {"armed": 102, "callback": 102, "pre_party": 1, "battle_party": 1, "callback_party": 2,
                         "post_party": 2, "party_changed": 102},
               "decoy": {"raw": 40, "accepted": 0, "bank_rejects": 40},
-              "negatives": {name: "refused" for name in U1_NEGATIVES}}
+              "negatives": {name: "refused" for name in U1_NEGATIVES},
+              "faint": {"armed": 106, "callback": 106, "slot": 0, "party_count": 2, "battle_hp": 0,
+                        "battle_species": 158, "battle_dvs": 0x9A7B, "party_species": 158, "party_dvs": 0x9A7B,
+                        "callback_party_hp": 5, "post_party_hp": 0, "hp_zero_frame": 106}}
     if fault == "misaligned":
         record["misaligned"] = 1
     elif fault == "ram_effect":
@@ -1155,6 +1158,20 @@ def u1_record(fault=None):
         record["negatives"]["script_bytecode_arm"] = "NOT refused"
     elif fault == "registry":
         record["registry_failed"] = "callback PC differs"
+    elif fault == "faint_missing":
+        del record["faint"]
+    elif fault == "faint_battle_hp":   # the callback ran before the battle mon reached 0 HP
+        record["faint"]["battle_hp"] = 3
+    elif fault == "faint_other_record":   # wCurBattleMon names a party record that is not the battle mon
+        record["faint"]["party_dvs"] = 0x1111
+    elif fault == "faint_copied_back":   # the party record was already at 0 HP inside the callback
+        record["faint"]["callback_party_hp"] = 0
+    elif fault == "faint_late_copyback":
+        record["faint"]["hp_zero_frame"] = 108
+    elif fault == "faint_never_zero":
+        del record["faint"]["hp_zero_frame"]
+    elif fault == "faint_frame":
+        record["faint"]["callback"] = 107
     return record
 
 
@@ -1173,7 +1190,9 @@ def test_the_u1_verdict_accepts_a_capture_count_bumped_frames_before_the_site():
 @pytest.mark.parametrize("fault", ["misaligned", "ram_effect", "callback_frame", "callback_sees_n",
                                    "effect_after_callback", "no_change_frame", "box_fired", "decoy_accepted",
                                    "decoy_silent", "decoy_bank_rejects", "off_pin", "order", "missing",
-                                   "wrong_bank", "twice", "negative", "registry"])
+                                   "wrong_bank", "twice", "negative", "registry", "faint_missing", "faint_battle_hp",
+                                   "faint_other_record", "faint_copied_back", "faint_late_copyback",
+                                   "faint_never_zero", "faint_frame"])
 def test_the_u1_verdict_refuses_every_negative_control(fault):
     lua, gate = u1_gate()
     problems, proven = gate.verdict(lua.table_from(u1_record(fault), recursive=True))
@@ -1266,8 +1285,9 @@ def test_the_u1_probe_and_negatives_run_on_the_shared_binders(title, fault):
         schedule.clear()
         world.frame += 1
 
-    def sym(name, *_):
-        return lua.table_from([world.read(world.p["ram"][name], "System Bus")])
+    def sym(name, offset=None, n=None):
+        address = world.p["ram"][name] + (offset or 0)
+        return lua.table_from([world.read(address + i, "System Bus") for i in range(n or 1)])
 
     api = lua.table(read_u8=world.io.read_u8, read_range=world.io.read_range, register=world.io.register,
                     framecount=world.io.framecount, on_bus_exec=world.io.on_bus_exec,
@@ -1298,10 +1318,21 @@ def test_the_u1_probe_and_negatives_run_on_the_shared_binders(title, fault):
         world.party([world.mon(), world.mon(species=16, dvs=0x1234)])
         world.fire("capture_party")
 
+    lead, caught = world.mon(), world.mon(species=16, dvs=0x1234)
+
+    def faint():   # U1d: UpdateFaintedPlayerMon entry: battle copy at 0 HP, party record not yet copied back
+        ram = world.p["ram"]
+        for address, value in ((ram["wCurBattleMon"], 0), (ram["wBattleMonHP"], 0), (ram["wBattleMonHP"] + 1, 0),
+                               (ram["wBattleMonSpecies"], lead["species"]),
+                               (ram["wBattleMonDVs"], lead["dvs"] >> 8), (ram["wBattleMonDVs"] + 1, lead["dvs"] & 255)):
+            world.memory["System Bus", address] = value
+        world.fire("battle_faint")
+        world.party([{**lead, "hp": 0}, caught])   # the same routine's UpdateBattleMonInParty, same frame
+
     for action in (lambda: world.fire("wild_ready"), fire_decoy, catch,
                    lambda: world.fire("capture_party_finalized"),
                    lambda: world.fire("battle_end", wrong_pc=fault == "echo_pc", wrong_shadow=fault == "echo_bank"),
-                   lambda: world.fire("save_completed")):
+                   lambda: world.fire("save_completed"), faint):
         schedule.append(action)
         ctx.api.advance()
     probe.release()
@@ -1318,6 +1349,9 @@ def test_the_u1_probe_and_negatives_run_on_the_shared_binders(title, fault):
     assert (align.armed, align.callback, align.pre_party, align.callback_party, align.post_party) == (
         align.armed, align.armed, 1, 2, 2)
     assert (align.battle_party, align.party_changed) == (1, align.armed)   # the count changed on the catch frame
+    f = record.faint
+    assert (f.slot, f.battle_hp, f.party_species, f.callback_party_hp, f.post_party_hp) == (0, 0, lead["species"], 30, 0)
+    assert f.callback == f.armed == f.hp_zero_frame   # the copy-back landed on the callback frame
     assert list(problems.values()) == [] and tuple(proven.values()) == U1_EXPECT
 
 

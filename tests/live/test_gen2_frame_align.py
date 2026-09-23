@@ -47,7 +47,7 @@ pytestmark = [
 
 GATE = "lua/tests/gen2_frame_align.lua"
 TITLES = ("crystal", "gold", "silver")
-EXPECT = ("wild_ready", "capture_party", "capture_party_finalized", "battle_end", "save_completed")
+EXPECT = ("wild_ready", "capture_party", "capture_party_finalized", "battle_end", "save_completed", "battle_faint")
 # BattlePack's per-pocket input states and ItemSubmenu's USE/QUIT box (engine/items/pack.asm:685-782
 # .ItemsPocketMenu/.KeyItemsPocketMenu/.TMHMPocketMenu/.BallsPocketMenu, :783-803 ItemSubmenu; the same
 # lines and pocket order in pokecrystal and pokegold, resolved per title from its own .sym).
@@ -55,6 +55,13 @@ EXPECT = ("wild_ready", "capture_party", "capture_party_finalized", "battle_end"
 PACK_UI = {"pack_items": "BattlePack.ItemsPocketMenu", "pack_balls": "BattlePack.BallsPocketMenu",
            "pack_key": "BattlePack.KeyItemsPocketMenu", "pack_tmhm": "BattlePack.TMHMPocketMenu",
            "item_submenu": "ItemSubmenu"}
+# The faint leg's UI origins (card gen2-U1d, shared with the H1c duo through lua/tests/duo/gen2_faint_inputs.lua):
+# MoveSelectionScreen.interpret_joypad re-runs after every cursor move (C engine/battle/core.asm:5432-5457);
+# PartyMenuSelect is the party list of both BattleMenu_PKMN and PickPartyMonInBattle (core.asm:2842-2861,
+# engine/pokemon/party_menu.asm PartyMenuSelect); BattleMonMenu is BattleMenu_PKMN.GetMenu's SWITCH/STATS/CANCEL
+# (core.asm:5109-5116). Same labels in pokegold, resolved per title from its own .sym.
+FAINT_UI = {"move_menu": "MoveSelectionScreen.interpret_joypad", "battle_party": "PartyMenuSelect",
+            "battle_mon_menu": "BattleMonMenu"}
 
 
 def u1_facts(ctx, facts, qualification_attempt_id: str) -> dict:
@@ -70,15 +77,23 @@ def u1_facts(ctx, facts, qualification_attempt_id: str) -> dict:
                      "hex": ctx.rom[flat:flat + 3].hex()}
             break
     assert decoy is not None, "no unused ROM bank for the wrong-bank decoy"
-    pack_ui = {kind: {k: v for k, v in gen2_fixtures._code_site(ctx, symbol).items() if k != "symbol_offset"}
-               for kind, symbol in PACK_UI.items()}
+    def site(symbol):
+        return {k: v for k, v in gen2_fixtures._code_site(ctx, symbol).items() if k != "symbol_offset"}
+
+    pack_ui = {kind: site(symbol) for kind, symbol in PACK_UI.items()}
     # PokeBallEffect asks AskGiveNicknameText -> _AskGiveNicknameText (C engine/items/item_effects.asm:
     # 1113-1115, data/text/common_3.asm:1250-1255; G/S item_effects.asm:1102-1103, common_3.asm:289-294),
     # not the gift-side "received?" text the route facts bind.
     anchor = "Give a nickname to"
     assert f'_AskGiveNicknameText::\n\ttext "{anchor}"' in ctx.read_source("data/text/common_3.asm"), \
         "catch nickname anchor left the source"
-    return {"pack_ui": pack_ui, "decoy": decoy, "prompts": {"catch_nickname": [anchor]},
+    # AskUseNextPokemon prints BattleText_UseNextMon (C data/text/battle.asm:214-216, G/S :207-209); #MON
+    # expands to POKéMON, so the anchor stops before it.
+    next_mon = "Use next"
+    assert f'BattleText_UseNextMon:\n\ttext "{next_mon} #MON?"' in ctx.read_source("data/text/battle.asm"), \
+        "use-next-mon anchor left the source"
+    return {"pack_ui": pack_ui, "faint_ui": {kind: site(symbol) for kind, symbol in FAINT_UI.items()},
+            "decoy": decoy, "prompts": {"catch_nickname": [anchor], "next_mon": [next_mon]},
             "qualification_attempt_id": qualification_attempt_id}
 
 
@@ -126,6 +141,13 @@ def verify(text: str, pack: dict, title: str) -> dict:
     # the gate emits effect_to_callback_frames in the receipt, not on the ALIGN line (first live PASS 2026-09-23)
     fa = receipt["frame_alignment"]
     assert fa["effect_to_callback_frames"] == a["callback"] - a["party_changed"] >= 0, fa
+    # battle_faint: re-checked here from the FAINT line, independently of F.faint_problem
+    f = tag_json(text, "FAINT")
+    assert f["callback"] == f["armed"] and 0 <= f["slot"] < f["party_count"], f
+    assert f["battle_hp"] == 0 and f["callback_party_hp"] > 0, f
+    assert (f["party_species"], f["party_dvs"]) == (f["battle_species"], f["battle_dvs"]), f
+    assert f["callback"] <= f["hp_zero_frame"] <= f["callback"] + 1, f
+    assert {k: v for k, v in receipt["faint_alignment"].items() if k in f} == f, receipt["faint_alignment"]
     return receipt
 
 
