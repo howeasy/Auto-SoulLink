@@ -1318,7 +1318,7 @@ class SLinkServer:
                     # are present (Codex cx-a66ab55a F2), so the key's presence is what is
                     # passed through, never a falsey-coerced value.
                     _mixed = self._mixed_games_error(
-                        player_id, _rt, msg.get("artifact_kind") or "clean",
+                        player_id, _rt, msg.get("artifact_kind", "clean"),
                         msg.get("foundation", _FOUNDATION_ABSENT))
                     if _mixed:
                         log.warning(f"[{player_id}] REJECTED: {_mixed}")
@@ -1761,7 +1761,7 @@ class SLinkServer:
             if not self.state.artifact_kind:
                 # "named" (a vanilla cartridge admitted by header) is a clean-layout artifact
                 self.state.artifact_kind = {"named": "clean"}.get(
-                    msg.get("artifact_kind") or "clean", msg.get("artifact_kind") or "clean")
+                    msg.get("artifact_kind", "clean"), msg.get("artifact_kind", "clean"))
                 _dirty = True
                 # Per-run capability: the adapter's native_trade_ui()/supports_info_panel()
                 # follow the committed kind from here on (base adapter: no-op).

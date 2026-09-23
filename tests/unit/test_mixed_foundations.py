@@ -260,6 +260,48 @@ async def test_a_present_foundation_must_be_the_derived_string(tmp_path, bad):
         await close()
 
 
+# ── declared artifact_kind: absent defaults to clean, present is an assertion ────────────
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", [None, "", False, 0, [], {}])
+async def test_a_present_artifact_kind_is_never_coerced_to_clean(tmp_path, bad):
+    """docs/protocol.md §2.2: only a MISSING key defaults to `clean`.
+
+    The socket path passed `msg.get("artifact_kind") or "clean"` into
+    `_mixed_games_error`, so a present falsey kind (None, "", False, 0, [], {}) became a
+    clean-lane admission before the isinstance check could see it, and the commit path
+    then stored "clean" for the whole run.
+    """
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        reply = await send(_hello("a", {"rom_type": "firered", "artifact_kind": bad}))
+        assert _refused(reply), (bad, reply)
+        assert "Bad artifact_kind" in srv.state.identity_error["a"]
+        assert srv.state.artifact_kind == "", "a refused hello commits no artifact kind"
+        assert not srv.state.rom_type and "a" not in srv.state.player_identity
+        # Fail-closed for a direct caller too, not only through the socket.
+        assert "Bad artifact_kind" in srv._mixed_games_error("a", "firered", bad)
+        # And the run is still open: omitting the key is what defaults to clean.
+        assert not _refused(await send(_hello("a", {"rom_type": "firered"})))
+        assert srv.state.artifact_kind == "clean"
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
+async def test_a_declared_named_artifact_kind_still_commits_as_clean(tmp_path):
+    """The commit path's `named` -> `clean` mapping is a rule, not a falsey coercion."""
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        assert not _refused(await send(_hello("a", {"rom_type": "firered",
+                                                    "artifact_kind": "named"})))
+        assert srv.state.artifact_kind == "clean"
+    finally:
+        await close()
+
+
 @pytest.mark.asyncio
 async def test_the_matching_and_the_omitted_foundation_are_both_accepted(tmp_path):
     srv = SLinkServer(data_dir=str(tmp_path))
