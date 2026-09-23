@@ -76,7 +76,14 @@
       "kind": "overlay",
       "revision": "US",
       "selection": "FUTURE",
-      "status": "PLANNED"
+      "status": "BUILT",
+      "sha1": "9f395af8735e51f623e18786a2722707af72b241",
+      "md5": "119d6cf1bce7cdf73b0435b27846fbca",
+      "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+      "ups": {
+        "file": "patch/dist/SLink-Silver.ups",
+        "sha256": "bcb5504491d331bd8e25a3b09b2b65eb0cab07d59351b16b07872beca65ef566"
+      }
     },
     {
       "id": "silver_ghost",

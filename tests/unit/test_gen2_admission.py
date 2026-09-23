@@ -327,4 +327,6 @@ def test_existing_committed_matrices_are_valid():
         # Build evidence can be populated by the separate runner after this initial cut.
         receipt_path = ROOT / "data/gen2/build_provenance.json"
         receipt = json.loads(receipt_path.read_text()) if receipt_path.exists() else None
-        admission.validate_matrix(matrix, lock, receipt, lock_bytes=lock_bytes)
+        # P4.1f: the overlay rows are BUILT from the SLink companion build receipt.
+        overlay = json.loads((ROOT / "data/gen2/overlay_provenance.json").read_text())
+        admission.validate_matrix(matrix, lock, receipt, lock_bytes=lock_bytes, overlay=overlay)

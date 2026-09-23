@@ -102,7 +102,10 @@ def test_committed_matrices_admit_all_three_under_o22_and_regenerate():
                      "silver": {"id": "G1", "state": "ADMITTED", "authority": "O-22+O-23"}}
     sys.path.insert(0, str(ROOT / "tools"))
     import gen_gen2_admission as generator
-    assert generator.main(["--provenance", str(ROOT / "data/gen2/build_provenance.json"), "--check"]) == 0
+    assert generator.main(["--provenance", str(ROOT / "data/gen2/build_provenance.json"),
+                           # P4.1f: the overlay rows are BUILT from the SLink companion build receipt
+                           "--overlay-provenance", str(ROOT / "data/gen2/overlay_provenance.json"),
+                           "--check"]) == 0
 
 
 def test_shipped_receipts_are_the_committed_fixture_bytes_and_decode_alike_in_lua():

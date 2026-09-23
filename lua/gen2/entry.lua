@@ -355,8 +355,16 @@ local function compose(deps, title, production)
                 covers=function(kind)
                     return type(checkpoint.covers) == "function" and checkpoint:covers(kind) == true
                 end})
+            -- P4.1f panel: production only; it writes WRAM0 through its own panel permit. A clean
+            -- cartridge has no live SLNK service, so it reads ABSENT and never paints.
+            local panel
+            if production then
+                local Panel = load("lua/gen2/panel.lua")
+                panel = Panel.new(profile, data.charmap, io_, Panel.writes(io_, Permit),
+                                  assert(deps.hud, "explicit hud required").sanitize or function(s) return s end)
+            end
             client = load("lua/gen2/client.lua").new({
-                reads=reads, wire=wire, writes=writes, rom=rom, boxes=boxes,
+                reads=reads, wire=wire, writes=writes, rom=rom, boxes=boxes, panel=panel,
                 safety={check=function(kind) return checkpoint:check(kind) end},
                 signals=signals,
                 -- production only: the held checkpoint PC the client hooks (writes + hello readiness)

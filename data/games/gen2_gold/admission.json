@@ -76,7 +76,14 @@
       "kind": "overlay",
       "revision": "US",
       "selection": "FUTURE",
-      "status": "PLANNED"
+      "status": "BUILT",
+      "sha1": "0bb4dcf8963d73b1686abf57aeea501086914d33",
+      "md5": "275134ffda44e07c66d5ad0c423060d6",
+      "base_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
+      "ups": {
+        "file": "patch/dist/SLink-Gold.ups",
+        "sha256": "06a3cdbff9c7da1aa0357d42ae94efe66bde949234437978446f090057abef58"
+      }
     },
     {
       "id": "gold_ghost",

@@ -367,6 +367,19 @@
         "hWX": 65489,
         "hWY": 65490
       },
+      "overlay": {
+        "artifact": "crystal_overlay",
+        "base_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+        "md5": "1560dd95bf1418f2a323888face95b1c",
+        "ram": {
+          "wAttrmap": 52697,
+          "wSlinkMailbox": 53208,
+          "wTilemap": 50336
+        },
+        "rom_sha1": "9f8c0345e03012d1da5e2e75c6828a699a1e40e8",
+        "sym": "crystal_slink.sym",
+        "sym_sha256": "df3af5c938724f5b04b27ae91115077f4135392eda948738cd85a456f7ceca23"
+      },
       "ram": {
         "hBGMapAddress": 65494,
         "hBGMapMode": 65492,

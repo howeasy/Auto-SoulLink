@@ -21,9 +21,9 @@
 -- Events come from the binder's latches only (capture, whiteout, PC ops, NPC trade,
 -- evolution) or from a binder observation settled against one read (faint, battle start/end,
 -- save, reset); nothing is inferred by polling. A binder refusal is logged once per reason. Writes happen only inside the armed permit at the
--- checkpoint. P4 (native panel, native sound, SLINK trade) is not here: those commands get
--- the protocol's "nothing happened" replies (handle_command) and request_sfx_local is the
--- sound seam.
+-- checkpoint. P4 native sound and SLINK trade are not here: those commands get the protocol's
+-- "nothing happened" replies (handle_command) and request_sfx_local is the sound seam. The
+-- native panel (P4.1f) is the optional p.panel (lua/gen2/panel.lua); nil means no panel.
 local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_PENDING_FRAMES = 600,
                  MAX_HELD = 64 }
 
@@ -52,6 +52,7 @@ function Client.new(p)
     local net, json, hud, io = p.net, p.json, p.hud, p.io
     local profile, sites, area_map = p.profile, p.sites, p.area_map
     local log = p.log or function(...) end
+    local panel = p.panel -- P4.1f panel: lua/gen2/panel.lua, or nil (no panel)
     local c = profile.constants
     local arr = json.array -- tag lists so an empty one encodes as [] not {}
 
@@ -430,7 +431,13 @@ function Client.new(p)
             local slot, mon = find_party_slot(cmd.old_key)
             send("trade_done", { token = cmd.token, slot = slot or cmd.slot, new_key = cmd.old_key,
                                  new_species = mon and mon.species_id or 0 })
-        elseif c_ == "trade_mask" or c_ == "trade_offer_ack" or c_ == "link_panel"
+        elseif c_ == "link_panel" then
+            -- P4.1f panel: held until the cartridge asks for it (panel.lua); no panel = nothing happened
+            if panel then
+                local pok, perr = panel:hold(cmd.rows)
+                if not pok then log("[SLink-gen2] link_panel: " .. tostring(perr)) end
+            end
+        elseif c_ == "trade_mask" or c_ == "trade_offer_ack"
                or c_ == "ghost_pos" or c_ == "pending_keys" then
             -- Gen 2: P4 trade/panel/presence (pending_keys feeds Gen 1's APEX set only)
         else
@@ -719,8 +726,10 @@ function Client.new(p)
             writes_enabled = self.writes_enabled, rom_sha1 = self.rom_sha1,
             in_battle = battle.mode ~= 0,
             -- Gen 2: no rom_content (gen2_gsc.rom_content_fingerprint refuses: not qualified)
-            -- and no panel/sfx capability until P4
-            panel = false, panel_abi = 0, sfx = false,
+            -- P4.1f panel: per CARTRIDGE, only a live SLink build with CAP_PANEL has it. Native
+            -- sound stays off until P4.2b binds the SE table and request_sfx_local posts to it.
+            panel = panel and panel:present() or false, panel_abi = panel and panel:abi() or 0,
+            sfx = false,
         }
         if hello_identity() ~= expected_identity then return false, "hello identity changed during snapshot" end
         return send("hello", payload)
@@ -850,6 +859,11 @@ function Client.new(p)
         -- in battle. Such a frame is skipped whole, as if it never ran: no hello step, no invalidation,
         -- nothing published from a half-read; the next mapped frame catches up (signals stay latched).
         if io.bank_valid(profile.ram_bank.wPlayerID, profile.ram.wPlayerID, 1) ~= true then return end
+        -- P4.1f panel: every mapped frame, before the hello step (the player may sit in START).
+        if panel then
+            local pok, perr = panel:service()
+            if not pok then log("[SLink-gen2] panel: " .. tostring(perr)) end
+        end
         local connected = self.hello_session:step(self.frame)
         self.checkpoint_held = false -- one frame's hold arms one frame's readiness
         self.hello_sent = connected == true

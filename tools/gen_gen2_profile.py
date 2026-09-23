@@ -18,8 +18,10 @@ from pathlib import Path
 
 if __package__:
     from .gen2_source_data import ARTIFACTS, ROOT, load_context, rom_offset
+    from .rgbds_symbols import parse_symbols
 else:
     from gen2_source_data import ARTIFACTS, ROOT, load_context, rom_offset
+    from rgbds_symbols import parse_symbols
 
 ROM_SYMBOLS = (
     "BaseData", "PokemonNames", "EvosAttacksPointers", "Moves", "MoveNames", "ItemNames",
@@ -47,6 +49,9 @@ RAM_SYMBOLS = (
     "wPokegearFlags", "wEventFlags", "wPlayersHouse1FSceneID", "wElmsLabSceneID",
     "wNewBarkTownSceneID",
 )
+# P4.1f: the Gen 2 panel binder's addresses (lua/gen2/panel.lua), read from the SLink build's
+# own pinned .sym, never the clean one's. All three live in WRAM0.
+OVERLAY_RAM = ("wSlinkMailbox", "wTilemap", "wAttrmap")
 STAT_STAGE_FIELDS = (
     ("ATTACK", "Atk"), ("DEFENSE", "Def"), ("SPEED", "Spd"),
     ("SP_ATTACK", "SAtk"), ("SP_DEFENSE", "SDef"), ("ACCURACY", "Acc"), ("EVASION", "Eva"),
@@ -490,8 +495,49 @@ def build(title: str, root: Path = ROOT) -> dict:
         "constants": constants, "storage_boxes": boxes,
         "constant_sources": source_files,
     }
+    overlay = overlay_block(ctx, title, root)
+    if overlay is not None:
+        selected["overlay"] = overlay
     return {"schema": "gen2-profile-v1", "generator": "tools/gen_gen2_profile.py",
             "source": ctx.source_record(), "write_authority": "NONE", "titles": {title: selected}}
+
+
+def overlay_block(ctx, title: str, root: Path) -> dict | None:
+    """The SLink build of this title, from data/gen2/overlay_provenance.json and its pinned .sym.
+
+    None while the published overlay is the null (mailbox-only) build: it is byte-identical to the
+    clean ROM, so there is no separate cartridge to describe.
+    """
+    raw_prov = (root / "data/gen2/overlay_provenance.json").read_bytes()
+    prov = json.loads(raw_prov)
+    if prov.get("schema") != "gen2-overlay-provenance-v1":
+        raise ValueError("overlay provenance: unsupported schema")
+    out = prov["outputs"][ctx.artifact]
+    clean_sha1 = ctx.lock["outputs"][ctx.artifact]["sha1"]
+    if out.get("base_sha1") != clean_sha1 or out.get("slink_title") != title:
+        raise ValueError(f"{title}: overlay provenance base/title disagrees with the clean pin")
+    if out.get("identical_to_clean") is True:
+        if out.get("sha1") != clean_sha1:
+            raise ValueError(f"{title}: null overlay claims a different sha1")
+        return None
+    if out.get("identical_to_clean") is not False or out.get("sha1") == clean_sha1:
+        raise ValueError(f"{title}: overlay must differ from the clean ROM")
+    name = f"{title}_slink.sym"
+    raw = (root / "data/gen2" / name).read_bytes()
+    sha = hashlib.sha256(raw).hexdigest()
+    if prov.get("symbols", {}).get(name) != sha:
+        raise ValueError(f"{name}: sha256 {sha} differs from overlay provenance")
+    symbols = parse_symbols(raw.decode("utf-8"))
+    ram = {}
+    for sym in OVERLAY_RAM:
+        if sym not in symbols:
+            raise ValueError(f"{name}: required symbol {sym!r} missing")
+        bank, address = symbols[sym]
+        if bank != 0 or not 0xC000 <= address < 0xD000:
+            raise ValueError(f"{name}: {sym} outside WRAM0")
+        ram[sym] = address
+    return {"artifact": f"{title}_overlay", "base_sha1": clean_sha1, "rom_sha1": out["sha1"],
+            "md5": out["md5"], "sym": name, "sym_sha256": sha, "ram": ram}
 
 
 def render(profile: dict) -> str:

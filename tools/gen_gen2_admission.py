@@ -3,7 +3,9 @@
 
 Without --provenance, generate hashless PLANNED rows. Passing a verified builder
 receipt explicitly promotes the four clean rows to BUILT after checking the
-adjacent .sym/.map files. Neither mode emits ADMITTED artifacts. G1 opens only for a
+adjacent .sym/.map files; --overlay-provenance (P4.1f) likewise promotes the three
+overlay rows to BUILT from the SLink companion build receipt (still FUTURE: BUILT is
+an identity, never a runtime admission). Neither mode emits ADMITTED artifacts. G1 opens only for a
 title in G1_ADMITTED (an owner ruling), only once its rows are BUILT, and the gate row
 is the grant, never the proof: lua/gen2/entry.lua re-validates that title's shipped
 PHYSICAL receipts at every load. Overlay/ghost qualification belongs to later owners.
@@ -11,6 +13,7 @@ PHYSICAL receipts at every load. Overlay/ghost qualification belongs to later ow
     python tools/gen_gen2_admission.py
     python tools/gen_gen2_admission.py --provenance data/gen2/build_provenance.json
     python tools/gen_gen2_admission.py --provenance data/gen2/build_provenance.json --check
+    python tools/gen_gen2_admission.py --provenance data/gen2/build_provenance.json         --overlay-provenance data/gen2/overlay_provenance.json --check
 """
 from __future__ import annotations
 
@@ -165,6 +168,35 @@ def validate_provenance(lock: dict, provenance: dict, *, lock_bytes: bytes | Non
                     f"provenance: {name}.{ext} hash mismatch")
 
 
+def overlay_row(title: str, lock: dict, overlay: dict) -> dict:
+    """The BUILT identity of one title's SLink companion build (data/gen2/overlay_provenance.json).
+
+    The null (mailbox-only) build is byte-identical to the clean ROM and is refused: one hash
+    must never name two artifact kinds.
+    """
+    object_at(overlay, "overlay provenance")
+    require(overlay.get("schema") == "gen2-overlay-provenance-v1", "overlay provenance: unsupported schema")
+    artifact = TITLE_OUTPUTS[title][0][0]
+    sources = object_at(overlay.get("sources"), "overlay provenance.sources")
+    source = lock["outputs"][artifact]["source"]
+    require(object_at(sources.get(source), f"overlay {source}").get("commit") == lock["sources"][source]["commit"],
+            f"overlay provenance: {source} commit differs from the lock")
+    out = object_at(object_at(overlay.get("outputs"), "overlay provenance.outputs").get(artifact),
+                    f"overlay {artifact}")
+    clean = lock["outputs"][artifact]["sha1"]
+    require(out.get("slink_title") == title and out.get("base_sha1") == clean,
+            f"overlay provenance: {artifact} title/base differs from the clean pin")
+    require(out.get("identical_to_clean") is False and is_hash(out.get("sha1"), 40) and out["sha1"] != clean,
+            f"overlay provenance: {artifact} is the null overlay (identical to clean); nothing to promote")
+    require(is_hash(out.get("md5"), 32), f"overlay provenance: {artifact} md5 missing")
+    ups = object_at(out.get("ups"), f"overlay {artifact}.ups")
+    require(isinstance(ups.get("file"), str) and is_hash(ups.get("sha256"), 64),
+            f"overlay provenance: {artifact} UPS identity missing")
+    return {"id": f"{title}_overlay", "kind": "overlay", "revision": TITLE_OUTPUTS[title][0][1],
+            "selection": "FUTURE", "status": "BUILT", "sha1": out["sha1"], "md5": out["md5"],
+            "base_sha1": clean, "ups": {"file": ups["file"], "sha256": ups["sha256"]}}
+
+
 def _planned_matrix(title: str, source_lock_sha256: str) -> dict:
     rows = [{"id": name, "kind": "clean", "revision": revision, "selection": selection,
              "lock_output": name, "status": "PLANNED"}
@@ -188,7 +220,7 @@ def _planned_matrix(title: str, source_lock_sha256: str) -> dict:
 
 
 def build_matrices(lock: dict, provenance: dict | None = None, *,
-                   lock_bytes: bytes | None = None) -> dict[str, dict]:
+                   lock_bytes: bytes | None = None, overlay: dict | None = None) -> dict[str, dict]:
     validate_lock(lock)
     source_lock_sha256 = lock_sha256(lock, lock_bytes)
     if provenance is not None:
@@ -201,11 +233,17 @@ def build_matrices(lock: dict, provenance: dict | None = None, *,
                 if row["kind"] == "clean":
                     row.update(status="BUILT", sha1=lock["outputs"][row["id"]]["sha1"],
                                build_provenance_sha256=content_sha256(provenance))
+    if overlay is not None:
+        require(provenance is not None, "overlay rows require the clean build provenance")
+        for matrix in matrices.values():
+            rows = matrix["artifacts"]
+            index = next(i for i, row in enumerate(rows) if row["kind"] == "overlay")
+            rows[index] = overlay_row(matrix["title"], lock, overlay)
     return matrices
 
 
 def validate_matrix(matrix: dict, lock: dict, provenance: dict | None = None, *,
-                    lock_bytes: bytes | None = None) -> None:
+                    lock_bytes: bytes | None = None, overlay: dict | None = None) -> None:
     validate_lock(lock)
     object_at(matrix, "matrix")
     require(isinstance(matrix.get("title"), str) and matrix["title"] in TITLE_OUTPUTS,
@@ -229,6 +267,10 @@ def validate_matrix(matrix: dict, lock: dict, provenance: dict | None = None, *,
         require(status != "ADMITTED", "matrix: ADMITTED requires separate owner G1 acceptance; P1 cannot grant it")
         if status == "PLANNED":
             require(row == planned, "matrix: PLANNED row must match selected facts and carry no hash")
+        elif planned["kind"] == "overlay":
+            require(status == "BUILT" and overlay is not None,
+                    "matrix: a BUILT overlay row requires the overlay provenance")
+            require(row == overlay_row(matrix["title"], lock, overlay), "matrix: BUILT overlay identity mismatch")
         else:
             require(status == "BUILT" and planned["kind"] == "clean", "matrix: unsupported artifact state/kind")
             built = {**planned, "status": "BUILT", "sha1": lock["outputs"][planned["id"]]["sha1"],
@@ -256,13 +298,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lock", type=Path, default=ROOT / "data/gen2_sources.lock.json")
     parser.add_argument("--out-dir", type=Path, default=ROOT / "data/games")
     parser.add_argument("--provenance", type=Path, help="explicitly promote verified clean builds to BUILT")
+    parser.add_argument("--overlay-provenance", type=Path,
+                        help="explicitly promote the SLink companion builds' overlay rows to BUILT")
     parser.add_argument("--check", action="store_true", help="validate exact current files without writing")
     args = parser.parse_args(argv)
     try:
         lock_bytes = args.lock.read_bytes()
         lock = _parse_json(lock_bytes, str(args.lock))
         provenance = _load(args.provenance) if args.provenance else None
-        matrices = build_matrices(lock, provenance, lock_bytes=lock_bytes)
+        overlay = _load(args.overlay_provenance) if args.overlay_provenance else None
+        matrices = build_matrices(lock, provenance, lock_bytes=lock_bytes, overlay=overlay)
         if provenance is not None:
             for name, expected in provenance["symbols"].items():
                 artifact = args.provenance.parent / name
@@ -282,8 +327,11 @@ def main(argv: list[str] | None = None) -> int:
                 if provenance is None:
                     require(all(row.get("status") == "PLANNED" for row in rows),
                             "existing BUILT/ADMITTED matrix requires explicit provenance; refusing downgrade")
+                if overlay is None:
+                    require(all(row.get("status") == "PLANNED" for row in rows if row.get("kind") == "overlay"),
+                            "existing BUILT overlay row requires --overlay-provenance; refusing downgrade")
                 if args.check:
-                    validate_matrix(current, lock, provenance, lock_bytes=lock_bytes)
+                    validate_matrix(current, lock, provenance, lock_bytes=lock_bytes, overlay=overlay)
             if args.check:
                 require(path.exists() and path.read_bytes() == generated.encode("utf-8"),
                         f"{path}: stale or missing; regenerate the artifact matrix")

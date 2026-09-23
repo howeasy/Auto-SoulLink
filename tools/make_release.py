@@ -121,6 +121,7 @@ _LUA_GEN2 = [
     "signals.lua",
     "wire.lua",
     "boxes.lua",
+    "panel.lua",  # P4.1f: entry.lua composes it (production); it dofiles ../gb_panel.lua
 ]
 
 # lua/clients/

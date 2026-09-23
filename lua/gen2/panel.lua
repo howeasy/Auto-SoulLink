@@ -1,0 +1,141 @@
+-- lua/gen2/panel.lua — the Gen 2 binder onto lua/gb_panel.lua (P4.1f): the client paints,
+-- the cartridge reveals.
+--
+-- gb_panel.lua owns the handshake, the tile renderer and the SFX queue. This file supplies the
+-- Gen 2 facts, every address from the profile's generated `overlay` block (tools/gen_gen2_profile.py
+-- reads it from the pinned data/gen2/<title>_slink.sym): wSlinkMailbox, wTilemap, wAttrmap, the
+-- pack's charmap and the deadline. It adds one Gen 2 policy on top: FRESHNESS. Native Reset
+-- leaves the old mailbox in WRAM0 for 32 DelayFrames before Init clears it, and New Game never
+-- clears it (patch/gen2/src/slink.asm tail), so a beacon alone can be last session's. The
+-- mailbox counts as live only while the service's init cookie reads $A5 AND its sampled frame
+-- counter has moved within STALL frames. Until then the cartridge reads ABSENT and nothing paints.
+local module_dir = debug.getinfo(1, "S").source:match("^@(.+[/\\])[^/\\]+$")
+local G = dofile(assert(module_dir, "gen2/panel.lua must be dofile'd by path") .. "../gb_panel.lua")
+local P = {}
+
+-- patch/gb/slink_abi.inc: version 3, the LE sampled counter at +5..6. patch/gen2/src/slink.asm:
+-- SLINK_SAMPLE_VALID = mailbox + SLINK_PUBLIC_SIZE + 1 (= +31) holds SLINK_SAMPLE_COOKIE $A5,
+-- written by the service's first visit after Init zeroed the mailbox.
+-- tests/unit/test_gen2_panel.py pins all of these to the .inc/.asm.
+P.ABI_VERSION, P.OFF_COUNTER, P.OFF_COOKIE, P.COOKIE = 3, 5, 31, 0xA5
+-- Codex's panel plan (P4.1e): the panel loads SCGB_DIPLOMA's neutral palettes and paints the
+-- attrmap with palette 0, and WaitBGMap2 moves attrs and tiles together. Gold/Silver run in both
+-- modes, but their own ClearScreen fills wAttrmap without testing hCGB (pokegold home/text.asm
+-- ClearScreen); only the VRAM push is gated on hCGB (home/map.asm .PushAttrmap). So painting the
+-- buffer is mode-independent, the same as the game's own clear. Crystal is CGB-only (-C).
+P.ATTR_FILL = 0
+-- The patch stages for <= 90 DelayFrames and then reveals the fallback. Ours is tighter, measured
+-- from the transition WE observed (the Gen 1 value).
+P.DEADLINE = 60
+-- The counter only moves when DelayFrame runs the service; the START menu and the panel poll call
+-- it every frame. A second without movement means the service isn't running and the bytes are stale.
+P.STALL = 60
+-- ponytail: P4.2b binds the Gen 2 SE table (caps SFX is 0 until P4.2a); no server id maps yet.
+P.SFX_CODE_FOR_GEN3_ID = {}
+P.BLANK = G.BLANK
+P.WRAM0_LO, P.WRAM0_HI = 0xC000, 0xD000   -- hardware: WRAM0 is never banked; every panel byte is in it
+
+--- ASCII -> Gen 2 tile id over the pack's generated charmap (data/games/gen2_*/charmap.lua
+--- `encoding`). A tile write shows a glyph only for the font block ($7F space .. $FF); a code
+--- below it ('@' terminator, '#' the POKé control) is text-engine control, never a tile, so it
+--- and anything unmapped become spaces rather than guesses.
+function P.tile_for(charmap)
+    local enc = assert(charmap and charmap.encoding, "Gen 2 charmap.encoding required")
+    return function(ch)
+        local b = enc[ch]
+        if type(b) == "number" and b >= G.BLANK and b <= 0xFF then return b end
+        return G.BLANK
+    end
+end
+
+--- The panel's own write window: a shared write_permit over WRAM0 only, armed by gb_panel with
+--- its allow() predicate. It never shares a permit with the party/box writers.
+function P.writes(io, Permit)
+    assert(Permit and Permit.new, "shared write permit factory required")
+    local permit = Permit.new({
+        write_u8 = function(addr, value, domain) return io.write_u8(addr, value, domain) end,
+        domains = { ["System Bus"] = {
+            bounds = function(addr, n, reason)
+                return reason == "panel" and addr >= P.WRAM0_LO and addr + n <= P.WRAM0_HI
+            end,
+            mapped = function() return true end,          -- WRAM0: no bank to check
+            pointer_stable = function() return true end,  -- concrete addresses from the profile
+        } },
+        -- gb_panel arms and disarms around each page inside one frame's service().
+        lifetime = { capture = function() return {} end, valid = function() return true end },
+        provenance = function(domain, addr, n, reason)
+            return { addr = addr, n = n, why = reason, domain = domain, frame = io.framecount() }
+        end,
+    })
+    local arm, write = permit.arm, permit.write_bytes
+    return {
+        log = permit.log,
+        arm = function(_, reason, allow)
+            return arm(permit, reason, allow and function(domain, addr, n)
+                return domain == "System Bus" and allow(addr, n)
+            end or nil)
+        end,
+        disarm = function() permit:disarm() end,
+        write_bytes = function(_, addr, bytes) return write(permit, "System Bus", addr, bytes) end,
+    }
+end
+
+--- profile: the selected title profile (entry.lua); its `overlay` block names the addresses.
+--- charmap: the pack's charmap.lua. io: read_u8/framecount. writes: P.writes(...). sanitize: hud.lua's.
+--- Returns nil, why when the profile has no overlay block (no SLink build exists for it).
+function P.new(profile, charmap, io, writes, sanitize)
+    local ov = type(profile) == "table" and profile.overlay
+    if type(ov) ~= "table" or type(ov.ram) ~= "table" then
+        return nil, "profile has no overlay block: no SLink cartridge build for this title"
+    end
+    local ram = ov.ram
+    local MAILBOX = assert(ram.wSlinkMailbox, "overlay.ram.wSlinkMailbox required")
+    local self = G.new({
+        mailbox  = MAILBOX,
+        tilemap  = assert(ram.wTilemap, "overlay.ram.wTilemap required"),
+        attrmap  = { base = assert(ram.wAttrmap, "overlay.ram.wAttrmap required"), fill = P.ATTR_FILL },
+        charmap  = P.tile_for(charmap),
+        se_map   = P.SFX_CODE_FOR_GEN3_ID,
+        deadline = P.DEADLINE,
+    }, io, writes, sanitize)
+
+    local function u8(addr)
+        local v = io.read_u8(addr)
+        return type(v) == "number" and math.floor(v) % 256 or nil
+    end
+    local last_counter, moved_at, fresh = nil, nil, false
+
+    --- One observation per frame: live = beacon + version 3 + cookie, with the counter moving.
+    local function observe()
+        local frame = io.framecount()
+        local ok = u8(MAILBOX) == G.BEACON[1] and u8(MAILBOX + 1) == G.BEACON[2]
+                   and u8(MAILBOX + 2) == G.BEACON[3] and u8(MAILBOX + 3) == G.BEACON[4]
+                   and u8(MAILBOX + G.OFF_ABI) == P.ABI_VERSION and u8(MAILBOX + P.OFF_COOKIE) == P.COOKIE
+        local lo, hi = u8(MAILBOX + P.OFF_COUNTER), u8(MAILBOX + P.OFF_COUNTER + 1)
+        if not ok or lo == nil or hi == nil or type(frame) ~= "number" then
+            last_counter, moved_at, fresh = nil, nil, false
+            return
+        end
+        local counter = lo + hi * 256
+        if last_counter ~= nil and counter ~= last_counter then
+            moved_at, fresh = frame, true
+        elseif moved_at == nil or frame - moved_at > P.STALL then
+            fresh = false   -- never seen moving, or stalled: last session's bytes or no service
+        end
+        last_counter = counter
+    end
+
+    function self:fresh() return fresh end
+
+    local base_present, base_sfx_present, base_service = self.present, self.sfx_present, self.service
+    function self:present() return fresh and base_present(self) end
+    function self:sfx_present() return fresh and base_sfx_present(self) end
+    function self:service()
+        local ok, err = pcall(observe)
+        if not ok then fresh = false return nil, tostring(err) end
+        return base_service(self)
+    end
+    return self
+end
+
+return P
