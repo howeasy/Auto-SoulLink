@@ -545,7 +545,7 @@ Assertions for `tests/unit/test_protocol_conformance.py`: a lupa-driven fake ser
 **tick / snapshots**
 
 14. `tick` is periodic (Gen 3: every 30 frames) and carries `has_pokeballs`, `area_id`, `loc_name`, `in_battle`, `badges`, `trainer_name`; `party` when the save is valid and not borrowed; `enemy_party` (`[]` outside battle); `pc_boxes` when the party diff is trustworthy (`gen3:4126-4372`).
-15. The first tick after a wild battle starts has `in_battle=true`, `is_trainer_battle=false`, non-empty `area_id`, and `enemy_party[0].species_id > 0` (`server.py:3074-3093`).
+15. The first tick after a wild battle starts has `in_battle=true`, `is_trainer_battle=false`, non-empty `area_id`, and `enemy_party[0].species_id > 0` (`server.py`: the wild-battle-start dupes block inside `_dispatch`, gated on `_enc_species` — `:2129-2148` at `99c70d9c`; the block moved from `:3074-3093`, which is why this cites the function).
 16. In a trainer battle the tick has `is_trainer_battle=true` and `trainer_id>0`, or `opponent_name`/`opponent_class` (`server.py:3049-3064`).
 17. `status_cond` uses the §8-5 bit layout; `stat_stages` is a 7-list with 6 = neutral present only for `active` mons; `pp_ups` or `pp_bonuses` present when `moves` are (`html_render.py:150-196`, `server.py:3392-3410`).
 18. `pc_boxes` entries have 0-based `box`/`slot`, `key`, `species_id`, `nickname`; the memorial box index used by the client equals `adapter.memorial_box_index` (`server.py:8019-8027`).

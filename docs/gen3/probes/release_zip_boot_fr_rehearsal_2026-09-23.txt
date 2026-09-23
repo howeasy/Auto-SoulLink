@@ -1,5 +1,5 @@
 G4 item 5 REHEARSAL: the extracted release zip boots FireRed on the NEW client
-zip: SLink-player-0.0.0-g4check built by OMP (C4-ZIP) from a verified git-archive export of a0657c20 (84/84 shipped files == HEAD blobs; closure 23/23 present)
+zip: SLink-player-0.0.0-g4check built by OMP (C4-ZIP). CORRECTION (C4-ZIPCHK): the export was an unpinned `git archive HEAD`, so the zip is NOT a0657c20; tools/check_release_zip.py PASSES it at --rev 99c70d9c (85 members == blobs, 23/23 closure) and FAILS it at a0657c20 on exactly the C5 files, so this boot ran the committed C5 stack (2dc1b750).
 boot: EmuHawk --config=<temp cfg, GBA SaveRAM in a temp dir seeded with tests/fixtures/gen3/firered_party_town.sav> --lua=<bootstrap: sets SLINK_HOST/PORT/PLAYER, taps A 300-1500 frames, dofile <extract>/lua/slink.lua> 'Pokemon - FireRed Version (USA).gba' (sha1 41cb23d8); server: python -m server.server from the same export
 The final receipt is re-taken on the final cut.
 
