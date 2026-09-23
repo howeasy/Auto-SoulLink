@@ -57,3 +57,30 @@ Not proven:
 
 Natural-play task snapshots would settle it: League rooms, Icefall Cave, Center 1F, the Union Room room, map-name
 popups, and returning from item and field-move interactions.
+
+## Adversarial review of the C4-SAVE fix (headless Codex cx-3e10776a, SLink 0e7f89e7, pret c75f3523)
+
+Runtime fixes RETAINED. No unsafe write frame was found in any vanilla save or link path. Paths covered:
+- START save, including the overwrite/replace prompts, cancel, success/error text, and the unlock-to-destroy interval,
+  where there is no intervening frame loop;
+- Cable Club/script save (task50_save_game + CONTEXT_WAITING);
+- flash-failure recovery (the task persists);
+- Hall of Fame;
+- Task_LinkFullSave and its minigame callers;
+- post-link-battle and trade incremental saves;
+- Mystery Gift, chat, e-reader and erase-save.
+
+SaveBattleTowerProgress is registered, but no invoking script was found.
+
+On link: cable callbacks run only behind sLinkOpen. Wireless relies on the other exclusions (linked overworld
+callbacks, Task_RunUnionRoom, the player-exchange tasks). gReceivedRemoteLinkPlayers can clear before RFU teardown
+completes, so it is not a universal teardown witness.
+
+REJECT on the probe only: the dialog row treats the stale sSaveDialogCB as proof of an active dialog, so after an
+earlier save it can pass on a different START submenu. This is routed to C4-6t, together with the save helper's
+second-save detection.
+
+RR: the four gated link bodies and the START/save-dialog wrappers are byte-identical, but HandleSavingData and
+RunSaveFailedScreen differ from FR, so RR is not qualified here.
+
+PHYSICAL rows owed are listed in the review; they are carried into the G4 draft's 2a/2b.
