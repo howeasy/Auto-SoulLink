@@ -416,15 +416,17 @@ PARTY_TITLES: dict[str, dict[str, object]] = {
         # BizHawk's gamedb knows a clean FR/LG dump: the battery is filed under the gamedb title
         # (tests/fixtures/gen3/README.md), not under the staged ROM's filename.
         "saveram": "Pokemon - FireRed Version (USA).SaveRAM",
-        # gen3_fr_newgame_inputs.lua's intro legs are frame-timed and were verified on FR US 1.0
-        # only (its own header banner). LG's intro is the same engine, but nobody has calibrated
-        # its naming screens, so the scripted NEW GAME lane refuses LG by name.
         "scripted_newgame": True,
     },
     "leafgreen": {
         "rom": "Pokemon - LeafGreen Version (USA).gba",
         "saveram": "Pokemon - LeafGreen Version (USA).SaveRAM",
-        "scripted_newgame": False,
+        # Owner ruling 2026-09-23 (card C4-LGF2): "the intro is the same as FireRed, why not
+        # just copy it?" -- FR and LG are the same pret pokefirered engine built twice, so
+        # gen3_fr_newgame_inputs.lua's intro legs (frame-timed, verified on FR US 1.0) are
+        # reused on LG rather than refused. A mistuned run still fails loudly on the pinned
+        # post-intro walk/save (map id, flash sector counter), same as FR.
+        "scripted_newgame": True,
     },
 }
 
@@ -641,10 +643,11 @@ def cmd_boot_check(args: argparse.Namespace) -> int:
 
 
 def cmd_make_fr(args: argparse.Namespace) -> int:
-    """The scripted NEW GAME lane. FireRed only: gen3_fr_newgame_inputs.lua's intro legs are
-    frame-timed and were verified on FR US 1.0 (its own header banner), and LG's naming screens
-    have never been calibrated. Refused by name -- before anything is staged or launched -- so a
-    caller who cannot supply a calibrated intro finds out here, not from a mistuned run."""
+    """The scripted NEW GAME lane: FireRed and LeafGreen, the same pret pokefirered engine built
+    twice, share gen3_fr_newgame_inputs.lua's frame-timed intro legs (owner ruling 2026-09-23,
+    card C4-LGF2). A title with no calibrated scripted intro (none currently) is refused by name
+    -- before anything is staged or launched -- so a caller who cannot supply one finds out here,
+    not from a mistuned run."""
     try:
         title = _checked_title(args)
     except ValueError as exc:
@@ -654,10 +657,10 @@ def cmd_make_fr(args: argparse.Namespace) -> int:
         print(f"make-fr FAIL: {title} has no calibrated scripted NEW GAME. "
               f"lua/tests/gen3_fr_newgame_inputs.lua's intro legs (copyright/Oak/gender/two "
               f"naming screens) are placed by elapsed frames and verified on FireRed US 1.0 "
-              f"only; LG's screens are uncalibrated and the driver refuses to guess. For an LG "
-              f"pre-starter save: play the intro by hand (normal inputs) to Pallet Town, save "
-              f"in-game, then `import` it -- see tests/fixtures/gen3/README.md. For a party "
-              f"fixture from such a save: `make-fr-party --title leafgreen --seed <it>`.",
+              f"only. For a pre-starter save on {title}: play the intro by hand (normal inputs) "
+              f"to Pallet Town, save in-game, then `import` it -- see "
+              f"tests/fixtures/gen3/README.md. For a party fixture from such a save: "
+              f"`make-fr-party --title {title} --seed <it>`.",
               file=sys.stderr)
         return 1
     rom_rel, run_dir, battery = _prepare_run(
@@ -882,13 +885,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_boot.add_argument("--timeout", type=int, default=600)
     p_boot.set_defaults(func=cmd_boot_check)
 
-    p_fr = sub.add_parser("make-fr", help="EMULATOR: scripted NEW GAME on FireRed -> fixture "
-                                          "(FireRed only; LeafGreen refuses by name)")
+    p_fr = sub.add_parser("make-fr", help="EMULATOR: scripted NEW GAME -> fixture "
+                                          "(FireRed and LeafGreen; the same intro drives both)")
     p_fr.add_argument("--rom", required=True)
     p_fr.add_argument("--out", required=True)
     p_fr.add_argument("--title", default=None,
-                      help="party-lane title (default firered); a title without a calibrated "
-                           "scripted intro refuses by name")
+                      help="party-lane title (default firered): firered or leafgreen; a title "
+                           "without a calibrated scripted intro refuses by name")
     p_fr.add_argument("--saveram-name", default=None)
     p_fr.add_argument("--timeout", type=int, default=1800)
     p_fr.set_defaults(func=cmd_make_fr)

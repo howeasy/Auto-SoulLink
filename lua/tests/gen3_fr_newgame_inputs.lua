@@ -8,26 +8,53 @@
 --   python tools/gen3_fixtures.py make-fr --rom <FireRed.gba> --out tests/fixtures/gen3/firered_town.sav
 --
 -- Environment: SLINK_ROOT, SLINK_GEN3_CHECKPOINT, SLINK_GEN3_TITLE (see gen3_boot_check.lua).
--- Optional tuning knobs, because the legs below are TIMED, not signalled (see the warning):
---   SLINK_GEN3_FR_INTRO      frames of A/Start mashing before the player-name menu (2700)
---   SLINK_GEN3_FR_NAME_GAP   frames between the player-name and rival-name menus (1500)
 --
--- ┌── Intro legs: TIMED, verified PHYSICALLY 2026-09-21 ─────────────────────────────────────┐
--- │ The intro legs (copyright, Oak, gender, two naming screens) are placed by elapsed frames  │
--- │ and their menu geometry is not pinned from source; they were VERIFIED by outcome on FR   │
--- │ US 1.0 (docs/gen3/probes/makefr_firered_town_2026-09-21.txt): the run reached the field  │
--- │ on 2F at (6,6) with a male sprite (†1 BOY) and a preset name (trainer "JONN", †2/†3),    │
--- │ twice with the default frame counts (†4). A mistuned intro still fails loudly: the walk   │
--- │ out is keyed to SaveBlock1 coordinates/map id and the save to the flash sector counter.   │
--- │ The walk out (leg 6) is PINNED from pret/pokefirered c75f352 map data, see below.         │
--- │ Radical Red is NOT driven by this script (its fixture is an imported real save); its      │
--- │ extra intro textboxes on 2F / on the way to 1F are what the stalled-step A presses absorb. │
+-- ┌── Intro legs: WITNESS-DRIVEN (card C4-LGF2, coordinator steer 2026-09-23) ────────────────┐
+-- │ Originally TIMED (fixed elapsed-frame waits tuned once on FR, verified PHYSICALLY          │
+-- │ 2026-09-21). That broke on LeafGreen: the SCREENS and CHOICES are identical (same          │
+-- │ pret pokefirered engine, same naming-screen behaviour) but the ELAPSED FRAME COUNT to      │
+-- │ reach the gender prompt and each naming screen differs by title -- so a frame budget       │
+-- │ tuned on FR landed the input a beat early/late on LG. Replaced with the same "wait for      │
+-- │ the engine's own task/callback2, never a frame guess" shape c1507b7d already used for the  │
+-- │ START-menu SAVE row: mash A/Start (safe on every plain textbox) until                      │
+-- │ Task_OakSpeech_HandleGenderInput or CB2_NamingScreen is the active task/callback2           │
+-- │ (lua/tests/gen3_title_syms.lua, checked against both pret .sym files), THEN press the      │
+-- │ pinned choice ONCE. Only the button sequence itself is still unverified from source (†1     │
+-- │ BOY, †2/†3 Down+A = first preset name) -- never the timing, on either title now.            │
+-- │ The walk out (leg 6) is PINNED from pret/pokefirered c75f352 map data, see below.           │
+-- │ Radical Red is NOT driven by this script (its fixture is an imported real save); its        │
+-- │ extra intro textboxes on 2F / on the way to 1F are what the stalled-step A presses absorb.  │
 -- └───────────────────────────────────────────────────────────────────────────────────────────┘
 
 local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
 assert(WT, "SLINK_ROOT unset — launch via tools/gen3_fixtures.py")
 local G = dofile(WT .. "/lua/tests/gen3_boot_check.lua")   -- helpers only; it does not self-run
 local PL = dofile(WT .. "/lua/tests/playlib.lua")
+local Syms = dofile(WT .. "/lua/tests/gen3_title_syms.lua")
+
+-- TITLE: same "global, else env, else firered" shape gen3_scripted_play.lua uses, so every
+-- existing FireRed caller (neither global nor env set) keeps byte-for-byte behaviour.
+local TITLE = SLINK_GEN3_TITLE or os.getenv("SLINK_GEN3_TITLE")
+if not TITLE or TITLE == "" then TITLE = "firered" end
+local S = Syms.for_title(TITLE)
+local TASK_SIZE = 40   -- gTasks entry size (gen3_scripted_play.lua's own TASK_SIZE, S.TASKS_BASE)
+
+--- Is the task at `addr` the currently active one? Same gTasks[] scan shape as
+--- gen3_scripted_play.lua's own party_task(): func u32 @+0, isActive u8 @+4.
+local function task_active(addr)
+    if not addr then return false end
+    for slot = 0, 15 do
+        local base = S.TASKS_BASE + slot * TASK_SIZE
+        if memory.read_u8(base + 4) ~= 0 and memory.read_u32_le(base) == addr then
+            return true
+        end
+    end
+    return false
+end
+
+local function callback2_is(addr)
+    return addr ~= nil and memory.read_u32_le(S.GMAIN_CALLBACK2_ADDR) == addr
+end
 -- The step walker and the press-into-warp come from the shared scripted-play runtime
 -- (lua/tests/playlib.lua). This script binds only what those two need: playlib holds no host
 -- call and no game fact of its own (Codex review cx-67a6e199), and a walk that never fights
@@ -57,9 +84,6 @@ G.open("gen3_fr_newgame")
 pcall(client.speedmode, 6399)
 G.budget = 120000
 
-local INTRO = tonumber(os.getenv("SLINK_GEN3_FR_INTRO") or "") or 2700
-local NAME_GAP = tonumber(os.getenv("SLINK_GEN3_FR_NAME_GAP") or "") or 1500
-
 local cp, title = G.checkpoint()
 G.phase("start", "title=" .. tostring(title))
 
@@ -73,34 +97,60 @@ if G.save_counter(domain) >= 0 then
 end
 G.phase("domain", domain .. " (erased battery, cold boot)")
 
--- ── leg 1 †1 †4: copyright, Oak's speech, the gender prompt ─────────────────────────────────
--- A on the 16-frame cadence advances text and takes each prompt's default row; Start skips
--- the attract cutscene. Stops early if the field is somehow already up.
-G.phase("intro", "frames=" .. INTRO)
-G.mash(INTRO, function() return G.pred_ok(cp, "callback2") end)
+-- ── leg 1 †1: copyright, Oak's speech, the gender prompt (witness-driven) ────────────────────
+-- A on the 16-frame cadence advances every preceding textbox (safe: a plain message only
+-- needs A, Start only skips the attract cutscene); stop the instant the gender-prompt task
+-- itself becomes active, then press A ONCE -- a deliberate select, not a press that happens to
+-- land inside a blind mash. Stops early if the field is somehow already up.
+local GENDER_TASK = S.TASK_OAKSPEECH_GENDER_INPUT
+G.phase("intro", "waiting for the gender-prompt task")
+if not G.mash(90000, function()
+    return G.pred_ok(cp, "callback2") or task_active(GENDER_TASK)
+end) then
+    G.shot("stuck")
+    G.finish(false, "the gender-prompt task never became active (Task_OakSpeech_HandleGenderInput)")
+end
+if task_active(GENDER_TASK) then
+    G.tap("A", 3, 20)   -- †1 BOY, the default cursor position
+end
 
 -- ── leg 2 †2: the player-name screen — Down then A takes the first preset ───────────────────
-G.phase("name-player", "†UNVERIFIED Down+A = first preset name")
+-- Mash through the gender-confirm/name-prompt text until the naming screen's own callback
+-- (CB2_NamingScreen) is up, then commit the preset -- no elapsed-frame guess either side.
+local NAMING_CB2 = S.CB2_NAMING_SCREEN
+G.phase("name-player", "waiting for the naming screen")
+if not G.mash(90000, function() return callback2_is(NAMING_CB2) end) then
+    G.shot("stuck")
+    G.finish(false, "the player-naming screen never opened (CB2_NamingScreen)")
+end
 G.tap("Down", 3, 20)
 G.tap("A", 3, 60)
+if not G.mash(9000, function() return not callback2_is(NAMING_CB2) end) then
+    G.shot("stuck")
+    G.finish(false, "the player-naming screen never closed after Down+A")
+end
 
--- ── leg 3 †4: "So it's <NAME>!", then Oak introduces the rival ───────────────────────────────
-G.phase("name-gap", "frames=" .. NAME_GAP)
-G.mash(NAME_GAP, function() return G.pred_ok(cp, "callback2") end)
-
--- ── leg 4 †3: the rival-name screen — same shape ────────────────────────────────────────────
-G.phase("name-rival", "†UNVERIFIED Down+A = first preset name")
+-- ── leg 3: "So it's <NAME>!", then Oak introduces the rival ─────────────────────────────────
+-- ── leg 4 †3: the rival-name screen — same shape, same witness, reused for the SECOND time
+-- CB2_NamingScreen comes up (the address does not distinguish player vs. rival; order does).
+G.phase("name-rival", "waiting for the naming screen")
+if not G.mash(90000, function() return callback2_is(NAMING_CB2) end) then
+    G.shot("stuck")
+    G.finish(false, "the rival-naming screen never opened (CB2_NamingScreen)")
+end
 G.tap("Down", 3, 20)
 G.tap("A", 3, 60)
+if not G.mash(9000, function() return not callback2_is(NAMING_CB2) end) then
+    G.shot("stuck")
+    G.finish(false, "the rival-naming screen never closed after Down+A")
+end
 
 -- ── leg 5: Oak's wrap-up, then the player wakes in the bedroom ──────────────────────────────
 if not G.boot_to_field(cp, 9000) then
     G.shot("stuck")
     local cb2 = G.pred(cp, "callback2")
-    G.finish(false, string.format("the intro never handed control to the field (callback2=%08X). "
-                               .. "The †UNVERIFIED legs above are the suspect: retune "
-                               .. "SLINK_GEN3_FR_INTRO / SLINK_GEN3_FR_NAME_GAP and see "
-                               .. "patch/build/gen3_stuck.png", cb2))
+    G.finish(false, string.format("the intro never handed control to the field (callback2=%08X); "
+                               .. "see patch/build/gen3_stuck.png", cb2))
 end
 
 -- ── leg 6: out of the bedroom, down the stairs, out the front door into Pallet Town ─────────

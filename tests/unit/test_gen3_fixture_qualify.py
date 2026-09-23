@@ -212,23 +212,29 @@ def test_leafgreen_rom_default_is_the_checkout_root_dump():
     assert os.path.exists(path)
 
 
-def test_make_fr_refuses_leafgreen_by_name_without_staging_or_launching(monkeypatch, capsys,
-                                                                        tmp_path):
-    """gen3_fr_newgame_inputs.lua's intro legs are frame-timed and FR-verified only, so the
-    scripted NEW GAME lane must refuse LG *before* anything is copied or launched -- and say what
-    to do instead."""
-    def boom(*_a, **_k):
-        raise AssertionError("refused title reached stage_rom/_launch")
+def test_make_fr_now_drives_leafgreen_through_the_shared_fr_intro(monkeypatch, tmp_path):
+    """Owner ruling 2026-09-23 (card C4-LGF2): FR and LG are the same pret pokefirered engine
+    built twice, so LG reuses gen3_fr_newgame_inputs.lua's intro rather than being refused by
+    name. Emulator boundary stubbed (stage_rom/_launch): this only proves the plumbing reaches
+    the driver with title=leafgreen instead of refusing before staging."""
+    assert fx.PARTY_TITLES["leafgreen"]["scripted_newgame"] is True
+    seen: dict = {}
 
-    monkeypatch.setattr(fx, "stage_rom", boom)
-    monkeypatch.setattr(fx, "_launch", boom)
+    monkeypatch.setattr(fx, "_prepare_run", lambda name, rom, *, seed, saveram_name_override:
+                         ("patch/build/staged.gba", tmp_path, "staged.SaveRAM"))
+
+    def fake_launch(script, rom_rel, run_dir, *, rr, timeout, extra_env=None, title=None):
+        seen.update(script=script, rom_rel=rom_rel, rr=rr, title=title)
+        return False, "RESULT: FAIL (stub)"
+
+    monkeypatch.setattr(fx, "_launch", fake_launch)
     code = fx.cmd_make_fr(argparse.Namespace(title="leafgreen", rom="ignored.gba",
                                              out=str(tmp_path / "x.sav"), saveram_name=None,
                                              timeout=1))
-    assert code == 1
-    err = capsys.readouterr().err
-    assert "no calibrated scripted NEW GAME" in err
-    assert "README.md" in err and "make-fr-party --title leafgreen" in err
+    assert code == 1  # the stub never reported PASS
+    assert seen["script"] == fx.FR_NEWGAME_LUA
+    assert seen["title"] == "leafgreen"
+    assert seen["rr"] is False
 
 
 def test_make_party_wires_the_leafgreen_title_saveram_and_run_dir(monkeypatch, tmp_path):

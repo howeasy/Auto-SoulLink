@@ -325,6 +325,23 @@ local function party_task()
     end
     return nil
 end
+--- Generic gTasks[] witness (card C4-LGF2): is the task at `addr` the currently active one?
+--- Same func-at-+0/isActive-at-+4 scan party_task() above already uses for its own three
+--- addresses, reusable for any single task address -- e.g. TASK_YES_NO_MENU below.
+local function task_active(addr)
+    if not addr then return false end
+    for slot = 0, 15 do
+        local base = TASKS_BASE + slot * TASK_SIZE
+        if memory.read_u8(base + 4) ~= 0 and memory.read_u32_le(base) == addr then
+            return true
+        end
+    end
+    return false
+end
+-- Task_YesNoMenu_HandleInput (src/script_menu.c): the generic Yes/No confirm task every
+-- ScriptMenu_YesNo box uses, including the starter-nickname decline the "starter" leg drives
+-- below. No radical_red value: this file's story legs already refuse RR by name.
+local TASK_YES_NO_MENU = S.TASK_YES_NO_MENU
 local CB2_BAG_MENU_RUN = S.CB2_BAG_MENU_RUN      -- CB2_BagMenuRun | 1 (Thumb bit)
 local BAG_MENU_STATE_ADDR = S.BAG_MENU_STATE_ADDR   -- gBagMenuState
 local BAG_POCKET_OFF, BAG_ITEMS_ABOVE_OFF, BAG_CURSOR_POS_OFF = 0x06, 0x08, 0x0E
@@ -834,8 +851,29 @@ play = PL.bind(H, {
     end,
 })
 
+-- WITNESS-DRIVEN battle recovery (card C4-LGF2, coordinator steer 2026-09-23). PHYSICAL LG run:
+-- parcel_deliver's "Route1->Pallet" warp failed with "map never changed from 787" -- the phase
+-- log showed the walk itself (route1_north_to_south_edge) reached its own `to` tile cleanly, so
+-- the stall was in THIS press-into-the-connection step, which sits on tall grass (Route 1's
+-- south/north edges are grass at every open column; route1_edge_to_lab_door's own PATHS comment
+-- already says so). playlib's enter_warp presses blindly and carries no battle policy of its own
+-- (playlib holds no game fact); RE-RUNNING THE SAME PRESS SEQUENCE ON AN UNCHANGED FAILURE WOULD
+-- ONLY RE-ROLL THE SAME RNG, so the fix resolves whatever incidental battle is actually open --
+-- witnessed by play.in_battle, fought with play.fight_through, the exact pattern route1_faint
+-- already uses for a battle mid-walk -- THEN retries the press. Deterministic regardless of which
+-- tile the encounter rolls on.
 local function warp_to(cp, dir, budget, dest, label)
-    local ok, why = play.enter_warp(cp, dir, budget)
+    local ok, why
+    for _ = 1, 3 do
+        ok, why = play.enter_warp(cp, dir, budget)
+        if ok then break end
+        if not play.in_battle(cp) then break end   -- a real failure, not a battle: stop retrying
+        if not play.fight_through(cp, 1200) then
+            G.finish(false, label .. ": warp_failed: an incidental battle during the warp "
+                         .. "press never ended")
+            return
+        end
+    end
     if not ok then G.finish(false, label .. ": warp_failed: " .. tostring(why)); return end
     verify_destination(cp, label, dest)
 end
@@ -1767,6 +1805,21 @@ LEGS[#LEGS + 1] = {
         "data/maps/PalletTown_ProfessorOaksLab/scripts.inc:1140-1180 (RivalPicksStarter -> RivalWalksToX -> RivalTakesStarter: trailing rival dialogue, all plain `message`/`msgbox` with no further MSGBOX_YESNO)",
     },
     run = function(cp)
+        -- SEED LANDING TILE (card C4-LGF2). town_start_to_oak_trigger's own `from` (6,9) is
+        -- pinned against tests/fixtures/gen3/firered_town.sav's committed position -- but that
+        -- fixture was built 2026-09-21, before save_via_menu's stray-Down-during-the-SAVE-row-
+        -- search bug was fixed at the root (card gen3-P4-C4-F2, commit c1507b7d), and the
+        -- README records that bug as capable of nudging the player's position DURING a save. A
+        -- battery built with the fixed helper (leafgreen_town.sav) rests at the engine's TRUE
+        -- post-door-exit tile instead (DEST.house_exit, "Exterior door exits take one step
+        -- south"), one tile short. Bridge that one step here -- a no-op for firered_town.sav,
+        -- which is already at (6,9) and never takes this branch.
+        do
+            local px, py = G.pos(cp)
+            if px == DEST.house_exit.x and py == DEST.house_exit.y then
+                play.follow(cp, "house_exit_to_town_start", "starter")
+            end
+        end
         -- Walking onto (12,1) fires the coord_event; from here to landing in the lab at scene=2
         -- is ENTIRELY scripted (lockall): Oak enters, leads the player north through the door,
         -- an internal `warp` command lands them at (6,12) in the lab, and the lab's own
@@ -1876,18 +1929,25 @@ LEGS[#LEGS + 1] = {
 
         -- Phase 2: the trailing "received {mon} from OAK!" message/fanfare, the nickname
         -- Yes/No (Text_GiveNicknameToThisMon, scripts.inc:1129), and the rival's own dialogue
-        -- (scripts.inc:1140-1180) all run before script_context_status goes idle. A alone would
-        -- risk landing on the nickname box's default YES and opening the naming screen this
-        -- driver doesn't handle; B alone risks not dismissing a plain message (only A does).
-        -- Alternating A then B on every tap is safe both ways: a plain `message`/`waitmessage`
-        -- box only closes on A (B is a no-op there); the one Yes/No box left (nickname) treats
-        -- B identically to NO (src/script_menu.c:901-905, MENU_B_PRESSED -> FALSE) without
-        -- opening the keyboard -- so the exact frame the box appears doesn't need to be known.
+        -- (scripts.inc:1140-1180) all run before script_context_status goes idle.
+        -- WITNESS-DRIVEN (card C4-LGF2, coordinator steer 2026-09-23): a plain message box only
+        -- closes on A, so mash A through every one of those; the instant
+        -- Task_YesNoMenu_HandleInput is the active task (the SAME task every Yes/No box in the
+        -- game uses, gTasks[] witness above), press B ONCE -- MENU_B_PRESSED is handled
+        -- identically to NO (src/script_menu.c:901-905) -- and go back to mashing A. This
+        -- replaces an earlier blind "alternate A then B every tap" design: on a PHYSICAL LG run
+        -- that pattern let an A land on the Yes/No box's own default YES one iteration before
+        -- its own B could decline it (one frame-timing tick different from FR's own run),
+        -- opening the naming keyboard this driver does not otherwise handle. Witnessing the
+        -- task directly removes the coincidence entirely, on either title.
         local idle = false
-        for _ = 1, 40 do
+        for _ = 1, 200 do
             if G.pred_ok(cp, "script_context_status") then idle = true; break end
-            G.tap("A", 3, 16)
-            G.tap("B", 3, 16)
+            if task_active(TASK_YES_NO_MENU) then
+                G.tap("B", 3, 20)
+            else
+                G.tap("A", 3, 16)
+            end
         end
         if not idle then
             G.shot("stuck")
@@ -2631,24 +2691,70 @@ LEGS[#LEGS + 1] = {
 --- LEGS/PATHS/DEST/verify_starter/verify_rival/parcel-delivery are the Pallet Town INTRO STORY,
 -- pinned against tests/fixtures/gen3/firered_town.sav (card C4-LG: the duo drivers reuse this
 -- file's WITNESS CONSTANTS on both sides of a live FR<->LG duo, never this story playthrough).
--- No LG fixture or savestate prefix exists for it, so refuse by name rather than boot a LG ROM
--- into an FR-only story and misreport whatever the mismatch produces.
+-- Owner ruling 2026-09-23 (card C4-LGF2): FireRed and LeafGreen are the same pret pokefirered
+-- engine built twice -- the intro is the same, so LG reuses this FR story rather than getting
+-- its own. Every S.<ADDR> above already resolves per-title via Syms.for_title(TITLE)
+-- (test_gen3_title_syms.py), and every oracle below (verify_starter/verify_rival/DEST tiles/
+-- flags) reads species/flag ids and map tiles that are identical data in both titles -- so
+-- nothing here needs an LG-specific literal. radical_red still refuses: its fixture is an
+-- imported real save, not a scripted new game, and the shared runtime says so itself
+-- (lua/tests/gen3_fr_newgame_inputs.lua header: "Radical Red is NOT driven by this script").
+--- SLINK_GEN3_PLAY_STOP_AFTER=<leg name> (card C4-LGF2): run LEGS[1..that leg], walk back to
+-- the Route 1 grass origin (12,37) if the stop leg left the player on the grass square, then
+-- save in-game there -- reusing the SAME "save" leg object defined above, never a duplicate of
+-- its logic. Built for the LG source-save bootstrap (tests/fixtures/gen3/README.md, "The LG
+-- source save" option 3): the card's own chain wants exactly starter/rival/parcel/Poke-Balls/
+-- route1_catch, landing where make-party --kind town's own contract expects its seed (an
+-- unhealed party standing AT (12,37)) -- not the "save" leg's default (far) position after the
+-- PC deposit/withdraw/release legs nobody asked LG to exercise yet. Unset (the default), this
+-- changes nothing: `legs` is just `LEGS` and every existing caller keeps byte-for-byte behaviour.
+local function stopped_legs(stop_after)
+    local idx, save_leg
+    for i, leg in ipairs(LEGS) do
+        if leg.name == stop_after then idx = i end
+        if leg.name == "save" then save_leg = leg end
+    end
+    if not idx then
+        G.finish(false, "gen3_scripted_play: SLINK_GEN3_PLAY_STOP_AFTER names no leg: "
+                     .. stop_after)
+        return nil
+    end
+    local legs = {}
+    for i = 1, idx do legs[i] = LEGS[i] end
+    if stop_after == "route1_catch" then
+        legs[#legs + 1] = {
+            name = "return_to_grass_origin",
+            exercises = { "walk" },
+            source = { "return_to_grass_origin (this file): the grass-loop origin walk-back "
+                     .. "every later Route 1 leg already reuses" },
+            run = function(cp) return_to_grass_origin(cp, "play_stop_after") end,
+        }
+    end
+    legs[#legs + 1] = assert(save_leg, "gen3_scripted_play: no 'save' leg defined")
+    return legs
+end
+
 local function run()
-    if TITLE ~= "firered" then
+    if TITLE ~= "firered" and TITLE ~= "leafgreen" then
         G.finish(false, "gen3_scripted_play: the Pallet Town story legs (LEGS/PATHS/DEST) are "
-                     .. "FireRed-only; SLINK_GEN3_TITLE=" .. tostring(TITLE))
+                     .. "FireRed/LeafGreen-only; SLINK_GEN3_TITLE=" .. tostring(TITLE))
         return
     end
-    play.main(LEGS, {
+    local stop_after = os.getenv("SLINK_GEN3_PLAY_STOP_AFTER")
+    local legs = stop_after and stopped_legs(stop_after) or LEGS
+    if stop_after and not legs then return end   -- stopped_legs already called G.finish(false, ...)
+    play.main(legs, {
         name   = "gen3_scripted_play",      -- patch/build/gen3_scripted_play_result.txt
         budget = 900000,
-        -- A savestate per FINISHED leg (slink_fr_<leg>.State). The FR checkpoint negatives
-        -- (lua/tests/probe_gen3_checkpoint.lua) need an in-battle-reachable state and a door
-        -- state, and tests/fixtures/gen3/firered_town.sav has party=0 -- no wild battle is
-        -- reachable from it, so this run is the only route there: the state at starter's
-        -- leg-done is one A press from the rival battle, and leave_lab_for_parcel's is the
-        -- lab door. A leg that FAILED saves nothing; a state written mid-failure is a trap.
-        save_states = "slink_fr_",
+        -- A savestate per FINISHED leg (slink_fr_<leg>.State / slink_lg_<leg>.State). The FR
+        -- checkpoint negatives (lua/tests/probe_gen3_checkpoint.lua) need an in-battle-reachable
+        -- state and a door state, and tests/fixtures/gen3/firered_town.sav has party=0 -- no
+        -- wild battle is reachable from it at all, so this run is the only route there: the
+        -- state at starter's leg-done is one A press from the rival battle, and
+        -- leave_lab_for_parcel's is the lab door. A leg that FAILED saves nothing; a state
+        -- written mid-failure is a trap. Title-prefixed (card C4-LGF2) so an LG run never
+        -- clobbers FR's own committed probe states with LG data under the same filename.
+        save_states = TITLE == "leafgreen" and "slink_lg_" or "slink_fr_",
         -- The fixture's battery is seeded but the field pointer is not sane at cold boot until
         -- the title screen -> CONTINUE has run (gen3_boot_check.lua run():300-320); a leg cannot
         -- read G.pos/G.map before this. It happens BEFORE the observer starts, deliberately: the

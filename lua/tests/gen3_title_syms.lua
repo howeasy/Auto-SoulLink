@@ -148,6 +148,28 @@ M.entries = {
                         firered = 0x0808DECD, leafgreen = 0x0808DEA1 },
     PC_ON_B_PRESSED = { symbol = "Task_OnBPressed", thumb = true,
                          firered = 0x0808ECE5, leafgreen = 0x0808ECB9 },
+
+    -- ── witnesses for the scripted NEW GAME intro (card C4-LGF2, coordinator steer) ───────────
+    -- Replace gen3_fr_newgame_inputs.lua's old fixed-frame-count waits (tuned once on FR,
+    -- silently wrong on LG -- same screens, different elapsed frames) with RAM witnesses, the
+    -- same "wait for the engine's own task/callback2, never a frame guess" shape c1507b7d
+    -- already established for the START-menu SAVE row. No RR citation: Radical Red is not
+    -- driven by this script (its fixture is an imported real save, gen3_fr_newgame_inputs.lua's
+    -- own header). ABSENT for radical_red.
+    TASK_OAKSPEECH_GENDER_INPUT = { symbol = "Task_OakSpeech_HandleGenderInput", thumb = true,
+                                     firered = 0x0812FFA5, leafgreen = 0x0812FF7D },
+    -- CB2_NamingScreen (DoNamingScreen's own run callback): reused for BOTH the player-name and
+    -- rival-name screens in the intro -- there is no separate constant per screen, so the
+    -- caller tells them apart by ORDER (first activation = player, second = rival), not by
+    -- address.
+    CB2_NAMING_SCREEN = { symbol = "CB2_NamingScreen", thumb = true,
+                          firered = 0x0809FB71, leafgreen = 0x0809FB45 },
+    -- Task_YesNoMenu_HandleInput: the generic Yes/No confirm task every ScriptMenu_YesNo box
+    -- uses (src/script_menu.c), including the starter-nickname decline this same file's
+    -- "starter" leg drives. One address serves every Yes/No box in the game; which box is open
+    -- is not disambiguated by this witness alone (callers know from their own leg context).
+    TASK_YES_NO_MENU = { symbol = "Task_YesNoMenu_HandleInput", thumb = true,
+                         firered = 0x0809CE55, leafgreen = 0x0809CE29 },
 }
 
 local TITLES = { firered = true, leafgreen = true, radical_red = true }

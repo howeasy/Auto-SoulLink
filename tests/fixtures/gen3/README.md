@@ -81,10 +81,11 @@ not look. The run then fails loudly (erased battery at boot); pass
 `--saveram-name "Pokemon - FireRed Version (USA).SaveRAM"` to seed it
 correctly. The failure message names the file BizHawk actually wrote.
 
-## `make-fr` — the vanilla FireRed fixture
+## `make-fr` — the scripted FireRed/LeafGreen NEW GAME (card C4-LGF2)
 
 ```
 python tools/gen3_fixtures.py make-fr --rom "<FireRed.gba>" --out tests/fixtures/gen3/firered_town.sav
+python tools/gen3_fixtures.py make-fr --title leafgreen --rom "<LeafGreen.gba>" --out tests/fixtures/gen3/leafgreen_town.sav
 ```
 
 Cold-boots an **erased** per-run SaveRAM directory (so the title offers NEW
@@ -93,26 +94,37 @@ out of the house into Pallet Town, saves in-game, flushes, then `import`s and
 qualifies the result as vanilla. Replaces steps 1-4 of the old hand recipe
 below. Step 5 (`derive-b`) and the `boot-check` above are still run by hand.
 
-> **†UNVERIFIED — every input in the FireRed intro is a guess.**
-> `pret/pokefirered` is not in the local pret cache
-> (`E:/Google Drive/SLink/.cache/pret/` holds pokered, pokeyellow, pokecrystal,
-> pokegold, pokeheartgold, pokeplatinum) and this tree ships no
-> `pokefirered.sym`, so the naming screen's callback and menu geometry cannot
-> be pinned. Named in the driver's header banner:
-> †1 A on the gender prompt takes BOY; †2 the player-name screen is a preset
-> list, so Down+A accepts a preset instead of opening the keyboard; †3 the
-> rival-name screen has the same shape; †4 the **frame counts** that place †2
-> and †3, since no engine signal marks those screens — retune with
-> `SLINK_GEN3_FR_INTRO` / `SLINK_GEN3_FR_NAME_GAP`.
-> Everything after the intro is signalled, not timed: the walk out is keyed to
-> the SaveBlock1 map id (`lua/memory_gba.lua:1109-1114`) and the save to the
-> flash sector counter, so a mistuned intro fails on a budget with a
-> screenshot rather than writing a fixture from the wrong game state.
+**Owner ruling 2026-09-23 (card C4-LGF2): "the intro is the same as
+FireRed, why not just copy it?"** FireRed and LeafGreen are the same pret
+pokefirered engine built twice, so this ONE driver plays the intro on
+either title (`--title leafgreen`); there is no separate LG intro script.
+
+**WITNESS-DRIVEN, not timed.** The intro legs used to be placed by fixed
+elapsed-frame counts (`SLINK_GEN3_FR_INTRO` / `SLINK_GEN3_FR_NAME_GAP`,
+tuned once on FR US 1.0, 2026-09-21). That broke on LeafGreen: the SCREENS
+and CHOICES are identical (physically confirmed) but the ELAPSED FRAMES to
+reach each one are not, so an FR-tuned budget landed an input a beat early
+or late. `data/gen3/pret/pokefirered.sym` and `pokeleafgreen.sym` DO ship
+in this tree (`lua/tests/gen3_title_syms.lua` already reads both), so the
+driver now waits on the engine's own state instead of a frame guess, the
+same "wait for the task/callback2, never a frame count" shape
+`gen3_boot_check.lua`'s SAVE-row search (`c1507b7d`) already uses:
+`Task_OakSpeech_HandleGenderInput` gates the gender press, `CB2_NamingScreen`
+gates both naming screens (title-checked in `test_gen3_title_syms.py`), and
+the starter-nickname Yes/No decline in `gen3_scripted_play.lua`'s own
+`starter` leg is gated by `Task_YesNoMenu_HandleInput` the same way. Only
+the CHOICE at each screen is still a citation-backed pin, never the timing:
+†1 A on the gender prompt takes BOY; †2 the player-name screen is a preset
+list, so Down+A accepts a preset instead of opening the keyboard; †3 the
+rival-name screen has the same shape.
+Everything after the intro is signalled, not timed: the walk out is keyed to
+the SaveBlock1 map id (`lua/memory_gba.lua:1109-1114`) and the save to the
+flash sector counter, so a mistuned intro fails on a budget with a
+screenshot rather than writing a fixture from the wrong game state.
 
 ## FR/LG production recipe, by hand
 
-The fallback when `make-fr`'s †UNVERIFIED intro legs will not tune, or for
-LeafGreen (which has no scripted driver):
+The fallback if the scripted intro above will not run on a given ROM/title:
 
 1. Boot a clean FR or LG US 1.0 ROM in BizHawk from a fresh (erased) save.
 2. Play a NEW GAME through the intro to the first Pokémon Center town (an
@@ -224,104 +236,111 @@ not a scripted normal input, and is out of scope under this card's
 contract. `derive-b`'s OT-identity rewrite is the only PLAN-sanctioned
 byte-level derivation (PLAN §11); it never touches position.
 
-## LeafGreen (planned, card C4-LGF)
+## LeafGreen fixtures (card C4-LGF2, 2026-09-23)
 
-**Nothing LG is built yet.** What this card changed is that the lane is now
-*drivable* on LG: `make-party` (`make-fr-party` is the old alias, same
-handler) takes `--title leafgreen`, the Lua party driver
-(`lua/tests/gen3_fixture_from_state.lua`) resolves its title from
-`SLINK_GEN3_TITLE` and picks that title's own profile entry instead of
-hardcoding `firered`, and the shared scripted runtime it dofiles
-(`gen3_scripted_play.lua`) was already title-aware from card C4-LG/LG2.
+**Built.** Owner ruling: *"the intro is the same as FireRed, why not just
+copy it?"* FireRed and LeafGreen are one `pret/pokefirered` decomp built
+twice, so `make-fr`/`make-party` drive LG through the exact same scripted
+runtime as FR (`--title leafgreen`), no LG-only script. Every DATA symbol
+the walk/heal/flee/save legs read sits at the identical address in both
+`.sym` files (checked symbol by symbol by `tests/unit/test_gen3_title_syms.py`),
+and `DEST`/`PATHS` describe maps the two titles share (Pallet Town, Route 1,
+Viridian City) — confirmed, not just inferred, by the physical LG runs below.
 
-Why LG is cheap in principle: FireRed and LeafGreen are one
-`pret/pokefirered` decomp built twice. Every DATA symbol the walk / heal /
-flee / save legs read sits at the identical address in both `.sym` files
-(checked symbol by symbol by `tests/unit/test_gen3_title_syms.py`), and
-`DEST`/`PATHS` describe maps the two titles share (Pallet Town, Route 1,
-Viridian City). So the driver needs no LG-specific address and no LG-specific
-map table. What it does need is a **source battery with a party**, and that
-is the one part still unwitnessed.
+### The chain that produced these fixtures
 
-### The LG source save (the decision this card had to make)
-
-`lua/tests/gen3_fr_newgame_inputs.lua` — the scripted NEW GAME that produced
-`firered_town.sav` — is **FR-only by nature** and now refuses LG by name
-(`python tools/gen3_fixtures.py make-fr --title leafgreen …` exits 1 with the
-reason). Its intro legs (copyright, Oak, gender, two naming screens) are
-placed by *elapsed frames*, not by a signal, and were verified physically on
-FR US 1.0 only; LG's screens have never been calibrated, and the driver will
-not guess a mistimed intro (a mistuned one fails loudly, but nobody has
-tuned it). No frame count is proposed here: that is an emulator-lane job.
-
-Two admissible ways to get LG's party-bearing battery, both using **normal
-inputs only** — no memory pokes, no game-data staging, no Computer Use, the
-same contract the FR pair was built under:
-
-1. **Hand-play the minimum path, then script the rest** (recommended first
-   pass). The minimum path to a starter plus one catch is: NEW GAME → the
-   intro (gender + two names) → out of the house → Oak's lab → pick a starter
-   → fight the rival → walk Route 1 north to Viridian → the Mart, take Oak's
-   Parcel → back to Pallet, deliver it to Oak → receive Poké Balls → Route 1
-   grass, throw a ball at the first encounter and catch it. (The Parcel
-   errand is what gates Poké Balls in FRLG; there is no earlier ball.) Then
-   save in-game standing in Route 1's grass at (12,37) and close BizHawk so
-   the `.SaveRAM` flushes. Import it as the seed, then run the two party
-   kinds below — everything after this point is scripted.
-2. **A calibrated scripted new game.** If the FR new-game legs turn out to
-   match LG's intro (same engine, same screens), the cheapest fix is to give
-   LG its own `SLINK_GEN3_FR_INTRO` / `SLINK_GEN3_FR_NAME_GAP` values from a
-   physical run and then relax the refusal. Not attempted here; the refusal
-   names it.
-
-A third option exists for the *story* legs specifically — the shared runtime's
-own `route1_catch` leg is title-aware, so `SLINK_GEN3_TITLE=leafgreen` on that
-gate can drive starter + catch from an LG pre-starter save — but it is the
-same emulator lane and it still needs that pre-starter save first.
-
-### The LG commands, in order
+1. `make-fr --title leafgreen` → `leafgreen_town.sav` (pre-starter, cold
+   boot → NEW GAME → intro → Pallet Town → save). The intro is
+   **witness-driven** (`Task_OakSpeech_HandleGenderInput` /
+   `CB2_NamingScreen`, `lua/tests/gen3_title_syms.lua`), not frame-timed —
+   see the `make-fr` section above.
+2. `gen3_scripted_play.lua` with `SLINK_GEN3_TITLE=leafgreen` and
+   `SLINK_GEN3_PLAY_STOP_AFTER=route1_catch` (an env knob added for this
+   card): runs the Pallet Town story — starter, rival battle, the Parcel
+   errand (which gates Poké Balls in FRLG), Route 1 catch — then walks back
+   to the grass origin (12,37) and saves in-game, producing a source
+   battery with an unhealed two-mon party standing exactly where
+   `make-party --kind town` expects its seed. Every per-step oracle in this
+   file (`verify_starter`, `verify_rival`, the parcel-delivery witnesses,
+   the catch outcome) ran unmodified against LG and would have failed by
+   name on a wrong outcome; none did.
+3. `import` the flushed battery, then `make-party --title leafgreen --kind
+   town` (heals at the Viridian Center, saves at (24,39)) and `--kind
+   battle` (seeded from town's own output, saves at Route 1 grass (12,37)).
+4. `derive-b` both (vanilla path: OTID/OT-name re-key, position untouched).
+5. `boot-check --title leafgreen` all four, `--saveram-name "Pokemon -
+   LeafGreen Version (USA).SaveRAM"` (LG is gamedb-known, like FR).
 
 ```bash
-# 0. once: the imported party-bearing seed (see "The LG source save" above),
-#    saved in Route 1 grass at (12,37) with a healed two-mon party
-python tools/gen3_fixtures.py import --src "<BizHawk GBA/SaveRAM path>"     --out /tmp/lg_seed.sav
-
-# 1. town -- heals at the Viridian Center, saves on Viridian's south tile (24,39)
-python tools/gen3_fixtures.py make-party --title leafgreen --kind town     --seed /tmp/lg_seed.sav --out tests/fixtures/gen3/leafgreen_party_town.sav
-
-# 2. battle -- seeds from town's own healed output, saves in Route 1 grass (12,37)
-python tools/gen3_fixtures.py make-party --title leafgreen --kind battle     --seed tests/fixtures/gen3/leafgreen_party_town.sav     --out tests/fixtures/gen3/leafgreen_party_battle.sav
-
-# 3. B sides (vanilla derive-b: OT identity only, position untouched)
-python tools/gen3_fixtures.py derive-b tests/fixtures/gen3/leafgreen_party_town.sav     tests/fixtures/gen3/leafgreen_party_town_b.sav
-python tools/gen3_fixtures.py derive-b tests/fixtures/gen3/leafgreen_party_battle.sav     tests/fixtures/gen3/leafgreen_party_battle_b.sav
-
-# 4. usability: cold boot -> CONTINUE -> re-save -> reload, one per fixture
-python tools/gen3_fixtures.py boot-check --title leafgreen     --rom "E:/Google Drive/SLink/Pokemon - LeafGreen Version (USA).gba"     --fixture tests/fixtures/gen3/leafgreen_party_battle.sav
+python tools/gen3_fixtures.py make-fr --title leafgreen --rom "<LeafGreen.gba>" --out tests/fixtures/gen3/leafgreen_town.sav
+# (the SLINK_GEN3_PLAY_STOP_AFTER story-seed run is a coordinator/emulator-lane step, not a CLI subcommand yet)
+python tools/gen3_fixtures.py import --src "<BizHawk GBA/SaveRAM path>" --out /tmp/lg_seed.sav
+python tools/gen3_fixtures.py make-party --title leafgreen --kind town   --seed /tmp/lg_seed.sav --out tests/fixtures/gen3/leafgreen_party_town.sav
+python tools/gen3_fixtures.py make-party --title leafgreen --kind battle --seed tests/fixtures/gen3/leafgreen_party_town.sav --out tests/fixtures/gen3/leafgreen_party_battle.sav
+python tools/gen3_fixtures.py derive-b tests/fixtures/gen3/leafgreen_party_town.sav   tests/fixtures/gen3/leafgreen_party_town_b.sav
+python tools/gen3_fixtures.py derive-b tests/fixtures/gen3/leafgreen_party_battle.sav tests/fixtures/gen3/leafgreen_party_battle_b.sav
+python tools/gen3_fixtures.py boot-check --title leafgreen --rom "E:/Google Drive/SLink/Pokemon - LeafGreen Version (USA).gba" --saveram-name "Pokemon - LeafGreen Version (USA).SaveRAM" --fixture tests/fixtures/gen3/leafgreen_party_town.sav
 ```
 
-`--rom` is optional: without it the builder uses the title's own dump from
-`tools/gen3_fixtures.py:PARTY_TITLES`, searched upward from the repo root
-(the dumps live at the main checkout root). The battery is seeded under the
-gamedb name `Pokemon - LeafGreen Version (USA).SaveRAM`; if BizHawk files it
-under something else the run says so and tells you which `--saveram-name` to
-pass next time. The LG pair is asserted by
+### What differed from the FR precedent, and how the oracles caught it
+
+- **The gender/naming-screen intro was frame-timed, tuned once on FR.**
+  Same screens and choices on LG, different elapsed frames — an FR-tuned
+  budget could land an input a beat early/late. Fixed by waiting on the
+  engine's own task/callback2 (`Task_OakSpeech_HandleGenderInput`,
+  `CB2_NamingScreen`) instead of a frame count; re-verified on FR too (same
+  landing tile/map, `RESULT: PASS map=768 counter -1 -> 1`).
+- **The town-save door-exit tile.** `firered_town.sav` (built 2026-09-21,
+  before the SAVE-row search's stray-Down bug was fixed at the root,
+  `c1507b7d`) sits at (6,9); a battery built with the fixed helper rests at
+  the engine's true post-door-exit tile, (6,8), one short. The `starter`
+  leg's own `town_start_to_oak_trigger` path is pinned to (6,9); a one-step
+  bridge (a no-op for FR's own already-committed fixture) covers the gap.
+- **The starter-nickname Yes/No decline.** Alternating blind A/B taps (the
+  FR-only design) let an A land on the nickname prompt's own default YES
+  one iteration before B could decline it — opening the naming keyboard,
+  caught by name (`patch/build/gen3_stuck.png`) rather than silently
+  mis-saving. Fixed by witnessing `Task_YesNoMenu_HandleInput` and pressing
+  B only while it is the active task.
+- **An incidental battle at the Route 1 / Pallet Town connection.**
+  `parcel_deliver`'s `warp_to(..., DEST.pallet_north, ...)` failed with
+  `map never changed from 787`: Route 1's own south/north edges are tall
+  grass, so a wild encounter can start while pressing *into* the
+  connection, and `playlib`'s `enter_warp` has no battle policy of its own.
+  `warp_to` now resolves an incidental battle (`play.in_battle` /
+  `play.fight_through`, the same pattern `route1_faint` already used) before
+  retrying the press — deterministic regardless of where the encounter
+  rolls, verified by re-running the identical seed (cold-boot emulation is
+  deterministic: the same encounter fired at the same frame both times).
+
+None of this needed a single LG-specific address, map, or literal beyond
+the three witnesses above (all title-checked by `test_gen3_title_syms.py`).
+
+### leafgreen_town.sav / leafgreen_party_{town,battle}[_b].sav
+
+- `leafgreen_town.sav`: pre-starter, Pallet Town (map 768). sha256
+  `98f562460399ec45c55182dcf44986163f96826ea16ed51677f7216ef245c2b0`, slot
+  1, counter 1, trainer `MAX` #1C600D89, party empty. Not independently
+  boot-checked (it is consumed immediately by the story-seed run; the four
+  party fixtures below carry the boot-check receipts).
+- `leafgreen_party_town.sav`: saved on Viridian City's own south tile (map
+  3.1, tile (24,39)). sha256
+  `b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2`, slot
+  1, counter 3, trainer `MAX` #1C600D89, party `[Squirtle Lv.6 hp=23/23,
+  Rattata Lv.3 hp=15/15]`, both fully healed. Boot-checked (counter 3→4,
+  14/14 sectors, party unchanged).
+- `leafgreen_party_battle.sav`: saved standing in Route 1 tall grass (map
+  3.19, tile (12,37)). sha256
+  `3922d561ff671b86f3f82e84be6068a2ce1f6a4a60df942831dadd9ebe6a01ae`, slot
+  0, counter 4, same trainer and healed party as the town fixture.
+  Boot-checked (counter 4→5, 14/14 sectors, party unchanged).
+- `leafgreen_party_town_b.sav` / `leafgreen_party_battle_b.sav`: `derive-b`
+  over the two fixtures above (OTID/OT-name re-keyed, position untouched).
+  sha256 `710898c92d7b01832a502ebba33c49dc14e751b2b9f1c9469ac862ddd9586497`
+  and `934184df33c5de0f8eeac56d1647ab465664ad2fd047fda8dd1475ce35af7b11`,
+  trainer `MAXB` #E39FF276, same party (species/level/HP) as the `a` side.
+  Both boot-checked (counter 3→4 and 4→5, 14/14 sectors, party unchanged).
+
 `tests/unit/test_gen3_fixture_qualify.py::test_lg_party_fixtures_match_the_fr_contract`
-(two fully healed mons, the kind's own tile, A/B OTs distinct and positions
-identical), which skips until the files exist.
-
-### LG-specific unknowns
-
-- **The intro (only if option 2 is taken)**: LG's naming screens are
-  frame-timed and uncalibrated; FR's values are not reused.
-- **The shared tiles are INFER for LG.** `DEST`/`PATHS` come from
-  `gen3_scripted_play.lua`, whose coordinates are FR-sourced. The maps are the
-  same map data in both titles, so the tiles should be identical — but no LG
-  run has confirmed (12,37)/(24,39) yet. The first `make-party --title
-  leafgreen` pass is what turns this into a receipt; its driver verifies the
-  destination tile and refuses on mismatch rather than saving somewhere else.
-- **The gamedb battery name** for an LG dump is assumed to mirror FR's; the
-  tool prints the name it seeded and the name BizHawk actually wrote.
-- **The flee machinery** is shared and level-agnostic; an LG party of two
-  early-route mons is expected to escape Route 1 wildlife on the same terms
-  FR does (first-attempt success is not assumed — the loop retries).
+and `::test_lg_party_b_variant_has_a_distinct_trainer_at_the_same_place` now
+run (no longer skip) and pass against these five committed files.
