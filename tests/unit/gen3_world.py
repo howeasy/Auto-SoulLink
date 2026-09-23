@@ -352,6 +352,8 @@ class World:
         for b in range(count):
             self.poke_int(self.ram["BATTLER_PARTY_INDEXES_ADDR"] + 2 * b, order[b], 2)
         self.poke_int(self.ram["ENEMY_COUNT_ADDR"], self.stale_enemy_count, 1)
+        # ZeroEnemyPartyMons (pret pokemon.c:1748-1752) clears all six slots before every battle
+        self.poke(self.ram["ENEMY_BASE"], bytes(6 * codec.PARTY_MON_SIZE))
         for i, rec in enumerate(enemy):
             self.poke(self.ram["ENEMY_BASE"] + i * codec.PARTY_MON_SIZE, self.encode(rec))
         # battler 0 live: the CFRU in-battle detector reads its maxHP (reads.lua read_battle)
