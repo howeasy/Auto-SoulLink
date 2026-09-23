@@ -47,7 +47,7 @@
       "axes": {"kind": "write_window", "title": "crystal", "requirement_ids": ["W-1", "W-2", "W-5", "W-6", "W-7"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal.write_window.json",
-        "sha256": "8950c957cb6fa205b52574fac8abdafe9d1174bb340015f9bc0c8722104eef60"
+        "sha256": "2af3c51b09fad7b2e62be1541404ab237203372dca4ad90b07eb52b757fa0f21"
       }}}]
     },
     {
@@ -57,7 +57,7 @@
       "axes": {"kind": "write_window", "title": "gold", "requirement_ids": ["W-1", "W-2", "W-5", "W-6", "W-7"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold.write_window.json",
-        "sha256": "5742ae9b8a322072672d75613610b998143a1a17b33158461911ecbca55fc76b"
+        "sha256": "f12f299bf78fb74e9abe769acc325830f9cb671717c5db4d650dc8e22ab2cf36"
       }}}]
     },
     {
@@ -67,7 +67,7 @@
       "axes": {"kind": "write_window", "title": "silver", "owner_ruling": "O-23", "requirement_ids": ["W-1", "W-2", "W-5", "W-6", "W-7"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold.write_window.json",
-        "sha256": "5742ae9b8a322072672d75613610b998143a1a17b33158461911ecbca55fc76b"
+        "sha256": "f12f299bf78fb74e9abe769acc325830f9cb671717c5db4d650dc8e22ab2cf36"
       }}}]
     },
     {

@@ -118,7 +118,7 @@ end
 -- point.write_done, point.window_frames (frames of the open window) and point.battle_attempted.
 function U.driver(mode, maps)
     assert(U.MODES[mode], "unknown U2 mode " .. tostring(mode))
-    local d = {terminal="done", phase="idle"}
+    local d = {terminal="done", phase="idle", stage=1}   -- stage: boxes_reset's op round (Safety.BOX_OPS)
     -- A native press is HELD 12 frames (gen2_qualify.lua HOLD); overworld walking holds per frame.
     local HOLD, held, hold_left, release = 12, nil, 0, false
     local mark, save_counter, confirmed, waited, here, from = 0, nil, false, 0, nil, nil
@@ -216,14 +216,22 @@ function U.driver(mode, maps)
             end
             if idle and waited > U.REPULSE then waited = 0; return press("Start") end
             return {}, p
-        elseif p == "ops" then   -- boxes_reset: the checkpoint hook runs the ops; then a fresh hold
+        elseif p == "ops" then   -- boxes_reset: the checkpoint hook runs this stage's ops; then a fresh hold
             if point.ops_done then
                 if ops_mark == nil then ops_mark = point.accepted
-                elseif idle and point.accepted > ops_mark then mark = point.accepted; go("to_save") end
+                elseif idle and point.accepted > ops_mark then
+                    mark, ops_mark = point.accepted, nil
+                    -- stage 3 ends UNSAVED: done flushes the reset image (no native save)
+                    go(d.stage == 3 and "done" or "to_save")
+                end
             end
             return {}, d.phase
         elseif p == "post_save" then
-            if live(mode == "boxes_reset" and "done" or "exit") then return {}, d.phase end
+            if mode == "boxes_reset" then
+                if live("ops") then d.stage = d.stage + 1 end
+                return {}, d.phase
+            end
+            if live("exit") then return {}, d.phase end
             if ui and ui.kind == "start_menu" and ready and waited > U.REPULSE then waited = 0; return press("B") end
             return {}, p
         elseif p == "exit" then
@@ -693,6 +701,7 @@ U.BOX_MODES = {boxes=true, boxes_reset=true, boxes_reload=true}
 U.FRAME_ALIGN = "lua/tests/gen2_frame_align.lua"
 U.PACK_KINDS = {"pack_items", "pack_balls", "pack_key", "pack_tmhm", "item_submenu"}
 function U.reset_path(dir, case_name) return dir .. "/" .. case_name .. ".u2_reset.SaveRAM" end
+function U.saved2_path(dir, case_name) return dir .. "/" .. case_name .. ".u2_saved2.SaveRAM" end
 
 -- Pure driver for mode boxes: idle -> two F.driver catches (each ends in a native save) -> post_save ->
 -- ops (the hook runs them) -> done. point adds accepted, party_count, ops_done.
@@ -826,6 +835,7 @@ function U.box_main(e)
     local ops, keys, driver = {}, nil, nil
     local function run_op()
         local w = want[#ops + 1]
+        if (w.stage or 1) ~= (driver.stage or 1) then return end
         if keys == nil then
             local party = assert(reads.read_party())
             assert(#party.mons == 3, "the ops need the lead and two catches in the party")
@@ -834,7 +844,7 @@ function U.box_main(e)
         local before, pb = snapshot_regions(), party_hex()
         written = {}
         in_hold = true
-        local ok, why = exec[w.op](keys[w.key])
+        local ok, why = exec[w.op](keys[w.key], w.defer and {defer_backing=true} or nil)
         in_hold = false
         local after, changed = snapshot_regions(), json.array({})
         for i, r in ipairs(regions) do
@@ -843,6 +853,7 @@ function U.box_main(e)
         local kinds = json.array({})
         for _, k in ipairs(written) do kinds[#kinds + 1] = k end
         ops[#ops + 1] = {op=w.op, key=keys[w.key], ok=ok == true, reason=why or json.null, frame=api.framecount(),
+                         stage=w.stage or 1, deferred=w.defer == true and ok == true and why ~= nil,
                          written=kinds, party_before_hex=pb, party_after_hex=party_hex(), changed=changed}
         if ok ~= true then log("  op " .. #ops .. " " .. w.op .. " refused: " .. tostring(why)) end
     end
@@ -870,7 +881,9 @@ function U.box_main(e)
     local function observe()
         local point = base()
         point.accepted, point.party_count = rec.accepted, ctx.sym("wPartyCount")[1]
-        point.ops_done = #ops == #want or (#ops > 0 and not ops[#ops].ok)
+        local stage = driver and driver.stage or 1
+        local next_op = want[#ops + 1]
+        point.ops_done = next_op == nil or (next_op.stage or 1) > stage or (#ops > 0 and not ops[#ops].ok)
         if point.ui and point.ui.kind == "pack_balls" then point.ball_cursor = F.ball_cursor(SG.screen(ctx)) end
         if point.ui and point.ui.kind == "battle_menu" then
             local menu = SG.parse_menu(SG.screen(ctx), ctx.obs.screen.width, ctx.obs.screen.height, SG.BATTLE_MENU_GRID)
@@ -883,7 +896,7 @@ function U.box_main(e)
     local idle = {}
     for _, name in ipairs(SG.BUTTONS) do idle[name] = false end
     local host = ctx.Host.new({step=SG.button_step(ctx), frame=api.framecount, idle=idle})
-    local phases, save, reset, catch = {}, nil, nil, nil
+    local phases, save, save2, reset, catch = {}, nil, nil, nil, nil
     local function keep(path)
         local digest = SG.cart_digest(api)
         local bytes = SG.flush(ctx, digest)
@@ -907,10 +920,12 @@ function U.box_main(e)
         end,
         function(_, phase, frame)
             phases[#phases + 1] = {phase=phase, frame=frame, accepted=rec.accepted}
-            if phase == "post_save" then
+            if phase == "post_save" and save == nil then
                 save = keep(U.saved_path(ctx.env.dir, ctx.case.name))
                 catch = {party_before=party_before, party_after=ctx.sym("wPartyCount")[1]}
-            elseif phase == "done" and mode == "boxes" then
+            elseif phase == "post_save" then
+                save2 = keep(U.saved2_path(ctx.env.dir, ctx.case.name))
+            elseif phase == "done" and (mode == "boxes" or mode == "boxes_reset") then
                 reset = keep(U.reset_path(ctx.env.dir, ctx.case.name))   -- NO save: the reset control image
             end
         end)
@@ -926,7 +941,8 @@ function U.box_main(e)
         liveness={accepted=rec.accepted, raw=rec.raw, refused=rec.refused, other_bank=rec.other_bank,
                   refusals=json.object(rec.reasons), hits=json.array(rec.hits)},
         phases=json.array(phases), windows=json.object({}), layout=layout, ops=json.array(ops),
-        save=save or json.null, reset=reset or json.null, catch=mode == "boxes" and catch or json.null,
+        save=save or json.null, save2=save2 or json.null, reset=reset or json.null,
+        catch=mode == "boxes" and catch or json.null,
         control=control or json.null, boot_cartram_sha256=boot_digest or json.null,
         persist=(mode == "boxes_reload" and played) and box_bytes() or json.null}
     if played then

@@ -959,9 +959,10 @@ def box_runs(receipt):
         r.update(extra)
         return r
 
-    def op(name, key, written, pb, pa, changed=()):
+    def op(name, key, written, pb, pa, changed=(), stage=1, deferred=False):
         return {"op": name, "key": key, "ok": True, "written": list(written), "party_before_hex": pb,
-                "party_after_hex": pa, "changed": [{"flat": f, "before_hex": b, "after_hex": a} for f, b, a in changed]}
+                "party_after_hex": pa, "changed": [{"flat": f, "before_hex": b, "after_hex": a} for f, b, a in changed],
+                "stage": stage, "deferred": deferred}
 
     k1, k2, act, mem = "7AAA:1234:13", "3BBB:1234:10", layout["active_flat"], layout["memorial_flat"]
     save, reset, final = "a" * 64, "b" * 64, "c" * 64
@@ -970,19 +971,25 @@ def box_runs(receipt):
            op("memorialize", k2, ["backing_box", "party_collection"], P(3, "2"), P(2, "3"), [(mem, X(0, "m0"), X(1, "m1"))]),
            op("deposit", k1, ["box_deposit", "party_collection"], P(2, "3"), P(1, "4"), [(act, X(0, "a2"), X(1, "a3"))])]
     again = [op("memorialize", k2, ["party_collection"], P(3, "0"), P(2, "g")),
-             op("withdraw", k2, ["party_collection", "backing_box"], P(2, "g"), P(3, "h"), [(mem, X(1, "m1"), X(0, "m2"))]),
-             op("deposit", k1, ["box_deposit", "party_collection"], P(3, "h"), P(2, "i"), [(act, X(0, "e"), X(1, "a4"))])]
+             op("withdraw", k2, ["party_collection"], P(2, "g"), P(3, "h"), deferred=True),
+             op("deposit", k1, ["box_deposit", "party_collection"], P(3, "h"), P(2, "i"), [(act, X(0, "e"), X(1, "a4"))]),
+             op("settle", k2, ["backing_box"], P(2, "i"), P(2, "i"), [(mem, X(1, "m1"), X(0, "m2"))], stage=2),
+             op("memorialize", k2, ["backing_box", "party_collection"], P(2, "i"), P(1, "j"),
+                [(mem, X(0, "m2"), X(1, "m3"))], stage=2),
+             op("withdraw", k2, ["party_collection"], P(1, "j"), P(2, "k"), stage=3, deferred=True)]
+    final2 = reset2 = "d" * 64   # the deferred withdraw is WRAM-only: the unsaved flush equals save 2
     return {
         "boxes": run("boxes", "u2-box-crystal", ["idle", "walk", "battle", "save", "saved", "post_save", "ops", "done"],
                      catch={"party_before": 1, "party_after": 3}, ops=ops,
                      save={"flushed": True, "cartram_sha256": save}, reset={"flushed": True, "cartram_sha256": reset}),
         "boxes_reset": run("boxes_reset", "u2-box-crystal-reset", ["idle", "ops", "to_save", "save", "post_save", "done"],
                            boot_cartram_sha256=reset, ops=again, save={"flushed": True, "cartram_sha256": final},
+                           save2={"flushed": True, "cartram_sha256": final2}, reset={"flushed": True, "cartram_sha256": reset2},
                            control={"party_hex": P(3, "0"), "active_hex": X(0, "e"), "backing_hex": X(0, "e"),
                                     "memorial_hex": X(1, "m1")}),
-        "boxes_reload": run("boxes_reload", "u2-box-crystal-reload", ["idle", "done"], boot_cartram_sha256=final,
-                            persist={"party_hex": P(2, "i"), "active_hex": X(1, "a4"), "backing_hex": X(1, "a4"),
-                                     "memorial_hex": X(0, "m2")}),
+        "boxes_reload": run("boxes_reload", "u2-box-crystal-reload", ["idle", "done"], boot_cartram_sha256=reset2,
+                            persist={"party_hex": P(1, "j"), "active_hex": X(1, "a4"), "backing_hex": X(1, "a4"),
+                                     "memorial_hex": X(1, "m3")}),
     }
 
 
@@ -1038,8 +1045,15 @@ BOX_FAULTS = {
     "reset_party_kept": ("runs.boxes_reset.control.party_hex", None, "the party is not the saved one"),
     "reset_active_kept": ("runs.boxes_reset.control.active_hex", None, "active sBox is not its backing"),
     "reset_memorial_lost": ("runs.boxes_reset.control.memorial_hex", None, "backing (memorial) edit did not survive"),
-    "reload_other_boot": ("runs.boxes_reload.boot_cartram_sha256", "d" * 64, "did not cold-boot the reset"),
-    "reload_lost_memorial": ("runs.boxes_reload.persist.memorial_hex", None, "reload lacks"),
+    "reload_other_boot": ("runs.boxes_reload.boot_cartram_sha256", "9" * 64, "did not cold-boot the reset"),
+    "reload_lost_memorial": ("runs.boxes_reload.persist.memorial_hex", None, "exactly once, in sBox14"),
+    "reload_party_kept_the_withdraw": ("runs.boxes_reload.persist.party_hex", None, "reload lacks"),
+    "deferral_removed_early": ("runs.boxes_reset.ops.3.changed.0.before_hex", None, "before the save witness"),
+    "withdraw_not_deferred": ("runs.boxes_reset.ops.1.deferred", False, "without its deferral"),
+    "settle_in_stage_1": ("runs.boxes_reset.ops.3.stage", 1, "another stage"),
+    "no_second_save": ("runs.boxes_reset.save2", DELETE, "second native save"),
+    "deferred_withdraw_wrote_cart": ("runs.boxes_reset.ops.5.changed",
+                                     [{"flat": 0x79E0, "before_hex": "00", "after_hex": "01"}], "changed other box regions"),
     "reload_backing_differs": ("runs.boxes_reload.persist.backing_hex", None, "reload lacks"),
     "layout_drift": ("runs.boxes_reload.layout.memorial_flat", 0x59E0, "disagree on the box layout"),
 }
@@ -1054,7 +1068,9 @@ def test_box_run_faults_refuse_the_whole_receipt(sim_runs, fault):
         value = {"reset_party_kept": runs["boxes"]["ops"][3]["party_after_hex"],
                  "reset_active_kept": runs["boxes"]["ops"][3]["changed"][0]["after_hex"],
                  "reset_memorial_lost": runs["boxes"]["ops"][2]["changed"][0]["before_hex"],
-                 "reload_lost_memorial": runs["boxes"]["ops"][2]["changed"][0]["after_hex"],
+                 "reload_lost_memorial": runs["boxes_reset"]["ops"][3]["changed"][0]["after_hex"],
+                 "reload_party_kept_the_withdraw": runs["boxes_reset"]["ops"][5]["party_after_hex"],
+                 "deferral_removed_early": _hexfill(1102, 1, "another sBox14 image"),
                  "reload_backing_differs": runs["boxes"]["ops"][0]["changed"][0]["before_hex"]}[fault]
     if value == "APPEND":
         value = receipt["runs"]["boxes"]["ops"][0]["changed"] + [{"flat": 0x4000, "before_hex": "00", "after_hex": "01"}]

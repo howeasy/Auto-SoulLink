@@ -63,7 +63,11 @@ M.REACQUIRE = {
 -- the party-count change; box = the ONE region whose bytes change ("active" sBox or the "memorial" sBox14)
 -- and its count change. boxes ends with an unsaved active edit (C1 in sBox) and a backing edit (C2 in
 -- sBox14): its CartRAM is flushed WITHOUT a save and cold-booted as boxes_reset, the reset-before-save
--- control. There the memorial completes party-only (full-record match), then withdraw(sBox14), box_mon, SAVE.
+-- control. boxes_reset runs three stages (gen2-box-deferral-live): (1) the memorial completes party-only
+-- (full-record match), a DEFERRED withdraw from sBox14 writes the party only (the box copy stays: a
+-- duplicate), box_mon; native SAVE. (2) the settle drops the sBox14 copy (party untouched), memorialize
+-- again; native SAVE. (3) a deferred withdraw from sBox14, then the CartRAM is flushed WITHOUT a save:
+-- boxes_reload cold-boots it and must find the mon exactly once, back in sBox14.
 M.BOX_OPS = {
     boxes = {
         {op="deposit", key=1, written={"box_deposit", "party_collection"}, party=-1, box="active", count=1},
@@ -72,9 +76,12 @@ M.BOX_OPS = {
         {op="deposit", key=1, written={"box_deposit", "party_collection"}, party=-1, box="active", count=1},
     },
     boxes_reset = {
-        {op="memorialize", key=2, written={"party_collection"}, party=-1},
-        {op="withdraw", key=2, written={"party_collection", "backing_box"}, party=1, box="memorial", count=-1},
-        {op="deposit", key=1, written={"box_deposit", "party_collection"}, party=-1, box="active", count=1},
+        {op="memorialize", key=2, stage=1, written={"party_collection"}, party=-1},
+        {op="withdraw", key=2, stage=1, defer=true, written={"party_collection"}, party=1},
+        {op="deposit", key=1, stage=1, written={"box_deposit", "party_collection"}, party=-1, box="active", count=1},
+        {op="settle", key=2, stage=2, written={"backing_box"}, party=0, box="memorial", count=-1},
+        {op="memorialize", key=2, stage=2, written={"backing_box", "party_collection"}, party=-1, box="memorial", count=1},
+        {op="withdraw", key=2, stage=3, defer=true, written={"party_collection"}, party=1},
     },
 }
 M.PARTY_BLOCK, M.BOX_COPY = 428, 1102
@@ -213,14 +220,25 @@ function M.run_problem(run, mode, primary)
         if type(save) ~= "table" or save.flushed ~= true or not hex64(save.cartram_sha256) then
             return "native save not flushed"
         end
+        local last = mode == "boxes" and save or run.save2
+        if type(last) ~= "table" or last.flushed ~= true or not hex64(last.cartram_sha256) then
+            return "second native save not flushed"
+        end
+        local reset = run.reset
+        if type(reset) ~= "table" or reset.flushed ~= true or not hex64(reset.cartram_sha256) then
+            return "the unsaved post-op CartRAM was not flushed for the reset control"
+        end
+        -- boxes ends with unsaved sBox/sBox14 edits, so its SRAM differs from the save. boxes_reset ends
+        -- with a DEFERRED withdraw, a WRAM-only write: its op record changed no box region (box_ops_problem).
+        -- No whole-image equality there: Gold/Silver rewrite sScratch (the window stack) after a save
+        -- (live Gold box run: 279 bytes, all sScratch), so the hashes differ without any SLink write.
+        if mode == "boxes" and reset.cartram_sha256 == last.cartram_sha256 then
+            return "the unsaved post-op CartRAM was not flushed for the reset control"
+        end
         if mode == "boxes" then
-            local catch, reset = run.catch, run.reset
+            local catch = run.catch
             if type(catch) ~= "table" or not integer(catch.party_before, 1, 4) or catch.party_after ~= catch.party_before + 2 then
                 return "the two scripted catches did not land in the party"
-            end
-            if type(reset) ~= "table" or reset.flushed ~= true or not hex64(reset.cartram_sha256)
-               or reset.cartram_sha256 == save.cartram_sha256 then
-                return "the unsaved post-op CartRAM was not flushed for the reset control"
             end
         else
             local k = run.control
@@ -269,6 +287,9 @@ function M.box_ops_problem(run, mode)
         local exact = plain_array(written) and #written == #w.written
         for j, kind in ipairs(w.written) do exact = exact and written[j] == kind end
         if not exact then return name .. " wrote other kinds than " .. table.concat(w.written, "+") end
+        if (op.stage or 1) ~= (w.stage or 1) or (op.deferred == true) ~= (w.defer == true) then
+            return name .. " ran in another stage or without its deferral"
+        end
         if not hexbytes(op.party_before_hex, M.PARTY_BLOCK) or not hexbytes(op.party_after_hex, M.PARTY_BLOCK)
            or tonumber(op.party_after_hex:sub(1, 2), 16) ~= tonumber(op.party_before_hex:sub(1, 2), 16) + w.party then
             return name .. " did not move the party count by " .. w.party
@@ -401,13 +422,21 @@ function M.box_chain_problem(boxes, reset, reload)
         return "reset control: the backing (memorial) edit did not survive the reset"
     end
     if b[1].party_before_hex ~= k.party_hex then return "reset ops did not start from the control party" end
-    if reload.boot_cartram_sha256 ~= reset.save.cartram_sha256 or reload.fixture_sha256 == reset.fixture_sha256 then
-        return "the reload did not cold-boot the reset run's flushed save"
+    -- the deferred withdraw left the durable copy untouched through the SAVE until the settle
+    if b[4].changed[1].before_hex ~= k.memorial_hex then
+        return "the deferred withdraw removed the sBox14 copy before the save witness"
+    end
+    if reload.boot_cartram_sha256 ~= reset.reset.cartram_sha256 or reload.fixture_sha256 == reset.fixture_sha256 then
+        return "the reload did not cold-boot the reset run's unsaved final CartRAM"
     end
     local keep = reload.persist
-    if keep.party_hex ~= b[3].party_after_hex or keep.active_hex ~= b[3].changed[1].after_hex
-       or keep.backing_hex ~= keep.active_hex or keep.memorial_hex ~= b[2].changed[1].after_hex then
-        return "the reload lacks the saved party, active/backing box or memorial bytes"
+    if keep.party_hex ~= b[5].party_after_hex or keep.active_hex ~= b[3].changed[1].after_hex
+       or keep.backing_hex ~= keep.active_hex then
+        return "the reload lacks the saved party or active/backing box bytes"
+    end
+    -- a reset after a deferred withdraw: the mon is back in sBox14 only (never lost, never twice)
+    if keep.memorial_hex ~= b[5].changed[1].after_hex or keep.party_hex == b[6].party_after_hex then
+        return "the reset after a deferred withdraw did not leave the mon exactly once, in sBox14"
     end
     return nil
 end

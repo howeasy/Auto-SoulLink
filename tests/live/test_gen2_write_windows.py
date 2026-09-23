@@ -331,33 +331,46 @@ def verify_boxes(text: str, primary: dict, symbols, saved: bytes, reset: bytes) 
     return run
 
 
-def verify_boxes_reset(text: str, primary: dict, symbols, boxes: dict, candidate: bytes, saved: bytes) -> dict:
-    """The reset control (the unsaved image cold-booted) and the completing ops' native save."""
+def saved2_image(directory: Path, fixture: str) -> Path:
+    return directory / f"{fixture}.u2_saved2.SaveRAM"
+
+
+def verify_boxes_reset(text: str, primary: dict, symbols, boxes: dict, candidate: bytes, saved: bytes,
+                       saved2: bytes, reset: bytes) -> dict:
+    """The reset control (the unsaved image cold-booted), then three stages (lua/gen2_write_safety.lua
+    BOX_OPS.boxes_reset): the deferred sBox14 withdraw keeps the box copy through SAVE 1, the settle drops
+    it, the memorial is saved by SAVE 2, and a second deferred withdraw is flushed WITHOUT a save."""
     run = run_record(text)
     verify_liveness(run, primary)
     assert run["fixture_sha256"] == hashlib.sha256(candidate).hexdigest(), "reset ran on another file"
-    assert run["boot_cartram_sha256"] == hashlib.sha256(candidate[:CART_RAM_BYTES]).hexdigest() \
-        == boxes["reset"]["cartram_sha256"], "reset did not cold-boot the unsaved flush"
+    assert run["boot_cartram_sha256"] == hashlib.sha256(candidate[:CART_RAM_BYTES]).hexdigest()         == boxes["reset"]["cartram_sha256"], "reset did not cold-boot the unsaved flush"
     off, a, b, k = _bound_layout(run, symbols), boxes["ops"], run["ops"], run["control"]
     assert k["party_hex"] == a[0]["party_before_hex"], "reset: the party is not the saved one"
     assert k["active_hex"] == k["backing_hex"] == a[0]["changed"][0]["before_hex"], "reset: the active edit survived"
     assert k["memorial_hex"] == a[2]["changed"][0]["after_hex"], "reset: the backing edit was lost"
+    deposit = b[2]["changed"][0]["after_hex"]
     img = _image(_hashed(saved, run["save"]["cartram_sha256"]), off)
     assert img["party_hex"] == b[2]["party_after_hex"], "party not saved"
-    assert img["active_hex"] == img["backing_hex"] == b[2]["changed"][0]["after_hex"], "SaveBox did not copy the deposit"
-    assert img["memorial_hex"] == b[1]["changed"][0]["after_hex"], "sBox14 lost the withdraw"
+    assert img["active_hex"] == img["backing_hex"] == deposit, "SaveBox did not copy the deposit"
+    assert img["memorial_hex"] == k["memorial_hex"], "the deferred withdraw touched sBox14 before the save"
+    img = _image(_hashed(saved2, run["save2"]["cartram_sha256"]), off)
+    assert img["party_hex"] == b[4]["party_after_hex"] and img["memorial_hex"] == b[4]["changed"][0]["after_hex"],         "save 2 lacks the memorial"
+    assert img["active_hex"] == img["backing_hex"] == deposit
+    img2 = _image(_hashed(reset, run["reset"]["cartram_sha256"]), off)
+    assert img2 == {**img, "active_hex": img2["active_hex"]} and img2["active_hex"] == deposit,         "the unsaved deferred withdraw changed durable bytes"
     return run
 
 
 def verify_boxes_reload(text: str, primary: dict, symbols, reset: dict, candidate: bytes) -> dict:
+    """The reset after a deferred withdraw: the saved party (without the mon) and sBox14 (with it)."""
     run = run_record(text)
     verify_liveness(run, primary)
-    assert run["boot_cartram_sha256"] == hashlib.sha256(candidate[:CART_RAM_BYTES]).hexdigest() \
-        == reset["save"]["cartram_sha256"], "reload did not cold-boot the reset run's save"
+    assert run["boot_cartram_sha256"] == hashlib.sha256(candidate[:CART_RAM_BYTES]).hexdigest()         == reset["reset"]["cartram_sha256"], "reload did not cold-boot the reset run's unsaved flush"
     off, b, keep = _bound_layout(run, symbols), reset["ops"], run["persist"]
-    assert keep == {"party_hex": b[2]["party_after_hex"], "active_hex": b[2]["changed"][0]["after_hex"],
-                    "backing_hex": b[2]["changed"][0]["after_hex"], "memorial_hex": b[1]["changed"][0]["after_hex"]}, \
-        "the reload lacks the saved bytes"
+    deposit = b[2]["changed"][0]["after_hex"]
+    assert keep == {"party_hex": b[4]["party_after_hex"], "active_hex": deposit, "backing_hex": deposit,
+                    "memorial_hex": b[4]["changed"][0]["after_hex"]}, "the mon is not exactly once, in sBox14"
+    assert keep["party_hex"] != b[5]["party_after_hex"], "the unsaved withdraw survived the reset"
     cart = bytes.fromhex(live.tag_json(text, "DUMP")["cartram"]["hex"])
     assert _image(cart, off) == keep, "the dumped CartRAM (sPokemonData, sBox, backing, sBox14) disagrees"
     return run
@@ -393,9 +406,11 @@ def test_box_runs(title, emuhawk):  # noqa: F811 - pytest fixture
     shutil.copyfile(reset_image(directory, spec.name), candidate)
     directory, text = _run(spec, candidate, candidate.read_bytes(), "boxes_reset", f"{title}_boxes_reset", q)
     reset = verify_boxes_reset(text, primary, ctx.symbols, boxes, candidate.read_bytes(),
-                               saved_image(directory, spec.name).read_bytes())
+                               saved_image(directory, spec.name).read_bytes(),
+                               saved2_image(directory, spec.name).read_bytes(),
+                               reset_image(directory, spec.name).read_bytes())
     candidate = REPO / ".cache/gen2-fixtures/u2-write-windows" / f"{title}_battle.box_reload_candidate.SaveRAM"
-    shutil.copyfile(saved_image(directory, spec.name), candidate)
+    shutil.copyfile(reset_image(directory, spec.name), candidate)
     _, text = _run(spec, candidate, candidate.read_bytes(), "boxes_reload", f"{title}_boxes_reload", q)
     reload = verify_boxes_reload(text, primary, ctx.symbols, reset, candidate.read_bytes())
     assert fixture.read_bytes() == staged, f"{spec.name} changed while the gates ran"
