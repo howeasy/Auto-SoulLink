@@ -133,3 +133,86 @@ SAVE_WITNESS_DUMP path=patch/build/e2e_faint_cmd_gen3_b_1_witness.bin bytes=1310
 SAVE_WITNESS faint_cmd counter=4->5
 WRITES 16
 RESULT: PASS (memorialized 263620B6:6621F275)
+
+# ===== RE-RUN (same day) on the stricter harness 32e0e469 + save helper root fix c1507b7d: PASS =====
+# B's save found the SAVE row on the first attempt (no route_1 drift); B witness sha identical to the first run
+
+========== scenario: faint_cmd_gen3 ==========
+[duo] faint_cmd_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] server up: tcp=62941 http=62942 data=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_gen3_pmu4u_2o
+[duo] cleared 7 stale artifact(s) for faint_cmd_gen3: e2e_faint_cmd_gen3_a_1_witness.bin, e2e_faint_cmd_gen3_a_attempt1_result.txt, e2e_faint_cmd_gen3_a_result.txt, e2e_faint_cmd_gen3_b_1_witness.bin, e2e_faint_cmd_gen3_b_attempt1_result.txt, e2e_faint_cmd_gen3_b_result.txt, e2e_faint_cmd_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=2D356A90:6621F275
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 263620B6:99DE0D8A <-> 263620B6:6621F275
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'memorialize', 'key': '263620B6:99DE0D8A'}
+[duo] queued for a: {'cmd': 'game_over'}
+[duo] injected A faint 263620B6:99DE0D8A -> force_faint B 263620B6:6621F275; re-queued to A: ['memorialize', 'game_over']
+[duo] SAVE_WITNESS_SHA256 inst=a site=c9afa1663cf3862efcbdc103c3ef4a761eabaf23bbe6c8943ca8788bfb66b7d8 file=c9afa1663cf3862efcbdc103c3ef4a761eabaf23bbe6c8943ca8788bfb66b7d8 match=true saves=1 counter=4->5 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=8351c72e13cbb3662a2bdc8569aea6f974a284b0622fb5cb01729dc193ee1466 file=8351c72e13cbb3662a2bdc8569aea6f974a284b0622fb5cb01729dc193ee1466 match=true saves=1 counter=4->5 rtc=normalized
+[duo] faint_cmd: 263620B6:99DE0D8A and 263620B6:6621F275 saved once each in box 14; B's HP 0 came from an overworld-armed write
+[duo] PYDEC: PASS asserted scenario facts
+[duo] faint_cmd_gen3: a=PASS b=PASS
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45\tests\fixtures\gen3\wire\faint_cmd_gen3_a_new_client.jsonl
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45\tests\fixtures\gen3\wire\faint_cmd_gen3_b_new_client.jsonl
+
+========== summary ==========
+  faint_cmd_gen3: PASS (attempt 1 of 1)
+EXIT=0
+## instance b (re-run)
+duo instance b scenario=faint_cmd_gen3 phase=initial title=firered attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:62941 (non-blocking)…
+[client] [SLink-gen3] gen3_frlg/firered (clean by hash) player b -> 127.0.0.1:62941 (rom 41cb23d8)
+client built by lua/gen3/run.lua: title=firered player=b -> 127.0.0.1:62941
+[client] [SLink] TCP connected to 127.0.0.1:62941
+[client] [SLink-gen3] box scan stopped at box 0: gPokemonStoragePtr is null
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"viridian_city","artifact_kind":"clean","badges":0,"ball_count":0,"event":"hello","foundation":"gen3_frlg","has_pokeballs":false,"in_battle":false,"loc_name":"viridian_city","ot_id":1713500
+RX resolved_areas
+RX config
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"viridian_city_mart","player":"b","seq":2}
+TX area_enter - {"area_id":"pallet_town","event":"area_enter","loc_name":"pallet_town","player":"b","seq":4}
+TX area_enter - {"area_id":"viridian_city","event":"area_enter","loc_name":"viridian_city","player":"b","seq":8}
+[client] [gen3] phase field frame=778 map=(3,1)
+MYKEY 0 2D356A90:6621F275
+PARTY slot=0 key=2D356A90:6621F275 species=7 level=9 hp=27/27
+MYKEY 1 263620B6:6621F275
+PARTY slot=1 key=263620B6:6621F275 species=16 level=4 hp=17/17
+booted frame=778 map=map=769 at=(24,39) balls=4
+READY 263620B6:6621F275
+RX force_faint key=263620B6:6621F275
+RX play_sound
+[client] [SLink-gen3] write sound 0x03007340 +4 frame 2012
+[client] [SLink-gen3] write sound 0x03007348 +1 frame 2012
+[client] [SLink-gen3] write sound 0x03007349 +1 frame 2012
+[client] [SLink-gen3] write sound 0x0300734C +4 frame 2012
+[client] [SLink-gen3] write sound 0x030023E8 +4 frame 2012
+[client] [SLink-gen3] write sound 0x030023E8 +1 frame 2012
+[client] [SLink-gen3] write sound 0x030023F7 +1 frame 2012
+[client] [SLink-gen3] write sound 0x030023FB +1 frame 2012
+[client] [SLink-gen3] write sound 0x03002401 +1 frame 2012
+[client] [SLink-gen3] write sound 0x03002408 +4 frame 2012
+[client] [SLink-gen3] write sound 0x03002428 +4 frame 2012
+[client] [SLink-gen3] write sound 0x03007344 +4 frame 2012
+RX memorialize key=263620B6:6621F275
+RX game_over
+[client] [SLink-gen3] write overworld 0x0202433E +2 frame 2012
+FORCED_HP0 263620B6:6621F275 frame=2012 in_battle=0 battler=0
+[client] [SLink-gen3] write overworld 0x02030D44 +80 frame 2013
+[client] [SLink-gen3] write overworld 0x020242E8 +100 frame 2013
+[client] [SLink-gen3] write overworld 0x02024029 +1 frame 2013
+TX memorialize_done 263620B6:6621F275 {"box":13,"event":"memorialize_done","key":"263620B6:6621F275","player":"b","seq":54}
+[client] [gen3] phase save-menu frame=2073 counter=4
+[client] [gen3] phase save-dialog frame=2219 row=4
+[client] [gen3] phase saved frame=2698 counter=4->5
+SAVE_WITNESS_DUMP path=patch/build/e2e_faint_cmd_gen3_b_1_witness.bin bytes=131072 saves=1 frame=2947 counter=5
+[client] [gen3] phase slot-complete frame=2960 sectors=14/14
+SAVE_WITNESS faint_cmd counter=4->5
+WRITES 16
+RESULT: PASS (memorialized 263620B6:6621F275)
