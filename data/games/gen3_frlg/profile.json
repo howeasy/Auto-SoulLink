@@ -260,8 +260,18 @@
         "rom.BATTLE_MOVES_ADDR": "data/gen3/pret/pokeleafgreen.sym:26907 (gBattleMoves; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
         "rom.BEGIN_BATTLE_INTRO_ADDR": "data/gen3/pret/pokeleafgreen.sym:1602 (BeginBattleIntro|1, the Thumb form gBattleMainFunc stores; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
         "rom.BEGIN_BATTLE_INTRO_DUMMY_ADDR": "data/gen3/pret/pokeleafgreen.sym:1601 (BeginBattleIntroDummy|1, the Thumb form gBattleMainFunc stores; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.CB2_EVOLUTION_BEGIN_ADDR": "data/gen3/pret/pokeleafgreen.sym CB2_BeginEvolutionScene translated by symbol name from pokefirered.sym 0x080CDD19 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.CB2_EVOLUTION_LOAD_ADDR": "data/gen3/pret/pokeleafgreen.sym CB2_EvolutionSceneLoadGraphics translated by symbol name from pokefirered.sym 0x080CE0E9 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.CB2_EVOLUTION_UPDATE_ADDR": "data/gen3/pret/pokeleafgreen.sym CB2_EvolutionSceneUpdate translated by symbol name from pokefirered.sym 0x080CE711 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.CB2_TRADE_EVOLUTION_UPDATE_ADDR": "data/gen3/pret/pokeleafgreen.sym CB2_TradeEvolutionSceneUpdate translated by symbol name from pokefirered.sym 0x080CE72D (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
         "rom.EXPERIENCE_TABLES_ADDR": "data/gen3/pret/pokeleafgreen.sym:26982 (gExperienceTables; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
-        "rom.PP_UP_GET_MASK_ADDR": "data/gen3/pret/pokeleafgreen.sym:27398 (gPPUpGetMask; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)"
+        "rom.PP_UP_GET_MASK_ADDR": "data/gen3/pret/pokeleafgreen.sym:27398 (gPPUpGetMask; pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.SE_SONG_HEADERS.16": "data/gen3/pret/pokeleafgreen.sym se_faint translated by symbol name from pokefirered.sym 0x086B5984 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.SE_SONG_HEADERS.17": "data/gen3/pret/pokeleafgreen.sym se_flee translated by symbol name from pokefirered.sym 0x086B59D4 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.SE_SONG_HEADERS.22": "data/gen3/pret/pokeleafgreen.sym se_boo translated by symbol name from pokefirered.sym 0x086B5ADC (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.SE_SONG_HEADERS.25": "data/gen3/pret/pokeleafgreen.sym se_success translated by symbol name from pokefirered.sym 0x086B5BB0 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.SE_SONG_HEADERS.26": "data/gen3/pret/pokeleafgreen.sym se_failure translated by symbol name from pokefirered.sym 0x086B5BE0 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)",
+        "rom.SE_SONG_HEADERS.95": "data/gen3/pret/pokeleafgreen.sym se_shiny translated by symbol name from pokefirered.sym 0x086B6E70 (pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788)"
       },
       "admitted": true,
       "derived": {
@@ -334,10 +344,10 @@
         "BATTLE_MOVES_ADDR": 136645600,
         "BEGIN_BATTLE_INTRO_ADDR": 134292417,
         "BEGIN_BATTLE_INTRO_DUMMY_ADDR": 134292413,
-        "CB2_EVOLUTION_BEGIN_ADDR": 135060761,
-        "CB2_EVOLUTION_LOAD_ADDR": 135061737,
-        "CB2_EVOLUTION_UPDATE_ADDR": 135063313,
-        "CB2_TRADE_EVOLUTION_UPDATE_ADDR": 135063341,
+        "CB2_EVOLUTION_BEGIN_ADDR": 135060717,
+        "CB2_EVOLUTION_LOAD_ADDR": 135061693,
+        "CB2_EVOLUTION_UPDATE_ADDR": 135063269,
+        "CB2_TRADE_EVOLUTION_UPDATE_ADDR": 135063297,
         "EXPERIENCE_TABLES_ADDR": 136657600,
         "POST_BATTLE_WRITER_TASKS": [
           134414905
@@ -345,12 +355,12 @@
         "PP_UP_GET_MASK_ADDR": 136699521,
         "RETURN_FROM_BATTLE_ADDR": 134306649,
         "SE_SONG_HEADERS": {
-          "16": 141252996,
-          "17": 141253076,
-          "22": 141253340,
-          "25": 141253552,
-          "26": 141253600,
-          "95": 141258352
+          "16": 141251168,
+          "17": 141251248,
+          "22": 141251512,
+          "25": 141251724,
+          "26": 141251772,
+          "95": 141256524
         }
       },
       "rom_sha1": "574fa542ffebb14be69902d1d36f1ec0a4afd71e",

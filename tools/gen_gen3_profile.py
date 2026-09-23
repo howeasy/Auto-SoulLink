@@ -557,6 +557,95 @@ def _title(profile: dict, title: str, key: str, admitted: bool) -> dict:
     return out
 
 
+# ── C4-LGSE: LeafGreen ROM addresses the shared `vanilla` table gets wrong ─────────
+# Same bug class as the BASESTATS_ADDR override above: the Lua `vanilla` profile is
+# one table shared by both titles, so it can only carry one literal per key -- and it
+# carries FireRed's for SE_SONG_HEADERS and the evolution-scene CB2s.  Translate by
+# symbol NAME (FR address -> FR symbol -> LG address for that symbol), never by a
+# fixed byte offset, and hard-fail on any ambiguity rather than guess.
+_SYM_LINE = re.compile(r"^([0-9a-fA-F]{8})\s+[a-zA-Z]\s+[0-9a-fA-F]+\s+(\S+)$", re.M)
+
+
+def _sym_index(text: str) -> tuple[dict[int, list[str]], dict[str, list[int]]]:
+    """{address: [symbol names]} and {name: [addresses]} for a pret .sym file's text.
+    `.gcc2_compiled.` pseudo-symbols are excluded from the name index -- never a real
+    translation target -- but kept in the address index so callers can still see (and
+    reject) an address that names more than one thing."""
+    by_addr: dict[int, list[str]] = {}
+    by_name: dict[str, list[int]] = {}
+    for m in _SYM_LINE.finditer(text):
+        addr, name = int(m[1], 16), m[2]
+        by_addr.setdefault(addr, []).append(name)
+        if not name.startswith("."):
+            by_name.setdefault(name, []).append(addr)
+    return by_addr, by_name
+
+
+def _real_names_at(by_addr: dict, addr: int) -> list[str]:
+    return [n for n in by_addr.get(addr, []) if not n.startswith(".")]
+
+
+def _translate_fr_default(fr_by_addr: dict, lg_by_name: dict, fr_val: int, label: str) -> tuple[int, str]:
+    """FR ROM address -> LG's address for the same symbol, keeping the Thumb bit."""
+    thumb = fr_val & 1
+    names = _real_names_at(fr_by_addr, fr_val & ~1)
+    if len(names) != 1:
+        sys.exit(f"gen_gen3_profile: {label}: pokefirered.sym names {names or 'no'} real "
+                 f"symbols at 0x{fr_val & ~1:08X} (need exactly one)")
+    name = names[0]
+    addrs = lg_by_name.get(name, [])
+    if len(addrs) != 1:
+        sys.exit(f"gen_gen3_profile: {label}: pokeleafgreen.sym has {len(addrs)} addresses "
+                 f"for {name} (need exactly one)")
+    return addrs[0] | thumb, name
+
+
+# Paths the guard below must never flag: known cases where a leafgreen value legitimately
+# equals FireRed's without being a copy-paste bug.
+_GUARD_EXCLUDE_PATHS = {
+    # Keyed by FireRed's own game code -- FR's value IS the right value here.
+    "derived.BASESTATS_ADDR_BY_GAME_CODE.BPRE",
+}
+
+
+def _walk_rom_addrs(lg_val, fr_val, path: str):
+    """Yield (path, lg value, fr value) for every int in `lg_val` that sits in the ROM
+    address range, recursing into dicts/lists (e.g. SE_SONG_HEADERS, POST_BATTLE_WRITER_TASKS).
+    `fr_val` is the value at the same path in FireRed's entry, or None where it has none."""
+    if isinstance(lg_val, dict):
+        for k, v in lg_val.items():
+            yield from _walk_rom_addrs(v, fr_val.get(k) if isinstance(fr_val, dict) else None,
+                                       f"{path}.{k}")
+    elif isinstance(lg_val, list):
+        for i, v in enumerate(lg_val):
+            fv = fr_val[i] if isinstance(fr_val, list) and i < len(fr_val) else None
+            yield from _walk_rom_addrs(v, fv, f"{path}[{i}]")
+    elif isinstance(lg_val, int) and 0x08000000 <= lg_val <= 0x09FFFFFF:
+        yield path, lg_val, fr_val
+
+
+def _guard_leafgreen_not_copied(lg_entry: dict, fr_entry: dict, fr_by_addr: dict, lg_by_addr: dict) -> None:
+    """C4-LGSE: fail the build -- don't ship -- the next time a leafgreen ROM address is left at
+    FireRed's default. A value only trips this if it (a) still equals FireRed's value at the same
+    path and (b) FireRed's address names exactly one real symbol that sits at a DIFFERENT address
+    in pokeleafgreen.sym -- positive evidence LG disagrees, not just two ROMs coincidentally
+    sharing an address (e.g. BeginBattleIntro, or Task_LaunchLvlUpAnim in POST_BATTLE_WRITER_TASKS)."""
+    for section in ("ram", "rom", "derived"):
+        for key, lg_val in lg_entry[section].items():
+            fr_val = fr_entry[section].get(key)
+            for path, val, fr_leaf in _walk_rom_addrs(lg_val, fr_val, f"{section}.{key}"):
+                if path in _GUARD_EXCLUDE_PATHS or val != fr_leaf:
+                    continue
+                addr = val & ~1
+                names = _real_names_at(fr_by_addr, addr)
+                if len(names) != 1:
+                    continue  # can't resolve -- no positive evidence of a bug
+                if names[0] not in _real_names_at(lg_by_addr, addr):
+                    sys.exit(f"gen_gen3_profile: leafgreen.{path} = 0x{val:08X} still equals "
+                             f"FireRed's value, and FireRed's {names[0]} sits at a different "
+                             f"address in pokeleafgreen.sym -- translate it (see C4-LGSE)")
+
+
 def build(pack: str, profiles: dict, source: dict) -> dict:
     out = {
         "schema": SCHEMA,
@@ -566,6 +655,11 @@ def build(pack: str, profiles: dict, source: dict) -> dict:
         "titles": {t: _title(profiles[k], t, k, adm) for t, k, adm in PACKS[pack]},
     }
     if pack == "gen3_frlg":
+        # C4-LGSE: FireRed's own index, used below to translate leafgreen's copied ROM
+        # addresses and to guard against the next one nobody translates.
+        fr_by_addr, fr_by_name = _sym_index(
+            (REPO / "data/gen3/pret/pokefirered.sym").read_text(encoding="utf-8"))
+        lg_by_addr: dict[int, list[str]] = {}
         for title in ("firered", "leafgreen"):
             entry = out["titles"][title]
             path = f"data/gen3/pret/poke{title}.sym"
@@ -614,6 +708,31 @@ def build(pack: str, profiles: dict, source: dict) -> dict:
                 entry["rom"]["BASESTATS_ADDR"] = int(match[1], 16)
                 entry["_src"]["rom.BASESTATS_ADDR"] = (
                     f"{path}:{_line_of(text, match.start())} (gSpeciesInfo; {PRET_PIN})")
+                # C4-LGSE: the same "shared vanilla table carries FR's default" bug, for
+                # SE_SONG_HEADERS and the evolution CB2s. Translate each by symbol name.
+                lg_by_addr, lg_by_name = _sym_index(text)
+                new_headers = {}
+                for sid, fr_val in entry["rom"]["SE_SONG_HEADERS"].items():
+                    new_val, name = _translate_fr_default(
+                        fr_by_addr, lg_by_name, fr_val, f"rom.SE_SONG_HEADERS[{sid}]")
+                    new_headers[sid] = new_val
+                    entry["_src"][f"rom.SE_SONG_HEADERS.{sid}"] = (
+                        f"{path} {name} translated by symbol name from pokefirered.sym "
+                        f"0x{fr_val:08X} ({PRET_PIN})")
+                entry["rom"]["SE_SONG_HEADERS"] = new_headers  # a fresh dict: FR's entry
+                # still points at the original, un-translated dict object -- never mutate it.
+                for cb2_key in ("CB2_EVOLUTION_LOAD_ADDR", "CB2_EVOLUTION_BEGIN_ADDR",
+                                "CB2_EVOLUTION_UPDATE_ADDR", "CB2_TRADE_EVOLUTION_UPDATE_ADDR"):
+                    fr_val = entry["rom"][cb2_key]
+                    new_val, name = _translate_fr_default(
+                        fr_by_addr, lg_by_name, fr_val, f"rom.{cb2_key}")
+                    entry["rom"][cb2_key] = new_val
+                    entry["_src"][f"rom.{cb2_key}"] = (
+                        f"{path} {name} translated by symbol name from pokefirered.sym "
+                        f"0x{fr_val:08X} ({PRET_PIN})")
+        # C4-LGSE guard: the next FR-default value nobody translated must fail the build.
+        _guard_leafgreen_not_copied(out["titles"]["leafgreen"], out["titles"]["firered"],
+                                    fr_by_addr, lg_by_addr)
     if pack == "gen3_rr":
         # The existing RR detector explicitly rejects party counts above this limit.
         text = (REPO / SRC).read_text(encoding="utf-8")

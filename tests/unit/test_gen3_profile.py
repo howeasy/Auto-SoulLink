@@ -25,6 +25,22 @@ TITLE_TABLE = {
     "radical_red": "radical_red",
 }
 
+# C4-LGSE: same bug class as BASESTATS_ADDR (below) -- the shared `vanilla` Lua table can only
+# carry one literal per key, and it carries FireRed's for these.  leafgreen's generator output
+# instead names its own pokeleafgreen.sym symbol, so these keys are exempted from the "literal
+# survives verbatim" checks and checked against their own .sym address here instead.
+LEAFGREEN_OWN_ROM_VALUES = {
+    "BASESTATS_ADDR": 0x08254760,
+    "CB2_EVOLUTION_LOAD_ADDR": 0x080CE0BD,
+    "CB2_EVOLUTION_BEGIN_ADDR": 0x080CDCED,
+    "CB2_EVOLUTION_UPDATE_ADDR": 0x080CE6E5,
+    "CB2_TRADE_EVOLUTION_UPDATE_ADDR": 0x080CE701,
+}
+LEAFGREEN_SE_SONG_HEADERS = {
+    "16": 0x086B5260, "17": 0x086B52B0, "22": 0x086B53B8, "25": 0x086B548C,
+    "26": 0x086B54BC, "95": 0x086B674C,
+}
+
 
 def _load(pack: str) -> dict:
     return json.loads(PROFILES[pack].read_text(encoding="utf-8"))
@@ -78,8 +94,8 @@ def test_every_scalar_literal_survives_at_the_same_key(name: str) -> None:
     assert len(found) >= 15, f"{name}: the slice regex found only {len(found)} literals"
     for key, lit in found.items():
         assert key in flat, f"{name}: {key} is missing from profile.json"
-        if name == "leafgreen" and key == "BASESTATS_ADDR":
-            assert flat[key] == 0x08254760  # LG symbol, not the shared FR default
+        if name == "leafgreen" and key in LEAFGREEN_OWN_ROM_VALUES:
+            assert flat[key] == LEAFGREEN_OWN_ROM_VALUES[key]  # LG symbol, not the shared FR default
             continue
         assert flat[key] == _num(lit), f"{name}: {key} changed value"
 
@@ -91,6 +107,10 @@ def test_se_song_headers_survive(name: str) -> None:
     se_block = se_block[:se_block.index("}")]
     want = {k: _num(v) for k, v in SE_ENTRY.findall(se_block)}
     assert want, f"{name}: no SE_SONG_HEADERS entries sliced"
+    if name == "leafgreen":
+        # C4-LGSE: leafgreen's own addresses, translated by symbol name -- never the shared
+        # Lua literal sliced above, which is FireRed's.
+        want = {k: LEAFGREEN_SE_SONG_HEADERS[k] for k in want}
     assert _title(name)["rom"]["SE_SONG_HEADERS"] == want
 
 
@@ -163,6 +183,13 @@ def test_vanilla_storage_and_party_facts(name: str) -> None:
         base_src[key] = title["_src"][key]
     if name == "leafgreen":
         base_src["rom.BASESTATS_ADDR"] = title["_src"]["rom.BASESTATS_ADDR"]
+        # C4-LGSE: SE_SONG_HEADERS + the evolution CB2s, translated by symbol name.
+        for key in LEAFGREEN_OWN_ROM_VALUES:
+            if key == "BASESTATS_ADDR":
+                continue
+            base_src[f"rom.{key}"] = title["_src"][f"rom.{key}"]
+        for song_id in LEAFGREEN_SE_SONG_HEADERS:
+            base_src[f"rom.SE_SONG_HEADERS.{song_id}"] = title["_src"][f"rom.SE_SONG_HEADERS.{song_id}"]
     assert title["_src"] == base_src
 
 
