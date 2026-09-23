@@ -82,11 +82,12 @@ def test_gen2_launch_uses_cgb_300_percent_and_isolated_process_environment(monke
     assert launched[0][1]["env"]["SLINK_GEN2_SAVERAM_DIR"] != launched[1][1]["env"]["SLINK_GEN2_SAVERAM_DIR"]
 
 
-def test_gen2_server_routing_override_is_child_process_only(monkeypatch, tmp_path):
+@pytest.mark.parametrize("game", ["gen2_new", "gen2_gold_silver", "gen2_crystal_gold"])
+def test_gen2_server_uses_production_routing(monkeypatch, tmp_path, game):
     from server import adapters
 
     before = dict(adapters._ROM_TYPE_TO_GAME_ID)
-    run = duo.DuoRun("link", _args(game="gen2_new", scenario="link", server_flags=[]))
+    run = duo.DuoRun("link", _args(game=game, scenario="link", server_flags=[]))
     run.wait_for = lambda *args: True
     launched = []
     monkeypatch.setattr(duo.subprocess, "Popen",
@@ -94,8 +95,10 @@ def test_gen2_server_routing_override_is_child_process_only(monkeypatch, tmp_pat
     run.start_server()
     cmd, kwargs = launched[0]
     kwargs["stdout"].close()
-    assert cmd[1] == "-c" and "runpy.run_module" in cmd[2]
-    assert json.loads(kwargs["env"]["SLINK_DUO_ROM_ROUTES"]) == {"Crystal": "gen2_gsc", "crystal": "gen2_gsc"}
+    assert cmd[1:3] == ["-m", "server.server"]
+    assert "env" not in kwargs and "server_rom_routes" not in run.gcfg
+    for title in ("Crystal", "Gold", "Silver"):
+        assert adapters.game_id_for_rom_type(title) == "gen2_gsc"
     assert before == adapters._ROM_TYPE_TO_GAME_ID
 
 
@@ -103,15 +106,79 @@ def test_gen2_required_callbacks_delegate_original_results_to_h2(monkeypatch, tm
     seen = []
     results = {"a": "A receipt", "b": "B receipt"}
     module = SimpleNamespace(check_save_witness=lambda res: seen.append(("witness", res)),
-        link_oracle=lambda res, **kwargs: seen.append((kwargs["data_dir"], res)))
+        link_oracle=lambda res, **kwargs: seen.append((kwargs, res)))
     monkeypatch.setitem(sys.modules, "gen2_duo_oracles", module)
     run = duo.DuoRun("link", _args(game="gen2_new", scenario="link"))
+    run._gen2_inputs = {"a": {"ot_id": 101, "fixture": tmp_path / "gold_battle.SaveRAM"},
+                        "b": {"ot_id": 202, "fixture": tmp_path / "silver_battle.SaveRAM"}}
     run._run_oracle(results)
-    assert [entry[0] for entry in seen] == ["witness", run.data_dir]
+    assert seen[0][0] == "witness"
+    assert seen[1][0] == {"data_dir": run.data_dir, "ot_ids": {"a": 101, "b": 202},
+                           "boot_saveram": {"a": tmp_path / "gold_battle.SaveRAM",
+                                            "b": tmp_path / "silver_battle.SaveRAM"}}
     assert all(entry[1] is results for entry in seen)
     run.check_gen2_save_witness = None
     with pytest.raises(RuntimeError, match="witness validator"):
         run._run_oracle(results)
+
+
+@pytest.mark.parametrize("game,titles,names", [
+    ("gen2_gold_silver", ("gold", "silver"), ("gold_battle", "silver_battle")),
+    ("gen2_crystal_gold", ("crystal", "gold"), ("crystal_battle", "gold_battle")),
+])
+def test_gen2_prepares_each_title_plan_and_ui_origins(monkeypatch, tmp_path, game, titles, names):
+    import run_gb_gate as gate
+
+    from tests.live import test_gen2_frame_align as align, test_gen2_new_gates as inspect
+    from tools import gen2_fixtures, gen2_source_data
+
+    emulator = tmp_path / "EmuHawk.exe"
+    emulator.touch()
+    monkeypatch.setattr(duo, "EMUHAWK", str(emulator))
+    inputs = {}
+    for side, title, name in zip(("a", "b"), titles, names, strict=True):
+        fixture = tmp_path / f"{name}.SaveRAM"
+        fixture.write_bytes(name.encode())
+        inputs[side] = {"title": title, "name": name, "fixture": fixture,
+                        "qualification_attempt_id": f"qualified-{name}"}
+    selected, plans, loaded, facts, origins = [], [], [], [], []
+
+    def preflight(**kwargs):
+        selected.append(kwargs["game"])
+        return inputs
+
+    def plan(title, directory, fixture, speed):
+        plans.append((title, directory, fixture, speed))
+        return {"title": title}
+
+    def context(title, **kwargs):
+        loaded.append(title)
+        return SimpleNamespace(title=title)
+
+    def route(title, repo):
+        facts.append(title)
+        return {"title": title}
+
+    def u1(ctx, route_facts, attempt):
+        origins.append((ctx.title, route_facts["title"], attempt))
+        return {"pack_ui": ctx.title}
+
+    monkeypatch.setattr(duo, "gen2_preflight", preflight)
+    monkeypatch.setitem(gate.GENS["gen2"], "plan", plan)
+    monkeypatch.setattr(gen2_source_data, "load_context", context)
+    monkeypatch.setattr(gen2_fixtures, "route_facts", route)
+    monkeypatch.setattr(align, "u1_facts", u1)
+    monkeypatch.setattr(inspect, "inspect_env", lambda *args, **kwargs: {
+        "SLINK_GEN2_FIXTURE_CASE": "{}"})
+    run = duo.DuoRun("link", _args(game=game, scenario="link"))
+    run._prepare_gen2_lane()
+    assert selected == [game] and loaded == facts == list(titles)
+    assert plans == [(titles[index], run._saveram_dir(side), inputs[side]["fixture"], 300)
+                     for index, side in enumerate(("a", "b"))]
+    assert origins == [(title, title, f"qualified-{name}")
+                       for title, name in zip(titles, names, strict=True)]
+    assert [json.loads(run._gen2_env[side]["SLINK_GEN2_U1_FACTS"])["pack_ui"]
+            for side in ("a", "b")] == list(titles)
 
 
 def test_gen2_real_witness_refuses_two_client_passes_without_save_markers():

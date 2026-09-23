@@ -932,21 +932,27 @@ def evidence_contract(game):
     return FAMILY_EVIDENCE[family]
 
 
-def gen2_preflight(*, repo=None):
-    """Bind both distinct C/C fixtures to their full qualification reports and pinned ROM."""
+def gen2_preflight(*, repo=None, game="gen2_new"):
+    """Bind each side's fixture to its full qualification report and its title's pinned ROM."""
     root = Path(repo or REPO).resolve()
     if REPO not in sys.path:
         sys.path.insert(0, REPO)
     from tests.live.test_gen2_new_gates import qualified_identity
+    from tools.gen2_fixtures import BY_NAME
     from tools.gen2_source_data import load_context
 
-    ctx = load_context("crystal", root=root)
-    rom = ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"]
-    source = ctx.source_record()
-    if hashlib.sha1(rom.read_bytes()).hexdigest() != source["rom_sha1"]:
-        raise RuntimeError("Gen 2 duo ROM differs from the pinned source")
+    pairing = GAMES[game]
+    if pairing.get("launch_profile") != "gen2":
+        raise ValueError(f"not a Gen 2 duo pairing: {game}")
     result = {}
-    for inst, name in (("a", "crystal_battle"), ("b", "crystal_battle_ot2")):
+    for inst in ("a", "b"):
+        name = pairing["fixture"][inst]
+        title = BY_NAME[name].title
+        ctx = load_context(title, root=root)
+        rom = ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"]
+        source = ctx.source_record()
+        if hashlib.sha1(rom.read_bytes()).hexdigest() != source["rom_sha1"]:
+            raise RuntimeError(f"{inst}: Gen 2 {title} ROM differs from the pinned source")
         fixture = root / "tests/fixtures/gen2" / f"{name}.SaveRAM"
         raw = fixture.read_bytes()
         ot_id = qualified_identity(name, raw, repo=root)
@@ -955,7 +961,7 @@ def gen2_preflight(*, repo=None):
         result[inst] = {"name": name, "fixture": fixture, "sha256": hashlib.sha256(raw).hexdigest(),
                         "ot_id": ot_id, "qualification": receipt,
                         "qualification_attempt_id": report["attempt_id"],
-                        "rom": rom, "rom_sha1": source["rom_sha1"], "title": "crystal"}
+                        "rom": rom, "rom_sha1": source["rom_sha1"], "title": title}
     if result["a"]["ot_id"] == result["b"]["ot_id"] or result["a"]["sha256"] == result["b"]["sha256"]:
         raise RuntimeError("Gen 2 duo requires distinct qualified OTs and fixture bytes")
     return result
@@ -967,7 +973,18 @@ GAMES = {
         "launch_profile": "gen2", "uses_savestate": False,
         "fixture": {"a": "crystal_battle", "b": "crystal_battle_ot2"},
         "scenario_prefix": "gen2_",
-        "server_rom_routes": {"Crystal": "gen2_gsc", "crystal": "gen2_gsc"},
+    },
+    "gen2_gold_silver": {
+        "main": "lua/tests/duo/duo_gen2_main.lua", "game": "gen2_new",
+        "launch_profile": "gen2", "uses_savestate": False,
+        "fixture": {"a": "gold_battle", "b": "silver_battle"},
+        "scenario_prefix": "gen2_",
+    },
+    "gen2_crystal_gold": {
+        "main": "lua/tests/duo/duo_gen2_main.lua", "game": "gen2_new",
+        "launch_profile": "gen2", "uses_savestate": False,
+        "fixture": {"a": "crystal_battle", "b": "gold_battle"},
+        "scenario_prefix": "gen2_",
     },
     "gen3_rr": {
         "main": "lua/tests/duo/duo_main.lua",
@@ -1213,23 +1230,12 @@ class DuoRun:
                "--port", str(self.tcp_port),
                "--http-port", str(self.http_port),
                "--data-dir", self.data_dir] + self.cfg["flags"] + self.args.server_flags
-        env = None
-        if getattr(self, "gcfg", {}).get("server_rom_routes"):
-            # U5 is a separate cutover. Override only this child process, never the
-            # repository's production routing rows or another running server.
-            bootstrap = ("import json,os,runpy; from server import adapters; "
-                         "adapters._ROM_TYPE_TO_GAME_ID.update("
-                         "json.loads(os.environ['SLINK_DUO_ROM_ROUTES'])); "
-                         "runpy.run_module('server.server', run_name='__main__')")
-            cmd = [sys.executable, "-c", bootstrap, *cmd[3:]]
-            env = dict(os.environ, SLINK_DUO_ROM_ROUTES=json.dumps(self.gcfg["server_rom_routes"]))
-            print(f"[duo] process-local server routing: {self.gcfg['server_rom_routes']}")
         self.server = subprocess.Popen(
             cmd, cwd=REPO,
             # The handle is the server subprocess's stdout and must outlive this call —
             # a `with` would close it out from under the still-running server.
             stdout=open(os.path.join(self.data_dir, "server.log"), "w"),  # noqa: SIM115
-            stderr=subprocess.STDOUT, **({"env": env} if env is not None else {}))
+            stderr=subprocess.STDOUT)
         self.wait_for("server HTTP up", lambda: self._status() is not None, 30)
         print(f"[duo] server up: tcp={self.tcp_port} http={self.http_port} data={self.data_dir}")
 
@@ -1578,7 +1584,7 @@ class DuoRun:
     def _prepare_gen2_lane(self):
         if not Path(EMUHAWK).is_file():
             raise FileNotFoundError(f"EmuHawk missing for Gen 2 duo: {EMUHAWK}")
-        self._gen2_inputs = gen2_preflight()
+        self._gen2_inputs = gen2_preflight(game=self.game)
         from run_gb_gate import GENS
 
         from tests.live.test_gen2_frame_align import u1_facts
@@ -1586,13 +1592,13 @@ class DuoRun:
         from tools import gen2_fixtures, gen2_source_data
 
         self._gen2_plans = {
-            inst: GENS["gen2"]["plan"]("crystal", self._saveram_dir(inst),
+            inst: GENS["gen2"]["plan"](row["title"], self._saveram_dir(inst),
                                        row["fixture"], 300)
             for inst, row in self._gen2_inputs.items()}
-        ctx = gen2_source_data.load_context("crystal", root=Path(REPO))
-        facts = gen2_fixtures.route_facts("crystal", Path(REPO))
         self._gen2_env = {}
         for inst, row in self._gen2_inputs.items():
+            ctx = gen2_source_data.load_context(row["title"], root=Path(REPO))
+            facts = gen2_fixtures.route_facts(row["title"], Path(REPO))
             env = inspect_env(gen2_fixtures.BY_NAME[row["name"]], row["fixture"].read_bytes(),
                               repo=Path(REPO))
             case = json.loads(env["SLINK_GEN2_FIXTURE_CASE"])
@@ -1614,7 +1620,9 @@ class DuoRun:
 
     def assert_gen2_link_saved(self, results, **kwargs):
         oracle = importlib.import_module("gen2_duo_oracles")
-        return oracle.link_oracle(results, data_dir=self.data_dir, **kwargs)
+        return oracle.link_oracle(results, data_dir=self.data_dir,
+            ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
 
     def _mon_stats_keys(self):
         """The persisted `mon_stats` keys, or [] when the document is absent/unreadable."""
@@ -4445,7 +4453,8 @@ def list_lines(game):
     """
     lines = []
     for name in scenarios_for(game):
-        targets = SCENARIOS[name].get("target", "town")
+        targets = (GAMES[game]["fixture"] if GAMES[game].get("launch_profile") == "gen2"
+                   else SCENARIOS[name].get("target", "town"))
         shown = (", ".join(f"{inst}:{targets[inst]}" for inst in ("a", "b"))
                  if isinstance(targets, dict) else targets)
         lines.append(f"{name}  attempts={scenario_attempt_limit(name, game)}  targets={shown}")

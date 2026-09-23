@@ -1,4 +1,4 @@
-"""Opt-in Crystal/Crystal link gate; enabled prerequisites and evidence fail closed."""
+"""Opt-in Gen 2 link pairings; enabled prerequisites and evidence fail closed."""
 import os
 import subprocess
 import sys
@@ -21,11 +21,17 @@ pytestmark = [
 GAME = "gen2_new"
 SCENARIOS = ("link",)
 LANE = "gen2-cc-link"
+PAIRINGS = {
+    GAME: LANE,
+    "gen2_gold_silver": "gen2-gs-link",
+    "gen2_crystal_gold": "gen2-cg-link",
+}
 
 
-def run_link_gate():
+def run_link_gate(game=GAME):
     # Qualification must bind both fixtures to the pinned ROM before any process starts.
-    duo.gen2_preflight(repo=REPO)
+    lane = PAIRINGS[game]
+    duo.gen2_preflight(repo=REPO, game=game)
     assert Path(duo.EMUHAWK).is_file(), f"EmuHawk missing: {duo.EMUHAWK}"
     receipts = [REPO / "patch" / "build" / f"e2e_link_{side}_result.txt"
                 for side in ("a", "b", "pydec")]
@@ -35,7 +41,7 @@ def run_link_gate():
     try:
         result = subprocess.run(
             [sys.executable, str(REPO / "tools" / "e2e_duo.py"),
-             "--keep-data", "--game", GAME, "--scenario", "link", "--lane", LANE],
+             "--keep-data", "--game", game, "--scenario", "link", "--lane", lane],
             cwd=REPO, capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=timeout)
     except subprocess.TimeoutExpired as exc:
@@ -52,5 +58,6 @@ def run_link_gate():
             f"missing or failed {side} verdict: {verdicts}")
 
 
-def test_gen2_new_duo_link():
-    run_link_gate()
+@pytest.mark.parametrize("game", PAIRINGS)
+def test_gen2_new_duo_link(game):
+    run_link_gate(game)

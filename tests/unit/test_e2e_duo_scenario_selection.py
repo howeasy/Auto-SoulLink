@@ -38,7 +38,7 @@ def test_family_evidence_contracts_are_explicit_and_aliases_share_one():
         contract = duo_module.evidence_contract(game)
         if game.startswith("gen1"):
             assert contract is required
-        elif game == "gen2_new":
+        elif GAMES[game].get("game", game) == "gen2_new":
             assert contract.require_oracle is True
             assert contract.witness_validator
             assert callable(getattr(DuoRun, contract.witness_validator, None))
@@ -54,7 +54,87 @@ def test_gen2_new_selects_only_link_with_required_evidence():
     assert callable(getattr(DuoRun, contract.witness_validator, None))
     assert callable(getattr(DuoRun, SCENARIOS["link"]["oracle"], None))
     for game in GAMES:
-        assert scenario_applies("link", game) == (game == "gen2_new")
+        assert scenario_applies("link", game) == (GAMES[game].get("game", game) == "gen2_new")
+
+
+@pytest.mark.parametrize("game,fixtures", (
+    ("gen2_new", {"a": "crystal_battle", "b": "crystal_battle_ot2"}),
+    ("gen2_gold_silver", {"a": "gold_battle", "b": "silver_battle"}),
+    ("gen2_crystal_gold", {"a": "crystal_battle", "b": "gold_battle"}),
+))
+def test_gen2_pairing_rows_share_link_contract(game, fixtures):
+    assert game in GAMES
+    assert GAMES[game]["game"] == "gen2_new"
+    assert GAMES[game]["fixture"] == fixtures
+    assert scenarios_for(game) == ["link"]
+    assert duo_module.evidence_contract(game) is duo_module.evidence_contract("gen2_new")
+    assert not GAMES[game].get("server_rom_routes")
+    assert duo_list_lines(game) == [
+        f"link  attempts=1  targets=a:{fixtures['a']}, b:{fixtures['b']}"]
+
+
+@pytest.mark.parametrize("game,titles,names", (
+    ("gen2_gold_silver", ("gold", "silver"), ("gold_battle", "silver_battle")),
+    ("gen2_crystal_gold", ("crystal", "gold"), ("crystal_battle", "gold_battle")),
+))
+@pytest.mark.parametrize("fault", (None, "rom_a", "rom_b", "same_ot", "same_bytes"))
+def test_gen2_pairing_preflight_binds_each_source_and_fixture(
+        monkeypatch, tmp_path, game, titles, names, fault):
+    import hashlib
+    import json
+    from types import SimpleNamespace
+
+    from tests.live import test_gen2_new_gates as gates
+    from tools import gen2_source_data
+
+    fixture_dir = tmp_path / "tests/fixtures/gen2"
+    receipt_dir = fixture_dir / "receipts"
+    receipt_dir.mkdir(parents=True)
+    contexts, expected, loaded, qualified = {}, {}, [], []
+    for index, (side, title, name) in enumerate(zip(("a", "b"), titles, names, strict=True)):
+        source_dir = tmp_path / title
+        source_dir.mkdir()
+        rom = source_dir / f"{title}.gbc"
+        rom.write_bytes(title.encode())
+        pin = hashlib.sha1(rom.read_bytes()).hexdigest()
+        if fault == f"rom_{side}":
+            rom.write_bytes(b"wrong ROM")
+        contexts[title] = SimpleNamespace(
+            source_dir=source_dir, artifact=title,
+            lock={"outputs": {title: {"filename": rom.name}}},
+            source_record=lambda pin=pin: {"rom_sha1": pin})
+        raw = b"same" if fault == "same_bytes" else name.encode()
+        fixture = fixture_dir / f"{name}.SaveRAM"
+        fixture.write_bytes(raw)
+        ot_id = 123 if fault == "same_ot" else 123 + index
+        receipt = receipt_dir / f"{name}.qualification.json"
+        receipt.write_text(json.dumps({"attempt_id": f"qualified-{side}", "ot_id": ot_id}))
+        expected[side] = {"title": title, "name": name, "rom": rom, "rom_sha1": pin,
+                          "fixture": fixture, "sha256": hashlib.sha256(raw).hexdigest(),
+                          "ot_id": ot_id, "qualification": receipt,
+                          "qualification_attempt_id": f"qualified-{side}"}
+
+    def load(title, *, root):
+        assert root == tmp_path
+        loaded.append(title)
+        return contexts[title]
+
+    def identity(name, raw, *, repo):
+        assert repo == tmp_path
+        assert raw == (fixture_dir / f"{name}.SaveRAM").read_bytes()
+        qualified.append(name)
+        return json.loads((receipt_dir / f"{name}.qualification.json").read_text())["ot_id"]
+
+    monkeypatch.setattr(gen2_source_data, "load_context", load)
+    monkeypatch.setattr(gates, "qualified_identity", identity)
+    if fault:
+        match = "ROM differs" if fault.startswith("rom_") else "distinct qualified OTs"
+        with pytest.raises(RuntimeError, match=match):
+            duo_module.gen2_preflight(repo=tmp_path, game=game)
+    else:
+        assert duo_module.gen2_preflight(repo=tmp_path, game=game) == expected
+        assert loaded == list(titles)
+        assert qualified == list(names)
 
 
 def _gen2_wrapper(monkeypatch, tmp_path):
@@ -76,7 +156,8 @@ def _gen2_wrapper(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("missing", ("rom", "fixture", "qualification receipt"))
-def test_gen2_duo_wrapper_refuses_missing_preflight_input(monkeypatch, tmp_path, missing):
+@pytest.mark.parametrize("game", ("gen2_new", "gen2_gold_silver", "gen2_crystal_gold"))
+def test_gen2_duo_wrapper_refuses_missing_preflight_input(monkeypatch, tmp_path, missing, game):
     wrapper, _ = _gen2_wrapper(monkeypatch, tmp_path)
 
     def refuse(**kwargs):
@@ -88,7 +169,7 @@ def test_gen2_duo_wrapper_refuses_missing_preflight_input(monkeypatch, tmp_path,
     monkeypatch.setattr(wrapper.duo, "gen2_preflight", refuse)
     monkeypatch.setattr(wrapper.subprocess, "run", forbidden)
     with pytest.raises(AssertionError, match=f"missing {missing}"):
-        wrapper.run_link_gate()
+        wrapper.run_link_gate(game)
 
 
 def test_gen2_duo_wrapper_cannot_reuse_stale_pass_receipts(monkeypatch, tmp_path):
@@ -98,6 +179,31 @@ def test_gen2_duo_wrapper_cannot_reuse_stale_pass_receipts(monkeypatch, tmp_path
         (build / f"e2e_link_{side}_result.txt").write_text(f"{prefix}: PASS\n")
     with pytest.raises(AssertionError, match="missing fresh a receipt"):
         wrapper.run_link_gate()
+
+
+@pytest.mark.parametrize("game,lane", (
+    ("gen2_new", "gen2-cc-link"),
+    ("gen2_gold_silver", "gen2-gs-link"),
+    ("gen2_crystal_gold", "gen2-cg-link"),
+))
+def test_gen2_duo_wrapper_selects_pairing_for_preflight_and_launch(
+        monkeypatch, tmp_path, game, lane):
+    from types import SimpleNamespace
+
+    wrapper, build = _gen2_wrapper(monkeypatch, tmp_path)
+    checked = []
+    monkeypatch.setattr(wrapper.duo, "gen2_preflight", lambda **kw: checked.append(kw))
+
+    def run(cmd, **kwargs):
+        assert checked == [{"repo": tmp_path, "game": game}]
+        assert cmd[-6:] == ["--game", game, "--scenario", "link", "--lane", lane]
+        for side in ("a", "b", "pydec"):
+            prefix = "PYDEC" if side == "pydec" else "RESULT"
+            (build / f"e2e_link_{side}_result.txt").write_text(f"{prefix}: PASS\n")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(wrapper.subprocess, "run", run)
+    wrapper.run_link_gate(game)
 
 
 @pytest.mark.parametrize("bad", ("a", "b", "pydec", "none"))
