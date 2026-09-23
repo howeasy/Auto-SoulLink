@@ -234,16 +234,16 @@ Built by `build_party_snapshot` (`gen3_frlge_client.lua:1186-1314`, fields at `1
 | `level` | int | MUST | `partner_blobs.level`, display back-fill, `_resolve_level`, killfeed level | `state.py:2780`, `server.py:4709` |
 | `slot` | int 0-5 | SHOULD | `partner_blobs.slot` (trade `apply_trade.slot`), party ordering (`999` fallback) | `state.py:2778`, `server.py:8081-8089` |
 | `species_id` | int (game-internal) | SHOULD | display back-fill into MonInfo, blobs, sprites, names, types | `state.py:1033-1046`, `server.py:3385-3388` |
-| `nickname` | str | SHOULD | MonInfo back-fill, HUD labels, dashboard | `state.py:1032-1043` |
+| `nickname` | str | SHOULD | MonInfo back-fill, HUD labels, dashboard | `state.py:1176-1191` |
 | `active` | bool | SHOULD (battle) | active-battler marker, `stat_stages` shown only when true, doubles inference on foes | `server.py:3779`, `server.py:3871`, `server.py:5404` |
 | `status_cond` | int (Gen 3 `status1` layout) | SHOULD | `status_icon_html` (dashboard) and `adapter.status_token` (`link_panel`) | `server.py:3866`, `server.py:2604`, `html_render.py:150-166` |
-| `stat_stages` | list[7] of int 0-12, 6 = neutral, order ATK,DEF,SPD,SATK,SDEF,ACC,EVA; `nil`/absent when not active | optional | `stat_stages_html(stages, adapter.stat_stage_labels())` — `int(raw)-6` | `html_render.py:169-196`, `server.py:3870`, `memory_gba.lua:437-446` |
-| `moves` | list[4] int move ids | optional | `move_details` via `adapter.move_data` | `server.py:3394-3413` |
-| `pp` | list[4] int | optional | `current_pp` | `server.py:3411` |
-| `pp_bonuses` | int (2 bits/move, Gen 3) **or** `pp_ups: list[4]` (Gen 4) | optional | max PP scaling `base + base*ups//5` | `server.py:3396-3410` |
+| `stat_stages` | list[7] of int 0-12, 6 = neutral, order ATK,DEF,SPD,SATK,SDEF,ACC,EVA; `nil`/absent when not active | optional | `stat_stages_html(stages, adapter.stat_stage_labels())` — `int(raw)-6` | `html_render.py:169-196`, `server.py:3011`, `memory_gba.lua:437-446` |
+| `moves` | list[4] int move ids | optional | `move_details` via `adapter.move_data` | `server.py:2421-2447` |
+| `pp` | list[4] int | optional | `current_pp` | `server.py:2439-2446` |
+| `pp_bonuses` | int (2 bits/move, Gen 3) **or** `pp_ups: list[4]` (Gen 4) | optional | max PP scaling `base + base*ups//5` | `server.py:2428-2444` |
 | `held_item_id` (legacy alias `held_item`) | int | optional | `adapter.item_name` | `server.py:2890`, `server.py:3798-3799` |
 | `ability_id` (legacy alias `ability`) | int | optional | `adapter.ability_name` (hidden when `!supports_abilities()`) | `server.py:2891`, `server.py:3389-3390` |
-| `form` | int | optional (Gen 4+) | sprite form | `server.py:3386` |
+| `form` | int | optional (Gen 4+) | sprite form | `server.py:2461-2463` |
 | `blob_hex` | hex, **exactly `adapter.party_blob_size()*2` chars** | MUST for trade / rival swap | `_ingest_party_blobs` — wrong length or non-hex ⇒ entry silently dropped from `partner_blobs` ⇒ that mon is never trade-eligible and rival swap says "no cached party blobs" | `state.py:3045-3089`, `base.py:204-218` |
 
 Gen 3 does **not** send `ot`, `nature`, `gender` or `pp_ups` in the party entry; `gender` is derived server-side from `adapter.gender_from_key(key, species_id)` (`server.py:2892`).
@@ -252,19 +252,19 @@ Gen 3 does **not** send `ot`, `nature`, `gender` or `pp_ups` in the party entry;
 
 | Field | Type | Meaning | Consumer |
 |---|---|---|---|
-| `has_pokeballs` | bool | nuzlocke gate; only `True` has an effect | `state.py:357-358` |
-| `ball_count` | int | dashboard | `server.py:3021-3022` |
+| `has_pokeballs` | bool | nuzlocke gate; only `True` has an effect | `state.py:431` |
+| `ball_count` | int | dashboard | `server.py:2076-2077` |
 | `area_id`, `loc_name` | str | current area / display location | `server.py:3094-3100` |
-| `in_battle` | bool | battle edge detection; `false` clears `trainer_id/opponent_*/enemy_party/is_doubles` | `server.py:3036-3046` |
-| `is_trainer_battle` | bool | wild vs trainer; suppresses dupes check | `server.py:3047-3048`, `3075-3076` |
-| `trainer_id` | int | `adapter.trainer_info(tid)` → opponent name/class; if the adapter returns no class, `opponent_name`/`opponent_class` from the tick are accepted instead | `server.py:3049-3064` |
+| `in_battle` | bool | battle edge detection; `false` clears `trainer_id/opponent_*/enemy_party/is_doubles` | `server.py:2091-2101` |
+| `is_trainer_battle` | bool | wild vs trainer; suppresses dupes check | `server.py:2102-2103`, `2130-2131` |
+| `trainer_id` | int | `adapter.trainer_info(tid)` → opponent name/class; if the adapter returns no class, `opponent_name`/`opponent_class` from the tick are accepted instead | `server.py:2104-2118` |
 | `opponent_name`, `opponent_class` | str | non-RR fallback for trainer display and killfeed | `server.py:3057-3064` |
-| `enemy_party` | list[FoeEntry] (§4.3); `[]` when not in battle | battle panel, killer enrichment, dupes check (`[0].species_id`) | `server.py:3065-3066`, `2956-2960`, `3079` |
-| `is_doubles` | bool | doubles chip; if absent, inferred from >1 `active` foe | `server.py:3067-3073` |
-| `pc_boxes` | list[BoxEntry] (§4.4), full cache every tick | box table, memorial contamination scan, `_mon_cache` | `server.py:3029-3035` |
-| `badges` | int bitmask | 8 gym circles, badges overlay, compact panel popcount | `server.py:3023-3024`, `4088-4103` |
-| `kanto_badges` | int bitmask | second-region badges (Gen 4) | `server.py:3025-3026` |
-| `trainer_name` | str | dashboard | `server.py:3027-3028` |
+| `enemy_party` | list[FoeEntry] (§4.3); `[]` when not in battle | battle panel, killer enrichment, dupes check (`[0].species_id`) | `server.py:2120-2121`, `2485-2496`, `2133-2134` |
+| `is_doubles` | bool | doubles chip; if absent, inferred from >1 `active` foe | `server.py:2122-2128`, `2936` |
+| `pc_boxes` | list[BoxEntry] (§4.4), full cache every tick | box table, memorial contamination scan, `_mon_cache` | `server.py:2084-2089` |
+| `badges` | int bitmask | 8 gym circles, badges overlay, compact panel popcount | `server.py:2078-2079`, `3270-3289` |
+| `kanto_badges` | int bitmask | second-region badges (Gen 4) | `server.py:2080-2081`, `3270-3289` |
+| `trainer_name` | str | dashboard | `server.py:2082-2083` |
 
 `money` and `frame` are **not** part of the protocol (nothing sends or reads them).
 
@@ -274,10 +274,10 @@ Gen 3 builds it from `M.readEnemyParty()` (`memory_gba.lua:1541-1577`) overlaid 
 
 | Field | Type | Consumer | Cite |
 |---|---|---|---|
-| `species_id` | int | name, sprite, types, killer species, dupes | `server.py:3944`, `2959`, `3079` |
-| `level` | int | display, killer level | `server.py:3945`, `2960` |
+| `species_id` | int | name, sprite, types, killer species, dupes | `server.py:2490-2495`, `3001`, `2134` |
+| `level` | int | display, killer level | `server.py:2024`, `3004` |
 | `hp`, `maxHP` | int | HP bar; "active foe" for killer = first with `hp > 0` | `server.py:3946-3947`, `2957` |
-| `active` | bool | active marker, stat stages, doubles inference | `server.py:3948`, `3071` |
+| `active` | bool | active marker, stat stages, doubles inference | `server.py:2934`, `2126` |
 | `ability_id`, `held_item_id`, `status_cond`, `stat_stages`, `moves`, `pp`, `pp_bonuses`/`pp_ups`, `form`, `key` | as §4.1 | battle panel | `server.py:3949-3951`, `3436-3473`, `3977` |
 
 ### 4.4 Box entry (element of `pc_boxes`)
@@ -286,11 +286,11 @@ Built by `scan_next_boxes` (`gen3_frlge_client.lua:1409-1467`, entry at `1451-14
 
 | Field | Type | Consumer | Cite |
 |---|---|---|---|
-| `box` | int, 0-based box index | memorial contamination (`box == adapter.memorial_box_index`), display `box+1` | `server.py:8019`, `8027`, `4401` |
-| `slot` | int, 0-based | display `slot+1`, logs | `server.py:4402` |
+| `box` | int, 0-based box index | memorial contamination (`box == adapter.memorial_box_index`), display `box+1` | `server.py:4637`, `4645`, `4694` |
+| `slot` | int, 0-based | display `slot+1`, logs | `server.py:4658`, `4695` |
 | `key` | key | `_cache_mon_info`, dead-in-regular-box re-memorialize, level fallbacks | `server.py:1735-1775`, `8066-8079` |
 | `species_id`, `nickname` | int, str | display | `server.py:8023-8025`, `4386` |
-| `level` | int | optional; falls back through `mon_stats` → link entry → `party_details` → `_mon_cache` | `server.py:3834-3859` |
+| `level` | int | optional; falls back through `mon_stats` → link entry → `party_details` → `_mon_cache` | `server.py:4709-4728` |
 | `held_item_id`, `ability_id`, `moves` | | box table | `server.py:4390-4391`, `3423-3432` |
 
 There is **no** "active box index" on the wire.

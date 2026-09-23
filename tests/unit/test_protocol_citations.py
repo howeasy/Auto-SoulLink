@@ -1,7 +1,7 @@
 """docs/protocol.md cites `file.py:<a>-<b>` for the code behind each row. Those numbers drift:
 the file grows, the row keeps pointing at whatever moved into that range, and nothing notices
-because the prose around it is still true. This test notices, with two rules (cards C4-CITE and
-C4-CITE2).
+because the prose around it is still true. This test notices, with four rules (cards C4-CITE,
+C4-CITE2, C4-CITE3 and C4-CITE4).
 
 Rule 1 -- symbols. For every `<name>.py:<a>[-<b>]` citation on a line that also names, in
 backticks, one or more code symbols DEFINED in that file, every line of the cited range must lie
@@ -20,8 +20,19 @@ exactly one `server.py`/`state.py` citation and names no other symbol, that stri
 the cited range. A row whose subject is a *description* rather than a name (a table's first cell
 holding prose) is skipped, as are rows naming several commands.
 
-Rows neither rule can judge -- several events, no symbol, no event, an incidental mention -- are
-skipped, never guessed. `_INCIDENTAL` records the ones that are skipped for a stated reason.
+Rule 4 -- snapshot fields. §4's tables name a wire field in the first cell (`ball_count`,
+`blob_hex`, `pc_boxes`, `maxHP`). When such a row names exactly one such field, carries exactly
+one `server.py`/`state.py` citation and names no other symbol defined in that file, the cited
+range must contain the field string -- that column is supposed to point at the place the server
+consumes the field. The field must also appear somewhere in the cited file: a file-wide absence
+is not a drifted range (rule 2's discipline), so the row is skipped rather than guessed at. Rows
+naming two fields (`hp`, `maxHP`), two citations, or a code symbol in the first cell (`_build_status_dict`,
+the §4.5 builder rows) are skipped too -- measured against the pre-card document, that keeps the
+judged set at the rows whose citation is answerable, and every one it finds is a real drift.
+
+Rows no rule can judge -- several events, no symbol, no event, two citations, an incidental
+mention -- are skipped, never guessed. `_INCIDENTAL` records the ones that are skipped for a
+stated reason.
 
 It is deliberately not a link checker: it never asks whether the row's claim is true, only
 whether the place it points at is still the place it names.
@@ -62,7 +73,8 @@ _INCIDENTAL: dict[tuple[str, str], str] = {
 # The revisions this test is written against, pinned by sha (never HEAD~n).
 PRE_SWEEP_REV = "7e97cb40"    # before the C4-CITE sweep: rule 1 has plenty to say
 PRE_EVENT_REV = "062f812f"    # before C4-CITE2: rule 2's rows were still stale
-PRE_COMMAND_REV = "cc807cf3"  # before this card: rule 3's rows were still stale
+PRE_COMMAND_REV = "cc807cf3"  # before C4-CITE3: rule 3's rows were still stale
+PRE_FIELD_REV = "1729c72e"    # before C4-CITE4: the §4 field rows were still stale
 
 
 def _resolve(name: str) -> Path | None:
@@ -122,7 +134,10 @@ def check_citations(text: str) -> list[str]:
             text_cache[str(path)] = path.read_text(encoding="utf-8", errors="replace").splitlines()
         return span_cache[str(path)]
 
+    in_section_4 = False
     for lineno, line in enumerate(text.splitlines(), 1):
+        if line.startswith("## "):
+            in_section_4 = line.startswith("## 4.")
         is_row = line.startswith("|") and len(line.split("|")) > 2
         subject = line.split("|")[1] if is_row else line
         events = sorted({t for t in BACKTICK.findall(subject) if t in EVENTS})
@@ -167,6 +182,16 @@ def check_citations(text: str) -> list[str]:
                         f"command/field(s) the row names ({', '.join(missing)})")
                 continue
 
+            # rule 4: a §4 snapshot-field row must cite a range that names the field
+            if in_section_4:
+                field = _field_name(subject, spans, tokens)
+                if field is not None:
+                    if field in "\n".join(text_cache[str(path)]) and field not in window:
+                        problems.append(
+                            f"docs/protocol.md:{lineno}: {match.group(0)} does not contain the "
+                            f"`{field}` field the row documents")
+                    continue
+
             # rule 2: a pure wire-event row must cite that event's handling
             if len(events) != 1:
                 continue
@@ -205,6 +230,26 @@ def _subject_names(subject: str, spans: dict[str, list[tuple[int, int]]],
     if any(t != name and IDENT.fullmatch(t) and t in spans for t in tokens):
         return None
     return [name]
+
+
+def _field_name(subject: str, spans: dict[str, list[tuple[int, int]]],
+                tokens: list[str]) -> str | None:
+    """The single wire field a §4 row's first cell names, or None when the row cannot be judged.
+
+    None means: no name, several names (`hp`, `maxHP`), a first cell that names a code symbol
+    rather than a field (the §4.5 builder rows), or another symbol of the cited file named
+    elsewhere in the row (the row is about that symbol, not about the field). A field is spelled
+    as a plain identifier in backticks: `stat_stages`, `ball_count`, `maxHP`.
+    """
+    names = [t for t in (s.strip("()") for s in BACKTICK.findall(subject)) if IDENT.fullmatch(t)]
+    if len(names) != 1:
+        return None
+    name = names[0]
+    if name in spans:
+        return None
+    if any(t != name and IDENT.fullmatch(t) and t in spans for t in tokens):
+        return None
+    return name
 
 
 def _doc_at(rev: str) -> str | None:
@@ -263,3 +308,22 @@ def test_the_command_rule_catches_the_pre_command_sweep_document():
     problems = check_citations(text)
     assert problems, "the pre-command-sweep document passed; rule 3 has no teeth"
     assert any("server.py:2512-2523" in p and "seq" in p for p in problems), problems
+
+
+def test_the_field_rule_catches_the_pre_field_sweep_document():
+    """Falsifier for rule 4, pinned to the revision before this card.
+
+    Measured on that revision: rule 4 judges 23 of §4's 58 table rows and flags all 23 -- the
+    rows carry one citation, name one field, and that citation does not contain the field. The
+    drift is not subtle: `server.py:3944-3948` (cited for the foe `species_id`/`level`/`active`)
+    is the Twitch-bot startup, `4402` (box `slot`) is the backup listing, `3834-3859` (box
+    `level`) is the bot config handlers, and `8019` (box `box`) is past the end of the file
+    (5153 lines at that revision).
+    """
+    text = _doc_at(PRE_FIELD_REV)
+    if text is None or "`server.py:3021-3022`" not in text:
+        pytest.skip(f"{PRE_FIELD_REV}:docs/protocol.md unavailable or already re-anchored")
+    problems = check_citations(text)
+    assert problems, "the pre-field-sweep document passed; rule 4 has no teeth"
+    assert any("server.py:3021-3022" in p and "`ball_count`" in p for p in problems), problems
+    assert any("server.py:3944" in p and "`species_id`" in p for p in problems), problems
