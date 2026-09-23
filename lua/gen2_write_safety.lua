@@ -1,6 +1,18 @@
--- Gen 2 source-candidate predicate. Inspection is SOURCE/MODEL only; check()
--- deliberately cannot authorize runtime writes before a separate qualified rebind.
+-- Gen 2 checkpoint policy over the shared GB evaluator. inspect_candidate() is SOURCE/MODEL
+-- evidence and never authority. check() authorizes ONLY behind a PHYSICAL write-window receipt
+-- (M.qualified: schema gen2-write-window-receipt-v1, written by tests/live/test_gen2_write_windows.py
+-- after lua/tests/gen2_write_windows.lua proved the idle write and refused every negative on the
+-- running cartridge) for the same title and the identical checkpoint rows. Crystal and Gold carry
+-- their own receipts; Silver's pack rows equal Gold's (primary is byte-identical), so a Gold
+-- receipt covers Silver ONLY while those rows stay identical. Authorization is not admission:
+-- admission stays with admission.json / entry.lua (O-22, card U3).
 local M = {}
+M.RECEIPT_SCHEMA = "gen2-write-window-receipt-v1"
+-- title -> the title whose PHYSICAL receipt may authorize it (rows must still be identical).
+M.RECEIPT_TITLE = {crystal="crystal", gold="gold", silver="gold"}
+M.RECEIPT_CONTROLS = {idle_party_write="authorized", idle_box_write="authorized", start_menu="refused",
+    script_text="refused", mid_warp="refused", battle_party_write="refused"}
+M.SAVE_WINDOW = {refused=true, MODEL_ONLY=true}
 local REQUIRED = {
     wMapStatus=true, wMapEventStatus=true, wScriptRunning=true, wScriptMode=true,
     wScriptFlags=true, wScriptStackSize=true, wJoypadDisable=true, wGameLogicPaused=true,
@@ -18,8 +30,53 @@ local function masked(value, mask)
     end
     return result
 end
+local function same(a, b)
+    if type(a) ~= type(b) then return false end
+    if type(a) ~= "table" then return a == b end
+    for key, value in pairs(a) do if not same(value, b[key]) then return false end end
+    for key in pairs(b) do if a[key] == nil then return false end end
+    return true
+end
 
-function M.new(pack, title, io, evaluator, ownership)
+-- Symbols of the pack's state predicates that `read` refuses, in pack order. Pure.
+function M.failing_predicates(primary, read)
+    local failed = {}
+    for _, condition in ipairs(primary.state_predicates) do
+        if masked(read(condition.address, condition.read_domain), condition.mask) ~= condition.value then
+            failed[#failed + 1] = condition.symbol
+        end
+    end
+    return failed
+end
+
+-- true, or nil,why: `receipt` is a PHYSICAL write-window receipt that may authorize `title`.
+function M.qualified(pack, title, receipt)
+    local owner = M.RECEIPT_TITLE[title]
+    if not owner then return nil, "no PHYSICAL write-window receipt path for " .. tostring(title) end
+    if type(receipt) ~= "table" or receipt.schema ~= M.RECEIPT_SCHEMA or receipt.evidence_level ~= "PHYSICAL"
+       or receipt.result ~= "PASS" then
+        return nil, "PHYSICAL write-window receipt required"
+    end
+    local data = type(pack) == "table" and type(pack.titles) == "table" and pack.titles[title]
+    if receipt.title ~= owner or type(data) ~= "table" or type(pack.source) ~= "table"
+       or (owner == title and receipt.rom_sha1 ~= pack.source.rom_sha1) then
+        return nil, "write-window receipt belongs to another title or ROM"
+    end
+    if not same(receipt.checkpoint, data.primary) then
+        return nil, "write-window receipt proved other checkpoint rows than this pack's"
+    end
+    for name, want in pairs(M.RECEIPT_CONTROLS) do
+        if type(receipt.controls) ~= "table" or receipt.controls[name] ~= want then
+            return nil, "write-window receipt control not " .. want .. ": " .. name
+        end
+    end
+    if not M.SAVE_WINDOW[receipt.save_window] or receipt.persisted ~= true then
+        return nil, "write-window receipt lacks the save-window verdict or the save/reload persistence proof"
+    end
+    return true
+end
+
+function M.new(pack, title, io, evaluator, ownership, receipt)
     assert(type(evaluator) == "table" and type(evaluator.check) == "function", "shared GB evaluator required")
     assert(type(ownership) == "table", "explicit host ownership observations required")
     for _, name in ipairs({"capture", "valid", "admitted", "no_conflicting_owner",
@@ -27,11 +84,29 @@ function M.new(pack, title, io, evaluator, ownership)
         assert(ownership[name] ~= nil, name .. " observation required")
     end
     local self = {}
+    local evaluate
+    local qualified, unqualified = true, nil
+    if receipt == nil then
+        qualified, unqualified = false, "Gen 2 checkpoint is SOURCE_CANDIDATE; runtime qualification is OPEN"
+    else
+        qualified, unqualified = M.qualified(pack, title, receipt)
+    end
+    -- The runtime authority: the same held evaluation inspect_candidate reports, but only behind
+    -- the PHYSICAL receipt. Must run inside the synchronous CPU hold at the checkpoint PC.
     function self:check()
-        return false, "Gen 2 checkpoint is SOURCE_CANDIDATE; runtime qualification is OPEN"
+        if not qualified then return false, unqualified end
+        local ok, matches, why = pcall(evaluate)
+        if not ok then return false, "checkpoint evidence unavailable: " .. tostring(matches) end
+        return matches == true, why
     end
     function self:inspect_candidate()
-        local ok, matches, why = pcall(function()
+        local ok, matches, why = pcall(evaluate)
+        return {candidate_match=ok and matches == true, runtime_authorized=false,
+            evidence_level="SOURCE_MODEL", physical_status="OPEN",
+            reason=ok and why or ("checkpoint evidence unavailable: " .. tostring(matches))}
+    end
+    function evaluate()
+        do
             assert(type(pack) == "table" and pack.schema == "gen2-write-checkpoint-v1", "unsupported Gen 2 checkpoint pack")
             assert(type(title) == "string" and type(pack.titles) == "table", "selected title required")
             local count = 0
@@ -106,11 +181,8 @@ function M.new(pack, title, io, evaluator, ownership)
                 if masked(read(serial.address, "System Bus"), serial.mask) ~= serial.value then
                     return false, "serial transfer owns the game"
                 end
-                for _, condition in ipairs(primary.state_predicates) do
-                    if masked(read(condition.address, condition.read_domain), condition.mask) ~= condition.value then
-                        return false, condition.symbol .. " predicate refused"
-                    end
-                end
+                local failed = M.failing_predicates(primary, read)
+                if failed[1] then return false, failed[1] .. " predicate refused" end
                 if not banks_match() or ownership.valid(held) ~= true
                     or ownership.admitted(title, pack.source.rom_sha1) ~= true
                     or ownership.no_conflicting_owner() ~= true then
@@ -119,10 +191,7 @@ function M.new(pack, title, io, evaluator, ownership)
                 return true
             end)
             return accepted, reason
-        end)
-        return {candidate_match=ok and matches == true, runtime_authorized=false,
-            evidence_level="SOURCE_MODEL", physical_status="OPEN",
-            reason=ok and why or ("checkpoint evidence unavailable: " .. tostring(matches))}
+        end
     end
     return self
 end
