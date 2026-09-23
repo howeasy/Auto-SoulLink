@@ -1562,3 +1562,264 @@ def test_route1_faint_reports_a_counter_that_never_advanced(machine):
     with pytest.raises(LuaError, match="playerFaintCounter never advanced"):
         leg(mod, "route1_faint").run(fake.cp)
     assert fake.fights == 20, "the leg must keep hunting until its encounter budget runs out"
+
+
+# ── C3-41: the PC stage checks that fire when a witness never appears ─────────────────────────
+# C3-40 witnessed what each guard does when the world misbehaves in a specific way; these are the
+# remaining named failures whose trigger is a witness that never shows up or never advances. Each
+# test puts the flow in front of the real PC.* function with exactly that missing witness and
+# asserts the ONE name, so deleting the guard turns its test red (before/after matrix in the
+# C3-41 receipt). No emulator, no ROM, no screenshots: fake RAM against the real functions.
+
+
+def test_pc_open_reports_an_interaction_that_never_started(machine):
+    """No menu and an IDLE script context: the A that was meant to boot the PC did nothing (the
+    player was not facing the metatile, or a script owned the press). The retry loop's own
+    witness -- the script context going busy -- is what says the interaction started."""
+    lua, mod, fake = machine
+    with pytest.raises(LuaError, match="pc_interaction_not_started"):
+        mod.PC.open(fake.cp, "no-interaction")
+
+
+def test_pc_open_reports_no_menu_after_the_retry_budget(machine):
+    """The other side of the same loop: the script keeps looking busy for every retry and still
+    no PC menu ever appears, so the loop runs out with nothing to drive."""
+    lua, mod, fake = machine
+    lua.execute("""
+        G.pred_ok=function(_,name)
+            if name=='script_context_status' then return false end
+            return true
+        end
+    """)
+    with pytest.raises(LuaError, match="pc_which_pc_menu_missing"):
+        mod.PC.open(fake.cp, "no-menu")
+
+
+def test_pc_open_reports_a_choice_consumed_without_the_top_menu(machine):
+    """"Which PC should be accessed?" is consumed and the script moves on -- but no
+    Task_PCMainMenu appears, so there is no storage menu to drive. read through VAR_RESULT zero
+    (a real choice leaves 127 only on the owner-list cancel), then require the top menu."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.w32(0x03005090,0x0809CC99); F.w8(0x03005090+4,1)   -- Task_MultichoiceMenu_HandleInput
+        F.w8(0x0203ADE4+2,0); F.w8(0x0203ADE4+4,3)           -- row 0, four owner rows
+        F.on_tap=function(button)
+            if button=='A' then
+                F.w32(0x03005090,0)                          -- the choice is consumed
+                F.w16(0x020370D0,0)                          -- and this visit wrote row 0
+            end
+        end
+    """)
+    with pytest.raises(LuaError, match="pc_storage_top_menu_missing"):
+        mod.PC.open(fake.cp, "no-top-menu")
+
+
+@pytest.mark.parametrize("pointer,task", [(0x0202A000, None),
+                                          (0x12345678, 0x0808DD89)])
+def test_pc_box_reports_a_missing_chooser(machine, pointer, task):
+    """Choose the destination box: either the deposit menu task (and so its box chooser) is not
+    up at all, or gStorage is not a readable EWRAM pointer -- both leave the stage with nothing
+    to choose in, and the guard covers both disjuncts."""
+    lua, mod, fake = machine
+    fake.w32(0x020397B0, pointer)
+    if task is not None:
+        fake.w32(0x03005090, task)
+        fake.w8(0x03005090 + 4, 1)
+    with pytest.raises(LuaError, match="pc_box_chooser_missing"):
+        mod.PC.box("no-chooser")
+
+
+def test_pc_box_reports_a_choice_that_handed_the_box_to_another_task(machine):
+    """The chooser's A is accepted and then the deposit menu is GONE -- a different task owns the
+    screen, so the box this leg chose is not the box on display. TryStorePartyMonInBox never
+    fired, and returning success here would read someone else's box."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,1)
+        F.w32(0x03005090,0x0808DD89); F.w8(0x03005090+4,1)   -- Task_DepositMenu, ready
+        F.w8(0x020397B6,0)
+        F.on_tap=function(button)
+            if button=='A' then F.w32(0x03005090,0) end       -- the chooser disappears
+        end
+    """)
+    with pytest.raises(LuaError, match="pc_box_deposit_wrong_task"):
+        mod.PC.box("wrong-task")
+
+
+def test_pc_box_reports_a_deposit_that_never_committed(machine):
+    """The chooser stays up on box 0 and its A never moves anything: the leg retries a bounded
+    number of times, then reports the deposit as not committed instead of walking away from a
+    mon that is still in the party."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,1)
+        F.w32(0x03005090,0x0808DD89); F.w8(0x03005090+4,1)
+        F.w8(0x020397B6,0)
+    """)
+    with pytest.raises(LuaError, match="pc_box_deposit_not_committed"):
+        mod.PC.box("no-commit")
+
+
+def test_pc_mode_reports_storage_never_entered(machine):
+    """A on DEPOSIT is accepted but Task_PokeStorageMain never appears while the top menu stays up
+    and ready on the same row, so every retry sees the same menu. Entering the mode is the
+    witness the whole stage rests on."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,0); F.w8(F.pcstore+1,1)
+        F.w32(0x03005090,0x0808C39D); F.w8(0x03005090+4,1)
+        F.w16(0x03005090+8,2); F.w16(0x03005090+10,1)  -- already on DEPOSIT, ready
+        F.w8(0x0203ADE4+4,4)
+    """)
+    with pytest.raises(LuaError, match="pc_storage_mode_not_entered"):
+        mod.PC.mode("no-storage", 1)
+
+
+def test_pc_popup_reports_another_task_taking_over_the_popup(machine):
+    """The A that opens the selected-mon popup is accepted, then the box task itself disappears
+    and Task_OnSelectedMon never appears: something else owns the screen, so this stage must not
+    keep pressing A into it."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,0); F.w8(F.pcstore+1,1)
+        F.w8(0x02039820,1); F.w8(0x02039821,1)
+        F.w32(0x03005090,0x0808D2BD); F.w8(0x03005090+4,1)
+        F.dropping=false; F.t=0
+        F.on_tap=function(button)
+            if button=='A' then F.dropping=true end
+        end
+        F.on_frame=function()
+            if F.dropping then
+                F.t=F.t+1
+                if F.t==10 then F.w32(0x03005090,0) end   -- the box task goes away
+            end
+        end
+    """)
+    with pytest.raises(LuaError, match="pc_storage_popup_unexpected_task"):
+        mod.PC.popup("took-over", 1, 1, 0)
+
+
+def test_pc_select_reports_a_choice_that_started_the_wrong_task(machine):
+    """Pressing A on the popup does leave Task_OnSelectedMon behind -- but starts some OTHER
+    task instead of the one this stage asked for (WITHDRAW/DEPOSIT/RELEASE). The call must fail
+    rather than report a transfer that never ran."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.w32(0x03005090,0x0808D879); F.w8(0x03005090+4,1)   -- Task_OnSelectedMon
+        F.on_tap=function(button)
+            if button=='A' then F.w32(0x03005090,0x0808D2BD) end -- back to the box, not the asked task
+        end
+    """)
+    with pytest.raises(LuaError, match="pc_storage_choice_wrong_task"):
+        mod.PC.select("wrong-task", 0x0808DD89)
+
+
+def test_pc_select_reports_a_choice_never_taken(machine):
+    """The popup stays up through every bounded retry and the asked-for task never starts: the
+    stage ends by naming the choice it could not take."""
+    lua, mod, fake = machine
+    fake.w32(0x03005090, 0x0808D879)
+    fake.w8(0x03005090 + 4, 1)
+    with pytest.raises(LuaError, match="pc_storage_choice_not_taken"):
+        mod.PC.select("never-taken", 0x0808DD89)
+
+
+def test_pc_cursor_reports_a_cursor_that_rolls_past_the_row(machine):
+    """The cursor keeps MOVING (every press is accepted) but rolls around the box's occupied slots
+    and never lands on the requested row: after the bounded search the stage must fail instead of
+    selecting whatever row it happens to be on."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore)
+        F.w32(0x03005090,0x0808D2BD); F.w8(0x03005090+4,1)
+        F.w8(0x02039820,1); F.w8(0x02039821,0)
+        F.on_tap=function(button)
+            if button=='Down' then F.w8(0x02039821,(F.r8(0x02039821)+1)%4) end -- 0..3, never 4
+        end
+    """)
+    with pytest.raises(LuaError, match="pc_storage_cursor_stalled"):
+        mod.PC.cursor("rolling", 1, 4)
+
+
+def test_pc_cursor_reports_a_cursor_that_never_moves(machine):
+    """The stuck read: the position byte does not change on a press, so the wait for movement
+    itself is the witness that fails -- the same name as the search's end, which is why the
+    press COUNT is asserted too. One press and then the failure is the guard's whole point: a
+    second press into a box whose cursor reads stale is input the driver must not send. With the
+    wait removed the loop presses again (8 times before the same name), so the count is the only
+    signature this guard has."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.downs=0
+        F.on_tap=function(button) if button=='Down' then F.downs=F.downs+1 end end
+    """)
+    fake.w32(0x020397B0, 0x0202A000)
+    fake.w32(0x03005090, 0x0808D2BD)
+    fake.w8(0x03005090 + 4, 1)
+    fake.w8(0x02039820, 1)
+    fake.w8(0x02039821, 0)
+    with pytest.raises(LuaError, match="pc_storage_cursor_stalled"):
+        mod.PC.cursor("stuck", 1, 3)
+    assert fake.downs == 1, "a stuck cursor read must not be pressed at again"
+
+
+def test_pc_popup_reports_a_popup_cursor_that_moves_but_never_arrives(machine):
+    """The popup is up and five rows wide, the cursor steps one row per press -- and the row this
+    stage wants is the LAST one, which the bounded search never tests because the budget runs out
+    on the press that would reach it. Failing here is the point: the popup would otherwise be
+    confirmed on the wrong row (CANCEL, or RELEASE on a summary read)."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,2); F.w8(F.pcstore+1,1)
+        F.w8(0x02039820,1); F.w8(0x02039821,1)
+        F.w8(0x0203ADE4+2,0); F.w8(0x0203ADE4+4,4)
+        F.w32(0x03005090,0x0808D2BD); F.w8(0x03005090+4,1)
+        F.on_tap=function(button)
+            if button=='A' then F.w32(0x03005090,0x0808D879) end -- the popup opens
+            if button=='Down' then F.w8(0x0203ADE4+2,F.r8(0x0203ADE4+2)+1) end
+        end
+    """)
+    with pytest.raises(LuaError, match="pc_storage_popup_cursor_stalled"):
+        mod.PC.popup("last-row", 1, 1, 4)
+
+
+def test_pc_popup_reports_a_popup_cursor_that_never_moves(machine):
+    """The popup read never advances on a press, so the cursor wait is the witness that fails --
+    the same name as the search's end, so the press COUNT is asserted as well: one Down and then
+    the failure, where removing the wait presses 4 times into the popup before the same name."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000; F.downs=0
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,2); F.w8(F.pcstore+1,1)
+        F.w8(0x02039820,1); F.w8(0x02039821,1)
+        F.w8(0x0203ADE4+2,0); F.w8(0x0203ADE4+4,4)
+        F.w32(0x03005090,0x0808D2BD); F.w8(0x03005090+4,1)
+        F.on_tap=function(button)
+            if button=='A' then F.w32(0x03005090,0x0808D879) end
+            if button=='Down' then F.downs=F.downs+1 end
+        end
+    """)
+    with pytest.raises(LuaError, match="pc_storage_popup_cursor_stalled"):
+        mod.PC.popup("stuck-popup", 1, 1, 3)
+    assert fake.downs == 1, "a stuck popup cursor must not be pressed at again"
+
+
+@pytest.mark.parametrize("pointer,task", [(0x0202A000, None),
+                                          (0x12345678, 0x0808DECD)])
+def test_pc_release_reports_a_missing_confirmation(machine, pointer, task):
+    """Task_ReleaseMon (or a readable gStorage) is what the confirmation prompt lives in: with
+    either one missing there is no yes/no box up, and reading a cursor out of a menu that is not
+    there is how a release gets confirmed by accident."""
+    lua, mod, fake = machine
+    fake.w32(0x020397B0, pointer)
+    if task is not None:
+        fake.w32(0x03005090, task)
+        fake.w8(0x03005090 + 4, 1)
+    with pytest.raises(LuaError, match="pc_release_confirmation_missing"):
+        mod.PC.release("no-confirmation")
