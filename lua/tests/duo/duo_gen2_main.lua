@@ -207,8 +207,8 @@ end
 -- (parts.writes IS the client's writes object; run_deferred calls it inside the checkpoint hook). Every
 -- field is read synchronously in the call: raw wPartyMons before/after, the permit log rows it added, and
 -- the CPU/bank/stack/state evidence the per-title checkpoint pack names. No byte is written here.
-local function bus_hex(addr, n)
-    local bytes = api.read_range(addr, n, "System Bus")
+local function bus_hex(addr, n, domain)
+    local bytes = api.read_range(addr, n, domain or "System Bus")
     local out = {}
     for i = 1, n do out[i] = fmt("%02x", bytes[i]) end
     return table.concat(out)
@@ -223,11 +223,19 @@ local function checkpoint_evidence()
         for _, b in ipairs(api.read_range(p.address, p.width, "System Bus")) do value = value * 256 + b end
         values[p.symbol] = value
     end
+    -- Both anchors the production safety rechecks (gen2_write_safety.lua), each in the ROM domain at its
+    -- rom_offset and mapped on the System Bus at its address, expected_hex/2 bytes.
+    local anchors = {}
+    for name, row in pairs(primary.anchors) do
+        local n = #row.expected_hex // 2
+        anchors[name] = {rom_hex=bus_hex(row.rom_offset, n, "ROM"), mapped_hex=bus_hex(row.address, n)}
+    end
     -- BizHawk exposes no MBC bank register: hrom_bank is the hROMBank shadow, anchor_hex the mapped bytes.
     return {pc=api.register("PC"), sp=sp, hrom_bank=api.read_u8(ctx.profile.hram.hROMBank, "System Bus"),
             svbk=api.read_u8(0xFF70, "System Bus") % 8, sc=api.read_u8(0xFF02, "System Bus"),
             stack_hex=bus_hex(sp, primary.caller_stack.required_read_bytes),
-            anchor_hex=bus_hex(anchor.address, #anchor.expected_hex // 2), state=json.object(values)}
+            anchor_hex=bus_hex(anchor.address, #anchor.expected_hex // 2), anchors=json.object(anchors),
+            state=json.object(values)}
 end
 local W = parts.writes or {}   -- production always composes it; a stand-in client may not
 local _faint_party_slot = W.faint_party_slot
