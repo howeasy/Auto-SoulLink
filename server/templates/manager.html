@@ -54,7 +54,7 @@
             <h2 class="mk-h2"><span>Game</span><i></i><em>any two cartridges of a family can link</em></h2>
             <div class="mk-games">
               <template x-for="g in form.games" :key="g.key">
-                <button type="button" class="mk-gchip" :class="[draft.game === g.key ? 'active' : '', g.key === '' ? 'detect' : '']" @click="draft.game = g.key" x-text="g.label"></button>
+                <button type="button" class="mk-gchip" :disabled="g.unadmitted" :class="[draft.game === g.key ? 'active' : '', g.key === '' ? 'detect' : '']" @click="draft.game = g.key" x-text="g.label"></button>
               </template>
             </div>
           </section>
