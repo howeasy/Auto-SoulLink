@@ -195,10 +195,14 @@ TASK_COUNT = 16
 # range is that symbol's whole body from the title's own .sym, System mode (0x1F), Thumb.  FR
 # census (docs/gen3/probes/census_fr_overworld_2026-09-21.txt): 1707/1800 frame ends at R15
 # 0x080008AC..0x080008B4, mode 0x1F, T=1.  The other 93 landed in the BIOS IRQ vector (R15=0x1C,
-# mode 0x12, T=0) and are refused on purpose -- the next parked frame admits.  LG has no census,
-# so its block carries no observed_pc.
+# mode 0x12, T=0) and are refused on purpose -- the next parked frame admits.  LG census
+# (docs/gen3/probes/census_lg_overworld_2026-09-23.txt, the first LG frame-end evidence): 1675/1800
+# frame ends at R15 0x080008AC..0x080008B4, mode 0x1F, T=1, the same symbol range (the FR and LG
+# .sym files agree on 0x08000890 + 0x30); the other 125 landed in the same BIOS IRQ vector and are
+# refused on purpose.
 PARKED_SYMBOL = "WaitForVBlank"
-FRLG_CENSUS = {"firered": (0x080008AC, "docs/gen3/probes/census_fr_overworld_2026-09-21.txt")}
+FRLG_CENSUS = {"firered": (0x080008AC, "docs/gen3/probes/census_fr_overworld_2026-09-21.txt"),
+               "leafgreen": (0x080008AC, "docs/gen3/probes/census_lg_overworld_2026-09-23.txt")}
 # RR (CFRU) parks in the BIOS instead (docs/gen3/probes/census_rr_overworld_2026-09-21.txt):
 # 1800/1800 frames at R15=0x000001C4 with CPSR mode 0x1F (System) and T=0.
 RR_CPU = {"mode": 0x1F, "thumb": 0, "pc_min": 0x00000000, "pc_max": 0x00003FFF,

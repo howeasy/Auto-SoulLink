@@ -150,13 +150,19 @@ def test_frlg_cpu_is_parked_in_wait_for_vblank(title: str) -> None:
     addr, size = G.parse_sym(G.SYM_DIR / G.PACKS["gen3_frlg"][title][0])["WaitForVBlank"]
     assert (cpu["pc_min"], cpu["pc_max"]) == (addr, addr + size - 1)
     assert cpu["mode"] == 0x1F and cpu["thumb"] == 1 and cpu["symbol"] == "WaitForVBlank"
-    if title == "leafgreen":  # no LG census exists; FR's observation must not be copied over
-        assert "observed_pc" not in cpu and "census" not in cpu
-        return
+    assert "census" in cpu and "observed_pc" in cpu, f"{title}: cpu block carries no census pins"
+    assert (G.ROOT / cpu["census"]).is_file(), cpu["census"]
+    if title == "leafgreen":  # the first LG frame-end census (168fde14); same modal PC as FR's
+        assert cpu["census"] == "docs/gen3/probes/census_lg_overworld_2026-09-23.txt"
+    # the committed pack is what the generator emits for this title
+    assert G.cpu_clause(title, G.parse_sym(G.SYM_DIR / G.PACKS["gen3_frlg"][title][0]),
+                        is_rr=False) == cpu
     rows = census_rows(cpu["census"])
     rom_pcs = {pc for pc in rows if pc >= G.ROM_BASE}
     assert rom_pcs and all(addr <= pc <= cpu["pc_max"] for pc in rom_pcs)
-    assert cpu["observed_pc"] == max(rows, key=rows.get)
+    # the dominant frame-end PC, and the dominant non-IRQ one, are the pack's observed_pc
+    assert cpu["observed_pc"] == max(rows, key=rows.get) == max(rom_pcs, key=lambda pc: rows[pc])
+    assert cpu["observed_pc"] == 0x080008AC
     # everything else is the BIOS IRQ vector -- refused by the clause, and a small minority
     assert all(pc < 0x4000 for pc in set(rows) - rom_pcs)
     assert sum(rows[pc] for pc in rom_pcs) > 0.9 * sum(rows.values())
