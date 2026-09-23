@@ -92,8 +92,10 @@ Commands are the ones the receipts themselves used. **S**
    with `SLINK_CHECKPOINT_ROWS=<row>` narrowing per row, on both FR clean and (once it exists)
    the LG clean artifact. Negative rows must name an expected clause (C3-24).
 4. **Cold-boot admission** of the FRLG artifacts on the final cut:
-   `python tools/gen3_fixtures.py boot-check --rom patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba --fixture tests/fixtures/gen3/firered_party_battle.sav`
-   (and the same for the LG fixtures, with `--saveram-name "Pokemon - LeafGreen Version (USA).SaveRAM"`).
+   `python tools/gen3_fixtures.py boot-check --rom patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba --saveram-name "Pokemon - FireRed Version (USA).SaveRAM" --fixture tests/fixtures/gen3/firered_party_battle.sav`
+   (`--saveram-name` is REQUIRED: without it the battery name is derived from the staged ROM name, which BizHawk
+   does not use, and the boot sees an erased battery; rehearsal 2026-09-23)
+   (and the same for the LG fixtures, with `--title leafgreen --saveram-name "Pokemon - LeafGreen Version (USA).SaveRAM"`).
    Expected: `BOOT-CHECK PASS … counter=<a>-><b> party=[…]`, 14/14 sectors.
 5. **The extracted release zip boots FR on the new client**: build the zip
    (`python tools/make_release.py`), extract it to a clean directory, load the shipped
