@@ -164,8 +164,8 @@ def test_poisoned_lead_ticks_on_the_park_tiles_then_parks_after_the_faint():
     assert step(rt, d, x=1, y=2, overworld_ready=False, ui=ui("text"))[0] == ["A"]   # "fainted!"
     fainted = {"party": {0: {"hp": 0, "status": 0}, 1: {"hp": 12, "status": 0}}, "poison_fainted": True}
     buttons, phase = d.step(pt(rt, x=1, y=2, **fainted))
-    assert phase == "park" and buttons["Left"]
-    buttons, phase = d.step(pt(rt, x=0, y=2, **fainted))
+    assert phase == "park" and buttons["Up"]                     # onto the hunt grass (1,1)
+    buttons, phase = d.step(pt(rt, x=1, y=1, **fainted))
     assert phase == "poisoned" and not any(buttons.values())
 
 
@@ -255,16 +255,21 @@ def test_a_path_blocked_only_by_a_live_object_waits_then_fails_with_the_live_fac
     assert buttons is None and "objects 0,1 1,2" in why and "can_step" in why
 
 
-def test_park_hands_over_only_once_the_grass_next_door_is_steppable_again():
-    """Crystal live run 2: the faint text's closetext reloads the tilemap; the faint leg's first grass step
-    must not be judged on the stale permissions."""
+def test_park_hands_over_on_a_grass_tile_or_in_a_battle():
+    """Crystal live runs 2-3: the U1 grass walk refused the floor park tile's single grass neighbour; the
+    faint leg now starts in the grass."""
     rt = lua()
     d = driver(rt, load(rt))
     step(rt, d, map_number=2, x=1, y=1)
     d.step(pt(rt, x=1, y=1, party={0: {"hp": 9, "status": PSN}}))
     fainted = {"party": {0: {"hp": 0, "status": 0}}, "poison_fainted": True}
-    closed = {"Up": False, "Down": False, "Left": False, "Right": False}
-    buttons, phase = d.step(pt(rt, x=0, y=2, can_step=closed, **fainted))
-    assert phase == "park" and not any(buttons.values())
-    buttons, phase = d.step(pt(rt, x=0, y=2, **fainted))
+    buttons, phase = d.step(pt(rt, x=1, y=2, **fainted))
+    assert phase == "park" and buttons["Up"]
+    buttons, phase = d.step(pt(rt, x=1, y=1, **fainted))
+    assert phase == "poisoned"
+    d2 = driver(rt, load(rt))
+    step(rt, d2, map_number=2, x=1, y=1)
+    d2.step(pt(rt, x=1, y=1, party={0: {"hp": 9, "status": PSN}}))
+    d2.step(pt(rt, x=1, y=2, **fainted))
+    buttons, phase = d2.step(pt(rt, battle_mode=1, overworld_ready=False, **fainted))
     assert phase == "poisoned"

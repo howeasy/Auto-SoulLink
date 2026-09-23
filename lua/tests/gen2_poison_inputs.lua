@@ -20,7 +20,8 @@
     tick     the target is poisoned in the party: oscillate between the two floor park tiles (no grass, no
              encounter) until opts.fainted() -- the probe's poison_faint hit; every 4 steps DoPoisonStep takes
              1 HP (C engine/overworld/events.asm:905-912). The "fainted!" text box takes A.
-    park     walk back to park[1] (next to grass, so the faint leg can start) -> "poisoned" (terminal).
+    park     walk onto the nearest hunt grass tile (the faint leg starts in the grass) -> "poisoned" (terminal);
+             a wild battle on the way also hands over.
   facts (SLINK_GEN2_U1_FACTS.poison, tests/live/test_gen2_frame_align.poison_facts):
     maps {name -> _map_facts}, legs {{map, side, exits={{x,y}}}}, hunt_map, park {{x,y},{x,y}},
     moves {POISON_STING=id}, psn_mask (1 << PSN, constants/battle_constants.asm).
@@ -171,7 +172,8 @@ function PI.driver(F, facts, opts)
         if self.phase == self.terminal then return {}, self.phase end
         local ui = point.ui
         if integer(point.battle_mode, 1, 255) then
-            if self.phase == "tick" or self.phase == "park" then return nil, "a battle started on the park tiles" end
+            if self.phase == "tick" then return nil, "a battle started on the park tiles" end
+            if self.phase == "park" then self.phase = self.terminal return {}, self.phase end   -- the faint leg's battle
             if target == nil and integer(point.active_slot, 0, 5) then target = point.active_slot end
             if ui == nil or point.input_ready ~= true then return {}, self.phase end
             return battle(point, ui)
@@ -190,20 +192,11 @@ function PI.driver(F, facts, opts)
         end
         if (self.phase == "tick" or self.phase == "park") and point.poison_fainted == true then self.phase = "park" end
         if self.phase == "park" then
-            local buttons, why = walk(hunt, point, {facts.park[1]})
+            -- Hand the faint leg a grass tile, not a floor tile beside one: at the park tile the U1 grass walk
+            -- has a single grass neighbour and refused it on a stale permission read (Crystal live runs 2-3).
+            local buttons, why = walk(hunt, point, facts.hunt_grass)
             if why ~= "arrived" then return buttons, why end
-            -- The faint text's closetext reloads the tilemap (LoadOverworldTilemap): hand over only once the
-            -- live step permissions show the grass next door again (the faint leg's first step; live run 2).
-            for _, d in ipairs(PI.DIRECTIONS) do
-                local x, y = point.x + d[2], point.y + d[3]
-                if x >= 0 and x < hunt.width and y >= 0 and y < hunt.height and hunt.grid[y * hunt.width + x + 1] == 2
-                   and type(point.can_step) == "table" and point.can_step[d[1]] == true then
-                    self.phase = self.terminal
-                    return {}, self.phase
-                end
-            end
-            waited = waited + 1
-            if waited > PI.WAIT_FRAMES then return nil, "the park tile never showed a steppable grass neighbour" end
+            self.phase = self.terminal
             return {}, self.phase
         end
         if self.phase == "tick" then
