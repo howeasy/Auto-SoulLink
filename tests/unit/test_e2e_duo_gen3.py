@@ -371,6 +371,35 @@ def test_rows_without_the_flag_keep_their_verdict_paths():
 
 
 # ── saved-state oracle helpers ─────────────────────────────────────────────────────────────
+def _rom_with_pp(table, title="firered"):
+    """A ROM image holding only the move table's PP bytes the synthetic records use, at the
+    title's own rom.BATTLE_MOVES_ADDR -- so gen3_limits' real ROM read is what these tests run."""
+    with open(duo.gen3_profile_path(title), encoding="utf-8") as handle:
+        prof = json.load(handle)["titles"][title]
+    base = prof["rom"]["BATTLE_MOVES_ADDR"] - 0x08000000
+    stride, off = prof["derived"]["BATTLE_MOVE_ENTRY_SIZE"], prof["derived"]["BATTLE_MOVE_PP_OFFSET"]
+    rom = bytearray(base + 1024 * stride)
+    for move, pp in table.items():
+        rom[base + move * stride + off] = pp
+    return bytes(rom)
+
+
+# Tackle 35 PP, Tail Whip 30 PP (pret src/data/battle_moves.h), as the synthetic mons carry them
+LIMITS = duo.gen3_limits("firered", _rom_with_pp({33: 35, 39: 30}))
+
+
+def _rt(*args, **kw):
+    return duo.gen3_round_trip_problems(*args, **{"limits": LIMITS, **kw})
+
+
+def _mem(*args, **kw):
+    return duo.gen3_memorial_problems(*args, **{"limits": LIMITS, **kw})
+
+
+def _cap(*args, **kw):
+    return duo.gen3_capture_problems(*args, **{"limits": LIMITS, **kw})
+
+
 def _decoded(image):
     return duo.gen3_decode(image)
 
@@ -379,26 +408,26 @@ def test_memorial_problems_positive_and_negatives(pair):
     fixture, _ = pair
     good = _saved(fixture, 3, [STARTER], {(13, 0): _mon(PIDGEY["personality"], party=False, species=16)})
     key = _key(PIDGEY)
-    assert duo.gen3_memorial_problems("b", _decoded(good), _decoded(fixture), key, 13) == []
+    assert _mem("b", _decoded(good), _decoded(fixture), key, 13) == []
     kept = _saved(fixture, 3, [STARTER, PIDGEY])
     assert any("still in the saved party" in p for p in
-               duo.gen3_memorial_problems("b", _decoded(kept), _decoded(fixture), key, 13))
+               _mem("b", _decoded(kept), _decoded(fixture), key, 13))
     wrong_box = _saved(fixture, 3, [STARTER], {(0, 0): _mon(PIDGEY["personality"], party=False)})
     assert any("not exactly once in the memorial" in p for p in
-               duo.gen3_memorial_problems("b", _decoded(wrong_box), _decoded(fixture), key, 13))
+               _mem("b", _decoded(wrong_box), _decoded(fixture), key, 13))
 
 
 def test_round_trip_problems_positive_and_negatives(pair):
     fixture, saved = pair
     key = _key(PIDGEY)
-    assert duo.gen3_round_trip_problems("a", _decoded(saved), _decoded(fixture), key) == []
+    assert _rt("a", _decoded(saved), _decoded(fixture), key) == []
     moved = dict(PIDGEY, level=6, max_hp=22)
     changed = _saved(fixture, 3, [STARTER, moved])
     assert any("differs from the fixture" in p for p in
-               duo.gen3_round_trip_problems("a", _decoded(changed), _decoded(fixture), key))
+               _rt("a", _decoded(changed), _decoded(fixture), key))
     boxed_too = _saved(fixture, 3, [STARTER, PIDGEY], {(0, 0): _mon(PIDGEY["personality"], party=False)})
     assert any("still (or also) in a saved box" in p for p in
-               duo.gen3_round_trip_problems("a", _decoded(boxed_too), _decoded(fixture), key))
+               _rt("a", _decoded(boxed_too), _decoded(fixture), key))
 
 
 def test_capture_problems_and_ball_count(pair):
@@ -406,10 +435,10 @@ def test_capture_problems_and_ball_count(pair):
     caught = _saved(fixture, 3, [STARTER, PIDGEY, CATCH], balls=3)
     key = _key(CATCH)
     sent = {"species_id": 19, "level": 5, "held_item_id": 0, "nickname": "MON"}
-    assert duo.gen3_capture_problems("a", _decoded(caught), _decoded(fixture), key, sent) == []
-    assert any("species" in p for p in duo.gen3_capture_problems(
+    assert _cap("a", _decoded(caught), _decoded(fixture), key, sent) == []
+    assert any("species" in p for p in _cap(
         "a", _decoded(caught), _decoded(fixture), key, dict(sent, species_id=16)))
-    assert any("level" in p for p in duo.gen3_capture_problems(
+    assert any("level" in p for p in _cap(
         "a", _decoded(caught), _decoded(fixture), key, dict(sent, level=7)))
     assert duo.gen3_ball_count(fixture) == 4 and duo.gen3_ball_count(caught) == 3
 
@@ -435,6 +464,7 @@ def _oracle_stub(monkeypatch, tmp_path, scenario, saved, fixture, links):
     (tmp_path / "links.json").write_text(json.dumps({"links": links}), encoding="utf-8")
     monkeypatch.setattr(run, "_gen3_flushed", lambda inst: saved[inst])
     monkeypatch.setattr(run, "_gen3_fixture_bytes", lambda inst: fixture)
+    monkeypatch.setattr(run, "_gen3_limits", lambda inst: LIMITS)
     run._link_keys = {"a": _key(PIDGEY), "b": _key(PIDGEY_B)}
     return run, notes
 
@@ -941,7 +971,7 @@ def _run_module(lua, scenario, player, phase, spec):
     # RR-only: explode now reads the engine through ctx (no raw memory/joypad), so it runs here.
     ("explode", "a", "initial", {"linked": "K0"}, ["LINKED_FAINTED K0"]),
     ("explode", "b", "initial", {"linked": "K0"},
-     ["READY_ACTIVE K0 last_used=0", "EXPLOSION_EXECUTED K0 battler_slot=0 last_used=153"]),
+     ["READY_ACTIVE K0 last_used=0", "EXPLOSION_ACTION_STARTED K0 battler_slot=0 last_used=153"]),
     ("rival_swap", "b", "initial", {}, ["READY_IN_BATTLE"]),
     ("rival_swap", "a", "initial", {}, []),
     ("native_absent", "a", "initial", {}, ["TRADE_PHASE scene", "NATIVE_STAGED phase=scene writes=3"]),
@@ -969,7 +999,7 @@ def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spe
     ("whiteout", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
     ("boxsync", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
     # finding 5: force_explode delivered but the engine never executed Explosion
-    ("explode", "b", "initial", {"linked": "K0", "executes": "lua:false"}, "never executed Explosion"),
+    ("explode", "b", "initial", {"linked": "K0", "executes": "lua:false"}, "never started Explosion"),
 ])
 def test_scenario_modules_fail_with_a_named_reason(lua, scenario, player, phase, spec, reason):
     ok, passed, msg, _ = _run_module(lua, scenario, player, phase, spec)
@@ -997,13 +1027,32 @@ def test_rr_rows_decode_saves_with_the_rr_layout(monkeypatch):
 
 def test_record_validity_is_the_cartridges_own():
     """Vanilla demands the secure checksum; RR (CFRU, no checksum) must not be failed for the
-    None it decodes with, nor pass a record decoded with a vanilla verdict."""
-    rr_mon = {"checksum_ok": None, "has_species": 1, "is_bad_egg": 0, "species": 277, "level": 5}
-    assert duo.gen3_record_problems("x", rr_mon, rr=True) == []
-    assert duo.gen3_record_problems("x", rr_mon, rr=False)          # the old "is not True" rule
-    assert duo.gen3_record_problems("x", dict(rr_mon, checksum_ok=True), rr=True)
-    assert duo.gen3_record_problems("x", dict(rr_mon, has_species=0), rr=True)
-    assert duo.gen3_record_problems("x", dict(rr_mon, level=0), rr=True)
+    None it decodes with, nor pass a record decoded with a vanilla verdict. Level and species
+    are bounded by the title (Codex C4-6c finding 5): RR's MAX_LEVEL is 250, FR's 100; RR's
+    species are rr_species.json's ids, FR's 1..411."""
+    rr_limits = duo.gen3_limits("radical_red", _rom_with_pp({}, "radical_red"))
+    rr_mon = {"checksum_ok": None, "has_species": 1, "is_bad_egg": 0, "species": 277,
+              "level": 5, "moves": [0, 0, 0, 0], "pp": [0, 0, 0, 0], "pp_bonuses": 0}
+    assert duo.gen3_record_problems("x", rr_mon, rr=True, limits=rr_limits) == []
+    assert duo.gen3_record_problems("x", rr_mon, rr=False, limits=LIMITS)   # the old "is not True" rule
+    assert duo.gen3_record_problems("x", dict(rr_mon, checksum_ok=True), rr=True, limits=rr_limits)
+    assert duo.gen3_record_problems("x", dict(rr_mon, has_species=0), rr=True, limits=rr_limits)
+    assert duo.gen3_record_problems("x", dict(rr_mon, level=0), rr=True, limits=rr_limits)
+    # RR's own level cap, not vanilla's
+    assert duo.gen3_record_problems("x", dict(rr_mon, level=200), rr=True, limits=rr_limits) == []
+    assert duo.gen3_record_problems("x", dict(rr_mon, level=251), rr=True, limits=rr_limits)
+    fr = dict(rr_mon, checksum_ok=True, species=16)
+    assert duo.gen3_record_problems("x", dict(fr, level=101), limits=LIMITS)
+    # species: a real RR id beyond vanilla's range passes on RR, an id RR never defines does not
+    with open(duo.GEN3_RR_SPECIES, encoding="utf-8") as handle:
+        rr_ids = sorted(int(k) for k in json.load(handle))
+    missing = next(i for i in range(1, rr_ids[-1]) if i not in set(rr_ids))
+    assert duo.gen3_record_problems("x", dict(rr_mon, species=rr_ids[-1]), rr=True, limits=rr_limits) == []
+    assert duo.gen3_record_problems("x", dict(rr_mon, species=missing), rr=True, limits=rr_limits)
+    assert duo.gen3_record_problems("x", dict(fr, species=412), limits=LIMITS)
+    assert duo.gen3_record_problems("x", dict(fr, species=411), limits=LIMITS) == []
+    # no move table: the PP bound cannot be checked, which is a problem, not a pass
+    assert any("no move table" in p for p in duo.gen3_record_problems("x", fr))
 
 
 def _rr_with_balls(count):
@@ -1039,7 +1088,7 @@ def test_rr_wrong_save_is_parsed_with_the_rr_layout(monkeypatch, tmp_path):
 def test_round_trip_refuses_a_flipped_checksum_bit(pair):
     fixture, _ = pair
     flipped = _saved(fixture, 3, [STARTER, dict(PIDGEY, flip_checksum=True)])
-    problems = duo.gen3_round_trip_problems("a", _decoded(flipped), _decoded(fixture), _key(PIDGEY))
+    problems = _rt("a", _decoded(flipped), _decoded(fixture), _key(PIDGEY))
     assert any("secure checksum fails" in p for p in problems), problems
 
 
@@ -1056,33 +1105,75 @@ def test_round_trip_refuses_a_flipped_checksum_bit(pair):
 def test_round_trip_names_every_changed_invariant(pair, field, value):
     fixture, _ = pair
     changed = _saved(fixture, 3, [STARTER, dict(PIDGEY, **{field: value})])
-    problems = duo.gen3_round_trip_problems("a", _decoded(changed), _decoded(fixture), _key(PIDGEY))
+    problems = _rt("a", _decoded(changed), _decoded(fixture), _key(PIDGEY))
     assert any(f"('{field}'," in p for p in problems), problems
 
 
-def test_round_trip_allows_exactly_the_whitelisted_changes(pair):
-    """HP, status, PP (and the checksum over it), mail and friendship are what a deposit,
-    withdraw or walk legitimately change; nothing else is."""
+@pytest.mark.parametrize("field, value, message", [
+    ("hp", 65535, "hp 65535/20"),                      # Codex's repro, one field at a time
+    ("pp", [255, 255, 255, 255], "holds 255 PP"),
+    ("status", 0xFFFFFFFF, "not a valid status1"),
+    ("mail", 3, "mail 0x03 without a held mail item"),
+])
+def test_record_validity_bounds_every_mutable_field(field, value, message):
+    """Codex C4-6c finding 1: hp=65535/20, PP 255 in every slot and status 0xFFFFFFFF all passed
+    the old whitelist. Each is a named problem now, whatever the scenario."""
+    mon = duo.gen3_decode(_saved(_fixture([STARTER, PIDGEY]), 3, [STARTER, dict(PIDGEY, **{field: value})]))[0][1]
+    problems = duo.gen3_record_problems("x", mon, limits=LIMITS)
+    assert any(message in p for p in problems), problems
+
+
+def test_round_trip_refuses_codex_repro(pair):
     fixture, _ = pair
-    healed = dict(PIDGEY, hp=3, status=8, pp=[20, 30, 0, 0], friendship=90)
-    saved = _saved(fixture, 3, [STARTER, healed])
-    assert duo.gen3_round_trip_problems("a", _decoded(saved), _decoded(fixture), _key(PIDGEY)) == []
-    whitelist = {"hp", "status", "mail", "pp", "friendship", "checksum"}
-    assert whitelist == duo.GEN3_RECORD_MUTABLE
+    broken = dict(PIDGEY, hp=65535, pp=[255, 255, 255, 255], status=0xFFFFFFFF)
+    saved = _saved(fixture, 3, [STARTER, broken])
+    problems = _rt("a", _decoded(saved), _decoded(fixture), _key(PIDGEY), walked=True)
+    for message in ("hp 65535/20", "holds 255 PP", "not a valid status1", "not healed",
+                    "not cured", "not restored"):
+        assert any(message in p for p in problems), (message, problems)
+
+
+def test_a_withdrawal_is_healed_cured_and_pp_restored(pair):
+    """Each is inside its bound, yet not what a mon fresh out of a box looks like."""
+    fixture, saved = pair
+    assert _rt("a", _decoded(saved), _decoded(fixture), _key(PIDGEY)) == []
+    for change, message in (({"hp": 3}, "not healed"), ({"status": 8}, "not cured"),
+                            ({"pp": [20, 30, 0, 0]}, "not restored")):
+        hurt = _saved(fixture, 3, [STARTER, dict(PIDGEY, **change)])
+        problems = _rt("a", _decoded(hurt), _decoded(fixture), _key(PIDGEY))
+        assert any(message in p for p in problems), (change, problems)
+
+
+def test_friendship_may_move_only_when_the_scenario_walked_the_mon(pair):
+    fixture, _ = pair
+    walked = _saved(fixture, 3, [STARTER, dict(PIDGEY, friendship=90)])
+    assert _rt("a", _decoded(walked), _decoded(fixture), _key(PIDGEY), walked=True) == []
+    idle = _rt("b", _decoded(walked), _decoded(fixture), _key(PIDGEY), walked=False)
+    assert any("('friendship'," in p for p in idle), idle
+    assert frozenset({"hp", "status", "mail", "pp", "checksum"}) == duo.GEN3_RECORD_MUTABLE
+
+
+def test_memorial_friendship_moves_only_after_a_battle(pair):
+    fixture, _ = pair
+    changed = _saved(fixture, 3, [STARTER],
+                     {(13, 0): dict(_mon(PIDGEY["personality"], party=False, species=16), friendship=60)})
+    key = _key(PIDGEY)
+    assert _mem("b", _decoded(changed), _decoded(fixture), key, 13, battled=True) == []
+    assert any("('friendship'," in p for p in _mem("b", _decoded(changed), _decoded(fixture), key, 13))
 
 
 def test_memorial_record_keeps_the_fixture_invariants(pair):
     fixture, _ = pair
     item = _saved(fixture, 3, [STARTER],
                   {(13, 0): dict(_mon(PIDGEY["personality"], party=False, species=16), held_item=13)})
-    problems = duo.gen3_memorial_problems("b", _decoded(item), _decoded(fixture), _key(PIDGEY), 13)
+    problems = _mem("b", _decoded(item), _decoded(fixture), _key(PIDGEY), 13)
     assert any("('held_item'," in p for p in problems), problems
 
 
 def test_capture_record_must_be_valid_for_the_cartridge(pair):
     fixture, _ = pair
     caught = _saved(fixture, 3, [STARTER, PIDGEY, dict(CATCH, flip_checksum=True)], balls=3)
-    problems = duo.gen3_capture_problems("a", _decoded(caught), _decoded(fixture), _key(CATCH),
+    problems = _cap("a", _decoded(caught), _decoded(fixture), _key(CATCH),
                                          {"species_id": 19})
     assert any("secure checksum fails" in p for p in problems), problems
 
@@ -1148,19 +1239,65 @@ def _pair_vanilla():
     return saved, saved, fixture
 
 
-def test_rr_witness_method_reports_the_extension_verdict(tmp_path, monkeypatch):
+def _ext_line(scenario, inst, saves, size=None, attempt=1):
+    return (f"SAVE_WITNESS_EXT path=patch/build/e2e_{scenario}_{inst}_{attempt}_witness_ext.bin "
+            f"bytes={codec.RR_EXT_SIZE if size is None else size} saves={saves}\n")
+
+
+def _rr_ext_run(tmp_path, monkeypatch, saves=1):
     fixture = _rr_fixture(ext_byte=0x00)
     saved = _rr_saved(fixture, 3, ext_byte=0x11)
+    if saves == 2:
+        saved = _rr_saved(saved, 4, ext_byte=0x11)
     run, receipts, notes, build = _witness_run(tmp_path, monkeypatch, (fixture, saved))
     run.game, run.gcfg = "gen3_rr_new", dict(duo.GAMES["gen3_rr_new"])
-    run.check_save_witness_gen3(receipts)
-    assert all("extension_30_31=OPEN" in n for n in notes), notes
-    notes.clear()
+    (tmp_path / "patch" / "build").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(duo, "BUILD", str(tmp_path / "patch" / "build"))
     for inst in ("a", "b"):
-        (build / f"e2e_faint_cmd_gen3_{inst}_1_witness_ext.bin").write_bytes(
+        (tmp_path / "patch" / "build" / f"e2e_faint_cmd_gen3_{inst}_1_witness.bin").write_bytes(saved)
+        (tmp_path / "patch" / "build" / f"e2e_faint_cmd_gen3_{inst}_1_witness_ext.bin").write_bytes(
             bytes([0x11]) * codec.RR_EXT_SIZE)
-    run.check_save_witness_gen3(receipts)
+    return run, notes
+
+
+def _rr_receipt(inst, saves, ext_saves):
+    out = "SAVE_WITNESS faint_cmd counter=2->3\n"
+    for n in range(1, saves + 1):
+        out += (f"SAVE_WITNESS_DUMP path=patch/build/e2e_faint_cmd_gen3_{inst}_1_witness.bin "
+                f"bytes={codec.FLASH_SIZE} saves={n} frame={n} counter={2 + n}\n")
+        if n in ext_saves:
+            out += _ext_line("faint_cmd_gen3", inst, n)
+    return out
+
+
+def test_rr_witness_method_binds_the_extension_to_the_final_save(tmp_path, monkeypatch):
+    run, notes = _rr_ext_run(tmp_path, monkeypatch)
+    run.check_save_witness_gen3({i: _rr_receipt(i, 1, {1}) for i in ("a", "b")})
     assert all("extension_30_31=LIVE_RAM_MATCH" in n for n in notes), notes
+    notes.clear()
+    # the copy is on disk, but no receipt binds it to any save: OPEN, not a match
+    run.check_save_witness_gen3({i: _rr_receipt(i, 1, set()) for i in ("a", "b")})
+    assert all("extension_30_31=OPEN" in n and "no SAVE_WITNESS_EXT receipt" in n for n in notes), notes
+
+
+def test_rr_extension_copy_from_an_earlier_save_is_open(tmp_path, monkeypatch):
+    """Codex's repro: counter 2->4, dumps 1 and 2, the EXT receipt only at ordinal 1 -- the file
+    on disk is save 1's copy, so the final save's extension is OPEN, never LIVE_RAM_MATCH."""
+    run, notes = _rr_ext_run(tmp_path, monkeypatch, saves=2)
+    run.check_save_witness_gen3({i: _rr_receipt(i, 2, {1}) for i in ("a", "b")})
+    assert all("extension_30_31=OPEN" in n and "save 1's, not the final save 2's" in n
+               for n in notes), notes
+
+
+@pytest.mark.parametrize("line, message", [
+    (_ext_line("faint_cmd_gen3", "{inst}", 1, attempt=2), "extension copy landed at"),
+    (_ext_line("faint_cmd_gen3", "{inst}", 1, size=16), "receipt says 16 bytes"),
+])
+def test_rr_extension_receipt_that_names_another_file_fails(tmp_path, monkeypatch, line, message):
+    run, _ = _rr_ext_run(tmp_path, monkeypatch)
+    receipts = {i: _rr_receipt(i, 1, set()) + line.format(inst=i) for i in ("a", "b")}
+    with pytest.raises(RuntimeError, match=message):
+        run.check_save_witness_gen3(receipts)
 
 
 # finding 5: explode needs a keyed command and the engine's execution, not a stamped slot
@@ -1168,7 +1305,7 @@ def _explode_receipts(ka, kb):
     return {"a": (f"ENGINE_FAINT_SITE frame=10\nTX faint {ka} {{}}\n"
                   f"TX memorialize_done {ka} {{}}\n"),
             "b": (f"READY_ACTIVE {kb} last_used=0\nRX force_explode key={kb}\n"
-                  f"EXPLOSION_EXECUTED {kb} battler_slot=0 last_used=153\n"
+                  f"EXPLOSION_ACTION_STARTED {kb} battler_slot=0 last_used=153\n"
                   f"TX memorialize_done {kb} {{}}\n")}
 
 
@@ -1183,10 +1320,11 @@ def test_explode_oracle_needs_the_engine_to_execute_the_keyed_command(monkeypatc
     (tmp_path / "slink.log").write_text(f"[a] faint → force_explode b:{k}\n", encoding="utf-8")
     receipts = _explode_receipts(k, k)
     run.assert_explode_gen3_saved(receipts)
-    assert notes and "Explosion executed" in notes[-1]
+    assert notes and "NON-QUALIFYING CONTROL (not qualification)" in notes[-1]
+    assert "not proven executed" in notes[-1]
     stamped_only = dict(receipts, b=receipts["b"].replace(
-        f"EXPLOSION_EXECUTED {k} battler_slot=0 last_used=153\n", "Explosion stamped into move slot 0\n"))
-    with pytest.raises(RuntimeError, match="EXPLOSION_EXECUTED"):
+        f"EXPLOSION_ACTION_STARTED {k} battler_slot=0 last_used=153\n", "Explosion stamped into move slot 0\n"))
+    with pytest.raises(RuntimeError, match="EXPLOSION_ACTION_STARTED"):
         run.assert_explode_gen3_saved(stamped_only)
     unkeyed = dict(receipts, b=receipts["b"].replace(f"RX force_explode key={k}", "RX force_explode"))
     with pytest.raises(RuntimeError, match="force_explode"):
@@ -1194,6 +1332,18 @@ def test_explode_oracle_needs_the_engine_to_execute_the_keyed_command(monkeypatc
     poked = dict(receipts, a=receipts["a"].replace("ENGINE_FAINT_SITE frame=10\n", ""))
     with pytest.raises(RuntimeError, match="ENGINE_FAINT_SITE"):
         run.assert_explode_gen3_saved(poked)
+
+
+def test_explode_is_a_non_qualifying_control():
+    """Codex C4-6c finding 4: lastUsedMovePlayer is stamped before attackcanceler/tryexplosion,
+    so a cancelled Explosion reads 153 too; without a downstream witness explode never
+    qualifies, and nothing in the driver calls the action 'executed'."""
+    control = duo.SCENARIOS["explode_gen3"].get("control", "")
+    assert "NON-QUALIFYING" in control and "attackcanceler" in control
+    assert "CONTROL, not a qualification pass" in duo.summary_lines(
+        {"explode_gen3": (True, 1)}, "gen3_rr_new")[0]
+    text = (REPO / "lua" / "tests" / "duo" / "scenario_gen3_explode.lua").read_text(encoding="utf-8")
+    assert "EXPLOSION_EXECUTED" not in text and "EXPLOSION_ACTION_STARTED" in text
 
 
 def test_no_driver_pokes_game_memory():
@@ -1226,3 +1376,73 @@ def test_wire_logs_are_labelled_by_client(monkeypatch, tmp_path):
         monkeypatch.setattr(duo, "WIRE_FIXTURES", str(out))
         landed = run.collect_wire_logs()
         assert [Path(x).name for x in landed] == [f"faint_cmd_gen3_a_{label}.jsonl"], game
+
+
+# finding 2: the driver's location logic, run as written (lupa over the extracted bodies)
+_LOCATE_FNS = re.compile(r"local function (locate_key|observed)\(.*?\nend\n", re.S)
+
+
+@pytest.fixture(scope="module")
+def locate():
+    """`locate(party, boxes, want)`: party is "K,X" or "unreadable"; boxes is "X,K|unreadable|"
+    (one entry per box). Returns (observed, unknown, why) from the driver's own functions."""
+    from lupa import LuaRuntime
+
+    text = DRIVER.read_text(encoding="utf-8")
+    bodies = [m.group(0) for m in _LOCATE_FNS.finditer(text)]
+    assert len(bodies) == 2, "duo_gen3_main.lua must define locate_key and observed"
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    return lua.execute("\n".join(bodies) + """
+        local function split(s, sep)
+            local out = {}
+            for part in (s .. sep):gmatch("(.-)" .. sep:gsub("%p", "%%%0")) do out[#out + 1] = part end
+            return out
+        end
+        local function mons(csv)
+            local t = {}
+            for i, k in ipairs(csv == "" and {} or split(csv, ",")) do
+                t[i] = { slot = i - 1, key = k, has_species = 1 }
+            end
+            return t
+        end
+        return function(party, boxes, want)
+            local rows = split(boxes, "|")
+            local read_party = function()
+                if party == "unreadable" then return nil, "no pointer" end
+                return mons(party)
+            end
+            local read_box = function(b)
+                if rows[b + 1] == "unreadable" then return nil, "mid-relocation" end
+                return mons(rows[b + 1])
+            end
+            local at, why = locate_key("K", read_party, read_box, #rows, function(m) return m.key end)
+            return observed(at, want), at == nil, why
+        end""")
+
+
+def test_location_positives_need_every_read(locate):
+    boxed, unknown, _ = locate("", "|X,K", "boxed")
+    assert boxed == "1:1" and not unknown
+    returned, unknown, _ = locate("X,K", "|", "returned")
+    assert returned and not unknown
+    assert locate("K", "|", "boxed")[0] is None          # in the party: not boxed
+    assert locate("", "K|", "returned")[0] is None       # boxed: not returned
+
+
+def test_box_read_failure_is_never_returned_observed(locate):
+    """Codex: party read OK (K in the party) but a box read failed -> K may be boxed as well;
+    no RETURNED_OBSERVED."""
+    got, unknown, why = locate("K", "|unreadable", "returned")
+    assert got is None and unknown and "box 1 unreadable" in why
+
+
+def test_party_read_failure_is_never_boxed_observed(locate):
+    """Codex: the party is unreadable but K sits in a box -> K may be in the party as well;
+    no BOXED_OBSERVED."""
+    got, unknown, why = locate("unreadable", "K", "boxed")
+    assert got is None and unknown and "party unreadable" in why
+
+
+def test_a_key_in_two_box_slots_is_ambiguous(locate):
+    got, unknown, why = locate("", "K|K", "boxed")
+    assert got is None and unknown and "two box slots" in why

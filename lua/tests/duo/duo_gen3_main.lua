@@ -310,6 +310,8 @@ function ctx.party()
     end
     return out
 end
+--- The party entry for `key`, or nil when it is not SEEN -- absent OR unreadable. Use it only to
+--- confirm presence; absence claims go through ctx.locate / ctx.observe_*.
 function ctx.find(key)
     for _, m in ipairs(ctx.party() or {}) do if m.key == key then return m end end
 end
@@ -392,32 +394,62 @@ event.onframeend(function()
 end, "SLink-duo-gen3-hp0")
 function ctx.hp0(key) return hp0[key] end
 
---- Where `key` is boxed right now ("box:slot", zero-based), or nil: every box of the title's
---- pack (derived.BOXES_PER_STORE) read through the same reads.lua read_box the client uses.
-function ctx.boxed(key)
-    for box = 0, (profile.derived.BOXES_PER_STORE or 0) - 1 do
-        for _, m in ipairs(reader.read_box(box) or {}) do
-            if m.has_species == 1 and reader.key(m) == key then return fmt("%d:%d", box, m.slot) end
+--- Where `key` is, with each read's SUCCESS kept apart from its answer (Codex C4-6c finding 2).
+--- Self-contained (no upvalues) so tests/unit/test_e2e_duo_gen3.py runs this exact body under
+--- lupa. Returns { party = slot|false, box = "box:slot"|false } only when the party read AND every
+--- one of the `box_count` box reads succeeded; otherwise nil, why -- UNKNOWN, never "absent". A
+--- key in two box slots is ambiguous, also nil.
+local function locate_key(key, read_party, read_box, box_count, key_of)
+    local party, pwhy = read_party()
+    if not party then return nil, "party unreadable: " .. tostring(pwhy) end
+    if type(box_count) ~= "number" or box_count < 1 then return nil, "no box count in the pack" end
+    local at = { party = false, box = false }
+    for _, m in ipairs(party) do
+        if key_of(m) == key then at.party = m.slot end
+    end
+    for box = 0, box_count - 1 do
+        local mons, bwhy = read_box(box)
+        if not mons then return nil, "box " .. box .. " unreadable: " .. tostring(bwhy) end
+        for _, m in ipairs(mons) do
+            if m.has_species == 1 and key_of(m) == key then
+                if at.box then return nil, "key in two box slots" end
+                at.box = box .. ":" .. m.slot
+            end
         end
     end
+    return at
 end
---- The physical half of a deposit/withdraw ACK (Codex C4-6b finding 2): an ACK on the wire is
---- the client's word; these read the cartridge. BOXED_OBSERVED = absent from the party AND
---- present in a box; RETURNED_OBSERVED = in the party AND in no box.
+--- The two physical read-backs, decided from a COMPLETE location only: BOXED = absent from the
+--- party AND in exactly one box slot; RETURNED = in the party AND in no box. Also self-contained.
+local function observed(at, want)
+    if not at then return nil end
+    if want == "boxed" then return (at.party == false and at.box) or nil end
+    return (at.party ~= false and at.box == false) and at or nil
+end
+function ctx.locate(key)
+    return locate_key(key, reader.read_party, reader.read_box, profile.derived.BOXES_PER_STORE, reader.key)
+end
+--- The physical half of a deposit/withdraw ACK: an ACK on the wire is the client's word; these
+--- read the cartridge, and an unreadable party or box is waited out, never taken as absence.
+local function observe(key, want, marker, secs)
+    local last_why
+    local hit = ctx.wait_until(function()
+        local at, why = ctx.locate(key)
+        last_why = why or last_why
+        return observed(at, want)
+    end, secs or 60, marker .. " " .. key)
+    if not hit and last_why then log(fmt("OBSERVE_UNKNOWN %s %s (%s)", marker, key, last_why)) end
+    return hit
+end
 function ctx.observe_boxed(key, secs)
-    local at = ctx.wait_until(function()
-        return (not ctx.find(key)) and ctx.boxed(key) or nil
-    end, secs or 60, "BOXED_OBSERVED " .. key)
+    local at = observe(key, "boxed", "BOXED_OBSERVED", secs)
     if at then log(fmt("BOXED_OBSERVED %s box=%s", key, at)) end
     return at
 end
 function ctx.observe_returned(key, secs)
-    local m = ctx.wait_until(function()
-        local mon = ctx.find(key)
-        return mon and not ctx.boxed(key) and mon or nil
-    end, secs or 60, "RETURNED_OBSERVED " .. key)
-    if m then log(fmt("RETURNED_OBSERVED %s slot=%d", key, m.slot)) end
-    return m
+    local at = observe(key, "returned", "RETURNED_OBSERVED", secs)
+    if at then log(fmt("RETURNED_OBSERVED %s slot=%d", key, at.party)) end
+    return at
 end
 --- gBattleResults.lastUsedMovePlayer (pret include/battle.h: +0x22), which HandleAction_UseMove
 --- stamps with gCurrentMove as the engine starts EXECUTING a player move (pret src/battle_main.c

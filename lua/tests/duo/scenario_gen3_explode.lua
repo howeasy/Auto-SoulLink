@@ -1,4 +1,6 @@
--- scenario_gen3_explode.lua — explode_gen3 (RR only; server --explode-mode).
+-- scenario_gen3_explode.lua — explode_gen3 (RR only; server --explode-mode): a NON-QUALIFYING
+-- CONTROL (SCENARIOS["explode_gen3"]["control"], Codex C4-6c finding 4). Its only engine witness
+-- is upstream of the cancellation checks (see B below), so a PASS here never qualifies Explode.
 --
 -- Scripted normal inputs only (Codex C4-6b finding 5: the old port's direct HP poke is gone).
 -- The runner links the two party LEADS and releases A only once B reports READY_ACTIVE.
@@ -8,12 +10,14 @@
 --      force_faint. The rest of A's battle is the scripted-play battle policy; A saves after its
 --      own memorial.
 --   B: parked on the action menu with the linked lead as battler 0 (no input: pressing A would
---      commit our own move). The KEYED force_explode must arrive, and then the ENGINE must
---      execute Explosion for that battler: gBattleResults.lastUsedMovePlayer, which
---      HandleAction_UseMove stamps with the move it starts executing and battle start resets
---      (pret src/battle_main.c:2316,4021-4022), must read MOVE_EXPLOSION after the command and
---      not before it. A stamped move slot alone (the old bar) proves the commit write, not the
---      execution. B then finishes the battle, waits for its memorial and saves.
+--      commit our own move). The KEYED force_explode must arrive, and then the engine must
+--      START the Explosion action for that battler: gBattleResults.lastUsedMovePlayer, which
+--      HandleAction_UseMove stamps with gCurrentMove and battle start resets (pret
+--      src/battle_main.c:2316,4021-4022), must read MOVE_EXPLOSION after the command and not
+--      before it. That stamp precedes attackcanceler/tryexplosion
+--      (data/battle_scripts_1.s:376-382): a Damp, sleep or flinch cancel reads the same, so it is
+--      logged as EXPLOSION_ACTION_STARTED, never as executed. B finishes the battle, waits for
+--      its memorial and saves.
 -- BLOCKED like the other "battle"-target RR scenarios (tests/fixtures/gen3/rr_battle{,_b}.sav
 -- are not built) and on the lastUsedMovePlayer offset being FR's (+0x22) on RR, unverified.
 local fmt = string.format
@@ -52,11 +56,11 @@ local function b_side(ctx, linked)
     end
     local executed = ctx.wait_until(function()
         return ctx.last_used_move_player() == MOVE_EXPLOSION or nil
-    end, 180, "the engine to execute Explosion")
+    end, 180, "the engine to start the Explosion action")
     if not executed then
-        return false, fmt("the engine never executed Explosion (lastUsedMovePlayer=%d)", ctx.last_used_move_player())
+        return false, fmt("the engine never started Explosion (lastUsedMovePlayer=%d)", ctx.last_used_move_player())
     end
-    ctx.log(fmt("EXPLOSION_EXECUTED %s battler_slot=%d last_used=%d", linked, ctx.battler_slot(),
+    ctx.log(fmt("EXPLOSION_ACTION_STARTED %s battler_slot=%d last_used=%d", linked, ctx.battler_slot(),
                 ctx.last_used_move_player()))
     if ctx.in_battle() then
         local ok, err = ctx.try(ctx.play.fight_through, ctx.cp, 4000)
@@ -71,7 +75,7 @@ local function b_side(ctx, linked)
     end
     local ok, why = ctx.save("explode")
     if not ok then return false, why end
-    return true, "keyed force_explode executed natively"
+    return true, "NON-QUALIFYING CONTROL: keyed force_explode delivered, Explosion action started (execution not proven)"
 end
 
 return function(ctx)

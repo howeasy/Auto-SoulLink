@@ -234,10 +234,11 @@ SCENARIOS = {
     # (the old client's row keeps those) and trade_abort (a later card; not built here, see the
     # card's final report). All three below are BLOCKED the same way as the five "battle"-target
     # scenarios above (missing rr_battle{,_b}.sav); see each entry.
-    #   explode      A loses its linked lead in a wild battle (normal inputs only, no HP poke);
-    #                --explode-mode sends B's partner force_explode, and B's receipt must show
-    #                the engine EXECUTING Explosion for it (gBattleResults.lastUsedMovePlayer),
-    #                not just the Variant-3 commit (Codex C4-6b finding 5).
+    #   explode      NON-QUALIFYING CONTROL (`control`): A loses its linked lead naturally,
+    #                B must receive the KEYED force_explode, and B's receipt shows the engine
+    #                STARTING the Explosion action (lastUsedMovePlayer). That is upstream of
+    #                attackcanceler/tryexplosion, so it cannot prove execution (Codex C4-6c
+    #                finding 4); blocked until an RR-verified downstream witness exists.
     #   rival_swap   BLOCKED NEGATIVE CONTROL (`control`): a dummy team is refused with
     #                refresh_failed; no valid swap is proven until refresh_enemy gets a write
     #                window (commit 9505648b, OMP C4-8).
@@ -246,6 +247,11 @@ SCENARIOS = {
     #                fixture's slot-1 record): the companion must stage it natively, the clean
     #                cartridge must refuse it and write nothing (trade port 78908fe8).
     "explode_gen3": {"flags": ["--explode-mode"], "timeout": 900, "games": ("gen3_rr_new",),
+                     "control": "NON-QUALIFYING (BLOCKED): the only execution witness, "
+                                "gBattleResults.lastUsedMovePlayer, is stamped at action start "
+                                "before attackcanceler/tryexplosion (a Damp/sleep/flinch cancel "
+                                "still reads 153) and its +0x22 offset is unverified on RR; no "
+                                "RR-verified witness downstream of the cancellation exists yet",
                      "target": "battle", "frames": 1500000, "oracle": "assert_explode_gen3_saved"},
     # `control`: a NEGATIVE/BLOCKED characterization, never a qualification PASS (Codex
     # C4-6b finding 6); summary_lines and the oracle's PYDEC line both say so.
@@ -990,6 +996,8 @@ GEN3_RR_PROFILE = os.path.join(REPO, "data", "games", "gen3_rr", "profile.json")
 # event it SENDS and one per command it RECEIVES.
 GEN3_TX_RE = r"(?m)^TX {event} {key}(?=\s|$)"   # key "-" for an event that carries none
 GEN3_RX_RE = r"(?m)^RX {cmd} key={key}(?=\s|$)"
+# duo_gen3_main.lua dump_witness: one per extension RAM copy, right after its save's DUMP line.
+GEN3_EXT_RE = re.compile(r"SAVE_WITNESS_EXT path=(\S+) bytes=(\d+) saves=(\d+)\s*$")
 
 
 def gen3_codec():
@@ -1160,32 +1168,109 @@ def check_gen3_witness(witness, flushed, fixture, *, saves, rr=False, ext_ram=No
     return facts
 
 
-def gen3_record_problems(label, mon, rr=False):
-    """The cartridge's own record validity. Vanilla: the secure checksum must hold (pret
-    GetBoxMonData's bad-egg rule). Radical Red (CFRU) never stores or checks one (gen3_codec
-    leaves checksum_ok None), so its validity is the header the engine itself reads: has_species
-    set, not a bad egg, a nonzero species and, for a party record, a level in 1..100."""
+# The title's record bounds (Codex C4-6c findings 1 and 5). Vanilla FRLG: species 1..411 --
+# pret include/constants/species.h:421-423 (SPECIES_EGG 412 == NUM_SPECIES, eggs keep their real
+# species in the record). Radical Red: the species ids CFRU actually defines,
+# data/games/gen3_frlge/rr_species.json (the table tools/gen_gen3_profile.py already cites for
+# RR's SHEDINJA_SPECIES_ID). MAX_LEVEL is each pack's derived.MAX_LEVEL (RR 250, ROM-pinned in
+# data/games/gen3_rr/profile.json _src). A move's max PP is pret's CalculatePPWithBonus
+# (src/pokemon.c:3898-3902) over the title's own ROM move table (rom.BATTLE_MOVES_ADDR,
+# derived.BATTLE_MOVE_ENTRY_SIZE/BATTLE_MOVE_PP_OFFSET), the same read lua/gen3/boxes.lua makes.
+GEN3_VANILLA_NUM_SPECIES = 412
+GEN3_RR_SPECIES = os.path.join(REPO, "data", "games", "gen3_frlge", "rr_species.json")
+MAIL_NONE = 0xFF                                  # pret include/constants/items.h:451
+GEN3_MAIL_ITEMS = range(121, 133)                 # ITEM_ORANGE_MAIL..ITEM_RETRO_MAIL, items.h:125-136
+GEN3_MAIL_COUNT = 16                              # MAIL_COUNT = PARTY_SIZE + 10, global.h:43
+
+
+def gen3_limits(title, rom=None):
+    """The record bounds for `title`: {"max_level", "species" (a predicate), "max_pp"
+    (move, pp_bonuses, index) -> int, or None without a ROM}. Nothing here is a literal the
+    title's pack or pret does not already pin."""
+    with open(gen3_profile_path(title), encoding="utf-8") as handle:
+        profile = json.load(handle)["titles"][title]
+    derived = profile["derived"]
+    if title == "radical_red":
+        with open(GEN3_RR_SPECIES, encoding="utf-8") as handle:
+            known = {int(k) for k in json.load(handle)}
+
+        def species(value):
+            return value in known
+    else:
+        def species(value):
+            return 1 <= value < GEN3_VANILLA_NUM_SPECIES
+    max_pp = None
+    if rom is not None:
+        base = profile["rom"]["BATTLE_MOVES_ADDR"] - 0x08000000
+        stride, off = derived["BATTLE_MOVE_ENTRY_SIZE"], derived["BATTLE_MOVE_PP_OFFSET"]
+
+        def max_pp(move, pp_bonuses, index):
+            base_pp = rom[base + move * stride + off]
+            ups = (pp_bonuses >> (2 * index)) & 3          # gPPUpGetMask[index] = 3 << 2*index
+            return base_pp + (base_pp * 20 * ups) // 100
+    return {"max_level": derived["MAX_LEVEL"], "species": species, "max_pp": max_pp}
+
+
+def gen3_status_ok(status) -> bool:
+    """A valid status1 encoding (pret include/constants/battle.h:90-101): none, sleep turns 1-7,
+    exactly one of poison/burn/freeze/paralysis, or toxic with its turn counter (bits 8-11)."""
+    return (status == 0 or 1 <= status <= 7 or status in (0x08, 0x10, 0x20, 0x40)
+            or (status & ~0xF00) == 0x80)
+
+
+def gen3_record_problems(label, mon, rr=False, limits=None):
+    """The cartridge's own record validity, every mutable field bounded.
+
+    Checksum: vanilla must hold (pret GetBoxMonData's bad-egg rule); CFRU never stores one
+    (gen3_codec leaves checksum_ok None). Header: has_species, not a bad egg, a species the
+    title defines. Party tail: level 1..MAX_LEVEL, 0 < max_hp, hp <= max_hp, a valid status,
+    mail MAIL_NONE unless a mail item is held. PP: none on an empty move slot (vanilla; CFRU's
+    expansion computes all four from the table, so an empty slot must stay within move 0's), and
+    never above CalculatePPWithBonus for the move in that slot. Without `limits` (no ROM) the
+    PP bound cannot be checked and that is a problem, not a pass."""
     problems = []
     if rr:
         if mon.get("checksum_ok") is not None:
             problems.append(f"{label}: an RR record decoded with a vanilla checksum verdict")
     elif mon.get("checksum_ok") is not True:
         problems.append(f"{label}: the secure checksum fails")
-    if mon.get("has_species") != 1 or mon.get("is_bad_egg") or not mon.get("species"):
+    species_ok = limits["species"] if limits else (lambda v: bool(v))
+    if mon.get("has_species") != 1 or mon.get("is_bad_egg") or not species_ok(mon.get("species", 0)):
         problems.append(f"{label}: not a valid record (has_species={mon.get('has_species')}, "
                         f"bad_egg={mon.get('is_bad_egg')}, species={mon.get('species')})")
-    if "level" in mon and not 1 <= mon["level"] <= 100:
-        problems.append(f"{label}: level {mon['level']} is out of range")
+    max_level = limits["max_level"] if limits else 100
+    if "level" in mon and not 1 <= mon["level"] <= max_level:
+        problems.append(f"{label}: level {mon['level']} is outside 1..{max_level}")
+    if "hp" in mon:
+        if mon["max_hp"] <= 0 or mon["hp"] > mon["max_hp"]:
+            problems.append(f"{label}: hp {mon['hp']}/{mon['max_hp']} is not a valid HP")
+        if not gen3_status_ok(mon["status"]):
+            problems.append(f"{label}: status 0x{mon['status']:08X} is not a valid status1")
+        mail_ok = (mon["mail"] == MAIL_NONE
+                   or (mon.get("held_item") in GEN3_MAIL_ITEMS and mon["mail"] < GEN3_MAIL_COUNT))
+        if not mail_ok:
+            problems.append(f"{label}: mail 0x{mon['mail']:02X} without a held mail item")
+    max_pp = limits and limits.get("max_pp")
+    if not max_pp:
+        problems.append(f"{label}: no move table to bound PP against")
+    else:
+        for i, (move, pp) in enumerate(zip(mon["moves"], mon["pp"], strict=True)):
+            cap = 0 if move == 0 and not rr else max_pp(move, mon["pp_bonuses"], i)
+            if pp > cap:
+                problems.append(f"{label}: move slot {i} (move {move}) holds {pp} PP, max {cap}")
     return problems
 
 
-# What a legitimate move of one record may change, and NOTHING else: party-only state the game
-# resets or recomputes (hp/status/mail: BoxMonToMon + CalculateMonStats; pp: BoxMonRestorePP on
-# deposit, and battle use), friendship (the walking/faint friendship events while it rides in the
-# party), and the checksum covering those secure fields. Everything else -- PID, OT id/name,
-# nickname, language, species, item, exp, moves, PP-ups, EVs, IVs, ability bit, met data,
-# pokerus, ribbons, markings, egg flags, level and stats -- is invariant and must match.
-GEN3_RECORD_MUTABLE = frozenset({"hp", "status", "mail", "pp", "friendship", "checksum"})
+# What moving one record may change, and NOTHING else: party-only state the game resets or
+# recomputes (hp/status/mail: BoxMonToMon + CalculateMonStats; pp: BoxMonRestorePP on deposit,
+# battle use) and the checksum covering those secure fields. Friendship is added ONLY when the
+# scenario walked the mon in the party or fought with it (the walking/faint friendship events).
+# Everything else -- PID, OT id/name, nickname, language, species, item, exp, moves, PP-ups, EVs,
+# IVs, ability bit, met data, pokerus, ribbons, markings, egg flags, level and stats -- is
+# invariant. The mutable fields are not free: gen3_record_problems bounds each of them, and a
+# round trip additionally pins them to the withdrawal's own postcondition.
+GEN3_RECORD_MUTABLE = frozenset({"hp", "status", "mail", "pp", "checksum"})
+GEN3_ACTIVITY_MUTABLE = frozenset({"friendship"})
 # CFRU's 58-byte CompressedPokemon drops these on every trip through a box (gen3_codec
 # expand_compressed_box_mon): no contest bytes, a zero `unknown`, and the expansion sets ribbons
 # bit 31 (RR ROM 0x090B696A). Ribbons are compared with that bit masked, not skipped.
@@ -1209,10 +1294,31 @@ def gen3_record_diff(was, now, rr=False, mutable=GEN3_RECORD_MUTABLE):
     return out
 
 
-def gen3_memorial_problems(label, saved, fixture, key, memorial_box, rr=False):
+def gen3_withdrawn_problems(label, mon, limits):
+    """The postcondition of a mon that just came OUT of a box, on either cartridge: healthy
+    (hp == max_hp, BoxMonToMon + CalculateMonStats), cured (status 0), mail cleared, and every
+    move slot at its full PP -- vanilla restores PP on deposit (BoxMonRestorePP), CFRU refills
+    all four from the table on expansion."""
+    problems = []
+    if mon["hp"] != mon["max_hp"]:
+        problems.append(f"{label}: withdrawn at {mon['hp']}/{mon['max_hp']} HP, not healed")
+    if mon["status"] != 0:
+        problems.append(f"{label}: withdrawn with status 0x{mon['status']:08X}, not cured")
+    if mon["mail"] != MAIL_NONE and mon.get("held_item") not in GEN3_MAIL_ITEMS:
+        problems.append(f"{label}: withdrawn with mail 0x{mon['mail']:02X}")
+    max_pp = limits and limits.get("max_pp")
+    if max_pp:
+        full = [max_pp(m, mon["pp_bonuses"], i) if m else 0 for i, m in enumerate(mon["moves"])]
+        if list(mon["pp"]) != full:
+            problems.append(f"{label}: withdrawn with PP {list(mon['pp'])}, not restored {full}")
+    return problems
+
+
+def gen3_memorial_problems(label, saved, fixture, key, memorial_box, rr=False, limits=None,
+                           battled=False):
     """`key` left the party for exactly one slot of the memorial box; nothing else moved. The
     memorial record must be valid for the cartridge and, when the fixture carried the mon, keep
-    every invariant field of the record it was cut from."""
+    every invariant field of the record it was cut from (friendship only if it `battled`)."""
     party, boxes = saved
     f_party, f_boxes = fixture
     keys = [gen3_key(m) for m in party]
@@ -1225,9 +1331,10 @@ def gen3_memorial_problems(label, saved, fixture, key, memorial_box, rr=False):
                         f"box {memorial_box}")
     else:
         problems += gen3_record_problems(f"{label}: the memorial record for {key}",
-                                         boxes[where[0]], rr)
+                                         boxes[where[0]], rr, limits)
         was = next((m for m in f_party if gen3_key(m) == key), None)
-        changed = gen3_record_diff(was, boxes[where[0]], rr) if was else []
+        mutable = GEN3_RECORD_MUTABLE | (GEN3_ACTIVITY_MUTABLE if battled else set())
+        changed = gen3_record_diff(was, boxes[where[0]], rr, mutable) if was else []
         if changed:
             problems.append(f"{label}: the memorial {key} differs from the fixture record in "
                             f"{changed}")
@@ -1241,9 +1348,10 @@ def gen3_memorial_problems(label, saved, fixture, key, memorial_box, rr=False):
     return problems
 
 
-def gen3_round_trip_problems(label, saved, fixture, key, rr=False):
-    """`key` is back in the party exactly once, boxed nowhere, valid for the cartridge, and every
-    invariant field equals the fixture's record (only GEN3_RECORD_MUTABLE may differ)."""
+def gen3_round_trip_problems(label, saved, fixture, key, rr=False, limits=None, walked=False):
+    """`key` is back in the party exactly once, boxed nowhere, valid for the cartridge, in the
+    withdrawal's postcondition (healed, cured, PP restored), and every invariant field equals
+    the fixture's record -- friendship may move only when the scenario `walked` it."""
     party, boxes = saved
     f_party, f_boxes = fixture
     keys = [gen3_key(m) for m in party]
@@ -1260,14 +1368,16 @@ def gen3_round_trip_problems(label, saved, fixture, key, rr=False):
     now = next((m for m in party if gen3_key(m) == key), None)
     was = next((m for m in f_party if gen3_key(m) == key), None)
     if now and was:
-        problems += gen3_record_problems(f"{label}: the returned {key}", now, rr)
-        changed = gen3_record_diff(was, now, rr)
+        problems += gen3_record_problems(f"{label}: the returned {key}", now, rr, limits)
+        problems += gen3_withdrawn_problems(f"{label}: the returned {key}", now, limits)
+        mutable = GEN3_RECORD_MUTABLE | (GEN3_ACTIVITY_MUTABLE if walked else set())
+        changed = gen3_record_diff(was, now, rr, mutable)
         if changed:
             problems.append(f"{label}: the returned {key} differs from the fixture in {changed}")
     return problems
 
 
-def gen3_capture_problems(label, saved, fixture, key, sent=None, rr=False):
+def gen3_capture_problems(label, saved, fixture, key, sent=None, rr=False, limits=None):
     """A caught `key` joined the party once (appended), is boxed nowhere, nothing else moved, the
     record is valid for the cartridge, and it carries what the client's capture event said
     (species, level, held item, nickname) -- `sent` is that event's decoded fields."""
@@ -1285,7 +1395,7 @@ def gen3_capture_problems(label, saved, fixture, key, sent=None, rr=False):
         problems.append(f"{label}: the saved boxes are not the fixture's")
     mon = next((m for m in party if gen3_key(m) == key), None)
     if mon:
-        problems += gen3_record_problems(f"{label}: the capture {key}", mon, rr)
+        problems += gen3_record_problems(f"{label}: the capture {key}", mon, rr, limits)
         for wire, field in (("species_id", "species"), ("level", "level"),
                             ("held_item_id", "held_item"), ("nickname", "nickname")):
             if sent and sent.get(wire) is not None and mon[field] != sent[wire]:
@@ -1629,6 +1739,16 @@ class DuoRun:
         """The row decodes Radical Red's layout (GAMES[...]["rr"]); every saved-state read,
         record-validity rule and bag read below threads it (Codex C4-6b finding 1)."""
         return bool((getattr(self, "gcfg", None) or {}).get("rr"))
+
+    def _gen3_limits(self, inst):
+        """gen3_limits for this instance's title over the ROM it booted (cached per ROM path):
+        the species/level bounds and the move table every record's PP is checked against."""
+        cache = self.__dict__.setdefault("_gen3_limits_cache", {})
+        rom = self._gen3_rom(inst)
+        if rom not in cache:
+            with open(os.path.join(REPO, rom), "rb") as handle:
+                cache[rom] = gen3_limits(self._gen3_title(inst), handle.read())
+        return cache[rom]
 
     def _gen3_saved(self, inst):
         return gen3_decode(self._gen3_flushed(inst), rr=self._gen3_rr)
@@ -4849,14 +4969,8 @@ class DuoRun:
                                    f"attempt's start — a leftover, not this run's save")
             with open(path, "rb") as handle:
                 witness = handle.read()
-            ext_ram = None
-            ext_path = path[:-len(".bin")] + "_ext.bin"
-            if self._gen3_rr and os.path.exists(ext_path):
-                if os.path.getmtime(ext_path) < started:
-                    raise RuntimeError(f"{inst}: the extension RAM copy {rel_to_repo(ext_path)} "
-                                       f"predates this attempt's start")
-                with open(ext_path, "rb") as handle:
-                    ext_ram = handle.read()
+            ext_ram, ext_note = (self._gen3_final_ext(inst, receipt, len(dumps), started)
+                                 if self._gen3_rr else (None, ""))
             facts = check_gen3_witness(witness, self._gen3_flushed(inst),
                                        self._gen3_fixture_bytes(inst), saves=len(dumps),
                                        rr=self._gen3_rr, ext_ram=ext_ram)
@@ -4866,7 +4980,45 @@ class DuoRun:
                              f"file={facts['file']} match=true saves={len(dumps)} "
                              f"counter={facts['counter'][0]}->{facts['counter'][1]}"
                              + (" rtc=normalized" if facts["rtc"] else "")
-                             + (f" extension_30_31={facts['extension']}" if facts["extension"] else ""))
+                             + (f" extension_30_31={facts['extension']}" if facts["extension"] else "")
+                             + (f" ({ext_note})" if ext_note else ""))
+
+    def _gen3_final_ext(self, inst, receipt, saves, started):
+        """The live extension RAM copy bound to the FINAL save by its own receipt, or (None, why)
+        -> the witness reports extension=OPEN (Codex C4-6c finding 3). The file name and mtime
+        prove nothing about WHICH save wrote it: the driver logs one SAVE_WITNESS_EXT line per
+        copy, right after that save's SAVE_WITNESS_DUMP, carrying its ordinal. Only a copy whose
+        receipt is the last EXT line, carries the final dump's ordinal, follows the final dump,
+        and names this attempt's path at the documented length is compared. A receipt that names
+        the wrong path or length is a FAIL, not an OPEN."""
+        codec = gen3_codec()
+        lines = receipt.splitlines()
+        exts = [(i, m) for i, line in enumerate(lines)
+                if (m := GEN3_EXT_RE.match(line))]
+        last_dump = max(i for i, line in enumerate(lines) if line.startswith("SAVE_WITNESS_DUMP "))
+        if not exts:
+            return None, "no SAVE_WITNESS_EXT receipt"
+        at, match = exts[-1]
+        rel, size, ordinal = match.group(1), int(match.group(2)), int(match.group(3))
+        if ordinal != saves or at < last_dump:
+            return None, (f"the last extension copy is save {ordinal}'s, not the final save "
+                          f"{saves}'s")
+        path = self._witness_path(inst)[:-len(".bin")] + "_ext.bin"
+        if os.path.normpath(os.path.join(REPO, rel)) != os.path.normpath(path):
+            raise RuntimeError(f"{inst}: the extension copy landed at {rel!r}, not "
+                               f"{rel_to_repo(path)!r}")
+        if size != codec.RR_EXT_SIZE:
+            raise RuntimeError(f"{inst}: the extension receipt says {size} bytes, the extension "
+                               f"is {codec.RR_EXT_SIZE}")
+        if not os.path.exists(path) or os.path.getmtime(path) < started:
+            raise RuntimeError(f"{inst}: the extension copy {rel_to_repo(path)} is missing or "
+                               f"predates this attempt")
+        with open(path, "rb") as handle:
+            blob = handle.read()
+        if len(blob) != size:
+            raise RuntimeError(f"{inst}: the extension copy is {len(blob)} bytes, its receipt "
+                               f"says {size}")
+        return blob, ""
 
     # ── Gen 3 (gen3_frlg): runner halves ───────────────────────────────────────────────────
     def _gen3_prelude(self, link_slot=None):
@@ -5157,7 +5309,8 @@ class DuoRun:
         problems = []
         for inst, key in (("a", ka), ("b", kb)):
             problems += gen3_memorial_problems(inst, self._gen3_saved(inst),
-                                               self._gen3_fixture_saved(inst), key, box, rr=self._gen3_rr)
+                                               self._gen3_fixture_saved(inst), key, box, rr=self._gen3_rr,
+                                               limits=self._gen3_limits(inst))
         problems += gen3_receipt_problems(
             "a", results["a"], required=[gen3_rx("memorialize", ka), gen3_tx("memorialize_done", ka)],
             forbidden=[r"(?m)^RX force_faint "])
@@ -5191,7 +5344,8 @@ class DuoRun:
         box = self._gen3_memorial_box()
         for inst, key in (("a", ka), ("b", kb)):
             problems += gen3_memorial_problems(inst, self._gen3_saved(inst),
-                                               self._gen3_fixture_saved(inst), key, box, rr=self._gen3_rr)
+                                               self._gen3_fixture_saved(inst), key, box, rr=self._gen3_rr,
+                                               limits=self._gen3_limits(inst), battled=True)
         site = r"(?m)^ENGINE_FAINT_SITE "
         problems += gen3_receipt_problems(
             "a", results["a"], required=[site, gen3_tx("faint", ka), gen3_tx("memorialize_done", ka)],
@@ -5214,9 +5368,11 @@ class DuoRun:
         ka, kb = self._link_keys["a"], self._link_keys["b"]
         problems = []
         for inst, key in (("a", ka), ("b", kb)):
+            # only A walks with its linked mon in the party (grass -> PC); B's is idle
             problems += gen3_round_trip_problems(inst, self._gen3_saved(inst),
                                                  self._gen3_fixture_saved(inst), key,
-                                                 rr=self._gen3_rr)
+                                                 rr=self._gen3_rr, limits=self._gen3_limits(inst),
+                                                 walked=inst == "a")
         chain_a = [gen3_tx("party_to_box", ka), gen3_boxed(ka), gen3_tx("box_to_party", ka),
                    gen3_returned(ka)]
         problems += gen3_receipt_problems(
@@ -5239,9 +5395,11 @@ class DuoRun:
         ka, kb = self._link_keys["a"], self._link_keys["b"]
         problems = []
         for inst, key in (("a", ka), ("b", kb)):
+            # only A walks with its linked mon in the party (grass -> PC); B's is idle
             problems += gen3_round_trip_problems(inst, self._gen3_saved(inst),
                                                  self._gen3_fixture_saved(inst), key,
-                                                 rr=self._gen3_rr)
+                                                 rr=self._gen3_rr, limits=self._gen3_limits(inst),
+                                                 walked=inst == "a")
         # TX whiteout, not the driver's WHITED_OUT marker, opens the chain: the rebuild commands
         # answer the event and can land while the whiteout scene is still playing.
         # BOXED_OBSERVED / RETURNED_OBSERVED are the cartridge read back (absent from the party
@@ -5285,7 +5443,7 @@ class DuoRun:
                 problems.append(f"{inst}: no capture of {key} sent for route_1")
             problems += gen3_capture_problems(inst, self._gen3_saved(inst),
                                               self._gen3_fixture_saved(inst), key, sent,
-                                              rr=self._gen3_rr)
+                                              rr=self._gen3_rr, limits=self._gen3_limits(inst))
             throws = len(re.findall(r"(?m)^THREW \d+", text or ""))
             title = self._gen3_title(inst)
             before = gen3_ball_count(self._gen3_fixture_bytes(inst), title)
@@ -5323,7 +5481,8 @@ class DuoRun:
                 p: gen3_key(m) for p, m in f_boxes.items()}:
             problems.append("A's saved party/boxes are not the fixture's")
         problems += gen3_memorial_problems("b", self._gen3_saved("b"), self._gen3_fixture_saved("b"),
-                                           b_key, self._gen3_memorial_box(), rr=self._gen3_rr)
+                                           b_key, self._gen3_memorial_box(), rr=self._gen3_rr,
+                                           limits=self._gen3_limits("b"), battled=True)
         problems += gen3_receipt_problems(
             "b", results["b"], required=[rf"(?m)^FAINTED {re.escape(b_key)}\b",
                                          gen3_rx("memorialize", b_key),
@@ -5355,12 +5514,14 @@ class DuoRun:
 
     # ── RR-only oracles (P5, card C5-5) ─────────────────────────────────────────────────────
     def assert_explode_gen3_saved(self, results):
-        """explode_gen3: A's linked lead fainted in the engine (the faint site fired, then the
-        client sent faint); the server chose force_explode; B received it KEYED to its linked mon
-        while that mon was the active battler, and the engine then EXECUTED Explosion for it
-        (EXPLOSION_EXECUTED: gBattleResults.lastUsedMovePlayer read MOVE_EXPLOSION after the
-        command, not before). Both memorials saved. A stamped move slot alone is not accepted
-        (Codex C4-6b finding 5)."""
+        """explode_gen3, a NON-QUALIFYING CONTROL (SCENARIOS `control`): A's linked lead fainted
+        in the engine (the faint site fired, then the client sent faint); the server chose
+        force_explode; B received it KEYED to its linked mon while that mon was the active
+        battler, and the engine then STARTED the Explosion action (EXPLOSION_ACTION_STARTED:
+        lastUsedMovePlayer read MOVE_EXPLOSION after the command, not before). That witness sits
+        upstream of attackcanceler/tryexplosion (pret battle_main.c:4021-4022,
+        data/battle_scripts_1.s:376-382), so a cancelled Explosion reads the same: this PASS is
+        never a qualification (Codex C4-6c finding 4). Both memorials saved."""
         self._gen3_flush_boundary()
         self._gen3_one_link("memorial", cause="battle")
         ka, kb = self._link_keys["a"], self._link_keys["b"]
@@ -5373,19 +5534,21 @@ class DuoRun:
         for inst, key in (("a", ka), ("b", kb)):
             problems += gen3_memorial_problems(inst, self._gen3_saved(inst),
                                                self._gen3_fixture_saved(inst), key, box,
-                                               rr=self._gen3_rr)
+                                               rr=self._gen3_rr, limits=self._gen3_limits(inst),
+                                               battled=True)
         site = r"(?m)^ENGINE_FAINT_SITE "
         problems += gen3_receipt_problems(
             "a", results["a"], required=[site, gen3_tx("faint", ka), gen3_tx("memorialize_done", ka)],
             ordered=[(site, gen3_tx("faint", ka))], forbidden=[r"(?m)^RX force_"])
         chain = [rf"(?m)^READY_ACTIVE {re.escape(kb)} ", gen3_rx("force_explode", kb),
-                 rf"(?m)^EXPLOSION_EXECUTED {re.escape(kb)} battler_slot=\d+ last_used=153\b",
+                 rf"(?m)^EXPLOSION_ACTION_STARTED {re.escape(kb)} battler_slot=\d+ last_used=153\b",
                  gen3_tx("memorialize_done", kb)]
         problems += gen3_receipt_problems("b", results["b"], required=chain,
                                           ordered=list(zip(chain, chain[1:], strict=False)),
                                           forbidden=[r"(?m)^READY_ACTIVE \S+ last_used=153\b"])
-        self._gen3_raise(problems, f"explode: engine faint {ka} -> keyed force_explode {kb} -> "
-                                   f"Explosion executed by the engine; both memorials saved")
+        self._gen3_raise(problems, f"explode NON-QUALIFYING CONTROL (not qualification): engine "
+                                   f"faint {ka} -> keyed force_explode {kb} -> the Explosion ACTION "
+                                   f"started (not proven executed); both memorials saved")
 
     def assert_rival_swap_gen3_saved(self, results):
         """rival_swap_gen3 is a BLOCKED NEGATIVE CONTROL, not a qualification (SCENARIOS
