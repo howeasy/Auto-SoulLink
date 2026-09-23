@@ -63,7 +63,13 @@ Shadow lane invocation: `SLINK_SHADOW=1 python tools/e2e_duo.py --game gen3_rr -
 
 ## Next actions (in order)
 
-0. (checkpoint 8) (a) Record the Opus review of 4f511a1e (C3-36; it also closes the C3-34 blocker). (b) FR deposit route: runs 27b stalls at the PC top menu. Diagnose from pret: the PC owner menu rows once the Pokedex is obtained (docs/gen3/research/fr_pc_flow_and_pc_move_sites.md, Codex R9), how the leg's A presses are paced, and whether a witness (the Task_PCMainMenu 0x0808C39C task or a menu-cursor var) shows the first A landed. Fix in the FR driver with a RAM-witnessed step per menu, like RR's pinned flow. Then run FR 28 from `SLINK_STATE=slink_fr_route1_faint.State SLINK_GEN3_PLAY_FROM=viridian_pc_deposit_withdraw` (the state is now saved on the field) through pc_release and save. (c) When the FR PC kinds are PHYSICAL, fold them into docs/gen3/G3_request_draft.md and send the G3 request. (d) AP: deferred post-RC (owner 2026-09-23, PLAN §0); the " AP" header check is no longer an RC item.
+0. (checkpoint 8) (a) DONE: Opus ACCEPT of 4f511a1e (C3-36; closes the C3-34 blocker). Queued minors, none blocking:
+   - The move-slot A (~:780) and the mash_a stop on party_menu_up (~:784) have no test. The fake should model A on a fainted slot opening the popup first, and "has no energy" appearing only after SEND OUT (party_menu.c:3743-3757).
+   - If a stray A already opened the popup, one B recovers it (:3083-3087), instead of failing forced_party_input_not_ready.
+   - gPartyMenuUseExitCallback is never cleared, so the :1239 check proves little.
+   - The faint baseline (~:1965) should be `> 0` after each battle, because BattleStartClearSetData zeroes playerFaintCounter (battle_main.c:2308).
+   - Eggs have HP > 0 (~:1197).
+   - The route1_faint in_battle/settle gates are covered only by the source-grep test. (b) FR deposit route: runs 27b stalls at the PC top menu. Diagnose from pret: the PC owner menu rows once the Pokedex is obtained (docs/gen3/research/fr_pc_flow_and_pc_move_sites.md, Codex R9), how the leg's A presses are paced, and whether a witness (the Task_PCMainMenu 0x0808C39C task or a menu-cursor var) shows the first A landed. Fix in the FR driver with a RAM-witnessed step per menu, like RR's pinned flow. Then run FR 28 from `SLINK_STATE=slink_fr_route1_faint.State SLINK_GEN3_PLAY_FROM=viridian_pc_deposit_withdraw` (the state is now saved on the field) through pc_release and save. (c) When the FR PC kinds are PHYSICAL, fold them into docs/gen3/G3_request_draft.md and send the G3 request. (d) AP: deferred post-RC (owner 2026-09-23, PLAN §0); the " AP" header check is no longer an RC item.
 
 Older (checkpoint 7):
 
