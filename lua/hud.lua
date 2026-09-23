@@ -240,6 +240,14 @@ local function draw_text(x, y, s, color, size)
     end
 end
 
+-- Left x that centres `s` between `left` and `right`. Exact for the pixel font (fixed
+-- advance); the Courier char_width is an estimate, so Courier lines sit within a pixel or two.
+local function centre_x(s, left, right, size)
+    local scale = (cfg.pixel_font or not size) and 1 or size / cfg.font_size   -- pixelText has no size
+    local w = #s * cfg.char_width * scale
+    return math.max(left, math.floor((left + right - w) / 2))
+end
+
 -- ── HUD message bar (bottom of screen, queued) ──────────────────────────────
 -- Message lifecycle -----------------------------------------------------------
 -- Only the HEAD of a queue ages, so K queued messages used to occupy the screen
@@ -292,7 +300,8 @@ local function render_hud()
                 cfg.hud_right, cfg.hud_y + cfg.font_size,
                 0xFF000000, 0xBB000000)
     for i = 1, n do
-        draw_text(cfg.hud_x, cfg.hud_y - 1 - (n - i) * line_h, msg.lines[i], msg.color)
+        draw_text(centre_x(msg.lines[i], cfg.hud_x, cfg.hud_right), cfg.hud_y - 1 - (n - i) * line_h,
+                  msg.lines[i], msg.color)
     end
     age(hud_queue)
 end
@@ -316,7 +325,7 @@ local function render_prompt()
     gui.drawBox(1, py, cfg.screen_w - 1, py + cfg.prompt_h + (n - 1) * line_h,
                 0xFF000000, 0xCC000000)
     for i = 1, n do
-        draw_text(4, py + 1 + (i - 1) * line_h, p.lines[i], p.color)
+        draw_text(centre_x(p.lines[i], 4, cfg.screen_w - 4), py + 1 + (i - 1) * line_h, p.lines[i], p.color)
     end
     age(prompt_queue)
 end
@@ -336,7 +345,8 @@ local function render_game_over()
     if not game_over then return end
     local gy = cfg.gameover_y
     gui.drawBox(0, gy, cfg.screen_w, gy + 24, 0xFFBB0000, 0xDD990000)
-    draw_text(8, gy + 4, "GAME OVER!", "#FFFFFF", cfg.font_size + 2)
+    draw_text(centre_x("GAME OVER!", 0, cfg.screen_w, cfg.font_size + 2), gy + 4, "GAME OVER!", "#FFFFFF",
+              cfg.font_size + 2)
 end
 
 -- ── Rebuild (post-whiteout) persistent banner ───────────────────────────────
@@ -361,7 +371,7 @@ local function render_rebuilding()
     if not rebuild_text or game_over then return end
     local ry = cfg.gameover_y
     gui.drawBox(0, ry, cfg.screen_w, ry + 14, 0xFF0066AA, 0xDD003388)
-    draw_text(4, ry + 2, rebuild_text, "#FFFFFF")
+    draw_text(centre_x(rebuild_text, 0, cfg.screen_w), ry + 2, rebuild_text, "#FFFFFF")
 end
 
 -- ── Nuzlocke-start transient banner ─────────────────────────────────────────
@@ -383,7 +393,8 @@ local function render_nuzlocke_start()
     if not nuzlocke_start_text or game_over then return end
     local ny = cfg.gameover_y
     gui.drawBox(0, ny, cfg.screen_w, ny + 24, 0xFF0066AA, 0xDD003388)
-    draw_text(8, ny + 4, nuzlocke_start_text, "#FFFFFF", cfg.font_size + 2)
+    draw_text(centre_x(nuzlocke_start_text, 0, cfg.screen_w, cfg.font_size + 2), ny + 4, nuzlocke_start_text,
+              "#FFFFFF", cfg.font_size + 2)
     nuzlocke_start_frames = nuzlocke_start_frames - 1
     if nuzlocke_start_frames <= 0 then nuzlocke_start_text = nil end
 end

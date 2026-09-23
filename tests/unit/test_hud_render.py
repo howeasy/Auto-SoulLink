@@ -254,3 +254,17 @@ def test_gb_screen_draws_the_fceux_pixel_font_and_gba_keeps_courier():
     gba.H.show("PIDGEY KO'd", 255, 80, 80, 240)
     frame = gba.render()
     assert "pixelText" not in frame and "drawText" in frame, frame
+
+
+def test_lines_are_centred_on_the_screen():
+    """Each line is centred on its own: short lines start further right than long ones, and a
+    GB line of n chars (6px advance) starts at (160 - 6n) / 2 give or take the bar margins."""
+    w = World().gbc()
+    w.lua.execute("local d = gui.pixelText; gui.pixelText = function(x, y, s, ...) XS[#XS+1] = {x, s}; return d(x, y, s, ...) end")
+    w.lua.globals().XS = w.lua.eval("{}")
+    w.H.show("Partner caught PIDGEY in Route 1", 255, 255, 255, 240)
+    w.render()
+    xs = [(e[1], e[2]) for e in w.lua.globals().XS.values()]
+    assert [s for _, s in xs] == ["Partner caught PIDGEY in", "Route 1"], xs
+    for x, s in xs:
+        assert abs((x + len(s) * 6 / 2) - 80) <= 1, (x, s)
