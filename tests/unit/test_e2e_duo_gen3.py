@@ -599,12 +599,15 @@ def test_the_row_resolves_titles_fixtures_and_one_line_leafgreen():
     row = duo.GAMES["gen3_frlg"]
     run = duo.DuoRun.__new__(duo.DuoRun)
     run.gcfg, run.cfg = dict(row), dict(duo.SCENARIOS["boxsync_gen3"])
-    assert run.is_gen3_battery and run._gen3_title("b") == "firered"
-    assert run._gen3_fixture_path("a").endswith(os.path.join("gen3", "firered_party_battle.sav"))
-    assert run._gen3_fixture_path("b").endswith(os.path.join("gen3", "firered_party_town_b.sav"))
-    run.gcfg = dict(row, sides=dict(row["sides"], b=("leafgreen", "leafgreen_party_{target}")))
+    # The G4 pairing: A FireRed, B LeafGreen (fixtures 0978a5be).
+    assert run.is_gen3_battery and run._gen3_title("a") == "firered"
     assert run._gen3_title("b") == "leafgreen"
-    assert run._gen3_fixture_path("b").endswith("leafgreen_party_town.sav")
+    assert run._gen3_fixture_path("a").endswith(os.path.join("gen3", "firered_party_battle.sav"))
+    assert run._gen3_fixture_path("b").endswith(os.path.join("gen3", "leafgreen_party_town.sav"))
+    # FR/FR stays one line away (the _b fixtures remain committed).
+    run.gcfg = dict(row, sides=dict(row["sides"], b=("firered", "firered_party_{target}_b")))
+    assert run._gen3_title("b") == "firered"
+    assert run._gen3_fixture_path("b").endswith("firered_party_town_b.sav")
     # P5: radical_red joined (GAMES["gen3_rr_new"]) alongside firered/leafgreen.
     assert set(duo.GEN3_TITLES) == {"firered", "leafgreen", "radical_red"}
     for inst in ("a", "b"):

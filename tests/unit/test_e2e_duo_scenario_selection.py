@@ -338,4 +338,4 @@ def test_the_gen3_wrapper_lists_exactly_the_gen3_frlg_scenarios():
     for name in mod.SCENARIOS:
         assert scenario_applies(name, "gen3_frlg")
         assert mod.deadline_for(name) == SCENARIOS[name]["timeout"] + 300
-    assert mod.required_fixtures("boxsync_gen3") == ["firered_party_battle", "firered_party_town_b"]
+    assert mod.required_fixtures("boxsync_gen3") == ["firered_party_battle", "leafgreen_party_town"]

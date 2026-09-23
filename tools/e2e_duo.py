@@ -1543,8 +1543,7 @@ GAMES = {
     # Battery boot like gen1_new, but through tools/gen3_fixtures.py's GBA config and flash
     # fixtures, dispatched by `play` (see DuoRun.is_gen3_battery). `sides` is (title, fixture
     # stem) per instance, the stem formatted with the scenario's per-instance target; the fixture
-    # worker's saves are firered_party_{town,battle}{,_b}.sav. LeafGreen as B is ONE line once
-    # its fixtures exist: "b": ("leafgreen", "leafgreen_party_{target}"). `oracle_required`: a
+    # worker's saves are firered_party_{town,battle}{,_b}.sav. B is LeafGreen (the G4 FR<->LG pairing). `oracle_required`: a
     # scenario with no saved-state oracle FAILS here, the Gen 1 rule; `save_witness` is the
     # method _run_oracle runs first.
     "gen3_frlg": {
@@ -1552,7 +1551,7 @@ GAMES = {
         "game": "gen3_frlg",
         "play": "gen3_fixtures",
         "sides": {"a": ("firered", "firered_party_{target}"),
-                  "b": ("firered", "firered_party_{target}_b")},
+                  "b": ("leafgreen", "leafgreen_party_{target}")},   # FR<->LG, the G4 pairing (fixtures 0978a5be)
         "uses_savestate": False,
         "scenario_prefix": "gen3_",
         "oracle_required": True,
