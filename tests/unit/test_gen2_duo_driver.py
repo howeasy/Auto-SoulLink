@@ -53,7 +53,14 @@ FAKE_HUD = "return {init=function() end, render=function() end, show=function() 
 FAKE_RUN = """local ROOT = os.getenv("SLINK_ROOT")
 local C = require("connector")
 local json = dofile(ROOT .. "/lua/json_codec.lua")
-local client = {seq = 0}
+SLINK_GEN2_CLIENT, SLINK_GEN2_PARTS = nil, nil
+if SLINK_TEST_REFUSE then
+    console.log("[SLink-gen2] crystal cartridge refused (production admission): unknown sha1")
+    return
+end
+-- The production client's observable lifecycle, reduced: hello once live; every 60 frames a validation
+-- (SLINK_TEST_LIVE, default always live) whose 5th failure pauses writes; a dead game drops the hello.
+local client = {seq = 0, hello_sent = false, writes_enabled = true, gate_revoked = false, invalid = 0}
 function client:send(event, fields)
     self.seq = self.seq + 1
     fields.event, fields.seq, fields.player = event, self.seq, "a"
@@ -64,15 +71,29 @@ function client:on_event(ev)
 end
 function client:handle_command(cmd) end
 function client:frame_end()
-    if not self.hello then self.hello = true; self:send("hello", {ot_id = 46401}) end
+    local live = SLINK_TEST_LIVE == nil or SLINK_TEST_LIVE()
+    if not live then self.hello_sent = false end
+    if emu.framecount() % 60 == 0 then
+        if live then
+            self.invalid = 0
+            if self.gate_revoked then self.gate_revoked, self.writes_enabled = false, true end
+        else
+            self.invalid = self.invalid + 1
+            if self.invalid >= 5 and self.writes_enabled then self.writes_enabled, self.gate_revoked = false, true end
+        end
+    end
+    if live and not self.hello_sent then self.hello_sent = true; self:send("hello", {ot_id = 46401}) end
     local queue = SLINK_TEST_EVENTS or {}
     SLINK_TEST_EVENTS = {}
     for _, ev in ipairs(queue) do pcall(self.on_event, self, ev) end
+    local commands = SLINK_TEST_COMMANDS or {}
+    SLINK_TEST_COMMANDS = {}
+    for _, cmd in ipairs(commands) do self:handle_command(cmd) end
 end
 SLINK_GEN2_CLIENT = client
 local title = SLINK_TEST_CLIENT_TITLE or os.getenv("SLINK_GEN2_TITLE")
 SLINK_GEN2_PARTS = {client = client, production_admitted = SLINK_TEST_ADMITTED, qualification = "TEST_STANDIN",
-                    pack = "gen2_" .. title, title = title, profile = {rom_sha1 = "test"}}
+                    pack = "gen2_" .. title, title = title, profile = {rom_sha1 = "test"}, writes = {log = {}}}
 event.onframeend(function() client:frame_end() end)
 """
 
@@ -194,7 +215,7 @@ FAINT_UI = {"move_menu": "MoveSelectionScreen.interpret_joypad", "battle_party":
 
 
 def run_driver(tmp_path, title="crystal", *, admitted=True, go=True, client_title=None, scenario="link",
-               player="a", **sim_options):
+               player="a", duo=None, go_text="GO", sim_class=None, setup=None, **sim_options):
     root = make_root(tmp_path, title)
     for rel in DRIVER_FILES:
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -203,8 +224,8 @@ def run_driver(tmp_path, title="crystal", *, admitted=True, go=True, client_titl
     (root / "lua/hud.lua").write_text(FAKE_HUD, encoding="utf-8")
     (root / "lua/gen2/run.lua").write_text(FAKE_RUN, encoding="utf-8")
     spec, env = qualify_env(root, title, "battle", "boot")
-    sim = DuoSim(LuaRuntime(unpack_returned_tuples=True), title, **sim_options)
-    if scenario != "link":   # the faint route's UI origins (U1d's u1_facts carries the same symbols)
+    sim = (sim_class or DuoSim)(LuaRuntime(unpack_returned_tuples=True), title, **sim_options)
+    if scenario == "gen2_faint":   # the faint route's UI origins (U1d's u1_facts carries the same symbols)
         from tools.gen2_fixtures import _code_site
         sim.u1.setdefault("faint_ui", {kind: {k: v for k, v in _code_site(context(title), symbol).items()
                                               if k != "symbol_offset"} for kind, symbol in FAINT_UI.items()})
@@ -214,7 +235,7 @@ def run_driver(tmp_path, title="crystal", *, admitted=True, go=True, client_titl
     sim.install(env)
     result, go_file = root / "patch/build/e2e_link_a_result.txt", tmp_path / "go_a.txt"
     if go:
-        go_file.write_text("GO", encoding="utf-8")
+        go_file.write_text(go_text, encoding="utf-8")
     glob = sim.lua.globals()
     glob.SLINK_TEST_ADMITTED = admitted
     glob.SLINK_TEST_CLIENT_TITLE = client_title
@@ -222,7 +243,10 @@ def run_driver(tmp_path, title="crystal", *, admitted=True, go=True, client_titl
     glob.SLINK_DUO = sim.lua.table_from({
         "wt": str(root).replace("\\", "/"), "player": player, "scenario": scenario, "game": "gen2_new", "attempt": 1,
         "result": str(result).replace("\\", "/"), "partner_result": str(tmp_path / "b.txt").replace("\\", "/"),
-        "go_file": str(go_file).replace("\\", "/"), "timeout_frames": 12000, "max_phase_frames": 3000})
+        "go_file": str(go_file).replace("\\", "/"), "timeout_frames": 12000, "max_phase_frames": 3000,
+        **(duo or {})})
+    if setup:
+        setup(sim, glob)
     with pytest.raises(LuaError, match="slink-duo-finished"):
         sim.lua.execute(f'dofile("{glob.SLINK_DUO.wt}/{MAIN}")')
     assert sim.exited
@@ -363,9 +387,9 @@ def test_verdict_refuses_a_tampered_or_reordered_sequence(lines, match):
 
 def test_driver_files_are_lua_syntax_clean():
     check = LuaRuntime().execute("return function(s, n) local f, e = load(s, n); return f and 'ok' or e end")
-    for rel in ("lua/tests/duo/duo_gen2_main.lua", "lua/tests/duo/scenario_gen2_link.lua",
-                "lua/tests/duo/gen2_route29_inputs.lua", "lua/tests/duo/scenario_gen2_faint.lua",
-                "lua/tests/duo/gen2_faint_inputs.lua"):
+    files = sorted(p.relative_to(ROOT).as_posix() for p in (ROOT / "lua/tests/duo").glob("*gen2*.lua"))
+    assert "lua/tests/duo/duo_gen2_main.lua" in files and len(files) >= 5
+    for rel in files:
         assert check((ROOT / rel).read_text(encoding="utf-8"), "@" + rel) == "ok", rel
 
 
@@ -620,3 +644,95 @@ def test_faint_verdict_refuses_a_third_write():
     lines = repeat_write()
     problems, receipt = faint_verdict(lines[:12] + [lines[11]] + lines[12:])
     assert receipt is None and any("3 PARTY_HP_WRITE" in p for p in problems), problems
+
+
+# --- admit_wrong_rom (C-1, C-6g) -----------------------------------------------------------------------
+
+ADMIT = ROOT / "lua/tests/duo/scenario_gen2_admit_wrong_rom.lua"
+DRIVER_FILES += ("lua/tests/duo/scenario_gen2_admit_wrong_rom.lua",)
+
+
+def refuse(sim, glob):
+    glob.SLINK_TEST_REFUSE = True
+
+
+def test_admit_wrong_rom_admitted_half_hellos_holds_saves_and_passes(tmp_path):
+    lines, sim, _ = run_driver(tmp_path, scenario="admit_wrong_rom")
+    assert lines[-1] == "RESULT: PASS (admitted and held)", "\n".join(lines[-20:])
+    receipt = tag_json(lines, "RECEIPT")
+    assert receipt["schema"] == "gen2-duo-admit-wrong-rom-v1" and receipt["expect_admission"] == "admitted"
+    assert tag_json(lines, "HOLD")["hellos"] == 1 and sim.writes == []
+
+
+def test_admit_wrong_rom_refused_half_is_silent_and_presses_nothing(tmp_path):
+    lines, sim, _ = run_driver(tmp_path, scenario="admit_wrong_rom", player="b",
+                               duo={"expect_admission": "refused"}, setup=refuse)
+    assert lines[-1] == "RESULT: PASS (refused, silent, CartRAM unchanged)", "\n".join(lines)
+    head = tag_json(lines, "DUO_GEN2")
+    assert head["expect_admission"] == "refused" and head["rom_sha1"] == sim.facts["rom_sha1"].lower()
+    assert "refused (production admission)" in tag_json(lines, "ADMISSION_REFUSED")["console"]
+    assert tag_json(lines, "NO_TRAFFIC")["tx"] == 0
+    cart = tag_json(lines, "CARTRAM_UNCHANGED")
+    assert cart["before"] == cart["after"] == hashlib.sha256(sim.cart[:0x8000]).hexdigest()
+    assert not any(line.startswith(("CLIENT", "BOOTED", "HELLO", "TX ")) for line in lines)
+    assert all(not any(row.values()) for row in sim.inputs)   # idle frames only
+
+
+def test_admit_wrong_rom_refused_half_fails_when_the_rom_is_admitted(tmp_path):
+    lines, _, _ = run_driver(tmp_path, scenario="admit_wrong_rom", player="b", duo={"expect_admission": "refused"})
+    assert lines[-1] == "RESULT: FAIL (the unadmitted ROM started a client)"
+
+
+def test_admit_wrong_rom_refused_half_needs_the_go_file(tmp_path):
+    lines, _, _ = run_driver(tmp_path, scenario="admit_wrong_rom", player="b", go=False,
+                             duo={"expect_admission": "refused", "timeout_frames": 600}, setup=refuse)
+    assert lines[-1].startswith("RESULT: FAIL") and "timeout" in lines[-1], lines[-1]
+
+
+def admit_verdict(lines):
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    json_codec = lua.execute((ROOT / "lua/json_codec.lua").read_text(encoding="utf-8"))
+    problems, receipt = lua.execute(ADMIT.read_text(encoding="utf-8")).verdict(lua.table_from(lines), json_codec)
+    return list(problems.values()), receipt
+
+
+def refused_lines():
+    j = json.dumps
+    return ["DUO_GEN2 " + j({"player": "b", "scenario": "admit_wrong_rom", "attempt": 1, "title": "crystal",
+                             "rom_sha1": "ab" * 20, "expect_admission": "refused"}),
+            "ADMISSION_REFUSED " + j({"frame": 0, "rom_sha1": "ab" * 20, "client": False,
+                                      "console": "[SLink-gen2] crystal cartridge refused (production admission): x"}),
+            "NO_TRAFFIC " + j({"frame": 700, "frames": 600, "tx": 0}),
+            "CARTRAM_UNCHANGED " + j({"before": "cd" * 32, "after": "cd" * 32})]
+
+
+def admitted_lines():
+    lines = [line for line in happy_lines() if not line.startswith(("ENGINE_CAPTURE", "CAPTURE_SENT", "CAUGHT"))]
+    lines[0] = lines[0].replace('"scenario": "link"', '"scenario": "admit_wrong_rom"')
+    return lines[:-1] + ["HOLD " + json.dumps({"frame": 1000, "frames": 600, "hellos": 1}), lines[-1]]
+
+
+def test_admit_verdict_passes_each_complete_half():
+    for lines, kind in ((refused_lines(), "refused"), (admitted_lines(), "admitted")):
+        problems, receipt = admit_verdict(lines)
+        assert problems == [] and receipt["expect_admission"] == kind, problems
+
+
+@pytest.mark.parametrize("lines,match", [
+    (refused_lines() + ['TX {"event":"hello"}'], "sent on the wire"),
+    (refused_lines()[:1] + refused_lines()[2:], "missing ADMISSION_REFUSED"),
+    ([x.replace('"tx": 0', '"tx": 3') for x in refused_lines()], "sent on the wire"),
+    (refused_lines()[:3] + ["CARTRAM_UNCHANGED " + json.dumps({"before": "cd" * 32, "after": "ce" * 32})],
+     "changed its CartRAM"),
+    (refused_lines()[:1] + [refused_lines()[2], refused_lines()[1], refused_lines()[3]], "NO_TRAFFIC before"),
+    (refused_lines() + [happy_lines()[4]], "printed HELLO"),
+    ([x.replace('"console": "[SLink-gen2] crystal cartridge refused (production admission): x"', '"console": ""')
+      for x in refused_lines()], "no refusal line"),
+    (admitted_lines() + ["HELLO_AGAIN " + json.dumps({"frame": 1, "ot_id": 1, "n": 2})], "more than once"),
+    ([x for x in admitted_lines() if not x.startswith("HOLD")], "missing HOLD"),
+    (admitted_lines()[:-2] + [admitted_lines()[-1], admitted_lines()[-2]], "save witness before HOLD"),
+], ids=["refused-tx", "no-refusal", "refused-count", "cart-changed", "quiet-first", "refused-hello", "no-console",
+        "rehello", "no-hold", "save-first"])
+def test_admit_verdict_refuses_a_tampered_half(lines, match):
+    problems, receipt = admit_verdict(lines)
+    assert receipt is None and any(match in p for p in problems), problems

@@ -15,9 +15,12 @@
     ROM / config   run_gb_gate._gen2_plan(<title>, <per-instance SaveRAM dir under BUILD>, <fixture>,
                    100|300)["rom"]; config from run_gb_gate._gen2_config(plan, cfg); seed
                    tests/fixtures/gen2/<case>.SaveRAM into <SAVERAM_DIR>/<SAVERAM_NAME> before launch.
-    SLINK_DUO      wt, player "a"|"b", scenario "link"|"gen2_link"|"faint"|"gen2_faint", game "gen2_new", attempt,
+    SLINK_DUO      wt, player "a"|"b", scenario <name>|gen2_<name> (lua/tests/duo/scenario_gen2_<name>.lua: link,
+                   faint, reconnect, soft_reset, admit_wrong_rom), game "gen2_new", attempt,
                    result (this instance's result file), partner_result, go_file,
-                   timeout_frames (default 150000), idle_jitter (optional)
+                   timeout_frames (default 150000), idle_jitter (optional); per scenario (its header):
+                   phase + expected_key (reconnect), expect_admission "refused" (admit_wrong_rom's
+                   unadmitted-ROM half: no gate context, S.run_refused instead of S.run)
     process env    (Popen env=, per instance, as run_gb_gate passes it) SLINK_ROOT;
                    _gen2_plan(...)["env"]: SLINK_GEN2_TITLE/_ROM_SHA1/_CORE_MODE/_COLD=0/_SAVERAM_DIR/
                    _SAVERAM_NAME; tests/live/test_gen2_new_gates.inspect_env(spec, fixture_bytes):
@@ -52,6 +55,9 @@
     RECEIPT {schema "gen2-duo-link-v1", ...header, key, booted, hello, capture, save, client,
              input_mode "normal_buttons", harness_write_scopes []}                     PASS only
     RESULT: PASS (caught <key>) | RESULT: FAIL (<reason>)                                   last line
+  Every scenario may also see: HELLO_AGAIN {frame, ot_id, n} (each later hello; HELLO stays the first),
+  RX_TEXT {frame, cmd, text} (hud_show/gui_prompt/msgbox text, after its RX line). Each scenario's
+  header lists the markers it adds.
   CLIENT also carries registered_sites (the production binder's status().registered_sites after start).
   The faint scenario adds LINK_SAVE, ENGINE_FAINT, FAINT_SENT, PARTY_HP_WRITE and BENCH_HP_STATUS;
   scenario_gen2_faint.lua's header is their contract.
@@ -100,21 +106,11 @@ if not okS then finish(false, "no gen2_new scenario " .. tostring(D.scenario)) e
 local wire = dofile(ROOT .. "/lua/gen2/wire.lua")
 
 local api = SG.bizhawk()
-local ok, ctx = pcall(function()
-    local c = SG.context(api, os.getenv)
-    assert(c.qualify ~= nil and c.qualify.stage == "boot", "SLINK_GEN2_QUALIFY stage \"boot\" required")
-    assert(c.case.target == "battle", "the link scenario runs on a battle fixture")
-    c.u1 = assert(json.decode(assert(os.getenv("SLINK_GEN2_U1_FACTS"), "SLINK_GEN2_U1_FACTS missing")))
-    return c
-end)
-if not ok then finish(false, "bad environment: " .. tostring(ctx)) end
-ctx.log = log
-jlog("DUO_GEN2", {player=D.player, scenario=D.scenario, attempt=D.attempt or 1, case=ctx.case.name,
-                  title=ctx.env.title, rom_sha1=ctx.env.rom_sha1, fixture_sha256=ctx.qualify.stage_fingerprint})
-
+local timeout = D.timeout_frames or 150000
 -- ── receipts the harness keeps (never an oracle of their own; S.verdict re-reads the lines) ──
 local rec = {captures=0, capture=nil, sent_keys={}, caught=nil, client_saves=0, save_completed_frame=nil,
-             faint=nil, faint_sent=nil, rx={}, hp_write=nil}
+             faint=nil, faint_sent=nil, rx={}, hp_write=nil,
+             hellos={}, tx=0}
 local sent = {}
 local function maybe_caught()
     local key = rec.capture and rec.capture.key
@@ -130,9 +126,16 @@ C.send = function(line)
     local okd, msg = pcall(json.decode, line)
     local event = okd and type(msg) == "table" and msg.event or "?"
     if event ~= "tick" then log("TX " .. tostring(line):sub(1, 220)) end
-    if event == "hello" and sent.hello == nil then
-        sent.hello = {frame=emu.framecount(), ot_id=msg.ot_id}
-        jlog("HELLO", sent.hello)
+    rec.tx = rec.tx + 1
+    if event == "hello" then
+        local hello = {frame=emu.framecount(), ot_id=msg.ot_id}
+        rec.hellos[#rec.hellos + 1] = hello
+        if sent.hello == nil then
+            sent.hello = hello
+            jlog("HELLO", hello)
+        else
+            jlog("HELLO_AGAIN", {frame=hello.frame, ot_id=hello.ot_id, n=#rec.hellos})
+        end
     elseif event == "capture" and type(msg.key) == "string" then
         rec.sent_keys[msg.key] = true
         jlog("CAPTURE_SENT", {frame=emu.framecount(), key=msg.key, seq=msg.seq})
@@ -149,6 +152,69 @@ local function start_production()
     dofile(ROOT .. "/lua/gen2/run.lua")
     return SLINK_GEN2_CLIENT, SLINK_GEN2_PARTS
 end
+local function go_ready()
+    local f = D.go_file and io.open(D.go_file, "r")
+    if f then f:close() end
+    return f ~= nil
+end
+-- True once `path` exists and holds `text` (the runner's phase markers in the go-file).
+local function file_has(path, text)
+    local f = path and io.open(path, "r")
+    if not f then return false end
+    local body = f:read("a")
+    f:close()
+    return body:find(text, 1, true) ~= nil
+end
+
+-- ── the REFUSED half (SLINK_DUO.expect_admission == "refused", scenario admit_wrong_rom) ─────────
+-- An unadmitted ROM has no route/qualification facts by construction, so this half builds no gate
+-- context: it only loads the production entry, which must refuse, and then idles with no input.
+if D.expect_admission == "refused" then
+    if type(S.run_refused) ~= "function" then finish(false, "scenario " .. D.scenario .. " has no refused half") end
+    local idle_buttons = {}
+    for _, button in ipairs(SG.BUTTONS) do idle_buttons[button] = false end
+    local r = {log=log, jlog=jlog, json=json, lines=lines, player=D.player, api=api, SG=SG, rec=rec, go=go_ready}
+    jlog("DUO_GEN2", {player=D.player, scenario=D.scenario, attempt=D.attempt or 1,
+                      title=tostring(os.getenv("SLINK_GEN2_TITLE")), rom_sha1=tostring(api.romhash()):lower(),
+                      expect_admission="refused"})
+    function r.start()   -- run.lua's own console lines are its refusal reason
+        local captured = {}
+        console.log = function(line) captured[#captured + 1] = tostring(line); _console_log(line) end
+        local okp, client_or_err = pcall(start_production)
+        console.log = _console_log
+        return okp, client_or_err, captured
+    end
+    function r.frames(n)
+        for _ = 1, n do
+            if api.framecount() > timeout then error("scenario timeout after " .. timeout .. " frames", 0) end
+            api.set_buttons(idle_buttons)
+            api.advance()
+        end
+    end
+    function r.wait(pred, frames)
+        for _ = 1, frames do
+            if pred() then return true end
+            r.frames(1)
+        end
+        return pred() and true or false
+    end
+    local ran, pass, msg = pcall(S.run_refused, r)
+    if not ran then finish(false, "scenario error: " .. tostring(pass)) end
+    finish(pass, msg)
+end
+
+local ok, ctx = pcall(function()
+    local c = SG.context(api, os.getenv)
+    assert(c.qualify ~= nil and c.qualify.stage == "boot", "SLINK_GEN2_QUALIFY stage \"boot\" required")
+    assert(c.case.target == "battle", "the link scenario runs on a battle fixture")
+    c.u1 = assert(json.decode(assert(os.getenv("SLINK_GEN2_U1_FACTS"), "SLINK_GEN2_U1_FACTS missing")))
+    return c
+end)
+if not ok then finish(false, "bad environment: " .. tostring(ctx)) end
+ctx.log = log
+jlog("DUO_GEN2", {player=D.player, scenario=D.scenario, attempt=D.attempt or 1, case=ctx.case.name,
+                  title=ctx.env.title, rom_sha1=ctx.env.rom_sha1, fixture_sha256=ctx.qualify.stage_fingerprint})
+
 local started, gen2, parts = pcall(start_production)
 if not started or type(gen2) ~= "table" or type(parts) ~= "table" then
     finish(false, "production client did not start: " .. tostring(started and "run.lua exposed no client" or gen2))
@@ -199,6 +265,9 @@ gen2.handle_command = function(self, cmd)
     if c ~= "noop" then
         log("RX " .. tostring(c) .. (type(cmd) == "table" and cmd.key and (" key=" .. tostring(cmd.key)) or ""))
         rec.rx[#rec.rx + 1] = {cmd=c, key=type(cmd) == "table" and cmd.key or nil}
+        if (c == "hud_show" or c == "gui_prompt" or c == "msgbox") and type(cmd.text) == "string" then
+            jlog("RX_TEXT", {frame=emu.framecount(), cmd=c, text=cmd.text})
+        end
     end
     return _handle(self, cmd)
 end
@@ -271,11 +340,12 @@ end
 local state = SG.hooks(ctx)
 local idle = {}
 for _, button in ipairs(SG.BUTTONS) do idle[button] = false end
-local host = ctx.Host.new({step=SG.button_step(ctx), frame=api.framecount, idle=idle})
-local timeout = D.timeout_frames or 150000
+local step = SG.button_step(ctx)
+local host = ctx.Host.new({step=step, frame=api.framecount, idle=idle})
 
 local h = {lines=lines, json=json, sent=sent, log=log, jlog=jlog, player=D.player, rec=rec, registered=registered,
-           root=ROOT}
+           root=ROOT, client=gen2, parts=parts, phase=D.phase, expected_key=D.expected_key, go_file=D.go_file,
+           file_has=file_has, frame=api.framecount}
 function h.frames(n)
     for _ = 1, n do
         if api.framecount() > timeout then error("scenario timeout after " .. timeout .. " frames", 0) end
@@ -289,17 +359,32 @@ function h.wait(pred, frames)
     end
     return pred() and true or false
 end
-function h.go()
-    local f = D.go_file and io.open(D.go_file, "r")
-    if f then f:close() end
-    return f ~= nil
+h.go = go_ready
+-- Normal buttons held for n frames (the soft-reset chord); every other button released.
+function h.hold(buttons, n)
+    for _ = 1, n do
+        if api.framecount() > timeout then error("scenario timeout after " .. timeout .. " frames", 0) end
+        local b = {}
+        for k, v in pairs(idle) do b[k] = v end
+        for k, v in pairs(buttons) do b[k] = v end
+        step(b)
+    end
 end
+-- The gate's own decoder (never production's): {ot_id, party_count}, or nil while unreadable.
+function h.identity()
+    local okp, player = pcall(ctx.reads.read_player)
+    local okq, party = pcall(ctx.reads.read_party)
+    if not okp or not okq or not player or not party then return nil end
+    return {ot_id=player.ot_id, party_count=party.count}
+end
+-- The production writer's permit log length (0 for a stand-in client that composes none).
+function h.write_count() return #((parts.writes or {}).log or {}) end
 function h.jitter()
     local requested = D.idle_jitter or 0
     h.frames(requested)
     log(fmt("JITTER requested=%d applied=%d attempt=%d", requested, requested, D.attempt or 1))
 end
-function h.arrive()
+function h.arrive(tag)
     local case, q = ctx.case, ctx.qualify
     local arrived, why = pcall(ctx.Qualify.run, host, SG.qualify_observer(ctx), ctx.facts, q.facts,
         {name=case.name, title=case.title, attempt_id=case.attempt_id, stage="boot",
@@ -309,7 +394,7 @@ function h.arrive()
     if not arrived then return false, why end
     local map, party = ctx.reads.read_map(), ctx.reads.read_party()
     if not map or not party then return false, "arrival map/party unreadable" end
-    jlog("BOOTED", {frame=api.framecount(), map_group=map.group, map_number=map.number, x=map.x, y=map.y,
+    jlog(tag or "BOOTED", {frame=api.framecount(), map_group=map.group, map_number=map.number, x=map.x, y=map.y,
                     party_count=party.count})
     return true
 end
