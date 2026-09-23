@@ -36,6 +36,12 @@ REASON_TERMINALS = {
     "native_absent": "no native block in this pack",
     "sound_driver": "m4a SE1 ident == ID_NUMBER",
 }
+# 2B-INTEGRATE-PROBE: the G4 2b battle-window rows, P.STATES indices 23..31, in run order
+# (N8 last: its bag helper can end the whole run). name -> gen3_battle_window_rows row.
+BW_ROWS = {"bw_n1_action_draw": "N1", "bw_n4_bag": "N4", "bw_n5_party": "N5", "bw_n6_summary": "N6",
+           "bw_n7_switch": "N7", "bw_n9_run": "N9", "bw_u1_oldman": "U1", "bw_u2_pokedude": "U2",
+           "bw_n8_item": "N8"}
+BW_INDICES = set(range(23, 32))
 CORE = set(range(1, 8))
 # Reason-row P.STATES indices (10..22, REASON_BASE = 22 - 13 + 1), by name -- planned() per
 # artifact (docs/gen3/research/battle_write_predicate.md §6): the battle_animation row is
@@ -69,8 +75,9 @@ def module():
 
 def test_all_states_have_named_terminals(module):
     _, probe = module
-    states = {row.name: row.terminal for row in probe.STATES.values()}
+    states = {row.name: row.terminal for row in probe.STATES.values() if row.bw is None}
     assert states == {**TERMINALS, **REASON_TERMINALS}
+    assert [r.name for r in probe.STATES.values() if r.bw is not None] == list(BW_ROWS)
     for name, terminal in TERMINALS.items():
         assert f'name="{name}", terminal="{terminal}"' in SOURCE
     # Reason-row terminals are built with `..` string concatenation across lines in the source
@@ -369,14 +376,15 @@ def test_artifact_rows_are_negative_and_gated(module):
 
 
 @pytest.mark.parametrize("title,kind,env,want", [
-    ("firered", "clean", None, CORE | {9} | FIRERED_CLEAN_REASON_ROWS),
+    ("firered", "clean", None, CORE | {9} | FIRERED_CLEAN_REASON_ROWS | BW_INDICES),
     ("radical_red", "companion", None, CORE | {8, 9} | RADICAL_RED_COMPANION_REASON_ROWS),
     ("radical_red", "clean", None, CORE | RADICAL_RED_CLEAN_REASON_ROWS),
-    ("leafgreen", "clean", None, CORE | {9} | LEAFGREEN_CLEAN_REASON_ROWS),
+    ("leafgreen", "clean", None, CORE | {9} | LEAFGREEN_CLEAN_REASON_ROWS | BW_INDICES),
     ("radical_red", "companion", "script_running", CORE | {9}),
     ("radical_red", "companion", "pc_menu, script_running", CORE | {8, 9}),
     ("radical_red", "companion", "none", CORE),
-    ("firered", "clean", "", CORE | {9} | FIRERED_CLEAN_REASON_ROWS),
+    ("firered", "clean", "", CORE | {9} | FIRERED_CLEAN_REASON_ROWS | BW_INDICES),
+    ("leafgreen", "clean", "bw_u2_pokedude, bw_n9_run", CORE | {28, 30}),
 ])
 def test_planned_rows_by_artifact(module, title, kind, env, want):
     _, probe = module
@@ -389,6 +397,7 @@ def test_planned_rows_by_artifact(module, title, kind, env, want):
     ("radical_red", "clean", "script_running"),
     ("firered", "clean", "idle"),           # core rows cannot be narrowed away
     ("firered", "clean", "bogus"),
+    ("radical_red", "companion", "bw_n9_run"),   # the 2b rows are FR/LG only
 ])
 def test_planned_rejects_inadmissible_or_unknown_rows(module, title, kind, env):
     _, probe = module
@@ -579,3 +588,195 @@ def test_low_a_unknown_witness_names_are_errors(module):
                                                "until_witness": "send_out_promt"}))
     w, stop = probe.row_witness(WIT, lua.table_from({"name": "x", "witness": "always"}))
     assert w() is True and stop() is True
+
+
+# ── 2B-INTEGRATE-PROBE: the G4 2b battle-window rows ─────────────────────────────────────────
+from tests.unit.test_gen3_battle_window_rows import HASHES, World, committed, parked  # noqa: E402
+
+RR_ROWS = lupa.LuaRuntime(unpack_returned_tuples=True).execute(
+    (ROOT / "lua/tests/gen3_battle_window_rows.lua").read_text(encoding="utf-8"))
+
+
+def bw_specs(probe):
+    return {r.name: r for r in probe.STATES.values() if r.bw is not None}
+
+
+def test_bw_rows_are_the_matrix_rows_not_duplicates(module):
+    _, probe = module
+    specs = bw_specs(probe)
+    assert {n: s.bw for n, s in specs.items()} == BW_ROWS
+    obs = {r.name for r in RR_ROWS.ROWS.values()}
+    for name, spec in specs.items():
+        assert spec.bw in obs, name
+        assert spec.expectation == "bw" and spec.reason == "battle_faint", name
+        assert set(spec.artifacts.keys()) == {"firered/clean", "leafgreen/clean"}, name
+        assert spec.state_env and spec.state, name
+        assert probe.check_inputs(spec) is True
+    # N3 needs a doubles fixture (recorded limit); N2/N10-N13 are existing rows, cross-referenced
+    assert "N3" not in set(BW_ROWS.values())
+    notes = " ".join(s.note for s in specs.values())
+    for existing in ("battle_move_menu (N2)", "battle_intro (N10)", "battle_faint_prompt (N11)",
+                     "battle_animation (N12)", "battle_over (N13)"):
+        assert existing in notes
+    # the tutorial rows default to the 2B-TUTORIAL-STATES names under their own env
+    assert (specs["bw_u1_oldman"].state_env, specs["bw_u1_oldman"].state) == (
+        "SLINK_CHECKPOINT_OLDMAN_STATE", "slink_oldman.State")
+    assert (specs["bw_u2_pokedude"].state_env, specs["bw_u2_pokedude"].state) == (
+        "SLINK_CHECKPOINT_POKEDUDE_STATE", "slink_pokedude.State")
+    # N1 samples from the intro state (before the draw frame); N7/N8/N9 load the parked menu,
+    # and their committing A is pressed with the row already sampling
+    assert specs["bw_n1_action_draw"].state == "slink_preintro.State"
+    assert probe.WAIT_FOR_MON_SELECTION == 0x08030685
+
+
+def test_u2_presses_no_b_at_all(module):
+    lua, probe = module
+    u2 = bw_specs(probe)["bw_u2_pokedude"]
+    assert u2.forbid_b is True and len(u2.inputs) == 0
+    for step in ({"tap": "B"}, {"pulse": "B", "frames": 10, "stop": "turn_over"}):
+        bad = lua.table_from({"name": "u2", "bw": "U2", "forbid_b": True,
+                              "inputs": lua.table_from([lua.table_from(step)])})
+        with pytest.raises(lupa.LuaError, match="B is forbidden"):
+            probe.check_inputs(bad)
+    assert 'assert(btn ~= "B" or not (bw_last and' in SOURCE        # the runtime guard too
+
+
+@pytest.mark.parametrize("step,msg", [
+    ({"hop": 1}, "unknown input step"),
+    ({"tap": "A", "idle": 3}, "several step kinds"),
+    ({"wait": "bag_opne"}, "unknown wait bag_opne"),
+    ({"pulse": "B", "frames": 9}, "a pulse needs a stop"),
+])
+def test_check_inputs_rejects_malformed_steps(module, step, msg):
+    lua, probe = module
+    spec = lua.table_from({"name": "x", "bw": "N4", "inputs": lua.table_from([lua.table_from(step)])})
+    with pytest.raises(lupa.LuaError, match=msg):
+        probe.check_inputs(spec)
+    plain = lua.table_from({"name": "x", "inputs": lua.table_from([lua.table_from({"action": 1})])})
+    with pytest.raises(lupa.LuaError, match="battle-window step"):
+        probe.check_inputs(plain)
+
+
+def test_a_bw_row_wired_without_its_sampler_never_passes(module):
+    lua, probe = module
+    row = lua.table_from({"name": "bw_n9_run", "expectation": "bw", "samples": 0, "yes": 0, "no": 0,
+                          "reached": True})
+    assert tuple(probe.verdict(row)) == (False, "battle-window row has no sampler")
+
+
+def bw_world(title):
+    w = World(title)
+    return w, w.lua.execute(SOURCE)
+
+
+def bw_row(w, name):
+    return w.lua.table_from({"name": name, "expectation": "bw", "bw": w.R.row(w.ctx, name),
+                             "samples": 0, "yes": 0, "no": 0})
+
+
+def feed(w, probe, row, states):
+    extra = w.lua.table_from({"map": "3.19", "pos": "12,37"})
+    for st in states:
+        w.set(**st)
+        probe.bw_feed(row, w.safety, extra)
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_an_unreached_accumulator_fails_the_probe(title):
+    w, probe = bw_world(title)
+    row = bw_row(w, "N9")
+    feed(w, probe, row, [parked(title)] * 120)          # sampled, but never the committed RUN
+    assert row.bw.samples == 0
+    assert tuple(probe.verdict(row)) == (False, "UNREACHED no qualifying sample")
+    # positive control through the same path: RUN committed, then gBattleOutcome == RAN
+    row = bw_row(w, "N9")
+    ran = committed(title, ret=(0x21, 3, 0, 0))
+    feed(w, probe, row, [parked(title)] * 5 + [ran] * 4 + [dict(ran, outcome=4)])
+    assert tuple(probe.verdict(row)) == (True, "PASS -")
+    # a committed window with no terminal (failed escape reopens the menu) is UNREACHED
+    row = bw_row(w, "N9")
+    feed(w, probe, row, [ran] * 4 + [parked(title)] * 5)
+    ok, why = probe.verdict(row)
+    assert ok is False and why.startswith("UNREACHED terminal never observed")
+
+
+def test_a_fail_accumulator_fails_the_probe():
+    w = World("firered", drop="battle_input_controller")
+    probe = w.lua.execute(SOURCE)
+    assert tuple(probe.verdict(bw_row(w, "N9"))) == (False, "FAIL pack lacks clause(s) P")
+
+
+def test_a_missing_state_blocks_even_a_passing_bw_row():
+    w, probe = bw_world("firered")
+    row = bw_row(w, "N9")
+    ran = committed("firered", ret=(0x21, 3, 0, 0))
+    feed(w, probe, row, [ran] * 4 + [dict(ran, outcome=4)])
+    assert probe.verdict(row)[0] is True
+    row.blocked = "UNREACHED state missing: X/slink_pokedude.State"
+    assert tuple(probe.verdict(row)) == (False, "UNREACHED state missing: X/slink_pokedude.State")
+    assert 'row.blocked = "UNREACHED " .. why' in SOURCE and "if not meta then row.blocked = mwhy end" in SOURCE
+
+
+def test_bw_meta_needs_all_five_hashes_and_makes_a_receipt():
+    w, probe = bw_world("firered")
+    L = w.lua
+    doc = {"pack": "p0", "source": "s0",
+           "states": {"slink_prebattle.State": {"state": "st0", "fixture": "f0", "prep": "mkstates battle"}}}
+    path = "D:/states/slink_prebattle.State"
+    meta = probe.bw_meta(L.table_from(doc, recursive=True), "r0", path, "N9")
+    assert dict(meta.hashes) == HASHES and meta.prep == "mkstates battle" and meta.state_path == path
+    line = w.ctx.receipt(w.ctx, w.sample(), meta)
+    assert line.startswith("BWSAMPLE N9 title=firered") and "state_path=" + path in line
+    assert probe.bw_meta(L.table_from(doc, recursive=True), None, path, "N9")[1] == \
+        "receipt needs the rom hash for slink_prebattle.State"
+    for key in ("fixture", "state"):
+        inner = {k: v for k, v in doc["states"]["slink_prebattle.State"].items() if k != key}
+        partial = {**doc, "states": {"slink_prebattle.State": inner}}
+        assert probe.bw_meta(L.table_from(partial, recursive=True), "r0", path, "N9")[1] == \
+            f"receipt needs the {key} hash for slink_prebattle.State"
+    assert probe.bw_meta(None, "r0", path, "N9")[1] == "receipt needs the fixture hash for slink_prebattle.State"
+    other = probe.bw_meta(L.table_from(doc, recursive=True), "r0", "D:/states/slink_oldman.State", "U1")
+    assert other[0] is None                    # a state the hash file does not name
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_bw_waits_read_the_sample(title):
+    w, probe = bw_world(title)
+    W = probe.BW_WAITS
+    w.set(**parked(title))
+    s = w.sample()
+    assert W.action_input(s, w.ctx) is True and W.turn_over(s, w.ctx) is True
+    assert W.party_input(s, w.ctx) is False and W.bag_input(s, w.ctx) is False
+    ran = committed(title, ret=(0x21, 3, 0, 0))
+    w.set(**ran)
+    s = w.sample()
+    assert W.action_input(s, w.ctx) is False and W.turn_over(s, w.ctx) is False
+    w.set(**dict(ran, outcome=4))
+    assert W.turn_over(w.sample(), w.ctx) is True
+
+
+def test_frame_end_feeds_bw_rows_under_the_callback_pcall():
+    assert 'bw_last = P.bw_feed(active, safety, {map = g .. "." .. n, pos = x .. "," .. y})' in SOURCE
+    assert "local success, why = pcall(sample)" in SOURCE
+    assert 'dofile(wt .. "/lua/tests/gen3_battle_window_rows.lua").bind(cp, title, deps, wt)' in SOURCE
+    assert "G.log(line)" in SOURCE and 'G.log(bw_ctx:receipt(acc[k], meta) .. " at=" .. k)' in SOURCE
+    assert "memory.write" not in SOURCE
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_the_runner_glue_names_exist_on_the_bound_ctx(title):
+    """bw_row/bw_steps call these through the bound ctx; a typo would only surface live."""
+    w = World(title)
+    ctx = w.ctx
+    acc = ctx.row(ctx, "N9")
+    line, status = ctx.verdict_line(acc)
+    assert line.startswith("BWROW N9 UNREACHED") and status == "UNREACHED"
+    assert ctx.K.BATTLE_TYPE_POKEDUDE == 0x10000 and ctx.T.ACTION_CURSOR_ADDR == 0x02023FF8
+    for name in ("HANDLE_INPUT_CHOOSE_ACTION", "CB2_BAG_MENU_RUN", "TASK_BAG_MENU_HANDLE_INPUT",
+                 "TASK_ANIMATE_WIN0V", "CB2_UPDATE_PARTY_MENU", "TASK_CHOOSE_MON", "TASK_SELECTION_POPUP"):
+        assert ctx.T[name], name
+    assert ctx.W.CB2_RUN_SUMMARY_SCREEN
+    for name in ("bw_row(i, spec)", "row.bw, bw_last = bw_ctx:row(spec.bw), nil",
+                 "local line, status = bw_ctx.verdict_line(acc)", "bw_ctx.K.BATTLE_TYPE_POKEDUDE",
+                 "memory.read_u8(bw_ctx.T.ACTION_CURSOR_ADDR)", "SP.throw_pokeball_from_bag(cp, spec.name)"):
+        assert name in SOURCE, name

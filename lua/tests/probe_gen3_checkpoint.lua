@@ -1,7 +1,12 @@
 -- P3 checkpoint lane: read-only predicate, joypad-driven forbidden states.
 -- Env: SLINK_ROOT, SLINK_GEN3_CHECKPOINT/TITLE, SLINK_GEN3_KIND (required),
 -- SLINK_STATE (idle field), SLINK_CHECKPOINT_BATTLE_STATE, SLINK_CHECKPOINT_DOOR_STATE,
--- SLINK_CHECKPOINT_PC_STATE, SLINK_CHECKPOINT_SCRIPT_STATE, SLINK_CHECKPOINT_ROWS.
+-- SLINK_CHECKPOINT_PC_STATE, SLINK_CHECKPOINT_SCRIPT_STATE, SLINK_CHECKPOINT_ROWS, and per reason
+-- row its state_env (below). G4 2b battle-window rows (bw_*) also read SLINK_CHECKPOINT_INTRO_STATE,
+-- SLINK_CHECKPOINT_OLDMAN_STATE, SLINK_CHECKPOINT_POKEDUDE_STATE and SLINK_BW_HASHES (a JSON file:
+-- {"pack": sha256, "source": sha, "states": {"<state basename>": {"state": sha256,
+-- "fixture": sha256, "prep": "<normal-input preparation receipt>"}}}; the ROM hash is the loaded
+-- ROM's own, gameinfo.getromhash()). A bw row without all five receipt hashes fails.
 -- Bare state names resolve under SLINK_STATE_DIR (default E:/Howard/Bizhawk/GBA/State).
 -- Always runs the seven core phases. No subset can earn the complete probe's PASS.
 -- Artifact rows (those with `artifacts`) run only where "<title>/<kind>" is admitted.
@@ -145,6 +150,69 @@ P.REASON_ROWS = {
         artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true},
         note="the sound reason on a live driver; native_busy is model-only (the probe posts no op)"},
 }
+
+-- ── G4 2b battle-window rows (card 2B-INTEGRATE-PROBE) ──────────────────────────────────────
+-- docs/gen3/research/g4_2b_matrix_plan_2026-09-23.md §4. `bw` names a row of
+-- lua/tests/gen3_battle_window_rows.lua (card 2B-OBS): that module owns the witness (arm, hold,
+-- done), the floor, the receipt and the verdict (PASS / FAIL / UNREACHED; only PASS passes here).
+-- Every frame from the first one after the row's state loads is sampled into it, so N1/N7/N8/N9
+-- see their commit/draw frame. Matrix rows already covered, NOT repeated: N2 = battle_move_menu,
+-- N10 = battle_intro, N11 = battle_faint_prompt, N12 = battle_animation, N13 = battle_over.
+-- Normal joypad only. Input steps beyond tap/idle/mash (bw rows only): {wait=W, frames=n}
+-- advances until P.BW_WAITS[W]; {action=n} steers gActionSelectionCursor (0 FIGHT, 1 BAG,
+-- 2 POKEMON, 3 RUN; Right/Left flip bit 0, Down/Up bit 1); {slot=n} presses Down until the party
+-- cursor is n; {pulse=btn, frames=n, stop=W} presses btn on the 16-frame cadence until W;
+-- {throw_ball=true} is gen3_scripted_play's throw_pokeball_from_bag; a bw mash's `stop` names a W.
+local FRLG = {["firered/clean"]=true, ["leafgreen/clean"]=true}
+local TAP_A = {tap="A", frames=3, gap=0}
+P.BW_ROWS = {
+    {name="bw_n1_action_draw", bw="N1", terminal="ctrl0 HandleChooseActionAfterDma3 then HandleInputChooseAction",
+        state_env="SLINK_CHECKPOINT_INTRO_STATE", state="slink_preintro.State",
+        inputs={{mash=3000, stop="action_input"}}, hold=30,
+        note="sampled from the intro on, so the draw frame is seen before the menu reads input; "
+            .. "the intro itself is battle_intro (N10)"},
+    {name="bw_n4_bag", bw="N4", terminal="CB2_BagMenuRun + bag input task, fade settled, battle location",
+        state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
+        inputs={{wait="action_input"}, {action=1}, TAP_A, {wait="bag_input"}},
+        note="BAG from the parked wild menu; the move submenu is battle_move_menu (N2)"},
+    {name="bw_n5_party", bw="N5", terminal="CB2_UpdatePartyMenu + Task_HandleChooseMonInput, CHOOSE_MON",
+        state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
+        inputs={{wait="action_input"}, {action=2}, TAP_A, {wait="party_input"}},
+        note="POKEMON from the parked wild menu; the forced send-out is battle_faint_prompt (N11)"},
+    {name="bw_n6_summary", bw="N6", terminal="CB2_RunPokemonSummaryScreen from the battle party menu",
+        state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
+        inputs={{wait="action_input"}, {action=2}, TAP_A, {wait="party_input"}, TAP_A,
+                {wait="party_popup"}, {tap="Down", frames=3, gap=13}, TAP_A, {wait="summary"}},
+        note="the lead's popup row 1 = SUMMARY (pret src/data/party_menu.h:1094 ShiftSummaryCancel)"},
+    {name="bw_n7_switch", bw="N7", terminal="CHOSENMONRETURNVALUE, then gBattlerPartyIndexes[0]==selected",
+        state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
+        inputs={{wait="action_input"}, {action=2}, TAP_A, {wait="party_input"}, {slot=1}, TAP_A,
+                {wait="party_popup"}, TAP_A, {pulse="B", frames=3000, stop="turn_over"}},
+        note="SHIFT to the healthy slot 1 (both battle fixtures); B only clears battle text; the "
+            .. "move animation after it is battle_animation (N12)"},
+    {name="bw_n9_run", bw="N9", terminal="TWORETURNVALUES B_ACTION_RUN, then gBattleOutcome==B_OUTCOME_RAN",
+        state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
+        inputs={{wait="action_input"}, {action=3}, TAP_A, {pulse="B", frames=3000, stop="turn_over"}},
+        note="RUN from the parked wild menu; the resolved state is battle_over (N13)"},
+    {name="bw_u1_oldman", bw="U1", terminal="OLD_MAN_TUTORIAL bit 9 + ctrl0 in battle_controller_oak_old_man.o",
+        state_env="SLINK_CHECKPOINT_OLDMAN_STATE", state="slink_oldman.State", inputs={}, forbid_b=true,
+        note="the auto-driven demo, state from mkstates_gen3_tutorials; no input at all"},
+    {name="bw_u2_pokedude", bw="U2", terminal="POKEDUDE bit 16 + ctrl0 in battle_controller_pokedude.o",
+        state_env="SLINK_CHECKPOINT_POKEDUDE_STATE", state="slink_pokedude.State", inputs={}, forbid_b=true,
+        note="NO B while the flag is set: JOY_HELD(B) quits the battle (pret battle_main.c:1455)"},
+    -- Last on purpose: throw_pokeball_from_bag ends the WHOLE run through its own G.finish when
+    -- the bag cannot be driven; every earlier bw row has logged its BWROW/receipt lines by then.
+    {name="bw_n8_item", bw="N8", terminal="ONERETURNVALUE item 4, then gBattleOutcome~=0 or the menu reopens",
+        state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
+        inputs={{wait="action_input"}, {action=1}, {tap="A", frames=3, gap=30}, {throw_ball=true},
+                {pulse="B", frames=4000, stop="turn_over"}},
+        note="an owned POKE BALL; B clears the dex page and declines the nickname, so a catch "
+            .. "reaches gBattleOutcome 7 and is classified ended=outcome=7, not failed"},
+}
+for _, spec in ipairs(P.BW_ROWS) do
+    spec.expectation, spec.reason, spec.artifacts = "bw", "battle_faint", FRLG
+    P.REASON_ROWS[#P.REASON_ROWS + 1] = spec
+end
 for _, spec in ipairs(P.REASON_ROWS) do P.STATES[#P.STATES + 1] = spec end
 P.REASON_BASE = #P.STATES - #P.REASON_ROWS + 1
 
@@ -289,6 +357,72 @@ function P.planned(title, kind, rows_env)
     return plan
 end
 
+-- bw input waits over the previous frame-end sample `s` (gen3_battle_window_rows R.sample)
+-- and its bound ctx `c` (c.T = gen3_title_syms, c.W = gen3_battle_window_syms).
+P.BW_WAITS = {
+    action_input = function(s, c) return s.ctrl[0] == c.T.HANDLE_INPUT_CHOOSE_ACTION end,
+    bag_input = function(s, c)
+        return s.cb2 == c.T.CB2_BAG_MENU_RUN and s.tasks[c.T.TASK_BAG_MENU_HANDLE_INPUT] == true
+            and not s.tasks[c.T.TASK_ANIMATE_WIN0V] and not s.fade
+    end,
+    party_input = function(s, c)
+        return s.cb2 == c.T.CB2_UPDATE_PARTY_MENU and s.tasks[c.T.TASK_CHOOSE_MON] == true and not s.fade
+    end,
+    party_popup = function(s, c) return s.tasks[c.T.TASK_SELECTION_POPUP] == true and not s.fade end,
+    summary = function(s, c) return s.cb2 == c.W.CB2_RUN_SUMMARY_SCREEN and not s.fade end,
+    turn_over = function(s, c) return s.outcome ~= 0 or s.ctrl[0] == c.T.HANDLE_INPUT_CHOOSE_ACTION end,
+}
+P.STEP_KINDS = {"tap", "idle", "mash", "wait", "action", "slot", "pulse", "throw_ball"}
+local BW_ONLY = {wait=true, action=true, slot=true, pulse=true, throw_ball=true}
+
+--- Validate a row's input steps before any is pressed: one known kind per step, bw-only kinds
+--- only on bw rows, known wait names, and no B at all on a forbid_b row (U2: the Pokedude flag).
+function P.check_inputs(spec)
+    for i, step in ipairs(spec.inputs or {}) do
+        local where, kind = spec.name .. " input " .. i, nil
+        for _, k in ipairs(P.STEP_KINDS) do
+            if step[k] ~= nil then
+                assert(kind == nil, where .. ": several step kinds")
+                kind = k
+            end
+        end
+        assert(kind, where .. ": unknown input step")
+        assert(spec.bw or not BW_ONLY[kind], where .. ": " .. kind .. " is a battle-window step")
+        assert(not (spec.forbid_b and (step.tap == "B" or step.pulse == "B")), where .. ": B is forbidden")
+        for _, w in ipairs({step.wait or false, step.stop or false}) do
+            assert(w == false or P.BW_WAITS[w], where .. ": unknown wait " .. tostring(w))
+        end
+        assert(kind ~= "pulse" or step.stop, where .. ": a pulse needs a stop")
+    end
+    return true
+end
+
+P.BW_HASHES = {"rom", "fixture", "pack", "source", "state"}
+
+--- The receipt meta for one bw row, or nil + why when any of the five hashes is absent (the
+--- receipt refuses a blank; the row then fails by name instead of the probe dying at log time).
+function P.bw_meta(doc, rom, state_path, row)
+    local base = state_path:match("[^/\\]+$")
+    local st = doc and doc.states and doc.states[base] or {}
+    local meta = {row = row, state_path = state_path, prep = st.prep,
+        hashes = {rom = rom, fixture = st.fixture, pack = doc and doc.pack, source = doc and doc.source,
+                  state = st.state}}
+    for _, h in ipairs(P.BW_HASHES) do
+        local v = meta.hashes[h]
+        if type(v) ~= "string" or v == "" then return nil, "receipt needs the " .. h .. " hash for " .. base end
+    end
+    return meta
+end
+
+--- One witnessed frame of a bw row: the rows module's sample (safety's verdict + the full
+--- tuple), fed to the row's accumulator. Returns the sample. Unreadable memory raises.
+function P.bw_feed(row, safety, extra)
+    local acc = row.bw
+    local s = acc.ctx:sample(safety, acc.spec.reason, nil, extra)
+    acc.ctx.feed(acc, s)
+    return s
+end
+
 -- Count one witnessed frame: safety's ok, reason and last_clauses, plus clause attribution.
 function P.tally(row, ok, reason, clauses, cpsr)
     row.samples = row.samples + 1
@@ -331,6 +465,11 @@ end
 function P.verdict(row)
     if row.error then return false, "callback error: " .. tostring(row.error) end
     if row.blocked then return false, tostring(row.blocked) end
+    if row.expectation == "bw" then
+        if not row.bw then return false, "battle-window row has no sampler" end
+        local status, why = row.bw.ctx.verdict(row.bw)
+        return status == "PASS", status .. " " .. why
+    end
     if not row.reached then return false, "terminal not reached" end
     local min = row.min_samples or 1
     if row.samples < min then return false, string.format("samples %d < min_samples %d", row.samples, min) end
@@ -432,8 +571,15 @@ function P.run()
         G.phase("probe-state", row.name .. " terminal=" .. row.terminal)
         return row
     end
+    local bw_ctx, bw_last, bw_doc, rom_sha, SP
     local function sample()
         if not active then return end
+        if active.bw then
+            local g, n = G.map(cp)
+            local x, y = G.pos(cp)
+            bw_last = P.bw_feed(active, safety, {map = g .. "." .. n, pos = x .. "," .. y})
+            return
+        end
         -- Executed by onframeend, never from an exec hook. Raw R15/CPSR are reported,
         -- not fabricated as BIOS/0x1F. A core sampling mismatch fails the idle gate.
         if active.witness() then
@@ -489,6 +635,20 @@ function P.run()
     end
     local ok, err = pcall(function()
         memory.usememorydomain("System Bus") -- G.* reads use the current bus domain
+        for i, spec in ipairs(P.STATES) do
+            if plan[i] and spec.bw and not bw_ctx then
+                -- bound once per artifact on the probe's own deps; FR/LG only (for_title refuses RR)
+                bw_ctx = dofile(wt .. "/lua/tests/gen3_battle_window_rows.lua").bind(cp, title, deps, wt)
+                local path = os.getenv("SLINK_BW_HASHES")
+                local f = path and io.open(path, "rb")
+                if f then
+                    bw_doc = dofile(wt .. "/lua/json_codec.lua").decode(f:read("a"))
+                    f:close()
+                end
+                local got, h = pcall(function() return gameinfo.getromhash() end)
+                rom_sha = got and type(h) == "string" and h:lower() or nil
+            end
+        end
         hook = event.onframeend(function()
             local success, why = pcall(sample)
             if not success then callback_error = tostring(why); if active then active.error = callback_error end end
@@ -585,8 +745,80 @@ function P.run()
         -- ── C4-B2 reason rows: one generic runner, declarative specs ──────────────────────
         local WIT = P.witnesses(cp, function(a) return memory.read_u8(a) end,
                                 function(a) return memory.read_u32_le(a) end)
+        local function bw_wait(name)
+            local w = P.BW_WAITS[name]
+            return function() return bw_last ~= nil and w(bw_last, bw_ctx) end
+        end
+        local function no_b(btn)   -- belt and braces over check_inputs: never B in a Pokedude battle
+            assert(btn ~= "B" or not (bw_last and (bw_last.type or 0) & bw_ctx.K.BATTLE_TYPE_POKEDUDE ~= 0),
+                "B refused while BATTLE_TYPE_POKEDUDE is set")
+        end
+        local function bw_steps(spec)
+            for _, step in ipairs(spec.inputs) do
+                if step.tap then no_b(step.tap); G.tap(step.tap, step.frames or 3, step.gap or 13)
+                elseif step.idle then G.idle(step.idle)
+                elseif step.mash then G.mash(step.mash, bw_wait(step.stop))
+                elseif step.wait then
+                    local w = bw_wait(step.wait)
+                    for _ = 1, step.frames or 600 do if w() then break end; G.advance() end
+                elseif step.action then
+                    for _ = 1, 4 do
+                        local c = memory.read_u8(bw_ctx.T.ACTION_CURSOR_ADDR)
+                        if c == step.action then break end
+                        if (c & 1) ~= (step.action & 1) then G.tap((c & 1) == 0 and "Right" or "Left", 3, 13)
+                        else G.tap((c & 2) == 0 and "Down" or "Up", 3, 13) end
+                    end
+                elseif step.slot then
+                    for _ = 1, 8 do
+                        if bw_last and bw_last.pm_slot == step.slot then break end
+                        G.tap("Down", 3, 13)
+                    end
+                elseif step.pulse then
+                    no_b(step.pulse)
+                    local stop = bw_wait(step.stop)
+                    for f = 1, step.frames do
+                        if stop() then break end
+                        joypad.set(f % 16 == 8 and {[step.pulse] = true} or {})
+                        G.advance()
+                    end
+                    joypad.set({})
+                elseif step.throw_ball then
+                    SP = SP or dofile(wt .. "/lua/tests/gen3_scripted_play.lua")
+                    SP.throw_pokeball_from_bag(cp, spec.name)
+                end
+            end
+        end
+        -- One bw row: state, steps, hold, then its BWROW verdict and first/bad/terminal receipts,
+        -- logged now (not at the end) so a later row cannot lose them.
+        local function bw_row(i, spec)
+            P.check_inputs(spec)
+            local path = P.state_path(os.getenv(spec.state_env) or spec.state, os.getenv("SLINK_STATE_DIR"))
+            local loaded, why = load(path)
+            local row = begin(i, function() return false end)
+            row.bw, bw_last = bw_ctx:row(spec.bw), nil
+            local meta, mwhy = P.bw_meta(bw_doc, rom_sha, path, spec.bw)
+            if not loaded then
+                row.blocked = "UNREACHED " .. why
+            else
+                if not meta then row.blocked = mwhy end
+                bw_steps(spec)
+                for _ = 1, spec.hold or 180 do G.advance() end
+            end
+            active = nil
+            local acc = row.bw
+            row.samples, row.yes, row.no = acc.samples, acc.admitted, acc.samples - acc.admitted
+            local line, status = bw_ctx.verdict_line(acc)
+            row.reason = row.blocked or status
+            G.log(line)
+            if meta then
+                for _, k in ipairs({"first", "bad", "terminal"}) do
+                    if acc[k] then G.log(bw_ctx:receipt(acc[k], meta) .. " at=" .. k) end
+                end
+            end
+        end
         for i = P.REASON_BASE, #P.STATES do
-            if plan[i] then
+            if plan[i] and P.STATES[i].bw then bw_row(i, P.STATES[i])
+            elseif plan[i] then
                 local spec = P.STATES[i]
                 local loaded, why = load(os.getenv(spec.state_env) or spec.state)
                 -- until_witness: the mash runs to that state, and the row is only reached there
