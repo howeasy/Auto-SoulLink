@@ -7,7 +7,8 @@
 -- SINGLES ONLY; doubles player slots belong to D1-D5, not this carrier.
 --   ctx.enter_trainer(label, expected_trainer_id, prep) -> true | false, why
 --     T2 uses Rick102, NOT the Route22 rival. PREPARATION: train the lead to prep.level_floor
---     (default13), within prep.max_frames (60000), by normal Route1 Tackle battles and normal
+--     (13), within prep.max_frames (ctx.preparation_budget: <=1,782,000 for these fixtures),
+--     by normal Route1 Tackle battles and normal
 --     Viridian nurse healing. Reuse GRASS_ORIGIN/GRASS_LOOP/hunt; no game-data staging/pokes.
 --     Heal the lead to full HP/status0 before walking to Rick, and verify those at entry.
 --     Training is a no-op if already at the floor. Fail if budget/floor fails or a forced switch
@@ -66,7 +67,7 @@ local function peer(ctx)
         local s = ctx.partner_result()
         if s and s:find("\nRESULT:", 1, true) then return s end
         if s and s:match("^RESULT:") then return s end
-    end, 1800, "battle-window A result")
+    end, ctx.D.battle_window_case=="trainer_bench" and 7200 or 1800, "battle-window A result")
     local verdict
     for line in ((text or "") .. "\n"):gmatch("([^\r\n]+)") do
         verdict = line:match("^RESULT: (%u+)") or verdict
@@ -95,7 +96,7 @@ return function(ctx)
     if mode == "trainer_bench" then
         if type(ctx.enter_trainer) ~= "function" then return false, "missing enter_trainer route seam" end
         local floor = ctx.D.battle_window_level_floor or 13
-        if not integer(floor) or floor < 13 or floor > 100 then return false, "invalid preparation level floor" end
+        if floor ~= 13 then return false, "invalid preparation level floor (budget pinned to13)" end
         local before = (ctx.party() or {})[1]
         if not before or before.slot ~= 0 or not integer(before.level) then return false, "unreadable prep lead" end
         local preparing, prep_error = true, nil
@@ -109,12 +110,16 @@ return function(ctx)
                 return true
             end
             if not lead or lead.hp<=0 or not primary then
-                prep_error = "PREPARATION lead fainted or bench switched in"
+                prep_error = fmt("PREPARATION lead fainted or bench switched in hp=%s primary=%s",
+                                 tostring(lead and lead.hp),tostring(primary))
                 return true
             end
         end)
+        if type(ctx.preparation_budget)~="function" then return false,"missing preparation_budget seam" end
+        local budget_ok, budget = pcall(ctx.preparation_budget,before,floor)
+        if not budget_ok then return false,"PREPARATION budget: "..tostring(budget) end
         local ok, why = ctx.enter_trainer("battle_window trainer", TRAINER_ID,
-            {level_floor=floor, max_frames=60000, target_key=key, target_slot=slot, target_hp=mon.hp})
+            {level_floor=floor, max_frames=budget, target_key=key, target_slot=slot, target_hp=mon.hp})
         preparing = false
         local after, target = (ctx.party() or {})[1], ctx.find(key)
         if prep_error or not target or target.key ~= key or target.slot ~= slot or target.hp ~= mon.hp then

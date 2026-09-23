@@ -58,8 +58,8 @@ WT_FWD = REPO.replace("\\", "/")
 # --game: Gen 3-only scenarios were run against a Game Boy, where they died on the savestate
 # they declare and no GB fixture has.
 SCENARIOS = {
-    "trainer_bench_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg",),
-        "target": {"a": "town", "b": "town"}, "frames": 3000000, "no_save": ("b",),
+    "trainer_bench_gen3": {"flags": [], "timeout": 7200, "games": ("gen3_frlg",),
+        "target": {"a": "town", "b": "town"}, "frames": 8000000, "no_save": ("b",),
         "scenario_module": "battle_window", "battle_window_case": "trainer_bench", "battle_window_slot": 1,
         "oracle": "assert_trainer_bench_gen3_saved"},
     "active_end_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",),

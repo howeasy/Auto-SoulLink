@@ -422,7 +422,7 @@ function ctx.party()
     local out = {}
     for _, m in ipairs(mons) do
         out[#out + 1] = { slot = m.slot, key = reader.key(m), hp = m.hp, max_hp = m.max_hp,
-                          species = m.species, level = m.level, status = m.status,
+                          species = m.species, level = m.level, experience = m.experience, status = m.status,
                           moves = m.moves, pp = m.pp }
     end
     return out
@@ -1194,6 +1194,7 @@ if D.battle_window_case then
     ctx.enter_trainer = function(label, expected, prep)
         return Routes.enter_trainer(ctx,Tutorial,emu.framecount,label,expected,prep)
     end
+    ctx.preparation_budget = Routes.preparation_budget
 end
 local base = D.scenario_module or D.scenario:gsub("_gen3$", "")
 local file = fmt("%s/lua/tests/duo/scenario_%s%s.lua", ROOT, D.scenario_prefix or "gen3_", base)

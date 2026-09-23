@@ -1,5 +1,6 @@
 """Read-only ROM tile verification and injected route/snapshot falsifiers; no emulator."""
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -82,7 +83,7 @@ def test_prep_fails_before_pressing_when_budget_or_target_is_wrong(env, budget, 
     lua, routes = env
     lua.execute("""
         presses=0
-        c={party=function() return {{hp=20}} end,find=function() return {slot=1,hp=HP} end,
+        c={play={},party=function() return {{hp=20,level=6,max_hp=20}} end,log=function() end,find=function() return {slot=1,hp=HP} end,
            in_battle=function() return false end,peek=function() return 0x02025000 end,
            G={map=function() return 3,1 end,pos=function() return 24,39 end,
               tap=function() presses=presses+1 end},
@@ -124,3 +125,153 @@ def test_nested_helper_stops_on_first_fainted_lead_frame(env):
     ok, why = routes.with_budget(g.e, g.frame, 50, g.helper, g.check)
     assert not ok and "lead fainted" in why and g.n == 2
     assert lua.eval("e.frameadvance==old")
+
+
+def test_prep_budget_covers_pret_experience_gap_and_nurse_trips(env):
+    lua, routes = env
+    species = (PRET / "src/data/pokemon/species_info.h").read_text()
+    squirtle = species.split("[SPECIES_SQUIRTLE] =")[1].split("\n    },")[0]
+    assert ".growthRate = GROWTH_MEDIUM_SLOW" in squirtle
+    tables = (PRET / "src/data/pokemon/experience_tables.h").read_text()
+    assert "(6 * CUBE(n)) / 5 - (15 * SQUARE(n)) + (100 * n) - 140" in tables
+    encounters = json.loads((PRET / "src/data/wild_encounters.json").read_text())
+    yields = []
+    for group in encounters["wild_encounter_groups"]:
+        for area in group.get("encounters", []):
+            if area["map"] not in ("MAP_ROUTE1", "MAP_ROUTE2"):
+                continue
+            for mon in area["land_mons"]["mons"]:
+                info = species.split(f'[{mon["species"]}] =')[1].split("\n    },")[0]
+                base = int(re.search(r"\.expYield = (\d+)", info)[1])
+                yields.append(base * mon["min_level"] // 7)
+    assert min(yields) == 15
+    for level, exp, wins in [(6, 179, 73), (9, 419, 57)]:
+        budget = routes.preparation_budget(lua.table_from({"level": level, "experience": exp}), 13)
+        assert budget >= 30000 + wins * 24000
+        assert budget <= 1800000
+
+
+def test_runner_and_partner_allow_the_full_preparation_budget(env):
+    from tools import e2e_duo
+
+    lua, _ = env
+    cfg = e2e_duo.SCENARIOS["trainer_bench_gen3"]
+    # At the configured 16x, a 1.8M-frame prep needs 1875 ideal seconds; allow CPU/I/O
+    # contention and post-READY proof. B must wait just as long without its frame guard firing.
+    assert cfg["timeout"] >= 7200
+    assert cfg["frames"] >= cfg["timeout"] * 60 * 16
+    carrier = lua.execute((ROOT / "lua/tests/duo/scenario_gen3_battle_window.lua").read_text())
+    lua.execute("""
+        wait_seconds=0
+        c={player='b',D={battle_window_case='trainer_bench'},wait_go=function() return true end,
+           wait_until=function(fn,s) wait_seconds=s;return fn() end,
+           partner_result=function() return 'RESULT: PASS' end}
+    """)
+    assert carrier(lua.globals().c)[0]
+    assert lua.globals().wait_seconds >= cfg["timeout"]
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_shared_transit_escapes_instead_of_fighting_and_restores_policy(env, fail):
+    lua, routes = env
+    lua.execute("""
+        attacks=0; escapes=0
+        old=function() attacks=attacks+1; error('lead fainted at HP5') end
+        c={play={fight_through=old},run_away=function() escapes=escapes+1;return true end,
+           log=function() end}
+        transit=function()
+            assert(c.play.fight_through({})) -- same dispatch as playlib.handle_encounter
+            if FAIL then error('route blocked') end
+            return true
+        end
+    """)
+    g = lua.globals()
+    g.FAIL = fail
+    ok, why = routes.with_incidental_escape(g.c, "prep", g.transit)
+    assert ok is not fail
+    if fail:
+        assert "route blocked" in why
+    assert g.escapes == 1 and g.attacks == 0
+    assert lua.eval("c.play.fight_through==old")
+
+
+def test_training_heals_before_hunt_and_runs_at_low_hp(env):
+    lua, routes = env
+    lua.execute("""
+        events={}; m={level=6,experience=179,hp=8,max_hp=25,status=0,moves={33},pp={30}}
+        battle=false; hunts=0
+        c={party=function() return {m} end,log=function() end,
+           hunt=function() events[#events+1]='hunt';hunts=hunts+1;battle=true;return true end,
+           in_battle=function() return battle end,
+           await_turn=function() return battle and 'action' or 'over' end,
+           use_move=function()
+               events[#events+1]='attack'
+               if hunts==1 then m.hp=12 else m.level=13;battle=false end
+               return true
+           end,
+           run_away=function() events[#events+1]='run';battle=false;return true end,
+           play={wait_scene_settled=function() return true end}}
+        heal=function() events[#events+1]='heal';m.hp=m.max_hp end
+        guard=function() end
+    """)
+    g = lua.globals()
+    routes.train(g.c, "prep", 13, g.heal, g.guard)
+    assert list(g.events.values()) == ["heal", "hunt", "attack", "run", "heal", "hunt", "attack"]
+
+
+def test_training_can_finish_normal_four_hit_pidgey_before_healing(env):
+    lua, routes = env
+    lua.execute("""
+        hits=0;heals=0;battle=false
+        m={level=6,hp=23,max_hp=23,status=0,moves={33},pp={30}}
+        c={party=function() return {m} end,log=function() end,
+           hunt=function() battle=true;return true end,in_battle=function() return battle end,
+           await_turn=function() return battle and 'action' or 'over' end,
+           use_move=function()
+               hits=hits+1
+               if hits==4 then m.level=13;battle=false else m.hp=m.hp-3 end
+               return true
+           end,
+           run_away=function() error('healthy lead abandoned a winnable battle') end,
+           play={wait_scene_settled=function() return true end}}
+        heal=function() heals=heals+1;m.hp=23 end
+        guard=function() end
+    """)
+    g = lua.globals()
+    routes.train(g.c, "prep", 13, g.heal, g.guard)
+    assert g.hits == 4 and g.heals == 1
+
+
+def test_preparation_wraps_actual_shared_follow_and_logs_nested_frames(env):
+    lua, routes = env
+    lua.globals().r = routes
+    lua.execute("""
+        f=0;x=24;y=39;g=3;n=1;logs={};attacks=0;escapes=0
+        old=function() attacks=attacks+1;error('unmanaged battle') end
+        e={frameadvance=function() f=f+1 end}
+        c={emulator=e,cp={},party=function() return {{level=13,experience=1261,hp=30,max_hp=30,status=0}} end,
+           find=function() return {slot=1,hp=15} end,in_battle=function() return false end,
+           on_field=function() return true end,peek=function() return 1 end,
+           log=function(s) logs[#logs+1]=s end,frames=function() e.frameadvance() end,
+           run_away=function() escapes=escapes+1;return true end,
+           walk_to_pc=function() error('HEAL_REACHED') end,
+           G={map=function() return g,n end,pos=function() return x,y end,
+              tap=function() y=y-1;e.frameadvance() end,pred_ok=function() return true end},
+           play={fight_through=old,follow=function()
+               c.play.fight_through({})
+               for i=1,6001 do e.frameadvance() end
+           end},
+           SP={DEST={route1_north={group=3,num=19,x=12,y=0}},warp_to=function(_,_,_,d)
+                g=d.group;n=d.num;x=d.x;y=d.y end}}
+        t={START={24,39},TRIGGER={24,38},SEGMENTS={},after_scene=function() return true end}
+        r.paths.tutorial_to_town={3,1,24,38,24,38,''}
+        prep={max_frames=30000,target_key='K',target_slot=1,target_hp=15,level_floor=13}
+    """)
+    g = lua.globals()
+    ok, why = routes.enter_trainer(g.c, g.t, lambda: g.f, "prep", 102, g.prep)
+    assert not ok and "HEAL_REACHED" in why
+    assert g.escapes == 2 and g.attacks == 0
+    assert lua.eval("c.play.fight_through==old and e.frameadvance~=nil")
+    progress = [s for s in g.logs.values() if s.startswith("PREP_PROGRESS")]
+    assert len(progress) >= 3
+    assert all("level=13 exp=1261 hp=30/30" in s and "frames=" in s for s in progress)

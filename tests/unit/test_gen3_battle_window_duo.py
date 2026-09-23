@@ -78,8 +78,9 @@ function world(mode, fault)
                 overworld_permit=not battling and fault~='denied_field_write',
                 tuple=fault=='empty_tuple' and '' or 'main=selection comm0=1 flags=1 controller=player'}
     end
+    c.preparation_budget = function() return 1800000 end
     c.enter_trainer = function(label,id,prep)
-        assert(id==102 and prep.level_floor==13 and prep.max_frames==60000)
+        assert(id==102 and prep.level_floor==13 and prep.max_frames==1800000)
         prepared=true
         if fault=='prep_hp' then hp=hp-1 end
         if fault=='prep_slot' then target_slot=3 end

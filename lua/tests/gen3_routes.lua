@@ -14,6 +14,85 @@ R.paths = {
 local dirs = {U="Up",D="Down",L="Left",R="Right"}
 local delta = {Up={0,-1},Down={0,1},Left={-1,0},Right={1,0}}
 
+-- pret c75f3523: species_info.h Squirtle GROWTH_MEDIUM_SLOW; experience_tables.h
+-- EXP_MEDIUM_SLOW; wild_encounters.json Route1/2 minimum yield is Pidgey2: 55*2/7=15
+-- (battle_script_commands.c:3166). Lv6=179, Lv9=419, Lv13=1261: <=73 / <=57 wins.
+-- Engineering allowance, NOT a pret timing fact: 2 encounters/win *6000 frames plus
+-- 12000 for a nurse round trip, and 30000 for tutorial/final route. LG <=1,782,000.
+function R.preparation_budget(mon, floor)
+    assert(floor==13,"preparation budget is sized for level13")
+    local function exp(n) return (6*n*n*n)//5 - 15*n*n + 100*n - 140 end
+    assert(mon.level>=6,"preparation needs the committed level6+ Squirtle fixture")
+    local current = mon.experience or exp(mon.level)
+    local wins = math.ceil(math.max(0,exp(floor)-current)/15)
+    return 30000 + wins*24000
+end
+
+-- The SAME playlib object is closed over by SP's follow/hunt/nurse helpers. Scope its
+-- incidental policy to preparation, restoring on success AND errors before the Rick fight.
+-- LG's captured trace (seq371/384/410) entered the second transit battle at8/25 then5/25;
+-- the inherited FIGHT policy had no health gate. Transit now always RUNs, even at full HP.
+function R.with_incidental_escape(c, label, fn)
+    local old = c.play.fight_through
+    c.play.fight_through = function()
+        c.log("PREP_ESCAPE incidental")
+        local ok, why = c.run_away(label.." incidental")
+        assert(ok,"incidental flee: "..tostring(why))
+        return true
+    end
+    local ok, result = pcall(fn)
+    c.play.fight_through = old
+    return ok, result
+end
+
+local function rest_needed(m)
+    -- In battle, RUN at half HP (minimum12). LG's observed normal hits were3 and crit8;
+    -- starting another fight at8 was unsafe. A 75% IN-BATTLE cutoff would also prevent a
+    -- healthy Lv6 from finishing an ordinary four-hit Pidgey3 battle (23->20->17->14).
+    -- This reserve is not an RNG guarantee; the per-frame lead/bench guards stay mandatory.
+    return m.hp<=math.max(12,math.ceil(m.max_hp/2)) or m.status~=0
+end
+
+local function heal_before_hunt(m)
+    -- Heal earlier between encounters, BEFORE entering another battle near the RUN floor.
+    return m.hp*4<=m.max_hp*3 or rest_needed(m)
+end
+
+local function tackle(m)
+    for i,id in ipairs(m.moves) do if id==33 and m.pp[i]>0 then return i-1 end end
+end
+
+function R.train(c, label, floor, heal, guard)
+    local function lead() return c.party()[1] end
+    while lead().level < floor do
+        guard()
+        local m=lead();local move=tackle(m)
+        while heal_before_hunt(m) or not move or m.pp[move+1]<5 do
+            heal();guard()
+            m=lead();move=tackle(m) -- a failed escape on the return walk can cost HP
+        end
+        assert(c.hunt(label),"training encounter not reached")
+        local rest=false
+        for _=1,80 do
+            guard()
+            local turn=c.await_turn(60,"B")
+            if turn=="over" then break end
+            assert(turn=="action","training forced party menu or stalled")
+            m=lead();move=tackle(m)
+            if not move or rest_needed(m) then
+                c.log(string.format("PREP_ESCAPE training hp=%d/%d",m.hp,m.max_hp))
+                local ok,why=c.run_away(label.." training rest")
+                assert(ok,"training rest escape: "..tostring(why))
+                rest=true;break
+            end
+            local ok,why=c.use_move(move);assert(ok,why)
+        end
+        assert(not c.in_battle(),"training battle budget exhausted")
+        assert(c.play.wait_scene_settled(c.cp,1800),"training did not settle");guard()
+        if rest or heal_before_hunt(lead()) then heal() end
+    end
+end
+
 -- Bound even frames advanced inside shared helpers; restore the emulator API on EVERY exit.
 function R.with_budget(emulator, frame, max_frames, fn, check)
     local old, start = emulator.frameadvance, frame()
@@ -70,10 +149,17 @@ end
 
 function R.enter_trainer(c, T, frame, label, expected, prep)
     local start = frame()
+    local next_progress = start
     local function guard()
         assert(frame()-start < prep.max_frames, "PREPARATION frame budget exhausted")
         local p = c.party()
         assert(p and p[1] and p[1].hp>0, "PREPARATION lead fainted")
+        if frame() >= next_progress then
+            local m=p[1]
+            c.log(string.format("PREP_PROGRESS level=%d exp=%d hp=%d/%d frames=%d budget=%d",
+                  m.level,m.experience or -1,m.hp,m.max_hp,frame()-start,prep.max_frames))
+            next_progress=frame()+6000
+        end
         local target = c.find(prep.target_key)
         assert(target and target.slot==prep.target_slot and target.hp==prep.target_hp,
                "PREPARATION bench target changed")
@@ -134,6 +220,7 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
         return m and m.hp==m.max_hp and m.status==0
     end
     local function heal()
+        c.log("PREP_HEAL begin")
         c.walk_to_pc(label)
         c.play.follow(c.cp,"pc_to_pokecenter_entrance",label)
         c.play.follow(c.cp,"pokecenter_entrance_to_nurse",label)
@@ -144,6 +231,7 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
         assert(await(function() return healthy() and quiet() end,2400,"A"),"nurse did not heal/settle")
         c.play.follow(c.cp,"center_heal_spot_to_pc",label)
         c.walk_pc_to_grass(label);guard()
+        c.log("PREP_HEAL returned")
     end
     local function run()
         assert(expected==102,"unsupported preparation trainer")
@@ -165,31 +253,7 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
         warp("Down",c.SP.DEST.route1_north)
         c.play.follow(c.cp,"route1_north_to_south_edge",label)
         c.play.follow(c.cp,"route1_south_to_grass_spot",label)
-        while lead().level < prep.level_floor do
-            guard()
-            local m=lead();local move
-            for i,id in ipairs(m.moves) do if id==33 and m.pp[i]>0 then move=i-1 end end
-            if m.hp*2<m.max_hp or m.status~=0 or not move or m.pp[move+1]<5 then heal() end
-            assert(c.hunt(label),"training encounter not reached")
-            local rest = false
-            for _=1,80 do
-                guard()
-                local turn=c.await_turn(60,"B")
-                if turn=="over" then break end
-                assert(turn=="action","training forced party menu or stalled")
-                m=lead();move=nil
-                for i,id in ipairs(m.moves) do if id==33 and m.pp[i]>0 then move=i-1 end end
-                if not move or m.hp*2<m.max_hp or m.status~=0 then
-                    local ok,why=c.run_away(label.." training rest")
-                    assert(ok,"training rest escape: "..tostring(why))
-                    rest=true;break
-                end
-                local ok,why=c.use_move(move);assert(ok,why)
-            end
-            assert(not c.in_battle(),"training battle budget exhausted")
-            c.play.wait_scene_settled(c.cp,1800);guard()
-            if rest then heal() end
-        end
+        R.train(c,label,prep.level_floor,heal,guard)
         heal() -- always: full HP/status0 before leaving for Rick
         c.SP.return_to_grass_origin(c.cp,label)
         c.play.follow(c.cp,"route1_grass_to_north_edge",label)
@@ -218,8 +282,15 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
         return true
     end
     local ok, result
-    if c.emulator then ok,result=R.with_budget(c.emulator,frame,prep.max_frames,run,guard)
-    else ok,result=pcall(run) end -- read-only unit fakes also exercise guard() directly
+    local function bounded()
+        if c.emulator then
+            local passed,value=R.with_budget(c.emulator,frame,prep.max_frames,run,guard)
+            if not passed then error(value,0) end
+            return value
+        end
+        return run() -- read-only unit fakes also exercise guard() directly
+    end
+    ok,result=R.with_incidental_escape(c,label,bounded)
     if not ok then return false,tostring(result) end
     return result
 end
