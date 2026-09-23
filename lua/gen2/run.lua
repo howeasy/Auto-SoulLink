@@ -1,10 +1,16 @@
--- lua/gen2/run.lua — BizHawk entry for the Gen 2 client (P3b gates only).
+-- lua/gen2/run.lua — BizHawk entry for the Gen 2 PRODUCTION client.
 --
--- Launchable directly with --lua= for live gates. It builds the SOURCE/MODEL CANDIDATE
--- graph through Entry.build_candidate, never Entry.build: production admission refuses
--- while G1 is PENDING, and the player launcher (lua/slink.lua) is switched here only at
--- the G3 cutover. Everything game-related is built by lua/gen2/entry.lua; this file only
--- supplies the BizHawk-shaped io, the LuaSocket transport, the HUD and the frame loop.
+-- Builds the graph through Entry.build only: the cartridge must be admitted by its actual
+-- sha1 (G1 ADMITTED, owner ruling O-22, with its U1/U2 PHYSICAL receipts re-validated at
+-- load). Today that is Crystal 1.0; Gold/Silver (G1 PENDING), an unknown hash or a non-Gen 2
+-- cartridge is refused here with a console line and no client. Everything game-related is
+-- built by lua/gen2/entry.lua; this file only supplies the BizHawk-shaped live io, the
+-- LuaSocket transport, the HUD and the frame loop.
+--
+-- Exposed for gates and the H1 duo driver (nil unless admitted): SLINK_GEN2_CLIENT (the client;
+-- its on_event/handle_command and connector.send are looked up per call, so wrappers work),
+-- SLINK_GEN2_PARTS (production_admitted=true, qualification, pack, title, profile, ...),
+-- SLINK_GEN2_CHECKPOINT.
 --
 -- A top-level --lua= script sees source == "main" (no path), so the repo root comes from
 -- SLINK_ROOT first, exactly as lua/gen1/run.lua falls back when it has no path.
@@ -20,6 +26,7 @@ local H = require("hud")
 local host = SLINK_HOST or os.getenv("SLINK_HOST") or "127.0.0.1"
 local port = tonumber(SLINK_PORT or os.getenv("SLINK_PORT") or 54321)
 local player = SLINK_PLAYER or os.getenv("SLINK_PLAYER") or "a"
+SLINK_GEN2_CLIENT, SLINK_GEN2_PARTS, SLINK_GEN2_CHECKPOINT = nil, nil, nil
 
 local function rom_u8(addr) return memory.read_u8(addr, "ROM") end
 local title, header = Entry.detect_title(rom_u8)
@@ -29,18 +36,13 @@ if not title then
 end
 
 local json = dofile(ROOT .. "/lua/json_codec.lua")
-local files = Entry.PACK_FILES[Entry.PACKS[title].pack]
-local function pack_json(key)
-    local handle = assert(io.open(ROOT .. "/" .. files[key], "rb"))
-    local value = json.decode(handle:read("*a"))
-    handle:close()
-    return value
-end
+local handle = assert(io.open(ROOT .. "/" .. Entry.PACK_FILES[Entry.PACKS[title].pack].profile, "rb"))
+local HROMBANK = json.decode(handle:read("*a")).titles[title].ram.hROMBank
+handle:close()
 
 -- The actual mapping, observed per call: ROM0/WRAM0/HRAM are bank 0, ROMX is the hROMBank
--- shadow (a shadow, not a mapper read: the binder's bank qualification stays OPEN), WRAMX is
--- SVBK ($FF70, 0 selects 1). reads.lua/signals.lua/writes.lua refuse whatever this refuses.
-local HROMBANK = pack_json("profile").titles[title].ram.hROMBank
+-- shadow (the same observation the U2 PHYSICAL gate made), WRAMX is SVBK ($FF70, 0 selects 1).
+-- reads.lua/signals.lua/writes.lua refuse whatever this refuses.
 local function wram_bank()
     local svbk = memory.read_u8(0xFF70, "System Bus") % 8
     return svbk == 0 and 1 or svbk
@@ -55,7 +57,7 @@ local function bank_valid(bank, addr, n)
     return false
 end
 local io_ = {
-    model_only = true, cart_ram_linear = true,
+    cart_ram_linear = true,
     read_u8 = function(addr, d) return memory.read_u8(addr, d or "System Bus") end,
     read_range = function(addr, len, d)
         local out = {}
@@ -66,6 +68,7 @@ local io_ = {
     bank_valid = bank_valid,
     stack_valid = function(sp, n) return bank_valid(sp < 0xD000 and 0 or wram_bank(), sp, n) end,
     domain_size = function(d) return memory.getmemorydomainsize(d) end,
+    domains = function() return memory.getmemorydomainlist() end,
     register = function(name) return emu.getregister(name) end,
     framecount = function() return emu.framecount() end,
     on_bus_exec = function(fn, addr, name, d) return event.on_bus_exec(fn, addr, name, d or "System Bus") end,
@@ -73,36 +76,16 @@ local io_ = {
     saveram = function() if client and client.saveram then return client.saveram() end end, -- BizHawk's client lib
 }
 
--- The source-candidate checkpoint: check() refuses until P3b.5 qualifies it, so the hello
--- waits for a battle and no write is attempted. inspect_candidate() is there for the gate.
-local checkpoint = dofile(ROOT .. "/lua/gen2_write_safety.lua").new(pack_json("checkpoint"), title, io_,
-    dofile(ROOT .. "/lua/gb_checkpoint.lua"), {
-        capture = function() return emu.framecount() end,
-        valid = function(held) return held == emu.framecount() end,
-        admitted = function() return false end, -- production admission is G1 PENDING
-        no_conflicting_owner = function() return true end,
-        mapped_rom_bank = function() return memory.read_u8(HROMBANK, "System Bus") end,
-        effective_wram_bank = wram_bank,
-    })
-
 H.init({ screen_w = 160, screen_h = 144 })
 C.init(host, port)
 
-local parts, why = Entry.build_candidate({
-    candidate_only = true, root = ROOT, title = title, io = io_, net = C, hud = H, player = player,
-    checkpoint = checkpoint, log = function(t) console.log(t) end,
-    -- ponytail: no ownership proof exists for the candidate graph (P3b.5), so every write is
-    -- refused by the permit's authorize policy; the lifetime is the arming frame.
-    write_policy = {
-        authorize = function() return false end,
-        pointer_stable = function() return true end,
-        lifetime = { capture = function() return emu.framecount() end,
-                     valid = function(token) return token == emu.framecount() end },
-        provenance = function() return { site = "lua/gen2/run.lua candidate" } end,
-    },
+local parts, why = Entry.build({
+    root = ROOT, title = title, io = io_, net = C, hud = H, player = player,
+    rom_size = memory.getmemorydomainsize("ROM"), read_rom_u8 = rom_u8,
+    log = function(t) console.log(t) end,
 })
 if not parts then
-    console.log("[SLink-gen2] candidate graph refused: " .. tostring(why))
+    console.log("[SLink-gen2] " .. title .. " cartridge refused (production admission): " .. tostring(why))
     return
 end
 local gen2 = parts.client
@@ -111,13 +94,11 @@ if not ok then
     console.log("[SLink-gen2] refused to start: " .. tostring(err))
     return
 end
-console.log(string.format("[SLink-gen2] *** CANDIDATE GRAPH (Entry.build_candidate, NOT Entry.build): "
-                          .. "%s/%s SOURCE/MODEL only, production admission G1 PENDING, no PHYSICAL claim *** "
-                          .. "player %s -> %s:%d (rom %s)", parts.pack, title, player, host, port,
-                          parts.profile.rom_sha1:sub(1, 8)))
+console.log(string.format("[SLink-gen2] %s/%s PRODUCTION (%s, G1 %s) player %s -> %s:%d (rom %s)",
+                          parts.pack, parts.title, parts.qualification, parts.data.admission.gate.state,
+                          player, host, port, parts.profile.rom_sha1:sub(1, 8)))
 
--- Exposed for live gates and the console.
-SLINK_GEN2_CLIENT, SLINK_GEN2_PARTS, SLINK_GEN2_CHECKPOINT = gen2, parts, checkpoint
+SLINK_GEN2_CLIENT, SLINK_GEN2_PARTS, SLINK_GEN2_CHECKPOINT = gen2, parts, parts.checkpoint
 
 event.onframeend(function()
     local fok, ferr = pcall(function() gen2:frame_end() end)

@@ -8,7 +8,8 @@
   "source_lock_sha256": "113b41354f65a9859bf878cedb334de27e0c9e3ff0f2cc13693889dfd524a3ed",
   "gate": {
     "id": "G1",
-    "state": "PENDING"
+    "state": "ADMITTED",
+    "authority": "O-22"
   },
   "unknown_hash_policy": "REFUSE",
   "refused_kinds": [

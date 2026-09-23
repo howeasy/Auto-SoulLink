@@ -3,8 +3,10 @@
 
 Without --provenance, generate hashless PLANNED rows. Passing a verified builder
 receipt explicitly promotes the four clean rows to BUILT after checking the
-adjacent .sym/.map files. Neither mode grants G1 or emits ADMITTED artifacts.
-Overlay/ghost qualification and runtime admission belong to later phase owners.
+adjacent .sym/.map files. Neither mode emits ADMITTED artifacts. G1 opens only for a
+title in G1_ADMITTED (an owner ruling), only once its rows are BUILT, and the gate row
+is the grant, never the proof: lua/gen2/entry.lua re-validates that title's shipped
+PHYSICAL receipts at every load. Overlay/ghost qualification belongs to later owners.
 
     python tools/gen_gen2_admission.py
     python tools/gen_gen2_admission.py --provenance data/gen2/build_provenance.json
@@ -38,6 +40,16 @@ TITLE_OUTPUTS = {
     "silver": [("pokesilver", "US", "SELECTED")],
 }
 RGBDS_BINARIES = ("rgbasm", "rgblink", "rgbfix", "rgbgfx")
+# Owner ruling O-22 (docs/gen2/REVIEW_RECORD.md): a title's G1 gate opens only after its U1
+# engine-site and U2 write-window receipts pass PHYSICAL (data/games/<pack>/receipts/).
+# Gold/Silver have no U1 receipt yet: they stay PENDING.
+G1_ADMITTED = {"crystal": "O-22"}
+
+
+def _gate(title: str, built: bool) -> dict:
+    if built and title in G1_ADMITTED:
+        return {"id": "G1", "state": "ADMITTED", "authority": G1_ADMITTED[title]}
+    return {"id": "G1", "state": "PENDING"}
 
 
 def render(value: dict) -> str:
@@ -163,7 +175,7 @@ def _planned_matrix(title: str, source_lock_sha256: str) -> dict:
     return {
         "schema_version": 1, "purpose": "P1_ARTIFACT_MATRIX_ONLY", "foundation": "gen2_gsc",
         "title": title, "pack": f"gen2_{title}", "selected_revision": TITLE_OUTPUTS[title][0][1],
-        "source_lock_sha256": source_lock_sha256, "gate": {"id": "G1", "state": "PENDING"},
+        "source_lock_sha256": source_lock_sha256, "gate": _gate(title, False),
         "unknown_hash_policy": "REFUSE", "refused_kinds": ["archipelago", "randomized", "unknown"],
         "authorized_title_pairings": [["crystal", "crystal"], ["crystal", "gold"],
                                       ["crystal", "silver"], ["gold", "gold"],
@@ -184,6 +196,7 @@ def build_matrices(lock: dict, provenance: dict | None = None, *,
     matrices = {f"gen2_{title}": _planned_matrix(title, source_lock_sha256) for title in TITLE_OUTPUTS}
     if provenance is not None:
         for matrix in matrices.values():
+            matrix["gate"] = _gate(matrix["title"], True)
             for row in matrix["artifacts"]:
                 if row["kind"] == "clean":
                     row.update(status="BUILT", sha1=lock["outputs"][row["id"]]["sha1"],
@@ -198,6 +211,9 @@ def validate_matrix(matrix: dict, lock: dict, provenance: dict | None = None, *,
     require(isinstance(matrix.get("title"), str) and matrix["title"] in TITLE_OUTPUTS,
             "matrix: unsupported title")
     expected = _planned_matrix(matrix["title"], lock_sha256(lock, lock_bytes))
+    rows = matrix.get("artifacts")
+    expected["gate"] = _gate(matrix["title"], isinstance(rows, list) and any(
+        isinstance(row, dict) and row.get("status") == "BUILT" for row in rows))
     require(set(matrix) == set(expected), "matrix: missing or unsupported fields")
     for key in expected.keys() - {"artifacts"}:
         require(matrix[key] == expected[key], f"matrix: {key} differs from P1 contract")
@@ -277,7 +293,8 @@ def main(argv: list[str] | None = None) -> int:
         for path, generated in pending:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(generated, encoding="utf-8", newline="\n")
-        print("Gen 2 P1 artifact matrices are current; G1 admission remains pending")
+        print("Gen 2 artifact matrices are current; G1: " + ", ".join(
+            f"{m['title']} {m['gate']['state']}" for m in matrices.values()))
         return 0
     except (OSError, ValueError) as exc:
         print(f"Gen 2 artifact matrix refused: {exc}", file=sys.stderr)

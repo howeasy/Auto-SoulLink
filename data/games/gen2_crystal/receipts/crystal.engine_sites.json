@@ -1,0 +1,118 @@
+{
+ "absent": [
+  "capture_box"
+ ],
+ "attempt_id": "inspect-crystal_battle",
+ "bank_check": "live",
+ "core_mode": "CGB",
+ "decoy": {
+  "accepted": 0,
+  "addr": 26996,
+  "bank": 127,
+  "bank_rejects": 96,
+  "raw": 96
+ },
+ "evidence_level": "PHYSICAL",
+ "fixture": "crystal_battle",
+ "fixture_sha256": "f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6",
+ "frame_alignment": {
+  "aligned_hits": 6,
+  "armed": 5699,
+  "battle_party": 1,
+  "callback": 5699,
+  "callback_party": 2,
+  "effect_to_callback_frames": 1,
+  "misaligned_hits": 0,
+  "party_changed": 5698,
+  "passed": true,
+  "post_party": 2,
+  "pre_party": 2,
+  "rule": "callback emu.framecount() == the frame being emulated (armed); wPartyCount is battle_party at wild_ready, battle_party+1 inside the capture_party callback and to the main loop at armed+1; it first changed at party_changed <= callback"
+ },
+ "harness_write_scopes": [],
+ "input_mode": "normal_buttons",
+ "negatives": {
+  "script_bytecode_arm": "refused",
+  "wrong_bank_hit": "refused",
+  "wrong_pack_byte": "refused"
+ },
+ "pack_commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+ "pack_specs_sha256": "402a6a95054a0ad021fc1e8053119d4beb277885cf254691689c738e5f1825d5",
+ "proven": [
+  "battle_end",
+  "capture_party",
+  "capture_party_finalized",
+  "save_completed",
+  "wild_ready"
+ ],
+ "qualification_attempt_id": "requal-crystal-battle-n14b",
+ "result": "PASS",
+ "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+ "schema": "gen2-engine-site-receipt-v1",
+ "sites": {
+  "battle_end": {
+   "addr": 30366,
+   "bank": 15,
+   "bank_rejects": 0,
+   "expected_hex": "cda576cdd076",
+   "first_frame": 5817,
+   "hits": 1,
+   "pc": 30366,
+   "raw": 1,
+   "symbol": "ExitBattle"
+  },
+  "capture_box": {
+   "addr": 27460,
+   "bank": 3,
+   "expected_hex": "3e1321835bcf",
+   "hits": 0,
+   "raw": 1,
+   "symbol": "PokeBallEffect.SendToPC"
+  },
+  "capture_party": {
+   "addr": 27355,
+   "bank": 3,
+   "bank_rejects": 0,
+   "expected_hex": "3e1321495bcf",
+   "first_frame": 5699,
+   "hits": 1,
+   "pc": 27355,
+   "raw": 1,
+   "symbol": "PokeBallEffect.not_celebi"
+  },
+  "capture_party_finalized": {
+   "addr": 27618,
+   "bank": 3,
+   "bank_rejects": 0,
+   "expected_hex": "fa30d2",
+   "first_frame": 5807,
+   "hits": 1,
+   "pc": 27618,
+   "raw": 1,
+   "symbol": "PokeBallEffect.return_from_capture"
+  },
+  "save_completed": {
+   "addr": 19562,
+   "bank": 5,
+   "bank_rejects": 0,
+   "expected_hex": "c9",
+   "first_frame": 6539,
+   "hits": 1,
+   "pc": 19562,
+   "raw": 1,
+   "symbol": "_SaveGameData.ok"
+  },
+  "wild_ready": {
+   "addr": 30280,
+   "bank": 15,
+   "bank_rejects": 0,
+   "expected_hex": "110090",
+   "first_frame": 4169,
+   "hits": 1,
+   "pc": 30280,
+   "raw": 1,
+   "symbol": "InitEnemyWildmon.skip_unown"
+  }
+ },
+ "title": "crystal"
+}

@@ -1,0 +1,153 @@
+{
+ "attempt_id": "requal-crystal-battle-n14b",
+ "errors": [],
+ "fixtures": [
+  {
+   "artifacts": {
+    "boot:game_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-battle-n14b\\crystal_battle\\qualify\\boot-dcde9b189ee72fe7\\crystal_battle.boot.witness.json",
+     "sha256": "a7d3a310f5d8619e90f6797f113fb0648b25492277583b3a95a85727e0fb2169",
+     "size": 1945
+    },
+    "fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\tests\\fixtures\\gen2\\crystal_battle.SaveRAM",
+     "sha256": "f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6",
+     "size": 32790
+    },
+    "played_receipt": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-battle-a1\\crystal_battle\\saveram\\crystal_battle.played.json",
+     "sha256": "2ecb659fae008c178747f244e791e543cc3cc64b6f39ddb88039054e03de53bf",
+     "size": 996
+    },
+    "profile": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\data\\games\\gen2_crystal\\profile.json",
+     "sha256": "9ab1272981db1208a8f5ef9ff206c1470271cae6727d5e6475541e75b900d558",
+     "size": 79972
+    },
+    "resave:fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-battle-n14b\\crystal_battle\\qualify\\resave-d2e5c42b648daf8e\\crystal_battle.resaved.SaveRAM",
+     "sha256": "b6440a65cc7649e6093078d7d85cb66d305e25e11894fe1cfcf89b65c97cf515",
+     "size": 32790
+    },
+    "resave:reload_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-battle-n14b\\crystal_battle\\qualify\\reload-d2e5c42b648daf8e\\crystal_battle.reload.witness.json",
+     "sha256": "4c61fa1fd234c6d9f881516e49c89c03149f2cd5e77e1efeb3b4c7fd4e3875b8",
+     "size": 1947
+    },
+    "resave:save_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-battle-n14b\\crystal_battle\\qualify\\resave-d2e5c42b648daf8e\\crystal_battle.resave.witness.json",
+     "sha256": "25303ed6bd66ffef589a332232123153cb060bab1b9297d3b2ef6beb1eb5a278",
+     "size": 2069
+    },
+    "rom": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-build\\pokecrystal\\pokecrystal.gbc",
+     "sha256": "d6702e353dcbe2d2c69183046c878ef13a0dae4006e8cdff521cca83dd1582fe",
+     "size": 2097152
+    },
+    "route_facts": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-battle-n14b\\crystal_battle\\qualify\\crystal_route_facts.json",
+     "sha256": "0b27d2f2c98e8bc108919bdab016ed536f0bdf0f77d332c5f7a3cfb544fffcc4",
+     "size": 13930
+    }
+   },
+   "name": "crystal_battle",
+   "passed": true,
+   "problems": [],
+   "provenance": {
+    "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+    "route_facts_sha256": "eee720532d0481d51f0a8cb3d8ab0cff8d2dc21a5cb3ac03fb4f6847dcd6b7a5",
+    "scope": "candidate fixture",
+    "title": "crystal"
+   },
+   "stages": [
+    {
+     "evidence": {
+      "ball_origin": "O-10 harness injection",
+      "natural_ball_acquisition": "false",
+      "oracle": "independent Gen2 PYDEC",
+      "player_id": "46401"
+     },
+     "fingerprint": "3d37dad4a2551c689b7f533856c229c42f69f92e8b73a03eccc7040c8ba487ce",
+     "notes": [
+      "Static bytes do not prove played origin, RTC or GAME qualification."
+     ],
+     "problems": [],
+     "stage": "qualify",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "cartram_sha256": "0b2047aab124500c9d8aaa84744b4e0c550d18fa9e2e9463c807601375262e06",
+      "location": "[24, 3]",
+      "observer": "independent_GAME CONTINUE",
+      "position": "[53, 12]"
+     },
+     "fingerprint": "dcde9b189ee72fe779cdef3e837dd2285110998d213bd063bc102f2b5d902057",
+     "notes": [],
+     "outputs": {
+      "boot:game_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-battle-n14b\\crystal_battle\\qualify\\boot-dcde9b189ee72fe7\\crystal_battle.boot.witness.json",
+       "sha256": "a7d3a310f5d8619e90f6797f113fb0648b25492277583b3a95a85727e0fb2169",
+       "size": 1945
+      }
+     },
+     "problems": [],
+     "stage": "boot",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "observer": "independent_GAME re-save + reload",
+      "resave_cartram_sha256": "f202c6a4ecee4742d228c47c99d90fce4767abf1885b7b26b68196cc013613cc"
+     },
+     "fingerprint": "d2e5c42b648daf8e0d8d6bd5dd7278d2726256de23ac986196b82ed16813c5eb",
+     "notes": [],
+     "outputs": {
+      "resave:fixture": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-battle-n14b\\crystal_battle\\qualify\\resave-d2e5c42b648daf8e\\crystal_battle.resaved.SaveRAM",
+       "sha256": "b6440a65cc7649e6093078d7d85cb66d305e25e11894fe1cfcf89b65c97cf515",
+       "size": 32790
+      },
+      "resave:reload_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-battle-n14b\\crystal_battle\\qualify\\reload-d2e5c42b648daf8e\\crystal_battle.reload.witness.json",
+       "sha256": "4c61fa1fd234c6d9f881516e49c89c03149f2cd5e77e1efeb3b4c7fd4e3875b8",
+       "size": 1947
+      },
+      "resave:save_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-battle-n14b\\crystal_battle\\qualify\\resave-d2e5c42b648daf8e\\crystal_battle.resave.witness.json",
+       "sha256": "25303ed6bd66ffef589a332232123153cb060bab1b9297d3b2ef6beb1eb5a278",
+       "size": 2069
+      }
+     },
+     "problems": [],
+     "stage": "resave",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "oracle": "independent re-save PYDEC + GAME raw-party witness"
+     },
+     "fingerprint": "fe6097f3cc3e6cb56d6d75e82153543adc65064730891c5946a33dfa58790335",
+     "notes": [],
+     "problems": [],
+     "stage": "post_oracle",
+     "status": "PASS"
+    }
+   ]
+  }
+ ],
+ "open_obligations": [
+  "coordinator GAME/RTC/played-origin review",
+  "recorded source/physical gate sign-off"
+ ],
+ "passed": true,
+ "physical_qualification": false,
+ "required_stages": [
+  "qualify",
+  "boot",
+  "resave",
+  "post_oracle"
+ ],
+ "schema": "fixture-qualification-v1",
+ "scope": "full"
+}

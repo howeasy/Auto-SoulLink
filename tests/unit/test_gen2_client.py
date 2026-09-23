@@ -143,12 +143,39 @@ def codec_key(m):
     return gen2_codec.key({"dv_word": m["dvs"], "ot_id": m["ot"], "species_id": m["species"]})
 
 
+OPEN = r"""
+return function(files)
+    local real = io.open
+    io.open = function(path, mode)
+        for suffix, text in pairs(files) do
+            if path:sub(-#suffix) == suffix then
+                if text == false then return nil, "missing test input" end
+                return {read = function() return text end, close = function() end}
+            end
+        end
+        return real(path, mode)
+    end
+end
+"""
+
+
+CHECKPOINT = {t: json.loads((ROOT / f"data/games/gen2_{t}/write_checkpoint.json").read_text())["titles"][t]
+              for t in ("crystal", "gold", "silver")}
+
+
+class Refused(Exception):
+    """Entry.build refused the production graph (the Lua reason is the message)."""
+
+
 class World:
-    def __init__(self, title="crystal", swaps=None):
+    def __init__(self, title="crystal", swaps=None, production=False, files=None):
         self.title = title
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         if swaps:
             self.lua.execute(MUTATE)(self.lua.table_from(swaps))
+        if files:
+            self.lua.execute(OPEN)(self.lua.table_from(files))
+        self.production = production
         self.profile = json.loads((ROOT / f"data/games/gen2_{title}/profile.json").read_text())["titles"][title]
         self.sites = json.loads((ROOT / f"data/games/gen2_{title}/engine_signals.json").read_text())["titles"][title]["sites"]
         self.points = {n: pt for s in self.sites.values() for n, pt in s["point_symbols"].items()}
@@ -161,11 +188,22 @@ class World:
         checkpoint = self.lua.eval("function(f) return {check=function() return f() end} end")(
             lambda: (self.checkpoint_ok, "stub checkpoint"))
         entry = self.lua.eval("dofile")((ROOT / "lua/gen2/entry.lua").as_posix())
-        args = self.lua.table(root=ROOT.as_posix(), title=title, io=self.io, candidate_only=True,
-                              write_policy=self.lua.execute(POLICY)(lambda op, slot: self.owned(op, slot)),
-                              net=self.net, hud=self.hud, player="a", checkpoint=checkpoint, log=log)
-        result = entry.build_candidate(args)
+        if production:
+            # Live-shaped IO: not model_only, with the domain list the checkpoint evaluator needs.
+            self.io.model_only = False
+            self.io.domains = self.lua.eval('function() return {"ROM", "System Bus", "CartRAM"} end')
+            args = self.lua.table(root=ROOT.as_posix(), title=title, io=self.io, net=self.net, hud=self.hud,
+                                  player="a", log=log, rom_size=len(rom),
+                                  read_rom_u8=self.lua.eval("function(io) return function(a) return io.read_u8(a, 'ROM') end end")(self.io))
+            result = entry.build(args)
+        else:
+            args = self.lua.table(root=ROOT.as_posix(), title=title, io=self.io, candidate_only=True,
+                                  write_policy=self.lua.execute(POLICY)(lambda op, slot: self.owned(op, slot)),
+                                  net=self.net, hud=self.hud, player="a", checkpoint=checkpoint, log=log)
+            result = entry.build_candidate(args)
         parts = result[0] if isinstance(result, tuple) else result
+        if production and parts is None:
+            raise Refused(result[1])
         assert parts is not None, result
         self.parts, self.client = parts, parts.client
         # A saved game standing in the overworld: one party mon, one ball, box 1 empty.
@@ -225,7 +263,27 @@ class World:
     def written(self):
         return [tuple(w.values()) for w in self.emu.writes.values()]
 
+    def hold(self, **broken):
+        """Production: the CPU reaches the pack checkpoint PC in a held idle frame (every pack
+        predicate, caller word and bank shadow as the U2 PHYSICAL gate accepted them); `broken`
+        overrides predicate values. The PC leaves the checkpoint again before frame end."""
+        primary = CHECKPOINT[self.title]["primary"]
+        for condition in primary["state_predicates"]:
+            value = broken.get(condition["symbol"], condition["value"])
+            self.emu.poke("System Bus", condition["address"], self.lua.table_from([value]))
+        sp = primary["caller_stack"]["minimum_sp"] + 16
+        for word in primary["caller_stack"]["required_words"]:
+            self.emu.poke("System Bus", sp + word["offset_from_sp"],
+                          self.lua.table_from([word["value"] & 255, word["value"] >> 8]))
+        self.emu.regs.SP = sp
+        hit = self.emu.fire(primary["execution_before"]["bank"], primary["execution_before"]["pc"])
+        self.emu.regs.PC = 0
+        return hit
+
     def hello(self):
+        if self.production:
+            self.hold()
+            self.frames(1)
         self.checkpoint_ok = True
         self.frames(2)
         hellos = self.sent("hello")
@@ -255,7 +313,7 @@ def test_no_hello_before_the_checkpoint():
         assert world.sent("hello") == []
         world.hello()
 
-    falsify(check, mutant("lua/gen2/client.lua", ("if battle.mode == 0 and not safety.check() then",
+    falsify(check, mutant("lua/gen2/client.lua", ("if battle.mode == 0 and not (self.checkpoint_held or safety.check(PARTY_HP)) then",
                                                   "if false then")))
 
 
@@ -269,7 +327,7 @@ def test_no_write_outside_the_armed_gate():
         assert world.written() == []
         assert not any("KO'd" in text for text in world.shown())
 
-    falsify(check, mutant("lua/gen2/client.lua", ("local safe = safety.check()", "local safe = true")))
+    falsify(check, mutant("lua/gen2/client.lua", ("local safe = safety.check(PARTY_HP)", "local safe = true")))
 
 
 def test_the_permit_itself_refuses_an_unarmed_write():
@@ -945,3 +1003,183 @@ def test_the_adapter_accepts_every_static_area_the_binder_can_publish(title):
             zone = legend if row["area_id"] == legend else \
                 f"static_{row['map_group'] * 256 + row['map_number']}_{row['species']}"
             assert adapter.is_gift_area(zone) and adapter.gift_link_area(zone) == zone, (title, row["id"])
+
+
+# ── production graph (card U3): Entry.build over the admitted Crystal and its PHYSICAL receipts ─────
+RECEIPTS = ROOT / "tests/fixtures/gen2/receipts"
+
+
+def production(title="crystal", swaps=None, files=None):
+    return World(title, swaps=swaps, production=True, files=files)
+
+
+def falsify_production(check, swaps):
+    """The rule holds on the shipped production graph and fails on the broken variant."""
+    check(production())
+    with pytest.raises(AssertionError):
+        check(production(swaps=swaps))
+
+
+def test_production_registers_exactly_the_u1_proven_sites_and_the_u2_kinds():
+    world = production()
+    parts = world.parts
+    assert parts.production_admitted is True and parts.qualification == "PHYSICAL_RECEIPTED"
+    proven = json.loads((RECEIPTS / "crystal.engine_sites.json").read_text())["proven"]
+    status = world.client.signals.status(world.client.signals)
+    assert status.evidence_level == "PHYSICAL" and status.runtime_authorized is True
+    assert sorted(status.registered_sites.values()) == sorted(proven)
+    assert sorted(parts.write_scope.kinds.keys()) == ["box_deposit", "party_hp"]
+    pc = CHECKPOINT["crystal"]["primary"]["execution_before"]["pc"]
+    assert world.emu.callbacks["SLink-gen2-checkpoint"].addr == pc
+    world.client.stop(world.client)
+    assert world.emu.callbacks["SLink-gen2-checkpoint"] is None
+
+
+def test_production_no_hello_before_an_accepted_checkpoint_hold():
+    def check(world):
+        world.frames(120)
+        assert world.sent("hello") == []
+        assert world.hold(wScriptRunning=1) == 1  # a script frame at the PC: the predicate refuses
+        world.frames(2)
+        assert world.sent("hello") == []
+        world.hold()
+        world.frames(1)
+        assert len(world.sent("hello")) == 1
+
+    falsify_production(check, mutant("lua/gen2/client.lua", (
+        "if battle.mode == 0 and not (self.checkpoint_held or safety.check(PARTY_HP)) then", "if false then")))
+
+
+def test_production_refuses_an_unarmed_or_unheld_write():
+    def check(world):
+        attempt = world.lua.eval("""function(w, arm) return pcall(function()
+            if arm then w:arm('overworld') end
+            return w:faint_party_slot(0, {mode=0, link_mode=0}) end) end""")
+        ok, err = attempt(world.parts.writes, False)
+        assert ok is False and "no armed write window" in err
+        result = attempt(world.parts.writes, True)  # armed, but the CPU is not held at the checkpoint
+        world.parts.writes.disarm(world.parts.writes)
+        assert isinstance(result, tuple) and result[0] is False and "ownership refused" in result[1]
+        assert world.written() == []
+
+    falsify_production(check, mutant("lua/gen2/entry.lua", (
+        "return kind ~= nil and checkpoint:check(kind) == true", "return true")))
+
+
+def test_production_bench_faint_lands_only_inside_the_checkpoint_hold():
+    world = production()
+    bench = mon(species=172, dvs=0x3AAA)
+    world.party([mon(), bench])
+    world.hello()
+    world.frames(60)  # a live validation enables writes
+    world.reply({"cmd": "force_faint", "key": codec_key(bench), "nickname": "PICHU"})
+    world.frames(130)
+    assert world.written() == [] and world.hp_of(1) == (30, 0)
+    world.hold()
+    assert world.hp_of(1) == (0, 0) and world.hp_of(0) == (30, 0)
+    receipts = [dict(r.items()) for r in world.parts.writes.log.values()]
+    assert {r["site"] for r in receipts} == {"lua/gen2/entry.lua production"}
+    assert "show:!! PICHU KO'd" in world.shown()
+
+
+def test_production_refuses_what_the_receipts_do_not_cover():
+    world = production()
+    active = mon()
+    world.party([active, mon(species=172, dvs=0x3AAA)])
+    world.hello()
+    world.frames(60)
+    world.reply({"cmd": "box_mon", "key": codec_key(active)})
+    world.field("wBattleMode", 1)
+    world.reply({"cmd": "force_faint", "key": codec_key(active), "nickname": "PIKA"})
+    world.frames(2)
+    (nack,) = world.sent("box_mon_failed")
+    assert "current-box deposit" in nack["reason"]
+    assert any(text.startswith("show:KO held") for text in world.shown()) and world.written() == []
+
+
+def test_production_key_agrees_with_the_python_codec_on_the_same_record():
+    def check(world):
+        starter, caught = mon(species=155, ot=0x0BCD, dvs=0xFEDC), mon(species=19, ot=0x0BCD, dvs=0x1357)
+        world.party([starter])
+        assert world.hello()["party"][0]["key"] == codec_key(starter)
+        world.field("wBattleMode", 1)
+        world.fire("wild_ready")
+        world.party([starter, caught])
+        world.fire("capture_party")
+        world.fire("capture_party_finalized")
+        world.frames(1)
+        assert [c["key"] for c in world.sent("capture")] == [codec_key(caught)]
+
+    falsify_production(check, mutant("lua/gen2/wire.lua", (
+        'string.format("%04X:%04X:%02X", mon.dv_word, mon.ot_id, mon.species_id)',
+        'string.format("%04X:%04X:%02X", mon.ot_id, mon.dv_word, mon.species_id)')))
+
+
+@pytest.mark.parametrize("title", ["gold", "silver"])
+def test_gold_and_silver_cartridges_refuse_production(title):
+    with pytest.raises(Refused, match="G1 PENDING"):
+        production(title)
+
+
+@pytest.mark.parametrize("name,path,value", [
+    ("crystal.engine_sites.json", ("evidence_level",), "MODEL"),
+    ("crystal.write_window.json", ("runs", "town", "evidence_level"), "MODEL"),
+    ("crystal_battle.qualification.json", ("fixtures", 0, "artifacts", "fixture", "sha256"), "0" * 64),
+])
+def test_a_forged_or_model_receipt_refuses_production(name, path, value):
+    receipt = json.loads((ROOT / "data/games/gen2_crystal/receipts" / name).read_text())
+    node = receipt
+    for key in path[:-1]:
+        node = node[key]
+    node[path[-1]] = value
+    with pytest.raises(Refused, match="PHYSICAL proof refused"):
+        production(files={f"/receipts/{name}": json.dumps(receipt)})
+
+
+RUN_HOST = r"""
+return function(rom, root, pc_log)
+    local frames, callbacks = {}, {}
+    memory = {
+        read_u8 = function(a, d) if d == "ROM" then return rom:byte(a + 1) or 0 end return 0 end,
+        write_u8 = function() end,
+        getmemorydomainsize = function(d) return d == "ROM" and #rom or 0x10000 end,
+        getmemorydomainlist = function() return {"ROM", "System Bus", "CartRAM"} end,
+    }
+    emu = {framecount = function() return 1 end, getregister = function() return 0 end}
+    event = {
+        onframeend = function(fn) frames[#frames + 1] = fn end,
+        onexit = function() end,
+        on_bus_exec = function(fn, addr, name) callbacks[name] = addr; return name end,
+        unregisterbyid = function() return true end,
+    }
+    console = {log = function(t) pc_log[#pc_log + 1] = t end}
+    package.loaded.connector = {init = function() end, send = function() end, receive = function() end,
+                                pump = function() end, connected = function() return false end}
+    package.loaded.hud = {init = function() end, render = function() end, show = function() end}
+    SLINK_GEN2_CLIENT, SLINK_GEN2_PARTS = "stale", "stale"
+    dofile(root .. "/lua/gen2/run.lua")
+    return frames, callbacks
+end
+"""
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold"])
+def test_run_lua_exposes_the_production_client_only_for_an_admitted_cartridge(title):
+    """The H1 duo driver's contract: SLINK_GEN2_CLIENT / SLINK_GEN2_PARTS (production_admitted),
+    the client's own onframeend tick; nil for a refused cartridge."""
+    profile = json.loads((ROOT / f"data/games/gen2_{title}/profile.json").read_text())["titles"][title]
+    repo = "pokecrystal" if title == "crystal" else "pokegold"
+    rom = (ROOT / f".cache/gen2-build/{repo}/{profile['artifact']}.gbc").read_bytes()
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    logs = lua.table()
+    frames, callbacks = lua.execute(RUN_HOST)(rom, ROOT.as_posix(), logs)
+    g = lua.globals()
+    if title == "crystal":
+        assert g.SLINK_GEN2_PARTS.production_admitted is True
+        assert g.SLINK_GEN2_PARTS.qualification == "PHYSICAL_RECEIPTED" and g.SLINK_GEN2_PARTS.title == "crystal"
+        assert lua.eval("rawequal")(g.SLINK_GEN2_PARTS.client, g.SLINK_GEN2_CLIENT) and len(frames) == 1
+        assert callbacks["SLink-gen2-checkpoint"] == CHECKPOINT["crystal"]["primary"]["execution_before"]["pc"]
+        assert any("PRODUCTION" in line for line in logs.values())
+    else:
+        assert g.SLINK_GEN2_CLIENT is None and g.SLINK_GEN2_PARTS is None and len(frames) == 0
+        assert any("refused" in line and "PENDING" in line for line in logs.values())

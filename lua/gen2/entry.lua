@@ -1,9 +1,12 @@
--- Gen 2 source-candidate composition and fail-closed production admission.
--- No emulator global or production activation. build_candidate requires explicit
--- candidate_only=true and injected IO/policies; with deps.net it also composes the
--- Gen 2 client (lua/gen2/client.lua) over the same MODEL graph (model_only IO,
--- MODEL_PROBE signals, an injected checkpoint), still runtime_started=false until
--- client:start(). build/admit cannot promote the current BUILT, G1-PENDING catalogs.
+-- Gen 2 composition: the SOURCE/MODEL candidate graph and the admitted production graph.
+-- No emulator global. build_candidate requires explicit candidate_only=true and injected
+-- IO/policies; with deps.net it also composes the Gen 2 client (lua/gen2/client.lua) over
+-- the same MODEL graph (model_only IO, MODEL_PROBE signals, an injected checkpoint).
+-- build is production: admit() passes only a SELECTED, BUILT row whose G1 gate is ADMITTED
+-- (owner ruling O-22) AND whose shipped PHYSICAL receipts re-validate now (U1 engine sites,
+-- U2 write windows, each bound to its committed fixture-qualification report). Today that
+-- is Crystal 1.0 only; Gold/Silver stay G1 PENDING and ship no receipts.
+-- Either graph stays runtime_started=false until client:start().
 local Entry = {}
 
 Entry.PACKS = {
@@ -66,6 +69,22 @@ Entry.PACK_FILES = {
         checkpoint="data/games/gen2_silver/write_checkpoint.json",
     },
 }
+-- The O-22 proofs a production pack ships as release data: byte copies of the committed
+-- tests/fixtures/gen2/receipts/ files (tests/unit/test_gen2_entry.py pins them equal).
+-- A pack absent here can never be admitted, whatever its admission.json says.
+Entry.RECEIPT_FILES = {
+    gen2_crystal={
+        engine_sites="data/games/gen2_crystal/receipts/crystal.engine_sites.json",
+        write_window="data/games/gen2_crystal/receipts/crystal.write_window.json",
+        qualifications={
+            crystal_battle="data/games/gen2_crystal/receipts/crystal_battle.qualification.json",
+            crystal_town="data/games/gen2_crystal/receipts/crystal_town.qualification.json",
+        },
+    },
+}
+-- Permit operation (lua/gen2/writes.lua) -> the U2 write kind that authorizes it. Anything
+-- else (write_party_bytes, active faint, explode) has no receipt kind and is refused.
+Entry.WRITE_KIND = {party_faint="party_hp"}
 local titles = {"crystal", "gold", "silver"}
 local order = {"profile", "admission", "sites", "checkpoint", "area_map", "statics", "encounters",
                "species", "evolutions", "gifts", "moves", "trainers", "map_names", "items", "charmap"}
@@ -137,6 +156,28 @@ local function source_anchors(data, title)
     return anchors
 end
 
+-- The O-22 proofs of one title, re-validated from the shipped receipts: {engine, write,
+-- proven, scope}, or nil,why. The validators recompute every verdict from raw records.
+local function proofs(root, json, data, title, pack)
+    local files = Entry.RECEIPT_FILES[pack]
+    if not files then return nil, "no shipped PHYSICAL receipts for " .. tostring(title) end
+    local S, M = dofile(root .. "/lua/gen2/signals.lua"), dofile(root .. "/lua/gen2_write_safety.lua")
+    local function read(rel) return load_json(json, root .. "/" .. rel) end
+    local engine, write, reports = read(files.engine_sites), read(files.write_window), {}
+    for fixture, rel in pairs(files.qualifications) do reports[fixture] = read(rel) end
+    local proven, why = S.qualified_sites(title, data.sites, engine)
+    if not proven then return nil, "U1 engine-site receipt: " .. tostring(why) end
+    local bound
+    bound, why = S.bind_fixture_qualification(engine, reports[engine.fixture])
+    if not bound then return nil, "U1 engine-site receipt: " .. tostring(why) end
+    local scope
+    scope, why = M.qualified(data.checkpoint, title, write)
+    if not scope then return nil, "U2 write-window receipt: " .. tostring(why) end
+    bound, why = M.bind_fixture_qualification(write, reports)
+    if not bound then return nil, "U2 write-window receipt: " .. tostring(why) end
+    return {engine=engine, write=write, proven=proven, scope=scope}
+end
+
 function Entry.admit(args)
     local ok, result, reason = pcall(function()
         local root = assert(args.root, "root required")
@@ -160,10 +201,14 @@ function Entry.admit(args)
             eligible=function(candidate)
                 local row, matrix = candidate.row, candidate.data.admission
                 if row.selection ~= "SELECTED" then return false, "artifact selection " .. tostring(row.selection) .. " is not admitted" end
-                -- No future gate spelling or ADMITTED schema is invented here. The
-                -- current catalog is explicitly source inventory, not admission.
-                return false, "Gen 2 catalog status " .. tostring(row.status) .. "; G1 " .. tostring(matrix.gate.state)
-                              .. "; source catalog grants no runtime admission"
+                if row.status ~= "BUILT" or matrix.gate.state ~= "ADMITTED" then
+                    return false, "Gen 2 catalog status " .. tostring(row.status) .. "; G1 " .. tostring(matrix.gate.state)
+                                  .. "; source catalog grants no runtime admission"
+                end
+                -- The gate row is the grant, never the proof: the receipts must still pass.
+                local proof, why = proofs(root, json, candidate.data, candidate.title, candidate.def.pack)
+                if not proof then return false, "G1 ADMITTED but the PHYSICAL proof refused: " .. why end
+                return true
             end,
             anchors=function(candidate) return source_anchors(candidate.data, candidate.title) end,
             kind=function(candidate, mode)
@@ -183,16 +228,18 @@ function Entry.admit(args)
     return result
 end
 
--- Explicit, non-activated source/model graph. It is not a production build path
--- and does not manufacture a client, transport, hook handles or an admitted row.
-function Entry.build_candidate(deps)
+-- One composition, two graphs. Candidate (production=false): the explicit source/model
+-- graph, never admitted, with an injected checkpoint and write policy. Production (only
+-- behind Entry.admit): checkpoint, write policy, signals and the checkpoint hook are built
+-- HERE from the re-validated receipts, and the client always exists.
+local function compose(deps, title, production)
     local ok, result = pcall(function()
-        assert(deps.candidate_only == true, "explicit candidate_only=true required")
+        if not production then assert(deps.candidate_only == true, "explicit candidate_only=true required") end
         local root = assert(deps.root, "root required")
-        local io_ = assert(deps.io, "explicit candidate IO required")
+        local io_ = assert(deps.io, "explicit IO required")
         local load = function(path) return dofile(root .. "/" .. path) end
         local json, Admission = load("lua/json_codec.lua"), load("lua/admission.lua")
-        local data, profile, def = load_pack(root, json, assert(deps.title, "selected title required"))
+        local data, profile, def = load_pack(root, json, assert(title, "selected title required"))
         assert(type(io_.read_u8) == "function" and type(io_.domain_size) == "function", "explicit ROM IO required")
         local size = io_.domain_size("ROM")
         assert(size == profile.derived.rom_size, "candidate ROM size mismatch")
@@ -209,27 +256,73 @@ function Entry.build_candidate(deps)
             unknown=function(byte) return string.format("<$%02X>", byte) end})
         local reads, why = Reads.new(profile, io_, decode_name)
         assert(reads, why)
-        local writes = Writes.new(profile, io_, Permit, assert(deps.write_policy, "explicit candidate write policy required"))
+        local checkpoint, write_policy, proof
+        if production then
+            assert(io_.model_only ~= true, "production requires live IO, not model_only")
+            proof = assert(proofs(root, json, data, title, def.pack))
+            local hrom = assert(profile.ram.hROMBank, "hROMBank coordinate required")
+            local function held() return io_.framecount() end
+            local function still(token) return token == io_.framecount() end
+            -- Host observations exactly as the U2 PHYSICAL gate made them (lua/tests/gen2_write_windows.lua):
+            -- the hROMBank shadow, SVBK (0 selects 1), a same-frame hold.
+            checkpoint = load("lua/gen2_write_safety.lua").new(data.checkpoint, title, io_, load("lua/gb_checkpoint.lua"), {
+                capture=held, valid=still,
+                admitted=function(t, sha) return t == title and sha == profile.rom_sha1 end,
+                -- ponytail: the production graph is the only writer; save/trade/serial ownership is the
+                -- pack predicates' job (wGameLogicPaused, wLinkMode, hSerialConnectionStatus, SC).
+                no_conflicting_owner=function() return true end,
+                mapped_rom_bank=function() return io_.read_u8(hrom, "System Bus") end,
+                effective_wram_bank=function()
+                    local svbk = io_.read_u8(0xFF70, "System Bus") % 8
+                    return svbk == 0 and 1 or svbk
+                end,
+            }, proof.write)
+            write_policy = {
+                -- Every permit write re-proves the held checkpoint for its receipt kind.
+                authorize=function(operation)
+                    local kind = Entry.WRITE_KIND[operation]
+                    return kind ~= nil and checkpoint:check(kind) == true
+                end,
+                pointer_stable=function() return true end, -- ponytail: the party array is fixed WRAM
+                lifetime={capture=held, valid=still},
+                provenance=function() return {site="lua/gen2/entry.lua production", evidence="U2 PHYSICAL receipt"} end,
+            }
+        else
+            write_policy = assert(deps.write_policy, "explicit candidate write policy required")
+        end
+        local writes = Writes.new(profile, io_, Permit, write_policy)
         local rom = Rom.new(profile, io_)
         local client
-        if deps.net ~= nil then
-            -- The client graph is MODEL by construction: signals.new_model is the only binder
-            -- that registers (signals.new refuses until P3b.4 PHYSICAL requalification).
-            assert(io_.model_only == true, "candidate client requires model_only IO")
-            local checkpoint = assert(deps.checkpoint, "explicit candidate checkpoint required")
-            assert(type(checkpoint.check) == "function", "checkpoint:check required")
+        if production or deps.net ~= nil then
             local Signals, Registry, GB = load("lua/gen2/signals.lua"), load("lua/hook_registry.lua"),
                                           load("lua/gb_hook_binding.lua")
-            local title = deps.title
+            local options = {title=title, profile=data.profile, pack=data.sites, io=io_,
+                Registry=Registry, GB=GB, reads=reads, owner="SLink-gen2", max_pending=64,
+                areas=data.area_map, encounters=data.encounters, statics=data.statics}
+            local signals
+            if production then
+                -- signals.new registers exactly the receipt's proven sites, under PHYSICAL authority.
+                options.runtime_qualification = proof.engine
+                signals = function(authority)
+                    options.authority = {kind="PHYSICAL_RUNTIME", capture=authority.capture, valid=authority.valid}
+                    return Signals.new(options)
+                end
+            else
+                -- The candidate client is MODEL by construction: signals.new_model registers.
+                assert(io_.model_only == true, "candidate client requires model_only IO")
+                checkpoint = assert(deps.checkpoint, "explicit candidate checkpoint required")
+                assert(type(checkpoint.check) == "function", "checkpoint:check required")
+                signals = function(authority)
+                    options.authority = authority
+                    return Signals.new_model(options)
+                end
+            end
             client = load("lua/gen2/client.lua").new({
                 reads=reads, wire=load("lua/gen2/wire.lua"), writes=writes, rom=rom,
-                safety={check=function() return checkpoint:check() end},
-                signals=function(authority)
-                    return Signals.new_model({title=title, profile=data.profile, pack=data.sites, io=io_,
-                        Registry=Registry, GB=GB, reads=reads, authority=authority, owner="SLink-gen2",
-                        max_pending=64, areas=data.area_map, encounters=data.encounters,
-                        statics=data.statics})
-                end,
+                safety={check=function(kind) return checkpoint:check(kind) end},
+                signals=signals,
+                -- production only: the held checkpoint PC the client hooks (writes + hello readiness)
+                checkpoint_pc=production and data.checkpoint.titles[title].primary.execution_before.pc or nil,
                 net=deps.net, json=json, hud=assert(deps.hud, "explicit hud required"), io=io_,
                 profile=profile, sites=data.sites.titles[title].sites, area_map=data.area_map,
                 player=assert(deps.player, "explicit player required"), rom_type=def.rom_type,
@@ -239,12 +332,18 @@ function Entry.build_candidate(deps)
         end
         assert(io_.domain_size("ROM") == size and Admission.sha1(read_rom, size) == profile.rom_sha1
                and io_.domain_size("ROM") == size, "candidate ROM changed during composition")
-        return {pack=def.pack, title=deps.title, profile=profile, data=data, reads=reads, writes=writes,
-                rom=rom, client=client, production_admitted=false, runtime_started=false,
-                qualification="SOURCE_MODEL_CANDIDATE"}
+        return {pack=def.pack, title=title, profile=profile, data=data, reads=reads, writes=writes,
+                rom=rom, client=client, checkpoint=checkpoint, production_admitted=production,
+                runtime_started=false, proven_sites=proof and proof.proven, write_scope=proof and proof.scope,
+                qualification=production and "PHYSICAL_RECEIPTED" or "SOURCE_MODEL_CANDIDATE"}
     end)
     if not ok then return nil, tostring(result) end
     return result
+end
+
+-- Explicit, non-activated source/model graph; never a production build path.
+function Entry.build_candidate(deps)
+    return compose(deps, deps.title, false)
 end
 
 -- Header family (ROM $0134..$0143). It only picks which pack build_candidate hash-checks.
@@ -263,10 +362,15 @@ function Entry.detect_title(read_rom_u8)
     return nil, header
 end
 
+-- Production: the admitted title's graph (see compose). deps = admit()'s root, rom_size and
+-- read_rom_u8, plus live io (not model_only), net, hud, player and log.
 function Entry.build(deps)
     local decision, reason = Entry.admit(deps)
     if not decision then return nil, reason end
-    return nil, "Gen 2 production runtime composition is not implemented"
+    if deps.title ~= nil and deps.title ~= decision.title then
+        return nil, "admitted title " .. decision.title .. " differs from the requested " .. tostring(deps.title)
+    end
+    return compose(deps, decision.title, true)
 end
 
 return Entry

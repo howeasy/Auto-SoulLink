@@ -1,6 +1,7 @@
-"""Gen 2 candidate graph and production-admission refusals over actual P1 ROMs."""
+"""Gen 2 candidate graph and production admission over actual P1 ROMs (O-22: Crystal only)."""
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -68,12 +69,79 @@ def test_all_current_generated_pack_files_are_literal_entry_dependencies():
         assert paths == {f"data/games/gen2_{title}/{name}" for name in PACK_FILES}
 
 
-@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+@pytest.mark.parametrize("title", ["gold", "silver"])
 def test_built_pending_catalogs_cannot_admit_production(title):
     world = World(title)
     decision, reason = world.entry.admit(world.args())
     assert decision is None and "BUILT" in reason and "PENDING" in reason
     assert world.writes == []
+
+
+def test_crystal_is_admitted_only_behind_its_shipped_receipts():
+    world = World()
+    decision = world.entry.admit(world.args())
+    assert not isinstance(decision, tuple), decision
+    assert (decision.title, decision.pack, decision.kind, decision.rom_sha1) == (
+        "crystal", "gen2_crystal", "clean", "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133")
+    world.lua.execute("""local original = io.open
+        io.open=function(path,mode)
+            if path:match('/receipts/crystal%.write_window%.json$') then return nil, 'missing receipt' end
+            return original(path,mode)
+        end""")
+    decision, reason = world.entry.admit(world.args())
+    assert decision is None and "write_window" in reason
+    assert set(dict(world.entry.RECEIPT_FILES.items())) == {"gen2_crystal"}  # nothing else can be admitted
+
+
+def test_committed_matrices_admit_crystal_alone_under_o22_and_regenerate():
+    gates = {t: json.loads((ROOT / f"data/games/gen2_{t}/admission.json").read_text())["gate"]
+             for t in ("crystal", "gold", "silver")}
+    assert gates == {"crystal": {"id": "G1", "state": "ADMITTED", "authority": "O-22"},
+                     "gold": {"id": "G1", "state": "PENDING"}, "silver": {"id": "G1", "state": "PENDING"}}
+    sys.path.insert(0, str(ROOT / "tools"))
+    import gen_gen2_admission as generator
+    assert generator.main(["--provenance", str(ROOT / "data/gen2/build_provenance.json"), "--check"]) == 0
+
+
+def test_shipped_receipts_are_the_committed_fixture_bytes_and_decode_alike_in_lua():
+    world = World()
+    json_codec = world.lua.eval("dofile")((ROOT / "lua/json_codec.lua").as_posix())
+    to_python = world.lua.eval("""function(codec, text)
+        local function plain(v)
+            if v == codec.null then return nil end
+            if type(v) ~= "table" then return v end
+            local out = {}
+            for k, item in pairs(v) do out[k] = plain(item) end
+            return out
+        end
+        return plain(assert(codec.decode(text)))
+    end""")
+
+    def python(value):
+        if hasattr(value, "items"):
+            items = dict(value.items())
+            keys = list(items)
+            if keys and all(isinstance(k, int) for k in keys):
+                return [python(items[k]) for k in sorted(keys)]
+            return {k: python(v) for k, v in items.items()}
+        return value
+
+    def normal(value):  # Python view of what Lua can represent: no nulls, [] and {} alike
+        if isinstance(value, dict):
+            out = {k: normal(v) for k, v in value.items() if v is not None}
+            return out or []
+        if isinstance(value, list):
+            return [normal(v) for v in value]
+        return value
+
+    files = dict(world.entry.RECEIPT_FILES.gen2_crystal.items())
+    paths = [files["engine_sites"], files["write_window"], *dict(files["qualifications"].items()).values()]
+    assert len(paths) == 4
+    for rel in paths:
+        shipped = ROOT / rel
+        assert shipped.read_bytes() == (ROOT / "tests/fixtures/gen2/receipts" / shipped.name).read_bytes(), rel
+        text = shipped.read_text(encoding="utf-8")
+        assert normal(python(to_python(json_codec, text))) == normal(json.loads(text)), rel
 
 
 def test_crystal_revision11_remains_build_only():
@@ -101,9 +169,14 @@ def test_candidate_build_wires_existing_read_write_rom_modules_without_activatio
 
 
 def test_production_build_stays_closed_and_candidate_build_is_explicit():
-    world = World()
+    world = World("gold")
     result, reason = world.entry.build(world.args())
     assert result is None and "PENDING" in reason
+    world = World()
+    world.image = bytes([world.image[0] ^ 1]) + world.image[1:]
+    result, reason = world.entry.build(world.args())
+    assert result is None and "unknown" in reason
+    world = World()
     args = world.args()
     args.candidate_only = None
     result, reason = world.entry.build_candidate(args)

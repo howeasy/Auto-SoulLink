@@ -3,14 +3,17 @@
 -- P3b rules qualification only. lua/gen1/client.lua is the standard: this file mirrors its
 -- structure (outbound, wire shapes, writes gate, inbound commands, signals -> events,
 -- hello/tick, per-frame driver) and every place it differs carries a `Gen 2:` reason.
--- Contract: docs/protocol.md. Evidence: SOURCE/MODEL only; nothing here is a PHYSICAL receipt.
+-- Contract: docs/protocol.md. Evidence comes from the parts: the candidate graph is MODEL; the
+-- production graph (Entry.build, admitted Crystal) binds the U1/U2 PHYSICAL receipts.
 --
--- Parts (all injected; lua/gen2/entry.lua build_candidate composes them):
+-- Parts (all injected; lua/gen2/entry.lua build / build_candidate compose them):
 --   reads    lua/gen2/reads.lua     WRAM/SRAM decoders
 --   wire     lua/gen2/wire.lua      decoded record -> docs/protocol.md §4 shapes (refuses eggs)
 --   signals  factory(authority) -> the lua/gen2/signals.lua binder (typed events + latches)
 --   writes   lua/gen2/writes.lua    bench faint behind the shared write permit
---   safety   checkpoint, :check() -> ok, why (lua/gen2_write_safety.lua refuses until P3b.5)
+--   safety   checkpoint, :check(kind) -> ok, why (lua/gen2_write_safety.lua: only a U2-receipted
+--            write kind in the held checkpoint frame)
+--   checkpoint_pc  production only: the checkpoint PC hooked for writes + hello readiness
 --   net      lua/connector.lua      newline-JSON TCP (send/receive/pump/connected)
 --   json/hud/io                     as Gen 1
 --
@@ -27,11 +30,13 @@ local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_P
 -- binder links to the map's area (signals.lua final_event: NORMAL 0, FISH 4, TREE 8);
 -- roamer/contest/scripted battles resolve their own namespace or nothing (O-17, O-18).
 local AREA_BATTLE_TYPES = { [0] = true, [4] = true, [8] = true }
--- Gen 2: the box executor (boxes.lua gate preflight/execute over a qualified linear CartRAM
--- mapping, B-10) is OPEN until P3b.5, so these answer with the protocol NACK, never success.
+-- Gen 2: no box executor is composed (boxes.lua preflight/execute, B-10). The U2 receipt proves
+-- only a current-box deposit; none of these is that, so each answers the protocol NACK.
 local BOX_NACK = { box_mon = "box_mon_failed", party_mon = "sync_retrieve_failed",
                    memorialize = "memorialize_failed" }
-local BOX_OPEN = "Gen 2 box writer not qualified (P3b.5 OPEN)"
+local BOX_OPEN = "Gen 2 box writer not composed (U2 proves only a current-box deposit)"
+-- The U2 write kind whose held checkpoint the hello snapshot and the bench faint wait for.
+local PARTY_HP = "party_hp"
 
 local function nick_label(key, nickname)
     if nickname and nickname ~= "" then return nickname end
@@ -427,7 +432,7 @@ function Client.new(p)
     -- Deferred queue: one command per frame, only at the verified checkpoint, inside the permit.
     function self:run_deferred()
         if #self.deferred == 0 or not self.writes_enabled or not net.connected() then return end
-        local safe = safety.check()
+        local safe = safety.check(PARTY_HP)
         if not safe then return end
         local cmd = table.remove(self.deferred, 1)
         local slot, mon, _, why = find_party_slot(cmd.key)
@@ -641,7 +646,7 @@ function Client.new(p)
             local battle = reads.read_battle()
             if not battle then return false, "battle state unavailable" end
             -- PLAN §5.4: the first hello waits for the OWPlayerInput checkpoint or a running battle
-            if battle.mode == 0 and not safety.check() then
+            if battle.mode == 0 and not (self.checkpoint_held or safety.check(PARTY_HP)) then
                 return false, "waiting for Gen 2 checkpoint or battle"
             end
             return hello_identity() == identity, "identity changed while checking readiness"
@@ -724,6 +729,22 @@ function Client.new(p)
         if not binder then error("Gen 2 engine signals refused: " .. tostring(why), 0) end
         self.signals = binder
         self.signal_failure_logged = nil
+        if p.checkpoint_pc and not self.checkpoint_hook then
+            self.checkpoint_hook = io.on_bus_exec(function()
+                local ok, err = pcall(self.at_checkpoint, self)
+                if not ok then log("[SLink-gen2] checkpoint hold: " .. tostring(err)) end
+            end, p.checkpoint_pc,
+                                                  "SLink-gen2-checkpoint", "System Bus")
+        end
+    end
+
+    -- Production: the CPU sits at the checkpoint PC (OWPlayerInput, before `call CheckAPressOW`),
+    -- the only place check(kind) can accept. An accepted hold arms this frame's hello readiness
+    -- and runs one deferred write inside the hold, exactly where the U2 gate wrote.
+    function self:at_checkpoint()
+        if not safety.check(PARTY_HP) then return end
+        self.checkpoint_held = true
+        self:run_deferred()
     end
 
     function self:frame_end()
@@ -734,6 +755,7 @@ function Client.new(p)
         self.last_frame, self.frame = now, now
         net.pump()
         local connected = self.hello_session:step(self.frame)
+        self.checkpoint_held = false -- one frame's hold arms one frame's readiness
         self.hello_sent = connected == true
         if self.frame % Client.VALIDATE_EVERY == 0 then self:validate() end
         connected = connected and self.hello_session:status().ready
@@ -777,6 +799,7 @@ function Client.new(p)
     end
 
     function self:stop()
+        if self.checkpoint_hook then io.unregister(self.checkpoint_hook); self.checkpoint_hook = nil end
         if self.signals then self.signals:close() end
     end
 
