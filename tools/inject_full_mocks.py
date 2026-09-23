@@ -14,6 +14,11 @@ What you get after running:
 
 After running, refresh http://localhost:8099/ in your browser. If the
 widgets still show "no data", call /api/reset first.
+
+`--game gen1` swaps in a Red/Blue cast. `--game gen2 --title crystal|gold|silver` swaps
+in a Johto cast on that title (both players), and adds one MEMORIAL pair (fainted, then
+confirmed into the memorial box the way the client confirms a memorialize) beside the
+DEAD one.
 """
 import asyncio
 import contextlib
@@ -203,6 +208,84 @@ GEN1_BOXED_A = _g1cap(60, "6D7E:30B8", "Bubbles", 10)
 GEN1_BOXED_B = _g1cap(54, "5E6F:7B0B", "Quack", 10)
 
 
+# ── Gen 2 (Crystal/Gold/Silver) variant ──────────────────────────────────────────────────
+# server/adapters/gen2_gsc.py: keys are DVs:OTID:species like Gen 1, but the species byte
+# IS the National Dex number (1..251), gender comes from the key's DVs (gender_from_key,
+# so none is sent) and none of these DVs is shiny (is_shiny). Held items are real
+# items.json ids that is_valid_held_item accepts; there are no abilities. Every area is
+# a real area_map.json id with wild encounters in all three titles.
+TITLE = "crystal"  # --title: the rom_type both players report
+
+
+def _g2cap(dex: int, dvs_ot: str, nick: str, lv: int, item: int) -> tuple:
+    return (dex, f"{dvs_ot}:{dex:02X}", nick, lv, item)
+
+
+GEN2_PAIRS = [
+    ("route_29",   _g2cap(161, "4A5B:30B8", "Scout",  4, 173), _g2cap(16,  "3C2D:7B0B", "Pidge",  4, 0)),
+    ("route_30",   _g2cap(163, "5B6C:30B8", "Hooty",  6, 0),   _g2cap(60,  "2D3E:7B0B", "Swirl",  6, 73)),
+    ("route_31",   _g2cap(69,  "6C7D:30B8", "Twig",   7, 117), _g2cap(129, "1E2F:7B0B", "Flop",   7, 95)),
+    ("dark_cave",  _g2cap(41,  "7D8E:30B8", "Vampy",  8, 146), _g2cap(74,  "0F1A:7B0B", "Rocky",  8, 125)),
+    ("route_32",   _g2cap(194, "8E9F:30B8", "Squish", 9, 76),  _g2cap(187, "9A0B:7B0B", "Puff",   9, 83)),
+    ("union_cave", _g2cap(95,  "9F0A:30B8", "Pillar", 10, 112), _g2cap(98, "8B1C:7B0B", "Pinch", 10, 119)),
+]
+
+# Gen 2 move ids (pokecrystal constants/move_constants.asm); four slots, 0 = empty, as
+# the client's wire.party_entry always sends.
+GEN2_MOVES = {
+    161: [33, 111, 0, 0],      # Sentret: Tackle, Defense Curl
+    16:  [33, 28, 16, 0],      # Pidgey: Tackle, Sand-Attack, Gust
+    163: [33, 45, 193, 64],    # Hoothoot: Tackle, Growl, Foresight, Peck
+    60:  [145, 95, 55, 0],     # Poliwag: Bubble, Hypnosis, Water Gun
+    69:  [22, 74, 35, 0],      # Bellsprout: Vine Whip, Growth, Wrap
+    129: [150, 33, 0, 0],      # Magikarp: Splash, Tackle
+    41:  [141, 48, 44, 0],     # Zubat: Leech Life, Supersonic, Bite
+    74:  [33, 111, 88, 222],   # Geodude: Tackle, Defense Curl, Rock Throw, Magnitude
+    194: [55, 39, 21, 0],      # Wooper: Water Gun, Tail Whip, Slam
+    187: [150, 235, 39, 33],   # Hoppip: Splash, Synthesis, Tail Whip, Tackle
+    95:  [33, 103, 20, 88],    # Onix: Tackle, Screech, Bind, Rock Throw
+    98:  [145, 43, 11, 106],   # Krabby: Bubble, Leer, Vicegrip, Harden
+    92:  [95, 122, 180, 212],  # Gastly: Hypnosis, Lick, Spite, Mean Look
+    19:  [33, 39, 98, 0],      # Rattata: Tackle, Tail Whip, Quick Attack
+    96:  [1, 95, 50, 93],      # Drowzee: Pound, Hypnosis, Disable, Confusion
+    204: [33, 182, 120, 0],    # Pineco: Tackle, Protect, Selfdestruct
+    102: [140, 95, 115, 0],    # Exeggcute: Barrage, Hypnosis, Reflect
+}
+
+GEN2_PENDING_AREA = "route_34"
+GEN2_PENDING_A = _g2cap(96, "AB12:30B8", "Snooze", 12, 0)
+GEN2_DEAD_ZONE_AREA = "route_33"
+GEN2_DEAD_ZONE_BOB = _g2cap(190, "7A8B:7B0B", "Aipom", 8, 0)
+GEN2_BOXED_AREA = "route_36"
+GEN2_BOXED_A = _g2cap(204, "6D7E:30B8", "Cone", 12, 143)
+GEN2_BOXED_B = _g2cap(102, "5E6F:7B0B", "Eggs", 12, 126)
+# Fainted, then confirmed into the memorial box by both clients -> status "memorial".
+GEN2_MEMORIAL_AREA = "sprout_tower"
+GEN2_MEMORIAL_A = _g2cap(92, "4C5D:30B8", "Boo", 8, 113)
+GEN2_MEMORIAL_B = _g2cap(19, "3E4F:7B0B", "Nibbles", 8, 0)
+# gen2_gsc.memorial_box_index: NUM_BOXES - 1 (the UI's "Box 14").
+GEN2_MEMORIAL_BOX = 13
+# Party slot of the DEAD pair (the faint below): both halves are sent at 0 HP.
+DEAD_SLOT = 2
+
+
+def _gen2_pack(name: str) -> dict:
+    with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                           "data", "games", f"gen2_{TITLE}", f"{name}.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _gen2_rom_sha1() -> str:
+    """The pinned clean sha1 lua/gen2/entry.lua reports for this title."""
+    return _gen2_pack("profile")["source"]["rom_sha1"]
+
+
+def _gen2_pp(moves: list[int]) -> list[int]:
+    """Full PP per slot, so no move reads over its maximum (a flat 25 showed "25/15")."""
+    pp = {row["id"]: row["pp"] for row in _gen2_pack("moves")["moves"]}
+    return [pp.get(m, 0) for m in moves]
+
+
 def _rom_type(player: str) -> str:
     """What each player's client reports in its hello.
 
@@ -219,15 +302,17 @@ def _rom_type(player: str) -> str:
     """
     if _is_gen1():
         return "red" if player == "a" else "blue"
+    if GAME == "gen2":
+        return TITLE.capitalize()  # lua/gen2/entry.lua sends "Crystal" / "Gold" / "Silver"
     return "firered_rr"
 
 
 def _pairs():
-    return GEN1_PAIRS if _is_gen1() else PAIRS
+    return {"gen1": GEN1_PAIRS, "gen2": GEN2_PAIRS}.get(GAME, PAIRS)
 
 
 def _moves():
-    return GEN1_MOVES if _is_gen1() else MOVES
+    return {"gen1": GEN1_MOVES, "gen2": GEN2_MOVES}.get(GAME, MOVES)
 
 
 def _final_areas() -> tuple[str, str]:
@@ -242,27 +327,70 @@ def _final_areas() -> tuple[str, str]:
     to say pewter_museum "so the widget renders (Falkner @ Pewter Museum)", which has one
     priority trainer and no encounters at all; route_22 has seven and six.
     """
-    return ("route_3", "route_24") if _is_gen1() else ("route_22", "cerulean_city")
+    return {"gen1": ("route_3", "route_24"),
+            "gen2": ("ilex_forest", "national_park")}.get(GAME, ("route_22", "cerulean_city"))
 
 
 def _pending():
-    return ((GEN1_PENDING_AREA, GEN1_PENDING_A) if _is_gen1()
-            else (PENDING_AREA, PENDING_A))
+    return {"gen1": (GEN1_PENDING_AREA, GEN1_PENDING_A),
+            "gen2": (GEN2_PENDING_AREA, GEN2_PENDING_A)}.get(GAME, (PENDING_AREA, PENDING_A))
 
 
 def _dead_zone():
-    return ((GEN1_DEAD_ZONE_AREA, GEN1_DEAD_ZONE_BOB) if _is_gen1()
-            else (DEAD_ZONE_AREA, DEAD_ZONE_BOB))
+    return {"gen1": (GEN1_DEAD_ZONE_AREA, GEN1_DEAD_ZONE_BOB),
+            "gen2": (GEN2_DEAD_ZONE_AREA, GEN2_DEAD_ZONE_BOB)}.get(GAME, (DEAD_ZONE_AREA, DEAD_ZONE_BOB))
 
 
 def _boxed():
-    return ((GEN1_BOXED_AREA, GEN1_BOXED_A, GEN1_BOXED_B) if _is_gen1()
-            else (BOXED_AREA, BOXED_A, BOXED_B))
+    return {"gen1": (GEN1_BOXED_AREA, GEN1_BOXED_A, GEN1_BOXED_B),
+            "gen2": (GEN2_BOXED_AREA, GEN2_BOXED_A, GEN2_BOXED_B)}.get(GAME, (BOXED_AREA, BOXED_A, BOXED_B))
+
+
+def _memorial():
+    """A pair driven all the way to "memorial". Gen 2 only: the other casts predate it
+    and their event lists are kept as they were."""
+    return (GEN2_MEMORIAL_AREA, GEN2_MEMORIAL_A, GEN2_MEMORIAL_B) if GAME == "gen2" else None
+
+
+def _hello_extra(player: str) -> dict:
+    """Identity fields each generation's real client puts in its hello."""
+    ot = "30B8" if player == "a" else "7B0B"
+    if _is_gen1():
+        return {"ot_id": ot}
+    if GAME == "gen2":
+        # lua/gen2/client.lua send_hello; the Gen 2 wire's ot_id is the integer.
+        return {"foundation": "gen2_gsc", "artifact_kind": "clean", "ot_id": int(ot, 16),
+                "rom_sha1": _gen2_rom_sha1(), "party": []}
+    return {}
+
+
+def _capture_extra(gender: str, species: int, item: int) -> dict:
+    """What a capture carries beyond the shared fields. Gen 2 sends its held item only:
+    the server derives gender from the key, and there are no abilities."""
+    if _is_gen1():
+        return {}
+    if GAME == "gen2":
+        return {"held_item_id": item}
+    return {"gender": gender, "ability_id": ABILITIES.get(species, 1), "held_item_id": item}
+
+
+def _boot_key(player: str) -> str:
+    ot, dex = ("30B8", 25) if player == "a" else ("7B0B", 4)
+    if _is_gen1():
+        return f"{'0001' if player == 'a' else '0002'}:{ot}:{_g1(dex):02X}"
+    if GAME == "gen2":
+        return f"{'0001' if player == 'a' else '0002'}:{ot}:{dex:02X}"
+    return "BOOT0001" if player == "a" else "BOOT0002"
 
 
 def _wild_foe() -> dict:
     """The mon the player is mid-battle against. Gen 1 has no abilities, so sending an
     ability_id would be a lie the enemy panel would happily render."""
+    if GAME == "gen2":
+        # wire.foe_entry: no key, four move/pp/pp_ups slots.
+        return {"species_id": 191, "level": 11, "hp": 28, "maxHP": 32, "status_cond": 0,
+                "held_item_id": 0, "active": True, "moves": [71, 74, 0, 0], "pp": [20, 40, 0, 0],
+                "pp_ups": [0, 0, 0, 0]}  # Sunkern: Absorb, Growth
     if _is_gen1():
         return {"species_id": _g1(10), "level": 11, "hp": 28, "maxHP": 32, "active": True,
                 "key": f"1A2B:0000:{_g1(10):02X}", "status_cond": 0, "stat_stages": {},
@@ -279,7 +407,7 @@ def _stored(tag: str, ot: str, species: int) -> str:
     else, so a readable literal like "STORED_A1" would silently drop the row on Gen 1
     and leave the box table looking merely short rather than broken.
     """
-    if _is_gen1():
+    if GAME in ("gen1", "gen2"):
         return f"{ord(tag[0]):02X}{int(tag[1]):02X}:{ot}:{species:02X}"
     return "STORED_" + tag
 
@@ -302,9 +430,22 @@ def _mon(species, key, nick, lv, item, *, gender, active):
          "species_id": species, "nickname": nick, "active": active,
          "_slot": None,
          "moves": _moves().get(species, []), "pp": [25, 25, 25, 25]}
-    if not _is_gen1():
+    if GAME == "gen2":
+        d.update(held_item_id=item, pp=_gen2_pp(d["moves"]), pp_ups=[0, 0, 0, 0], status_cond=0)
+    elif not _is_gen1():
         d.update(ability_id=ABILITIES.get(species, 1), held_item_id=item, gender=gender, pp_bonuses=0)
     return d
+
+
+def _memorial_box_rows(side: int) -> list[dict]:
+    """The memorial pair where a completed memorialize leaves it: in the memorial box,
+    which is the only place the contamination check expects a dead mon."""
+    memorial = _memorial()
+    if not memorial:
+        return []
+    cap = memorial[1 + side]
+    return [{"box": GEN2_MEMORIAL_BOX, "slot": 0, "key": cap[1], "nickname": cap[2],
+             "species_id": cap[0], "held_item_id": cap[4], "moves": _moves().get(cap[0], [])}]
 
 
 async def main() -> None:
@@ -324,13 +465,13 @@ async def main() -> None:
     # (the trainers_for_area / encounter_table adapter methods are RR-gated).
     events: list[dict] = [
         {"event": "hello", "player": "a", "rom_type": _rom_type("a"), "trainer_name": "Alice",
-         "has_pokeballs": True, **({"ot_id": "30B8"} if _is_gen1() else {})},
+         "has_pokeballs": True, **_hello_extra("a")},
         {"event": "hello", "player": "b", "rom_type": _rom_type("b"), "trainer_name": "Bob",
-         "has_pokeballs": True, **({"ot_id": "7B0B"} if _is_gen1() else {})},
+         "has_pokeballs": True, **_hello_extra("b")},
         # Tick events with party of 1 dummy so size > 0 and quarantine logic kicks in.
         # We'll set proper parties after all captures.
-        {"event": "tick", "player": "a", "has_pokeballs": True, "party": [{"key": (f"0001:30B8:{_g1(25):02X}" if _is_gen1() else "BOOT0001")}], "current_area_id": "starter"},
-        {"event": "tick", "player": "b", "has_pokeballs": True, "party": [{"key": (f"0002:7B0B:{_g1(4):02X}" if _is_gen1() else "BOOT0002")}], "current_area_id": "starter"},
+        {"event": "tick", "player": "a", "has_pokeballs": True, "party": [{"key": _boot_key("a")}], "current_area_id": "starter"},
+        {"event": "tick", "player": "b", "has_pokeballs": True, "party": [{"key": _boot_key("b")}], "current_area_id": "starter"},
     ]
 
     print("Sending 6 paired captures + faint + shiny...")
@@ -343,16 +484,14 @@ async def main() -> None:
             "species_id": a_sid, "key": a_key, "nickname": a_nick,
             "level": a_lv, "hp": 20 + a_lv, "maxHP": 20 + a_lv,
             "in_box": False,
-            **({} if _is_gen1() else {"gender": "male" if a_lv % 2 else "female",
-                                      "ability_id": ABILITIES.get(a_sid, 1), "held_item_id": a_item}),
+            **_capture_extra("male" if a_lv % 2 else "female", a_sid, a_item),
         })
         events.append({
             "event": "capture", "player": "b", "area_id": area,
             "species_id": b_sid, "key": b_key, "nickname": b_nick,
             "level": b_lv, "hp": 20 + b_lv, "maxHP": 20 + b_lv,
             "in_box": False,
-            **({} if _is_gen1() else {"gender": "female" if b_lv % 2 else "male",
-                                      "ability_id": ABILITIES.get(b_sid, 1), "held_item_id": b_item}),
+            **_capture_extra("female" if b_lv % 2 else "male", b_sid, b_item),
         })
 
     # Dead zone: Alice misses, Bob catches (but link won't form → dead_zone)
@@ -371,13 +510,13 @@ async def main() -> None:
         "event": "capture", "player": "a", "area_id": boxed_area,
         "species_id": a_sid, "key": a_key, "nickname": a_nick,
         "level": a_lv, "hp": 20 + a_lv, "maxHP": 20 + a_lv, "in_box": False,
-        **({} if _is_gen1() else {"gender": "male", "ability_id": ABILITIES.get(a_sid, 1), "held_item_id": a_item}),
+        **_capture_extra("male", a_sid, a_item),
     })
     events.append({
         "event": "capture", "player": "b", "area_id": boxed_area,
         "species_id": b_sid, "key": b_key, "nickname": b_nick,
         "level": b_lv, "hp": 20 + b_lv, "maxHP": 20 + b_lv, "in_box": False,
-        **({} if _is_gen1() else {"gender": "female", "ability_id": ABILITIES.get(b_sid, 1), "held_item_id": b_item}),
+        **_capture_extra("female", b_sid, b_item),
     })
 
     # Alice catches somewhere Bob has not been. Stays pending -- and quarantined to her
@@ -388,10 +527,31 @@ async def main() -> None:
         "event": "capture", "player": "a", "area_id": pend_area,
         "species_id": p_sid, "key": p_key, "nickname": p_nick,
         "level": p_lv, "hp": 20 + p_lv, "maxHP": 20 + p_lv, "in_box": True,
-        **({} if _is_gen1() else {"gender": "male", "ability_id": ABILITIES.get(p_sid, 1), "held_item_id": p_item}),
+        **_capture_extra("male", p_sid, p_item),
     })
 
+    # A pair taken all the way to "memorial": both caught, A's half faints (the server
+    # force-faints B's and queues a memorialize for each), then both clients confirm the
+    # move into the memorial box -- lua/gen2/client.lua run_box sends memorialize_done --
+    # and later report the mons in that box (the pc_boxes ticks below).
+    memorial = _memorial()
+    if memorial:
+        mem_area, mem_a, mem_b = memorial
+        for player, cap in (("a", mem_a), ("b", mem_b)):
+            events.append({"event": "area_enter", "player": player, "area_id": mem_area})
+            events.append({
+                "event": "capture", "player": player, "area_id": mem_area,
+                "species_id": cap[0], "key": cap[1], "nickname": cap[2],
+                "level": cap[3], "hp": 20 + cap[3], "maxHP": 20 + cap[3], "in_box": False,
+                **_capture_extra("", cap[0], cap[4]),
+            })
+        events.append({"event": "faint", "player": "a", "key": mem_a[1], "area_id": mem_area})
+        for player, cap in (("a", mem_a), ("b", mem_b)):
+            events.append({"event": "memorialize_done", "player": player, "key": cap[1],
+                           "box": GEN2_MEMORIAL_BOX})
+
     # Faint one of the linked party mons — the route3 pair becomes a Memorial
+    # (on Gen 2 it stays DEAD: its memorialize is never confirmed, see DEAD_SLOT)
     events.append({
         "event": "faint", "player": "a", "key": _pairs()[2][1][1],
         "area_id": _pairs()[2][0],
@@ -418,6 +578,10 @@ async def main() -> None:
         _mon(*b_cap, gender="female", active=(i == 0))
         for i, (_, _, b_cap) in enumerate(_pairs())
     ]
+    if memorial:
+        # The DEAD pair is still in both parties, at 0 HP: its memorialize is queued but no
+        # client has reached a safe state to run it yet. That is what keeps it "dead".
+        alice_party[DEAD_SLOT]["hp"] = bob_party[DEAD_SLOT]["hp"] = 0
     # Tick fields are FLAT (not nested under "battle_state") — the server
     # only reads in_battle / enemy_party / is_trainer_battle at the top
     # level of the tick message. See server.py handle_event tick branch.
@@ -461,7 +625,7 @@ async def main() -> None:
              "species_id": _sid(133), "held_item_id": 0, "moves": []},
             {"box": 1, "slot": 4, "key": _stored("A2", "30B8", _sid(63)), "nickname": "Bench",
              "species_id": _sid(63), "held_item_id": 0, "moves": []},
-        ],
+        ] + _memorial_box_rows(0),
     })
     events.append({
         "event": "tick", "player": "b", "has_pokeballs": True,
@@ -471,7 +635,7 @@ async def main() -> None:
              "species_id": box_b[0], "held_item_id": box_b[4], "moves": _moves().get(box_b[0], [])},
             {"box": 0, "slot": 1, "key": _stored("B1", "7B0B", _sid(129)), "nickname": "Reserve",
              "species_id": _sid(129), "held_item_id": 0, "moves": []},
-        ],
+        ] + _memorial_box_rows(1),
     })
 
     # The attempt counter goes over HTTP and depends on nothing in the event stream, so
@@ -492,7 +656,10 @@ if __name__ == "__main__":
     import argparse
 
     _ap = argparse.ArgumentParser(description=__doc__)
-    _ap.add_argument("--game", choices=("gen3", "gen1"), default="gen3",
+    _ap.add_argument("--game", choices=("gen3", "gen1", "gen2"), default="gen3",
                      help="which generation's cast to inject (default: gen3)")
-    GAME = _ap.parse_args().game
+    _ap.add_argument("--title", choices=("crystal", "gold", "silver"), default="crystal",
+                     help="gen2 only: the title both players run (default: crystal)")
+    _args = _ap.parse_args()
+    GAME, TITLE = _args.game, _args.title
     asyncio.run(main())
