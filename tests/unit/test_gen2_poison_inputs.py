@@ -122,32 +122,55 @@ def test_battle_runs_from_a_foe_without_poison_sting():
     rt = lua()
     d = driver(rt, load(rt))
     step(rt, d, map_number=2, x=1, y=1)
-    battle = {"battle_mode": 1, "active_slot": 0, "foe_sting": False, "overworld_ready": False}
+    battle = {"battle_mode": 1, "active_slot": 0, "active_hp": 20, "foe_sting": False, "overworld_ready": False}
     assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **battle)[0] == ["Right"]
     assert step(rt, d, ui=ui("battle_menu", MENU, 2, 2), **battle)[0] == ["Down"]
     assert step(rt, d, ui=ui("battle_menu", MENU, 4, 2), **battle)[0] == ["A"]
 
 
-def test_a_poison_sting_foe_gets_leer_until_the_lead_is_poisoned_then_run():
+def test_a_poison_sting_foe_gets_leer_until_a_party_mon_is_poisoned_then_run():
     rt = lua()
     d = driver(rt, load(rt))
     step(rt, d, map_number=2, x=1, y=1)
-    battle = {"battle_mode": 1, "active_slot": 0, "foe_sting": True, "overworld_ready": False}
+    battle = {"battle_mode": 1, "active_slot": 0, "active_hp": 20, "foe_sting": True, "overworld_ready": False}
     assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **battle)[0] == ["A"]                       # FIGHT
     assert step(rt, d, ui=ui("move_menu", ["SCRATCH", "LEER"]), **battle)[0] == ["Down"]
     assert step(rt, d, ui=ui("move_menu", ["SCRATCH", "LEER"], 2), **battle)[0] == ["A"]             # never SCRATCH
-    battle["target_psn"] = True
+    battle["active_psn"] = True
     assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **battle)[0] == ["Right"]                   # toward RUN
     assert step(rt, d, ui=ui("move_menu", ["SCRATCH", "LEER"]), **battle)[0] == ["B"]
 
 
-def test_a_foe_sting_against_a_switched_in_mon_is_fled():
+def test_a_worn_down_or_passive_less_mon_switches_out_and_nobody_fit_runs():
+    """Silver live run 1: the lead was worn down until a sting fainted it in battle."""
     rt = lua()
     d = driver(rt, load(rt))
     step(rt, d, map_number=2, x=1, y=1)
-    step(rt, d, ui=ui("text"), battle_mode=1, active_slot=0, overworld_ready=False)                  # target = lead 0
-    other = {"battle_mode": 1, "active_slot": 1, "foe_sting": True, "overworld_ready": False}
-    assert step(rt, d, ui=ui("battle_menu", MENU, 4, 2), **other)[0] == ["A"]                        # RUN
+    low = {"battle_mode": 1, "active_slot": 0, "active_hp": 7, "foe_sting": True, "overworld_ready": False}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **low)[0] == ["Right"]                      # PKMN cell
+    assert step(rt, d, ui=ui("battle_party"), party_cursor=0, **low)[0] == ["Down"]
+    assert step(rt, d, ui=ui("battle_party"), party_cursor=1, **low)[0] == ["A"]
+    assert step(rt, d, ui=ui("battle_mon_menu", ["SWITCH", "STATS", "CANCEL"]), **low)[0] == ["A"]
+    mate = {"battle_mode": 1, "active_slot": 1, "active_hp": 12, "foe_sting": True, "overworld_ready": False}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **mate)[0] == ["A"]                         # FIGHT first
+    assert step(rt, d, ui=ui("move_menu", ["TACKLE"]), **mate)[0] == ["B"]                            # no passive
+    party = {0: {"hp": 20, "status": 0}, 1: {"hp": 12, "status": 0}}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), party=party, **mate)[0] == ["Right"]         # PKMN now
+    worn = {0: {"hp": 5, "status": 0}, 1: {"hp": 12, "status": 0}}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), party=worn, **mate)[0] == ["Right"]          # toward RUN
+    assert step(rt, d, ui=ui("battle_menu", MENU, 2, 2), party=worn, **mate)[0] == ["Down"]
+    assert step(rt, d, ui=ui("battle_menu", MENU, 4, 2), party=worn, **mate)[0] == ["A"]
+
+
+def test_any_poisoned_party_mon_ends_the_hunt():
+    rt = lua()
+    d = driver(rt, load(rt))
+    step(rt, d, map_number=2, x=1, y=1)
+    battle = {"battle_mode": 1, "active_slot": 0, "active_hp": 20, "foe_sting": True, "overworld_ready": False,
+              "party": {0: {"hp": 20, "status": 0}, 1: {"hp": 9, "status": PSN}}}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 4, 2), **battle)[0] == ["A"]                       # RUN
+    buttons, phase = d.step(pt(rt, x=1, y=1, party={0: {"hp": 20, "status": 0}, 1: {"hp": 9, "status": PSN}}))
+    assert phase == "tick"
 
 
 def test_poisoned_lead_ticks_on_the_park_tiles_then_parks_after_the_faint():

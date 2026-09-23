@@ -16,7 +16,8 @@
              source-grid Dijkstra that prefers floor to grass (fewer encounters); ledges stay walls.
     hunt     oscillate in the grass. A wild battle whose foe knows no POISON_STING: RUN (retried through
              "Can't escape!"). A foe that knows it: FIGHT -> a passive move (LEER/GROWL/...; never damage it) each
-             turn until the target (the lead) carries PSN, then RUN. The target fainting in battle is a failure.
+             turn, or a switch to a party mate above LOW_HP (see PI.driver), until a party mon carries PSN, then
+             RUN. A party mon fainting in battle is a failure.
     tick     the target is poisoned in the party: oscillate between the two floor park tiles (no grass, no
              encounter) until opts.fainted() -- the probe's poison_faint hit; every 4 steps DoPoisonStep takes
              1 HP (C engine/overworld/events.asm:905-912). The "fainted!" text box takes A.
@@ -94,30 +95,39 @@ PI.WAIT_FRAMES = 600
 
 local function on(point, map) return point.map_group == map.map_group and point.map_number == map.map_number end
 
--- Pure point -> buttons, phase. point adds: poison_fainted, active_slot, party ({slot -> {hp, status}}),
--- foe_sting (the wild foe knows POISON_STING), target_psn (the active battle mon carries PSN), poison_fainted.
+-- Pure point -> buttons, phase. point adds: poison_fainted, active_slot, active_hp (the battle copy), party
+-- ({slot -> {hp, status}}), foe_sting (the wild foe knows POISON_STING), active_psn (the battle mon carries
+-- PSN), party_cursor (battle party list entry under the cursor).
+-- Against a POISON_STING foe the active mon passes turns with a passive move; a mon at or below LOW_HP, or one
+-- that knows no passive move, is switched out for a living party mate above LOW_HP instead (TryPlayerSwitch
+-- passes the turn and the incoming mon takes the hit, the U1d FI trick); with nobody above LOW_HP it RUNs.
+-- ANY party mon carrying PSN ends the hunt (DoPoisonStep ticks every poisoned party mon). Silver live run 1:
+-- flee failures and stings wore the lead down until a sting fainted it in battle.
+PI.LOW_HP = 7
+PI.PKMN_CELL = 2   -- BattleMenu 2x2 grid FIGHT|PKMN / PACK|RUN (engine/battle/menu.asm:32-45): by position
 function PI.driver(F, facts, opts)
     local self = {terminal="poisoned", phase="travel", battles=0}
     local held, hold_left, release = nil, 0, false
-    local here, from, target = nil, nil, nil
+    local here, from = nil, nil
     local maps, hunt = facts.maps, facts.maps[facts.hunt_map]
-    local passive = opts.moves
+    local passive, no_passive = opts.moves, {}
     local function press(button)
         release, held, hold_left = true, button, PI.HOLD - 1
         return {[button]=true}, self.phase
     end
+    -- wanted: a label, or a 1-based cell index (the PKMN glyph cell).
     local function choose(ui, wanted, columns)
         if type(ui.items) ~= "table" or not integer(ui.cursor, 1, #ui.items) or ui.columns ~= columns then
             return nil, "source menu geometry unavailable"
         end
-        local index
-        for i, label in ipairs(ui.items) do
+        local index = type(wanted) == "number" and wanted or nil
+        for i, label in ipairs(index == nil and ui.items or {}) do
             if type(label) == "string" and label:upper() == wanted then
                 if index then return nil, "ambiguous menu label " .. wanted end
                 index = i
             end
         end
-        if not index then return nil, "required native menu item missing: " .. wanted end
+        if not integer(index, 1, #ui.items) then return nil, "required native menu item missing: " .. tostring(wanted) end
         if index == ui.cursor then return press("A") end
         local tx, cx = (index - 1) % columns, (ui.cursor - 1) % columns
         if tx ~= cx then return press(tx > cx and "Right" or "Left") end
@@ -139,29 +149,53 @@ function PI.driver(F, facts, opts)
         if button == "arrived" then return nil, "arrived" end
         return {[button]=true}, self.phase
     end
-    local function status(point, slot)
-        local mon = type(point.party) == "table" and point.party[slot]
-        return mon and mon.hp, mon and mon.status
-    end
     local function psn(value) return integer(value, 0, 255) and (value // facts.psn_mask) % 2 == 1 end
+    local function party(point) return type(point.party) == "table" and point.party or {} end
+    local function poisoned(point)
+        for _, mon in pairs(party(point)) do if psn(mon.status) and integer(mon.hp, 1, 999) then return true end end
+        return false
+    end
+    local function alive(point)
+        for _, mon in pairs(party(point)) do if integer(mon.hp, 1, 999) then return true end end
+        return false
+    end
+    -- a living party mate of the active mon above LOW_HP (party HP; the active mon's own is its battle copy)
+    local function relief(point)
+        for slot = 0, 5 do
+            local mon = party(point)[slot]
+            if slot ~= point.active_slot and mon and integer(mon.hp, PI.LOW_HP + 1, 999) then return slot end
+        end
+    end
     local function battle(point, ui)
-        local hunting = self.phase == "hunt"
-        local fight = hunting and point.foe_sting == true and point.active_slot == target and point.target_psn ~= true
+        local sting = self.phase == "hunt" and point.foe_sting == true and point.active_psn ~= true and not poisoned(point)
+        local active = point.active_slot
+        local fit = integer(point.active_hp, PI.LOW_HP + 1, 999) and not no_passive[active]
         if ui.kind == "battle_menu" then
             if point.battle_mode ~= 1 then return nil, "battle menu outside a wild battle" end
-            return choose(ui, fight and "FIGHT" or "RUN", 2)
+            if not sting then return choose(ui, "RUN", 2) end
+            if fit then return choose(ui, "FIGHT", 2) end
+            if relief(point) ~= nil then return choose(ui, PI.PKMN_CELL, 2) end
+            return choose(ui, "RUN", 2)
         end
         if ui.kind == "move_menu" then
-            if not fight then return press("B") end
+            if not (sting and fit) then return press("B") end
             if type(ui.items) ~= "table" then return nil, "move list unreadable" end
             for _, name in ipairs(passive) do
                 for _, label in ipairs(ui.items) do
                     if type(label) == "string" and label:upper() == name then return choose(ui, name, 1) end
                 end
             end
-            return nil, "the target knows no passive move"
+            no_passive[active] = true   -- this mon passes turns by switching out instead
+            return press("B")
         end
-        if ui.kind == "yes_no" and ui.prompt == "next_mon" then return nil, "the target fainted in battle before the poison" end
+        if ui.kind == "battle_party" then
+            local want = relief(point)
+            if want == nil or not integer(point.party_cursor, 0, 5) then return press("B") end
+            if point.party_cursor == want then return press("A") end
+            return press(point.party_cursor < want and "Down" or "Up")
+        end
+        if ui.kind == "battle_mon_menu" then return choose(ui, "SWITCH", 1) end
+        if ui.kind == "yes_no" and ui.prompt == "next_mon" then return nil, "a party mon fainted in battle before the poison" end
         if ui.kind == "text" or ui.kind == "prompt_button" or ui.kind == "wait_button" then return press("A") end
         return nil, "UI is not valid in battle: " .. tostring(ui.kind)
     end
@@ -174,7 +208,6 @@ function PI.driver(F, facts, opts)
         if integer(point.battle_mode, 1, 255) then
             if self.phase == "tick" then return nil, "a battle started on the park tiles" end
             if self.phase == "park" then self.phase = self.terminal return {}, self.phase end   -- the faint leg's battle
-            if target == nil and integer(point.active_slot, 0, 5) then target = point.active_slot end
             if ui == nil or point.input_ready ~= true then return {}, self.phase end
             return battle(point, ui)
         end
@@ -184,11 +217,11 @@ function PI.driver(F, facts, opts)
             return nil, "UI is not valid in phase " .. self.phase .. ": " .. tostring(ui.kind)
         end
         if point.overworld_ready ~= true then return {}, self.phase end
-        target = target or 0   -- the lead (DoPoisonStep walks the whole party; the lead is who meets the foe)
-        local hp, st = status(point, target)
         if self.phase == "hunt" or self.phase == "travel" then
-            if hp == 0 then return nil, "the target fainted in battle before the poison" end
-            if psn(st) then self.phase = "tick" end
+            for _, mon in pairs(party(point)) do
+                if mon.hp == 0 then return nil, "a party mon fainted in battle before the poison" end
+            end
+            if poisoned(point) then self.phase = "tick" end
         end
         if (self.phase == "tick" or self.phase == "park") and point.poison_fainted == true then self.phase = "park" end
         if self.phase == "park" then
@@ -201,7 +234,8 @@ function PI.driver(F, facts, opts)
         end
         if self.phase == "tick" then
             if not on(point, hunt) then return nil, "left the hunt map while poisoned" end
-            if hp == 0 then return {}, self.phase end   -- the faint script is about to run
+            if not alive(point) then return nil, "the whole party is down" end
+            if not poisoned(point) then return {}, self.phase end   -- the faint script is about to run
             local a, b = facts.park[1], facts.park[2]
             local goal = (point.x == a.x and point.y == a.y) and b or a
             local buttons, why = walk(hunt, point, {goal})
@@ -252,8 +286,10 @@ function PI.new(ctx, SG, F, FI, opts)
             point.foe_sting = false
             for _, move in ipairs(foe and foe.moves or {}) do if move == sting then point.foe_sting = true end end
             local mine = ctx.reads.read_battle_mon("player")
-            point.target_psn = mine ~= nil and (mine.status // facts.psn_mask) % 2 == 1
+            point.active_psn = mine ~= nil and (mine.status // facts.psn_mask) % 2 == 1
+            point.active_hp = mine and mine.hp
         end
+        if point.ui and point.ui.kind == "battle_party" then point.party_cursor = FI.party_cursor(SG.screen(ctx)) end
         point.party = {}
         local party = ctx.reads.read_party()
         for _, m in ipairs(party and party.mons or {}) do point.party[m.slot] = {hp=m.hp, status=m.status} end
