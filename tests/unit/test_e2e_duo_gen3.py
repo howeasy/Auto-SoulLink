@@ -20,14 +20,21 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools"))
+sys.path.insert(0, str(REPO / "tests" / "unit"))
 
 import e2e_duo as duo  # noqa: E402
 import gen3_fixtures  # noqa: E402
+
+# Reuse the RR compressed-mon builder (server/adapters/gen3_codec round-trip already proven
+# there) rather than re-deriving the CompressedPokemon layout a second time.
+from test_gen3_rr_save_layout import _compressed  # noqa: E402
 
 from server.adapters import gen3_codec as codec  # noqa: E402
 
 GEN3 = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
         "link_gen3", "deadzone_gen3", "reconnect_gen3")
+# P5 (card C5-5): RR-only, added on top of GEN3 above (which now also runs on gen3_rr_new).
+GEN3_RR_ONLY = ("explode_gen3", "rival_swap_gen3", "native_absent_gen3")
 OT_A = 0x99DE0D8A
 
 
@@ -165,6 +172,93 @@ def test_witness_each_failure_mode_is_named(pair, mutate, flushed_from, saves, m
         flushed = witness + b"\x00" * 3
     with pytest.raises(RuntimeError, match=re.escape(message)):
         duo.check_gen3_witness(witness, flushed, fixture, saves=saves)
+
+
+# ── check_gen3_witness(rr=True): RR's own layout and its narrower "untouched" range ────────
+RR_MON = (277, 0xEBEF11DA, 0x2BDDC8BF)   # species, personality, ot_id -- test_gen3_rr_save_layout's own Treecko
+
+
+def _rr_mon_bytes(species, personality, ot_id, level=5):
+    """A plaintext (RR is CFRU_NO_ENCRYPT) party record: expand_compressed_box_mon + the
+    party-only tail, same technique test_gen3_rr_save_layout's own synthetic test uses."""
+    raw = bytearray(codec.expand_compressed_box_mon(_compressed(species, personality, ot_id)))
+    raw += bytes(codec.PARTY_MON_SIZE - codec.BOX_MON_SIZE)
+    raw[0x54] = level
+    return bytes(raw)
+
+
+def _rr_write_slot(image, counter, party=RR_MON, ext_byte=None, rotation=0):
+    """Mutate `image` in place: one RR slot the way the game writes it (sibling of `_write_slot`
+    above, RR-chunked via `_build_rr_image`'s own placement rule). `ext_byte`, when given, also
+    rewrites the unrotated extension (sectors 30-31) -- omitted, it is left alone, the same way a
+    real single-sector save leaves untouched chunks alone."""
+    layout = codec.rr_slot_layout()
+    sb1 = bytearray(codec.SAVEBLOCK1_SIZE)
+    sb1[codec.SB1_PARTY_COUNT_OFFSET] = 1
+    sb1[codec.SB1_PARTY_OFFSET:codec.SB1_PARTY_OFFSET + codec.PARTY_MON_SIZE] = _rr_mon_bytes(*party)
+    source = {"sb2": bytes(codec.SAVEBLOCK2_SIZE), "sb1": bytes(sb1), "storage": bytes(codec.STORAGE_SIZE)}
+    for sid, entry in enumerate(layout):
+        chunk = source[entry["object"]][entry["offset"]:entry["offset"] + entry["size"]]
+        index = ((rotation + sid) % codec.NUM_SECTORS_PER_SLOT) + codec.NUM_SECTORS_PER_SLOT * (counter % 2)
+        image[index * codec.SECTOR_SIZE:(index + 1) * codec.SECTOR_SIZE] = \
+            codec.write_sector(chunk, sid, counter, layout)
+    if ext_byte is not None:
+        ext = bytes([ext_byte]) * codec.RR_EXT_SIZE
+        for n, index in enumerate(codec.RR_EXT_SECTORS):
+            image[index * codec.SECTOR_SIZE:(index + 1) * codec.SECTOR_SIZE] = \
+                ext[n * codec.CHUNK_SIZE_CFRU:(n + 1) * codec.CHUNK_SIZE_CFRU].ljust(codec.SECTOR_SIZE, b"\0")
+
+
+def _rr_fixture(party=RR_MON, ext_byte=0x00):
+    """Counter 2 in slot 0, the older counter 1 in slot 1 -- the RR sibling of `_fixture` above,
+    so a one-save witness has a real (not erased) "other slot" to compare against."""
+    image = bytearray(b"\xff" * codec.FLASH_SIZE)
+    _rr_write_slot(image, 1, party, ext_byte=ext_byte)
+    _rr_write_slot(image, 2, party, ext_byte=ext_byte)
+    return bytes(image)
+
+
+def _rr_saved(fixture, counter, party=RR_MON, ext_byte=None):
+    image = bytearray(fixture)
+    _rr_write_slot(image, counter, party, ext_byte=ext_byte)
+    return bytes(image)
+
+
+def test_rr_witness_positive():
+    fixture = _rr_fixture()
+    saved = _rr_saved(fixture, 3)
+    facts = duo.check_gen3_witness(saved, saved, fixture, saves=1, rr=True)
+    assert facts["counter"] == (2, 3)
+
+
+def test_rr_witness_extension_boxes_may_legitimately_change():
+    """docs/gen3/research/flash_save.md:136: sectors 30-31 (RR boxes 20-22) carry no checksum or
+    generation counter of their own, and a normal save CAN rewrite them -- unlike vanilla's Hall
+    of Fame, asserting byte-equality against the fixture there would be wrong, not stricter."""
+    fixture = _rr_fixture(ext_byte=0x00)
+    saved = _rr_saved(fixture, 3, ext_byte=0x11)
+    facts = duo.check_gen3_witness(saved, saved, fixture, saves=1, rr=True)
+    assert facts["counter"] == (2, 3)
+
+
+def test_rr_witness_still_refuses_a_changed_hall_of_fame_sector():
+    """Sectors 28-29 stay real Hall of Fame/Trainer Tower territory even under rr=True (only
+    30-31 are RR's own extension) -- narrowing the range must not widen it into a no-op."""
+    fixture = _rr_fixture()
+    saved = bytearray(_rr_saved(fixture, 3))
+    saved[28 * codec.SECTOR_SIZE] ^= 0xFF
+    with pytest.raises(RuntimeError, match="sectors 28-29"):
+        duo.check_gen3_witness(bytes(saved), bytes(saved), fixture, saves=1, rr=True)
+
+
+def test_rr_witness_decoded_party_mismatch_is_named():
+    """witness vs FLUSHED, not vs the fixture (check_gen3_witness compares those two): a
+    from-scratch `saved` with a different party than the dumped witness must be caught."""
+    fixture = _rr_fixture()
+    witness = _rr_saved(fixture, 3, party=RR_MON)
+    flushed = _rr_saved(fixture, 3, party=(1, 0xAAAABBBB, 0x2BDDC8BF))
+    with pytest.raises(RuntimeError, match="decoded party differs"):
+        duo.check_gen3_witness(witness, flushed, fixture, saves=1, rr=True)
 
 
 # ── check_save_witness_gen3: the receipt and file rules ────────────────────────────────────
@@ -405,6 +499,44 @@ def test_link_oracle_counts_the_thrown_balls(monkeypatch, tmp_path):
         run.assert_link_gen3_saved(receipts)
 
 
+# ── RR-only oracles (P5, card C5-5) ─────────────────────────────────────────────────────────
+def test_native_absent_oracle_positive_and_negative():
+    run = _oracle_run("native_absent_gen3", game="gen3_rr_new")
+    notes = []
+    run._pydec_note = notes.append
+    receipts = dict.fromkeys(("a", "b"), "RX apply_trade key=00000000:00000000\nWRITES 0\n")
+    run.assert_native_absent_gen3_saved(receipts)
+    assert notes and "native_absent" in notes[-1]
+    bad = dict(receipts, b="RX apply_trade key=00000000:00000000\nWRITES 1\n")
+    with pytest.raises(RuntimeError, match="WRITES 0"):
+        run.assert_native_absent_gen3_saved(bad)
+    missing = dict(receipts, a="WRITES 0\n")   # no RX apply_trade at all
+    with pytest.raises(RuntimeError, match="RX apply_trade"):
+        run.assert_native_absent_gen3_saved(missing)
+
+
+def test_rival_swap_oracle_asserts_the_documented_refresh_failed_limit():
+    run = _oracle_run("rival_swap_gen3", game="gen3_rr_new")
+    notes = []
+    run._pydec_note = notes.append
+    a_untouched = ([STARTER], {})
+    run._gen3_saved = lambda inst: a_untouched
+    run._gen3_fixture_saved = lambda inst: a_untouched
+    b_receipt = ("READY_IN_BATTLE\nRX replace_rival_team\n"
+                'TX rival_team_replaced - {"error":"refresh_failed","species_ids":[],"trainer_id":0}\n')
+    receipts = {"a": "", "b": b_receipt}
+    run.assert_rival_swap_gen3_saved(receipts)
+    assert notes and "refresh_failed" in notes[-1]
+    # A successful swap (a future refresh_enemy landing) is NOT this scenario's expected outcome:
+    # the oracle names it, it does not silently accept a "better" reply.
+    ok_reply = dict(receipts, b=b_receipt.replace("refresh_failed", "ok"))
+    with pytest.raises(RuntimeError, match="expected 'refresh_failed'"):
+        run.assert_rival_swap_gen3_saved(ok_reply)
+    no_marker = dict(receipts, b=b_receipt.replace("READY_IN_BATTLE\n", ""))
+    with pytest.raises(RuntimeError, match="READY_IN_BATTLE"):
+        run.assert_rival_swap_gen3_saved(no_marker)
+
+
 # ── per-game dispatch: ROM, battery, config, stub ──────────────────────────────────────────
 def test_the_row_resolves_titles_fixtures_and_one_line_leafgreen():
     row = duo.GAMES["gen3_frlg"]
@@ -416,7 +548,8 @@ def test_the_row_resolves_titles_fixtures_and_one_line_leafgreen():
     run.gcfg = dict(row, sides=dict(row["sides"], b=("leafgreen", "leafgreen_party_{target}")))
     assert run._gen3_title("b") == "leafgreen"
     assert run._gen3_fixture_path("b").endswith("leafgreen_party_town.sav")
-    assert set(duo.GEN3_TITLES) == {"firered", "leafgreen"}
+    # P5: radical_red joined (GAMES["gen3_rr_new"]) alongside firered/leafgreen.
+    assert set(duo.GEN3_TITLES) == {"firered", "leafgreen", "radical_red"}
     for inst in ("a", "b"):
         assert row["sides"][inst][0] in duo.GEN3_TITLES
 
@@ -471,6 +604,61 @@ def test_gen3_rom_prefers_the_dump_then_the_staged_copy(monkeypatch, tmp_path):
         run._gen3_rom("a")
 
 
+# ── RR ROM/battery staging: staged companion build vs the raw clean dump (P5, C5-5) ────────
+def test_gen3_rr_rom_companion_uses_the_staged_build_directly(monkeypatch, tmp_path):
+    """No dump search at all for the ordinary (default) kind: `staged` (ROM_REL) short-circuits
+    it, so a companion-kind run never depends on a raw RR dump being reachable."""
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr_new"]), dict(duo.SCENARIOS["faint_cmd_gen3"])
+    root = tmp_path / "wt"
+    (root / "patch" / "build").mkdir(parents=True)
+    (root / duo.ROM_REL).write_bytes(b"rom")
+    monkeypatch.setattr(duo, "REPO", str(root))
+    assert run._gen3_rom("a") == duo.ROM_REL
+
+
+def test_gen3_rr_rom_companion_missing_build_refuses(monkeypatch, tmp_path):
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr_new"]), dict(duo.SCENARIOS["faint_cmd_gen3"])
+    (tmp_path / "empty").mkdir()
+    monkeypatch.setattr(duo, "REPO", str(tmp_path / "empty"))
+    with pytest.raises(FileNotFoundError, match="slink_RR"):
+        run._gen3_rom("a")
+
+
+def test_gen3_rr_rom_clean_kind_searches_the_raw_dump(monkeypatch, tmp_path):
+    """native_absent_gen3's `rom_kind: {"b": "clean"}` bypasses `staged` and searches for the
+    raw dump (patch/tools/build.py:91 DEFAULT_RR / patch/README.md:18), same rule as firered."""
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr_new"]), dict(duo.SCENARIOS["native_absent_gen3"])
+    root = tmp_path / "main" / "wt"
+    root.mkdir(parents=True)
+    monkeypatch.setattr(duo, "REPO", str(root))
+    (tmp_path / "main" / duo.GEN3_CLEAN_RR_ROM).write_bytes(b"rom")
+    staged = []
+    monkeypatch.setattr(gen3_fixtures, "stage_rom", lambda src: staged.append(src) or "staged_clean.gba")
+    assert run._gen3_rom("b") == "staged_clean.gba"
+    assert staged[0].endswith(duo.GEN3_CLEAN_RR_ROM)
+
+
+def test_gen3_rr_battery_path_companion_kind_uses_the_pinned_saveram_name(tmp_path):
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr_new"]), dict(duo.SCENARIOS["faint_cmd_gen3"])
+    run._saveram_dir = lambda inst: str(tmp_path)
+    assert os.path.basename(run._gen3_battery_path("a")) == "slink RR.SaveRAM"
+
+
+def test_gen3_rr_battery_path_clean_kind_computes_the_saveram_name(monkeypatch, tmp_path):
+    """No hand-transcribed saveram name for the clean side: it is derived from whatever
+    `_gen3_rom` actually staged (gen3_fixtures.saveram_name), avoiding a transcription error."""
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr_new"]), dict(duo.SCENARIOS["native_absent_gen3"])
+    run._saveram_dir = lambda inst: str(tmp_path)
+    monkeypatch.setattr(run, "_gen3_rom", lambda inst: "patch/build/gen3_Pokemon_-_Radical_Red.gba")
+    path = run._gen3_battery_path("b")
+    assert os.path.basename(path) == "gen3 Pokemon - Radical Red.SaveRAM"
+
+
 # ── the driver files: symbols, paths and helpers they name exist ──────────────────────────
 DRIVER = REPO / "lua" / "tests" / "duo" / "duo_gen3_main.lua"
 SCRIPTED = REPO / "lua" / "tests" / "gen3_scripted_play.lua"
@@ -482,6 +670,18 @@ def test_every_scenario_has_its_module_and_runner_half():
         base = name[:-len("_gen3")]
         assert (REPO / "lua" / "tests" / "duo" / f"scenario_{row['scenario_prefix']}{base}.lua").is_file(), name
         assert callable(getattr(duo.DuoRun, f"orchestrate_{name}", None)), name
+
+
+def test_every_rr_only_scenario_has_its_module_oracle_and_runner_half():
+    """P5 (card C5-5): explode_gen3/rival_swap_gen3/native_absent_gen3, on gen3_rr_new."""
+    row = duo.GAMES["gen3_rr_new"]
+    for name in GEN3_RR_ONLY:
+        base = name[:-len("_gen3")]
+        assert (REPO / "lua" / "tests" / "duo" / f"scenario_{row['scenario_prefix']}{base}.lua").is_file(), name
+        assert callable(getattr(duo.DuoRun, f"orchestrate_{name}", None)), name
+        oracle = duo.SCENARIOS[name]["oracle"]
+        assert oracle == f"assert_{name}_saved" and callable(getattr(duo.DuoRun, oracle, None)), name
+        assert duo.SCENARIOS[name]["games"] == ("gen3_rr_new",), name
 
 
 @pytest.mark.parametrize("title", ["firered", "leafgreen"])
@@ -539,8 +739,13 @@ function FAKE(scenario, player, phase, spec)
         if event == "sync_retrieve_done" then gone[key] = nil end
         return true
     end
-    ctx.wait_received = function() return true end
-    ctx.last_sent = function() return { area_id = "route_1", species_id = 16 } end
+    ctx.wait_received = function() return spec.received ~= false end
+    ctx.last_sent = function(event)
+        if event == "rival_team_replaced" then return spec.rival_reply or { error = "refresh_failed" } end
+        return { area_id = "route_1", species_id = 16 }
+    end
+    ctx.await_turn = function() return spec.turn or "action" end
+    ctx.zero_hp = function() return spec.zero_hp_ok ~= false end
     ctx.hp0 = function() return spec.hp0 end
     ctx.battle_hold = function() return { why = "active battler" } end
     ctx.save = function() return true end
@@ -609,6 +814,12 @@ def _run_module(lua, scenario, player, phase, spec):
     ("reconnect", "b", "initial", {}, ["RECONNECT_READY b"]),
     ("reconnect", "a", "same_save", {}, ["RECONNECT_HELLO same_save count=1"]),
     ("reconnect", "a", "wrong_save", {}, ["RECONNECT_HELLO wrong_save count=1"]),
+    # RR-only (P5, card C5-5): explode is not covered here (its B half polls raw memory/joypad
+    # globals this harness does not stub -- see the card's final report).
+    ("rival_swap", "b", "initial", {}, ["READY_IN_BATTLE"]),
+    ("rival_swap", "a", "initial", {}, []),
+    ("native_absent", "a", "initial", {}, ["PROBE_SETTLED writes=0"]),
+    ("native_absent", "b", "initial", {}, ["PROBE_SETTLED writes=0"]),
 ])
 def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spec, markers):
     ok, passed, msg, logs = _run_module(lua, scenario, player, phase, spec)
@@ -623,6 +834,9 @@ def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spe
     ("faint_cmd", "b", "initial", {}, "never took K1 to HP 0"),
     ("reconnect", "a", "wrong_save", {"writes": 2}, "wrote 2 time(s)"),
     ("reconnect", "a", "initial", {}, "the runner never killed A"),
+    ("rival_swap", "b", "initial", {"turn": "party"}, "never reached the action menu"),
+    ("rival_swap", "b", "initial", {"rival_reply": "lua:{error='ok'}"}, "expected error=refresh_failed"),
+    ("native_absent", "b", "initial", {"received": "lua:false"}, "probe never arrived"),
 ])
 def test_scenario_modules_fail_with_a_named_reason(lua, scenario, player, phase, spec, reason):
     ok, passed, msg, _ = _run_module(lua, scenario, player, phase, spec)

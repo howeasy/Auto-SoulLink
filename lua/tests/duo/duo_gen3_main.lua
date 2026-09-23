@@ -23,7 +23,11 @@
 -- SAVE_WITNESS/SAVE_WITNESS_DUMP lines, scenario markers, and a final "RESULT: PASS|FAIL (why)".
 local D = SLINK_DUO
 assert(D and D.wt and D.player and D.scenario and D.result, "SLINK_DUO not configured (run via tools/e2e_duo.py)")
-assert(D.game == "gen3_frlg", "duo_gen3_main only serves game gen3_frlg, got " .. tostring(D.game))
+-- P5 (card C5-5): "gen3_rr_new" is the battery-boot RR row (tools/e2e_duo.py GAMES), sharing
+-- this driver with "gen3_frlg" -- everything below that reads a per-title pack/checkpoint path
+-- or symbol table branches on D.title ("radical_red" vs firered/leafgreen), not on D.game.
+assert(D.game == "gen3_frlg" or D.game == "gen3_rr_new",
+       "duo_gen3_main only serves game gen3_frlg/gen3_rr_new, got " .. tostring(D.game))
 assert(D.title, "SLINK_DUO.title missing (the GAMES row's sides)")
 
 local ROOT = D.wt
@@ -81,8 +85,13 @@ local function read_json(rel)
     return assert(JSON.decode(raw), "malformed " .. rel)
 end
 local title = D.title
-local cp = assert(read_json("data/games/gen3_frlg/write_checkpoint.json")[title], "no checkpoint for " .. title)
-local profile = assert(read_json("data/games/gen3_frlg/profile.json").titles[title], "no profile for " .. title)
+-- P5: radical_red's pack lives under data/games/gen3_rr, not gen3_frlg's (different checkpoint
+-- predicate and RAM/derived offsets -- RR's 25-box layout in particular, gen3_codec commit
+-- 62887460). Every OTHER read in this file goes through `cp`/`profile`, so this one branch is
+-- the whole of the pack selection.
+local pack = title == "radical_red" and "gen3_rr" or "gen3_frlg"
+local cp = assert(read_json("data/games/" .. pack .. "/write_checkpoint.json")[title], "no checkpoint for " .. title)
+local profile = assert(read_json("data/games/" .. pack .. "/profile.json").titles[title], "no profile for " .. title)
 G.title, G.budget = title, 5000000
 local function bus_bytes(addr, n)
     local out = {}
@@ -107,7 +116,15 @@ local S = {}
 do
     local want = {}
     for _, n in ipairs(SYMS) do want[n] = true end
-    local path = ROOT .. "/data/gen3/pret/poke" .. title .. ".sym"
+    -- radical_red has no pret .sym of its own (RR is a hack of FR, not a pret source tree): RR
+    -- retains FR's addresses for every function this file's own docs/gen3/research notes
+    -- actually cross-checked against the RR binary (Task_DepositMenu/Task_WithdrawMon,
+    -- TryStorePartyMonInBox -- docs/gen3/research/rr_pc_menu.md:29,79-80). The REST of SYMS
+    -- (battle action/move cursors, gBattlerControllerFuncs, gBattleMons/gBattleMoves) are NOT
+    -- independently verified for RR -- reusing pokefirered.sym for them is the best-supported
+    -- available choice, not a confirmed fact; see the card's final report.
+    local sym_title = title == "radical_red" and "firered" or title
+    local path = ROOT .. "/data/gen3/pret/poke" .. sym_title .. ".sym"
     for line in io.lines(path) do
         local addr, name = line:match("^(%x+) %a %x+ (%S+)")
         if name and want[name] and not S[name] then S[name] = tonumber(addr, 16) end
@@ -349,6 +366,15 @@ event.onframeend(function()
     end
 end, "SLink-duo-gen3-hp0")
 function ctx.hp0(key) return hp0[key] end
+--- explode_gen3 (RR only): zero a party mon's HP directly, mirroring the old RR driver's own RAM
+--- poke (scenario_explode.lua) -- the overworld watcher reads this as a faint and the client
+--- sends `faint`, same as an engine-driven one. False if `key` is not currently in the party.
+function ctx.zero_hp(key)
+    local m = ctx.find(key)
+    if not m then return false end
+    memory.write_u16_le(reader.party_base() + m.slot * MON_SIZE + HP_OFF, 0, "System Bus")
+    return true
+end
 
 -- ── battle input (pret battle_controller_player.c / party_menu.c, symbols above) ─────────
 local B_OUTCOME_CAUGHT = 7        -- pret include/constants/battle.h

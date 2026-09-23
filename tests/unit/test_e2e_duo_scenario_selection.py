@@ -254,6 +254,11 @@ def test_list_lines_carry_the_attempt_limit_and_the_targets():
 # ── gen3_frlg: the new Gen 3 client on vanilla FRLG (card C4-6a) ────────────────────────────────
 GEN3_FRLG_SCENARIOS = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3",
                        "whiteout_gen3", "link_gen3", "deadzone_gen3", "reconnect_gen3")
+# P5 (card C5-5): gen3_rr_new runs the same seven (their `games` tuples EXTENDED, never renamed)
+# plus three RR-only scenarios (docs/gen3/PLAN.md §14 P5, minus ghost/trade/infopanel -- the old
+# client's `gen3_rr` row keeps those -- and trade_abort, a later card).
+GEN3_RR_ONLY_SCENARIOS = ("explode_gen3", "rival_swap_gen3", "native_absent_gen3")
+GEN3_RR_NEW_SCENARIOS = GEN3_FRLG_SCENARIOS + GEN3_RR_ONLY_SCENARIOS
 
 
 def test_gen3_frlg_selection_is_exactly_its_seven():
@@ -261,20 +266,33 @@ def test_gen3_frlg_selection_is_exactly_its_seven():
     assert sorted(scenarios_for("gen3_frlg")) == sorted(GEN3_FRLG_SCENARIOS)
 
 
+def test_gen3_rr_new_selection_is_the_seven_shared_plus_its_own_three():
+    """P5, card C5-5: `--scenario all --game gen3_rr_new` runs the seven gen3_frlg shares PLUS
+    explode_gen3/rival_swap_gen3/native_absent_gen3 -- and nothing else (not the old client's
+    trade/ghost/infopanel/explode on `gen3_rr`, not any gen1/gen2 name)."""
+    assert sorted(scenarios_for("gen3_rr_new")) == sorted(GEN3_RR_NEW_SCENARIOS)
+    assert "gen3_rr_new" in duo_module.OPT_IN_GAMES
+
+
 def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
-    """Opt-in both ways: the `_gen3` keys name only gen3_frlg (P5 adds gen3_rr by extending the
-    tuple, never by renaming), and the savestate-less shared ones (faint/boxsync) and every other
-    row's keys stay out of it."""
+    """Opt-in both ways: the `_gen3` keys name only gen3_frlg and gen3_rr_new (P5 adds gen3_rr_new
+    by EXTENDING the shared seven's `games` tuple, never by renaming), and the savestate-less
+    shared ones (faint/boxsync) and every other row's keys stay out of it."""
     assert "gen3_frlg" in duo_module.OPT_IN_GAMES
     for game in GAMES:
-        if game != "gen3_frlg":
-            assert not set(scenarios_for(game)) & set(GEN3_FRLG_SCENARIOS), game
+        if game not in ("gen3_frlg", "gen3_rr_new"):
+            assert not set(scenarios_for(game)) & set(GEN3_RR_NEW_SCENARIOS), game
     for name in SCENARIOS:
         if name not in GEN3_FRLG_SCENARIOS:
             assert not scenario_applies(name, "gen3_frlg"), name
+        if name not in GEN3_RR_NEW_SCENARIOS:
+            assert not scenario_applies(name, "gen3_rr_new"), name
     for name in GEN3_FRLG_SCENARIOS:
-        assert SCENARIOS[name]["games"] == ("gen3_frlg",), name
+        assert SCENARIOS[name]["games"] == ("gen3_frlg", "gen3_rr_new"), name
         assert scenario_attempt_limit(name, "gen3_frlg") == 1
+        assert scenario_attempt_limit(name, "gen3_rr_new") == 1
+    for name in GEN3_RR_ONLY_SCENARIOS:
+        assert SCENARIOS[name]["games"] == ("gen3_rr_new",), name
 
 
 def test_every_gen3_frlg_scenario_declares_an_oracle_that_exists():
@@ -287,6 +305,29 @@ def test_every_gen3_frlg_scenario_declares_an_oracle_that_exists():
         method = SCENARIOS[name].get("oracle")
         assert method and callable(getattr(DuoRun, method, None)), name
         assert method == f"assert_{name}_saved", name
+
+
+def test_every_gen3_rr_new_scenario_declares_an_oracle_that_exists():
+    """P5 (card C5-5): gen3_rr_new's row (its own `save_witness`, `rr=True`) and all ten scenarios."""
+    row = GAMES["gen3_rr_new"]
+    assert row["oracle_required"] is True and row["rr"] is True
+    assert callable(getattr(DuoRun, row["save_witness"], None))
+    for name in scenarios_for("gen3_rr_new"):
+        method = SCENARIOS[name].get("oracle")
+        assert method and callable(getattr(DuoRun, method, None)), name
+        assert method == f"assert_{name}_saved", name
+
+
+def test_the_gen3_rr_new_wrapper_lists_the_shared_seven_plus_its_three():
+    sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
+    mod = __import__("test_duo_gen3")
+    assert mod.GAME_RR == "gen3_rr_new"
+    assert sorted(mod.SCENARIOS_RR) == sorted(GEN3_RR_NEW_SCENARIOS)
+    for name in mod.SCENARIOS_RR:
+        assert scenario_applies(name, "gen3_rr_new")
+        assert mod.deadline_for_rr(name) == SCENARIOS[name]["timeout"] + 300
+    assert mod.required_fixtures_rr("boxsync_gen3") == ["rr_battle", "rr_town_b"]
+    assert mod.required_fixtures_rr("faint_cmd_gen3") == ["rr_town", "rr_town_b"]
 
 
 def test_the_gen3_wrapper_lists_exactly_the_gen3_frlg_scenarios():

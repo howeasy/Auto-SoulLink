@@ -196,23 +196,69 @@ SCENARIOS = {
     #   linked_faint_active natural engine faint of A's ACTIVE linked mon; B's partner sits
     #                       active mid-battle (held), is switched out, and must drop to HP 0
     #                       while the battle is still running (owner ruling 2026-09-23).
-    "faint_cmd_gen3": {"flags": [], "timeout": 900, "games": ("gen3_frlg",), "target": "town",
-                       "frames": 2000000, "oracle": "assert_faint_cmd_gen3_saved"},
-    "linked_faint_active_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg",),
+    # P5 (card C5-5): every `games` tuple below now names "gen3_rr_new" too -- these seven apply
+    # to RR unchanged (PLAN §14 P5, owner ruling: RR under the standard). The five whose `target`
+    # includes "battle" are blocked on the missing rr_battle{,_b}.sav fixture (see GAMES
+    # ["gen3_rr_new"]'s comment); faint_cmd (server-command only) and reconnect (target "town")
+    # have no such dependency. All seven also inherit an UNVERIFIED risk in common: their walking
+    # (Route 1 grass) and PC-menu navigation come from lua/tests/gen3_scripted_play.lua's
+    # FR-pret-derived PATHS/symbols, reused for RR (duo_gen3_main.lua) because the OLD RR duo
+    # driver (lua/tests/duo/duo_main.lua) never walks at all -- there is no pinned RR walking
+    # flow anywhere in this repo to port instead. Only the specific functions
+    # docs/gen3/research/rr_pc_menu.md and rr_save_layout.md actually cross-checked against the
+    # RR binary (Task_DepositMenu/Task_WithdrawMon, a few battle-flag addresses) are confirmed
+    # identical to FR's; the rest (battle action/move cursors, map names/tile coordinates) are
+    # assumed, not verified.
+    "faint_cmd_gen3": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_rr_new"),
+                       "target": "town", "frames": 2000000,
+                       "oracle": "assert_faint_cmd_gen3_saved"},
+    "linked_faint_active_gen3": {"flags": [], "timeout": 1800,
+                                 "games": ("gen3_frlg", "gen3_rr_new"),
                                  "target": "battle", "frames": 2500000,
                                  "oracle": "assert_linked_faint_active_gen3_saved"},
-    "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg",),
+    "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr_new"),
                      "target": {"a": "battle", "b": "town"}, "frames": 2500000,
                      "oracle": "assert_boxsync_gen3_saved"},
-    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg",),
+    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr_new"),
                       "target": {"a": "battle", "b": "town"}, "frames": 3000000,
                       "oracle": "assert_whiteout_gen3_saved"},
-    "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg",), "target": "battle",
-                  "frames": 2500000, "oracle": "assert_link_gen3_saved"},
-    "deadzone_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg",), "target": "battle",
-                      "frames": 2500000, "oracle": "assert_deadzone_gen3_saved"},
-    "reconnect_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",), "target": "town",
-                       "frames": 2000000, "no_save": ("a",), "oracle": "assert_reconnect_gen3_saved"},
+    "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr_new"),
+                  "target": "battle", "frames": 2500000, "oracle": "assert_link_gen3_saved"},
+    "deadzone_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr_new"),
+                      "target": "battle", "frames": 2500000,
+                      "oracle": "assert_deadzone_gen3_saved"},
+    "reconnect_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_rr_new"),
+                       "target": "town", "frames": 2000000, "no_save": ("a",),
+                       "oracle": "assert_reconnect_gen3_saved"},
+    # ── RR-only (P5, card C5-5): docs/gen3/PLAN.md §14 P5's nine minus ghost/trade/infopanel
+    # (the old client's row keeps those) and trade_abort (a later card; not built here, see the
+    # card's final report). All three below are BLOCKED the same way as the five "battle"-target
+    # scenarios above (missing rr_battle{,_b}.sav) -- explode also needs the player positioned in
+    # a trainer's sightline, which "battle" (a grass fixture) is not either; see each entry.
+    #   explode      force_explode Variant-3 (lua/gen3/client.lua explode_step), ported
+    #                behaviour-for-behaviour from the OLD RR driver's scenario_explode.lua
+    #                (trusted RR addresses, docs/gen3/PLAN.md §0). A zeroes its own linked mon's
+    #                HP directly; B must already be walked up to a trainer (the old row's
+    #                slink_prebattle.State) -- no such fixture exists for the battery-boot row.
+    #   rival_swap   native OP_SET_ENEMY_PARTY (lua/gen3/native.lua replace_rival_team) against a
+    #                real battle. entry.lua's refresh_enemy has no write window in the battle's
+    #                first frames yet (commit 9505648b), so the DOCUMENTED, EXPECTED reply is
+    #                error=refresh_failed -- the oracle asserts that, not a successful swap.
+    #   native_absent B boots the CLEAN RR dump (rom_kind clean/companion split, no fixture
+    #                dependency -- runs on rr_town.sav like faint_cmd/reconnect); both sides get
+    #                the same apply_trade debug probe. lua/gen3/native.lua has no apply_trade yet
+    #                (trade is a later card), so client.lua:820-824 refuses identically on BOTH
+    #                sides today -- a real clean-vs-companion asymmetry only appears once trade
+    #                is ported. This scenario is NOT blocked on a fixture.
+    "explode_gen3": {"flags": ["--explode-mode"], "timeout": 900, "games": ("gen3_rr_new",),
+                     "target": "battle", "frames": 1500000, "oracle": "assert_explode_gen3_saved"},
+    "rival_swap_gen3": {"flags": [], "timeout": 600, "games": ("gen3_rr_new",),
+                        "target": "battle", "frames": 900000, "no_save": ("a", "b"),
+                        "oracle": "assert_rival_swap_gen3_saved"},
+    "native_absent_gen3": {"flags": [], "timeout": 300, "games": ("gen3_rr_new",),
+                           "target": "town", "frames": 300000,
+                           "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("a", "b"),
+                           "oracle": "assert_native_absent_gen3_saved"},
     # The four below are Gen 3-only and say so explicitly. They load Radical Red savestates
     # and two of them need the RR companion patch, so there is nothing for a Game Boy to run.
     "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420,
@@ -234,7 +280,7 @@ SCENARIOS = {
 # Titles that never inherit a scenario implicitly. An entry with no `games` key means "every
 # title", which is right for savestate-less shared scenarios like faint/boxsync — but not for
 # `gen1_new`, whose driver runs only the scenarios that name it, so opt-in is the whole rule.
-OPT_IN_GAMES = ("gen1_new", "gen3_frlg")
+OPT_IN_GAMES = ("gen1_new", "gen3_frlg", "gen3_rr_new")
 
 
 def is_pure_pairing(game) -> bool:
@@ -916,14 +962,30 @@ def saved_money(sram):
 # dumps live in the main checkout, docs/gen3_requirements.md Pins); `saveram` is the name
 # BizHawk's gamedb files a clean dump's battery under (tests/fixtures/gen3/README.md
 # "boot-check") -- never the ROM-derived gen3_fixtures.saveram_name().
+# P5 (card C5-5): Radical Red. `staged` names the already-built ROM directly (ROM_REL, the
+# companion patch, ships from patch/build/) -- unlike firered/leafgreen it is not a raw dump the
+# repo-root/parents search in _gen3_rom applies to, so `staged` short-circuits that search.
+# `saveram` is pinned from tools/mkstates.py:117 / the RR boot-check note in
+# tools/gen3_fixtures.py:saveram_name (BizHawk has no gamedb hash for this ROM, so it derives
+# the battery name from the launched filename, underscores->spaces -- "slink_RR.gba" is what
+# actually gets launched here, unstaged, so this is that rule applied to that exact name).
 GEN3_TITLES = {
     "firered": {"rom": "Pokemon - FireRed Version (USA).gba",
                 "saveram": "Pokemon - FireRed Version (USA).SaveRAM"},
     "leafgreen": {"rom": "Pokemon - LeafGreen Version (USA).gba",
                   "saveram": "Pokemon - LeafGreen Version (USA).SaveRAM"},
+    "radical_red": {"staged": ROM_REL, "saveram": "slink RR.SaveRAM"},
 }
+# The raw, UNPATCHED Radical Red dump (patch/tools/build.py:91 DEFAULT_RR, patch/README.md:18),
+# for native_absent_gen3's clean-boot side only (`rom_kind`: "clean"). It resolves through the
+# ORDINARY repo-root/parents dump search (no `staged` entry), same as firered/leafgreen, because
+# unlike the companion build it genuinely is a raw dump to stage; its battery name is computed
+# from the staged path at resolve time (_gen3_battery_path), not pinned here, since stage_rom's
+# naming is derived from the ORIGINAL filename and hand-transcribing it risks a typo.
+GEN3_CLEAN_RR_ROM = "Pokemon - Radical Red.gba"
 GEN3_FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen3")
 GEN3_PROFILE = os.path.join(REPO, "data", "games", "gen3_frlg", "profile.json")
+GEN3_RR_PROFILE = os.path.join(REPO, "data", "games", "gen3_rr", "profile.json")
 # Receipt lines the Gen 3 driver writes (lua/tests/duo/duo_gen3_main.lua): one per non-tick
 # event it SENDS and one per command it RECEIVES.
 GEN3_TX_RE = r"(?m)^TX {event} {key}(?=\s|$)"   # key "-" for an event that carries none
@@ -942,16 +1004,25 @@ def gen3_key(mon) -> str:
     return f"{mon['personality']:08X}:{mon['ot_id']:08X}"
 
 
-def gen3_decode(image):
-    """(party, boxes) of a vanilla flash image; `boxes` maps (box, slot) -> mon, occupied only."""
+def gen3_decode(image, rr=False):
+    """(party, boxes) of a flash image; `boxes` maps (box, slot) -> mon, occupied only.
+
+    `rr` selects RR's 25-scattered-box/fixed-order-party layout (gen3_codec party_from_save/
+    boxes_from_save(rr=True), pinned commit 62887460) instead of vanilla FRLG's 14 boxes.
+    """
     codec = gen3_codec()
     body = codec.split_rtc(image)[0]
     boxes = {}
-    for box, row in enumerate(codec.boxes_from_save(body)):
+    for box, row in enumerate(codec.boxes_from_save(body, rr=rr)):
         for slot, mon in enumerate(row):
             if mon["has_species"] and mon["species"]:
                 boxes[(box, slot)] = mon
-    return codec.party_from_save(body), boxes
+    return codec.party_from_save(body, rr=rr), boxes
+
+
+def gen3_profile_path(title) -> str:
+    """The pack profile.json this title's derived offsets live in (radical_red -> gen3_rr)."""
+    return GEN3_RR_PROFILE if title == "radical_red" else GEN3_PROFILE
 
 
 def gen3_ball_count(image, title="firered") -> int:
@@ -959,10 +1030,12 @@ def gen3_ball_count(image, title="firered") -> int:
 
     Offsets come from the pack (profile.json derived SB1_BALL_POCKET_OFFSET/_COUNT and
     SB2_ENC_KEY_OFFSET); only the quantity is XORed with the low u16 of the encryption key
-    (pret src/item.c:20-29).
+    (pret src/item.c:20-29). UNVERIFIED for radical_red: no RR scenario reads this yet (P5's
+    battle-target RR scenarios are all blocked on the missing rr_battle fixture), so the RR
+    branch of this offset lookup has never actually run.
     """
     codec = gen3_codec()
-    with open(GEN3_PROFILE, encoding="utf-8") as handle:
+    with open(gen3_profile_path(title), encoding="utf-8") as handle:
         derived = json.load(handle)["titles"][title]["derived"]
     parsed = codec.parse_flash(codec.split_rtc(image)[0])
     sb1, sb2 = parsed["sb1"], parsed["sb2"]
@@ -981,7 +1054,7 @@ def _gen3_sectors(body, indexes):
     return b"".join(body[i * codec.SECTOR_SIZE:(i + 1) * codec.SECTOR_SIZE] for i in indexes)
 
 
-def check_gen3_witness(witness, flushed, fixture, *, saves):
+def check_gen3_witness(witness, flushed, fixture, *, saves, rr=False):
     """PLAN §5.5's check_save_witness_gen3, on bytes: returns the facts or raises, naming the rule.
 
     `witness` is the SRAM (flash) domain dumped inside the successful TrySavingData return,
@@ -997,6 +1070,19 @@ def check_gen3_witness(witness, flushed, fixture, *, saves):
       * the decoded party and boxes equal the flushed battery's;
       * the flushed body, its optional 16-byte RTC suffix normalized by gen3_codec.split_rtc,
         is byte-identical to the hook-time image.
+
+    `rr=True` (P5, card C5-5) qualifies/decodes through the RR layout instead (`cfru=True`,
+    `gen3_decode(..., rr=True)`) and narrows the blind "untouched" range to sectors 28-29:
+    RR's own physical sectors 30-31 are a single-copy, unrotated EXTENSION that carries boxes
+    20-22 (gen3_codec.RR_EXT_SECTORS/RR_BOX_BASES) and, per
+    docs/gen3/research/flash_save.md:136, "have no checksum or generation counter, so a complete
+    rotating slot cannot authenticate their age" -- a normal RR save CAN legitimately rewrite
+    them (any scenario that touches boxes 20-22), so asserting byte-equality against the fixture
+    there would be wrong, not stricter. Their freshness/completion is instead established the
+    same way the rest of the image already is, at the bottom of this function: the witness (read
+    live, inside the save hook) and the flushed file (read after quit) must be byte-identical --
+    an extension a save left stale or torn could not reproduce that agreement by chance, and
+    gen3_decode already refuses (ValueError, ext_erased) an all-0xFF extension outright.
     """
     import hashlib
 
@@ -1004,7 +1090,7 @@ def check_gen3_witness(witness, flushed, fixture, *, saves):
     if len(witness) != codec.FLASH_SIZE:
         raise RuntimeError(f"the save witness is {len(witness)} bytes, expected "
                            f"{codec.FLASH_SIZE} (0x{codec.FLASH_SIZE:X})")
-    ok, why = codec.qualify_flash(witness)
+    ok, why = codec.qualify_flash(witness, cfru=rr)
     if not ok:
         raise RuntimeError(f"the save witness is not a complete save (sector set): {why}")
     try:
@@ -1012,8 +1098,8 @@ def check_gen3_witness(witness, flushed, fixture, *, saves):
         fixture_body = codec.split_rtc(fixture)[0]
     except ValueError as exc:
         raise RuntimeError(f"a battery image has an unsupported length: {exc}") from exc
-    before = codec.parse_flash(fixture_body)["counter"]
-    after = codec.parse_flash(witness)["counter"]
+    before = codec.parse_flash(fixture_body, cfru=rr)["counter"]
+    after = codec.parse_flash(witness, cfru=rr)["counter"]
     if after <= before:
         raise RuntimeError(f"the save counter did not advance over the fixture's "
                            f"({before} -> {after}): the witness is not a save this run made")
@@ -1022,15 +1108,16 @@ def check_gen3_witness(witness, flushed, fixture, *, saves):
                            f"witnessed {saves} save(s); a save went unwitnessed or a dump is "
                            f"missing")
     per_slot = codec.NUM_SECTORS_PER_SLOT
-    untouched = {"sectors 28-31": range(2 * per_slot, codec.SECTORS_COUNT)}
+    special_end = (2 * per_slot + 2) if rr else codec.SECTORS_COUNT
+    untouched = {f"sectors 28-{special_end - 1}": range(2 * per_slot, special_end)}
     if saves == 1:
         other = 1 - after % codec.NUM_SAVE_SLOTS
         untouched[f"the unwritten slot {other}"] = range(other * per_slot, (other + 1) * per_slot)
     for name, indexes in untouched.items():
         if _gen3_sectors(witness, indexes) != _gen3_sectors(fixture_body, indexes):
             raise RuntimeError(f"{name} differ from the fixture; a normal save never writes them")
-    w_party, w_boxes = gen3_decode(witness)
-    f_party, f_boxes = gen3_decode(body)
+    w_party, w_boxes = gen3_decode(witness, rr=rr)
+    f_party, f_boxes = gen3_decode(body, rr=rr)
     if [gen3_key(m) for m in w_party] != [gen3_key(m) for m in f_party] or w_party != f_party:
         raise RuntimeError(f"the decoded party differs: witness {[gen3_key(m) for m in w_party]} "
                            f"vs flushed {[gen3_key(m) for m in f_party]}")
@@ -1261,6 +1348,25 @@ GAMES = {
         "oracle_required": True,
         "save_witness": "check_save_witness_gen3",
     },
+    # P5 (card C5-5): the NEW Gen 3 client on Radical Red, battery-boot like gen3_frlg (the same
+    # `play`/duo_gen3_main.lua/witness method) instead of the OLD client's savestate row above
+    # ("gen3_rr", untouched). `sides` stems "rr_{target}" match tests/fixtures/gen3/README.md's
+    # naming (only "town" exists today: rr_town.sav / rr_town_b.sav, both boot-checked --
+    # rr_battle{,_b}.sav do not exist, so every scenario below whose `target` is "battle" FAILS
+    # at fixture lookup until the fixture worker builds them; this is a real, named blocker, not
+    # a silent gap). `game` is its own family (not aliased to "gen3_frlg") so duo_gen3_main.lua
+    # and the SYS/pack selection can tell RR apart; `rr=True` is read by check_save_witness_gen3.
+    "gen3_rr_new": {
+        "main": "lua/tests/duo/duo_gen3_main.lua",
+        "game": "gen3_rr_new",
+        "play": "gen3_fixtures",
+        "sides": {"a": ("radical_red", "rr_{target}"), "b": ("radical_red", "rr_{target}_b")},
+        "uses_savestate": False,
+        "scenario_prefix": "gen3_",
+        "oracle_required": True,
+        "save_witness": "check_save_witness_gen3",
+        "rr": True,
+    },
 }
 
 
@@ -1352,15 +1458,35 @@ class DuoRun:
         stem = self.gcfg["sides"][inst][1].format(target=self._target_for(inst))
         return os.path.join(GEN3_FIXTURES, stem + ".sav")
 
+    def _gen3_rom_kind(self, inst) -> str:
+        """native_absent_gen3's per-instance ROM selection (a scenario field, like `target`):
+        "companion" (default, the ROM every other RR scenario boots) or "clean" (the raw,
+        unpatched dump, GEN3_CLEAN_RR_ROM). Titles other than radical_red ignore this."""
+        kind = self.cfg.get("rom_kind", "companion")
+        return kind[inst] if isinstance(kind, dict) else kind
+
     def _gen3_rom(self, inst) -> str:
         """The instance's ROM, staged to a space-free repo-relative path (gen3_fixtures.stage_rom,
         the launch rule shared with run_gate). An already-staged copy is used when the dump
-        itself is not reachable from this checkout."""
+        itself is not reachable from this checkout.
+
+        radical_red's entry carries `staged` (ROM_REL, the already-built companion patch) for
+        the ordinary "companion" kind, bypassing the dump search below entirely; native_absent_
+        gen3's "clean" kind instead searches for the raw dump (GEN3_CLEAN_RR_ROM), same as
+        firered/leafgreen.
+        """
         from pathlib import Path
 
         import gen3_fixtures
 
-        name = GEN3_TITLES[self._gen3_title(inst)]["rom"]
+        title = self._gen3_title(inst)
+        row = GEN3_TITLES[title]
+        staged = row.get("staged")
+        if staged and self._gen3_rom_kind(inst) == "companion":
+            if not os.path.isfile(os.path.join(REPO, staged)):
+                raise FileNotFoundError(f"{staged} not found (build the companion patch first)")
+            return staged
+        name = GEN3_CLEAN_RR_ROM if title == "radical_red" else row["rom"]
         for base in (Path(REPO), *Path(REPO).parents):
             if (base / name).is_file():
                 return gen3_fixtures.stage_rom(str(base / name))
@@ -1371,8 +1497,18 @@ class DuoRun:
                                 f"staged {staged}")
 
     def _gen3_battery_path(self, inst) -> str:
-        return os.path.join(self._saveram_dir(inst),
-                            GEN3_TITLES[self._gen3_title(inst)]["saveram"])
+        title = self._gen3_title(inst)
+        row = GEN3_TITLES[title]
+        if title == "radical_red" and self._gen3_rom_kind(inst) == "clean":
+            # No gamedb hash for this dump either: the battery name follows whatever filename
+            # _gen3_rom actually staged it under (gen3_fixtures.saveram_name), computed here
+            # rather than hand-transcribed to avoid a transposition error going unnoticed.
+            import gen3_fixtures
+
+            saveram = gen3_fixtures.saveram_name(self._gen3_rom(inst))
+        else:
+            saveram = row["saveram"]
+        return os.path.join(self._saveram_dir(inst), saveram)
 
     def _gen3_flushed(self, inst) -> bytes:
         """The battery the instance's EmuHawk left, by the gamedb name it was seeded under (or the
@@ -4606,7 +4742,8 @@ class DuoRun:
             with open(path, "rb") as handle:
                 witness = handle.read()
             facts = check_gen3_witness(witness, self._gen3_flushed(inst),
-                                       self._gen3_fixture_bytes(inst), saves=len(dumps))
+                                       self._gen3_fixture_bytes(inst), saves=len(dumps),
+                                       rr=bool(self.gcfg.get("rr")))
             self._pydec_note(f"SAVE_WITNESS_SHA256 inst={inst} site={facts['site']} "
                              f"file={facts['file']} match=true saves={len(dumps)} "
                              f"counter={facts['counter'][0]}->{facts['counter'][1]}"
@@ -4696,6 +4833,38 @@ class DuoRun:
         """D-3 on FRLG: A runs, route_1 dead-zones, B's later catch there is retired (shared)."""
         self._gen3_prelude()
         self.assert_dead_zone_new()
+
+    # ── RR-only runner halves (P5, card C5-5) ───────────────────────────────────────────────
+    def orchestrate_explode_gen3(self):
+        """Ported behaviour-for-behaviour from the OLD RR driver's scenario_explode.lua (trusted
+        RR addresses, docs/gen3/PLAN.md §0): link the two ACTIVE starters, then let A's own
+        scenario half zero its linked mon's HP directly (mirroring the old file's RAM poke) --
+        the server's --explode-mode propagation queues force_explode to B."""
+        self._gen3_prelude(link_slot=0)
+        self.go(self._gen3_linked_lines())
+
+    def orchestrate_rival_swap_gen3(self):
+        """PLAN P5's native rival-swap control (RR only): B fights, A idles. Once B logs
+        READY_IN_BATTLE the runner queues replace_rival_team with a well-formed but dummy blob --
+        lua/gen3/native.lua stages and reads it back, then always answers refresh_failed (no
+        write window in the battle's first frames yet, commit 9505648b), so the exact bytes
+        never reach the oracle."""
+        self._gen3_prelude()
+        self.go()
+        self._gen3_mark("b", r"^READY_IN_BATTLE\b", "B at the battle action menu")
+        self.queue_command("b", {"cmd": "replace_rival_team", "trainer_id": 0,
+                                 "blobs_hex": ["00" * 100]})
+
+    def orchestrate_native_absent_gen3(self):
+        """PLAN P5's clean-vs-companion RR control: B boots rom_kind=clean (no companion patch,
+        GAMES["gen3_rr_new"]'s `_gen3_rom_kind`), A stays companion. Both receive the same
+        apply_trade debug probe once ready; lua/gen3/client.lua:820-824 never sends a wire reply
+        for either outcome (trade is not ported yet), so the receipt's own refusal log line is
+        the only witness -- the oracle reads it directly, not a TX/RX marker."""
+        self._gen3_prelude()
+        self.go()
+        for inst in ("a", "b"):
+            self.queue_command(inst, {"cmd": "apply_trade", "old_key": "00000000:00000000"})
 
     def _gen3_wrong_save(self, path):
         """A real, qualifying vanilla save whose trainer id differs from A's fixture."""
@@ -4803,9 +4972,14 @@ class DuoRun:
 
     # ── Gen 3 (gen3_frlg): saved-state oracles ─────────────────────────────────────────────
     def _gen3_memorial_box(self) -> int:
-        """MEMORIAL = the last box (lua/gen3/boxes.lua memorial_box = BOXES_PER_STORE - 1)."""
-        with open(GEN3_PROFILE, encoding="utf-8") as handle:
-            derived = json.load(handle)["titles"][self._gen3_title("a")]["derived"]
+        """MEMORIAL = the last box (lua/gen3/boxes.lua memorial_box = BOXES_PER_STORE - 1).
+
+        RR (25 boxes) reads its own pack profile, not gen3_frlg's (14 boxes) -- `title` is
+        constant across both instances of a row, so "a" stands in for the pair.
+        """
+        title = self._gen3_title("a")
+        with open(gen3_profile_path(title), encoding="utf-8") as handle:
+            derived = json.load(handle)["titles"][title]["derived"]
         return derived["BOXES_PER_STORE"] - 1
 
     def _gen3_one_link(self, status, cause=None):
@@ -5022,6 +5196,59 @@ class DuoRun:
             problems.append(f"B's saved party {b_keys} lacks its linked {self._link_keys['b']}")
         self._gen3_raise(problems, "reconnect: A's batteries untouched across both relaunches "
                                    "(zero client writes on the wrong save); B saved its half")
+
+    # ── RR-only oracles (P5, card C5-5) ─────────────────────────────────────────────────────
+    def assert_explode_gen3_saved(self, results):
+        """explode_gen3: A's linked mon was zeroed directly and memorialized (the normal linked-
+        death flow); B's partner Exploded (Variant-3 menu skip stamped the move) and the battle
+        resolved to an outcome, then memorialized too -- ported from the old RR driver's
+        scenario_explode.lua (trusted RR addresses, docs/gen3/PLAN.md §0)."""
+        self._gen3_flush_boundary()
+        self._gen3_one_link("memorial")
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        box = self._gen3_memorial_box()
+        problems = gen3_memorial_problems("a", self._gen3_saved("a"), self._gen3_fixture_saved("a"),
+                                          ka, box)
+        problems += gen3_memorial_problems("b", self._gen3_saved("b"), self._gen3_fixture_saved("b"),
+                                           kb, box)
+        problems += gen3_receipt_problems(
+            "b", results["b"], required=[r"(?m)^IN_BATTLE at action menu",
+                                         r"(?m)^Explosion stamped into move slot 0",
+                                         r"(?m)^resolved: outcome=\d"])
+        self._gen3_raise(problems, f"explode: {ka} zeroed overworld -> memorialized; {kb}'s "
+                                   f"partner Exploded, the battle resolved, both memorialized")
+
+    def assert_rival_swap_gen3_saved(self, results):
+        """rival_swap_gen3: A idles untouched; B reached a real battle and the server's
+        replace_rival_team landed, answered refresh_failed -- the documented limit until
+        refresh_enemy gets a write window (commit 9505648b), not a bug this oracle is chasing."""
+        problems = gen3_receipt_problems(
+            "b", results["b"], required=[r"(?m)^READY_IN_BATTLE\b",
+                                         r"(?m)^RX replace_rival_team\b",
+                                         gen3_tx("rival_team_replaced", "-")])
+        err = self._gen3_sent_field(results["b"], "rival_team_replaced", "-", "error")
+        if err != "refresh_failed":
+            problems.append(f"b: rival_team_replaced error={err!r}, expected 'refresh_failed' "
+                            f"(the documented limit, not a bug)")
+        a_party, _ = self._gen3_saved("a")
+        f_party, _ = self._gen3_fixture_saved("a")
+        if [gen3_key(m) for m in a_party] != [gen3_key(m) for m in f_party]:
+            problems.append("a's saved party is not the fixture's (rival_swap only drives b)")
+        self._gen3_raise(problems, "rival_swap: b's replace_rival_team answered refresh_failed "
+                                   "(the documented limit); a untouched")
+
+    def assert_native_absent_gen3_saved(self, results):
+        """native_absent_gen3: both instances receive the same apply_trade probe. Neither side
+        has native.apply_trade yet (trade is a later card, not this one), so both refuse
+        identically today (client.lua:820-824's log line, no wire reply, no write) -- this is a
+        weaker assertion than PLAN's ultimate "clean refused, companion answers" intent, and is
+        documented as such rather than faked."""
+        problems = []
+        for inst in ("a", "b"):
+            problems += gen3_receipt_problems(
+                inst, results[inst], required=[r"(?m)^RX apply_trade\b", r"(?m)^WRITES 0$"])
+        self._gen3_raise(problems, "native_absent: apply_trade delivered to both a (companion) "
+                                   "and b (clean); neither wrote (trade not yet ported)")
 
     def _run_oracle(self, results):
         """The scenario's post-result oracle, from the SCENARIOS registry.

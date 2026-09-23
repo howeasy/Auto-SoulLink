@@ -72,3 +72,48 @@ def test_gen3_frlg_duo(scenario):
                     f"stdout:\n{(exc.stdout or '')[-4000:]}")
     assert proc.returncode == 0, (
         f"{GAME} duo {scenario} failed:\n{proc.stdout[-4000:]}\n{proc.stderr[-1000:]}")
+
+
+# ── gen3_rr_new: the same NEW client on Radical Red (P5, card C5-5) ────────────────────────
+# Several of these are currently BLOCKED: linked_faint_active/boxsync/whiteout/link/deadzone/
+# explode/rival_swap all need a "battle" target, and tests/fixtures/gen3/rr_battle{,_b}.sav do
+# not exist yet (only rr_town.sav/rr_town_b.sav are built) -- required_fixtures_rr below fails
+# them loudly with the missing fixture's name, the same policy the module docstring states for
+# gen3_frlg, rather than silently skipping. Only faint_cmd_gen3, reconnect_gen3 and
+# native_absent_gen3 (all "town") can actually run today.
+GAME_RR = "gen3_rr_new"
+SCENARIOS_RR = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
+                "link_gen3", "deadzone_gen3", "reconnect_gen3",
+                "explode_gen3", "rival_swap_gen3", "native_absent_gen3")
+
+
+def deadline_for_rr(scenario):
+    return RUNNER_SCENARIOS[scenario]["timeout"] * scenario_attempt_limit(scenario, GAME_RR) + 300
+
+
+def required_fixtures_rr(scenario):
+    targets = RUNNER_SCENARIOS[scenario].get("target", "town")
+    sides = RUNNER_GAMES[GAME_RR]["sides"]
+    return [sides[inst][1].format(target=targets[inst] if isinstance(targets, dict) else targets)
+            for inst in ("a", "b")]
+
+
+@pytest.mark.parametrize("scenario", SCENARIOS_RR)
+def test_gen3_rr_new_duo(scenario):
+    if not os.path.exists(EMUHAWK):
+        pytest.fail(f"EmuHawk missing: {EMUHAWK}")
+    for stem in required_fixtures_rr(scenario):
+        if not os.path.exists(os.path.join(GEN3_FIXTURES, stem + ".sav")):
+            pytest.fail(f"fixture missing: tests/fixtures/gen3/{stem}.sav (tools/gen3_fixtures.py)")
+    cmd = [sys.executable, os.path.join(REPO, "tools", "e2e_duo.py"),
+           "--game", GAME_RR, "--scenario", scenario]
+    if scenario == "reconnect_gen3" and os.environ.get("SLINK_WRONG_SAVE"):
+        cmd.extend(("--wrong-save", os.environ["SLINK_WRONG_SAVE"]))
+    try:
+        proc = subprocess.run(cmd, cwd=REPO, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=deadline_for_rr(scenario))
+    except subprocess.TimeoutExpired as exc:
+        pytest.fail(f"{GAME_RR} duo {scenario} exceeded {deadline_for_rr(scenario)} s -- partial "
+                    f"stdout:\n{(exc.stdout or '')[-4000:]}")
+    assert proc.returncode == 0, (
+        f"{GAME_RR} duo {scenario} failed:\n{proc.stdout[-4000:]}\n{proc.stderr[-1000:]}")
