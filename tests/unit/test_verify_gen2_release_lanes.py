@@ -38,14 +38,18 @@ def test_required_phase_lanes_and_every_title_are_declared():
 
 def test_live_new_gates_lane_targets_the_p3b3a_inspect_driver():
     """P3b.3a landed lua/tests/gen2_inspect_gate.lua and tests/live/test_gen2_new_gates.py; this
-    lane's argv already names that file (nothing to rename), it stays UNIMPLEMENTED because the
-    lane's full requirement mapping also needs the engine-site/write/client rows no card has
-    landed yet, and its why= now says so instead of describing the whole file as absent."""
+    lane's argv still names that file (the live run is still what proves R-1/R-2/R-3/R-4/R-5g). The
+    engine-site (U1/P3b.4), write-window (U2/P3b.5, Silver via O-23) and fixture-qualification rows
+    the lane's full requirement mapping also needs are now bound by new_gates_errors() against
+    tests/gen2_live_gate_requirements.json, so the lane is no longer UNIMPLEMENTED -- a gap in that
+    binding fails run_lane before it ever spawns EmuHawk."""
     lane = _lane("live-new-gates")
     assert "tests/live/test_gen2_new_gates.py" in lane.argv
     assert (Path(__file__).resolve().parents[2] / "tests/live/test_gen2_new_gates.py").exists()
-    assert "P3b.3a" in lane.why and "inspect" in lane.why
-    assert "live-new-gates" in gate.UNIMPLEMENTED
+    assert "inspect" in lane.why
+    assert "live-new-gates" not in gate.UNIMPLEMENTED
+    assert "live-new-gates" in gate._SLOW
+    assert gate.NEW_GATES in gate.PREREQUISITES["live-new-gates"]
     assert {"R-1", "R-2", "R-3", "R-5g"} <= set(gate.REQUIREMENTS["live-new-gates"])
 
 
@@ -227,7 +231,7 @@ def test_missing_source_inputs_fail_before_subprocess(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("name", [
-    "fixtures", "patch-build", "live-gates", "live-new-gates", "live-trade-gates",
+    "fixtures", "patch-build", "live-gates", "live-trade-gates",
     "duo-pairs", "release-evidence",
 ])
 def test_future_binding_cannot_pass_by_merely_adding_a_file(monkeypatch, tmp_path, name):
@@ -352,30 +356,51 @@ def _row(doc, rid):
     return next(row for row in doc["requirements"] if row["id"] == rid)
 
 
+def _capture_key(text):
+    """The ENGINE_CAPTURE {"key": ...} line's key, the way tools/verify_gen2_release.py reads it."""
+    line = next(one for one in text.splitlines() if one.startswith("ENGINE_CAPTURE "))
+    return json.loads(line[len("ENGINE_CAPTURE "):])["key"]
+
+
 def _green_tree(tmp_path):
-    """A fully receipted matrix built from the committed C<->C receipts: the known positive."""
+    """A fully receipted matrix built from the committed C<->C receipts: the known positive.
+
+    Each case's fixture_sha256 is the REAL sha256 of its tests/fixtures/gen2/<case>.SaveRAM (review
+    O16 F2) and the pydec receipt carries Codex's H5 PYDEC line (O16 F1), not the old bare PASS."""
     lock = json.loads((REPO / "data/gen2_sources.lock.json").read_text(encoding="utf-8"))
     (tmp_path / "data").mkdir(exist_ok=True)
     (tmp_path / "data/gen2_sources.lock.json").write_text(json.dumps(lock), encoding="utf-8")
+    (tmp_path / "tests/fixtures/gen2").mkdir(parents=True, exist_ok=True)
     doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
     receipts = tmp_path / "receipts"
     receipts.mkdir()
+    a_text = (REPO / "tests/fixtures/gen2/receipts/duo_link_cc_a_result.txt").read_text(encoding="utf-8")
+    b_text = (REPO / "tests/fixtures/gen2/receipts/duo_link_cc_b_result.txt").read_text(encoding="utf-8")
+    keys = {"a": _capture_key(a_text), "b": _capture_key(b_text)}
+    source_text = {"a": a_text, "b": b_text}
     for row in doc["requirements"]:
         axes = row["axes"]
         titles = {"a": axes["initiator"], "b": axes["partner"]}
         entries = {}
-        for side in ("a", "b", "pydec"):
-            source = REPO / f"tests/fixtures/gen2/receipts/duo_link_cc_{side}_result.txt"
-            text = source.read_text(encoding="utf-8")
-            if side != "pydec":
-                header = {"attempt": 1, "case": axes["fixtures"][side], "player": side,
-                          "rom_sha1": lock["outputs"][f"poke{titles[side]}"]["sha1"],
-                          "scenario": "link", "title": titles[side]}
-                text = "\n".join("DUO_GEN2 " + json.dumps(header) if line.startswith("DUO_GEN2 ")
-                                 else line for line in text.splitlines()) + "\n"
+        for side in ("a", "b"):
+            case = axes["fixtures"][side]
+            fixture_bytes = (REPO / "tests/fixtures/gen2" / f"{case}.SaveRAM").read_bytes()
+            (tmp_path / "tests/fixtures/gen2" / f"{case}.SaveRAM").write_bytes(fixture_bytes)
+            header = {"attempt": 1, "case": case, "player": side,
+                      "rom_sha1": lock["outputs"][f"poke{titles[side]}"]["sha1"], "scenario": "link",
+                      "title": titles[side], "fixture_sha256": hashlib.sha256(fixture_bytes).hexdigest()}
+            text = "\n".join("DUO_GEN2 " + json.dumps(header) if line.startswith("DUO_GEN2 ")
+                             else line for line in source_text[side].splitlines()) + "\n"
             path = receipts / f"{row['id']}_{side}.txt"
             path.write_text(text, encoding="utf-8", newline="\n")
             entries[side] = {"path": path.relative_to(tmp_path).as_posix(), "sha256": _lf_sha(path)}
+        pydec_text = ("attempt 1 of 1\n"
+                      f"PYDEC: PASS a={keys['a']} b={keys['b']} area=route_29 "
+                      f"titles={axes['initiator']}/{axes['partner']} status=alive\n")
+        pydec_path = receipts / f"{row['id']}_pydec.txt"
+        pydec_path.write_text(pydec_text, encoding="utf-8", newline="\n")
+        entries["pydec"] = {"path": pydec_path.relative_to(tmp_path).as_posix(),
+                            "sha256": _lf_sha(pydec_path)}
         row["proofs"] = [{"scenario": "link", "receipts": entries}]
     (tmp_path / "tests").mkdir(exist_ok=True)
     _write_doc(tmp_path, doc)
@@ -394,14 +419,21 @@ def test_duo_link_lane_is_the_implemented_physical_matrix_lane():
 
 
 def test_committed_matrix_is_red_exactly_where_a_pair_has_no_receipt():
-    """The real tree: a row with no registered proof is red; the receipted C<->C cell is not."""
+    """The real tree: a row with no registered proof is red; a receipted row's a/b legs are clean.
+
+    Every receipted row's pydec leg is ALSO currently red (review O16 F1): the committed pydec
+    receipts are still the old content-free "PASS asserted scenario facts" kind, pending Codex's
+    H5 PYDEC line landing on freshly re-run receipts -- that is the one expected gap here."""
     doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
     errors = gate.duo_matrix_errors()
-    assert errors, "the committed matrix cannot be green while any proof list is empty"
+    assert errors, "the committed matrix cannot be green while the pydec receipts are content-free"
     for row in doc["requirements"]:
         mine = [error for error in errors if error.startswith(row["id"] + "/")]
         if row["proofs"]:
-            assert not [error for error in mine if "receipt" in error], mine
+            ab_receipt_problems = [error for error in mine
+                                   if "receipt" in error and "pydec receipt does not name" not in error]
+            assert not ab_receipt_problems, mine
+            assert any("pydec receipt does not name this cell" in error for error in mine), mine
         else:
             assert f"{row['id']}/link: no receipt registered" in " ".join(mine)
     assert _row(doc, "duo.crystal.crystal")["proofs"], "the C<->C link PASS receipt is registered"
@@ -439,7 +471,49 @@ _GAPS = {
     "header_other_title": "duo.gold.silver/link: b receipt header does not name",
     "header_other_scenario": "duo.gold.silver/link: a receipt header does not name",
     "no_save_witness": "duo.gold.silver/link: b receipt has no SAVE_WITNESS line",
+    # Review O16 (cx-4373a801) of H4 abec68c0 -- each finding gets its own red-first case.
+    "f1_pydec_wrong_a_key": "duo.gold.silver/link: pydec receipt does not name this cell: a=",
+    "f1_pydec_wrong_titles": "duo.gold.silver/link: pydec receipt does not name this cell: titles=",
+    "f1_pydec_wrong_status": "duo.gold.silver/link: pydec receipt does not name this cell: status=",
+    "f1_pydec_missing_area": "duo.gold.silver/link: pydec receipt does not name this cell: area=",
+    "f1_pydec_old_content_free": "duo.gold.silver/link: pydec receipt does not name this cell",
+    "f2_fixture_sha256_wrong": "duo.gold.silver/link: b receipt header does not name",
+    "f3_unknown_title": "b: axes title 'ruby' has no 'pokeruby' entry in data/gen2_sources.lock.json",
+    "f4_duplicate_proof_scenario": "duo.gold.silver: duplicate proof scenario(s) ['link']",
+    "f4_undeclared_proof_scenario": "duo.gold.silver: proof scenario(s) ['whiteout'] not declared",
+    "f5_malformed_row_no_axes": "duo.gold.silver: malformed row",
 }
+
+
+def _edit_pydec_token(key, new_value):
+    def edit(text):
+        return "\n".join(
+            " ".join(f"{key}={new_value}" if part.startswith(f"{key}=") else part
+                     for part in line.split(" ")) if line.startswith("PYDEC: PASS ") else line
+            for line in text.splitlines()) + "\n"
+    return edit
+
+
+def _drop_pydec_token(key):
+    def edit(text):
+        return "\n".join(
+            " ".join(part for part in line.split(" ") if not part.startswith(f"{key}="))
+            if line.startswith("PYDEC: PASS ") else line
+            for line in text.splitlines()) + "\n"
+    return edit
+
+
+def _edit_header_field(key, new_value):
+    def edit(text):
+        out = []
+        for line in text.splitlines():
+            if line.startswith("DUO_GEN2 "):
+                header = json.loads(line[len("DUO_GEN2 "):])
+                header[key] = new_value
+                line = "DUO_GEN2 " + json.dumps(header)
+            out.append(line)
+        return "\n".join(out) + "\n"
+    return edit
 
 
 @pytest.mark.parametrize("mutation", list(_GAPS))
@@ -502,6 +576,26 @@ def test_every_matrix_gap_is_red(tmp_path, mutation):
     elif mutation == "no_save_witness":
         rewrite("b", lambda text: "\n".join(line for line in text.splitlines()
                                             if not line.startswith("SAVE_WITNESS ")))
+    elif mutation == "f1_pydec_wrong_a_key":
+        rewrite("pydec", _edit_pydec_token("a", "WRONGKEY"))
+    elif mutation == "f1_pydec_wrong_titles":
+        rewrite("pydec", _edit_pydec_token("titles", "gold/gold"))
+    elif mutation == "f1_pydec_wrong_status":
+        rewrite("pydec", _edit_pydec_token("status", "dead"))
+    elif mutation == "f1_pydec_missing_area":
+        rewrite("pydec", _drop_pydec_token("area"))
+    elif mutation == "f1_pydec_old_content_free":
+        rewrite("pydec", lambda text: "attempt 1 of 1\nPYDEC: PASS asserted scenario facts\n")
+    elif mutation == "f2_fixture_sha256_wrong":
+        rewrite("b", _edit_header_field("fixture_sha256", "0" * 64))
+    elif mutation == "f3_unknown_title":
+        gs["axes"]["partner"] = "ruby"
+    elif mutation == "f4_duplicate_proof_scenario":
+        gs["proofs"] = gs["proofs"] + [gs["proofs"][0]]
+    elif mutation == "f4_undeclared_proof_scenario":
+        gs["proofs"].append({"scenario": "whiteout", "receipts": {}})
+    elif mutation == "f5_malformed_row_no_axes":
+        del gs["axes"]
     _write_doc(tmp_path, doc)
     errors = gate.duo_matrix_errors(tmp_path, duo)
     assert any(_GAPS[mutation] in error for error in errors), (mutation, errors)
@@ -514,3 +608,164 @@ def test_duo_matrix_cli_exit_follows_the_gaps(monkeypatch, capsys):
     monkeypatch.setattr(gate, "duo_matrix_errors", lambda: [])
     assert gate.main(["--duo-matrix"]) == 0
     assert "RECEIPTED" in capsys.readouterr().out
+
+
+# --- H4b: live-new-gates receipt binding (U1 engine-site, U2 write-window incl. O-23, fixture
+# qualification); no emulator; every gap is RED --------------------------------------------------
+
+def _copy_new_gates_tree(tmp_path):
+    """A byte-identical copy of the committed new-gates receipts and their manifest -- the known
+    positive, safe to mutate without touching the real tree."""
+    doc = json.loads((REPO / gate.NEW_GATES).read_text(encoding="utf-8"))
+    for row in doc["requirements"]:
+        entry = row["proofs"][0]["receipts"]["receipt"]
+        src, dst = REPO / entry["path"], tmp_path / entry["path"]
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(src.read_bytes())
+        if row["axes"]["kind"] == "qualification":
+            fixture = row["axes"]["fixture"] + ".SaveRAM"
+            (tmp_path / "tests/fixtures/gen2" / fixture).write_bytes(
+                (REPO / "tests/fixtures/gen2" / fixture).read_bytes())
+    (tmp_path / gate.NEW_GATES).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / gate.NEW_GATES).write_text(json.dumps(doc), encoding="utf-8")
+    return doc
+
+
+def _new_gates_row(doc, rid):
+    return next(row for row in doc["requirements"] if row["id"] == rid)
+
+
+def _repin(tmp_path, entry):
+    entry["sha256"] = _lf_sha(tmp_path / entry["path"])
+
+
+def test_new_gates_lane_is_the_implemented_receipt_lane():
+    lane = _lane("live-new-gates")
+    assert "live-new-gates" not in gate.UNIMPLEMENTED
+    assert lane.name in gate._SLOW
+    assert gate.NEW_GATES in gate.PREREQUISITES["live-new-gates"]
+    assert "tests/fixtures/gen2/receipts" in gate.PREREQUISITES["live-new-gates"]
+
+
+def test_committed_new_gates_tree_is_fully_green():
+    """The real tree today: every U1/U2/qualification row bound, pinned and PHYSICAL."""
+    assert gate.new_gates_errors() == []
+
+
+def test_copied_new_gates_tree_is_also_green(tmp_path):
+    _copy_new_gates_tree(tmp_path)
+    assert gate.new_gates_errors(tmp_path) == []
+
+
+def test_new_gates_manifest_missing_is_red(tmp_path):
+    assert gate.new_gates_errors(tmp_path) == [f"{gate.NEW_GATES} missing"]
+
+
+def test_o23_row_reuses_golds_receipt_for_silver():
+    """docs/gen2/REVIEW_RECORD.md O-23: Silver's row is Gold's own receipt file, not a copy."""
+    doc = json.loads((REPO / gate.NEW_GATES).read_text(encoding="utf-8"))
+    gold = _new_gates_row(doc, "new-gates.write-window.gold")["proofs"][0]["receipts"]["receipt"]
+    silver = _new_gates_row(doc, "new-gates.write-window.silver")["proofs"][0]["receipts"]["receipt"]
+    assert gold["path"] == silver["path"] == "tests/fixtures/gen2/receipts/gold.write_window.json"
+    assert gold["sha256"] == silver["sha256"]
+
+
+# Each gap names its own check, so every check is individually load-bearing (revert-tested).
+_NEW_GATE_GAPS = {
+    "proof_emptied": "no receipt registered (an empty proof is a release blocker)",
+    "receipt_unregistered": "receipt not registered",
+    "receipt_missing": "missing",
+    "receipt_edited": "sha256 differs from its pin",
+    "engine_site_flipped": "differs from the pack or has no live hit",
+    "write_window_flipped": "not a read-back HP-1",
+    "o23_checkpoint_diverges": "write-window receipt proved other checkpoint rows than this pack's",
+    "qualification_failed": "fixture qualification receipt is not a passed run",
+    "qualification_fixture_swapped": "does not confirm",
+    "unknown_kind": "no validator for receipt kind",
+}
+
+
+@pytest.mark.parametrize("mutation", list(_NEW_GATE_GAPS))
+def test_every_new_gate_gap_is_red(tmp_path, mutation):
+    doc = _copy_new_gates_tree(tmp_path)
+    row = lambda rid: _new_gates_row(doc, rid)  # noqa: E731
+
+    if mutation == "proof_emptied":
+        row("new-gates.engine-sites.crystal")["proofs"] = []
+    elif mutation == "receipt_unregistered":
+        del row("new-gates.engine-sites.crystal")["proofs"][0]["receipts"]["receipt"]
+    elif mutation == "receipt_missing":
+        entry = row("new-gates.engine-sites.crystal")["proofs"][0]["receipts"]["receipt"]
+        (tmp_path / entry["path"]).unlink()
+    elif mutation == "receipt_edited":
+        entry = row("new-gates.engine-sites.crystal")["proofs"][0]["receipts"]["receipt"]
+        path = tmp_path / entry["path"]
+        path.write_text(path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    elif mutation == "engine_site_flipped":
+        entry = row("new-gates.engine-sites.crystal")["proofs"][0]["receipts"]["receipt"]
+        path = tmp_path / entry["path"]
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        name = sorted(receipt["proven"])[0]
+        raw = bytearray(bytes.fromhex(receipt["sites"][name]["expected_hex"]))
+        raw[0] ^= 0x01
+        receipt["sites"][name]["expected_hex"] = raw.hex()
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        _repin(tmp_path, entry)
+    elif mutation == "write_window_flipped":
+        entry = row("new-gates.write-window.crystal")["proofs"][0]["receipts"]["receipt"]
+        path = tmp_path / entry["path"]
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        party = receipt["runs"]["town"]["write"]["party"]
+        raw = bytearray(bytes.fromhex(party["written_hex"]))
+        raw[0] ^= 0x01
+        party["written_hex"] = raw.hex()
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        _repin(tmp_path, entry)
+    elif mutation == "o23_checkpoint_diverges":
+        entry = row("new-gates.write-window.silver")["proofs"][0]["receipts"]["receipt"]
+        path = tmp_path / entry["path"]
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        receipt["checkpoint"]["anchors"]["ow_player_input"]["address"] += 2
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        # The mutated file is Gold's own receipt (O-23 shares it): re-pin both rows that name it so
+        # only the checkpoint mismatch fires, not an unrelated sha256 drift on Gold's own row.
+        _repin(tmp_path, entry)
+        _repin(tmp_path, row("new-gates.write-window.gold")["proofs"][0]["receipts"]["receipt"])
+    elif mutation == "qualification_failed":
+        entry = row("new-gates.qualification.crystal_town")["proofs"][0]["receipts"]["receipt"]
+        path = tmp_path / entry["path"]
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        receipt["passed"] = False
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        _repin(tmp_path, entry)
+    elif mutation == "qualification_fixture_swapped":
+        entry = row("new-gates.qualification.crystal_town")["proofs"][0]["receipts"]["receipt"]
+        path = tmp_path / entry["path"]
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        receipt["fixtures"][0]["name"] = "crystal_battle"
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        _repin(tmp_path, entry)
+    elif mutation == "unknown_kind":
+        row("new-gates.engine-sites.crystal")["axes"]["kind"] = "badge_sites"
+
+    (tmp_path / gate.NEW_GATES).write_text(json.dumps(doc), encoding="utf-8")
+    errors = gate.new_gates_errors(tmp_path)
+    assert any(_NEW_GATE_GAPS[mutation] in error for error in errors), (mutation, errors)
+
+
+def test_new_gates_cli_exit_follows_the_gaps(monkeypatch, capsys):
+    monkeypatch.setattr(gate, "new_gates_errors", lambda: ["new-gates.x: no receipt"])
+    assert gate.main(["--new-gates"]) == 1
+    assert "RED  new-gates.x" in capsys.readouterr().out
+    monkeypatch.setattr(gate, "new_gates_errors", lambda: [])
+    assert gate.main(["--new-gates"]) == 0
+    assert "PHYSICAL" in capsys.readouterr().out
+
+
+def test_new_gates_precheck_blocks_run_lane_before_pytest(monkeypatch):
+    monkeypatch.setattr(gate, "new_gates_errors", lambda: ["new-gates.x: gap"])
+    monkeypatch.setattr(gate.release_lanes, "run_lane",
+                        lambda *_args, **_kwargs: pytest.fail("pytest spawned despite the gap"))
+    ok, detail = gate.run_lane(_lane("live-new-gates"), quiet=True)
+    assert not ok
+    assert detail == "new-gates.x: gap"

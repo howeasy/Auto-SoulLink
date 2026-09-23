@@ -13,6 +13,13 @@ registers in tools/e2e_duo.py, each with its post-result oracle and pinned PASS 
 A missing pair, scenario, oracle or receipt is RED, never green. Enabling them requires their reviewed
 implementation and prerequisite/receipt contracts, not removing a missing-input check.
 
+--new-gates (a live-new-gates precondition) checks the committed U1 engine-site, U2 write-window
+(Silver via O-23) and fixture-qualification receipts of tests/gen2_live_gate_requirements.json against
+their pinned sha256 and their production Lua validators (reusing tests/unit/test_gen2_physical_receipts.py's
+`validate()`, never re-deriving PASS). It runs with no emulator; a gap there fails live-new-gates before
+the lane spawns EmuHawk. R-1/R-2/R-3/R-4/R-5g still need a fresh SLINK_LIVE=1 run of the live inspect
+gate on real hardware, which the lane runs directly once this check is clean.
+
 Every executing lane checks its declared input paths before spawning a command. The
 source/data tools then verify hashes and provenance themselves. Missing scripts, data,
 dependencies and pytest skips are failures. This manifest grants no evidence-cell or
@@ -118,11 +125,12 @@ LANES = [
          why="UNIMPLEMENTED P4: panel/sound and transient receipts on qualified overlays"),
     Lane("live-new-gates", _pytest("tests/live/test_gen2_new_gates.py"),
          env={"SLINK_LIVE": "1"},
-         why="UNIMPLEMENTED P3b: P3b.3a landed the live inspect rows (lua/tests/gen2_inspect_gate.lua"
-             " -- same-frame party/box dump, R-1/R-2/R-3/R-5g on the running cartridge); the"
-             " engine-site (P3b.4), write-window (P3b.5) and client-conformance (P3b.6/P3b.7) rows"
-             " this lane's full requirement mapping also needs are not yet in this file, so the"
-             " lane stays gated"),
+         why="PHYSICAL receipts: the U1 engine-site, U2 write-window (Silver via O-23) and fixture"
+             " qualification rows of tests/gen2_live_gate_requirements.json are bound and pinned by"
+             " sha256 (new_gates_errors, no emulator); a gap there fails the lane before it spawns"
+             " EmuHawk. R-1/R-2/R-3/R-4/R-5g have no committed receipt and still need a fresh"
+             " SLINK_LIVE=1 run of the live inspect gate (lua/tests/gen2_inspect_gate.lua) on real"
+             " hardware; client-conformance (P3b.6/P3b.7) stays a separate later card"),
     Lane("live-trade-gates", _pytest("tests/live/test_gen2_trade_gates.py"),
          env={"SLINK_LIVE": "1"},
          why="UNIMPLEMENTED P4: native trade, held items, refusal and exact-record reload"),
@@ -167,7 +175,6 @@ UNIMPLEMENTED = {
     "fixtures": "P3b fixture qualifier, eight played fixtures and GAME/PYDEC reload evidence",
     "patch-build": "P4 companion build command and patched-artifact qualification",
     "live-gates": "P4 panel/sound gate and transient-receipt contract",
-    "live-new-gates": "P3b.4-P3b.7 engine-site/write/client rows still absent from tests/live/test_gen2_new_gates.py (P3b.3a landed only the inspect rows; see the lane's why=)",
     "live-trade-gates": "P4 trade and held-item persistence/refusal gates",
     "duo-pairs": ("P3b.7 scenarios beyond link (ball_gate, boxed_capture, faints, poison, whiteout,"
                   " pc_ops, changebox, clauses, shiny_bonus, reconnect, soft_reset, evolution,"
@@ -210,7 +217,7 @@ PREREQUISITES = {
     ),
     "patch-build": _SOURCE_INPUTS,
     "live-gates": (),
-    "live-new-gates": (),
+    "live-new-gates": ("tests/gen2_live_gate_requirements.json", "tests/fixtures/gen2/receipts"),
     "live-trade-gates": (),
     "duo-link": ("tests/gen2_release_requirements.json", "tools/e2e_duo.py",
                  "data/gen2_sources.lock.json"),
@@ -226,11 +233,61 @@ DUO_PAIRS = (("crystal", "crystal"), ("crystal", "gold"), ("gold", "silver"))
 DUO_REQUIRED_SCENARIOS = frozenset({"link"})
 
 
+# Codex's H5 PYDEC format (review O16 F1): "PYDEC: PASS a=<key> b=<key> area=<id>
+# titles=<a-title>/<b-title> status=<alive|dead>" -- link ends alive, gen2_faint ends dead.
+SCENARIO_END_STATUS = {"link": "alive", "gen2_faint": "dead"}
+
+
+def _fixture_sha256(root: Path, fixture: str) -> str | None:
+    try:
+        return hashlib.sha256((root / "tests/fixtures/gen2" / f"{fixture}.SaveRAM").read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def _engine_capture_key(lines: list[str]) -> str | None:
+    line = next((one for one in lines if one.startswith("ENGINE_CAPTURE ")), None)
+    if not line:
+        return None
+    try:
+        return json.loads(line[len("ENGINE_CAPTURE "):]).get("key")
+    except ValueError:
+        return None
+
+
+def _pydec_tokens(lines: list[str]) -> dict | None:
+    line = next((one for one in lines if one.startswith("PYDEC: PASS ")), None)
+    if line is None:
+        return None
+    tokens = {}
+    for part in line[len("PYDEC: PASS "):].split():
+        key, sep, value = part.partition("=")
+        if sep:
+            tokens[key] = value
+    return tokens
+
+
+def _pydec_cell_errors(lines: list[str], scenario: str, axes: dict, capture_keys: dict) -> list[str]:
+    """The pydec receipt names its own cell, not just a bare PASS (review O16 F1)."""
+    tokens = _pydec_tokens(lines)
+    if not tokens:
+        return ["pydec receipt does not name this cell"]
+    want = {"a": capture_keys.get("a"), "b": capture_keys.get("b"),
+            "titles": f"{axes['initiator']}/{axes['partner']}",
+            "status": SCENARIO_END_STATUS.get(scenario)}
+    errors = [f"pydec receipt does not name this cell: {key}={tokens.get(key)!r}, want {value!r}"
+              for key, value in want.items() if value is not None and tokens.get(key) != value]
+    if not tokens.get("area"):
+        errors.append("pydec receipt does not name this cell: area= is empty or missing")
+    return errors
+
+
 def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: dict) -> list[str]:
     """One registered proof: pinned bytes, PASS verdicts, and headers naming this exact cell."""
     errors = []
     receipts = proof.get("receipts") or {}
     titles = {"a": axes["initiator"], "b": axes["partner"]}
+    capture_keys = {}
     for side in ("a", "b", "pydec"):
         entry = receipts.get(side)
         if not entry:
@@ -250,10 +307,18 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
         if not verdicts or any(verdict != ["PASS"] for verdict in verdicts):
             errors.append(f"{side} receipt has no {prefix} PASS verdict, or a non-PASS one")
         if side == "pydec":
+            errors.extend(_pydec_cell_errors(lines, scenario, axes, capture_keys))
             continue
+        capture_keys[side] = _engine_capture_key(lines)
         title = titles[side]
-        want = {"player": side, "scenario": scenario, "case": axes["fixtures"][side],
-                "title": title, "rom_sha1": lock.get(f"poke{title}", {}).get("sha1")}
+        lock_key = f"poke{title}"
+        if lock_key not in lock:
+            errors.append(f"{side}: axes title {title!r} has no {lock_key!r} entry in "
+                          f"data/gen2_sources.lock.json")
+            continue
+        want = {"player": side, "scenario": scenario, "case": axes["fixtures"][side], "title": title,
+                "rom_sha1": lock[lock_key].get("sha1"),
+                "fixture_sha256": _fixture_sha256(root, axes["fixtures"][side])}
         header = next((json.loads(line[len("DUO_GEN2 "):]) for line in lines
                        if line.startswith("DUO_GEN2 ")), None)
         if header is None or any(header.get(key) != value for key, value in want.items()):
@@ -276,48 +341,69 @@ def duo_matrix_errors(root: Path | None = None, duo=None) -> list[str]:
     lock = json.loads((root / "data/gen2_sources.lock.json").read_text(encoding="utf-8"))["outputs"]
     rows = [row for row in doc.get("requirements", []) if row.get("stage") == "live-duos"]
     errors = []
-    pairs = sorted((row["axes"]["initiator"], row["axes"]["partner"]) for row in rows)
+    # .get(): a malformed row (missing "axes"/"initiator"/etc.) surfaces as a pairs mismatch here,
+    # never a crash -- the per-row loop below gives it its own dedicated "malformed row" message too.
+    pairs = sorted((((row.get("axes") or {}).get("initiator"), (row.get("axes") or {}).get("partner"))
+                   for row in rows), key=str)  # str key: a malformed row's None must not crash the sort
     if pairs != sorted(DUO_PAIRS):
         errors.append(f"release matrix pairs {pairs} != required {sorted(DUO_PAIRS)}")
-    declared = {row["axes"]["pairing"] for row in rows}
+    declared = {row.get("axes", {}).get("pairing") for row in rows}
     errors.extend(f"{game}: Gen 2 duo pairing in tools/e2e_duo.py is not in the release matrix"
                   for game in duo.GAMES
                   if duo.scenario_family(game) == "gen2_new" and game not in declared)
     for row in rows:
-        rid, axes = row["id"], row["axes"]
-        game, scenarios = axes["pairing"], axes.get("scenarios") or []
-        missing_required = DUO_REQUIRED_SCENARIOS - set(scenarios)
-        if missing_required:
-            errors.append(f"{rid}: required scenario(s) {sorted(missing_required)} not declared")
-        registered = []
-        if game not in duo.GAMES or duo.scenario_family(game) != "gen2_new":
-            errors.append(f"{rid}: pairing {game} is not a gen2_new row in tools/e2e_duo.py")
-        else:
-            registered = duo.scenarios_for(game)
-            if duo.GAMES[game].get("fixture") != axes["fixtures"]:
-                errors.append(f"{rid}: tools/e2e_duo.py {game} fixtures "
-                              f"{duo.GAMES[game].get('fixture')} != matrix {axes['fixtures']}")
-            try:
-                if not duo.evidence_contract(game).require_oracle:
-                    errors.append(f"{rid}: {game} evidence contract does not require an oracle")
-            except RuntimeError as exc:
-                errors.append(f"{rid}: {exc}")
-            errors.extend(f"{rid}: registered scenario {name} is not in the release matrix"
-                          for name in registered if name not in scenarios)
-        proofs = {proof.get("scenario"): proof for proof in row.get("proofs", [])}
-        for name in scenarios:
-            cell = f"{rid}/{name}"
-            if name not in registered:
-                errors.append(f"{cell}: scenario not registered for {game} in tools/e2e_duo.py")
+        try:
+            rid, axes = row["id"], row["axes"]
+            game, scenarios = axes["pairing"], axes.get("scenarios") or []
+            missing_required = DUO_REQUIRED_SCENARIOS - set(scenarios)
+            if missing_required:
+                errors.append(f"{rid}: required scenario(s) {sorted(missing_required)} not declared")
+            registered = []
+            if game not in duo.GAMES or duo.scenario_family(game) != "gen2_new":
+                errors.append(f"{rid}: pairing {game} is not a gen2_new row in tools/e2e_duo.py")
             else:
-                oracle = duo.SCENARIOS[name].get("oracle")
-                if not oracle or not callable(getattr(duo.DuoRun, oracle, None)):
-                    errors.append(f"{cell}: no post-result oracle ({oracle!r})")
-            if name not in proofs:
-                errors.append(f"{cell}: no receipt registered (an empty proof is a release blocker)")
-                continue
-            errors.extend(f"{cell}: {problem}"
-                          for problem in _receipt_errors(root, proofs[name], name, axes, lock))
+                registered = duo.scenarios_for(game)
+                if duo.GAMES[game].get("fixture") != axes["fixtures"]:
+                    errors.append(f"{rid}: tools/e2e_duo.py {game} fixtures "
+                                  f"{duo.GAMES[game].get('fixture')} != matrix {axes['fixtures']}")
+                try:
+                    if not duo.evidence_contract(game).require_oracle:
+                        errors.append(f"{rid}: {game} evidence contract does not require an oracle")
+                except RuntimeError as exc:
+                    errors.append(f"{rid}: {exc}")
+                errors.extend(f"{rid}: registered scenario {name} is not in the release matrix"
+                              for name in registered if name not in scenarios)
+            # F4 (review O16): a scenario proof-listed twice, or naming a scenario axes.scenarios
+            # never declared, is reported -- a dict comprehension would silently keep only one.
+            proof_list = row.get("proofs", [])
+            proof_names = [proof.get("scenario") for proof in proof_list]
+            dupes = sorted({name for name in proof_names if proof_names.count(name) > 1}, key=str)
+            if dupes:
+                errors.append(f"{rid}: duplicate proof scenario(s) {dupes}")
+            undeclared = sorted({name for name in proof_names if name not in scenarios}, key=str)
+            if undeclared:
+                errors.append(f"{rid}: proof scenario(s) {undeclared} not declared in axes.scenarios")
+            proofs = {}
+            for proof in proof_list:
+                proofs.setdefault(proof.get("scenario"), proof)
+            for name in scenarios:
+                cell = f"{rid}/{name}"
+                if name not in registered:
+                    errors.append(f"{cell}: scenario not registered for {game} in tools/e2e_duo.py")
+                else:
+                    oracle = duo.SCENARIOS[name].get("oracle")
+                    if not oracle or not callable(getattr(duo.DuoRun, oracle, None)):
+                        errors.append(f"{cell}: no post-result oracle ({oracle!r})")
+                if name not in proofs:
+                    errors.append(f"{cell}: no receipt registered (an empty proof is a release blocker)")
+                    continue
+                errors.extend(f"{cell}: {problem}"
+                              for problem in _receipt_errors(root, proofs[name], name, axes, lock))
+        except (KeyError, TypeError, AttributeError) as exc:
+            # F5 (review O16): a malformed row is its own red gap, never an uncaught crash that
+            # takes the whole matrix (and every other row's real gaps) down with it.
+            cell = row.get("id", "<row without id>") if isinstance(row, dict) else "<malformed row>"
+            errors.append(f"{cell}: malformed row: {exc!r}")
     return errors
 
 
@@ -329,6 +415,98 @@ def _duo_matrix_main() -> int:
         print(f"duo matrix: {len(errors)} gap(s); a missing pair/scenario/oracle/receipt is not a pass")
         return 1
     print("duo matrix: every pair x scenario cell RECEIPTED")
+    return 0
+
+
+NEW_GATES = "tests/gen2_live_gate_requirements.json"
+
+
+def _new_gate_receipt(root: Path, entry: dict) -> tuple[dict | None, str | None]:
+    """The receipt at entry['path'], loaded only after its bytes match entry['sha256'] (CRLF->LF)."""
+    path = root / entry["path"]
+    if not path.is_file():
+        return None, f"{entry['path']} missing"
+    raw = path.read_bytes().replace(b"\r\n", b"\n")
+    if hashlib.sha256(raw).hexdigest() != entry.get("sha256"):
+        return None, f"{entry['path']} sha256 differs from its pin"
+    return json.loads(raw.decode("utf-8")), None
+
+
+def _qualification_row_errors(root: Path, fixture: str, receipt: dict) -> list[str]:
+    """A committed *.qualification.json report: passed, and still binding the staged fixture's bytes.
+
+    `physical_qualification` is never true on ANY qualification report by design (tools/gen2_fixtures.py
+    qualify()/qualification_report(): "the report never claims physical qualification" -- it always
+    stamps False pending a separate coordinator sign-off), so it is not a pass/fail signal here."""
+    errors = []
+    if not receipt.get("passed") or receipt.get("errors"):
+        errors.append("fixture qualification receipt is not a passed run")
+    rows = receipt.get("fixtures") or []
+    if not rows or rows[0].get("name") != fixture or not rows[0].get("passed"):
+        errors.append(f"qualification report does not confirm {fixture} passed")
+        return errors
+    saveram = root / "tests/fixtures/gen2" / f"{fixture}.SaveRAM"
+    want = (rows[0].get("artifacts") or {}).get("fixture", {}).get("sha256")
+    if not saveram.is_file():
+        errors.append(f"{fixture}.SaveRAM missing")
+    elif want and hashlib.sha256(saveram.read_bytes()).hexdigest() != want:
+        errors.append(f"{fixture}.SaveRAM does not match the bytes its qualification receipt covers")
+    return errors
+
+
+def new_gates_errors(root: Path | None = None, receipt_validate=None) -> list[str]:
+    """Every gap in the live-new-gates lane's non-emulator evidence: U1 engine-site, U2 write-window
+    (Silver via O-23) and fixture-qualification receipts, each pinned by sha256. An empty proof is a
+    release blocker. R-1/R-2/R-3/R-4/R-5g are NOT covered here -- they have no committed receipt and
+    still need a fresh live run (see tests/gen2_live_gate_requirements.json's scope=).
+
+    engine_sites/write_window rows are handed to tests/unit/test_gen2_physical_receipts.py's own
+    `validate()` (N18) instead of re-deriving PASS through the Lua modules a second time; that function
+    is also what makes the Silver-via-O-23 row red the moment Gold's and Silver's checkpoint rows
+    differ (M.qualified compares receipt.checkpoint against Silver's own pack)."""
+    root = ROOT if root is None else root
+    path = root / NEW_GATES
+    if not path.is_file():
+        return [f"{NEW_GATES} missing"]
+    if receipt_validate is None:
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        from tests.unit.test_gen2_physical_receipts import validate as receipt_validate
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    errors = []
+    for row in doc.get("requirements", []):
+        rid, axes, kind = row["id"], row["axes"], row["axes"]["kind"]
+        proofs = row.get("proofs") or []
+        if not proofs:
+            errors.append(f"{rid}: no receipt registered (an empty proof is a release blocker)")
+            continue
+        for proof in proofs:
+            entry = (proof.get("receipts") or {}).get("receipt")
+            if not entry:
+                errors.append(f"{rid}: receipt not registered")
+                continue
+            receipt, why = _new_gate_receipt(root, entry)
+            if receipt is None:
+                errors.append(f"{rid}: {why}")
+            elif kind in ("engine_sites", "write_window"):
+                proven, why = receipt_validate(kind, axes["title"], receipt)
+                if proven is None:
+                    errors.append(f"{rid}: {why}")
+            elif kind == "qualification":
+                errors.extend(f"{rid}: {e}" for e in _qualification_row_errors(root, axes["fixture"], receipt))
+            else:
+                errors.append(f"{rid}: no validator for receipt kind {kind!r}")
+    return errors
+
+
+def _new_gates_main() -> int:
+    errors = new_gates_errors()
+    for error in errors:
+        print(f"RED  {error}")
+    if errors:
+        print(f"new gates: {len(errors)} gap(s); a missing/edited/unproven receipt is not a pass")
+        return 1
+    print("new gates: every engine-site, write-window and qualification receipt bound and PHYSICAL")
     return 0
 
 
@@ -363,6 +541,10 @@ def run_lane(lane: Lane, quiet: bool) -> tuple[bool, str]:
     """Bind prerequisites and zero skip exemptions; share execution and accounting."""
     if lane.name in UNIMPLEMENTED:
         return False, f"UNIMPLEMENTED: {UNIMPLEMENTED[lane.name]}"
+    if lane.name == "live-new-gates":
+        gaps = new_gates_errors()
+        if gaps:
+            return False, "; ".join(gaps)
     if lane.name not in PREREQUISITES:
         return False, "undeclared lane prerequisites"
     paths = list(PREREQUISITES[lane.name])
@@ -380,8 +562,11 @@ def run_lane(lane: Lane, quiet: bool) -> tuple[bool, str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    if (sys.argv[1:] if argv is None else argv) == ["--duo-matrix"]:
+    given = sys.argv[1:] if argv is None else argv
+    if given == ["--duo-matrix"]:
         return _duo_matrix_main()
+    if given == ["--new-gates"]:
+        return _new_gates_main()
     errors = manifest_errors()
     if errors:
         print("Gen 2 manifest invalid: " + "; ".join(errors), file=sys.stderr)

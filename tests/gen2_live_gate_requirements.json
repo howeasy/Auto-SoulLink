@@ -1,0 +1,154 @@
+{
+  "schema": 1,
+  "scope": "P3b.4/P3b.5 committed receipts (U1 engine-site, U2 write-window, fixture-qualification) that tools/verify_gen2_release.py's live-new-gates lane binds without touching the emulator. This file does NOT cover R-1/R-2/R-3/R-4/R-5g: that evidence has no committed receipt and comes only from a fresh SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py run, which the lane runs directly once every row here is clean.",
+  "coverage_policy": "A row passes only on a registered proof whose committed receipt matches its pinned sha256 and validates through the production Lua validator (engine_sites, write_window) or its own passed/physical_qualification fields (qualification). Empty proofs are explicit release blockers.",
+  "proof_hash_policy": "Receipt SHA256 normalizes CRLF to LF (Windows checkouts use core.autocrlf).",
+  "stages": [
+    {
+      "id": "physical-live",
+      "description": "Real cartridge evidence bound to committed receipts, checked without re-running the emulator"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "new-gates.engine-sites.crystal",
+      "stage": "physical-live",
+      "description": "U1 Crystal engine-hook proof (wild_ready, capture_party, capture_party_finalized, battle_end, save_completed)",
+      "axes": {"kind": "engine_sites", "title": "crystal", "requirement_ids": ["F-2", "F-3"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal.engine_sites.json",
+        "sha256": "99a7a39319d05e009c630c23d5dac4580f2f6a256e623ea2aa7c65fea76f2734"
+      }}}]
+    },
+    {
+      "id": "new-gates.engine-sites.gold",
+      "stage": "physical-live",
+      "description": "U1-GS Gold engine-hook proof (its own capture sites, 2 bytes above Silver's)",
+      "axes": {"kind": "engine_sites", "title": "gold", "requirement_ids": ["F-2", "F-3"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold.engine_sites.json",
+        "sha256": "bc88a00a2be1d5582cc457bcaee8069c39f2f8efe4ce276773c346b4a4295517"
+      }}}]
+    },
+    {
+      "id": "new-gates.engine-sites.silver",
+      "stage": "physical-live",
+      "description": "U1-GS Silver engine-hook proof (its own capture sites; not shared with Gold, see O-23)",
+      "axes": {"kind": "engine_sites", "title": "silver", "requirement_ids": ["F-2", "F-3"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver.engine_sites.json",
+        "sha256": "e64188d28ec3de02d037bc9e73a58f3621c178f8ed4acfd031047fb8b1db994d"
+      }}}]
+    },
+    {
+      "id": "new-gates.write-window.crystal",
+      "stage": "physical-live",
+      "description": "U2 Crystal write-window proof (idle reacquisition, warp/Continue; party_hp, box_deposit writes)",
+      "axes": {"kind": "write_window", "title": "crystal", "requirement_ids": ["W-1", "W-2", "W-5", "W-6", "W-7"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal.write_window.json",
+        "sha256": "390d583bdd658a01ffcde2e9539394c297243e9df312be85b9b872d9d90cb671"
+      }}}]
+    },
+    {
+      "id": "new-gates.write-window.gold",
+      "stage": "physical-live",
+      "description": "U2 Gold write-window proof (idle reacquisition, warp/Continue; party_hp, box_deposit writes)",
+      "axes": {"kind": "write_window", "title": "gold", "requirement_ids": ["W-1", "W-2", "W-5", "W-6", "W-7"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold.write_window.json",
+        "sha256": "722a7c1f1cf66835a8d5aa8e3106895cfcbe10da85d3d7cfeffb36f56ea25187"
+      }}}]
+    },
+    {
+      "id": "new-gates.write-window.silver",
+      "stage": "physical-live",
+      "description": "Owner ruling O-23: Silver's U2 requirement is satisfied by Gold's receipt while their checkpoint rows stay byte-identical (docs/gen2/REVIEW_RECORD.md O-23); lua/gen2_write_safety.lua M.qualified refuses this row the moment the two packs diverge.",
+      "axes": {"kind": "write_window", "title": "silver", "owner_ruling": "O-23", "requirement_ids": ["W-1", "W-2", "W-5", "W-6", "W-7"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold.write_window.json",
+        "sha256": "722a7c1f1cf66835a8d5aa8e3106895cfcbe10da85d3d7cfeffb36f56ea25187"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.crystal_town",
+      "stage": "physical-live",
+      "description": "Crystal town fixture: cold boot, resave, reload PYDEC/GAME agreement",
+      "axes": {"kind": "qualification", "fixture": "crystal_town", "requirement_ids": ["F-6", "S-1", "S-2", "S-3", "S-4", "S-5", "S-6", "S-7", "S-8", "S-9g", "S-10g"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_town.qualification.json",
+        "sha256": "66699f30808ce0d891af0787eb8894d7218eefeb44ffef8f4d7fb2c8e06ff678"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.crystal_battle",
+      "stage": "physical-live",
+      "description": "Crystal battle fixture: cold boot, resave, reload PYDEC/GAME agreement",
+      "axes": {"kind": "qualification", "fixture": "crystal_battle", "requirement_ids": ["F-6", "S-1", "S-2", "S-3", "S-4", "S-5", "S-6", "S-7", "S-8", "S-9g", "S-10g"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_battle.qualification.json",
+        "sha256": "4a6bfa980fb5b7977538ca2149412a829102d5f64937543eb5798d0827cb9370"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.crystal_town_ot2",
+      "stage": "physical-live",
+      "description": "Crystal town fixture played under a second OT (C<->C pairing, wrong-save control)",
+      "axes": {"kind": "qualification", "fixture": "crystal_town_ot2", "requirement_ids": ["F-6"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_town_ot2.qualification.json",
+        "sha256": "171a00e32e547d2e650540c8f9e010acaf39a93b1131d7d1b7cb39691d293d8a"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.crystal_battle_ot2",
+      "stage": "physical-live",
+      "description": "Crystal battle fixture played under a second OT (C<->C pairing, wrong-save control)",
+      "axes": {"kind": "qualification", "fixture": "crystal_battle_ot2", "requirement_ids": ["F-6"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_battle_ot2.qualification.json",
+        "sha256": "5a66b33f558619ee741ea5c81bfb06f87a3d82341830a8170fdf6c9a186c7c82"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.gold_town",
+      "stage": "physical-live",
+      "description": "Gold town fixture: cold boot, resave, reload PYDEC/GAME agreement",
+      "axes": {"kind": "qualification", "fixture": "gold_town", "requirement_ids": ["F-6", "S-1", "S-2", "S-3", "S-4", "S-5", "S-6", "S-7", "S-8", "S-9g", "S-10g"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_town.qualification.json",
+        "sha256": "62973233d0333d543571b5dde6760416c4b587056182e22c09373c86cbfd4e8a"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.gold_battle",
+      "stage": "physical-live",
+      "description": "Gold battle fixture: cold boot, resave, reload PYDEC/GAME agreement",
+      "axes": {"kind": "qualification", "fixture": "gold_battle", "requirement_ids": ["F-6", "S-1", "S-2", "S-3", "S-4", "S-5", "S-6", "S-7", "S-8", "S-9g", "S-10g"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_battle.qualification.json",
+        "sha256": "929ecff95239ecb2007b5bb50d97d98e24f3289d6af8027f16bc9c61f581753d"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.silver_town",
+      "stage": "physical-live",
+      "description": "Silver town fixture: cold boot, resave, reload PYDEC/GAME agreement",
+      "axes": {"kind": "qualification", "fixture": "silver_town", "requirement_ids": ["F-6", "S-1", "S-2", "S-3", "S-4", "S-5", "S-6", "S-7", "S-8", "S-9g", "S-10g"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_town.qualification.json",
+        "sha256": "67cb235053aa96020263048851648d91d04ee0d0d4ed4ac6ef5af629b29609ea"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.silver_battle",
+      "stage": "physical-live",
+      "description": "Silver battle fixture: cold boot, resave, reload PYDEC/GAME agreement",
+      "axes": {"kind": "qualification", "fixture": "silver_battle", "requirement_ids": ["F-6", "S-1", "S-2", "S-3", "S-4", "S-5", "S-6", "S-7", "S-8", "S-9g", "S-10g"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_battle.qualification.json",
+        "sha256": "e8025867a0df6efe17c9acd0285e398a4c33727e39d61d83532939087a8a628a"
+      }}}]
+    }
+  ]
+}
