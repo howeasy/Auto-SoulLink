@@ -6,10 +6,16 @@
 -- builds the io/ev tables and injects them.
 --
 --   deps.root     repo root path (for dofile / pack files)
---   deps.mode     "observer" (P3: reads + signals over a read-only io; there is no
---                 client.lua yet). Production mode lands in P4.
+--   deps.mode     "observer" (P3: reads + signals over a read-only io, returns nil, parts)
+--                 or "production" (P4: returns client, parts; see build_production below)
 --   deps.io       read_u8/read_u16/read_u32(addr), read_bytes(addr, len),
---                 rom_read(off, len), framecount(), register(name)
+--                 rom_read(off, len), framecount(), register(name); production adds
+--                 write_u8(addr, value) (the ONLY write sink, reached only through writes.lua)
+--                 and optionally saveram() (flush the battery at the save site)
+--   production only: deps.net, deps.hud, deps.player, deps.rom_sha1 (the admitted hash),
+--                 deps.native (the RR companion part, P5; nil today), deps.battle_policy
+--                 (function(snapshot, reason) -> ok, why for the battle reasons: the C4-B seam),
+--                 deps.boxes_new (a harness replacement for lua/gen3/boxes.lua's B.new)
 --   deps.ev       on_bus_exec(fn, addr, name) -> id, unregister(id)
 --   deps.pack     "gen3_frlg" | "gen3_rr"
 --   deps.title    "firered" | "leafgreen" | "radical_red"
@@ -68,11 +74,17 @@ Entry.PACK_FILES = {
         profile = "data/games/gen3_frlg/profile.json",
         sites = "data/games/gen3_frlg/engine_signals.json",
         checkpoint = "data/games/gen3_frlg/write_checkpoint.json",
+        area_map = "data/games/gen3_frlge/area_map.json",
+        locations = "data/games/gen3_frlge/gen3_frlge_locations.lua",
     },
+    -- RR is a FireRed map hack: the old client resolves its areas from the same FRLG tables
+    -- (lua/games/gen3_frlge.lua:641-651, the non-Emerald branch)
     gen3_rr = {
         profile = "data/games/gen3_rr/profile.json",
         sites = "data/games/gen3_rr/engine_signals.json",
         checkpoint = "data/games/gen3_rr/write_checkpoint.json",
+        area_map = "data/games/gen3_frlge/area_map.json",
+        locations = "data/games/gen3_frlge/gen3_frlge_locations.lua",
     },
 }
 Entry.ROM_TYPE = {}
@@ -205,13 +217,81 @@ end
 
 -- ── build ────────────────────────────────────────────────────────────────────────────
 
+-- Production (P4, docs/gen3/research/p4_gen1_contract_map.md §3.1). The same pack data as
+-- observer mode, plus: the checkpoint instance over the injected io, the write policy, the
+-- one write sink, the box mover and the client (lua/gen3/client.lua over lua/core). Signals
+-- are NOT built here: client:start() builds them, so a refused site check fails start() by
+-- name (the Gen 1 run.lua pattern) instead of the build.
+local function build_production(deps, c)
+    local L, io_, pack = c.L, c.io, c.pack
+    assert(io_.write_u8 ~= nil, "production io needs write_u8")
+    local wc = assert(c.write_checkpoint, "pack " .. pack .. " ships no write checkpoint for " .. c.title)
+    local Safety, Writes = L("lua/gen3/safety.lua"), L("lua/gen3/writes.lua")
+    local log = deps.log or function() end
+    local native = deps.native
+    local safety = Safety.new(wc, {
+        io = {
+            read_u8 = function(addr, domain)
+                if domain == "ROM" then return io_.rom_read(addr, 1)[1] end
+                return io_.read_u8(addr)
+            end,
+            read_u16_le = function(addr) return io_.read_u16(addr) end,
+            read_u32_le = function(addr) return io_.read_u32(addr) end,
+        },
+        regs = function() return { R15 = io_.register("R15"), CPSR = io_.register("CPSR") } end,
+        native_idle = function()
+            if native and native.idle then return native:idle() end
+            return true                                    -- no native part: nothing in flight
+        end,
+    }, c.artifact_kind)
+    -- The write policy. "overworld" is the G3-signed checkpoint. The battle reasons have no
+    -- predicate in the packs yet (C4-B designs WHEN a battle write may land); until then they
+    -- are refused by name, which the client turns into a HOLD, never a silent write.
+    local battle_policy = deps.battle_policy
+    local policy = {}
+    function policy:snapshot() return safety:snapshot() end
+    function policy:check(snapshot, reason)
+        if reason == "overworld" then return safety:check(snapshot) end
+        if battle_policy then return battle_policy(snapshot, reason) end
+        return false, "no " .. tostring(reason) .. " predicate in the " .. pack .. " checkpoint pack yet (C4-B)"
+    end
+    local writes = Writes.new({
+        safety = policy, frame = io_.framecount,
+        io = io_,                                          -- writes.lua is the only caller of write_u8
+        log = function(r)
+            log(string.format("[SLink-gen3] write %s 0x%08X +%d frame %d", r.reason, r.address, r.len, r.frame))
+        end,
+    })
+    local reads = c.reads
+    local boxes_rel = "lua/gen3/boxes.lua"
+    -- deps.boxes_new(profile, reads, box_io) replaces the box mover (a harness seam; the
+    -- release build never passes it)
+    local boxes_new = deps.boxes_new
+    if not boxes_new and file_exists(c.root .. "/" .. boxes_rel) then boxes_new = L(boxes_rel).new end
+    local boxes = boxes_new and boxes_new(c.profile, reads, {
+        read_bytes = io_.read_bytes, rom_read = io_.rom_read, writes = writes }) or nil
+    local files = Entry.PACK_FILES[pack]
+    local core = { Session = L("lua/core/session.lua"), Identity = L("lua/core/identity.lua"),
+                   Deferred = L("lua/core/deferred.lua") }
+    local client = L("lua/gen3/client.lua").new({
+        reads = reads, R = c.Reads, profile = c.profile, sites = c.sites, Signals = c.Signals,
+        writes = writes, boxes = boxes, policy = policy, net = assert(deps.net, "deps.net required"),
+        hud = assert(deps.hud, "deps.hud required"), json = c.json, io = io_, ev = c.ev,
+        area_map = load_json(c.json, c.root .. "/" .. files.area_map),
+        locations = dofile(c.root .. "/" .. files.locations),
+        player = deps.player, rom_type = c.parts.rom_type, rom_sha1 = deps.rom_sha1 or c.parts.rom_hash,
+        foundation = pack, artifact_kind = c.artifact_kind, native = native, log = deps.log, core = core,
+    })
+    local parts = c.parts
+    parts.writes, parts.boxes, parts.safety, parts.policy, parts.native = writes, boxes, safety, policy, native
+    return client, parts
+end
+
 function Entry.build(deps)
     local root = assert(deps.root, "deps.root required")
     local mode = deps.mode or "observer"
-    -- P4 lands production mode (client.lua); until then any other mode is refused by name
-    -- rather than half-built.
-    assert(mode == "observer", "deps.mode " .. tostring(mode)
-           .. " is not built yet; lua/gen3 is observer-only until P4")
+    assert(mode == "observer" or mode == "production", "deps.mode " .. tostring(mode)
+           .. " is not a Gen 3 build mode (observer | production)")
     local L = function(rel) return dofile(root .. "/" .. rel) end
     local json = L("lua/json_codec.lua")
     local Reads, Signals = L("lua/gen3/reads.lua"), L("lua/gen3/signals.lua")
@@ -238,6 +318,20 @@ function Entry.build(deps)
     -- The pointer symbols (gSaveBlock1Ptr / gSaveBlock2Ptr / gPokemonStoragePtr) live in the
     -- checkpoint pack, so reads gets them as data rather than naming an address itself.
     local reads = Reads.new(profile, io_, write_checkpoint and write_checkpoint.pointers)
+    if mode == "production" then
+        local parts = {
+            pack = pack, title = title, kind = kind, artifact_kind = artifact_kind,
+            rom_type = pack_def.rom_type[title], rom_hash = artifact.rom_sha1,
+            profile = profile, sites = sites, write_checkpoint = write_checkpoint,
+            reads = reads, json = json, mode = mode, log = deps.log or function() end,
+        }
+        return build_production(deps, {
+            L = L, root = root, io = io_, ev = assert(deps.ev, "deps.ev required"), pack = pack,
+            title = title, profile = profile, sites = sites, write_checkpoint = write_checkpoint,
+            artifact_kind = artifact_kind, reads = reads, Reads = Reads, Signals = Signals,
+            json = json, parts = parts,
+        })
+    end
     local signals = Signals.new(profile, sites, io_, assert(deps.ev, "deps.ev required"),
                                 deps.on_fire)
     -- The checkpoint predicate is a sibling card (lua/gen3/safety.lua, P3 C3-2); bind it

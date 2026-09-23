@@ -142,6 +142,10 @@ function Session.new(p)
             if why then
                 log(e.cmd .. " refused in battle: " .. why .. " " .. tostring(e.key))
                 res = "done"
+            elseif not self.writes_enabled then
+                -- a paused gate holds battle writes too (Gen 1 on_battle_loop_head gates on
+                -- writes_enabled, gen1/client.lua:1376): nothing lands while identity is unsure
+                res, rwhy = "hold", self.gate_revoked and "writes paused" or "writes not enabled yet"
             elseif not party then
                 res, rwhy = "hold", "party unreadable"
             elseif not slot then

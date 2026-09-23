@@ -404,7 +404,7 @@ def test_force_faint_in_battle_without_a_battle_path_is_deferred_to_the_checkpoi
 
 def test_force_faint_in_battle_whose_battle_write_returns_nil_is_deferred():
     w = World()
-    w.step()
+    w.step_to(60)  # writes enabled at the first validation
     w.st.in_battle, w.st.checkpoint, w.st.battle_result = True, False, None
     w.command(cmd="force_faint", key=B)
     w.step()
@@ -414,7 +414,7 @@ def test_force_faint_in_battle_whose_battle_write_returns_nil_is_deferred():
 
 def test_a_bench_faint_in_battle_lands_the_same_frame():
     w = World()
-    w.step()
+    w.step_to(60)  # writes enabled at the first validation
     w.st.in_battle, w.st.battle_result = True, "done"
     w.command(cmd="force_explode", key=B)
     w.step()
@@ -424,7 +424,7 @@ def test_a_bench_faint_in_battle_lands_the_same_frame():
 
 def test_an_active_battler_is_held_across_frames_and_reported_then_lands_on_switch_out():
     w = World()
-    w.step()
+    w.step_to(60)  # writes enabled at the first validation
     w.st.in_battle, w.st.battle_result, w.st.checkpoint = True, "hold", False
     w.command(cmd="force_faint", key=A)
     w.step(w.S.PENDING_HUD_FRAMES + 60)
@@ -435,6 +435,19 @@ def test_an_active_battler_is_held_across_frames_and_reported_then_lands_on_swit
     w.st.battle_result = "done"                             # switched out
     w.step()
     assert w.s.battle_pending_count(w.s) == 0 and w.q.size(w.q) == 0
+
+
+def test_a_paused_gate_holds_battle_writes_and_never_calls_the_driver():
+    w = World()
+    w.step_to(60)
+    w.s.writes_enabled, w.s.gate_revoked = False, True
+    w.st.in_battle, w.st.battle_result = True, "done"
+    w.command(cmd="force_faint", key=B)
+    w.step(3)
+    assert w.battle_writes() == [] and w.s.battle_pending_count(w.s) == 1
+    w.s.writes_enabled = True
+    w.step()
+    assert w.battle_writes() == [("force_faint", B, 1, False)] and w.s.battle_pending_count(w.s) == 0
 
 
 def test_a_hold_at_battle_end_gets_one_final_attempt_then_falls_back_to_the_checkpoint():
@@ -454,7 +467,7 @@ def test_a_hold_at_battle_end_gets_one_final_attempt_then_falls_back_to_the_chec
 
 def test_a_final_attempt_that_lands_at_battle_end_is_not_deferred():
     w = World()
-    w.step()
+    w.step_to(60)  # writes enabled at the first validation
     w.st.in_battle, w.st.battle_result = True, "hold"
     w.command(cmd="force_faint", key=A)
     w.step()
@@ -465,7 +478,7 @@ def test_a_final_attempt_that_lands_at_battle_end_is_not_deferred():
 
 def test_a_held_battle_write_follows_a_key_change_alias():
     w = World()
-    w.step()
+    w.step_to(60)  # writes enabled at the first validation
     w.st.in_battle, w.st.battle_result = True, "hold"
     w.command(cmd="force_faint", key=A)
     w.step()
@@ -481,7 +494,7 @@ def test_a_held_battle_write_follows_a_key_change_alias():
 
 def test_the_driver_can_drop_its_held_battle_writes():
     w = World()
-    w.step()
+    w.step_to(60)  # writes enabled at the first validation
     w.st.in_battle, w.st.battle_result = True, "hold"
     w.command(cmd="force_faint", key=A)
     w.step()

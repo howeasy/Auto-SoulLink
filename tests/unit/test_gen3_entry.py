@@ -288,10 +288,71 @@ def test_build_refuses_and_arms_nothing_when_a_site_is_not_in_the_rom():
     assert world.registered == [], "a refused build must arm nothing"
 
 
-def test_build_refuses_a_mode_that_is_not_built_yet():
+def test_build_refuses_a_mode_that_is_not_a_gen3_build_mode():
     world = World(build=False)
-    with pytest.raises(lupa.LuaError, match="observer-only until P4"):
+    with pytest.raises(lupa.LuaError, match="not a Gen 3 build mode"):
+        world.Entry.build(world.deps(mode="shadow"))
+
+
+# ── production mode (P4 C4-2b) ─────────────────────────────────────────────────────────
+
+def _production(world, **over):
+    L = world.lua
+    world.io.write_u8 = lambda a, v: None
+    net = L.table(connected=lambda: False, pump=lambda: None, send=lambda line: None,
+                  receive=lambda: None)
+    hud = L.table(show=lambda *a: None, prompt=lambda *a: None)
+    return world.Entry.build(world.deps(mode="production", net=net, hud=hud, player="a", **over))
+
+
+@pytest.mark.parametrize("pack,title,kind", [
+    ("gen3_frlg", "firered", "clean"),
+    ("gen3_frlg", "leafgreen", "clean"),
+    ("gen3_rr", "radical_red", "clean"),
+    ("gen3_rr", "radical_red", "companion"),
+])
+def test_production_build_returns_a_client_and_arms_no_hook_until_start(pack, title, kind):
+    world = World(pack=pack, title=title, kind=kind, build=False)
+    client, parts = _production(world)
+    assert client is not None and parts.mode == "production"
+    assert parts.writes is not None and parts.policy is not None and parts.safety is not None
+    assert world.registered == [], "signals are built by client:start(), not by the build"
+    client.start(client)
+    assert len(world.registered) == len(world.sites)
+
+
+def test_production_start_refuses_by_name_when_a_site_is_not_in_the_rom():
+    sites = sites_of("gen3_frlg", "firered", "clean")
+    rom = seed_rom(sites)
+    rom[sites["faint"]["rom_offset"]] ^= 0xFF
+    world = World(pack="gen3_frlg", title="firered", rom=rom, build=False)
+    client, _ = _production(world)
+    with pytest.raises(lupa.LuaError, match="engine sites differ from the ROM: faint"):
+        client.start(client)
+    assert world.registered == []
+
+
+def test_production_refuses_a_read_only_io():
+    world = World(pack="gen3_frlg", title="firered", build=False)
+    with pytest.raises(lupa.LuaError, match="production io needs write_u8"):
         world.Entry.build(world.deps(mode="production"))
+
+
+def test_the_default_write_policy_refuses_battle_reasons_by_name_until_c4b():
+    world = World(pack="gen3_frlg", title="firered", build=False)
+    _, parts = _production(world)
+    policy = parts.policy
+    for reason in ("battle_faint", "battle_commit"):
+        ok, why = policy.check(policy, world.lua.table(), reason)
+        assert ok is False and reason in why and "gen3_frlg" in why and "C4-B" in why
+
+
+def test_an_injected_battle_policy_decides_the_battle_reasons():
+    world = World(pack="gen3_rr", title="radical_red", build=False)
+    seen = []
+    _, parts = _production(world, battle_policy=lambda snap, reason: (seen.append(str(reason)) or True, "ok"))
+    ok, _ = parts.policy.check(parts.policy, world.lua.table(), "battle_commit")
+    assert ok is True and seen == ["battle_commit"]
 
 
 def test_build_refuses_an_unadmitted_title():
