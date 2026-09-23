@@ -294,14 +294,15 @@ class InspectSim(QualifySim):
     # --- scripted display screens (the gate's normal-button navigation) ---------------------------
 
     def start_menu_flow(self):
-        """START menu: the gate picks the Status entry (the player's name) or #MON, and B exits."""
+        """START menu: the gate picks the Status entry (the player's name) or POKéMON, and B exits.
+        "#MON@" draws the characters POKé (PlacePOKe, C home/text.asm:224,313,404), never a # tile."""
         while True:
-            items = ["#DEX", "#MON", "PACK", self.player_name, "SAVE", "OPTION", "EXIT"]
+            items = ["POKéDEX", "POKéMON", "PACK", self.player_name, "SAVE", "OPTION", "EXIT"]
             chosen = yield from self.menu_select("start_menu", items, at=(8, 0))
             if chosen == self.player_name:
                 yield from self.card_screen()
                 continue
-            if chosen == "#MON":
+            if chosen == "POKéMON":
                 yield from self.party_flow()
                 continue
             self.clear()
@@ -935,11 +936,12 @@ def test_item_column_and_expected_text_are_title_keyed(gate):
 
 def test_find_menu_item_matches_the_folded_labels(gate):
     lua, G = gate
-    items = lua.table_from(["#DEX", "#MON", "PACK", "GOLD", "SAVE", "OPTION", "EXIT"])
+    items = lua.table_from(["POKéDEX", "POKéMON", "PACK", "GOLD", "SAVE", "OPTION", "EXIT"])
     assert G.find_menu_item(items, "GOLD") == 4
-    assert G.find_menu_item(items, "#MON") == 2
+    assert G.find_menu_item(items, "POKEMON") == 2
+    assert G.find_menu_item(items, "#MON") is None   # the # control code never reaches the tilemap
     assert G.find_menu_item(items, "NOPE") is None
-    assert G.find_menu_item(items, G.normalize_text("#MON")) == 2
+    assert G.find_menu_item(items, G.normalize_text("POKéMON")) == 2
     assert G.normalize_text("POKéMON") == "POKEMON"
     assert G.find_menu_item(lua.table_from(["SAVE", "Save"]), "SAVE") is None   # ambiguous
 

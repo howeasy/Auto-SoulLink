@@ -252,8 +252,8 @@ function G.id_text(ot_id) return string.format("%05d", ot_id) end
 G.GENDER_GLYPH = {male = "♂", female = "♀", genderless = ""}
 G.SHINY_GLYPH = "⁂"
 
--- Fold accents so the "POKé" tile ("#") and an item pack's "Poké Ball" compare alike. The start menu's
--- party entry is "#MON" (STARTMENUITEM_POKEMON) in both titles, so "#" is left alone.
+-- Fold accents so the start menu's "POKéMON" (its "#MON@" string expands through PlacePOKe to the
+-- characters POKé) and an item pack's "Poké Ball" compare alike.
 function G.normalize_text(text) return (text:gsub("é", "E"):gsub("É", "E")):upper() end
 
 -- Index of the one menu item whose folded text is `wanted`, or nil (no match, or an ambiguous pair).
@@ -516,7 +516,10 @@ function G.display_pass(ctx, SG, log, check, reads, species)
         if phase == "start_menu" then
             local m = screen()
             if not m then return {}, phase end
-            local target = G.find_menu_item(m.items, G.normalize_text(glyphs[encoding["#"]] .. "MON"))
+            -- ".PartyString: #MON@" (C/G engine/menus/start_menu.asm:190): the `#` control code expands
+            -- through PlacePOKe to the characters "POKé" (C home/text.asm:224,313,404; G :211,371), so
+            -- the tilemap reads POKéMON, never a `#` glyph (live inspect run 2026-09-23 stalled here).
+            local target = G.find_menu_item(m.items, G.normalize_text("POKéMON"))
             if not target then return {}, phase end
             if target == m.cursor then phase = "party" return nav.press("A"), phase end
             return nav.press(target > m.cursor and "Down" or "Up"), phase
