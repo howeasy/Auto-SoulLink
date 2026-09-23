@@ -14,12 +14,15 @@
 --     would involve the bench. prep.target_key/slot/hp must remain unchanged on EVERY frame.
 --     Then normal Route2/Forest route to Rick; return parked, battle_permit=true, outcome=0,
 --     is_trainer=true, trainer_id=expected. Integration owns this route/preparation binding.
---     Route prerequisite: a decomp BFS blocking ALL objects finds no ordinary-walk route
---     around BOTH active tutorial tiles(20,8)/(22,8) and scene1 old man(21,8). The apparent
---     west detour crosses the Cut tree(18,5) and is invalid. Integration must confirm a normal
---     tutorial-completion prerequisite (talk from21,9 is a candidate); scene2 then disables
---     the coordinate triggers. Do not claim a literal tile-avoidance shortcut is verified.
---     Reuse the plan's Route2/gate/Forest route after reaching(20,0), U to Route2(8,79).
+--     Required normal-input chain (binding belongs to 2B-INTEGRATE-DUO):
+--       1. Reuse mkstates_gen3_tutorials.lua's tutorial prefix (c08328b4/e4c30fff, receipts
+--          66d2a802): (24,39) U8 L2 U22 ->(22,9), U into TutorialTriggerRight while var4051=1.
+--          A only, never B; prove var4051=2, TeachyTV366 granted and field quiet at(22,8).
+--       2. Train to the level floor and heal normally in the Viridian Pokemon Center.
+--       3. Walk north through(20,0), U to Route2(8,79), then the plan's gate/Forest route to
+--          Rick's first sight tile(42,45). Revalidate full HP/status0 and the parked postcondition.
+--     Scene2 makes both tutorial coordinate triggers inactive. No route may assume scene1
+--     passability: the previously suggested western shortcut crosses Cut tree(18,5).
 --     pret trainer_parties.h:273-284: Rick's Weedle6 (Poison Sting/String Shot), Caterpie6
 --     (Tackle/String Shot), .iv0 = IV0 (battle_main.c:1576). The rival .iv50 = IV6. Both town
 --     fixtures have no Potions. Coordinator FC-T2-FLOOR ruling (Monte Carlo, not reproduced
