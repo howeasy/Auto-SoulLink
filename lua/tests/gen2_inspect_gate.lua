@@ -26,13 +26,19 @@
   DECODE_FRAME records it. The Python side binds each Lua decode's own raw_hex to the captured bytes.
 
   R-3 SCOPE NOTE: the RAW_* lines below are a SECOND, independent Lua reader of the same
-  profile-declared WRAM addresses (bypassing lua/gen2/reads.lua entirely), not an OCR of the
-  game's own rendered Trainer Card / party status / PC box screens. R-3 against the on-screen text
-  (GEN2_BINDING_PLAN P3b.3a's "GAME" oracle) needs UI navigation the eight town/battle fixtures
-  cannot reach, and stays OPEN.
+  profile-declared WRAM addresses (bypassing lua/gen2/reads.lua entirely). The tilemap half of R-3
+  IS now closed by the scripted display pass further down: GAME_TRAINER_CARD reads the game's own
+  rendered Trainer Card (wPlayerID at (5,4) and wPlayerName at (7,2)) after navigating START ->
+  Status with normal buttons. The badge half of R-3 stays OPEN: Johto/Kanto badges are VRAM tiles
+  animated as OAM (TrainerCard_JohtoBadgesOAM, engine/menus/trainer_card.asm:149-158,197-207), which
+  a wTilemap oracle cannot see -- it needs an OAM/VRAM witness. The PC box header is OUT OF SCOPE:
+  Elm's lab has no PC, so no town/battle fixture can reach it (docs/gen2/reviews/
+  OMP_R3_R5G_DISPLAY_FACTS_2026-09-23.md).
   R-5g SCOPE NOTE: GENDER_SHINY is a DV-formula cross-check (this file vs an independent Python
-  reimplementation). It is NOT the game's own status-screen gender symbol or shiny palette, which is
-  what R-5g requires; R-5g stays OPEN.
+  reimplementation). The display half of R-5g IS now closed by GAME_STATS_HEAD: after navigating
+  START -> #MON -> the lead party mon's STATS screen, the (18,0) gender glyph and (19,0) shiny
+  marker are read from wTilemap and compared against this file's own G.gender_and_shiny over the
+  same DVs, with the blank tile taken from the title's charmap.
 
   Environment (all required): SLINK_ROOT; run_gb_gate._gen2_plan's SLINK_GEN2_TITLE/_ROM_SHA1/
   _CORE_MODE (CGB)/_COLD ("0")/_SAVERAM_DIR/_SAVERAM_NAME; and, from tests/live/test_gen2_new_gates.py
@@ -51,6 +57,15 @@
     RAW_BADGES / RAW_BATTLE / RAW_BOXNUM   the independent hand-rolled second reader (see above)
     GENDER_SHINY  per party slot, {gender, shiny} from dv_word alone (formula cross-check only)
     DECODE_FRAME  the frame counter after every decode above (must equal DUMP.frame)
+
+  Display oracle lines (normal-button navigation; see the R-3/R-5g SCOPE notes):
+    GAME_TRAINER_CARD  {frame, id_digits_hex, id_text, expected_id_text, player_id_hex, name_row,
+                        name_col, name_length, name_bytes_hex, name_text, expected_name,
+                        player_name_hex, blank_byte}
+    GAME_STATS_HEAD    {frame, gender_byte, gender_expected, gender_glyph, shiny_byte,
+                        shiny_expected, shiny_glyph, blank_byte, species_id, dv_word, gender, shiny}
+    GAME_STATS_ITEM    {frame, item_row, item_col, label_text, held_item, item_bytes_hex, item_text,
+                        item_expected}
 --]]
 local G = {}
 G.RESULT = "patch/build/gen2_inspect_gate_result.txt"
@@ -58,6 +73,18 @@ G.CART_RAM_BYTES = 0x8000
 G.SCRIPTED_GATE = "lua/tests/test_gen2_scripted_gate.lua"
 -- ponytail: idle-stability window, not a measured native timing; raise if a live run needs longer.
 G.STABILITY_IDLE_FRAMES = 60
+-- ponytail: scripted-display calibration knobs, not measured native timings. A 2D menu samples its
+-- joypad per frame, so a short HOLD registers; the GAP keeps a second press out of the frame the
+-- first is still being consumed in. Raise if a live run drops a press.
+G.DISPLAY_HOLD = 2
+G.DISPLAY_GAP = 12
+-- Frames a screen's tilemap is left to finish drawing after its per-frame joypad state is reached.
+G.DISPLAY_SETTLE = 8
+-- Per-phase and whole-pass frame bounds: a wait that never advances fails through the host, no hang.
+G.DISPLAY_PHASE_FRAMES = 900
+G.DISPLAY_FRAMES = 8000
+-- The overworld input tick window, as lua/tests/test_gen2_scripted_gate.lua's G.OVERWORLD_WINDOW.
+G.DISPLAY_OVERWORLD_WINDOW = 2
 
 local function integer(value, low, high)
     return type(value) == "number" and value % 1 == 0 and value >= low and value <= high
@@ -167,6 +194,384 @@ function G.gender_and_shiny(dv_word, gender_ratio)
     elseif gender_ratio == 0 then gender = "male"
     else gender = (attack * 16 + speed <= gender_ratio) and "female" or "male" end
     return gender, shiny
+end
+
+-- ================================================================================================
+-- Display oracle (R-3 tilemap half, R-5g display half): the game's OWN rendered Trainer Card and
+-- party status screens, read out of wTilemap after ordinary-button navigation. See the SCOPE notes.
+-- ================================================================================================
+
+-- wTilemap is SCREEN_WIDTH cells wide and ClearTilemap fills every cell with ' ' (home/text.asm:22-32):
+-- cell (x, y) is wTilemap + y*width + x. Coordinates here are 0-based, as hlcoord's are.
+function G.tile_offset(x, y, width) return y * width + x end
+
+-- A run of tilemap bytes through a title's charmap (charmap.glyphs: byte -> glyph name). A byte the
+-- charmap does not name is refused, never silently masked.
+function G.decode_cells(glyphs, bytes)
+    local out = {}
+    for i = 1, #bytes do
+        local name = glyphs[bytes[i]]
+        if name == nil then
+            return nil, string.format("tilemap byte $%02X has no glyph in the title charmap", bytes[i])
+        end
+        out[#out + 1] = name
+    end
+    return table.concat(out)
+end
+
+-- A run of tilemap bytes decoded up to a string terminator (names end at the '@' tile).
+function G.decode_cells_terminated(glyphs, terminator, bytes)
+    local out = {}
+    for i = 1, #bytes do
+        if bytes[i] == terminator then break end
+        local name = glyphs[bytes[i]]
+        if name == nil then
+            return nil, string.format("name byte $%02X has no glyph in the title charmap", bytes[i])
+        end
+        out[#out + 1] = name
+    end
+    return table.concat(out)
+end
+
+-- The Trainer Card prints wPlayerID as a 5-digit zero-padded number (PRINTNUM_LEADINGZEROS | 2, 5):
+-- C engine/menus/trainer_card.asm:238-240, G :236-238.
+function G.id_text(ot_id) return string.format("%05d", ot_id) end
+
+-- Glyph names keyed by the gender the DV derivation reports; PINK/GREEN/BLUE pages all draw it.
+G.GENDER_GLYPH = {male = "♂", female = "♀", genderless = ""}
+G.SHINY_GLYPH = "⁂"
+
+-- Fold accents so the "POKé" tile ("#") and an item pack's "Poké Ball" compare alike. The start menu's
+-- party entry is "#MON" (STARTMENUITEM_POKEMON) in both titles, so "#" is left alone.
+function G.normalize_text(text) return (text:gsub("é", "E"):gsub("É", "E")):upper() end
+
+-- Index of the one menu item whose folded text is `wanted`, or nil (no match, or an ambiguous pair).
+function G.find_menu_item(items, wanted)
+    local target
+    for i, item in ipairs(items) do
+        if type(item) == "string" and G.normalize_text(item) == wanted then
+            if target then return nil end
+            target = i
+        end
+    end
+    return target
+end
+
+-- The stats head's expected (18,0) gender and (19,0) shiny bytes in a title's charmap. A genderless
+-- mon writes no gender char (C stats_screen.asm:474-486) and a non-shiny mon writes no shiny icon
+-- (:522-526): both leave ClearTilemap's blank cell untouched, so a stale byte there is never the glyph.
+function G.stats_head_expected(encoding, gender, shiny)
+    local blank = assert(encoding[" "], "charmap lacks the blank tile")
+    local gender_byte = blank
+    if gender ~= "genderless" then
+        local glyph = assert(G.GENDER_GLYPH[gender], "unknown gender " .. tostring(gender))
+        gender_byte = assert(encoding[glyph], "charmap lacks " .. glyph)
+    end
+    local shiny_byte = blank
+    if shiny then shiny_byte = assert(encoding[G.SHINY_GLYPH], "charmap lacks " .. G.SHINY_GLYPH) end
+    return {blank_byte = blank, gender_byte = gender_byte, shiny_byte = shiny_byte}
+end
+
+-- The stats screen's GREEN page prints .Item ("ITEM") at (0,8) and the name after it: at (8,8) in
+-- Crystal (engine/pokemon/stats_screen.asm:726-733) but at (6,8) in Gold/Silver (:567-577). With no
+-- item .GetItemName returns .ThreeDashes "---" (C :755-757, G :610-614).
+G.ITEM_COLUMN = {crystal = 8, gold = 6, silver = 6}
+G.NO_ITEM_TEXT = "---"
+function G.item_column(title) return assert(G.ITEM_COLUMN[title], "no item column for title " .. tostring(title)) end
+
+-- The expected item-line text: the game's own no-item text, or the title pack's name for `held`
+-- (folded on both sides before comparison). nil when the pack has no such id.
+function G.item_expected(pack, held_item)
+    if held_item == 0 then return G.NO_ITEM_TEXT end
+    local name = pack[tostring(held_item)]
+    if type(name) ~= "string" then return nil end
+    return G.normalize_text(name)
+end
+
+function G.item_names(ctx)
+    local rel = "data/games/gen2_" .. ctx.env.title .. "/item_names.json"
+    local f = assert(io.open(ctx.root .. "/" .. rel, "rb"), "cannot open " .. rel)
+    local text = f:read("a")
+    f:close()
+    local wrapper = assert(ctx.json.decode(text), rel .. " is malformed")
+    assert(type(wrapper) == "table", rel .. " is not an id table")
+    return wrapper
+end
+
+-- The two joypad-state code sites the display pass waits on are not among the route facts'
+-- ui_origins; they are resolved from the SAME rgbds symbol artifact the facts' sites come from
+-- (data/gen2/<artifact>.sym, the plain `BB:AAAA Name` rows tools/rgbds_symbols.py parses), and the
+-- expected ROM byte is read from the running ROM at the site's flat offset, exactly as the scripted
+-- gate's hooks do. The shared gate file is not touched.
+G.SYM_ARTIFACT = {crystal = "pokecrystal", gold = "pokegold", silver = "pokesilver"}
+function G.sym_site(ctx, label)
+    local artifact = assert(G.SYM_ARTIFACT[ctx.env.title], "unsupported title " .. tostring(ctx.env.title))
+    local path = ctx.root .. "/data/gen2/" .. artifact .. ".sym"
+    local f = assert(io.open(path, "rb"), "cannot open " .. path)
+    local text = f:read("a")
+    f:close()
+    local bank, address
+    for line in text:gmatch("[^\r\n]+") do
+        local b, a, name = line:match("^%s*([0-9a-fA-F]+):([0-9a-fA-F]+)%s+(%S+)")
+        if name == label then
+            assert(bank == nil, "duplicate symbol " .. label)
+            bank, address = tonumber(b, 16), tonumber(a, 16)
+        end
+    end
+    assert(bank ~= nil, "symbol not found in " .. artifact .. ".sym: " .. label)
+    local flat = (bank == 0) and address or (bank * 0x4000 + address - 0x4000)
+    local want = ctx.api.read_range(flat, 1, "ROM")
+    assert(type(want) == "table" and #want == 1, "ROM read failed for " .. label)
+    return {id = label, bank = bank, addr = address, flat = flat, hex = string.format("%02x", want[1])}
+end
+
+-- The display pass's own bank/byte-checked hooks (the shared G.hooks knows only the facts'
+-- ui_origins): the Trainer Card page-1 joypad state, the stats joypad state and the overworld tick.
+function G.display_hooks(ctx)
+    local api, obs = ctx.api, ctx.obs
+    local binding = ctx.Binding.new({read_u8 = api.read_u8, read_range = api.read_range, register = api.register,
+        framecount = api.framecount, on_bus_exec = api.on_bus_exec, unregister = api.unregister},
+        {bus_domain = "System Bus", rom_domain = "ROM", bank_domain = "System Bus", pc_register = "PC",
+         sp_register = "SP", bank_address = ctx.profile.hram.hROMBank})
+    local state = {errors = {}, handles = {}, card = {hits = 0}, stats = {hits = 0}, tick = nil}
+    local function watch(id, site, on_hit)
+        local valid = binding:validate({id = id, bank = site.bank, address = site.addr,
+            expected_hex = site.hex, capture_offset = 0, rom_offset = site.flat})
+        local handle = binding:register(valid, function()
+            local ok, hit = pcall(binding.context, binding, valid)
+            if not ok then state.errors[#state.errors + 1] = tostring(hit) return end
+            if hit then on_hit(hit.frame) end
+        end, "SLink-gen2-display-" .. id)
+        assert(binding:valid_handle(handle), id .. ": hook registration failed")
+        state.handles[#state.handles + 1] = handle
+    end
+    watch("trainer_card", G.sym_site(ctx, "TrainerCard_Page1_Joypad"), function(frame)
+        state.card.hits, state.card.frame = state.card.hits + 1, frame
+    end)
+    watch("mon_stats", G.sym_site(ctx, "MonStatsJoypad"), function(frame)
+        state.stats.hits, state.stats.frame = state.stats.hits + 1, frame
+    end)
+    watch("overworld_tick", obs.overworld_tick, function(frame) state.tick = frame end)
+    function state.release()
+        for _, handle in ipairs(state.handles) do pcall(binding.unregister, binding, handle) end
+        state.handles = {}
+    end
+    return state
+end
+
+-- One bounded navigation stage over the shared host: `machine` returns (buttons, phase) and the host
+-- returns once a terminal phase has settled. A wait that never advances trips the phase bound.
+local function display_stage(ctx, SG, name, terminal, machine)
+    local idle = {}
+    for _, button in ipairs(SG.BUTTONS) do idle[button] = false end
+    local host = ctx.Host.new({step = SG.button_step(ctx), frame = ctx.api.framecount, idle = idle})
+    return pcall(host.run, {name = name, terminal = terminal, max_frames = G.DISPLAY_FRAMES,
+        max_phase_frames = G.DISPLAY_PHASE_FRAMES, settle_frames = G.DISPLAY_SETTLE, terminal_idle = true}, machine)
+end
+
+-- A press held for G.DISPLAY_HOLD frames, then G.DISPLAY_GAP idle frames before the next decision.
+local function navigator()
+    local nav = {hold = 0, gap = 0, button = nil}
+    function nav.press(button)
+        nav.button, nav.hold, nav.gap = button, G.DISPLAY_HOLD - 1, G.DISPLAY_GAP
+        return {[button] = true}
+    end
+    function nav.step()
+        if nav.hold > 0 then nav.hold = nav.hold - 1 return {[nav.button] = true} end
+        if nav.gap > 0 then nav.gap = nav.gap - 1 return {} end
+        return nil
+    end
+    return nav
+end
+
+-- The whole display pass: Trainer Card -> back to the overworld -> party status head -> GREEN page.
+-- Every coordinate, byte and expectation is logged so tests/live/test_gen2_new_gates.py can derive
+-- the same values independently. Returns nothing; each observation is checked through `check`.
+function G.display_pass(ctx, SG, log, check, reads, species)
+    local api, obs, json = ctx.api, ctx.obs, ctx.json
+    local encoding, glyphs = ctx.charmap.encoding, ctx.charmap.glyphs
+    local blank = assert(encoding[" "], "charmap lacks the blank tile")
+    local function cells(x, y, n) return ctx.sym("wTilemap", G.tile_offset(x, y, obs.screen.width), n) end
+    local function hex(bytes)
+        local out = {}
+        for i = 1, #bytes do out[i] = string.format("%02x", bytes[i]) end
+        return table.concat(out)
+    end
+    local function screen()
+        return G.parse_menu(G.screen(ctx), obs.screen.width, obs.screen.height)
+    end
+    local hooks = G.display_hooks(ctx)
+    local failed = 0
+    local function fail(what, detail)
+        failed = failed + 1
+        log(string.format("  [FAIL] %s  -- %s", what, tostring(detail)))
+        local ok, rows = pcall(G.screen, ctx)
+        if ok then
+            for y, row in ipairs(rows) do log(string.format("  screen %02d |%s|", y, table.concat(row))) end
+        end
+    end
+    local function run(name, terminal, machine)
+        local ok, result = display_stage(ctx, SG, name, terminal, machine)
+        if not ok then fail(name, result) end
+        return ok
+    end
+
+    local id_raw = ctx.sym("wPlayerID", 0, 2)
+    local player_id = id_raw[1] * 256 + id_raw[2]
+    local name_raw = ctx.sym("wPlayerName", 0, ctx.profile.constants.NAME_LENGTH)
+    local player_name, name_why = G.decode_cells_terminated(glyphs, encoding["@"], name_raw)
+    local party = reads.read_party()
+    if not check("display pass has wPlayerName and a party mon to read", player_name ~= nil and party ~= nil
+                 and party.count >= 1, name_why or (party == nil and "no party")) then
+        hooks.release()
+        return
+    end
+    local lead = party.mons[1]
+
+    -- 1. Trainer Card page 1 via START -> the Status entry (the entry labelled with the player name).
+    local nav, phase = navigator(), "overworld"
+    local function overworld_ready()
+        local battle = reads.read_battle()
+        return hooks.tick ~= nil and api.framecount() - hooks.tick <= G.DISPLAY_OVERWORLD_WINDOW
+            and battle ~= nil and battle.mode == 0
+    end
+    if run("display-card", "card", function()
+        local buttons = nav.step()
+        if buttons then return buttons, phase end
+        if phase == "overworld" then
+            if not overworld_ready() then return {}, phase end
+            phase = "start_menu"
+            return nav.press("Start"), phase
+        end
+        if phase == "start_menu" then
+            local m = screen()
+            if not m then return {}, phase end
+            local target = G.find_menu_item(m.items, G.normalize_text(player_name))
+            if not target then return {}, phase end
+            if target == m.cursor then phase = "card_wait" return nav.press("A"), phase end
+            return nav.press(target > m.cursor and "Down" or "Up"), phase
+        end
+        if phase == "card_wait" then
+            if hooks.card.hits > 0 then phase = "card" return {}, phase end
+            return {}, phase
+        end
+        return {}, phase   -- terminal "card": the host settles the tilemap
+    end) then
+        local id_cells = cells(5, 4, 5)
+        local id_digits, id_why = G.decode_cells(glyphs, id_cells)
+        local expected_id = G.id_text(player_id)
+        local name_cells = cells(7, 2, #player_name)
+        local name_text, card_why = G.decode_cells(glyphs, name_cells)
+        log("GAME_TRAINER_CARD " .. json.encode({frame = api.framecount(),
+            id_digits_hex = hex(id_cells), id_text = id_digits, expected_id_text = expected_id,
+            player_id_hex = hex(id_raw), name_row = 2, name_col = 7, name_length = #player_name,
+            name_bytes_hex = hex(name_cells), name_text = name_text, expected_name = player_name,
+            player_name_hex = hex(name_raw), blank_byte = blank}))
+        check("Trainer Card (5,4) five digits render wPlayerID",
+              id_digits ~= nil and id_digits == expected_id, id_digits or id_why)
+        check("Trainer Card (7,2) renders wPlayerName",
+              name_text ~= nil and name_text == player_name, name_text or card_why)
+    end
+
+    -- 2. B out of the card and the start menu, back to the overworld.
+    nav, phase = navigator(), "exit"
+    run("display-exit", "overworld", function()
+        local buttons = nav.step()
+        if buttons then return buttons, phase end
+        if overworld_ready() then phase = "overworld" return {}, phase end
+        return nav.press("B"), phase
+    end)
+
+    -- 3. Stats screen head via START -> #MON -> the lead mon -> the mon submenu -> STATS.
+    nav, phase = navigator(), "overworld"
+    if run("display-stats", "stats", function()
+        local buttons = nav.step()
+        if buttons then return buttons, phase end
+        if phase == "overworld" then
+            if not overworld_ready() then return {}, phase end
+            phase = "start_menu"
+            return nav.press("Start"), phase
+        end
+        if phase == "start_menu" then
+            local m = screen()
+            if not m then return {}, phase end
+            local target = G.find_menu_item(m.items, G.normalize_text(glyphs[encoding["#"]] .. "MON"))
+            if not target then return {}, phase end
+            if target == m.cursor then phase = "party" return nav.press("A"), phase end
+            return nav.press(target > m.cursor and "Down" or "Up"), phase
+        end
+        if phase == "party" then
+            if hooks.stats.hits > 0 then phase = "stats" return {}, phase end
+            local m = screen()
+            if m and G.find_menu_item(m.items, "STATS") then phase = "submenu" return {}, phase end
+            return nav.press("A"), phase   -- select the lead mon; a stray re-press only re-selects #MON
+        end
+        if phase == "submenu" then
+            if hooks.stats.hits > 0 then phase = "stats" return {}, phase end
+            local m = screen()
+            if not m then return {}, phase end
+            local target = G.find_menu_item(m.items, "STATS")
+            if not target then return {}, phase end
+            if target == m.cursor then phase = "stats_wait" return nav.press("A"), phase end
+            return nav.press(target > m.cursor and "Down" or "Up"), phase
+        end
+        if phase == "stats_wait" then
+            if hooks.stats.hits > 0 then phase = "stats" return {}, phase end
+            return {}, phase
+        end
+        return {}, phase   -- terminal "stats"
+    end) then
+        local gender_byte = cells(18, 0, 1)[1]
+        local shiny_byte = cells(19, 0, 1)[1]
+        local row = species[tostring(lead.species_id)]
+        local gender, shiny = G.gender_and_shiny(lead.dv_word, row.gender_ratio)
+        local expected = G.stats_head_expected(encoding, gender, shiny)
+        log("GAME_STATS_HEAD " .. json.encode({frame = api.framecount(), gender_byte = gender_byte,
+            gender_expected = expected.gender_byte, gender_glyph = G.GENDER_GLYPH[gender],
+            shiny_byte = shiny_byte, shiny_expected = expected.shiny_byte,
+            shiny_glyph = shiny and G.SHINY_GLYPH or "", blank_byte = expected.blank_byte,
+            species_id = lead.species_id, dv_word = lead.dv_word, gender = gender, shiny = shiny}))
+        check("stats screen (18,0) gender glyph matches the DVs",
+              gender_byte == expected.gender_byte, string.format("$%02X != $%02X", gender_byte, expected.gender_byte))
+        check("stats screen (19,0) shiny marker matches the DVs",
+              shiny_byte == expected.shiny_byte, string.format("$%02X != $%02X", shiny_byte, expected.shiny_byte))
+
+        -- 4. RIGHT to the GREEN page, then the item line.
+        nav, phase = navigator(), "right"
+        local function item_line()
+            local label = G.decode_cells(glyphs, cells(0, 8, 4))
+            return label == "ITEM"
+        end
+        run("display-green", "green", function()
+            local buttons = nav.step()
+            if buttons then return buttons, phase end
+            if item_line() then phase = "green" return {}, phase end
+            return nav.press("Right"), phase   -- Cycles Pink->Green->Blue->Pink; stop at the ITEM label.
+        end)
+        local item_col = G.item_column(ctx.env.title)
+        local expected_item = G.item_expected(G.item_names(ctx), lead.held_item)
+        local label_text = G.decode_cells(glyphs, cells(0, 8, 4))
+        local length = expected_item and #expected_item or 3
+        local item_cells = cells(item_col, 8, length)
+        local item_text = G.decode_cells(glyphs, item_cells)
+        log("GAME_STATS_ITEM " .. json.encode({frame = api.framecount(), item_row = 8, item_col = item_col,
+            label_text = label_text, held_item = lead.held_item, item_bytes_hex = hex(item_cells),
+            item_text = item_text, item_expected = expected_item}))
+        check("stats GREEN page (0,8) carries the ITEM label", label_text == "ITEM", label_text)
+        check("stats GREEN page item line matches the expected item text",
+              item_text ~= nil and expected_item ~= nil
+              and G.normalize_text(item_text) == G.normalize_text(expected_item) and #item_text == length,
+              string.format("%s != %s", tostring(item_text), tostring(expected_item)))
+        -- 5. B out of the stats screen, the submenu and the start menu.
+        nav, phase = navigator(), "exit"
+        run("display-stats-exit", "overworld", function()
+            local buttons = nav.step()
+            if buttons then return buttons, phase end
+            if overworld_ready() then phase = "overworld" return {}, phase end
+            return nav.press("B"), phase
+        end)
+    end
+    hooks.release()
 end
 
 -- The post-CONTINUE overworld arrival: gen2_qualify.lua's "boot" stage (terminal "loaded"), driven
@@ -319,6 +724,7 @@ function G.main(api, getenv, SG)
     local decode_frame = api.framecount()
     check("every decode ran at the capture frame", decode_frame == dump.frame, decode_frame)
     log("DECODE_FRAME " .. json.encode(decode_frame))
+    G.display_pass(ctx, SG, log, check, reads, species)
     return finish()
 end
 
