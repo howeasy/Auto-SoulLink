@@ -102,7 +102,7 @@ def test_unadmitted_gen3_variants_carry_the_suffix():
     admitted and have no such suffix."""
     labels = GAME_LABELS
     assert "not admitted by the SLink client yet" in labels["gen3_ap"]
-    for game in ("gen3_e", "gen4_hgss", "gen4_pt", "gen5_bw", "gen5_bw2"):
+    for game in ("gen3_e",):
         assert "not admitted by the SLink client yet" in labels[game]
     assert "not admitted by the SLink client yet" not in labels["gen3"]
     assert "not admitted by the SLink client yet" not in labels["gen3_rr"]
@@ -113,4 +113,12 @@ def test_new_run_form_marks_exactly_the_unadmitted_games():
     from UNADMITTED_GAMES, so the chips and the handle_new refusal cannot drift apart."""
     from server.manager import UNADMITTED_GAMES, new_run_form
     flagged = {g["key"] for g in new_run_form()["games"] if g["unadmitted"]}
-    assert flagged == set(UNADMITTED_GAMES) == {"gen3_ap", "gen3_e", "gen4_hgss", "gen4_pt", "gen5_bw", "gen5_bw2"}
+    assert flagged == set(UNADMITTED_GAMES) == {"gen3_ap", "gen3_e"}
+
+
+def test_gen4_and_gen5_are_not_offered_in_the_manager():
+    """Owner 2026-09-23: Gen 4/5 never ran on a real game; their code stays (tag
+    archive/gen4-gen5) but the New-run form must not list them at all."""
+    from server.manager import new_run_form
+    keys = {g["key"] for g in new_run_form()["games"]}
+    assert not {k for k in keys if k.startswith(("gen4", "gen5"))}
