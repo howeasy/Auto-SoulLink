@@ -1,0 +1,294 @@
+#!/usr/bin/env python3
+"""Build the SLink companion overlay ROMs for Crystal, Gold and Silver (P4.1a).
+
+Source overlay on the pinned pret checkout (owner ruling O-27 D6), the pureRGB pipeline shape
+(tools/build_purergb_overlay.py) applied to Gen 2's two source repos:
+
+    fresh copy of the pinned checkout (.cache/gen2-build/{pokecrystal,pokegold},
+      HEAD == data/gen2_sources.lock.json)
+      -> apply_overlay()                 (copies patch/gen2/src/* into engine/slink/, edits
+                                          main.asm; a no-op when patch/gen2/src/ has nothing
+                                          this tool recognises for a repo -- the "empty overlay")
+      -> make pokecrystal.gbc / pokegold.gbc pokesilver.gbc  (pinned RGBDS v1.0.3 + w64devkit,
+                                          bare tool names on the verified PATH, same as
+                                          tools/build_gen2_syms.py -- no space-free relocation
+                                          needed, the pinned build already succeeds from this
+                                          space-bearing worktree)
+      -> data/gen2/{crystal,gold,silver}_slink.{sym,map}
+      -> patch/dist/SLink-{Crystal,Gold,Silver}.ups  (patch/tools/make_ups.py; CRC-bound to the
+                                          clean pinned ROM, round-trip verified)
+      -> data/gen2/overlay_provenance.json
+
+Today patch/gen2/src/ holds only the mailbox reservation stubs (ticket 14, owner ruling O-27
+D1): SECTION "SLink Mailbox" at a fixed WRAM0 address per title, sized to the full linker-
+verified EMPTY gap, emitting zero ROM bytes. Card P4.1c (Codex) adds patch/gen2/src/slink.asm
+next; this tool includes it automatically when present -- see `overlay_plan()`.
+
+    python tools/build_gen2_companion.py                 # build + publish
+    python tools/build_gen2_companion.py --check          # build, compare, publish nothing
+    python tools/build_gen2_companion.py --src-dir DIR    # override patch/gen2/src (falsifiers)
+    python tools/build_gen2_companion.py --rgbds-bin DIR --w64devkit-bin DIR
+    python tools/build_gen2_companion.py --crystal-repo PATH --gold-repo PATH
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import pathlib
+import shutil
+import subprocess
+import sys
+import zlib
+from datetime import UTC, datetime
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "patch" / "tools"))
+from build_gen2_syms import ROOT, _load_lock, _source_check, _toolchains  # noqa: E402
+from make_ups import ups_apply, ups_create  # noqa: E402
+
+LOCK_PATH = ROOT / "data" / "gen2_sources.lock.json"
+OVERLAY_CACHE = ROOT / ".cache" / "gen2-overlay"
+SRC_DIR = ROOT / "patch" / "gen2" / "src"
+OUT_DIR = ROOT / "data" / "gen2"
+DIST = ROOT / "patch" / "dist"
+PROVENANCE_PATH = OUT_DIR / "overlay_provenance.json"
+PROVENANCE_SCHEMA = "gen2-overlay-provenance-v1"
+
+# lock output key -> (SLink title, UPS artifact, source repo)
+TITLES: dict[str, tuple[str, str, str]] = {
+    "pokecrystal": ("crystal", "SLink-Crystal.ups", "pokecrystal"),
+    "pokegold": ("gold", "SLink-Gold.ups", "pokegold"),
+    "pokesilver": ("silver", "SLink-Silver.ups", "pokegold"),
+}
+
+# repo -> the mailbox stub that reserves that repo's title-specific WRAM span (O-27 D1).
+REPO_MAILBOX_STUB = {
+    "pokecrystal": "slink_mailbox_crystal.asm",
+    "pokegold": "slink_mailbox_goldsilver.asm",
+}
+# Shared files a later card drops into patch/gen2/src/ that both repos include verbatim.
+# Card P4.1c: Codex's beacon/ABI/DelayFrame bridge, once it exists.
+OPTIONAL_SHARED_FILES = ["slink.asm"]
+
+# (file, anchor) per repo -- the anchor is the tail of main.asm up to (not including) the rest of
+# the "Stadium 2 Checksums" section line, so the fixed ROMX[$addr] suffix that differs between the
+# two repos is never part of the matched text. Verify-then-replace-once, same discipline as
+# tools/apply_purergb_overlay.py: a checkout that isn't the pinned source fails loudly.
+MAIN_ANCHORS: dict[str, str] = {
+    "pokecrystal": 'INCLUDE "engine/events/odd_egg.asm"\n\n\nSECTION "Stadium 2 Checksums"',
+    "pokegold": 'INCLUDE "data/credits_strings.asm"\n\n\nSECTION "Stadium 2 Checksums"',
+}
+OVERLAY_DST = "engine/slink"
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def rom_facts(data: bytes) -> dict:
+    return {
+        "sha1": hashlib.sha1(data).hexdigest(),
+        "md5": hashlib.md5(data).hexdigest(),
+        "header_crc": data[0x14E:0x150].hex().upper(),
+        "crc32": format(zlib.crc32(data) & 0xFFFFFFFF, "08X"),
+        "title": data[0x134:0x143].rstrip(b"\x00").decode("ascii", "replace"),
+        "size": len(data),
+    }
+
+
+def overlay_plan(repo: str, src_dir: pathlib.Path) -> list[tuple[str, pathlib.Path]]:
+    """Return (dest name under engine/slink/, source path) pairs for files that exist.
+
+    The repo-specific mailbox stub is normalised to a fixed destination name (slink_mailbox.asm)
+    so shared files (Codex's slink.asm) can reference the wSlinkMailbox symbol without caring
+    which title they were built for. An empty return means "empty overlay" -- apply_overlay()
+    then touches nothing in the checkout.
+    """
+    plan: list[tuple[str, pathlib.Path]] = []
+    stub = src_dir / REPO_MAILBOX_STUB[repo]
+    if stub.is_file():
+        plan.append(("slink_mailbox.asm", stub))
+    for name in OPTIONAL_SHARED_FILES:
+        path = src_dir / name
+        if path.is_file():
+            plan.append((name, path))
+    return plan
+
+
+def apply_overlay(checkout: pathlib.Path, repo: str, src_dir: pathlib.Path) -> list[str]:
+    """Copy the overlay plan into `checkout` and hook main.asm. Returns the files applied."""
+    plan = overlay_plan(repo, src_dir)
+    if not plan:
+        return []
+    main_path = checkout / "main.asm"
+    anchor = MAIN_ANCHORS[repo]
+    text = main_path.read_text(encoding="utf-8")
+    n = text.count(anchor)
+    if n != 1:
+        raise RuntimeError(
+            f"{repo}: expected the Stadium-checksums anchor exactly once in main.asm, found {n}"
+        )
+    dest_dir = checkout / OVERLAY_DST
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    names = []
+    for dest_name, source_path in plan:
+        (dest_dir / dest_name).write_bytes(source_path.read_bytes())
+        names.append(dest_name)
+    block = "\n".join(
+        ['; SLink companion overlay (tools/build_gen2_companion.py)']
+        + [f'INCLUDE "{OVERLAY_DST}/{name}"' for name in names]
+    )
+    new_anchor = anchor.replace('\n\n\nSECTION', f'\n\n{block}\n\n\nSECTION', 1)
+    main_path.write_text(text.replace(anchor, new_anchor, 1), encoding="utf-8", newline="\n")
+    return names
+
+
+def fresh_copy(repo_dir: pathlib.Path, commit: str, dest: pathlib.Path) -> pathlib.Path:
+    """Verified-clean, pinned-commit copy of `repo_dir` into `dest` (a fresh tree each build)."""
+    _source_check(repo_dir, commit)
+    if dest.exists():
+        shutil.rmtree(dest, onexc=lambda fn, p, e: (os.chmod(p, 0o600), fn(p)))
+    shutil.copytree(repo_dir, dest, symlinks=True)
+    return dest
+
+
+def make(checkout: pathlib.Path, targets: list[str], env: dict) -> list[str]:
+    make_bin = env["_MAKE_BIN"]
+    clean = [make_bin, "RGBDS=", "CC=gcc", "MAKE=make", "SHELL=sh", "clean"]
+    command = [make_bin, "RGBDS=", "CC=gcc", "MAKE=make", "SHELL=sh", "-j4", *targets]
+    run_env = {k: v for k, v in env.items() if not k.startswith("_")}
+    for cmd in (clean, command):
+        print(f"[gen2-companion] {' '.join(cmd)}  (cwd={checkout})", file=sys.stderr)
+        result = subprocess.run(cmd, cwd=str(checkout), env=run_env, capture_output=True, text=True)
+        if result.returncode != 0:
+            sys.stderr.write(result.stdout)
+            sys.stderr.write(result.stderr)
+            raise RuntimeError(f"{' '.join(cmd)} failed with exit code {result.returncode}")
+    return command
+
+
+def build(*, crystal_repo: pathlib.Path | None = None, gold_repo: pathlib.Path | None = None,
+          src_dir: pathlib.Path | None = None, rgbds_bin: pathlib.Path | None = None,
+          w64devkit_bin: pathlib.Path | None = None, check: bool = False) -> int:
+    lock, _raw = _load_lock(LOCK_PATH, record=False)
+    src_dir = src_dir or SRC_DIR
+    clean_repos = {
+        "pokecrystal": (crystal_repo or ROOT / ".cache" / "gen2-build" / "pokecrystal").resolve(),
+        "pokegold": (gold_repo or ROOT / ".cache" / "gen2-build" / "pokegold").resolve(),
+    }
+    from _build_tools_bootstrap import _binary_name, ensure_rgbds, ensure_w64devkit
+    rgbds = (rgbds_bin or ensure_rgbds(lock["rgbds_version"])).resolve()
+    devkit = (w64devkit_bin or ensure_w64devkit()).resolve()
+    toolchain_record, env = _toolchains(rgbds, devkit, lock)
+    env["_MAKE_BIN"] = str(devkit / _binary_name("make"))
+
+    targets_by_repo: dict[str, list[str]] = {}
+    for _key, (_title, _ups, repo) in TITLES.items():
+        targets_by_repo.setdefault(repo, [])
+    for key, (_title, _ups, repo) in TITLES.items():
+        targets_by_repo[repo].append(f"{key}.gbc")
+
+    outputs: dict[str, dict] = {}
+    files: dict[pathlib.Path, bytes] = {}
+    overlay_applied: dict[str, list[str]] = {}
+    commands: dict[str, list[str]] = {}
+    for repo, commit_spec in ((name, lock["sources"][name]) for name in clean_repos):
+        checkout = fresh_copy(clean_repos[repo], commit_spec["commit"], OVERLAY_CACHE / repo)
+        overlay_applied[repo] = apply_overlay(checkout, repo, src_dir)
+        commands[repo] = make(checkout, targets_by_repo[repo], env)
+
+    for key, (title, ups_name, repo) in TITLES.items():
+        checkout = OVERLAY_CACHE / repo
+        clean_dir = clean_repos[repo]
+        spec = lock["outputs"][key]
+        base = (clean_dir / spec["filename"]).read_bytes()
+        if hashlib.sha1(base).hexdigest() != spec["sha1"]:
+            raise RuntimeError(f"{key}: the clean ROM in {clean_dir} does not match the lock")
+        data = (checkout / spec["filename"]).read_bytes()
+        ups = ups_create(base, data)
+        if ups_apply(base, ups) != data:
+            raise RuntimeError(f"{key}: UPS round trip failed")
+        files[DIST / ups_name] = ups
+        for ext in ("sym", "map"):
+            # rgbds on Windows writes CRLF; the repo pins LF (.gitattributes), matching the
+            # pureRGB overlay's published bytes and provenance hashes (c411b2f3).
+            files[OUT_DIR / f"{title}_slink.{ext}"] = (
+                (checkout / f"{key}.{ext}").read_bytes().replace(b"\r\n", b"\n"))
+        outputs[key] = {
+            "filename": spec["filename"], "slink_title": title, "base_sha1": spec["sha1"],
+            "identical_to_clean": data == base,
+            **rom_facts(data),
+            "ups": {"file": f"patch/dist/{ups_name}", "size": len(ups), "sha256": _sha256(ups)},
+        }
+        print(f"[gen2-companion] {key}: sha1={outputs[key]['sha1']} "
+              f"identical_to_clean={outputs[key]['identical_to_clean']} ups={len(ups)} bytes",
+              file=sys.stderr)
+
+    provenance = {
+        "schema": PROVENANCE_SCHEMA,
+        "generated": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "sources": lock["sources"],
+        "overlay": {
+            "src_dir": (src_dir.relative_to(ROOT).as_posix() if src_dir.is_relative_to(ROOT)
+                        else src_dir.as_posix()),
+            "applied": overlay_applied,
+            "sources_sha256": {p.name: _sha256(p.read_bytes()) for p in sorted(src_dir.iterdir())
+                                if p.suffix in (".asm", ".inc")} if src_dir.is_dir() else {},
+        },
+        "toolchain": toolchain_record,
+        "commands": {repo: " ".join(cmd) for repo, cmd in commands.items()},
+        "outputs": outputs,
+        "symbols": {dst.name: _sha256(data) for dst, data in files.items() if dst.parent == OUT_DIR},
+    }
+
+    if check:
+        drift = [str(dst.relative_to(ROOT)) for dst, data in files.items()
+                 if not dst.exists() or dst.read_bytes() != data]
+        if PROVENANCE_PATH.exists():
+            committed = json.loads(PROVENANCE_PATH.read_text(encoding="utf-8"))
+            committed.pop("generated", None)
+            mine = dict(provenance)
+            mine.pop("generated")
+            if committed != mine:
+                drift.append(str(PROVENANCE_PATH.relative_to(ROOT)))
+        else:
+            drift.append(str(PROVENANCE_PATH.relative_to(ROOT)))
+        if drift:
+            print(f"[gen2-companion] --check: drift from the committed artifacts: {drift}", file=sys.stderr)
+            return 1
+        print("[gen2-companion] --check: the build reproduces every committed artifact byte-for-byte",
+              file=sys.stderr)
+        return 0
+
+    for dst, data in files.items():
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(data)
+    PROVENANCE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PROVENANCE_PATH.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
+    print(f"[gen2-companion] published {len(files)} files + {PROVENANCE_PATH.relative_to(ROOT)}",
+          file=sys.stderr)
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--crystal-repo", type=pathlib.Path, default=None)
+    ap.add_argument("--gold-repo", type=pathlib.Path, default=None)
+    ap.add_argument("--src-dir", type=pathlib.Path, default=None,
+                    help="override patch/gen2/src (used by the equality-gate falsifiers)")
+    ap.add_argument("--rgbds-bin", type=pathlib.Path, default=None)
+    ap.add_argument("--w64devkit-bin", type=pathlib.Path, default=None)
+    ap.add_argument("--check", action="store_true", help="build and compare, publish nothing")
+    args = ap.parse_args()
+    try:
+        return build(crystal_repo=args.crystal_repo, gold_repo=args.gold_repo, src_dir=args.src_dir,
+                     rgbds_bin=args.rgbds_bin, w64devkit_bin=args.w64devkit_bin, check=args.check)
+    except (RuntimeError, SystemExit) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
