@@ -38,8 +38,10 @@
   Environment: the inspect gate's (SLINK_ROOT, run_gb_gate._gen2_plan bindings, SLINK_GEN2_FIXTURE_CASE,
   SLINK_GEN2_ROUTE_FACTS, SLINK_GEN2_QUALIFY stage "boot") plus SLINK_GEN2_U1_FACTS from
   tests/live/test_gen2_frame_align.py: {pack_ui = {kind -> site}, decoy = {symbol, bank, addr, flat, hex},
-  prompts = {catch_nickname = {anchor}}, battle_menu = F.grid_menu geometry} (PokeBallEffect asks
-  _AskGiveNicknameText, item_effects.asm:574-581, not GiveANickname_YesNo's gift text). SLINK_GEN2_TRACE=1
+  prompts = {catch_nickname = {anchor}}} (PokeBallEffect asks _AskGiveNicknameText,
+  item_effects.asm:574-581, not GiveANickname_YesNo's gift text). The battle menu is read through the
+  shared gate's G.parse_menu + G.BATTLE_MENU_GRID (the N17 constant, pinned to BattleMenuHeader by
+  tests/unit/test_gen2_scripted_gate.py), never a local geometry. SLINK_GEN2_TRACE=1
   logs a state line (phase, UI, readiness, battle mode, PC + stack labels) every 30 frames; any play
   failure logs that line plus the visible screen.
   Printed: HIT_SUMMARY, ALIGN, DECOY, NEGATIVES, PRODUCTION, VERDICT and RECEIPT (json after the tag).
@@ -96,34 +98,6 @@ function F.ball_cursor(rows)
         end
     end
     return nil
-end
-
--- Pure: the battle menu read at its SOURCE geometry, not by the scripted gate's parse_menu. That parser
--- joins single-space runs into one item ("POKé BALL"), so with the cursor on FIGHT the row reads
--- "FIGHT <PK><MN>" (the empty column-2 cursor cell is one space) and choose() steered Right/Left forever:
--- the U1 live "phase made no bounded progress: battle". g (tests/live/test_gen2_frame_align.py, from
--- BattleMenuHeader engine/battle/menu.asm:31-48): 0-based first-label cell x,y, rows, columns, spacing
--- and each label's glyphs; the cursor cell is one tile left of each label (engine/menus/menu.asm:159-165).
-function F.grid_menu(rows, g)
-    local items, cursor = {}, nil
-    for r = 0, g.rows - 1 do
-        local row = rows[g.y + 2 * r + 1]   -- Place2DMenuItemStrings: rows 2 tiles apart (:117-157)
-        if type(row) ~= "table" then return nil end
-        for c = 0, g.columns - 1 do
-            local index, x = r * g.columns + c + 1, g.x + c * g.spacing + 1
-            local glyphs = g.labels[index]
-            for i, glyph in ipairs(glyphs) do
-                if row[x + i - 1] ~= glyph then return nil end
-            end
-            if row[x - 1] == "▶" then
-                if cursor then return nil end
-                cursor = index
-            end
-            items[index] = table.concat(glyphs)
-        end
-    end
-    if not cursor then return nil end
-    return {items=items, cursor=cursor, columns=g.columns}
 end
 
 -- Pure: nearest ROM label at or below addr (bank 0 for home), from rgblink .sym text; diagnostics only.
@@ -525,7 +499,6 @@ function F.main(api, getenv, SG)
         assert(c.env.title == "crystal" and c.case.name == "crystal_battle", "U1 runs on crystal_battle only")
         assert(c.qualify ~= nil and c.qualify.stage == "boot", "SLINK_GEN2_QUALIFY stage \"boot\" required")
         c.u1 = assert(c.json.decode(assert(getenv("SLINK_GEN2_U1_FACTS"), "SLINK_GEN2_U1_FACTS missing")))
-        assert(type(c.u1.battle_menu) == "table", "U1 facts lack the battle menu geometry")
         return c
     end)
     if not check("environment, facts, profile and running ROM/CGB bound", ok, not ok and ctx or nil) then
@@ -574,7 +547,8 @@ function F.main(api, getenv, SG)
         point.probe_hits = {capture_party=probe.record.sites.capture_party.hits}
         if point.ui and point.ui.kind == "pack_balls" then point.ball_cursor = F.ball_cursor(SG.screen(ctx)) end
         if point.ui and point.ui.kind == "battle_menu" then
-            local menu = F.grid_menu(SG.screen(ctx), ctx.u1.battle_menu)
+            local menu = SG.parse_menu(SG.screen(ctx), ctx.obs.screen.width, ctx.obs.screen.height,
+                                       SG.BATTLE_MENU_GRID)
             if menu then point.ui.items, point.ui.cursor, point.ui.columns = menu.items, menu.cursor, menu.columns
             else point.input_ready = false end
         end

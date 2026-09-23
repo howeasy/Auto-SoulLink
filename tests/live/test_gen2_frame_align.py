@@ -25,7 +25,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -57,25 +56,6 @@ PACK_UI = {"pack_items": "BattlePack.ItemsPocketMenu", "pack_balls": "BattlePack
            "item_submenu": "ItemSubmenu"}
 
 
-def battle_menu_grid(ctx) -> dict:
-    """BattleMenuHeader (pokecrystal engine/battle/menu.asm:31-48) at _2DMenu's own geometry, for the gate's
-    F.grid_menu: GetMenuTextStartCoord puts the first label at (left+2, top+2) for a cursor menu without
-    STATICMENU_NO_TOP_SPACING (home/menu.asm:214-235); Place2DMenuItemStrings steps columns by `spacing` and
-    rows by 2 tiles (engine/menus/menu.asm:117-157). <PKMN> prints as <PK><MN> (home/text.asm:316,408)."""
-    menu = ctx.read_source("engine/battle/menu.asm")
-    block = re.search(r"^BattleMenuHeader:$(.*?)^SafariBattleMenuHeader:", menu, re.M | re.S)[1]
-    flags = re.search(r"^\s*db (.*?) ; flags$", block.split(".MenuData:")[1], re.M)[1]
-    assert "STATICMENU_CURSOR" in flags and "NO_TOP_SPACING" not in flags, flags
-    left, top = map(int, re.search(r"menu_coords (\d+), (\d+),", block).groups())
-    rows, columns = map(int, re.search(r"dn (\d+), (\d+) ; rows, columns", block).groups())
-    spacing = int(re.search(r"db (\d+) ; spacing", block)[1])
-    labels = re.findall(r'db "([^"]*)@"', block)
-    assert len(labels) == rows * columns and "PACK" in labels, labels
-    assert re.search(r'^PlacePKMNText::\s+db "<PK><MN>@"', ctx.read_source("home/text.asm"), re.M)
-    glyphs = [["<PK>", "<MN>"] if label == "<PKMN>" else list(label) for label in labels]
-    return {"x": left + 2, "y": top + 2, "rows": rows, "columns": columns, "spacing": spacing, "labels": glyphs}
-
-
 def u1_facts(ctx, facts, qualification_attempt_id: str) -> dict:
     """Pack-UI origins and the wrong-bank decoy: the overworld tick PC in the highest bank that carries
     no symbol and only zero bytes there (never executed), so a hit can only be the real bank's code."""
@@ -96,7 +76,6 @@ def u1_facts(ctx, facts, qualification_attempt_id: str) -> dict:
     anchor = "Give a nickname to"
     assert f'text "{anchor}"' in ctx.read_source("data/text/common_3.asm"), "catch nickname anchor left the source"
     return {"pack_ui": pack_ui, "decoy": decoy, "prompts": {"catch_nickname": [anchor]},
-            "battle_menu": battle_menu_grid(ctx),
             "qualification_attempt_id": qualification_attempt_id}
 
 

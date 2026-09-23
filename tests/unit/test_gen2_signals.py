@@ -1290,8 +1290,10 @@ def test_the_u1_probe_and_negatives_run_on_the_shared_binders(fault):
     assert list(problems.values()) == [] and tuple(proven.values()) == U1_EXPECT
 
 
-# pokecrystal BattleMenuHeader (engine/battle/menu.asm:31-48) as tests/live/test_gen2_frame_align.battle_menu_grid
-# derives it: labels from (10,14), 2x2, spacing 6.
+# pokecrystal BattleMenuHeader (engine/battle/menu.asm:31-48): labels from (10,14), 2x2, spacing 6. The
+# literal is the screen this file DRAWS from; the gate reads through the shared G.BATTLE_MENU_GRID
+# (pinned to the same source by tests/unit/test_gen2_scripted_gate.py), and the kept regression below
+# asserts the two agree, so a drifted constant cannot be mirrored by its own screen.
 U1_BATTLE_MENU = {"x": 10, "y": 14, "rows": 2, "columns": 2, "spacing": 6,
                   "labels": [list("FIGHT"), ["<PK>", "<MN>"], list("PACK"), list("RUN")]}
 
@@ -1318,10 +1320,12 @@ def battle_screen(cursor):
 
 def test_the_u1_battle_menu_reads_by_source_geometry_where_the_text_parser_oscillated():
     """Live U1 stall root cause: parse_menu joins "FIGHT <PK><MN>" while the cursor is on FIGHT (the empty
-    column-2 cursor cell is one space), so the driver pressed Right, then Left from PKMN, forever."""
+    column-2 cursor cell is one space), so the driver pressed Right, then Left from PKMN, forever. The
+    gate reads through the same shared reader with G.BATTLE_MENU_GRID (N17b), so the grid read is fed the
+    constant and the screens are drawn from this file's pinned literal."""
     lua, gate = u1_gate()
     sg = gate.scripted_gate(ROOT.as_posix())
-    grid = lua.table_from(U1_BATTLE_MENU, recursive=True)
+    grid = sg.BATTLE_MENU_GRID
     driver = gate.driver(lua.table_from({"width": 1, "height": 1, "grid": [2]}, recursive=True))
 
     def press(menu):
@@ -1341,15 +1345,15 @@ def test_the_u1_battle_menu_reads_by_source_geometry_where_the_text_parser_oscil
     assert press(as_menu(sg.parse_menu(lua.table_from(battle_screen(2), recursive=True), 20, 18))) == ["Left"]
 
     for cursor, expected in ((1, "Down"), (2, "Left"), (3, "A"), (4, "Left")):
-        menu = gate.grid_menu(lua.table_from(battle_screen(cursor), recursive=True), grid)
+        menu = sg.parse_menu(lua.table_from(battle_screen(cursor), recursive=True), 20, 18, grid)
         assert list(menu["items"].values()) == ["FIGHT", "<PK><MN>", "PACK", "RUN"] and menu["cursor"] == cursor
         assert press(as_menu(menu)) == [expected]
     blank = battle_screen(1)
     blank[14][9] = " "
-    assert gate.grid_menu(lua.table_from(blank, recursive=True), grid) is None          # no cursor: not ready
+    assert sg.parse_menu(lua.table_from(blank, recursive=True), 20, 18, grid) is None   # no cursor: not ready
     moved = battle_screen(1)
     moved[16][10:14] = list("ITEM")
-    assert gate.grid_menu(lua.table_from(moved, recursive=True), grid) is None          # labels off the source
+    assert sg.parse_menu(lua.table_from(moved, recursive=True), 20, 18, grid) is None   # labels off the source
 
 
 def test_a_u1_play_stall_logs_the_last_point_the_cpu_and_the_screen():
@@ -1377,3 +1381,32 @@ def test_a_u1_play_stall_logs_the_last_point_the_cpu_and_the_screen():
                  "at=PromptButton.input_wait_loop+7"):
         assert part in stall, (part, stall)
     assert lines[-2:] == ["  screen 01 |Wild PIDGEY|", "  screen 02 |appeared!|"]
+
+
+# --- card gen2-N17b: U1's battle-menu read converges on the shared reader -------------------------
+U1_ITEMS = ["FIGHT", "<PK><MN>", "PACK", "RUN"]
+
+
+def test_the_u1_battle_menu_read_is_the_shared_reader_on_the_pinned_geometry():
+    """U1 no longer carries a local grid read (N17b): the gate feeds SG.BATTLE_MENU_GRID to the shared
+    SG.parse_menu. The screens here are drawn from this file's own pinned literal, so a constant that
+    drifts from BattleMenuHeader fails here (and in test_gen2_scripted_gate, which pins it to the
+    source). The reader must return FIGHT/<PK><MN>/PACK/RUN with the cursor index and two columns, and
+    refuse a menu of another shape. At the cutover the old F.grid_menu and the shared reader were
+    compared screen-for-screen and were identical on all four cursor positions and both refusals."""
+    lua, gate = u1_gate()
+    sg = gate.scripted_gate(ROOT.as_posix())
+    grid = sg.BATTLE_MENU_GRID
+    for key in ("x", "y", "rows", "columns", "spacing"):
+        assert U1_BATTLE_MENU[key] == grid[key], key
+    assert U1_BATTLE_MENU["labels"] == [list(grid["labels"][i].values())
+                                        for i in range(1, len(U1_BATTLE_MENU["labels"]) + 1)]
+    blank, moved = battle_screen(1), battle_screen(1)
+    blank[14][9] = " "
+    moved[16][10:14] = list("ITEM")
+    for cursor in (1, 2, 3, 4):
+        menu = sg.parse_menu(lua.table_from(battle_screen(cursor), recursive=True), 20, 18, grid)
+        assert list(menu["items"].values()) == U1_ITEMS
+        assert (menu["cursor"], menu["columns"]) == (cursor, 2)
+    for screen in (blank, moved):
+        assert sg.parse_menu(lua.table_from(screen, recursive=True), 20, 18, grid) is None
