@@ -856,6 +856,10 @@ function FAKE(scenario, player, phase, spec)
     end
     ctx.frames = function() end
     local watchers, write_armed, teala = {}, nil, spec.teala or 1
+    local DIR = { Down = 1, Up = 2, Left = 3, Right = 4 }
+    local facing, walking = 2, false
+    ctx.facing = function() return facing end
+    ctx.player_idle = function() if walking then walking = false; return false end return true end
     local function run_watchers()
         for i = #watchers, 1, -1 do if watchers[i]() then table.remove(watchers, i) end end
     end
@@ -978,7 +982,15 @@ function FAKE(scenario, player, phase, spec)
     -- a script is live from a talk (A tap) until A mashes it closed (mash_until)
     ctx.G = { map = function() return here.group, here.num end, pos = function() return here.x, here.y end,
               pred_ok = function() return released end,
-              tap = function(btn) if btn == "A" then released = false end end }
+              tap = function(btn)
+                  if btn == "A" then
+                      -- an A that faces no attendant talks to nobody (center_controls' counters)
+                      if scenario == "center_controls" and facing ~= 2 then return end
+                      released = false
+                  elseif DIR[btn] then
+                      if walking then walking = false else facing = DIR[btn] end  -- dropped mid-step
+                  end
+              end }
     ctx.center_state = function()
         local missing = spec.ur_missing and { spec.ur_missing } or {}
         return string.format("map=%d.%d at=(%d,%d) frame=7 tasks=[] preds=[]", here.group, here.num,
@@ -1042,7 +1054,12 @@ function FAKE(scenario, player, phase, spec)
     end
     ctx.play = { fight_through = function() return true end, wait_scene_settled = function() return true end,
                  where = function() return "here" end,
-                 follow = function(_, name) logs[#logs + 1] = "FOLLOW " .. name end }
+                 follow = function(_, name)
+                     logs[#logs + 1] = "FOLLOW " .. name
+                     local last = ({ center2f_to_direct_corner = "Right", center2f_counter_to_direct_corner = "Right",
+                                     center2f_direct_corner_to_union_room = "Left" })[name]
+                     if last then facing, walking = DIR[last], true end   -- the last step still walking
+                 end }
     local fn = dofile(SCENARIO_DIR .. "/scenario_gen3_" .. scenario .. ".lua")
     local ok, pass, msg = pcall(fn, ctx)
     return ok, pass, tostring(ok and msg or pass), table.concat(logs, "\n")
@@ -1061,6 +1078,11 @@ def lua():
     defs = [re.search(_LUA_DEF.format(re.escape(name)), text, re.M | re.S)
             for name in ("queued_entry", "ctx.queued", "ctx.hold_probe")]
     defs.append(re.search(r"^function ctx\.attempted\(\) .* end$", text, re.M))
+    # the REAL turn-and-prove (C4-6p), when this cut has one; the fake supplies facing/idle
+    face = [re.search(r"^local FACING = .*$", text, re.M),
+            re.search(_LUA_DEF.format(re.escape("ctx.face")), text, re.M | re.S)]
+    if all(face):
+        defs += face
     if all(defs):
         runtime.globals().HOLD_SRC = "\n".join(d.group(0) for d in defs)
     runtime.execute(_FAKE_CTX)
@@ -2604,3 +2626,39 @@ def test_identity_asks_git_for_z_records_and_submodules(monkeypatch, tmp_path):
     run._gen3_identity()
     status = [c for c in seen if "status" in c][0]
     assert "-z" in status and "--porcelain=v1" in status and "--ignore-submodules=none" in status
+
+
+# ── C4-6p: live r7 at fb255a05, FR and LG ───────────────────────────────────────────────────
+def test_center_controls_proves_it_faces_the_counter_before_talking(lua):
+    """r7: the follow returns at the START of its last Right step; the old single Up tap landed
+    inside that walk, was dropped, and A met the empty tile to the east -- "cable_menu: the
+    attendant's script never started" on both titles. ctx.face waits the step out and reads the
+    facing nibble back before A."""
+    ok, passed, msg, logs = _run_module(lua, "center_controls", "a", "initial", {})
+    assert ok and passed is True, msg
+    assert "TALK cable_menu at=" in logs and "facing=2 idle=true" in logs, logs
+    assert "TALK union_room_attendant" in logs
+
+
+_FACE_MODEL = r"""
+FLAGS, BYTE18, TAPS = 0x41, 0x44, {}        -- mid-step (heldMovementActive, not finished), facing right
+S = { gObjectEvents = 0x100 }
+memory = { read_u8 = function(a) if a == 0x100 then return FLAGS end return BYTE18 end }
+G = { tap = function(btn) TAPS[#TAPS + 1] = btn; if FLAGS == 0xC1 and btn == "Up" then BYTE18 = 0x22 end end }
+ctx = { frames = function() FLAGS = 0xC1 end }
+"""
+
+
+def test_face_reads_the_low_nibble_and_waits_out_the_step():
+    from lupa import LuaRuntime
+
+    text = DRIVER.read_text(encoding="utf-8")
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.execute(_FACE_MODEL)
+    body = text[text.index("local FACING = {"):text.index("--- Is the pret function `name`")]
+    lua.execute(body)
+    assert lua.eval("ctx.facing()") == 4                  # low nibble of 0x44: right
+    assert lua.eval("ctx.face('Up')") is True
+    assert list(lua.globals().TAPS.values()) == ["Up"]     # one tap, AFTER the step ended
+    lua.execute("BYTE18 = 0x42")                          # movementDirection 4, facingDirection 2
+    assert lua.eval("ctx.facing()") == 2

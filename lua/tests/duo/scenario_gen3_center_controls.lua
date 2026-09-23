@@ -43,6 +43,16 @@ local DEST_2F = { group = 5, num = 5, x = 2, y = 6 }
 local VAR_MAP_SCENE_POKEMON_CENTER_TEALA = 0x407C
 local TUTORIAL_END = { x = 2, y = 4 }
 
+--- Face the counter north and talk across it, logging where A stands and faces first.
+local function talk_across(ctx, name)
+    local faced = ctx.face("Up")
+    local x, y = ctx.G.pos(ctx.cp)
+    ctx.log(fmt("TALK %s at=(%d,%d) facing=%d idle=%s", name, x, y, ctx.facing(), tostring(ctx.player_idle())))
+    if not faced then return false, name .. ": could not face the counter (facing " .. ctx.facing() .. ")" end
+    ctx.G.tap("A", 3, 13)
+    return true
+end
+
 local function a_side(ctx, linked)
     local SP, cp, G, play = ctx.SP, ctx.cp, ctx.G, ctx.play
     local function script_live() return not G.pred_ok(cp, "script_context_status") end
@@ -86,8 +96,8 @@ local function a_side(ctx, linked)
         ctx.log(fmt("TEALA_TUTORIAL var=%s skipped", tostring(teala)))
         play.follow(cp, "center2f_to_direct_corner", "center_controls a")
     end
-    G.tap("Up", 3, 20)                                   -- face the counter (10,3): no step
-    G.tap("A", 3, 13)
+    local ok_face, why_face = talk_across(ctx, "cable_menu")
+    if not ok_face then return false, why_face end
     if not ctx.wait_until(script_live, 10, "the Direct Corner attendant's script") then
         return false, "cable_menu: the attendant's script never started"
     end
@@ -125,8 +135,8 @@ local function a_side(ctx, linked)
     ctx.log(fmt("CONTROL_SETTLED cable_link box_mon %s", linked))
 
     play.follow(cp, "center2f_direct_corner_to_union_room", "center_controls a")
-    G.tap("Up", 3, 20)
-    G.tap("A", 3, 13)
+    ok_face, why_face = talk_across(ctx, "union_room_attendant")
+    if not ok_face then return false, why_face end
     if not ctx.wait_until(script_live, 10, "the Union Room attendant's script") then
         return false, "union_room_attendant: the script never started"
     end

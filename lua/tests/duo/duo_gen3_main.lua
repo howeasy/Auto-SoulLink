@@ -144,7 +144,8 @@ local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInpu
                "Task_LinkupAwaitConnection", "sGlobalScriptContext",
                "CableClub_EventScript_SelectCableClubRoom", "CableClub_EventScript_Colosseum",
                "CableClub_EventScript_UnionRoomAdapterNotConnected",
-               "CableClub_EventScript_WirelessClubAttendant", "Task_MultichoiceMenu_HandleInput" }
+               "CableClub_EventScript_WirelessClubAttendant", "Task_MultichoiceMenu_HandleInput",
+               "gObjectEvents" }
 local S = {}
 do
     local want = {}
@@ -621,6 +622,33 @@ function ctx.script_at(label, next_label)
     return script_at(function(a) return memory.read_u8(a, "System Bus") end,
                      function(a) return memory.read_u32_le(a, "System Bus") end,
                      S.sGlobalScriptContext, S[label], S[next_label])
+end
+--- The player's object event (gObjectEvents slot 0). pret include/global.fieldmap.h struct
+--- ObjectEvent: flags +0x00 (bit6 heldMovementActive, bit7 heldMovementFinished), +0x18
+--- `u8 facingDirection:4; u8 movementDirection:4` -- GCC packs ARM bitfields LSB-first, so the
+--- facing is the LOW nibble (1 down, 2 up, 3 left, 4 right; the RR object-event notes agree).
+local FACING = { Down = 1, Up = 2, Left = 3, Right = 4 }
+function ctx.facing() return memory.read_u8(S.gObjectEvents + 0x18, "System Bus") & 0x0F end
+function ctx.player_idle()
+    local f = memory.read_u8(S.gObjectEvents, "System Bus")
+    return (f & 0x40) == 0 or (f & 0x80) ~= 0
+end
+--- Turn the player to `dir` and PROVE it: wait out any step still in flight (a follow returns
+--- when the coordinates move, which is the START of the last step's walk), then tap `dir` until
+--- the facing nibble reads it. Only for a blocked tile ahead (a counter): there a tap turns,
+--- it cannot step. Live center_controls_gen3 r7 (fb255a05, FR and LG): the old single Up tap
+--- landed inside the last Right step, was dropped, and A met the empty tile to the east.
+function ctx.face(dir)
+    local want = assert(FACING[dir], "no direction " .. tostring(dir))
+    for _ = 1, 6 do
+        for _ = 1, 60 do
+            if ctx.player_idle() then break end
+            ctx.frames(1)
+        end
+        if ctx.facing() == want then return true end
+        G.tap(dir, 3, 20)
+    end
+    return ctx.facing() == want
 end
 --- Is the pret function `name` (one of SYMS) an active task right now?
 function ctx.task_live(name) return party_task(assert(S[name], "no SYMS entry " .. name)) end
