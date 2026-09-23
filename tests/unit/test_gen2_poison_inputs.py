@@ -240,3 +240,16 @@ def test_poison_joins_the_expected_order_just_before_battle_faint():
     assert list(F.expect(False).values()) == list(F.EXPECT.values())
     names = list(F.expect(True).values())
     assert names[-2:] == ["poison_faint", "battle_faint"] and len(names) == len(F.EXPECT) + 1
+
+
+def test_a_path_blocked_only_by_a_live_object_waits_then_fails_with_the_live_facts():
+    rt = lua()
+    PI = load(rt)
+    PI.WAIT_FRAMES = 3
+    d = driver(rt, PI)
+    wall = {"map_number": 1, "x": 0, "y": 2, "blocked": lua_list([{"x": 0, "y": 1}, {"x": 1, "y": 2}])}
+    for _ in range(3):
+        buttons, phase = d.step(pt(rt, **wall))
+        assert phase == "travel" and not any(buttons.values())
+    buttons, why = d.step(pt(rt, **wall))
+    assert buttons is None and "objects 0,1 1,2" in why and "can_step" in why

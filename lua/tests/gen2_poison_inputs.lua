@@ -82,8 +82,14 @@ function PI.step_toward(map, point, goals)
         end
         cost = cost + 1
     end
-    return nil, fmt("no source path from %d,%d on %s", point.x, point.y, tostring(map.map_const))
+    local steps, objects = {}, {}
+    for _, d in ipairs(PI.DIRECTIONS) do steps[#steps + 1] = d[1] .. "=" .. tostring(point.can_step[d[1]]) end
+    for _, b in ipairs(point.blocked or {}) do objects[#objects + 1] = b.x .. "," .. b.y end
+    return nil, fmt("no source path from %d,%d on %s (can_step %s; objects %s)", point.x, point.y,
+                    tostring(map.map_const), table.concat(steps, " "), table.concat(objects, " "))
 end
+-- A path blocked only by a live object or a closed first step waits for it (walking NPCs move on).
+PI.WAIT_FRAMES = 600
 
 local function on(point, map) return point.map_group == map.map_group and point.map_number == map.map_number end
 
@@ -116,9 +122,19 @@ function PI.driver(F, facts, opts)
         if tx ~= cx then return press(tx > cx and "Right" or "Left") end
         return press(index > ui.cursor and "Down" or "Up")
     end
+    local waited = 0
     local function walk(map, point, goals)
         local button, why = PI.step_toward(map, point, goals)
-        if not button then return nil, why end
+        if not button then
+            -- the source grid alone has a path: a live object or step permission is in the way; wait it out
+            local open = {x=point.x, y=point.y, can_step={Up=true, Down=true, Left=true, Right=true}}
+            if PI.step_toward(map, open, goals) and waited < PI.WAIT_FRAMES then
+                waited = waited + 1
+                return {}, self.phase
+            end
+            return nil, why
+        end
+        waited = 0
         if button == "arrived" then return nil, "arrived" end
         return {[button]=true}, self.phase
     end
