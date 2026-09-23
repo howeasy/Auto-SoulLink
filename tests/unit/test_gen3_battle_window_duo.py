@@ -56,6 +56,8 @@ function world(mode, fault)
     c.party = function() return {{slot=0,level=fault=='prep_floor' and 6 or (prepared and 13 or 9),
         hp=fault=='prep_unhealed' and 19 or 20,max_hp=20,status=fault=='prep_status' and 8 or 0}} end
     c.received = function(cmd,k) return k == 'K' and rx or 0 end
+    c.in_battle = function() return battling end
+    c.battler_slot = function() return fault=='prep_switched' and 1 or 0 end
     c.battle_hold = function(k)
         if k=='K' and battling and rx>0 and fault~='missing_hold' then return {why='active battler'} end
     end
@@ -82,6 +84,7 @@ function world(mode, fault)
         if fault=='prep_hp' then hp=hp-1 end
         if fault=='prep_slot' then target_slot=3 end
         if fault=='prep_transient' then hp=19; c.frames(1); hp=20 end
+        if fault=='prep_switched' then battling=true; c.frames(1) end
         if fault=='route_failed' then return false,'blocked on normal route' end
         battling=true
         return true
@@ -201,6 +204,7 @@ def test_observed_failure_is_named_and_never_saved_as_a_pass(mode, fault, reason
     ("prep_transient", "PREPARATION altered"),
     ("prep_unhealed", "full HP with no status"),
     ("prep_status", "full HP with no status"),
+    ("prep_switched", "bench switched in"),
 ])
 def test_bad_setup_does_not_publish_ready(fault, reason):
     passed, why, (log, *_) = run("trainer_bench", fault)

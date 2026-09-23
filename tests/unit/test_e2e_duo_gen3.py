@@ -41,6 +41,93 @@ GEN3_RR_ONLY = ("explode_gen3", "rival_swap_gen3", "native_absent_gen3")
 OT_A = 0x99DE0D8A
 
 
+@pytest.mark.parametrize("name,case,target,slot,attempts", [
+    ("trainer_bench_gen3", "trainer_bench", "town", 1, 2),
+    ("active_end_gen3", "active_end", "battle", 0, 1),
+])
+def test_battle_window_registration(name, case, target, slot, attempts):
+    row = duo.SCENARIOS[name]
+    assert row["battle_window_case"] == case and row["scenario_module"] == "battle_window"
+    assert row["target"] == {"a": target, "b": "town"} and row["battle_window_slot"] == slot
+    assert row["no_save"] == ("b",)
+    for game in ("gen3_frlg", "gen3_lgfr"):
+        assert duo.scenario_applies(name, game)
+        assert duo.scenario_attempt_limit(name, game) == attempts
+    assert not duo.scenario_applies(name, "gen3_rr_new")
+    assert callable(getattr(duo.DuoRun, "orchestrate_" + name))
+    assert callable(getattr(duo.DuoRun, row["oracle"]))
+
+
+@pytest.mark.parametrize("name", ["trainer_bench_gen3", "active_end_gen3"])
+def test_battle_window_queues_only_after_its_keyed_ready(name, monkeypatch):
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.cfg = duo.SCENARIOS[name]
+    run.http_port = 1234
+    run._pydec_note = lambda text: None
+    setup = []
+    monkeypatch.setattr(duo, "api", lambda *args: setup.append(args) or {"ok": True})
+    calls = []
+    run._gen3_prelude = lambda: ({0: "A0", 1: "A1"}, {0: "B0", 1: "B1"})
+    run.go = lambda lines: calls.append(("go", lines))
+    run._gen3_mark = lambda *args: calls.append(("ready", args))
+    run.queue_command = lambda *args: calls.append(("queue", args))
+    getattr(run, "orchestrate_" + name)()
+    assert [row[0] for row in calls] == ["go", "ready", "queue"]
+    key = "A" + str(run.cfg["battle_window_slot"])
+    assert key in calls[1][1][1] and run.cfg["battle_window_case"] in calls[1][1][1]
+    assert calls[2][1] == ("a", {"cmd": "force_faint", "key": key})
+    assert [row[3]["area_id"] for row in setup] == ["viridian_city", "route_1", "route_2", "viridian_forest"]
+    assert all(row[2] == "/api/debug/set_area_state" and row[3]["state"] == "linked" for row in setup)
+
+
+def test_t2_retry_restarts_whole_attempt_once_only(monkeypatch):
+    from tests.unit.test_gen3_battle_window_oracle import loss_receipts
+
+    instances = []
+    class Run:
+        def __init__(self, name, args, attempt):
+            instances.append(self)
+            self.attempt = attempt
+        def run(self):
+            return False
+    monkeypatch.setattr(duo, "DuoRun", Run)
+    receipts = loss_receipts()
+    monkeypatch.setattr(duo, "read_result", lambda name, side: receipts[side])
+    monkeypatch.setattr(duo, "_archive_attempt", lambda *args: None)
+    args = argparse.Namespace(game="gen3_frlg", idle_jitter=0)
+    assert duo.run_scenario_with_rng_retry("trainer_bench_gen3", args) == (False, 2)
+    assert [r.attempt for r in instances] == [1, 2]
+    instances.clear()
+    receipts["a"] = "RESULT: FAIL (PREPARATION lead fainted)"
+    assert duo.run_scenario_with_rng_retry("trainer_bench_gen3", args) == (False, 1)
+    assert len(instances) == 1
+
+
+def test_battle_window_oracle_binding_runs_after_fresh_witness(monkeypatch, tmp_path):
+    import gen3_battle_window_oracle as oracle
+
+    run = _oracle_run("trainer_bench_gen3")
+    run.gcfg = duo.GAMES["gen3_frlg"]
+    run.attempt, run._link_keys = 1, {"a": "K"}
+    calls = []
+    hook = tmp_path / "hook.bin"
+    hook.write_bytes(b"hook")
+    run._witness_path = lambda side: str(hook)
+    run._gen3_fixture_bytes = lambda side: b"fixture" + side.encode()
+    run._gen3_flushed = lambda side: b"flushed" + side.encode()
+    run.check_save_witness_gen3 = lambda results: calls.append("fresh witness")
+    run._pydec_note = lambda text: calls.append(text)
+    def verify(**kw):
+        assert calls == ["fresh witness"]
+        assert kw["helpers"] is duo and kw["witness"] == b"hook"
+        assert kw["peer_flushed"] == b"flushedb" and kw["case"] == "trainer_bench"
+        calls.append("oracle")
+        return {"case": kw["case"], "key": "K", "slot": 1, "observed_samples": 2}
+    monkeypatch.setattr(oracle, "verify", verify)
+    run._run_oracle({"a": "receipt", "b": "idle"})
+    assert calls[:2] == ["fresh witness", "oracle"]
+
+
 # ── synthetic saves ─────────────────────────────────────────────────────────────────────────
 def _mon(personality, *, party=True, ot_id=OT_A, level=5, species=7):
     mon = {
@@ -624,12 +711,14 @@ def _gba_config(tmp_path):
     return path
 
 
-def test_launch_seeds_the_flash_body_and_writes_a_gba_config(monkeypatch, tmp_path):
+@pytest.mark.parametrize("scenario", ["faint_cmd_gen3", "trainer_bench_gen3", "active_end_gen3"])
+def test_launch_seeds_the_flash_body_and_writes_a_gba_config(monkeypatch, tmp_path, scenario):
     fixture = _fixture([STARTER, PIDGEY])
     fixtures = tmp_path / "fixtures"
     fixtures.mkdir()
     (fixtures / "firered_party_town.sav").write_bytes(fixture + b"\x07" * 16)   # RTC suffix dropped
     (fixtures / "firered_party_town_b.sav").write_bytes(fixture)
+    (fixtures / "firered_party_battle.sav").write_bytes(fixture)
     monkeypatch.setattr(duo, "GEN3_FIXTURES", str(fixtures))
     monkeypatch.setattr(duo, "BUILD", str(tmp_path))
     monkeypatch.setattr(duo, "BIZHAWK_CONFIG", str(_gba_config(tmp_path)))
@@ -637,8 +726,8 @@ def test_launch_seeds_the_flash_body_and_writes_a_gba_config(monkeypatch, tmp_pa
     launched = []
     monkeypatch.setattr(duo.subprocess, "Popen", lambda argv, **kw: launched.append(argv))
     monkeypatch.setattr(gen3_fixtures, "stage_rom", lambda src: "patch/build/gen3_fr.gba")
-    args = argparse.Namespace(game="gen3_frlg", lane="t", scenario="faint_cmd_gen3", idle_jitter=0)
-    run = duo.DuoRun("faint_cmd_gen3", args, attempt=1)
+    args = argparse.Namespace(game="gen3_frlg", lane="t", scenario=scenario, idle_jitter=0)
+    run = duo.DuoRun(scenario, args, attempt=1)
     monkeypatch.setattr(run, "_gen3_rom", lambda inst: f"patch/build/gen3_{inst}.gba")
     run.launch_instance("a")
     battery = Path(run._saveram_dir("a")) / "Pokemon - FireRed Version (USA).SaveRAM"
@@ -650,6 +739,9 @@ def test_launch_seeds_the_flash_body_and_writes_a_gba_config(monkeypatch, tmp_pa
     assert 'title = "firered"' in stub and 'scenario_prefix = "gen3_"' in stub
     assert 'game = "gen3_frlg"' in stub and "duo_gen3_main.lua" in stub
     assert launched[0][-1] == "patch/build/gen3_a.gba"
+    if scenario != "faint_cmd_gen3":
+        assert 'scenario_module = "battle_window"' in stub
+        assert f'battle_window_case = "{duo.SCENARIOS[scenario]["battle_window_case"]}"' in stub
 
 
 def test_gen3_rom_prefers_the_dump_then_the_staged_copy(monkeypatch, tmp_path):
@@ -3193,7 +3285,7 @@ def test_row1_the_cancel_leg_emits_prompt_refusals_and_the_landing(lua):
              "SAVE_CANCEL_WRITE_FRAME K1 frame=5626 field_free=true start_menu_task=false",
              "CONTROL_SETTLED save_cancel party_mon K1"]
     at = [logs.find(m) for m in order]
-    assert -1 not in at and at == sorted(at), list(zip(order, at))
+    assert -1 not in at and at == sorted(at), list(zip(order, at, strict=True))
 
 
 def test_row1_a_write_that_lands_with_the_field_locked_is_red(lua):

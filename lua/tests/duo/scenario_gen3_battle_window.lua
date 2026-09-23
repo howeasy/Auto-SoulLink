@@ -101,9 +101,15 @@ return function(ctx)
         local preparing, prep_error = true, nil
         ctx.watch(function()
             if not preparing then return true end
-            local ok, t = pcall(ctx.find, key)
+            local ok, t, lead, primary = pcall(function()
+                return ctx.find(key), (ctx.party() or {})[1], not ctx.in_battle() or ctx.battler_slot()==0
+            end)
             if not ok or not t or t.key ~= key or t.slot ~= slot or t.hp ~= mon.hp then
                 prep_error = "PREPARATION altered bench target HP/key/slot"
+                return true
+            end
+            if not lead or lead.hp<=0 or not primary then
+                prep_error = "PREPARATION lead fainted or bench switched in"
                 return true
             end
         end)

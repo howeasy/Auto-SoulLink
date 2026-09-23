@@ -58,6 +58,14 @@ WT_FWD = REPO.replace("\\", "/")
 # --game: Gen 3-only scenarios were run against a Game Boy, where they died on the savestate
 # they declare and no GB fixture has.
 SCENARIOS = {
+    "trainer_bench_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg",),
+        "target": {"a": "town", "b": "town"}, "frames": 3000000, "no_save": ("b",),
+        "scenario_module": "battle_window", "battle_window_case": "trainer_bench", "battle_window_slot": 1,
+        "oracle": "assert_trainer_bench_gen3_saved"},
+    "active_end_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",),
+        "target": {"a": "battle", "b": "town"}, "frames": 2000000, "no_save": ("b",),
+        "scenario_module": "battle_window", "battle_window_case": "active_end", "battle_window_slot": 0,
+        "oracle": "assert_active_end_gen3_saved"},
     "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     # Both halves die, then the pair is buried in the generation's graveyard box — Box 12 on
@@ -514,6 +522,8 @@ def scenario_attempt_limit(name, game):
     coin-flip outcome (see `run_scenario_with_rng_retry`).
     """
     entry = SCENARIOS.get(name, {})
+    if entry.get("battle_window_case"):
+        return 2 if entry["battle_window_case"] == "trainer_bench" else 1
     # a cold boot replays one fixed NEW GAME: nothing to retry (ball_gate_new)
     if not rng_retry_family(game) or entry.get("cold_boot"):
         return 1
@@ -535,6 +545,21 @@ def scenario_attempt_limit(name, game):
         # runner lost both attempts to 'a wild foe knocked the starter out' (owner: raise it).
         return 4
     return 3
+
+
+def battle_window_failure(name, receipts, attempt):
+    """Early client FAIL classification; never borrowed from the generic ball-RNG policy."""
+    case = SCENARIOS.get(name, {}).get("battle_window_case")
+    if not case:
+        return None
+    from gen3_battle_window_oracle import classify_failure
+    texts = {side: receipts.get(side) or "" for side in ("a", "b")}
+    ready = re.search(r"(?m)^READY_BATTLE_WINDOW " + re.escape(case) + r" ([0-9A-F]{8}:[0-9A-F]{8})\b",
+                      texts["a"])
+    if not ready:
+        return None
+    return classify_failure(case=case, key=ready.group(1), receipts=texts, attempt=attempt,
+                            helpers=sys.modules[__name__])
 
 
 def species_reroll_state(receipts):
@@ -2401,6 +2426,9 @@ class DuoRun:
             # title's pack files and pret symbols by `title`.
             duo.update({"title": self._gen3_title(inst),
                         "scenario_prefix": self.gcfg["scenario_prefix"]})
+            for field in ("scenario_module", "battle_window_case"):
+                if field in self.cfg:
+                    duo[field] = self.cfg[field]
             if self._gen3_rr:
                 # the live EWRAM range RR's extension writer copies to sectors 30-31
                 codec = gen3_codec()
@@ -5270,6 +5298,44 @@ class DuoRun:
         return self.wait_for(f"{inst}: {what}", lambda: re.search(
             pattern, read_result(self.scenario, inst) or "", re.M), timeout or self.cfg["timeout"])
 
+    def orchestrate_trainer_bench_gen3(self):
+        ka, kb = self._gen3_prelude()  # command-only carrier: no death/memorialize event or injected link
+        # These are write-window controls, NOT encounter-rule qualification. A normal RUN or
+        # training KO otherwise dead-zones its area and queues play_sound to BOTH clients
+        # (state._handle_no_catch), violating the carrier's intentionally isolated two-byte
+        # write and B's idle contract. Resolve only SERVER test state before GO; no RAM/save edit.
+        for area in ("viridian_city", "route_1", "route_2", "viridian_forest"):
+            reply = api(self.http_port, "POST", "/api/debug/set_area_state", {"area_id": area, "state": "linked"})
+            if not reply.get("ok"):
+                raise RuntimeError(f"battle-window area control refused: {area}: {reply}")
+        self._pydec_note("BATTLE_WINDOW_AREA_CONTROL server_only=linked "
+                         "areas=viridian_city,route_1,route_2,viridian_forest encounter_rules=not_qualified")
+        slot = self.cfg["battle_window_slot"]
+        self._link_keys = {"a": ka[slot], "b": kb[slot]}
+        self.go(self._gen3_linked_lines())
+        case, key = self.cfg["battle_window_case"], self._link_keys["a"]
+        self._gen3_mark("a", rf"^READY_BATTLE_WINDOW {case} {re.escape(key)} slot={slot}\b",
+                        "battle-window READY")
+        self.queue_command("a", {"cmd": "force_faint", "key": key})
+
+    orchestrate_active_end_gen3 = orchestrate_trainer_bench_gen3
+
+    def assert_battle_window_gen3_saved(self, results):
+        # _run_oracle already called check_save_witness_gen3: path/mtime/ordinal/flush are bound.
+        from pathlib import Path
+
+        from gen3_battle_window_oracle import verify
+
+        facts = verify(case=self.cfg["battle_window_case"], key=self._link_keys["a"], receipts=results,
+                       fixture=self._gen3_fixture_bytes("a"), witness=Path(self._witness_path("a")).read_bytes(),
+                       flushed=self._gen3_flushed("a"), peer_fixture=self._gen3_fixture_bytes("b"),
+                       peer_flushed=self._gen3_flushed("b"), helpers=sys.modules[__name__], attempt=self.attempt)
+        self._pydec_note(f"BATTLE_WINDOW_PYDEC case={facts['case']} key={facts['key']} "
+                         f"slot={facts['slot']} hp=0 samples={facts['observed_samples']}")
+
+    assert_trainer_bench_gen3_saved = assert_battle_window_gen3_saved
+    assert_active_end_gen3_saved = assert_battle_window_gen3_saved
+
     def orchestrate_faint_cmd_gen3(self):
         """Server-command/persistence-only (PLAN §5.5): link the two slot-1 mons, then inject A's
         faint through the debug API. The server marks the pair DEAD, queues force_faint to B and
@@ -6200,6 +6266,14 @@ def run_scenario_with_rng_retry(name, args):
             _archive_attempt(name, attempt, receipts)  # AFTER the annotation, so it is archived
             return ok, attempt
         _archive_attempt(name, attempt, receipts)
+        if SCENARIOS[name].get("battle_window_case"):
+            classification = battle_window_failure(name, receipts, attempt) if not ok else None
+            if classification:
+                print(f"[duo] {name}: NOT_SUBJECT retry={classification['retry']} {classification['reason']}")
+            if not ok and attempt < limit and classification and classification["retry"]:
+                print(f"[duo] {name}: restarting the whole T2 attempt with fresh server and seeds")
+                continue
+            return ok, attempt
         if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt, limit):
             return ok, attempt
         print(f"[duo] {name}: the cartridge's only ball missed; restarting attempt "

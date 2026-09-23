@@ -166,7 +166,7 @@ local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInpu
                "CableClub_EventScript_WelcomeToCableClub", "CableClub_EventScript_UnusedWelcomeToCableClub",
                "CableClub_EventScript_UnionRoomAdapterNotConnected",
                "CableClub_EventScript_WirelessClubAttendant", "gSpecialVar_Result", "gObjectEvents",
-               "gLinkCallback", "sLinkOpen", "LinkCB_RequestPlayerDataExchange", "sSaveDialogCB",
+               "gLinkCallback", "sLinkOpen", "LinkCB_RequestPlayerDataExchange", "sSaveDialogCB", "gSaveBlock1Ptr",
                "SaveDialogCB_ReturnSuccess", "task50_save_game", "Task_StartMenuHandleInput",
                -- C4-SAVE-ROWS (ctx.peek): the START menu/save dialog statics (start_menu.c:63-72,
                -- new_game.c:37)
@@ -305,7 +305,26 @@ end
 
 -- ── the production client: lua/gen3/run.lua, unmodified ──────────────────────────────────
 SLINK_GEN3_CLIENT = nil
+-- Capture the REAL built policy through the harness composition seam; run.lua normally drops
+-- Entry.build's second return. Restore dofile even if startup fails. No production code changed.
+local battle_parts
+local original_dofile = dofile
+if D.battle_window_case then
+    dofile = function(path)
+        local value = original_dofile(path)
+        if path == ROOT .. "/lua/gen3/entry.lua" then
+            local build = value.build
+            value.build = function(...)
+                local client, parts = build(...)
+                battle_parts = parts
+                return client, parts
+            end
+        end
+        return value
+    end
+end
 local okrun, errrun = pcall(dofile, ROOT .. "/lua/gen3/run.lua")
+dofile = original_dofile
 if not okrun then finish(false, "lua/gen3/run.lua raised: " .. tostring(errrun)) end
 local session = SLINK_GEN3_CLIENT
 if not session then finish(false, "run.lua built no client: " .. tostring(refused or "no reason logged")) end
@@ -331,7 +350,7 @@ log(fmt("client built by lua/gen3/run.lua: title=%s player=%s -> %s:%s", title, 
 -- ── context ──────────────────────────────────────────────────────────────────────────────
 local ctx = { D = D, player = D.player, phase = phase, log = log, fmt = fmt, G = G, SP = SP,
               play = play, cp = cp, reader = reader, sym = S, title = title, session = session,
-              finished = FINISHED }
+              finished = FINISHED, emulator = emu }
 
 function ctx.frames(n) for _ = 1, n do emu.frameadvance() end end
 --- pred() each frame until truthy (its value) or `secs` of wall clock pass (nil, logged).
@@ -403,7 +422,8 @@ function ctx.party()
     local out = {}
     for _, m in ipairs(mons) do
         out[#out + 1] = { slot = m.slot, key = reader.key(m), hp = m.hp, max_hp = m.max_hp,
-                          species = m.species, level = m.level }
+                          species = m.species, level = m.level, status = m.status,
+                          moves = m.moves, pp = m.pp }
     end
     return out
 end
@@ -1160,7 +1180,22 @@ if not ctx.wait_until(function() return seen_tx.hello end, 120, "the client's he
 end
 
 -- ── the scenario ─────────────────────────────────────────────────────────────────────────
-local base = D.scenario:gsub("_gen3$", "")
+if D.battle_window_case then
+    local Routes = load_or_die("/lua/tests/gen3_routes.lua", "battle-window routes")
+    local Tutorial = load_or_die("/lua/tests/mkstates_gen3_tutorials.lua", "tutorial helpers")
+    assert(battle_parts and battle_parts.policy, "no actual battle-window policy captured")
+    ctx.battle_window_snapshot = Routes.snapshotter(ctx, {
+        u8=function(a) return memory.read_u8(a,"System Bus") end,
+        u16=function(a) return memory.read_u16_le(a,"System Bus") end,
+        u32=function(a) return memory.read_u32_le(a,"System Bus") end,
+    }, battle_parts.policy, profile.ram, emu.framecount, function()
+        return {R15=emu.getregister("R15"),CPSR=emu.getregister("CPSR")}
+    end)
+    ctx.enter_trainer = function(label, expected, prep)
+        return Routes.enter_trainer(ctx,Tutorial,emu.framecount,label,expected,prep)
+    end
+end
+local base = D.scenario_module or D.scenario:gsub("_gen3$", "")
 local file = fmt("%s/lua/tests/duo/scenario_%s%s.lua", ROOT, D.scenario_prefix or "gen3_", base)
 local okload, scenario = pcall(dofile, file)
 if not okload or type(scenario) ~= "function" then
