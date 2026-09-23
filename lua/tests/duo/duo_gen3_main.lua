@@ -167,7 +167,12 @@ local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInpu
                "CableClub_EventScript_UnionRoomAdapterNotConnected",
                "CableClub_EventScript_WirelessClubAttendant", "gSpecialVar_Result", "gObjectEvents",
                "gLinkCallback", "sLinkOpen", "LinkCB_RequestPlayerDataExchange", "sSaveDialogCB",
-               "SaveDialogCB_ReturnSuccess", "task50_save_game", "Task_StartMenuHandleInput" }
+               "SaveDialogCB_ReturnSuccess", "task50_save_game", "Task_StartMenuHandleInput",
+               -- C4-SAVE-ROWS (ctx.peek): the START menu/save dialog statics (start_menu.c:63-72,
+               -- new_game.c:37)
+               "sSaveDialogDelay", "gDifferentSaveFile", "SaveDialogCB_AskSaveHandleInput",
+               "SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput", "sStartMenuCursorPos",
+               "sNumStartMenuItems", "sStartMenuOrder" }
 local S = {}
 do
     local want = {}
@@ -714,6 +719,14 @@ function ctx.face(dir)
 end
 --- Is the pret function `name` (one of SYMS) an active task right now?
 function ctx.task_live(name) return party_task(assert(S[name], "no SYMS entry " .. name)) end
+--- A pret static (one of SYMS) read now: `width` bytes (1/2/4) at S[name] + `offset`. Read-only;
+--- a callback compares against S[fn] | 1 (Thumb).
+function ctx.peek(name, width, offset)
+    local a = assert(S[name], "no SYMS entry " .. name) + (offset or 0)
+    if width == 4 then return memory.read_u32_le(a, "System Bus") end
+    if width == 2 then return memory.read_u16_le(a, "System Bus") end
+    return memory.read_u8(a, "System Bus")
+end
 
 --- Can the bag take a press? pret item_menu.c:1044-1049: Task_BagMenu_HandleInput returns
 --- without reading input while gPaletteFade.active (bit 7 of byte +7, the checkpoint pack's

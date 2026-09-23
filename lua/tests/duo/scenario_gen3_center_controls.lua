@@ -19,11 +19,16 @@
 --                         read there is IsWirelessAdapterConnected's own return (0 = FALSE,
 --                         observed). Probe box_mon <linked>, held. This proves refusal during
 --                         the welcome MESSAGE wait, NOT during the service multichoice.
---   cable_link            TRADE CENTER -> the party check -> EventScript_AskSaveGame (YES: this
---                         run's one in-game save, the witness; it lands BEFORE any probe moves a
---                         byte, so it is no persistence proof of the later deposit/withdraw) ->
---                         TryTradeLinkup: with no cable partner Task_LinkupAwaitConnection spins
---                         until B (cable_club.c:216-237). The same probe must still be held.
+--   cable_save            TRADE CENTER -> the party check -> EventScript_AskSaveGame: the save
+--                         prompt with task50_save_game alive (G4 draft row 3). The same probe,
+--                         held BEFORE the save lands (this run's one in-game save, the witness;
+--                         it lands before any probe moves a byte, so it is no persistence proof of
+--                         the later deposit/withdraw).
+--   cable_link            YES through the save -> TryTradeLinkup: with no cable partner
+--                         Task_LinkupAwaitConnection spins until B (cable_club.c:208-214). The
+--                         same probe must still be held; every held frame samples sLinkOpen/
+--                         gLinkCallback for row 6 (CABLE_CALLBACK_NULL, witnessed or the
+--                         no-cable-partner limit).
 --   union_room_attendant  a caller return address inside CableClub_EventScript_
 --                         UnionRoomAdapterNotConnected on the script stack (its msgbox waits in
 --                         the std script): IsWirelessAdapterConnected returned FALSE, observed.
@@ -132,18 +137,58 @@ local function a_side(ctx, linked)
         return script_live() and at_welcome() ~= nil
     end, 600)
     if not clause then return false, why end
-    -- A past the \p, TRADE CENTER (multichoice row 0), then YES through the save prompts, until
-    -- the linkup task waits: every A on this road means "go on", so overshoot is harmless -- for
-    -- a SAME-save fixture. A different-file save (gDifferentSaveFile) asks "replace the previous
-    -- file?" with NO as the default (start_menu.c SaveDialogCB_AskReplacePreviousFilePrintYesNoMenu):
-    -- there A declines, the script aborts, and the run FAILS at the linkup wait -- never a false pass.
+    -- cable_save (G4 draft §3.2 row 3): A past the \p, TRADE CENTER (multichoice row 0) and the
+    -- party check reach EventScript_AskSaveGame (cable_club.inc:367 -> std_msgbox.inc:57-60):
+    -- `special Field_AskSaveTheGame` creates task50_save_game (start_menu.c:620-626) and the
+    -- script waits. Stop mashing on that task, before any YES: the save prompt waits for input,
+    -- a stable refusing state, and the SAME box_mon is held there. The save lands after it.
+    local function saving() return ctx.task_live("task50_save_game") end
+    if not ctx.mash_until(saving, 60, "A") then
+        return false, "cable_save: task50_save_game never started (EventScript_AskSaveGame not reached)"
+    end
+    clause, why = ctx.hold_probe("cable_save", "box_mon", linked, saving, 600, true)
+    if not clause then return false, why end
+    -- then YES through the save prompts until the linkup task waits: every A on this road means
+    -- "go on", so overshoot is harmless -- for a SAME-save fixture. With a save on the cartridge
+    -- start_menu.c:731 always shows the overwrite prompt (default YES, :754-759); a different-file
+    -- save (gDifferentSaveFile) asks "replace the previous file?" with NO as the default
+    -- (SaveDialogCB_AskReplacePreviousFilePrintYesNoMenu, :761-766): there A declines, the script
+    -- aborts, and the run FAILS at the linkup wait -- never a false pass.
     local function linking() return ctx.task_live("Task_LinkupAwaitConnection") end
     if not ctx.mash_until(linking, 90, "A") then
         return false, "cable_link: Task_LinkupAwaitConnection never started (save or party check refused?)"
     end
     ctx.frames(60)
-    clause, why = ctx.hold_probe("cable_link", "box_mon", linked, linking, 600, true)
+    -- row 6 (null callback while open), sampled on every held frame of the link wait. pret
+    -- link.c: OpenLink sets sLinkOpen (InitLink :373) and then gLinkCallback (:394) in one
+    -- function, so "open before exchange" has no frame boundary (a recorded limit). The callback
+    -- is NULLed only by ClearLinkCallback/_2 (:746-757), whose callers (cable_club.c:637/693/886,
+    -- field_fadetransition.c:661) all run after a partner connected; with no cable partner the
+    -- wait never gets there (Task_LinkupAwaitConnection returns on playerCount < 2, cable_club.c:
+    -- 208-214) and LinkMain2 never runs the callback (:512-523). So the expected receipt is the
+    -- LIMIT form, carrying its evidence: the link open on N sampled frames, the callback never 0.
+    local open_n, null_n, cb_seen = 0, 0, 0
+    local function linking_sampled()
+        if not linking() then return false end
+        if ctx.peek("sLinkOpen", 1) ~= 0 then
+            open_n = open_n + 1
+            local cb = ctx.peek("gLinkCallback", 4)
+            if cb == 0 then null_n = null_n + 1 else cb_seen = cb end
+        end
+        return true
+    end
+    clause, why = ctx.hold_probe("cable_link", "box_mon", linked, linking_sampled, 600, true)
     if not clause then return false, why end
+    if open_n == 0 then
+        return false, "cable_link: sLinkOpen never read 1 during the link wait (nothing sampled for row 6)"
+    end
+    if null_n > 0 then
+        ctx.log(fmt("CABLE_CALLBACK_NULL sLinkOpen=1 gLinkCallback=0 samples=%d/%d", null_n, open_n))
+    else
+        ctx.log(fmt("CABLE_CALLBACK_NULL limit=no-cable-partner open_frames=%d null_frames=0 callback=0x%08X%s",
+                    open_n, cb_seen, cb_seen == (ctx.sym.LinkCB_RequestPlayerDataExchange | 1)
+                    and ":LinkCB_RequestPlayerDataExchange" or ""))
+    end
     ctx.log(fmt("CONTROL_RELEASED cable_link box_mon %s", linked))
     G.tap("B", 3, 13)                                    -- CheckLinkCanceledBeforeConnection
     local ok, swhy = settle_field("cable_link")
@@ -182,8 +227,8 @@ local function a_side(ctx, linked)
     end
     if not ctx.observe_returned(linked) then return false, linked .. " never read back in the party" end
     ctx.log(fmt("CONTROL_SETTLED union_room_attendant party_mon %s", linked))
-    return true, "the cable menu, the cable link wait and the Union Room attendant each held a "
-                 .. "keyed probe; each landed once released"
+    return true, "the cable menu, the Cable Club save prompt, the cable link wait and the Union Room "
+                 .. "attendant each held a keyed probe; each landed once released"
 end
 
 return function(ctx)

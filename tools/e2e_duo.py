@@ -1480,27 +1480,63 @@ def _receipt_line(text, match):
     return text[start:end if end >= 0 else len(text)]
 
 
+# rows 1/9 (C4-SAVE-ROWS): the START menu refusals name the menu's own clauses, never a
+# save-dialog pointer (sSaveDialogCB is a witness, not a clause, since C4-SAVE)
+_MENU_CLAUSE = r"clause=(?:task|field_controls_locked) "
+
+
 def save_then_write_chain(ka):
-    """save_then_write_gen3's A receipt, in order (scenario_gen3_save_then_write.lua emits it)."""
+    """save_then_write_gen3's A receipt, in order (scenario_gen3_save_then_write.lua emits it):
+    the C4-6s regression, each save's SAVE_DISMISSAL (A press vs the 60-call timeout, read from
+    sSaveDialogDelay), then the menu leg -- row 9's witness false off SAVE with a refused probe,
+    row 1's overwrite prompt and redrawn menu each refusing the same probe, and its landing only
+    after B freed the field."""
     k = re.escape(ka)
-    return [r"(?m)^SAVE_WITNESS_DUMP .*saves=1 ",
+    dismissal = r"by=(?:a_press delay=[1-9]\d*|timeout delay=0)$"
+    return [r"(?m)^SAVE_WITNESS_DUMP .*saves=1 ", rf"(?m)^SAVE_DISMISSAL save_then_write_1 {dismissal}",
             r"(?m)^STALE_SAVE_DIALOG save_dialog_cb=0x[0-9A-F]{8}:SaveDialogCB_ReturnSuccess",
             rf"(?m)^WRITE_PROBE_READY {k} ", gen3_rx("box_mon", ka), gen3_tx("stats_cache", ka),
-            gen3_boxed(ka), rf"(?m)^WRITE_LANDED box_mon {k} ", r"(?m)^SAVE_WITNESS_DUMP .*saves=2 "]
+            gen3_boxed(ka), rf"(?m)^WRITE_LANDED box_mon {k} ", r"(?m)^SAVE_WITNESS_DUMP .*saves=2 ",
+            rf"(?m)^SAVE_DISMISSAL save_then_write_2 {dismissal}",
+            r"(?m)^DIALOG_WITNESS_FALSE cursor=\d+ action=\d+ save_row=\d+ menu=open stale=0x(?!00000000)[0-9A-F]{8}$",
+            rf"(?m)^CONTROL_LIVE dialog_witness {k} ", gen3_rx("party_mon", ka),
+            rf"(?m)^CONTROL_REFUSED dialog_witness party_mon {k} {_MENU_CLAUSE}",
+            rf"(?m)^SAVE_CANCEL_PROMPT {k} row=save prompt=(?:overwrite|different_file)$",
+            rf"(?m)^CONTROL_REFUSED save_prompt party_mon {k} {_MENU_CLAUSE}",
+            rf"(?m)^SAVE_CANCEL_MENU_REDRAWN {k} ",
+            rf"(?m)^CONTROL_REFUSED save_cancel_menu party_mon {k} {_MENU_CLAUSE}",
+            rf"(?m)^CONTROL_RELEASED save_cancel party_mon {k}$", rf"(?m)^SAVE_CANCEL_FIELD_FREE {k}$",
+            gen3_tx("sync_retrieve_done", ka), gen3_returned(ka),
+            rf"(?m)^CONTROL_SETTLED save_cancel party_mon {k}$"]
+
+
+def save_then_write_forbidden(ka):
+    """No failed write, no third save (the cancelled dialog wrote nothing), and no save-dialog
+    pointer named in row 9's refusal (the old pack's clause, G4 draft row 9)."""
+    return [gen3_tx("box_mon_failed", ka), gen3_tx("sync_retrieve_failed", ka),
+            r"(?m)^SAVE_WITNESS_DUMP .*saves=3 ", r"(?m)^CONTROL_REFUSED dialog_witness .*save_dialog_cb"]
 
 
 def center_controls_chain(ka):
     """center_controls_gen3's A receipt, in order (scenario_gen3_center_controls.lua emits it):
     each control's source-pinned WITNESS before its CONTROL_LIVE, the keyed probe after it, the
     refusal, then CONTROL_RELEASED at the release input BEFORE the probe's ACK and read-back,
-    and CONTROL_SETTLED after them (Codex REV-center-receipt-2)."""
+    and CONTROL_SETTLED after them (Codex REV-center-receipt-2). C4-SAVE-ROWS: cable_save (row 3)
+    refuses the same probe before the save's DUMP, and CABLE_CALLBACK_NULL (row 6) follows the
+    link wait's refusal."""
     k = re.escape(ka)
     return [r"(?m)^WITNESS cable_welcome_message script=CableClub_EventScript_WelcomeToCableClub at=\S+ "
             r"var_result=0 adapter_connected=false",
             rf"(?m)^CONTROL_LIVE cable_welcome_message {k} ", gen3_rx("box_mon", ka),
             rf"(?m)^CONTROL_REFUSED cable_welcome_message box_mon {k} clause=\S+ ",
+            # row 3: the Cable Club save's own refusal, BEFORE the save lands
+            rf"(?m)^CONTROL_LIVE cable_save {k} ", rf"(?m)^CONTROL_REFUSED cable_save box_mon {k} clause=\S+ ",
             r"(?m)^SAVE_WITNESS_DUMP ", rf"(?m)^CONTROL_LIVE cable_link {k} ",
             rf"(?m)^CONTROL_REFUSED cable_link box_mon {k} clause=\S+ ",
+            # row 6: a witnessed null-callback-while-open frame, or the no-partner limit with its
+            # evidence (open on >= 1 sampled frame, never null, a non-null callback)
+            r"(?m)^CABLE_CALLBACK_NULL (?:sLinkOpen=1 gLinkCallback=0 samples=[1-9]\d*/[1-9]\d*"
+            r"|limit=no-cable-partner open_frames=[1-9]\d* null_frames=0 callback=0x(?!00000000)[0-9A-F]{8})",
             rf"(?m)^CONTROL_RELEASED cable_link box_mon {k}$", gen3_tx("stats_cache", ka),
             gen3_boxed(ka), rf"(?m)^CONTROL_SETTLED cable_link box_mon {k}$",
             r"(?m)^WITNESS union_room_attendant script=CableClub_EventScript_UnionRoomAdapterNotConnected "
@@ -5279,6 +5315,14 @@ class DuoRun:
         ka = self._link_keys["a"]
         self._gen3_mark("a", rf"^WRITE_PROBE_READY {re.escape(ka)} ", "A idle after its save, sSaveDialogCB stale")
         self.queue_command("a", {"cmd": "box_mon", "key": ka})
+        # rows 9/1 (C4-SAVE-ROWS): one party_mon, queued once A rests the START cursor off SAVE; A
+        # holds it there, at the overwrite prompt and the redrawn menu, and it lands after B
+        self._gen3_mark("a", rf"^CONTROL_LIVE dialog_witness {re.escape(ka)} ",
+                        "A in the START menu, cursor off SAVE")
+        cached = self._gen3_sent_event(read_result(self.scenario, "a"), "stats_cache", ka) or {}
+        if not cached.get("stats"):
+            raise RuntimeError(f"A never reported stats_cache for {ka}; no party_mon probe to send")
+        self.queue_command("a", {"cmd": "party_mon", "key": ka, "stats": cached["stats"]})
 
     def orchestrate_whiteout_gen3(self):
         """Both halves of the slot-1 pair boxed (A by hand, B by the mirrored box_mon), the
@@ -5617,7 +5661,7 @@ class DuoRun:
         chain = save_then_write_chain(ka)
         problems += gen3_receipt_problems(
             "a", results["a"], required=chain, ordered=list(zip(chain, chain[1:], strict=False)),
-            forbidden=[gen3_tx("box_mon_failed", ka)])
+            forbidden=save_then_write_forbidden(ka))
         self._gen3_raise(problems, f"save_then_write: {ka} boxed by a keyed write on an idle field after "
                                    f"an in-game save (stale sSaveDialogCB observed); saved twice")
 

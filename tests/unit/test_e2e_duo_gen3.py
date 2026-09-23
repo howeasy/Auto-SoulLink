@@ -1030,7 +1030,16 @@ function FAKE(scenario, player, phase, spec)
                     { slot = 1, key = "K1", hp = 5, max_hp = 17, species = 16, level = 4 },
                     { slot = 2, key = "K9", hp = 9, max_hp = 9, species = 19, level = 3 } }
     local ctx = { player = player, phase = phase, fmt = string.format, cp = {}, finished = "done",
-                  D = {}, hp0_tag = "FORCED_HP0" }
+                  D = {}, hp0_tag = "FORCED_HP0", title = "firered" }
+    -- C4-SAVE-ROWS: the pret statics a scenario reads through ctx.peek (SYMS addresses; the
+    -- callbacks compare with the Thumb bit, as the real S table does)
+    ctx.sym = { SaveDialogCB_AskSaveHandleInput = 0x0806F7F8, SaveDialogCB_ReturnSuccess = 0x0806F9E0,
+                SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput = 0x0806F8DC,
+                LinkCB_RequestPlayerDataExchange = 0x0800A720 }
+    -- the START menu after an in-game save (save_then_write): closed, the cursor left on SAVE
+    -- (row 4 of the identity order), sSaveDialogCB stale on SaveDialogCB_ReturnSuccess
+    local menu = { open = false, cb = "input", cursor = 4, dialog = 0x0806F9E1 }
+    local menu_tap
     -- released: a talk's script closed (mash_until); save_then_write starts on an idle field
     local probes, released = 0, scenario == "save_then_write"
     ctx.log = function(s)
@@ -1041,6 +1050,7 @@ function FAKE(scenario, player, phase, spec)
             local probe = ({ cable_welcome_message = "box_mon", nurse = "box_mon", union_room_attendant = "party_mon" })[live]
             if probe then logs[#logs + 1] = "RX " .. probe .. " key=" .. (spec.linked or "K1") end
         end
+        if live == "dialog_witness" then logs[#logs + 1] = "RX party_mon key=" .. (spec.linked or "K1") end
         if tostring(s):find("^WRITE_PROBE_READY") then
             probes = probes + 1
             logs[#logs + 1] = "RX box_mon key=" .. (spec.linked or "K1")
@@ -1108,6 +1118,8 @@ function FAKE(scenario, player, phase, spec)
         if spec.stale and event == "stats_cache" then return false end
         -- today's pack: the probe stays held on save_dialog_cb after the save
         if spec.held and event == "stats_cache" then return false end
+        -- row 1's mirror: the released party_mon never lands once the field is free
+        if spec.never_lands and event == "sync_retrieve_done" then return false end
         logs[#logs + 1] = "TX " .. event .. " " .. tostring(key) .. " {}"
         return true
     end
@@ -1144,6 +1156,7 @@ function FAKE(scenario, player, phase, spec)
     local saves = 0
     ctx.save = function()
         saves = saves + 1
+        menu.open, menu.cb, menu.cursor, menu.dialog = false, "input", 4, 0x0806F9E1
         logs[#logs + 1] = string.format("SAVE_WITNESS_DUMP path=p bytes=131072 saves=%d frame=1 counter=%d",
                                         saves, 4 + saves)
         return true
@@ -1183,8 +1196,20 @@ function FAKE(scenario, player, phase, spec)
                whiteout_destination = function() return CENTER end, warp_to = function() end }
     -- a script is live from a talk (A tap) until A mashes it closed (mash_until)
     ctx.G = { map = function() return here.group, here.num end, pos = function() return here.x, here.y end,
-              pred_ok = function() return released end,
+              pred_ok = function(_, name)
+                  if name == "field_controls_locked" and (menu.open or menu.stuck) then return false end
+                  return released
+              end,
+              start_menu_witness = function()
+                  return function() return menu.open and menu.cb == "input" end,
+                         function()
+                             -- spec.old_witness: the pre-10e4a702 shape, the stale pointer alone
+                             if spec.old_witness then return menu.dialog ~= 0 end
+                             return menu.open and menu.cb == "save"
+                         end
+              end,
               tap = function(btn)
+                  if scenario == "save_then_write" then return menu_tap(btn) end
                   if btn == "A" then
                       -- an A that faces no attendant talks to nobody (center_controls' counters)
                       if scenario == "center_controls" and facing ~= 2 then return end
@@ -1222,6 +1247,8 @@ function FAKE(scenario, player, phase, spec)
     local saved = false
     ctx.task_live = function(name)
         if name == "Task_MultichoiceMenu_HandleInput" then return false end   -- still at the \p
+        if name == "Task_StartMenuHandleInput" then return menu.open end
+        if name == "task50_save_game" and spec.no_save_task then return false end
         if name == "Task_LinkupAwaitConnection" and not saved then
             saved = true                       -- the Cable Club save precedes the link wait
             logs[#logs + 1] = "SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5"
@@ -1256,6 +1283,38 @@ function FAKE(scenario, player, phase, spec)
                             .. "forbidden state: field_controls_locked"
     local attempted = 0
     local session = { deferred = { items = items, exec = { write_count = function() return attempted end } } }
+    -- the START menu model (pret start_menu.c): Start opens it on StartCB_HandleInput; Up/Down move
+    -- the cursor; A on SAVE runs the dialog to the save yes/no, A there to the overwrite yes/no;
+    -- B at a yes/no cancels back to the menu (:589-594), B at the menu closes it (:436-441)
+    local SAVE_ASK, OVERWRITE = 0x0806F7F9, 0x0806F8DD
+    menu_tap = function(btn)
+        if btn == "Start" and not menu.open then menu.open, menu.cb = true, "input"
+        elseif not menu.open then return
+        elseif menu.cb == "input" and (btn == "Up" or btn == "Down") then
+            menu.cursor = menu.cursor + (btn == "Up" and -1 or 1)
+        elseif menu.cb == "input" and btn == "A" and menu.cursor == 4 then menu.cb, menu.dialog = "save", SAVE_ASK
+        elseif menu.cb == "save" and btn == "A" and menu.dialog == SAVE_ASK then
+            menu.dialog = OVERWRITE
+            -- spec.prompt_admits: the checkpoint admits at the prompt, so the queued probe executes
+            if spec.prompt_admits then
+                for i = #items, 1, -1 do if items[i].cmd == "party_mon" then table.remove(items, i) end end
+            end
+        elseif menu.cb == "save" and btn == "B" and menu.dialog == OVERWRITE then menu.cb = "input"
+        elseif menu.cb == "input" and btn == "B" then menu.open, menu.stuck = false, spec.stuck_locked
+        end
+    end
+    ctx.peek = function(name, _, offset)
+        if name == "sSaveDialogDelay" then return spec.delay or 23 end
+        if name == "sSaveDialogCB" then return menu.dialog end
+        if name == "sStartMenuCursorPos" then return menu.cursor end
+        if name == "sNumStartMenuItems" then return 7 end
+        if name == "sStartMenuOrder" then return offset or 0 end
+        if name == "gDifferentSaveFile" then return 0 end
+        -- the no-partner link wait (link.c OpenLink :390-395): open, callback set, never run
+        if name == "sLinkOpen" then return spec.link_closed and 0 or 1 end
+        if name == "gLinkCallback" then return spec.null_cb and 0 or 0x0800A721 end
+        error("fake ctx.peek: no " .. tostring(name))
+    end
     function session.deferred:pending() return #self.items, why, 0, self.items[1] and self.items[1].cmd end
     ctx.deferred_hold = function()                      -- HEAD d199da32's accessor (why, head)
         local _, w, _, head = session.deferred:pending()
@@ -2512,9 +2571,13 @@ def _center_controls_receipt(k):
             "var_result=0 adapter_connected=false(observed: IsWirelessAdapterConnected's VAR_RESULT)\n"
             f"CONTROL_LIVE cable_welcome_message {k} map=5.5\nRX box_mon key={k}\n"
             f"CONTROL_REFUSED cable_welcome_message box_mon {k} clause=script_context_status held\n"
+            f"CONTROL_LIVE cable_save {k} map=5.5\n"
+            f"CONTROL_REFUSED cable_save box_mon {k} clause=task held\n"
             "SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5\n"
             f"CONTROL_LIVE cable_link {k} map=5.5\n"
             f"CONTROL_REFUSED cable_link box_mon {k} clause=task held\n"
+            "CABLE_CALLBACK_NULL limit=no-cable-partner open_frames=601 null_frames=0 "
+            "callback=0x0800A721:LinkCB_RequestPlayerDataExchange\n"
             f"CONTROL_RELEASED cable_link box_mon {k}\nTX stats_cache {k} {{}}\n"
             f"BOXED_OBSERVED {k} box=0:0\nCONTROL_SETTLED cable_link box_mon {k}\n"
             "WITNESS union_room_attendant script=CableClub_EventScript_UnionRoomAdapterNotConnected "
@@ -2548,6 +2611,26 @@ def test_center_controls_oracle_positive_and_negatives(monkeypatch, tmp_path):
         f"BOXED_OBSERVED {k} box=0:0\n", f"BOXED_OBSERVED {k} box=0:0\nCONTROL_RELEASED cable_link box_mon {k}\n")
     with pytest.raises(RuntimeError, match="CONTROL_RELEASED cable_link"):
         run.assert_center_controls_gen3_saved(dict(good, a=late))
+    # rows 3/6 (C4-SAVE-ROWS): the Cable Club save is its own refusal, before the save lands
+    with pytest.raises(RuntimeError, match="cable_save"):
+        run.assert_center_controls_gen3_saved(dict(good, a=good["a"].replace(
+            f"CONTROL_REFUSED cable_save box_mon {k} clause=task held\n", "")))
+    save_first = good["a"].replace("SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5\n", "").replace(
+        f"CONTROL_LIVE cable_save {k}", f"SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5\nCONTROL_LIVE cable_save {k}")
+    with pytest.raises(RuntimeError, match="SAVE_WITNESS_DUMP"):
+        run.assert_center_controls_gen3_saved(dict(good, a=save_first))
+    # the limit form carries its evidence: the link was open on sampled frames, never null
+    for bad in ("open_frames=0 null_frames=0", "open_frames=601 null_frames=3"):
+        with pytest.raises(RuntimeError, match="CABLE_CALLBACK_NULL"):
+            run.assert_center_controls_gen3_saved(dict(good, a=good["a"].replace(
+                "open_frames=601 null_frames=0", bad)))
+    with pytest.raises(RuntimeError, match="CABLE_CALLBACK_NULL"):
+        run.assert_center_controls_gen3_saved(dict(good, a=good["a"].replace(
+            "callback=0x0800A721", "callback=0x00000000")))
+    witnessed = good["a"].replace(
+        "CABLE_CALLBACK_NULL limit=no-cable-partner open_frames=601 null_frames=0 "
+        "callback=0x0800A721:LinkCB_RequestPlayerDataExchange", "CABLE_CALLBACK_NULL sLinkOpen=1 gLinkCallback=0 samples=4/601")
+    run.assert_center_controls_gen3_saved(dict(good, a=witnessed))
 
 
 def test_the_lgfr_row_is_the_frlg_family_with_leafgreen_as_a():
@@ -2984,6 +3067,28 @@ def test_save_then_write_refuses_a_run_that_does_not_exercise_the_defect(lua):
     assert ok and passed is False and "does not exercise the defect" in msg, msg
 
 
+def _save_then_write_receipt(k):
+    return ("SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5\n"
+            "SAVE_DISMISSAL save_then_write_1 by=a_press delay=40\n"
+            "STALE_SAVE_DIALOG save_dialog_cb=0x0806F9E1:SaveDialogCB_ReturnSuccess(no save dialog task)\n"
+            f"WRITE_PROBE_READY {k} map=3.1\nRX box_mon key={k}\nTX stats_cache {k} {{}}\n"
+            f"BOXED_OBSERVED {k} box=0:0\nWRITE_LANDED box_mon {k} map=3.1\n"
+            "SAVE_WITNESS_DUMP path=p bytes=1 saves=2 frame=2 counter=6\n"
+            "SAVE_DISMISSAL save_then_write_2 by=timeout delay=0\n"
+            "DIALOG_WITNESS_FALSE cursor=3 action=3 save_row=4 menu=open stale=0x0806F9E1\n"
+            f"CONTROL_LIVE dialog_witness {k} map=3.1\nRX party_mon key={k}\n"
+            f"CONTROL_REFUSED dialog_witness party_mon {k} clause=field_controls_locked held\n"
+            f"SAVE_CANCEL_PROMPT {k} row=save prompt=overwrite\n"
+            f"CONTROL_LIVE save_prompt {k} map=3.1\n"
+            f"CONTROL_REFUSED save_prompt party_mon {k} clause=task held\n"
+            f"SAVE_CANCEL_MENU_REDRAWN {k} cursor=4 sSaveDialogCB=0x0806F8DD\n"
+            f"CONTROL_LIVE save_cancel_menu {k} map=3.1\n"
+            f"CONTROL_REFUSED save_cancel_menu party_mon {k} clause=field_controls_locked held\n"
+            f"CONTROL_RELEASED save_cancel party_mon {k}\nSAVE_CANCEL_FIELD_FREE {k}\n"
+            f"TX sync_retrieve_done {k} {{}}\nRETURNED_OBSERVED {k} slot=1\n"
+            f"CONTROL_SETTLED save_cancel party_mon {k}\n")
+
+
 def test_save_then_write_oracle_positive_and_negatives(monkeypatch, tmp_path):
     fixture = _fixture([STARTER, PIDGEY])
     k = _key(PIDGEY)
@@ -2991,13 +3096,24 @@ def test_save_then_write_oracle_positive_and_negatives(monkeypatch, tmp_path):
     run, notes = _oracle_stub(monkeypatch, tmp_path, "save_then_write_gen3", {"a": boxed, "b": boxed},
                               fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "alive"}])
     run._link_keys = {"a": k, "b": k}
-    receipt = ("SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5\n"
-               "STALE_SAVE_DIALOG save_dialog_cb=0x0806F9E1:SaveDialogCB_ReturnSuccess(no save dialog task)\n"
-               f"WRITE_PROBE_READY {k} map=3.1\nRX box_mon key={k}\nTX stats_cache {k} {{}}\n"
-               f"BOXED_OBSERVED {k} box=0:0\nWRITE_LANDED box_mon {k} map=3.1\n"
-               "SAVE_WITNESS_DUMP path=p bytes=1 saves=2 frame=2 counter=6\n")
+    receipt = _save_then_write_receipt(k)
     run.assert_save_then_write_gen3_saved({"a": receipt, "b": ""})
     assert notes and "save_then_write" in notes[-1]
+    # rows 1/9 (C4-SAVE-ROWS): the leg is required, the old clause is refused by name, and the
+    # cancelled dialog must not have saved
+    for cut, match in ((f"CONTROL_REFUSED save_prompt party_mon {k} clause=task held\n", "save_prompt"),
+                       ("DIALOG_WITNESS_FALSE", "DIALOG_WITNESS_FALSE"),
+                       (f"SAVE_CANCEL_FIELD_FREE {k}\n", "SAVE_CANCEL_FIELD_FREE"),
+                       ("SAVE_DISMISSAL save_then_write_2", "SAVE_DISMISSAL")):
+        with pytest.raises(RuntimeError, match=match):
+            run.assert_save_then_write_gen3_saved({"a": receipt.replace(cut, "X"), "b": ""})
+    with pytest.raises(RuntimeError, match="save_dialog_cb"):
+        run.assert_save_then_write_gen3_saved({"a": receipt.replace(
+            f"dialog_witness party_mon {k} clause=field_controls_locked",
+            f"dialog_witness party_mon {k} clause=field_controls_locked save_dialog_cb=0x0806F9E1!"), "b": ""})
+    with pytest.raises(RuntimeError, match="saves=3"):
+        run.assert_save_then_write_gen3_saved({"a": receipt + "SAVE_WITNESS_DUMP path=p bytes=1 saves=3 frame=3 counter=7\n",
+                                                "b": ""})
     with pytest.raises(RuntimeError, match="STALE_SAVE_DIALOG"):
         run.assert_save_then_write_gen3_saved({"a": receipt.replace("STALE_SAVE_DIALOG", "STALE_X"), "b": ""})
     with pytest.raises(RuntimeError, match="box_mon_failed"):
@@ -3017,6 +3133,107 @@ def test_the_save_then_write_runner_queues_only_after_the_stale_witness():
     assert duo.SCENARIOS["save_then_write_gen3"]["no_save"] == ("b",)
     assert duo.scenario_applies("save_then_write_gen3", "gen3_frlg")
     assert duo.scenario_applies("save_then_write_gen3", "gen3_lgfr")
+
+
+# ── C4-SAVE-ROWS: G4 draft §3.2 rows 1/3/6/9 (docs/gen3/research/c4_save_rows_design_2026-09-23.md) ──
+# Each row's falsifier runs the REAL scenario under the fake ctx; every one is red on beeea4ff,
+# where neither scenario had the leg (it passed without naming the row).
+
+def test_row1_the_success_dismissal_is_read_not_assumed(lua):
+    """start_menu.c:668/:673-687: sSaveDialogDelay starts at 60 and drops once per ReturnSuccess
+    call; a held A ends it early (> 0), the timeout at 0; 60 means ReturnSuccess never ran."""
+    for delay, marker in ((23, "by=a_press delay=23"), (0, "by=timeout delay=0")):
+        ok, passed, msg, logs = _run_module(lua, "save_then_write", "a", "initial", {"delay": delay})
+        assert ok and passed is True, msg
+        assert f"SAVE_DISMISSAL save_then_write_1 {marker}" in logs, logs
+        assert f"SAVE_DISMISSAL save_then_write_2 {marker}" in logs, logs
+    ok, passed, msg, _ = _run_module(lua, "save_then_write", "a", "initial", {"delay": 60})
+    assert ok and passed is False and "SaveDialogCB_ReturnSuccess never ran" in msg, msg
+
+
+def test_row1_a_prompt_that_admits_fails_naming_the_prompt(lua):
+    """The leg cannot pass on a prompt that never refused: the queued party_mon executed there."""
+    ok, passed, msg, logs = _run_module(lua, "save_then_write", "a", "initial", {"prompt_admits": "lua:true"})
+    assert ok and passed is False and msg.startswith("save_prompt: party_mon K1 is not queued"), msg
+    assert "SAVE_CANCEL_PROMPT K1 row=save prompt=overwrite" in logs, logs
+
+
+@pytest.mark.parametrize("spec, why", [
+    ({"never_lands": "lua:true"}, "SAVE_CANCEL_FIELD_FREE: the released party_mon never landed"),
+    ({"stuck_locked": "lua:true"}, "SAVE_CANCEL_FIELD_FREE: the field never freed"),
+])
+def test_row1_a_cancel_that_stays_refused_fails_at_field_free(lua, spec, why):
+    ok, passed, msg, _ = _run_module(lua, "save_then_write", "a", "initial", spec)
+    assert ok and passed is False and msg.startswith(why), msg
+
+
+def test_row1_the_cancel_leg_emits_prompt_refusals_and_the_landing(lua):
+    ok, passed, msg, logs = _run_module(lua, "save_then_write", "a", "initial", {})
+    assert ok and passed is True, msg
+    order = ["SAVE_CANCEL_PROMPT K1 row=save prompt=overwrite",
+             "CONTROL_REFUSED save_prompt party_mon K1 clause=field_controls_locked",
+             "SAVE_CANCEL_MENU_REDRAWN K1 cursor=4 sSaveDialogCB=0x0806F8DD",
+             "CONTROL_REFUSED save_cancel_menu party_mon K1 clause=field_controls_locked",
+             "CONTROL_RELEASED save_cancel party_mon K1", "SAVE_CANCEL_FIELD_FREE K1",
+             "TX sync_retrieve_done K1", "RETURNED_OBSERVED K1", "CONTROL_SETTLED save_cancel party_mon K1"]
+    at = [logs.find(m) for m in order]
+    assert -1 not in at and at == sorted(at), list(zip(order, at))
+
+
+def test_row9_the_old_witness_shape_is_red(lua):
+    """cx-3e10776a: the stale pointer alone reads TRUE on another row; the row must refuse it."""
+    ok, passed, msg, _ = _run_module(lua, "save_then_write", "a", "initial", {"old_witness": "lua:true"})
+    assert ok and passed is False and "dialog_witness: the save-dialog witness reads TRUE" in msg, msg
+
+
+def test_row9_the_witness_stays_false_off_the_save_row(lua):
+    ok, passed, msg, logs = _run_module(lua, "save_then_write", "a", "initial", {})
+    assert ok and passed is True, msg
+    assert "DIALOG_WITNESS_FALSE cursor=3 action=3 save_row=4 menu=open stale=0x0806F9E1" in logs, logs
+    assert "CONTROL_REFUSED dialog_witness party_mon K1 clause=field_controls_locked" in logs, logs
+
+
+def test_row3_the_cable_save_needs_its_task_witness(lua):
+    ok, passed, msg, _ = _run_module(lua, "center_controls", "a", "initial", {"no_save_task": "lua:true"})
+    assert ok and passed is False and msg.startswith("cable_save: task50_save_game never started"), msg
+
+
+def test_row3_the_cable_save_is_its_own_refusal_before_the_save_lands(lua):
+    ok, passed, msg, logs = _run_module(lua, "center_controls", "a", "initial", {})
+    assert ok and passed is True, msg
+    refused = logs.find("CONTROL_REFUSED cable_save box_mon K1 clause=")
+    assert refused != -1 and refused < logs.find("SAVE_WITNESS_DUMP") < logs.find("CONTROL_LIVE cable_link K1"), logs
+
+
+@pytest.mark.parametrize("spec, marker", [
+    ({}, "CABLE_CALLBACK_NULL limit=no-cable-partner open_frames=601 null_frames=0 "
+         "callback=0x0800A721:LinkCB_RequestPlayerDataExchange"),
+    ({"null_cb": "lua:true"}, "CABLE_CALLBACK_NULL sLinkOpen=1 gLinkCallback=0 samples=601/601"),
+])
+def test_row6_the_link_wait_is_sampled_for_a_null_callback(lua, spec, marker):
+    ok, passed, msg, logs = _run_module(lua, "center_controls", "a", "initial", spec)
+    assert ok and passed is True, msg
+    assert marker in logs, logs
+    assert logs.find("CONTROL_REFUSED cable_link") < logs.find(marker) < logs.find("CONTROL_RELEASED cable_link")
+
+
+def test_row6_a_link_that_never_opened_samples_nothing(lua):
+    ok, passed, msg, _ = _run_module(lua, "center_controls", "a", "initial", {"link_closed": "lua:true"})
+    assert ok and passed is False and "sLinkOpen never read 1" in msg, msg
+
+
+def test_the_save_then_write_runner_queues_the_withdraw_after_the_dialog_witness():
+    body = (REPO / "tools" / "e2e_duo.py").read_text(encoding="utf-8")
+    orch = body[body.index("def orchestrate_save_then_write_gen3"):body.index("def orchestrate_whiteout_gen3")]
+    assert orch.index("CONTROL_LIVE dialog_witness") < orch.index('"cmd": "party_mon"')
+
+
+def test_the_new_driver_symbols_are_pret_statics():
+    names = set(_driver_syms())
+    assert {"sSaveDialogDelay", "gDifferentSaveFile", "SaveDialogCB_AskSaveHandleInput",
+            "SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput", "sStartMenuCursorPos",
+            "sNumStartMenuItems", "sStartMenuOrder"} <= names
+
 
 
 # ── C4-6t: BizHawk rewind off in every generated run config (duo run 61569 crash) ─────────────
