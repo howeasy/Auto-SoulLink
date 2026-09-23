@@ -5,17 +5,20 @@
 Per title (Crystal first, then Gold) three EmuHawk launches of lua/tests/gen2_write_windows.lua:
   town    <title>_town: an idle-hold party write (lua/gen2/writes.lua) and a current-box deposit into the
           authoritative sBox copy in CartRAM (lua/gen2/boxes.lua), START menu / Elm's script text box /
-          native SAVE (wGameLogicPaused) / lab exit warp windows, the flushed SaveRAM.
+          native SAVE (wGameLogicPaused, required) / lab exit warp windows, the flushed SaveRAM.
   reload  that flushed SaveRAM, cold-booted through CONTINUE: the written bytes must be there.
   battle  <title>_battle: a Route 29 wild battle window, a refused party-only write to the active slot.
-This file re-derives every verdict from the gate's printed observations and the flushed SaveRAM bytes
-(raw offsets from the pinned .sym, never the PYDEC codec), then writes the PHYSICAL receipt that
-lua/gen2_write_safety.lua's check() requires (M.qualified), and re-checks it through that Lua:
+Each run prints its own record (U2_RUN; evidence_level is the gate's, never stamped here). This file
+re-derives liveness (phases + MEASURED PC/hROMBank at accepted holds) and persistence (raw offsets from the
+pinned .sym, never the profile or the PYDEC codec; the staged fixture bytes must differ before the save),
+assembles the receipt from the three run records, and runs lua/gen2_write_safety.lua's own M.qualified
+(every control recomputed from the raw records) and M.bind_fixture_qualification against
+tests/fixtures/gen2/receipts/<fixture>.qualification.json:
 
     tests/fixtures/gen2/receipts/<title>.write_window.json
 
-Silver has no run of its own: its checkpoint rows are identical to Gold's, so the Gold receipt covers it
-(M.RECEIPT_TITLE) exactly while those rows stay identical. Skipped without EmuHawk, the pinned build or
+Silver has no run of its own: its checkpoint rows are identical to Gold's, so the Gold receipt (Gold's
+pinned ROM) covers it exactly while those rows stay identical. Skipped without EmuHawk, the pinned build or
 a qualified fixture (the release runner counts a skip as a failure).
 """
 from __future__ import annotations
@@ -43,13 +46,16 @@ pytestmark = [
 
 GATE = "lua/tests/gen2_write_windows.lua"
 TITLES = ("crystal", "gold")
-OBSERVE = 30
-RECEIPT_SCHEMA = "gen2-write-window-receipt-v1"
+RECEIPT_SCHEMA = "gen2-write-window-receipt-v2"
+# The pack physical.required_controls this receipt covers; every other one stays OPEN (M.qualified scope).
+COVERED_CONTROLS = ["idle reacquisition", "warp/Continue"]
 CART_RAM_BYTES = 0x8000
-TOWN_WINDOWS = {"start_menu": (OBSERVE, None), "script_text": (OBSERVE, {"wScriptRunning", "wScriptFlags"}),
-                "mid_warp": (1, {"wMapStatus"})}
-SAVE_WINDOW = {"save_paused": (1, {"wGameLogicPaused"})}
-BATTLE_WINDOWS = {"battle": (OBSERVE, {"wBattleMode"})}
+# Independent re-derivation of idle reacquisition: the second phase of each pair was entered only after
+# a NEW accepted hold (the gate driver's order; lua/gen2_write_safety.lua M.REACQUIRE mirrors it).
+REACQUIRE = {"town": [("idle", "start_menu"), ("face", "talk"), ("to_save", "save"), ("post_save", "exit"),
+                      ("post_warp", "done")],
+             "reload": [("idle", "done")],
+             "battle": [("idle", "walk"), ("post_battle", "done")]}
 
 
 def receipt_path(title: str, *, repo: Path = REPO) -> Path:
@@ -62,117 +68,136 @@ def sram_flat(bank: int, address: int) -> int:
     return bank * 0x2000 + address - 0xA000
 
 
-def verify_windows(windows: dict, required: dict) -> None:
-    """Every required window was observed, held no accepted checkpoint hold, refused the party write by
-    ownership without changing a byte, and (where named) failed on its stated predicate."""
-    for name, (frames, symbols) in required.items():
-        w = windows.get(name)
-        assert w is not None and w["frames"] >= frames, (name, "window not observed", w)
-        assert w["accepted"] == 0, (name, "accepted checkpoint hold inside the window", w)
-        write = w.get("write")
-        assert isinstance(write, dict) and write["refused"] is True and "ownership refused" in write["reason"] \
-            and write["party_unchanged"] is True, (name, "party write not refused by ownership", write)
-        if symbols:
-            assert symbols & set(w["failing"]), (name, "stated predicate did not refuse", w["failing"])
+def offsets(symbols, current_box: int) -> dict:
+    """Raw persistence offsets from the pinned .sym alone: the saved party HP (sPokemonData image of
+    wPartyMon1HP), the active sBox copy and the current box's backing slot sBox<n>."""
+    s = symbols
+    backing = s[f"sBox{current_box + 1}"]
+    return {"party_hp": sram_flat(s["sPokemonData"].bank, s["sPokemonData"].address)
+            + s["wPartyMon1HP"].address - s["wPokemonData"].address,
+            "dump_party_hp": s["wPartyMon1HP"].address - s["wPartyCount"].address,
+            "active": sram_flat(s["sBox"].bank, s["sBox"].address),
+            "length": s["sBoxEnd"].address - s["sBox"].address,
+            "backing": sram_flat(backing.bank, backing.address)}
 
 
-def verify_town(text: str, profile: dict, cartram: bytes, party_hp_flat: int) -> dict:
-    """The town run: the idle-hold writes, every window, and the flushed SaveRAM carrying the written
-    party HP (sPokemonData) and the deposit in BOTH the active sBox and its native SaveBox backing slot."""
+def run_record(text: str) -> dict:
     assert "RESULT: PASS" in text.splitlines()[-1], text[-2000:]
-    write, windows = live.tag_json(text, "U2_WRITE"), live.tag_json(text, "U2_WINDOWS")
-    save = live.tag_json(text, "U2_SAVE")
-    party, box = write["party"], write["box"]
-    before = int(party["before_hex"], 16)
-    assert int(party["written_hex"], 16) == before - 1 and party["readback_hex"] == party["written_hex"], party
-    assert party["address"] == profile["ram"]["wPartyMon1HP"] and party["offset"] == profile["constants"]["MON_HP"]
-    derived = profile["derived"]
-    assert box["owner"] == "active" and box["flat"] == derived["active_box_flat"], box
-    assert box["length"] == derived["active_box_copy_length"] and box["readback_hex"] == box["after_hex"], box
-    assert box["count_after"] == box["count_before"] + 1, box
-    assert box["backing_flat"] == profile["storage_boxes"][box["current_box"]]["flat"], box
-    verify_windows(windows, TOWN_WINDOWS)
-    if "save_paused" in windows:
-        verify_windows(windows, SAVE_WINDOW)
-    save_window = "refused" if "save_paused" in windows else "MODEL_ONLY"
-    # PYDEC-independent persistence: raw offsets in the flushed file.
+    run = live.tag_json(text, "U2_RUN")
+    assert run["result"] == "PASS", run["result"]
+    return run
+
+
+def verify_liveness(run: dict, primary: dict) -> None:
+    """Accepted holds at the MEASURED checkpoint PC/hROMBank, and a fresh one after every window."""
+    pc, bank = primary["execution_before"]["pc"], primary["execution_before"]["bank"]
+    hits = run["liveness"]["hits"]
+    assert run["liveness"]["accepted"] >= 1 and hits, "no accepted checkpoint hold"
+    assert all((hit["pc"], hit["bank"]) == (pc, bank) for hit in hits), ("accepted off the checkpoint", hits)
+    at: dict = {}
+    for entry in run["phases"]:
+        at.setdefault(entry["phase"], entry["accepted"])
+    for before, after in REACQUIRE[run["mode"]]:
+        assert before in at and after in at and at[after] > at[before], \
+            (f"no fresh accepted hold between {before} and {after}", at)
+
+
+def verify_town(text: str, primary: dict, symbols, cartram: bytes, staged: bytes) -> dict:
+    """The town run: the idle-hold writes and the flushed SaveRAM carrying the written party HP and the
+    deposit in BOTH the active sBox and its backing slot, which the staged fixture did not hold yet."""
+    run = run_record(text)
+    verify_liveness(run, primary)
+    party, box = run["write"]["party"], run["write"]["box"]
+    off = offsets(symbols, box["current_box"])
+    assert (box["flat"], box["length"], box["backing_flat"]) == (off["active"], off["length"], off["backing"]), \
+        ("profile box offsets disagree with the pinned .sym", box, off)
+    written, after = bytes.fromhex(party["written_hex"]), bytes.fromhex(box["after_hex"])
+    hp, active, backing, n = off["party_hp"], off["active"], off["backing"], off["length"]
+    assert staged[hp:hp + 2] != written, "saved party HP already held the written value before the run"
+    assert staged[active:active + n] != after, "active sBox already held the deposit before the run"
+    assert staged[backing:backing + n] != after, "backing box slot already held the deposit before the run"
     cart = cartram[:CART_RAM_BYTES]
-    assert len(cart) == CART_RAM_BYTES and hashlib.sha256(cart).hexdigest() == save["cartram_sha256"], \
+    assert len(cart) == CART_RAM_BYTES and hashlib.sha256(cart).hexdigest() == run["save"]["cartram_sha256"], \
         "flushed SaveRAM differs from the post-save CartRAM the gate hashed"
-    assert cart[party_hp_flat:party_hp_flat + 2].hex() == party["written_hex"], "party HP not saved"
-    after = bytes.fromhex(box["after_hex"])
-    active, backing = box["flat"], box["backing_flat"]
-    assert cart[active:active + len(after)] == after, "active sBox lost the deposit across the native save"
-    assert cart[backing:backing + len(after)] == after, "native SaveBox did not copy the external sBox write"
-    bus = box["bus"]
-    return {"write": write, "windows": windows, "save_window": save_window,
-            "start_menu_predicates_pass": windows["start_menu"]["failing"] == [],
-            "sram_closed_bus_view": {"address": bus["address"], "bus": bus["value"], "cartram": bus["cartram_value"]},
-            "cartram": {"visible": True, "survived_native_save": True}}
+    assert cart[hp:hp + 2] == written, "party HP not saved"
+    assert cart[active:active + n] == after, "active sBox lost the deposit across the native save"
+    assert cart[backing:backing + n] == after, "native SaveBox did not copy the external sBox write"
+    return run
 
 
-def verify_reload(text: str, profile: dict, town: dict) -> None:
-    """The cold reload of the town run's save: party HP and the deposit are back through CONTINUE."""
-    assert "RESULT: PASS" in text.splitlines()[-1], text[-2000:]
-    dump = live.tag_json(text, "DUMP")
+def verify_reload(text: str, primary: dict, symbols, town: dict, candidate: bytes) -> dict:
+    """The cold reload of the town run's flushed save. The current box lives in SRAM, so CONTINUE runs no
+    LoadBox: this proves the cold-booted CartRAM (hashed before the first frame) still holds both box copies
+    and the party HP after the game loaded and ran on it."""
+    run = run_record(text)
+    verify_liveness(run, primary)
+    assert run["fixture_sha256"] == hashlib.sha256(candidate).hexdigest(), "reload ran on another file"
+    assert run["boot_cartram_sha256"] == hashlib.sha256(candidate[:CART_RAM_BYTES]).hexdigest() \
+        == town["save"]["cartram_sha256"], "reload did not cold-boot the town run's flushed CartRAM"
     party, box = town["write"]["party"], town["write"]["box"]
-    ram = profile["ram"]
-    offset = (ram["wPartyMon1HP"] - ram["wPartyCount"]) * 2
-    assert dump["party"]["address"] == ram["wPartyCount"], dump["party"]
-    assert dump["party"]["hex"][offset:offset + 4] == party["written_hex"], "party HP did not survive the reload"
-    cart = bytes.fromhex(dump["cartram"]["hex"])
-    after = bytes.fromhex(box["after_hex"])
-    assert cart[box["flat"]:box["flat"] + len(after)] == after, "deposit did not survive the reload (LoadBox)"
+    off = offsets(symbols, box["current_box"])
+    dump = live.tag_json(text, "DUMP")
+    assert dump["party"]["address"] == symbols["wPartyCount"].address, dump["party"]
+    at = off["dump_party_hp"] * 2
+    assert dump["party"]["hex"][at:at + 4] == party["written_hex"], "party HP did not survive the reload"
+    cart, after, n = bytes.fromhex(dump["cartram"]["hex"]), bytes.fromhex(box["after_hex"]), off["length"]
+    assert cart[off["active"]:off["active"] + n] == after, "active sBox lost the deposit across the reload"
+    assert cart[off["backing"]:off["backing"] + n] == after, "backing box slot lost the deposit across the reload"
+    return run
 
 
-def verify_battle(text: str) -> dict:
-    assert "RESULT: PASS" in text.splitlines()[-1], text[-2000:]
-    windows = live.tag_json(text, "U2_WINDOWS")
-    verify_windows(windows, BATTLE_WINDOWS)
-    write = windows["battle"]["write"]
+def verify_battle(text: str, primary: dict) -> dict:
+    run = run_record(text)
+    verify_liveness(run, primary)
+    write = run["windows"]["battle"]["write"]
     assert write["faint_refused"] is True and "active faint timing is not qualified" in write["faint_reason"], write
-    model = live.tag_json(text, "U2_BATTLE_MODEL")
-    assert model["active_slot"] == write["slot"], model
-    return {"windows": windows, "model": model}
+    assert run["battle_model"]["active_slot"] == write["slot"], run["battle_model"]
+    return run
 
 
-def build_receipt(title: str, pack: dict, town: dict, battle: dict, *, fixtures: dict) -> dict:
-    """The PHYSICAL receipt lua/gen2_write_safety.lua M.qualified accepts: the exact checkpoint rows
-    proved, each control's verdict, the save-window verdict and the save/reload persistence proof."""
-    return {"schema": RECEIPT_SCHEMA, "evidence_level": "PHYSICAL", "result": "PASS", "title": title,
-            "rom_sha1": pack["source"]["rom_sha1"], "pack_commit": pack["source"]["commit"],
-            "checkpoint": pack["titles"][title]["primary"],
-            "controls": {"idle_party_write": "authorized", "idle_box_write": "authorized",
-                         "start_menu": "refused", "script_text": "refused", "mid_warp": "refused",
-                         "battle_party_write": "refused"},
-            "mechanisms": {"start_menu": "anchor OWPlayerInput not reached (the 15 predicates "
-                           + ("all pass)" if town["start_menu_predicates_pass"] else "do not all pass)"),
-                           "script_text": sorted(town["windows"]["script_text"]["failing"]),
-                           "mid_warp": sorted(town["windows"]["mid_warp"]["failing"]),
-                           "battle_party_write": sorted(battle["windows"]["battle"]["failing"]),
-                           "battle_active_ko": "MODEL: must target wBattleMonHP (UpdateBattleMonInParty)"},
-            "save_window": town["save_window"], "persisted": True,
-            "cartram_external_write": {**town["cartram"], "survived_cold_reload": True,
-                                       "sram_closed_bus_view": town["sram_closed_bus_view"]},
-            "fixtures": fixtures, "input_mode": "normal_buttons", "harness_write_scopes": ["TEST-ONLY"]}
+def build_receipt(title: str, pack: dict, runs: dict) -> dict:
+    """The receipt M.qualified checks: the pack binding, the exact checkpoint rows and the three gate run
+    records as printed (their evidence_level is the gate's own), plus the covered controls."""
+    return {"schema": RECEIPT_SCHEMA, "title": title, "rom_sha1": pack["source"]["rom_sha1"],
+            "pack_commit": pack["source"]["commit"], "checkpoint": pack["titles"][title]["primary"],
+            "runs": runs, "covered_controls": list(COVERED_CONTROLS)}
+
+
+def _module():
+    from lupa.lua54 import LuaRuntime
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    return lua, lua.eval("dofile")((REPO / "lua/gen2_write_safety.lua").as_posix())
 
 
 def lua_qualified(pack: dict, title: str, receipt: dict):
-    """lua/gen2_write_safety.lua M.qualified on the receipt, through lupa (the production check)."""
-    from lupa.lua54 import LuaRuntime
-    lua = LuaRuntime(unpack_returned_tuples=True)
-    module = lua.eval("dofile")((REPO / "lua/gen2_write_safety.lua").as_posix())
+    """lua/gen2_write_safety.lua M.qualified (the production check): (scope dict, None) or (None, why)."""
+    lua, module = _module()
     result = module.qualified(lua.table_from(pack, recursive=True), title, lua.table_from(receipt, recursive=True))
+    scope, why = result if isinstance(result, tuple) else (result, None)
+    if scope is None:
+        return None, why
+    return {"kinds": sorted(scope.kinds.keys()), "covered": list(scope.covered.values()),
+            "uncovered": list(scope.uncovered.values())}, None
+
+
+def lua_bind(receipt: dict, reports: dict):
+    """lua/gen2_write_safety.lua M.bind_fixture_qualification: (True, None) or (None, why)."""
+    lua, module = _module()
+    result = module.bind_fixture_qualification(lua.table_from(receipt, recursive=True),
+                                               lua.table_from(reports, recursive=True))
     return result if isinstance(result, tuple) else (result, None)
 
 
 # --- the live gate ------------------------------------------------------------------------------
 
 
-def _run(spec, fixture: Path, staged: bytes, mode: str, lane: str):
+def _run(spec, fixture: Path, staged: bytes, mode: str, lane: str, qualification_attempt_id: str):
     from run_gb_gate import run_gate
     env = live.inspect_env(spec, staged)
-    env["SLINK_GEN2_U2"] = json.dumps({"mode": mode})
+    case = json.loads(env["SLINK_GEN2_FIXTURE_CASE"])
+    case["attempt_id"] = f"u2-{lane}"   # one attempt id per run (M.qualified requires them distinct)
+    env["SLINK_GEN2_FIXTURE_CASE"] = json.dumps(case)
+    env["SLINK_GEN2_U2"] = json.dumps({"mode": mode, "qualification_attempt_id": qualification_attempt_id})
     directory = REPO / ".cache/gen2-fixtures/u2-write-windows" / lane
     passed, path, text = run_gate(GATE, rom_key=spec.title, target=spec.target, timeout=1500,
                                   saveram_dir=str(directory), fixture_path=str(fixture), speed_percent=300,
@@ -190,40 +215,46 @@ def test_write_windows(title, emuhawk):  # noqa: F811 - pytest fixture
                   or live.receipt_missing_reason(spec.name))
         if reason:
             pytest.skip(reason)
-    fixtures, staged = {}, {}
+    staged, reports = {}, {}
     for spec in (town_spec, battle_spec):
-        path = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
-        staged[spec.name] = path.read_bytes()
+        staged[spec.name] = (REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM").read_bytes()
         live.qualified_identity(spec.name, staged[spec.name])   # the staged bytes are the qualified candidate
-        fixtures[spec.name] = hashlib.sha256(staged[spec.name]).hexdigest()
-    profile = json.loads((REPO / f"data/games/gen2_{title}/profile.json").read_text(encoding="utf-8"))["titles"][title]
+        reports[spec.name] = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json")
+                                        .read_text(encoding="utf-8"))
     pack = json.loads((REPO / f"data/games/gen2_{title}/write_checkpoint.json").read_text(encoding="utf-8"))
-    ctx = gen2_source_data.load_context(title, root=REPO)
-    pokemon = ctx.symbols["sPokemonData"]
-    hp_flat = sram_flat(pokemon.bank, pokemon.address) + profile["ram"]["wPartyMon1HP"] - profile["ram"]["wPokemonData"]
+    primary = pack["titles"][title]["primary"]
+    symbols = gen2_source_data.load_context(title, root=REPO).symbols
+    town_q = reports[town_spec.name]["attempt_id"]
 
     town_fixture = REPO / "tests/fixtures/gen2" / f"{town_spec.name}.SaveRAM"
-    directory, text = _run(town_spec, town_fixture, staged[town_spec.name], "town", f"{title}_town")
+    directory, text = _run(town_spec, town_fixture, staged[town_spec.name], "town", f"{title}_town", town_q)
     from run_gb_gate import describe_gen2
     saved = directory / describe_gen2(title)["saveram_name"]
-    town = verify_town(text, profile, saved.read_bytes(), hp_flat)
+    town = verify_town(text, primary, symbols, saved.read_bytes(), staged[town_spec.name])
 
     candidate = REPO / ".cache/gen2-fixtures/u2-write-windows" / f"{title}_town.reload_candidate.SaveRAM"
     shutil.copyfile(saved, candidate)
-    _, text = _run(town_spec, candidate, candidate.read_bytes(), "reload", f"{title}_town_reload")
-    verify_reload(text, profile, town)
+    _, text = _run(town_spec, candidate, candidate.read_bytes(), "reload", f"{title}_town_reload", town_q)
+    reload = verify_reload(text, primary, symbols, town, candidate.read_bytes())
 
     battle_fixture = REPO / "tests/fixtures/gen2" / f"{battle_spec.name}.SaveRAM"
-    _, text = _run(battle_spec, battle_fixture, staged[battle_spec.name], "battle", f"{title}_battle")
-    battle = verify_battle(text)
+    _, text = _run(battle_spec, battle_fixture, staged[battle_spec.name], "battle", f"{title}_battle",
+                   reports[battle_spec.name]["attempt_id"])
+    battle = verify_battle(text, primary)
     for spec in (town_spec, battle_spec):
         assert (REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM").read_bytes() == staged[spec.name], \
             f"{spec.name} changed while the gates ran"
 
-    receipt = build_receipt(title, pack, town, battle, fixtures=fixtures)
-    accepted, why = lua_qualified(pack, title, receipt)
-    assert accepted is True, why
+    receipt = build_receipt(title, pack, {"town": town, "reload": reload, "battle": battle})
+    scope, why = lua_qualified(pack, title, receipt)
+    assert scope is not None, why
+    bound, why = lua_bind(receipt, reports)
+    assert bound is True, why
+    if title == "gold":
+        silver = json.loads((REPO / "data/games/gen2_silver/write_checkpoint.json").read_text(encoding="utf-8"))
+        assert lua_qualified(silver, "silver", receipt)[0] is not None
     receipt_path(title).write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"{title}: write kinds {scope['kinds']}; covered {scope['covered']}; OPEN {scope['uncovered']}")
 
 
 @pytest.fixture(scope="module")

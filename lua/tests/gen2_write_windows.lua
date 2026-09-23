@@ -15,24 +15,29 @@
   ONLY inside an accepted hold. Inputs are normal buttons: 12-frame HOLD menu presses, overworld
   walking holds a direction per frame (a walk step is 8 frames).
 
-  Modes (SLINK_GEN2_U2 = {"mode": ...}):
+  Modes (SLINK_GEN2_U2 = {"mode": ..., "qualification_attempt_id": <the fixture's qualification attempt>}):
     town    <title>_town (Elm's lab). idle: party HP-1 (writes.lua) + a current-box deposit of the lead
             mon into the AUTHORITATIVE sBox copy in CartRAM (boxes.lua, owner "active"), both in one
-            accepted hold, with the SRAM-closed bus view recorded. Then START menu (refused: the anchor
-            does not fire; the 15 predicates are recorded), Elm's script text box (refused:
-            wScriptRunning/wScriptFlags), a native SAVE (wGameLogicPaused window if the frame end sees
-            it), SaveRAM flushed, then the lab exit warp (refused: wMapStatus) and liveness in New Bark.
-    reload  the town run's flushed SaveRAM, cold-booted: CONTINUE, liveness, DUMP (party + CartRAM).
+            accepted hold, with the SRAM-closed bus view recorded. Then START menu (refused by
+            wScriptRunning/wScriptMode, and the OWPlayerInput anchor stays silent inside it), Elm's
+            script text box (wScriptRunning/wScriptMode/wScriptFlags), a native SAVE (the
+            wGameLogicPaused window, 62+ frames: REQUIRED), SaveRAM flushed, then the lab exit warp
+            (wMapStatus) and liveness in New Bark.
+    reload  the town run's flushed SaveRAM, cold-booted: its CartRAM hash before any frame, CONTINUE,
+            liveness, the persisted party HP + active/backing box bytes, DUMP (party + CartRAM).
     battle  <title>_battle (Route 29 grass): liveness, walk the grass until a wild battle (bounded), the
-            battle window (refused: wBattleMode; a party-only write to the ACTIVE slot is refused and
-            faint_party_slot refuses the active slot -- UpdateBattleMonInParty copies the battle struct
-            back, so an in-battle KO must target wBattleMonHP: MODEL-only, recorded as U2_BATTLE_MODEL),
+            battle window (wBattleMode; faint_party_slot refuses the active slot -- UpdateBattleMonInParty
+            copies the battle struct back, so an in-battle KO must target wBattleMonHP: MODEL-only),
             RUN, liveness after the battle.
-  A window's accepted anchor hits count only for frames whose START and END both lie inside the window
-  (a hold accepted just before a warp begins is idle by construction).
+  Per window the RAW mechanism is recorded: frames, frames open at BOTH edges (only their anchor hits
+  count: a hold accepted just before a warp begins is idle by construction), raw in-bank anchor hits and
+  inspect_candidate's refusal reasons at them, accepted holds, the failing-predicate set of every frame,
+  and a party write attempted outside any hold with its before/after bytes (the permit refuses it: the
+  authority is an accepted hold, so the window's own evidence is the hits + predicates above).
 
-  Printed (JSON after the tag): U2_WRITE, U2_WINDOWS, U2_LIVENESS, U2_SAVE, U2_BATTLE_MODEL, U2_PHASES,
-  DUMP (reload). tests/live/test_gen2_write_windows.py re-derives the verdict and writes the receipt.
+  Printed: U2_RUN <json> (the run record lua/gen2_write_safety.lua M.run_problem/M.qualified recompute;
+  evidence_level PHYSICAL only from this file's own BizHawk entry, MODEL under any library caller) and
+  DUMP (reload). tests/live/test_gen2_write_windows.py re-derives it and assembles the receipt.
 --]]
 local U = {}
 U.RESULT = "patch/build/gen2_write_windows_result.txt"
@@ -287,7 +292,10 @@ function U.inspect_gate(root)
     return IG
 end
 
+local live_api   -- set only by this file's own BizHawk entry below; a library caller cannot claim it
+
 function U.main(api, getenv, SG, IG)
+    local evidence = (live_api ~= nil and api == live_api) and "PHYSICAL" or "MODEL"
     local root = getenv("SLINK_ROOT") or SLINK_ROOT or "."
     local lines, failures = {}, 0
     local function log(s)
@@ -313,6 +321,8 @@ function U.main(api, getenv, SG, IG)
         assert(c.qualify ~= nil and c.qualify.stage == "boot", "SLINK_GEN2_QUALIFY stage \"boot\" required")
         c.u2 = assert(c.json.decode(assert(getenv("SLINK_GEN2_U2"), "SLINK_GEN2_U2 missing")))
         assert(U.MODES[c.u2.mode] == c.case.target, "U2 mode does not fit the fixture target")
+        assert(type(c.u2.qualification_attempt_id) == "string" and c.u2.qualification_attempt_id ~= "",
+               "SLINK_GEN2_U2 qualification_attempt_id missing")
         return c
     end)
     if not check("environment, facts, profile and running ROM/CGB bound", ok, not ok and ctx or nil) then
@@ -356,10 +366,12 @@ function U.main(api, getenv, SG, IG)
         })
 
     -- The ONLY authority for a harness write: an accepted hold, inside the checkpoint callback.
-    local in_hold = false
+    -- Every byte written is charged to the harness scope armed around it (the run record lists them).
+    local in_hold, scope_now, wrote_scopes = false, nil, {}
+    local function charge() wrote_scopes[tostring(scope_now)] = true end
     local lifetime = {capture=api.framecount, valid=function(token) return token == api.framecount() end}
     local writes = Writes.new(profile, {
-        write_u8=function(addr, value, domain) api.write_u8(addr, value, domain) end,
+        write_u8=function(addr, value, domain) charge(); api.write_u8(addr, value, domain) end,
         bank_valid=function(b, addr, n)
             if addr >= 0xC000 and addr + n <= 0xD000 then return b == 0 end
             return addr >= 0xD000 and addr + n <= 0xE000 and b == effective_wram_bank()
@@ -371,7 +383,7 @@ function U.main(api, getenv, SG, IG)
         })
     local flat, length = profile.derived.active_box_flat, profile.derived.active_box_copy_length
     local box_permit = Permit.new({
-        write_u8=function(addr, value) api.write_u8(addr, value, "CartRAM") end,
+        write_u8=function(addr, value) charge(); api.write_u8(addr, value, "CartRAM") end,
         domains={CartRAM={bounds=function(addr, n) return addr >= flat and addr + n <= flat + length end,
             mapped=function() return in_hold end, pointer_stable=function() return true end}},
         lifetime=lifetime,
@@ -393,7 +405,8 @@ function U.main(api, getenv, SG, IG)
         end,
         execute=function(_, spans)
             local span = spans[1]
-            box_permit:scope("u2-test-box-write", nil, function()
+            scope_now = "u2-test-box-write"
+            box_permit:scope(scope_now, nil, function()
                 box_permit:write_batch({{domain="CartRAM", addr=span.address, bytes=span.bytes}})
             end)
             return {status="written", completed=#span.bytes}
@@ -409,11 +422,14 @@ function U.main(api, getenv, SG, IG)
         local value = hp[1] * 256 + hp[2]
         assert(value >= 2, "lead mon HP below 2")
         local written = {(value - 1) // 256, (value - 1) % 256}
-        writes:arm("u2-test-party-write")
+        scope_now = "u2-test-party-write"
+        writes:arm(scope_now)
         writes:write_party_bytes(0, c.MON_HP, written)
         writes:disarm()
         local cur, saved = ctx.sym("wCurBox")[1], ctx.sym("wSavedAtLeastOnce")[1]
         local before = api.read_range(flat, length, "CartRAM")
+        local backing = profile.storage_boxes[cur + 1].flat
+        local backing_before = api.read_range(backing, length, "CartRAM")
         local bus_address = 0xA000 + flat % 0x2000
         local bus_value = api.read_u8(bus_address, "System Bus")
         local record = ctx.sym("wPartyMon1", 0, 32)
@@ -426,33 +442,43 @@ function U.main(api, getenv, SG, IG)
                     bank=profile.ram_bank.wPartyMon1HP, before_hex=hex(hp), written_hex=hex(written),
                     readback_hex=hex(ctx.sym("wPartyMon1HP", 0, 2))},
                 box={current_box=cur, saved_at_least_once=saved, flat=flat, length=length,
-                    backing_flat=profile.storage_boxes[cur + 1].flat, owner=plan.owner,
+                    backing_flat=backing, backing_before_hex=hex(backing_before), owner=plan.owner,
                     count_before=before[1], count_after=plan.after[1], before_hex=hex(before),
                     after_hex=hex(plan.after), readback_hex=hex(api.read_range(flat, length, "CartRAM")),
                     bus={address=bus_address, value=bus_value, cartram_value=before[1]}}}
     end
 
+    -- reload: the cold-booted CartRAM, hashed before the first emulated frame of this run.
+    local boot_digest = mode == "reload" and SG.cart_digest(api) or nil
     local arrived, detail, state = IG.arrive(ctx, SG)
     if not check("post-CONTINUE overworld arrival", arrived, detail) then
         state.release()
         return finish("no arrival")
     end
 
-    local rec = {accepted=0, seen=0, other_bank=0, refused=0, reasons={}, distinct=0, windows={}, order={}, errors={},
-                 pending=mode == "town", write=nil, prev=nil}
+    local rec = {accepted=0, raw=0, seen=0, seen_raw=0, other_bank=0, refused=0, reasons={}, distinct=0,
+                 frame_reasons={}, hits={}, windows={}, order={}, errors={}, pending=mode == "town", write=nil, prev=nil}
+    local function bounded(into, reason, n)   -- at most 16 distinct reasons per histogram
+        local distinct = 0
+        for _ in pairs(into) do distinct = distinct + 1 end
+        if into[reason] ~= nil or distinct < 16 then into[reason] = (into[reason] or 0) + (n or 1) end
+    end
     local function on_checkpoint()
         local fine, err = pcall(function()
-            if api.read_u8(HROM, "System Bus") ~= bank then rec.other_bank = rec.other_bank + 1; return end
+            local hit_bank = api.read_u8(HROM, "System Bus")
+            if hit_bank ~= bank then rec.other_bank = rec.other_bank + 1; return end
+            rec.raw = rec.raw + 1
             local report = checkpoint:inspect_candidate()
             if report.candidate_match ~= true then
                 rec.refused = rec.refused + 1
-                if rec.reasons[report.reason] or rec.distinct < 16 then   -- bounded distinct reasons
-                    if not rec.reasons[report.reason] then rec.distinct = rec.distinct + 1 end
-                    rec.reasons[report.reason] = (rec.reasons[report.reason] or 0) + 1
-                end
+                bounded(rec.reasons, report.reason)
+                bounded(rec.frame_reasons, report.reason)
                 return
             end
             rec.accepted = rec.accepted + 1
+            if #rec.hits < 8 then   -- MEASURED PC register and hROMBank byte, never the pack echo
+                rec.hits[#rec.hits + 1] = {frame=api.framecount(), pc=api.register("PC"), bank=hit_bank}
+            end
             if rec.pending then
                 rec.pending, in_hold = false, true
                 local wrote, result = pcall(idle_write, api.framecount(), report.reason)
@@ -465,28 +491,31 @@ function U.main(api, getenv, SG, IG)
     end
     local handle = api.on_bus_exec(on_checkpoint, primary.execution_before.pc, "SLink-gen2-u2-checkpoint", "System Bus")
 
-    -- A refused-write attempt outside any hold, through the SAME writer and authorize policy.
+    -- A party write attempted outside any hold, through the SAME writer and authorize policy, with the
+    -- slot's HP bytes before and after (a byte-level control; the window's authority evidence is its
+    -- anchor hits and failing predicates).
     local function attempt(window, slot, battle)
         local base = profile.ram.wPartyMon1HP + slot * profile.constants.PARTYMON_STRUCT_LENGTH - profile.ram.wPartyMon1
-        local before = ctx.sym("wPartyMon1", base, 2)
+        local before = hex(ctx.sym("wPartyMon1", base, 2))
+        scope_now = "u2-negative-" .. window
         local wrote, why = pcall(function()
-            writes:arm("u2-negative-" .. window)
+            writes:arm(scope_now)
             writes:write_party_bytes(slot, profile.constants.MON_HP, {0, 1})
         end)
         writes:disarm()
-        local out = {slot=slot, refused=not wrote, reason=tostring(why),
-                     party_unchanged=hex(ctx.sym("wPartyMon1", base, 2)) == hex(before)}
+        local out = {slot=slot, refused=not wrote, reason=tostring(why), before_hex=before}
         if battle then
             local snapshot = {mode=ctx.sym("wBattleMode")[1], link_mode=pred_read(rows.wLinkMode.address),
                               battle_type=ctx.sym("wBattleType")[1], active_slot=slot}
+            scope_now = "u2-negative-battle-faint"
             local fainted, faint_why = pcall(function()
-                writes:arm("u2-negative-battle-faint")
+                writes:arm(scope_now)
                 writes:faint_party_slot(slot, snapshot)
             end)
             writes:disarm()
             out.faint_refused, out.faint_reason = not fainted, tostring(faint_why)
-            out.party_unchanged = out.party_unchanged and hex(ctx.sym("wPartyMon1", base, 2)) == hex(before)
         end
+        out.after_hex = hex(ctx.sym("wPartyMon1", base, 2))
         return out
     end
 
@@ -506,19 +535,27 @@ function U.main(api, getenv, SG, IG)
     -- open at both ends of that frame.
     local function account(phase, point)
         local name = U.window_for(phase, point)
-        local hits = rec.accepted - rec.seen
-        rec.seen = rec.accepted
-        if name and rec.prev == name then rec.windows[name].accepted = rec.windows[name].accepted + hits end
+        local accepted, raw, reasons = rec.accepted - rec.seen, rec.raw - rec.seen_raw, rec.frame_reasons
+        rec.seen, rec.seen_raw, rec.frame_reasons = rec.accepted, rec.raw, {}
+        local both = name ~= nil and rec.prev == name
         rec.prev = name
         if not name then return end
         local w = rec.windows[name]
         if not w then
-            w = {frames=0, accepted=0, failing={}}
+            w = {frames=0, both_edges=0, raw=0, accepted=0, edge_raw=0, reasons={}, sets={}, set_order={}}
             rec.windows[name] = w
             rec.order[#rec.order + 1] = name
         end
         w.frames = w.frames + 1
-        for _, symbol in ipairs(Safety.failing_predicates(primary, pred_read)) do w.failing[symbol] = true end
+        if both then
+            w.both_edges, w.raw, w.accepted = w.both_edges + 1, w.raw + raw, w.accepted + accepted
+            for reason, n in pairs(reasons) do bounded(w.reasons, reason, n) end
+        else
+            w.edge_raw = w.edge_raw + raw   -- the opening frame: hits before the window began
+        end
+        local key = table.concat(Safety.failing_predicates(primary, pred_read), ",")
+        if not w.sets[key] then w.sets[key], w.set_order[#w.set_order + 1] = 0, key end
+        w.sets[key] = w.sets[key] + 1
         if w.write == nil and w.frames >= 2 then
             if name ~= "battle" then
                 w.write = attempt(name, 0, false)
@@ -556,8 +593,7 @@ function U.main(api, getenv, SG, IG)
                 SG.flush(ctx, digest)
                 local c = profile.constants
                 save = {frame=frame, saves=state.saves, cartram_sha256=digest, flushed=true,
-                        party_hp_hex=hex(ctx.sym("wPartyMon1HP", 0, 2)), mon_hp=c.MON_HP,
-                        paused_frames=rec.windows.save_paused and rec.windows.save_paused.frames or 0}
+                        party_hp_hex=hex(ctx.sym("wPartyMon1HP", 0, 2)), mon_hp=c.MON_HP}
             end
         end)
     api.unregister(handle)
@@ -567,52 +603,50 @@ function U.main(api, getenv, SG, IG)
 
     local windows = {}
     for _, name in ipairs(rec.order) do
-        local w, failing = rec.windows[name], json.array({})
-        for symbol in pairs(w.failing) do failing[#failing + 1] = symbol end
-        table.sort(failing)
-        windows[name] = {frames=w.frames, accepted=w.accepted, failing=failing, write=w.write or json.null}
+        local w, sets = rec.windows[name], json.array({})
+        for _, key in ipairs(w.set_order) do
+            local symbols = json.array({})
+            for symbol in key:gmatch("[^,]+") do symbols[#symbols + 1] = symbol end
+            sets[#sets + 1] = {symbols=symbols, frames=w.sets[key]}
+        end
+        windows[name] = {frames=w.frames, both_edges=w.both_edges, raw=w.raw, accepted=w.accepted,
+                         edge_raw=w.edge_raw, refusals=json.object(w.reasons), failing_sets=sets,
+                         write=w.write or json.null}
     end
-    local reasons = {}
-    for reason, count in pairs(rec.reasons) do reasons[reason] = count end
-    log("U2_PHASES " .. json.encode(json.array(phases)))
-    log("U2_WINDOWS " .. json.encode(json.object(windows)))
-    log("U2_LIVENESS " .. json.encode({accepted=rec.accepted, refused=rec.refused, other_bank=rec.other_bank,
-        reasons=json.object(reasons), pc=primary.execution_before.pc, bank=bank}))
-    if rec.write then log("U2_WRITE " .. json.encode(rec.write)) end
-    if save then log("U2_SAVE " .. json.encode(save)) end
-    if model then log("U2_BATTLE_MODEL " .. json.encode(model)) end
-    if mode == "reload" and played then log("DUMP " .. json.encode(IG.dump(api, profile))) end
+    local scopes = json.array({})
+    for scope in pairs(wrote_scopes) do scopes[#scopes + 1] = scope end
+    table.sort(scopes)
+    local persist = json.null
+    if mode == "reload" and played then
+        local cur = ctx.sym("wCurBox")[1]
+        persist = {current_box=cur, party_hp_hex=hex(ctx.sym("wPartyMon1HP", 0, 2)),
+                   active_box_hex=hex(api.read_range(flat, length, "CartRAM")),
+                   backing_box_hex=hex(api.read_range(profile.storage_boxes[cur + 1].flat, length, "CartRAM"))}
+        log("DUMP " .. json.encode(IG.dump(api, profile)))
+    end
+    local run = {schema=Safety.RUN_SCHEMA, mode=mode, title=title, evidence_level=evidence, result="FAIL",
+        rom_sha1=ctx.env.rom_sha1, pack_commit=pack.source.commit, fixture=ctx.case.name,
+        fixture_sha256=ctx.qualify.stage_fingerprint, attempt_id=ctx.case.attempt_id,
+        qualification_attempt_id=ctx.u2.qualification_attempt_id, core_mode="CGB", input_mode="normal_buttons",
+        harness_write_scopes=scopes,
+        liveness={accepted=rec.accepted, raw=rec.raw, refused=rec.refused, other_bank=rec.other_bank,
+                  refusals=json.object(rec.reasons), hits=json.array(rec.hits)},
+        phases=json.array(phases), windows=json.object(windows), write=rec.write or json.null,
+        save=save or json.null, boot_cartram_sha256=boot_digest or json.null, persist=persist,
+        battle_model=model or json.null}
 
-    -- The gate's own verdict; tests/live/test_gen2_write_windows.py re-derives it independently.
-    local function window_ok(name, need_frames, symbols)
-        local w = windows[name]
-        if not check(name .. " window observed", w ~= nil and w.frames >= need_frames, w and w.frames) then return end
-        check(name .. ": no accepted checkpoint hold inside the window", w.accepted == 0, w.accepted)
-        check(name .. ": a party write attempt is refused by ownership and changes nothing",
-              w.write ~= json.null and w.write.refused and w.write.reason:find("ownership refused", 1, true) ~= nil
-              and w.write.party_unchanged, w.write ~= json.null and w.write.reason or "not attempted")
-        if symbols then
-            local hit = false
-            for _, symbol in ipairs(w.failing) do if symbols[symbol] then hit = true end end
-            check(name .. ": the stated predicate refuses the window", hit, table.concat(w.failing, ","))
+    -- The gate's own verdict: the SAME recomputation M.qualified runs on the receipt.
+    if played then
+        local problem = Safety.run_problem(run, mode, primary)
+        check("run record proves the " .. mode .. " controls", problem == nil, problem)
+        if mode == "battle" then
+            local w = windows.battle or {}
+            check("battle: faint_party_slot refuses the active slot as unqualified", type(w.write) == "table"
+                  and tostring(w.write.faint_reason):find("active faint timing is not qualified", 1, true) ~= nil)
         end
     end
-    if played and mode == "town" then
-        local w = rec.write or {}
-        check("idle hold wrote party HP and the current-box deposit", w.error == nil and w.party ~= nil
-              and w.party.readback_hex == w.party.written_hex and w.box.readback_hex == w.box.after_hex, w.error)
-        window_ok("start_menu", U.OBSERVE, nil)
-        window_ok("script_text", U.OBSERVE, {wScriptRunning=true, wScriptFlags=true})
-        window_ok("mid_warp", 1, {wMapStatus=true})
-        if windows.save_paused then window_ok("save_paused", 1, {wGameLogicPaused=true}) end
-        check("native save flushed", save ~= nil)
-    elseif played and mode == "battle" then
-        window_ok("battle", U.OBSERVE, {wBattleMode=true})
-        local w = windows.battle
-        check("battle: faint_party_slot refuses the active slot",
-              w and w.write ~= json.null and w.write.faint_refused
-              and w.write.faint_reason:find("active faint timing is not qualified", 1, true) ~= nil)
-    end
+    run.result = failures == 0 and "PASS" or "FAIL"
+    log("U2_RUN " .. json.encode(run))
     return finish()
 end
 
@@ -623,6 +657,7 @@ assert(ROOT, "SLINK_ROOT unset -- launch via tools/run_gb_gate.py")
 local IG = U.inspect_gate(ROOT)
 local SG = IG.scripted_gate(ROOT)
 local api = SG.bizhawk()
+live_api = api
 api.domains = function() return memory.getmemorydomainlist() end
 U.main(api, os.getenv, SG, IG)
 api.exit()
