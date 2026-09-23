@@ -2,9 +2,14 @@
 -- ROM offsets (not anchor.address) select bytes, including frame_control's slice.
 local S = {}
 local anchors = {"cb1_overworld", "cb2_overworld", "frame_control", "run_tasks", "try_saving_data"}
+-- The contract: this list defines both the checked SET of overworld predicates and the
+-- first-failure PRIORITY order (deliberate, not alphabetical) -- pack.predicates must match
+-- it exactly, checked both ways in overworld()'s preamble.
 local predicates = {"callback1", "callback2", "field_controls_locked", "in_battle",
     "link_callback", "link_transferring", "palette_fade_active",
     "link_players_received", "script_context_status", "soft_reset_disabled"}
+local known_predicates = {}
+for _, name in ipairs(predicates) do known_predicates[name] = true end
 local function uint(v, limit)
     assert(type(v) == "number" and v % 1 == 0 and v >= 0 and v <= limit, "unreadable integer")
     return v
@@ -72,6 +77,10 @@ function S.new(pack, deps, kind)
                 end
             end
             for _, name in ipairs(predicates) do assert(pack.predicates[name], "missing predicate: " .. name) end
+            -- Coverage guard: the clause loop below only walks the module's fixed list, so a
+            -- pack predicate NOT in that list would otherwise be silently skipped (never
+            -- evaluated, never refused) instead of refusing the whole checkpoint.
+            for name in sorted_pairs(pack.predicates) do assert(known_predicates[name], "unknown predicate: " .. name) end
         end)
         if not ok then self.last_clauses = {"pack"}; return false, tostring(result) end
         -- Every clause is evaluated (reads only), so the refusal names all of them.

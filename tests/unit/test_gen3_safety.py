@@ -147,6 +147,45 @@ def test_two_failed_predicates_report_the_same_reason_regardless_of_pairs_order(
     assert len(reasons) == 1, reasons
 
 
+def test_pairs_override_assumption_still_holds():
+    """The falsifier above only works because safety.lua resolves `pairs` as a plain global
+    (no `local pairs = pairs` alias) and the predicate loop walks the module's fixed
+    `predicates` list via ipairs. Pin both, so a future refactor that shadows `pairs` locally
+    doesn't silently turn the falsifier above into a no-op."""
+    src = (ROOT / "lua/gen3/safety.lua").read_text(encoding="utf-8")
+    assert "local pairs" not in src, \
+        "safety.lua now aliases pairs locally; the pairs-order falsifier above needs updating"
+    assert "ipairs(predicates)" in src, "predicate loop no longer walks the module's fixed list"
+
+
+def test_extra_predicate_not_in_the_module_list_still_refuses():
+    """C4-ORDER review fix (OMP ACCEPT-WITH-FIXES): switching the predicate loop to
+    ipairs(predicates) means a pack predicate NOT in the module's list is never visited by that
+    loop -- so with no reverse check it would be silently skipped (never evaluated, never
+    refused) instead of counted as an unknown predicate. Red on dc855dda (admitted); green once
+    the preamble asserts every pack.predicates name is in the module's known set."""
+    w = World()
+    pack = dict(w.pack)
+    pack["predicates"] = dict(w.pack["predicates"])
+    pack["predicates"]["zz_extra_predicate"] = {"address": 0x02020000, "offset": 0, "width": 1, "expect": 0}
+    module = w.lua.execute((ROOT / "lua/gen3/safety.lua").read_text(encoding="utf-8"))
+    safety = module.new(w.lua.table_from(pack, recursive=True), w.lua.globals().deps, "companion")
+    ok, why = safety.check(safety, None)
+    assert ok is False, why
+    assert list(safety.last_clauses.values()) == ["pack"], (why, list(safety.last_clauses.values()))
+
+
+def test_radical_red_extra_anchor_saveblocks_setter_is_verified():
+    """radical_red's pack carries an extra ROM anchor (saveblocks_setter) beyond the module's
+    fixed `anchors` list; sorted_pairs(pack.anchors) must still verify every key present in the
+    pack, not just the module's five, mirroring the predicate coverage guard above."""
+    w = World("radical_red", "companion")
+    anchor = w.pack["anchors"]["saveblocks_setter"]
+    good = bytes.fromhex(anchor["expected_hex"]["companion"])[0]
+    w.lua.globals().rom[anchor["rom_offset"]] = good ^ 0xFF
+    assert not w.check()
+
+
 @pytest.mark.parametrize("r15,cpsr", [(452, 16), (452, 18), (452, 63), (16384, 31)])
 def test_cpu_refuses_other_mode_thumb_or_unparked_pc(r15, cpsr):
     w = World()
