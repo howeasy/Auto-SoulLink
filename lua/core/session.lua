@@ -9,6 +9,7 @@
 --   S = Session.new{ net, json, hud, log, tag, player, game, identity, deferred }
 --   S.send(event, fields) -> bool       S:validate() -> ok, why       S:handle_command(cmd)
 --   S:start()  S:frame_end()  S:stop()  S:battle_pending_count()  S:drop_battle_writes(why)
+--   S:eligible() -> bool   may anything be POSTED/armed now (writes enabled, hello'd, connected)
 --   state the driver may read/set: writes_enabled, hello_sent, game_over, config, resolved_areas,
 --   seeded, pending_safe (set it on battle end; `safe` goes out once out of battle)
 --
@@ -22,7 +23,14 @@
 --     pre_pump() (before net.pump: Gen 1's panel service); on_disconnect(); after_receive()
 --     (pcall'd, before the deferred run: Gen 1's trade_tick); play_sound(gen3_se_id);
 --     commands = { [name] = fn(cmd) -> consumed? }; battle_write(entry, slot, mon, ending)
---       -> "done" | "hold", why | nil.
+--       -> "done" | "hold", why | nil; party_borrowed() -> bool (a borrowed party is in RAM:
+--     a force_* whose key is not in it is HELD, not dropped).
+--
+-- Nothing semantic precedes hello (docs/protocol.md §9 item 4): an event emitted while the
+-- connection has not sent its hello yet (a frame hook, a hello_fields side effect) is held in
+-- order and flushed right after the hello; a dropped connection drops the held events with it
+-- (item 3: nothing is buffered across a disconnect). Validation runs FIRST in the frame, before
+-- any driver service, so a pause decided this frame gates this frame's posts (S:eligible).
 --
 -- Command dispatch: noop; then game.commands[name] (returns true to CONSUME, false/nil to fall
 -- through -- how Gen 1's receptionist show_menu, RR's trade/native/rival/explode, Gen 1's
@@ -41,7 +49,8 @@
 -- pending key_change alias; rewritten to the new key on key_change_ack). When the battle ends
 -- each held entry gets one last battle_write(..., true); anything not "done" is deferred.
 -- Which frames a battle write may land on is the driver's safety predicate, never the core's.
-local Session = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, PENDING_HUD_FRAMES = 600 }
+local Session = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, PENDING_HUD_FRAMES = 600,
+                  MAX_PRE_HELLO = 64 }
 
 local CANCEL = { show_choices = { "menu_result", "choice", 127 }, show_menu = { "menu_result", "choice", 0 },
                  choose_mon = { "mon_chosen", "slot", 7 } }
@@ -62,11 +71,11 @@ function Session.new(p)
         player = p.player, seq = 0, frame = 0, hello_sent = false,
         writes_enabled = false, invalid_streak = 0, gate_revoked = false, game_over = false,
         resolved_areas = {}, seeded = false, config = {}, pending_safe = false,
-        battle_pending = {}, signals = nil, signal_failure_shown = false,
+        battle_pending = {}, pre_hello = {}, signals = nil, signal_failure_shown = false,
         game = game, identity = identity, deferred = deferred,
     }
 
-    local function send(name, fields)
+    local function transmit(name, fields)
         if not net.connected() then
             log("drop " .. name .. ": not connected")
             return false
@@ -77,7 +86,23 @@ function Session.new(p)
         net.send(json.encode(msg))
         return true
     end
+    local function send(name, fields)
+        if name ~= "hello" and not self.hello_sent and net.connected() then
+            local held = self.pre_hello
+            if #held >= Session.MAX_PRE_HELLO then
+                log("pre-hello hold full: dropped " .. tostring(held[1][1]))
+                table.remove(held, 1)
+            end
+            held[#held + 1] = { name, fields }
+            return true
+        end
+        return transmit(name, fields)
+    end
     self.send = send
+
+    function self:eligible()
+        return self.writes_enabled == true and self.hello_sent == true and net.connected() == true
+    end
     -- the queue's shared seams are the session's own unless the caller bound others
     deferred.send = deferred.send or send
     deferred.log = deferred.log or log
@@ -175,7 +200,13 @@ function Session.new(p)
         end
         local slot, _, _, why = identity:find_party_slot(cmd.key, party)
         if why then log(c .. ": " .. why .. " " .. tostring(cmd.key)) return end
-        if not slot then log(c .. ": key not in party " .. tostring(cmd.key)) return end
+        if not slot and not (game.party_borrowed and game.party_borrowed()) then
+            log(c .. ": key not in party " .. tostring(cmd.key))
+            return
+        end
+        -- a borrowed party hides the player's own: HOLD the command (the flush keeps it while
+        -- the key is absent and resolves it after the restore; battle end hands it to the
+        -- checkpoint queue), never drop it -- a server force_* is never resent
         if game.battle_write and game.in_battle() then
             self.battle_pending[#self.battle_pending + 1] = entry  -- flushed this frame
         else
@@ -209,10 +240,16 @@ function Session.new(p)
         elseif c == "unresolve_area" then
             self.resolved_areas[cmd.area_id] = nil
         elseif c == "key_change_ack" then
-            if identity:ack(cmd.old_key) and cmd.new_key then
-                -- the server now tracks the new key: held battle writes follow it
+            identity:ack(cmd.old_key)
+            if cmd.new_key and cmd.migrated ~= false then
+                -- the server migrated its records and queued commands old -> new: every command
+                -- still held here follows it (battle writes AND the checkpoint queue); a
+                -- replay (migrated = false) renamed nothing, so nothing is rewritten
                 for _, e in ipairs(self.battle_pending) do
                     if e.key == cmd.old_key then e.key = cmd.new_key end
+                end
+                for _, q in ipairs(deferred.items) do
+                    if q.key == cmd.old_key then q.key = cmd.new_key end
                 end
             end
         elseif c == "key_change_rejected" then
@@ -239,7 +276,11 @@ function Session.new(p)
     function self:send_hello()
         local f = game.hello_fields() or {}
         if f.writes_enabled == nil then f.writes_enabled = self.writes_enabled end
-        self.hello_sent = send("hello", f)
+        self.hello_sent = transmit("hello", f)
+        if not self.hello_sent then return end
+        local held = self.pre_hello
+        self.pre_hello = {}
+        for _, e in ipairs(held) do transmit(e[1], e[2]) end
     end
 
     function self:send_tick()
@@ -273,18 +314,20 @@ function Session.new(p)
 
     function self:frame_end()
         self.frame = game.frame()
+        -- validation first: a pause decided this frame already gates this frame's posts
+        if self.frame % Session.VALIDATE_EVERY == 0 then self:validate() end
         if game.pre_pump then game.pre_pump() end
         net.pump()
         local connected = net.connected()
         if not connected then
             self.hello_sent = false
+            self.pre_hello = {}
             if game.on_disconnect then game.on_disconnect() end
         end
         -- pump, THEN hello: the reconnect hello is the first line of a new connection
         -- (tests/unit/test_connector_reconnect.py:5-8)
         if connected and not self.hello_sent and game.hello_ready() then self:send_hello() end
         connected = connected and self.hello_sent
-        if self.frame % Session.VALIDATE_EVERY == 0 then self:validate() end
         local sigs = self.signals
         for _, sig in ipairs(sigs and sigs:drain() or {}) do
             local ok, err = pcall(game.on_signal, sig)

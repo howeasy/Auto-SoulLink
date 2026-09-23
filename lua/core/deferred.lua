@@ -12,6 +12,21 @@
 --   exec.memorialize(key, slot_hint)   -> true | nil, reason
 --   exec.stats_of(mon) -> stats table  (optional; default { level = m.level, maxHP = m.max_hp })
 --   exec.rescan()                      (optional; after a successful move)
+--   exec.write_count() -> int          (optional; bytes the sink has written so far -- tells a
+--                                      clean executor error from a partial mutation)
+--
+-- Queue hygiene (docs/protocol.md §9 item 31): a box_mon cancels a still-queued party_mon for
+-- the same key and vice versa (the NEW command stays: the server already cancelled the old
+-- one at queue time, state.py:2043-2046); a memorialize already queued for a key absorbs a
+-- duplicate, so a tail-retrying memorial is never multiplied.
+--
+-- An executor that THROWS still ends in a terminal keyed reply (items 28-30):
+--   nothing written (write_count unchanged)  -> a safe retry at the tail, EXEC_RETRIES times,
+--                                               then <cmd>_failed "executor error: ..."
+--   bytes written, or no write_count          -> <cmd>_failed "uncertain: partial write ...":
+--                                               never retried (the mutation may be half done)
+--   the executor already answered             -> nothing more (a throw after the reply)
+-- force_faint/force_explode have no reply on the wire: their errors are logged.
 -- send/log/hud/identity/read_party may be left out: Session.new binds its own (session.lua).
 --
 -- Gate: Q:run(gate, frame, game_over) asks gate() -> ok, why only when the queue is non-empty
@@ -30,9 +45,14 @@
 -- Can Gen 1 bind it unchanged? Its run_deferred body is this code with self.boxes:* and
 -- writes:faint_party_slot as the executors, box_count - 1 as memorial_box and
 -- rom.base_stats_for resolved inside its withdraw closure. Q.items is the plain array Gen 1
--- tests read as client.deferred (alias it). Only the stats_cache ordering above changes.
-local Deferred = {}
+-- tests read as client.deferred (alias it). Only the stats_cache ordering above changes; the
+-- queue hygiene and the executor-error replies are further deltas Gen 1 gains on re-bind.
+local Deferred = { EXEC_RETRIES = 3 }
 Deferred.__index = Deferred
+
+local OPPOSITE = { box_mon = "party_mon", party_mon = "box_mon" }
+local FAILED = { box_mon = "box_mon_failed", party_mon = "sync_retrieve_failed",
+                 memorialize = "memorialize_failed" }
 
 local EXEC = { "arm", "disarm", "faint_slot", "deposit", "withdraw", "memorialize" }
 
@@ -51,7 +71,23 @@ function Deferred.new(p)
                           hold = nil }, Deferred)
 end
 
-function Deferred:push(cmd) self.items[#self.items + 1] = cmd end
+function Deferred:push(cmd)
+    local log = self.log or function() end
+    local opp = OPPOSITE[cmd.cmd]
+    for i = #self.items, 1, -1 do
+        local q = self.items[i]
+        if q.key == cmd.key then
+            if opp and q.cmd == opp then
+                table.remove(self.items, i)
+                log(cmd.cmd .. " cancels the queued " .. opp .. " " .. tostring(cmd.key))
+            elseif cmd.cmd == "memorialize" and q.cmd == "memorialize" then
+                log("memorialize already queued " .. tostring(cmd.key))
+                return
+            end
+        end
+    end
+    self.items[#self.items + 1] = cmd
+end
 function Deferred:size() return #self.items end
 
 -- n, why, age (frames), head command name -- for the tick HUD line (PLAN §5.4). why is nil when
@@ -83,7 +119,8 @@ function Deferred:run(gate, frame, game_over)
     local function rescan() if exec.rescan then exec.rescan() end end
 
     local cmd = table.remove(self.items, 1)
-    local requeued
+    local requeued, settled
+    local function answer(event, fields) settled = true; return send(event, fields) end
     -- A retired alias (a rejected key_change) names the OLD key; the executor gets the key the
     -- cartridge holds and the evidence-validated slot. Evidence failure is TERMINAL for it: the
     -- executor's own key lookup would find whichever record carries the duplicated key.
@@ -93,11 +130,12 @@ function Deferred:run(gate, frame, game_over)
         local slot, _, _, why = find(cmd.key)
         hint, refused = slot, (not slot) and (why or "retired record not found") or nil
     end
+    local before = exec.write_count and exec.write_count()
     local ok, err = pcall(function()
         exec.arm()
         if refused and (cmd.cmd == "box_mon" or cmd.cmd == "memorialize") then
             log(cmd.cmd .. " refused for the retired key: " .. refused .. " " .. tostring(cmd.key))
-            send(cmd.cmd .. "_failed", { key = cmd.key, reason = refused })
+            answer(cmd.cmd .. "_failed", { key = cmd.key, reason = refused })
         elseif cmd.cmd == "force_faint" or cmd.cmd == "force_explode" then
             local slot, _, _, why = find(cmd.key)
             if slot then
@@ -113,6 +151,7 @@ function Deferred:run(gate, frame, game_over)
             local slot, mon = find(cmd.key)
             local stats = slot and (exec.stats_of or default_stats)(mon) or nil  -- BEFORE the move
             local done, reason = exec.deposit(phys, hint)
+            settled = true
             if not done then
                 send("box_mon_failed", { key = cmd.key, reason = reason or "deposit refused" })
                 show("X Box fail: " .. nick_label(cmd.key, mon and mon.nickname), 255, 80, 80, 240)
@@ -123,6 +162,7 @@ function Deferred:run(gate, frame, game_over)
             end
         elseif cmd.cmd == "party_mon" then
             local done, reason = exec.withdraw(cmd.key, cmd.stats, cmd.nickname)
+            settled = true
             if done then
                 send("sync_retrieve_done", { key = cmd.key })
                 rescan()
@@ -143,6 +183,7 @@ function Deferred:run(gate, frame, game_over)
         elseif cmd.cmd == "memorialize" then
             local _, mem_mon = find(cmd.key)
             local done, reason = exec.memorialize(phys, hint)
+            settled = true
             if done then
                 send("memorialize_done", { key = cmd.key, box = self.memorial_box })
                 rescan()
@@ -163,7 +204,24 @@ function Deferred:run(gate, frame, game_over)
         exec.disarm()
     end)
     exec.disarm()
-    if not ok then log("deferred " .. tostring(cmd.cmd) .. " failed: " .. tostring(err)) end
+    if not ok and not settled then
+        local wrote = before == nil or exec.write_count() ~= before
+        local tries = cmd.error_retries or 0
+        if not wrote and tries < Deferred.EXEC_RETRIES then
+            cmd.error_retries = tries + 1
+            self.items[#self.items + 1] = cmd
+            requeued = "executor error, nothing written"
+            log("deferred " .. tostring(cmd.cmd) .. " error (nothing written), retry " .. cmd.error_retries
+                .. "/" .. Deferred.EXEC_RETRIES .. ": " .. tostring(err))
+        else
+            local reason = (wrote and "uncertain: partial write before the error: " or "executor error: ")
+                           .. tostring(err)
+            log("deferred " .. tostring(cmd.cmd) .. " failed: " .. reason .. " " .. tostring(cmd.key))
+            if FAILED[cmd.cmd] then send(FAILED[cmd.cmd], { key = cmd.key, reason = reason }) end
+        end
+    elseif not ok then
+        log("deferred " .. tostring(cmd.cmd) .. " error after its reply: " .. tostring(err))
+    end
     if requeued then held(self, frame, requeued) else self.hold = nil end
     return true
 end

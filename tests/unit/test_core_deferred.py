@@ -31,7 +31,7 @@ MEMORIAL = 13
 class Queue:
     """The FIFO over a scripted executor. `timeline` interleaves exec calls and sends."""
 
-    def __init__(self, stats_of=False):
+    def __init__(self, stats_of=False, write_count=True):
         self.lua = L = lupa.LuaRuntime(unpack_returned_tuples=True)
         self.timeline: list[tuple] = []
         self.logs: list[str] = []
@@ -40,6 +40,9 @@ class Queue:
                       {"key": B, "slot": 1, "level": 9, "max_hp": 31, "nick": [2], "moves": [2]}]
         self.results: dict[str, list] = {"deposit": [], "withdraw": [], "memorialize": []}
         self.explode: set[str] = set()
+        self.partial: set[str] = set()     # executors that write a byte before throwing
+        self.throw_rescan = False
+        self.written = 0
         self.gate = (True, None)
         json_mod = L.eval(f'dofile("{JSON}")')
         send = L.eval("function(json, sink) return function(e, f) f = f or {}; f.event = e; "
@@ -53,8 +56,10 @@ class Queue:
             deposit=lambda k, h: self._exec("deposit", str(k), h),
             withdraw=lambda k, st, n: self._exec("withdraw", str(k)),
             memorialize=lambda k, h: self._exec("memorialize", str(k), h),
-            rescan=lambda: self.timeline.append(("rescan",)),
+            rescan=self._rescan,
         )
+        if write_count:
+            exec_.write_count = lambda: self.written
         if stats_of:
             exec_.stats_of = lambda m: L.table(level=m.level, maxHP=m.max_hp, attack=7)
         Deferred = L.eval(f'dofile("{DEFERRED}")')
@@ -74,8 +79,15 @@ class Queue:
                                            "nickname_bytes": L.table_from(m["nick"]),
                                            "moves": L.table_from(m["moves"])}) for m in self.party])
 
+    def _rescan(self):
+        self.timeline.append(("rescan",))
+        if self.throw_rescan:
+            raise RuntimeError("rescan blew up")
+
     def _exec(self, name, *args):
         self.timeline.append((name,) + args)
+        if name in self.partial:
+            self.written += 1
         if name in self.explode:
             raise RuntimeError(f"{name} blew up")
         if name == "faint_slot":
@@ -166,6 +178,79 @@ def test_an_executor_that_throws_is_logged_disarmed_and_does_not_stop_the_queue(
     assert any("box_mon" in line and "blew up" in line for line in q.logs)
     q.run(2)
     assert q.calls("faint_slot") == [("faint_slot", 1)]
+
+
+# -- MAJOR 5 (C4-2d): an executor exception still ends in a terminal keyed reply ------------
+
+@pytest.mark.parametrize("cmd,event", [("box_mon", "box_mon_failed"), ("party_mon", "sync_retrieve_failed"),
+                                       ("memorialize", "memorialize_failed")])
+def test_a_clean_executor_error_retries_then_fails_terminally(cmd, event):
+    q = Queue()
+    q.explode = {"deposit", "withdraw", "memorialize"}
+    q.push(cmd=cmd, key=A)
+    q.drain(10)
+    name = {"box_mon": "deposit", "party_mon": "withdraw", "memorialize": "memorialize"}[cmd]
+    assert len(q.calls(name)) == 1 + 3 and q.size() == 0          # the first try + 3 safe retries
+    (fail,) = q.sends(event)
+    assert valid(fail)["key"] == A and fail["reason"].startswith("executor error")
+
+
+def test_a_partial_write_before_the_error_fails_at_once_as_uncertain():
+    q = Queue()
+    q.explode, q.partial = {"deposit"}, {"deposit"}
+    q.push(cmd="box_mon", key=A)
+    q.drain(5)
+    assert len(q.calls("deposit")) == 1                            # never retried
+    (fail,) = q.sends("box_mon_failed")
+    assert fail["reason"].startswith("uncertain: partial write")
+
+
+def test_without_a_write_count_an_executor_error_is_uncertain():
+    q = Queue(write_count=False)
+    q.explode = {"memorialize"}
+    q.push(cmd="memorialize", key=A)
+    q.run()
+    assert q.sends("memorialize_failed")[0]["reason"].startswith("uncertain")
+
+
+def test_an_error_after_the_reply_sends_nothing_more():
+    q = Queue()
+    q.throw_rescan = True
+    q.push(cmd="party_mon", key=C)
+    q.run()
+    assert [e["event"] for e in q.sends()] == ["sync_retrieve_done"] and q.size() == 0
+
+
+# -- MINOR 2 (C4-2d): queue hygiene (docs/protocol.md §9 item 31) ----------------------------
+
+def test_an_opposing_box_mon_cancels_the_queued_party_mon_before_any_move():
+    q = Queue()
+    q.gate = (False, "held")
+    q.push(cmd="party_mon", key=C)
+    q.push(cmd="box_mon", key=C)
+    q.gate = (True, None)
+    q.drain(3)
+    assert q.calls("withdraw") == [] and [c[0] for c in q.calls("deposit")] == ["deposit"]
+
+
+def test_an_opposing_party_mon_cancels_the_queued_box_mon():
+    q = Queue()
+    q.gate = (False, "held")
+    q.push(cmd="box_mon", key=A)
+    q.push(cmd="party_mon", key=A)
+    q.gate = (True, None)
+    q.drain(3)
+    assert q.calls("deposit") == [] and len(q.calls("withdraw")) == 1
+
+
+def test_a_duplicate_memorialize_is_absorbed_even_while_one_tail_retries():
+    q = Queue()
+    q.results["memorialize"] = [(False, "last party mon")] * 4
+    q.push(cmd="memorialize", key=A)
+    q.run(1)                                                      # refused: back at the tail
+    q.push(cmd="memorialize", key=A)
+    q.push(cmd="memorialize", key=A)
+    assert q.size() == 1
 
 
 def test_force_faint_for_a_key_that_left_the_party_writes_nothing_and_says_so():

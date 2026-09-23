@@ -562,22 +562,6 @@ def test_world_ot_id_is_present_or_derivable_from_the_party_key():
 # ── 11: hello omits party contents when not loaded / borrowed ──────────────────────────────
 
 @world_item("11")
-@pytest.mark.xfail(strict=True, reason=(
-    "CLIENT DEFECT (independent finding, C4-5): lua/gen3/client.lua drv.hello_fields() never "
-    "checks st.frozen before calling party_wire(party) -- unlike drv.tick_fields(), which does "
-    "(`if not st.frozen then f.party = party_wire(party) end`, client.lua:660-661). hello is "
-    "sent exactly once per connection, the instant hello_ready() first holds, and "
-    "hello_ready() returns true immediately whenever in_battle() is true regardless of the "
-    "checkpoint predicate (client.lua:616-621). So a reconnect while a borrowed (partner's) "
-    "party is in RAM -- an RR multi-battle dropping and rejoining mid-fight -- sends the "
-    "BORROWED party's real contents in hello.party instead of []. Reproduced below: "
-    "docs/protocol.md item 11 says hello 'omits party contents ([]) when ... the party is "
-    "borrowed'. Proposed fix (not applied here -- this card reports client defects, it does "
-    "not patch lua/gen3/client.lua): in hello_fields(), reuse the same "
-    "`if not st.frozen then ... end` guard tick_fields() already has, sending "
-    "`party = json.array({})` (hello.party is a required field, so it must stay present, "
-    "just empty) when frozen."
-))
 def test_world_hello_omits_party_when_borrowed():
     """The not-loaded half of item 11 holds structurally: game_is_live() gates hello_ready()
     entirely (client.lua:598-605, 616-621), so no hello -- let alone one with a party -- is

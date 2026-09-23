@@ -14,8 +14,14 @@
 --   net, hud, json, io, ev, area_map, locations, player, rom_type, rom_sha1, foundation,
 --   artifact_kind, log, core = { Session, Identity, Deferred }, native (optional; P5).
 --
--- The optional native part (lua/gen3/native.lua, the RR companion mailbox, P5). Every seam
--- below calls it when present and otherwise does what the old client did without the patch:
+-- The optional native part (lua/gen3/native.lua, the RR companion mailbox). It is attached
+-- after construction (session.attach_native(n): native needs the session's send, the session
+-- needs native -- the binding card wires the two). Every seam below calls it when present and
+-- otherwise does what the old client did without the patch. Native POSTING is gated on the
+-- session (S:eligible(): writes enabled, hello'd, connected): the client wraps the injected
+-- write policy so that every arm of reason "native" or "sound" is also refused while the
+-- session is ineligible. native:service() still runs every frame, so ACK polling never stops;
+-- a refused arm leaves the job queued (native.lua dispatch returns nil), it is not dropped.
 --   native:service()               each frame before the net pump
 --   native:idle() -> bool          the safety checkpoint's "native" clause
 --   native:hello_fields() -> table merged into hello (panel/sfx capabilities)
@@ -44,6 +50,17 @@ local EXPLODE_PP = 5                 -- Explosion's PP, so a PP drop proves the 
 local B_ACTION_USE_MOVE = 0
 local STATE_ACTION_CONFIRMED_STANDBY = 3
 local TARGET_FOE_PRIMARY = 1
+-- The m4a sound driver's fields the old client's SE1 poke writes (lua/memory_gba.lua:1946-
+-- 1988 and M.playSE :2021-2066, production-tested on FR/LG and RR). Struct geometry of the
+-- MusicPlayerInfo/Track structs; the gSoundInfo POINTER comes from the pack
+-- (ram.SOUND_INFO_PTR_ADDR) and the song headers from rom.SE_SONG_HEADERS.
+local M4A_ID = 0x68736D53                     -- MusicPlayerInfo.ident when initialised
+local MPL = { SONG_HDR = 0x00, STATUS = 0x04, TRACKCOUNT = 0x08, PRIORITY = 0x09, CLOCK = 0x0C,
+              TRACKS_PTR = 0x2C, IDENT = 0x34, NEXT = 0x3C }
+local SNDINFO_HEAD = 0x24
+local TRK = { FLAGS = 0x00, BEND = 0x0F, VOLX = 0x13, LFO = 0x19, CHAN = 0x20, CMDPTR = 0x40 }
+local TRK_START = 0xC0                        -- EXIST | START
+local IWRAM_LO, IWRAM_HI = 0x03000000, 0x03008000   -- GBA memory map (platform constant)
 -- Gift/static areas (server/adapters/gen3_frlge.py via lua/games/gen3_frlge.lua:27-37): no
 -- NEW ENCOUNTER banner and never a no_catch there.
 local GIFT_AREAS = { oaks_lab = true, intro = true, gift = true, cinnabar_lab = true,
@@ -75,6 +92,17 @@ function Client.new(p)
     local key = reads.key
     local session
     local function send(event, fields) return session.send(event, fields) end
+    local function eligible() return session ~= nil and session:eligible() end
+    -- The BLOCKER gate (C4-2d): native and sound arms need an eligible session. Wrapping the
+    -- injected policy covers every arm made through the one sink, including a job native.lua
+    -- queued while eligible and tries to post after a pause.
+    local base_check = policy.check
+    function policy:check(snapshot, reason)
+        if (reason == "native" or reason == "sound") and not eligible() then
+            return false, "session not eligible for " .. reason .. " writes (paused, not hello'd or disconnected)"
+        end
+        return base_check(self, snapshot, reason)
+    end
 
     local st = {
         known = {},        -- every key this save has shown us (party + boxes): acquisitions are NEW keys
@@ -86,7 +114,7 @@ function Client.new(p)
         battle = nil,      -- battle_begin .. battle_end lifecycle
         frozen = false,    -- a borrowed party is in RAM
         flags = {},        -- what the signals of this frame said changed
-        has_pokeballs = false, last_area = nil, trade = nil,
+        has_pokeballs = false, last_area = nil, trade = nil, sound_frame = nil, sound_logged = {},
         bframe = nil, bcache = nil,
     }
 
@@ -210,9 +238,18 @@ function Client.new(p)
             elseif not st.commanded[k] then st.alive[k] = true end
         end
     end
+    -- The stats shape server/state.py caches (stats_cache, party_to_box, boxed capture) and
+    -- boxes.lua needs to rebuild a CFRU record on withdraw (level, maxHP, five stats, PP):
+    -- the old client's snapshot, gen3_frlge_client.lua:1625-1639.
+    local function stats_of(m)
+        local s = { level = m.level, maxHP = m.max_hp, attack = m.attack, defense = m.defense,
+                    speed = m.speed, spAtk = m.sp_attack, spDef = m.sp_defense }
+        for i = 1, 4 do s["pp" .. i] = m.pp and m.pp[i] or 0 end
+        return s
+    end
     local function rebaseline(party)
         st.party_prev = {}
-        for _, m in ipairs(party) do st.party_prev[key(m)] = { slot = m.slot, level = m.level, max_hp = m.max_hp } end
+        for _, m in ipairs(party) do st.party_prev[key(m)] = { slot = m.slot, stats = stats_of(m) } end
         observe_hp(party)
     end
     local function seed_known(party)
@@ -286,9 +323,16 @@ function Client.new(p)
         if #fresh == 1 then
             local e = fresh[1]
             resolve_area()
+            -- a boxed record has no party tail: the caught mon's stats and PP are still in the
+            -- enemy party record it was copied from (old client :3950-3985 read the same foe)
+            local src
+            local b = battle_now()
+            for _, m in ipairs(b and b.enemy_party or {}) do if key(m) == e.key then src = m end end
+            local stats = src and stats_of(src) or nil
             send("capture", { key = e.key, area_id = area_id, in_box = true, species_id = e.species_id,
                               nickname = e.nickname, held_item_id = e.held_item_id,
-                              is_egg = e.is_egg == 1, gift = gift or nil })
+                              level = stats and stats.level or nil, maxHP = stats and stats.maxHP or nil,
+                              stats = stats, is_egg = e.is_egg == 1, gift = gift or nil })
         elseif #fresh > 1 then
             -- more than one unknown boxed key cannot be attributed to this acquisition
             log("acquisition: " .. #fresh .. " new boxed keys, none reported (ambiguous)")
@@ -310,7 +354,7 @@ function Client.new(p)
         for k, prev in pairs(st.carried) do
             if boxed[k] then
                 st.carried[k] = nil
-                send("party_to_box", { key = k, stats = { level = prev.level, maxHP = prev.max_hp } })
+                send("party_to_box", { key = k, stats = prev.stats })
             elseif now[k] then
                 st.carried[k] = nil                            -- a party shuffle, not a move
             elseif released then
@@ -436,11 +480,13 @@ function Client.new(p)
         local ok, cwhy = policy:check(snap, reason)
         if not ok then return nil, cwhy end
         local allow = {}
-        for _, w in ipairs(plan) do allow[w[1]] = w[2] end
+        for _, w in ipairs(plan) do allow[w[1] .. ":" .. w[2]] = true end
         local wok, err = pcall(function()
-            writes:arm(reason, function(x, n) return allow[x] == n end)
+            writes:arm(reason, function(x, n) return allow[x .. ":" .. n] == true end)
             for _, w in ipairs(plan) do
-                if w[2] == 2 then writes:write_u16(w[1], w[3]) else writes:write_bytes(w[1], { w[3] }) end
+                if w[2] == 4 then writes:write_u32(w[1], w[3])
+                elseif w[2] == 2 then writes:write_u16(w[1], w[3])
+                else writes:write_bytes(w[1], { w[3] }) end
             end
         end)
         writes:disarm()
@@ -499,7 +545,17 @@ function Client.new(p)
         local pp0 = io.read_u8(base + BATTLE_MON_PP_OFF)
         local comm = io.read_u8(a.BATTLE_COMM_ADDR + battler)
         local ex = e.explode
-        if ex and ex.failed then return "hold", "explosion failed; held as the active battler" end
+        if ex and ex.failed then return "hold", ex.why end
+        -- A pre-existing multi-turn lock (Thrash/Outrage/Rollout: gLockedMoves[battler] ~= 0)
+        -- owns the next action; committing Explosion over it would fight the engine. Held as
+        -- the active battler instead, and nothing is written. Sleep and flinch need no case:
+        -- the move never executes, PP never drops, and the commit is re-armed each turn until
+        -- it does or the battler leaves. Liveness of every branch here is NOT PHYSICAL.
+        if not ex and num(a.LOCKED_MOVES_ADDR) and io.read_u16(a.LOCKED_MOVES_ADDR + battler * 2) ~= 0 then
+            e.explode = { battler = battler, failed = true, why = "move locked; held as the active battler" }
+            log("force_explode: battler " .. battler .. " is move-locked; held as active " .. e.key)
+            return "hold", "move locked; held as the active battler"
+        end
         if ex and bhp == 0 then
             e.explode = nil
             hud.show("!! " .. (mon.nickname or key(mon)) .. " BOOM!", 255, 80, 80, 360)
@@ -507,7 +563,7 @@ function Client.new(p)
         end
         if ex and pp0 < EXPLODE_PP then
             if comm < STATE_ACTION_CONFIRMED_STANDBY then
-                ex.failed = true
+                ex.failed, ex.why = true, "explosion failed; held as the active battler"
                 log("force_explode: Explosion executed and the battler survived; held as active " .. e.key)
                 return "hold", "explosion failed; held as the active battler"
             end
@@ -574,10 +630,12 @@ function Client.new(p)
             if not boxes then return nil, "no box module" end
             return boxes:memorialize(k, hint)
         end,
-        -- the old client's stats_cache shape (gen3_frlge_client.lua:1613-1633)
-        stats_of = function(m)
-            return { level = m.level, maxHP = m.max_hp, attack = m.attack, defense = m.defense,
-                     speed = m.speed, spAtk = m.sp_attack, spDef = m.sp_defense }
+        stats_of = stats_of,
+        -- every byte moves through the one sink, whose log tells a clean error from a partial one
+        write_count = function()
+            local n = 0
+            for _, r in ipairs(writes.log) do n = n + (r.len or 0) end
+            return n
         end,
         -- our own moves must not read as the player's: re-baseline after every one
         rescan = function()
@@ -594,6 +652,12 @@ function Client.new(p)
     drv.read_party = party_read
     drv.in_battle = in_battle
     drv.battle_write = battle_write
+    function drv.party_borrowed()
+        local party = party_read()
+        if party then update_frozen(party) end
+        return st.frozen
+    end
+    function drv.attach_native(n) native = n end
 
     function drv.game_is_live()
         local party, why = party_read()
@@ -625,15 +689,21 @@ function Client.new(p)
         st.last_area, st.trade = nil, nil
     end
 
+    -- No wire side effect here (no area_enter, no banner): hello is the connection's first line.
     function drv.hello_fields()
         local party = party_read() or {}
+        update_frozen(party)
         rescan_boxes()
-        seed_known(party)                                      -- box-key seeding at connect
-        rebaseline(party)
+        -- a borrowed party is never published nor learned as ours (docs/protocol.md §9 item 11):
+        -- hello.party stays present and empty, exactly like tick_fields' guard
+        local own = st.frozen and {} or party
+        seed_known(own)                                        -- box-key seeding at connect
+        if not st.frozen then rebaseline(party) end
         latch_balls(false)                                     -- a resume, not an acquisition
-        local area_id, loc = check_area()
+        local area_id, loc = area_now()
+        st.last_area = area_id .. "|" .. loc
         local f = { rom_type = p.rom_type, foundation = p.foundation, artifact_kind = p.artifact_kind,
-                    rom_sha1 = p.rom_sha1, party = party_wire(party), pc_boxes = pc_boxes_wire(),
+                    rom_sha1 = p.rom_sha1, party = party_wire(own), pc_boxes = pc_boxes_wire(),
                     area_id = area_id, loc_name = loc, has_pokeballs = st.has_pokeballs,
                     in_battle = in_battle(), badges = badges(), ball_count = ball_count() }
         local t = trainer()
@@ -704,11 +774,12 @@ function Client.new(p)
     -- rival swap is a companion-mailbox feature (OP_SET_ENEMY_PARTY, P5 native.lua). Without
     -- the patch: the old client's refusal (gen3_frlge_client.lua:824-837).
     C.replace_rival_team = function(cmd)
-        if native and native.replace_rival_team then return native:replace_rival_team(cmd) end
         if not in_battle() then
             send("rival_team_replaced", { trainer_id = cmd.trainer_id or 0, species_ids = arr({}), error = "not_in_battle" })
-        elseif not session.writes_enabled then
-            log("replace_rival_team: writes disabled")
+        elseif not eligible() then
+            log("replace_rival_team: session not eligible (writes paused); nothing staged")
+        elseif native and native.replace_rival_team then
+            native:replace_rival_team(cmd)
         else
             send("rival_team_replaced", { trainer_id = cmd.trainer_id or 0, species_ids = arr({}), error = "patch_required" })
         end
@@ -721,9 +792,14 @@ function Client.new(p)
         return true
     end
     -- native pickers/menus (RR PC trade NPC); otherwise the core answers with the cancel sentinels
+    -- Once native takes a prompt it owns the answer (its done callback replies, including the
+    -- cancel sentinel on refusal), so the command is CONSUMED: no second, core-made ACK.
     for _, name in ipairs(MENU_CMDS) do
         C[name] = function(cmd)
-            if native and native[name] then return native[name](native, cmd) end
+            if native and native[name] and eligible() then
+                native[name](native, cmd)
+                return true
+            end
             return false
         end
     end
@@ -736,10 +812,56 @@ function Client.new(p)
         return false
     end
     C.ghost_pos = function() return true end                   -- peer ghost: post-RC (PLAN §0)
-    -- Sounds are a native (mailbox) feature. The old client's Lua m4a poke is not ported: it
-    -- writes the sound engine outside any checkpoint window.
+    -- Sound: the native SE when the companion is present, else the old client's m4a SE1 poke
+    -- (lua/memory_gba.lua M.playSE) as a GATED write, writes:arm("sound", allow) over exactly
+    -- the fields it pokes. A refused arm (no "sound" clause set yet, an ineligible session, a
+    -- pack without the gSoundInfo pointer) means no sound, logged once per reason.
+    local function sound_refused(why)
+        if not st.sound_logged[why] then
+            st.sound_logged[why] = true
+            log("sound refused: " .. why)
+        end
+    end
+    local function m4a_plan(id)
+        local ptr = num(a.SOUND_INFO_PTR_ADDR)
+        local headers = profile.rom and profile.rom.SE_SONG_HEADERS
+        local hdr = type(headers) == "table" and num(headers[tostring(id)]) or nil
+        if not ptr then return nil, "pack has no ram.SOUND_INFO_PTR_ADDR" end
+        if not hdr then return nil, "pack has no song header for SE " .. tostring(id) end
+        local function iw(v) return v >= IWRAM_LO and v < IWRAM_HI end
+        local info = io.read_u32(ptr)
+        if not iw(info) then return nil, "gSoundInfo not initialised" end
+        -- MPlayOpen prepends: the list is gMPlayTable reversed, SE1 is the second-to-last node
+        local nodes, cur = {}, io.read_u32(info + SNDINFO_HEAD)
+        while iw(cur) and #nodes < 16 do nodes[#nodes + 1] = cur; cur = io.read_u32(cur + MPL.NEXT) end
+        if #nodes < 2 then return nil, "m4a player list not initialised" end
+        local se1 = nodes[#nodes - 1]
+        local track0 = io.read_u32(se1 + MPL.TRACKS_PTR)
+        if io.read_u32(se1 + MPL.IDENT) ~= M4A_ID or not iw(track0) then return nil, "m4a SE1 not idle" end
+        local h = io.rom_read(hdr - 0x08000000, 12)
+        local count, priority = h[1], h[3]
+        local cmd_ptr = h[9] + h[10] * 256 + h[11] * 65536 + h[12] * 16777216
+        return {
+            { se1 + MPL.IDENT, 4, M4A_ID + 1 },            -- lock against the ISR
+            { se1 + MPL.SONG_HDR, 4, hdr }, { se1 + MPL.STATUS, 4, (1 << count) - 1 },
+            { se1 + MPL.TRACKCOUNT, 1, count }, { se1 + MPL.PRIORITY, 1, priority },
+            { se1 + MPL.CLOCK, 4, 0 },
+            { track0, 4, 0 }, { track0 + TRK.FLAGS, 1, TRK_START }, { track0 + TRK.BEND, 1, 2 },
+            { track0 + TRK.VOLX, 1, 64 }, { track0 + TRK.LFO, 1, 22 }, { track0 + TRK.CHAN, 4, 0 },
+            { track0 + TRK.CMDPTR, 4, cmd_ptr },
+            { se1 + MPL.IDENT, 4, M4A_ID },                -- unlock: the next VBlank plays it
+        }
+    end
     drv.play_sound = function(id)
-        if native and native.play_sound then native:play_sound(id) end
+        if not eligible() then return sound_refused("session not eligible") end
+        local f = io.framecount()
+        if st.sound_frame == f then return end              -- one cue per frame
+        st.sound_frame = f
+        if native and native.play_sound and native:play_sound(id) then return end
+        local plan, why = m4a_plan(id)
+        if not plan then return sound_refused(why) end
+        local ok, awhy = armed_write("sound", plan)
+        if not ok then sound_refused(tostring(awhy)) end
     end
     drv.pre_pump = function()
         if native and native.service then native:service() end
@@ -750,6 +872,7 @@ function Client.new(p)
     session = core.Session.new({ net = p.net, json = json, hud = hud, log = sink, tag = TAG,
                                  player = p.player, game = drv, identity = Id, deferred = Q })
     session.driver, session.state = drv, st
+    session.attach_native = drv.attach_native
     return session
 end
 

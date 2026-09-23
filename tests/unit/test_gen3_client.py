@@ -10,6 +10,7 @@ First falsifiers:
 """
 from __future__ import annotations
 
+import json
 import re
 
 import pytest
@@ -57,7 +58,7 @@ def test_falsifier_a_faint_signal_yields_exactly_one_faint_with_the_right_key():
     assert len(w.events("faint")) == 1
 
 
-def test_falsifier_no_hello_before_the_checkpoint_predicate_holds():
+def test_falsifier_no_hello_out_of_battle_before_the_checkpoint_predicate_holds():
     w = World()
     w.set_party(party(A))
     w.break_checkpoint()
@@ -66,6 +67,16 @@ def test_falsifier_no_hello_before_the_checkpoint_predicate_holds():
     w.overworld_safe()
     w.step()
     assert len(w.events("hello")) == 1
+
+
+def test_in_battle_hello_does_not_wait_for_the_checkpoint():
+    """PLAN's rule is "checkpoint OR battle" (Gen 1 parity): a reconnect mid-battle hellos."""
+    w = World()
+    w.set_party(party(A))
+    w.enter_battle([FOE], fire=False)                         # the in_battle clause fails the checkpoint
+    w.step()
+    (hello,) = w.events("hello")
+    assert hello["in_battle"] is True
 
 
 def test_falsifier_an_active_battler_force_faint_holds_then_lands_on_switch_out():
@@ -176,15 +187,31 @@ def test_a_gift_is_a_capture_with_gift_true():
     assert cap["key"] == KC and cap["gift"] is True
 
 
+FULL_STATS = {"level": 5, "maxHP": 20, "attack": 11, "defense": 12, "speed": 13, "spAtk": 14,
+              "spDef": 15, "pp1": 35, "pp2": 30, "pp3": 0, "pp4": 0}
+
+
 def test_a_catch_with_a_full_party_is_a_boxed_capture():
     w = live(pids=(A, B))
-    w.enter_battle([FOE])
+    w.enter_battle([mon_record(C, OT, species=19)])            # the wild mon, as caught
     w.set_box(1, 0, mon_record(C, OT, species=19))
     w.fire("capture_wild")
     w.fire("pc_move")
     w.step()
     (cap,) = w.events("capture")
     assert cap["key"] == KC and cap["in_box"] is True and cap["species_id"] == 19
+    # MAJOR 4 (C4-2d): the complete stats the server caches and boxes.lua needs on withdraw
+    assert cap["stats"] == FULL_STATS and cap["level"] == 5 and cap["maxHP"] == 20
+
+
+@pytest.mark.parametrize("pack,title", [("gen3_frlg", "firered"), ("gen3_rr", "radical_red")])
+def test_major4_party_to_box_carries_the_complete_stats_on_both_packs(pack, title):
+    w = live(pack, title, pids=(A, B))
+    w.set_party(party(A))
+    w.set_box(0, 0, mon_record(B, OT, species=5))
+    w.fire("pc_deposit")
+    w.step()
+    assert w.events("party_to_box")[0]["stats"] == FULL_STATS
 
 
 def test_a_failed_wild_encounter_sends_one_no_catch():
@@ -233,7 +260,7 @@ def test_a_pc_deposit_and_withdraw_are_party_to_box_and_box_to_party():
     w.fire("pc_deposit")
     w.step()
     (dep,) = w.events("party_to_box")
-    assert dep["key"] == KB and dep["stats"] == {"level": 5, "maxHP": 20}
+    assert dep["key"] == KB and dep["stats"] == FULL_STATS
     w.set_box(0, 0, None)
     w.set_party(party(A, B))
     w.fire("pc_withdraw")
@@ -389,6 +416,35 @@ def test_rr_explosion_that_lands_settles_without_a_faint_report():
     assert w.client.battle_pending_count(w.client) == 0 and w.events("faint") == []
 
 
+def _hp_writes(w):
+    hp = {w.party_base() + slot * 100 + 0x56 + i for slot in range(6) for i in range(2)}
+    hp |= {w.ram["BATTLE_MONS_ADDR"] + b * 0x58 + 0x28 + i for b in range(4) for i in range(2)}
+    return [x for x in w.writes if x[0] in hp]
+
+
+def test_explode_control_a_move_locked_battler_is_held_and_nothing_is_written():
+    w, base = _explode_world()
+    w.poke_int(w.ram["LOCKED_MOVES_ADDR"], 37, 2)              # Thrash in progress
+    w.command(cmd="force_explode", key=KA)
+    w.step(5)
+    assert w.writes == [] and "move locked" in str(lua_to_py_list(w.client.battle_pending)[0].why)
+
+
+@pytest.mark.parametrize("model", ["sleep", "flinch"])
+def test_explode_control_sleep_or_flinch_rearms_the_commit_and_never_writes_hp(model):
+    """The move never executes (PP stays 5) and the turn ends: the commit is re-armed under
+    battle_commit, the entry stays held; no HP byte is ever written. Liveness NOT PHYSICAL."""
+    w, base = _explode_world()
+    w.command(cmd="force_explode", key=KA)
+    w.step()
+    for _ in range(3):                                         # three turns asleep / flinching
+        w.poke_int(w.ram["BATTLE_COMM_ADDR"], 0, 1)
+        w.step()
+        assert w._read(w.ram["BATTLE_COMM_ADDR"], 1) == 3
+    assert _hp_writes(w) == [] and set(write_reasons(w)) == {"battle_commit"}
+    assert w.client.battle_pending_count(w.client) == 1
+
+
 def test_rr_explosion_that_the_battler_survives_degrades_to_a_held_faint():
     w, base = _explode_world()
     w.command(cmd="force_explode", key=KA)
@@ -399,6 +455,7 @@ def test_rr_explosion_that_the_battler_survives_degrades_to_a_held_faint():
     w.step(3)
     held = lua_to_py_list(w.client.battle_pending)[0]
     assert "explosion failed" in str(held.why) and len(w.writes) == n
+    assert _hp_writes(w) == []                                  # Damp: never an active-battler HP write
 
 
 def test_rr_explosion_commit_is_rewritten_when_the_engine_resets_it():
@@ -536,6 +593,185 @@ def test_every_byte_written_went_through_the_armed_sink():
     w.step()
     logged = sum(int(r.len) for r in lua_to_py_list(w.parts.writes.log))
     assert logged == len(w.writes) > 0
+
+
+# ── C4-2d review findings ─────────────────────────────────────────────────────────────────
+
+RR_PACK = json.loads((REPO / "data" / "games" / "gen3_rr" / "profile.json").read_text(encoding="utf-8"))
+NATIVE = RR_PACK["native"]
+
+
+def attach_real_native(w, present=True):
+    """The REAL lua/gen3/native.lua over this World's production sink, attached late."""
+    if present:
+        w.poke_int(NATIVE["BASE"], NATIVE["SIG"], 4)
+        w.poke_int(NATIVE["BASE"] + 4, NATIVE["ABI"], 2)
+    L = w.lua
+    N = L.eval(f'dofile("{(REPO / "lua" / "gen3" / "native.lua").as_posix()}")')
+    json_mod = L.eval(f'dofile("{(REPO / "lua" / "json_codec.lua").as_posix()}")')
+    native = N.new(L.table_from(RR_PACK, recursive=True), L.table(
+        io=w.io, writes=w.parts.writes, reads=w.parts.reads, send=w.client.send,
+        in_battle=lambda: True, refresh_enemy=lambda *_: True, artifact_kind=w.kind,
+        array=json_mod.array))
+    w.client.attach_native(native)
+    return native
+
+
+def native_writes(w):
+    lo, hi = NATIVE["BASE"], NATIVE["BASE"] + 0x200
+    return [x for x in w.writes if lo <= x[0] < hi]
+
+
+def rr_live():
+    w = live("gen3_rr", "radical_red", "companion")
+    w.battle_ok = True                                         # the fake predicate admits "native"
+    return w
+
+
+def test_blocker_control_an_eligible_session_posts_the_native_sound():
+    w = rr_live()
+    attach_real_native(w)
+    w.command(cmd="play_sound", sound=25)
+    w.step(3)
+    assert native_writes(w), "positive control: the real native.lua must post while eligible"
+
+
+def test_blocker_a_paused_session_posts_nothing_through_the_real_native_part():
+    w = rr_live()
+    attach_real_native(w)
+    w.command(cmd="play_sound", sound=25)
+    w.step()                                                  # received: queued in native.lua
+    w.client.writes_enabled, w.client.gate_revoked = False, True
+    w.step(20)
+    assert native_writes(w) == [] and w.writes == []
+    w.client.writes_enabled, w.client.gate_revoked = True, False
+    w.step(2)
+    assert native_writes(w), "the queued job survives the pause and posts once eligible"
+
+
+def test_blocker_a_paused_session_stages_no_rival_swap():
+    w = rr_live()
+    attach_real_native(w)
+    w.enter_battle([FOE], trainer_id=5)
+    w.client.writes_enabled, w.client.gate_revoked = False, True
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=["00" * 100])
+    w.step(5)
+    assert w.writes == [] and w.events("rival_team_replaced") == []
+    w.client.writes_enabled, w.client.gate_revoked = True, False
+    w.step(3)
+    assert native_writes(w) == [], "nothing was queued while paused, so nothing stale posts later"
+
+
+def test_minor1_a_native_owned_prompt_is_answered_exactly_once():
+    w = rr_live()
+    attach_real_native(w, present=False)                       # native refuses: its callback answers
+    w.command(cmd="show_menu", token="tk", text="?")
+    w.step()
+    assert [r["token"] for r in w.events("menu_result")] == ["tk"]
+
+
+def test_major1_a_capture_before_hello_is_sent_after_it():
+    w = World()
+    w.set_party(party(A))
+    w.break_checkpoint()                                       # no hello yet (out of battle)
+    w.step()
+    w.set_party(party(A, B))
+    w.fire("mon_given")
+    w.step(3)
+    assert w.sent == []
+    w.overworld_safe()
+    w.step()
+    assert w.names()[:2] == ["hello", "capture"]
+
+
+def test_major1_a_reconnect_hello_has_no_area_enter_before_it():
+    w = live()
+    w.connected = False
+    w.step()
+    w.set_location(1, 0)                                       # moved while offline
+    w.connected = True
+    n = len(w.sent)
+    w.step()
+    assert [m["event"] for m in w.sent[n:]][:1] == ["hello"]
+    assert w.events("area_enter") == [] and w.sent[n]["area_id"] == "viridian_forest"
+
+
+def test_major2_a_mid_battle_reconnect_with_a_borrowed_party_hellos_an_empty_party():
+    w = live()
+    w.enter_battle([FOE], active=(0,))
+    w.step()
+    w.set_party([mon_record(0x99999999, 0x5555, species=7)])
+    w.fire("map_load")
+    w.step()
+    w.connected = False
+    w.step()
+    w.connected = True
+    w.step()
+    assert w.events("hello")[-1]["party"] == []
+
+
+def test_major3_a_force_faint_during_a_borrowed_party_is_held_and_lands_after_restore():
+    w = live()
+    w.battle_ok = True
+    w.enter_battle([FOE], active=(0,))
+    w.step()
+    w.set_party([mon_record(0x99999999, 0x5555, species=7)])  # the partner's party
+    w.command(cmd="force_faint", key=KB)
+    w.step(3)
+    assert w.client.battle_pending_count(w.client) == 1 and w.writes == []
+    w.set_party(party(A, B))                                   # restored
+    w.step()
+    assert w.party_hp(1) == 0 and w.client.battle_pending_count(w.client) == 0
+
+
+def _m4a_world(allow):
+    """An initialised m4a SE1 player in IWRAM and a pack gSoundInfo pointer."""
+    w = live()
+    w.battle_ok = allow
+    ptr, info, node_a, node_b, track0 = 0x03007FF0, 0x03006000, 0x03006100, 0x03006200, 0x03006300
+    w.parts.profile.ram.SOUND_INFO_PTR_ADDR = ptr              # not in the packs yet (reported)
+    w.poke_int(ptr, info, 4)
+    w.poke_int(info + 0x24, node_a, 4)
+    w.poke_int(node_a + 0x3C, node_b, 4)
+    w.poke_int(node_a + 0x34, 0x68736D53, 4)
+    w.poke_int(node_a + 0x2C, track0, 4)
+    hdr = w.profile["rom"]["SE_SONG_HEADERS"]["26"] - 0x08000000
+    for i, b in enumerate([1, 0, 5, 0, 0, 0, 0, 0, 0x10, 0x20, 0x30, 0x08]):
+        w.rom[hdr + i] = b
+    return w
+
+
+def test_sound_without_the_pack_pointer_is_refused_once_and_writes_nothing():
+    w = live()
+    w.command(cmd="game_over")
+    w.step(2)
+    w.command(cmd="play_sound", sound=26)
+    w.step(2)
+    assert w.writes == []
+    assert len([line for line in w.logs if "SOUND_INFO_PTR_ADDR" in line]) == 1
+
+
+@pytest.mark.parametrize("allow", [False, True])
+def test_sound_fallback_arms_the_sound_reason_and_a_refusal_writes_nothing(allow):
+    """allow=False: the policy refuses "sound". allow=True: the policy admits it but writes.lua
+    has no "sound" reason yet (OMP C4-B2 adds it), so the arm itself refuses. Either way: no
+    sound, one log line, never an ungated write."""
+    w = _m4a_world(allow)
+    w.command(cmd="play_sound", sound=26)
+    w.step()
+    w.command(cmd="play_sound", sound=26)
+    w.step()
+    assert w.writes == []
+    assert "sound" in w.battle_checks                           # the arm went through the policy
+    assert len([line for line in w.logs if "sound refused" in line]) == 1
+
+
+def test_sound_is_refused_while_the_session_is_ineligible():
+    w = _m4a_world(True)
+    w.client.writes_enabled, w.client.gate_revoked = False, True
+    w.command(cmd="play_sound", sound=26)
+    w.step()
+    assert w.writes == [] and "sound" not in w.battle_checks
 
 
 # ── static contract ───────────────────────────────────────────────────────────────────────

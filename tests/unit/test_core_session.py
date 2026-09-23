@@ -48,7 +48,10 @@ return function(st, sink)
         return true
     end
     function d.save_cleared() return st.cleared end
-    function d.hello_ready() return st.hello_ready, "not live yet" end
+    function d.hello_ready()                      -- the contract: live AND (battle OR checkpoint)
+        if not st.party_ok then return false, "party unreadable" end
+        return st.hello_ready, "not live yet"
+    end
     function d.hello_fields()
         return { rom_type = "firered", foundation = "gen3_frlg", party = st.json.array({}) }
     end
@@ -63,6 +66,7 @@ return function(st, sink)
     function d.on_reset() sink("reset") end
     function d.play_sound(id) sink("sound", id) end
     d.frame_hooks = { function() sink("hook") end }
+    function d.party_borrowed() return st.borrowed == true end
     if st.battle_path then
         function d.battle_write(entry, slot, mon, ending)
             sink("battle_write", entry.cmd, entry.key, slot, ending)
@@ -572,6 +576,112 @@ def test_stop_closes_the_signals():
     w = World()
     w.s.stop(w.s)
     assert ("close",) in w.timeline
+
+
+# -- C4-2d review findings ------------------------------------------------------------------
+
+def _emitter(w, event):
+    """A frame hook that emits `event` whenever the test sets w.st.emit (a reducer stand-in)."""
+    w.driver.frame_hooks[2] = w.lua.eval(
+        "function(s, st, name) return function() if st.emit then st.emit = false; s.send(name, {}) end end end"
+    )(w.s, w.st, event)
+
+
+def test_major1_no_semantic_event_precedes_hello_it_is_held_and_flushed_after():
+    w = World()
+    w.st.hello_ready = False
+    _emitter(w, "whiteout")
+    w.step()
+    w.st.emit = True
+    w.step(3)
+    assert w.sent == []
+    w.st.hello_ready = True
+    w.step()
+    assert [m["event"] for m in w.sent] == ["hello", "whiteout"]
+    assert [m["seq"] for m in w.sent] == [1, 2]
+
+
+def test_major1_held_pre_hello_events_die_with_the_connection():
+    w = World()
+    w.st.hello_ready = False
+    _emitter(w, "whiteout")
+    w.st.emit = True
+    w.step()
+    w.connected = False
+    w.step()
+    w.connected, w.st.hello_ready = True, True
+    w.step()
+    assert [m["event"] for m in w.sent] == ["hello"]
+
+
+def test_major3_a_new_force_faint_during_a_borrowed_party_is_held_then_lands_after_restore():
+    w = World()
+    w.step_to(60)
+    w.st.in_battle, w.st.battle_result = True, "done"
+    w.set_party((C, 0))                                   # a partner's party in RAM
+    w.st.borrowed = True
+    w.command(cmd="force_faint", key=A)
+    w.step(5)
+    assert w.s.battle_pending_count(w.s) == 1 and w.battle_writes() == []
+    w.set_party((A, 0), (B, 1))                           # restored
+    w.st.borrowed = False
+    w.step()
+    assert w.battle_writes() == [("force_faint", A, 0, False)] and w.s.battle_pending_count(w.s) == 0
+
+
+def test_major3_without_a_borrowed_party_an_absent_key_is_still_dropped():
+    w = World()
+    w.step_to(60)
+    w.st.in_battle = True
+    w.command(cmd="force_faint", key=C)
+    w.step()
+    assert w.s.battle_pending_count(w.s) == 0 and w.q.size(w.q) == 0
+
+
+def test_major6_key_change_ack_migrates_queued_checkpoint_commands():
+    w = World()
+    w.step_to(60)
+    w.st.checkpoint = False
+    w.command(cmd="memorialize", key=OLD)
+    w.command(cmd="force_faint", key=B)
+    w.step()
+    w.command(cmd="key_change_ack", old_key=OLD, new_key=NEW, migrated=True)
+    w.step()
+    items = w.q["items"]
+    assert [str(items[i].key) for i in (1, 2)] == [NEW, B]
+
+
+def test_major6_a_replayed_ack_renames_nothing():
+    w = World()
+    w.step_to(60)
+    w.st.checkpoint = False
+    w.command(cmd="memorialize", key=OLD)
+    w.step()
+    w.command(cmd="key_change_ack", old_key=OLD, new_key=NEW, migrated=False)
+    w.step()
+    assert str(w.q["items"][1].key) == OLD
+
+
+def test_blocker_validation_runs_before_the_driver_service_so_a_pause_gates_that_frame():
+    w = World()
+    seen = []
+    w.driver.pre_pump = w.lua.eval("function(s, rec) return function() rec(s.frame, s:eligible()) end end")(
+        w.s, lambda f, e: seen.append((f, e)))
+    w.step_to(60)
+    w.st.party_ok = False
+    w.step_to(60 + 60 * w.S.MAX_INVALID)                  # the pausing validation's frame
+    assert seen[-1] == (60 + 60 * w.S.MAX_INVALID, False)
+    assert seen[59] == (60, True)                         # enabled by frame 60's own validation
+
+
+def test_eligible_needs_writes_hello_and_a_connection():
+    w = World()
+    w.step()
+    assert w.s.eligible(w.s) is False                     # writes not enabled yet
+    w.step_to(60)
+    assert w.s.eligible(w.s) is True
+    w.connected = False
+    assert w.s.eligible(w.s) is False
 
 
 # -- static contract ---------------------------------------------------------------------

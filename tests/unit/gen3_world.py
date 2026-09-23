@@ -235,8 +235,9 @@ class World:
         self.set_party([])
 
     def set_trainer(self, ot_id, name="RED"):
-        if "SB2_OT_ID_OFFSET" in self.d:
+        if "SB2_OT_ID_OFFSET" in self.d:          # each offset independently: packs pin them apart
             self.poke_int(SB2_ADDR + self.d["SB2_OT_ID_OFFSET"], ot_id, 4)
+        if "SB2_NAME_OFFSET" in self.d:
             self.poke(SB2_ADDR + self.d["SB2_NAME_OFFSET"], codec.encode_name(name, codec.OT_NAME_LEN))
 
     def set_location(self, group, num):
