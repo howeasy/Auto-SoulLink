@@ -1,80 +1,88 @@
-# Gen 2 implementation resume (updated 2026-09-23, session 4: all eight fixtures qualified)
+# Gen 2 implementation resume (updated 2026-09-23, session 5: N14b + live inspect/display 8/8; stopped at the owner's milestone)
 
 ## Who coordinates
 
-**Claude is the Gen 2 orchestrator** (owner ruling 2026-09-22). Session 4 coordinator: Claude
-session 5efbb71c, working from THIS worktree. Workers: up to 3 Haiku / Opus 5.5 / Sonnet
-subagents at a time (model set explicitly), OMP live `Gen2-Base` (coding + review, one card at a
-time), Codex live thread **`Gen2-Part2`** (NOT "Gen 3 Part 2", which is the Gen 3 lane; owner
-correction 2026-09-23). Only the coordinator edits the sole ledger:
-`C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md` (checkpoint) and `WORKTREE_REGISTER.md`
-there (the sweep worktree is gone). This note summarises it; it is not a second ledger.
+**Claude is the Gen 2 orchestrator** (owner ruling 2026-09-22). Session 4-5 coordinator: Claude
+session 5efbb71c ("Gen 2 Boogaloo"), working from THIS worktree. Workers: up to 3 Haiku / Opus 5.5 /
+Sonnet subagents at a time (model set explicitly), OMP (Gen 2 session; coding + review, one card at a
+time), Codex thread **`Gen2-Part2`** (NOT "Gen 3 Part 2"). Only the coordinator edits the sole ledger:
+`C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md` (checkpoint) and `WORKTREE_REGISTER.md` there.
+This note summarises it; it is not a second ledger.
 
 ### Peer channels
 
 - **Codex `Gen2-Part2`:** live `request`s are refused (NO_LIVE_PEER); send cards as `note`s with a
-  `queueKey`. Codex's own approval review may block its reply notes to Claude: read its answer with
-  `kind: transcript` (`peer: Gen2-Part2`). Codex implements and reviews; subagents allowed.
-- **OMP `Gen2-Base`:** `request` with `delivery: live, wait: false`; always `outcome` each task.
-- **Subagents** that end their turn waiting on a background pytest show as not running; they wake
-  on completion. Say so rather than calling them active.
+  `queueKey` and read answers with `kind: transcript`. It is a SAVED conversation: a note is read only
+  when its desktop opens it (it went idle ~62 min at session end). Close hook tasks with
+  `python C:/Users/howar/.claude/hooks/orchestration.py done note:<queueKey> --session <id>`.
+- **OMP (Gen 2):** the name `Gen2-Base` and its session id CHANGE between cards (replies came from
+  01a0c535..., 01a0ce10..., 01a0ce2f...); when the name does not resolve, try the id from its latest
+  PEER REPLY. `kind: peers` lists only `Gen3-2` (the Gen 3 lane's: never cross). OMP works in its own
+  detached worktree `C:/Users/howar/AppData/Local/Temp/g2omp` (branches omp/gen2-O6, omp/gen2-U4b);
+  the coordinator cherry-picks. `request` with `delivery: live, wait: false`; `outcome` every task.
+- **Machine sharing:** other lanes run EmuHawk on this machine. The Gen 3 lane's
+  `tools/gen3_fixtures.py` once ran `taskkill /F /IM EmuHawk.exe` and killed five Gen 2 gate runs; the
+  Gen 3 coordinator fixed it (PID/run-dir scoped). Symptom of a foreign kill: result file stops early,
+  no RESULT line, no crash record. Diagnose with the EmuHawk parent command lines (Win32_Process).
+- **Never shell-background (`&`) a live run from the Bash tool:** it survives the call, and a second
+  run then shares `patch/build/<gate>_result.txt` (one all-eight run was voided that way). Use
+  `run_in_background` and one run at a time.
 
 ## Where things are
 
-- Branch `codex/gen2-foundation`, not pushed since P1 (`93ccb8e`). Local master (`c411b2f`) is
-  merged INTO the branch (`5d0a41b`, `1ad7fd7`); master itself is 19 ahead of origin, unpushed.
+- Branch `codex/gen2-foundation`, not pushed since P1 (`93ccb8e`). Local master `7957c24` merged in at
+  `1bb69b4` (clean; unit suite 6026 passed / 15 skipped).
 - **Pinned pret sources are `.cache/gen2-build/{pokecrystal,pokegold}`** (7a7881d / 656583c).
-  `.cache/pret` holds OTHER commits (3438c70 / e78abb8): never cite it.
-- Staged (gitignored): Gen 1/2 dumps at the root; `patch/build/gen1_pure*_overlay.gbc` re-applied
-  from master's UPS (sha1 == `data/purergb/overlay_provenance.json`); `.cache/purergb` is a
-  JUNCTION to the root pinned pureRGB checkout (remove with `os.rmdir` on the junction only).
-  Root `.cache/slink-upr/PokeRandoZX.jar` is the notify-SFX (patch 0009) jar (owner);
-  the old one is `PokeRandoZX-pre0009-2026-09-21.jar`.
-- Uncommitted work under review: per-card patches in `.cache/snapshots/gen2-session4-2026-09-23/`.
+  `.cache/pret` holds OTHER commits: never cite it.
+- Coordinator lane drivers (gitignored): `.cache/requal.py <suffix> [names]` = qualify() of each
+  COMMITTED fixture with its original played receipt (no replay); `run_fixtures.py` (session scratchpad;
+  replay + qualify + stage). Staged inputs as in the runbook.
 
-## Done this session (commit bodies + docs/gen2/reviews/ carry the evidence)
+## Done this session (5) — commit bodies + docs/gen2/reviews/ carry the evidence
 
-- `5d0a41b` / `1ad7fd7` merge master (one conflict: Gen 1 hook-latch logging re-expressed on the
-  shared `hook_registry` `status()`); the post-merge suite's 30 failures all fixed or explained.
-- `e2586c6` **P3a.2** Gen 2 hello conformance (shared schema, `protocol.md` §8.1); `e09d0a9` cites.
-- `6a55f99` owner ruling **O-21** (Crystal Tin Tower Suicune = `legend_245`) + R6 review record.
-- `f5b23cc` O-21 in the Crystal static pack/adapter (SOURCE only; runtime capture = card N12b);
-  legacy `Gen2CrystalAdapter.encounter_table` reads the pack per hello title.
-- `40d614f` **N14a** (R6 #6 full-chain receipt gate; S2 rewind cancels queued work).
-- `ca0888b` **N15** server: only a MISSING `artifact_kind` defaults to clean.
-- Cross-title areas: only `battle_tower` is Crystal-only (no acquisitions); owner: fine as-is.
-- **`28d26d1` ALL EIGHT FIXTURES PLAYED + QUALIFIED** (4/4 stages each, committed with receipts): Crystal OT 46401
-  (town/battle) and 44068 (_ot2 town/battle), Gold 50342, Silver 51084. The route ran unchanged on Gold/Silver; the only
-  fix was the re-save oracle: Gold/Silver `RestoreOverworldMapTiles` copies the screen tilemap into `sScratch[0:$168]`.
-  **Next when resumed:** live inspect gate on the eight fixtures; N14b strict re-save rules (then re-qualify all eight,
-  ~5 min each via the coordinator driver); gen2-M1 Gen 1 duo A/B; the Gen 2 duo harness (P3b.7).
-  N14b source facts are DONE (Codex): `docs/gen2/reviews/N14B_FACTS_CODEX_2026-09-23.md` is the implementation
-  card's input. Local master has moved again (9 commits past the last sync): merge it before the next shared
-  change. Coordinator lane driver (not committed): session scratchpad `run_fixtures.py` = run_play + qualify +
-  stage + receipt per fixture, stop at the first failure; recreate from the eight-fixture commit body if lost.
-- **`398aef4` FIRST LIVE GEN 2 PLAY + QUALIFICATION PASS** (crystal_town, attempt n2-crystal-town-a7;
-  route 112 s @300%, qualify 4/4 stages 211 s @100%, player_id 46401). The played save replaced the legacy
-  `tests/fixtures/gen2/crystal_town.SaveRAM` (owner); receipt in `tests/fixtures/gen2/receipts/`. Live fixes: 12-frame
-  press hold (main menu polls every 5+ frames), NPC coords = struct - 4, `ONE_SHOT_KINDS = {continue_confirm}`.
-  Also `acd552c`/`ba46ac9` hook-registry + signal-binder per-hit allocation removed, `7ce1105` static captures,
-  `cfde305` route origins, `209dbae` N14c.
+- `1bb69b4` merge master 7957c24 (OMP O4: no semantic conflict). Owner: master's pixel-font HUD is
+  expected -> `ac097cd` Gen 2 NEW ENCOUNTER banner newline-separated like Gen 1.
+- `347c800` HOLD comment: the walk step is 8 frames (OMP O3, StepVectors); route walks never use press().
+- `e2a6738` **N16** server refuses an unknown `artifact_kind` string (guard APPROVE; carry: pre-N15
+  persisted kinds load unvalidated).
+- `4ae0f7f` **N14b** strict re-save rules + fresh-fixture guards (Sonnet APPROVE). `e01ae24` **all eight
+  receipts re-qualified under N14b**, 4/4 stages each, fixture bytes unchanged.
+- **Live inspect gate 8/8 PASS at `0c9eabc`** incl. the OMP O6 display oracle (Trainer Card ID/name,
+  stats gender/shiny, item line) on Crystal/Gold/Silver -> R-3 tilemap half + R-5g display half
+  PHYSICAL (badges = OAM and PC box header stay OPEN). Live-found fixes: `71dbc44` G/S stats label
+  `StatsScreen_LoadPage.joypad_loop`, `81d7892` 12-frame display HOLD, `195544e` START menu reads
+  POKéMON (the `#` code expands to POKé), `0c9eabc` items.json (legacy item_names.json is Crystal-only).
+- Owner ruling **O-22** (`4f3a2b6`): conditional production admission — U3 admits a title only after
+  its U1 + U2 PHYSICAL proofs pass.
+- P3b.7 plan from Codex (`7265ba0`, docs/gen2/reviews/P3B7_PLAN_CODEX_2026-09-23.md): cards U1-U5, H0-H4.
+- **U4** `09d4339` server title binder (OMP APPROVE); **U4b** `c0d8998`+`adbeb88` per-player title data
+  for cross-title pairs (O-16), review queued with Codex (note gen2-U4b-review).
+- **H0** `afcc568` (Codex) neutral duo evidence contract per family (Sonnet APPROVE).
+- **U1** `a867df4` + **U1b** `e92b182` Crystal engine-hook proof + hardened receipt (Opus review of U1;
+  U1b answers it). **Live U1 run FAILED** (`.cache/u1-live.log`): walk OK, `wild_ready` fired once at
+  its pinned bank/PC (first PHYSICAL site hit), then the BATTLE phase made no bounded progress (no
+  screen dump in this gate). Likely: a battle screen with no mapped UI kind falls through to the
+  overworld wait (lua/tests/gen2_frame_align.lua ~:131-175).
+- **U2** `e2952725` write windows (MODEL only): Opus review REQUEST CHANGES (2 HIGH receipt trust, see
+  ledger gen2-U2-review). Source correction to OMP O8: a START-menu frame DOES fail predicates
+  (CheckMenuOW -> CallScript sets wScriptRunning; PlayerEvents .ok sets wScriptMode).
+- Facts recorded: N12B_OPEN_FACTS (Celebi unreachable on pinned 1.0; static re-fight table; Electrodes
+  consumed on a win), OMP_R3_R5G_DISPLAY_FACTS, OMP_U2_WRITE_WINDOW_FACTS (+O8; Bug Contest bit = 2).
 
-## In flight / next, in order (the owner check-in is AFTER step 3)
+## Next, in order
 
-1. Commit after review: **N11+N11b** route origins (`PromptButton.input_wait_loop`,
-   `JoyWaitAorB`, `SetDayOfWeek.loop2`, yes/no at `_YesNoBox` so the `PlaceYesNoBox` save prompt
-   is seen; real `has_existing_save`; qualify answers `prompt_button` only in the save phase);
-   **N13** registry read-only site view (no per-hit copy); **N13b** Gen 1/2 signals reject path
-   allocates nothing; **N14c** R7 follow-ups.
-2. After the `lua/gen2/client.lua` commits: re-pin `protocol.md` client cites (+N) and the
-   coverage-map sha; rewrite the §2.2 server.py:1321 note (fixed by `ca0888b`).
-3. **gen2-N2 first live Gen 2 play**: commit N11 first, freeze a lane worktree, junction only
-   `.cache/gen2-build`, `mkdir tests/fixtures/gen2/receipts`, run_play crystal_town (300%), then
-   `qualify()` (100%), stage the CANDIDATE SaveRAM, write the receipt (OMP preflight READY,
-   cx-2e09cd35; budgets unmeasured: a stall costs the 1200 s timeout). **Then stop and check in.**
-4. Queued: N14b strict re-save rules (facts card with Codex); N12b static-capture runtime path
-   (design OMP cx-4f13cf07); gen2-M1 Gen 1 duo A/B after N13/N13b (isolated discriminator master
-   99.3 s vs branch 112.8 s); other fixtures; Gen 2 duo harness.
+1. **U1 live diagnosis:** add a screen dump + UI-kind trace when the battle phase stalls
+   (lua/tests/gen2_frame_align.lua), map the missing battle UI kind(s) from source, rerun once
+   (`SLINK_LIVE=1 pytest tests/live/test_gen2_frame_align.py`); on PASS commit
+   `tests/fixtures/gen2/receipts/crystal.engine_sites.json`. Never rerun unchanged.
+2. **U2b:** port U1b's receipt hardening into `lua/gen2_write_safety.lua` M.qualified (raw evidence,
+   fixture/attempt binding, gate-emitted PHYSICAL), pin Gold's sha1 for Silver, drop the MODEL_ONLY save
+   fallback, settle the required-controls scope; then U2 live (`-k crystal`, `-k gold`).
+3. Read Codex's U4b review (transcript) when it wakes; then U3 production graph (O-22), U5 route,
+   H1/H2/H3 (Gen 2 duo driver + oracle + wrapper), gen2-M1 Gen 1 duo A/B.
+4. Carries: per-context HOLD if an exact-one-tile overworld press is ever needed; U4b docstring
+   boundary note; capture_box unproven (needs a full party); static hardware firing (no fixture near a
+   publishable static).
 
 ## Runbook (exact commands; run from this worktree root)
 
