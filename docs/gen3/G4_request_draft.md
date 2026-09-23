@@ -245,11 +245,9 @@ IN FLIGHT** (`save_then_write_gen3` and `center_controls_gen3`, FR-as-A and LG-a
 11. **The rollback freeze is the SHA + manifest** (owner, 2026-09-23, decision (c)): `docs/gen3/rollback_bundle.md` @ `2cd9f993` is the frozen rollback; no separate archive is built. **S**
 12. **Doubles, the target menu and Safari are signed as current-fixture limits** (owner, 2026-09-23, decision (d)): 2b rows D1-D5, N3 and U3 are recorded G4 limits; every other 2b row still runs. **S**
 
-### Open — decision (b)
+13. **The cartridge's own link features are signed as limits** (owner, 2026-09-23, decision (b)): the real in-game link battle (`battle_link`) and Union Room entry/return are recorded G4 limits. SLink never uses the game's link cable or a wireless adapter — its trades and link events go through the SLink server (`docs/protocol.md` §6) — so these rows only test that SLink stays hands-off if a player uses the cartridge's own Cable Club link battle or Union Room, which cannot be produced here (no cable partner; `IsWirelessAdapterConnected` observed false). The 2F Cable Club controls that do run here stay PASS (`c13cf7c7`). **S**
 
-| # | Decision | Options | Why it matters |
-|---|---|---|---|
-| **b** | The two rows that cannot be produced here: the real link battle (`battle_link`) and Union-Room **entry/return** | (i) record them as limits naming the observed condition; or (ii) provide fixtures/hardware | entry/return is unreachable while `IsWirelessAdapterConnected` is observed false (`lua/tests/duo/scenario_gen3_center_controls.lua:32`). The 2F cable-menu, cable-link and no-adapter controls are **designed to run without an adapter and stay OPEN on their own** (under diagnosis; a fix is live-testing now). A recorded hardware limit does **not** close the trainer, faint or other probe rows **S** |
+All four owner scope decisions are now settled.
 
 ---
 
