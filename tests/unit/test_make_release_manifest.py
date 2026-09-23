@@ -130,10 +130,8 @@ def test_the_closure_is_the_gen1_client_and_nothing_stale():
         "data/games/gen1_rby/profile.json",
         # Only reachable once the closure is rooted at the launchers, not run.lua alone.
         "lua/game_detect.lua",
-        "lua/clients/gen2_crystal_client.lua",
         "lua/clients/gen4_hgsspt_client.lua",
         "lua/clients/gen5_bw_client.lua",
-        "lua/games/gen2_crystal.lua",
         "lua/games/gen4_hgsspt.lua",
         "lua/games/gen5_bw.lua",
         "data/games/gen4_hgsspt/gen4_hgsspt_areas.lua",
@@ -192,6 +190,18 @@ def test_the_old_gen1_client_is_not_shipped(archive):
     themselves stay on disk until their unit consumers are migrated."""
     assert "lua/clients/gen1_rby_client.lua" not in archive
     assert "lua/games/gen1_rby.lua" not in archive
+
+
+def test_the_legacy_gen2_runtime_is_neither_derived_nor_shipped(archive):
+    """P3b.8 removed the legacy Gen 2 client (Archipelago Crystal, its last route, is refused:
+    O-25). Nothing a launcher reaches may name it, and the ZIP must not carry it."""
+    legacy = {
+        "lua/slink_gen2.lua", "lua/clients/gen2_crystal_client.lua", "lua/memory_gb.lua",
+        "lua/games/gen2_crystal.lua", "lua/games/gen2_crystal_trainers.lua",
+        "lua/gen2_crystal_areas.lua", "lua/gen2_crystal_locations.lua",
+    }
+    assert not legacy & _closure(_ENTRYPOINTS)
+    assert not legacy & archive
 
 
 def test_gb_companion_bundle_names_every_pure_overlay_ups():

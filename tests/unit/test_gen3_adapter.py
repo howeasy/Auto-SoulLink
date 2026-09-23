@@ -453,12 +453,13 @@ class TestMoveData:
         Verify they don't crash AND produce the same output as the no-form call.
         """
         from server.adapters.gen1_rby import Gen1Adapter
-        from server.adapters.gen2_crystal import Gen2CrystalAdapter
+        from server.adapters.gen2_gsc import Gen2GSCAdapter
         from server.adapters.gen3_frlge import Gen3Adapter
         from server.adapters.gen5_bw import Gen5Adapter
-        for cls, sp in [(Gen1Adapter, 25), (Gen2CrystalAdapter, 25),
+        for cls, sp in [(Gen1Adapter, 25), (Gen2GSCAdapter, 25),
                         (Gen3Adapter, 25), (Gen5Adapter, 495)]:
-            a = cls() if cls is not Gen3Adapter else cls(is_rr=False)
+            a = (cls(is_rr=False) if cls is Gen3Adapter
+                 else cls(rom_type="Crystal") if cls is Gen2GSCAdapter else cls())
             # Calling with explicit form arg must not crash AND must equal the no-form output.
             assert a.sprite_html(sp, 0)  == a.sprite_html(sp)
             assert a.sprite_html(sp, 5)  == a.sprite_html(sp)

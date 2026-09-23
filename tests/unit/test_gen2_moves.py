@@ -53,6 +53,6 @@ def test_generated_source_verified_move_bounds_and_known_records():
 
 def test_shared_adapter_package_import_and_existing_move_reader_compatibility():
     root = Path(__file__).resolve().parents[2]
-    code = "from server.adapters.gen2_crystal import Gen2CrystalAdapter; a=Gen2CrystalAdapter(); assert a.move_data(2)['type_name']=='Fighting'; assert a.move_data(12)['split']==0; assert a.move_data(14)['split']==2; assert a.move_data(53)['split']==1; assert a.move_data(33)['accuracy']==95"
+    code = "from server.adapters.gen2_gsc import Gen2GSCAdapter; a=Gen2GSCAdapter(rom_type='Crystal'); assert a.move_data(2)['type_name']=='Fighting'; assert a.move_data(12)['split']==0; assert a.move_data(14)['split']==2; assert a.move_data(53)['split']==1; assert a.move_data(33)['accuracy']==95"
     result = subprocess.run([sys.executable, "-B", "-c", code], cwd=root, text=True, capture_output=True)
     assert result.returncode == 0, result.stdout + result.stderr

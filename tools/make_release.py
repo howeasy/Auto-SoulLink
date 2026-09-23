@@ -60,14 +60,12 @@ GENERATORS: list[tuple[str, str]] = [
 _LUA_ROOT = [
     "slink.lua",
     "slink_gen1.lua",
-    "slink_gen2.lua",
     "slink_gen3.lua",
     "slink_gen4.lua",
     "slink_gen5.lua",
     "connector.lua",
     "game_detect.lua",
     "hud.lua",
-    "memory_gb.lua",
     "memory_gba.lua",
     "memory_nds.lua",
     "sfx_arbiter.lua",
@@ -91,9 +89,6 @@ _LUA_ROOT = [
     # (patch_present() stays false, so the client falls back to RAM-poke).
     "mailbox.lua",
     "peer_ghost_npc.lua",
-    # Gen 2 area tables live in lua/ (loaded via _lua_root)
-    "gen2_crystal_areas.lua",
-    "gen2_crystal_locations.lua",
     # Gen 3/4/5 area tables live in data/games/<gen>/ (loaded via _proj_root)
 ]
 
@@ -127,7 +122,6 @@ _LUA_GEN2 = [
 
 # lua/clients/
 _LUA_CLIENTS = [
-    "gen2_crystal_client.lua",
     "gen3_frlge_client.lua",
     "gen4_hgsspt_client.lua",
     "gen5_bw_client.lua",
@@ -135,13 +129,6 @@ _LUA_CLIENTS = [
 
 # lua/games/
 _LUA_GAMES = [
-    "gen2_crystal.lua",
-    # Unconditionally required at module load by lua/clients/gen2_crystal_client.lua:101
-    # (`local TRAINERS = require("games.gen2_crystal_trainers")`) for trainer-name resolution
-    # in battle/HUD messages. Missing from this list before test_make_release_manifest.py's
-    # launcher-rooted closure caught it -- the require runs at module load, so a Crystal
-    # player's release build failed to start the client at all.
-    "gen2_crystal_trainers.lua",
     "gen3_frlge.lua",
     "gen4_hgsspt.lua",
     "gen5_bw.lua",
@@ -288,7 +275,6 @@ _COMPANION_ROM_ARCNAME = "Pokemon - Radical Red (SLink companion).gba"
 # Launcher scripts (relative to lua/) whose SLINK_* lines get patched
 _LAUNCHER_SCRIPTS: set[str] = {
     "slink_gen1.lua",
-    "slink_gen2.lua",
     "slink_gen3.lua",
     "slink_gen4.lua",
     "slink_gen5.lua",

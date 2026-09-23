@@ -35,8 +35,9 @@ def test_there_are_clients_to_check():
     P8-2b: four, not five. Gen 1 left lua/clients/ for lua/gen1/, where the client is a module
     rather than a BizHawk entry script, and its acks are covered below against that path.
     Written as a lower bound so it holds before and after the old client's deletion.
+    P3b.8: three -- Gen 2's legacy client went the same way (lua/gen2/ replaces it).
     """
-    assert len(CLIENTS) >= 4
+    assert len(CLIENTS) >= 3
 
 
 GEN1_CLIENT = os.path.join(REPO, "lua", "gen1", "client.lua")
@@ -83,21 +84,3 @@ def test_a_client_that_confirms_also_reports_failure(client):
     )
 
 
-def test_gen2_confirms_the_already_boxed_or_missing_case():
-    """The specific Gen 2 regression.
-
-    Deliberately NOT generalised across clients. Gen 3 routes every outcome through a single
-    `memorialize_finish` helper, so counting send-sites would flag it as broken when it is in
-    fact the better shape — an earlier version of this test did exactly that, and would have
-    pushed someone to duplicate Gen 3's ack for no reason. The invariant that matters is "no
-    path exits without reporting", which is not something a regex can see; so this pins the one
-    branch that was genuinely silent.
-    """
-    src = _read("gen2_crystal_client.lua")
-    idx = src.index('cmd.cmd == "memorialize"')
-    branch = src[idx:idx + 3000]
-    tail = branch[branch.index("Try box scan"):]
-    assert "memorialize_done" in tail, (
-        "Gen 2's already-boxed / not-found branch does not confirm, so the server re-queues "
-        "that memorialize on every reconnect for a mon that no longer exists"
-    )
