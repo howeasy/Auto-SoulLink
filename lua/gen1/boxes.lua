@@ -416,7 +416,14 @@ function B.new(profile, reads, io)
         return out
     end
 
-    function self.party_mon(key, base_stats, nickname, stats)
+    -- Durability (mirror of lua/gen2/boxes.lua ops.withdraw/ops.settle, OMP BOX review F1): a
+    -- non-current saved box is bank SRAM, durable at once, while the party is WRAM until the next
+    -- native SAVE. Removing the box copy before that save loses the mon on a reset (the saved party
+    -- lacks it, the bank lost it). With opts.defer_backing the party copy is written now and the box
+    -- copy stays (a duplicate, never a loss); after the save witness the caller re-runs party_mon(key),
+    -- whose interrupted-withdraw replay below drops the box copy on a full-record match (the settle).
+    -- The current box lives in WRAM (reverts with the party), so it needs no deferral.
+    function self.party_mon(key, base_stats, nickname, stats, opts)
         -- stats is the server's optional cache, retained for command-shape
         -- compatibility; rebuilt values from verified base stats are authoritative.
         local _ = stats
@@ -464,6 +471,9 @@ function B.new(profile, reads, io)
         newbox, why = compose(t.raw, box, without(t.list, hit.slot))
         if not newbox then return nil, why end
         io.write_bytes(party.base, newparty) -- party first: no loss if interrupted
+        if not t.current and type(opts) == "table" and opts.defer_backing == true then
+            return true, "backing removal deferred to the save witness"
+        end
         write_target(t, newbox)
         return true
     end
@@ -523,8 +533,28 @@ function B.new(profile, reads, io)
         if not newbox then return nil, why end
         newparty, why = compose(source.raw, party, without(source.list, source.slot))
         if not newparty then return nil, why end
+        -- an unsettled deferred withdraw left the durable box copy (mirror of gen2 ops.memorialize):
+        -- it goes too, AFTER the memorial and the party, so a reset in between leaves a duplicate
+        local copy
+        copy, why = all_box_matches(key, current)
+        if why then return nil, why end
+        if copy and not same_transfer(original, copy.target.list[copy.slot]) then
+            return nil, "ambiguous key exists in both party and box"
+        end
         write_target(t, newbox)
         io.write_bytes(party.base, newparty)
+        if copy then
+            -- re-read: the memorial write rewrote (and re-sealed) a whole bank the copy may share
+            local again, slot
+            again, why = target(copy.index, current)
+            if not again then return nil, why end
+            slot, why = find(again.list, key)
+            if not slot then return nil, why or "box copy vanished" end
+            local rest
+            rest, why = compose(again.raw, box, without(again.list, slot))
+            if not rest then return nil, why end
+            write_target(again, rest)
+        end
         return true
     end
 
@@ -532,8 +562,8 @@ function B.new(profile, reads, io)
     -- species' base-stat record before withdraw; a national-dex keyed table
     -- cannot safely be indexed by this command's opaque identity key.
     function self:deposit(key, slot_hint) return self.box_mon(key, slot_hint) end
-    function self:withdraw(key, stats, base_stats, nickname)
-        return self.party_mon(key, base_stats, nickname, stats)
+    function self:withdraw(key, stats, base_stats, nickname, opts)
+        return self.party_mon(key, base_stats, nickname, stats, opts)
     end
 
     return self

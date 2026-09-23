@@ -3443,3 +3443,29 @@ def test_model_hello_menu_hold_reconnect_battle_and_reset_remain_supported(monke
     world.client.hello_session.invalidate(world.client.hello_session, "save_reset")
     world.step()
     assert len(world.events("hello")) == 3
+
+
+def test_a_deferred_backing_withdraw_settles_only_after_the_save_witness(world):
+    """gen1-box-durability (mirror of gen2 699930b6): party_mon asks boxes.lua to defer a non-current
+    box removal; the client acks at once and re-runs party_mon (the replay = the settle) only at the
+    first checkpoint after save_witness."""
+    calls = []
+
+    def withdraw(_self, key, stats=None, base=None, nickname=None, opts=None):
+        calls.append((key, bool(opts and opts["defer_backing"])))
+        return (True, "backing removal deferred to the save witness") if len(calls) == 1 else True
+    world.client.boxes = world.lua.table_from({"withdraw": withdraw})
+    world.connect()
+    world.step(60)
+    world.overworld_safe()
+    world.reply({"cmd": "party_mon", "key": "ABCD:0001:99"})
+    world.step(2)
+    assert calls == [("ABCD:0001:99", True)]
+    assert [m["key"] for m in world.events("sync_retrieve_done")] == ["ABCD:0001:99"]
+    world.overworld_safe()
+    world.step(5)
+    assert len(calls) == 1                     # no settle before the native save
+    world.fire("save_witness")
+    world.overworld_safe()
+    world.step(2)
+    assert calls == [("ABCD:0001:99", True), ("ABCD:0001:99", False)]

@@ -163,6 +163,8 @@ function Client.new(p)
         pending_change = nil, pending_rival = nil, battle = nil, has_pokeballs = false,
         nuzlocke_announced = false,
         signals = nil, boxes = p.boxes, rom = p.rom, statics = p.statics, panel = p.panel,
+        -- deferred backing-box removals ({key, armed}) waiting for save_witness (gen1-box-durability)
+        box_settle = {},
         trade = p.trade, trade_enabled = false, trade_state = nil,
         -- A1: server-seeded pending-capture keys (part of the APEX collision set) and the
         -- old->new alias held between a key_change and its ack
@@ -770,9 +772,26 @@ function Client.new(p)
 
     -- Deferred queue: one command per frame, only at the verified overworld checkpoint.
     function self:run_deferred()
-        if #self.deferred == 0 or not self.writes_enabled or not net.connected() then return end
+        local armed
+        for i, s in ipairs(self.box_settle) do if s.armed then armed = armed or i end end
+        if (#self.deferred == 0 and not armed) or not self.writes_enabled or not net.connected() then return end
         local safe, why = safety.check(ws_profile, io)
         if not safe then return end
+        if armed then
+            -- the native save persisted the party: re-running party_mon is the interrupted-withdraw
+            -- replay (boxes.lua), which drops the box copy on a full-record match; a reset before the
+            -- save left the mon in the box only, and the replay is a no-op there. One op per checkpoint.
+            -- Mirror of lua/gen2/client.lua run_deferred's settle.
+            local s = table.remove(self.box_settle, armed)
+            local ok, done, reason = pcall(function()
+                writes:arm("overworld")
+                return self.boxes:withdraw(s.key)
+            end)
+            writes:disarm()
+            log("[SLink-gen1] box copy settle " .. s.key .. ": " .. (ok and done and "done" or tostring(reason or done)))
+            self:rescan_boxes()
+            return
+        end
         local cmd = table.remove(self.deferred, 1)
         -- the key the cartridge holds for cmd.key and, for a retired alias, the validated slot:
         -- the box module takes both so a duplicate of the new key elsewhere cannot block the
@@ -830,7 +849,14 @@ function Client.new(p)
                 for _, e in ipairs(self.box_cache) do if e.key == cmd.key then species = e.species_id end end
                 local base = species and self.rom and self.rom.base_stats_for(species) or nil
                 local done, reason = nil, "no box module"
-                if self.boxes then done, reason = self.boxes:withdraw(cmd.key, cmd.stats, base, cmd.nickname) end
+                if self.boxes then
+                    done, reason = self.boxes:withdraw(cmd.key, cmd.stats, base, cmd.nickname, { defer_backing = true })
+                end
+                if done and reason then
+                    -- F1: the non-current box copy stays until save_witness (never a loss on a reset)
+                    self.box_settle[#self.box_settle + 1] = { key = cmd.key, armed = false }
+                    log("[SLink-gen1] party_mon " .. tostring(cmd.key) .. ": " .. reason)
+                end
                 if done then
                     send("sync_retrieve_done", { key = cmd.key })
                     self:rescan_boxes()
@@ -1299,6 +1325,7 @@ function Client.new(p)
             end
         elseif k == "save_witness" then
             if io.saveram then pcall(io.saveram) end
+            for _, s in ipairs(self.box_settle) do s.armed = true end  -- gen1-box-durability
         elseif k == "starter_begin" or k == "starter_end" or k == "battle_loop_head" then
             -- consumed inside the hook (battle_loop_head) or informational (starter)
         end
