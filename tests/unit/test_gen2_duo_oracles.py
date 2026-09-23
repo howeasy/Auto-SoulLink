@@ -1051,6 +1051,134 @@ def test_wrong_rom_admission_refuses_mutations(admission_case, fault):
         oracles.admit_wrong_rom_oracle(results, **kwargs)
 
 
+@pytest.fixture(scope="module")
+def reconnect_qualification_cache():
+    from functools import lru_cache
+
+    from tests.live.test_gen2_new_gates import qualified_identity
+
+    return lru_cache(maxsize=8)(qualified_identity)
+
+
+@pytest.fixture
+def reconnect_case(good_case, tmp_path, monkeypatch, reconnect_qualification_cache):
+    from tests.live import test_gen2_new_gates
+
+    monkeypatch.setattr(test_gen2_new_gates, "qualified_identity", reconnect_qualification_cache)
+    initial, data_dir, decoded = good_case
+    pin = codec.for_foundation("crystal").profile["titles"]["crystal"]["rom_sha1"]
+    for side in ("a", "b"):
+        initial[side] = "\n".join(line for line in initial[side].splitlines() if not line.startswith("RESULT:"))
+        for tag in ("DUO_GEN2", "CLIENT"):
+            row = oracles._last_tagged(initial[side], tag)
+            row.update(rom_sha1=pin)
+            if tag == "DUO_GEN2":
+                row.update(player=side, scenario="gen2_reconnect")
+            initial[side] = _replace_tag(initial[side], tag, row)
+        initial[side] = _replace_tag(initial[side], "RECONNECT_READY",
+            {"frame": 5100, "phase": "initial", "player": side, "key": decoded[side]["key"]})
+    head = oracles._last_tagged(initial["b"], "DUO_GEN2")
+    initial["b"] = _replace_tag(initial["b"], "B_STAYED", {"frame": 10000, "hellos": 1, "force_faint": 0, "box_mon": 0})
+    initial["b"] = _replace_tag(initial["b"], "RECEIPT", {**head, "schema": "gen2-duo-reconnect-v1", "phase": "initial"})
+    initial["b"] += "\nRESULT: PASS"
+    initial_path = Path(oracles._last_tagged(initial["a"], "SAVE_WITNESS")["saveram_path"])
+    staged, final, texts = {}, {}, {}
+    for phase in ("same_save", "wrong_save"):
+        seed = initial_path.read_bytes() if phase == "same_save" else FIXTURES["b"].read_bytes()
+        staged[phase] = tmp_path / f"{phase}-seed.SaveRAM"
+        final[phase] = tmp_path / f"{phase}-final.SaveRAM"
+        staged[phase].write_bytes(seed)
+        final[phase].write_bytes(seed)
+        ot = OT_IDS["a"] if phase == "same_save" else OT_IDS["b"]
+        head = {"player": "a", "scenario": "gen2_reconnect", "attempt": 2 if phase == "same_save" else 3,
+                "case": "crystal_battle", "title": "crystal", "rom_sha1": pin,
+                "fixture_sha256": hashlib.sha256(seed).hexdigest()}
+        back = {"frame": 3500, "phase": phase, "hellos": 1, "ot_id": ot,
+                "expected_key": decoded["a"]["key"], "linked": phase == "same_save"}
+        rows = [("DUO_GEN2", head), ("CLIENT", {"title": "crystal", "rom_sha1": pin, "production_admitted": True}),
+                ("BOOTED", {"frame": 3000}), ("HELLO", {"frame": 3300, "ot_id": ot}), ("RECONNECT_HELLO", back)]
+        if phase == "wrong_save":
+            rows.extend([("RX_TEXT", {"frame": 3510, "cmd": "hud_show", "text": "[x] WRONG SAVE: slot A"}),
+                         ("WRONG_SAVE_HUD", {"frame": 3511, "text": "[x] WRONG SAVE: slot A"})])
+        rows.append(("RECEIPT", {**head, **back, "schema": "gen2-duo-reconnect-v1"}))
+        texts[phase] = "\n".join(f"{tag} {json.dumps(value)}" for tag, value in rows) + "\nRESULT: PASS"
+    doc = json.loads((Path(data_dir) / "links.json").read_text())
+    doc.update(player_identity={side: {"ot_id": str(OT_IDS[side])} for side in ("a", "b")}, pending_captures={})
+    events = [{"type": "hello", "player": side, "text": "Connected (Crystal)"} for side in ("a", "b")]
+    players = {side: {"connected": True, "party_keys": [decoded[side]["key"]], "identity_error": ""} for side in ("a", "b")}
+    snapshots = {"initial": {"links": deepcopy(doc), "events": deepcopy(events), "status": {"players": deepcopy(players)}}}
+    snapshots["disconnected"] = deepcopy(snapshots["initial"])
+    snapshots["disconnected"]["status"]["players"]["a"]["connected"] = False
+    events.insert(0, {"type": "hello", "player": "a", "text": "Connected (Crystal)"})
+    snapshots["same_save"] = {"links": deepcopy(doc), "events": deepcopy(events), "status": {"players": deepcopy(players)}}
+    snapshots["before_wrong"] = deepcopy(snapshots["same_save"])
+    snapshots["before_wrong"]["status"]["players"]["a"]["connected"] = False
+    events.insert(0, {"type": "hello", "player": "a", "text": "REJECTED — wrong save/slot"})
+    players["a"]["identity_error"] = "Identity mismatch for slot A"
+    snapshots["wrong_save"] = {"links": deepcopy(doc), "events": deepcopy(events), "status": {"players": deepcopy(players)}}
+    (Path(data_dir) / "links.json").write_text(json.dumps(doc))
+    (Path(data_dir) / "events.json").write_text(json.dumps(events))
+    return {"a": texts["wrong_save"], "b": initial["b"]}, {"data_dir": data_dir, "initial_results": initial,
+        "relaunch_results": texts, "boot_saveram": FIXTURES, "staged_saves": staged,
+        "relaunch_saves": final, "snapshots": snapshots}
+
+
+def test_reconnect_independent_three_phase_evidence(reconnect_case):
+    results, kwargs = reconnect_case
+    facts = []
+    oracles.reconnect_oracle(results, **kwargs, on_verified=facts.append)
+    assert facts[0]["status"] == "alive" and facts[0]["a"] != facts[0]["b"]
+
+
+@pytest.mark.parametrize("fault", ["same_hash", "wrong_hash", "same_seed", "wrong_seed", "same_final",
+    "wrong_final", "same_witness", "wrong_witness", "same_hello", "wrong_hud", "b_faint", "not_killed",
+    "link_changed", "identity_changed", "duplicate_capture", "wrong_accepted", "b_disconnected", "result_swap",
+    "initial_duplicate_hello", "rule_state"])
+def test_reconnect_refuses_mutations(reconnect_case, fault):
+    results, kwargs = reconnect_case
+    phase = "wrong_save" if fault.startswith("wrong") else "same_save"
+    texts, snapshots = kwargs["relaunch_results"], kwargs["snapshots"]
+    if fault.endswith("hash"):
+        head = oracles._last_tagged(texts[phase], "DUO_GEN2")
+        head["fixture_sha256"] = "0" * 64
+        texts[phase] = _replace_tag(texts[phase], "DUO_GEN2", head)
+    elif fault.endswith("seed") or fault.endswith("final"):
+        mapping = kwargs["staged_saves"] if fault.endswith("seed") else kwargs["relaunch_saves"]
+        mapping[phase].write_bytes(FIXTURES["a"].read_bytes())
+    elif fault.endswith("witness"):
+        texts[phase] += "\nSAVE_WITNESS {}"
+    elif fault == "same_hello":
+        texts[phase] += "\nHELLO_AGAIN {}"
+    elif fault == "wrong_hud":
+        texts[phase] = texts[phase].replace("WRONG SAVE", "RIGHT SAVE")
+    elif fault == "b_faint":
+        kwargs["initial_results"]["b"] += "\nRX force_faint key=bad"
+        results["b"] = kwargs["initial_results"]["b"]
+    elif fault == "not_killed":
+        snapshots["disconnected"]["status"]["players"]["a"]["connected"] = True
+    elif fault == "link_changed":
+        snapshots["same_save"]["links"]["links"][0]["status"] = "dead"
+    elif fault == "identity_changed":
+        snapshots["same_save"]["links"]["player_identity"]["a"]["ot_id"] = "7"
+    elif fault == "duplicate_capture":
+        snapshots["same_save"]["events"].insert(0, {"type": "capture", "player": "a"})
+    elif fault == "wrong_accepted":
+        snapshots["wrong_save"]["status"]["players"]["a"]["identity_error"] = ""
+    elif fault == "b_disconnected":
+        snapshots["same_save"]["status"]["players"]["b"]["connected"] = False
+    elif fault == "initial_duplicate_hello":
+        for snapshot in snapshots.values():
+            snapshot["events"].append({"type": "hello", "player": "b", "text": "Connected (Crystal)"})
+    elif fault == "rule_state":
+        snapshots["same_save"]["links"]["run_over"] = True
+    else:
+        results["a"] = texts["same_save"]
+    if fault.startswith("wrong") and fault != "wrong_accepted":
+        results["a"] = texts["wrong_save"]
+    with pytest.raises(RuntimeError):
+        oracles.reconnect_oracle(results, **kwargs)
+
+
 def test_missing_links_json_refused(good_case, tmp_path):
     results, _data_dir, _decoded = good_case
     empty_dir = tmp_path / "empty"

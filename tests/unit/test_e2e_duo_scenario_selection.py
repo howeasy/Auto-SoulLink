@@ -110,9 +110,119 @@ def test_gen2_refusal_go_requires_only_admitted_a(monkeypatch, admitted):
         assert not released
 
 
+@pytest.mark.parametrize("phase", ("same_save", "wrong_save"))
+def test_gen2_reconnect_stages_immutable_seeds_and_rebinds_boot_fingerprint(monkeypatch, tmp_path, phase):
+    import hashlib
+    import json
+    from pathlib import Path
+
+    import run_gb_gate as gate
+
+    monkeypatch.setattr(duo_module, "BUILD", str(tmp_path))
+    run = object.__new__(DuoRun)
+    run.game, run.scenario, run._lane = "gen2_new", "gen2_reconnect", "cc"
+    run.cfg = SCENARIOS[run.scenario]
+    source = tmp_path / "source.SaveRAM"
+    source.write_bytes(b"staged independent save")
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    run._gen2_inputs = {"a": {"title": "crystal", "wrong_sha256": digest}}
+    old = {"directory": tmp_path / "initial"}
+    run._gen2_plans = {"a": old}
+    run._gen2_env = {"a": {"SLINK_GEN2_FIXTURE_CASE": json.dumps({"name": "crystal_battle", "attempt_id": "old"}),
+                          "SLINK_GEN2_QUALIFY": json.dumps({"stage": "boot", "stage_fingerprint": "old", "facts": {"pin": 1}})}}
+    run._gen2_staged_saves, run._gen2_relaunch_saves = {}, {}
+    run.go_files = {"a": str(tmp_path / "go")}
+    Path(run.go_files["a"]).write_text("A_DONE_SAME")
+    run._expected_exit = {"a"}
+    launched = []
+    run.launch_instance = lambda *args, **kwargs: launched.append((args, kwargs))
+    monkeypatch.setitem(gate.GENS["gen2"], "plan", lambda title, directory, seed, speed: {
+        "directory": directory, "fixture": seed, "saveram_name": "crystal.SaveRAM"})
+    run._stage_gen2_reconnect(phase, source, "abcd:1234:01")
+    assert old["directory"] == tmp_path / "initial"
+    assert run._gen2_staged_saves[phase] != source
+    assert run._gen2_staged_saves[phase].read_bytes() == source.read_bytes()
+    assert run._gen2_relaunch_saves[phase].read_bytes() == source.read_bytes()
+    assert run._gen2_relaunch_saves[phase].parent.name.endswith("_" + phase)
+    assert json.loads(run._gen2_env["a"]["SLINK_GEN2_QUALIFY"]) == {
+        "stage": "boot", "stage_fingerprint": digest, "facts": {"pin": 1}}
+    assert json.loads(run._gen2_env["a"]["SLINK_GEN2_FIXTURE_CASE"])["attempt_id"] != "old"
+    assert Path(run.go_files["a"]).read_text() == ""
+    assert launched == [(("a",), {"phase": phase, "seed": False, "expected_key": "abcd:1234:01"})]
+    assert not run._expected_exit
+
+
+def test_gen2_reconnect_cannot_pass_without_all_live_legs():
+    run = object.__new__(DuoRun)
+    run.scenario = "gen2_reconnect"
+    run._live_complete = {}
+    assert run._live_ok() is False
+    run._live_complete[run.scenario] = True
+    assert run._live_ok() is True
+
+
+def test_gen2_reconnect_orchestration_keeps_b_online_and_archives_initial_a(monkeypatch, tmp_path):
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(duo_module, "BUILD", str(tmp_path))
+    run = object.__new__(DuoRun)
+    run.game, run.scenario, run._lane = "gen2_new", "gen2_reconnect", "cc"
+    run._gen2_plans = {"a": {"directory": tmp_path, "saveram_name": "initial.SaveRAM"}}
+    run._gen2_inputs = {"a": {"wrong_fixture": tmp_path / "wrong.SaveRAM"}}
+    run._live_complete = {}
+    state = {"phase": "initial", "connected": True, "b_done": False}
+    actions = []
+    def text(side):
+        if side == "b" and state["b_done"]:
+            return "RESULT: PASS B stayed"
+        if side == "b" or state["phase"] == "initial":
+            return "RECONNECT_READY " + json.dumps({"key": side + "-key"})
+        return 'RECONNECT_HELLO {"hellos":1}\nWRONG_SAVE_HUD {"text":"wrong"}\nRESULT: PASS relaunch'
+    run._read_receipt = text
+    run._status = lambda: {"players": {
+        "a": {"connected": state["connected"], "party_keys": ["a-key"],
+              "identity_error": "wrong" if state["phase"] == "wrong_save" else ""},
+        "b": {"connected": True}}}
+    run._links_json = lambda: [{"status": "alive", "area_id": "route_29",
+                               "a": {"key": "a-key"}, "b": {"key": "b-key"}}]
+    run._gen2_admit_snapshot = lambda: {"phase": state["phase"], "connected": state["connected"]}
+    def terminate(side):
+        assert side == "a"
+        state["connected"] = False
+        actions.append(("kill", state["phase"]))
+    run.terminate_instance = terminate
+    def stage(phase, source, key):
+        assert key == "a-key"
+        state.update(phase=phase, connected=True)
+        actions.append(("stage", phase, Path(source).name))
+    run._stage_gen2_reconnect = stage
+    def append(side, marker):
+        actions.append((side, marker))
+        if marker == "B_DONE":
+            state["b_done"] = True
+    run._append_reconnect_marker = append
+    run.emu_by_inst = {"a": SimpleNamespace(wait=lambda **kwargs: None)}
+    def wait(label, predicate, timeout):
+        result = predicate()
+        assert result, label
+        return result
+    run.wait_for = wait
+    run._orchestrate_gen2_reconnect()
+    assert actions == [("kill", "initial"), ("stage", "same_save", "initial.SaveRAM"),
+                       ("a", "A_DONE_SAME"), ("kill", "same_save"),
+                       ("stage", "wrong_save", "wrong.SaveRAM"), ("a", "A_DONE_WRONG"),
+                       ("kill", "wrong_save"), ("b", "B_DONE")]
+    initial = tmp_path / f"e2e_{run.artifact_name}_a_initial_result.txt"
+    assert "RECONNECT_READY" in initial.read_text() and "RESULT:" not in initial.read_text()
+    assert "RESULT: PASS" in Path(run._result_path("a")).read_text()
+    assert run._live_ok()
+
+
 def test_gen2_new_selects_link_and_faint_with_required_evidence():
     assert "gen2_new" in GAMES
-    assert scenarios_for("gen2_new") == ["link", "gen2_faint", "gen2_admit_wrong_rom"]
+    assert scenarios_for("gen2_new") == ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect"]
     contract = duo_module.evidence_contract("gen2_new")
     assert contract.require_oracle and contract.witness_validator
     assert callable(getattr(DuoRun, contract.witness_validator, None))
@@ -133,13 +243,13 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
     assert game in GAMES
     assert GAMES[game]["game"] == "gen2_new"
     assert GAMES[game]["fixture"] == fixtures
-    assert scenarios_for(game) == ["link", "gen2_faint", "gen2_admit_wrong_rom"]
+    assert scenarios_for(game) == ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect"]
     assert duo_module.evidence_contract(game) is duo_module.evidence_contract("gen2_new")
     assert not GAMES[game].get("server_rom_routes")
     assert duo_list_lines(game) == [
         f"{scenario}  attempts=1  targets=a:{fixtures['a']}, "
         f"b:{'crystal_battle_ot2' if scenario == 'gen2_admit_wrong_rom' else fixtures['b']}"
-        for scenario in ("link", "gen2_faint", "gen2_admit_wrong_rom")]
+        for scenario in ("link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect")]
 
 
 @pytest.mark.parametrize("game,titles,names", (

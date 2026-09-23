@@ -75,6 +75,9 @@ SCENARIOS = {
     "gen2_admit_wrong_rom": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
                              "no_setup": True, "frames": 216000,
                              "oracle": "assert_gen2_admit_wrong_rom", "oracle_kwargs": {}},
+    "gen2_reconnect": {"flags": [], "timeout": 2400, "games": ("gen2_new",),
+                       "no_setup": True, "frames": 432000,
+                       "oracle": "assert_gen2_reconnect_saved", "oracle_kwargs": {}},
     "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     # The old `gen1`/`gen1_yellow` client and its scenario drivers were deleted (deletion plan
@@ -495,7 +498,7 @@ def jitter_problems(text, expected_requested):
 # Scenarios whose verdict needs a LIVE leg to have finished, not just two client RESULT lines:
 # the flag is set only inside the live assert (assert_reconnect_new / assert_admit_randomized_new),
 # and the post-result oracle refuses to describe a save that leg never produced.
-LIVE_LEG_SCENARIOS = ("reconnect_new", "admit_randomized_new")
+LIVE_LEG_SCENARIOS = ("reconnect_new", "admit_randomized_new", "gen2_reconnect")
 
 RECONNECT_GAMEPLAY_EVENTS = ("capture", "linked", "no_catch", "dead_zone")
 
@@ -974,6 +977,15 @@ def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
             result[inst].update(rom=wrong_rom, rom_sha1=pin["sha1"], expect_admission="refused")
     if result["a"]["ot_id"] == result["b"]["ot_id"] or result["a"]["sha256"] == result["b"]["sha256"]:
         raise RuntimeError("Gen 2 duo requires distinct qualified OTs and fixture bytes")
+    if scenario == "gen2_reconnect":
+        name = f"{result['a']['title']}_battle_ot2"
+        wrong = root / "tests/fixtures/gen2" / f"{name}.SaveRAM"
+        if name not in BY_NAME or not wrong.is_file():
+            raise FileNotFoundError(f"Gen 2 reconnect missing qualified wrong-save fixture: {name}")
+        raw = wrong.read_bytes()
+        if BY_NAME[name].title != result["a"]["title"] or qualified_identity(name, raw, repo=root) == result["a"]["ot_id"]:
+            raise RuntimeError("Gen 2 reconnect wrong-save must match title and differ in OT")
+        result["a"].update(wrong_fixture=wrong, wrong_sha256=hashlib.sha256(raw).hexdigest())
     return result
 
 
@@ -1630,9 +1642,11 @@ class DuoRun:
             if not (Path(REPO) / path).is_file():
                 raise FileNotFoundError(f"Gen 2 duo driver missing: {path}")
         oracle = importlib.import_module("gen2_duo_oracles")
-        oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle",
+        oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle", "gen2_reconnect": "reconnect_oracle",
                        "gen2_admit_wrong_rom": "admit_wrong_rom_oracle"}[self.scenario]
         witness = "check_admit_wrong_rom_witness" if self.scenario == "gen2_admit_wrong_rom" else "check_save_witness"
+        if self.scenario == "gen2_reconnect":
+            witness = "check_reconnect_witness"
         if not all(callable(getattr(oracle, name, None)) for name in (witness, oracle_name)):
             raise RuntimeError("Gen 2 duo witness/oracle implementation missing")
 
@@ -1640,6 +1654,10 @@ class DuoRun:
         oracle = importlib.import_module("gen2_duo_oracles")
         if self.scenario == "gen2_admit_wrong_rom":
             return oracle.check_admit_wrong_rom_witness(results, **self._gen2_admit_paths())
+        if self.scenario == "gen2_reconnect":
+            return oracle.check_reconnect_witness(results,
+                initial_results={"a": self._gen2_initial_a, "b": results["b"]},
+                relaunch_results=self._gen2_relaunch_results, staged_saves=self._gen2_staged_saves)
         return oracle.check_save_witness(results)
 
     def _gen2_admit_paths(self):
@@ -1657,6 +1675,92 @@ class DuoRun:
         return oracle.admit_wrong_rom_oracle(results, data_dir=self.data_dir,
             before=self._gen2_admit_before, after=self._gen2_admit_snapshot(),
             on_verified=self._record_gen2_facts, **self._gen2_admit_paths(), **kwargs)
+
+    def assert_gen2_reconnect_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.reconnect_oracle(results, data_dir=self.data_dir,
+            initial_results={"a": self._gen2_initial_a, "b": results["b"]},
+            relaunch_results=self._gen2_relaunch_results, staged_saves=self._gen2_staged_saves,
+            relaunch_saves=self._gen2_relaunch_saves, snapshots=self._gen2_reconnect_snapshots,
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()},
+            on_verified=self._record_gen2_facts, **kwargs)
+
+    def _stage_gen2_reconnect(self, phase, source, key):
+        from run_gb_gate import GENS
+
+        if phase not in ("same_save", "wrong_save"):
+            raise RuntimeError("invalid Gen 2 reconnect phase")
+        raw = Path(source).read_bytes()
+        if phase == "wrong_save" and hashlib.sha256(raw).hexdigest() != self._gen2_inputs["a"]["wrong_sha256"]:
+            raise RuntimeError("qualified wrong-save fixture changed after preflight")
+        seed = Path(BUILD, f"e2e_{self.artifact_name}_a_{phase}_seed.SaveRAM")
+        seed.write_bytes(raw)
+        directory = Path(self._saveram_dir("a") + "_" + phase)
+        plan = GENS["gen2"]["plan"](self._gen2_inputs["a"]["title"], directory, seed, 300)
+        directory.mkdir(parents=True, exist_ok=True)
+        target = directory / plan["saveram_name"]
+        target.write_bytes(raw)
+        self._gen2_plans["a"] = plan
+        env = dict(self._gen2_env["a"])
+        case = json.loads(env["SLINK_GEN2_FIXTURE_CASE"])
+        case["attempt_id"] = f"duo-reconnect-a-{phase}-{uuid.uuid4().hex}"
+        qualify = json.loads(env["SLINK_GEN2_QUALIFY"])
+        qualify.update(stage="boot", stage_fingerprint=hashlib.sha256(raw).hexdigest())
+        env.update(SLINK_GEN2_FIXTURE_CASE=json.dumps(case), SLINK_GEN2_QUALIFY=json.dumps(qualify))
+        self._gen2_env["a"] = env
+        self._gen2_staged_saves[phase], self._gen2_relaunch_saves[phase] = seed, target
+        Path(self.go_files["a"]).write_text("", encoding="utf-8")
+        self.launch_instance("a", phase=phase, seed=False, expected_key=key)
+        self._expected_exit.discard("a")
+
+    def _orchestrate_gen2_reconnect(self):
+        def marker(side, tag):
+            text = self._read_receipt(side)
+            rows = [json.loads(line[len(tag) + 1:]) for line in text.splitlines() if line.startswith(tag + " ")]
+            return rows[0] if len(rows) == 1 else None
+
+        ready = {inst: self.wait_for(f"{inst} reconnect link save", lambda i=inst: marker(i, "RECONNECT_READY"), 600)
+                 for inst in ("a", "b")}
+        self.wait_for("Gen 2 persisted live pair before crash", lambda: any(
+            row.get("status") == "alive" and row.get("area_id") == "route_29"
+            and all((row.get(inst) or {}).get("key") == ready[inst]["key"] for inst in ("a", "b"))
+            for row in self._links_json()), 60)
+        self._gen2_initial_a = self._read_receipt("a")
+        Path(BUILD, f"e2e_{self.artifact_name}_a_initial_result.txt").write_text(self._gen2_initial_a, encoding="utf-8")
+        initial_save = Path(self._gen2_plans["a"]["directory"]) / self._gen2_plans["a"]["saveram_name"]
+        self._gen2_reconnect_snapshots = {"initial": self._gen2_admit_snapshot()}
+        self._gen2_staged_saves, self._gen2_relaunch_saves, self._gen2_relaunch_results = {}, {}, {}
+        self.terminate_instance("a")
+        def disconnected():
+            players = (self._status() or {}).get("players", {})
+            return not players.get("a", {}).get("connected") and players.get("b", {}).get("connected")
+        self.wait_for("Gen 2 A disconnected, B online", disconnected, 45)
+        self._gen2_reconnect_snapshots["disconnected"] = self._gen2_admit_snapshot()
+        for phase, source in (("same_save", initial_save), ("wrong_save", self._gen2_inputs["a"]["wrong_fixture"])):
+            if phase == "wrong_save":
+                self._gen2_reconnect_snapshots["before_wrong"] = self._gen2_admit_snapshot()
+            self._stage_gen2_reconnect(phase, source, ready["a"]["key"])
+            self.wait_for(f"Gen 2 {phase} hello", lambda: marker("a", "RECONNECT_HELLO"), 300)
+            def reconciled(phase=phase):
+                players = (self._status() or {}).get("players", {})
+                a = players.get("a", {})
+                if not a.get("connected") or not players.get("b", {}).get("connected"):
+                    return False
+                if phase == "wrong_save":
+                    return a.get("identity_error") and marker("a", "WRONG_SAVE_HUD")
+                return not a.get("identity_error") and ready["a"]["key"] in a.get("party_keys", [])
+            self.wait_for(f"Gen 2 {phase} server reconciliation", reconciled, 60)
+            self._gen2_reconnect_snapshots[phase] = self._gen2_admit_snapshot()
+            self._append_reconnect_marker("a", "A_DONE_SAME" if phase == "same_save" else "A_DONE_WRONG")
+            self.wait_for(f"Gen 2 {phase} PASS", lambda: (terminal_result(self._read_receipt("a")) or "").startswith("RESULT: PASS"), 60)
+            self._gen2_relaunch_results[phase] = self._read_receipt("a")
+            self.emu_by_inst["a"].wait(timeout=30)
+            self.terminate_instance("a")
+            self.wait_for(f"Gen 2 {phase} socket closed", disconnected, 45)
+        Path(self._result_path("a")).write_text(self._gen2_relaunch_results["wrong_save"], encoding="utf-8")
+        self._append_reconnect_marker("b", "B_DONE")
+        self.wait_for("Gen 2 B stayed online", lambda: (terminal_result(self._read_receipt("b")) or "").startswith("RESULT: PASS"), 120)
+        self._live_complete["gen2_reconnect"] = True
 
     def assert_gen2_link_saved(self, results, **kwargs):
         oracle = importlib.import_module("gen2_duo_oracles")
@@ -4117,6 +4221,8 @@ class DuoRun:
             if self.scenario == "gen2_admit_wrong_rom":
                 self._gen2_admit_before = self._gen2_admit_snapshot()
             self.go()
+            if self.scenario == "gen2_reconnect":
+                self._orchestrate_gen2_reconnect()
             return
         if self.scenario == "admit_randomized_new":
             self.assert_admit_randomized_new()
@@ -4479,6 +4585,8 @@ class DuoRun:
                 if passed and scenario_family(getattr(self, "game", "")) == "gen2_new":
                     reason = " ".join(f"{key}={self._gen2_verified_facts[key]}"
                                       for key in ("a", "b", "area", "titles", "status"))
+                    if self.scenario == "gen2_reconnect":
+                        reason += f" scenario={self.scenario}"
                     if self.scenario == "gen2_admit_wrong_rom":
                         reason += f" scenario={self.scenario} rom_b={self._gen2_verified_facts['rom_b']}"
                 self._pydec_note(f"PYDEC: {'PASS' if passed else 'FAIL'} {reason}")

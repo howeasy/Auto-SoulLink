@@ -757,3 +757,183 @@ def admit_wrong_rom_oracle(results, *, data_dir, before, after, boot_saveram, re
                          f"rom_{refused}": wrong["rom_sha1"]})
     except (KeyError, TypeError, ValueError, OSError, IndexError) as exc:
         raise RuntimeError(f"admit_wrong_rom evidence missing or malformed: {exc}") from exc
+
+
+def _reconnect_need(condition, reason):
+    if not condition:
+        raise RuntimeError(f"reconnect: {reason}")
+
+
+def _reconnect_pass(text):
+    rows = [line for line in text.splitlines() if line.startswith("RESULT:")]
+    _reconnect_need(len(rows) == 1 and re.match(r"^RESULT: PASS(?:\s|$)", rows[0]), "missing sole PASS verdict")
+
+
+def _reconnect_head(text, player):
+    from tools.gen2_source_data import load_context
+
+    head, client = _one_marker(text, "DUO_GEN2"), _one_marker(text, "CLIENT")
+    _duo_marker(player, text)
+    _reconnect_need(head.get("player") == player and head.get("scenario") == "gen2_reconnect",
+                    "player/scenario differs")
+    pin = load_context(head["title"], root=REPO_ROOT).source_record()["rom_sha1"]
+    _reconnect_need(head["rom_sha1"] == client.get("rom_sha1") == pin
+                    and client.get("title") == head["title"] and client.get("production_admitted") is True,
+                    "production client/title/ROM pin differs")
+    _one_marker(text, "HELLO")
+    _reconnect_need(not any(line.startswith("HELLO_AGAIN ") for line in text.splitlines()), "duplicate hello")
+    return head
+
+
+def _reconnect_receipt(text, head, phase):
+    receipt = _one_marker(text, "RECEIPT")
+    _reconnect_need(receipt.get("schema") == "gen2-duo-reconnect-v1" and receipt.get("phase") == phase,
+                    "receipt schema/phase differs")
+    for field in ("player", "scenario", "attempt", "case", "title", "rom_sha1", "fixture_sha256"):
+        _reconnect_need(receipt.get(field) == head.get(field), f"receipt {field} differs")
+    return receipt
+
+
+def check_reconnect_witness(results, *, initial_results, relaunch_results, staged_saves):
+    """Initial captures must save; only the two explicitly bound relaunch phases omit saving."""
+    try:
+        _reconnect_need(set(relaunch_results) == set(staged_saves) == {"same_save", "wrong_save"}, "both relaunches required")
+        _reconnect_need(results["a"] == relaunch_results["wrong_save"] and results["b"] == initial_results["b"],
+                        "final results do not name wrong-save A and held B")
+        check_save_witness(initial_results)
+        for inst in ("a", "b"):
+            text = initial_results[inst]
+            head = _reconnect_head(text, inst)
+            ready, save, capture = (_one_marker(text, tag) for tag in ("RECONNECT_READY", "SAVE_WITNESS", "ENGINE_CAPTURE"))
+            _reconnect_need(ready.get("phase") == "initial" and ready.get("player") == inst
+                            and ready.get("key") == capture.get("key") and _frame(ready) >= _frame(save)
+                            and text.index("SAVE_WITNESS ") < text.index("RECONNECT_READY "), "initial ready/save binding differs")
+            if inst == "a":
+                _reconnect_need(not any(line.startswith(("RESULT:", "RECEIPT ")) for line in text.splitlines()),
+                                "initial A must be killed before verdict")
+            else:
+                _reconnect_pass(text)
+                _reconnect_receipt(text, head, "initial")
+                stayed = _one_marker(text, "B_STAYED")
+                _reconnect_need(stayed.get("hellos") == 1 and stayed.get("force_faint") == stayed.get("box_mon") == 0
+                                and _frame(stayed) >= _frame(ready), "B did not stay quiet")
+                suffix = text[text.index("RECONNECT_READY "):]
+                _reconnect_need(not re.search(r"^RX (?:force_faint|box_mon)(?:\s|$)", suffix, re.M), "B received a mutation command")
+        original = _duo_marker("a", initial_results["a"])
+        for phase in ("same_save", "wrong_save"):
+            text = relaunch_results[phase]
+            _reconnect_pass(text)
+            head = _reconnect_head(text, "a")
+            _one_marker(text, "BOOTED")
+            back, hello = _one_marker(text, "RECONNECT_HELLO"), _one_marker(text, "HELLO")
+            receipt = _reconnect_receipt(text, head, phase)
+            _reconnect_need(head["title"] == original["title"] and head["case"] == f"{head['title']}_battle",
+                            "relaunch title/battle case differs")
+            seed = Path(staged_saves[phase]).read_bytes()
+            _reconnect_need(head["fixture_sha256"] == hashlib.sha256(seed).hexdigest(), "staged save fingerprint differs")
+            _reconnect_need(back.get("phase") == phase and back.get("hellos") == 1
+                            and back.get("linked") is (phase == "same_save")
+                            and back.get("ot_id") == hello.get("ot_id") and _frame(back) >= _frame(hello),
+                            "relaunch hello/phase differs")
+            for field in ("expected_key", "linked", "ot_id"):
+                _reconnect_need(receipt.get(field) == back.get(field), f"relaunch receipt {field} differs")
+            _reconnect_need(not any(line.startswith(("SAVE_WITNESS ", "ENGINE_CAPTURE ", "RECONNECT_READY ")) for line in text.splitlines()),
+                            "relaunch unexpectedly played/saved")
+            _reconnect_need(not re.search(r"^RX (?:force_faint|box_mon)(?:\s|$)", text, re.M), "A relaunch received mutation command")
+            if phase == "wrong_save":
+                hud = _one_marker(text, "WRONG_SAVE_HUD")
+                target = "[x] WRONG SAVE: slot A"
+                messages = [json.loads(line[len("RX_TEXT "):]) for line in text.splitlines() if line.startswith("RX_TEXT ")]
+                _reconnect_need(hud.get("text") == target and _frame(hud) >= _frame(back)
+                                and any(isinstance(row, dict) and row.get("cmd") == "hud_show" and row.get("text") == target
+                                        and _frame(row) >= _frame(hello) for row in messages), "wrong-save HUD missing or early")
+            else:
+                _reconnect_need(not any(line.startswith("WRONG_SAVE_HUD ") for line in text.splitlines()), "same save refused")
+    except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError) as exc:
+        raise RuntimeError(f"reconnect evidence missing or malformed: {exc}") from exc
+
+
+def reconnect_oracle(results, *, data_dir, initial_results, relaunch_results, boot_saveram,
+                     staged_saves, relaunch_saves, snapshots, on_verified=None):
+    """Independent saved identities and unchanged links across a kill and both required reconnects."""
+    from server.adapters import gen2_codec as codec
+    from tests.live.test_gen2_new_gates import qualified_identity
+    from tools.gen2_fixtures import _saved_field
+
+    try:
+        check_reconnect_witness(results, initial_results=initial_results, relaunch_results=relaunch_results,
+                                 staged_saves=staged_saves)
+        decoded, _, document = _pair_oracle(initial_results, data_dir=data_dir, boot_saveram=boot_saveram)
+        title, linked_key = decoded["a"]["title"], decoded["a"]["key"]
+        layout = codec.for_foundation(title)
+        witness = _one_marker(initial_results["a"], "SAVE_WITNESS")
+        initial_raw = Path(witness["saveram_path"]).read_bytes()
+        original_ot = int.from_bytes(_saved_field(initial_raw, layout, "wPlayerID", 2), "big")
+        _reconnect_need(_hello_ot_id("a", initial_results["a"]) == original_ot, "initial trainer OT differs from save")
+        for phase in ("same_save", "wrong_save"):
+            seed, flushed = Path(staged_saves[phase]).read_bytes(), Path(relaunch_saves[phase]).read_bytes()
+            _reconnect_need(len(seed) == len(flushed) == SAVERAM_BYTES, "relaunch save size differs")
+            _reconnect_need(codec.strict_checksum_witness(seed[:CARTRAM_BYTES], layout)["valid"]
+                            and codec.strict_checksum_witness(flushed[:CARTRAM_BYTES], layout)["valid"], "relaunch checksum refused")
+            old = codec.decode_saved_party(seed[:CARTRAM_BYTES], layout, copy_name="primary")["mons"]
+            new = codec.decode_saved_party(flushed[:CARTRAM_BYTES], layout, copy_name="primary")["mons"]
+            ot = int.from_bytes(_saved_field(seed, layout, "wPlayerID", 2), "big")
+            _reconnect_need(old and old == new and ot == int.from_bytes(_saved_field(flushed, layout, "wPlayerID", 2), "big"),
+                            "relaunch saved party/trainer changed")
+            back = _one_marker(relaunch_results[phase], "RECONNECT_HELLO")
+            _reconnect_need(back["expected_key"] == linked_key and back["ot_id"] == ot,
+                            "relaunch marker identity differs from decoded save")
+            keys = [codec.key(mon) for mon in new]
+            if phase == "same_save":
+                _reconnect_need(seed == initial_raw and ot == original_ot and linked_key in keys, "same-save seed lost initial linked image")
+            else:
+                qualified_ot = qualified_identity(f"{title}_battle_ot2", seed, repo=REPO_ROOT)
+                _reconnect_need(qualified_ot == ot != original_ot and linked_key not in keys,
+                                "wrong-save seed is not qualified other-OT battle input")
+        _reconnect_need(set(snapshots) == {"initial", "disconnected", "same_save", "before_wrong", "wrong_save"},
+                        "all five server snapshots required")
+        baseline = snapshots["initial"]
+        identities = baseline["links"]["player_identity"]
+        _reconnect_need(str(identities["a"]["ot_id"]) == str(original_ot), "initial server identity differs")
+        for inst in ("a", "b"):
+            hellos = [row for row in baseline["events"] if row.get("type") == "hello" and row.get("player") == inst]
+            _reconnect_need(len(hellos) == 1 and hellos[0].get("text", "").startswith("Connected ("),
+                            "initial server needs exactly one accepted hello per side")
+        # mon_stats is a display cache refreshed by hello/tick, not encounter/identity state.
+        # Reconnect may flush the latest cache; every persisted rule field must stay fixed.
+        rule_state = {key: value for key, value in baseline["links"].items() if key != "mon_stats"}
+        for phase, snap in snapshots.items():
+            players = snap["status"]["players"]
+            _reconnect_need(players["b"].get("connected") is True and not players["b"].get("identity_error"), "B disconnected or rejected")
+            _reconnect_need(snap["links"]["links"] == baseline["links"]["links"]
+                            and snap["links"]["player_identity"] == identities
+                            and snap["links"].get("pending_captures", {}) == baseline["links"].get("pending_captures", {}),
+                            f"{phase}: link/identity/pending changed")
+            _reconnect_need({key: value for key, value in snap["links"].items() if key != "mon_stats"} == rule_state,
+                            f"{phase}: persisted rule state changed")
+            if phase in ("disconnected", "before_wrong"):
+                _reconnect_need(players["a"].get("connected") is False, f"{phase}: A never disconnected")
+            elif phase == "wrong_save":
+                _reconnect_need("Identity mismatch for slot A" in players["a"].get("identity_error", ""), "wrong-save server rejection absent")
+            else:
+                _reconnect_need(players["a"].get("connected") is True and not players["a"].get("identity_error")
+                                and linked_key in players["a"].get("party_keys", []), f"{phase}: A link not adopted")
+        _reconnect_need(snapshots["disconnected"]["events"] == baseline["events"], "events changed while disconnected")
+        for old_phase, new_phase, text in (("initial", "same_save", "Connected ("),
+                                          ("before_wrong", "wrong_save", "REJECTED — wrong save/slot")):
+            old, new = snapshots[old_phase]["events"], snapshots[new_phase]["events"]
+            _reconnect_need(isinstance(old, list) and isinstance(new, list) and len(new) == len(old) + 1 and new[1:] == old,
+                            f"{new_phase}: event history changed beyond one hello")
+            row = new[0]
+            _reconnect_need(row.get("player") == "a" and row.get("type") == "hello"
+                            and (row.get("text", "").startswith(text) if new_phase == "same_save" else row.get("text") == text),
+                            f"{new_phase}: missing expected server hello")
+        _reconnect_need(snapshots["same_save"]["events"] == snapshots["before_wrong"]["events"], "events changed between relaunches")
+        _reconnect_need(snapshots["before_wrong"]["links"] == snapshots["wrong_save"]["links"], "wrong save changed persisted state")
+        _reconnect_need(document == snapshots["wrong_save"]["links"], "final links differ from wrong-save snapshot")
+        disk_events = json.loads((Path(data_dir) / "events.json").read_text(encoding="utf-8"))
+        _reconnect_need(disk_events == snapshots["wrong_save"]["events"], "final events differ from wrong-save snapshot")
+        if on_verified is not None:
+            on_verified(_verified_facts(decoded, "route_29", "alive"))
+    except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError, AssertionError) as exc:
+        raise RuntimeError(f"reconnect evidence missing or malformed: {exc}") from exc

@@ -869,3 +869,103 @@ def test_wrong_rom_matrix_refuses_rebound_evidence(tmp_path, mutation):
 def test_refused_half_exception_does_not_extend_to_capture_scenarios(tmp_path, scenario):
     proof, axes, lock, text = _admission_cell(tmp_path)
     assert _check_admission_cell(tmp_path, proof, axes, lock, text, scenario)
+
+
+def _reconnect_cell(tmp_path):
+    doc = _green_tree(tmp_path)
+    row = _row(doc, "duo.crystal.crystal")
+    proof, axes = row["proofs"][0], row["axes"]
+    lock = json.loads((tmp_path / "data/gen2_sources.lock.json").read_text())["outputs"]
+    keys = {"a": "1234:5678:00", "b": "1234:5678:01"}
+    seeds = {"same_save": b"s" * 32790,
+             "wrong_save": (REPO / "tests/fixtures/gen2/crystal_battle_ot2.SaveRAM").read_bytes()}
+    proof["staged_saves"] = {}
+    for phase, raw in seeds.items():
+        path = tmp_path / f"{phase}.SaveRAM"
+        path.write_bytes(raw)
+        proof["staged_saves"][phase] = {"path": path.name, "sha256": hashlib.sha256(raw).hexdigest()}
+    proof["staged_saves"]["wrong_save"]["case"] = "crystal_battle_ot2"
+    text = {}
+    for side in ("a", "b", "a_same_save", "a_wrong_save"):
+        player = "b" if side == "b" else "a"
+        phase = side[2:] if side.startswith("a_") else "initial"
+        fixture = axes["fixtures"][player] if phase == "initial" else "crystal_battle"
+        head = {"player": player, "scenario": "gen2_reconnect", "title": "crystal", "case": fixture,
+                "rom_sha1": lock["pokecrystal"]["sha1"], "attempt": 1,
+                "fixture_sha256": gate._fixture_sha256(tmp_path, fixture) if phase == "initial"
+                else proof["staged_saves"][phase]["sha256"]}
+        records = [("DUO_GEN2", head), ("CLIENT", {"production_admitted": True}),
+                   ("BOOTED", {}), ("HELLO", {"ot_id": 46401})]
+        receipt = {**head, "schema": "gen2-duo-reconnect-v1", "phase": phase}
+        if phase == "initial":
+            records += [("ENGINE_CAPTURE", {"key": keys[player]}),
+                        ("SAVE_WITNESS", {"saveram_bytes": 32790,
+                          "cartram_sha256": hashlib.sha256(seeds["same_save"][:32768]).hexdigest()}),
+                        ("RECONNECT_READY", {"phase": "initial", "player": player, "key": keys[player]})]
+            if player == "b":
+                records.append(("B_STAYED", {"hellos": 1, "force_faint": 0, "box_mon": 0}))
+        else:
+            detail = {"phase": phase, "hellos": 1, "expected_key": keys["a"], "linked": phase == "same_save"}
+            records.append(("RECONNECT_HELLO", detail))
+            receipt.update(detail)
+            if phase == "wrong_save":
+                records += [("RX_TEXT", {"cmd": "hud_show", "text": "[x] WRONG SAVE: slot A"}),
+                            ("WRONG_SAVE_HUD", {"text": "[x] WRONG SAVE: slot A"})]
+        if side != "a":
+            records.append(("RECEIPT", receipt))
+        text[side] = "\n".join(tag + " " + json.dumps(value) for tag, value in records) + "\n"
+        if side != "a":
+            text[side] += "RESULT: PASS\n"
+        proof["receipts"][side] = {"path": f"receipts/{side}.txt"}
+    text["pydec"] = (f"PYDEC: PASS scenario=gen2_reconnect a={keys['a']} b={keys['b']} "
+                     "area=route_29 titles=crystal/crystal status=alive\n")
+    return proof, axes, lock, text
+
+
+def test_reconnect_matrix_binds_every_phase_and_staged_save(tmp_path):
+    proof, axes, lock, text = _reconnect_cell(tmp_path)
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_reconnect") == []
+
+
+@pytest.mark.parametrize("mutation", ["missing_phase", "missing_stage", "stage_pin", "stage_bytes",
+    "wrong_fixture", "header_hash", "header_title", "initial_result", "initial_save", "b_result",
+    "relaunch_result", "relaunch_save", "phase", "linked", "key", "hud", "b_repeat",
+    "force_faint", "pydec_scenario", "pydec_status"])
+def test_reconnect_matrix_refuses_partial_or_rebound_proof(tmp_path, mutation):
+    proof, axes, lock, text = _reconnect_cell(tmp_path)
+    if mutation == "missing_phase":
+        del text["a_same_save"]
+        del proof["receipts"]["a_same_save"]
+    elif mutation == "missing_stage":
+        del proof["staged_saves"]["same_save"]
+    elif mutation == "stage_pin":
+        proof["staged_saves"]["same_save"]["sha256"] = "0" * 64
+    elif mutation == "stage_bytes":
+        (tmp_path / "same_save.SaveRAM").write_bytes(b"changed")
+    elif mutation == "wrong_fixture":
+        proof["staged_saves"]["wrong_save"]["case"] = "crystal_battle"
+    elif mutation == "header_hash":
+        text["a_same_save"] = _edit_header_field("fixture_sha256", "0" * 64)(text["a_same_save"])
+    elif mutation == "header_title":
+        text["a_same_save"] = _edit_header_field("title", "gold")(text["a_same_save"])
+    elif mutation == "initial_result":
+        text["a"] += "RESULT: PASS\n"
+    elif mutation in ("initial_save", "b_result", "relaunch_result", "hud"):
+        side, tag = {"initial_save": ("a", "SAVE_WITNESS"), "b_result": ("b", "RESULT:"),
+                     "relaunch_result": ("a_same_save", "RESULT:"), "hud": ("a_wrong_save", "WRONG_SAVE_HUD")}[mutation]
+        text[side] = "\n".join(line for line in text[side].splitlines() if not line.startswith(tag + " "))
+    elif mutation == "relaunch_save":
+        text["a_same_save"] += "SAVE_WITNESS {}\n"
+    elif mutation in ("phase", "linked", "key"):
+        old, new = {"phase": ('"phase": "same_save"', '"phase": "wrong_save"'),
+                    "linked": ('"linked": true', '"linked": false'),
+                    "key": ('"expected_key": "1234:5678:00"', '"expected_key": "bad"')}[mutation]
+        text["a_same_save"] = text["a_same_save"].replace(old, new)
+    elif mutation == "b_repeat":
+        text["b"] += "HELLO_AGAIN {}\n"
+    elif mutation == "force_faint":
+        text["a_wrong_save"] += "RX force_faint key=x\n"
+    else:
+        key, value = ("scenario", "link") if mutation == "pydec_scenario" else ("status", "dead")
+        text["pydec"] = _edit_pydec_token(key, value)(text["pydec"])
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_reconnect")

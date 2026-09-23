@@ -19,7 +19,7 @@ pytestmark = [
 ]
 
 GAME = "gen2_new"
-SCENARIOS = ("link", "gen2_faint", "gen2_admit_wrong_rom")
+SCENARIOS = ("link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect")
 LANE = "gen2-cc-link"
 PAIRINGS = {
     GAME: LANE,
@@ -36,7 +36,11 @@ def run_gate(game=GAME, scenario="link"):
     assert Path(duo.EMUHAWK).is_file(), f"EmuHawk missing: {duo.EMUHAWK}"
     receipts = [REPO / "patch" / "build" / f"e2e_{scenario}_{lane}_{side}_result.txt"
                 for side in ("a", "b", "pydec")]
-    for path in receipts:
+    reconnect = []
+    if scenario == "gen2_reconnect":
+        reconnect = [REPO / "patch/build" / f"e2e_{scenario}_{lane}_a_{phase}_result.txt"
+                     for phase in ("initial", "same_save", "wrong_save")]
+    for path in receipts + reconnect:
         path.unlink(missing_ok=True)
     timeout = duo.SCENARIOS[scenario]["timeout"] + 300
     try:
@@ -57,6 +61,14 @@ def run_gate(game=GAME, scenario="link"):
         assert verdicts and all(line == f"{prefix} PASS"
                                 or line.startswith(f"{prefix} PASS ") for line in verdicts), (
             f"missing or failed {side} verdict: {verdicts}")
+    for path in reconnect:
+        assert path.is_file(), f"missing reconnect phase receipt: {path}"
+        text = path.read_text(encoding="utf-8")
+        if path.name.endswith("_initial_result.txt"):
+            assert "RECONNECT_READY " in text and "RESULT:" not in text, "initial A was not killed at reconnect hold"
+        else:
+            verdicts = [line for line in text.splitlines() if line.startswith("RESULT:")]
+            assert len(verdicts) == 1 and verdicts[0].startswith("RESULT: PASS"), f"missing reconnect PASS: {path}"
 
 
 def run_link_gate(game=GAME):

@@ -330,8 +330,122 @@ def _refused_receipt_errors(lines: list[str], rom_sha1: str | None) -> list[str]
     return errors
 
 
+def _reconnect_receipt_errors(root: Path, proof: dict, axes: dict, lock: dict) -> list[str]:
+    """Bind all reconnect legs and immutable staged bytes; only killed initial A lacks RESULT."""
+    def need(condition, why):
+        if not condition:
+            raise ValueError(why)
+
+    def pinned(entry, binary=False):
+        raw = (root / entry["path"]).read_bytes()
+        if not binary:
+            raw = raw.replace(b"\r\n", b"\n")
+        need(hashlib.sha256(raw).hexdigest() == entry["sha256"], f"{entry['path']}: sha256 differs")
+        return raw
+
+    def one(lines, tag):
+        bodies = [line[len(tag) + 1:] for line in lines if line.startswith(tag + " ")]
+        need(len(bodies) == 1, f"expected one {tag}")
+        row = json.loads(bodies[0])
+        need(isinstance(row, dict), f"malformed {tag}")
+        return row
+
+    def position(lines, tag):
+        return next(i for i, line in enumerate(lines) if line.startswith(tag + " "))
+
+    try:
+        receipts = proof["receipts"]
+        legs = {side: pinned(receipts[side]).decode("utf-8").splitlines()
+                for side in ("a", "b", "a_same_save", "a_wrong_save", "pydec")}
+        stages = proof["staged_saves"]
+        seeds = {phase: pinned(stages[phase], binary=True) for phase in ("same_save", "wrong_save")}
+        wrong_case = f"{axes['initiator']}_battle_ot2"
+        need(stages["wrong_save"]["case"] == wrong_case, "wrong-save fixture case differs")
+        need(hashlib.sha256(seeds["wrong_save"]).hexdigest() == _fixture_sha256(root, wrong_case),
+             "wrong-save staged bytes differ from fixture")
+        need(seeds["same_save"] != seeds["wrong_save"], "relaunch seeds are identical")
+        keys = {side: one(legs[side], "ENGINE_CAPTURE")["key"] for side in ("a", "b")}
+        need(all(isinstance(key, str) and key for key in keys.values()), "missing capture keys")
+        for side in ("a", "b", "a_same_save", "a_wrong_save"):
+            lines = legs[side]
+            player = "b" if side == "b" else "a"
+            phase = side[2:] if side.startswith("a_") else "initial"
+            title = axes["partner"] if player == "b" else axes["initiator"]
+            case = axes["fixtures"][player] if phase == "initial" else f"{title}_battle"
+            fingerprint = (_fixture_sha256(root, case) if phase == "initial"
+                           else hashlib.sha256(seeds[phase]).hexdigest())
+            head = one(lines, "DUO_GEN2")
+            want = {"player": player, "scenario": "gen2_reconnect", "title": title, "case": case,
+                    "rom_sha1": lock[f"poke{title}"]["sha1"], "fixture_sha256": fingerprint}
+            need(fingerprint and all(head.get(key) == value for key, value in want.items()),
+                 f"{side}: header does not bind its fixture and ROM")
+            verdicts = [line for line in lines if line.startswith("RESULT:")]
+            need(not verdicts if side == "a" else
+                 len(verdicts) == 1 and verdicts[0].split()[1:2] == ["PASS"], f"{side}: wrong RESULT contract")
+            need(one(lines, "CLIENT").get("production_admitted") is True, f"{side}: no production client")
+            one(lines, "BOOTED")
+            one(lines, "HELLO")
+            need(not any(line.startswith("HELLO_AGAIN ") for line in lines), f"{side}: repeated hello")
+            if phase == "initial":
+                save, ready = one(lines, "SAVE_WITNESS"), one(lines, "RECONNECT_READY")
+                need(ready.get("key") == keys[player] and ready.get("phase") == "initial"
+                     and ready.get("player") == player, f"{side}: wrong RECONNECT_READY")
+                need(position(lines, "RECONNECT_READY") > position(lines, "SAVE_WITNESS"), "ready before save")
+                if player == "a":
+                    need(len(seeds["same_save"]) == save.get("saveram_bytes") == 32790
+                         and hashlib.sha256(seeds["same_save"][:32768]).hexdigest() == save.get("cartram_sha256"),
+                         "same-save stage does not bind initial A flushed save")
+                    need(not any(line.startswith("RECEIPT ") for line in lines), "killed initial A has receipt")
+                else:
+                    stayed = one(lines, "B_STAYED")
+                    need(stayed.get("hellos") == 1 and stayed.get("force_faint") == 0
+                         and stayed.get("box_mon") == 0, "B did not stay connected unchanged")
+                    need(position(lines, "B_STAYED") > position(lines, "RECONNECT_READY"), "B_STAYED early")
+                    tail = lines[position(lines, "RECONNECT_READY") + 1:]
+                    need(not any(line.startswith(("RX force_faint", "RX box_mon")) for line in tail),
+                         "B received destructive command")
+            else:
+                need(not any(line.startswith(("SAVE_WITNESS ", "ENGINE_CAPTURE ", "RECONNECT_READY ",
+                                               "RX force_faint", "RX box_mon")) for line in lines),
+                     f"{side}: relaunch emitted capture/save or destructive command")
+                back = one(lines, "RECONNECT_HELLO")
+                need(back.get("phase") == phase and back.get("expected_key") == keys["a"]
+                     and back.get("linked") is (phase == "same_save") and back.get("hellos") == 1,
+                     f"{side}: reconnect identity mismatch")
+                need(position(lines, "RECONNECT_HELLO") > position(lines, "HELLO"), "reconnect before hello")
+                if phase == "wrong_save":
+                    hud = one(lines, "WRONG_SAVE_HUD")
+                    received = [(i, json.loads(line[len("RX_TEXT "):])) for i, line in enumerate(lines)
+                                if line.startswith("RX_TEXT ")]
+                    wrong = [i for i, value in received if isinstance(value, dict)
+                             and value.get("cmd") == "hud_show" and value.get("text") == "[x] WRONG SAVE: slot A"]
+                    need(hud.get("text") == "[x] WRONG SAVE: slot A" and wrong, "missing wrong-save rejection HUD")
+                    need(min(wrong) > position(lines, "HELLO")
+                         and position(lines, "WRONG_SAVE_HUD") > position(lines, "RECONNECT_HELLO"), "HUD early")
+                else:
+                    need(not any(line.startswith("WRONG_SAVE_HUD ") for line in lines), "same save refused")
+            if side != "a":
+                receipt = one(lines, "RECEIPT")
+                need(receipt.get("schema") == "gen2-duo-reconnect-v1" and receipt.get("phase") == phase
+                     and all(receipt.get(key) == head.get(key) for key in (*want, "attempt")),
+                     f"{side}: receipt does not bind header/phase")
+                if phase != "initial":
+                    need(receipt.get("expected_key") == keys["a"] and receipt.get("linked") is (phase == "same_save"),
+                         f"{side}: receipt identity mismatch")
+        tokens = _pydec_tokens(legs["pydec"])
+        want = {"scenario": "gen2_reconnect", **keys, "area": "route_29", "status": "alive",
+                "titles": f"{axes['initiator']}/{axes['partner']}"}
+        need(tokens and all(tokens.get(key) == value for key, value in want.items()), "pydec does not bind reconnect cell")
+        need(sum(line.startswith("PYDEC:") for line in legs["pydec"]) == 1, "ambiguous pydec verdict")
+    except (KeyError, TypeError, ValueError, AttributeError, OSError, StopIteration) as exc:
+        return [f"reconnect proof invalid: {exc}"]
+    return []
+
+
 def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: dict) -> list[str]:
     """One registered proof: pinned bytes, PASS verdicts, and headers naming this exact cell."""
+    if scenario == "gen2_reconnect":
+        return _reconnect_receipt_errors(root, proof, axes, lock)
     errors = []
     receipts = proof.get("receipts") or {}
     titles = {"a": axes["initiator"], "b": axes["partner"]}
