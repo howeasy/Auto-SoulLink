@@ -241,14 +241,15 @@ IN FLIGHT** (`save_then_write_gen3` and `center_controls_gen3`, FR-as-A and LG-a
 9. **The LG intro is the same engine as FR's** (owner, 2026-09-23): LG fixtures were built through
    the FireRed scripted path with pret-sym RAM witnesses replacing frame counts (`0978a5be`). **S**
 
-### Open — the three scope decisions
+10. **Item 6 is split** (owner, 2026-09-23, decision (a)): take `44bf25d6` (the Gen 1 SFX-gate stale test expectation; applies cleanly, test files only) into this cut; judge the Gen 1 command-ordering case and the legacy Gen 2 failure by route-differential evidence against master's baseline, and leave `3941198c` to the post-G4 convergence card (`docs/gen3/research/item6_integration_feasibility_2026-09-23.md`, `21234c4f`). **S**
+11. **The rollback freeze is the SHA + manifest** (owner, 2026-09-23, decision (c)): `docs/gen3/rollback_bundle.md` @ `2cd9f993` is the frozen rollback; no separate archive is built. **S**
+12. **Doubles, the target menu and Safari are signed as current-fixture limits** (owner, 2026-09-23, decision (d)): 2b rows D1-D5, N3 and U3 are recorded G4 limits; every other 2b row still runs. **S**
+
+### Open — decision (b)
 
 | # | Decision | Options | Why it matters |
 |---|---|---|---|
-| **a** | Item 6: what to integrate, and what coverage / known defects to accept for the Gen 1 and Gen 2 lanes | the owner has all the estimates, probes and retries in front of them. (i) integrate the Gen 2 branch's fixes into this cut and re-run; or (ii) accept route-differential evidence - an agreed baseline (the same suites on master) and an agreed test subset, recording the failures that already exist there | the facts: the Gen 1 SFX town gate is a **stale test expectation**, fixed by `44bf25d6`; `3941198c` fixes a real Gen 1 **command-ordering** defect; **neither fixes the separate legacy Gen 2 battery-boot failure**. Route-differential evidence proves **no regression**, not full Gen 1/Gen 2 correctness. `PLAN.md:20` (`ca53e491`) settles timing only: the shared layers converge **after** G4 **S** |
 | **b** | The two rows that cannot be produced here: the real link battle (`battle_link`) and Union-Room **entry/return** | (i) record them as limits naming the observed condition; or (ii) provide fixtures/hardware | entry/return is unreachable while `IsWirelessAdapterConnected` is observed false (`lua/tests/duo/scenario_gen3_center_controls.lua:32`). The 2F cable-menu, cable-link and no-adapter controls are **designed to run without an adapter and stay OPEN on their own** (under diagnosis; a fix is live-testing now). A recorded hardware limit does **not** close the trainer, faint or other probe rows **S** |
-| **c** | Item 7: does the SHA + manifest count as the frozen rollback? | (i) yes — `docs/gen3/rollback_bundle.md` @ `2cd9f993` is the freeze; or (ii) no — build and hash a named archive from that record | the record exists and is citable; only the artifact archive is absent **S** |
-| **d** | The 2b advanced fixtures: build them, or sign those rows as limits | (i) build a normally-earned advanced fixture route (Forest → Brock → Route 3/Mt. Moon → Cerulean → … → Route 8, and Fuchsia/Safari) so D1–D5, N3 and U3 become runnable; or (ii) sign them as current-fixture limits | the plan (`docs/gen3/research/g4_2b_matrix_plan_2026-09-23.md` @ `082b33a9`) prices the near-term work at **9–11 launches** and calls the full progression route **UNVERIFIED**; (i) buys real doubles/Safari/target-menu coverage at an unmeasured cost — do not budget it as one short warp. **S**/**M** |
 
 ---
 
