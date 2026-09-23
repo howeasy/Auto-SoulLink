@@ -695,7 +695,7 @@ def test_an_unreached_accumulator_fails_the_probe(title):
     assert tuple(probe.verdict(row)) == (True, "PASS -")
     # a committed window with no terminal (failed escape reopens the menu) is UNREACHED
     row = bw_row(w, "N9")
-    feed(w, probe, row, [ran] * 4 + [parked(title)] * 5)
+    feed(w, probe, row, [parked(title)] * 5 + [ran] * 4 + [parked(title)] * 5)
     ok, why = probe.verdict(row)
     assert ok is False and why.startswith("UNREACHED terminal never observed")
 
@@ -710,7 +710,7 @@ def test_a_missing_state_blocks_even_a_passing_bw_row():
     w, probe = bw_world("firered")
     row = bw_row(w, "N9")
     ran = committed("firered", ret=(0x21, 3, 0, 0))
-    feed(w, probe, row, [ran] * 4 + [dict(ran, outcome=4)])
+    feed(w, probe, row, [parked("firered")] * 5 + [ran] * 4 + [dict(ran, outcome=4)])  # fresh arm (bdbf5736)
     assert probe.verdict(row)[0] is True
     row.blocked = "UNREACHED state missing: X/slink_pokedude.State"
     assert tuple(probe.verdict(row)) == (False, "UNREACHED state missing: X/slink_pokedude.State")
@@ -756,10 +756,10 @@ def test_bw_waits_read_the_sample(title):
 
 
 def test_frame_end_feeds_bw_rows_under_the_callback_pcall():
-    assert 'bw_last = P.bw_feed(active, safety, {map = g .. "." .. n, pos = x .. "," .. y})' in SOURCE
+    assert "bw_last = P.bw_feed(active, safety, extra)" in SOURCE
     assert "local success, why = pcall(sample)" in SOURCE
     assert 'dofile(wt .. "/lua/tests/gen3_battle_window_rows.lua").bind(cp, title, deps, wt)' in SOURCE
-    assert "G.log(line)" in SOURCE and 'G.log(bw_ctx:receipt(acc[k], meta) .. " at=" .. k)' in SOURCE
+    assert "G.log(line)" in SOURCE and 'G.log(bw_ctx:receipt(acc[k], meta, acc) .. " at=" .. k)' in SOURCE
     assert "memory.write" not in SOURCE
 
 
@@ -780,3 +780,70 @@ def test_the_runner_glue_names_exist_on_the_bound_ctx(title):
                  "local line, status = bw_ctx.verdict_line(acc)", "bw_ctx.K.BATTLE_TYPE_POKEDUDE",
                  "memory.read_u8(bw_ctx.T.ACTION_CURSOR_ADDR)", "SP.throw_pokeball_from_bag(cp, spec.name)"):
         assert name in SOURCE, name
+
+
+# ── live 765beb48: bw_n7_switch UNREACHED on FR and LG (samples=0 windows=0) ────────────────
+# ffceb394 opened the SHIFT popup with A (gap 0), waited for the popup (already up: zero frames)
+# and pressed A again: one continuous A, so JOY_NEW fired once, SHIFT was never chosen, and the
+# B pulse cancelled the popup and the menu (CHOSENMONRETURNVALUE with PARTY_SIZE: no arm).
+FFCEB394_N7 = [{"wait": "action_input"}, {"action": 2}, {"tap": "A", "frames": 3, "gap": 0},
+               {"wait": "party_input"}, {"slot": 1}, {"tap": "A", "frames": 3, "gap": 0},
+               {"wait": "party_popup"}, {"tap": "A", "frames": 3, "gap": 0},
+               {"pulse": "B", "frames": 3000, "stop": "turn_over"}]
+
+
+def spec_of(lua, steps, **kw):
+    return lua.table_from({"name": "n7", "bw": "N7", **kw,
+                           "inputs": lua.table_from([lua.table_from(s) for s in steps])})
+
+
+def test_n7_ffceb394_inputs_merge_two_presses_into_one(module):
+    lua, probe = module
+    with pytest.raises(lupa.LuaError, match="input 6: A pressed again with no released frame"):
+        probe.check_inputs(spec_of(lua, FFCEB394_N7))     # party-open A .. SHIFT-popup A: timing-safe only
+    live = [dict(s, gap=1) if i == 2 else s for i, s in enumerate(FFCEB394_N7)]
+    with pytest.raises(lupa.LuaError, match="input 8: A pressed again with no released frame"):
+        probe.check_inputs(spec_of(lua, live))            # popup A .. SHIFT A: the live failure
+    # the same A-A pair is fine once a frame is released between them, by any releasing step
+    for between in ({"idle": 1}, {"tap": "Down"}, {"mash": 10, "stop": "action_input"}):
+        steps = [{"tap": "A", "gap": 0}, {"wait": "party_popup"}, between, {"tap": "A"}]
+        assert probe.check_inputs(spec_of(lua, steps)) is True
+    for zero in ({"wait": "party_popup"}, {"action": 2}, {"slot": 1}, {"idle": 0}):
+        with pytest.raises(lupa.LuaError, match="no released frame"):
+            probe.check_inputs(spec_of(lua, [{"tap": "A", "gap": 0}, zero, {"tap": "A"}]))
+
+
+def test_every_bw_row_releases_between_presses(module):
+    _, probe = module
+    for spec in bw_specs(probe).values():
+        assert probe.check_inputs(spec) is True, spec.name
+        for step in spec.inputs.values():
+            assert step.tap is None or step.gap != 0, (spec.name, step.tap)
+    n7 = bw_specs(probe)["bw_n7_switch"]
+    kinds = [next(k for k in ("wait", "action", "slot", "tap", "pulse") if s[k] is not None)
+             for s in n7.inputs.values()]
+    assert kinds == ["wait", "action", "tap", "wait", "slot", "tap", "wait", "tap", "pulse"]
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_n8_ball_count_comes_from_the_shared_reader_with_the_key(title):
+    """bdbf5736: N8 needs extra.balls. The probe reads it with lua/gen3/reads.lua read_balls
+    (SaveBlock1 +0x430, 13 slots, quantity ^ low16(SaveBlock2 +0xF20)) from this profile."""
+    import json as _json
+    prof = _json.loads((ROOT / "data/games/gen3_frlg/profile.json").read_text(encoding="utf-8"))["titles"][title]
+    d = prof["derived"]
+    assert (d["SB1_BALL_POCKET_OFFSET"], d["SB1_BALL_POCKET_COUNT"], d["SB2_ENC_KEY_OFFSET"]) == (0x430, 13, 0xF20)
+    assert not d.get("BAG_IN_EWRAM") and d.get("BALL_POCKET_ENC") is not False
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    reads = lua.execute((ROOT / "lua/gen3/reads.lua").read_text(encoding="utf-8"))
+    pack = FRLG_PACK[title]
+    sb1, sb2, key = 0x02025000, 0x02024000, 0xBEEF1234
+    mem = {pack["pointers"]["gSaveBlock1Ptr"]["address"]: sb1, pack["pointers"]["gSaveBlock2Ptr"]["address"]: sb2,
+           sb2 + 0xF20: key, sb1 + 0x430: 4, sb1 + 0x432: 5 ^ 0x1234}
+    rd = lambda a: mem.get(a, 0)  # noqa: E731
+    io = lua.table_from({"read_u8": rd, "read_u16": rd, "read_u32": rd,
+                         "read_bytes": lambda a, k: lua.table_from([0] * k)})
+    r = reads.new(lua.table_from(prof, recursive=True), io, lua.table_from(pack["pointers"], recursive=True))
+    assert r.read_balls().ball_count == 5
+    assert "local balls = bag.read_balls()" in SOURCE and "extra.balls = balls and balls.ball_count" in SOURCE
+    assert "if active.bw.spec.receipt_fields then" in SOURCE

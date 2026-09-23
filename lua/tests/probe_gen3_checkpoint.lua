@@ -164,7 +164,10 @@ P.REASON_ROWS = {
 -- cursor is n; {pulse=btn, frames=n, stop=W} presses btn on the 16-frame cadence until W;
 -- {throw_ball=true} is gen3_scripted_play's throw_pokeball_from_bag; a bw mash's `stop` names a W.
 local FRLG = {["firered/clean"]=true, ["leafgreen/clean"]=true}
-local TAP_A = {tap="A", frames=3, gap=0}
+-- gap=1: one released frame after every A. With gap=0 the popup-opening A and the SHIFT A of
+-- bw_n7_switch were ONE held press (the popup wait is already true on the next frame), so SHIFT
+-- was never chosen and the B pulse cancelled the menu: N7 UNREACHED on FR and LG, lane 765beb48.
+local TAP_A = {tap="A", frames=3, gap=1}
 P.BW_ROWS = {
     {name="bw_n1_action_draw", bw="N1", terminal="ctrl0 HandleChooseActionAfterDma3 then HandleInputChooseAction",
         state_env="SLINK_CHECKPOINT_INTRO_STATE", state="slink_preintro.State",
@@ -378,6 +381,7 @@ local BW_ONLY = {wait=true, action=true, slot=true, pulse=true, throw_ball=true}
 --- Validate a row's input steps before any is pressed: one known kind per step, bw-only kinds
 --- only on bw rows, known wait names, and no B at all on a forbid_b row (U2: the Pokedude flag).
 function P.check_inputs(spec)
+    local held   -- a button a gap-0 tap may still hold: no step since is sure to have released it
     for i, step in ipairs(spec.inputs or {}) do
         local where, kind = spec.name .. " input " .. i, nil
         for _, k in ipairs(P.STEP_KINDS) do
@@ -393,6 +397,12 @@ function P.check_inputs(spec)
             assert(w == false or P.BW_WAITS[w], where .. ": unknown wait " .. tostring(w))
         end
         assert(kind ~= "pulse" or step.stop, where .. ": a pulse needs a stop")
+        -- JOY_NEW needs a released frame between two presses; a wait already true, an action or
+        -- slot step already in place, all take zero frames, so only these release a held button
+        assert(step.tap == nil or step.tap ~= held,
+            where .. ": " .. tostring(held) .. " pressed again with no released frame (the game sees one press)")
+        if step.tap then held = (step.gap == 0) and step.tap or nil
+        elseif (step.idle or 0) > 0 or kind == "mash" or kind == "pulse" or kind == "throw_ball" then held = nil end
     end
     return true
 end
@@ -571,13 +581,21 @@ function P.run()
         G.phase("probe-state", row.name .. " terminal=" .. row.terminal)
         return row
     end
-    local bw_ctx, bw_last, bw_doc, rom_sha, SP
+    local bw_ctx, bw_last, bw_doc, rom_sha, SP, bag
     local function sample()
         if not active then return end
         if active.bw then
             local g, n = G.map(cp)
             local x, y = G.pos(cp)
-            bw_last = P.bw_feed(active, safety, {map = g .. "." .. n, pos = x .. "," .. y})
+            local extra = {map = g .. "." .. n, pos = x .. "," .. y}
+            -- N8's receipt_fields: the ball pocket total (SaveBlock1 +0x430, quantity XOR the
+            -- low 16 bits of SaveBlock2.encryptionKey; lua/gen3/reads.lua read_balls), every frame
+            -- from the load, so the row's first fed sample is the pre-throw baseline (bdbf5736)
+            if active.bw.spec.receipt_fields then
+                local balls = bag.read_balls()
+                extra.balls = balls and balls.ball_count
+            end
+            bw_last = P.bw_feed(active, safety, extra)
             return
         end
         -- Executed by onframeend, never from an exec hook. Raw R15/CPSR are reported,
@@ -647,6 +665,19 @@ function P.run()
                 end
                 local got, h = pcall(function() return gameinfo.getromhash() end)
                 rom_sha = got and type(h) == "string" and h:lower() or nil
+                local pf = assert(io.open(wt .. "/data/games/gen3_frlg/profile.json", "rb"))
+                local profile = dofile(wt .. "/lua/json_codec.lua").decode(pf:read("a")).titles[title]
+                pf:close()
+                bag = dofile(wt .. "/lua/gen3/reads.lua").new(profile, {
+                    read_u8 = function(a) return memory.read_u8(a) end,
+                    read_u16 = function(a) return memory.read_u16_le(a) end,
+                    read_u32 = function(a) return memory.read_u32_le(a) end,
+                    read_bytes = function(a, k)
+                        local out = {}
+                        for j = 1, k do out[j] = memory.read_u8(a + j - 1) end
+                        return out
+                    end,
+                }, cp.pointers)
             end
         end
         hook = event.onframeend(function()
@@ -812,7 +843,7 @@ function P.run()
             G.log(line)
             if meta then
                 for _, k in ipairs({"first", "bad", "terminal"}) do
-                    if acc[k] then G.log(bw_ctx:receipt(acc[k], meta) .. " at=" .. k) end
+                    if acc[k] then G.log(bw_ctx:receipt(acc[k], meta, acc) .. " at=" .. k) end
                 end
             end
         end
