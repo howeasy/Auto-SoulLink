@@ -98,7 +98,13 @@ function Session.new(p)
         end
         return transmit(name, fields)
     end
-    self.send = send
+    -- S.send(event, fields) is the API; the method form S:send(event, fields) is accepted too, so
+    -- a binding that calls it with a colon (lua/gen3/entry.lua's native send) cannot pass the
+    -- session itself as the event name
+    self.send = function(a, b, c)
+        if a == self then return send(b, c) end
+        return send(a, b)
+    end
 
     function self:eligible()
         return self.writes_enabled == true and self.hello_sent == true and net.connected() == true
@@ -124,7 +130,10 @@ function Session.new(p)
             -- the save was cleared (reset / new game): the next hello is a new session, and every
             -- alias pointed at a record that is gone with it
             if game.save_cleared and game.save_cleared() then
+                -- the save epoch ends here: events held for a hello that never went out belong
+                -- to the save that is gone, so they die with it (never flushed into the next)
                 self.hello_sent = false
+                self.pre_hello = {}
                 identity:clear()
                 if game.on_reset then game.on_reset() end
             end
@@ -240,11 +249,25 @@ function Session.new(p)
         elseif c == "unresolve_area" then
             self.resolved_areas[cmd.area_id] = nil
         elseif c == "key_change_ack" then
-            identity:ack(cmd.old_key)
-            if cmd.new_key and cmd.migrated ~= false then
-                -- the server migrated its records and queued commands old -> new: every command
-                -- still held here follows it (battle writes AND the checkpoint queue); a
-                -- replay (migrated = false) renamed nothing, so nothing is rewritten
+            local alias = identity:ack(cmd.old_key)
+            -- migrated=true: the server renamed old -> new now. migrated=false is EITHER a replay
+            -- (the rename already happened, server/state.py:2557-2567) OR an old key the server
+            -- never tracked; the wire cannot tell them apart, so local commands follow the
+            -- mapping only with evidence it is ours: the alias we raised for exactly this pair,
+            -- or the cartridge holding the new key and not the old one.
+            local function evidence()
+                if alias and alias.new_key == cmd.new_key then return true end
+                local party = game.read_party()
+                if not party then return false end
+                local has_new, has_old = false, false
+                for _, m in ipairs(party) do
+                    local k = identity.key(m)
+                    if k == cmd.new_key then has_new = true end
+                    if k == cmd.old_key then has_old = true end
+                end
+                return has_new and not has_old
+            end
+            if cmd.new_key and cmd.new_key ~= cmd.old_key and (cmd.migrated ~= false or evidence()) then
                 for _, e in ipairs(self.battle_pending) do
                     if e.key == cmd.old_key then e.key = cmd.new_key end
                 end

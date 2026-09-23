@@ -71,7 +71,8 @@ def mon_record(personality: int, ot_id: int, species: int = 1, level: int = 5, h
         "pokeball": 4, "ot_gender": 0,
         "ivs": dict.fromkeys(STATS, 10),
         "is_egg": is_egg, "ability_num": 0, "ribbons": 0,
-        "status": 0, "level": level, "mail": 0, "hp": hp, "max_hp": max_hp, "attack": 11,
+        "status": 0, "level": level, "mail": 0xFF, "hp": hp,  # mail: MAIL_NONE
+        "max_hp": max_hp, "attack": 11,
         "defense": 12, "speed": 13, "sp_attack": 14, "sp_defense": 15,
     }
 
@@ -131,7 +132,11 @@ class World:
         self.logs: list[str] = []
         self.writes: list[tuple[int, int, int]] = []
         self.saveram_calls = 0
-        self.battle_ok = False           # the fake C4-B battle predicate
+        # battle_ok: does the fake bus satisfy the pack's REAL battle clause set (write_checkpoint
+        # battle.clauses, judged by lua/gen3/safety.lua)? battle_checks: every non-overworld
+        # reason the real policy was asked about, recorded at the policy seam.
+        self._battle_ok = False
+        self.in_battle_state = False
         self.battle_checks: list[str] = []
         self.lua = L = lupa.LuaRuntime(unpack_returned_tuples=True)
         self.io = L.table(
@@ -155,14 +160,21 @@ class World:
         self.Entry = L.eval(f'dofile("{ENTRY}")')
         deps = {"root": REPO.as_posix(), "mode": "production", "io": self.io, "ev": self.ev,
                 "net": net, "hud": hud, "pack": pack, "title": title, "kind": kind, "player": player,
-                "rom_sha1": "ab" * 20, "log": lambda t: self.logs.append(str(t)),
-                "battle_policy": self._battle_policy}
+                "rom_sha1": "ab" * 20, "log": lambda t: self.logs.append(str(t))}
         if native is not None:          # native(lua_runtime) -> the native part's Lua table
             deps["native"] = native(L)
         if boxes is not None:           # boxes(lua_runtime) -> the mover's Lua table
             mover = boxes(L)
             deps["boxes_new"] = lambda *_a: mover
         self.client, self.parts = self.Entry.build(L.table(**deps))
+        policy = self.parts.policy
+        real_check = policy.check
+
+        def check(this, snap, reason, args=None):
+            if str(reason) != "overworld":
+                self.battle_checks.append(str(reason))
+            return real_check(this, snap, reason, args)
+        policy.check = check
         self.setup_save()
         self.overworld_safe()
         self.client.start(self.client)
@@ -196,9 +208,31 @@ class World:
         self.hooks[str(name)] = (fn, int(addr))
         return f"id-{len(self.hooks):04d}"
 
-    def _battle_policy(self, _snap, reason):
-        self.battle_checks.append(str(reason))
-        return (True, "fake C4-B predicate") if self.battle_ok else (False, "fake C4-B predicate refuses")
+    @property
+    def battle_ok(self):
+        return self._battle_ok
+
+    @battle_ok.setter
+    def battle_ok(self, value):
+        self._battle_ok = bool(value)
+        if self.in_battle_state:
+            self.apply_battle_clauses()
+
+    def apply_battle_clauses(self):
+        """Put the bus in (battle_ok) or out of the pack's battle-safe state: the action-
+        selection input wait, gBattleCommunication[0] == 1 (docs: OMP C4-B). Only the clause
+        bytes are touched; a masked clause clears just its bits."""
+        for c in self.wc["battle"]["clauses"]:
+            addr, width = c["address"] + c.get("offset", 0), c["width"]
+            if c["compare"] == "nonzero":
+                if self._read(addr, width) == 0:
+                    self.poke_int(addr, 1, width)
+            elif "mask" in c:
+                self.poke_int(addr, (self._read(addr, width) & ~c["mask"]) | c["expect"], width)
+            elif c["name"] == "battle_main_func" and not self._battle_ok:
+                self.poke_int(addr, 0, width)            # the engine is not in its input wait
+            else:
+                self.poke_int(addr, c["expect"], width)
 
     def _send(self, line):
         self.lines.append(str(line))
@@ -318,6 +352,8 @@ class World:
             self.poke(self.ram["ENEMY_BASE"] + i * codec.PARTY_MON_SIZE, self.encode(rec))
         # battler 0 live: the CFRU in-battle detector reads its maxHP (reads.lua read_battle)
         self.poke_int(self.ram["BATTLE_MONS_ADDR"] + 0x28 + 4, 20, 2)
+        self.in_battle_state = True
+        self.apply_battle_clauses()
         if fire:
             self.fire("battle_begin")
 
@@ -326,6 +362,7 @@ class World:
             self.poke_int(self.ram["BATTLER_PARTY_INDEXES_ADDR"] + 2 * b, slot, 2)
 
     def leave_battle(self, outcome=1, fire=True):
+        self.in_battle_state = False
         p = self.wc["predicates"]["in_battle"]
         self.poke_int(p["address"] + p["offset"], p["expect"], 1)
         self.poke_int(self.ram["BATTLE_OUTCOME_ADDR"], outcome, 1)

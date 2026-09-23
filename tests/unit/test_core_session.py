@@ -580,11 +580,13 @@ def test_stop_closes_the_signals():
 
 # -- C4-2d review findings ------------------------------------------------------------------
 
-def _emitter(w, event):
+def _emitter(w, event, key=None):
     """A frame hook that emits `event` whenever the test sets w.st.emit (a reducer stand-in)."""
-    w.driver.frame_hooks[2] = w.lua.eval(
-        "function(s, st, name) return function() if st.emit then st.emit = false; s.send(name, {}) end end end"
-    )(w.s, w.st, event)
+    slot = len(w.driver.frame_hooks) + 1
+    w.driver.frame_hooks[slot] = w.lua.eval(
+        "function(s, st, name, key) local done = false return function() if st.emit and not done then "
+        "done = true; s.send(name, key and {key = key} or {}) end end end"
+    )(w.s, w.st, event, key)
 
 
 def test_major1_no_semantic_event_precedes_hello_it_is_held_and_flushed_after():
@@ -651,8 +653,11 @@ def test_major6_key_change_ack_migrates_queued_checkpoint_commands():
     assert [str(items[i].key) for i in (1, 2)] == [NEW, B]
 
 
-def test_major6_a_replayed_ack_renames_nothing():
+def test_r3_an_unrelated_migrated_false_ack_without_evidence_renames_nothing():
+    """migrated:false for an old key the server never tracked (state.py:2566-2571): the
+    cartridge still holds OLD and no alias was raised, so nothing local follows."""
     w = World()
+    w.set_party((OLD, 0), (B, 1))
     w.step_to(60)
     w.st.checkpoint = False
     w.command(cmd="memorialize", key=OLD)
@@ -660,6 +665,65 @@ def test_major6_a_replayed_ack_renames_nothing():
     w.command(cmd="key_change_ack", old_key=OLD, new_key=NEW, migrated=False)
     w.step()
     assert str(w.q["items"][1].key) == OLD
+
+
+def test_r3_a_replayed_ack_with_our_alias_migrates_the_queued_command():
+    """The replay ACK (migration already happened server-side, state.py:2557-2565) arrives
+    with migrated:false; our own pending alias for exactly this pair is the evidence."""
+    w = World()
+    w.set_party((NEW, 0), (B, 1))
+    w.step_to(60)
+    w.st.checkpoint = False
+    p = w.st.party
+    w.identity.begin_alias(w.identity, OLD, NEW, p[1], p)
+    w.command(cmd="force_faint", key=OLD)
+    w.step()
+    w.q.push(w.q, w.lua.table_from({"cmd": "memorialize", "key": OLD}))
+    w.command(cmd="key_change_ack", old_key=OLD, new_key=NEW, migrated=False)
+    w.step()
+    assert [str(w.q["items"][i].key) for i in range(1, w.q.size(w.q) + 1)] == [NEW]
+
+
+def test_r3_a_replayed_ack_after_the_alias_cleared_follows_the_cartridge():
+    """The first ACK was lost with the connection after the alias was dropped (e.g. a reset
+    of the alias table): the cartridge holding NEW and not OLD is the evidence."""
+    w = World()
+    w.set_party((NEW, 0), (B, 1))
+    w.step_to(60)
+    w.st.checkpoint = False
+    w.q.push(w.q, w.lua.table_from({"cmd": "memorialize", "key": OLD}))
+    w.command(cmd="key_change_ack", old_key=OLD, new_key=NEW, migrated=False)
+    w.step()
+    assert str(w.q["items"][1].key) == NEW
+
+
+def test_r2_held_pre_hello_events_die_with_a_save_reset():
+    """A keyed event and a whiteout held for a hello that never went out belong to the save
+    that was cleared; the next save's hello is not followed by them."""
+    w = World()
+    w.st.hello_ready = False
+    _emitter(w, "faint", key=A)
+    _emitter(w, "whiteout")
+    w.st.emit = True
+    w.step()
+    w.st.emit = False
+    w.st.party_ok, w.st.cleared = False, True
+    w.step_to(60)                                         # the validation sees the cleared save
+    w.st.party_ok, w.st.cleared, w.st.hello_ready = True, False, True
+    w.step()
+    assert [m["event"] for m in w.sent] == ["hello"]
+
+
+def test_r2_held_events_of_a_save_that_was_not_reset_still_follow_its_hello():
+    w = World()
+    w.st.hello_ready = False
+    _emitter(w, "faint", key=A)
+    w.st.emit = True
+    w.step()
+    w.st.emit = False
+    w.st.hello_ready = True
+    w.step()
+    assert [m["event"] for m in w.sent] == ["hello", "faint"]
 
 
 def test_blocker_validation_runs_before_the_driver_service_so_a_pause_gates_that_frame():
@@ -672,6 +736,14 @@ def test_blocker_validation_runs_before_the_driver_service_so_a_pause_gates_that
     w.step_to(60 + 60 * w.S.MAX_INVALID)                  # the pausing validation's frame
     assert seen[-1] == (60 + 60 * w.S.MAX_INVALID, False)
     assert seen[59] == (60, True)                         # enabled by frame 60's own validation
+
+
+def test_send_accepts_the_method_form_too():
+    w = World()
+    w.step()
+    w.lua.eval("function(s) s:send('whiteout', {}) end")(w.s)
+    w.s.send("whiteout", w.lua.table())
+    assert [m["event"] for m in w.sent] == ["hello", "whiteout", "whiteout"]
 
 
 def test_eligible_needs_writes_hello_and_a_connection():

@@ -221,6 +221,34 @@ def test_an_error_after_the_reply_sends_nothing_more():
     assert [e["event"] for e in q.sends()] == ["sync_retrieve_done"] and q.size() == 0
 
 
+def test_r1_a_sink_that_throws_on_byte_two_is_uncertain_through_the_real_writes_lua():
+    """The real lua/gen3/writes.lua: byte 1 lands, the sink throws on byte 2 before any log
+    receipt exists. Its attempt counter moved, so the reply is 'uncertain', never a retry."""
+    q = Queue()
+    L = q.lua
+    ram, calls = {}, []
+
+    def sink(addr, value, *_):
+        calls.append(int(addr))
+        if len(calls) == 2:
+            raise RuntimeError("sink died on byte 2")
+        ram[int(addr)] = int(value)
+    W = L.eval(f'dofile("{(REPO / "lua" / "gen3" / "writes.lua").as_posix()}")')
+    writes = W.new(L.table(safety=L.eval("{ snapshot = function() return {} end, "
+                                         "check = function() return true end }"),
+                           frame=lambda: 1, io=L.table(write_u8=sink)))
+    q.q.exec.deposit = L.eval(
+        "function(w) return function(key, hint) w:arm('overworld', function() return true end); "
+        "w:write_bytes(4096, {1, 2}); return true end end")(writes)
+    q.q.exec.write_count = L.eval("function(w) return function() return w.attempted end end")(writes)
+    q.push(cmd="box_mon", key=A)
+    q.drain(5)
+    assert ram == {4096: 1} and len(writes.log) == 0            # RAM changed, no receipt
+    assert writes.attempted == 2 and len(calls) == 2              # never retried
+    (fail,) = q.sends("box_mon_failed")
+    assert fail["reason"].startswith("uncertain: partial write")
+
+
 # -- MINOR 2 (C4-2d): queue hygiene (docs/protocol.md §9 item 31) ----------------------------
 
 def test_an_opposing_box_mon_cancels_the_queued_party_mon_before_any_move():

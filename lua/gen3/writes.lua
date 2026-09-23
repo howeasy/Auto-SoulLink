@@ -10,7 +10,10 @@ end
 function W.new(deps)
     local safety = assert(deps.safety, "safety policy required")
     local window
-    local self = {log = {}}
+    -- `attempted` counts every byte handed to the sink, incremented BEFORE the external write:
+    -- a sink that throws on byte k leaves attempted >= k, so a caller can tell "nothing was
+    -- written" (unchanged) from "RAM may have changed" (moved) even when no log receipt exists.
+    local self = {log = {}, attempted = 0}
     function self:disarm() window = nil end
     function self:arm(reason, allow, args)
         window = nil
@@ -37,7 +40,10 @@ function W.new(deps)
         local ok, why = safety:check(window.snapshot, window.reason, window.args)
         assert(ok == true, why)
         -- No reads/callbacks between final revalidation and the first write.
-        for i = 1, n do deps.io.write_u8(addr + i - 1, copy[i], "System Bus") end
+        for i = 1, n do
+            self.attempted = self.attempted + 1
+            deps.io.write_u8(addr + i - 1, copy[i], "System Bus")
+        end
         local record = {reason = window.reason, address = addr, len = n, frame = window.frame,
             why = window.reason, addr = addr, n = n}
         self.log[#self.log + 1] = record

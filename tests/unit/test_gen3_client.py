@@ -344,7 +344,7 @@ def test_a_refused_battle_faint_check_holds_and_writes_nothing():
     w.step(3)
     assert w.writes == [] and w.client.battle_pending_count(w.client) == 1
     held = lua_to_py_list(w.client.battle_pending)[0]
-    assert "refuses" in str(held.why)
+    assert "forbidden state" in str(held.why)                # the REAL battle clause set refused
     w.battle_ok = True
     w.step()
     assert w.party_hp(1) == 0 and w.client.battle_pending_count(w.client) == 0
@@ -422,6 +422,21 @@ def _hp_writes(w):
     return [x for x in w.writes if x[0] in hp]
 
 
+def test_the_full_commit_lands_through_the_real_writes_and_safety_with_the_guard_last():
+    """C4-2e item 2: writes.lua re-checks the REAL battle_commit clause set before every byte;
+    gBattleCommunication[battler] is that set's battle_comm_0 clause AND its guard, so it must
+    be the plan's last write or the rest is refused mid-plan."""
+    w, base = _explode_world()
+    w.command(cmd="force_explode", key=KA)
+    w.step()
+    comm = w.ram["BATTLE_COMM_ADDR"]
+    commit = [x for x in w.writes if x[1] is not None]
+    addrs = [x[0] for x in commit]
+    assert addrs[-1] == comm and addrs.count(comm) == 1           # the committing byte, last
+    assert len(commit) == 4 * 2 + 4 + 1 + 2 + 1 + 1 + 1           # moves, PP, action, move, pos, target, comm
+    assert sum(int(r.len) for r in lua_to_py_list(w.parts.writes.log)) == len(commit)
+
+
 def test_explode_control_a_move_locked_battler_is_held_and_nothing_is_written():
     w, base = _explode_world()
     w.poke_int(w.ram["LOCKED_MOVES_ADDR"], 37, 2)              # Thrash in progress
@@ -438,7 +453,7 @@ def test_explode_control_sleep_or_flinch_rearms_the_commit_and_never_writes_hp(m
     w.command(cmd="force_explode", key=KA)
     w.step()
     for _ in range(3):                                         # three turns asleep / flinching
-        w.poke_int(w.ram["BATTLE_COMM_ADDR"], 0, 1)
+        w.poke_int(w.ram["BATTLE_COMM_ADDR"], 1, 1)            # the next turn's input wait
         w.step()
         assert w._read(w.ram["BATTLE_COMM_ADDR"], 1) == 3
     assert _hp_writes(w) == [] and set(write_reasons(w)) == {"battle_commit"}
@@ -450,7 +465,7 @@ def test_rr_explosion_that_the_battler_survives_degrades_to_a_held_faint():
     w.command(cmd="force_explode", key=KA)
     w.step()
     w.poke_int(base + 0x24, 4, 1)                               # executed
-    w.poke_int(w.ram["BATTLE_COMM_ADDR"], 0, 1)                 # a new turn began, hp > 0
+    w.poke_int(w.ram["BATTLE_COMM_ADDR"], 1, 1)                 # a new turn's input wait, hp > 0
     n = len(w.writes)
     w.step(3)
     held = lua_to_py_list(w.client.battle_pending)[0]
@@ -602,19 +617,13 @@ NATIVE = RR_PACK["native"]
 
 
 def attach_real_native(w, present=True):
-    """The REAL lua/gen3/native.lua over this World's production sink, attached late."""
+    """The REAL lua/gen3/native.lua instance Entry built for this RR companion World (the one
+    the client, Safety's native_idle and the write policy share); present = its beacon is up."""
+    assert w.parts.native is not None, "Entry builds native for the RR companion artifact"
     if present:
         w.poke_int(NATIVE["BASE"], NATIVE["SIG"], 4)
         w.poke_int(NATIVE["BASE"] + 4, NATIVE["ABI"], 2)
-    L = w.lua
-    N = L.eval(f'dofile("{(REPO / "lua" / "gen3" / "native.lua").as_posix()}")')
-    json_mod = L.eval(f'dofile("{(REPO / "lua" / "json_codec.lua").as_posix()}")')
-    native = N.new(L.table_from(RR_PACK, recursive=True), L.table(
-        io=w.io, writes=w.parts.writes, reads=w.parts.reads, send=w.client.send,
-        in_battle=lambda: True, refresh_enemy=lambda *_: True, artifact_kind=w.kind,
-        array=json_mod.array))
-    w.client.attach_native(native)
-    return native
+    return w.parts.native
 
 
 def native_writes(w):
@@ -682,6 +691,69 @@ def test_major1_a_capture_before_hello_is_sent_after_it():
     w.overworld_safe()
     w.step()
     assert w.names()[:2] == ["hello", "capture"]
+    # R4 (C4-2e): exactly the acquired mon -- A was there before the first frame
+    assert [c["key"] for c in w.events("capture")] == [KB]
+
+
+def test_r4_a_party_loaded_without_a_signal_is_never_an_acquisition():
+    """The save is live at the main menu with an empty party; CONTINUE brings A and B in with
+    no engine acquisition signal; a later gift reports only the gift."""
+    w = World()
+    w.step(2)                                                  # live, empty party: the baseline
+    w.set_party(party(A, B))                                   # CONTINUE, no signal
+    w.step(3)
+    w.set_party(party(A, B, C))
+    w.fire("mon_given")
+    w.step()
+    assert [c["key"] for c in w.events("capture")] == [KC]
+
+
+def test_r4_a_gift_straddling_a_frame_end_is_still_an_acquisition():
+    """The party grows at a frame end whose return hook fires on the NEXT frame: the quiet
+    frame must not absorb the new key before the signal settles it."""
+    w = live(pids=(A,))
+    w.set_party(party(A, B))
+    w.step()                                                   # party written, hook not yet fired
+    w.fire("mon_given")
+    w.step()
+    assert [c["key"] for c in w.events("capture")] == [KB]
+
+
+def test_r1_a_mover_that_throws_on_byte_two_is_uncertain_with_the_production_counter():
+    """The client's own write_count over the real writes.lua: byte 1 lands, byte 2 throws."""
+    w, _ = boxed_live()
+    L, landed = w.lua, []
+    real = w.io.write_u8
+
+    def sink(addr, value, *rest):
+        landed.append(int(addr))
+        if len(landed) == 2:
+            raise RuntimeError("sink died on byte 2")
+        return real(addr, value, *rest)
+    w.io.write_u8 = sink
+    w.client.deferred.exec.deposit = L.eval(
+        "function(w) return function(key, hint) w:arm('overworld', function() return true end); "
+        "w:write_bytes(0x02030000, {1, 2}); return true end end")(w.parts.writes)
+    w.command(cmd="box_mon", key=KB)
+    w.step(5)
+    assert w._read(0x02030000, 1) == 1 and len(landed) == 2      # RAM changed; never retried
+    (fail,) = w.events("box_mon_failed")
+    assert fail["reason"].startswith("uncertain: partial write")
+
+
+def test_r3_a_replayed_ack_lands_the_queued_faint_on_the_renamed_mon():
+    """Codex's repro: faint(A) queued, the cartridge's A became B, the server's ACK is a
+    replay (migrated:false). The faint must land on B, not vanish."""
+    w = live(pids=(A, C))
+    w.break_checkpoint()
+    w.command(cmd="force_faint", key=KA)
+    w.step()
+    w.set_party([mon_record(B, OT, species=4), mon_record(C, OT, species=5)])
+    w.command(cmd="key_change_ack", old_key=KA, new_key=KB, migrated=False)
+    w.step()
+    w.overworld_safe()
+    w.step(2)
+    assert w.party_hp(0) == 0
 
 
 def test_major1_a_reconnect_hello_has_no_area_enter_before_it():

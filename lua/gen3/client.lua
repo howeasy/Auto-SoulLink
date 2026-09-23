@@ -14,10 +14,10 @@
 --   net, hud, json, io, ev, area_map, locations, player, rom_type, rom_sha1, foundation,
 --   artifact_kind, log, core = { Session, Identity, Deferred }, native (optional; P5).
 --
--- The optional native part (lua/gen3/native.lua, the RR companion mailbox). It is attached
--- after construction (session.attach_native(n): native needs the session's send, the session
--- needs native -- the binding card wires the two). Every seam below calls it when present and
--- otherwise does what the old client did without the patch. Native POSTING is gated on the
+-- The optional native part (lua/gen3/native.lua, the RR companion mailbox) arrives as p.native:
+-- Entry builds ONE instance and hands it to the client, Safety's native_idle and (through it)
+-- the write policy, so all three see the same mailbox. Every seam below calls it when present
+-- and otherwise does what the old client did without the patch. Native POSTING is gated on the
 -- session (S:eligible(): writes enabled, hello'd, connected): the client wraps the injected
 -- write policy so that every arm of reason "native" or "sound" is also refused while the
 -- session is ineligible. native:service() still runs every frame, so ACK polling never stops;
@@ -97,11 +97,11 @@ function Client.new(p)
     -- injected policy covers every arm made through the one sink, including a job native.lua
     -- queued while eligible and tries to post after a pause.
     local base_check = policy.check
-    function policy:check(snapshot, reason)
+    function policy:check(snapshot, reason, args)
         if (reason == "native" or reason == "sound") and not eligible() then
             return false, "session not eligible for " .. reason .. " writes (paused, not hello'd or disconnected)"
         end
-        return base_check(self, snapshot, reason)
+        return base_check(self, snapshot, reason, args)       -- args reach the clause sets
     end
 
     local st = {
@@ -115,6 +115,7 @@ function Client.new(p)
         frozen = false,    -- a borrowed party is in RAM
         flags = {},        -- what the signals of this frame said changed
         has_pokeballs = false, last_area = nil, trade = nil, sound_frame = nil, sound_logged = {},
+        baselined = false, seen_count = nil, observe_at = nil,
         bframe = nil, bcache = nil,
     }
 
@@ -454,6 +455,12 @@ function Client.new(p)
         update_frozen(party)
         local area_id = area_now()
         if st.battle and in_battle() then note_battle(battle_now()) end
+        if f.acquire and not st.baselined then
+            -- nothing tells a pre-existing key from a new one yet: report none, learn them all
+            log("acquisition signal before a party baseline exists: not reported")
+            f.acquire = nil
+            if not st.frozen then rescan_boxes(); seed_known(party); st.baselined = true end
+        end
         if not st.frozen then
             if f.faint or f.battle_end or f.whiteout then settle_faints(party, area_id) end
             if f.acquire then settle_acquisitions(party, area_id, f.caught or (st.battle and st.battle.caught)) end
@@ -474,15 +481,16 @@ function Client.new(p)
                             and num(a.CHOSEN_MOVE_ADDR) and num(a.BATTLE_COMM_ADDR) and true or false
 
     -- one armed window, one reason, one allow set; returns true or nil, why
-    local function armed_write(reason, plan)
+    -- args: what the reason's clause set needs (battle_commit: {battler}; sound: {player, track})
+    local function armed_write(reason, plan, args)
         local snap, why = policy:snapshot()
         if not snap then return nil, why end
-        local ok, cwhy = policy:check(snap, reason)
+        local ok, cwhy = policy:check(snap, reason, args)
         if not ok then return nil, cwhy end
         local allow = {}
         for _, w in ipairs(plan) do allow[w[1] .. ":" .. w[2]] = true end
         local wok, err = pcall(function()
-            writes:arm(reason, function(x, n) return allow[x .. ":" .. n] == true end)
+            writes:arm(reason, function(x, n) return allow[x .. ":" .. n] == true end, args)
             for _, w in ipairs(plan) do
                 if w[2] == 4 then writes:write_u32(w[1], w[3])
                 elseif w[2] == 2 then writes:write_u16(w[1], w[3])
@@ -519,7 +527,6 @@ function Client.new(p)
         end
         plan[#plan + 1] = { a.CHOSEN_ACTION_ADDR + battler, 1, B_ACTION_USE_MOVE }
         plan[#plan + 1] = { a.CHOSEN_MOVE_ADDR + battler * 2, 2, MOVE_EXPLOSION }
-        plan[#plan + 1] = { a.BATTLE_COMM_ADDR + battler, 1, STATE_ACTION_CONFIRMED_STANDBY }
         local bs = num(a.BATTLE_STRUCT_PTR_ADDR) and io.read_u32(a.BATTLE_STRUCT_PTR_ADDR) or 0
         if bs ~= 0 then
             if num(d.BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF) then
@@ -529,6 +536,10 @@ function Client.new(p)
                 plan[#plan + 1] = { bs + d.BATTLE_STRUCT_MOVE_TARGET_OFF + battler, 1, TARGET_FOE_PRIMARY }
             end
         end
+        -- LAST: the committing state is itself the battle_commit guard (gBattleCommunication
+        -- [battler] < 3) and writes.lua re-validates before every write, so any write after it
+        -- would be refused mid-plan and leave a half-committed action
+        plan[#plan + 1] = { a.BATTLE_COMM_ADDR + battler, 1, STATE_ACTION_CONFIRMED_STANDBY }
         return plan
     end
 
@@ -571,7 +582,7 @@ function Client.new(p)
         end
         if ex and comm >= STATE_ACTION_CONFIRMED_STANDBY then return "hold", "explosion committed" end
         -- first commit, or the engine reset the commit state at turn start: (re)write it
-        local ok, why = armed_write("battle_commit", commit_plan(battler, not ex))
+        local ok, why = armed_write("battle_commit", commit_plan(battler, not ex), { battler = battler })
         if not ok then return "hold", why end
         if not ex then
             e.explode = { battler = battler }
@@ -631,12 +642,9 @@ function Client.new(p)
             return boxes:memorialize(k, hint)
         end,
         stats_of = stats_of,
-        -- every byte moves through the one sink, whose log tells a clean error from a partial one
-        write_count = function()
-            local n = 0
-            for _, r in ipairs(writes.log) do n = n + (r.len or 0) end
-            return n
-        end,
+        -- every byte moves through the one sink; its ATTEMPT counter moves before each external
+        -- write, so an error after the first attempted byte reads as a (possible) mutation
+        write_count = function() return writes.attempted end,
         -- our own moves must not read as the player's: re-baseline after every one
         rescan = function()
             rescan_boxes()
@@ -657,7 +665,6 @@ function Client.new(p)
         if party then update_frozen(party) end
         return st.frozen
     end
-    function drv.attach_native(n) native = n end
 
     function drv.game_is_live()
         local party, why = party_read()
@@ -687,6 +694,7 @@ function Client.new(p)
         st.known, st.alive, st.commanded, st.party_prev, st.carried = {}, {}, {}, {}, {}
         st.box_cache, st.boxes_ok, st.battle, st.frozen, st.flags = {}, false, nil, false, {}
         st.last_area, st.trade = nil, nil
+        st.baselined, st.seen_count, st.observe_at = false, nil, nil
     end
 
     -- No wire side effect here (no area_enter, no banner): hello is the connection's first line.
@@ -698,6 +706,7 @@ function Client.new(p)
         -- hello.party stays present and empty, exactly like tick_fields' guard
         local own = st.frozen and {} or party
         seed_known(own)                                        -- box-key seeding at connect
+        if not st.frozen then st.baselined = true end
         if not st.frozen then rebaseline(party) end
         latch_balls(false)                                     -- a resume, not an acquisition
         local area_id, loc = area_now()
@@ -767,7 +776,33 @@ function Client.new(p)
         -- evolution keeps PID:OTID, so the key is unchanged and the next tick carries the
         -- species. poison_hp_before / pc_release_begin bookkeeping and frame_control: nothing.
     end
-    drv.frame_hooks = { settle }
+    -- The pre-existing baseline (R4), independent of hello: what is in the party/boxes on a
+    -- QUIET frame (no engine change signalled) is not an acquisition. The first live quiet
+    -- frame baselines at once (a loaded save, or the script starting mid-game). After that a
+    -- party-count change is learned only after it has stayed quiet across one frame boundary,
+    -- so a gift whose GiveMonToPlayer straddles a frame end (party written this frame, return
+    -- hook next frame) is still settled as an acquisition, not absorbed. A signalled frame
+    -- belongs to settle, which runs after this hook.
+    local function observe_known()
+        if next(st.flags) then st.observe_at = nil; return end
+        local f = io.framecount()
+        local count = num(a.PARTY_COUNT_ADDR) and io.read_u8(a.PARTY_COUNT_ADDR) or -1
+        if st.baselined and st.observe_at == nil then
+            if count ~= st.seen_count then st.observe_at = f + 1 end
+            return
+        end
+        if st.baselined and f < st.observe_at then return end
+        st.observe_at = nil
+        if not drv.game_is_live() then return end
+        local party = party_read()
+        if not party then return end
+        update_frozen(party)
+        if st.frozen then return end                           -- a borrowed party is never ours
+        if not st.baselined then rescan_boxes(); st.baselined = true end
+        seed_known(party)
+        st.seen_count = count
+    end
+    drv.frame_hooks = { observe_known, settle }
 
     -- ── command seams ──────────────────────────────────────────────────────────────
     local C = drv.commands
@@ -850,7 +885,7 @@ function Client.new(p)
             { track0 + TRK.VOLX, 1, 64 }, { track0 + TRK.LFO, 1, 22 }, { track0 + TRK.CHAN, 4, 0 },
             { track0 + TRK.CMDPTR, 4, cmd_ptr },
             { se1 + MPL.IDENT, 4, M4A_ID },                -- unlock: the next VBlank plays it
-        }
+        }, { player = se1, track = track0 }
     end
     drv.play_sound = function(id)
         if not eligible() then return sound_refused("session not eligible") end
@@ -858,9 +893,9 @@ function Client.new(p)
         if st.sound_frame == f then return end              -- one cue per frame
         st.sound_frame = f
         if native and native.play_sound and native:play_sound(id) then return end
-        local plan, why = m4a_plan(id)
-        if not plan then return sound_refused(why) end
-        local ok, awhy = armed_write("sound", plan)
+        local plan, args = m4a_plan(id)
+        if not plan then return sound_refused(args) end
+        local ok, awhy = armed_write("sound", plan, args)
         if not ok then sound_refused(tostring(awhy)) end
     end
     drv.pre_pump = function()
@@ -872,7 +907,6 @@ function Client.new(p)
     session = core.Session.new({ net = p.net, json = json, hud = hud, log = sink, tag = TAG,
                                  player = p.player, game = drv, identity = Id, deferred = Q })
     session.driver, session.state = drv, st
-    session.attach_native = drv.attach_native
     return session
 end
 
