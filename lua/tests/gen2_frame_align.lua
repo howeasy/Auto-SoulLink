@@ -645,7 +645,16 @@ function F.main(api, getenv, SG)
     if played then
         local fdriver, fobserve, fspec = FI.new(ctx, SG, F, {
             fainted=function() return probe.record.sites.battle_faint.hits >= 1 end})
-        played, outcome = F.play(host, fspec, fdriver, fobserve, diag)
+        -- "saved" is reached on the save counter while SavedTheGame still shows its text (live U1d run 1:
+        -- the stale yes_no context reached FI's walk phase); idle until the overworld tick is back.
+        local settle = {terminal=fdriver.terminal, phase="settle"}
+        function settle.step(point)
+            if settle.phase == "settle" and point.overworld_ready ~= true then return {}, "settle" end
+            local buttons, phase = fdriver.step(point)
+            settle.phase = fdriver.phase
+            return buttons, phase
+        end
+        played, outcome = F.play(host, fspec, settle, fobserve, diag)
     end
     probe.release()
     state.release()
