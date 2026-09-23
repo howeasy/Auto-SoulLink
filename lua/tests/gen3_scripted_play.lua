@@ -1649,6 +1649,12 @@ local function leave_storage(cp, label)
         elseif pc_task(PC_ON_B_PRESSED) then
             -- the Continue-BOX yes/no: never A (YES keeps the box open; FR run 28b looped here)
             if storage and memory.read_u8(storage) == 2 then G.tap("B", 3, 13) else G.advance() end
+        elseif pc_task(PC_MAIN_MENU) then
+            -- Leaving the box lands on the storage MAIN menu (WITHDRAW/DEPOSIT/..., PHYSICAL FR
+            -- run 28d), one level above the owner list: B there is MENU_B_PRESSED == SEE YA!
+            -- (pokemon_storage_system_menu.c:263-290). Only while it accepts input (state 2).
+            local main = pc_task(PC_MAIN_MENU)
+            if memory.read_u16_le(main + 8) == 2 then G.tap("B", 3, 13) else G.advance() end
         elseif pc_task(PC_STORAGE_MAIN) or pc_task(PC_ON_SELECTED) or pc_task(PC_DEPOSIT_MENU) then
             G.advance()      -- a storage task still owns input: A here would act inside the box
         elseif not G.pred_ok(cp, "script_context_status") then

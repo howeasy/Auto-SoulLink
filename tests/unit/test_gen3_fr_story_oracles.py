@@ -1173,6 +1173,12 @@ def test_pc_exit_answers_continue_box_with_b_not_a(machine):
             elseif F.stage=='prompt' and button=='A' then
                 F.a_in_box=F.a_in_box+1; F.stage='storage'; F.w32(0x03005090,0x0808D2BD); F.w8(F.pcstore,0)
             elseif F.stage=='prompt' and button=='B' then
+                -- FR run 28d: leaving the box lands on the storage main menu (state 2)
+                F.stage='mainmenu'; F.w32(0x03005090,0x0808C39D); F.w16(0x03005090+8,2)
+                F.w32(0x020397B0,0)
+            elseif F.stage=='mainmenu' and button=='A' then
+                F.a_in_box=F.a_in_box+1           -- A here would re-enter DEPOSIT
+            elseif F.stage=='mainmenu' and button=='B' then
                 F.stage='script'; F.w32(0x03005090,0)
             elseif F.stage=='script' and button=='A' then
                 F.stage='owner'; F.w32(0x03005090,0x0809CC99); F.w8(0x0203ADE4+4,3)
