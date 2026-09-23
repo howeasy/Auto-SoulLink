@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from server.manager import GAMES, OPTIONS, new_run_form, option_support
+from server.manager import GAME_LABELS, GAMES, OPTIONS, new_run_form, option_support
 
 GEN1 = ["red", "blue"]
 RR = ["firered_rr", "firered_rr"]
@@ -93,3 +93,15 @@ def test_native_messages_is_disabled_for_every_game(tmp_path):
     s = option_support("native_messages", RR)
     assert not s["ok"] and "post-rc" in s["why"].lower(), s
     assert SoulLinkState(data_dir=str(tmp_path), native_messages=True).native_messages is False
+
+
+def test_unadmitted_gen3_variants_carry_the_suffix():
+    """Archipelago FRLG and Emerald are not admitted by the Gen 3 client yet (owner
+    2026-09-23, docs/gen3/PLAN.md §14.1). Their labels carry a 'not admitted' suffix
+    so players know they cannot start a SLink with them. Vanilla gen3 and gen3_rr are
+    admitted and have no such suffix."""
+    labels = GAME_LABELS
+    assert "not admitted by the SLink client yet" in labels["gen3_ap"]
+    assert "not admitted by the SLink client yet" in labels["gen3_e"]
+    assert "not admitted by the SLink client yet" not in labels["gen3"]
+    assert "not admitted by the SLink client yet" not in labels["gen3_rr"]
