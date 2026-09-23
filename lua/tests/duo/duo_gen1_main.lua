@@ -1681,11 +1681,12 @@ end
 
 -- The bench half of a linked faint that lands WHILE B IS IN A BATTLE (commit 6a8958fb): B meets a
 -- wild foe with its starter out and the linked mon benched in slot 1, holds the battle menu until
--- the server's force_faint/force_explode arrives, then takes the free MOVE-menu cancel (see
--- explode_free_reentry) back to the loop head, where the client zeroes the bench slot. Before the
--- fix a bench target in battle was deferred to the overworld checkpoint, so the mon stayed alive
--- and switchable for the whole battle: every marker below is taken with wIsInBattle ~= 0, and
--- that deferral would leave the slot's HP untouched until after BATTLE_RESULT.
+-- the server's force_faint/force_explode arrives. The client zeroes the bench slot the frame the
+-- command arrives (BENCH_ZERO_ON_RX, with no loop head run since the hold began), so the battle
+-- menu can never switch it in. B then takes the free MOVE-menu cancel (see explode_free_reentry)
+-- back to the loop head, where the queued backstop finds the slot already dead and moves no byte
+-- (LOOP_HEAD_BENCH_SETTLED). The 6a8958fb client waited for that loop head (a switch from the
+-- held menu got the doomed mon a turn); the one before it waited for the overworld checkpoint.
 local function bench_battle_half(key, explode)
     local size = parts.profile.derived.party_struct_size
     local function slot_hp(slot)
@@ -1706,21 +1707,23 @@ local function bench_battle_half(key, explode)
     local starter_before = slot_hp(0)
     log(fmt("READY_BENCH_BATTLE linked_slot=1 active_slot=0 in_battle=%d bench_hp=%04X "
             .. "active_hp=%04X moves=%s", rd(ram.wIsInBattle), slot_hp(1), active_before, moves_before))
-    local wrote = false
+    local settled, heads = false, 0
     local old = gclient.on_battle_loop_head
     gclient.on_battle_loop_head = function(self, sig)
+        heads = heads + 1
         local pending = self.pending_battle_writes[1]
         local hp_before = slot_hp(1)
-        old(self, sig)
-        if wrote or not (pending and pending.key == key and #self.pending_battle_writes == 0) then return end
+        local moved = old(self, sig)
+        if settled or not (pending and pending.key == key and #self.pending_battle_writes == 0) then return moved end
         local hp, status = slot_hp(1)
-        if hp_before ~= 0 and hp == 0 and rd(ram.wIsInBattle) ~= 0 then
-            wrote = true
-            log(fmt("LOOP_HEAD_BENCH_WRITE key=%s cmd=%s in_battle=%d bench_hp=%04X status=%02X "
-                    .. "hp_before=%d active_slot=%d active_hp=%04X moves=%s", key, pending.cmd,
-                    rd(ram.wIsInBattle), hp, status, hp_before, rd(ram.wPlayerMonNumber),
-                    battle_hp(), hex4(ram.wBattleMonMoves)))
+        if hp == 0 and rd(ram.wIsInBattle) ~= 0 then
+            settled = true
+            log(fmt("LOOP_HEAD_BENCH_SETTLED key=%s cmd=%s in_battle=%d bench_hp=%04X status=%02X "
+                    .. "hp_before=%d landed=%s moved=%s active_slot=%d active_hp=%04X moves=%s", key, pending.cmd,
+                    rd(ram.wIsInBattle), hp, status, hp_before, tostring(pending.landed == true), tostring(moved == true),
+                    rd(ram.wPlayerMonNumber), battle_hp(), hex4(ram.wBattleMonMoves)))
         end
+        return moved
     end
     local want = explode and "force_explode" or "force_faint"
     local forced = false
@@ -1732,8 +1735,19 @@ local function bench_battle_half(key, explode)
     if explode then
         log(fmt("EXPLODE_CMDS force_explode=%d force_faint=%d", seen.force_explode or 0, seen.force_faint or 0))
     end
-    -- The command is only queued; nothing is written until a loop head runs.
-    if slot_hp(1) == 0 then driver.close();return false, "the bench slot was zeroed before any loop head ran" end
+    -- The write lands on receipt: the slot reads 0 within a few frames of RX, and no loop head
+    -- has run since B began holding the battle menu (a loop-head-only client fails here).
+    local f0, zeroed = emu.framecount(), false
+    for _ = 1, 5 do
+        if slot_hp(1) == 0 then zeroed = true break end
+        yield_frame()
+    end
+    local rx_hp, rx_status = slot_hp(1)
+    log(fmt("BENCH_ZERO_ON_RX key=%s cmd=%s in_battle=%d bench_hp=%04X status=%02X frames=%d loop_heads=%d "
+            .. "active_slot=%d", key, want, rd(ram.wIsInBattle), rx_hp, rx_status, emu.framecount() - f0, heads,
+            rd(ram.wPlayerMonNumber)))
+    if not zeroed or rx_status ~= 0 then driver.close();return false, "the bench slot was not zeroed on receipt" end
+    if heads ~= 0 then driver.close();return false, "a loop head ran before the receipt readback" end
     if not driver.choose("FIGHT").ok then driver.close();return false, "B could not choose FIGHT for the free cancel" end
     local opened = false
     for _ = 1, 900 do
@@ -1744,13 +1758,13 @@ local function bench_battle_half(key, explode)
     local cancelled = false
     for _ = 1, 900 do
         if rd(symbols.wTopMenuItemX) ~= MOVE_MENU_X then cancelled = true end
-        if wrote then break end
+        if settled then break end
         yield_frame((not cancelled) and pulse_at_frame("B") or nil)
     end
-    if not wrote then
+    if not settled then
         local hp, status = slot_hp(1)
         driver.close()
-        return false, fmt("the bench write never landed at the loop head (in_battle=%d bench=%04X/%02X)",
+        return false, fmt("the loop head never settled the queued bench entry (in_battle=%d bench=%04X/%02X)",
                           rd(ram.wIsInBattle), hp, status)
     end
     -- Still in the same battle: the bench is dead, the active battler untouched.

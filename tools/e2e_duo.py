@@ -2495,9 +2495,12 @@ class DuoRun:
 
     def _assert_bench_battle_markers(self, b_text, expected_cmd):
         """B's in-battle ordering for the bench lanes: held battle -> command received in battle
-        -> loop-head write with the bench at 0000/00 -> in-battle readback with the active battler
-        unchanged -> battle end. Each marker is read off the receipt duo_gen1_main.lua's
-        bench_battle_half writes; a pre-fix client never logs LOOP_HEAD_BENCH_WRITE at all."""
+        -> bench at 0000/00 within a few frames of RX with NO loop head run yet (the write lands
+        on receipt) -> the next loop head finds the queued backstop already dead and moves no
+        byte -> in-battle readback with the active battler unchanged -> battle end. Each marker
+        is read off the receipt duo_gen1_main.lua's bench_battle_half writes; a loop-head-only
+        client never logs BENCH_ZERO_ON_RX (the driver fails first) and its loop head would be
+        the one that moved the bytes (hp_before != 0, moved=true)."""
         key = self._link_keys["b"]
         other = "force_faint" if expected_cmd == "force_explode" else "force_explode"
         ready = marker(b_text, r"READY_BENCH_BATTLE linked_slot=1 active_slot=0 in_battle=([1-9]\d*) "
@@ -2508,17 +2511,21 @@ class DuoRun:
                     f"B {expected_cmd} receipt")
         if rx.group(1) == "0":
             raise RuntimeError(f"B received {expected_cmd} outside a battle")
-        write = marker(b_text, rf"LOOP_HEAD_BENCH_WRITE key={re.escape(key)} cmd={expected_cmd} "
-                               r"in_battle=([1-9]\d*) bench_hp=0000 status=00 hp_before=[1-9]\d* "
-                               r"active_slot=0 ", "B loop-head bench write")
+        zero = marker(b_text, rf"BENCH_ZERO_ON_RX key={re.escape(key)} cmd={expected_cmd} "
+                              r"in_battle=([1-9]\d*) bench_hp=0000 status=00 frames=([0-5]) loop_heads=0 "
+                              r"active_slot=0", "B bench zero on receipt")
+        write = marker(b_text, rf"LOOP_HEAD_BENCH_SETTLED key={re.escape(key)} cmd={expected_cmd} "
+                               r"in_battle=([1-9]\d*) bench_hp=0000 status=00 hp_before=0 landed=true "
+                               r"moved=false active_slot=0 ", "B loop-head bench backstop")
         readback = marker(b_text, r"BENCH_HP_STATUS_IN_BATTLE 0000 00 in_battle=[1-9]\d* active_slot=0 "
                                   r"active_hp=([0-9A-F]{4})->([0-9A-F]{4}) "
                                   r"starter_hp=([0-9A-F]{4})->([0-9A-F]{4}) "
                                   r"moves=([0-9A-F]{8})->([0-9A-F]{8})", "B in-battle bench readback")
         end = marker(b_text, r"BATTLE_RESULT b \d+", "B battle end")
-        if not (ready.start() < rx.start() < write.start() < readback.start() < end.start()):
+        if not (ready.start() < rx.start() < zero.start() < write.start() < readback.start() < end.start()):
             raise RuntimeError("B bench markers out of order: want READY_BENCH_BATTLE < RX < "
-                               "LOOP_HEAD_BENCH_WRITE < BENCH_HP_STATUS_IN_BATTLE < BATTLE_RESULT")
+                               "BENCH_ZERO_ON_RX < LOOP_HEAD_BENCH_SETTLED < BENCH_HP_STATUS_IN_BATTLE "
+                               "< BATTLE_RESULT")
         if readback.group(1) != readback.group(2) or readback.group(3) != readback.group(4):
             raise RuntimeError(f"the bench write touched the active battler: {readback.group(0)}")
         moves = readback.group(6)
@@ -2532,8 +2539,9 @@ class DuoRun:
             if cmds.groups() != ("1", "0"):
                 raise RuntimeError(f"Explode Mode sent force_explode={cmds.group(1)} "
                                    f"force_faint={cmds.group(2)}, expected 1 / 0")
-        self._pydec_note(f"bench-in-battle: {expected_cmd} RX in battle, loop-head write "
-                         f"in_battle={write.group(1)} 0000/00 before BATTLE_RESULT, active "
+        self._pydec_note(f"bench-in-battle: {expected_cmd} RX in battle, bench 0000/00 "
+                         f"{zero.group(2)} frame(s) after RX with no loop head run, loop-head backstop "
+                         f"in_battle={write.group(1)} moved nothing, before BATTLE_RESULT, active "
                          f"battler {readback.group(1)} moves {moves} untouched")
 
     def assert_explode_saved(self, results):
