@@ -81,6 +81,28 @@ do
     end
 end
 
+-- ── Gen 2 route ──────────────────────────────────────────────────────────────
+-- Crystal, Gold and Silver all run the rewritten client under lua/gen2/, which owns its
+-- own cartridge detection (entry.lua Entry.detect_title) -- routed by TITLE, not by
+-- per-title admission: run.lua itself admits or refuses through Entry.build (Entry.admit
+-- is sha1-first, never by header), so a recognised title always reaches it and an
+-- unadmitted build (a PENDING revision, or any unknown hash) is refused there with no
+-- fallback (O-22/O-23, docs/gen2/reviews/OMP_U5_CUTOVER_FACTS_2026-09-23.md). The
+-- Archipelago fork's header ("AP_CRYSTAL") is not one of the three titles Entry.detect_title
+-- recognises at all (O-8: not admitted in the RC), so it is untouched and keeps the legacy
+-- game_detect route below.
+do
+    local sys_ok, sys = pcall(function() return emu.getsystemid() end)
+    if sys_ok and (sys == "GB" or sys == "GBC" or sys == "SGB") then
+        local Entry = dofile(_dir .. "gen2/entry.lua")
+        local title = Entry.detect_title(function(addr) return memory.read_u8(addr, "ROM") end)
+        if title then
+            dofile(_dir .. "gen2/run.lua")
+            return
+        end
+    end
+end
+
 -- Detect which game is loaded
 package.loaded["game_detect"]       = nil
 local game_detect = require("game_detect")

@@ -39,8 +39,10 @@ def _run_launcher(script: str, system_id: str | None, rom: bytes,
                   detected_game_id: str = "gen3_frlge", bizhawk: str = "2.11.1") -> list[str]:
     """dofile `lua/<script>` with stub BizHawk globals; return the paths it dofile'd.
 
-    Only `gen1/entry.lua` is executed for real -- every other dofile target is recorded
-    and skipped, so no client ever starts and one run cannot load two clients.
+    Only `gen1/entry.lua` and `gen2/entry.lua` are executed for real -- both are pure
+    cartridge-header detectors with no side effects -- every other dofile target
+    (including `gen2/run.lua`, U5's Crystal route) is recorded and skipped, so no
+    client ever starts and one run cannot load two clients.
     """
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     g = lua.globals()
@@ -55,7 +57,7 @@ def _run_launcher(script: str, system_id: str | None, rom: bytes,
     def fake_dofile(path):
         rel = norm(path)
         loaded.append(rel)
-        if rel.endswith("gen1/entry.lua"):
+        if rel.endswith("gen1/entry.lua") or rel.endswith("gen2/entry.lua"):
             return real_dofile(path)
         return None
 

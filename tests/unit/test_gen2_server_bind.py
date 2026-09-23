@@ -4,9 +4,11 @@
 (server.py hello, state.py persisted reload, server.py rom_content). The binder lives in
 the adapter (`_TITLE_FOR_ROM_TYPE`), so shared code keeps no `game_id` branch.
 
-The production rom_type rows still select the legacy `gen2_crystal` adapter until the
-G3 cutover (U5). The hello-path tests simulate the cutover by re-pointing the six Gen 2
-rows with monkeypatch; the live default is asserted unchanged.
+Crystal's rom_type rows now select `gen2_gsc` (U5, docs/gen2/reviews/OMP_U5_CUTOVER_FACTS_2026-09-23.md);
+Gold and Silver still select the legacy `gen2_crystal` adapter (G1 PENDING, no shipped
+receipts). The hello-path tests below simulate the FULL eventual cutover by re-pointing all
+six Gen 2 rows with monkeypatch, since Gold/Silver's own binder needs to be provable ahead
+of their own G1 admission; the live default is asserted to reflect only the Crystal flip.
 """
 from __future__ import annotations
 
@@ -17,7 +19,6 @@ import pytest
 from server import adapters
 from server.adapters import (
     _ROM_TYPE_TO_FOUNDATION,
-    _ROM_TYPE_TO_GAME_ID,
     adapter_class_for_rom_type,
     game_id_for_rom_type,
     get_adapter,
@@ -72,11 +73,13 @@ def test_the_binder_refuses_what_is_not_an_admitted_gen2_title(kwargs):
         get_adapter("gen2_gsc", **kwargs)
 
 
-def test_the_live_rows_still_select_the_legacy_adapter():
-    """Row-flip verdict: the flip waits for U5 (the launcher still runs the legacy client)."""
-    for rom_type in GEN2 + AP:
+def test_the_live_rows_reflect_the_u5_cutover():
+    """Row-flip verdict: Crystal, Gold and Silver all flip at U5 (O-22/O-23; the launcher now
+    runs lua/gen2/run.lua for any of them); `crystal_ap` stays on the legacy client (O-8)."""
+    for rom_type in GEN2:
+        assert game_id_for_rom_type(rom_type) == "gen2_gsc", rom_type
+    for rom_type in AP:
         assert game_id_for_rom_type(rom_type) == "gen2_crystal", rom_type
-    assert "gen2_gsc" not in _ROM_TYPE_TO_GAME_ID.values()
 
 
 def test_after_the_flip_the_class_lookup_answers_pairing_without_a_title(cutover):

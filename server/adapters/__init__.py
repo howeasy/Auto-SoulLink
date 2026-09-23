@@ -61,15 +61,19 @@ _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
     # adapter, and the run continued under whichever adapter was already loaded — the Gen 3
     # default. Every Gen 2 claim that did not come from a Crystal run rested on that.
     #
-    # RUNTIME ROUTE ONLY. These rows still pick the LEGACY `gen2_crystal` adapter, because
-    # the shipped launcher runs the legacy client until the G3 cutover (docs/gen2/PLAN.md
-    # §5.9). Pairing does NOT read them: every Gen 2 spelling has its own row in
-    # `_ROM_TYPE_TO_FOUNDATION` below. The cutover re-points these rows to the already
-    # registered `gen2_gsc` (bottom of this file), whose constructor binds its title from
-    # the `rom_type` the generic factory forwards; `crystal_ap` binds no title (O-8).
-    "Crystal": "gen2_crystal", "crystal": "gen2_crystal",
-    "Gold": "gen2_crystal", "gold": "gen2_crystal",
-    "Silver": "gen2_crystal", "silver": "gen2_crystal",
+    # RUNTIME ROUTE. Crystal, Gold and Silver all cut over here (U5, O-22/O-23,
+    # docs/gen2/reviews/OMP_U5_CUTOVER_FACTS_2026-09-23.md): the launcher (lua/slink.lua) now
+    # runs the new client for every recognised Gen 2 title, so their rows point at the
+    # already-registered `gen2_gsc` (bottom of this file), whose constructor binds its title
+    # from the `rom_type` the generic factory forwards. Per-title admission (whether a given
+    # build actually gets a client) is Entry.admit's job at runtime, not this table's --
+    # a PENDING revision or an unknown hash is refused by run.lua itself, with no fallback.
+    # `crystal_ap` binds no title and stays legacy on purpose (O-8: not admitted in the RC).
+    # Pairing does NOT read these rows: every Gen 2 spelling has its own row in
+    # `_ROM_TYPE_TO_FOUNDATION` below.
+    "Crystal": "gen2_gsc", "crystal": "gen2_gsc",
+    "Gold": "gen2_gsc", "gold": "gen2_gsc",
+    "Silver": "gen2_gsc", "silver": "gen2_gsc",
     "Crystal (AP)": "gen2_crystal", "crystal_ap": "gen2_crystal",
     "pokemon_black": "gen5_bw",
     "pokemon_white": "gen5_bw",
@@ -191,7 +195,7 @@ from .gen2_crystal import Gen2CrystalAdapter  # noqa: E402
 
 register_adapter("gen2_crystal", Gen2CrystalAdapter)
 
-# Registered but NOT routed: no rom_type row selects it until the G3 cutover (U5).
+# Routed for Crystal, Gold and Silver (U5 cutover, above); crystal_ap stays gen2_crystal.
 from .gen2_gsc import Gen2GSCAdapter  # noqa: E402
 
 register_adapter("gen2_gsc", Gen2GSCAdapter)

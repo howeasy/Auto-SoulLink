@@ -42,6 +42,13 @@ GB_GBA_MODULES = [
     ("lua/games/gen2_crystal.lua", "gen2_crystal"),
 ]
 
+# U5 cutover (widened to all three titles by O-23): `lua/slink.lua` now routes an actual
+# Crystal/Gold/Silver cartridge to lua/gen2/run.lua BEFORE game_detect ever runs this legacy
+# module, so these variants' rom_types no longer resolve to this module's own adapter -- they
+# resolve to `gen2_gsc` (docs/gen2/reviews/OMP_U5_CUTOVER_FACTS_2026-09-23.md). `crystal_ap`
+# is unaffected (O-8: not admitted in the RC, stays on the legacy adapter).
+_VARIANT_GAME_ID_OVERRIDE = {"crystal": "gen2_gsc", "gold": "gen2_gsc", "silver": "gen2_gsc"}
+
 
 def _load(rel_path):
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
@@ -62,10 +69,11 @@ def test_every_variant_routes_to_its_adapter(rel_path, expected_game_id):
     unrouted = []
     for variant in _variants(mod):
         rom_type = mod.rom_type_for_variant(variant)
-        if game_id_for_rom_type(rom_type) != expected_game_id:
+        want = _VARIANT_GAME_ID_OVERRIDE.get(variant, expected_game_id)
+        if game_id_for_rom_type(rom_type) != want:
             unrouted.append(
                 f"  variant {variant!r} -> rom_type {rom_type!r} -> "
-                f"{game_id_for_rom_type(rom_type)!r}, expected {expected_game_id!r}")
+                f"{game_id_for_rom_type(rom_type)!r}, expected {want!r}")
     assert not unrouted, (
         f"{rel_path} emits rom_types that do not reach its adapter, so a run on that "
         f"variant silently keeps whichever adapter was already loaded:\n"
@@ -103,9 +111,18 @@ def test_no_rom_type_maps_to_a_nonexistent_adapter():
 def test_gen2_non_crystal_variants_are_registered():
     """The specific regression, pinned by name so a revert reads as what it is.
 
-    Gold, Silver and Crystal (AP) all routed to None before this fix.
+    Gold, Silver and Crystal (AP) all routed to None before this fix. U5 (O-22/O-23) later
+    moved Gold and Silver's own row to `gen2_gsc` alongside Crystal; `crystal_ap` stays on
+    the legacy `gen2_crystal` adapter on purpose (O-8). The regression this guards against
+    -- routing to nothing at all -- is the same either way, so this only pins "registered
+    to a real Gen 2 adapter", not which one.
     """
-    for rom_type in ("Gold", "Silver", "Crystal (AP)", "gold", "silver", "crystal_ap"):
+    for rom_type in ("Gold", "Silver", "gold", "silver"):
+        assert game_id_for_rom_type(rom_type) == "gen2_gsc", (
+            f"{rom_type!r} does not reach the Gen 2 adapter — a run on it would keep the "
+            f"default (Gen 3) adapter and persist the wrong game_id")
+        assert variant_label(rom_type), f"{rom_type!r} has no display label"
+    for rom_type in ("Crystal (AP)", "crystal_ap"):
         assert game_id_for_rom_type(rom_type) == "gen2_crystal", (
             f"{rom_type!r} does not reach the Gen 2 adapter — a run on it would keep the "
             f"default (Gen 3) adapter and persist the wrong game_id")

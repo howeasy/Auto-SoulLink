@@ -5,8 +5,9 @@ spelling, so every Gen 2 pairing is admitted by the generic derived-foundation c
 (no title relation in shared code). A Gen 2 half beside a Gen 1 or Gen 3 half is refused
 and the refusal changes nothing.
 
-The runtime adapter is NOT part of this: `_ROM_TYPE_TO_GAME_ID` keeps every Gen 2 spelling
-on the legacy `gen2_crystal` adapter until the G3 cutover. The legacy client is NOT wholly
+The runtime adapter was NOT part of this card: `_ROM_TYPE_TO_GAME_ID` kept every Gen 2
+spelling on the legacy `gen2_crystal` adapter until U5, which re-points Crystal's rows to
+`gen2_gsc` (Gold and Silver stay legacy, G1 PENDING). The legacy client is NOT wholly
 unaffected, by design (O-8): `crystal_ap` keeps the legacy foundation, so a legacy
 Crystal/Gold/Silver half beside a legacy `crystal_ap` half, which paired before, is now
 refused in both arrival orders, including on restart of a pre-existing mixed run saved in
@@ -85,8 +86,12 @@ def _gate_snapshot(srv) -> dict:
 # ── the derivation ───────────────────────────────────────────────────────────────────────
 
 def test_every_gen2_spelling_has_its_own_foundation_row_not_the_game_id_fallback():
-    """Falsifier: a title-cased alias falling back to the game_id foundation is red."""
-    routed = {rt for rt, gid in _ROM_TYPE_TO_GAME_ID.items() if gid == "gen2_crystal"}
+    """Falsifier: a title-cased alias falling back to the game_id foundation is red.
+
+    Crystal's game_id row moved to `gen2_gsc` at U5; Gold/Silver/AP stay on the legacy
+    `gen2_crystal` adapter, so the totality check spans both rows rather than pinning one.
+    """
+    routed = {rt for rt, gid in _ROM_TYPE_TO_GAME_ID.items() if gid in ("gen2_crystal", "gen2_gsc")}
     assert routed == set(GEN2) | set(AP), "a Gen 2 spelling was added without a pairing row"
     for rom_type in GEN2:
         assert _ROM_TYPE_TO_FOUNDATION.get(rom_type) == "gen2_gsc", rom_type
@@ -358,13 +363,18 @@ async def test_a_restart_re_derives_gen2_gsc_from_every_persisted_spelling(tmp_p
         await close()
 
 
-# ── the cutover boundary: the runtime route is untouched ─────────────────────────────────
+# ── the cutover boundary: every admitted Gen 2 title moved, AP did not ────────────────────
 
-def test_the_legacy_runtime_route_is_unchanged_until_the_g3_cutover():
-    """P3a.1 changes pairing only. The shipped legacy client still gets the legacy adapter;
-    re-pointing these rows is the G3 cutover, not this card. `gen2_gsc` is registered (U4
-    title binder, tests/unit/test_gen2_server_bind.py) but no rom_type routes to it."""
-    for rom_type in GEN2 + AP:
+def test_the_u5_cutover_moved_every_admitted_gen2_title_but_not_ap():
+    """P3a.1 changed pairing only; U5 (docs/gen2/reviews/OMP_U5_CUTOVER_FACTS_2026-09-23.md,
+    widened by owner ruling O-23) is the runtime row flip, and it flips Crystal, Gold and
+    Silver together -- their per-title admission (whether a given build gets a client at
+    all) is Entry.admit's job at runtime, not this row. `crystal_ap` stays legacy on purpose
+    (O-8: not admitted in the RC). `gen2_gsc` is registered well before this (U4 title
+    binder, tests/unit/test_gen2_server_bind.py); U5 is what starts routing to it."""
+    for rom_type in GEN2:
+        assert game_id_for_rom_type(rom_type) == "gen2_gsc", rom_type
+    for rom_type in AP:
         assert game_id_for_rom_type(rom_type) == "gen2_crystal", rom_type
     assert "gen2_gsc" in _REGISTRY
-    assert "gen2_gsc" not in _ROM_TYPE_TO_GAME_ID.values()
+    assert set(_ROM_TYPE_TO_GAME_ID.values()) & {"gen2_crystal", "gen2_gsc"} == {"gen2_crystal", "gen2_gsc"}

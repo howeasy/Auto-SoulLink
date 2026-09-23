@@ -27,7 +27,9 @@ import make_release  # noqa: E402
 # The two scripts a player actually loads in BizHawk's Lua Console. Rooting the closure at
 # `lua/gen1/run.lua` alone (as this test used to) misses anything only the launchers reach:
 # slink.lua's own game_detect dispatch and its lua/games/gen{2,4,5}_*.lua registry, and the
-# Gen 1 route's dofile of gen1/entry.lua for Entry.detect_title.
+# Gen 1 route's dofile of gen1/entry.lua for Entry.detect_title. Since U5, slink.lua's own
+# Gen 2 route dofiles gen2/entry.lua and gen2/run.lua the same way, so the closure follows
+# entry.lua's literal PACK_FILES/RECEIPT_FILES data paths too -- no separate root needed.
 _ENTRYPOINTS = ["lua/slink.lua", "lua/slink_gen1.lua"]
 
 # Paths a Lua source names literally: "lua/gen1/reads.lua", '/data/games/.../x.json', or a
@@ -136,6 +138,12 @@ def test_the_closure_is_the_gen1_client_and_nothing_stale():
         "lua/games/gen5_bw.lua",
         "data/games/gen4_hgsspt/gen4_hgsspt_areas.lua",
         "data/games/gen5_bw/gen5_bw_areas.lua",
+        # The Gen 2 (Crystal) production graph, cut over at U5.
+        "lua/gen2/entry.lua", "lua/gen2/run.lua", "lua/gen2/client.lua",
+        "lua/gen2_write_safety.lua",
+        "data/games/gen2_crystal/admission.json",
+        "data/games/gen2_crystal/receipts/crystal.engine_sites.json",
+        "data/games/gen2_gold/admission.json",
     ):
         assert expected in closure, f"{expected} was not derived from {_ENTRYPOINTS}: {closure}"
 
@@ -153,6 +161,7 @@ def test_every_manifest_entry_names_a_file_that_exists():
     listed = (
         [f"lua/{f}" for f in make_release._LUA_ROOT]
         + [f"lua/gen1/{f}" for f in make_release._LUA_GEN1]
+        + [f"lua/gen2/{f}" for f in make_release._LUA_GEN2]
         + [f"lua/clients/{f}" for f in make_release._LUA_CLIENTS]
         + [f"lua/games/{f}" for f in make_release._LUA_GAMES]
         + [f"data/games/{gen}/{f}"

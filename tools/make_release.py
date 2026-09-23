@@ -75,6 +75,9 @@ _LUA_ROOT = [
     "json_codec.lua",
     # The Gen 1 client's closure: entry.lua dofiles these shared modules off the repo root.
     "gen1_write_safety.lua",
+    # The Gen 2 client's own write-safety module (lua/gen2/entry.lua dofiles it off the
+    # repo root, same idiom as gen1_write_safety.lua above).
+    "gen2_write_safety.lua",
     "write_permit.lua",
     "gb_checkpoint.lua",
     "token_scanner.lua",
@@ -107,6 +110,19 @@ _LUA_GEN1 = [
     "rom.lua",
     "trade_overlay.lua",
     "panel.lua",
+]
+
+# lua/gen2/ — the Gen 2 client (Crystal only, U5 cutover). run.lua is what lua/slink.lua
+# dofiles; boxes.lua is NOT part of this graph (no box executor is composed, B-10).
+_LUA_GEN2 = [
+    "run.lua",
+    "entry.lua",
+    "client.lua",
+    "reads.lua",
+    "writes.lua",
+    "rom.lua",
+    "signals.lua",
+    "wire.lua",
 ]
 
 # lua/clients/
@@ -160,6 +176,83 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "engine_signals_overlay.json",
         "profile_overlay.json",
         "write_checkpoint_overlay.json",
+    ],
+    "gen2_crystal": [
+        # lua/gen2/entry.lua Entry.PACK_FILES.gen2_crystal (Entry.build reads these at load,
+        # for every title -- the admission catalog walks Crystal/Gold/Silver together).
+        "profile.json",
+        "admission.json",
+        "engine_signals.json",
+        "write_checkpoint.json",
+        "area_map.json",
+        "static_encounters.json",
+        "encounter_tables.json",
+        "species_index.json",
+        "evolutions.json",
+        "gifts.json",
+        "moves.json",
+        "trainers.json",
+        "map_names.json",
+        "items.json",
+        "charmap.lua",
+        # Entry.RECEIPT_FILES.gen2_crystal -- the shipped O-22 proofs Entry.build
+        # re-validates before admitting Crystal. Gold/Silver ship none (G1 PENDING).
+        "receipts/crystal.engine_sites.json",
+        "receipts/crystal.write_window.json",
+        "receipts/crystal_battle.qualification.json",
+        "receipts/crystal_town.qualification.json",
+    ],
+    "gen2_gold": [
+        # Entry.PACK_FILES.gen2_gold -- Entry.build's admission catalog loads these for
+        # every title, whether or not that title is currently ADMITTED.
+        "profile.json",
+        "admission.json",
+        "engine_signals.json",
+        "write_checkpoint.json",
+        "area_map.json",
+        "static_encounters.json",
+        "encounter_tables.json",
+        "species_index.json",
+        "evolutions.json",
+        "gifts.json",
+        "moves.json",
+        "trainers.json",
+        "map_names.json",
+        "items.json",
+        "charmap.lua",
+        # Entry.RECEIPT_FILES.gen2_gold (O-22 admission), the shipped proofs Entry.build
+        # re-validates before admitting Gold.
+        "receipts/gold.engine_sites.json",
+        "receipts/gold.write_window.json",
+        "receipts/gold_battle.qualification.json",
+        "receipts/gold_town.qualification.json",
+    ],
+    "gen2_silver": [
+        # Entry.PACK_FILES.gen2_silver -- same as Gold.
+        "profile.json",
+        "admission.json",
+        "engine_signals.json",
+        "write_checkpoint.json",
+        "area_map.json",
+        "static_encounters.json",
+        "encounter_tables.json",
+        "species_index.json",
+        "evolutions.json",
+        "gifts.json",
+        "moves.json",
+        "trainers.json",
+        "map_names.json",
+        "items.json",
+        "charmap.lua",
+        # Entry.RECEIPT_FILES.gen2_silver (O-22+O-23 admission) -- Silver's U2 write-window
+        # IS Gold's receipt (its checkpoint rows are identical), so it ships its own
+        # engine-sites + battle qualification plus Gold's write-window and the two Gold
+        # qualification reports it binds to.
+        "receipts/silver.engine_sites.json",
+        "receipts/gold.write_window.json",
+        "receipts/gold_battle.qualification.json",
+        "receipts/gold_town.qualification.json",
+        "receipts/silver_battle.qualification.json",
     ],
     "gen3_frlge": [
         "gen3_frlge_areas.lua",
@@ -362,6 +455,7 @@ def build_release(
     required: list[Path] = (
         [REPO_ROOT / "lua" / f for f in _LUA_ROOT]
         + [REPO_ROOT / "lua" / "gen1" / f for f in _LUA_GEN1]
+        + [REPO_ROOT / "lua" / "gen2" / f for f in _LUA_GEN2]
         + [REPO_ROOT / "lua" / "clients" / f for f in _LUA_CLIENTS]
         + [REPO_ROOT / "lua" / "games" / f for f in _LUA_GAMES]
         + [
@@ -422,6 +516,10 @@ def build_release(
         for fname in _LUA_GEN1:
             zf.write(REPO_ROOT / "lua" / "gen1" / fname, prefix + f"lua/gen1/{fname}")
             print(f"  [added]   {prefix}lua/gen1/{fname}")
+
+        for fname in _LUA_GEN2:
+            zf.write(REPO_ROOT / "lua" / "gen2" / fname, prefix + f"lua/gen2/{fname}")
+            print(f"  [added]   {prefix}lua/gen2/{fname}")
 
         for fname in _LUA_CLIENTS:
             zf.write(REPO_ROOT / "lua" / "clients" / fname, prefix + f"lua/clients/{fname}")
