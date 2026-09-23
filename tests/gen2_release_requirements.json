@@ -124,7 +124,7 @@
         "initiator": "gold",
         "partner": "silver",
         "fixtures": {"a": "gold_battle", "b": "silver_battle"},
-        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom"]
+        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_soft_reset"]
       },
       "proofs": [
         {
@@ -161,6 +161,24 @@
                   "sha256": "f9aa832d2ca2baec1d3e2bd0c24060a4cf8aea0d3d61f793d9b6f1686306fb99"},
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_gs_pydec_result.txt",
                       "sha256": "da37f0245afdbc8018333ae634237c9150a5f8f1134ea73175b3404b2051d928"}
+          }
+        },
+        {
+          "scenario": "gen2_soft_reset",
+          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_soft_reset --lane gen2-gs-soft-reset --keep-data",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_soft_reset_gs_a_result.txt",
+              "sha256": "a2f7fcf55114e0f714eb5fb4198f82d39eddc6ee4616d17c279bebb798e2cab4"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_soft_reset_gs_b_result.txt",
+              "sha256": "49f37aa3df0fa7cceb904afdea68efb589ef0e43edaf966de536282621a1638a"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_soft_reset_gs_pydec_result.txt",
+              "sha256": "6902ca2a71e7efcbbbb0be5b5ac65b5643c283b915454a18e1a681da5dfae2d4"
+            }
           }
         }
       ]

@@ -1,0 +1,18 @@
+DUO_GEN2 {"attempt":1,"case":"silver_battle","fixture_sha256":"0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd","player":"b","rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","scenario":"gen2_soft_reset","title":"silver"}
+CLIENT {"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","poison_faint","save_completed","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  phase continue @3218
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":51084,"panel":false,"
+HELLO {"frame":3338,"ot_id":51084}
+  phase loaded @3338
+RX resolved_areas
+RX config
+BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 A4FC:C78C:9E
+IDLE_PARTNER {"frame":7448,"hellos":1}
+  phase save @7448 xy=53,12
+  phase saved @8142 xy=53,12
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"4445178bf4614476925af46b0bbc344e3b0a20a6ecb76498548c2a861ecae97a","client_saves":1,"flushed_matches":true,"frame":8172,"gate_saves":1,"save_completed_frame":8142,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/saveram_gen2_soft_reset_gen2-gs-soft-reset_b/Pokemon - Silver Version (USA, Europe).SaveRAM"}
+RECEIPT {"attempt":1,"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"case":"silver_battle","client":{"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","poison_faint","save_completed","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"},"fixture_sha256":"0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd","harness_write_scopes":[],"hello":{"frame":3338,"ot_id":51084},"idle":{"frame":7448,"hellos":1},"input_mode":"normal_buttons","player":"b","rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","save":{"cartram_bytes":32768,"cartram_sha256":"4445178bf4614476925af46b0bbc344e3b0a20a6ecb76498548c2a861ecae97a","client_saves":1,"flushed_matches":true,"frame":8172,"gate_saves":1,"save_completed_frame":8142,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/saveram_gen2_soft_reset_gen2-gs-soft-reset_b/Pokemon - Silver Version (USA, Europe).SaveRAM"},"scenario":"gen2_soft_reset","schema":"gen2-duo-soft-reset-v1","title":"silver"}
+RESULT: PASS (idled at the checkpoint across the partner reset)

@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=reset b=idle area=none titles=gold/silver status=unchanged scenario=gen2_soft_reset
