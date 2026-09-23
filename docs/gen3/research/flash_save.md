@@ -120,7 +120,24 @@ CF's packed CompressedPokemon is **58 bytes / 3A**, containing personality, OTID
 
 CF's table places 25 boxes in noncontiguous RAM: boxes 1–19 at 02029318 with 30*58 strides; 20–22 at 0203CB44; 23–24 at 02027434; 25 at 02024638. [CF storage.c:44–86][cb] The current SLink RR profile mirrors those bases and sets CFRU_NO_ENCRYPT; its reconstruction leaves the checksum zero. That proves the local binding's assumptions, not RR's complete disk layout. [SLink lua/games/gen3_frlge.lua:260–303,342](../../../lua/games/gen3_frlge.lua#L260), [lua/memory_gba.lua:570–588,1075–1083](../../../lua/memory_gba.lua#L1075).
 
-**RR-specific UNVERIFIED:** exact RR4.1 chunk table, parasite mapping, extension-sector usage, custom signature, signed counter comparison, and mapping of every noncontiguous live box/name/wallpaper region into disk chunks. Current upstream CFRU is not RR source provenance. P2 must extract the admitted RR tables/functions and qualify all-box save/reload. RAM-address agreement is insufficient. [cl], [ce], [cb]; PLAN:128.
+### RR binary revalidation and codec support (C5, 2026-09-23)
+
+The chunk table, parasite mapping and 25-box disk map are now **SOURCE/binary pinned**, as previously recorded in [rr_save_layout.md](rr_save_layout.md). C5 independently re-read `patch/build/slink_RR.gba` and the clean RR image; `verify_rr_save_layout_rom` in `server/adapters/gen3_codec.py` checks the tables and instruction anchors on both. The companion witness SHA1 is `b7d1e0756fcc66575878affc8f7b95c45386bb1c`; clean RR is `964f951a0fdaf209e4ea1344883ef0d557bb3a80`. File offsets below are not GBA bus addresses.
+
+| Witness | ROM file offset / evidence |
+|---|---|
+| 14 `{u16 object offset,u16 size}` entries | `0x1148BF0`; exactly `RR_CHUNK_TABLE`, sizes F24 / FF0,FF0,FF0,D98 / eight FF0,450 |
+| 25 live box pointers | `0x1148930`; first 19 in storage, next 3 in extension, next 2 in SB1, final in SB2 |
+| Object bases | setter pools `0x4C094`, `0x4C098`, `0x4C0A0` -> `02024588`, `0202552C`, `02029314` |
+| Checksum precedes parasite insertion | checksum halfword store `0x10B8D28`, then ID comparisons `0x10B8D30..38` and copy at `0x10B8D54` |
+| Parasite destinations/lengths | pools `0x10B8DEC`, `0x10B8DF0`, `0x10B8E04` -> `0203B174`, `0203B240`, `0203B498`; lengths CC, 96<<2=258, BA<<4=BA0 from `0x10B8D3E`, `0x10B8D42..46`, `0x10B8DB6..BA` |
+| Shared extension | pools `0x10B8DFC`, `0x10B8E00` -> `0203C038`, `0203D028`; FF0-byte copies and physical-sector immediates 1E/1F at `0x10B8D78..AE` |
+
+`party_from_save(image, rr=True)` and `boxes_from_save(image, rr=True)` now dispatch to the RR layout. The legacy `rr_*` entry points remain available. They are loader-style readers; a save witness must separately require `qualify_flash(cfru=True)` and its counter/attempt/live-save receipt. Sectors 30/31 have no checksum or generation counter, so a complete rotating slot cannot authenticate their age.
+
+`rr_patch_saved_ranges(image, {ram_address: bytes})` is a structural rewrite primitive. It validates the selected rotating slot, maps bytes across section boundaries and the FF0 extension boundary, applies only requested byte edits, and recomputes only changed ordinary section checksums. It never calls the zero-filling `write_sector` on existing data. Parasite regions are excluded from writable mappings; opaque parasite bytes in both slots, inactive-slot bytes, section tails, HOF sectors and optional RTC are preserved. Empty/no-op edits are byte-identical. `rr_rewrite_identity` builds a restricted header-only edit on this primitive (§5.7).
+
+MODEL tests cover `rr_town.sav`, inverse byte edits, owned/foreign identity selection, occupied synthetic records in all four regions including box20 slot21 across physical sectors30/31 and box23 across ordinary chunks, and direct equality with the Lua RAM-record decoder on the fixture party bytes. The committed fixture's actual boxed records are empty: synthetic occupied records are not a physical all-box save/reload receipt. High-bit save-counter rewrites explicitly refuse pending RR selector qualification; parasite semantics and extension generation coupling remain RR-OPEN.
 
 ## 4. Save-completion witness candidates
 
@@ -152,6 +169,8 @@ For upstream CF, SaveWriteToFlash(FFFF,...) returning OK covers its normal 14 se
 
 7. **RR needs its own derivation.** Its binding uses fixed-order unencrypted party data; compressed records include OTID directly and have no vanilla secure-data checksum layout. Use the admitted RR codec, not the vanilla XOR recipe. Recompute applicable flash checksums, separately protect parasite/extension data, and establish the full RR daycare/history ownership inventory before claiming completeness. [SLink memory_gba.lua:570–572,764–775,1075–1083](../../../lua/memory_gba.lua#L570), [cm], [cw], [ce]
 
+   **C5 primitive:** `rr_rewrite_identity(image, trainer_id, trainer_name, owned_ot_id=None) -> (bytes, manifest)` changes selected-slot trainer OT/name plus occupied party and compressed-box records whose OT matches the source trainer (or explicit owner selector). Only header OTID +4 and OT name +14 change; raw compressed data, PID, mon checksums and foreign records remain byte-identical. The caller chooses the new identity/shiny policy; the helper does not invent one. The inactive rotating slot deliberately retains the original identity, while sectors30/31 are shared; this policy is reported in the manifest. Daycare/mail/history and parasite identities are preserved without claiming a complete ownership inventory. A caller requiring both rotating slots to become B must not treat this selected-slot primitive as that stronger policy. The fixture worker owns CLI integration and cold boot qualification.
+
 8. **Backup slot and RTC.** Preserve/hash the original; record selected slot/counter/rotation and transformed record keys. **[RECOMMENDATION]** Explicitly decide whether the backup slot retains A identity or is transformed too: recovery into an old A identity can invalidate a B/wrong-save fixture. Preserve special sectors and optional RTC unless intentionally changed. Every derived output requires cold boot→CONTINUE→re-save→reload plus independent decoding; encode/decode round trips alone are not usability proof. [fl], [bs]; PLAN:130.
 
 ## 6. Outside-lease findings and P2 verification targets
@@ -167,8 +186,8 @@ No file outside this note was changed.
 
 - FR research revision→admitted FR/LG US 1.0 binary equivalence, compiled sizes and exact execution sites; pinned build/ROM checks and live callback receipts still required. [fc], [fw]; PLAN:108–110.
 - Installed BH/MG hashes, SRAM domain/content binding, save-type/RTC overrides, file length and witness/flush equality; the §2 probe is not run. [bd], [bs], [md]
-- RR4.1 table/extension mapping, custom signatures, signed counter semantics, full/partial completion and checksum coverage; upstream CF is evidence of divergence, not a qualified RR decoder. [cl], [cs], [ce], [cw]
-- All 25 RR boxes' disk locations and generation coupling of extension sectors; no assumption that vanilla storage sections alone hold them. [cb], [ce]
+- RR table/parasite/extension mappings and ordinary checksum coverage are binary-pinned (§3). RR signed counter selection at high-bit boundaries, full/partial completion semantics, and extension generation coupling remain unqualified; rewrite explicitly refuses high-bit counters. [cs], [ce], [cw]
+- All 25 RR box locations have SOURCE and synthetic MODEL coverage, but occupied-record save/reload across every region still needs PHYSICAL receipts. No claim that the single-copy extension matches a recovered older rotating slot is possible from the image alone. [cb], [ce]
 - Complete _b identity/history transformation, intended shiny/ownership behavior and bootability; no fixture was created. [ident], [shiny]; PLAN:130.
 - No live save witness, interrupted-save recovery, flash failure, RTC change or cross-version test was executed. This is SOURCE research only; MODEL and PHYSICAL gates remain outstanding. PLAN:127–139.
 
@@ -206,4 +225,3 @@ No file outside this note was changed.
 [md]: https://github.com/TASEmulators/mgba/blob/94b1578f8545d8ad17bb4036dba908612d5731e2/src/platform/bizhawk/bizinterface.c#L624-L650
 [mh]: https://github.com/TASEmulators/mgba/blob/94b1578f8545d8ad17bb4036dba908612d5731e2/include/mgba/internal/gba/savedata.h#L91-L95
 [mr]: https://github.com/TASEmulators/mgba/blob/94b1578f8545d8ad17bb4036dba908612d5731e2/src/gba/savedata.c#L599-L659
-

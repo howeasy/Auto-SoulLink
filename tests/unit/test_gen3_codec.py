@@ -3,9 +3,34 @@
 Everything here is synthetic: no ROM, no save file, no emulator.
 """
 
+import json
+from pathlib import Path
+
 import pytest
 
 from server.adapters import gen3_codec as codec
+
+
+def test_rr_saved_party_matches_ram_side_lua_decoder_on_same_fixture_bytes():
+    lupa = pytest.importorskip("lupa")
+    root = Path(__file__).resolve().parents[2]
+    image = (root / "tests/fixtures/gen3/rr_town.sav").read_bytes()
+    sb1 = codec.parse_flash(image, cfru=True)["sb1"]
+    profile = json.loads((root / "data/games/gen3_rr/profile.json").read_text())["titles"]["radical_red"]
+    runtime = lupa.LuaRuntime(unpack_returned_tuples=True)
+    module = runtime.execute((root / "lua/gen3/reads.lua").read_text(encoding="utf-8"))
+    reads = module.new(runtime.table_from(profile, recursive=True), runtime.table(
+        read_u8=lambda *_: 0, read_u32=lambda *_: 0,
+        read_bytes=lambda *_: runtime.table()))
+    expected = codec.party_from_save(image, rr=True)
+    for slot, py in enumerate(expected):
+        start = codec.SB1_PARTY_OFFSET + slot * codec.PARTY_MON_SIZE
+        lua = reads.decode_party_mon(runtime.table(*sb1[start:start + codec.PARTY_MON_SIZE]))
+        for field in ("personality", "ot_id", "nickname", "ot_name", "species", "level",
+                      "hp", "max_hp", "held_item", "experience", "status"):
+            assert lua[field] == py[field], field
+        assert list(lua.moves.values()) == py["moves"]
+        assert list(lua.pp.values()) == py["pp"]
 
 
 def _mon(personality: int, *, party: bool = True) -> dict:

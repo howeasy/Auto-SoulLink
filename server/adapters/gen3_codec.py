@@ -606,19 +606,10 @@ SB1_PARTY_COUNT_OFFSET = 0x34
 SB1_PARTY_OFFSET = 0x38
 PARTY_CAPACITY = 6
 
-_RR_SAVE_REFUSAL = (
-    "the vanilla FR/LG extractors do not handle Radical Red: RR's chunk table "
-    "is CFRU's 0xFF0 one and its 25 boxes live in four non-contiguous EWRAM "
-    "regions (docs/gen3/research/flash_save.md §3 called this UNVERIFIED; it "
-    "is now pinned in docs/gen3/research/rr_save_layout.md). Use "
-    "rr_party_from_save() / rr_boxes_from_save() instead."
-)
-
-
 def party_from_save(image: bytes, rr: bool = False) -> list[dict]:
-    """Decode the saved party out of a flash image (vanilla FR/LG only)."""
+    """Decode party using the title's disk layout; qualify_flash is a separate gate."""
     if rr:
-        raise NotImplementedError(_RR_SAVE_REFUSAL)
+        return rr_party_from_save(image)
     sb1 = parse_flash(image)["sb1"]
     count = min(sb1[SB1_PARTY_COUNT_OFFSET], PARTY_CAPACITY)
     out = []
@@ -629,9 +620,9 @@ def party_from_save(image: bytes, rr: bool = False) -> list[dict]:
 
 
 def boxes_from_save(image: bytes, rr: bool = False) -> list[list[dict]]:
-    """Decode all 14 x 30 boxed mons out of a flash image (vanilla FR/LG)."""
+    """Decode vanilla's 14 boxes or RR's 25 scattered compressed boxes."""
     if rr:
-        raise NotImplementedError(_RR_SAVE_REFUSAL)
+        return rr_boxes_from_save(image)
     storage = parse_flash(image)["storage"]
     boxes = []
     for box in range(BOXES_PER_STORE):
@@ -703,9 +694,10 @@ _RR_EXT_ERASED = (
 
 
 def rr_slot_layout() -> list[dict]:
-    """RR's 14 sections.  Identical to ``slot_layout(CHUNK_SIZE_CFRU)``; this
-    name exists so callers do not have to know that RR == the CFRU macro."""
-    return slot_layout(CHUNK_SIZE_CFRU)
+    """RR's ROM table, independently of the vanilla section-size macro."""
+    return [{"id": sid, "object": "sb2" if sid == 0 else "sb1" if sid < 5 else "storage",
+             "offset": offset, "size": size}
+            for sid, (offset, size) in enumerate(RR_CHUNK_TABLE)]
 
 
 def _rr_regions(image: bytes) -> list[tuple[int, bytes]]:
@@ -771,3 +763,140 @@ def rr_boxes_from_save(image: bytes) -> list[list[dict]]:
                     (slot + 1) * COMPRESSED_MON_SIZE]), rr=True)
             for slot in range(MONS_PER_BOX)])
     return boxes
+
+
+def verify_rr_save_layout_rom(rom: bytes) -> None:
+    """SOURCE gate for RR save constants; no emulation or upstream equivalence guess.
+
+    File offsets from the admitted clean/companion RR images, re-read for C5.
+    Writer stores the ordinary checksum at 0x10B8D28 before the parasite switch;
+    the extension writer copies 0xFF0 bytes into sectors 0x1E/0x1F.
+    """
+    anchors = {
+        0x1148BF0: b"".join(off.to_bytes(2, "little") + size.to_bytes(2, "little")
+                           for off, size in RR_CHUNK_TABLE),
+        0x1148930: b"".join(base.to_bytes(4, "little") for base in RR_BOX_BASES),
+        0x4C094: RR_SAVEBLOCK2_ADDR.to_bytes(4, "little") + RR_SAVEBLOCK1_ADDR.to_bytes(4, "little"),
+        0x4C0A0: RR_STORAGE_ADDR.to_bytes(4, "little"),
+        0x10B8DEC: RR_PARASITE_ADDR.to_bytes(4, "little")
+                     + (RR_PARASITE_ADDR + RR_PARASITE_PIECES[0]).to_bytes(4, "little"),
+        0x10B8DFC: RR_EXT_ADDR.to_bytes(4, "little")
+                     + (RR_EXT_ADDR + CHUNK_SIZE_CFRU).to_bytes(4, "little")
+                     + (RR_PARASITE_ADDR + RR_PARASITE_PIECES[0]
+                        + RR_PARASITE_PIECES[4]).to_bytes(4, "little"),
+        0x10B8D28: bytes.fromhex("f85223689a5a360c042a06d00d2a3ed0002a0dd12b49cc2202e0"
+                                "96222a499200ff200001801a0004000c1818"),
+        0x10B8DB6: bytes.fromhex("ba2212491201c4e7"),
+        0x10B8D78: bytes.fromhex("ff2220491201200000f06af921001e2000f067f9"),
+        0x10B8D9E: bytes.fromhex("ff2217491201200000f057f921001f2000f054f9"),
+    }
+    for offset, expected in anchors.items():
+        if rom[offset:offset + len(expected)] != expected:
+            raise ValueError(f"RR save ROM anchor mismatch at 0x{offset:X}")
+
+
+def _rr_rewrite_context(image: bytes) -> tuple[dict, list[tuple[int, int, int]]]:
+    ok, why = qualify_flash(image, cfru=True)
+    if not ok:
+        raise ValueError(f"RR source save does not qualify: {why}")
+    parsed = parse_flash(image, cfru=True)
+    # The old SOURCE inventory has not pinned RR's signed counter comparison.
+    # Do not extend an identity rewrite into that ambiguous range by accident.
+    if any(s["signature_ok"] and s["id_known"] and s["counter"] >= 0x80000000
+           for s in parsed["sectors"][:28]):
+        raise ValueError("RR-OPEN: high-bit save counter selection is not pinned")
+    _rr_regions(image)  # complete boxes require a non-erased shared extension
+    if parsed["sb1"][SB1_PARTY_COUNT_OFFSET] > PARTY_CAPACITY:
+        raise ValueError("RR party count exceeds six")
+    bases = {"sb2": RR_SAVEBLOCK2_ADDR, "sb1": RR_SAVEBLOCK1_ADDR, "storage": RR_STORAGE_ADDR}
+    first = parsed["slot"] * NUM_SECTORS_PER_SLOT
+    sectors = {s["id"]: s["index"] for s in parsed["sectors"][first:first + NUM_SECTORS_PER_SLOT]}
+    spans = []
+    for entry in rr_slot_layout():
+        start = bases[entry["object"]] + entry["offset"]
+        spans.append((start, start + entry["size"], sectors[entry["id"]] * SECTOR_SIZE))
+    for n, sector in enumerate(RR_EXT_SECTORS):
+        start = RR_EXT_ADDR + n * CHUNK_SIZE_CFRU
+        spans.append((start, start + CHUNK_SIZE_CFRU, sector * SECTOR_SIZE))
+    return parsed, spans
+
+
+def rr_patch_saved_ranges(image: bytes, patches: dict[int, bytes]) -> bytes:
+    """Patch RAM-addressed saved bytes in the selected slot/shared extension.
+
+    Preflight every byte before mutation. Only changed ordinary chunks receive
+    new checksums; no whole-sector encoding occurs. Parasite payload, footer
+    counter/rotation, inactive slot, HOF, extension tails and optional RTC survive.
+    This is a structural editor, not proof of gameplay validity or extension age.
+    """
+    parsed, spans = _rr_rewrite_context(image)
+    edits: dict[int, int] = {}
+    for address, data in patches.items():
+        if not isinstance(address, int) or not isinstance(data, bytes):
+            raise ValueError("RR patches require integer RAM addresses and bytes")
+        for n, value in enumerate(data):
+            target = address + n
+            hits = [disk + target - lo for lo, hi, disk in spans if lo <= target < hi]
+            if len(hits) != 1:
+                raise ValueError(f"RR patch byte 0x{target:08X} has no unique saved mapping")
+            where = hits[0]
+            if where in edits and edits[where] != value:
+                raise ValueError("conflicting RR saved patches")
+            edits[where] = value
+    result = bytearray(image)
+    for where, value in edits.items():
+        result[where] = value
+    first = parsed["slot"] * NUM_SECTORS_PER_SLOT
+    for sector in parsed["sectors"][first:first + NUM_SECTORS_PER_SLOT]:
+        start = sector["index"] * SECTOR_SIZE
+        size = RR_CHUNK_TABLE[sector["id"]][1]
+        chunk = bytes(result[start:start + size])
+        if chunk != image[start:start + size]:
+            off = start + OFF_SECTOR_CHECKSUM
+            result[off:off + 2] = sector_checksum(chunk, size).to_bytes(2, "little")
+    output = bytes(result)
+    ok, why = qualify_flash(output, cfru=True)
+    if not ok:
+        raise ValueError(f"RR rewritten save does not qualify: {why}")
+    return output
+
+
+def rr_rewrite_identity(image: bytes, trainer_id: int, trainer_name: str,
+                        *, owned_ot_id: int | None = None) -> tuple[bytes, list[str]]:
+    """Derive-style identity edit, preserving foreign mons and opaque RR bytes.
+
+    Only occupied party/box records whose OT matches owned_ot_id (default: source
+    trainer) are selected. RR records are plaintext; change header OT fields only,
+    preserving compressed bits and stored checksums. Caller chooses shiny policy
+    (old_id ^ 0xFFFFFFFF preserves the XOR contribution). Backup retains A identity.
+    Daycare/mail/history are deliberately outside this ownership inventory.
+    """
+    if not isinstance(trainer_id, int) or not 0 <= trainer_id <= 0xFFFFFFFF:
+        raise ValueError("trainer_id must be u32")
+    if owned_ot_id is not None and (not isinstance(owned_ot_id, int)
+                                    or not 0 <= owned_ot_id <= 0xFFFFFFFF):
+        raise ValueError("owned_ot_id must be u32")
+    parsed, _ = _rr_rewrite_context(image)
+    name = encode_name(trainer_name, OT_NAME_LEN)
+    old_id = int.from_bytes(parsed["sb2"][0xA:0xE], "little")
+    owner = old_id if owned_ot_id is None else owned_ot_id
+    new_id = trainer_id.to_bytes(4, "little")
+    patches = {RR_SAVEBLOCK2_ADDR: name, RR_SAVEBLOCK2_ADDR + 0xA: new_id}
+    manifest = [f"trainer {old_id:#010x} -> {trainer_id:#010x}, name={trainer_name!r}",
+                f"selected slot={parsed['slot']} counter={parsed['counter']} unchanged; "
+                "inactive slot retains original identity; extension is shared",
+                "daycare/mail/history, parasite, save encryption key and RTC preserved; boot-check required"]
+
+    def record(mon: dict, address: int, label: str) -> None:
+        if mon["species"] == 0 or mon["ot_id"] != owner:
+            return
+        patches[address + 4] = new_id
+        patches[address + 0x14] = name
+        manifest.append(f"{label} PID={mon['personality']:08X} OT={owner:08X}->{trainer_id:08X}")
+
+    for slot, mon in enumerate(rr_party_from_save(image)):
+        record(mon, RR_SAVEBLOCK1_ADDR + SB1_PARTY_OFFSET + slot * PARTY_MON_SIZE, f"party[{slot}]")
+    for box, mons in enumerate(rr_boxes_from_save(image)):
+        for slot, mon in enumerate(mons):
+            record(mon, RR_BOX_BASES[box] + slot * COMPRESSED_MON_SIZE, f"box[{box}][{slot}]")
+    return rr_patch_saved_ranges(image, patches), manifest

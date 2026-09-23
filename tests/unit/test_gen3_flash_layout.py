@@ -6,6 +6,8 @@ pret/pokefirered c75f352304d529f6ba92d4f74b9cf8b5c3810788 and from
 docs/gen3/research/flash_save.md §1-§3.
 """
 
+from pathlib import Path
+
 import pytest
 
 from server.adapters import gen3_codec as codec
@@ -362,10 +364,144 @@ def test_party_and_boxes_round_trip_through_a_synthetic_save():
     assert boxes[3][6]["has_species"] == 0
 
 
-def test_rr_save_extraction_is_refused_with_a_citation():
-    image = _image((4, _blocks(1)))
-    for call in (codec.party_from_save, codec.boxes_from_save):
-        with pytest.raises(NotImplementedError) as excinfo:
-            call(image, rr=True)
-        assert "flash_save.md" in str(excinfo.value)
-        assert "UNVERIFIED" in str(excinfo.value)
+RR_FIXTURE = Path(__file__).resolve().parents[1] / "fixtures/gen3/rr_town.sav"
+
+
+def test_rr_public_save_extractors_delegate_to_the_pinned_rr_layout():
+    image = RR_FIXTURE.read_bytes()
+    assert codec.party_from_save(image, rr=True) == codec.rr_party_from_save(image)
+    assert codec.boxes_from_save(image, rr=True) == codec.rr_boxes_from_save(image)
+    assert len(codec.boxes_from_save(image, rr=True)) == 25
+
+
+def test_rr_identity_rewrite_preserves_parasite_backup_extension_and_rtc():
+    original = RR_FIXTURE.read_bytes() + bytes(range(16))
+    parsed = codec.parse_flash(original, cfru=True)
+    old_id = int.from_bytes(parsed["sb2"][10:14], "little")
+    rewritten, manifest = codec.rr_rewrite_identity(original, old_id ^ 0xFFFFFFFF, "PEER")
+    assert codec.qualify_flash(rewritten, cfru=True) == (True, "ok")
+    after = codec.parse_flash(rewritten, cfru=True)
+    assert codec.decode_name(after["sb2"][:7]) == "PEER"
+    assert codec.party_from_save(rewritten, rr=True)[0]["ot_id"] == old_id ^ 0xFFFFFFFF
+    assert after["counter"] == parsed["counter"] and after["rotation"] == parsed["rotation"]
+    for sector in parsed["sectors"][:28]:
+        sid = sector["id"]
+        if sid in codec.RR_PARASITE_PIECES:
+            start = sector["index"] * codec.SECTOR_SIZE + codec.RR_CHUNK_TABLE[sid][1]
+            end = sector["index"] * codec.SECTOR_SIZE + codec.CHUNK_SIZE_CFRU
+            assert rewritten[start:end] == original[start:end]
+    half = (1 - parsed["slot"]) * 14 * codec.SECTOR_SIZE
+    assert rewritten[half:half + 14 * codec.SECTOR_SIZE] == original[half:half + 14 * codec.SECTOR_SIZE]
+    # Fixture boxes are empty, so its entire shared extension must be untouched too.
+    assert rewritten[28 * codec.SECTOR_SIZE:] == original[28 * codec.SECTOR_SIZE:]
+    assert any("inactive" in line for line in manifest)
+    assert codec.rr_rewrite_identity(rewritten, old_id ^ 0xFFFFFFFF, "PEER")[0] == rewritten
+
+
+def test_rr_saved_range_noop_and_inverse_preserve_every_byte():
+    image = RR_FIXTURE.read_bytes()
+    assert codec.rr_patch_saved_ranges(image, {}) == image
+    original = codec.parse_flash(image, cfru=True)["sb2"][:7]
+    edited = codec.rr_patch_saved_ranges(image, {codec.RR_SAVEBLOCK2_ADDR: b"\xBB" * 7})
+    restored = codec.rr_patch_saved_ranges(edited, {codec.RR_SAVEBLOCK2_ADDR: original})
+    assert restored == image
+
+
+@pytest.mark.parametrize("box,slot", [(0, 0), (18, 29), (19, 21), (21, 29),
+                                     (22, 3), (23, 29), (24, 29)])
+def test_rr_identity_rewrite_covers_all_disk_regions_and_boundary_records(box, slot):
+    from tests.unit.test_gen3_rr_save_layout import _compressed
+
+    image = RR_FIXTURE.read_bytes()
+    owner = codec.party_from_save(image, rr=True)[0]["ot_id"]
+    record = _compressed(25, 0x12345678, owner)
+    addr = codec.RR_BOX_BASES[box] + slot * codec.COMPRESSED_MON_SIZE
+    seeded = codec.rr_patch_saved_ranges(image, {addr: record})
+    assert codec.boxes_from_save(seeded, rr=True)[box][slot]["species"] == 25
+    changed, _ = codec.rr_rewrite_identity(seeded, owner ^ 0xFFFFFFFF, "OTHER")
+    mon = codec.boxes_from_save(changed, rr=True)[box][slot]
+    assert (mon["personality"], mon["species"], mon["ot_id"], mon["ot_name"]) == (
+        0x12345678, 25, owner ^ 0xFFFFFFFF, "OTHER"
+    )
+    old = codec.boxes_from_save(seeded, rr=True)[box][slot]
+    for field in ("experience", "moves", "ivs", "evs", "nickname", "held_item"):
+        assert mon[field] == old[field]
+    # Ordinary checksum repair must not touch any spare parasite bytes, in either slot.
+    for section in codec.parse_flash(seeded, cfru=True)["sectors"][:28]:
+        if section["id"] in codec.RR_PARASITE_PIECES:
+            start = section["index"] * codec.SECTOR_SIZE
+            size = codec.RR_CHUNK_TABLE[section["id"]][1]
+            assert changed[start + size:start + codec.CHUNK_SIZE_CFRU] == seeded[
+                start + size:start + codec.CHUNK_SIZE_CFRU]
+    for index in codec.RR_EXT_SECTORS:
+        start = index * codec.SECTOR_SIZE
+        assert changed[start + codec.CHUNK_SIZE_CFRU:start + codec.SECTOR_SIZE] == seeded[
+            start + codec.CHUNK_SIZE_CFRU:start + codec.SECTOR_SIZE]
+
+
+def test_rr_identity_preserves_foreign_mon_provenance():
+    from tests.unit.test_gen3_rr_save_layout import _compressed
+
+    image = RR_FIXTURE.read_bytes()
+    foreign = _compressed(25, 123, 456)
+    image = codec.rr_patch_saved_ranges(image, {codec.RR_BOX_BASES[24]: foreign})
+    owner = codec.party_from_save(image, rr=True)[0]["ot_id"]
+    changed, _ = codec.rr_rewrite_identity(image, owner ^ 0xFFFFFFFF, "OTHER")
+    assert codec.boxes_from_save(changed, rr=True)[24][0] == codec.boxes_from_save(image, rr=True)[24][0]
+
+
+@pytest.mark.parametrize("address", [codec.RR_PARASITE_ADDR, codec.RR_EXT_ADDR + codec.RR_EXT_SIZE])
+def test_rr_saved_editor_cannot_write_parasite_or_outside_saved_spans(address):
+    with pytest.raises(ValueError, match="no unique saved mapping"):
+        codec.rr_patch_saved_ranges(RR_FIXTURE.read_bytes(), {address: b"x"})
+
+
+def test_rr_rewrite_refuses_conflicts_and_unqualified_source():
+    image = RR_FIXTURE.read_bytes()
+    with pytest.raises(ValueError, match="conflicting"):
+        codec.rr_patch_saved_ranges(image, {codec.RR_SAVEBLOCK2_ADDR: b"AB",
+                                          codec.RR_SAVEBLOCK2_ADDR + 1: b"C"})
+    broken = bytearray(image)
+    first = codec.parse_flash(image, cfru=True)["slot"] * 14 * codec.SECTOR_SIZE
+    broken[first] ^= 1
+    with pytest.raises(ValueError, match="does not qualify"):
+        codec.rr_rewrite_identity(bytes(broken), 1, "B")
+
+
+def test_rr_rewrite_refuses_unpinned_high_bit_counter_selection():
+    image = bytearray(RR_FIXTURE.read_bytes())
+    parsed = codec.parse_flash(bytes(image), cfru=True)
+    first = parsed["slot"] * 14
+    for sector in parsed["sectors"][first:first + 14]:
+        off = sector["index"] * codec.SECTOR_SIZE + codec.OFF_SECTOR_COUNTER
+        image[off:off + 4] = (0x80000002).to_bytes(4, "little")
+    with pytest.raises(ValueError, match="high-bit save counter"):
+        codec.rr_rewrite_identity(bytes(image), 1, "B")
+
+
+def test_rr_rewrite_refuses_erased_extension_and_invalid_party_count():
+    image = bytearray(RR_FIXTURE.read_bytes())
+    for sector in codec.RR_EXT_SECTORS:
+        start = sector * codec.SECTOR_SIZE
+        image[start:start + codec.SECTOR_SIZE] = b"\xFF" * codec.SECTOR_SIZE
+    with pytest.raises(ValueError, match="erased"):
+        codec.rr_rewrite_identity(bytes(image), 1, "B")
+    bad_count = codec.rr_patch_saved_ranges(RR_FIXTURE.read_bytes(), {
+        codec.RR_SAVEBLOCK1_ADDR + codec.SB1_PARTY_COUNT_OFFSET: b"\x07"})
+    with pytest.raises(ValueError, match="count exceeds six"):
+        codec.rr_rewrite_identity(bad_count, 1, "B")
+
+
+@pytest.mark.parametrize("path", [Path("patch/build/slink_RR.gba"),
+                                 Path("E:/Google Drive/SLink/Pokemon - Radical Red.gba")])
+def test_rr_save_layout_matches_binary_and_refuses_changed_parasite_code(path):
+    if not path.is_absolute():
+        path = Path(__file__).resolve().parents[2] / path
+    if not path.exists():
+        pytest.skip("local copyrighted RR ROM absent")
+    raw = path.read_bytes()
+    codec.verify_rr_save_layout_rom(raw)
+    changed = bytearray(raw)
+    changed[0x10B8D3E] ^= 1  # parasite length immediate
+    with pytest.raises(ValueError, match="anchor mismatch"):
+        codec.verify_rr_save_layout_rom(bytes(changed))
