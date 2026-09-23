@@ -1,0 +1,26 @@
+
+========== scenario: deadzone_gen3 ==========
+[duo] deadzone_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] server up: tcp=59741 http=59742 data=C:\Users\howar\AppData\Local\Temp\slink_duo_deadzone_gen3_x9_lxrwg
+[duo] cleared 7 stale artifact(s) for deadzone_gen3: e2e_deadzone_gen3_a_2_witness.bin, e2e_deadzone_gen3_a_attempt2_result.txt, e2e_deadzone_gen3_a_result.txt, e2e_deadzone_gen3_b_2_witness.bin, e2e_deadzone_gen3_b_attempt2_result.txt, e2e_deadzone_gen3_b_result.txt, e2e_deadzone_gen3_pydec_attempt2_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] go-file written for a
+[duo] DEAD ZONE FROM REAL PLAY (new client): route_1
+[duo] go-file written for b
+[duo] B caught 6E6B0BA1:1C600D89 in the dead zone; force-fainted, memorialized
+[duo] links.json: 1 dead_zone entry for route_1; B's 6E6B0BA1:1C600D89 retired
+[duo] SAVE_WITNESS_SHA256 inst=a site=c1e82a0b935abec1bcdaf16d6392b68da6b2036f833eb050b8dd8050bcc7e31e file=c1e82a0b935abec1bcdaf16d6392b68da6b2036f833eb050b8dd8050bcc7e31e match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=c12b4a9b57fb1cb3db70b6e58fe5c5d735c80d00978532d3f5fa4a768d4ccc2f file=c12b4a9b57fb1cb3db70b6e58fe5c5d735c80d00978532d3f5fa4a768d4ccc2f match=true saves=1 counter=4->5 rtc=normalized
+[duo] deadzone: route_1 locked by A's no_catch (species 19); B's 6E6B0BA1:1C600D89 saved only in the memorial box
+[duo] PYDEC: PASS asserted scenario facts
+[duo] deadzone_gen3: a=PASS b=PASS
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\deadzone_gen3_a_gen3_new.jsonl
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\deadzone_gen3_b_gen3_new.jsonl
+
+========== summary ==========
+  deadzone_gen3: PASS (attempt 1 of 3)
