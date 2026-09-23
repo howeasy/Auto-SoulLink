@@ -46,8 +46,9 @@ This note summarises it; it is not a second ledger.
   own receipt.
 - **Owner ruling O-23** (`b7f8459`): Silver's U2 gate = Gold's write-window receipt while their checkpoint rows are
   identical. => Crystal, Gold and Silver ALL satisfy O-22.
-- **U3** `1f07f71e`: admitted Crystal runs through `Entry.build` (production graph, U1/U2 receipts bound). U3 was told
-  it may extend admission to Gold/Silver if it is data + the same path (reconcile its final report).
+- **U3** `1f07f71e` + **U3b** `3352cab3`: Crystal, Gold AND Silver run through `Entry.build` as production (receipts
+  shipped under `data/games/gen2_*/receipts/`, byte-identical to the fixtures; only party_faint->party_hp writes;
+  box ops NACK; only U1-proven sites register). Non-author review pending.
 - **U5** (in flight, uncommitted at the pause): title-scoped launcher branch in `lua/slink.lua`, server row flip,
   Gen 2 release-manifest rows, legacy-route test updates (input: `docs/gen2/reviews/OMP_U5_CUTOVER_FACTS_2026-09-23.md`).
 - **H1** `7b9cab48` Gen 2 duo driver (`lua/tests/duo/duo_gen2_main.lua` header = contract; Sonnet APPROVE).
@@ -127,8 +128,11 @@ This note summarises it; it is not a second ledger.
    (`items=- cursor=nil`, only `CANCEL` decoded; log .cache/duo-gen2-cc-link2.log) -> a pocket-draw readiness
    race in the pack reading (lua/tests/duo/gen2_route29_inputs.lua / the shared pack UI kinds, F.ball_cursor).
    Also A's hello carried `ball_count: 0` with `in_battle: true` — check the client's in-battle ball count read.
-   NEXT: card to make the Ball-pocket read wait for a stable, decodable item list (bounded), plus the in-battle
-   ball_count; then rerun the duo until a clean end-to-end PASS (never rerun unchanged).
+   **CAVEAT: run 2 is contaminated** — it ran 14:53-14:56 while U3b's Gold/Silver edits to lua/gen2/{entry,client,run}.lua
+   were uncommitted in the tree (committed 14:56:48 as `3352cab3`); they change hello readiness, which may explain A's
+   odd hello. NEXT: wait for U5 to commit (its server/launcher edits are in the tree), then rerun the duo on a CLEAN
+   committed tree; only if A's pocket race recurs, cut the Ball-pocket readiness card (stable decodable item list,
+   bounded) + the in-battle ball_count check.
 2. Reconcile U5 (commit + slink-adapter-guard review + Gen 3 unit check) and U3's final report (G/S admission scope);
    non-author review of U3.
 3. Gold/Silver admission + route if U3/U5 did not include them; then G<->S duo and the C<->G `link` (O-16); OMP
