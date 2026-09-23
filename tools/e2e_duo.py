@@ -5126,6 +5126,10 @@ class DuoRun:
         self._gen3_prelude(link_slot=1)
         self.go(self._gen3_linked_lines())
         self.assert_whiteout_both_boxed()
+        # G4 item 2a's negative control: after its save A parks in the Center nurse's script, and
+        # a queued SLink write must stay HELD there (scenario_gen3_whiteout.lua nurse_control)
+        self._gen3_mark("a", r"^CONTROL_LIVE ", "A parked in the nurse's script (negative control)")
+        self.queue_command("a", {"cmd": "box_mon", "key": self._link_keys["a"]})
 
     def orchestrate_link_gen3(self):
         """D-1 on FRLG: both catch on Route 1 and the SERVER pairs them by area (shared check)."""
@@ -5436,10 +5440,20 @@ class DuoRun:
         chain_a = [gen3_boxed(ka), gen3_tx("whiteout", "-"), r"(?m)^RX rebuild_start\b",
                    gen3_rx("party_mon", ka), gen3_tx("sync_retrieve_done", ka),
                    r"(?m)^RX rebuild_done\b", gen3_returned(ka)]
+        # G4 item 2a (docs/gen3/G4_request_draft.md): the Center state with the Union Room set
+        # live, the rebuild write landing at the Center landing tile, and -- after the save -- a
+        # queued box_mon held with zero writes while the nurse's script is live. A never ACKs
+        # that box_mon (TX stats_cache would be the held write landing).
+        center, landed = r"(?m)^CENTER_STATE ", r"(?m)^WRITE_IN_CENTER "
+        control = [gen3_returned(ka), r"(?m)^CONTROL_LIVE ", gen3_rx("box_mon", ka),
+                   r"(?m)^CONTROL_REFUSED box_mon "]
         problems += gen3_receipt_problems(
-            "a", results["a"], required=chain_a + [r"(?m)^WHITED_OUT\b"],
-            ordered=list(zip(chain_a, chain_a[1:], strict=False)),
-            forbidden=[gen3_rx("memorialize", ka), r"(?m)^RX force_faint "])
+            "a", results["a"], required=chain_a + [r"(?m)^WHITED_OUT\b", center, landed] + control,
+            ordered=list(zip(chain_a, chain_a[1:], strict=False))
+            + [(gen3_tx("whiteout", "-"), center), (center, landed),
+               (gen3_tx("sync_retrieve_done", ka), landed)]
+            + list(zip(control, control[1:], strict=False)),
+            forbidden=[gen3_rx("memorialize", ka), r"(?m)^RX force_faint ", gen3_tx("stats_cache", ka)])
         chain_b = [gen3_rx("box_mon", kb), gen3_tx("stats_cache", kb), gen3_boxed(kb),
                    gen3_rx("party_mon", kb), gen3_tx("sync_retrieve_done", kb), gen3_returned(kb)]
         problems += gen3_receipt_problems(

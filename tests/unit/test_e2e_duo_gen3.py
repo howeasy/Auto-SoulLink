@@ -930,7 +930,24 @@ function FAKE(scenario, player, phase, spec)
     ctx.try = function(fn, ...) return pcall(fn, ...) end
     ctx.writes = function() return writes end
     ctx.wrong_save_hud = function() return true end
-    ctx.SP = { verify_fight_cursor = function() return "fight" end }
+    local CENTER = { group = 5, num = 4, x = 7, y = 4 }
+    local here = CENTER
+    ctx.SP = { verify_fight_cursor = function() return "fight" end,
+               whiteout_destination = function() return CENTER end }
+    ctx.G = { map = function() return here.group, here.num end, pos = function() return here.x, here.y end,
+              pred_ok = function() return false end, tap = function() end }
+    ctx.center_state = function()
+        local missing = spec.ur_missing and { spec.ur_missing } or {}
+        return "map=5.4 at=(7,4) frame=1 tasks=[] preds=[]", missing, here
+    end
+    ctx.on_write = function(_, fn)
+        if spec.write_at == "outside" then here = { group = 3, num = 1, x = 26, y = 27 } end
+        fn()
+        here = CENTER
+    end
+    ctx.write_hook_errors = function() return {} end
+    ctx.deferred_hold = function() if spec.no_hold then return nil end return "forbidden state: script_context_status" end
+    ctx.locate = function() return { party = 1, box = false } end
     ctx.play = { fight_through = function() return true end, wait_scene_settled = function() return true end,
                  where = function() return "here" end }
     local fn = dofile(SCENARIO_DIR .. "/scenario_gen3_" .. scenario .. ".lua")
@@ -976,7 +993,10 @@ def _run_module(lua, scenario, player, phase, spec):
     ("boxsync", "b", "initial", {}, ["BOXED_OBSERVED K1", "MIRROR_DEPOSITED K1",
                                      "RETURNED_OBSERVED K1", "MIRROR_WITHDRAWN K1"]),
     ("whiteout", "a", "initial", {}, ["BOXED_OBSERVED K1", "DEPOSITED_FOR_REBUILD K1",
-                                      "WHITED_OUT at here"]),
+                                      "CENTER_STATE map=5.4 at=(7,4)", "WHITED_OUT at here",
+                                      "WRITE_IN_CENTER map=5.4 at=(7,4)",
+                                      "CONTROL_LIVE map=5.4", "CONTROL_REFUSED box_mon K1 "
+                                      "clause=script_context_status"]),
     ("whiteout", "b", "initial", {}, ["BOXED_OBSERVED K1", "DEPOSITED_FOR_REBUILD K1",
                                       "RETURNED_OBSERVED K1", "MIRROR_WITHDRAWN K1"]),
     ("link", "a", "initial", {}, ["CAUGHT K9", "RETURNED_OBSERVED K9 slot=2"]),
@@ -1236,10 +1256,11 @@ def test_rr_box_trip_ignores_only_what_cfru_compression_drops():
 
 # finding 2: whiteout/boxsync need the cartridge read back, not just the ACK
 def _whiteout_receipts(k):
-    a = (f"BOXED_OBSERVED {k} box=0:0\nTX whiteout - {{}}\nWHITED_OUT at here\n"
-         "RX rebuild_start text=REBUILDING\n"
-         f"RX party_mon key={k}\nTX sync_retrieve_done {k} {{}}\nRX rebuild_done\n"
-         f"RETURNED_OBSERVED {k} slot=1\n")
+    a = (f"BOXED_OBSERVED {k} box=0:0\nTX whiteout - {{}}\nCENTER_STATE map=5.4 at=(7,4)\n"
+         "WHITED_OUT at here\nRX rebuild_start text=REBUILDING\n"
+         f"RX party_mon key={k}\nTX sync_retrieve_done {k} {{}}\nWRITE_IN_CENTER map=5.4 at=(7,4)\n"
+         f"RX rebuild_done\nRETURNED_OBSERVED {k} slot=1\nCONTROL_LIVE map=5.4\n"
+         f"RX box_mon key={k}\nCONTROL_REFUSED box_mon {k} clause=script_context_status\n")
     b = (f"RX box_mon key={k}\nTX stats_cache {k} {{}}\nBOXED_OBSERVED {k} box=0:0\n"
          f"RX party_mon key={k}\nTX sync_retrieve_done {k} {{}}\nRETURNED_OBSERVED {k} slot=1\n")
     return {"a": a, "b": b}
@@ -1974,3 +1995,68 @@ def test_the_attempt_jitter_lands_after_go(tmp_path):
     assert g.FIRST_INPUT == 50 + 37, g.FIRST_INPUT
     assert "JITTER requested=37 applied=37 attempt=2" in list(g.LOGS.values())
     assert duo.jitter_problems("\n".join(g.LOGS.values()), 37) == []
+
+
+# ── C4-6k: G4 item 2a, the write inside a Pokemon Center (whiteout_gen3 A) ─────────────────
+@pytest.mark.parametrize("spec, why", [
+    ({"ur_missing": "Task_UnionRoomListen"}, "Union Room background set is absent"),
+    ({"write_at": "outside"}, "landed outside the Center landing tile"),
+    ({"no_hold": "lua:true"}, "control: box_mon is not held"),
+])
+def test_whiteout_a_proves_the_center_write_or_fails_by_name(lua, spec, why):
+    ok, passed, msg, _ = _run_module(lua, "whiteout", "a", "initial", spec)
+    assert ok and passed is False and why in msg, msg
+
+
+def test_the_center_predicates_read_the_pack_union_room_set():
+    """The driver's own center_predicates over the FR pack and a fake bus: all three Union Room
+    tasks (FR 0x081199FC / 0x08119D34 / 0x080F8B34, Thumb |1) active -> none missing; drop one
+    -> it is named. Every pack predicate is printed, "!" off its expected value."""
+    from lupa import LuaRuntime
+
+    cp = json.loads((REPO / "data" / "games" / "gen3_frlg" / "write_checkpoint.json").read_text(
+        encoding="utf-8"))["firered"]
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.execute(_lua_defs(DRIVER, ["center_predicates"]) + "\nCENTER_PREDICATES = center_predicates")
+    tasks = cp["tasks"]["address"]
+    mem = {}
+    for i, fn in enumerate((0x081199FC, 0x08119D34, 0x080F8B34)):
+        mem[tasks + i * 40] = fn | 1
+        mem[tasks + i * 40 + 4] = 1
+    sle = cp["predicates"]["script_context_status"]
+    mem[sle["address"]] = 2
+    cp_lua = lua.table_from(cp, recursive=True)
+    read = lua.eval("function(m) return function(a) return m[a] or 0 end end")(lua.table_from(mem))
+    preds, missing = lua.globals().CENTER_PREDICATES(cp_lua, read)
+    assert list(missing.values()) == []
+    assert "script_context_status=0x2," in preds and "link_players_received=0x0," in preds
+    assert "callback1=0x0!" in preds                   # off CB1_Overworld on this bare bus
+    mem[tasks + 2 * 40 + 4] = 0                         # Task_UnionRoomListen no longer active
+    read = lua.eval("function(m) return function(a) return m[a] or 0 end end")(lua.table_from(mem))
+    _, missing = lua.globals().CENTER_PREDICATES(cp_lua, read)
+    assert list(missing.values()) == ["Task_UnionRoomListen"]
+
+
+def test_whiteout_oracle_requires_the_center_receipt(monkeypatch, tmp_path):
+    fixture = _fixture([STARTER, PIDGEY])
+    saved = _saved(fixture, 3, [STARTER, PIDGEY])
+    k = _key(PIDGEY)
+    run, _ = _oracle_stub(monkeypatch, tmp_path, "whiteout_gen3", {"a": saved, "b": saved},
+                          fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "alive"}])
+    run._link_keys = {"a": k, "b": k}
+    receipts = _whiteout_receipts(k)
+    for marker in ("CENTER_STATE", "WRITE_IN_CENTER", "CONTROL_REFUSED"):
+        cut = "\n".join(line for line in receipts["a"].splitlines() if not line.startswith(marker))
+        with pytest.raises(RuntimeError, match=marker):
+            run.assert_whiteout_gen3_saved(dict(receipts, a=cut))
+    # the held box_mon landing (an ACK) is a failed control, not a pass
+    landed = dict(receipts, a=receipts["a"] + f"TX stats_cache {k} {{}}\n")
+    with pytest.raises(RuntimeError, match="stats_cache"):
+        run.assert_whiteout_gen3_saved(landed)
+
+
+def test_the_runner_queues_the_control_write_only_after_a_parks():
+    body = REPO / "tools" / "e2e_duo.py"
+    text = body.read_text(encoding="utf-8")
+    orch = text[text.index("def orchestrate_whiteout_gen3"):text.index("def orchestrate_link_gen3")]
+    assert orch.index("^CONTROL_LIVE ") < orch.index('"cmd": "box_mon"')

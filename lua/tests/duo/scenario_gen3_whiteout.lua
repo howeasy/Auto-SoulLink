@@ -9,6 +9,22 @@
 -- client sends `whiteout`; the server answers rebuild_start + party_mon to A and party_mon to B
 -- (server/state.py _queue_rebuild_commands); both clients withdraw at their checkpoints, A gets
 -- rebuild_done, and both save. A whiteout during the walk itself counts: it is the same event.
+--
+-- A also carries G4 item 2a's receipt (docs/gen3/G4_request_draft.md; owner ruling 2026-09-23,
+-- 5ecfae3b): it lands in the Viridian Center 1F, logs CENTER_STATE there (the Union Room
+-- background set must be live, or the receipt proves nothing), and the rebuild's first overworld
+-- write must land in that Center at the landing tile (WRITE_IN_CENTER), before any movement.
+-- After the save, the negative control: A talks to the nurse and parks in her script; the runner
+-- queues box_mon for the linked key, which must stay HELD (named clause, zero writes, the mon
+-- still in the party) while the script is live (CONTROL_REFUSED).
+local fmt = string.format
+
+local function at(ctx, dest)
+    local g, n = ctx.G.map(ctx.cp)
+    local x, y = ctx.G.pos(ctx.cp)
+    return g == dest.group and n == dest.num and x == dest.x and y == dest.y
+end
+
 local function a_side(ctx, linked)
     ctx.walk_to_pc("whiteout a")
     local gone, why = ctx.pc_deposit("whiteout a deposit")
@@ -30,12 +46,85 @@ local function a_side(ctx, linked)
     if not ctx.mash_until(function() return ctx.sent("whiteout") > 0 end, 180, "A") then
         return false, "the client never sent whiteout"
     end
+    -- (1) the landing, before the rebuild can land: nothing is pressed here, and the checkpoint
+    -- stays shut until the after-whiteout heal script (which waits for A) has ended
+    local dest = ctx.SP.whiteout_destination(ctx.cp)    -- Viridian Center 1F 5.4 (7,4)
+    if not dest then return false, "no whiteout destination" end
+    local writes0 = ctx.writes()
+    local line, missing
+    ctx.wait_until(function()
+        if not at(ctx, dest) then return nil end
+        line, missing = ctx.center_state()
+        return #missing == 0
+    end, 30, "the Center landing with the Union Room background set")
+    if not line then return false, "never landed on the Center tile " .. dest.x .. "," .. dest.y end
+    ctx.log(fmt("CENTER_STATE %s writes_since_whiteout=%d", line, ctx.writes() - writes0))
+    if #missing > 0 then
+        return false, "the Union Room background set is absent at the Center landing ("
+                   .. table.concat(missing, ",") .. "): this receipt would not prove the widened allow-list"
+    end
+    if ctx.writes() ~= writes0 then return false, "a write landed before CENTER_STATE was taken" end
+    -- (2) the state in the very frame the first overworld write lands
+    local wline, wmissing, wat
+    ctx.on_write("overworld", function() wline, wmissing, wat = ctx.center_state() end)
     ctx.play.wait_scene_settled(ctx.cp, 6000)          -- the heal-location landing and its text
     ctx.log("WHITED_OUT at " .. ctx.play.where(ctx.cp))
     if not ctx.wait_received("party_mon", linked, 900) then return false, "no rebuild party_mon" end
     if not ctx.wait_sent("sync_retrieve_done", linked, 600) then return false, "the rebuild withdraw was not acknowledged" end
+    local ack_line = ctx.center_state()
+    local mon = ctx.find(linked)
+    ctx.log(fmt("WRITE_IN_CENTER %s | ack %s slot=%s", tostring(wline), ack_line,
+                mon and tostring(mon.slot) or "absent"))
+    if #ctx.write_hook_errors() > 0 then return false, "the write-frame read failed: " .. ctx.write_hook_errors()[1] end
+    if not wline then return false, "sync_retrieve_done sent, but no overworld write line was seen" end
+    if not (wat.group == dest.group and wat.num == dest.num and wat.x == dest.x and wat.y == dest.y) then
+        return false, "the rebuild write landed outside the Center landing tile"
+    end
+    if #wmissing > 0 then return false, "the Union Room set was gone when the write landed" end
+    if not at(ctx, dest) then return false, "the player moved before the ACK" end
+    if not mon then return false, linked .. " is not in the party at the ACK" end
     if not ctx.wait_received("rebuild_done", nil, 300) then return false, "no rebuild_done" end
     if not ctx.observe_returned(linked) then return false, linked .. " was never read back in the party (and out of every box)" end
+    return true, dest
+end
+
+--- (4) The negative control, after the save: pret ViridianCity_PokemonCenter_1F/map.json puts
+--- the nurse at (7,2) across the counter (7,3) (MB_COUNTER 0x80: tools/gba_map.py --map 5.4
+--- --find-behaviour 0x80), and CB2_WhiteOut faces the player north, so A at the landing talks
+--- to her through it (field_control_avatar.c:412-415). Her script waits on its first message:
+--- it stays live, and a queued write must stay held for as long as it is.
+local CONTROL_FRAMES = 600
+local function nurse_control(ctx, linked, dest)
+    if not at(ctx, dest) then return false, "control: not at the Center landing" end
+    ctx.G.tap("A", 3, 13)
+    if not ctx.wait_until(function() return not ctx.G.pred_ok(ctx.cp, "script_context_status") end,
+                          10, "the nurse's script") then
+        return false, "control: the nurse's script never started"
+    end
+    ctx.frames(60)
+    local writes0, acks0 = ctx.writes(), ctx.sent("stats_cache", linked)
+    ctx.log("CONTROL_LIVE " .. (ctx.center_state()))
+    if not ctx.wait_received("box_mon", linked, 600) then return false, "control: the runner never queued box_mon" end
+    local why
+    for _ = 1, CONTROL_FRAMES do
+        ctx.frames(1)
+        if ctx.G.pred_ok(ctx.cp, "script_context_status") then return false, "control: the nurse's script ended" end
+        if ctx.writes() ~= writes0 then return false, "control: a write landed while the nurse's script was live" end
+        why = ctx.deferred_hold()
+        if not why then return false, "control: box_mon is not held in the deferred queue" end
+    end
+    -- the clause the gate named must be one that is failing right now
+    local clause = why:match("^forbidden state: (%S+)$")
+    if clause and ctx.G.pred_ok(ctx.cp, clause) then clause = nil end
+    if not clause and why == "unknown active task" then clause = "task" end
+    if not clause then return false, "control: the hold names no failing clause (" .. tostring(why) .. ")" end
+    local where = ctx.locate(linked)
+    if not (where and where.party ~= false and where.box == false) then
+        return false, "control: " .. linked .. " moved while the write was held"
+    end
+    if ctx.sent("stats_cache", linked) ~= acks0 then return false, "control: an ACK went out while held" end
+    ctx.log(fmt("CONTROL_REFUSED box_mon %s clause=%s why=%q held_frames=%d writes=0 slot=%d %s", linked,
+                clause, why, CONTROL_FRAMES, where.party, (ctx.center_state())))
     return true
 end
 
@@ -62,8 +151,13 @@ return function(ctx)
     local ok, why
     if ctx.player == "a" then ok, why = a_side(ctx, linked) else ok, why = b_side(ctx, linked) end
     if not ok then return false, why end
+    local dest = ctx.player == "a" and why or nil
     ctx.frames(60)
     ok, why = ctx.save("whiteout")
     if not ok then return false, why end
-    return true, "pair " .. linked .. " rebuilt after the whiteout"
+    if dest then
+        ok, why = nurse_control(ctx, linked, dest)
+        if not ok then return false, why end
+    end
+    return true, "pair " .. linked .. " rebuilt after the whiteout" .. (dest and "; the write landed in the Center" or "")
 end

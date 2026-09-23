@@ -55,10 +55,22 @@ local function finish(pass, msg)
     error(FINISHED, 0)
 end
 local writes, refused = 0, nil
+-- one-shot hooks on a client write line, by reason (ctx.on_write): they run INSIDE the client's
+-- frame end, i.e. in the very frame the write landed, so what they read is the state it saw
+local write_hooks, write_hook_errors = {}, {}
 console.log = function(s)
     local text = tostring(s)
     _console_log(text)
-    if text:find("[SLink-gen3] write ", 1, true) then writes = writes + 1 end
+    if text:find("[SLink-gen3] write ", 1, true) then
+        writes = writes + 1
+        local reason = text:match("%[SLink%-gen3%] write (%S+) ")
+        local hook = reason and write_hooks[reason]
+        if hook then
+            write_hooks[reason] = nil
+            local hok, herr = pcall(hook, text)
+            if not hok then write_hook_errors[#write_hook_errors + 1] = tostring(herr) end
+        end
+    end
     if text:find("[SLink-gen3] refused", 1, true) then refused = text end
     if logf then logf:write("[client] " .. text .. "\n"); logf:flush() end
     -- The shared helpers (gen3_boot_check / gen3_scripted_play) end a run with
@@ -393,6 +405,15 @@ function ctx.wait_received(cmd, key, secs)
                           "RX " .. cmd .. " " .. tostring(key))
 end
 function ctx.writes() return writes end
+--- Run fn(line) once, in the frame of the client's next `write <reason>` line.
+function ctx.on_write(reason, fn) write_hooks[reason] = fn end
+function ctx.write_hook_errors() return write_hook_errors end
+--- Why the session's deferred queue is holding its head command (lua/core/deferred.lua
+--- Deferred:pending: the gate's refusal, e.g. "forbidden state: script_context_status"), or nil.
+function ctx.deferred_hold()
+    local n, why, _, head = session.deferred:pending(emu.framecount())
+    if n > 0 then return why, head end
+end
 function ctx.wrong_save_hud() return wrong_save_hud end
 --- The session's held in-battle write for `key` (lua/core/session.lua battle_pending), if any.
 function ctx.battle_hold(key)
@@ -549,6 +570,50 @@ function ctx.bag_input_ready()
                            function(a) return memory.read_u8(a, "System Bus") end, S)
 end
 ctx.action_menu_up, ctx.party_menu_up = action_menu_up, party_menu_up
+
+--- G4 item 2a (docs/gen3/G4_request_draft.md): the checkpoint state a write inside a Pokemon
+--- Center is judged against -- every pack predicate's value (callback1/2, script/fade/lock,
+--- gReceivedRemoteLinkPlayers as link_players_received, ...; "!" marks one off its expected
+--- value) -- and the Union Room background tasks (C4-UR, 5ecfae3b: every Center 1F runs
+--- CableClub_OnResume -> InitUnionRoom) that are NOT active. Self-contained (no upvalues) so
+--- tests/unit/test_e2e_duo_gen3.py runs this exact body. read(address, width) -> integer.
+local function center_predicates(cp, read)
+    local t, active = cp.tasks, {}
+    for i = 0, (t.count | 0) - 1 do
+        local base = (t.address | 0) + i * (t.struct_size | 0)
+        if read(base + (t.is_active_offset | 0), 1) ~= 0 then active[read(base + (t.func_offset | 0), 4)] = true end
+    end
+    local missing = {}
+    for _, name in ipairs({ "Task_InitUnionRoom", "Task_SearchForChildOrParent", "Task_UnionRoomListen" }) do
+        local fn = t.allowed_overworld_tasks[name]
+        if not (fn and active[(fn | 0) | 1]) then missing[#missing + 1] = name end
+    end
+    local names, parts = {}, {}
+    for name in pairs(cp.predicates) do names[#names + 1] = name end
+    table.sort(names)
+    for _, name in ipairs(names) do
+        local p = cp.predicates[name]
+        local v = read((p.address | 0) + ((p.offset or 0) | 0), (p.width or 1) | 0)
+        if p.mask then v = v & (p.mask | 0) end
+        parts[#parts + 1] = string.format("%s=0x%X%s", name, v, v == (p.expect | 0) and "" or "!")
+    end
+    return "preds=[" .. table.concat(parts, ",") .. "]", missing
+end
+--- (line, missing Union Room tasks, {group, num, x, y}): map, tile, frame, the FULL active task
+--- list (SP.PC.dump) and every predicate, read now.
+function ctx.center_state()
+    local g, n = G.map(cp)
+    local x, y = G.pos(cp)
+    local preds, missing = center_predicates(cp, function(a, width)
+        if width == 4 then return memory.read_u32_le(a, "System Bus") end
+        if width == 2 then return memory.read_u16_le(a, "System Bus") end
+        return memory.read_u8(a, "System Bus")
+    end)
+    local dumped, dump = pcall(SP.PC.dump)
+    return fmt("map=%d.%d at=(%d,%d) frame=%d %s %s", g, n, x, y, emu.framecount(),
+               dumped and tostring(dump) or "dump failed: " .. tostring(dump), preds),
+           missing, { group = g, num = n, x = x, y = y }
+end
 
 --- HandleInputChooseAction / HandleInputChooseMove: Left/Right toggle bit 0 of the cursor,
 --- Up/Down bit 1 (each only in its own direction). Bounded, then read back.
