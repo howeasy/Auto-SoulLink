@@ -586,6 +586,18 @@ def test_door_leg_rejects_a_field_that_stays_locked(lua, fake, legs):
     assert not ok and "destination is not stable" in log
 
 
+def test_door_leg_rejects_a_wrong_source_map(lua, fake, legs):
+    """door_warp's own literal source guard (`play.map(cp) ~= 769`) is otherwise
+    undiscriminated (OMP review cx-a59b23a9 finding 3): every other door_warp test starts from
+    the reset fixture's default map (3,1) == 769, so none of them exercise a wrong SOURCE map --
+    they only ever probe the destination. This leg must refuse a different starting map before a
+    single button is pressed."""
+    fake.set_overworld(True)
+    fake.set_map(3, 2)         # (3,2) -> map id 770, not the pinned outside map 769
+    ok, log, _err = fake.run_leg(_leg(legs, "door_warp")["run"])
+    assert not ok and "source is not the pinned outside map 769" in log
+
+
 # ── behaviour: pc_ops keyed oracle ───────────────────────────────────────────────────────────
 
 _PARTY_ABC = "{ {0xAAAA0001, 0x1111, 0xA0}, {0xBBBB0002, 0x2222, 0xB0}, {0xCCCC0003, 0x3333, 0xC0} }"
@@ -709,6 +721,80 @@ def test_pc_ops_fails_when_a_bystander_record_changed(lua, fake, legs):
     ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
     assert not ok
     assert "is not byte-identical after the round trip" in log
+
+
+def test_pc_ops_rejects_a_bystander_box_record_changing_during_deposit(lua, fake, legs):
+    """boxes_unchanged's DEPOSIT-side call (before -> mid) is a different check from the
+    WITHDRAW-side one below (before -> after): a corruption that persists to the very end would
+    trip either one, so it cannot tell them apart. To discriminate the deposit-side call
+    specifically (OMP review cx-a59b23a9 finding 3), the bystander must go wrong ONLY during the
+    deposit's interim state and be 'repaired' again by the time withdraw finishes -- exactly the
+    window only the deposit call ever looks at."""
+    _pc_scenario(lua, fake,
+                 "{ {0xAAAA0001, 0x1111, 0xA0}, {0xCCCC0003, 0x3333, 0xC0}, "
+                 "{0xBBBB0002, 0x2222, 0xDEAD} }")
+    lua.execute("""
+        FAKE.set_box(1, 2, 0x99990009, 0x7777, 4)      -- a bystander already in storage
+        local original = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            original(f)
+            if FAKE.a >= 16 then
+                FAKE.set_box(1, 2, 0x99990009, 0x7777, 4)  -- repaired by the time withdraw ends
+            elseif FAKE.a >= 8 then
+                FAKE.set_box(1, 2, 0x99990009, 0x7777, 5)  -- wrong only during the deposit
+            end
+        end
+    """)
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
+    assert not ok
+    assert "box record changed or disappeared" in log
+
+
+def test_pc_ops_rejects_a_bystander_box_record_changing_during_withdraw(lua, fake, legs):
+    """The WITHDRAW-side boxes_unchanged call is a separate guard from the deposit-side one
+    above -- a bystander box record that survives the deposit untouched but then moves during
+    the withdraw half must still fail."""
+    _pc_scenario(lua, fake,
+                 "{ {0xAAAA0001, 0x1111, 0xA0}, {0xCCCC0003, 0x3333, 0xC0}, "
+                 "{0xBBBB0002, 0x2222, 0xDEAD} }")
+    lua.execute("""
+        FAKE.set_box(1, 2, 0x99990009, 0x7777, 4)      -- a bystander already in storage
+        local original = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            original(f)
+            if FAKE.a >= 16 then FAKE.set_box(1, 2, 0x99990009, 0x7777, 5) end  -- mutates
+        end                                             -- only once the withdraw runs
+    """)
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
+    assert not ok
+    assert "box record changed or disappeared" in log
+
+
+def test_pc_ops_rejects_a_bystander_party_record_changing_during_deposit(lua, fake, legs):
+    """play.survivors_intact's DEPOSIT-phase call (before -> mid, undiscriminated per OMP
+    review cx-a59b23a9 finding 3) is a different check from the final before-vs-after loop that
+    every existing bystander test exercises: a record that goes wrong mid-deposit and is
+    'repaired' again by the time withdraw finishes would slip past that final loop entirely,
+    because it only compares the two endpoints. This is exactly the interim state the deposit
+    call exists to catch."""
+    fake.set_battle(False)
+    fake.set_overworld(True)
+    fake.set_pos(7, 8)                 # slink_pokecenter_full.State stands here
+    lua.execute(f"""
+        FAKE.set_party({_PARTY_ABC})
+        FAKE.on_frame = function()
+            if FAKE.a >= 16 then
+                FAKE.set_party({_PARTY_ABC})            -- withdraw restores the bystander too
+                FAKE.set_box(0, 0, 0, 0, 0)
+            elseif FAKE.a >= 8 then
+                FAKE.set_party({{ {{0xAAAA0001, 0x1111, 0xBEEF}}, {{0xCCCC0003, 0x3333, 0xC0}} }})
+                FAKE.set_box(0, 0, 0xBBBB0002, 0x2222, 1)
+            end
+        end
+    """)
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
+    assert not ok
+    assert "record AAAA0001:00001111 is not byte-identical" in log
 
 
 def test_pc_ops_fails_when_the_storage_ui_never_closes(lua, fake, legs):
@@ -973,6 +1059,116 @@ def test_wild_catch_passes_when_the_ball_lands_and_the_party_grows(lua, fake, le
     assert "outcome=7, party 1 -> 2" in log
 
 
+def test_wild_catch_refuses_when_the_source_map_is_unreadable_at_leg_start(lua, fake, legs):
+    """stable_field must never accept nil == nil for the expected map (OMP review cx-a59b23a9
+    finding 2): with the SaveBlock1 pointer insane from before the catch even starts, the OLD
+    code captured source_map = nil and later compared play.map(cp) == nil after the catch --
+    always true, so the leg PASSED with zero map evidence at all. RED before the fix (the leg
+    passed here), GREEN after (source_map is checked and named as the failure reason before a
+    single button is pressed)."""
+    _catch_world(lua, fake)
+    fake.set_sb1(False)        # the SaveBlock1 pointer is insane for the whole leg
+    ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "wild_catch")["run"])
+    assert not ok
+    assert "RESULT: FAIL" in log
+    assert "source map id is unreadable" in log
+
+
+def test_wild_catch_refuses_an_unreadable_enemy_identity(lua, fake, legs):
+    """The enemy-validity guard (`enemy.species == 0 or enemy.has_species ~= 1`) is otherwise
+    undiscriminated (OMP review cx-a59b23a9 finding 3): every other wild_catch test calls
+    fake.set_enemy(...) first, so none of them ever exercise an unreadable enemy record."""
+    fake.set_battle(True)
+    fake.set_overworld(False)
+    fake.set_menu(True)
+    fake.set_balls(4, 5)
+    fake.set_outcome(0)
+    lua.execute("FAKE.set_party({ {0xAAAA0001, 0x1111, 0xA0} })")
+    # fake.set_enemy(...) never called: ENEMY_BASE reads as all zero, species == 0.
+    ok, log, _err = fake.run_leg(_leg(legs, "wild_catch")["run"])
+    assert not ok
+    assert "unreadable enemy identity" in log
+
+
+def test_wild_catch_rejects_an_existing_party_mon_changing_species(lua, fake, legs):
+    """wild_catch's party-conservation loop ("existing party mon changed identity") is
+    otherwise undiscriminated (OMP review cx-a59b23a9 finding 3): every existing negative only
+    ever mutates the NEW record's slot. A bystander party record -- one that was never part of
+    this catch -- changing species mid-leg must fail here, before the new-record checks even
+    look at it."""
+    _catch_world(lua, fake)
+    lua.execute("""
+        local original = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            original(f)
+            if FAKE.a >= 7 then
+                FAKE.set_party({ {0xAAAA0001,0x1111,0xA0,9}, {0xCAFE0002,0x2222,0xB0,2} })
+            end
+        end
+    """)
+    ok, log, _err = fake.run_leg(_leg(legs, "wild_catch")["run"])
+    assert not ok and "existing party mon changed identity" in log
+
+
+def test_wild_catch_rejects_a_bystander_box_record_changing(lua, fake, legs):
+    """boxes_unchanged("wild_catch", ...) is otherwise undiscriminated (OMP review cx-a59b23a9
+    finding 3): the existing full-party test only ever writes the ONE new box slot the catch
+    itself produces. A second, pre-existing box record that has nothing to do with this catch
+    must not move underneath it."""
+    _catch_world(lua, fake)
+    lua.execute("""
+        local full = {
+            {0xAAAA0001,0x1111,0xA0}, {0xBBBB0002,0x2222,0xB0},
+            {0xCCCC0003,0x3333,0xC0}, {0xDDDD0004,0x4444,0xD0},
+            {0xEEEE0005,0x5555,0xE0}, {0xFFFF0006,0x6666,0xF0}
+        }
+        FAKE.set_party(full)
+        FAKE.set_box(0, 1, 0x12340001, 0x4444, 5)      -- a bystander already in storage
+        local original = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            original(f)
+            FAKE.set_party(full)
+            if FAKE.a >= 7 then
+                FAKE.set_box(0, 0, 0xCAFE0002, 0x2222, 2)  -- the caught mon, correctly placed
+                FAKE.set_box(0, 1, 0x12340001, 0x4444, 6)  -- the bystander mutates too
+            end
+        end
+    """)
+    ok, log, _err = fake.run_leg(_leg(legs, "wild_catch")["run"])
+    assert not ok and "box record changed or disappeared" in log
+
+
+def test_wild_catch_full_party_addition_cannot_land_in_the_party(lua, fake, legs):
+    """The full-party leg no longer carries its own after_party/new_place check: it was
+    provably unreachable (OMP review cx-a59b23a9 finding 3, verified independently here -- see
+    the comment in gen3_rr_scripted_play.lua above `else` in the wild_catch run body). Any
+    attempt to make the caught mon land in an already-full party, or to change the reported
+    party count, necessarily removes or hides an existing party key first, which this
+    party-conservation loop ("existing party mon changed identity") always catches earlier.
+    This is the covering-rule test the deleted guard's comment points at."""
+    _catch_world(lua, fake)
+    lua.execute("""
+        local full = {
+            {0xAAAA0001,0x1111,0xA0}, {0xBBBB0002,0x2222,0xB0},
+            {0xCCCC0003,0x3333,0xC0}, {0xDDDD0004,0x4444,0xD0},
+            {0xEEEE0005,0x5555,0xE0}, {0xFFFF0006,0x6666,0xF0}
+        }
+        FAKE.set_party(full)
+        local original = FAKE.on_frame
+        FAKE.on_frame = function(f)
+            original(f)
+            if FAKE.a >= 7 then
+                FAKE.set_party(full)
+                FAKE.set_box(0, 0, 0xCAFE0002, 0x2222, 2)
+                FAKE.w8(FAKE.PARTY_COUNT, 5)     -- the count byte lies about how many remain
+            end
+        end
+    """)
+    ok, log, _err = fake.run_leg(_leg(legs, "wild_catch")["run"])
+    assert not ok
+    assert "existing party mon changed identity" in log
+
+
 def test_wild_catch_refuses_an_outcome_already_caught_before_this_battle(lua, fake, legs):
     _catch_world(lua, fake)
     fake.set_outcome(7)
@@ -1124,6 +1320,39 @@ def test_wild_catch_fails_when_the_bag_sequence_never_spends_a_ball(lua, fake, l
     assert not ok
     assert "ball not thrown on throw 1" in log
     assert "never reached USE" in log
+
+
+# ── behaviour: owned_snapshot's own cross-check ──────────────────────────────────────────────
+
+
+def test_owned_snapshot_rejects_a_reads_lua_vs_raw_key_mismatch(lua, fake, module, legs):
+    """owned_snapshot's `key ~= party.order[i]` guard compares reads.lua's own decode against
+    the raw PID:OTID the driver reads directly through H.party_key -- a check against the two
+    paths silently drifting apart (e.g. a profile regeneration that moves one address but not
+    the other; OMP review finding 6 names exactly this risk). With identical fixed addresses in
+    this fixture the two normally always agree, so the only way to falsify the guard here (OMP
+    review cx-a59b23a9 finding 3) is to make the raw path lie, the same way the driver's own
+    binding is overridden in test_the_frame_end_binding_reports_a_refused_registration above."""
+    fake.set_battle(True)
+    fake.set_menu(True)
+    fake.set_balls(4, 5)
+    fake.set_outcome(0)
+    fake.set_enemy(0xCAFE0002, 0x9999, 2)
+    lua.execute("FAKE.set_party({ {0xAAAA0001, 0x1111, 0xA0} })")
+    H = module.play.H
+    original = H.party_key
+    lua.globals().ORIGINAL_PARTY_KEY = original
+    try:
+        H.party_key = lua.eval(
+            'function(i) if i == 0 then return "DEADBEEF:00000000" end '
+            "return ORIGINAL_PARTY_KEY(i) end"
+        )
+        ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "wild_catch")["run"])
+        assert not ok
+        assert "ambiguous or invalid party record" in log
+    finally:
+        H.party_key = original
+        lua.globals().ORIGINAL_PARTY_KEY = None
 
 
 def test_save_leg_reports_the_shared_oracles_failure_reason(lua, fake, module, legs):

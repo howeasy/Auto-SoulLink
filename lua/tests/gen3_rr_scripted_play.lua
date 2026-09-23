@@ -185,11 +185,19 @@ local function field_ready(cp)
            and G.pred_ok(cp, "field_controls_locked")
 end
 
+-- expected_map must never be nil: play.map(cp) also returns nil whenever the SaveBlock1
+-- pointer is not sane, and nil == nil would then read an UNREADABLE map as a stable one
+-- (OMP review cx-a59b23a9 finding 2 -- caught live with FAKE.set_sb1(false), see
+-- test_wild_catch_refuses_when_the_source_map_is_unreadable_at_leg_start). Every caller must
+-- fail with a named reason before it ever hands this function a nil expected map.
 local function stable_field(cp, expected_map, x, y, budget)
+    assert(expected_map ~= nil, "stable_field: expected_map must not be nil -- the caller must "
+        .. "fail the leg with a named reason instead of comparing against an unreadable map")
     local stable = 0
     for _ = 1, budget do
         local px, py = G.pos(cp)
-        if field_ready(cp) and play.map(cp) == expected_map
+        local map_now = play.map(cp)
+        if field_ready(cp) and map_now ~= nil and map_now == expected_map
            and (x == nil or (px == x and py == y)) then
             stable = stable + 1
             if stable >= 16 then return true end
@@ -234,7 +242,11 @@ end
 local PATHS = {
     pokecenter_start_to_pc = {
         map = "PokemonCenter_1F (group 5, map 4)",
-        from = { 7, 8 },             -- where slink_pokecenter_full.State stands (the PLAIN
+        from = { 7, 8 },             -- where slink_pokecenter_full.State stands
+                                     -- (docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt:5;
+                                     -- lua/tests/mkstate_gen3_rr_fill.lua fills the party via the
+                                     -- companion patch's OP_CREATE_MON on top of the plain
+                                     -- lua/tests/mkstate.lua:332-368 capture -- the PLAIN
                                      -- slink_pokecenter.State is at (11,8), after its own walk)
         to = { 11, 2 },              -- the approach tile below the PC metatile (11,1)
         dirs = { "Up", "Up", "Up", "Up", "Right", "Right", "Right", "Right", "Up", "Up" },
@@ -550,6 +562,13 @@ LEGS[#LEGS + 1] = {
         local before = owned_snapshot("wild_catch before")
         local before_party = before.party.n
         local source_map = play.map(cp)
+        -- Never hand stable_field a nil expected map: an unreadable SaveBlock1 pointer here
+        -- must fail this leg with its own reason, not silently compare "unreadable" against
+        -- "unreadable" later and call that a stable field (finding 2, see stable_field above).
+        if source_map == nil then
+            G.finish(false, "wild_catch: the source map id is unreadable "
+                          .. "(SaveBlock1 pointer not sane) at leg start")
+        end
         local _, balls = ball_slot0()
         G.phase("balls", string.format("pocket slot 0 = Poke Ball x%d, party=%d",
                                        balls, before_party))
@@ -705,9 +724,17 @@ LEGS[#LEGS + 1] = {
             G.phase("caught", string.format("outcome=%d, party %d -> %d after %d throw(s)",
                                             battle_outcome(), before_party, after_party, throws))
         else
-            if after_party ~= before_party or new_place ~= "box" then
-                G.finish(false, "wild_catch: full-party catch did not add exactly one boxed mon")
-            end
+            -- UNREACHABLE BY CONSTRUCTION, same class as the pc_ops finding above (OMP review
+            -- cx-a59b23a9 finding 3, verified independently here): with a full 6-slot party,
+            -- new_place can only be "party" if some existing party key vanished from `after` to
+            -- make room for it, and that ALREADY dies at the "existing party mon changed
+            -- identity" loop above (:671-675) before this branch runs. after_party can only
+            -- differ from before_party by an actual PARTY_COUNT_ADDR write, and that either
+            -- desyncs from reads.lua's own capacity check ("party count exceeds capacity") or,
+            -- at a lower count, hides a real key that then trips the same :671-675 loop --
+            -- confirmed with a scratch fake poking PARTY_COUNT_ADDR both ways; both die with an
+            -- earlier, more specific message. test_wild_catch_full_party_addition_cannot_land_
+            -- in_the_party targets the covering :671-675 loop directly.
             G.phase("caught", string.format(
                 "outcome=%d with a full party (%d): the matching mon was read back in a box",
                 battle_outcome(), before_party))
@@ -801,7 +828,7 @@ LEGS[#LEGS + 1] = {
     state = "slink_pokecenter_full.State",
     exercises = { "pc_deposit", "pc_box_place", "pc_withdraw" },
     source = {
-        "lua/tests/mkstate.lua:270-300 (the pokecenter state family is captured inside a map the companion patch recognises as a Pokémon Center 1F — it spawns its trade NPC there, which is how the state is verified); slink_pokecenter_full.State stands at (11,8) with a party of 3",
+        "lua/tests/mkstate.lua:332-368 (the pokecenter state family is captured inside a map the companion patch recognises as a Pokémon Center 1F — it spawns its trade NPC there, which is how the PLAIN slink_pokecenter.State is verified); slink_pokecenter_full.State is that same map with its party filled to 3 by lua/tests/mkstate_gen3_rr_fill.lua's OP_CREATE_MON filler (not mkstate.lua -- that only produces the 1-mon plain state), and stands at (7,8), not (11,8) (docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt:5)",
         "patch/build/slink_RR.gba parsed directly: gMapGroups 0x083526A8 -> group 5 map 4 header 0x08350E30 -> layout 0x082D5990 (15x10) -> blocks 0x082D5864, tileset attributes 0x082AFFB4 / 0x082B4A50; the only MB_PC (0x83) metatile is (11,1), approach (11,2)",
         "docs/gen3_engine_sites.md pc_deposit row (rr PINNED 0809315C/+8, TryStorePartyMonInBox +0x80 with R0==1)",
         "docs/gen3_engine_sites.md pc_box_place row (rr PINNED 08093018/+8; RR IN-PLACE wrapper, capture 08093020, SetBoxMonAt detours to 090B6CA4)",
@@ -922,9 +949,15 @@ LEGS[#LEGS + 1] = {
                 .. "now holds [%s]. A released-and-replaced mon, or a different box mon, is "
                 .. "not a round trip", gone, play.keylist(after)))
         end
-        if after_world.boxes[gone] then
-            G.finish(false, "pc_ops: withdraw copied the selected mon and left it boxed")
-        end
+        -- UNREACHABLE BY CONSTRUCTION, not decorative slop: owned_snapshot("pc_ops after
+        -- withdraw") above already hard-fails "ambiguous or invalid box record" the moment a
+        -- box record's PID:OTID also appears in the party (:152-155) -- and `gone` is already
+        -- confirmed in the party two checks up. A copy left behind in a box can therefore never
+        -- reach a check here; it dies inside owned_snapshot first, with the honest message.
+        -- Confirmed by deleting this block in a scratch copy: the suite stayed green, and
+        -- test_pc_ops_rejects_a_copy_on_withdraw_that_leaves_a_box_duplicate (which exists for
+        -- exactly this scenario) already asserts "ambiguous or invalid box record", not this
+        -- one (OMP review cx-a59b23a9 findings 3/4).
         boxes_unchanged("pc_ops withdraw", before_world.boxes, after_world.boxes)
         -- The travelling record may differ byte for byte (RR stores a 58-byte
         -- CompressedPokemon, so the round trip is lossy BY DESIGN); the ones that STAYED must
@@ -990,7 +1023,10 @@ LEGS[#LEGS + 1] = {
         "src/pokemon_storage_system_tasks.c:1307-1339 (states 4/5/6/7: exactly two more JOY_NEW "
             .. "waits -- MSG_WAS_RELEASED then MSG_BYE_BYE -- before CompactPartySlots and the "
             .. "return to Task_PokeStorageMain)",
-        "lua/tests/mkstate.lua:270-300 (slink_pokecenter_full.State: party of 3 at (11,8))",
+        "lua/tests/mkstate_gen3_rr_fill.lua (slink_pokecenter_full.State: party of 3 via the "
+            .. "companion patch's OP_CREATE_MON filler on top of lua/tests/mkstate.lua:332-368's "
+            .. "plain pokecenter capture; stands at (7,8), not (11,8) -- "
+            .. "docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt:5)",
     },
     check = check_on_field,
     run = function(cp)
