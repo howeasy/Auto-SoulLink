@@ -90,6 +90,32 @@ MAIN_ANCHORS: dict[str, str] = {
 }
 OVERLAY_DST = "engine/slink"
 
+# Coordinator follow-up gen2-p41a-delay-hook (Codex, via P4.1c): DelayFrame is called directly by
+# menus/text/overworld, not reached through slink.asm's own INCLUDE chain, so the main-thread SFX
+# service needs its own hook. Same-size edit: DelayFrame's leading `ld a, 1` / `ld [wVBlankOccurred],
+# a` (5 bytes) becomes `call SlinkDelayFrameBridge` + 2 nops (5 bytes). Confirmed identical text in
+# both pinned repos (.cache/gen2-build/{pokecrystal,pokegold}/home/delay.asm). The ROM0 bridge (its
+# body is Codex's, in slink.asm) lives in the confirmed-free $0063-$00FF padding right after the
+# joypad vector ($0060-$0062) in all three titles' pinned .map -- this tool owns only the source
+# replacement, applied verify-once, only when slink.asm is present.
+DELAY_ANCHOR = 'DelayFrame::\n; Wait for one frame\n\tld a, 1\n\tld [wVBlankOccurred], a\n'
+DELAY_REPLACEMENT = (
+    'DelayFrame::\n; Wait for one frame\n'
+    '\tcall SlinkDelayFrameBridge ; SLink overlay: same size as the displaced ld a,1 / ld [wVBlankOccurred],a\n'
+    '\tnop\n\tnop\n'
+)
+DELAY_HOOK_TRIGGER = "slink.asm"  # presence of this file in the plan gates the home/delay.asm edit
+
+
+def apply_delay_hook(checkout: pathlib.Path) -> None:
+    """Verify-then-replace-once the DelayFrame lead-in in home/delay.asm (same size, no shift)."""
+    path = checkout / "home" / "delay.asm"
+    text = path.read_text(encoding="utf-8")
+    n = text.count(DELAY_ANCHOR)
+    if n != 1:
+        raise RuntimeError(f"home/delay.asm: expected the DelayFrame anchor exactly once, found {n}")
+    path.write_text(text.replace(DELAY_ANCHOR, DELAY_REPLACEMENT, 1), encoding="utf-8", newline="\n")
+
 
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -162,6 +188,8 @@ def apply_overlay(
         )
         new_anchor = anchor.replace('\n\n\nSECTION', f'\n\n{block}\n\n\nSECTION', 1)
         main_path.write_text(text.replace(anchor, new_anchor, 1), encoding="utf-8", newline="\n")
+    if DELAY_HOOK_TRIGGER in applied:
+        apply_delay_hook(checkout)
     return applied
 
 

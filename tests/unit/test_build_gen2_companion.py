@@ -206,6 +206,82 @@ def test_apply_overlay_with_only_the_shared_abi_header_never_touches_main_asm(tm
     assert (checkout / bc.OVERLAY_DST / bc.SHARED_ABI_NAME).is_file()
 
 
+# ---------------------------------------------------------------- DelayFrame hook (home/delay.asm)
+# Coordinator follow-up gen2-p41a-delay-hook: applied only when slink.asm (card P4.1c) is present,
+# verify-then-replace-once, same size (5 bytes either way) -- this tool owns just the source edit,
+# never the ROM0 bridge body (Codex's, in slink.asm).
+
+
+def _write_real_delay_asm(checkout: Path) -> None:
+    (checkout / "home").mkdir(parents=True, exist_ok=True)
+    (checkout / "home" / "delay.asm").write_text(
+        'DelayFrame::\n; Wait for one frame\n\tld a, 1\n\tld [wVBlankOccurred], a\n\n'
+        '; Wait for the next VBlank, halting to conserve battery\n.halt\n\thalt\n\tnop\n'
+        '\tld a, [wVBlankOccurred]\n\tand a\n\tjr nz, .halt\n\tret\n',
+        encoding="utf-8",
+    )
+
+
+def test_delay_hook_not_applied_when_slink_asm_absent(tmp_path):
+    checkout = _fake_checkout(tmp_path, "pokecrystal")
+    _write_real_delay_asm(checkout)
+    before = (checkout / "home" / "delay.asm").read_text(encoding="utf-8")
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "slink_mailbox_crystal.asm").write_text('SECTION "SLink Mailbox", WRAM0[$0000]\n\tds 1\n')
+
+    applied = bc.apply_overlay(checkout, "pokecrystal", src_dir, _no_gb_dir(tmp_path))
+
+    assert "slink.asm" not in applied
+    assert (checkout / "home" / "delay.asm").read_text(encoding="utf-8") == before
+
+
+def test_delay_hook_applied_when_slink_asm_present(tmp_path):
+    checkout = _fake_checkout(tmp_path, "pokecrystal")
+    _write_real_delay_asm(checkout)
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "slink_mailbox_crystal.asm").write_text('SECTION "SLink Mailbox", WRAM0[$0000]\n\tds 1\n')
+    (src_dir / "slink.asm").write_text("; codex P4.1c\n")
+
+    applied = bc.apply_overlay(checkout, "pokecrystal", src_dir, _no_gb_dir(tmp_path))
+
+    assert "slink.asm" in applied
+    delay_text = (checkout / "home" / "delay.asm").read_text(encoding="utf-8")
+    assert "call SlinkDelayFrameBridge" in delay_text
+    assert "\tld a, 1\n\tld [wVBlankOccurred], a\n" not in delay_text
+    # Everything after the lead-in (the .halt loop) is untouched.
+    assert ".halt\n\thalt\n\tnop\n\tld a, [wVBlankOccurred]\n\tand a\n\tjr nz, .halt\n\tret\n" in delay_text
+
+
+def test_apply_delay_hook_refuses_a_missing_anchor(tmp_path):
+    checkout = tmp_path / "checkout"
+    (checkout / "home").mkdir(parents=True)
+    (checkout / "home" / "delay.asm").write_text("; not the real delay.asm\n", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="exactly once"):
+        bc.apply_delay_hook(checkout)
+
+
+def test_apply_delay_hook_refuses_a_duplicate_anchor(tmp_path):
+    checkout = tmp_path / "checkout"
+    _write_real_delay_asm(checkout)
+    path = checkout / "home" / "delay.asm"
+    path.write_text(path.read_text(encoding="utf-8") * 2, encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="exactly once"):
+        bc.apply_delay_hook(checkout)
+
+
+def test_delay_anchor_and_replacement_are_the_same_instruction_count():
+    """Sanity check on the hand-verified byte-size claim: 2 replaced instructions in, 3 in
+    (call + 2 nops), each mnemonic present exactly once/twice as expected."""
+    assert bc.DELAY_ANCHOR.count("ld a, 1") == 1
+    assert bc.DELAY_ANCHOR.count("ld [wVBlankOccurred], a") == 1
+    assert bc.DELAY_REPLACEMENT.count("call SlinkDelayFrameBridge") == 1
+    assert bc.DELAY_REPLACEMENT.count("nop") == 2
+
+
 # ---------------------------------------------------------------- rom_facts
 
 
