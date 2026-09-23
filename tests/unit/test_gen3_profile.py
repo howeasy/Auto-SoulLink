@@ -501,6 +501,18 @@ def test_thumb_addresses_are_kept_verbatim_and_marked() -> None:
                 assert val & 1, f"{name}: {key} is in rom_thumb but is even"
 
 
+def test_c511a_the_rival_opcode_is_in_the_native_block() -> None:
+    """C5-11a: the profile's native opcode keys are generated from lua/mailbox.lua, so the new
+    rival opcode must appear there with its ABI number and its own source citation -- the Lua side
+    (native.lua's transfer("rival")) reads it from this block, and handlers.c owns the number."""
+    title = _title("radical_red")
+    native = _load("gen3_rr")["native"]
+    assert native["OP_RIVAL_SWAP"] == 28
+    assert native["OP_SET_ENEMY_PARTY"] == 16, "opcode 16 stays the trade's"
+    assert "lua/mailbox.lua" in native["_src"]["OP_RIVAL_SWAP"]
+    assert title["rom"]["BATTLE_INTRO_GET_MONS_DATA_ADDR"] == 0x08012FAD
+
+
 def test_pinned_rom_hashes() -> None:
     assert _title("firered")["rom_sha1"] == "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc"
     assert _title("leafgreen")["rom_sha1"] == "574fa542ffebb14be69902d1d36f1ec0a4afd71e"

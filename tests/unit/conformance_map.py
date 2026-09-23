@@ -141,6 +141,13 @@ ITEMS: list[Item] = [
     Item("44", "no box_mon/party_mon/memorialize executes during apply_trade", "live"),
     Item("45", "trainer_battle_start fires once per trainer battle, not wild/borrowed", "live",
          "check_rival_team_replaced"),
+    Item("45a", "replace_rival_team echoes the announcing battle_id; a missing/mismatched id is "
+                "refused with stale_battle_id and nothing written", "world",
+         "check_battle_id_echo",
+         disagreement="the shipped Gen 3 client and every Gen 1/Gen 2 client send no battle_id; "
+                       "before card C5-10 the server had no id to echo",
+         resolution="the field is optional on the wire (old clients unchanged) and required by "
+                    "the new Gen 3 client's own guard"),
     Item("46", "replace_rival_team always produces one rival_team_replaced", "live",
          "check_rival_team_replaced"),
     Item("47", "status.badges is a count, not a bitmask", "live", "check_status_badges"),

@@ -387,6 +387,42 @@ def check_rival_team_replaced(lines: list[dict]) -> set[str]:
     return violations
 
 
+def check_battle_id_echo(lines: list[dict]) -> set[str]:
+    """Item 45a (card C5-10, hardened per Codex's review): every s2c `replace_rival_team` that
+    carries a battle identity must carry one THIS client announced for that battle -- the full
+    per-player (session, battle_id, trainer_id) triple -- and a client that declared
+    `battle_identity: true` in hello must see both fields on every rival command. A transcript is
+    one connection, so the announced identities are that player's own. Transcripts captured before
+    the field existed have neither declarations nor ids and pass silently."""
+    violations: set[str] = set()
+    announced: list[tuple] = []
+    declared = False
+    for line in lines:
+        msg = line.get("msg") or {}
+        if line.get("dir") == "c2s":
+            if msg.get("event") == "hello" and msg.get("battle_identity") is True:
+                declared = True
+            elif (msg.get("event") == "trainer_battle_start"
+                  and isinstance(msg.get("battle_id"), int)
+                  and isinstance(msg.get("session"), str)):
+                announced.append((msg["session"], msg["battle_id"], msg.get("trainer_id")))
+        elif line.get("dir") == "s2c":
+            for command in msg.get("commands", []):
+                if command.get("cmd") != "replace_rival_team":
+                    continue
+                has_session, has_battle_id = "session" in command, "battle_id" in command
+                if has_session != has_battle_id:
+                    violations.add("45a")          # a half-identity is never legal
+                elif has_session:
+                    triple = (command.get("session"), command.get("battle_id"),
+                              command.get("trainer_id"))
+                    if triple not in announced:
+                        violations.add("45a")
+                elif declared:
+                    violations.add("45a")          # a declared client must get both fields
+    return violations
+
+
 def check_status_badges(lines: list[dict]) -> set[str]:
     """Item 46: status.badges is a small count (0-8), never a bitmask value > 8."""
     for line in lines:
@@ -408,6 +444,7 @@ _CHECKERS = {
     "check_keyed_replies": check_keyed_replies,
     "check_token_echo": check_token_echo,
     "check_rival_team_replaced": check_rival_team_replaced,
+    "check_battle_id_echo": check_battle_id_echo,
     "check_status_badges": check_status_badges,
 }
 
@@ -541,6 +578,39 @@ def test_world_hello_carries_the_required_fields_on_every_artifact():
             for field in ("key", "hp", "maxHP", "level", "slot", "species_id", "nickname", "blob_hex"):
                 assert field in entry, (pack, title, kind, field)
             assert len(entry["blob_hex"]) == 200, (pack, title, kind, entry["blob_hex"])
+
+
+@pytest.fixture(autouse=True)
+def _battle_nonce(monkeypatch):
+    """The battle request nonce is minted by the bootstrap (lua/gen3/run.lua) and consumed through
+    $SLINK_GEN3_BATTLE_NONCE, the documented seam; the lupa harness builds Entry directly, so
+    without this the client fails closed (no identity, no capability) and every rival test would
+    refuse. A test that needs distinct sessions overrides the value itself."""
+    monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "0000BEEF")
+
+
+# ── 45a: the battle request identity (card C5-10) ───────────────────────────────────────────
+
+@world_item("45a")
+def test_world_battle_identity_is_minted_per_battle_and_guards_the_swap():
+    """The client's half of the contract: `trainer_battle_start` announces a session nonce and a
+    per-battle counter, and `replace_rival_team` is refused (`stale_battle_id`, nothing written)
+    unless it carries both for the battle the client is in."""
+    w = World("gen3_rr", "radical_red", "companion")
+    w.set_party(_party(_A, _B))
+    w.set_balls(3)
+    w.step_to(60)
+    w.enter_battle([_FOE], trainer_id=42)
+    w.step(61)                      # the same warm-up test_gen3_client.py's own event test uses
+    (start,) = w.events("trainer_battle_start")
+    assert isinstance(start["session"], str) and 0 < len(start["session"]) <= 16, start
+    assert start["battle_id"] == 1, start
+    before = list(w.writes)
+    w.command(cmd="replace_rival_team", trainer_id=42, n=1, blobs_hex=["00" * 100])
+    w.step()
+    (reply,) = w.events("rival_team_replaced")
+    assert reply["error"] == "stale_battle_id", reply
+    assert w.writes == before, "a refused swap must write nothing"
 
 
 # ── 10: ot_id present, or derivable from party[0].key ───────────────────────────────────────

@@ -403,7 +403,40 @@ against `BPRE.ld` and disassembled (capstone):
 | 24 | DEPOSIT_MON | `[0]`=partySlot `[1]`=boxId `[2]`=boxPos | party→PC box (CFRU `CreateCompressedMonFromBoxMon` + shift-compact party). LIVE (`test_live_boxsync`). See "PC storage / box migration reference" |
 | 25 | WITHDRAW_MON | `[0]`=boxId `[1]`=boxPos `[2]`=partySlot | PC box→party (CFRU `CompressedMonToMon`; engine recomputes level/stats/PP). LIVE (`test_live_boxsync`) |
 | 26 | MEMORIALIZE | `[0]`=partySlot `[1]`=boxId `[2]`=boxPos | party→memorial box. Same compress as DEPOSIT_MON but removal is **zero + SWAP-WITH-LAST** (not shift) so survivors keep their slot indices — CFRU's deferred battle writes target slots (mirrors Lua `M.memorializeMon`). Lua picks the free memorial slot + renames boxes. LIVE (`test_live_memorialize`) |
+| 28 | RIVAL_SWAP | `[0]`=count (1..6) `[1..2]`=trainer_id (u16 LE); blobs staged in `SLINK_BLOB_BUF` | **C5-11a** — the RIVAL SWAP's own opcode. Same byte-copy basis as 16 (`stage_enemy_party`), but gated by the five-part consumption check below. `OP_SET_ENEMY_PARTY` (16) stays the FIELD TRADE's staging and carries no window check: `OP_TRADE_SCENE`'s handler documents that it trades against `gEnemyParty[0]` staged by 16, so a check there would reject every trade. See `docs/gen3/research/rival_swap_refresh_window.md` §5.3 |
 | 23 | SHOW_BATTLE_MESSAGE | `[0..1]`=duration frames, `[2]`=window id (0→`0xD`). FR text in `SLINK_TEXT_BUF` | **native IN-BATTLE text** (the BizHawk-HUD-in-battle replacement), drawn into the Battle Calc's move-info window (`0xD`, top-left). `BattleNotif`@`0x0203FD00` {active,win,task,phase,frames}. **Two parts:** (1) build.py RE-POINTS the calc's `BattlePutTextOnWindow` detour @`0x080D87BE` (was `BL 0x08378CA8`) to naked shim `slink_battletext_hook` → `slink_battle_inject` swaps the text ptr for window `BN->win` IN-CONTEXT (inside the engine's draw), then `bx 0x08378CA9` (calc trampoline). REAL callable entry = `0x080D87BD` (prologue @`0x080D87BC`), NOT the detour @`0x080D87BE`. (2) `drive_battle_notif` `CreateTask`s `slink_notif_task` which draws every frame via **RunTasks** (the in-context point — calling `BattlePutTextOnWindow` from the slink_hook frame hook WHITE-OUTS the BG); on teardown draws an empty FR string then `DestroyTask 0x08077508` (poking the task struct @+0 corrupts the FUNC ptr → RunTasks crash; isActive@+4). SYNC ack |
+
+### Fail reason codes (`Mailbox.reason`, u16 @14)
+
+| code | name | set by |
+|---|---|---|
+| 1 | `REASON_SCRIPT_CONTEXT` | `sScriptContext2Enabled` (a script owns the field) |
+| 2 | `REASON_BAD_ARGS` | out-of-range args |
+| 3 | `REASON_NOT_ON_FIELD` | `on_field()` false |
+| 8 | `REASON_WINDOW_CLOSED` | **C5-11a** — `OP_RIVAL_SWAP` consumed outside the rival-swap window. `lua/gen3/native.lua` mirrors this table (`FAIL_REASONS`) and surfaces the NAME to the job, which replies `rival_team_replaced{error="refresh_failed", reason="window_closed"}` |
+
+### Rival-swap window constants (`OP_RIVAL_SWAP`, C5-11a)
+
+Radical Red addresses (the profile's `ram` block carries the same values; the rebuild re-verifies
+them). The check runs at CONSUMPTION, before the first byte is copied — failing any part means no
+copy at all.
+
+| name | address | meaning |
+|---|---|---|
+| `RV_BATTLE_COMM` | `0x02023E82` | `gBattleCommunication[0]` = `MULTIUSE_STATE`; `>= 15` means `CB2_HandleStartBattle` case 15 (`InitBattleControllers` → `SetBattlePartyIds`) has run |
+| `RV_BATTLE_MAIN_FUNC` | `0x03004F84` | `gBattleMainFunc`; must still be `BeginBattleIntroDummy|1` |
+| `RV_GMAIN_CB2` | `0x030030F4` | `gMain + 4` (`callback2`); must be `CB2_HandleStartBattle|1` |
+| `RV_BATTLE_TYPE` | `0x02022B4C` | `gBattleTypeFlags`; `& BATTLE_TYPE_LINK (0x02)` must be 0 |
+| `RV_TRAINER_OPPONENT` | `0x020386AE` | `gTrainerBattleOpponent_A` (u16); must equal `args[1..2]` |
+| `RV_BEGIN_DUMMY` | `0x080123BD` | `BeginBattleIntroDummy|1` (C5-9 pin; RR-BIN stores it at pool `0xD2E8`) |
+| `RV_CB2_START_BATTLE` | `0x08010509` | `CB2_HandleStartBattle|1` (SYM / write_checkpoint pack) |
+
+**ABI version stays `1`.** The mailbox *layout* is unchanged, and `lua/gen3/native.lua`'s
+`present()` requires EXACT equality of the ABI word — bumping it for an additive opcode would report
+the native part absent on every older patch and disable trades, menus and sounds with it.
+Compatibility comes from the dispatcher: an unknown opcode takes the default `ack(ST_FAIL)`, so a
+new client on an old patch refuses the swap cleanly. A future change that alters the *layout* must
+bump the version and ship a range check in `present()`.
 
 **RR `gSpecials` is REORDERED** — the FireRed `special` indices (e.g. ChoosePartyMon 170, DoInGameTradeScene
 265) DO NOT work on RR (live-proven no-ops). The native menus/scene are invoked **by address** via CFRU's

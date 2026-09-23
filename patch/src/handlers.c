@@ -50,9 +50,36 @@ enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
                                      Deposit conversion, but removal is zero + SWAP-WITH-LAST (not
                                      shift) so survivors keep their slot indices (CFRU deferred
                                      battle writes target slots; mirrors Lua M.memorializeMon). */
-       OP_SHOW_INFO = 27 };       /* §6 SOULLINK info screen from the lines staged in SlinkInfo;
+       OP_SHOW_INFO = 27,         /* §6 SOULLINK info screen from the lines staged in SlinkInfo;
                                      async, result[0] = 0 (A) / 0x7F (B) — the pagination signal */
+       OP_RIVAL_SWAP = 28 };      /* C5-11a: the RIVAL SWAP's own opcode. Same BLOB_BUF staging and
+                                     byte-copy basis as OP_SET_ENEMY_PARTY (16), but with the
+                                     consumption-time window check + trainer context that must NOT
+                                     apply to 16: the field trade stages with 16 and then runs
+                                     OP_TRADE_SCENE (see that case's comment), so a window check on
+                                     16 would reject every trade. See docs/gen3/research/
+                                     rival_swap_refresh_window.md §5.3. */
 enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
+
+/* Mailbox `reason` values for a ST_FAIL ack. 1..3 are used inline by the older cases in the
+ * order listed below; 8 is the first NAMED one (this file owns the numbering — `lua/gen3/
+ * native.lua` mirrors it in its FAIL-reason table, and patch/src/ADDRESSES.md lists both). */
+#define REASON_SCRIPT_CONTEXT  1u   /* sScriptContext2Enabled */
+#define REASON_BAD_ARGS       2u
+#define REASON_NOT_ON_FIELD   3u
+#define REASON_WINDOW_CLOSED  8u   /* OP_RIVAL_SWAP consumed outside the rival-swap window */
+
+/* Rival-swap window (C5-11a, doc §5.3). Radical Red addresses, from the profile's `ram` block and
+ * the C5-9 pins; ADDRESSES.md carries the table and the rebuild re-verifies them. */
+#define RV_BATTLE_COMM      0x02023E82u  /* gBattleCommunication[MULTIUSE_STATE] = byte 0 */
+#define RV_BATTLE_MAIN_FUNC 0x03004F84u  /* gBattleMainFunc */
+#define RV_GMAIN_CB2        0x030030F4u  /* gMain + 4 (callback2) */
+#define RV_BATTLE_TYPE      0x02022B4Cu  /* gBattleTypeFlags */
+#define RV_TRAINER_OPPONENT 0x020386AEu  /* gTrainerBattleOpponent_A (u16) */
+#define RV_BATTLE_TYPE_LINK 0x02u        /* BATTLE_TYPE_LINK */
+#define RV_MULTIUSE_SETUP_DONE 15u       /* CB2_HandleStartBattle case 15 == InitBattleControllers */
+#define RV_BEGIN_DUMMY      0x080123BDu  /* BeginBattleIntroDummy|1 (C5-9 pin, RR-BIN 0x123BD) */
+#define RV_CB2_START_BATTLE 0x08010509u  /* CB2_HandleStartBattle|1 (SYM / write_checkpoint pack) */
 
 /* Armed forced-move state (controller-swap driver), EWRAM scratch past the mailbox. */
 typedef struct {
@@ -1783,6 +1810,21 @@ void slink_setup_start_menu(void)
     R8(sNumStartMenuActions) = 7;
 }
 
+/* C5-11a: the shared gEnemyParty staging of OP_SET_ENEMY_PARTY/OP_RIVAL_SWAP. Faithful byte
+ * copy from SLINK_BLOB_BUF (caller staged count*100 raw party-mon bytes), zeroing maxHP (+0x58)
+ * on the unused trailing slots so CFRU's scan-until-maxHP==0 terminates, then the count. */
+static void stage_enemy_party(u8 count)
+{
+    for (u8 i = 0; i < count; i++) {
+        volatile u8 *src = (volatile u8 *)(SLINK_BLOB_BUF + (u32)i * MON_SIZE);
+        volatile u8 *dst = (volatile u8 *)(gEnemyParty   + (u32)i * MON_SIZE);
+        for (u32 j = 0; j < MON_SIZE; j++) dst[j] = src[j];
+    }
+    for (u8 s = count; s < 6; s++)
+        R16(gEnemyParty + (u32)s * MON_SIZE + 0x58) = 0;
+    R8(gEnemyPartyCount) = count;
+}
+
 __attribute__((section(".text.entry"), used))
 void slink_hook(void)
 {
@@ -1864,6 +1906,28 @@ void slink_hook(void)
         break;
     }
 
+    case OP_RIVAL_SWAP: {        /* C5-11a. args: [0]=count (1..6), [1..2]=trainer_id (u16 LE).
+                                    The RIVAL SWAP's own opcode: OP_SET_ENEMY_PARTY (16) is shared
+                                    with field-trade staging and stays unchanged. The five-part
+                                    check below is the AUTHORITY for the window (doc §5.3): it
+                                    proves the copy lands after CreateNPCTrainerParty and BEFORE
+                                    SetBattlePartyIds and the opponent snapshot. Failing ANY part
+                                    means NO copy at all — the rival keeps its own team. */
+        u8 count = MB->args[0];
+        u16 trainer = (u16)(MB->args[1] | (MB->args[2] << 8));
+        if (count == 0 || count > 6) { ack(ST_FAIL, REASON_BAD_ARGS); return; }
+        if (R8(RV_BATTLE_COMM) >= RV_MULTIUSE_SETUP_DONE
+            || R32(RV_BATTLE_MAIN_FUNC) != RV_BEGIN_DUMMY
+            || R32(RV_GMAIN_CB2) != RV_CB2_START_BATTLE
+            || (R32(RV_BATTLE_TYPE) & RV_BATTLE_TYPE_LINK)
+            || R16(RV_TRAINER_OPPONENT) != trainer) {
+            ack(ST_FAIL, REASON_WINDOW_CLOSED);
+            return;
+        }
+        stage_enemy_party(count);
+        break;
+    }
+
     case OP_SET_ENEMY_PARTY: {   /* args: [0]=count. Lua staged count*100 raw party-mon bytes in
                                     SLINK_BLOB_BUF. Faithful byte-copy into gEnemyParty (preserves the
                                     partner's EXACT mons: moves/IVs/EVs/PID/item) — NOT CreateMon, which
@@ -1872,16 +1936,8 @@ void slink_hook(void)
                                     engine fn. RR/CFRU party-mon layout == enemy-mon layout (NO_ENCRYPT),
                                     so a raw memcpy is sufficient — same basis as M.writeEnemyParty. */
         u8 count = MB->args[0];
-        if (count == 0 || count > 6) { ack(ST_FAIL, 2); return; }
-        for (u8 i = 0; i < count; i++) {
-            volatile u8 *src = (volatile u8 *)(SLINK_BLOB_BUF + (u32)i * MON_SIZE);
-            volatile u8 *dst = (volatile u8 *)(gEnemyParty   + (u32)i * MON_SIZE);
-            for (u32 j = 0; j < MON_SIZE; j++) dst[j] = src[j];
-        }
-        /* Zero maxHP (+0x58) on unused slots so CFRU's scan-until-maxHP==0 terminates. */
-        for (u8 s = count; s < 6; s++)
-            R16(gEnemyParty + (u32)s * MON_SIZE + 0x58) = 0;
-        R8(gEnemyPartyCount) = count;
+        if (count == 0 || count > 6) { ack(ST_FAIL, REASON_BAD_ARGS); return; }
+        stage_enemy_party(count);
         break;
     }
 

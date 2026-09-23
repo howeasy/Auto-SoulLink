@@ -20,6 +20,10 @@
 local N = {}
 local O = {abi=4, opcode=6, seq=8, status=10, ack=12, reason=14, args=16, result=48}
 local BUSY, OK, FAIL = 1, 2, 3
+-- ST_FAIL reason words (patch/src/handlers.c owns the numbering; ADDRESSES.md lists both sides).
+-- Only the named ones matter to Lua: an unknown word stays unnamed rather than being guessed.
+local FAIL_REASONS = {[1] = "script_context", [2] = "bad_args", [3] = "not_on_field",
+                      [8] = "window_closed"}
 local function integer(v, maximum)
     return type(v) == "number" and v % 1 == 0 and v >= 0 and v <= maximum
 end
@@ -77,8 +81,8 @@ function N.new(profile, deps)
     function self:trade_active() return false end -- apply_trade belongs to the trade card
     function self:hello_fields() return {} end -- no invented wire capability fields
 
-    local function finish(job, why, result)
-        if job.done then job.done(why, result) end
+    local function finish(job, why, result, reason)
+        if job.done then job.done(why, result, reason) end
     end
     local function abort(why)
         local active, waiting = pending, queue
@@ -225,6 +229,23 @@ function N.new(profile, deps)
             args = {cmd.slot}
         end
         if step == "scene" then op = assert(p.OP_TRADE_SCENE)
+        elseif step == "rival" then
+            -- C5-11a: the rival swap's OWN opcode (28). OP_SET_ENEMY_PARTY (16) stays the field
+            -- trade's transport, so the patch's window/trainer check can never reject a trade.
+            local trainer = cmd.trainer_id
+            if not integer(trainer, 65535) or trainer == 0 then return nil, "invalid trainer" end
+            local rows = cmd.blobs_hex
+            if type(rows) ~= "table" or #rows < 1 or #rows > 6 then return nil, "invalid blobs" end
+            local bytes = {}
+            for _, hex in ipairs(rows) do
+                if type(hex) ~= "string" or #hex ~= 200 or hex:find("[^%x]") then
+                    return nil, "invalid blobs"
+                end
+                for i = 1, 200, 2 do bytes[#bytes + 1] = tonumber(hex:sub(i, i + 1), 16) end
+            end
+            op = assert(p.OP_RIVAL_SWAP)
+            args = {#rows, trainer & 255, trainer >> 8}
+            stages = {{p.BLOB_BUF, bytes}}
         elseif step == "party" or step == "enemy" then
             local rows = step == "party" and {cmd.blob_hex} or cmd.blobs_hex
             if type(rows) ~= "table" or #rows < 1 or #rows > 6 then
@@ -244,10 +265,12 @@ function N.new(profile, deps)
         else return nil, "unsupported transfer step" end
         return enqueue({op=op, args=args, stages=stages, done=done, valid=valid})
     end
-    function self:replace_rival_team(cmd)
+    function self:replace_rival_team(cmd, guard)
         local trainer = cmd.trainer_id or 0
-        local function reply(why, species)
-            send("rival_team_replaced", {trainer_id=trainer, species_ids=array(species or {}), error=why})
+        local function reply(why, species, reason)
+            local fields = {trainer_id=trainer, species_ids=array(species or {}), error=why}
+            if reason then fields.reason = reason end
+            send("rival_team_replaced", fields)
         end
         if not deps.in_battle or not deps.in_battle() then reply("not_in_battle"); return true end
         if not deps.refresh_enemy then reply("refresh_required"); return true end
@@ -260,10 +283,23 @@ function N.new(profile, deps)
             for i = 1, 200, 2 do bytes[#bytes + 1] = tonumber(hex:sub(i, i + 1), 16) end
         end
         local count = #rows
-        return enqueue({op=assert(p.OP_SET_ENEMY_PARTY), args={count},
-            valid=function() return deps.in_battle(), "not_in_battle" end,
-            stages={{p.BLOB_BUF, bytes}}, done=function(why)
-                if why then reply(why); return end
+        local epoch = {session = cmd.session, battle_id = cmd.battle_id, trainer_id = cmd.trainer_id}
+        return enqueue({op=assert(p.OP_RIVAL_SWAP), args={count, trainer & 255, trainer >> 8},
+            valid=function()
+                -- C5-11a: the guard runs at DISPATCH, immediately before posting, and every part
+                -- is re-evaluated there -- never at enqueue. `guard` is the caller's live epoch
+                -- check (client.lua), which owns the identity; this file adds its own in-battle
+                -- and interval checks so a job can never post outside them.
+                if not deps.in_battle or not deps.in_battle() then return false, "not_in_battle" end
+                if guard then
+                    local ok, why = guard(epoch)
+                    if not ok then return false, why end
+                end
+                return true
+            end,
+            stages={{p.BLOB_BUF, bytes}}, done=function(why, _result, reason)
+                if why then reply(why == "native refused" and "refresh_failed" or why, nil, reason)
+                    return end
                 local ram = assert(profile.titles.radical_red.ram)
                 local actual = io.read_bytes(ram.ENEMY_BASE, #bytes)
                 for i, b in ipairs(bytes) do
@@ -352,8 +388,10 @@ function N.new(profile, deps)
             elseif io.read_u16(p.BASE + O.ack) == job.seq
                 and (io.read_u16(p.BASE + O.status) == OK or io.read_u16(p.BASE + O.status) == FAIL) then
                 local status, result = io.read_u16(p.BASE + O.status), io.read_u8(p.BASE + O.result)
+                local reason = status == FAIL and io.read_u16(p.BASE + O.reason) or nil
                 pending = nil -- consume receipt BEFORE any next post can rewrite it
-                finish(job, status == FAIL and "native refused" or nil, result)
+                finish(job, status == FAIL and "native refused" or nil, result,
+                       reason and FAIL_REASONS[reason] or nil)
             elseif frame - job.started >= timeout_for(job.op) then
                 -- Never reuse a timed-out slot: opcode==0 can mean an async handler
                 -- still owns it. A reset/absent beacon is the recovery boundary.

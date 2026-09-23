@@ -42,6 +42,11 @@ end
 -- (moves/IVs/EVs/PID/item). Args: {count}. The active-foe gBattleMons refresh stays in Lua
 -- (M.refreshActiveEnemyBattlers) — see the client's pending_enemy_party settle.
 MB.OP_SET_ENEMY_PARTY = 16
+-- C5-11a: the RIVAL SWAP's own opcode. Same staging as OP_SET_ENEMY_PARTY (16) but with the
+-- consumption-time window + trainer check on the patch side; 16 stays the field trade's transport
+-- and must never carry that check (OP_TRADE_SCENE stages with it). The profile's native block is
+-- generated from this table, so the number lives here and in patch/src/handlers.c.
+MB.OP_RIVAL_SWAP = 28
 MB.BLOB_BUF = 0x0203FA00     -- patch reads count*100 raw party-mon bytes from here (matches handlers.c)
 
 -- Stage decoded blobs (a list of 100-byte arrays) into the patch's blob buffer.

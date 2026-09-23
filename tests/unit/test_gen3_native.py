@@ -180,7 +180,7 @@ def test_a_job_dropped_by_its_guard_carries_no_receipt():
     w = World()
     seen = []
     handle = w.native.transfer(w.native, "scene", w.lua.table(slot=0),
-                               lambda why, _r: seen.append(why),
+                               lambda why, _r, _reason=None: seen.append(why),
                                lambda: (False, "guard:moved"))
     w.service()
     assert seen == ["guard:moved"] and handle["posted"] is None and w.output == []
@@ -222,7 +222,7 @@ def test_the_codex_counterexample_a_completion_write_does_not_receipt_a_refused_
     assert swap["posted"] is True
     seen = []
     trade = w.native.transfer(w.native, "scene", w.lua.table(slot=0),
-                              lambda why, _r: seen.append(why),
+                              lambda why, _r, _reason=None: seen.append(why),
                               lambda: (False, "guard:moved"))
     before = w.writes["attempted"]
     w.ack()                                                      # the swap completes in this call
@@ -231,6 +231,72 @@ def test_the_codex_counterexample_a_completion_write_does_not_receipt_a_refused_
     assert (0x0203F900, 0x5A) in w.output
     assert seen == ["guard:moved"], "and a guard that ran and refused, in the same call"
     assert trade["posted"] is None, "our op was never published, so it cannot read as posted"
+
+
+# ── C5-11a: the rival swap's own opcode, and the two uses kept apart ─────────────────────────
+
+def test_c511a_transfer_rival_posts_opcode_28_with_the_trainer_as_u16_le():
+    w = World()
+    handle = w.native.transfer(w.native, "rival",
+                               w.lua.table(trainer_id=0x1234, blobs_hex=w.lua.table("AB" * 100)),
+                               lambda *_: None)
+    w.service()
+    assert handle["posted"] is True
+    assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_RIVAL_SWAP"] == 28
+    assert w.read(w.n["BASE"] + 16, 1) == 1                  # count
+    assert w.read(w.n["BASE"] + 17, 1) == 0x34               # trainer low byte
+    assert w.read(w.n["BASE"] + 18, 1) == 0x12               # trainer high byte
+
+
+def test_c511a_transfer_enemy_still_posts_the_trade_opcode_16():
+    """The field trade's staging is untouched by the rival opcode (handlers.c:1993-1998 documents
+    that OP_TRADE_SCENE depends on it)."""
+    w = World()
+    handle = w.native.transfer(w.native, "enemy", w.lua.table(blobs_hex=w.lua.table("AB" * 100)),
+                               lambda *_: None)
+    w.service()
+    assert handle["posted"] is True
+    assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_SET_ENEMY_PARTY"] == 16
+
+
+def test_c511a_transfer_rival_refuses_a_zero_trainer():
+    w = World()
+    assert w.native.transfer(w.native, "rival",
+                             w.lua.table(trainer_id=0, blobs_hex=w.lua.table("AB" * 100)),
+                             lambda *_: None) == (None, "invalid trainer")
+
+
+def test_c511a_a_fail_ack_carries_the_patchs_reason_word_into_the_job():
+    """The patch's reason word (handlers.c owns the numbering) is surfaced to the job's done as a
+    NAME: 8 -> window_closed."""
+    w = World()
+    seen = []
+    w.native.transfer(w.native, "rival", w.lua.table(trainer_id=5, blobs_hex=w.lua.table("AB" * 100)),
+                      lambda why, _r, reason: seen.append((why, reason)))
+    w.service()
+    w.put(w.n["BASE"] + 14, 8, 2)                            # reason = REASON_WINDOW_CLOSED
+    w.ack(status=3)                                          # ST_FAIL
+    w.service()
+    assert seen == [("native refused", "window_closed")], seen
+
+
+def test_c511a_the_patch_handler_keeps_the_two_uses_apart():
+    """No C test harness exists in this repo (and no compiler on this host), so this is a static
+    contract over patch/src/handlers.c: opcode 28 exists with the five-part consumption check and
+    the window_closed reason, and opcode 16's own case carries NO window check -- the field trade
+    stages with 16, so a check there would reject every trade."""
+    src = (ROOT / "patch" / "src" / "handlers.c").read_text(encoding="utf-8")
+    assert "OP_RIVAL_SWAP = 28" in src
+    assert "#define REASON_WINDOW_CLOSED  8u" in src
+    rival = src[src.index("case OP_RIVAL_SWAP:"):]
+    rival = rival[:rival.index("case OP_SET_ENEMY_PARTY:")]
+    for part in ("RV_BATTLE_COMM", "RV_BATTLE_MAIN_FUNC", "RV_GMAIN_CB2", "RV_BATTLE_TYPE_LINK",
+                 "RV_TRAINER_OPPONENT", "REASON_WINDOW_CLOSED", "stage_enemy_party(count)"):
+        assert part in rival, part
+    trade = src[src.index("case OP_SET_ENEMY_PARTY:"):]
+    trade = trade[:trade.index("case OP_SET_PARTY_MON:")]
+    assert "RV_" not in trade, "opcode 16 must stay free of the window check"
+    assert "stage_enemy_party(count)" in trade
 
 
 @pytest.mark.parametrize("lost_ack", [False, True])
@@ -453,7 +519,7 @@ def test_trade_transport_owns_blob_staging_until_ack_and_does_not_expose_apply_t
     w = World()
     completions = []
     w.native.transfer(w.native, "enemy", w.lua.table(blobs_hex=w.lua.table("11" * 100)),
-                      lambda why, result: completions.append((why, result)))
+                      lambda why, result, _reason=None: completions.append((why, result)))
     w.native.transfer(w.native, "party", w.lua.table(slot=2, blob_hex="22" * 100), None)
     assert w.output == []
     w.service()

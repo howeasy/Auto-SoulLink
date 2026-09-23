@@ -70,10 +70,141 @@ end
 H.init({ screen_w = 240, screen_h = 160 })
 C.init(host, port)
 
+-- Battle request nonce seed (card C5-10b). This file is the BizHawk-facing bootstrap, so it is
+-- where process-unique entropy is gathered: wall clock, the process CPU clock (sub-second), a
+-- random draw seeded from both, and the admitted ROM's hash. Client.new itself never touches an
+-- emulator global -- it just consumes the string this produces -- and a harness can override the
+-- whole thing with $SLINK_GEN3_BATTLE_NONCE (see entry.lua) for determinism.
+-- >>> session counter (C5-11b..C5-11d; keep this block self-contained -- tests/unit/
+-- test_gen3_patch_sources.py extracts it by these markers, drives it through a fake filesystem) >>>
+-- WHAT IT IS FOR. The session nonce must never repeat for one player across client processes: the
+-- server keeps a queued replace_rival_team for a player slot across that slot's restart, and the
+-- client accepts it only when cmd.session equals ITS nonce (docs/gen3/research/
+-- rival_swap_refresh_window.md §3.3). os.time() repeats inside a second and stock BizHawk Lua has
+-- no process id, so the unique part is a per-install counter, allocated here. It lives at the
+-- INSTALL ROOT (ROOT, next to slink_lua.log), because a player's release has no patch/build/.
+--
+-- WHY IT IS UNIQUE (C5-11d BLOCKER 1). The counter file is a BATON: to allocate, a caller RENAMES
+-- it to a name of its own, reads n, and publishes n+1 as a fresh file renamed into the baton's
+-- place (the taken file stays intact until then, so a failed write never truncates the counter).
+-- os.rename is C rename(), and on Windows and POSIX alike only ONE rename can consume a given
+-- source name: the loser gets ENOENT. So at most one caller holds the baton at a time -- by
+-- construction, not by a re-read that another writer can race (the old lock file was opened "w",
+-- so two owners could each read their own token back; Codex's interleaving gave both callers 10).
+-- This part needs no non-replacing rename, so it holds on Linux too.
+--
+-- FIRST CREATION is the one step where the OSes differ, because a missing baton is ambiguous
+-- (never created, or held by someone right now). A baton is created only when the baton AND the
+-- birth record are BOTH positively absent (errno ENOENT, never a guess from a failed open) and
+-- this caller wins the birth record, which is decided exactly once per install:
+--   * Windows: rename(tmp, born) -- C rename refuses an existing destination, so one caller wins,
+--     ever.
+--   * POSIX (Linux): rename would REPLACE, so the record is an append-only log instead: each
+--     claimant appends its token with "a" (O_APPEND: every append lands at the then-current end,
+--     atomically on a local filesystem) and the winner is the token on the FIRST line, which no
+--     later append can change. The one non-structural step: two first-ever claimants in the same
+--     instant must draw distinct tokens (wall second + CPU clock + a 31-bit draw).
+-- The birth record is never removed, so after the first run a missing baton only ever means "held"
+-- (or a holder crashed mid-hold): wait, then fail closed. Nothing ever recreates it.
+--
+-- FAIL CLOSED (C5-11d MAJOR 2). nil means the client mints no identity, declares no capability and
+-- refuses every rival command. nil is returned for: a baton still missing after the bounded wait;
+-- an unreadable, empty, non-integral or out-of-range baton, or a write, flush, close or rename that
+-- does not report success (in every case the baton is put back as found). There is no
+-- restart-at-1 path: the only initialisation is the won birth above.
+--
+-- RECOVERY (owner action, never automatic; Codex REV4): inspect EVERY generation artifact before
+-- touching anything. Cleanup of a published holder's file can fail silently, so several
+-- slink_gen3_session.baton.<token> files may exist and a filename's existence does not mean its
+-- holder still owns it. Restore only the file holding the HIGHEST generation, and only when that
+-- choice is unambiguous; never pick an arbitrary .baton.* file, never restore an older generation
+-- (that reissues a value), and never remove slink_gen3_session.born. Every temporary name assumes
+-- distinct tokens: a same-token collision on POSIX can replace another caller's held file.
+local function next_session_counter(root, open_file, remove_file, spin, rename_file, windows)
+    open_file, remove_file, rename_file = open_file or io.open, remove_file or os.remove,
+                                          rename_file or os.rename
+    if windows == nil then windows = package.config:sub(1, 1) == "\\" end
+    spin = spin or function() local t = os.clock() + 0.005 while os.clock() < t do end end
+    local ENOENT = 2                                -- the same errno in MSVC's CRT and on POSIX
+    local base = root .. "/slink_gen3_session"
+    local baton, born = base .. ".baton", base .. ".born"
+    local token = string.format("%d-%d-%d", os.time(), math.floor(os.clock() * 1e6) % 1000000000,
+                                math.random(0, 2147483647))
+    local mine = baton .. "." .. token             -- the baton's name while this call holds it
+
+    local function put(path, text, mode)           -- true only if write, flush and close succeed
+        local f = open_file(path, mode or "w")
+        if not f then return false end
+        local ok = f:write(text) ~= nil
+        ok = f:flush() ~= nil and ok
+        return f:close() ~= nil and ok
+    end
+    local function get(path)                       -- content, or nil + errno
+        local f, _, errno = open_file(path, "r")
+        if not f then return nil, errno end
+        local s = f:read("a")
+        if f:close() == nil then return nil end
+        return s
+    end
+    local function won_birth()
+        if windows then
+            local tmp = base .. ".born." .. token
+            if put(tmp, token) and rename_file(tmp, born) then return true end
+            remove_file(tmp)
+            return false
+        end
+        if not put(born, token .. "\n", "a") then return false end
+        local s = get(born)
+        return s ~= nil and s:match("^[^\n]*") == token
+    end
+
+    local birth_checked = false
+    for _ = 1, 100 do
+        local took, _, errno = rename_file(baton, mine)
+        if took then
+            local s = get(mine)
+            local n = s and s:match("^%d+$") and tonumber(s)
+            local nxt = mine .. ".next"
+            if n and n < 4294967295 and put(nxt, tostring(n + 1)) and rename_file(nxt, baton) then
+                remove_file(mine)
+                return n + 1
+            end
+            remove_file(nxt)
+            rename_file(mine, baton)               -- put it back as found: fail closed, no reset
+            return nil
+        end
+        if errno == ENOENT and not birth_checked then
+            birth_checked = true
+            local _, born_errno = get(born)
+            if born_errno == ENOENT and won_birth() then
+                local tmp = base .. ".new." .. token
+                if not (put(tmp, "0") and rename_file(tmp, baton)) then
+                    remove_file(tmp)
+                    return nil
+                end
+            end
+        end
+        spin()
+    end
+    return nil
+end
+-- <<< session counter <<<
+
+local session_counter = next_session_counter(ROOT)
+local battle_nonce_seed = nil
+if session_counter then
+    math.randomseed(os.time() + math.floor(os.clock() * 1000))
+    local rom_bits = tonumber((admitted.rom_hash or ""):sub(1, 8), 16) or 0
+    battle_nonce_seed = string.format("%08X%08X", session_counter % 4294967296,
+                                      (math.floor(os.clock() * 1e6)
+                                       + math.random(0, 4294967295) + rom_bits) % 4294967296)
+end
+
 local client = Entry.build({
     root = ROOT, mode = "production", io = io_, ev = ev, net = C, hud = H,
     pack = admitted.pack, title = admitted.title, kind = admitted.kind, player = player,
     rom_sha1 = admitted.rom_hash, log = function(t) console.log(t) end,
+    battle_nonce_seed = battle_nonce_seed,
 })
 local ok, err = pcall(function() client:start() end)
 if not ok then

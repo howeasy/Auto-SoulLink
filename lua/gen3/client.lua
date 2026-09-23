@@ -101,6 +101,48 @@ function Client.new(p)
         return base_check(self, snapshot, reason, args)       -- args reach the clause sets
     end
 
+    -- battle request identity (docs/protocol.md, card C5-10): a client-SESSION NONCE minted once
+    -- per client process, plus a per-battle counter bumped on every battle-begin signal. Both
+    -- ride on trainer_battle_start; the server stores and echoes both on replace_rival_team, and
+    -- the command seam below refuses anything that is not this session's current battle.
+    --
+    -- The nonce is what makes a restart safe: a bare counter would collide across sessions
+    -- (session A's battle 1 and a restarted session B's battle 1 are both 1, so a command the
+    -- server queued for A and delivered late would pass in B). A reconnect inside one process
+    -- keeps both; only a real restart re-mints the nonce.
+    --
+    -- The seed arrives from the bootstrap (lua/gen3/run.lua, which owns the BizHawk-facing
+    -- entropy) through Entry, or from $SLINK_GEN3_BATTLE_NONCE for a harness that needs
+    -- determinism. Anything else -- absent, non-hex, longer than the wire's 16 chars -- means NO
+    -- identity: there is no local draw (C5-11c MAJOR 5), because a guessable session is exactly
+    -- what the per-install counter exists to prevent.
+    local session_nonce
+    do
+        local seed = p.battle_nonce_seed
+        -- NO fallback (Codex C5-10 review, restated C5-11c): without a usable seed this client
+        -- mints NO identity, declares no capability, and refuses every rival command -- fail
+        -- closed, never a guessable session.
+        if type(seed) == "string" and seed:match("^%x+$") and #seed <= 16 then
+            session_nonce = seed
+        else
+            session_nonce = nil
+        end
+    end
+    local battle_seq = 0
+    -- RIVAL AUTHORITY (C5-11c BLOCKER 2). The battle that may accept a rival swap, as the immutable
+    -- {session, battle_id, trainer_id} triple. It is opened when this client ANNOUNCES a battle
+    -- (note_battle) and closed SYNCHRONOUSLY when a lifecycle boundary signal is CAPTURED -- the
+    -- signals layer runs the on_fire handlers at the fire (lua/gen3/signals.lua:121-122), i.e.
+    -- before the frame's drain and before pre_pump services native. That is deliberately separate
+    -- from st.battle: a same-frame battle_end + battle_begin (same trainer) never touches the
+    -- reducer's lifecycle, so a job queued behind a menu cannot ride it into the next battle, and
+    -- the boundary sweep that used to clear st.battle (and made finish_battle skip the encounter
+    -- result) is gone.
+    --
+    -- It is only as good as the signals that close it (C5-11d): a reset (drv.on_reset) revokes it,
+    -- and so does a signal source that stopped delivering -- see live_authority below.
+    local rival_authority = nil
+    local sig_src = nil          -- the signal source drv.start armed; its health gates the authority
     local st = {
         known = {},        -- every key this save has shown us (party + boxes): acquisitions are NEW keys
         alive = {},        -- keys last seen with hp > 0: a faint is alive -> hp 0 at a faint site
@@ -421,7 +463,19 @@ function Client.new(p)
         end
         if b.is_trainer and num(b.trainer_id) and b.trainer_id ~= 0 and not bt.trainer_sent then
             bt.trainer_sent = true
-            send("trainer_battle_start", { trainer_id = b.trainer_id })
+            bt.trainer_id = b.trainer_id
+            -- battle_id rides with the announcement: it is what this battle's
+            -- replace_rival_team must echo back (docs/protocol.md).
+            if session_nonce then
+                send("trainer_battle_start", { trainer_id = b.trainer_id,
+                                               battle_id = bt.battle_id, session = session_nonce })
+                rival_authority = {session = session_nonce, battle_id = bt.battle_id,
+                                   trainer_id = b.trainer_id,
+                                   rejected = sig_src and sig_src.rejected}
+            else
+                -- no identity to announce: the server will treat this client as legacy
+                send("trainer_battle_start", { trainer_id = b.trainer_id })
+            end
         end
     end
 
@@ -495,13 +549,33 @@ function Client.new(p)
 
     -- one armed window, one reason, one allow set; returns true or nil, why
     -- args: what the reason's clause set needs (battle_commit: {battler}; sound: {player, track})
+    --
+    -- C5-11d addendum (the LeafGreen sound stall): a plan is applied WHOLE or not at all. Every
+    -- entry's address, width and value is checked against writes.lua's own uint rules BEFORE the
+    -- window is armed, so a bad entry anywhere (LG's garbage SE header made the sound plan's LAST
+    -- value, status, overflow after 11 of 12 entries had landed) is refused with zero bytes
+    -- written. What can still stop a plan mid-way is a live safety refusal between entries;
+    -- writes.attempted makes that one loud.
+    local UINT_MAX = { [1] = 255, [2] = 65535, [4] = 4294967295 }
+    local function uint_ok(v, max)
+        return type(v) == "number" and v % 1 == 0 and v >= 0 and v <= max
+    end
     local function armed_write(reason, plan, args)
+        for i, w in ipairs(plan) do
+            local max = UINT_MAX[w[2]]
+            if not (max and uint_ok(w[1], 4294967296 - w[2]) and uint_ok(w[3], max)) then
+                return nil, string.format("%s plan entry %d/%d is not writable (addr=%s width=%s "
+                                          .. "value=%s); nothing written", reason, i, #plan,
+                                          tostring(w[1]), tostring(w[2]), tostring(w[3]))
+            end
+        end
         local snap, why = policy:snapshot()
         if not snap then return nil, why end
         local ok, cwhy = policy:check(snap, reason, args)
         if not ok then return nil, cwhy end
         local allow = {}
         for _, w in ipairs(plan) do allow[w[1] .. ":" .. w[2]] = true end
+        local before = writes.attempted
         local wok, err = pcall(function()
             writes:arm(reason, function(x, n) return allow[x .. ":" .. n] == true end, args)
             for _, w in ipairs(plan) do
@@ -511,7 +585,15 @@ function Client.new(p)
             end
         end)
         writes:disarm()
-        if not wok then return nil, tostring(err) end
+        if not wok then
+            local attempted = (writes.attempted or 0) - (before or 0)
+            if attempted > 0 then
+                err = string.format("PARTIAL %s write: %d byte(s) attempted, partial mutation possible: %s",
+                                    reason, attempted, tostring(err))
+                log(err)
+            end
+            return nil, tostring(err)
+        end
         return true
     end
 
@@ -715,6 +797,9 @@ function Client.new(p)
         st.last_area, st.trade = nil, nil
         st.baselined, st.seen_count, st.observe_at = false, nil, nil
         st.trade_apply, st.trade_settle_until, st.trade_unresolved = nil, 0, {}   -- the save is gone
+        -- C5-11d MAJOR 3: the battle the authority named is gone with the save, whatever the
+        -- battle RAM still says; a queued job must not ride it (reducer lifecycle or not)
+        rival_authority = nil
     end
 
     -- No wire side effect here (no area_enter, no banner): hello is the connection's first line.
@@ -743,6 +828,12 @@ function Client.new(p)
                     rom_sha1 = p.rom_sha1, party = party_wire(own), pc_boxes = pc_boxes_wire(),
                     area_id = area_id, loc_name = loc, has_pokeballs = st.has_pokeballs,
                     in_battle = in_battle(), badges = badges(), ball_count = ball_count() }
+        if session_nonce then
+            -- capability declaration (card C5-10b): this client mints and enforces the battle
+            -- request identity, so the server may refuse an identity-less manual rival inject for
+            -- it. Declared ONLY when the identity really exists (fail closed).
+            f.battle_identity = true
+        end
         local t = trainer()
         if t then f.ot_id, f.trainer_name = t.ot_id, t.name end
         if native and native.hello_fields then
@@ -772,7 +863,17 @@ function Client.new(p)
     end
 
     function drv.start()
-        return p.Signals.new(profile, p.sites, io, p.ev, nil)
+        -- on_fire runs AT the fire, before the queue is drained: the only place a same-frame
+        -- end+begin can be seen before native is serviced (see rival_authority above).
+        local function close_authority(sig)
+            local had = rival_authority
+            rival_authority = nil                 -- first: a throwing log must not keep it open
+            if had then log("rival authority closed by " .. tostring(sig and sig.kind)) end
+        end
+        sig_src = p.Signals.new(profile, p.sites, io, p.ev,
+                                {battle_begin = close_authority, battle_end = close_authority,
+                                 whiteout = close_authority})
+        return sig_src
     end
 
     function drv.on_signal(sig)
@@ -781,7 +882,11 @@ function Client.new(p)
             -- the pre-battle party is the borrowed-party reference
             local base = {}
             for pk in pairs(st.party_prev) do base[pk] = true end
-            st.battle = { caught = false, base_keys = base }
+            battle_seq = battle_seq + 1
+            -- both halves of the request identity live on the epoch record: the guard below and
+            -- the harness read them from here, never from a second copy
+            st.battle = { caught = false, base_keys = base, battle_id = battle_seq,
+                          session = session_nonce }
         elseif k == "battle_end" then f.battle_end = true
         elseif k == "faint" then f.faint = true
         elseif k == "poison_faint" then f.faint = true          -- OPEN kind (FR only), not PHYSICAL
@@ -839,20 +944,124 @@ function Client.new(p)
 
     -- ── command seams ──────────────────────────────────────────────────────────────
     local C = drv.commands
-    -- rival swap is a companion-mailbox feature (OP_SET_ENEMY_PARTY, P5 native.lua). Without
-    -- the patch: the old client's refusal (gen3_frlge_client.lua:824-837).
-    C.replace_rival_team = function(cmd)
-        if not in_battle() then
-            send("rival_team_replaced", { trainer_id = cmd.trainer_id or 0, species_ids = arr({}), error = "not_in_battle" })
-        elseif not eligible() then
-            log("replace_rival_team: session not eligible (writes paused); nothing staged")
-        elseif native and native.replace_rival_team then
-            native:replace_rival_team(cmd)
-        else
-            send("rival_team_replaced", { trainer_id = cmd.trainer_id or 0, species_ids = arr({}), error = "patch_required" })
+    -- §4.3 selectable-team pre-filter (C5-11a). The engine's own rule, getter semantics:
+    -- GetMonData(MON_DATA_SPECIES_OR_EGG) collapses an empty slot, an egg and a BAD EGG to
+    -- SPECIES_EGG (pret src/pokemon.c:3245-3249), plus HP != 0, so the predicate is
+    -- hp != 0 and species != 0 and not is_egg_flag and not is_bad_egg. Doubles needs two
+    -- distinct such mons. Decode-only, from the blobs the command carries. The patch remains
+    -- the authority for the WINDOW; this is a pre-filter that keeps an unselectable team from
+    -- ever being staged.
+    local function selectable_team(cmd)
+        -- doubles from the battle's own type flags (C5-11c MAJOR 6): gBattlersCount is not
+        -- initialised yet in W1, so the count was the wrong witness.
+        local double_mask = d.BATTLE_TYPE_DOUBLE_MASK
+        local need = (num(a.BATTLE_TYPE_ADDR) and num(double_mask)
+                      and (io.read_u32(a.BATTLE_TYPE_ADDR) & double_mask) ~= 0) and 2 or 1
+        local viable = 0
+        for _, hex in ipairs(cmd.blobs_hex or {}) do
+            local raw = {}
+            for i = 1, 200, 2 do raw[#raw + 1] = tonumber(hex:sub(i, i + 1), 16) end
+            local mon = reads.decode_party_mon(raw)
+            -- getter semantics (pret src/pokemon.c:3182-3183, 3245-3249): MON_DATA_SPECIES_OR_EGG
+            -- returns SPECIES_EGG when species != 0 && (SECURE Misc.isEgg || boxMon.isBadEgg) --
+            -- the decoded `is_egg` is that secure bit; the header `is_egg_flag` is not enough.
+            if mon and mon.hp ~= 0 and mon.species ~= 0 and mon.is_egg == 0
+               and mon.is_bad_egg == 0 then
+                viable = viable + 1
+            end
+        end
+        if viable >= need then return true end
+        return false, "slots_unviable"
+    end
+
+    -- The dispatch-time revalidation (C5-11a BLOCKER). The job carries an IMMUTABLE epoch snapshot
+    -- and this runs immediately before the post, so a job queued behind a menu cannot act after
+    -- the battle it was minted for has ended -- the case Codex reproduced (battle1/sessionS/id1,
+    -- battle2 same trainer/id2, the old request posting into battle2). `st.battle` alone is not
+    -- enough: lua/core/session.lua services native BEFORE this frame's signal drain, which is why
+    -- pre_pump sweeps the boundary first (below) and why the live reads are checked here too.
+    -- C5-11d MAJOR 4: the authority is closed BY signals, so it cannot outlive their delivery. A
+    -- source that failed (signals.lua:126 -- a fire can fail before on_fire runs), was closed
+    -- (hooks uninstalled), was never armed, or has rejected a callback since the authority opened
+    -- (a boundary fire counted and dropped, signals.lua:97-100) may have missed the boundary that
+    -- should have closed it. Read here, at the ONE consumer, from the source's own fields, so no
+    -- path that stops delivery -- however its flag got set -- leaves the authority usable.
+    local function live_authority()
+        local s, a = sig_src, rival_authority
+        if a and not (s and not s.failure and not s.closed and s.rejected == a.rejected) then
+            rival_authority = nil
+            log("rival authority revoked: engine signals are not being delivered")
+        end
+        return rival_authority
+    end
+    local function rival_epoch_guard(epoch)
+        -- the AUTHORITY, not the reducer's st.battle: it is closed at signal capture, so a job
+        -- minted for an earlier battle can never post after a same-frame boundary (BLOCKER 2).
+        local now = live_authority()
+        if now == nil then return false, "stale_battle_id" end
+        if now.session ~= epoch.session or now.battle_id ~= epoch.battle_id
+           or now.trainer_id ~= epoch.trainer_id then
+            return false, "stale_battle_id"
+        end
+        if not in_battle() then return false, "not_in_battle" end
+        local live = battle_now()
+        if not (live and live.is_trainer and num(live.trainer_id)
+                and live.trainer_id == epoch.trainer_id) then
+            return false, "stale_battle_id"
         end
         return true
     end
+
+    -- rival swap is a companion-mailbox feature (OP_RIVAL_SWAP 28, C5-11a; 16 stays the trade's).
+    -- Without the patch: the old client's refusal (gen3_frlge_client.lua:824-837).
+    C.replace_rival_team = function(cmd)
+        local function refuse(why)
+            send("rival_team_replaced", { trainer_id = cmd.trainer_id or 0, species_ids = arr({}),
+                                          error = why })
+        end
+        local trainer = cmd.trainer_id
+        local current = st.battle
+        if not in_battle() then
+            refuse("not_in_battle")
+        -- MAJOR 1 (Codex C5-10 review): the no-epoch case FIRST -- a client attached mid-battle
+        -- has no identity to compare against and must refuse by name, never index a nil record.
+        elseif session_nonce == nil then
+            -- fail closed: no identity was minted, so nothing can be validated
+            log("replace_rival_team refused: stale_battle_id (no session nonce)")
+            refuse("stale_battle_id")
+        elseif current == nil then
+            log("replace_rival_team refused: stale_battle_id (no epoch)")
+            refuse("stale_battle_id")
+        elseif type(cmd.battle_id) ~= "number" or cmd.battle_id % 1 ~= 0
+            or type(cmd.session) ~= "string" or cmd.session ~= current.session
+            or cmd.battle_id ~= current.battle_id then
+            log("replace_rival_team refused: stale_battle_id (counter=" .. tostring(cmd.battle_id)
+                .. " session=" .. tostring(cmd.session) .. " current="
+                .. tostring(current.battle_id) .. "/" .. tostring(current.session) .. ")")
+            refuse("stale_battle_id")
+        -- trainer matching is mandatory and has no shortcuts: a missing, non-numeric, zero,
+        -- out-of-range or non-matching id is refused, and so is an epoch whose trainer is unknown.
+        elseif type(trainer) ~= "number" or trainer % 1 ~= 0 or trainer <= 0 or trainer > 65535
+            or type(current.trainer_id) ~= "number" or current.trainer_id ~= trainer then
+            log("replace_rival_team refused: stale_battle_id (trainer=" .. tostring(trainer)
+                .. " current=" .. tostring(current.trainer_id) .. ")")
+            refuse("stale_battle_id")
+        else
+            local ok, why = selectable_team(cmd)
+            if not ok then
+                log("replace_rival_team refused: " .. why)
+                refuse(why)
+            elseif not eligible() then
+                log("replace_rival_team: session not eligible (writes paused); nothing staged")
+            elseif native and native.replace_rival_team then
+                native:replace_rival_team(cmd, rival_epoch_guard)
+            else
+                refuse("patch_required")
+            end
+        end
+        return true
+    end
+
     -- the disabled-foundation write guard (PLAN §10): no trade path -> nothing written, no reply
     -- ── the RR PC trade (apply_trade), PLAN §5.6, docs/protocol.md §6.2 ───────────
     -- The Gen 1 standard's shape (lua/gen1/client.lua:1594-1765) over the old RR client's native
@@ -1148,9 +1357,23 @@ function Client.new(p)
             local f = assert(F[on .. "." .. name], "sound block has no field " .. on .. "." .. name)
             return (on == "player" and player or track) + f.offset, f.size
         end
+        -- the header and the track-0 script it points at must be in ROM, and the track count a
+        -- real m4a one (pret include/gba/m4a_internal.h MAX_MUSICPLAYER_TRACKS = 16): a garbage
+        -- header (LG shipped FR's SE addresses) must be refused here, before any plan exists
+        local function in_rom(v, len) return v >= 0x08000000 and v + (len or 1) <= 0x0A000000 end
+        local se = "SE " .. tostring(id) .. " song header " .. string.format("0x%X", hdr)
+        if not in_rom(hdr, 12) then return nil, se .. " is not in ROM" end
         local h = io.rom_read(hdr - 0x08000000, 12)
         local count, priority = h[1], h[3]
         local cmd_ptr = h[9] + h[10] * 256 + h[11] * 65536 + h[12] * 16777216
+        -- ponytail: 16 is m4a's hard cap; SE1's own allocated tracks (gMPlayTable) are tighter,
+        -- use them if a pack ever names them
+        if not (count >= 1 and count <= 16) then
+            return nil, se .. " has trackCount " .. count .. " (m4a allows 1..16)"
+        end
+        if not in_rom(cmd_ptr) then
+            return nil, se .. string.format(" has a track pointer 0x%X outside ROM", cmd_ptr)
+        end
         local plan = {}
         local function put(on, name, value, width)
             local addr, size = at(on, name)
@@ -1187,6 +1410,9 @@ function Client.new(p)
     end
     drv.pre_pump = function()
         if not (native and native.service) then return end
+        -- C5-11c MAJOR 3: this used to clear st.battle on a live boundary, which made
+        -- finish_battle skip the encounter result (RR companion then sent no no_catch where RR
+        -- clean did). The rival authority above replaces it and never touches the lifecycle.
         native:service()
         -- the trade's first actual post is the posting job's OWN dispatch receipt (native.lua sets
         -- `posted` when it publishes that job's opcode). Never infer it from sink bytes: a

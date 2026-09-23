@@ -507,11 +507,13 @@ def test_prompts_without_a_native_part_get_the_cancel_sentinels(name, extra, eve
 
 def test_rival_swap_without_the_companion_refuses_like_the_old_client():
     w = live("gen3_rr", "radical_red")
-    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=["00" * 100])
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w))
     w.step()
     assert w.events("rival_team_replaced")[-1]["error"] == "not_in_battle"
-    w.enter_battle([FOE], trainer_id=5)
-    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=["00" * 100])
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w),
+              session=session, battle_id=bid)
     w.step()
     assert w.events("rival_team_replaced")[-1]["error"] == "patch_required"
     assert w.writes == []
@@ -665,9 +667,11 @@ def test_blocker_a_paused_session_posts_nothing_through_the_real_native_part():
 def test_blocker_a_paused_session_stages_no_rival_swap():
     w = rr_live()
     attach_real_native(w)
-    w.enter_battle([FOE], trainer_id=5)
+    ready_battle(w, 5)
     w.client.writes_enabled, w.client.gate_revoked = False, True
-    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=["00" * 100])
+    session, bid = battle_identity(w)
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w),
+              session=session, battle_id=bid)
     w.step(5)
     assert w.writes == [] and w.events("rival_team_replaced") == []
     w.client.writes_enabled, w.client.gate_revoked = True, False
@@ -993,6 +997,40 @@ def mb_ack(w, status=OK_, result=0):
     w.poke_int(base + MB["result"], result, 1)
 
 
+@pytest.fixture(autouse=True)
+def _battle_nonce(monkeypatch):
+    """The battle request nonce is minted by the bootstrap (lua/gen3/run.lua) and consumed through
+    $SLINK_GEN3_BATTLE_NONCE, the documented seam; the lupa harness builds Entry directly, so
+    without this the client fails closed (no identity, no capability) and every rival test would
+    refuse. A test that needs distinct sessions overrides the value itself."""
+    monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "0000BEEF")
+
+
+def viable_blobs(w, count=1):
+    """`count` encoded party mons that pass §4.3's selectable-team rule (hp != 0, real species,
+    neither an egg nor a bad egg) -- the blobs a rival swap is actually allowed to stage."""
+    return [w.encode(mon_record(0x30000000 + i, OT, species=4 + i, hp=20)).hex().upper()
+            for i in range(count)]
+
+
+def ready_battle(w, trainer_id):
+    """Enter a trainer battle and let the client note it: the trainer id is only recorded when
+    the per-frame observer runs, which is the same 61-frame warm-up the event test uses."""
+    w.set_balls(3)
+    w.enter_battle([FOE], trainer_id=trainer_id)
+    w.step(61)
+    assert w.client.state.battle is not None
+    assert w.client.state.battle["trainer_id"] == trainer_id
+
+
+def battle_identity(w):
+    """(session, battle_id) for the battle the client is in (card C5-10): both halves of the
+    request identity it minted and announced, read from its own epoch record."""
+    battle = w.client.state.battle
+    assert battle is not None, "the client is not in a battle"
+    return battle["session"], battle["battle_id"]
+
+
 def trade_world(present=True):
     w = rr_live()
     attach_real_native(w, present)
@@ -1020,10 +1058,13 @@ def test_rival_swap_posts_through_the_real_native_path_and_reports_the_refresh_r
     clauses; Entry refuses refresh_enemy by name (no write reason covers the battle's first
     frames), so the reply names that refusal instead of claiming a swap."""
     w, _blob = trade_world()
-    w.enter_battle([FOE], trainer_id=5)
-    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=[w.encode(PARTNER).hex().upper()])
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1,
+              blobs_hex=[w.encode(PARTNER).hex().upper()], session=session, battle_id=bid)
     w.step(2)
-    assert mb_op(w) == NATIVE["OP_SET_ENEMY_PARTY"]
+    # C5-11a: the rival path posts its OWN opcode (28); OP_SET_ENEMY_PARTY (16) is the trade's.
+    assert mb_op(w) == NATIVE["OP_RIVAL_SWAP"]
     w.poke(w.ram["ENEMY_BASE"], w.encode(PARTNER))              # the patch copied gEnemyParty
     w.poke_int(w.ram["ENEMY_COUNT_ADDR"], 1, 1)
     mb_ack(w)
@@ -1417,6 +1458,548 @@ def test_trade_request_is_never_sent_while_an_apply_is_in_flight():
     assert any("trade_request dropped" in line for line in w.logs)
 
 
+# ── card C5-10: the battle request identity ──────────────────────────────────────────────────
+
+def test_c510_the_identity_is_minted_per_battle_and_the_counter_increments():
+    """One session nonce per client process, a counter per battle: the second battle of the same
+    client announces battle_id 2 and the SAME nonce (a reconnect or a new battle is not a
+    restart)."""
+    w = live("gen3_rr", "radical_red")
+    w.set_balls(3)
+    w.enter_battle([FOE], trainer_id=42)
+    w.step(61)
+    first = w.events("trainer_battle_start")[-1]
+    assert first["battle_id"] == 1 and isinstance(first["session"], str) and first["session"]
+    w.leave_battle()
+    w.step()
+    w.enter_battle([FOE], trainer_id=42)
+    w.step(61)
+    second = w.events("trainer_battle_start")[-1]
+    assert second["battle_id"] == 2, second
+    assert second["session"] == first["session"], "one nonce per client process"
+
+
+def test_c510_a_missing_or_mismatched_identity_is_refused_and_writes_nothing():
+    """The guard's vocabulary, for everything that can legitimately reach it: a wrong counter, a
+    missing half, and a foreign session nonce are each refused with stale_battle_id, and none of
+    them writes. (Malformed shapes never get this far — protocol_schema.py rejects those on the
+    wire; see test_c510_malformed_identities_are_schema_violations.)"""
+    from tests.unit.protocol_schema import validate_command
+    w = live("gen3_rr", "radical_red")
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    # only shapes that are schema-LEGAL can reach the guard: a half-identity is rejected on the
+    # wire now (protocol_schema.PAIRED_FIELDS), and the malformed-value cases are pinned there.
+    for bad in ({"session": session, "battle_id": bid + 1},
+                {"session": "00000000", "battle_id": bid}):
+        command = {"cmd": "replace_rival_team", "trainer_id": 5, "n": 1,
+                   "blobs_hex": ["00" * 100], **bad}
+        assert validate_command(command) == [], bad      # every case here is schema-legal
+        before = list(w.writes)
+        w.command(**command)
+        w.step()
+        assert w.events("rival_team_replaced")[-1]["error"] == "stale_battle_id", bad
+        assert w.writes == before, bad
+
+
+def test_c510_malformed_identities_are_schema_violations():
+    """Codex REV-5: a boolean, fractional or out-of-range counter, or a malformed nonce, fails
+    validation in protocol_schema.py and is NEVER coerced."""
+    from tests.unit.protocol_schema import validate_command, validate_event
+    base = {"cmd": "replace_rival_team", "trainer_id": 5, "n": 1, "blobs_hex": ["00" * 100],
+            "session": "ABCD1234", "battle_id": 1}
+    assert validate_command(base) == []
+    for bad in ({"battle_id": True}, {"battle_id": 1.5}, {"battle_id": 0},
+                {"battle_id": -1}, {"battle_id": 2 ** 32}, {"battle_id": "1"},
+                {"session": True}, {"session": ""}, {"session": "not-hex"},
+                {"session": "A" * 17}):
+        assert validate_command({**base, **bad}), bad
+    # all-or-none pairing (Codex C5-10 review): a half-identity is a violation either way
+    for half in ({"battle_id": 1}, {"session": "ABCD1234"}):
+        command = {k: v for k, v in base.items() if k not in ("session", "battle_id")}
+        assert validate_command({**command, **half}), half
+    # present-but-null is a violation too (C5-11c minor): None is not "absent"
+    for nulls in ({"session": None, "battle_id": 1}, {"session": "ABCD1234", "battle_id": None},
+                  {"session": None, "battle_id": None}):
+        assert validate_command({**base, **nulls}), nulls
+    event = {"event": "trainer_battle_start", "player": "a", "seq": 1, "trainer_id": 42,
+             "session": "ABCD1234", "battle_id": 2}
+    assert validate_event(event) == []
+    for bad in ({"battle_id": True}, {"battle_id": 0.5}, {"session": "zz"}, {"session": "A" * 20}):
+        assert validate_event({**event, **bad}), bad
+
+
+def test_c510_a_foreign_session_and_a_closed_epoch_are_both_refused():
+    """Codex REV-5's two falsifiers: session A's counter 1 must not pass in a restarted session B
+    (simulated by A's identity with another nonce, which is what B compares against), and a
+    delayed command delivered after the battle ended must not swap anything either."""
+    w = live("gen3_rr", "radical_red")
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    before = list(w.writes)
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w),
+              session="DEADBEEF", battle_id=bid)
+    w.step()
+    assert w.events("rival_team_replaced")[-1]["error"] == "stale_battle_id"
+    assert w.writes == before
+    w.leave_battle()
+    w.step()
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w),
+              session=session, battle_id=bid)
+    w.step()
+    assert w.events("rival_team_replaced")[-1]["error"] in ("not_in_battle", "stale_battle_id")
+    assert w.writes == before
+
+
+def test_c510b_two_client_sessions_get_distinct_nonces_and_the_old_id_is_refused(monkeypatch):
+    """Codex REV-5's exact falsifier, with two REAL client instances: session A's battle 1 and a
+    restarted session B's battle 1 both carry counter 1, and A's command must not pass in B.
+    The bootstrap's entropy is injected through $SLINK_GEN3_BATTLE_NONCE, the seam entry.lua
+    hands to Client.new (card C5-10b)."""
+    monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "AAAA1111")
+    a = live("gen3_rr", "radical_red")
+    ready_battle(a, 42)
+    start_a = a.events("trainer_battle_start")[-1]
+    assert (start_a["session"], start_a["battle_id"]) == ("AAAA1111", 1)
+
+    monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "BBBB2222")
+    b = live("gen3_rr", "radical_red")
+    ready_battle(b, 42)
+    start_b = b.events("trainer_battle_start")[-1]
+    assert (start_b["session"], start_b["battle_id"]) == ("BBBB2222", 1)
+
+    before = list(b.writes)
+    b.command(cmd="replace_rival_team", trainer_id=42, n=1, blobs_hex=viable_blobs(b),
+              session=start_a["session"], battle_id=start_a["battle_id"])
+    b.step()
+    assert b.events("rival_team_replaced")[-1]["error"] == "stale_battle_id"
+    assert b.writes == before, "the other session's command must write nothing"
+    # ... while B's own identity is not itself a refusal (no companion here: patch_required)
+    b.command(cmd="replace_rival_team", trainer_id=42, n=1, blobs_hex=viable_blobs(b),
+              session=start_b["session"], battle_id=start_b["battle_id"])
+    b.step()
+    assert b.events("rival_team_replaced")[-1]["error"] == "patch_required"
+
+
+def test_c510b_the_hello_declares_the_battle_identity_capability():
+    """The capability the server gates the manual-inject refusal on: the new client declares it,
+    and an older client simply omits the field."""
+    w = live("gen3_rr", "radical_red")
+    (hello,) = w.events("hello")
+    assert hello["battle_identity"] is True
+
+
+def test_c510b_a_missing_or_malformed_seed_fails_closed(monkeypatch):
+    """Codex C5-10 review: there is NO deterministic fallback. A client that cannot get a seed
+    mints no identity, declares no capability in hello, and refuses every rival command -- the
+    swap simply does not happen, which is safer than a session that could collide."""
+    for bad in ("zz-not-hex", "A" * 17, ""):
+        monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", bad)
+        w = live("gen3_rr", "radical_red")
+        hello = w.events("hello")[-1]
+        assert "battle_identity" not in hello, bad
+        ready_battle(w, 5)
+        start = w.events("trainer_battle_start")[-1]
+        assert "session" not in start and "battle_id" not in start, bad
+        before = list(w.writes)
+        w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w),
+                  session="0000BEEF", battle_id=1)
+        w.step()
+        assert w.events("rival_team_replaced")[-1]["error"] == "stale_battle_id", bad
+        assert w.writes == before, bad
+
+
+def test_c510_the_happy_path_passes_the_guard():
+    """A valid identity is not itself a refusal: with no companion the reply is the existing
+    patch_required, i.e. the command got past the guard and into the later checks."""
+    w = live("gen3_rr", "radical_red")
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w),
+              session=session, battle_id=bid)
+    w.step()
+    assert w.events("rival_team_replaced")[-1]["error"] == "patch_required"
+
+
+# ── C5-11a: the rival opcode, the window refusal and the pre-filters ─────────────────────────
+
+def test_c511a_the_rival_path_posts_opcode_28_with_the_trainer_argument():
+    """The rival swap's own opcode (28), never the trade's 16, and the trainer rides in
+    args[1..2] as a u16 little-endian."""
+    w, _blob = trade_world()
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1,
+              blobs_hex=[w.encode(PARTNER).hex().upper()], session=session, battle_id=bid)
+    w.step(2)
+    assert mb_op(w) == NATIVE["OP_RIVAL_SWAP"]
+    assert NATIVE["OP_RIVAL_SWAP"] == 28, "the ABI number is fixed by handlers.c"
+    assert w._read(NATIVE["BASE"] + 16, 1) == 1          # count
+    assert w._read(NATIVE["BASE"] + 17, 2) == 5          # trainer_id, u16 LE
+
+
+def test_c511a_the_patchs_window_refusal_reaches_the_reply_as_refresh_failed():
+    """The patch's ST_FAIL + REASON_WINDOW_CLOSED (8) must surface as the documented shape:
+    error refresh_failed with reason window_closed, and nothing written."""
+    w, _blob = trade_world()
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    enemy_before = w._read(w.ram["ENEMY_BASE"], 4)        # the PID: the game state a swap touches
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1,
+              blobs_hex=[w.encode(PARTNER).hex().upper()], session=session, battle_id=bid)
+    w.step(2)
+    assert mb_op(w) == NATIVE["OP_RIVAL_SWAP"]
+    mb_ack(w, status=3)                                   # ST_FAIL
+    w.poke_int(NATIVE["BASE"] + 14, 8, 2)                 # reason = REASON_WINDOW_CLOSED
+    w.step()
+    (reply,) = w.events("rival_team_replaced")
+    assert reply["error"] == "refresh_failed" and reply["reason"] == "window_closed", reply
+    assert w._read(w.ram["ENEMY_BASE"], 4) == enemy_before, "a refused swap writes no game state"
+    trade_writes_are_native_only(w)                       # only the mailbox was staged"
+
+
+def test_c511a_a_new_client_on_an_old_patch_refuses_cleanly():
+    """An unknown opcode on an older patch takes the dispatcher's default ack(ST_FAIL) (no
+    reason), so the swap refuses as refresh_failed and nothing is written."""
+    w, _blob = trade_world()
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    enemy_before = w._read(w.ram["ENEMY_BASE"], 4)
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1,
+              blobs_hex=[w.encode(PARTNER).hex().upper()], session=session, battle_id=bid)
+    w.step(2)
+    mb_ack(w, status=3)                                   # ST_FAIL, reason 0 (unset)
+    w.step()
+    (reply,) = w.events("rival_team_replaced")
+    assert reply["error"] == "refresh_failed" and "reason" not in reply, reply
+    assert w._read(w.ram["ENEMY_BASE"], 4) == enemy_before
+
+
+def test_c511a_the_selectable_team_rule_refuses_no_viable_singles():
+    w = live("gen3_rr", "radical_red")
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    dead = [w.encode(mon_record(0x40000000, OT, species=4, hp=0, max_hp=20)).hex().upper()]
+    before = list(w.writes)
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=dead,
+              session=session, battle_id=bid)
+    w.step()
+    assert w.events("rival_team_replaced")[-1]["error"] == "slots_unviable"
+    assert w.writes == before
+
+
+def test_c511a_the_selectable_team_rule_needs_two_distinct_mons_in_doubles():
+    w = live("gen3_rr", "radical_red")
+    w.set_balls(3)
+    w.enter_battle([FOE], trainer_id=5, doubles=True)
+    w.step(61)
+    session, bid = battle_identity(w)
+    one = viable_blobs(w, 1)
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=one,
+              session=session, battle_id=bid)
+    w.step()
+    assert w.events("rival_team_replaced")[-1]["error"] == "slots_unviable"
+    w.command(cmd="replace_rival_team", trainer_id=5, n=2, blobs_hex=viable_blobs(w, 2),
+              session=session, battle_id=bid)
+    w.step()
+    assert w.events("rival_team_replaced")[-1]["error"] == "patch_required"
+
+
+def test_c511a_the_selectable_team_rule_follows_the_engine_getter_on_bad_eggs():
+    """MON_DATA_SPECIES_OR_EGG collapses an empty slot, an egg AND a bad egg to SPECIES_EGG
+    (pret src/pokemon.c:3245-3249) -- so a bad egg is not selectable even though its species
+    field looks real."""
+    w = live("gen3_rr", "radical_red")
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    bad_egg = dict(mon_record(0x50000000, OT, species=4, hp=20))
+    bad_egg["is_bad_egg"] = 1
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1,
+              blobs_hex=[w.encode(bad_egg).hex().upper()], session=session, battle_id=bid)
+    w.step()
+    assert w.events("rival_team_replaced")[-1]["error"] == "slots_unviable"
+
+
+def test_c510_codex_repro_a_queued_rival_job_cannot_post_in_the_next_battle():
+    """Codex's C5-10 repro: battle1 with session S/id1, a menu ACK still pending, a valid rival
+    request queued BEHIND it. Battle1 ends, battle2 begins with the SAME trainer and id2, then
+    the menu ACKs -- the old request must not post (it would write 107 bytes into battle2)."""
+    w, _blob = trade_world()
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    assert bid == 1
+    w.command(cmd="show_menu", token="tk", text="?")        # posts, stays pending (async UI)
+    w.step(2)
+    assert mb_op(w) == NATIVE["OP_SHOW_MENU"]
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1,
+              blobs_hex=[w.encode(PARTNER).hex().upper()], session=session, battle_id=bid)
+    w.step()
+    w.leave_battle()                                        # battle1 ends
+    w.step()
+    ready_battle(w, 5)                                      # battle2, same trainer
+    assert w.client.state.battle["battle_id"] == 2
+    mb_ack(w)                                               # the menu finally completes
+    w.step(2)
+    assert mb_op(w) != NATIVE["OP_RIVAL_SWAP"], "the stale rival job must not post"
+    assert w.events("rival_team_replaced")[-1]["error"] == "stale_battle_id"
+
+
+def test_c510_a_client_with_no_epoch_refuses_by_name_instead_of_erroring():
+    """MAJOR 1: with no epoch (e.g. attached mid-battle) the refusal must be named, never a Lua
+    error from indexing a nil record."""
+    w = live("gen3_rr", "radical_red")
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    w.client.state.battle = None                            # the mid-battle attach case
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w),
+              session=session, battle_id=bid)
+    w.step()
+    assert w.events("rival_team_replaced")[-1]["error"] == "stale_battle_id"
+
+
+def test_c510_trainer_matching_has_no_shortcuts():
+    """MAJOR 1: trainer 0, a mismatched trainer and an epoch whose trainer is unknown are each
+    refused -- no shortcut accepts any of them."""
+    w = live("gen3_rr", "radical_red")
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    for trainer in (0, 7):
+        w.command(cmd="replace_rival_team", trainer_id=trainer, n=1, blobs_hex=viable_blobs(w),
+                  session=session, battle_id=bid)
+        w.step()
+        assert w.events("rival_team_replaced")[-1]["error"] == "stale_battle_id", trainer
+    w.client.state.battle["trainer_id"] = None
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w),
+              session=session, battle_id=bid)
+    w.step()
+    assert w.events("rival_team_replaced")[-1]["error"] == "stale_battle_id"
+
+
+# ── C5-11c: the rival authority, the encounter result, and the prefilter witnesses ──────────
+
+def test_c511c_a_same_frame_end_plus_begin_lets_no_old_job_post():
+    """Codex REV2-C5-10-11 BLOCKER 2: a battle-1 request queued behind a menu, then battle_end AND
+    battle_begin for the SAME trainer captured in one frame, then the menu ACKs. The old job must
+    not post -- the authority epoch is closed at capture, not by a live RAM comparison."""
+    w, _blob = trade_world()
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    assert bid == 1
+    w.command(cmd="show_menu", token="tk", text="?")          # posts, stays pending
+    w.step(2)
+    assert mb_op(w) == NATIVE["OP_SHOW_MENU"]
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1,
+              blobs_hex=[w.encode(PARTNER).hex().upper()], session=session, battle_id=bid)
+    w.step()
+    before = list(w.writes)
+    w.leave_battle()                                          # captured: closes the authority
+    w.enter_battle([FOE], trainer_id=5)                       # same trainer, same frame
+    mb_ack(w)                                                 # the menu completes
+    w.step(2)
+    assert mb_op(w) != NATIVE["OP_RIVAL_SWAP"], "a stale job must not post across the boundary"
+    assert w.events("rival_team_replaced")[-1]["error"] == "stale_battle_id"
+    assert w.writes == before, "and it must write nothing"
+
+
+def test_c511c_the_encounter_result_survives_the_boundary_on_both_rr_kinds():
+    """MAJOR 3 regression: the old boundary sweep cleared st.battle before battle_end drained, so
+    finish_battle skipped the encounter result and the RR COMPANION sent no no_catch where RR
+    clean did. Both kinds must send exactly one."""
+    for kind in ("clean", "companion"):
+        w = World("gen3_rr", "radical_red", kind)
+        w.set_party(party(A, B))
+        w.step_to(60)
+        w.set_balls(3)
+        w.step(30)
+        w.enter_battle([FOE])                                  # a wild battle: no trainer id
+        w.step(30)
+        w.leave_battle(outcome=4)                              # ran away
+        w.step()
+        got = w.events("no_catch")
+        assert len(got) == 1, f"{kind}: expected exactly one no_catch, got {len(got)}"
+
+
+def test_c511c_doubles_is_read_from_the_battle_type_flags_not_the_battler_count():
+    """MAJOR 6: gBattlersCount is not initialised yet in W1. With the DOUBLE flag set and a STALE
+    count of 2, one eligible mon must still be refused."""
+    w = live("gen3_rr", "radical_red")
+    w.set_balls(3)
+    w.enter_battle([FOE], trainer_id=5, doubles=True)
+    w.poke_int(w.ram["BATTLERS_COUNT_ADDR"], 2, 1)             # stale: the flags say doubles
+    w.step(61)
+    session, bid = battle_identity(w)
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w, 1),
+              session=session, battle_id=bid)
+    w.step()
+    assert w.events("rival_team_replaced")[-1]["error"] == "slots_unviable"
+
+
+def test_c511c_the_secure_egg_bit_is_what_the_prefilter_reads():
+    """MAJOR 6: getter semantics use the SECURE Misc.isEgg (pret pokemon.c:3182-3183), not the
+    header flag. A mon with the secure bit set and the header flag clear is not selectable."""
+    w = live("gen3_rr", "radical_red")
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    sneaky = dict(mon_record(0x60000000, OT, species=4, hp=20))
+    sneaky["is_egg"] = 1                 # the secure substruct bit
+    sneaky["is_egg_flag"] = 0            # the header bit stays clear
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1,
+              blobs_hex=[w.encode(sneaky).hex().upper()], session=session, battle_id=bid)
+    w.step()
+    assert w.events("rival_team_replaced")[-1]["error"] == "slots_unviable"
+
+
+# ── C5-11d: the rival authority must die with a reset and with the signal source ────────────
+
+def _rival_job_behind_a_menu(w):
+    """Codex REV3's common prefix: battle 1 announced (session S, id 1, trainer 5), a menu posted
+    and left pending, a valid rival request for battle 1 queued BEHIND it."""
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    assert bid == 1
+    w.command(cmd="show_menu", token="tk", text="?")          # posts, stays pending
+    w.step(2)
+    assert mb_op(w) == NATIVE["OP_SHOW_MENU"]
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1,
+              blobs_hex=[w.encode(PARTNER).hex().upper()], session=session, battle_id=bid)
+    w.step()
+
+
+def test_c511d_a_reset_revokes_the_rival_authority():
+    """Codex REV3 MAJOR 3, the exact interleaving: announce battle 1, menu pending, rival request
+    queued, driver.on_reset(), the same-trainer battle RAM left in place with NO fresh captured
+    begin, then the menu ACKs. Before the fix opcode 28 posted with 109 new writes on the
+    authority the reset should have closed."""
+    w, _blob = trade_world()
+    _rival_job_behind_a_menu(w)
+    before = list(w.writes)
+    w.client.driver.on_reset()
+    mb_ack(w)
+    w.step(2)
+    assert mb_op(w) != NATIVE["OP_RIVAL_SWAP"], "a reset must revoke the rival authority"
+    assert w.writes == before, f"{len(w.writes) - len(before)} bytes written after the reset"
+    assert w.events("rival_team_replaced")[-1]["error"] == "stale_battle_id"
+
+
+def _stop_by_failure_field(w):
+    w.client.signals.failure = "test: signals failed"        # Codex REV3's repro, verbatim
+
+
+def _stop_by_close(w):
+    w.client.signals.close(w.client.signals)                 # the hooks are uninstalled
+
+
+def _stop_by_a_fire_error(w):
+    """The natural path: the next boundary fire itself fails (its ROM bytes differ at fire
+    time), which sets failure BEFORE on_fire could close the authority (signals.lua:104-109)."""
+    site = w.sites["battle_end"]
+    w.rom[site["rom_offset"]] ^= 0xFF
+
+
+def _stop_by_a_rejected_fire(w):
+    """Boundary callbacks whose address is not the site's are counted and dropped
+    (signals.lua:97-100): neither the end nor the next begin was delivered, so nothing closed."""
+    for kind in ("battle_end", "battle_begin"):
+        fn, addr = w.hooks[f"SLink-gen3-{kind}"]
+        w.hooks[f"SLink-gen3-{kind}"] = (fn, addr + 2)
+
+
+@pytest.mark.parametrize("stop", [_stop_by_failure_field, _stop_by_close, _stop_by_a_fire_error,
+                                  _stop_by_a_rejected_fire],
+                         ids=["failure", "close", "fire_error", "rejected_fire"])
+def test_c511d_a_stopped_signal_source_revokes_the_rival_authority(stop):
+    """Codex REV3 MAJOR 4: queue a rival request behind a menu, stop the signal source, end and
+    start a same-trainer battle (the stopped source captures neither boundary), then ACK the menu.
+    Before the fix opcode 28 posted with 109 writes on the retained id-1 authority. `failure` is
+    Codex's exact step; the others are every other way delivery stops."""
+    w, _blob = trade_world()
+    _rival_job_behind_a_menu(w)
+    before = list(w.writes)
+    stop(w)
+    w.leave_battle()
+    w.step()
+    w.enter_battle([FOE], trainer_id=5)                       # same trainer, battle RAM live again
+    w.step()
+    mb_ack(w)
+    w.step(2)
+    assert mb_op(w) != NATIVE["OP_RIVAL_SWAP"], "a stopped signal source must revoke the authority"
+    assert w.writes == before, f"{len(w.writes) - len(before)} bytes written on a dead authority"
+    assert w.events("rival_team_replaced")[-1]["error"] == "stale_battle_id"
+
+
+def test_c511d_control_a_healthy_source_still_posts_the_same_queued_job():
+    """The control for both falsifiers: the same prefix with nothing stopped and nothing reset
+    posts opcode 28 when the menu ACKs, so the refusals above are the fix, not the harness."""
+    w, _blob = trade_world()
+    _rival_job_behind_a_menu(w)
+    mb_ack(w)
+    w.step(2)
+    assert mb_op(w) == NATIVE["OP_RIVAL_SWAP"]
+
+
+# ── C5-11d addendum: the LeafGreen sound stall (a plan applies whole or not at all) ──────────
+
+def _se26_header(w, count, cmd_ptr):
+    """SE 26's song header rewritten in ROM: byte 0 trackCount, byte 2 priority, 8..11 the
+    track-0 script pointer (the layout m4a_plan reads)."""
+    hdr = w.profile["rom"]["SE_SONG_HEADERS"]["26"] - 0x08000000
+    for i, b in enumerate([count, 0, 5, 0, 0, 0, 0, 0, *cmd_ptr.to_bytes(4, "little")]):
+        w.rom[hdr + i] = b
+
+
+@pytest.mark.parametrize("count, cmd_ptr, named", [
+    (40, 0x08302010, "trackCount 40"),              # the live LG failure: status overflowed LAST
+    (0, 0x08302010, "trackCount 0"),
+    (1, 0x02001000, "outside ROM"),
+], ids=["track_count_40", "track_count_0", "cmd_ptr_in_ewram"])
+def test_c511d_a_garbage_se_header_writes_nothing_and_is_refused_by_name(count, cmd_ptr, named):
+    """Coordinator addendum (live LeafGreen run): LG's pack carried FR's SE header addresses, so
+    m4a_plan read garbage; trackCount >= 32 made status = (1 << count) - 1 overflow u32, and
+    writes.lua refused that LAST entry after 11 of 12 had landed -- a garbage songHeader and
+    cmdPtr in gMPlayInfo_SE1, and the game stalled. An insane header must be refused by name with
+    zero bytes written."""
+    w, _snd, _player = _m4a_world("leafgreen")
+    _se26_header(w, count, cmd_ptr)
+    w.command(cmd="play_sound", sound=26)
+    w.step()
+    assert w.writes == [], f"{len(w.writes)} bytes written from a garbage header"
+    assert any("sound refused" in line and named in line for line in w.logs), w.logs[-3:]
+
+
+def test_c511d_a_plan_with_an_unwritable_late_entry_writes_nothing():
+    """The generic guard, on a plan that is NOT sound: the explode commit's battle-struct entries
+    come from a pointer read out of RAM. A garbage pointer makes those late entries unaddressable;
+    before the fix the moves, PP, action and move (15 bytes) had already landed when writes.lua
+    refused them. Now the whole plan is refused first."""
+    w, _base = _explode_world()
+    w.poke_int(w.ram["BATTLE_STRUCT_PTR_ADDR"], 0xFFFFFFFF, 4)
+    w.command(cmd="force_explode", key=KA)
+    w.step()
+    assert w.writes == [], f"{len(w.writes)} bytes of a half-applied commit"
+    held = lua_to_py_list(w.client.battle_pending)[0]
+    assert "nothing written" in str(held.why)
+
+
+def test_c511d_a_plan_stopped_mid_way_is_logged_as_partial():
+    """What pre-validation cannot rule out -- the sink itself failing on byte two -- is reported
+    loudly from writes.attempted instead of reading like a clean refusal."""
+    w = live()
+    w.battle_ok = True
+    w.enter_battle([FOE], active=(0,))
+    calls = []
+
+    def dies_on_byte_two(addr, value, domain=None):
+        calls.append(addr)
+        if len(calls) == 2:
+            raise RuntimeError("sink died")
+        return w._write_u8(addr, value, domain)
+
+    w.io.write_u8 = dies_on_byte_two
+    w.command(cmd="force_faint", key=KB)
+    w.step()
+    assert any("PARTIAL battle_faint write: 2 byte(s) attempted, partial mutation possible" in line for line in w.logs), w.logs[-3:]
+
+
 def test_a_second_apply_while_one_is_in_flight_is_ignored():
     w, blob = trade_world()
     w.break_checkpoint()
@@ -1438,6 +2021,7 @@ def test_the_driver_names_no_bizhawk_global_and_no_title():
     assert not re.search(r"firered|leafgreen|radical_red|gen3_frlg|gen3_rr", code)
     assert not re.search(r"\bmemory\.write|write_u8\(", code)
     _ = lua_to_py
+
 
 
 def test_a_pc_withdraw_is_box_to_party_while_the_party_count_is_stale():

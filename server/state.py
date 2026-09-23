@@ -116,6 +116,19 @@ def is_shiny(key: str) -> bool:
     return pid_otid_shiny(*parsed)
 
 
+def _valid_battle_identity(session, battle_id) -> bool:
+    """The ONE strict validator for the battle request identity (card C5-10, hardened per Codex's
+    C5-10 review): a hex nonce of 1..16 characters and an integer counter in 1..2**32-1, never a
+    bool. Both the event path and the queue helper call this, so the two can never disagree about
+    what a valid pair is, and nothing is ever coerced into validity."""
+    if not isinstance(session, str) or not 1 <= len(session) <= 16:
+        return False
+    if any(c not in "0123456789abcdefABCDEF" for c in session):
+        return False
+    return (isinstance(battle_id, int) and not isinstance(battle_id, bool)
+            and 1 <= battle_id < 2 ** 32)
+
+
 class SoulLinkState:
     def __init__(self, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False, overworld_presence: bool = False, native_messages: bool = False, native_sounds: bool = False, battle_calc: bool = True, pc_trade_npc: bool = True):
         # When data_dir is provided (manager mode) use it; otherwise fall back to the
@@ -223,6 +236,20 @@ class SoulLinkState:
         # (composition or level deltas).  In-memory only; not persisted —
         # blobs are re-sent on every reconnect.
         self.partner_blobs: dict[str, list[dict]] = {"a": [], "b": []}
+        # Latest battle request identity per player (card C5-10): (session nonce, battle
+        # counter, trainer id) from the client's most recent `trainer_battle_start`, echoed on
+        # the `replace_rival_team` commands that belong to that battle so the client can refuse
+        # a late or mismatched one.  The nonce is minted per client PROCESS, so it is what makes
+        # a restart safe: a restarted client's counter 1 is not the previous session's counter 1.
+        # Runtime only, never persisted -- absent for Gen 1, Gen 2 and old Gen 3 clients, which
+        # never send one, and gone after a server restart (a manual inject must then wait for a
+        # fresh trainer_battle_start rather than reuse metadata it cannot trust).
+        self.latest_battle_requests: dict[str, tuple[str, int, int]] = {}
+        # Players whose client declared `battle_identity: true` in its hello (card C5-10b): only
+        # for those may the server refuse an identity-less manual rival inject. Clients that never
+        # declare it -- Gen 1, Gen 2, and the old Gen 3 RR client, which stays the production RR
+        # client until the patch card lands -- keep the pre-card behaviour exactly.
+        self.battle_identity_clients: dict[str, bool] = {}
         # Rival Team Swap auto-trigger.  Set once at run creation via the
         # `--rival-team-swap` CLI flag (mirrors --explode-mode).  When True,
         # the server auto-issues replace_rival_team on trainer_battle_start
@@ -995,6 +1022,12 @@ class SoulLinkState:
             incoming_ot = self.adapter.parse_ot_id(first_key)
         incoming_name = msg.get("trainer_name", "")
 
+        # Capability declaration (card C5-10b, hardened per Codex's C5-10 review): adopted only
+        # AFTER the identity-lock checks below have passed. A hello rejected as a wrong save must
+        # not be able to grant or revoke anything -- otherwise a spoofed or misdirected hello
+        # could flip the manual-inject gate for this slot.
+        declare_identity = msg.get("battle_identity") is True
+
         if incoming_ot:
             existing = self.player_identity.get(player_id)
             if existing:
@@ -1034,6 +1067,14 @@ class SoulLinkState:
                 self.identity_error.pop(player_id, None)
                 log.info(f"[{player_id}] Identity locked: {incoming_name or player_id.upper()} (OT {incoming_ot[:8]})")
                 self._save()
+
+        # Adopted here: past every identity-lock return above.
+        self.battle_identity_clients[player_id] = declare_identity
+        if not declare_identity:
+            # C5-11c MAJOR 7: an ACCEPTED legacy hello also clears the stored battle identity, so
+            # a client that does not speak the protocol cannot leave a stale pair behind for the
+            # manual inject to inherit.
+            self.latest_battle_requests.pop(player_id, None)
 
         old_size = self.party_size.get(player_id, 0)
         self.party_size[player_id] = len(party)
@@ -3050,12 +3091,29 @@ class SoulLinkState:
     # ── Rival Team Swap: trainer-battle detection + injection ───────────────
 
     def queue_rival_team_swap(self, target_player: str, trainer_id: int,
-                              source: str = "auto") -> tuple[bool, str]:
+                              source: str = "auto",
+                              session: str | None = None,
+                              battle_id: int | None = None) -> tuple[bool, str]:
         """Queue a `replace_rival_team` command for `target_player`.
 
         Used by:
         - Phase 2 manual inject (source='manual') — fires from dashboard button.
         - Phase 3 auto-trigger (source='auto') — fires from trainer_battle_start.
+
+        Battle request identity (card C5-10, docs/protocol.md): `session` is the nonce the
+        CLIENT minted for this process and `battle_id` the counter of the battle it announced
+        with `trainer_battle_start`; the client refuses a command that does not carry both and
+        match the battle it is in. The auto path passes the pair it just received. The manual
+        path passes neither and inherits the LATEST pair stored for this player (the battle the
+        dashboard is looking at) -- and REFUSES when there is none (a server restart, or a
+        client that never announced with an identity): sending an id-less command at a client
+        that requires one is a guaranteed refusal one round trip later, and inventing an id is
+        worse. `never retag`: the pair is copied into the queued command here and never updated
+        afterwards, so a command always carries the identity it was created for.
+
+        When the player's client sends no identity at all — Gen 1, Gen 2 and old Gen 3 clients —
+        both fields are omitted entirely, so those clients keep byte-identical payloads and
+        today's behaviour.
 
         Returns (ok, reason). When ok=False the caller can surface `reason`
         to the user (dashboard button needs that to explain why nothing fired).
@@ -3071,16 +3129,39 @@ class SoulLinkState:
         blobs = self.partner_blobs.get(partner, [])
         if not blobs:
             return False, f"partner {partner!r} has no cached party blobs"
-        self.queued_commands[target_player].append({
+        if session is not None or battle_id is not None:
+            # an EXPLICITLY supplied pair must be valid: only a fully omitted one may inherit
+            if not _valid_battle_identity(session, battle_id):
+                return False, (f"invalid battle identity supplied for {target_player!r} "
+                               f"(session={session!r}, battle_id={battle_id!r})")
+        elif source == "manual":
+            # only the dashboard's manual inject may inherit the stored identity
+            stored = self.latest_battle_requests.get(target_player)
+            session, battle_id = stored[:2] if stored else (None, None)
+        else:
+            # AUTO echoes ONLY the identity of the announcement that triggered it (Codex C5-10
+            # MAJOR 2): inheriting here would let a stale pair ride a fresh trigger.
+            session, battle_id = None, None
+        if (source == "manual" and not (session and battle_id)
+                and self.battle_identity_clients.get(target_player)):
+            return False, (f"no battle request identity for {target_player!r} — a manual rival "
+                           "inject needs the client's latest trainer_battle_start (session nonce "
+                           "+ battle counter); wait for the next rival battle")
+        command = {
             "cmd": "replace_rival_team",
             "trainer_id": int(trainer_id) if trainer_id is not None else 0,
             "n": len(blobs),
             "blobs_hex": [b["blob"].hex() for b in blobs],
             "source": source,
-        })
+        }
+        if session and battle_id:
+            command["session"] = session
+            command["battle_id"] = battle_id
+        self.queued_commands[target_player].append(command)
         log.info(
             f"[{target_player}] queued replace_rival_team "
-            f"(trainer_id={trainer_id}, n={len(blobs)}, source={source})"
+            f"(trainer_id={trainer_id}, n={len(blobs)}, source={source}, "
+            f"session={session}, battle_id={battle_id})"
         )
         return True, "queued"
 
@@ -3100,11 +3181,30 @@ class SoulLinkState:
         trainer_id = msg.get("trainer_id")
         if not isinstance(trainer_id, int) or trainer_id <= 0:
             return
+        # The client's battle request id (card C5-10). Old Gen 3 clients and Gen 1/2 omit it:
+        # nothing is stored and nothing is echoed, so their commands stay byte-identical.
+        session = msg.get("session")
+        battle_id = msg.get("battle_id")
+        if _valid_battle_identity(session, battle_id):
+            # stored, not merged: the tuple is the identity of the battle being announced, and a
+            # queued command keeps the tuple it was created with.
+            self.latest_battle_requests[player_id] = (session, battle_id, trainer_id)
+        elif session is None and battle_id is None:
+            # LEGACY announcement (an old client, or none at all): it proves this client does not
+            # speak the protocol, so any identity stored for it is cleared rather than inherited
+            # (Codex C5-10 MAJOR 2 -- a stale identity must not survive a legacy hello).
+            self.latest_battle_requests.pop(player_id, None)
+        else:
+            # MALFORMED: rejected, never treated as legacy, never stored. The stored tuple (from
+            # a previous good announcement) is left alone -- only the manual path may use it.
+            log.warning(f"[{player_id}] trainer_battle_start with a malformed battle identity "
+                        f"(session={session!r}, battle_id={battle_id!r}); not stored")
+            session, battle_id = None, None
         rival_ids = self.adapter.rival_trainer_ids() if self.adapter else set()
         is_rival = trainer_id in rival_ids
         log.info(
             f"[{player_id}] trainer_battle_start trainer_id={trainer_id} "
-            f"is_rival={is_rival}"
+            f"is_rival={is_rival} session={session} battle_id={battle_id}"
         )
         if not is_rival:
             return
@@ -3115,7 +3215,8 @@ class SoulLinkState:
             )
             return
         ok, reason = self.queue_rival_team_swap(
-            player_id, trainer_id=trainer_id, source="auto")
+            player_id, trainer_id=trainer_id, source="auto",
+            session=session, battle_id=battle_id)
         if not ok:
             log.info(
                 f"[{player_id}] rival team swap auto-trigger skipped: {reason}"

@@ -339,6 +339,10 @@ local function build_production(deps, c)
         locations = dofile(c.root .. "/" .. files.locations),
         player = deps.player, rom_type = c.parts.rom_type, rom_sha1 = deps.rom_sha1 or c.parts.rom_hash,
         foundation = pack, artifact_kind = c.artifact_kind, native = native, log = deps.log, core = core,
+        -- the battle request nonce seed (card C5-10b): the bootstrap's entropy, or the harness
+        -- seam for determinism. Client.new validates it and mints NO identity without it.
+        -- the env seam wins over the bootstrap so a harness can pin a session deterministically
+        battle_nonce_seed = os.getenv("SLINK_GEN3_BATTLE_NONCE") or deps.battle_nonce_seed,
         -- the m4a fact (SE1 player / gSoundInfo pointer, field offsets) lives in the checkpoint
         -- pack's sound block, the same block safety's sound clauses judge: one source of truth
         sound = wc.sound,

@@ -92,6 +92,32 @@ with a battle request id. The contract:
 | capability | **client → server** | the new client declares `battle_identity: true` in its hello. The server refuses an identity-less **manual** inject only for a client that declared it: Gen 1, Gen 2 and the old Gen 3 RR client (which stays the production RR client until the patch card lands) keep the pre-card behaviour and get a command with neither field. Capability is never inferred from anything else, and a restart of the server is covered because the dropped connection makes the client re-hello. |
 | protocol | `docs/protocol.md` | the `trainer_battle_start` event row carries `session` + `battle_id` (minted per battle-begin, echoed on every command of that battle, refused on mismatch); the `replace_rival_team` row carries the optional pair; `rival_team_replaced` gained `stale_battle_id`; hello gained `battle_identity`; §9 item 45a records all of it. |
 
+**The nonce's actual guarantee (C5-11d, replacing C5-11c's lock file).** What it must do: never
+repeat for one player slot across client processes, because the server keeps a queued command for
+the slot across a restart and the client admits it on `cmd.session == nonce` alone. Stock BizHawk
+Lua has no process id and `os.time()` repeats inside a second, so the unique part is a per-install
+counter at the install root, allocated as a **baton**: a caller renames `slink_gen3_session.baton`
+to a name of its own, reads *n*, and renames a fresh file holding *n*+1 back into place. C
+`rename()` lets only one caller consume a given source name (the loser gets `ENOENT`) on Windows
+and POSIX alike, so at most one caller holds the baton at a time — mutual exclusion by
+construction. (C5-11c's lock file was opened `"w"`, so two owners could each read their own token
+back: Codex REV3 executed that interleaving and both callers got 10.) **First creation** is the only
+OS-dependent step, since a missing baton may just be held: a baton is created only when the baton
+*and* the never-removed birth record `slink_gen3_session.born` are both positively absent
+(`ENOENT`) and this caller wins the birth record. On Windows the win is a non-replacing
+`rename(tmp, born)`. On **Linux**, `rename` replaces, so the record is an append-only log (`"a"`,
+O_APPEND on a local filesystem) and the winner is the token on its first line, which later appends
+cannot change. The one step that is not structural is that two first-ever claimants in the same
+instant must draw distinct tokens (wall second + CPU clock + a 31-bit draw). **Fail closed**
+(Codex REV3 MAJOR 2): only that won birth initialises. A baton that stays missing after the bounded
+wait, one that cannot be read, is empty, or is non-integral or out of range, and any write, flush,
+close or rename that fails, all return nothing, and the taken baton is put back as found. There is
+no restart at 1: a reset is the cross-session collision the nonce exists to prevent. When
+allocation fails the client mints no identity, declares no capability in hello, and refuses every
+rival command. Falsifiers: `tests/unit/test_gen3_patch_sources.py` (`test_c511d_*`) run two Lua
+runtimes over one fake filesystem with Windows or POSIX rename semantics, one of them paused on a
+thread at the named point.
+
 Job epoch equality (Codex REV-4): the *job* is bound to the epoch that existed when it was
 queued, not merely to a live epoch — the guard therefore compares the command's `battle_id`
 against the epoch id, and the epoch object is replaced (not mutated) on every battle-begin so a
@@ -254,7 +280,7 @@ trade. The rival swap gets its own opcode:
 | item | value |
 |---|---|
 | name / number | `OP_RIVAL_SWAP = 28` — the enum's current maximum is `OP_SHOW_INFO = 27` (`patch/src/handlers.c:52-53`) |
-| args | `args[0] = count` (1..6), `args[1] = trainer_id` (the trainer the client announced) |
+| args | `args[0] = count` (1..6), `args[1..2] = trainer_id` (u16 LE, the trainer the client announced) |
 | staging | identical to 16: `count` × 100 raw party-mon bytes in `BLOB_BUF`, no Lua-side gating of the stage |
 | `OP_SET_ENEMY_PARTY` (16) | **unchanged**, still the trade's transport, no window check, no trainer context |
 | profile / Lua | the key `OP_RIVAL_SWAP` joins the profile's `native` block next to `OP_SET_ENEMY_PARTY` (`data/games/gen3_rr/profile.json:49`, sourced from the old client's mailbox table `lua/mailbox.lua:307`, which must gain the row too); `native.lua` gains a `transfer("rival", {blobs_hex, trainer_id})` step that uses it, and its `replace_rival_team` path switches from `transfer("enemy", …)` to it |
@@ -271,7 +297,7 @@ RAM, no Lua:
 | `gBattleMainFunc == BEGIN_BATTLE_INTRO_DUMMY_ADDR` (`0x080123BD`) | C5-9 pin (RR-BIN: pool `0xD2E8`, store at `0xD282`) | the setup phase value, alive only from `SetUpBattleVars` (PRET `src/battle_main.c:699`) until `InitBattleControllers` (`:113`) |
 | `gMain.callback2 == CB2_HandleStartBattle\|1` (`0x08010509`) | write_checkpoint pack / SYM | this battle's own setup callback, not the overworld and not `BattleMainCB2` |
 | `!(gBattleTypeFlags & BATTLE_TYPE_LINK)` | `ram.BATTLE_TYPE_ADDR` | **REV-5 major**: a link battle has no rival team to replace, and the Lua pre-filter must not be the only place that says so |
-| `gTrainerBattleOpponent_A == args[1]` | `ram.TRAINER_OPPONENT_ADDR` | the intended trainer context: the patch only swaps for the trainer the client announced |
+| `gTrainerBattleOpponent_A == args[1..2]` | `ram.TRAINER_OPPONENT_ADDR` | the intended trainer context: the patch only swaps for the trainer the client announced (u16 LE) |
 
 Any part failing → **no copy at all**, `status = ST_FAIL`, `ack = job.seq`, `reason =
 REASON_WINDOW_CLOSED` in the mailbox reason slot (u16 at offset 14, `patch/src/ADDRESSES.md:376`);
@@ -358,7 +384,7 @@ from the existing checkpoint fixtures and must name one of their `expect_clauses
 | `no_viable_singles` | a replacement with no eligible mon at all (all fainted/egg) | negative | `slots_unviable` | the engine's selection would find no eligible slot; the refusal happens before any write, on every tier |
 | `one_viable_doubles` | a doubles battle whose replacement has exactly one eligible enemy mon | negative | `slots_unviable` | doubles needs two *distinct* eligible mons (the second battler's scan excludes the first's index) |
 | `patch_window_refusal` | the rival opcode consumed outside the patch's condition (a probe posts it with the phase value moved on) | negative | the patch's `REASON_WINDOW_CLOSED` | the patch, not Lua, is the authority: the reply is `refresh_failed` with `reason = window_closed` and `gEnemyParty` is byte-identical |
-| `patch_trainer_context` | the rival opcode consumed with `args[1]` naming a different trainer than `gTrainerBattleOpponent_A` | negative | the patch's trainer clause | the intended-trainer context is enforced in the authority, so a stale op for another trainer cannot swap |
+| `patch_trainer_context` | the rival opcode consumed with `args[1..2]` naming a different trainer than `gTrainerBattleOpponent_A` | negative | the patch's trainer clause | the intended-trainer context is enforced in the authority, so a stale op for another trainer cannot swap |
 
 ## 9. Open items
 
