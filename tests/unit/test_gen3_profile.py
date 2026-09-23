@@ -141,9 +141,21 @@ def test_rr_party_capacity_comes_from_its_existing_detector() -> None:
     assert match
     line = text.count("\n", 0, start + match.start()) + 1
     assert title["derived"]["PARTY_CAPACITY"] == int(match[1]) == 6
+    # The legacy pointer row is documented where it lives: 0x03003840 is the old client's, not
+    # the pack's pointer (card C3-33), so a reader cannot mistake it for the new client's source.
+    legacy = title["ram"]["SB1_PTR_ADDR"]
+    assert legacy == 0x03003840
+    hit = re.search(rf"^\s*SB1_PTR_ADDR\s*=\s*0x{legacy:08X}\s*,", text, re.M)
+    assert hit, "the radical_red SB1_PTR_ADDR literal is gone from the Lua table"
+    legacy_line = text.count("\n", 0, hit.start()) + 1
     assert title["_src"] == {
         "derived.PARTY_CAPACITY":
             f"lua/games/gen3_frlge.lua:{line} (_detectRR partyCount limit)",
+        "ram.SB1_PTR_ADDR":
+            f"lua/games/gen3_frlge.lua:{legacy_line} "
+            "(the old client's address, kept for parity: it is a literal-pool constant inside "
+            "IntrMain_Buffer, not the pointer -- the new client reads "
+            "write_checkpoint.pointers.gSaveBlock1Ptr, which is ROM-derived)",
     }
 
 

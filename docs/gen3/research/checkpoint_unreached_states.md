@@ -265,17 +265,30 @@ once at boot". **That is stale:** `main.c:232-233` is only the boot value.
 - Pinned by `test_gen3_safety_unreached.py:135-146` `test_save_block_offset_instruction`, which
   reads the four ROMs and skips if any is absent.
 
-**Finding: RR pack pointers are not the setter's pointers.** UNVERIFIED which one is authoritative.
-- RR's `SetSaveBlocksPointers` literal pool still names `0x03005008` / `0x0300500C` / `0x03005010`
-  (ROM file `0x4C08C..0x4C0A0`, `docs/gen3/research/rr_save_layout.md:60-67`).
-- `data/games/gen3_rr/write_checkpoint.json` `pointers` snapshots `profile.ram.SB1_PTR_ADDR`
-  `0x03003840` and `SB2_PTR_ADDR` `0x03003838` (generator `RR_POINTERS`,
-  `tools/gen_gen3_write_checkpoint.py:157,294-300`). It also uses the literal
-  `pokemon_storage_base` `0x02029314`, which `safety.lua:25` never re-reads, so it cannot move.
-- The two pairs may both be valid pointers (the P1/P3 receipts deref `0x03003840` successfully),
-  but what writes `0x03003840` is not decoded here.
-- With the offset fixed at 0, neither pair can change value from `SetSaveBlocksPointers`. So on RR
-  the `pointer moved` clause is structurally vacuous against the relocation PLAN §5.3 cites.
+**Resolved (card C3-33): the RR pack names the setter's pointers.** The two pairs were never both
+pointers — one of them is a literal-pool constant inside `IntrMain_Buffer`.
+- RR's `SetSaveBlocksPointers` literal pool names `0x03005008` / `0x0300500C` / `0x03005010`
+  (ROM file `0x4C08C..0x4C0A3`, `docs/gen3/research/rr_save_layout.md:60-67`), and the stores in
+  front of it pair each with its object: `str r0,[r4]` (r4 = pool[0] = `0x03005008`) with
+  `&gSaveBlock1` `0x0202552C`, `str r0,[r2]` (r2 = pool[1] = `0x0300500C`) with `&gSaveBlock2`
+  `0x02024588`, and `str r1,[r2]` (r2 = pool[4] = `0x03005010`) with `&gPokemonStorage`
+  `0x02029314`. `tools/gen_gen3_write_checkpoint.py` decodes exactly that (`setter_pairs` +
+  `rr_saveblock_pointers`) and fails closed on any other body.
+- `0x03003840` / `0x03003838` are **not** pointers. They live inside `IntrMain_Buffer`
+  (`src/main.c:80`, filled at `:347-349` by `DmaCopy32(3, intr_main, IntrMain_Buffer, ...)` from
+  the blob at ROM `0x08000248`), and the words there are two literal-pool constants of the code
+  embedded in that blob: `0x03003840` = `&gSaveBlock1` (`0x0202552C`) and `0x03003838` =
+  `&gSaveBlock2` (`0x02024588`). Nothing in RR writes them as pointers, and the ROM contains no
+  word-aligned `0x03003840` literal at all (the only two occurrences are unaligned, in CFRU data).
+- The P1/P3 "deref succeeds" observation is that coincidence, not a counter-example: RR's offset is
+  fixed at 0, so the constant and the live `gSaveBlock1Ptr` are the same number. On an FR savestate
+  (offset `0x74`) the same word sits `0x74` bytes behind the live pointer — which is why the FR pack
+  was always right and the RR pack was not.
+- The pack now reads the three pool addresses, `anchors.saveblocks_setter` byte-pins the setter per
+  artifact (so `safety.lua` refuses a build that moved it or restored the mask), and the old
+  client's value stays only as a documented limit (`profile.json` `_src.ram.SB1_PTR_ADDR`).
+- With the offset fixed at 0, none of the three can change value from `SetSaveBlocksPointers`. So
+  on RR the `pointer moved` clause is structurally vacuous against the relocation PLAN §5.3 cites.
 
 **Why a gate armed before relocation is refused after it.** This is the MODEL, in three layers.
 1. Relocation runs to completion inside one callback (`CB2_InitBattle`, or a map-load CB2). A
@@ -291,8 +304,9 @@ once at boot". **That is stale:** `main.c:232-233` is only the boot value.
 - Existing test: `test_gen3_safety.py:151-161` covers RR `gSaveBlock1Ptr` only.
 - Added: `test_gen3_safety_unreached.py:118-132` `test_mid_relocation_every_pointer` covers all four
   artifacts × every pack pointer (FR/LG `gSaveBlock1Ptr`, `gSaveBlock2Ptr`, `gPokemonStoragePtr`;
-  RR both SB pointers). Each pointer is moved by +4, a legal `load_save.c:75` step, between `arm`
-  and `write_u16`. Expected: `pointer moved: <name>`, with bus writes and log both empty.
+  RR the same three, since C3-33 gave the RR pack a real `gPokemonStoragePtr`). Each pointer is
+  moved by +4, a legal `load_save.c:75` step, between `arm` and `write_u16`. Expected:
+  `pointer moved: <name>`, with bus writes and log both empty.
 
 **Model limit.** The snapshot guards arm→write. It does **not** guard a caller that computed its
 target address from a pointer read on an earlier frame and then arms on a later frame. The snapshot
@@ -302,9 +316,10 @@ address across frames is outside this proof.
 
 **Verdict.** FR/LG: SOURCE+MODEL covered. RR: the relocation risk is SOURCE-covered (the offset is
 fixed at 0 and the copy happens within one callback) and the clause is MODEL-covered, but the clause
-cannot fire on RR from this path. The RR pack's pointer addresses need one source decode (above).
-PHYSICAL is missing on every artifact. A true "mid-relocation" live state does not exist at frame
-granularity, so the honest PHYSICAL control is "arm, then advance through a battle start or map
+cannot fire on RR from this path. The RR pack's pointer addresses are the ROM pool addresses now
+(C3-33, above). PHYSICAL is missing on every artifact. A true "mid-relocation" live state does not
+exist at frame granularity, so the honest PHYSICAL control is "arm, then advance through a battle
+start or map
 load, then write refused". That exercises `writes.lua:35` on RR, and on FR it exercises `:35` or
 `:37`.
 
@@ -351,7 +366,7 @@ landed separately in `3040b91`; the first-failure reason remains order-dependent
 | Link (cable / wireless) | all | `callback1` (`CB1_UpdateLinkState`), `link_callback`, `wireless_comm_type` :55; task allow-list :71; `link_transferring` is always 0 at the park (defense in depth only) | pret `link.c:394,1690-1694`; `cable_club.c:579,873`; `union_room.c:407,1161`; `overworld.c:1605,1643`; `main.c:195-216` | `test_gen3_safety_unreached.py:85-100`; `test_gen3_safety.py:70-78` | SOURCE+MODEL covered; PHYSICAL OPEN |
 | Native op staged | RR companion | `native_idle` :74 | probe-only supplier `probe_gen3_checkpoint.lua:104-111` = opcode slot `0x0203F806` ≠ 0; client outbox, staged buffers and ghost not covered; fail-open when the mailbox is absent | `test_gen3_safety_unreached.py:110-115`; `test_gen3_safety.py:121-127,134-140` | **GAP**: predicate MODEL-covered, no production supplier (P5 C5-1 `native.lua`); OPEN/deferred |
 | Mid-relocation | FR, LG | pointer revalidation :77 (+ window expiry `writes.lua:35`) | pret `load_save.c:69-83,85-116`; `battle_main.c:614`; `overworld.c:1337` | `test_gen3_safety_unreached.py:118-132`; `test_gen3_safety.py:151-161`; `test_gen3_writes.py:51-58` | SOURCE+MODEL covered; PHYSICAL OPEN |
-| Mid-relocation | RR | same clause, vacuous: RR offset is fixed at 0 (`0x0804C062` `0021 0021`); window expiry `writes.lua:35` is the effective guard | ROM bytes (`test_save_block_offset_instruction` :135-146); `BR:GAME_HEAP_RESERVATION.md:48-58` | as FR | SOURCE+MODEL covered; RR pack pointer addresses (0x03003840/38 vs setter pool 0x03005008/0C) UNVERIFIED |
+| Mid-relocation | RR | same clause, vacuous: RR offset is fixed at 0 (`0x0804C062` `0021 0021`); window expiry `writes.lua:35` is the effective guard | ROM bytes (`test_save_block_offset_instruction` :135-146); `BR:GAME_HEAP_RESERVATION.md:48-58` | as FR; plus `test_gen3_write_checkpoint.py::test_rr_pointers_are_the_rom_setter_pool_addresses` and `::test_rr_setter_signature_mismatch_raises_a_named_error` | SOURCE+MODEL covered; RR pack pointer addresses **RESOLVED (C3-33)**: ROM `SetSaveBlocksPointers` pool `0x03005008`/`0x0300500C`/`0x03005010`, setter byte-pinned as `anchors.saveblocks_setter` |
 | PC menu | FR clean (SKIP row) | task allow-list :71 (`Task_PCMainMenu`); script context :55 | pret `pokemon_storage_system_menu.c:356` | `test_gen3_safety_unreached.py:103-107` | SOURCE+MODEL covered; FR PHYSICAL OPEN |
 | Empty write log | all | `writes.lua:22-23,37-38` | — | every negative in the added file asserts `writes` and `log` empty; positive control :58-64 | MODEL covered; PHYSICAL still `predicate_only` |
 
@@ -363,9 +378,12 @@ landed separately in `3040b91`; the first-failure reason remains order-dependent
 2. **`docs/gen3_write_checkpoint.md:260-262` is stale.** Vanilla FRLG re-points all three save
    pointers on every battle start and map load (§4). The pack and the code are already correct;
    only the prose is wrong.
-3. **RR pointer provenance.** The pack snapshots `0x03003840` / `0x03003838`, but RR's setter
-   writes `0x03005008` / `0x0300500C` / `0x03005010` with offset 0. One decode of what writes
-   `0x03003840` in RR would settle it (§4).
+3. **RR pointer provenance — RESOLVED (card C3-33, 2026-09-22).** The pack snapshots
+   `0x03005008` / `0x0300500C` / `0x03005010`, read out of the setter's literal pool after a body
+   signature check; `0x03003840` / `0x03003838` are literal-pool constants inside
+   `IntrMain_Buffer`, not pointers (§4), and the setter is byte-pinned as
+   `anchors.saveblocks_setter` so a moved setter or a restored relocation mask fails closed. The
+   old client keeps its own value as a documented limit.
 4. **The FR `slink_fr_parcel_deliver.State` carries a non-zero `gWirelessCommType`.** This is a
    liveness risk for FR writes after that cutscene, if the value persists (§2).
 5. **`link_transferring` cannot refuse at the parked frame end** (§2). Keep it, but do not cite it

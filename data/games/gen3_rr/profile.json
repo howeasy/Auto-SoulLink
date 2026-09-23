@@ -128,7 +128,8 @@
   "titles": {
     "radical_red": {
       "_src": {
-        "derived.PARTY_CAPACITY": "lua/games/gen3_frlge.lua:450 (_detectRR partyCount limit)"
+        "derived.PARTY_CAPACITY": "lua/games/gen3_frlge.lua:450 (_detectRR partyCount limit)",
+        "ram.SB1_PTR_ADDR": "lua/games/gen3_frlge.lua:264 (the old client's address, kept for parity: it is a literal-pool constant inside IntrMain_Buffer, not the pointer -- the new client reads write_checkpoint.pointers.gSaveBlock1Ptr, which is ROM-derived)"
       },
       "admitted": true,
       "derived": {

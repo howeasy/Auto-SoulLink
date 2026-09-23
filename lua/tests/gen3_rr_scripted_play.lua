@@ -768,7 +768,7 @@ LEGS[#LEGS + 1] = {
         "lua/tests/mkstate.lua:216-246 (slink_door.State: outside a Pokémon Center door, player facing NORTH — captured before any movement, so holding Up is the whole warp)",
         "docs/gen3/probes/shadow_rr_play_2026-09-21.txt (PHYSICAL: map_load x1, 769 -> 1284, when this leg ran from its own state)",
         "docs/gen3_engine_sites.md map_load row (CB2_LoadMap2's normal branch; the warp is the only natural source of it)",
-        "lua/games/gen3_frlge.lua:258 (radical_red SB1_PTR_ADDR 0x03003840 — the map id G.map reads)",
+        "data/games/gen3_rr/write_checkpoint.json pointers.gSaveBlock1Ptr 0x03005008 (ROM-derived from the SetSaveBlocksPointers pool, card C3-33) — the map id G.map reads",
     },
     check = check_on_field,
     run = function(cp)

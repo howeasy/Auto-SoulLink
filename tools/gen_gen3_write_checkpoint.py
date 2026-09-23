@@ -162,8 +162,36 @@ def cpu_clause(title: str, syms, is_rr: bool) -> dict:
         cpu.update(observed_pc=pc, census=census)
     return cpu
 
-# RR relocates the save blocks; these come from the admitted pack profile, not from a symbol.
-RR_POINTERS = {"gSaveBlock1Ptr": "SB1_PTR_ADDR", "gSaveBlock2Ptr": "SB2_PTR_ADDR"}
+# ── the RR save-block pointers, read out of the ROM's own setter (card C3-33) ─────────────────
+# pret/pokefirered c75f3523 src/load_save.c:69-83 SetSaveBlocksPointers stores &<object> + offset
+# into three IWRAM pointer variables.  The *address* of the function is the FireRed symbol (RR is
+# an FR rebuild and keeps it there), but no pointer address is taken from the symbol table: the
+# pool words are read out of the body after it is signature-checked, so a build that moved or
+# reshaped the setter fails closed instead of shipping an address nobody verified.
+#
+# The old client's radical_red profile ships 0x03003840 / 0x03003838 for these two, which is
+# neither of them: those addresses are a literal-pool constant (`&gSaveBlock1` / `&gSaveBlock2`)
+# inside IntrMain_Buffer, the DMA'd copy of the intr_main blob at ROM 0x08000248.  They read
+# correctly on today's RR only because its offset is fixed at 0, so the constant equals the live
+# pointer; nothing enforces that, and it cannot be a pack's evidence.
+SETTER_SYMBOL = "SetSaveBlocksPointers"
+# ROM file 0x4C058: push {r4,r5,lr}; ldr r4,[pc,#0x30]; ldr r5,[r4]; bl Random
+SETTER_PREFIX = bytes.fromhex("30b50c4c2568f8f733ff")
+SETTER_BODY = 0x34          # the body; its six-word literal pool starts here (ROM file 0x4C08C)
+SETTER_OFFSET_AT = 0x0A
+# `movs r1,#0` twice, where vanilla FR has `movs r1,#0x7C; ands r1,r0` (load_save.c:75).  RR's
+# save-block offset is therefore always 0: the pointer values never move, while the legacy
+# 0x03003840 alias inside IntrMain_Buffer would not move with them if they did
+# (docs/gen3/research/checkpoint_unreached_states.md §4).
+SETTER_OFFSET_BYTES = bytes.fromhex("00210021")
+# EWRAM object -> the pointer variable the setter stores its address into.  The three objects are
+# the pool's EWRAM words; docs/gen3/research/rr_save_layout.md:55-68 validates them against the
+# bytes the real save file has at those bases.
+SAVEBLOCK_BASES = {0x0202552C: "gSaveBlock1Ptr", 0x02024588: "gSaveBlock2Ptr",
+                   0x02029314: "gPokemonStoragePtr"}
+SAVEBLOCK_POINTERS = ("gSaveBlock1Ptr", "gSaveBlock2Ptr", "gPokemonStoragePtr")
+IWRAM_RANGE = (0x03000000, 0x03008000)
+POOL_SOURCE = "rom:SetSaveBlocksPointers pool"
 
 
 def parse_sym(path: pathlib.Path) -> dict[str, tuple[int, int]]:
@@ -221,6 +249,82 @@ def verify_data(syms, roms: dict[str, bytes], name: str) -> bool:
         raise SystemExit(f"{name} is not in {witness}'s literal pool -- witness table is wrong")
     return all(all(body(rom, waddr + o, 4) == fr[o:o + 4] for o in offs)
                for key, rom in roms.items() if key != "_fr")
+
+
+def setter_pairs(address: int, code: bytes, rom: bytes) -> list[tuple[int, int]]:
+    """[(pointer variable, &object)] for every store in a SetSaveBlocksPointers body.
+
+    Only the three instruction forms this body uses are decoded -- the Thumb short literal load
+    (`ldr rN,[pc,#imm8]`), the three-register add (`adds rD,rA,rB`) and the zero-offset short
+    store (`str rM,[rN]`) -- and a 32-bit `bl` is stepped over whole.  The caller
+    signature-checks the body first, so an unrecognised form cannot quietly mis-pair; a store
+    whose registers do not resolve to two pool words is dropped, and the caller requires all
+    three pairs to be present.
+    """
+    reg: dict[int, int] = {}            # register -> the literal word it carries
+    out: list[tuple[int, int]] = []
+    at = 0
+    while at + 1 < len(code):
+        op = int.from_bytes(code[at:at + 2], "little")
+        if op & 0xF800 == 0xF000:                                   # first half of a 32-bit bl
+            at += 4
+            continue
+        if 0x4800 <= op <= 0x4FFF:                                  # ldr rN,[pc,#imm8*4]
+            n, imm = (op >> 8) & 7, (op & 0xFF) * 4
+            word_at = ((address + at + 4) & ~3) + imm
+            reg[n] = struct.unpack_from("<I", rom, word_at - ROM_BASE)[0]
+        elif op & 0xF800 == 0x1800:                                 # adds rD,rA,rB
+            d, a, b = op & 7, op >> 3 & 7, op >> 6 & 7
+            if a in reg:
+                reg[d] = reg[a]
+            elif b in reg:
+                reg[d] = reg[b]
+            else:
+                reg.pop(d, None)
+        elif op & 0xF800 == 0x6000 and ((op >> 6) & 0x1F) == 0:      # str rM,[rN]
+            n, m = (op >> 3) & 7, op & 7
+            if n in reg and m in reg:
+                out.append((reg[n], reg[m]))
+        at += 2
+    return out
+
+
+def rr_saveblock_pointers(syms: dict[str, tuple[int, int]], rom: bytes) -> dict[str, int]:
+    """{gSaveBlock*Ptr: IWRAM address} for RR, read out of the setter's literal pool.
+
+    Named SystemExit -- never a guess -- when the ROM is not the pinned RR build: the setter's
+    address comes from the pret .sym, so a build that moved or reshaped it, or that restored the
+    relocation mask, invalidates every pointer address this pack names and has to be re-pinned
+    by hand.
+    """
+    address, _size = syms[SETTER_SYMBOL]
+    code = body(rom, address, SETTER_BODY)
+    if code[:len(SETTER_PREFIX)] != SETTER_PREFIX:
+        raise SystemExit(
+            f"rr_saveblock_pointers: {SETTER_SYMBOL} at {address:#010x} is not the pinned body "
+            f"(got {code[:len(SETTER_PREFIX)].hex()}, expected {SETTER_PREFIX.hex()}); the RR "
+            f"save-block pointers must be re-pinned before regenerating")
+    offset = code[SETTER_OFFSET_AT:SETTER_OFFSET_AT + 4]
+    if offset != SETTER_OFFSET_BYTES:
+        raise SystemExit(
+            f"rr_saveblock_pointers: {SETTER_SYMBOL} at {address:#010x} no longer fixes the "
+            f"save-block offset to 0 at +{SETTER_OFFSET_AT:#x} (got {offset.hex()}, expected "
+            f"{SETTER_OFFSET_BYTES.hex()}): the pointer values would relocate on every battle "
+            f"start and map load, and the legacy 0x03003840 alias would not follow them")
+    out: dict[str, int] = {}
+    for variable, base in setter_pairs(address, code, rom):
+        name = SAVEBLOCK_BASES.get(base)
+        if name is None or not IWRAM_RANGE[0] <= variable < IWRAM_RANGE[1]:
+            raise SystemExit(
+                f"rr_saveblock_pointers: {SETTER_SYMBOL} at {address:#010x} stores "
+                f"{variable:#010x} <- {base:#010x}, which is not a save-block pointer")
+        out[name] = variable
+    missing = [name for name in SAVEBLOCK_POINTERS if name not in out]
+    if missing:
+        raise SystemExit(
+            f"rr_saveblock_pointers: {SETTER_SYMBOL} at {address:#010x} yielded {sorted(out)}; "
+            f"the setter no longer names {missing}")
+    return out
 
 
 def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) -> tuple[dict, list[str]]:
@@ -300,13 +404,30 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
     if is_rr:
         profile = json.loads((ROOT / "data" / "games" / pack / "profile.json").read_text("utf-8"))
         ram = profile["titles"][title]["ram"]
-        for name, field in RR_POINTERS.items():
-            if ram.get(field) is not None:
-                out["pointers"][name] = {"address": ram[field], "source": f"profile.ram.{field}"}
-        # RR (CFRU) has no gPokemonStoragePtr: storage sits at a fixed EWRAM base.
+        # Card C3-33: the three pointers come out of the ROM's own setter, not out of the old
+        # client's legacy profile (whose 0x03003840/0x03003838 are literal-pool constants inside
+        # IntrMain_Buffer).  Both RR artifacts must agree -- the companion patch is additive.
+        derived = rr_saveblock_pointers(syms, roms["clean"])
+        for kind, rom in roms.items():
+            if kind != "_fr" and rr_saveblock_pointers(syms, rom) != derived:
+                raise SystemExit(f"{title}/{kind}: the save-block pointers differ from the clean ROM")
+        for name in SAVEBLOCK_POINTERS:
+            out["pointers"][name] = {"address": derived[name], "source": POOL_SOURCE}
+        # RR (CFRU) keeps box storage in a fixed EWRAM struct as well as behind the pointer; the
+        # struct base stays a separate fact for the reads layer's cross-check.
         if ram.get("POKEMON_STORAGE_BASE") is not None:
             out["pointers"]["pokemon_storage_base"] = {
                 "address": ram["POKEMON_STORAGE_BASE"], "source": "profile.ram.POKEMON_STORAGE_BASE"}
+        # The setter itself, byte-pinned per artifact.  safety.lua re-reads every anchor's bytes
+        # from the running ROM, so a build that moved the setter -- or that restored the
+        # relocation mask -- is refused at runtime as well as here.
+        setter_addr, setter_size = syms[SETTER_SYMBOL]
+        out["anchors"]["saveblocks_setter"] = {
+            "symbol": SETTER_SYMBOL, "address": setter_addr,
+            "rom_offset": setter_addr - ROM_BASE, "length": setter_size,
+            "expected_hex": {kind: body(rom, setter_addr, setter_size).hex().upper()
+                             for kind, rom in roms.items() if kind != "_fr"},
+        }
     else:
         for name in ("gSaveBlock1Ptr", "gSaveBlock2Ptr", "gPokemonStoragePtr"):
             out["pointers"][name] = {"symbol": name, "address": syms[name][0], "source": sym_file}

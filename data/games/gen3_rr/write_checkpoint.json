@@ -41,6 +41,16 @@
         "rom_offset": 488824,
         "symbol": "RunTasks"
       },
+      "saveblocks_setter": {
+        "address": 134529112,
+        "expected_hex": {
+          "clean": "30B50C4C2568F8F733FF002100210A4A0A48081810600A4808182060094A0A48091811604DF0E2FE281CC4F0DDFB30BC01BC0047085000030C500003884502022C5502021050000314930202",
+          "companion": "30B50C4C2568F8F733FF002100210A4A0A48081810600A4808182060094A0A48091811604DF0E2FE281CC4F0DDFB30BC01BC0047085000030C500003884502022C5502021050000314930202"
+        },
+        "length": 76,
+        "rom_offset": 311384,
+        "symbol": "SetSaveBlocksPointers"
+      },
       "try_saving_data": {
         "address": 135111524,
         "expected_hex": {
@@ -61,13 +71,17 @@
       "thumb": 0
     },
     "pointers": {
+      "gPokemonStoragePtr": {
+        "address": 50352144,
+        "source": "rom:SetSaveBlocksPointers pool"
+      },
       "gSaveBlock1Ptr": {
-        "address": 50346048,
-        "source": "profile.ram.SB1_PTR_ADDR"
+        "address": 50352136,
+        "source": "rom:SetSaveBlocksPointers pool"
       },
       "gSaveBlock2Ptr": {
-        "address": 50346040,
-        "source": "profile.ram.SB2_PTR_ADDR"
+        "address": 50352140,
+        "source": "rom:SetSaveBlocksPointers pool"
       },
       "pokemon_storage_base": {
         "address": 33723156,

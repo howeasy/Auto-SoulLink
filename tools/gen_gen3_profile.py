@@ -357,6 +357,24 @@ def build(pack: str, profiles: dict, source: dict) -> dict:
             "derived.PARTY_CAPACITY":
                 f"{SRC}:{_line_of(text, detector.start(1) + match.start())} (_detectRR partyCount limit)",
         }
+        # The old client's radical_red table still ships 0x03003840 / 0x03003838 for
+        # SB1_PTR_ADDR / SB2_PTR_ADDR.  Those are not the pointers: both are literal-pool
+        # constants inside IntrMain_Buffer (the DMA'd intr_main blob), correct on today's RR only
+        # because its save-block offset is fixed at 0.  The values stay, because every Lua
+        # literal has to survive at its key, and the NEW client reads the ROM-derived
+        # write_checkpoint.pointers.gSaveBlock1Ptr instead (card C3-33) -- so the legacy address
+        # is recorded here as the documented limit it is rather than silently inherited.
+        legacy = entry["ram"].get("SB1_PTR_ADDR")
+        hits = [m.start() for m in
+                re.finditer(rf"^\s*SB1_PTR_ADDR\s*=\s*0x{legacy:08X}\s*,", text, re.M)
+                ] if isinstance(legacy, int) else []
+        if len(hits) != 1:
+            sys.exit(f"gen_gen3_profile: {SRC} must spell the RR SB1_PTR_ADDR "
+                     f"0x{legacy:X} exactly once (found {len(hits)})")
+        entry["_src"]["ram.SB1_PTR_ADDR"] = (
+            f"{SRC}:{_line_of(text, hits[0])} (the old client's address, kept for parity: it is "
+            "a literal-pool constant inside IntrMain_Buffer, not the pointer -- the new client "
+            "reads write_checkpoint.pointers.gSaveBlock1Ptr, which is ROM-derived)")
         out["native"] = native_block()
     return out
 

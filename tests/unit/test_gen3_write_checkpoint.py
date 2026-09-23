@@ -149,6 +149,77 @@ def test_rr_cpu_is_the_bios_census() -> None:
     assert census_rows(cpu["census"]) == {0x1C4: 1800}
 
 
+# ── the RR save-block pointers (card C3-33) ─────────────────────────────────────────────────
+# The old client's radical_red profile ships 0x03003840 / 0x03003838 for these two.  Those are
+# not the pointers: they are literal-pool constants inside IntrMain_Buffer (the DMA'd copy of the
+# intr_main blob at ROM 0x08000248), and they read correctly on today's RR only because its
+# save-block offset is fixed at 0.  The pack names what the ROM's own setter writes.
+RR_POINTERS = {"gSaveBlock1Ptr": 0x03005008, "gSaveBlock2Ptr": 0x0300500C,
+               "gPokemonStoragePtr": 0x03005010}
+LEGACY_ALIASES = (0x03003840, 0x03003838)
+
+
+def test_rr_pointers_are_the_rom_setter_pool_addresses() -> None:
+    pointers = load("gen3_rr")["radical_red"]["pointers"]
+    assert {name: pointers[name]["address"] for name in RR_POINTERS} == RR_POINTERS
+    for name in RR_POINTERS:
+        assert pointers[name]["source"] == G.POOL_SOURCE
+    # the box-storage struct base stays a separate fact: reads.lua cross-checks against it
+    assert pointers["pokemon_storage_base"]["address"] == 0x02029314
+
+
+def test_rr_pointers_are_what_the_rom_derives_now() -> None:
+    """The committed addresses are the derivation, not a transcription of it."""
+    syms = G.parse_sym(G.SYM_DIR / G.PACKS["gen3_rr"]["radical_red"][0])
+    for kind in G.PACKS["gen3_rr"]["radical_red"][1]:
+        rom = rom_or_skip("gen3_rr", "radical_red", kind)
+        assert G.rr_saveblock_pointers(syms, rom) == RR_POINTERS, kind
+
+
+@pytest.mark.parametrize("pack,title", PACK_TITLES)
+def test_no_legacy_alias_address_is_any_pack_pointer(pack: str, title: str) -> None:
+    """0x03003840 / 0x03003838 are IntrMain_Buffer pool constants; a pack pointer that uses one
+    of them re-binds the new client to an address nothing writes."""
+    for name, spec in load(pack)[title]["pointers"].items():
+        assert spec["address"] not in LEGACY_ALIASES, f"{pack}/{title}/{name}"
+
+
+def test_rr_setter_is_byte_pinned_and_its_offset_is_zero() -> None:
+    """The setter is an anchor, so safety.lua re-reads its bytes from the running ROM, and the
+    '+'0x0A halfword is the RR build's identity: offset 0, against vanilla FR's relocation mask."""
+    anchor = load("gen3_rr")["radical_red"]["anchors"]["saveblocks_setter"]
+    syms = G.parse_sym(G.SYM_DIR / G.PACKS["gen3_rr"]["radical_red"][0])
+    address, size = syms[anchor["symbol"]]
+    assert (anchor["address"], anchor["rom_offset"], anchor["length"]) == (
+        address, address - G.ROM_BASE, size)
+    for kind in G.PACKS["gen3_rr"]["radical_red"][1]:
+        rom = rom_or_skip("gen3_rr", "radical_red", kind)
+        pinned = bytes.fromhex(anchor["expected_hex"][kind])
+        assert pinned == rom[anchor["rom_offset"]:anchor["rom_offset"] + anchor["length"]]
+        at = G.SETTER_OFFSET_AT
+        assert pinned[at:at + 4] == G.SETTER_OFFSET_BYTES, f"{kind}: RR offset is not pinned to 0"
+    fr = rom_or_skip("gen3_frlg", "firered", "clean")
+    mask = fr[address - G.ROM_BASE + G.SETTER_OFFSET_AT:][:4]
+    assert mask == bytes.fromhex("7c210140"), "the FR control lost its relocation mask"
+
+
+def test_rr_setter_signature_mismatch_raises_a_named_error() -> None:
+    syms = G.parse_sym(G.SYM_DIR / G.PACKS["gen3_rr"]["radical_red"][0])
+    rom = bytearray(rom_or_skip("gen3_rr", "radical_red", "clean"))
+    at = syms[G.SETTER_SYMBOL][0] - G.ROM_BASE
+    moved = bytearray(rom)
+    moved[at] ^= 0xFF
+    with pytest.raises(SystemExit, match="is not the pinned body"):
+        G.rr_saveblock_pointers(syms, bytes(moved))
+    relocating = bytearray(rom)
+    relocating[at + G.SETTER_OFFSET_AT:at + G.SETTER_OFFSET_AT + 4] = bytes.fromhex("7c210140")
+    with pytest.raises(SystemExit, match="no longer fixes the save-block offset to 0"):
+        G.rr_saveblock_pointers(syms, bytes(relocating))
+    # the vanilla FR build is the same failure: same function, relocation mask intact
+    with pytest.raises(SystemExit, match="no longer fixes the save-block offset to 0"):
+        G.rr_saveblock_pointers(syms, rom_or_skip("gen3_frlg", "firered", "clean"))
+
+
 def test_generator_check_passes_on_the_committed_files() -> None:
     for pack, titles in G.PACKS.items():
         for title in titles:

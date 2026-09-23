@@ -198,6 +198,7 @@ differ at the frame site.
 | `cb1_overworld` | `CB1_Overworld` `0x08056534` | the overworld callback1 body (LG's BL offsets differ, so its bytes differ) |
 | `run_tasks` | `RunTasks` `0x08077578` | the task dispatcher **and** its `gTasks` literal `0x03005090` |
 | `frame_control` | `CallCallbacks + 0x0A` `0x0800051A`, 8 bytes | the per-frame exec site the P1 probe registered (`REGISTER frame addr=0x0800051A`) |
+| `saveblocks_setter` (radical_red only) | `SetSaveBlocksPointers` `0x0804C058`, `0x4C` bytes | the save-block setter body **and its literal pool**, i.e. the three pointer addresses the checkpoint names (§4.4). RR-only: its offset instruction is `movs r1,#0` twice by design, where FR/LG carry the relocation mask, so the bytes are per-kind by intent rather than by rebuild |
 | `try_saving_data` | `TrySavingData` (FR `0x080DA364`, LG `0x080DA338`) | the save witness (`TrySavingData(SAVE_NORMAL) == SAVE_STATUS_OK`) |
 
 `frame_control` is the one anchor whose bytes are build-specific: FR `3BF1A9F9…`, LG `3BF195F9…`,
@@ -268,13 +269,33 @@ Vanilla FRLG re-points all three (`gSaveBlock1Ptr`, `gSaveBlock2Ptr`, `gPokemonS
 one random offset (`src/load_save.c:69-83` `SetSaveBlocksPointers`, called from
 `MoveSaveBlocks_ResetHeap` `:110`) on every battle start (`src/battle_main.c:614`) and map load
 (`src/overworld.c:1337`); `UpdateSaveAddresses` (`src/save.c:630`) re-reads them into the sector
-table on every save. RR never relocates: its offset is fixed at 0 (`0x0804C062`), and its pointer
-addresses come from the profile, not a symbol.
+table on every save.
 
-| title | gSaveBlock1Ptr | gSaveBlock2Ptr | storage | source |
+RR keeps the same three pointer variables, and pins the relocation offset to 0: `0x0804C062` is
+`movs r1,#0` twice where vanilla has `movs r1,#0x7C; ands r1,r0` (`:75`; both RR artifacts are
+read by `test_gen3_safety_unreached.py:162-167`). `tools/gen_gen3_write_checkpoint.py` takes the
+setter's address from `pokefirered.sym`, signature-checks the body, and reads the three addresses
+out of the function's own literal pool (ROM file `0x4C08C..0x4C0A3`) — nothing about the pointers
+comes from the old client's table:
+
+| title | gSaveBlock1Ptr | gSaveBlock2Ptr | gPokemonStoragePtr | source |
 |---|---|---|---|---|
-| firered / leafgreen | `0x03005008` | `0x0300500C` | `gPokemonStoragePtr` `0x03005010` | `.sym` |
-| radical_red | `0x03003840` | `0x03003838` | fixed base `0x02029314` (no pointer) | `data/games/gen3_rr/profile.json` `ram` |
+| firered / leafgreen | `0x03005008` | `0x0300500C` | `0x03005010` | `.sym` |
+| radical_red | `0x03005008` | `0x0300500C` | `0x03005010` | ROM `SetSaveBlocksPointers` pool (ROM file `0x4C08C`); `pokemon_storage_base` `0x02029314` stays from `profile.ram` |
+
+`0x03003840` / `0x03003838` are **not** pointer variables. They sit inside `IntrMain_Buffer`
+(`src/main.c:80`, filled at `:347-349` by `DmaCopy32(3, intr_main, IntrMain_Buffer, ...)` from the
+blob at ROM `0x08000248`) and hold literal-pool constants of the code embedded in that blob —
+`0x03003840` is `&gSaveBlock1` (`0x0202552C`) and `0x03003838` is `&gSaveBlock2` (`0x02024588`).
+They read correctly on this build only because the offset is 0, so the constant equals the live
+pointer; on an FR state (offset `0x74`) the same word is `0x74` bytes behind the live
+`gSaveBlock1Ptr`. The old client still ships them for parity (recorded in
+`data/games/gen3_rr/profile.json` `_src.ram.SB1_PTR_ADDR`); the checkpoint and every new-client
+read use the ROM-derived addresses instead.
+
+`safety.lua` re-checks the setter itself: `anchors.saveblocks_setter` pins the whole function and
+its pool per artifact, so a build that moved the setter — or that restored the relocation mask —
+is refused at runtime, not only at generation time.
 
 Rule (PLAN §5.3): dereference all three at arm time, keep the snapshot, and compare before every
 write. A changed pointer aborts the write; it does not retarget it.
