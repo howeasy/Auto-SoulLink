@@ -862,6 +862,29 @@ def test_rewind_cancels_a_deferred_faint_from_the_abandoned_timeline():
     assert world.hp_of(1) == (30, 0) and world.written() == []
 
 
+def test_a_write_refused_after_the_gate_is_logged_and_consumed():
+    """When the checkpoint gate (safety.check) passes but the write itself refuses,
+    the refusal is logged once, no bytes are written, and the deferred command is
+    consumed (not re-queued). This pins current behavior—benign in production because
+    the gate and the write re-check run in the same frame (OMP review O13)."""
+    world = World()
+    lead, bench = mon(), mon(species=172, dvs=0x3AAA)
+    world.party([lead, bench])
+    world.hello()
+    world.frames(60)  # a live validation arms the model writer
+    world.checkpoint_ok = True  # gate passes
+    world.owned = lambda op, slot: False  # but the write refuses
+    world.reply({"cmd": "force_faint", "key": codec_key(bench), "nickname": "PICHU"})
+    world.frames(1)  # run_deferred is called; the gate passes but arm() refuses
+    # The command is consumed, even though the write was refused.
+    assert len(world.client.deferred) == 0
+    assert world.written() == []
+    # The refusal is logged.
+    assert any("refused by the write gate" in line for line in world.logs.values())
+    # The HUD shows the refusal message.
+    assert any("KO refused" in text for text in world.shown())
+
+
 def test_rewind_cancels_a_safe_reply_from_the_abandoned_battle():
     world = World()
     world.hello()
