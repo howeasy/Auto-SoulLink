@@ -65,6 +65,35 @@ def _display(value):
     return value.title().replace("'D", "'d")
 
 
+def _fixed_species_gift_areas():
+    """Union, across the C/G/S packs, of gift areas with a forced, identical species.
+
+    A `givepoke` row hands the actual species immediately (unlike `giveegg`,
+    whose party slot holds the EGG marker until hatch -- O-15: capture is at
+    hatch, never GiveEgg, so an egg gift's own area_id is never a capture
+    area_id here). An area qualifies when every selected `givepoke` row in it
+    names the SAME species: player-choice areas (starters, Game Corner) name
+    several and are excluded; a single-species area with no choice is fixed.
+    Per-title this derives {dragons_den, mt_mortar, route_35} for Crystal and
+    {mt_mortar, route_35} for Gold/Silver (Crystal-only Dragon's Den Dratini).
+    State consults only the RUN adapter (server/state.py ~1672) even for a
+    Crystal<->Gold pair, so the set must be the union, not one title's alone.
+    """
+    areas = set()
+    for title in _ARTIFACT:
+        gifts = _json(_DATA / f"gen2_{title}" / "gifts.json")["gifts"]
+        by_area = {}
+        for row in gifts:
+            if not row.get("applicability", {}).get("selected") or row.get("operation") != "givepoke":
+                continue
+            by_area.setdefault(row["area_id"], set()).add(row.get("species"))
+        areas |= {area for area, species in by_area.items() if len(species) == 1}
+    return frozenset(areas)
+
+
+_FIXED_SPECIES_GIFT_AREAS = _fixed_species_gift_areas()
+
+
 class Gen2GSCAdapter(GameAdapter):
     """Game facts only; constructing this object cannot activate a runtime route.
 
@@ -332,6 +361,17 @@ class Gen2GSCAdapter(GameAdapter):
             return False
         return (area_id.startswith("gift_") and len(area_id) > 5 or self._legend(area_id)
                 or area_id in self._static_ids)
+
+    def is_fixed_species_gift(self, area_id):
+        """See module-level `_fixed_species_gift_areas` for the derivation.
+
+        `area_id` normally arrives already gift-namespaced (state.py's
+        gift_link_area runs first, e.g. "gift_dragons_den"); strip that prefix
+        before the lookup. A bare raw area_id (no prefix) still matches.
+        """
+        if not isinstance(area_id, str):
+            return False
+        return area_id.removeprefix("gift_") in _FIXED_SPECIES_GIFT_AREAS
 
     def is_daycare_area(self, area_id):
         return area_id == "gift_daycare"

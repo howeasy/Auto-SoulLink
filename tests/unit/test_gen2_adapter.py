@@ -1060,6 +1060,28 @@ class TestGen2GSCAdapter:
         for item in (6, 175, 158, 255, 256, -1, True):
             assert not gsc_adapter.is_valid_held_item(item)
 
+    def test_gsc_context_gender_type_area_form_and_trainer_facts(self, gsc_adapter):
+        """OMP census gap: these were exercised on the legacy Gen2CrystalAdapter but
+        never on gen2_gsc, the adapter every Crystal/Gold/Silver run actually uses."""
+        assert gsc_adapter.gender_symbol("male") == "♂"
+        assert gsc_adapter.gender_symbol("female") == "♀"
+        assert gsc_adapter.gender_symbol("genderless") == ""
+        assert gsc_adapter.gender_symbol("unknown") == ""
+        assert gsc_adapter.type_name(0) == "Normal"
+        assert gsc_adapter.type_name(27) == "Dark"
+        assert gsc_adapter.type_name(9) == "Steel"
+        assert gsc_adapter.type_name(999) == "Type #999"
+        assert gsc_adapter.area_display_name("route_29") == "Route 29"
+        assert gsc_adapter.area_display_name("gift_daycare") == "Egg Hatch"
+        assert gsc_adapter.area_display_name(None) == ""
+        assert gsc_adapter.form_sprite_id(152) is None
+        assert gsc_adapter.form_sprite_id(201) is None  # Unown forms are cosmetic
+        # Randy, the Route 35 guard, is a named source NPC (gifts.json
+        # named_trainer=true for his Spearow gift) -- but a gift-giver carries
+        # no (class, instance) trainer id, so gsc still answers ("", "").
+        assert gsc_adapter.trainer_info(0) == ("", "")
+        assert gsc_adapter.trainer_info(999) == ("", "")
+
     # data/items/mail_items.asm:1-12 (MailItems, identical in both pins; read by
     # ItemIsMail, C engine/pokemon/mail_2.asm:941-945, G :922-926). Ids from
     # constants/item_constants.asm. LITEBLUEMAIL/PORTRAITMAIL lack an _MAIL suffix.
