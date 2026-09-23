@@ -186,6 +186,25 @@ class Gen2GSCAdapter(GameAdapter):
     def game_id(self):
         return "gen2_gsc"
 
+    # ── per-player binding (card gen2-U4b) ───────────────────────────────────────────────
+    # One pairing foundation, three packs: the run's adapter is locked to whichever title
+    # said hello first (the binder above), so a partner running another title would be
+    # answered with the other cartridge's species, encounters and items. Declaring these two
+    # methods is the WHOLE gate shared code reads -- server.py's hello path resolves them
+    # with getattr and branches on nothing else, so no title, rom_type or game_id test
+    # exists there. An adapter that declares neither (every other generation) keeps the one
+    # run-level adapter for both players.
+    def per_player_key(self, rom_type):
+        """The key `rom_type` binds per player, or None for a spelling this pack does not own.
+
+        A key is opaque to shared code: it is only ever compared with `per_player_bound_key`.
+        """
+        return _TITLE_FOR_ROM_TYPE.get(rom_type)
+
+    def per_player_bound_key(self):
+        """This adapter's own key -- the one a hello must DIFFER from to need its own adapter."""
+        return self.title
+
     def is_valid_mon_key(self, key):
         match = _KEY.fullmatch(key) if isinstance(key, str) else None
         return bool(match and 1 <= int(match[3], 16) <= 251)

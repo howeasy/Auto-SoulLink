@@ -652,6 +652,35 @@ class SLinkServer:
             return self.adapter.info_panel_width() == 0
         return bool(reported)
 
+    def _bind_player_adapter(self, player_id: str, rom_type: str) -> None:
+        """Give a player their own adapter when the run's adapter declares one.
+
+        A run's adapter may declare that the cartridges it admits bind DIFFERENT
+        per-player data: Gen 2's three titles share one pairing foundation but not one
+        pack, so the adapter locked to whichever title said hello first cannot answer for
+        a partner on another title. The declaration is ADAPTER data (`per_player_key` /
+        `per_player_bound_key`, resolved with getattr) -- never a game_id, title or
+        rom_type branch in this file. An adapter that declares neither -- every generation
+        but Gen 2 today -- keeps the one run-level adapter for both players, exactly as
+        before.
+
+        Called on EVERY hello, not only the first: a reconnect re-declares its cartridge,
+        and a player whose key matches the run's again drops the adapter it had.
+        """
+        from server.adapters import game_id_for_rom_type, get_adapter
+        key_for = getattr(self.state.adapter, "per_player_key", None)
+        own_key = getattr(self.state.adapter, "per_player_bound_key", None)
+        if not (rom_type and callable(key_for) and callable(own_key)):
+            return
+        player_key = key_for(rom_type)
+        if player_key is None or player_key == own_key():
+            self._player_adapters.pop(player_id, None)
+            return
+        self._player_adapters[player_id] = get_adapter(
+            game_id_for_rom_type(rom_type), is_rr=rom_type.endswith("_rr"), rom_type=rom_type)
+        log.info(f"[{player_id}] per-player adapter bound to {player_key!r} "
+                 f"(run adapter is {own_key()!r})")
+
     def adapter_for(self, player_id: str):
         """The adapter that describes THIS player's cartridge.
 
@@ -1383,6 +1412,13 @@ class SLinkServer:
                     elif rom_type and rom_type != self.state.rom_type:
                         log.warning(f"[{player_id}] hello rom_type={rom_type!r} ignored — "
                                     f"run already locked to {self.state.rom_type!r}")
+                    # Per-player binding, on EVERY hello (not only the one that committed
+                    # the run): the run's adapter may declare that some of the cartridges it
+                    # admits need their OWN adapter (Gen 2's three titles share one pairing
+                    # foundation but not one pack). Generic -- the gate is the adapter's own
+                    # declaration, never a title or game_id here -- and the run's identity is
+                    # untouched: only `_player_adapters` moves.
+                    self._bind_player_adapter(player_id, rom_type)
                 # Hello-first. A connection has proved nothing until it has said hello, so
                 # nothing else on it is listened to. Without this a cartridge whose hello was
                 # lost still had its ticks reconciled into whichever slot it named, and a
