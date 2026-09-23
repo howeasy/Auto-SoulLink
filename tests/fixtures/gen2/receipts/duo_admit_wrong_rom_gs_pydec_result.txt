@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=admitted b=refused area=none titles=gold/crystal status=refused scenario=gen2_admit_wrong_rom rom_b=f2f52230b536214ef7c9924f483392993e226cfb

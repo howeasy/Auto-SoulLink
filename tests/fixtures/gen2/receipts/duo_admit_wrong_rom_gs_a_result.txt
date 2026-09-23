@@ -1,0 +1,18 @@
+DUO_GEN2 {"attempt":1,"case":"gold_battle","fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","player":"a","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","scenario":"gen2_admit_wrong_rom","title":"gold"}
+CLIENT {"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","save_completed","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  phase continue @3218
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":50342,"panel":false,"
+HELLO {"frame":3338,"ot_id":50342}
+  phase loaded @3338
+RX resolved_areas
+RX config
+BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 EC63:C4A6:9E
+HOLD {"frame":4170,"frames":600,"hellos":1}
+  phase save @4170
+  phase saved @4864
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"285916d03e9b2a13fb86d47a0c60759b72ec72a7d0e8dad897814e9c960ad203","client_saves":1,"flushed_matches":true,"frame":4894,"gate_saves":1,"save_completed_frame":4864,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/saveram_gen2_admit_wrong_rom_gen2-gs-admit-wrong-rom_a/Pokemon - Gold Version (USA, Europe).SaveRAM"}
+RECEIPT {"attempt":1,"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"case":"gold_battle","client":{"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","save_completed","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"},"expect_admission":"admitted","fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","harness_write_scopes":[],"hello":{"frame":3338,"ot_id":50342},"input_mode":"normal_buttons","player":"a","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","save":{"cartram_bytes":32768,"cartram_sha256":"285916d03e9b2a13fb86d47a0c60759b72ec72a7d0e8dad897814e9c960ad203","client_saves":1,"flushed_matches":true,"frame":4894,"gate_saves":1,"save_completed_frame":4864,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/saveram_gen2_admit_wrong_rom_gen2-gs-admit-wrong-rom_a/Pokemon - Gold Version (USA, Europe).SaveRAM"},"scenario":"gen2_admit_wrong_rom","schema":"gen2-duo-admit-wrong-rom-v1","title":"gold"}
+RESULT: PASS (admitted and held)
