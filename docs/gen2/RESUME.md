@@ -117,9 +117,18 @@ This note summarises it; it is not a second ledger.
 
 ## Next, in order
 
-1. **Read the first physical C<->C duo result**: `python tools/e2e_duo.py --game gen2_new --scenario link --lane
-   gen2-cc-link --keep-data` (log `.cache/duo-gen2-cc-link.log`, started at the pause). PASS = milestone; FAIL ->
-   diagnose from the per-instance result files (the driver dumps markers; never rerun unchanged).
+1. **First physical C<->C duo — the Soul Link FORMED on hardware (run 1, 2026-09-23)**: both production clients
+   (A crystal_battle, B crystal_battle_ot2) walked Route 29, caught a Rattata each, saved; the server linked
+   `route_29` A 0C6D:B541:13 <-> B 0F5C:AC24:13 (alive, area linked); both drivers RESULT PASS; witness validator
+   PASS. The run was marked FAIL only because H2's oracle counted `mon_stats` as an extra acceptance -> fixed
+   `855c91e`; the fixed oracle PASSES on run 1's real output (data dir C:/Users/howar/AppData/Local/Temp/
+   slink_duo_link_o5ax1k53). **Run 2 FAILED on A: "no Poke Ball left in the pocket"** although A booted from the
+   exact fixture (.bak == fixture): the pack's Ball pocket was read while item names were still garbage tiles
+   (`items=- cursor=nil`, only `CANCEL` decoded; log .cache/duo-gen2-cc-link2.log) -> a pocket-draw readiness
+   race in the pack reading (lua/tests/duo/gen2_route29_inputs.lua / the shared pack UI kinds, F.ball_cursor).
+   Also A's hello carried `ball_count: 0` with `in_battle: true` — check the client's in-battle ball count read.
+   NEXT: card to make the Ball-pocket read wait for a stable, decodable item list (bounded), plus the in-battle
+   ball_count; then rerun the duo until a clean end-to-end PASS (never rerun unchanged).
 2. Reconcile U5 (commit + slink-adapter-guard review + Gen 3 unit check) and U3's final report (G/S admission scope);
    non-author review of U3.
 3. Gold/Silver admission + route if U3/U5 did not include them; then G<->S duo and the C<->G `link` (O-16); OMP
