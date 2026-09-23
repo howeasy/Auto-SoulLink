@@ -1,57 +1,69 @@
 # Gen 3 (P4) FRLG RC cutover gate request — G4 evidence assembly
 
-**Ready to request G4 owner review.** The new Gen 3 client has a live FR↔LG duo PASS on the
-faint-propagation scenario (`docs/gen3/probes/duo_frlg_faint_cmd_gen3_2026-09-23.txt`, PASS with
-both sides' `SAVE_WITNESS_SHA256` matching and counter deltas 4→5 / 3→4) and the FR/FR control on
-the same scenario (`duo_fr_faint_cmd_gen3_2026-09-23.txt`). Both are the *first* live runs on the
-new client, and the FR↔LG one was taken on a tree that also carried uncommitted C5-10/C5-11a
-edits, so it is **not yet citable**: §4 makes the clean re-run the first owed item. What G4 signs
-is therefore not signed here — the rest of the FRLG scenario set, the battle/native/sound probe
-rows, the release-zip boot, the Gen 1/Gen 2 re-runs after the `slink.lua` route change and the
-frozen rollback bundle are all still owed (§4), and the limits of §5 are carried forward.
+**Status: G4 is not yet signable.** §2 is the current per-item state: items 1, 2 and 4 carry
+citable receipts, item 2a is half-closed (Center writes PASS on both titles, the 2F controls are
+failing under diagnosis), and 2b / 3 / 5 / 6 / 7 / 8 are open, blocked, or rehearsal-only. Three
+scope decisions are open with the owner (§5); the remaining lane work is
+`docs/gen3/G4_status_2026-09-23.md`'s estimate: about 27–33 launches without item 6 and 61–67
+with it as written, excluding RNG retries.
 
-Every claim below is tagged **S** (source: a file/commit in this repo), **M** (model: a unit-level
-suite or an independent review), or **P** (physical: a receipt from a real cartridge in BizHawk).
+Reconciled against `docs/gen3/G4_status_2026-09-23.md` (Codex REV-g4-draft-1 at `cc807cf3`) and
+`docs/gen3/probes/RECEIPT_AUDIT_2026-09-23.md` (Codex REV-receipt-audit-1). Receipts live in
+`docs/gen3/probes/`; every commit named below is in `git log --oneline`.
+
+Every claim is tagged **S** (source: a file/commit in this repo), **M** (model: a unit-level suite
+or an independent review), or **P** (physical: a receipt from a real cartridge in BizHawk).
 
 ---
 
 ## 1. What G4 signs
 
-From `docs/gen3/PLAN.md:204` (§6 P4 row: "New client + FRLG cutover", vanilla RC) and §14's P4
+From `docs/gen3/PLAN.md:206` (§6 P4 row: "New client + FRLG cutover", vanilla RC) and §14's P4
 row, G4 is the gate at which the **owner runs a live FireRed↔LeafGreen duo from the Run Manager**
 — link, faint propagation, dead zone, box sync, save/reload — and signs it. **S**
 
-The gate check the owner sees, per `docs/gen3/PLAN.md:224` and §14: **S**
+The gate check the owner sees, per `docs/gen3/PLAN.md:297` ("Gate check" = the receipt set the owner sees) and §14 (`:295`): **S**
 
-1. the conformance suite green;
+1. the conformance suite green (65 tests, §3);
 2. duo receipts that carry `SAVE_WITNESS_SHA256` **and** a counter delta;
 3. the FR and LG coverage rows closed;
 4. the extracted release zip booting FR on the new client;
-5. the rollback bundle frozen (`docs/gen3/PLAN.md` §9: the previous release bundle — old client +
+5. the rollback bundle frozen (`docs/gen3/PLAN.md` §9 (`:229-231`): the previous release bundle — old client +
    `SLink-RR.ups` — frozen as an artifact, because a route flag alone is not a rollback once saves
-   have been mutated). **S** — note the §9 text still names the *previous* companion md5
-   (`8dcffce7…`), while the shipped UPS has produced `bf8e94a0…` since G0
-   (`docs/gen3/PLAN.md:313`); the frozen bundle must be cut from the current pre-G4 artifact, not
-   from that stale line. **S**
+   have been mutated). **S** — the frozen record is `docs/gen3/rollback_bundle.md` (`2cd9f993`);
+   it pins master `7957c24c`, the old client's blob shas, and the companion md5 **measured from the
+   shipped artifact**: `bf8e94a0…` from applying `patch/dist/SLink-RR.ups` (md5 `84082ec3…`) to the
+   clean base `8529f3a4…`. `PLAN.md` §9's `8dcffce7…` (`:231`) and `server/patcher.py`'s master pin are both
+   stale against that artifact; the measured apply is the number to freeze. **S**
 
 G4 is a cutover gate, not RC approval and not G5 (the RR cutover, whose patch rebuild is its own
 card). **S**
 
 ---
 
-## 2. PHYSICAL evidence held
+## 2. Per-item status
 
-| # | Receipt | What it proves | Tag |
+Status vocabulary: **DONE** = a citable receipt exists (its cut named); **REHEARSED** = a receipt
+exists but must be re-taken on the frozen final cut; **OPEN** = not started or incomplete;
+**BLOCKED** = cannot run with current hardware/fixtures.
+
+| Item | Status | Evidence (receipt @ commit; cut) | Still owed |
 |---|---|---|---|
-| 1 | `docs/gen3/probes/duo_fr_faint_cmd_gen3_2026-09-23.txt` — FR/FR `faint_cmd_gen3` PASS, client HEAD `78908fe8` + harness fix `c8020f61`, fixtures `firered_party_town{,_b}.sav` (`03276561`) | A's injected faint becomes a `force_faint` for B through the **overworld checkpoint**; both sides memorialize to box 14 and save; `SAVE_WITNESS_SHA256` site == file on both (a: `9e3a3a74…`, b: `8351c72e…`), counter 4→5, 14/14 sectors, RTC-normalized; PYDEC asserted the scenario facts | **P** |
-| 2 | `docs/gen3/probes/duo_frlg_faint_cmd_gen3_2026-09-23.txt` — **FR A ↔ LG B** `faint_cmd_gen3` PASS at `2121e9ef`, LG fixture `0978a5be`; B's client admitted `title=leafgreen` | the same chain across two *different* cartridges: LG's `force_faint` lands on B (key `F6B6A64D:1C600D89`), both memorialize and save (a 4→5, b 3→4), hook dump == flushed battery on both, PYDEC PASS | **P**, with the **dirty-cut caveat**: the receipt's own header says the tree also carried uncommitted C5-10/C5-11a edits, and it must be re-run on a clean cut before G4 cites it (`24c6ba9a` exists precisely to record that) |
-| 3 | `tests/fixtures/gen3/wire/faint_cmd_gen3_{a,b}_gen3_new.jsonl` | the wire goldens from a live *new-client* run; the conformance suite passes on them (item 45a's checker is silent until ids appear, which is expected) | **P** |
-| 4 | `docs/gen3/probes/duo_frlg_faint_cmd_gen3_2026-09-23.txt` (line `[duo] wire log: …`) vs `duo_fr_faint_cmd_gen3_2026-09-23.txt` (same field) | the FR/FR receipt's wire logs are named `*_old_client.jsonl` although the run was the new client (`[client] [SLink-gen3] gen3_frlg/firered (clean by hash)` in its own log) — a labelling defect in the receipt, not a client mix-up | **P** |
+| **1** FR↔LG faint on a clean cut | **DONE** | `duo_frlg_faint_cmd_gen3_clean_2026-09-23b.txt` @ `8deddf23`, cut `d199da32`: `faint_cmd_gen3: a=PASS b=PASS` | nothing; caveat: the receipt proves an *injected-event overworld* faint, not a natural battle faint (audit) **P** |
+| **2** the seven FRLG scenarios | **DONE at their cuts** | link + boxsync @ `d074bda2` (cut `d199da32`); reconnect + wrong-save @ `60a9ce18` (cut `fb255a05`, `source=fb255a05`); deadzone + whiteout @ `ac1a5490` (cut `059da756`); `linked_faint_active_gen3` @ `4ec51ed0` (cut `eaa96787`) — all `a=PASS b=PASS` with `SAVE_WITNESS_SHA256 match=true` and counter deltas | a final frozen-cut re-run of faint/link/boxsync/reconnect as regression evidence (audit) **P** |
+| **2a** writes inside a Pokémon Center | **OPEN** (half-closed) | `center_receipt_whiteout_fr_as_a_2026-09-23.txt` and `..._lg_as_a_...` @ `5a8064f3`, cut `fb255a05`: `whiteout_gen3: a=PASS b=PASS`, "the write landed in the Center", `CONTROL_LIVE nurse map=5.4 at=(7,4)`, `CONTROL_REFUSED nurse box_mon clause=field_controls_locked attempted=0 writes=0 bytes=unchanged`, witness match + counters, PYDEC PASS — FR-as-A and LG-as-A both | the **2F controls** (`center_controls_gen3` is failing and under diagnosis) plus the Union-Room-entry negative row; both need the owner's decision (b) because BizHawk has no wireless adapter **P** |
+| **2b** in-battle faint window | **OPEN** | wild parked positive on both titles @ `059da756`; LG active hold to bench HP0 @ `4ec51ed0` | trainer positives, FR active hold, doubles (both slots, partner menu refusal, B-cancel reopen), the boundary negatives, and the Pokedude/old-man/Safari refusals; `battle_link` is **BLOCKED** (no connected-link capability) **P** |
+| **3** FRLG probe rows | **OPEN** | 16 FR / 14 LG rows PASS @ `059da756` (lane `eaa96787`), receipts `checkpoint_{fr,lg}_clean_frlg_rows_2026-09-23.txt` | `battle_input_trainer`, `battle_faint_prompt` and `battle_link` on both titles; LG also `script_running` and `battle_commit_state3`; negative rows must name an expected clause (C3-24) **P** |
+| **4** cold-boot admission | **REHEARSED** | `bootcheck_frlg_rehearsal_keys_2026-09-23.txt` @ `3327720c`, lane cut `fb255a05`: **8/8 PASS** (FR and LG × town/battle × a/b) with the PID:OTID key oracle, counters advancing, 14/14 sectors | re-take on the frozen final cut **P** |
+| **5** extracted release zip boots FR on the new client | **REHEARSED** | the zip-boot rehearsal and its correction @ `c8f0c804` (which also lands `tools/check_release_zip.py`, the standing hygiene gate: every member's blob equal to its `git show <rev>:<path>`, no dev-only paths, the 23-file FRLG closure present) | rebuild a **pinned** zip from the final cut, run `python tools/check_release_zip.py <zip> --rev <cut>`, boot it, and record the rev beside the artifact **P** |
+| **6** Gen 1 / Gen 2 lanes after the `slink.lua` route change | **BLOCKED as written** | Gen 2 route boot DONE @ `cc807cf3` (`gen2_route_boot_crystal_2026-09-23.txt`); the legacy Gen 2 duo and the Gen 1 SFX town gate are **red on master too**, i.e. **baseline-differential**: they predate this branch's route change, so a red there is not evidence the cutover broke a generation — only a *delta against the master baseline* is | decision (a): integrate the Gen 1 fixes from the Gen 2 branch (`44bf25d6` SFX gate, `3941198c` Gen 1 ordering) or accept route-differential evidence. As written the item is 34 invocations **S**/**P** |
+| **7** rollback bundle freeze | **OPEN (definition)** | the frozen record exists: `docs/gen3/rollback_bundle.md` @ `2cd9f993` (cut master `7957c24c`, old-client blob shas, the measured companion md5, the rollback procedure and its checklist) | decision (c): does that SHA + manifest count as the freeze, or must a named archive be built and hashed? **S** |
+| **8** owner's own Manager run | **OPEN** | — | two BizHawk instances, the FR↔LG pair, launched from the Manager's run page, exercising link, faint propagation, dead zone, box sync and save/reload by hand. The rows above exist so this run is the confirmation, not the first contact **S** |
 
-What these two receipts do **not** cover: any scenario other than faint propagation, any battle-
-interior hold (`linked_faint_active_gen3`), any LG-side catch/link/deadzone/boxsync/whiteout/
-reconnect, any Manager-driven run (both were harness runs, not the Manager's UI), and any release
-zip. All of those are §4 items.
+What the OPEN rows still need, in lane order (one emulator lane at a time, `PLAN.md:23`/`:297`): the 2F
+controls and the Union-Room row (2a); the 2b matrix; the five probe rows (3); the final boot-check
+(4) and the pinned zip (5); the reconnect wrong-save already re-taken at `fb255a05` and only the
+scenario re-runs remain for (2). Estimates live in `docs/gen3/G4_status_2026-09-23.md`. **S**
 
 ---
 
@@ -59,138 +71,74 @@ zip. All of those are §4 items.
 
 | Area | Evidence | Tag |
 |---|---|---|
-| Unit suites | `python -m pytest tests/unit -q -p no:randomly` → **5434 passed, 1 failed, 297 skipped**; the single failure is `tests/unit/test_gen1_trade_patch.py::test_defs_match_committed_red_and_blue_symbols_and_pret_tables`, which needs `.cache/pret/pokered` and is environment-only in a worktree | **M** |
-| Gen 3 suites | the Gen 3 gate set (client, native, entry, safety, writes ownership, protocol conformance, profile, checkpoint, fixtures, patch sources) is green; `python tools/lua_syntax_check.py` → 233 Lua files parse; `ruff` clean on every touched file | **M** |
-| Conformance | `tests/unit/test_protocol_conformance.py` (53 passed) over the `gen3_new` goldens, with the doc-sync meta-tests that keep `docs/protocol.md` §9 and `conformance_map.py` in step | **M** |
+| Unit suites | `python -m pytest tests/unit -q -p no:randomly --deselect tests/unit/test_gen1_trade_patch.py::test_defs_match_committed_red_and_blue_symbols_and_pret_tables` → **5671 passed, 300 skipped, 1 deselected, 0 failed** at the `3327720c` tree (measured with the concurrent workers' uncommitted edits in place). The deselected test needs `.cache/pret/pokered` and is environment-only in a worktree, which is why it is deselected rather than reported as a failure | **M** |
+| Gen 3 suites | the Gen 3 gate set (client, native, entry, safety, writes ownership, profile, checkpoint, fixtures, patch sources) is green; `python tools/lua_syntax_check.py` → 235 Lua files parse; `ruff` clean on every touched file | **M** |
+| Conformance | `tests/unit/test_protocol_conformance.py` → **65 passed** over the `gen3_new` goldens, with the doc-sync meta-tests that keep `docs/protocol.md` §9 and `conformance_map.py` in step; the citation-drift rules (three of them now) run in `tests/unit/test_protocol_citations.py` with sha-pinned falsifiers | **M** |
 | Write ownership | `tests/unit/test_gen3_write_ownership.py` + the static leak test and the intercepted-sink run required by `docs/gen3/PLAN.md:169` ("write ownership is not proven by `writes.log` alone") | **M** |
-| Duo harness | `tests/unit/test_e2e_duo_*.py` (~440 tests) incl. the strictness rounds `50d580c9` / `32e0e469` / `2cace0a9` | **M** |
+| Duo harness | `tests/unit/test_e2e_duo_*.py` (386 tests across the eleven files) incl. the strictness rounds `50d580c9` / `32e0e469` / `2cace0a9`, and the C4-6n provenance work (`fb255a05`: full markers, rename-safe dirty check) | **M** |
+| Release-zip hygiene | `tools/check_release_zip.py` @ `c8f0c804`: 432+ citations' worth of layout discipline for the artifact — blob equality per member, no dev-only paths, the FRLG closure present | **M** |
 | Independent reviews (Codex, "Review Gen 3 Part 2") | ACCEPT: `writes.lua`, `deferred.lua`, `identity.lua`, the Entry binding, `native.lua`, `core/session.lua` (REV6); `client.lua` quiet-timer; the trade lifecycle at `78908fe8` (REV7, with the receipt caveat since closed by C5-7's per-job dispatch receipt); the duo harness REV4 ACCEPT at `2cace0a9` — narrow: receipt order, RR move-0 PP, duplicate party key, with the RR extension and the explode/rival controls left OPEN/NON-QUALIFYING (`RC_MASTER_GUIDE.md`, row `gen3-P4-C4-6d`). REJECT-then-fixed: `boxes.lua` (Opus review, fixed `d1d4fcec`); the client core (REV2/REV3, fixed `aa062f61`/`690e1c63`/`f3575ff5`) | **M** |
-| Open review at this writing | `gen3-REV2-C5-10-11` is queued ("re-review identity + opcode split") and `gen3-REV-C5-10`'s fixes are folded into the uncommitted C5-11a tree; neither is a G4 input | **S** |
+| The C5 stack | **committed** as `2dc1b750` (C5-10/10b/11a/11b/11c/11d: battle identity, patch-enforced window, fail-closed session counter) — no longer an uncommitted tree, and still not a G4 input | **S** |
 
 ---
 
-## 4. What is still OWED before asking — ordered lane checklist
-
-Everything here runs on the emulator lane, one at a time (`PLAN.md` §14: "one emulator lane").
-Commands are the ones the receipts themselves used. **S**
-
-1. **Clean re-run of the FR↔LG faint propagation** (the receipt names a dirty cut):
-   `git status` clean at a committed cut, then
-   `python tools/e2e_duo.py --game gen3_frlg --scenario faint_cmd_gen3 --wire-log`
-   Expected: `faint_cmd_gen3: a=PASS b=PASS`, two `SAVE_WITNESS_SHA256 … match=true` lines with
-   counter deltas, `PYDEC: PASS`, `EXIT=0`. Refresh the two `gen3_new` goldens from this run.
-2. **The remaining FRLG scenarios**, one invocation each (the set `--scenario all` would run for
-   this game, from `python tools/e2e_duo.py --game gen3_frlg --list`):
-   `link_gen3`, `deadzone_gen3`, `boxsync_gen3`, `whiteout_gen3`, `reconnect_gen3`
-   (plus its fail-closed leg `--wrong-save <second-OT FR flash save>`), and
-   `linked_faint_active_gen3` — the **in-battle** faint the owner requires on vanilla with RR
-   parity (`docs/gen3_resume.md`, checkpoint 10 rulings). Each needs its own PASS receipt with
-   witness hashes and counter deltas; `--wire-log` for the ones whose wire shape is new.
-2a. **Writes inside a Pokemon Center (owner ruling 2026-09-23; 5ecfae3b, Codex REV-center-tasks-1 ACCEPT
-   as SOURCE/MODEL only).** This widens the G3-signed task allow-list, so it needs its own PHYSICAL
-   receipt on FR and LG (RR at G5), kept separate from the G3 signature:
-   (1) pin ROM/pack/source hashes and fixture; stand in an identified Center 1F reached naturally; log map,
-   coordinates, frame, the FULL active task list, RFU/received-player state, callback/script/fade predicates,
-   parked CPU and the pointer snapshot;
-   (2) deliver a real queued SLink mutation while the Union Room background set is present, and show the
-   overworld arm and the writes landing INSIDE the Center before leaving (whiteout_gen3's rebuild is the
-   natural carrier); independently read the keyed party/PC result; a PASS after walking out does not count;
-   (3) save normally: fresh save-hook witness + counter, flushed battery / PYDEC readback of the affected
-   slot, no unrelated record changed, no duplicate event or ACK;
-   (4) negative controls: move toward an RFU/Union Room/cable session (nurse, 2F attendant, Union Room
-   entry and return) and show the newly refused task or predicate by name with ZERO mutation while blocked.
-   Record 2F/Union Room locations explicitly. Limit: BizHawk has no wireless adapter, so partner detection
-   is proven from source only;
-   (5) the existing field/battle/menu/IRQ negative controls must still hold.
-   Keep the transitive-audit manifest (the C4-UR closure list and callback roots) as audit evidence.
-2b. **In-battle faint window (eaa96787; Codex REV-battle-window-1 ACCEPT as SOURCE/MODEL).** The first live
-   receipt is linked_faint_active_gen3 PASS (4ec51ed0). Still owed PHYSICAL, on BOTH FR and LG:
-   - wild AND trainer parked-menu positives: a keyed benched HP write before any input or battle end;
-   - the active target held until switch or end;
-   - doubles: both active slots held; a true bench positive on the primary menu; the partner menu refused;
-     B-cancel reopens the window;
-   - boundary negatives: menu draw, move/target, bag/party/summary, confirmed switch/item/run, intro, faint,
-     animation, link;
-   - Pokedude, old man and Safari refused.
-   Each receipt records the full clauses, the controller/exec/comm tuple, CPU at the write, the keyed party slot
-   before and after, and an untouched active gBattleMons; a later turn/switch and a save/reload keep the faint.
-   Caveats Codex recorded:
-   - battle safety has no CPU clause, so the tuple is frame-granular, not an atomic proof;
-   - RR's old flags==0 tuple is unchanged and not RR qualification;
-   - the design doc overstates "AI reads no bench" (AI_TARGET reads bench HP read-only).
-3. **The FRLG-relevant probe rows** — the battle/native/sound rows that need battle savestates
-   (13+ rows, per `docs/gen3_resume.md`'s checkpoint-10 next-actions item 2):
-   `python tools/run_gate.py lua/tests/probe_gen3_checkpoint.lua --rom patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba`
-   with `SLINK_CHECKPOINT_ROWS=<row>` narrowing per row, on both FR clean and (once it exists)
-   the LG clean artifact. Negative rows must name an expected clause (C3-24).
-4. **Cold-boot admission** of the FRLG artifacts on the final cut:
-   `python tools/gen3_fixtures.py boot-check --rom patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba --saveram-name "Pokemon - FireRed Version (USA).SaveRAM" --fixture tests/fixtures/gen3/firered_party_battle.sav`
-   (`--saveram-name` is REQUIRED: without it the battery name is derived from the staged ROM name, which BizHawk
-   does not use, and the boot sees an erased battery; rehearsal 2026-09-23)
-   (and the same for the LG fixtures, with `--title leafgreen --saveram-name "Pokemon - LeafGreen Version (USA).SaveRAM"`).
-   Expected: `BOOT-CHECK PASS … counter=<a>-><b> party=[…]`, 14/14 sectors.
-5. **The extracted release zip boots FR on the new client**: build the zip
-   (`python tools/make_release.py`), extract it to a clean directory, load the shipped
-   `slink.lua`/`slink_gen3.lua` in BizHawk against a FireRed ROM, and confirm the new client
-   (not the old one) admits the title, connects and reaches the field. This is the item that
-   proves the `lua/slink.lua` route change is correct *in the shipped layout*, not in the repo.
-6. **Gen 1 and Gen 2 lanes re-run after the `slink.lua` route change** (the GBA branch moved; the
-   GB/GBC branches were touched by the same file): `SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py`,
-   `SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py`, and the Gen 2 pair
-   (`tests/live/test_gen2_gates.py`, `tests/e2e/test_duo_gen2.py`). Any red here is a G4 blocker,
-   because it would mean the cutover broke a shipped generation.
-7. **Freeze the rollback bundle** (`PLAN.md` §9): archive the current pre-G4 release bundle — the
-   old Gen 3 client + the shipped `SLink-RR.ups` with its recorded md5 — as a named artifact, with
-   the md5 taken from `server/patcher.py` at the frozen cut rather than from the stale §9 line.
-8. **The owner's own Manager run** (the thing G4 actually signs): two BizHawk instances, the FR↔LG
-   pair, launched from the Manager's run page, exercising link, faint propagation, dead zone, box
-   sync and save/reload by hand. The lane items above exist so that this run is the *confirmation*,
-   not the first contact.
-
----
-
-## 5. Limits carried forward (not signed by G4)
+## 4. Limits carried forward (not signed by G4)
 
 | Limit | Why it is not a G4 row | Tag |
 |---|---|---|
-| The seven OPEN signal kinds and the four PARTIAL checklist rows from G3 | unchanged since G3 signed them as limits (`docs/gen3/PLAN.md:316`); the FRLG-relevant subset is §4 item 3, the rest stay OPEN | **S** |
-| **LG clean and RR clean artifacts** | G3 carried them as deferred; LG now has fixtures and one duo receipt (`0978a5be`, `fc0e45b2`), RR clean has none | **S** |
+| The seven OPEN signal kinds and the four PARTIAL checklist rows from G3 | unchanged since G3 signed them as limits (`docs/gen3/PLAN.md` §14.1 at `:311`); the FRLG-relevant subset is §2 item 3, the rest stay OPEN | **S** |
+| **RR clean artifact** | G3 carried it as deferred and it still has no duo receipt; **LG clean now exists** — fixtures (`0978a5be`, `fc0e45b2`), boot-check 8/8 @ `3327720c` and both LG-as-A Center receipts @ `5a8064f3` | **S** |
 | `explode_gen3` and `rival_swap_gen3` | labelled **NON-QUALIFYING controls** (`2cace0a9`): their witnesses sit at action-start / an unverified RR offset, so they cannot qualify a row | **S** |
 | The RR extension evidence | OPEN in the harness (`2cace0a9`); the RR save extension is compared to a live-RAM copy or reported OPEN | **S** |
-| The RR cutover, the patch rebuild, `patch/dist/SLink-RR.ups`, `server/patcher.py`'s md5, the companion re-pin | **G5**, not G4 (`docs/gen3/PLAN.md:205`); the uncommitted C5-10/C5-11a work (rival-swap identity + `OP_RIVAL_SWAP`) is explicitly *not* on the faint path and not part of this gate | **S** |
+| The RR cutover, the patch rebuild, `patch/dist/SLink-RR.ups`, `server/patcher.py`'s pin, the companion re-pin | **G5**, not G4 (`docs/gen3/PLAN.md:207`, the P5 row). The C5 stack is committed (`2dc1b750`) but explicitly *not* on the faint path and not part of this gate | **S** |
 | Archipelago FRLG, RR native text, the peer ghost | removed from this RC by owner ruling (`PLAN.md` §0, `docs/gen3/TODO.md`) | **S** |
 | Gen 4/Gen 5 (HGSS/Pt/BW) | out of this release entirely | **S** |
 
 ---
 
-## 6. Owner decisions G4 relies on
+## 5. Owner decisions
 
-1. **FRLG vanilla is the RC**, RR comes under the same standard alongside P4 but flips at G5; every
-   P4 card is pack-neutral (`docs/gen3/PLAN.md:17`, owner ruling 2026-09-23). **S**
-2. **In-battle faint must work on vanilla, with RR parity** — this is why
-   `linked_faint_active_gen3` is a required lane item (§4 item 2), not an optional one. **S**
-3. **Old RR client addresses are trusted evidence** for RR pack fields, recorded as
-   "old-client RR profile (production-tested)", never over a ROM-derived value (`PLAN.md:17`). **S**
-4. **The companion artifact is what the shipped UPS produces** (md5 `bf8e94a0…`), and the
-   `codex/rr-foundation` branch is archived rather than merged (G0 record, `PLAN.md:313`). **S**
-5. **Peer ghost removed from the RC**; **RR native text removed/disabled**; **Archipelago FRLG
-   deferred post-RC** (`PLAN.md` §0; `docs/gen3/TODO.md:6-32`). **S**
-6. **Two-reviewer precedent at G6** is kept (G0). **S**
-7. **Rival swap gets a wire request id and a patch-side consumption-time window check** (owner
-   ruling recorded at `122d003e`, `PLAN.md` §0), and the additive opcode does **not** bump the
-   mailbox ABI (C5-8d, coordinator-accepted). Neither is a G4 item; both are G5. **S**
-8. **The LG intro is the same engine as FR's** (owner, 2026-09-23): LG fixtures were built through
+### Settled (recorded; not reopened here)
+
+1. **Center writes are in scope and need their own PHYSICAL receipt on FR and LG** (owner ruling
+   2026-09-23; `5ecfae3b`, Codex REV-center-tasks-1 ACCEPT as SOURCE/MODEL). The receipts at
+   `5a8064f3` are the first half of it; the 2F controls are the half that is failing. **S**/**P**
+2. **In-battle faint must work on vanilla, with RR parity** (`PLAN.md:16`) — that is why `linked_faint_active_gen3`
+   is a required row (now PASS at `4ec51ed0`) and why 2b's matrix is owed rather than optional. **S**/**P**
+3. **The generations converge after G4**: the Gen 1 SFX gate (`44bf25d6`) and the Gen 1 ordering
+   fix (`3941198c`) live on the Gen 2 branch and are not this cut's work. What is *open* is only how
+   item 6 records that (decision (a) below). **S**
+4. **FRLG vanilla is the RC**, RR flips at G5; every P4 card is pack-neutral (`PLAN.md:17`, the RR-under-the-new-standard row). **S**
+5. **The companion artifact is what the shipped UPS produces** (`bf8e94a0…`, §1 item 5) and the
+   `codex/rr-foundation` branch is archived rather than merged (`PLAN.md:201`, the P0 row). **S**
+6. **Peer ghost removed from the RC; RR native text removed/disabled; Archipelago FRLG deferred
+   post-RC** (`PLAN.md` §0; `docs/gen3/TODO.md:6-32`). **S**
+7. **Two-reviewer precedent at G6** is kept. **S**
+8. **Rival swap gets a wire request id and a patch-side consumption-time window check** (`122d003e`,
+   `PLAN.md` §0); the additive opcode does not bump the mailbox ABI (C5-8d). G5, not G4. **S**
+9. **The LG intro is the same engine as FR's** (owner, 2026-09-23): LG fixtures were built through
    the FireRed scripted path with pret-sym RAM witnesses replacing frame counts (`0978a5be`). **S**
+
+### Open — the three scope decisions
+
+| # | Decision | Options | Why it matters |
+|---|---|---|---|
+| **a** | Item 6: how to treat the Gen 1 / Gen 2 baselines | (i) integrate the Gen 2 branch's Gen 1 fixes into this cut and re-run; or (ii) accept route-differential evidence for the pre-existing reds (the Gen 2 route boot already PASSes @ `cc807cf3`) | as written the item is 34 invocations and its reds predate the change; (ii) takes the item from ~34 launches to a comparison against the master baseline **S** |
+| **b** | Unexecutable rows: a real link battle (`battle_link`) and Union-Room entry | (i) record them as limits with the reason (BizHawk has no wireless/RFU adapter, no connected-link capability); or (ii) provide fixtures/hardware | they cannot be produced on this machine; leaving them as owed blocks 2a, 2b and item 3's remaining rows **S** |
+| **c** | Item 7: does the SHA + manifest count as the frozen rollback? | (i) yes — `docs/gen3/rollback_bundle.md` @ `2cd9f993` is the freeze; or (ii) no — build and hash a named archive from that record | the record exists and is citable; only the artifact archive is absent **S** |
 
 ---
 
-## 7. How to verify this draft
+## 6. How to verify this draft
 
 - Every receipt path above exists under `docs/gen3/probes/`; every commit hash is in
-  `git log --oneline 10cd25f9..HEAD` (65 commits at the time of writing).
-- The scenario names and the FR↔LG pairing come from `tools/e2e_duo.py` itself
-  (`--list` output; the pairing is the `"b": ("leafgreen", "leafgreen_party_{target}")` row).
+  `git log --oneline`: the scenario receipts land at `8deddf23`, `d074bda2`, `4ec51ed0`, `059da756`, `ac1a5490`, `fb255a05`, `5a8064f3`, `60a9ce18`, `3327720c`.
+- The per-item status and the open decisions are Codex's reconciliation
+  (`docs/gen3/G4_status_2026-09-23.md`) plus the receipts that landed after it (`5a8064f3`,
+  `60a9ce18`, `3327720c`); where this draft disagrees it says so rather than quietly restating.
+- The scenario names and the FR↔LG pairing come from `tools/e2e_duo.py` itself (`--list` output;
+  the pairing is the `"b": ("leafgreen", "leafgreen_party_{target}")` row).
 - The review verdicts come from the RC ledger's `gen3-P4*` / `gen3-REV*` rows
   (`C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md`), not from this draft's prose.
-- Nothing in §4 is claimed as done; §2's two receipts are the only PHYSICAL rows, and one of them
-  is explicitly marked as needing a clean re-run.
+- Nothing above is claimed beyond its receipt: §2's DONE rows are the ten duo receipts (eight scenarios plus the two
+  Center-as-A runs) plus the boot-check, and the REHEARSED rows say what a final cut still has to re-take.
