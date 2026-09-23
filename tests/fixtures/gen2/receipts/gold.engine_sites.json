@@ -1,0 +1,118 @@
+{
+ "absent": [
+  "capture_box"
+ ],
+ "attempt_id": "inspect-gold_battle",
+ "bank_check": "live",
+ "core_mode": "CGB",
+ "decoy": {
+  "accepted": 0,
+  "addr": 26791,
+  "bank": 127,
+  "bank_rejects": 13,
+  "raw": 13
+ },
+ "evidence_level": "PHYSICAL",
+ "fixture": "gold_battle",
+ "fixture_sha256": "6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6",
+ "frame_alignment": {
+  "aligned_hits": 10,
+  "armed": 9415,
+  "battle_party": 1,
+  "callback": 9415,
+  "callback_party": 2,
+  "effect_to_callback_frames": 1,
+  "misaligned_hits": 0,
+  "party_changed": 9414,
+  "passed": true,
+  "post_party": 2,
+  "pre_party": 2,
+  "rule": "callback emu.framecount() == the frame being emulated (armed); wPartyCount is battle_party at wild_ready, battle_party+1 inside the capture_party callback and to the main loop at armed+1; it first changed at party_changed <= callback"
+ },
+ "harness_write_scopes": [],
+ "input_mode": "normal_buttons",
+ "negatives": {
+  "script_bytecode_arm": "refused",
+  "wrong_bank_hit": "refused",
+  "wrong_pack_byte": "refused"
+ },
+ "pack_commit": "656583c939d30f920a316177311a502dd222b57c",
+ "pack_specs_sha256": "402a6a95054a0ad021fc1e8053119d4beb277885cf254691689c738e5f1825d5",
+ "proven": [
+  "battle_end",
+  "capture_party",
+  "capture_party_finalized",
+  "save_completed",
+  "wild_ready"
+ ],
+ "qualification_attempt_id": "requal-gold-battle-n14b",
+ "result": "PASS",
+ "rom_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
+ "schema": "gen2-engine-site-receipt-v1",
+ "sites": {
+  "battle_end": {
+   "addr": 29782,
+   "bank": 15,
+   "bank_rejects": 0,
+   "expected_hex": "cd307d2005",
+   "first_frame": 9533,
+   "hits": 1,
+   "pc": 29782,
+   "raw": 1,
+   "symbol": "ExitBattle"
+  },
+  "capture_box": {
+   "addr": 27571,
+   "bank": 3,
+   "expected_hex": "3e01",
+   "hits": 0,
+   "raw": 10,
+   "symbol": "PokeBallEffect.SendToPC"
+  },
+  "capture_party": {
+   "addr": 27472,
+   "bank": 3,
+   "bank_rejects": 0,
+   "expected_hex": "fa02d0",
+   "first_frame": 9415,
+   "hits": 1,
+   "pc": 27472,
+   "raw": 1,
+   "symbol": "PokeBallEffect.skip_pokedex"
+  },
+  "capture_party_finalized": {
+   "addr": 27723,
+   "bank": 3,
+   "bank_rejects": 0,
+   "expected_hex": "fa19d1",
+   "first_frame": 4957,
+   "hits": 5,
+   "pc": 27723,
+   "raw": 5,
+   "symbol": "PokeBallEffect.return_from_capture"
+  },
+  "save_completed": {
+   "addr": 19725,
+   "bank": 5,
+   "bank_rejects": 0,
+   "expected_hex": "c9",
+   "first_frame": 10277,
+   "hits": 1,
+   "pc": 19725,
+   "raw": 1,
+   "symbol": "_SaveGameData"
+  },
+  "wild_ready": {
+   "addr": 29696,
+   "bank": 15,
+   "bank_rejects": 0,
+   "expected_hex": "110090",
+   "first_frame": 3634,
+   "hits": 1,
+   "pc": 29696,
+   "raw": 1,
+   "symbol": "InitEnemyWildmon.skip_unown"
+  }
+ },
+ "title": "gold"
+}
