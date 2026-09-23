@@ -266,12 +266,14 @@ end
 
 --- true, or false + why. BizHawk 2.11's savestate.load returns false on a missing file instead
 --- of raising, which kept the PREVIOUS state loaded under the new row's name (C4-PROBE2 review
---- A-1). Existence is checked first so the answer does not rest on that return value alone.
+--- A-1). Existence is checked first, and only a literal true counts as loaded (OMP A2: nil is a
+--- failure too, never "no news is good news").
 function P.load_state(path, load_fn, open_fn)
     local f = open_fn(path, "rb")
     if not f then return false, "state missing: " .. path end
     f:close()
-    if load_fn(path) == false then return false, "savestate.load refused: " .. path end
+    local got = load_fn(path)
+    if got ~= true then return false, "savestate.load refused (returned " .. tostring(got) .. "): " .. path end
     return true
 end
 
@@ -330,13 +332,32 @@ end
 
 --- (witness, stop) for a reason row. battle_comm_eq/_ge are factories over witness_value; every
 --- other WIT entry IS the witness (calling it handed begin() a boolean: C4-PROBE, first FR run).
---- An unknown witness or until_witness name is an error, never a silent fallback.
+--- Errors, never a silent fallback: an unknown witness or until_witness name, a factory without
+--- witness_value, a witness_value on a plain witness, a factory as until_witness (OMP A4).
+P.WITNESS_FACTORIES = {battle_comm_eq = true, battle_comm_ge = true}
 function P.row_witness(WIT, spec)
     local build = assert(WIT[spec.witness], "unknown witness " .. tostring(spec.witness) .. " in " .. spec.name)
-    local w = spec.witness_value ~= nil and build(spec) or build
+    local factory = P.WITNESS_FACTORIES[spec.witness] == true
+    assert(factory == (spec.witness_value ~= nil), spec.name .. ": witness " .. spec.witness
+        .. (factory and " is a factory and needs witness_value" or " takes no witness_value"))
+    local w = factory and build(spec) or build
     if spec.until_witness == nil then return w, w end
+    assert(not P.WITNESS_FACTORIES[spec.until_witness],
+        spec.name .. ": until_witness " .. spec.until_witness .. " is a factory")
     return w, assert(WIT[spec.until_witness],
         "unknown until_witness " .. tostring(spec.until_witness) .. " in " .. spec.name)
+end
+
+--- B6: every planned row's inputs (and a reason row's witness names) are validated before any
+--- row runs, so a malformed spec fails at the start instead of after the emulator work.
+function P.validate(plan, WIT)
+    for i, spec in ipairs(P.STATES) do
+        if plan[i] then
+            P.check_inputs(spec)
+            if spec.witness ~= nil then P.row_witness(WIT, spec) end
+        end
+    end
+    return true
 end
 
 -- Set of P.STATES indices to run for this artifact.
@@ -408,6 +429,21 @@ function P.check_inputs(spec)
 end
 
 P.BW_HASHES = {"rom", "fixture", "pack", "source", "state"}
+-- struct Pokemon is 100 bytes, hp u16 at +0x56 (pret include/pokemon.h; duo_main.lua:26)
+P.PARTY_MON_SIZE, P.MON_HP_OFF = 100, 0x56
+
+--- OMP B5: the menu/party state a live miss needs, from one bw sample (nil: none fed yet).
+--- slot1_usable = a second party mon exists with HP > 0 (the N7 SHIFT target).
+function P.bw_diag(prefix, s)
+    if s == nil then return prefix .. " no sample fed yet" end
+    local e = s.extra or {}
+    local usable = (e.party_count or 0) >= 2 and (e.slot1_hp or 0) > 0
+    return string.format("%s frame=%s ctrl0=%s chosen0=%s bufB0=%s,%s outcome=%s cb2=%s pm_type=%s pm_slot=%s pm_action=%s bag_location=%s fade=%s party_count=%s slot1_hp=%s slot1_usable=%s",
+        prefix, tostring(s.frame), s.ctrl[0] and string.format("%08X", s.ctrl[0]) or "nil", tostring(s.chosen0),
+        tostring(s.ret[0]), tostring(s.ret[1]), tostring(s.outcome), s.cb2 and string.format("%08X", s.cb2) or "nil",
+        tostring(s.pm_type), tostring(s.pm_slot), tostring(s.pm_action), tostring(s.bag_location),
+        tostring(s.fade), tostring(e.party_count), tostring(e.slot1_hp), tostring(usable))
+end
 
 --- The receipt meta for one bw row, or nil + why when any of the five hashes is absent (the
 --- receipt refuses a blank; the row then fails by name instead of the probe dying at log time).
@@ -503,6 +539,50 @@ function P.verdict(row)
     return true, "-"
 end
 
+--- (good, why, line): a row's PROBE verdict line. frames = emulator frames the row spent.
+function P.row_line(spec, row)
+    local good, why = P.verdict(row)
+    -- A positive row's floor is derived from its min_samples; state it, so a reader does
+    -- not have to re-derive why a rate was refused. Negative/report rows have none.
+    local floor = spec.expectation == "positive"
+        and string.format(" floor=%d", P.non_irq_floor(row)) or ""
+    return good, why, string.format("PROBE %s %s sampled=%d true=%d false=%d irq=%d non_irq_sampled=%d non_irq_true=%d%s terminal=%s reached=%s R15=%s CPSR=%s frame=%s frames=%s clauses=%s verdict=%s%s reason=%s",
+        row.name, good and "PASS" or "FAIL", row.samples, row.yes, row.no,
+        row.irq or 0, row.non_irq_samples or 0, row.non_irq_yes or 0, floor, row.terminal,
+        tostring(row.reached), tostring(row.r15), tostring(row.cpsr), tostring(row.frame),
+        tostring(row.frames), P.clause_counts(row), why, spec.note and (" note=" .. spec.note) or "",
+        row.reason)
+end
+
+--- Log a finished row's PROBE line NOW (OMP B2): a later G.finish -- throw_pokeball_from_bag's
+--- own, gen3_scripted_play.lua:2274-2341 -- can end the run without erasing it.
+function P.finish_row(row, spent, log)
+    row.frames = row.spent0 and spent - row.spent0 or nil
+    local good, _, line = P.row_line(P.STATES[row.index], row)
+    log(line)
+    row.logged = true
+    return good
+end
+
+--- The end-of-run pass: every planned row's verdict counts; lines only for rows not yet logged
+--- (a row cut short by an error) and SKIP / "FAIL not run" for the rest. Returns passed.
+function P.summary(rows, plan, title, kind, passed, log)
+    for i, spec in ipairs(P.STATES) do
+        local row = rows[i]
+        if not plan[i] then
+            log(string.format("PROBE %s SKIP not selected for %s/%s", spec.name, title, kind))
+        elseif not row then
+            passed = false
+            log(string.format("PROBE %s FAIL not run", spec.name))
+        else
+            local good, _, line = P.row_line(spec, row)
+            passed = passed and good
+            if not row.logged then log(line) end
+        end
+    end
+    return passed
+end
+
 function P.clause_counts(row)
     local keys, out = {}, {}
     for k in pairs(row.clauses or {}) do keys[#keys + 1] = k end
@@ -570,16 +650,25 @@ function P.run()
         if ok then G.idle(1) end
         return ok, why
     end
+    local function must_load(name)   -- OMP A3: a core phase fails naming the state and the cause
+        local ok, why = load(name)
+        assert(ok, "core phase state: " .. tostring(why))
+    end
     local idle_state = os.getenv("SLINK_STATE") or "slink_overworld.State"
     local function begin(index, witness)
         local spec = P.STATES[index]
         local row = {name=spec.name, terminal=spec.terminal, expectation=spec.expectation,
             expect_clauses=spec.expect_clauses, min_samples=spec.min_samples,
             samples=0, yes=0, no=0, irq=0, non_irq_samples=0, non_irq_yes=0,
-            reached=false, reason="-", witness=witness, write_reason=spec.reason, args=spec.args}
+            reached=false, reason="-", witness=witness, write_reason=spec.reason, args=spec.args,
+            index=index, spent0=G.spent}
         rows[index], active = row, row
         G.phase("probe-state", row.name .. " terminal=" .. row.terminal)
         return row
+    end
+    local function finish(row)
+        active = nil
+        P.finish_row(row, G.spent, G.log)
     end
     local bw_ctx, bw_last, bw_doc, rom_sha, SP, bag
     local function sample()
@@ -587,7 +676,9 @@ function P.run()
         if active.bw then
             local g, n = G.map(cp)
             local x, y = G.pos(cp)
-            local extra = {map = g .. "." .. n, pos = x .. "," .. y}
+            local extra = {map = g .. "." .. n, pos = x .. "," .. y,
+                party_count = memory.read_u8(bw_ctx.T.PARTY_COUNT_ADDR),
+                slot1_hp = memory.read_u16_le(bw_ctx.T.PARTY_BASE + P.PARTY_MON_SIZE + P.MON_HP_OFF)}
             -- N8's receipt_fields: the ball pocket total (SaveBlock1 +0x430, quantity XOR the
             -- low 16 bits of SaveBlock2.encryptionKey; lua/gen3/reads.lua read_balls), every frame
             -- from the load, so the row's first fed sample is the pre-throw baseline (bdbf5736)
@@ -680,19 +771,22 @@ function P.run()
                 }, cp.pointers)
             end
         end
+        local WIT = P.witnesses(cp, function(a) return memory.read_u8(a) end,
+                                function(a) return memory.read_u32_le(a) end)
+        P.validate(plan, WIT)
         hook = event.onframeend(function()
             local success, why = pcall(sample)
             if not success then callback_error = tostring(why); if active then active.error = callback_error end end
         end, "SLink-gen3-checkpoint-probe")
         assert(hook and tostring(hook):gsub("[{}]", "") ~= "00000000-0000-0000-0000-000000000000",
             "frame-end registration refused")
-        assert(load(idle_state))
+        must_load(idle_state)
         local row = begin(1,function() return true end)
         G.idle(300)
         row.reached = field() and row.samples == 300
-        active = nil
+        finish(row)
 
-        assert(load(idle_state))
+        must_load(idle_state)
         local x,y = G.pos(cp)
         assert(x >= 0 and y >= 0, "invalid walking origin")
         row = begin(2,function() return true end)
@@ -704,17 +798,17 @@ function P.run()
         end
         joypad.set({})
         row.reached = moved and row.samples == 120
-        active = nil
+        finish(row)
 
-        assert(load(idle_state))
+        must_load(idle_state)
         G.tap("Start",3,30)
         row = begin(3,function() return not G.pred_ok(cp,"field_controls_locked") end)
-        G.idle(120); row.reached = row.samples > 0; active = nil
+        G.idle(120); row.reached = row.samples > 0; finish(row)
 
-        assert(load(idle_state))
+        must_load(idle_state)
         assert(open_save_dialog(), "save prompt not reached for dialog control")
         row = begin(4,function() return dialog_open() end)
-        G.idle(120); row.reached = row.samples > 0; active = nil
+        G.idle(120); row.reached = row.samples > 0; finish(row)
 
         local domain = assert(G.flash_domain(), "flash domain unavailable")
         local before, after = G.save_counter(domain), nil
@@ -730,13 +824,13 @@ function P.run()
             G.advance()
             if after and G.sectors_at(domain,after) >= 14 then complete=true; break end
         end
-        joypad.set({}); row.reached = complete and row.samples > 0; active = nil
+        joypad.set({}); row.reached = complete and row.samples > 0; finish(row)
 
-        assert(load(os.getenv("SLINK_CHECKPOINT_BATTLE_STATE") or "slink_prebattle.State"))
+        must_load(os.getenv("SLINK_CHECKPOINT_BATTLE_STATE") or "slink_prebattle.State")
         row = begin(6,function() return not G.pred_ok(cp,"in_battle") end)
-        G.idle(120); row.reached = row.samples > 0; active = nil
+        G.idle(120); row.reached = row.samples > 0; finish(row)
 
-        assert(load(os.getenv("SLINK_CHECKPOINT_DOOR_STATE") or "slink_door.State"))
+        must_load(os.getenv("SLINK_CHECKPOINT_DOOR_STATE") or "slink_door.State")
         local group,number = G.map(cp)
         assert(group >= 0 and number >= 0, "invalid starting map")
         row = begin(7,function() return not G.pred_ok(cp,"palette_fade_active") end)
@@ -747,11 +841,11 @@ function P.run()
             changed = changed or (g >= 0 and n >= 0 and (g ~= group or n ~= number))
             if changed and field() and G.pred_ok(cp,"palette_fade_active") then break end
         end
-        joypad.set({}); row.reached = changed and field() and row.samples > 0; active = nil
+        joypad.set({}); row.reached = changed and field() and row.samples > 0; finish(row)
 
         if plan[8] then
             -- gba_map 5.4 --bfs 7,8 11,2; PC at (11,1). Five A presses reach the storage menu.
-            assert(load(os.getenv("SLINK_CHECKPOINT_PC_STATE") or "slink_pokecenter_full.State"))
+            must_load(os.getenv("SLINK_CHECKPOINT_PC_STATE") or "slink_pokecenter_full.State")
             local tasks = assert(cp.tasks, "no tasks block")
             local function pc_up()
                 return P.task_active(memory.read_u8, memory.read_u32_le, tasks, P.TASK_PC_MAIN_MENU)
@@ -769,13 +863,40 @@ function P.run()
                 row.reached = pc_up()
                 if not row.reached then row.reason = "storage menu task not held" end
             else row.reason = where end
-            active = nil
+            finish(row)
+            back_out()
+        end
+
+        -- script_running runs BEFORE the reason rows: the last one (bw_n8_item) can end the run.
+        if plan[9] then
+            local p = cp.predicates.script_context_status
+            assert(p and p.address == P.SCRIPT_STATUS and (p.offset or 0) == 0,
+                "pack does not bind sGlobalScriptContextStatus at the sym address")
+            -- RR: nurse (7,2) behind MB_COUNTER (7,3), talk from (7,4) facing Up (gba_map 5.4).
+            -- FR/LG: the Viridian woman from P.SCRIPT_TILE, in the mkstates-built state (C4-PROBE2;
+            -- the earlier FR row used an externally made Oak-lab state).
+            local rr = title == "radical_red"
+            must_load(os.getenv("SLINK_CHECKPOINT_SCRIPT_STATE")
+                or (rr and "slink_pokecenter_full.State" or "slink_script.State"))
+            local function running() return P.script_active(memory.read_u8) end
+            row = begin(9, running)
+            local there, where
+            if rr then there, where = walk({"Up","Up","Up","Up"}, 7, 4)
+            else there, where = walk({}, P.SCRIPT_TILE[1], P.SCRIPT_TILE[2]) end
+            if there and running() then there, where = false, "script already running before A" end
+            if there then
+                G.tap("Up",3,20)
+                G.tap("A",3,0)
+                for _ = 1,60 do if running() then break end; G.advance() end
+                G.idle(120)
+                row.reached = running()
+                if not row.reached then row.reason = "script context not held" end
+            else row.reason = where end
+            finish(row)
             back_out()
         end
 
         -- ── C4-B2 reason rows: one generic runner, declarative specs ──────────────────────
-        local WIT = P.witnesses(cp, function(a) return memory.read_u8(a) end,
-                                function(a) return memory.read_u32_le(a) end)
         local function bw_wait(name)
             local w = P.BW_WAITS[name]
             return function() return bw_last ~= nil and w(bw_last, bw_ctx) end
@@ -785,7 +906,10 @@ function P.run()
                 "B refused while BATTLE_TYPE_POKEDUDE is set")
         end
         local function bw_steps(spec)
-            for _, step in ipairs(spec.inputs) do
+            for n, step in ipairs(spec.inputs) do
+                if step.throw_ball then
+                    G.phase("helper", spec.name .. " throw_pokeball_from_bag: its own G.finish ends the run here")
+                end
                 if step.tap then no_b(step.tap); G.tap(step.tap, step.frames or 3, step.gap or 13)
                 elseif step.idle then G.idle(step.idle)
                 elseif step.mash then G.mash(step.mash, bw_wait(step.stop))
@@ -817,12 +941,12 @@ function P.run()
                     SP = SP or dofile(wt .. "/lua/tests/gen3_scripted_play.lua")
                     SP.throw_pokeball_from_bag(cp, spec.name)
                 end
+                G.log(P.bw_diag("BWSTEP " .. spec.bw .. " " .. n, bw_last))   -- one line per step, not per frame
             end
         end
         -- One bw row: state, steps, hold, then its BWROW verdict and first/bad/terminal receipts,
         -- logged now (not at the end) so a later row cannot lose them.
         local function bw_row(i, spec)
-            P.check_inputs(spec)
             local path = P.state_path(os.getenv(spec.state_env) or spec.state, os.getenv("SLINK_STATE_DIR"))
             local loaded, why = load(path)
             local row = begin(i, function() return false end)
@@ -835,17 +959,18 @@ function P.run()
                 bw_steps(spec)
                 for _ = 1, spec.hold or 180 do G.advance() end
             end
-            active = nil
             local acc = row.bw
             row.samples, row.yes, row.no = acc.samples, acc.admitted, acc.samples - acc.admitted
             local line, status = bw_ctx.verdict_line(acc)
             row.reason = row.blocked or status
             G.log(line)
+            G.log(P.bw_diag("BWLAST " .. spec.bw, bw_last))
             if meta then
                 for _, k in ipairs({"first", "bad", "terminal"}) do
-                    if acc[k] then G.log(bw_ctx:receipt(acc[k], meta, acc) .. " at=" .. k) end
+                    if acc[k] then G.log(bw_ctx:receipt(acc[k], meta, acc) .. " at=" .. k .. P.bw_diag("", acc[k])) end
                 end
             end
+            finish(row)
         end
         for i = P.REASON_BASE, #P.STATES do
             if plan[i] and P.STATES[i].bw then bw_row(i, P.STATES[i])
@@ -872,64 +997,17 @@ function P.run()
                     if not arrived then row.reason = spec.until_witness .. " never reached"
                     elseif not row.reached then row.reason = "state witness never held" end
                 end
-                active = nil
+                finish(row)
             end
         end
 
-        if plan[9] then
-            local p = cp.predicates.script_context_status
-            assert(p and p.address == P.SCRIPT_STATUS and (p.offset or 0) == 0,
-                "pack does not bind sGlobalScriptContextStatus at the sym address")
-            -- RR: nurse (7,2) behind MB_COUNTER (7,3), talk from (7,4) facing Up (gba_map 5.4).
-            -- FR/LG: the Viridian woman from P.SCRIPT_TILE, in the mkstates-built state (C4-PROBE2;
-            -- the earlier FR row used an externally made Oak-lab state).
-            local rr = title == "radical_red"
-            assert(load(os.getenv("SLINK_CHECKPOINT_SCRIPT_STATE")
-                or (rr and "slink_pokecenter_full.State" or "slink_script.State")))
-            local function running() return P.script_active(memory.read_u8) end
-            row = begin(9, running)
-            local there, where
-            if rr then there, where = walk({"Up","Up","Up","Up"}, 7, 4)
-            else there, where = walk({}, P.SCRIPT_TILE[1], P.SCRIPT_TILE[2]) end
-            if there and running() then there, where = false, "script already running before A" end
-            if there then
-                G.tap("Up",3,20)
-                G.tap("A",3,0)
-                for _ = 1,60 do if running() then break end; G.advance() end
-                G.idle(120)
-                row.reached = running()
-                if not row.reached then row.reason = "script context not held" end
-            else row.reason = where end
-            active = nil
-            back_out()
-        end
     end)
     active = nil
     if hook then pcall(event.unregisterbyid,hook) end
-    local passed = ok and callback_error == nil
-    for i, spec in ipairs(P.STATES) do
-        local row = rows[i]
-        if not plan[i] then
-            G.log(string.format("PROBE %s SKIP not selected for %s/%s", spec.name, title, kind))
-        elseif not row then
-            passed = false
-            G.log(string.format("PROBE %s FAIL not run", spec.name))
-        else
-            local good, why = P.verdict(row)
-            passed = passed and good
-            -- A positive row's floor is derived from its min_samples; state it, so a reader does
-            -- not have to re-derive why a rate was refused. Negative/report rows have none.
-            local floor = spec.expectation == "positive"
-                and string.format(" floor=%d", P.non_irq_floor(row)) or ""
-            G.log(string.format("PROBE %s %s sampled=%d true=%d false=%d irq=%d non_irq_sampled=%d non_irq_true=%d%s terminal=%s reached=%s R15=%s CPSR=%s frame=%s clauses=%s verdict=%s%s reason=%s",
-                row.name, good and "PASS" or "FAIL", row.samples, row.yes, row.no,
-                row.irq, row.non_irq_samples, row.non_irq_yes, floor, row.terminal,
-                tostring(row.reached), tostring(row.r15), tostring(row.cpsr), tostring(row.frame),
-                P.clause_counts(row), why, spec.note and (" note=" .. spec.note) or "", row.reason))
-        end
-    end
+    local passed = P.summary(rows, plan, title, kind, ok and callback_error == nil, G.log)
     -- Not evidence: this probe constructs no writer, so there is nothing to count.
     G.log("WRITE_SURFACE none (predicate-only probe) native_idle=opcode_queue_only")
+    G.log(string.format("FRAMES spent=%d budget=%d", G.spent, G.budget))   -- OMP C1
     G.finish(passed, ok and (callback_error or "all checkpoint controls") or tostring(err))
 end
 

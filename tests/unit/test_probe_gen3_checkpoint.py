@@ -555,7 +555,7 @@ def test_a1_missing_or_refused_state_never_loads(module, tmp_path):
     present = tmp_path / "slink_prebattle.State"
     present.write_bytes(b"x")
     ok, why = probe.load_state(present.as_posix(), lambda p: False, io_open)
-    assert ok is False and why.startswith("savestate.load refused: ")
+    assert ok is False and why.startswith("savestate.load refused (returned false): ")
     assert probe.load_state(present.as_posix(), load_fn, io_open) is True and len(calls) == 1
     assert probe.state_path("slink_x.State", "D:/s") == "D:/s/slink_x.State"
     assert probe.state_path("C:/a/slink_x.State", "D:/s") == "C:/a/slink_x.State"
@@ -570,7 +570,7 @@ def test_a1_a_blocked_row_fails_by_name_whatever_it_counted(module):
     row.blocked = "UNREACHED state missing: X/slink_pretrainer.State"
     assert tuple(probe.verdict(row)) == (False, "UNREACHED state missing: X/slink_pretrainer.State")
     # the runner: the core phases assert the load, a reason row is blocked by name
-    assert SOURCE.count("assert(load(") == 8
+    assert SOURCE.count("must_load(") == 9 and "assert(load(" not in SOURCE   # def + 8 core sites
     assert 'row.blocked, row.reason = "UNREACHED " .. why, why' in SOURCE
     assert "savestate.load(name)" not in SOURCE
 
@@ -759,7 +759,8 @@ def test_frame_end_feeds_bw_rows_under_the_callback_pcall():
     assert "bw_last = P.bw_feed(active, safety, extra)" in SOURCE
     assert "local success, why = pcall(sample)" in SOURCE
     assert 'dofile(wt .. "/lua/tests/gen3_battle_window_rows.lua").bind(cp, title, deps, wt)' in SOURCE
-    assert "G.log(line)" in SOURCE and 'G.log(bw_ctx:receipt(acc[k], meta, acc) .. " at=" .. k)' in SOURCE
+    assert "G.log(line)" in SOURCE
+    assert 'G.log(bw_ctx:receipt(acc[k], meta, acc) .. " at=" .. k .. P.bw_diag("", acc[k]))' in SOURCE
     assert "memory.write" not in SOURCE
 
 
@@ -847,3 +848,135 @@ def test_n8_ball_count_comes_from_the_shared_reader_with_the_key(title):
     assert r.read_balls().ball_count == 5
     assert "local balls = bag.read_balls()" in SOURCE and "extra.balls = balls and balls.ball_count" in SOURCE
     assert "if active.bw.spec.receipt_fields then" in SOURCE
+
+
+# ── OMP review of 0c7fc5fb/920d46af/ffceb394 (B2, B5, B6, C1, A2, A3, A4) ──────────────────────
+def finished_row(lua, probe, name, **fields):
+    index = next(i for i, r in probe.STATES.items() if r.name == name)
+    spec = probe.STATES[index]
+    base = {"name": name, "terminal": spec.terminal, "expectation": spec.expectation,
+            "expect_clauses": spec.expect_clauses, "min_samples": spec.min_samples, "samples": 0,
+            "yes": 0, "no": 0, "irq": 0, "non_irq_samples": 0, "non_irq_yes": 0, "reached": True,
+            "reason": "-", "index": index, "spent0": 1000}
+    return index, lua.table_from({**base, **fields})
+
+
+def test_b2_a_helper_finish_mid_run_keeps_every_completed_row_line(module):
+    """Rows log their PROBE line as they end; a later G.finish (throw_pokeball_from_bag's own)
+    that never reaches the summary loses nothing already finished."""
+    lua, probe = module
+    log = []
+    done = {}
+    for name, fields in (("idle", {"samples": 300, "yes": 300, "non_irq_samples": 300, "non_irq_yes": 300}),
+                         ("battle", {"samples": 120, "no": 120,
+                                     "clauses": lua.table_from({"in_battle": 120})}),
+                         ("script_running", {"samples": 120, "no": 120,
+                                             "clauses": lua.table_from({"script_context_status": 120})})):
+        i, row = finished_row(lua, probe, name, **fields)
+        done[i] = row
+        assert probe.finish_row(row, 1300, log.append) is True
+    # ... then the N8 helper calls G.finish: the run ends here, no summary pass runs
+    assert [ln.split()[1:3] for ln in log] == [["idle", "PASS"], ["battle", "PASS"], ["script_running", "PASS"]]
+    assert all(" frames=300 " in ln for ln in log)
+    # a normal end: the summary does not repeat logged rows, logs the rest, and counts all
+    plan = lua.table_from(dict.fromkeys((1, 6, 9, 10), True))
+    later = []
+    passed = probe.summary(lua.table_from(done), plan, "firered", "clean", True, later.append)
+    assert passed is False                                  # row 10 planned but never run
+    assert [ln for ln in later if ln.split()[1] in ("idle", "battle", "script_running")] == []
+    assert "PROBE battle_input_wild FAIL not run" in later
+    # the run itself: every row end goes through finish(), and the script row precedes the
+    # reason rows (the last of which, bw_n8_item, can end the run)
+    assert SOURCE.count("finish(row)") == 12 and SOURCE.count("active = nil") == 3
+    assert SOURCE.index("if plan[9] then") < SOURCE.index("for i = P.REASON_BASE, #P.STATES do")
+    assert "P.summary(rows, plan, title, kind, ok and callback_error == nil, G.log)" in SOURCE
+
+
+def test_b2_a_logged_row_still_counts_in_the_verdict(module):
+    lua, probe = module
+    i, row = finished_row(lua, probe, "battle", samples=120, yes=1, no=119,
+                          clauses=lua.table_from({"in_battle": 119}))
+    log = []
+    assert probe.finish_row(row, 1100, log.append) is False and log[0].split()[1:3] == ["battle", "FAIL"]
+    assert probe.summary(lua.table_from({i: row}), lua.table_from({i: True}), "firered", "clean",
+                         True, log.append) is False
+    assert len([ln for ln in log if ln.startswith("PROBE battle ")]) == 1
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_b5_bw_diag_carries_the_menu_and_party_state(title):
+    w, probe = bw_world(title)
+    assert probe.bw_diag("BWLAST N7", None) == "BWLAST N7 no sample fed yet"
+    w.set(**parked(title), pm=(1, 0, 1), bag_location=5, fade=True)
+    s = w.ctx.sample(w.ctx, w.safety, "battle_faint", None,
+                     w.lua.table_from({"map": "3.19", "pos": "12,37", "party_count": 2, "slot1_hp": 17}))
+    line = probe.bw_diag("BWSTEP N7 6", s)
+    for field in ("BWSTEP N7 6 frame=100", "pm_type=1", "pm_slot=1", "pm_action=0", "bag_location=5",
+                  "fade=true", "party_count=2", "slot1_hp=17", "slot1_usable=true", "chosen0=0"):
+        assert field in line, field
+    for count, hp in ((1, 17), (2, 0)):
+        s.extra = w.lua.table_from({"party_count": count, "slot1_hp": hp})
+        assert "slot1_usable=false" in probe.bw_diag("x", s)
+    assert probe.PARTY_MON_SIZE == 100 and probe.MON_HP_OFF == 0x56
+    assert 'G.log(P.bw_diag("BWSTEP " .. spec.bw .. " " .. n, bw_last))' in SOURCE
+    assert 'G.log(P.bw_diag("BWLAST " .. spec.bw, bw_last))' in SOURCE
+
+
+def test_b6_every_planned_row_is_validated_before_any_row_runs(module):
+    lua, probe = module
+    WIT = witness_table(lua, probe, FRLG_PACK["firered"], {})
+    for title, kind in (("firered", "clean"), ("leafgreen", "clean"), ("radical_red", "companion"),
+                        ("radical_red", "clean")):
+        assert probe.validate(probe.planned(title, kind, None), WIT) is True
+    i = next(i for i, r in probe.STATES.items() if r.name == "battle_move_menu")
+    spec = probe.STATES[i]
+    saved = spec.inputs
+    spec.inputs = lua.table_from([lua.table_from({"tap": "A", "gap": 0}), lua.table_from({"tap": "A"})])
+    try:
+        with pytest.raises(lupa.LuaError, match="battle_move_menu input 2: A pressed again"):
+            probe.validate(probe.planned("firered", "clean", None), WIT)
+    finally:
+        spec.inputs = saved
+    assert SOURCE.index("P.validate(plan, WIT)") < SOURCE.index("hook = event.onframeend(")
+
+
+def test_c1_frames_are_logged_per_row_and_at_the_end(module):
+    lua, probe = module
+    _, row = finished_row(lua, probe, "battle", samples=120, no=120, clauses=lua.table_from({"in_battle": 120}))
+    log = []
+    probe.finish_row(row, 1777, log.append)
+    assert " frames=777 " in log[0]
+    assert 'G.log(string.format("FRAMES spent=%d budget=%d", G.spent, G.budget))' in SOURCE
+    assert "index=index, spent0=G.spent}" in SOURCE
+
+
+def test_a2_a_nil_savestate_load_is_not_a_load(module, tmp_path):
+    lua, probe = module
+    present = tmp_path / "slink_prebattle.State"
+    present.write_bytes(b"x")
+    ok, why = probe.load_state(present.as_posix(), lambda p: None, lua.eval("io.open"))
+    assert ok is False and why.startswith("savestate.load refused (returned nil): ")
+
+
+def test_a3_core_phase_loads_name_the_state(module):
+    """Plain assert(load(x)) already forwarded load's second return as the message (lupa below);
+    must_load keeps that explicit and says which kind of phase failed."""
+    lua, probe = module
+    ok, msg = lua.execute("return pcall(function() assert((function() return false, 'state missing: X' end)()) end)")
+    assert ok is False and "state missing: X" in msg
+    assert 'assert(ok, "core phase state: " .. tostring(why))' in SOURCE
+
+
+def test_a4_witness_value_only_with_a_factory_and_never_on_until(module):
+    lua, probe = module
+    WIT = witness_table(lua, probe, FRLG_PACK["firered"], {})
+    with pytest.raises(lupa.LuaError, match="battle_input takes no witness_value"):
+        probe.row_witness(WIT, lua.table_from({"name": "x", "witness": "battle_input", "witness_value": 2}))
+    with pytest.raises(lupa.LuaError, match="battle_comm_eq is a factory and needs witness_value"):
+        probe.row_witness(WIT, lua.table_from({"name": "x", "witness": "battle_comm_eq"}))
+    with pytest.raises(lupa.LuaError, match="until_witness battle_comm_ge is a factory"):
+        probe.row_witness(WIT, lua.table_from({"name": "x", "witness": "battle_comm_eq", "witness_value": 2,
+                                               "until_witness": "battle_comm_ge"}))
+    w, stop = probe.row_witness(WIT, lua.table_from({"name": "x", "witness": "battle_comm_eq",
+                                                     "witness_value": 0}))
+    assert w() is True and stop() is True             # comm0 reads 0 in the empty fake RAM
