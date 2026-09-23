@@ -1493,7 +1493,7 @@ def save_then_write_chain(ka):
     the release, with its write-frame witness (field free, no START task, read inside the write).
     SAVE_CANCEL_FIELD_FREE is NOT in this line: see save_then_write_order."""
     k = re.escape(ka)
-    dismissal = r"by=(?:a_press delay=[1-9]\d*|timeout delay=0)$"
+    dismissal = r"by=(?:a_press delay=(?:[1-9]|[1-5]\d)|timeout delay=0)$"
     return [r"(?m)^SAVE_WITNESS_DUMP .*saves=1 ", rf"(?m)^SAVE_DISMISSAL save_then_write_1 {dismissal}",
             r"(?m)^STALE_SAVE_DIALOG save_dialog_cb=0x[0-9A-F]{8}:SaveDialogCB_ReturnSuccess",
             rf"(?m)^WRITE_PROBE_READY {k} ", gen3_rx("box_mon", ka), gen3_tx("stats_cache", ka),
@@ -1503,13 +1503,15 @@ def save_then_write_chain(ka):
             rf"(?m)^CONTROL_LIVE dialog_witness {k} ", gen3_rx("party_mon", ka),
             rf"(?m)^CONTROL_REFUSED dialog_witness party_mon {k} {_MENU_CLAUSE}",
             rf"(?m)^SAVE_CANCEL_PROMPT {k} row=save prompt=(?:overwrite|different_file)$",
+            rf"(?m)^CONTROL_LIVE save_prompt {k} ",
             rf"(?m)^CONTROL_REFUSED save_prompt party_mon {k} {_MENU_CLAUSE}",
-            rf"(?m)^SAVE_CANCEL_MENU_REDRAWN {k} ",
+            rf"(?m)^SAVE_CANCEL_MENU_REDRAWN {k} ", rf"(?m)^CONTROL_LIVE save_cancel_menu {k} ",
             rf"(?m)^CONTROL_REFUSED save_cancel_menu party_mon {k} {_MENU_CLAUSE}",
             rf"(?m)^CONTROL_RELEASED save_cancel party_mon {k}$",
             gen3_tx("sync_retrieve_done", ka), gen3_returned(ka),
             rf"(?m)^SAVE_CANCEL_WRITE_FRAME {k} frame=\d+ field_free=true start_menu_task=false$",
-            rf"(?m)^CONTROL_SETTLED save_cancel party_mon {k}$"]
+            rf"(?m)^CONTROL_SETTLED save_cancel party_mon {k}$",
+            r"(?m)^SAVE_COUNTER_UNCHANGED before=(\d+) after=\1$"]
 
 
 def save_then_write_order(ka):
@@ -1523,7 +1525,7 @@ def save_then_write_order(ka):
     chain = save_then_write_chain(ka)
     released = rf"(?m)^CONTROL_RELEASED save_cancel party_mon {re.escape(ka)}$"
     free = rf"(?m)^SAVE_CANCEL_FIELD_FREE {re.escape(ka)}$"
-    settled = chain[-1]
+    settled = rf"(?m)^CONTROL_SETTLED save_cancel party_mon {re.escape(ka)}$"
     return [*chain, free], [*zip(chain, chain[1:], strict=False), (released, free), (free, settled)]
 
 
@@ -1532,6 +1534,48 @@ def save_then_write_forbidden(ka):
     pointer named in row 9's refusal (the old pack's clause, G4 draft row 9)."""
     return [gen3_tx("box_mon_failed", ka), gen3_tx("sync_retrieve_failed", ka),
             r"(?m)^SAVE_WITNESS_DUMP .*saves=3 ", r"(?m)^CONTROL_REFUSED dialog_witness .*save_dialog_cb"]
+
+
+# ctx.hold_probe's 600 held frames plus its frame-0 sample: every held frame calls live() once
+CABLE_HOLD_SAMPLES = 601
+_CABLE_NULL_RE = re.compile(
+    r"(?m)^CABLE_CALLBACK_NULL (?:(?P<witnessed>sLinkOpen=1 gLinkCallback=0)|limit=no-cable-partner) "
+    r"held_frames=(?P<held>\d+) open_frames=(?P<open>\d+) null_frames=(?P<null>\d+)"
+    r"(?: callback=0x(?P<cb>[0-9A-F]{8}):(?P<name>\w+))?$")
+
+
+def gen3_sym(title, name):
+    """`name`'s address in pret's .sym for `title` (radical_red reads FR's, as the driver does)."""
+    sym = "firered" if title == "radical_red" else title
+    with open(os.path.join(REPO, "data", "gen3", "pret", f"poke{sym}.sym"), encoding="utf-8") as handle:
+        for line in handle:
+            parts = line.split()
+            if len(parts) == 4 and parts[3] == name:
+                return int(parts[0], 16)
+    raise RuntimeError(f"no {name} in poke{sym}.sym")
+
+
+def cable_callback_problems(label, text, link_cb):
+    """Row 6 (G4 draft §3.2): the CABLE_CALLBACK_NULL line's fields. Witnessed: 1 <= null <= open
+    <= held. The no-cable-partner limit: the link open on EVERY held frame (held >= the hold's
+    CABLE_HOLD_SAMPLES), never null, and the callback LinkCB_RequestPlayerDataExchange at its
+    .sym address (`link_cb`, Thumb bit set)."""
+    m = _CABLE_NULL_RE.search(text or "")
+    if not m:
+        return [f"{label}: CABLE_CALLBACK_NULL missing or malformed"]
+    held, opened, null = int(m["held"]), int(m["open"]), int(m["null"])
+    problems = []
+    if held < CABLE_HOLD_SAMPLES:
+        problems.append(f"{label}: CABLE_CALLBACK_NULL held_frames={held} < {CABLE_HOLD_SAMPLES}")
+    if m["witnessed"]:
+        if m["cb"] is not None or not 1 <= null <= opened <= held:
+            problems.append(f"{label}: CABLE_CALLBACK_NULL witnessed form needs 1 <= null <= open <= held "
+                            f"and no callback ({m.group(0)})")
+    elif null != 0 or opened != held or m["cb"] is None or m["name"] != "LinkCB_RequestPlayerDataExchange" \
+            or int(m["cb"], 16) != (link_cb | 1):
+        problems.append(f"{label}: CABLE_CALLBACK_NULL limit needs open_frames == held_frames, null_frames=0 "
+                        f"and callback=0x{link_cb | 1:08X}:LinkCB_RequestPlayerDataExchange ({m.group(0)})")
+    return problems
 
 
 def center_controls_chain(ka):
@@ -1550,10 +1594,8 @@ def center_controls_chain(ka):
             rf"(?m)^CONTROL_LIVE cable_save {k} ", rf"(?m)^CONTROL_REFUSED cable_save box_mon {k} clause=\S+ ",
             r"(?m)^SAVE_WITNESS_DUMP ", rf"(?m)^CONTROL_LIVE cable_link {k} ",
             rf"(?m)^CONTROL_REFUSED cable_link box_mon {k} clause=\S+ ",
-            # row 6: a witnessed null-callback-while-open frame, or the no-partner limit with its
-            # evidence (open on >= 1 sampled frame, never null, a non-null callback)
-            r"(?m)^CABLE_CALLBACK_NULL (?:sLinkOpen=1 gLinkCallback=0 samples=[1-9]\d*/[1-9]\d*"
-            r"|limit=no-cable-partner open_frames=[1-9]\d* null_frames=0 callback=0x(?!00000000)[0-9A-F]{8})",
+            # row 6: located here, judged field by field by cable_callback_problems
+            r"(?m)^CABLE_CALLBACK_NULL ",
             rf"(?m)^CONTROL_RELEASED cable_link box_mon {k}$", gen3_tx("stats_cache", ka),
             gen3_boxed(ka), rf"(?m)^CONTROL_SETTLED cable_link box_mon {k}$",
             r"(?m)^WITNESS union_room_attendant script=CableClub_EventScript_UnionRoomAdapterNotConnected "
@@ -5658,6 +5700,8 @@ class DuoRun:
         problems += gen3_receipt_problems(
             "a", results["a"], required=chain, ordered=list(zip(chain, chain[1:], strict=False)),
             forbidden=[gen3_tx("box_mon_failed", ka), gen3_tx("sync_retrieve_failed", ka)])
+        problems += cable_callback_problems(
+            "a", results["a"], gen3_sym(self._gen3_title("a"), "LinkCB_RequestPlayerDataExchange"))
         self._gen3_raise(problems, f"center_controls: {ka} held at the Cable Club menu, the cable "
                                    f"link wait and the Union Room attendant; landed once released")
 

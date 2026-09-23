@@ -65,6 +65,11 @@ local function menu_leg(ctx, linked)
     local function dialog_cb() return ctx.peek("sSaveDialogCB", 4) end
     local function at(label) return dialog_cb() == (S[label] | 1) end
     local function cursor() return ctx.peek("sStartMenuCursorPos", 1) end
+    -- the leg must write NO save: the flash counter itself (gen3_boot_check.save_counter, the word
+    -- the loader picks a slot by), not a log line -- a DUMP_SKIPPED/_FAIL save leaves no DUMP
+    local dom = G.flash_domain()
+    if not dom then return false, "SAVE_COUNTER: no flash memory domain" end
+    local counter0 = G.save_counter(dom)
 
     -- open START with save_via_menu's discipline (gen3_boot_check.lua:421-439): press only on a
     -- free field, then wait for the menu to READ input; a swallowed Start is pressed again
@@ -177,6 +182,11 @@ local function menu_leg(ctx, linked)
     end
     ctx.log(fmt("SAVE_CANCEL_WRITE_FRAME %s frame=%d field_free=true start_menu_task=false", linked, landed.frame))
     ctx.log(fmt("CONTROL_SETTLED save_cancel party_mon %s", linked))
+    local counter1 = G.save_counter(dom)
+    if counter1 ~= counter0 then
+        return false, fmt("SAVE_COUNTER: the menu leg moved the flash save counter %d -> %d", counter0, counter1)
+    end
+    ctx.log(fmt("SAVE_COUNTER_UNCHANGED before=%d after=%d", counter0, counter1))
     return true
 end
 

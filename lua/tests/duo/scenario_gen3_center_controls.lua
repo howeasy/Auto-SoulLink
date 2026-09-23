@@ -161,19 +161,23 @@ local function a_side(ctx, linked)
     ctx.frames(60)
     -- row 6 (null callback while open), sampled on every held frame of the link wait. pret
     -- link.c: OpenLink sets sLinkOpen (InitLink :373) and then gLinkCallback (:394) in one
-    -- function, so "open before exchange" has no frame boundary (a recorded limit). The callback
-    -- is NULLed only by ClearLinkCallback/_2 (:746-757), whose callers (cable_club.c:637/693/886,
-    -- field_fadetransition.c:661) all run after a partner connected; with no cable partner the
-    -- wait never gets there (Task_LinkupAwaitConnection returns on playerCount < 2, cable_club.c:
-    -- 208-214) and LinkMain2 never runs the callback (:512-523). So the expected receipt is the
-    -- LIMIT form, carrying its evidence: the link open on N sampled frames, the callback never 0.
-    local open_n, null_n, cb_seen = 0, 0, 0
+    -- function, so "open before exchange" has no frame boundary (a recorded limit). Three sites
+    -- NULL the callback: ClearLinkCallback/_2 (:746-757; callers cable_club.c:637/693/886,
+    -- field_fadetransition.c:661) and LinkCB_RequestPlayerDataExchange itself (:1128-1134), the
+    -- most direct route once a partner connects -- but LinkMain2 runs the callback only with
+    -- LINK_STAT_CONN_ESTABLISHED (:512-523), and with no cable partner Task_LinkupAwaitConnection
+    -- returns on playerCount < 2 (cable_club.c:208-214), so none is reached. The expected receipt
+    -- is the LIMIT form, carrying its evidence: the link open on EVERY held frame, the callback
+    -- never 0 and always LinkCB_RequestPlayerDataExchange (the .sym address, ctx.sym).
+    local link_cb = ctx.sym.LinkCB_RequestPlayerDataExchange | 1
+    local held_n, open_n, null_n, other_cb = 0, 0, 0, nil
     local function linking_sampled()
         if not linking() then return false end
+        held_n = held_n + 1
         if ctx.peek("sLinkOpen", 1) ~= 0 then
             open_n = open_n + 1
             local cb = ctx.peek("gLinkCallback", 4)
-            if cb == 0 then null_n = null_n + 1 else cb_seen = cb end
+            if cb == 0 then null_n = null_n + 1 elseif cb ~= link_cb then other_cb = other_cb or cb end
         end
         return true
     end
@@ -183,11 +187,19 @@ local function a_side(ctx, linked)
         return false, "cable_link: sLinkOpen never read 1 during the link wait (nothing sampled for row 6)"
     end
     if null_n > 0 then
-        ctx.log(fmt("CABLE_CALLBACK_NULL sLinkOpen=1 gLinkCallback=0 samples=%d/%d", null_n, open_n))
+        ctx.log(fmt("CABLE_CALLBACK_NULL sLinkOpen=1 gLinkCallback=0 held_frames=%d open_frames=%d null_frames=%d",
+                    held_n, open_n, null_n))
     else
-        ctx.log(fmt("CABLE_CALLBACK_NULL limit=no-cable-partner open_frames=%d null_frames=0 callback=0x%08X%s",
-                    open_n, cb_seen, cb_seen == (ctx.sym.LinkCB_RequestPlayerDataExchange | 1)
-                    and ":LinkCB_RequestPlayerDataExchange" or ""))
+        if open_n ~= held_n then
+            return false, fmt("cable_link: the link was open on %d of %d held frames; the no-partner limit "
+                              .. "needs every one", open_n, held_n)
+        end
+        if other_cb then
+            return false, fmt("cable_link: gLinkCallback read 0x%08X, not LinkCB_RequestPlayerDataExchange "
+                              .. "(0x%08X)", other_cb, link_cb)
+        end
+        ctx.log(fmt("CABLE_CALLBACK_NULL limit=no-cable-partner held_frames=%d open_frames=%d null_frames=0 "
+                    .. "callback=0x%08X:LinkCB_RequestPlayerDataExchange", held_n, open_n, link_cb))
     end
     ctx.log(fmt("CONTROL_RELEASED cable_link box_mon %s", linked))
     G.tap("B", 3, 13)                                    -- CheckLinkCanceledBeforeConnection

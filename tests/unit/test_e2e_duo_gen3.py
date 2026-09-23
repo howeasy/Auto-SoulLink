@@ -1039,6 +1039,9 @@ function FAKE(scenario, player, phase, spec)
     -- the START menu after an in-game save (save_then_write): closed, the cursor left on SAVE
     -- (row 4 of the identity order), sSaveDialogCB stale on SaveDialogCB_ReturnSuccess
     local menu = { open = false, cb = "input", cursor = 4, dialog = 0x0806F9E1 }
+    -- the flash save counter (G.save_counter): 4 + saves; spec.leg_saved models a menu-leg save
+    -- that logged no DUMP line (SAVE_WITNESS_DUMP_SKIPPED/_FAIL)
+    local flash, flaky = 4, 0
     local menu_tap
     -- released: a talk's script closed (mash_until); save_then_write starts on an idle field
     local probes, released = 0, scenario == "save_then_write"
@@ -1160,6 +1163,7 @@ function FAKE(scenario, player, phase, spec)
     ctx.save = function()
         saves = saves + 1
         menu.open, menu.cb, menu.cursor, menu.dialog = false, "input", 4, 0x0806F9E1
+        flash = 4 + saves
         logs[#logs + 1] = string.format("SAVE_WITNESS_DUMP path=p bytes=131072 saves=%d frame=1 counter=%d",
                                         saves, 4 + saves)
         return true
@@ -1203,6 +1207,8 @@ function FAKE(scenario, player, phase, spec)
                   if name == "field_controls_locked" and (menu.open or menu.stuck) then return false end
                   return released
               end,
+              flash_domain = function() return "Flash" end,
+              save_counter = function() return flash end,
               start_menu_witness = function()
                   return function() return menu.open and menu.cb == "input" end,
                          function()
@@ -1307,7 +1313,9 @@ function FAKE(scenario, player, phase, spec)
             if spec.prompt_admits then
                 for i = #items, 1, -1 do if items[i].cmd == "party_mon" then table.remove(items, i) end end
             end
-        elseif menu.cb == "save" and btn == "B" and menu.dialog == OVERWRITE then menu.cb = "input"
+        elseif menu.cb == "save" and btn == "B" and menu.dialog == OVERWRITE then
+            menu.cb = "input"
+            if spec.leg_saved then flash = flash + 1 end
         elseif menu.cb == "input" and btn == "B" then menu.open, menu.stuck = false, spec.stuck_locked
         end
     end
@@ -1319,8 +1327,11 @@ function FAKE(scenario, player, phase, spec)
         if name == "sStartMenuOrder" then return offset or 0 end
         if name == "gDifferentSaveFile" then return 0 end
         -- the no-partner link wait (link.c OpenLink :390-395): open, callback set, never run
-        if name == "sLinkOpen" then return spec.link_closed and 0 or 1 end
-        if name == "gLinkCallback" then return spec.null_cb and 0 or 0x0800A721 end
+        if name == "sLinkOpen" then
+            if spec.link_flaky then flaky = flaky + 1; return flaky % 2 end   -- open on every other frame
+            return spec.link_closed and 0 or 1
+        end
+        if name == "gLinkCallback" then return spec.null_cb and 0 or spec.odd_cb and 0x12345679 or 0x0800A721 end
         error("fake ctx.peek: no " .. tostring(name))
     end
     function session.deferred:pending() return #self.items, why, 0, self.items[1] and self.items[1].cmd end
@@ -2584,7 +2595,7 @@ def _center_controls_receipt(k):
             "SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5\n"
             f"CONTROL_LIVE cable_link {k} map=5.5\n"
             f"CONTROL_REFUSED cable_link box_mon {k} clause=task held\n"
-            "CABLE_CALLBACK_NULL limit=no-cable-partner open_frames=601 null_frames=0 "
+            "CABLE_CALLBACK_NULL limit=no-cable-partner held_frames=601 open_frames=601 null_frames=0 "
             "callback=0x0800A721:LinkCB_RequestPlayerDataExchange\n"
             f"CONTROL_RELEASED cable_link box_mon {k}\nTX stats_cache {k} {{}}\n"
             f"BOXED_OBSERVED {k} box=0:0\nCONTROL_SETTLED cable_link box_mon {k}\n"
@@ -2627,17 +2638,11 @@ def test_center_controls_oracle_positive_and_negatives(monkeypatch, tmp_path):
         f"CONTROL_LIVE cable_save {k}", f"SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5\nCONTROL_LIVE cable_save {k}")
     with pytest.raises(RuntimeError, match="SAVE_WITNESS_DUMP"):
         run.assert_center_controls_gen3_saved(dict(good, a=save_first))
-    # the limit form carries its evidence: the link was open on sampled frames, never null
-    for bad in ("open_frames=0 null_frames=0", "open_frames=601 null_frames=3"):
-        with pytest.raises(RuntimeError, match="CABLE_CALLBACK_NULL"):
-            run.assert_center_controls_gen3_saved(dict(good, a=good["a"].replace(
-                "open_frames=601 null_frames=0", bad)))
-    with pytest.raises(RuntimeError, match="CABLE_CALLBACK_NULL"):
-        run.assert_center_controls_gen3_saved(dict(good, a=good["a"].replace(
-            "callback=0x0800A721", "callback=0x00000000")))
+    # row 6's line is judged field by field (REV-PROBE2-SAVEROWS B-2): see test_row6_oracle_*
     witnessed = good["a"].replace(
-        "CABLE_CALLBACK_NULL limit=no-cable-partner open_frames=601 null_frames=0 "
-        "callback=0x0800A721:LinkCB_RequestPlayerDataExchange", "CABLE_CALLBACK_NULL sLinkOpen=1 gLinkCallback=0 samples=4/601")
+        "CABLE_CALLBACK_NULL limit=no-cable-partner held_frames=601 open_frames=601 null_frames=0 "
+        "callback=0x0800A721:LinkCB_RequestPlayerDataExchange",
+        "CABLE_CALLBACK_NULL sLinkOpen=1 gLinkCallback=0 held_frames=601 open_frames=601 null_frames=4")
     run.assert_center_controls_gen3_saved(dict(good, a=witnessed))
 
 
@@ -3095,7 +3100,7 @@ def _save_then_write_receipt(k):
             "[client] [SLink-gen3] write overworld 0x020242E8 +100 frame 5626\n"
             f"TX sync_retrieve_done {k} {{}}\nSAVE_CANCEL_FIELD_FREE {k}\nRETURNED_OBSERVED {k} slot=1\n"
             f"SAVE_CANCEL_WRITE_FRAME {k} frame=5626 field_free=true start_menu_task=false\n"
-            f"CONTROL_SETTLED save_cancel party_mon {k}\n")
+            f"CONTROL_SETTLED save_cancel party_mon {k}\nSAVE_COUNTER_UNCHANGED before=6 after=6\n")
 
 
 def test_save_then_write_oracle_positive_and_negatives(monkeypatch, tmp_path):
@@ -3253,9 +3258,10 @@ def test_row3_the_cable_save_is_its_own_refusal_before_the_save_lands(lua):
 
 
 @pytest.mark.parametrize("spec, marker", [
-    ({}, "CABLE_CALLBACK_NULL limit=no-cable-partner open_frames=601 null_frames=0 "
+    ({}, "CABLE_CALLBACK_NULL limit=no-cable-partner held_frames=601 open_frames=601 null_frames=0 "
          "callback=0x0800A721:LinkCB_RequestPlayerDataExchange"),
-    ({"null_cb": "lua:true"}, "CABLE_CALLBACK_NULL sLinkOpen=1 gLinkCallback=0 samples=601/601"),
+    ({"null_cb": "lua:true"},
+     "CABLE_CALLBACK_NULL sLinkOpen=1 gLinkCallback=0 held_frames=601 open_frames=601 null_frames=601"),
 ])
 def test_row6_the_link_wait_is_sampled_for_a_null_callback(lua, spec, marker):
     ok, passed, msg, logs = _run_module(lua, "center_controls", "a", "initial", spec)
@@ -3269,17 +3275,115 @@ def test_row6_a_link_that_never_opened_samples_nothing(lua):
     assert ok and passed is False and "sLinkOpen never read 1" in msg, msg
 
 
+# ── REV-PROBE2-SAVEROWS (ACCEPT-WITH-FIXES): B-2, B-3 and the lows; each red on 0feb9383 ──
+@pytest.mark.parametrize("spec, why", [
+    ({"odd_cb": "lua:true"}, "gLinkCallback read 0x12345679, not LinkCB_RequestPlayerDataExchange"),
+    ({"link_flaky": "lua:true"}, "the link was open on 301 of 601 held frames"),
+])
+def test_row6_the_limit_needs_every_frame_open_on_the_named_callback(lua, spec, why):
+    ok, passed, msg, _ = _run_module(lua, "center_controls", "a", "initial", spec)
+    assert ok and passed is False and why in msg, msg
+
+
+def test_row6_oracle_judges_the_line_field_by_field(monkeypatch, tmp_path):
+    """The reviewer's fuzz (open_frames=1, callback=0x12345678, samples=9/3) passed 0feb9383's
+    regex; the address is resolved from pokefirered.sym (A is FireRed here)."""
+    fixture = _fixture([STARTER, PIDGEY])
+    saved = _saved(fixture, 3, [STARTER, PIDGEY])
+    k = _key(PIDGEY)
+    run, _ = _oracle_stub(monkeypatch, tmp_path, "center_controls_gen3", {"a": saved, "b": saved},
+                          fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "alive"}])
+    run._link_keys = {"a": k, "b": k}
+    good = _center_controls_receipt(k)
+    run.assert_center_controls_gen3_saved({"a": good, "b": ""})
+    line = ("CABLE_CALLBACK_NULL limit=no-cable-partner held_frames=601 open_frames=601 null_frames=0 "
+            "callback=0x0800A721:LinkCB_RequestPlayerDataExchange")
+    assert line in good
+    for bad in (
+            # the reviewer's three, as 0feb9383 accepted them
+            "CABLE_CALLBACK_NULL limit=no-cable-partner open_frames=1 null_frames=0 callback=0x0800A721",
+            "CABLE_CALLBACK_NULL limit=no-cable-partner open_frames=601 null_frames=0 callback=0x12345678",
+            "CABLE_CALLBACK_NULL sLinkOpen=1 gLinkCallback=0 samples=9/3",
+            # and in the new shape
+            line.replace("open_frames=601", "open_frames=1"),
+            line.replace("held_frames=601 open_frames=601", "held_frames=60 open_frames=60"),
+            line.replace("0x0800A721", "0x12345679"),
+            line.replace(":LinkCB_RequestPlayerDataExchange", ":LinkCB_Other"),
+            line.replace(":LinkCB_RequestPlayerDataExchange", ""),
+            "CABLE_CALLBACK_NULL sLinkOpen=1 gLinkCallback=0 held_frames=601 open_frames=3 null_frames=9",
+            "CABLE_CALLBACK_NULL sLinkOpen=1 gLinkCallback=0 held_frames=601 open_frames=700 null_frames=9"):
+        with pytest.raises(RuntimeError, match="CABLE_CALLBACK_NULL"):
+            run.assert_center_controls_gen3_saved({"a": good.replace(line, bad), "b": ""})
+
+
+def test_row1_a_leg_that_moved_the_flash_counter_is_red(lua):
+    """A save the dialog wrote with no DUMP line (SAVE_WITNESS_DUMP_SKIPPED/_FAIL) is caught by the
+    flash counter itself."""
+    ok, passed, msg, _ = _run_module(lua, "save_then_write", "a", "initial", {"leg_saved": "lua:true"})
+    assert ok and passed is False and msg.startswith("SAVE_COUNTER: the menu leg moved the flash save counter 6 -> 7"), msg
+    ok, passed, msg, logs = _run_module(lua, "save_then_write", "a", "initial", {})
+    assert ok and passed is True and "SAVE_COUNTER_UNCHANGED before=6 after=6" in logs, (msg, logs)
+
+
+def test_save_then_write_oracle_lows(monkeypatch, tmp_path):
+    fixture = _fixture([STARTER, PIDGEY])
+    k = _key(PIDGEY)
+    boxed = _saved(fixture, 5, [STARTER], {(0, 0): _mon(PIDGEY["personality"], party=False, species=16)})
+    run, _ = _oracle_stub(monkeypatch, tmp_path, "save_then_write_gen3", {"a": boxed, "b": boxed},
+                          fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "alive"}])
+    run._link_keys = {"a": k, "b": k}
+    receipt = _save_then_write_receipt(k)
+    run.assert_save_then_write_gen3_saved({"a": receipt, "b": ""})
+    for bad, match in (
+            (receipt.replace(f"CONTROL_LIVE save_prompt {k} map=3.1\n", ""), "CONTROL_LIVE save_prompt"),
+            (receipt.replace(f"CONTROL_LIVE save_cancel_menu {k} map=3.1\n", ""), "CONTROL_LIVE save_cancel_menu"),
+            (receipt.replace("by=a_press delay=40", "by=a_press delay=60"), "SAVE_DISMISSAL"),
+            (receipt.replace("by=a_press delay=40", "by=a_press delay=200"), "SAVE_DISMISSAL"),
+            (receipt.replace("SAVE_COUNTER_UNCHANGED before=6 after=6\n", ""), "SAVE_COUNTER_UNCHANGED"),
+            (receipt.replace("before=6 after=6", "before=6 after=7"), "SAVE_COUNTER_UNCHANGED")):
+        with pytest.raises(RuntimeError, match=match):
+            run.assert_save_then_write_gen3_saved({"a": bad, "b": ""})
+    # the CONTROL_LIVE of each held control precedes its refusal
+    swapped = receipt.replace(f"CONTROL_LIVE save_prompt {k} map=3.1\n", "").replace(
+        f"CONTROL_REFUSED save_prompt party_mon {k} clause=task held\n",
+        f"CONTROL_REFUSED save_prompt party_mon {k} clause=task held\nCONTROL_LIVE save_prompt {k} map=3.1\n")
+    with pytest.raises(RuntimeError, match="must precede"):
+        run.assert_save_then_write_gen3_saved({"a": swapped, "b": ""})
+
+
 def test_the_save_then_write_runner_queues_the_withdraw_after_the_dialog_witness():
     body = (REPO / "tools" / "e2e_duo.py").read_text(encoding="utf-8")
     orch = body[body.index("def orchestrate_save_then_write_gen3"):body.index("def orchestrate_whiteout_gen3")]
     assert orch.index("CONTROL_LIVE dialog_witness") < orch.index('"cmd": "party_mon"')
 
 
+# pret pokefirered c75f3523 (start_menu.c:63-72, new_game.c:37): address and size in BOTH .sym
+# files -- the widths the scenario peeks must fit, and the START menu trio must be the same words
+# gen3_boot_check.lua reads (START_MENU_*_ADDR).
+_SAVE_ROWS_SYMS = {"sSaveDialogDelay": (0x03000FA8, 1), "gDifferentSaveFile": (0x02031DB0, 1),
+                   "SaveDialogCB_AskSaveHandleInput": (0x0806F7F8, 0x72),
+                   "SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput": (0x0806F8DC, 0x46),
+                   "sStartMenuCursorPos": (0x020370F4, 1), "sNumStartMenuItems": (0x020370F5, 1),
+                   "sStartMenuOrder": (0x020370F6, 9)}
+
+
 def test_the_new_driver_symbols_are_pret_statics():
-    names = set(_driver_syms())
-    assert {"sSaveDialogDelay", "gDifferentSaveFile", "SaveDialogCB_AskSaveHandleInput",
-            "SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput", "sStartMenuCursorPos",
-            "sNumStartMenuItems", "sStartMenuOrder"} <= names
+    assert set(_SAVE_ROWS_SYMS) <= set(_driver_syms())
+    for title in ("firered", "leafgreen"):
+        got = {}
+        for line in (REPO / "data" / "gen3" / "pret" / f"poke{title}.sym").read_text(encoding="utf-8").splitlines():
+            parts = line.split()
+            if len(parts) == 4 and parts[3] in _SAVE_ROWS_SYMS:
+                got.setdefault(parts[3], (int(parts[0], 16), int(parts[2], 16)))
+        assert got == _SAVE_ROWS_SYMS, (title, got)
+    boot = (REPO / "lua" / "tests" / "gen3_boot_check.lua").read_text(encoding="utf-8")
+    for const, name in (("START_MENU_CURSOR_ADDR", "sStartMenuCursorPos"),
+                        ("START_MENU_COUNT_ADDR", "sNumStartMenuItems"), ("START_MENU_ORDER_ADDR", "sStartMenuOrder")):
+        assert int(re.search(rf"local {const}\s*=\s*0x([0-9A-Fa-f]+)", boot).group(1), 16) == _SAVE_ROWS_SYMS[name][0]
+    scenario = (REPO / "lua" / "tests" / "duo" / "scenario_gen3_save_then_write.lua").read_text(encoding="utf-8")
+    for name, width in re.findall(r'ctx\.peek\("(\w+)", (\d)', scenario):
+        if name in _SAVE_ROWS_SYMS:
+            assert int(width) <= _SAVE_ROWS_SYMS[name][1], (name, width)
 
 
 
