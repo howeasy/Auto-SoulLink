@@ -1,8 +1,9 @@
 --[[
   lua/tests/duo/scenario_gen2_link.lua -- the gen2_new `link` scenario body + its verdict (card gen2-H1).
 
-  One half of the first Crystal<->Crystal link (docs/gen2/reviews/P3B7_PLAN_CODEX_2026-09-23.md
-  "smallest PHYSICAL milestone"): arrive by CONTINUE, hello, wait for the runner's go-file, catch one
+  One half of a `link` between any two of Crystal/Gold/Silver (O-16; first C<->C PASS bfc7ccc,
+  docs/gen2/reviews/P3B7_PLAN_CODEX_2026-09-23.md "smallest PHYSICAL milestone"). Title-neutral: every
+  per-title fact reaches it through the driver's context. Arrive by CONTINUE, hello, wait for the runner's go-file, catch one
   wild mon on Route 29 with normal buttons, let the client report it, save natively and flush. The
   server-side link (both captures -> the route_29 link) is the independent oracle's job
   (tools/gen2_duo_oracles.py); this half only reports what it observed.

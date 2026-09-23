@@ -6,9 +6,11 @@ through CONTINUE onto Route 29 grass, extended here with a Poke Ball catch) and 
 production entry (a fake lua/gen2/run.lua in the temp root that exposes SLINK_GEN2_CLIENT/_PARTS and
 ticks on event.onframeend, as the real one does). Passing here is authoring evidence only.
 
-Red controls: no engine capture event -> no CAUGHT and no PASS; the production client never observes the
-native save -> no PASS; a candidate (non-production) graph -> no PASS; and the pure verdict refuses every
-missing, duplicated or reordered marker.
+The happy path runs per title (Crystal, Gold, Silver: O-16 pairs any two); the title comes from
+SLINK_GEN2_TITLE alone. Red controls: no engine capture event -> no CAUGHT and no PASS; the production client
+never observes the native save -> no PASS; a candidate (non-production) graph -> no PASS; a client that
+detected another title than SLINK_GEN2_TITLE -> no PASS; and the pure verdict refuses every missing,
+duplicated or reordered marker.
 """
 from __future__ import annotations
 
@@ -67,8 +69,9 @@ function client:frame_end()
     for _, ev in ipairs(queue) do pcall(self.on_event, self, ev) end
 end
 SLINK_GEN2_CLIENT = client
+local title = SLINK_TEST_CLIENT_TITLE or os.getenv("SLINK_GEN2_TITLE")
 SLINK_GEN2_PARTS = {client = client, production_admitted = SLINK_TEST_ADMITTED, qualification = "TEST_STANDIN",
-                    pack = "gen2_crystal", title = "crystal", profile = {rom_sha1 = "test"}}
+                    pack = "gen2_" .. title, title = title, profile = {rom_sha1 = "test"}}
 event.onframeend(function() client:frame_end() end)
 """
 
@@ -76,11 +79,11 @@ event.onframeend(function() client:frame_end() end)
 class DuoSim(QualifySim):
     """CONTINUE onto Route 29 grass, walk, one wild battle caught with a Poke Ball (NO nickname), save."""
 
-    def __init__(self, lua, *, emit_capture=True, client_save=True):
+    def __init__(self, lua, title="crystal", *, emit_capture=True, client_save=True):
         self.emit_capture, self.client_save = emit_capture, client_save
         self.frame_hooks, self.caught = [], False
-        super().__init__(lua, "crystal", "battle", where=grass_start())
-        self.u1 = u1_facts(context("crystal"), facts("crystal"), "q-model")
+        super().__init__(lua, title, "battle", where=grass_start(title))
+        self.u1 = u1_facts(context(title), facts(title), "q-model")
         self.sites.update(self.u1["pack_ui"])
         lua.execute("function SLINK_TEST_PUSH(ev) SLINK_TEST_EVENTS = SLINK_TEST_EVENTS or {};"
                     " table.insert(SLINK_TEST_EVENTS, ev) end")
@@ -174,9 +177,9 @@ class DuoSim(QualifySim):
                     yield from self.catch_battle()
 
 
-def grass_start():
+def grass_start(title):
     """A Route 29 grass tile with a grass neighbour (the walk oscillates between them)."""
-    area = facts("crystal")["maps"]["Route29"]
+    area = facts(title)["maps"]["Route29"]
     w, h, grid = area["width"], area["height"], area["grid"]
     for y in range(1, h - 1):
         for x in range(1, w - 1):
@@ -185,16 +188,16 @@ def grass_start():
     raise AssertionError("no Route 29 grass pair")
 
 
-def run_driver(tmp_path, *, admitted=True, go=True, **sim_options):
-    root = make_root(tmp_path, "crystal")
+def run_driver(tmp_path, title="crystal", *, admitted=True, go=True, client_title=None, **sim_options):
+    root = make_root(tmp_path, title)
     for rel in DRIVER_FILES:
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(ROOT / rel, root / rel)
     (root / "lua/connector.lua").write_text(FAKE_CONNECTOR, encoding="utf-8")
     (root / "lua/hud.lua").write_text(FAKE_HUD, encoding="utf-8")
     (root / "lua/gen2/run.lua").write_text(FAKE_RUN, encoding="utf-8")
-    spec, env = qualify_env(root, "crystal", "battle", "boot")
-    sim = DuoSim(LuaRuntime(unpack_returned_tuples=True), **sim_options)
+    spec, env = qualify_env(root, title, "battle", "boot")
+    sim = DuoSim(LuaRuntime(unpack_returned_tuples=True), title, **sim_options)
     env["SLINK_GEN2_U1_FACTS"] = json.dumps(sim.u1)
     sim.install(env)
     result, go_file = root / "patch/build/e2e_link_a_result.txt", tmp_path / "go_a.txt"
@@ -202,6 +205,7 @@ def run_driver(tmp_path, *, admitted=True, go=True, **sim_options):
         go_file.write_text("GO", encoding="utf-8")
     glob = sim.lua.globals()
     glob.SLINK_TEST_ADMITTED = admitted
+    glob.SLINK_TEST_CLIENT_TITLE = client_title
     glob.SLINK_HOST, glob.SLINK_PORT, glob.SLINK_PLAYER = "127.0.0.1", 1, "a"
     glob.SLINK_DUO = sim.lua.table_from({
         "wt": str(root).replace("\\", "/"), "player": "a", "scenario": "link", "game": "gen2_new", "attempt": 1,
@@ -220,8 +224,9 @@ def tag_json(lines, tag):
     return rows[0]
 
 
-def test_link_happy_path_catches_reports_saves_and_passes(tmp_path):
-    lines, sim, env = run_driver(tmp_path)
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_link_happy_path_catches_reports_saves_and_passes(tmp_path, title):
+    lines, sim, env = run_driver(tmp_path, title)
     assert lines[-1] == f"RESULT: PASS (caught {KEY})", "\n".join(lines[-40:])
     tags = [line.split(" ", 1)[0] for line in lines]
     # HELLO may precede BOOTED (the client says hello whenever its checkpoint allows); the rest is ordered.
@@ -234,7 +239,8 @@ def test_link_happy_path_catches_reports_saves_and_passes(tmp_path):
     assert save["saveram_bytes"] == len(flushed) == 0x8000 + 22 and save["gate_saves"] >= 1 and save["client_saves"] >= 1
     receipt = tag_json(lines, "RECEIPT")
     assert receipt["schema"] == "gen2-duo-link-v1" and receipt["key"] == KEY and receipt["player"] == "a"
-    assert receipt["case"] == "crystal_battle" and receipt["capture"]["site_id"] == "capture_party_finalized"
+    assert receipt["case"] == f"{title}_battle" and receipt["title"] == title == receipt["client"]["title"]
+    assert receipt["capture"]["site_id"] == "capture_party_finalized"
     assert receipt["harness_write_scopes"] == [] and sim.writes == []
     # Normal buttons only.
     assert all(set(row) <= {"Up", "Down", "Left", "Right", "A", "B", "Start", "Select"} for row in sim.inputs)
@@ -256,6 +262,12 @@ def test_no_client_save_observation_is_no_pass(tmp_path):
 def test_a_candidate_graph_is_refused_before_any_play(tmp_path):
     lines, sim, _ = run_driver(tmp_path, admitted=False)
     assert lines[-1] == "RESULT: FAIL (client is not the production graph)"
+    assert not sim.inputs
+
+
+def test_a_client_on_another_title_is_refused_before_any_play(tmp_path):
+    lines, sim, _ = run_driver(tmp_path, "gold", client_title="silver")
+    assert lines[-1] == "RESULT: FAIL (client title silver differs from SLINK_GEN2_TITLE gold)"
     assert not sim.inputs
 
 

@@ -8,10 +8,13 @@
   scenario (lua/tests/duo/scenario_gen2_<name>.lua) with normal buttons only. No harness write.
 
   LAUNCH CONTRACT (for the gen2_new rows of tools/e2e_duo.py)
-    ROM / config   run_gb_gate._gen2_plan("crystal", <per-instance SaveRAM dir under BUILD>, <fixture>,
+    TITLE          per instance, crystal|gold|silver (O-16: any C/G/S pair, e.g. C<->C crystal_battle +
+                   crystal_battle_ot2, G<->S gold_battle + silver_battle, C<->G crystal_battle + gold_battle).
+                   The driver takes it from SLINK_GEN2_TITLE only; every per-title input below must be built
+                   for THAT instance's title, and the fixture case must be <title>_battle[_ot2].
+    ROM / config   run_gb_gate._gen2_plan(<title>, <per-instance SaveRAM dir under BUILD>, <fixture>,
                    100|300)["rom"]; config from run_gb_gate._gen2_config(plan, cfg); seed
                    tests/fixtures/gen2/<case>.SaveRAM into <SAVERAM_DIR>/<SAVERAM_NAME> before launch.
-                   A = crystal_battle, B = crystal_battle_ot2.
     SLINK_DUO      wt, player "a"|"b", scenario "link"|"gen2_link", game "gen2_new", attempt,
                    result (this instance's result file), partner_result, go_file,
                    timeout_frames (default 150000), idle_jitter (optional)
@@ -20,8 +23,9 @@
                    _SAVERAM_NAME; tests/live/test_gen2_new_gates.inspect_env(spec, fixture_bytes):
                    SLINK_GEN2_FIXTURE_CASE (attempt_id overridden per instance, ^[%w_-]{1,80}$),
                    SLINK_GEN2_ROUTE_FACTS, SLINK_GEN2_QUALIFY (stage boot, sha256 of the staged fixture);
-                   SLINK_GEN2_U1_FACTS = tests/live/test_gen2_frame_align.u1_facts(load_context(title),
-                   route_facts(title), <the fixture's qualification attempt_id>) (pack UI + catch prompt)
+                   SLINK_GEN2_U1_FACTS = tests/live/test_gen2_frame_align.u1_facts(load_context(<title>),
+                   route_facts(<title>), <the fixture's qualification attempt_id>) (pack UI + catch prompt;
+                   the pack-UI sites are title-specific ROM addresses: never share one instance's facts)
     go-file        after HELLO the driver waits (frame-bound) for D.go_file to exist; the runner writes
                    it once the server holds both hellos
 
@@ -29,6 +33,7 @@
   earlier: the client says hello whenever its checkpoint allows):
     DUO_GEN2 {player, scenario, attempt, case, title, rom_sha1, fixture_sha256}         at start
     CLIENT {qualification, production_admitted, pack, title, rom_sha1}                 client started
+                   (FAIL unless the production client detected the same title as SLINK_GEN2_TITLE)
     BOOTED {frame, map_group, map_number, x, y, party_count}                           after CONTINUE
     MYKEY <slot> <key>                                  each party mon, after boot and after the route
     HELLO {frame, ot_id}                                               the client's hello went out
@@ -145,6 +150,11 @@ jlog("CLIENT", {qualification=tostring(parts.qualification), production_admitted
                 pack=tostring(parts.pack), title=tostring(parts.title),
                 rom_sha1=tostring(parts.profile and parts.profile.rom_sha1)})
 if parts.production_admitted ~= true then finish(false, "client is not the production graph") end
+-- The client detects its title from the ROM header (run.lua Entry.detect_title); the gate booted the
+-- fixture for SLINK_GEN2_TITLE. A cross-title lane mix-up must fail here, not deep in the route.
+if parts.title ~= ctx.env.title then
+    finish(false, fmt("client title %s differs from SLINK_GEN2_TITLE %s", tostring(parts.title), ctx.env.title))
+end
 
 local _on_event = gen2.on_event
 gen2.on_event = function(self, ev)

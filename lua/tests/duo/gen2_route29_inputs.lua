@@ -1,7 +1,17 @@
 --[[
   lua/tests/duo/gen2_route29_inputs.lua -- the gen2_new duo's Route 29 route (card gen2-H1).
 
-  Normal buttons only, from a warm crystal_battle(_ot2) arrival on Route 29 grass:
+  Normal buttons only, from a warm <title>_battle(_ot2) arrival on Route 29 grass (C, G and S battle
+  fixtures all saved on Route 29, map 24:3, with the O-10 Ball stack; their qualification receipts'
+  boot witnesses). The route is the same on all three titles; the per-title parts come from the context
+  (SLINK_GEN2_TITLE: route facts, UI origins, prompt anchors, profile) and SLINK_GEN2_U1_FACTS:
+    same source   BattlePack pocket order + menus, pack.asm:627-800 identical in pokecrystal 7a7881d and
+                  pokegold 656583c; the battle menu is the 2x2 BattleMenuHeader grid (G.BATTLE_MENU_GRID)
+    per title     BattleMenu C core.asm:4881 / G/S :4641; PokeBallEffect nickname ask C item_effects.asm:574
+                  / G/S :572; the save menu text differs (C DisplaySaveInfoOnSave vs G/S
+                  DisplayNormalContinueData, engine/menus/save.asm) but its prompts are the route facts'
+  The same F.driver played this route PHYSICAL on every title's battle fixture (U1: crystal 7c08529,
+  gold eac806c, silver 92318de, tests/fixtures/gen2/receipts/<title>.engine_sites.json).
     walk    one held direction per frame between grass tiles (a walk step is 8 frames; the
             direction is re-decided every frame, never a 12-frame press)
     battle  BattleMenu PACK -> the Ball pocket -> POKe BALL -> USE, A through battle text, NO to the
@@ -10,7 +20,7 @@
             i.e. until the client sent the capture it observed; the save cannot start earlier
     save    START -> SAVE -> YES -> (overwrite text) -> YES, the native _SaveGameData completion
   The point -> buttons driver IS the U1 gate's (lua/tests/gen2_frame_align.lua F.driver, proven live
-  PHYSICAL on this fixture): 12-frame menu HOLD + one release frame, per-frame walk holds. The UI read
+  PHYSICAL on these fixtures): 12-frame menu HOLD + one release frame, per-frame walk holds. The UI read
   is the shared scripted gate's observer (qualified UI origins, the N17 battle-menu grid); this file only
   adds the Ball-pocket UI kinds and the catch-nickname prompt (SLINK_GEN2_U1_FACTS, produced by
   tests/live/test_gen2_frame_align.u1_facts) and feeds the engine-capture count in as probe_hits.
