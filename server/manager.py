@@ -74,6 +74,7 @@ GAMES = [
     ("gen5_bw", "Black · White", ["pokemon_black", "pokemon_white"]),
     ("gen5_bw2", "Black 2 · White 2", ["pokemon_black_2", "pokemon_white_2"]),
 ]
+UNADMITTED_GAMES = frozenset({"gen3_ap", "gen3_e"})  # labelled "not admitted"; handle_new refuses them
 GAME_LABELS = {key: label for key, label, _ in GAMES}
 GAME_MEMBERS = {key: members for key, _, members in GAMES}
 # The randomizer contract a Gen 1 game names (upr_settings.FAMILY_*): a pure run takes pure
@@ -890,6 +891,11 @@ class RunManager:
         name = str(body.get("name", "")).strip()
         if not name:
             return web.json_response({"ok": False, "error": "name is required"}, status=400)
+        # Listed but not admitted (docs/gen3/PLAN.md:112): visible in the Manager, never created,
+        # because the client would refuse the run at hello.
+        if str(body.get("game", "") or "") in UNADMITTED_GAMES:
+            return web.json_response({"ok": False, "error": f"{GAME_LABELS[body['game']]}: cannot create a run"},
+                                     status=400)
 
         runs = _load_registry()
         run_id = "run_" + datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
@@ -1089,7 +1095,7 @@ class RunManager:
             wanted = _game_family(run.get("game"))
             if wanted and wanted != family:
                 return web.json_response({"ok": False, "error": (
-                    f"this run is {GAME_LABELS[run['game']]}; these are "
+                    f"this run is {GAME_LABELS.get(run['game'], run['game'])}; these are "
                     f"{'pureRGB' if family == FAMILY_PURE else 'vanilla'} cartridges -- pick "
                     f"{'pureRGB' if wanted == FAMILY_PURE else 'vanilla Red / Blue / Yellow'} dumps")}, status=400)
         # Either a settings file the user built in UPR's GUI, the form's spec (every option

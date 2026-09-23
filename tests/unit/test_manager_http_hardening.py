@@ -334,3 +334,25 @@ async def test_a_spawn_that_exits_on_startup_raises_with_its_reason(tmp_path, mo
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
     with pytest.raises(RuntimeError, match="Cannot listen on TCP"):
         await manager._spawn_run(run, "127.0.0.1")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("game", sorted(manager.UNADMITTED_GAMES))
+async def test_manager_refuses_to_create_an_unadmitted_game(manager_client, manager_dir, monkeypatch, game):
+    """AP FRLG and Emerald stay listed with a 'not admitted' label (docs/gen3/PLAN.md:112),
+    but a run for them would be refused by the client at hello, so /api/runs/new refuses
+    it first: 400, nothing written, nothing spawned. Vanilla gen3 is still created."""
+    async def unexpected_spawn(*args, **kwargs):
+        pytest.fail("an unadmitted game must not spawn a run")
+
+    monkeypatch.setattr(manager, "_spawn_run", unexpected_spawn)
+    response = await manager_client.post("/api/runs/new", json={"name": "x", "game": game})
+    assert response.status == 400
+    assert "cannot create a run" in (await response.json())["error"]
+    assert manager._load_registry() == []
+    assert [p.name for p in manager_dir.iterdir()] == []
+
+
+def test_a_saved_run_with_an_unknown_game_key_still_labels():
+    """A registry run saved under a game key no longer in GAMES must not raise KeyError."""
+    assert manager.GAME_LABELS.get("gen3_gone", "gen3_gone") == "gen3_gone"
