@@ -108,11 +108,26 @@ latch: every script command and every animation emit sets it and the engine wait
 
 Two facts from that table matter for the design:
 
-1. **Every writer and every reader above runs inside a battle *script* or a controller exec** —
-   i.e. while `gBattleMainFunc != HandleTurnActionSelectionState` or while
-   `gBattleControllerExecFlags != 0`. The input wait is the one phase with no script and no pending
-   controller exec, so it is the one frame in which the engine neither reads nor writes the party
-   for any battler. That is the whole safety argument for a party-struct write.
+1. **Every writer and every reader above runs inside a battle *script* or a controller exec other
+   than the action menu's** — i.e. while `gBattleMainFunc != HandleTurnActionSelectionState`, or
+   while battler 0's controller is not `HandleInputChooseAction`. The input wait is **not** an
+   exec-idle frame (corrected by C4-BW; the first design said it was): `STATE_BEFORE_ACTION_CHOSEN`
+   emits `CHOOSE_ACTION` and `MarkBattlerForControllerExec(0)` sets bit 0
+   (`src/battle_main.c:3133-3135`, `src/battle_util.c:185-191`), and only
+   `PlayerBufferExecCompleted` clears it, once the player has chosen
+   (`src/battle_controller_player.c:186-200`). So the parked menu is `gBattleControllerExecFlags ==
+   1` with the pending exec being `HandleInputChooseAction` itself, which only reads the joypad,
+   moves the cursor, bounces the battler-0 sprites, and on START redraws the HP text of the
+   *active* battlers from `gPlayerParty[gBattlerPartyIndexes[i]]` (`src/battle_interface.c:1019`) —
+   a read of an active slot, never of a benched one. The opponent AI's choose-action/move execs
+   (possible while battler 0 waits) read `gEnemyParty`/`gBattleMons` only and complete inside their
+   own frame. The bag and party menus (where `PokemonUseItemEffects` writes the party) run under
+   other controllers (`OpenBagAndChooseItem`/`CompleteWhenChoseItem`,
+   `OpenPartyMenuToChooseMon`/`WaitForMonSelection`) with `gBattleCommunication[0] == 2`. That
+   parked menu is the one frame in which nothing reads or writes a *benched* party mon, which is
+   the whole safety argument for a party-struct write. The frame *after* a choice (flags back to
+   0) is not safe: the choice is already in `gBattleBufferB`, possibly a SWITCH into the mon being
+   zeroed.
 2. A **level-up cannot resurrect a written 0 HP**: `CalculateMonStats` takes the early `return`
    when `currentHP == 0 && oldMaxHP != 0` (`src/pokemon.c:2155-2161`), so the exp path rewrites
    stats/level/exp but not HP. An Exp. Share recipient that SLink killed mid-battle stays dead
@@ -144,15 +159,33 @@ only in *how* the address is proven, which is a generator question (§7).
 |---|---|---|---|---|
 | `battle_main_func` | `gBattleMainFunc` `0x03004F84` | 4 | `== HandleTurnActionSelectionState \| 1` (`0x08014041`) | PRET `src/battle_main.c:2912,2998`; SYM |
 | `battle_comm_0` | `gBattleCommunication` `0x02023E82` +0 | 1 | `== 1` (`STATE_WAIT_ACTION_CHOSEN`) | PRET `src/battle_main.c:3140-3151` |
-| `battle_exec_flags_idle` | `gBattleControllerExecFlags` `0x02023BC8` | 4 | `== 0` | PRET `src/battle_controllers.c:600-616` |
+| `battle_exec_flags_input` | `gBattleControllerExecFlags` `0x02023BC8` | 4 | `== 1` (only battler 0's CHOOSE_ACTION exec pending) | PRET `src/battle_main.c:3133-3135`, `src/battle_util.c:185-191`, `src/battle_controller_player.c:186-200` |
+| `battle_input_controller` | `gBattlerControllerFuncs[0]` `0x03004FE0` (u32 Thumb pointers, battler 0 first; SYM size `0x10`) | 4 | `== HandleInputChooseAction \| 1` (`0x0802E439`, the player controller's spelling) | PRET `src/battle_controller_player.c:219-311,2402-2410`; SYM + MAP (`src/battle_controller_player.o` `.text` `0x0802E310`+`0x5AA8`) |
 | `battle_not_link` | `gBattleTypeFlags` `0x02022B4C` | 4 | `& 0x02 == 0` (`BATTLE_TYPE_LINK`) | PRET `include/constants/battle.h:48` |
 | `battle_engine_loaded` | `gBattleMons` `0x02023BE4` +`0x2C` | 2 | `> 0` (`gBattleMons[0].maxHP` — battle data live) | RR-PROD `lua/memory_gba.lua:465-473`; INFER for FR/LG |
 | `battle_outcome_open` | `gBattleOutcome` `0x02023E8A` | 1 | `== 0` | RR-PROD `lua/memory_gba.lua:472`; PRET `src/battle_main.c:3706` |
 
-`battle_comm_0` is battler 0 — the player's primary. In singles that is the only player battler; in
-doubles the state machine iterates battlers in index order, so battler 0's menu is up first and
-battler 2 is handled before it reaches 0 again (PRET `:3103-3140`). A write while battler 0 waits
-therefore has *no* player battler mid-action (battler 2 is in 3/4 at that point, `:3352-3366`).
+`battle_comm_0` is battler 0 — the player's primary. In singles that is the only player battler. In
+doubles battler 2 (the right flank) is only sent `CHOOSE_ACTION` once battler 0 has reached
+`STATE_WAIT_ACTION_CONFIRMED` (PRET `src/battle_main.c:3110-3113`), so while battler 0's menu is up
+battler 2 sits uncommitted in state 0 and the exec word is exactly battler 0's bit: `== 1`. (The
+first design said battler 2 was in 3/4 at that point; pret says the opposite.) Battler 2's own menu
+(`gBattleCommunication[0] == 4`, flags `== 4`) is refused on all three battler-0 clauses —
+fail-closed, since battler 0's choice, possibly a SWITCH, is already committed there. A
+B_ACTION_CANCEL_PARTNER from battler 2 resets battler 0 to state 0, which re-emits the menu and
+clears `monToSwitchIntoId[0]` (`:3109`), so the window reopens clean. The opponent AI's execs (bits
+1/3) complete inside their own frame; a sampled frame that still carries one is refused.
+
+`battle_input_controller` pins the window to the player's *interactive* menu. It refuses the
+`HandleChooseActionAfterDma3` draw frames, the move and target submenus (`HandleInputChooseMove`,
+`HandleInputChooseTarget`), the bag and party menus, and the three other controllers that also own
+a `HandleInputChooseAction` spelling (SYM has four: player `0x0802E438`, Safari `0x080DD5A4`,
+Oak/old man `0x080E763C`, Pokedude `0x08156140` on FR; parse_sym keeps the first, and the generator
+asserts it lies in `battle_controller_player.o` per the MAP). Refusing those three is required for
+Pokedude: Teachy TV swaps `gPlayerParty` (`src/teachy_tv.c:1178,1210`), so a write there would land
+in the Pokedude's party and be discarded by `LoadPlayerParty`. For Safari and the Oak / old-man
+tutorials the refusal only delays the faint until the battle ends (the first rival battle has no
+bench; the old man battle is scripted).
 
 `battle_engine_loaded` + `battle_outcome_open` are the RR-side "we are in a battle" evidence the
 shipped client already uses; on FR/LG they are redundant with `battle_main_func` but harmless, and
@@ -231,7 +264,7 @@ from the pack — §5).
 
 | forbidden state | rejected by |
 |---|---|
-| move/status animation, damage script, any script running | `battle_exec_flags_idle` (a script sets exec flags), `battle_main_func` |
+| move/status animation, damage script, any script running | `battle_exec_flags_input` (a script sets other exec bits), `battle_input_controller`, `battle_main_func` |
 | the intro / send-out sequence | `battle_main_func` (not the input wait) |
 | the forced send-out menu after a faint (`HandleFaintedMonActions` → `Cmd_openpartyscreen`) | `battle_main_func`, `battle_comm_0` (0/5 during that flow) |
 | the move submenu (`STATE_WAIT_ACTION_CASE_CHOSEN`) or the confirmed states 3/4/5 | `battle_comm_0` |
@@ -391,7 +424,7 @@ variables directly (independent of `safety`, as the existing rows do):
 | `battle_input_wild` | wild battle, menu left alone (parked) | positive | — | firered/clean, leafgreen/clean, radical_red/clean, radical_red/companion | the new clause set admits a real input wait, ≥ 300 non-IRQ samples |
 | `battle_input_trainer` | trainer battle, menu left alone | positive | — | as above | not a wild-only property (trainer battles have their own intro/scripts) |
 | `battle_move_menu` | the same battle after one Down/A (move submenu up) | negative | `battle_comm_0` | as above | state 2 is refused |
-| `battle_animation` | mid move animation (exec flags set) | negative | `battle_exec_flags_idle`, `battle_main_func` | as above | the animation window is refused |
+| `battle_animation` | mid move animation (exec flags set) | negative | `battle_exec_flags_input`, `battle_input_controller`, `battle_main_func` | as above | the animation window is refused |
 | `battle_faint_prompt` | the forced send-out prompt after a faint | negative | `battle_main_func`, `battle_comm_0` | as above | the post-faint flow is refused (this is where a bench write *must* have landed earlier) |
 | `battle_intro` | the send-out sequence / intro | negative | `battle_main_func` | as above | the intro is refused |
 | `battle_link` | a link battle, input wait | negative | `battle_not_link` | firered/clean, leafgreen/clean (RR link entry is a CFRU unknown, `docs/gen3_write_checkpoint.md` §4.2) | link party memcpys cannot race a write |

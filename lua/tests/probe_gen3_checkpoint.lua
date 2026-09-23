@@ -67,8 +67,10 @@ P.REASON_ROWS = {
         inputs={{tap="A",frames=3,gap=13},{idle=120}},
         artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true},
         note="A on FIGHT opens the move submenu (STATE_WAIT_ACTION_CASE_CHOSEN)"},
-    {name="battle_animation", terminal="gBattleControllerExecFlags~=0",
-        expectation="negative", expect_clauses={battle_exec_flags_idle=true, battle_main_func=true},
+    {name="battle_animation", terminal="gBattleControllerExecFlags~=0 and "
+        .. "gBattlerControllerFuncs[0]~=HandleInputChooseAction",
+        expectation="negative",
+        expect_clauses={battle_exec_flags_input=true, battle_input_controller=true, battle_main_func=true},
         reason="battle_faint", witness="battle_exec_busy",
         state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
         inputs={{tap="A",frames=3,gap=13},{tap="A",frames=3,gap=13},{idle=30}},
@@ -76,14 +78,16 @@ P.REASON_ROWS = {
         note="two A presses commit a move; the animation holds the exec flags. FR/LG only: the "
             .. "RR pack has no gBattleControllerExecFlags address (reported UNVERIFIED)"},
     {name="battle_faint_prompt", terminal="gBattleMainFunc ~= HandleTurnActionSelectionState",
-        expectation="negative", expect_clauses={battle_main_func=true, battle_exec_flags_idle=true},
+        expectation="negative", expect_clauses={battle_main_func=true, battle_exec_flags_input=true,
+                                                battle_input_controller=true},
         reason="battle_faint", witness="battle_not_input",
         state_env="SLINK_CHECKPOINT_FAINT_STATE", state="slink_prefaint.State",
         inputs={{mash=160}},
         artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true},
         note="mash to the forced send-out prompt after a faint"},
     {name="battle_intro", terminal="gBattleMainFunc ~= HandleTurnActionSelectionState",
-        expectation="negative", expect_clauses={battle_main_func=true, battle_exec_flags_idle=true},
+        expectation="negative", expect_clauses={battle_main_func=true, battle_exec_flags_input=true,
+                                                battle_input_controller=true},
         reason="battle_faint", witness="battle_not_input",
         state_env="SLINK_CHECKPOINT_INTRO_STATE", state="slink_preintro.State",
         inputs={},
@@ -461,7 +465,9 @@ function P.run()
         end
         local comm_a, comm_w = clause_of("battle_comm_0")
         local main_a, main_w, main_c = clause_of("battle_main_func")
-        local flags_a, flags_w = clause_of("battle_exec_flags_idle")
+        -- FR/LG name the input-wait flags clause battle_exec_flags_input (C4-BW); RR keeps _idle
+        local flags_a = clause_of("battle_exec_flags_input") or clause_of("battle_exec_flags_idle")
+        local ctrl_a, _, ctrl_c = clause_of("battle_input_controller")
         local type_a, type_w = clause_of("battle_not_link")
         local out_a, out_w = clause_of("battle_outcome_open")
         local native = cp.native
@@ -480,7 +486,11 @@ function P.run()
             end,
             battle_comm_eq = function(spec) return function() return w8(comm_a) == spec.witness_value end end,
             battle_comm_ge = function(spec) return function() return w8(comm_a) >= spec.witness_value end end,
-            battle_exec_busy = function() return w32(flags_a) ~= 0 end,
+            -- flags ~= 0 alone also holds at the parked action menu (bit 0 pends on the input,
+            -- C4-BW), which the battle_faint window admits; busy = not battler 0's action input
+            battle_exec_busy = function()
+                return w32(flags_a) ~= 0 and (ctrl_c == nil or w32(ctrl_a) ~= ctrl_c.expect)
+            end,
             battle_link = function() return w32(type_a) & 2 ~= 0 end,
             battle_resolved = function() return w8(out_a) ~= 0 end,
             native_idle = function()

@@ -235,13 +235,16 @@ def test_unknown_reason_refuses_by_name():
     assert ok is False and clauses == ["reason"] and "memorial_rename" in why
 
 
-BATTLE_KEYS = ["battle_main_func", "battle_comm_0", "battle_exec_flags_idle", "battle_not_link",
-               "battle_engine_loaded", "battle_outcome_open"]
+BATTLE_KEYS = ["battle_main_func", "battle_comm_0", "battle_exec_flags_input", "battle_input_controller",
+               "battle_not_link", "battle_engine_loaded", "battle_outcome_open"]
+RR_BATTLE_KEYS = ["battle_main_func", "battle_comm_0", "battle_not_link", "battle_engine_loaded",
+                  "battle_outcome_open"]
 
 
 @pytest.mark.parametrize("title,kind,keys", [
     ("firered", "clean", BATTLE_KEYS),
-    ("radical_red", "companion", [k for k in BATTLE_KEYS if k != "battle_exec_flags_idle"]),
+    ("leafgreen", "clean", BATTLE_KEYS),
+    ("radical_red", "companion", RR_BATTLE_KEYS),
 ])
 def test_battle_input_accepts_and_names_each_broken_clause(title, kind, keys):
     w = World(title, kind)
@@ -259,6 +262,82 @@ def test_battle_input_accepts_and_names_each_broken_clause(title, kind, keys):
             w2.lua.globals().put(spec["address"] + spec.get("offset", 0), spec["expect"] ^ 1, spec["width"])
         ok, why, clauses = w2.check_reason("battle_faint")
         assert ok is False and clauses == [name] and name in why
+
+
+# ── C4-BW: the battle_faint window is the PARKED action menu, not "exec flags == 0" ────────────
+# pret: STATE_BEFORE_ACTION_CHOSEN emits CHOOSE_ACTION and MarkBattlerForControllerExec(0) sets
+# bit 0 (battle_main.c:3133-3135, battle_util.c:185-191); only PlayerBufferExecCompleted clears
+# it, once the player has chosen (battle_controller_player.c:186-200). The engine values below
+# come from the title's own .sym (never the pack under test), so the old pack is falsified.
+def pret_syms(title):
+    """{name: [addresses in .sym order]} -- every spelling of a static name."""
+    out = {}
+    for line in (ROOT / "data/gen3/pret" / f"poke{title}.sym").read_text(encoding="utf-8").splitlines():
+        parts = line.split()
+        if len(parts) == 4 and parts[1] in ("l", "g"):
+            out.setdefault(parts[3], []).append(int(parts[0], 16))
+    return out
+
+
+def battle_world(title, comm, flags, controller):
+    """A FR/LG world at HandleTurnActionSelectionState with battler 0 in the given state."""
+    w = World(title, "clean")
+    s, g = pret_syms(title), w.lua.globals()
+    g.put(s["gBattleCommunication"][0], comm, 1)
+    g.put(s["gBattleControllerExecFlags"][0], flags, 4)
+    g.put(s["gBattlerControllerFuncs"][0], controller | 1, 4)  # u32 Thumb pointers, battler 0 first
+    return w
+
+
+def player(title, name):
+    """The player controller's spelling (battle_controller_player.o links first)."""
+    return pret_syms(title)[name][0]
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_battle_faint_admits_the_parked_action_menu(title):
+    w = battle_world(title, 1, 1, player(title, "HandleInputChooseAction"))
+    ok, why, clauses = w.check_reason("battle_faint")
+    assert ok is True and clauses == [], why
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+@pytest.mark.parametrize("state,comm,flags,controller,refused_by", [
+    # the frame after A: the choice sits in gBattleBufferB, flags clear, controller back to run
+    ("post_choice", 1, 0, lambda t: player(t, "PlayerBufferRunCommand"),
+     ["battle_exec_flags_input", "battle_input_controller"]),
+    ("move_submenu", 2, 1, lambda t: player(t, "HandleInputChooseMove"),
+     ["battle_comm_0", "battle_input_controller"]),
+    ("target_menu", 2, 1, lambda t: player(t, "HandleInputChooseTarget"),
+     ["battle_comm_0", "battle_input_controller"]),
+    ("party_menu", 2, 1, lambda t: player(t, "WaitForMonSelection"),
+     ["battle_comm_0", "battle_input_controller"]),
+    ("bag", 2, 1, lambda t: player(t, "CompleteWhenChoseItem"),
+     ["battle_comm_0", "battle_input_controller"]),
+    ("menu_draw", 1, 1, lambda t: player(t, "HandleChooseActionAfterDma3"),
+     ["battle_input_controller"]),
+    # Teachy TV: Pokedude's own HandleInputChooseAction, gPlayerParty swapped out (teachy_tv.c:1178)
+    ("pokedude", 1, 1, lambda t: pret_syms(t)["HandleInputChooseAction"][-1],
+     ["battle_input_controller"]),
+    # doubles: battler 2 is asked only once battler 0 is confirmed (comm 4); flags = bit 2
+    ("doubles_battler2", 4, 4, lambda t: player(t, "PlayerBufferRunCommand"),
+     ["battle_comm_0", "battle_exec_flags_input", "battle_input_controller"]),
+])
+def test_battle_faint_refuses_every_other_battler0_state(title, state, comm, flags, controller, refused_by):
+    ok, why, clauses = battle_world(title, comm, flags, controller(title)).check_reason("battle_faint")
+    assert ok is False and clauses == refused_by, (state, clauses)
+
+
+def test_rr_battle_window_is_unchanged_and_fail_closed():
+    """RR keeps flags == 0 until its own gBattlerControllerFuncs / CFRU pins exist."""
+    w = World("radical_red", "companion")
+    names = [c["name"] for c in w.pack["battle"]["clauses"]]
+    assert "battle_input_controller" not in names and "battle_exec_flags_input" not in names
+    flags = next(c for c in w.pack["battle"]["clauses"] if c["name"] == "battle_exec_flags_idle")
+    assert flags["expect"] == 0
+    w.lua.globals().put(flags["address"], 1, 4)          # the parked menu stays refused on RR
+    ok, why, clauses = w.check_reason("battle_faint")
+    assert ok is False and clauses == ["battle_exec_flags_idle"]
 
 
 def test_battle_commit_guard_is_named_and_fail_closed():

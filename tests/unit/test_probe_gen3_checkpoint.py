@@ -24,7 +24,8 @@ REASON_TERMINALS = {
     "battle_input_trainer": "battle_main_func==HandleTurnActionSelectionState and "
         "gBattleCommunication[0]==1",
     "battle_move_menu": "gBattleCommunication[0]==2",
-    "battle_animation": "gBattleControllerExecFlags~=0",
+    "battle_animation":
+        "gBattleControllerExecFlags~=0 and gBattlerControllerFuncs[0]~=HandleInputChooseAction",
     "battle_faint_prompt": "gBattleMainFunc ~= HandleTurnActionSelectionState",
     "battle_intro": "gBattleMainFunc ~= HandleTurnActionSelectionState",
     "battle_link": "gBattleTypeFlags & 2",
@@ -262,9 +263,9 @@ def test_every_negative_row_declares_expect_clauses(module):
             "script_running": {"script_context_status"},
             # C4-B2 reason rows (docs/gen3/research/battle_write_predicate.md §6):
             "battle_move_menu": {"battle_comm_0"},
-            "battle_animation": {"battle_exec_flags_idle", "battle_main_func"},
-            "battle_faint_prompt": {"battle_main_func", "battle_exec_flags_idle"},
-            "battle_intro": {"battle_main_func", "battle_exec_flags_idle"},
+            "battle_animation": {"battle_exec_flags_input", "battle_input_controller", "battle_main_func"},
+            "battle_faint_prompt": {"battle_main_func", "battle_exec_flags_input", "battle_input_controller"},
+            "battle_intro": {"battle_main_func", "battle_exec_flags_input", "battle_input_controller"},
             "battle_link": {"battle_not_link"},
             "battle_over": {"battle_outcome_open", "battle_engine_loaded"},
             "battle_commit_state3": {"battle_commit_guard"},

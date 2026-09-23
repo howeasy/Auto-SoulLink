@@ -239,10 +239,13 @@ OVERWORLD_PREDICATES = ("callback1", "callback2", "field_controls_locked", "in_b
                         "link_callback", "link_players_received", "link_transferring",
                         "palette_fade_active", "save_dialog_cb", "script_context_status",
                         "soft_reset_disabled")
-FR_BATTLE_CLAUSES = ("battle_main_func", "battle_comm_0", "battle_exec_flags_idle",
+FR_BATTLE_CLAUSES = ("battle_main_func", "battle_comm_0", "battle_exec_flags_input",
+                     "battle_input_controller", "battle_not_link", "battle_engine_loaded",
+                     "battle_outcome_open")
+# RR's exec-flags clause is pinned from the RR binary (gen3-RR-execflags). C4-BW left RR on the
+# old flags == 0 clause (fail-closed) until its gBattlerControllerFuncs / CFRU input pins exist.
+RR_BATTLE_CLAUSES = ("battle_main_func", "battle_comm_0", "battle_exec_flags_idle",
                      "battle_not_link", "battle_engine_loaded", "battle_outcome_open")
-# RR's exec-flags clause is pinned from the RR binary (gen3-RR-execflags), so RR matches FR/LG.
-RR_BATTLE_CLAUSES = FR_BATTLE_CLAUSES
 
 
 @pytest.mark.parametrize("pack,title", PACK_TITLES)
@@ -282,6 +285,14 @@ def test_frlg_battle_addresses_are_the_sym_values(pack: str, title: str) -> None
         assert syms[clause["symbol"]][0] == clause["address"], clause["name"]
     main = next(c for c in block["clauses"] if c["name"] == "battle_main_func")
     assert main["expect"] == syms["HandleTurnActionSelectionState"][0] | 1
+    # C4-BW: the parked action menu -- battler 0's input exec pending, the PLAYER's controller
+    flags = next(c for c in block["clauses"] if c["name"] == "battle_exec_flags_input")
+    assert (flags["expect"], flags["width"]) == (1, 4)
+    ctrl = next(c for c in block["clauses"] if c["name"] == "battle_input_controller")
+    assert (ctrl["offset"], ctrl["width"], ctrl["expect"]) == (0, 4, 0x0802E439)
+    lo, hi = G.text_span(G.SYM_DIR / G.PACKS[pack][title][0].replace(".sym", ".map"),
+                         G.PLAYER_CONTROLLER_OBJ)
+    assert lo <= ctrl["expect"] - 1 < hi
 
 
 def test_rr_battle_clauses_are_rr_facts_not_sym_assertions() -> None:

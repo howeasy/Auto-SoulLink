@@ -224,6 +224,19 @@ def parse_sym(path: pathlib.Path) -> dict[str, tuple[int, int]]:
     return out
 
 
+PLAYER_CONTROLLER_OBJ = "src/battle_controller_player.o"
+
+
+def text_span(map_path: pathlib.Path, obj: str) -> tuple[int, int]:
+    """The [start, end) of obj's .text in a pret linker map."""
+    for line in map_path.read_text(encoding="utf-8").splitlines():
+        parts = line.split()
+        if len(parts) == 4 and parts[0] == ".text" and parts[3] == obj:
+            start = int(parts[1], 16)
+            return start, start + int(parts[2], 16)
+    raise SystemExit(f"{map_path}: no .text for {obj}")
+
+
 def load_rom(pack: str, title: str, kind: str) -> bytes:
     path, sha1 = ROMS[(pack, title, kind)]
     if not path.exists():
@@ -422,6 +435,10 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
     profile = json.loads((ROOT / "data" / "games" / pack / "profile.json").read_text("utf-8"))
     out["battle"], battle_dropped = battle_block(title, syms, is_rr, profile)
     unverified += [f"battle {row}" for row in battle_dropped]
+    if not is_rr:  # four HandleInputChooseAction spellings; parse_sym must have kept the player's
+        lo, hi = text_span(SYM_DIR / sym_file.replace(".sym", ".map"), PLAYER_CONTROLLER_OBJ)
+        if not lo <= syms["HandleInputChooseAction"][0] < hi:
+            raise SystemExit(f"{title}: HandleInputChooseAction is not {PLAYER_CONTROLLER_OBJ}'s")
     if is_rr:
         native = native_block(profile)
         if native is not None:
@@ -472,10 +489,23 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
 #   nonzero  value ~= 0
 #   lt       value <  value_field           (the commit guard; indexed by args.battler)
 
+# C4-BW: the input wait is NOT exec-idle. STATE_BEFORE_ACTION_CHOSEN emits CHOOSE_ACTION and
+# MarkBattlerForControllerExec(0) sets bit 0 (pret battle_main.c:3133-3135, battle_util.c:185-191);
+# only PlayerBufferExecCompleted clears it, once the player has CHOSEN (battle_controller_player.c
+# :186-200). "flags == 0" admitted only the frame after a committed choice -- the choice already in
+# gBattleBufferB, possibly a SWITCH into the mon being zeroed -- and never the parked menu (live
+# linked_faint_active_gen3 r3, 123c6c45: a bench force_faint held 99 s on this clause).
+# The window is the parked menu itself: exactly battler 0's input exec pending (the opponent AI
+# completes inside its own frame; in doubles battler 2 is only asked after battler 0 reaches
+# STATE_WAIT_ACTION_CONFIRMED, battle_main.c:3110-3113, so flags == 1 is battler 0's menu only), and
+# battler 0's controller is the PLAYER's HandleInputChooseAction. That pin also refuses the
+# HandleChooseActionAfterDma3 draw frames, the move/target submenus, the bag and party menus, and
+# the Safari / Oak-old-man / Pokedude controllers (Teachy TV swaps gPlayerParty: teachy_tv.c:1178).
 BATTLE_CLAUSES_FRLG = (
     ("battle_main_func", "gBattleMainFunc", 0, 4, None, "eq_symbol", "HandleTurnActionSelectionState"),
     ("battle_comm_0", "gBattleCommunication", 0, 1, None, "eq", 1),
-    ("battle_exec_flags_idle", "gBattleControllerExecFlags", 0, 4, None, "eq", 0),
+    ("battle_exec_flags_input", "gBattleControllerExecFlags", 0, 4, None, "eq", 1),
+    ("battle_input_controller", "gBattlerControllerFuncs", 0, 4, None, "eq_symbol", "HandleInputChooseAction"),
     ("battle_not_link", "gBattleTypeFlags", 0, 4, 0x02, "eq", 0),
     ("battle_engine_loaded", "gBattleMons", 0x2C, 2, None, "nonzero", None),
     ("battle_outcome_open", "gBattleOutcome", 0, 1, None, "eq", 0),

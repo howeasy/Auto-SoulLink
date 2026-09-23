@@ -73,11 +73,22 @@
         {
           "address": 33700808,
           "compare": "eq",
-          "expect": 0,
-          "name": "battle_exec_flags_idle",
+          "expect": 1,
+          "name": "battle_exec_flags_input",
           "offset": 0,
           "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
           "symbol": "gBattleControllerExecFlags",
+          "width": 4
+        },
+        {
+          "address": 50352096,
+          "compare": "eq_symbol",
+          "expect": 134407225,
+          "expect_symbol": "HandleInputChooseAction",
+          "name": "battle_input_controller",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattlerControllerFuncs",
           "width": 4
         },
         {
@@ -433,11 +444,22 @@
         {
           "address": 33700808,
           "compare": "eq",
-          "expect": 0,
-          "name": "battle_exec_flags_idle",
+          "expect": 1,
+          "name": "battle_exec_flags_input",
           "offset": 0,
           "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
           "symbol": "gBattleControllerExecFlags",
+          "width": 4
+        },
+        {
+          "address": 50352096,
+          "compare": "eq_symbol",
+          "expect": 134407225,
+          "expect_symbol": "HandleInputChooseAction",
+          "name": "battle_input_controller",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattlerControllerFuncs",
           "width": 4
         },
         {
