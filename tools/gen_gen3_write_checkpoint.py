@@ -476,7 +476,9 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
 
     profile = json.loads((ROOT / "data" / "games" / pack / "profile.json").read_text("utf-8"))
     out["battle"], battle_dropped = battle_block(title, syms, is_rr, profile, roms)
-    unverified += [f"battle {row}" for row in battle_dropped]
+    if battle_dropped:  # REV-C5-RR-BW-FIX 1: a partial clause set is a weaker permit, not a closed one
+        raise SystemExit(f"{title}: battle clause(s) unproven, no battle block emitted: "
+                         + "; ".join(battle_dropped))
     if not is_rr:  # four HandleInputChooseAction spellings; parse_sym must have kept the player's
         lo, hi = text_span(SYM_DIR / sym_file.replace(".sym", ".map"), PLAYER_CONTROLLER_OBJ)
         if not lo <= syms["HandleInputChooseAction"][0] < hi:
@@ -578,6 +580,13 @@ BATTLE_DROPPED_RR = ()
 # never `eq_symbol HandleInputChooseAction` (whose RR body differs).  Any byte change -- pool word
 # included -- drops the clause and lists it as unverified.
 RR_INPUT_CONTROLLER = ("HandleChooseActionAfterDma3", 0x18, 0x22)
+# REV-C5-RR-BW-FIX 2: RR HOLDS battle_commit (safety.lua refuses it by this reason).  The commit
+# writes gBattleCommunication[b] = 3 while CFRU's parked controller is still battler 0's, and an L
+# press then runs its ball shortcut -- RemoveBagItem at 0x090AA114 -- before the engine takes the
+# coerced action (docs/gen3/research/rr_battle_tuple_2026-09-23.md §1 e).  FR/LG's parked handler
+# has no side effect.  Drop this only with a proven controller-handoff design (G5).
+RR_COMMIT_HOLD = ("battle_commit held on RR: CFRU's parked controller stays live after the commit "
+                  "(L-throw RemoveBagItem 0x090AA114); controller handoff unproven (G5)")
 BATTLE_COMMIT_GUARD = {"symbol": "gBattleCommunication", "offset": 0, "width": 1, "compare": "lt",
                        "value": 3, "indexed_by": "battler"}
 BATTLE_COMMIT_GUARD_RR = {"symbol": "BATTLE_COMM_ADDR", "offset": 0, "width": 1, "compare": "lt",
@@ -636,6 +645,9 @@ def rr_input_controller(syms, roms: dict[str, bytes] | None) -> tuple[dict | Non
     fn, addr_at, value_at = RR_INPUT_CONTROLLER
     if not roms or "_fr" not in roms or fn not in syms:
         return None, "no RR ROMs to prove it against"
+    lo, hi = text_span(SYM_DIR / "pokefirered.map", PLAYER_CONTROLLER_OBJ)
+    if not lo <= syms[fn][0] < hi:  # parse_sym keeps the first spelling; it must be the player's
+        return None, f"{fn} @ {syms[fn][0]:#010x} is not {PLAYER_CONTROLLER_OBJ}'s"
     if not verify_code(syms, roms, fn):
         return None, f"{fn} @ {syms[fn][0]:#010x} differs from FR in an RR ROM"
     start = syms[fn][0]
@@ -689,6 +701,7 @@ def battle_block(title: str, syms, is_rr: bool, profile: dict | None,
         guard["address"] = ram.get("BATTLE_COMM_ADDR")
         guard["source"] = BATTLE_SOURCE_RR % "BATTLE_COMM_ADDR"
         dropped += list(BATTLE_DROPPED_RR)
+        hold = {"commit_hold": RR_COMMIT_HOLD}
     else:
         for name, symbol, offset, width, mask, compare, expect in BATTLE_CLAUSES_FRLG:
             entry = {"name": name, "symbol": symbol, "address": syms[symbol][0], "offset": offset,
@@ -704,7 +717,8 @@ def battle_block(title: str, syms, is_rr: bool, profile: dict | None,
         guard = dict(BATTLE_COMMIT_GUARD)
         guard["address"] = syms["gBattleCommunication"][0]
         guard["source"] = BATTLE_SOURCE_FRLG
-    return {"version": "gen3-battle-v1", "clauses": clauses, "commit_guard": guard}, dropped
+        hold = {}
+    return {"version": "gen3-battle-v1", "clauses": clauses, "commit_guard": guard, **hold}, dropped
 
 
 def native_block(profile: dict | None) -> dict | None:

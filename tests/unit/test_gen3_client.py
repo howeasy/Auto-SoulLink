@@ -380,14 +380,63 @@ def test_frlg_force_explode_on_the_active_battler_is_a_held_faint():
     assert w.writes == [] and w.client.battle_pending_count(w.client) == 1
 
 
-def _explode_world():
+def _lift_rr_commit_hold(w):
+    """Plan-shape scaffolding for the G5 controller-handoff design: the RR pack HOLDS battle_commit
+    (REV-C5-RR-BW-FIX 2, the battle_commit_hold clause). safety.lua evaluates every clause and
+    names every failure, so a refusal by the hold ALONE means the rest of the real clause set
+    admitted: only that refusal is lifted, keeping the commit plan's coverage."""
+    policy = w.parts.policy
+    held_check, safety = policy.check, w.parts.safety
+
+    def check(this, snap, reason, args=None):
+        ok, why = held_check(this, snap, reason, args)
+        if not ok and list(safety.last_clauses.values()) == ["battle_commit_hold"]:
+            return True, "hold lifted (test scaffolding)"
+        return ok, why
+    policy.check = check
+
+
+def _explode_world(lift_hold=True):
     w = live("gen3_rr", "radical_red")
+    if lift_hold:
+        _lift_rr_commit_hold(w)
     w.battle_ok = True
     w.poke_int(w.ram["BATTLE_STRUCT_PTR_ADDR"], 0x02020000, 4)
     w.enter_battle([FOE], active=(0,))
     base = w.ram["BATTLE_MONS_ADDR"]
     w.poke_int(base + 0x28, 20, 2)                              # battler 0 hp
     return w, base
+
+
+def _policy_check(w, reason, args=None):
+    policy = w.parts.policy
+    snap = policy.snapshot(policy)
+    ok, why = policy.check(policy, snap, reason, w.lua.table_from(args or {}, recursive=True))
+    return bool(ok), str(why)
+
+
+def test_rr_battle_commit_is_refused_until_a_controller_handoff_is_proven():
+    """REV-C5-RR-BW-FIX 2: the commit writes comm[b] = 3 while CFRU's parked controller is still
+    live, and an L press then runs RemoveBagItem (0x090AA114) -- a ball lost. The RR pack holds
+    battle_commit by name (pack data, enforced by safety.lua: client.lua names no title); the
+    battle state itself is admissible, so the hold is the ONLY failing clause."""
+    w, _base = _explode_world(lift_hold=False)
+    assert _policy_check(w, "battle_faint")[0] is True        # the clause set itself admits
+    ok, why = _policy_check(w, "battle_commit", {"battler": 0})
+    assert ok is False and "battle_commit" in why and "0x090AA114" in why
+    assert list(w.parts.safety.last_clauses.values()) == ["battle_commit_hold"]
+    w.command(cmd="force_explode", key=KA)
+    w.step(3)
+    assert w.writes == [] and write_reasons(w) == []
+    held = lua_to_py_list(w.client.battle_pending)[0]
+    assert "0x090AA114" in str(held.why)
+
+
+def test_frlg_battle_commit_policy_is_unchanged():
+    w = live()
+    w.battle_ok = True
+    w.enter_battle([FOE], active=(0,))
+    assert _policy_check(w, "battle_commit", {"battler": 0}) [0] is True
 
 
 def test_rr_force_explode_commits_the_menu_skip_under_battle_commit():

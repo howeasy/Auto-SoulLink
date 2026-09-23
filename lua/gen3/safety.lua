@@ -10,6 +10,14 @@ local predicates = {"callback1", "callback2", "field_controls_locked", "in_battl
     "link_players_received", "script_context_status", "soft_reset_disabled"}
 local known_predicates = {}
 for _, name in ipairs(predicates) do known_predicates[name] = true end
+-- The battle clause SET (REV-C5-RR-BW-FIX 1), checked both ways in battle() before anything is
+-- evaluated: a pack missing one (the generator dropped an unproven pin) or carrying an unknown
+-- one refuses as "pack", never runs a weaker set. Evaluation order stays the pack's.
+local battle_clauses = {"battle_main_func", "battle_comm_0", "battle_exec_flags_input",
+    "battle_input_controller", "battle_not_link", "battle_engine_loaded", "battle_outcome_open"}
+local known_battle_clauses = {}
+for _, name in ipairs(battle_clauses) do known_battle_clauses[name] = true end
+local battle_compares = {eq = true, eq_rom = true, eq_symbol = true, nonzero = true}
 local function uint(v, limit)
     assert(type(v) == "number" and v % 1 == 0 and v >= 0 and v <= limit, "unreadable integer")
     return v
@@ -195,13 +203,36 @@ function S.new(pack, deps, kind)
 
     local function battle(reason, snapshot, args)
         self.last_clauses = {}
-        local ok, result = pcall(preamble, "battle")
+        local ok, result = pcall(function()
+            preamble("battle")
+            local block = pack.battle
+            assert(block.version == "gen3-battle-v1", "unsupported battle block")
+            assert(type(block.clauses) == "table", "missing battle clauses")
+            local seen = {}
+            for _, spec in ipairs(block.clauses) do
+                local name = spec.name
+                assert(known_battle_clauses[name], "unknown battle clause: " .. tostring(name))
+                assert(not seen[name], "duplicate battle clause: " .. name)
+                assert(battle_compares[spec.compare], "unsupported battle compare: " .. name)
+                assert(spec.compare == "nonzero" or type(spec.expect) == "number",
+                    "battle clause without expect: " .. name)
+                seen[name] = true
+            end
+            for _, name in ipairs(battle_clauses) do assert(seen[name], "missing battle clause: " .. name) end
+            assert(block.commit_hold == nil or type(block.commit_hold) == "string", "invalid commit_hold")
+            if reason == "battle_commit" then assert(block.commit_guard, "missing battle commit guard") end
+        end)
         if not ok then self.last_clauses = {"pack"}; return false, tostring(result) end
-        local battle_block = assert(pack.battle, "missing battle block")
-        assert(battle_block.version == "gen3-battle-v1", "unsupported battle block")
-        local entries = clause_entries(battle_block.clauses)
+        local entries = clause_entries(pack.battle.clauses)
         if reason == "battle_commit" then
-            local guard = assert(pack.battle.commit_guard, "missing battle commit guard")
+            -- REV-C5-RR-BW-FIX 2: a pack may HOLD battle_commit outright (RR: CFRU's parked
+            -- controller outlives the commit). A clause, not an early return, so last_clauses
+            -- still names every other failure alongside it.
+            local hold = pack.battle.commit_hold
+            if hold then
+                entries[#entries + 1] = {key = "battle_commit_hold", fn = function() error(hold, 0) end}
+            end
+            local guard = pack.battle.commit_guard
             local battler = args and args.battler
             entries[#entries + 1] = {key = "battle_commit_guard", fn = function()
                 assert(type(battler) == "number" and battler % 1 == 0 and battler >= 0 and battler <= 3,

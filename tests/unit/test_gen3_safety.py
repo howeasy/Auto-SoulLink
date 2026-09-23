@@ -8,10 +8,14 @@ lupa = pytest.importorskip("lupa")
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def committed_pack(title):
+    folder = "gen3_rr" if title == "radical_red" else "gen3_frlg"
+    return json.loads((ROOT / "data/games" / folder / "write_checkpoint.json").read_text())[title]
+
+
 class World:
-    def __init__(self, title="radical_red", kind="companion"):
-        folder = "gen3_rr" if title == "radical_red" else "gen3_frlg"
-        self.pack = json.loads((ROOT / "data/games" / folder / "write_checkpoint.json").read_text())[title]
+    def __init__(self, title="radical_red", kind="companion", pack=None):
+        self.pack = committed_pack(title) if pack is None else pack
         self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
         self.lua.execute("""
             mem = {}; rom = {}; unreadable = nil
@@ -332,6 +336,9 @@ def test_battle_input_accepts_and_names_each_broken_clause(title, kind, keys):
     w = World(title, kind)
     for reason in ("battle_faint", "battle_commit"):
         ok, why, clauses = w.check_reason(reason, {"battler": 0})
+        if reason == "battle_commit" and "commit_hold" in w.pack["battle"]:  # RR holds commits
+            assert ok is False and clauses == ["battle_commit_hold"], clauses
+            continue
         assert ok is True and clauses == [] and reason in why
     for name in keys:
         spec = next(c for c in w.pack["battle"]["clauses"] if c["name"] == name)
@@ -415,8 +422,8 @@ def test_battle_faint_refuses_every_other_battler0_state(title, state, comm, fla
 # gBattleCommunication 0x02023E82, gBattleControllerExecFlags 0x02023BC8, gBattlerControllerFuncs
 # 0x03004FE0.  CFRU's input handler keeps exec bit 0 set while parked and clears it inside the
 # commit call, which also stores PlayerBufferRunCommand (0x0802E3B5).
-def rr_battle_world(kind, comm, flags, controller):
-    w = World("radical_red", kind)
+def rr_battle_world(kind, comm, flags, controller, pack=None):
+    w = World("radical_red", kind, pack)
     g = w.lua.globals()
     g.put(0x02023E82, comm, 1)
     g.put(0x02023BC8, flags, 4)
@@ -448,10 +455,96 @@ def test_rr_battle_faint_refuses_every_other_battler0_state(kind, state, comm, f
 
 
 @pytest.mark.parametrize("kind", ["clean", "companion"])
-def test_rr_battle_commit_refuses_the_commit_frame(kind):
-    """comm 1 < 3 passes the guard; the refusal must come from the new clauses."""
-    ok, why, clauses = rr_battle_world(kind, 1, 0, 0x0802E3B5).check_reason("battle_commit", {"battler": 0})
-    assert ok is False and clauses == ["battle_exec_flags_input", "battle_input_controller"], clauses
+@pytest.mark.parametrize("hold", [True, False], ids=["committed_pack", "hold_lifted"])
+def test_rr_battle_commit_refuses_the_commit_frame(kind, hold):
+    """comm 1 < 3 passes the guard; the refusal must come from the new clauses, with or without
+    the pack's battle_commit hold (REV-C5-RR-BW-FIX 2)."""
+    pack = committed_pack("radical_red")
+    if not hold:
+        del pack["battle"]["commit_hold"]
+    w = rr_battle_world(kind, 1, 0, 0x0802E3B5, pack)
+    ok, why, clauses = w.check_reason("battle_commit", {"battler": 0})
+    expect = ["battle_commit_hold"] * hold + ["battle_exec_flags_input", "battle_input_controller"]
+    assert ok is False and clauses == expect, clauses
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+def test_rr_battle_commit_is_held_at_the_parked_menu(kind):
+    """REV-C5-RR-BW-FIX 2: at the admissible parked menu the hold is the ONLY failing clause;
+    battle_faint there admits. FR/LG carry no hold."""
+    w = rr_battle_world(kind, 1, 1, 0x0802E439)
+    ok, why, clauses = w.check_reason("battle_commit", {"battler": 0})
+    assert ok is False and clauses == ["battle_commit_hold"] and "0x090AA114" in why
+    assert w.check_reason("battle_faint")[0] is True
+    assert "commit_hold" not in committed_pack("firered")["battle"]
+    assert "commit_hold" not in committed_pack("leafgreen")["battle"]
+
+
+# ── REV-C5-RR-BW-FIX 1: a pack missing a battle clause refuses as {"pack"}, never admits ───────
+# Dropping the controller pin left exec == 1 alone, which admits the draw frame and both L-window
+# controllers; an empty clause list admitted every frame.  safety.lua now checks the battle clause
+# SET both ways (like the overworld predicates) before evaluating anything.
+def pack_without(title, drop):
+    """The committed pack with the named battle clauses removed (None = every clause)."""
+    pack = committed_pack(title)
+    clauses = pack["battle"]["clauses"]
+    pack["battle"]["clauses"] = [] if drop is None else [c for c in clauses if c["name"] not in drop]
+    return pack
+
+
+RR_NON_PARKED = [("menu_draw", 1, 1, 0x08032B95), ("l_subui_open", 1, 1, 0x090A9E41),
+                 ("l_subui_returned", 1, 1, 0x090A9EA1), ("commit_frame", 1, 0, 0x0802E3B5)]
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+@pytest.mark.parametrize("drop", [("battle_input_controller",), None], ids=["pin_removed", "empty"])
+@pytest.mark.parametrize("state,comm,flags,controller", RR_NON_PARKED)
+def test_rr_incomplete_battle_block_refuses_as_pack(kind, drop, state, comm, flags, controller):
+    w = rr_battle_world(kind, comm, flags, controller, pack_without("radical_red", drop))
+    for reason in ("battle_faint", "battle_commit"):
+        ok, why, clauses = w.check_reason(reason, {"battler": 0})
+        assert ok is False and clauses == ["pack"], (state, reason, clauses)
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+@pytest.mark.parametrize("drop", [("battle_input_controller",), None], ids=["pin_removed", "empty"])
+@pytest.mark.parametrize("state,flags,controller", [
+    ("menu_draw", 1, "HandleChooseActionAfterDma3"), ("post_choice", 0, "PlayerBufferRunCommand")])
+def test_frlg_incomplete_battle_block_refuses_as_pack(title, drop, state, flags, controller):
+    w = World(title, "clean", pack_without(title, drop))
+    s, g = pret_syms(title), w.lua.globals()
+    g.put(s["gBattleCommunication"][0], 1, 1)
+    g.put(s["gBattleControllerExecFlags"][0], flags, 4)
+    g.put(s["gBattlerControllerFuncs"][0], player(title, controller) | 1, 4)
+    ok, why, clauses = w.check_reason("battle_faint")
+    assert ok is False and clauses == ["pack"], (state, clauses)
+
+
+@pytest.mark.parametrize("title,kind", [("firered", "clean"), ("radical_red", "companion")])
+@pytest.mark.parametrize("mutation", ["unknown_name", "duplicate", "bad_compare", "no_expect",
+                                      "bad_version", "no_battle"])
+def test_malformed_battle_block_refuses_as_pack_instead_of_raising(title, kind, mutation):
+    pack = committed_pack(title)
+    block = pack["battle"]
+    clauses = block["clauses"]
+    if mutation == "unknown_name":
+        clauses.append(dict(clauses[0], name="battle_extra"))
+    elif mutation == "duplicate":
+        clauses.append(dict(clauses[1]))
+    elif mutation == "bad_compare":
+        clauses[1]["compare"] = "lt"
+    elif mutation == "no_expect":
+        del clauses[1]["expect"]
+    elif mutation == "bad_version":
+        block["version"] = "gen3-battle-v0"
+    if mutation == "no_battle":
+        pack.pop("battle")
+    # the World fixture seeds RAM from the committed block; the mutated pack goes to safety.lua
+    w = World(title, kind)
+    module = w.lua.execute((ROOT / "lua/gen3/safety.lua").read_text(encoding="utf-8"))
+    w.safety = module.new(w.lua.table_from(pack, recursive=True), w.lua.globals().deps, kind)
+    ok, why, clauses = w.check_reason("battle_faint")
+    assert ok is False and clauses == ["pack"], (mutation, why)
 
 
 def test_battle_commit_guard_is_named_and_fail_closed():

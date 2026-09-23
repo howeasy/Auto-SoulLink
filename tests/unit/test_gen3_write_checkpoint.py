@@ -284,7 +284,9 @@ def test_overworld_section_is_untouched_by_the_new_blocks(pack: str, title: str)
     assert block["version"] == "gen3-overworld-v1"
     assert tuple(sorted(block["predicates"])) == tuple(sorted(OVERWORLD_PREDICATES))
     assert block["cpu"]["mode"] == 0x1F
-    assert set(block["battle"]) == {"clauses", "commit_guard", "version"}
+    # RR alone HOLDS battle_commit (REV-C5-RR-BW-FIX 2); FR/LG's block shape is unchanged
+    hold = {"commit_hold"} if pack == "gen3_rr" else set()
+    assert set(block["battle"]) == {"clauses", "commit_guard", "version"} | hold
     assert "sound" in block
 
 
@@ -343,10 +345,16 @@ def test_rr_battle_clauses_are_rr_facts_not_sym_assertions() -> None:
     assert (ctrl["address"], ctrl["offset"], ctrl["width"], ctrl["compare"], ctrl["expect"]) ==         (0x03004FE0, 0, 4, "eq", 0x0802E439)
     assert "LDR@0x08032BB6" in ctrl["source"] and "LDR@0x08032BAC" in ctrl["source"]
     assert "expect_symbol" not in ctrl  # a ROM literal, never the FR HandleInputChooseAction symbol
+    assert "0x090AA114" in block["commit_hold"]      # battle_commit held until a G5 handoff design
 
 
-def test_rr_input_controller_drops_when_its_pool_word_changes(monkeypatch) -> None:
-    """Flip one byte of the LDR@0x08032BB6 pool word (0x08032BD0) in the companion: fail-closed."""
+def test_rr_input_controller_pool_word_change_is_fatal(monkeypatch) -> None:
+    """Flip one byte of the LDR@0x08032BB6 pool word (0x08032BD0) in the companion: the generator
+    refuses to emit a battle block without the pin (a partial clause set would admit the draw
+    frame), instead of writing a six-clause pack."""
+    for kind in ("clean", "companion"):
+        rom_or_skip("gen3_rr", "radical_red", kind)
+    rom_or_skip("gen3_frlg", "firered", "clean")
     real = G.load_rom
 
     def mutated(pack, title, kind):
@@ -357,10 +365,16 @@ def test_rr_input_controller_drops_when_its_pool_word_changes(monkeypatch) -> No
         return rom[:at] + bytes([rom[at] ^ 0xFF]) + rom[at + 1:]
 
     monkeypatch.setattr(G, "load_rom", mutated)
-    out, unverified = G.build_title("gen3_rr", "radical_red", "pokefirered.sym", ("clean", "companion"))
-    names = [c["name"] for c in out["battle"]["clauses"]]
-    assert "battle_input_controller" not in names
-    assert any("battle_input_controller" in row for row in unverified), unverified
+    with pytest.raises(SystemExit, match="battle_input_controller"):
+        G.build_title("gen3_rr", "radical_red", "pokefirered.sym", ("clean", "companion"))
+
+
+def test_rr_input_controller_must_be_the_player_controllers_after_dma3(monkeypatch) -> None:
+    """The first .sym spelling of HandleChooseActionAfterDma3 must be battle_controller_player.o's."""
+    monkeypatch.setattr(G, "text_span", lambda map_path, obj: (0, 1))
+    entry, why = G.rr_input_controller({"HandleChooseActionAfterDma3": (0x08032B94, 0x40)},
+                                       {"_fr": b"", "clean": b""})
+    assert entry is None and G.PLAYER_CONTROLLER_OBJ in why
 
 
 def test_native_block_is_the_profile_and_stays_inside_ewram() -> None:

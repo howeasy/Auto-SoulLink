@@ -146,6 +146,7 @@
         "value": 3,
         "width": 1
       },
+      "commit_hold": "battle_commit held on RR: CFRU's parked controller stays live after the commit (L-throw RemoveBagItem 0x090AA114); controller handoff unproven (G5)",
       "version": "gen3-battle-v1"
     },
     "cpu": {

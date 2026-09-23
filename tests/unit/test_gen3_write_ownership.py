@@ -220,6 +220,17 @@ def test_a_held_battler_landing_at_the_overworld_checkpoint_is_fully_logged():
 
 def test_rr_force_explode_menu_skip_commit_is_fully_logged():
     w = _live("gen3_rr", "radical_red")
+    # The RR pack HOLDS battle_commit (REV-C5-RR-BW-FIX 2). Lift ONLY a refusal by the hold alone
+    # (every other clause admitted) so the commit plan's logging stays covered for G5.
+    policy, safety = w.parts.policy, w.parts.safety
+    held_check = policy.check
+
+    def check(this, snap, reason, args=None):
+        ok, why = held_check(this, snap, reason, args)
+        if not ok and list(safety.last_clauses.values()) == ["battle_commit_hold"]:
+            return True, "hold lifted (test scaffolding)"
+        return ok, why
+    policy.check = check
     w.battle_ok = True
     w.poke_int(w.ram["BATTLE_STRUCT_PTR_ADDR"], 0x02020000, 4)
     w.enter_battle([FOE], active=(0,))
