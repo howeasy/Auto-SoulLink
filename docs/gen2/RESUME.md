@@ -1,4 +1,4 @@
-# Gen 2 implementation resume (updated 2026-09-23, session 6: Crystal passes both O-22 gates PHYSICAL; stopped at the owner's milestone)
+# Gen 2 implementation resume (updated 2026-09-23, session 7: all three titles pass O-22; first C<->C duo run in progress; paused for compaction)
 
 ## Who coordinates
 
@@ -38,7 +38,31 @@ This note summarises it; it is not a second ledger.
   COMMITTED fixture with its original played receipt (no replay); `run_fixtures.py` (session scratchpad;
   replay + qualify + stage). Staged inputs as in the runbook.
 
-## Done this session (6) — Crystal O-22 gates PHYSICAL
+## Done this session (7) — toward the first PHYSICAL Gen 2 duo
+
+- **U1 PHYSICAL on all three titles**: Crystal `7c08529`, Gold `eac806c`, Silver `92318de`
+  (`tests/fixtures/gen2/receipts/{title}.engine_sites.json`; U1-GS `9a2643c7` made the gate per-title; each title
+  keeps its own rows — Silver's capture sites sit 2 bytes below Gold's). `S.PHYSICAL_TITLES` maps each title to its
+  own receipt.
+- **Owner ruling O-23** (`b7f8459`): Silver's U2 gate = Gold's write-window receipt while their checkpoint rows are
+  identical. => Crystal, Gold and Silver ALL satisfy O-22.
+- **U3** `1f07f71e`: admitted Crystal runs through `Entry.build` (production graph, U1/U2 receipts bound). U3 was told
+  it may extend admission to Gold/Silver if it is data + the same path (reconcile its final report).
+- **U5** (in flight, uncommitted at the pause): title-scoped launcher branch in `lua/slink.lua`, server row flip,
+  Gen 2 release-manifest rows, legacy-route test updates (input: `docs/gen2/reviews/OMP_U5_CUTOVER_FACTS_2026-09-23.md`).
+- **H1** `7b9cab48` Gen 2 duo driver (`lua/tests/duo/duo_gen2_main.lua` header = contract; Sonnet APPROVE).
+  **H2** `23fbc80e`+`469dad08` independent oracle `tools/gen2_duo_oracles.py` (Sonnet APPROVE; carry H2b: defensive
+  checksum inside `link_oracle`, document the removed OT-differ guard). **H3** `674303bb` (Codex) `gen2_new` family +
+  `link` lane in `tools/e2e_duo.py` + `tests/e2e/test_duo_gen2_new.py`; Crystal server routing is a lane-local
+  override in the child process until U5; duo unit selection 428 passed.
+- **N18** `8c3b0cd` committed-receipt validators (27 passed with all receipts). Codex static-canon DESIGN done
+  (pack-owned `static_<lowercase_map_const>_<species>`, keep `legend_245`); OMP implementing it
+  (`omp/gen2-static-canon` in `C:/Users/howar/AppData/Local/Temp/g2omp`, card cx-7bde9c30) — cherry-pick after review;
+  its signals.lua hunk is the static-zone function only.
+- Collaboration mode (owner): parallel workers message each other directly by agent id (cc coordinator); Codex is
+  steered (`delivery: steer`) for every mid-card update.
+
+## Done in session 6 — Crystal O-22 gates PHYSICAL
 
 - **U1 Crystal engine-hook proof PHYSICAL** (`7c08529`, `tests/fixtures/gen2/receipts/crystal.engine_sites.json`):
   wild_ready, capture_party, capture_party_finalized, battle_end, save_completed fire at their pinned bank/PC on
@@ -93,17 +117,13 @@ This note summarises it; it is not a second ledger.
 
 ## Next, in order
 
-1. **U3 production graph** (O-22 now satisfied for Crystal: U1 + U2 PHYSICAL receipts committed): admit Crystal in
-   `data/games/gen2_crystal/admission.json`, `Entry.build` composes production with the U1 receipt
-   (`S.qualified_sites` + `S.bind_fixture_qualification`) and the U2 receipt (`M.qualified` +
-   `M.bind_fixture_qualification`; `check(kind)` needs a write kind at `lua/gen2/entry.lua:226`). Gold/Silver stay
-   PENDING until their U1 (anchor `_2DMenuInterpretJoypad`, title-keyed rows).
-2. U5 launcher/Manager route; then H1/H2/H3 (Gen 2 duo driver + independent oracle + wrapper) for the first
-   C<->C `link` duo; static canonical ids (from Codex's design); gen2-M1 Gen 1 duo A/B.
-3. Landed at the stop: N18 `8c3b0cd` (every committed PHYSICAL receipt re-validated by its production validator,
-   tamper controls). QUEUED, not started: Codex gen2-static-canon (read-only static id design; re-send it). Carries: U2 uncovered controls (textbox, nested menus, battle KO, Cable Club, reset/
-   state-load, corrupt anchor ...); capture_box unproven (full party); PHYSICAL is self-reported by the gate
-   (launch through EmuHawk is the guarantee); rollback drops ~1 frame of client events (by design).
+1. **Read the first physical C<->C duo result**: `python tools/e2e_duo.py --game gen2_new --scenario link --lane
+   gen2-cc-link --keep-data` (log `.cache/duo-gen2-cc-link.log`, started at the pause). PASS = milestone; FAIL ->
+   diagnose from the per-instance result files (the driver dumps markers; never rerun unchanged).
+2. Reconcile U5 (commit + slink-adapter-guard review + Gen 3 unit check) and U3's final report (G/S admission scope);
+   non-author review of U3.
+3. Gold/Silver admission + route if U3/U5 did not include them; then G<->S duo and the C<->G `link` (O-16); OMP
+   static-canon-impl cherry-pick + review; H2b; the H4 lane closure; gen2-M1 Gen 1 duo A/B.
 
 ## Runbook (exact commands; run from this worktree root)
 
