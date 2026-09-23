@@ -34,7 +34,10 @@
   Environment: the inspect gate's (SLINK_ROOT, run_gb_gate._gen2_plan bindings, SLINK_GEN2_FIXTURE_CASE,
   SLINK_GEN2_ROUTE_FACTS, SLINK_GEN2_QUALIFY stage "boot") plus SLINK_GEN2_U1_FACTS from
   tests/live/test_gen2_frame_align.py: {pack_ui = {kind -> site}, decoy = {symbol, bank, addr, flat, hex},
-  prompts = {catch_nickname = {anchor}}} (PokeBallEffect asks _AskGiveNicknameText, not the gift text).
+  prompts = {catch_nickname = {anchor}}, battle_menu = F.grid_menu geometry} (PokeBallEffect asks
+  _AskGiveNicknameText, item_effects.asm:574-581, not GiveANickname_YesNo's gift text). SLINK_GEN2_TRACE=1
+  logs a state line (phase, UI, readiness, battle mode, PC + stack labels) every 30 frames; any play
+  failure logs that line plus the visible screen.
   Printed: HIT_SUMMARY, ALIGN, DECOY, NEGATIVES, PRODUCTION, VERDICT and RECEIPT (json after the tag).
 --]]
 local F = {}
@@ -89,6 +92,95 @@ function F.ball_cursor(rows)
         end
     end
     return nil
+end
+
+-- Pure: the battle menu read at its SOURCE geometry, not by the scripted gate's parse_menu. That parser
+-- joins single-space runs into one item ("POKé BALL"), so with the cursor on FIGHT the row reads
+-- "FIGHT <PK><MN>" (the empty column-2 cursor cell is one space) and choose() steered Right/Left forever:
+-- the U1 live "phase made no bounded progress: battle". g (tests/live/test_gen2_frame_align.py, from
+-- BattleMenuHeader engine/battle/menu.asm:31-48): 0-based first-label cell x,y, rows, columns, spacing
+-- and each label's glyphs; the cursor cell is one tile left of each label (engine/menus/menu.asm:159-165).
+function F.grid_menu(rows, g)
+    local items, cursor = {}, nil
+    for r = 0, g.rows - 1 do
+        local row = rows[g.y + 2 * r + 1]   -- Place2DMenuItemStrings: rows 2 tiles apart (:117-157)
+        if type(row) ~= "table" then return nil end
+        for c = 0, g.columns - 1 do
+            local index, x = r * g.columns + c + 1, g.x + c * g.spacing + 1
+            local glyphs = g.labels[index]
+            for i, glyph in ipairs(glyphs) do
+                if row[x + i - 1] ~= glyph then return nil end
+            end
+            if row[x - 1] == "▶" then
+                if cursor then return nil end
+                cursor = index
+            end
+            items[index] = table.concat(glyphs)
+        end
+    end
+    if not cursor then return nil end
+    return {items=items, cursor=cursor, columns=g.columns}
+end
+
+-- Pure: nearest ROM label at or below addr (bank 0 for home), from rgblink .sym text; diagnostics only.
+function F.symbols(text)
+    local banks = {}
+    for bank, addr, name in text:gmatch("(%x%x):(%x%x%x%x) (%S+)") do
+        local b, a = tonumber(bank, 16), tonumber(addr, 16)
+        if a < 0x8000 then
+            banks[b] = banks[b] or {}
+            table.insert(banks[b], {a, name})
+        end
+    end
+    return function(bank, addr)
+        local list = banks[addr < 0x4000 and 0 or bank] or {}
+        local best
+        for _, s in ipairs(list) do
+            if s[1] <= addr and (best == nil or s[1] > best[1]) then best = s end
+        end
+        return best and fmt("%s+%d", best[2], addr - best[1]) or fmt("%02X:%04X", bank, addr)
+    end
+end
+
+-- Pure: one diagnostic line for a trace or a stall; never an oracle.
+function F.state_line(tag, frame, phase, point, where)
+    local ui = type(point) == "table" and point.ui or nil
+    point = type(point) == "table" and point or {}
+    return fmt("  %s @%s phase=%s ui=%s prompt=%s ready=%s battle_mode=%s ow=%s items=%s cursor=%s at=%s",
+        tag, tostring(frame), tostring(phase), ui and tostring(ui.kind) or "-", ui and tostring(ui.prompt) or "-",
+        tostring(point.input_ready), tostring(point.battle_mode), tostring(point.overworld_ready),
+        ui and type(ui.items) == "table" and table.concat(ui.items, "|") or "-",
+        ui and tostring(ui.cursor) or "-", tostring(where))
+end
+
+-- The bounded play; on ANY failure (phase bound, driver refusal) it logs the last point, where the CPU
+-- is and the visible screen. diag = {log, frame, screen, where, trace}; trace (SLINK_GEN2_TRACE=1) adds
+-- one state line per 30 frames. Budgets stay the host's (max_phase_frames).
+F.TRACE_EVERY = 30
+function F.play(host, spec, driver, observe, diag)
+    local last
+    local function locate()
+        local placed, where = pcall(diag.where)
+        return placed and where or "?"
+    end
+    local ok, outcome = pcall(host.run, spec, function(frame)
+        local point = observe()
+        last = point
+        local buttons, phase = driver.step(point)
+        if buttons == nil then error(phase, 0) end
+        if diag.trace and frame % F.TRACE_EVERY == 0 then
+            diag.log(F.state_line("trace", frame, phase, point, locate()))
+        end
+        return buttons, phase, point
+    end, function(_, phase, frame) diag.log(fmt("  phase %s @%d", phase, frame)) end)
+    if not ok then
+        diag.log(F.state_line("stall", diag.frame(), driver.phase, last, locate()))
+        local shown, rows = pcall(diag.screen)
+        if shown then
+            for y, row in ipairs(rows) do diag.log(fmt("  screen %02d |%s|", y, table.concat(row))) end
+        end
+    end
+    return ok, outcome
 end
 
 -- Pure point -> buttons, phase. Phases walk -> battle -> save -> saved (terminal).
@@ -417,6 +509,7 @@ function F.main(api, getenv, SG)
         assert(c.env.title == "crystal" and c.case.name == "crystal_battle", "U1 runs on crystal_battle only")
         assert(c.qualify ~= nil and c.qualify.stage == "boot", "SLINK_GEN2_QUALIFY stage \"boot\" required")
         c.u1 = assert(c.json.decode(assert(getenv("SLINK_GEN2_U1_FACTS"), "SLINK_GEN2_U1_FACTS missing")))
+        assert(type(c.u1.battle_menu) == "table", "U1 facts lack the battle menu geometry")
         return c
     end)
     if not check("environment, facts, profile and running ROM/CGB bound", ok, not ok and ctx or nil) then
@@ -464,18 +557,34 @@ function F.main(api, getenv, SG)
         local point = base()
         point.probe_hits = {capture_party=probe.record.sites.capture_party.hits}
         if point.ui and point.ui.kind == "pack_balls" then point.ball_cursor = F.ball_cursor(SG.screen(ctx)) end
+        if point.ui and point.ui.kind == "battle_menu" then
+            local menu = F.grid_menu(SG.screen(ctx), ctx.u1.battle_menu)
+            if menu then point.ui.items, point.ui.cursor, point.ui.columns = menu.items, menu.cursor, menu.columns
+            else point.input_ready = false end
+        end
         return point
     end
+    local symbol_at
+    local function where()   -- PC and the ROM words on the stack, as bank-guessed labels (diagnostics only)
+        if symbol_at == nil then
+            local f = assert(io.open(ctx.root .. "/data/gen2/pokecrystal.sym", "rb"))
+            symbol_at = F.symbols(f:read("a"))
+            f:close()
+        end
+        local bank, sp = api.read_u8(ctx.profile.hram.hROMBank, "System Bus"), api.register("SP")
+        local out = {symbol_at(bank, api.register("PC"))}
+        for i = 0, 7 do
+            local word = api.read_u8(sp + 2 * i, "System Bus") + 256 * api.read_u8(sp + 2 * i + 1, "System Bus")
+            if word >= 0x0100 and word < 0x8000 then out[#out + 1] = symbol_at(bank, word) end
+        end
+        return table.concat(out, "<")
+    end
     local driver = F.driver(ctx.facts.maps.Route29)
-    local played, outcome = pcall(host.run, {name="u1-crystal", terminal=driver.terminal,
+    local played, outcome = F.play(host, {name="u1-crystal", terminal=driver.terminal,
         max_frames=F.BUDGET.max_frames, max_phase_frames=F.BUDGET.max_phase_frames,
-        settle_frames=F.BUDGET.settle_frames, terminal_idle=true},
-        function()
-            local point = observe()
-            local buttons, phase = driver.step(point)
-            if buttons == nil then error(phase, 0) end
-            return buttons, phase, point
-        end, function(_, phase, frame) log(fmt("  phase %s @%d", phase, frame)) end)
+        settle_frames=F.BUDGET.settle_frames, terminal_idle=true}, driver, observe,
+        {log=log, frame=api.framecount, screen=function() return SG.screen(ctx) end, where=where,
+         trace=getenv("SLINK_GEN2_TRACE") == "1"})
     probe.release()
     state.release()
     local record = probe.record

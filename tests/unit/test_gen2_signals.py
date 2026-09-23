@@ -1268,3 +1268,92 @@ def test_the_u1_probe_and_negatives_run_on_the_shared_binders(fault):
     assert (align.armed, align.callback, align.pre_party, align.callback_party, align.post_party) == (
         align.armed, align.armed, 1, 2, 2)
     assert list(problems.values()) == [] and tuple(proven.values()) == U1_EXPECT
+
+
+# pokecrystal BattleMenuHeader (engine/battle/menu.asm:31-48) as tests/live/test_gen2_frame_align.battle_menu_grid
+# derives it: labels from (10,14), 2x2, spacing 6.
+U1_BATTLE_MENU = {"x": 10, "y": 14, "rows": 2, "columns": 2, "spacing": 6,
+                  "labels": [list("FIGHT"), ["<PK>", "<MN>"], list("PACK"), list("RUN")]}
+
+
+def battle_screen(cursor):
+    """The live battle menu screen: the empty battle textbox with the 12x6 menu box over it at (8,12)."""
+    cells = [[" "] * 20 for _ in range(18)]
+
+    def box(x, y, width, height):
+        cells[y][x:x + width] = ["┌"] + ["─"] * (width - 2) + ["┐"]
+        for row in range(y + 1, y + height - 1):
+            cells[row][x], cells[row][x + width - 1] = "│", "│"
+            cells[row][x + 1:x + width - 1] = [" "] * (width - 2)
+        cells[y + height - 1][x:x + width] = ["└"] + ["─"] * (width - 2) + ["┘"]
+
+    box(0, 12, 20, 6)
+    box(8, 12, 12, 6)
+    for (x, y), label in zip(((10, 14), (16, 14), (10, 16), (16, 16)), U1_BATTLE_MENU["labels"]):
+        cells[y][x:x + len(label)] = label
+    x, y = ((9, 14), (15, 14), (9, 16), (15, 16))[cursor - 1]
+    cells[y][x] = "▶"
+    return cells
+
+
+def test_the_u1_battle_menu_reads_by_source_geometry_where_the_text_parser_oscillated():
+    """Live U1 stall root cause: parse_menu joins "FIGHT <PK><MN>" while the cursor is on FIGHT (the empty
+    column-2 cursor cell is one space), so the driver pressed Right, then Left from PKMN, forever."""
+    lua, gate = u1_gate()
+    sg = gate.scripted_gate(ROOT.as_posix())
+    grid = lua.table_from(U1_BATTLE_MENU, recursive=True)
+    driver = gate.driver(lua.table_from({"width": 1, "height": 1, "grid": [2]}, recursive=True))
+
+    def press(menu):
+        point = {"battle_mode": 1, "input_ready": True, "save_success_counter": 0, "hits": {"erase_save": 0},
+                 "probe_hits": {"capture_party": 0}, "ui": {"kind": "battle_menu", **menu}}
+        buttons, _ = driver.step(lua.table_from(point, recursive=True))
+        for _ in range(12):   # the 12-frame hold, then one release frame
+            driver.step(lua.table_from(point, recursive=True))
+        return list(dict(buttons))
+
+    def as_menu(parsed):
+        return {"items": list(parsed["items"].values()), "cursor": parsed["cursor"], "columns": parsed["columns"]}
+
+    on_fight = sg.parse_menu(lua.table_from(battle_screen(1), recursive=True), 20, 18)
+    assert list(on_fight["items"].values())[0] == "FIGHT <PK><MN>"
+    assert press(as_menu(on_fight)) == ["Right"]                       # the old reading steers away from PACK
+    assert press(as_menu(sg.parse_menu(lua.table_from(battle_screen(2), recursive=True), 20, 18))) == ["Left"]
+
+    for cursor, expected in ((1, "Down"), (2, "Left"), (3, "A"), (4, "Left")):
+        menu = gate.grid_menu(lua.table_from(battle_screen(cursor), recursive=True), grid)
+        assert list(menu["items"].values()) == ["FIGHT", "<PK><MN>", "PACK", "RUN"] and menu["cursor"] == cursor
+        assert press(as_menu(menu)) == [expected]
+    blank = battle_screen(1)
+    blank[14][9] = " "
+    assert gate.grid_menu(lua.table_from(blank, recursive=True), grid) is None          # no cursor: not ready
+    moved = battle_screen(1)
+    moved[16][10:14] = list("ITEM")
+    assert gate.grid_menu(lua.table_from(moved, recursive=True), grid) is None          # labels off the source
+
+
+def test_a_u1_play_stall_logs_the_last_point_the_cpu_and_the_screen():
+    lua, gate = u1_gate()
+    lines = []
+    host = lua.eval("""{run=function(spec, decide, on_phase)
+        for frame = 1, 61 do decide(frame) end
+        error(spec.name .. ": phase made no bounded progress: battle", 0)
+    end}""")
+    driver = gate.driver(lua.table_from({"width": 1, "height": 1, "grid": [2]}, recursive=True))
+    point = {"battle_mode": 1, "input_ready": False, "save_success_counter": 0, "hits": {"erase_save": 0},
+             "probe_hits": {"capture_party": 0}, "ui": {"kind": "prompt_button"}}
+    symbol_at = gate.symbols("00:0ad9 PromptButton.input_wait_loop\n0f:6139 BattleMenu\n01:d000 wRAM\n")
+    assert symbol_at(0x0F, 0x0AE0) == "PromptButton.input_wait_loop+7" and symbol_at(0x0F, 0x613A) == "BattleMenu+1"
+    diag = lua.table(log=lines.append, frame=lambda: 4056, trace=True,
+                     screen=lambda: lua.table_from([list("Wild PIDGEY"), list("appeared!")], recursive=True),
+                     where=lambda: symbol_at(0x0F, 0x0AE0))
+    ok, why = gate.play(host, lua.table(name="u1-crystal"), driver,
+                        lambda: lua.table_from(point, recursive=True), diag)
+    assert ok is False and "no bounded progress" in why
+    traces = [line for line in lines if line.startswith("  trace")]
+    assert [line.split()[1] for line in traces] == ["@30", "@60"]
+    stall = next(line for line in lines if line.startswith("  stall"))
+    for part in ("@4056", "phase=battle", "ui=prompt_button", "ready=false", "battle_mode=1",
+                 "at=PromptButton.input_wait_loop+7"):
+        assert part in stall, (part, stall)
+    assert lines[-2:] == ["  screen 01 |Wild PIDGEY|", "  screen 02 |appeared!|"]
