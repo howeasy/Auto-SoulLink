@@ -61,10 +61,11 @@ Shadow lane invocation: `SLINK_SHADOW=1 python tools/e2e_duo.py --game gen3_rr -
 
 ## Next actions (checkpoint 10)
 
-1. Reconcile the four in-flight cards (gate, commit, review): C4-6c harness fixes (queued); C4-8 -> commit test + design doc;
+1. Reconcile the four in-flight cards (gate, commit, review): C4-6c harness fixes (Opus, in flight) -> Codex re-review; C4-8 -> commit test + design doc;
 2. Lane: re-run gen3_rr_new faint_cmd_gen3 (RR load fixed); then the remaining FRLG duos (link, deadzone, boxsync, whiteout, reconnect, linked_faint_active needs the battle policy which is now bound) after C4-6b; the 13 battle/native/sound probe rows (need 5 battle savestates).
 3. Open design items: rival-swap gBattleMons refresh window (OMP C4-8 doc); LeafGreen fixtures for the FR<->LG G4 duo; RR battle fixtures; RR walking/battle-menu syms beyond the 13 cited.
-4. Old-client latent bug found: vanilla OUTCOME_CAUGHT/RAN were 6/3 (pret 7/4) -> ask the owner whether to patch the shipped old client before cutover.
+4. DONE (owner: "Patch"): old client vanilla OUTCOME_CAUGHT/RAN fixed to pret 7/4 (3ea768fa). Master cherry-pick only on owner authority.
+5. Regression sweep after the stop: RR scripted-play fixture leaked SLINK_GEN3_TITLE into later FR tests (fixed 45285857); entry.lua local named `client` tripped the BizHawk-global scan (fixed); probe tests updated for the 13 reason rows (4abad314); live wire logs moved to docs/gen3/probes/wire. gen3 unit suite 1632 passed; full unit suite only fails the env-only test_gen1_trade_patch (no .cache/pret/pokered here).
 
 ## Checkpoint 9 (2026-09-23, owner stop): G3 request ready
 
