@@ -193,6 +193,27 @@ def apply_overlay(
     return applied
 
 
+def external_source_hashes(
+    repos: dict[str, pathlib.Path] | list[str], src_dir: pathlib.Path, gb_dir: pathlib.Path = GB_DIR
+) -> dict[str, str]:
+    """sha256, keyed by repo-relative path, for every overlay input apply_overlay() copies from
+    outside `src_dir` (today just patch/gb/slink_abi.inc). Coordinator follow-up: `sources_sha256`
+    previously only hashed files inside src_dir, so a shared file copied from elsewhere (the ABI
+    include) was missing from the input provenance even though it was compiled into the ROM.
+    """
+    hashes: dict[str, str] = {}
+    resolved_src = src_dir.resolve() if src_dir.is_dir() else None
+    for repo in repos:
+        for _dest_name, source_path, _include in overlay_plan(repo, src_dir, gb_dir):
+            resolved = source_path.resolve()
+            if resolved_src is not None and resolved.parent == resolved_src:
+                continue  # already covered by sources_sha256's src_dir scan
+            key = (resolved.relative_to(ROOT).as_posix() if resolved.is_relative_to(ROOT)
+                   else resolved.as_posix())
+            hashes[key] = _sha256(resolved.read_bytes())
+    return hashes
+
+
 def fresh_copy(repo_dir: pathlib.Path, commit: str, dest: pathlib.Path) -> pathlib.Path:
     """Verified-clean, pinned-commit copy of `repo_dir` into `dest` (a fresh tree each build)."""
     _source_check(repo_dir, commit)
@@ -274,6 +295,10 @@ def build(*, crystal_repo: pathlib.Path | None = None, gold_repo: pathlib.Path |
               f"identical_to_clean={outputs[key]['identical_to_clean']} ups={len(ups)} bytes",
               file=sys.stderr)
 
+    sources_sha256 = {p.name: _sha256(p.read_bytes()) for p in sorted(src_dir.iterdir())
+                       if p.suffix in (".asm", ".inc")} if src_dir.is_dir() else {}
+    sources_sha256.update(external_source_hashes(clean_repos, src_dir))
+
     provenance = {
         "schema": PROVENANCE_SCHEMA,
         "generated": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -282,8 +307,7 @@ def build(*, crystal_repo: pathlib.Path | None = None, gold_repo: pathlib.Path |
             "src_dir": (src_dir.relative_to(ROOT).as_posix() if src_dir.is_relative_to(ROOT)
                         else src_dir.as_posix()),
             "applied": overlay_applied,
-            "sources_sha256": {p.name: _sha256(p.read_bytes()) for p in sorted(src_dir.iterdir())
-                                if p.suffix in (".asm", ".inc")} if src_dir.is_dir() else {},
+            "sources_sha256": sources_sha256,
         },
         "toolchain": toolchain_record,
         "commands": {repo: " ".join(cmd) for repo, cmd in commands.items()},

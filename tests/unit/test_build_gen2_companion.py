@@ -88,6 +88,43 @@ def test_shared_abi_header_present_is_copied_but_not_included(tmp_path):
     assert (bc.SHARED_ABI_NAME, gb_dir / bc.SHARED_ABI_NAME, False) in plan
 
 
+# --------------------------------------------------- external_source_hashes (input provenance)
+# Coordinator follow-up (Codex review): sources_sha256 only hashed files inside src_dir, so a
+# file apply_overlay copies from elsewhere (the shared ABI include) was compiled into the ROM but
+# missing from the input provenance. external_source_hashes() fills that gap, keyed by the file's
+# path relative to the repo root, and never duplicates what sources_sha256 already covers.
+
+
+def test_external_source_hashes_empty_when_abi_include_absent(tmp_path):
+    gb_dir = _no_gb_dir(tmp_path)
+    assert bc.external_source_hashes(["pokecrystal", "pokegold"], tmp_path, gb_dir) == {}
+
+
+def test_external_source_hashes_includes_the_abi_include_when_present(tmp_path):
+    gb_dir = tmp_path / "gb"
+    gb_dir.mkdir()
+    abi_path = gb_dir / bc.SHARED_ABI_NAME
+    abi_path.write_text("; shared ABI\n")
+
+    hashes = bc.external_source_hashes(["pokecrystal", "pokegold"], tmp_path, gb_dir)
+
+    resolved = abi_path.resolve()
+    expected_key = (resolved.relative_to(bc.ROOT).as_posix() if resolved.is_relative_to(bc.ROOT)
+                    else resolved.as_posix())
+    assert expected_key in hashes, f"missing {expected_key!r} in {hashes!r}"
+    assert hashes[expected_key] == bc._sha256(abi_path.read_bytes())
+    # Shared across both repos: one entry, not one per repo.
+    assert len(hashes) == 1
+
+
+def test_external_source_hashes_never_duplicates_files_already_inside_src_dir(tmp_path):
+    """A file that happens to live under src_dir (e.g. the mailbox stub) is sources_sha256's job,
+    not external_source_hashes'."""
+    (tmp_path / "slink_mailbox_crystal.asm").write_text("; crystal\n")
+    hashes = bc.external_source_hashes(["pokecrystal"], tmp_path, _no_gb_dir(tmp_path))
+    assert hashes == {}
+
+
 # ---------------------------------------------------------------- apply_overlay
 
 
