@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -15,6 +17,468 @@ import pytest
 from server.adapters import gen2_codec as codec
 from tools import gen2_duo_oracles as oracles
 from tools.gen2_fixtures import _REGION_STARTS, _saved_field
+
+# These MODEL mutations change saved bytes, not source/layout facts. Verify each
+# pinned layout once; keep all per-case decode/hash/checksum checks fresh.
+_verified_layout = lru_cache(maxsize=None)(codec.for_foundation)
+
+
+@pytest.fixture(autouse=True)
+def _reuse_verified_layout(monkeypatch):
+    monkeypatch.setattr(codec, "for_foundation", _verified_layout)
+
+
+def _replace_tag(text, tag, value):
+    lines = [line for line in text.splitlines() if not line.startswith(tag + " ")]
+    return "\n".join(lines + [f"{tag} {json.dumps(value)}"])
+
+
+def _edit_saved_record(path, layout, slot, offset, payload):
+    raw = bytearray(path.read_bytes())
+    region, start = _region_and_offset(layout, "wPartyMon1")
+    _poke(raw, region, start + slot * layout.party_size + offset, payload)
+    for copy_name in ("primary", "backup"):
+        checksum = codec.sav_checksum(bytes(raw[:CART]), layout, copy_name)
+        at = layout.checksum_offsets[copy_name]
+        raw[at:at + 2] = checksum.to_bytes(2, "little")
+    path.write_bytes(raw)
+
+
+@pytest.fixture
+def faint_case(good_case, layout, tmp_path):
+    return _make_faint_case(good_case, {"a": layout, "b": layout}, tmp_path)
+
+
+def _make_faint_case(good_case, layouts, tmp_path):
+    results, data_dir, decoded = good_case
+    images = {}
+    for inst in ("a", "b"):
+        layout = layouts[inst]
+        text = results[inst]
+        final = oracles._last_tagged(text, "SAVE_WITNESS")
+        path = Path(final["saveram_path"])
+        link_path = tmp_path / f"{inst}.linked.SaveRAM"
+        link_path.write_bytes(path.read_bytes())
+        images[inst] = link_path
+        party = codec.decode_saved_party(path.read_bytes()[:CART], layout, copy_name="primary")
+        slot = party["count"] - 1
+        _edit_saved_record(path, layout, slot, layout.constants["MON_HP"], bytes(2))
+        _edit_saved_record(path, layout, slot, layout.constants["MON_STATUS"], bytes(1))
+        final.update(frame=9000, save_completed_frame=8990, gate_saves=2, client_saves=2,
+                     cartram_sha256=hashlib.sha256(path.read_bytes()[:CART]).hexdigest())
+        client = oracles._last_tagged(text, "CLIENT")
+        client.update(registered_sites=["battle_faint", "save_completed"],
+                      rom_sha1=layout.profile["titles"][layout.title]["rom_sha1"])
+        header = oracles._last_tagged(text, "DUO_GEN2")
+        header.update(player=inst, scenario="gen2_faint", rom_sha1=client["rom_sha1"])
+        text = _replace_tag(_replace_tag(text, "DUO_GEN2", header), "CLIENT", client)
+        text = _replace_tag(text, "LINK_SAVE", {"frame": 5000, "key": decoded[inst]["key"],
+            "gate_saves": 1, "client_saves": 1, "save_completed_frame": 4990,
+            "saveram_path": str(link_path), "saveram_bytes": len(link_path.read_bytes()),
+            "cartram_bytes": CART, "cartram_sha256": hashlib.sha256(link_path.read_bytes()[:CART]).hexdigest()})
+        if inst == "a":
+            text = _replace_tag(text, "ENGINE_FAINT", {"frame": 7000, "site_id": "battle_faint",
+                "cause": "battle", "key": decoded[inst]["key"], "slot": slot})
+            text = _replace_tag(text, "FAINT_SENT", {"frame": 7001, "key": decoded[inst]["key"], "seq": 42})
+        else:
+            pack = json.loads((ROOT / f"data/games/gen2_{layout.title}/write_checkpoint.json").read_text())
+            primary = pack["titles"][layout.title]["primary"]
+            stack = primary["caller_stack"]
+            stack_bytes = bytearray(stack["required_read_bytes"])
+            for word in stack["required_words"]:
+                at = word["offset_from_sp"]
+                stack_bytes[at:at + 2] = word["value"].to_bytes(2, word["endianness"])
+            pokemon = next(r for r in layout.regions if r.name == "pokemon")
+            start = pokemon.primary + layout.addresses["wPartyMon1"] - layout.addresses["wPokemonData"]
+            n = layout.party_size * layout.constants["PARTY_LENGTH"]
+            log = []
+            for index, (offset, length) in enumerate(((layout.constants["MON_STATUS"], 1),
+                                                     (layout.constants["MON_HP"], 2)), 1):
+                log.append({"domain": "System Bus", "addr": layout.addresses["wPartyMon1"] + slot * 48 + offset,
+                    "n": length, "why": "overworld", "status": "written", "completed": length,
+                    "attempted": length, "batch_index": index, "batch_size": 2,
+                    "site": "lua/gen2/entry.lua production", "evidence": "U2 PHYSICAL receipt",
+                    "title": layout.title, "artifact": layout.profile["titles"][layout.title]["artifact"],
+                    "rom_sha1": client["rom_sha1"]})
+            write = {"frame": 7100, "key": decoded[inst]["key"], "slot": slot, "kind": "party_hp", "ok": True,
+                "before_party_hex": link_path.read_bytes()[start:start + n].hex(),
+                "after_party_hex": path.read_bytes()[start:start + n].hex(), "log": log,
+                "checkpoint": {"pc": primary["execution_before"]["pc"], "sp": stack["minimum_sp"],
+                    "hrom_bank": primary["execution_before"]["bank"], "svbk": 1, "sc": 0,
+                    "stack_hex": stack_bytes.hex(), "anchor_hex": primary["anchors"]["ow_player_input"]["expected_hex"],
+                    "anchors": {name: {"rom_hex": row["expected_hex"], "mapped_hex": row["expected_hex"]}
+                                for name, row in primary["anchors"].items()},
+                    "state": {row["symbol"]: row["value"] for row in primary["state_predicates"]}}}
+            text += f"\nRX force_faint key={decoded[inst]['key']}"
+            text = _replace_tag(text, "PARTY_HP_WRITE", write)
+        results[inst] = _replace_tag(text, "SAVE_WITNESS", final)
+    document = json.loads((Path(data_dir) / "links.json").read_text())
+    document["links"][0].update(status="dead", cause="battle", initiating_player="a", killed_at="2026-09-23T12:00:00Z")
+    document["pending_memorials"] = {inst: [row["key"]] for inst, row in decoded.items()}
+    (Path(data_dir) / "links.json").write_text(json.dumps(document))
+    (Path(data_dir) / "server.log").write_text(f"[a] faint → force_faint b:{decoded['b']['key']}\n", encoding="utf-8")
+    return results, data_dir, images
+
+
+def test_faint_saved_bytes_and_checkpoint_pass(faint_case):
+    results, data_dir, _ = faint_case
+    assert oracles.faint_oracle(results, data_dir=data_dir) is None
+
+
+def _memorial_case(faint_case):
+    results, data_dir, _ = faint_case
+    path = Path(data_dir) / "links.json"
+    doc = json.loads(path.read_text())
+    row = doc["links"][0]
+    row["status"] = "memorial"
+    doc["pending_memorials"] = {"a": [], "b": []}
+    path.write_text(json.dumps(doc))
+    log = Path(data_dir) / "server.log"
+    text = log.read_text(encoding="utf-8")
+    text += f"[b] memorialize_failed key={row['b']['key'][:8]} reason=unsupported\n"
+    text += f"[a] memorialize_failed key={row['a']['key'][:8]} reason=unsupported\n"
+    text += "pair in route_29 marked memorial (with failed memorialization)\n"
+    log.write_text(text, encoding="utf-8")
+    return results, data_dir
+
+
+def test_faint_accepts_proven_memorial_after_expected_nacks(faint_case):
+    results, data_dir = _memorial_case(faint_case)
+    facts = []
+    assert oracles.faint_oracle(results, data_dir=data_dir, on_verified=facts.append) is None
+    assert facts[0]["status"] == "memorial"
+
+
+@pytest.mark.parametrize("fault", ["missing_a", "missing_b", "wrong_key", "no_transition", "wrong_order", "pending"])
+def test_faint_memorial_requires_ordered_server_evidence(faint_case, fault):
+    results, data_dir = _memorial_case(faint_case)
+    path = Path(data_dir) / "server.log"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if fault in ("missing_a", "missing_b"):
+        prefix = f"[{fault[-1]}] memorialize_failed"
+        lines = [line for line in lines if not line.startswith(prefix)]
+    elif fault == "wrong_key":
+        lines[1] = "[b] memorialize_failed key=BAD:KEY reason=unsupported"
+    elif fault == "no_transition":
+        lines.pop()
+    elif fault == "wrong_order":
+        lines = [lines[-1], *lines[:-1]]
+    else:
+        state = Path(data_dir) / "links.json"
+        doc = json.loads(state.read_text())
+        doc["pending_memorials"]["b"] = [doc["links"][0]["b"]["key"]]
+        state.write_text(json.dumps(doc))
+    path.write_text("\n".join(lines), encoding="utf-8")
+    with pytest.raises(RuntimeError):
+        oracles.faint_oracle(results, data_dir=data_dir)
+
+
+def _repeat_write(results):
+    write = oracles._last_tagged(results["b"], "PARTY_HP_WRITE")
+    repeat = deepcopy(write)
+    repeat.update(frame=write["frame"] + 1, before_party_hex=write["after_party_hex"])
+    return repeat
+
+
+@pytest.mark.parametrize("frame", [7101, 8995])
+def test_faint_accepts_one_idempotent_repeat(faint_case, frame):
+    results, data_dir, _ = faint_case
+    repeat = _repeat_write(results)
+    repeat["frame"] = frame
+    results["b"] += f"\nRX force_faint key={repeat['key']}\nPARTY_HP_WRITE {json.dumps(repeat)}"
+    assert oracles.faint_oracle(results, data_dir=data_dir) is None
+
+
+@pytest.mark.parametrize("fault", ["key", "slot", "bytes", "checkpoint", "third_write"])
+def test_faint_repeat_must_be_idempotent_and_qualified(faint_case, fault):
+    results, data_dir, _ = faint_case
+    repeat = _repeat_write(results)
+    if fault == "key":
+        repeat["key"] = "wrong"
+    elif fault == "slot":
+        repeat["slot"] = 0
+    elif fault == "bytes":
+        raw = bytearray.fromhex(repeat["after_party_hex"])
+        raw[0] ^= 1
+        repeat["after_party_hex"] = raw.hex()
+    elif fault == "checkpoint":
+        repeat["checkpoint"]["state"]["wBattleMode"] = 1
+    results["b"] += f"\nRX force_faint key={repeat['key']}\nPARTY_HP_WRITE {json.dumps(repeat)}"
+    if fault == "third_write":
+        results["b"] += f"\nRX force_faint key={repeat['key']}\nPARTY_HP_WRITE {json.dumps(repeat)}"
+    with pytest.raises(RuntimeError):
+        oracles.faint_oracle(results, data_dir=data_dir)
+
+
+@pytest.mark.parametrize("name", ["ow_player_input", "player_events_caller"])
+@pytest.mark.parametrize("domain", ["rom_hex", "mapped_hex"])
+@pytest.mark.parametrize("fault", ["missing", "bad"])
+def test_faint_requires_every_anchor_in_both_domains(faint_case, name, domain, fault):
+    results, data_dir, _ = faint_case
+    write = oracles._last_tagged(results["b"], "PARTY_HP_WRITE")
+    if fault == "missing":
+        write["checkpoint"]["anchors"][name].pop(domain)
+    else:
+        raw = bytearray.fromhex(write["checkpoint"]["anchors"][name][domain])
+        raw[0] ^= 1
+        write["checkpoint"]["anchors"][name][domain] = raw.hex()
+    results["b"] = _replace_tag(results["b"], "PARTY_HP_WRITE", write)
+    with pytest.raises(RuntimeError, match="anchor"):
+        oracles.faint_oracle(results, data_dir=data_dir)
+
+
+@pytest.mark.parametrize("titles", [("gold", "silver"), ("crystal", "gold")])
+def test_cross_title_faint_and_decoded_fact_receipt(tmp_path, titles):
+    layouts = {side: codec.for_foundation(title) for side, title in zip(("a", "b"), titles, strict=True)}
+    ots = {"crystal": 46401, "gold": 50342, "silver": 51084}
+    sides = {side: (layouts[side], ROOT / f"tests/fixtures/gen2/{title}_battle.SaveRAM",
+                    f"{title}_battle", title, ots[title], 16 + index * 3)
+             for index, (side, title) in enumerate(zip(("a", "b"), titles, strict=True))}
+    base = _duo_case(tmp_path, sides)
+    results, data_dir, _ = _make_faint_case(base, layouts, tmp_path)
+    facts = []
+    assert oracles.faint_oracle(results, data_dir=data_dir, on_verified=facts.append) is None
+    assert facts == [{"a": base[2]["a"]["key"], "b": base[2]["b"]["key"],
+                      "titles": "/".join(titles), "area": "route_29", "status": "dead"}]
+
+
+def test_link_facts_are_decoded_and_not_emitted_on_refusal(good_case):
+    results, data_dir, decoded = good_case
+    facts = []
+    assert oracles.link_oracle(results, data_dir=data_dir, on_verified=facts.append) is None
+    assert facts == [{"a": decoded["a"]["key"], "b": decoded["b"]["key"],
+                      "area": "route_29", "titles": "crystal/crystal", "status": "alive"}]
+    facts.clear()
+    (Path(data_dir) / "links.json").write_text('{"links": []}')
+    with pytest.raises(RuntimeError):
+        oracles.link_oracle(results, data_dir=data_dir, on_verified=facts.append)
+    assert facts == []
+
+
+@pytest.mark.parametrize("field", ["gate_saves", "client_saves", "save_completed_frame"])
+def test_faint_requires_a_new_save_after_link(faint_case, field):
+    results, data_dir, _ = faint_case
+    link = oracles._last_tagged(results["b"], "LINK_SAVE")
+    final = oracles._last_tagged(results["b"], "SAVE_WITNESS")
+    final[field] = link[field]
+    if field in ("gate_saves", "client_saves"):
+        final.update(gate_saves=link["gate_saves"], client_saves=link["client_saves"])
+    results["b"] = _replace_tag(results["b"], "SAVE_WITNESS", final)
+    with pytest.raises(RuntimeError, match="newer|chronology"):
+        oracles.faint_oracle(results, data_dir=data_dir)
+
+
+def test_gold_marker_cannot_claim_layout_identical_silver_fixture(tmp_path):
+    layouts = {title: codec.for_foundation(title) for title in ("gold", "silver")}
+    silver = ROOT / "tests/fixtures/gen2/silver_battle.SaveRAM"
+    assert codec.strict_checksum_witness(silver.read_bytes()[:CART], layouts["gold"])["valid"]
+    sides = {side: (layouts[title], ROOT / f"tests/fixtures/gen2/{title}_battle.SaveRAM",
+                    f"{title}_battle", title, ot, species)
+             for side, title, ot, species in (("a", "gold", 50342, 16), ("b", "silver", 51084, 19))}
+    results, _data_dir, _ = _duo_case(tmp_path, sides)
+    duo = oracles._last_tagged(results["a"], "DUO_GEN2")
+    duo.update(case="silver_battle", fixture_sha256=hashlib.sha256(silver.read_bytes()).hexdigest())
+    results["a"] = _replace_tag(results["a"], "DUO_GEN2", duo)
+    with pytest.raises(RuntimeError, match="case.*title|title.*case"):
+        oracles.check_save_witness(results)
+
+
+def _refresh_faint_hash(results, inst, tag="SAVE_WITNESS"):
+    marker = oracles._last_tagged(results[inst], tag)
+    marker["cartram_sha256"] = hashlib.sha256(Path(marker["saveram_path"]).read_bytes()[:CART]).hexdigest()
+    results[inst] = _replace_tag(results[inst], tag, marker)
+
+
+@pytest.mark.parametrize("fault", [
+    "missing_link_a", "missing_link_b", "missing_engine_faint", "missing_faint_sent", "missing_write",
+    "duplicate_write", "unregistered", "not_production", "wrong_pin", "no_rx", "server_command", "server_key",
+    "alive_pair", "poison_cause", "wrong_initiator", "no_death_time", "duplicate_link", "pending_key",
+    "a_alive", "b_alive", "b_other_hp", "b_target_pp", "link_dead", "link_hash", "link_checksum", "link_key",
+    "write_preimage", "write_readback", "extra_write_a", "write_before_link", "write_after_save",
+    "faint_before_link", "faint_after_save", "faint_key", "faint_site", "faint_cause", "faint_slot", "sent_key",
+    "sent_seq", "boolean_save_count", "negative_save_count", "faint_wrong_slot",
+])
+def test_faint_mutations_refused(faint_case, layout, fault):
+    original, data_dir, _ = faint_case
+    results = deepcopy(original)
+    write = oracles._last_tagged(results["b"], "PARTY_HP_WRITE")
+    faint = oracles._last_tagged(results["a"], "ENGINE_FAINT")
+    b_key = write["key"]
+    missing = {"missing_link_a": ("a", "LINK_SAVE"), "missing_link_b": ("b", "LINK_SAVE"),
+        "missing_engine_faint": ("a", "ENGINE_FAINT"), "missing_faint_sent": ("a", "FAINT_SENT"),
+        "missing_write": ("b", "PARTY_HP_WRITE")}
+    if fault in missing:
+        side, tag = missing[fault]
+        results[side] = "\n".join(line for line in results[side].splitlines() if not line.startswith(tag + " "))
+    elif fault == "duplicate_write":
+        results["b"] += "\nPARTY_HP_WRITE " + json.dumps(write)
+    elif fault in ("unregistered", "not_production", "wrong_pin"):
+        client = oracles._last_tagged(results["a"], "CLIENT")
+        if fault == "unregistered":
+            client["registered_sites"] = ["save_completed"]
+        elif fault == "not_production":
+            client["production_admitted"] = False
+        else:
+            client["rom_sha1"] = "f" * 40
+            duo = oracles._last_tagged(results["a"], "DUO_GEN2")
+            duo["rom_sha1"] = client["rom_sha1"]
+            results["a"] = _replace_tag(results["a"], "DUO_GEN2", duo)
+        results["a"] = _replace_tag(results["a"], "CLIENT", client)
+    elif fault == "no_rx":
+        results["b"] = results["b"].replace("RX force_faint", "RX noop")
+    elif fault in ("server_command", "server_key"):
+        (Path(data_dir) / "server.log").write_text(
+            f"[a] faint → {'noop' if fault == 'server_command' else 'force_faint'} b:"
+            f"{'wrong' if fault == 'server_key' else b_key}\n", encoding="utf-8")
+    elif fault in ("alive_pair", "poison_cause", "wrong_initiator", "no_death_time", "duplicate_link", "pending_key"):
+        path = Path(data_dir) / "links.json"
+        doc = json.loads(path.read_text())
+        row = doc["links"][0]
+        if fault == "duplicate_link":
+            doc["links"].append(deepcopy(row))
+        elif fault == "pending_key":
+            doc["pending_captures"] = {"route_30": {"b": row["b"]}}
+        else:
+            field, value = {"alive_pair": ("status", "alive"), "poison_cause": ("cause", "poison"),
+                            "wrong_initiator": ("initiating_player", "b"), "no_death_time": ("killed_at", None)}[fault]
+            row[field] = value
+        path.write_text(json.dumps(doc))
+    elif fault in ("a_alive", "b_alive", "b_other_hp", "b_target_pp", "link_dead"):
+        inst = "a" if fault == "a_alive" else "b"
+        tag = "LINK_SAVE" if fault == "link_dead" else "SAVE_WITNESS"
+        marker = oracles._last_tagged(results[inst], tag)
+        path = Path(marker["saveram_path"])
+        slot = 0 if fault == "b_other_hp" else 1
+        offset = layout.constants["MON_PP"] if fault == "b_target_pp" else layout.constants["MON_HP"]
+        value = b"\x01" if fault == "b_target_pp" else b"\x00\x00" if fault == "link_dead" else b"\x00\x01"
+        _edit_saved_record(path, layout, slot, offset, value)
+        _refresh_faint_hash(results, inst, tag)
+    elif fault in ("link_hash", "link_checksum", "link_key"):
+        marker = oracles._last_tagged(results["a"], "LINK_SAVE")
+        if fault == "link_hash":
+            marker["cartram_sha256"] = "0" * 64
+        elif fault == "link_key":
+            marker["key"] = "wrong"
+        else:
+            path = Path(marker["saveram_path"])
+            raw = bytearray(path.read_bytes())
+            raw[layout.checksum_offsets["primary"]] ^= 1
+            path.write_bytes(raw)
+            marker["cartram_sha256"] = hashlib.sha256(raw[:CART]).hexdigest()
+        results["a"] = _replace_tag(results["a"], "LINK_SAVE", marker)
+    elif fault in ("write_preimage", "write_readback", "write_before_link", "write_after_save"):
+        if fault.startswith("write_before") or fault.startswith("write_after"):
+            write["frame"] = 4999 if fault == "write_before_link" else 9001
+        else:
+            field = "before_party_hex" if fault == "write_preimage" else "after_party_hex"
+            raw = bytearray.fromhex(write[field])
+            raw[0] ^= 1
+            write[field] = raw.hex()
+        results["b"] = _replace_tag(results["b"], "PARTY_HP_WRITE", write)
+    elif fault == "extra_write_a":
+        results["a"] += "\nPARTY_HP_WRITE " + json.dumps(write)
+    elif fault.startswith("faint_"):
+        field, value = {"faint_before_link": ("frame", 4999), "faint_after_save": ("frame", 9001),
+            "faint_key": ("key", "wrong"), "faint_site": ("site_id", "poison_faint"),
+            "faint_cause": ("cause", "poison"), "faint_slot": ("slot", 6), "faint_wrong_slot": ("slot", 0)}[fault]
+        faint[field] = value
+        results["a"] = _replace_tag(results["a"], "ENGINE_FAINT", faint)
+    elif fault in ("sent_key", "sent_seq"):
+        sent = oracles._last_tagged(results["a"], "FAINT_SENT")
+        sent["key" if fault == "sent_key" else "seq"] = "wrong" if fault == "sent_key" else True
+        results["a"] = _replace_tag(results["a"], "FAINT_SENT", sent)
+    else:
+        final = oracles._last_tagged(results["a"], "SAVE_WITNESS")
+        value = -1 if fault == "negative_save_count" else True
+        final.update(gate_saves=value, client_saves=value)
+        results["a"] = _replace_tag(results["a"], "SAVE_WITNESS", final)
+    with pytest.raises(RuntimeError):
+        oracles.faint_oracle(results, data_dir=data_dir)
+
+
+@pytest.mark.parametrize("fault", ["sibling_fixture", "sibling_hash", "cross_title_case", "null_rom", "bad_rom", "null_hash"])
+def test_link_fixture_and_marker_bindings_refuse(good_case, fault):
+    results, data_dir, _ = good_case
+    duo = oracles._last_tagged(results["a"], "DUO_GEN2")
+    duo["fixture_sha256"] = hashlib.sha256(FIXTURES["a"].read_bytes()).hexdigest()
+    if fault in ("sibling_fixture", "cross_title_case"):
+        duo["case"] = "crystal_town" if fault == "sibling_fixture" else "gold_battle"
+        if fault == "cross_title_case":
+            duo["fixture_sha256"] = hashlib.sha256((ROOT / "tests/fixtures/gen2/gold_battle.SaveRAM").read_bytes()).hexdigest()
+            # The bad case/title relationship must refuse before save-layout decoding.
+            results["a"] = _replace_tag(results["a"], "DUO_GEN2", duo)
+            with pytest.raises(RuntimeError, match="case.*title|title.*case"):
+                oracles.check_save_witness(results)
+            return
+    elif fault == "sibling_hash":
+        duo["fixture_sha256"] = hashlib.sha256((ROOT / "tests/fixtures/gen2/crystal_town.SaveRAM").read_bytes()).hexdigest()
+    elif fault in ("null_rom", "bad_rom"):
+        value = None if fault == "null_rom" else "not-a-sha1"
+        duo["rom_sha1"] = value
+        client = oracles._last_tagged(results["a"], "CLIENT")
+        client["rom_sha1"] = value
+        results["a"] = _replace_tag(results["a"], "CLIENT", client)
+    else:
+        duo["fixture_sha256"] = None
+    results["a"] = _replace_tag(results["a"], "DUO_GEN2", duo)
+    with pytest.raises(RuntimeError):
+        oracles.link_oracle(results, data_dir=data_dir)
+
+
+@pytest.mark.parametrize("field,value", [("pc", 0), ("hrom_bank", 0), ("svbk", 2), ("sc", 128),
+    ("sp", 0), ("stack_hex", "0000"), ("anchor_hex", "00"), ("state", {})])
+def test_faint_wrong_checkpoint_refused(faint_case, field, value):
+    results, data_dir, _ = faint_case
+    write = oracles._last_tagged(results["b"], "PARTY_HP_WRITE")
+    write["checkpoint"][field] = value
+    results["b"] = _replace_tag(results["b"], "PARTY_HP_WRITE", write)
+    with pytest.raises(RuntimeError, match="checkpoint|anchor|caller"):
+        oracles.faint_oracle(results, data_dir=data_dir)
+
+
+@pytest.mark.parametrize("symbol", ["wMapStatus", "wMapEventStatus", "wScriptRunning", "wScriptMode",
+    "wScriptFlags", "wScriptStackSize", "wJoypadDisable", "wGameLogicPaused", "wInputType", "wBattleMode",
+    "wStateFlags", "hMapEntryMethod", "wLinkMode", "hSerialConnectionStatus", "wSavedAtLeastOnce"])
+def test_faint_every_checkpoint_predicate_refuses(faint_case, symbol):
+    results, data_dir, _ = faint_case
+    write = oracles._last_tagged(results["b"], "PARTY_HP_WRITE")
+    bit = {"wScriptFlags": 4, "wStateFlags": 128}.get(symbol, 1)
+    write["checkpoint"]["state"][symbol] ^= bit
+    results["b"] = _replace_tag(results["b"], "PARTY_HP_WRITE", write)
+    with pytest.raises(RuntimeError, match=symbol):
+        oracles.faint_oracle(results, data_dir=data_dir)
+
+
+@pytest.mark.parametrize("field,value", [("domain", "WRAM"), ("addr", 0), ("n", 3), ("why", "battle"),
+    ("status", "error"), ("completed", 0), ("attempted", 0), ("batch_index", 0), ("batch_size", 1),
+    ("site", "harness"), ("evidence", "MODEL"), ("title", "gold"), ("artifact", "pokegold"), ("rom_sha1", "0" * 40)])
+def test_faint_permit_receipt_mutations_refused(faint_case, field, value):
+    results, data_dir, _ = faint_case
+    write = oracles._last_tagged(results["b"], "PARTY_HP_WRITE")
+    write["log"][1][field] = value
+    results["b"] = _replace_tag(results["b"], "PARTY_HP_WRITE", write)
+    with pytest.raises(RuntimeError, match="permit span"):
+        oracles.faint_oracle(results, data_dir=data_dir)
+
+
+def test_faint_allows_native_battle_changes_to_a_other_mon(faint_case, layout):
+    results, data_dir, _ = faint_case
+    marker = oracles._last_tagged(results["a"], "SAVE_WITNESS")
+    _edit_saved_record(Path(marker["saveram_path"]), layout, 0, layout.constants["MON_PP"], b"\x01")
+    _refresh_faint_hash(results, "a")
+    assert oracles.faint_oracle(results, data_dir=data_dir) is None
+
+
+def test_faint_allows_a_to_gain_a_level_before_eventual_death(faint_case, layout):
+    results, data_dir, _ = faint_case
+    marker = oracles._last_tagged(results["a"], "SAVE_WITNESS")
+    _edit_saved_record(Path(marker["saveram_path"]), layout, 1, layout.constants["MON_LEVEL"], b"\x06")
+    _refresh_faint_hash(results, "a")
+    path = Path(data_dir) / "links.json"
+    doc = json.loads(path.read_text())
+    doc["links"][0]["a"]["level"] = 6
+    path.write_text(json.dumps(doc))
+    assert oracles.faint_oracle(results, data_dir=data_dir) is None
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = {"a": ROOT / "tests/fixtures/gen2/crystal_battle.SaveRAM",
@@ -111,7 +575,8 @@ def _marker_text(*, saveram_path, cartram, key, species, level, hello_ot_id, tit
                   acquisition="wild", destination="party", result="PASS", rom_sha1="deadbeef" * 5,
                   receipt=False):
     duo = {"player": "a", "scenario": "link", "attempt": 1, "case": case, "title": title,
-          "rom_sha1": rom_sha1, "fixture_sha256": "0" * 64}
+          "rom_sha1": rom_sha1, "fixture_sha256": hashlib.sha256(
+              (ROOT / "tests/fixtures/gen2" / f"{case}.SaveRAM").read_bytes()).hexdigest()}
     witness = {"frame": 5000, "save_completed_frame": 4990, "gate_saves": gate_saves,
               "client_saves": client_saves,
               "cartram_sha256": sha256 or hashlib.sha256(cartram).hexdigest(),

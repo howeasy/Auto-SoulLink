@@ -32,6 +32,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
@@ -67,6 +68,10 @@ SCENARIOS = {
     "link": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
              "no_setup": True, "frames": 216000, "target": {"a": "battle", "b": "battle_ot2"},
              "oracle": "assert_gen2_link_saved", "oracle_kwargs": {}},
+    "gen2_faint": {"flags": [], "timeout": 2400, "games": ("gen2_new",),
+                   "no_setup": True, "frames": 432000,
+                   "target": {"a": "battle", "b": "battle_ot2"},
+                   "oracle": "assert_gen2_faint_saved", "oracle_kwargs": {}},
     "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     # Both halves die, then the pair is buried in the generation's graveyard box — Box 12 on
@@ -1096,12 +1101,12 @@ class DuoRun:
         # position are keyed by it (the `lane` property below). --lane names a lane for a wrapper
         # that wants stable names ("pure-a", "lane3"); the port is the default.
         self._lane = getattr(args, "lane", None)
-        self._pydec_path = (os.path.join(BUILD, f"e2e_{scenario}_pydec_result.txt")
+        self._pydec_path = (os.path.join(BUILD, f"e2e_{self.artifact_name}_pydec_result.txt")
                             if evidence_contract(self.game).require_oracle else None)
         self.server = None
         self.emus = []
         self.emu_by_inst = {}
-        self.go_files = {inst: os.path.join(BUILD, f"duo_go_{scenario}_{inst}.txt")
+        self.go_files = {inst: os.path.join(BUILD, f"duo_go_{self.artifact_name}_{inst}.txt")
                          for inst in ("a", "b")}
         # When this attempt started, and when each instance was launched: artifact freshness is
         # measured against these, because a leftover file from an earlier run would otherwise
@@ -1211,7 +1216,7 @@ class DuoRun:
         """
         phase = getattr(self, "_phase", {}).get(inst, "initial")
         if phase == "initial":
-            return read_result(self.scenario, inst) or ""
+            return read_result(self.artifact_name, inst) or ""
         path = self._phase_result_path(inst, phase)
         try:
             with open(path, encoding="utf-8", errors="replace") as handle:
@@ -1468,10 +1473,19 @@ class DuoRun:
             shutil.copyfile(seeded, os.path.join(self._saveram_dir(inst), extra_name))
         return seeded
 
+    @property
+    def artifact_name(self):
+        if scenario_family(getattr(self, "game", "")) == "gen2_new":
+            # Escape the separator/glob characters in custom lanes: cc must not
+            # share cc_more's cleanup prefix. Normal matrix lane names are unchanged.
+            lane = urllib.parse.quote(self.lane, safe="-").replace("_", "%5F")
+            return f"{self.scenario}_{lane}"
+        return self.scenario
+
     def _phase_result_path(self, inst, phase="initial"):
         if phase == "initial":
             return self._result_path(inst)
-        return os.path.join(BUILD, f"e2e_{self.scenario}_{inst}_{phase}_result.txt")
+        return os.path.join(BUILD, f"e2e_{self.artifact_name}_{inst}_{phase}_result.txt")
 
     def expected_idle_jitter(self) -> int:
         """The idle-frame count both stubs are told to apply, and the driver must echo back.
@@ -1602,16 +1616,21 @@ class DuoRun:
             env = inspect_env(gen2_fixtures.BY_NAME[row["name"]], row["fixture"].read_bytes(),
                               repo=Path(REPO))
             case = json.loads(env["SLINK_GEN2_FIXTURE_CASE"])
-            case["attempt_id"] = f"duo-link-{inst}-{self.attempt}-{uuid.uuid4().hex}"
+            case["attempt_id"] = f"duo-{self.scenario}-{inst}-{self.attempt}-{uuid.uuid4().hex}"
             env["SLINK_GEN2_FIXTURE_CASE"] = json.dumps(case)
             env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, facts, row["qualification_attempt_id"]))
             self._gen2_env[inst] = env
-        for path in (self.gcfg["main"], "lua/tests/duo/scenario_gen2_link.lua",
-                     "lua/tests/duo/gen2_route29_inputs.lua"):
+        scenario_name = self.scenario.removeprefix("gen2_")
+        driver_files = [self.gcfg["main"], f"lua/tests/duo/scenario_gen2_{scenario_name}.lua",
+                        "lua/tests/duo/gen2_route29_inputs.lua"]
+        if self.scenario == "gen2_faint":
+            driver_files.append("lua/tests/duo/gen2_faint_inputs.lua")
+        for path in driver_files:
             if not (Path(REPO) / path).is_file():
                 raise FileNotFoundError(f"Gen 2 duo driver missing: {path}")
         oracle = importlib.import_module("gen2_duo_oracles")
-        if not all(callable(getattr(oracle, name, None)) for name in ("check_save_witness", "link_oracle")):
+        oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle"}[self.scenario]
+        if not all(callable(getattr(oracle, name, None)) for name in ("check_save_witness", oracle_name)):
             raise RuntimeError("Gen 2 duo witness/oracle implementation missing")
 
     def check_gen2_save_witness(self, results):
@@ -1621,8 +1640,25 @@ class DuoRun:
     def assert_gen2_link_saved(self, results, **kwargs):
         oracle = importlib.import_module("gen2_duo_oracles")
         return oracle.link_oracle(results, data_dir=self.data_dir,
+            on_verified=self._record_gen2_facts,
             ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
             boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
+
+    def assert_gen2_faint_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.faint_oracle(results, data_dir=self.data_dir,
+            on_verified=self._record_gen2_facts,
+            ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
+
+    def _record_gen2_facts(self, facts):
+        fields = ("a", "b", "area", "titles", "status")
+        if not isinstance(facts, dict) or any(not isinstance(facts.get(key), str)
+                                             or not facts[key] for key in fields):
+            raise RuntimeError("Gen 2 oracle verified facts missing")
+        if facts["status"] not in ("alive", "dead", "memorial"):
+            raise RuntimeError("Gen 2 oracle verified status invalid")
+        self._gen2_verified_facts = dict(facts)
 
     def _mon_stats_keys(self):
         """The persisted `mon_stats` keys, or [] when the document is absent/unreadable."""
@@ -1644,7 +1680,7 @@ class DuoRun:
         """
         keep = os.path.basename(getattr(self, "_pydec_path", "") or "")
         removed = []
-        for path in sorted(glob.glob(os.path.join(BUILD, f"e2e_{self.scenario}_*"))):
+        for path in sorted(glob.glob(os.path.join(BUILD, f"e2e_{self.artifact_name}_*"))):
             if keep and os.path.basename(path) == keep:
                 continue
             os.remove(path)
@@ -4014,15 +4050,15 @@ class DuoRun:
 
     def wait_results(self):
         def both():
-            ra = read_result(self.scenario, "a")
-            rb = read_result(self.scenario, "b")
+            ra = read_result(self.artifact_name, "a")
+            rb = read_result(self.artifact_name, "b")
             if ra and "RESULT:" in ra and rb and "RESULT:" in rb:
                 return ra, rb
             return None
         return self.wait_for("both RESULT lines", both, self.cfg["timeout"])
 
     def _result_path(self, inst):
-        return os.path.join(BUILD, f"e2e_{self.scenario}_{inst}_result.txt")
+        return os.path.join(BUILD, f"e2e_{self.artifact_name}_{inst}_result.txt")
 
     def cleanup(self, passed):
         for p in self.emus:
@@ -4052,7 +4088,7 @@ class DuoRun:
                 return all(players.get(inst, {}).get("connected")
                            and players[inst].get("admission") == "admitted"
                            and any(line.startswith("HELLO ") for line in
-                                   (read_result(self.scenario, inst) or "").splitlines())
+                                   (read_result(self.artifact_name, inst) or "").splitlines())
                            for inst in ("a", "b"))
             self.wait_for("both admitted Gen 2 hellos", both_hellos, 300)
             self.go()
@@ -4396,7 +4432,10 @@ class DuoRun:
             pa = "RESULT: PASS" in ra
             pb = "RESULT: PASS" in rb
             if pa and pb:
+                self._gen2_verified_facts = None
                 self._run_oracle({"a": ra, "b": rb})
+                if scenario_family(getattr(self, "game", "")) == "gen2_new" and not self._gen2_verified_facts:
+                    raise RuntimeError("Gen 2 oracle did not report verified facts")
             if pa and pb and scenario_family(getattr(self, "game", "")) == "gen1_new":
                 # Harness finding, not a scenario verdict: the harness wrote the expected count
                 # into the stub, so the driver's echo is checkable without the game. Checked
@@ -4412,6 +4451,9 @@ class DuoRun:
                 reason = ("asserted scenario facts" if passed else
                           "live leg did not complete" if pa and pb and not self._live_ok() else
                           "client RESULT before saved-state oracle")
+                if passed and scenario_family(getattr(self, "game", "")) == "gen2_new":
+                    reason = " ".join(f"{key}={self._gen2_verified_facts[key]}"
+                                      for key in ("a", "b", "area", "titles", "status"))
                 self._pydec_note(f"PYDEC: {'PASS' if passed else 'FAIL'} {reason}")
             print(f"[duo] {self.scenario}: a={'PASS' if pa else 'FAIL'} "
                   f"b={'PASS' if pb else 'FAIL'}")
@@ -4510,18 +4552,21 @@ def run_scenario_with_rng_retry(name, args):
         print(f"[duo] {name}: attempt {attempt} of {limit}")
         print(f"[duo] JITTER requested={jitter_for_attempt(args.idle_jitter, attempt)} "
               f"attempt={attempt}")
+        artifact = name
         try:
-            ok = DuoRun(name, args, attempt=attempt).run()
+            run = DuoRun(name, args, attempt=attempt)
+            artifact = getattr(run, "artifact_name", name)
+            ok = run.run()
         except Exception as exc:
             # An oracle failure is not RNG: the scenario is lost, and the lane needs the
             # summary block with the reason rather than a traceback (run() has already written
             # its own PYDEC: FAIL line).
-            receipts = {inst: read_result(name, inst) for inst in ("a", "b")}
-            _archive_attempt(name, attempt, receipts)
+            receipts = {inst: read_result(artifact, inst) for inst in ("a", "b")}
+            _archive_attempt(artifact, attempt, receipts)
             reason = f"{type(exc).__name__}: {exc}"
             print(f"[duo] {name}: attempt {attempt} aborted — {reason}")
             return False, attempt, reason
-        receipts = {inst: read_result(name, inst) for inst in ("a", "b")}
+        receipts = {inst: read_result(artifact, inst) for inst in ("a", "b")}
         if reroll_retry and ok:
             state = species_reroll_state(receipts)
             if state == "observed":
@@ -4542,7 +4587,7 @@ def run_scenario_with_rng_retry(name, args):
                     handle.write(line + "\n")
             _archive_attempt(name, attempt, receipts)  # AFTER the annotation, so it is archived
             return ok, attempt
-        _archive_attempt(name, attempt, receipts)
+        _archive_attempt(artifact, attempt, receipts)
         if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt, limit):
             return ok, attempt
         print(f"[duo] {name}: the cartridge's only ball missed; restarting attempt "

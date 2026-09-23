@@ -231,9 +231,9 @@ def test_missing_oracle_is_rejected_before_launch(tmp_path, monkeypatch):
 
 
 def _required_family(run, monkeypatch):
-    run.game = "gen2_new"
+    run.game = "model_duo_family"
     run.args = SimpleNamespace(keep_alive=False)
-    monkeypatch.setitem(duo.FAMILY_EVIDENCE, "gen2_new",
+    monkeypatch.setitem(duo.FAMILY_EVIDENCE, "model_duo_family",
                         duo.EvidenceContract("assert_stub_witness", require_oracle=True))
     run.cfg = {"oracle": "assert_stub_oracle", "oracle_kwargs": {"expected": 7}}
     run.assert_stub_witness = lambda results: None
@@ -346,7 +346,7 @@ def test_required_family_complete_run_emits_verdict_after_both_stages(tmp_path, 
 def test_incomplete_contract_is_not_a_legacy_opt_out(tmp_path, monkeypatch, contract):
     run, results, _notes, _build = _stub(tmp_path, monkeypatch)
     _required_family(run, monkeypatch)
-    monkeypatch.setitem(duo.FAMILY_EVIDENCE, "gen2_new", contract)
+    monkeypatch.setitem(duo.FAMILY_EVIDENCE, "model_duo_family", contract)
     with pytest.raises(RuntimeError):
         run._run_oracle(results)
 

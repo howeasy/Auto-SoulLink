@@ -46,15 +46,18 @@ def test_family_evidence_contracts_are_explicit_and_aliases_share_one():
             assert contract == duo_module.EvidenceContract()
 
 
-def test_gen2_new_selects_only_link_with_required_evidence():
+def test_gen2_new_selects_link_and_faint_with_required_evidence():
     assert "gen2_new" in GAMES
-    assert scenarios_for("gen2_new") == ["link"]
+    assert scenarios_for("gen2_new") == ["link", "gen2_faint"]
     contract = duo_module.evidence_contract("gen2_new")
     assert contract.require_oracle and contract.witness_validator
     assert callable(getattr(DuoRun, contract.witness_validator, None))
     assert callable(getattr(DuoRun, SCENARIOS["link"]["oracle"], None))
+    assert SCENARIOS["gen2_faint"]["oracle"] == "assert_gen2_faint_saved"
+    assert callable(getattr(DuoRun, SCENARIOS["gen2_faint"]["oracle"], None))
     for game in GAMES:
         assert scenario_applies("link", game) == (GAMES[game].get("game", game) == "gen2_new")
+        assert scenario_applies("gen2_faint", game) == (GAMES[game].get("game", game) == "gen2_new")
 
 
 @pytest.mark.parametrize("game,fixtures", (
@@ -66,11 +69,12 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
     assert game in GAMES
     assert GAMES[game]["game"] == "gen2_new"
     assert GAMES[game]["fixture"] == fixtures
-    assert scenarios_for(game) == ["link"]
+    assert scenarios_for(game) == ["link", "gen2_faint"]
     assert duo_module.evidence_contract(game) is duo_module.evidence_contract("gen2_new")
     assert not GAMES[game].get("server_rom_routes")
     assert duo_list_lines(game) == [
-        f"link  attempts=1  targets=a:{fixtures['a']}, b:{fixtures['b']}"]
+        f"{scenario}  attempts=1  targets=a:{fixtures['a']}, b:{fixtures['b']}"
+        for scenario in ("link", "gen2_faint")]
 
 
 @pytest.mark.parametrize("game,titles,names", (
@@ -157,7 +161,8 @@ def _gen2_wrapper(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("missing", ("rom", "fixture", "qualification receipt"))
 @pytest.mark.parametrize("game", ("gen2_new", "gen2_gold_silver", "gen2_crystal_gold"))
-def test_gen2_duo_wrapper_refuses_missing_preflight_input(monkeypatch, tmp_path, missing, game):
+@pytest.mark.parametrize("scenario", ("link", "gen2_faint"))
+def test_gen2_duo_wrapper_refuses_missing_preflight_input(monkeypatch, tmp_path, missing, game, scenario):
     wrapper, _ = _gen2_wrapper(monkeypatch, tmp_path)
 
     def refuse(**kwargs):
@@ -169,14 +174,14 @@ def test_gen2_duo_wrapper_refuses_missing_preflight_input(monkeypatch, tmp_path,
     monkeypatch.setattr(wrapper.duo, "gen2_preflight", refuse)
     monkeypatch.setattr(wrapper.subprocess, "run", forbidden)
     with pytest.raises(AssertionError, match=f"missing {missing}"):
-        wrapper.run_link_gate(game)
+        wrapper.run_gate(game, scenario)
 
 
 def test_gen2_duo_wrapper_cannot_reuse_stale_pass_receipts(monkeypatch, tmp_path):
     wrapper, build = _gen2_wrapper(monkeypatch, tmp_path)
     for side in ("a", "b", "pydec"):
         prefix = "PYDEC" if side == "pydec" else "RESULT"
-        (build / f"e2e_link_{side}_result.txt").write_text(f"{prefix}: PASS\n")
+        (build / f"e2e_link_gen2-cc-link_{side}_result.txt").write_text(f"{prefix}: PASS\n")
     with pytest.raises(AssertionError, match="missing fresh a receipt"):
         wrapper.run_link_gate()
 
@@ -199,7 +204,7 @@ def test_gen2_duo_wrapper_selects_pairing_for_preflight_and_launch(
         assert cmd[-6:] == ["--game", game, "--scenario", "link", "--lane", lane]
         for side in ("a", "b", "pydec"):
             prefix = "PYDEC" if side == "pydec" else "RESULT"
-            (build / f"e2e_link_{side}_result.txt").write_text(f"{prefix}: PASS\n")
+            (build / f"e2e_link_{lane}_{side}_result.txt").write_text(f"{prefix}: PASS\n")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(wrapper.subprocess, "run", run)
@@ -208,29 +213,93 @@ def test_gen2_duo_wrapper_selects_pairing_for_preflight_and_launch(
 
 @pytest.mark.parametrize("bad", ("a", "b", "pydec", "none"))
 @pytest.mark.parametrize("mode", ("fail", "absent"))
-def test_gen2_duo_wrapper_requires_both_results_and_pydec(monkeypatch, tmp_path, bad, mode):
+@pytest.mark.parametrize("scenario", ("link", "gen2_faint"))
+def test_gen2_duo_wrapper_requires_both_results_and_pydec(monkeypatch, tmp_path, bad, mode, scenario):
     from types import SimpleNamespace
 
     wrapper, build = _gen2_wrapper(monkeypatch, tmp_path)
 
     def run(cmd, **kwargs):
-        assert cmd[-6:] == ["--game", "gen2_new", "--scenario", "link",
-                            "--lane", "gen2-cc-link"]
+        assert cmd[-6:] == ["--game", "gen2_new", "--scenario", scenario,
+                            "--lane", "gen2-cc-" + scenario.removeprefix("gen2_")]
         for side in ("a", "b", "pydec"):
             if side == bad and mode == "absent":
                 continue
             prefix = "PYDEC" if side == "pydec" else "RESULT"
             verdict = "FAIL" if side == bad else "PASS"
-            (build / f"e2e_link_{side}_result.txt").write_text(f"{prefix}: {verdict}\n")
+            lane = "gen2-cc-" + scenario.removeprefix("gen2_")
+            (build / f"e2e_{scenario}_{lane}_{side}_result.txt").write_text(f"{prefix}: {verdict}\n")
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(wrapper.subprocess, "run", run)
     if bad == "none":
-        wrapper.run_link_gate()
+        wrapper.run_gate(scenario=scenario)
     else:
         match = f"missing fresh {bad} receipt" if mode == "absent" else f"failed {bad} verdict"
         with pytest.raises(AssertionError, match=match):
-            wrapper.run_link_gate()
+            wrapper.run_gate(scenario=scenario)
+
+
+def test_gen2_faint_oracle_receives_qualified_inputs_and_requires_witness(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    seen = []
+    results = {"a": "A receipt", "b": "B receipt"}
+    module = SimpleNamespace(check_save_witness=lambda res: seen.append(("witness", res)),
+        faint_oracle=lambda res, **kwargs: seen.append((kwargs, res)))
+    monkeypatch.setitem(sys.modules, "gen2_duo_oracles", module)
+    run = object.__new__(DuoRun)
+    run.game, run.scenario = "gen2_gold_silver", "gen2_faint"
+    run.cfg, run.data_dir = SCENARIOS[run.scenario], str(tmp_path)
+    run._gen2_inputs = {"a": {"ot_id": 101, "fixture": tmp_path / "gold.SaveRAM"},
+                        "b": {"ot_id": 202, "fixture": tmp_path / "silver.SaveRAM"}}
+    run._run_oracle(results)
+    assert seen == [("witness", results), ({"data_dir": str(tmp_path),
+        "on_verified": run._record_gen2_facts,
+        "ot_ids": {"a": 101, "b": 202},
+        "boot_saveram": {"a": tmp_path / "gold.SaveRAM", "b": tmp_path / "silver.SaveRAM"}}, results)]
+    run.check_gen2_save_witness = None
+    with pytest.raises(RuntimeError, match="witness validator"):
+        run._run_oracle(results)
+
+
+@pytest.mark.parametrize("missing", ("driver", "faint_inputs", "witness", "oracle", None))
+def test_gen2_faint_prelaunch_requires_its_driver_and_oracle(monkeypatch, tmp_path, missing):
+    from types import SimpleNamespace
+
+    emulator = tmp_path / "EmuHawk.exe"
+    emulator.touch()
+    monkeypatch.setattr(duo_module, "EMUHAWK", str(emulator))
+    monkeypatch.setattr(duo_module, "REPO", str(tmp_path))
+    monkeypatch.setattr(duo_module, "gen2_preflight", lambda **kwargs: {})
+    driver_dir = tmp_path / "lua/tests/duo"
+    driver_dir.mkdir(parents=True)
+    for name in ("duo_gen2_main.lua", "scenario_gen2_link.lua", "gen2_route29_inputs.lua"):
+        (driver_dir / name).touch()
+    if missing != "driver":
+        (driver_dir / "scenario_gen2_faint.lua").touch()
+    if missing != "faint_inputs":
+        (driver_dir / "gen2_faint_inputs.lua").touch()
+    callbacks = {"link_oracle": lambda results: None,
+                 "faint_oracle": lambda results: None,
+                 "check_save_witness": lambda results: None}
+    if missing in ("witness", "oracle"):
+        del callbacks["check_save_witness" if missing == "witness" else "faint_oracle"]
+    monkeypatch.setitem(sys.modules, "gen2_duo_oracles", SimpleNamespace(**callbacks))
+    run = object.__new__(DuoRun)
+    run.game, run.scenario = "gen2_new", "gen2_faint"
+    run.gcfg = GAMES[run.game]
+    if missing == "driver":
+        with pytest.raises(FileNotFoundError, match="scenario_gen2_faint"):
+            run._prepare_gen2_lane()
+    elif missing == "faint_inputs":
+        with pytest.raises(FileNotFoundError, match="gen2_faint_inputs"):
+            run._prepare_gen2_lane()
+    elif missing:
+        with pytest.raises(RuntimeError, match="witness/oracle implementation missing"):
+            run._prepare_gen2_lane()
+    else:
+        run._prepare_gen2_lane()
 
 
 def test_unknown_family_does_not_inherit_legacy_evidence():

@@ -114,6 +114,7 @@ def test_gen2_required_callbacks_delegate_original_results_to_h2(monkeypatch, tm
     run._run_oracle(results)
     assert seen[0][0] == "witness"
     assert seen[1][0] == {"data_dir": run.data_dir, "ot_ids": {"a": 101, "b": 202},
+                           "on_verified": run._record_gen2_facts,
                            "boot_saveram": {"a": tmp_path / "gold_battle.SaveRAM",
                                             "b": tmp_path / "silver_battle.SaveRAM"}}
     assert all(entry[1] is results for entry in seen)
@@ -212,6 +213,91 @@ def test_gen2_clears_old_results_before_the_server_startup_wait(monkeypatch, tmp
         run.run()
 
 
+def test_gen2_cleanup_keeps_a_lane_whose_name_extends_this_one(monkeypatch, tmp_path):
+    monkeypatch.setattr(duo, "BUILD", str(tmp_path))
+    runs = [duo.DuoRun("gen2_faint", _args(game="gen2_new", scenario="gen2_faint", lane=lane))
+            for lane in ("cc", "cc_more")]
+    paths = []
+    for run in runs:
+        result = Path(run._result_path("a"))
+        snapshot = result.with_name(result.name.replace("_result.txt", "_link_save.SaveRAM"))
+        result.write_text("RESULT: PASS")
+        snapshot.write_bytes(b"immutable link snapshot")
+        paths.append((result, snapshot))
+    runs[0]._clear_attempt_artifacts()
+    assert all(not path.exists() for path in paths[0])
+    assert all(path.exists() for path in paths[1])
+
+
+def test_gen2_lane_results_go_files_and_clearing_do_not_cross_lanes(monkeypatch, tmp_path):
+    monkeypatch.setattr(duo, "BUILD", str(tmp_path))
+    first = duo.DuoRun("gen2_faint", _args(game="gen2_new", lane="cc"))
+    second = duo.DuoRun("gen2_faint", _args(game="gen2_gold_silver", lane="gs"))
+    for run in (first, second):
+        for side in ("a", "b"):
+            Path(run._result_path(side)).write_text("HELLO {}\nRESULT: PASS\n")
+            Path(run._phase_result_path(side, "saved")).write_text("phase")
+            Path(run.go_files[side]).write_text("go")
+        Path(run._pydec_path).write_text("PYDEC: PASS stale\n")
+    first._clear_attempt_artifacts()
+    assert not Path(first._result_path("a")).exists()
+    assert not Path(first._phase_result_path("a", "saved")).exists()
+    assert not Path(first.go_files["a"]).exists()
+    assert Path(second._result_path("a")).is_file()
+    assert Path(second.go_files["a"]).is_file()
+    assert Path(second._pydec_path).read_text() == "PYDEC: PASS stale\n"
+    first.wait_for = lambda label, predicate, timeout: predicate()
+    assert first.wait_results() is None
+    assert first._read_receipt("a") == ""
+    first._status = lambda: {"players": {side: {"connected": True, "admission": "admitted"}
+                                        for side in ("a", "b")}}
+    def refuse_other_lane(label, predicate, timeout):
+        assert predicate() is False
+        raise RuntimeError("own HELLO absent")
+    first.wait_for = refuse_other_lane
+    with pytest.raises(RuntimeError, match="own HELLO absent"):
+        first.orchestrate()
+
+
+@pytest.mark.parametrize("verified", (True, False))
+def test_gen2_final_pydec_requires_verified_facts(monkeypatch, tmp_path, verified):
+    monkeypatch.setattr(duo, "BUILD", str(tmp_path))
+    run = duo.DuoRun("gen2_faint", _args(game="gen2_new", lane="cc", keep_alive=False))
+    for method in ("_prepare_gen2_lane", "start_server", "start_instances", "orchestrate"):
+        setattr(run, method, lambda: None)
+    run.cleanup = lambda passed: None
+    run.wait_results = lambda: ("RESULT: PASS", "RESULT: PASS")
+    facts = {"a": "key-a", "b": "key-b", "area": "route_29",
+             "titles": "crystal/gold", "status": "dead"}
+    run._run_oracle = lambda results: run._record_gen2_facts(facts) if verified else None
+    if verified:
+        assert run.run() is True
+        assert Path(run._pydec_path).read_text().splitlines()[-1] == (
+            "PYDEC: PASS a=key-a b=key-b area=route_29 titles=crystal/gold status=dead")
+    else:
+        run._gen2_verified_facts = facts  # A previous callback must not qualify this verdict.
+        with pytest.raises(RuntimeError, match="did not report verified facts"):
+            run.run()
+        assert "PYDEC: PASS" not in Path(run._pydec_path).read_text()
+
+
+def test_gen2_attempt_archive_reads_only_its_lane(monkeypatch, tmp_path):
+    monkeypatch.setattr(duo, "BUILD", str(tmp_path))
+    args = _args(game="gen2_new", lane="cc")
+    run = duo.DuoRun("gen2_faint", args)
+    for side in ("a", "b"):
+        Path(run._result_path(side)).write_text("RESULT: PASS own\n")
+        (tmp_path / f"e2e_gen2_faint_{side}_result.txt").write_text("RESULT: PASS other\n")
+    Path(run._pydec_path).write_text("PYDEC: PASS own\n")
+    run.run = lambda: True
+    monkeypatch.setattr(duo, "DuoRun", lambda *a, **kw: run)
+    assert duo.run_scenario_with_rng_retry("gen2_faint", args) == (True, 1)
+    for side in ("a", "b", "pydec"):
+        path = tmp_path / f"e2e_gen2_faint_cc_{side}_attempt1_result.txt"
+        assert path.is_file()
+        assert "own" in path.read_text() and "other" not in path.read_text()
+
+
 @pytest.fixture(autouse=True)
 def _fresh_lane_registry(monkeypatch):
     """The lane ordinal is process state; a fresh table keeps each test's expectation local."""
@@ -261,7 +347,7 @@ def test_required_family_gets_the_same_pydec_transport(monkeypatch, tmp_path):
                         duo.EvidenceContract("future_witness", require_oracle=True))
     run = _run(monkeypatch, tmp_path, game="gen2_new")
     try:
-        assert run._pydec_path == str(tmp_path / "e2e_link_new_pydec_result.txt")
+        assert run._pydec_path == str(tmp_path / f"e2e_link_new_{run.lane}_pydec_result.txt")
         assert run.launched == []
     finally:
         os.rmdir(run.data_dir)

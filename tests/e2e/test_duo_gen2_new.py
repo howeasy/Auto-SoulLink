@@ -19,7 +19,7 @@ pytestmark = [
 ]
 
 GAME = "gen2_new"
-SCENARIOS = ("link",)
+SCENARIOS = ("link", "gen2_faint")
 LANE = "gen2-cc-link"
 PAIRINGS = {
     GAME: LANE,
@@ -28,20 +28,21 @@ PAIRINGS = {
 }
 
 
-def run_link_gate(game=GAME):
+def run_gate(game=GAME, scenario="link"):
     # Qualification must bind both fixtures to the pinned ROM before any process starts.
-    lane = PAIRINGS[game]
+    assert scenario in SCENARIOS, f"unknown Gen 2 duo scenario: {scenario}"
+    lane = PAIRINGS[game].removesuffix("link") + scenario.removeprefix("gen2_")
     duo.gen2_preflight(repo=REPO, game=game)
     assert Path(duo.EMUHAWK).is_file(), f"EmuHawk missing: {duo.EMUHAWK}"
-    receipts = [REPO / "patch" / "build" / f"e2e_link_{side}_result.txt"
+    receipts = [REPO / "patch" / "build" / f"e2e_{scenario}_{lane}_{side}_result.txt"
                 for side in ("a", "b", "pydec")]
     for path in receipts:
         path.unlink(missing_ok=True)
-    timeout = duo.SCENARIOS["link"]["timeout"] + 300
+    timeout = duo.SCENARIOS[scenario]["timeout"] + 300
     try:
         result = subprocess.run(
             [sys.executable, str(REPO / "tools" / "e2e_duo.py"),
-             "--keep-data", "--game", game, "--scenario", "link", "--lane", lane],
+             "--keep-data", "--game", game, "--scenario", scenario, "--lane", lane],
             cwd=REPO, capture_output=True, text=True, encoding="utf-8", errors="replace",
             timeout=timeout)
     except subprocess.TimeoutExpired as exc:
@@ -58,6 +59,11 @@ def run_link_gate(game=GAME):
             f"missing or failed {side} verdict: {verdicts}")
 
 
+def run_link_gate(game=GAME):
+    run_gate(game, "link")
+
+
 @pytest.mark.parametrize("game", PAIRINGS)
-def test_gen2_new_duo_link(game):
-    run_link_gate(game)
+@pytest.mark.parametrize("scenario", SCENARIOS)
+def test_gen2_new_duo(game, scenario):
+    run_gate(game, scenario)
