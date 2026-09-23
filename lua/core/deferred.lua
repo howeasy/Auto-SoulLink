@@ -86,7 +86,16 @@ function Deferred:push(cmd)
             end
         end
     end
-    self.items[#self.items + 1] = cmd
+    -- server order: a command handed over late (a force_* held through a battle) goes back to its
+    -- ARRIVAL place, ahead of anything the server sent after it (live deadzone_gen3 r3: the same
+    -- key's later memorialize ran first and the force_faint was dropped, "key not in party")
+    local at = #self.items + 1
+    if cmd.arrival then
+        for i, q in ipairs(self.items) do
+            if q.arrival and q.arrival > cmd.arrival then at = i; break end
+        end
+    end
+    table.insert(self.items, at, cmd)
 end
 function Deferred:size() return #self.items end
 

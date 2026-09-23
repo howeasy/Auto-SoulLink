@@ -192,7 +192,7 @@ function Session.new(p)
                 e.why, e.since = rwhy or "held", e.since or self.frame
                 keep[#keep + 1] = e
             elseif res ~= "done" then
-                deferred:push({ cmd = e.cmd, key = e.key, nickname = e.nickname })
+                deferred:push({ cmd = e.cmd, key = e.key, nickname = e.nickname, arrival = e.arrival })
             end
         end
         self.battle_pending = keep
@@ -237,7 +237,7 @@ function Session.new(p)
 
     local function route_force(cmd)
         local c = cmd.cmd
-        local entry = { cmd = c, key = cmd.key, nickname = cmd.nickname }
+        local entry = { cmd = c, key = cmd.key, nickname = cmd.nickname, arrival = cmd.arrival }
         local party = game.read_party()
         if not party then
             -- unreadable now (e.g. a naming prompt before the record lands): the checkpoint
@@ -264,6 +264,8 @@ function Session.new(p)
     -- ── inbound commands ───────────────────────────────────────────────────────────
     function self:handle_command(cmd)
         local c = cmd.cmd
+        self.arrivals = (self.arrivals or 0) + 1
+        cmd.arrival = self.arrivals                         -- server order, kept across a battle hold
         if c == "noop" then return end
         local own = game.commands and game.commands[c]
         if own and own(cmd) then return end

@@ -858,3 +858,25 @@ def test_core_names_no_bizhawk_global_and_writes_no_memory(name):
     code = "\n".join(line.split("--", 1)[0] for line in (CORE / name).read_text(encoding="utf-8").splitlines())
     assert not BIZHAWK.search(code), BIZHAWK.search(code)
     assert not WRITES.search(code), WRITES.search(code)
+
+
+def test_a_battle_held_force_faint_keeps_its_place_ahead_of_the_later_memorialize():
+    """Live deadzone_gen3 r3 (123c6c45), B: the capture's force_faint arrived IN BATTLE (held),
+    its memorialize arrived next (straight to the deferred queue); at battle end the held
+    force_faint was appended BEHIND it, the memorialize moved the record out, and the
+    force_faint was dropped ("key not in party"). Server order is force_faint -> memorialize
+    (state.py _propagate_faint); Gen 1's deadzone_new receipt is FAINTED then RETIRED."""
+    w = World()
+    w.step_to(60)
+    w.st.in_battle, w.st.battle_result, w.st.checkpoint = True, "hold", False
+    w.command(cmd="force_faint", key=B)
+    w.command(cmd="memorialize", key=B)
+    w.step(3)
+    w.st.in_battle = False                 # the battle ends; the final attempt declines (nil)
+    w.st.battle_result = None
+    w.step()
+    order = [str(q.cmd) for q in w.q["items"].values()]
+    assert order == ["force_faint", "memorialize"], order
+    w.st.checkpoint = True
+    w.step()
+    assert w.called("faint_slot") == [("faint_slot", 1, "force_faint")]
