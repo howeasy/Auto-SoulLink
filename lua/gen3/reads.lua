@@ -142,7 +142,7 @@ function R.secure_checksum(plain)
 end
 
 -- CFRU CompressedPokemon (0x3A) -> BoxPokemon (0x50). Fields CFRU does not store
--- (checksum, PP, contest, ribbons) stay zero, which is why RR records carry no checksum.
+-- (checksum, PP, contest) stay zero. RR's builder sets the high ribbons byte bit7.
 function R.expand_compressed_mon(raw)
     if #raw ~= R.COMPRESSED_MON_SIZE then
         return nil, "compressed record length disagrees with profile"
@@ -162,6 +162,7 @@ function R.expand_compressed_mon(raw)
     end
     copy(0x38, 0x2C, 6)         -- EVs
     copy(0x44, 0x32, 8)         -- Misc head
+    out[0x4F + 1] = 0x80       -- RR ROM 0x090B696A..76: OR bit7 at BoxPokemon+0x4F
     return out
 end
 
@@ -188,6 +189,9 @@ function R.new(profile, io, pointers)
     local mons_per_box = d.MONS_PER_BOX or R.MONS_PER_BOX
     local r = { charmap = cm, rr = rr, party_capacity = party_capacity,
                 mons_per_box = mons_per_box }
+    r.expand_compressed_mon = R.expand_compressed_mon
+    r.PARTY_MON_SIZE = R.PARTY_MON_SIZE
+    r.BOX_MON_SIZE = R.BOX_MON_SIZE
 
     function r.decode_name(bytes)
         local out = {}

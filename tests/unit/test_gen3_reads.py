@@ -30,6 +30,26 @@ FR_SAV = FIXTURES / "firered_town.sav"
 RAW_PAIRS = {"nickname_raw": "nickname_bytes", "ot_name_raw": "ot_name_bytes"}
 
 
+def test_instance_exports_shared_record_geometry_and_compressed_expander():
+    world = World()
+    module = world.Reads
+    reads = module.new(world.lua.table_from(world.profile, recursive=True), world.io)
+    assert reads.PARTY_MON_SIZE == module.PARTY_MON_SIZE
+    assert reads.BOX_MON_SIZE == module.BOX_MON_SIZE
+    assert world.lua.eval("function(a,b) return a == b end")(
+        reads.expand_compressed_mon, module.expand_compressed_mon)
+
+
+def test_rr_expansion_sets_the_binary_pinned_ribbon_bit_without_changing_identity():
+    world = World()
+    raw = bytes(range(codec.COMPRESSED_MON_SIZE))
+    py = codec.expand_compressed_box_mon(raw)
+    lua = bytes(lua_to_py(world.Reads.expand_compressed_mon(world.lua.table(*raw))))
+    assert lua == py and py[0x4F] == 0x80
+    assert py[:8] == raw[:8] and py[0x1C:0x20] == bytes(4)
+    assert codec.decode_box_mon(py, rr=True)["ribbons"] == 0x80000000
+
+
 def assert_same_mon(lua_mon, py_mon):
     got = lua_to_py(lua_mon) if not isinstance(lua_mon, dict) else lua_mon
     for key, value in py_mon.items():

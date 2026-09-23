@@ -123,6 +123,7 @@ class Cart:
 
     def seed_move_pp(self):
         self.seed_rom(self.profile["rom"]["BATTLE_MOVES_ADDR"] + 33 * 12 + 4, b"\x23")
+        self.seed_rom(self.profile["rom"]["BATTLE_MOVES_ADDR"] + 4, b"\x23")  # RR move0 PP
         self.seed_rom(self.profile["rom"]["PP_UP_GET_MASK_ADDR"], b"\x03\x0c\x30\xc0")
 
     def put_party(self, records):
@@ -149,6 +150,50 @@ def mon_bytes(personality, *, rr=False, pp=2):
     return codec.encode_party_mon(mon, rr=rr)
 
 
+def changed_mon(raw, *, rr=False, **fields):
+    mon = codec.decode_party_mon(raw, rr=rr)
+    mon.update(fields)
+    return codec.encode_party_mon(mon, rr=rr)
+
+
+def empty_party_record():
+    return bytes(0x55) + b"\xFF" + bytes(100 - 0x56)  # pret ZeroMonData: MAIL_NONE
+
+
+@pytest.mark.parametrize("operation", ["deposit", "memorialize"])
+@pytest.mark.parametrize("unusable", ["fainted", "egg"])
+def test_removing_the_last_alive_non_egg_is_refused(operation, unusable):
+    cart = Cart()
+    target, other = mon_bytes(50), mon_bytes(75)
+    other = changed_mon(other, hp=0) if unusable == "fainted" else changed_mon(other, is_egg=1)
+    cart.put_party([target, other])
+    cart.seed_move_pp()
+    assert getattr(cart.boxes, operation)(cart.boxes, cart.key(target), 0) == (None, "last party mon")
+    assert cart.written == []
+
+
+@pytest.mark.parametrize("operation", ["deposit", "memorialize"])
+def test_validated_hint_selects_one_of_the_ninjask_shedinja_shared_keys(operation):
+    cart = Cart()
+    first = changed_mon(mon_bytes(50), species=302)
+    second = changed_mon(mon_bytes(50), species=303)
+    cart.put_party([first, second, mon_bytes(75)])
+    cart.seed_move_pp()
+    assert getattr(cart.boxes, operation)(cart.boxes, cart.key(first), 1) is True
+    box = 0 if operation == "deposit" else cart.boxes.memorial_box
+    assert codec.decode_box_mon(cart.raw(cart.box_addr(box), 80))["species"] == 303
+    assert codec.decode_party_mon(cart.raw(cart.party_base, 100))["species"] == 302
+
+
+def test_holding_mail_refuses_deposit_without_mutation():
+    cart = Cart()
+    target = changed_mon(mon_bytes(50), held_item=121)
+    cart.put_party([target, mon_bytes(75)])
+    cart.seed_move_pp()
+    assert cart.boxes.deposit(cart.boxes, cart.key(target), 0) == (None, "holding mail")
+    assert cart.written == []
+
+
 def test_deposit_refuses_the_last_party_mon_without_any_write():
     cart = Cart()
     record = mon_bytes(50)
@@ -169,7 +214,7 @@ def test_deposit_restores_depleted_pp_and_preserves_the_other_box_fields():
     assert cart.boxes.deposit(cart.boxes, cart.key(target), 1) is True
     assert cart.raw(cart.party_count, 1) == b"\x01"
     assert cart.raw(cart.party_base, 100) == lead
-    assert cart.raw(cart.party_base + 100, 100) == bytes(100)
+    assert cart.raw(cart.party_base + 100, 100) == empty_party_record()
     expected = codec.decode_party_mon(target)
     expected["pp"] = [42, 0, 0, 0]
     boxed = cart.raw(cart.box_addr(0), 80)
@@ -221,7 +266,7 @@ def test_deposit_compacts_a_middle_party_slot_and_updates_the_count():
     assert cart.raw(cart.party_count, 1) == b"\x02"
     assert cart.raw(cart.party_base, 100) == first
     assert cart.raw(cart.party_base + 100, 100) == last
-    assert cart.raw(cart.party_base + 200, 100) == bytes(100)
+    assert cart.raw(cart.party_base + 200, 100) == empty_party_record()
 
 
 @pytest.mark.parametrize("offset", [4, 64, 124])
@@ -278,10 +323,12 @@ def test_rr_withdraw_expands_record_and_requires_a_valid_stat_cache():
     assert len(cart.written) == before
     cached = cart.lua.table(level=5, maxHP=19, attack=9, defense=9, speed=9,
                             spAtk=11, spDef=11, pp1=7)
+    cart.seed_move_pp()
     assert cart.boxes.withdraw(cart.boxes, key, cached, None) is True
     restored = codec.decode_party_mon(cart.raw(cart.party_base + 100, 100), rr=True)
     assert (restored["personality"], restored["species"], restored["level"],
-            restored["hp"], restored["max_hp"], restored["pp"][0]) == (50, 1, 5, 19, 19, 7)
+            restored["hp"], restored["max_hp"], restored["pp"][0]) == (50, 1, 5, 19, 19, 42)
+    assert restored["pp"][1:] == [35, 35, 35]
     assert cart.raw(cart.box_addr(0), 58) == bytes(58)
 
 
@@ -302,9 +349,9 @@ def test_rr_scan_reads_nonzero_growth_row_with_256_entries_above_level_100():
     assert cart.boxes.scan(cart.boxes)[1].level == 125
 
 
-@pytest.mark.parametrize("cached_pp,rom_available,expected", [(None, True, 42), (0, False, 0),
-                                                          (None, False, None)])
-def test_rr_pp_uses_cache_or_pinned_rom_and_never_invents_five(cached_pp, rom_available, expected):
+@pytest.mark.parametrize("cached_pp,rom_available,expected", [(None, True, 42), (0, True, 42),
+                                                          (None, False, None), (7, False, None)])
+def test_rr_pp_refills_from_rom_even_with_depleted_cache(cached_pp, rom_available, expected):
     cart = Cart("radical_red")
     target = mon_bytes(50, rr=True)
     cart.put_party([mon_bytes(75, rr=True), target])
@@ -338,7 +385,7 @@ def test_memorialize_moves_the_target_from_party_and_is_idempotent(title):
     assert cart.boxes.memorialize(cart.boxes, key, 1) is True
     assert cart.raw(cart.party_count, 1) == b"\x01"
     assert cart.raw(cart.party_base, 100) == lead
-    assert cart.raw(cart.party_base + 100, 100) == bytes(100)
+    assert cart.raw(cart.party_base + 100, 100) == empty_party_record()
     size = 58 if rr else 80
     memorial = cart.raw(cart.box_addr(cart.boxes.memorial_box), size)
     assert memorial != bytes(size)
@@ -427,7 +474,7 @@ def test_duplicate_party_or_box_key_refuses_without_mutation():
     cart = Cart()
     repeated = mon_bytes(50)
     cart.put_party([repeated, repeated])
-    ok, why = cart.boxes.deposit(cart.boxes, cart.key(repeated), 1)
+    ok, why = cart.boxes.deposit(cart.boxes, cart.key(repeated), None)
     assert (ok, why) == (None, "ambiguous duplicate key")
     assert cart.written == []
 
@@ -637,3 +684,172 @@ def test_vanilla_roundtrip_projects_to_a_qualifying_synthetic_flash_save():
     assert boxes[cart.boxes.memorial_box][0]["personality"] == 50
     assert boxes[cart.boxes.memorial_box][0]["checksum_ok"] is True
     assert boxes[0][0]["has_species"] == 0
+
+
+@pytest.mark.parametrize("species,hp", [(1, 177), (303, 1)])
+def test_distinct_stats_nature_evs_ivs_all_pp_bonuses_and_shedinja(species, hp):
+    cart = Cart()
+    cart.seed_vanilla_stats()
+    base = bytearray(28)
+    base[:6] = bytes([70, 120, 65, 95, 110, 85])
+    cart.seed_rom(cart.profile["rom"]["BASESTATS_ADDR"] + species * 28, base)
+    cart.seed_rom(cart.profile["rom"]["EXPERIENCE_TABLES_ADDR"], b"".join(
+        (n ** 3).to_bytes(4, "little") for n in range(101)))
+    cart.seed_move_pp()
+    for move, pp in ((45, 40), (85, 15), (153, 5)):
+        cart.seed_rom(cart.profile["rom"]["BATTLE_MOVES_ADDR"] + move * 12 + 4, bytes([pp]))
+    names = ("hp", "attack", "defense", "speed", "sp_attack", "sp_defense")
+    target = changed_mon(mon_bytes(53), species=species, experience=125000,
+                         moves=[33, 45, 85, 153], pp=[1, 2, 3, 4], pp_bonuses=0xE4,
+                         ivs=dict(zip(names, [31, 7, 22, 19, 28, 3], strict=True)),
+                         evs=dict(zip(names, [252, 80, 44, 156, 200, 12], strict=True)))
+    cart.put_party([mon_bytes(75), target])
+    key = cart.key(target)
+    assert cart.boxes.deposit(cart.boxes, key, 1) is True
+    assert cart.boxes.withdraw(cart.boxes, key, None, None) is True
+    decoded = codec.decode_party_mon(cart.raw(cart.party_base + 100, 100))
+    # Worked pret CalculateMonStats control: level50 Adamant (+Atk,-SpA).
+    assert [decoded[k] for k in ("hp", "max_hp", "attack", "defense", "speed",
+                                "sp_attack", "sp_defense")] == [hp, hp, 151, 86, 129, 138, 93]
+    assert decoded["pp"] == [35, 48, 21, 8]
+    assert decoded["checksum_ok"] is True and decoded["mail"] == 255
+
+
+@pytest.mark.parametrize("title,maximum", [("firered", 100), ("radical_red", 250)])
+def test_level_scan_stops_at_the_profile_cap(title, maximum):
+    cart = Cart(title)
+    rr = title == "radical_red"
+    if rr:
+        cart.seed_rr_stats()
+    else:
+        cart.seed_vanilla_stats()
+        cart.seed_move_pp()
+    count = cart.profile["derived"]["EXPERIENCE_TABLE_ENTRY_COUNT"]
+    cart.seed_rom(cart.profile["rom"]["EXPERIENCE_TABLES_ADDR"], b"".join(
+        n.to_bytes(4, "little") for n in range(count)))
+    target = changed_mon(mon_bytes(50, rr=rr), rr=rr, experience=0xFFFFFFFF)
+    cart.put_party([mon_bytes(75, rr=rr), target])
+    assert cart.boxes.deposit(cart.boxes, cart.key(target), 1) is True
+    assert cart.boxes.scan(cart.boxes)[1].level == maximum
+
+
+def test_rr_compression_keeps_growth_and_misc_bytes_and_expands_with_engine_flag():
+    cart = Cart("radical_red")
+    target = changed_mon(mon_bytes(50, rr=True), rr=True, experience=0x123456,
+                         held_item=77, friendship=201, growth_filler=0xA5,
+                         pokerus=0xD7, met_location=83, met_level=61, met_game=4,
+                         pokeball=9, ot_gender=1, ability_num=1)
+    cart.put_party([mon_bytes(75, rr=True), target])
+    assert cart.boxes.deposit(cart.boxes, cart.key(target), 1) is True
+    compressed = cart.raw(cart.box_addr(0), 58)
+    assert compressed[0x1C:0x27] == target[0x20:0x2B]
+    assert compressed[0x32:0x3A] == target[0x44:0x4C]
+    expanded = codec.expand_compressed_box_mon(compressed)
+    assert expanded[0x4F] == 0x80
+    assert expanded[0x44:0x4C] == target[0x44:0x4C]
+
+
+@pytest.mark.parametrize("operation", ["deposit", "memorialize"])
+def test_corrupt_zero_species_box_slot_is_occupied_and_never_overwritten(operation):
+    cart = Cart()
+    target = mon_bytes(50)
+    cart.put_party([mon_bytes(75), target])
+    cart.seed_move_pp()
+    corrupt = bytearray(80)
+    corrupt[0x1C] = 1
+    box = 0 if operation == "deposit" else cart.boxes.memorial_box
+    cart.poke(cart.box_addr(box), corrupt)
+    assert getattr(cart.boxes, operation)(cart.boxes, cart.key(target), 1) is True
+    assert cart.raw(cart.box_addr(box), 80) == corrupt
+    assert codec.decode_box_mon(cart.raw(cart.box_addr(box, 1), 80))["personality"] == 50
+
+
+@pytest.mark.parametrize("where", ["party", "box"])
+def test_checksum_refusals_do_not_write(where):
+    cart = Cart()
+    target = bytearray(mon_bytes(50))
+    target[0x1C] ^= 1
+    if where == "party":
+        cart.put_party([mon_bytes(75), bytes(target)])
+        result = cart.boxes.deposit(cart.boxes, cart.key(bytes(target)), 1)
+    else:
+        cart.put_party([mon_bytes(75)])
+        cart.poke(cart.box_addr(0), target[:80])
+        result = cart.boxes.withdraw(cart.boxes, cart.key(bytes(target)), None, None)
+    assert result == (None, where + " checksum invalid")
+    assert cart.written == []
+
+
+def test_missing_rom_pp_or_stats_returns_named_refusal_without_writes():
+    cart = Cart()
+    target = mon_bytes(50)
+    cart.put_party([mon_bytes(75), target])
+    assert cart.boxes.deposit(cart.boxes, cart.key(target), 1) == (None, "PP unavailable")
+    assert cart.written == []
+    cart.put_party([mon_bytes(75)])
+    cart.poke(cart.box_addr(0), target[:80])
+    assert cart.boxes.withdraw(cart.boxes, cart.key(target), None, None) == (None, "stats unavailable")
+    assert cart.written == []
+
+
+def test_withdraw_reason_precedence_and_full_party_idempotence():
+    cart = Cart()
+    records = [mon_bytes(i * 25) for i in range(1, 7)]
+    cart.put_party(records)
+    assert cart.boxes.withdraw(cart.boxes, cart.key(records[0]), None, None) is True
+    assert cart.boxes.withdraw(cart.boxes, "missing", None, None) == (None, "party full")
+    cart.put_party(records[:1])
+    assert cart.boxes.withdraw(cart.boxes, "missing", None, None) == (None, "key not boxed")
+    assert cart.written == []
+
+
+def test_allow_covers_only_planned_slots_and_one_count_byte():
+    cart = Cart()
+    target = mon_bytes(50)
+    cart.put_party([mon_bytes(75), target])
+    cart.seed_move_pp()
+    arm = cart.writes.arm
+    checked = []
+
+    def checking_arm(self, reason, allow):
+        assert allow(cart.party_base + 100, 100) is True
+        assert allow(cart.box_addr(0), 80) is True
+        assert allow(cart.party_count, 1) is True
+        for addr, size in ((cart.party_base, 1), (cart.party_base + 200, 1),
+                           (cart.box_addr(1), 1), (cart.party_count, 2), (cart.party_count + 1, 1)):
+            assert allow(addr, size) is False
+        checked.append(True)
+        return arm(self, reason, allow)
+
+    cart.writes.arm = checking_arm
+    assert cart.boxes.deposit(cart.boxes, cart.key(target), 1) is True
+    assert checked == [True]
+
+
+def test_write_error_always_disarms_the_window():
+    cart = Cart()
+    target = mon_bytes(50)
+    cart.put_party([mon_bytes(75), target])
+    cart.seed_move_pp()
+    actual = cart.writes.write_bytes
+
+    def fail(*_):
+        raise RuntimeError("injected write refusal")
+
+    cart.writes.write_bytes = fail
+    with pytest.raises((lupa.LuaError, RuntimeError), match="injected write refusal"):
+        cart.boxes.deposit(cart.boxes, cart.key(target), 1)
+    with pytest.raises(lupa.LuaError, match="no armed write window"):
+        actual(cart.writes, cart.party_count, cart.lua.table(2))
+
+
+def test_rr_binary_expander_refills_all_pp_slots_and_sets_the_ribbon_flag():
+    path = ROOT / "patch/build/slink_RR.gba"
+    if not path.exists():
+        pytest.skip("local copyrighted RR ROM absent")
+    rom = path.read_bytes()
+    # CreateBoxMonFromCompressedMon: read ppBonuses, call CalculatePPWithBonus,
+    # store +0x34+i, increment i and loop until four. The word is Thumb callable.
+    assert rom[0x10B69D0:0x10B69E4].hex() == "074b317800f050fc2b0001353433e054042df0d1"
+    assert int.from_bytes(rom[0x10B69F0:0x10B69F4], "little") == 0x0804101D
+    assert rom[0x10B696A:0x10B6978].hex() == "220080234632517a5b420b435372"

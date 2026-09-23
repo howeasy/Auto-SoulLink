@@ -16,7 +16,6 @@
 -- so table layout alone does not establish vanilla stat semantics. Keep complete
 -- engine-derived cached stats; a natural RR boxsync save witness still gates RC.
 local B = {}
-local PARTY_SIZE, BOX_SIZE = 100, 80 -- pret include/pokemon.h:105-141
 local ATTACKS_POSITION = {
     [0]=1, 1, 2, 3, 2, 3, 0, 0, 0, 0, 0, 0,
     2, 3, 1, 1, 3, 2, 2, 3, 1, 1, 3, 2,
@@ -50,6 +49,13 @@ function B.new(profile, reads, io)
     assert(type(reads) == "table" and type(io) == "table" and io.writes,
            "read facade and armed writes required")
     local d = profile.derived
+    local PARTY_SIZE = assert(reads.PARTY_MON_SIZE, "reads party size required")
+    local BOX_SIZE = assert(reads.BOX_MON_SIZE, "reads box size required")
+    local function empty_party()
+        local record = zero(PARTY_SIZE)
+        record[0x55 + 1] = 0xFF -- pret ZeroMonData: MAIL_NONE
+        return record
+    end
     local a = profile.ram
     local rr = d.CFRU_COMPRESSED_BOX == true
     local box_count = assert(d.BOXES_PER_STORE, "box count required")
@@ -77,26 +83,7 @@ function B.new(profile, reads, io)
             return storage + assert(d.BOX_DATA_OFFSET, "box data offset required")
                    + (box * mons_per_box + slot) * stride
         end
-        local function allow(addr, length)
-            local ending = addr + length
-            if addr >= party_base and ending <= party_base + PARTY_SIZE * reads.party_capacity then
-                return true
-            end
-            if addr == a.PARTY_COUNT_ADDR and length == 1 then return true end
-            if rr then
-                for box = 0, box_count - 1 do
-                    local base = box_addr(box, 0)
-                    if addr >= base and ending <= base + mons_per_box * stride then return true end
-                end
-            else
-                local base = box_addr(0, 0)
-                if addr >= base and ending <= base + box_count * mons_per_box * stride then
-                    return true
-                end
-            end
-            return false
-        end
-        return {party = party_base, storage = storage, box_addr = box_addr, allow = allow}
+        return {party = party_base, storage = storage, box_addr = box_addr}
     end
 
     local expanded_box
@@ -109,7 +96,7 @@ function B.new(profile, reads, io)
                 local mon, why = reads.decode_box_mon(expanded_box(raw))
                 if not mon then return nil, nil, why end
                 -- The game tests MON_DATA_SPECIES, not the hasSpecies header bit.
-                if mon.species ~= 0 then
+                if mon.species ~= 0 or mon.checksum_ok == false then
                     local key = string.format("%08X:%08X", word(raw, 0, 4), word(raw, 4, 4))
                     found = found or {}
                     found[#found + 1] = {box=box, slot=slot, addr=addr, raw=raw, key=key}
@@ -133,7 +120,13 @@ function B.new(profile, reads, io)
     end
 
     local function write_plan(place, plan)
-        io.writes:arm("overworld", place.allow)
+        local function allow(addr, length)
+            for _, change in ipairs(plan) do
+                if addr >= change[1] and addr + length <= change[1] + #change[2] then return true end
+            end
+            return false
+        end
+        io.writes:arm("overworld", allow)
         local ok, err = pcall(function()
             -- A relocation between read/plan and arm must not make the
             -- arm-time safety snapshot bless the old storage address.
@@ -201,14 +194,7 @@ function B.new(profile, reads, io)
 
     expanded_box = function(raw)
         if not rr then return copy(raw, 0, BOX_SIZE) end
-        local result = zero(BOX_SIZE)
-        for i = 0, 0x1B do result[i + 1] = raw[i + 1] end
-        for i = 0, 10 do result[0x20 + i + 1] = raw[0x1C + i + 1] end
-        local packed = word(raw, 0x27, 5)
-        for i = 0, 3 do put(result, 0x2C + i * 2, 2, (packed >> (10 * i)) & 0x3FF) end
-        for i = 0, 5 do result[0x38 + i + 1] = raw[0x2C + i + 1] end
-        for i = 0, 7 do result[0x44 + i + 1] = raw[0x32 + i + 1] end
-        return result
+        return reads.expand_compressed_mon(raw)
     end
 
     local function rom_bytes(address, length)
@@ -309,32 +295,32 @@ function B.new(profile, reads, io)
             end
             level, hp = stats.level, stats.maxHP
             computed = {stats.attack, stats.defense, stats.speed, stats.spAtk, stats.spDef}
+            -- RR ROM CreateBoxMonFromCompressedMon: 0x090B69C6..0x090B69E2
+            -- calls CalculatePPWithBonus for ALL four slots (including move 0).
+            -- The record does not store current PP. Cached depleted PP must not
+            -- override the game's full refill on expansion.
             for i = 0, 3 do
-                if mon.moves[i + 1] ~= 0 then
-                    local pp = stats["pp" .. (i + 1)]
-                    if not (type(pp) == "number" and pp % 1 == 0 and pp >= 0 and pp <= 255) then
-                        local ok, value = pcall(function()
-                            local rom = assert(profile.rom)
-                            local moves = assert(rom.BATTLE_MOVES_ADDR)
-                            local stride = assert(d.BATTLE_MOVE_ENTRY_SIZE)
-                            local off = assert(d.BATTLE_MOVE_PP_OFFSET)
-                            local base_pp = rom_bytes(moves + mon.moves[i + 1] * stride + off, 1)[1]
-                            local mask = rom_bytes(assert(rom.PP_UP_GET_MASK_ADDR) + i, 1)[1]
-                            assert(type(base_pp) == "number" and base_pp > 0 and base_pp <= 255)
-                            assert(mask == (3 << (2 * i)), "invalid PP-Up mask")
-                            local ups = (mon.pp_bonuses & mask) >> (2 * i)
-                            local maximum = base_pp + math.floor(base_pp * 20 * ups / 100)
-                            assert(maximum <= 255, "invalid move PP")
-                            return maximum
-                        end)
-                        if not ok then return nil, "PP unavailable" end
-                        pp = value
-                    end
-                    record[0x34 + i + 1] = pp
-                end
+                local ok, value = pcall(function()
+                    local rom = assert(profile.rom)
+                    local moves = assert(rom.BATTLE_MOVES_ADDR)
+                    local stride = assert(d.BATTLE_MOVE_ENTRY_SIZE)
+                    local off = assert(d.BATTLE_MOVE_PP_OFFSET)
+                    local base_pp = rom_bytes(moves + mon.moves[i + 1] * stride + off, 1)[1]
+                    local mask = rom_bytes(assert(rom.PP_UP_GET_MASK_ADDR) + i, 1)[1]
+                    assert(type(base_pp) == "number" and base_pp > 0 and base_pp <= 255)
+                    assert(mask == (3 << (2 * i)), "invalid PP-Up mask")
+                    local ups = (mon.pp_bonuses & mask) >> (2 * i)
+                    local maximum = base_pp + math.floor(base_pp * 20 * ups / 100)
+                    assert(maximum <= 255, "invalid move PP")
+                    return maximum
+                end)
+                if not ok then return nil, "PP unavailable" end
+                record[0x34 + i + 1] = value
             end
         else
-            level, hp, computed = vanilla_tail(mon)
+            local ok
+            ok, level, hp, computed = pcall(vanilla_tail, mon)
+            if not ok then return nil, "stats unavailable" end
         end
         for i = BOX_SIZE + 1, PARTY_SIZE do record[i] = 0 end
         put(record, 0x50, 4, 0) -- BoxMonToMon clears status
@@ -349,19 +335,30 @@ function B.new(profile, reads, io)
     local function party_match(key, slot_hint)
         local party, why = reads.read_party()
         if not party then return nil, nil, why end
-        local found
+        local found, hinted, duplicate
         for _, mon in ipairs(party) do
             if not rr and mon.checksum_ok ~= true then
                 return nil, nil, "party checksum invalid"
             end
             if mon.has_species == 1 and reads.key(mon) == key then
-                if found then return nil, nil, "ambiguous duplicate key" end
+                if found then duplicate = true end
                 found = mon
+                if mon.slot == slot_hint then hinted = mon end
             end
         end
-        -- Hints can go stale after party compaction. The key remains authoritative.
-        local _ = slot_hint
+        if hinted then return party, hinted end -- validated locator disambiguates shared PID:OTID
+        if duplicate then return nil, nil, "ambiguous duplicate key" end
         return party, found
+    end
+
+    local function survivor(party, slot)
+        -- pret pokemon_storage_system_menu.c:155-168 CountPartyAliveNonEggMonsExcept.
+        for _, mon in ipairs(party) do
+            if mon.slot ~= slot and mon.species ~= 0 and mon.is_egg == 0 and mon.hp > 0 then
+                return true
+            end
+        end
+        return false
     end
 
     function self:deposit(key, slot_hint)
@@ -381,16 +378,21 @@ function B.new(profile, reads, io)
             return nil, "key not in party"
         end
         if boxed then return nil, "ambiguous key exists in both party and box" end
-        if #party <= 1 then return nil, "last party mon" end
+        if not survivor(party, mon.slot) then return nil, "last party mon" end
+        -- pret mail_data.c:167ff; same mail IDs in rr_items.json. Do not orphan attached mail.
+        if (mon.held_item >= 121 and mon.held_item <= 132) or mon.mail ~= 0xFF then
+            return nil, "holding mail"
+        end
         if not free then return nil, "current box full" end
         local source = io.read_bytes(place.party + mon.slot * PARTY_SIZE, PARTY_SIZE)
-        local box_raw = restored_box(source, mon)
+        local ok, box_raw = pcall(restored_box, source, mon)
+        if not ok then return nil, "PP unavailable" end
         local plan = {{free.addr, box_raw}}
         for slot = mon.slot, #party - 2 do
             plan[#plan + 1] = {place.party + slot * PARTY_SIZE,
                                io.read_bytes(place.party + (slot + 1) * PARTY_SIZE, PARTY_SIZE)}
         end
-        plan[#plan + 1] = {place.party + (#party - 1) * PARTY_SIZE, zero(PARTY_SIZE)}
+        plan[#plan + 1] = {place.party + (#party - 1) * PARTY_SIZE, empty_party()}
         plan[#plan + 1] = {a.PARTY_COUNT_ADDR, {#party - 1}}
         write_plan(place, plan)
         return true
@@ -443,14 +445,14 @@ function B.new(profile, reads, io)
         end
         if mon and boxed then return nil, "ambiguous key exists in both party and box" end
         if not mon and not boxed then return nil, "key not in party" end
-        if mon and #party <= 1 then return nil, "last party mon" end
+        if mon and not survivor(party, mon.slot) then return nil, "last party mon" end
         local destination
         for slot = 0, mons_per_box - 1 do
             local addr = place.box_addr(self.memorial_box, slot)
             local raw = io.read_bytes(addr, stride)
             local candidate, candidate_why = reads.decode_box_mon(expanded_box(raw))
             if not candidate then return nil, candidate_why end
-            if candidate.species == 0 then
+            if candidate.species == 0 and candidate.checksum_ok ~= false then
                 destination = addr
                 break
             end
@@ -464,18 +466,24 @@ function B.new(profile, reads, io)
             source = boxed.raw
             source_mon, why = reads.decode_box_mon(expanded_box(source))
             if not source_mon then return nil, why end
+            if source_mon.checksum_ok == false then return nil, "box checksum invalid" end
         end
         -- A boxed RR mon is already in the 58-byte format. Recompressing those
         -- bytes as if they were a party record would corrupt Growth/Misc fields.
-        local target = (rr and boxed and not mon) and copy(source, 0, stride)
-                       or restored_box(source, source_mon)
+        local target
+        if rr and boxed and not mon then target = copy(source, 0, stride)
+        else
+            local ok
+            ok, target = pcall(restored_box, source, source_mon)
+            if not ok then return nil, "PP unavailable" end
+        end
         local plan = {{destination, target}}
         if mon then
             for slot = mon.slot, #party - 2 do
                 plan[#plan + 1] = {place.party + slot * PARTY_SIZE,
                                    io.read_bytes(place.party + (slot + 1) * PARTY_SIZE, PARTY_SIZE)}
             end
-            plan[#plan + 1] = {place.party + (#party - 1) * PARTY_SIZE, zero(PARTY_SIZE)}
+            plan[#plan + 1] = {place.party + (#party - 1) * PARTY_SIZE, empty_party()}
             plan[#plan + 1] = {a.PARTY_COUNT_ADDR, {#party - 1}}
         else
             plan[#plan + 1] = {boxed.addr, zero(stride)}
@@ -493,11 +501,16 @@ function B.new(profile, reads, io)
             local mon
             mon, why = reads.decode_box_mon(expanded_box(entry.raw))
             if not mon then return nil, why end
-            local _, growth = species_base(mon)
+            if mon.checksum_ok == false then return nil, "box checksum invalid" end
+            local ok, level = pcall(function()
+                local _, growth = species_base(mon)
+                return level_from_exp(mon, growth)
+            end)
+            if not ok then return nil, "stats unavailable" end
             out[#out + 1] = {
                 box = entry.box, slot = entry.slot, key = entry.key,
                 species_id = mon.species, nickname = mon.nickname,
-                level = level_from_exp(mon, growth), moves = mon.moves,
+                level = level, moves = mon.moves,
             }
         end
         return out

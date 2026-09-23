@@ -107,6 +107,7 @@ def decode_records(name: str, raw: bytes, rr: bool) -> list[dict]:
     elif name == "box0":
         stride = COMPRESSED_MON_SIZE if rr else BOX_MON_SIZE
         if rr:
+            # Shared codec expansion includes RR's +0x4F bit7 (ROM 0x090B696A..76).
             decode = lambda rec: codec.decode_box_mon(  # noqa: E731
                 codec.expand_compressed_box_mon(rec), rr=True)
         else:

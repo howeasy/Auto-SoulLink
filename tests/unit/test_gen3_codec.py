@@ -214,7 +214,7 @@ def test_expand_compressed_box_mon_matches_the_lua_field_map():
     assert out[0x38:0x3E] == evs
     assert out[0x3E:0x44] == b"\x00" * 6                # contest bytes
     assert out[0x44:0x4C] == misc
-    assert out[0x4C:0x50] == b"\x00" * 4                # ribbons
+    assert out[0x4C:0x50] == b"\x00\x00\x00\x80"       # RR ROM 0x090B696A..76
 
     # And the expansion is readable by the rr decoder.
     mon = codec.decode_box_mon(out, rr=True)

@@ -339,7 +339,7 @@ def encode_box_mon(mon: dict, rr: bool = False) -> bytes:
 #   +0x27..0x2B        -> four 10-bit moves -> u16 at +0x2C/+0x2E/+0x30/+0x32
 #                         (PP at +0x34..0x37 is not stored, left zero)
 #   +0x2C..0x31 (6 B)  -> EVs at +0x38 (contest bytes at +0x3E left zero)
-#   +0x32..0x39 (8 B)  -> Misc head at +0x44 (ribbons at +0x4C left zero)
+#   +0x32..0x39 (8 B)  -> Misc head at +0x44; RR sets bit31 of ribbons on expansion
 # ---------------------------------------------------------------------------
 def expand_compressed_box_mon(raw: bytes) -> bytes:
     if len(raw) != COMPRESSED_MON_SIZE:
@@ -353,6 +353,7 @@ def expand_compressed_box_mon(raw: bytes) -> bytes:
         out[0x2C + i * 2:0x2E + i * 2] = move.to_bytes(2, "little")
     out[0x38:0x3E] = raw[0x2C:0x32]
     out[0x44:0x4C] = raw[0x32:0x3A]
+    out[0x4F] = 0x80  # RR ROM 0x090B696A..76, CreateBoxMonFromCompressedMon
     return bytes(out)
 
 
