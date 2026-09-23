@@ -78,6 +78,8 @@ _LUA_ROOT = [
     "gen2_write_safety.lua",
     "write_permit.lua",
     "gb_checkpoint.lua",
+    # lua/gen1/panel.lua dofiles its sibling ../gb_panel.lua (the shared GB panel, P4.1d).
+    "gb_panel.lua",
     "token_scanner.lua",
     "admission.lua",
     "hook_registry.lua",
