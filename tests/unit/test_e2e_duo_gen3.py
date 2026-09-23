@@ -863,8 +863,13 @@ function FAKE(scenario, player, phase, spec)
     -- gone: a deposit leaves the party until the withdraw; boxed: where the fake PC holds it;
     -- used: gBattleResults.lastUsedMovePlayer; writes: the armed-sink write count
     local gone, boxed, used, writes = {}, {}, 0, spec.writes or 0
+    if spec.gone then gone[spec.gone] = true end     -- a record the server moved out (quarantine)
     ctx.find = function(k) for _, m in ipairs(party) do if m.key == k and not gone[k] then return m end end end
-    ctx.sent = function(event) if event == "box_mon_failed" or event == "sync_retrieve_failed" then return 0 end return spec.sent or 1 end
+    ctx.sent = function(event)
+        if event == "box_mon_failed" or event == "sync_retrieve_failed" then return 0 end
+        if spec.unsent and spec.unsent:find(event, 1, true) then return 0 end
+        return spec.sent or 1
+    end
     ctx.received = function(cmd) if cmd == "force_faint" and player == "a" then return 0 end return 1 end
     ctx.wait_sent = function(event, key)
         if event == "stats_cache" and not spec.noop_deposit then gone[key] = true; boxed[key] = true end
@@ -965,7 +970,7 @@ def _run_module(lua, scenario, player, phase, spec):
                                       "WHITED_OUT at here"]),
     ("whiteout", "b", "initial", {}, ["BOXED_OBSERVED K1", "DEPOSITED_FOR_REBUILD K1",
                                       "RETURNED_OBSERVED K1", "MIRROR_WITHDRAWN K1"]),
-    ("link", "a", "initial", {}, ["CAUGHT K9"]),
+    ("link", "a", "initial", {}, ["CAUGHT K9", "RETURNED_OBSERVED K9 slot=2"]),
     ("deadzone", "a", "initial", {}, ["NO_CATCH area=route_1 species=16"]),
     ("deadzone", "b", "initial", {"hp0": "lua:{frame=1,in_battle=false}"}, ["CAUGHT K9", "RETIRED K9"]),
     ("reconnect", "b", "initial", {}, ["RECONNECT_READY b"]),
@@ -1516,3 +1521,71 @@ def test_a_key_in_two_party_slots_is_ambiguous(locate):
 def test_a_key_in_two_box_slots_is_ambiguous(locate):
     got, unknown, why = locate("", "K|K", "boxed")
     assert got is None and unknown and "two box slots" in why
+
+
+# ── C4-6e: the first live link_gen3 (FR A / LG B) ─────────────────────────────────────────
+def test_link_consequence_is_named_when_the_partner_ends_before_the_link():
+    """B's capture was quarantined (box_mon) and correctly boxed; A had FAILED, so the link
+    never formed. The old body read that as "not in the party before the SAVE"; it is a
+    consequence of the partner's failure and says so."""
+    from lupa import LuaRuntime
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().SCENARIO_DIR = str(REPO / "lua" / "tests" / "duo").replace("\\", "/")
+    lua.execute(_FAKE_CTX)
+    ok, passed, msg, _ = _run_module(lua, "link", "b", "initial",
+                                     {"unsent": "sync_retrieve_done", "gone": "K9"})
+    assert ok and passed is False and msg.startswith("CONSEQUENCE: the partner finished before the link formed"), msg
+
+
+_BAG_READY = re.compile(r"local function bag_input_ready\(.*?\nend\n", re.S)
+
+
+@pytest.fixture(scope="module")
+def bag_ready():
+    """`bag_ready(cb2_ok, fade_active, tasks)`: the driver's own bag_input_ready over a fake bus;
+    tasks is a comma list of active task names ("input", "animate")."""
+    from lupa import LuaRuntime
+
+    body = _BAG_READY.search(DRIVER.read_text(encoding="utf-8"))
+    assert body, "duo_gen3_main.lua must define bag_input_ready"
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    return lua.execute(body.group(0) + """
+        local s = { gMain = 0x100, CB2_BagMenuRun = 0x08107EE0, gPaletteFade = 0x200, gTasks = 0x300,
+                    Task_BagMenu_HandleInput = 0x08108F0C, Task_AnimateWin0v = 0x08108CFC }
+        return function(cb2_ok, fade_active, tasks)
+            local mem32, mem8 = {}, {}
+            mem32[s.gMain + 4] = cb2_ok and (s.CB2_BagMenuRun | 1) or 0x080565B5
+            mem8[s.gPaletteFade + 7] = fade_active and 0x80 or 0x00
+            local i = 0
+            for name in tasks:gmatch("[^,]+") do
+                local base = s.gTasks + i * 40
+                mem8[base + 4] = 1
+                mem32[base] = (name == "input" and s.Task_BagMenu_HandleInput or s.Task_AnimateWin0v) | 1
+                i = i + 1
+            end
+            return bag_input_ready(function(a) return mem32[a] or 0 end,
+                                   function(a) return mem8[a] or 0 end, s)
+        end""")
+
+
+@pytest.mark.parametrize("cb2_ok, fade_active, tasks, ready", [
+    (True, False, "input", True),
+    (False, False, "input", False),                 # not the bag yet
+    (True, True, "input", False),                   # the open fade: every press is dropped
+    (True, False, "input,animate", False),          # the window animation: same
+    (True, False, "", False),                       # no input task at all
+])
+def test_bag_input_ready_follows_task_bagmenu_handleinput(bag_ready, cb2_ok, fade_active, tasks, ready):
+    """pret item_menu.c:1044-1049 (the gates) and :501-502 (CB2_BagMenuRun installed before the
+    fade ends): the live FR failure pressed A in exactly the fade_active=True row."""
+    assert bag_ready(cb2_ok, fade_active, tasks) is ready
+
+
+def test_catch_waits_for_bag_input_before_the_throw():
+    text = DRIVER.read_text(encoding="utf-8")
+    catch = text[text.index("function ctx.catch("):text.index("function ctx.lose_active(")]
+    bag, wait, throw = (catch.index("ctx.choose_action(ACTION_BAG)"),
+                        catch.index("ctx.wait_until(ctx.bag_input_ready"),
+                        catch.index("SP.throw_pokeball_from_bag("))
+    assert bag < wait < throw

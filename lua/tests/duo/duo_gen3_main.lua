@@ -122,7 +122,8 @@ local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInpu
                "gActionSelectionCursor", "gMoveSelectionCursor", "gBattleMons", "gBattlerPartyIndexes",
                "gBattleOutcome", "gMain", "gTasks", "gPartyMenu", "CB2_UpdatePartyMenu",
                "Task_HandleChooseMonInput", "Task_HandleSelectionMenuInput",
-               "Task_ReturnToChooseMonAfterText", "gBattleMoves", "Task_DepositMenu", "Task_WithdrawMon" }
+               "Task_ReturnToChooseMonAfterText", "gBattleMoves", "Task_DepositMenu", "Task_WithdrawMon",
+               "CB2_BagMenuRun", "Task_BagMenu_HandleInput", "Task_AnimateWin0v", "gPaletteFade" }
 local S = {}
 do
     local want = {}
@@ -500,6 +501,30 @@ local function party_task(fn)
     return false
 end
 function ctx.battler_slot() return memory.read_u16_le(S.gBattlerPartyIndexes) end
+
+--- Can the bag take a press? pret item_menu.c:1044-1049: Task_BagMenu_HandleInput returns
+--- without reading input while gPaletteFade.active (bit 7 of byte +7, the checkpoint pack's
+--- palette_fade_active predicate) or while Task_AnimateWin0v runs, and CB2_BagMenuRun is
+--- installed (:501-502) BEFORE the open fade ends -- so "the bag is up" is not "the bag reads A".
+--- Self-contained (no upvalues) so tests/unit/test_e2e_duo_gen3.py runs this exact body.
+local function bag_input_ready(read_u32, read_u8, s)
+    if read_u32(s.gMain + 4) ~= (s.CB2_BagMenuRun | 1) then return false end
+    if (read_u8(s.gPaletteFade + 7) & 0x80) ~= 0 then return false end
+    local input, animating = false, false
+    for i = 0, 15 do
+        local base = s.gTasks + i * 40                   -- sizeof(struct Task), include/task.h
+        if read_u8(base + 4) ~= 0 then
+            local fn = read_u32(base)
+            if fn == (s.Task_BagMenu_HandleInput | 1) then input = true end
+            if fn == (s.Task_AnimateWin0v | 1) then animating = true end
+        end
+    end
+    return input and not animating
+end
+function ctx.bag_input_ready()
+    return bag_input_ready(function(a) return memory.read_u32_le(a, "System Bus") end,
+                           function(a) return memory.read_u8(a, "System Bus") end, S)
+end
 ctx.action_menu_up, ctx.party_menu_up = action_menu_up, party_menu_up
 
 --- HandleInputChooseAction / HandleInputChooseMove: Left/Right toggle bit 0 of the cursor,
@@ -620,6 +645,13 @@ function ctx.catch(label)
         end
         local ok, why = ctx.choose_action(ACTION_BAG)
         if not ok then return nil, why end
+        -- Live link_gen3 FR, throw 2: the bag REMEMBERS the POKEBALLS pocket (gBagMenuState is
+        -- EWRAM, OPEN_BAG_LAST), so the helper's pocket steer -- whose Right + 40-frame idle hid
+        -- the open fade on throw 1 -- was skipped, its selecting A landed during the fade and was
+        -- dropped, and gSpecialVar_ItemId kept GoToBagMenu's ITEM_NONE (item_menu.c:340).
+        if not ctx.wait_until(ctx.bag_input_ready, 20, "the battle bag to take input") then
+            return nil, "the battle bag never took input"
+        end
         SP.throw_pokeball_from_bag(cp, label)
         throws = throws + 1
         log("THREW " .. throws)
