@@ -173,16 +173,16 @@ SPEC = g.BY_NAME
 
 # --- identities and SaveRAM boundary -------------------------------------------------------------
 
-def test_all_eight_fixture_identities_are_enumerated_with_a_distinct_ot2_pair():
+def test_all_nine_fixture_identities_are_enumerated_with_distinct_ot2_controls():
     assert sorted(SPEC) == sorted([f"{t}_{k}" for t in TITLES for k in ("town", "battle")]
-                                  + ["crystal_town_ot2", "crystal_battle_ot2"])
+                                  + ["crystal_town_ot2", "crystal_battle_ot2", "gold_battle_ot2"])
     ot2 = [spec for spec in g.FIXTURES if spec.identity == "ot2"]
-    assert {spec.title for spec in ot2} == {"crystal"} and {spec.target for spec in ot2} == {"town", "battle"}
+    assert {(spec.title, spec.target) for spec in ot2} == {("crystal", "town"), ("crystal", "battle"), ("gold", "battle")}
     # The second OT comes from a different played name choice and a shifted title idle.
     assert all(spec.title_idle_frames > 0 for spec in ot2)
     assert all(spec.title_idle_frames == 0 for spec in g.FIXTURES if spec.identity == "default")
     manifest = g.fixture_manifest(ROOT)
-    assert manifest["qualified"] is False and len(manifest["fixtures"]) == 8
+    assert manifest["qualified"] is False and len(manifest["fixtures"]) == 9
     for row in manifest["fixtures"]:
         assert row["filename"] == row["name"] + ".SaveRAM" and row["core_mode"] == "CGB"
         assert row["ball_exception"] == ("O-10" if row["target"] == "battle" else None)
@@ -221,10 +221,10 @@ def layout_party_offset(title):
 
 # --- static oracle: positive and refusal controls ------------------------------------------------
 
-def test_static_inventory_of_eight_passes_and_never_claims_physical_or_natural_balls(tmp_path):
+def test_static_inventory_of_nine_passes_and_never_claims_physical_or_natural_balls(tmp_path):
     report = g.qualification_report(write_inventory(tmp_path / "inv"), root=ROOT)
     assert report["passed"], problems(report)
-    assert report["physical_qualification"] is False and len(report["fixtures"]) == 8
+    assert report["physical_qualification"] is False and len(report["fixtures"]) == 9
     for row in report["fixtures"]:
         evidence = row["stages"][0]["evidence"]
         assert evidence["natural_ball_acquisition"] == "false"
@@ -237,12 +237,15 @@ def test_ot2_pair_must_carry_a_distinct_ot_and_cohorts_must_agree(tmp_path):
     split = g.qualification_report(write_inventory(
         tmp_path / "split", ids=lambda spec: 0x9999 if spec.name == "gold_battle" else ot_for(spec)), root=ROOT)
     assert not split["passed"] and "cohort" in problems(split)
+    gold = g.qualification_report(write_inventory(
+        tmp_path / "gold", ids=lambda spec: 0x1234 if spec.name == "gold_battle_ot2" else ot_for(spec)), root=ROOT)
+    assert not gold["passed"] and "Gold OT2" in problems(gold)
 
 
 @pytest.mark.parametrize("change,match", [
-    ({"remove": "silver_town.SaveRAM"}, "exact eight"),
-    ({"rename": ("gold_town.SaveRAM", "Pokemon - Gold Version (USA, Europe).SaveRAM")}, "exact eight"),
-    ({"rename": ("crystal_town.SaveRAM", "crystal_town_ot3.SaveRAM")}, "exact eight"),
+    ({"remove": "silver_town.SaveRAM"}, "exact played-fixture inventory"),
+    ({"rename": ("gold_town.SaveRAM", "Pokemon - Gold Version (USA, Europe).SaveRAM")}, "exact played-fixture inventory"),
+    ({"rename": ("crystal_town.SaveRAM", "crystal_town_ot3.SaveRAM")}, "exact played-fixture inventory"),
 ])
 def test_wrong_or_missing_saveram_name_refuses_the_inventory(tmp_path, change, match):
     directory = write_inventory(tmp_path / "inv")

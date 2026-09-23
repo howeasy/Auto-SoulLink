@@ -47,7 +47,10 @@ class FixtureSpec:
 
 FIXTURES = tuple(FixtureSpec(f"{title}_{target}", title, target, "default", 0)
                  for title in ("crystal", "gold", "silver") for target in ("town", "battle")) + tuple(
-    FixtureSpec(f"crystal_{target}_ot2", "crystal", target, "ot2", 240) for target in ("town", "battle"))
+    FixtureSpec(f"crystal_{target}_ot2", "crystal", target, "ot2", 240) for target in ("town", "battle")) + (
+    # The G<->S reconnect wrong-save control: same ot2 recipe (preset name 3 = HIRO, 240-frame title idle).
+    # ponytail: battle only; add gold_town_ot2 / silver ot2 when a lane needs them.
+    FixtureSpec("gold_battle_ot2", "gold", "battle", "ot2", 240),)
 MAPS = ("PlayersHouse2F", "PlayersHouse1F", "NewBarkTown", "ElmsLab", "Route29")
 BY_NAME = {spec.name: spec for spec in FIXTURES}
 # docs/gen2/reviews/OMP_RTC_SOURCE_2026-09-22.md: 32 KiB CartRAM plus the 22-byte BizHawk 2.11.1
@@ -793,6 +796,7 @@ def validate_identity_cohorts(rows):
         _require(ids[f"{title}_town"] == ids[f"{title}_battle"], "town/battle OT cohort differs")
     _require(ids["crystal_town_ot2"] == ids["crystal_battle_ot2"]
              and ids["crystal_town_ot2"] != ids["crystal_town"], "Crystal OT2 is not a distinct played identity")
+    _require(ids["gold_battle_ot2"] != ids["gold_battle"], "Gold OT2 is not a distinct played identity")
 
 
 def qualify_stage(context):
@@ -976,15 +980,15 @@ def qualify(spec_or_name, candidate_path, attempt_id, *, receipt_path=None, root
 
 
 def qualification_report(directory, *, root=ROOT, scope="static", game_callbacks=None):
-    """Exactly eight cases; full mode requires independent GAME callbacks."""
+    """Exactly the FIXTURES cases; full mode requires independent GAME callbacks."""
     callbacks = {"qualify": qualify_stage, "post_oracle": post_oracle_stage}
     by_name = BY_NAME
     if game_callbacks:
         _require(set(game_callbacks) <= {"boot", "resave"}, "independent PYDEC callbacks cannot be replaced")
         callbacks.update(game_callbacks)
     try:
-        paths = qualification.enumerate_fixtures(Path(directory), suffix=".SaveRAM", max_fixtures=8)
-        _require({path.stem for path in paths} == set(by_name), "exact eight played-fixture inventory required")
+        paths = qualification.enumerate_fixtures(Path(directory), suffix=".SaveRAM", max_fixtures=len(by_name))
+        _require({path.stem for path in paths} == set(by_name), "exact played-fixture inventory required")
         # Facts files are supplied by the coordinator's immutable attempt snapshot.
         cases, facts_by_title = [], {}
         for path in paths:
@@ -994,7 +998,7 @@ def qualification_report(directory, *, root=ROOT, scope="static", game_callbacks
             cases.append(_fixture_case(spec, path, Path(directory) / (spec.name + ".played.json"),
                                        Path(directory) / (spec.title + "_route_facts.json"),
                                        facts_by_title[spec.title], root))
-        report = qualification.qualify_fixtures(cases, callbacks, scope=scope, max_fixtures=8)
+        report = qualification.qualify_fixtures(cases, callbacks, scope=scope, max_fixtures=len(by_name))
         if report["passed"]:
             try:
                 validate_identity_cohorts(report["fixtures"])
@@ -1002,7 +1006,7 @@ def qualification_report(directory, *, root=ROOT, scope="static", game_callbacks
                 report["passed"] = False
                 report["errors"].append(str(exc))
     except (ValueError, OSError) as exc:
-        report = qualification.qualify_fixtures([], callbacks, scope=scope, max_fixtures=8)
+        report = qualification.qualify_fixtures([], callbacks, scope=scope, max_fixtures=len(BY_NAME))
         report["errors"].append(str(exc))
     report["physical_qualification"] = False
     report["open_obligations"] = ["coordinator GAME/RTC/played-origin review", "recorded source/physical gate sign-off"]
