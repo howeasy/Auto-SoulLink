@@ -169,6 +169,10 @@ class SoulLinkState:
         # party_details, _mon_cache) consulted by the key_change collision preflight.
         # Adapter-neutral: the rules layer never sees what the presentation layer stores.
         self.presentation_key_in_use = None
+        # Title-sensitive acquisition policy; standalone states use their run adapter.
+        # Species/evolution, gender/type, shiny and capability rules stay run-global:
+        # admitted titles share those semantics, but their static map sites can differ.
+        self.player_adapter_for = None
         # Committed trainer names — set once per player on first hello, static for run.
         self.trainer_names: dict[str, str] = {"a": "", "b": ""}
         # monKeys awaiting memorialize_done confirmation from each player
@@ -1219,13 +1223,16 @@ class SoulLinkState:
         if self.run_over:
             self.queued_commands[player_id].append({"cmd": "game_over"})
 
+    def _adapter_for(self, player_id: str):
+        return self.player_adapter_for(player_id) if self.player_adapter_for else self.adapter
+
     def _handle_area_enter(self, player_id: str, msg: dict):
         area_id = msg.get("area_id", "")
         if not area_id:
             return
         # Gift areas (oaks_lab, intro, etc.) are not encounter areas — their captures
         # are handled directly via _handle_capture.  Don't create pending area state.
-        if self.adapter.is_gift_area(area_id):
+        if self._adapter_for(player_id).is_gift_area(area_id):
             return
         # Always track area state — Lua only sends area_enter events once it has confirmed
         # Pokéballs are available (M.hasPokeballs() gate on the client side).
@@ -1239,15 +1246,16 @@ class SoulLinkState:
             self._set_area_state(area_id, AreaStatus.PENDING_BOTH, player=player_id)
         self._save()
 
-    def _is_gift_capture(self, area_id: str, is_egg: bool) -> bool:
+    def _is_gift_capture(self, area_id: str, is_egg: bool, player_id: str) -> bool:
         """Effective gift status for a capture event.
 
         True if the area is a known gift area OR the capture is a definitive egg
         from outside the daycare (NPC egg-givers in encounter areas).
         """
-        if self.adapter.is_gift_area(area_id):
+        adapter = self._adapter_for(player_id)
+        if adapter.is_gift_area(area_id):
             return True
-        return bool(is_egg and not self.adapter.is_daycare_area(area_id))
+        return bool(is_egg and not adapter.is_daycare_area(area_id))
 
     def _handle_capture(self, player_id: str, msg: dict):
         area_id = msg.get("area_id", "")
@@ -1258,7 +1266,7 @@ class SoulLinkState:
         # `gift=true` is the Lua's authoritative signal for any new mon received
         # outside battle (gifts, starters, fossils, eggs) — independent of whether
         # the current area is a known gift area.
-        gift_capture = bool(msg.get("gift", False)) or self._is_gift_capture(area_id, is_egg)
+        gift_capture = bool(msg.get("gift", False)) or self._is_gift_capture(area_id, is_egg, player_id)
 
         # A catch in any non-gift area confirms Pokéballs are available.
         if not gift_capture:
@@ -1451,7 +1459,7 @@ class SoulLinkState:
         # pair and never lock a real area's wild-encounter slot — and so they link
         # even if that real area is already LINKED/DEAD_ZONE.
         if gift_capture:
-            area_id = self.adapter.gift_link_area(area_id)
+            area_id = self._adapter_for(player_id).gift_link_area(area_id)
 
         status = self.area_states.get(area_id, AreaStatus.UNSEEN)
 
@@ -1879,7 +1887,7 @@ class SoulLinkState:
             return
 
         # Gift areas can never become dead zones — wild encounters there are coincidental.
-        if self.adapter.is_gift_area(area_id):
+        if self._adapter_for(player_id).is_gift_area(area_id):
             log.debug(f"[{player_id}] no_catch ignored — {area_id} is a gift area")
             return
 

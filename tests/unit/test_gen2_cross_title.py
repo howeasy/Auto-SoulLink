@@ -16,6 +16,7 @@ tests re-point the six Gen 2 rows with the same monkeypatch U4's tests use.
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -219,7 +220,7 @@ async def test_another_generation_binds_no_per_player_adapter(tmp_path, first, s
 async def test_a_restart_keeps_the_run_title_and_re_binds_the_other_title(tmp_path, cutover):
     """The persisted run stores one rom_type, so the binding is re-derived from hellos.
 
-    This is why state.py needed no change: `_player_adapters` is live-only state, and the
+    `_player_adapters` is live-only state; the saved run keeps its own title, and the
     U4 binder already restores the RUN's title from the persisted rom_type.
     """
     srv = SLinkServer(data_dir=str(tmp_path))
@@ -244,5 +245,173 @@ async def test_a_restart_keeps_the_run_title_and_re_binds_the_other_title(tmp_pa
         assert reloaded.adapter_for("b").title == "gold", "re-derived from the hello"
         assert not _refused(await send(_hello("a", _cart("Crystal"))))
         assert reloaded.adapter_for("a") is reloaded.state.adapter
+    finally:
+        await close()
+
+# U4b: title-sensitive rules, refusal atomicity, and state replacement.
+@pytest.mark.asyncio
+@pytest.mark.parametrize("first,second", [("Crystal", "Gold"), ("Gold", "Crystal")])
+async def test_static_capture_uses_capturing_title(tmp_path, cutover, first, second):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        for player, title in (("a", first), ("b", second)):
+            assert not _refused(await send(_hello(player, _cart(title), party=[
+                {"key": "1234:30B8:01", "species_id": 1, "level": 5}])))
+        run = srv.state.adapter
+        for player, title in (("a", first), ("b", second)):
+            # Map numbers and species come from the pack, not the adapter being tested.
+            row = next(row for row in _pack(TITLE[title], "static_encounters")["encounters"]
+                       if row["script"] == "UnionCaveLapras")
+            area = f"static_{row['map_group'] * 256 + row['map_number']}_131"
+            assert area == ("static_807_131" if title == "Crystal" else "static_799_131")
+            key = "1234:30B8:83" if player == "a" else "1234:7B0B:83"
+            reply = await send({"event": "capture", "player": player, "area_id": area,
+                                "key": key, "species_id": 131, "level": 20, "gift": False})
+            assert srv.state.party_size[player] >= 1, "quarantine guard must be exercised"
+            assert not any(c.get("cmd") == "box_mon" and c.get("key") == key
+                           for c in reply["commands"]), (title, reply)
+            assert any(players.get(player) and players[player].key == key
+                       for players in srv.state.pending_captures.values())
+        assert srv.state.adapter is run and srv.state.rom_type == first
+    finally:
+        await close()
+
+
+def _binding_snapshot(srv):
+    return {"player_adapters": dict(srv._player_adapters), "adapter": srv.adapter,
+            "state_adapter": srv.state.adapter, "rom_type": srv.state.rom_type,
+            "is_rr": srv.state.is_rr}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rejection", ["identity", "admission"])
+async def test_rejected_hello_preserves_player_binding(tmp_path, cutover, rejection):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        await send(_hello("a", _cart("Crystal")))
+        await send(_hello("b", _cart("Gold")))
+        before = _binding_snapshot(srv)
+        if rejection == "admission":
+            srv._rom_contract = {"unreadable": True}
+        reply = await send(_hello("b", _cart("Silver"),
+                                  ot_id="WRONG" if rejection == "identity" else "7B0B"))
+        if rejection == "identity":
+            assert "b" in srv.state.identity_error
+            assert any("WRONG SAVE" in c.get("text", "") for c in reply["commands"])
+        else:
+            assert srv.admission["b"]["state"] == "rejected"
+        assert _binding_snapshot(srv) == before
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("first,second", [("red", "blue"), ("firered", "leafgreen")])
+@pytest.mark.parametrize("replacement", ["reset", "rollback"])
+async def test_state_replacement_drops_previous_generation_binding(
+        tmp_path, cutover, first, second, replacement):
+    from unittest.mock import AsyncMock
+
+    from server.state import SoulLinkState
+
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        await send(_hello("a", _cart("Crystal")))
+        await send(_hello("b", _cart("Gold")))
+        assert srv.adapter_for("b").title == "gold"
+        if replacement == "reset":
+            response = await srv.handle_reset_api(None)
+        else:
+            backup_dir = tmp_path / "backups"
+            backup_dir.mkdir()
+            old = SoulLinkState(data_dir=str(tmp_path / "other"))
+            old.rom_type = first
+            old.adapter = get_adapter(adapters.game_id_for_rom_type(first), is_rr=False)
+            old.game_id = old.adapter.game_id
+            old._links_path = str(backup_dir / "links.backup.1.json")
+            old._save()
+            response = await srv.handle_debug_rollback(AsyncMock(json=AsyncMock(return_value={"slot": 1})))
+        assert response.status == 200
+        assert srv._player_adapters == {}
+        await send(_hello("a", _cart(first)))
+        await send(_hello("b", _cart(second)))
+        assert srv.state.rom_type == first
+        assert srv._player_adapters == {}
+        assert srv.adapter_for("a") is srv.state.adapter
+        assert srv.adapter_for("b") is srv.state.adapter
+    finally:
+        await close()
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("first,second", [("Crystal", "Gold"), ("Gold", "Crystal")])
+@pytest.mark.parametrize("capture_area", ["route_29", "foreign_static"])
+async def test_non_gift_capture_still_quarantines(tmp_path, cutover, first, second, capture_area):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        await send(_hello("a", _cart(first)))
+        await send(_hello("b", _cart(second), party=[
+            {"key": "1234:7B0B:01", "species_id": 1, "level": 5}]))
+        # The other title's Lapras map id must not gain gift treatment by shape alone.
+        area = capture_area if capture_area == "route_29" else (
+            "static_807_131" if second == "Gold" else "static_799_131")
+        key = "1234:7B0B:83"
+        reply = await send({"event": "capture", "player": "b", "area_id": area,
+                            "key": key, "species_id": 131, "level": 20, "gift": False})
+        assert any(c.get("cmd") == "box_mon" and c.get("key") == key
+                   for c in reply["commands"])
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("replacement", ["reset", "rollback"])
+async def test_replaced_state_rebinds_title_sensitive_capture_rules(tmp_path, cutover, replacement):
+    from unittest.mock import AsyncMock
+
+    from server.state import SoulLinkState
+
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        await send(_hello("a", _cart("Crystal")))
+        await send(_hello("b", _cart("Gold")))
+        if replacement == "reset":
+            await srv.handle_reset_api(None)
+        else:
+            backup_dir = tmp_path / "backups"
+            backup_dir.mkdir()
+            saved = SoulLinkState(data_dir=str(tmp_path / "other"))
+            saved.rom_type = "Crystal"
+            saved.adapter = get_adapter("gen2_gsc", is_rr=False, rom_type="Crystal")
+            saved.game_id = saved.adapter.game_id
+            saved._links_path = str(backup_dir / "links.backup.1.json")
+            saved._save()
+            await srv.handle_debug_rollback(AsyncMock(json=AsyncMock(return_value={"slot": 1})))
+        # An old socket must not mutate the replacement run before another accepted hello.
+        before = deepcopy((srv.state.pending_captures, srv.state.links,
+                           srv.state.party_keys, srv.party_details, srv._mon_cache))
+        stale_reply = await send({"event": "capture", "player": "b",
+                                  "area_id": "static_799_131", "key": "1234:7B0B:83",
+                                  "species_id": 131, "level": 20, "gift": False})
+        after = (srv.state.pending_captures, srv.state.links,
+                 srv.state.party_keys, srv.party_details, srv._mon_cache)
+        assert stale_reply["commands"] == [{"cmd": "noop"}]
+        assert after == before
+        await send(_hello("a", _cart("Crystal")))
+        await send(_hello("b", _cart("Gold"), party=[
+            {"key": "1234:7B0B:01", "species_id": 1, "level": 5}]))
+        assert srv.adapter_for("b").title == "gold"
+        key = "1234:7B0B:83"
+        reply = await send({"event": "capture", "player": "b", "area_id": "static_799_131",
+                            "key": key, "species_id": 131, "level": 20, "gift": False})
+        assert srv.state.party_size["b"] >= 1
+        assert not any(c.get("cmd") == "box_mon" and c.get("key") == key
+                       for c in reply["commands"])
+        assert any(players.get("b") and players["b"].key == key
+                   for players in srv.state.pending_captures.values())
     finally:
         await close()

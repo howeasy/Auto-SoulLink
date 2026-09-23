@@ -332,6 +332,7 @@ class SLinkServer:
         # get_adapter() is not a singleton, so one adapter per player is cheap; absent an
         # entry here a player simply uses the run-global adapter and the shipped tables.
         self._player_adapters: dict[str, object] = {}
+        self.state.player_adapter_for = self.adapter_for
 
         # ── Admission ─────────────────────────────────────────────────────────
         # A run built from randomized ROMs records, per player, the fingerprint of the
@@ -664,7 +665,7 @@ class SLinkServer:
         but Gen 2 today -- keeps the one run-level adapter for both players, exactly as
         before.
 
-        Called on EVERY hello, not only the first: a reconnect re-declares its cartridge,
+        Called on every accepted hello: a reconnect re-declares its cartridge,
         and a player whose key matches the run's again drops the adapter it had.
         """
         from server.adapters import game_id_for_rom_type, get_adapter
@@ -684,9 +685,9 @@ class SLinkServer:
     def adapter_for(self, player_id: str):
         """The adapter that describes THIS player's cartridge.
 
-        Only content differs per player, never rules: the supported randomizer settings
-        deliberately exclude types, evolutions, movesets and base stats, so the species and
-        type clauses stay seed-independent and keep using the run-global adapter.
+        Content and title-sensitive acquisition sites may differ per player. Species,
+        evolution, gender/type and shiny rules retain the run adapter: admitted titles
+        and supported randomizer settings share those semantics.
         """
         # getattr, not a plain attribute read: some tests build an SLinkServer without
         # running __init__, and a lookup helper should answer for those rather than raise.
@@ -1412,13 +1413,6 @@ class SLinkServer:
                     elif rom_type and rom_type != self.state.rom_type:
                         log.warning(f"[{player_id}] hello rom_type={rom_type!r} ignored — "
                                     f"run already locked to {self.state.rom_type!r}")
-                    # Per-player binding, on EVERY hello (not only the one that committed
-                    # the run): the run's adapter may declare that some of the cartridges it
-                    # admits need their OWN adapter (Gen 2's three titles share one pairing
-                    # foundation but not one pack). Generic -- the gate is the adapter's own
-                    # declaration, never a title or game_id here -- and the run's identity is
-                    # untouched: only `_player_adapters` moves.
-                    self._bind_player_adapter(player_id, rom_type)
                 # Hello-first. A connection has proved nothing until it has said hello, so
                 # nothing else on it is listened to. Without this a cartridge whose hello was
                 # lost still had its ticks reconciled into whichever slot it named, and a
@@ -1794,6 +1788,9 @@ class SLinkServer:
                                 "REJECTED — wrong save/slot", area or loc)
                 return cmds
 
+            # Publish only after admission and save identity accepted this hello. A refused
+            # cartridge must not replace the last accepted player's acquisition/display data.
+            self._bind_player_adapter(player_id, rom)
             self._log_event(player_id, "hello",
                             f"Connected ({rom}, {party_n} mons)", loc or area)
             self.player_area[player_id] = loc or area
@@ -4353,6 +4350,11 @@ class SLinkServer:
             pc_trade_npc=self.state.pc_trade_npc)
         self.state.presentation_key_in_use = self._presentation_key_in_use
         self.adapter = self.state.adapter
+        self._player_adapters = {}
+        self.state.player_adapter_for = self.adapter_for
+        # Existing sockets keep their hello gate; require re-admission into the new state.
+        self.admission = {pid: {"state": "contract_pending", "reason": "run restored; awaiting hello"}
+                          for pid in VALID_PLAYERS}
         if self.state.artifact_kind:
             self.adapter.set_artifact_kind(self.state.artifact_kind)
         # Restore events.json and reload ring buffer
@@ -4388,6 +4390,10 @@ class SLinkServer:
                                    pc_trade_npc=self.state.pc_trade_npc)
         self.state.presentation_key_in_use = self._presentation_key_in_use
         self.adapter = self.state.adapter
+        self._player_adapters = {}
+        self.state.player_adapter_for = self.adapter_for
+        self.admission = {pid: {"state": "contract_pending", "reason": "run reset; awaiting hello"}
+                          for pid in VALID_PLAYERS}
         self.connected_players.clear()
         # Clear derived display caches so SSE doesn't broadcast stale data.
         self.player_area = {"a": "", "b": ""}
