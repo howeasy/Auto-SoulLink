@@ -173,6 +173,23 @@ def source_ref(ctx, path, line):
     return f"{ctx.lock['outputs'][ctx.artifact]['source']}@{ctx.source_commit} {path}:{line}"
 
 
+# O-21 (docs/gen2/REVIEW_RECORD.md): Crystal's Tin Tower Suicune static
+# (pokecrystal maps/TinTower1F.asm, TinTower1FSuicuneBattleScript.Next2) is a
+# legend like the Gold/Silver roaming Suicune -- its area is legend_<species>
+# and never claims the ordinary tin_tower map area for its capture. Keyed by
+# source label so Gold/Silver, which have no such label, are untouched.
+LEGEND_STATIC_OVERRIDES = {"TinTower1FSuicuneBattleScript.Next2": {"titles": ("crystal",), "species": 245}}
+
+
+def legend_area_override(ctx, row, species):
+    override = LEGEND_STATIC_OVERRIDES.get(row["label"])
+    if override is None or ctx.title not in override["titles"]:
+        return None
+    if override["species"] != species:
+        raise ValueError(f"legend static override species mismatch: {row['label']}")
+    return f"legend_{species}"
+
+
 def public_row(ctx, row, maps):
     location = maps.get(row["map_name"])
     if location is None:
@@ -208,6 +225,9 @@ def build(ctx):
                      battle_type=[line for _, line in row["block"] if line.startswith("loadvar VAR_BATTLETYPE,")],
                      source_unused=bool(re.search(rf"^{re.escape(row['label'])}:.*;.*unreferenced", row["source_text"], re.M)),
                      capture_success="OPEN", finalization="OPEN")
+        legend_area = legend_area_override(ctx, row, species)
+        if legend_area is not None:
+            entry["area_id"] = legend_area
         entry["rom"] = witness(ctx, row, bytes([commands["loadwildmon"], species, level]))
         rows.append(entry)
     return {"schema": "gen2-static-encounters-v1", "generator": "gen_gen2_statics.py",

@@ -425,7 +425,7 @@
       "map_name": "TinTower1F",
       "map_group": 3,
       "map_number": 4,
-      "area_id": "tin_tower",
+      "area_id": "legend_245",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TinTower1F.asm:119",
       "script": "TinTower1FSuicuneBattleScript.Next2",
       "applicability": {

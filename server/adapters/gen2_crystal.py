@@ -119,14 +119,18 @@ if os.path.exists(_moves_path):
 else:
     log.warning("Gen 2 moves.json not found: %s", _moves_path)
 
-# ── Load Gen 2 wild encounter tables (Phase 6) ─────────────────────────
-_GEN2_ENCOUNTERS: dict[str, dict[str, list[dict]]] = {}
-_enc_path = os.path.join(_DATA_DIR, "encounter_tables.json")
-if os.path.exists(_enc_path):
-    with open(_enc_path) as _f:
-        _GEN2_ENCOUNTERS = json.load(_f)
-else:
-    log.warning("Gen 2 encounter_tables.json not found: %s", _enc_path)
+# ── Wild encounter tables ─────────────────────────────────────────────
+# ponytail: P2 regenerated encounter_tables.json into the source-bound pack schema; this legacy
+# class reads it through Gen2GSCAdapter's per-area view of the hello's own title until the G3
+# cutover deletes it. An unrouted title (e.g. crystal_ap) gets no table, never Crystal's.
+_GSC_VIEWS: dict = {}
+
+
+def _gsc_view(title):
+    if title not in _GSC_VIEWS:
+        from .gen2_gsc import Gen2GSCAdapter
+        _GSC_VIEWS[title] = Gen2GSCAdapter(title)
+    return _GSC_VIEWS[title]
 
 # Move split → integer ID expected by renderer (0=Physical, 1=Special, 2=Status)
 _SPLIT_NAME_TO_ID = {"Physical": 0, "Special": 1, "Status": 2}
@@ -139,8 +143,9 @@ class Gen2CrystalAdapter(GameAdapter):
     sequential NatDex IDs 1-251. Steel and Dark are new types.
     """
 
-    def __init__(self, **kwargs):
-        pass
+    def __init__(self, rom_type: str = "crystal", **kwargs):
+        name = (rom_type or "crystal").lower()
+        self._title = name if name in ("crystal", "gold", "silver") else None
 
     @property
     def game_id(self) -> str:
@@ -202,7 +207,7 @@ class Gen2CrystalAdapter(GameAdapter):
     def encounter_table(self, area_id: str) -> dict[str, list[dict]] | None:
         """Return wild encounter data keyed by method (Morn/Day/Nite/Surf/...).
         Partial coverage — see data/games/gen2_crystal/encounter_tables.json."""
-        return _GEN2_ENCOUNTERS.get(area_id)
+        return _gsc_view(self._title).encounter_table(area_id) if self._title else None
 
     def evo_family(self, species_id: int) -> int:
         return base_form(species_id, False)

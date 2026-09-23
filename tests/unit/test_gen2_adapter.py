@@ -589,10 +589,27 @@ def test_encounter_table_entry_schema(adapter):
 
 def test_encounter_table_coverage(adapter):
     """Full pret-generated coverage across all Johto + Kanto routes + dungeons."""
-    from server.adapters.gen2_crystal import _GEN2_ENCOUNTERS
-    assert len(_GEN2_ENCOUNTERS) >= 70, (
-        f"Gen 2 encounter coverage shrank to {len(_GEN2_ENCOUNTERS)} areas"
+    pack = Path(__file__).resolve().parents[2] / "data" / "games" / "gen2_crystal" / "area_map.json"
+    ids = {row["area_id"] for row in json.loads(pack.read_text("utf-8")).values()}
+    areas = [a for a in ids if adapter.encounter_table(a)]
+    assert len(areas) >= 70, (
+        f"Gen 2 encounter coverage shrank to {len(areas)} areas"
     )
+
+
+@pytest.mark.parametrize("rom_type", ["crystal", "Gold", "silver"])
+def test_legacy_encounter_table_is_the_hello_title(rom_type):
+    """Route 30 Morn differs per title (review gen2-R9 B1): a Gold/Silver run never shows Crystal's."""
+    from server.adapters.gen2_gsc import Gen2GSCAdapter
+    want = Gen2GSCAdapter(rom_type.lower()).encounter_table("route_30")
+    assert Gen2CrystalAdapter(rom_type=rom_type).encounter_table("route_30") == want
+    others = [Gen2GSCAdapter(t).encounter_table("route_30") for t in ("crystal", "gold", "silver")
+              if t != rom_type.lower()]
+    assert any(o["Morn"] != want["Morn"] for o in others)
+
+
+def test_legacy_encounter_table_refuses_an_unrouted_title():
+    assert Gen2CrystalAdapter(rom_type="crystal_ap").encounter_table("route_29") is None
 
 
 @pytest.mark.parametrize("area_id,expected_substr", [
@@ -1128,6 +1145,22 @@ class TestGen2GSCAdapter:
                 gsc_adapter.gift_link_area("tin_tower", acquisition="roamer", species_id=245)
         else:
             assert gsc_adapter.gift_link_area("route_29", acquisition="roamer", species_id=245) == "legend_245"
+
+    def test_crystal_tin_tower_suicune_static_resolves_as_a_legend(self, gsc_adapter):
+        """O-21 (SOURCE; runtime capture OPEN, N12b): like the roaming Suicune, the Tin Tower static is legend_245
+        and never locks tin_tower as a consumed ordinary-wild capture area."""
+        path = (Path(__file__).resolve().parents[2] / "data/games"
+                / f"gen2_{gsc_adapter.title}" / "static_encounters.json")
+        statics = json.loads(path.read_text("utf-8"))["encounters"]
+        suicune = [row for row in statics if row["species"] == 245]
+        if gsc_adapter.title != "crystal":
+            assert suicune == []  # Gold/Silver: Suicune roams, it has no static row.
+            return
+        row = next(iter(suicune))
+        assert row["area_id"] == "legend_245"
+        assert gsc_adapter.is_gift_area("legend_245")
+        assert gsc_adapter.gift_link_area("legend_245") == "legend_245"
+        assert gsc_adapter.area_display_name("legend_245") == "Suicune"
 
     def test_presentation_keeps_source_map_time_and_slot_rows(self, gsc_adapter):
         table = gsc_adapter.encounter_table("route_29")

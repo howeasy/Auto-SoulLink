@@ -51,6 +51,18 @@ def test_missing_script_symbol_refuses(contexts):
         generator.build(replace(ctx, symbols=symbols))
 
 
+def test_crystal_tin_tower_suicune_is_a_legend_not_a_tin_tower_capture(packs):
+    """O-21 (docs/gen2/REVIEW_RECORD.md), SOURCE classification only: the Tin Tower Suicune static is
+    legend_245 like the Gold/Silver roaming Suicune, and never claims the
+    ordinary tin_tower map area for its capture."""
+    row = next(r for r in packs["crystal"]["encounters"] if r["species"] == 245)
+    assert row["script"] == "TinTower1FSuicuneBattleScript.Next2"
+    assert row["map_name"] == "TinTower1F"  # source map identity is retained
+    assert row["area_id"] == "legend_245"
+    for title in ("gold", "silver"):
+        assert all(r["species"] != 245 for r in packs[title]["encounters"])
+
+
 def test_check_never_repairs_malformed_output(tmp_path, monkeypatch, packs):
     from tools import gen_gen2_charmap as common
 

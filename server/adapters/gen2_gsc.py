@@ -145,9 +145,18 @@ class Gen2GSCAdapter(GameAdapter):
         # whole route/city a gift or automatically bypass fixed-species clauses.
         self._gifts = load("gifts", "gen2-gifts-v1")["gifts"]
         statics = load("static_encounters", "gen2-static-encounters-v1")["encounters"]
+        selected_statics = [row for row in statics if row.get("applicability", {}).get("selected")
+                            and not row.get("source_unused")]
         self._static_sites = {(row["map_group"] * 256 + row["map_number"], row["species"])
-                              for row in statics if row.get("applicability", {}).get("selected")
-                              and not row.get("source_unused")}
+                              for row in selected_statics}
+        # O-21: a static whose generated area_id is already legend_<species> (Crystal's
+        # Tin Tower Suicune, tools/gen_gen2_statics.py LEGEND_STATIC_OVERRIDES) joins the
+        # roamer legend namespace -- source-grounded pack data, not a species special case.
+        for row in selected_statics:
+            match = re.fullmatch(r"legend_([1-9][0-9]{0,2})", row.get("area_id", ""))
+            _require(match is None or int(match[1]) == row["species"], "static legend area/species mismatch")
+        self._legend_species = self._roamers | {row["species"] for row in selected_statics
+                                                if re.fullmatch(r"legend_[1-9][0-9]{0,2}", row.get("area_id", ""))}
         self._areas = _json(directory / "area_map.json")
         self._area_names = {}
         for key, row in self._areas.items():
@@ -269,7 +278,7 @@ class Gen2GSCAdapter(GameAdapter):
 
     def _legend(self, area_id):
         match = re.fullmatch(r"legend_([1-9][0-9]{0,2})", area_id) if isinstance(area_id, str) else None
-        return bool(match and int(match[1]) in self._roamers)
+        return bool(match and int(match[1]) in self._legend_species)
 
     def is_gift_area(self, area_id):
         if not isinstance(area_id, str) or _AREA.fullmatch(area_id) is None:
