@@ -1294,11 +1294,13 @@ def gen3_record_diff(was, now, rr=False, mutable=GEN3_RECORD_MUTABLE):
     return out
 
 
-def gen3_withdrawn_problems(label, mon, limits):
+def gen3_withdrawn_problems(label, mon, limits, rr=False):
     """The postcondition of a mon that just came OUT of a box, on either cartridge: healthy
     (hp == max_hp, BoxMonToMon + CalculateMonStats), cured (status 0), mail cleared, and every
-    move slot at its full PP -- vanilla restores PP on deposit (BoxMonRestorePP), CFRU refills
-    all four from the table on expansion."""
+    move slot at its full PP. Vanilla restores PP on deposit (BoxMonRestorePP), where an empty
+    slot has none; CFRU's expansion calls CalculatePPWithBonus for ALL four slots, move 0
+    included (lua/gen3/boxes.lua RR withdraw; RR ROM 0x090B69C6..0x090B69E2), so on RR an empty
+    slot carries the table's move-0 PP -- the same split gen3_record_problems makes."""
     problems = []
     if mon["hp"] != mon["max_hp"]:
         problems.append(f"{label}: withdrawn at {mon['hp']}/{mon['max_hp']} HP, not healed")
@@ -1308,7 +1310,8 @@ def gen3_withdrawn_problems(label, mon, limits):
         problems.append(f"{label}: withdrawn with mail 0x{mon['mail']:02X}")
     max_pp = limits and limits.get("max_pp")
     if max_pp:
-        full = [max_pp(m, mon["pp_bonuses"], i) if m else 0 for i, m in enumerate(mon["moves"])]
+        full = [max_pp(m, mon["pp_bonuses"], i) if (m or rr) else 0
+                for i, m in enumerate(mon["moves"])]
         if list(mon["pp"]) != full:
             problems.append(f"{label}: withdrawn with PP {list(mon['pp'])}, not restored {full}")
     return problems
@@ -1369,7 +1372,7 @@ def gen3_round_trip_problems(label, saved, fixture, key, rr=False, limits=None, 
     was = next((m for m in f_party if gen3_key(m) == key), None)
     if now and was:
         problems += gen3_record_problems(f"{label}: the returned {key}", now, rr, limits)
-        problems += gen3_withdrawn_problems(f"{label}: the returned {key}", now, limits)
+        problems += gen3_withdrawn_problems(f"{label}: the returned {key}", now, limits, rr)
         mutable = GEN3_RECORD_MUTABLE | (GEN3_ACTIVITY_MUTABLE if walked else set())
         changed = gen3_record_diff(was, now, rr, mutable)
         if changed:

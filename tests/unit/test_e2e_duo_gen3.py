@@ -1144,6 +1144,37 @@ def test_a_withdrawal_is_healed_cured_and_pp_restored(pair):
         assert any(message in p for p in problems), (change, problems)
 
 
+def _rr_withdrawn(limits, moves=(33, 0, 0, 0)):
+    pp = [limits["max_pp"](m, 0, i) for i, m in enumerate(moves)]
+    return {"checksum_ok": None, "has_species": 1, "is_bad_egg": 0, "species": 277, "level": 5,
+            "hp": 20, "max_hp": 20, "status": 0, "mail": 0xFF, "held_item": 0,
+            "moves": list(moves), "pp": pp, "pp_bonuses": 0}
+
+
+def test_rr_withdrawal_keeps_the_move0_pp_cfru_computes():
+    """Codex C4-6d #2: CFRU's expansion computes PP for all four slots, move 0 included, so an RR
+    mon with moves [33,0,0,0] comes out of a box with move 0's table PP in the empty slots. Only
+    vanilla's empty slot is 0."""
+    limits = duo.gen3_limits("radical_red", _rom_with_pp({0: 35, 33: 35}, "radical_red"))
+    mon = _rr_withdrawn(limits)
+    assert mon["pp"] == [35, 35, 35, 35]
+    assert duo.gen3_record_problems("x", mon, rr=True, limits=limits) == []
+    assert duo.gen3_withdrawn_problems("x", mon, limits, rr=True) == []
+    assert any("not restored" in p for p in duo.gen3_withdrawn_problems("x", mon, limits, rr=False))
+
+
+def test_rr_withdrawal_with_the_real_rom_move0_pp():
+    """The same, with move 0's PP read from the staged companion ROM's own move table."""
+    rom = REPO / duo.GEN3_TITLES["radical_red"]["staged"]
+    if not rom.is_file():
+        pytest.skip(f"{rom} is not built (the RR companion ROM is a local artifact)")
+    limits = duo.gen3_limits("radical_red", rom.read_bytes())
+    mon = _rr_withdrawn(limits)
+    assert mon["pp"][1] == limits["max_pp"](0, 0, 1)
+    assert duo.gen3_record_problems("x", mon, rr=True, limits=limits) == []
+    assert duo.gen3_withdrawn_problems("x", mon, limits, rr=True) == []
+
+
 def test_friendship_may_move_only_when_the_scenario_walked_the_mon(pair):
     fixture, _ = pair
     walked = _saved(fixture, 3, [STARTER, dict(PIDGEY, friendship=90)])
@@ -1260,14 +1291,44 @@ def _rr_ext_run(tmp_path, monkeypatch, saves=1):
     return run, notes
 
 
+_EMITTER = re.compile(r"local function witness_receipt_lines\(.*?\nend\n", re.S)
+_EMIT = {}
+
+
+def _driver_emit(rel, saves, erel=None):
+    """The receipt lines duo_gen3_main.lua's OWN witness_receipt_lines emits for one save, in its
+    emission order (the body is extracted from the driver and run under lupa), so producer and
+    consumer are tested together rather than against a hand-written order (Codex C4-6d #1)."""
+    if "fn" not in _EMIT:
+        from lupa import LuaRuntime
+
+        body = _EMITTER.search(DRIVER.read_text(encoding="utf-8"))
+        assert body, "duo_gen3_main.lua must define witness_receipt_lines"
+        _EMIT["fn"] = LuaRuntime(unpack_returned_tuples=True).execute(
+            body.group(0) + "\nreturn witness_receipt_lines")
+    lines = _EMIT["fn"](rel, codec.FLASH_SIZE, saves, saves, 2 + saves, erel, codec.RR_EXT_SIZE)
+    return [lines[i] for i in range(1, len(lines) + 1)]
+
+
 def _rr_receipt(inst, saves, ext_saves):
     out = "SAVE_WITNESS faint_cmd counter=2->3\n"
+    rel = f"patch/build/e2e_faint_cmd_gen3_{inst}_1_witness.bin"
     for n in range(1, saves + 1):
-        out += (f"SAVE_WITNESS_DUMP path=patch/build/e2e_faint_cmd_gen3_{inst}_1_witness.bin "
-                f"bytes={codec.FLASH_SIZE} saves={n} frame={n} counter={2 + n}\n")
-        if n in ext_saves:
-            out += _ext_line("faint_cmd_gen3", inst, n)
+        erel = rel.replace(".bin", "_ext.bin") if n in ext_saves else None
+        out += "".join(line + "\n" for line in _driver_emit(rel, n, erel))
     return out
+
+
+def test_driver_receipts_bind_the_extension_as_the_consumer_reads_them(tmp_path, monkeypatch):
+    """Codex C4-6d #1: the driver logged EXT before DUMP and the consumer demanded EXT after it,
+    so every genuine RR copy read as OPEN. Fed the driver's ACTUAL lines, the consumer binds it."""
+    rel = "patch/build/e2e_faint_cmd_gen3_a_1_witness.bin"
+    lines = _driver_emit(rel, 1, rel.replace(".bin", "_ext.bin"))
+    assert [line.split()[0] for line in lines] == ["SAVE_WITNESS_DUMP", "SAVE_WITNESS_EXT"]
+    assert duo.SAVE_WITNESS_DUMP_RE.search(lines[0]) and duo.GEN3_EXT_RE.match(lines[1])
+    run, notes = _rr_ext_run(tmp_path, monkeypatch)
+    blob, why = run._gen3_final_ext("a", "\n".join(lines) + "\n", 1, 0)
+    assert why == "" and blob == bytes([0x11]) * codec.RR_EXT_SIZE
 
 
 def test_rr_witness_method_binds_the_extension_to_the_final_save(tmp_path, monkeypatch):
@@ -1441,6 +1502,12 @@ def test_party_read_failure_is_never_boxed_observed(locate):
     no BOXED_OBSERVED."""
     got, unknown, why = locate("unreadable", "K", "boxed")
     assert got is None and unknown and "party unreadable" in why
+
+
+def test_a_key_in_two_party_slots_is_ambiguous(locate):
+    """Codex C4-6d #3: party K,K with every box empty used to read RETURNED_OBSERVED."""
+    got, unknown, why = locate("K,K", "|", "returned")
+    assert got is None and unknown and "two party slots" in why
 
 
 def test_a_key_in_two_box_slots_is_ambiguous(locate):

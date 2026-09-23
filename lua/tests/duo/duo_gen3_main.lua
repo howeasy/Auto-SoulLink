@@ -146,6 +146,19 @@ end
 -- ── seams teed before run.lua binds them ─────────────────────────────────────────────────
 local seen_tx, seen_rx, tx, rx = {}, {}, {}, {}
 local witness_saves, wrong_save_hud = 0, false
+--- The receipt lines one save's witness produces, IN EMISSION ORDER: the DUMP first, then (RR)
+--- the EXT copy bound to the same ordinal -- tools/e2e_duo.py _gen3_final_ext requires the final
+--- EXT to follow the final DUMP. Self-contained (no upvalues) so tests/unit/test_e2e_duo_gen3.py
+--- runs this exact body under lupa and feeds its output to the Python consumer.
+local function witness_receipt_lines(rel, bytes, saves, frame, counter, erel, ext_size)
+    local lines = { string.format("SAVE_WITNESS_DUMP path=%s bytes=%d saves=%d frame=%d counter=%d",
+                                  rel, bytes, saves, frame, counter) }
+    if erel then
+        lines[#lines + 1] = string.format("SAVE_WITNESS_EXT path=%s bytes=%d saves=%d",
+                                          erel, ext_size, saves)
+    end
+    return lines
+end
 local function dump_witness()
     witness_saves = witness_saves + 1
     -- repo-relative: ROOT contains a space, and a `path=` value with one cannot be parsed back
@@ -160,19 +173,23 @@ local function dump_witness()
     -- RR: the live EWRAM range the extension writer copies verbatim into sectors 30-31
     -- (D.ext_addr/D.ext_size from gen3_codec via the stub), read at the same save boundary, so
     -- the harness can prove the saved extension is THIS state (Codex C4-6b finding 4).
+    local erel
     if D.ext_addr and D.ext_size then
         local ext = {}
         for off = 0, D.ext_size - 4, 4 do
             ext[#ext + 1] = string.pack("<I4", memory.read_u32_le(D.ext_addr + off, "System Bus"))
         end
-        local erel = rel:gsub("%.bin$", "_ext.bin")
+        erel = rel:gsub("%.bin$", "_ext.bin")
         local ef = assert(io.open(ROOT .. "/" .. erel, "wb"), "cannot open " .. erel)
         ef:write(table.concat(ext))
         ef:close()
-        log(fmt("SAVE_WITNESS_EXT path=%s bytes=%d saves=%d", erel, D.ext_size, witness_saves))
     end
-    log(fmt("SAVE_WITNESS_DUMP path=%s bytes=%d saves=%d frame=%d counter=%d", rel, #blob,
-            witness_saves, emu.framecount(), G.save_counter(dom)))
+    -- both files are on disk before either line is logged: a failed copy leaves no DUMP line
+    -- for this ordinal (SAVE_WITNESS_DUMP_FAIL instead), never a DUMP without its EXT
+    for _, line in ipairs(witness_receipt_lines(rel, #blob, witness_saves, emu.framecount(),
+                                                G.save_counter(dom), erel, D.ext_size)) do
+        log(line)
+    end
 end
 -- "Validated" is observable only as the signal queue growing by one entry of the site's kind
 -- (lua/gen3/signals.lua fire(): every rejection returns before the append).
@@ -398,14 +415,17 @@ function ctx.hp0(key) return hp0[key] end
 --- Self-contained (no upvalues) so tests/unit/test_e2e_duo_gen3.py runs this exact body under
 --- lupa. Returns { party = slot|false, box = "box:slot"|false } only when the party read AND every
 --- one of the `box_count` box reads succeeded; otherwise nil, why -- UNKNOWN, never "absent". A
---- key in two box slots is ambiguous, also nil.
+--- key in two party slots or two box slots is ambiguous, also nil.
 local function locate_key(key, read_party, read_box, box_count, key_of)
     local party, pwhy = read_party()
     if not party then return nil, "party unreadable: " .. tostring(pwhy) end
     if type(box_count) ~= "number" or box_count < 1 then return nil, "no box count in the pack" end
     local at = { party = false, box = false }
     for _, m in ipairs(party) do
-        if key_of(m) == key then at.party = m.slot end
+        if key_of(m) == key then
+            if at.party then return nil, "key in two party slots" end
+            at.party = m.slot
+        end
     end
     for box = 0, box_count - 1 do
         local mons, bwhy = read_box(box)
