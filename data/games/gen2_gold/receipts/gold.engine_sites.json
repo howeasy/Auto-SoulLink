@@ -9,14 +9,31 @@
   "accepted": 0,
   "addr": 26791,
   "bank": 127,
-  "bank_rejects": 13,
-  "raw": 13
+  "bank_rejects": 65,
+  "raw": 65
  },
  "evidence_level": "PHYSICAL",
+ "faint_alignment": {
+  "armed": 29488,
+  "battle_dvs": 60515,
+  "battle_hp": 0,
+  "battle_species": 158,
+  "callback": 29488,
+  "callback_party_hp": 1,
+  "copyback_frames": 0,
+  "hp_zero_frame": 29488,
+  "party_count": 2,
+  "party_dvs": 60515,
+  "party_species": 158,
+  "passed": true,
+  "post_party_hp": 0,
+  "rule": "battle_faint callback frame == armed; wCurBattleMon is a party slot; the battle mon reads HP 0 and the slot's party record is that mon (species, DVs) with HP > 0 inside the callback (before copy-back); the party record reads HP 0 on the callback frame or the next",
+  "slot": 0
+ },
  "fixture": "gold_battle",
  "fixture_sha256": "6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6",
  "frame_alignment": {
-  "aligned_hits": 10,
+  "aligned_hits": 14,
   "armed": 9415,
   "battle_party": 1,
   "callback": 9415,
@@ -40,6 +57,7 @@
  "pack_specs_sha256": "402a6a95054a0ad021fc1e8053119d4beb277885cf254691689c738e5f1825d5",
  "proven": [
   "battle_end",
+  "battle_faint",
   "capture_party",
   "capture_party_finalized",
   "save_completed",
@@ -56,17 +74,28 @@
    "bank_rejects": 0,
    "expected_hex": "cd307d2005",
    "first_frame": 9533,
-   "hits": 1,
+   "hits": 2,
    "pc": 29782,
-   "raw": 1,
+   "raw": 2,
    "symbol": "ExitBattle"
+  },
+  "battle_faint": {
+   "addr": 20724,
+   "bank": 15,
+   "bank_rejects": 20,
+   "expected_hex": "fac6cf4f2142cb",
+   "first_frame": 29488,
+   "hits": 1,
+   "pc": 20724,
+   "raw": 21,
+   "symbol": "UpdateFaintedPlayerMon"
   },
   "capture_box": {
    "addr": 27571,
    "bank": 3,
    "expected_hex": "3e01",
    "hits": 0,
-   "raw": 10,
+   "raw": 34,
    "symbol": "PokeBallEffect.SendToPC"
   },
   "capture_party": {
@@ -108,9 +137,9 @@
    "bank_rejects": 0,
    "expected_hex": "110090",
    "first_frame": 3634,
-   "hits": 1,
+   "hits": 2,
    "pc": 29696,
-   "raw": 1,
+   "raw": 2,
    "symbol": "InitEnemyWildmon.skip_unown"
   }
  },

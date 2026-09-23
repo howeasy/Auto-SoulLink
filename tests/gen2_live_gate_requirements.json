@@ -17,7 +17,7 @@
       "axes": {"kind": "engine_sites", "title": "crystal", "requirement_ids": ["F-2", "F-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal.engine_sites.json",
-        "sha256": "99a7a39319d05e009c630c23d5dac4580f2f6a256e623ea2aa7c65fea76f2734"
+        "sha256": "2f15b23adb6a748bbb0fb2afd04da55cd772251ad44df97d9afe3f956d29c4dd"
       }}}]
     },
     {
@@ -27,7 +27,7 @@
       "axes": {"kind": "engine_sites", "title": "gold", "requirement_ids": ["F-2", "F-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold.engine_sites.json",
-        "sha256": "bc88a00a2be1d5582cc457bcaee8069c39f2f8efe4ce276773c346b4a4295517"
+        "sha256": "ccdeb035c0f6f74481361fb21adf4206680abfd57c311f5c47622594deed49d2"
       }}}]
     },
     {
@@ -37,7 +37,7 @@
       "axes": {"kind": "engine_sites", "title": "silver", "requirement_ids": ["F-2", "F-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver.engine_sites.json",
-        "sha256": "e64188d28ec3de02d037bc9e73a58f3621c178f8ed4acfd031047fb8b1db994d"
+        "sha256": "7228369b0cdd512346ed8a91389d76bacc47e600cff5f8327cec40f7197897de"
       }}}]
     },
     {
