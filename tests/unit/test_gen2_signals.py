@@ -858,3 +858,304 @@ def test_the_static_pack_must_share_the_engine_site_source(fault):
     result = world.module.new_model(options)
     binder = result[0] if isinstance(result, tuple) else result
     assert (binder is None) == (fault is not None)
+
+
+
+# --- card gen2-U1: PHYSICAL receipt gate for production registration + the live-gate logic ---
+
+U1_EXPECT = ("wild_ready", "capture_party", "capture_party_finalized", "battle_end", "save_completed")
+U1_NEGATIVES = ("wrong_pack_byte", "script_bytecode_arm", "wrong_bank_hit")
+
+
+def receipt(world, proven=U1_EXPECT):
+    sites = {name: {"bank": world.sites[name]["bank"], "addr": world.sites[name]["addr"],
+                    "pc": world.sites[name]["addr"], "expected_hex": world.sites[name]["expected_hex"],
+                    "hits": 1, "first_frame": 100 + index}
+             for index, name in enumerate(proven)}
+    return {"schema": "gen2-engine-site-receipt-v1", "title": world.title, "evidence_level": "PHYSICAL",
+            "result": "PASS", "rom_sha1": world.pack["source"]["rom_sha1"],
+            "pack_commit": world.pack["source"]["commit"], "pack_specs_sha256": world.pack["specs_sha256"],
+            "bank_check": "live", "frame_alignment": {"passed": True},
+            "negatives": {name: "refused" for name in U1_NEGATIVES}, "sites": sites, "proven": list(proven)}
+
+
+def production(world, qualification, *, authority="PHYSICAL_RUNTIME", model_io=False):
+    options = world.options()
+    if not model_io:
+        options.io = world.lua.eval("""function(io)
+            local t = {}
+            for k, v in pairs(io) do t[k] = v end
+            t.model_only = nil
+            return t
+        end""")(world.io)
+    options.authority = world.lua.table(kind=authority, capture=world.authority.capture,
+                                        valid=world.authority.valid)
+    options.runtime_qualification = world.lua.table_from(qualification, recursive=True)
+    result = world.module.new(options)
+    return (result[0], result[1]) if isinstance(result, tuple) else (result, None)
+
+
+def test_crystal_receipt_registers_only_the_proven_sites_and_publishes_physical_events():
+    world = World()
+    binder, why = production(world, receipt(world))
+    assert binder is not None, why
+    assert {address for _, address in world.callbacks.values()} == {world.sites[n]["addr"] for n in U1_EXPECT}
+    assert sorted(binder.status(binder).registered_sites.values()) == sorted(U1_EXPECT)
+    world.fire("capture_party")
+    world.events(binder)
+    world.party([world.mon(nickname=0x82)])
+    world.fire("capture_party_finalized")
+    [event] = [event for event in world.events(binder) if event.kind == "capture"]
+    assert event.evidence_level == "PHYSICAL" and event.runtime_authorized is True
+    assert binder.status(binder).evidence_level == "PHYSICAL"
+
+
+@pytest.mark.parametrize("title", ["gold", "silver"])
+def test_gold_and_silver_refuse_production_even_with_a_matching_receipt(title):
+    world = World(title)
+    binder, why = production(world, receipt(world))
+    assert binder is None and "OPEN" in why and world.callbacks == {}
+
+
+@pytest.mark.parametrize("fault", ["schema", "rom", "specs", "pc", "bank", "bytes", "no_hits", "alignment",
+                                   "negative", "unknown_site", "model_authority", "model_io"])
+def test_a_faulty_receipt_or_model_authority_registers_nothing(fault):
+    world = World()
+    qualification = receipt(world)
+    site = qualification["sites"]["capture_party"]
+    if fault == "schema":
+        qualification["schema"] = "gen2-engine-site-receipt-v0"
+    elif fault == "rom":
+        qualification["rom_sha1"] = "0" * 40
+    elif fault == "specs":
+        qualification["pack_specs_sha256"] = "0" * 64
+    elif fault == "pc":
+        site["pc"] += 1
+    elif fault == "bank":
+        site["bank"] += 1
+    elif fault == "bytes":
+        site["expected_hex"] = "00"
+    elif fault == "no_hits":
+        site["hits"] = 0
+    elif fault == "alignment":
+        qualification["frame_alignment"]["passed"] = False
+    elif fault == "negative":
+        qualification["negatives"]["wrong_bank_hit"] = "NOT refused"
+    elif fault == "unknown_site":
+        qualification["proven"].append("not_a_site")
+    binder, why = production(world, qualification,
+                             authority="MODEL_PROBE" if fault == "model_authority" else "PHYSICAL_RUNTIME",
+                             model_io=fault == "model_io")
+    assert binder is None and why and world.callbacks == {}
+
+
+def test_a_proven_final_without_its_proven_insertion_is_not_registered():
+    world = World()
+    binder, why = production(world, receipt(world, ("wild_ready", "capture_party_finalized")))
+    assert binder is not None, why
+    assert list(binder.status(binder).registered_sites.values()) == ["wild_ready"]
+
+
+def test_an_arm_on_script_bytecode_is_refused_by_address_whatever_it_claims():
+    world = World()
+    script = world.sites["whiteout_before_heal"]["guards"]["script_context"]
+    site = world.sites["capture_party"]  # keeps its CPU symbol and instruction claims
+    site.update(bank=script["bank"], addr=script["addr"], expected_hex=script["expected_hex"],
+                rom_offset=script["bank"] * 0x4000 + script["addr"] - 0x4000)
+    result = world.module.new_model(world.options())
+    assert isinstance(result, tuple) and result[0] is None and "script bytecode" in result[1]
+    assert world.callbacks == {}
+
+
+def test_the_crystal_pack_carries_every_site_the_live_gate_proves():
+    world = World()
+    for name in (*U1_EXPECT, "capture_box"):
+        site = world.sites[name]
+        assert site["kind"] == "CPU_INSTRUCTION" and site["rom_bank_guard"]["expected"] == site["bank"]
+        flat = site["addr"] if site["bank"] == 0 else site["bank"] * 0x4000 + site["addr"] - 0x4000
+        assert site["rom_offset"] == flat
+    assert isinstance(world.pack["specs_sha256"], str) and len(world.pack["specs_sha256"]) == 64
+
+
+def u1_gate():
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.execute("SLINK_GEN2_GATE_LIBRARY = true")
+    return lua, lua.eval("dofile")((ROOT / "lua/tests/gen2_frame_align.lua").as_posix())
+
+
+def u1_record(fault=None):
+    sites, seq = {}, 0
+    for name in U1_EXPECT:
+        seq += 1
+        sites[name] = {"bank": 3, "addr": 0x4000 + seq, "pc": 0x4000 + seq, "hit_bank": 3, "hits": 1,
+                       "log": [{"seq": seq, "frame": 100 + seq, "armed": 100 + seq}]}
+    sites["capture_box"] = {"bank": 3, "addr": 0x6b44, "hits": 0, "log": []}
+    record = {"accept_errors": 0, "aligned": 5, "misaligned": 0, "sites": sites,
+              "align": {"armed": 102, "callback": 102, "pre_party": 1, "callback_party": 2, "post_party": 2},
+              "decoy": {"raw": 40, "accepted": 0}, "negatives": {name: "refused" for name in U1_NEGATIVES}}
+    if fault == "misaligned":
+        record["misaligned"] = 1
+    elif fault == "ram_effect":
+        record["align"]["post_party"] = 1
+    elif fault == "callback_frame":
+        record["align"]["callback"] = 103
+    elif fault == "box_fired":
+        sites["capture_box"]["hits"] = 1
+    elif fault == "decoy_accepted":
+        record["decoy"]["accepted"] = 1
+    elif fault == "decoy_silent":
+        record["decoy"]["raw"] = 0
+    elif fault == "order":
+        sites["save_completed"]["log"][0]["seq"] = 3
+    elif fault == "missing":
+        sites["battle_end"]["log"] = []
+    elif fault == "wrong_bank":
+        sites["capture_party"]["hit_bank"] = 4
+    elif fault == "twice":
+        sites["capture_party"]["hits"] = 2
+    elif fault == "negative":
+        record["negatives"]["script_bytecode_arm"] = "NOT refused"
+    elif fault == "registry":
+        record["registry_failed"] = "callback PC differs"
+    return record
+
+
+def test_the_u1_verdict_proves_the_expected_sites_in_engine_order():
+    lua, gate = u1_gate()
+    problems, proven = gate.verdict(lua.table_from(u1_record(), recursive=True))
+    assert list(problems.values()) == [] and tuple(proven.values()) == U1_EXPECT
+
+
+@pytest.mark.parametrize("fault", ["misaligned", "ram_effect", "callback_frame", "box_fired", "decoy_accepted",
+                                   "decoy_silent", "order", "missing", "wrong_bank", "twice", "negative",
+                                   "registry"])
+def test_the_u1_verdict_refuses_every_negative_control(fault):
+    lua, gate = u1_gate()
+    problems, proven = gate.verdict(lua.table_from(u1_record(fault), recursive=True))
+    assert len(problems) >= 1 and len(proven) == 0
+
+
+def test_the_u1_walker_oscillates_in_grass_and_refuses_without_grass():
+    lua, gate = u1_gate()
+
+    def t(value):
+        return lua.table_from(value, recursive=True)
+
+    grass = t({"width": 3, "height": 3, "grid": [2] * 9})
+    point = t({"x": 1, "y": 1, "can_step": {"Up": True, "Down": True, "Left": True, "Right": True}, "blocked": []})
+    assert gate.walk_direction(grass, point, t({"x": 1, "y": 2})) == "Down"
+    assert gate.walk_direction(grass, point, None) == "Up"
+    none = gate.walk_direction(t({"width": 3, "height": 3, "grid": [1] * 9}), point, None)
+    assert none[0] is None and "grass" in none[1]
+
+
+def test_the_u1_ball_cursor_reads_the_pocket_row():
+    lua, gate = u1_gate()
+
+    def rows(*texts):
+        return lua.table_from([list(text) for text in texts], recursive=True)
+
+    assert gate.ball_cursor(rows("  POKé BALL  ×10", "▶POKé BALL  ×10")) == "ball"
+    assert gate.ball_cursor(rows(" POKé BALL", "▶CANCEL")) == "cancel"
+    assert gate.ball_cursor(rows("BALLS ▶", "  CANCEL")) is None
+
+
+def test_the_u1_driver_throws_a_ball_and_refuses_a_battle_without_a_catch():
+    lua, gate = u1_gate()
+
+    def t(value):
+        return lua.table_from(value, recursive=True)
+
+    driver = gate.driver(t({"width": 3, "height": 3, "grid": [2] * 9}))
+    base = {"battle_mode": 1, "input_ready": True, "save_success_counter": 0, "probe_hits": {"capture_party": 0},
+            "hits": {"same_save_file": 0, "erase_save": 0}}
+
+    def step(**extra):
+        buttons, phase = driver.step(t({**base, **extra}))
+        return (dict(buttons) if buttons is not None else None), phase
+
+    def drain():   # the 12-frame hold, then one release frame
+        for _ in range(12):
+            step()
+
+    menu = {"kind": "battle_menu", "items": ["FIGHT", "PKMN", "PACK", "RUN"], "cursor": 1, "columns": 2}
+    assert step(ui=menu) == ({"Down": True}, "battle")
+    drain()
+    assert step(ui={"kind": "pack_items"}) == ({"Right": True}, "battle")
+    drain()
+    assert step(ui={"kind": "pack_balls"}, ball_cursor="ball") == ({"A": True}, "battle")
+    drain()
+    submenu = {"kind": "item_submenu", "items": ["USE", "QUIT"], "cursor": 1, "columns": 1}
+    assert step(ui=submenu) == ({"A": True}, "battle")
+    drain()
+    nickname = {"kind": "yes_no", "prompt": "catch_nickname", "items": ["YES", "NO"], "cursor": 1, "columns": 1}
+    assert step(ui=nickname) == ({"Down": True}, "battle")
+    drain()
+    buttons, why = step(ui={**nickname, "prompt": "nickname"})
+    assert buttons is None and "unmapped" in why
+    buttons, why = step(ui={"kind": "trainer_card"})
+    assert buttons is None and "not valid in battle" in why
+    buttons, why = step(battle_mode=0, overworld_ready=True)
+    assert buttons is None and "without a catch" in why
+
+
+def test_the_u1_probe_and_negatives_run_on_the_shared_binders():
+    """The live gate's own arming, frame bookkeeping and load-time negatives, on the pack-faithful
+    fake ROM: aligned hits in engine order, the capture RAM effect, a decoy that never passes."""
+    world = World()
+    lua = world.lua
+    lua.execute("SLINK_GEN2_GATE_LIBRARY = true")
+    gate = lua.eval("dofile")((ROOT / "lua/tests/gen2_frame_align.lua").as_posix())
+    decoy = {"symbol": "OWPlayerInput", "bank": 0x7F, "addr": 0x6974, "flat": 0x7F * 0x4000 + 0x6974 - 0x4000,
+             "hex": "000000"}
+    schedule = []
+
+    def advance():
+        for action in schedule:
+            action()
+        schedule.clear()
+        world.frame += 1
+
+    def sym(name, *_):
+        return lua.table_from([world.read(world.p["ram"][name], "System Bus")])
+
+    api = lua.table(read_u8=world.io.read_u8, read_range=world.io.read_range, register=world.io.register,
+                    framecount=world.io.framecount, on_bus_exec=world.io.on_bus_exec,
+                    unregister=world.io.unregister, advance=advance)
+    ctx = lua.table(api=api, root=ROOT.as_posix(), reads=world.reads, sym=sym,
+                    env=lua.table(title="crystal"), profile=lua.table_from(world.p, recursive=True),
+                    Binding=world.gb)
+    wrapper, pack = lua.table_from(world.profile, recursive=True), lua.table_from(world.pack, recursive=True)
+    negatives, detail = gate.negatives(ctx, world.module, wrapper, pack)
+    assert detail.control == "bound", detail.control
+    assert (negatives.wrong_pack_byte, negatives.script_bytecode_arm) == ("refused", "refused"), dict(detail)
+    assert world.callbacks == {}
+
+    probe = gate.probe(ctx, pack, lua.table_from(decoy))
+
+    def fire_decoy():
+        world.reg["PC"], world.bank, world.shadow = 0x6974, 37, 37
+        for callback, address in list(world.callbacks.values()):
+            if address == 0x6974:
+                callback()
+
+    def catch():
+        world.party([world.mon(), world.mon(species=16, dvs=0x1234)])
+        world.fire("capture_party")
+
+    for action in (lambda: world.fire("wild_ready"), fire_decoy, catch,
+                   lambda: world.fire("capture_party_finalized"), lambda: world.fire("battle_end"),
+                   lambda: world.fire("save_completed")):
+        schedule.append(action)
+        ctx.api.advance()
+    probe.release()
+    record = probe.record
+    record.negatives = negatives
+    record.negatives.wrong_bank_hit = "refused"
+    assert (record.decoy.raw, record.decoy.accepted) == (1, 0)
+    align = record.align
+    assert (align.armed, align.callback, align.pre_party, align.callback_party, align.post_party) == (
+        align.armed, align.armed, 1, 2, 2)
+    problems, proven = gate.verdict(record)
+    assert list(problems.values()) == [] and tuple(proven.values()) == U1_EXPECT
+    assert world.callbacks == {}

@@ -1,8 +1,12 @@
--- Gen 2 typed guard/model binder. No emulator globals or production activation.
+-- Gen 2 typed guard binder: MODEL probes, and production only through a PHYSICAL receipt. No emulator globals.
 -- Shared hook_registry owns registration, callback faults, queues and cleanup;
 -- gb_hook_binding owns ROM/bus anchor, PC and bank-shadow validation.
--- Current engine_signals packs are SOURCE_CANDIDATE, never runtime authority.
--- new(options) refuses until a separately reviewed physical-qualification rebind.
+-- Current engine_signals packs are SOURCE_CANDIDATE, never runtime authority by themselves.
+-- new(options) registers production hooks ONLY for sites a PHYSICAL engine-site receipt
+-- (options.runtime_qualification, schema gen2-engine-site-receipt-v1, written by the live gate
+-- lua/tests/gen2_frame_align.lua via tests/live/test_gen2_frame_align.py) proves, on a title in
+-- PHYSICAL_TITLES (Crystal only: Gold/Silver stay refused). Every other site stays unregistered.
+-- Registration is not admission: runtime admission stays with admission.json/entry.lua (O-22, U3).
 -- new_model(options) requires explicit MODEL_PROBE authority and model_only IO.
 -- Options: title, profile/pack wrappers, Registry, GB, io, reads (gen2/reads),
 -- authority={kind,allow_model_registration,capture,valid}, owner,max_pending,
@@ -98,18 +102,90 @@ local OPEN = {
     contest_selected="Provisional contest buffer is not final acquisition",
 }
 
+S.RECEIPT_SCHEMA = "gen2-engine-site-receipt-v1"
+-- Titles with a live engine-site receipt path. Gold/Silver have none yet: always refused.
+S.PHYSICAL_TITLES = {crystal=true}
+S.RECEIPT_NEGATIVES = {"wrong_pack_byte","script_bytecode_arm","wrong_bank_hit"}
+
+-- The proven site set of a PHYSICAL receipt, or nil,why. Pure: the caller decodes the file.
+-- A site is proven only when the receipt names it and recorded a live hit at exactly the
+-- bank/PC/bytes the pack pins, and the receipt belongs to this title, ROM and pack with the
+-- frame-alignment probe and every negative control passed. A proven site whose acquisition
+-- predecessor is unproven is dropped too (it could never publish).
+function S.qualified_sites(title, pack, receipt)
+    if not S.PHYSICAL_TITLES[title] then
+        return nil,"Gen 2 runtime signal qualification is OPEN for " .. tostring(title) .. ": no PHYSICAL receipt path"
+    end
+    if type(receipt) ~= "table" or receipt.schema ~= S.RECEIPT_SCHEMA or receipt.evidence_level ~= "PHYSICAL"
+       or receipt.result ~= "PASS" then
+        return nil,"PHYSICAL engine-site qualification receipt required"
+    end
+    local data = type(pack) == "table" and type(pack.titles) == "table" and pack.titles[title]
+    if not data or type(pack.source) ~= "table" or receipt.title ~= title
+       or receipt.rom_sha1 ~= pack.source.rom_sha1 or receipt.pack_commit ~= pack.source.commit
+       or type(pack.specs_sha256) ~= "string" or receipt.pack_specs_sha256 ~= pack.specs_sha256 then
+        return nil,"qualification receipt belongs to another title, ROM or engine-site pack"
+    end
+    if receipt.bank_check ~= "live" or type(receipt.frame_alignment) ~= "table"
+       or receipt.frame_alignment.passed ~= true then
+        return nil,"qualification receipt lacks the live bank check or the frame-alignment probe"
+    end
+    for _,name in ipairs(S.RECEIPT_NEGATIVES) do
+        if type(receipt.negatives) ~= "table" or receipt.negatives[name] ~= "refused" then
+            return nil,"qualification receipt negative control not refused: " .. name
+        end
+    end
+    if type(receipt.proven) ~= "table" or type(receipt.sites) ~= "table" then
+        return nil,"qualification receipt names no proven sites"
+    end
+    local proven = {}
+    for _,name in ipairs(receipt.proven) do
+        local site, hit = data.sites[name], receipt.sites[name]
+        if type(site) ~= "table" or type(hit) ~= "table" or not integer(hit.hits,1,9007199254740991)
+           or hit.bank ~= site.bank or hit.addr ~= site.addr or hit.pc ~= site.addr
+           or hit.expected_hex ~= site.expected_hex or not integer(hit.first_frame,0,9007199254740991) then
+            return nil,"qualification receipt site differs from the pack or has no live hit: " .. tostring(name)
+        end
+        proven[name] = true
+    end
+    local changed = true
+    while changed do
+        changed = false
+        for name in pairs(proven) do
+            local prior = data.sites[name].guards.requires_prior
+            for _,start in ipairs(prior and prior.site_ids or {}) do
+                if not proven[start] and proven[name] then proven[name], changed = nil, true end
+            end
+        end
+    end
+    if next(proven) == nil then return nil,"qualification receipt proves no registrable site" end
+    return proven
+end
+
+local build
 function S.new(options)
     if type(options) ~= "table" or options.runtime_qualification == nil then
         return nil,"explicit Gen 2 runtime qualification is required"
     end
-    return nil,"Gen 2 runtime signal qualification is OPEN; source candidates cannot register production hooks"
+    local proven, why = S.qualified_sites(options.title, options.pack, options.runtime_qualification)
+    if not proven then return nil,why end
+    local ok,result,reason,failed = pcall(build,options,proven)
+    if not ok then return nil,tostring(result) end
+    return result,reason,failed
 end
 
-local function build(options)
+function build(options, proven)
     assert(type(options) == "table", "Gen 2 model options required")
     local io, authority = assert(options.io), assert(options.authority)
-    assert(io.model_only == true and authority.kind == "MODEL_PROBE"
-           and authority.allow_model_registration == true, "explicit MODEL probe authority required")
+    if proven then
+        assert(io.model_only ~= true and authority.kind == "PHYSICAL_RUNTIME",
+               "PHYSICAL runtime authority and live IO required")
+    else
+        assert(io.model_only == true and authority.kind == "MODEL_PROBE"
+               and authority.allow_model_registration == true, "explicit MODEL probe authority required")
+    end
+    local evidence = proven and "PHYSICAL" or "MODEL"
+    local physical_status = proven and "SITE_FIRING_RECEIPTED" or "OPEN"
     assert(callable(authority.capture) and callable(authority.valid), "held model operation authority required")
     assert(callable(io.bank_valid), "actual mapped bank observations required")
     local profile, pack = copy(options.profile), copy(options.pack)
@@ -138,24 +214,17 @@ local function build(options)
     local binding = GB.new(io,{bus_domain="System Bus",rom_domain="ROM",bank_domain="System Bus",
         bank_address=assert(p.ram.hROMBank),pc_register="PC",sp_register="SP"})
     local ids, by_id, grouped, descriptors, source_points = {}, {}, {}, {}, {}
-    for name in pairs(data.sites) do ids[#ids+1] = name end
+    for name in pairs(data.sites) do
+        if not proven or proven[name] then ids[#ids+1] = name end
+    end
     table.sort(ids)
     assert(#ids > 0,"engine sites unavailable")
-    for _,name in ipairs(ids) do
-        local site = data.sites[name]
-        assert(site.kind == "CPU_INSTRUCTION" and site.maturity == "SOURCE_CANDIDATE"
-               and site.runtime_enabled == false and site.physical_firing == "OPEN",
-               name .. ": CPU source candidate required")
-        assert(site.symbol ~= "Script_Whiteout" and site.symbol ~= "OverworldWhiteoutScript",
-               "script bytecode cannot be a bus-exec hook")
-        assert(type(site.instructions) == "table" and #site.instructions > 0,"CPU instruction proof required")
-        for _,instruction in ipairs(site.instructions) do
-            assert(type(instruction) == "string" and CPU[instruction:match("^(%w+)")],
-                   "unsupported CPU instruction or script bytecode")
-        end
-        assert(site.event_role == "OBSERVATION" or site.event_role == "CLASSIFICATION_ONLY", "invalid signal role")
-        assert(type(site.signal) == "string" and type(site.phase) == "string" and type(site.guards) == "table",
-               "typed site metadata required")
+    -- Script bytecode is data: an anchor overlapping ANY declared script range is refused by
+    -- address, whatever symbol or instructions the site claims.
+    -- Point-symbol coordinates are pack-wide generated facts: collected from every site, also
+    -- the ones a PHYSICAL receipt leaves unregistered.
+    local scripts = {}
+    for _,site in pairs(data.sites) do
         assert(type(site.point_symbols) == "table","source point-symbol facts required")
         for symbol,point in pairs(site.point_symbols) do
             assert(integer(point.bank,0,255) and integer(point.addr,0,65535),"invalid source point")
@@ -168,6 +237,33 @@ local function build(options)
             end
             source_points[symbol] = point
         end
+        local script = type(site.guards) == "table" and site.guards.script_context
+        if script then
+            assert(integer(script.bank,0,255) and integer(script.addr,0,65535) and type(script.expected_hex) == "string",
+                   "invalid script-bytecode range")
+            scripts[#scripts+1] = {bank=script.bank,lo=script.addr,hi=script.addr+#script.expected_hex//2}
+        end
+    end
+    for _,name in ipairs(ids) do
+        local site = data.sites[name]
+        assert(site.kind == "CPU_INSTRUCTION" and site.maturity == "SOURCE_CANDIDATE"
+               and site.runtime_enabled == false and site.physical_firing == "OPEN",
+               name .. ": CPU source candidate required")
+        assert(site.symbol ~= "Script_Whiteout" and site.symbol ~= "OverworldWhiteoutScript",
+               "script bytecode cannot be a bus-exec hook")
+        assert(type(site.expected_hex) == "string" and integer(site.addr,0,65535), name .. ": anchor required")
+        for _,range in ipairs(scripts) do
+            assert(site.bank ~= range.bank or site.addr+#site.expected_hex//2 <= range.lo or site.addr >= range.hi,
+                   name .. ": script bytecode cannot be a bus-exec hook (anchor overlaps script data)")
+        end
+        assert(type(site.instructions) == "table" and #site.instructions > 0,"CPU instruction proof required")
+        for _,instruction in ipairs(site.instructions) do
+            assert(type(instruction) == "string" and CPU[instruction:match("^(%w+)")],
+                   "unsupported CPU instruction or script bytecode")
+        end
+        assert(site.event_role == "OBSERVATION" or site.event_role == "CLASSIFICATION_ONLY", "invalid signal role")
+        assert(type(site.signal) == "string" and type(site.phase) == "string" and type(site.guards) == "table",
+               "typed site metadata required")
         if site.signal == "evolution_species" then
             assert(type(site.identity_migration) == "table" and type(site.identity_migration.old_species_by_new) == "table",
                    name .. ": generated pre-evolution table required")
@@ -598,10 +694,10 @@ local function build(options)
         for name,value in pairs(starts) do latches[name] = value end
         if #events == 0 then return nil end
         for _,event in ipairs(events) do
-            event.evidence_level,event.physical_status,event.runtime_authorized = "MODEL","OPEN",false
+            event.evidence_level,event.physical_status,event.runtime_authorized = evidence,physical_status,proven ~= nil
         end
-        return {kind="gen2_model_batch",events=events,context=context,generation=held.generation,
-                operation=held.operation,evidence_level="MODEL",physical_status="OPEN",runtime_authorized=false}
+        return {kind=proven and "gen2_batch" or "gen2_model_batch",events=events,context=context,generation=held.generation,
+                operation=held.operation,evidence_level=evidence,physical_status=physical_status,runtime_authorized=proven ~= nil}
     end
     local error_message, failed
     service,error_message,failed = Registry.new({owner=options.owner,max_pending=options.max_pending,sites=descriptors,
@@ -687,7 +783,8 @@ local function build(options)
     end
     function self:status()
         local result = service:status()
-        result.runtime_authorized,result.physical_status,result.evidence_level = false,"OPEN","MODEL"
+        result.runtime_authorized,result.physical_status,result.evidence_level = proven ~= nil,physical_status,evidence
+        result.registered_sites = copy(ids)
         result.refusals,result.open_obligations,result.drops = copy(refusals),copy(OPEN),copy(drops)
         result.refused_acquisitions = refused_acquisitions
         result.pending_acquisitions = 0
