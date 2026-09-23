@@ -1,0 +1,96 @@
+
+========== scenario: link_gen3 ==========
+[duo] link_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] server up: tcp=62891 http=62892 data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_tog_0ny0
+[duo] cleared 7 stale artifact(s) for link_gen3: e2e_link_gen3_a_1_witness.bin, e2e_link_gen3_a_attempt1_result.txt, e2e_link_gen3_a_result.txt, e2e_link_gen3_b_1_witness.bin, e2e_link_gen3_b_attempt1_result.txt, e2e_link_gen3_b_result.txt, e2e_link_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] PYDEC: FAIL client RESULT before both RESULT lines
+[duo] link_gen3: a client finished before 'both RESULT lines' (a: no RESULT; b: RESULT: FAIL (hunt ended out-of-balls))
+--- link_gen3 a result (last 25 lines) ---
+MYKEY 0 2D356A90:99DE0D8A
+PARTY slot=0 key=2D356A90:99DE0D8A species=7 level=9 hp=27/27
+MYKEY 1 263620B6:99DE0D8A
+PARTY slot=1 key=263620B6:99DE0D8A species=16 level=4 hp=17/17
+booted frame=778 map=map=787 at=(12,37) balls=4
+JITTER requested=0 applied=0 attempt=1
+[client] [gen3] phase encounter-found frame=1593 link: cycle 3 mid-step Left at (13,38)
+[client] [gen3] phase battle-state-saved frame=1593 E:/Howard/Bizhawk/GBA/State/slink_fr_battle.State
+THREW 1
+THREW 2
+THREW 3
+RX play_sound
+[client] [SLink-gen3] write sound 0x03007340 +4 frame 4142
+[client] [SLink-gen3] write sound 0x03007348 +1 frame 4142
+[client] [SLink-gen3] write sound 0x03007349 +1 frame 4142
+[client] [SLink-gen3] write sound 0x0300734C +4 frame 4142
+[client] [SLink-gen3] write sound 0x030023E8 +4 frame 4142
+[client] [SLink-gen3] write sound 0x030023E8 +1 frame 4142
+[client] [SLink-gen3] write sound 0x030023F7 +1 frame 4142
+[client] [SLink-gen3] write sound 0x030023FB +1 frame 4142
+[client] [SLink-gen3] write sound 0x03002401 +1 frame 4142
+[client] [SLink-gen3] write sound 0x03002408 +4 frame 4142
+[client] [SLink-gen3] write sound 0x03002428 +4 frame 4142
+[client] [SLink-gen3] write sound 0x03007344 +4 frame 4142
+RX msgbox text=Route 1 is a dead zone!
+--- link_gen3 b result (last 25 lines) ---
+PARTY slot=1 key=F6B6A64D:1C600D89 species=19 level=3 hp=15/15
+booted frame=778 map=map=787 at=(12,37) balls=2
+JITTER requested=0 applied=0 attempt=1
+[client] [gen3] phase encounter-found frame=1546 link: cycle 2 mid-step Up at (12,38)
+[client] [gen3] phase battle-state-saved frame=1546 E:/Howard/Bizhawk/GBA/State/slink_fr_battle.State
+THREW 1
+THREW 2
+TX no_catch - {"area_id":"route_1","event":"no_catch","level":2,"player":"b","seq":127,"species_id":16}
+TX safe - {"event":"safe","player":"b","seq":128}
+RX play_sound
+[client] [SLink-gen3] write sound 0x03007340 +4 frame 4213
+[client] [SLink-gen3] write sound 0x03007348 +1 frame 4213
+[client] [SLink-gen3] write sound 0x03007349 +1 frame 4213
+[client] [SLink-gen3] write sound 0x0300734C +4 frame 4213
+[client] [SLink-gen3] write sound 0x030023E8 +4 frame 4213
+[client] [SLink-gen3] write sound 0x030023E8 +1 frame 4213
+[client] [SLink-gen3] write sound 0x030023F7 +1 frame 4213
+[client] [SLink-gen3] write sound 0x030023FB +1 frame 4213
+[client] [SLink-gen3] write sound 0x03002401 +1 frame 4213
+[client] [SLink-gen3] write sound 0x03002408 +4 frame 4213
+[client] [SLink-gen3] write sound 0x03002428 +4 frame 4213
+[client] [SLink-gen3] write sound 0x03007344 +4 frame 4213
+RX msgbox text=Route 1 is a dead zone!
+WRITES 12
+RESULT: FAIL (hunt ended out-of-balls)
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\link_gen3_a_gen3_new.jsonl
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\link_gen3_b_gen3_new.jsonl
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_tog_0ny0
+[duo] link_gen3: the cartridge's only ball missed; restarting attempt 2 of 3 with a fresh server, run directory and SaveRAM seeds
+[duo] link_gen3: attempt 2 of 3
+[duo] JITTER requested=37 attempt=2
+[duo] server up: tcp=62906 http=62907 data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_5cxc072r
+[duo] cleared 5 stale artifact(s) for link_gen3: e2e_link_gen3_a_attempt1_result.txt, e2e_link_gen3_a_result.txt, e2e_link_gen3_b_attempt1_result.txt, e2e_link_gen3_b_result.txt, e2e_link_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=A3346CB9:99DE0D8A b=BC952D37:1C600D89
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): A3346CB9:99DE0D8A <-> BC952D37:1C600D89 on route_1, alive
+[duo] SAVE_WITNESS_SHA256 inst=a site=fd706b0638c4f4193c3de1647e30c5d989d3cf1d160a33e0de60be249cd29ac8 file=fd706b0638c4f4193c3de1647e30c5d989d3cf1d160a33e0de60be249cd29ac8 match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=77fd5297b91ac1c040d4405b642006a68ca2f37e0fcb4c708e4783829633b3f5 file=77fd5297b91ac1c040d4405b642006a68ca2f37e0fcb4c708e4783829633b3f5 match=true saves=1 counter=4->5 rtc=normalized
+[duo] BAG_BALLS baseline=4 final=2 throws=2 inst=a
+[duo] BAG_BALLS baseline=2 final=1 throws=1 inst=b
+[duo] link: A3346CB9:99DE0D8A <-> BC952D37:1C600D89 alive on route_1 and saved once in each party
+[duo] PYDEC: PASS asserted scenario facts
+[duo] link_gen3: a=PASS b=PASS
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\link_gen3_a_gen3_new.jsonl
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\link_gen3_b_gen3_new.jsonl
+
+========== summary ==========
+  link_gen3: PASS (attempt 2 of 3)
