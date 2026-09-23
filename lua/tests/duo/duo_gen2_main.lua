@@ -56,8 +56,9 @@
              input_mode "normal_buttons", harness_write_scopes []}                     PASS only
     RESULT: PASS (caught <key>) | RESULT: FAIL (<reason>)                                   last line
   Every scenario may also see: HELLO_AGAIN {frame, ot_id, n} (each later hello; HELLO stays the first),
-  RX_TEXT {frame, cmd, text} (hud_show/gui_prompt/msgbox text, after its RX line). Each scenario's
-  header lists the markers it adds.
+  RX_TEXT {frame, cmd, text} (hud_show/gui_prompt/msgbox text, after its RX line), MEMORIAL_ACK {frame,
+  event memorialize_done|memorialize_failed, key, box, reason} (the client's reply to a memorialize). An RX
+  line is `RX <cmd>[ key=<k>][ sound=<n>][ area_id=<a>]`. Each scenario's header lists the markers it adds.
   CLIENT also carries registered_sites (the production binder's status().registered_sites after start).
   The faint scenario adds LINK_SAVE, ENGINE_FAINT, FAINT_SENT, PARTY_HP_WRITE and BENCH_HP_STATUS;
   scenario_gen2_faint.lua's header is their contract.
@@ -110,7 +111,7 @@ local timeout = D.timeout_frames or 150000
 -- ── receipts the harness keeps (never an oracle of their own; S.verdict re-reads the lines) ──
 local rec = {captures=0, capture=nil, sent_keys={}, caught=nil, client_saves=0, save_completed_frame=nil,
              faint=nil, faint_sent=nil, rx={}, hp_write=nil,
-             hellos={}, tx=0}
+             hellos={}, tx=0, memorial={}}
 local sent = {}
 local function maybe_caught()
     local key = rec.capture and rec.capture.key
@@ -140,6 +141,10 @@ C.send = function(line)
         rec.sent_keys[msg.key] = true
         jlog("CAPTURE_SENT", {frame=emu.framecount(), key=msg.key, seq=msg.seq})
         maybe_caught()
+    elseif (event == "memorialize_done" or event == "memorialize_failed") and type(msg.key) == "string" then
+        local ack = {frame=emu.framecount(), event=event, key=msg.key, box=msg.box, reason=msg.reason}
+        rec.memorial[msg.key] = rec.memorial[msg.key] or ack
+        jlog("MEMORIAL_ACK", ack)
     elseif event == "faint" and type(msg.key) == "string" then
         rec.faint_sent = {frame=emu.framecount(), key=msg.key, seq=msg.seq}
         jlog("FAINT_SENT", rec.faint_sent)
@@ -245,7 +250,7 @@ gen2.on_event = function(self, ev)
             species_id=m.species_id, level=m.level})
         if ev.site_id == "capture_party_finalized" and ev.acquisition == "wild" then
             rec.captures = rec.captures + 1
-            rec.capture = rec.capture or {key=m.key}
+            rec.capture = rec.capture or {key=m.key, species_id=m.species_id, area_id=ev.area_id}
             maybe_caught()
         end
     elseif type(ev) == "table" and ev.kind == "faint" and type(ev.mon) == "table" then
@@ -263,8 +268,10 @@ local _handle = gen2.handle_command
 gen2.handle_command = function(self, cmd)
     local c = type(cmd) == "table" and cmd.cmd or "?"
     if c ~= "noop" then
-        log("RX " .. tostring(c) .. (type(cmd) == "table" and cmd.key and (" key=" .. tostring(cmd.key)) or ""))
-        rec.rx[#rec.rx + 1] = {cmd=c, key=type(cmd) == "table" and cmd.key or nil}
+        local t = type(cmd) == "table" and cmd or {}
+        log("RX " .. tostring(c) .. (t.key and (" key=" .. tostring(t.key)) or "")
+            .. (t.sound and (" sound=" .. tostring(t.sound)) or "") .. (t.area_id and (" area_id=" .. tostring(t.area_id)) or ""))
+        rec.rx[#rec.rx + 1] = {cmd=c, key=t.key, sound=t.sound, area_id=t.area_id, text=t.text}
         if (c == "hud_show" or c == "gui_prompt" or c == "msgbox") and type(cmd.text) == "string" then
             jlog("RX_TEXT", {frame=emu.framecount(), cmd=c, text=cmd.text})
         end
@@ -480,6 +487,20 @@ function h.save()
     return play({name="duo-gen2-save", terminal=driver.terminal, terminal_idle=true, max_frames=left,
                  max_phase_frames=math.min(D.max_phase_frames or F.BUDGET.max_phase_frames, left),
                  settle_frames=F.BUDGET.settle_frames}, driver, SG.qualify_observer(ctx))
+end
+-- The species clause's reroll (gen2_route29_inputs.lua): walk to the next wild battle's menu -> its foe species
+-- (the battle stays up for h.play or h.flee), or RUN from the battle that is up back to the overworld.
+function h.encounter()
+    local driver, observe, spec = R.encounter(ctx, SG, F, {max_frames=math.max(1, timeout - api.framecount()),
+        max_phase_frames=D.max_phase_frames})
+    local ok, why = play(spec, driver, observe)
+    if not ok then return false, why end
+    return true, driver.foe
+end
+function h.flee()
+    local driver, observe, spec = R.flee(ctx, SG, F, {max_frames=math.max(1, timeout - api.framecount()),
+        max_phase_frames=D.max_phase_frames})
+    return play(spec, driver, observe)
 end
 -- The faint route (gen2_faint_inputs.lua): the opts.target party slot fights until opts.fainted().
 function h.sacrifice(opts)

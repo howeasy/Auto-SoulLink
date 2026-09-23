@@ -143,12 +143,33 @@ class DuoSim(QualifySim):
                 self.clear()
                 return
 
-    def catch_battle(self):
+    # Per-battle seams (the clause sims override them): the foe, the expected BattleMenu choice, reactions.
+    def next_foe(self):
+        return 16, KEY
+
+    def battle_choice(self, species):
+        return "PACK"
+
+    def on_fled(self, species):
+        pass
+
+    def on_caught(self, species, key):
+        pass
+
+    def catch_battle(self, species=16, key=KEY):
         self.put("wBattleMode", [1])
+        self.put("wEnemyMonSpecies", [species])
         yield from self.wait(4)
         yield from self.text("Wild PIDGEY", "appeared!")
-        yield from self.menu("battle_menu", ["FIGHT", "<PK><MN>", "PACK", "RUN"], "PACK", columns=2,
+        choice = self.battle_choice(species)
+        yield from self.menu("battle_menu", ["FIGHT", "<PK><MN>", "PACK", "RUN"], choice, columns=2,
                              grid=grid_as_python(battle_grid()))
+        if choice == "RUN":
+            yield from self.text("Got away safely!")
+            yield from self.wait(4)
+            self.put("wBattleMode", [0])
+            self.on_fled(species)
+            return
         yield from self.pocket("pack_items", "Right")
         yield from self.pocket("pack_balls", "A", ["POKé BALL", "CANCEL"])
         yield from self.menu("item_submenu", ["USE", "QUIT"], "USE", at=(12, 8))
@@ -160,9 +181,10 @@ class DuoSim(QualifySim):
         if self.emit_capture:   # the binder's capture event at capture_party_finalized
             self.push({"kind": "capture", "site_id": "capture_party_finalized", "acquisition": "wild",
                        "area_id": "route_29", "destination": "party", "slot": count + 1,
-                       "mon": {"key": KEY, "species_id": 16, "level": 3}})
+                       "mon": {"key": key, "species_id": species, "level": 3}})
         yield from self.wait(4)
         self.put("wBattleMode", [0])
+        self.on_caught(species, key)
 
     def game(self):
         yield from self.wait(20)
@@ -198,7 +220,8 @@ class DuoSim(QualifySim):
             if self.tile(self.x, self.y) == 2:
                 steps += 1
                 if steps >= 3:
-                    yield from self.catch_battle()
+                    steps = 0
+                    yield from self.catch_battle(*self.next_foe())
 
 
 def grass_start(title):
@@ -1035,3 +1058,393 @@ def soft_drop(player, tag):
 def test_soft_verdict_refuses_a_tampered_half(lines, match):
     problems, receipt = soft_verdict(lines)
     assert receipt is None and any(match in p for p in problems), problems
+
+
+# --- the clause scenarios (wave B: type_clause, gender_clause, species_clause) ---------------------------
+
+CLAUSE = ROOT / "lua/tests/duo/gen2_clause.lua"
+DRIVER_FILES += ("lua/tests/duo/gen2_clause.lua", "lua/tests/duo/scenario_gen2_type_clause.lua",
+                 "lua/tests/duo/scenario_gen2_gender_clause.lua", "lua/tests/duo/scenario_gen2_species_clause.lua")
+RATTATA_KEY = "1A2B:B542:13"
+LINKED_TEXT = "Pidgey and Rattata linked!"
+DECOMPS = ROOT / ".cache/gen2-build"
+
+
+class ClauseSim(DuoSim):
+    """DuoSim whose battles follow `foes` [(species, key), ...] (the last repeats), RUN from `dupe`, and whose
+    server answers through after_catch(sim, species, key) / after_flee(sim, species)."""
+
+    def __init__(self, lua, title="crystal", *, foes=((16, KEY),), dupe=None, after_catch=None, after_flee=None, **kw):
+        self.foes, self.dupe, self.after_catch, self.after_flee, self.battles = list(foes), dupe, after_catch, after_flee, []
+        super().__init__(lua, title, **kw)
+        lua.execute("function SLINK_TEST_CMD(c) SLINK_TEST_COMMANDS = SLINK_TEST_COMMANDS or {};"
+                    " table.insert(SLINK_TEST_COMMANDS, c) end")
+
+    def command(self, **cmd):
+        self.lua.globals().SLINK_TEST_CMD(self.lua.table_from(cmd))
+
+    def next_foe(self):
+        return self.foes[min(len(self.battles), len(self.foes) - 1)]
+
+    def battle_choice(self, species):
+        self.battles.append(species)
+        return "RUN" if species == self.dupe else "PACK"
+
+    def on_fled(self, species):
+        if self.after_flee:
+            self.after_flee(self, species)
+
+    def on_caught(self, species, key):
+        if self.after_catch:
+            self.after_catch(self, species, key)
+
+
+def boo(sim, species, key):
+    sim.command(cmd="play_sound", sound=22)
+
+
+def linked(sim, species, key):
+    sim.command(cmd="play_sound", sound=25)
+    sim.command(cmd="msgbox", text=LINKED_TEXT)
+
+
+def reroll_prompt(sim, species):
+    sim.command(cmd="gui_prompt", text="Dupes clause: Pidgey -- reroll!")
+    sim.command(cmd="unresolve_area", area_id="route_29")
+
+
+def run_clause(tmp_path, scenario, **kw):
+    return run_driver(tmp_path, scenario=scenario, sim_class=ClauseSim, **kw)
+
+
+def test_type_clause_partner_rejected_half_saves_again_and_passes(tmp_path):
+    lines, sim, _ = run_clause(tmp_path, "type_clause", after_catch=boo)
+    assert lines[-1] == f"RESULT: PASS (type clause partner_rejected {KEY} (clause_observed))", "\n".join(lines[-30:])
+    capture = tag_json(lines, "CLAUSE_CAPTURE")
+    assert (capture["species_id"], capture["types"], capture["gender"]) == (16, ["Normal", "Flying"], "female")
+    receipt = tag_json(lines, "RECEIPT")
+    assert receipt["schema"] == "gen2-duo-type-clause-v1" and receipt["verdict"] == "partner_rejected"
+    assert "RX play_sound sound=22" in lines and sim.writes == []
+    assert tag_json(lines, "SAVE_WITNESS")["gate_saves"] >= 2   # the link save and the final one
+
+
+def test_type_clause_a_pidgey_that_links_is_refused(tmp_path):
+    lines, _, _ = run_clause(tmp_path, "type_clause", after_catch=linked)
+    assert lines[-1].startswith("RESULT: FAIL") and "Pidgey shares a type with every Route 29 species" in lines[-1]
+
+
+def test_type_clause_without_a_verdict_never_passes(tmp_path):
+    lines, _, _ = run_clause(tmp_path, "type_clause")
+    assert lines[-1].startswith("RESULT: FAIL") and "timeout" in lines[-1], lines[-1]
+    assert not any(line.startswith("CLAUSE_VERDICT") for line in lines)
+
+
+def test_gender_clause_linked_half_passes_unobserved(tmp_path):
+    lines, _, _ = run_clause(tmp_path, "gender_clause", after_catch=linked)
+    assert lines[-1] == f"RESULT: PASS (gender clause linked {KEY} (clause_unobserved))", "\n".join(lines[-30:])
+    assert tag_json(lines, "RECEIPT")["path"] == "clause_unobserved"
+    assert tag_json(lines, "RX_TEXT")["text"] == LINKED_TEXT
+
+
+def test_species_clause_a_catches_pends_waits_for_the_link_and_saves(tmp_path):
+    lines, _, _ = run_clause(tmp_path, "species_clause", after_catch=linked)
+    assert lines[-1] == f"RESULT: PASS (A pending {KEY} linked)", "\n".join(lines[-30:])
+    assert tag_json(lines, "PENDING_CAPTURE")["species_id"] == 16
+    assert tag_json(lines, "RECEIPT")["role"] == "pending"
+
+
+def run_reroll(tmp_path, foes, *, flee=reroll_prompt, **kw):
+    return run_clause(tmp_path, "species_clause", player="b", go_text="GO\nA_PENDING species=16\n", foes=foes,
+                      dupe=16, after_flee=flee, after_catch=linked, **kw)
+
+
+def test_species_clause_b_runs_from_a_s_species_twice_then_catches_and_links(tmp_path):
+    lines, sim, _ = run_reroll(tmp_path, [(16, KEY), (16, KEY), (19, RATTATA_KEY)])
+    assert lines[-1] == f"RESULT: PASS (reroll_observed: B linked {RATTATA_KEY} after 2 reroll(s))", "\n".join(lines[-40:])
+    assert sim.battles == [16, 16, 19]
+    assert [json.loads(x.split(" ", 1)[1])["species_id"] for x in lines if x.startswith("ENCOUNTER ")] == [16, 16, 19]
+    receipt = tag_json(lines, "RECEIPT")
+    assert (receipt["role"], receipt["rerolls"], receipt["dupe_species"]) == ("reroller", 2, 16)
+    assert all(set(row) <= {"Up", "Down", "Left", "Right", "A", "B", "Start", "Select"} for row in sim.inputs)
+
+
+def test_species_clause_b_catches_a_first_non_duplicate_unobserved(tmp_path):
+    lines, sim, _ = run_reroll(tmp_path, [(19, RATTATA_KEY)])
+    assert lines[-1] == f"RESULT: PASS (reroll_unobserved: B linked {RATTATA_KEY} after 0 reroll(s))", "\n".join(lines[-30:])
+    assert sim.battles == [19]
+
+
+def test_species_clause_b_fails_a_run_with_no_dupes_prompt(tmp_path):
+    lines, sim, _ = run_reroll(tmp_path, [(16, KEY), (19, RATTATA_KEY)], flee=None)
+    assert lines[-1] == "RESULT: FAIL (no dupes-clause prompt for species 16 (A's))" and sim.battles == [16]
+
+
+def test_species_clause_b_only_duplicates_is_an_rng_fail(tmp_path):
+    lines, sim, _ = run_reroll(tmp_path, [(16, KEY)], duo={"timeout_frames": 60000})
+    assert lines[-1] == "RESULT: FAIL (RNG: the species hunt met only duplicates within its battle budget)", lines[-1]
+    assert sim.battles == [16] * 8
+
+
+def test_species_clause_b_waits_for_a_pending(tmp_path):
+    lines, sim, _ = run_clause(tmp_path, "species_clause", player="b", duo={"timeout_frames": 3000})
+    assert lines[-1].startswith("RESULT: FAIL") and "timeout" in lines[-1] and sim.battles == []
+
+
+# --- the reroll's two drivers, pure ---
+
+ROUTE_INPUTS = ROOT / "lua/tests/duo/gen2_route29_inputs.lua"
+
+
+def route_inputs(lua):
+    return lua.execute(ROUTE_INPUTS.read_text(encoding="utf-8"))
+
+
+def test_encounter_driver_walks_presses_through_the_intro_and_stops_at_the_menu_with_the_foe():
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    walk = lua.eval("{walk_direction=function() return 'Left' end}")
+    d = route_inputs(lua).encounter_driver(walk, lua.table_from({}))
+    buttons, phase = d.step(point(lua, battle_mode=0, overworld_ready=True))
+    assert dict(buttons) == {"Left": True} and phase == "walk"
+    assert press(lua, d, ui=ui("text")) == (["A"], "battle")
+    buttons, phase = d.step(point(lua, ui=ui("battle_menu", MENU, 1, 2), foe=19))
+    assert phase == "encounter" and d.foe == 19 and not any(buttons.values())
+    lua2 = LuaRuntime(unpack_returned_tuples=True)
+    d2 = route_inputs(lua2).encounter_driver(lua2.eval("{}"), lua2.table_from({}))
+    assert d2.step(point(lua2, ui=ui("battle_menu", MENU, 1, 2)))[1] == "wild battle menu without a foe species"
+    assert d2.step(point(lua2, battle_mode=2))[1] == "not a wild battle"
+
+
+def test_flee_driver_chooses_run_retries_cant_escape_and_ends_in_the_overworld():
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    d = route_inputs(lua).flee_driver()
+    assert press(lua, d, ui=ui("battle_menu", MENU, 1, 2)) == (["Right"], "battle")
+    assert press(lua, d, ui=ui("battle_menu", MENU, 2, 2)) == (["Down"], "battle")
+    assert press(lua, d, ui=ui("battle_menu", MENU, 4, 2)) == (["A"], "battle")
+    assert press(lua, d, ui=ui("text")) == (["A"], "battle")   # "Can't escape!"
+    assert press(lua, d, ui=ui("battle_menu", MENU, 4, 2)) == (["A"], "battle")
+    assert d.runs == 2
+    assert d.step(point(lua, battle_mode=0, overworld_ready=True))[1] == "escaped"
+
+
+def test_flee_driver_gives_up_after_max_runs():
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    R = route_inputs(lua)
+    d = R.flee_driver()
+    for _ in range(R.MAX_RUNS):
+        press(lua, d, ui=ui("battle_menu", MENU, 4, 2))
+    assert d.step(point(lua, ui=ui("battle_menu", MENU, 4, 2)))[1] == f"could not escape in {R.MAX_RUNS} RUNs"
+
+
+# --- the clause verdicts, pure ---
+
+def clause_runtime(name):
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    json_codec = lua.execute((ROOT / "lua/json_codec.lua").read_text(encoding="utf-8"))
+    link = lua.execute(SCENARIO.read_text(encoding="utf-8"))
+    path = (ROOT / f"lua/tests/duo/scenario_gen2_{name}.lua").as_posix()
+    return lua, lua.execute(f'return dofile("{path}")'), json_codec, link
+
+
+def clause_verdict(name, lines):
+    lua, scenario, json_codec, link = clause_runtime(name)
+    problems, receipt = scenario.verdict(lua.table_from(lines), json_codec, link.verdict)
+    return list(problems.values()), receipt
+
+
+def clause_lines(kind, verdict, *, ending="dead", species=16, key=KEY):
+    def j(value):
+        return json.dumps(value, ensure_ascii=False)
+    types = {16: ["Normal", "Flying"], 19: ["Normal"], 161: ["Normal"], 163: ["Normal", "Flying"], 187: ["Grass", "Flying"]}
+    base = [x.replace('"scenario": "link"', f'"scenario": "{kind}_clause"') for x in happy_lines()[:8]]
+    base = [x.replace(KEY, key).replace('"species_id": 16', f'"species_id": {species}') for x in base]
+    out = base + ["CLAUSE_CAPTURE " + j({"frame": 1600, "key": key, "species_id": species, "area_id": "route_29",
+                                         "types": types[species], "gender": "female"})]
+    if verdict == "rejected":
+        prompt = "[x] Type clause: shared Normal" if kind == "type" else "[x] Gender clause: both are ♀"
+        out += ["RX force_faint key=" + key, "RX memorialize key=" + key, "RX play_sound sound=26", "RX gui_prompt",
+                "RX_TEXT " + j({"frame": 1700, "cmd": "gui_prompt", "text": prompt}),
+                "RX unresolve_area area_id=route_29",
+                "CLAUSE_VERDICT " + j({"frame": 1701, "verdict": "rejected"}),
+                "PARTY_HP_WRITE " + j({"frame": 1750, "key": key, "slot": 1, "kind": "party_hp", "ok": True}),
+                "MEMORIAL_ACK " + j({"frame": 1760, "event": "memorialize_failed" if ending == "dead" else "memorialize_done",
+                                     "key": key, **({"reason": "Gen 2 box executor not composed"} if ending == "dead"
+                                                    else {"box": 13})})]
+        out.append("REJECTED_MON " + j({"frame": 1770, "key": key, "ending": "dead", "in_party": True, "slot": 1, "hp": 0,
+                                        "status": 0} if ending == "dead" else
+                                       {"frame": 1770, "key": key, "ending": "memorial", "box": 13, "in_party": False}))
+    elif verdict == "partner_rejected":
+        out += ["RX play_sound sound=22", "CLAUSE_VERDICT " + j({"frame": 1701, "verdict": "partner_rejected"})]
+    else:
+        out += ["RX play_sound sound=25", "RX msgbox", "RX_TEXT " + j({"frame": 1700, "cmd": "msgbox", "text": LINKED_TEXT}),
+                "CLAUSE_VERDICT " + j({"frame": 1701, "verdict": "linked"})]
+    return out + [happy_lines()[8]]
+
+
+@pytest.mark.parametrize("kind,verdict,ending,species", [
+    ("type", "rejected", "dead", 16), ("type", "rejected", "memorial", 16), ("type", "partner_rejected", "dead", 16),
+    ("type", "linked", "dead", 187), ("type", "linked", "dead", 161), ("gender", "rejected", "dead", 16),
+    ("gender", "rejected", "memorial", 19), ("gender", "linked", "dead", 16)])
+def test_clause_verdict_passes_each_complete_ending(kind, verdict, ending, species):
+    key = KEY[:-2] + f"{species:02X}"
+    problems, receipt = clause_verdict(f"{kind}_clause", clause_lines(kind, verdict, ending=ending, species=species, key=key))
+    assert problems == [] and receipt["verdict"] == verdict and receipt["clause"] == kind, problems
+    assert receipt["ending"] == (ending if verdict == "rejected" else None)
+
+
+def cl_replace(lines, old, new):
+    out = [x.replace(old, new) for x in lines]
+    assert out != lines, old
+    return out
+
+
+def cl_drop(lines, prefix):
+    out = [x for x in lines if not x.startswith(prefix)]
+    assert len(out) < len(lines), prefix
+    return out
+
+
+def cl_move(lines, prefix, before):
+    row = next(x for x in lines if x.startswith(prefix))
+    rest = [x for x in lines if x is not row]
+    at = next(i for i, x in enumerate(rest) if x.startswith(before))
+    return rest[:at] + [row] + rest[at:]
+
+
+TREJ, TMEM, GREJ = clause_lines("type", "rejected"), clause_lines("type", "rejected", ending="memorial"), \
+    clause_lines("gender", "rejected")
+
+
+@pytest.mark.parametrize("name,lines,match", [
+    ("type_clause", cl_replace(TREJ, "shared Normal", "shared Grass"), "a type the catch lacks: Grass"),
+    ("type_clause", cl_replace(TREJ, "shared Normal", "shared "), "names no shared type"),
+    ("type_clause", cl_drop(TREJ, "PARTY_HP_WRITE"), "no production PARTY_HP_WRITE"),
+    ("type_clause", cl_replace(TREJ, '"ok": true', '"ok": false'), "no production PARTY_HP_WRITE"),
+    ("type_clause", cl_drop(TREJ, "MEMORIAL_ACK"), "no MEMORIAL_ACK"),
+    ("type_clause", cl_drop(TREJ, "RX memorialize"), "no memorialize"),
+    ("type_clause", cl_drop(TREJ, "RX play_sound sound=26"), "no play_sound 26"),
+    ("type_clause", cl_replace(TREJ, "area_id=route_29", "area_id=route_30"), "no unresolve_area"),
+    ("type_clause", cl_drop(TREJ, "RX_TEXT"), "no [x] Type clause: prompt"),
+    ("type_clause", cl_replace(TREJ, '"hp": 0', '"hp": 5'), "did not leave the mon dead"),
+    ("type_clause", cl_replace(TREJ, '"in_party": true', '"in_party": false'), "did not leave the mon dead"),
+    ("type_clause", cl_replace(TMEM, '"box": 13', '"box": 12'), "into sBox14"),
+    ("type_clause", cl_replace(TMEM, '"in_party": false', '"in_party": true'), "into sBox14"),
+    ("type_clause", cl_drop(TREJ, "REJECTED_MON"), "missing REJECTED_MON"),
+    ("type_clause", cl_move(TREJ, "REJECTED_MON", "MEMORIAL_ACK"), "before the checkpoint replies"),
+    ("type_clause", cl_move(TREJ, "SAVE_WITNESS", "REJECTED_MON"), "final save precedes"),
+    ("type_clause", TREJ[:-1] + ["RX play_sound sound=22", TREJ[-1]], "also saw its partner's verdict"),
+    ("type_clause", cl_move(TREJ, "CLAUSE_VERDICT", "RX force_faint"), "before its wire cause"),
+    ("type_clause", cl_move(TREJ, "RX force_faint", "ENGINE_CAPTURE"), "before the capture was sent"),
+    ("type_clause", cl_replace(TREJ, '"verdict": "rejected"', '"verdict": "linked"'), "has no wire cause"),
+    ("type_clause", clause_lines("type", "partner_rejected") + ["RX force_faint key=" + KEY], "was rejected"),
+    ("type_clause", cl_replace(TREJ, '"types": ["Normal", "Flying"]', '"types": ["Normal"]'), "types disagree"),
+    ("type_clause", cl_replace(TREJ, '"gender": "female"', '"gender": "male"'), "gender disagrees"),
+    ("type_clause", clause_lines("type", "linked", species=163, key=KEY[:-2] + "A3"), "Hoothoot shares a type"),
+    ("gender_clause", cl_replace(GREJ, "both are ♀", "both are ♂"), "names the other gender"),
+    ("gender_clause", cl_drop(clause_lines("gender", "linked"), "RX_TEXT"), "has no wire cause"),
+], ids=lambda v: v if isinstance(v, str) and len(v) < 40 else None)
+def test_clause_verdict_refuses_a_tampered_ending(name, lines, match):
+    problems, receipt = clause_verdict(name, lines)
+    assert receipt is None and any(match in p for p in problems), problems
+
+
+def species_lines(player, encounters=((16, True), (19, False))):
+    j = json.dumps
+    if player == "a":
+        base = [x.replace('"scenario": "link"', '"scenario": "species_clause"') for x in happy_lines()[:8]]
+        return base + ["PENDING_CAPTURE " + j({"frame": 1600, "key": KEY, "species_id": 16, "area_id": "route_29"}),
+                       "RX msgbox", "RX_TEXT " + j({"frame": 5000, "cmd": "msgbox", "text": LINKED_TEXT}),
+                       "LINKED " + j({"frame": 5001, "text": LINKED_TEXT}), happy_lines()[8]]
+    last_species = encounters[-1][0]
+    key = KEY[:-2] + f"{last_species:02X}"
+    head = [x.replace('"player": "a", "scenario": "link"', '"player": "b", "scenario": "species_clause"')
+            for x in happy_lines()[:5]]
+    out = head + ["A_PENDING " + j({"frame": 400, "species_id": 16})]
+    for n, (species, dupe) in enumerate(encounters, 1):
+        out.append("ENCOUNTER " + j({"frame": 500 * n, "n": n, "species_id": species, "dupe": dupe}))
+        if dupe:
+            prompt = "Dupes clause: Pidgey -- reroll!"
+            out += ["RX gui_prompt", "RX_TEXT " + j({"frame": 500 * n + 1, "cmd": "gui_prompt", "text": prompt}),
+                    "RX unresolve_area area_id=route_29",
+                    "REROLL " + j({"frame": 500 * n + 2, "n": n, "species_id": species, "prompt": prompt})]
+    catch = [x.replace(KEY, key).replace('"species_id": 16', f'"species_id": {last_species}') for x in happy_lines()[5:8]]
+    return out + catch + ["RX msgbox", "RX_TEXT " + j({"frame": 5000, "cmd": "msgbox", "text": LINKED_TEXT}),
+                          "LINKED " + j({"frame": 5001, "text": LINKED_TEXT}), happy_lines()[8]]
+
+
+def test_species_verdict_passes_each_complete_half():
+    for player, encounters, path in (("a", None, "pending"), ("b", ((16, True), (19, False)), "reroll_observed"),
+                                     ("b", ((161, False),), "reroll_unobserved"),
+                                     ("b", ((16, True), (16, True), (187, False)), "reroll_observed")):
+        lines = species_lines(player) if encounters is None else species_lines(player, encounters)
+        problems, receipt = clause_verdict("species_clause", lines)
+        assert problems == [] and receipt["path"] == path, (player, encounters, problems)
+
+
+SB = species_lines("b")
+
+
+@pytest.mark.parametrize("lines,match", [
+    (cl_drop(SB, "RX_TEXT {\"frame\": 501"), "no RX dupes-clause prompt behind REROLL 1"),
+    (cl_drop(SB, "REROLL"), "no REROLL after duplicate encounter 1"),
+    (species_lines("b", ((16, True), (16, False))), "the caught encounter is A's species"),
+    (species_lines("b", ((19, False), (16, False))), "a non-duplicate encounter was not caught"),
+    (cl_replace(SB, '"n": 2', '"n": 3'), "ENCOUNTER out of order"),
+    (cl_replace(SB, '-- reroll!"}', '-- reroll?"}'), "REROLL names another prompt"),
+    ([x.replace("Pidgey -- reroll!", "Rattata -- reroll!") if x.startswith("RX_TEXT") else x for x in SB],
+     "no RX dupes-clause prompt behind REROLL 1"),
+    (cl_drop(SB, "A_PENDING"), "missing A_PENDING"),
+    (SB[:-1] + ["RX_TEXT " + json.dumps({"frame": 6000, "cmd": "msgbox", "text": "Route 29 is a dead zone!"}), SB[-1]],
+     "dead zone"),
+    (SB[:-1] + ["RX_TEXT " + json.dumps({"frame": 6000, "cmd": "gui_prompt", "text": "[x] Dup Pidgey"}), SB[-1]],
+     "species-clause rejection prompt"),
+    (SB[:-1] + ["RX force_faint key=" + KEY[:-2] + "13", SB[-1]], "force-fainted"),
+    (cl_drop(SB, "LINKED"), "missing LINKED"),
+    (cl_move(SB, "SAVE_WITNESS", "LINKED"), "final save precedes the link"),
+    (species_lines("a") + ["ENCOUNTER " + json.dumps({"frame": 1, "n": 1, "species_id": 16, "dupe": True})],
+     "the pending half printed ENCOUNTER"),
+    (cl_replace(species_lines("a"), '"species_id": 16, "area_id"', '"species_id": 19, "area_id"'),
+     "PENDING_CAPTURE names another catch"),
+], ids=["no-prompt", "no-reroll", "caught-dupe", "ran-clean", "enc-order", "wrong-prompt", "rx-other-species", "no-a-pending",
+        "dead-zone", "dup-prompt", "force-faint", "no-link", "save-first", "a-encounter", "a-pending-other"])
+def test_species_verdict_refuses_a_tampered_half(lines, match):
+    problems, receipt = clause_verdict("species_clause", lines)
+    assert receipt is None and any(match in p for p in problems), problems
+
+
+# --- the Route 29 facts against the decomps and the server adapter ---
+
+def clause_facts():
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    K = lua.execute(f'return dofile("{CLAUSE.as_posix()}")')
+    return lua, K
+
+
+def test_clause_species_facts_match_the_server_adapter():
+    from server.adapters.gen2_gsc import Gen2GSCAdapter
+    adapter, (_, K) = Gen2GSCAdapter("crystal"), clause_facts()
+    for species, mon in K.SPECIES.items():
+        types = [adapter.type_name(t) for t in dict.fromkeys(adapter.species_types(species))]
+        assert (mon.name, list(mon.types.values())) == (adapter.species_name(species), types)
+        assert adapter.evo_family(species) == species and adapter._species[species]["gender_ratio"] == K.GENDER_RATIO
+
+
+def test_clause_gender_matches_the_server_rule_for_every_attack_and_speed_dv():
+    from server.adapters.gen2_gsc import Gen2GSCAdapter
+    adapter, (_, K) = Gen2GSCAdapter("crystal"), clause_facts()
+    for attack in range(16):
+        for speed in range(16):
+            key = f"{attack:X}{(attack * 7) % 16:X}{speed:X}{(speed * 5) % 16:X}:B542:10"
+            assert K.gender(key) == adapter.gender_from_key(key, 16), key
+            assert K.gender(key) == ("female" if attack <= 7 else "male")
+
+
+@pytest.mark.skipif(not DECOMPS.exists(), reason="pinned decomps not built (.cache/gen2-build)")
+@pytest.mark.parametrize("repo,start", [("pokecrystal", 1237), ("pokegold", 1573)])
+def test_clause_route29_species_are_exactly_the_decomp_grass_table(repo, start):
+    _, K = clause_facts()
+    lines = (DECOMPS / repo / "data/wild/johto_grass.asm").read_text(encoding="utf-8").splitlines()
+    assert lines[start - 1].strip() == "def_grass_wildmons ROUTE_29"
+    block = lines[start:lines.index("\tend_grass_wildmons", start)]
+    names = {line.split(",")[1].strip() for line in block if line.strip().startswith("db ") and "percent" not in line}
+    ours = {mon.name.upper() for mon in K.SPECIES.values()}
+    assert names <= ours and (names == ours if repo == "pokecrystal" else ours - names == {"HOPPIP"})
