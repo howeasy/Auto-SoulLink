@@ -26,6 +26,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -48,6 +49,67 @@ pytestmark = [
 GATE = "lua/tests/gen2_frame_align.lua"
 TITLES = ("crystal", "gold", "silver")
 EXPECT = ("wild_ready", "capture_party", "capture_party_finalized", "battle_end", "save_completed", "battle_faint")
+# card gen2-u1e-poison: titles whose U1 run adds the overworld poison leg (lua/tests/gen2_poison_inputs.lua).
+# Gold has no day POISON_STING foe south of the Route 30 battle demo; it waits for its own fixture (main's ruling).
+POISON_TITLES = ("crystal", "silver")
+POISON_EXPECT = EXPECT[:-1] + ("poison_faint",) + EXPECT[-1:]
+# Route 29 -> Cherrygrove -> Route 30 (C/G data/maps/attributes.asm `connection`); the Route 30 south grass is the hunt.
+POISON_ROUTE = (("Route29", "west", "CherrygroveCity"), ("CherrygroveCity", "north", "Route30"))
+POISON_HUNT = "Route30"
+# Two floor tiles on the Route 30 south exit, the first next to the south grass (the faint leg starts there).
+POISON_PARK = ({"x": 7, "y": 49}, {"x": 7, "y": 50})
+SIDE = {"north": "Up", "south": "Down", "west": "Left", "east": "Right"}
+
+
+def expect_for(title):
+    return POISON_EXPECT if title in POISON_TITLES else EXPECT
+
+
+def poison_facts(ctx) -> dict:
+    """Source/ROM-bound maps, connection edges, the POISON_STING id and the PSN mask for the poison leg."""
+    areas = {row["map_const"]: row for row in gen2_fixtures.build_area_map(ctx).values()}
+    by_name = {row["map_name"]: row for row in areas.values()}
+    names = {name for leg in POISON_ROUTE for name in (leg[0], leg[2])}
+    maps = {name: gen2_fixtures._map_facts(ctx, by_name[name], areas) for name in sorted(names)}
+    attributes = ctx.read_source("data/maps/attributes.asm")
+    legs = []
+    for source, side, target in POISON_ROUTE:
+        block = attributes.split(f"map_attributes {source},", 1)[1].split("map_attributes", 1)[0]
+        found = re.search(rf"^\s*connection {side}, {target}, \w+, (-?\d+)", block, re.M)
+        assert found, f"source connection missing: {source} {side} {target}"
+        offset = int(found[1])
+        a, b = maps[source], maps[target]
+        exits = []
+        # the connection offset is in blocks: the target coordinate along the edge = source - 2 * offset
+        for i in range(a["width"] if side in ("north", "south") else a["height"]):
+            j = i - 2 * offset
+            if side in ("north", "south"):
+                if not 0 <= j < b["width"]:
+                    continue
+                ay, by_ = (0, b["height"] - 1) if side == "north" else (a["height"] - 1, 0)
+                ok = a["grid"][ay * a["width"] + i] and b["grid"][by_ * b["width"] + j]
+                tile = {"x": i, "y": ay}
+            else:
+                if not 0 <= j < b["height"]:
+                    continue
+                ax, bx = (0, b["width"] - 1) if side == "west" else (a["width"] - 1, 0)
+                ok = a["grid"][i * a["width"] + ax] and b["grid"][j * b["width"] + bx]
+                tile = {"x": ax, "y": i}
+            if ok:
+                exits.append(tile)
+        assert exits, f"no walkable edge tile: {source} -> {target}"
+        legs.append({"map": source, "side": SIDE[side], "exits": exits})
+    hunt = maps[POISON_HUNT]
+    grass = [{"x": x, "y": y} for y in range(hunt["height"]) for x in range(hunt["width"])
+             if hunt["grid"][y * hunt["width"] + x] == 2]
+    for tile in POISON_PARK:
+        assert hunt["grid"][tile["y"] * hunt["width"] + tile["x"]] == 1, f"park tile not floor: {tile}"
+    first = POISON_PARK[0]
+    assert hunt["grid"][first["y"] * hunt["width"] + first["x"] + 1] == 2, "park tile 1 not next to grass"
+    moves = gen2_fixtures.const_block(ctx.read_source("constants/move_constants.asm"), "POISON_STING")
+    status = gen2_fixtures.const_block(ctx.read_source("constants/battle_constants.asm"), "PSN")
+    return {"maps": maps, "legs": legs, "hunt_map": POISON_HUNT, "hunt_grass": grass, "park": list(POISON_PARK),
+            "moves": {"POISON_STING": moves["POISON_STING"]}, "psn_mask": 1 << status["PSN"]}
 # BattlePack's per-pocket input states and ItemSubmenu's USE/QUIT box (engine/items/pack.asm:685-782
 # .ItemsPocketMenu/.KeyItemsPocketMenu/.TMHMPocketMenu/.BallsPocketMenu, :783-803 ItemSubmenu; the same
 # lines and pocket order in pokecrystal and pokegold, resolved per title from its own .sym).
@@ -92,9 +154,12 @@ def u1_facts(ctx, facts, qualification_attempt_id: str) -> dict:
     next_mon = "Use next"
     assert f'BattleText_UseNextMon:\n\ttext "{next_mon} #MON?"' in ctx.read_source("data/text/battle.asm"), \
         "use-next-mon anchor left the source"
-    return {"pack_ui": pack_ui, "faint_ui": {kind: site(symbol) for kind, symbol in FAINT_UI.items()},
-            "decoy": decoy, "prompts": {"catch_nickname": [anchor], "next_mon": [next_mon]},
-            "qualification_attempt_id": qualification_attempt_id}
+    out = {"pack_ui": pack_ui, "faint_ui": {kind: site(symbol) for kind, symbol in FAINT_UI.items()},
+           "decoy": decoy, "prompts": {"catch_nickname": [anchor], "next_mon": [next_mon]},
+           "qualification_attempt_id": qualification_attempt_id}
+    if ctx.title in POISON_TITLES:
+        out["poison"] = poison_facts(ctx)
+    return out
 
 
 def tag_json(text: str, tag: str):
@@ -104,12 +169,13 @@ def tag_json(text: str, tag: str):
 def verify(text: str, pack: dict, title: str) -> dict:
     """Independent re-check of the gate output; returns the receipt the gate printed."""
     sites = pack["titles"][title]["sites"]
+    expect = expect_for(title)
     summary = tag_json(text, "HIT_SUMMARY")
     for name, row in summary.items():
         if row["hits"]:
             assert (row["pc"], row["bank"], row["off_pin"]) == (sites[name]["addr"], sites[name]["bank"], 0), (name, row)
     previous = 0
-    for name in EXPECT:
+    for name in expect:
         log = summary.get(name, {}).get("log") or []
         after = [hit["seq"] for hit in log if hit["seq"] > previous]
         assert after, f"{name} did not fire after the previous expected site"
@@ -119,7 +185,7 @@ def verify(text: str, pack: dict, title: str) -> dict:
     assert summary.get("capture_box", {}).get("hits", 0) == 0, "capture_box fired on a party < 6 catch"
     align = tag_json(text, "ALIGN")
     a = align["align"]
-    assert align["misaligned"] == 0 and align["aligned"] >= len(EXPECT), align
+    assert align["misaligned"] == 0 and align["aligned"] >= len(expect), align
     assert a["callback"] == a["armed"] and a["callback_party"] == a["battle_party"] + 1 == a["post_party"], a
     assert a["party_changed"] <= a["callback"], a
     decoy = tag_json(text, "DECOY")
@@ -129,14 +195,14 @@ def verify(text: str, pack: dict, title: str) -> dict:
     assert "differ from the ROM" in negatives["wrong_pack_byte"], negatives
     assert "script bytecode" in negatives["script_bytecode_arm"], negatives
     production = tag_json(text, "PRODUCTION")
-    assert sorted(production["registered"]) == sorted(EXPECT), production
+    assert sorted(production["registered"]) == sorted(expect), production
     assert production["refused_title"] != title, production
     receipt = tag_json(text, "RECEIPT")
     assert receipt["title"] == title and receipt["fixture"] == f"{title}_battle", receipt
     source = pack["source"]
     assert (receipt["rom_sha1"], receipt["pack_commit"], receipt["pack_specs_sha256"]) == (
         source["rom_sha1"], source["commit"], pack["specs_sha256"])
-    assert sorted(receipt["proven"]) == sorted(EXPECT) and receipt["harness_write_scopes"] == []
+    assert sorted(receipt["proven"]) == sorted(expect) and receipt["harness_write_scopes"] == []
     assert receipt["evidence_level"] == "PHYSICAL" and receipt["decoy"]["bank_rejects"] == receipt["decoy"]["raw"]
     # the gate emits effect_to_callback_frames in the receipt, not on the ALIGN line (first live PASS 2026-09-23)
     fa = receipt["frame_alignment"]
@@ -148,6 +214,18 @@ def verify(text: str, pack: dict, title: str) -> dict:
     assert (f["party_species"], f["party_dvs"]) == (f["battle_species"], f["battle_dvs"]), f
     assert f["callback"] <= f["hp_zero_frame"] <= f["callback"] + 1, f
     assert {k: v for k, v in receipt["faint_alignment"].items() if k in f} == f, receipt["faint_alignment"]
+    if "poison_faint" in expect:
+        # poison_faint: re-checked here from the POISON / POISON_MODEL lines, independently of F.poison_problem
+        p, m = tag_json(text, "POISON"), tag_json(text, "POISON_MODEL")
+        psn = receipt["poison_alignment"]["psn_mask"]
+        assert p["callback"] == p["armed"] and 0 <= p["slot"] < p["party_count"] and p["battle_mode"] == 0, p
+        assert p["callback_hp"] == 0 and p["callback_status"] & psn and p["pre_hp"] in (0, 1), p
+        assert p["callback"] <= p["status_zero_frame"] <= p["callback"] + 1, p
+        assert len(m["events"]) == 1, m
+        e = m["events"][0]
+        assert (e["kind"], e["cause"], e["site_id"]) == ("faint", "poison", "poison_faint"), e
+        assert (e["slot"], e["species"], e["dvs"]) == (p["slot"], p["species"], p["dvs"]), (e, p)
+        assert {k: v for k, v in receipt["poison_alignment"].items() if k in p} == p, receipt["poison_alignment"]
     return receipt
 
 
@@ -168,7 +246,8 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     qualification = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
     env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, gen2_fixtures.route_facts(spec.title, REPO),
                                                      qualification["attempt_id"]))
-    passed, path, text = run_gate(GATE, rom_key=spec.title, target=spec.target, timeout=1200,
+    passed, path, text = run_gate(GATE, rom_key=spec.title, target=spec.target,
+                                  timeout=2400 if title in POISON_TITLES else 1200,
                                   saveram_dir=str(REPO / ".cache/gen2-fixtures/u1-hook-proof" / spec.name),
                                   fixture_path=str(fixture), speed_percent=300, env_overrides=env)
     assert passed, f"gate FAILED; result {path}: {text[-3000:]}"

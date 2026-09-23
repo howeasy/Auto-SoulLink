@@ -209,7 +209,7 @@ function FI.driver(F, map, opts)
 end
 
 function FI.new(ctx, SG, F, opts)
-    local driver = FI.driver(F, ctx.facts.maps.Route29, opts)
+    local driver = FI.driver(F, opts.map or ctx.facts.maps.Route29, opts)   -- opts.map: U1e poison runs it on Route 30
     local base = SG.qualify_observer(ctx)
     local function observe()
         local point = base()

@@ -63,6 +63,21 @@ F.RESULT = "patch/build/gen2_frame_align_result.txt"
 F.SCRIPTED_GATE = "lua/tests/test_gen2_scripted_gate.lua"
 F.EXPECT = {"wild_ready", "capture_party", "capture_party_finalized", "battle_end", "save_completed", "battle_faint"}
 F.FAINT_INPUTS = "lua/tests/duo/gen2_faint_inputs.lua"
+-- card gen2-u1e-poison: with SLINK_GEN2_U1_FACTS.poison the play gains a poison leg between the save and the
+-- faint leg (lua/tests/gen2_poison_inputs.lua), poison_faint joins the expected sites before battle_faint, and
+-- the faint leg runs on the poison leg's hunt map (the catch, last mon standing, faints there).
+F.POISON_INPUTS = "lua/tests/gen2_poison_inputs.lua"
+F.POISON_BUDGET = {max_frames=150000, max_phase_frames=60000}
+F.POISON_FAINT_BATTLES = 12   -- ponytail: the catch fights to its faint; damage carries between battles
+function F.expect(poison)
+    if not poison then return F.EXPECT end
+    local out = {}
+    for _, name in ipairs(F.EXPECT) do
+        if name == "battle_faint" then out[#out + 1] = "poison_faint" end
+        out[#out + 1] = name
+    end
+    return out
+end
 F.ABSENT = {"capture_box"}
 F.PACK_KINDS = {"pack_items", "pack_balls", "pack_key", "pack_tmhm", "item_submenu"}
 -- BattlePack pocket order (engine/items/pack.asm:627-782): items <-> balls <-> key <-> tmhm <-> items.
@@ -281,7 +296,8 @@ function F.driver(map)
 end
 
 -- Pure verdict over the probe record: problems (empty = PASS) and the proven site list.
-function F.verdict(record)
+function F.verdict(record, expect)
+    expect = expect or F.EXPECT
     local problems = {}
     local function need(ok, what) if not ok then problems[#problems + 1] = what end end
     need(record.registry_failed == nil, "hook registry latched a failure: " .. tostring(record.registry_failed))
@@ -293,7 +309,7 @@ function F.verdict(record)
          and a.post_party == a.callback_party and integer(a.party_changed, 0, 2^53) and a.party_changed <= a.callback,
          "capture_party RAM effect is not aligned to the callback frame")
     local sites, previous = record.sites, 0
-    for _, name in ipairs(F.EXPECT) do
+    for _, name in ipairs(expect) do
         local site, found = sites[name], nil
         for _, hit in ipairs(site and site.log or {}) do
             if hit.seq > previous then found = hit break end
@@ -306,13 +322,21 @@ function F.verdict(record)
     need(sites.capture_party and sites.capture_party.hits == 1, "capture_party must fire exactly once")
     local faint = F.faint_problem(record.faint)
     need(faint == nil, tostring(faint))
+    for _, name in ipairs(expect) do
+        if name == "poison_faint" then
+            local why = F.poison_problem(record.poison, record.psn_mask)
+            need(why == nil, tostring(why))
+            why = F.poison_emission_problem(record.poison_model, record.poison)
+            need(why == nil, tostring(why))
+        end
+    end
     for _, name in ipairs(F.ABSENT) do need(sites[name] and sites[name].hits == 0, name .. " fired on a party < 6 catch") end
     need(record.decoy.raw >= 1 and record.decoy.accepted == 0 and record.decoy.bank_rejects == record.decoy.raw,
          "wrong-bank decoy: no raw fire, an accepted hit, or a hit not rejected by bank")
     for _, name in ipairs({"wrong_pack_byte", "script_bytecode_arm", "wrong_bank_hit"}) do
         need(record.negatives[name] == "refused", "negative control not refused: " .. name)
     end
-    return problems, #problems == 0 and {table.unpack(F.EXPECT)} or {}
+    return problems, #problems == 0 and {table.unpack(expect)} or {}
 end
 
 local function read_json(ctx, rel)
@@ -371,6 +395,52 @@ function F.faint_problem(f)
     return nil
 end
 
+-- poison_faint (DoPoisonStep.DamageMonIfPoisoned +27, C engine/events/poisonstep.asm:88-90, G the same lines):
+-- `ld a, MON_STATUS / call GetPartyParamLocation / ld [hl], 0` right after the 1-HP tick stored HP 0. Inside the
+-- callback the wCurPartyMon record (the index signals.lua faint_event reads) reads HP 0 with PSN still set; the
+-- main loop saw HP 1 before the armed frame (0 only if the frame boundary split the dec from the site), and the
+-- status reads 0 on the callback frame or the next. Overworld only: wBattleMode 0.
+function F.poison_snapshot(ctx, armed, callback, pre_hp)
+    local slot = ctx.sym("wCurPartyMon")[1]
+    local off = party_offset(ctx, math.min(slot, 5))
+    return {armed=armed, callback=callback, slot=slot, party_count=ctx.sym("wPartyCount")[1],
+            battle_mode=ctx.sym("wBattleMode")[1], species=ctx.sym("wPartyMon1Species", off)[1],
+            dvs=word(ctx.sym("wPartyMon1DVs", off, 2)), callback_hp=word(ctx.sym("wPartyMon1HP", off, 2)),
+            callback_status=ctx.sym("wPartyMon1Status", off)[1], pre_hp=pre_hp and pre_hp[slot] or nil}
+end
+function F.party_status(ctx, slot) return ctx.sym("wPartyMon1Status", party_offset(ctx, slot))[1] end
+
+-- Pure: the poison record's rule (nil = aligned, else why). psn_mask = 1 << PSN (constants/battle_constants.asm).
+function F.poison_problem(p, psn_mask)
+    if type(p) ~= "table" then return "poison_faint recorded no same-frame snapshot" end
+    if not integer(p.armed, 0, 2^53) or p.callback ~= p.armed then return "poison_faint callback frame != armed frame" end
+    if not integer(p.party_count, 1, 6) or not integer(p.slot, 0, p.party_count - 1) then return "wCurPartyMon is not a party slot" end
+    if p.battle_mode ~= 0 then return "poison_faint fired inside a battle" end
+    if not integer(p.species, 1, 251) then return "the wCurPartyMon record is not a mon" end
+    if p.callback_hp ~= 0 then return "the poisoned record is not at 0 HP inside the callback" end
+    if not integer(psn_mask, 1, 128) or not integer(p.callback_status, 0, 255) or (p.callback_status // psn_mask) % 2 ~= 1 then
+        return "the record's PSN bit was already cleared at the callback"
+    end
+    if p.pre_hp ~= 1 and p.pre_hp ~= 0 then return "the record did not read 1 HP (or 0) before the armed frame" end
+    if not integer(p.status_zero_frame, 0, 2^53) or p.status_zero_frame < p.callback or p.status_zero_frame > p.callback + 1 then
+        return "the record's status did not read 0 on the callback frame or the next"
+    end
+    return nil
+end
+
+-- Pure: the MODEL binder, armed on this very hook during the leg, emitted ONE faint event (cause poison) naming
+-- the snapshot's slot and mon. m = {events = {{kind, cause, slot, species, dvs}}, refusals = {...}}.
+function F.poison_emission_problem(m, p)
+    if type(m) ~= "table" or type(m.events) ~= "table" then return "the model binder recorded nothing" end
+    if #m.events ~= 1 then return fmt("the model binder emitted %d poison faint events, not 1", #m.events) end
+    local e = m.events[1]
+    if e.kind ~= "faint" or e.cause ~= "poison" or e.site_id ~= "poison_faint" then return "the model event is not a poison faint" end
+    if type(p) ~= "table" or e.slot ~= p.slot or e.species ~= p.species or e.dvs ~= p.dvs then
+        return "the model event names another record than the callback snapshot"
+    end
+    return nil
+end
+
 -- Arm every pack site (grouped by bank:PC like lua/gen2/signals.lua) plus the wrong-bank decoy.
 function F.probe(ctx, pack, decoy_site)
     local Registry = dofile(ctx.root .. "/lua/hook_registry.lua")
@@ -382,6 +452,7 @@ function F.probe(ctx, pack, decoy_site)
     local logged = {}
     for _, name in ipairs(F.EXPECT) do logged[name] = true end
     for _, name in ipairs(F.ABSENT) do logged[name] = true end
+    logged.poison_faint = true
     local names = {}
     for name in pairs(sites) do names[#names + 1] = name end
     table.sort(names)
@@ -449,6 +520,9 @@ function F.probe(ctx, pack, decoy_site)
                     record.battle_party = ctx.sym("wPartyCount")[1]   -- the party before any capture
                 end
                 if name == "battle_faint" and record.faint == nil then record.faint = F.faint_snapshot(ctx, probe.armed, hit.frame) end
+                if name == "poison_faint" and record.poison == nil then
+                    record.poison = F.poison_snapshot(ctx, probe.armed, hit.frame, probe.party_hp)
+                end
                 if name == "capture_party" and record.align == nil then
                     record.align = {armed=probe.armed, callback=hit.frame, pre_party=probe.pre_party,
                                     battle_party=record.battle_party, callback_party=ctx.sym("wPartyCount")[1]}
@@ -479,6 +553,17 @@ function F.probe(ctx, pack, decoy_site)
             faint.post_party_hp = faint.post_party_hp or hp
             if hp == 0 then faint.hp_zero_frame = frame end
         end
+        -- poison: every party HP at the end of each frame (the pre-armed read) until the hit, then the status clear.
+        if probe.watch_poison then
+            local poison = record.poison
+            if poison == nil then
+                probe.party_hp = {}
+                for slot = 0, math.min(party, 6) - 1 do probe.party_hp[slot] = F.party_hp(ctx, slot) end
+            elseif poison.status_zero_frame == nil and integer(poison.slot, 0, 5) then
+                poison.post_status = poison.post_status or F.party_status(ctx, poison.slot)
+                if F.party_status(ctx, poison.slot) == 0 then poison.status_zero_frame = frame end
+            end
+        end
     end
     function probe.release()
         api.advance = advance
@@ -501,6 +586,38 @@ local function binder_options(ctx, wrapper, pack, owner, physical)
     return {title=ctx.env.title, profile=wrapper, pack=pack, io=io_, authority=authority, reads=ctx.reads,
             Registry=dofile(ctx.root .. "/lua/hook_registry.lua"), GB=dofile(ctx.root .. "/lua/gb_hook_binding.lua"),
             owner=owner, max_pending=8}
+end
+
+-- The production decoder (lua/gen2/signals.lua faint_event) on the live hook, as a MODEL instance holding only the
+-- poison_faint row: model_only IO whose bank check is the live hROMBank byte. Not PHYSICAL authority.
+function F.poison_model(ctx, Signals, wrapper, pack)
+    local api, title = ctx.api, ctx.env.title
+    local only = copy(pack)
+    only.titles[title].sites = {poison_faint=only.titles[title].sites.poison_faint}
+    local options = binder_options(ctx, wrapper, only, "gen2-u1e-poison-model")
+    options.io.bank_valid = function(bank)
+        return bank == 0 or api.read_u8(ctx.profile.hram.hROMBank, "System Bus") == bank
+    end
+    options.io.stack_valid = function() return true end   -- poison_faint has no stack guard
+    options.authority.valid = function() return true end
+    local model, why = Signals.new_model(options)
+    assert(model, "poison model binder refused: " .. tostring(why))
+    local out = {events={}}
+    function out.drain()
+        for _, batch in ipairs(model:drain()) do
+            for _, e in ipairs(batch.events) do
+                out.events[#out.events + 1] = {kind=e.kind, cause=e.cause, site_id=e.site_id, slot=e.slot,
+                    species=e.mon and e.mon.species_id, dvs=e.mon and e.mon.dv_word}
+            end
+        end
+    end
+    function out.close()
+        out.drain()
+        local status = model:status()
+        out.refusals, out.failed = status.refusals, status.failed
+        model:close()
+    end
+    return out
 end
 
 -- The load-time refusals, each beside its known-positive control on the same live ROM.
@@ -611,7 +728,10 @@ function F.main(api, getenv, SG)
         return finish("no arrival")
     end
 
+    local poison = ctx.u1.poison ~= nil
+    local expect = F.expect(poison)
     local probe = F.probe(ctx, pack, ctx.u1.decoy)
+    probe.watch_poison = poison
     local base = SG.qualify_observer(ctx)
     local function observe()
         local point = base()
@@ -648,9 +768,22 @@ function F.main(api, getenv, SG)
         settle_frames=F.BUDGET.settle_frames, terminal_idle=true}, driver, observe, diag)
     -- The faint leg (the shared H1c inputs): back into the grass, the lead (party [starter, catch]) takes
     -- the wild mon's hits behind a status move until it faints; NO to "Use next", out to the overworld.
+    -- card gen2-u1e-poison: the lead meets a POISON_STING foe on the hunt map, is poisoned, and faints to
+    -- DoPoisonStep on the park tiles; the production decoder (MODEL instance) rides the same hook.
+    local model, fopts = nil, {fainted=function() return probe.record.sites.battle_faint.hits >= 1 end}
+    if played and poison then
+        local PI = dofile(ctx.root .. "/" .. F.POISON_INPUTS)
+        model = F.poison_model(ctx, Signals, wrapper, pack)
+        local pdriver, pobserve, pspec = PI.new(ctx, SG, F, FI, {
+            fainted=function() return probe.record.sites.poison_faint.hits >= 1 end,
+            max_frames=F.POISON_BUDGET.max_frames, max_phase_frames=F.POISON_BUDGET.max_phase_frames})
+        played, outcome = F.play(host, pspec, pdriver, pobserve, diag)
+        model.close()
+        probe.record.poison_model, probe.record.psn_mask = model, ctx.u1.poison.psn_mask
+        fopts.map, fopts.max_battles = ctx.u1.poison.maps[ctx.u1.poison.hunt_map], F.POISON_FAINT_BATTLES
+    end
     if played then
-        local fdriver, fobserve, fspec = FI.new(ctx, SG, F, {
-            fainted=function() return probe.record.sites.battle_faint.hits >= 1 end})
+        local fdriver, fobserve, fspec = FI.new(ctx, SG, F, fopts)
         -- F.play settles the stale save UI first (live U1d run 1).
         played, outcome = F.play(host, fspec, fdriver, fobserve, diag)
     end
@@ -659,7 +792,8 @@ function F.main(api, getenv, SG)
     local record = probe.record
     record.negatives = negatives
     record.negatives.wrong_bank_hit = (record.decoy.raw >= 1 and record.decoy.accepted == 0) and "refused" or "NOT refused"
-    check("walk -> wild encounter -> Poke Ball catch -> native save -> walk -> lead faints", played,
+    check("walk -> wild encounter -> Poke Ball catch -> native save -> " .. (poison and "poisoned lead faints on the overworld -> " or "")
+          .. "walk -> a mon faints in battle", played,
           not played and outcome or nil)
 
     local summary = {}
@@ -672,15 +806,20 @@ function F.main(api, getenv, SG)
     log("HIT_SUMMARY " .. json.encode(json.object(summary)))
     log("ALIGN " .. json.encode({align=record.align or json.null, aligned=record.aligned, misaligned=record.misaligned}))
     log("FAINT " .. json.encode(record.faint or json.null))
+    if poison then
+        log("POISON " .. json.encode(record.poison or json.null))
+        log("POISON_MODEL " .. json.encode(model and {events=json.array(model.events), refusals=json.object(model.refusals or {}),
+                                                       failed=model.failed or json.null} or json.null))
+    end
     log("DECOY " .. json.encode({site=ctx.u1.decoy, raw=record.decoy.raw, accepted=record.decoy.accepted,
                                   bank_rejects=record.decoy.bank_rejects}))
-    local problems, proven = F.verdict(record)
+    local problems, proven = F.verdict(record, expect)
     log("VERDICT " .. json.encode(json.object({problems=json.array(problems), proven=json.array(proven)})))
     for _, problem in ipairs(problems) do check(problem, false) end
     if not played or #problems > 0 then return finish("no receipt") end
 
     local sites = {}
-    for _, name in ipairs(F.EXPECT) do
+    for _, name in ipairs(expect) do
         local s = record.sites[name]
         sites[name] = {bank=s.bank, addr=s.addr, pc=s.pc, expected_hex=s.expected_hex, symbol=s.symbol,
                        hits=s.hits, raw=s.raw, bank_rejects=s.bank_rejects, first_frame=s.first_frame}
@@ -714,6 +853,18 @@ function F.main(api, getenv, SG)
         negatives=record.negatives, decoy={bank=ctx.u1.decoy.bank, addr=ctx.u1.decoy.addr, raw=record.decoy.raw,
             accepted=record.decoy.accepted, bank_rejects=record.decoy.bank_rejects},
         sites=sites, proven=json.array(proven), absent=json.array(F.ABSENT)}
+    if poison then
+        local p = record.poison
+        receipt.poison_alignment = {passed=true, rule="poison_faint callback frame == armed; overworld (wBattleMode 0); "
+            .. "wCurPartyMon is a party slot whose record reads HP 0 with PSN still set inside the callback, read HP 1 "
+            .. "(0 if the frame boundary split the tick) before the armed frame, and reads status 0 on the callback "
+            .. "frame or the next; the production faint decoder (MODEL instance on the same hook) emitted one poison "
+            .. "faint naming that slot, species and DVs",
+            armed=p.armed, callback=p.callback, slot=p.slot, party_count=p.party_count, battle_mode=p.battle_mode,
+            species=p.species, dvs=p.dvs, callback_hp=p.callback_hp, callback_status=p.callback_status,
+            psn_mask=record.psn_mask, pre_hp=p.pre_hp, post_status=p.post_status, status_zero_frame=p.status_zero_frame,
+            clear_frames=p.status_zero_frame - p.callback, model_event=model.events[1]}
+    end
 
     -- The production gate on this very ROM: the receipt registers exactly the proven sites; the other
     -- title (F.REFUSE, with its own pack) refuses it.

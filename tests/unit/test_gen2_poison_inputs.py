@@ -1,0 +1,242 @@
+"""Card gen2-u1e-poison: the pure poison leg (lua/tests/gen2_poison_inputs.lua) and the frame-align gate's poison
+record rules (lua/tests/gen2_frame_align.lua F.poison_problem / F.poison_emission_problem / F.expect).
+No emulator: synthetic points in, buttons out."""
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from lupa import LuaRuntime
+
+ROOT = Path(__file__).resolve().parents[2]
+POISON = ROOT / "lua/tests/gen2_poison_inputs.lua"
+ALIGN = ROOT / "lua/tests/gen2_frame_align.lua"
+PSN = 8
+
+# 5x3 map: row 0 floor, row 1 grass except x=4, row 2 floor. group 1.
+GRID = [1, 1, 1, 1, 1,
+        2, 2, 2, 2, 1,
+        1, 1, 1, 1, 1]
+
+
+def lua():
+    return LuaRuntime(unpack_returned_tuples=True)
+
+
+def load(rt):
+    return rt.execute(POISON.read_text(encoding="utf-8"))
+
+
+def frame_align(rt):
+    rt.globals().SLINK_GEN2_GATE_LIBRARY = True
+    return rt.execute(ALIGN.read_text(encoding="utf-8"))
+
+
+def table(rt, value):
+    return rt.table_from(value, recursive=True)
+
+
+def lua_list(values):
+    return {i + 1: v for i, v in enumerate(values)}
+
+
+def a_map(number, grid=GRID, width=5, height=3):
+    return {"map_group": 1, "map_number": number, "map_const": f"M{number}", "width": width, "height": height,
+            "grid": lua_list(grid), "warps": {}}
+
+
+ALL = {"Up": True, "Down": True, "Left": True, "Right": True}
+
+
+def test_path_prefers_floor_to_grass_and_arrives():
+    rt = lua()
+    PI = load(rt)
+    m = table(rt, a_map(1))
+    # (3,0) -> (3,2): straight down costs grass 4 + floor 1 = 5; around the floor column x=4 costs 4
+    step = PI.step_toward(m, table(rt, {"x": 3, "y": 0, "can_step": ALL}), table(rt, lua_list([{"x": 3, "y": 2}])))
+    assert step == "Right"
+    # (0,0) -> (0,2): the detour costs 10, so the grass is crossed
+    assert PI.step_toward(m, table(rt, {"x": 0, "y": 0, "can_step": ALL}), table(rt, lua_list([{"x": 0, "y": 2}]))) == "Down"
+    assert PI.step_toward(m, table(rt, {"x": 0, "y": 2, "can_step": ALL}),
+                          table(rt, lua_list([{"x": 0, "y": 2}]))) == "arrived"
+
+
+def test_path_first_step_obeys_live_collision_and_objects():
+    rt = lua()
+    PI = load(rt)
+    m = table(rt, a_map(1))
+    no_right = dict(ALL, Right=False)
+    step = PI.step_toward(m, table(rt, {"x": 0, "y": 0, "can_step": no_right}), table(rt, lua_list([{"x": 0, "y": 2}])))
+    assert step == "Down"
+    blocked = PI.step_toward(m, table(rt, {"x": 0, "y": 0, "can_step": no_right, "blocked": lua_list([{"x": 0, "y": 1}])}),
+                             table(rt, lua_list([{"x": 0, "y": 2}])))
+    assert blocked[0] is None and "no source path" in blocked[1]
+
+
+FACTS = {"maps": {"A": a_map(1), "H": a_map(2)}, "hunt_map": "H",
+         "legs": lua_list([{"map": "A", "side": "Left", "exits": lua_list([{"x": 0, "y": 0}])}]),
+         "hunt_grass": lua_list([{"x": 1, "y": 1}]), "park": lua_list([{"x": 0, "y": 2}, {"x": 1, "y": 2}]),
+         "moves": {"POISON_STING": 40}, "psn_mask": PSN}
+MENU = ["FIGHT", "<PK><MN>", "PACK", "RUN"]
+
+
+def driver(rt, PI):
+    F = rt.eval("{walk_direction=function() return 'Left' end}")
+    return PI.driver(F, table(rt, FACTS), table(rt, {"moves": lua_list(["GROWL", "LEER"])}))
+
+
+def pt(rt, **fields):
+    base = {"map_group": 1, "map_number": 2, "x": 1, "y": 1, "can_step": ALL, "battle_mode": 0,
+            "overworld_ready": True, "input_ready": True, "party": {0: {"hp": 20, "status": 0}, 1: {"hp": 12, "status": 0}}}
+    base.update(fields)
+    return table(rt, base)
+
+
+def ui(kind, items=None, cursor=1, columns=1, **extra):
+    out = {"kind": kind, **extra}
+    if items:
+        out.update(items=lua_list(items), cursor=cursor, columns=columns)
+    return out
+
+
+def step(rt, d, **fields):
+    buttons, phase = d.step(pt(rt, **fields))
+    assert buttons is not None, phase
+    pressed = sorted(k for k, v in buttons.items() if v)
+    if pressed and pressed[0] in ("A", "B", "Up", "Down", "Left", "Right") and fields.get("ui"):
+        for _ in range(12):
+            d.step(pt(rt, **fields))
+    return pressed, phase
+
+
+def test_travel_crosses_the_source_edge_then_enters_the_hunt_grass():
+    rt = lua()
+    d = driver(rt, load(rt))
+    assert step(rt, d, map_number=1, x=1, y=0) == (["Left"], "travel")      # toward the exit tile
+    assert step(rt, d, map_number=1, x=0, y=0) == (["Left"], "travel")      # on it: hold the side
+    assert step(rt, d, map_number=2, x=1, y=0)[0] == ["Down"]               # hunt map: onto the grass
+    assert step(rt, d, map_number=2, x=1, y=1) == (["Left"], "hunt")        # grass reached: oscillate
+
+
+def test_battle_runs_from_a_foe_without_poison_sting():
+    rt = lua()
+    d = driver(rt, load(rt))
+    step(rt, d, map_number=2, x=1, y=1)
+    battle = {"battle_mode": 1, "active_slot": 0, "foe_sting": False, "overworld_ready": False}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **battle)[0] == ["Right"]
+    assert step(rt, d, ui=ui("battle_menu", MENU, 2, 2), **battle)[0] == ["Down"]
+    assert step(rt, d, ui=ui("battle_menu", MENU, 4, 2), **battle)[0] == ["A"]
+
+
+def test_a_poison_sting_foe_gets_leer_until_the_lead_is_poisoned_then_run():
+    rt = lua()
+    d = driver(rt, load(rt))
+    step(rt, d, map_number=2, x=1, y=1)
+    battle = {"battle_mode": 1, "active_slot": 0, "foe_sting": True, "overworld_ready": False}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **battle)[0] == ["A"]                       # FIGHT
+    assert step(rt, d, ui=ui("move_menu", ["SCRATCH", "LEER"]), **battle)[0] == ["Down"]
+    assert step(rt, d, ui=ui("move_menu", ["SCRATCH", "LEER"], 2), **battle)[0] == ["A"]             # never SCRATCH
+    battle["target_psn"] = True
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **battle)[0] == ["Right"]                   # toward RUN
+    assert step(rt, d, ui=ui("move_menu", ["SCRATCH", "LEER"]), **battle)[0] == ["B"]
+
+
+def test_a_foe_sting_against_a_switched_in_mon_is_fled():
+    rt = lua()
+    d = driver(rt, load(rt))
+    step(rt, d, map_number=2, x=1, y=1)
+    step(rt, d, ui=ui("text"), battle_mode=1, active_slot=0, overworld_ready=False)                  # target = lead 0
+    other = {"battle_mode": 1, "active_slot": 1, "foe_sting": True, "overworld_ready": False}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 4, 2), **other)[0] == ["A"]                        # RUN
+
+
+def test_poisoned_lead_ticks_on_the_park_tiles_then_parks_after_the_faint():
+    rt = lua()
+    d = driver(rt, load(rt))
+    step(rt, d, map_number=2, x=1, y=1)
+    poisoned = {"party": {0: {"hp": 9, "status": PSN}, 1: {"hp": 12, "status": 0}}}
+    buttons, phase = d.step(pt(rt, x=1, y=1, **poisoned))
+    assert phase == "tick" and buttons["Down"]                     # off the grass toward park[1] (0,2)
+    buttons, phase = d.step(pt(rt, x=0, y=2, **poisoned))
+    assert phase == "tick" and buttons["Right"]                    # on park[1]: go to park[2]
+    buttons, phase = d.step(pt(rt, x=1, y=2, **poisoned))
+    assert phase == "tick" and buttons["Left"]
+    assert step(rt, d, x=1, y=2, overworld_ready=False, ui=ui("text"))[0] == ["A"]   # "fainted!"
+    fainted = {"party": {0: {"hp": 0, "status": 0}, 1: {"hp": 12, "status": 0}}, "poison_fainted": True}
+    buttons, phase = d.step(pt(rt, x=1, y=2, **fainted))
+    assert phase == "park" and buttons["Left"]
+    buttons, phase = d.step(pt(rt, x=0, y=2, **fainted))
+    assert phase == "poisoned" and not any(buttons.values())
+
+
+def test_the_lead_fainting_in_battle_is_a_failure_not_a_poison_proof():
+    rt = lua()
+    d = driver(rt, load(rt))
+    step(rt, d, map_number=2, x=1, y=1)
+    buttons, why = d.step(pt(rt, battle_mode=1, active_slot=0, overworld_ready=False,
+                             ui=ui("yes_no", ["YES", "NO"], prompt="next_mon")))
+    assert buttons is None and "fainted in battle" in why
+
+
+def test_a_battle_on_the_park_tiles_is_refused():
+    rt = lua()
+    d = driver(rt, load(rt))
+    step(rt, d, map_number=2, x=1, y=1)
+    d.step(pt(rt, x=1, y=1, party={0: {"hp": 9, "status": PSN}}))
+    buttons, why = d.step(pt(rt, battle_mode=1, overworld_ready=False))
+    assert buttons is None and "park" in why
+
+
+GOOD = {"armed": 900, "callback": 900, "slot": 0, "party_count": 2, "battle_mode": 0, "species": 158, "dvs": 0xF794,
+        "callback_hp": 0, "callback_status": PSN, "pre_hp": 1, "status_zero_frame": 900}
+
+
+def test_poison_rule_accepts_the_same_frame_record():
+    rt = lua()
+    F = frame_align(rt)
+    assert F.poison_problem(table(rt, GOOD), PSN) is None
+    assert F.poison_problem(table(rt, dict(GOOD, pre_hp=0, status_zero_frame=901)), PSN) is None
+
+
+@pytest.mark.parametrize("change,match", [
+    ({"callback": 901}, "callback frame"),
+    ({"slot": 2}, "party slot"),
+    ({"battle_mode": 1}, "inside a battle"),
+    ({"callback_hp": 1}, "0 HP"),
+    ({"callback_status": 0}, "PSN"),
+    ({"pre_hp": 2}, "1 HP"),
+    ({"status_zero_frame": 902}, "status did not read 0"),
+    ({"status_zero_frame": None}, "status did not read 0"),
+])
+def test_poison_rule_refuses_each_broken_measurement(change, match):
+    rt = lua()
+    F = frame_align(rt)
+    record = {k: v for k, v in dict(GOOD, **change).items() if v is not None}
+    assert match in F.poison_problem(table(rt, record), PSN)
+    assert "no same-frame" in F.poison_problem(None, PSN)
+
+
+EVENT = {"kind": "faint", "cause": "poison", "site_id": "poison_faint", "slot": 0, "species": 158, "dvs": 0xF794}
+
+
+@pytest.mark.parametrize("events,match", [
+    ([EVENT], None),
+    ([], "emitted 0"),
+    ([EVENT, EVENT], "emitted 2"),
+    ([dict(EVENT, cause="battle")], "not a poison faint"),
+    ([dict(EVENT, slot=1)], "another record"),
+    ([dict(EVENT, dvs=1)], "another record"),
+])
+def test_emission_rule_needs_one_poison_faint_naming_the_snapshot(events, match):
+    rt = lua()
+    F = frame_align(rt)
+    why = F.poison_emission_problem(table(rt, {"events": lua_list(events)}), table(rt, GOOD))
+    assert (why is None) if match is None else (match in why)
+
+
+def test_poison_joins_the_expected_order_just_before_battle_faint():
+    rt = lua()
+    F = frame_align(rt)
+    assert list(F.expect(False).values()) == list(F.EXPECT.values())
+    names = list(F.expect(True).values())
+    assert names[-2:] == ["poison_faint", "battle_faint"] and len(names) == len(F.EXPECT) + 1
