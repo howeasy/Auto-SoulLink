@@ -532,9 +532,24 @@ def test_crystal_keeps_its_window_stack_in_wram():
     assert g.unexpected_resave_bytes(body, bytes(changed), layout_of("crystal"), "crystal") == [(0x1FFE, 0x1FFF)]
 
 
+@pytest.mark.parametrize("title", ["gold", "silver"])
+def test_gold_silver_menu_close_tilemap_copy_into_sscratch_is_scratch_not_a_stray(title):
+    """G engine/menus/menu.asm:569-591 RestoreOverworldMapTiles copies SCREEN_AREA (20*18 = $168) tilemap
+    bytes into sScratch ($0000 flat) whenever an overworld menu closes: live gold_town re-save (review gen2-R18)."""
+    body = bytes(cart(title, "town", 0x1234))
+    for at in (0x0000, 0x0004, 0x0167):
+        changed = bytearray(body)
+        changed[at] ^= 0x5A
+        assert g.unexpected_resave_bytes(body, bytes(changed), layout_of(title), title) == [], hex(at)
+    changed = bytearray(body)
+    changed[0x0168] ^= 0x5A
+    assert g.unexpected_resave_bytes(body, bytes(changed), layout_of(title), title) == [(0x0168, 0x0169)]
+
+
 def test_crystal_boot_may_only_zero_the_first_32_scratch_bytes():
-    """C home/init.asm:98,205-213 ClearsScratch; Gold has no such routine."""
-    for title, stray in (("crystal", []), ("gold", [(0, 0x20)])):
+    """C home/init.asm:98,205-213 ClearsScratch; Gold has no such routine, but its whole sScratch[0:$168]
+    is already allowed UI scratch (RestoreOverworldMapTiles), so a Gold zero there is no stray either."""
+    for title, stray in (("crystal", []), ("gold", [])):
         body = bytearray(cart(title, "battle", 0x1234))
         body[0:0x40] = b"\x77" * 0x40  # battle animation graphics left in sScratch
         booted = bytearray(body)

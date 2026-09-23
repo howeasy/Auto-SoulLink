@@ -1,0 +1,153 @@
+{
+ "attempt_id": "n3-crystal-town-ot2-a1",
+ "errors": [],
+ "fixtures": [
+  {
+   "artifacts": {
+    "boot:game_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\boot-f3b07ff42d78f440\\crystal_town_ot2.boot.witness.json",
+     "sha256": "69abb15e5548f68799f3e45f3e5ceb2b2ae6e921946526a0465e2675a041c2ff",
+     "size": 1941
+    },
+    "fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\saveram\\Pokemon - Crystal Version (USA, Europe).SaveRAM",
+     "sha256": "8b254f04e23cb0a99e50c5170f9d8ba0b55df75015d00d2467193ce75e026c2e",
+     "size": 32790
+    },
+    "played_receipt": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\saveram\\crystal_town_ot2.played.json",
+     "sha256": "c9bebb637a6cc2fd4f0dc6b8747d6d1c1f449951cef2b82b110726621b637b5a",
+     "size": 832
+    },
+    "profile": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\data\\games\\gen2_crystal\\profile.json",
+     "sha256": "9ab1272981db1208a8f5ef9ff206c1470271cae6727d5e6475541e75b900d558",
+     "size": 79972
+    },
+    "resave:fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\resave-bb46f43fe09e7643\\crystal_town_ot2.resaved.SaveRAM",
+     "sha256": "1c63a44d929e527e97f91d6bcc97535afd45153a0bc175f7daa8ba444913e3cc",
+     "size": 32790
+    },
+    "resave:reload_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\reload-bb46f43fe09e7643\\crystal_town_ot2.reload.witness.json",
+     "sha256": "9d7699fa7adc34cebd33a8556fe5d13e29038088211658d91ed4f618246406af",
+     "size": 1943
+    },
+    "resave:save_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\resave-bb46f43fe09e7643\\crystal_town_ot2.resave.witness.json",
+     "sha256": "7368bdea9c5a617ddfb8ea10dd99d20bbe0c5c1e910f41b258dde7a68946d3d1",
+     "size": 2065
+    },
+    "rom": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-build\\pokecrystal\\pokecrystal.gbc",
+     "sha256": "d6702e353dcbe2d2c69183046c878ef13a0dae4006e8cdff521cca83dd1582fe",
+     "size": 2097152
+    },
+    "route_facts": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\crystal_route_facts.json",
+     "sha256": "0b27d2f2c98e8bc108919bdab016ed536f0bdf0f77d332c5f7a3cfb544fffcc4",
+     "size": 13930
+    }
+   },
+   "name": "crystal_town_ot2",
+   "passed": true,
+   "problems": [],
+   "provenance": {
+    "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+    "route_facts_sha256": "eee720532d0481d51f0a8cb3d8ab0cff8d2dc21a5cb3ac03fb4f6847dcd6b7a5",
+    "scope": "candidate fixture",
+    "title": "crystal"
+   },
+   "stages": [
+    {
+     "evidence": {
+      "ball_origin": "none",
+      "natural_ball_acquisition": "false",
+      "oracle": "independent Gen2 PYDEC",
+      "player_id": "44068"
+     },
+     "fingerprint": "4744cf938ea39e5ff48e796aa776cd9fa9b96e6e406ae90edb4ab6cffcdff30b",
+     "notes": [
+      "Static bytes do not prove played origin, RTC or GAME qualification."
+     ],
+     "problems": [],
+     "stage": "qualify",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "cartram_sha256": "ef9c085dc3bb501e1f17cfe03614978e04effaa82d26f0fd6f926d549d481c74",
+      "location": "[24, 5]",
+      "observer": "independent_GAME CONTINUE",
+      "position": "[5, 3]"
+     },
+     "fingerprint": "f3b07ff42d78f44099a6fc841527098e766cb319b1a679302b10cb0e3dc28c1d",
+     "notes": [],
+     "outputs": {
+      "boot:game_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\boot-f3b07ff42d78f440\\crystal_town_ot2.boot.witness.json",
+       "sha256": "69abb15e5548f68799f3e45f3e5ceb2b2ae6e921946526a0465e2675a041c2ff",
+       "size": 1941
+      }
+     },
+     "problems": [],
+     "stage": "boot",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "observer": "independent_GAME re-save + reload",
+      "resave_cartram_sha256": "1245949e66bf49bd94d349de363fbca9555690b69889e0bb539b0086929ec348"
+     },
+     "fingerprint": "bb46f43fe09e764333806af12ddbeac8e8f7a6126582817a9ba5753a00c8f470",
+     "notes": [],
+     "outputs": {
+      "resave:fixture": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\resave-bb46f43fe09e7643\\crystal_town_ot2.resaved.SaveRAM",
+       "sha256": "1c63a44d929e527e97f91d6bcc97535afd45153a0bc175f7daa8ba444913e3cc",
+       "size": 32790
+      },
+      "resave:reload_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\reload-bb46f43fe09e7643\\crystal_town_ot2.reload.witness.json",
+       "sha256": "9d7699fa7adc34cebd33a8556fe5d13e29038088211658d91ed4f618246406af",
+       "size": 1943
+      },
+      "resave:save_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-crystal-town-ot2-a1\\crystal_town_ot2\\qualify\\resave-bb46f43fe09e7643\\crystal_town_ot2.resave.witness.json",
+       "sha256": "7368bdea9c5a617ddfb8ea10dd99d20bbe0c5c1e910f41b258dde7a68946d3d1",
+       "size": 2065
+      }
+     },
+     "problems": [],
+     "stage": "resave",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "oracle": "independent re-save PYDEC + GAME raw-party witness"
+     },
+     "fingerprint": "42fd696f91bc6125b409dfce03c5c5167c0e1e942772f85b8aff3712a093ead7",
+     "notes": [],
+     "problems": [],
+     "stage": "post_oracle",
+     "status": "PASS"
+    }
+   ]
+  }
+ ],
+ "open_obligations": [
+  "coordinator GAME/RTC/played-origin review",
+  "recorded source/physical gate sign-off"
+ ],
+ "passed": true,
+ "physical_qualification": false,
+ "required_stages": [
+  "qualify",
+  "boot",
+  "resave",
+  "post_oracle"
+ ],
+ "schema": "fixture-qualification-v1",
+ "scope": "full"
+}

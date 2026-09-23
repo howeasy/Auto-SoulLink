@@ -97,8 +97,13 @@ SAVE_WRITES_CRYSTAL = (("sGSBallFlag", ("sGSBallFlag", 1)), ("sGSBallFlagBackup"
 # Every menu writes it: _PushWindow (G engine/menus/menu.asm:438) stores the menu header and tile backups,
 # ClearWindowData (G home/menu.asm:712) zeroes its top from StartMenu and MainMenu, so CONTINUE and START/SAVE
 # both rewrite it. Crystal keeps the stack in WRAM (wWindowStack, C home/menu.asm:768-772): nothing there.
-SCRATCH_WRITES = {"crystal": (), "gold": (("sWindowStackBottom", ("sWindowStackTop", 1)),),
-                  "silver": (("sWindowStackBottom", ("sWindowStackTop", 1)),)}
+# Closing an overworld menu also copies the whole screen tilemap into sScratch[0:SCREEN_AREA] in Gold/Silver
+# (RestoreOverworldMapTiles, G engine/menus/menu.asm:569-591, SCREEN_AREA = 20*18 = $168); the same routine is
+# unreferenced in Crystal (C engine/menus/menu.asm:696); live gold_town re-save corroborates ($0004-$0167 moved).
+# Battle-only sScratch writers (G engine/battle_anims/anim_commands.asm, engine/battle/core.asm) are out of scope:
+# qualification never battles, so a stray there is a real signal, not a reason to widen this span.
+_GS_SCRATCH = (("sWindowStackBottom", ("sWindowStackTop", 1)), ("sScratch", ("sScratch", 20 * 18)))
+SCRATCH_WRITES = {"crystal": (), "gold": _GS_SCRATCH, "silver": _GS_SCRATCH}
 # Crystal Init zeroes sScratch[0:$20] on every boot (C home/init.asm:98 -> ClearsScratch :205-213; Gold has no
 # such routine). Battle animations decompress into sScratch (DecompressRequest2bpp C home/gfx.asm:118-133 via
 # LoadBattleAnimGFX engine/battle_anims/helpers.asm:105-122), so a candidate that met a wild battle holds

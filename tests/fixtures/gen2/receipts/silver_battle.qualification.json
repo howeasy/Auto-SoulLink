@@ -1,0 +1,153 @@
+{
+ "attempt_id": "n3-silver-battle-a2",
+ "errors": [],
+ "fixtures": [
+  {
+   "artifacts": {
+    "boot:game_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\boot-398e8ad272148bb6\\silver_battle.boot.witness.json",
+     "sha256": "bdd34d3b70add6ce968f7968d77b691135b097de2c9b94005c217598b483c831",
+     "size": 1936
+    },
+    "fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\saveram\\Pokemon - Silver Version (USA, Europe).SaveRAM",
+     "sha256": "0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd",
+     "size": 32790
+    },
+    "played_receipt": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\saveram\\silver_battle.played.json",
+     "sha256": "312197cf29c2833b779b388ad63b1da6872d818c0cefa5f588ebd07990b40245",
+     "size": 994
+    },
+    "profile": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\data\\games\\gen2_silver\\profile.json",
+     "sha256": "b5db26876a6605e05de03612be0ef4e556258ea8213ba745f7138c4d594c48c4",
+     "size": 73328
+    },
+    "resave:fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\resave-92ffc517b79e0794\\silver_battle.resaved.SaveRAM",
+     "sha256": "b929ce0ca92f5749a2c75e3cff5c0d90765140f655ef9ba187b800630e71acca",
+     "size": 32790
+    },
+    "resave:reload_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\reload-92ffc517b79e0794\\silver_battle.reload.witness.json",
+     "sha256": "726f4f7debbcccd77c9e9a1d3b4a68e8cf6cf9c350a8299ab64d3b79791632d5",
+     "size": 1938
+    },
+    "resave:save_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\resave-92ffc517b79e0794\\silver_battle.resave.witness.json",
+     "sha256": "33d035806d8c4b12f17229756fd3a1adc4ac62e0c16e132c61cbb41932fb384a",
+     "size": 2060
+    },
+    "rom": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-build\\pokegold\\pokesilver.gbc",
+     "sha256": "72b190859a59623cbef6c49d601f8de52c1d2331b4f08a8d2acc17274fc19a8c",
+     "size": 2097152
+    },
+    "route_facts": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\silver_route_facts.json",
+     "sha256": "f9f341a431fc332677b8c134a7a0a4696bd94bf9e521148c105c30b6489a6c1d",
+     "size": 13576
+    }
+   },
+   "name": "silver_battle",
+   "passed": true,
+   "problems": [],
+   "provenance": {
+    "rom_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+    "route_facts_sha256": "89c8cdaf7e57fa9ccc700e0e32a99ebb17d439d3bbc41f25ed09f75e0b60324a",
+    "scope": "candidate fixture",
+    "title": "silver"
+   },
+   "stages": [
+    {
+     "evidence": {
+      "ball_origin": "O-10 harness injection",
+      "natural_ball_acquisition": "false",
+      "oracle": "independent Gen2 PYDEC",
+      "player_id": "51084"
+     },
+     "fingerprint": "f68ab2f7a1cfd445d89c43176ce993a9eaabb78d0fd05f631eb85b79fd43f57e",
+     "notes": [
+      "Static bytes do not prove played origin, RTC or GAME qualification."
+     ],
+     "problems": [],
+     "stage": "qualify",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "cartram_sha256": "463d6b35dcd3ae97078386c7337a4c890bfb30ed05198a7fabc250abfec9926e",
+      "location": "[24, 3]",
+      "observer": "independent_GAME CONTINUE",
+      "position": "[53, 12]"
+     },
+     "fingerprint": "398e8ad272148bb60faadb2b91b283e98c4ffdcf08beb3e396357b5106344387",
+     "notes": [],
+     "outputs": {
+      "boot:game_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\boot-398e8ad272148bb6\\silver_battle.boot.witness.json",
+       "sha256": "bdd34d3b70add6ce968f7968d77b691135b097de2c9b94005c217598b483c831",
+       "size": 1936
+      }
+     },
+     "problems": [],
+     "stage": "boot",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "observer": "independent_GAME re-save + reload",
+      "resave_cartram_sha256": "c9f7b2554019009b95833cd93472f18eec6d1c5f68f472b524f4757b549b1f6d"
+     },
+     "fingerprint": "92ffc517b79e0794595d931f4e7452da490b444272edb23210a7101546a5c016",
+     "notes": [],
+     "outputs": {
+      "resave:fixture": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\resave-92ffc517b79e0794\\silver_battle.resaved.SaveRAM",
+       "sha256": "b929ce0ca92f5749a2c75e3cff5c0d90765140f655ef9ba187b800630e71acca",
+       "size": 32790
+      },
+      "resave:reload_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\reload-92ffc517b79e0794\\silver_battle.reload.witness.json",
+       "sha256": "726f4f7debbcccd77c9e9a1d3b4a68e8cf6cf9c350a8299ab64d3b79791632d5",
+       "size": 1938
+      },
+      "resave:save_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-silver-battle-a2\\silver_battle\\qualify\\resave-92ffc517b79e0794\\silver_battle.resave.witness.json",
+       "sha256": "33d035806d8c4b12f17229756fd3a1adc4ac62e0c16e132c61cbb41932fb384a",
+       "size": 2060
+      }
+     },
+     "problems": [],
+     "stage": "resave",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "oracle": "independent re-save PYDEC + GAME raw-party witness"
+     },
+     "fingerprint": "01d9bc88d1f68528919b950b30e68f4c337a90b11d95e73f370834d95aafc1b4",
+     "notes": [],
+     "problems": [],
+     "stage": "post_oracle",
+     "status": "PASS"
+    }
+   ]
+  }
+ ],
+ "open_obligations": [
+  "coordinator GAME/RTC/played-origin review",
+  "recorded source/physical gate sign-off"
+ ],
+ "passed": true,
+ "physical_qualification": false,
+ "required_stages": [
+  "qualify",
+  "boot",
+  "resave",
+  "post_oracle"
+ ],
+ "schema": "fixture-qualification-v1",
+ "scope": "full"
+}
