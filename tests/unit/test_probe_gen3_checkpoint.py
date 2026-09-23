@@ -255,8 +255,8 @@ def test_verdict_passes_when_expected_clause_is_among_several(module):
 def test_every_negative_row_declares_expect_clauses(module):
     lua, probe = module
     want = {"start_menu": {"field_controls_locked"},
-            "dialog": {"save_dialog_cb", "field_controls_locked"},
-            "save": {"save_dialog_cb", "field_controls_locked"},
+            "dialog": {"task", "field_controls_locked"},   # C4-SAVE: not the stale pointer
+            "save": {"task", "field_controls_locked"},
             "battle": {"in_battle", "callback1", "callback2"},
             "fade": {"palette_fade_active"},
             "pc_menu": {"task"},

@@ -74,7 +74,7 @@ def test_anchor_offsets_are_inside_their_symbol(pack: str, title: str) -> None:
 def test_allowed_tasks_are_even_thumb_free_addresses(pack: str, title: str) -> None:
     tasks = load(pack)[title]["tasks"]
     allowed = tasks["allowed_overworld_tasks"]
-    assert set(allowed) == set(G.ALLOWED_TASKS)
+    assert set(allowed) == set(G.ALLOWED_TASKS) | (set(G.FRLG_ONLY_TASKS) if pack == "gen3_frlg" else set())
     syms = G.parse_sym(G.SYM_DIR / load(pack)[title]["sym"])
     for name, address in allowed.items():
         assert address % 2 == 0, f"{title}/{name}: Thumb bit must be stripped"
@@ -108,6 +108,31 @@ def test_no_predicate_reads_wireless_transport_selector(pack: str, title: str) -
         assert not start <= 0x03003F3C < start + predicate["width"], (
             f"{title}: {name} reads gWirelessCommType"
         )
+
+
+@pytest.mark.parametrize("pack,title", PACK_TITLES)
+def test_link_clause_is_slinkopen_and_nothing_reads_glinkcallback(pack: str, title: str) -> None:
+    # C4-SAVE: gLinkCallback survives CloseLink (link.c:419-426); only sLinkOpen gates it (:512).
+    block = load(pack)[title]
+    syms = G.parse_sym(G.SYM_DIR / block["sym"])
+    p = block["predicates"]["link_callback"]
+    assert (p["symbol"], p["address"], p["offset"], p["width"], p["expect"]) == \
+        ("sLinkOpen", syms["sLinkOpen"][0], 0, 1, 0)
+    cb = syms["gLinkCallback"][0]
+    for name, q in block["predicates"].items():
+        start = q["address"] + q["offset"]
+        assert not (start < cb + 4 and cb < start + q["width"]), f"{title}: {name} reads gLinkCallback"
+
+
+def test_rr_link_clause_needs_byte_identical_link_code(monkeypatch) -> None:
+    for kind in G.PACKS["gen3_rr"]["radical_red"][1]:
+        rom_or_skip("gen3_rr", "radical_red", kind)
+    rom_or_skip("gen3_frlg", "firered", "clean")
+    real = G.verify_code
+    monkeypatch.setattr(G, "verify_code", lambda syms, roms, name: name != "LinkMain2" and real(syms, roms, name))
+    out, unverified = G.build_title("gen3_rr", "radical_red", "pokefirered.sym", ("clean", "companion"))
+    assert "link_callback" not in out["predicates"]   # fail-closed: safety.lua then refuses all
+    assert any("LinkMain2" in row for row in unverified)
 
 
 def census_rows(path: str) -> dict[int, int]:

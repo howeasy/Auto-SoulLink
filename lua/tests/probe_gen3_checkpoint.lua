@@ -21,10 +21,14 @@ P.STATES = {
     {name="walking", terminal="position_changed_120", expectation="report"},
     {name="start_menu", terminal="field_controls_locked", expectation="negative",
         expect_clauses={field_controls_locked=true}},
+    -- C4-SAVE: sSaveDialogCB is never reset (pret start_menu.c:608-842), so it cannot be what
+    -- refuses a live save. The whole dialog runs inside Task_StartMenuHandleInput (:378-394)
+    -- under ShowStartMenu's lock (:405, released :586/:598); every physical dialog/save frame on
+    -- record names both (checkpoint_*_2026-09-2[23]*.txt: task:N, field_controls_locked:N).
     {name="dialog", terminal="save_dialog_cb_nonzero", expectation="negative",
-        expect_clauses={save_dialog_cb=true, field_controls_locked=true}},
+        expect_clauses={task=true, field_controls_locked=true}},
     {name="save", terminal="new_counter_partial_slot_then_14_sectors", expectation="negative",
-        expect_clauses={save_dialog_cb=true, field_controls_locked=true}},
+        expect_clauses={task=true, field_controls_locked=true}},
     {name="battle", terminal="in_battle_mask_nonzero", expectation="negative",
         expect_clauses={in_battle=true, callback1=true, callback2=true}},
     {name="fade", terminal="palette_fade_active_then_map_changed", expectation="negative",

@@ -91,3 +91,49 @@ def test_link_players_received_in_a_center_is_refused(title, kind):
 
 def test_no_session_task_is_allowed():
     assert not set(SESSION) & set(G.ALLOWED_TASKS)
+
+
+# C4-SAVE audit: the Elite Four / Champion room lighting task never destroys itself (pret
+# field_specials.c:2160-2185) and outlives the entrance script's releaseall, so the player walks
+# the room beside it. Literal (even) addresses from the .sym; RR is deliberately left refusing.
+LEAGUE_RUN = {"firered": 0x080CCA18, "leafgreen": 0x080CC9EC, "radical_red": 0x080CCA18}
+LEAGUE_CANCEL = {"firered": 0x080CCAF4, "leafgreen": 0x080CCAC8, "radical_red": 0x080CCAF4}
+
+
+def league_world(title: str, kind: str, fn: int) -> World:
+    """The three field tasks + one league lighting task in gTasks."""
+    w = World(title, kind)
+    g, t = w.lua.globals(), w.pack["tasks"]
+    syms = G.parse_sym(G.SYM_DIR / sym_file(title))
+    for i in range(t["count"] * t["struct_size"]):
+        g.mem[t["address"] + i] = 0
+    for i, f in enumerate([syms[n][0] for n in FIELD] + [fn]):
+        base = t["address"] + i * t["struct_size"]
+        g.put(base + t["func_offset"], f | 1, 4)
+        g.put(base + t["is_active_offset"], 1, 1)
+    return w
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_league_lighting_addresses_are_the_sym(title):
+    syms = G.parse_sym(G.SYM_DIR / sym_file(title))
+    assert LEAGUE_RUN[title] == syms["Task_RunPokemonLeagueLightingEffect"][0]
+    assert LEAGUE_CANCEL[title] == syms["Task_CancelPokemonLeagueLightingEffect"][0]
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_league_room_with_the_lighting_task_is_admitted(title):
+    ok, why, clauses = league_world(title, "clean", LEAGUE_RUN[title]).check_reason("overworld")
+    assert (ok, why, clauses) == (True, "verified overworld checkpoint", [])
+
+
+@pytest.mark.parametrize("title,kind", CASES)
+def test_league_cancel_task_stays_refused(title, kind):
+    ok, why, clauses = league_world(title, kind, LEAGUE_CANCEL[title]).check_reason("overworld")
+    assert ok is False and clauses == ["task"]
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+def test_rr_league_lighting_stays_refused_until_reachability_is_decoded(kind):
+    ok, why, clauses = league_world("radical_red", kind, LEAGUE_RUN["radical_red"]).check_reason("overworld")
+    assert ok is False and clauses == ["task"]

@@ -92,7 +92,15 @@ PREDICATES = {
     "save_dialog_cb": ("sSaveDialogCB", 0, 4, None, 0),
     # src/save.c Task_LinkFullSave sets this for the duration of the link full save
     "soft_reset_disabled": ("gSoftResetDisabled", 0, 1, None, 0),
-    "link_callback": ("gLinkCallback", 0, 4, None, 0),
+    # C4-SAVE: "a link callback can run" is sLinkOpen, not gLinkCallback != NULL.  gLinkCallback
+    # is executed at exactly one site, LinkMain2 link.c:522-523, behind `if (!sLinkOpen) return`
+    # (:512-513).  sLinkOpen is set only by InitLink (:373), reached only from OpenLink's cable
+    # branch (:390-394, the same call that sets gLinkCallback), and cleared by CloseLink (:424,
+    # also the link-error path :1400-1412).  CloseLink never clears gLinkCallback, so after a
+    # cancelled no-partner Cable Club link it rests on LinkCB_RequestPlayerDataExchange with the
+    # link closed (live FR center_controls r9) -- a dead pointer that held every write forever.
+    # The key keeps its name because lua/gen3/safety.lua requires it by name.
+    "link_callback": ("sLinkOpen", 0, 1, None, 0),
     "link_transferring": ("gLinkTransferringData", 0, 1, None, 0),
     # src/link.c:421 CloseLink / :410 OpenLink clear it; :540 (cable) and link_rfu_2.c:1879,2065
     # (wireless) set it once the partner's player data is in -- non-zero for a whole link session.
@@ -100,7 +108,8 @@ PREDICATES = {
     # menu's adapter probe (main_menu.c:573 -> link.c:243-261) and sticky (CloseLink leaves it),
     # so it is 1 for the whole session on hardware with the adapter (receipt
     # docs/gen3/probes/checkpoint_fr_parcel_lineage_2026-09-22.txt).  The pre-exchange window is
-    # link_callback + callback1 + the task allow-list.
+    # link_callback (sLinkOpen, cable) + callback1 + the task allow-list; the RFU branch of
+    # OpenLink (:406-408) never set gLinkCallback, so wireless never rested on that clause.
     "link_players_received": ("gReceivedRemoteLinkPlayers", 0, 1, None, 0),
 }
 
@@ -114,8 +123,14 @@ WITNESS = {
     "sSaveDialogCB": "RunSaveDialogCB",
     "gSoftResetDisabled": "AgbMain",
     "gLinkTransferringData": "AgbMain",
-    "gLinkCallback": "ClearLinkCallback",
+    "sLinkOpen": "CloseLink",
     "gReceivedRemoteLinkPlayers": "CloseLink",
+}
+
+# predicate -> the FR code its soundness argument rests on.  For RR every body must be
+# byte-identical (verify_code) or the predicate is not emitted (fail-closed).
+PREDICATE_CODE = {
+    "link_callback": ("InitLink", "OpenLink", "CloseLink", "LinkMain2"),
 }
 
 # Every task that is legitimately running while the player just stands in the overworld:
@@ -138,9 +153,24 @@ WITNESS = {
 CENTER_UNION_ROOM_TASKS = ("Task_InitUnionRoom", "Task_SearchForChildOrParent", "Task_UnionRoomListen")
 ALLOWED_TASKS = ("Task_RunPerStepCallback", "Task_RunTimeBasedEvents", "Task_WeatherMain") \
     + CENTER_UNION_ROOM_TASKS
+# C4-SAVE audit: the Elite Four / Champion room lighting.  DoPokemonLeagueLightingEffect
+# (src/field_specials.c:2133-2158) is each league room's ON_RESUME (e.g. data/maps/
+# PokemonLeague_LoreleisRoom/scripts.inc:9-12 -> data/scripts/pokemon_league.inc:62-64) and
+# creates Task_RunPokemonLeagueLightingEffect, which never destroys itself (:2160-2185) and keeps
+# running after the entrance script's releaseall (scripts.inc:43-48), so the player walks freely
+# beside it.  Its whole reach is palettes: FlagGet (event_data.c:303-311, a read), a read of
+# gSaveBlock1Ptr->location, LoadPalette and ApplyGlobalTintToPaletteSlot (fieldmap.c:863-883,
+# gPlttBufferUnfaded/Faded).  It is destroyed by StopPokemonLeagueLightingEffectTask
+# (:2205-2209; the START menu :453 and item_use.c call it before leaving the field) and by
+# ResumeMap's ResetTasks (overworld.c:2105).  Task_CancelPokemonLeagueLightingEffect stays OFF:
+# it lives only inside the post-battle script, until FLAG_TEMP_4 (pokemon_league.inc:7,41).
+# FR/LG only: RR's RunOnResumeMapScript body differs and CFRU's league map scripts are not
+# decoded, so reachability there is unproven and RR keeps refusing (fail-closed).
+FRLG_ONLY_TASKS = ("Task_RunPokemonLeagueLightingEffect",)
 ALLOWED_TASKS_SOURCE = ("pret c75f3523: src/field_tasks.c:84-94, src/field_weather.c:146-170; "
                         "Center 1F Union Room background (C4-UR): data/scripts/cable_club.inc:1120-1122, "
                         "src/union_room.c:3515-3604,3714-3745, src/link_rfu_2.c:505-564,2727-2742; "
+                        "league room lighting (FR/LG only): src/field_specials.c:2133-2185,2205-2209; "
                         "RR: FR body byte-identical at the same address in every RR ROM")
 
 # include/task.h: struct Task { TaskFunc func; bool8 isActive; u8 prev, next, priority; s16 data[16]; }
@@ -397,7 +427,7 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
 
     predicates = {}
     for key, (symbol, offset, width, mask, expect) in PREDICATES.items():
-        if not ok_data(symbol):
+        if not ok_data(symbol) or not all(ok_code(fn) for fn in PREDICATE_CODE.get(key, ())):
             continue
         entry = {"symbol": symbol, "address": syms[symbol][0], "offset": offset, "width": width}
         if mask is not None:
@@ -412,7 +442,7 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
         predicates[key] = entry
 
     allowed = {}
-    for name in ALLOWED_TASKS:
+    for name in ALLOWED_TASKS + (() if is_rr else FRLG_ONLY_TASKS):
         if ok_code(name):
             allowed[name] = syms[name][0]
 

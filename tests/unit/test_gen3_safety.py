@@ -424,3 +424,99 @@ def test_writes_arm_passes_args_through():
                w.lua.table_from({"battler": 1}, recursive=True))
     writer.write_u16(writer, 0x02024284 + 0x56, 0)
     assert len(g.writes) == 2
+
+
+# -- C4-SAVE: the two pointers pret never resets (live center_controls_gen3 r9, f926a8b4) ----------
+# Engine values come from the title's own .sym, never from the pack under test, so a pack that
+# still reads gLinkCallback / sSaveDialogCB is falsified.  RR reads the FireRed symbols (its
+# pack is proven against them byte-for-byte by tools/gen_gen3_write_checkpoint.py).
+SAVE_LINK_TITLES = [("firered", "clean"), ("leafgreen", "clean"),
+                    ("radical_red", "clean"), ("radical_red", "companion")]
+
+
+def engine(title):
+    s = pret_syms("firered" if title == "radical_red" else title)
+    return {name: v[0] for name, v in s.items()}
+
+
+def put_active_task(w, fn):
+    """Occupy the first free gTasks slot with an active task running fn."""
+    t, g = w.pack["tasks"], w.lua.globals()
+    for i in range(t["count"]):
+        base = t["address"] + i * t["struct_size"]
+        if g.mem[base + t["is_active_offset"]] == 0:
+            g.put(base + t["func_offset"], fn | 1, 4)
+            g.put(base + t["is_active_offset"], 1, 1)
+            return
+    raise AssertionError("no free task slot")
+
+
+@pytest.mark.parametrize("title,kind", SAVE_LINK_TITLES)
+def test_stale_link_callback_with_the_link_closed_is_admitted(title, kind):
+    """A cancelled no-partner Cable Club link: CloseLink (link.c:419-426) clears sLinkOpen but
+    leaves gLinkCallback on LinkCB_RequestPlayerDataExchange, which only LinkMain2 runs, and only
+    while sLinkOpen (:512-523).  Live FR r9: link_callback=0x0800A721 with sLinkOpen=0."""
+    w, s = World(title, kind), engine(title)
+    g = w.lua.globals()
+    g.put(s["gLinkCallback"], s["LinkCB_RequestPlayerDataExchange"] | 1, 4)
+    g.put(s["sLinkOpen"], 0, 1)
+    ok, why, clauses = w.check_reason("overworld")
+    assert ok is True and clauses == [], (why, clauses)
+
+
+@pytest.mark.parametrize("title,kind", SAVE_LINK_TITLES)
+@pytest.mark.parametrize("callback", ["LinkCB_RequestPlayerDataExchange", None])
+def test_an_open_cable_link_is_refused(title, kind, callback):
+    """OpenLink's cable branch (link.c:390-394) sets sLinkOpen and gLinkCallback together; the
+    callback clears itself (:1128-1134) long before the partner's player data is in, so the
+    None case is a live link that no pointer clause saw (gReceivedRemoteLinkPlayers still 0)."""
+    w, s = World(title, kind), engine(title)
+    g = w.lua.globals()
+    g.put(s["gLinkCallback"], s[callback] | 1 if callback else 0, 4)
+    g.put(s["sLinkOpen"], 1, 1)
+    ok, why, clauses = w.check_reason("overworld")
+    assert ok is False and clauses == ["link_callback"], (why, clauses)
+
+
+@pytest.mark.parametrize("title,kind", SAVE_LINK_TITLES)
+@pytest.mark.parametrize("dialog_cb", ["SaveDialogCB_DoSave", "SaveDialogCB_ReturnSuccess"])
+def test_a_live_start_menu_save_is_refused_without_the_dialog_pointer(title, kind, dialog_cb):
+    """Every frame of a START-menu save runs inside Task_StartMenuHandleInput (start_menu.c:
+    378-394, destroyed only when StartCB_Save2 returns TRUE :583-600) under the lock ShowStartMenu
+    took (:405, released at :586/:598 in that same call).  TrySavingData runs synchronously inside
+    SaveDialogCB_DoSave (:791-805).  The refusal must not need sSaveDialogCB."""
+    w, s = World(title, kind), engine(title)
+    g = w.lua.globals()
+    g.put(s["sSaveDialogCB"], s[dialog_cb] | 1, 4)
+    g.put(s["sLockFieldControls"], 1, 1)
+    put_active_task(w, s["Task_StartMenuHandleInput"])
+    ok, why, clauses = w.check_reason("overworld")
+    assert ok is False and {"task", "field_controls_locked"} <= set(clauses), (why, clauses)
+
+
+@pytest.mark.parametrize("title,kind", SAVE_LINK_TITLES)
+def test_a_live_script_save_is_refused_without_the_dialog_pointer(title, kind):
+    """EventScript_AskSaveGame (std_msgbox.inc:57-60): special Field_AskSaveTheGame creates
+    task50_save_game (start_menu.c:620-626), then waitstate parks the script CONTEXT_WAITING
+    (scrcmd.c:127-131, script.c:360-363) until the task's ScriptContext_Enable (:651-653)."""
+    w, s = World(title, kind), engine(title)
+    g = w.lua.globals()
+    g.put(s["sSaveDialogCB"], s["SaveDialogCB_DoSave"] | 1, 4)
+    g.put(s["sLockFieldControls"], 1, 1)
+    g.put(s["sGlobalScriptContextStatus"], 1, 1)
+    put_active_task(w, s["task50_save_game"])
+    ok, why, clauses = w.check_reason("overworld")
+    assert ok is False and {"task", "field_controls_locked", "script_context_status"} <= set(clauses), \
+        (why, clauses)
+
+
+@pytest.mark.xfail(strict=True, reason="C4-SAVE save half: lua/gen3/safety.lua requires the "
+                   "save_dialog_cb key by name (preamble), so the pack cannot drop it alone")
+@pytest.mark.parametrize("title,kind", SAVE_LINK_TITLES)
+def test_a_finished_save_leaves_the_field_writable(title, kind):
+    """After a save sSaveDialogCB rests on SaveDialogCB_ReturnSuccess forever: every assignment
+    (start_menu.c:608-842) is non-NULL.  Live LG r9: 0x0806F9E1 on an idle field, held 404x."""
+    w, s = World(title, kind), engine(title)
+    w.lua.globals().put(s["sSaveDialogCB"], s["SaveDialogCB_ReturnSuccess"] | 1, 4)
+    ok, why, clauses = w.check_reason("overworld")
+    assert ok is True and clauses == [], (why, clauses)
