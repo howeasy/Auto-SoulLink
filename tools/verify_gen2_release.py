@@ -213,7 +213,7 @@ PREREQUISITES = {
     "fixtures": tuple(
         f"tests/fixtures/gen2/{name}.SaveRAM"
         for name in (*(f"{title}_{kind}" for title in TITLES for kind in ("town", "battle")),
-                     "crystal_town_ot2", "crystal_battle_ot2")
+                     "crystal_town_ot2", "crystal_battle_ot2", "gold_battle_ot2")
     ),
     "patch-build": _SOURCE_INPUTS,
     "live-gates": (),
@@ -537,6 +537,120 @@ def _soft_reset_receipt_errors(lines: list[str], side: str) -> list[str]:
     return []
 
 
+def _clause_cell_errors(legs: dict, scenario: str, axes: dict) -> list[str]:
+    """Only observed clause branches qualify; bind the PYDEC facts to the saved driver evidence."""
+    kind = scenario.removeprefix("gen2_").removesuffix("_clause")
+
+    def need(condition, why):
+        if not condition:
+            raise ValueError(why)
+
+    def rows(side, tag):
+        found = [(i, json.loads(line[len(tag) + 1:])) for i, line in enumerate(legs[side])
+                 if line.startswith(tag + " ")]
+        need(all(isinstance(row, dict) for _, row in found), f"malformed {side} {tag}")
+        return found
+
+    def one(side, tag):
+        found = rows(side, tag)
+        need(len(found) == 1, f"expected one {side} {tag}")
+        return found[0]
+
+    try:
+        caps = {side: one(side, "ENGINE_CAPTURE")[1] for side in ("a", "b")}
+        receipts = {}
+        verdicts = {}
+        for side in ("a", "b"):
+            cap, head = caps[side], one(side, "DUO_GEN2")[1]
+            save_at, save = one(side, "SAVE_WITNESS")
+            receipt_at, receipt = one(side, "RECEIPT")
+            receipts[side] = receipt
+            need(one(side, "CLIENT")[1].get("production_admitted") is True, "clause client not admitted")
+            need(cap.get("area_id") == "route_29" and isinstance(cap.get("key"), str) and cap["key"], "wrong capture area/key")
+            need(receipt_at > save_at and receipt.get("schema") == f"gen2-duo-{kind}-clause-v1"
+                 and receipt.get("save") == save and receipt.get("capture") == cap and receipt.get("key") == cap["key"]
+                 and receipt.get("species_id") == cap.get("species_id")
+                 and all(receipt.get(key) == head.get(key) for key in
+                         ("player", "scenario", "attempt", "case", "title", "rom_sha1", "fixture_sha256")),
+                 "clause receipt does not bind header/capture/final save")
+            need(type(save.get("gate_saves")) is int and save["gate_saves"] >= 2
+                 and type(save.get("client_saves")) is int and save["client_saves"] >= 2
+                 and save.get("flushed_matches") is True and save.get("cartram_bytes") == 32768,
+                 "clause final second native save missing")
+            digest = save.get("cartram_sha256")
+            need(isinstance(digest, str) and len(digest) == 64
+                 and all(c in "0123456789abcdef" for c in digest), "clause final save digest missing")
+            last_tag = "LINKED" if kind == "species" else "CLAUSE_VERDICT"
+            outcome_at, outcome = one(side, last_tag)
+            need(save_at > outcome_at and type(save.get("save_completed_frame")) is int
+                 and type(outcome.get("frame")) is int and save["save_completed_frame"] > outcome["frame"],
+                 "clause final save precedes outcome")
+            if kind != "species":
+                cc_at, cc = one(side, "CLAUSE_CAPTURE")
+                need(cc_at < outcome_at and all(cc.get(key) == cap.get(key) for key in ("key", "species_id", "area_id")),
+                     "clause capture differs from engine")
+                verdict = outcome.get("verdict")
+                verdicts[side] = verdict
+                need(verdict in ("rejected", "partner_rejected") and receipt.get("verdict") == verdict
+                     and receipt.get("clause") == kind and receipt.get("path") == "clause_observed",
+                     "clause rejection unobserved")
+                if verdict == "rejected":
+                    mon_at, mon = one(side, "REJECTED_MON")
+                    ack_at, ack = one(side, "MEMORIAL_ACK")
+                    writes = rows(side, "PARTY_HP_WRITE")
+                    need(writes and all(value.get("key") == cap["key"] and value.get("ok") is True
+                                        and at < mon_at for at, value in writes), "rejected mon lacks successful production write")
+                    need(ack_at < mon_at < save_at and mon.get("key") == ack.get("key") == cap["key"]
+                         and save["save_completed_frame"] > mon["frame"], "rejected ending not saved")
+                    ending = mon.get("ending")
+                    need(receipt.get("ending") == ending and (
+                        ending == "dead" and ack.get("event") == "memorialize_failed"
+                        and mon.get("in_party") is True and mon.get("hp") == 0 or
+                        ending == "memorial" and ack.get("event") == "memorialize_done"
+                        and mon.get("in_party") is False and mon.get("box") == ack.get("box") == 13),
+                        "rejected ending disagrees with memorial acknowledgement")
+                else:
+                    need(not rows(side, "REJECTED_MON"), "partner marked rejected")
+        tokens = _pydec_tokens(legs["pydec"])
+        want = {"scenario": scenario, "a": caps["a"]["key"], "b": caps["b"]["key"], "area": "route_29",
+                "titles": f"{axes['initiator']}/{axes['partner']}", "clause": kind}
+        if kind != "species":
+            need(sorted(verdicts.values()) == ["partner_rejected", "rejected"], "clause requires one rejected half")
+            rejected = next(side for side in verdicts if verdicts[side] == "rejected")
+            want.update(status="clause_observed", rejected=rejected, ending=receipts[rejected]["ending"])
+        else:
+            pending_at, pending = one("a", "PENDING_CAPTURE")
+            need(pending_at > one("a", "ENGINE_CAPTURE")[0] and pending_at < one("a", "LINKED")[0]
+                 and all(pending.get(key) == caps["a"].get(key) for key in ("key", "species_id", "area_id"))
+                 and receipts["a"].get("role") == receipts["a"].get("path") == "pending", "invalid pending capture")
+            ap_at, ap = one("b", "A_PENDING")
+            need(ap.get("species_id") == caps["a"]["species_id"] != caps["b"]["species_id"], "reroll does not bind partner species")
+            encounters, rerolls = rows("b", "ENCOUNTER"), rows("b", "REROLL")
+            need(len(encounters) >= 2 and len(rerolls) == len(encounters) - 1, "species reroll unobserved")
+            need(receipts["b"].get("role") == "reroller" and receipts["b"].get("path") == "reroll_observed"
+                 and receipts["b"].get("rerolls") == len(rerolls)
+                 and receipts["b"].get("dupe_species") == ap["species_id"], "species receipt does not bind rerolls")
+            for i, (at, encounter) in enumerate(encounters):
+                dupe = i < len(rerolls)
+                species = ap["species_id"] if dupe else caps["b"]["species_id"]
+                need(at > ap_at and encounter.get("n") == i + 1 and encounter.get("dupe") is dupe
+                     and encounter.get("species_id") == species, "encounter species/order differs")
+                if dupe:
+                    rr_at, rr = rerolls[i]
+                    need(at < rr_at < encounters[i + 1][0] and rr.get("n") == i + 1
+                         and rr.get("species_id") == species, "reroll order/species differs")
+                    prompt = rr.get("prompt")
+                    need(isinstance(prompt, str) and prompt.startswith("Dupes clause: ") and prompt.endswith(" -- reroll!")
+                         and any(at < rx_at < rr_at and rx.get("cmd") == "gui_prompt" and rx.get("text") == prompt
+                                 for rx_at, rx in rows("b", "RX_TEXT")), "reroll lacks observed server prompt")
+            need(encounters[-1][0] < one("b", "ENGINE_CAPTURE")[0], "catch precedes final encounter")
+            want.update(status="alive", rerolls=str(len(rerolls)))
+        need(tokens and all(tokens.get(key) == value for key, value in want.items()), "pydec does not bind observed clause cell")
+    except (KeyError, TypeError, ValueError, AttributeError, StopIteration) as exc:
+        return [f"clause proof invalid: {exc}"]
+    return []
+
+
 def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: dict) -> list[str]:
     """One registered proof: pinned bytes, PASS verdicts, and headers naming this exact cell."""
     if scenario == "gen2_reconnect":
@@ -545,6 +659,7 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
     receipts = proof.get("receipts") or {}
     titles = {"a": axes["initiator"], "b": axes["partner"]}
     capture_keys = {}
+    legs = {}
     for side in ("a", "b", "pydec"):
         entry = receipts.get(side)
         if not entry:
@@ -559,6 +674,7 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
             errors.append(f"{side} receipt {entry['path']} sha256 differs from its pin")
             continue
         lines = raw.decode("utf-8", errors="replace").splitlines()
+        legs[side] = lines
         prefix = "PYDEC:" if side == "pydec" else "RESULT:"
         verdicts = [line.split()[1:2] for line in lines if line.startswith(prefix)]
         if not verdicts or any(verdict != ["PASS"] for verdict in verdicts):
@@ -595,6 +711,8 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
             errors.append(f"{side} receipt has no SAVE_WITNESS line")
         if scenario == "gen2_soft_reset":
             errors.extend(_soft_reset_receipt_errors(lines, side))
+    if scenario in ("gen2_species_clause", "gen2_type_clause", "gen2_gender_clause"):
+        errors.extend(_clause_cell_errors(legs, scenario, axes))
     return errors
 
 

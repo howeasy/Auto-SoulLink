@@ -99,6 +99,15 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+
+class ClauseUnobserved(RuntimeError):
+    """A independently valid clean pair did not exercise the requested RNG-dependent clause."""
+
+
+def _clause_need(condition, reason):
+    if not condition:
+        raise RuntimeError(f"clause: {reason}")
+
 SAVE_WITNESS_FIELDS = ("frame", "save_completed_frame", "gate_saves", "client_saves",
                        "cartram_sha256", "cartram_bytes", "saveram_path", "saveram_bytes",
                        "flushed_matches")
@@ -888,7 +897,8 @@ def reconnect_oracle(results, *, data_dir, initial_results, relaunch_results, bo
                             "relaunch marker identity differs from decoded save")
             keys = [codec.key(mon) for mon in new]
             if phase == "same_save":
-                _reconnect_need(seed == initial_raw and ot == original_ot and linked_key in keys, "same-save seed lost initial linked image")
+                _reconnect_need(seed[:CARTRAM_BYTES] == initial_raw[:CARTRAM_BYTES] and ot == original_ot and linked_key in keys,
+                                "same-save seed lost initial linked image")
             else:
                 qualified_ot = qualified_identity(f"{title}_battle_ot2", seed, repo=REPO_ROOT)
                 _reconnect_need(qualified_ot == ot != original_ot and linked_key not in keys,
@@ -1043,3 +1053,250 @@ def soft_reset_oracle(results, *, data_dir, before, after, boot_saveram, on_veri
                          "status": "unchanged"})
     except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError) as exc:
         raise RuntimeError(f"soft_reset evidence missing or malformed: {exc}") from exc
+
+
+def _tag_rows(text, tag):
+    values = [(at, json.loads(line[len(tag) + 1:])) for at, line in enumerate(text.splitlines()) if line.startswith(tag + " ")]
+    _clause_need(all(isinstance(row, dict) for _, row in values), f"malformed {tag}")
+    return values
+
+
+def _clause_source(title):
+    from tools.gen2_source_data import load_context
+
+    source = load_context(title, root=REPO_ROOT).source_record()
+    packs = {}
+    for name in ("species_index", "evolutions", "encounter_tables"):
+        packs[name] = json.loads((REPO_ROOT / f"data/games/gen2_{title}/{name}.json").read_text())
+        _clause_need(packs[name]["source"] == source, f"{name} source provenance differs")
+    enc = packs["encounter_tables"]
+    slots = {(slot["species"], slot["level"]) for row in enc["wild"]["grass"]
+             if enc["map_areas"][str(row["map_group"] * 256 + row["map_number"])] == "route_29" for slot in row["slots"]}
+    return packs, slots, source
+
+
+def _clause_inventory(raw, layout):
+    from server.adapters import gen2_codec as codec
+
+    party = codec.decode_saved_party(raw[:CARTRAM_BYTES], layout, copy_name="primary")["mons"]
+    boxes = codec.verify_boxes(raw[:CARTRAM_BYTES], layout)
+    rows = [("party", mon) for mon in party]
+    rows += [(index, mon) for index, box in enumerate(boxes) for mon in box["mons"]]
+    keys = [codec.key(mon) for _, mon in rows]
+    _clause_need(len(keys) == len(set(keys)), "duplicate identity across saved party/boxes")
+    return party, {codec.key(mon): (place, mon) for place, mon in rows}
+
+
+def _clause_captures(results, boot_saveram, kind):
+    from server.adapters import gen2_codec as codec
+    from tools.gen2_fixtures import _saved_field
+
+    check_save_witness(results)
+    decoded = {}
+    for inst in ("a", "b"):
+        text = results[inst]
+        _reconnect_pass(text)
+        witness, client, title = _boot_marker(inst, text)
+        head, cap, receipt = (_one_marker(text, tag) for tag in ("DUO_GEN2", "ENGINE_CAPTURE", "RECEIPT"))
+        packs, slots, source = _clause_source(title)
+        _clause_need(head.get("player") == inst and head.get("scenario") == f"gen2_{kind}_clause"
+                     and client.get("production_admitted") is True and head["rom_sha1"] == source["rom_sha1"], "clause production/header differs")
+        _clause_need(receipt.get("schema") == f"gen2-duo-{kind}-clause-v1", "clause receipt schema differs")
+        for field in ("player", "scenario", "attempt", "case", "title", "rom_sha1", "fixture_sha256"):
+            _clause_need(receipt.get(field) == head.get(field), f"clause receipt {field} differs")
+        seed, saved = Path(boot_saveram[inst]).read_bytes(), Path(witness["saveram_path"]).read_bytes()
+        layout = codec.for_foundation(title)
+        _clause_need(len(seed) == SAVERAM_BYTES and hashlib.sha256(seed).hexdigest() == head["fixture_sha256"]
+                     and codec.strict_checksum_witness(seed[:CARTRAM_BYTES], layout)["valid"], "boot fingerprint/checksum differs")
+        _, old = _clause_inventory(seed, layout)
+        party, current = _clause_inventory(saved, layout)
+        new_keys = set(current) - set(old)
+        _clause_need(set(old) <= set(current) and len(new_keys) == 1, "saved inventory is not boot plus one catch")
+        key = next(iter(new_keys))
+        place, mon = current[key]
+        _clause_need(cap.get("key") == key and cap.get("species_id") == mon["species_id"] and cap.get("level") == mon["level"]
+                     and cap.get("area_id") == "route_29" and cap.get("site_id") == "capture_party_finalized"
+                     and cap.get("acquisition") == "wild" and cap.get("destination") == "party", "engine capture differs from saved catch")
+        _clause_need((mon["species_id"], mon["level"]) in slots, "catch outside pinned Route 29 grass slots")
+        ot = int.from_bytes(_saved_field(seed, layout, "wPlayerID", 2), "big")
+        _clause_need(mon["ot_id"] == ot == _hello_ot_id(inst, text), "captured OT differs from saved trainer")
+        _clause_need(sum(n for _, n in _ball_pocket(saved, layout)) < sum(n for _, n in _ball_pocket(seed, layout)), "Ball pocket did not decrease")
+        _clause_need(f"CAUGHT {key}" in text.splitlines(), "saved catch lacks CAUGHT marker")
+        sent = _one_marker(text, "CAPTURE_SENT")
+        _clause_need(sent.get("key") == key and _frame(cap) <= _frame(sent) < _frame(witness, "save_completed_frame"), "capture/send/save chronology differs")
+        species = packs["species_index"]["species"][str(mon["species_id"])]
+        ratio = species["gender_ratio"]
+        _clause_need(ratio not in (0, 254, 255), "clause lane needs mixed-gender species")
+        gender = "female" if ((mon["dvs"]["attack"] << 4) | mon["dvs"]["speed"]) <= ratio else "male"
+        types = list(dict.fromkeys(t.removesuffix("_TYPE").title() for t in species["types"]))
+        decoded[inst] = {"key": key, "species": mon["species_id"], "level": mon["level"], "title": title,
+                         "mon": mon, "place": place, "party": party, "current": current, "layout": layout, "witness": witness,
+                         "types": types, "gender": gender, "packs": packs, "receipt": receipt}
+    _clause_need(decoded["a"]["key"] != decoded["b"]["key"], "captures share identity")
+    return decoded
+
+
+def _clause_rejection(results, decoded, document, events, kind):
+    from server.adapters import gen2_codec as codec
+
+    verdicts = {}
+    for inst, row in decoded.items():
+        cc, cv = _one_marker(results[inst], "CLAUSE_CAPTURE"), _one_marker(results[inst], "CLAUSE_VERDICT")
+        _clause_need(cc.get("key") == row["key"] and cc.get("species_id") == row["species"] and cc.get("area_id") == "route_29"
+                     and cc.get("types") == row["types"] and cc.get("gender") == row["gender"], "CLAUSE_CAPTURE differs from source/PYDEC")
+        verdicts[inst] = cv.get("verdict")
+        _clause_need(row["receipt"].get("clause") == kind and row["receipt"].get("verdict") == cv.get("verdict")
+                     and _frame(cv) >= _frame(cc) and _frame(row["witness"], "save_completed_frame") > _frame(cv), "clause receipt/verdict chronology differs")
+    shared = sorted(set(decoded["a"]["types"]) & set(decoded["b"]["types"]))
+    violates = bool(shared) if kind == "type" else decoded["a"]["gender"] == decoded["b"]["gender"]
+    if set(verdicts.values()) == {"linked"}:
+        _clause_need(not violates and all(row["receipt"].get("path") == "clause_unobserved" for row in decoded.values()), "invalid clean clause result")
+        return None
+    _clause_need(violates and sorted(verdicts.values()) == ["partner_rejected", "rejected"], "no valid observed clause roles")
+    reject = next(inst for inst in decoded if verdicts[inst] == "rejected")
+    partner = "b" if reject == "a" else "a"
+    own, other = decoded[reject], decoded[partner]
+    _clause_need(other["place"] != other["layout"].constants["NUM_BOXES"] - 1
+                 and (other["place"] != "party" or other["mon"]["hp"] > 0), "retained pending counterpart died or was memorialized")
+    _clause_need(all(row["receipt"].get("path") == "clause_observed" for row in decoded.values()), "observed clause path missing")
+    _clause_need(document["links"] == [] and document["area_states"].get("route_29") == f"pending_{reject}"
+                 and document["retry_areas"].get(reject) == ["route_29"], "rejected clause changed link/retry state")
+    pending = document["pending_captures"]
+    _clause_need(set(pending) == {"route_29"} and set(pending["route_29"]) == {partner}
+                 and pending["route_29"][partner].get("key") == other["key"]
+                 and pending["route_29"][partner].get("species") == other["species"], "retained pending capture differs")
+    captures = [row for row in events if row.get("type") == "capture" and row.get("area_id") == "route_29"]
+    _clause_need(len(captures) == 2 and [r.get("player") for r in captures] == [reject, partner]
+                 and all(r.get("key") == decoded[r["player"]]["key"] for r in captures), "rejection not the later server capture")
+    explanation = "Type clause: shared " + ", ".join(shared) if kind == "type" else "Gender clause: both are " + ("♀" if own["gender"] == "female" else "♂")
+    _clause_need(any(row.get("type") == "violation" and row.get("player") == reject and explanation in row.get("text", "") for row in events), "server lacks source-derived clause violation")
+    text, key = results[reject], own["key"]
+    commands = (f"RX force_faint key={key}", f"RX memorialize key={key}", "RX play_sound sound=26", "RX unresolve_area area_id=route_29")
+    _clause_need(all(any(line == cmd or line.startswith(cmd + " ") for line in text.splitlines()) for cmd in commands), "rejected command set incomplete")
+    _clause_need("RX play_sound sound=22" in results[partner].splitlines(), "partner lacks SE_BOO")
+    _clause_need(not re.search(r"^RX force_faint(?:\s|$)", results[partner], re.M), "retained counterpart received force_faint")
+    _clause_need(any(row.get("cmd") == "gui_prompt" and row.get("text") == "[x] " + explanation for _, row in _tag_rows(text, "RX_TEXT")), "clause prompt differs from source")
+    writes = _tag_rows(text, "PARTY_HP_WRITE")
+    _clause_need(len(writes) == 1 and not _tag_rows(results[partner], "PARTY_HP_WRITE"), "exactly one rejected-mon write required")
+    _, write = writes[0]
+    _clause_need(text.index("CAPTURE_SENT ") < text.index(commands[0]) < text.index("PARTY_HP_WRITE "),
+                 "rejection write preceded its capture/force_faint command")
+    layout = own["layout"]
+    n = layout.party_size * layout.constants["PARTY_LENGTH"]
+    before, after = _hex_bytes(write.get("before_party_hex"), n, "clause before"), _hex_bytes(write.get("after_party_hex"), n, "clause after")
+    count = len(own["party"]) + (own["place"] != "party")
+    pre, post = [], []
+    for slot in range(count):
+        start = slot * layout.party_size
+        pre.append(codec.decode_party_mon(before[start:start + layout.party_size], layout, species_marker=before[start]))
+        post.append(codec.decode_party_mon(after[start:start + layout.party_size], layout, species_marker=after[start]))
+    _faint_write(write, layout, pre, post, key)
+    _clause_need(pre[write["slot"]]["hp"] > 0 and _frame(write) < _frame(own["witness"], "save_completed_frame"), "rejection did not faint a live mon before save")
+    by_key = {codec.key(mon): mon for mon in post}
+    _clause_need(len(by_key) == len(post) and set(by_key) == {codec.key(mon) for mon in own["party"]} | {key}, "write party differs from saved inventory")
+    for mon in own["party"]:
+        _clause_need(by_key[codec.key(mon)]["raw_hex"] == mon["raw_hex"], "saved party differs from checkpoint postimage")
+    ack, rejected = _one_marker(text, "MEMORIAL_ACK"), _one_marker(text, "REJECTED_MON")
+    ending = rejected.get("ending")
+    _clause_need(ack.get("key") == rejected.get("key") == key and own["receipt"].get("ending") == ending
+                 and _frame(rejected) >= max(_frame(write), _frame(ack))
+                 and _frame(rejected) < _frame(own["witness"], "save_completed_frame"), "rejection ending/chronology differs")
+    if ending == "dead":
+        _clause_need(ack.get("event") == "memorialize_failed" and own["place"] == "party"
+                     and own["mon"]["hp"] == 0 and rejected.get("in_party") is True and rejected.get("hp") == 0, "failed memorial must persist HP zero in party")
+    else:
+        box = layout.constants["NUM_BOXES"] - 1
+        _clause_need(ending == "memorial" and ack.get("event") == "memorialize_done" and ack.get("box") == box
+                     and own["place"] == box and rejected.get("box") == box and rejected.get("in_party") is False
+                     and own["mon"]["raw_hex"] == by_key[key]["raw_hex"][:layout.box_mon_size * 2], "memorial not independently saved in final box")
+    _clause_need(key not in document["pending_memorials"].get(reject, []), "memorial acknowledgement not settled")
+    return {**_verified_facts(decoded, "route_29", "clause_observed"), "clause": kind, "rejected": reject, "ending": ending}
+
+
+def _species_clause(results, decoded, document, events, pending_snapshot):
+    a, b = decoded["a"], decoded["b"]
+    families = b["packs"]["evolutions"]["family"]
+    _clause_need(families[str(a["species"])] != families[str(b["species"])], "linked captures share evolution family")
+    _clause_need(isinstance(pending_snapshot, dict), "species lane needs pre-release pending snapshot")
+    pending = pending_snapshot["links"]["pending_captures"]
+    _clause_need(pending_snapshot["links"]["links"] == [] and set(pending) == {"route_29"}
+                 and set(pending["route_29"]) == {"a"} and pending["route_29"]["a"].get("key") == a["key"]
+                 and pending["route_29"]["a"].get("species") == a["species"], "A was not uniquely pending before B release")
+    baseline_events = pending_snapshot["events"]
+    _clause_need(any(row.get("type") == "capture" and row.get("player") == "a" and row.get("key") == a["key"] for row in baseline_events)
+                 and not any(row.get("type") in ("capture", "reroll", "linked") and row.get("player") == "b" for row in baseline_events),
+                 "pending event baseline is after B gameplay or before A capture")
+    _clause_need(isinstance(events, list) and len(events) >= len(baseline_events)
+                 and events[-len(baseline_events):] == baseline_events, "pending baseline not retained in final event history")
+    _clause_need(document.get("pending_captures", {}) == {} and document["area_states"].get("route_29") == "linked", "species area not settled linked")
+    for inst, row in decoded.items():
+        text = results[inst]
+        linked = _one_marker(text, "LINKED")
+        _clause_need(isinstance(linked.get("text"), str) and linked["text"].endswith(" linked!")
+                     and _frame(linked) < _frame(row["witness"], "save_completed_frame"), "link not followed by native save")
+        _clause_need(not re.search(r"^RX force_faint(?:\s|$)", text, re.M), "species catch was rejected")
+        for _, message in _tag_rows(text, "RX_TEXT"):
+            _clause_need(" is a dead zone!" not in message.get("text", "")
+                         and not message.get("text", "").startswith(("[x] Species clause", "[x] Dup ")), "species rejection/dead zone")
+    mark = _one_marker(results["a"], "PENDING_CAPTURE")
+    _clause_need(mark.get("key") == a["key"] and mark.get("species_id") == a["species"] and mark.get("area_id") == "route_29"
+                 and _frame(mark) < _frame(_one_marker(results["a"], "LINKED")), "pending marker differs")
+    text = results["b"]
+    ap = _one_marker(text, "A_PENDING")
+    _clause_need(ap.get("species_id") == a["species"], "B released for wrong pending species")
+    encounters, rerolls = _tag_rows(text, "ENCOUNTER"), _tag_rows(text, "REROLL")
+    _clause_need(1 <= len(encounters) <= 8 and len(rerolls) == len(encounters) - 1, "species encounter/reroll budget differs")
+    prompt = "Dupes clause: " + b["packs"]["species_index"]["species"][str(a["species"])]["name"].title() + " -- reroll!"
+    for index, (position, encounter) in enumerate(encounters, 1):
+        last = index == len(encounters)
+        species = encounter.get("species_id")
+        dupe = families[str(species)] == families[str(a["species"])]
+        _clause_need(encounter.get("n") == index and encounter.get("dupe") is dupe and dupe is not last
+                     and _frame(encounter) >= _frame(ap), "species encounter family/order differs")
+        if last:
+            cap = _one_marker(text, "ENGINE_CAPTURE")
+            _clause_need(species == b["species"] and _frame(encounter) <= _frame(cap), "catch not final nonduplicate encounter")
+        else:
+            rpos, reroll = rerolls[index - 1]
+            _clause_need(reroll.get("n") == index and reroll.get("species_id") == species and reroll.get("prompt") == prompt
+                         and position < rpos < encounters[index][0] and _frame(encounter) <= _frame(reroll), "reroll order/prompt differs")
+            _clause_need(any(position < pos < rpos and msg.get("cmd") == "gui_prompt" and msg.get("text") == prompt
+                             for pos, msg in _tag_rows(text, "RX_TEXT")), "reroll lacks observed prompt")
+    server_rerolls = [row for row in events if row.get("type") == "reroll"]
+    _clause_need(len(server_rerolls) == len(rerolls) and all(row.get("player") == "b" and row.get("area_id") == "route_29"
+                 and row.get("text") == "🔁 " + prompt for row in server_rerolls), "server rerolls differ from observed encounters")
+    ordered = list(reversed(events))
+    b_captures = [index for index, row in enumerate(ordered) if row.get("type") == "capture" and row.get("player") == "b" and row.get("key") == b["key"]]
+    _clause_need(len(b_captures) == 1 and all(index < b_captures[0] for index, row in enumerate(ordered) if row.get("type") == "reroll"), "reroll after B capture")
+    _clause_need(not any(row.get("type") in ("dead_zone", "violation") for row in events), "species server rejected catch")
+    for inst, role in (("a", "pending"), ("b", "reroller")):
+        receipt = decoded[inst]["receipt"]
+        _clause_need(receipt.get("role") == role and receipt.get("species_id") == decoded[inst]["species"], "species receipt role/catch differs")
+    receipt = b["receipt"]
+    _clause_need(receipt.get("dupe_species") == a["species"] and receipt.get("rerolls") == len(rerolls)
+                 and receipt.get("path") == ("reroll_observed" if rerolls else "reroll_unobserved"), "species receipt path/count differs")
+    if not rerolls:
+        return None
+    return {**_verified_facts(decoded, "route_29", "alive"), "clause": "species", "rerolls": len(rerolls)}
+
+
+def clause_oracle(results, *, kind, data_dir, boot_saveram, pending_snapshot=None, on_verified=None):
+    """Source-derived clause predicates plus independent saved inventory and server outcomes."""
+    try:
+        _clause_need(kind in ("type", "gender", "species"), "unknown clause kind")
+        decoded = _clause_captures(results, boot_saveram, kind)
+        document = json.loads((Path(data_dir) / "links.json").read_text(encoding="utf-8"))
+        events = json.loads((Path(data_dir) / "events.json").read_text(encoding="utf-8"))
+        if kind == "species":
+            facts = _species_clause(results, decoded, document, events, pending_snapshot)
+            _pair_oracle(results, data_dir=data_dir, boot_saveram=boot_saveram)
+        else:
+            facts = _clause_rejection(results, decoded, document, events, kind)
+        if facts is None:
+            _pair_oracle(results, data_dir=data_dir, boot_saveram=boot_saveram)
+            _clause_need(all(row["place"] == "party" and row["mon"]["hp"] > 0 for row in decoded.values()), "clean linked captures not alive")
+            raise ClauseUnobserved(f"{kind} clause unobserved: independently valid alive pair; retry needed")
+        if on_verified is not None:
+            on_verified(facts)
+    except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError) as exc:
+        raise RuntimeError(f"clause evidence missing or malformed: {exc}") from exc

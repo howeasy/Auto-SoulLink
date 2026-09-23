@@ -78,6 +78,12 @@ SCENARIOS = {
     "gen2_reconnect": {"flags": [], "timeout": 2400, "games": ("gen2_new",),
                        "no_setup": True, "frames": 432000,
                        "oracle": "assert_gen2_reconnect_saved", "oracle_kwargs": {}},
+    "gen2_type_clause": {"flags": ["--type-clause"], "timeout": 2400, "games": ("gen2_new",),
+                         "no_setup": True, "frames": 432000, "oracle": "assert_gen2_clause_saved", "oracle_kwargs": {"kind": "type"}},
+    "gen2_gender_clause": {"flags": ["--gender-clause"], "timeout": 2400, "games": ("gen2_new",),
+                           "no_setup": True, "frames": 432000, "oracle": "assert_gen2_clause_saved", "oracle_kwargs": {"kind": "gender"}},
+    "gen2_species_clause": {"flags": ["--species-clause"], "timeout": 2400, "games": ("gen2_new",),
+                            "no_setup": True, "frames": 432000, "oracle": "assert_gen2_clause_saved", "oracle_kwargs": {"kind": "species"}},
     "gen2_soft_reset": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
                         "no_setup": True, "frames": 216000,
                         "oracle": "assert_gen2_soft_reset_saved", "oracle_kwargs": {}},
@@ -434,6 +440,8 @@ def scenario_attempt_limit(name, game):
     (`retryable_gen1_rng`); three for species_clause_new, whose PASS may still be a
     coin-flip outcome (see `run_scenario_with_rng_retry`).
     """
+    if scenario_family(game) == "gen2_new" and name in GEN2_CLAUSE_SCENARIOS:
+        return 3
     if scenario_family(game) != "gen1_new" or name == "ball_gate_new":
         return 1
     if name == "species_clause_new":
@@ -501,6 +509,7 @@ def jitter_problems(text, expected_requested):
 # Scenarios whose verdict needs a LIVE leg to have finished, not just two client RESULT lines:
 # the flag is set only inside the live assert (assert_reconnect_new / assert_admit_randomized_new),
 # and the post-result oracle refuses to describe a save that leg never produced.
+GEN2_CLAUSE_SCENARIOS = ("gen2_type_clause", "gen2_gender_clause", "gen2_species_clause")
 LIVE_LEG_SCENARIOS = ("reconnect_new", "admit_randomized_new", "gen2_reconnect", "gen2_soft_reset")
 
 RECONNECT_GAMEPLAY_EVENTS = ("capture", "linked", "no_catch", "dead_zone")
@@ -1641,12 +1650,15 @@ class DuoRun:
                         "lua/tests/duo/gen2_route29_inputs.lua"]
         if self.scenario == "gen2_faint":
             driver_files.append("lua/tests/duo/gen2_faint_inputs.lua")
+        if self.scenario in GEN2_CLAUSE_SCENARIOS:
+            driver_files.append("lua/tests/duo/gen2_clause.lua")
         for path in driver_files:
             if not (Path(REPO) / path).is_file():
                 raise FileNotFoundError(f"Gen 2 duo driver missing: {path}")
         oracle = importlib.import_module("gen2_duo_oracles")
         oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle", "gen2_reconnect": "reconnect_oracle",
-                       "gen2_admit_wrong_rom": "admit_wrong_rom_oracle", "gen2_soft_reset": "soft_reset_oracle"}[self.scenario]
+                       "gen2_admit_wrong_rom": "admit_wrong_rom_oracle", "gen2_soft_reset": "soft_reset_oracle",
+                       **dict.fromkeys(GEN2_CLAUSE_SCENARIOS, "clause_oracle")}[self.scenario]
         witness = "check_admit_wrong_rom_witness" if self.scenario == "gen2_admit_wrong_rom" else "check_save_witness"
         if self.scenario == "gen2_reconnect":
             witness = "check_reconnect_witness"
@@ -1688,6 +1700,32 @@ class DuoRun:
             relaunch_saves=self._gen2_relaunch_saves, snapshots=self._gen2_reconnect_snapshots,
             boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()},
             on_verified=self._record_gen2_facts, **kwargs)
+
+    def assert_gen2_clause_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.clause_oracle(results, data_dir=self.data_dir,
+            pending_snapshot=getattr(self, "_gen2_clause_pending", None),
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()},
+            on_verified=self._record_gen2_facts, **kwargs)
+
+    def _release_gen2_species(self):
+        def pending_marker():
+            rows = [json.loads(line.partition(" ")[2]) for line in self._read_receipt("a").splitlines()
+                    if line.startswith("PENDING_CAPTURE ")]
+            if len(rows) > 1:
+                raise RuntimeError("multiple A PENDING_CAPTURE markers")
+            return rows[0] if rows else None
+        marker = self.wait_for("Gen 2 A pending marker", pending_marker, self.cfg["timeout"])
+        if marker.get("area_id") != "route_29" or not marker.get("key") or type(marker.get("species_id")) is not int:
+            raise RuntimeError("invalid Gen 2 pending key/area/species")
+        def server_pending():
+            entry = ((self._status() or {}).get("pending_captures", {}).get("route_29", {}).get("a"))
+            return entry if entry and entry.get("key") == marker["key"] else None
+        entry = self.wait_for("Gen 2 server A pending capture", server_pending, self.cfg["timeout"])
+        if entry.get("species") != marker["species_id"]:
+            raise RuntimeError("Gen 2 server pending species differs from A")
+        self._gen2_clause_pending = self._gen2_admit_snapshot()
+        self._go_one("b", [f"A_PENDING species={marker['species_id']}"])
 
     def assert_gen2_soft_reset_saved(self, results, **kwargs):
         oracle = importlib.import_module("gen2_duo_oracles")
@@ -1810,6 +1848,10 @@ class DuoRun:
         allowed = ("refused",) if self.scenario == "gen2_admit_wrong_rom" else ("alive", "dead", "memorial")
         if self.scenario == "gen2_soft_reset":
             allowed = ("unchanged",)
+        if self.scenario in ("gen2_type_clause", "gen2_gender_clause"):
+            allowed = ("clause_observed",)
+        if self.scenario == "gen2_species_clause":
+            allowed = ("alive",)
         if facts["status"] not in allowed:
             raise RuntimeError("Gen 2 oracle verified status invalid")
         self._gen2_verified_facts = dict(facts)
@@ -4253,6 +4295,8 @@ class DuoRun:
                 self._orchestrate_gen2_reconnect()
             elif self.scenario == "gen2_soft_reset":
                 self._orchestrate_gen2_soft_reset()
+            elif self.scenario == "gen2_species_clause":
+                self._release_gen2_species()
             return
         if self.scenario == "admit_randomized_new":
             self.assert_admit_randomized_new()
@@ -4619,6 +4663,10 @@ class DuoRun:
                         reason += f" scenario={self.scenario}"
                     if self.scenario == "gen2_admit_wrong_rom":
                         reason += f" scenario={self.scenario} rom_b={self._gen2_verified_facts['rom_b']}"
+                    if self.scenario in GEN2_CLAUSE_SCENARIOS:
+                        extra = ("clause", "rerolls") if self.scenario == "gen2_species_clause" else ("clause", "rejected", "ending")
+                        reason += f" scenario={self.scenario} " + " ".join(
+                            f"{key}={self._gen2_verified_facts[key]}" for key in extra)
                 self._pydec_note(f"PYDEC: {'PASS' if passed else 'FAIL'} {reason}")
             print(f"[duo] {self.scenario}: a={'PASS' if pa else 'FAIL'} "
                   f"b={'PASS' if pb else 'FAIL'}")
@@ -4629,6 +4677,10 @@ class DuoRun:
             if self.args.keep_alive:
                 input("[duo] --keep-alive: press Enter to tear down…")
         except ClientFinishedEarly as exc:
+            if self.scenario == "gen2_species_clause":
+                # Preserve the pre-cleanup process/RESULT observation: cleanup kills A before
+                # its normal waiting-for-link timeout when B exhausts the duplicate hunt.
+                self._gen2_species_early_finish = exc
             # Not an error of the run: the cartridges ended while a wait was still pending, so
             # the receipts on disk are the verdict. Recorded, printed (the lane's evidence
             # collection reads these tails), torn down, and returned as False so
@@ -4731,6 +4783,11 @@ def run_scenario_with_rng_retry(name, args):
             receipts = {inst: read_result(artifact, inst) for inst in ("a", "b")}
             _archive_attempt(artifact, attempt, receipts)
             reason = f"{type(exc).__name__}: {exc}"
+            if name in GEN2_CLAUSE_SCENARIOS and scenario_family(args.game) == "gen2_new":
+                oracle = importlib.import_module("gen2_duo_oracles")
+                if isinstance(exc, oracle.ClauseUnobserved) and attempt < limit:
+                    print(f"[duo] {name}: clause unobserved; retrying fresh lane")
+                    continue
             print(f"[duo] {name}: attempt {attempt} aborted — {reason}")
             return False, attempt, reason
         receipts = {inst: read_result(artifact, inst) for inst in ("a", "b")}
@@ -4755,11 +4812,41 @@ def run_scenario_with_rng_retry(name, args):
             _archive_attempt(name, attempt, receipts)  # AFTER the annotation, so it is archived
             return ok, attempt
         _archive_attempt(artifact, attempt, receipts)
+        if (not ok and name == "gen2_species_clause" and scenario_family(args.game) == "gen2_new"
+                and attempt < limit and gen2_species_rng_miss(receipts,
+                    early_finish=getattr(run, "_gen2_species_early_finish", None),
+                    pending_snapshot=getattr(run, "_gen2_clause_pending", None))):
+            print(f"[duo] {name}: duplicates-only hunt; retrying fresh lane")
+            continue
         if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt, limit):
             return ok, attempt
         print(f"[duo] {name}: the cartridge's only ball missed; restarting attempt "
               f"{attempt + 1} of {limit} with a fresh server, run directory and SaveRAM seeds")
     return False, limit
+
+
+def gen2_species_rng_miss(receipts, *, early_finish=None, pending_snapshot=None):
+    """Only the driver's bounded duplicate hunt and its waiting partner may retry."""
+    expected = {"a": "RESULT: FAIL (the link never formed)",
+                "b": "RESULT: FAIL (RNG: the species hunt met only duplicates within its battle budget)"}
+    results = {inst: [line for line in (receipts.get(inst) or "").splitlines()
+                      if line.startswith("RESULT:")] for inst in expected}
+    if all(results[inst] == [line] for inst, line in expected.items()):
+        return True
+    if (results != {"a": [], "b": [expected["b"]]}
+            or not isinstance(early_finish, ClientFinishedEarly)
+            or early_finish.awaited != "both RESULT lines" or early_finish.exited
+            or early_finish.finished != {"a": "", "b": expected["b"]}):
+        return False
+    try:
+        markers = [json.loads(line.partition(" ")[2]) for line in receipts["a"].splitlines()
+                   if line.startswith("PENDING_CAPTURE ")]
+        entry = pending_snapshot["links"]["pending_captures"]["route_29"]["a"]
+        return (len(markers) == 1 and markers[0]["area_id"] == "route_29"
+                and bool(markers[0]["key"]) and markers[0]["key"] == entry["key"]
+                and type(markers[0]["species_id"]) is int and markers[0]["species_id"] == entry["species"])
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def main():

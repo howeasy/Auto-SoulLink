@@ -36,6 +36,10 @@ def test_required_phase_lanes_and_every_title_are_declared():
     assert "--check" in _lane("source-build").argv
 
 
+def test_fixture_lane_declares_gold_wrong_save_control_as_input():
+    assert "tests/fixtures/gen2/gold_battle_ot2.SaveRAM" in gate.PREREQUISITES["fixtures"]
+
+
 def test_live_new_gates_lane_targets_the_p3b3a_inspect_driver():
     """P3b.3a landed lua/tests/gen2_inspect_gate.lua and tests/live/test_gen2_new_gates.py; this
     lane's argv still names that file (the live run is still what proves R-1/R-2/R-3/R-4/R-5g). The
@@ -1069,3 +1073,101 @@ def test_soft_reset_matrix_refuses_weak_receipts(tmp_path, mutation):
                       "pydec_scenario": ("scenario", "link")}[mutation]
         text["pydec"] = _edit_pydec_token(key, value)(text["pydec"])
     assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_soft_reset")
+
+
+def _clause_cell(tmp_path, kind):
+    proof, axes, lock, _ = _soft_reset_cell(tmp_path)
+    scenario = f"gen2_{kind}_clause"
+    keys, text = {"a": "1234:5678:00", "b": "2234:5678:01"}, {}
+    for side in ("a", "b"):
+        species = 16 if side == "a" else 19
+        case = axes["fixtures"][side]
+        head = {"player": side, "scenario": scenario, "title": "crystal", "case": case, "attempt": 1,
+                "rom_sha1": lock["pokecrystal"]["sha1"], "fixture_sha256": gate._fixture_sha256(tmp_path, case)}
+        cap = {"frame": 100, "key": keys[side], "species_id": species, "area_id": "route_29"}
+        save = {"frame": 300, "save_completed_frame": 299, "gate_saves": 2, "client_saves": 2,
+                "flushed_matches": True, "cartram_bytes": 32768, "cartram_sha256": "a" * 64}
+        rows = [("DUO_GEN2", head), ("CLIENT", {"production_admitted": True}), ("ENGINE_CAPTURE", cap),
+                ("CAPTURE_SENT", {"frame": 101, "key": keys[side]})]
+        receipt = {**head, "schema": f"gen2-duo-{kind}-clause-v1", "key": keys[side],
+                   "species_id": species, "capture": cap, "save": save}
+        if kind == "species":
+            if side == "a":
+                rows.append(("PENDING_CAPTURE", cap))
+                receipt.update(role="pending", path="pending", rerolls=0)
+            else:
+                encounters = [("A_PENDING", {"frame": 50, "species_id": 16}),
+                              ("ENCOUNTER", {"frame": 60, "n": 1, "species_id": 16, "dupe": True}),
+                              ("RX_TEXT", {"cmd": "gui_prompt", "text": "Dupes clause: Pidgey -- reroll!"}),
+                              ("REROLL", {"frame": 70, "n": 1, "species_id": 16,
+                                          "prompt": "Dupes clause: Pidgey -- reroll!"}),
+                              ("ENCOUNTER", {"frame": 90, "n": 2, "species_id": 19, "dupe": False})]
+                rows[2:2] = encounters
+                receipt.update(role="reroller", path="reroll_observed", rerolls=1, dupe_species=16)
+            rows.append(("LINKED", {"frame": 200, "text": "A and B linked!"}))
+        else:
+            verdict = "partner_rejected" if side == "a" else "rejected"
+            rows.append(("CLAUSE_CAPTURE", cap))
+            rows.append(("CLAUSE_VERDICT", {"frame": 200, "verdict": verdict}))
+            receipt.update(clause=kind, path="clause_observed", verdict=verdict)
+            if side == "b":
+                rows.extend([("PARTY_HP_WRITE", {"frame": 201, "key": keys[side], "ok": True}),
+                             ("MEMORIAL_ACK", {"frame": 202, "key": keys[side], "event": "memorialize_failed"}),
+                             ("REJECTED_MON", {"frame": 203, "key": keys[side], "ending": "dead", "hp": 0,
+                                               "in_party": True})])
+                receipt["ending"] = "dead"
+        rows.extend([("SAVE_WITNESS", save), ("RECEIPT", receipt)])
+        text[side] = "\n".join(tag + " " + json.dumps(value) for tag, value in rows) + "\nRESULT: PASS\n"
+    facts = "status=alive clause=species rerolls=1" if kind == "species" else (
+        f"status=clause_observed clause={kind} rejected=b ending=dead")
+    text["pydec"] = (f"PYDEC: PASS scenario={scenario} a={keys['a']} b={keys['b']} "
+                     f"area=route_29 titles=crystal/crystal {facts}\n")
+    return proof, axes, lock, text
+
+
+@pytest.mark.parametrize("kind", ["species", "type", "gender"])
+def test_clause_matrix_accepts_observed_branch(tmp_path, kind):
+    proof, axes, lock, text = _clause_cell(tmp_path, kind)
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, f"gen2_{kind}_clause") == []
+
+
+@pytest.mark.parametrize("kind", ["type", "gender"])
+def test_clause_matrix_accepts_proven_memorial_ending(tmp_path, kind):
+    proof, axes, lock, text = _clause_cell(tmp_path, kind)
+    text["b"] = text["b"].replace('"event": "memorialize_failed"', '"event": "memorialize_done", "box": 13')
+    text["b"] = text["b"].replace('"ending": "dead"', '"ending": "memorial", "box": 13').replace(
+        '"in_party": true', '"in_party": false')
+    text["pydec"] = _edit_pydec_token("ending", "memorial")(text["pydec"])
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, f"gen2_{kind}_clause") == []
+
+
+@pytest.mark.parametrize("kind,mutation", [(kind, mutation) for kind in ("species", "type", "gender")
+    for mutation in ("unobserved", "first_save", "early_save", "receipt_missing", "wrong_fact", "header_hash")]
+    + [("species", "no_reroll"), ("species", "no_prompt"), ("species", "same_species"),
+       ("type", "no_write"), ("type", "wrong_ending"), ("gender", "wrong_rejected"), ("gender", "two_rejected")])
+def test_clause_matrix_refuses_unobserved_or_rebound_receipts(tmp_path, kind, mutation):
+    proof, axes, lock, text = _clause_cell(tmp_path, kind)
+    if mutation == "unobserved":
+        text["b"] = text["b"].replace('"reroll_observed"', '"reroll_unobserved"').replace(
+            '"clause_observed"', '"clause_unobserved"').replace('"verdict": "rejected"', '"verdict": "linked"')
+    elif mutation == "first_save":
+        text["b"] = text["b"].replace('"gate_saves": 2', '"gate_saves": 1')
+    elif mutation == "early_save":
+        text["b"] = text["b"].replace('"save_completed_frame": 299', '"save_completed_frame": 101')
+    elif mutation in ("receipt_missing", "no_reroll", "no_prompt", "no_write"):
+        tag = {"receipt_missing": "RECEIPT", "no_reroll": "REROLL", "no_prompt": "RX_TEXT",
+               "no_write": "PARTY_HP_WRITE"}[mutation]
+        text["b"] = "\n".join(line for line in text["b"].splitlines() if not line.startswith(tag + " "))
+    elif mutation == "wrong_fact":
+        text["pydec"] = _edit_pydec_token("clause", "wrong")(text["pydec"])
+    elif mutation == "header_hash":
+        text["b"] = _edit_header_field("fixture_sha256", "0" * 64)(text["b"])
+    elif mutation == "same_species":
+        text["b"] = text["b"].replace('"species_id": 19', '"species_id": 16')
+    elif mutation == "wrong_ending":
+        text["pydec"] = _edit_pydec_token("ending", "memorial")(text["pydec"])
+    elif mutation == "wrong_rejected":
+        text["pydec"] = _edit_pydec_token("rejected", "a")(text["pydec"])
+    elif mutation == "two_rejected":
+        text["a"] = text["a"].replace('"partner_rejected"', '"rejected"')
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, f"gen2_{kind}_clause")

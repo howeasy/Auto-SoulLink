@@ -219,7 +219,11 @@ def test_gen2_reconnect_orchestration_keeps_b_online_and_archives_initial_a(monk
         "b": {"connected": True}}}
     run._links_json = lambda: [{"status": "alive", "area_id": "route_29",
                                "a": {"key": "a-key"}, "b": {"key": "b-key"}}]
-    run._gen2_admit_snapshot = lambda: {"phase": state["phase"], "connected": state["connected"]}
+    def snapshot():
+        row = {"phase": state["phase"], "connected": state["connected"]}
+        actions.append(("snapshot", row["phase"], row["connected"]))
+        return row
+    run._gen2_admit_snapshot = snapshot
     def terminate(side):
         assert side == "a"
         state["connected"] = False
@@ -242,9 +246,12 @@ def test_gen2_reconnect_orchestration_keeps_b_online_and_archives_initial_a(monk
         return result
     run.wait_for = wait
     run._orchestrate_gen2_reconnect()
-    assert actions == [("kill", "initial"), ("stage", "same_save", "initial.SaveRAM"),
-                       ("a", "A_DONE_SAME"), ("kill", "same_save"),
-                       ("stage", "wrong_save", "wrong.SaveRAM"), ("a", "A_DONE_WRONG"),
+    # Capture connected evidence BEFORE permitting client teardown; B stays until every cut.
+    assert actions == [("snapshot", "initial", True), ("kill", "initial"),
+                       ("snapshot", "initial", False), ("stage", "same_save", "initial.SaveRAM"),
+                       ("snapshot", "same_save", True), ("a", "A_DONE_SAME"), ("kill", "same_save"),
+                       ("snapshot", "same_save", False), ("stage", "wrong_save", "wrong.SaveRAM"),
+                       ("snapshot", "wrong_save", True), ("a", "A_DONE_WRONG"),
                        ("kill", "wrong_save"), ("b", "B_DONE")]
     initial = tmp_path / f"e2e_{run.artifact_name}_a_initial_result.txt"
     assert "RECONNECT_READY" in initial.read_text() and "RESULT:" not in initial.read_text()
@@ -254,7 +261,7 @@ def test_gen2_reconnect_orchestration_keeps_b_online_and_archives_initial_a(monk
 
 def test_gen2_new_selects_link_and_faint_with_required_evidence():
     assert "gen2_new" in GAMES
-    assert scenarios_for("gen2_new") == ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset"]
+    assert scenarios_for("gen2_new") == ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset"]
     contract = duo_module.evidence_contract("gen2_new")
     assert contract.require_oracle and contract.witness_validator
     assert callable(getattr(DuoRun, contract.witness_validator, None))
@@ -275,13 +282,13 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
     assert game in GAMES
     assert GAMES[game]["game"] == "gen2_new"
     assert GAMES[game]["fixture"] == fixtures
-    assert scenarios_for(game) == ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset"]
+    assert scenarios_for(game) == ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset"]
     assert duo_module.evidence_contract(game) is duo_module.evidence_contract("gen2_new")
     assert not GAMES[game].get("server_rom_routes")
     assert duo_list_lines(game) == [
-        f"{scenario}  attempts=1  targets=a:{fixtures['a']}, "
+        f"{scenario}  attempts={3 if scenario in duo_module.GEN2_CLAUSE_SCENARIOS else 1}  targets=a:{fixtures['a']}, "
         f"b:{'crystal_battle_ot2' if scenario == 'gen2_admit_wrong_rom' else fixtures['b']}"
-        for scenario in ("link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset")]
+        for scenario in ("link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset")]
 
 
 @pytest.mark.parametrize("game,titles,names", (
@@ -733,3 +740,110 @@ def test_list_lines_carry_the_attempt_limit_and_the_targets():
     assert lines["ball_gate_new"] == "ball_gate_new  attempts=1  targets=town"
     for name in scenarios_for("gen1_new"):
         assert name in lines, name
+
+
+@pytest.mark.parametrize("kind", ("type", "gender", "species"))
+def test_gen2_clause_registry_requires_observed_oracle(kind):
+    name = f"gen2_{kind}_clause"
+    row = SCENARIOS[name]
+    assert row["flags"] == [f"--{kind}-clause"]
+    assert row["oracle"] == "assert_gen2_clause_saved"
+    assert row["oracle_kwargs"] == {"kind": kind}
+    assert callable(getattr(DuoRun, row["oracle"]))
+    for game in ("gen2_new", "gen2_gold_silver", "gen2_crystal_gold"):
+        assert name in scenarios_for(game)
+        assert scenario_attempt_limit(name, game) == 3
+    assert not scenario_applies(name, "gen1_new")
+
+
+@pytest.mark.parametrize("mismatch", (False, True))
+def test_gen2_species_release_records_server_snapshot_before_go(mismatch):
+    import json
+    run = object.__new__(DuoRun)
+    run.cfg = {"timeout": 10}
+    marker = {"key": "catch-a", "species_id": 16, "area_id": "route_29"}
+    run._read_receipt = lambda inst: "PENDING_CAPTURE " + json.dumps(marker)
+    entry = {"key": "catch-a", "species": 19 if mismatch else 16}
+    run._status = lambda: {"pending_captures": {"route_29": {"a": entry}}}
+    run.wait_for = lambda label, fn, timeout: fn()
+    snapshot = {"links": {"pending_captures": {"route_29": {"a": entry}}}, "events": []}
+    run._gen2_admit_snapshot = lambda: snapshot
+    sent = []
+    def go(inst, lines):
+        assert run._gen2_clause_pending == snapshot
+        sent.append((inst, lines))
+    run._go_one = go
+    if mismatch:
+        with pytest.raises(RuntimeError, match="species"):
+            run._release_gen2_species()
+        assert not sent
+    else:
+        run._release_gen2_species()
+        assert sent == [("b", ["A_PENDING species=16"])]
+
+
+@pytest.mark.parametrize("outcomes, expected, attempts", (
+    (("unobserved", "pass"), True, 2),
+    (("unobserved", "unobserved", "unobserved"), False, 3),
+    (("broken", "pass"), False, 1),
+))
+def test_gen2_clause_retries_only_oracle_validated_unobserved(monkeypatch, outcomes, expected, attempts):
+    from types import SimpleNamespace
+    class Unobserved(RuntimeError):
+        pass
+    seen = []
+    class FakeRun:
+        def __init__(self, name, args, attempt):
+            seen.append(attempt)
+        def run(self):
+            outcome = outcomes[len(seen) - 1]
+            if outcome == "unobserved":
+                raise Unobserved("valid link without clause")
+            if outcome == "broken":
+                raise RuntimeError("checksum mismatch")
+            return True
+    monkeypatch.setattr(duo_module, "DuoRun", FakeRun)
+    monkeypatch.setattr(duo_module.importlib, "import_module", lambda name: SimpleNamespace(ClauseUnobserved=Unobserved))
+    monkeypatch.setattr(duo_module, "read_result", lambda *args: "RESULT: PASS")
+    monkeypatch.setattr(duo_module, "_archive_attempt", lambda *args: None)
+    result = duo_module.run_scenario_with_rng_retry("gen2_type_clause", SimpleNamespace(game="gen2_new", idle_jitter=0))
+    assert result[:2] == (expected, attempts)
+    assert len(seen) == attempts
+
+
+@pytest.mark.parametrize("extra", ("", "\nRESULT: FAIL (bad checksum)", "\nRESULT: PASS"))
+def test_gen2_species_rng_retry_excludes_other_failures(extra):
+    rows = {"a": "RESULT: FAIL (the link never formed)",
+            "b": "RESULT: FAIL (RNG: the species hunt met only duplicates within its battle budget)" + extra}
+    assert duo_module.gen2_species_rng_miss(rows) is (not extra)
+
+
+@pytest.mark.parametrize("fault, attempts", ((None, 3), ("dead_a", 1), ("failed_a", 1), ("wrong_pending", 1)))
+def test_gen2_species_live_early_finish_retries_only_waiting_pending_partner(monkeypatch, fault, attempts):
+    import json
+    from types import SimpleNamespace
+    marker = {"key": "catch-a", "species_id": 16, "area_id": "route_29"}
+    receipts = {"a": "PENDING_CAPTURE " + json.dumps(marker),
+                "b": "RESULT: FAIL (RNG: the species hunt met only duplicates within its battle budget)"}
+    if fault == "failed_a":
+        receipts["a"] += "\nRESULT: FAIL (checksum mismatch)"
+    runs = []
+    def factory(name, args, attempt):
+        run = object.__new__(DuoRun)
+        run.scenario, run.game, run.args, run.attempt = name, args.game, args, attempt
+        run.cfg, run.gcfg = {"timeout": 1}, {}
+        run.start_server = run.start_instances = run.orchestrate = lambda: None
+        run._read_receipt = receipts.get
+        run._process_exited = lambda side: fault == "dead_a" and side == "a"
+        run.cleanup = lambda passed: None
+        run._gen2_clause_pending = {"links": {"pending_captures": {"route_29": {"a": {
+            "key": "other" if fault == "wrong_pending" else "catch-a", "species": 16}}}}}
+        runs.append(run)
+        return run
+    monkeypatch.setattr(duo_module, "DuoRun", factory)
+    monkeypatch.setattr(duo_module, "validate_pipeline", lambda *args: None)
+    monkeypatch.setattr(duo_module, "read_result", lambda name, side: receipts[side])
+    monkeypatch.setattr(duo_module, "_archive_attempt", lambda *args: None)
+    result = duo_module.run_scenario_with_rng_retry("gen2_species_clause", SimpleNamespace(game="gen2_new", idle_jitter=0))
+    assert result[:2] == (False, attempts)
+    assert len(runs) == attempts

@@ -1319,6 +1319,325 @@ def test_soft_reset_refuses_mutations(soft_reset_case, fault):
         oracles.soft_reset_oracle(results, **kwargs)
 
 
+def _clause_base(tmp_path, species_pair=(16, 19)):
+    layout = codec.for_foundation("crystal")
+    base = _duo_case(tmp_path, {side: (layout, FIXTURES[side], CASES[side], "crystal", OT_IDS[side], species)
+                               for side, species in zip(("a", "b"), species_pair, strict=True)})
+    results, data_dir, decoded = base
+    for side in ("a", "b"):
+        save = oracles._last_tagged(results[side], "SAVE_WITNESS")
+        _edit_saved_record(Path(save["saveram_path"]), layout, 1, layout.constants["MON_LEVEL"], bytes([3]))
+        _refresh_faint_hash(results, side)
+        cap = oracles._last_tagged(results[side], "ENGINE_CAPTURE")
+        cap["level"] = decoded[side]["level"] = 3
+        results[side] = _replace_tag(results[side], "ENGINE_CAPTURE", cap)
+    (Path(data_dir) / "links.json").write_text(json.dumps({"links": [{"area_id": "route_29", "status": "alive", **decoded}]}))
+    return base
+
+
+@pytest.fixture
+def clause_case(tmp_path):
+    layout = codec.for_foundation("crystal")
+    results, data_dir, images = _make_faint_case(_clause_base(tmp_path), {"a": layout, "b": layout}, tmp_path)
+    keys, captures = {}, {}
+    for side in ("a", "b"):
+        cap = oracles._last_tagged(results[side], "ENGINE_CAPTURE")
+        captures[side], keys[side] = cap, cap["key"]
+        head = oracles._last_tagged(results[side], "DUO_GEN2")
+        head["scenario"] = "gen2_type_clause"
+        save = oracles._last_tagged(results[side], "SAVE_WITNESS")
+        if side == "a":
+            Path(save["saveram_path"]).write_bytes(images[side].read_bytes())
+            save["cartram_sha256"] = hashlib.sha256(images[side].read_bytes()[:CART]).hexdigest()
+        rows = [("DUO_GEN2", head), ("CLIENT", oracles._last_tagged(results[side], "CLIENT")),
+                ("HELLO", oracles._last_tagged(results[side], "HELLO")), ("ENGINE_CAPTURE", cap),
+                ("CAPTURE_SENT", {"frame": 4801, "key": cap["key"], "seq": 8}),
+                ("CLAUSE_CAPTURE", {"frame": 5000, "key": cap["key"], "species_id": cap["species_id"], "area_id": "route_29",
+                                    "types": ["Normal", "Flying"] if side == "a" else ["Normal"],
+                                    "gender": "female" if int(cap["key"][0], 16) <= 7 else "male"})]
+        text = "\n".join(f"{tag} {json.dumps(row)}" for tag, row in rows) + f"\nCAUGHT {cap['key']}"
+        verdict = "partner_rejected" if side == "a" else "rejected"
+        if side == "a":
+            text += "\nRX play_sound sound=22"
+        else:
+            text += f"\nRX force_faint key={cap['key']}\nRX memorialize key={cap['key']}\nRX play_sound sound=26\nRX unresolve_area area_id=route_29"
+            text += "\nRX_TEXT " + json.dumps({"frame": 7000, "cmd": "gui_prompt", "text": "[x] Type clause: shared Normal"})
+        text += "\nCLAUSE_VERDICT " + json.dumps({"frame": 7001, "verdict": verdict})
+        if side == "b":
+            text += "\nPARTY_HP_WRITE " + json.dumps(oracles._last_tagged(results[side], "PARTY_HP_WRITE"))
+            text += "\nMEMORIAL_ACK " + json.dumps({"frame": 7200, "event": "memorialize_failed", "key": cap["key"], "reason": "unsupported"})
+            text += "\nREJECTED_MON " + json.dumps({"frame": 7300, "key": cap["key"], "ending": "dead", "in_party": True, "slot": 1, "hp": 0, "status": 0})
+        text += "\nSAVE_WITNESS " + json.dumps(save)
+        text += "\nRECEIPT " + json.dumps({**head, "schema": "gen2-duo-type-clause-v1", "clause": "type", "verdict": verdict,
+            "path": "clause_observed", "ending": "dead" if side == "b" else None}) + "\nRESULT: PASS"
+        results[side] = text
+    doc = {"links": [], "pending_captures": {"route_29": {"a": {"key": keys["a"], "species": captures["a"]["species_id"]}}},
+           "area_states": {"route_29": "pending_b"}, "retry_areas": {"a": [], "b": ["route_29"]}, "pending_memorials": {"a": [], "b": []}}
+    (Path(data_dir) / "links.json").write_text(json.dumps(doc))
+    events = [{"type": "violation", "player": "b", "area_id": "route_29", "text": "[x] Type clause: shared Normal"},
+              *[{"type": "capture", "player": side, "key": keys[side], "area_id": "route_29"} for side in ("b", "a")]]
+    (Path(data_dir) / "events.json").write_text(json.dumps(events))
+    return results, {"kind": "type", "data_dir": data_dir, "boot_saveram": FIXTURES}
+
+
+def test_clause_observed_independent_dead_pending_proof(clause_case):
+    results, kwargs = clause_case
+    facts = []
+    oracles.clause_oracle(results, **kwargs, on_verified=facts.append)
+    assert facts[0]["ending"] == "dead" and facts[0]["rejected"] == "b"
+
+
+@pytest.mark.parametrize("box_number", [13, 12])
+def test_clause_memorial_requires_saved_final_box(clause_case, box_number):
+    results, kwargs = clause_case
+    layout = codec.for_foundation("crystal")
+    save = oracles._last_tagged(results["b"], "SAVE_WITNESS")
+    path = Path(save["saveram_path"])
+    raw = bytearray(path.read_bytes())
+    party = codec.decode_saved_party(bytes(raw[:CART]), layout, copy_name="primary")["mons"]
+    mon = dict(party[-1])
+    mon["raw_hex"] = mon["raw_hex"][:layout.box_mon_size * 2]
+    box = codec.verify_boxes(bytes(raw[:CART]), layout)[box_number]
+    box.update(count=1, mons=[mon])
+    start, length = layout.storage_boxes[box_number]
+    raw[start:start + length] = codec.encode_box(box, layout)
+    region = next(r for r in layout.regions if r.name == "pokemon")
+    _poke(raw, region, layout.addresses["wPartyCount"] - layout.addresses["wPokemonData"], bytes([1]))
+    _poke(raw, region, layout.addresses["wPartySpecies"] - layout.addresses["wPokemonData"] + 1, bytes([255]))
+    for copy_name in ("primary", "backup"):
+        offset = layout.checksum_offsets[copy_name]
+        raw[offset:offset + 2] = codec.sav_checksum(bytes(raw[:CART]), layout, copy_name).to_bytes(2, "little")
+    path.write_bytes(raw)
+    _refresh_faint_hash(results, "b")
+    for tag in ("MEMORIAL_ACK", "REJECTED_MON", "RECEIPT"):
+        row = oracles._last_tagged(results["b"], tag)
+        if tag == "MEMORIAL_ACK":
+            row.update(event="memorialize_done", box=13)
+        elif tag == "REJECTED_MON":
+            row.update(ending="memorial", box=13, in_party=False)
+        else:
+            row.update(ending="memorial")
+        results["b"] = _replace_tag(results["b"], tag, row)
+    if box_number == 13:
+        oracles.clause_oracle(results, **kwargs)
+    else:
+        with pytest.raises(RuntimeError, match="memorial"):
+            oracles.clause_oracle(results, **kwargs)
+
+
+def test_type_clause_valid_clean_pair_is_retry_not_release(tmp_path):
+    results, data_dir, _ = _clause_base(tmp_path, (187, 19))
+    pin = codec.for_foundation("crystal").profile["titles"]["crystal"]["rom_sha1"]
+    for side in ("a", "b"):
+        head = oracles._last_tagged(results[side], "DUO_GEN2")
+        head.update(player=side, scenario="gen2_type_clause", rom_sha1=pin)
+        client = oracles._last_tagged(results[side], "CLIENT")
+        client["rom_sha1"] = pin
+        results[side] = _replace_tag(_replace_tag(results[side], "DUO_GEN2", head), "CLIENT", client)
+        cap = oracles._last_tagged(results[side], "ENGINE_CAPTURE")
+        results[side] = _replace_tag(results[side], "CAPTURE_SENT", {"frame": 4801, "key": cap["key"], "seq": 8})
+        results[side] = _replace_tag(results[side], "CLAUSE_CAPTURE", {"frame": 4802, "key": cap["key"], "species_id": cap["species_id"],
+            "area_id": "route_29", "types": ["Grass", "Flying"] if side == "a" else ["Normal"],
+            "gender": "female" if int(cap["key"][0], 16) <= 7 else "male"})
+        results[side] = _replace_tag(results[side], "CLAUSE_VERDICT", {"frame": 4803, "verdict": "linked"})
+        results[side] = _replace_tag(results[side], "RECEIPT", {**head, "schema": "gen2-duo-type-clause-v1",
+            "clause": "type", "verdict": "linked", "path": "clause_unobserved"})
+    (Path(data_dir) / "events.json").write_text("[]")
+    facts = []
+    with pytest.raises(oracles.ClauseUnobserved):
+        oracles.clause_oracle(results, kind="type", data_dir=data_dir, boot_saveram=FIXTURES, on_verified=facts.append)
+    assert facts == []
+
+
+@pytest.mark.parametrize("fault", ["pending", "retry", "area", "link", "events", "write_checkpoint", "write_bytes", "alive",
+                                   "prompt", "ack", "other_key", "types", "schema", "write_order"])
+def test_clause_observed_refuses_mutations(clause_case, fault):
+    results, kwargs = clause_case
+    path = Path(kwargs["data_dir"]) / "links.json"
+    doc = json.loads(path.read_text())
+    if fault == "pending":
+        doc["pending_captures"] = {}
+    elif fault == "retry":
+        doc["retry_areas"]["b"] = []
+    elif fault == "area":
+        doc["area_states"]["route_29"] = "linked"
+    elif fault == "link":
+        doc["links"] = [{"area_id": "route_29", "status": "alive"}]
+    elif fault == "events":
+        (Path(kwargs["data_dir"]) / "events.json").write_text("[]")
+    elif fault in ("write_checkpoint", "write_bytes"):
+        row = oracles._last_tagged(results["b"], "PARTY_HP_WRITE")
+        if fault == "write_checkpoint":
+            row["checkpoint"]["state"]["wBattleMode"] = 1
+        else:
+            row["after_party_hex"] = row["before_party_hex"]
+        results["b"] = _replace_tag(results["b"], "PARTY_HP_WRITE", row)
+    elif fault == "alive":
+        save = oracles._last_tagged(results["b"], "SAVE_WITNESS")
+        _edit_saved_record(Path(save["saveram_path"]), codec.for_foundation("crystal"), 1, codec.for_foundation("crystal").constants["MON_HP"], b"\x00\x01")
+        _refresh_faint_hash(results, "b")
+    elif fault == "prompt":
+        results["b"] = results["b"].replace("shared Normal", "shared Fire")
+    elif fault == "ack":
+        results["b"] = results["b"].replace("memorialize_failed", "memorialize_done")
+    elif fault == "other_key":
+        results["b"] = results["b"].replace("force_faint key=", "force_faint key=BAD")
+    elif fault == "write_order":
+        command = next(line for line in results["b"].splitlines() if line.startswith("RX force_faint "))
+        results["b"] = results["b"].replace(command + "\n", "") + "\n" + command
+    elif fault == "types":
+        row = oracles._last_tagged(results["a"], "CLAUSE_CAPTURE")
+        row["types"] = ["Fire"]
+        results["a"] = _replace_tag(results["a"], "CLAUSE_CAPTURE", row)
+    else:
+        results["b"] = results["b"].replace("gen2-duo-type-clause-v1", "gen2-duo-link-v1")
+    path.write_text(json.dumps(doc))
+    with pytest.raises(RuntimeError):
+        oracles.clause_oracle(results, **kwargs)
+
+
+@pytest.fixture
+def species_clause_case(tmp_path):
+    results, data_dir, decoded = _clause_base(tmp_path)
+    pin = codec.for_foundation("crystal").profile["titles"]["crystal"]["rom_sha1"]
+    prompt = "Dupes clause: Pidgey -- reroll!"
+    for side in ("a", "b"):
+        old = results[side]
+        head = oracles._last_tagged(old, "DUO_GEN2")
+        head.update(player=side, scenario="gen2_species_clause", rom_sha1=pin)
+        client = oracles._last_tagged(old, "CLIENT")
+        client["rom_sha1"] = pin
+        cap, save = oracles._last_tagged(old, "ENGINE_CAPTURE"), oracles._last_tagged(old, "SAVE_WITNESS")
+        save.update(frame=8000, save_completed_frame=7990)
+        rows = [("DUO_GEN2", head), ("CLIENT", client), ("HELLO", oracles._last_tagged(old, "HELLO"))]
+        if side == "b":
+            rows += [("A_PENDING", {"frame": 3500, "species_id": 16}),
+                     ("ENCOUNTER", {"frame": 3600, "n": 1, "species_id": 16, "dupe": True}),
+                     ("RX_TEXT", {"frame": 3610, "cmd": "gui_prompt", "text": prompt}),
+                     ("REROLL", {"frame": 3700, "n": 1, "species_id": 16, "prompt": prompt}),
+                     ("ENCOUNTER", {"frame": 4000, "n": 2, "species_id": 19, "dupe": False})]
+        rows += [("ENGINE_CAPTURE", cap), ("CAPTURE_SENT", {"frame": 4801, "key": cap["key"], "seq": 8})]
+        if side == "a":
+            rows += [("PENDING_CAPTURE", {"frame": 5000, "key": cap["key"], "species_id": 16, "area_id": "route_29"})]
+        rows += [("LINKED", {"frame": 7000, "text": "A and B linked!"}), ("SAVE_WITNESS", save),
+                 ("RECEIPT", {**head, "schema": "gen2-duo-species-clause-v1", "role": "pending" if side == "a" else "reroller",
+                   "species_id": cap["species_id"], "dupe_species": None if side == "a" else 16,
+                   "rerolls": 0 if side == "a" else 1, "path": "pending" if side == "a" else "reroll_observed"})]
+        results[side] = "\n".join(f"{tag} {json.dumps(row)}" for tag, row in rows) + f"\nCAUGHT {cap['key']}\nRESULT: PASS"
+    capture_a = {"type": "capture", "player": "a", "key": decoded["a"]["key"], "area_id": "route_29"}
+    pending = {"links": {"links": [], "pending_captures": {"route_29": {"a": decoded["a"]}}}, "events": [capture_a]}
+    doc = json.loads((Path(data_dir) / "links.json").read_text())
+    doc.update(pending_captures={}, area_states={"route_29": "linked"})
+    events = [{"type": "linked", "player": "b", "area_id": "route_29"},
+              {"type": "capture", "player": "b", "key": decoded["b"]["key"], "area_id": "route_29"},
+              {"type": "reroll", "player": "b", "area_id": "route_29", "text": "🔁 " + prompt}, capture_a]
+    (Path(data_dir) / "links.json").write_text(json.dumps(doc))
+    (Path(data_dir) / "events.json").write_text(json.dumps(events), encoding="utf-8")
+    return results, {"kind": "species", "data_dir": data_dir, "boot_saveram": FIXTURES, "pending_snapshot": pending}
+
+
+def test_species_clause_pending_reroll_and_link_proof(species_clause_case):
+    results, kwargs = species_clause_case
+    facts = []
+    oracles.clause_oracle(results, **kwargs, on_verified=facts.append)
+    assert facts[0]["clause"] == "species" and facts[0]["rerolls"] == 1
+
+
+def test_species_clause_unobserved_is_typed_retry_not_release(species_clause_case):
+    results, kwargs = species_clause_case
+    text = results["b"]
+    text = "\n".join(line for line in text.splitlines() if not line.startswith(("REROLL ", "RX_TEXT "))
+                     and not (line.startswith("ENCOUNTER ") and json.loads(line[len("ENCOUNTER "):])["dupe"]))
+    last = oracles._last_tagged(text, "ENCOUNTER")
+    last["n"] = 1
+    text = _replace_tag(text, "ENCOUNTER", last)
+    receipt = oracles._last_tagged(text, "RECEIPT")
+    receipt.update(path="reroll_unobserved", rerolls=0)
+    results["b"] = _replace_tag(text, "RECEIPT", receipt)
+    path = Path(kwargs["data_dir"]) / "events.json"
+    path.write_text(json.dumps([row for row in json.loads(path.read_text(encoding="utf-8")) if row.get("type") != "reroll"]), encoding="utf-8")
+    facts = []
+    with pytest.raises(oracles.ClauseUnobserved):
+        oracles.clause_oracle(results, **kwargs, on_verified=facts.append)
+    assert facts == []
+
+
+def test_clause_gender_uses_decoded_dvs(clause_case):
+    results, kwargs = clause_case
+    genders = [oracles._last_tagged(results[side], "CLAUSE_CAPTURE")["gender"] for side in ("a", "b")]
+    if genders[0] != genders[1]:
+        layout = codec.for_foundation("crystal")
+        old_key = oracles._last_tagged(results["b"], "ENGINE_CAPTURE")["key"]
+        new_key = ("A" if genders[0] == "male" else "1") + old_key[1:]
+        dvs = bytes.fromhex(new_key[:4])
+        save = oracles._last_tagged(results["b"], "SAVE_WITNESS")
+        _edit_saved_record(Path(save["saveram_path"]), layout, 1, layout.constants["MON_DVS"], dvs)
+        results["b"] = results["b"].replace(old_key, new_key)
+        _refresh_faint_hash(results, "b")
+        write = oracles._last_tagged(results["b"], "PARTY_HP_WRITE")
+        for field in ("before_party_hex", "after_party_hex"):
+            raw = bytearray.fromhex(write[field])
+            start = layout.party_size + layout.constants["MON_DVS"]
+            raw[start:start + 2] = dvs
+            write[field] = raw.hex()
+        results["b"] = _replace_tag(results["b"], "PARTY_HP_WRITE", write)
+        cc = oracles._last_tagged(results["b"], "CLAUSE_CAPTURE")
+        cc["gender"] = genders[0]
+        results["b"] = _replace_tag(results["b"], "CLAUSE_CAPTURE", cc)
+        for filename in ("links.json", "events.json"):
+            path = Path(kwargs["data_dir"]) / filename
+            path.write_text(path.read_text().replace(old_key, new_key))
+    symbol = "♀" if genders[0] == "female" else "♂"
+    for side in ("a", "b"):
+        results[side] = results[side].replace("gen2_type_clause", "gen2_gender_clause").replace("gen2-duo-type-clause-v1", "gen2-duo-gender-clause-v1")
+        receipt = oracles._last_tagged(results[side], "RECEIPT")
+        receipt["clause"] = "gender"
+        results[side] = _replace_tag(results[side], "RECEIPT", receipt).replace("Type clause: shared Normal", "Gender clause: both are " + symbol)
+    path = Path(kwargs["data_dir"]) / "events.json"
+    path.write_text(path.read_text().replace("Type clause: shared Normal", "Gender clause: both are " + symbol), encoding="utf-8")
+    kwargs["kind"] = "gender"
+    oracles.clause_oracle(results, **kwargs)
+
+
+@pytest.mark.parametrize("fault", ["no_pending", "late_pending", "wrong_species", "no_prompt", "no_server_reroll", "encounter_order", "extra_capture"])
+def test_species_clause_refuses_mutations(species_clause_case, fault):
+    results, kwargs = species_clause_case
+    if fault == "no_pending":
+        kwargs["pending_snapshot"] = None
+    elif fault == "late_pending":
+        kwargs["pending_snapshot"]["events"].append({"type": "capture", "player": "b"})
+    elif fault in ("wrong_species", "encounter_order"):
+        tag = "A_PENDING" if fault == "wrong_species" else "REROLL"
+        row = oracles._last_tagged(results["b"], tag)
+        row["species_id" if fault == "wrong_species" else "n"] = 19 if fault == "wrong_species" else 2
+        results["b"] = _replace_tag(results["b"], tag, row)
+    elif fault == "no_prompt":
+        results["b"] = "\n".join(line for line in results["b"].splitlines() if not line.startswith("RX_TEXT "))
+    else:
+        path = Path(kwargs["data_dir"]) / "events.json"
+        rows = json.loads(path.read_text(encoding="utf-8"))
+        if fault == "no_server_reroll":
+            rows = [row for row in rows if row.get("type") != "reroll"]
+        else:
+            rows.insert(0, next(row for row in rows if row.get("type") == "capture" and row.get("player") == "b"))
+        path.write_text(json.dumps(rows), encoding="utf-8")
+    with pytest.raises(RuntimeError):
+        oracles.clause_oracle(results, **kwargs)
+
+
+def test_reconnect_same_save_rtc_trailer_may_differ(reconnect_case):
+    results, kwargs = reconnect_case
+    path = kwargs["staged_saves"]["same_save"]
+    raw = bytearray(path.read_bytes())
+    raw[-1] ^= 1
+    path.write_bytes(raw)
+    for tag in ("DUO_GEN2", "RECEIPT"):
+        row = oracles._last_tagged(kwargs["relaunch_results"]["same_save"], tag)
+        row["fixture_sha256"] = hashlib.sha256(raw).hexdigest()
+        kwargs["relaunch_results"]["same_save"] = _replace_tag(kwargs["relaunch_results"]["same_save"], tag, row)
+    oracles.reconnect_oracle(results, **kwargs)
+
+
 def test_missing_links_json_refused(good_case, tmp_path):
     results, _data_dir, _decoded = good_case
     empty_dir = tmp_path / "empty"

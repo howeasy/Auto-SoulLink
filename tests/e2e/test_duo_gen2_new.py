@@ -19,7 +19,7 @@ pytestmark = [
 ]
 
 GAME = "gen2_new"
-SCENARIOS = ("link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset")
+SCENARIOS = ("link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset")
 LANE = "gen2-cc-link"
 PAIRINGS = {
     GAME: LANE,
@@ -42,7 +42,7 @@ def run_gate(game=GAME, scenario="link"):
                      for phase in ("initial", "same_save", "wrong_save")]
     for path in receipts + reconnect:
         path.unlink(missing_ok=True)
-    timeout = duo.SCENARIOS[scenario]["timeout"] + 300
+    timeout = duo.SCENARIOS[scenario]["timeout"] * duo.scenario_attempt_limit(scenario, game) + 300
     try:
         result = subprocess.run(
             [sys.executable, str(REPO / "tools" / "e2e_duo.py"),
