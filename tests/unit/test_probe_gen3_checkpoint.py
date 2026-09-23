@@ -17,7 +17,46 @@ TERMINALS = {
     "pc_menu": "task_pc_main_menu_active_60",
     "script_running": "script_context_not_shutdown_60",
 }
+# C4-B2 reason rows (battle/battle_commit/native/sound), P.STATES indices 10..22.
+REASON_TERMINALS = {
+    "battle_input_wild": "battle_main_func==HandleTurnActionSelectionState and "
+        "gBattleCommunication[0]==1",
+    "battle_input_trainer": "battle_main_func==HandleTurnActionSelectionState and "
+        "gBattleCommunication[0]==1",
+    "battle_move_menu": "gBattleCommunication[0]==2",
+    "battle_animation": "gBattleControllerExecFlags~=0",
+    "battle_faint_prompt": "gBattleMainFunc ~= HandleTurnActionSelectionState",
+    "battle_intro": "gBattleMainFunc ~= HandleTurnActionSelectionState",
+    "battle_link": "gBattleTypeFlags & 2",
+    "battle_over": "gBattleOutcome~=0",
+    "battle_commit_state3": "gBattleCommunication[0]>=3",
+    "native_idle_field": "companion beacon present and mailbox idle",
+    "native_idle_battle": "companion beacon present and mailbox idle in battle",
+    "native_absent": "no native block in this pack",
+    "sound_driver": "m4a SE1 ident == ID_NUMBER",
+}
 CORE = set(range(1, 8))
+# Reason-row P.STATES indices (10..22, REASON_BASE = 22 - 13 + 1), by name -- planned() per
+# artifact (docs/gen3/research/battle_write_predicate.md §6): the battle_animation row is
+# FR/LG-only, native_busy is model-only (no probe row), the rest gate on `artifacts`.
+BATTLE_INPUT_WILD, BATTLE_INPUT_TRAINER, BATTLE_MOVE_MENU = 10, 11, 12
+BATTLE_ANIMATION, BATTLE_FAINT_PROMPT, BATTLE_INTRO = 13, 14, 15
+BATTLE_LINK, BATTLE_OVER, BATTLE_COMMIT_STATE3 = 16, 17, 18
+NATIVE_IDLE_FIELD, NATIVE_IDLE_BATTLE, NATIVE_ABSENT, SOUND_DRIVER = 19, 20, 21, 22
+# planned() reason-row selection per artifact (OMP C4-B2 report: 11/10/3/7 rows).
+FIRERED_CLEAN_REASON_ROWS = {BATTLE_INPUT_WILD, BATTLE_INPUT_TRAINER, BATTLE_MOVE_MENU,
+    BATTLE_ANIMATION, BATTLE_FAINT_PROMPT, BATTLE_INTRO, BATTLE_LINK, BATTLE_OVER,
+    BATTLE_COMMIT_STATE3, NATIVE_ABSENT, SOUND_DRIVER}
+LEAFGREEN_CLEAN_REASON_ROWS = {BATTLE_INPUT_WILD, BATTLE_INPUT_TRAINER, BATTLE_MOVE_MENU,
+    BATTLE_ANIMATION, BATTLE_FAINT_PROMPT, BATTLE_INTRO, BATTLE_LINK, BATTLE_OVER,
+    NATIVE_ABSENT, SOUND_DRIVER}
+RADICAL_RED_CLEAN_REASON_ROWS = {BATTLE_INPUT_WILD, NATIVE_ABSENT, SOUND_DRIVER}
+RADICAL_RED_COMPANION_REASON_ROWS = {BATTLE_INPUT_WILD, BATTLE_INPUT_TRAINER, BATTLE_MOVE_MENU,
+    BATTLE_OVER, BATTLE_COMMIT_STATE3, NATIVE_IDLE_FIELD, NATIVE_IDLE_BATTLE}
+assert len(FIRERED_CLEAN_REASON_ROWS) == 11
+assert len(LEAFGREEN_CLEAN_REASON_ROWS) == 10
+assert len(RADICAL_RED_CLEAN_REASON_ROWS) == 3
+assert len(RADICAL_RED_COMPANION_REASON_ROWS) == 7
 
 
 @pytest.fixture
@@ -30,9 +69,16 @@ def module():
 def test_all_states_have_named_terminals(module):
     _, probe = module
     states = {row.name: row.terminal for row in probe.STATES.values()}
-    assert states == TERMINALS
+    assert states == {**TERMINALS, **REASON_TERMINALS}
     for name, terminal in TERMINALS.items():
         assert f'name="{name}", terminal="{terminal}"' in SOURCE
+    # Reason-row terminals are built with `..` string concatenation across lines in the source
+    # (the multi-line ones), so only the name literal -- not the full concatenated terminal --
+    # is checked against SOURCE; the terminal TEXT itself is checked against the parsed table.
+    for name in REASON_TERMINALS:
+        assert f'name="{name}"' in SOURCE
+    for row in probe.STATES.values():
+        assert row.terminal and row.terminal.strip(), row.name
 
 
 @pytest.mark.parametrize("expectation,samples,yes,reached,error,want", [
@@ -213,7 +259,16 @@ def test_every_negative_row_declares_expect_clauses(module):
             "battle": {"in_battle", "callback1", "callback2"},
             "fade": {"palette_fade_active"},
             "pc_menu": {"task"},
-            "script_running": {"script_context_status"}}
+            "script_running": {"script_context_status"},
+            # C4-B2 reason rows (docs/gen3/research/battle_write_predicate.md §6):
+            "battle_move_menu": {"battle_comm_0"},
+            "battle_animation": {"battle_exec_flags_idle", "battle_main_func"},
+            "battle_faint_prompt": {"battle_main_func", "battle_exec_flags_idle"},
+            "battle_intro": {"battle_main_func", "battle_exec_flags_idle"},
+            "battle_link": {"battle_not_link"},
+            "battle_over": {"battle_outcome_open", "battle_engine_loaded"},
+            "battle_commit_state3": {"battle_commit_guard"},
+            "native_absent": {"native_present"}}
     got = {r.name: set(r.expect_clauses.keys()) for r in probe.STATES.values() if r.expectation == "negative"}
     assert got == want
     row = lua.table_from({"expectation": "negative", "samples": 5, "yes": 0, "reached": True})
@@ -288,7 +343,9 @@ def test_real_safety_frame_end_sampling_and_save_witness_are_wired():
     assert 'dofile(wt .. "/lua/gen3/safety.lua")' in SOURCE
     assert "S.new(cp, deps, kind)" in SOURCE
     assert "event.onframeend(function()" in SOURCE
-    assert "safety:check()" in SOURCE
+    # C4-B2: the reason runner passes the row's reason/args through; core rows carry neither, so
+    # this is a byte-identical `safety:check(nil, nil, nil)` for them.
+    assert "safety:check(nil, active.write_reason, active.args)" in SOURCE
     assert "counter > before and G.sectors_at(domain,counter) < 14" in SOURCE
     assert "G.sectors_at(domain,after) >= 14" in SOURCE
     assert 'FAIL not run' in SOURCE and "passed = false" in SOURCE
@@ -310,14 +367,14 @@ def test_artifact_rows_are_negative_and_gated(module):
 
 
 @pytest.mark.parametrize("title,kind,env,want", [
-    ("firered", "clean", None, CORE | {9}),
-    ("radical_red", "companion", None, CORE | {8, 9}),
-    ("radical_red", "clean", None, CORE),
-    ("leafgreen", "clean", None, CORE),
+    ("firered", "clean", None, CORE | {9} | FIRERED_CLEAN_REASON_ROWS),
+    ("radical_red", "companion", None, CORE | {8, 9} | RADICAL_RED_COMPANION_REASON_ROWS),
+    ("radical_red", "clean", None, CORE | RADICAL_RED_CLEAN_REASON_ROWS),
+    ("leafgreen", "clean", None, CORE | LEAFGREEN_CLEAN_REASON_ROWS),
     ("radical_red", "companion", "script_running", CORE | {9}),
     ("radical_red", "companion", "pc_menu, script_running", CORE | {8, 9}),
     ("radical_red", "companion", "none", CORE),
-    ("firered", "clean", "", CORE | {9}),
+    ("firered", "clean", "", CORE | {9} | FIRERED_CLEAN_REASON_ROWS),
 ])
 def test_planned_rows_by_artifact(module, title, kind, env, want):
     _, probe = module
