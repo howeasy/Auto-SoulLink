@@ -20,9 +20,7 @@ rather than duplicated here: Gen 2's fixture parks indoors, because New Bark
 Town's west exit is script-locked until Elm hands over a starter, and there is
 no grass fixture to walk.
 
-Every profile address verified by
-[tools/verify_profile_addresses.py](../../../tools/verify_profile_addresses.py)
-against the pret decomp .sym output. Runtime smoke-test checklist in
+Runtime smoke-test checklist in
 [docs/gen1_gen2_runtime_checks.md](../../../docs/gen1_gen2_runtime_checks.md).
 
 Fixture: `tests/fixtures/gen2/crystal_town.SaveRAM`, a committed battery save
@@ -33,9 +31,7 @@ directories.
 ## Files
 
 - `area_map.json` — Route/city → area_id mapping (124 entries)
-- `species_types.json` — Species type data (251 species)
-- `gender_ratios.json` — Species gender ratio data
-- `item_names.json` — Item ID → name mapping
+- `items.json` — Item id → attributes (name, placeholder/key-item flags, permissions)
 - `moves.json` — 251 moves: name, type, power, accuracy, pp, split, effect_chance
 - `trainers.json` — `classes` (class_id → class name) + `named_trainers` (Johto/Kanto leaders, E4, rivals)
 - `encounter_tables.json` — Wild encounter slots by area_id with Morn/Day/Nite variants (partial coverage; extend by adding more areas)
