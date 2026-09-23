@@ -31,7 +31,9 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -490,8 +492,14 @@ def _launch(script: str, rom_rel: str, run_dir: Path, *, rr: bool, timeout: int,
     sys.path.insert(0, os.path.join(REPO, "tools"))
     import run_gate
 
+    # `run_gate.BIZHAWK_CONFIG` gets overwritten below to point at THIS call's per-run copy, so a
+    # second `_launch` call in the same process (a retry) would otherwise read a config.ini that
+    # a fresh `_prepare_run` had already deleted (FileNotFoundError) -- stash the pristine source
+    # once per process rather than trusting the mutated module global on later calls.
+    if not hasattr(run_gate, "_SLINK_ORIGINAL_CONFIG"):
+        run_gate._SLINK_ORIGINAL_CONFIG = run_gate.BIZHAWK_CONFIG
     cfg = str(run_dir / "config.ini")
-    write_gba_run_config(run_gate.BIZHAWK_CONFIG, cfg, str(run_dir))
+    write_gba_run_config(run_gate._SLINK_ORIGINAL_CONFIG, cfg, str(run_dir))
     checkpoint = CHECKPOINTS[rr]
     os.environ["SLINK_GEN3_CHECKPOINT"] = str(checkpoint)
     os.environ["SLINK_GEN3_TITLE"] = "radical_red" if rr else "firered"
@@ -591,31 +599,133 @@ def cmd_make_fr(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_make_fr_party(args: argparse.Namespace) -> int:
-    """From an existing gen3_scripted_play.lua savestate (a party already reachable, e.g. after
-    the route1_catch leg), walk to a party fixture position and save in-game
-    (lua/tests/gen3_fixture_from_state.lua) -- or, with --probe, just load the state and report
-    party HP/position without walking or saving (verify the probe first)."""
-    if not args.probe and not args.out:
-        print("make-fr-party FAIL: --out is required unless --probe", file=sys.stderr)
-        return 1
-    extra_env = {"SLINK_GEN3_FIXTURE_KIND": args.kind, "SLINK_STATE": args.state}
-    if args.state_dir:
-        extra_env["SLINK_STATE_DIR"] = args.state_dir
-    if args.probe:
-        extra_env["SLINK_GEN3_FIXTURE_PROBE"] = "1"
-    rom_rel, run_dir, battery = _prepare_run(
-        f"make_fr_party_{args.kind}", args.rom, seed=None, saveram_name_override=args.saveram_name)
-    print(f"cold boot (state load supplies the field): {run_dir} is empty, battery will be {battery}")
+def our_emuhawk_pids(processes: list[dict]) -> list[int]:
+    """Pure filter: which EmuHawk.exe processes are OUR fixture-building runs, judged by whether
+    their command line names a path under RUN_DIR (patch/build/gen3_fixture_runs/) or invokes
+    THIS card's own Lua driver (FR_PARTY_LUA) -- NEVER a blanket match. `processes` is
+    [{"ProcessId": int, "CommandLine": str|None}, ...], the shape `Get-CimInstance Win32_Process
+    | Select ProcessId,CommandLine | ConvertTo-Json` produces -- NOTE "ProcessId", not "Id":
+    Win32_Process has no "Id" property, so `Select-Object Id` silently returns null for every
+    row (PHYSICAL 2026-09-23: this meant `kill_our_emuhawk` below had been taskkilling `/PID
+    None` -- a silent no-op -- since it was written, so every crashed run's orphan piled up
+    uncleaned before the next attempt launched. Found only by directly inspecting the JSON this
+    query actually produces, not by trusting the property name).
 
-    passed, text = _launch(FR_PARTY_LUA, rom_rel, run_dir, rr=False, timeout=args.timeout,
-                            extra_env=extra_env)
-    print(text.rstrip())
+    The run_dir itself is NOT a command-line argument (run_gate.py's cmd is only
+    --config=<fixed-name>.ini --lua=<script> <rom>; the run_dir only appears INSIDE that config
+    file, as the redirected SaveRAM path) -- FR_PARTY_LUA is what actually appears on the
+    command line for every attempt this retry loop launches, so it is the check that fires in
+    practice; the run_dir check stays as a second, harmless guard.
+
+    2026-09-23 incident: a blanket `taskkill /IM EmuHawk.exe` here killed five in-flight Gen 2
+    gate runs in a concurrent worktree (the owner allows the Gen 2 and Gen 3 emulator lanes to
+    run at the same time) -- this filter is what makes the kill safe to scope to our own PIDs.
+    """
+    needles = (f"{RUN_DIR.as_posix()}/", str(RUN_DIR).replace("/", "\\") + "\\", FR_PARTY_LUA)
+    return [p["ProcessId"] for p in processes
+            if any(n in (p.get("CommandLine") or "") for n in needles)]
+
+
+def _emuhawk_processes() -> list[dict]:
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-Command",
+         "Get-CimInstance Win32_Process -Filter \"Name='EmuHawk.exe'\" | "
+         "Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"],
+        capture_output=True, text=True, timeout=15)
+    raw = (result.stdout or "").strip()
+    if not raw:
+        return []
+    data = json.loads(raw)
+    return [data] if isinstance(data, dict) else data
+
+
+def kill_our_emuhawk() -> None:
+    """Best-effort: kill only EmuHawk.exe processes that are OUR fixture runs (see
+    our_emuhawk_pids), never a machine-wide /IM kill. Failures here are swallowed -- this is
+    orphan cleanup, not something worth failing the whole build over.
+
+    Waits (bounded) for the kill to actually take effect: `taskkill` returning is not the same
+    as the process's file handles being released (PHYSICAL 2026-09-23 -- a launch right after a
+    reported-successful kill still hit `PermissionError` on the shared result.txt, from
+    run_gate.py's own `os.remove`, which this file does not own and does not patch)."""
+    try:
+        for pid in our_emuhawk_pids(_emuhawk_processes()):
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
+        for _ in range(20):
+            if not our_emuhawk_pids(_emuhawk_processes()):
+                return
+            time.sleep(0.5)
+    except Exception:
+        pass
+
+
+def _run_fr_party_attempts(name: str, rom: str, saveram_name: str | None, timeout: int,
+                            extra_env: dict, seed: bytes,
+                            max_attempts: int = 25) -> tuple[bool, str, Path, str]:
+    """Launch FR_PARTY_LUA up to `max_attempts` times under a fresh run_dir/`name`, seeded with
+    `seed` (a flash body -- the source battery to cold-boot -> CONTINUE, same plumbing
+    `boot-check` uses), retrying the WHOLE emulator process (not just an in-script step):
+    observed 2026-09-23, EmuHawk itself intermittently exits with no RESULT line (no Lua error,
+    no Windows crash record) somewhere in save_via_menu's post-save "wait for the dialog to
+    close" loop -- ONLY ever reproduced after a savestate.load() mid-script, never after a real
+    cold boot (which is what every kind uses now; kept here in case the flakiness turns out to
+    be broader than that one instrument). A crashed run's `proc.poll()` reports the launched
+    process gone, but `tasklist` still shows an EmuHawk.exe alive minutes later (run_gate.py's
+    own taskkill only fires when its PID is still running, so this orphan is never cleaned up).
+    Clean up before each attempt, but ONLY our own runs (kill_our_emuhawk/our_emuhawk_pids) -- a
+    blanket /IM kill here previously took out a concurrent Gen 2 worktree's in-flight gate runs;
+    the two emulator lanes are allowed to run at the same time. Returns
+    (passed, text, run_dir, battery)."""
+    passed, text, run_dir, battery = False, "", None, ""
+    for attempt in range(1, max_attempts + 1):
+        kill_our_emuhawk()
+        rom_rel, run_dir, battery = _prepare_run(name, rom, seed=seed,
+                                                  saveram_name_override=saveram_name)
+        print(f"cold boot: {run_dir} seeded with {len(seed)} bytes, battery will be "
+              f"{battery}" + (f" (process attempt {attempt}/{max_attempts})" if attempt > 1 else ""))
+        passed, text = _launch(FR_PARTY_LUA, rom_rel, run_dir, rr=False, timeout=timeout,
+                                extra_env=extra_env)
+        print(text.rstrip())
+        if passed or "RESULT: FAIL" in text:
+            break   # a real FAIL verdict is not retried; only a crashed/no-verdict process is
+        print(f"make-fr-party: process attempt {attempt}/{max_attempts} left no RESULT line "
+              f"(EmuHawk exited without one); retrying" if attempt < max_attempts else
+              f"make-fr-party: giving up after {max_attempts} process attempts", file=sys.stderr)
+    return passed, text, run_dir, battery
+
+
+def cmd_make_fr_party(args: argparse.Namespace) -> int:
+    """Cold-boot a source battery (--seed) -> CONTINUE and drive lua/tests/gen3_fixture_from_
+    state.lua with scripted normal inputs (walk, heal, flee every incidental wild encounter --
+    never fight) to a party fixture, saved in-game. BUILD ORDER MATTERS: --kind town first
+    (--seed the accepted-but-unhealed battle fixture; heals the party at the Viridian Center and
+    saves standing at Viridian's own south tile), then --kind battle (--seed town's own output;
+    walks the short leg back to Route 1's grass origin and saves there) -- a single cold-boot
+    session covering the WHOLE heal-and-return round trip reproducibly crashed EmuHawk (see the
+    Lua driver's own header comment for the physical evidence); two short sessions split at
+    Viridian never did. No savestate is used anywhere either way."""
+    if not args.out:
+        print("make-fr-party FAIL: --out is required", file=sys.stderr)
+        return 1
+    seed_path = Path(args.seed)
+    if not seed_path.exists():
+        print(f"make-fr-party FAIL: --seed {seed_path} does not exist", file=sys.stderr)
+        return 1
+    try:
+        seed = codec.split_rtc(seed_path.read_bytes())[0]
+        ok, msg = codec.qualify_flash(seed)
+        if not ok:
+            raise ValueError(f"--seed does not qualify: {msg}")
+    except (ValueError, OSError) as exc:
+        print(f"make-fr-party FAIL: {exc}", file=sys.stderr)
+        return 1
+    extra_env = {"SLINK_GEN3_FIXTURE_KIND": args.kind}
+
+    passed, _text, run_dir, battery = _run_fr_party_attempts(
+        f"make_fr_party_{args.kind}", args.rom, args.saveram_name, args.timeout, extra_env, seed)
     if not passed:
         print("make-fr-party FAIL: the driver did not report PASS", file=sys.stderr)
         return 1
-    if args.probe:
-        return 0
 
     flushed = _flushed_saveram(run_dir, battery)
     if flushed is None:
@@ -678,15 +788,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_fr.set_defaults(func=cmd_make_fr)
 
     p_frp = sub.add_parser("make-fr-party",
-                           help="EMULATOR: party fixture from an existing scripted-play state")
+                           help="EMULATOR: cold-boot --seed, walk/heal/flee, save in-game")
     p_frp.add_argument("--rom", required=True)
-    p_frp.add_argument("--out", default=None, help="required unless --probe")
+    p_frp.add_argument("--out", required=True)
     p_frp.add_argument("--kind", choices=["battle", "town"], required=True)
-    p_frp.add_argument("--state", default="slink_fr_route1_catch.State")
-    p_frp.add_argument("--state-dir", default=None,
-                       help="SLINK_STATE_DIR override; default E:/Howard/Bizhawk/GBA/State")
-    p_frp.add_argument("--probe", action="store_true",
-                       help="load the state and report party HP/position; no walk, no save")
+    p_frp.add_argument("--seed", required=True,
+                       help="battery .sav to cold-boot -> CONTINUE (town: the accepted-but-"
+                            "unhealed battle fixture; battle: town's own healed output -- "
+                            "build town FIRST)")
     p_frp.add_argument("--saveram-name", default=None)
     p_frp.add_argument("--timeout", type=int, default=1800)
     p_frp.set_defaults(func=cmd_make_fr_party)

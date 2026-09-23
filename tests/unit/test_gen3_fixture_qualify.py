@@ -103,6 +103,71 @@ def test_committed_fixtures_qualify(path):
     assert result["ok"], result["message"]
 
 
+# --- firered_party_{battle,town}[_b].sav (card gen3-P4-C4-F) ----------------
+
+def _fixture(name: str) -> bytes:
+    with open(os.path.join(FIXTURES_DIR, name), "rb") as f:
+        return f.read()
+
+
+@pytest.mark.parametrize("name", [
+    "firered_party_battle.sav", "firered_party_battle_b.sav",
+    "firered_party_town.sav", "firered_party_town_b.sav",
+])
+def test_fr_party_fixtures_have_a_fully_healed_two_mon_party(name):
+    """firered_town.sav is pre-starter (party 0); these four are the only committed FR fixtures
+    with a party at all, all built from the same route1_catch state (starter + one Route 1
+    catch). The coordinator's own requirement (card gen3-P4-C4-F, 2026-09-23): every duo
+    scenario these feed (faint_cmd, linked_faint_active, boxsync, whiteout) assumes a HEALTHY
+    party, not merely a non-fainted one -- hp must equal max_hp for both mons."""
+    data = _fixture(name)
+    result = fx.qualify_one(data, rr=False)
+    assert result["ok"], result["message"]
+    assert len(result["party"]) == 2
+    mons = codec.party_from_save(data, rr=False)
+    assert len(mons) == 2
+    for m in mons:
+        assert m["hp"] == m["max_hp"], f"species {m['species']}: hp {m['hp']}/{m['max_hp']}"
+
+
+@pytest.mark.parametrize("a_name,b_name", [
+    ("firered_party_battle.sav", "firered_party_battle_b.sav"),
+    ("firered_party_town.sav", "firered_party_town_b.sav"),
+])
+def test_fr_party_b_variant_matches_species_and_position_with_a_distinct_trainer(a_name, b_name):
+    """derive_b's own contract (test_derive_b_changes_exactly_the_manifested_fields): OT
+    identity changes; the owned party's species/order does not. Added 2026-09-23 (duo-harness
+    finding d146b992): derive_b must ALSO never move the player -- SaveBlock1's pos (+0x00/+0x02)
+    and map (+0x04/+0x05) are outside every field derive_b's own manifest ever names, so an A/B
+    pair must read the identical map and tile."""
+    a_body, b_body = _fixture(a_name), _fixture(b_name)
+    ra, rb = fx.qualify_one(a_body, rr=False), fx.qualify_one(b_body, rr=False)
+    assert ra["ok"] and rb["ok"]
+    assert len(ra["party"]) == len(rb["party"]) == 2
+    assert [m["species"] for m in ra["party"]] == [m["species"] for m in rb["party"]]
+    assert ra["trainer_id"] != rb["trainer_id"]
+    assert ra["trainer_name"] != rb["trainer_name"]
+    pa, pb = codec.parse_flash(a_body), codec.parse_flash(b_body)
+    assert pa["sb1"][0:6] == pb["sb1"][0:6], (
+        f"{a_name} and {b_name} must stand at the same map/tile; derive_b never patches position")
+
+
+def test_fr_party_battle_and_town_share_trainer_and_party_at_different_positions():
+    """town is cold-booted from battle's own healed output and walked to Viridian with scripted
+    normal inputs (lua/tests/gen3_fixture_from_state.lua, PHYSICAL 2026-09-23 -- see the
+    README's provenance note): same trainer and same party species/levels, but a DIFFERENT
+    SaveBlock1 map/position -- town is an independent in-game save, not a byte patch, so no
+    byte-identity is asserted past that."""
+    battle, town = _fixture("firered_party_battle.sav"), _fixture("firered_party_town.sav")
+    rb, rt = fx.qualify_one(battle, rr=False), fx.qualify_one(town, rr=False)
+    assert rb["ok"] and rt["ok"]
+    assert rb["trainer_id"] == rt["trainer_id"]
+    assert [m["species"] for m in rb["party"]] == [m["species"] for m in rt["party"]]
+    assert [m["level"] for m in rb["party"]] == [m["level"] for m in rt["party"]]
+    pb, pt = codec.parse_flash(battle), codec.parse_flash(town)
+    assert pb["sb1"][0:6] != pt["sb1"][0:6], "town must stand somewhere other than battle's tile"
+
+
 # --- import: RTC-suffix strip -----------------------------------------------
 
 def test_import_strips_optional_rtc_suffix(tmp_path):
@@ -385,6 +450,30 @@ def test_saveram_name_matches_observed_gba_underscore_normalization():
     # BizHawk writes the optional RTC suffix itself; the seeded name must not carry one.
     assert fx.saveram_name("patch/build/gen3_slink_RR.gba") == "gen3 slink RR.SaveRAM"
     assert fx.saveram_name("a/b/firered.gba") == "firered.SaveRAM"
+
+
+def test_our_emuhawk_pids_scopes_to_our_own_lua_driver_never_a_blanket_match():
+    # 2026-09-23: a blanket `taskkill /IM EmuHawk.exe` here killed five in-flight Gen 2 gate
+    # runs in a concurrent worktree. our_emuhawk_pids is what makes the kill safe to scope: a
+    # Gen 2 (or any other lane's) command line must NOT match, and our own must.
+    # Real command-line shape (run_gate.py's `cmd`): --config=<fixed name>.ini
+    # --lua=<script> <rom> -- the run_dir itself never appears there, only inside the config
+    # file, so the Lua-driver-path branch is what actually fires for a real launch.
+    gen2_proc = {"ProcessId": 111, "CommandLine": (
+        'E:\\Howard\\Bizhawk\\EmuHawk.exe --config=patch/build/gate_cfg_gen2_scripted_play.ini '
+        '--lua=lua/tests/gen2_scripted_play.lua patch/build/gen2_pokemon_crystal.gbc')}
+    unrelated_proc = {"ProcessId": 222, "CommandLine": None}
+    ours_proc = {"ProcessId": 333, "CommandLine": (
+        'E:\\Howard\\Bizhawk\\EmuHawk.exe '
+        '--config=patch/build/gate_cfg_gen3_fixture_from_state.ini '
+        '--lua=lua/tests/gen3_fixture_from_state.lua '
+        'patch/build/gen3_gen3_Pokemon_-_FireRed_Version_(USA).gba')}
+    run_dir_proc = {"ProcessId": 444, "CommandLine":
+                    f"something referencing {fx.RUN_DIR.as_posix()}/make_fr_party_battle"}
+    assert fx.our_emuhawk_pids([gen2_proc, unrelated_proc]) == []
+    assert fx.our_emuhawk_pids([ours_proc]) == [333]
+    assert fx.our_emuhawk_pids([gen2_proc, ours_proc, unrelated_proc]) == [333]
+    assert fx.our_emuhawk_pids([run_dir_proc]) == [444]
 
 
 def _q(counter, party, ok=True, message="ok"):

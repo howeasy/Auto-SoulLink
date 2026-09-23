@@ -138,3 +138,93 @@ Vanilla FireRed US 1.0 (sha1 `41cb23d8…`), produced by `tools/gen3_fixtures.py
 ## rr_town_b.sav (2026-09-21)
 
 Derived from `rr_town.sav` by `tools/gen3_fixtures.py derive-b --rr` (Codex card C2-8, pinned RR layout): player OTID XOR 0xFFFFFFFF, name `B` → `BB`, every owned record's OTID/OT-name re-keyed in place (fixed-order unencrypted RR records, no vanilla XOR/checksum), only the two changed chunks' sector checksums recomputed, parasite/extension bytes byte-identical. sha256 `13da0f15400894b78077a236514a54c01e4085d53a02821f411e428c9f51f1d3`. Boot-checked (`docs/gen3/probes/bootcheck_rr_town_b_2026-09-21.txt`, counter 2→3, 14/14 sectors, trainer `BB` #3559012160 after the boot). Seeded under the default battery name (`gen3 slink RR.SaveRAM`).
+
+## firered_party_battle.sav / firered_party_town.sav (+ `_b`, 2026-09-23)
+
+Party fixtures (card gen3-P4-C4-F). **Only scripted normal inputs — no
+memory pokes, no Computer Use, no byte-patched position.** Built entirely
+by cold-booting a battery through CONTINUE and walking/healing/fleeing
+with `lua/tests/gen3_fixture_from_state.lua`
+(`tools/gen3_fixtures.py make-fr-party`); `derive-b` (PLAN §11, OT identity
+only) is the one byte-level derivation used anywhere in this pair.
+`savestate.load()` mid-script is never used — every session is a real cold
+boot.
+
+Build order matters and is split into two separate cold-boot sessions at
+the natural midpoint (Viridian City), not one long session:
+
+1. **`town`** — cold-boots the accepted, unhealed
+   `firered_party_battle.sav` (below) → CONTINUE, flees every incidental
+   Route 1 encounter (never fights), walks to the Viridian Pokemon Center,
+   heals the whole party, walks back out to Viridian's own south tile
+   (24,39, non-grass town ground), saves in-game via the START menu.
+2. **`battle`** — cold-boots `town`'s own healed output → CONTINUE, walks
+   the short leg back to Route 1's grass origin (12,37), saves there.
+
+A single cold-boot session covering the whole heal-and-return round trip
+(~9500-12000 frames) reproducibly left EmuHawk exiting with no RESULT line
+partway through; splitting at Viridian (each session roughly half the
+length) never reproduced it — recorded as an instrument limit, not a game
+bug.
+
+**Root cause of an earlier false "silent crash" diagnosis**: `returncode=1`
+with no RESULT line in the driver's own result file looked like a host
+crash, but was our own `finish(false, ...)` firing through
+`gen3_scripted_play.lua`'s *separate* `dofile`'d module instance — `dofile`
+re-executes a file fresh on every call, so that instance's own `G` was
+never `G.open()`'d and wrote its FAIL line nowhere the driver read. Fixed
+by routing every finish-capable call in `gen3_fixture_from_state.lua`
+(`my_verify_destination`, `my_return_to_grass_origin`, `follow_running`,
+`reach_target`) through the driver's own `G` exclusively; no code here
+calls into `gen3_scripted_play.lua`'s finish-capable helpers anymore.
+
+**The real bug that diagnosis then surfaced**: `save_via_menu`'s SAVE-row
+search (shared, `lua/tests/gen3_boot_check.lua`, read-only here) presses
+only Start/A/B/Down while hunting for the right row. A stray Down can leak
+past the menu onto the bare field mid-search, and — since the search can
+take many attempts — that stray press can walk the player across the
+Route1↔Viridian↔Pallet map connections *during* the save transaction, so a
+`sok=true` verdict from `save_via_menu` is not proof the saved data is at
+the intended tile. Both directions were observed: Route 1's grass square
+drifting into Pallet Town while saving "battle", and Viridian drifting back
+onto Route 1 while saving "town". Fixed in `gen3_fixture_from_state.lua`,
+not in the shared save driver: `save_at` now re-verifies position *after*
+every save (not just before) and retries — recover position via
+`reach_target`, save again — up to 8 attempts, since one drift can chain
+into a longer, drift-prone row search on the very next attempt.
+
+- `firered_party_battle.sav`: saved standing in Route 1 tall grass (map
+  3.19, tile (12,37)). sha256
+  `95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e`, slot
+  1, counter 7, trainer `JONN` #99DE0D8A, party `[Squirtle Lv.9 hp=27/27,
+  species 16 (Pidgey) Lv.4 hp=17/17]` — both mons fully healed (`hp ==
+  max_hp`), not merely non-fainted. Boot-checked (cold boot → CONTINUE →
+  re-save → reload, counter 7→8, 14/14 sectors, party unchanged).
+- `firered_party_town.sav`: saved standing on Viridian City's own south
+  tile (map 3.1, tile (24,39)), non-grass town ground. sha256
+  `db60478826f16ff02c04ff5dc7df67579cf3e32ef99ca4dfbb36cd976047e213`, slot
+  0, counter 4, trainer `JONN` #99DE0D8A, same fully-healed party as the
+  battle fixture. Boot-checked (counter 4→5, 14/14 sectors, party
+  unchanged).
+- `firered_party_battle_b.sav` / `firered_party_town_b.sav`: `derive-b`
+  over the two fixtures above (vanilla path — OTID/OT-name re-keyed on
+  both party mons, secure data re-encrypted/re-checksummed, sector
+  checksums recomputed; position bytes untouched, so each `_b` fixture
+  sits on the exact same tile as its `a` side). sha256
+  `d90e464960551dc953d475b40a3f386c1729c5bafab6ac845db649fe2819daab` and
+  `3fcb2975cadec0caa1a750a12a90c1a0d47cb5d3938627bc8dbe5a14ba18bd9e`,
+  trainer `JONNB` #6621F275, same party (species/level/HP) as the `a`
+  side. Both boot-checked (counter 7→8 and 4→5, 14/14 sectors, party
+  unchanged).
+
+The `retarget-position` subcommand this section previously described (a
+pure SaveBlock1 pos/map byte patch, used to build an earlier
+`firered_party_town.sav`) has been **removed**: it is game-data staging,
+not a scripted normal input, and is out of scope under this card's
+contract. `derive-b`'s OT-identity rewrite is the only PLAN-sanctioned
+byte-level derivation (PLAN §11); it never touches position.
+
+LeafGreen: no LG battery fixture has been built in this card (FireRed US
+1.0 only). `gen3_fixture_from_state.lua`'s walk/heal/flee/save driver is
+FireRed-specific (tuned DEST/PATHS tables from `gen3_scripted_play.lua`)
+and has not been exercised against LeafGreen.
