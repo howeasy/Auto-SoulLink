@@ -1179,6 +1179,125 @@ def test_reconnect_refuses_mutations(reconnect_case, fault):
         oracles.reconnect_oracle(results, **kwargs)
 
 
+@pytest.fixture
+def soft_reset_case(tmp_path, request):
+    from tools.gen2_fixtures import _saved_field
+
+    titles = getattr(request, "param", ("crystal", "crystal"))
+    fixtures, ots = {}, {}
+    results = {}
+    for side, title in zip(("a", "b"), titles, strict=True):
+        case = "crystal_battle_ot2" if side == "b" and titles == ("crystal", "crystal") else f"{title}_battle"
+        fixtures[side] = ROOT / f"tests/fixtures/gen2/{case}.SaveRAM"
+        layout = codec.for_foundation(title)
+        pin = layout.profile["titles"][title]["rom_sha1"]
+        ots[side] = int.from_bytes(_saved_field(fixtures[side].read_bytes(), layout, "wPlayerID", 2), "big")
+        path = tmp_path / f"{side}.SaveRAM"
+        path.write_bytes(fixtures[side].read_bytes())
+        head = {"player": side, "scenario": "gen2_soft_reset", "attempt": 1,
+                "title": title, "rom_sha1": pin, "case": case,
+                "fixture_sha256": hashlib.sha256(fixtures[side].read_bytes()).hexdigest()}
+        client = {"title": title, "rom_sha1": pin, "production_admitted": True}
+        boot, hello = {"frame": 100}, {"frame": 110, "ot_id": ots[side]}
+        save = {"frame": 5000, "save_completed_frame": 4990, "gate_saves": 1, "client_saves": 1,
+                "cartram_bytes": CART, "saveram_bytes": CART + 22, "flushed_matches": True,
+                "cartram_sha256": hashlib.sha256(path.read_bytes()[:CART]).hexdigest(), "saveram_path": str(path)}
+        rows = [("DUO_GEN2", head), ("CLIENT", client), ("BOOTED", boot), ("HELLO", hello)]
+        receipt = {**head, "schema": "gen2-duo-soft-reset-v1", "booted": boot, "hello": hello,
+                   "save": save, "client": client, "input_mode": "normal_buttons", "harness_write_scopes": []}
+        if side == "a":
+            reset, paused = {"frame": 233, "delta": 33}, {"frame": 473, "delta": 240}
+            rehello = {"frame": 1001, "ot_id": ots[side], "hellos": 2}
+            rows.extend([("HELLO_AT_CHECKPOINT", {"frame": 150, "ot_id": ots[side], "hellos": 1, "writes_enabled": True}),
+                         ("CHORD_GATE", {"frame": 199}), ("CHORD", {"frame": 200, "frames": 4}),
+                         ("RESET_SEEN", reset), ("HELLO_CLEARED", {"frame": 240, "delta": 7}),
+                         ("WRITES_PAUSED", paused), ("REBOOTED", {"frame": 900}),
+                         ("HELLO_AGAIN", {"frame": 999, "ot_id": ots[side], "n": 2}),
+                         ("WRITES_RESUMED", {"frame": 1000, "delta": 767}), ("REHELLO", rehello),
+                         ("NO_WRITES_IN_WINDOW", {"writes": 0})])
+            receipt.update(reset=reset, paused=paused, rehello=rehello)
+        else:
+            idle = {"frame": 2000, "hellos": 1}
+            rows.append(("IDLE_PARTNER", idle))
+            receipt.update(idle=idle)
+        rows.extend([("SAVE_WITNESS", save), ("RECEIPT", receipt)])
+        results[side] = "\n".join(f"{tag} {json.dumps(value)}" for tag, value in rows) + "\nRESULT: PASS"
+    links = {"links": [], "player_identity": {side: {"ot_id": str(ots[side])} for side in ("a", "b")}, "pending_captures": {}}
+    events = [{"type": "hello", "player": side, "text": "Connected (Crystal)"} for side in ("a", "b")]
+    before = {"links": deepcopy(links), "events": deepcopy(events), "status": {"players": {
+        side: {"connected": True, "identity_error": ""} for side in ("a", "b")}}}
+    before["links_bytes"] = json.dumps(links).encode()
+    after = deepcopy(before)
+    after["events"].insert(0, {"type": "hello", "player": "a", "text": "Connected (Crystal)"})
+    (tmp_path / "links.json").write_text(json.dumps(links))
+    (tmp_path / "events.json").write_text(json.dumps(after["events"]))
+    return results, {"data_dir": str(tmp_path), "before": before, "after": after, "boot_saveram": fixtures}
+
+
+@pytest.mark.parametrize("soft_reset_case", [("crystal", "crystal"), ("gold", "silver"), ("crystal", "gold")], indirect=True)
+def test_soft_reset_independent_evidence(soft_reset_case):
+    results, kwargs = soft_reset_case
+    facts = []
+    oracles.soft_reset_oracle(results, **kwargs, on_verified=facts.append)
+    titles = "/".join(oracles._last_tagged(results[side], "DUO_GEN2")["title"] for side in ("a", "b"))
+    assert facts == [{"a": "reset", "b": "idle", "area": "none", "titles": titles, "status": "unchanged"}]
+
+
+def test_soft_reset_after_snapshot_may_follow_normal_driver_exit(soft_reset_case):
+    results, kwargs = soft_reset_case
+    for side in ("a", "b"):
+        kwargs["after"]["status"]["players"][side]["connected"] = False
+    oracles.soft_reset_oracle(results, **kwargs)
+
+
+@pytest.mark.parametrize("fault", ["reset_delta", "clear_delta", "pause_delta", "resume_delta", "late_clear",
+    "early_pause", "wrong_ot", "no_pause", "writes", "write_row", "b_reset", "capture", "fixture_hash",
+    "party", "identity", "rule_state", "extra_hello", "rejected_hello", "b_disconnect", "receipt", "links_bytes"])
+def test_soft_reset_refuses_mutations(soft_reset_case, fault):
+    results, kwargs = soft_reset_case
+    if fault.endswith("delta") or fault in ("late_clear", "early_pause"):
+        tag = {"reset_delta": "RESET_SEEN", "clear_delta": "HELLO_CLEARED", "pause_delta": "WRITES_PAUSED",
+               "resume_delta": "WRITES_RESUMED", "late_clear": "HELLO_CLEARED", "early_pause": "WRITES_PAUSED"}[fault]
+        row = oracles._last_tagged(results["a"], tag)
+        if fault.endswith("delta"):
+            row["delta"] += 1
+        else:
+            row.update(frame=500 if fault == "late_clear" else 250, delta=267 if fault == "late_clear" else 17)
+        results["a"] = _replace_tag(results["a"], tag, row)
+    elif fault in ("wrong_ot", "writes", "fixture_hash", "receipt"):
+        tag, field, value = {"wrong_ot": ("HELLO_AGAIN", "ot_id", 1), "writes": ("NO_WRITES_IN_WINDOW", "writes", 1),
+                             "fixture_hash": ("DUO_GEN2", "fixture_sha256", "0" * 64),
+                             "receipt": ("RECEIPT", "harness_write_scopes", ["party"])}[fault]
+        row = oracles._last_tagged(results["a"], tag)
+        row[field] = value
+        results["a"] = _replace_tag(results["a"], tag, row)
+    elif fault == "no_pause":
+        results["a"] = "\n".join(line for line in results["a"].splitlines() if not line.startswith("WRITES_PAUSED "))
+    elif fault in ("write_row", "b_reset", "capture"):
+        side, tag = {"write_row": ("a", "PARTY_HP_WRITE"), "b_reset": ("b", "HELLO_AGAIN"), "capture": ("a", "ENGINE_CAPTURE")}[fault]
+        results[side] += f"\n{tag} {{}}"
+    elif fault == "party":
+        save = oracles._last_tagged(results["a"], "SAVE_WITNESS")
+        raw = build_capture(codec.for_foundation("crystal"), FIXTURES["a"], ot_id=OT_IDS["a"], species=16)[0]
+        Path(save["saveram_path"]).write_bytes(raw)
+        save["cartram_sha256"] = hashlib.sha256(raw[:CART]).hexdigest()
+        results["a"] = _replace_tag(results["a"], "SAVE_WITNESS", save)
+    elif fault == "identity":
+        kwargs["after"]["links"]["player_identity"]["a"]["ot_id"] = "1"
+    elif fault == "rule_state":
+        kwargs["after"]["links"]["run_over"] = True
+    elif fault == "extra_hello":
+        kwargs["after"]["events"].insert(0, {"type": "hello", "player": "b", "text": "Connected (Crystal)"})
+    elif fault == "rejected_hello":
+        kwargs["after"]["events"][0]["text"] = "REJECTED — wrong save/slot"
+    elif fault == "links_bytes":
+        kwargs["after"]["links_bytes"] += b" "
+    else:
+        kwargs["before"]["status"]["players"]["b"]["connected"] = False
+    with pytest.raises(RuntimeError):
+        oracles.soft_reset_oracle(results, **kwargs)
+
+
 def test_missing_links_json_refused(good_case, tmp_path):
     results, _data_dir, _decoded = good_case
     empty_dir = tmp_path / "empty"

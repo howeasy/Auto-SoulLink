@@ -161,6 +161,38 @@ def test_gen2_reconnect_cannot_pass_without_all_live_legs():
     assert run._live_ok() is True
 
 
+def test_gen2_soft_reset_has_required_oracle_and_live_leg():
+    assert SCENARIOS["gen2_soft_reset"]["oracle"] == "assert_gen2_soft_reset_saved"
+    run = object.__new__(DuoRun)
+    run.scenario, run._live_complete = "gen2_soft_reset", {}
+    assert not run._live_ok()
+
+
+def test_gen2_soft_reset_baseline_precedes_chord(monkeypatch, tmp_path):
+    from pathlib import Path
+
+    run = object.__new__(DuoRun)
+    run.go_files = {"a": str(tmp_path / "go")}
+    run._live_complete = {}
+    rows = [{"player": "a", "type": "hello", "text": "Connected (A)"},
+            {"player": "b", "type": "hello", "text": "Connected (B)"}]
+    snapshots = []
+    def snapshot():
+        snapshots.append(Path(run.go_files["a"] + ".chord").exists())
+        return {"events": list(rows)}
+    run._gen2_admit_snapshot = snapshot
+    run._read_receipt = lambda side: 'HELLO_AT_CHECKPOINT {"hellos":1}\nREHELLO {"hellos":2}'
+    def events():
+        return [{"player": "a", "type": "hello", "text": "Connected (A)"}] + rows
+    run._reconnect_events = events
+    def wait(label, predicate, timeout):
+        assert predicate(), label
+    run.wait_for = wait
+    run._orchestrate_gen2_soft_reset()
+    assert snapshots == [False, True]
+    assert run._live_complete["gen2_soft_reset"]
+
+
 def test_gen2_reconnect_orchestration_keeps_b_online_and_archives_initial_a(monkeypatch, tmp_path):
     import json
     from pathlib import Path
@@ -222,7 +254,7 @@ def test_gen2_reconnect_orchestration_keeps_b_online_and_archives_initial_a(monk
 
 def test_gen2_new_selects_link_and_faint_with_required_evidence():
     assert "gen2_new" in GAMES
-    assert scenarios_for("gen2_new") == ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect"]
+    assert scenarios_for("gen2_new") == ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset"]
     contract = duo_module.evidence_contract("gen2_new")
     assert contract.require_oracle and contract.witness_validator
     assert callable(getattr(DuoRun, contract.witness_validator, None))
@@ -243,13 +275,13 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
     assert game in GAMES
     assert GAMES[game]["game"] == "gen2_new"
     assert GAMES[game]["fixture"] == fixtures
-    assert scenarios_for(game) == ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect"]
+    assert scenarios_for(game) == ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset"]
     assert duo_module.evidence_contract(game) is duo_module.evidence_contract("gen2_new")
     assert not GAMES[game].get("server_rom_routes")
     assert duo_list_lines(game) == [
         f"{scenario}  attempts=1  targets=a:{fixtures['a']}, "
         f"b:{'crystal_battle_ot2' if scenario == 'gen2_admit_wrong_rom' else fixtures['b']}"
-        for scenario in ("link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect")]
+        for scenario in ("link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset")]
 
 
 @pytest.mark.parametrize("game,titles,names", (

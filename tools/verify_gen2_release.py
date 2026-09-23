@@ -281,6 +281,9 @@ def _pydec_cell_errors(lines: list[str], scenario: str, axes: dict, capture_keys
         want = {"scenario": scenario, "a": "admitted", "b": "refused", "area": "none",
                 "titles": f"{axes['initiator']}/crystal", "status": "refused",
                 "rom_b": (lock or {}).get("pokecrystal11", {}).get("sha1", "")}
+    elif scenario == "gen2_soft_reset":
+        want = {"scenario": scenario, "a": "reset", "b": "idle", "area": "none",
+                "titles": f"{axes['initiator']}/{axes['partner']}", "status": "unchanged"}
     errors = [f"pydec receipt does not name this cell: {key}={tokens.get(key)!r}, want {value!r}"
               for key, value in want.items()
               if value is not None and not (tokens.get(key) in value if isinstance(value, set) else tokens.get(key) == value)]
@@ -442,6 +445,98 @@ def _reconnect_receipt_errors(root: Path, proof: dict, axes: dict, lock: dict) -
     return []
 
 
+def _soft_reset_receipt_errors(lines: list[str], side: str) -> list[str]:
+    """Check reset observations without inventing an ENGINE occurrence for the WRAM-clear path."""
+    def need(condition, why):
+        if not condition:
+            raise ValueError(why)
+
+    def one(tag):
+        rows = [(i, line[len(tag) + 1:]) for i, line in enumerate(lines) if line.startswith(tag + " ")]
+        need(len(rows) == 1, f"expected one {tag}")
+        index, body = rows[0]
+        row = json.loads(body)
+        need(isinstance(row, dict), f"malformed {tag}")
+        return index, row
+
+    try:
+        tags = ("DUO_GEN2", "CLIENT", "BOOTED", "HELLO", "SAVE_WITNESS", "RECEIPT")
+        marks = {tag: one(tag) for tag in tags}
+        a_only = ("HELLO_AT_CHECKPOINT", "CHORD_GATE", "CHORD", "RESET_SEEN", "HELLO_CLEARED",
+                  "WRITES_PAUSED", "REBOOTED", "WRITES_RESUMED", "HELLO_AGAIN", "REHELLO", "NO_WRITES_IN_WINDOW")
+        if side == "a":
+            marks.update({tag: one(tag) for tag in a_only})
+        else:
+            need(not any(line.split(" ", 1)[0] in a_only for line in lines), "idle B emitted reset/rehello marker")
+            marks["IDLE_PARTNER"] = one("IDLE_PARTNER")
+
+        def value(tag):
+            return marks[tag][1]
+
+        def after(later, earlier):
+            need(marks[later][0] > marks[earlier][0], f"{later} before {earlier}")
+            if "frame" in value(later) and "frame" in value(earlier):
+                need(type(value(later)["frame"]) is int and type(value(earlier)["frame"]) is int
+                     and value(later)["frame"] >= value(earlier)["frame"], f"{later} frame before {earlier}")
+
+        def delta(tag, start, low, high):
+            row, baseline = value(tag), value(start)
+            need(type(row.get("frame")) is int and type(baseline.get("frame")) is int
+                 and type(row.get("delta")) is int and row["delta"] == row["frame"] - baseline["frame"]
+                 and low <= row["delta"] <= high, f"{tag} inconsistent/out-of-bounds delta")
+
+        need(value("CLIENT").get("production_admitted") is True, "no production client")
+        need(not any(line.startswith(("ENGINE_CAPTURE ", "ENGINE_SOFT_RESET ")) for line in lines),
+             "soft reset receipt must not substitute an engine occurrence")
+        hello, save, receipt, head = (value(tag) for tag in ("HELLO", "SAVE_WITNESS", "RECEIPT", "DUO_GEN2"))
+        need(type(hello.get("ot_id")) is int and 0 < hello["ot_id"] <= 65535, "hello has no live OT")
+        digest = save.get("cartram_sha256")
+        need(save.get("flushed_matches") is True and save.get("cartram_bytes") == 32768
+             and isinstance(digest, str) and len(digest) == 64 and all(c in "0123456789abcdef" for c in digest)
+             and type(save.get("gate_saves")) is int and save["gate_saves"] >= 1
+             and type(save.get("client_saves")) is int and save["client_saves"] >= 1, "incomplete native save")
+        after("RECEIPT", "SAVE_WITNESS")
+        need(receipt.get("schema") == "gen2-duo-soft-reset-v1"
+             and all(receipt.get(key) == head.get(key) for key in
+                     ("player", "scenario", "attempt", "case", "title", "rom_sha1", "fixture_sha256"))
+             and receipt.get("hello") == hello and receipt.get("save") == save
+             and receipt.get("client") == value("CLIENT"), "receipt does not bind its markers/header")
+        if side == "a":
+            at = value("HELLO_AT_CHECKPOINT")
+            need(at.get("hellos") == 1 and at.get("writes_enabled") is True
+                 and at.get("ot_id") == hello["ot_id"], "reset checkpoint not initially admitted")
+            for later, earlier in (("HELLO_AT_CHECKPOINT", "HELLO"), ("CHORD_GATE", "HELLO_AT_CHECKPOINT"),
+                    ("CHORD", "CHORD_GATE"), ("RESET_SEEN", "CHORD"), ("HELLO_CLEARED", "RESET_SEEN"),
+                    ("WRITES_PAUSED", "RESET_SEEN"), ("REBOOTED", "HELLO_CLEARED"), ("REBOOTED", "WRITES_PAUSED"),
+                    ("WRITES_RESUMED", "REBOOTED"), ("HELLO_AGAIN", "WRITES_PAUSED"), ("REHELLO", "REBOOTED"),
+                    ("REHELLO", "HELLO_AGAIN"), ("NO_WRITES_IN_WINDOW", "REHELLO"),
+                    ("SAVE_WITNESS", "NO_WRITES_IN_WINDOW")):
+                after(later, earlier)
+            need(type(value("CHORD").get("frames")) is int and value("CHORD")["frames"] >= 1, "empty chord")
+            delta("RESET_SEEN", "CHORD", 30, 60)
+            delta("HELLO_CLEARED", "RESET_SEEN", 0, 180)
+            delta("WRITES_PAUSED", "RESET_SEEN", 180, 420)
+            resumed = value("WRITES_RESUMED")
+            need(type(resumed.get("delta")) is int
+                 and resumed["delta"] == resumed["frame"] - value("RESET_SEEN")["frame"], "resume delta differs")
+            need(value("HELLO_AGAIN").get("n") == value("REHELLO").get("hellos") == 2
+                 and value("HELLO_AGAIN").get("ot_id") == value("REHELLO").get("ot_id") == hello["ot_id"],
+                 "rehello count or OT differs")
+            need(value("NO_WRITES_IN_WINDOW").get("writes") == 0, "writes occurred in reset window")
+            need(type(save.get("save_completed_frame")) is int
+                 and save["save_completed_frame"] > value("REHELLO")["frame"], "save completed before rehello")
+            need(receipt.get("reset") == value("RESET_SEEN") and receipt.get("paused") == value("WRITES_PAUSED")
+                 and receipt.get("rehello") == value("REHELLO"), "receipt reset detail differs")
+        else:
+            need(value("IDLE_PARTNER").get("hellos") == 1, "idle partner hello count differs")
+            after("IDLE_PARTNER", "HELLO")
+            after("SAVE_WITNESS", "IDLE_PARTNER")
+            need(receipt.get("idle") == value("IDLE_PARTNER"), "receipt idle detail differs")
+    except (KeyError, TypeError, ValueError, AttributeError) as exc:
+        return [f"{side} soft-reset receipt invalid: {exc}"]
+    return []
+
+
 def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: dict) -> list[str]:
     """One registered proof: pinned bytes, PASS verdicts, and headers naming this exact cell."""
     if scenario == "gen2_reconnect":
@@ -498,6 +593,8 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
             errors.extend(_refused_receipt_errors(lines, lock[lock_key].get("sha1")))
         elif not any(line.startswith("SAVE_WITNESS ") for line in lines):
             errors.append(f"{side} receipt has no SAVE_WITNESS line")
+        if scenario == "gen2_soft_reset":
+            errors.extend(_soft_reset_receipt_errors(lines, side))
     return errors
 
 

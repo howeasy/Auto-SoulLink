@@ -937,3 +937,106 @@ def reconnect_oracle(results, *, data_dir, initial_results, relaunch_results, bo
             on_verified(_verified_facts(decoded, "route_29", "alive"))
     except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError, AssertionError) as exc:
         raise RuntimeError(f"reconnect evidence missing or malformed: {exc}") from exc
+
+
+def soft_reset_oracle(results, *, data_dir, before, after, boot_saveram, on_verified=None):
+    """Both native saves preserve the party; one WRAM-clear reset produces one same-OT rehello."""
+    from server.adapters import gen2_codec as codec
+    from tools.gen2_fixtures import _saved_field
+    from tools.gen2_source_data import load_context
+
+    def need(condition, reason):
+        if not condition:
+            raise RuntimeError(f"soft_reset: {reason}")
+
+    try:
+        check_save_witness(results)
+        titles, identities = {}, {}
+        reset_tags = ("HELLO_AT_CHECKPOINT", "CHORD_GATE", "CHORD", "RESET_SEEN", "HELLO_CLEARED",
+                      "WRITES_PAUSED", "REBOOTED", "WRITES_RESUMED", "HELLO_AGAIN", "REHELLO", "NO_WRITES_IN_WINDOW")
+        for inst in ("a", "b"):
+            text = results[inst]
+            _reconnect_pass(text)
+            head = _one_marker(text, "DUO_GEN2")
+            witness, client, title = _boot_marker(inst, text)
+            hello, receipt, booted = (_one_marker(text, tag) for tag in ("HELLO", "RECEIPT", "BOOTED"))
+            need(head.get("player") == inst and head.get("scenario") == "gen2_soft_reset", "player/scenario differs")
+            need(client.get("production_admitted") is True
+                 and head["rom_sha1"] == load_context(title, root=REPO_ROOT).source_record()["rom_sha1"], "production/pinned ROM differs")
+            need(receipt.get("schema") == "gen2-duo-soft-reset-v1" and receipt.get("input_mode") == "normal_buttons"
+                 and receipt.get("harness_write_scopes") == [], "receipt schema/input/write scopes differ")
+            for field in ("player", "scenario", "attempt", "case", "title", "rom_sha1", "fixture_sha256"):
+                need(receipt.get(field) == head.get(field), f"{inst}: receipt {field} differs")
+            for field, value in (("hello", hello), ("client", client), ("save", witness), ("booted", booted)):
+                need(receipt.get(field) == value, f"{inst}: receipt {field} evidence differs")
+            need(not any(line.startswith(("ENGINE_CAPTURE ", "PARTY_HP_WRITE ")) for line in text.splitlines()), "capture/write during passive reset")
+            layout = codec.for_foundation(title)
+            seed, final = Path(boot_saveram[inst]).read_bytes(), Path(witness["saveram_path"]).read_bytes()
+            need(len(seed) == SAVERAM_BYTES and hashlib.sha256(seed).hexdigest() == head["fixture_sha256"], "boot fixture hash/size differs")
+            need(codec.strict_checksum_witness(seed[:CARTRAM_BYTES], layout)["valid"], "boot checksum refused")
+            old = codec.decode_saved_party(seed[:CARTRAM_BYTES], layout, copy_name="primary")["mons"]
+            new = codec.decode_saved_party(final[:CARTRAM_BYTES], layout, copy_name="primary")["mons"]
+            ot = int.from_bytes(_saved_field(seed, layout, "wPlayerID", 2), "big")
+            need(old and old == new, "saved party changed across passive reset")
+            need(ot == int.from_bytes(_saved_field(final, layout, "wPlayerID", 2), "big") == hello.get("ot_id"), "saved/hello trainer identity differs")
+            titles[inst], identities[inst] = title, ot
+            if inst == "a":
+                rows = {tag: _one_marker(text, tag) for tag in reset_tags}
+                # Main's HELLO_AGAIN can arrive during CONTINUE before REBOOTED is logged.
+                ordered = ("HELLO", "HELLO_AT_CHECKPOINT", "CHORD_GATE", "CHORD", "RESET_SEEN",
+                           "HELLO_CLEARED", "WRITES_PAUSED", "REBOOTED", "WRITES_RESUMED", "REHELLO",
+                           "NO_WRITES_IN_WINDOW", "SAVE_WITNESS")
+                need(all(text.index(left + " ") < text.index(right + " ") for left, right in zip(ordered, ordered[1:], strict=False)),
+                     "reset markers out of order")
+                at, chord, reset = rows["HELLO_AT_CHECKPOINT"], rows["CHORD"], rows["RESET_SEEN"]
+                need(at.get("writes_enabled") is True and at.get("hellos") == 1 and at.get("ot_id") == ot,
+                     "reset did not start admitted with writes enabled")
+                need(type(chord.get("frames")) is int and chord["frames"] == 4
+                     and _frame(rows["CHORD_GATE"]) <= _frame(chord), "native chord differs")
+                for tag, start, low, high in (("RESET_SEEN", chord, 30, 60), ("HELLO_CLEARED", reset, 0, 180),
+                                             ("WRITES_PAUSED", reset, 180, 420), ("WRITES_RESUMED", reset, 0, None)):
+                    row = rows[tag]
+                    delta = _frame(row) - _frame(start)
+                    need(type(row.get("delta")) is int and row["delta"] == delta
+                         and delta >= low and (high is None or delta <= high), f"{tag}: measured delta outside reset window")
+                again, rehello, resumed = rows["HELLO_AGAIN"], rows["REHELLO"], rows["WRITES_RESUMED"]
+                need(again.get("n") == rehello.get("hellos") == 2 and again.get("ot_id") == rehello.get("ot_id") == ot,
+                     "reset rehello count/identity differs")
+                need(_frame(rows["WRITES_PAUSED"]) <= _frame(again) <= _frame(rehello)
+                     and _frame(rows["REBOOTED"]) <= _frame(resumed) <= _frame(rehello)
+                     and _frame(witness, "save_completed_frame") > _frame(rehello), "resume/rehello/save chronology differs")
+                need(type(rows["NO_WRITES_IN_WINDOW"].get("writes")) is int and rows["NO_WRITES_IN_WINDOW"]["writes"] == 0,
+                     "write in reset window")
+                for field, tag in (("reset", "RESET_SEEN"), ("paused", "WRITES_PAUSED"), ("rehello", "REHELLO")):
+                    need(receipt.get(field) == rows[tag], f"receipt {field} differs")
+            else:
+                need(not any(line.startswith(tuple(tag + " " for tag in reset_tags)) for line in text.splitlines()), "idle partner reset/rehelloed")
+                idle = _one_marker(text, "IDLE_PARTNER")
+                need(idle.get("hellos") == 1 and receipt.get("idle") == idle
+                     and _frame(hello) <= _frame(idle) < _frame(witness, "save_completed_frame"), "idle partner hold/save differs")
+        for label, snapshot in (("before", before), ("after", after)):
+            document = snapshot["links"]
+            need(document["links"] == [] and document.get("pending_captures", {}) == {}, "unexpected link/capture")
+            for inst in ("a", "b"):
+                player = snapshot["status"]["players"][inst]
+                need((label != "before" or player.get("connected") is True) and not player.get("identity_error"),
+                     f"{label}: missing initial connection/rejected {inst}")
+                need(str(document["player_identity"][inst]["ot_id"]) == str(identities[inst]), f"{label}: server trainer identity differs")
+                hellos = [row for row in snapshot["events"] if row.get("type") == "hello" and row.get("player") == inst]
+                count = 2 if label == "after" and inst == "a" else 1
+                need(len(hellos) == count and all(row.get("text", "").startswith("Connected (") for row in hellos),
+                     f"{label}: accepted hello count differs")
+        need(before["links"] == after["links"], "persisted rules/identity changed across reset")
+        need(isinstance(before["links_bytes"], bytes) and before["links_bytes"] == after["links_bytes"]
+             and json.loads(before["links_bytes"]) == before["links"], "links.json bytes changed across reset")
+        need(len(after["events"]) == len(before["events"]) + 1 and after["events"][1:] == before["events"]
+             and after["events"][0].get("player") == "a" and after["events"][0].get("type") == "hello",
+             "event history changed beyond one A rehello")
+        for name in ("links", "events"):
+            need(json.loads((Path(data_dir) / f"{name}.json").read_text(encoding="utf-8")) == after[name], f"final {name} differs from snapshot")
+        need((Path(data_dir) / "links.json").read_bytes() == after["links_bytes"], "final links.json bytes differ")
+        if on_verified is not None:
+            on_verified({"a": "reset", "b": "idle", "area": "none", "titles": "/".join(titles[inst] for inst in ("a", "b")),
+                         "status": "unchanged"})
+    except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError) as exc:
+        raise RuntimeError(f"soft_reset evidence missing or malformed: {exc}") from exc

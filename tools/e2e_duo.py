@@ -78,6 +78,9 @@ SCENARIOS = {
     "gen2_reconnect": {"flags": [], "timeout": 2400, "games": ("gen2_new",),
                        "no_setup": True, "frames": 432000,
                        "oracle": "assert_gen2_reconnect_saved", "oracle_kwargs": {}},
+    "gen2_soft_reset": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
+                        "no_setup": True, "frames": 216000,
+                        "oracle": "assert_gen2_soft_reset_saved", "oracle_kwargs": {}},
     "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     # The old `gen1`/`gen1_yellow` client and its scenario drivers were deleted (deletion plan
@@ -498,7 +501,7 @@ def jitter_problems(text, expected_requested):
 # Scenarios whose verdict needs a LIVE leg to have finished, not just two client RESULT lines:
 # the flag is set only inside the live assert (assert_reconnect_new / assert_admit_randomized_new),
 # and the post-result oracle refuses to describe a save that leg never produced.
-LIVE_LEG_SCENARIOS = ("reconnect_new", "admit_randomized_new", "gen2_reconnect")
+LIVE_LEG_SCENARIOS = ("reconnect_new", "admit_randomized_new", "gen2_reconnect", "gen2_soft_reset")
 
 RECONNECT_GAMEPLAY_EVENTS = ("capture", "linked", "no_catch", "dead_zone")
 
@@ -1643,7 +1646,7 @@ class DuoRun:
                 raise FileNotFoundError(f"Gen 2 duo driver missing: {path}")
         oracle = importlib.import_module("gen2_duo_oracles")
         oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle", "gen2_reconnect": "reconnect_oracle",
-                       "gen2_admit_wrong_rom": "admit_wrong_rom_oracle"}[self.scenario]
+                       "gen2_admit_wrong_rom": "admit_wrong_rom_oracle", "gen2_soft_reset": "soft_reset_oracle"}[self.scenario]
         witness = "check_admit_wrong_rom_witness" if self.scenario == "gen2_admit_wrong_rom" else "check_save_witness"
         if self.scenario == "gen2_reconnect":
             witness = "check_reconnect_witness"
@@ -1666,8 +1669,9 @@ class DuoRun:
                 "refused_saveram": Path(plan["directory"]) / plan["saveram_name"]}
 
     def _gen2_admit_snapshot(self):
+        raw = Path(self.data_dir, "links.json").read_bytes()
         return {"status": self._status(), "raw": self._raw_state(),
-                "links": json.loads(Path(self.data_dir, "links.json").read_text(encoding="utf-8")),
+                "links": json.loads(raw), "links_bytes": raw,
                 "events": self._reconnect_events()}
 
     def assert_gen2_admit_wrong_rom(self, results, **kwargs):
@@ -1684,6 +1688,28 @@ class DuoRun:
             relaunch_saves=self._gen2_relaunch_saves, snapshots=self._gen2_reconnect_snapshots,
             boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()},
             on_verified=self._record_gen2_facts, **kwargs)
+
+    def assert_gen2_soft_reset_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.soft_reset_oracle(results, data_dir=self.data_dir,
+            before=self._gen2_soft_reset_before, after=self._gen2_soft_reset_after,
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()},
+            on_verified=self._record_gen2_facts, **kwargs)
+
+    def _orchestrate_gen2_soft_reset(self):
+        self.wait_for("Gen 2 A ready for reset chord", lambda: any(line.startswith("HELLO_AT_CHECKPOINT ")
+                      for line in self._read_receipt("a").splitlines()), 60)
+        self._gen2_soft_reset_before = self._gen2_admit_snapshot()
+        Path(self.go_files["a"] + ".chord").write_text("baseline recorded\n", encoding="utf-8")
+        def rehello():
+            if not any(line.startswith("REHELLO ") for line in self._read_receipt("a").splitlines()):
+                return False
+            return sum(row.get("type") == "hello" and row.get("player") == "a"
+                       and row.get("text", "").startswith("Connected (")
+                       for row in self._reconnect_events()) == 2
+        self.wait_for("Gen 2 same-OT rehello accepted after reset", rehello, 300)
+        self._gen2_soft_reset_after = self._gen2_admit_snapshot()
+        self._live_complete["gen2_soft_reset"] = True
 
     def _stage_gen2_reconnect(self, phase, source, key):
         from run_gb_gate import GENS
@@ -1782,6 +1808,8 @@ class DuoRun:
                                              or not facts[key] for key in fields):
             raise RuntimeError("Gen 2 oracle verified facts missing")
         allowed = ("refused",) if self.scenario == "gen2_admit_wrong_rom" else ("alive", "dead", "memorial")
+        if self.scenario == "gen2_soft_reset":
+            allowed = ("unchanged",)
         if facts["status"] not in allowed:
             raise RuntimeError("Gen 2 oracle verified status invalid")
         self._gen2_verified_facts = dict(facts)
@@ -4223,6 +4251,8 @@ class DuoRun:
             self.go()
             if self.scenario == "gen2_reconnect":
                 self._orchestrate_gen2_reconnect()
+            elif self.scenario == "gen2_soft_reset":
+                self._orchestrate_gen2_soft_reset()
             return
         if self.scenario == "admit_randomized_new":
             self.assert_admit_randomized_new()
@@ -4585,7 +4615,7 @@ class DuoRun:
                 if passed and scenario_family(getattr(self, "game", "")) == "gen2_new":
                     reason = " ".join(f"{key}={self._gen2_verified_facts[key]}"
                                       for key in ("a", "b", "area", "titles", "status"))
-                    if self.scenario == "gen2_reconnect":
+                    if self.scenario in ("gen2_reconnect", "gen2_soft_reset"):
                         reason += f" scenario={self.scenario}"
                     if self.scenario == "gen2_admit_wrong_rom":
                         reason += f" scenario={self.scenario} rom_b={self._gen2_verified_facts['rom_b']}"

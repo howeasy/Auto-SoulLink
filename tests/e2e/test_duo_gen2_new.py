@@ -19,7 +19,7 @@ pytestmark = [
 ]
 
 GAME = "gen2_new"
-SCENARIOS = ("link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect")
+SCENARIOS = ("link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset")
 LANE = "gen2-cc-link"
 PAIRINGS = {
     GAME: LANE,

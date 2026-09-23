@@ -969,3 +969,103 @@ def test_reconnect_matrix_refuses_partial_or_rebound_proof(tmp_path, mutation):
         key, value = ("scenario", "link") if mutation == "pydec_scenario" else ("status", "dead")
         text["pydec"] = _edit_pydec_token(key, value)(text["pydec"])
     assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_reconnect")
+
+
+def _soft_reset_cell(tmp_path):
+    doc = _green_tree(tmp_path)
+    row = _row(doc, "duo.crystal.crystal")
+    proof, axes = row["proofs"][0], row["axes"]
+    lock = json.loads((tmp_path / "data/gen2_sources.lock.json").read_text())["outputs"]
+    text = {}
+    for side in ("a", "b"):
+        case = axes["fixtures"][side]
+        head = {"player": side, "scenario": "gen2_soft_reset", "title": "crystal", "case": case,
+                "rom_sha1": lock["pokecrystal"]["sha1"], "attempt": 1,
+                "fixture_sha256": gate._fixture_sha256(tmp_path, case)}
+        client = {"production_admitted": True}
+        hello = {"frame": 100, "ot_id": 46401 if side == "a" else 44068}
+        save = {"frame": 1000, "save_completed_frame": 999, "flushed_matches": True,
+                "cartram_bytes": 32768, "cartram_sha256": "a" * 64, "gate_saves": 1, "client_saves": 1}
+        records = [("DUO_GEN2", head), ("CLIENT", client), ("BOOTED", {"frame": 99}), ("HELLO", hello)]
+        detail = {}
+        if side == "a":
+            rows = {
+                "HELLO_AT_CHECKPOINT": {"frame": 110, "ot_id": 46401, "hellos": 1, "writes_enabled": True},
+                "CHORD_GATE": {"frame": 111}, "CHORD": {"frame": 112, "frames": 4},
+                "RESET_SEEN": {"frame": 145, "delta": 33}, "HELLO_CLEARED": {"frame": 150, "delta": 5},
+                "WRITES_PAUSED": {"frame": 400, "delta": 255},
+                "HELLO_AGAIN": {"frame": 600, "ot_id": 46401, "n": 2},
+                "REBOOTED": {"frame": 601}, "WRITES_RESUMED": {"frame": 602, "delta": 457},
+                "REHELLO": {"frame": 603, "ot_id": 46401, "hellos": 2},
+                "NO_WRITES_IN_WINDOW": {"writes": 0},
+            }
+            records.extend(rows.items())
+            detail = {"reset": rows["RESET_SEEN"], "paused": rows["WRITES_PAUSED"], "rehello": rows["REHELLO"]}
+        else:
+            idle = {"frame": 700, "hellos": 1}
+            records.append(("IDLE_PARTNER", idle))
+            detail = {"idle": idle}
+        receipt = {**head, "schema": "gen2-duo-soft-reset-v1", "client": client,
+                   "hello": hello, "save": save, **detail}
+        records.extend([("SAVE_WITNESS", save), ("RECEIPT", receipt)])
+        text[side] = "\n".join(tag + " " + json.dumps(value) for tag, value in records) + "\nRESULT: PASS\n"
+    text["pydec"] = ("PYDEC: PASS scenario=gen2_soft_reset a=reset b=idle area=none "
+                     "titles=crystal/crystal status=unchanged\n")
+    return proof, axes, lock, text
+
+
+def test_soft_reset_matrix_requires_chronological_reset_receipts(tmp_path):
+    proof, axes, lock, text = _soft_reset_cell(tmp_path)
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_soft_reset") == []
+
+
+def test_soft_reset_matrix_allows_production_hello_before_arrival_marker(tmp_path):
+    proof, axes, lock, text = _soft_reset_cell(tmp_path)
+    for side in ("a", "b"):
+        lines = text[side].splitlines()
+        booted = next(i for i, line in enumerate(lines) if line.startswith("BOOTED "))
+        hello = next(i for i, line in enumerate(lines) if line.startswith("HELLO "))
+        lines[booted], lines[hello] = lines[hello], lines[booted]
+        text[side] = "\n".join(lines)
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_soft_reset") == []
+
+
+@pytest.mark.parametrize("mutation", ["pause_missing", "no_write_missing", "writes", "reset_delta", "delta_lie",
+    "pause_early", "wrong_ot", "three_hellos", "idle_repeat", "idle_reset", "save_early", "save_missing",
+    "fixture_hash", "fake_engine", "receipt_detail", "receipt_missing", "pydec_status", "pydec_side",
+    "pydec_scenario", "order", "no_client"])
+def test_soft_reset_matrix_refuses_weak_receipts(tmp_path, mutation):
+    proof, axes, lock, text = _soft_reset_cell(tmp_path)
+    if mutation in ("pause_missing", "no_write_missing", "save_missing", "receipt_missing"):
+        tag = {"pause_missing": "WRITES_PAUSED", "no_write_missing": "NO_WRITES_IN_WINDOW",
+               "save_missing": "SAVE_WITNESS", "receipt_missing": "RECEIPT"}[mutation]
+        text["a"] = "\n".join(line for line in text["a"].splitlines() if not line.startswith(tag + " "))
+    elif mutation in ("writes", "reset_delta", "delta_lie", "pause_early", "wrong_ot", "three_hellos", "save_early", "no_client"):
+        old, new = {"writes": ('"writes": 0', '"writes": 1'),
+                    "reset_delta": ('"delta": 33', '"delta": 1'),
+                    "delta_lie": ('"frame": 145', '"frame": 146'),
+                    "pause_early": ('"delta": 255', '"delta": 60'),
+                    "wrong_ot": ('"ot_id": 46401, "n": 2', '"ot_id": 44068, "n": 2'),
+                    "three_hellos": ('"hellos": 2', '"hellos": 3'),
+                    "save_early": ('"save_completed_frame": 999', '"save_completed_frame": 500'),
+                    "no_client": ('"production_admitted": true', '"production_admitted": false')}[mutation]
+        text["a"] = text["a"].replace(old, new)
+    elif mutation in ("idle_repeat", "idle_reset", "fake_engine"):
+        side, tag = {"idle_repeat": ("b", "HELLO_AGAIN"), "idle_reset": ("b", "CHORD"),
+                     "fake_engine": ("a", "ENGINE_CAPTURE")}[mutation]
+        text[side] += tag + " {}\n"
+    elif mutation == "fixture_hash":
+        text["a"] = _edit_header_field("fixture_sha256", "0" * 64)(text["a"])
+    elif mutation == "receipt_detail":
+        text["a"] = text["a"].replace('"paused": {"frame": 400', '"paused": {"frame": 401')
+    elif mutation == "order":
+        lines = text["a"].splitlines()
+        x, y = [next(i for i, line in enumerate(lines) if line.startswith(tag + " "))
+                for tag in ("CHORD_GATE", "CHORD")]
+        lines[x], lines[y] = lines[y], lines[x]
+        text["a"] = "\n".join(lines)
+    else:
+        key, value = {"pydec_status": ("status", "alive"), "pydec_side": ("a", "idle"),
+                      "pydec_scenario": ("scenario", "link")}[mutation]
+        text["pydec"] = _edit_pydec_token(key, value)(text["pydec"])
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_soft_reset")
