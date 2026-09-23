@@ -11,7 +11,14 @@ G4 lane items started after the milestone, run in the clean lane worktree `.clau
 - boxsync_gen3 FAIL: withdraw sent no box_to_party because gPlayerPartyCount is stale inside the PC.
   Fixed in 767ba0a5 (unit falsifier). NEXT: live re-run.
 - whiteout_gen3 FAIL: A's rebuilt party_mon was held for the whole wait by the safety.lua task clause
-  ("unknown active task"). Diagnosis card C4-6h was out at the stop; no re-run until it is fixed.
+  ("unknown active task"). C4-6h DIAGNOSED (not applied): A waits inside the Viridian Center 1F, and every
+  FRLG Center 1F runs CableClub_OnResume -> InitUnionRoom (pret cable_club.inc; union_room.c:3110), which
+  leaves Task_InitUnionRoom / Task_SearchForChildOrParent / Task_UnionRoomListen active. Those are not on
+  the allow-list (write_checkpoint.json:345-349), so the checkpoint never opens indoors. The tasks were seen
+  in A's own pc-exit dump on that map; that they were active after the whiteout is inferred.
+  Harness fix: walk A out of the Center before the rebuild wait, and dump the task list on wait_until
+  timeouts. OWNER QUESTION: real players are held in every FRLG Center until they step outside. Is that
+  acceptable? Allow-listing the RFU tasks is a signed-path change.
 - Not started: reconnect_gen3 (+ --wrong-save), deadzone_gen3, linked_faint_active_gen3, then G4 items 3-7.
 C5-11c: OMP fixed all 8 REV2 findings; it is UNCOMMITTED in this worktree (full suite 5467 passed with SLINK_ARMGCC).
 NEXT: slink-adapter-guard + Codex REV3, then commit, patch rebuild, md5, lane gates.
