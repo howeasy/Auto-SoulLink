@@ -1007,6 +1007,27 @@ def test_wrong_rom_admission_independent_evidence(admission_case):
     assert facts[0]["status"] == "refused"
 
 
+def test_wrong_rom_admission_accepts_terminal_disconnect(admission_case):
+    results, kwargs = admission_case
+    kwargs["after"]["status"]["players"]["a"]["connected"] = False
+    kwargs["after"]["raw"]["_live"]["connected_players"]["a"]["connected"] = False
+    oracles.admit_wrong_rom_oracle(results, **kwargs)
+
+
+@pytest.mark.parametrize("fault", ("never_connected", "admission_lost", "identity_error"))
+def test_wrong_rom_terminal_disconnect_keeps_admission_requirements(admission_case, fault):
+    results, kwargs = admission_case
+    kwargs["after"]["status"]["players"]["a"]["connected"] = False
+    if fault == "never_connected":
+        kwargs["before"]["status"]["players"]["a"]["connected"] = False
+    elif fault == "admission_lost":
+        kwargs["after"]["status"]["players"]["a"]["admission"] = "refused"
+    else:
+        kwargs["after"]["status"]["players"]["a"]["identity_error"] = "wrong save"
+    with pytest.raises(RuntimeError, match="admitted public status"):
+        oracles.admit_wrong_rom_oracle(results, **kwargs)
+
+
 @pytest.mark.parametrize("fault", ["pin", "role", "missing", "client", "tx", "short_hold", "digest",
     "disk", "hello_again", "identity", "player", "event", "links", "admitted_party", "fixture_hash"])
 def test_wrong_rom_admission_refuses_mutations(admission_case, fault):

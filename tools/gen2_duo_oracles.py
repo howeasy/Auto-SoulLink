@@ -731,7 +731,10 @@ def admit_wrong_rom_oracle(results, *, data_dir, before, after, boot_saveram, re
             _admit_need(isinstance(live, dict) and refused not in live and admitted in live,
                         f"{label}: refused player row or admitted row missing")
             active = players[admitted]
-            _admit_need(active.get("connected") is True and active.get("admission") == "admitted"
+            # RESULT is followed by client.exit(); the final poll may see a closed
+            # socket. The admission record and saved identity survive that close.
+            _admit_need((label == "after" or active.get("connected") is True)
+                        and active.get("admission") == "admitted"
                         and not active.get("identity_error"), f"{label}: admitted public status differs")
             idle = players.get(refused, {})
             _admit_need(not any(idle.get(field) for field in ("connected", "party_keys", "trainer_name", "current_area_id", "identity_error")),
