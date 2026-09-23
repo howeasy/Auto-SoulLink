@@ -97,7 +97,7 @@ whiteout; only lines placed **after** it are skipped on a LOSE.
 | LakeOfRage RedGyarados | `ifequal LOSE, .NotBeaten` **skips** `disappear` on LOSE (maps/LakeOfRage.asm:79-83); reward (`giveitem RED_SCALE`) also skipped since `.NotBeaten`→`reloadmapafterbattle` still redirects away on LOSE | **Yes** | No (disappear+reward run) | No |
 | Route36 Sudowoodo (WateredWeirdTreeScript) | `setevent EVENT_FOUGHT_SUDOWOODO` fires **unconditionally right after** `startbattle`, before the `ifequal DRAW` branch (maps/Route36.asm:71-73); both branches (`DidntCatchSudowoodo` and fallthrough) disappear+twin-sprite the tree before their own `reloadmapafterbattle` | No — flag already set pre-branch | No | No |
 | TeamRocketBaseB1F exploding traps (Voltorb/Geodude/Koffing ×22 numbered traps) | Wrapper (`ExplodingTrap1..22`) calls `reloadmapafterbattle` **then** `setevent EVENT_EXPLODING_TRAP_n` (maps/TeamRocketBaseB1F.asm:272-445) | **Yes** | No | No |
-| TeamRocketBaseB2F RocketElectrode1/2/3 | `iftrue TeamRocketBaseB2FReloadMap` skips `disappear` on LOSE/DRAW (maps/TeamRocketBaseB2F.asm:224-274); on WIN, `disappear` is session-only — **no `setevent` for `EVENT_TEAM_ROCKET_BASE_B2F_ELECTRODE_{1,2,3}` exists anywhere in the pinned source** (full-repo grep of both `checkevent`-only usage), so the follow-through `checkevent…iffalse TeamRocketBaseB2FReloadMap` chain always falls through to the same reload, and `RocketBaseElectrodeScript` (which gives HM06 Whirlpool) is **unreachable in this source** | **Yes** | **Yes** | **Yes — infinitely re-fightable in the pinned source; no consumption flag is ever set** |
+| TeamRocketBaseB2F RocketElectrode1/2/3 | `startbattle` then `iftrue TeamRocketBaseB2FReloadMap` skips `disappear` on LOSE/DRAW (maps/TeamRocketBaseB2F.asm:222-238); on WIN `disappear TEAMROCKETBASEB2F_ELECTRODE1/4` runs, and `Script_disappear` SETS the object's own event flag (`ApplyEventActionAppearDisappear` with b=1, engine/overworld/scripting.asm:973-985), which for these objects is `EVENT_TEAM_ROCKET_BASE_B2F_ELECTRODE_1/2/3` (object_event lines 960-965). COORDINATOR CORRECTION: the worker's "never setevent, never consumed" reading missed that `disappear` sets the flag. | **Yes** | **Yes** | No (consumed on WIN) |
 | TinTowerRoof TinTowerHoOh(.Silver) | `setevent EVENT_FOUGHT_HO_OH` fires **before** `startbattle` (maps/TinTowerRoof.asm:26-29); map callback hides the object once that flag is set (TinTowerRoofHoOhCallback, maps/TinTowerRoof.asm:6-13) | No — consumed before the fight starts | No | No |
 | WhirlIslandLugiaChamber Lugia(.Silver) | Same pattern: `setevent EVENT_FOUGHT_LUGIA` **before** `startbattle` (maps/WhirlIslandLugiaChamber.asm:26-29) | No | No | No |
 | TinTower1F Suicune (Crystal only, `legend_245`) | `setevent EVENT_FOUGHT_SUICUNE` + roaming-Suicune flags fire **after** `startbattle` but **before** `reloadmapafterbattle` (maps/TinTower1F.asm:119-127) | No — flags already set pre-`reloadmapafterbattle` | No | No |
@@ -112,9 +112,9 @@ whiteout; only lines placed **after** it are skipped on a LOSE.
   Suicune, Sudowoodo, Lapras, Snorlax.
 - **Re-fightable after a whiteout loss specifically, consumed after
   anything else:** Red Gyarados, the three Team Rocket Base exploding traps.
-- **Re-fightable indefinitely, never consumed by source (a latent/unfixed
-  flag gap in the pinned pret decompile):** the three `RocketElectrode`
-  duos in Team Rocket Base B2F.
+- **Re-fightable after a loss OR a flee, consumed only on a WIN:** the three
+  `RocketElectrode` statics in Team Rocket Base B2F (coordinator correction:
+  `disappear` sets the object's event flag, scripting.asm:980-983).
 
 ## 3. Box-full on ordinary wild catches
 
@@ -244,9 +244,5 @@ UNVERIFIED list).
 - Whether any other engine path besides `mobile_41.asm`'s
   Backup/Restore/Clear routines and the VC hook ever touches `sGSBallFlag`
   in a way not caught by the full-repo grep performed here.
-- Bug-for-bug status of the `RocketElectrode1/2/3` "never consumed" finding
-  against the actual retail Gold/Silver/Crystal cartridges (this is a
-  pinned-source finding, not independently cross-checked against a second
-  disassembly or hardware capture).
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
