@@ -421,6 +421,7 @@ def emu_stubbed(request):
         read_u8=lambda a, *_: store.get(int(a), 0) & 0xFF,
         read_u16_le=lambda a, *_: store.get(int(a), 0) & 0xFFFF,
         read_u32_le=lambda a, *_: store.get(int(a), 0),
+        read_s16_le=lambda a, *_: store.get(int(a), 0),
     )
     runtime.globals().emu = runtime.table(framecount=lambda: 0)
     logged: list[str] = []
@@ -436,16 +437,22 @@ def _fake_cp(runtime, store, ptr_addr, sb1_addr, group, num):
     store[ptr_addr] = sb1_addr
     store[sb1_addr + 0x04] = group
     store[sb1_addr + 0x05] = num
+    # Source-defined outdoor checkpoint -> Pallet house respawn.
+    store[sb1_addr + 0x1C] = 3
+    store[sb1_addr + 0x1D] = 0
+    store[sb1_addr + 0x1E] = 255
+    store[sb1_addr + 0x20] = 6
+    store[sb1_addr + 0x22] = 8
     return runtime.table(pointers=runtime.table(
         gSaveBlock1Ptr=runtime.table(address=ptr_addr)))
 
 
 def test_check_whiteout_raises_when_displaced_to_the_heal_map(emu_stubbed):
     runtime, module, store, logged, _ = emu_stubbed
-    assert module.HEAL_MAP == 4 * 256 + 0
     ptr_addr, sb1_addr = 0x03005008, 0x02020000
-    # The player is now reading the heal map's (group, num) == HEAL_MAP.
+    # The outdoor Pallet checkpoint projects to the house (4.0), not the outdoor map.
     cp = _fake_cp(runtime, store, ptr_addr, sb1_addr, 4, 0)
+    store[sb1_addr], store[sb1_addr + 2] = 8, 5
     with pytest.raises(LuaError):
         module.check_whiteout(cp, 3 * 256 + 19, 12, 37)  # before_map = Route1 (3.19)
 
@@ -454,6 +461,7 @@ def test_check_whiteout_does_not_raise_when_still_on_the_same_map(emu_stubbed):
     runtime, module, store, logged, _ = emu_stubbed
     ptr_addr, sb1_addr = 0x03005008, 0x02020000
     cp = _fake_cp(runtime, store, ptr_addr, sb1_addr, 3, 19)  # still on Route1
+    store[sb1_addr], store[sb1_addr + 2] = 12, 37
     module.check_whiteout(cp, 3 * 256 + 19, 12, 37)  # before_map == current map: no whiteout
     assert not logged, "a same-map read must not log or raise a whiteout"
 
@@ -574,6 +582,10 @@ def test_whiteout_settles_before_the_map_read_so_recovery_engages_before_the_nex
 
     def read_u8(addr, *_a):
         addr = int(addr)
+        if addr == SB1_ADDR + 0x1C:
+            return 3
+        if addr == SB1_ADDR + 0x1E:
+            return 255
         if addr == IN_BATTLE_ADDR:
             return 2 if in_battle() else 0          # mask=2, expect=0: pred_ok True == NOT in battle
         if addr in (SCS_ADDR, FCL_ADDR):
@@ -590,6 +602,10 @@ def test_whiteout_settles_before_the_map_read_so_recovery_engages_before_the_nex
 
     def read_s16_le(addr, *_a):
         addr = int(addr)
+        if addr == SB1_ADDR + 0x20:
+            return 6
+        if addr == SB1_ADDR + 0x22:
+            return 8
         if addr == SB1_ADDR + 0x00:
             return HOUSE_X if warped() else GRASS_X
         if addr == SB1_ADDR + 0x02:
@@ -978,6 +994,7 @@ def test_verify_parcel_delivered_passes_on_the_good_state(parcel_cp):
     _, module, store, logged, exits, cp, sb1_addr = parcel_cp
     _set_pokedex_flag(store, sb1_addr, module, True)
     _set_ball_slot(store, sb1_addr, module, 0, module.ITEM_POKE_BALL)
+    store[sb1_addr + module.LAB_SCENE_VAR_OFFSET] = 6
 
     module.verify_parcel_delivered(cp, "test")
 
@@ -1017,11 +1034,14 @@ def test_start_oak_delivery_stops_as_soon_as_the_parcel_leaves(parcel_cp):
     `removeitem`) -- start_oak_delivery must return quietly, never calling G.finish."""
     runtime, module, store, logged, exits, cp, sb1_addr = parcel_cp
     _set_parcel_slot(store, sb1_addr, module, 0, module.ITEM_OAKS_PARCEL)
-    presses = {"n": 0}
+    presses = {"n": 0, "held": False}
 
-    def joypad_set(_buttons):
-        presses["n"] += 1
-        if presses["n"] >= 3:
+    def joypad_set(buttons):
+        held = bool(buttons and buttons["A"])
+        if held and not presses["held"]:
+            presses["n"] += 1
+        presses["held"] = held
+        if presses["n"] == 3:
             _set_parcel_slot(store, sb1_addr, module, 0, 0)
 
     runtime.globals().joypad = runtime.table(set=joypad_set)
@@ -1029,3 +1049,4 @@ def test_start_oak_delivery_stops_as_soon_as_the_parcel_leaves(parcel_cp):
     module.start_oak_delivery(cp, "test")
 
     assert not exits, "must return once the parcel leaves, not mash on to the frame budget"
+    assert presses["n"] == 3, "no A press may follow the observed removal"

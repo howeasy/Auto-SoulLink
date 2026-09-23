@@ -47,6 +47,25 @@ local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
 assert(WT, "SLINK_ROOT unset — launch via the gen3 fixture/gate tooling")
 local G = dofile(WT .. "/lua/tests/gen3_boot_check.lua")
 local PL = dofile(WT .. "/lua/tests/playlib.lua")
+local Reads = dofile(WT .. "/lua/gen3/reads.lua")
+local JSON = dofile(WT .. "/lua/json_codec.lua")
+local profile_file = assert(io.open(WT .. "/data/games/gen3_frlg/profile.json", "rb"))
+local profile = assert(JSON.decode(profile_file:read("a"))).titles.firered
+profile_file:close()
+assert(profile.admitted and not profile.derived.CFRU_NO_ENCRYPT
+       and profile.derived.BOX_DATA_OFFSET == 4 and profile.derived.BOXES_PER_STORE == 14,
+       "FR uncompressed box layout is not admitted")
+local function read_bytes(addr, count)
+    local bytes = {}
+    for i = 1, count do bytes[i] = memory.read_u8(addr + i - 1) end
+    return bytes
+end
+-- Defer host reads so loading the leg table needs no emulator globals.
+local reader = Reads.new(profile, {
+    read_u8 = function(a) return memory.read_u8(a) end,
+    read_u32 = function(a) return memory.read_u32_le(a) end,
+    read_bytes = read_bytes,
+})
 
 -- Plaintext (no decrypt needed) RAM observables pinned in lua/games/gen3_frlge.lua's `vanilla`
 -- profile table, cited per use below.
@@ -79,18 +98,9 @@ local ACTION_FIGHT, ACTION_BAG = 0, 1
 local function action_menu_up() return memory.read_u32_le(BATTLER_CTRL_ADDR) == HANDLE_INPUT_CHOOSE_ACTION end
 local function action_cursor() return memory.read_u8(ACTION_CURSOR_ADDR) end
 
--- WHERE A WHITEOUT PUTS YOU. pret src/overworld.c SetWarpDestinationToLastHealLocation warps to
--- gSaveBlock1Ptr->lastHealLocation, which a new game seeds to the player's own house
--- (src/new_game.c). Identified from the ROM rather than assumed -- map 4.0 is the only 13x10
--- map whose single object event stands at (8,4) (MOM) with the front door at (4,8)/(5,8) and
--- the stairs at (10,2), exactly the geometry lua/tests/gen3_fr_newgame_inputs.lua walks:
---
---   python tools/gba_map.py "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba" --map 4.0
---   -> map 4.0: 13x10, 4 warps, 1 objects, 0 coords, 1 bg     objects [(8,4)]
---
--- PHYSICAL confirmation (FR lane run 14): the whiteout left the player at (8,5) -- the tile
--- directly below MOM, which is where FRLG stands you up after she heals your party.
-local HEAL_MAP = 4 * 256 + 0            -- MAP_PALLET_TOWN_PLAYERS_HOUSE_1F
+-- Whiteout destinations are projected from the saved outdoor checkpoint below.
+-- Run 14 landed at Mom (4.0, 8,5); run 24 landed at Viridian's nurse (5.4, 7,4).
+-- Neither receipt makes that interior the destination of every subsequent whiteout.
 
 local function battle_outcome() return memory.read_u8(BATTLE_OUTCOME_ADDR) end
 
@@ -120,9 +130,62 @@ local LAB_SCENE_VAR_OFFSET = SB1_VARS_OFFSET + (VAR_MAP_SCENE_PALLET_TOWN_PROFES
 local function sb1_ptr(cp)
     local ptr = assert(cp.pointers and cp.pointers.gSaveBlock1Ptr, "no gSaveBlock1Ptr")
     local sb1 = memory.read_u32_le(int(ptr.address))
-    if sb1 < 0x02000000 or sb1 >= 0x02040000 then return nil end
+    if sb1 < 0x02000000 or sb1 > 0x02040000 - 0x3D68 or sb1 % 4 ~= 0 then return nil end
     return sb1
 end
+
+-- C3-29, pret/pokefirered@c75f352: global.h:392-398,765. gSaveBlock1Ptr is
+-- 03005008 (data/gen3/pret/pokefirered.sym:809); lastHealLocation at +0x1C is
+-- WarpData: s8 group/num/warpId at +0/+1/+2, padding +3, s16 x/y at +4/+6.
+-- This is the OUTDOOR checkpoint, not the whiteout interior! heal_location.c:64-118
+-- maps it through src/data/heal_locations.json:3-19 to house 4.0 (8,5) or Center
+-- 5.4 (7,4). Freeze this projection before advancing the battle/whiteout sequence.
+local SB1_LAST_HEAL_OFFSET = 0x1C
+local function whiteout_destination(cp)
+    local sb1 = sb1_ptr(cp)
+    if not sb1 then G.finish(false, "whiteout_heal_pointer: unreadable SaveBlock1"); return end
+    local p = sb1 + SB1_LAST_HEAL_OFFSET
+    local group, num = memory.read_u8(p), memory.read_u8(p + 1)
+    local warp = memory.read_u8(p + 2)
+    local x, y = memory.read_s16_le(p + 4), memory.read_s16_le(p + 6)
+    if group == 3 and num == 0 and warp == 255 and x == 6 and y == 8 then
+        return {group = 4, num = 0, x = 8, y = 5}
+    elseif group == 3 and num == 1 and warp == 255 and x == 26 and y == 27 then
+        return {group = 5, num = 4, x = 7, y = 4}
+    end
+    G.finish(false, string.format("whiteout_heal_unsupported: lastHealLocation %d.%d "
+             .. "warp=%d (%d,%d)", group, num, warp, x, y))
+end
+
+local function verify_destination(cp, label, dest)
+    local group, num = G.map(cp)
+    local x, y = G.pos(cp)
+    if group ~= dest.group or num ~= dest.num or x ~= dest.x or y ~= dest.y then
+        G.finish(false, string.format("%s: destination_mismatch: expected %d.%d (%d,%d), "
+                 .. "got %s.%s (%s,%s)", label, dest.group, dest.num, dest.x, dest.y,
+                 tostring(group), tostring(num), tostring(x), tostring(y)))
+        return false
+    end
+    return true
+end
+
+-- Exact destinations from data/maps/{PalletTown,Route1,ViridianCity,...}/map.json
+-- warp_events/connections + data/maps/map_groups.json. Exterior door exits take
+-- one step south (src/field_fadetransition.c:317-402); connection offsets are
+-- Pallet<->Route1=0, Route1<->Viridian=12. These are settled input terminals.
+local DEST = {
+    house_exit = {group=3, num=0, x=6, y=8},
+    lab = {group=4, num=3, x=6, y=12},
+    lab_exit = {group=3, num=0, x=16, y=14},
+    route1_south = {group=3, num=19, x=12, y=39},
+    route1_north = {group=3, num=19, x=12, y=0},
+    pallet_north = {group=3, num=0, x=12, y=0},
+    viridian_south = {group=3, num=1, x=24, y=39},
+    mart = {group=5, num=3, x=4, y=7},
+    mart_exit = {group=3, num=1, x=36, y=20},
+    center = {group=5, num=4, x=7, y=8},
+    center_exit = {group=3, num=1, x=26, y=27},
+}
 
 --- The lab scene var, read through gSaveBlock1Ptr the way G.map/G.pos do: -1 while the pointer
 --- is not yet a sane EWRAM address.
@@ -130,6 +193,34 @@ local function lab_scene_var(cp)
     local sb1 = sb1_ptr(cp)
     if not sb1 then return -1 end
     return memory.read_u16_le(sb1 + LAB_SCENE_VAR_OFFSET)
+end
+
+local function verify_starter()
+    local mons, why = reader.read_party()
+    local mon = mons and mons[1]
+    -- scripts.inc:1092-1129 chooses Squirtle (species.h:14: 7), then givemon.
+    if not mons or #mons ~= 1 or not mon or mon.species ~= 7 or mon.has_species ~= 1
+       or mon.is_egg ~= 0 or mon.is_bad_egg ~= 0 or not mon.checksum_ok then
+        G.finish(false, "starter_species: party slot 0 must be a valid Squirtle (7): "
+                 .. tostring(why or (mon and mon.species)))
+    end
+end
+
+local function flag_set(cp, id)
+    local sb1 = sb1_ptr(cp)
+    if not sb1 then return false end
+    return (memory.read_u8(sb1 + 0xEE0 + id // 8) & (1 << (id % 8))) ~= 0
+end
+
+local function verify_rival(cp, outcome)
+    -- battle.h:76-77; scripts.inc:467-482 sets scene=4 and flag 0x258 on BOTH
+    -- win and loss (flags.h:625). Losing the tutorial is valid; run/catch is not.
+    if outcome ~= 1 and outcome ~= 2 then
+        G.finish(false, "rival_outcome: expected WON(1) or LOST(2), got " .. tostring(outcome))
+    end
+    if not flag_set(cp, 0x258) or lab_scene_var(cp) ~= 4 then
+        G.finish(false, "rival_terminal: FLAG_BEAT_RIVAL_IN_OAKS_LAB and lab scene 4 required")
+    end
 end
 
 -- THE BAG WITNESS (card gen3-P3-C3-23). CB2_BagMenuFromBattle (src/item_menu.c:350-353) calls
@@ -218,6 +309,25 @@ local function key_items_has_parcel(cp)
             return true
         end
     end
+    return false
+end
+
+local function verify_parcel_fetched(cp)
+    local sb1 = sb1_ptr(cp)
+    -- item.c:20-29 XORs quantity with the LOW u16 of SaveBlock2.encryptionKey
+    -- (global.h:358 +0xF20; pokefirered.sym:810 gSaveBlock2Ptr=0300500C).
+    local sb2 = memory.read_u32_le(0x0300500C)
+    if not sb1 or sb2 < 0x02000000 or sb2 > 0x02040000 - 0xF24 or sb2 % 4 ~= 0 then
+        G.finish(false, "parcel_fetch_pointer: unreadable bag or encryption key"); return
+    end
+    local key = memory.read_u16_le(sb2 + 0xF20)
+    for slot = 0, BAG_KEYITEMS_COUNT - 1 do
+        local addr = sb1 + SB1_KEYITEMS_POCKET_OFFSET + slot * 4
+        if memory.read_u16_le(addr) == ITEM_OAKS_PARCEL
+           and (memory.read_u16_le(addr + 2) ~ key) > 0 then return true end
+    end
+    G.finish(false, "parcel_fetch_missing: mart did not grant ITEM_OAKS_PARCEL(349) "
+             .. "with positive quantity in the key pocket")
     return false
 end
 
@@ -428,6 +538,22 @@ local PATHS = {
         map = "PalletTown_PlayersHouse_1F", from = { 8, 5 }, to = { 4, 8 },
         dirs = { "Down","Down","Down","Left","Left","Left","Left" },
     },
+    -- C3-29: BFS over pret data/layouts/PokemonCenter_1F/map.bin, with
+    -- ViridianCity_PokemonCenter_1F/map.json object tiles blocked: (7,4)->(7,8).
+    heal_center_to_door = {
+        map = "PokemonCenter_1F", from = {7,4}, to = {7,8},
+        dirs = {"Down","Down","Down","Down"},
+    },
+    -- pret PalletTown/map.json warp 0=(6,7), Task_ExitDoor walks south to (6,8).
+    house_exit_to_town_start = {
+        map = "PalletTown", from = {6,8}, to = {6,9}, dirs = {"Down"},
+    },
+    -- BFS over pret data/layouts/PalletTown/map.bin, objects blocked.
+    pallet_north_to_town_start = {
+        map = "PalletTown", from = {12,0}, to = {6,9},
+        dirs = {"Down","Down","Down","Down","Down","Down","Down","Down","Down",
+                "Left","Left","Left","Left","Left","Left"},
+    },
     -- VIRIDIAN HEAL DETOUR (prevention, so the southbound Route 1 walk starts at full HP).
     --   python tools/gba_map.py "<FR>.gba" --map 3.1 --bfs 36,20 26,27
     --   python tools/gba_map.py "<FR>.gba" --map 3.1 --bfs 26,27 24,39
@@ -553,12 +679,11 @@ local H = {
     end,
 }
 
-local play
+local play, check_whiteout
 play = PL.bind(H, {
     paths          = PATHS,
     -- where the per-leg savestates below land
     state_dir      = os.getenv("SLINK_GEN3_PLAY_STATES_DIR") or "E:/Howard/Bizhawk/GBA/State",
-    heal_map       = HEAL_MAP,
     max_recoveries = 2,
     -- HOW THIS GAME FIGHTS a battle it did not choose. gActionSelectionCursor resets to 0
     -- (USE_MOVE) each battle (src/battle_controller_player.c), so A, A is a pinned
@@ -573,12 +698,133 @@ play = PL.bind(H, {
     -- spacing are ours.
     menu_back = function(_, gap) G.tap("B", 3, gap or 20) end,
     battle = function(cp, budget)
+        local before_map, before_x, before_y = play.map(cp), G.pos(cp)
+        local dest = whiteout_destination(cp)
         if not play.mash_a(budget or 1200, function() return not H.in_battle(cp) end) then
             return false
         end
-        return play.wait_scene_settled(cp, 1800)
+        if not play.wait_scene_settled(cp, 1800) then return false end
+        -- Raise the shared recovery signal here: playlib's static heal_map cannot
+        -- express FR's lastHealLocation-dependent respawn projection.
+        check_whiteout(cp, before_map, before_x, before_y, dest)
+        return true
     end,
 })
+
+local function warp_to(cp, dir, budget, dest, label)
+    local ok, why = play.enter_warp(cp, dir, budget)
+    if not ok then G.finish(false, label .. ": warp_failed: " .. tostring(why)); return end
+    verify_destination(cp, label, dest)
+end
+
+-- FR boxes: pokefirered.sym:811 gPokemonStoragePtr=03005010, relocated on load
+-- (src/load_save.c:68-78). pokemon_storage_system.h:44-49 boxes begin at +4, NOT
+-- the stale +1 comment: BoxPokemon requires u32 alignment (pokemon.h:105-127).
+-- 14 * 30 uncompressed 80-byte records; reads.lua decrypts/permutates and checks
+-- the secure checksum. PID/OTID are plaintext; no production write API is used.
+local function owned_snapshot(label)
+    local party = play.party_snapshot()
+    local mons, why = reader.read_party()
+    if not mons or #mons ~= party.n then
+        G.finish(false, label .. ": unreadable_party: " .. tostring(why)); return
+    end
+    local owned = {party=party, mons={}, boxes={}}
+    for i, mon in ipairs(mons) do
+        local key = reader.key(mon)
+        if mon.species == 0 or mon.has_species ~= 1 or mon.is_bad_egg ~= 0
+           or not mon.checksum_ok or owned.mons[key] or key ~= party.order[i] then
+            G.finish(false, label .. ": invalid_party_record: " .. key); return
+        end
+        owned.mons[key] = mon
+    end
+    local storage, bad = reader.read_storage()
+    if not storage then G.finish(false, label .. ": unreadable_storage: " .. tostring(bad)); return end
+    owned.current_box = memory.read_u8(storage)
+    for box = 0, 13 do
+        local records, err = reader.read_box(box)
+        if not records then G.finish(false, label .. ": unreadable_box: " .. tostring(err)); return end
+        for slot, mon in ipairs(records) do
+            if not mon.checksum_ok or mon.is_bad_egg ~= 0 then
+                G.finish(false, label .. ": invalid_box_checksum"); return
+            end
+            if mon.species ~= 0 then
+                local key = reader.key(mon)
+                if mon.has_species ~= 1 or owned.mons[key] or owned.boxes[key] then
+                    G.finish(false, label .. ": ambiguous_box_record: " .. key); return
+                end
+                local addr = storage + 4 + (box * 30 + slot - 1) * 80
+                owned.boxes[key] = {box=box, slot=slot-1, species=mon.species,
+                    raw=string.char(table.unpack(read_bytes(addr, 80)))}
+            elseif mon.has_species ~= 0 then
+                G.finish(false, label .. ": empty_box_has_species_flag"); return
+            end
+        end
+    end
+    return owned
+end
+
+local function boxes_unchanged(label, before, after, except)
+    for key, old in pairs(before) do
+        if key ~= except then
+            local new = after[key]
+            if not new or old.box ~= new.box or old.slot ~= new.slot or old.raw ~= new.raw then
+                G.finish(false, label .. ": unrelated_box_changed: " .. key)
+            end
+        end
+    end
+    for key in pairs(after) do
+        if key ~= except and not before[key] then
+            G.finish(false, label .. ": unexpected_box_addition: " .. key)
+        end
+    end
+end
+
+local function verify_pc_transfer(label, op, before, after, target)
+    local a, b = before.party, after.party
+    if op == "withdraw" then
+        if b.n ~= a.n + 1 or a.keys[target] or not b.keys[target]
+           or not before.boxes[target] or after.boxes[target] then
+            G.finish(false, label .. ": withdraw_target: selected PID must move box->party")
+        end
+        if after.mons[target].species ~= before.boxes[target].species then
+            G.finish(false, label .. ": withdraw_species: selected record changed species")
+        end
+    else
+        local gone = play.departed_key(a, b)
+        if b.n ~= a.n - 1 or gone ~= target then
+            G.finish(false, label .. ": pc_target: party slot 1 PID was not the single departure")
+        end
+        if op == "deposit" then
+            local boxed = after.boxes[target]
+            if not boxed or boxed.box ~= 0 or boxed.slot ~= 0
+               or boxed.species ~= before.mons[target].species then
+                G.finish(false, label .. ": deposit_readback: selected PID not in box 0 slot 0")
+            end
+        elseif op == "release" then
+            if after.boxes[target] then
+                G.finish(false, label .. ": release_deposited: selected PID is still boxed")
+            end
+        else
+            G.finish(false, label .. ": unknown PC operation")
+        end
+    end
+    local ok, why = play.survivors_intact(a, b, target)
+    if not ok then G.finish(false, label .. ": " .. why) end
+    boxes_unchanged(label, before.boxes, after.boxes, op ~= "release" and target or nil)
+end
+
+local function pc_deposit_target(before)
+    if before.party.n < 2 then G.finish(false, "pc_target: deposit needs at least two mons") end
+    -- This input route chooses box 0, then withdraws slot 0; bind that cursor to
+    -- the selected identity BEFORE pressing buttons, including on resumed runs.
+    if before.current_box ~= 0 then G.finish(false, "pc_box_cursor: current box must be 0") end
+    for _, mon in pairs(before.boxes) do
+        if mon.box == 0 and mon.slot == 0 then
+            G.finish(false, "pc_box_slot: box 0 slot 0 must be empty before deposit")
+        end
+    end
+    return before.party.order[2]
+end
 
 --- Hunt a wild encounter by walking a PINNED TALL-GRASS LOOP.
 ---
@@ -677,25 +923,25 @@ local function hunt_encounter(cp, label, cycles)
     return landed_in_battle
 end
 
---- Walk out of the house a whiteout put us in, back to Pallet Town's door-exit tile (6,9) --
---- the tile every town path already starts from. Each leg's own `recover` continues from here.
+--- Route either admitted respawn interior to Pallet Town (6,9), the shared resume origin.
+--- The house's actual door landing is (6,8); the following verified step reaches (6,9).
 local function recover_to_pallet_town(cp)
-    if play.map(cp) ~= HEAL_MAP then
-        G.shot("stuck")
-        G.finish(false, string.format(
-            "whiteout recovery: expected the heal map %d, found %d at %s",
-            HEAL_MAP, play.map(cp), play.at(cp)))
-    end
-    play.follow(cp, "heal_house_to_door", "whiteout-recovery")
-    if not play.enter_warp(cp, "Down", 30) then
-        G.finish(false, "whiteout recovery: the house's front door never fired a warp")
-    end
-    local x, y = G.pos(cp)
-    if x ~= 6 or y ~= 9 then
-        G.shot("stuck")
-        G.finish(false, string.format(
-            "whiteout recovery: leaving the house landed at (%d,%d), not Pallet Town's (6,9)",
-            x, y))
+    local dest = whiteout_destination(cp)
+    verify_destination(cp, "whiteout_recovery", dest)
+    if dest.group == 4 and dest.num == 0 then
+        play.follow(cp, "heal_house_to_door", "whiteout-recovery")
+        warp_to(cp, "Down", 30, DEST.house_exit, "whiteout house exit")
+        play.follow(cp, "house_exit_to_town_start", "whiteout-recovery")
+    elseif dest.group == 5 and dest.num == 4 then
+        play.follow(cp, "heal_center_to_door", "whiteout-recovery")
+        warp_to(cp, "Down", 30, DEST.center_exit, "whiteout Center exit")
+        play.follow(cp, "pokecenter_door_to_route1_edge", "whiteout-recovery")
+        warp_to(cp, "Down", 30, DEST.route1_north, "whiteout Viridian->Route1")
+        play.follow(cp, "route1_north_to_south_edge", "whiteout-recovery")
+        warp_to(cp, "Down", 30, DEST.pallet_north, "whiteout Route1->Pallet")
+        play.follow(cp, "pallet_north_to_town_start", "whiteout-recovery")
+    else
+        G.finish(false, "whiteout_recovery_unsupported: no route for this respawn map")
     end
     G.phase("recovered", "back outside at " .. play.at(cp))
 end
@@ -708,12 +954,15 @@ end
 --- its battles must raise the same signal itself, or a whiteout here just runs off the end of
 --- the leg looking like a plain loss. `before_map/x/y` is the position the caller captured right
 --- as the battle started (same convention as handle_encounter's own `before`).
-local function check_whiteout(cp, before_map, before_x, before_y)
+check_whiteout = function(cp, before_map, before_x, before_y, dest)
     local nmap = play.map(cp)
-    if nmap == HEAL_MAP and before_map ~= HEAL_MAP then
+    local x, y = G.pos(cp)
+    if nmap ~= before_map or x ~= before_x or y ~= before_y then
+        dest = dest or whiteout_destination(cp)
+        if not verify_destination(cp, "whiteout_landing", dest) then return end
         G.phase("whiteout", string.format(
             "battle displaced the player from map %s (%d,%d) to the heal map %s at %s",
-            tostring(before_map), before_x, before_y, tostring(HEAL_MAP), play.at(cp)))
+            tostring(before_map), before_x, before_y, tostring(nmap), play.at(cp)))
         error({ whiteout = true, map = nmap, from_map = before_map,
                 from_x = before_x, from_y = before_y }, 0)
     end
@@ -786,9 +1035,12 @@ end
 --- fix, applied where a leg fights its own.
 local function resolve_battle_and_check_whiteout(cp, mash_budget)
     local before_map, before_x, before_y = play.map(cp), G.pos(cp)
+    local dest = whiteout_destination(cp)
     local resolved = play.mash_a(mash_budget or 160, function() return not play.in_battle(cp) end)
-    if resolved then play.wait_scene_settled(cp, 1800) end
-    check_whiteout(cp, before_map, before_x, before_y)
+    if resolved and not play.wait_scene_settled(cp, 1800) then
+        G.finish(false, "whiteout_settle: post-battle scene never settled"); return false
+    end
+    check_whiteout(cp, before_map, before_x, before_y, dest)
     return resolved
 end
 
@@ -811,9 +1063,7 @@ end
 local function recover_to_route1_grass(cp)
     recover_to_pallet_town(cp)
     play.follow(cp, "town_start_to_oak_trigger", "whiteout-recovery")
-    if not play.enter_warp(cp, "Up", 30) then
-        G.finish(false, "whiteout recovery: PalletTown->Route1 crossing never fired")
-    end
+    warp_to(cp, "Up", 30, DEST.route1_south, "whiteout Pallet->Route1")
     play.follow(cp, "route1_south_to_grass_spot", "whiteout-recovery")
     grass_step = 1
     G.phase("recovered", "back in the grass at " .. play.at(cp))
@@ -923,6 +1173,7 @@ LEGS[#LEGS + 1] = {
             G.shot("stuck")
             G.finish(false, "starter: Oak's intercept never warped the player into the lab")
         end
+        verify_destination(cp, "starter Oak warp", DEST.lab)
         G.phase("in-lab", play.where(cp))
         -- GROUND TRUTH, not position/idle guessing (PHYSICAL runs 4-7: position (6,4) + script
         -- idle + field controls unlocked was NOT sufficient — Oak was still talking). scripts.inc
@@ -1009,6 +1260,7 @@ LEGS[#LEGS + 1] = {
             G.shot("stuck")
             G.finish(false, "starter: gPlayerPartyCount never left 0 after interacting with the ball")
         end
+        verify_starter()
         G.phase("starter-got", "party=" .. play.party_count())
 
         -- Phase 2: the trailing "received {mon} from OAK!" message/fanfare, the nickname
@@ -1063,12 +1315,13 @@ LEGS[#LEGS + 1] = {
         -- guess. What the rival does in response is not controlled — RISK stated in the header.
         -- A-only (mash_a): G.mash's Start pulse must never fire while a battle is up. A loss is
         -- an acceptable outcome here (see source: RIVAL_BATTLE_HEAL_AFTER, no whiteout), so the
-        -- terminal is only in_battle clearing, not a win.
+        -- terminal allows WON or LOST, followed by the lab script's flag and scene writes.
         local ended = play.mash_a(1200, function() return not play.in_battle(cp) end)   -- PHYSICAL run 10: the fight was WON at ~315 taps but the end-of-battle text still needs presses
         if not ended then
             G.shot("stuck")
             G.finish(false, "rival_battle: in_battle never cleared within budget")
         end
+        local outcome = battle_outcome()  -- retain this battle's result before the scene advances
         G.phase("battle-end")
         -- Post-battle is scripted too (EndRivalBattle: HealPlayerParty, "go toughen up your
         -- mon" message, the rival's own applymovement exit): wait_scene_settled (A-only while
@@ -1078,6 +1331,7 @@ LEGS[#LEGS + 1] = {
             G.shot("stuck")
             G.finish(false, "rival_battle: post-battle scene never settled (idle+unlocked 60f)")
         end
+        verify_rival(cp, outcome)
         G.phase("rival-gone", string.format("at=(%d,%d)", G.pos(cp)))
     end,
 }
@@ -1117,6 +1371,7 @@ LEGS[#LEGS + 1] = {
                 "leave_lab_for_parcel: the lab exit never fired a warp; obj0=(%d,%d) sb1=(%d,%d)",
                 ox2, oy2, G.pos(cp)))
         end
+        verify_destination(cp, "leave_lab_for_parcel", DEST.lab_exit)
         G.phase("outside", play.where(cp))
     end,
 }
@@ -1140,11 +1395,11 @@ LEGS[#LEGS + 1] = {
     },
     run = function(cp)
         play.follow(cp, "lab_exit_to_route1_edge", "parcel_fetch")
-        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "parcel_fetch: PalletTown->Route1 crossing never fired") end
+        warp_to(cp, "Up", 30, DEST.route1_south, "parcel_fetch Pallet->Route1")
         play.follow(cp, "route1_south_to_north_edge", "parcel_fetch")
-        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "parcel_fetch: Route1->ViridianCity crossing never fired") end
+        warp_to(cp, "Up", 30, DEST.viridian_south, "parcel_fetch Route1->Viridian")
         play.follow(cp, "route1_edge_to_mart_door", "parcel_fetch")
-        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "parcel_fetch: the mart door never fired a warp") end
+        warp_to(cp, "Up", 30, DEST.mart, "parcel_fetch mart door")
         G.phase("in-mart", play.where(cp))
         -- Let the ON_FRAME script run and clear its own message boxes with A; the scene owns
         -- player movement. wait_scene_settled: idle+unlocked debounced 60 frames, never a
@@ -1153,7 +1408,8 @@ LEGS[#LEGS + 1] = {
             G.shot("stuck")
             G.finish(false, "parcel_fetch: the mart's parcel scene never returned control")
         end
-        G.phase("parcel-scene-done", string.format("at=(%d,%d)", G.pos(cp)))
+        verify_parcel_fetched(cp)
+        G.phase("parcel-scene-done", string.format("at=(%d,%d), parcel read back", G.pos(cp)))
     end,
 }
 
@@ -1165,6 +1421,13 @@ LEGS[#LEGS + 1] = {
 -- generously: the removeitem fires after only the first two message boxes
 -- (Text_OakHaveSomethingForMe, then the "Delivered Oak's Parcel" fanfare message) clear.
 local function start_oak_delivery(cp, label)
+    if not sb1_ptr(cp) then
+        G.finish(false, label .. ": parcel_fetch_precondition: key pocket unreadable"); return
+    end
+    if not key_items_has_parcel(cp) then
+        G.finish(false, label .. ": parcel_fetch_precondition: mart/parcel_fetch left no "
+                 .. "ITEM_OAKS_PARCEL in the key pocket"); return
+    end
     for _ = 1, 400 do
         if not key_items_has_parcel(cp) then return end
         G.tap("A", 3, 16)
@@ -1201,7 +1464,11 @@ local function verify_parcel_delivered(cp, label)
         G.finish(false, label .. ": the POKe BALLS pocket has no ITEM_POKE_BALL")
         return
     end
-    G.phase("balls-received", label .. ": parcel gone, dex flag set, POKe BALL in the pocket")
+    -- scripts.inc:678 is AFTER the dex flag and ball gift: this is the scene terminal.
+    if lab_scene_var(cp) ~= 6 then
+        G.finish(false, label .. ": parcel_delivery_scene: lab scene never reached 6"); return
+    end
+    G.phase("balls-received", label .. ": parcel gone, dex flag set, POKe BALL in the pocket, scene=6")
 end
 
 LEGS[#LEGS + 1] = {
@@ -1219,7 +1486,7 @@ LEGS[#LEGS + 1] = {
     -- to redo is the walk from the town to the lab.
     deliver_from_town = function(cp)
         play.follow(cp, "town_start_to_lab_door", "parcel_deliver")
-        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "parcel_deliver: the lab door never fired a warp") end
+        warp_to(cp, "Up", 30, DEST.lab, "parcel_deliver lab door")
         play.follow(cp, "lab_entrance_to_oak", "parcel_deliver")
     end,
     -- playlib calls recover() after a whiteout, then resume() instead of run().
@@ -1230,22 +1497,23 @@ LEGS[#LEGS + 1] = {
         -- entry in this file that isn't independently source-BFS'd, because the engine (not the
         -- player) drove that walk. Verified at runtime by G.pos same as every other step.
         play.follow(cp, "mart_scene_end_to_exit", "parcel_deliver")
-        if not play.enter_warp(cp, "Down", 30) then G.finish(false, "parcel_deliver: the mart exit never fired a warp") end
+        warp_to(cp, "Down", 30, DEST.mart_exit, "parcel_deliver mart exit")
 
         -- HEAL FIRST (FR lane run 14: the starter fainted in the Route 1 grass on the way home
         -- and the player whited out). A full party is the cheap prevention; playlib's whiteout
         -- recovery below is the expensive cure, and both now exist.
         play.follow(cp, "mart_door_to_pokecenter_door", "parcel_deliver")
-        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "parcel_deliver: the PokeCenter door never fired a warp") end
+        warp_to(cp, "Up", 30, DEST.center, "parcel_deliver Center door")
         heal_at_nurse(cp, "parcel_deliver")
-        if not play.enter_warp(cp, "Down", 30) then G.finish(false, "parcel_deliver: the PokeCenter exit never fired a warp") end
+        play.follow(cp, "heal_center_to_door", "parcel_deliver")
+        warp_to(cp, "Down", 30, DEST.center_exit, "parcel_deliver Center exit")
         play.follow(cp, "pokecenter_door_to_route1_edge", "parcel_deliver")
 
-        if not play.enter_warp(cp, "Down", 30) then G.finish(false, "parcel_deliver: ViridianCity->Route1 crossing never fired") end
+        warp_to(cp, "Down", 30, DEST.route1_north, "parcel_deliver Viridian->Route1")
         play.follow(cp, "route1_north_to_south_edge", "parcel_deliver")
-        if not play.enter_warp(cp, "Down", 30) then G.finish(false, "parcel_deliver: Route1->PalletTown crossing never fired") end
+        warp_to(cp, "Down", 30, DEST.pallet_north, "parcel_deliver Route1->Pallet")
         play.follow(cp, "route1_edge_to_lab_door", "parcel_deliver")
-        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "parcel_deliver: the lab door never fired a warp") end
+        warp_to(cp, "Up", 30, DEST.lab, "parcel_deliver lab door")
         play.follow(cp, "lab_entrance_to_oak", "parcel_deliver")
         G.tap("Up", 2, 13)
         -- Talking to Oak with the parcel triggers the whole delivery + Pokedex + 5-balls
@@ -1438,8 +1706,9 @@ LEGS[#LEGS + 1] = {
             G.shot("stuck")
             G.finish(false, "route1_catch: the lab exit never fired a warp")
         end
+        verify_destination(cp, "route1_catch lab exit", DEST.lab_exit)
         play.follow(cp, "lab_exit_to_route1_edge", "route1_catch")
-        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "route1_catch: PalletTown->Route1 crossing never fired") end
+        warp_to(cp, "Up", 30, DEST.route1_south, "route1_catch Pallet->Route1")
         play.follow(cp, "route1_south_to_grass_spot", "route1_catch")
         route1_catch_loop(cp)
     end,
@@ -1526,13 +1795,15 @@ LEGS[#LEGS + 1] = {
     },
     run = function(cp)
         play.follow(cp, "route1_grass_to_north_edge", "viridian_pc_deposit_withdraw")
-        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "viridian_pc: Route1->ViridianCity crossing never fired") end
+        warp_to(cp, "Up", 30, DEST.viridian_south, "viridian_pc Route1->Viridian")
         play.follow(cp, "route1_edge_to_pokecenter_door", "viridian_pc_deposit_withdraw")
-        if not play.enter_warp(cp, "Up", 30) then G.finish(false, "viridian_pc: the PokeCenter door never fired a warp") end
+        warp_to(cp, "Up", 30, DEST.center, "viridian_pc Center door")
         play.follow(cp, "pokecenter_entrance_to_pc", "viridian_pc_deposit_withdraw")
         G.tap("Up", 2, 13)               -- face the (solid) PC metatile at (11,1)
 
-        local before = play.party_snapshot()
+        local before_world = owned_snapshot("viridian_pc before")
+        local before = before_world.party
+        local target = pc_deposit_target(before_world)
         if before.n < 2 then
             G.finish(false, string.format(
                 "viridian_pc: the party holds %d mon. The storage main menu REFUSES DEPOSIT at "
@@ -1552,7 +1823,9 @@ LEGS[#LEGS + 1] = {
         pc_press("A", PC_WAIT.commit)                                    -- box 0 -> TryStore...
         leave_storage(cp, "viridian_pc")
 
-        local mid = play.party_snapshot()
+        local mid_world = owned_snapshot("viridian_pc deposited")
+        local mid = mid_world.party
+        verify_pc_transfer("viridian_pc deposit", "deposit", before_world, mid_world, target)
         if mid.n ~= before.n - 1 then
             G.shot("stuck")
             G.finish(false, string.format(
@@ -1580,7 +1853,9 @@ LEGS[#LEGS + 1] = {
         pc_press("A", PC_WAIT.commit)                                    -- WITHDRAW
         leave_storage(cp, "viridian_pc")
 
-        local after = play.party_snapshot()
+        local after_world = owned_snapshot("viridian_pc withdrawn")
+        local after = after_world.party
+        verify_pc_transfer("viridian_pc withdraw", "withdraw", mid_world, after_world, target)
         if after.n ~= mid.n + 1 then
             G.shot("stuck")
             G.finish(false, string.format(
@@ -1620,12 +1895,14 @@ LEGS[#LEGS + 1] = {
     run = function(cp)
         -- The leg runs straight after the round trip, so the player is already at the PC.
         G.tap("Up", 2, 13)
-        local before = play.party_snapshot()
+        local before_world = owned_snapshot("pc_release before")
+        local before = before_world.party
         if before.n < 2 then
             G.finish(false, string.format(
                 "pc_release: the party holds %d mon; DEPOSIT mode (which is how the party-side "
                 .. "popup is reached) is refused at one", before.n))
         end
+        local target = before.order[2]  -- Down from slot 0 selects slot 1, before compaction
 
         open_storage_menu()
         pc_press("Down", PC_WAIT.cursor); pc_press("A", PC_WAIT.menu)    -- DEPOSIT (party area)
@@ -1642,7 +1919,9 @@ LEGS[#LEGS + 1] = {
         pc_press("A", PC_WAIT.commit)                                    -- MSG_BYE_BYE
         leave_storage(cp, "pc_release")
 
-        local after = play.party_snapshot()
+        local after_world = owned_snapshot("pc_release after")
+        local after = after_world.party
+        verify_pc_transfer("pc_release", "release", before_world, after_world, target)
         if after.n ~= before.n - 1 then
             G.shot("stuck")
             G.finish(false, string.format(
@@ -1654,14 +1933,8 @@ LEGS[#LEGS + 1] = {
         if not gone then G.finish(false, "pc_release: " .. why) end
         local ok, bad = play.survivors_intact(before, after, gone)
         if not ok then G.finish(false, "pc_release: " .. bad) end
-        -- WHAT THIS CANNOT PROVE, stated rather than glossed: that the mon was RELEASED and not
-        -- deposited. Telling those apart needs a box read, and vanilla FRLG has no decrypt-free
-        -- box observable pinned (the species lives inside the encrypted substructures) -- which
-        -- is exactly why this leg was OPEN before. The engine sites are what the observer is
-        -- here for: pc_release_begin and pc_release fire on this route and on no other.
         G.phase("released", string.format(
-            "party %d -> %d, key %s gone (the observer's pc_release pair is the proof it was a "
-            .. "release and not a deposit; no box read exists to check from here)",
+            "party %d -> %d, selected key %s gone from party and all 14 boxes; boxes unchanged",
             before.n, after.n, gone))
     end,
 }
@@ -1777,9 +2050,7 @@ return {
     follow = play.follow,
     in_battle = play.in_battle,
     LAB_SCENE_VAR_OFFSET = LAB_SCENE_VAR_OFFSET,
-    -- test hooks (card gen3-P3-C3-18): the whiteout signal a leg that owns its own battle must
-    -- raise itself, the heal map id it compares against, and the checkpoint-battle-state guard.
-    HEAL_MAP = HEAL_MAP,
+    -- Whiteout signal and checkpoint-battle-state guard (C3-18, C3-29).
     check_whiteout = check_whiteout,
     save_battle_state_once = save_battle_state_once,
     -- test hooks (card gen3-P3-C3-21): the action-menu witness address/value pair and cursor
@@ -1818,4 +2089,14 @@ return {
     pokeballs_pocket_has_poke_ball = pokeballs_pocket_has_poke_ball,
     start_oak_delivery = start_oak_delivery,
     verify_parcel_delivered = verify_parcel_delivered,
+    -- C3-29 fake-RAM falsifiers; these are read-only FR projections.
+    SB1_LAST_HEAL_OFFSET = SB1_LAST_HEAL_OFFSET,
+    whiteout_destination = whiteout_destination,
+    verify_destination = verify_destination, DEST = DEST, warp_to = warp_to,
+    recover_to_pallet_town = recover_to_pallet_town,
+    recover_to_route1_grass = recover_to_route1_grass,
+    verify_starter = verify_starter, verify_rival = verify_rival,
+    verify_parcel_fetched = verify_parcel_fetched,
+    owned_snapshot = owned_snapshot, verify_pc_transfer = verify_pc_transfer,
+    pc_deposit_target = pc_deposit_target,
 }
