@@ -14,10 +14,12 @@
 --     would involve the bench. prep.target_key/slot/hp must remain unchanged on EVERY frame.
 --     Then normal Route2/Forest route to Rick; return parked, battle_permit=true, outcome=0,
 --     is_trainer=true, trainer_id=expected. Integration owns this route/preparation binding.
---     Viridian decomp BFS (layouts/map.bin + map.json objects): (24,39) U8 L2 U12 ->(22,19),
---     then U2 L14 U12 R11 U5 R1 ->(20,0); U crosses to Route2(8,79). This avoids BOTH
---     tutorial triggers (20,8)/(22,8) and the scene1 old man's relocated (21,8). Stop/retry
---     moving NPCs normally. Reuse the plan's Route2/gate/Forest route to Rick's sight (42,45).
+--     Route prerequisite: a decomp BFS blocking ALL objects finds no ordinary-walk route
+--     around BOTH active tutorial tiles(20,8)/(22,8) and scene1 old man(21,8). The apparent
+--     west detour crosses the Cut tree(18,5) and is invalid. Integration must confirm a normal
+--     tutorial-completion prerequisite (talk from21,9 is a candidate); scene2 then disables
+--     the coordinate triggers. Do not claim a literal tile-avoidance shortcut is verified.
+--     Reuse the plan's Route2/gate/Forest route after reaching(20,0), U to Route2(8,79).
 --     pret trainer_parties.h:273-284: Rick's Weedle6 (Poison Sting/String Shot), Caterpie6
 --     (Tackle/String Shot), .iv0 = IV0 (battle_main.c:1576). The rival .iv50 = IV6. Both town
 --     fixtures have no Potions. Coordinator FC-T2-FLOOR ruling (Monte Carlo, not reproduced
