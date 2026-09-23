@@ -78,6 +78,9 @@ def test_every_scalar_literal_survives_at_the_same_key(name: str) -> None:
     assert len(found) >= 15, f"{name}: the slice regex found only {len(found)} literals"
     for key, lit in found.items():
         assert key in flat, f"{name}: {key} is missing from profile.json"
+        if name == "leafgreen" and key == "BASESTATS_ADDR":
+            assert flat[key] == 0x08254760  # LG symbol, not the shared FR default
+            continue
         assert flat[key] == _num(lit), f"{name}: {key} changed value"
 
 
@@ -152,6 +155,8 @@ def test_vanilla_storage_and_party_facts(name: str) -> None:
         assert key in title["_src"], f"{name}: {key} has no _src citation"
         assert path in title["_src"][key], f"{name}: {key} citation does not name its own .sym file"
         base_src[key] = title["_src"][key]
+    if name == "leafgreen":
+        base_src["rom.BASESTATS_ADDR"] = title["_src"]["rom.BASESTATS_ADDR"]
     assert title["_src"] == base_src
 
 
@@ -210,6 +215,7 @@ def test_rr_party_capacity_comes_from_its_existing_detector() -> None:
 
 
 RR_BINARY_VALUES = {
+    ("ram", "BATTLE_CONTROLLER_EXEC_FLAGS_ADDR"): 0x02023BC8,
     ("derived", "SB2_OT_ID_OFFSET"): 0xA,
     ("rom", "EXPERIENCE_TABLES_ADDR"): 0x0915514C,
     ("derived", "EXPERIENCE_TABLE_ENTRY_COUNT"): 256,
@@ -237,7 +243,8 @@ def test_rr_rom_pins_are_in_the_generated_profile():
 
 @pytest.mark.parametrize("anchor", ["calculate_pp", "box_level", "trainer_id", "pp_up_masks",
                                     "action_callback_store", "action_callback_pool",
-                                    "action_callback_entry"])
+                                    "action_callback_entry", "controller_exec_marker",
+                                    "controller_exec_reader", "controller_exec_reader_pool"])
 def test_rr_rom_anchor_mutation_refuses_the_facts(anchor):
     from tools.gen_gen3_profile import RR_ROM_ANCHORS, rr_rom_facts
 
@@ -282,6 +289,25 @@ def test_frlg_experience_dimensions_are_explicit(name):
     d = _title(name)["derived"]
     assert d["EXPERIENCE_TABLE_ENTRY_COUNT"] == 101
     assert d["MAX_LEVEL"] == 100
+
+
+def test_rr_exec_flags_checkpoint_reads_the_new_profile_pin():
+    from tools.gen_gen3_write_checkpoint import battle_block
+
+    profile = _load("gen3_rr")
+    block, dropped = battle_block("radical_red", {}, True, profile)
+    clause = next(c for c in block["clauses"] if c["name"] == "battle_exec_flags_idle")
+    assert (clause["address"], clause["width"], clause["expect"]) == (0x02023BC8, 4, 0)
+    assert "rom:" in clause["source"] and not dropped
+    profile["titles"]["radical_red"]["ram"]["BATTLE_CONTROLLER_EXEC_FLAGS_ADDR"] = 123456
+    block, _ = battle_block("radical_red", {}, True, profile)
+    assert next(c for c in block["clauses"] if c["name"] == "battle_exec_flags_idle")["address"] == 123456
+
+
+def test_leafgreen_base_stats_address_comes_from_its_own_symbol():
+    lines = (REPO / "data/gen3/pret/pokeleafgreen.sym").read_text().splitlines()
+    address = int(next(line.split()[0] for line in lines if line.endswith(" gSpeciesInfo")), 16)
+    assert _title("leafgreen")["rom"]["BASESTATS_ADDR"] == address == 0x08254760
 
 
 @pytest.mark.parametrize("name,symbol,section,key", [

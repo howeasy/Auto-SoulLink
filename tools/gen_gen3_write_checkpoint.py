@@ -470,17 +470,13 @@ BATTLE_CLAUSES_RR = (
     # 0x03004F84 / 0x08014041 and stores the callback).  Read, never retyped.
     ("battle_main_func", "BATTLE_MAIN_FUNC_ADDR", 0, 4, None, "eq_rom", "HANDLE_TURN_ACTION_SELECTION_ADDR"),
     ("battle_comm_0", "BATTLE_COMM_ADDR", 0, 1, None, "eq", 1),
+    ("battle_exec_flags_idle", "BATTLE_CONTROLLER_EXEC_FLAGS_ADDR", 0, 4, None, "eq", 0),
     ("battle_not_link", "BATTLE_TYPE_ADDR", 0, 4, 0x02, "eq", 0),
     ("battle_engine_loaded", "BATTLE_MONS_ADDR", 0x2C, 2, None, "nonzero", None),
     ("battle_outcome_open", "BATTLE_OUTCOME_ADDR", 0, 1, None, "eq", 0),
 )
-# The RR clause set is deliberately smaller: gBattleMainFunc's *expect* is a FireRed code address
-# (INFER for CFRU) and gBattleControllerExecFlags has no RR-PROD source at all.  Both are reported
-# instead of emitted, so a reader can see what the RR predicate does not yet carry.
-BATTLE_DROPPED_RR = (
-    "battle_exec_flags_idle: gBattleControllerExecFlags has no RR-PROD address (not in "
-    "profile.ram, not read by the old client)",
-)
+# Both RR callback and controller-exec word are now ROM-pinned in profile.json.
+BATTLE_DROPPED_RR = ()
 BATTLE_COMMIT_GUARD = {"symbol": "gBattleCommunication", "offset": 0, "width": 1, "compare": "lt",
                        "value": 3, "indexed_by": "battler"}
 BATTLE_COMMIT_GUARD_RR = {"symbol": "BATTLE_COMM_ADDR", "offset": 0, "width": 1, "compare": "lt",
@@ -538,6 +534,8 @@ def battle_block(title: str, syms, is_rr: bool, profile: dict | None) -> tuple[d
             entry = {"name": name, "symbol": key, "address": ram[key], "offset": offset,
                      "width": width, "compare": compare,
                      "source": BATTLE_SOURCE_RR % key}
+            if key == "BATTLE_CONTROLLER_EXEC_FLAGS_ADDR":
+                entry["source"] = f"profile.ram.{key}; " + profile["titles"][title]["_src"][f"ram.{key}"]
             if mask is not None:
                 entry["mask"] = mask
             if compare == "eq_rom":

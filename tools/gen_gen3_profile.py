@@ -145,6 +145,13 @@ RR_DERIVED = {
 # for which field is being accessed. No Capstone dependency in the generator.
 RR_WITNESS_SHA1 = "b7d1e0756fcc66575878affc8f7b95c45386bb1c"
 RR_ROM_ANCHORS = {
+    "controller_exec_marker": (0x17248,
+        "00b50006030e0848006802210840002810d0064a06499800401801680907106808431060"
+        "0ee000004c2b0202c83b02025ce42508044a054998004018116800680143116001bc0047"
+        "c83b02025ce42508"),
+    "controller_exec_reader": (0x141DC,
+        "154c1649164b1d78a800401802681001f0210906084310431102084312031043216801409846002901d0"),
+    "controller_exec_reader_pool": (0x14234, "c83b0202"),
     "calculate_pp": (0x4101C,
         "10b50004000c1206120e0d4c43001b189b001b191c790b48101803780b4052001341"
         "9800c018800060436421a2f1e6ff24182406240e201c10bc02bc08470000d0211509a1de2508"),
@@ -205,7 +212,14 @@ def rr_rom_facts(rom: bytes | None = None) -> dict:
         raise ValueError("RR trainer reader no longer uses canonical gSaveBlock2Ptr")
     if literal(0x1070626) != 0x03004F84 or read(0x107062A, 2) != 0x601A:
         raise ValueError("RR callback witness no longer stores into gBattleMainFunc")
+    exec_flags = literal(0x1725A)
+    if exec_flags != literal(0x1727C) or exec_flags != literal(0x141DC):
+        raise ValueError("RR controller execution-flag writer/reader disagree")
     facts = {
+        ("ram", "BATTLE_CONTROLLER_EXEC_FLAGS_ADDR"): (exec_flags,
+            "controller_exec_marker:LDR@0x1725A/0x1727C pools@0x17274/0x17290; "
+            "OR/STR@0x17266..0x1726A,0x17284..0x1728A; "
+            "controller_exec_reader:LDR@0x141DC pool@0x14234,word-test@0x141FC..0x14204"),
         ("derived", "SB2_OT_ID_OFFSET"): (ot_offsets[-1], "trainer_id:0xCC1E4 byte assembly +0xA..D"),
         ("rom", "EXPERIENCE_TABLES_ADDR"): (literal(0x3E850), "box_level:LDR@0x3E850 pool@0x3E894"),
         ("derived", "EXPERIENCE_TABLE_ENTRY_COUNT"): (row_bytes // 4, "box_level:0x3E85E..0x3E862 row stride / u32"),
@@ -522,6 +536,15 @@ def build(pack: str, profiles: dict, source: dict) -> dict:
                 entry[section][name] = int(sym_match[1], 16)
                 entry["_src"][f"{section}.{name}"] = (
                     f"{path}:{_line_of(text, sym_match.start())} ({symbol}; {PRET_PIN})")
+            # C4-3c separately requested correction: the shared legacy vanilla
+            # table carries FR's default; LG must publish its own table address.
+            if title == "leafgreen":
+                match = re.search(r"^([0-9a-fA-F]{8})\s+g\s+[0-9a-fA-F]+\s+gSpeciesInfo$", text, re.M)
+                if not match:
+                    raise ValueError("LeafGreen gSpeciesInfo symbol missing")
+                entry["rom"]["BASESTATS_ADDR"] = int(match[1], 16)
+                entry["_src"]["rom.BASESTATS_ADDR"] = (
+                    f"{path}:{_line_of(text, match.start())} (gSpeciesInfo; {PRET_PIN})")
     if pack == "gen3_rr":
         # The existing RR detector explicitly rejects party counts above this limit.
         text = (REPO / SRC).read_text(encoding="utf-8")

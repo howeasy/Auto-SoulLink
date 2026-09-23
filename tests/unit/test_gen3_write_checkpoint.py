@@ -241,8 +241,8 @@ OVERWORLD_PREDICATES = ("callback1", "callback2", "field_controls_locked", "in_b
                         "soft_reset_disabled")
 FR_BATTLE_CLAUSES = ("battle_main_func", "battle_comm_0", "battle_exec_flags_idle",
                      "battle_not_link", "battle_engine_loaded", "battle_outcome_open")
-RR_BATTLE_CLAUSES = ("battle_main_func", "battle_comm_0", "battle_not_link",
-                     "battle_engine_loaded", "battle_outcome_open")
+# RR's exec-flags clause is pinned from the RR binary (gen3-RR-execflags), so RR matches FR/LG.
+RR_BATTLE_CLAUSES = FR_BATTLE_CLAUSES
 
 
 @pytest.mark.parametrize("pack,title", PACK_TITLES)
@@ -296,8 +296,8 @@ def test_rr_battle_clauses_are_rr_facts_not_sym_assertions() -> None:
     main = next(c for c in block["clauses"] if c["name"] == "battle_main_func")
     assert main["expect"] == rom["HANDLE_TURN_ACTION_SELECTION_ADDR"] == 0x08014041
     assert main["expect_symbol"] == "HANDLE_TURN_ACTION_SELECTION_ADDR"
-    # the one clause with no RR-PROD source at all stays out, and is reported by the generator
-    assert "battle_exec_flags_idle" not in {c["name"] for c in block["clauses"]}
+    flags = next(c for c in block["clauses"] if c["name"] == "battle_exec_flags_idle")
+    assert "rom:" in flags["source"] and flags["expect"] == 0 and flags["width"] == 4
 
 
 def test_native_block_is_the_profile_and_stays_inside_ewram() -> None:

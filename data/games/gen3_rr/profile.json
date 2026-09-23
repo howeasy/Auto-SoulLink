@@ -148,6 +148,18 @@
           "expected_hex": "10B50004000C1206120E0D4C43001B189B001B191C790B48101803780B40520013419800C018800060436421A2F1E6FF24182406240E201C10BC02BC08470000D0211509A1DE2508",
           "rom_offset": 266268
         },
+        "controller_exec_marker": {
+          "expected_hex": "00B50006030E0848006802210840002810D0064A064998004018016809071068084310600EE000004C2B0202C83B02025CE42508044A054998004018116800680143116001BC0047C83B02025CE42508",
+          "rom_offset": 94792
+        },
+        "controller_exec_reader": {
+          "expected_hex": "154C1649164B1D78A800401802681001F0210906084310431102084312031043216801409846002901D0",
+          "rom_offset": 82396
+        },
+        "controller_exec_reader_pool": {
+          "expected_hex": "C83B0202",
+          "rom_offset": 82484
+        },
         "pp_up_masks": {
           "expected_hex": "030C30C0",
           "rom_offset": 2481825
@@ -174,6 +186,7 @@
         "derived.SB1_LOCATION_MAP_NUM_OFFSET": "lua/memory_gba.lua:272,1113 (old-client RR profile, production-tested)",
         "derived.SB2_OT_ID_OFFSET": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c trainer_id:0xCC1E4 byte assembly +0xA..D",
         "derived.SHEDINJA_SPECIES_ID": "data/games/gen3_frlge/rr_species.json:\"303\"=\"Shedinja\" (RR species table; CFRU keeps this id unrenumbered)",
+        "ram.BATTLE_CONTROLLER_EXEC_FLAGS_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c controller_exec_marker:LDR@0x1725A/0x1727C pools@0x17274/0x17290; OR/STR@0x17266..0x1726A,0x17284..0x1728A; controller_exec_reader:LDR@0x141DC pool@0x14234,word-test@0x141FC..0x14204",
         "ram.SB1_PTR_ADDR": "lua/games/gen3_frlge.lua:264 (the old client's address, kept for parity: it is a literal-pool constant inside IntrMain_Buffer, not the pointer -- the new client reads write_checkpoint.pointers.gSaveBlock1Ptr, which is ROM-derived)",
         "rom.BATTLE_MOVES_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c calculate_pp:LDR@0x41026 pool@0x4105C",
         "rom.EXPERIENCE_TABLES_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c box_level:LDR@0x3E850 pool@0x3E894",
@@ -258,6 +271,7 @@
         "BATTLERS_COUNT_ADDR": 33700812,
         "BATTLER_PARTY_INDEXES_ADDR": 33700814,
         "BATTLE_COMM_ADDR": 33701506,
+        "BATTLE_CONTROLLER_EXEC_FLAGS_ADDR": 33700808,
         "BATTLE_MAIN_FUNC_ADDR": 50352004,
         "BATTLE_MONS_ADDR": 33700836,
         "BATTLE_OUTCOME_ADDR": 33701514,
