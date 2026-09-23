@@ -33,6 +33,10 @@ def _replace_tag(text, tag, value):
     return "\n".join(lines + [f"{tag} {json.dumps(value)}"])
 
 
+def _replace_tag_in_place(text, tag, value):
+    return "\n".join(f"{tag} {json.dumps(value)}" if line.startswith(tag + " ") else line for line in text.splitlines())
+
+
 def _edit_saved_record(path, layout, slot, offset, payload):
     raw = bytearray(path.read_bytes())
     region, start = _region_and_offset(layout, "wPartyMon1")
@@ -125,7 +129,7 @@ def test_faint_saved_bytes_and_checkpoint_pass(faint_case):
     assert oracles.faint_oracle(results, data_dir=data_dir) is None
 
 
-def _memorial_case(faint_case):
+def _memorial_case(faint_case, native=True):
     results, data_dir, _ = faint_case
     path = Path(data_dir) / "links.json"
     doc = json.loads(path.read_text())
@@ -135,18 +139,55 @@ def _memorial_case(faint_case):
     path.write_text(json.dumps(doc))
     log = Path(data_dir) / "server.log"
     text = log.read_text(encoding="utf-8")
-    text += f"[b] memorialize_failed key={row['b']['key'][:8]} reason=unsupported\n"
-    text += f"[a] memorialize_failed key={row['a']['key'][:8]} reason=unsupported\n"
-    text += "pair in route_29 marked memorial (with failed memorialization)\n"
+    event = "memorialize_done" if native else "memorialize_failed"
+    text += f"[b] {event} key={row['b']['key'][:8]}\n"
+    text += f"[a] {event} key={row['a']['key'][:8]}\n"
+    text += "pair in route_29 fully memorialized\n" if native else "pair in route_29 marked memorial (with failed memorialization)\n"
     log.write_text(text, encoding="utf-8")
+    if native:
+        layout = codec.for_foundation("crystal")
+        for inst in ("a", "b"):
+            witness = oracles._last_tagged(results[inst], "SAVE_WITNESS")
+            save = Path(witness["saveram_path"])
+            raw = bytearray(save.read_bytes())
+            party = codec.decode_saved_party(bytes(raw[:CART]), layout, copy_name="primary")["mons"]
+            mon = party[-1]
+            key = codec.key(mon)
+            marker = {field: mon[field] for field in ("raw_hex", "ot_raw_hex", "nickname_raw_hex", "species_marker")}
+            marker.update(frame=7200, key=key, slot=len(party) - 1)
+            box = codec.verify_boxes(bytes(raw[:CART]), layout)[13]
+            boxed = {**mon, "raw_hex": mon["raw_hex"][:layout.box_mon_size * 2]}
+            box.update(count=1, mons=[boxed])
+            start, length = layout.storage_boxes[13]
+            raw[start:start + length] = codec.encode_box(box, layout)
+            region = next(r for r in layout.regions if r.name == "pokemon")
+            _poke(raw, region, layout.addresses["wPartyCount"] - layout.addresses["wPokemonData"], bytes([len(party) - 1]))
+            _poke(raw, region, layout.addresses["wPartySpecies"] - layout.addresses["wPokemonData"] + len(party) - 1, bytes([255]))
+            for copy_name in ("primary", "backup"):
+                offset = layout.checksum_offsets[copy_name]
+                raw[offset:offset + 2] = codec.sav_checksum(bytes(raw[:CART]), layout, copy_name).to_bytes(2, "little")
+            save.write_bytes(raw)
+            # Native preimage and ACK are added after the write, before the final save receipt.
+            lines = [line for line in results[inst].splitlines() if not line.startswith(("SAVE_WITNESS ", "RESULT:"))]
+            lines += ["MEMORIAL_PREIMAGE " + json.dumps(marker),
+                      "MEMORIAL_ACK " + json.dumps({"frame": 7300, "event": "memorialize_done", "key": key, "box": 13})]
+            witness["cartram_sha256"] = hashlib.sha256(raw[:CART]).hexdigest()
+            lines += ["SAVE_WITNESS " + json.dumps(witness), "RESULT: PASS"]
+            results[inst] = "\n".join(lines)
     return results, data_dir
 
 
-def test_faint_accepts_proven_memorial_after_expected_nacks(faint_case):
+def test_faint_accepts_independently_saved_memorial_with_preimages(faint_case):
     results, data_dir = _memorial_case(faint_case)
     facts = []
     assert oracles.faint_oracle(results, data_dir=data_dir, on_verified=facts.append) is None
     assert facts[0]["status"] == "memorial"
+
+
+def test_faint_refuses_nack_only_memorial_without_saved_boxes(faint_case):
+    results, data_dir = _memorial_case(faint_case, native=False)
+    with pytest.raises(RuntimeError):
+        oracles.faint_oracle(results, data_dir=data_dir)
 
 
 @pytest.mark.parametrize("fault", ["missing_a", "missing_b", "wrong_key", "no_transition", "wrong_order", "pending"])
@@ -155,10 +196,10 @@ def test_faint_memorial_requires_ordered_server_evidence(faint_case, fault):
     path = Path(data_dir) / "server.log"
     lines = path.read_text(encoding="utf-8").splitlines()
     if fault in ("missing_a", "missing_b"):
-        prefix = f"[{fault[-1]}] memorialize_failed"
+        prefix = f"[{fault[-1]}] memorialize_done"
         lines = [line for line in lines if not line.startswith(prefix)]
     elif fault == "wrong_key":
-        lines[1] = "[b] memorialize_failed key=BAD:KEY reason=unsupported"
+        lines[1] = "[b] memorialize_done key=BAD:KEY"
     elif fault == "no_transition":
         lines.pop()
     elif fault == "wrong_order":
@@ -169,6 +210,50 @@ def test_faint_memorial_requires_ordered_server_evidence(faint_case, fault):
         doc["pending_memorials"]["b"] = [doc["links"][0]["b"]["key"]]
         state.write_text(json.dumps(doc))
     path.write_text("\n".join(lines), encoding="utf-8")
+    with pytest.raises(RuntimeError):
+        oracles.faint_oracle(results, data_dir=data_dir)
+
+
+@pytest.mark.parametrize("fault", ["missing_key", "wrong_box", "duplicate_key", "pp", "non_pp", "missing_preimage",
+    "alive_preimage", "preimage_key", "unknown_move", "wrong_ack", "late_write", "other_b_mon"])
+def test_faint_memorial_refuses_native_evidence_corruption(faint_case, fault):
+    results, data_dir = _memorial_case(faint_case)
+    layout = codec.for_foundation("crystal")
+    if fault in ("missing_key", "wrong_box", "duplicate_key", "pp", "non_pp", "other_b_mon"):
+        witness = oracles._last_tagged(results["b"], "SAVE_WITNESS")
+        path = Path(witness["saveram_path"])
+        raw = bytearray(path.read_bytes())
+        start, size = layout.storage_boxes[13]
+        if fault in ("wrong_box", "duplicate_key"):
+            target, _ = layout.storage_boxes[12]
+            raw[target:target + size] = raw[start:start + size]
+        if fault in ("missing_key", "wrong_box"):
+            raw[start:start + 2] = bytes([0, 255])
+        elif fault in ("pp", "non_pp"):
+            at = start + layout.addresses["sBoxMon1"] - layout.addresses["sBox"]
+            raw[at + layout.constants["MON_PP" if fault == "pp" else "MON_ITEM"]] ^= 1
+        path.write_bytes(raw)
+        if fault == "other_b_mon":
+            _edit_saved_record(path, layout, 0, layout.constants["MON_HAPPINESS"], bytes([1]))
+        _refresh_faint_hash(results, "b")
+    elif fault == "missing_preimage":
+        results["a"] = "\n".join(line for line in results["a"].splitlines() if not line.startswith("MEMORIAL_PREIMAGE "))
+    elif fault == "wrong_ack":
+        ack = oracles._last_tagged(results["a"], "MEMORIAL_ACK")
+        ack["event"] = "memorialize_failed"
+        results["a"] = _replace_tag_in_place(results["a"], "MEMORIAL_ACK", ack)
+    elif fault == "late_write":
+        line = next(line for line in results["b"].splitlines() if line.startswith("PARTY_HP_WRITE "))
+        results["b"] = results["b"].replace(line + "\n", "") + "\n" + line
+    else:
+        marker = oracles._last_tagged(results["a"], "MEMORIAL_PREIMAGE")
+        if fault == "preimage_key":
+            marker["key"] = "bad"
+        else:
+            raw = bytearray.fromhex(marker["raw_hex"])
+            raw[layout.constants["MON_HP"] + 1 if fault == "alive_preimage" else layout.constants["MON_MOVES"]] = 1 if fault == "alive_preimage" else 255
+            marker["raw_hex"] = raw.hex()
+        results["a"] = _replace_tag_in_place(results["a"], "MEMORIAL_PREIMAGE", marker)
     with pytest.raises(RuntimeError):
         oracles.faint_oracle(results, data_dir=data_dir)
 
@@ -1396,6 +1481,9 @@ def test_clause_memorial_requires_saved_final_box(clause_case, box_number):
     raw = bytearray(path.read_bytes())
     party = codec.decode_saved_party(bytes(raw[:CART]), layout, copy_name="primary")["mons"]
     mon = dict(party[-1])
+    preimage = {field: mon[field] for field in ("raw_hex", "ot_raw_hex", "nickname_raw_hex", "species_marker")}
+    preimage.update(frame=7180, key=codec.key(mon), slot=len(party) - 1)
+    results["b"] = results["b"].replace("MEMORIAL_ACK ", "MEMORIAL_PREIMAGE " + json.dumps(preimage) + "\nMEMORIAL_ACK ")
     mon["raw_hex"] = mon["raw_hex"][:layout.box_mon_size * 2]
     box = codec.verify_boxes(bytes(raw[:CART]), layout)[box_number]
     box.update(count=1, mons=[mon])
@@ -1417,7 +1505,7 @@ def test_clause_memorial_requires_saved_final_box(clause_case, box_number):
             row.update(ending="memorial", box=13, in_party=False)
         else:
             row.update(ending="memorial")
-        results["b"] = _replace_tag(results["b"], tag, row)
+        results["b"] = _replace_tag_in_place(results["b"], tag, row)
     if box_number == 13:
         oracles.clause_oracle(results, **kwargs)
     else:
@@ -1431,6 +1519,29 @@ def test_deposit_pp_real_sentret_record(title):
     party = "a10021000000c4a60000080000000000000000000022ba22000000460000000200000000000d00060006000600060007"
     box = "a10021000000c4a60000080000000000000000000022ba230000004600000002"
     assert oracles._deposited_record(party, codec.for_foundation(title)).hex() == box
+
+
+@pytest.mark.parametrize("fault", ["missing", "hp", "bytes", "nickname", "late_write"])
+def test_clause_memorial_requires_actual_preimage(clause_case, fault):
+    test_clause_memorial_requires_saved_final_box(clause_case, 13)
+    results, kwargs = clause_case
+    if fault == "missing":
+        results["b"] = "\n".join(line for line in results["b"].splitlines() if not line.startswith("MEMORIAL_PREIMAGE "))
+    elif fault == "late_write":
+        line = next(line for line in results["b"].splitlines() if line.startswith("PARTY_HP_WRITE "))
+        results["b"] = results["b"].replace(line + "\n", "") + "\n" + line
+    else:
+        pre = oracles._last_tagged(results["b"], "MEMORIAL_PREIMAGE")
+        if fault == "nickname":
+            pre["nickname_raw_hex"] = "00" * 11
+        else:
+            raw = bytearray.fromhex(pre["raw_hex"])
+            offset = codec.for_foundation("crystal").constants["MON_HP"] + 1 if fault == "hp" else 1
+            raw[offset] ^= 1
+            pre["raw_hex"] = raw.hex()
+        results["b"] = _replace_tag_in_place(results["b"], "MEMORIAL_PREIMAGE", pre)
+    with pytest.raises(RuntimeError):
+        oracles.clause_oracle(results, **kwargs)
 
 
 @pytest.mark.parametrize("ups", [0, 1, 2, 3])
@@ -1475,7 +1586,12 @@ def test_memorial_deposit_restores_consumed_pp_exactly(clause_case, fault):
         assert record[at] == 35  # The modeled starter-derived capture knows Scratch, base PP 35.
         record[at] = 34
         write[field] = record.hex()
-    results["b"] = _replace_tag(results["b"], "PARTY_HP_WRITE", write)
+    results["b"] = _replace_tag_in_place(results["b"], "PARTY_HP_WRITE", write)
+    preimage = oracles._last_tagged(results["b"], "MEMORIAL_PREIMAGE")
+    raw_preimage = bytearray.fromhex(preimage["raw_hex"])
+    raw_preimage[layout.constants["MON_PP"]] = 34
+    preimage["raw_hex"] = raw_preimage.hex()
+    results["b"] = _replace_tag_in_place(results["b"], "MEMORIAL_PREIMAGE", preimage)
     if fault:
         witness = oracles._last_tagged(results["b"], "SAVE_WITNESS")
         path = Path(witness["saveram_path"])

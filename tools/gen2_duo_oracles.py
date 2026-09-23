@@ -524,6 +524,67 @@ def _faint_write(write, layout, linked, final, key):
                     for k, v in expected.items()) and not row.get("error"), "B permit span/provenance differs")
 
 
+def _memorial_observation(text, key, layout, witness):
+    """The synchronous production observation, before successful native deposition."""
+    from server.adapters import gen2_codec as codec
+
+    preimage, ack = _one_marker(text, "MEMORIAL_PREIMAGE"), _one_marker(text, "MEMORIAL_ACK")
+    raw = _hex_bytes(preimage.get("raw_hex"), layout.party_size, "memorial preimage")
+    ot = _hex_bytes(preimage.get("ot_raw_hex"), layout.name_size, "memorial OT")
+    nickname = _hex_bytes(preimage.get("nickname_raw_hex"), layout.nickname_size, "memorial nickname")
+    mon = codec.decode_party_mon(raw, layout, species_marker=preimage.get("species_marker"), ot=ot, nickname=nickname)
+    _faint_need(preimage.get("key") == codec.key(mon) == key and mon["hp"] == 0,
+                "memorial preimage does not name the actual HP-zero linked mon")
+    box_number = layout.constants["NUM_BOXES"] - 1
+    _faint_need(ack.get("event") == "memorialize_done" and ack.get("key") == key and ack.get("box") == box_number,
+                "memorial needs successful final-box acknowledgement")
+    pre_at, ack_at = text.index("MEMORIAL_PREIMAGE "), text.index("MEMORIAL_ACK ")
+    _faint_need(pre_at < ack_at < text.index("SAVE_WITNESS ")
+                and _frame(preimage) <= _frame(ack) < _frame(witness, "save_completed_frame"),
+                "memorial preimage/ack/save chronology differs")
+    pre_line = next(at for at, line in enumerate(text.splitlines()) if line.startswith("MEMORIAL_PREIMAGE "))
+    for line_at, write in _tag_rows(text, "PARTY_HP_WRITE"):
+        _faint_need(line_at < pre_line, "HP write occurred after memorial preimage")
+        _faint_need(_frame(write) <= _frame(preimage), "HP write frame after memorial preimage")
+    slot = preimage.get("slot")
+    _faint_need(type(slot) is int and 0 <= slot < layout.constants["PARTY_LENGTH"], "memorial preimage party slot invalid")
+    return mon, preimage
+
+
+def _memorial_party(text, key, layout, linked_path, witness):
+    """Bind a real pre-deposit party observation to one independently decoded final Box 14 mon."""
+    from server.adapters import gen2_codec as codec
+
+    mon, preimage = _memorial_observation(text, key, layout, witness)
+    box_number = layout.constants["NUM_BOXES"] - 1
+    saved = Path(witness["saveram_path"]).read_bytes()
+    final, inventory = _clause_inventory(saved, layout)
+    _, original = _clause_inventory(Path(linked_path).read_bytes(), layout)
+    _faint_need(set(inventory) == set(original), "memorial saved inventory changed identity")
+    _faint_need(key in inventory and inventory[key][0] == box_number
+                and all(codec.key(row) != key for row in final), "linked mon not uniquely absent from party and present in Box 14")
+    boxed = inventory[key][1]
+    _faint_need(boxed["raw_hex"] == _deposited_record(mon["raw_hex"], layout).hex()
+                and boxed["species_marker"] == mon["species_marker"]
+                and boxed["ot_raw_hex"] == mon["ot_raw_hex"] and boxed["nickname_raw_hex"] == mon["nickname_raw_hex"],
+                "saved memorial differs from native deposit of actual preimage")
+    for other_key, (place, original_mon) in original.items():
+        if other_key == key:
+            continue
+        now_place, now_mon = inventory[other_key]
+        _faint_need(place == now_place, "unrelated mon changed storage location during memorial")
+        if place != "party":
+            _faint_need(all(now_mon[field] == original_mon[field] for field in ("raw_hex", "species_marker", "ot_raw_hex", "nickname_raw_hex")),
+                        "unrelated boxed mon changed during memorial")
+    slot = preimage.get("slot")
+    _faint_need(type(slot) is int and 0 <= slot <= len(final), "memorial preimage party slot invalid")
+    # Restore only the independently witnessed record into the final remaining party.
+    # This is the pre-deposit view used for HP-write checks, not a claim that Box 14 stores HP.
+    party_before_deposit = list(final)
+    party_before_deposit.insert(slot, mon)
+    return party_before_deposit, preimage
+
+
 def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
     from server.adapters import gen2_codec as codec
 
@@ -563,6 +624,13 @@ def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
                                          boot_saveram=boot_saveram, status=("dead", "memorial"), snapshots=snapshots)
     _faint_need(row.get("cause") == "battle" and row.get("initiating_player") == "a" and row.get("killed_at"),
                 "server death is not A's battle faint")
+    memorial_preimages = {}
+    if row["status"] == "memorial":
+        for inst in ("a", "b"):
+            layout, linked, _final, witness = parties[inst]
+            observed, preimage = _memorial_party(results[inst], decoded[inst]["key"], layout, snapshots[inst], witness)
+            parties[inst] = layout, linked, observed, witness
+            memorial_preimages[inst] = preimage
     for inst in ("a", "b"):
         _, linked, final, _ = parties[inst]
         key = decoded[inst]["key"]
@@ -590,6 +658,8 @@ def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
                 and type(sent.get("seq")) is int and sent["seq"] >= 0, "A faint slot/sequence invalid")
     _faint_need(_frame(stages["a"]) < _frame(faint) <= _frame(sent)
                 <= _frame(parties["a"][3], "save_completed_frame"), "A faint chronology differs")
+    if memorial_preimages:
+        _faint_need(_frame(sent) <= _frame(memorial_preimages["a"]), "A memorial preimage precedes faint")
     _faint_need(not any(line.startswith("PARTY_HP_WRITE ") for line in results["a"].splitlines()), "A used a harness/permit faint instead of battle")
     writes = [(index, json.loads(line.removeprefix("PARTY_HP_WRITE ")))
               for index, line in enumerate(results["b"].splitlines()) if line.startswith("PARTY_HP_WRITE ")]
@@ -615,19 +685,16 @@ def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
     issued = re.search(r"\[a\] faint → force_faint b:" + re.escape(b_key) + r"(?:\s|$)", log)
     _faint_need(issued, "server did not issue force_faint to B")
     if row["status"] == "memorial":
-        # Gen 2 NACKs unsupported memorialization. The server finalizes the dead
-        # pair anyway; require that ordered transition rather than accepting a
-        # bare MEMORIAL claim or implying that a native box write succeeded.
-        end = log.find(f"pair in {area_id} marked memorial (with failed memorialization)", issued.end())
-        _faint_need(end >= 0, "server lacks failed-memorial transition after death")
+        end = log.find(f"pair in {area_id} fully memorialized", issued.end())
+        _faint_need(end >= 0, "server lacks successful memorial transition after death")
         pending = document.get("pending_memorials")
         _faint_need(isinstance(pending, dict), "server memorial pending state missing")
         for inst in ("a", "b"):
             key = decoded[inst]["key"]
-            pattern = rf"\[{inst}\] memorialize_failed key=" + re.escape(key[:8]) + r"(?:\s|$)"
+            pattern = rf"\[{inst}\] memorialize_done key=" + re.escape(key[:8]) + r"(?:\s|$)"
             ack = re.search(pattern, log[issued.end():end])
             _faint_need(ack and isinstance(pending.get(inst), list) and key not in pending[inst],
-                        f"server lacks settled {inst} memorial NACK after death")
+                        f"server lacks settled {inst} memorial success after death")
     return _verified_facts(decoded, area_id, row["status"])
 
 
@@ -1237,9 +1304,12 @@ def _clause_rejection(results, decoded, document, events, kind):
                      and own["mon"]["hp"] == 0 and rejected.get("in_party") is True and rejected.get("hp") == 0, "failed memorial must persist HP zero in party")
     else:
         box = layout.constants["NUM_BOXES"] - 1
+        pre_mon, preimage = _memorial_observation(text, key, layout, own["witness"])
         _clause_need(ending == "memorial" and ack.get("event") == "memorialize_done" and ack.get("box") == box
                      and own["place"] == box and rejected.get("box") == box and rejected.get("in_party") is False
-                     and own["mon"]["raw_hex"] == _deposited_record(by_key[key]["raw_hex"], layout).hex(),
+                     and preimage["slot"] == write["slot"] and pre_mon["raw_hex"] == by_key[key]["raw_hex"]
+                     and all(own["mon"][field] == pre_mon[field] for field in ("species_marker", "ot_raw_hex", "nickname_raw_hex"))
+                     and own["mon"]["raw_hex"] == _deposited_record(pre_mon["raw_hex"], layout).hex(),
                      "memorial not independently saved in final box")
     _clause_need(key not in document["pending_memorials"].get(reject, []), "memorial acknowledgement not settled")
     return {**_verified_facts(decoded, "route_29", "clause_observed"), "clause": kind, "rejected": reject, "ending": ending}

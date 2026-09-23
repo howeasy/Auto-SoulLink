@@ -651,6 +651,52 @@ def _clause_cell_errors(legs: dict, scenario: str, axes: dict) -> list[str]:
     return []
 
 
+def _memorial_receipt_errors(lines: list[str], side: str) -> list[str]:
+    """Box records have no HP: memorial qualification needs the actual HP-zero party preimage."""
+    def need(condition, why):
+        if not condition:
+            raise ValueError(why)
+
+    def one(tag):
+        found = [(i, json.loads(line[len(tag) + 1:])) for i, line in enumerate(lines)
+                 if line.startswith(tag + " ")]
+        need(len(found) == 1, f"expected one {tag}")
+        need(isinstance(found[0][1], dict), f"malformed {tag}")
+        return found[0]
+
+    try:
+        pre_at, pre = one("MEMORIAL_PREIMAGE")
+        ack_at, ack = one("MEMORIAL_ACK")
+        save_at, save = one("SAVE_WITNESS")
+        _, cap = one("ENGINE_CAPTURE")
+        _, head = one("DUO_GEN2")
+        from server.adapters import gen2_codec as codec
+
+        layout = codec.for_foundation(head["title"])
+        mon = codec.decode_party_mon(bytes.fromhex(pre["raw_hex"]), layout,
+            species_marker=pre["species_marker"], ot=bytes.fromhex(pre["ot_raw_hex"]),
+            nickname=bytes.fromhex(pre["nickname_raw_hex"]))
+        need(codec.key(mon) == pre.get("key") == cap.get("key") and mon["hp"] == 0
+             and mon["species_id"] == cap.get("species_id") and not mon["is_egg"],
+             "preimage is not the captured HP-zero party mon")
+        need(type(pre.get("slot")) is int and 0 <= pre["slot"] < layout.constants["PARTY_LENGTH"],
+             "preimage party slot invalid")
+        need(ack.get("event") == "memorialize_done" and ack.get("key") == cap["key"]
+             and type(ack.get("box")) is int and ack["box"] == layout.constants["NUM_BOXES"] - 1 == 13,
+             "successful Box 14 memorial acknowledgement missing")
+        need(pre_at < ack_at < save_at and type(pre.get("frame")) is int and type(ack.get("frame")) is int
+             and type(save.get("save_completed_frame")) is int
+             and pre["frame"] <= ack["frame"] < save["save_completed_frame"], "preimage/ack/final-save chronology differs")
+        for i, line in enumerate(lines):
+            if line.startswith("PARTY_HP_WRITE "):
+                write = json.loads(line[len("PARTY_HP_WRITE "):])
+                need(i < pre_at and type(write.get("frame")) is int and write["frame"] <= pre["frame"],
+                     "HP write after memorial preimage")
+    except (KeyError, TypeError, ValueError, AttributeError, OSError) as exc:
+        return [f"{side} memorial receipt invalid: {exc}"]
+    return []
+
+
 def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: dict) -> list[str]:
     """One registered proof: pinned bytes, PASS verdicts, and headers naming this exact cell."""
     if scenario == "gen2_reconnect":
@@ -713,6 +759,14 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
             errors.extend(_soft_reset_receipt_errors(lines, side))
     if scenario in ("gen2_species_clause", "gen2_type_clause", "gen2_gender_clause"):
         errors.extend(_clause_cell_errors(legs, scenario, axes))
+    tokens = _pydec_tokens(legs.get("pydec", [])) or {}
+    memorial_sides = ()
+    if scenario == "gen2_faint" and tokens.get("status") == "memorial":
+        memorial_sides = ("a", "b")
+    elif scenario in ("gen2_type_clause", "gen2_gender_clause") and tokens.get("ending") == "memorial":
+        memorial_sides = (tokens.get("rejected"),)
+    for side in memorial_sides:
+        errors.extend(_memorial_receipt_errors(legs.get(side, []), side))
     return errors
 
 

@@ -433,6 +433,11 @@ def test_committed_matrix_is_red_exactly_where_a_pair_has_no_receipt():
             cell = row["id"] + "/" + proof["scenario"] + ":"
             ab_receipt_problems = [error for error in mine if error.startswith(cell)
                                    if "receipt" in error and "pydec receipt does not name" not in error]
+            if proof["scenario"] == "gen2_faint":
+                # Preimage hardening deliberately reopens the three archived memorial proofs.
+                allowed = {f"{cell} {side} memorial receipt invalid: expected one MEMORIAL_PREIMAGE"
+                           for side in ("a", "b")}
+                ab_receipt_problems = [error for error in ab_receipt_problems if error not in allowed]
             assert not ab_receipt_problems, mine
         for scenario in row["axes"]["scenarios"]:
             if scenario not in {proof["scenario"] for proof in row["proofs"]}:
@@ -1078,7 +1083,7 @@ def test_soft_reset_matrix_refuses_weak_receipts(tmp_path, mutation):
 def _clause_cell(tmp_path, kind):
     proof, axes, lock, _ = _soft_reset_cell(tmp_path)
     scenario = f"gen2_{kind}_clause"
-    keys, text = {"a": "1234:5678:00", "b": "2234:5678:01"}, {}
+    keys, text = {"a": "1234:5678:10", "b": "2234:5678:13"}, {}
     for side in ("a", "b"):
         species = 16 if side == "a" else 19
         case = axes["fixtures"][side]
@@ -1138,7 +1143,91 @@ def test_clause_matrix_accepts_proven_memorial_ending(tmp_path, kind):
     text["b"] = text["b"].replace('"ending": "dead"', '"ending": "memorial", "box": 13').replace(
         '"in_party": true', '"in_party": false')
     text["pydec"] = _edit_pydec_token("ending", "memorial")(text["pydec"])
+    text["b"] = _add_memorial_preimage(text["b"], "2234:5678:13")
     assert _check_admission_cell(tmp_path, proof, axes, lock, text, f"gen2_{kind}_clause") == []
+
+
+def _add_memorial_preimage(text, key):
+    dv, ot, species = (int(part, 16) for part in key.split(":"))
+    raw = bytearray(48)
+    raw[0], raw[31] = species, 2
+    raw[6:8], raw[21:23] = ot.to_bytes(2, "big"), dv.to_bytes(2, "big")
+    pre = {"frame": 201, "key": key, "slot": 1, "raw_hex": raw.hex(), "ot_raw_hex": "50" * 11,
+           "nickname_raw_hex": "50" * 11, "species_marker": species}
+    return text.replace("MEMORIAL_ACK ", "MEMORIAL_PREIMAGE " + json.dumps(pre) + "\nMEMORIAL_ACK ")
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_memorial_preimage_uses_each_titles_party_codec(title):
+    rows = [("DUO_GEN2", {"title": title}), ("ENGINE_CAPTURE", {"key": "2234:5678:13", "species_id": 19}),
+            ("MEMORIAL_ACK", {"frame": 201, "key": "2234:5678:13", "event": "memorialize_done", "box": 13}),
+            ("SAVE_WITNESS", {"save_completed_frame": 202})]
+    text = "\n".join(tag + " " + json.dumps(value) for tag, value in rows)
+    text = _add_memorial_preimage(text, "2234:5678:13")
+    assert gate._memorial_receipt_errors(text.splitlines(), "a") == []
+
+
+@pytest.mark.parametrize("pair", ["duo.crystal.crystal", "duo.gold.silver", "duo.crystal.gold"])
+def test_old_memorial_faint_receipts_require_real_preimage(tmp_path, pair):
+    doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
+    row = _row(doc, pair)
+    proof = next(proof for proof in row["proofs"] if proof["scenario"] == "gen2_faint")
+    lock = json.loads((REPO / "data/gen2_sources.lock.json").read_text(encoding="utf-8"))["outputs"]
+    errors = gate._receipt_errors(REPO, proof, "gen2_faint", row["axes"], lock)
+    assert any("a memorial" in error and "MEMORIAL_PREIMAGE" in error for error in errors), errors
+    assert any("b memorial" in error and "MEMORIAL_PREIMAGE" in error for error in errors), errors
+
+
+@pytest.mark.parametrize("mutation", ["absent", "positive_hp", "box_record", "wrong_key", "wrong_species",
+    "ot_length", "nickname_length", "wrong_box", "nack", "duplicate", "duplicate_ack", "late", "frame_lie",
+    "slot", "late_write", "save_same_frame"])
+def test_clause_memorial_requires_actual_party_preimage(tmp_path, mutation):
+    proof, axes, lock, text = _clause_cell(tmp_path, "type")
+    text["b"] = text["b"].replace('"event": "memorialize_failed"', '"event": "memorialize_done", "box": 13')
+    text["b"] = text["b"].replace('"ending": "dead"', '"ending": "memorial", "box": 13').replace(
+        '"in_party": true', '"in_party": false')
+    text["pydec"] = _edit_pydec_token("ending", "memorial")(text["pydec"])
+    text["b"] = _add_memorial_preimage(text["b"], "2234:5678:13")
+    lines = text["b"].splitlines()
+    at = next(i for i, line in enumerate(lines) if line.startswith("MEMORIAL_PREIMAGE "))
+    pre = json.loads(lines[at].split(" ", 1)[1])
+    if mutation == "positive_hp":
+        raw = bytearray.fromhex(pre["raw_hex"])
+        raw[35] = 1
+        pre["raw_hex"] = raw.hex()
+    elif mutation == "box_record":
+        pre["raw_hex"] = pre["raw_hex"][:64]
+    elif mutation == "wrong_key":
+        pre["key"] = "1234:5678:10"
+    elif mutation == "wrong_species":
+        pre["species_marker"] = 16
+    elif mutation in ("ot_length", "nickname_length"):
+        pre["ot_raw_hex" if mutation == "ot_length" else "nickname_raw_hex"] = "50"
+    elif mutation == "frame_lie":
+        pre["frame"] = 204
+    elif mutation == "slot":
+        pre["slot"] = 6
+    lines[at] = "MEMORIAL_PREIMAGE " + json.dumps(pre)
+    if mutation == "absent":
+        del lines[at]
+    elif mutation == "duplicate":
+        lines.insert(at, lines[at])
+    elif mutation == "duplicate_ack":
+        lines.insert(at + 1, lines[at + 1])
+    elif mutation == "late":
+        lines[at], lines[at + 1] = lines[at + 1], lines[at]
+    elif mutation == "late_write":
+        index = next(i for i, line in enumerate(lines) if line.startswith("PARTY_HP_WRITE "))
+        lines.insert(at + 1, lines.pop(index))
+    text["b"] = "\n".join(lines)
+    if mutation == "wrong_box":
+        text["b"] = text["b"].replace('"box": 13', '"box": 12')
+    elif mutation == "nack":
+        text["b"] = text["b"].replace('"memorialize_done"', '"memorialize_failed"')
+    elif mutation == "save_same_frame":
+        text["b"] = text["b"].replace('"save_completed_frame": 299', '"save_completed_frame": 202')
+    errors = _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_type_clause")
+    assert any("memorial" in error for error in errors), errors
 
 
 @pytest.mark.parametrize("kind,mutation", [(kind, mutation) for kind in ("species", "type", "gender")
