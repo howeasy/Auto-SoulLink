@@ -1,4 +1,4 @@
-# Gen 2 implementation resume (updated 2026-09-23, session 5: N14b + live inspect/display 8/8; stopped at the owner's milestone)
+# Gen 2 implementation resume (updated 2026-09-23, session 6: Crystal passes both O-22 gates PHYSICAL; stopped at the owner's milestone)
 
 ## Who coordinates
 
@@ -38,7 +38,29 @@ This note summarises it; it is not a second ledger.
   COMMITTED fixture with its original played receipt (no replay); `run_fixtures.py` (session scratchpad;
   replay + qualify + stage). Staged inputs as in the runbook.
 
-## Done this session (5) — commit bodies + docs/gen2/reviews/ carry the evidence
+## Done this session (6) — Crystal O-22 gates PHYSICAL
+
+- **U1 Crystal engine-hook proof PHYSICAL** (`7c08529`, `tests/fixtures/gen2/receipts/crystal.engine_sites.json`):
+  wild_ready, capture_party, capture_party_finalized, battle_end, save_completed fire at their pinned bank/PC on
+  a scripted walk -> wild battle -> Poke Ball catch -> native save; frame alignment armed == callback; party count
+  changes one frame BEFORE the capture callback (TryAddMonToParty increments first, GeneratePartyMonStats crosses a
+  VBlank); negatives refused. Live-found fixes: U1c `41da2d6` (the battle menu is a 2x2 grid the shared parser
+  misread), `a5392d4` (probe control from the wild_ready party count), `28ec846` (wrapper field).
+- **U2 write windows PHYSICAL**: Crystal `6ba4527`, Gold `7718619` (covers Silver while its checkpoint rows stay
+  identical; Gold sha pinned). Receipt v2 carries raw window records, `M.qualified` recomputes them; covered
+  controls: idle reacquisition + warp/Continue (party_hp, box_deposit writes). U2b `8f84aeb` (review hardening),
+  U2c `a76f299` (post-save snapshot: Gold/Silver rewrite SRAM window stack + sScratch after the flush).
+- **N17** `4f6846ec` shared scripted gate reads the 2x2 battle menu at source geometry (valid for C/G/S);
+  **N17b** `7a744a7` U1 gate uses the shared reader.
+- **U4b cross-title per-player data** fixed: `917321b` (Codex, per-player acquisition rules + bind after
+  acceptance) and `434c678` (reset/rollback close live sockets so every gen re-hellos; the first fix locked out
+  connected Gen 1/Gen 3 clients) — guard review APPROVE; `/slink-test 3` 525 passed.
+- Facts: `OMP_U1_BATTLE_FACTS_2026-09-23.md` (Crystal battle UI sequence; Gold/Silver engine-site parity:
+  G/S battle-menu anchor `_2DMenuInterpretJoypad` 09:419C, Silver capture sites 2 bytes below Gold's).
+- Open design (Codex card gen2-static-canon, read-only, in flight): equivalent statics get different area ids
+  per title (Gold Lapras `static_799_131`, Crystal `static_807_131`) -> cross-title pairing needs a canonical id.
+
+## Done in session 5 — commit bodies + docs/gen2/reviews/ carry the evidence
 
 - `1bb69b4` merge master 7957c24 (OMP O4: no semantic conflict). Owner: master's pixel-font HUD is
   expected -> `ac097cd` Gen 2 NEW ENCOUNTER banner newline-separated like Gen 1.
@@ -71,18 +93,17 @@ This note summarises it; it is not a second ledger.
 
 ## Next, in order
 
-1. **U1 live diagnosis:** add a screen dump + UI-kind trace when the battle phase stalls
-   (lua/tests/gen2_frame_align.lua), map the missing battle UI kind(s) from source, rerun once
-   (`SLINK_LIVE=1 pytest tests/live/test_gen2_frame_align.py`); on PASS commit
-   `tests/fixtures/gen2/receipts/crystal.engine_sites.json`. Never rerun unchanged.
-2. **U2b:** port U1b's receipt hardening into `lua/gen2_write_safety.lua` M.qualified (raw evidence,
-   fixture/attempt binding, gate-emitted PHYSICAL), pin Gold's sha1 for Silver, drop the MODEL_ONLY save
-   fallback, settle the required-controls scope; then U2 live (`-k crystal`, `-k gold`).
-3. Read Codex's U4b review (transcript) when it wakes; then U3 production graph (O-22), U5 route,
-   H1/H2/H3 (Gen 2 duo driver + oracle + wrapper), gen2-M1 Gen 1 duo A/B.
-4. Carries: per-context HOLD if an exact-one-tile overworld press is ever needed; U4b docstring
-   boundary note; capture_box unproven (needs a full party); static hardware firing (no fixture near a
-   publishable static).
+1. **U3 production graph** (O-22 now satisfied for Crystal: U1 + U2 PHYSICAL receipts committed): admit Crystal in
+   `data/games/gen2_crystal/admission.json`, `Entry.build` composes production with the U1 receipt
+   (`S.qualified_sites` + `S.bind_fixture_qualification`) and the U2 receipt (`M.qualified` +
+   `M.bind_fixture_qualification`; `check(kind)` needs a write kind at `lua/gen2/entry.lua:226`). Gold/Silver stay
+   PENDING until their U1 (anchor `_2DMenuInterpretJoypad`, title-keyed rows).
+2. U5 launcher/Manager route; then H1/H2/H3 (Gen 2 duo driver + independent oracle + wrapper) for the first
+   C<->C `link` duo; static canonical ids (from Codex's design); gen2-M1 Gen 1 duo A/B.
+3. In flight at the stop: OMP gen2-N18 (committed-receipt validator tests, g2omp branch omp/gen2-N18), Codex
+   gen2-static-canon (design). Carries: U2 uncovered controls (textbox, nested menus, battle KO, Cable Club, reset/
+   state-load, corrupt anchor ...); capture_box unproven (full party); PHYSICAL is self-reported by the gate
+   (launch through EmuHawk is the guarantee); rollback drops ~1 frame of client events (by design).
 
 ## Runbook (exact commands; run from this worktree root)
 
