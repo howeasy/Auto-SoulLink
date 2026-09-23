@@ -383,13 +383,18 @@ class Gen1Adapter(GameAdapter):
         if not dex:
             return ""
         url = self.sprite_src(species_id)
+        # The transparent Gen 1 art is a 56px cell centred on a 96px canvas (20px pad),
+        # so the 40px window shows the image at 40*96/56 = 69px, offset by 20*69/96 = 14px:
+        # the mon then fills the box the way Gen 2's 56px sprites do. Inline sizes, so the
+        # shared `.mon-sprite` width in slink.css cannot undo the crop.
         return (
             '<span style="display:inline-block;width:40px;height:40px;'
             'overflow:hidden;vertical-align:middle">'
             f'<img class="mon-sprite" data-species="{dex}" src="{url}" '
-            'width="52" height="52" loading="lazy" '
+            'width="69" height="69" loading="lazy" '
             'onerror="this.style.visibility=&#39;hidden&#39;" '
-            'style="image-rendering:pixelated;margin:-6px"></span>'
+            'style="image-rendering:pixelated;width:69px;height:69px;max-width:none;'
+            'margin:-14px"></span>'
         )
 
     def ability_name(self, ability_id: int, species_id: int = 0) -> str:

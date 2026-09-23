@@ -89,3 +89,10 @@ def test_status_token_agrees_with_the_shared_icon_renderer(a):
 # fixture -- a popcount could not produce it) and ::test_all_twelve_sram_boxes
 # (read_current_box_num returns the masked index, so Box 12's contents no longer report as
 # box 0 here and box 11 from the memorial read).
+
+
+def test_sprite_crop_fills_the_box_like_gen2(a):
+    """The art is a 56px cell on a 96px canvas; a 40px window must show it at 69px, -14px."""
+    html = a.sprite_html(PIKACHU)
+    assert "width:40px;height:40px" in html and "width:69px;height:69px" in html
+    assert "margin:-14px" in html

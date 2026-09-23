@@ -306,7 +306,8 @@ body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
 
 /* ── Sprites (shared) ──────────────────────────────────────────────────
  * Two shapes come out of the payload. Gen 3 is a bare <img class="mon-sprite">. Gen 1 is
- * a 40px overflow-hidden <span> cropping a 52px <img> at margin:-6px, all inline styles.
+ * a 40px overflow-hidden <span> cropping a 69px <img> at margin:-14px, all inline styles
+ * (its art is a 56px cell on a 96px canvas: scale 96/56 = 12/7, offset 20/56 = 5/14).
  * Scaling the second means scaling the wrapper AND its image by the same factor, in plain
  * lengths -- `scale(calc(60px / 40px))` divides a length by a length, which CSS rejects,
  * and that is why the previous attempt left Gen 1 at 40px. The inline styles need
@@ -315,11 +316,11 @@ body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
 .mk-spr { flex: none; line-height: 0; display: grid; place-items: center; width: var(--mk-spr-s); height: var(--mk-spr-s); }
 .mk-spr img.mon-sprite { width: var(--mk-spr-s); height: var(--mk-spr-s); object-fit: contain; image-rendering: pixelated; }
 .mk-spr > span { width: var(--mk-spr-s) !important; height: var(--mk-spr-s) !important; }
-.mk-spr > span > img { width: calc(var(--mk-spr-s) * 1.3) !important; height: calc(var(--mk-spr-s) * 1.3) !important; margin: calc(var(--mk-spr-s) * -0.15) !important; image-rendering: pixelated; }
+.mk-spr > span > img { width: calc(var(--mk-spr-s) * 12 / 7) !important; height: calc(var(--mk-spr-s) * 12 / 7) !important; max-width: none; margin: calc(var(--mk-spr-s) * -5 / 14) !important; image-rendering: pixelated; }
 .mk-spr.big { width: var(--mk-spr); height: var(--mk-spr); }
 .mk-spr.big img.mon-sprite { width: var(--mk-spr); height: var(--mk-spr); }
 .mk-spr.big > span { width: var(--mk-spr) !important; height: var(--mk-spr) !important; }
-.mk-spr.big > span > img { width: calc(var(--mk-spr) * 1.3) !important; height: calc(var(--mk-spr) * 1.3) !important; margin: calc(var(--mk-spr) * -0.15) !important; }
+.mk-spr.big > span > img { width: calc(var(--mk-spr) * 12 / 7) !important; height: calc(var(--mk-spr) * 12 / 7) !important; margin: calc(var(--mk-spr) * -5 / 14) !important; }
 
 .mk-hp { display: flex; flex-direction: column; gap: 3px; min-width: calc(var(--scale-step) * 3.4); }
 .mk-hp-num { font-size: var(--fs-sm); font-variant-numeric: tabular-nums; color: var(--c-dim); }
