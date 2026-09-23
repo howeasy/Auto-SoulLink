@@ -117,6 +117,9 @@ class Cart:
         base[:6] = bytes([45, 49, 49, 45, 65, 65])
         base[0x13] = 0
         self.seed_rom(base_addr + 28, base)
+        self.seed_rom(self.profile["rom"]["EXPERIENCE_TABLES_ADDR"], b"".join(
+            n.to_bytes(4, "little") for n in (0, 1, 8, 27, 64, 125, 216)
+        ))
 
     def seed_move_pp(self):
         self.seed_rom(self.profile["rom"]["BATTLE_MOVES_ADDR"] + 33 * 12 + 4, b"\x23")
@@ -280,6 +283,47 @@ def test_rr_withdraw_expands_record_and_requires_a_valid_stat_cache():
     assert (restored["personality"], restored["species"], restored["level"],
             restored["hp"], restored["max_hp"], restored["pp"][0]) == (50, 1, 5, 19, 19, 7)
     assert cart.raw(cart.box_addr(0), 58) == bytes(58)
+
+
+def test_rr_scan_reads_nonzero_growth_row_with_256_entries_above_level_100():
+    cart = Cart("radical_red")
+    cart.seed_rr_stats()
+    cart.seed_rom(0x09010000 + 28 + cart.profile["derived"]["BASESTATS_GROWTH_RATE_OFFSET"], b"\x01")
+    count = cart.profile["derived"]["EXPERIENCE_TABLE_ENTRY_COUNT"]
+    assert count == 256 and cart.profile["derived"]["MAX_LEVEL"] == 250
+    # Distinct synthetic row. Vanilla stride indexes zeros; a 100-level cap also fails.
+    cart.seed_rom(cart.profile["rom"]["EXPERIENCE_TABLES_ADDR"] + count * 4,
+                  b"".join((n * 10).to_bytes(4, "little") for n in range(count)))
+    mon = codec.decode_party_mon(mon_bytes(50, rr=True), rr=True)
+    mon["experience"] = 1250
+    target = codec.encode_party_mon(mon, rr=True)
+    cart.put_party([mon_bytes(75, rr=True), target])
+    assert cart.boxes.deposit(cart.boxes, cart.key(target), 1) is True
+    assert cart.boxes.scan(cart.boxes)[1].level == 125
+
+
+@pytest.mark.parametrize("cached_pp,rom_available,expected", [(None, True, 42), (0, False, 0),
+                                                          (None, False, None)])
+def test_rr_pp_uses_cache_or_pinned_rom_and_never_invents_five(cached_pp, rom_available, expected):
+    cart = Cart("radical_red")
+    target = mon_bytes(50, rr=True)
+    cart.put_party([mon_bytes(75, rr=True), target])
+    key = cart.key(target)
+    assert cart.boxes.deposit(cart.boxes, key, 1) is True
+    if rom_available:
+        cart.seed_move_pp()
+    stats = cart.lua.table(level=125, maxHP=231, attack=144, defense=145, speed=146,
+                           spAtk=147, spDef=148, pp1=cached_pp)
+    before = len(cart.written)
+    result = cart.boxes.withdraw(cart.boxes, key, stats, None)
+    if expected is None:
+        assert result == (None, "PP unavailable")
+        assert len(cart.written) == before
+    else:
+        assert result is True
+        mon = codec.decode_party_mon(cart.raw(cart.party_base + 100, 100), rr=True)
+        assert mon["pp"][0] == expected
+        assert (mon["level"], mon["max_hp"], mon["attack"], mon["sp_defense"]) == (125, 231, 144, 148)
 
 
 @pytest.mark.parametrize("title", ["firered", "radical_red"])

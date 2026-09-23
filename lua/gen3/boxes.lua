@@ -11,8 +11,10 @@
 --   derived.SHEDINJA_SPECIES_ID=303 (pret include/constants/species.h:312).
 -- RR-OPEN: compressed layout is from the RR profile's CFRU_BOX_BASES/stride and
 -- old memory_gba.lua:1015-1104; this unit suite has no RR-binary save readback.
--- RR growth thresholds use pret's six formulas, not a pinned RR experience table;
--- a natural RR boxsync save witness must qualify the result before RC.
+-- Experience and PP use the RR binary-pinned tables and dimensions. Full RR stat
+-- calculation is a replacement routine (ROM 0x0803E47C detours to 0x090788FC),
+-- so table layout alone does not establish vanilla stat semantics. Keep complete
+-- engine-derived cached stats; a natural RR boxsync save witness still gates RC.
 local B = {}
 local PARTY_SIZE, BOX_SIZE = 100, 80 -- pret include/pokemon.h:105-141
 local ATTACKS_POSITION = {
@@ -235,49 +237,21 @@ function B.new(profile, reads, io)
         local base = rom_bytes(base_addr + mon.species * entry_size, entry_size)
         assert(mon.species > 0 and base[1] > 0 and base[2] > 0,
                "species base stats unreadable")
-        local growth = base[0x13 + 1]
+        local growth = base[assert(d.BASESTATS_GROWTH_RATE_OFFSET,
+                                   "profile.derived.BASESTATS_GROWTH_RATE_OFFSET required") + 1]
         assert(growth and growth < 6, "invalid growth rate")
         return base, growth
     end
 
-    local function rr_exp_threshold(growth, n)
-        -- pret src/data/pokemon/experience_tables.h:4-16. CFRU/RR equivalence is RR-OPEN.
-        local cube = n * n * n
-        if growth == 0 then return cube end
-        if growth == 1 then
-            if n <= 50 then return math.floor((100 - n) * cube / 50) end
-            if n <= 68 then return math.floor((150 - n) * cube / 100) end
-            if n <= 98 then
-                return math.floor(math.floor((1911 - 10 * n) / 3) * cube / 500)
-            end
-            return math.floor((160 - n) * cube / 100)
-        end
-        if growth == 2 then
-            if n <= 15 then return math.floor((math.floor((n + 1) / 3) + 24) * cube / 50) end
-            if n <= 36 then return math.floor((n + 14) * cube / 50) end
-            return math.floor((math.floor(n / 2) + 32) * cube / 50)
-        end
-        if growth == 3 then
-            return math.floor(6 * cube / 5) - 15 * n * n + 100 * n - 140
-        end
-        if growth == 4 then return math.floor(4 * cube / 5) end
-        return math.floor(5 * cube / 4)
-    end
-
     local function level_from_exp(mon, growth)
         local level = 1
-        local exp_table
-        if not rr then
-            exp_table = assert(profile.rom.EXPERIENCE_TABLES_ADDR,
-                               "profile.rom.EXPERIENCE_TABLES_ADDR required")
-        end
-        for candidate = 2, 100 do
-            local threshold
-            if rr then
-                threshold = rr_exp_threshold(growth, candidate)
-            else
-                threshold = word(rom_bytes(exp_table + (growth * 101 + candidate) * 4, 4), 0, 4)
-            end
+        local exp_table = assert(profile.rom.EXPERIENCE_TABLES_ADDR,
+                                 "profile.rom.EXPERIENCE_TABLES_ADDR required")
+        local count = assert(d.EXPERIENCE_TABLE_ENTRY_COUNT, "experience row size required")
+        local maximum = assert(d.MAX_LEVEL, "maximum level required")
+        assert(maximum >= 1 and maximum < count, "invalid experience dimensions")
+        for candidate = 2, maximum do
+            local threshold = word(rom_bytes(exp_table + (growth * count + candidate) * 4, 4), 0, 4)
             if threshold > mon.experience then break end
             level = candidate
         end
@@ -326,7 +300,7 @@ function B.new(profile, reads, io)
                 return type(value) == "number" and value % 1 == 0
                        and value > 0 and value <= maximum
             end
-            if type(stats) ~= "table" or not valid(stats.level, 100)
+            if type(stats) ~= "table" or not valid(stats.level, assert(d.MAX_LEVEL, "maximum level required"))
                or not valid(stats.maxHP, 65535)
                or not valid(stats.attack, 65535) or not valid(stats.defense, 65535)
                or not valid(stats.speed, 65535) or not valid(stats.spAtk, 65535)
@@ -337,7 +311,26 @@ function B.new(profile, reads, io)
             computed = {stats.attack, stats.defense, stats.speed, stats.spAtk, stats.spDef}
             for i = 0, 3 do
                 if mon.moves[i + 1] ~= 0 then
-                    record[0x34 + i + 1] = stats["pp" .. (i + 1)] or 5
+                    local pp = stats["pp" .. (i + 1)]
+                    if not (type(pp) == "number" and pp % 1 == 0 and pp >= 0 and pp <= 255) then
+                        local ok, value = pcall(function()
+                            local rom = assert(profile.rom)
+                            local moves = assert(rom.BATTLE_MOVES_ADDR)
+                            local stride = assert(d.BATTLE_MOVE_ENTRY_SIZE)
+                            local off = assert(d.BATTLE_MOVE_PP_OFFSET)
+                            local base_pp = rom_bytes(moves + mon.moves[i + 1] * stride + off, 1)[1]
+                            local mask = rom_bytes(assert(rom.PP_UP_GET_MASK_ADDR) + i, 1)[1]
+                            assert(type(base_pp) == "number" and base_pp > 0 and base_pp <= 255)
+                            assert(mask == (3 << (2 * i)), "invalid PP-Up mask")
+                            local ups = (mon.pp_bonuses & mask) >> (2 * i)
+                            local maximum = base_pp + math.floor(base_pp * 20 * ups / 100)
+                            assert(maximum <= 255, "invalid move PP")
+                            return maximum
+                        end)
+                        if not ok then return nil, "PP unavailable" end
+                        pp = value
+                    end
+                    record[0x34 + i + 1] = pp
                 end
             end
         else
