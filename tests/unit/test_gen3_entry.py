@@ -338,21 +338,55 @@ def test_production_refuses_a_read_only_io():
         world.Entry.build(world.deps(mode="production"))
 
 
-def test_the_default_write_policy_refuses_battle_reasons_by_name_until_c4b():
+def test_each_reason_reaches_safety_check_with_the_real_pack_clauses():
+    """C4-7: the policy is a pass-through. Every reason evaluates the PACK's own clause set (the
+    refusal names a clause that only exists in the pack), and the args reach the guard."""
     world = World(pack="gen3_frlg", title="firered", build=False)
     _, parts = _production(world)
     policy = parts.policy
+    ok, why = policy.check(policy, world.lua.table(), "overworld")
+    assert ok is False and "anchor" in why          # the preamble ran, so safety was reached
     for reason in ("battle_faint", "battle_commit"):
         ok, why = policy.check(policy, world.lua.table(), reason)
-        assert ok is False and reason in why and "gen3_frlg" in why and "C4-B" in why
+        assert ok is False
+        # safety's own refusal: either a pack clause name or its anchor preamble -- never the
+        # old entry.lua stub ("no <reason> predicate ... yet (C4-B)"), which no longer exists.
+        assert "safety.lua" in why and "C4-B" not in why, why
+    ok, why = policy.check(policy, world.lua.table(), "memorial_rename")
+    assert ok is False and "unknown write reason" in why
 
 
-def test_an_injected_battle_policy_decides_the_battle_reasons():
-    world = World(pack="gen3_rr", title="radical_red", build=False)
-    seen = []
-    _, parts = _production(world, battle_policy=lambda snap, reason: (seen.append(str(reason)) or True, "ok"))
-    ok, _ = parts.policy.check(parts.policy, world.lua.table(), "battle_commit")
-    assert ok is True and seen == ["battle_commit"]
+def test_an_overworld_and_a_battle_refusal_hold():
+    """The client treats a refusal as a HOLD: the pack clauses decide, and the guard is
+    fail-closed on a missing battler (so an explode cannot write until the client passes one)."""
+    world = World(pack="gen3_frlg", title="firered")
+    _, parts = _production(world)
+    policy = parts.policy
+    # seed the checkpoint's own ROM anchors, or safety refuses in its preamble and the clauses
+    # under test are never evaluated
+    anchors = pack_json("gen3_frlg", "write_checkpoint.json")["firered"]["anchors"]
+    for a in anchors.values():
+        hexs = a["expected_hex"]["clean"]
+        for i in range(a["length"]):
+            world.rom[a["rom_offset"] + i] = int(hexs[i * 2:i * 2 + 2], 16)
+    # seed the battle clause set in the fake bus so only the guard decides
+    guard = parts.write_checkpoint["battle"]["commit_guard"]
+    for slot in range(4):                       # the guard shares gBattleCommunication with
+        world.poke(guard["address"] + slot, b"\0")   # battle_comm_0, so seed it FIRST
+    clauses = world.lua.eval("function(p) return p.battle.clauses end")(parts.write_checkpoint)
+    for i in range(1, len(clauses) + 1):
+        c = clauses[i]
+        value = 1 if c["compare"] == "nonzero" else c["expect"]
+        world.poke(c["address"] + (c["offset"] or 0), int(value).to_bytes(c["width"], "little"))
+    ok, why = policy.check(policy, world.lua.table(), "battle_commit")
+    assert ok is False and "battler" in why                     # fail-closed without args
+    # the guard accepts a valid battler (checked at the safety seam; the policy pass-through is
+    # asserted above and in test_gen3_safety.py)
+    ok, why = parts.safety.check(parts.safety, world.lua.table(), "battle_commit",
+                                 world.lua.eval("function() return { battler = 1 } end")())
+    assert ok is True, why
+    ok, why = policy.check(policy, world.lua.table(), "overworld")
+    assert ok is False, "an overworld arm inside the fake world must still refuse (no real state)"
 
 
 def test_build_refuses_an_unadmitted_title():

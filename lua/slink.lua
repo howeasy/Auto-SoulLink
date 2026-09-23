@@ -89,10 +89,7 @@ end
 -- 2026-09-23, docs/gen3/PLAN.md §0). `admitted_by ~= "header"` matters: RR carries FireRed's
 -- header code, so an unpinned RR build must not be routed here and refused by the site check.
 --
--- TODO(lua/gen3/entry.lua): once entry.lua defines Entry.ROUTED (the P5 card that adds
--- gen3_rr to it), read that instead of the local set below; until then this is the routed
--- set's one home.
-local _GEN3_ROUTED_PACKS = { gen3_frlg = true }
+-- The routed set lives in entry.lua (Entry.ROUTED); the launcher keeps no copy of it.
 do
     local sys_ok, sys = pcall(function() return emu.getsystemid() end)
     if sys_ok and sys == "GBA" then
@@ -115,7 +112,21 @@ do
                                 header_code = ok_hc and header_code or "" })
             return E, a
         end)
-        local routed_set = admit_ok and Entry and (Entry.ROUTED or _GEN3_ROUTED_PACKS) or nil
+        -- An admission failure or a header-only admission falls through to game_detect exactly
+        -- like an unrecognised cartridge, but never silently: a GBA cartridge that names itself
+        -- BPRE/BPGE yet is not pinned (an unpinned hack, a bad dump) is the case a player needs
+        -- to see, and so is an admission error. RR carries FireRed's header code, so
+        -- admitted_by ~= "header" is what keeps an unpinned RR build off this route.
+        if admit_ok and Entry and admitted and Entry.ROUTED[admitted.pack]
+           and admitted.admitted_by == "header" then
+            console.log("[SLink] Gen 3 route: " .. tostring(admitted.pack) .. "/"
+                        .. tostring(admitted.title) .. " was admitted by header only (hash "
+                        .. tostring(admitted.rom_hash):sub(1, 8) .. ") -- falling back to the old client")
+        elseif not admit_ok then
+            console.log("[SLink] Gen 3 route: admission failed (" .. tostring(Entry) .. ") "
+                        .. "-- falling back to the old client")
+        end
+        local routed_set = admit_ok and Entry and Entry.ROUTED or nil
         if admit_ok and Entry and admitted and routed_set[admitted.pack]
            and admitted.admitted_by ~= "header" then
             -- The engine hooks are only proven on 2.11.x (same guard as the Gen 1 route,

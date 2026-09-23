@@ -13,7 +13,7 @@
 --                 write_u8(addr, value) (the ONLY write sink, reached only through writes.lua)
 --                 and optionally saveram() (flush the battery at the save site)
 --   production only: deps.net, deps.hud, deps.player, deps.rom_sha1 (the admitted hash),
---                 deps.native (the RR companion part, P5; nil today), deps.battle_policy
+--                 deps.native (an injected companion part; nil by default)
 --                 (function(snapshot, reason) -> ok, why for the battle reasons: the C4-B seam),
 --                 deps.boxes_new (a harness replacement for lua/gen3/boxes.lua's B.new)
 --   deps.ev       on_bus_exec(fn, addr, name) -> id, unregister(id)
@@ -87,6 +87,10 @@ Entry.PACK_FILES = {
         locations = "data/games/gen3_frlge/gen3_frlge_locations.lua",
     },
 }
+-- Which packs lua/slink.lua's Gen 3 route sends to the rewritten client. The route reads this
+-- table; the launcher keeps no copy of it. gen3_rr joins in G5.
+Entry.ROUTED = { gen3_frlg = true }
+
 Entry.ROM_TYPE = {}
 for _, pack in pairs(Entry.PACKS) do
     for title, rt in pairs(pack.rom_type) do Entry.ROM_TYPE[title] = rt end
@@ -244,17 +248,13 @@ local function build_production(deps, c)
             return true                                    -- no native part: nothing in flight
         end,
     }, c.artifact_kind)
-    -- The write policy. "overworld" is the G3-signed checkpoint. The battle reasons have no
-    -- predicate in the packs yet (C4-B designs WHEN a battle write may land); until then they
-    -- are refused by name, which the client turns into a HOLD, never a silent write.
-    local battle_policy = deps.battle_policy
+    -- The write policy: a straight pass-through. Every reason and its args reach the library,
+    -- which owns the clause sets (overworld is the G3-signed predicate; battle_faint /
+    -- battle_commit / native / sound are the C4-B2 sets); an unknown reason is refused by name
+    -- there. The client turns any refusal into a HOLD, never a silent write.
     local policy = {}
     function policy:snapshot() return safety:snapshot() end
-    function policy:check(snapshot, reason)
-        if reason == "overworld" then return safety:check(snapshot) end
-        if battle_policy then return battle_policy(snapshot, reason) end
-        return false, "no " .. tostring(reason) .. " predicate in the " .. pack .. " checkpoint pack yet (C4-B)"
-    end
+    function policy:check(snapshot, reason, args) return safety:check(snapshot, reason, args) end
     local writes = Writes.new({
         safety = policy, frame = io_.framecount,
         io = io_,                                          -- writes.lua is the only caller of write_u8
@@ -273,7 +273,65 @@ local function build_production(deps, c)
     local files = Entry.PACK_FILES[pack]
     local core = { Session = L("lua/core/session.lua"), Identity = L("lua/core/identity.lua"),
                    Deferred = L("lua/core/deferred.lua") }
-    local client = L("lua/gen3/client.lua").new({
+    -- ── native: the RR companion ABI (P4 C4-7) ─────────────────────────────────────────
+    -- Constructed BEFORE the client and passed INTO it, so one instance answers every seam: the
+    -- client's own service/commands, Safety's native_idle closure below, and (through it) the
+    -- writes policy. Attaching late left deps.native nil, so native_idle could report idle while
+    -- the real mailbox was busy (Codex REV2). The session does not exist yet, so send resolves it
+    -- lazily. The FULL pack profile is read here: the arena lives at profile.native, outside
+    -- titles (Codex REV on C5-1). Clean artifacts, FRLG and packs with no native block get none.
+    local client
+    local full_profile = load_json(c.json, c.root .. "/" .. files.profile)
+    if not native and pack == "gen3_rr" and c.artifact_kind == "companion"
+       and type(full_profile.native) == "table" then
+        local status = c.write_checkpoint and c.write_checkpoint.predicates
+            and c.write_checkpoint.predicates.script_context_status
+        -- panel_closed: the SOULLINK panel is a start-menu row, so it is over when the script
+        -- context that owned the menu is back to SHUTDOWN (the pack's own predicate). The result
+        -- byte: the patch's SlinkInfo has no result field (patch/src/handlers.c:224-234), so this
+        -- binding can only report "closed" (1), never "next page" (0).
+        -- TODO(C4-7): wire the page-turn result once the patch publishes one (P5/P6 panel scope).
+        local function panel_closed()
+            if not status then return true, 1 end
+            local value = io_.read_u8(status.address + (status.offset or 0))
+            if status.mask then value = value & status.mask end
+            return value == status.expect, 1
+        end
+        -- refresh_enemy: after OP_SET_ENEMY_PARTY copies gEnemyParty, the active foe's
+        -- gBattleMons[1]/[3] cache is stale -- the patch's comment assigns that refresh to Lua
+        -- (patch/src/handlers.c:1867-1888), the job the old client does in
+        -- M.refreshEnemyPartyNative (lua/memory_gba.lua:1699-1729). That write lands in the
+        -- battle's FIRST frames, and NO write reason covers that window: battle_faint's clause
+        -- set is the action-selection input wait (battle_main_func ==
+        -- HandleTurnActionSelectionState), which the intro is not, so an arm there is refused by
+        -- name. This binding therefore refuses by name and the native op replies refresh_failed,
+        -- instead of writing through a window the design has not established.
+        -- TODO(C4-7/C4-B follow-up): give it a window -- an intro-phase clause set (plus its probe
+        -- row and the pret evidence for who reads gBattleMons[1] during the intro), or a patch
+        -- opcode that refreshes natively.
+        local function refresh_enemy(_count)
+            return nil, "refresh_enemy_window_missing: the battle's first frames carry no "
+                .. "battle write reason (battle_faint is the action-selection input wait)"
+        end
+        native = L("lua/gen3/native.lua").new(full_profile, {
+            -- The exact io surface native.lua reads.
+            io = {
+                read_u8 = function(addr) return io_.read_u8(addr) end,
+                read_u16 = function(addr) return io_.read_u16(addr) end,
+                read_u32 = function(addr) return io_.read_u32(addr) end,
+                read_bytes = function(addr, len) return io_.read_bytes(addr, len) end,
+                framecount = function() return io_.framecount() end,
+            },
+            writes = writes, reads = reads, array = c.json.array,
+            send = function(event, fields)
+                if client then return client:send(event, fields) end
+            end,
+            in_battle = function() return client and client.driver.in_battle() or false end,
+            artifact_kind = c.artifact_kind, log = log,
+            refresh_enemy = refresh_enemy, panel_closed = panel_closed,
+        })
+    end
+    client = L("lua/gen3/client.lua").new({
         reads = reads, R = c.Reads, profile = c.profile, sites = c.sites, Signals = c.Signals,
         writes = writes, boxes = boxes, policy = policy, net = assert(deps.net, "deps.net required"),
         hud = assert(deps.hud, "deps.hud required"), json = c.json, io = io_, ev = c.ev,
@@ -284,6 +342,7 @@ local function build_production(deps, c)
     })
     local parts = c.parts
     parts.writes, parts.boxes, parts.safety, parts.policy, parts.native = writes, boxes, safety, policy, native
+    parts.native_present = native ~= nil
     return client, parts
 end
 
