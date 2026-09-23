@@ -2,6 +2,20 @@
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in the sweep worktree's `docs/gen1_reference/RC_MASTER_GUIDE.md` (`E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`). Requirements ledger: `docs/gen3_requirements.md`.
 
+## STOP POINT 2026-09-23 (owner: stop at the milestone)
+
+Resume here. HEAD 767ba0a5. Milestone: FR<->LG faint_cmd_gen3 PASS on the new client, clean cut (c6d5ea4f).
+G4 lane items started after the milestone, run in the clean lane worktree `.claude/worktrees/gen3-lane-clean`:
+- link_gen3 run 1 FAIL: bag fade race (fixed 43b9ccb4). Run 2: A PASS on throw 1, B out of balls (2 balls, RNG).
+  ad9669b1 adds the Gen 1 ball-RNG retry. NEXT: re-run on a cut containing ad9669b1.
+- boxsync_gen3 FAIL: withdraw sent no box_to_party because gPlayerPartyCount is stale inside the PC.
+  Fixed in 767ba0a5 (unit falsifier). NEXT: live re-run.
+- whiteout_gen3 FAIL: A's rebuilt party_mon was held for the whole wait by the safety.lua task clause
+  ("unknown active task"). Diagnosis card C4-6h was out at the stop; no re-run until it is fixed.
+- Not started: reconnect_gen3 (+ --wrong-save), deadzone_gen3, linked_faint_active_gen3, then G4 items 3-7.
+C5-11c: OMP fixed all 8 REV2 findings; it is UNCOMMITTED in this worktree (full suite 5467 passed with SLINK_ARMGCC).
+NEXT: slink-adapter-guard + Codex REV3, then commit, patch rebuild, md5, lane gates.
+
 ## Where things are
 
 - Worktree `E:/Google Drive/SLink/.claude/worktrees/gen3-migration-planning-5d8e45`, branch `claude/gen3-migration-planning-5d8e45`, pushed to origin on owner authority (2026-09-21) so CI could build the pret symbols. Not merged to master. Base: master `4749a2c`.
