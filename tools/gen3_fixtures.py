@@ -30,6 +30,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import sys
 from pathlib import Path
 
@@ -377,6 +378,7 @@ def cmd_derive_b(args: argparse.Namespace) -> int:
 
 BOOT_CHECK_LUA = "lua/tests/gen3_boot_check.lua"
 FR_NEWGAME_LUA = "lua/tests/gen3_fr_newgame_inputs.lua"
+FR_PARTY_LUA = "lua/tests/gen3_fixture_from_state.lua"
 RUN_DIR = Path(REPO) / "patch" / "build" / "gen3_fixture_runs"
 CHECKPOINTS = {False: Path(REPO) / "data/games/gen3_frlg/write_checkpoint.json",
                True: Path(REPO) / "data/games/gen3_rr/write_checkpoint.json"}
@@ -508,7 +510,12 @@ def _prepare_run(name: str, rom: str, *, seed: bytes | None, saveram_name_overri
     rom_rel = stage_rom(rom)
     run_dir = RUN_DIR / name
     if run_dir.exists():
-        shutil.rmtree(run_dir)
+        # reference_worktree_readonly_attr: a prior run's directory can come back read-only
+        # (Google Drive sync attribute), which plain rmtree refuses with WinError 5.
+        def _clear_readonly(func, path, _exc_info):
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        shutil.rmtree(run_dir, onerror=_clear_readonly)
     run_dir.mkdir(parents=True)
     battery = saveram_name_override or saveram_name(rom_rel)
     if seed is not None:
@@ -584,6 +591,51 @@ def cmd_make_fr(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_make_fr_party(args: argparse.Namespace) -> int:
+    """From an existing gen3_scripted_play.lua savestate (a party already reachable, e.g. after
+    the route1_catch leg), walk to a party fixture position and save in-game
+    (lua/tests/gen3_fixture_from_state.lua) -- or, with --probe, just load the state and report
+    party HP/position without walking or saving (verify the probe first)."""
+    if not args.probe and not args.out:
+        print("make-fr-party FAIL: --out is required unless --probe", file=sys.stderr)
+        return 1
+    extra_env = {"SLINK_GEN3_FIXTURE_KIND": args.kind, "SLINK_STATE": args.state}
+    if args.state_dir:
+        extra_env["SLINK_STATE_DIR"] = args.state_dir
+    if args.probe:
+        extra_env["SLINK_GEN3_FIXTURE_PROBE"] = "1"
+    rom_rel, run_dir, battery = _prepare_run(
+        f"make_fr_party_{args.kind}", args.rom, seed=None, saveram_name_override=args.saveram_name)
+    print(f"cold boot (state load supplies the field): {run_dir} is empty, battery will be {battery}")
+
+    passed, text = _launch(FR_PARTY_LUA, rom_rel, run_dir, rr=False, timeout=args.timeout,
+                            extra_env=extra_env)
+    print(text.rstrip())
+    if not passed:
+        print("make-fr-party FAIL: the driver did not report PASS", file=sys.stderr)
+        return 1
+    if args.probe:
+        return 0
+
+    flushed = _flushed_saveram(run_dir, battery)
+    if flushed is None:
+        print(f"make-fr-party FAIL: EmuHawk left no *.SaveRAM in {run_dir}", file=sys.stderr)
+        return 1
+    try:
+        body = import_savedata(flushed.read_bytes(), rr=False)
+    except (ValueError, OSError) as exc:
+        print(f"make-fr-party FAIL: candidate refused: {exc}", file=sys.stderr)
+        return 1
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(body)
+    r = qualify_one(body, rr=False)
+    print(f"wrote {out} ({len(body)} bytes) sha256={sha256_hex(body)} slot={r['slot']} "
+          f"counter={r['counter']} trainer={r['trainer_name']!r}#{r['trainer_id']:08X} "
+          f"party={r['party']}")
+    return 0
+
+
 # ---------------------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -624,6 +676,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_fr.add_argument("--saveram-name", default=None)
     p_fr.add_argument("--timeout", type=int, default=1800)
     p_fr.set_defaults(func=cmd_make_fr)
+
+    p_frp = sub.add_parser("make-fr-party",
+                           help="EMULATOR: party fixture from an existing scripted-play state")
+    p_frp.add_argument("--rom", required=True)
+    p_frp.add_argument("--out", default=None, help="required unless --probe")
+    p_frp.add_argument("--kind", choices=["battle", "town"], required=True)
+    p_frp.add_argument("--state", default="slink_fr_route1_catch.State")
+    p_frp.add_argument("--state-dir", default=None,
+                       help="SLINK_STATE_DIR override; default E:/Howard/Bizhawk/GBA/State")
+    p_frp.add_argument("--probe", action="store_true",
+                       help="load the state and report party HP/position; no walk, no save")
+    p_frp.add_argument("--saveram-name", default=None)
+    p_frp.add_argument("--timeout", type=int, default=1800)
+    p_frp.set_defaults(func=cmd_make_fr_party)
 
     return ap
 

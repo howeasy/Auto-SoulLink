@@ -49,6 +49,13 @@ Shadow lane invocation: `SLINK_SHADOW=1 python tools/e2e_duo.py --game gen3_rr -
 
 > OWNER RULING 2026-09-22: peer ghost removed from the Gen 3 RC and deferred post-RC (PLAN §0/§10, requirements 'Not in this release'). P5 drops ghost.lua and the ghost scenario; RR duo set is eight.
 
+## P4 in progress (2026-09-23, after G3 signed)
+
+- Owner rulings: in-battle faint must work on vanilla with RR parity (PLAN §0 "In-battle faint"); RR is brought under the new standard alongside P4 (PLAN §0 "RR under the new standard"). All P4 cards are pack-neutral.
+- Landed: 4f9cb1c6 (C4-5a Manager labels), b59e071a (C3-42 PC.popup row 4, OMP), c54ae24a (research: `docs/gen3/research/p4_old_client_inventory.md` Codex, `p4_gen1_contract_map.md` Opus).
+- In flight: C4-F fixtures (Sonnet, emulator lane), C4-1 `lua/core/{session,identity,deferred}.lua` (Opus), C4-2a reads/profile incl. RR + battle fields (Sonnet), C4-3 `lua/gen3/boxes.lua` pack-neutral (Codex; deposit restores PP like the game), C4-0c fact-check (OMP).
+- Queued: C4-B battle_faint write predicate design (pinned battle sites + checkpoint clauses, FR/LG/RR); C4-2b Gen 3 client driver (after C4-1); C4-4 entry production mode/run.lua/route/manifest; C4-5 conformance World + write-ownership guard; C4-6 duo lane; P5 C5-1 native.lua, C5-3 companion re-pin, C5-4 gatelib.
+
 ## Checkpoint 9 (2026-09-23, owner stop): G3 request ready
 
 - **G3 request draft is ready for the owner**: `docs/gen3/G3_request_draft.md` (5efd1f24). It has a summary at the top. The owner is asked to sign the evidenced FR clean / RR companion G3 cells. The 7 OPEN kinds, 4 PARTIAL rows and deferred LG/RR clean artifacts are carried forward as limits. This is not G4 or RC approval.
