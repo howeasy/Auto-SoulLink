@@ -15,7 +15,7 @@
     ROM / config   run_gb_gate._gen2_plan(<title>, <per-instance SaveRAM dir under BUILD>, <fixture>,
                    100|300)["rom"]; config from run_gb_gate._gen2_config(plan, cfg); seed
                    tests/fixtures/gen2/<case>.SaveRAM into <SAVERAM_DIR>/<SAVERAM_NAME> before launch.
-    SLINK_DUO      wt, player "a"|"b", scenario "link"|"gen2_link", game "gen2_new", attempt,
+    SLINK_DUO      wt, player "a"|"b", scenario "link"|"gen2_link"|"faint"|"gen2_faint", game "gen2_new", attempt,
                    result (this instance's result file), partner_result, go_file,
                    timeout_frames (default 150000), idle_jitter (optional)
     process env    (Popen env=, per instance, as run_gb_gate passes it) SLINK_ROOT;
@@ -52,7 +52,10 @@
     RECEIPT {schema "gen2-duo-link-v1", ...header, key, booted, hello, capture, save, client,
              input_mode "normal_buttons", harness_write_scopes []}                     PASS only
     RESULT: PASS (caught <key>) | RESULT: FAIL (<reason>)                                   last line
-  The PASS is scenario_gen2_link.lua S.verdict over these very lines: CAUGHT/PASS without an engine
+  CLIENT also carries registered_sites (the production binder's status().registered_sites after start).
+  The faint scenario adds LINK_SAVE, ENGINE_FAINT, FAINT_SENT, PARTY_HP_WRITE and BENCH_HP_STATUS;
+  scenario_gen2_faint.lua's header is their contract.
+  The PASS is scenario_gen2_<name>.lua S.verdict over these very lines: CAUGHT/PASS without an engine
   capture, a sent capture and a native save observed by both the gate site and the client is a FAIL.
 
   U3 BINDING (one place, start_production below): dofile lua/gen2/run.lua -- the entry lua/slink.lua
@@ -110,7 +113,8 @@ jlog("DUO_GEN2", {player=D.player, scenario=D.scenario, attempt=D.attempt or 1, 
                   title=ctx.env.title, rom_sha1=ctx.env.rom_sha1, fixture_sha256=ctx.qualify.stage_fingerprint})
 
 -- ── receipts the harness keeps (never an oracle of their own; S.verdict re-reads the lines) ──
-local rec = {captures=0, capture=nil, sent_keys={}, caught=nil, client_saves=0, save_completed_frame=nil}
+local rec = {captures=0, capture=nil, sent_keys={}, caught=nil, client_saves=0, save_completed_frame=nil,
+             faint=nil, faint_sent=nil, rx={}, hp_write=nil}
 local sent = {}
 local function maybe_caught()
     local key = rec.capture and rec.capture.key
@@ -133,6 +137,9 @@ C.send = function(line)
         rec.sent_keys[msg.key] = true
         jlog("CAPTURE_SENT", {frame=emu.framecount(), key=msg.key, seq=msg.seq})
         maybe_caught()
+    elseif event == "faint" and type(msg.key) == "string" then
+        rec.faint_sent = {frame=emu.framecount(), key=msg.key, seq=msg.seq}
+        jlog("FAINT_SENT", rec.faint_sent)
     end
     return _send(line)
 end
@@ -146,9 +153,16 @@ local started, gen2, parts = pcall(start_production)
 if not started or type(gen2) ~= "table" or type(parts) ~= "table" then
     finish(false, "production client did not start: " .. tostring(started and "run.lua exposed no client" or gen2))
 end
+-- The sites the production binder actually registered (only receipt-proven ones, lua/gen2/signals.lua).
+local registered = {}
+do
+    local okr, st = pcall(function() return gen2.signals:status() end)
+    for _, id in ipairs(okr and type(st) == "table" and st.registered_sites or {}) do registered[#registered + 1] = tostring(id) end
+    table.sort(registered)
+end
 jlog("CLIENT", {qualification=tostring(parts.qualification), production_admitted=parts.production_admitted == true,
                 pack=tostring(parts.pack), title=tostring(parts.title),
-                rom_sha1=tostring(parts.profile and parts.profile.rom_sha1)})
+                rom_sha1=tostring(parts.profile and parts.profile.rom_sha1), registered_sites=json.array(registered)})
 if parts.production_admitted ~= true then finish(false, "client is not the production graph") end
 -- The client detects its title from the ROM header (run.lua Entry.detect_title); the gate booted the
 -- fixture for SLINK_GEN2_TITLE. A cross-title lane mix-up must fail here, not deep in the route.
@@ -168,6 +182,11 @@ gen2.on_event = function(self, ev)
             rec.capture = rec.capture or {key=m.key}
             maybe_caught()
         end
+    elseif type(ev) == "table" and ev.kind == "faint" and type(ev.mon) == "table" then
+        local f = {frame=emu.framecount(), site_id=tostring(ev.site_id), cause=tostring(ev.cause), key=tostring(ev.mon.key),
+                   slot=ev.slot}
+        jlog("ENGINE_FAINT", f)
+        rec.faint = rec.faint or f
     elseif type(ev) == "table" and ev.kind == "observation" and ev.site_id == "save_completed" then
         rec.client_saves = rec.client_saves + 1
         rec.save_completed_frame = emu.framecount()
@@ -177,19 +196,78 @@ end
 local _handle = gen2.handle_command
 gen2.handle_command = function(self, cmd)
     local c = type(cmd) == "table" and cmd.cmd or "?"
-    if c ~= "noop" then log("RX " .. tostring(c) .. (type(cmd) == "table" and cmd.key and (" key=" .. tostring(cmd.key)) or "")) end
+    if c ~= "noop" then
+        log("RX " .. tostring(c) .. (type(cmd) == "table" and cmd.key and (" key=" .. tostring(cmd.key)) or ""))
+        rec.rx[#rec.rx + 1] = {cmd=c, key=type(cmd) == "table" and cmd.key or nil}
+    end
     return _handle(self, cmd)
 end
 
+-- PARTY_HP_WRITE: the PRODUCTION writer's bench faint, observed around the very call the client makes
+-- (parts.writes IS the client's writes object; run_deferred calls it inside the checkpoint hook). Every
+-- field is read synchronously in the call: raw wPartyMons before/after, the permit log rows it added, and
+-- the CPU/bank/stack/state evidence the per-title checkpoint pack names. No byte is written here.
+local function bus_hex(addr, n)
+    local bytes = api.read_range(addr, n, "System Bus")
+    local out = {}
+    for i = 1, n do out[i] = fmt("%02x", bytes[i]) end
+    return table.concat(out)
+end
+local function checkpoint_evidence()
+    local primary = parts.data.checkpoint.titles[ctx.env.title].primary
+    local anchor = primary.anchors.ow_player_input
+    local sp = api.register("SP")
+    local values = {}
+    for _, p in ipairs(primary.state_predicates) do
+        local value = 0   -- the RAW bytes, big-endian joined; the oracle applies mask/operator
+        for _, b in ipairs(api.read_range(p.address, p.width, "System Bus")) do value = value * 256 + b end
+        values[p.symbol] = value
+    end
+    -- BizHawk exposes no MBC bank register: hrom_bank is the hROMBank shadow, anchor_hex the mapped bytes.
+    return {pc=api.register("PC"), sp=sp, hrom_bank=api.read_u8(ctx.profile.hram.hROMBank, "System Bus"),
+            svbk=api.read_u8(0xFF70, "System Bus") % 8, sc=api.read_u8(0xFF02, "System Bus"),
+            stack_hex=bus_hex(sp, primary.caller_stack.required_read_bytes),
+            anchor_hex=bus_hex(anchor.address, #anchor.expected_hex // 2), state=json.object(values)}
+end
+local W = parts.writes or {}   -- production always composes it; a stand-in client may not
+local _faint_party_slot = W.faint_party_slot
+if _faint_party_slot then W.faint_party_slot = function(self, slot, snapshot)
+    local base, n = parts.profile.ram.wPartyMons, 6 * parts.profile.constants.PARTYMON_STRUCT_LENGTH
+    local mark = #(self.log or {})
+    local row = {frame=emu.framecount(), slot=slot, kind="party_hp"}
+    local party = ctx.reads.read_party()
+    for _, m in ipairs(party and party.mons or {}) do if m.slot == slot then row.key = wire.mon_key(m) end end
+    local eok, evidence = pcall(checkpoint_evidence)
+    row.checkpoint = eok and evidence or {error=tostring(evidence)}
+    row.before_party_hex = bus_hex(base, n)
+    local ok, result = pcall(_faint_party_slot, self, slot, snapshot)
+    row.after_party_hex = bus_hex(base, n)
+    row.ok, row.error = ok, not ok and tostring(result) or nil
+    local added = {}
+    for i = mark + 1, #(self.log or {}) do added[#added + 1] = self.log[i] end
+    row.log = json.array(added)
+    jlog("PARTY_HP_WRITE", row)
+    if ok and rec.hp_write == nil then rec.hp_write = row end
+    if not ok then error(result, 0) end
+    return result
+end end
+
 -- ── the gate hooks, the input host and the scenario harness ─────────────────────────────
 R.prepare(ctx, SG, ctx.u1)
+local FI
+if S.FAINT_INPUTS then   -- the faint route's UI origins are watched from the first hook on
+    FI = dofile(ROOT .. "/lua/tests/duo/gen2_faint_inputs.lua")
+    local fok, fwhy = pcall(FI.prepare, ctx, SG, ctx.u1)
+    if not fok then finish(false, "faint inputs: " .. tostring(fwhy)) end
+end
 local state = SG.hooks(ctx)
 local idle = {}
 for _, button in ipairs(SG.BUTTONS) do idle[button] = false end
 local host = ctx.Host.new({step=SG.button_step(ctx), frame=api.framecount, idle=idle})
 local timeout = D.timeout_frames or 150000
 
-local h = {lines=lines, json=json, sent=sent, log=log, jlog=jlog}
+local h = {lines=lines, json=json, sent=sent, log=log, jlog=jlog, player=D.player, rec=rec, registered=registered,
+           root=ROOT}
 function h.frames(n)
     for _ = 1, n do
         if api.framecount() > timeout then error("scenario timeout after " .. timeout .. " frames", 0) end
@@ -242,18 +320,78 @@ function h.play()
         screen=function() return SG.screen(ctx) end, where=function() return "-" end,
         trace=os.getenv("SLINK_GEN2_TRACE") == "1"})
 end
-function h.witness()
-    if state.saves < 1 then return false, "the native save_completed site never fired" end
-    if rec.client_saves < 1 then return false, "the production client never observed save_completed" end
+-- The flushed native save: CartRAM digest == the first 0x8000 bytes of the flushed SaveRAM file.
+local function flushed()
+    if state.saves < 1 then return nil, "the native save_completed site never fired" end
+    if rec.client_saves < 1 then return nil, "the production client never observed save_completed" end
     local wok, digest = pcall(SG.cart_digest, api)
-    if not wok then return false, digest end
+    if not wok then return nil, digest end
     local fok, saved = pcall(SG.flush, ctx, digest)   -- asserts file == CartRAM + the 22-byte RTC trailer
-    if not fok then return false, saved end
-    jlog("SAVE_WITNESS", {frame=api.framecount(), save_completed_frame=rec.save_completed_frame,
-        gate_saves=state.saves, client_saves=rec.client_saves, cartram_sha256=digest, cartram_bytes=SG.CART_RAM_BYTES,
-        saveram_path=(ctx.env.dir .. "/" .. ctx.env.saveram):gsub("\\", "/"), saveram_bytes=#saved,
-        flushed_matches=true})
+    if not fok then return nil, saved end
+    return {frame=api.framecount(), save_completed_frame=rec.save_completed_frame, gate_saves=state.saves,
+            client_saves=rec.client_saves, cartram_sha256=digest, cartram_bytes=SG.CART_RAM_BYTES,
+            saveram_path=(ctx.env.dir .. "/" .. ctx.env.saveram):gsub("\\", "/"), saveram_bytes=#saved,
+            flushed_matches=true}, saved
+end
+function h.witness()
+    local w, saved = flushed()
+    if not w then return false, saved end
+    jlog("SAVE_WITNESS", w)
     return true
+end
+-- LINK_SAVE: the linked save, copied once next to the result file (the runner's e2e_<scenario>_* sweep
+-- clears it between attempts; an existing copy is refused, never overwritten).
+function h.link_save(key)
+    local w, saved = flushed()
+    if not w then return false, saved end
+    local result = D.result:gsub("\\", "/")
+    local path = result:gsub("_result%.txt$", "") .. "_link_save.SaveRAM"
+    if path == result .. "_link_save.SaveRAM" then return false, "result path does not end in _result.txt" end
+    local existing = io.open(path, "rb")
+    if existing then existing:close(); return false, "link save copy already exists: " .. path end
+    local f = io.open(path, "wb")
+    if not f then return false, "cannot write " .. path end
+    f:write(saved)
+    f:close()
+    jlog("LINK_SAVE", {frame=w.frame, saveram_path=path, saveram_bytes=#saved, cartram_sha256=w.cartram_sha256,
+                       cartram_bytes=w.cartram_bytes, gate_saves=w.gate_saves, client_saves=w.client_saves,
+                       save_completed_frame=w.save_completed_frame, key=key})
+    return true
+end
+-- True once the partner's result file carries a `<tag> ...` line.
+function h.partner_has(tag)
+    local f = D.partner_result and io.open(D.partner_result, "r")
+    if not f then return false end
+    local text = "\n" .. f:read("a")
+    f:close()
+    return text:find("\n" .. tag .. " ", 1, true) ~= nil
+end
+-- The party slot (0-based) and record holding `key`, through the gate's own decoder (never production's).
+function h.slot_of(key)
+    local party = ctx.reads.read_party()
+    for _, m in ipairs(party and party.mons or {}) do
+        if wire.mon_key(m) == key then return m.slot, m end
+    end
+end
+local function play(spec, driver, observe)
+    return F.play(host, spec, driver, observe, {log=log, frame=api.framecount,
+        screen=function() return SG.screen(ctx) end, where=function() return "-" end,
+        trace=os.getenv("SLINK_GEN2_TRACE") == "1"})
+end
+-- START -> SAVE -> YES (-> overwrite) from the overworld: the link route's own save phase, alone.
+function h.save()
+    local driver = F.driver(ctx.facts.maps.Route29)
+    driver.phase = "save"
+    local left = math.max(1, timeout - api.framecount())
+    return play({name="duo-gen2-save", terminal=driver.terminal, terminal_idle=true, max_frames=left,
+                 max_phase_frames=math.min(D.max_phase_frames or F.BUDGET.max_phase_frames, left),
+                 settle_frames=F.BUDGET.settle_frames}, driver, SG.qualify_observer(ctx))
+end
+-- The faint route (gen2_faint_inputs.lua): the opts.target party slot fights until opts.fainted().
+function h.sacrifice(opts)
+    local driver, observe, spec = FI.new(ctx, SG, F, {target=opts.target, fainted=opts.fainted,
+        max_frames=math.max(1, timeout - api.framecount()), max_phase_frames=D.max_phase_frames})
+    return play(spec, driver, observe)
 end
 
 local ran, pass, msg = pcall(S.run, h)
