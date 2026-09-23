@@ -264,7 +264,7 @@ local function compose(deps, title, production)
         assert(size == profile.derived.rom_size, "candidate ROM size mismatch")
         local function read_rom(offset) return io_.read_u8(offset, "ROM") end
         assert(Admission.sha1(read_rom, size) == profile.rom_sha1, "candidate ROM hash mismatch")
-        assert(Admission.anchors_match(source_anchors(data, deps.title), {size=size, read_u8=read_rom}, "sha1"),
+        assert(Admission.anchors_match(source_anchors(data, title), {size=size, read_u8=read_rom}, "sha1"),
                "candidate source anchor mismatch")
         local Reads, Writes, Rom = load("lua/gen2/reads.lua"), load("lua/gen2/writes.lua"), load("lua/gen2/rom.lua")
         local Permit = load("lua/write_permit.lua")
