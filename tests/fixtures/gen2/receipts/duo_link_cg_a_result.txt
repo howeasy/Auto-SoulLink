@@ -1,5 +1,5 @@
 DUO_GEN2 {"attempt":1,"case":"crystal_battle","fixture_sha256":"f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6","player":"a","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","scenario":"link","title":"crystal"}
-CLIENT {"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"}
+CLIENT {"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","save_completed","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"}
 JITTER requested=0 applied=0 attempt=1
   phase title @1
   phase continue @3180
@@ -10,12 +10,9 @@ RX resolved_areas
 RX config
 BOOTED {"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
 MYKEY 0 F794:B541:9E
-  phase walk @3471
+  phase walk @3689
 TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":true,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"p
-  phase battle @3774
-RX resolved_areas
-RX config
-TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":true,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"p
+  phase battle @4020
 RX resolved_areas
 RX config
 TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":true,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"p
@@ -42,22 +39,47 @@ RX config
 TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":true,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"p
 RX resolved_areas
 RX config
-ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":5416,"key":"354D:B541:13","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":19}
-TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":15,"in_box":false,"key":"354D:B541:13","level":3,"maxHP":15,"nickname":"RATTATA","player":"a","seq":51,"species_id":19,"stats":{"level":3,"maxHP"
-CAPTURE_SENT {"frame":5416,"key":"354D:B541:13","seq":51}
-CAUGHT 354D:B541:13
-RX box_mon key=354D:B541:13
-TX {"event":"box_mon_failed","key":"354D:B541:13","player":"a","reason":"Gen 2 box writer not composed (U2 proves only a current-box deposit)","seq":52}
-TX {"event":"safe","player":"a","seq":53}
-TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":9,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"p
-  phase save @5483
-RX box_mon key=354D:B541:13
-TX {"event":"box_mon_failed","key":"354D:B541:13","player":"a","reason":"Gen 2 box writer not composed (U2 proves only a current-box deposit)","seq":56}
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":true,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"p
 RX resolved_areas
 RX config
-  phase saved @6148
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":9,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":true,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"pa
+RX resolved_areas
+RX config
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":9,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":true,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"pa
+RX resolved_areas
+RX config
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":9,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":true,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"pa
+RX resolved_areas
+RX config
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":9,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":true,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"pa
+RX resolved_areas
+RX config
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":9,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":true,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"pa
+RX resolved_areas
+RX config
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":9,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":true,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"pa
+RX resolved_areas
+RX config
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":9,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":true,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"pa
+RX resolved_areas
+RX config
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":6819,"key":"A515:B541:A1","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":161}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":13,"in_box":false,"key":"A515:B541:A1","level":2,"maxHP":13,"nickname":"SENTRET","player":"a","seq":83,"species_id":161,"stats":{"level":2,"maxHP
+CAPTURE_SENT {"frame":6819,"key":"A515:B541:A1","seq":83}
+CAUGHT A515:B541:A1
+RX hud_show
+RX play_sound
+RX msgbox
+RX party_mon key=A515:B541:A1
+TX {"event":"sync_retrieve_failed","key":"A515:B541:A1","player":"a","reason":"Gen 2 box writer not composed (U2 proves only a current-box deposit)","seq":84}
+TX {"event":"safe","player":"a","seq":85}
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":8,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"p
+  phase save @6886
+RX resolved_areas
+RX config
+  phase saved @7551
 MYKEY 0 F794:B541:9E
-MYKEY 1 354D:B541:13
-SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"c5284f87ef59aa37cd85d0c0008088318335cbd86fd68b05c9788f7ac9e612ed","client_saves":1,"flushed_matches":true,"frame":6178,"gate_saves":1,"save_completed_frame":6148,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-duo-live-lane/patch/build/saveram_link_gen2-cg-link_a/Pokemon - Crystal Version (USA, Europe).SaveRAM"}
-RECEIPT {"attempt":1,"booted":{"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":5416,"key":"354D:B541:13","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":19},"case":"crystal_battle","client":{"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"},"fixture_sha256":"f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6","harness_write_scopes":[],"hello":{"frame":3303,"ot_id":46401},"input_mode":"normal_buttons","key":"354D:B541:13","player":"a","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","save":{"cartram_bytes":32768,"cartram_sha256":"c5284f87ef59aa37cd85d0c0008088318335cbd86fd68b05c9788f7ac9e612ed","client_saves":1,"flushed_matches":true,"frame":6178,"gate_saves":1,"save_completed_frame":6148,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-duo-live-lane/patch/build/saveram_link_gen2-cg-link_a/Pokemon - Crystal Version (USA, Europe).SaveRAM"},"scenario":"link","schema":"gen2-duo-link-v1","title":"crystal"}
-RESULT: PASS (caught 354D:B541:13)
+MYKEY 1 A515:B541:A1
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"668a222279dcc165ab7634fa6b42f5a218b4989f0a3e766086291303d4298d7d","client_saves":1,"flushed_matches":true,"frame":7581,"gate_saves":1,"save_completed_frame":7551,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-cg-faint-link/patch/build/saveram_link_gen2-cg-link_a/Pokemon - Crystal Version (USA, Europe).SaveRAM"}
+RECEIPT {"attempt":1,"booted":{"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":6819,"key":"A515:B541:A1","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":161},"case":"crystal_battle","client":{"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","save_completed","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"},"fixture_sha256":"f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6","harness_write_scopes":[],"hello":{"frame":3303,"ot_id":46401},"input_mode":"normal_buttons","key":"A515:B541:A1","player":"a","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","save":{"cartram_bytes":32768,"cartram_sha256":"668a222279dcc165ab7634fa6b42f5a218b4989f0a3e766086291303d4298d7d","client_saves":1,"flushed_matches":true,"frame":7581,"gate_saves":1,"save_completed_frame":7551,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-cg-faint-link/patch/build/saveram_link_gen2-cg-link_a/Pokemon - Crystal Version (USA, Europe).SaveRAM"},"scenario":"link","schema":"gen2-duo-link-v1","title":"crystal"}
+RESULT: PASS (caught A515:B541:A1)

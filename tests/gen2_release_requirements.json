@@ -103,11 +103,11 @@
           "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario link --lane gen2-cg-link --keep-data",
           "receipts": {
             "a": {"path": "tests/fixtures/gen2/receipts/duo_link_cg_a_result.txt",
-                  "sha256": "354a7466dcdf3ce94f03d1b73849648f721b8d2234c20e83f9456a531facb327"},
+                  "sha256": "90cb57d777a686bd6633e6d4d6715f73140a0a42c64fdae7ea3e287d47e68d83"},
             "b": {"path": "tests/fixtures/gen2/receipts/duo_link_cg_b_result.txt",
-                  "sha256": "8c2afc79156ee0ee634c3682c64c452efd758a2fe63bca0eb1f7896694fc93a0"},
+                  "sha256": "e181ade5648b2d0c78d0dca5575cd95d2ce1d2e21e72779bb29ee0e69f752fd2"},
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_link_cg_pydec_result.txt",
-                      "sha256": "3df8a800bd7c74c78c4285710c59c673a3c212d195dde7e7c83aa4b032d6571f"}
+                      "sha256": "23e18ac2b3f2ea5a69887016350abbe76a802c69974c8cf626ad2f8a1b5ea4ac"}
           }
         }
       ]
