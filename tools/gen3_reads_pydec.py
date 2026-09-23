@@ -158,6 +158,54 @@ def apply_mutation(dumps: dict) -> str | None:
     return None
 
 
+# ── P4 card C4-2a: trainer/location/badges/bag/battle-type decoders, independent of
+# lua/gen3/reads.lua on purpose (PLAN §5.7) -- offsets default to the FR/LG values recorded in
+# data/games/gen3_frlg/profile.json (derived.SB2_OT_ID_OFFSET etc). Callers on a different pack
+# pass that pack's own offsets instead of assuming these defaults.
+SB2_TRAINER_NAME_LEN = 7  # PLAYER_NAME_LENGTH, pret include/constants/global.h:64
+
+
+def decode_trainer(sb2: bytes, ot_offset: int = 0x0A, name_offset: int = 0) -> dict:
+    """SaveBlock2.playerTrainerId (u32 LE) + playerName (pret include/global.h:327-332)."""
+    ot_id = int.from_bytes(sb2[ot_offset:ot_offset + 4], "little")
+    name = codec.decode_name(sb2[name_offset:name_offset + SB2_TRAINER_NAME_LEN])
+    return {"ot_id": ot_id, "name": name}
+
+
+def decode_location(sb1: bytes, group_offset: int = 0x04, num_offset: int = 0x05) -> dict:
+    """SaveBlock1.location, struct WarpData (pret include/global.h:392-398,759-762): two
+    signed bytes."""
+    def _s8(b: int) -> int:
+        return b - 256 if b >= 128 else b
+    return {"map_group": _s8(sb1[group_offset]), "map_num": _s8(sb1[num_offset])}
+
+
+def decode_badges(flags_byte: int) -> int:
+    """The 8 FLAG_BADGE0x_GET bits already share one byte (pret include/constants/flags.h);
+    bit i (0-based) is badge i+1. `flags_byte` is SaveBlock1.flags[SB1_BADGE_BYTE_OFFSET]."""
+    return flags_byte & 0xFF
+
+
+def decode_ball_pocket(raw: bytes, count: int, key: int | None = None) -> dict:
+    """ItemSlot{u16 itemId, u16 quantity} (pret include/global.h:400-404), `count` slots back
+    to back. `key` is SaveBlock2.encryptionKey (src/item.c GetBagItemQuantity XORs the low 16
+    bits); pass None for CFRU/RR's unencrypted pocket."""
+    total = 0
+    for i in range(count):
+        item = int.from_bytes(raw[i * 4:i * 4 + 2], "little")
+        qty = int.from_bytes(raw[i * 4 + 2:i * 4 + 4], "little")
+        if key is not None:
+            qty ^= key & 0xFFFF
+        if item != 0:
+            total += qty
+    return {"ball_count": total, "has_pokeballs": total > 0}
+
+
+def decode_battle_type(flags: int, trainer_mask: int, double_mask: int) -> dict:
+    """gBattleTypeFlags (u32) against the pack's BATTLE_TYPE_TRAINER_MASK/DOUBLE_MASK."""
+    return {"is_trainer": bool(flags & trainer_mask), "is_doubles": bool(flags & double_mask)}
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("dump", type=Path)

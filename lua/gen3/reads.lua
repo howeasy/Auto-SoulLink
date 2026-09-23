@@ -26,6 +26,14 @@ R.NAME_EOS = 0xFF               -- charmap.txt: '$' = FF
 R.PARTY_CAPACITY = 6            -- PARTY_SIZE
 R.MONS_PER_BOX = 30             -- IN_BOX_COUNT
 
+-- P4 card C4-2a: engine-fixed struct geometry, shared by every title (vanilla and CFRU/RR
+-- alike -- lua/memory_gba.lua's production isInBattle() uses this same HP offset on both).
+-- include/pokemon.h:170-206 (pret/pokefirered@c75f3523) struct BattlePokemon.
+R.BATTLE_MON_SIZE = 0x58        -- sizeof(struct BattlePokemon)
+R.BATTLE_MON_HP_OFF = 0x28      -- BattlePokemon.hp (u16); .maxHP is HP_OFF + 4
+-- include/global.h:400-404 struct ItemSlot { u16 itemId; u16 quantity; }.
+R.ITEM_SLOT_SIZE = 4
+
 -- Vanilla FR/LG relocate their save blocks on every load: SetSaveBlocksPointers
 -- (pret/pokefirered src/load_save.c:68-78 at the pinned commit c75f3523) computes
 --     offset = Random() & ((SAVEBLOCK_MOVE_RANGE - 1) & ~3)     -- :75
@@ -377,6 +385,149 @@ function R.new(profile, io, pointers)
             mon.slot, mon.box_index = slot, index
             out[#out + 1] = mon
         end
+        return out
+    end
+
+    -- ── P4 card C4-2a: trainer / location / badges / bag / battle ────────────────────
+    -- Every field here returns nil, reason when the pack has not pinned the address or
+    -- offset it needs (so the gen3_rr pack, which does not carry most of these yet, keeps
+    -- working exactly as it did before this card until its own evidence lands).
+
+    -- SaveBlock2.playerTrainerId (u32 LE) + playerName (pret include/global.h:327-332;
+    -- src/pokemon.c:1798-1801 for the little-endian assembly of the OT id).
+    function r.read_trainer()
+        local ot_off, name_off = d.SB2_OT_ID_OFFSET, d.SB2_NAME_OFFSET
+        if not ot_off or not name_off then
+            return nil, "profile has no derived.SB2_OT_ID_OFFSET/SB2_NAME_OFFSET"
+        end
+        local sb2, why = r.read_sb2()
+        if not sb2 then return nil, why end
+        local name = io.read_bytes(sb2 + name_off, R.OT_NAME_LEN)
+        return { ot_id = io.read_u32(sb2 + ot_off), name = r.decode_name(name), name_bytes = name }
+    end
+
+    -- SaveBlock1.location (struct WarpData, pret include/global.h:392-398,759-762): signed
+    -- mapGroup/mapNum bytes.
+    function r.read_location()
+        local group_off, num_off = d.SB1_LOCATION_MAP_GROUP_OFFSET, d.SB1_LOCATION_MAP_NUM_OFFSET
+        if not group_off or not num_off then
+            return nil, "profile has no derived.SB1_LOCATION_MAP_GROUP_OFFSET/MAP_NUM_OFFSET"
+        end
+        local sb1, why = r.read_sb1()
+        if not sb1 then return nil, why end
+        local function s8(v) return v >= 128 and v - 256 or v end
+        return { map_group = s8(io.read_u8(sb1 + group_off)), map_num = s8(io.read_u8(sb1 + num_off)) }
+    end
+
+    -- SaveBlock1.flags[]: the 8 FLAG_BADGE0x_GET bits sit consecutively inside one byte
+    -- (pret include/constants/flags.h:1324,1364-1371) -- bit i (0-based) is badge i+1.
+    function r.read_badges()
+        if not d.SB1_FLAGS_OFFSET or not d.SB1_BADGE_BYTE_OFFSET then
+            return nil, "profile has no derived.SB1_FLAGS_OFFSET/SB1_BADGE_BYTE_OFFSET"
+        end
+        local sb1, why = r.read_sb1()
+        if not sb1 then return nil, why end
+        return io.read_u8(sb1 + d.SB1_FLAGS_OFFSET + d.SB1_BADGE_BYTE_OFFSET)
+    end
+
+    -- Poke Ball pocket: ItemSlot{u16 itemId, u16 quantity} (pret include/global.h:400-404).
+    -- Vanilla FR/LG keep the pocket inside SaveBlock1 and XOR every quantity with the low 16
+    -- bits of SaveBlock2.encryptionKey (src/item.c GetBagItemQuantity: `encryptionKey ^ *ptr`,
+    -- truncated to u16 by the return type). CFRU/RR relocate the pocket to a fixed EWRAM
+    -- address and leave quantities unencrypted (profile.derived.BAG_IN_EWRAM / BALL_POCKET_ENC).
+    function r.read_balls()
+        local count = d.SB1_BALL_POCKET_COUNT
+        if not count then return nil, "profile has no derived.SB1_BALL_POCKET_COUNT" end
+        local base
+        if d.BAG_IN_EWRAM then
+            if not a.BALL_POCKET_ADDR then return nil, "profile has no ram.BALL_POCKET_ADDR" end
+            base = a.BALL_POCKET_ADDR
+        else
+            if not d.SB1_BALL_POCKET_OFFSET then
+                return nil, "profile has no derived.SB1_BALL_POCKET_OFFSET"
+            end
+            local sb1, why = r.read_sb1()
+            if not sb1 then return nil, why end
+            base = sb1 + d.SB1_BALL_POCKET_OFFSET
+        end
+        local encrypted = d.BALL_POCKET_ENC ~= false
+        local key = 0
+        if encrypted then
+            if not d.SB2_ENC_KEY_OFFSET then return nil, "profile has no derived.SB2_ENC_KEY_OFFSET" end
+            local sb2, why = r.read_sb2()
+            if not sb2 then return nil, why end
+            key = io.read_u32(sb2 + d.SB2_ENC_KEY_OFFSET) & 0xFFFF
+        end
+        local total = 0
+        for i = 0, count - 1 do
+            local item = io.read_u16(base + i * R.ITEM_SLOT_SIZE)
+            local qty = io.read_u16(base + i * R.ITEM_SLOT_SIZE + 2)
+            if encrypted then qty = qty ~ key end
+            if item ~= 0 then total = total + qty end
+        end
+        return { ball_count = total, has_pokeballs = total > 0 }
+    end
+
+    -- The enemy party, decoded exactly like r.read_party() (ram.ENEMY_BASE/ENEMY_COUNT_ADDR
+    -- instead of the player's; the enemy array is never save-block-relocated).
+    function r.read_enemy_party()
+        if not a.ENEMY_COUNT_ADDR then return nil, "profile has no ram.ENEMY_COUNT_ADDR" end
+        if not a.ENEMY_BASE then return nil, "profile has no ram.ENEMY_BASE" end
+        local count = io.read_u8(a.ENEMY_COUNT_ADDR)
+        if count > party_capacity then return nil, "enemy party count exceeds capacity" end
+        local out = {}
+        for slot = 0, count - 1 do
+            local mon, bad = r.decode_party_mon(
+                io.read_bytes(a.ENEMY_BASE + slot * R.PARTY_MON_SIZE, R.PARTY_MON_SIZE))
+            if not mon then return nil, bad end
+            mon.slot = slot
+            out[#out + 1] = mon
+        end
+        return out
+    end
+
+    -- In-battle state, type flags, the trainer opponent id, the battler->party-slot mapping
+    -- and the enemy party. Booleans whose mask/address the pack has not pinned come back
+    -- absent rather than failing the whole read (gen3_rr today: is_trainer/is_doubles).
+    function r.read_battle()
+        if not (a.BATTLE_TYPE_ADDR and a.BATTLE_OUTCOME_ADDR and a.BATTLERS_COUNT_ADDR
+                and a.BATTLER_PARTY_INDEXES_ADDR and a.ENEMY_COUNT_ADDR and a.ENEMY_BASE) then
+            return nil, "profile has no ram.BATTLE_TYPE_ADDR/BATTLE_OUTCOME_ADDR/"
+                       .. "BATTLERS_COUNT_ADDR/BATTLER_PARTY_INDEXES_ADDR/ENEMY_*"
+        end
+        local out = {}
+        -- Two production-proven in-battle detectors (lua/memory_gba.lua M.isInBattle),
+        -- selected by the pack: vanilla reads a gMain bit, CFRU/RR has no reliable gMain so
+        -- it reads the live battler-0 BattlePokemon instead.
+        -- profile.json's JSON `null` (e.g. RR's ram.GMAIN_ADDR) decodes to a truthy sentinel
+        -- table, not Lua nil (lua/json_codec.lua), so "is this address present" is a type
+        -- check, never a plain truthiness check.
+        if d.OVERWORLD_MODE == "battle_outcome" and type(a.BATTLE_MONS_ADDR) == "number" then
+            local max_hp = io.read_u16(a.BATTLE_MONS_ADDR + R.BATTLE_MON_HP_OFF + 4)
+            out.in_battle = max_hp > 0 and io.read_u8(a.BATTLE_OUTCOME_ADDR) == 0
+        elseif type(a.GMAIN_ADDR) == "number" and d.GMAIN_INBATTLE_OFFSET and d.GMAIN_INBATTLE_MASK then
+            out.in_battle = (io.read_u8(a.GMAIN_ADDR + d.GMAIN_INBATTLE_OFFSET) & d.GMAIN_INBATTLE_MASK) ~= 0
+        end
+        out.outcome = io.read_u8(a.BATTLE_OUTCOME_ADDR)
+        local type_flags = io.read_u32(a.BATTLE_TYPE_ADDR)
+        if d.BATTLE_TYPE_TRAINER_MASK then out.is_trainer = (type_flags & d.BATTLE_TYPE_TRAINER_MASK) ~= 0 end
+        if d.BATTLE_TYPE_DOUBLE_MASK then out.is_doubles = (type_flags & d.BATTLE_TYPE_DOUBLE_MASK) ~= 0 end
+        if type(a.TRAINER_OPPONENT_ADDR) == "number" then
+            out.trainer_id = io.read_u16(a.TRAINER_OPPONENT_ADDR)
+        end
+        local count = io.read_u8(a.BATTLERS_COUNT_ADDR)
+        local battlers = {}
+        for i = 0, count - 1 do
+            battlers[i + 1] = io.read_u16(a.BATTLER_PARTY_INDEXES_ADDR + i * 2)
+        end
+        out.battlers_count, out.battler_party_indexes = count, battlers
+        -- Player battlers are position 0 (single) and additionally 2 (doubles): outside link
+        -- battles the battler id equals the position id (pret include/constants/battle.h:10-19).
+        out.active_player_battler_slots = { battlers[1] }
+        if count >= 4 then out.active_player_battler_slots[2] = battlers[3] end
+        local enemy, why = r.read_enemy_party()
+        if not enemy then return nil, why end
+        out.enemy_party = enemy
         return out
     end
 

@@ -114,6 +114,57 @@ def test_refuses_missing_dump(tmp_path):
     assert exc.value.code == 2
 
 
+# ── P4 card C4-2a: the new trainer/location/badges/bag/battle-type decoders ──────────────
+def test_decode_trainer_reads_the_ot_id_and_name():
+    sb2 = bytearray(20)
+    sb2[0:7] = codec.encode_name("ASH", 7)
+    sb2[0x0A:0x0E] = (0x12345678).to_bytes(4, "little")
+    assert pydec.decode_trainer(bytes(sb2)) == {"ot_id": 0x12345678, "name": "ASH"}
+
+
+def test_decode_location_is_signed():
+    """Adversarial: a negative (>=0x80) mapGroup byte must decode to a negative int, not
+    wrap to a huge unsigned value."""
+    sb1 = bytearray(10)
+    sb1[4], sb1[5] = 250, 3          # 250 == -6 as a signed byte
+    assert pydec.decode_location(bytes(sb1)) == {"map_group": -6, "map_num": 3}
+
+
+def test_decode_badges_isolates_the_one_shared_byte():
+    """Adversarial: badge 8 only (bit 7), and a wider int with garbage above bit 7 that must
+    be masked off rather than leaking into the bitmask."""
+    assert pydec.decode_badges(0b10000000) == 0x80
+    assert pydec.decode_badges(0x1_80) == 0x80
+
+
+def test_decode_ball_pocket_xors_the_low_16_bits_of_a_wide_key_and_skips_empty_slots():
+    """Adversarial: a key with bits set above bit 15 must not affect the decrypted quantity,
+    and a slot with itemId==ITEM_NONE must not contribute even if its raw quantity is nonzero."""
+    key = 0xABCD1234
+    qty = 37
+    raw = bytearray(8)
+    raw[0:2] = (4).to_bytes(2, "little")                      # slot 0: item id 4 (a ball)
+    raw[2:4] = (qty ^ (key & 0xFFFF)).to_bytes(2, "little")    # encrypted quantity
+    raw[4:6] = (0).to_bytes(2, "little")                       # slot 1: ITEM_NONE
+    raw[6:8] = (999).to_bytes(2, "little")                     # garbage raw quantity, must be skipped
+    assert pydec.decode_ball_pocket(bytes(raw), 2, key) == {"ball_count": 37, "has_pokeballs": True}
+    # unencrypted (CFRU/RR): the raw quantity IS the count
+    raw2 = bytearray(4)
+    raw2[0:2] = (4).to_bytes(2, "little")
+    raw2[2:4] = (12).to_bytes(2, "little")
+    assert pydec.decode_ball_pocket(bytes(raw2), 1) == {"ball_count": 12, "has_pokeballs": True}
+
+
+def test_decode_battle_type_reads_both_masks_independently():
+    trainer_mask, double_mask = 0x08, 0x01
+    assert pydec.decode_battle_type(0x08, trainer_mask, double_mask) == {
+        "is_trainer": True, "is_doubles": False}
+    assert pydec.decode_battle_type(0x09, trainer_mask, double_mask) == {
+        "is_trainer": True, "is_doubles": True}
+    assert pydec.decode_battle_type(0x10, trainer_mask, double_mask) == {
+        "is_trainer": False, "is_doubles": False}
+
+
 def demo():
     """ponytail: smallest runnable check without pytest."""
     mon = _mon(0x1234ABCD)

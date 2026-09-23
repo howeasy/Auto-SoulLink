@@ -49,6 +49,88 @@ FRLG_DERIVED = {
     "BOXES_PER_STORE": (14, f"{STORAGE_HEADER}:7 (TOTAL_BOXES_COUNT)"),
     "MONS_PER_BOX": (5 * 6, f"{STORAGE_HEADER}:8-10 (IN_BOX_ROWS * IN_BOX_COLUMNS)"),
     "PARTY_CAPACITY": (6, f"{PRET_PIN}:include/constants/global.h:78 (PARTY_SIZE)"),
+    # ── P4 card C4-2a: trainer/location/badges/bag/battle facts the new client needs,
+    # none of which the vanilla Lua table carries (docs/gen3/research/p4_gen1_contract_map.md
+    # §2 item 3, §3.2). Every offset below is read straight off the pinned pret commit, never
+    # off Radical Red (memory: RR types are non-standard).
+    "SB2_OT_ID_OFFSET": (0x0A, f"{PRET_PIN}:include/global.h:332 (SaveBlock2.playerTrainerId); "
+                         f"{PRET_PIN}:src/pokemon.c:1798-1801 (u32 little-endian assembly)"),
+    "SB2_NAME_OFFSET": (0, f"{PRET_PIN}:include/global.h:329 (SaveBlock2.playerName)"),
+    "SB1_LOCATION_MAP_GROUP_OFFSET": (0x04, f"{PRET_PIN}:include/global.h:759-762 "
+                                      "(SaveBlock1.location); "
+                                      f"{PRET_PIN}:include/global.h:392-398 (struct WarpData.mapGroup)"),
+    "SB1_LOCATION_MAP_NUM_OFFSET": (0x05, f"{PRET_PIN}:include/global.h:759-762 "
+                                    "(SaveBlock1.location); "
+                                    f"{PRET_PIN}:include/global.h:392-398 (struct WarpData.mapNum)"),
+    "SB1_BADGE_BYTE_OFFSET": (0x104, f"{PRET_PIN}:include/constants/flags.h:1324,1364-1371 "
+                              "(SYS_FLAGS=0x800; FLAG_BADGE01_GET..FLAG_BADGE08_GET = "
+                              "SYS_FLAGS+0x20..+0x27; byte = flag_id >> 3, relative to "
+                              "SaveBlock1.flags[])"),
+    "OUTCOME_WON": (1, f"{PRET_PIN}:include/constants/battle.h:76 (B_OUTCOME_WON)"),
+    "OUTCOME_LOST": (2, f"{PRET_PIN}:include/constants/battle.h:77 (B_OUTCOME_LOST)"),
+    "OUTCOME_DREW": (3, f"{PRET_PIN}:include/constants/battle.h:78 (B_OUTCOME_DREW)"),
+    "OUTCOME_RAN": (4, f"{PRET_PIN}:include/constants/battle.h:79 (B_OUTCOME_RAN)"),
+    "OUTCOME_CAUGHT": (7, f"{PRET_PIN}:include/constants/battle.h:82 (B_OUTCOME_CAUGHT)"),
+    "BATTLE_TYPE_TRAINER_MASK": (0x08, f"{PRET_PIN}:include/constants/battle.h:50 "
+                                 "(BATTLE_TYPE_TRAINER)"),
+    "BATTLE_TYPE_DOUBLE_MASK": (0x01, f"{PRET_PIN}:include/constants/battle.h:47 "
+                                "(BATTLE_TYPE_DOUBLE)"),
+    "GMAIN_INBATTLE_OFFSET": (0x439, "data/games/gen3_frlg/write_checkpoint.json: "
+                              "firered.predicates.in_battle (gMain+0x439; verified live by the "
+                              "cb1_overworld census probe, docs/gen3/probes/census_fr_overworld_"
+                              "2026-09-21.txt)"),
+    "GMAIN_INBATTLE_MASK": (0x02, "data/games/gen3_frlg/write_checkpoint.json: "
+                            "firered.predicates.in_battle"),
+    "BATTLE_MOVE_ENTRY_SIZE": (12, "data/gen3/pret/pokefirered.sym:26905 gBattleMoves "
+                               "(0x10A4 bytes / 355 moves = 12); "
+                               f"{PRET_PIN}:include/pokemon.h:284"),
+    "BATTLE_MOVE_PP_OFFSET": (4, f"{PRET_PIN}:include/pokemon.h:238-249 (struct BattleMove.pp)"),
+    # boxes card (C4-3) addendum: PP restore needs the species growth rate, which lives inside
+    # the existing BASESTATS entry (rom.BASESTATS_ADDR / BASESTATS_ADDR_BY_GAME_CODE) -- no new
+    # ROM address, just its offset.
+    "BASESTATS_GROWTH_RATE_OFFSET": (0x13, f"{PRET_PIN}:include/pokemon.h:230 "
+                                     "(struct SpeciesInfo.growthRate)"),
+    "SHEDINJA_SPECIES_ID": (303, f"{PRET_PIN}:include/constants/species.h:312 (SPECIES_SHEDINJA); "
+                            "used by CalculateMonStats' 1-HP exception, src/pokemon.c:2124-2132"),
+}
+
+# ── more P4 card C4-2a facts: symbols read straight out of each title's own .sym file (same
+# technique as the gPokemonStorage match below), so the address is self-verifying per title
+# rather than a literal this file could get wrong for one of the two ROMs.
+FRLG_SYM_ADDR = {
+    # profile section, key -> the unique global .sym symbol
+    ("ram", "TRAINER_OPPONENT_ADDR"): "gTrainerBattleOpponent_A",
+    ("rom", "EXPERIENCE_TABLES_ADDR"): "gExperienceTables",
+    ("rom", "BATTLE_MOVES_ADDR"): "gBattleMoves",
+    ("rom", "PP_UP_GET_MASK_ADDR"): "gPPUpGetMask",
+}
+
+# ── gen3_rr facts sourced from the OLD client (lua/memory_gba.lua), per the owner's 2026-09-23
+# ruling relayed on card C4-2a: the old RR client is production-tested, so its RAM offsets are
+# acceptable RR evidence where no ROM/pret evidence exists. Every one of these is read from
+# memory_gba.lua GENERICALLY (no RR-only branch), i.e. the exact same code path already serves
+# RR live today -- never a value the pack already derives from the ROM (that trap is
+# SB1_PTR_ADDR/SB2_PTR_ADDR above, which this dict does not touch).
+RR_DERIVED = {
+    "SB1_LOCATION_MAP_GROUP_OFFSET": (0x04, "lua/memory_gba.lua:271,1112 (old-client RR profile, "
+                                      "production-tested: mapGroup read generically off SB1_PTR_ADDR)"),
+    "SB1_LOCATION_MAP_NUM_OFFSET": (0x05, "lua/memory_gba.lua:272,1113 (old-client RR profile, "
+                                    "production-tested)"),
+    "SB1_BADGE_BYTE_OFFSET": (0x104, "lua/memory_gba.lua:1177,1181 (old-client RR profile, "
+                              "production-tested: M.readBadges is generic over M.SB1_FLAGS_OFFSET)"),
+    "BATTLE_TYPE_TRAINER_MASK": (0x08, "lua/memory_gba.lua:378 (old-client RR profile, "
+                                 "production-tested)"),
+    "BATTLE_TYPE_DOUBLE_MASK": (0x01, "lua/memory_gba.lua:385 (old-client RR profile, "
+                                "production-tested)"),
+    "OUTCOME_WON": (1, "lua/memory_gba.lua:389 (old-client RR profile, production-tested; "
+                    "unconditional, never overridden per-profile)"),
+    "OUTCOME_LOST": (2, "lua/memory_gba.lua:390 (old-client RR profile, production-tested)"),
+    "OUTCOME_DREW": (3, "lua/memory_gba.lua:391 (old-client RR profile, production-tested: "
+                     "\"CFRU inserts DREW=3, shifting RAN from 3->4\")"),
+    # Confirmed unrenumbered by CFRU: data/games/gen3_frlge/rr_species.json["303"] == "Shedinja",
+    # the same id as pret's SPECIES_SHEDINJA (FRLG_DERIVED above).
+    "SHEDINJA_SPECIES_ID": (303, 'data/games/gen3_frlge/rr_species.json:"303"="Shedinja" '
+                            "(RR species table; CFRU keeps this id unrenumbered)"),
 }
 
 SCHEMA = "gen3-profile-v1"
@@ -343,6 +425,15 @@ def build(pack: str, profiles: dict, source: dict) -> dict:
             for name, (value, where) in FRLG_DERIVED.items():
                 entry["derived"][name] = value
                 entry["_src"][f"derived.{name}"] = where
+            for (section, name), symbol in FRLG_SYM_ADDR.items():
+                sym_matches = list(re.finditer(
+                    rf"^([0-9a-fA-F]{{8}})\s+g\s+[0-9a-fA-F]+\s+{re.escape(symbol)}$", text, re.M))
+                if len(sym_matches) != 1:
+                    sys.exit(f"gen_gen3_profile: {path} must name exactly one {symbol}")
+                sym_match = sym_matches[0]
+                entry[section][name] = int(sym_match[1], 16)
+                entry["_src"][f"{section}.{name}"] = (
+                    f"{path}:{_line_of(text, sym_match.start())} ({symbol}; {PRET_PIN})")
     if pack == "gen3_rr":
         # The existing RR detector explicitly rejects party counts above this limit.
         text = (REPO / SRC).read_text(encoding="utf-8")
@@ -375,6 +466,9 @@ def build(pack: str, profiles: dict, source: dict) -> dict:
             f"{SRC}:{_line_of(text, hits[0])} (the old client's address, kept for parity: it is "
             "a literal-pool constant inside IntrMain_Buffer, not the pointer -- the new client "
             "reads write_checkpoint.pointers.gSaveBlock1Ptr, which is ROM-derived)")
+        for name, (value, where) in RR_DERIVED.items():
+            entry["derived"][name] = value
+            entry["_src"][f"derived.{name}"] = where
         out["native"] = native_block()
     return out
 

@@ -166,7 +166,9 @@ def test_the_load_check_reads_the_rom_not_the_bus():
 # no log entry. The BizHawk-global half of the rule covers the modules this card owns; a
 # bootstrap (run.lua / shadow_run.lua) is what BUILDS the io/ev tables, so it is exempt by
 # name, exactly as lua/gen1/entry.lua's `bizhawk_deps` is.
-WRITE_SINKS = re.compile(r"memory\s*\.\s*write|[:.]\s*write_(?:u8|u16|u32|bytes)\s*\(")
+# A call on the armed `writes` object is the gate itself, not a raw sink (boxes.lua routes
+# every PC move through `io.writes:write_bytes`); any other write_* call is a leak.
+WRITE_SINKS = re.compile(r"memory\s*\.\s*write|(?<!writes)[:.]\s*write_(?:u8|u16|u32|bytes)\s*\(")
 BIZHAWK_GLOBALS = re.compile(
     r"(?<![\w.])(memory|emu|event|joypad|gui|client|console|savestate|userdata)\s*\.")
 MODULES = ("entry.lua", "reads.lua", "signals.lua")

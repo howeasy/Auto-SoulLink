@@ -123,7 +123,7 @@ def test_vanilla_storage_and_party_facts(name: str) -> None:
                 "MONS_PER_BOX": 30, "PARTY_CAPACITY": 6}
     for key, value in expected.items():
         assert title["derived"][key] == value
-    assert title["_src"] == {
+    base_src = {
         "ram.POKEMON_STORAGE_BASE": f"{path}:{line} (gPokemonStorage; {pin})",
         "derived.BOX_DATA_OFFSET": f"{header}:44-48; "
                                    f"{pin}:include/pokemon.h:105-108 (u32 alignment)",
@@ -131,6 +131,26 @@ def test_vanilla_storage_and_party_facts(name: str) -> None:
         "derived.MONS_PER_BOX": f"{header}:8-10 (IN_BOX_ROWS * IN_BOX_COLUMNS)",
         "derived.PARTY_CAPACITY": f"{pin}:include/constants/global.h:78 (PARTY_SIZE)",
     }
+    # P4 card C4-2a: every additional trainer/location/badges/bag/battle citation this card
+    # adds, present for exactly the two vanilla titles and nothing else.
+    c4_2a_derived_keys = {
+        "SB2_OT_ID_OFFSET", "SB2_NAME_OFFSET", "SB1_LOCATION_MAP_GROUP_OFFSET",
+        "SB1_LOCATION_MAP_NUM_OFFSET", "SB1_BADGE_BYTE_OFFSET", "OUTCOME_WON", "OUTCOME_LOST",
+        "OUTCOME_DREW", "OUTCOME_RAN", "OUTCOME_CAUGHT", "BATTLE_TYPE_TRAINER_MASK",
+        "BATTLE_TYPE_DOUBLE_MASK", "GMAIN_INBATTLE_OFFSET", "GMAIN_INBATTLE_MASK",
+        "BATTLE_MOVE_ENTRY_SIZE", "BATTLE_MOVE_PP_OFFSET", "BASESTATS_GROWTH_RATE_OFFSET",
+        "SHEDINJA_SPECIES_ID",
+    }
+    c4_2a_sym_keys = {"ram.TRAINER_OPPONENT_ADDR", "rom.EXPERIENCE_TABLES_ADDR",
+                       "rom.BATTLE_MOVES_ADDR", "rom.PP_UP_GET_MASK_ADDR"}
+    for key in c4_2a_derived_keys:
+        assert f"derived.{key}" in title["_src"], f"{name}: derived.{key} has no _src citation"
+        base_src[f"derived.{key}"] = title["_src"][f"derived.{key}"]
+    for key in c4_2a_sym_keys:
+        assert key in title["_src"], f"{name}: {key} has no _src citation"
+        assert path in title["_src"][key], f"{name}: {key} citation does not name its own .sym file"
+        base_src[key] = title["_src"][key]
+    assert title["_src"] == base_src
 
 
 def test_rr_party_capacity_comes_from_its_existing_detector() -> None:
@@ -148,7 +168,7 @@ def test_rr_party_capacity_comes_from_its_existing_detector() -> None:
     hit = re.search(rf"^\s*SB1_PTR_ADDR\s*=\s*0x{legacy:08X}\s*,", text, re.M)
     assert hit, "the radical_red SB1_PTR_ADDR literal is gone from the Lua table"
     legacy_line = text.count("\n", 0, hit.start()) + 1
-    assert title["_src"] == {
+    base_src = {
         "derived.PARTY_CAPACITY":
             f"lua/games/gen3_frlge.lua:{line} (_detectRR partyCount limit)",
         "ram.SB1_PTR_ADDR":
@@ -157,6 +177,88 @@ def test_rr_party_capacity_comes_from_its_existing_detector() -> None:
             "IntrMain_Buffer, not the pointer -- the new client reads "
             "write_checkpoint.pointers.gSaveBlock1Ptr, which is ROM-derived)",
     }
+    # P4 card C4-2a addendum 4/5: old-client-evidenced RR facts, every citation naming
+    # lua/memory_gba.lua (production-tested), never a pret path (RR has no pret source).
+    rr_c4_2a_keys = {
+        "SB1_LOCATION_MAP_GROUP_OFFSET", "SB1_LOCATION_MAP_NUM_OFFSET", "SB1_BADGE_BYTE_OFFSET",
+        "BATTLE_TYPE_TRAINER_MASK", "BATTLE_TYPE_DOUBLE_MASK", "OUTCOME_WON", "OUTCOME_LOST",
+        "OUTCOME_DREW",
+    }
+    for key in rr_c4_2a_keys:
+        cite = title["_src"].get(f"derived.{key}")
+        assert cite and "lua/memory_gba.lua" in cite, f"radical_red: derived.{key} needs an old-client citation"
+        base_src[f"derived.{key}"] = cite
+    # SHEDINJA_SPECIES_ID comes from the RR species table, not the old client.
+    shedinja_cite = title["_src"].get("derived.SHEDINJA_SPECIES_ID")
+    assert shedinja_cite and "rr_species.json" in shedinja_cite
+    base_src["derived.SHEDINJA_SPECIES_ID"] = shedinja_cite
+    assert title["_src"] == base_src
+    assert title["derived"]["SHEDINJA_SPECIES_ID"] == 303
+    # values already agree with the pinned pret constants used for FR/LG (never RR-only guesses)
+    assert title["derived"]["SB1_LOCATION_MAP_GROUP_OFFSET"] == 0x04
+    assert title["derived"]["SB1_BADGE_BYTE_OFFSET"] == 0x104
+    assert title["derived"]["OUTCOME_CAUGHT"] == 7 and title["derived"]["OUTCOME_RAN"] == 4
+    # values this card could NOT find evidence for stay absent (RR-OPEN, reported to the owner)
+    for key in ("SB2_OT_ID_OFFSET", "SB2_NAME_OFFSET", "EXPERIENCE_TABLES_ADDR",
+                "BATTLE_MOVES_ADDR", "BATTLE_MOVE_ENTRY_SIZE", "BATTLE_MOVE_PP_OFFSET",
+                "GMAIN_INBATTLE_OFFSET", "GMAIN_INBATTLE_MASK"):
+        assert key not in title["derived"] and key not in title["ram"] and key not in title["rom"]
+    assert "PP_UP_GET_MASK_ADDR" not in title["rom"]
+
+
+@pytest.mark.parametrize("name,symbol,section,key", [
+    ("firered", "gTrainerBattleOpponent_A", "ram", "TRAINER_OPPONENT_ADDR"),
+    ("leafgreen", "gTrainerBattleOpponent_A", "ram", "TRAINER_OPPONENT_ADDR"),
+    ("firered", "gExperienceTables", "rom", "EXPERIENCE_TABLES_ADDR"),
+    ("leafgreen", "gExperienceTables", "rom", "EXPERIENCE_TABLES_ADDR"),
+    ("firered", "gBattleMoves", "rom", "BATTLE_MOVES_ADDR"),
+    ("leafgreen", "gBattleMoves", "rom", "BATTLE_MOVES_ADDR"),
+    ("firered", "gPPUpGetMask", "rom", "PP_UP_GET_MASK_ADDR"),
+    ("leafgreen", "gPPUpGetMask", "rom", "PP_UP_GET_MASK_ADDR"),
+])
+def test_p4_c4_2a_sym_addresses_match_the_titles_own_sym_file(name, symbol, section, key) -> None:
+    """P4 card C4-2a: independently re-derives each new address straight from the title's own
+    .sym file (never trusts the generator's own regex)."""
+    path = f"data/gen3/pret/poke{name}.sym"
+    text = (REPO / path).read_text(encoding="utf-8")
+    matches = re.findall(rf"^([0-9a-fA-F]{{8}})\s+g\s+[0-9a-fA-F]+\s+{symbol}$", text, re.M)
+    assert len(matches) == 1, f"{path}: expected exactly one {symbol}"
+    assert _title(name)[section][key] == int(matches[0], 16)
+
+
+def test_p4_c4_2a_engine_constants_match_the_pinned_pret_header() -> None:
+    """The battle/flags/pokemon constants this card added, re-derived from the pinned pret
+    header independent of the generator's own copies."""
+    _pin_dir = pathlib.Path("E:/Google Drive/SLink/.cache/pret/pokefirered")
+    pin_dir = _pin_dir if _pin_dir.exists() else None
+    if pin_dir is None:
+        pytest.skip("no local pret checkout to re-derive against (values are still pinned in "
+                    "tools/gen_gen3_profile.py:FRLG_DERIVED with a file:line citation each)")
+    battle_h = (pin_dir / "include" / "constants" / "battle.h").read_text(encoding="utf-8")
+    flags_h = (pin_dir / "include" / "constants" / "flags.h").read_text(encoding="utf-8")
+    pokemon_h = (pin_dir / "include" / "pokemon.h").read_text(encoding="utf-8")
+    for name in ("firered", "leafgreen"):
+        derived = _title(name)["derived"]
+        for const, key in (("B_OUTCOME_WON", "OUTCOME_WON"), ("B_OUTCOME_LOST", "OUTCOME_LOST"),
+                           ("B_OUTCOME_DREW", "OUTCOME_DREW"), ("B_OUTCOME_RAN", "OUTCOME_RAN"),
+                           ("B_OUTCOME_CAUGHT", "OUTCOME_CAUGHT"),
+                           ("BATTLE_TYPE_TRAINER", "BATTLE_TYPE_TRAINER_MASK"),
+                           ("BATTLE_TYPE_DOUBLE", "BATTLE_TYPE_DOUBLE_MASK")):
+            m = re.search(rf"^#define {const}\s+\(?(0x[0-9A-Fa-f]+|\d+)(\s*<<\s*(\d+))?", battle_h, re.M)
+            assert m, const
+            want = _num(m[1]) << int(m[3]) if m[3] else _num(m[1])
+            assert derived[key] == want
+        assert derived["SB1_BADGE_BYTE_OFFSET"] == 0x104
+        # SYS_FLAGS itself is a chained macro (TRAINER_FLAGS_END + 1); its pinned value 0x800
+        # is cross-checked by tests/unit/test_gen3_reads.py's live badge-byte reads instead of
+        # re-expanded here. This only re-derives the FLAG_BADGE01_GET offset from it.
+        assert re.search(r"^#define SYS_FLAGS \(TRAINER_FLAGS_END \+ 1\)", flags_h, re.M)
+        badge01 = _num(re.search(r"^#define FLAG_BADGE01_GET\s+\(SYS_FLAGS \+ (0x[0-9A-Fa-f]+)\)",
+                                  flags_h, re.M)[1])
+        assert (0x800 + badge01) >> 3 == derived["SB1_BADGE_BYTE_OFFSET"]
+        growth_off = re.search(r"/\* 0x13 \*/ u8 growthRate;", pokemon_h)
+        assert growth_off, "growthRate moved in pokemon.h"
+        assert derived["BASESTATS_GROWTH_RATE_OFFSET"] == 0x13
 
 
 @pytest.mark.parametrize("name", ["firered_ap", "emerald"])

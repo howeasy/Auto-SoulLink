@@ -128,7 +128,16 @@
   "titles": {
     "radical_red": {
       "_src": {
+        "derived.BATTLE_TYPE_DOUBLE_MASK": "lua/memory_gba.lua:385 (old-client RR profile, production-tested)",
+        "derived.BATTLE_TYPE_TRAINER_MASK": "lua/memory_gba.lua:378 (old-client RR profile, production-tested)",
+        "derived.OUTCOME_DREW": "lua/memory_gba.lua:391 (old-client RR profile, production-tested: \"CFRU inserts DREW=3, shifting RAN from 3->4\")",
+        "derived.OUTCOME_LOST": "lua/memory_gba.lua:390 (old-client RR profile, production-tested)",
+        "derived.OUTCOME_WON": "lua/memory_gba.lua:389 (old-client RR profile, production-tested; unconditional, never overridden per-profile)",
         "derived.PARTY_CAPACITY": "lua/games/gen3_frlge.lua:450 (_detectRR partyCount limit)",
+        "derived.SB1_BADGE_BYTE_OFFSET": "lua/memory_gba.lua:1177,1181 (old-client RR profile, production-tested: M.readBadges is generic over M.SB1_FLAGS_OFFSET)",
+        "derived.SB1_LOCATION_MAP_GROUP_OFFSET": "lua/memory_gba.lua:271,1112 (old-client RR profile, production-tested: mapGroup read generically off SB1_PTR_ADDR)",
+        "derived.SB1_LOCATION_MAP_NUM_OFFSET": "lua/memory_gba.lua:272,1113 (old-client RR profile, production-tested)",
+        "derived.SHEDINJA_SPECIES_ID": "data/games/gen3_frlge/rr_species.json:\"303\"=\"Shedinja\" (RR species table; CFRU keeps this id unrenumbered)",
         "ram.SB1_PTR_ADDR": "lua/games/gen3_frlge.lua:264 (the old client's address, kept for parity: it is a literal-pool constant inside IntrMain_Buffer, not the pointer -- the new client reads write_checkpoint.pointers.gSaveBlock1Ptr, which is ROM-derived)"
       },
       "admitted": true,
@@ -140,6 +149,8 @@
         "BATTLE_RESULTS_PLAYER_FAINTS_OFF": 0,
         "BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF": 128,
         "BATTLE_STRUCT_MOVE_TARGET_OFF": 12,
+        "BATTLE_TYPE_DOUBLE_MASK": 1,
+        "BATTLE_TYPE_TRAINER_MASK": 8,
         "BOXES_PER_STORE": 25,
         "BOX_NAMES_OFFSET": 33604,
         "CFRU_BOX_BASES": [
@@ -174,12 +185,18 @@
         "COMPRESSED_MON_SIZE": 58,
         "GMAIN_CB2_OFFSET": 4,
         "OUTCOME_CAUGHT": 7,
+        "OUTCOME_DREW": 3,
+        "OUTCOME_LOST": 2,
         "OUTCOME_RAN": 4,
+        "OUTCOME_WON": 1,
         "OVERWORLD_MODE": "battle_outcome",
         "PARTY_CAPACITY": 6,
         "PARTY_IN_SB1": false,
+        "SB1_BADGE_BYTE_OFFSET": 260,
         "SB1_BALL_POCKET_COUNT": 50,
         "SB1_FLAGS_OFFSET": 3808,
+        "SB1_LOCATION_MAP_GROUP_OFFSET": 4,
+        "SB1_LOCATION_MAP_NUM_OFFSET": 5,
         "SB1_PARTY_BASE_OFFSET": 56,
         "SB1_VARS_OFFSET": 4096,
         "SB2_ENC_KEY_OFFSET": 3872,
@@ -187,6 +204,7 @@
         "SE_LINKED_KO": 79,
         "SE_NEW_LINK": 2,
         "SE_NUZLOCKE_START": 268,
+        "SHEDINJA_SPECIES_ID": 303,
         "TASK_STRUCT_SIZE": 40
       },
       "ram": {
