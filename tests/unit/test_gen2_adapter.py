@@ -353,3 +353,7 @@ class TestGen2GSCPackRefusal:
 def test_sprites_use_the_transparent_folder(gsc_adapter):
     # the bare gold/ and silver/ PNGs have an opaque white background
     assert gsc_adapter.sprite_src(25).endswith(f"/generation-ii/{gsc_adapter.title}/transparent/25.png")
+
+
+def test_display_names_keep_acronyms_and_possessives(gsc_adapter):
+    assert (gsc_adapter.item_name(82), gsc_adapter.item_name(26), gsc_adapter.item_name(191)) == ("King's Rock", "HP Up", "TM01")

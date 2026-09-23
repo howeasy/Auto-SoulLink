@@ -62,7 +62,8 @@ def _json(path):
 
 
 def _display(value):
-    return value.title().replace("'D", "'d")
+    s = value.title().replace("'D", "'d").replace("'S", "'s")
+    return re.sub(r"\b(Hp|Pp|Tm|Hm)(?=\d|\b)", lambda m: m[1].upper(), s)
 
 
 def _fixed_species_gift_areas():
