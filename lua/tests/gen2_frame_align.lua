@@ -799,6 +799,12 @@ function F.main(api, getenv, SG)
         model.close()
         probe.record.poison_model, probe.record.psn_mask = model, ctx.u1.poison.psn_mask
         fopts.map, fopts.max_battles = ctx.u1.poison.maps[ctx.u1.poison.hunt_map], F.POISON_FAINT_BATTLES
+        -- The faint target is the living mon, named up front: at battle start wCurBattleMon still reads the
+        -- poison-fainted lead's slot, and FI would try to switch that 0-HP mon back in (Crystal live run 5).
+        local party = ctx.reads.read_party()
+        for _, m in ipairs(party and party.mons or {}) do
+            if m.hp > 0 and fopts.target == nil then fopts.target = m.slot end
+        end
     end
     if played then
         local fdriver, fobserve, fspec = FI.new(ctx, SG, F, fopts)
