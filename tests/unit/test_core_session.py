@@ -642,8 +642,11 @@ def test_major3_without_a_borrowed_party_an_absent_key_is_still_dropped():
 
 def test_major6_key_change_ack_migrates_queued_checkpoint_commands():
     w = World()
+    w.set_party((NEW, 0), (B, 1))
     w.step_to(60)
     w.st.checkpoint = False
+    p = w.st.party
+    w.identity.begin_alias(w.identity, OLD, NEW, p[1], p)       # the key_change we raised
     w.command(cmd="memorialize", key=OLD)
     w.command(cmd="force_faint", key=B)
     w.step()
@@ -684,9 +687,10 @@ def test_r3_a_replayed_ack_with_our_alias_migrates_the_queued_command():
     assert [str(w.q["items"][i].key) for i in range(1, w.q.size(w.q) + 1)] == [NEW]
 
 
-def test_r3_a_replayed_ack_after_the_alias_cleared_follows_the_cartridge():
-    """The first ACK was lost with the connection after the alias was dropped (e.g. a reset
-    of the alias table): the cartridge holding NEW and not OLD is the evidence."""
+def test_r3_codex1_no_alias_an_unrelated_new_key_in_the_party_is_never_evidence():
+    """C4-2g (Codex REV3 case 1): no pending alias; the party holds an UNRELATED record carrying
+    NEW; memorialize(OLD) is queued; a migrated:false ACK OLD->NEW arrives. Key membership is not
+    continuity: the command stays on OLD."""
     w = World()
     w.set_party((NEW, 0), (B, 1))
     w.step_to(60)
@@ -694,7 +698,53 @@ def test_r3_a_replayed_ack_after_the_alias_cleared_follows_the_cartridge():
     w.q.push(w.q, w.lua.table_from({"cmd": "memorialize", "key": OLD}))
     w.command(cmd="key_change_ack", old_key=OLD, new_key=NEW, migrated=False)
     w.step()
-    assert str(w.q["items"][1].key) == NEW
+    assert str(w.q["items"][1].key) == OLD
+    assert any("no valid alias" in line and "none" in line for line in w.logs)
+
+
+def test_r3_codex2_a_lost_alias_keeps_its_latch_through_a_replay_ack():
+    """C4-2g (Codex REV3 case 2): OLD->NEW is raised, the record departs (alias.lost latches),
+    a REPLACEMENT now carries NEW; a replay ACK must not hand the command to the replacement."""
+    w = World()
+    w.set_party((NEW, 0), (B, 1))
+    w.step_to(60)
+    w.st.checkpoint = False
+    p = w.st.party
+    w.identity.begin_alias(w.identity, OLD, NEW, p[1], p)
+    w.identity.departure(w.identity, NEW)                         # the aliased record left
+    w.set_party((NEW, 0), (B, 1))                                 # a replacement carries NEW
+    w.q.push(w.q, w.lua.table_from({"cmd": "memorialize", "key": OLD}))
+    w.command(cmd="key_change_ack", old_key=OLD, new_key=NEW, migrated=False)
+    w.step()
+    assert str(w.q["items"][1].key) == OLD
+    assert any("no valid alias" in line and "lost" in line for line in w.logs)
+
+
+def test_r3_an_ambiguous_alias_keeps_its_latch_through_an_ack():
+    w = World()
+    w.set_party((NEW, 0), (NEW, 1))                               # a twin at the change
+    w.step_to(60)
+    w.st.checkpoint = False
+    p = w.st.party
+    w.identity.begin_alias(w.identity, OLD, NEW, p[1], p)
+    w.set_party((NEW, 0), (B, 1))
+    w.q.push(w.q, w.lua.table_from({"cmd": "memorialize", "key": OLD}))
+    w.command(cmd="key_change_ack", old_key=OLD, new_key=NEW, migrated=True)
+    w.step()
+    assert str(w.q["items"][1].key) == OLD
+
+
+def test_r3_an_ack_for_a_different_pair_does_not_use_the_alias():
+    w = World()
+    w.set_party((NEW, 0), (B, 1))
+    w.step_to(60)
+    w.st.checkpoint = False
+    p = w.st.party
+    w.identity.begin_alias(w.identity, OLD, NEW, p[1], p)
+    w.q.push(w.q, w.lua.table_from({"cmd": "memorialize", "key": OLD}))
+    w.command(cmd="key_change_ack", old_key=OLD, new_key=C, migrated=True)   # not our pair
+    w.step()
+    assert str(w.q["items"][1].key) == OLD
 
 
 def test_r2_held_pre_hello_events_die_with_a_save_reset():

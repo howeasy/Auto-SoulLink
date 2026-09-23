@@ -719,9 +719,15 @@ function Client.new(p)
         -- a borrowed party is never published nor learned as ours (docs/protocol.md §9 item 11):
         -- hello.party stays present and empty, exactly like tick_fields' guard
         local own = st.frozen and {} or party
-        seed_known(own)                                        -- box-key seeding at connect
-        if not st.frozen then st.baselined = true end
-        if not st.frozen then rebaseline(party) end
+        -- Once a baseline exists hello REPORTS and never learns: the session builds hello before
+        -- this frame's signals drain, so a mon added since the last quiet frame (its acquisition
+        -- hook firing this frame or the next) must stay unknown for settle to report it as a
+        -- capture right after the hello. Only the very first baseline is taken here.
+        if not st.baselined and not st.frozen then
+            seed_known(own)                                    -- box-key seeding at connect
+            rebaseline(party)
+            st.baselined = true
+        end
         latch_balls(false)                                     -- a resume, not an acquisition
         local area_id, loc = area_now()
         st.last_area = area_id .. "|" .. loc

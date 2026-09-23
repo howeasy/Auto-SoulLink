@@ -745,9 +745,31 @@ def test_r1_a_mover_that_throws_on_byte_two_is_uncertain_with_the_production_cou
     assert fail["reason"].startswith("uncertain: partial write")
 
 
+def _raise_alias(w, old_key, new_key):
+    """What the reducer does when it sends key_change old->new: the alias over the record."""
+    party = w.client.driver.read_party()
+    w.client.identity.begin_alias(w.client.identity, old_key, new_key, party[1], party)
+
+
 def test_r3_a_replayed_ack_lands_the_queued_faint_on_the_renamed_mon():
-    """Codex's repro: faint(A) queued, the cartridge's A became B, the server's ACK is a
-    replay (migrated:false). The faint must land on B, not vanish."""
+    """faint(A) queued, the cartridge's A became B and THIS client raised the A->B alias; the
+    server's ACK is a replay (migrated:false). The faint lands on B through the retained alias."""
+    w = live(pids=(A, C))
+    w.break_checkpoint()
+    w.command(cmd="force_faint", key=KA)
+    w.step()
+    w.set_party([mon_record(B, OT, species=4), mon_record(C, OT, species=5)])
+    _raise_alias(w, KA, KB)
+    w.command(cmd="key_change_ack", old_key=KA, new_key=KB, migrated=False)
+    w.step()
+    w.overworld_safe()
+    w.step(2)
+    assert w.party_hp(0) == 0
+
+
+def test_r3_without_our_alias_a_replayed_ack_never_retargets_the_faint():
+    """C4-2g: the same frames with NO alias (the B in slot 0 is unrelated to A): the faint stays
+    on A and is dropped by name at the checkpoint; B keeps its HP."""
     w = live(pids=(A, C))
     w.break_checkpoint()
     w.command(cmd="force_faint", key=KA)
@@ -757,7 +779,52 @@ def test_r3_a_replayed_ack_lands_the_queued_faint_on_the_renamed_mon():
     w.step()
     w.overworld_safe()
     w.step(2)
-    assert w.party_hp(0) == 0
+    assert w.party_hp(0) == 20
+    assert any("force_faint dropped at the checkpoint" in line and KA in line for line in w.logs)
+
+
+def test_r4_codex1_a_capture_in_the_first_hello_frame_is_reported_after_the_hello():
+    """C4-2g (Codex REV3): A present, checkpoint unsafe, a quiet frame baselines A; then B is
+    added, mon_given fires and the checkpoint turns safe before the next step: that one frame
+    sends the hello AND settles B. Exactly [hello, capture(B)]."""
+    w = World()
+    w.set_party(party(A))
+    w.break_checkpoint()
+    w.step()                                                   # the quiet baseline of A
+    w.set_party(party(A, B))
+    w.fire("mon_given")
+    w.overworld_safe()
+    w.step()
+    assert w.names()[:2] == ["hello", "capture"]
+    assert [c["key"] for c in w.events("capture")] == [KB]
+
+
+def test_r4_codex2_a_reconnect_between_the_party_write_and_its_hook_still_captures():
+    """C4-2g (Codex REV3): B's party write lands while disconnected; the connection returns
+    and the hello is built on the frame whose mon_given hook fires. Exactly one capture(B)."""
+    w = live(pids=(A,))
+    w.connected = False
+    w.step()
+    w.set_party(party(A, B))                                    # written, hook not yet fired
+    w.step()
+    w.connected = True
+    w.fire("mon_given")
+    n = len(w.sent)
+    w.step()
+    assert [m["event"] for m in w.sent[n:]][:2] == ["hello", "capture"]
+    assert [c["key"] for c in w.events("capture")] == [KB]
+
+
+def test_r4_control_the_first_hello_still_baselines_a_party_it_has_never_seen():
+    """The first-ever baseline is still taken by hello when no quiet frame preceded it: a
+    later acquisition reports only the new mon."""
+    w = World()
+    w.set_party(party(A, B))
+    w.step()                                                   # hello on the very first frame
+    w.set_party(party(A, B, C))
+    w.fire("mon_given")
+    w.step()
+    assert [c["key"] for c in w.events("capture")] == [KC]
 
 
 def test_major1_a_reconnect_hello_has_no_area_enter_before_it():

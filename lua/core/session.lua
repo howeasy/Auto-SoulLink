@@ -250,30 +250,31 @@ function Session.new(p)
             self.resolved_areas[cmd.area_id] = nil
         elseif c == "key_change_ack" then
             local alias = identity:ack(cmd.old_key)
-            -- migrated=true: the server renamed old -> new now. migrated=false is EITHER a replay
-            -- (the rename already happened, server/state.py:2557-2567) OR an old key the server
-            -- never tracked; the wire cannot tell them apart, so local commands follow the
-            -- mapping only with evidence it is ours: the alias we raised for exactly this pair,
-            -- or the cartridge holding the new key and not the old one.
-            local function evidence()
-                if alias and alias.new_key == cmd.new_key then return true end
+            -- Local commands follow old -> new ONLY through the alias this client raised for
+            -- exactly that pair when it sent the key_change, and only while that alias still
+            -- names one record: a fresh observation re-applies identity.lua's sticky latches (a
+            -- departure or a twin since the change = lost / ambiguous, never recomputed away).
+            -- The migrated flag does not decide it -- migrated=false is a replay OR an old key the
+            -- server never tracked (server/state.py:2557-2571) -- and key membership is never
+            -- evidence: an unrelated record can carry the new key. Without a valid alias the
+            -- commands stay on the old key and resolve (or fail) by name at execution.
+            local valid = alias ~= nil and alias.old_key == cmd.old_key and alias.new_key == cmd.new_key
+            if valid then
                 local party = game.read_party()
-                if not party then return false end
-                local has_new, has_old = false, false
-                for _, m in ipairs(party) do
-                    local k = identity.key(m)
-                    if k == cmd.new_key then has_new = true end
-                    if k == cmd.old_key then has_old = true end
-                end
-                return has_new and not has_old
+                if party then identity:observe_one(alias, party) end
+                valid = not alias.lost and not alias.ambiguous
             end
-            if cmd.new_key and cmd.new_key ~= cmd.old_key and (cmd.migrated ~= false or evidence()) then
+            if cmd.new_key and cmd.new_key ~= cmd.old_key and valid then
                 for _, e in ipairs(self.battle_pending) do
-                    if e.key == cmd.old_key then e.key = cmd.new_key end
+                    if e.key == cmd.old_key then e.key, e.migrated_from = cmd.new_key, cmd.old_key end
                 end
                 for _, q in ipairs(deferred.items) do
-                    if q.key == cmd.old_key then q.key = cmd.new_key end
+                    if q.key == cmd.old_key then q.key, q.migrated_from = cmd.new_key, cmd.old_key end
                 end
+            elseif cmd.new_key and cmd.new_key ~= cmd.old_key then
+                log("key_change_ack " .. tostring(cmd.old_key) .. " -> " .. tostring(cmd.new_key)
+                    .. ": no valid alias for the pair (" .. (alias and (alias.lost and "lost" or alias.ambiguous
+                    and "ambiguous" or "different pair") or "none") .. "); local commands stay on the old key")
             end
         elseif c == "key_change_rejected" then
             identity:reject(cmd.old_key, game.read_party())
