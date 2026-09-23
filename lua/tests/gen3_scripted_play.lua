@@ -882,6 +882,33 @@ local function save_battle_state_once(cp)
     end
 end
 
+--- Walk back to GRASS_ORIGIN from wherever a hunt left the player on the square. FR run 25d:
+--- route1_faint ended at (13,38) and viridian_pc's first path starts at (12,37). Left undoes
+--- the x, Up the y; each step can still find a battle (play.step fights it).
+local function return_to_grass_origin(cp, label)
+    for _ = 1, 4 do
+        local px, py = G.pos(cp)
+        if px == GRASS_ORIGIN[1] and py == GRASS_ORIGIN[2] then return end
+        local on_square = (px == 12 or px == 13) and (py == 37 or py == 38)
+        if not on_square then
+            G.shot("stuck")
+            G.finish(false, string.format("%s: expected to be on the grass square (12..13,37..38), "
+                     .. "found %s", label, play.at(cp)))
+            return
+        end
+        local ok, why = play.step(cp, px == 13 and "Left" or "Up", play.map(cp), true)
+        if not ok then
+            G.finish(false, string.format("%s: step back to the grass origin failed (%s) at %s",
+                     label, tostring(why), play.at(cp)))
+            return
+        end
+    end
+    local px, py = G.pos(cp)
+    if px ~= GRASS_ORIGIN[1] or py ~= GRASS_ORIGIN[2] then
+        G.finish(false, string.format("%s: never reached the grass origin; at %s", label, play.at(cp)))
+    end
+end
+
 local function hunt_encounter(cp, label, cycles)
     local start_map = play.map(cp)
     -- Re-anchor if we are not on one of the square's four tiles at all (a whiteout recovery or
@@ -1810,6 +1837,7 @@ LEGS[#LEGS + 1] = {
         "docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt (the same flow observed hook by hook, and the source of the frame spacing)",
     },
     run = function(cp)
+        return_to_grass_origin(cp, "viridian_pc_deposit_withdraw")
         play.follow(cp, "route1_grass_to_north_edge", "viridian_pc_deposit_withdraw")
         warp_to(cp, "Up", 30, DEST.viridian_south, "viridian_pc Route1->Viridian")
         play.follow(cp, "route1_edge_to_pokecenter_door", "viridian_pc_deposit_withdraw")
@@ -2061,6 +2089,7 @@ if (debug.getinfo(1, "S").source or "") == "main" then run() end
 return {
     LEGS = LEGS, PATHS = PATHS, play = play,
     GRASS_LOOP = GRASS_LOOP, GRASS_ORIGIN = GRASS_ORIGIN,
+    return_to_grass_origin = return_to_grass_origin,
     -- test hooks (Codex review cx-378ce251): the in_battle polarity wrapper and the lab scene
     -- var address arithmetic, both independently checkable without an emulator.
     follow = play.follow,

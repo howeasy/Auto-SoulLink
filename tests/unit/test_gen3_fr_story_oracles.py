@@ -508,6 +508,7 @@ def test_deposit_withdraw_leg_uses_target_readback(machine, bad):
     init_party(fake)
     lua.execute("""
         F.warps=0
+        F.place(3,19,12,37)   -- the grass origin the leg's first path starts from
         D.play.follow=function() end
         D.play.enter_warp=function()
             F.warps=F.warps+1
@@ -583,3 +584,30 @@ def test_lab_exit_verify_waits_for_the_step_off_the_door(machine):
     """)
     assert mod.verify_destination(fake.cp, "route1_catch lab exit", mod.DEST["lab_exit"])
     lua.execute("F.on_frame=nil")
+
+
+@pytest.mark.parametrize("start,steps", [((12, 37), []), ((13, 38), ["Left", "Up"]),
+                                         ((13, 37), ["Left"]), ((12, 38), ["Up"])])
+def test_return_to_grass_origin_from_every_square_tile(machine, start, steps):
+    # FR run 25d: route1_faint ended at (13,38); viridian_pc's path starts at (12,37).
+    lua, mod, fake = machine
+    fake.place(3, 19, *start)
+    lua.execute("""
+        F.steps={}
+        D.play.step=function(cp,dir)
+            F.steps[#F.steps+1]=dir
+            local x,y=G.pos(cp)
+            if dir=="Left" then x=x-1 else y=y-1 end
+            F.place(3,19,x,y); return true
+        end
+    """)
+    mod.return_to_grass_origin(fake.cp, "t")
+    assert list(fake.steps.values()) == steps
+    assert tuple(lua.eval("{G.pos(F.cp)}").values()) == (12, 37)
+
+
+def test_return_to_grass_origin_refuses_off_square(machine):
+    lua, mod, fake = machine
+    fake.place(3, 19, 12, 30)
+    with pytest.raises(LuaError, match="grass square"):
+        mod.return_to_grass_origin(fake.cp, "t")
