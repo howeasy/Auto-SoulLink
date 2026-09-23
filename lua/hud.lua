@@ -129,7 +129,11 @@ local function wrap(text, max_chars, max_lines)
     if max_chars < 1 then max_chars = 1 end
     local lines, cur = {}, ""
     local function push() lines[#lines + 1] = cur; cur = "" end
-    for tok in text:gmatch("%S+") do
+    -- "\n" forces a break: each newline-separated part wraps on its own
+    for tok in text:gsub("\n", " \1 "):gmatch("%S+") do
+      if tok == "\1" then
+        if cur ~= "" then push() end
+      else
         local word = tok                    -- a for-loop variable is const in Lua 5.5
         while #word > max_chars do          -- hard-break an over-long token
             if cur ~= "" then push() end
@@ -144,6 +148,7 @@ local function wrap(text, max_chars, max_lines)
             push()
             cur = word
         end
+      end
     end
     if cur ~= "" then push() end
     if #lines == 0 then lines[1] = "" end

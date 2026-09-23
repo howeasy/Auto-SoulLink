@@ -268,3 +268,11 @@ def test_lines_are_centred_on_the_screen():
     assert [s for _, s in xs] == ["Partner caught PIDGEY in", "Route 1"], xs
     for x, s in xs:
         assert abs((x + len(s) * 6 / 2) - 80) <= 1, (x, s)
+
+
+def test_a_newline_forces_a_line_break():
+    """The NEW ENCOUNTER banner puts the area on its own line: "\n" breaks even when both fit."""
+    w = World().gbc()
+    w.H.show("** NEW ENCOUNTER **\nRoute 1", 255, 220, 60, 240)
+    w.render()
+    assert w.drawn == ["** NEW ENCOUNTER **", "Route 1"], w.drawn
