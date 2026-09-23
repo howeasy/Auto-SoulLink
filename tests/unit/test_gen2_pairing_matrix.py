@@ -362,7 +362,9 @@ async def test_a_restart_re_derives_gen2_gsc_from_every_persisted_spelling(tmp_p
 
 def test_the_legacy_runtime_route_is_unchanged_until_the_g3_cutover():
     """P3a.1 changes pairing only. The shipped legacy client still gets the legacy adapter;
-    re-pointing these rows (and registering gen2_gsc) is the G3 cutover, not this card."""
+    re-pointing these rows is the G3 cutover, not this card. `gen2_gsc` is registered (U4
+    title binder, tests/unit/test_gen2_server_bind.py) but no rom_type routes to it."""
     for rom_type in GEN2 + AP:
         assert game_id_for_rom_type(rom_type) == "gen2_crystal", rom_type
-    assert "gen2_gsc" not in _REGISTRY
+    assert "gen2_gsc" in _REGISTRY
+    assert "gen2_gsc" not in _ROM_TYPE_TO_GAME_ID.values()

@@ -18,6 +18,10 @@ from .base import GameAdapter, gb_status_token, humanize_area_id
 
 _DATA = Path(__file__).resolve().parents[2] / "data" / "games"
 _ARTIFACT = {"crystal": "pokecrystal", "gold": "pokegold", "silver": "pokesilver"}
+# Title binder: every Gen 2 hello spelling (server/adapters/__init__.py rows) -> its title.
+# `crystal_ap` / "Crystal (AP)" are absent on purpose (O-8): they bind no title.
+_TITLE_FOR_ROM_TYPE = {spelling: title for title in _ARTIFACT
+                       for spelling in (title, title.capitalize())}
 _COMMITS = {"pokecrystal": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
             "pokegold": "656583c939d30f920a316177311a502dd222b57c"}
 _ROMS = {"crystal": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
@@ -65,7 +69,15 @@ class Gen2GSCAdapter(GameAdapter):
     must separately authenticate pack bytes; this loader checks their coherence.
     """
 
-    def __init__(self, title: str, *, data_root: Path = _DATA):
+    def __init__(self, title: str | None = None, *, rom_type: str | None = None,
+                 is_rr: bool = False, artifact_kind: str | None = None, data_root: Path = _DATA):
+        # The generic factory (get_adapter on hello, persisted reload, rom_content) passes
+        # rom_type/is_rr/artifact_kind, never a title: bind the title from rom_type here.
+        if rom_type is not None:
+            bound = _TITLE_FOR_ROM_TYPE.get(rom_type)
+            _require(bound is not None and title in (None, bound), f"no Gen 2 title for rom_type {rom_type!r}")
+            title = bound
+        _require(not is_rr, "Gen 2 has no Radical Red layout")
         _require(isinstance(title, str) and title in _ARTIFACT, "explicit supported Gen 2 title required")
         self.title = title
         directory = Path(data_root) / f"gen2_{title}"
@@ -167,6 +179,8 @@ class Gen2GSCAdapter(GameAdapter):
             _require(self._encounters["map_areas"].get(key) == row["area_id"], "encounter/map area mismatch")
             self._area_names[row["area_id"]] = _display(row["name"])
         self._tables = self._presentation_tables()
+        if artifact_kind is not None:
+            self.set_artifact_kind(artifact_kind)
 
     @property
     def game_id(self):

@@ -64,8 +64,9 @@ _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
     # RUNTIME ROUTE ONLY. These rows still pick the LEGACY `gen2_crystal` adapter, because
     # the shipped launcher runs the legacy client until the G3 cutover (docs/gen2/PLAN.md
     # §5.9). Pairing does NOT read them: every Gen 2 spelling has its own row in
-    # `_ROM_TYPE_TO_FOUNDATION` below. The cutover re-points these rows (and registers
-    # `gen2_gsc`, whose constructor needs a title, not `is_rr`/`rom_type`); it is not here.
+    # `_ROM_TYPE_TO_FOUNDATION` below. The cutover re-points these rows to the already
+    # registered `gen2_gsc` (bottom of this file), whose constructor binds its title from
+    # the `rom_type` the generic factory forwards; `crystal_ap` binds no title (O-8).
     "Crystal": "gen2_crystal", "crystal": "gen2_crystal",
     "Gold": "gen2_crystal", "gold": "gen2_crystal",
     "Silver": "gen2_crystal", "silver": "gen2_crystal",
@@ -189,3 +190,8 @@ register_adapter("gen1_purergb", Gen1PureRGBAdapter)
 from .gen2_crystal import Gen2CrystalAdapter  # noqa: E402
 
 register_adapter("gen2_crystal", Gen2CrystalAdapter)
+
+# Registered but NOT routed: no rom_type row selects it until the G3 cutover (U5).
+from .gen2_gsc import Gen2GSCAdapter  # noqa: E402
+
+register_adapter("gen2_gsc", Gen2GSCAdapter)
