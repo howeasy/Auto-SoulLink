@@ -121,6 +121,80 @@ def test_positive_with_only_irq_samples_fails_and_negative_still_counts_irq(modu
     assert probe.verdict(neg)[0] is False
 
 
+def test_positive_row_needs_a_non_irq_denominator_floor(module):
+    """C3-35: a 90% rate over five frames is not evidence.
+
+    A positive row's raw count can be large while its non-IRQ denominator is tiny -- safety
+    refuses CPSR mode 0x12 by design, so 300 witnessed frames may leave a handful of usable
+    ones. Five accepted non-IRQ frames of 300 raw samples is a 100% "rate" and must FAIL.
+    """
+    lua, probe = module
+    row = lua.table_from({"expectation": "positive", "samples": 0, "yes": 0, "no": 0,
+                          "irq": 0, "non_irq_samples": 0, "non_irq_yes": 0, "reached": True})
+    for _ in range(5):
+        probe.tally(row, True, "ok", None, 0x1F)
+    for _ in range(295):
+        probe.tally(row, False, "IRQ mode refused", lua.table_from(["cpu"]), 0x12)
+    assert (row.samples, row.irq, row.non_irq_samples, row.non_irq_yes) == (300, 295, 5, 5)
+    assert row.non_irq_yes / row.non_irq_samples >= 0.90      # the rate alone would certify it
+    ok, why = probe.verdict(row)
+    assert ok is False and "non-IRQ samples 5 < floor 30" in why
+
+
+def test_positive_floor_is_min_samples_or_the_probe_floor(module):
+    """The floor is the row's own min_samples when that is larger, and never below the probe
+    floor. (idle is the only positive row today and carries no min_samples.)"""
+    lua, probe = module
+    assert probe.POSITIVE_MIN_NON_IRQ == 30
+    for min_samples, want in ((None, 30), (1, 30), (29, 30), (30, 30), (60, 60), (120, 120)):
+        row = lua.table_from({"min_samples": min_samples})
+        assert probe.non_irq_floor(row) == want, min_samples
+    row = lua.table_from({"expectation": "positive", "min_samples": 60, "samples": 60,
+                          "non_irq_samples": 44, "non_irq_yes": 44, "reached": True})
+    ok, why = probe.verdict(row)
+    assert ok is False and "non-IRQ samples 44 < floor 60" in why
+
+
+def test_negative_rows_are_unaffected_by_the_positive_floor(module):
+    """A negative row's evidence is its attributable refusals, not a rate: it may carry zero
+    non-IRQ samples and still pass on its expected clause."""
+    lua, probe = module
+    row = run_row(lua, probe, "pc_menu", [])
+    for _ in range(122):
+        probe.tally(row, False, "IRQ mode refused", lua.table_from(["task"]), 0x12)
+    assert (row.samples, row.irq) == (122, 122)
+    assert not row.non_irq_samples           # never set: every witnessed frame was IRQ mode
+    assert tuple(probe.verdict(row)) == (True, "-")
+
+
+def test_the_physical_receipt_shapes_still_pass(module):
+    """docs/gen3/probes/checkpoint_fr_clean_2026-09-23_nonirq.txt: idle 276 non-IRQ of 300 (all
+    276 accepted), walking 109 of 120. The floor must not turn either row into a failure."""
+    lua, probe = module
+    idle = run_row(lua, probe, "idle", [])
+    for _ in range(276):
+        probe.tally(idle, True, "ok", None, 0x1F)
+    for _ in range(24):
+        probe.tally(idle, False, "CPU outside parked checkpoint", lua.table_from(["cpu"]), 0x12)
+    assert (idle.samples, idle.irq, idle.non_irq_samples, idle.non_irq_yes) == (300, 24, 276, 276)
+    assert tuple(probe.verdict(idle)) == (True, "positive rate")
+
+    walking = run_row(lua, probe, "walking", [])
+    for _ in range(109):
+        probe.tally(walking, True, "ok", None, 0x1F)
+    for _ in range(11):
+        probe.tally(walking, False, "CPU outside parked checkpoint", lua.table_from(["cpu"]), 0x12)
+    assert (walking.samples, walking.non_irq_samples) == (120, 109)
+    assert tuple(probe.verdict(walking)) == (True, "-")
+
+
+def test_receipt_prints_the_positive_floor():
+    """The floor is derived from min_samples, so the receipt line states it rather than leaving a
+    reader to re-derive it (the irq/non_irq counts stay where C3-32 put them)."""
+    assert "irq=%d non_irq_sampled=%d non_irq_true=%d%s terminal=%s" in SOURCE
+    assert 'string.format(" floor=%d", P.non_irq_floor(row))' in SOURCE
+
+
 def test_verdict_passes_when_expected_clause_is_among_several(module):
     lua, probe = module
     row = run_row(lua, probe, "pc_menu", [["script_context_status", "task"]] * 122)

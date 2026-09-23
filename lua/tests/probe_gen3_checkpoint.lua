@@ -12,7 +12,10 @@
 local P = {}
 -- expect_clauses: every counted refusal of a negative row must name at least one of these
 -- safety clause keys (safety.last_clauses after check); any other refusal fails the row.
--- min_samples: witnessed frames the row must count (default 1).
+-- min_samples: witnessed frames the row must count (default 1). A POSITIVE row also needs a
+-- non-IRQ denominator of at least max(min_samples, P.POSITIVE_MIN_NON_IRQ): its rate is computed
+-- over the non-IRQ samples only, so a raw count says nothing about how many frames the rate rests
+-- on.
 P.STATES = {
     {name="idle", terminal="field_idle_300", expectation="positive"},
     {name="walking", terminal="position_changed_120", expectation="report"},
@@ -109,6 +112,19 @@ function P.tally(row, ok, reason, clauses, cpsr)
     end
 end
 
+-- Positive rows: the smallest non-IRQ denominator their 90% rate may rest on (C3-35).
+-- safety refuses CPSR mode 0x12 by design, so "sampled=300" can mean five usable frames; the
+-- rate must not certify anything on a handful. 30 is a tenth of the idle row's 300 witnessed
+-- frames (the only positive row today), and the recorded physical shapes are 276/300 (FR
+-- checkpoint_fr_clean_2026-09-23_nonirq.txt:9), 275/300 and 300/300 (RR companion 2026-09-22b:10)
+-- -- an order of magnitude above the floor, so no receipt on record could have tripped it.
+-- A row that asks for more witnessed frames than this floors at its own min_samples.
+P.POSITIVE_MIN_NON_IRQ = 30
+
+function P.non_irq_floor(row)
+    return math.max(row.min_samples or 1, P.POSITIVE_MIN_NON_IRQ)
+end
+
 -- Counts are conditional on the row's state witness, not on safety's answer. Returns ok, why.
 function P.verdict(row)
     if row.error then return false, "callback error: " .. tostring(row.error) end
@@ -118,6 +134,10 @@ function P.verdict(row)
     if row.expectation == "positive" then
         local eligible = row.non_irq_samples or 0
         if eligible == 0 then return false, "no non-IRQ positive samples" end
+        local floor = P.non_irq_floor(row)
+        if eligible < floor then
+            return false, string.format("non-IRQ samples %d < floor %d", eligible, floor)
+        end
         return (row.non_irq_yes or 0) / eligible >= 0.90, "positive rate"
     end
     if row.expectation == "negative" then
@@ -376,9 +396,13 @@ function P.run()
         else
             local good, why = P.verdict(row)
             passed = passed and good
-            G.log(string.format("PROBE %s %s sampled=%d true=%d false=%d irq=%d non_irq_sampled=%d non_irq_true=%d terminal=%s reached=%s R15=%s CPSR=%s frame=%s clauses=%s verdict=%s%s reason=%s",
+            -- A positive row's floor is derived from its min_samples; state it, so a reader does
+            -- not have to re-derive why a rate was refused. Negative/report rows have none.
+            local floor = spec.expectation == "positive"
+                and string.format(" floor=%d", P.non_irq_floor(row)) or ""
+            G.log(string.format("PROBE %s %s sampled=%d true=%d false=%d irq=%d non_irq_sampled=%d non_irq_true=%d%s terminal=%s reached=%s R15=%s CPSR=%s frame=%s clauses=%s verdict=%s%s reason=%s",
                 row.name, good and "PASS" or "FAIL", row.samples, row.yes, row.no,
-                row.irq, row.non_irq_samples, row.non_irq_yes, row.terminal,
+                row.irq, row.non_irq_samples, row.non_irq_yes, floor, row.terminal,
                 tostring(row.reached), tostring(row.r15), tostring(row.cpsr), tostring(row.frame),
                 P.clause_counts(row), why, spec.note and (" note=" .. spec.note) or "", row.reason))
         end
