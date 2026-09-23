@@ -2,6 +2,32 @@
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in the sweep worktree's `docs/gen1_reference/RC_MASTER_GUIDE.md` (`E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`). Requirements ledger: `docs/gen3_requirements.md`.
 
+## CHECKPOINT 13 (2026-09-23): MILESTONE -- Center receipts + the stale-save fix PASS live on FR and LG
+
+Resume from HEAD after this commit (see git log). Clean lane is `.claude/worktrees/gen3-lane-clean` at 10e4a702.
+- PASS on both titles at 10e4a702:
+  - save_then_write_gen3 (a keyed write lands after an in-game save);
+  - center_controls_gen3 (Cable Club welcome wait, link wait, no-adapter message);
+  - whiteout (write inside the Center + nurse control), 5a8064f3.
+- Fixes landed:
+  - C4-SAVE 5923c4dd + 0e7f89e7 (sLinkOpen; save_dialog_cb as a witness; League lighting). Codex adversarial review:
+    the runtime fixes are retained;
+  - C4-6t 10e4a702 (rewind off in every run config; START-menu save witness);
+  - harness hardening 8e9e7ba4 / f5d92327.
+- Evidence docs:
+  - docs/gen3/research/checkpoint_predicate_audit_2026-09-23.md (audit, census, adversarial review, RR save path);
+  - docs/gen3/G4_status_2026-09-23.md;
+  - docs/gen3/G4_request_draft.md, which OMP (C4-DRAFT3) is updating in the tree; commit it after review.
+- Open for G4:
+  - the 2b in-battle matrix (trainer, doubles, tutorial, and the remaining negatives);
+  - the missing probe rows;
+  - Codex's owed save/link physical rows;
+  - final-cut re-takes (boot-check, zip);
+  - the owner's three scope decisions (item 6 Gen 1/Gen 2 baseline, the link/Union Room limits, the rollback freeze);
+  - the owner's Manager run.
+- G5 (RR): its own battle-lifecycle and save-caller proof. RR still routes to the old client.
+- Environment: any EmuHawk launched with the machine's base config.ini still has rewind ON (a crash risk). Owner FYI.
+
 ## CHECKPOINT 12 (2026-09-23, after a coordinator crash): Center receipts + the stale-save defect
 
 HEAD 3fefbee7. Clean lane `.claude/worktrees/gen3-lane-clean`.
