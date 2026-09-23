@@ -19,7 +19,7 @@
         "initiator": "crystal",
         "partner": "crystal",
         "fixtures": {"a": "crystal_battle", "b": "crystal_battle_ot2"},
-        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect"]
+        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset"]
       },
       "proofs": [
         {
@@ -92,6 +92,24 @@
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_cc_a_wrong_save_seed.SaveRAM",
               "sha256": "e2298243d3b10965b354184f1778d946a0909402c57b4ccaff574f819cfcc6dd",
               "case": "crystal_battle_ot2"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_soft_reset",
+          "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_soft_reset --lane gen2-cc-soft-reset --keep-data",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_soft_reset_cc_a_result.txt",
+              "sha256": "166f82e523ca513e7fded638b8db7178951a83c6455a4298740729fadf39672c"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_soft_reset_cc_b_result.txt",
+              "sha256": "d5999e4049d51579a75b088c2b2fd591f8e9e5d6e59e608d6209f4990fe20080"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_soft_reset_cc_pydec_result.txt",
+              "sha256": "42a89e5e58f470ce6f83f9b07783bf111c390851b9355088ba8b447d842abf1b"
             }
           }
         }
