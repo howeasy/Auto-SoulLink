@@ -2060,3 +2060,26 @@ def test_the_runner_queues_the_control_write_only_after_a_parks():
     text = body.read_text(encoding="utf-8")
     orch = text[text.index("def orchestrate_whiteout_gen3"):text.index("def orchestrate_link_gen3")]
     assert orch.index("^CONTROL_LIVE ") < orch.index('"cmd": "box_mon"')
+
+
+# ── C4-6l: live whiteout_gen3 r3 (123c6c45) ─────────────────────────────────────────────────
+def test_whiteout_oracle_takes_the_servers_party_mon_first_order(monkeypatch, tmp_path):
+    """The server's rebuild reply is [party_mon..., rebuild_start] (state.py
+    _queue_rebuild_commands); the live A logged RX party_mon before RX rebuild_start, and the
+    oracle refused it. rebuild_start still has to answer the whiteout and precede rebuild_done."""
+    fixture = _fixture([STARTER, PIDGEY])
+    saved = _saved(fixture, 3, [STARTER, PIDGEY])
+    k = _key(PIDGEY)
+    run, _ = _oracle_stub(monkeypatch, tmp_path, "whiteout_gen3", {"a": saved, "b": saved},
+                          fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "alive"}])
+    run._link_keys = {"a": k, "b": k}
+    receipts = _whiteout_receipts(k)
+    start = "RX rebuild_start text=REBUILDING\n"
+    party = f"RX party_mon key={k}\n"
+    live = dict(receipts, a=receipts["a"].replace(start + party, party + start))
+    assert live["a"] != receipts["a"]
+    run.assert_whiteout_gen3_saved(live)
+    late = dict(receipts, a=receipts["a"].replace(start, "").replace(
+        "RX rebuild_done\n", "RX rebuild_done\n" + start))
+    with pytest.raises(RuntimeError, match="rebuild_start"):
+        run.assert_whiteout_gen3_saved(late)

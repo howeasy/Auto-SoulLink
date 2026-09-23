@@ -5437,9 +5437,14 @@ class DuoRun:
         # BOXED_OBSERVED / RETURNED_OBSERVED are the cartridge read back (absent from the party
         # AND in a box; back in the party AND in no box): an ACK alone is the client's word, and a
         # no-op deposit that still ACKed would otherwise pass (Codex C4-6b finding 2).
-        chain_a = [gen3_boxed(ka), gen3_tx("whiteout", "-"), r"(?m)^RX rebuild_start\b",
+        # rebuild_start is NOT ordered against party_mon: the server queues the party_mons first
+        # and rebuild_start after them, in one reply (server/state.py _queue_rebuild_commands;
+        # live whiteout_gen3 r3 on 123c6c45: `RX party_mon` then `RX rebuild_start`). It must
+        # answer the whiteout and precede rebuild_done -- the Gen 1 oracle's own rule.
+        chain_a = [gen3_boxed(ka), gen3_tx("whiteout", "-"),
                    gen3_rx("party_mon", ka), gen3_tx("sync_retrieve_done", ka),
                    r"(?m)^RX rebuild_done\b", gen3_returned(ka)]
+        start = r"(?m)^RX rebuild_start\b"
         # G4 item 2a (docs/gen3/G4_request_draft.md): the Center state with the Union Room set
         # live, the rebuild write landing at the Center landing tile, and -- after the save -- a
         # queued box_mon held with zero writes while the nurse's script is live. A never ACKs
@@ -5448,8 +5453,9 @@ class DuoRun:
         control = [gen3_returned(ka), r"(?m)^CONTROL_LIVE ", gen3_rx("box_mon", ka),
                    r"(?m)^CONTROL_REFUSED box_mon "]
         problems += gen3_receipt_problems(
-            "a", results["a"], required=chain_a + [r"(?m)^WHITED_OUT\b", center, landed] + control,
+            "a", results["a"], required=chain_a + [start,r"(?m)^WHITED_OUT\b", center, landed] + control,
             ordered=list(zip(chain_a, chain_a[1:], strict=False))
+            + [(gen3_tx("whiteout", "-"), start), (start, r"(?m)^RX rebuild_done\b")]
             + [(gen3_tx("whiteout", "-"), center), (center, landed),
                (gen3_tx("sync_retrieve_done", ka), landed)]
             + list(zip(control, control[1:], strict=False)),
