@@ -70,6 +70,7 @@ pcall(function() client.speedmode(D.speed or 1600) end)
 
 local JSON = dofile(ROOT .. "/lua/json_codec.lua")
 local G = dofile(ROOT .. "/lua/tests/gen3_boot_check.lua")
+SLINK_GEN3_TITLE = D.title   -- the scripted helpers read their per-title addresses from this (C4-LG)
 local SP = dofile(ROOT .. "/lua/tests/gen3_scripted_play.lua")   -- helpers only; never run()
 local Reads = dofile(ROOT .. "/lua/gen3/reads.lua")
 local play = SP.play

@@ -49,12 +49,25 @@ local G = dofile(WT .. "/lua/tests/gen3_boot_check.lua")
 local PL = dofile(WT .. "/lua/tests/playlib.lua")
 local Reads = dofile(WT .. "/lua/gen3/reads.lua")
 local JSON = dofile(WT .. "/lua/json_codec.lua")
+local Syms = dofile(WT .. "/lua/tests/gen3_title_syms.lua")
+
+-- TITLE (card C4-LG): a SLINK_GEN3_TITLE GLOBAL (the same "global, else env" shape SLINK_ROOT
+-- uses two lines up — a duo driver sets globals, not process env, per BizHawk instance) or env
+-- var, defaulting to "firered" so every existing caller that never set either keeps the exact
+-- byte-for-byte FR behaviour this file always had. Syms.for_title refuses loudly for anything
+-- else, the address-lookup half of "refuse by name on LG"; the story-only half
+-- (LEGS/PATHS/DEST/verify_starter/verify_rival) is guarded in run() below.
+local TITLE = SLINK_GEN3_TITLE or os.getenv("SLINK_GEN3_TITLE")
+if not TITLE or TITLE == "" then TITLE = "firered" end
+local S = Syms.for_title(TITLE)
+
 local profile_file = assert(io.open(WT .. "/data/games/gen3_frlg/profile.json", "rb"))
-local profile = assert(JSON.decode(profile_file:read("a"))).titles.firered
+local profile = assert(JSON.decode(profile_file:read("a"))).titles[TITLE]
 profile_file:close()
+assert(profile, "gen3_scripted_play: no profile." .. TITLE .. " in data/games/gen3_frlg/profile.json")
 assert(profile.admitted and not profile.derived.CFRU_NO_ENCRYPT
        and profile.derived.BOX_DATA_OFFSET == 4 and profile.derived.BOXES_PER_STORE == 14,
-       "FR uncompressed box layout is not admitted")
+       TITLE .. " uncompressed box layout is not admitted")
 local function read_bytes(addr, count)
     local bytes = {}
     for i = 1, count do bytes[i] = memory.read_u8(addr + i - 1) end
@@ -68,13 +81,16 @@ local reader = Reads.new(profile, {
 })
 
 -- Plaintext (no decrypt needed) RAM observables pinned in lua/games/gen3_frlge.lua's `vanilla`
--- profile table, cited per use below.
-local PARTY_COUNT_ADDR    = 0x02024029  -- gPlayerPartyCount (vanilla.PARTY_COUNT_ADDR)
-local BATTLE_OUTCOME_ADDR = 0x02023E8A  -- vanilla.BATTLE_OUTCOME_ADDR; B_OUTCOME_CAUGHT == 7
-                                         -- (pret include/constants/battle.h:82)
-local BATTLE_RESULTS_ADDR = 0x03004F90  -- vanilla.BATTLE_RESULTS_ADDR; playerFaintCounter @ +0
+-- profile table, cited per use below. Title-aware (card C4-LG): every address below comes from
+-- S = Syms.for_title(TITLE), verified against both .sym files by test_gen3_title_syms.py. FR
+-- and LG land on the identical WRAM address for all of these (same decomp, same struct layout);
+-- S exists so a future divergence is caught by the pytest, not discovered live.
+local PARTY_COUNT_ADDR    = S.PARTY_COUNT_ADDR     -- gPlayerPartyCount
+local BATTLE_OUTCOME_ADDR = S.BATTLE_OUTCOME_ADDR  -- B_OUTCOME_CAUGHT == 7
+                                                    -- (pret include/constants/battle.h:82)
+local BATTLE_RESULTS_ADDR = S.BATTLE_RESULTS_ADDR  -- gBattleResults; playerFaintCounter @ +0
 local B_OUTCOME_CAUGHT = 7
-local PARTY_BASE          = 0x02024284  -- gPlayerParty (vanilla.PARTY_BASE)
+local PARTY_BASE          = S.PARTY_BASE  -- gPlayerParty
 local MON_SIZE            = 100
 local OFF_HP, OFF_MAXHP   = 0x56, 0x58  -- lua/tests/duo/duo_main.lua:26-27
 local OFF_PID, OFF_OTID   = 0x00, 0x04  -- lua/tests/duo/duo_main.lua:23-24
@@ -90,9 +106,9 @@ local OFF_PID, OFF_OTID   = 0x00, 0x04  -- lua/tests/duo/duo_main.lua:23-24
 -- which is this same FR symbol (RR is a FR ROM hack). gActionSelectionCursor (0x02023FF8, u8[4]
 -- per-battler; pokefirered.sym:146) is 0 FIGHT, 1 BAG, 2 POKeMON, 3 RUN
 -- (src/battle_controller_player.c); battler 0 is the player.
-local BATTLER_CTRL_ADDR = 0x03004FE0
-local HANDLE_INPUT_CHOOSE_ACTION = 0x0802E439  -- 0x0802E438 | 1 (Thumb bit)
-local ACTION_CURSOR_ADDR = 0x02023FF8
+local BATTLER_CTRL_ADDR = S.BATTLER_CTRL_ADDR
+local HANDLE_INPUT_CHOOSE_ACTION = S.HANDLE_INPUT_CHOOSE_ACTION  -- HandleInputChooseAction | 1
+local ACTION_CURSOR_ADDR = S.ACTION_CURSOR_ADDR
 local ACTION_FIGHT, ACTION_BAG = 0, 1
 
 local function action_menu_up() return memory.read_u32_le(BATTLER_CTRL_ADDR) == HANDLE_INPUT_CHOOSE_ACTION end
@@ -113,7 +129,7 @@ local function player_faints() return memory.read_u8(BATTLE_RESULTS_ADDR) end
 
 -- gObjectEvents = 0x02036E38 (pokefirered.sym:205); playlib.obj_pos/obj_facing read it
 -- (object 0 = player, currentCoords +0x10/+0x12 stored +7, facing nibble at +0x18).
-local OBJ_EVENTS_ADDR = 0x02036E38
+local OBJ_EVENTS_ADDR = S.OBJ_EVENTS_ADDR
 
 local function int(x) return math.floor(x) end
 
@@ -270,20 +286,20 @@ end
 -- CB2_BagMenuRun is therefore "the bag is up and reading Left/Right/A", the same callback2-
 -- witness shape used throughout this codebase (gMain @ pokefirered.sym:745 0x030030f0,
 -- .callback2 @ +0x04 per include/main.h:14-15).
-local GMAIN_CALLBACK2_ADDR = 0x030030F4  -- gMain.callback2
+local GMAIN_CALLBACK2_ADDR = S.GMAIN_CALLBACK2_ADDR  -- gMain.callback2
 -- pret/pokefirered@c75f352: pokefirered.sym:507,829,10991,11025,11043,11149.
 -- include/party_menu.h:8-19: slotId +9, action +0xB; src/party_menu.c:5832-5857
 -- opens the mandatory battle menu at slot 0 and :1119-1150 accepts input only
 -- while Task_HandleChooseMonInput is active. src/data/party_menu.h:1095 puts
 -- SEND OUT at popup row 0 for PARTY_ACTION_SEND_OUT=1.
-local CB2_UPDATE_PARTY_MENU = 0x0811EBA1
-local PARTY_MENU_ADDR = 0x0203B0A0
+local CB2_UPDATE_PARTY_MENU = S.CB2_UPDATE_PARTY_MENU
+local PARTY_MENU_ADDR = S.PARTY_MENU_ADDR
 local PARTY_MENU_SLOT_OFF, PARTY_MENU_ACTION_OFF = 9, 0xB
 local PARTY_ACTION_SEND_OUT = 1
-local TASKS_BASE, TASK_SIZE = 0x03005090, 40
-local TASK_CHOOSE_MON = 0x0811FB29
-local TASK_RETURN_AFTER_TEXT = 0x081203B9
-local TASK_SELECTION_POPUP = 0x08122C5D
+local TASKS_BASE, TASK_SIZE = S.TASKS_BASE, 40
+local TASK_CHOOSE_MON = S.TASK_CHOOSE_MON
+local TASK_RETURN_AFTER_TEXT = S.TASK_RETURN_AFTER_TEXT
+local TASK_SELECTION_POPUP = S.TASK_SELECTION_POPUP
 local function party_menu_up()
     return memory.read_u32_le(GMAIN_CALLBACK2_ADDR) == CB2_UPDATE_PARTY_MENU
 end
@@ -298,11 +314,11 @@ local function party_task()
     end
     return nil
 end
-local CB2_BAG_MENU_RUN = 0x08107EE1      -- CB2_BagMenuRun | 1 (Thumb bit)
-local BAG_MENU_STATE_ADDR = 0x0203ACFC   -- gBagMenuState
+local CB2_BAG_MENU_RUN = S.CB2_BAG_MENU_RUN      -- CB2_BagMenuRun | 1 (Thumb bit)
+local BAG_MENU_STATE_ADDR = S.BAG_MENU_STATE_ADDR   -- gBagMenuState
 local BAG_POCKET_OFF, BAG_ITEMS_ABOVE_OFF, BAG_CURSOR_POS_OFF = 0x06, 0x08, 0x0E
 local BAG_POCKET_POKEBALLS = 2           -- OPEN_BAG_POKEBALLS
-local SPECIAL_VAR_ITEM_ID_ADDR = 0x0203AD30  -- gSpecialVar_ItemId (pokefirered.sym:449)
+local SPECIAL_VAR_ITEM_ID_ADDR = S.SPECIAL_VAR_ITEM_ID_ADDR  -- gSpecialVar_ItemId (pokefirered.sym:449)
 
 -- POKe BALL is item 4 (include/constants/items.h:8). Its pocket, SaveBlock1.bagPocket_PokeBalls
 -- (include/global.h:781, offset 0x0430 within SaveBlock1: pcItems 0x0298 + bagPocket_Items
@@ -368,8 +384,8 @@ end
 local function verify_parcel_fetched(cp)
     local sb1 = sb1_ptr(cp)
     -- item.c:20-29 XORs quantity with the LOW u16 of SaveBlock2.encryptionKey
-    -- (global.h:358 +0xF20; pokefirered.sym:810 gSaveBlock2Ptr=0300500C).
-    local sb2 = memory.read_u32_le(0x0300500C)
+    -- (global.h:358 +0xF20; pokefirered.sym:810 gSaveBlock2Ptr).
+    local sb2 = memory.read_u32_le(S.SAVEBLOCK2_PTR_ADDR)
     if not sb1 or sb2 < 0x02000000 or sb2 > 0x02040000 - 0xF24 or sb2 % 4 ~= 0 then
         G.finish(false, "parcel_fetch_pointer: unreadable bag or encryption key"); return
     end
@@ -1357,14 +1373,14 @@ end
 -- task.data[0]=state (2 HANDLE_INPUT), data[1]=selected row (0 WITHDRAW,1 DEPOSIT).
 -- src/pokemon_storage_system_data.c:16-17,69-76: sCursorArea/sCursorPosition
 -- are 02039820/21 (sym:315-316), 0=box, 1=party; popup cursor is sMenu+2.
-local PC_TASKS, PC_TASK_SIZE = 0x03005090, 40 -- sym:829; include/task.h:14-25
-local PC_MULTICHOICE = 0x0809CC99
-local PC_MAIN_MENU = 0x0808C39D
-local PC_STORAGE_MAIN = 0x0808D2BD
-local PC_ON_SELECTED = 0x0808D879
-local PC_DEPOSIT_MENU = 0x0808DD89
-local PC_WITHDRAW_MON = 0x0808DC9D
-local PC_RELEASE_MON = 0x0808DECD
+local PC_TASKS, PC_TASK_SIZE = S.TASKS_BASE, 40 -- sym:829; include/task.h:14-25
+local PC_MULTICHOICE = S.PC_MULTICHOICE
+local PC_MAIN_MENU = S.PC_MAIN_MENU
+local PC_STORAGE_MAIN = S.PC_STORAGE_MAIN
+local PC_ON_SELECTED = S.PC_ON_SELECTED
+local PC_DEPOSIT_MENU = S.PC_DEPOSIT_MENU
+local PC_WITHDRAW_MON = S.PC_WITHDRAW_MON
+local PC_RELEASE_MON = S.PC_RELEASE_MON
 -- Task_OnBPressed (pokemon_storage_system_tasks.c:1988-2035): B in storage asks "Continue BOX
 -- operations?". The cursor starts on NO, not YES: ShowYesNoWindow(cursorPos)
 -- (tasks.c:2595-2599) calls CreateYesNoMenu(..., initialCursorPos = 1) -- that 7th argument IS
@@ -1376,13 +1392,13 @@ local PC_RELEASE_MON = 0x0808DECD
 -- NO and B is MENU_B_PRESSED: BOTH exit (state 2 case 1 / MENU_B_PRESSED, tasks.c:2016-2031);
 -- only Down+A (YES, case 0) stays in the box. B is pressed because its outcome cannot depend
 -- on where the cursor happens to be.
-local PC_ON_B_PRESSED = 0x0808ECE5
-local PC_MENU_CURSOR = 0x0203ADE4 + 2
-local PC_MENU_MAX_CURSOR = 0x0203ADE4 + 4 -- src/menu.c:9-25
-local PC_RESULT = 0x020370D0 -- sym:231 gSpecialVar_Result, VAR_RESULT
-local PC_CURSOR_AREA, PC_CURSOR_POS = 0x02039820, 0x02039821
-local PC_STORAGE_PTR = 0x020397B0 -- sym:307; gStorage->state +0, boxOption +1
-local PC_DEPOSIT_BOX_ID = 0x020397B6 -- sym:310; sDepositBoxId
+local PC_ON_B_PRESSED = S.PC_ON_B_PRESSED
+local PC_MENU_CURSOR = S.PC_MENU_BASE + 2
+local PC_MENU_MAX_CURSOR = S.PC_MENU_BASE + 4 -- src/menu.c:9-25
+local PC_RESULT = S.PC_RESULT -- sym:231 gSpecialVar_Result, VAR_RESULT
+local PC_CURSOR_AREA, PC_CURSOR_POS = S.PC_CURSOR_AREA, S.PC_CURSOR_POS
+local PC_STORAGE_PTR = S.PC_STORAGE_PTR -- sym:307; gStorage->state +0, boxOption +1
+local PC_DEPOSIT_BOX_ID = S.PC_DEPOSIT_BOX_ID -- sym:310; sDepositBoxId
 -- gStorage->boxOption is one enum (OPTION_WITHDRAW 0, OPTION_DEPOSIT 1, OPTION_MOVE_MONS 2,
 -- include/pokemon_storage_system_internal.h:17-24) and CURSOR_AREA_* is another (IN_BOX 0,
 -- IN_PARTY 1, :108-115); they merely happen to share 0/1. A popup offers the option its
@@ -1421,7 +1437,7 @@ local function pc_state_dump()
     local sp = memory.read_u32_le(PC_STORAGE_PTR)
     local st = (sp >= 0x02000000 and sp < 0x02040000) and memory.read_u8(sp) or -1
     return string.format("tasks=[%s] storage_state=%d script_status=%d result=%d menu_cursor=%d",
-        table.concat(tasks, ","), st, memory.read_u8(0x03000EA8),
+        table.concat(tasks, ","), st, memory.read_u8(S.SCRIPT_CONTEXT_STATUS_ADDR),
         memory.read_u16_le(PC_RESULT), memory.read_u8(PC_MENU_CURSOR))
 end
 
@@ -1796,16 +1812,16 @@ LEGS[#LEGS + 1] = {
         -- (pokefirered.sym:205), object 0 = player, currentCoords s16 x/y at +0x10/+0x12
         -- (include/global.fieldmap.h struct ObjectEvent), stored +7 (MAP_OFFSET).
         do
-            local ox = memory.read_s16_le(0x02036E38 + 0x10) - 7
-            local oy = memory.read_s16_le(0x02036E38 + 0x12) - 7
+            local ox = memory.read_s16_le(OBJ_EVENTS_ADDR + 0x10) - 7
+            local oy = memory.read_s16_le(OBJ_EVENTS_ADDR + 0x12) - 7
             local sx, sy = G.pos(cp)
             G.phase("pre-walk", string.format("obj0=(%d,%d) sb1=(%d,%d)", ox, oy, sx, sy))
             G.shot("prewalk")
         end
         play.follow(cp, "lab_oak_scene_end_to_ball", "starter")   -- asserts the real (6,4), not assumed
         do
-            local ox = memory.read_s16_le(0x02036E38 + 0x10) - 7
-            local oy = memory.read_s16_le(0x02036E38 + 0x12) - 7
+            local ox = memory.read_s16_le(OBJ_EVENTS_ADDR + 0x10) - 7
+            local oy = memory.read_s16_le(OBJ_EVENTS_ADDR + 0x12) - 7
             local sx, sy = G.pos(cp)
             G.phase("post-walk", string.format("obj0=(%d,%d) sb1=(%d,%d)", ox, oy, sx, sy))
             G.shot("postwalk")
@@ -1815,7 +1831,7 @@ LEGS[#LEGS + 1] = {
             -- at +0x18 (include/global.fieldmap.h: u8 movementDirection:4 / facingDirection:4);
             -- 1=down 2=up 3=left 4=right. Hold Up until it reads 2 (the ball object is solid,
             -- so Up can only turn, never step).
-            local function facing() return memory.read_u8(0x02036E38 + 0x18) >> 4 end
+            local function facing() return memory.read_u8(OBJ_EVENTS_ADDR + 0x18) >> 4 end
             for _ = 1, 4 do
                 if facing() == 2 then break end
                 for _ = 1, 8 do joypad.set({ Up = true }); G.advance() end
@@ -2597,7 +2613,17 @@ LEGS[#LEGS + 1] = {
 
 -- ── run ──────────────────────────────────────────────────────────────────────────────────────
 
+--- LEGS/PATHS/DEST/verify_starter/verify_rival/parcel-delivery are the Pallet Town INTRO STORY,
+-- pinned against tests/fixtures/gen3/firered_town.sav (card C4-LG: the duo drivers reuse this
+-- file's WITNESS CONSTANTS on both sides of a live FR<->LG duo, never this story playthrough).
+-- No LG fixture or savestate prefix exists for it, so refuse by name rather than boot a LG ROM
+-- into an FR-only story and misreport whatever the mismatch produces.
 local function run()
+    if TITLE ~= "firered" then
+        G.finish(false, "gen3_scripted_play: the Pallet Town story legs (LEGS/PATHS/DEST) are "
+                     .. "FireRed-only; SLINK_GEN3_TITLE=" .. tostring(TITLE))
+        return
+    end
     play.main(LEGS, {
         name   = "gen3_scripted_play",      -- patch/build/gen3_scripted_play_result.txt
         budget = 900000,
