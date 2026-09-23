@@ -105,3 +105,11 @@ def test_unadmitted_gen3_variants_carry_the_suffix():
     assert "not admitted by the SLink client yet" in labels["gen3_e"]
     assert "not admitted by the SLink client yet" not in labels["gen3"]
     assert "not admitted by the SLink client yet" not in labels["gen3_rr"]
+
+
+def test_new_run_form_marks_exactly_the_unadmitted_games():
+    """The template greys a chip from this flag (manager.html :disabled="g.unadmitted"), derived
+    from UNADMITTED_GAMES, so the chips and the handle_new refusal cannot drift apart."""
+    from server.manager import UNADMITTED_GAMES, new_run_form
+    flagged = {g["key"] for g in new_run_form()["games"] if g["unadmitted"]}
+    assert flagged == set(UNADMITTED_GAMES) == {"gen3_ap", "gen3_e"}

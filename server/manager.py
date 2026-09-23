@@ -217,7 +217,8 @@ def new_run_form() -> dict:
     """Everything the New-run form needs, computed here so the reasons and the greying
     come from one table: per game family, per option, (ok, why)."""
     return {
-        "games": [{"key": k, "label": lbl, "members": m} for k, lbl, m in GAMES],
+        "games": [{"key": k, "label": lbl, "members": m, "unadmitted": k in UNADMITTED_GAMES}
+                  for k, lbl, m in GAMES],
         "groups": [{"label": lbl, "keys": keys} for lbl, keys in OPTION_GROUPS],
         "options": {k: {"label": lbl, "desc": d} for k, (lbl, d) in OPTIONS.items()},
         "support": {k: {opt: option_support(opt, m or [""]) for opt in OPTIONS} for k, _, m in GAMES},
