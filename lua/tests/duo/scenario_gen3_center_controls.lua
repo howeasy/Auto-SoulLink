@@ -10,14 +10,15 @@
 --
 -- A (the runner queues each probe once A logs CONTROL_LIVE <name>; ctx.hold_probe checks it, and
 -- each control's live() carries its source-pinned WITNESS on every sampled frame):
---   cable_menu            the global script context parked in CableClub_EventScript_
+--   cable_welcome_message  the global script context parked in CableClub_EventScript_
 --                         WelcomeToCableClub -- the Direct Corner attendant's no-adapter branch
 --                         -- waiting at the \p of CableClub_Text_WelcomeWhichCableClubService
 --                         ("...CABLE CLUB.\p"): `waitmessage` holds the script there until A,
 --                         so it is a STABLE refusing state (live r8: after 240 frames the script
 --                         sat here, never at the multichoice the old witness demanded). VAR_RESULT
 --                         read there is IsWirelessAdapterConnected's own return (0 = FALSE,
---                         observed). Probe box_mon <linked>, held.
+--                         observed). Probe box_mon <linked>, held. This proves refusal during
+--                         the welcome MESSAGE wait, NOT during the service multichoice.
 --   cable_link            TRADE CENTER -> the party check -> EventScript_AskSaveGame (YES: this
 --                         run's one in-game save, the witness; it lands BEFORE any probe moves a
 --                         byte, so it is no persistence proof of the later deposit/withdraw) ->
@@ -43,6 +44,21 @@ local DEST_2F = { group = 5, num = 5, x = 2, y = 6 }
 -- stepping Up into that lockall ("First, I need to show you this ...").
 local VAR_MAP_SCENE_POKEMON_CENTER_TEALA = 0x407C
 local TUTORIAL_END = { x = 2, y = 4 }
+
+--- A released probe that never landed: when the script is over and the refusal rests on a
+--- predicate pret never clears (ctx.stale_predicates; no map change or later script clears
+--- either), that is a PRODUCT FINDING, recorded as such -- not a harness timeout.
+local function not_landed(ctx, name, cmd, linked, script_live)
+    local held = ctx.queued(cmd, linked)
+    local stale = ctx.stale_predicates()
+    if #stale > 0 and not script_live() then
+        ctx.log(fmt("FINDING stale_predicate %s %s %s idle_field=true held=%s", name, cmd,
+                    table.concat(stale, " "), tostring(held and held.why)))
+        return fmt("PRODUCT FINDING: %s released to an idle field, but the overworld checkpoint still "
+                   .. "refuses on a pointer pret never clears (%s)", name, table.concat(stale, "; "))
+    end
+    return fmt("%s: the probe never landed once released (%s)", name, tostring(held and held.why))
+end
 
 --- Face the counter north and talk across it, logging where A stands and faces first.
 local function talk_across(ctx, name)
@@ -97,27 +113,30 @@ local function a_side(ctx, linked)
         ctx.log(fmt("TEALA_TUTORIAL var=%s skipped", tostring(teala)))
         play.follow(cp, "center2f_to_direct_corner", "center_controls a")
     end
-    local ok_face, why_face = talk_across(ctx, "cable_menu")
+    local ok_face, why_face = talk_across(ctx, "cable_welcome_message")
     if not ok_face then return false, why_face end
     if not ctx.wait_until(script_live, 10, "the Direct Corner attendant's script") then
-        return false, "cable_menu: the attendant's script never started"
+        return false, "cable_welcome_message: the attendant's script never started"
     end
     -- drive by the witnessed position, not a delay: the no-adapter branch's welcome message
     if not ctx.wait_until(function() return at_welcome() end, 10, "CableClub_EventScript_WelcomeToCableClub") then
-        ctx.log("WITNESS cable_menu script=CableClub_EventScript_WelcomeToCableClub at=nil adapter_connected=unobserved")
-        return false, "cable_menu: the attendant never entered CableClub_EventScript_WelcomeToCableClub (the no-adapter branch)"
+        ctx.log("WITNESS cable_welcome_message script=CableClub_EventScript_WelcomeToCableClub at=nil adapter_connected=unobserved")
+        return false, "cable_welcome_message: the attendant never entered CableClub_EventScript_WelcomeToCableClub (the no-adapter branch)"
     end
     local at, result = at_welcome(), ctx.special_result()
-    ctx.log(fmt("WITNESS cable_menu script=CableClub_EventScript_WelcomeToCableClub at=%s var_result=%d "
+    ctx.log(fmt("WITNESS cable_welcome_message script=CableClub_EventScript_WelcomeToCableClub at=%s var_result=%d "
                 .. "adapter_connected=%s", tostring(at), result,
                 result == 0 and "false(observed: IsWirelessAdapterConnected's VAR_RESULT)" or "TRUE"))
-    if result ~= 0 then return false, "cable_menu: IsWirelessAdapterConnected returned " .. result end
-    local clause, why = ctx.hold_probe("cable_menu", "box_mon", linked, function()
+    if result ~= 0 then return false, "cable_welcome_message: IsWirelessAdapterConnected returned " .. result end
+    local clause, why = ctx.hold_probe("cable_welcome_message", "box_mon", linked, function()
         return script_live() and at_welcome() ~= nil
     end, 600)
     if not clause then return false, why end
     -- A past the \p, TRADE CENTER (multichoice row 0), then YES through the save prompts, until
-    -- the linkup task waits: every A on this road means "go on", so overshoot is harmless
+    -- the linkup task waits: every A on this road means "go on", so overshoot is harmless -- for
+    -- a SAME-save fixture. A different-file save (gDifferentSaveFile) asks "replace the previous
+    -- file?" with NO as the default (start_menu.c SaveDialogCB_AskReplacePreviousFilePrintYesNoMenu):
+    -- there A declines, the script aborts, and the run FAILS at the linkup wait -- never a false pass.
     local function linking() return ctx.task_live("Task_LinkupAwaitConnection") end
     if not ctx.mash_until(linking, 90, "A") then
         return false, "cable_link: Task_LinkupAwaitConnection never started (save or party check refused?)"
@@ -130,8 +149,7 @@ local function a_side(ctx, linked)
     local ok, swhy = settle_field("cable_link")
     if not ok then return false, swhy end
     if not ctx.wait_sent("stats_cache", linked, 60) then
-        local held = ctx.queued("box_mon", linked)
-        return false, "cable_link: the probe never landed once released (" .. tostring(held and held.why) .. ")"
+        return false, not_landed(ctx, "cable_link", "box_mon", linked, script_live)
     end
     if not ctx.observe_boxed(linked) then return false, "cable_link: " .. linked .. " never read back boxed" end
     ctx.log(fmt("CONTROL_SETTLED cable_link box_mon %s", linked))
@@ -160,9 +178,7 @@ local function a_side(ctx, linked)
     ok, swhy = settle_field("union_room_attendant")
     if not ok then return false, swhy end
     if not ctx.wait_sent("sync_retrieve_done", linked, 60) then
-        local held = ctx.queued("party_mon", linked)
-        return false, "union_room_attendant: the probe never landed once released ("
-                   .. tostring(held and held.why) .. ")"
+        return false, not_landed(ctx, "union_room_attendant", "party_mon", linked, script_live)
     end
     if not ctx.observe_returned(linked) then return false, linked .. " never read back in the party" end
     ctx.log(fmt("CONTROL_SETTLED union_room_attendant party_mon %s", linked))

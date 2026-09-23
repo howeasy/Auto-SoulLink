@@ -850,7 +850,7 @@ function FAKE(scenario, player, phase, spec)
         local live = tostring(s):match("^CONTROL_LIVE (%S+)")
         if live then
             probes = probes + 1
-            local probe = ({ cable_menu = "box_mon", nurse = "box_mon", union_room_attendant = "party_mon" })[live]
+            local probe = ({ cable_welcome_message = "box_mon", nurse = "box_mon", union_room_attendant = "party_mon" })[live]
             if probe then logs[#logs + 1] = "RX " .. probe .. " key=" .. (spec.linked or "K1") end
         end
     end
@@ -912,6 +912,8 @@ function FAKE(scenario, player, phase, spec)
     ctx.wait_sent = function(event, key)
         if event == "stats_cache" and not spec.noop_deposit then gone[key] = true; boxed[key] = true end
         if event == "sync_retrieve_done" then gone[key] = nil; boxed[key] = nil end
+        -- live r9: after the cancelled cable link the released probe never landed
+        if spec.stale and event == "stats_cache" then return false end
         logs[#logs + 1] = "TX " .. event .. " " .. tostring(key) .. " {}"
         return true
     end
@@ -1035,6 +1037,13 @@ function FAKE(scenario, player, phase, spec)
         return nil
     end
     ctx.special_result = function() return spec.var_result or 0 end
+    ctx.stale_predicates = function()
+        if spec.stale then
+            return { "link_callback=0x0800A721:LinkCB_RequestPlayerDataExchange(sLinkOpen=0)",
+                     "save_dialog_cb=0x0806F9E1:SaveDialogCB_ReturnSuccess(no save dialog task)" }
+        end
+        return {}
+    end
     -- the deferred queue the REAL ctx.queued/ctx.hold_probe read (HOLD_SRC, from the driver);
     -- spec.queue = "wrong" is Codex's case: the right reason, but only an unrelated party_mon
     local key = spec.linked or "K1"
@@ -1128,8 +1137,8 @@ def _run_module(lua, scenario, player, phase, spec):
                                       "WRITE_IN_CENTER map=5.4 at=(7,4)",
                                       "CONTROL_LIVE nurse K1 map=5.4",
                                       "CONTROL_REFUSED nurse box_mon K1 clause=field_controls_locked"]),
-    ("center_controls", "a", "initial", {}, ["CONTROL_LIVE cable_menu K1 ",
-                                             "CONTROL_REFUSED cable_menu box_mon K1 clause=",
+    ("center_controls", "a", "initial", {}, ["CONTROL_LIVE cable_welcome_message K1 ",
+                                             "CONTROL_REFUSED cable_welcome_message box_mon K1 clause=",
                                              "CONTROL_REFUSED cable_link box_mon K1 clause=",
                                              "CONTROL_RELEASED cable_link box_mon K1",
                                              "CONTROL_REFUSED union_room_attendant party_mon K1 clause=",
@@ -2296,10 +2305,10 @@ def test_deadzone_oracle_takes_one_dead_zone_row_per_player(monkeypatch, tmp_pat
 
 
 def _center_controls_receipt(k):
-    return ("WITNESS cable_menu script=CableClub_EventScript_WelcomeToCableClub at=scriptPtr "
+    return ("WITNESS cable_welcome_message script=CableClub_EventScript_WelcomeToCableClub at=scriptPtr "
             "var_result=0 adapter_connected=false(observed: IsWirelessAdapterConnected's VAR_RESULT)\n"
-            f"CONTROL_LIVE cable_menu {k} map=5.5\nRX box_mon key={k}\n"
-            f"CONTROL_REFUSED cable_menu box_mon {k} clause=script_context_status held\n"
+            f"CONTROL_LIVE cable_welcome_message {k} map=5.5\nRX box_mon key={k}\n"
+            f"CONTROL_REFUSED cable_welcome_message box_mon {k} clause=script_context_status held\n"
             "SAVE_WITNESS_DUMP path=p bytes=1 saves=1 frame=1 counter=5\n"
             f"CONTROL_LIVE cable_link {k} map=5.5\n"
             f"CONTROL_REFUSED cable_link box_mon {k} clause=task held\n"
@@ -2326,7 +2335,7 @@ def test_center_controls_oracle_positive_and_negatives(monkeypatch, tmp_path):
     assert notes and "center_controls" in notes[-1]
     # the probe arriving BEFORE the state it is supposed to test proves nothing
     early = f"RX box_mon key={k}\n" + good["a"].replace(f"RX box_mon key={k}\n", "")
-    with pytest.raises(RuntimeError, match="CONTROL_LIVE cable_menu"):
+    with pytest.raises(RuntimeError, match="CONTROL_LIVE cable_welcome_message"):
         run.assert_center_controls_gen3_saved(dict(good, a=early))
     with pytest.raises(RuntimeError, match="CONTROL_RELEASED union_room_attendant"):
         run.assert_center_controls_gen3_saved(dict(good, a=good["a"].replace(
@@ -2373,7 +2382,7 @@ def test_the_runner_records_rom_pack_source_and_fixture_identity(monkeypatch, tm
 def test_the_center_controls_runner_queues_each_probe_after_its_marker():
     body = (REPO / "tools" / "e2e_duo.py").read_text(encoding="utf-8")
     orch = body[body.index("def orchestrate_center_controls_gen3"):body.index("def orchestrate_whiteout_gen3")]
-    assert orch.index("CONTROL_LIVE cable_menu") < orch.index('"cmd": "box_mon"')
+    assert orch.index("CONTROL_LIVE cable_welcome_message") < orch.index('"cmd": "box_mon"')
     assert orch.index("CONTROL_LIVE union_room_attendant") < orch.index('"cmd": "party_mon"')
     assert "stats_cache" in orch
 
@@ -2646,7 +2655,7 @@ def test_center_controls_proves_it_faces_the_counter_before_talking(lua):
     facing nibble back before A."""
     ok, passed, msg, logs = _run_module(lua, "center_controls", "a", "initial", {})
     assert ok and passed is True, msg
-    assert "TALK cable_menu at=" in logs and "facing=2 idle=true" in logs, logs
+    assert "TALK cable_welcome_message at=" in logs and "facing=2 idle=true" in logs, logs
     assert "TALK union_room_attendant" in logs
 
 
@@ -2682,7 +2691,7 @@ def test_cable_menu_parks_at_the_welcome_paragraph_and_observes_the_adapter(lua)
     there (IsWirelessAdapterConnected's return) is read, not inferred."""
     ok, passed, msg, logs = _run_module(lua, "center_controls", "a", "initial", {})
     assert ok and passed is True, msg
-    assert ("WITNESS cable_menu script=CableClub_EventScript_WelcomeToCableClub at=scriptPtr var_result=0 "
+    assert ("WITNESS cable_welcome_message script=CableClub_EventScript_WelcomeToCableClub at=scriptPtr var_result=0 "
             "adapter_connected=false") in logs, logs
     assert "var_result=0 adapter_connected=false" in logs.split("WITNESS union_room_attendant")[1]
 
@@ -2704,3 +2713,45 @@ def test_the_welcome_block_is_where_pret_puts_the_wait():
         span = (syms["CableClub_EventScript_UnusedWelcomeToCableClub"]
                 - syms["CableClub_EventScript_WelcomeToCableClub"])
         assert span == 15, (title, span)
+
+
+# ── C4-6r: live r9 at f926a8b4, FR and LG ───────────────────────────────────────────────────
+def test_a_stale_checkpoint_pointer_after_release_is_a_named_product_finding(lua):
+    """r9: after B cancelled the Cable Club link and the attendant's script ended (script status
+    2, only the background tasks), the released box_mon stayed held on link_callback (FR) /
+    save_dialog_cb (LG): LinkCB_RequestPlayerDataExchange and SaveDialogCB_ReturnSuccess, which
+    pret never clears. The harness must say so, not time out as if the probe were lost."""
+    ok, passed, msg, logs = _run_module(lua, "center_controls", "a", "initial", {"stale": "lua:true"})
+    assert ok and passed is False and msg.startswith("PRODUCT FINDING: cable_link released to an idle field"), msg
+    assert "FINDING stale_predicate cable_link box_mon link_callback=0x0800A721" in logs, logs
+
+
+_STALE_MODEL = r"""
+MEM = {}
+S = { gLinkCallback = 0x10, sLinkOpen = 0x20, sSaveDialogCB = 0x30, task50_save_game = 0x40,
+      Task_StartMenuHandleInput = 0x50, LinkCB_RequestPlayerDataExchange = 0x0800A720,
+      SaveDialogCB_ReturnSuccess = 0x0806F9E0 }
+LIVE = {}
+function STALE() return stale_predicates(function(a) return MEM[a] or 0 end, function(a) return MEM[a] or 0 end,
+                                         S, function(fn) return LIVE[fn] == true end) end
+"""
+
+
+@pytest.fixture
+def stale_model():
+    from lupa import LuaRuntime
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.execute(_lua_defs(DRIVER, ["stale_predicates"]) + "\n" + _STALE_MODEL)
+    return lua
+
+
+def test_stale_predicates_names_only_pointers_whose_state_is_over(stale_model):
+    lua = stale_model
+    assert list(lua.globals().STALE().values()) == []
+    lua.execute("MEM[0x10] = 0x0800A721; MEM[0x30] = 0x0806F9E1")        # r9: both left behind
+    got = list(lua.globals().STALE().values())
+    assert got == ["link_callback=0x0800A721:LinkCB_RequestPlayerDataExchange(sLinkOpen=0)",
+                   "save_dialog_cb=0x0806F9E1:SaveDialogCB_ReturnSuccess(no save dialog task)"], got
+    lua.execute("MEM[0x20] = 1; LIVE[0x40] = true")                     # link open, save running
+    assert list(lua.globals().STALE().values()) == []

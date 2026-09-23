@@ -144,7 +144,9 @@ local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInpu
                "Task_LinkupAwaitConnection", "sGlobalScriptContext",
                "CableClub_EventScript_WelcomeToCableClub", "CableClub_EventScript_UnusedWelcomeToCableClub",
                "CableClub_EventScript_UnionRoomAdapterNotConnected",
-               "CableClub_EventScript_WirelessClubAttendant", "gSpecialVar_Result", "gObjectEvents" }
+               "CableClub_EventScript_WirelessClubAttendant", "gSpecialVar_Result", "gObjectEvents",
+               "gLinkCallback", "sLinkOpen", "LinkCB_RequestPlayerDataExchange", "sSaveDialogCB",
+               "SaveDialogCB_ReturnSuccess", "task50_save_game", "Task_StartMenuHandleInput" }
 local S = {}
 do
     local want = {}
@@ -620,6 +622,35 @@ end
 --- nothing in the no-adapter branches writes it until a multichoice/yesno does, so read while
 --- parked in that branch's message it IS the special's return value.
 function ctx.special_result() return memory.read_u16_le(S.gSpecialVar_Result, "System Bus") end
+--- PRODUCT FINDING probe (live center_controls r9, fb255a05 -> f926a8b4): two overworld
+--- checkpoint predicates test pointers pret never clears on a player's ordinary path.
+---   link_callback: OpenLink sets gLinkCallback = LinkCB_RequestPlayerDataExchange (link.c:394);
+---     only LinkMain2 with a connection ESTABLISHED runs (and so clears) it (:520-523, :1129-1133);
+---     CloseLink (:419-426) leaves it. A cancelled no-partner Cable Club link leaves it set with
+---     the link CLOSED (sLinkOpen FALSE, :424).
+---   save_dialog_cb: sSaveDialogCB (start_menu.c:71) is assigned by every save-dialog step and
+---     never reset to NULL; after ANY in-game save it rests on SaveDialogCB_ReturnSuccess.
+--- Each is reported only when it is set while its real state is over: the link closed / no
+--- save dialog task running. Self-contained (no upvalues) so tests run this exact body.
+local function stale_predicates(read_u8, read_u32, s, task_live)
+    local out = {}
+    local cb = read_u32(s.gLinkCallback)
+    if cb ~= 0 and read_u8(s.sLinkOpen) == 0 then
+        out[#out + 1] = string.format("link_callback=0x%08X%s(sLinkOpen=0)", cb,
+            cb == (s.LinkCB_RequestPlayerDataExchange | 1) and ":LinkCB_RequestPlayerDataExchange" or "")
+    end
+    local sd = read_u32(s.sSaveDialogCB)
+    if sd ~= 0 and not task_live(s.task50_save_game) and not task_live(s.Task_StartMenuHandleInput) then
+        out[#out + 1] = string.format("save_dialog_cb=0x%08X%s(no save dialog task)", sd,
+            sd == (s.SaveDialogCB_ReturnSuccess | 1) and ":SaveDialogCB_ReturnSuccess" or "")
+    end
+    return out
+end
+function ctx.stale_predicates()
+    return stale_predicates(function(a) return memory.read_u8(a, "System Bus") end,
+                            function(a) return memory.read_u32_le(a, "System Bus") end, S,
+                            function(fn) return party_task(fn) end)
+end
 --- script_at over the named script labels (SYMS), read now.
 function ctx.script_at(label, next_label)
     return script_at(function(a) return memory.read_u8(a, "System Bus") end,

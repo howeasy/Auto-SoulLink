@@ -1481,10 +1481,10 @@ def center_controls_chain(ka):
     refusal, then CONTROL_RELEASED at the release input BEFORE the probe's ACK and read-back,
     and CONTROL_SETTLED after them (Codex REV-center-receipt-2)."""
     k = re.escape(ka)
-    return [r"(?m)^WITNESS cable_menu script=CableClub_EventScript_WelcomeToCableClub at=\S+ "
+    return [r"(?m)^WITNESS cable_welcome_message script=CableClub_EventScript_WelcomeToCableClub at=\S+ "
             r"var_result=0 adapter_connected=false",
-            rf"(?m)^CONTROL_LIVE cable_menu {k} ", gen3_rx("box_mon", ka),
-            rf"(?m)^CONTROL_REFUSED cable_menu box_mon {k} clause=\S+ ",
+            rf"(?m)^CONTROL_LIVE cable_welcome_message {k} ", gen3_rx("box_mon", ka),
+            rf"(?m)^CONTROL_REFUSED cable_welcome_message box_mon {k} clause=\S+ ",
             r"(?m)^SAVE_WITNESS_DUMP ", rf"(?m)^CONTROL_LIVE cable_link {k} ",
             rf"(?m)^CONTROL_REFUSED cable_link box_mon {k} clause=\S+ ",
             rf"(?m)^CONTROL_RELEASED cable_link box_mon {k}$", gen3_tx("stats_cache", ka),
@@ -5242,7 +5242,7 @@ class DuoRun:
         self._gen3_prelude(link_slot=1)
         self.go(self._gen3_linked_lines())
         ka = self._link_keys["a"]
-        self._gen3_mark("a", rf"^CONTROL_LIVE cable_menu {re.escape(ka)} ", "A parked at the Cable Club menu")
+        self._gen3_mark("a", rf"^CONTROL_LIVE cable_welcome_message {re.escape(ka)} ", "A parked at the Cable Club welcome message")
         self.queue_command("a", {"cmd": "box_mon", "key": ka})
         self._gen3_mark("a", rf"^CONTROL_LIVE union_room_attendant {re.escape(ka)} ",
                         "A parked at the Union Room attendant")
