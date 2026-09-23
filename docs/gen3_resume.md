@@ -45,6 +45,28 @@ Shadow lane invocation: `SLINK_SHADOW=1 python tools/e2e_duo.py --game gen3_rr -
 
 > OWNER RULING 2026-09-22: peer ghost removed from the Gen 3 RC and deferred post-RC (PLAN §0/§10, requirements 'Not in this release'). P5 drops ghost.lua and the ghost scenario; RR duo set is eight.
 
+## Checkpoint 8 (2026-09-23, owner stop)
+
+- Peers: magi restarted, and steer now works for Codex (`magi doctor`: "Codex app steer channel found"). Codex thread "Review Gen 3 Part 2" still returns NO_LIVE_PEER for live REQUESTS, so cards go as steer notes WITH a `queueKey`; Codex replies by note or into the task mailbox (`magi exchange <id>`). OMP "Gen3-2" takes live requests. The hook `~/.claude/hooks/orchestration.py` was fixed: failed deliveries and plain notes no longer mark a peer idle.
+- Landed and gated:
+  - C3-33 09c051d0: RR pack save-block pointers are ROM-derived (0x03005008/0C/10) plus the saveblocks_setter anchor. Sonnet ACCEPT (it re-derived the ROM bytes).
+  - C3-34 78f2a29e: FR review follow-ups. The Opus review was BLOCKED; its blocker is fixed by C3-36.
+  - C3-35 eb97f457: non-IRQ sample floor. OMP.
+  - C3-36 4f511a1e: route1_faint finishes its battle; the forced send-out party menu is handled via CB2_UpdatePartyMenu 0x0811EBA0. Opus review IN FLIGHT at stop.
+  - Coordinator fixes: 88311449 (C3-31 review minors), 904ad4d3 (the grass hunt's first step follows the tile).
+  - C3-37 0c3f0ec5: G3 request draft + requirements §X.1 refreshed. OMP.
+- PHYSICAL:
+  - RR r9 whole lane PASS at 09c051d0 (277429b4).
+  - RR checkpoint 9/9 PASS on the current cut (bac6ea77).
+  - FR census header title=firered (2340cbd9).
+  - FR runs 26-27 (e131f747): route1_faint now completes its battle. viridian_pc reaches the Viridian PC after 2 incidental battles, but the deposit input route stalls at the PC top menu ("Which PC should be accessed?"), so nothing departs and the pc_target oracle refuses.
+
+## Next actions (in order)
+
+0. (checkpoint 8) (a) Record the Opus review of 4f511a1e (C3-36; it also closes the C3-34 blocker). (b) FR deposit route: runs 27b stalls at the PC top menu. Diagnose from pret: the PC owner menu rows once the Pokedex is obtained (docs/gen3/research/fr_pc_flow_and_pc_move_sites.md, Codex R9), how the leg's A presses are paced, and whether a witness (the Task_PCMainMenu 0x0808C39C task or a menu-cursor var) shows the first A landed. Fix in the FR driver with a RAM-witnessed step per menu, like RR's pinned flow. Then run FR 28 from `SLINK_STATE=slink_fr_route1_faint.State SLINK_GEN3_PLAY_FROM=viridian_pc_deposit_withdraw` (the state is now saved on the field) through pc_release and save. (c) When the FR PC kinds are PHYSICAL, fold them into docs/gen3/G3_request_draft.md and send the G3 request. (d) AP " AP" header check still needs an AP-patched dump from the owner.
+
+Older (checkpoint 7):
+
 ## Checkpoint 7 (2026-09-23, owner stop to restart magi)
 
 - Peers this session: Codex live thread **"Review Gen 3 Part 2"** (the "Gen 3 Part 2" thread refused live requests; the Gen 2 coordinator also routes to it), OMP **"Gen3-2"** (case-sensitive). `delivery: steer` failed every time with NO_STEER_CHANNEL (the Codex desktop app-tools channel is missing; magi doctor warns codex 0.155.1 is newer than verified 0.153.4). That is the reason for the restart. magi refuses new requests (RECONCILE_FIRST) until old replies get `kind: outcome`.
@@ -57,7 +79,7 @@ Shadow lane invocation: `SLINK_SHADOW=1 python tools/e2e_duo.py --game gen3_rr -
   - C3-33 (OMP cx-bfac60e9): RR packs' saveblock pointers derived from the ROM (0x03005008/0C/10, source rom:SetSaveBlocksPointers pool), generators, tests, docs/gen3_write_checkpoint.md.
 - Housekeeping: two stash entries `c3-30-lua-redcheck` and `c3-30-cb0-redcheck` are already applied (their content is in 30d13c63). guard_git blocks `stash drop`, so the owner can drop them.
 
-## Next actions (in order)
+## Next actions at checkpoint 7 (superseded by checkpoint 8 above)
 
 0. (checkpoint 7) (a) Reconcile C3-34 and C3-33: read each peer's reply (or `magi mail --task <id>`), gate, commit, and get a non-author review of each. (b) Record the Opus review of 02150752 (C3-31). (c) PHYSICAL: RR r9 whole lane on the committed C3-31 + C3-33 cut (first run on the ROM-derived pointer); FR run 26 from `SLINK_STATE=slink_fr_route1_faint.State SLINK_GEN3_PLAY_FROM=viridian_pc_deposit_withdraw` through viridian_pc, pc_release, save. FR lane invocation: `SLINK_GEN3_CHECKPOINT=<wt>/data/games/gen3_frlg/write_checkpoint.json SLINK_GEN3_TITLE=firered python tools/run_gate.py lua/tests/gen3_scripted_play.lua --rom "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba" --shadow --timeout 3000`. The FR legs do NOT declare savestates, so SLINK_STATE is required when resuming. (d) Queued minors: a non-IRQ minimum-sample floor for positive checkpoint rows; the FR census re-run with the new header. (e) The AP " AP" header still needs an AP-patched dump from the owner (none on disk). (f) Then update the G3 draft (FR capture_wild now PHYSICAL) and send the G3 request with the OPEN list.
 
