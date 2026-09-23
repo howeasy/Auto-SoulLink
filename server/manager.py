@@ -144,7 +144,7 @@ OPTION_SUPPORT = {
                         "gen1_purergb": {"ok": True, "why": "No patch needed — pureRGB's enemy party is plaintext, same as vanilla Gen 1."},
                         "gen3_frlge_rr": {"ok": True}},
     "overworld_presence": {"all": False, "why": "Radical Red only.", "gen3_frlge_rr": {"ok": True}},
-    "native_messages": {"all": False, "why": "Radical Red only.", "gen3_frlge_rr": {"ok": True}},
+    "native_messages": {"all": False, "why": "Disabled for this release (post-RC; docs/gen3/TODO.md)."},
     "native_sounds": {"all": False, "why": "Needs a companion patch with a native sound path (Radical Red, Gen 1 Red/Blue, pureRGB).",
                       "gen1_rby": {"ok": True},
                       "gen1_purergb": {"ok": True},

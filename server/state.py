@@ -249,7 +249,10 @@ class SoulLinkState:
         #    patched ROM; the client gates it via the patch's config byte (1 = disabled).
         #  * pc_trade_npc    (default ON):  the Pokémon-Center trade NPC.  Only EFFECTIVE while
         #    overworld_presence is OFF (the ghost replaces it as the trade entry point).
-        self.native_messages: bool = native_messages
+        # ponytail: native text is DISABLED for the Gen 3 RC (owner 2026-09-23, docs/gen3/TODO.md).
+        # The flag, CLI option and saved rule are still accepted and ignored, so the code can be
+        # re-enabled by deleting this override (here and in load()).
+        self.native_messages: bool = False
         self.native_sounds: bool = native_sounds
         self.battle_calc: bool = battle_calc
         self.pc_trade_npc: bool = pc_trade_npc
@@ -886,7 +889,7 @@ class SoulLinkState:
                 state.explode_mode = bool(saved_rules.get("explode_mode", explode_mode))
                 state.rival_team_swap = bool(saved_rules.get("rival_team_swap", rival_team_swap))
                 state.overworld_presence = bool(saved_rules.get("overworld_presence", overworld_presence))
-                state.native_messages = bool(saved_rules.get("native_messages", native_messages))
+                state.native_messages = False  # disabled for the RC; see __init__
                 state.native_sounds = bool(saved_rules.get("native_sounds", native_sounds))
                 state.battle_calc = bool(saved_rules.get("battle_calc", battle_calc))
                 state.pc_trade_npc = bool(saved_rules.get("pc_trade_npc", pc_trade_npc))

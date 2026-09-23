@@ -11,6 +11,7 @@ Owner ruling 2026-09-23. Notifications drawn in the ROM's own text boxes instead
 
 In the old client this path is `try_native_box` and `native_messages` (`lua/clients/gen3_frlge_client.lua:435-476, 550, 719-1014`). The server default is already messages OFF (Lua HUD).
 
+- **Disabled, code kept (owner 2026-09-23):** `server/state.py` forces `native_messages` False in `__init__` and `load()`. The CLI flag, saved rule and hello payload are accepted and ignored. The Manager greys the option out for every game (`server/manager.py`). To re-enable, delete those two overrides and restore the `gen3_frlge_rr` availability entry. Test: `tests/unit/test_manager_option_labels.py::test_native_messages_is_disabled_for_every_game`.
 - **RC behaviour:** every Gen 3 notification and prompt goes through `lua/hud.lua`, as on FRLG vanilla. `native.lua` (P5) ports the mailbox ABI, trade, info panel, explode and rival swap. It does not port the message opcodes.
 - **Post-RC card:**
   - Port the message opcodes into `native.lua` behind the same capability branch.

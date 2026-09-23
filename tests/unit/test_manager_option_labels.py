@@ -28,7 +28,7 @@ def test_the_no_patch_generations_are_allowed_and_say_so(key):
     assert "no patch" in s["why"].lower(), s
 
 
-@pytest.mark.parametrize("key", ["overworld_presence", "native_messages",
+@pytest.mark.parametrize("key", ["overworld_presence",
                                  "battle_calc", "pc_trade_npc"])
 def test_the_radical_red_only_features_are_greyed_elsewhere(key):
     """The other half of the same honesty: a Gen 1 player switching these on gets nothing,
@@ -84,3 +84,12 @@ def test_the_form_table_covers_every_family_and_option():
     for family in form["support"].values():
         assert set(family) == set(OPTIONS)
         assert all({"ok", "why"} <= set(v) for v in family.values())
+
+
+def test_native_messages_is_disabled_for_every_game(tmp_path):
+    """Native text is disabled for the Gen 3 RC (owner 2026-09-23, docs/gen3/TODO.md):
+    greyed on Radical Red too, and the server ignores every way of turning it on."""
+    from server.state import SoulLinkState
+    s = option_support("native_messages", RR)
+    assert not s["ok"] and "post-rc" in s["why"].lower(), s
+    assert SoulLinkState(data_dir=str(tmp_path), native_messages=True).native_messages is False
