@@ -88,9 +88,12 @@ def test_version_and_fail_closed_shape(pack: str, title: str) -> None:
     assert block["version"] == "gen3-overworld-v1"
     # the predicates the checkpoint cannot do without
     for key in ("callback1", "callback2", "in_battle", "palette_fade_active",
-                "field_controls_locked", "script_context_status", "save_dialog_cb",
-                "link_callback"):
+                "field_controls_locked", "script_context_status", "link_callback"):
         assert key in block["predicates"], f"{title}: missing predicate {key}"
+    # C4-SAVE: the never-reset dialog pointer is a driver witness, not a clause
+    syms = G.parse_sym(G.SYM_DIR / block["sym"])
+    assert "save_dialog_cb" not in block["predicates"]
+    assert block["witnesses"]["save_dialog_cb"]["address"] == syms["sSaveDialogCB"][0]
     assert block["pointers"], f"{title}: no SaveBlock pointers to revalidate"
 
 
@@ -262,7 +265,7 @@ def test_generator_check_passes_on_the_committed_files() -> None:
 OVERWORLD_KEYS = ("version", "sym", "anchors", "predicates", "tasks", "cpu", "pointers")
 OVERWORLD_PREDICATES = ("callback1", "callback2", "field_controls_locked", "in_battle",
                         "link_callback", "link_players_received", "link_transferring",
-                        "palette_fade_active", "save_dialog_cb", "script_context_status",
+                        "palette_fade_active", "script_context_status",
                         "soft_reset_disabled")
 FR_BATTLE_CLAUSES = ("battle_main_func", "battle_comm_0", "battle_exec_flags_input",
                      "battle_input_controller", "battle_not_link", "battle_engine_loaded",

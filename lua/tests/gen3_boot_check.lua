@@ -146,7 +146,9 @@ end
 
 --- (value, expected) for a named checkpoint predicate, mask applied.
 function M.pred(cp, name)
-    local p = assert(cp.predicates and cp.predicates[name], "no predicate " .. name)
+    -- C4-SAVE: sSaveDialogCB is a witness (read, never a clause): pack `witnesses` block
+    local p = assert(cp.predicates and cp.predicates[name] or cp.witnesses and cp.witnesses[name],
+        "no predicate " .. name)
     local v = read_width(int(p.address) + int(p.offset or 0), int(p.width or 1))
     if p.mask then v = v & int(p.mask) end
     return v, int(p.expect)

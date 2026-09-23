@@ -236,13 +236,13 @@ at the same offset in all four ROMs.
 | `palette_fade_active` | `gPaletteFade` `0x02037AB8` +0x007 | `& 0x80 == 0` | `include/palette.h`: `active:1` is bit 31 of the word at +4; `CB2_Overworld` itself reads exactly this byte/bit |
 | `field_controls_locked` | `sLockFieldControls` `0x03000F9C` | `== 0` | `src/script.c:34,197-209`. This is the symbol the RR literal `0x03000F9C` refers to — upstream renamed `ScriptContext2` to "player field controls"; same byte, same meaning |
 | `script_context_status` | `sGlobalScriptContextStatus` `0x03000EA8` | `== 2` (`CONTEXT_SHUTDOWN`) | `src/script.c:20-23,319,338` — the script-context-1 runner is idle only in SHUTDOWN |
-| `save_dialog_cb` | `sSaveDialogCB` `0x03000FA4` | `== 0` | `src/start_menu.c:71,608-842`. **DEFECT (C4-SAVE, live r9 at `f926a8b4`):** every assignment is non-NULL and nothing resets it, so after the first save of a boot it rests on `SaveDialogCB_ReturnSuccess` (LG `0x0806F9E1`) and refuses every idle frame for the rest of the session. It is not what refuses a live save — the task allow-list and `field_controls_locked` refuse every frame of one (§6). Dropping it needs `lua/gen3/safety.lua` to stop requiring the key (pending, see §6 note) |
 | `soft_reset_disabled` | `gSoftResetDisabled` `0x03003530` | `== 0` | `src/save.c:887,958` — `Task_LinkFullSave` holds it for the whole flash write |
 | `link_callback` | `sLinkOpen` `0x02022718` (1 byte) | `== 0` | C4-SAVE: "a link callback can run". `gLinkCallback` is executed only at `src/link.c:522-523`, behind `if (!sLinkOpen) return` (`:512-513`); `sLinkOpen` is set only by `InitLink` (`:373`), from `OpenLink`'s cable branch (`:390-394`, the same call that sets `gLinkCallback`), and cleared by `CloseLink` (`:424`, also the error path `:1400-1412`), which leaves `gLinkCallback` set — the old `gLinkCallback == 0` test held every write after a cancelled no-partner Cable Club link (live FR r9: `0x0800A721`, `sLinkOpen = 0`). Key name kept because `safety.lua` requires it. RR: address proven through `CloseLink`'s pool, and `InitLink`/`OpenLink`/`CloseLink`/`LinkMain2` are byte-identical in both RR ROMs (generator `PREDICATE_CODE`) |
 | `link_transferring` | `gLinkTransferringData` `0x030030E4` | `== 0` | `src/main.c:195-210` |
 | `link_players_received` | `gReceivedRemoteLinkPlayers` `0x03003F64` | `== 0` | `src/link.c:410,421` (`OpenLink`/`CloseLink` clear it), `:540` and `src/link_rfu_2.c:1879,2065` set it once a partner's player data is in; RR address proven through `CloseLink`'s literal pool, link-ACTIVE semantics are inference only (see below). Replaces `wireless_comm_type` (`gWirelessCommType` `0x03003F3C`), which is the sticky transport selector set by the title menu's adapter probe (`src/main_menu.c:573` -> `src/link.c:243-261`), not a link-activity flag — it refused every idle frame of a FR save lineage (`docs/gen3/probes/checkpoint_fr_parcel_lineage_2026-09-22.txt`) |
 | tasks | `gTasks` `0x03005090` | every active slot's `func` ∈ `allowed_overworld_tasks` | §3 |
 | CPU | FRLG: `WaitForVBlank` `0x08000890` size `0x30` | FRLG: CPSR mode `0x1F`, `T == 1`, R15 ∈ `[0x08000890,0x080008BF]`; RR: mode `0x1F`, `T == 0`, R15 ∈ `[0x0000,0x3FFF]` | per title, §4.3 |
+| witness `save_dialog_cb` | `sSaveDialogCB` `0x03000FA4` | none (pack `witnesses`, read by `gen3_boot_check.save_via_menu` and the probe's dialog row, never by `safety.lua`) | C4-SAVE: every assignment (`src/start_menu.c:608-842`) is non-NULL and nothing resets it, so as a clause it held every write after the first save of a boot (live LG r9 `0x0806F9E1`, 404 holds). A live save is refused by the task allow-list and `field_controls_locked` (§6) |
 | pointers | §4.4 | snapshot at arm time, revalidate before each write | PLAN §5.3 |
 
 **RR link evidence limit.** The `CloseLink` literal-pool comparison proves the address of
@@ -362,12 +362,6 @@ than at "the checkpoint":
 | screen fading (map transition) | `palette_fade_active` |
 | mid-relocation (RR) | pointer snapshot revalidation (§4.4) |
 | native op staged (RR) | owned by `native.lua`, P5 |
-
-C4-SAVE note: the save half of the fix is pending. `lua/gen3/safety.lua`'s preamble asserts every
-key of its required list, `save_dialog_cb` included, so the pack cannot drop the clause alone, and
-`lua/tests/gen3_boot_check.lua` (`save_via_menu`) and the probe's dialog witness read
-`sSaveDialogCB` through that predicate entry. `tests/unit/test_gen3_safety.py::
-test_a_finished_save_leaves_the_field_writable` is a strict xfail until it lands.
 
 ## 7. Regenerating
 

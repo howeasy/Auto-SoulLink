@@ -221,13 +221,6 @@
         "symbol": "gPaletteFade",
         "width": 1
       },
-      "save_dialog_cb": {
-        "address": 50335652,
-        "expect": 0,
-        "offset": 0,
-        "symbol": "sSaveDialogCB",
-        "width": 4
-      },
       "script_context_status": {
         "address": 50335400,
         "expect": 2,
@@ -369,7 +362,16 @@
       "struct_size": 40,
       "symbol": "gTasks"
     },
-    "version": "gen3-overworld-v1"
+    "version": "gen3-overworld-v1",
+    "witnesses": {
+      "save_dialog_cb": {
+        "address": 50335652,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sSaveDialogCB",
+        "width": 4
+      }
+    }
   },
   "leafgreen": {
     "anchors": {
@@ -591,13 +593,6 @@
         "symbol": "gPaletteFade",
         "width": 1
       },
-      "save_dialog_cb": {
-        "address": 50335652,
-        "expect": 0,
-        "offset": 0,
-        "symbol": "sSaveDialogCB",
-        "width": 4
-      },
       "script_context_status": {
         "address": 50335400,
         "expect": 2,
@@ -739,6 +734,15 @@
       "struct_size": 40,
       "symbol": "gTasks"
     },
-    "version": "gen3-overworld-v1"
+    "version": "gen3-overworld-v1",
+    "witnesses": {
+      "save_dialog_cb": {
+        "address": 50335652,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sSaveDialogCB",
+        "width": 4
+      }
+    }
   }
 }

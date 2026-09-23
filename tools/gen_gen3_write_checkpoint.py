@@ -88,8 +88,6 @@ PREDICATES = {
     "field_controls_locked": ("sLockFieldControls", 0, 1, None, 0),
     # src/script.c CONTEXT_RUNNING=0, CONTEXT_WAITING=1, CONTEXT_SHUTDOWN=2
     "script_context_status": ("sGlobalScriptContextStatus", 0, 1, None, 2),
-    # src/start_menu.c: non-NULL for the whole save dialog FSM, which is what calls TrySavingData
-    "save_dialog_cb": ("sSaveDialogCB", 0, 4, None, 0),
     # src/save.c Task_LinkFullSave sets this for the duration of the link full save
     "soft_reset_disabled": ("gSoftResetDisabled", 0, 1, None, 0),
     # C4-SAVE: "a link callback can run" is sLinkOpen, not gLinkCallback != NULL.  gLinkCallback
@@ -111,6 +109,19 @@ PREDICATES = {
     # link_callback (sLinkOpen, cable) + callback1 + the task allow-list; the RFU branch of
     # OpenLink (:406-408) never set gLinkCallback, so wireless never rested on that clause.
     "link_players_received": ("gReceivedRemoteLinkPlayers", 0, 1, None, 0),
+}
+
+# name -> the same shape as PREDICATES, emitted as `witnesses`: read by the test drivers, never a
+# safety clause.  C4-SAVE: sSaveDialogCB (start_menu.c:71) is assigned at :608-842, always
+# non-NULL, and never reset, so after the first save of a boot it rests on
+# SaveDialogCB_ReturnSuccess (live LG r9: 0x0806F9E1, 404 holds on an idle field).  A live save
+# is refused without it: the whole START-menu dialog runs inside Task_StartMenuHandleInput
+# (:378-394) under ShowStartMenu's lock (:405 until :586/:598, the call that destroys the task);
+# the script save runs task50_save_game (:620-654) under waitstate (CONTEXT_WAITING) and the
+# script lock; TrySavingData is synchronous inside SaveDialogCB_DoSave (:791-805).  It stays a
+# witness because a change in it is how gen3_boot_check.save_via_menu sees the dialog OPEN.
+WITNESSES = {
+    "save_dialog_cb": ("sSaveDialogCB", 0, 4, None, 0),
 }
 
 # data symbol -> the FR function whose literal pool pins it (used only to prove RR)
@@ -425,8 +436,8 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
                              for kind, rom in roms.items() if kind != "_fr"},
         }
 
-    predicates = {}
-    for key, (symbol, offset, width, mask, expect) in PREDICATES.items():
+    predicates, witnesses = {}, {}
+    for key, (symbol, offset, width, mask, expect) in [*PREDICATES.items(), *WITNESSES.items()]:
         if not ok_data(symbol) or not all(ok_code(fn) for fn in PREDICATE_CODE.get(key, ())):
             continue
         entry = {"symbol": symbol, "address": syms[symbol][0], "offset": offset, "width": width}
@@ -439,7 +450,7 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
             entry["expect"] = syms[expect][0] | 1  # Thumb pointer, as gMain stores it
         else:
             entry["expect"] = expect
-        predicates[key] = entry
+        (witnesses if key in WITNESSES else predicates)[key] = entry
 
     allowed = {}
     for name in ALLOWED_TASKS + (() if is_rr else FRLG_ONLY_TASKS):
@@ -451,6 +462,7 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
         "sym": sym_file,
         "anchors": anchors,
         "predicates": predicates,
+        "witnesses": witnesses,
         "tasks": {"symbol": "gTasks", "struct_size": TASK_STRUCT_SIZE, "count": TASK_COUNT,
                   "func_offset": 0, "is_active_offset": 4,
                   "allowed_overworld_tasks": allowed, "source": ALLOWED_TASKS_SOURCE},

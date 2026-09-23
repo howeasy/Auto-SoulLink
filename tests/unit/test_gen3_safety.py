@@ -94,7 +94,7 @@ def test_committed_census_positive(title, kind):
 
 @pytest.mark.parametrize("name", ["callback1", "callback2", "field_controls_locked", "in_battle",
                                   "link_callback", "link_players_received", "link_transferring",
-                                  "palette_fade_active", "save_dialog_cb", "script_context_status",
+                                  "palette_fade_active", "script_context_status",
                                   "soft_reset_disabled"])
 def test_each_forbidden_state(name):
     w = World()
@@ -168,7 +168,7 @@ def test_unavailable_dependencies_return_false(change):
 def test_missing_required_evidence_fails_closed():
     w = World()
     module = w.lua.execute((ROOT / "lua/gen3/safety.lua").read_text(encoding="utf-8"))
-    del w.pack["predicates"]["save_dialog_cb"]
+    del w.pack["predicates"]["link_callback"]
     w.safety = module.new(w.lua.table_from(w.pack, recursive=True), w.lua.globals().deps, "companion")
     assert not w.check()
 
@@ -193,7 +193,7 @@ def test_pointer_movement_refuses_before_write():
 
 OVERWORLD_KEYS = ["callback1", "callback2", "field_controls_locked", "in_battle", "link_callback",
                   "link_players_received", "link_transferring", "palette_fade_active",
-                  "save_dialog_cb", "script_context_status", "soft_reset_disabled"]
+                  "script_context_status", "soft_reset_disabled"]
 
 
 @pytest.mark.parametrize("reason", [None, "overworld"])
@@ -510,8 +510,6 @@ def test_a_live_script_save_is_refused_without_the_dialog_pointer(title, kind):
         (why, clauses)
 
 
-@pytest.mark.xfail(strict=True, reason="C4-SAVE save half: lua/gen3/safety.lua requires the "
-                   "save_dialog_cb key by name (preamble), so the pack cannot drop it alone")
 @pytest.mark.parametrize("title,kind", SAVE_LINK_TITLES)
 def test_a_finished_save_leaves_the_field_writable(title, kind):
     """After a save sSaveDialogCB rests on SaveDialogCB_ReturnSuccess forever: every assignment

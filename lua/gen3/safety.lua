@@ -3,7 +3,7 @@
 local S = {}
 local anchors = {"cb1_overworld", "cb2_overworld", "frame_control", "run_tasks", "try_saving_data"}
 local predicates = {"callback1", "callback2", "field_controls_locked", "in_battle",
-    "link_callback", "link_transferring", "palette_fade_active", "save_dialog_cb",
+    "link_callback", "link_transferring", "palette_fade_active",
     "link_players_received", "script_context_status", "soft_reset_disabled"}
 local function uint(v, limit)
     assert(type(v) == "number" and v % 1 == 0 and v >= 0 and v <= limit, "unreadable integer")
