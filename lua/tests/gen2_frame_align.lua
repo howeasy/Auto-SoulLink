@@ -152,9 +152,13 @@ end
 -- The bounded play; on ANY failure (phase bound, driver refusal) it logs the last point, where the CPU
 -- is and the visible screen. diag = {log, frame, screen, where, trace}; trace (SLINK_GEN2_TRACE=1) adds
 -- one state line per 30 frames. Budgets stay the host's (max_phase_frames).
+-- Every leg first SETTLES: it idles until the overworld tick is back or a battle is up. A leg that starts
+-- right after a save would otherwise see the save's overwrite yes_no as the newest UI: save_completed fires
+-- at _SaveGameData, then SavedTheGame idles 32 frames + text + SFX + 30 frames with no UI origin and no
+-- overworld tick (C engine/menus/save.asm:241-264; U1d live run 1, the C<->G faint duo's RED run 2).
 F.TRACE_EVERY = 30
 function F.play(host, spec, driver, observe, diag)
-    local last
+    local last, settled = nil, false
     local function locate()
         local placed, where = pcall(diag.where)
         return placed and where or "?"
@@ -162,6 +166,8 @@ function F.play(host, spec, driver, observe, diag)
     local ok, outcome = pcall(host.run, spec, function(frame)
         local point = observe()
         last = point
+        settled = settled or point.overworld_ready == true or integer(point.battle_mode, 1, 255)
+        if not settled then return {}, "settle", point end
         local buttons, phase = driver.step(point)
         if buttons == nil then error(phase, 0) end
         if diag.trace and frame % F.TRACE_EVERY == 0 then
@@ -645,16 +651,8 @@ function F.main(api, getenv, SG)
     if played then
         local fdriver, fobserve, fspec = FI.new(ctx, SG, F, {
             fainted=function() return probe.record.sites.battle_faint.hits >= 1 end})
-        -- "saved" is reached on the save counter while SavedTheGame still shows its text (live U1d run 1:
-        -- the stale yes_no context reached FI's walk phase); idle until the overworld tick is back.
-        local settle = {terminal=fdriver.terminal, phase="settle"}
-        function settle.step(point)
-            if settle.phase == "settle" and point.overworld_ready ~= true then return {}, "settle" end
-            local buttons, phase = fdriver.step(point)
-            settle.phase = fdriver.phase
-            return buttons, phase
-        end
-        played, outcome = F.play(host, fspec, settle, fobserve, diag)
+        -- F.play settles the stale save UI first (live U1d run 1).
+        played, outcome = F.play(host, fspec, fdriver, fobserve, diag)
     end
     probe.release()
     state.release()

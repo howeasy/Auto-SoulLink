@@ -7,7 +7,8 @@
     opts.target     party slot (0-based) that must faint; nil = whatever leads (U1d's lead faint)
     opts.fainted()  true once the engine faint was observed (the duo: the production binder's battle_faint
                     event for the target key; U1d: its battle_faint hit)
-    opts.moves      move names to prefer in the FIGHT list (default FI.PASSIVE_MOVES), else the first move
+    opts.moves      move names to prefer in the FIGHT list (default FI.PASSIVE_MOVES); with none, a switch passes
+                    the turn (the first move only when no other mon is alive)
     opts.max_battles  wild battles tried before giving up (default 3; the target may win a battle instead)
   It never saves: callers run F.driver with phase "save" afterwards (duo_gen2_main.lua h.save).
 
@@ -103,6 +104,12 @@ function FI.driver(F, map, opts)
     local self = {terminal="fainted", phase="walk", battles=0}
     local HOLD, held, hold_left, release = 12, nil, 0, false
     local here, from, target, switched = nil, nil, opts.target, false
+    -- A morning/day catch (Pidgey/Sentret L2-3) knows only TACKLE (C data/pokemon/evos_attacks.asm:226, :2194;
+    -- johto_grass.asm:1237-1254): FIGHT would KO the foe (C<->G RED run 1, "survived 3 battles"). Such a target
+    -- passes each turn by a switch instead (TryPlayerSwitch: the foe hits the incoming mon, core.asm:5156-5229).
+    -- ponytail: the other mon takes every other hit (Totodile ~half the target's damage, more HP); if it faints
+    -- first the target, alone, attacks after all.
+    local no_passive = false
     local max_battles = opts.max_battles or FI.MAX_BATTLES
     local passive = opts.moves or FI.PASSIVE_MOVES
     local function press(button)
@@ -125,20 +132,21 @@ function FI.driver(F, map, opts)
         if tx ~= cx then return press(tx > cx and "Right" or "Left") end
         return press(index > ui.cursor and "Down" or "Up")
     end
-    local function pick_move(ui)
+    local function living_other(point)
+        for slot = 0, 5 do
+            local hp = point.party_hp[slot]
+            if slot ~= target and type(hp) == "number" and hp > 0 then return slot end
+        end
+    end
+    local function pick_move(ui, point)
         if type(ui.items) ~= "table" then return nil, "move list unreadable" end
         for _, name in ipairs(passive) do
             for _, label in ipairs(ui.items) do
                 if type(label) == "string" and label:upper() == name then return choose(ui, name, 1) end
             end
         end
+        if living_other(point) ~= nil then no_passive = true; return press("B") end
         return choose(ui, tostring(ui.items[1]):upper(), 1)
-    end
-    local function living_other(point)
-        for slot = 0, 5 do
-            local hp = point.party_hp[slot]
-            if slot ~= target and type(hp) == "number" and hp > 0 then return slot end
-        end
     end
     function self.step(point)
         if type(point) ~= "table" then return nil, "observation missing" end
@@ -160,10 +168,11 @@ function FI.driver(F, map, opts)
             local done = point.fainted == true
             if ui.kind == "battle_menu" then
                 if done or (point.foe_harmless and not switched) then return choose(ui, "RUN", 2) end
-                return choose(ui, switched and "FIGHT" or FI.PKMN_CELL, 2)
+                local fight = point.active_slot == target and (not no_passive or living_other(point) == nil)
+                return choose(ui, fight and "FIGHT" or FI.PKMN_CELL, 2)
             end
             if ui.kind == "battle_party" then
-                local want = (done or switched) and living_other(point) or target
+                local want = (done or point.active_slot == target) and living_other(point) or target
                 if want == nil then return nil, "no living party mon left to send out" end
                 if not integer(point.party_cursor, 0, 5) then return {}, self.phase end
                 if point.party_cursor == want then return press("A") end
@@ -172,7 +181,7 @@ function FI.driver(F, map, opts)
             if ui.kind == "battle_mon_menu" then return choose(ui, "SWITCH", 1) end
             if ui.kind == "move_menu" then
                 if done then return press("B") end
-                return pick_move(ui)
+                return pick_move(ui, point)
             end
             if ui.kind == "yes_no" then
                 if ui.prompt ~= "next_mon" then return nil, "unmapped battle yes/no prompt: " .. tostring(ui.prompt) end

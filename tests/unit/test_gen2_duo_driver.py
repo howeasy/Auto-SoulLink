@@ -615,6 +615,72 @@ def test_faint_route_refuses_a_zero_hp_target_without_the_engine_faint():
     assert buttons is None and "never observed" in why
 
 
+def test_faint_route_switches_a_tackle_only_target_out_instead_of_attacking():
+    """C<->G faint RED run 1 ("survived 3 battles"): a morning/day Route 29 catch (Pidgey/Sentret L2-3,
+    pokecrystal data/wild/johto_grass.asm:1237-1254) knows only TACKLE (evos_attacks.asm:226, :2194), so the
+    old fallback attacked and KO'd the foe. Pass the turn by switching instead (TryPlayerSwitch: the foe hits
+    the incoming mon) and switch the target back in next turn; never FIGHT with it."""
+    lua, d = faint_driver()
+    on = {"active_slot": 1}
+    assert press(lua, d, ui=ui("battle_menu", MENU, 1, 2), **on)[0] == ["A"]              # FIGHT: moves unknown yet
+    assert press(lua, d, ui=ui("move_menu", ["TACKLE"]), **on)[0] == ["B"]                # no passive move: back out
+    assert press(lua, d, ui=ui("battle_menu", MENU, 1, 2), **on)[0] == ["Right"]          # PKMN, not FIGHT
+    assert press(lua, d, ui=ui("battle_party"), party_cursor=1, **on)[0] == ["Up"]        # the other living mon
+    assert press(lua, d, ui=ui("battle_party"), party_cursor=0, **on)[0] == ["A"]
+    assert press(lua, d, ui=ui("battle_mon_menu", ["SWITCH", "STATS", "CANCEL"]), **on)[0] == ["A"]
+    back = {"active_slot": 0}
+    assert press(lua, d, ui=ui("battle_menu", MENU, 1, 2), **back)[0] == ["Right"]        # PKMN: target back in
+    assert press(lua, d, ui=ui("battle_party"), party_cursor=0, **back)[0] == ["Down"]
+    assert press(lua, d, ui=ui("battle_party"), party_cursor=1, **back)[0] == ["A"]
+    assert press(lua, d, ui=ui("battle_menu", MENU, 1, 2), **on)[0] == ["Right"]          # still no FIGHT
+
+
+def test_faint_route_attacks_with_a_tackle_only_target_when_it_is_the_last_mon_standing():
+    lua, d = faint_driver()
+    last = {"active_slot": 1, "party_hp": {0: 0, 1: 9}}
+    assert press(lua, d, ui=ui("battle_menu", MENU, 1, 2), **last)[0] == ["A"]
+    assert press(lua, d, ui=ui("move_menu", ["TACKLE"]), **last)[0] == ["A"]
+
+
+def frame_align():
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().SLINK_GEN2_GATE_LIBRARY = True
+    return lua, lua.execute((ROOT / "lua/tests/gen2_frame_align.lua").read_text(encoding="utf-8"))
+
+
+def test_every_leg_settles_a_stale_save_yes_no_before_its_driver_runs():
+    """C<->G faint RED run 2 ("UI is not valid in phase walk: yes_no"): a leg that starts right after a save
+    sees the save's overwrite yes_no as the newest UI (save_completed fires at _SaveGameData, then SavedTheGame
+    idles 32 frames + text + SFX + 30 frames with no UI origin and no overworld tick, pokecrystal
+    engine/menus/save.asm:241-264). F.play idles until the overworld tick is back or a battle is up."""
+    lua, F = frame_align()
+    FI = lua.execute(FAINT_INPUTS.read_text(encoding="utf-8"))
+    walk = lua.eval("{walk_direction=function() return 'Left' end}")
+    driver = FI.driver(walk, lua.table_from({}), lua.table_from({"target": 1}))
+    stale = {"battle_mode": 0, "overworld_ready": False, "input_ready": True, "party_hp": {0: 17, 1: 14},
+             "ui": {"kind": "yes_no", "prompt": "save_overwrite", "items": {1: "YES", 2: "NO"}, "cursor": 1,
+                    "columns": 1}}
+    back = {"battle_mode": 0, "overworld_ready": True, "party_hp": {0: 17, 1: 14}, "x": 1, "y": 1}
+    points = lua.table_from([lua.table_from(p, recursive=True) for p in [stale] * 5 + [back]])
+    seen = []
+    # A host that runs one step per point and records (phase, pressed buttons); observe walks the same points.
+    host, observe = lua.eval("""function(points, record)
+        local i = 0
+        return {run=function(spec, step)
+            for frame = 1, #points do
+                local buttons, phase = step(frame)
+                record(phase, buttons)
+            end
+            return "done"
+        end}, function() i = i + 1 return points[i] end
+    end""")(points, lambda phase, buttons: seen.append((phase, sorted(k for k, v in buttons.items() if v))))
+    diag = lua.table_from({"log": lambda line: None, "frame": lambda: 0, "screen": lambda: lua.table_from({}),
+                           "where": lambda: "-", "trace": False})
+    ok, outcome = F.play(host, lua.table_from({"terminal": driver.terminal}), driver, observe, diag)
+    assert ok is True, outcome
+    assert seen == [("settle", [])] * 5 + [("walk", ["Left"])]
+
+
 def test_party_cursor_reads_the_source_geometry():
     lua = LuaRuntime(unpack_returned_tuples=True)
     FI = lua.execute(FAINT_INPUTS.read_text(encoding="utf-8"))
