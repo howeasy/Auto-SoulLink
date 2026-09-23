@@ -707,28 +707,39 @@ def test_a_battle_write_that_never_landed_is_applied_after_the_battle(world):
 @pytest.mark.parametrize("special", [False, True])
 def test_a_battle_held_force_faint_keeps_its_place_ahead_of_the_later_memorialize(world, special):
     """The server queues force_faint then memorialize for one key (state.py _propagate_faint).
-    In battle the faint is held in pending_battle_writes; the hand-over (battle_end flush, or the
-    special-battle loop-head fallback) used to APPEND it behind the memorialize, which buried the
-    live mon first and then dropped the faint ("key not in party"). Gen 3 684bbb7a, same shape."""
+    In battle the faint is held in pending_battle_writes; the hand-over used to APPEND it behind
+    the memorialize, which buried the live mon first and then dropped the faint ("key not in
+    party"). Gen 3 684bbb7a, same shape. Two hand-over sites, one leg each:
+    - plain: the ACTIVE battler, the battle ends before a loop head -> the battle_end flush;
+    - special: a BENCH mon in a special battle (wBattleType 2) -> the loop-head fallback, which
+      is the only path for it (the active-battler guard refuses a special battle and keeps the
+      entry, so an active target would still hand over at battle_end -- review O14 F1)."""
     world.connect()
     world.step(60)
     world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
     world.fire("wild_begin")
     world.step()
-    key = codec.key(world.party()[0])
+    slot = 1 if special else 0
+    key = codec.key(world.party()[slot])
     world.reply({"cmd": "force_faint", "key": key}, {"cmd": "memorialize", "key": key})
     world.step()
+
+    def queued():
+        return [str(world.client.deferred[i]["cmd"]) for i in range(1, len(world.client.deferred) + 1)]
+
     if special:
         world.bus[world.ram["wBattleType"]] = 2
         world.fire("battle_loop_head")
+        assert queued() == ["force_faint", "memorialize"], "loop-head fallback: " + str(queued())
     world.bus[world.ram["wIsInBattle"]] = 0
     world.fire("battle_end")
     world.step()                                # the battle_end signal is handled on the frame
-    queued = [str(world.client.deferred[i]["cmd"]) for i in range(1, len(world.client.deferred) + 1)]
-    assert queued == ["force_faint", "memorialize"], queued
+    assert queued() == ["force_faint", "memorialize"], queued()
     world.overworld_safe()
-    world.step(4)
-    assert not any("force_faint dropped" in line for line in world.logs), world.logs
+    world.step()                                # one command per frame: the faint lands first
+    assert world.party()[slot]["hp"] == 0 and codec.key(world.party()[slot]) == key,         "the faint must land on the live mon before the memorialize moves it"
+    world.step(3)
+    assert not any("force_faint dropped" in line or "failed" in line for line in world.logs), world.logs
     assert len(world.events("memorialize_done")) == 1
 
 

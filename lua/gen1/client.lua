@@ -496,6 +496,7 @@ function Client.new(p)
     -- ponytail: mirrors Gen 3's lua/core/deferred.lua Deferred:push; folds into it at the
     -- post-G4 convergence card (owner ruling), not a third queue.
     local function defer_held(entry)
+        entry.arrival = entry.arrival or self.arrivals   -- an unstamped entry counts as newest
         for i, queued in ipairs(self.deferred) do
             if queued.arrival and queued.arrival > entry.arrival then
                 table.insert(self.deferred, i, entry)
