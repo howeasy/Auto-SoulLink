@@ -105,19 +105,22 @@ end
 local function field_settled()
     for _, p in ipairs({ "callback2", "in_battle", "field_controls_locked",
                          "script_context_status", "palette_fade_active" }) do
-        if not G.pred_ok(cp, p) then return false end
+        if not G.pred_ok(cp, p) then return false, p end
     end
     return true
 end
 
+--- Returns true once the field held `hold` frames, else false and the predicate still refusing.
 local function wait_field(frames, hold)
-    local held = 0
+    local held, ok, why = 0, false, nil
     for _ = 1, frames or 3000 do
-        held = field_settled() and held + 1 or 0
+        ok, why = field_settled()
+        held = ok and held + 1 or 0
         if held >= (hold or 30) then return true end
         G.advance()
     end
-    return false
+    G.shot("stuck")
+    return false, why
 end
 
 -- Action-menu/outcome reads from the pack's battle clauses (bound in run()).
@@ -157,7 +160,11 @@ local function follow(g, n, path, label)
             moved = step(dir)
             if in_battle() then
                 if not run_away() then return false, label .. ": could not flee a wild battle" end
-                if not wait_field() then return false, label .. ": field never returned after fleeing" end
+                local back, why = wait_field()
+                if not back then
+                    return false, string.format("%s: field never returned after fleeing (%s refuses, at %s)",
+                        label, tostring(why), select(2, at(g, n, -1, -1)))
+                end
             end
             if moved then break end
         end
