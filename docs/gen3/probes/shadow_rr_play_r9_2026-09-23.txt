@@ -1,0 +1,43 @@
+# RR r9 whole lane, cut 09c051d0 (C3-31 driver + C3-33 ROM-derived pointers + saveblocks_setter anchor), slink_RR.gba, observer on
+phase start frame=1 title=radical_red
+phase shadow frame=1 observer started admitted_by=hash
+phase leg-state frame=1010 battle_to_field <- E:/Howard/Bizhawk/GBA/State/slink_prebattle.State
+phase leg-start frame=1010 battle_to_field
+phase field frame=2514 map=787 at=(7,33) outcome=1
+phase leg-done frame=2514 battle_to_field
+phase leg-state frame=1010 wild_faint <- E:/Howard/Bizhawk/GBA/State/slink_prebattle.State
+phase leg-start frame=1010 wild_faint
+phase survived frame=4819 encounter 1: hp_positive=true hp_zero=false faints 0->0 outcome=1 key=EBEF11DA:2BDDC8BF
+phase survived frame=6482 encounter 2: hp_positive=true hp_zero=false faints 0->0 outcome=1 key=EBEF11DA:2BDDC8BF
+phase survived frame=8032 encounter 3: hp_positive=true hp_zero=false faints 0->0 outcome=1 key=EBEF11DA:2BDDC8BF
+phase fainted frame=9854 same player battler went positive -> 0 HP; playerFaintCounter 0 -> 1; party=1
+phase leg-done frame=9854 wild_faint
+phase leg-state frame=1160 wild_catch <- E:/Howard/Bizhawk/GBA/State/slink_prebattle_balls.State
+phase leg-start frame=1160 wild_catch
+phase balls frame=1160 pocket slot 0 = Poke Ball x5, party=1
+phase throw-caught frame=2744 throw 1: outcome=7 balls 5 -> 4
+phase caught frame=2834 outcome=7, party 1 -> 2 after 1 throw(s)
+phase leg-done frame=2834 wild_catch
+phase skip-open frame=2834 pc_move_full_party: SendMonToPC (RR: the compressed-storage detour at 090B6E38) only runs on an ACQUISITION that cannot fit in the party — a catch or a gift with SIX party mons. wild_catch now supplies the catch, but no savestate in the family carries a full party. The ROM-pinned compressed boxes are readable; the missing full-party fixture and live lane keep this kind OPEN
+phase leg-state frame=780 door_warp <- E:/Howard/Bizhawk/GBA/State/slink_door.State
+phase leg-start frame=780 door_warp
+phase warped frame=955 map 769 -> 1284 at=(7,8)
+phase leg-done frame=955 door_warp
+phase leg-state frame=1653 pc_ops <- E:/Howard/Bizhawk/GBA/State/slink_pokecenter_full.State
+phase leg-start frame=1653 pc_ops
+phase deposited frame=3643 party 3 -> 2, key 91BCEDE1:2BDDC8BF left the party
+phase withdrawn frame=5265 party 2 -> 3, key 91BCEDE1:2BDDC8BF is back; 2 other records byte-identical
+phase leg-done frame=5265 pc_ops
+phase leg-state frame=1653 pc_release <- E:/Howard/Bizhawk/GBA/State/slink_pokecenter_full.State
+phase leg-start frame=1653 pc_release
+phase released frame=4275 party 3 -> 2, key 76A4B39A:2BDDC8BF gone from party and every box; boxes unchanged
+phase leg-done frame=4275 pc_release
+phase leg-state frame=970 save <- E:/Howard/Bizhawk/GBA/State/slink_overworld.State
+phase leg-start frame=970 save
+phase save-menu frame=970 counter=4
+phase save-dialog frame=2083 attempt=7
+phase saved frame=2130 counter=4->5
+phase slot-complete frame=2889 sectors=14/14
+phase save-complete frame=2986 fixture counter 4 -> 5
+phase leg-done frame=2986 save
+RESULT: PASS reached: battle_to_field,wild_faint,wild_catch,door_warp,pc_ops,pc_release,save | open (skipped): pc_move_full_party
