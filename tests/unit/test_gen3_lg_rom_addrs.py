@@ -91,32 +91,36 @@ def test_leafgreen_translation_has_a_src_citation():
 
 def test_guard_fires_on_a_synthetic_copied_value():
     """The general guard (not just the SE/CB2-specific fix): a leafgreen rom.* value left
-    equal to FireRed's default, where FireRed's address names a real symbol that sits at a
-    different address in pokeleafgreen.sym, must fail the build."""
+    equal to FireRed's default, where FireRed's address names a real, globally-unique symbol
+    that sits at a different address in pokeleafgreen.sym, must fail the build."""
     from tools.gen_gen3_profile import _guard_leafgreen_not_copied, _sym_index
 
-    fr_by_addr, _ = _sym_index(FR_SYM.read_text(encoding="utf-8"))
-    lg_by_addr, _ = _sym_index(LG_SYM.read_text(encoding="utf-8"))
+    fr_by_addr, fr_by_name = _sym_index(FR_SYM.read_text(encoding="utf-8"))
+    _, lg_by_name = _sym_index(LG_SYM.read_text(encoding="utf-8"))
     # se_faint: FR's own address, never translated -- exactly this card's bug, reproduced
     # for a made-up key so the test doesn't depend on the real fix staying broken.
     bug_val = 0x086B5984
     fr_entry = {"ram": {}, "rom": {"SYNTHETIC_BUG": bug_val}, "derived": {}}
-    lg_entry = {"ram": {}, "rom": {"SYNTHETIC_BUG": bug_val}, "derived": {}}
+    lg_entry = {"ram": {}, "rom": {"SYNTHETIC_BUG": bug_val}, "derived": {}, "rom_thumb": []}
     with pytest.raises(SystemExit, match="rom.SYNTHETIC_BUG"):
-        _guard_leafgreen_not_copied(lg_entry, fr_entry, fr_by_addr, lg_by_addr)
+        _guard_leafgreen_not_copied(lg_entry, fr_entry, fr_by_addr, fr_by_name, lg_by_name)
 
 
 def test_guard_does_not_fire_on_a_genuinely_shared_address():
-    """Task_LaunchLvlUpAnim (POST_BATTLE_WRITER_TASKS[0]) sits at the same address in both
-    .sym files -- coincidence, not a copy bug -- so the guard must leave it alone."""
+    """Task_LaunchLvlUpAnim (POST_BATTLE_WRITER_TASKS[0]) is a `static` helper repeated 3x in
+    each .sym file -- not globally unique by name -- but the specific instance this task writer
+    targets sits at the SAME address in both files (verified directly; see the
+    _GUARD_EXCLUDE_PATHS comment in tools/gen_gen3_profile.py), so it is an explicit, documented
+    exclusion and the guard must leave it alone."""
     from tools.gen_gen3_profile import _guard_leafgreen_not_copied, _sym_index
 
-    fr_by_addr, _ = _sym_index(FR_SYM.read_text(encoding="utf-8"))
-    lg_by_addr, _ = _sym_index(LG_SYM.read_text(encoding="utf-8"))
+    fr_by_addr, fr_by_name = _sym_index(FR_SYM.read_text(encoding="utf-8"))
+    _, lg_by_name = _sym_index(LG_SYM.read_text(encoding="utf-8"))
     shared_val = 0x08030239  # Thumb form of 0x08030238, Task_LaunchLvlUpAnim in both .sym
+    thumb = {"rom_thumb": ["POST_BATTLE_WRITER_TASKS"]}
     fr_entry = {"ram": {}, "rom": {"POST_BATTLE_WRITER_TASKS": [shared_val]}, "derived": {}}
-    lg_entry = {"ram": {}, "rom": {"POST_BATTLE_WRITER_TASKS": [shared_val]}, "derived": {}}
-    _guard_leafgreen_not_copied(lg_entry, fr_entry, fr_by_addr, lg_by_addr)  # must not raise
+    lg_entry = {"ram": {}, "rom": {"POST_BATTLE_WRITER_TASKS": [shared_val]}, "derived": {}, **thumb}
+    _guard_leafgreen_not_copied(lg_entry, fr_entry, fr_by_addr, fr_by_name, lg_by_name)  # no raise
 
 
 def test_guard_excludes_the_known_game_code_false_positive():
@@ -125,9 +129,65 @@ def test_guard_excludes_the_known_game_code_false_positive():
     FireRed's symbol at that address sits elsewhere in pokeleafgreen.sym."""
     from tools.gen_gen3_profile import _guard_leafgreen_not_copied, _sym_index
 
-    fr_by_addr, _ = _sym_index(FR_SYM.read_text(encoding="utf-8"))
-    lg_by_addr, _ = _sym_index(LG_SYM.read_text(encoding="utf-8"))
+    fr_by_addr, fr_by_name = _sym_index(FR_SYM.read_text(encoding="utf-8"))
+    _, lg_by_name = _sym_index(LG_SYM.read_text(encoding="utf-8"))
     bpre_val = 0x08254784  # FireRed's own gSpeciesInfo address
-    entry = {"ram": {}, "rom": {},
+    entry = {"ram": {}, "rom": {}, "rom_thumb": [],
              "derived": {"BASESTATS_ADDR_BY_GAME_CODE": {"BPRE": bpre_val, "BPGE": 0x08254760}}}
-    _guard_leafgreen_not_copied(entry, entry, fr_by_addr, lg_by_addr)  # must not raise
+    _guard_leafgreen_not_copied(entry, entry, fr_by_addr, fr_by_name, lg_by_name)  # no raise
+
+
+# ── Codex review of the first C4-LGSE cut: the guard resolved a symbol at an address without
+# requiring it be unique GLOBALLY (only unique at that one address), and unconditionally
+# stripped bit 0 before looking an address up. Each of the three falsifiers below reproduces
+# a concrete bypass Codex found; each must be RED against the original, more permissive guard.
+
+def test_guard_fails_closed_on_an_fr_address_that_names_two_aliases():
+    """Bypass #1 (aliases): FR's old address names two symbols, Moved and Alias. LG moves
+    Moved to a new address but keeps Alias at the old one. The old guard's `len(names) != 1:
+    continue` silently accepted this (an ambiguous FR address was treated as "nothing to
+    check"); the fix must fail closed instead."""
+    from tools.gen_gen3_profile import _guard_leafgreen_not_copied
+
+    fr_by_addr = {0x08800000: ["Moved", "Alias"]}
+    fr_by_name = {"Moved": [0x08800000], "Alias": [0x08800000]}
+    lg_by_name = {"Alias": [0x08800000], "Moved": [0x08801000]}
+    fr_entry = {"ram": {}, "rom": {"KEY": 0x08800000}, "derived": {}}
+    lg_entry = {"ram": {}, "rom": {"KEY": 0x08800000}, "derived": {}, "rom_thumb": []}
+    with pytest.raises(SystemExit, match="rom.KEY"):
+        _guard_leafgreen_not_copied(lg_entry, fr_entry, fr_by_addr, fr_by_name, lg_by_name)
+
+
+def test_guard_fails_closed_on_a_duplicate_lg_static():
+    """Bypass #2 (duplicate statics): FR's old address uniquely names Static, but LG has a
+    `static` of the same name at BOTH the old address and its relocated one. The old guard
+    only checked "is the FR name present in LG's list AT the old address", which is true here
+    even though the name is ambiguous in LG -- an address match at the old address proves
+    nothing when the name recurs. The fix must require LG-global uniqueness too."""
+    from tools.gen_gen3_profile import _guard_leafgreen_not_copied
+
+    fr_by_addr = {0x08800000: ["Static"]}
+    fr_by_name = {"Static": [0x08800000]}
+    lg_by_name = {"Static": [0x08800000, 0x08900000]}  # ambiguous: old address AND a new one
+    fr_entry = {"ram": {}, "rom": {"KEY": 0x08800000}, "derived": {}}
+    lg_entry = {"ram": {}, "rom": {"KEY": 0x08800000}, "derived": {}, "rom_thumb": []}
+    with pytest.raises(SystemExit, match="rom.KEY"):
+        _guard_leafgreen_not_copied(lg_entry, fr_entry, fr_by_addr, fr_by_name, lg_by_name)
+
+
+def test_guard_catches_a_copied_odd_data_address():
+    """Bypass #3 (odd data address): PP_UP_GET_MASK_ADDR is real DATA at an odd address
+    (0x0825DEA1 in FireRed, gPPUpGetMask) -- not a Thumb pointer. The old guard unconditionally
+    cleared bit 0 before looking the address up (0x0825DEA0 names nothing), missed the real
+    symbol at the exact odd address, and let a copied value pass. The fix must look up the
+    exact address first, and only strip the bit for keys actually marked Thumb (`rom_thumb`)."""
+    from tools.gen_gen3_profile import _guard_leafgreen_not_copied, _sym_index
+
+    fr_by_addr, fr_by_name = _sym_index(FR_SYM.read_text(encoding="utf-8"))
+    _, lg_by_name = _sym_index(LG_SYM.read_text(encoding="utf-8"))
+    bug_val = 0x0825DEA1  # FireRed's own gPPUpGetMask address, never translated
+    fr_entry = {"ram": {}, "rom": {"PP_UP_GET_MASK_ADDR": bug_val}, "derived": {}}
+    # correctly NOT marked Thumb -- it's data, exactly like the real profile
+    lg_entry = {"ram": {}, "rom": {"PP_UP_GET_MASK_ADDR": bug_val}, "derived": {}, "rom_thumb": []}
+    with pytest.raises(SystemExit, match="PP_UP_GET_MASK_ADDR"):
+        _guard_leafgreen_not_copied(lg_entry, fr_entry, fr_by_addr, fr_by_name, lg_by_name)
