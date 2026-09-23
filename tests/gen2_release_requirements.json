@@ -65,11 +65,11 @@
           "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario link --lane gen2-gs-link --keep-data",
           "receipts": {
             "a": {"path": "tests/fixtures/gen2/receipts/duo_link_gs_a_result.txt",
-                  "sha256": "a9fd071adccdc0e5fc2ea9169f3870aba460549b723a28ba8f9ee6cacc1d43f6"},
+                  "sha256": "2cdda8d7018a056cf5034c7b1eb1108e01c7150aa03e3f334c60ff209dd4fb20"},
             "b": {"path": "tests/fixtures/gen2/receipts/duo_link_gs_b_result.txt",
-                  "sha256": "a527c6928cc02129d0e73fc9b306d2d27eaf3122e0d4bd97ed62271ce750eda1"},
+                  "sha256": "a99b5e41ed501336d181bc98fc345420ba67fa8ebfb2c1b7b355610cf86a6b65"},
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_link_gs_pydec_result.txt",
-                      "sha256": "3df8a800bd7c74c78c4285710c59c673a3c212d195dde7e7c83aa4b032d6571f"}
+                      "sha256": "d8e93a30def222538cf4ba0ff35dc81bae8f0afc790b0d8cbfbc1a4db505ad25"}
           }
         },
         {

@@ -1,2 +1,2 @@
 attempt 1 of 1
-PYDEC: PASS asserted scenario facts
+PYDEC: PASS a=DECF:C4A6:10 b=3948:C78C:10 area=route_29 titles=gold/silver status=alive
