@@ -796,50 +796,80 @@ def test_major3_a_force_faint_during_a_borrowed_party_is_held_and_lands_after_re
     assert w.party_hp(1) == 0 and w.client.battle_pending_count(w.client) == 0
 
 
-def _m4a_world(allow):
-    """An initialised m4a SE1 player in IWRAM and a pack gSoundInfo pointer."""
-    w = live()
-    w.battle_ok = allow
-    ptr, info, node_a, node_b, track0 = 0x03007FF0, 0x03006000, 0x03006100, 0x03006200, 0x03006300
-    w.parts.profile.ram.SOUND_INFO_PTR_ADDR = ptr              # not in the packs yet (reported)
-    w.poke_int(ptr, info, 4)
-    w.poke_int(info + 0x24, node_a, 4)
-    w.poke_int(node_a + 0x3C, node_b, 4)
-    w.poke_int(node_a + 0x34, 0x68736D53, 4)
-    w.poke_int(node_a + 0x2C, track0, 4)
+def _checkpoint_sound(w):
+    return json.loads((REPO / "data" / "games" / w.pack / "write_checkpoint.json")
+                      .read_text(encoding="utf-8"))[w.title]["sound"]
+
+
+TRACK0 = 0x03006300
+
+
+def _m4a_world(title="firered", ident_ok=True, track=TRACK0):
+    """An m4a SE1 player at the pack's own gMPlayInfo_SE1 (FR/LG sound block), its track in
+    IWRAM, and SE 26's song header in ROM. The REAL writes.lua + safety.lua decide."""
+    w = live("gen3_frlg", title)
+    snd = _checkpoint_sound(w)
+    player = snd["player_se1"]["address"]
+    w.poke_int(player + snd["ident_off"], snd["ident_magic"] if ident_ok else 0, 4)
+    w.poke_int(player + snd["tracks_off"], track, 4)
     hdr = w.profile["rom"]["SE_SONG_HEADERS"]["26"] - 0x08000000
     for i, b in enumerate([1, 0, 5, 0, 0, 0, 0, 0, 0x10, 0x20, 0x30, 0x08]):
         w.rom[hdr + i] = b
-    return w
+    return w, snd, player
 
 
-def test_sound_without_the_pack_pointer_is_refused_once_and_writes_nothing():
-    w = live()
-    w.command(cmd="game_over")
-    w.step(2)
-    w.command(cmd="play_sound", sound=26)
-    w.step(2)
-    assert w.writes == []
-    assert len([line for line in w.logs if "SOUND_INFO_PTR_ADDR" in line]) == 1
+def _sound_writes(w):
+    return [r for r in lua_to_py_list(w.parts.writes.log) if str(r.reason) == "sound"]
 
 
-@pytest.mark.parametrize("allow", [False, True])
-def test_sound_fallback_arms_the_sound_reason_and_a_refusal_writes_nothing(allow):
-    """allow=False: the policy refuses "sound". allow=True: the policy admits it but writes.lua
-    has no "sound" reason yet (OMP C4-B2 adds it), so the arm itself refuses. Either way: no
-    sound, one log line, never an ungated write."""
-    w = _m4a_world(allow)
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_sound_on_frlg_arms_sound_and_writes_exactly_the_pack_fields(title):
+    """POSITIVE (C4-2f): through the real writes.lua ("sound" reason) and the real sound clause
+    set, a play_sound lands every byte inside a field of the pack's sound block, logged."""
+    w, snd, player = _m4a_world(title)
     w.command(cmd="play_sound", sound=26)
     w.step()
+    logged = _sound_writes(w)
+    assert logged and sum(int(r.len) for r in logged) == len(w.writes)   # every byte logged
+    fields = [((player if f["on"] == "player" else TRACK0) + f["offset"], f["size"]) for f in snd["fields"]]
+    for addr, _value, _frame in w.writes:
+        assert any(base <= addr < base + size for base, size in fields), hex(addr)
+    hdr = w.profile["rom"]["SE_SONG_HEADERS"]["26"]
+    assert w._read(player + 0, 4) == hdr                                   # songHeader
+    assert w._read(player + 4, 4) == 1                                     # status: 1 track
+    assert w._read(TRACK0 + 0, 1) == 0xC0                                  # flags EXIST|START
+    assert w._read(TRACK0 + 64, 4) == 0x08302010                           # cmdPtr from the header
+    assert w._read(player + snd["ident_off"], 4) == snd["ident_magic"]     # never locked
+    assert int(logged[-1].address) == player + 4                           # status published last
+
+
+def test_sound_with_an_uninitialised_driver_writes_nothing():
+    """NEGATIVE: the real sound_player_ready clause fails (ident is not the m4a magic)."""
+    w, _snd, _player = _m4a_world(ident_ok=False)
     w.command(cmd="play_sound", sound=26)
     w.step()
     assert w.writes == []
-    assert "sound" in w.battle_checks                           # the arm went through the policy
-    assert len([line for line in w.logs if "sound refused" in line]) == 1
+    assert any("sound refused" in line and "not initialised" in line for line in w.logs)
+
+
+def test_sound_with_a_track_outside_iwram_writes_nothing():
+    """NEGATIVE: the real sound_addresses_in_iwram clause fails."""
+    w, _snd, _player = _m4a_world(track=0x02000000)
+    w.command(cmd="play_sound", sound=26)
+    w.step()
+    assert w.writes == [] and any("outside IWRAM" in line for line in w.logs)
+
+
+def test_rr_sound_is_refused_by_name_when_no_player_can_be_resolved():
+    w = live("gen3_rr", "radical_red")
+    w.command(cmd="play_sound", sound=26)
+    w.step()
+    assert w.writes == []
+    assert len([line for line in w.logs if "names no SE1 player" in line]) == 1
 
 
 def test_sound_is_refused_while_the_session_is_ineligible():
-    w = _m4a_world(True)
+    w, _snd, _player = _m4a_world()
     w.client.writes_enabled, w.client.gate_revoked = False, True
     w.command(cmd="play_sound", sound=26)
     w.step()

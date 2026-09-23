@@ -50,17 +50,13 @@ local EXPLODE_PP = 5                 -- Explosion's PP, so a PP drop proves the 
 local B_ACTION_USE_MOVE = 0
 local STATE_ACTION_CONFIRMED_STANDBY = 3
 local TARGET_FOE_PRIMARY = 1
--- The m4a sound driver's fields the old client's SE1 poke writes (lua/memory_gba.lua:1946-
--- 1988 and M.playSE :2021-2066, production-tested on FR/LG and RR). Struct geometry of the
--- MusicPlayerInfo/Track structs; the gSoundInfo POINTER comes from the pack
--- (ram.SOUND_INFO_PTR_ADDR) and the song headers from rom.SE_SONG_HEADERS.
-local M4A_ID = 0x68736D53                     -- MusicPlayerInfo.ident when initialised
-local MPL = { SONG_HDR = 0x00, STATUS = 0x04, TRACKCOUNT = 0x08, PRIORITY = 0x09, CLOCK = 0x0C,
-              TRACKS_PTR = 0x2C, IDENT = 0x34, NEXT = 0x3C }
-local SNDINFO_HEAD = 0x24
-local TRK = { FLAGS = 0x00, BEND = 0x0F, VOLX = 0x13, LFO = 0x19, CHAN = 0x20, CMDPTR = 0x40 }
-local TRK_START = 0xC0                        -- EXIST | START
-local IWRAM_LO, IWRAM_HI = 0x03000000, 0x03008000   -- GBA memory map (platform constant)
+-- The m4a SE1 poke (the old client's M.playSE, lua/memory_gba.lua:2021-2066, production-tested
+-- on FR/LG and RR). Every address and field offset comes from the checkpoint pack's sound block
+-- (p.sound: player_se1 / sound_info_ptr, player_head_off / player_next_off / tracks_off, and
+-- `fields`, the exact m4a fields a sound write may touch); only the VALUES the old client
+-- stores are here.
+local TRK_START = 0xC0                        -- MusicPlayerTrack.flags: EXIST | START
+local TRK_BEND, TRK_VOLX, TRK_LFO = 2, 64, 22 -- the old client's per-track defaults
 -- Gift/static areas (server/adapters/gen3_frlge.py via lua/games/gen3_frlge.lua:27-37): no
 -- NEW ENCOUNTER banner and never a no_catch there.
 local GIFT_AREAS = { oaks_lab = true, intro = true, gift = true, cinnabar_lab = true,
@@ -848,44 +844,76 @@ function Client.new(p)
     end
     C.ghost_pos = function() return true end                   -- peer ghost: post-RC (PLAN §0)
     -- Sound: the native SE when the companion is present, else the old client's m4a SE1 poke
-    -- (lua/memory_gba.lua M.playSE) as a GATED write, writes:arm("sound", allow) over exactly
-    -- the fields it pokes. A refused arm (no "sound" clause set yet, an ineligible session, a
-    -- pack without the gSoundInfo pointer) means no sound, logged once per reason.
+    -- (lua/memory_gba.lua M.playSE) as a GATED write, writes:arm("sound", allow, {player, track})
+    -- over exactly the pack block's fields. WHETHER it may land (driver initialised, addresses in
+    -- IWRAM) is safety's sound clause set, re-checked before every byte; the client only
+    -- resolves addresses. Any refusal means no sound, logged once per reason.
     local function sound_refused(why)
         if not st.sound_logged[why] then
             st.sound_logged[why] = true
             log("sound refused: " .. why)
         end
     end
-    local function m4a_plan(id)
-        local ptr = num(a.SOUND_INFO_PTR_ADDR)
-        local headers = profile.rom and profile.rom.SE_SONG_HEADERS
-        local hdr = type(headers) == "table" and num(headers[tostring(id)]) or nil
-        if not ptr then return nil, "pack has no ram.SOUND_INFO_PTR_ADDR" end
-        if not hdr then return nil, "pack has no song header for SE " .. tostring(id) end
-        local function iw(v) return v >= IWRAM_LO and v < IWRAM_HI end
+    -- SE1: the pack's static gMPlayInfo_SE1 (FR/LG), else resolved at runtime from the pack's
+    -- gSoundInfo pointer (MPlayOpen prepends, so the list is gMPlayTable reversed and SE1 is its
+    -- second-to-last node). A pack naming neither (RR today) is refused by name.
+    local function se1_player(snd)
+        if type(snd.player_se1) == "table" and num(snd.player_se1.address) then
+            return snd.player_se1.address
+        end
+        local ptr = type(snd.sound_info_ptr) == "table" and num(snd.sound_info_ptr.address) or nil
+        if not ptr then return nil, "the pack's sound block names no SE1 player and no gSoundInfo pointer" end
+        local lo, hi = snd.iwram_min, snd.iwram_max
+        local function iw(v) return v >= lo and v < hi end
         local info = io.read_u32(ptr)
         if not iw(info) then return nil, "gSoundInfo not initialised" end
-        -- MPlayOpen prepends: the list is gMPlayTable reversed, SE1 is the second-to-last node
-        local nodes, cur = {}, io.read_u32(info + SNDINFO_HEAD)
-        while iw(cur) and #nodes < 16 do nodes[#nodes + 1] = cur; cur = io.read_u32(cur + MPL.NEXT) end
+        local nodes, cur = {}, io.read_u32(info + snd.player_head_off)
+        while iw(cur) and #nodes < 16 do nodes[#nodes + 1] = cur; cur = io.read_u32(cur + snd.player_next_off) end
         if #nodes < 2 then return nil, "m4a player list not initialised" end
-        local se1 = nodes[#nodes - 1]
-        local track0 = io.read_u32(se1 + MPL.TRACKS_PTR)
-        if io.read_u32(se1 + MPL.IDENT) ~= M4A_ID or not iw(track0) then return nil, "m4a SE1 not idle" end
+        return nodes[#nodes - 1]
+    end
+    local function m4a_plan(id)
+        local snd = p.sound
+        if type(snd) ~= "table" or type(snd.fields) ~= "table" then
+            return nil, "no sound block in the checkpoint pack"
+        end
+        local headers = profile.rom and profile.rom.SE_SONG_HEADERS
+        local hdr = type(headers) == "table" and num(headers[tostring(id)]) or nil
+        if not hdr then return nil, "pack has no song header for SE " .. tostring(id) end
+        local player, why = se1_player(snd)
+        if not player then return nil, why end
+        local track = io.read_u32(player + snd.tracks_off) + (snd.track0_off or 0)
+        local F = {}
+        for _, f in ipairs(snd.fields) do F[f.on .. "." .. f.name] = f end
+        local function at(on, name)
+            local f = assert(F[on .. "." .. name], "sound block has no field " .. on .. "." .. name)
+            return (on == "player" and player or track) + f.offset, f.size
+        end
         local h = io.rom_read(hdr - 0x08000000, 12)
         local count, priority = h[1], h[3]
         local cmd_ptr = h[9] + h[10] * 256 + h[11] * 65536 + h[12] * 16777216
-        return {
-            { se1 + MPL.IDENT, 4, M4A_ID + 1 },            -- lock against the ISR
-            { se1 + MPL.SONG_HDR, 4, hdr }, { se1 + MPL.STATUS, 4, (1 << count) - 1 },
-            { se1 + MPL.TRACKCOUNT, 1, count }, { se1 + MPL.PRIORITY, 1, priority },
-            { se1 + MPL.CLOCK, 4, 0 },
-            { track0, 4, 0 }, { track0 + TRK.FLAGS, 1, TRK_START }, { track0 + TRK.BEND, 1, 2 },
-            { track0 + TRK.VOLX, 1, 64 }, { track0 + TRK.LFO, 1, 22 }, { track0 + TRK.CHAN, 4, 0 },
-            { track0 + TRK.CMDPTR, 4, cmd_ptr },
-            { se1 + MPL.IDENT, 4, M4A_ID },                -- unlock: the next VBlank plays it
-        }, { player = se1, track = track0 }
+        local plan = {}
+        local function put(on, name, value, width)
+            local addr, size = at(on, name)
+            plan[#plan + 1] = { addr, width or size, value }
+        end
+        -- No ident lock/unlock: the frame-end callback runs between emulated instructions, so the
+        -- ISR cannot see a half-set player, and the sound clause set (re-checked before every
+        -- byte) requires ident == magic -- a lock value would refuse the rest of the plan.
+        -- status goes LAST: it is what makes the next VBlank start the song.
+        put("player", "songHeader", hdr)
+        put("player", "trackCount", count)
+        put("player", "priority", priority)
+        put("player", "clock", 0)
+        put("track", "flags", 0)
+        put("track", "flags", TRK_START, 1)
+        put("track", "bendRange", TRK_BEND)
+        put("track", "volX", TRK_VOLX)
+        put("track", "lfoSpeed", TRK_LFO)
+        put("track", "chan", 0)
+        put("track", "cmdPtr", cmd_ptr)
+        put("player", "status", (1 << count) - 1)
+        return plan, { player = player, track = track }
     end
     drv.play_sound = function(id)
         if not eligible() then return sound_refused("session not eligible") end

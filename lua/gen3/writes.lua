@@ -2,7 +2,7 @@
 -- validate all bytes before mutation, provenance. Safety policy is injected, never bypassed.
 local W = {}
 local reasons = {overworld = true, battle_faint = true, battle_commit = true,
-    native = true, memorial_rename = true}
+    native = true, memorial_rename = true, sound = true}
 local function uint(v, max)
     assert(type(v) == "number" and v % 1 == 0 and v >= 0 and v <= max, "invalid unsigned integer")
     return v

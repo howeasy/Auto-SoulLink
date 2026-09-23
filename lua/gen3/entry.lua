@@ -324,7 +324,7 @@ local function build_production(deps, c)
             },
             writes = writes, reads = reads, array = c.json.array,
             send = function(event, fields)
-                if client then return client:send(event, fields) end
+                if client then return client.send(event, fields) end
             end,
             in_battle = function() return client and client.driver.in_battle() or false end,
             artifact_kind = c.artifact_kind, log = log,
@@ -339,6 +339,9 @@ local function build_production(deps, c)
         locations = dofile(c.root .. "/" .. files.locations),
         player = deps.player, rom_type = c.parts.rom_type, rom_sha1 = deps.rom_sha1 or c.parts.rom_hash,
         foundation = pack, artifact_kind = c.artifact_kind, native = native, log = deps.log, core = core,
+        -- the m4a fact (SE1 player / gSoundInfo pointer, field offsets) lives in the checkpoint
+        -- pack's sound block, the same block safety's sound clauses judge: one source of truth
+        sound = wc.sound,
     })
     local parts = c.parts
     parts.writes, parts.boxes, parts.safety, parts.policy, parts.native = writes, boxes, safety, policy, native
