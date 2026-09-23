@@ -251,28 +251,34 @@ async def test_a_restart_keeps_the_run_title_and_re_binds_the_other_title(tmp_pa
 # U4b: title-sensitive rules, refusal atomicity, and state replacement.
 @pytest.mark.asyncio
 @pytest.mark.parametrize("first,second", [("Crystal", "Gold"), ("Gold", "Crystal")])
-async def test_static_capture_uses_capturing_title(tmp_path, cutover, first, second):
+async def test_a_cross_title_static_links_in_one_canonical_area(tmp_path, cutover, first, second):
+    """gen2-static-canon (O-16): the static area is pack-owned and keyed by the lowercase
+    MAP CONSTANT, so the Crystal and Gold Lapras in Union Cave B2F resolve to ONE id -- the
+    group*256+number ids (Crystal 807, Gold 799) never met. Both captures are gifts in that
+    shared area, so the pair links there."""
     srv = SLinkServer(data_dir=str(tmp_path))
     send, close = await _session(srv)
     try:
         for player, title in (("a", first), ("b", second)):
             assert not _refused(await send(_hello(player, _cart(title), party=[
-                {"key": "1234:30B8:01", "species_id": 1, "level": 5}])))
-        run = srv.state.adapter
-        for player, title in (("a", first), ("b", second)):
-            # Map numbers and species come from the pack, not the adapter being tested.
+                {"key": f"1234:{'30B8' if player == 'a' else '7B0B'}:01", "species_id": 1, "level": 5}])))
+            # The id comes from the title's own pack, never from the adapter under test.
             row = next(row for row in _pack(TITLE[title], "static_encounters")["encounters"]
                        if row["script"] == "UnionCaveLapras")
-            area = f"static_{row['map_group'] * 256 + row['map_number']}_131"
-            assert area == ("static_807_131" if title == "Crystal" else "static_799_131")
-            key = "1234:30B8:83" if player == "a" else "1234:7B0B:83"
-            reply = await send({"event": "capture", "player": player, "area_id": area,
-                                "key": key, "species_id": 131, "level": 20, "gift": False})
+            assert row["static_area_id"] == "static_union_cave_b2f_131"
+        run = srv.state.adapter
+        keys = {player: f"1234:{'30B8' if player == 'a' else '7B0B'}:83" for player in ("a", "b")}
+        for player in ("a", "b"):
+            reply = await send({"event": "capture", "player": player,
+                                "area_id": "static_union_cave_b2f_131",
+                                "key": keys[player], "species_id": 131, "level": 20, "gift": False})
             assert srv.state.party_size[player] >= 1, "quarantine guard must be exercised"
-            assert not any(c.get("cmd") == "box_mon" and c.get("key") == key
+            assert not any(c.get("cmd") == "box_mon" and c.get("key") == keys[player]
                            for c in reply["commands"]), (title, reply)
-            assert any(players.get(player) and players[player].key == key
-                       for players in srv.state.pending_captures.values())
+        link = next(link for link in srv.state.links
+                    if link.area_id == "static_union_cave_b2f_131")
+        assert {link.a.key, link.b.key} == {keys["a"].upper(), keys["b"].upper()}
+        assert not srv.state.pending_captures.get("static_union_cave_b2f_131")
         assert srv.state.adapter is run and srv.state.rom_type == first
     finally:
         await close()
@@ -375,12 +381,14 @@ async def test_non_gift_capture_still_quarantines(tmp_path, cutover, first, seco
         await send(_hello("a", _cart(first)))
         await send(_hello("b", _cart(second), party=[
             {"key": "1234:7B0B:01", "species_id": 1, "level": 5}]))
-        # The other title's Lapras map id must not gain gift treatment by shape alone.
-        area = capture_area if capture_area == "route_29" else (
-            "static_807_131" if second == "Gold" else "static_799_131")
+        # Membership is per title, never a shape: Crystal's Celebi row (static_ilex_forest_251)
+        # is not a Gold static, and the G/S Burned Tower Entei row is not Crystal's.
+        foreign = {"gold": ("static_ilex_forest_251", 251),
+                   "crystal": ("static_burned_tower_b1f_244", 244)}
+        area, species = ("route_29", 131) if capture_area == "route_29" else foreign[TITLE[second]]
         key = "1234:7B0B:83"
         reply = await send({"event": "capture", "player": "b", "area_id": area,
-                            "key": key, "species_id": 131, "level": 20, "gift": False})
+                            "key": key, "species_id": species, "level": 20, "gift": False})
         assert any(c.get("cmd") == "box_mon" and c.get("key") == key
                    for c in reply["commands"])
     finally:
@@ -417,7 +425,7 @@ async def test_replaced_state_rebinds_title_sensitive_capture_rules(tmp_path, cu
         # _session decodes the response as JSON, so EOF surfaces as JSONDecodeError.
         with pytest.raises((ConnectionError, json.JSONDecodeError)):
             await send({"event": "capture", "player": "b",
-                        "area_id": "static_799_131", "key": "1234:7B0B:83",
+                        "area_id": "static_union_cave_b2f_131", "key": "1234:7B0B:83",
                         "species_id": 131, "level": 20, "gift": False})
         after = (srv.state.pending_captures, srv.state.links,
                  srv.state.party_keys, srv.party_details, srv._mon_cache)
@@ -429,7 +437,8 @@ async def test_replaced_state_rebinds_title_sensitive_capture_rules(tmp_path, cu
             {"key": "1234:7B0B:01", "species_id": 1, "level": 5}]))
         assert srv.adapter_for("b").title == "gold"
         key = "1234:7B0B:83"
-        reply = await send({"event": "capture", "player": "b", "area_id": "static_799_131",
+        reply = await send({"event": "capture", "player": "b",
+                            "area_id": "static_union_cave_b2f_131",
                             "key": key, "species_id": 131, "level": 20, "gift": False})
         assert srv.state.party_size["b"] >= 1
         assert not any(c.get("cmd") == "box_mon" and c.get("key") == key

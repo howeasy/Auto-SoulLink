@@ -935,13 +935,13 @@ def static_party_catch(world, group, number, species, battle_type, flags=128):
 
 @pytest.mark.parametrize("title,group,number,species,battle_type,flags,area", [
     ("crystal", 3, 4, 245, 12, 128, "legend_245"),  # Tin Tower Suicune, SUICUNE (O-21)
-    ("crystal", 9, 6, 130, 7, 128, "static_2310_130"),  # red Gyarados, FORCESHINY
-    ("crystal", 10, 3, 185, 0, 128, "static_2563_185"),  # Sudowoodo, NORMAL
-    ("crystal", 3, 49, 100, 9, 128, "static_817_100"),  # Rocket B1F Voltorb trap, TRAP
-    ("crystal", 12, 3, 143, 10, 128, "static_3075_143"),  # Snorlax, FORCEITEM
-    ("crystal", 3, 52, 251, 11, 128, "static_820_251"),  # Celebi, CelebiEvent_SetBattleType
-    ("crystal", 3, 39, 131, 0, 128, "static_807_131"),  # Lapras, NORMAL
-    ("gold", 15, 12, 250, 10, 128, "static_3852_250"),  # Gold's Ho-Oh beside its unselected Silver twin
+    ("crystal", 9, 6, 130, 7, 128, "static_lake_of_rage_130"),  # red Gyarados, FORCESHINY
+    ("crystal", 10, 3, 185, 0, 128, "static_route_36_185"),  # Sudowoodo, NORMAL
+    ("crystal", 3, 49, 100, 9, 128, "static_team_rocket_base_b1f_100"),  # Rocket B1F Voltorb trap, TRAP
+    ("crystal", 12, 3, 143, 10, 128, "static_vermilion_city_143"),  # Snorlax, FORCEITEM
+    ("crystal", 3, 52, 251, 11, 128, "static_ilex_forest_251"),  # Celebi, CelebiEvent_SetBattleType
+    ("crystal", 3, 39, 131, 0, 128, "static_union_cave_b2f_131"),  # Lapras, NORMAL
+    ("gold", 15, 12, 250, 10, 128, "static_tin_tower_roof_250"),  # Gold's Ho-Oh beside its unselected Silver twin
     ("crystal", 24, 3, 19, 0, 0, "route_29"),  # control: a natural wild Rattata is unchanged
 ])
 def test_a_scripted_static_capture_is_published_under_its_pack_area(title, group, number, species,
@@ -949,8 +949,10 @@ def test_a_scripted_static_capture_is_published_under_its_pack_area(title, group
     world = World(title)
     assert static_party_catch(world, group, number, species, battle_type, flags) == [
         (codec_key(mon(species=species, dvs=0x7AAA)), area, False)]
-    # Gen 1 canon (O-3): a static is its own gift area (static_<map_group*256+map_number>_<species>
-    # or its O-21 legend namespace), never the route's ordinary area
+    # Gen 1 canon (O-3), pack-owned since gen2-static-canon: a static is its own gift area
+    # (static_<lowercase map constant>_<species>, or its O-21 legend namespace), never the
+    # route's ordinary area -- and keyed by the map CONSTANT, so the same static in Crystal,
+    # Gold and Silver is one area for a pair (O-16)
     adapter = Gen2GSCAdapter(title)
     assert adapter.is_gift_area(area) == bool(flags) and (not flags or adapter.gift_link_area(area) == area)
 
@@ -989,20 +991,24 @@ def test_a_box_full_static_never_claims_the_mon_already_first_in_the_box(prior):
     world.fire("capture_box_finalized")
     world.frames(1)
     captures = [(c["key"], c["area_id"], c["in_box"]) for c in world.sent("capture")]
-    assert captures == ([] if prior == 20 else [(codec_key(caught), "static_818_101", True)])
+    assert captures == ([] if prior == 20 else [(codec_key(caught), "static_team_rocket_base_b2f_101", True)])
 
 
 @pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
 def test_the_adapter_accepts_every_static_area_the_binder_can_publish(title):
-    """The zone rule of lua/gen2/signals.lua final_event over every publishable pack row."""
+    """The zone rule of lua/gen2/signals.lua final_event over every publishable pack row:
+    the binder publishes the row's own static_area_id (gen2-static-canon), and the adapter's
+    membership set must accept exactly those -- no id is recomputed on either side."""
     adapter = Gen2GSCAdapter(title)
     rows = json.loads((ROOT / f"data/games/gen2_{title}/static_encounters.json").read_text())["encounters"]
-    for row in rows:
-        if row["applicability"]["selected"] and not row["source_unused"] and row["kind"] != "tutorial":
-            legend = f"legend_{row['species']}"
-            zone = legend if row["area_id"] == legend else \
-                f"static_{row['map_group'] * 256 + row['map_number']}_{row['species']}"
-            assert adapter.is_gift_area(zone) and adapter.gift_link_area(zone) == zone, (title, row["id"])
+    published = {row["static_area_id"] for row in rows
+                 if row["applicability"]["selected"] and not row["source_unused"]
+                 and row["kind"] != "tutorial"}
+    assert published, "the pack must publish at least one static area"
+    for zone in published:
+        assert adapter.is_gift_area(zone) and adapter.gift_link_area(zone) == zone, (title, zone)
+    # The retired group*256+number shape is refused outright, gift-shaped or not.
+    assert not adapter.is_gift_area(f"static_{rows[0]['map_group'] * 256 + rows[0]['map_number']}_{rows[0]['species']}")
 
 
 # ── production graph (card U3): Entry.build over the admitted Crystal and its PHYSICAL receipts ─────

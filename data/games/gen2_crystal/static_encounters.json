@@ -22,6 +22,7 @@
       "map_group": 3,
       "map_number": 52,
       "area_id": "ilex_forest",
+      "static_area_id": "static_ilex_forest_251",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/IlexForest.asm:466",
       "script": "IlexForestShrineScript.CelebiEvent",
       "applicability": {
@@ -56,6 +57,7 @@
       "map_group": 9,
       "map_number": 6,
       "area_id": "lake_of_rage",
+      "static_area_id": "static_lake_of_rage_130",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/LakeOfRage.asm:87",
       "script": "RedGyarados",
       "applicability": {
@@ -92,6 +94,7 @@
       "map_group": 24,
       "map_number": 3,
       "area_id": "route_29",
+      "static_area_id": "static_route_29_19",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/Route29.asm:53",
       "script": "Route29Tutorial1",
       "applicability": {
@@ -126,6 +129,7 @@
       "map_group": 24,
       "map_number": 3,
       "area_id": "route_29",
+      "static_area_id": "static_route_29_19",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/Route29.asm:78",
       "script": "Route29Tutorial2",
       "applicability": {
@@ -160,6 +164,7 @@
       "map_group": 24,
       "map_number": 3,
       "area_id": "route_29",
+      "static_area_id": "static_route_29_19",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/Route29.asm:118",
       "script": "CatchingTutorialDudeScript",
       "applicability": {
@@ -194,6 +199,7 @@
       "map_group": 10,
       "map_number": 3,
       "area_id": "route_36",
+      "static_area_id": "static_route_36_185",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/Route36.asm:77",
       "script": "WateredWeirdTreeScript",
       "applicability": {
@@ -228,6 +234,7 @@
       "map_group": 3,
       "map_number": 49,
       "area_id": "mahogany_town",
+      "static_area_id": "static_team_rocket_base_b1f_100",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TeamRocketBaseB1F.asm:454",
       "script": "VoltorbExplodingTrap",
       "applicability": {
@@ -264,6 +271,7 @@
       "map_group": 3,
       "map_number": 49,
       "area_id": "mahogany_town",
+      "static_area_id": "static_team_rocket_base_b1f_74",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TeamRocketBaseB1F.asm:464",
       "script": "GeodudeExplodingTrap",
       "applicability": {
@@ -300,6 +308,7 @@
       "map_group": 3,
       "map_number": 49,
       "area_id": "mahogany_town",
+      "static_area_id": "static_team_rocket_base_b1f_109",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TeamRocketBaseB1F.asm:474",
       "script": "KoffingExplodingTrap",
       "applicability": {
@@ -336,6 +345,7 @@
       "map_group": 3,
       "map_number": 50,
       "area_id": "mahogany_town",
+      "static_area_id": "static_team_rocket_base_b2f_101",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TeamRocketBaseB2F.asm:224",
       "script": "RocketElectrode1",
       "applicability": {
@@ -370,6 +380,7 @@
       "map_group": 3,
       "map_number": 50,
       "area_id": "mahogany_town",
+      "static_area_id": "static_team_rocket_base_b2f_101",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TeamRocketBaseB2F.asm:242",
       "script": "RocketElectrode2",
       "applicability": {
@@ -404,6 +415,7 @@
       "map_group": 3,
       "map_number": 50,
       "area_id": "mahogany_town",
+      "static_area_id": "static_team_rocket_base_b2f_101",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TeamRocketBaseB2F.asm:260",
       "script": "RocketElectrode3",
       "applicability": {
@@ -438,6 +450,7 @@
       "map_group": 3,
       "map_number": 4,
       "area_id": "legend_245",
+      "static_area_id": "legend_245",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TinTower1F.asm:119",
       "script": "TinTower1FSuicuneBattleScript.Next2",
       "applicability": {
@@ -474,6 +487,7 @@
       "map_group": 15,
       "map_number": 12,
       "area_id": "tin_tower",
+      "static_area_id": "static_tin_tower_roof_250",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/TinTowerRoof.asm:34",
       "script": "TinTowerHoOh",
       "applicability": {
@@ -510,6 +524,7 @@
       "map_group": 3,
       "map_number": 39,
       "area_id": "union_cave",
+      "static_area_id": "static_union_cave_b2f_131",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/UnionCaveB2F.asm:31",
       "script": "UnionCaveLapras",
       "applicability": {
@@ -544,6 +559,7 @@
       "map_group": 12,
       "map_number": 3,
       "area_id": "vermilion_city",
+      "static_area_id": "static_vermilion_city_143",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/VermilionCity.asm:56",
       "script": "VermilionSnorlax.Awake",
       "applicability": {
@@ -580,6 +596,7 @@
       "map_group": 3,
       "map_number": 73,
       "area_id": "whirl_islands",
+      "static_area_id": "static_whirl_island_lugia_chamber_249",
       "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/WhirlIslandLugiaChamber.asm:34",
       "script": "Lugia",
       "applicability": {

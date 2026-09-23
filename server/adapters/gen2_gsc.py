@@ -29,7 +29,11 @@ _ROMS = {"crystal": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
          "silver": "49b163f7e57702bc939d642a18f591de55d92dae"}
 _KEY = re.compile(r"([0-9A-Fa-f]{4}):([0-9A-Fa-f]{4}):([0-9A-Fa-f]{2})")
 _AREA = re.compile(r"[a-z][a-z0-9_]*")
-_STATIC = re.compile(r"static_([0-9]+)_([0-9]+)")
+# O-16 (docs/gen2/RESUME.md:61): the pack's own static area id is
+# static_<lowercase map constant>_<species> -- title-independent, so a Crystal/Gold pair
+# lands in ONE gift area. The trailing number is the NatDex species (tools/gen_gen2_statics.py).
+_STATIC = re.compile(r"static_[a-z][a-z0-9_]*_([1-9][0-9]{0,2})\Z")
+_LEGEND = re.compile(r"legend_([1-9][0-9]{0,2})\Z")
 _SPLIT = {"Physical": 0, "Special": 1, "Status": 2}
 
 
@@ -159,16 +163,26 @@ class Gen2GSCAdapter(GameAdapter):
         statics = load("static_encounters", "gen2-static-encounters-v1")["encounters"]
         selected_statics = [row for row in statics if row.get("applicability", {}).get("selected")
                             and not row.get("source_unused")]
-        self._static_sites = {(row["map_group"] * 256 + row["map_number"], row["species"])
-                              for row in selected_statics}
-        # O-21: a static whose generated area_id is already legend_<species> (Crystal's
-        # Tin Tower Suicune, tools/gen_gen2_statics.py LEGEND_STATIC_OVERRIDES) joins the
-        # roamer legend namespace -- source-grounded pack data, not a species special case.
+        # Every selected row carries its own canonical area id (gen2-static-canon, O-16):
+        # static_<lowercase map constant>_<species>, or legend_<species> where the
+        # generator's O-21 override applies (Crystal's Tin Tower Suicune, whose area_id
+        # is the same value). The id SET is the whole membership check -- a numeric
+        # group*256+number id or an invented one is refused, and the species suffix must
+        # be the row's own species.
+        self._static_ids = set()
         for row in selected_statics:
-            match = re.fullmatch(r"legend_([1-9][0-9]{0,2})", row.get("area_id", ""))
-            _require(match is None or int(match[1]) == row["species"], "static legend area/species mismatch")
-        self._legend_species = self._roamers | {row["species"] for row in selected_statics
-                                                if re.fullmatch(r"legend_[1-9][0-9]{0,2}", row.get("area_id", ""))}
+            canonical = row.get("static_area_id")
+            _require(isinstance(canonical, str), "static row missing canonical area id")
+            if (legend := _LEGEND.fullmatch(canonical)) is not None:
+                _require(int(legend[1]) == row["species"], "static legend area/species mismatch")
+            else:
+                match = _STATIC.fullmatch(canonical)
+                _require(match is not None and int(match[1]) == row["species"],
+                         "static canonical area/species mismatch")
+            self._static_ids.add(canonical)
+        self._legend_species = self._roamers | {
+            int(match[1]) for row in selected_statics
+            if (match := _LEGEND.fullmatch(row["static_area_id"]))}
         self._areas = _json(directory / "area_map.json")
         self._area_names = {}
         for key, row in self._areas.items():
@@ -310,16 +324,14 @@ class Gen2GSCAdapter(GameAdapter):
             return False
 
     def _legend(self, area_id):
-        match = re.fullmatch(r"legend_([1-9][0-9]{0,2})", area_id) if isinstance(area_id, str) else None
+        match = _LEGEND.fullmatch(area_id) if isinstance(area_id, str) else None
         return bool(match and int(match[1]) in self._legend_species)
 
     def is_gift_area(self, area_id):
         if not isinstance(area_id, str) or _AREA.fullmatch(area_id) is None:
             return False
-        static = _STATIC.fullmatch(area_id)
         return (area_id.startswith("gift_") and len(area_id) > 5 or self._legend(area_id)
-                or bool(static and str(int(static[1])) == static[1] and str(int(static[2])) == static[2]
-                        and (int(static[1]), int(static[2])) in self._static_sites))
+                or area_id in self._static_ids)
 
     def is_daycare_area(self, area_id):
         return area_id == "gift_daycare"

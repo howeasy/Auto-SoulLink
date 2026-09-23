@@ -224,15 +224,29 @@ def runtime_battle_type(ctx, row, types):
     return types[found[0] if found else "BATTLETYPE_NORMAL"]
 
 
-def public_row(ctx, row, maps):
+def public_row(ctx, row, maps, species=None):
+    """One generated row. `species` is passed by the statics pack alone: it adds the
+    canonical static area id the client publishes and the adapter validates. The gifts
+    pack shares this builder and has no static identity, so it leaves the column out."""
     location = maps.get(row["map_name"])
     if location is None:
         raise ValueError(f"map has no verified header: {row['map_name']}")
-    return {"id": f"{row['map_name']}:{row['label']}:{row['line']}",
-            "map_name": row["map_name"], "map_group": location["map_group"],
-            "map_number": location["map_number"], "area_id": location["area_id"],
-            "source": source_ref(ctx, row["path"], row["line"]), "script": row["label"],
-            "applicability": applicability(ctx, row)}
+    entry = {"id": f"{row['map_name']}:{row['label']}:{row['line']}",
+             "map_name": row["map_name"], "map_group": location["map_group"],
+             "map_number": location["map_number"], "area_id": location["area_id"]}
+    if species is not None:
+        # O-16 (docs/gen2/RESUME.md:61): the static's own area is pack-owned and
+        # title-independent -- keyed by the LOWERCASE MAP CONSTANT, never by
+        # group*256+number, so the same map+species in Crystal, Gold and Silver
+        # resolves to ONE gift area and a cross-title pair links there. A
+        # legend_<species> row overrides both columns below (O-21).
+        constant = location["map_const"]
+        if re.fullmatch(r"[A-Z][A-Z0-9_]*", constant) is None:
+            raise ValueError(f"map constant is not a plain name: {constant}")
+        entry["static_area_id"] = f"static_{constant.lower()}_{species}"
+    entry.update(source=source_ref(ctx, row["path"], row["line"]), script=row["label"],
+                 applicability=applicability(ctx, row))
+    return entry
 
 
 def build(ctx):
@@ -254,7 +268,7 @@ def build(ctx):
         if not tutorial and (not after or after[0] != "startbattle"):
             raise ValueError(f"unknown battle dispatch after {row['label']}")
         trap = any("BATTLETYPE_TRAP" in line for _, line in row["block"])
-        entry = public_row(ctx, row, maps)
+        entry = public_row(ctx, row, maps, species)
         entry.update(species=species, species_const=row["arguments"][0], level=level,
                      kind="tutorial" if tutorial else "scripted_trap_battle" if trap else "scripted_wild_battle",
                      battle_type=[line for _, line in row["block"] if line.startswith("loadvar VAR_BATTLETYPE,")],
@@ -264,6 +278,7 @@ def build(ctx):
         legend_area = legend_area_override(ctx, row, species)
         if legend_area is not None:
             entry["area_id"] = legend_area
+            entry["static_area_id"] = legend_area
         entry["rom"] = witness(ctx, row, bytes([commands["loadwildmon"], species, level]))
         rows.append(entry)
     return {"schema": "gen2-static-encounters-v1", "generator": "gen_gen2_statics.py",

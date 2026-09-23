@@ -581,19 +581,21 @@ function build(options, proven)
             for _,row in ipairs(statics and STATIC_TYPES[battle_type] and statics.encounters or {}) do
                 if row.map_group == group and row.map_number == number and row.species == after.mon.species_id
                    and row.runtime_battle_type == battle_type and row.applicability.selected == true then
-                    if row.source_unused ~= false or row.kind == "tutorial" or (zone and zone ~= row.area_id) then
+                    if row.source_unused ~= false or row.kind == "tutorial"
+                       or type(row.static_area_id) ~= "string" or (zone and zone ~= row.static_area_id) then
                         zone = false
                         break
                     end
-                    zone = row.area_id
+                    zone = row.static_area_id
                 end
             end
             need(zone,"OPEN: scripted/static acquisition caller policy unavailable")
-            -- Gen 1 canon (O-3, lua/gen1/client.lua static_<map>_<dex>): a static is its own gift
-            -- area and never consumes the route's; a legend_<species> row keeps it (O-21).
-            if zone ~= "legend_" .. after.mon.species_id then
-                zone = string.format("static_%d_%d",group*256+number,after.mon.species_id)
-            end
+            -- Gen 1 canon (O-3, lua/gen1/client.lua static_<map>_<dex>), pack-owned since
+            -- gen2-static-canon: the row names its own area -- keyed by the lowercase MAP
+            -- CONSTANT, not group*256+number -- so the same static in Crystal, Gold and Silver
+            -- is ONE gift area and a cross-title pair links there (O-16). A legend_<species>
+            -- row carries that namespace in the same column, and a static never consumes
+            -- the route's ordinary area (O-21).
             if after.collection == "box" then
                 -- SendMonIntoBox copies wEnemyMonDVs into the new first record; its .full branch
                 -- inserts nothing, leaving a pre-existing mon first and the box count unchanged.

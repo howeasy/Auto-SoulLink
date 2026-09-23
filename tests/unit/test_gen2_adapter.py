@@ -1131,9 +1131,16 @@ class TestGen2GSCAdapter:
         assert not gsc_adapter.is_gift_area("legend_25")
         assert not gsc_adapter.is_gift_area("legend_0243")
         assert not gsc_adapter.is_gift_area("gift_")
-        assert gsc_adapter.is_gift_area("static_2310_130")  # 09:06 Red Gyarados.
-        assert not gsc_adapter.is_gift_area("static_02310_130")
-        assert not gsc_adapter.is_gift_area("static_2310_25")
+        assert gsc_adapter.is_gift_area("static_lake_of_rage_130")  # 09:06 Red Gyarados.
+        # The retired group*256+number shape (2310 = 09:06) is not a member any more.
+        assert not gsc_adapter.is_gift_area("static_2310_130")
+        assert not gsc_adapter.is_gift_area("static_lake_of_rage_25")
+        # Membership is per title (gen2-static-canon, O-16): Crystal's Celebi row is not a
+        # Gold/Silver static even though the id shape is canonical everywhere.
+        if gsc_adapter.title == "crystal":
+            assert gsc_adapter.is_gift_area("static_ilex_forest_251")
+        else:
+            assert not gsc_adapter.is_gift_area("static_ilex_forest_251")
         assert gsc_adapter.is_daycare_area("gift_daycare")
         assert not gsc_adapter.is_egg_pickup_area("egg_route_30")
         with pytest.raises(ValueError):
@@ -1158,6 +1165,7 @@ class TestGen2GSCAdapter:
             return
         row = next(iter(suicune))
         assert row["area_id"] == "legend_245"
+        assert row["static_area_id"] == "legend_245"  # the pack's own published id (O-16/O-21)
         assert gsc_adapter.is_gift_area("legend_245")
         assert gsc_adapter.gift_link_area("legend_245") == "legend_245"
         assert gsc_adapter.area_display_name("legend_245") == "Suicune"
