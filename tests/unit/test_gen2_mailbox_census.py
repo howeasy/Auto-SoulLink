@@ -1,10 +1,12 @@
-"""Gen 2 SLink mailbox writer-exclusion census (card P4.1b, owner ruling O-27).
+"""Gen 2 SLink mailbox writer-exclusion census (card P4.1b, owner ruling O-27; scope widened
+per the OMP P4.1a/P4.1b independent review, docs/gen2/reviews/OMP_P41AB_REVIEW_2026-09-23.md).
 
 The real-title tests are the exit evidence: all three built titles must come back PROVEN
 against the pinned pokecrystal/pokegold decomps. The control tests are the falsifier this
-card requires (docs/gen2/reviews/P4_PLAN_2026-09-23.md P4.1b): they patch a COPY of a small
-synthetic source corpus, never the real checkout, with one added bulk write and one
-hard-coded literal address, and assert the census goes red and names the exact writer -
+card requires (docs/gen2/reviews/P4_PLAN_2026-09-23.md P4.1b, and the follow-up review's
+recommendation 3): they patch a COPY of a small synthetic source corpus, never the real
+checkout, with a planted bulk write, hard-coded literal address, FarCopyBytes write, and
+non-idiomatic `ld [hli], a` loop, and assert the census goes red and names the exact writer -
 then assert reverting the patch goes back to green.
 """
 from __future__ import annotations
@@ -124,6 +126,50 @@ def test_unresolvable_length_reaching_the_span_is_unproven_not_silently_passed()
     unproven = [w for w in result["unproven_writers"] if w["file"] == "engine/opaque.asm"]
     assert len(unproven) == 1
     assert unproven[0]["length_method"] == "STRUCTURAL_NEXT_SYMBOL_BOUND"
+
+
+def test_planted_farcopybytes_write_is_flagged_and_reverts():
+    """CONTROL (OMP F1/recommendation 3): a write through the wider helper family, not just
+    ByteFill/CopyBytes, must be caught."""
+    violated = {**CLEAN_SOURCE, "engine/planted_far.asm":
+                "PlantedFarCopy::\n\tld hl, wFoo\n\tld de, wBar\n\tld a, 5\n\tld bc, $20\n"
+                "\tcall FarCopyBytes\n"}
+    result = _run(violated)
+    assert result["verdict"] == "UNPROVEN"
+    hits = [w for w in result["violations"] if w["file"] == "engine/planted_far.asm"]
+    assert len(hits) == 1
+    assert hits[0]["callee"] == "FarCopyBytes" and hits[0]["dest_expr"] == "wBar"
+
+    reverted = _run(CLEAN_SOURCE)
+    assert reverted["verdict"] == "PROVEN"
+
+
+def test_planted_nonidiomatic_hli_loop_is_flagged_and_reverts():
+    """CONTROL (OMP F1/recommendation 3): a hand-rolled `ld [hli], a` loop that doesn't match
+    the exact Init idiom must still be caught, with its trip count never assumed."""
+    violated = {**CLEAN_SOURCE, "engine/planted_loop.asm":
+                "RoguePartialFill::\n\tld hl, wBaz\n\tld a, 5\n.loop\n\tld [hli], a\n"
+                "\tdec a\n\tjr nz, .loop\n"}
+    result = _run(violated)
+    assert result["verdict"] == "UNPROVEN"
+    hits = [w for w in result["unproven_writers"] if w["file"] == "engine/planted_loop.asm"]
+    assert len(hits) == 1
+    assert hits[0]["callee"] == "InlineHliStore" and hits[0]["dest_expr"] == "wBaz"
+    assert hits[0]["length_method"] == "STRUCTURAL_NEXT_SYMBOL_BOUND"
+
+    reverted = _run(CLEAN_SOURCE)
+    assert reverted["verdict"] == "PROVEN"
+
+
+def test_out_of_scope_computed_pointer_is_counted_not_silently_dropped():
+    """OMP F2: an unresolvable (computed-pointer) destination is counted per callee, not
+    silently absent from the report."""
+    violated = {**CLEAN_SOURCE, "engine/computed.asm":
+                "ComputedDest::\n\tld hl, wComputedPtrTable\n\tld a, [hli]\n\tld h, [hl]\n\tld l, a\n"
+                "\tld bc, $4\n\tcall ByteFill\n"}
+    result = _run(violated)
+    assert result["verdict"] == "PROVEN"  # a genuinely computed pointer is out of scope, not a violation
+    assert result["out_of_scope_by_callee"].get("ByteFill", 0) >= 1
 
 
 def test_symbol_arithmetic_into_span_is_flagged():
