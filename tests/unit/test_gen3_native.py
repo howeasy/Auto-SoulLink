@@ -31,6 +31,7 @@ class World:
                            read_u32=lambda a: self.read(a, 4),
                            read_bytes=lambda a, n: runtime.table(*self.raw(a, n)),
                            framecount=lambda: self.frame)
+        self.native_io = io
         writes_mod = runtime.execute((ROOT / "lua/gen3/writes.lua").read_text())
         self.writes = writes_mod.new(runtime.table(
             frame=lambda: self.frame,
@@ -382,3 +383,59 @@ def test_unsupported_and_malformed_transfers_cannot_write():
         assert result is None
     w.service()
     assert w.output == []
+
+
+def test_a_stale_ok_from_the_previous_op_never_completes_the_new_job():
+    """C5-6a: dispatch no longer writes status=BUSY. The previous op's ST_OK stays in the status
+    word with ack_seq one behind the new seq; completion needs ack == seq, so the new job stays
+    pending until the patch acks it -- and no status byte is ever written by Lua."""
+    w = World()
+    w.native.play_sound(w.native, 25)
+    w.service()
+    w.ack(status=2)
+    w.service()
+    assert w.native.idle(w.native) is True                   # the first op completed
+    first_seq = w.read(w.n["BASE"] + 8, 2)
+    w.native.show_menu(w.native, w.lua.table(token="t", text="Yes?"))
+    w.service()
+    assert w.read(w.n["BASE"] + 10, 2) == 2                   # the stale ST_OK is still there
+    assert w.read(w.n["BASE"] + 12, 2) == first_seq           # ack_seq = new seq - 1
+    assert w.read(w.n["BASE"] + 8, 2) == first_seq + 1
+    for _ in range(3):
+        w.frame += 1
+        w.service()
+    assert w.events == [] and w.native.idle(w.native) is False
+    assert all(addr not in (w.n["BASE"] + 10, w.n["BASE"] + 11) for addr, _ in w.output)
+    w.ack(status=2, result=1)
+    w.service()
+    assert [(e, f.choice) for e, f in w.events] == [("menu_result", 1)]
+
+
+@pytest.mark.parametrize("op,frames", [("OP_PLAY_SE", 1800), ("OP_SHOW_MENU", 2400),
+                                       ("OP_CHOOSE_PARTY_MON", 2400), ("OP_TRADE_SCENE", 6000)])
+def test_per_op_timeouts_outlast_the_patch_own_deadline(op, frames):
+    """Each op's ACK deadline exceeds the patch's own (handlers.c drive_ui): a normal trade scene
+    (~5580 frames) or a slow YES/NO answer (~1860) never poisons the mailbox."""
+    w = World()
+    # the harness native has timeout_frames=5: build a production-shaped one without the knob
+    L = w.lua
+    module = L.execute((ROOT / "lua/gen3/native.lua").read_text(encoding="utf-8"))
+    native = module.new(L.table_from(w.profile, recursive=True), L.table(
+        io=w.native_io, writes=w.writes, reads=w.reads, artifact_kind="companion",
+        send=lambda e, f: w.events.append((e, f)), in_battle=lambda: True,
+        refresh_enemy=lambda *_: True, panel_closed=lambda: (True, 127)))
+    if op == "OP_PLAY_SE":
+        native.play_sound(native, 25)
+    elif op == "OP_SHOW_MENU":
+        native.show_menu(native, L.table(token="t", text="?"))
+    elif op == "OP_CHOOSE_PARTY_MON":
+        native.choose_mon(native, L.table(token="t"))
+    else:
+        assert native.transfer(native, "scene", L.table(slot=0), lambda *_: None)
+    native.service(native)
+    assert w.read(w.n["BASE"] + 6, 2) == w.n[op]
+    w.frame += frames - 1
+    native.service(native)
+    assert native.idle(native) is False and native.service(native) is True
+    w.frame += 1
+    assert native.service(native) == (None, "native timeout")

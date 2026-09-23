@@ -616,6 +616,8 @@ RR_PACK = json.loads((REPO / "data" / "games" / "gen3_rr" / "profile.json").read
 NATIVE = RR_PACK["native"]
 
 
+
+
 def attach_real_native(w, present=True):
     """The REAL lua/gen3/native.lua instance Entry built for this RR companion World (the one
     the client, Safety's native_idle and the write policy share); present = its beacon is up."""
@@ -643,6 +645,8 @@ def test_blocker_control_an_eligible_session_posts_the_native_sound():
     w.command(cmd="play_sound", sound=25)
     w.step(3)
     assert native_writes(w), "positive control: the real native.lua must post while eligible"
+    # published, not merely begun: the opcode is the post's last byte
+    assert w._read(NATIVE["BASE"] + 6, 2) == NATIVE["OP_PLAY_SE"]
 
 
 def test_blocker_a_paused_session_posts_nothing_through_the_real_native_part():
@@ -874,6 +878,245 @@ def test_sound_is_refused_while_the_session_is_ineligible():
     w.command(cmd="play_sound", sound=26)
     w.step()
     assert w.writes == [] and "sound" not in w.battle_checks
+
+
+# ── C5-6a: the RR PC trade (apply_trade) over the REAL native.lua ─────────────────────────
+
+PARTNER = mon_record(0x55555555, 0x00009999, species=25, nickname="PIKA")
+KP = key_of(0x55555555, 0x00009999)
+MB = {"opcode": 6, "seq": 8, "status": 10, "ack": 12, "result": 48}
+OK_, FAIL_ = 2, 3
+
+
+def mb_op(w):
+    return w._read(NATIVE["BASE"] + MB["opcode"], 2)
+
+
+def mb_ack(w, status=OK_, result=0):
+    """What the companion patch does when it finishes the posted op."""
+    base = NATIVE["BASE"]
+    w.poke_int(base + MB["ack"], w._read(base + MB["seq"], 2), 2)
+    w.poke_int(base + MB["status"], status, 2)
+    w.poke_int(base + MB["opcode"], 0, 2)
+    w.poke_int(base + MB["result"], result, 1)
+
+
+def trade_world(present=True):
+    w = rr_live()
+    attach_real_native(w, present)
+    return w, w.encode(PARTNER).hex().upper()
+
+
+def swap_in_partner(w):
+    """The patch's scene / silent swap: slot 1 now holds the partner's mon."""
+    w.set_party([mon_record(A, OT, species=4, nickname="MON0"), PARTNER])
+
+
+def apply(w, blob, old_key=KB, slot=1, token="tr1"):
+    w.command(cmd="apply_trade", slot=slot, blob_hex=blob, old_key=old_key, token=token)
+
+
+def trade_writes_are_native_only(w):
+    reasons = set(write_reasons(w))
+    assert reasons <= {"native"}, reasons
+    lo, hi = NATIVE["BASE"], NATIVE["BASE"] + 0x800
+    assert all(lo <= a < hi for a, _v, _f in w.writes), "a trade byte landed outside the mailbox arena"
+
+
+def test_rival_swap_posts_through_the_real_native_path_and_reports_the_refresh_refusal():
+    """The rival swap's OP_SET_ENEMY_PARTY posts through writes:arm("native") and the real native
+    clauses; Entry refuses refresh_enemy by name (no write reason covers the battle's first
+    frames), so the reply names that refusal instead of claiming a swap."""
+    w, _blob = trade_world()
+    w.enter_battle([FOE], trainer_id=5)
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=[w.encode(PARTNER).hex().upper()])
+    w.step(2)
+    assert mb_op(w) == NATIVE["OP_SET_ENEMY_PARTY"]
+    w.poke(w.ram["ENEMY_BASE"], w.encode(PARTNER))              # the patch copied gEnemyParty
+    w.poke_int(w.ram["ENEMY_COUNT_ADDR"], 1, 1)
+    mb_ack(w)
+    w.step()
+    (reply,) = w.events("rival_team_replaced")
+    assert reply["error"] == "refresh_failed"
+    trade_writes_are_native_only(w)
+
+
+def test_trade_happy_path_stages_runs_the_scene_and_reports_the_received_mon():
+    w, blob = trade_world()
+    apply(w, blob)
+    w.step(2)
+    assert mb_op(w) == NATIVE["OP_SET_ENEMY_PARTY"]
+    staged = bytes(w._read(NATIVE["BLOB_BUF"] + i, 1) for i in range(100))
+    assert staged.hex().upper() == blob                        # the partner mon, byte for byte
+    mb_ack(w)
+    w.step()
+    assert mb_op(w) == NATIVE["OP_TRADE_SCENE"]
+    w.fire("trade_begin")                                        # TradeMons fires inside the scene
+    swap_in_partner(w)
+    w.fire("trade_done")
+    mb_ack(w)
+    w.step()
+    (done,) = w.events("trade_done")
+    assert done == {**done, "token": "tr1", "slot": 1, "new_key": KP, "new_species": 25}
+    w.fire("mon_given")
+    w.step(40)
+    # protocol §6.5: no key_change, no capture of the received mon, no party_to_box of the old one
+    assert w.events("key_change") == [] and w.events("capture") == [] and w.events("party_to_box") == []
+    trade_writes_are_native_only(w)
+
+
+def test_trade_relocates_the_offered_mon_by_key_when_the_party_was_reordered():
+    w, blob = trade_world()
+    w.set_party([mon_record(B, OT, species=5, nickname="MON1"), mon_record(A, OT, species=4, nickname="MON0")])
+    w.step()
+    apply(w, blob, slot=1)                                      # the snapshot said slot 1; B is in 0 now
+    w.step(2)
+    mb_ack(w)
+    w.step()
+    assert w._read(NATIVE["BASE"] + 16, 1) == 0                 # OP_TRADE_SCENE args: slot 0
+    w.set_party([PARTNER, mon_record(A, OT, species=4, nickname="MON0")])
+    mb_ack(w)
+    w.step()
+    assert w.events("trade_done")[0]["slot"] == 0 and w.events("trade_done")[0]["new_key"] == KP
+
+
+def test_trade_scene_refused_before_the_swap_falls_back_to_the_silent_swap():
+    w, blob = trade_world()
+    apply(w, blob)
+    w.step(2)
+    mb_ack(w)
+    w.step()
+    mb_ack(w, status=FAIL_)                                     # the scene failed; slot untouched
+    w.step()
+    assert mb_op(w) == NATIVE["OP_SET_PARTY_MON"]
+    swap_in_partner(w)
+    mb_ack(w)
+    w.step()
+    assert [d["new_key"] for d in w.events("trade_done")] == [KP]
+    trade_writes_are_native_only(w)
+
+
+def test_trade_scene_failure_after_the_swap_reconciles_without_an_overwrite():
+    w, blob = trade_world()
+    apply(w, blob)
+    w.step(2)
+    mb_ack(w)
+    w.step()
+    swap_in_partner(w)                                           # the scene DID swap, then failed
+    mb_ack(w, status=FAIL_)
+    n = len(w.writes)
+    w.step(3)
+    assert mb_op(w) == 0 and len(w.writes) == n                  # no silent swap on top
+    assert [d["new_key"] for d in w.events("trade_done")] == [KP]
+
+
+def test_trade_lost_scene_ack_waits_the_backstop_then_reconciles_from_the_slot():
+    w, blob = trade_world()
+    w.client.state.trade_limits.backstop = 120
+    apply(w, blob)
+    w.step(2)
+    mb_ack(w)
+    w.step()
+    w.poke_int(NATIVE["BASE"] + MB["seq"], 0xBEEF, 2)           # the ACK channel is lost
+    w.step()
+    assert w.events("trade_done") == []                          # never an early claim
+    swap_in_partner(w)                                           # the scene finished natively
+    w.step(120)
+    assert [d["new_key"] for d in w.events("trade_done")] == [KP]
+    assert mb_op(w) == NATIVE["OP_TRADE_SCENE"]                  # nothing posted after the loss
+
+
+def test_trade_stage_timeout_poisons_native_and_reports_the_slot_as_it_is():
+    """The real native.lua timeout (1800 frames) poisons the mailbox, so the silent swap cannot
+    post either: the slot is read back unchanged and reported (a recorded limit, see report)."""
+    w, blob = trade_world()
+    apply(w, blob)
+    w.step(2)
+    assert mb_op(w) == NATIVE["OP_SET_ENEMY_PARTY"]
+    w.step(1801)
+    (done,) = w.events("trade_done")
+    assert done["new_key"] == KB and w.client.state.trade_apply is None
+
+
+def test_trade_partner_declining_the_confirm_writes_no_party_byte_and_completes_nothing():
+    w, _blob = trade_world()
+    w.command(cmd="show_menu", token="cf", text="Trade your MON1 for PIKA?")
+    w.step(2)
+    assert mb_op(w) == NATIVE["OP_SHOW_MENU"]
+    mb_ack(w, result=0)                                          # NO
+    w.step()
+    assert [(m["token"], m["choice"]) for m in w.events("menu_result")] == [("cf", 0)]
+    assert w.events("trade_done") == [] and w.party_hp(1) == 20
+    trade_writes_are_native_only(w)
+
+
+def test_trade_on_rr_clean_has_no_trade_path_writes_nothing_and_completes_nothing():
+    w = live("gen3_rr", "radical_red", "clean")
+    assert w.parts.native is None
+    apply(w, w.encode(PARTNER).hex().upper())
+    w.step(5)
+    assert w.writes == [] and w.events("trade_done") == []
+
+
+def test_trade_with_the_companion_beacon_absent_aborts_with_no_write_and_no_completion():
+    w, blob = trade_world(present=False)
+    apply(w, blob)
+    w.step(5)
+    assert w.writes == [] and w.events("trade_done") == []
+    assert w.client.state.trade_apply is None and any("trade ABORTED" in line for line in w.logs)
+
+
+def test_trade_nothing_changed_when_the_offered_mon_left_the_party():
+    w, blob = trade_world()
+    apply(w, blob, old_key=KC, slot=1)                          # KC was never in the party
+    w.step(2)
+    (done,) = w.events("trade_done")
+    assert (done["new_key"], done["new_species"], done["slot"]) == (KC, 0, 1)
+    assert w.writes == []                                        # the bystander in slot 1 untouched
+
+
+def test_trade_holds_the_checkpoint_queue_then_purges_box_moves_for_the_traded_keys():
+    w, blob = trade_world()
+    w.break_checkpoint()                                         # the apply waits for a clear field
+    apply(w, blob)
+    w.command(cmd="box_mon", key=KB)
+    w.step(3)
+    assert w.client.deferred.size(w.client.deferred) == 1
+    w.overworld_safe()
+    w.step(2)
+    mb_ack(w)
+    w.step()
+    swap_in_partner(w)
+    mb_ack(w)
+    w.step(3)
+    assert w.events("trade_done")[0]["new_key"] == KP
+    assert w.client.deferred.size(w.client.deferred) == 0 and w.events("box_mon_failed") == []
+
+
+def test_trade_request_is_never_sent_while_an_apply_is_in_flight():
+    w, blob = trade_world()
+    w.command(cmd="config", overworld_presence=False, pc_trade_npc=True)
+    w.step(3)
+    counter = NATIVE["PI_COUNT"]
+    w.poke_int(counter, w._read(counter, 1) + 1, 1)             # positive control: an NPC talk
+    w.step()
+    assert len(w.events("trade_request")) == 1
+    w.break_checkpoint()
+    apply(w, blob)
+    w.step()
+    w.poke_int(counter, w._read(counter, 1) + 1, 1)
+    w.step()
+    assert len(w.events("trade_request")) == 1                   # the second one was dropped
+    assert any("trade_request dropped" in line for line in w.logs)
+
+
+def test_a_second_apply_while_one_is_in_flight_is_ignored():
+    w, blob = trade_world()
+    w.break_checkpoint()
+    apply(w, blob, token="t1")
+    apply(w, blob, token="t2")
+    w.step()
+    assert w.client.state.trade_apply.token == "t1"
 
 
 # ── static contract ───────────────────────────────────────────────────────────────────────

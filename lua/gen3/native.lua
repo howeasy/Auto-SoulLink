@@ -32,7 +32,20 @@ function N.new(profile, deps)
     local last_frame, was_present, npc_count, panel_drawn
     local npc_enabled, sounds_enabled = false, true
     local panel_rows, panel_page, panel_showing = {}, 0, false
-    local timeout = deps.timeout_frames or 1800
+    -- Per-op ACK deadlines, each LONGER than the patch's own timeout for that op so the patch's
+    -- ST_FAIL normally wins the race (patch/src/handlers.c drive_ui :1030-1072):
+    --   sync ops (acked the frame they run)              1800
+    --   UI kind 1 SHOW_MENU/SHOW_CHOICES/SHOW_INFO        60 start + 1800 answer -> 2400
+    --   UI kind 2 CHOOSE_PARTY_MON                        1800 -> 2400
+    --   UI kind 3 TRADE_SCENE                             180 start + 5400 scene -> 6000
+    -- deps.timeout_frames (a harness knob) overrides every op with one value.
+    local SYNC_TIMEOUT = 1800
+    local op_timeout = {}
+    for name, frames in pairs({OP_SHOW_MENU = 2400, OP_SHOW_CHOICES = 2400, OP_SHOW_INFO = 2400,
+                               OP_CHOOSE_PARTY_MON = 2400, OP_TRADE_SCENE = 6000}) do
+        if p[name] then op_timeout[p[name]] = frames end
+    end
+    local function timeout_for(op) return deps.timeout_frames or op_timeout[op] or SYNC_TIMEOUT end
     local self = {}
 
     local function present()
@@ -122,7 +135,11 @@ function N.new(profile, deps)
                 seq = (seq + 1) % 65536
                 job.seq = seq
                 if #job.args > 0 then writes:write_bytes(p.BASE + O.args, job.args) end
-                writes:write_u16(p.BASE + O.status, BUSY)
+                -- No Lua-side status=BUSY: the patch sets MB->status itself on every ack (OK/FAIL,
+                -- and ST_BUSY for the async ops), and ack_seq = seq-1 below already keeps a stale
+                -- OK of the previous op from reading as this op's completion (completion needs
+                -- ack == seq). Writing BUSY here also made writes.lua's per-byte recheck of the
+                -- native_idle clause (status ~= busy) refuse the rest of the post.
                 writes:write_u16(p.BASE + O.ack, (seq + 65535) % 65536)
                 writes:write_u16(p.BASE + O.seq, seq)
                 writes:write_u16(p.BASE + O.opcode, job.op) -- publish last
@@ -322,9 +339,14 @@ function N.new(profile, deps)
                 local status, result = io.read_u16(p.BASE + O.status), io.read_u8(p.BASE + O.result)
                 pending = nil -- consume receipt BEFORE any next post can rewrite it
                 finish(job, status == FAIL and "native refused" or nil, result)
-            elseif frame - job.started >= timeout then
+            elseif frame - job.started >= timeout_for(job.op) then
                 -- Never reuse a timed-out slot: opcode==0 can mean an async handler
                 -- still owns it. A reset/absent beacon is the recovery boundary.
+                -- RECORDED LIMIT (C5-6a): the poison also blocks any recovery post, so a trade
+                -- whose OP_SET_ENEMY_PARTY stage timed out cannot post its OP_SET_PARTY_MON
+                -- silent-swap fallback; the trade FSM reads the slot back and reports it as it is.
+                -- A safe recovery post would need to know whether the patch still owns the timed-
+                -- out op, and nothing in the ABI says so, so none is attempted.
                 poisoned = "native timeout"; abort(poisoned)
             end
         end
