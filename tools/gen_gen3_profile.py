@@ -7,6 +7,9 @@ The primary source is the literal address database in `lua/games/gen3_frlge.lua`
 out of the Lua text by a small strict parser for the subset those tables use
 (`KEY = 0xHEX | integer | "string" | true/false/nil | { ... }` plus `+`/`*`
 arithmetic and comments).  The file is never `require`d under a Lua runtime.
+RR-P5 additions are decoded from captured instruction/literal-pool anchors in
+the admitted RR binary. The anchors are shipped for ROM-free generation and
+verified against patch/build/slink_RR.gba whenever that local witness exists.
 
 Packs (PLAN §4, §5.1):
     data/games/gen3_frlg/profile.json   titles firered, leafgreen (admitted; both read the
@@ -44,6 +47,9 @@ STORAGE_HEADER = f"{PRET_PIN}:include/pokemon_storage_system.h"
 # boxes follows u8 currentBox, but BoxPokemon begins with u32 personality:
 # ARM alignment inserts three padding bytes (the header's 0x0001 comment is wrong).
 FRLG_DERIVED = {
+    "EXPERIENCE_TABLE_ENTRY_COUNT": (101, f"{PRET_PIN}:src/data/pokemon/experience_tables.h:18 "
+                                    "(gExperienceTables[][MAX_LEVEL + 1])"),
+    "MAX_LEVEL": (100, f"{PRET_PIN}:include/constants/pokemon.h:187 (MAX_LEVEL)"),
     "BOX_DATA_OFFSET": (4, f"{STORAGE_HEADER}:44-48; "
                          f"{PRET_PIN}:include/pokemon.h:105-108 (u32 alignment)"),
     "BOXES_PER_STORE": (14, f"{STORAGE_HEADER}:7 (TOTAL_BOXES_COUNT)"),
@@ -132,6 +138,88 @@ RR_DERIVED = {
     "SHEDINJA_SPECIES_ID": (303, 'data/games/gen3_frlge/rr_species.json:"303"="Shedinja" '
                             "(RR species table; CFRU keeps this id unrenumbered)"),
 }
+
+# RR-P5 binary witnesses: file offsets, NOT GBA virtual addresses. These bytes
+# were read from the admitted companion SHA1 below and checked against clean RR.
+# Keep complete reader bodies + literal pools, so a pointer alone is not evidence
+# for which field is being accessed. No Capstone dependency in the generator.
+RR_WITNESS_SHA1 = "b7d1e0756fcc66575878affc8f7b95c45386bb1c"
+RR_ROM_ANCHORS = {
+    "calculate_pp": (0x4101C,
+        "10b50004000c1206120e0d4c43001b189b001b191c790b48101803780b4052001341"
+        "9800c018800060436421a2f1e6ff24182406240e201c10bc02bc08470000d0211509a1de2508"),
+    "box_level": (0x3E830,
+        "70b5051c0b21002201f084fa041c2404240c281c1921002201f07cfa031c0122104e1149"
+        "e000001b80004118c87c20256d01684304308019006898420bd80c1c0132fa2a07dc9100"
+        "e07c68430918891908689842f4d9501e0006000e70bc02bc084700004c511509ec987b09"),
+    "trainer_id": (0xCC1E4,
+        "06480268507b0006117b09040843d17a09020843917a0843704700000c500003"),
+    "pp_up_masks": (0x25DEA1, "030c30c0"),
+    # Expanded CFRU code actually loads and stores the callback into gBattleMainFunc.
+    "action_callback_store": (0x1070626, "2d4b2d4a1a60"),
+    "action_callback_pool": (0x10706DC, "844f000341400108"),
+    "action_callback_entry": (0x14040, "f0b557464e464546e0b487b00f480021"),
+}
+
+
+def rr_rom_facts(rom: bytes | None = None) -> dict:
+    """Decode captured RR instructions/literals; verify a supplied ROM before use.
+
+    Embedded anchors keep ordinary profile generation reproducible without a
+    copyrighted ROM. With a local binary, --check also checks every witness byte.
+    A rebuild must be deliberately re-pinned if any witness changes.
+    """
+    anchors = [(name, off, bytes.fromhex(raw)) for name, (off, raw) in RR_ROM_ANCHORS.items()]
+    if rom is not None:
+        for name, off, raw in anchors:
+            if rom[off:off + len(raw)] != raw:
+                raise ValueError(f"RR ROM anchor mismatch: {name} at 0x{off:X}")
+
+    def read(off: int, size: int) -> int:
+        for _, start, raw in anchors:
+            if start <= off and off + size <= start + len(raw):
+                return int.from_bytes(raw[off - start:off - start + size], "little")
+        raise ValueError(f"RR fact reads outside captured anchors: 0x{off:X}")
+
+    def literal(off: int) -> int:
+        ins = read(off, 2)
+        if ins & 0xF800 != 0x4800:
+            raise ValueError(f"not a Thumb LDR literal: 0x{off:X}")
+        return read(((off + 4) & ~3) + (ins & 255) * 4, 4)
+
+    # CalculatePPWithBonus: (move*2 + move)*4, then LDRB +4.
+    move_stride = ((1 << ((read(0x41028, 2) >> 6) & 31)) + 1) \
+        << ((read(0x4102C, 2) >> 6) & 31)
+    pp_offset = (read(0x41030, 2) >> 6) & 31
+    # GetLevelFromBoxMonExp: growth byte +0x13; growth row = 0x20 << 5;
+    # u32 experience entries, and CMP level,#0xFA. RR is NOT vanilla 101/100.
+    row_bytes = (read(0x3E85E, 2) & 255) << ((read(0x3E860, 2) >> 6) & 31)
+    growth_offset = (read(0x3E85C, 2) >> 6) & 31
+    # GetPlayerTrainerId assembles byte offsets D,C,B,A into u32 little endian.
+    ot_offsets = [(read(off, 2) >> 6) & 31 for off in (0xCC1E8, 0xCC1EC, 0xCC1F2, 0xCC1F8)]
+    if ot_offsets != list(range(ot_offsets[-1] + 3, ot_offsets[-1] - 1, -1)):
+        raise ValueError("RR trainer ID reader is not four contiguous bytes")
+    # The canonical SB2 pointer is ROM-derived in write_checkpoint (C3-33).
+    # This witness checks that symbol; it never replaces the legacy profile value.
+    if literal(0xCC1E4) != 0x0300500C:
+        raise ValueError("RR trainer reader no longer uses canonical gSaveBlock2Ptr")
+    if literal(0x1070626) != 0x03004F84 or read(0x107062A, 2) != 0x601A:
+        raise ValueError("RR callback witness no longer stores into gBattleMainFunc")
+    facts = {
+        ("derived", "SB2_OT_ID_OFFSET"): (ot_offsets[-1], "trainer_id:0xCC1E4 byte assembly +0xA..D"),
+        ("rom", "EXPERIENCE_TABLES_ADDR"): (literal(0x3E850), "box_level:LDR@0x3E850 pool@0x3E894"),
+        ("derived", "EXPERIENCE_TABLE_ENTRY_COUNT"): (row_bytes // 4, "box_level:0x3E85E..0x3E862 row stride / u32"),
+        ("derived", "MAX_LEVEL"): (read(0x3E872, 2) & 255, "box_level:CMP@0x3E872"),
+        ("rom", "BATTLE_MOVES_ADDR"): (literal(0x41026), "calculate_pp:LDR@0x41026 pool@0x4105C"),
+        ("derived", "BATTLE_MOVE_ENTRY_SIZE"): (move_stride, "calculate_pp:0x41028..0x4102C index arithmetic"),
+        ("derived", "BATTLE_MOVE_PP_OFFSET"): (pp_offset, "calculate_pp:LDRB@0x41030"),
+        ("rom", "PP_UP_GET_MASK_ADDR"): (literal(0x41032), "calculate_pp:LDR@0x41032 pool@0x41060; bytes@0x25DEA1"),
+        ("derived", "BASESTATS_GROWTH_RATE_OFFSET"): (growth_offset, "box_level:LDRB@0x3E85C"),
+        ("rom", "HANDLE_TURN_ACTION_SELECTION_ADDR"): (literal(0x1070628),
+            "action_callback_store:0x1070626..0x107062A; pool@0x10706DC; entry@0x14040 (Thumb)"),
+    }
+    return {key: (value, f"rom:patch/build/slink_RR.gba sha1={RR_WITNESS_SHA1} {where}")
+            for key, (value, where) in facts.items()}
 
 SCHEMA = "gen3-profile-v1"
 
@@ -469,6 +557,17 @@ def build(pack: str, profiles: dict, source: dict) -> dict:
         for name, (value, where) in RR_DERIVED.items():
             entry["derived"][name] = value
             entry["_src"][f"derived.{name}"] = where
+        for (section, name), (value, where) in rr_rom_facts().items():
+            if name in entry[section] and entry[section][name] != value:
+                raise ValueError(f"RR binary fact would replace existing {section}.{name}")
+            entry[section][name] = value
+            entry["_src"][f"{section}.{name}"] = where
+        entry["rom_thumb"].append("HANDLE_TURN_ACTION_SELECTION_ADDR")
+        entry["rom_thumb"].sort()
+        entry["_rom_anchors"] = {
+            name: {"rom_offset": off, "expected_hex": raw.upper()}
+            for name, (off, raw) in RR_ROM_ANCHORS.items()
+        }
         out["native"] = native_block()
     return out
 
@@ -494,6 +593,10 @@ def main() -> int:
     ap.add_argument("--check", action="store_true",
                     help="exit 1 if a committed profile differs from a fresh generation")
     args = ap.parse_args()
+
+    rr_witness = REPO / "patch/build/slink_RR.gba"
+    if rr_witness.exists():
+        rr_rom_facts(rr_witness.read_bytes())
 
     text = (REPO / SRC).read_text(encoding="utf-8", errors="replace")
     profiles = parse_profiles(text)

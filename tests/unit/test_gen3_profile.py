@@ -1,11 +1,12 @@
 """The Gen 3 packs' profile.json preserves Lua literals and pinned pret additions.
 
-The generator is the only thing allowed to type a Gen 3 address, so every assertion here
-re-derives the expected value from the Lua sources with its own regexes (no Lua runtime,
-and no reuse of the generator's parser for the value checks).
+Legacy values are independently re-derived from Lua sources without executing Lua.
+RR-P5 facts additionally check the admitted binaries, instruction/literal anchors,
+independent direct pool reads, and mutations that must refuse stale witnesses.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import pathlib
 import re
@@ -134,6 +135,7 @@ def test_vanilla_storage_and_party_facts(name: str) -> None:
     # P4 card C4-2a: every additional trainer/location/badges/bag/battle citation this card
     # adds, present for exactly the two vanilla titles and nothing else.
     c4_2a_derived_keys = {
+        "EXPERIENCE_TABLE_ENTRY_COUNT", "MAX_LEVEL",
         "SB2_OT_ID_OFFSET", "SB2_NAME_OFFSET", "SB1_LOCATION_MAP_GROUP_OFFSET",
         "SB1_LOCATION_MAP_NUM_OFFSET", "SB1_BADGE_BYTE_OFFSET", "OUTCOME_WON", "OUTCOME_LOST",
         "OUTCOME_DREW", "OUTCOME_RAN", "OUTCOME_CAUGHT", "BATTLE_TYPE_TRAINER_MASK",
@@ -192,6 +194,10 @@ def test_rr_party_capacity_comes_from_its_existing_detector() -> None:
     shedinja_cite = title["_src"].get("derived.SHEDINJA_SPECIES_ID")
     assert shedinja_cite and "rr_species.json" in shedinja_cite
     base_src["derived.SHEDINJA_SPECIES_ID"] = shedinja_cite
+    for section, key in RR_BINARY_VALUES:
+        cite = title["_src"].get(f"{section}.{key}")
+        assert cite and cite.startswith("rom:patch/build/slink_RR.gba sha1=")
+        base_src[f"{section}.{key}"] = cite
     assert title["_src"] == base_src
     assert title["derived"]["SHEDINJA_SPECIES_ID"] == 303
     # values already agree with the pinned pret constants used for FR/LG (never RR-only guesses)
@@ -199,11 +205,83 @@ def test_rr_party_capacity_comes_from_its_existing_detector() -> None:
     assert title["derived"]["SB1_BADGE_BYTE_OFFSET"] == 0x104
     assert title["derived"]["OUTCOME_CAUGHT"] == 7 and title["derived"]["OUTCOME_RAN"] == 4
     # values this card could NOT find evidence for stay absent (RR-OPEN, reported to the owner)
-    for key in ("SB2_OT_ID_OFFSET", "SB2_NAME_OFFSET", "EXPERIENCE_TABLES_ADDR",
-                "BATTLE_MOVES_ADDR", "BATTLE_MOVE_ENTRY_SIZE", "BATTLE_MOVE_PP_OFFSET",
-                "GMAIN_INBATTLE_OFFSET", "GMAIN_INBATTLE_MASK"):
+    for key in ("SB2_NAME_OFFSET", "GMAIN_INBATTLE_OFFSET", "GMAIN_INBATTLE_MASK"):
         assert key not in title["derived"] and key not in title["ram"] and key not in title["rom"]
-    assert "PP_UP_GET_MASK_ADDR" not in title["rom"]
+
+
+RR_BINARY_VALUES = {
+    ("derived", "SB2_OT_ID_OFFSET"): 0xA,
+    ("rom", "EXPERIENCE_TABLES_ADDR"): 0x0915514C,
+    ("derived", "EXPERIENCE_TABLE_ENTRY_COUNT"): 256,
+    ("derived", "MAX_LEVEL"): 250,
+    ("rom", "BATTLE_MOVES_ADDR"): 0x091521D0,
+    ("derived", "BATTLE_MOVE_ENTRY_SIZE"): 12,
+    ("derived", "BATTLE_MOVE_PP_OFFSET"): 4,
+    ("rom", "PP_UP_GET_MASK_ADDR"): 0x0825DEA1,
+    ("derived", "BASESTATS_GROWTH_RATE_OFFSET"): 0x13,
+    ("rom", "HANDLE_TURN_ACTION_SELECTION_ADDR"): 0x08014041,
+}
+
+
+def test_rr_rom_pins_are_in_the_generated_profile():
+    from tools.gen_gen3_profile import rr_rom_facts
+
+    facts = rr_rom_facts()
+    title = _title("radical_red")
+    for (section, key), expected in RR_BINARY_VALUES.items():
+        assert title[section][key] == facts[section, key][0] == expected
+    assert "HANDLE_TURN_ACTION_SELECTION_ADDR" in title["rom_thumb"]
+    # Odd-address byte data must not accidentally become a Thumb function pin.
+    assert "PP_UP_GET_MASK_ADDR" not in title["rom_thumb"]
+
+
+@pytest.mark.parametrize("anchor", ["calculate_pp", "box_level", "trainer_id", "pp_up_masks",
+                                    "action_callback_store", "action_callback_pool",
+                                    "action_callback_entry"])
+def test_rr_rom_anchor_mutation_refuses_the_facts(anchor):
+    from tools.gen_gen3_profile import RR_ROM_ANCHORS, rr_rom_facts
+
+    end = max(off + len(bytes.fromhex(raw)) for off, raw in RR_ROM_ANCHORS.values())
+    image = bytearray(end)
+    for offset, raw in RR_ROM_ANCHORS.values():
+        image[offset:offset + len(bytes.fromhex(raw))] = bytes.fromhex(raw)
+    assert rr_rom_facts(bytes(image))
+    image[RR_ROM_ANCHORS[anchor][0]] ^= 1
+    with pytest.raises(ValueError, match=f"anchor mismatch: {anchor}"):
+        rr_rom_facts(bytes(image))
+
+
+@pytest.mark.parametrize("path,digest", [
+    (REPO / "patch/build/slink_RR.gba", "b7d1e0756fcc66575878affc8f7b95c45386bb1c"),
+    (pathlib.Path("E:/Google Drive/SLink/Pokemon - Radical Red.gba"),
+     "964f951a0fdaf209e4ea1344883ef0d557bb3a80"),
+])
+def test_rr_rom_anchors_match_both_admitted_binaries(path, digest):
+    from tools.gen_gen3_profile import RR_ROM_ANCHORS, rr_rom_facts
+
+    if not path.exists():
+        pytest.skip("local copyrighted RR ROM absent; embedded-anchor MODEL tests still run")
+    raw = path.read_bytes()
+    assert hashlib.sha1(raw).hexdigest() == digest
+    facts = rr_rom_facts(raw)
+    for (section, key), value in RR_BINARY_VALUES.items():
+        assert facts[section, key][0] == value
+    for name, (offset, expected) in RR_ROM_ANCHORS.items():
+        assert _title("radical_red")["_rom_anchors"][name] == {
+            "rom_offset": offset, "expected_hex": expected.upper(),
+        }
+    # Independent direct literal readers corroborate the generator's Thumb LDR decoder.
+    assert int.from_bytes(raw[0x4105C:0x41060], "little") == 0x091521D0
+    assert int.from_bytes(raw[0x3E894:0x3E898], "little") == 0x0915514C
+    assert raw[0x25DEA1:0x25DEA5] == bytes([3, 12, 48, 192])
+    assert raw[0x11521D0 + 153 * 12 + 4] == 5  # Explosion PP, relocated table
+
+
+@pytest.mark.parametrize("name", ["firered", "leafgreen"])
+def test_frlg_experience_dimensions_are_explicit(name):
+    d = _title(name)["derived"]
+    assert d["EXPERIENCE_TABLE_ENTRY_COUNT"] == 101
+    assert d["MAX_LEVEL"] == 100
 
 
 @pytest.mark.parametrize("name,symbol,section,key", [

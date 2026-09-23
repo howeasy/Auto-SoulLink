@@ -127,9 +127,44 @@
   },
   "titles": {
     "radical_red": {
+      "_rom_anchors": {
+        "action_callback_entry": {
+          "expected_hex": "F0B557464E464546E0B487B00F480021",
+          "rom_offset": 81984
+        },
+        "action_callback_pool": {
+          "expected_hex": "844F000341400108",
+          "rom_offset": 17237724
+        },
+        "action_callback_store": {
+          "expected_hex": "2D4B2D4A1A60",
+          "rom_offset": 17237542
+        },
+        "box_level": {
+          "expected_hex": "70B5051C0B21002201F084FA041C2404240C281C1921002201F07CFA031C0122104E1149E000001B80004118C87C20256D01684304308019006898420BD80C1C0132FA2A07DC9100E07C68430918891908689842F4D9501E0006000E70BC02BC084700004C511509EC987B09",
+          "rom_offset": 256048
+        },
+        "calculate_pp": {
+          "expected_hex": "10B50004000C1206120E0D4C43001B189B001B191C790B48101803780B40520013419800C018800060436421A2F1E6FF24182406240E201C10BC02BC08470000D0211509A1DE2508",
+          "rom_offset": 266268
+        },
+        "pp_up_masks": {
+          "expected_hex": "030C30C0",
+          "rom_offset": 2481825
+        },
+        "trainer_id": {
+          "expected_hex": "06480268507B0006117B09040843D17A09020843917A0843704700000C500003",
+          "rom_offset": 836068
+        }
+      },
       "_src": {
+        "derived.BASESTATS_GROWTH_RATE_OFFSET": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c box_level:LDRB@0x3E85C",
+        "derived.BATTLE_MOVE_ENTRY_SIZE": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c calculate_pp:0x41028..0x4102C index arithmetic",
+        "derived.BATTLE_MOVE_PP_OFFSET": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c calculate_pp:LDRB@0x41030",
         "derived.BATTLE_TYPE_DOUBLE_MASK": "lua/memory_gba.lua:385 (old-client RR profile, production-tested)",
         "derived.BATTLE_TYPE_TRAINER_MASK": "lua/memory_gba.lua:378 (old-client RR profile, production-tested)",
+        "derived.EXPERIENCE_TABLE_ENTRY_COUNT": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c box_level:0x3E85E..0x3E862 row stride / u32",
+        "derived.MAX_LEVEL": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c box_level:CMP@0x3E872",
         "derived.OUTCOME_DREW": "lua/memory_gba.lua:391 (old-client RR profile, production-tested: \"CFRU inserts DREW=3, shifting RAN from 3->4\")",
         "derived.OUTCOME_LOST": "lua/memory_gba.lua:390 (old-client RR profile, production-tested)",
         "derived.OUTCOME_WON": "lua/memory_gba.lua:389 (old-client RR profile, production-tested; unconditional, never overridden per-profile)",
@@ -137,14 +172,22 @@
         "derived.SB1_BADGE_BYTE_OFFSET": "lua/memory_gba.lua:1177,1181 (old-client RR profile, production-tested: M.readBadges is generic over M.SB1_FLAGS_OFFSET)",
         "derived.SB1_LOCATION_MAP_GROUP_OFFSET": "lua/memory_gba.lua:271,1112 (old-client RR profile, production-tested: mapGroup read generically off SB1_PTR_ADDR)",
         "derived.SB1_LOCATION_MAP_NUM_OFFSET": "lua/memory_gba.lua:272,1113 (old-client RR profile, production-tested)",
+        "derived.SB2_OT_ID_OFFSET": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c trainer_id:0xCC1E4 byte assembly +0xA..D",
         "derived.SHEDINJA_SPECIES_ID": "data/games/gen3_frlge/rr_species.json:\"303\"=\"Shedinja\" (RR species table; CFRU keeps this id unrenumbered)",
-        "ram.SB1_PTR_ADDR": "lua/games/gen3_frlge.lua:264 (the old client's address, kept for parity: it is a literal-pool constant inside IntrMain_Buffer, not the pointer -- the new client reads write_checkpoint.pointers.gSaveBlock1Ptr, which is ROM-derived)"
+        "ram.SB1_PTR_ADDR": "lua/games/gen3_frlge.lua:264 (the old client's address, kept for parity: it is a literal-pool constant inside IntrMain_Buffer, not the pointer -- the new client reads write_checkpoint.pointers.gSaveBlock1Ptr, which is ROM-derived)",
+        "rom.BATTLE_MOVES_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c calculate_pp:LDR@0x41026 pool@0x4105C",
+        "rom.EXPERIENCE_TABLES_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c box_level:LDR@0x3E850 pool@0x3E894",
+        "rom.HANDLE_TURN_ACTION_SELECTION_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c action_callback_store:0x1070626..0x107062A; pool@0x10706DC; entry@0x14040 (Thumb)",
+        "rom.PP_UP_GET_MASK_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c calculate_pp:LDR@0x41032 pool@0x41060; bytes@0x25DEA1"
       },
       "admitted": true,
       "derived": {
         "BAG_IN_EWRAM": true,
         "BALL_POCKET_ENC": false,
         "BASESTATS_ENTRY_SIZE": 28,
+        "BASESTATS_GROWTH_RATE_OFFSET": 19,
+        "BATTLE_MOVE_ENTRY_SIZE": 12,
+        "BATTLE_MOVE_PP_OFFSET": 4,
         "BATTLE_RESULTS_FOE_FAINTS_OFF": 1,
         "BATTLE_RESULTS_PLAYER_FAINTS_OFF": 0,
         "BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF": 128,
@@ -183,7 +226,9 @@
         "CFRU_COMPRESSED_BOX": true,
         "CFRU_NO_ENCRYPT": true,
         "COMPRESSED_MON_SIZE": 58,
+        "EXPERIENCE_TABLE_ENTRY_COUNT": 256,
         "GMAIN_CB2_OFFSET": 4,
+        "MAX_LEVEL": 250,
         "OUTCOME_CAUGHT": 7,
         "OUTCOME_DREW": 3,
         "OUTCOME_LOST": 2,
@@ -200,6 +245,7 @@
         "SB1_PARTY_BASE_OFFSET": 56,
         "SB1_VARS_OFFSET": 4096,
         "SB2_ENC_KEY_OFFSET": 3872,
+        "SB2_OT_ID_OFFSET": 10,
         "SE_GAME_OVER": 193,
         "SE_LINKED_KO": 79,
         "SE_NEW_LINK": 2,
@@ -239,15 +285,19 @@
         "TRAINER_OPPONENT_ADDR": 33785518
       },
       "rom": {
+        "BATTLE_MOVES_ADDR": 152379856,
         "CB2_EVOLUTION_BEGIN_ADDR": 135060761,
         "CB2_EVOLUTION_LOAD_ADDR": 135061737,
         "CB2_EVOLUTION_UPDATE_ADDR": 135063313,
         "CB2_TRADE_EVOLUTION_UPDATE_ADDR": 135063341,
         "CFRU_BASESTATS_PTR": 134218172,
+        "EXPERIENCE_TABLES_ADDR": 152392012,
+        "HANDLE_TURN_ACTION_SELECTION_ADDR": 134299713,
         "POST_BATTLE_WRITER_TASKS": [
           151601813,
           151601437
         ],
+        "PP_UP_GET_MASK_ADDR": 136699553,
         "RETURN_FROM_BATTLE_ADDR": 134306649,
         "SE_SONG_HEADERS": {
           "16": 141252996,
@@ -269,6 +319,7 @@
         "CB2_EVOLUTION_LOAD_ADDR",
         "CB2_EVOLUTION_UPDATE_ADDR",
         "CB2_TRADE_EVOLUTION_UPDATE_ADDR",
+        "HANDLE_TURN_ACTION_SELECTION_ADDR",
         "POST_BATTLE_WRITER_TASKS",
         "RETURN_FROM_BATTLE_ADDR"
       ],
