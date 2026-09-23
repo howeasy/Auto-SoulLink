@@ -1,5 +1,5 @@
 # FR run 28 (2026-09-23), coordinator lane, FR ROM, observer on, PLAY_FROM=viridian_pc_deposit_withdraw from slink_fr_route1_faint.State
-## 28a at c3560eac: whiteout on Route 1 (12,25), leg had no recover -> 0a8d4789
+## 28a at c3560eac: whiteout on Route 1 (12,25), leg had no recover -> 0a8d4787
 phase start frame=1 title=firered
 phase resume frame=1 from=viridian_pc_deposit_withdraw
 phase field frame=635 map=(3,0)
