@@ -21,12 +21,13 @@ the cited range. A row whose subject is a *description* rather than a name (a ta
 holding prose) is skipped, as are rows naming several commands.
 
 Rule 4 -- snapshot fields. §4's tables name a wire field in the first cell (`ball_count`,
-`blob_hex`, `pc_boxes`, `maxHP`). When such a row names exactly one such field, carries exactly
-one `server.py`/`state.py` citation and names no other symbol defined in that file, the cited
-range must contain the field string -- that column is supposed to point at the place the server
-consumes the field. The field must also appear somewhere in the cited file: a file-wide absence
-is not a drifted range (rule 2's discipline), so the row is skipped rather than guessed at. Rows
-naming two fields (`hp`, `maxHP`), two citations, or a code symbol in the first cell (`_build_status_dict`,
+`blob_hex`, `pc_boxes`, `maxHP`). When such a row names exactly one such field and names no other
+symbol defined in the cited file, its FIRST `server.py`/`state.py` citation must contain the field
+string -- that column is supposed to point at the place the server consumes the field. Rows with
+several citations are therefore judged once, on the one the row leans on; the rest of the row is
+still rule 1's business. The field must also appear somewhere in the cited file: a file-wide
+absence is not a drifted range (rule 2's discipline), so the row is skipped rather than guessed
+at. Rows naming two fields (`hp`, `maxHP`) or a code symbol in the first cell (`_build_status_dict`,
 the §4.5 builder rows) are skipped too -- measured against the pre-card document, that keeps the
 judged set at the rows whose citation is answerable, and every one it finds is a real drift.
 
@@ -75,6 +76,7 @@ PRE_SWEEP_REV = "7e97cb40"    # before the C4-CITE sweep: rule 1 has plenty to s
 PRE_EVENT_REV = "062f812f"    # before C4-CITE2: rule 2's rows were still stale
 PRE_COMMAND_REV = "cc807cf3"  # before C4-CITE3: rule 3's rows were still stale
 PRE_FIELD_REV = "1729c72e"    # before C4-CITE4: the §4 field rows were still stale
+PRE_FIELD_MULTI_REV = "65ebbac5"  # before C4-CITE5: the multi-citation §4 rows were still stale
 
 
 def _resolve(name: str) -> Path | None:
@@ -168,6 +170,18 @@ def check_citations(text: str) -> list[str]:
                         f"symbol the row names ({where})")
                 continue
 
+            # rule 4: a §4 snapshot-field row must cite a range that names the field. It judges
+            # the row's FIRST server.py/state.py citation -- the one the row leans on -- so a row
+            # carrying several citations is judged once, not once per citation.
+            if in_section_4 and cites and cites[0].group(0) == match.group(0):
+                field = _field_name(subject, spans, tokens)
+                if field is not None:
+                    if field in "\n".join(text_cache[str(path)]) and field not in window:
+                        problems.append(
+                            f"docs/protocol.md:{lineno}: {match.group(0)} does not contain the "
+                            f"`{field}` field the row documents")
+                    continue
+
             # rules 2 and 3 both need the row to carry exactly this one citation
             if len(cites) != 1 or cites[0].group(0) != match.group(0):
                 continue
@@ -181,16 +195,6 @@ def check_citations(text: str) -> list[str]:
                         f"docs/protocol.md:{lineno}: {match.group(0)} does not contain the "
                         f"command/field(s) the row names ({', '.join(missing)})")
                 continue
-
-            # rule 4: a §4 snapshot-field row must cite a range that names the field
-            if in_section_4:
-                field = _field_name(subject, spans, tokens)
-                if field is not None:
-                    if field in "\n".join(text_cache[str(path)]) and field not in window:
-                        problems.append(
-                            f"docs/protocol.md:{lineno}: {match.group(0)} does not contain the "
-                            f"`{field}` field the row documents")
-                    continue
 
             # rule 2: a pure wire-event row must cite that event's handling
             if len(events) != 1:
@@ -311,14 +315,15 @@ def test_the_command_rule_catches_the_pre_command_sweep_document():
 
 
 def test_the_field_rule_catches_the_pre_field_sweep_document():
-    """Falsifier for rule 4, pinned to the revision before this card.
+    """Falsifier for rule 4, pinned to the revision before C4-CITE4.
 
-    Measured on that revision: rule 4 judges 23 of §4's 58 table rows and flags all 23 -- the
-    rows carry one citation, name one field, and that citation does not contain the field. The
-    drift is not subtle: `server.py:3944-3948` (cited for the foe `species_id`/`level`/`active`)
-    is the Twitch-bot startup, `4402` (box `slot`) is the backup listing, `3834-3859` (box
-    `level`) is the bot config handlers, and `8019` (box `box`) is past the end of the file
-    (5153 lines at that revision).
+    Measured on that revision with rule 4 as it stands (it judges the first citation of
+    multi-citation rows too, as of C4-CITE5): 30 of §4's 48 field rows are judged and all 30 are
+    flagged -- 23 whose only server.py/state.py citation does not contain the field, plus the 7
+    multi-citation rows C4-CITE5 re-anchored. The drift is not subtle: `server.py:3944-3948`
+    (cited for the foe `species_id`/`level`/`active`) is the Twitch-bot startup, `4402` (box
+    `slot`) is the backup listing, `3834-3859` (box `level`) is the bot config handlers, and
+    `8019` (box `box`) is past the end of the file (5153 lines at that revision).
     """
     text = _doc_at(PRE_FIELD_REV)
     if text is None or "`server.py:3021-3022`" not in text:
@@ -327,3 +332,27 @@ def test_the_field_rule_catches_the_pre_field_sweep_document():
     assert problems, "the pre-field-sweep document passed; rule 4 has no teeth"
     assert any("server.py:3021-3022" in p and "`ball_count`" in p for p in problems), problems
     assert any("server.py:3944" in p and "`species_id`" in p for p in problems), problems
+
+
+def test_the_field_rule_judges_the_first_citation_of_multi_citation_rows():
+    """Falsifier for the widening, pinned to the revision before C4-CITE5.
+
+    At that revision the single-citation §4 rows were already re-anchored (C4-CITE4), so the only
+    rows the widened rule can still see are the multi-citation ones: exactly 7, every one stale
+    and every one reported once (the rule judges the row's first server.py/state.py citation, so
+    a row with three citations does not produce three findings). The witnesses, read: `state.py:952`
+    (for `maxHP`) is a `pass` in the save-loader's try; `state.py:964` (`hp`) is the bonus_keys
+    restore; `state.py:2780`/`2778` (`level`/`slot`) are the pending_bonus and pending_memorials
+    refs; `state.py:1033-1046` (`species_id`) is the identity-mismatch block; `server.py:3779`
+    (`active`) is a docstring example; `server.py:3866` (`status_cond`) is a `pass`.
+    """
+    text = _doc_at(PRE_FIELD_MULTI_REV)
+    if text is None or "`state.py:952`" not in text:
+        pytest.skip(f"{PRE_FIELD_MULTI_REV}:docs/protocol.md unavailable or already re-anchored")
+    problems = check_citations(text)
+    field_problems = [p for p in problems if "field the row documents" in p]
+    assert len(field_problems) == 7, problems
+    assert len(field_problems) == len(problems), problems
+    assert any("state.py:952" in p and "`maxHP`" in p for p in problems), problems
+    assert any("server.py:3779" in p and "`active`" in p for p in problems), problems
+    assert any("state.py:1033-1046" in p and "`species_id`" in p for p in problems), problems

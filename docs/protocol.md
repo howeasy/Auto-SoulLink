@@ -229,14 +229,14 @@ Built by `build_party_snapshot` (`gen3_frlge_client.lua:1186-1314`, fields at `1
 | Field | Type | Required | Server consumer | Cite |
 |---|---|---|---|---|
 | `key` | key | **MUST** | `party_keys` (`m["key"]` — a missing key raises `KeyError` in `_handle_hello` and kills the connection coroutine), `_reconcile_party_keys`, blobs, `party_details` (skipped if falsy) | `state.py:1003`, `state.py:2362`, `server.py:2899` |
-| `maxHP` | int | MUST | hello: only `maxHP > 0` entries count as party members; HP bars | `state.py:952`, `server.py:3863` |
-| `hp` | int | MUST | hello offline-faint detection (`hp == 0`), alive set for re-quarantine; HP bars | `state.py:964`, `state.py:980-997` |
-| `level` | int | MUST | `partner_blobs.level`, display back-fill, `_resolve_level`, killfeed level | `state.py:2780`, `server.py:4709` |
-| `slot` | int 0-5 | SHOULD | `partner_blobs.slot` (trade `apply_trade.slot`), party ordering (`999` fallback) | `state.py:2778`, `server.py:8081-8089` |
-| `species_id` | int (game-internal) | SHOULD | display back-fill into MonInfo, blobs, sprites, names, types | `state.py:1033-1046`, `server.py:3385-3388` |
+| `maxHP` | int | MUST | hello: only `maxHP > 0` entries count as party members; HP bars | `state.py:1101`, `server.py:2990-3006` |
+| `hp` | int | MUST | hello offline-faint detection (`hp == 0`), alive set for re-quarantine; HP bars | `state.py:1113`, `state.py:1127-1138` |
+| `level` | int | MUST | `partner_blobs.level`, display back-fill, `_resolve_level`, killfeed level | `state.py:3085`, `server.py:4709` |
+| `slot` | int 0-5 | SHOULD | `partner_blobs.slot` (trade `apply_trade.slot`), party ordering (`999` fallback) | `state.py:3083`, `server.py:4707` |
+| `species_id` | int (game-internal) | SHOULD | display back-fill into MonInfo, blobs, sprites, names, types | `state.py:1182`, `server.py:2460-2463` |
 | `nickname` | str | SHOULD | MonInfo back-fill, HUD labels, dashboard | `state.py:1176-1191` |
-| `active` | bool | SHOULD (battle) | active-battler marker, `stat_stages` shown only when true, doubles inference on foes | `server.py:3779`, `server.py:3871`, `server.py:5404` |
-| `status_cond` | int (Gen 3 `status1` layout) | SHOULD | `status_icon_html` (dashboard) and `adapter.status_token` (`link_panel`) | `server.py:3866`, `server.py:2604`, `html_render.py:150-166` |
+| `active` | bool | SHOULD (battle) | active-battler marker, `stat_stages` shown only when true, doubles inference on foes | `server.py:3011-3012`, `server.py:2934`, `server.py:2126-2128` |
+| `status_cond` | int (Gen 3 `status1` layout) | SHOULD | `status_icon_html` (dashboard) and `adapter.status_token` (`link_panel`) | `server.py:3010`, `server.py:1645`, `html_render.py:150-166` |
 | `stat_stages` | list[7] of int 0-12, 6 = neutral, order ATK,DEF,SPD,SATK,SDEF,ACC,EVA; `nil`/absent when not active | optional | `stat_stages_html(stages, adapter.stat_stage_labels())` — `int(raw)-6` | `html_render.py:169-196`, `server.py:3011`, `memory_gba.lua:437-446` |
 | `moves` | list[4] int move ids | optional | `move_details` via `adapter.move_data` | `server.py:2421-2447` |
 | `pp` | list[4] int | optional | `current_pp` | `server.py:2439-2446` |
@@ -300,7 +300,7 @@ There is **no** "active box index" on the wire.
 | Builder | Reads | Adapter calls |
 |---|---|---|
 | `_build_status_dict` `server.py:2407-2652` | `connected_players`, `player_area(_id)`, `ball_count`, `badges`, `kanto_badges`, `trainer_name`, `pc_boxes`, `party_details` (ordered by `slot`), `battle_state`, `identity_error`, `admission`, links/killfeed/pending/bonus | `species_name`, `sprite_html(sid, form)`, `ability_name(aid, sid)`, `move_data`, `area_display_name`, `gym_badge_slugs(rom_type)`, `encounter_table` + `sprite_src` via `adapter_for(pid)` |
-| `_build_status_html` `server.py:3608+` | the dict above; per mon: `nickname, species_id, gender, sprite_html, active, level, held_item_id, ability_name/id, move_details, hp, maxHP, status_cond, stat_stages` | `supports_abilities` (hide column, `server.py:3736`), `gender_from_key`, `item_name`, `ability_description`, `stat_stage_labels` (`server.py:3870`, `server.py:3967`), `species_types`/`type_name` (via `type_badges_html`), `memorial_box_index`, `trainer_info` |
+| `_handle_dashboard_template` `server.py:2672-2688` | the dict above; per mon: `nickname, species_id, gender, sprite_html, active, level, held_item_id, ability_name/id, move_details, hp, maxHP, status_cond, stat_stages` | `supports_abilities`, `stat_stage_labels` (`server/ui_capabilities.py:26-30`), `gender_from_key`, `item_name`, `ability_description`, `species_types`/`type_name`, `memorial_box_index`, `trainer_info` |
 | `_build_link_panel` `server.py:1606-1722` | links, `party_details` (`species_id, nickname, level, hp, maxHP, status_cond`), `_mon_cache`, `area_states`, `SoulLinkState.player_badges` (count) or `SLinkServer.player_badges` (bitmask) | `area_display_name`, `species_name`, `status_token`, `info_panel_width`, `supports_info_panel` |
 | `_build_party_overlay_context` `server.py:2854-2900` | `party_keys` order, `party_details` `hp,maxHP,species_id,species_name,nickname,level,sprite_html,status_cond,stat_stages,active` | — |
 | `_build_badges_overlay_context` `server.py:3270-3289` | `badges` bits 0-7, `kanto_badges` bits 0-7 for slugs 8+ | `gym_badge_slugs` |
