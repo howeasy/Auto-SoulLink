@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,6 +19,11 @@ from lupa import LuaError, LuaRuntime
 
 from tools import gen2_fixtures as g, run_gb_gate
 from tools.gen2_source_data import load_context
+
+# The pure route-driver harness (lua/tests/gen2_scripted_play.lua), reused as tests/unit/
+# test_gen2_scripted_play.py reuses it: the driver, its observation builder and one step.
+from tests.unit.test_gen2_fixtures import driver as route_driver, point as route_point, step as route_step
+from tests.unit.test_gen2_fixtures import lua as lua_runtime  # noqa: F401  (pytest fixture)
 
 ROOT = Path(__file__).resolve().parents[2]
 GATE = ROOT / "lua/tests/test_gen2_scripted_gate.lua"
@@ -62,6 +68,110 @@ def profile_wrapper(title, drop=()):
 def charmap(title):
     return cached(("charmap", title), lambda: dict(LuaRuntime().execute(
         (ROOT / f"data/games/gen2_{title}/charmap.lua").read_text(encoding="utf-8"))["encoding"]))
+
+
+# --- the gate's own constants, and the screens the engine draws -------------------------------------
+
+def gate_library():
+    """The gate module in LIBRARY mode (SLINK_GEN2_GATE_LIBRARY: no BizHawk globals, no main flow), so
+    its data can be asserted here rather than copied into this file."""
+    return cached(("gate",), lambda: _load_gate())
+
+
+def _load_gate():
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    runtime.globals().SLINK_GEN2_GATE_LIBRARY = True
+    return runtime, runtime.execute(GATE.read_text(encoding="utf-8"))
+
+
+def battle_grid():
+    """G.BATTLE_MENU_GRID, the source geometry the gate's battle_menu read uses."""
+    return gate_library()[1]["BATTLE_MENU_GRID"]
+
+
+def grid_as_python(grid):
+    """A grid lua table as plain data: the scalar fields plus each label's glyph run."""
+    out = {name: grid[name] for name in ("x", "y", "rows", "columns", "spacing")}
+    out["labels"] = [[grid["labels"][i][j] for j in range(1, len(grid["labels"][i]) + 1)]
+                     for i in range(1, grid["rows"] * grid["columns"] + 1)]
+    return out
+
+
+POKECRYSTAL = ROOT / ".cache/gen2-build/pokecrystal"
+BATTLE_MENU_HEADER = POKECRYSTAL / "engine/battle/menu.asm"
+
+
+def source_battle_menu_grid():
+    """BattleMenuHeader's geometry as the pinned pokecrystal source states it -- the same derivation the
+    U1 live lane makes (tests/live/test_gen2_frame_align.py:battle_menu_grid), from the same sources.
+    Screens in this file are drawn from THIS, never from the gate's constant, so a constant that drifts
+    from the source is caught by the reader tests and not mirrored by the screen they are handed."""
+    return cached(("source-battle-grid",), _source_battle_menu_grid)
+
+
+def _source_battle_menu_grid():
+    data = re.search(r"^BattleMenuHeader:$(.*?)^SafariBattleMenuHeader:",
+                     BATTLE_MENU_HEADER.read_text(encoding="utf-8"), re.M | re.S)[1]
+    flags = re.search(r"^\s*db (.*?) ; flags$", data.split(".MenuData:")[1], re.M)[1]
+    assert "STATICMENU_CURSOR" in flags and "NO_TOP_SPACING" not in flags, flags
+    left, top = map(int, re.search(r"menu_coords (\d+), (\d+),", data).groups())
+    rows, columns = map(int, re.search(r"dn (\d+), (\d+) ; rows, columns", data).groups())
+    spacing = int(re.search(r"db (\d+) ; spacing", data)[1])
+    labels = re.findall(r'db "([^"]*)@"', data)
+    assert len(labels) == rows * columns and "PACK" in labels, labels
+    assert re.search(r'^PlacePKMNText::\s+db "<PK><MN>@"',
+                     (POKECRYSTAL / "home/text.asm").read_text(encoding="utf-8"), re.M)
+    return {"x": left + 2, "y": top + 2, "rows": rows, "columns": columns, "spacing": spacing,
+            "labels": [["<PK>", "<MN>"] if label == "<PKMN>" else list(label) for label in labels]}
+
+
+def screen_tokens(text):
+    """`text` as the tilemap cells it writes: <PK> is one cell, every other character one cell."""
+    found, i = [], 0
+    while i < len(text):
+        end = text.index(">", i) + 1 if text[i] == "<" else i + 1
+        found.append(text[i:end])
+        i = end
+    return found
+
+
+def screen_box(rows, x0, y0, x1, y1):
+    for x in range(x0 + 1, x1):
+        rows[y0][x] = rows[y1][x] = "─"
+    for y in range(y0 + 1, y1):
+        rows[y][x0] = rows[y][x1] = "│"
+    rows[y0][x0], rows[y0][x1], rows[y1][x0], rows[y1][x1] = "┌", "┐", "└", "┘"
+
+
+def screen_text_at(rows, x, y, text):
+    for n, token in enumerate(screen_tokens(text)):
+        rows[y][x + n] = token
+
+
+def blank_screen(width=20, height=18):
+    return [[" "] * width for _ in range(height)]
+
+
+def menu_screen(rows, items, cursor, *, x0=0, y0=0, columns=1, grid=None, box=None):
+    """A boxed menu as the engine draws it, the cursor one tile left of each label (which is what
+    engine/menus/menu.asm:159-165 writes, and why the single-column read joins "FIGHT <PK><MN>").
+    `grid` places the labels at a source geometry instead (first label at grid.x, grid.y, columns
+    stepped by `spacing`, rows 2 tiles apart); `box` overrides the border span (a scrolling menu's own
+    menu_coords, e.g. the Ball pocket's 7, 1 .. SCREEN_WIDTH-1, TEXTBOX_Y-1)."""
+    if grid is None:
+        width = max(len(screen_tokens(item)) for item in items) + 2
+        span = box or (x0, y0, x0 + 1 + columns * width, y0 + 2 * ((len(items) + columns - 1) // columns))
+        cells = [(x0 + 2 + (i % columns) * width, y0 + 1 + 2 * (i // columns)) for i in range(len(items))]
+    else:
+        columns = grid["columns"]
+        span = (grid["x"] - 2, grid["y"] - 2, len(rows[0]) - 1, len(rows) - 1)
+        cells = [(grid["x"] + (i % columns) * grid["spacing"], grid["y"] + 2 * (i // columns))
+                 for i in range(len(items))]
+    screen_box(rows, *span)
+    for index, ((x, y), item) in enumerate(zip(cells, items)):
+        rows[y][x - 1] = "▶" if index == cursor else " "
+        screen_text_at(rows, x, y, item)
+    return rows
 
 
 class Input:
@@ -188,23 +298,13 @@ class Sim:
 
     @staticmethod
     def tokens(text):
-        found, i = [], 0
-        while i < len(text):
-            end = text.index(">", i) + 1 if text[i] == "<" else i + 1
-            found.append(text[i:end])
-            i = end
-        return found
+        return screen_tokens(text)
 
     def text_at(self, x, y, text):
-        for n, token in enumerate(self.tokens(text)):
-            self.rows[y][x + n] = token
+        screen_text_at(self.rows, x, y, text)
 
     def box(self, x0, y0, x1, y1):
-        for x in range(x0 + 1, x1):
-            self.rows[y0][x] = self.rows[y1][x] = "─"
-        for y in range(y0 + 1, y1):
-            self.rows[y][x0] = self.rows[y][x1] = "│"
-        self.rows[y0][x0], self.rows[y0][x1], self.rows[y1][x0], self.rows[y1][x1] = "┌", "┐", "└", "┘"
+        screen_box(self.rows, x0, y0, x1, y1)
 
     def textbox(self, *lines):
         self.box(0, 12, 19, 17)
@@ -233,22 +333,14 @@ class Sim:
         yield from self.until("A", kind)
         self.clear()
 
-    def menu(self, kind, items, expect, *, columns=1, at=(0, 0), lines=(), via=None):
+    def menu(self, kind, items, expect, *, columns=1, at=(0, 0), lines=(), via=None, grid=None):
         self.clear()
         if lines:
             self.textbox(*lines)
-        x0, y0 = at
-        width = max(len(self.tokens(item)) for item in items) + 2
-        rows = (len(items) + columns - 1) // columns
-        x1, y1 = x0 + 1 + columns * width, y0 + 2 * rows
-        self.box(x0, y0, x1, y1)
         cursor = 0
 
         def render():
-            for index, item in enumerate(items):
-                x, y = x0 + 1 + (index % columns) * width, y0 + 1 + 2 * (index // columns)
-                self.rows[y][x] = "▶" if index == cursor else " "
-                self.text_at(x + 1, y, item)
+            menu_screen(self.rows, items, cursor, x0=at[0], y0=at[1], columns=columns, grid=grid)
             self.draw()
 
         render()
@@ -394,7 +486,11 @@ class Sim:
     def battle(self):
         self.put("wBattleMode", [1])
         yield from self.wait(4)
-        yield from self.menu("battle_menu", ["FIGHT", "<PK><MN>", "PACK", "RUN"], "RUN", columns=2, at=(4, 12))
+        # The battle menu at its own source geometry (BattleMenuHeader, derived from the pinned source
+        # here rather than from the gate's constant): the gate reads this screen at the pinned cells,
+        # exactly as the running cartridge draws it, so a wrong constant fails here too.
+        yield from self.menu("battle_menu", ["FIGHT", "<PK><MN>", "PACK", "RUN"], "RUN", columns=2,
+                             grid=source_battle_menu_grid())
         yield from self.text("Got away safely!")
         self.put("wBattleMode", [0])
 
@@ -959,3 +1055,141 @@ def test_qualification_bad_binding_refuses_before_any_input(tmp_path, bad, match
 def test_gate_script_binding_declares_its_terminal_result_path():
     assert (ROOT / g.GATE_SCRIPT).is_file()
     assert Path(run_gb_gate._result_path_for(g.GATE_SCRIPT)).name == "test_gen2_scripted_gate_result.txt"
+
+
+# --- the shared battle-menu read (card gen2-N17) ---------------------------------------------------
+
+BATTLE_ITEMS = ["FIGHT", "<PK><MN>", "PACK", "RUN"]
+HOLD = 12  # lua/tests/gen2_scripted_play.lua press(): frames a native press is held
+
+
+def battle_screen(cursor=0, *, items=None, grid=None):
+    """The battle menu as the engine draws it, at the geometry the pinned source states (a `grid` here
+    overrides it for the refusal cases: the grid is what places the labels, so a shifted screen is a
+    different menu)."""
+    return menu_screen(blank_screen(), items or BATTLE_ITEMS, cursor, grid=grid or source_battle_menu_grid())
+
+
+def press_then_release(d, value):
+    """The route driver holds a native press for exactly HOLD observed frames, then consumes one
+    release frame (tests/unit/test_gen2_scripted_play.py's helper, same contract)."""
+    buttons, phase, request = route_step(d, value)
+    for _ in range(HOLD - 1):
+        assert route_step(d, value)[0] == buttons, "expected the press held for HOLD frames"
+    assert route_step(d, value)[0] == {}, "expected the driver's one-frame release"
+    return buttons, phase, request
+
+
+def test_the_gate_battle_menu_grid_is_the_pinned_header_geometry():
+    """G.BATTLE_MENU_GRID against BattleMenuHeader itself: the first label cell (left+2, top+2), rows,
+    columns, spacing and every label's glyph run, derived from the pinned pokecrystal source the same
+    way the U1 live lane derives it. Skips only where that pinned tree is absent."""
+    if not BATTLE_MENU_HEADER.exists():
+        pytest.skip(f"pinned pokecrystal source not present: {BATTLE_MENU_HEADER}")
+    assert grid_as_python(battle_grid()) == source_battle_menu_grid()
+
+
+def test_the_grid_read_reads_the_two_column_battle_menu():
+    """FIGHT / <PK><MN> / PACK / RUN, cursor one tile left of a label: all four items at their own cells,
+    the cursor index of the marked one, and the two columns the route driver needs. The nil-grid read of
+    the very same screen is untouched, so a caller without a grid still gets the pre-N17 join."""
+    lua, gate = gate_library()
+    for cursor in range(len(BATTLE_ITEMS)):
+        parsed = gate.parse_menu(lua.table_from(battle_screen(cursor), recursive=True), 20, 18, battle_grid())
+        assert list(parsed["items"].values()) == BATTLE_ITEMS
+        assert (parsed["cursor"], parsed["columns"]) == (cursor + 1, 2)
+    legacy = gate.parse_menu(lua.table_from(battle_screen(0), recursive=True), 20, 18)
+    assert list(legacy["items"].values()) == ["FIGHT <PK><MN>", "PACK", "RUN"]
+    assert (legacy["cursor"], legacy["columns"]) == (1, 2)
+
+
+def test_a_menu_of_another_shape_is_refused_never_silently_reread():
+    """The cannot-silently-accept property: labels off the pinned cells, a second cursor, a missing
+    label, a missing cursor and a blank screen all read as no menu at all."""
+    lua, gate = gate_library()
+
+    def read(rows):
+        return gate.parse_menu(lua.table_from(rows, recursive=True), 20, 18, battle_grid())
+
+    assert read(battle_screen(0)) is not None
+    # SafariBattleMenuHeader's own geometry (menu_coords 0, 12; db 11 spacing) carrying battle labels.
+    assert read(battle_screen(0, grid={"x": 2, "y": 14, "rows": 2, "columns": 2, "spacing": 11})) is None
+    shifted = battle_screen(0, grid={"x": 11, "y": 14, "rows": 2, "columns": 2, "spacing": 6})
+    assert read(shifted) is None
+    second = battle_screen(0)
+    second[14][15] = "▶"                                  # a second cursor (the col-2 row-1 cursor cell)
+    assert read(second) is None
+    unlabelled = battle_screen(0)
+    unlabelled[14][16] = "X"                              # the <PKMN> label off its cell
+    assert read(unlabelled) is None
+    unmarked = battle_screen(0)
+    unmarked[14][9] = " "                                 # no cursor anywhere
+    assert read(unmarked) is None
+    assert read(blank_screen()) is None
+
+
+def test_the_route_driver_selects_run_through_the_shared_grid_read(lua_runtime):
+    """lua/tests/gen2_scripted_play.lua's battle_menu arm on the screen the engine really draws: the shared
+    read hands it four items in a 2x2 menu, so the arm walks FIGHT -> RUN (Right, Down) and confirms it.
+    The pre-N17 read of the same screen joins FIGHT and <PKMN> into one item, and the same arm's presses
+    come out as Down, A -- a different item order, which is the drift this card closes."""
+    runtime, gate = gate_library()
+    parsed = gate.parse_menu(runtime.table_from(battle_screen(0), recursive=True), 20, 18, battle_grid())
+    items = list(parsed["items"].values())
+    d, f = route_driver(lua_runtime, "crystal", "battle")
+
+    def observation(cursor):
+        value = route_point(lua_runtime, f, "Route29", 0, 0, battle_mode=1, overworld_ready=False)
+        value["ui"] = lua_runtime.table_from({"kind": "battle_menu",
+                                              "origin": f["ui_origins"]["battle_menu"]["symbol"],
+                                              "items": lua_runtime.table_from(items), "cursor": cursor,
+                                              "columns": parsed["columns"]}, recursive=True)
+        value["input_ready"] = True
+        return value
+
+    cursor, presses = parsed["cursor"], []
+    moves = {"Up": -2, "Down": 2, "Left": -1, "Right": 1}
+    for _ in range(len(items) + 2):
+        buttons, phase, _ = press_then_release(d, observation(cursor))
+        assert buttons is not None and len(buttons) == 1, (buttons, phase)
+        button = next(iter(buttons))
+        presses.append(button)
+        if button == "A":
+            assert items[cursor - 1] == "RUN", (cursor, items)
+            break
+        cursor += moves[button]
+    else:
+        raise AssertionError(f"the driver never confirmed RUN: {presses}")
+    assert presses == ["Right", "Down", "A"]
+
+
+# kind -> (labels as the screen draws them, 0-based cursor cell, (x0, y0, box override))
+SINGLE_COLUMN = {
+    "start_menu": (["POKéMON", "PACK", "POKéGEAR", "CHRIS", "SAVE", "OPTION", "EXIT"], 5, (8, 0, None)),
+    "yes_no": (["YES", "NO"], 0, (13, 6, None)),
+    # BattlePack's Ball pocket: BallsPocketMenuHeader, engine/items/pack.asm:1507-1520, a scrolling menu
+    # at menu_coords 7, 1, SCREEN_WIDTH-1, TEXTBOX_Y-1. The quantity column is left out: it is drawn at
+    # the menu's right edge and is not what this read is about.
+    "pack_balls": (["POKé BALL", "GREAT BALL", "CANCEL"], 0, (7, 1, (7, 1, 19, 11))),
+}
+# Captured from the gate BEFORE the grid branch landed (a throwaway script over these same screens), then
+# pinned: the nil-grid read must keep returning exactly this.
+EXPECT_SINGLE_COLUMN = {
+    "start_menu": (["POKéMON", "PACK", "POKéGEAR", "CHRIS", "SAVE", "OPTION", "EXIT"], 6, 1),
+    "yes_no": (["YES", "NO"], 1, 1),
+    "pack_balls": (["POKé BALL", "GREAT BALL", "CANCEL"], 1, 1),
+}
+
+
+@pytest.mark.parametrize("kind", sorted(EXPECT_SINGLE_COLUMN))
+def test_single_column_menus_parse_exactly_as_before_the_grid_branch(kind):
+    """The single-column kinds (the START menu the route opens with SAVE selected, a Yes/No box, a Ball
+    pocket) through parse_menu with no grid: items, cursor and columns are exactly what the pre-change
+    gate returned for these screens. A space inside an item name is still one item ("POKé BALL")."""
+    labels, selected, (x0, y0, box) = SINGLE_COLUMN[kind]
+    lua, gate = gate_library()
+    rows = menu_screen(blank_screen(), labels, selected, x0=x0, y0=y0, box=box)
+    parsed = gate.parse_menu(lua.table_from(rows, recursive=True), 20, 18)
+    items, cursor, columns = EXPECT_SINGLE_COLUMN[kind]
+    assert list(parsed["items"].values()) == items
+    assert (parsed["cursor"], parsed["columns"]) == (cursor, columns)

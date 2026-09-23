@@ -66,6 +66,15 @@ G.ONE_SHOT_KINDS = {continue_confirm=true}
 G.CONFIRM = {A=true, B=true, Start=true}
 -- Charmap glyph names (data/games/gen2_<title>/charmap.lua), not byte values.
 G.GLYPH = {cursor="▶", top_left="┌", bottom_left="└", side="│", space=" "}
+-- The battle menu's source geometry, pinned from BattleMenuHeader (engine/battle/menu.asm:31-48):
+-- menu_coords 8, 12 (left, top), dn 2, 2 (rows, columns), db 6 (spacing), labels FIGHT/<PKMN>/PACK/RUN
+-- under STATICMENU_CURSOR | STATICMENU_DISABLE_B and no STATICMENU_NO_TOP_SPACING. So
+-- GetMenuTextStartCoord puts the first label at (left+2, top+2) = (10, 14) 0-based (home/menu.asm:214-235),
+-- Place2DMenuItemStrings steps columns by `spacing` and rows by 2 tiles (engine/menus/menu.asm:117-157),
+-- and the cursor cell is one tile left of each label (engine/menus/menu.asm:159-165). <PKMN> prints as
+-- <PK><MN> (home/text.asm:316,408), so each label is the glyph run the tilemap really holds.
+G.BATTLE_MENU_GRID = {x=10, y=14, rows=2, columns=2, spacing=6,
+    labels={{"F","I","G","H","T"}, {"<PK>","<MN>"}, {"P","A","C","K"}, {"R","U","N"}}}
 G.REQUIRED_RAM = {"wMapGroup", "wPartyCount", "wBattleMode", "wSavedAtLeastOnce", "wNumBalls", "wBalls",
     "wTilemap", "wObjectStructs", "wTileUp", "wTileDown", "wTileLeft", "wTileRight",
     "wPokegearFlags", "wEventFlags", "wSaveFileExists"}
@@ -263,6 +272,11 @@ function G.context(api, getenv)
     assert(type(charmap) == "table" and (charmap.source or {}).rom_sha1 == env.rom_sha1
            and type(charmap.glyphs) == "table" and type(charmap.encoding) == "table", "charmap belongs to another ROM")
     for _, glyph in pairs(G.GLYPH) do assert(charmap.encoding[glyph] ~= nil, "charmap lacks glyph " .. glyph) end
+    -- The grid's labels are matched against the decoded tilemap, so an unencodable glyph would read as a
+    -- menu that never matches instead of refusing: same authoring check as G.GLYPH above.
+    for _, glyphs in ipairs(G.BATTLE_MENU_GRID.labels) do
+        for _, glyph in ipairs(glyphs) do assert(charmap.encoding[glyph] ~= nil, "charmap lacks glyph " .. glyph) end
+    end
     local hash = api.romhash()
     assert(type(hash) == "string" and hash:lower() == env.rom_sha1, "running ROM differs from the selected SHA1")
     assert(api.systemid() == "GBC", "running core is not in CGB mode")
@@ -301,9 +315,33 @@ function G.context(api, getenv)
     return ctx
 end
 
--- Pure screen parsing over a decoded tilemap (rows of charmap glyph names).
-function G.parse_menu(rows, width, height)
+-- Pure screen parsing over a decoded tilemap (rows of charmap glyph names). Without a grid this is the
+-- single-column read, unchanged. With one (a source geometry, G.BATTLE_MENU_GRID) every label's full
+-- glyph run must sit at its derived cell and the cursor must sit one tile left of exactly one of them:
+-- a menu of any other shape is refused, never silently re-read as this one.
+function G.parse_menu(rows, width, height, grid)
     local g = G.GLYPH
+    if grid then
+        local items, cursor = {}, nil
+        for r = 0, grid.rows - 1 do
+            local row = rows[grid.y + 2 * r + 1]
+            if type(row) ~= "table" then return nil end
+            for c = 0, grid.columns - 1 do
+                local index, x = r * grid.columns + c + 1, grid.x + c * grid.spacing + 1
+                local glyphs = grid.labels[index]
+                for i, glyph in ipairs(glyphs) do
+                    if row[x + i - 1] ~= glyph then return nil end
+                end
+                if row[x - 1] == g.cursor then
+                    if cursor then return nil end
+                    cursor = index
+                end
+                items[index] = table.concat(glyphs)
+            end
+        end
+        if not cursor then return nil end
+        return {items=items, cursor=cursor, columns=grid.columns}
+    end
     local cx, cy
     for y = 1, height do
         for x = 1, width do
@@ -452,7 +490,8 @@ function G.observer(ctx)
                 and (not G.LOOP_KINDS[u.kind] or frame - u.last <= G.LOOP_WINDOW)
             if G.MENU_KINDS[u.kind] then
                 local rows = G.screen(ctx)
-                local menu = G.parse_menu(rows, obs.screen.width, obs.screen.height)
+                local menu = G.parse_menu(rows, obs.screen.width, obs.screen.height,
+                    u.kind == "battle_menu" and G.BATTLE_MENU_GRID or nil)
                 if menu then view.items, view.cursor, view.columns = menu.items, menu.cursor, menu.columns
                 else ready = false end
                 if u.kind == "yes_no" then view.prompt = G.classify_prompt(rows, ctx.prompts) end
