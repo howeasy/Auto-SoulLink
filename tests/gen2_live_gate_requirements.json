@@ -37,7 +37,7 @@
       "axes": {"kind": "engine_sites", "title": "silver", "requirement_ids": ["F-2", "F-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver.engine_sites.json",
-        "sha256": "7228369b0cdd512346ed8a91389d76bacc47e600cff5f8327cec40f7197897de"
+        "sha256": "39cc37617901ac20f67a951bc38aeca65d9b8d4c384a192356b1599ca5eef27c"
       }}}]
     },
     {
