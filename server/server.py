@@ -295,6 +295,20 @@ _FOUNDATION_ABSENT = object()
 _KNOWN_ARTIFACT_KINDS = frozenset({"clean", "overlay", "rand", "rand_overlay", "named", "companion"})
 
 
+def prompt_event_type(text: str) -> str | None:
+    """The events-log row a capture reply's gui_prompt stands for: "violation", "reroll" or None.
+
+    Rejections are state.py's clause prompts ("[x] <X> clause: ...", bonus pair "... - retry") and the
+    species-clause "[x] Dup <name>"; the pre-f1d79c72 texts ended "-- catch again!".
+    """
+    lower = text.lower()
+    if "reroll" in lower:
+        return "reroll"
+    if "catch again" in lower or " clause: " in lower or text.startswith("[x] Dup "):
+        return "violation"
+    return None
+
+
 class SLinkServer:
     def __init__(self, data_dir: str = None, run_id: str = None,
                  run_name: str = "", tcp_port: int = 0,
@@ -2189,12 +2203,10 @@ class SLinkServer:
             for c in cmds:
                 if c.get("cmd") == "gui_prompt":
                     _prompt_text = c.get("text", "")
-                    if "catch again" in _prompt_text.lower():
-                        self._log_event(player_id, "violation",
-                                        f"⚠ {_prompt_text}", _area_id)
-                    elif "reroll" in _prompt_text.lower():
-                        self._log_event(player_id, "reroll",
-                                        f"🔁 {_prompt_text}", _area_id)
+                    _kind = prompt_event_type(_prompt_text)
+                    if _kind:
+                        self._log_event(player_id, _kind,
+                                        f"{'⚠' if _kind == 'violation' else '🔁'} {_prompt_text}", _area_id)
 
         self._emit_obs_triggers(player_id, msg, cmds, _pre_area_state, _pre_battle)
         return cmds
