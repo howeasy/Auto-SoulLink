@@ -57,6 +57,12 @@ return function(rec)
       state.text = true
       state.texts[#state.texts + 1] = s
     end,
+    pixelText = function(x, y, s, fore, back, font)
+      rec("pixelText")
+      state.text = true
+      state.texts[#state.texts + 1] = s
+      state.pixel_font = font
+    end,
   }
   -- BizHawk hands Lua its API as NLua delegates, whose type() is "userdata", not "function".
   -- Wrap every stubbed API in a callable TABLE so a type(x) == "function" guard in hud.lua
@@ -89,7 +95,7 @@ class World:
         return list(self.state.texts.values())
 
     def gbc(self):
-        """Gen 1/2 geometry: 160x144 -> font 8, char_width 5, 30 chars per line."""
+        """Gen 1/2 geometry: 160x144 -> fceux pixel font, char_width 6, 25 chars per line."""
         self.H.init(self.lua.eval("{screen_w = 160, screen_h = 144}"))
         return self
 
@@ -145,39 +151,39 @@ def test_long_message_wraps_instead_of_truncating():
     text = "LINKED PIKACHU AND CHARMANDER IN VIRIDIAN FOREST NOW"
     w.H.show(text, 255, 255, 0, 240)
     frame = w.render()
-    assert frame.count("drawText") == 2, frame
-    assert w.drawn == ["LINKED PIKACHU AND CHARMANDER", "IN VIRIDIAN FOREST NOW"]
+    assert frame.count("pixelText") == 3 and "drawText" not in frame, frame
+    assert w.drawn == ["LINKED PIKACHU AND", "CHARMANDER IN VIRIDIAN", "FOREST NOW"]
     assert "..." not in "".join(w.drawn)
-    assert all(len(line) <= 30 for line in w.drawn)
+    assert all(len(line) <= 25 for line in w.drawn)
     assert w.state.box is True
 
 
 def test_wrapped_bar_grows_upward_so_the_bottom_edge_holds():
     """hud_y stays the bottom line: the extra lines must not fall off a 144px screen.
 
-    Read off the y hud.lua passes gui.drawText: bottom line at hud_y-1 = 131, each
+    Read off the y hud.lua passes gui.pixelText: bottom line at hud_y-1 = 131, each
     earlier line one font_size+2 higher. A bar that grew DOWNWARD would draw at
     141/151 and put line 2 under the screen.
     """
     ys = []
     w = World().gbc()
     w.lua.execute(
-        "local d = gui.drawText; gui.drawText = function(x, y, ...) YS[#YS+1] = y; return d(x, y, ...) end"
+        "local d = gui.pixelText; gui.pixelText = function(x, y, ...) YS[#YS+1] = y; return d(x, y, ...) end"
     )
     w.lua.globals().YS = w.lua.eval("{}")
     w.H.show("LINKED PIKACHU AND CHARMANDER IN VIRIDIAN FOREST NOW", 255, 255, 0, 240)
     w.render()
     ys = list(w.lua.globals().YS.values())
-    assert ys == [121, 131], ys          # font_size 8 -> line_h 10, hud_y 132
+    assert ys == [111, 121, 131], ys     # font_size 8 -> line_h 10, hud_y 132
 
 
 def test_only_past_the_line_cap_does_it_ellipsize_and_say_so():
     """Beyond 3 lines the last line is cut -- once, with a console.log receipt."""
     w = World().gbc()
-    text = " ".join(["WORD"] * 40)       # ~200 chars, far past 3 x 30
+    text = " ".join(["WORD"] * 40)       # ~200 chars, far past 3 x 25
     w.H.show(text, 255, 255, 0, 240)
     frame = w.render()
-    assert frame.count("drawText") == 3, frame
+    assert frame.count("pixelText") == 3, frame
     assert w.drawn[-1].endswith("...")
     assert not any(line.endswith("...") for line in w.drawn[:-1])
     logs = list(w.state.logs.values())
@@ -189,7 +195,7 @@ def test_prompt_wraps_too():
     w = World().gbc()
     w.H.prompt("SOUL LINK BROKEN BETWEEN PIKACHU AND CHARMANDER FOREVER", 255, 0, 0, 300)
     frame = w.render()
-    assert frame.count("drawText") == 2, frame
+    assert frame.count("pixelText") == 3, frame
     assert "..." not in "".join(w.drawn)
 
 
@@ -232,3 +238,19 @@ def test_clear_empties_both_queues():
     w.render()
     w.H.clear()
     assert "drawText" not in w.render()
+
+
+def test_gb_screen_draws_the_fceux_pixel_font_and_gba_keeps_courier():
+    """8pt Courier drawn at 160x144 and scaled up is a smear; a 144px screen takes the bitmap
+    font (one font pixel per screen pixel). Bigger screens keep GDI+ Courier."""
+    gb = World().gbc()
+    gb.H.show("PIDGEY KO'd", 255, 80, 80, 240)
+    gb.H.set_game_over()
+    frame = gb.render()
+    assert "drawText" not in frame and frame.count("pixelText") == 2, frame
+    assert gb.state.pixel_font == "fceux"
+    gba = World()
+    gba.H.init(gba.lua.eval("{screen_w = 240, screen_h = 160}"))
+    gba.H.show("PIDGEY KO'd", 255, 80, 80, 240)
+    frame = gba.render()
+    assert "pixelText" not in frame and "drawText" in frame, frame

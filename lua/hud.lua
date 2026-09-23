@@ -105,6 +105,11 @@ local cfg = {
     --   GBA (font_size=10, char_width=6): 234 / 6 = 39 chars
     --   NDS (font_size=10, char_width=6): 250 / 6 = 41 chars
     char_width = 6,
+    -- BizHawk bitmap font for gui.pixelText, or false for GDI+ Courier. A 144px screen
+    -- defaults to "fceux": 8pt Courier drawn at 160x144 then scaled up is a smear, while
+    -- fceux is 5x7 glyphs on a 6px advance (fceux.ttf in BizHawk.Client.Common.dll,
+    -- 128 units/px), the size of the game's own font and one screen pixel per font pixel.
+    pixel_font = nil,
 }
 
 -- Word wrap -------------------------------------------------------------------
@@ -171,11 +176,15 @@ function H.init(opts)
     -- take the 8/5 font so the bottom bar fits; the bar's top is derived from the
     -- screen height so it never lands below the screen (the GBA default 146 sat
     -- two pixels under a 144-px screen: LANE-BOOT2 found the Gen 1 HUD invisible).
+    if opts.pixel_font == nil then
+        cfg.pixel_font = (cfg.screen_h <= 144) and "fceux" or false
+    end
     if not opts.font_size then
         cfg.font_size = (cfg.screen_h <= 144) and 8 or 10
     end
     if not opts.char_width then
-        cfg.char_width = (cfg.screen_h <= 144) and 5 or 6
+        -- fceux advances 6px; 8pt Courier Bold ~5px
+        cfg.char_width = (cfg.pixel_font or cfg.screen_h > 144) and 6 or 5
     end
     if not opts.hud_y then
         cfg.hud_y = cfg.screen_h - cfg.font_size - 4
@@ -219,6 +228,16 @@ local function clear_surface()
     -- Test for presence, call through pcall, and let the lupa stub model the same shape.
     if gui.clearGraphics ~= nil then pcall(gui.clearGraphics) end
     if gui.cleartext ~= nil then pcall(gui.cleartext) end
+end
+
+-- Every HUD string goes through here: the pixel font when configured, else Courier.
+-- pixelText has no size, so `size` (the bigger banner text) only applies to Courier.
+local function draw_text(x, y, s, color, size)
+    if cfg.pixel_font then
+        gui.pixelText(x, y, s, color, 0x00000000, cfg.pixel_font)
+    else
+        gui.drawText(x, y, s, color, nil, size or cfg.font_size, "Courier New", "Bold")
+    end
 end
 
 -- ── HUD message bar (bottom of screen, queued) ──────────────────────────────
@@ -273,8 +292,7 @@ local function render_hud()
                 cfg.hud_right, cfg.hud_y + cfg.font_size,
                 0xFF000000, 0xBB000000)
     for i = 1, n do
-        gui.drawText(cfg.hud_x, cfg.hud_y - 1 - (n - i) * line_h, msg.lines[i],
-                     msg.color, nil, cfg.font_size, "Courier New", "Bold")
+        draw_text(cfg.hud_x, cfg.hud_y - 1 - (n - i) * line_h, msg.lines[i], msg.color)
     end
     age(hud_queue)
 end
@@ -298,8 +316,7 @@ local function render_prompt()
     gui.drawBox(1, py, cfg.screen_w - 1, py + cfg.prompt_h + (n - 1) * line_h,
                 0xFF000000, 0xCC000000)
     for i = 1, n do
-        gui.drawText(4, py + 1 + (i - 1) * line_h, p.lines[i], p.color,
-                     nil, cfg.font_size, "Courier New", "Bold")
+        draw_text(4, py + 1 + (i - 1) * line_h, p.lines[i], p.color)
     end
     age(prompt_queue)
 end
@@ -319,8 +336,7 @@ local function render_game_over()
     if not game_over then return end
     local gy = cfg.gameover_y
     gui.drawBox(0, gy, cfg.screen_w, gy + 24, 0xFFBB0000, 0xDD990000)
-    gui.drawText(8, gy + 4, "GAME OVER!", "#FFFFFF",
-                 nil, cfg.font_size + 2, "Courier New", "Bold")
+    draw_text(8, gy + 4, "GAME OVER!", "#FFFFFF", cfg.font_size + 2)
 end
 
 -- ── Rebuild (post-whiteout) persistent banner ───────────────────────────────
@@ -345,8 +361,7 @@ local function render_rebuilding()
     if not rebuild_text or game_over then return end
     local ry = cfg.gameover_y
     gui.drawBox(0, ry, cfg.screen_w, ry + 14, 0xFF0066AA, 0xDD003388)
-    gui.drawText(4, ry + 2, rebuild_text, "#FFFFFF",
-                 nil, cfg.font_size, "Courier New", "Bold")
+    draw_text(4, ry + 2, rebuild_text, "#FFFFFF")
 end
 
 -- ── Nuzlocke-start transient banner ─────────────────────────────────────────
@@ -368,8 +383,7 @@ local function render_nuzlocke_start()
     if not nuzlocke_start_text or game_over then return end
     local ny = cfg.gameover_y
     gui.drawBox(0, ny, cfg.screen_w, ny + 24, 0xFF0066AA, 0xDD003388)
-    gui.drawText(8, ny + 4, nuzlocke_start_text, "#FFFFFF",
-                 nil, cfg.font_size + 2, "Courier New", "Bold")
+    draw_text(8, ny + 4, nuzlocke_start_text, "#FFFFFF", cfg.font_size + 2)
     nuzlocke_start_frames = nuzlocke_start_frames - 1
     if nuzlocke_start_frames <= 0 then nuzlocke_start_text = nil end
 end
