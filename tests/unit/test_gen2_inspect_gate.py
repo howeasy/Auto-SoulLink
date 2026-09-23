@@ -33,6 +33,7 @@ from run_gb_gate import describe_gen2  # noqa: E402
 from server.adapters import gen2_codec as codec  # noqa: E402
 from tests.live import test_gen2_new_gates as live  # noqa: E402
 from tests.unit.test_gen2_scripted_gate import QualifySim, make_root, qualify_env  # noqa: E402
+from tools import fixture_qualification as qualification  # noqa: E402
 
 GATE = REPO / "lua/tests/gen2_inspect_gate.lua"
 TITLE = "crystal"
@@ -485,14 +486,35 @@ def test_compare_collection_fails_on_a_mismatched_count():
 def write_receipt(repo, name, data, player_id, *, report=None, row=None, stage=None):
     path = repo / live.RECEIPTS / f"{name}.qualification.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    body = {"schema": "fixture-qualification-v1", "scope": "full", "passed": True, "errors": [],
-            "fixtures": [{"name": name, "passed": True, "problems": [],
-                          "artifacts": {"fixture": {"path": f"{name}.SaveRAM", "size": len(data),
-                                                    "sha256": hashlib.sha256(data).hexdigest()}},
-                          "stages": [{"stage": "qualify", "status": "PASS",
-                                      "evidence": {"player_id": str(player_id), **(stage or {})}}],
-                          **(row or {})}],
-            **(report or {})}
+    inputs = {}
+    for role, content in {"fixture": data, "profile": b"profile", "rom": b"rom",
+                          "route_facts": b"route facts", "played_receipt": b"played receipt"}.items():
+        inputs[role] = repo / f"{name}.{role}"
+        inputs[role].write_bytes(content)
+    outputs = {}
+    for role, content in {"boot:game_witness": b"boot witness", "resave:fixture": data,
+                          "resave:save_witness": b"save witness",
+                          "resave:reload_witness": b"reload witness"}.items():
+        outputs[role] = repo / f"{name}.{role.replace(':', '.')}"
+        outputs[role].write_bytes(content)
+
+    def callback(context):
+        evidence = {"oracle": "model control"}
+        if context.stage == "qualify":
+            evidence.update({"player_id": str(player_id), **(stage or {})})
+        stage_outputs = {role.split(":", 1)[1]: output for role, output in outputs.items()
+                         if role.startswith(context.stage + ":")}
+        return qualification.StageReceipt(context.stage, context.fingerprint, "PASS",
+                                          evidence=evidence, outputs=stage_outputs)
+
+    case = qualification.FixtureCase(name, inputs,
+        {"title": "crystal", "rom_sha1": hashlib.sha1(b"rom").hexdigest(),
+         "scope": "candidate fixture", "route_facts_sha256": hashlib.sha256(b"route facts").hexdigest()})
+    body = qualification.qualify_fixtures([case], dict.fromkeys(qualification.FULL_CHAIN, callback),
+                                          scope="full", attempt_id=f"test-{name}")
+    assert body["passed"] is True
+    body["fixtures"][0].update(row or {})
+    body.update(report or {})
     path.write_text(json.dumps(body), encoding="utf-8")
 
 
@@ -513,13 +535,43 @@ def test_qualified_identity_binds_the_staged_bytes_and_the_receipts_ot(tmp_path)
     assert not live.identity_matches(town_capture, live.qualified_identity("crystal_town_ot2", OT2, repo=tmp_path))
 
 
+@pytest.mark.parametrize("missing", qualification.FULL_CHAIN)
+def test_qualified_identity_refuses_missing_full_chain_stage(tmp_path, missing):
+    write_receipt(tmp_path, "crystal_town", TOWN, 0x1234)
+    path = tmp_path / live.RECEIPTS / "crystal_town.qualification.json"
+    report = json.loads(path.read_text(encoding="utf-8"))
+    report["fixtures"][0]["stages"] = [stage for stage in report["fixtures"][0]["stages"]
+                                     if stage["stage"] != missing]
+    path.write_text(json.dumps(report), encoding="utf-8")
+    with pytest.raises(AssertionError, match="full-chain"):
+        live.qualified_identity("crystal_town", TOWN, repo=tmp_path)
+
+
+@pytest.mark.parametrize("change,match", [
+    (_set(["required_stages"], ["qualify"]), "full-chain"),
+    (_set(["errors"], ["late error"]), "errors"),
+    (_set(["fixtures", 0, "problems"], ["failed oracle"]), "problems"),
+    (_set(["fixtures", 0, "stages", 1, "problems"], ["failed boot"]), "problem-free"),
+    (_set(["fixtures", 0, "stages", 1, "fingerprint"], "0" * 64), "fingerprint"),
+    (_set(["fixtures", 0, "provenance", "title"], "gold"), "fingerprint"),
+    (_set(["fixtures", 0, "artifacts", "resave:fixture", "sha256"], "0" * 64), "artifact provenance"),
+])
+def test_qualified_identity_refuses_broken_full_chain_provenance(tmp_path, change, match):
+    write_receipt(tmp_path, "crystal_town", TOWN, 0x1234)
+    path = tmp_path / live.RECEIPTS / "crystal_town.qualification.json"
+    report = change(json.loads(path.read_text(encoding="utf-8")))
+    path.write_text(json.dumps(report), encoding="utf-8")
+    with pytest.raises(AssertionError, match=match):
+        live.qualified_identity("crystal_town", TOWN, repo=tmp_path)
+
+
 @pytest.mark.parametrize("changes,match", [
     ({"report": {"passed": False}}, "passed full-chain"),
     ({"report": {"scope": "static"}}, "passed full-chain"),
     ({"report": {"schema": "other"}}, "passed full-chain"),
     ({"row": {"passed": False}}, "single passed row"),
     ({"row": {"name": "crystal_battle"}}, "single passed row"),
-    ({"row": {"stages": []}}, "no qualified player ID"),
+    ({"row": {"stages": []}}, "full-chain"),
     ({"stage": {"player_id": "0x1234"}}, "no qualified player ID"),
 ])
 def test_qualified_identity_refuses_an_unqualified_or_misbound_receipt(tmp_path, changes, match):

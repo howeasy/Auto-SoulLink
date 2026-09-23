@@ -45,7 +45,7 @@ sys.path.insert(0, str(REPO / "tools"))
 
 from server.adapters import gen2_codec as codec  # noqa: E402
 from server.adapters.gen2_rom_scan import Rom  # noqa: E402
-from tools import gen2_fixtures, gen2_source_data  # noqa: E402
+from tools import fixture_qualification, gen2_fixtures, gen2_source_data  # noqa: E402
 from tools.gen2_fixtures import FIXTURES  # noqa: E402
 
 pytestmark = [
@@ -112,19 +112,71 @@ def qualified_identity(name: str, fixture_bytes: bytes, *, repo: Path = REPO) ->
     crystal_town file copied under the crystal_town_ot2 name fails the hash binding here."""
     path = repo / RECEIPTS / f"{name}.qualification.json"
     report = json.loads(path.read_text(encoding="utf-8"))
+    chain = fixture_qualification.FULL_CHAIN
     if (report.get("schema") != "fixture-qualification-v1" or report.get("scope") != "full"
-            or report.get("passed") is not True):
+            or report.get("passed") is not True or report.get("required_stages") != list(chain)
+            or not isinstance(report.get("attempt_id"), str) or not report["attempt_id"]):
         raise AssertionError(f"{name}: receipt is not a passed full-chain qualification report")
-    rows = [row for row in report.get("fixtures") or [] if row.get("name") == name]
-    if len(rows) != 1 or rows[0].get("passed") is not True:
+    if report.get("errors") != []:
+        raise AssertionError(f"{name}: qualification report has errors")
+    rows = report.get("fixtures")
+    if not isinstance(rows, list) or len(rows) != 1 or rows[0].get("name") != name or rows[0].get("passed") is not True:
         raise AssertionError(f"{name}: receipt has no single passed row for this fixture")
-    recorded = ((rows[0].get("artifacts") or {}).get("fixture") or {}).get("sha256")
-    if recorded != hashlib.sha256(fixture_bytes).hexdigest():
+    row = rows[0]
+    if row.get("problems") != []:
+        raise AssertionError(f"{name}: qualification row has problems")
+    provenance = row.get("provenance")
+    if (not isinstance(provenance, dict)
+            or set(provenance) != {"title", "rom_sha1", "scope", "route_facts_sha256"}
+            or any(not isinstance(value, str) or not value for value in provenance.values())):
+        raise AssertionError(f"{name}: fixture provenance is missing")
+    outputs = {"qualify": set(), "boot": {"boot:game_witness"},
+               "resave": {"resave:fixture", "resave:save_witness", "resave:reload_witness"},
+               "post_oracle": set()}
+    inputs = {"fixture", "profile", "rom", "route_facts", "played_receipt"}
+    artifacts = row.get("artifacts")
+    if not isinstance(artifacts, dict) or set(artifacts) != inputs | set().union(*outputs.values()):
+        raise AssertionError(f"{name}: artifact provenance is incomplete")
+    for record in artifacts.values():
+        if (not isinstance(record, dict) or set(record) != {"path", "size", "sha256"}
+                or not isinstance(record["path"], str) or not record["path"]
+                or type(record["size"]) is not int or record["size"] < 0
+                or not isinstance(record["sha256"], str)
+                or re.fullmatch(r"[0-9a-f]{64}", record["sha256"]) is None):
+            raise AssertionError(f"{name}: artifact provenance is malformed")
+    recorded = artifacts["fixture"]["sha256"]
+    if recorded != hashlib.sha256(fixture_bytes).hexdigest() or artifacts["fixture"]["size"] != len(fixture_bytes):
         raise AssertionError(f"{name}: staged fixture bytes differ from the qualified candidate "
                              f"(receipt sha256 {recorded})")
-    stage = next((row for row in rows[0].get("stages") or []
-                  if row.get("stage") == "qualify" and row.get("status") == "PASS"), {})
-    player_id = (stage.get("evidence") or {}).get("player_id")
+    stages = row.get("stages")
+    if (not isinstance(stages, list) or len(stages) != len(chain)
+            or [stage.get("stage") for stage in stages] != list(chain)):
+        raise AssertionError(f"{name}: receipt has no complete ordered full-chain")
+    snapshot = {role: artifacts[role] for role in inputs}
+    previous = []
+    for stage_name, stage in zip(chain, stages, strict=True):
+        if (stage.get("status") != "PASS" or stage.get("problems") != []
+                or not isinstance(stage.get("evidence"), dict) or not stage["evidence"]
+                or any(not isinstance(key, str) or not key or not isinstance(value, str) or not value
+                       for key, value in stage["evidence"].items())):
+            raise AssertionError(f"{name}: {stage_name} stage is not a problem-free PASS")
+        stage_outputs = stage.get("outputs", {})
+        if not isinstance(stage_outputs, dict) or set(stage_outputs) != outputs[stage_name]:
+            raise AssertionError(f"{name}: artifact provenance has missing stage outputs")
+        # The runner hashes the current artifacts and every preceding receipt into each stage.
+        fingerprint = hashlib.sha256(json.dumps({"attempt": report["attempt_id"], "fixture": name,
+            "scope": "full", "chain": chain, "stage": stage_name, "provenance": provenance,
+            "artifacts": snapshot, "previous": previous}, sort_keys=True,
+            separators=(",", ":")).encode()).hexdigest()
+        if stage.get("fingerprint") != fingerprint:
+            raise AssertionError(f"{name}: {stage_name} stage fingerprint differs from its inputs")
+        if any(artifacts[role] != record for role, record in stage_outputs.items()):
+            raise AssertionError(f"{name}: artifact provenance differs from stage outputs")
+        snapshot.update(stage_outputs)
+        previous.append(stage)
+    if snapshot != artifacts:
+        raise AssertionError(f"{name}: artifact provenance is incomplete")
+    player_id = stages[0]["evidence"].get("player_id")
     if not (isinstance(player_id, str) and player_id.isdigit() and int(player_id) <= 0xFFFF):
         raise AssertionError(f"{name}: receipt carries no qualified player ID")
     return int(player_id)
@@ -207,9 +259,9 @@ def gender_and_shiny(dv_word: int, gender_ratio: int) -> tuple[str, bool]:
 
 def wram_offset(bank: int, address: int, length: int) -> int:
     """CGB flat WRAM domain offset of a named-bank range (Pan Docs; the gate's G.wram_offset twin)."""
-    if bank == 0 and 0xC000 <= address and address + length <= 0xD000:
+    if bank == 0 and address >= 0xC000 and address + length <= 0xD000:
         return address - 0xC000
-    if 1 <= bank <= 7 and 0xD000 <= address and address + length <= 0xE000:
+    if 1 <= bank <= 7 and address >= 0xD000 and address + length <= 0xE000:
         return bank * 0x1000 + address - 0xD000
     raise AssertionError(f"WRAM range ${address:X}+{length} outside its bank {bank} window")
 

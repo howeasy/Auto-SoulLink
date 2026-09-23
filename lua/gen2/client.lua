@@ -265,9 +265,13 @@ function Client.new(p)
     function self:abandon_timeline(why)
         self.epoch = self.epoch + 1
         if self.signals then self.signals:abandon(why) end
-        self.faint_latches = {}
-        self.battle, self.pending_rescan = nil, false
+        self.faint_latches, self.deferred = {}, {}
+        self.battle, self.pending_safe, self.pending_rescan = nil, false, true
+        self.key_alias, self.retired_alias = nil, {}
         drop_held(why)
+        -- Hello readiness names the still-open TCP connection and player OT, not a frame epoch;
+        -- a changed OT invalidates it in hello_session:step. The next tick reports the resumed
+        -- party and the pending rescan attempts to refresh its boxes before that tick.
     end
 
     function self:validate()

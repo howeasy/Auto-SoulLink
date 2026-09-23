@@ -774,4 +774,37 @@ def test_pending_faint_and_acquisition_latches_do_not_survive_a_rewind():
 
     falsify(check, mutant("lua/gen2/client.lua", (
         "        if self.signals then self.signals:abandon(why) end\n"
-        "        self.faint_latches = {}\n        self.battle, self.pending_rescan = nil, false\n", "")))
+        "        self.faint_latches, self.deferred = {}, {}\n"
+        "        self.battle, self.pending_safe, self.pending_rescan = nil, false, true\n", "")))
+
+
+def test_rewind_cancels_a_deferred_faint_from_the_abandoned_timeline():
+    world = World()
+    lead, bench = mon(), mon(species=172, dvs=0x3AAA)
+    world.party([lead, bench])
+    world.hello()
+    world.frames(60)  # a live validation arms the model writer
+    world.checkpoint_ok = False
+    world.reply({"cmd": "force_faint", "key": codec_key(bench), "nickname": "PICHU"})
+    world.frames(1)
+    assert world.hp_of(1) == (30, 0) and world.written() == []
+
+    world.emu.frame -= 60  # load an earlier frame with the same party key
+    world.checkpoint_ok = True
+    world.frames(1)
+    assert world.hp_of(1) == (30, 0) and world.written() == []
+
+
+def test_rewind_cancels_a_safe_reply_from_the_abandoned_battle():
+    world = World()
+    world.hello()
+    world.frames(100)
+    world.field("wBattleMode", 1)
+    world.fire("battle_end")
+    world.frames(1)  # battle_end queued a safe reply, but the old battle still reads as active
+    assert world.sent("safe") == []
+
+    world.emu.frame -= 60
+    world.field("wBattleMode", 0)  # the loaded state is back in the overworld
+    world.frames(1)
+    assert world.sent("safe") == []
