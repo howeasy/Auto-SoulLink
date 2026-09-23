@@ -1391,8 +1391,27 @@ local function pc_storage()
     return ptr
 end
 
+--- What owned input when a PC stage failed: every active task's func, gStorage->state and the
+--- script context status byte (sGlobalScriptContextStatus 0x03000EA8, 2 = shutdown). A named
+--- stage without this left FR run 28c undiagnosable.
+local function pc_state_dump()
+    local tasks = {}
+    for i = 0, 15 do
+        local base = PC_TASKS + i * PC_TASK_SIZE
+        if memory.read_u8(base + 4) ~= 0 then
+            tasks[#tasks + 1] = string.format("%08X", memory.read_u32_le(base))
+        end
+    end
+    local sp = memory.read_u32_le(PC_STORAGE_PTR)
+    local st = (sp >= 0x02000000 and sp < 0x02040000) and memory.read_u8(sp) or -1
+    return string.format("tasks=[%s] storage_state=%d script_status=%d result=%d menu_cursor=%d",
+        table.concat(tasks, ","), st, memory.read_u8(0x03000EA8),
+        memory.read_u16_le(PC_RESULT), memory.read_u8(PC_MENU_CURSOR))
+end
+
 local function pc_fail(label, stage)
-    G.finish(false, label .. ": pc_" .. stage)
+    G.shot("stuck")
+    G.finish(false, label .. ": pc_" .. stage .. " " .. pc_state_dump())
     return false
 end
 
@@ -1621,8 +1640,9 @@ local function leave_storage(cp, label)
     -- pc.inc:50-55 loops back to EventScript_PCMainMenu after storage; the
     -- first B exits storage, the second B cancels the owner list (VAR_RESULT
     -- 127). Only script.c's SHUTDOWN+unlocked pair is a field terminal.
-    for _ = 1, 24 do
+    for step = 1, 24 do
         if pc_task(PC_MULTICHOICE) then break end
+        G.phase("pc-exit", string.format("step=%d %s", step, pc_state_dump()))
         local storage = pc_storage()
         if pc_task(PC_STORAGE_MAIN) and storage and memory.read_u8(storage) == 0 then
             G.tap("B", 3, 13)
