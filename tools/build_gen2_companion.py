@@ -37,6 +37,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -71,6 +72,7 @@ REPO_MAILBOX_STUB = {
 # Shared files a later card drops into patch/gen2/src/ that both repos include verbatim.
 # Card P4.1c: Codex's beacon/ABI/DelayFrame bridge, once it exists.
 OPTIONAL_SHARED_FILES = ["slink.asm"]
+PANEL_FILES = ("panel_flags.asm", "panel.asm", "panel_start.asm")
 
 # The mailbox/panel ABI is shared with Gen 1 (patch/gb/slink_abi.inc), not per-generation source,
 # so it is copied -- never duplicated under patch/gen2 -- from its one committed location. It is
@@ -105,6 +107,33 @@ DELAY_REPLACEMENT = (
     '\tnop\n\tnop\n'
 )
 DELAY_HOOK_TRIGGER = "slink.asm"  # presence of this file in the plan gates the home/delay.asm edit
+
+START_MENU_EDITS = (
+    ("\tconst STARTMENUITEM_QUIT     ; 8\n",
+     "\tconst STARTMENUITEM_QUIT     ; 8\n\tconst STARTMENUITEM_SLINK ; 9\n"),
+    ("\tdw StartMenu_Quit,     .QuitString,     .QuitDesc\n",
+     "\tdw StartMenu_Quit,     .QuitString,     .QuitDesc\n"
+     "\tdw SlinkStartMenuEntry, SlinkMenuString, SlinkMenuDesc\n"),
+    ("\tld a, STARTMENUITEM_EXIT\n", "\tld a, STARTMENUITEM_SLINK\n"),
+)
+
+
+def _start_menu_text(checkout: pathlib.Path) -> tuple[pathlib.Path, str]:
+    path = checkout / "engine/menus/start_menu.asm"
+    text = path.read_text(encoding="utf-8")
+    for anchor, _replacement in START_MENU_EDITS:
+        count = text.count(anchor)
+        if count != 1:
+            raise RuntimeError(f"start_menu.asm: expected {anchor.strip()!r} exactly once, found {count}")
+    for anchor, replacement in START_MENU_EDITS:
+        text = text.replace(anchor, replacement, 1)
+    return path, text + '\nINCLUDE "engine/slink/panel_start.asm"\n'
+
+
+def apply_start_menu_hook(checkout: pathlib.Path) -> None:
+    """O-28 replaces the visible EXIT choice; B/START still close the native menu."""
+    path, text = _start_menu_text(checkout)
+    path.write_text(text, encoding="utf-8", newline="\n")
 
 
 def apply_delay_hook(checkout: pathlib.Path) -> None:
@@ -145,16 +174,24 @@ def overlay_plan(
     nothing in the checkout.
     """
     plan: list[tuple[str, pathlib.Path, bool]] = []
+    panel = [name for name in PANEL_FILES if (src_dir / name).is_file()]
+    if panel and (len(panel) != len(PANEL_FILES) or not (src_dir / "slink.asm").is_file()):
+        raise RuntimeError("panel overlay requires panel_flags.asm, panel.asm, panel_start.asm and slink.asm")
     stub = src_dir / REPO_MAILBOX_STUB[repo]
     if stub.is_file():
         plan.append(("slink_mailbox.asm", stub, True))
     abi = gb_dir / SHARED_ABI_NAME
     if abi.is_file():
         plan.append((SHARED_ABI_NAME, abi, False))
+    if panel:
+        plan.append(("panel_flags.asm", src_dir / "panel_flags.asm", True))
     for name in OPTIONAL_SHARED_FILES:
         path = src_dir / name
         if path.is_file():
             plan.append((name, path, True))
+    if panel:
+        plan += [("panel.asm", src_dir / "panel.asm", True),
+                 ("panel_start.asm", src_dir / "panel_start.asm", False)]
     return plan
 
 
@@ -166,6 +203,8 @@ def apply_overlay(
     if not plan:
         return []
     include_names = [name for name, _path, include in plan if include]
+    if "panel.asm" in include_names:
+        _start_menu_text(checkout)  # all three anchors validated before any checkout mutation
     main_path = checkout / "main.asm"
     if include_names:
         anchor = MAIN_ANCHORS[repo]
@@ -190,6 +229,8 @@ def apply_overlay(
         main_path.write_text(text.replace(anchor, new_anchor, 1), encoding="utf-8", newline="\n")
     if DELAY_HOOK_TRIGGER in applied:
         apply_delay_hook(checkout)
+    if "panel.asm" in applied:
+        apply_start_menu_hook(checkout)
     return applied
 
 
@@ -238,6 +279,41 @@ def make(checkout: pathlib.Path, targets: list[str], env: dict) -> list[str]:
     return command
 
 
+def _symbols(path: pathlib.Path) -> dict[str, tuple[int, int]]:
+    symbols = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = re.fullmatch(r"([0-9a-fA-F]+):([0-9a-fA-F]+)\s+(\S+)", line.strip())
+        if match:
+            bank, address, name = match.groups()
+            if name in symbols:
+                raise RuntimeError(f"{path}: duplicate symbol {name}")
+            symbols[name] = (int(bank, 16), int(address, 16))
+    if not symbols:
+        raise RuntimeError(f"{path}: no link symbols")
+    return symbols
+
+
+def verify_symbol_scope(clean_sym: pathlib.Path, overlay_sym: pathlib.Path, *, panel: bool) -> None:
+    """Gate 6c: panel grows bank 4 only; other existing symbols stay fixed.
+
+    rgblink enforces section/bank fit. ROM operands elsewhere can legitimately change when
+    they reference bank-4 labels; byte-difference classification belongs to the later ROM gate.
+    """
+    old, new = _symbols(clean_sym), _symbols(overlay_sym)
+    for name, location in old.items():
+        current = new.get(name)
+        movable = panel and location[0] == 4 and 0x4000 <= location[1] < 0x8000
+        if current is None or (movable and (current[0] != 4 or not 0x4000 <= current[1] < 0x8000)):
+            raise RuntimeError(f"{name}: original symbol missing or outside allowed bank 4")
+        if not movable and current != location:
+            raise RuntimeError(f"{name}: original symbol moved outside panel bank 4: {location} -> {current}")
+    if panel:
+        for name in ("SlinkStartMenuEntry", "SlinkMenuString", "SlinkMenuDesc"):
+            bank, address = new.get(name, (-1, -1))
+            if bank != 4 or not 0x4000 <= address < 0x8000:
+                raise RuntimeError(f"{name}: panel START binding must link inside bank 4")
+
+
 def build(*, crystal_repo: pathlib.Path | None = None, gold_repo: pathlib.Path | None = None,
           src_dir: pathlib.Path | None = None, rgbds_bin: pathlib.Path | None = None,
           w64devkit_bin: pathlib.Path | None = None, check: bool = False) -> int:
@@ -276,6 +352,8 @@ def build(*, crystal_repo: pathlib.Path | None = None, gold_repo: pathlib.Path |
         if hashlib.sha1(base).hexdigest() != spec["sha1"]:
             raise RuntimeError(f"{key}: the clean ROM in {clean_dir} does not match the lock")
         data = (checkout / spec["filename"]).read_bytes()
+        verify_symbol_scope(clean_dir / f"{key}.sym", checkout / f"{key}.sym",
+                            panel="panel.asm" in overlay_applied[repo])
         ups = ups_create(base, data)
         if ups_apply(base, ups) != data:
             raise RuntimeError(f"{key}: UPS round trip failed")

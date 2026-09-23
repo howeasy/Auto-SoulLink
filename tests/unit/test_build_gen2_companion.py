@@ -7,8 +7,11 @@ Codex's future slink.asm), and that the main.asm hook is verify-then-replace-onc
 tools/apply_purergb_overlay.py's discipline.
 """
 
+import hashlib
+import json
 import re
 import sys
+from itertools import product
 from pathlib import Path
 
 import pytest
@@ -359,3 +362,125 @@ def test_titles_cover_crystal_gold_silver_only():
     assert set(bc.TITLES) == {"pokecrystal", "pokegold", "pokesilver"}
     assert {title for title, _ups, _repo in bc.TITLES.values()} == {"crystal", "gold", "silver"}
     assert {repo for _title, _ups, repo in bc.TITLES.values()} == {"pokecrystal", "pokegold"}
+
+
+def _panel_source(tmp_path):
+    source = tmp_path / "src"
+    source.mkdir()
+    for name in ("slink.asm", "panel_flags.asm", "panel.asm", "panel_start.asm"):
+        (source / name).write_text(f"; {name}\n")
+    return source
+
+
+@pytest.mark.parametrize("repo", ["pokecrystal", "pokegold"])
+def test_panel_trio_includes_and_replaces_only_exit(tmp_path, repo):
+    checkout = _fake_checkout(tmp_path, repo)
+    _write_real_delay_asm(checkout)
+    target = checkout / "engine/menus/start_menu.asm"
+    target.parent.mkdir(parents=True)
+    original = (ROOT / ".cache/gen2-build" / repo / "engine/menus/start_menu.asm").read_text()
+    target.write_text(original)
+    bc.apply_overlay(checkout, repo, _panel_source(tmp_path), _no_gb_dir(tmp_path))
+    main = (checkout / "main.asm").read_text()
+    assert main.index('/panel_flags.asm"') < main.index('/slink.asm"') < main.index('/panel.asm"')
+    assert '/panel_start.asm"' not in main
+    changed = target.read_text()
+    assert changed.endswith('INCLUDE "engine/slink/panel_start.asm"\n')
+    assert changed.count("\tconst STARTMENUITEM_SLINK") == 1
+    assert changed.count("\tdw SlinkStartMenuEntry, SlinkMenuString, SlinkMenuDesc") == 1
+    assert "\tld a, STARTMENUITEM_EXIT\n" not in changed
+    assert changed.count("\tld a, STARTMENUITEM_SLINK\n") == 1
+    # Existing handlers and non-EXIT availability conditions remain byte-for-byte source.
+    restored = changed.replace("\tconst STARTMENUITEM_SLINK ; 9\n", "")
+    restored = restored.replace("\tdw SlinkStartMenuEntry, SlinkMenuString, SlinkMenuDesc\n", "")
+    restored = restored.replace("\tld a, STARTMENUITEM_SLINK\n", "\tld a, STARTMENUITEM_EXIT\n")
+    assert restored.removesuffix('\nINCLUDE "engine/slink/panel_start.asm"\n') == original
+
+
+@pytest.mark.parametrize("missing", ["panel_flags.asm", "panel.asm", "panel_start.asm", "slink.asm"])
+def test_partial_panel_trio_is_refused_before_checkout_edits(tmp_path, missing):
+    src = _panel_source(tmp_path)
+    (src / missing).unlink()
+    checkout = _fake_checkout(tmp_path, "pokecrystal")
+    before = (checkout / "main.asm").read_bytes()
+    with pytest.raises(RuntimeError, match="panel"):
+        bc.apply_overlay(checkout, "pokecrystal", src, _no_gb_dir(tmp_path))
+    assert (checkout / "main.asm").read_bytes() == before
+    assert not (checkout / bc.OVERLAY_DST).exists()
+
+
+@pytest.mark.parametrize("which", ["constant", "table", "exit"])
+@pytest.mark.parametrize("count", [0, 2])
+def test_start_hook_refuses_nonunique_anchors_without_edit(tmp_path, which, count):
+    anchors = {"constant": "\tconst STARTMENUITEM_QUIT     ; 8\n",
+               "table": "\tdw StartMenu_Quit,     .QuitString,     .QuitDesc\n",
+               "exit": "\tld a, STARTMENUITEM_EXIT\n"}
+    original = (ROOT / ".cache/gen2-build/pokecrystal/engine/menus/start_menu.asm").read_text()
+    damaged = original.replace(anchors[which], anchors[which] * count)
+    target = tmp_path / "engine/menus/start_menu.asm"
+    target.parent.mkdir(parents=True)
+    target.write_text(damaged)
+    with pytest.raises(RuntimeError, match="exactly once"):
+        bc.apply_start_menu_hook(tmp_path)
+    assert target.read_text() == damaged
+
+
+def test_published_provenance_matches_patch_bytes_without_build():
+    report = json.loads(bc.PROVENANCE_PATH.read_text())
+    # This checks the artifact, not a frozen previous build hash; future panel artifacts work too.
+    for key, (_title, patch_name, repo) in bc.TITLES.items():
+        output = report["outputs"][key]
+        base = (ROOT / ".cache/gen2-build" / repo / output["filename"]).read_bytes()
+        patched = bc.ups_apply(base, (bc.DIST / patch_name).read_bytes())
+        assert output["sha1"] == hashlib.sha1(patched).hexdigest()
+        assert output["identical_to_clean"] == (patched == base)
+        assert output["identical_to_clean"] is False
+
+
+def test_replaced_exit_keeps_every_native_menu_within_screen():
+    # Native SetUpMenuItems: conditional dex/party/pack/gear/save-or-quit,
+    # always status/options/exit. O-28 replaces the last item without adding one.
+    for dex, party, gear, link, contest in product((False, True), repeat=5):
+        rows = int(dex) + int(party) + int(gear) + int(not link and not contest)
+        rows += 3 + int(not link)
+        top = 2 if contest else 0
+        assert top + 2 * rows + 1 <= 17
+    # The rejected append-only implementation cannot pass these full-menu examples.
+    assert 0 + 2 * (8 + 1) + 1 > 17
+    assert 2 + 2 * (7 + 1) + 1 > 17
+
+
+def _symbol_pair(tmp_path, mutation=None):
+    old = {"StartMenu.Items": (4, 0x66EB), "Tail": (4, 0x7500),
+           "DelayFrame": (0, 0x456), "RuntimeHook": (3, 0x6789), "State": (4, 0xD123)}
+    new = {**old, "Tail": (4, 0x7540), "SlinkStartMenuEntry": (4, 0x7F10),
+           "SlinkMenuString": (4, 0x7F20), "SlinkMenuDesc": (4, 0x7F26)}
+    if mutation:
+        mutation(new)
+    paths = [tmp_path / "clean.sym", tmp_path / "overlay.sym"]
+    for path, rows in zip(paths, (old, new), strict=True):
+        path.write_text("".join(f"{bank:02x}:{address:04x} {name}\n"
+                                for name, (bank, address) in rows.items()))
+    return paths
+
+
+def test_symbol_scope_accepts_only_bank4_growth(tmp_path):
+    bc.verify_symbol_scope(*_symbol_pair(tmp_path), panel=True)
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda rows: rows.update(RuntimeHook=(3, 0x678A)),
+    lambda rows: rows.update(DelayFrame=(0, 0x457)),
+    lambda rows: rows.update(State=(4, 0xD124)),  # bank-4 WRAM is not bank-4 ROM
+    lambda rows: rows.update(Tail=(5, 0x4540)),
+    lambda rows: rows.pop("Tail"),
+    lambda rows: rows.update(SlinkMenuString=(0x75, 0x4200)),
+])
+def test_symbol_scope_refuses_nonlocal_growth(tmp_path, mutation):
+    with pytest.raises(RuntimeError):
+        bc.verify_symbol_scope(*_symbol_pair(tmp_path, mutation), panel=True)
+
+
+def test_caps_zero_build_cannot_move_bank4_either(tmp_path):
+    with pytest.raises(RuntimeError, match="Tail"):
+        bc.verify_symbol_scope(*_symbol_pair(tmp_path), panel=False)
