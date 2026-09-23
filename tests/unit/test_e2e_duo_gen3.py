@@ -861,7 +861,8 @@ function FAKE(scenario, player, phase, spec)
     end
     ctx.go_has = function() return true end
     ctx.linked = function() return spec.linked or "K1" end
-    ctx.partner_done = function() return true end
+    ctx.partner_done = function() return spec.partner_done ~= false end
+    ctx.partner_result = function() return spec.partner end
     ctx.party = function() return party end
     -- gone: a deposit leaves the party until the withdraw; boxed: where the fake PC holds it;
     -- used: gBattleResults.lastUsedMovePlayer; writes: the armed-sink write count
@@ -869,7 +870,9 @@ function FAKE(scenario, player, phase, spec)
     if spec.gone then gone[spec.gone] = true end     -- a record the server moved out (quarantine)
     ctx.find = function(k) for _, m in ipairs(party) do if m.key == k and not gone[k] then return m end end end
     ctx.sent = function(event)
-        if event == "box_mon_failed" or event == "sync_retrieve_failed" then return 0 end
+        if event == "box_mon_failed" or event == "sync_retrieve_failed" then
+            return spec.failed == event and 1 or 0
+        end
         if spec.unsent and spec.unsent:find(event, 1, true) then return 0 end
         return spec.sent or 1
     end
@@ -1540,8 +1543,9 @@ def test_link_consequence_is_named_when_the_partner_ends_before_the_link():
     lua.globals().SCENARIO_DIR = str(REPO / "lua" / "tests" / "duo").replace("\\", "/")
     lua.execute(_FAKE_CTX)
     ok, passed, msg, _ = _run_module(lua, "link", "b", "initial",
-                                     {"unsent": "sync_retrieve_done", "gone": "K9"})
-    assert ok and passed is False and msg.startswith("CONSEQUENCE: the partner finished before the link formed"), msg
+                                     {"unsent": "sync_retrieve_done", "gone": "K9", "partner": A_FAILED})
+    assert ok and passed is False and msg.startswith(
+        "CONSEQUENCE: the partner failed before its catch, so the link never formed"), msg
 
 
 _BAG_READY = re.compile(r"local function bag_input_ready\(.*?\nend\n", re.S)
@@ -1599,8 +1603,8 @@ def test_catch_waits_for_bag_input_before_the_throw():
 
 # ── C4-6g: the ball-RNG retry, generalized from the Gen 1 standard ────────────────────────
 OUT_OF_BALLS = "RESULT: FAIL (hunt ended out-of-balls)"
-A_CONSEQUENCE = ("RESULT: FAIL (CONSEQUENCE: the partner finished before the link formed; "
-                 "21EDCA07:1C600D89 stays quarantined in the PC)")
+A_CONSEQUENCE = ("RESULT: FAIL (CONSEQUENCE: the partner failed before its catch, so the link never "
+                 "formed; 21EDCA07:1C600D89 stays quarantined in the PC)")
 
 
 def test_the_driver_returns_a_bare_out_of_balls_reason():
@@ -1660,7 +1664,6 @@ def test_the_gen3_driver_echoes_the_idle_jitter():
     format that jitter_problems checks on every double PASS of a retry family."""
     text = DRIVER.read_text(encoding="utf-8")
     assert 'log(fmt("JITTER requested=%d applied=%d attempt=%d"' in text
-    assert text.index('JITTER requested=') < text.index("pcall(scenario, ctx)")
     assert duo.jitter_problems("JITTER requested=37 applied=37 attempt=2\n", 37) == []
 
 
@@ -1734,3 +1737,240 @@ def test_the_bag_task_symbols_match_pret():
             if len(parts) == 4 and parts[3] in ("Task_BagMenu_HandleInput", "Task_AnimateWin0v"):
                 syms.setdefault(parts[3], int(parts[0], 16) | 1)
         assert (syms["Task_BagMenu_HandleInput"], syms["Task_AnimateWin0v"]) == want, title
+
+
+# ── lose_active under a key-edge model of the battle controller (card C4-6i) ────────────────
+# Live linked_faint_active_gen3 FR 324aea87: "LOSE ... status_move_slot=nil" then "TIMEOUT
+# waiting for the move menu". The driver's REAL steer/choose_action/status_move_slot/use_move/
+# lose_active, the helper's REAL wait_for_action_menu/verify_fight_cursor and gen3_boot_check's
+# REAL tap/idle run over a model with two pret facts: the battle controllers act only on JOY_NEW
+# (an edge of the held keys, main.c:299), and gBattleMons is empty until the intro copies it in
+# (battle_main.c:2576-2578), after the encounter step the hunt returns on.
+_LUA_DEF = r"^(?:local function {0}\(|function {0}\(|{0} = function\().*?^end$"
+
+
+def _lua_defs(path, names):
+    text = path.read_text(encoding="utf-8")
+    out = []
+    for name in names:
+        match = re.search(_LUA_DEF.format(re.escape(name)), text, re.M | re.S)
+        assert match, f"{path.name} must define {name}"
+        out.append(match.group(0))
+    return "\n".join(out)
+
+
+_BATTLE_MODEL = r"""
+S = { gBattlerControllerFuncs = 0x100, HandleInputChooseAction = 0x1000, HandleInputChooseMove = 0x2000,
+      gActionSelectionCursor = 0x200, gMoveSelectionCursor = 0x201, gBattleMons = 0x300, gBattleMoves = 0x8000 }
+local ACT, MOVE = S.HandleInputChooseAction | 1, S.HandleInputChooseMove | 1
+POWER = { [33] = 40, [39] = 0, [145] = 20 }                 -- Tackle, Tail Whip, Bubble
+M = { ctrl = 0, pending = {}, prev = {}, cursor = 0, lead_hp = 27, over = false, filled = false,
+      moves = { 33, 39, 145, 0 }, pp = { 35, 30, 30, 0 }, after = nil, used = {} }
+LOGS = {}
+function start(intro)                    -- the action menu comes up `intro` frames into the battle
+    M.after = { n = intro, to = ACT, fill = true }
+end
+joypad = { set = function(t) M.pending = t or {} end }
+memory = {
+    read_u32_le = function(a) if a == S.gBattlerControllerFuncs then return M.ctrl end return 0 end,
+    read_u16_le = function(a) return M.filled and M.moves[(a - S.gBattleMons - 0x0C) // 2 + 1] or 0 end,
+    read_u8 = function(a)
+        if a == S.gActionSelectionCursor then return 0 end
+        if a == S.gMoveSelectionCursor then return M.cursor end
+        if a >= S.gBattleMoves then return POWER[(a - S.gBattleMoves - 1) // 12] or 0 end
+        return M.filled and M.pp[a - S.gBattleMons - 0x24 + 1] or 0
+    end,
+}
+emu = { frameadvance = function()                           -- one frame: ReadKeys, then the controller
+    local new = {}
+    for _, k in ipairs({ "A", "Up", "Down", "Left", "Right" }) do
+        local held = M.pending[k] == true
+        new[k] = held and not M.prev[k]
+        M.prev[k] = held
+    end
+    M.pending = {}
+    if M.ctrl == ACT and new.A then M.ctrl = 0; M.after = { n = 3, to = MOVE }
+    elseif M.ctrl == MOVE and new.A then
+        local move = M.moves[M.cursor + 1]
+        M.used[#M.used + 1] = move
+        M.ctrl = 0
+        if POWER[move] > 0 then M.over = true              -- the foe goes down first
+        else M.lead_hp = math.max(0, M.lead_hp - 9); M.after = { n = 41, to = ACT } end
+    elseif M.ctrl == MOVE then                              -- HandleInputChooseMove's bit toggles
+        if new.Right then M.cursor = M.cursor | 1 elseif new.Left then M.cursor = M.cursor & 2
+        elseif new.Down then M.cursor = M.cursor | 2 elseif new.Up then M.cursor = M.cursor & 1 end
+    elseif M.after then
+        M.after.n = M.after.n - 1
+        if M.after.n <= 0 then
+            if M.after.fill then M.filled = true end
+            M.ctrl = M.after.to; M.after = nil
+        end
+    end
+end }
+G = { spent = 0, budget = 1e9, shot = function() end,
+      finish = function(_, why) error("G.finish: " .. tostring(why), 0) end }
+function G.advance() emu.frameadvance() end
+play = { in_battle = function() return not M.over end, at = function() return "here" end }
+function action_menu_up() return M.ctrl == ACT end
+function party_menu_up() return false end
+function action_cursor() return 0 end
+ACTION_FIGHT = 0
+log, fmt, cp = function(s) LOGS[#LOGS + 1] = s end, string.format, {}
+ctx = { find = function() return { hp = M.lead_hp } end, hp0 = function() return nil end }
+function ctx.wait_until(pred, _, what)
+    for _ = 1, 600 do local v = pred(); if v then return v end; emu.frameadvance() end
+    LOGS[#LOGS + 1] = "TIMEOUT waiting for " .. tostring(what)
+end
+"""
+
+
+@pytest.fixture
+def battle_model():
+    from lupa import LuaRuntime
+
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    runtime.execute(_BATTLE_MODEL)
+    runtime.execute("local M = G\n" + _lua_defs(REPO / "lua" / "tests" / "gen3_boot_check.lua",
+                                                ["M.idle", "M.tap"]))
+    runtime.execute(_lua_defs(REPO / "lua" / "tests" / "gen3_scripted_play.lua",
+                              ["wait_for_action_menu", "verify_fight_cursor"])
+                    + "\nSP = { verify_fight_cursor = verify_fight_cursor }")
+    text = DRIVER.read_text(encoding="utf-8")
+    consts = re.search(r"^local ACTION_FIGHT, ACTION_BAG, ACTION_SWITCH, ACTION_RUN = .*$", text, re.M)
+    menus = re.findall(r"^local function (?:ctrl0|action_menu_up|move_menu_up)\(\).*$", text, re.M)
+    assert consts and len(menus) == 3
+    runtime.execute("\n".join([consts.group(0), *menus,
+                               _lua_defs(DRIVER, ["steer", "ctx.choose_action", "ctx.status_move_slot",
+                                                  "ctx.use_move", "ctx.lose_active"]),
+                               "function LOSE() local ok, why = ctx.lose_active('K0', 'test')"
+                               " return ok, tostring(why) end"]))
+    return runtime
+
+
+@pytest.mark.parametrize("intro", [40, 41])          # both parities of the helper's A mash
+def test_lose_active_selects_fight_off_the_mash_and_reads_moves_after_the_intro(battle_model, intro):
+    lua = battle_model
+    lua.globals().start(intro)                       # gBattleMons empty at the encounter step
+    ok, why = lua.globals().LOSE()
+    m, logs = lua.globals().M, list(lua.globals().LOGS.values())
+    assert ok is True, (why, logs)
+    assert set(m.used.values()) == {39}, "only Tail Whip, never the damaging Tackle fallback"
+    assert "LOSE K0 status_move_slot=1" in logs, logs
+
+
+def test_lose_active_refuses_a_lead_without_a_no_damage_move(battle_model):
+    lua = battle_model
+    lua.execute("M.moves = { 33, 145, 0, 0 }; M.pp = { 35, 30, 0, 0 }")
+    lua.globals().start(40)
+    ok, why = lua.globals().LOSE()
+    assert ok is False and "no no-damage move" in why, why
+    assert len(lua.globals().M.used) == 0, "never pressed a damaging move"
+
+
+# ── C4-6j: Codex review of 43b9ccb4 / ad9669b1 ──────────────────────────────────────────────
+A_FAILED = 'lua:"duo instance a\\nRESULT: FAIL (hunt ended out-of-balls)\\n"'
+A_CAUGHT_THEN_FAILED = 'lua:"duo instance a\\nCAUGHT K7\\nRESULT: FAIL (save failed)\\n"'
+
+
+@pytest.mark.parametrize("spec", [
+    # Codex's executed case: this side's sync failed, the partner is still running
+    {"failed": "sync_retrieve_failed", "unsent": "sync_retrieve_done", "partner_done": "lua:false"},
+    {"failed": "box_mon_failed", "unsent": "sync_retrieve_done", "partner": A_FAILED},
+    # no own failure, but the partner's receipt does not explain the missing link
+    {"unsent": "sync_retrieve_done", "partner_done": "lua:false"},
+    {"unsent": "sync_retrieve_done", "partner": A_CAUGHT_THEN_FAILED},
+    {"unsent": "sync_retrieve_done", "partner": 'lua:"duo instance a\\nRESULT: PASS (caught K7)\\n"'},
+])
+def test_link_claims_a_consequence_only_when_the_partner_explains_it(lua, spec):
+    ok, passed, msg, _ = _run_module(lua, "link", "b", "initial", {"gone": "K9", **spec})
+    assert ok and passed is False, msg
+    assert duo.classify_gen1_result(f"RESULT: FAIL ({msg})") == "FINAL", msg
+
+
+def test_an_own_sync_failure_never_retries_with_a_partner_ball_miss(lua):
+    """Codex item 3: B's independent sync failure beside A's ball miss is not a retry."""
+    _, _, msg, _ = _run_module(lua, "link", "b", "initial",
+                               {"failed": "sync_retrieve_failed", "unsent": "sync_retrieve_done",
+                                "gone": "K9", "partner": A_FAILED})
+    b = f"RESULT: FAIL ({msg})"
+    assert not duo.retryable_gen1_rng("gen3_frlg", {"a": OUT_OF_BALLS, "b": b}, 1, 3), b
+    # the positive control: the same pair with B's link genuinely missing IS a retry
+    _, _, msg, _ = _run_module(lua, "link", "b", "initial",
+                               {"unsent": "sync_retrieve_done", "gone": "K9", "partner": A_FAILED})
+    assert duo.retryable_gen1_rng("gen3_frlg", {"a": OUT_OF_BALLS, "b": f"RESULT: FAIL ({msg})"}, 1, 3)
+
+
+_CATCH_MODEL = r"""
+BALLS, THROWS, RAN = nil, 0, { true }
+S = { gBattleOutcome = 0x10 }
+B_OUTCOME_CAUGHT, ACTION_BAG = 7, 1
+memory = { read_u8 = function() return 1 end }
+reader = { read_balls = function() if BALLS then return { ball_count = BALLS } end end }
+log = function() end
+boot_keys = {}
+play = { wait_scene_settled = function() return true end }
+SP = { verify_fight_cursor = function() return "fight" end,
+       throw_pokeball_from_bag = function() THROWS = THROWS + 1; BALLS = BALLS - 1 end }
+ctx = { hunt = function() return true end, choose_action = function() return true end,
+        wait_until = function(pred) return true end, bag_input_ready = function() return true end,
+        await_turn = function() return "action" end,                  -- every ball misses
+        run_away = function() return RAN[1], RAN[2] end,
+        last_sent = function() end, party = function() return {} end }
+function CATCH() local key, why = ctx.catch("t"); return key, tostring(why) end
+"""
+
+
+@pytest.fixture
+def catch_model():
+    from lupa import LuaRuntime
+
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    runtime.execute(_CATCH_MODEL)
+    runtime.execute(_lua_defs(DRIVER, ["ctx.balls", "ctx.catch"]))
+    return runtime
+
+
+@pytest.mark.parametrize("balls, ran, want", [
+    ("nil", "{ true }", "FINAL"),                           # Codex: read_balls() nil before any throw
+    ("0", "{ true }", "FINAL"),                             # a fixture that starts empty
+    ("2", "{ false, 'no escape' }", "FINAL"),               # exhausted, then the escape failed
+    ("2", "{ true }", "CAUSE_RNG"),                         # the real RNG: two thrown, both missed
+])
+def test_only_an_observed_ball_exhaustion_is_the_rng(catch_model, balls, ran, want):
+    catch_model.execute(f"BALLS = {balls}; RAN = {ran}")
+    key, why = catch_model.globals().CATCH()
+    text = f"RESULT: FAIL (hunt ended {why})"
+    assert key is None and duo.classify_gen1_result(text) == want, text
+    assert duo.retryable_gen1_rng("gen3_frlg", {"a": text, "b": "RESULT: PASS (x)"}, 1, 3) == (
+        want == "CAUSE_RNG")
+
+
+def test_the_attempt_jitter_lands_after_go(tmp_path):
+    """Codex item 4: idled before the scenario, a GO that comes later absorbs the jitter and the
+    retry replays the same roll. The driver's own wait_go and scenario tail, over a fake clock:
+    the first input after GO must come `requested` frames after it."""
+    from lupa import LuaRuntime
+
+    text = DRIVER.read_text(encoding="utf-8")
+    head = text[text.index("function ctx.wait_until("):text.index("function ctx.linked()")]
+    tail = text[text.index("local ok, pass, msg = pcall(scenario, ctx)"):]
+    go = (tmp_path / "go.txt").as_posix()
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.execute(f"""
+        FRAME, LOGS, FIRST_INPUT = 0, {{}}, nil
+        D = {{ idle_jitter = 37, attempt = 2, go_file = "{go}" }}
+        emu = {{ frameadvance = function()
+            FRAME = FRAME + 1
+            if FRAME == 50 then local f = io.open(D.go_file, "w"); f:write("GO\\n"); f:close() end
+        end }}
+        log, fmt, writes, FINISHED = function(s) LOGS[#LOGS + 1] = s end, string.format, 0, "F"
+        SP = {{ PC = {{ dump = function() return "" end }} }}
+        finish = function() end
+        ctx = {{}}
+    """)
+    lua.execute(head + "\nscenario = function(c) c.wait_go(); FIRST_INPUT = FRAME; return true, 'ok' end\n"
+                + tail)
+    g = lua.globals()
+    assert g.FIRST_INPUT == 50 + 37, g.FIRST_INPUT
+    assert "JITTER requested=37 applied=37 attempt=2" in list(g.LOGS.values())
+    assert duo.jitter_problems("\n".join(g.LOGS.values()), 37) == []

@@ -305,9 +305,26 @@ function ctx.go_has(marker)
     for _, l in ipairs(go_lines() or {}) do if l == marker then return true end end
     return false
 end
+-- --idle-jitter, the Gen 1 standard's retry lever: BizHawk is deterministic, and FRLG's VBlank
+-- advances the RNG once per frame (pret src/main.c:412 Random() in VBlankIntr), so idle frames
+-- are what make a retried attempt a different roll. They go AFTER the scenario's GO, before its
+-- first input: idled before the scenario, a GO that arrives later absorbs them and the retry
+-- replays the same roll (Codex review of ad9669b1). The harness writes the count (+37 per
+-- attempt) and checks the echo (e2e_duo.py jitter_problems); a scenario phase that never waits
+-- for GO echoes applied=0 at its end.
+local jitter_logged = false
+local function idle_jitter(apply)
+    if jitter_logged then return end
+    jitter_logged = true
+    local requested, applied = D.idle_jitter or 0, 0
+    if apply then for _ = 1, requested do emu.frameadvance(); applied = applied + 1 end end
+    log(fmt("JITTER requested=%d applied=%d attempt=%d", requested, applied, D.attempt or 1))
+end
 function ctx.wait_go(marker, secs)
     marker = marker or "GO"
-    return ctx.wait_until(function() return ctx.go_has(marker) end, secs or 1800, "go-file " .. marker)
+    local ok = ctx.wait_until(function() return ctx.go_has(marker) end, secs or 1800, "go-file " .. marker)
+    if ok and marker == "GO" then idle_jitter(true) end
+    return ok
 end
 function ctx.linked()
     for _, l in ipairs(go_lines() or {}) do
@@ -315,12 +332,14 @@ function ctx.linked()
         if k then return k end
     end
 end
-function ctx.partner_done()
+--- The partner's whole result file once it holds a RESULT line, else nil.
+function ctx.partner_result()
     local f = io.open(D.partner_result, "r")
-    if not f then return false end
+    if not f then return nil end
     local text = f:read("a"); f:close()
-    return text:find("RESULT:", 1, true) ~= nil
+    return text:find("RESULT:", 1, true) and text or nil
 end
+function ctx.partner_done() return ctx.partner_result() ~= nil end
 
 function ctx.party()
     local mons = reader.read_party()
@@ -564,6 +583,13 @@ function ctx.choose_action(action)
     if not steer(function() return memory.read_u8(S.gActionSelectionCursor) end, action) then
         return false, "action cursor stuck at " .. memory.read_u8(S.gActionSelectionCursor)
     end
+    -- SP.verify_fight_cursor mashes A every other frame and returns on the frame the menu comes
+    -- up, so half the time A was held on the frame before this one. HandleInputChooseAction
+    -- reads JOY_NEW(A_BUTTON) (pret battle_controller_player.c:225), an edge of heldKeysRaw
+    -- (main.c:299): a tap that continues that hold is no press at all. Live linked_faint_active
+    -- FR 324aea87: FIGHT already under the cursor (no steer tap to break the hold), A dropped,
+    -- "TIMEOUT waiting for the move menu". Release one frame first.
+    G.idle(1)
     G.tap("A", 3, 13)
     return true
 end
@@ -583,7 +609,9 @@ end
 function ctx.use_move(slot)
     local ok, why = ctx.choose_action(ACTION_FIGHT)
     if not ok then return false, why end
-    if not ctx.wait_until(move_menu_up, 10, "the move menu") then return false, "move menu never opened" end
+    if not ctx.wait_until(move_menu_up, 10, "the move menu") then
+        return false, "move menu never opened (action menu still up: " .. tostring(action_menu_up()) .. ")"
+    end
     if not steer(function() return memory.read_u8(S.gMoveSelectionCursor) end, slot) then
         return false, "move cursor stuck"
     end
@@ -643,8 +671,15 @@ function ctx.catch(label)
         local turn = SP.verify_fight_cursor(cp, "incidental_battle")
         if turn == nil then break end
         if turn == "party" then return nil, "a forced party menu came up while catching" end
-        if ctx.balls() <= 0 then
-            ctx.run_away(label)
+        -- Only an exhaustion OBSERVED after real throws is the ball RNG (and earns the retry); an
+        -- unreadable count or a fixture that starts empty is a harness defect (Codex review of
+        -- ad9669b1: read_balls() nil before any throw read as "out-of-balls", retryable).
+        local balls = ctx.balls()
+        if balls < 0 then return nil, "the Poke Ball count is unreadable" end
+        if balls == 0 then
+            if throws == 0 then return nil, "the fixture starts with no Poke Balls" end
+            local ran, rwhy = ctx.run_away(label)
+            if not ran then return nil, "out of balls, then the escape failed: " .. tostring(rwhy) end
             -- bare reason: every caller prefixes "hunt ended ", giving the Gen 1 standard's exact
             -- CAUSE_RNG phrase (tools/e2e_duo.py GEN1_RNG_REASON_CLASS "hunt ended out-of-balls")
             return nil, "out-of-balls"
@@ -680,21 +715,25 @@ end
 
 --- Keep choosing a no-damage move until the ACTIVE `key` faints (a natural engine faint).
 function ctx.lose_active(key, label)
-    local slot = ctx.status_move_slot()
-    log(fmt("LOSE %s status_move_slot=%s", key, tostring(slot)))
     -- The watcher's record, not a fresh read: a whiteout heals the party at the warp, so by the
     -- time the battle is gone the fainted mon can read full HP again.
     local function fainted()
         local m = ctx.find(key)
         return ctx.hp0(key) ~= nil or (m ~= nil and m.hp == 0)
     end
-    for _ = 1, 80 do
+    for turn_no = 1, 80 do
         if fainted() then return true end
         local turn = SP.verify_fight_cursor(cp, "incidental_battle")
         if turn ~= "fight" then
             return fainted(), "battle left the action menu (" .. tostring(turn) .. ")"
         end
-        local ok, why = ctx.use_move(slot or 0)
+        -- Only now: gBattleMons is copied in at BattleIntroDrawTrainersOrMonsSprites (pret
+        -- battle_main.c:2576-2578), long after the encounter step the hunt returns on -- live FR
+        -- 324aea87 read it there and got nil. No damaging fallback: it can KO the foe first.
+        local slot = ctx.status_move_slot()
+        if turn_no == 1 then log(fmt("LOSE %s status_move_slot=%s", key, tostring(slot))) end
+        if not slot then return false, label .. ": battler 0 has no no-damage move with PP" end
+        local ok, why = ctx.use_move(slot)
         if not ok then return false, label .. ": " .. why end
     end
     return false, label .. ": still standing after 80 turns"
@@ -799,14 +838,8 @@ local okload, scenario = pcall(dofile, file)
 if not okload or type(scenario) ~= "function" then
     finish(false, "no scenario module " .. file .. ": " .. tostring(scenario))
 end
--- --idle-jitter, the Gen 1 standard's retry lever: BizHawk is deterministic, and FRLG's VBlank
--- advances the RNG once per frame (pret src/main.c:412 Random() in VBlankIntr), so idle frames
--- before the scenario are what make a retried attempt a different roll. The harness writes the
--- count (+37 per attempt) and checks the echo (e2e_duo.py jitter_problems).
-local requested, applied = D.idle_jitter or 0, 0
-for _ = 1, requested do emu.frameadvance(); applied = applied + 1 end
-log(fmt("JITTER requested=%d applied=%d attempt=%d", requested, applied, D.attempt or 1))
 local ok, pass, msg = pcall(scenario, ctx)
+idle_jitter(false)              -- the echo, for a phase that never waited for GO (see wait_go)
 if not ok then
     if pass == FINISHED then return end
     finish(false, "scenario error: " .. tostring(pass))

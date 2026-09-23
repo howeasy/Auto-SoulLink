@@ -331,7 +331,9 @@ function R.new(profile, io, pointers)
     end
     r.party_base = party_base
 
-    -- occupied: every slot with a species (CalculatePlayerPartyCount's rule), not 0..count-1.
+    -- occupied: every slot with a species, not 0..count-1 -- deliberately NOT
+    -- CalculatePlayerPartyCount's rule, which counts only the contiguous prefix up to the first
+    -- SPECIES_NONE (pret pokemon.c:3742-3752) and so would miss a slot past a gap.
     -- Inside the PC gPlayerPartyCount is stale: the storage system recounts only on box exit
     -- (pret pokemon_storage_system_tasks.c Task_OnBPressed/Task_OnCloseBoxPressed state 4), so
     -- a withdrawn mon sits at slot == count and a deposited slot is a zeroed record under it.
