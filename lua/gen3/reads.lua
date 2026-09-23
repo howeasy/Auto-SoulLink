@@ -331,19 +331,25 @@ function R.new(profile, io, pointers)
     end
     r.party_base = party_base
 
-    function r.read_party()
+    -- occupied: every slot with a species (CalculatePlayerPartyCount's rule), not 0..count-1.
+    -- Inside the PC gPlayerPartyCount is stale: the storage system recounts only on box exit
+    -- (pret pokemon_storage_system_tasks.c Task_OnBPressed/Task_OnCloseBoxPressed state 4), so
+    -- a withdrawn mon sits at slot == count and a deposited slot is a zeroed record under it.
+    function r.read_party(occupied)
         if not a.PARTY_COUNT_ADDR then return nil, "profile has no ram.PARTY_COUNT_ADDR" end
         local count = io.read_u8(a.PARTY_COUNT_ADDR)
         if count > party_capacity then return nil, "party count exceeds capacity" end
         local base, why = party_base()
         if not base then return nil, why end
         local out = {}
-        for slot = 0, count - 1 do
+        for slot = 0, (occupied and party_capacity or count) - 1 do
             local mon, bad = r.decode_party_mon(
                 io.read_bytes(base + slot * R.PARTY_MON_SIZE, R.PARTY_MON_SIZE))
             if not mon then return nil, bad end
-            mon.slot = slot
-            out[#out + 1] = mon
+            if not occupied or mon.species ~= 0 then
+                mon.slot = slot
+                out[#out + 1] = mon
+            end
         end
         return out
     end

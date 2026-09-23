@@ -1438,3 +1438,29 @@ def test_the_driver_names_no_bizhawk_global_and_no_title():
     assert not re.search(r"firered|leafgreen|radical_red|gen3_frlg|gen3_rr", code)
     assert not re.search(r"\bmemory\.write|write_u8\(", code)
     _ = lua_to_py
+
+
+def test_a_pc_withdraw_is_box_to_party_while_the_party_count_is_stale():
+    """Live boxsync_gen3 run 1 (FR A): the withdraw sent no box_to_party. pret pokefirered: the
+    storage system recounts gPlayerPartyCount only on box exit (pokemon_storage_system_tasks.c
+    Task_OnBPressed/Task_OnCloseBoxPressed state 4). A deposit zeroes its slot under the old
+    count; a withdraw lands at slot == count, past a count-bounded read."""
+    w = live(pids=(A, B))
+    base, size = w.party_base(), 100
+    w.poke(base + size, bytes(size))                           # deposit: count stays 2
+    w.set_box(0, 0, mon_record(B, OT, species=5))
+    w.fire("pc_deposit")
+    w.step()
+    assert [e["key"] for e in w.events("party_to_box")] == [KB]
+    w.set_party(party(A))                                      # box exit recounts: 1
+    w.fire("map_load")
+    w.step()
+    w.set_box(0, 0, None)                                      # withdraw: count stays 1
+    w.poke(base + size, w.encode(party(A, B)[1]))
+    w.fire("pc_withdraw")
+    w.step()
+    assert [e["key"] for e in w.events("box_to_party")] == [KB]
+    w.set_party(party(A, B))                                   # box exit recounts: 2
+    w.fire("map_load")
+    w.step()
+    assert [e["key"] for e in w.events("box_to_party")] == [KB]   # no duplicate

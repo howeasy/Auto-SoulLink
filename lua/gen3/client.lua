@@ -128,7 +128,7 @@ function Client.new(p)
         if not f then return nil, "reads." .. name .. " is not built" end
         return f(...)
     end
-    local function party_read() return call("read_party") end
+    local function party_read(occupied) return call("read_party", occupied) end
     local function trainer() local t = call("read_trainer") return type(t) == "table" and t or nil end
     local function area_now()
         local l = call("read_location")
@@ -449,7 +449,7 @@ function Client.new(p)
         if not next(f) then return end
         st.flags = {}
         if f.save and io.saveram then pcall(io.saveram) end
-        local party = party_read()
+        local party = party_read(f.pc)                          -- a PC settle reads occupancy
         if not party then
             f.save = nil
             st.flags = f                                        -- try again next frame
