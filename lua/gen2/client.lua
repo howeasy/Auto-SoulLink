@@ -504,7 +504,7 @@ function Client.new(p)
                                        and scripted ~= nil and math.floor(scripted / 128) % 2 == 0 }
             if self.battle.resolves and self.has_pokeballs and self.seeded and area_id ~= ""
                and not self.resolved_areas[area_id] then
-                hud.show("** NEW ENCOUNTER **  " .. name, 255, 220, 60, 360)
+                hud.show("** NEW ENCOUNTER **\n" .. name, 255, 220, 60, 360)  -- area on its own line, as Gen 1
                 self:request_sfx_local(25)
             end
         elseif k == "trainer_ready" then

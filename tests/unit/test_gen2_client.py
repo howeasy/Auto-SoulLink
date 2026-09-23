@@ -639,6 +639,15 @@ def test_a_refused_capture_never_becomes_a_no_catch():
         "if b.capture_refused or ev.refused_acquisitions ~= b.refused_base then", "if false then")))
 
 
+def test_the_new_encounter_banner_puts_the_area_on_its_own_line():
+    world = World()
+    wild_battle(world)
+    world.frames(1)
+    banners = [s for s in world.shown() if "NEW ENCOUNTER" in s]
+    assert len(banners) == 1 and banners[0].startswith("show:** NEW ENCOUNTER **\n")
+    assert banners[0] != "show:** NEW ENCOUNTER **\n"
+
+
 def test_a_missed_throw_still_ends_as_no_catch():
     world = World()
     wild_battle(world)
