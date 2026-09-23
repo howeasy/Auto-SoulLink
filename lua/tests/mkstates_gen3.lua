@@ -160,6 +160,11 @@ local function follow(g, n, path, label)
             moved = step(dir)
             if in_battle() then
                 if not run_away() then return false, label .. ": could not flee a wild battle" end
+                -- "Got away safely!" waits for A; A only (a mashed Start could open the field menu)
+                for i = 1, 3000 do
+                    if field_settled() then break end
+                    joypad.set(i % 16 == 8 and { A = true } or {}); G.advance()
+                end
                 local back, why = wait_field()
                 if not back then
                     return false, string.format("%s: field never returned after fleeing (%s refuses, at %s)",
