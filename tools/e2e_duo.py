@@ -1875,7 +1875,7 @@ class DuoRun:
             if player == "rejected":
                 continue
             # the gen3 battery rows run the NEW client (lua/gen3); gen3_rr keeps "old_client"
-            label = "new_client" if self.is_gen3_battery else "old_client"
+            label = "gen3_new" if self.is_gen3_battery else "old_client"
             dest = os.path.join(WIRE_FIXTURES, f"{self.scenario}_{player}_{label}.jsonl")
             shutil.copyfile(os.path.join(wire, name), dest)
             print(f"[duo] wire log: {dest}")

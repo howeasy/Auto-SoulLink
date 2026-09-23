@@ -1424,7 +1424,7 @@ def test_no_scenario_passes_seconds_as_the_wait_go_marker():
 
 # the wire-log label: the gen3 battery rows run the NEW client
 def test_wire_logs_are_labelled_by_client(monkeypatch, tmp_path):
-    for game, label in (("gen3_frlg", "new_client"), ("gen3_rr_new", "new_client"),
+    for game, label in (("gen3_frlg", "gen3_new"), ("gen3_rr_new", "gen3_new"),
                         ("gen3_rr", "old_client")):
         run = duo.DuoRun.__new__(duo.DuoRun)
         run.scenario, run.game, run.gcfg = "faint_cmd_gen3", game, dict(duo.GAMES[game])
