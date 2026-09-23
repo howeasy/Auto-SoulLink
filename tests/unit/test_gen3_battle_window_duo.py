@@ -12,7 +12,7 @@ function world(mode, fault)
     local frame, rx, attempted = 10, 0, 0
     local slot = mode == 'trainer_bench' and 1 or 0
     local hp, battling, outcome = 20, false, 0
-    local ready, exiting, finished = false, false, false
+    local ready, exiting, finished, prepared = false, false, false, false
     local records, hooks, watchers, logs = {}, {}, {}, {}
     local active_bytes = string.rep('A', 0x58)
     local target_slot, target_key = slot, 'K'
@@ -53,7 +53,8 @@ function world(mode, fault)
     c.wait_go = function() return fault ~= 'no_go' end
     c.linked = function() return 'K' end
     c.find = function(k) if k == target_key then return {key=k,slot=target_slot,hp=hp} end end
-    c.party = function() return {{slot=0,level=fault=='prep_floor' and 6 or 9}} end
+    c.party = function() return {{slot=0,level=fault=='prep_floor' and 6 or (prepared and 13 or 9),
+        hp=fault=='prep_unhealed' and 19 or 20,max_hp=20,status=fault=='prep_status' and 8 or 0}} end
     c.received = function(cmd,k) return k == 'K' and rx or 0 end
     c.battle_hold = function(k)
         if k=='K' and battling and rx>0 and fault~='missing_hold' then return {why='active battler'} end
@@ -76,7 +77,8 @@ function world(mode, fault)
                 tuple=fault=='empty_tuple' and '' or 'main=selection comm0=1 flags=1 controller=player'}
     end
     c.enter_trainer = function(label,id,prep)
-        assert(id==102 and prep.level_floor==8 and prep.max_frames==60000)
+        assert(id==102 and prep.level_floor==13 and prep.max_frames==60000)
+        prepared=true
         if fault=='prep_hp' then hp=hp-1 end
         if fault=='prep_slot' then target_slot=3 end
         if fault=='prep_transient' then hp=19; c.frames(1); hp=20 end
@@ -154,7 +156,8 @@ def test_real_carrier_accepts_keyed_write_in_its_own_phase_and_normal_save(mode)
     else:
         assert "trainer=102" in log and "reason=battle_faint" in log
         assert log.index("BATTLE_WINDOW_LANDED") < log.index("BATTLE_WINDOW_EXIT trainer_bench")
-        assert "active_hex=" in log and "samples=" in log and "PREP_LEVEL before=9 after=9" in log
+        assert "active_hex=" in log and "samples=" in log and "PREP_LEVEL before=9 after=13" in log
+        assert "hp=full status=none" in log
 
 
 @pytest.mark.parametrize("mode,fault,reason", [
@@ -166,7 +169,7 @@ def test_real_carrier_accepts_keyed_write_in_its_own_phase_and_normal_save(mode)
     ("trainer_bench", "duplicate_rx", "duplicate force_faint"),
     ("trainer_bench", "denied_battle_write", "outside the in-battle bench window"),
     ("trainer_bench", "no_write", "no witnessed"),
-    ("trainer_bench", "trainer_whiteout", "whiteout is not persistence"),
+    ("trainer_bench", "trainer_whiteout", "T2_RNG_LOSS"),
     ("active_end", "missing_hold", "not held in battle_pending"),
     ("active_end", "last_hold_frame", "active target mutated"),
     ("active_end", "early_exit_write", "active target mutated"),
@@ -196,6 +199,8 @@ def test_observed_failure_is_named_and_never_saved_as_a_pass(mode, fault, reason
     ("prep_slot", "PREPARATION altered"),
     ("prep_floor", "level floor"),
     ("prep_transient", "PREPARATION altered"),
+    ("prep_unhealed", "full HP with no status"),
+    ("prep_status", "full HP with no status"),
 ])
 def test_bad_setup_does_not_publish_ready(fault, reason):
     passed, why, (log, *_) = run("trainer_bench", fault)

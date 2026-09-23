@@ -7,9 +7,10 @@
 -- SINGLES ONLY; doubles player slots belong to D1-D5, not this carrier.
 --   ctx.enter_trainer(label, expected_trainer_id, prep) -> true | false, why
 --     T2 uses Rick102, NOT the Route22 rival. PREPARATION: train the lead to prep.level_floor
---     (default8), within prep.max_frames (60000), by normal Route1 Tackle battles and normal
+--     (default13), within prep.max_frames (60000), by normal Route1 Tackle battles and normal
 --     Viridian nurse healing. Reuse GRASS_ORIGIN/GRASS_LOOP/hunt; no game-data staging/pokes.
---     No-op if already at the floor. Fail by name if budget/floor fails or a forced switch
+--     Heal the lead to full HP/status0 before walking to Rick, and verify those at entry.
+--     Training is a no-op if already at the floor. Fail if budget/floor fails or a forced switch
 --     would involve the bench. prep.target_key/slot/hp must remain unchanged on EVERY frame.
 --     Then normal Route2/Forest route to Rick; return parked, battle_permit=true, outcome=0,
 --     is_trainer=true, trainer_id=expected. Integration owns this route/preparation binding.
@@ -19,7 +20,11 @@
 --     moving NPCs normally. Reuse the plan's Route2/gate/Forest route to Rick's sight (42,45).
 --     pret trainer_parties.h:273-284: Rick's Weedle6 (Poison Sting/String Shot), Caterpie6
 --     (Tackle/String Shot), .iv0 = IV0 (battle_main.c:1576). The rival .iv50 = IV6. Both town
---     fixtures have no Potions; FR Squirtle9 clears the floor, LG Squirtle6 needs preparation.
+--     fixtures have no Potions. Coordinator FC-T2-FLOOR ruling (Monte Carlo, not reproduced
+--     here): LG8 wins30-58%, LG10 87-92%, LG13 99.6%; FR9 57-75%. Poison dominates risk.
+--     BOTH titles therefore train to13. One whole-attempt retry is allowed only for the named
+--     T2_RNG_LOSS AFTER the bench write; it never qualifies as PASS. Pre-READY loss is prep failure.
+--     ctx.party() must expose lead level/hp/max_hp/status from actual RAM (status0 means none).
 --   ctx.battle_window_snapshot(key) -> immutable table, or nil, why:
 --     frame, samples, in_battle (boolean), outcome, is_trainer (boolean), trainer_id, battlers_count,
 --     active_slots (player party slots, zero based), party_base, target_count,
@@ -84,8 +89,8 @@ return function(ctx)
     end
     if mode == "trainer_bench" then
         if type(ctx.enter_trainer) ~= "function" then return false, "missing enter_trainer route seam" end
-        local floor = ctx.D.battle_window_level_floor or 8
-        if not integer(floor) or floor < 8 or floor > 100 then return false, "invalid preparation level floor" end
+        local floor = ctx.D.battle_window_level_floor or 13
+        if not integer(floor) or floor < 13 or floor > 100 then return false, "invalid preparation level floor" end
         local before = (ctx.party() or {})[1]
         if not before or before.slot ~= 0 or not integer(before.level) then return false, "unreadable prep lead" end
         local preparing, prep_error = true, nil
@@ -108,7 +113,10 @@ return function(ctx)
         if not after or after.slot ~= 0 or not integer(after.level) or after.level < floor then
             return false, "PREPARATION did not reach the level floor within its budget"
         end
-        ctx.log(fmt("PREP_LEVEL before=%d after=%d floor=%d", before.level, after.level, floor))
+        if not integer(after.max_hp) or after.max_hp <= 0 or after.hp ~= after.max_hp or after.status ~= 0 then
+            return false, "PREPARATION lead must enter at full HP with no status"
+        end
+        ctx.log(fmt("PREP_LEVEL before=%d after=%d floor=%d hp=full status=none", before.level, after.level, floor))
     else
         if not ctx.hunt("battle_window active_end") then return false, "no wild encounter" end
         if ctx.SP.verify_fight_cursor(ctx.cp, "incidental_battle") ~= "fight" then
@@ -223,6 +231,10 @@ return function(ctx)
         if ctx.received("force_faint", key) > rx0 + 1 then return fail("duplicate force_faint during carrier") end
         if landed then
             if ctx.attempted() - attempts0 ~= 2 then return fail("extra client write after target HP write") end
+            if trainer and s.outcome == 2 and s.trainer_id == TRAINER_ID then
+                note_exit(s)
+                return fail("T2_RNG_LOSS: lead fainted to Rick after the SLink write landed")
+            end
             if s.target.hp ~= 0 then fail("target revived after the witnessed faint") end
             if trainer and not s.in_battle then note_exit(s) end
             return
@@ -268,7 +280,14 @@ return function(ctx)
     if trainer then
         local ok, err = ctx.try(ctx.play.fight_through, ctx.cp, 4000)
         if failed then return finish(false, failed) end
-        if not ok then return finish(false, "trainer completion: " .. tostring(err)) end
+        if not ok then
+            local last = snapshot()
+            if last and last.outcome == 2 and last.trainer_id == TRAINER_ID then
+                note_exit(last)
+                return finish(false, "T2_RNG_LOSS: lead fainted to Rick after the SLink write landed")
+            end
+            return finish(false, "trainer completion: " .. tostring(err))
+        end
     end
     ctx.play.wait_scene_settled(ctx.cp, 3000)
     local final, err = snapshot()
