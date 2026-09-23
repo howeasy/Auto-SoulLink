@@ -38,8 +38,93 @@ def test_family_evidence_contracts_are_explicit_and_aliases_share_one():
         contract = duo_module.evidence_contract(game)
         if game.startswith("gen1"):
             assert contract is required
+        elif game == "gen2_new":
+            assert contract.require_oracle is True
+            assert contract.witness_validator
+            assert callable(getattr(DuoRun, contract.witness_validator, None))
         else:
             assert contract == duo_module.EvidenceContract()
+
+
+def test_gen2_new_selects_only_link_with_required_evidence():
+    assert "gen2_new" in GAMES
+    assert scenarios_for("gen2_new") == ["link"]
+    contract = duo_module.evidence_contract("gen2_new")
+    assert contract.require_oracle and contract.witness_validator
+    assert callable(getattr(DuoRun, contract.witness_validator, None))
+    assert callable(getattr(DuoRun, SCENARIOS["link"]["oracle"], None))
+    for game in GAMES:
+        assert scenario_applies("link", game) == (game == "gen2_new")
+
+
+def _gen2_wrapper(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
+    wrapper = __import__("test_duo_gen2_new")
+    monkeypatch.setattr(wrapper, "REPO", tmp_path)
+    emulator = tmp_path / "EmuHawk.exe"
+    emulator.touch()
+    monkeypatch.setattr(wrapper.duo, "EMUHAWK", str(emulator))
+    monkeypatch.setattr(wrapper.duo, "gen2_preflight", lambda **kwargs: {}, raising=False)
+    monkeypatch.setitem(wrapper.duo.SCENARIOS, "link", {"timeout": 1})
+    build = tmp_path / "patch" / "build"
+    build.mkdir(parents=True)
+    monkeypatch.setattr(wrapper.subprocess, "run", lambda *a, **k: SimpleNamespace(
+        returncode=0, stdout="", stderr=""))
+    return wrapper, build
+
+
+@pytest.mark.parametrize("missing", ("rom", "fixture", "qualification receipt"))
+def test_gen2_duo_wrapper_refuses_missing_preflight_input(monkeypatch, tmp_path, missing):
+    wrapper, _ = _gen2_wrapper(monkeypatch, tmp_path)
+
+    def refuse(**kwargs):
+        raise AssertionError(f"missing {missing}")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("launched despite failed fixture preflight")
+
+    monkeypatch.setattr(wrapper.duo, "gen2_preflight", refuse)
+    monkeypatch.setattr(wrapper.subprocess, "run", forbidden)
+    with pytest.raises(AssertionError, match=f"missing {missing}"):
+        wrapper.run_link_gate()
+
+
+def test_gen2_duo_wrapper_cannot_reuse_stale_pass_receipts(monkeypatch, tmp_path):
+    wrapper, build = _gen2_wrapper(monkeypatch, tmp_path)
+    for side in ("a", "b", "pydec"):
+        prefix = "PYDEC" if side == "pydec" else "RESULT"
+        (build / f"e2e_link_{side}_result.txt").write_text(f"{prefix}: PASS\n")
+    with pytest.raises(AssertionError, match="missing fresh a receipt"):
+        wrapper.run_link_gate()
+
+
+@pytest.mark.parametrize("bad", ("a", "b", "pydec", "none"))
+@pytest.mark.parametrize("mode", ("fail", "absent"))
+def test_gen2_duo_wrapper_requires_both_results_and_pydec(monkeypatch, tmp_path, bad, mode):
+    from types import SimpleNamespace
+
+    wrapper, build = _gen2_wrapper(monkeypatch, tmp_path)
+
+    def run(cmd, **kwargs):
+        assert cmd[-6:] == ["--game", "gen2_new", "--scenario", "link",
+                            "--lane", "gen2-cc-link"]
+        for side in ("a", "b", "pydec"):
+            if side == bad and mode == "absent":
+                continue
+            prefix = "PYDEC" if side == "pydec" else "RESULT"
+            verdict = "FAIL" if side == bad else "PASS"
+            (build / f"e2e_link_{side}_result.txt").write_text(f"{prefix}: {verdict}\n")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(wrapper.subprocess, "run", run)
+    if bad == "none":
+        wrapper.run_link_gate()
+    else:
+        match = f"missing fresh {bad} receipt" if mode == "absent" else f"failed {bad} verdict"
+        with pytest.raises(AssertionError, match=match):
+            wrapper.run_link_gate()
 
 
 def test_unknown_family_does_not_inherit_legacy_evidence():

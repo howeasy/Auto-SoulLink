@@ -210,7 +210,7 @@ def test_run_oracle_skips_the_witness_for_other_generations(tmp_path, monkeypatc
 
 def test_new_family_cannot_pass_on_client_results_alone(tmp_path, monkeypatch):
     run, _results, _notes, _build = _stub(tmp_path, monkeypatch)
-    run.game = "gen2_new"
+    run.game = "unregistered_duo_family"
     run.cfg = {}
     with pytest.raises(RuntimeError, match="evidence contract"):
         run._run_oracle({"a": "RESULT: PASS", "b": "RESULT: PASS"})

@@ -21,6 +21,7 @@ INSIDE Lua. Per-instance --config copies avoid the shared config.ini write race.
 """
 import argparse
 import glob
+import hashlib
 import importlib
 import json
 import os
@@ -32,6 +33,8 @@ import sys
 import tempfile
 import time
 import urllib.request
+import uuid
+from pathlib import Path
 
 if __package__:
     from .duo_oracle_pipeline import EvidenceContract, run_pipeline, validate_pipeline
@@ -61,6 +64,9 @@ WT_FWD = REPO.replace("\\", "/")
 # --game: Gen 3-only scenarios were run against a Game Boy, where they died on the savestate
 # they declare and no GB fixture has.
 SCENARIOS = {
+    "link": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
+             "no_setup": True, "frames": 216000, "target": {"a": "battle", "b": "battle_ot2"},
+             "oracle": "assert_gen2_link_saved", "oracle_kwargs": {}},
     "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     # Both halves die, then the pair is buried in the generation's graveyard box — Box 12 on
@@ -221,7 +227,7 @@ SCENARIOS = {
 # Titles that never inherit a scenario implicitly. An entry with no `games` key means "every
 # title", which is right for savestate-less shared scenarios like faint/boxsync — but not for
 # `gen1_new`, whose driver runs only the scenarios that name it, so opt-in is the whole rule.
-OPT_IN_GAMES = ("gen1_new",)
+OPT_IN_GAMES = ("gen1_new", "gen2_new")
 
 
 def is_pure_pairing(game) -> bool:
@@ -912,6 +918,7 @@ def saved_money(sram):
 #
 # gen3_rr keeps exactly the previous behaviour and stays the default.
 FAMILY_EVIDENCE = {
+    "gen2_new": EvidenceContract("check_gen2_save_witness", require_oracle=True),
     "gen1_new": EvidenceContract("check_save_witness", require_oracle=True),
     "gen2_crystal": EvidenceContract(),
     "gen3_rr": EvidenceContract(),
@@ -925,7 +932,43 @@ def evidence_contract(game):
     return FAMILY_EVIDENCE[family]
 
 
+def gen2_preflight(*, repo=None):
+    """Bind both distinct C/C fixtures to their full qualification reports and pinned ROM."""
+    root = Path(repo or REPO).resolve()
+    if REPO not in sys.path:
+        sys.path.insert(0, REPO)
+    from tests.live.test_gen2_new_gates import qualified_identity
+    from tools.gen2_source_data import load_context
+
+    ctx = load_context("crystal", root=root)
+    rom = ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"]
+    source = ctx.source_record()
+    if hashlib.sha1(rom.read_bytes()).hexdigest() != source["rom_sha1"]:
+        raise RuntimeError("Gen 2 duo ROM differs from the pinned source")
+    result = {}
+    for inst, name in (("a", "crystal_battle"), ("b", "crystal_battle_ot2")):
+        fixture = root / "tests/fixtures/gen2" / f"{name}.SaveRAM"
+        raw = fixture.read_bytes()
+        ot_id = qualified_identity(name, raw, repo=root)
+        receipt = root / "tests/fixtures/gen2/receipts" / f"{name}.qualification.json"
+        report = json.loads(receipt.read_text(encoding="utf-8"))
+        result[inst] = {"name": name, "fixture": fixture, "sha256": hashlib.sha256(raw).hexdigest(),
+                        "ot_id": ot_id, "qualification": receipt,
+                        "qualification_attempt_id": report["attempt_id"],
+                        "rom": rom, "rom_sha1": source["rom_sha1"], "title": "crystal"}
+    if result["a"]["ot_id"] == result["b"]["ot_id"] or result["a"]["sha256"] == result["b"]["sha256"]:
+        raise RuntimeError("Gen 2 duo requires distinct qualified OTs and fixture bytes")
+    return result
+
+
 GAMES = {
+    "gen2_new": {
+        "main": "lua/tests/duo/duo_gen2_main.lua", "game": "gen2_new",
+        "launch_profile": "gen2", "uses_savestate": False,
+        "fixture": {"a": "crystal_battle", "b": "crystal_battle_ot2"},
+        "scenario_prefix": "gen2_",
+        "server_rom_routes": {"Crystal": "gen2_gsc", "crystal": "gen2_gsc"},
+    },
     "gen3_rr": {
         "main": "lua/tests/duo/duo_main.lua",
         "rom": {"a": ROM_REL, "b": ROM_REL},
@@ -1170,12 +1213,23 @@ class DuoRun:
                "--port", str(self.tcp_port),
                "--http-port", str(self.http_port),
                "--data-dir", self.data_dir] + self.cfg["flags"] + self.args.server_flags
+        env = None
+        if getattr(self, "gcfg", {}).get("server_rom_routes"):
+            # U5 is a separate cutover. Override only this child process, never the
+            # repository's production routing rows or another running server.
+            bootstrap = ("import json,os,runpy; from server import adapters; "
+                         "adapters._ROM_TYPE_TO_GAME_ID.update("
+                         "json.loads(os.environ['SLINK_DUO_ROM_ROUTES'])); "
+                         "runpy.run_module('server.server', run_name='__main__')")
+            cmd = [sys.executable, "-c", bootstrap, *cmd[3:]]
+            env = dict(os.environ, SLINK_DUO_ROM_ROUTES=json.dumps(self.gcfg["server_rom_routes"]))
+            print(f"[duo] process-local server routing: {self.gcfg['server_rom_routes']}")
         self.server = subprocess.Popen(
             cmd, cwd=REPO,
             # The handle is the server subprocess's stdout and must outlive this call —
             # a `with` would close it out from under the still-running server.
             stdout=open(os.path.join(self.data_dir, "server.log"), "w"),  # noqa: SIM115
-            stderr=subprocess.STDOUT)
+            stderr=subprocess.STDOUT, **({"env": env} if env is not None else {}))
         self.wait_for("server HTTP up", lambda: self._status() is not None, 30)
         print(f"[duo] server up: tcp={self.tcp_port} http={self.http_port} data={self.data_dir}")
 
@@ -1371,6 +1425,8 @@ class DuoRun:
         it: that returns the same path the GAMES table spells out for the vanilla rows and lets a
         pureRGB fixture key stage from the pinned source lock.
         """
+        if self.gcfg.get("launch_profile") == "gen2":
+            return Path(self._gen2_plans[inst]["rom"]).relative_to(Path(REPO).resolve()).as_posix()
         patch_key = self._patch_key(inst)
         if patch_key and self.gcfg.get("patched_saves_override"):
             import gen1_playthrough as g1
@@ -1384,6 +1440,15 @@ class DuoRun:
         return self.gcfg["rom"][inst]
 
     def _seed_instance_save(self, inst):
+        if self.gcfg.get("launch_profile") == "gen2":
+            fixture, plan = self._gen2_inputs[inst], self._gen2_plans[inst]
+            raw = Path(fixture["fixture"]).read_bytes()
+            if hashlib.sha256(raw).hexdigest() != fixture["sha256"]:
+                raise RuntimeError(f"{inst}: qualified fixture changed after preflight")
+            destination = Path(plan["directory"]) / plan["saveram_name"]
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(raw)
+            return str(destination)
         from run_gb_gate import GENS, seed_saveram
 
         seeded = seed_saveram(self.gcfg["fixture"][inst], self._target_for(inst),
@@ -1413,7 +1478,10 @@ class DuoRun:
     def launch_instance(self, inst, *, phase="initial", seed=True, expected_key=""):
         """Launch one cartridge; reconnect phases keep the existing per-instance SaveRAM."""
         cfg_ini = self.cfg_path(inst)
-        if self.battery_boot:
+        if self.gcfg.get("launch_profile") == "gen2":
+            from run_gb_gate import GENS
+            GENS["gen2"]["config"](self._gen2_plans[inst], Path(cfg_ini))
+        elif self.battery_boot:
             import gen1_playthrough as g1
 
             # purergb pins the config to GBC + not-SGB (PLAN A15); the fixture key names the
@@ -1446,6 +1514,11 @@ class DuoRun:
             # bounded loop (poison_new's A half: `D.timeout_secs or 2400`).
             "timeout_secs": self.cfg["timeout"],
         }
+        env = None
+        if self.gcfg.get("launch_profile") == "gen2":
+            duo["mutate_otid"] = False
+            env = dict(os.environ, SLINK_ROOT=WT_FWD, **self._gen2_plans[inst]["env"],
+                       **self._gen2_env[inst])
         if self.gcfg["uses_savestate"]:
             ss = self.cfg["savestate"]
             duo["savestate"] = f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}"
@@ -1471,7 +1544,7 @@ class DuoRun:
             [EMUHAWK, f"--config=patch/build/duo_cfg_{self.lane}_{inst}.ini",
              f"--lua=patch/build/duo_{self.lane}_{inst}.lua",
              self._rom_for(inst)],
-            cwd=REPO)
+            cwd=REPO, **({"env": env} if env is not None else {}))
         self.emus.append(p)
         self.emu_by_inst[inst] = p
         self._launch_times[inst] = time.time()
@@ -1493,7 +1566,7 @@ class DuoRun:
         print(f"[duo] terminated {inst} pid={p.pid}; server retained")
 
     def start_instances(self):
-        if self.battery_boot:
+        if self.battery_boot and self.gcfg.get("launch_profile") != "gen2":
             play = importlib.import_module(self.gcfg["play"])
             for key in self.gcfg["fixture"].values():
                 play.staged_rom(key)  # space-free relative ROM paths for BizHawk
@@ -1501,6 +1574,47 @@ class DuoRun:
         for inst in ("a", "b"):
             self.launch_instance(inst, seed=not self.cfg.get("cold_boot"))
         print("[duo] two EmuHawk instances launched")
+
+    def _prepare_gen2_lane(self):
+        if not Path(EMUHAWK).is_file():
+            raise FileNotFoundError(f"EmuHawk missing for Gen 2 duo: {EMUHAWK}")
+        self._gen2_inputs = gen2_preflight()
+        from run_gb_gate import GENS
+
+        from tests.live.test_gen2_frame_align import u1_facts
+        from tests.live.test_gen2_new_gates import inspect_env
+        from tools import gen2_fixtures, gen2_source_data
+
+        self._gen2_plans = {
+            inst: GENS["gen2"]["plan"]("crystal", self._saveram_dir(inst),
+                                       row["fixture"], 300)
+            for inst, row in self._gen2_inputs.items()}
+        ctx = gen2_source_data.load_context("crystal", root=Path(REPO))
+        facts = gen2_fixtures.route_facts("crystal", Path(REPO))
+        self._gen2_env = {}
+        for inst, row in self._gen2_inputs.items():
+            env = inspect_env(gen2_fixtures.BY_NAME[row["name"]], row["fixture"].read_bytes(),
+                              repo=Path(REPO))
+            case = json.loads(env["SLINK_GEN2_FIXTURE_CASE"])
+            case["attempt_id"] = f"duo-link-{inst}-{self.attempt}-{uuid.uuid4().hex}"
+            env["SLINK_GEN2_FIXTURE_CASE"] = json.dumps(case)
+            env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, facts, row["qualification_attempt_id"]))
+            self._gen2_env[inst] = env
+        for path in (self.gcfg["main"], "lua/tests/duo/scenario_gen2_link.lua",
+                     "lua/tests/duo/gen2_route29_inputs.lua"):
+            if not (Path(REPO) / path).is_file():
+                raise FileNotFoundError(f"Gen 2 duo driver missing: {path}")
+        oracle = importlib.import_module("gen2_duo_oracles")
+        if not all(callable(getattr(oracle, name, None)) for name in ("check_save_witness", "link_oracle")):
+            raise RuntimeError("Gen 2 duo witness/oracle implementation missing")
+
+    def check_gen2_save_witness(self, results):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.check_save_witness(results)
+
+    def assert_gen2_link_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.link_oracle(results, data_dir=self.data_dir, **kwargs)
 
     def _mon_stats_keys(self):
         """The persisted `mon_stats` keys, or [] when the document is absent/unreadable."""
@@ -3924,6 +4038,17 @@ class DuoRun:
 
     # ── per-scenario orchestration ───────────────────────────────────────────
     def orchestrate(self):
+        if getattr(self, "gcfg", {}).get("launch_profile") == "gen2":
+            def both_hellos():
+                players = (self._status() or {}).get("players", {})
+                return all(players.get(inst, {}).get("connected")
+                           and players[inst].get("admission") == "admitted"
+                           and any(line.startswith("HELLO ") for line in
+                                   (read_result(self.scenario, inst) or "").splitlines())
+                           for inst in ("a", "b"))
+            self.wait_for("both admitted Gen 2 hellos", both_hellos, 300)
+            self.go()
+            return
         if self.scenario == "admit_randomized_new":
             self.assert_admit_randomized_new()
             self.go()  # passive clients hold for ~600 frames before RESULT: PASS
@@ -4244,6 +4369,9 @@ class DuoRun:
             # Match __init__'s default for bare runners used by lifecycle unit tests.
             validate_pipeline(self, evidence_contract(getattr(self, "game", "gen3_rr")),
                               self.cfg)
+            if getattr(self, "gcfg", {}).get("launch_profile") == "gen2":
+                self._prepare_gen2_lane()
+                self._clear_attempt_artifacts()  # startup waits must not see an older RESULT
             if self.scenario == "admit_randomized_new":
                 self.prepare_admit_randomized_new()
             self.start_server()

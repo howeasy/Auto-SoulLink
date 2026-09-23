@@ -12,9 +12,12 @@ No emulator: `launch_instance` runs with `subprocess.Popen` recorded and BUILD p
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -23,6 +26,123 @@ sys.path.insert(0, os.path.join(_REPO, "tools"))
 
 import e2e_duo as duo  # noqa: E402
 import gen1_playthrough as g1  # noqa: E402
+
+
+def test_gen2_seeds_distinct_fixtures_under_the_same_name_in_separate_dirs(monkeypatch, tmp_path):
+    monkeypatch.setattr(duo, "BUILD", str(tmp_path))
+    run = duo.DuoRun("link", _args(game="gen2_new", scenario="link", lane="cc"))
+    run._gen2_inputs, run._gen2_plans = {}, {}
+    for side, raw in (("a", b"qualified A"), ("b", b"qualified B")):
+        fixture = tmp_path / f"{side}.SaveRAM"
+        fixture.write_bytes(raw)
+        run._gen2_inputs[side] = {"fixture": fixture, "sha256": hashlib.sha256(raw).hexdigest()}
+        run._gen2_plans[side] = {"directory": Path(run._saveram_dir(side)),
+                                 "saveram_name": "same-rom.SaveRAM"}
+    a = Path(run._seed_instance_save("a"))
+    b = Path(run._seed_instance_save("b"))
+    assert a.name == b.name == "same-rom.SaveRAM"
+    assert a.parent != b.parent
+    assert a.read_bytes() == b"qualified A" and b.read_bytes() == b"qualified B"
+    run._gen2_inputs["b"]["fixture"].write_bytes(b"changed after preflight")
+    with pytest.raises(RuntimeError, match="changed after preflight"):
+        run._seed_instance_save("b")
+
+
+def test_gen2_launch_uses_cgb_300_percent_and_isolated_process_environment(monkeypatch, tmp_path):
+    import run_gb_gate as gate
+
+    monkeypatch.setattr(duo, "BUILD", str(tmp_path))
+    monkeypatch.setattr(duo, "REPO", str(tmp_path))
+    monkeypatch.setattr(duo, "WT_FWD", tmp_path.as_posix())
+    monkeypatch.setattr(gate, "BIZHAWK_CONFIG", str(_config_file(tmp_path)))
+    launched = []
+    monkeypatch.setattr(duo.subprocess, "Popen",
+                        lambda cmd, **kwargs: launched.append((cmd, kwargs)) or SimpleNamespace())
+    run = duo.DuoRun("link", _args(game="gen2_new", scenario="link", lane="cc"))
+    run._gen2_inputs, run._gen2_plans, run._gen2_env = {}, {}, {}
+    for side in ("a", "b"):
+        fixture = tmp_path / f"fixture_{side}.SaveRAM"
+        fixture.write_bytes(side.encode())
+        run._gen2_inputs[side] = {"fixture": fixture, "sha256": hashlib.sha256(side.encode()).hexdigest()}
+        run._gen2_plans[side] = {"directory": Path(run._saveram_dir(side)),
+            "saveram_name": "same-rom.SaveRAM", "rom": tmp_path / "pinned.gbc", "speed_percent": 300,
+            "env": {"SLINK_GEN2_SAVERAM_DIR": run._saveram_dir(side), "SLINK_GEN2_CORE_MODE": "CGB"}}
+        run._gen2_env[side] = {"SLINK_GEN2_FIXTURE_CASE": f"qualified-{side}"}
+        run.launch_instance(side)
+        config = json.loads(Path(run.cfg_path(side)).read_text())
+        assert config["SpeedPercent"] == config["SpeedPercentAlternate"] == 300
+        assert config["ClockThrottle"] is True and config["Unthrottled"] is False
+        assert config["CoreSyncSettings"]["BizHawk.Emulation.Cores.Nintendo.Gameboy.Gameboy"]["ConsoleMode"] == 2
+        paths = config["PathEntries"]["Paths"]
+        assert all(Path(row["Path"]) == Path(run._saveram_dir(side)) for row in paths)
+        assert "mutate_otid = false" in Path(run.stub_path(side)).read_text()
+    assert launched[0][0][-1] == launched[1][0][-1] == "pinned.gbc"
+    assert launched[0][1]["env"]["SLINK_GEN2_FIXTURE_CASE"] == "qualified-a"
+    assert launched[1][1]["env"]["SLINK_GEN2_FIXTURE_CASE"] == "qualified-b"
+    assert launched[0][1]["env"]["SLINK_GEN2_SAVERAM_DIR"] != launched[1][1]["env"]["SLINK_GEN2_SAVERAM_DIR"]
+
+
+def test_gen2_server_routing_override_is_child_process_only(monkeypatch, tmp_path):
+    from server import adapters
+
+    before = dict(adapters._ROM_TYPE_TO_GAME_ID)
+    run = duo.DuoRun("link", _args(game="gen2_new", scenario="link", server_flags=[]))
+    run.wait_for = lambda *args: True
+    launched = []
+    monkeypatch.setattr(duo.subprocess, "Popen",
+                        lambda cmd, **kwargs: launched.append((cmd, kwargs)) or SimpleNamespace())
+    run.start_server()
+    cmd, kwargs = launched[0]
+    kwargs["stdout"].close()
+    assert cmd[1] == "-c" and "runpy.run_module" in cmd[2]
+    assert json.loads(kwargs["env"]["SLINK_DUO_ROM_ROUTES"]) == {"Crystal": "gen2_gsc", "crystal": "gen2_gsc"}
+    assert before == adapters._ROM_TYPE_TO_GAME_ID
+
+
+def test_gen2_required_callbacks_delegate_original_results_to_h2(monkeypatch, tmp_path):
+    seen = []
+    results = {"a": "A receipt", "b": "B receipt"}
+    module = SimpleNamespace(check_save_witness=lambda res: seen.append(("witness", res)),
+        link_oracle=lambda res, **kwargs: seen.append((kwargs["data_dir"], res)))
+    monkeypatch.setitem(sys.modules, "gen2_duo_oracles", module)
+    run = duo.DuoRun("link", _args(game="gen2_new", scenario="link"))
+    run._run_oracle(results)
+    assert [entry[0] for entry in seen] == ["witness", run.data_dir]
+    assert all(entry[1] is results for entry in seen)
+    run.check_gen2_save_witness = None
+    with pytest.raises(RuntimeError, match="witness validator"):
+        run._run_oracle(results)
+
+
+def test_gen2_real_witness_refuses_two_client_passes_without_save_markers():
+    run = duo.DuoRun("link", _args(game="gen2_new", scenario="link"))
+    results = {"a": "RESULT: PASS", "b": "RESULT: PASS"}
+    with pytest.raises(RuntimeError, match="missing SAVE_WITNESS"):
+        run._run_oracle(results)
+    run.cfg = {}
+    with pytest.raises(RuntimeError, match="post-result oracle"):
+        run._run_oracle(results)
+
+
+def test_gen2_clears_old_results_before_the_server_startup_wait(monkeypatch, tmp_path):
+    monkeypatch.setattr(duo, "BUILD", str(tmp_path))
+    run = duo.DuoRun("link", _args(game="gen2_new", scenario="link"))
+    stale = [Path(run._result_path(side)) for side in ("a", "b")]
+    for path in stale:
+        path.write_text("RESULT: FAIL previous attempt\n")
+    run._prepare_gen2_lane = lambda: None
+
+    def server():
+        assert all(not path.exists() for path in stale), "old verdict can abort server startup"
+
+    def stop():
+        raise RuntimeError("stop before emulator")
+
+    run.start_server = server
+    run.start_instances = stop
+    run.cleanup = lambda passed: None
+    with pytest.raises(RuntimeError, match="stop before emulator"):
+        run.run()
 
 
 @pytest.fixture(autouse=True)
