@@ -1,6 +1,6 @@
 SUMMARY:
-	ROM0: 16095 bytes used / 289 free
-	ROMX: 1625834 bytes used / 454934 free in 127 banks
+	ROM0: 16120 bytes used / 264 free
+	ROMX: 1625907 bytes used / 454861 free in 127 banks
 	SRAM: 48188 bytes used / 17348 free in 8 banks
 	WRAM0: 4083 bytes used / 13 free
 	WRAMX: 22978 bytes used / 5694 free in 7 banks
@@ -35,7 +35,10 @@ ROM0 bank #0:
 	SECTION: $0058-$005a ($0003 bytes) ["serial"]
 	EMPTY: $005b-$005f ($0005 bytes)
 	SECTION: $0060-$0062 ($0003 bytes) ["joypad"]
-	EMPTY: $0063-$00ff ($009d bytes)
+	SECTION: $0063-$007b ($0019 bytes) ["SLink DelayFrame Bridge"]
+	         $0063 = SlinkDelayFrameBridge
+	         $007c = SlinkDelayFrameBridgeEnd
+	EMPTY: $007c-$00ff ($0084 bytes)
 	SECTION: $0100-$014f ($0050 bytes) ["Header"]
 	         $0100 = Start
 	SECTION: $0150-$3fb4 ($3e65 bytes) ["Home"]
@@ -191,8 +194,8 @@ ROM0 bank #0:
 	         $09e5 = GetJoypad.finishauto
 	         $09ee = StartAutoInput
 	         $0a0a = StopAutoInput
-	         $0a1b = JoyTitleScreenInput
 	         $0a1b = JoyTitleScreenInput.loop
+	         $0a1b = JoyTitleScreenInput
 	         $0a34 = JoyTitleScreenInput.keycombo
 	         $0a36 = JoyWaitAorB
 	         $0a36 = JoyWaitAorB.loop
@@ -298,8 +301,8 @@ ROM0 bank #0:
 	         $0f9d = Get1bpp
 	         $0fa4 = Copy1bpp
 	         $0fb6 = ClearBox
-	         $0fb8 = FillBoxWithByte.row
 	         $0fb8 = FillBoxWithByte
+	         $0fb8 = FillBoxWithByte.row
 	         $0fba = FillBoxWithByte.col
 	         $0fc8 = ClearTilemap
 	         $0fdb = ClearScreen
@@ -928,8 +931,8 @@ ROM0 bank #0:
 	         $3026 = CopyBytes
 	         $302a = CopyBytes.CopyByte
 	         $302d = CopyBytes.HandleLoop
-	         $3034 = SwapBytes.Loop
 	         $3034 = SwapBytes
+	         $3034 = SwapBytes.Loop
 	         $3041 = ByteFill
 	         $3045 = ByteFill.PutByte
 	         $3046 = ByteFill.HandleLoop
@@ -942,8 +945,8 @@ ROM0 bank #0:
 	         $30b4 = SafeLoadTempTilemapToTilemap
 	         $30bf = LoadTempTilemapToTilemap
 	         $30d6 = CopyName1
-	         $30d9 = CopyName2
 	         $30d9 = CopyName2.loop
+	         $30d9 = CopyName2
 	         $30e1 = IsInArray
 	         $30e4 = IsInArray.loop
 	         $30f0 = IsInArray.NotInArray
@@ -976,8 +979,8 @@ ROM0 bank #0:
 	         $31cf = FarQueueScript
 	         $31db = CompareBytes
 	         $31db = CompareBytes.loop
-	         $31e4 = CompareBytesLong.loop
 	         $31e4 = CompareBytesLong
+	         $31e4 = CompareBytesLong.loop
 	         $31f1 = CompareBytesLong.diff
 	         $31f3 = ClearBGPalettes
 	         $31f6 = WaitBGMap
@@ -1258,7 +1261,7 @@ ROM0 bank #0:
 	         $3fa2 = Function3f9f.row
 	         $3fa5 = Function3f9f.col
 	EMPTY: $3fb5-$3fff ($004b bytes)
-	TOTAL EMPTY: $0121 bytes
+	TOTAL EMPTY: $0108 bytes
 
 ROMX bank #1:
 	SECTION: $4000-$747a ($347b bytes) ["bank1"]
@@ -43284,7 +43287,13 @@ ROMX bank #116:
 	TOTAL EMPTY: $26cf bytes
 
 ROMX bank #117:
-	EMPTY
+	SECTION: $4000-$4048 ($0049 bytes) ["SLink Service"]
+	         $4000 = SlinkService
+	         $402e = SlinkService.sample
+	         $4044 = SlinkService.remember
+	         $4049 = SlinkServiceEnd
+	EMPTY: $4049-$7fff ($3fb7 bytes)
+	TOTAL EMPTY: $3fb7 bytes
 
 ROMX bank #118:
 	EMPTY

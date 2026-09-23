@@ -3,6 +3,8 @@
 00:0008 FarCall
 00:0010 Bankswitch
 00:0028 JumpTable
+00:0063 SlinkDelayFrameBridge
+00:007c SlinkDelayFrameBridgeEnd
 00:0100 Start
 00:0150 VBlank
 00:0168 VBlank.return
@@ -10098,6 +10100,10 @@
 12:79c4 SeakingFrontpic
 12:7c0c MeganiumFrontpic
 12:7e54 LassPic
+13:4000 SlinkService
+13:402e SlinkService.sample
+13:4044 SlinkService.remember
+13:4049 SlinkServiceEnd
 14:4000 SelectMonFromParty
 14:401d SelectTradeOrDayCareMon
 14:403f InitPartyMenuLayout

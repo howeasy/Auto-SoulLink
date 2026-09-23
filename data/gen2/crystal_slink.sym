@@ -3,6 +3,8 @@
 00:0008 FarCall
 00:0010 Bankswitch
 00:0028 JumpTable
+00:0063 SlinkDelayFrameBridge
+00:007c SlinkDelayFrameBridgeEnd
 00:0100 Start
 00:0150 Reset
 00:016e _Start
@@ -42638,6 +42640,10 @@
 74:57e9 LugiaPokedexEntry
 74:585d HoOhPokedexEntry
 74:58cc CelebiPokedexEntry
+75:4000 SlinkService
+75:402e SlinkService.sample
+75:4044 SlinkService.remember
+75:4049 SlinkServiceEnd
 77:4000 UnownFont
 77:41b0 PrintPage1
 77:420a PrintPage1.column_loop

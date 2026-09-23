@@ -1,6 +1,6 @@
 SUMMARY:
-	ROM0: 16150 bytes used / 234 free
-	ROMX: 1138916 bytes used / 941852 free in 127 banks
+	ROM0: 16175 bytes used / 209 free
+	ROMX: 1138989 bytes used / 941779 free in 127 banks
 	SRAM: 31697 bytes used / 1071 free in 4 banks
 	WRAM0: 4096 bytes used / 0 free
 	WRAMX: 4096 bytes used / 0 free in 1 bank
@@ -35,7 +35,10 @@ ROM0 bank #0:
 	SECTION: $0058-$005a ($0003 bytes) ["serial"]
 	EMPTY: $005b-$005f ($0005 bytes)
 	SECTION: $0060-$0062 ($0003 bytes) ["joypad"]
-	EMPTY: $0063-$00ff ($009d bytes)
+	SECTION: $0063-$007b ($0019 bytes) ["SLink DelayFrame Bridge"]
+	         $0063 = SlinkDelayFrameBridge
+	         $007c = SlinkDelayFrameBridgeEnd
+	EMPTY: $007c-$00ff ($0084 bytes)
 	SECTION: $0100-$014f ($0050 bytes) ["Header"]
 	         $0100 = Start
 	SECTION: $0150-$3fed ($3e9e bytes) ["Home"]
@@ -997,8 +1000,8 @@ ROM0 bank #0:
 	         $33ba = PrintNum.PrintLeadingZero
 	         $33c0 = PrintNum.AdvancePointer
 	         $33cc = PrintNum.inc
-	         $33ce = PrintHexNumber
 	         $33ce = PrintHexNumber.loop
+	         $33ce = PrintHexNumber
 	         $33d7 = PrintHexNumber.HandleByte
 	         $33e9 = PrintHexNumber.PrintDigit
 	         $33f4 = PrintHexNumber.HexDigits
@@ -1249,7 +1252,7 @@ ROM0 bank #0:
 	         $3fda = CheckSFX.playing
 	         $3fdc = TerminateExpBarSound
 	EMPTY: $3fee-$3fff ($0012 bytes)
-	TOTAL EMPTY: $00ea bytes
+	TOTAL EMPTY: $00d1 bytes
 
 ROMX bank #1:
 	SECTION: $4000-$754d ($354e bytes) ["bank1"]
@@ -10234,7 +10237,13 @@ ROMX bank #18:
 	TOTAL EMPTY: $0000 bytes
 
 ROMX bank #19:
-	EMPTY
+	SECTION: $4000-$4048 ($0049 bytes) ["SLink Service"]
+	         $4000 = SlinkService
+	         $402e = SlinkService.sample
+	         $4044 = SlinkService.remember
+	         $4049 = SlinkServiceEnd
+	EMPTY: $4049-$7fff ($3fb7 bytes)
+	TOTAL EMPTY: $3fb7 bytes
 
 ROMX bank #20:
 	SECTION: $4000-$7a82 ($3a83 bytes) ["bank14"]
