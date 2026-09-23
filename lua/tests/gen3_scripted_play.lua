@@ -359,6 +359,14 @@ local ITEM_POKE_BALL = 4
 local SB1_POKEBALLS_POCKET_OFFSET = 0x0430
 
 local function bag_menu_up() return memory.read_u32_le(GMAIN_CALLBACK2_ADDR) == CB2_BAG_MENU_RUN end
+--- Can the bag READ a press? CB2_BagMenuRun is installed before the open fade ends (pret
+--- src/item_menu.c:501-502), and Task_BagMenu_HandleInput returns without reading input while
+--- gPaletteFade.active or Task_AnimateWin0v runs (:1044-1049). Live link_gen3 run 1 (FR, throw
+--- 2): the POKEBALLS pocket was remembered, the steer's idle was skipped, and the selecting A
+--- landed in the fade -- gSpecialVar_ItemId kept GoToBagMenu's ITEM_NONE (:340).
+local TASK_BAG_MENU_HANDLE_INPUT = S.TASK_BAG_MENU_HANDLE_INPUT
+local TASK_ANIMATE_WIN0V = S.TASK_ANIMATE_WIN0V
+local BAG_INPUT_WAIT_FRAMES = 240
 local function bag_pocket() return memory.read_u16_le(BAG_MENU_STATE_ADDR + BAG_POCKET_OFF) end
 --- The bag slot actually highlighted: itemsAbove[pocket] (scroll offset) + cursorPos[pocket]
 --- (on-screen row) — item_menu.c:470 initializes the list with exactly this pair.
@@ -1785,6 +1793,7 @@ local function leave_storage(cp, label)
     return true
 end
 PC.leave = leave_storage
+PC.dump = pc_state_dump      -- every active task + PC state, for a caller's timeout line
 
 local LEGS = {}
 
@@ -2276,6 +2285,27 @@ local function throw_pokeball_from_bag(cp, label)
         G.finish(false, string.format(
             "%s: the POKEBALLS pocket's cursor slot %d holds item %d, not ITEM_POKE_BALL(%d)",
             label, slot, item, ITEM_POKE_BALL))
+        return
+    end
+
+    -- Only press once the bag's input task will read it (see bag_input_ready above).
+    if not (TASK_BAG_MENU_HANDLE_INPUT and TASK_ANIMATE_WIN0V) then
+        G.finish(false, string.format(
+            "%s: no verified Task_BagMenu_HandleInput/Task_AnimateWin0v address for title %s",
+            label, tostring(TITLE)))
+        return
+    end
+    local ready = false
+    for _ = 1, BAG_INPUT_WAIT_FRAMES do
+        if G.pred_ok(cp, "palette_fade_active") and task_active(TASK_BAG_MENU_HANDLE_INPUT)
+           and not task_active(TASK_ANIMATE_WIN0V) then ready = true; break end
+        G.advance()
+    end
+    if not ready then
+        G.shot("stuck")
+        G.finish(false, string.format(
+            "%s: the bag never took input in %d frames (palette fade clear, Task_BagMenu_HandleInput "
+            .. "active, no Task_AnimateWin0v)", label, BAG_INPUT_WAIT_FRAMES))
         return
     end
 
@@ -2803,6 +2833,8 @@ return {
     -- against pokefirered.sym and exercise the fail-loud paths without an emulator.
     GMAIN_CALLBACK2_ADDR = GMAIN_CALLBACK2_ADDR,
     CB2_BAG_MENU_RUN = CB2_BAG_MENU_RUN,
+    TASK_BAG_MENU_HANDLE_INPUT = TASK_BAG_MENU_HANDLE_INPUT, TASK_ANIMATE_WIN0V = TASK_ANIMATE_WIN0V,
+    TASKS_BASE = TASKS_BASE,
     BAG_MENU_STATE_ADDR = BAG_MENU_STATE_ADDR,
     BAG_POCKET_OFF = BAG_POCKET_OFF,
     BAG_ITEMS_ABOVE_OFF = BAG_ITEMS_ABOVE_OFF,

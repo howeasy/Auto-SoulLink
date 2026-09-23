@@ -123,6 +123,13 @@ M.entries = {
                               firered = 0x08122C5D, leafgreen = 0x08122C35 },
     CB2_BAG_MENU_RUN = { symbol = "CB2_BagMenuRun", thumb = true,
                           firered = 0x08107EE1, leafgreen = 0x08107EB9 },
+    -- The bag's input gates (pret src/item_menu.c:1044-1049): Task_BagMenu_HandleInput reads
+    -- no press while the palette fade or Task_AnimateWin0v runs. Verified against both .sym
+    -- files (pokefirered.sym:10212/10205, pokeleafgreen.sym:10214/10207). No RR value: ABSENT.
+    TASK_BAG_MENU_HANDLE_INPUT = { symbol = "Task_BagMenu_HandleInput", thumb = true,
+                                    firered = 0x08108F0D, leafgreen = 0x08108EE5 },
+    TASK_ANIMATE_WIN0V = { symbol = "Task_AnimateWin0v", thumb = true,
+                            firered = 0x08108CFD, leafgreen = 0x08108CD5 },
     PC_MULTICHOICE = { symbol = "Task_MultichoiceMenu_HandleInput", thumb = true,
                         firered = 0x0809CC99, leafgreen = 0x0809CC6D },
     -- pret ROM address unchanged in RR (rr_pc_menu.md:29,36: only two 8-byte windows patched

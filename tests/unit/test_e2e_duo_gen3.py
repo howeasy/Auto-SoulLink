@@ -29,6 +29,9 @@ import gen3_fixtures  # noqa: E402
 # there) rather than re-deriving the CompressedPokemon layout a second time.
 from test_gen3_rr_save_layout import _compressed  # noqa: E402
 
+# the scripted-play helper's own BizHawk stub, reused for the bag/dump falsifiers (C4-6h)
+from test_gen3_scripted_play import _in_battle_cp, bag_stubbed  # noqa: E402,F401
+
 from server.adapters import gen3_codec as codec  # noqa: E402
 
 GEN3 = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
@@ -1659,3 +1662,75 @@ def test_the_gen3_driver_echoes_the_idle_jitter():
     assert 'log(fmt("JITTER requested=%d applied=%d attempt=%d"' in text
     assert text.index('JITTER requested=') < text.index("pcall(scenario, ctx)")
     assert duo.jitter_problems("JITTER requested=37 applied=37 attempt=2\n", 37) == []
+
+
+# ── C4-6h: the timeout task dump and the helper's bag wait. The whiteout walk-out was DROPPED
+# (owner ruling: SLink writes must land inside Pokemon Centers; the allow-list is its own card). ─────────────
+def test_a_timeout_line_carries_the_task_dump():
+    """The whiteout hold timed out naming nothing; the line now carries every active task."""
+    text = DRIVER.read_text(encoding="utf-8")
+    body = text[text.index("function ctx.wait_until("):text.index("local function go_lines(")]
+    assert "pcall(SP.PC.dump)" in body and '"TIMEOUT waiting for "' in body
+    assert re.search(r"^PC\.dump = pc_state_dump", SCRIPTED.read_text(encoding="utf-8"), re.M)
+
+
+def test_the_exported_dump_names_the_active_tasks(bag_stubbed):  # noqa: F811 (imported fixture)
+    runtime, module, store, logged, exits = bag_stubbed
+    store[module.TASKS_BASE] = 0x0815F9A5                        # one active task
+    store[module.TASKS_BASE + 4] = 1
+    dump = module.PC.dump()
+    assert "tasks=[0815F9A5]" in dump, dump
+
+
+def _bag_at_pokeball(runtime, module, store):
+    cp = _in_battle_cp(runtime, store)
+    store[module.GMAIN_CALLBACK2_ADDR] = module.CB2_BAG_MENU_RUN
+    store[module.BAG_MENU_STATE_ADDR + module.BAG_POCKET_OFF] = module.BAG_POCKET_POKEBALLS
+    ptr_addr, sb1_addr = 0x03005008, 0x02020000
+    store[ptr_addr] = sb1_addr
+    store[sb1_addr + module.SB1_POKEBALLS_POCKET_OFFSET] = module.ITEM_POKE_BALL
+    store[module.SPECIAL_VAR_ITEM_ID_ADDR] = module.ITEM_POKE_BALL
+    fade = 0x02037AB8
+    return runtime.table(
+        predicates=runtime.table(
+            in_battle=cp.predicates["in_battle"],
+            palette_fade_active=runtime.table(address=fade, offset=7, mask=0x80, expect=0, width=1)),
+        pointers=runtime.table(gSaveBlock1Ptr=runtime.table(address=ptr_addr))), fade
+
+
+def test_the_bag_throw_waits_for_the_input_task(bag_stubbed):  # noqa: F811 (imported fixture)
+    """Live FR throw 2: the bag was up, the pocket already POKEBALLS, and the selecting A fell in
+    the open fade. The helper must wait for the input task, and name the gate when it never
+    opens -- not press A into the fade and report a zero gSpecialVar_ItemId."""
+    runtime, module, store, logged, exits = bag_stubbed
+    cp, fade = _bag_at_pokeball(runtime, module, store)
+    store[fade + 7] = 0x80                                      # the fade never ends
+    module.throw_pokeball_from_bag(cp, "test")
+    fail = [line for line in logged if "RESULT: FAIL" in line]
+    assert exits and fail and "the bag never took input" in fail[-1], logged
+
+
+def test_the_bag_throw_proceeds_once_the_input_task_reads(bag_stubbed):  # noqa: F811 (imported fixture)
+    runtime, module, store, logged, exits = bag_stubbed
+    cp, fade = _bag_at_pokeball(runtime, module, store)
+    store[module.TASKS_BASE] = module.TASK_BAG_MENU_HANDLE_INPUT
+    store[module.TASKS_BASE + 4] = 1
+    module.throw_pokeball_from_bag(cp, "test")
+    assert not exits, logged
+    # ... and the window animation, when it runs, holds the press the same way
+    logged.clear()
+    store[module.TASKS_BASE + 40] = module.TASK_ANIMATE_WIN0V
+    store[module.TASKS_BASE + 44] = 1
+    module.throw_pokeball_from_bag(cp, "test")
+    assert exits and any("the bag never took input" in line for line in logged), logged
+
+
+def test_the_bag_task_symbols_match_pret():
+    for title, want in (("firered", (0x08108F0D, 0x08108CFD)), ("leafgreen", (0x08108EE5, 0x08108CD5))):
+        syms = {}
+        for line in (REPO / "data" / "gen3" / "pret" / f"poke{title}.sym").read_text(
+                encoding="utf-8").splitlines():
+            parts = line.split()
+            if len(parts) == 4 and parts[3] in ("Task_BagMenu_HandleInput", "Task_AnimateWin0v"):
+                syms.setdefault(parts[3], int(parts[0], 16) | 1)
+        assert (syms["Task_BagMenu_HandleInput"], syms["Task_AnimateWin0v"]) == want, title

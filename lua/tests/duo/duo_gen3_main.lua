@@ -286,7 +286,11 @@ function ctx.wait_until(pred, secs, what)
         if v then return v end
         emu.frameadvance()
     end
-    log("TIMEOUT waiting for " .. tostring(what))
+    -- which tasks held the game (card C4-6h: the Union Room tasks in a Center 1F kept the
+    -- checkpoint shut and nothing said so); covers wait_sent/wait_received/mash_until too
+    local dumped, dump = pcall(SP.PC.dump)
+    log("TIMEOUT waiting for " .. tostring(what) .. " [" .. (dumped and tostring(dump)
+                                                            or "dump failed: " .. tostring(dump)) .. "]")
     return nil
 end
 local function go_lines()
