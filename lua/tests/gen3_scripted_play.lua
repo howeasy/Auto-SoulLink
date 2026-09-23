@@ -284,7 +284,6 @@ local TASKS_BASE, TASK_SIZE = 0x03005090, 40
 local TASK_CHOOSE_MON = 0x0811FB29
 local TASK_RETURN_AFTER_TEXT = 0x081203B9
 local TASK_SELECTION_POPUP = 0x08122C5D
-local PARTY_MENU_EXIT_FLAG = 0x0203B0C0
 local function party_menu_up()
     return memory.read_u32_le(GMAIN_CALLBACK2_ADDR) == CB2_UPDATE_PARTY_MENU
 end
@@ -1197,11 +1196,19 @@ send_out_healthy_mon = function(cp, label)
         G.finish(false, label .. ": forced_party_count: need a replacement party")
         return false
     end
+    local records, why = reader.read_party()
+    if not records or #records ~= count then
+        G.finish(false, label .. ": forced_party_unreadable: " .. tostring(why)); return false
+    end
     local target
     for slot = 0, count - 1 do
         local base = PARTY_BASE + slot * MON_SIZE
+        local mon = records[slot + 1]
         if memory.read_u16_le(base + OFF_HP) > 0
-           and memory.read_u16_le(base + OFF_MAXHP) > 0 then target = slot; break end
+           and memory.read_u16_le(base + OFF_MAXHP) > 0
+           and mon.species ~= 0 and mon.has_species == 1 and mon.checksum_ok
+           and mon.is_bad_egg == 0 and mon.is_egg == 0
+           and mon.is_egg_flag == 0 then target = slot; break end
     end
     if not target then G.finish(false, label .. ": forced_party_no_healthy_mon"); return false end
     local ready = false
@@ -1210,6 +1217,11 @@ send_out_healthy_mon = function(cp, label)
         if not party_menu_up() then break end
         if task == TASK_CHOOSE_MON then ready = true; break end
         if task == TASK_RETURN_AFTER_TEXT then G.tap("A", 3, 13)
+        elseif task == TASK_SELECTION_POPUP then
+            -- A stray earlier press may have opened the fainted slot's popup.
+            -- B selects CANCEL1 and returns to Task_HandleChooseMonInput
+            -- (party_menu.c:3083-3087,3391-3400).
+            G.tap("B", 3, 13)
         else G.advance() end
     end
     if not ready then G.finish(false, label .. ": forced_party_input_not_ready"); return false end
@@ -1241,10 +1253,7 @@ send_out_healthy_mon = function(cp, label)
     end
     G.tap("A", 3, 20) -- SEND OUT is popup row 0 (src/data/party_menu.h:1095)
     for _ = 1, 900 do
-        if not party_menu_up() then
-            if memory.read_u8(PARTY_MENU_EXIT_FLAG) == 1 then return true end
-            break
-        end
+        if not party_menu_up() then return true end
         if party_task() == TASK_RETURN_AFTER_TEXT then
             G.finish(false, label .. ": forced_party_sendout_rejected"); return false
         end
@@ -1334,33 +1343,261 @@ local function heal_at_nurse(cp, label)
     G.phase("healed", string.format("%s: slot0 %d/%d", label, hp, maxhp))
 end
 
--- ── the vanilla PC flow, from source ────────────────────────────────────────────────────────
--- docs/gen3/research/fr_pc_flow_and_pc_move_sites.md (Codex R9, cited to pret c75f352). The
--- shape is the same one the RR census proved PHYSICALLY
--- (docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt), and the spacing below is that
--- receipt's: ~120 frames between message presses, ~180 before a menu accepts input, ~240 for a
--- commit to settle. Presses are DATA, not a sweep.
---
---   A #1 interact            "{PLAYER} booted up the PC."
---   A #2 dismiss             "Which PC should be accessed?"  rows: 0 SOMEONE'S PC,
---                            1 {PLAYER}'s PC, 2 PROF. OAK's PC, 3 LOG OFF  (four rows once the
---                            Pokedex is obtained, which parcel_deliver did; cursor starts at 0)
---   A #3 choose row 0        "Accessed Someone's PC."
---   A #4 dismiss             "POKeMON Storage System opened."
---   A #5 dismiss             Task_PCMainMenu, selection row 0
---
--- Storage menu: 0 WITHDRAW, 1 DEPOSIT, 2 MOVE, 3 MOVE ITEMS, 4 SEE YA!
-local PC_WAIT = { press = 120, menu = 180, commit = 240, cursor = 20 }
+-- ── FR PC stages, read through the symbols of pret/pokefirered@c75f352 ──────────────────────
+-- data/scripts/pc.inc:1-55; src/script_menu.c:977-1036; src/menu.c:9-25,337.
+-- sMenu is 0203ADE4 (sym:462, size 0x0C); 020399C0 is mon_markings.c's
+-- unrelated sMenu pointer. Task_MultichoiceMenu_HandleInput=0809CC98 (sym:6719).
+-- src/pokemon_storage_system_menu.c:230-371: Task_PCMainMenu=0808C39C,
+-- task.data[0]=state (2 HANDLE_INPUT), data[1]=selected row (0 WITHDRAW,1 DEPOSIT).
+-- src/pokemon_storage_system_data.c:16-17,69-76: sCursorArea/sCursorPosition
+-- are 02039820/21 (sym:315-316), 0=box, 1=party; popup cursor is sMenu+2.
+local PC_TASKS, PC_TASK_SIZE = 0x03005090, 40 -- sym:829; include/task.h:14-25
+local PC_MULTICHOICE = 0x0809CC99
+local PC_MAIN_MENU = 0x0808C39D
+local PC_STORAGE_MAIN = 0x0808D2BD
+local PC_ON_SELECTED = 0x0808D879
+local PC_DEPOSIT_MENU = 0x0808DD89
+local PC_WITHDRAW_MON = 0x0808DC9D
+local PC_RELEASE_MON = 0x0808DECD
+local PC_MENU_CURSOR = 0x0203ADE4 + 2
+local PC_MENU_MAX_CURSOR = 0x0203ADE4 + 4 -- src/menu.c:9-25
+local PC_RESULT = 0x020370D0 -- sym:231 gSpecialVar_Result, VAR_RESULT
+local PC_CURSOR_AREA, PC_CURSOR_POS = 0x02039820, 0x02039821
+local PC_STORAGE_PTR = 0x020397B0 -- sym:307; gStorage->state +0, boxOption +1
+local PC_DEPOSIT_BOX_ID = 0x020397B6 -- sym:310; sDepositBoxId
+local PC = {}
 
-local function pc_press(btn, wait)
-    G.tap(btn, 3, 13)
-    G.idle(wait or PC_WAIT.press)
+local function pc_task(fn)
+    for i = 0, 15 do
+        local base = PC_TASKS + i * PC_TASK_SIZE
+        if memory.read_u8(base + 4) ~= 0 and memory.read_u32_le(base) == fn then
+            return base
+        end
+    end
 end
 
---- Five A presses from the field to the storage main menu.
-local function open_storage_menu()
-    for _ = 1, 5 do pc_press("A", PC_WAIT.press) end
-    G.idle(PC_WAIT.menu - PC_WAIT.press)
+local function pc_storage()
+    local ptr = memory.read_u32_le(PC_STORAGE_PTR)
+    if ptr < 0x02000000 or ptr >= 0x02040000 or ptr % 4 ~= 0 then return nil end
+    return ptr
+end
+
+local function pc_fail(label, stage)
+    G.finish(false, label .. ": pc_" .. stage)
+    return false
+end
+
+local function pc_poll(predicate, budget)
+    for _ = 1, budget or 900 do
+        if predicate() then return true end
+        G.advance()
+    end
+    return false
+end
+
+local function pc_wait(label, stage, predicate, budget)
+    if pc_poll(predicate, budget) then return true end
+    return pc_fail(label, stage)
+end
+
+function PC.open(cp, label)
+    -- Run 27b resumed while this exact multichoice was already up. A stage may
+    -- consume a press, but no fixed number of A presses counts as progress.
+    if not pc_task(PC_MULTICHOICE) and not pc_task(PC_MAIN_MENU) then
+        if G.pred_ok(cp, "script_context_status") then G.tap("A", 3, 13) end
+        for _ = 1, 12 do
+            if pc_task(PC_MULTICHOICE) or pc_task(PC_MAIN_MENU) then break end
+            for _ = 1, 90 do
+                if pc_task(PC_MULTICHOICE) or pc_task(PC_MAIN_MENU) then break end
+                G.advance()
+            end
+            if pc_task(PC_MULTICHOICE) or pc_task(PC_MAIN_MENU) then break end
+            if G.pred_ok(cp, "script_context_status") then
+                return pc_fail(label, "interaction_not_started")
+            end
+            G.tap("A", 3, 13) -- script text, while the script is witnessed busy
+        end
+    end
+    if not pc_task(PC_MULTICHOICE) and not pc_task(PC_MAIN_MENU) then
+        return pc_fail(label, "which_pc_menu_missing")
+    end
+    if pc_task(PC_MULTICHOICE) then
+        -- CreatePCMenuWindow initializes row 0; refuse a resumed wrong row.
+        if memory.read_u8(PC_MENU_CURSOR) ~= 0 then return pc_fail(label, "which_pc_wrong_row") end
+        local rows = memory.read_u8(PC_MENU_MAX_CURSOR) + 1
+        if rows < 3 or rows > 5 then return pc_fail(label, "which_pc_wrong_row_count") end
+        for _ = 1, 12 do
+            if pc_task(PC_MAIN_MENU) then break end
+            if pc_task(PC_MULTICHOICE) then
+                if memory.read_u8(PC_MENU_CURSOR) ~= 0 then return pc_fail(label, "which_pc_wrong_row") end
+                G.tap("A", 3, 13) -- Someone's/Bill's PC, verified row 0
+            elseif not G.pred_ok(cp, "script_context_status") then
+                G.tap("A", 3, 13) -- Accessed PC / storage opened script boxes
+            else
+                for _ = 1, 90 do
+                    if pc_task(PC_MAIN_MENU) or pc_task(PC_MULTICHOICE) then break end
+                    G.advance()
+                end
+            end
+        end
+        if pc_task(PC_MULTICHOICE) then return pc_fail(label, "which_pc_choice_not_consumed") end
+        -- VAR_RESULT may already contain a stale zero; only read it after the
+        -- Task_MultichoiceMenu_HandleInput witness has disappeared (pc.inc:20-37).
+        if not pc_task(PC_MULTICHOICE) and memory.read_u16_le(PC_RESULT) ~= 0 then
+            return pc_fail(label, "which_pc_result_not_someones")
+        end
+    end
+    local main = pc_task(PC_MAIN_MENU)
+    if not main then return pc_fail(label, "storage_top_menu_missing") end
+    if not pc_wait(label, "storage_top_not_ready", function()
+        return pc_task(PC_MAIN_MENU) and memory.read_u16_le(main + 8) == 2
+    end, 900) then return false end
+    if memory.read_u16_le(main + 10) ~= 0 then return pc_fail(label, "storage_top_wrong_row") end
+    return true
+end
+
+function PC.mode(label, row)
+    local main = pc_task(PC_MAIN_MENU)
+    if not main or memory.read_u16_le(main + 8) ~= 2 then return pc_fail(label, "storage_top_not_ready") end
+    if memory.read_u8(PC_MENU_MAX_CURSOR) ~= 4 then return pc_fail(label, "storage_top_wrong_row_count") end
+    for _ = 1, 4 do
+        if memory.read_u16_le(main + 10) == row then break end
+        G.tap("Down", 3, 20)
+        if not pc_wait(label, "storage_top_cursor_stalled", function()
+            return memory.read_u16_le(main + 10) == row
+        end, 90) then return false end
+    end
+    if memory.read_u16_le(main + 10) ~= row then return pc_fail(label, "storage_top_wrong_row") end
+    for _ = 1, 4 do
+        G.tap("A", 3, 13)
+        for _ = 1, 900 do
+            if pc_task(PC_STORAGE_MAIN) then break end
+            G.advance()
+        end
+        if pc_task(PC_STORAGE_MAIN) then break end
+        if not pc_task(PC_MAIN_MENU) or memory.read_u16_le(main + 8) ~= 2
+           or memory.read_u16_le(main + 10) ~= row then break end
+    end
+    if not pc_task(PC_STORAGE_MAIN) then return pc_fail(label, "storage_mode_not_entered") end
+    local storage = pc_storage()
+    if not storage or memory.read_u8(storage + 1) ~= row then
+        return pc_fail(label, "storage_mode_mismatch")
+    end
+    return pc_wait(label, "storage_cursor_not_ready", function()
+        return pc_task(PC_STORAGE_MAIN) and memory.read_u8(storage) == 0
+    end, 900)
+end
+
+function PC.cursor(label, area, pos)
+    local storage = pc_storage()
+    if not storage or not pc_task(PC_STORAGE_MAIN) then return pc_fail(label, "storage_cursor_not_ready") end
+    if memory.read_u8(PC_CURSOR_AREA) ~= area then return pc_fail(label, "storage_cursor_wrong_area") end
+    for _ = 1, 8 do
+        local current = memory.read_u8(PC_CURSOR_POS)
+        if current == pos then return true end
+        if current > 5 then return pc_fail(label, "storage_cursor_invalid") end
+        G.tap(current < pos and "Down" or "Up", 3, 20)
+        if not pc_wait(label, "storage_cursor_stalled", function()
+            return memory.read_u8(PC_CURSOR_POS) ~= current
+        end, 90) then return false end
+        if memory.read_u8(PC_CURSOR_AREA) ~= area then return pc_fail(label, "storage_cursor_wrong_area") end
+    end
+    return pc_fail(label, "storage_cursor_stalled")
+end
+
+function PC.popup(label, area, pos, row)
+    if not PC.cursor(label, area, pos) then return false end
+    local storage = pc_storage()
+    if memory.read_u8(storage + 1) ~= area then return pc_fail(label, "storage_popup_wrong_mode") end
+    for _ = 1, 4 do
+        if pc_task(PC_ON_SELECTED) and memory.read_u8(storage) == 2 then break end
+        if not pc_task(PC_STORAGE_MAIN) then return pc_fail(label, "storage_popup_unexpected_task") end
+        G.tap("A", 3, 13)
+        for _ = 1, 120 do
+            if pc_task(PC_ON_SELECTED) and memory.read_u8(storage) == 2 then break end
+            G.advance()
+        end
+    end
+    if not pc_task(PC_ON_SELECTED) or memory.read_u8(storage) ~= 2 then
+        return pc_fail(label, "storage_popup_missing")
+    end
+    if memory.read_u8(PC_MENU_MAX_CURSOR) ~= 4 then return pc_fail(label, "storage_popup_wrong_row_count") end
+    for _ = 1, 4 do
+        local current = memory.read_u8(PC_MENU_CURSOR)
+        if current == row then return true end
+        if current > row then return pc_fail(label, "storage_popup_wrong_row") end
+        G.tap("Down", 3, 20)
+        if not pc_wait(label, "storage_popup_cursor_stalled", function()
+            return memory.read_u8(PC_MENU_CURSOR) == current + 1
+        end, 90) then return false end
+    end
+    return pc_fail(label, "storage_popup_cursor_stalled")
+end
+
+function PC.select(label, task)
+    if not pc_task(PC_ON_SELECTED) then return pc_fail(label, "storage_popup_missing") end
+    for _ = 1, 4 do
+        G.tap("A", 3, 13)
+        if pc_poll(function()
+            return pc_task(task) or not pc_task(PC_ON_SELECTED)
+        end, 180) then
+            if pc_task(task) then return true end
+            return pc_fail(label, "storage_choice_wrong_task")
+        end
+    end
+    return pc_fail(label, "storage_choice_not_taken")
+end
+
+function PC.box(label)
+    local storage = pc_storage()
+    if not storage or not pc_task(PC_DEPOSIT_MENU) then return pc_fail(label, "box_chooser_missing") end
+    if not pc_wait(label, "box_chooser_not_ready", function()
+        return pc_task(PC_DEPOSIT_MENU) and memory.read_u8(storage) == 1
+    end, 900) then return false end
+    -- CreateChooseBoxMenuSprites(sDepositBoxId) starts at the last confirmed
+    -- box (tasks.c:1192-1222); with no directional input, zero means box 0.
+    if memory.read_u8(PC_DEPOSIT_BOX_ID) ~= 0 then return pc_fail(label, "box_chooser_wrong_box") end
+    for _ = 1, 4 do
+        G.tap("A", 3, 13)
+        for _ = 1, 2400 do
+            if pc_task(PC_STORAGE_MAIN) then return true end
+            if not pc_task(PC_DEPOSIT_MENU) then return pc_fail(label, "box_deposit_wrong_task") end
+            local state = memory.read_u8(storage)
+            if state == 4 then return pc_fail(label, "box_deposit_box_full") end
+            if state == 1 and _ > 120 then break end -- only retry a lost press at the chooser
+            G.advance()
+        end
+    end
+    return pc_fail(label, "box_deposit_not_committed")
+end
+
+function PC.withdraw(label)
+    return pc_wait(label, "withdraw_not_completed", function()
+        return pc_task(PC_STORAGE_MAIN)
+    end, 2400)
+end
+
+function PC.release(label)
+    local storage = pc_storage()
+    if not storage or not pc_task(PC_RELEASE_MON) then return pc_fail(label, "release_confirmation_missing") end
+    if not pc_wait(label, "release_confirmation_not_ready", function()
+        return pc_task(PC_RELEASE_MON) and memory.read_u8(storage) == 1
+    end, 900) then return false end
+    if memory.read_u8(PC_MENU_CURSOR) ~= 1 then return pc_fail(label, "release_confirmation_not_no") end
+    G.tap("Up", 3, 20)
+    if memory.read_u8(PC_MENU_CURSOR) ~= 0 then return pc_fail(label, "release_confirmation_not_yes") end
+    G.tap("A", 3, 13)
+    if not pc_wait(label, "release_not_confirmed", function()
+        return pc_task(PC_RELEASE_MON) and memory.read_u8(storage) == 4
+    end, 2400) then return false end
+    G.tap("A", 3, 13) -- MSG_WAS_RELEASED -> MSG_BYE_BYE, src/tasks.c:1307-1339
+    if not pc_wait(label, "release_bye_message_missing", function()
+        return pc_task(PC_RELEASE_MON) and memory.read_u8(storage) == 5
+    end, 900) then return false end
+    G.tap("A", 3, 13)
+    return pc_wait(label, "release_not_completed", function()
+        return pc_task(PC_STORAGE_MAIN)
+    end, 2400)
 end
 
 --- THE PARTY COUNT IS A LIE WHILE THE PC IS OPEN. gPlayerPartyCount is recomputed on storage
@@ -1372,8 +1609,40 @@ end
 --- later!" textbox is still up, and stopping there shifts every press of the NEXT open by one
 --- (PHYSICAL, RR r5b/r5c -- it turned a withdraw into a second deposit).
 local function leave_storage(cp, label)
-    play.leave_menu(cp, label, { flush = 5, flush_gap = 27, settle = 60 })
+    -- pc.inc:50-55 loops back to EventScript_PCMainMenu after storage; the
+    -- first B exits storage, the second B cancels the owner list (VAR_RESULT
+    -- 127). Only script.c's SHUTDOWN+unlocked pair is a field terminal.
+    for _ = 1, 24 do
+        if pc_task(PC_MULTICHOICE) then break end
+        local storage = pc_storage()
+        if pc_task(PC_STORAGE_MAIN) and storage and memory.read_u8(storage) == 0 then
+            G.tap("B", 3, 13)
+        elseif not G.pred_ok(cp, "script_context_status") then
+            G.tap("A", 3, 13) -- PC script's message boxes before the owner list
+        else
+            G.advance()
+        end
+        for _ = 1, 90 do
+            if pc_task(PC_MULTICHOICE) then break end
+            G.advance()
+        end
+    end
+    if not pc_task(PC_MULTICHOICE) then return pc_fail(label, "exit_owner_list_missing") end
+    local rows = memory.read_u8(PC_MENU_MAX_CURSOR) + 1
+    if rows < 3 or rows > 5 then return pc_fail(label, "exit_owner_row_count") end
+    G.tap("B", 3, 13)
+    if not pc_wait(label, "exit_owner_not_canceled", function()
+        return not pc_task(PC_MULTICHOICE) and memory.read_u16_le(PC_RESULT) == 127
+    end, 180) then return false end
+    if not pc_wait(label, "exit_not_field", function()
+        return play.on_field(cp) and G.pred_ok(cp, "script_context_status")
+           and G.pred_ok(cp, "field_controls_locked")
+           and not pc_task(PC_STORAGE_MAIN) and not pc_task(PC_MAIN_MENU)
+           and not pc_task(PC_MULTICHOICE)
+    end, 900) then return false end
+    return true
 end
+PC.leave = leave_storage
 
 local LEGS = {}
 
@@ -1968,7 +2237,6 @@ LEGS[#LEGS + 1] = {
     -- (viridian_pc_deposit_withdraw) still expects to start from the grass, not the heal house.
     recover = function(cp) guarded_recovery(cp, "route1_faint", recover_to_route1_grass) end,
     run = function(cp)
-        local before = player_faints()
         local fainted = false
         for encounter = 1, 20 do
             if not hunt_encounter(cp, "route1_faint", 40) then
@@ -1987,7 +2255,9 @@ LEGS[#LEGS + 1] = {
                 G.finish(false, "route1_faint: battle_not_settled_after_faint")
                 return
             end
-            if player_faints() > before then fainted = true; break end
+            -- BattleStartClearSetData resets this counter for EACH battle
+            -- (battle_main.c:2308), so compare with zero after every fight.
+            if player_faints() > 0 then fainted = true; break end
         end
         if not fainted then
             G.shot("stuck")
@@ -2049,12 +2319,12 @@ LEGS[#LEGS + 1] = {
         -- "Deposit in which BOX?"; the LAST A commits box 0 and is what actually calls
         -- TryStorePartyMonInBox. That final confirmation is the press an earlier RR lane run
         -- was missing, and the reason its party count never moved.
-        open_storage_menu()
-        pc_press("Down", PC_WAIT.cursor); pc_press("A", PC_WAIT.menu)    -- DEPOSIT
-        pc_press("Down", PC_WAIT.cursor); pc_press("A", PC_WAIT.press)   -- party slot 1 -> popup
-        pc_press("A", PC_WAIT.press)                                     -- STORE -> box chooser
-        pc_press("A", PC_WAIT.commit)                                    -- box 0 -> TryStore...
-        leave_storage(cp, "viridian_pc")
+        PC.open(cp, "viridian_pc deposit")
+        PC.mode("viridian_pc deposit", 1) -- DEPOSIT
+        PC.popup("viridian_pc deposit", 1, 1, 0) -- party slot 1, STORE row 0
+        PC.select("viridian_pc deposit", PC_DEPOSIT_MENU)
+        PC.box("viridian_pc deposit")
+        PC.leave(cp, "viridian_pc deposit")
 
         local mid_world = owned_snapshot("viridian_pc deposited")
         local mid = mid_world.party
@@ -2063,8 +2333,8 @@ LEGS[#LEGS + 1] = {
             G.shot("stuck")
             G.finish(false, string.format(
                 "viridian_pc: after the deposit and leaving the PC the party count is %d, not "
-                .. "%d. The pinned route is 5x A, Down+A, Down+A, A (STORE), A (box) -- the "
-                .. "last A is the destination-box confirmation, without which nothing is stored",
+                .. "%d. The witnessed PC stages must reach the party popup and box chooser; "
+                .. "the chooser confirmation is what commits the deposit",
                 mid.n, before.n - 1))
         end
         local gone, why = play.departed_key(before, mid)
@@ -2075,16 +2345,17 @@ LEGS[#LEGS + 1] = {
         -- the BOX area at slot 0, A opens that record's popup, and A takes WITHDRAW (row 0).
         -- There is no destination confirmation on this path (R9 note).
         G.tap("Up", 2, 13)
-        open_storage_menu()
+        PC.open(cp, "viridian_pc withdraw")
         -- NO Up HERE. A re-opened PC starts the storage menu on ROW 0 (Withdraw), and an Up
         -- would WRAP the cursor to See Ya and close it (PHYSICAL, RR lane r5d,
         -- docs/gen3/probes/shadow_rr_play_r5d_pc_ops_2026-09-21.txt). The r5b/r5c
         -- "double deposit" that looked like a remembered cursor was really leave_storage
         -- returning early through the exit textbox; that is fixed above, not here.
-        pc_press("A", PC_WAIT.menu)                                      -- WITHDRAW (row 0)
-        pc_press("A", PC_WAIT.press)                                     -- box 0 slot 0 -> popup
-        pc_press("A", PC_WAIT.commit)                                    -- WITHDRAW
-        leave_storage(cp, "viridian_pc")
+        PC.mode("viridian_pc withdraw", 0)
+        PC.popup("viridian_pc withdraw", 0, 0, 0)
+        PC.select("viridian_pc withdraw", PC_WITHDRAW_MON)
+        PC.withdraw("viridian_pc withdraw")
+        PC.leave(cp, "viridian_pc withdraw")
 
         local after_world = owned_snapshot("viridian_pc withdrawn")
         local after = after_world.party
@@ -2137,20 +2408,16 @@ LEGS[#LEGS + 1] = {
         end
         local target = before.order[2]  -- Down from slot 0 selects slot 1, before compaction
 
-        open_storage_menu()
-        pc_press("Down", PC_WAIT.cursor); pc_press("A", PC_WAIT.menu)    -- DEPOSIT (party area)
-        pc_press("Down", PC_WAIT.cursor); pc_press("A", PC_WAIT.press)   -- party slot 1 -> popup
-        for _ = 1, 3 do pc_press("Down", PC_WAIT.cursor) end             -- STORE -> ... -> RELEASE
-        pc_press("A", PC_WAIT.press)                                     -- RELEASE -> Yes/No confirm
+        PC.open(cp, "pc_release")
+        PC.mode("pc_release", 1)
+        PC.popup("pc_release", 1, 1, 3) -- party slot 1, RELEASE row 3
+        PC.select("pc_release", PC_RELEASE_MON)
         -- THE CONFIRMATION IS PINNED. ShowYesNoWindow(1) starts the cursor on NO and does not
         -- wrap (pokemon_storage_system_tasks.c:2595-2599), so a bare A here declines silently --
         -- Up moves the cursor to YES first. Two more A's clear the trailing MSG_WAS_RELEASED and
         -- MSG_BYE_BYE messages (pokemon_storage_system_tasks.c:1307-1339).
-        pc_press("Up", PC_WAIT.cursor)
-        pc_press("A", PC_WAIT.press)                                     -- YES
-        pc_press("A", PC_WAIT.press)                                     -- MSG_WAS_RELEASED
-        pc_press("A", PC_WAIT.commit)                                    -- MSG_BYE_BYE
-        leave_storage(cp, "pc_release")
+        PC.release("pc_release") -- witness NO->YES, confirm, then both message states
+        PC.leave(cp, "pc_release")
 
         local after_world = owned_snapshot("pc_release after")
         local after = after_world.party
@@ -2332,6 +2599,7 @@ return {
     recover_to_route1_grass = recover_to_route1_grass,
     verify_starter = verify_starter, verify_rival = verify_rival,
     verify_parcel_fetched = verify_parcel_fetched,
+    PC = PC,
     owned_snapshot = owned_snapshot, verify_pc_transfer = verify_pc_transfer,
     pc_deposit_target = pc_deposit_target,
 }

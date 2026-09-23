@@ -513,12 +513,12 @@ def test_pc_release_confirms_yes_before_the_trailing_messages():
     before the A that accepts it, followed by exactly two more A's for the trailing
     MSG_WAS_RELEASED / MSG_BYE_BYE messages (src/pokemon_storage_system_tasks.c:1307-1339)."""
     leg_src = _SCRIPT_SRC.split('name = "pc_release"')[1].split('\n-- ── leg: save')[0]
-    release_at = leg_src.index('-- RELEASE -> Yes/No confirm')
-    up_at = leg_src.index('pc_press("Up", PC_WAIT.cursor)')
-    assert release_at < up_at, "Up must come after selecting RELEASE"
-    tail = leg_src[up_at:leg_src.index("leave_storage")]
-    a_presses = re.findall(r'pc_press\("A"', tail)
-    assert len(a_presses) == 3, f"expected YES + MSG_WAS_RELEASED + MSG_BYE_BYE, got {a_presses}"
+    assert 'PC.popup("pc_release", 1, 1, 3)' in leg_src
+    assert 'PC.select("pc_release", PC_RELEASE_MON)' in leg_src
+    assert 'PC.release("pc_release")' in leg_src
+    body = _SCRIPT_SRC.split("function PC.release(label)", 1)[1].split("\nend", 1)[0]
+    assert body.index('G.tap("Up", 3, 20)') < body.index('G.tap("A", 3, 13)')
+    assert body.count('G.tap("A", 3, 13)') == 3
 
 
 def test_save_battle_state_once_saves_no_more_than_once(emu_stubbed):

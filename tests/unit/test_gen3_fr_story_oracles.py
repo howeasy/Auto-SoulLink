@@ -343,10 +343,14 @@ def test_incidental_battle_resteers_remembered_pokemon_cursor_on_each_turn(machi
     assert fake.partyA == 0
 
 
-def test_forced_switch_selects_healthy_slot_from_run26_party_menu(machine):
+@pytest.mark.parametrize("stray_popup", [False, True])
+@pytest.mark.parametrize("egg_first", [False, True])
+def test_forced_switch_selects_healthy_slot_from_run26_party_menu(machine, stray_popup, egg_first):
     lua, mod, fake = machine
+    put_mon(fake, 0x02024284, 24)
+    put_mon(fake, 0x02024284 + 100, 49)
     lua.execute("""
-        F.in_battle=true; F.invalid=0; F.selected=-1; F.stage='party'; F.turns=0
+        F.in_battle=true; F.invalid=0; F.selected=-1; F.stage='party'; F.turns=0; F.stray_b=0
         F.w8(0x02024029,2)
         F.w16(0x02024284+0x56,0); F.w16(0x02024284+0x58,23)
         F.w16(0x02024284+100+0x56,17); F.w16(0x02024284+100+0x58,17)
@@ -368,16 +372,19 @@ def test_forced_switch_selects_healthy_slot_from_run26_party_menu(machine):
                     F.w32(0x03005090,0x0811FB29) -- dismiss 'has no energy'
                 elseif button=='Down' and task==0x0811FB29 then
                     F.w8(0x0203B0A0+9,1)
-                elseif button=='A' and task==0x0811FB29 then
-                    if F.r8(0x0203B0A0+9)==0 then
-                        F.invalid=F.invalid+1; F.w32(0x03005090,0x081203B9)
-                    else F.w32(0x03005090,0x08122C5D) end -- SEND OUT popup
-                elseif button=='A' and task==0x08122C5D then
-                    F.selected=F.r8(0x0203B0A0+9)
-                    F.stage='action'; F.w32(0x030030F4,0x08011101)
-                    F.w8(0x0203B0C0,1) -- TrySwitchInPokemon accepted the slot
-                    F.w32(0x03004FE0,D.HANDLE_INPUT_CHOOSE_ACTION)
-                    F.w8(D.ACTION_CURSOR_ADDR,0)
+                    elseif button=='A' and task==0x0811FB29 then
+                        F.w32(0x03005090,0x08122C5D) -- first A opens the popup, even on FNT
+                    elseif button=='B' and task==0x08122C5D then
+                        F.stray_b=F.stray_b+1; F.w32(0x03005090,0x0811FB29)
+                    elseif button=='A' and task==0x08122C5D then
+                        if F.r8(0x0203B0A0+9)==0 then
+                            F.invalid=F.invalid+1; F.w32(0x03005090,0x081203B9)
+                        else
+                            F.selected=F.r8(0x0203B0A0+9)
+                            F.stage='action'; F.w32(0x030030F4,0x08011101)
+                            F.w32(0x03004FE0,D.HANDLE_INPUT_CHOOSE_ACTION)
+                            F.w8(D.ACTION_CURSOR_ADDR,0)
+                        end
                 end
             elseif F.stage=='action' and button=='A' then
                 F.stage='move'; F.w32(0x03004FE0,0)
@@ -386,8 +393,14 @@ def test_forced_switch_selects_healthy_slot_from_run26_party_menu(machine):
             elseif F.stage=='animation' and button=='A' then F.in_battle=false end
         end
     """)
+    if stray_popup:
+        fake.w32(0x03005090, 0x08122C5D)
+    if egg_first:
+        fake.w16(0x02024284 + 0x56, 17)
+        fake.w8(0x02024284 + 0x13, 6)  # has_species + isEgg header flag
     mod.play.handle_encounter(fake.cp, None, "Down", lua.table(map=787, x=12, y=38))
     assert fake.selected == 1 and fake.invalid == 0
+    assert fake.stray_b == (1 if stray_popup else 0)
     assert fake.in_battle is False and fake.turns >= 1
 
 
@@ -749,7 +762,9 @@ def test_rival_leg_captures_outcome_before_postbattle_scene(machine, outcome, fl
 def test_release_leg_uses_selected_pid_and_box_census(machine, bad):
     lua, mod, fake = machine
     init_party(fake)
-    mod.play.leave_menu = lambda *_: depart(fake, box=0 if bad else None)
+    for name in ("open", "mode", "popup", "select", "release"):
+        mod.PC[name] = lambda *_: True
+    mod.PC.leave = lambda *_: depart(fake, box=0 if bad else None)
     if bad:
         with pytest.raises(LuaError, match="release_deposited"):
             leg(mod, "pc_release").run(fake.cp)
@@ -780,7 +795,9 @@ def test_deposit_withdraw_leg_uses_target_readback(machine, bad):
         else:
             withdraw(fake)
 
-    mod.play.leave_menu = leave
+    for name in ("open", "mode", "popup", "select", "box", "withdraw"):
+        mod.PC[name] = lambda *_: True
+    mod.PC.leave = leave
     if bad:
         with pytest.raises(LuaError, match="pc_target"):
             leg(mod, "viridian_pc_deposit_withdraw").run(fake.cp)
@@ -811,6 +828,245 @@ def test_pc_deposit_preconditions_bind_the_withdraw_cursor(machine, bad):
         put_mon(fake, fake.storage + 4, 100)
     with pytest.raises(LuaError, match="pc_box_cursor|pc_box_slot"):
         mod.pc_deposit_target(mod.owned_snapshot("before"))
+
+
+def test_run27b_which_pc_menu_retries_a_lost_press(machine):
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pc_a=0
+        F.w32(0x03005090,0x0809CC99) -- Task_MultichoiceMenu_HandleInput
+        F.w8(0x03005090+4,1)
+        F.w8(0x0203ADE4+2,0) -- sMenu.cursorPos = Someone's PC
+        F.w8(0x0203ADE4+4,3) -- four owner rows
+        F.w16(0x020370D0,127) -- stale result is not a completed selection
+        G.pred_ok=function(_,name)
+            if name=='script_context_status' then return false end
+            return true
+        end
+        F.on_tap=function(button)
+            if button~='A' then return end
+            F.pc_a=F.pc_a+1
+            if F.pc_a==2 then F.w32(0x03005090,0); F.w16(0x020370D0,0) end
+            if F.pc_a==4 then
+                F.w32(0x03005090,0x0808C39D) -- Task_PCMainMenu
+                F.w16(0x03005090+8,2); F.w16(0x03005090+10,0)
+            end
+        end
+    """)
+    assert mod.PC.open(fake.cp, "run27b") is True
+    assert fake.pc_a == 4
+
+
+def test_which_pc_wrong_row_and_permanently_lost_a_fail_named(machine):
+    lua, mod, fake = machine
+    fake.w32(0x03005090, 0x0809CC99)
+    fake.w8(0x03005090 + 4, 1)
+    fake.w8(0x0203ADE4 + 2, 1)
+    fake.w8(0x0203ADE4 + 4, 3)
+    with pytest.raises(LuaError, match="pc_which_pc_wrong_row"):
+        mod.PC.open(fake.cp, "wrong")
+    fake.w8(0x0203ADE4 + 2, 0)
+    with pytest.raises(LuaError, match="pc_which_pc_choice_not_consumed"):
+        mod.PC.open(fake.cp, "lost")
+
+
+def test_pc_deposit_menu_cursor_popup_and_box_chooser_are_witnessed(machine):
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000; F.box_t=0
+        F.w32(0x020397B0,F.pcstore)
+        F.w32(0x03005090,0x0808C39D); F.w8(0x03005090+4,1)
+        F.w16(0x03005090+8,2); F.w16(0x03005090+10,0)
+        F.w8(0x0203ADE4+4,4) -- five storage rows
+        F.on_tap=function(button)
+            local task=memory.read_u32_le(0x03005090)
+            if task==0x0808C39D then
+                if button=='Down' then F.w16(0x03005090+10,1)
+                elseif button=='A' then
+                    F.w32(0x03005090,0x0808D2BD)
+                    F.w8(F.pcstore,0); F.w8(F.pcstore+1,1)
+                    F.w8(0x02039820,1); F.w8(0x02039821,0)
+                end
+            elseif task==0x0808D2BD then
+                if button=='Down' then F.w8(0x02039821,1)
+                elseif button=='A' then
+                    F.w32(0x03005090,0x0808D879)
+                    F.w8(F.pcstore,2); F.w8(0x0203ADE4+2,0); F.w8(0x0203ADE4+4,4)
+                end
+            elseif task==0x0808D879 and button=='A' then
+                F.w32(0x03005090,0x0808DD89)
+                F.w8(F.pcstore,1); F.w8(0x020397B6,0)
+            elseif task==0x0808DD89 and button=='A' then
+                F.w8(F.pcstore,2) -- commit starts; task returns after compaction
+            end
+        end
+        F.on_frame=function()
+            if memory.read_u32_le(0x03005090)==0x0808DD89 and F.r8(F.pcstore)==2 then
+                F.box_t=F.box_t+1
+                if F.box_t==3 then
+                    F.w32(0x03005090,0x0808D2BD); F.w8(F.pcstore,0)
+                end
+            end
+        end
+    """)
+    assert mod.PC.open(fake.cp, "deposit") is True
+    assert mod.PC.mode("deposit", 1) is True
+    assert mod.PC.popup("deposit", 1, 1, 0) is True
+    assert mod.PC.select("deposit", 0x0808DD89) is True
+    assert mod.PC.box("deposit") is True
+    assert fake.box_t >= 3
+
+
+def test_pc_storage_cursor_wrong_area_fails_before_press(machine):
+    _, mod, fake = machine
+    fake.w32(0x020397B0, 0x0202A000)
+    fake.w32(0x03005090, 0x0808D2BD)
+    fake.w8(0x03005090 + 4, 1)
+    fake.w8(0x02039820, 0)
+    with pytest.raises(LuaError, match="pc_storage_cursor_wrong_area"):
+        mod.PC.cursor("wrong", 1, 1)
+
+
+def test_pc_exit_closes_storage_then_cancels_owner_list(machine):
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000; F.field=false; F.b=0
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,0)
+        F.w32(0x03005090,0x0808D2BD); F.w8(0x03005090+4,1)
+        G.pred_ok=function(_,name)
+            if name=='script_context_status' or name=='field_controls_locked' then return F.field end
+            return true
+        end
+        F.on_tap=function(button)
+            if button=='B' then
+                F.b=F.b+1
+                if F.b==1 then F.w32(0x03005090,0) end -- storage closes
+                if F.b==2 then
+                    F.w32(0x03005090,0); F.w16(0x020370D0,127); F.field=true
+                end
+            elseif button=='A' and F.b==1 then
+                F.w32(0x03005090,0x0809CC99)
+                F.w8(0x0203ADE4+4,3) -- owner list returns
+            end
+        end
+    """)
+    assert mod.PC.leave(fake.cp, "exit") is True
+    assert fake.b == 2 and fake.field is True
+
+
+def test_pc_withdraw_and_release_follow_their_own_task_states(machine):
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000; F.t=0; F.release_as=0
+        F.w32(0x020397B0,F.pcstore); F.w8(F.pcstore,0); F.w8(F.pcstore+1,0)
+        F.w8(0x02039820,0); F.w8(0x02039821,0)
+        F.w32(0x03005090,0x0808D2BD); F.w8(0x03005090+4,1)
+        F.on_tap=function(button)
+            local task=memory.read_u32_le(0x03005090)
+            if task==0x0808D2BD and button=='A' then
+                F.w32(0x03005090,0x0808D879); F.w8(F.pcstore,2)
+                F.w8(0x0203ADE4+2,0); F.w8(0x0203ADE4+4,4)
+            elseif task==0x0808D879 then
+                if button=='Down' then F.w8(0x0203ADE4+2,F.r8(0x0203ADE4+2)+1)
+                elseif button=='A' then
+                    if F.r8(F.pcstore+1)==0 then F.w32(0x03005090,0x0808DC9D)
+                    else F.w32(0x03005090,0x0808DECD); F.w8(F.pcstore,1)
+                         F.w8(0x0203ADE4+2,1) end
+                end
+            elseif task==0x0808DECD then
+                if button=='Up' then F.w8(0x0203ADE4+2,0)
+                elseif button=='A' then
+                    F.release_as=F.release_as+1
+                    if F.release_as==1 then F.w8(F.pcstore,4)
+                    elseif F.release_as==2 then F.w8(F.pcstore,5)
+                    else F.w32(0x03005090,0x0808D2BD); F.w8(F.pcstore,0) end
+                end
+            end
+        end
+        F.on_frame=function()
+            if memory.read_u32_le(0x03005090)==0x0808DC9D then
+                F.t=F.t+1
+                if F.t==3 then F.w32(0x03005090,0x0808D2BD); F.w8(F.pcstore,0) end
+            end
+        end
+    """)
+    assert mod.PC.popup("withdraw", 0, 0, 0) is True
+    assert mod.PC.select("withdraw", 0x0808DC9D) is True
+    assert mod.PC.withdraw("withdraw") is True
+    fake.w8(fake.pcstore + 1, 1)
+    fake.w8(0x02039820, 1)
+    fake.w8(0x02039821, 1)
+    assert mod.PC.popup("release", 1, 1, 3) is True
+    assert mod.PC.select("release", 0x0808DECD) is True
+    assert mod.PC.release("release") is True
+    assert fake.release_as == 3
+
+
+def test_lost_party_select_press_fails_at_popup_stage(machine):
+    _, mod, fake = machine
+    fake.w32(0x020397B0, 0x0202A000)
+    fake.w8(0x0202A000, 0)
+    fake.w8(0x0202A001, 1)
+    fake.w32(0x03005090, 0x0808D2BD)
+    fake.w8(0x03005090 + 4, 1)
+    fake.w8(0x02039820, 1)
+    fake.w8(0x02039821, 1)
+    with pytest.raises(LuaError, match="pc_storage_popup_missing"):
+        mod.PC.popup("lost", 1, 1, 0)
+
+
+def test_battle_mash_stops_before_party_menu_can_consume_another_a(machine):
+    lua, mod, fake = machine
+    lua.execute("""
+        F.in_battle=true; F.stage='action'; F.badA=0
+        F.w32(D.BATTLER_CTRL_ADDR,D.HANDLE_INPUT_CHOOSE_ACTION)
+        F.w8(D.ACTION_CURSOR_ADDR,0)
+        G.pred_ok=function(_,name)
+            if name=='in_battle' then return not F.in_battle end
+            return true
+        end
+        F.on_tap=function(button)
+            if button~='A' then return end
+            if F.stage=='action' then
+                F.stage='move'; F.w32(D.BATTLER_CTRL_ADDR,0)
+            elseif F.stage=='move' then F.stage='animation'
+            elseif F.stage=='animation' then
+                F.stage='party'; F.w32(0x030030F4,0x0811EBA1)
+                F.w8(0x02024029,2); F.w8(0x0203B0A0+8,1)
+                F.w8(0x0203B0A0+0xB,1)
+            elseif F.stage=='party' then F.badA=F.badA+1 end
+        end
+    """)
+    with pytest.raises(LuaError, match="forced_party_no_healthy_mon"):
+        mod.play.fight_through(fake.cp)
+    assert fake.badA == 0
+
+
+@pytest.mark.parametrize("gate", ["battle", "settle", "field"])
+def test_route1_faint_refuses_unsettled_terminal(machine, gate):
+    lua, mod, fake = machine
+    lua.globals().savestate = lua.table(save=lambda *_: True)
+    lua.execute("""
+        F.in_battle=true; F.field=true
+        F.w32(D.BATTLER_CTRL_ADDR,D.HANDLE_INPUT_CHOOSE_ACTION)
+        F.w8(D.ACTION_CURSOR_ADDR,0)
+        G.pred_ok=function(_,name)
+            if name=='in_battle' then return not F.in_battle end
+            if name=='callback2' then return F.field end
+            return true
+        end
+        D.play.fight_through=function()
+            F.w8(0x03004F90,1)
+            if F.gate~='battle' then F.in_battle=false end
+            return true
+        end
+        D.play.wait_scene_settled=function() return F.gate~='settle' end
+    """)
+    fake.gate = gate
+    if gate == "field":
+        fake.field = False
+    with pytest.raises(LuaError, match="battle_not_settled_after_faint"):
+        leg(mod, "route1_faint").run(fake.cp)
 
 
 def test_door_exit_is_judged_after_the_step_off_the_door(machine):
