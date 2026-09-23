@@ -894,8 +894,9 @@ class RunManager:
             return web.json_response({"ok": False, "error": "name is required"}, status=400)
         # Listed but not admitted (docs/gen3/PLAN.md:112): visible in the Manager, never created,
         # because the client would refuse the run at hello.
-        if str(body.get("game", "") or "") in UNADMITTED_GAMES:
-            return web.json_response({"ok": False, "error": f"{GAME_LABELS[body['game']]}: cannot create a run"},
+        game = str(body.get("game", "") or "").strip().lower()  # one normalized key: check, store, message
+        if game in UNADMITTED_GAMES:
+            return web.json_response({"ok": False, "error": f"{GAME_LABELS[game]}: cannot create a run"},
                                      status=400)
 
         runs = _load_registry()
@@ -919,7 +920,7 @@ class RunManager:
             "pid":        None,
             **run_options(body),
             # The game FAMILY, when named up front; "" means detect from the first hello.
-            "game": str(body.get("game", "") or "") if str(body.get("game", "") or "") in GAME_MEMBERS else "",
+            "game": game if game in GAME_MEMBERS else "",
         }
         # Create data directory immediately
         os.makedirs(os.path.join(MANAGER_DIR, run_id), exist_ok=True)

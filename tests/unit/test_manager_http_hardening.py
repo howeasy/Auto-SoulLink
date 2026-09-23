@@ -337,7 +337,7 @@ async def test_a_spawn_that_exits_on_startup_raises_with_its_reason(tmp_path, mo
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("game", sorted(manager.UNADMITTED_GAMES))
+@pytest.mark.parametrize("game", sorted(manager.UNADMITTED_GAMES) + [" gen3_ap", "GEN3_E"])
 async def test_manager_refuses_to_create_an_unadmitted_game(manager_client, manager_dir, monkeypatch, game):
     """AP FRLG and Emerald stay listed with a 'not admitted' label (docs/gen3/PLAN.md:112),
     but a run for them would be refused by the client at hello, so /api/runs/new refuses
