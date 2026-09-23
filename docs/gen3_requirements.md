@@ -32,7 +32,7 @@ what each one is missing. This ledger is populated phase by phase against `docs/
 
 - **ENGINE** — a `bus_exec` hook at the callback address for a pinned site fired (or did not), with expected bytes verified in ROM at load and rechecked on the bus at fire.
 - **PYDEC** — `server/adapters/gen3_codec.py` decodes the same raw EWRAM/IWRAM/flash bytes; Lua and Python must agree.
-- **GAME** — the game itself: the flash save reloads with the expected party/box contents; native RR screens (mailbox panel, trade scene, storage) show the expected text/state.
+- **GAME** — the game itself: the flash save reloads with the expected party/box contents; native RR screens (info panel, trade scene, storage) show the expected state. Native notification text is not an RC oracle (post-RC, `docs/gen3/TODO.md`).
 - **SERVER** — `links.json` / server status, read by pytest, not by the client.
 - **CONTROL** — a known-positive control: recompute a value two ways and require equality (e.g. codec round-trip on a fixture, flash-layout sector rotation).
 
@@ -176,6 +176,7 @@ same reachability context), never bytes alone.
 
 ## Not in this release
 
+- **Native text (RR)**: the companion's native notification boxes (`OP_SHOW_MESSAGE` 8, `OP_SHOW_BATTLE_MESSAGE` 23) are not an RC requirement (owner ruling 2026-09-23, PLAN §0). RC notifications and prompts go through `lua/hud.lua`. See `docs/gen3/TODO.md`.
 - **Archipelago FRLG**: deferred until post-RC (owner ruling 2026-09-23, PLAN §0), including the old-client " AP" header check on an AP-patched dump.
 - **Peer ghost (RR)**: removed from the Gen 3 RC and deferred until post-RC (owner ruling 2026-09-22, PLAN §0). N-2 and the `ghost` scenario are not RC rows; the RR companion scenario set is eight.
 

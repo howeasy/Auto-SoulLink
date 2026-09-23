@@ -43,6 +43,8 @@ Shadow lane invocation: `SLINK_SHADOW=1 python tools/e2e_duo.py --game gen3_rr -
 
 > SYNC 2026-09-22: master merged into this branch as ff9b9b95 (29 commits, clean) and again as 40f7e3ca after the owner-requested pureRGB fix on master (c411b2f3: six overlay symbol pins recomputed on LF bytes; f6229e77 had hashed a CRLF checkout). Both checkouts' LF-pinned files rewritten from their blobs (no content change). Remaining unit failures in this worktree are environment-only (pret cache lives at the repo root). Nothing pushed.
 
+> OWNER RULINGS 2026-09-23: native text (OP_SHOW_MESSAGE / OP_SHOW_BATTLE_MESSAGE) removed from the RC; AP deferred post-RC. Both are tracked in docs/gen3/TODO.md with the peer ghost.
+
 > OWNER RULING 2026-09-22: peer ghost removed from the Gen 3 RC and deferred post-RC (PLAN §0/§10, requirements 'Not in this release'). P5 drops ghost.lua and the ghost scenario; RR duo set is eight.
 
 ## Checkpoint 8 (2026-09-23, owner stop)
