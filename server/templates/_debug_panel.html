@@ -696,7 +696,7 @@ async function loadMemorial() {
     if (boxIdx >= 0) {
       h += '<div style="margin-bottom:0.8em"><b style="color:var(--text)">Memorial Box:</b> Box ' + (boxIdx + 1) + ' (index ' + boxIdx + ')</div>';
     } else {
-      h += '<div style="margin-bottom:0.8em"><b style="color:var(--text)">Memorial Box:</b> <span style="color:var(--c-dim)">No dedicated memorial box (Gen 1/2)</span></div>';
+      h += '<div style="margin-bottom:0.8em"><b style="color:var(--text)">Memorial Box:</b> <span style="color:var(--c-dim)">No dedicated memorial box for this game</span></div>';
     }
 
     // 2. Pending memorials
@@ -908,7 +908,7 @@ function renderLinksTable() {
   }
   var h = '<table class="ml-table"><thead><tr><th>Area</th><th>A</th><th>B</th><th>Status</th><th></th></tr></thead><tbody>';
   d.links.forEach(function(lnk, idx) {
-    var stCls = lnk.status === 'alive' ? 'st-alive' : (lnk.status === 'dead' || lnk.status === 'memorial' ? 'st-dead' : 'st-memorial');
+    var stCls = lnk.status === 'alive' ? 'st-alive' : (lnk.status === 'dead' ? 'st-dead' : 'st-memorial');
     var aLbl = lnk.a_nickname ? lnk.a_nickname + ' (' + (lnk.a_species_name||'') + ')' : (lnk.a_key ? lnk.a_key.substring(0,8) : '\u2014');
     var bLbl = lnk.b_nickname ? lnk.b_nickname + ' (' + (lnk.b_species_name||'') + ')' : (lnk.b_key ? lnk.b_key.substring(0,8) : '\u2014');
     h += '<tr>';
