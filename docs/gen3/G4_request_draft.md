@@ -77,8 +77,8 @@ Union-Room row (2a, a recorded limit); the 2b matrix (its plan @ `082b33a9`, its
 only the optional frozen-cut re-runs remain, the reconnect wrong-save having been re-taken at
 `fb255a05`. **Item 3 is done** (18 PASS + 4 not-selected SKIP per title, `03ab26e7`; its independent review
 REV-PROBE2-SAVEROWS is in flight). The checkpoint change carries its own rows, §3.2 — ten, of which
-rows 3 and 6 are **DONE live** (`24d6cf6a`) and rows 1 and 9 are **Lua PASS with an oracle fix and a
-re-run owed**; the estimate in the header folds in those runs. Estimates live in
+rows 1, 3, 6 and 9 are **DONE live** on both titles (3+6 @ `24d6cf6a`; 1+9 @ the save_then_write
+receipts at lane `0feb9383`); the estimate in the header folds in those runs. Estimates live in
 `docs/gen3/G4_status_2026-09-23.md`. **S**
 
 ---
@@ -147,7 +147,7 @@ Codex's review lists them; each is marked **runnable** on this machine as the ha
 
 | # | Row | Runnable or recorded limit |
 |---|---|---|
-| 1 | START save: first and repeated saves, both overwrite prompts, cancel, success dismissal | **half DONE, half runnable** — first and repeated saves are the §3.1 `saves=2` PASS on both titles; the overwrite prompts, cancel and dismissal need explicit driver steps — **IMPLEMENTED** at `c9e2b695` (`beee4ff`'s design): a `SAVE_DISMISSAL <tag> by=a_press or timeout delay=N` line read from `sSaveDialogDelay` (`scenario_gen3_save_then_write.lua:44-48`) distinguishes the two dismissals; the different-file prompt is a **recorded limit** — `start_menu.c:731` is an OR, so the fixture's one valid save always takes the same-file overwrite prompt and `gDifferentSaveFile` can never be true here — **live: Lua PASS, oracle fix + re-run owed** (see the results block below) |
+| 1 | START save: first and repeated saves, both overwrite prompts, cancel, success dismissal | **half DONE, half runnable** — first and repeated saves are the §3.1 `saves=2` PASS on both titles; the overwrite prompts, cancel and dismissal need explicit driver steps — **IMPLEMENTED** at `c9e2b695` (`beee4ff`'s design): a `SAVE_DISMISSAL <tag> by=a_press or timeout delay=N` line read from `sSaveDialogDelay` (`scenario_gen3_save_then_write.lua:44-48`) distinguishes the two dismissals; the different-file prompt is a **recorded limit** — `start_menu.c:731` is an OR, so the fixture's one valid save always takes the same-file overwrite prompt and `gDifferentSaveFile` can never be true here — **live: PASS on both titles** at lane `0feb9383` (see the results block below) |
 | 2 | START save: error/recovery (flash failure) | **recorded limit** — needs a forced flash failure the harness cannot inject; statically covered by the audit ("the task persists") |
 | 3 | script / Cable Club save | **runnable** — `center_controls_gen3`'s own save is the Cable Club's (`EventScript_AskSaveGame`); it needs its own witness row — **IMPLEMENTED** at `c9e2b695` as the `cable_save` control (the runner queues its probe at `CONTROL_LIVE`) — **DONE live** (`24d6cf6a`): refused `clause=field_controls_locked` at 600 frames, then released and settled |
 | 4 | Hall of Fame | **recorded limit** — needs the Elite Four; unreachable from the town fixture |
@@ -155,7 +155,7 @@ Codex's review lists them; each is marked **runnable** on this machine as the ha
 | 6 | cable: open before exchange, null callback while open, established, cancel, disconnect, then resumed writes | **half DONE, half runnable** — cancel → resumed writes is the FR PASS above; *open before exchange* and *null callback while open* (HEAD's own admitted gap) are runnable and owed — **IMPLEMENTED** at `c9e2b695`; the null-callback window is **logged its limit form live** (`24d6cf6a`) (`CABLE_CALLBACK_NULL limit=no-cable-partner`, `scenario_gen3_center_controls.lua:188`), because the callbacks are cleared only after a partner connects (`link.c:746-757`; the linkup task returns while `playerCount < 2`, `cable_club.c:208-214`); *open before exchange* is a **recorded limit** (`link.c:373` then `:394`, no frame boundary) |
 | 7 | wireless background / exchange / teardown | **recorded limit** — no adapter: both Center receipts observe `adapter_connected=false` (`IsWirelessAdapterConnected`'s VAR_RESULT) |
 | 8 | League rooms: admission, plus refusal in scripts, save and battle | **recorded limit on hardware, static proof in the audit** — `Task_RunPokemonLeagueLightingEffect` persists in the Elite Four rooms (PROVEN on FR/LG, inferred for RR); the rooms are unreachable from the town fixture |
-| 9 | a previously-saved fixture with the START cursor on another submenu, where the dialog witness must stay false | **SOURCE DONE, physical runnable** — the C4-6t witness (`10e4a702`) has unit falsifiers for exactly this; a probe re-run on a saved fixture is owed — **IMPLEMENTED** at `c9e2b695`: the row-9 refusal line forbids `save_dialog_cb`, and the driver gained seven `start_menu` statics in SYMS plus a read-only `ctx.peek` — **live: Lua PASS, oracle fix + re-run owed** (see the results block below) |
+| 9 | a previously-saved fixture with the START cursor on another submenu, where the dialog witness must stay false | **SOURCE DONE, physical runnable** — the C4-6t witness (`10e4a702`) has unit falsifiers for exactly this; a probe re-run on a saved fixture is owed — **IMPLEMENTED** at `c9e2b695`: the row-9 refusal line forbids `save_dialog_cb`, and the driver gained seven `start_menu` statics in SYMS plus a read-only `ctx.peek` — **live: PASS on both titles** at lane `0feb9383` (see the results block below) |
 | 10 | positive recovery writes with readback | **DONE** — §3.1's `save_then_write_gen3` on both titles (keyed write landed, PYDEC PASS) |
 
 The four rows above are implemented by **`c9e2b695`** (design `beee4ff`,
@@ -173,12 +173,14 @@ IN FLIGHT** (`save_then_write_gen3` and `center_controls_gen3`, FR-as-A and LG-a
   a save-dialog clause. Row 6 logged its **limit form**, as predicted: `CABLE_CALLBACK_NULL
   limit=no-cable-partner open_frames=601 null_frames=0 callback=0x0800A721:LinkCB_RequestPlayerDataExchange`
   (`:33`) — no window exists because no partner ever connects.
-- **Rows 1 + 9 — Lua PASS, oracle fix + re-run owed.** `save_then_write_gen3` on both titles: the Lua `RESULT`
-  was PASS and every behavioural marker held (`SAVE_DISMISSAL by=a_press`, `DIALOG_WITNESS_FALSE`, both
-  refusals at 600 frames with `attempted=0`, then returned and settled), but **PYDEC failed on an oracle
-  ordering bug**: the client applied the write on the first free frame, *before* the scenario logged
-  `SAVE_CANCEL_FIELD_FREE` for that same frame (a-side log order: RELEASED line 107, TX line 111, FIELD_FREE
-  line 112). The fix is in flight and those two launches are re-run. **Not called PASS.**
+- **Rows 1 + 9 — PASS on both titles.** `save_then_write_{fr,lg}_as_a_c4saverows_2026-09-23.txt`, clean lane
+  `0feb9383` (`source=0feb9383`), `save_then_write_gen3: a=PASS b=PASS`, `PYDEC: PASS asserted scenario facts`,
+  witness `match=true`. Markers: `SAVE_DISMISSAL by=a_press` for both saves, `DIALOG_WITNESS_FALSE` off SAVE,
+  the probe refused at the overwrite prompt and the redrawn menu (600 frames, `attempted=0`), then
+  `SAVE_CANCEL_WRITE_FRAME … field_free=true start_menu_task=false` (FR frame 5686, LG 5536). The first run at
+  `03ab26e7` failed PYDEC only on an oracle ordering bug — the client applies the write on the first free frame,
+  inside that frame's pump, before the scenario could log `SAVE_CANCEL_FIELD_FREE` — fixed at `0feb9383` by
+  ordering the landing on the write's own frame (falsifier red on `c9e2b695`). **P**
 
 
 ---
