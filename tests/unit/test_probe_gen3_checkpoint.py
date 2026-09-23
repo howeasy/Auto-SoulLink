@@ -10,7 +10,7 @@ TERMINALS = {
     "idle": "field_idle_300",
     "walking": "position_changed_120",
     "start_menu": "field_controls_locked",
-    "dialog": "save_dialog_cb_nonzero",
+    "dialog": "start_menu_save_callback_under_live_task",
     "save": "new_counter_partial_slot_then_14_sectors",
     "battle": "in_battle_mask_nonzero",
     "fade": "palette_fade_active_then_map_changed",
@@ -421,3 +421,29 @@ def test_witnesses_read_engine_state_not_safety(module):
     assert "safety" not in helpers and "check(" not in helpers
     assert "begin(8, pc_up)" in SOURCE and "begin(9, running)" in SOURCE
     assert "p.address == P.SCRIPT_STATUS" in SOURCE  # pack must agree with the sym address
+
+
+
+# ── C4-6t (Codex cx-3e10776a): the dialog row's witness after an earlier save ─────────────────
+def test_the_dialog_row_uses_the_shared_start_menu_witness(module):
+    lua, probe = module
+    ready = lua.eval("function() return 'ready' end")
+    running = lua.eval("function() return 'running' end")
+    G = lua.table(start_menu_witness=lua.eval("function(r, s) return function(t) return r, s end end")(ready, running))
+    arm, opened = probe.dialog_witness(G, lua.table(), "firered")
+    assert arm() == "ready" and opened() == "running"
+    assert 'begin(4,function() return dialog_open() end)' in SOURCE
+    assert 'not G.pred_ok(cp,"save_dialog_cb")' not in SOURCE
+
+
+def test_the_rr_fallback_needs_the_pointer_to_move_after_the_press(module):
+    lua, probe = module
+    lua.execute("CB = 0x0806F9E1")                     # stale: an earlier save's ReturnSuccess
+    G = lua.eval("""{ start_menu_witness = function() return nil end,
+                      pred = function(_, name) return CB, 0 end }""")
+    arm, opened = probe.dialog_witness(G, lua.table(), "radical_red")
+    assert opened() is False                           # never armed: nothing to compare against
+    arm()
+    assert opened() is False                           # stale non-zero alone is NOT a dialog
+    lua.execute("CB = 0x0806F7A1")
+    assert opened() is True

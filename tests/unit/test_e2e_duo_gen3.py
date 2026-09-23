@@ -3017,3 +3017,60 @@ def test_the_save_then_write_runner_queues_only_after_the_stale_witness():
     assert duo.SCENARIOS["save_then_write_gen3"]["no_save"] == ("b",)
     assert duo.scenario_applies("save_then_write_gen3", "gen3_frlg")
     assert duo.scenario_applies("save_then_write_gen3", "gen3_lgfr")
+
+
+# ── C4-6t: BizHawk rewind off in every generated run config (duo run 61569 crash) ─────────────
+_REWIND = {"UseCompression": False, "UseDelta": False, "Enabled": True, "BufferSize": 512}
+
+
+def _config_with_rewind(tmp_path):
+    path = tmp_path / "src.ini"
+    path.write_text(json.dumps({"Rewind": dict(_REWIND), "PathEntries": {"Paths": [
+        {"System": "GBA", "Type": "Save RAM", "Path": ""}]}}), encoding="utf-8")
+    return path
+
+
+def _rewind_of(path):
+    return json.loads(path.read_text(encoding="utf-8-sig"))["Rewind"]
+
+
+def test_every_run_config_writer_turns_rewind_off(tmp_path):
+    """BizHawk's rewind capture (MainForm.CaptureRewind -> ZwinderBuffer.Capture ->
+    MGBAHawk.SaveStateBinary) crashed both duo instances with an AccessViolationException."""
+    import gen1_playthrough as g1
+    import gen3_fixtures
+    import run_gate
+
+    src = _config_with_rewind(tmp_path)
+    for name, write in (
+            ("gb", lambda dst: g1.write_run_config(str(src), str(dst))),
+            ("gba", lambda dst: gen3_fixtures.write_gba_run_config(str(src), str(dst), str(tmp_path / "sr"))),
+            ("gate", lambda dst: run_gate.write_gate_config(str(src), str(dst)))):
+        dst = tmp_path / f"{name}.ini"
+        write(dst)
+        rewind = _rewind_of(dst)
+        assert rewind["Enabled"] is False, name
+        assert rewind["BufferSize"] == 512, name              # every other field kept
+    # an unparseable source is a loud error in every writer -- never a raw copy with rewind on
+    broken = tmp_path / "broken.ini"
+    broken.write_text("{not json", encoding="utf-8")
+    for name, write in (
+            ("gb", lambda dst: g1.write_run_config(str(broken), str(dst))),
+            ("gba", lambda dst: gen3_fixtures.write_gba_run_config(str(broken), str(dst), str(tmp_path / "sr3"))),
+            ("gate", lambda dst: run_gate.write_gate_config(str(broken), str(dst)))):
+        dst = tmp_path / f"broken_{name}.ini"
+        with pytest.raises(RuntimeError, match="rewind"):
+            write(dst)
+        assert not dst.exists(), name
+    # a config with no Rewind block at all gets one, disabled
+    bare = tmp_path / "bare.ini"
+    bare.write_text(json.dumps({}), encoding="utf-8")
+    run_gate.write_gate_config(str(bare), str(tmp_path / "bare_out.ini"))
+    assert _rewind_of(tmp_path / "bare_out.ini") == {"Enabled": False}
+
+
+def test_no_tool_copies_the_bizhawk_config_raw():
+    """Every per-run config goes through a writer that disables rewind -- no plain copy left."""
+    offenders = [p.name for p in (REPO / "tools").glob("*.py")
+                 if re.search(r"copyfile\(\s*BIZHAWK_CONFIG", p.read_text(encoding="utf-8"))]
+    assert offenders == [], offenders

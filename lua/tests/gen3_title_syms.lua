@@ -175,6 +175,18 @@ M.entries = {
     -- uses (src/script_menu.c), including the starter-nickname decline this same file's
     -- "starter" leg drives. One address serves every Yes/No box in the game; which box is open
     -- is not disambiguated by this witness alone (callers know from their own leg context).
+    -- The START menu's input chain (src/start_menu.c): the window exists from DoDrawStartMenu
+    -- step 2, but input is read only once Task_StartMenuHandleInput (created AFTER the draw) has
+    -- set sStartMenuCallback = StartCB_HandleInput (:376-392); the SAVE row's A moves that callback
+    -- to StartCB_Save1, then StartCB_Save2 while the dialog runs (:433, :568-573). sStartMenuCallback
+    -- is never reset either, so these are read against the live task. ABSENT on radical_red (CFRU
+    -- rebuilds the START menu; gen3_boot_check.save_via_menu keeps its older witness there).
+    TASK_START_MENU_HANDLE_INPUT = { symbol = "Task_StartMenuHandleInput", thumb = true,
+                                     firered = 0x0806F1F1, leafgreen = 0x0806F1F1 },
+    START_CB_HANDLE_INPUT = { symbol = "StartCB_HandleInput", thumb = true,
+                              firered = 0x0806F281, leafgreen = 0x0806F281 },
+    START_CB_SAVE1 = { symbol = "StartCB_Save1", thumb = true, firered = 0x0806F5A5, leafgreen = 0x0806F5A5 },
+    START_CB_SAVE2 = { symbol = "StartCB_Save2", thumb = true, firered = 0x0806F5C9, leafgreen = 0x0806F5C9 },
     TASK_YES_NO_MENU = { symbol = "Task_YesNoMenu_HandleInput", thumb = true,
                          firered = 0x0809CE55, leafgreen = 0x0809CE29 },
 }

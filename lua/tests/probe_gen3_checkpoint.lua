@@ -25,7 +25,10 @@ P.STATES = {
     -- refuses a live save. The whole dialog runs inside Task_StartMenuHandleInput (:378-394)
     -- under ShowStartMenu's lock (:405, released :586/:598); every physical dialog/save frame on
     -- record names both (checkpoint_*_2026-09-2[23]*.txt: task:N, field_controls_locked:N).
-    {name="dialog", terminal="save_dialog_cb_nonzero", expectation="negative",
+    -- The row's WITNESS is this invocation's transition into StartCB_Save1/Save2 under the live
+    -- Task_StartMenuHandleInput (gen3_boot_check.start_menu_witness): a stale sSaveDialogCB after
+    -- an earlier save made the old `~= 0` witness pass on ANY submenu's A (Codex cx-3e10776a).
+    {name="dialog", terminal="start_menu_save_callback_under_live_task", expectation="negative",
         expect_clauses={task=true, field_controls_locked=true}},
     {name="save", terminal="new_counter_partial_slot_then_14_sectors", expectation="negative",
         expect_clauses={task=true, field_controls_locked=true}},
@@ -275,6 +278,18 @@ function P.build_deps(mem, emulator, native_idle)
     }
 end
 
+--- The dialog row's (arm, opened) pair. FR/LG: gen3_boot_check's START-menu witness -- arm =
+--- the live menu task reads input (StartCB_HandleInput), opened = its callback then moved to
+--- StartCB_Save1/Save2. A title without pinned START-menu code (radical_red): arm records
+--- sSaveDialogCB just before the press and opened = it moved since, never the bare `~= 0`.
+function P.dialog_witness(G, cp, title)
+    local ready, running = G.start_menu_witness(title)
+    if ready then return ready, running end
+    local before
+    return function() before = (G.pred(cp, "save_dialog_cb")); return true end,
+           function() return before ~= nil and (G.pred(cp, "save_dialog_cb")) ~= before end
+end
+
 function P.run()
     local wt = assert(SLINK_ROOT or os.getenv("SLINK_ROOT"), "SLINK_ROOT required")
     local G = dofile(wt .. "/lua/tests/gen3_boot_check.lua")
@@ -331,16 +346,27 @@ function P.run()
             active.r15, active.cpsr, active.frame = regs.R15, regs.CPSR, deps.frame()
         end
     end
+    local dialog_armed, dialog_open = P.dialog_witness(G, cp, title)
     local function open_save_dialog()
         G.tap("Start",3,30)
-        for _ = 1,14 do
-            G.tap("A",3,60)
-            if not G.pred_ok(cp,"save_dialog_cb") then return true end
+        for attempt = 1,14 do
+            -- every press waits for the menu to READ input (a press into its draw is dropped)
+            for _ = 1,300 do if dialog_armed() then break end; G.advance() end
+            if attempt > 1 then
+                G.tap("Down",3,13)
+                for _ = 1,300 do if dialog_armed() then break end; G.advance() end
+            end
+            G.tap("A",3,0)
+            for _ = 1,60 do
+                if dialog_open() then return true end
+                G.advance()
+            end
+            -- another row's submenu: back out to the field and reopen one row further
             for _ = 1,12 do
                 if G.pred_ok(cp,"callback2") then break end
                 G.tap("B",3,20)
             end
-            G.tap("B",3,20); G.tap("Start",3,30); G.tap("Down",3,13)
+            G.tap("B",3,20); G.tap("Start",3,30)
         end
         return false
     end
@@ -399,7 +425,7 @@ function P.run()
 
         load(idle_state)
         assert(open_save_dialog(), "save prompt not reached for dialog control")
-        row = begin(4,function() return not G.pred_ok(cp,"save_dialog_cb") end)
+        row = begin(4,function() return dialog_open() end)
         G.idle(120); row.reached = row.samples > 0; active = nil
 
         local domain = assert(G.flash_domain(), "flash domain unavailable")

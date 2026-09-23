@@ -67,6 +67,47 @@ local function start_menu_open()
     return memory.read_u8(START_MENU_WINDOW_ID_ADDR) ~= WINDOW_NONE
 end
 
+-- The START menu's INPUT witness (card C4-6t). The window above exists before the menu reads
+-- input: Task_StartMenuHandleInput is created only after the draw finishes and then sets
+-- sStartMenuCallback = StartCB_HandleInput (pret start_menu.c:376-392). A first save always walked
+-- Down rows first, which hid that gap; a SECOND save starts with the cursor already on SAVE
+-- (FRLG keeps it), pressed A the frame the window appeared, and the press was dropped: live LG
+-- save_then_write "the second save: SAVE failed: the save dialog never opened". sStartMenuCallback
+-- and gTasks are WRAM data (identical in both .sym files: 0x020370F0, 0x03005090); the code
+-- addresses come per title from gen3_title_syms.
+local START_MENU_CALLBACK_ADDR = 0x020370F0     -- sStartMenuCallback (u32)
+local TASKS_ADDR, TASK_COUNT, TASK_SIZE = 0x03005090, 16, 40
+local function task_live(fn)
+    for i = 0, TASK_COUNT - 1 do
+        local base = TASKS_ADDR + i * TASK_SIZE
+        if memory.read_u8(base + 4) ~= 0 and memory.read_u32_le(base) == fn then return true end
+    end
+    return false
+end
+--- (input-ready, save-dialog-running) predicates over the live menu task, or nil for a title
+--- whose START menu code addresses are not pinned (radical_red). The ONE shared witness: the
+--- checkpoint probe's dialog row uses it too (M.start_menu_witness). save-dialog-running is FALSE
+--- for a stale pointer in every shape: a completed save (task destroyed, callback left on
+--- StartCB_Save2), a cancelled dialog (callback back on StartCB_HandleInput, :593), and another
+--- submenu's A (callback on that submenu's function) -- sSaveDialogCB may be non-zero in all three.
+local function start_menu_witness(title)
+    local ok, syms = pcall(function()
+        return dofile(WT .. "/lua/tests/gen3_title_syms.lua").for_title(title)
+    end)
+    if not ok or not (syms.TASK_START_MENU_HANDLE_INPUT and syms.START_CB_HANDLE_INPUT
+                      and syms.START_CB_SAVE1 and syms.START_CB_SAVE2) then
+        return nil
+    end
+    local function cb() return memory.read_u32_le(START_MENU_CALLBACK_ADDR) end
+    local function live() return task_live(syms.TASK_START_MENU_HANDLE_INPUT) end
+    return function() return live() and cb() == syms.START_CB_HANDLE_INPUT end,
+           function()
+               local c = cb()
+               return live() and (c == syms.START_CB_SAVE1 or c == syms.START_CB_SAVE2)
+           end
+end
+M.start_menu_witness = start_menu_witness
+
 -- Per-id section sizes: the SAVEBLOCK_CHUNK macro (pret src/save.c:43-72), mirrored from
 -- gen3_codec.slot_layout: size = min(sizeof(object) - chunk*CHUNK, CHUNK). CHUNK is 0xF80
 -- for vanilla FR/LG and CFRU's 0xFF0 for Radical Red (gen3_codec CHUNK_SIZE_CFRU).
@@ -358,6 +399,7 @@ function M.save_via_menu(cp, domain, attempts)
     -- and a bare ~= 0 would "open" on the first A of any row.
     local cb0 = M.pred(cp, "save_dialog_cb")
     local function dialog() return (M.pred(cp, "save_dialog_cb")) ~= cb0 end
+    local input_ready, save_running = start_menu_witness(M.title)
 
     local before = M.save_counter(domain)
     M.phase("save-menu", string.format("counter=%d", before))
@@ -400,6 +442,20 @@ function M.save_via_menu(cp, domain, attempts)
         return false, before, before, "the start menu window never opened"
     end
 
+    -- the window is up; wait for the menu to READ input before any Down/A (see above)
+    if input_ready then
+        local ready = false
+        for _ = 1, 300 do
+            if input_ready() then ready = true; break end
+            M.advance()
+        end
+        if not ready then
+            M.shot("stuck")
+            return false, before, before, "the start menu never took input (no Task_StartMenuHandleInput "
+                                          .. "with StartCB_HandleInput)"
+        end
+    end
+
     local n = memory.read_u8(START_MENU_COUNT_ADDR)
     local save_row = nil
     for i = 0, n - 1 do
@@ -433,8 +489,20 @@ function M.save_via_menu(cp, domain, attempts)
             memory.read_u8(START_MENU_CURSOR_ADDR))
     end
 
-    M.tap("A", 3, 60)
-    if not dialog() then
+    local opened_dialog = false
+    if save_running then
+        -- OPEN = the live menu task's callback moved from StartCB_HandleInput (just witnessed) to
+        -- StartCB_Save1/Save2 after THIS press -- robust to a stale sSaveDialogCB from an earlier save
+        M.tap("A", 3, 0)
+        for _ = 1, 120 do
+            if save_running() then opened_dialog = true; break end
+            M.advance()
+        end
+    else
+        M.tap("A", 3, 60)
+        opened_dialog = dialog()
+    end
+    if not opened_dialog then
         M.shot("stuck")
         return false, before, before, "the save dialog never opened"
     end

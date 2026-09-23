@@ -504,14 +504,15 @@ def write_gba_run_config(src: str, dst: str, saveram_dir: str) -> None:
     entry and refuses when it finds none.
     """
     sys.path.insert(0, os.path.join(REPO, "tools"))
-    try:
-        from gen1_playthrough import write_run_config
-        write_run_config(src, dst)
-    except Exception:                       # unparseable config: a plain copy, same fallback
-        shutil.copyfile(src, dst)
+    from gen1_playthrough import write_run_config
+    # no plain-copy fallback: it would carry Rewind.Enabled=true (duo run 61569's crash); an
+    # unparseable source now raises from write_run_config itself
+    write_run_config(src, dst)
     os.makedirs(saveram_dir, exist_ok=True)
     with open(dst, encoding="utf-8-sig") as f:
         cfg = json.load(f)
+    from gen1_playthrough import disable_rewind
+    disable_rewind(cfg)                     # even on write_run_config's plain-copy fallback
     entries = (cfg.get("PathEntries") or {}).get("Paths") or []
     patched = [e for e in entries if e.get("Type") == "Save RAM" and e.get("System") == "GBA"]
     if not patched:

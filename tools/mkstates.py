@@ -161,7 +161,10 @@ def _run_mkstate(kind, target, timeout, extra_env=None):
     if os.path.exists(result):
         os.remove(result)
     cfg_rel = "patch/build/mkstate_cfg.ini"
-    shutil.copyfile(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel))
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from run_gate import write_gate_config
+
+    write_gate_config(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel))   # rewind off (run 61569)
 
     env = dict(os.environ, SLINK_ROOT=REPO.replace("\\", "/"),
                SLINK_STATE_OUT=target.replace("\\", "/"), SLINK_STATE_KIND=kind,

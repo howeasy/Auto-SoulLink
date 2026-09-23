@@ -2274,7 +2274,9 @@ class DuoRun:
             g1.write_run_config(BIZHAWK_CONFIG, cfg_ini, saveram_dir=self._saveram_dir(inst),
                                 purergb=g1.is_purergb(self.gcfg["fixture"][inst]))
         else:
-            shutil.copyfile(BIZHAWK_CONFIG, cfg_ini)
+            from run_gate import write_gate_config
+
+            write_gate_config(BIZHAWK_CONFIG, cfg_ini)   # rewind off (duo run 61569's crash)
         self._apply_lane_window(cfg_ini)
         self._phase = getattr(self, "_phase", {})
         self._phase[inst] = phase

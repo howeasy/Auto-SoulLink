@@ -106,14 +106,31 @@ class World:
             startmenu_window, startmenu_open_delay, startmenu_open_at = 1, 0, nil
             startmenu_cursor, startmenu_count, startmenu_order = 0, 1, {4}
             down_before_open = 0
+            -- C4-6t: the menu READS input only once Task_StartMenuHandleInput runs and sets
+            -- sStartMenuCallback = StartCB_HandleInput, `ready_delay` frames after the window
+            -- appears (pret start_menu.c:376-392); an A before that is dropped. The SAVE row's A
+            -- then moves the callback to StartCB_Save2. startmenu_cb starts STALE (whatever an
+            -- earlier menu left: pret never resets it).
+            CB_ADDR, TASKS_ADDR = 0x020370F0, 0x03005090
+            TASK_FN, CB_INPUT, CB_SAVE2 = 0x0806F1F1, 0x0806F281, 0x0806F5C9
+            startmenu_cb, startmenu_task, startmenu_ready_delay, startmenu_ready_at = CB_INPUT, 1, 0, nil
             -- initial_lock_until models the settle-period lock PHYSICAL 2026-09-23 found: a
             -- fresh CONTINUE can hold sLockFieldControls locked for 100+ frames before any
             -- input at all. start_before_free counts a Start seen while that lock still holds
             -- -- gen3_boot_check.lua must wait it out, never press Start hoping it lands.
             initial_lock_until, start_before_free = 0, 0
             local function rd(fmt) return function(a) return (string.unpack(fmt, flash, a + 1)) end end
-            memory = {read_u32_le = rd("<I4"), read_u16_le = rd("<I2"),
+            local rd32 = rd("<I4")
+            memory = {read_u16_le = rd("<I2"),
+                read_u32_le = function(a)
+                    if a == CB_ADDR then return startmenu_cb end
+                    if a == TASKS_ADDR then return startmenu_task == 1 and TASK_FN or 0 end
+                    if a > TASKS_ADDR and a < TASKS_ADDR + 16 * 40 then return 0 end
+                    return rd32(a)
+                end,
                 read_u8 = function(a)
+                    if a == TASKS_ADDR + 4 then return startmenu_task end
+                    if a > TASKS_ADDR and a < TASKS_ADDR + 16 * 40 then return 0 end
                     if a == WINDOW_ADDR then return startmenu_window end
                     if a == COUNT_ADDR then return startmenu_count end
                     if a == CURSOR_ADDR then return startmenu_cursor end
@@ -140,13 +157,16 @@ class World:
                 -- on any other row is a real game pressing something else, not SAVE (this is
                 -- what makes the falsifier below distinguish "found the row" from "pressed A
                 -- on whatever row it happened to be on", the old helper's actual bug class).
-                if t and t.A and not dialog_stuck and startmenu_cursor == true_save_row() then
+                if t and t.A and not dialog_stuck and startmenu_cursor == true_save_row()
+                   and startmenu_task == 1 and startmenu_cb == CB_INPUT then
                     dialog = 0x0806F001
+                    startmenu_cb = CB_SAVE2
                 end
                 if t and t.Start then
                     if frame < initial_lock_until then start_before_free = start_before_free + 1 end
                     startmenu_window = WINDOW_NONE
                     startmenu_open_at = frame + startmenu_open_delay
+                    startmenu_task, startmenu_ready_at = 0, nil
                     -- mirrors pret's LockPlayerFieldControls, taken out the instant Start is
                     -- processed (start_menu.c ShowStartMenu); close_at/close_on_a/a_seen below
                     -- model the save flow's own later release, same as before.
@@ -168,6 +188,10 @@ class World:
                        frame = frame + 1
                        if startmenu_open_at and frame >= startmenu_open_at then
                            startmenu_window, startmenu_open_at = 1, nil
+                           startmenu_ready_at = frame + startmenu_ready_delay
+                       end
+                       if startmenu_ready_at and frame >= startmenu_ready_at then
+                           startmenu_task, startmenu_cb, startmenu_ready_at = 1, CB_INPUT, nil
                        end
                        if initial_lock_until > 0 and frame == initial_lock_until then locked = 0 end
                        if swap_at and frame >= swap_at then flash, swap_at = pending, nil; swapped = true end
@@ -194,7 +218,8 @@ class World:
     def sectors_at(self, ctr):
         return self.G.sectors_at(DOMAIN, ctr)
 
-    def configure_start_menu(self, *, open_delay=0, cursor=0, count=1, order=(4,)):
+    def configure_start_menu(self, *, open_delay=0, cursor=0, count=1, order=(4,), ready_delay=0,
+                             stale_cb=None):
         """open_delay=0: the window reads open ~1 frame after every Start press (the common
         case for every test above this one). open_delay=<n>: the window reads WINDOW_NONE for
         n frames after EVERY Start press (initial open and every reopen) -- models the fade-in
@@ -205,6 +230,9 @@ class World:
         g.startmenu_cursor, g.startmenu_count = cursor, count
         g.startmenu_order = self.lua.table(*order)
         g.down_before_open = 0
+        g.startmenu_ready_delay = ready_delay
+        if stale_cb is not None:
+            g.startmenu_cb, g.startmenu_task = stale_cb, 0
 
     def save(self, after: bytes, swap_at=200, close_at=None, close_on_a=False,
              dialog=0, dialog_stuck=False, initial_lock_frames=0):
@@ -373,3 +401,59 @@ def test_field_never_freeing_is_a_named_failure_not_a_hang():
     ok, before, after, why = w.save(valid(CTR), close_at=None, initial_lock_frames=10_000_000)
     assert ok is False and before == after == CTR - 1
     assert "never freed" in why
+
+
+
+# ── C4-6t: a second save in one boot (live LG save_then_write) ──────────────────────────────
+SAVE_RETURN_SUCCESS = 0x0806F9E1   # SaveDialogCB_ReturnSuccess|1: sSaveDialogCB after a save
+
+
+def test_a_second_save_after_a_first_save_opens_and_completes():
+    """Live LG save_then_write: "the second save: SAVE failed: the save dialog never opened". The
+    cursor already sat on SAVE from the first save, so the A went in the frame the window
+    appeared -- before Task_StartMenuHandleInput read input -- and was dropped. The helper must
+    wait for the menu's input chain, then see the callback leave StartCB_HandleInput."""
+    w = World(bytes(valid(CTR - 1)))
+    w.configure_start_menu(count=5, order=(0, 1, 2, 3, 4), cursor=0, ready_delay=12)
+    ok, before, after, why = w.save(valid(CTR), close_on_a=True)
+    assert (ok, before, after, why) == (True, CTR - 1, CTR, None)
+    g = w.lua.globals()
+    # the second save: cursor still on SAVE (row 4), stale sSaveDialogCB, stale StartCB_Save2
+    assert g.startmenu_cursor == 4
+    w.configure_start_menu(count=5, order=(0, 1, 2, 3, 4), cursor=4, ready_delay=12,
+                           stale_cb=0x0806F5C9)
+    ok, before, after, why = w.save(valid(CTR + 1), swap_at=g.frame + 200, close_on_a=True,
+                                    dialog=SAVE_RETURN_SUCCESS)
+    assert (ok, before, after, why) == (True, CTR, CTR + 1, None), why
+    assert g.flushes == 2
+
+
+def test_a_menu_that_never_reads_input_is_named():
+    w = World(bytes(valid(CTR - 1)))
+    w.configure_start_menu(ready_delay=100000)
+    ok, _, _, why = w.save(valid(CTR), close_at=400)
+    assert ok is False and "never took input" in why, why
+
+
+
+def test_the_save_witness_is_false_for_every_stale_shape():
+    """Codex cx-3e10776a: after an earlier save sSaveDialogCB is non-zero, so the old probe
+    witness (`~= 0`) passed on ANY submenu's A. The shared witness must be FALSE for a completed
+    save (task gone, callback left on StartCB_Save2), a cancelled dialog (callback back on
+    StartCB_HandleInput) and another submenu's A, and TRUE only while Save1/Save2 runs under the
+    live Task_StartMenuHandleInput."""
+    w = World(bytes(valid(CTR)))
+    g = w.lua.globals()
+    ready, running = w.G.start_menu_witness("firered")
+    g.dialog = SAVE_RETURN_SUCCESS                        # the stale pointer, in every case
+    old_witness = lambda: w.G.pred(w.lua.table(), "save_dialog_cb")[0] != 0  # noqa: E731 (HEAD's)
+    for task, cb, want in ((0, 0x0806F5C9, False),       # completed save: task destroyed
+                           (1, 0x0806F281, False),       # cancelled: back on HandleInput
+                           (1, 0x0806F481, False),       # BAG row A: StartMenuBagCallback
+                           (1, 0x0806F5A5, True),        # THIS press: StartCB_Save1
+                           (1, 0x0806F5C9, True)):       # the dialog running: StartCB_Save2
+        g.startmenu_task, g.startmenu_cb = task, cb
+        assert running() is want, (task, hex(cb))
+        assert old_witness() is True                      # HEAD's witness: true in all five
+    g.startmenu_task, g.startmenu_cb = 1, 0x0806F281
+    assert ready() is True

@@ -21,7 +21,6 @@ write race when gates run back to back.
 import argparse
 import os
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -70,6 +69,25 @@ def _has_verdict(path):
         return False
 
 
+def write_gate_config(src, dst):
+    """The per-run copy of BizHawk's config.ini, with rewind forced off (gen1_playthrough.
+    disable_rewind: rewind's core snapshots crashed EmuHawk on mGBA, duo run 61569). A config
+    that cannot be parsed is a loud error, never a plain copy with rewind still on."""
+    import json
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from gen1_playthrough import disable_rewind
+
+    try:
+        with open(src, encoding="utf-8-sig") as f:
+            cfg = json.load(f)
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"cannot parse BizHawk config {src} ({exc}); refusing to write a gate "
+                           f"config whose rewind cannot be turned off") from exc
+    with open(dst, "w", encoding="utf-8") as f:
+        json.dump(disable_rewind(cfg), f, indent=2)
+
+
 def run_gate(script, rom=DEFAULT_ROM, timeout=240, quiet=False, shadow=False):
     """Run one gate. Returns (passed: bool, result_path: str|None, text: str)."""
     if not os.path.exists(EMUHAWK):
@@ -79,7 +97,7 @@ def run_gate(script, rom=DEFAULT_ROM, timeout=240, quiet=False, shadow=False):
     os.makedirs(BUILD, exist_ok=True)
     tag = os.path.splitext(os.path.basename(script))[0]
     cfg_rel = f"patch/build/gate_cfg_{tag}.ini"
-    shutil.copyfile(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel))
+    write_gate_config(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel))
 
     # Delete this gate's own result file up front so a leftover from a previous run cannot be
     # mistaken for this one's verdict — an mtime comparison would not catch a file the gate never
