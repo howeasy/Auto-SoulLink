@@ -794,7 +794,7 @@ def test_pc_ops_rejects_a_bystander_party_record_changing_during_deposit(lua, fa
     """)
     ok, log, _err = lua.globals().FAKE.run_leg(_leg(legs, "pc_ops")["run"])
     assert not ok
-    assert "record AAAA0001:00001111 is not byte-identical" in log
+    assert "pc_ops deposit: record AAAA0001:00001111 is not byte-identical" in log
 
 
 def test_pc_ops_fails_when_the_storage_ui_never_closes(lua, fake, legs):

@@ -728,13 +728,13 @@ LEGS[#LEGS + 1] = {
             -- cx-a59b23a9 finding 3, verified independently here): with a full 6-slot party,
             -- new_place can only be "party" if some existing party key vanished from `after` to
             -- make room for it, and that ALREADY dies at the "existing party mon changed
-            -- identity" loop above (:671-675) before this branch runs. after_party can only
+            -- identity" loop above (:689-694) before this branch runs. after_party can only
             -- differ from before_party by an actual PARTY_COUNT_ADDR write, and that either
             -- desyncs from reads.lua's own capacity check ("party count exceeds capacity") or,
-            -- at a lower count, hides a real key that then trips the same :671-675 loop --
+            -- at a lower count, hides a real key that then trips the same :689-694 loop --
             -- confirmed with a scratch fake poking PARTY_COUNT_ADDR both ways; both die with an
             -- earlier, more specific message. test_wild_catch_full_party_addition_cannot_land_
-            -- in_the_party targets the covering :671-675 loop directly.
+            -- in_the_party targets the covering :689-694 loop directly.
             G.phase("caught", string.format(
                 "outcome=%d with a full party (%d): the matching mon was read back in a box",
                 battle_outcome(), before_party))
