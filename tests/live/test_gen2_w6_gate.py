@@ -62,6 +62,7 @@ STAGGER = 60          # seconds between this lane's EmuHawk launches (other lane
 # The U1 leg on the G/S overlays loses its default RNG path (Gold: the lead faints in the catch battle; Silver:
 # the faint leg stalls on "no PP left"): idle frames before boot reseed it. Recorded in the receipt.
 PREROLL = {("gold", "u1"): 120, ("silver", "u1"): 120}
+IN_PLACE_CODE = ("SlinkStartMenuEntry",)   # patch/gen2/src/panel_start.asm, bank 4
 INIT_LOOP = bytes.fromhex("3600230b78b120f8")   # Init.ByteFill: ld [hl],0 / inc hl / dec bc / ld a,b / or c / jr nz
 
 
@@ -79,11 +80,13 @@ def w6_facts(title: str, *, repo: Path = REPO) -> dict:
     symbols, rows = _symbols(title, repo)
     service_bank = symbols["SlinkService"][0]
     allow = [{"name": "SLink service bank", "bank": service_bank, "lo": 0x4000, "hi": 0x8000}]
-    # ponytail: every top-level Slink* code label outside the service bank runs to the next symbol in its bank.
-    # Covers the ROM0 bridges and the bank-4 START entry; a new in-place hunk only needs the Slink name.
+    # Outside the service bank: the ROM0 Slink* bridges and the in-place CODE hunks named in IN_PLACE_CODE, each
+    # running to the next symbol in its bank. In-place data/script labels (SlinkMenuString,
+    # SlinkSpecialPhoneCallList, SlinkTradeReceptionistScript) are never CPU code: a writer PC there is a fault.
+    # A new in-place code hunk fails closed until it is named here.
     for bank, addr, name in rows:
-        if (not name.startswith("Slink") or "." in name or name.endswith("End") or bank == service_bank
-                or addr >= 0x8000 or name in ("SlinkMenuString", "SlinkMenuDesc")):
+        if (not name.startswith("Slink") or "." in name or name.endswith("End") or addr >= 0x8000
+                or not (bank == 0 or name in IN_PLACE_CODE)):
             continue
         nxt = min((a for b, a, _ in rows if b == bank and a > addr), default=0x4000 if bank == 0 else 0x8000)
         allow.append({"name": name, "bank": bank, "lo": addr, "hi": nxt})

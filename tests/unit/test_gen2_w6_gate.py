@@ -93,8 +93,8 @@ def test_w6_facts_are_the_pinned_overlay():
         except Exception as exc:  # noqa: BLE001 - the pinned build is a local input
             pytest.skip(f"pinned build unavailable: {exc}")
         names = {r["name"] for r in f["allow"]}
-        assert {"SLink service bank", "SlinkDelayFrameBridge", "SlinkResetSoundBridge", "SlinkStartMenuEntry"} <= names
-        assert all(n.startswith("Slink") for n in names - {"SLink service bank"}), names
+        # data/script labels (SlinkSpecialPhoneCallList, SlinkTradeReceptionistScript) are never writer code
+        assert names == {"SLink service bank", "SlinkDelayFrameBridge", "SlinkResetSoundBridge", "SlinkStartMenuEntry"}
         assert all(r["bank"] != 0 or r["hi"] <= 0x100 for r in f["allow"]), "a ROM0 range runs past the header"
         entry = next(r for r in f["allow"] if r["name"] == "SlinkStartMenuEntry")
         assert entry["bank"] == 4 and entry["hi"] - entry["lo"] == 12   # call FadeToMenu / farcall / ld a,6 / ret
