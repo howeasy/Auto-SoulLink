@@ -6,12 +6,14 @@
     A  waits for B's LINK_SAVE, walks Route 29 -> Cherrygrove -> the #MON CENTER PC (party [starter, catch]):
          session 1  DEPOSIT the linked catch, WITHDRAW it          -> party_to_box, box_to_party on the wire
          waits for B's PC_PARTNER_2 (B's partner is back in B's party, so the server has B's key in party again)
-         session 2  DEPOSIT it again, RELEASE it from the box       -> party_to_box; the box release is NOT on the
-                    wire (client.lua RELEASE_SEEN, the shared-protocol gap S-6: the server keeps the pair ALIVE)
+         session 2  DEPOSIT it again, RELEASE it from the box       -> party_to_box, then release{key} (owner ruling
+                    O-35, client 149b38e2): the server kills the pair and memorializes B's partner (state.py
+                    _handle_release -> _propagate_faint cause "release"); A's released half gets no memorial
        then saves natively.
     B  idles in the overworld. The server mirrors each move onto B's linked mon (state.py _handle_party_to_box ->
        box_mon, _handle_box_to_party -> party_mon); the production client runs each at its checkpoint. B prints
-       PC_PARTNER_<n> once the command n ran physically, then saves.
+       PC_PARTNER_<n> once the command n ran physically. After A's release: force_faint (dropped: the partner is
+       boxed, a box record has no HP) and memorialize (its boxed half into Box 14, MEMORIAL_ACK), then saves.
 
   MARKER CONTRACT (duo_gen2_main.lua prints them; JSON after the tag). Everything the `link` scenario prints plus
   LINK_SAVE (scenario_gen2_faint.lua's contract). Added:
@@ -20,10 +22,12 @@
        PC_STATE {frame, phase "deposit-withdraw"|"deposit-release", party_count, box_count, cur_box}   after each session
     B: RX box_mon|party_mon key=<key>                                 (plain text, the driver's RX line)
        PC_PARTNER_1 / _2 / _3 {frame, cmd, key, in_party, party_count, box_count}   after box_mon, party_mon, box_mon ran
-    both: SAVE_WITNESS (the final save, newer than LINK_SAVE), RECEIPT {schema "gen2-duo-pc-ops-v1"}
+       RX force_faint key=<key>, RX memorialize key=<key>, MEMORIAL_ACK {event memorialize_done, box 13}   after PC_PARTNER_3
+    A: TX release {key}   after the box release's ENGINE_PC; A receives no death command
+    both: SAVE_WITNESS (the final save, newer than LINK_SAVE), RECEIPT {schema "gen2-duo-pc-ops-v2"}
 --]]
 local S = {}
-S.RECEIPT_SCHEMA = "gen2-duo-pc-ops-v1"
+S.RECEIPT_SCHEMA = "gen2-duo-pc-ops-v2"
 S.PC_INPUTS = true
 S.FAINT = "lua/tests/duo/scenario_gen2_faint.lua"
 S.LINK = "lua/tests/duo/scenario_gen2_link.lua"
@@ -34,7 +38,7 @@ S.SITES = {"pc_deposit_begin", "pc_deposit_complete", "pc_withdraw_begin", "pc_w
 S.PARTNER = {"box_mon", "party_mon", "box_mon"}   -- B's mirrored commands, in order
 S.ENGINE = {{"party_to_box"}, {"box_to_party"}, {"party_to_box"}, {"pc_release", "box"}}
 S.JSON_TAGS = {LINK_SAVE=true, ENGINE_PC=true, PC_STATE=true, PC_PARTNER_1=true, PC_PARTNER_2=true, PC_PARTNER_3=true,
-               SAVE_WITNESS=true, ENGINE_CAPTURE=true, DUO_GEN2=true, CLIENT=true}
+               SAVE_WITNESS=true, ENGINE_CAPTURE=true, DUO_GEN2=true, CLIENT=true, MEMORIAL_ACK=true}
 
 local function has(list, value)
     for _, v in ipairs(list or {}) do if v == value then return true end end
@@ -74,6 +78,13 @@ function S.run(h)
             local row = state(h, cmd)
             row.phase, row.cmd, row.key, row.in_party = nil, cmd, key, want_party
             h.jlog("PC_PARTNER_" .. n, row)
+        end
+        -- O-35: A's release kills the pair; B's boxed partner is memorialized into Box 14
+        if not h.wait(function() return h.rec.memorial[key] ~= nil end, S.SYNC_FRAMES) then
+            return false, "no memorialize ack for the released partner " .. key
+        end
+        if h.rec.memorial[key].event ~= "memorialize_done" then
+            return false, "the partner's memorial failed: " .. tostring(h.rec.memorial[key].reason)
         end
     else
         if not FS.await_partner_link(h) then return false, "B never printed LINK_SAVE" end
@@ -123,7 +134,7 @@ function S.verdict(lines, json, link_verdict)
             end
         elseif tag == "TX" then
             local event = body:match('"event":"([%w_]+)"')
-            if event == "party_to_box" or event == "box_to_party" or event == "faint" then
+            if event == "party_to_box" or event == "box_to_party" or event == "faint" or event == "release" then
                 tx[#tx + 1] = {at=index, event=event, key=body:match('"key":"([^"]+)"')}
             end
         end
@@ -149,8 +160,10 @@ function S.verdict(lines, json, link_verdict)
         need(save.at > link.at and type(save.value.gate_saves) == "number" and save.value.gate_saves > link.value.gate_saves,
              "no native save after LINK_SAVE")
     end
-    for _, r in ipairs(rx) do
-        need(r.cmd ~= "force_faint" and r.cmd ~= "memorialize", "a death command reached " .. tostring(player) .. " (" .. r.cmd .. ")")
+    if player == "a" then
+        for _, r in ipairs(rx) do
+            need(r.cmd ~= "force_faint" and r.cmd ~= "memorialize", "a death command reached a (" .. r.cmd .. ")")
+        end
     end
     local detail = {}
     if player == "a" then
@@ -170,12 +183,14 @@ function S.verdict(lines, json, link_verdict)
         end
         -- the wire: party_to_box, box_to_party, party_to_box for the key, each after its engine event; the
         -- box release sends nothing (S-6 gap)
-        need(#tx == 3 and tx[1].event == "party_to_box" and tx[2].event == "box_to_party" and tx[3].event == "party_to_box",
-             "A's storage sends are not party_to_box, box_to_party, party_to_box")
+        need(#tx == 4 and tx[1].event == "party_to_box" and tx[2].event == "box_to_party" and tx[3].event == "party_to_box"
+             and tx[4].event == "release", "A's sends are not party_to_box, box_to_party, party_to_box, release")
         for i = 1, math.min(#tx, 3) do
             need(tx[i].key == key and pc[i] ~= nil and tx[i].at > pc[i].at, "storage send " .. i .. " precedes its engine event or names another key")
         end
-        need(pc[4] == nil or #tx == 0 or pc[4].at > tx[#tx].at, "the release precedes the third storage send")
+        need(pc[4] == nil or tx[3] == nil or pc[4].at > tx[3].at, "the release precedes the third storage send")
+        need(pc[4] == nil or tx[4] == nil or (tx[4].key == key and tx[4].at > pc[4].at),
+             "release{key} was not sent for the linked key after the box release")
         local states = rows("PC_STATE")
         need(#states == 2, string.format("%d PC_STATE markers (expected two)", #states))
         if states[1] then
@@ -211,7 +226,22 @@ function S.verdict(lines, json, link_verdict)
                 need(prev == nil or p.at > prev.at, "PC_PARTNER markers out of order")
             end
         end
-        detail = {partner_commands=S.PARTNER}
+        -- O-35: after the third mirror, the death (force_faint, memorialize) and its Box 14 ack, before the save
+        local third = rows("PC_PARTNER_3")[1]
+        local kill, bury
+        for _, r in ipairs(rx) do
+            if third and r.at > third.at and r.key == key then
+                if r.cmd == "force_faint" then kill = kill or r elseif r.cmd == "memorialize" then bury = bury or r end
+            end
+        end
+        need(kill ~= nil and bury ~= nil, "no force_faint and memorialize for B's partner after the release")
+        local ack
+        for _, r in ipairs(rows("MEMORIAL_ACK")) do
+            if r.value.key == key and r.value.event == "memorialize_done" and r.value.box == 13 then ack = ack or r end
+        end
+        need(ack ~= nil and bury ~= nil and ack.at > bury.at and save ~= nil and save.at > ack.at,
+             "no memorialize_done (box 13) for B's partner before the final save")
+        detail = {partner_commands=S.PARTNER, partner_memorial=ack and ack.value}
     else
         need(false, "DUO_GEN2 names no player a|b")
     end

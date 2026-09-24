@@ -2879,7 +2879,7 @@ def pc_lines(player):
                   pc(2100, "box_to_party", box_index=0), tx("box_to_party"),
                   "PC_STATE " + j({"frame": 2200, "phase": "deposit-withdraw", "party_count": 2, "box_count": 0, "cur_box": 0}),
                   pc(2400, "party_to_box", box_index=0), tx("party_to_box"),
-                  pc(2500, "pc_release", collection="box", box_index=0),
+                  pc(2500, "pc_release", collection="box", box_index=0), tx("release"),
                   "PC_STATE " + j({"frame": 2600, "phase": "deposit-release", "party_count": 1, "box_count": 0, "cur_box": 0})]
     else:
         def partner(n, cmd, frame):
@@ -2888,7 +2888,9 @@ def pc_lines(player):
                                            "party_count": 2 if party else 1, "box_count": 0 if party else 1, "cur_box": 0})
         middle = ["RX box_mon key=" + KEY, partner(1, "box_mon", 2050),
                   "RX party_mon key=" + KEY, partner(2, "party_mon", 2150),
-                  "RX box_mon key=" + KEY, partner(3, "box_mon", 2450)]
+                  "RX box_mon key=" + KEY, partner(3, "box_mon", 2450),
+                  "RX force_faint key=" + KEY, "RX memorialize key=" + KEY,
+                  "MEMORIAL_ACK " + j({"frame": 2600, "event": "memorialize_done", "key": KEY, "box": 13})]
     return base + middle + [a[-1]]
 
 
@@ -2896,7 +2898,7 @@ def pc_lines(player):
 def test_pc_ops_verdict_passes_each_complete_half(player):
     problems, receipt = wave_c("pc_ops", pc_lines(player))
     assert problems == [], problems
-    assert receipt["schema"] == "gen2-duo-pc-ops-v1" and receipt["player"] == player
+    assert receipt["schema"] == "gen2-duo-pc-ops-v2" and receipt["player"] == player
 
 
 TX_OWN = "TX " + json.dumps({"event": "party_to_box", "key": KEY}, separators=(",", ":"))
@@ -2908,6 +2910,9 @@ TX_OWN = "TX " + json.dumps({"event": "party_to_box", "key": KEY}, separators=("
     (edit_tag(pc_lines("a"), "ENGINE_PC", 3, collection="party"), "pc_release/box"),
     (edit_tag(pc_lines("a"), "ENGINE_PC", 1, key=OTHER), "box_to_party for the linked key"),
     (without(pc_lines("a"), "TX ", 1), "not party_to_box, box_to_party"),
+    (without(pc_lines("a"), "TX ", 3), "not party_to_box, box_to_party, party_to_box, release"),
+    (without(pc_lines("b"), "RX memorialize"), "no force_faint and memorialize"),
+    (edit_tag(pc_lines("b"), "MEMORIAL_ACK", event="memorialize_failed"), "no memorialize_done"),
     (move(pc_lines("a"), "TX ", "ENGINE_PC"), "precedes its engine event"),
     (edit_tag(pc_lines("a"), "PC_STATE", 1, box_count=1), "box empty"),
     (pc_lines("a")[:-1] + ["RX force_faint key=" + KEY, pc_lines("a")[-1]], "death command"),
@@ -2916,7 +2921,8 @@ TX_OWN = "TX " + json.dumps({"event": "party_to_box", "key": KEY}, separators=("
     (edit_tag(pc_lines("b"), "PC_PARTNER_2", in_party=False), "PC_PARTNER_2 state differs"),
     (pc_lines("b")[:-1] + [TX_OWN, pc_lines("b")[-1]], "storage event of its own"),
     (move(without(pc_lines("b"), "RX box_mon", 0), "PC_PARTNER_1", "RX box_mon"), "precedes its command"),
-], ids=["no-site", "no-release", "party-release", "withdraw-other-key", "no-withdraw-send", "send-first",
+], ids=["no-site", "no-release", "party-release", "withdraw-other-key", "no-withdraw-send", "no-release-send",
+        "b-no-memorialize", "b-memorial-failed", "send-first",
         "box-not-empty", "a-death", "b-missing-third", "b-no-third-rx", "b-not-in-party", "b-sent", "b-early"])
 def test_pc_ops_verdict_refuses_a_tampered_or_reordered_half(lines, match):
     problems, receipt = wave_c("pc_ops", lines)

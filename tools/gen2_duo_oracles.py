@@ -1829,14 +1829,15 @@ def _pc_ops_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
     check_save_witness(results)
     heads, stages, raws = {}, {}, {}
     for inst in ("a", "b"):
-        heads[inst] = _wave_head(results, inst, "gen2_pc_ops", "gen2-duo-pc-ops-v1")
+        heads[inst] = _wave_head(results, inst, "gen2_pc_ops", "gen2-duo-pc-ops-v2")
         stages[inst], raws[inst] = _wave_stage(results[inst], inst, heads[inst][1], heads[inst][0])
-    decoded, row, _document = _pair_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids,
-                                           boot_saveram=boot_saveram, status="alive",
+    decoded, row, document = _pair_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids,
+                                          boot_saveram=boot_saveram, status=("dead", "memorial"),
                                            snapshots={inst: stages[inst]["saveram_path"] for inst in ("a", "b")})
     keys = {inst: decoded[inst]["key"] for inst in ("a", "b")}
     link_at = {inst: _wave_lines(results[inst], "LINK_SAVE ")[0][0] for inst in ("a", "b")}
-    # A: the binder's PC events and the wire, in order, all for the linked key; the box release is not sent (S-6)
+    # A: the binder's PC events and the wire, in order, all for the linked key; the box release sends release{key}
+    # (owner ruling O-35, client 149b38e2)
     a = results["a"]
     events = [(at, row_) for at, row_ in _tag_rows(a, "ENGINE_PC") if at > link_at["a"]]
     _wave_need([(e.get("kind"), e.get("collection"), e.get("key")) for _, e in events]
@@ -1847,20 +1848,22 @@ def _pc_ops_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
     sends = [(at, {"event": (re.search(r'"event":"(\w+)"', line) or [None, None])[1],
                    "key": (re.search(r'"key":"([^"]+)"', line) or [None, None])[1]})
              for at, line in _wave_after(_wave_lines(a, "TX "), link_at["a"])]
-    storage = [(at, m) for at, m in sends if m.get("event") in ("party_to_box", "box_to_party")]
+    storage = [(at, m) for at, m in sends if m.get("event") in ("party_to_box", "box_to_party", "release")]
     _wave_need([(m["event"], m.get("key")) for _, m in storage]
-               == [("party_to_box", keys["a"]), ("box_to_party", keys["a"]), ("party_to_box", keys["a"])]
-               and all(storage[i][0] > events[i][0] for i in range(3)) and events[3][0] > storage[2][0],
-               "A's storage sends are not the three transfers after their engine events")
+               == [("party_to_box", keys["a"]), ("box_to_party", keys["a"]), ("party_to_box", keys["a"]), ("release", keys["a"])]
+               and all(storage[i][0] > events[i][0] for i in range(4)) and events[3][0] > storage[2][0],
+               "A's sends are not the three transfers and the release after their engine events")
     # B: box_mon, party_mon, box_mon for its own linked key, each physically run, and nothing of its own on the wire
     b = results["b"]
     rx = [line for _, line in _wave_after(_wave_lines(b, "RX "), link_at["b"])
           if line.split(" ")[1] in ("box_mon", "party_mon", "force_faint", "memorialize")]
-    _wave_need(rx == [f"RX {cmd} key={keys['b']}" for cmd in ("box_mon", "party_mon", "box_mon")],
-               "B's mirrored commands are not box_mon, party_mon, box_mon for its key")
+    _wave_need(rx == [f"RX {cmd} key={keys['b']}" for cmd in ("box_mon", "party_mon", "box_mon", "force_faint", "memorialize")],
+               "B's commands are not box_mon, party_mon, box_mon, force_faint, memorialize for its key")
+    _wave_need(not any(l.split(" ")[1] in ("force_faint", "memorialize") for _, l in _wave_after(_wave_lines(a, "RX "), link_at["a"])),
+               "A received a death command for its released half")
     _wave_need(not any('"event":"party_to_box"' in l or '"event":"box_to_party"' in l for _, l in _wave_lines(b, "TX ")),
                "B sent a storage event of its own")
-    # the saves: A's catch released (in no party or box), B's boxed; every other mon where the link left it
+    # the saves: A's catch released (in no party or box), B's in the memorial box; every other mon where the link left it
     finals = {}
     for inst in ("a", "b"):
         layout, witness = heads[inst][1], heads[inst][0]
@@ -1873,20 +1876,23 @@ def _pc_ops_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
     _wave_need(keys["a"] not in finals["a"][1] and set(finals["a"][1]) == set(_clause_inventory(raws["a"], heads["a"][1])[1]) - {keys["a"]},
                "A's released key is still in its save")
     place = finals["b"][1].get(keys["b"], (None,))[0]
-    _wave_need(place not in (None, "party") and place == _wave_saved_current_box(Path(heads["b"][0]["saveram_path"]).read_bytes(), heads["b"][1]),
-               "B's linked key is not in its current box")
-    # the server: two mirrored deposits and one withdrawal; the release is invisible, the pair stays ALIVE
+    _wave_need(place == heads["b"][1].constants["NUM_BOXES"] - 1, "B's released partner is not in the memorial box (Box 14)")
+    # the server: two mirrored deposits, one withdrawal, then A's release kills the pair (O-35, cause "release")
     log = (Path(data_dir) / "server.log").read_text(encoding="utf-8", errors="replace")
     box_mon = re.findall(r"\[a\] party_to_box " + re.escape(keys["a"][:8]) + r" → box_mon b:" + re.escape(keys["b"][:8]), log)
     party_mon = re.findall(r"\[a\] box_to_party " + re.escape(keys["a"][:8]) + r" → party_mon b:" + re.escape(keys["b"][:8]), log)
     _wave_need(len(box_mon) == 2 and len(party_mon) == 1, "server did not mirror two deposits and one withdrawal")
-    _wave_need(row.get("status") == "alive" and not row.get("killed_at"),
-               "the released pair is no longer alive (the S-6 release gap is the documented rule)")
-    return {**_verified_facts(decoded, area_id, "alive"), "release": "unpropagated"}
+    released = re.findall(r"\[a\] released linked " + re.escape(keys["a"][:8]) + r" — the partner dies", log)
+    _wave_need(len(released) == 1, "server log lacks exactly one release of A's linked key")
+    _wave_need(row.get("status") in ("dead", "memorial") and row.get("killed_at") and row.get("cause") == "release"
+               and row.get("initiating_player") == "a", "the server did not kill the pair for A's release")
+    _wave_need(keys["a"] not in (document.get("pending_memorials") or {}).get("a", []), "A's released half awaits a memorial")
+    return {**_verified_facts(decoded, area_id, row["status"]), "release": "propagated"}
 
 
 def pc_ops_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_saveram=None, on_verified=None):
-    """S-6 by play: deposit/withdraw/deposit mirrored to B physically; the box release stays local (S-6 gap)."""
+    """S-6 by play: deposit/withdraw/deposit mirrored to B physically; A's box release kills the pair and B's
+    boxed partner is memorialized into Box 14 (owner ruling O-35). facts["release"] == "propagated"."""
     try:
         facts = _pc_ops_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids, boot_saveram=boot_saveram)
         if on_verified is not None:

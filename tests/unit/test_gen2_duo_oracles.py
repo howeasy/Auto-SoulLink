@@ -2342,7 +2342,7 @@ def pc_case(good_case, layout, tmp_path):
         link_path = tmp_path / f"{inst}.linked.SaveRAM"
         link_path.write_bytes(path.read_bytes())
         key = decoded[inst]["key"]
-        _save_move(path, layout, box=None if inst == "a" else 0)
+        _save_move(path, layout, box=None if inst == "a" else 13)   # B's partner: memorialized into Box 14
         final.update(frame=9000, save_completed_frame=8990, gate_saves=2, client_saves=2,
                      cartram_sha256=hashlib.sha256(path.read_bytes()[:CART]).hexdigest())
         link = {"frame": 5000, "key": key, "gate_saves": 1, "client_saves": 1, "save_completed_frame": 4990,
@@ -2356,24 +2356,30 @@ def pc_case(good_case, layout, tmp_path):
             def tx(event):
                 return "TX " + json.dumps({"event": event, "key": key, "seq": 1}, separators=(",", ":"))
             insert += [pc(6000, "party_to_box"), tx("party_to_box"), pc(6100, "box_to_party"), tx("box_to_party"),
-                       pc(6400, "party_to_box"), tx("party_to_box"), pc(6500, "pc_release", collection="box")]
+                       pc(6400, "party_to_box"), tx("party_to_box"), pc(6500, "pc_release", collection="box"),
+                       tx("release")]
         else:
-            insert += [f"RX {cmd} key={key}" for cmd in ("box_mon", "party_mon", "box_mon")]
-        text = _wave_text(text, scenario="gen2_pc_ops", schema="gen2-duo-pc-ops-v1", insert=insert, witness=final)
+            insert += [f"RX {cmd} key={key}" for cmd in ("box_mon", "party_mon", "box_mon", "force_faint", "memorialize")]
+        text = _wave_text(text, scenario="gen2_pc_ops", schema="gen2-duo-pc-ops-v2", insert=insert, witness=final)
         results[inst] = text.replace('"rom_sha1": "' + "deadbeef" * 5 + '"', f'"rom_sha1": "{rom}"')
         results[inst] = results[inst].replace('"player": "a"', f'"player": "{inst}"')
     a, b = decoded["a"]["key"][:8], decoded["b"]["key"][:8]
     (Path(data_dir) / "server.log").write_text(
         f"[a] party_to_box {a} → box_mon b:{b}\n[a] box_to_party {a} → party_mon b:{b} (stats cached)\n"
-        f"[a] party_to_box {a} → box_mon b:{b}\n", encoding="utf-8")
+        f"[a] party_to_box {a} → box_mon b:{b}\n[a] released linked {a} — the partner dies (O-35)\n", encoding="utf-8")
+    path = Path(data_dir) / "links.json"
+    doc = json.loads(path.read_text())
+    doc["links"][0].update(status="memorial", cause="release", initiating_player="a", killed_at="2026-09-24T12:00:00Z")
+    doc["pending_memorials"] = {"a": [], "b": []}
+    path.write_text(json.dumps(doc))
     return results, data_dir, decoded
 
 
-def test_pc_ops_oracle_passes_the_mirrored_moves_and_the_documented_release_gap(pc_case):
+def test_pc_ops_oracle_passes_the_mirrored_moves_and_the_o35_release_death(pc_case):
     results, data_dir, decoded = pc_case
     facts = []
     assert oracles.pc_ops_oracle(results, data_dir=data_dir, on_verified=facts.append) is None
-    assert facts[0]["status"] == "alive" and facts[0]["release"] == "unpropagated"
+    assert facts[0]["status"] == "memorial" and facts[0]["release"] == "propagated"
 
 
 def _pc_fault(pc_case, fault, layout):
@@ -2401,17 +2407,27 @@ def _pc_fault(pc_case, fault, layout):
         key = decoded["b"]["key"]
         results["b"] = results["b"].replace(f"RX party_mon key={key}", "RX tmp").replace(
             f"RX box_mon key={key}\nRX tmp", f"RX party_mon key={key}\nRX box_mon key={key}", 1)
-    elif fault == "dead":
+    elif fault == "alive":
         path = Path(data_dir) / "links.json"
         doc = json.loads(path.read_text())
-        doc["links"][0].update(status="dead", killed_at="2026-09-24T00:00:00Z")
+        doc["links"][0].update(status="alive", killed_at=None)
         path.write_text(json.dumps(doc))
+    elif fault == "no-release-log":
+        log = Path(data_dir) / "server.log"
+        log.write_text(log.read_text(encoding="utf-8").replace("released linked", "released unlinked"), encoding="utf-8")
+    elif fault == "no-release-send":
+        results["a"] = results["a"].replace('TX {"event":"release"', 'TX {"event":"noop"')
+    elif fault == "b-no-memorialize":
+        key = decoded["b"]["key"]
+        results["b"] = results["b"].replace(f"RX memorialize key={key}\n", "")
     return results, data_dir
 
 
 @pytest.mark.parametrize("fault,match", [
-    ("a-kept", "released key is still"), ("b-in-party", "not in its current box"), ("one-mirror", "mirror two deposits"),
-    ("party-release", "engine PC events"), ("b-order", "mirrored commands"), ("dead", "alive")])
+    ("a-kept", "released key is still"), ("b-in-party", "not in the memorial box"), ("one-mirror", "mirror two deposits"),
+    ("party-release", "engine PC events"), ("b-order", "box_mon, party_mon, box_mon, force_faint"), ("alive", "dead"),
+    ("no-release-log", "exactly one release"), ("no-release-send", "and the release"),
+    ("b-no-memorialize", "force_faint, memorialize")])
 def test_pc_ops_oracle_refuses_independent_save_server_and_marker_faults(pc_case, fault, match, layout):
     results, data_dir = _pc_fault(pc_case, fault, layout)
     with pytest.raises(RuntimeError, match=match):
