@@ -523,6 +523,8 @@ function Client.new(p)
             self:trade_prompt(cmd)
         elseif c_ == "apply_trade" and self:trade_live() then
             self:trade_apply(cmd)
+        elseif c_ == "apply_prepare" then
+            self:trade_prepare_answer(cmd)
         elseif c_ == "trade_mask" and self:trade_live() then
             self:trade_answer_query(cmd.mask or 0)
         elseif c_ == "trade_offer_ack" and self:trade_live() then
@@ -601,7 +603,7 @@ function Client.new(p)
     -- the partner side alone. Owed like trade_done: sent once the hello is ready (frame_end).
     local function withdraw_offer(server_token, why)
         log("[SLink-gen2] trade offer withdrawn: " .. why)
-        self.trade_owed = { event = "menu_result", fields = { token = server_token, choice = 0 } }
+        self.trade_owed = { event = "menu_result", fields = { token = server_token, choice = 0, withdraw = true } }
     end
 
     function self:trade_answer_offer(accept, server_token)
@@ -631,6 +633,17 @@ function Client.new(p)
         end
         self.trade_visit = { role = "responder", token = token, slot = cmd.slot }
         self.trade_state = { kind = "prompt", gen = gen, token = cmd.token, frame = self.frame }
+    end
+
+    -- MAJOR-1 prepare round: before either side may commit, can THIS cartridge still take its APPLY?
+    -- The checks trade_apply makes, moved ahead of both commits; nothing is staged. A side that
+    -- cannot answers ok = false and forgets the visit (the server cancels both).
+    function self:trade_prepare_answer(cmd)
+        local visit = self.trade_visit
+        local ok = self:trade_live() and visit ~= nil and visit.accepted == true and self.trade_state == nil
+                   and find_party_slot(cmd.old_key) == visit.slot and not trade:closed()
+        if not ok then self.trade_visit = nil end
+        send("apply_ready", { token = cmd.token, ok = ok })
     end
 
     -- Both sides: stage the OTHER mon under the accepted visit token; the cartridge commits.
@@ -1074,6 +1087,8 @@ function Client.new(p)
             -- P4.1f panel / P4.2b sound: per CARTRIDGE, only a live SLink build with the cap bit.
             panel = panel and panel:present() or false, panel_abi = panel and panel:abi() or 0,
             sfx = panel and panel:sfx_present() or false,
+            -- MAJOR-1 (review e9d5e136): this client answers apply_prepare before any APPLY
+            trade_prepare = self:trade_live(),
         }
         if hello_identity() ~= expected_identity then return false, "hello identity changed during snapshot" end
         return send("hello", payload)

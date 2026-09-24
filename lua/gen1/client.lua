@@ -637,6 +637,14 @@ function Client.new(p)
             self:trade_prompt(cmd)
         elseif c == "show_choices" or c == "show_menu" or c == "choose_mon" then
             ack_cancel(cmd) -- no native picker outside the receptionist flow
+        elseif c == "apply_prepare" then
+            -- MAJOR-1 prepare round (mirror of lua/gen2/client.lua trade_prepare_answer): the
+            -- service picks APPLY up anywhere, so ready = the mon is still here and no native
+            -- trade is in flight; nothing is staged
+            local st = self.trade_state
+            local ok = self.trade_enabled == true and find_party_slot(cmd.old_key) ~= nil
+                       and not (st and (st.kind == "apply" or st.kind == "prompt"))
+            send("apply_ready", { token = cmd.token, ok = ok })
         elseif c == "apply_trade" then
             if self.trade_enabled then self:trade_apply(cmd)
             else
@@ -1685,6 +1693,8 @@ function Client.new(p)
             panel = self.panel and self.panel:present() or false,
             panel_abi = self.panel and self.panel:abi() or 0,
             sfx = self.panel and self.panel:sfx_present() or false,
+            -- MAJOR-1 (review e9d5e136): this client answers apply_prepare before any APPLY
+            trade_prepare = self.trade_enabled == true,
         }
         if hello_identity() ~= expected_identity then return false, "hello identity changed during snapshot" end
         return send("hello", payload)

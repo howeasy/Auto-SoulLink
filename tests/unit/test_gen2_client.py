@@ -2045,7 +2045,7 @@ def test_trade_the_proposer_leaving_before_apply_withdraws_the_offer(how):
         assert cart.w.sent("menu_result") == [] and cart.w.client.trade_visit.accepted
         cart.close()                                # SLINK_TRADE_APPLY_FRAMES ran out: SlinkTradeExit
         cart.w.frames(2)
-    assert [(m["token"], m["choice"]) for m in cart.w.sent("menu_result")] == [("t1", 0)]
+    assert [(m["token"], m["choice"], m.get("withdraw")) for m in cart.w.sent("menu_result")] == [("t1", 0, True)]
     assert cart.w.client.trade_visit is None
     cart.w.frames(3)
     assert len(cart.w.sent("menu_result")) == 1
@@ -2081,3 +2081,38 @@ def test_trade_block_requires_the_commit_label():
     with pytest.raises(ValueError, match="SlinkTradeCommit"):
         gen_gen2_profile.trade_block(parse_symbols(
             sym + "75:4154 SlinkTradePromptEntry\n75:4237 SlinkTradeApplyPickup\n"))
+
+
+# ── MAJOR-1 (review e9d5e136): the prepare round ─────────────────────────────────────────────────
+
+def prepare_cmd(old=LEAD):
+    return {"cmd": "apply_prepare", "token": "t1", "slot": 0, "old_key": codec_key(old)}
+
+
+def test_trade_hello_declares_the_prepare_round_only_on_a_live_trade_build():
+    assert TradeCart().w.sent("hello")[0].get("trade_prepare") is True
+    assert TradeCart(caps=0x02).w.sent("hello")[0].get("trade_prepare") is False
+
+
+def test_trade_prepare_is_ready_only_while_the_cartridge_still_waits_for_the_apply():
+    cart = TradeCart()
+    proposer_ready(cart)
+    before = len(cart.w.written())
+    cart.w.reply(prepare_cmd())
+    cart.w.frames(1)
+    assert [(m["token"], m["ok"]) for m in cart.w.sent("apply_ready")] == [("t1", True)]
+    assert cart.w.written()[before:] == [], "a prepare stages nothing"
+    assert cart.w.client.trade_visit.accepted, "the visit still takes the apply"
+
+    left = TradeCart()
+    proposer_ready(left)
+    left.close()                                   # the APPLY wait ran out before the prepare
+    left.w.frames(2)
+    left.w.reply(prepare_cmd())
+    left.w.frames(1)
+    assert [m["ok"] for m in left.w.sent("apply_ready")] == [False]
+
+    stray = TradeCart()                            # no accepted visit, or another mon
+    stray.w.reply(prepare_cmd())
+    stray.w.frames(1)
+    assert [m["ok"] for m in stray.w.sent("apply_ready")] == [False]

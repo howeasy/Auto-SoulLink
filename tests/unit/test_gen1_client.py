@@ -3575,3 +3575,23 @@ def test_a_deferred_backing_withdraw_settles_only_after_the_save_witness(world):
     world.overworld_safe()
     world.step(2)
     assert calls == [("ABCD:0001:99", True), ("ABCD:0001:99", False)]
+
+
+# ── MAJOR-1 (review e9d5e136): the prepare round ─────────────────────────────────────────────────
+
+def test_a_patched_cartridge_declares_and_answers_the_prepare_round():
+    w = _patched_world()
+    assert w.events("hello")[0].get("trade_prepare") is True
+    old_key = codec.key(w.party()[0])
+    w.reply({"cmd": "apply_prepare", "token": "t40", "slot": 0, "old_key": old_key},
+            {"cmd": "apply_prepare", "token": "t41", "slot": 0, "old_key": "0000:0000:01"})
+    w.step()
+    assert [(m["token"], m["ok"]) for m in w.events("apply_ready")] == [("t40", True), ("t41", False)]
+    assert _overlay(w)[5] != 5, "a prepare arms nothing"
+    w.assert_all_conform()
+
+
+def test_an_unpatched_cartridge_declares_no_prepare_round(world):
+    world.connect()
+    world.step(3)
+    assert world.events("hello")[0].get("trade_prepare") is False
