@@ -138,15 +138,27 @@ function FI.driver(F, map, opts)
             if slot ~= target and type(hp) == "number" and hp > 0 then return slot end
         end
     end
+    -- ui.pp[i] is the remaining PP for ui.items[i] (observe() reads it from wBattleMonPP, aligned with the
+    -- source move order; MoveSelectionScreen never drops an exhausted move from the list, C core.asm "no PP
+    -- left" check). Missing pp data (unit-test ui() fixtures that don't set it) means "assume usable".
+    local function has_pp(ui, index)
+        local left = type(ui.pp) == "table" and ui.pp[index]
+        return type(left) ~= "number" or left > 0
+    end
     local function pick_move(ui, point)
         if type(ui.items) ~= "table" then return nil, "move list unreadable" end
         for _, name in ipairs(passive) do
-            for _, label in ipairs(ui.items) do
-                if type(label) == "string" and label:upper() == name then return choose(ui, name, 1) end
+            for i, label in ipairs(ui.items) do
+                if type(label) == "string" and label:upper() == name and has_pp(ui, i) then
+                    return choose(ui, name, 1)
+                end
             end
         end
         if living_other(point) ~= nil then no_passive = true; return press("B") end
-        return choose(ui, tostring(ui.items[1]):upper(), 1)
+        for i, label in ipairs(ui.items) do
+            if type(label) == "string" and has_pp(ui, i) then return choose(ui, label:upper(), 1) end
+        end
+        return choose(ui, tostring(ui.items[1]):upper(), 1)   -- nothing with PP left; let Struggle take over
     end
     function self.step(point)
         if type(point) ~= "table" then return nil, "observation missing" end
@@ -229,7 +241,11 @@ function FI.new(ctx, SG, F, opts)
         if point.ui and point.ui.kind == "battle_party" then point.party_cursor = FI.party_cursor(SG.screen(ctx)) end
         if point.ui and point.ui.kind == "move_menu" then
             local list = FI.move_list(SG.screen(ctx))
-            if list then point.ui.items, point.ui.cursor, point.ui.columns = list.items, list.cursor, list.columns
+            if list then
+                point.ui.items, point.ui.cursor, point.ui.columns = list.items, list.cursor, list.columns
+                -- PP is per active battler, in source move order, aligned with the ListMoves rows above.
+                local mine = battle and battle.mode ~= 0 and ctx.reads.read_battle_mon("player") or nil
+                point.ui.pp = mine and mine.pp or nil
             else point.input_ready = false end
         end
         return point

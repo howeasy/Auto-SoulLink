@@ -706,6 +706,21 @@ def test_faint_route_switches_a_tackle_only_target_out_instead_of_attacking():
     assert press(lua, d, ui=ui("battle_menu", MENU, 1, 2), **on)[0] == ["Right"]          # still no FIGHT
 
 
+def test_faint_route_switches_out_once_the_passive_move_hits_zero_pp():
+    """Silver U1 stall (frame 57680, battle_mode=1): a long fight can drain GROWL's 38 PP. Once it hits 0 the
+    driver must not keep re-selecting it (the engine's "no PP left" refusal never advances the turn) -- it
+    passes the turn by switching out instead, same as a target with no passive move at all."""
+    lua, d = faint_driver()
+    on = {"active_slot": 1}
+    assert press(lua, d, ui=ui("battle_menu", MENU, 1, 2), **on)[0] == ["A"]                       # FIGHT
+    spent = ui("move_menu", ["TACKLE", "GROWL"], cursor=2, pp={1: 35, 2: 0})
+    assert press(lua, d, ui=spent, **on)[0] == ["B"]                                                # GROWL is spent: back out
+    assert press(lua, d, ui=ui("battle_menu", MENU, 1, 2), **on)[0] == ["Right"]                    # PKMN, not FIGHT
+    assert press(lua, d, ui=ui("battle_party"), party_cursor=1, **on)[0] == ["Up"]
+    assert press(lua, d, ui=ui("battle_party"), party_cursor=0, **on)[0] == ["A"]
+    assert press(lua, d, ui=ui("battle_mon_menu", ["SWITCH", "STATS", "CANCEL"]), **on)[0] == ["A"]
+
+
 def test_faint_route_attacks_with_a_tackle_only_target_when_it_is_the_last_mon_standing():
     lua, d = faint_driver()
     last = {"active_slot": 1, "party_hp": {0: 0, 1: 9}}
