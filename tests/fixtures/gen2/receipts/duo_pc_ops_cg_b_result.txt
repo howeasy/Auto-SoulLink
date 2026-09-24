@@ -1,0 +1,52 @@
+DUO_GEN2 {"attempt":1,"case":"gold_battle","fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","player":"b","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","scenario":"gen2_pc_ops","title":"gold"}
+CLIENT {"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  phase continue @3218
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":50342,"panel":false,"
+HELLO {"ball_count":10,"frame":3338,"has_pokeballs":true,"ot_id":50342}
+  phase loaded @3338
+RX resolved_areas
+RX config
+RX dead_keys
+BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 EC63:C4A6:9E
+  phase walk @3368 xy=53,12
+  phase battle @3633 xy=52,12
+RX hud_show
+RX_TEXT {"cmd":"hud_show","frame":5252,"text":"Partner caught HOOTHOOT in Route 29"}
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":9524,"key":"497B:C4A6:13","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":19}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":13,"in_box":false,"key":"497B:C4A6:13","level":2,"maxHP":13,"nickname":"RATTATA","player":"b","seq":208,"species_id":19,"stats":{"level":2,"maxHP
+CAPTURE_SENT {"frame":9524,"key":"497B:C4A6:13","seq":208}
+CAUGHT 497B:C4A6:13
+RX play_sound sound=25
+RX msgbox
+RX_TEXT {"cmd":"msgbox","frame":9527,"text":"HOOTHOOT and RATTATA linked!"}
+RX party_mon key=497B:C4A6:13
+TX {"event":"safe","player":"b","seq":209}
+TX {"event":"sync_retrieve_done","key":"497B:C4A6:13","player":"b","seq":212}
+  phase save @9584 xy=52,12
+  phase saved @10278 xy=52,12
+MYKEY 0 EC63:C4A6:9E
+MYKEY 1 497B:C4A6:13
+LINK_SAVE {"cartram_bytes":32768,"cartram_sha256":"b18554e76341a5955a4f1e5ea6155c6b82cd7afec0659e1b8d06c613b7b114b5","client_saves":1,"frame":10308,"gate_saves":1,"key":"497B:C4A6:13","save_completed_frame":10278,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/wcl/patch/build/e2e_gen2_pc_ops_cg-pc_b_link_save.SaveRAM"}
+RX box_mon key=497B:C4A6:13
+TX {"event":"stats_cache","key":"497B:C4A6:13","player":"b","seq":376,"stats":{"level":2,"maxHP":13}}
+PC_PARTNER_1 {"box_count":1,"cmd":"box_mon","cur_box":0,"frame":14463,"in_party":false,"key":"497B:C4A6:13","party_count":1}
+RX party_mon key=497B:C4A6:13
+TX {"event":"sync_retrieve_done","key":"497B:C4A6:13","player":"b","seq":385}
+PC_PARTNER_2 {"box_count":0,"cmd":"party_mon","cur_box":0,"frame":14703,"in_party":true,"key":"497B:C4A6:13","party_count":2}
+RX box_mon key=497B:C4A6:13
+TX {"event":"stats_cache","key":"497B:C4A6:13","player":"b","seq":414,"stats":{"level":2,"maxHP":13}}
+PC_PARTNER_3 {"box_count":1,"cmd":"box_mon","cur_box":0,"frame":15543,"in_party":false,"key":"497B:C4A6:13","party_count":1}
+RX force_faint key=497B:C4A6:13
+RX play_sound sound=26
+RX memorialize key=497B:C4A6:13
+RX game_over
+TX {"box":13,"event":"memorialize_done","key":"497B:C4A6:13","player":"b","seq":426}
+MEMORIAL_ACK {"box":13,"event":"memorialize_done","frame":15874,"key":"497B:C4A6:13","ticks":418}
+  phase save @15875 xy=52,12
+  phase saved @16401 xy=52,12
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"65dba425a3e75f5cf7eaa8b7adffeb9d9e7ee9c20f864a00d33c89a9edf15eb8","client_saves":2,"flushed_matches":true,"frame":16431,"gate_saves":2,"save_completed_frame":16401,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/wcl/patch/build/saveram_gen2_pc_ops_cg-pc_b/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/wcl/patch/build/e2e_gen2_pc_ops_cg-pc_b_witness.SaveRAM"}
+RECEIPT {"attempt":1,"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":9524,"key":"497B:C4A6:13","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":19},"case":"gold_battle","client":{"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"},"fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3338,"has_pokeballs":true,"ot_id":50342},"input_mode":"normal_buttons","key":"497B:C4A6:13","link_save":{"cartram_bytes":32768,"cartram_sha256":"b18554e76341a5955a4f1e5ea6155c6b82cd7afec0659e1b8d06c613b7b114b5","client_saves":1,"frame":10308,"gate_saves":1,"key":"497B:C4A6:13","save_completed_frame":10278,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/wcl/patch/build/e2e_gen2_pc_ops_cg-pc_b_link_save.SaveRAM"},"partner_commands":["box_mon","party_mon","box_mon"],"partner_memorial":{"box":13,"event":"memorialize_done","frame":15874,"key":"497B:C4A6:13","ticks":418},"player":"b","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","save":{"cartram_bytes":32768,"cartram_sha256":"65dba425a3e75f5cf7eaa8b7adffeb9d9e7ee9c20f864a00d33c89a9edf15eb8","client_saves":2,"flushed_matches":true,"frame":16431,"gate_saves":2,"save_completed_frame":16401,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/wcl/patch/build/saveram_gen2_pc_ops_cg-pc_b/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/wcl/patch/build/e2e_gen2_pc_ops_cg-pc_b_witness.SaveRAM"},"scenario":"gen2_pc_ops","schema":"gen2-duo-pc-ops-v2","title":"gold"}
+RESULT: PASS (followed the partner's PC moves with 497B:C4A6:13)
