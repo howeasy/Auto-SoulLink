@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=1777:B541:85 b=F77D:AC24:85 area=gift_goldenrod_city titles=crystal/crystal status=alive

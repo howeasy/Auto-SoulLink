@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=5B72:C4A6:10 b=5B72:C78C:10 area=gift_daycare titles=gold/silver status=alive
