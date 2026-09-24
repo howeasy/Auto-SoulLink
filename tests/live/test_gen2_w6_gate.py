@@ -60,12 +60,16 @@ SCHEMA = "gen2-w6-gate-v1"
 TITLES = ("crystal", "gold", "silver")
 LEGS = ("panel", "sfx", "u1")
 STAGGER = 60          # seconds between this lane's EmuHawk launches (other lanes share the machine)
-# main 2026-09-23: the U1 leg runs the FROZEN U1e chain (catch, save, poison, battle faint, whiteout) at a7bf1773,
-# not U1f's in-development PC leg, which joins the corpus once it passes and is receipted (one more W6 re-run
-# then). The faint driver is taken at c60c45c3: its 0-PP fix (live: the frozen driver loops on TAIL WHIP at 0 PP).
-U1_REF = "a7bf1773"
-U1_FROZEN = {"lua/tests/gen2_frame_align.lua": U1_REF, "lua/tests/gen2_poison_inputs.lua": U1_REF,
-             "lua/tests/duo/gen2_faint_inputs.lua": "c60c45c3", "tests/live/test_gen2_frame_align.py": U1_REF}
+# The U1 leg runs a FROZEN U1 driver chain, {repo path: ref}, recorded in the receipt (main 2026-09-23).
+#   a7bf1773  U1e: catch, save, poison, battle faint, whiteout; the faint driver at c60c45c3 (its 0-PP fix; live:
+#             the a7bf1773 driver loops on TAIL WHIP at 0 PP)
+#   a882a763  U1f (PHYSICAL on all three titles): U1e + the Cherrygrove re-heal (5c2ce468) + Bill's PC leg
+# Gold runs U1f: its U1e Route 31 hunt loses a party mon to attrition before the poison (frame 46514).
+_U1 = ("lua/tests/gen2_frame_align.lua", "lua/tests/gen2_poison_inputs.lua", "lua/tests/duo/gen2_faint_inputs.lua",
+       "tests/live/test_gen2_frame_align.py")
+U1_CHAINS = {"a7bf1773": {**dict.fromkeys(_U1, "a7bf1773"), "lua/tests/duo/gen2_faint_inputs.lua": "c60c45c3"},
+             "a882a763": dict.fromkeys(_U1 + ("lua/tests/gen2_pc_inputs.lua",), "a882a763")}
+U1_CHAIN_FOR = {"crystal": "a7bf1773", "silver": "a7bf1773", "gold": "a882a763"}
 IN_PLACE_CODE = ("SlinkStartMenuEntry",)   # patch/gen2/src/panel_start.asm, bank 4
 INIT_LOOP = bytes.fromhex("3600230b78b120f8")   # Init.ByteFill: ld [hl],0 / inc hl / dec bc / ld a,b / or c / jr nz
 
@@ -118,17 +122,17 @@ def symbolize(title: str, key: str, repo: Path = REPO) -> str:
     return f"{key} {best[1]}+0x{addr - best[0]:x}" if best else key
 
 
-def frozen_u1():
-    """Each U1_FROZEN file at its ref under .cache/gen2-w6-frozen/<U1_REF> (the Lua wrapper serves them in place of
-    the worktree files), {path: {ref, sha256}}, and the frozen test module (u1_facts, verify, U1_FIXTURE, GATE)."""
-    base = REPO / ".cache/gen2-w6-frozen" / U1_REF
+def frozen_u1(chain: str):
+    """Each file of U1_CHAINS[chain] at its ref under .cache/gen2-w6-frozen/<chain> (the Lua wrapper serves them in
+    place of the worktree files), {path: {ref, sha256}}, and the frozen test module (u1_facts, verify, U1_FIXTURE)."""
+    base = REPO / ".cache/gen2-w6-frozen" / chain
     files = {}
-    for rel, ref in U1_FROZEN.items():
+    for rel, ref in U1_CHAINS[chain].items():
         data = subprocess.run(["git", "show", f"{ref}:{rel}"], cwd=REPO, capture_output=True, check=True).stdout
         (base / rel).parent.mkdir(parents=True, exist_ok=True)
         (base / rel).write_bytes(data)
         files[rel] = {"ref": ref, "sha256": hashlib.sha256(data).hexdigest()}
-    spec = importlib.util.spec_from_file_location("w6_frozen_u1", base / "tests/live/test_gen2_frame_align.py")
+    spec = importlib.util.spec_from_file_location("w6_frozen_u1_" + chain, base / "tests/live/test_gen2_frame_align.py")
     module = importlib.util.module_from_spec(spec)
     path = list(sys.path)
     spec.loader.exec_module(module)
@@ -179,7 +183,8 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
     from run_gb_gate import run_gate
 
     facts = w6_facts(title)
-    frozen_dir, frozen_files, u1 = frozen_u1()
+    chain = U1_CHAIN_FOR[title]
+    frozen_dir, frozen_files, u1 = frozen_u1(chain)
     legs, launched = {}, False
     for leg, (gate, inner_result, fixture_name, extra_env, check, timeout) in _legs(title, u1).items():
         spec = gen2_fixtures.BY_NAME[fixture_name]
@@ -198,7 +203,7 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
         env["SLINK_GEN2_W6"] = json.dumps({"leg": leg, "gate": gate, "inner_result": inner_result, "facts": facts,
                                            "overlay_sha1": facts["overlay_sha1"], "base_sha1": source["rom_sha1"],
                                            "clean_view": leg == "u1", "lua_control_offset": 20,
-                                           "frozen": {rel: str(frozen_dir / rel) for rel in U1_FROZEN
+                                           "frozen": {rel: str(frozen_dir / rel) for rel in U1_CHAINS[chain]
                                                       if rel.endswith(".lua")} if leg == "u1" else None})
         if launched:
             time.sleep(STAGGER)
@@ -215,7 +220,7 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
         verify_leg(record, leg, facts)
         legs[leg] = {**record, "fixture": spec.name, "fixture_sha256": hashlib.sha256(staged).hexdigest(),
                      "qualification_attempt_id": qual["attempt_id"],
-                     "driver": {"ref": U1_REF, "files": frozen_files} if leg == "u1" else None,
+                     "driver": {"ref": chain, "files": frozen_files} if leg == "u1" else None,
                      "writers": {symbolize(title, k): v for k, v in sorted(record["writers"].items())},
                      "boot_clear": {symbolize(title, k): v for k, v in sorted(record["boot_clear"].items())},
                      "regions": {name: {**r, "native": {symbolize(title, k): v for k, v in sorted(r["native"].items())},
