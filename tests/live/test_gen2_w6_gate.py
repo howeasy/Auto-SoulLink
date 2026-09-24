@@ -24,9 +24,11 @@ Skipped without EmuHawk, the pinned build, a fixture or its qualification receip
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -39,7 +41,6 @@ sys.path.insert(0, str(REPO / "tools"))
 sys.path.insert(0, str(REPO / "patch/tools"))
 
 from tests.live import (  # noqa: E402
-    test_gen2_frame_align as u1,
     test_gen2_new_gates as live,
     test_gen2_panel_gate as panel,
     test_gen2_sfx_gate as sfx,
@@ -59,6 +60,11 @@ SCHEMA = "gen2-w6-gate-v1"
 TITLES = ("crystal", "gold", "silver")
 LEGS = ("panel", "sfx", "u1")
 STAGGER = 60          # seconds between this lane's EmuHawk launches (other lanes share the machine)
+# main 2026-09-23: the U1 leg runs the FROZEN U1e chain (catch, save, poison, battle faint, whiteout), not U1f's
+# in-development PC leg, which joins the corpus once it passes and is receipted (one more W6 re-run then).
+U1_REF = "a7bf1773"
+U1_FROZEN = ("lua/tests/gen2_frame_align.lua", "lua/tests/gen2_poison_inputs.lua", "lua/tests/duo/gen2_faint_inputs.lua",
+             "tests/live/test_gen2_frame_align.py")
 IN_PLACE_CODE = ("SlinkStartMenuEntry",)   # patch/gen2/src/panel_start.asm, bank 4
 INIT_LOOP = bytes.fromhex("3600230b78b120f8")   # Init.ByteFill: ld [hl],0 / inc hl / dec bc / ld a,b / or c / jr nz
 
@@ -111,8 +117,27 @@ def symbolize(title: str, key: str, repo: Path = REPO) -> str:
     return f"{key} {best[1]}+0x{addr - best[0]:x}" if best else key
 
 
-def _legs(title: str) -> dict:
-    """leg -> (inner gate, its result file, fixture name, facts env name, env builder, verify, timeout)."""
+def frozen_u1(ref: str = U1_REF):
+    """U1_FROZEN at `ref` under .cache/gen2-w6-frozen/<ref> (the Lua wrapper serves them in place of the worktree
+    files), their sha256s, and the frozen test module (u1_facts, verify, U1_FIXTURE, GATE)."""
+    base = REPO / ".cache/gen2-w6-frozen" / ref
+    files = {}
+    for rel in U1_FROZEN:
+        data = subprocess.run(["git", "show", f"{ref}:{rel}"], cwd=REPO, capture_output=True, check=True).stdout
+        (base / rel).parent.mkdir(parents=True, exist_ok=True)
+        (base / rel).write_bytes(data)
+        files[rel] = hashlib.sha256(data).hexdigest()
+    spec = importlib.util.spec_from_file_location("w6_frozen_u1", base / U1_FROZEN[-1])
+    module = importlib.util.module_from_spec(spec)
+    path = list(sys.path)
+    spec.loader.exec_module(module)
+    sys.path[:] = path          # its REPO-relative sys.path inserts point into the cache
+    module.REPO = REPO
+    return base, files, module
+
+
+def _legs(title: str, u1) -> dict:
+    """leg -> (inner gate, its result file, fixture name, env builder, verify, timeout); u1 = the frozen U1 module."""
     def panel_env(spec, qual):
         return {"SLINK_GEN2_PANEL_FACTS": json.dumps(panel.panel_facts(title))}
 
@@ -153,8 +178,9 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
     from run_gb_gate import run_gate
 
     facts = w6_facts(title)
+    frozen_dir, frozen_files, u1 = frozen_u1()
     legs, launched = {}, False
-    for leg, (gate, inner_result, fixture_name, extra_env, check, timeout) in _legs(title).items():
+    for leg, (gate, inner_result, fixture_name, extra_env, check, timeout) in _legs(title, u1).items():
         spec = gen2_fixtures.BY_NAME[fixture_name]
         reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
                   or live.receipt_missing_reason(spec.name))
@@ -170,7 +196,9 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
         source = gen2_source_data.load_context(title, root=REPO).source_record()
         env["SLINK_GEN2_W6"] = json.dumps({"leg": leg, "gate": gate, "inner_result": inner_result, "facts": facts,
                                            "overlay_sha1": facts["overlay_sha1"], "base_sha1": source["rom_sha1"],
-                                           "clean_view": leg == "u1", "lua_control_offset": 20})
+                                           "clean_view": leg == "u1", "lua_control_offset": 20,
+                                           "frozen": {rel: str(frozen_dir / rel) for rel in U1_FROZEN
+                                                      if rel.endswith(".lua")} if leg == "u1" else None})
         if launched:
             time.sleep(STAGGER)
         launched = True
@@ -186,6 +214,7 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
         verify_leg(record, leg, facts)
         legs[leg] = {**record, "fixture": spec.name, "fixture_sha256": hashlib.sha256(staged).hexdigest(),
                      "qualification_attempt_id": qual["attempt_id"],
+                     "driver": {"ref": U1_REF, "files": frozen_files} if leg == "u1" else None,
                      "writers": {symbolize(title, k): v for k, v in sorted(record["writers"].items())},
                      "boot_clear": {symbolize(title, k): v for k, v in sorted(record["boot_clear"].items())},
                      "regions": {name: {**r, "native": {symbolize(title, k): v for k, v in sorted(r["native"].items())},

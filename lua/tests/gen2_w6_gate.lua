@@ -28,6 +28,8 @@
   may write one only if the region's slink_allow names it (empty until the phone service lands: until then
   any SLink write is a violation); any Lua store into a region is a violation. A region in WRAMX names its
   wram_bank and only writes with SVBK selecting that bank count.
+  frozen (optional): {repo-relative path -> file} served in place of the worktree file to every dofile of
+  root/<path> (main 2026-09-23: the U1 leg runs the frozen U1e chain, not the in-development U1f PC leg).
   Environment: whatever the inner gate needs, plus SLINK_GEN2_W6 (json, tests/live/test_gen2_w6_gate.py).
   Result file: patch/build/gen2_w6_gate_result.txt. Printed: INNER (the inner gate's own RESULT line),
   W6 (json), then RESULT: PASS|FAIL last. The inner gate's full output stays in its own result file.
@@ -252,7 +254,14 @@ function W.main(root, getenv)
         -- every hooked site's bytes are re-validated against the running ROM (lua/gb_hook_binding.lua)
         gameinfo.getromhash = function() return cfg.base_sha1 end
     end
+    local real_dofile = dofile
+    if cfg.frozen then
+        local served = {}
+        for rel, file in pairs(cfg.frozen) do served[root .. "/" .. rel] = file end
+        dofile = function(path, ...) return real_dofile(served[path] or path, ...) end
+    end
     local ok, why = pcall(dofile, root .. "/" .. cfg.gate)
+    dofile = real_dofile
     gameinfo.getromhash = real_hash
     local inner_done = ok or tostring(why):find("slink-gate-finished", 1, true) ~= nil
     local frames = emu.framecount() - armed_at
