@@ -3048,8 +3048,7 @@ def rebuild_lines(player):
                   "ENGINE_FAINT " + j({"frame": 3000, "site_id": "battle_faint", "cause": "battle", "key": STARTER, "slot": 0}),
                   "ENGINE_WHITEOUT " + j({"frame": 3050, "site_id": "whiteout_before_heal", "party": [{"key": STARTER, "hp": 0}]}),
                   "TX " + j({"event": "whiteout", "seq": 30}, separators=(",", ":")),
-                  "RX party_mon key=" + KEY, "RX rebuild_start", "RX party_mon key=" + KEY, "RX rebuild_done", rebuilt]
-        # (an early party_mon before rebuild_start is tolerated: the rebuild's own is the one after it)
+                  "RX party_mon key=" + KEY, "RX rebuild_start", "RX rebuild_done", rebuilt]   # the live cc order
     else:
         middle = ["RX box_mon key=" + KEY,
                   "PARTNER_BOXED " + j({"frame": 2100, "key": KEY, "party_count": 1, "box_count": 1}),
@@ -3071,6 +3070,7 @@ def test_whiteout_rebuild_verdict_passes_each_complete_half(player):
      "starter alone"),
     (without(rebuild_lines("a"), "RX rebuild_done"), "no rebuild_start, party_mon, rebuild_done"),
     (without(rebuild_lines("a"), "RX rebuild_start"), "no rebuild_start, party_mon, rebuild_done"),
+    (move(rebuild_lines("a"), "RX rebuild_done", "RX rebuild_start"), "no rebuild_start, party_mon, rebuild_done"),
     (without(rebuild_lines("a"), "TX ", 1), "one party_to_box and one whiteout"),
     (rebuild_lines("a")[:-1] + ["RX game_over", rebuild_lines("a")[-1]], "death command"),
     (edit_tag(rebuild_lines("a"), "REBUILT", party_count=1), "two-mon party"),
@@ -3078,7 +3078,7 @@ def test_whiteout_rebuild_verdict_passes_each_complete_half(player):
     (move(rebuild_lines("b"), "RX party_mon", "PARTNER_BOXED"), "no rebuild party_mon"),
     (rebuild_lines("b")[:-1] + ["RX rebuild_start", rebuild_lines("b")[-1]], "B received rebuild_start"),
     (rebuild_lines("b")[:-1] + ["RX force_faint key=" + KEY, rebuild_lines("b")[-1]], "death command"),
-], ids=["no-site", "catch-fainted", "two-in-whiteout", "no-done", "no-start", "no-whiteout-send", "game-over",
+], ids=["no-site", "catch-fainted", "two-in-whiteout", "no-done", "no-start", "done-first", "no-whiteout-send", "game-over",
         "one-mon", "b-not-boxed", "b-early-withdraw", "b-rebuild-start", "b-death"])
 def test_whiteout_rebuild_verdict_refuses_a_tampered_half(lines, match):
     problems, receipt = wave_c("whiteout_rebuild", lines)

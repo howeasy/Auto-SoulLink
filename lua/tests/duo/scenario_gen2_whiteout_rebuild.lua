@@ -20,7 +20,7 @@
     A: ENGINE_PC {kind "party_to_box", key}           the hand deposit
        ENGINE_FAINT {site_id battle_faint, key=<starter>}   the only faint
        ENGINE_WHITEOUT {site_id "whiteout_before_heal", party=[{key=<starter>, hp=0}]}
-       RX rebuild_start / RX party_mon key=<key> / RX rebuild_done
+       RX party_mon key=<key> / RX rebuild_start (either order: the server queues party_mon first) / RX rebuild_done
     B: RX box_mon key=<key>, PARTNER_BOXED {frame, key, party_count, box_count}, RX party_mon key=<key>
     both: REBUILT {frame, key, slot, hp, party_count, box_count}   the linked half back in the party
           SAVE_WITNESS (newer than LINK_SAVE), RECEIPT {schema "gen2-duo-whiteout-rebuild-v1"}
@@ -188,9 +188,10 @@ function S.verdict(lines, json, link_verdict)
                  "the pre-heal whiteout party is not the starter alone at HP 0")
             need(faint ~= nil and whiteout.at > faint.at, "the whiteout precedes the faint")
         end
+        -- _queue_rebuild_commands queues the party_mon before rebuild_start (state.py); rebuild_done follows both
         local start = first("rebuild_start", whiteout and whiteout.at)
-        local withdraw = first("party_mon", start and start.at)
-        local done = first("rebuild_done", withdraw and withdraw.at)
+        local withdraw = first("party_mon", whiteout and whiteout.at)
+        local done = first("rebuild_done", start and withdraw and math.max(start.at, withdraw.at))
         need(start ~= nil and withdraw ~= nil and done ~= nil, "no rebuild_start, party_mon, rebuild_done after the whiteout")
         need(done == nil or rebuilt == nil or rebuilt.at > done.at, "REBUILT precedes rebuild_done")
         detail = {whiteout=whiteout and whiteout.value}
