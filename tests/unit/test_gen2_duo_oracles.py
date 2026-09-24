@@ -1747,6 +1747,40 @@ def test_species_clause_pending_reroll_and_link_proof(species_clause_case):
     assert facts[0]["clause"] == "species" and facts[0]["rerolls"] == 1
 
 
+@pytest.mark.parametrize("missing_prompt", [None, 1, 2])
+def test_species_clause_early_prompts_are_bound_to_each_battle(species_clause_case, missing_prompt):
+    results, kwargs = species_clause_case
+    prompt = "Dupes clause: Pidgey -- reroll!"
+    lines = []
+    inserted = False
+    for line in results["b"].splitlines():
+        if line.startswith(("ENCOUNTER ", "REROLL ", "RX_TEXT ")):
+            if not inserted:
+                for number, frame in ((1, 3600), (2, 4000)):
+                    if missing_prompt != number:
+                        lines.append("RX_TEXT " + json.dumps({"frame": frame - 10, "cmd": "gui_prompt", "text": prompt}))
+                    lines.append("ENCOUNTER " + json.dumps({"frame": frame, "n": number, "species_id": 16, "dupe": True}))
+                    lines.append("REROLL " + json.dumps({"frame": frame + 100, "n": number, "species_id": 16, "prompt": prompt}))
+                lines.append("ENCOUNTER " + json.dumps({"frame": 4400, "n": 3, "species_id": 19, "dupe": False}))
+                inserted = True
+            continue
+        lines.append(line)
+    receipt = oracles._last_tagged(results["b"], "RECEIPT")
+    receipt["rerolls"] = 2
+    results["b"] = _replace_tag_in_place("\n".join(lines), "RECEIPT", receipt)
+    path = Path(kwargs["data_dir"]) / "events.json"
+    events = json.loads(path.read_text(encoding="utf-8"))
+    events.insert(2, dict(next(row for row in events if row.get("type") == "reroll")))
+    path.write_text(json.dumps(events), encoding="utf-8")
+    if missing_prompt is None:
+        facts = []
+        oracles.clause_oracle(results, **kwargs, on_verified=facts.append)
+        assert facts[0]["rerolls"] == 2
+    else:
+        with pytest.raises(RuntimeError, match="reroll lacks observed prompt"):
+            oracles.clause_oracle(results, **kwargs)
+
+
 def test_species_clause_unobserved_is_typed_retry_not_release(species_clause_case):
     results, kwargs = species_clause_case
     text = results["b"]

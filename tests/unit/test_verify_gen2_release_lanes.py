@@ -1274,6 +1274,41 @@ def test_clause_matrix_accepts_observed_branch(tmp_path, kind):
     assert _check_admission_cell(tmp_path, proof, axes, lock, text, f"gen2_{kind}_clause") == []
 
 
+@pytest.mark.parametrize("prompt_position", ["intro", "second_intro", "before_pending", "previous_battle"])
+def test_species_matrix_binds_intro_prompt_to_its_own_reroll_window(tmp_path, prompt_position):
+    proof, axes, lock, text = _clause_cell(tmp_path, "species")
+    lines = text["b"].splitlines()
+    first_encounter = next(i for i, line in enumerate(lines) if line.startswith("ENCOUNTER "))
+    prompt = next(i for i, line in enumerate(lines) if line.startswith("RX_TEXT "))
+    # The server can send its reroll prompt during the intro, before BattleMenu prints ENCOUNTER.
+    lines.insert(first_encounter, lines.pop(prompt))
+    if prompt_position == "before_pending":
+        ap = next(i for i, line in enumerate(lines) if line.startswith("A_PENDING "))
+        prompt = next(i for i, line in enumerate(lines) if line.startswith("RX_TEXT "))
+        lines.insert(ap, lines.pop(prompt))
+    elif prompt_position in ("previous_battle", "second_intro"):
+        first_reroll = next(i for i, line in enumerate(lines) if line.startswith("REROLL "))
+        final_encounter = next(i for i in range(first_reroll + 1, len(lines)) if lines[i].startswith("ENCOUNTER "))
+        final = json.loads(lines[final_encounter].split(" ", 1)[1])
+        final["n"] = 3
+        lines[final_encounter] = "ENCOUNTER " + json.dumps(final)
+        lines[final_encounter:final_encounter] = [
+            'ENCOUNTER {"frame":80,"n":2,"species_id":16,"dupe":true}',
+            'REROLL {"frame":85,"n":2,"species_id":16,"prompt":"Dupes clause: Pidgey -- reroll!"}',
+        ]
+        if prompt_position == "second_intro":
+            lines.insert(final_encounter, 'RX_TEXT {"cmd":"gui_prompt","text":"Dupes clause: Pidgey -- reroll!"}')
+        # Re-pin every claim: only the missing distinct prompt in battle two can reject this proof.
+        lines = [line.replace('"rerolls": 1', '"rerolls": 2') for line in lines]
+        text["pydec"] = _edit_pydec_token("rerolls", "2")(text["pydec"])
+    text["b"] = "\n".join(lines)
+    errors = _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_species_clause")
+    if prompt_position in ("intro", "second_intro"):
+        assert errors == []
+    else:
+        assert any("reroll lacks observed server prompt" in error for error in errors), errors
+
+
 @pytest.mark.parametrize("kind", ["type", "gender"])
 def test_clause_matrix_accepts_proven_memorial_ending(tmp_path, kind):
     proof, axes, lock, text = _clause_cell(tmp_path, kind)

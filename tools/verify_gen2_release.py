@@ -654,8 +654,10 @@ def _clause_cell_errors(legs: dict, scenario: str, axes: dict) -> list[str]:
                     need(at < rr_at < encounters[i + 1][0] and rr.get("n") == i + 1
                          and rr.get("species_id") == species, "reroll order/species differs")
                     prompt = rr.get("prompt")
+                    # Native intro can prompt before ENCOUNTER; never reuse the prior battle's prompt.
+                    prompt_start = ap_at if i == 0 else rerolls[i - 1][0]
                     need(isinstance(prompt, str) and prompt.startswith("Dupes clause: ") and prompt.endswith(" -- reroll!")
-                         and any(at < rx_at < rr_at and rx.get("cmd") == "gui_prompt" and rx.get("text") == prompt
+                         and any(prompt_start < rx_at < rr_at and rx.get("cmd") == "gui_prompt" and rx.get("text") == prompt
                                  for rx_at, rx in rows("b", "RX_TEXT")), "reroll lacks observed server prompt")
             need(encounters[-1][0] < one("b", "ENGINE_CAPTURE")[0], "catch precedes final encounter")
             want.update(status="alive", rerolls=str(len(rerolls)))

@@ -1427,7 +1427,10 @@ def _species_clause(results, decoded, document, events, pending_snapshot):
             rpos, reroll = rerolls[index - 1]
             _clause_need(reroll.get("n") == index and reroll.get("species_id") == species and reroll.get("prompt") == prompt
                          and position < rpos < encounters[index][0] and _frame(encounter) <= _frame(reroll), "reroll order/prompt differs")
-            _clause_need(any(position < pos < rpos and msg.get("cmd") == "gui_prompt" and msg.get("text") == prompt
+            # The first in-battle tick may prompt during intro text, before ENCOUNTER.
+            # Bound each prompt to this hunt window so another battle cannot supply it.
+            previous = _tag_rows(text, "A_PENDING")[0][0] if index == 1 else rerolls[index - 2][0]
+            _clause_need(any(previous < pos < rpos and msg.get("cmd") == "gui_prompt" and msg.get("text") == prompt
                              for pos, msg in _tag_rows(text, "RX_TEXT")), "reroll lacks observed prompt")
     server_rerolls = [row for row in events if row.get("type") == "reroll"]
     _clause_need(len(server_rerolls) == len(rerolls) and all(row.get("player") == "b" and row.get("area_id") == "route_29"
