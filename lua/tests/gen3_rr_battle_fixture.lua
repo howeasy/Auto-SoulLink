@@ -368,7 +368,7 @@ end
 -- see docs/gen3/research/rr_fixture_route_2026-09-24.md for why this route exists and how each
 -- id was PROVEN against RR's own compiled scripts (not vanilla FireRed's).
 local function run_route2()
-    G.open("gen3_rr_battle_fixture_route2")  -- patch/build/gen3_rr_battle_fixture_route2_result.txt
+    G.open("gen3_rr_battle_fixture")  -- same file as run(): run_gate.py watches the first result name in this source
     pcall(client.speedmode, 6399)
     G.budget = 400000
     local cp, title = G.checkpoint()
