@@ -1930,6 +1930,66 @@ def test_clause_observed_refuses_mutations(clause_case, fault):
         oracles.clause_oracle(results, **kwargs)
 
 
+def _bench_kill(text):
+    """O-32: the rejected catch killed on receipt while its capture battle is still up (final sweep
+    gen2_type_clause, frame 5761: pc 0x0040 at the frame end, hROMBank 3, wBattleMode 1, why=battle_bench)."""
+    row = oracles._last_tagged(text, "PARTY_HP_WRITE")
+    row["checkpoint"].update(pc=0x0040, hrom_bank=3, sc=124)
+    row["checkpoint"]["state"].update(wBattleMode=1, wScriptFlags=4, wScriptMode=1, wScriptRunning=255, wStateFlags=64)
+    for permit in row["log"]:
+        permit["why"] = "battle_bench"
+    return _replace_tag_in_place(text, "PARTY_HP_WRITE", row), row
+
+
+def test_clause_rejection_bench_kill_in_the_capture_battle_passes(clause_case):
+    results, kwargs = clause_case
+    results["b"], _ = _bench_kill(results["b"])
+    facts = []
+    oracles.clause_oracle(results, **kwargs, on_verified=facts.append)
+    assert facts[0]["rejected"] == "b"
+
+
+@pytest.mark.parametrize("fault", ["mixed_why", "overworld_why", "active", "box_capture", "late_capture",
+                                   "not_in_battle", "link_battle", "pc", "serial", "site"])
+def test_clause_rejection_bench_kill_refuses(clause_case, fault):
+    results, kwargs = clause_case
+    text, row = _bench_kill(results["b"])
+    capture = oracles._last_tagged(text, "ENGINE_CAPTURE")
+    if fault == "mixed_why":
+        row["log"][0]["why"] = "overworld"
+    elif fault == "overworld_why":            # the checkpoint's permit with battle evidence
+        for permit in row["log"]:
+            permit["why"] = "overworld"
+    elif fault == "active":                   # the target is not the mon this battle caught
+        capture["slot"] = 0
+    elif fault == "box_capture":
+        capture["destination"] = "box"
+    elif fault == "late_capture":
+        capture["frame"] = row["frame"] + 1
+    elif fault == "not_in_battle":
+        row["checkpoint"]["state"]["wBattleMode"] = 0
+    elif fault == "link_battle":
+        row["checkpoint"]["state"]["wLinkMode"] = 1
+    elif fault == "pc":                       # not the frame end the U2 battle_bench run measured
+        row["checkpoint"]["pc"] = 0x0041
+    elif fault == "serial":
+        row["checkpoint"]["sc"] = 0x80
+    else:
+        row["log"][1]["site"] = "harness"
+    text = _replace_tag_in_place(text, "ENGINE_CAPTURE", capture)
+    results["b"] = _replace_tag_in_place(text, "PARTY_HP_WRITE", row)
+    with pytest.raises(RuntimeError):
+        oracles.clause_oracle(results, **kwargs)
+
+
+def test_faint_bench_write_needs_active_battler_evidence(faint_case):
+    """gen2_faint's B write has no capture to prove it off the active battler: a battle_bench write refuses."""
+    results, data_dir, _ = faint_case
+    results["b"], _ = _bench_kill(results["b"])
+    with pytest.raises(RuntimeError, match="active battler"):
+        oracles.faint_oracle(results, data_dir=data_dir)
+
+
 @pytest.fixture
 def species_clause_case(tmp_path):
     results, data_dir, decoded = _clause_base(tmp_path)

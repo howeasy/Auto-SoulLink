@@ -530,13 +530,7 @@ def _faint_checkpoint(write, layout):
         for domain in ("rom_hex", "mapped_hex"):
             _faint_need(_hex_bytes(observed.get(domain), len(expected), f"anchor {name}/{domain}") == expected,
                         f"checkpoint anchor {name}/{domain} differs")
-    owner = primary["ownership_requirements"]
-    svbk, sc = point.get("svbk"), point.get("sc")
-    _faint_need(type(svbk) is int and 0 <= svbk <= 7
-                and (svbk or 1) == owner["effective_wram_bank"], "checkpoint WRAM bank differs")
-    serial = owner["serial_control"]
-    _faint_need(type(sc) is int and 0 <= sc <= 255 and sc & serial["mask"] == serial["value"],
-                "checkpoint serial owner active")
+    _faint_owner(point, primary)
     stack = primary["caller_stack"]
     sp = point.get("sp")
     _faint_need(type(sp) is int and stack["minimum_sp"] <= sp
@@ -545,24 +539,83 @@ def _faint_checkpoint(write, layout):
     for word in stack["required_words"]:
         at = word["offset_from_sp"]
         _faint_need(int.from_bytes(raw[at:at + 2], word["endianness"]) == word["value"], "checkpoint caller differs")
+    for predicate in primary["state_predicates"]:
+        _faint_need(_faint_predicate(point, predicate), f"checkpoint predicate {predicate['symbol']} refused")
+
+
+def _faint_owner(point, hold):
+    """The hold's WRAM bank and no serial transfer (gen2_write_safety.lua evaluate/evaluate_frame)."""
+    owner = hold["ownership_requirements"]
+    svbk, sc = point.get("svbk"), point.get("sc")
+    _faint_need(type(svbk) is int and 0 <= svbk <= 7
+                and (svbk or 1) == owner["effective_wram_bank"], "checkpoint WRAM bank differs")
+    serial = owner["serial_control"]
+    _faint_need(type(sc) is int and 0 <= sc <= 255 and sc & serial["mask"] == serial["value"],
+                "checkpoint serial owner active")
+
+
+def _faint_predicate(point, predicate):
     state = point.get("state")
     _faint_need(isinstance(state, dict), "checkpoint state missing")
-    for predicate in primary["state_predicates"]:
-        value = state.get(predicate["symbol"])
-        _faint_need(predicate["operator"] == "masked_equal" and type(value) is int
-                    and 0 <= value < 1 << (8 * predicate["width"])
-                    and value & predicate["mask"] == predicate["value"],
-                    f"checkpoint predicate {predicate['symbol']} refused")
+    value = state.get(predicate["symbol"])
+    return (predicate["operator"] == "masked_equal" and type(value) is int
+            and 0 <= value < 1 << (8 * predicate["width"]) and value & predicate["mask"] == predicate["value"])
 
 
-def _faint_write(write, layout, linked, final, key):
+# O-23: Silver's U2 proof is Gold's write-window receipt (lua/gen2_write_safety.lua M.RECEIPT_TITLE).
+RECEIPT_TITLE = {"crystal": "crystal", "gold": "gold", "silver": "gold"}
+
+
+def _faint_battle_bench(write, layout, captured):
+    """O-32 (0752a3ab): a bench death on receipt at a battle frame end. The frame evidence is what
+    gen2_write_safety.lua evaluate_frame accepts (the battle hold's WRAM bank, serial and wLinkMode
+    predicates; the primary's wBattleMode predicate REFUSING), the PC is the frame end the U2 receipt's
+    battle_bench run measured, and that receipt carries the battle_faint run it needs and this pack's
+    battle hold rows. `captured` is the ENGINE_CAPTURE of the target: a mon caught in this battle is
+    appended to the party and never sent out, so it is not the active battler."""
+    title = layout.title
+    data = json.loads((REPO_ROOT / f"data/games/gen2_{title}/write_checkpoint.json").read_text())["titles"][title]
+    owner = RECEIPT_TITLE[title]
+    receipt = json.loads((REPO_ROOT / f"data/games/gen2_{title}/receipts/{owner}.write_window.json").read_text())
+    runs = receipt.get("runs") or {}
+    _faint_need(receipt.get("title") == owner and receipt.get("battle_hold") == data["battle_hold"]
+                and all(isinstance(runs.get(mode), dict) and runs[mode].get("result") == "PASS"
+                        and runs[mode].get("evidence_level") == "PHYSICAL" for mode in ("battle_faint", "battle_bench")),
+                "no U2 battle_bench receipt for this battle hold")
+    bench = runs["battle_bench"].get("bench_write") or {}
+    point = write["checkpoint"]
+    _faint_need(isinstance(point, dict), "checkpoint observation missing")
+    _faint_need(bench.get("ok") is True and bench.get("where") == "frame_end" and type(bench.get("pc")) is int
+                and type(point.get("pc")) is int and point["pc"] == bench["pc"], "battle_bench frame-end pc differs")
+    _faint_owner(point, data["battle_hold"])
+    for predicate in data["battle_hold"]["state_predicates"]:
+        _faint_need(_faint_predicate(point, predicate), f"battle_bench predicate {predicate['symbol']} refused")
+    mode = next(p for p in data["primary"]["state_predicates"] if p["symbol"] == "wBattleMode")
+    _faint_need(type(point["state"].get(mode["symbol"])) is int and not _faint_predicate(point, mode),
+                "battle_bench outside a battle")
+    # ponytail: the log has no wCurBattleMon; proof is "caught in this battle". Upgrade: harness logs the active slot.
+    _faint_need(isinstance(captured, dict) and captured.get("key") == write.get("key")
+                and captured.get("destination") == "party" and captured.get("slot") == write.get("slot")
+                and _frame(captured) <= _frame(write), "battle_bench target not proven off the active battler")
+
+
+def _faint_write(write, layout, linked, final, key, captured=None):
+    """B's (or a clause rejection's) party HP/status zero: at the overworld checkpoint (why=overworld), or,
+    O-32, on receipt at a battle frame end (every permit why=battle_bench; `captured` proves the slot is
+    not the active battler -- callers without that evidence refuse a bench write)."""
     from server.adapters import gen2_codec as codec
 
     slot = write.get("slot")
     _faint_need(type(slot) is int and 0 <= slot < len(linked), "B write slot invalid")
     _faint_need(write.get("ok") is True and not write.get("error") and write.get("kind") == "party_hp"
                 and write.get("key") == key and codec.key(linked[slot]) == key, "B write ownership/result differs")
-    _faint_checkpoint(write, layout)
+    log = write.get("log")
+    _faint_need(isinstance(log, list) and len(log) == 2, "B write must carry exactly two permit spans")
+    why = "battle_bench" if all(isinstance(row, dict) and row.get("why") == "battle_bench" for row in log) else "overworld"
+    if why == "battle_bench":
+        _faint_battle_bench(write, layout, captured)
+    else:
+        _faint_checkpoint(write, layout)
     n = layout.party_size * layout.constants["PARTY_LENGTH"]
     before = _hex_bytes(write.get("before_party_hex"), n, "before party")
     after = _hex_bytes(write.get("after_party_hex"), n, "after party")
@@ -576,13 +629,11 @@ def _faint_write(write, layout, linked, final, key):
     expected[start + status] = 0
     expected[start + hp:start + hp + 2] = bytes(2)
     _faint_need(after == bytes(expected), "B write changed bytes outside target HP/status")
-    log = write.get("log")
-    _faint_need(isinstance(log, list) and len(log) == 2, "B write must carry exactly two permit spans")
     profile = layout.profile["titles"][layout.title]
     for index, (offset, length) in enumerate(((status, 1), (hp, 2)), 1):
         row = log[index - 1]
         expected = {"domain": "System Bus", "addr": layout.addresses["wPartyMon1"] + start + offset,
-                    "n": length, "why": "overworld", "status": "written", "completed": length,
+                    "n": length, "why": why, "status": "written", "completed": length,
                     "attempted": length, "batch_index": index, "batch_size": 2,
                     "site": "lua/gen2/entry.lua production", "evidence": "U2 PHYSICAL receipt",
                     "title": layout.title, "artifact": profile["artifact"], "rom_sha1": profile["rom_sha1"]}
@@ -1553,7 +1604,8 @@ def _clause_rejection(results, decoded, document, events, kind):
         start = slot * layout.party_size
         pre.append(codec.decode_party_mon(before[start:start + layout.party_size], layout, species_marker=before[start]))
         post.append(codec.decode_party_mon(after[start:start + layout.party_size], layout, species_marker=after[start]))
-    _faint_write(write, layout, pre, post, key)
+    captures = [row for _, row in _tag_rows(text, "ENGINE_CAPTURE") if row.get("key") == key]
+    _faint_write(write, layout, pre, post, key, captured=captures[0] if len(captures) == 1 else None)
     _clause_need(pre[write["slot"]]["hp"] > 0 and _frame(write) < _frame(own["witness"], "save_completed_frame"), "rejection did not faint a live mon before save")
     by_key = {codec.key(mon): mon for mon in post}
     _clause_need(len(by_key) == len(post) and set(by_key) == {codec.key(mon) for mon in own["party"]} | {key}, "write party differs from saved inventory")
