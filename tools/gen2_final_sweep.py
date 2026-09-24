@@ -3,11 +3,14 @@
     python tools/gen2_final_sweep.py --list                      # the cells and their exact commands
     python tools/gen2_final_sweep.py --lanes 4                   # everything (run only after "freeze")
     python tools/gen2_final_sweep.py --lanes 2 --only gen2_new/link gen2_new/gen2_admit_wrong_rom   # a dry run
+    python tools/gen2_final_sweep.py --pin <out>                 # after review: install the PASS receipts + repin
 
 Cells: every scenario tools/e2e_duo.py registers for C-C (gen2_new), G-S (gen2_gold_silver) and C-G
 (gen2_crystal_gold): the duo matrix, the wave-C/D duos and the native trades. Then the client-path live gates:
-engine_sites (frame_align, then U1G) and write_window per title, and panel/sfx/w6/phone per title. The qualification
-receipts bind fixture bytes, not code, so they are not rerun (tools/gen2_code_digest.py: not client-path).
+engine_sites (frame_align, then U1G) and write_window per title, panel/sfx/w6/phone per title, and the live-new-gates
+run attestation (tests/live/test_gen2_new_gates.py over every fixture; tests/live/conftest.py writes it). The
+qualification receipts bind fixture bytes, not code, so they are not rerun (tools/gen2_code_digest.py: not client-path).
+A scenario newly registered in tools/e2e_duo.py (e.g. gen2_evolution) is a cell automatically.
 
 Each lane is a detached worktree C:/Users/howar/AppData/Local/Temp/fs<k> at --sha, short enough for BizHawk's MAX_PATH
 (e2e_duo.BIZHAWK_PATH_LIMIT). .cache/gen2-build and .cache/gen2-fixtures are COPIED in, because the ROM must resolve
@@ -18,8 +21,10 @@ A cell is retried ONCE, and only on an RNG stall (RNG_STALL). On a timeout only 
 
 Output in --out: receipts/<repo-relative path> uses the committed names (duo_<scenario>_<cc|gs|cg>_*, the gates' own
 files). summary.json/summary.txt hold the sha, the CODE_DIGEST and per cell: ok, attempts, seconds, reason and every
-receipt with its LF sha256 (the pin value). Nothing is committed or pinned here: after review, copy receipts/ over
-the checkout and repin.
+receipt with its LF sha256 (the pin value). Nothing is committed here. --pin <out> copies the receipts of the PASS
+cells into this checkout and rewrites their sha256 in tests/gen2_release_requirements.json and
+tests/gen2_live_gate_requirements.json in place (text edit, formatting kept). It also adds the single inspect_run row
+when it is missing and lists every receipt no row names. Then commit the exact paths.
 """
 from __future__ import annotations
 
@@ -50,6 +55,18 @@ TITLES = ("crystal", "gold", "silver")
 # ponytail: the stall phrases seen in lane logs; widen here if a new RNG stall class shows up
 RNG_STALL = re.compile(r"out-of-balls|survived \d+ battles|duplicates-only hunt|clause unobserved")
 GATE_TIMEOUT = 3600
+PIN_FILES = ("tests/gen2_release_requirements.json", "tests/gen2_live_gate_requirements.json")
+ATTESTATION = "tests/fixtures/gen2/receipts/live_new_gates.inspect_run.json"   # tests/live/conftest.py
+INSPECT_ROW = """    {
+      "id": "new-gates.inspect-run",
+      "stage": "physical-live",
+      "description": "R-1/R-2/R-3/R-4/R-5g live-new-gates run attestation (gen2-live-new-gates-attestation-v1): SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py over every fixture, every title PASS, passes only (re-run: tools/gen2_final_sweep.py cell gate/inspect_run)",
+      "axes": {"kind": "inspect_run", "requirement_ids": ["R-1", "R-2", "R-3", "R-4", "R-5g"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "%s",
+        "sha256": "%s"
+      }}}]
+    }"""
 
 
 def live(test, title):
@@ -71,6 +88,8 @@ def cells():
         for kind in ("panel", "sfx", "w6", "phone"):
             out.append({"id": f"gate/{kind}/{title}", "kind": "gate", "timeout": GATE_TIMEOUT,
                         "commands": [live(f"test_gen2_{kind}_gate.py", title)]})
+    out.append({"id": "gate/inspect_run", "kind": "gate", "timeout": 13 * 900,   # every fixture, one inspect gate each
+                "commands": [[sys.executable, "-m", "pytest", "tests/live/test_gen2_new_gates.py", "-q", "-p", "no:randomly"]]})
     return sorted(out, key=lambda c: -c["timeout"])   # longest first
 
 
@@ -157,14 +176,42 @@ def collect_duo(cell, lane_id, lane, out):
 
 
 def collect_gate(lane, out):
+    """Every receipt the gate wrote (changed or new, the attestation included), copied out; the lane is then reset."""
     got = {}
-    for rel in tracked_changes(lane):
+    rows = git(lane, "status", "--porcelain", "--untracked-files=all", "--", "tests/fixtures/gen2/receipts", "data/games")
+    for line in rows.splitlines():
+        rel = line[3:].strip('"')
         dest = out / "receipts" / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(lane / rel, dest)
         got[rel] = lf_sha256(dest)
+        if line.startswith("??"):
+            (lane / rel).unlink()
     git(lane, "checkout", "--", ".")
     return got
+
+
+def pin(out, root=REPO):
+    """Install the PASS cells' receipts from a sweep's `out` and repin them; returns the receipts no row names."""
+    summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+    pins = {rel: sha for cell in summary["cells"] if cell["ok"] for rel, sha in cell.get("receipts", {}).items()}
+    for rel in pins:
+        shutil.copyfile(out / "receipts" / rel, root / rel)
+    named = set()
+    for name in PIN_FILES:
+        path = root / name
+        text = path.read_text(encoding="utf-8")
+        for rel, sha in pins.items():
+            pattern = re.compile(r'("path": "' + re.escape(rel) + r'",\s*"sha256": ")[0-9a-f]{64}"')
+            text, hits = pattern.subn(lambda m, sha=sha: m.group(1) + sha + '"', text)
+            if hits:
+                named.add(rel)
+        if name.endswith("live_gate_requirements.json") and ATTESTATION in pins and '"kind": "inspect_run"' not in text:
+            at = text.rindex("\n  ]")
+            text = text[:at] + ",\n" + INSPECT_ROW % (ATTESTATION, pins[ATTESTATION]) + text[at:]
+            named.add(ATTESTATION)
+        path.write_text(text, encoding="utf-8", newline="\n")
+    return sorted(rel for rel in pins if rel not in named and rel.endswith((".txt", ".json")))
 
 
 def run_cell(cell, lane, n, out, stagger):
@@ -204,7 +251,13 @@ def main(argv=None):
     parser.add_argument("--only", nargs="*", help="cell ids (exact) to run instead of all")
     parser.add_argument("--stagger", type=float, default=10.0, help="seconds between cell starts (preflight ~9 s)")
     parser.add_argument("--out", type=Path, default=LANE_ROOT / f"fsw-{time.strftime('%m%d-%H%M')}")
+    parser.add_argument("--pin", type=Path, metavar="OUT", help="install and repin a finished sweep's PASS receipts")
     args = parser.parse_args(argv)
+    if args.pin:
+        loose = pin(args.pin)
+        print("[sweep] pinned; receipts no requirement row names:" if loose else "[sweep] pinned; every receipt named")
+        print("\n".join(loose))
+        return 0
     todo = [c for c in cells() if not args.only or c["id"] in args.only]
     if args.only and len(todo) != len(set(args.only)):
         parser.error(f"unknown cell(s): {sorted(set(args.only) - {c['id'] for c in todo})}")
