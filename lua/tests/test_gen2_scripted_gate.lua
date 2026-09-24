@@ -197,9 +197,12 @@ function G.inputs(getenv, json)
     -- An errand fixture (tools/gen2_fixtures.ERRAND_FIXTURES) is named by its facts: only errand facts carry
     -- the errand events, so a plain battle case can never run the errand route or vice versa.
     local errand = type(facts.observer) == "table" and facts.observer.errand_events ~= nil
+    -- The one exception: the gen2_ball_gate duo (case.ball_gate) plays the errand from a zero-Ball town fixture
+    -- (docs/gen2/reviews/DUO_WAVE_D_FACTS_2026-09-24.md), so its case keeps the town fixture's name.
+    local town_errand = errand and case.target == "town" and case.ball_gate == true
     assert(case.name == env.title .. "_" .. case.target .. (case.identity == "ot2" and "_ot2" or "")
-           .. (errand and "_errand" or ""), "fixture case name mismatch")
-    assert(not errand or case.target == "battle", "the errand ends as a battle fixture")
+           .. ((errand and not town_errand) and "_errand" or ""), "fixture case name mismatch")
+    assert(not errand or case.target == "battle" or town_errand, "the errand ends as a battle fixture")
     assert(type(case.attempt_id) == "string" and #case.attempt_id <= 80 and case.attempt_id:match("^[%w_%-]+$"),
            "bounded attempt ID required")
     assert(integer(case.max_frames, 1, 1000000) and integer(case.max_phase_frames, 1, case.max_frames)

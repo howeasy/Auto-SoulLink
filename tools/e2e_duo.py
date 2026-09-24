@@ -87,6 +87,12 @@ SCENARIOS = {
               "target": {"a": "battle", "b": "battle_ot2"},
               "oracle": f"assert_{name}_saved", "oracle_kwargs": {}}
        for name in ("gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild")},
+    # DUO-WAVE-D (D-2): zero-Ball town fixtures, the errand played in the duo for the aide's natural Balls
+    # (docs/gen2/reviews/DUO_WAVE_D_FACTS_2026-09-24.md section 1); C-C and G-S only (GEN2_BALL_GATE_FIXTURES).
+    "gen2_ball_gate": {"flags": [], "timeout": 7200, "games": ("gen2_new",),
+                       "no_setup": True, "frames": 600000,
+                       "target": {"a": "town", "b": "town_ot2"},
+                       "oracle": "assert_gen2_ball_gate_saved", "oracle_kwargs": {}},
     "gen2_faint_active": {"flags": [], "timeout": 3000, "games": ("gen2_new",),
                           "no_setup": True, "frames": 432000,
                           "target": {"a": "battle", "b": "battle_ot2"},
@@ -291,6 +297,8 @@ def scenario_applies(name, game):
     # Native trade runs only on the pairings with trade seeds: C-C and G-S (owner Q10: C-G trade refused).
     if name in GEN2_TRADE_SCENARIOS and game not in GEN2_TRADE_FIXTURES:
         return False
+    if name == "gen2_ball_gate" and game not in GEN2_BALL_GATE_FIXTURES:
+        return False
     if allowed is None:
         return game not in OPT_IN_GAMES and family not in OPT_IN_GAMES
     return game in allowed or family in allowed
@@ -464,6 +472,8 @@ def scenario_attempt_limit(name, game):
     """
     if scenario_family(game) == "gen2_new" and name in GEN2_CLAUSE_SCENARIOS:
         return 3
+    if scenario_family(game) == "gen2_new" and name == "gen2_ball_gate":
+        return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)
     if scenario_family(game) != "gen1_new" or name == "ball_gate_new":
         return 1
     if name == "species_clause_new":
@@ -981,6 +991,12 @@ GEN2_TRADE_FIXTURES = {
 # Gold has no day POISON_STING foe south of the Route 30 battle demo: its poison A plays the
 # post-errand save (U1 ruling, tests/live/test_gen2_frame_align.py U1_FIXTURE); cc/cg keep the pairing.
 GEN2_POISON_FIXTURES = {"gen2_gold_silver": {"a": "gold_battle_errand"}}
+# gen2_ball_gate boots the zero-Ball town fixtures (Elm's lab after the starter) and plays the errand itself.
+GEN2_BALL_GATE_FIXTURES = {"gen2_new": {"a": "crystal_town", "b": "crystal_town_ot2"},
+                           "gen2_gold_silver": {"a": "gold_town", "b": "silver_town"}}
+# F.driver's refusal when the Ball pocket is empty (lua/tests/gen2_frame_align.lua): five natural Balls at ~33% a
+# throw miss about 13% of full-HP catches, so the lane may retry once on exactly this reason.
+GEN2_OUT_OF_BALLS = "no Poke Ball left in the pocket"
 GEN2_WAVE_C = {"gen2_whiteout": ("whiteout_oracle", "repair"), "gen2_pc_ops": ("pc_ops_oracle", "release"),
                "gen2_changebox": ("changebox_oracle", "box_change"), "gen2_poison": ("poison_oracle", "death"),
                "gen2_whiteout_rebuild": ("whiteout_rebuild_oracle", "rebuild")}
@@ -1006,6 +1022,8 @@ def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
             name = GEN2_TRADE_FIXTURES[game][inst]
         if scenario == "gen2_poison":
             name = GEN2_POISON_FIXTURES.get(game, {}).get(inst, name)
+        if scenario == "gen2_ball_gate":
+            name = GEN2_BALL_GATE_FIXTURES[game][inst]
         if name not in BY_NAME:
             raise FileNotFoundError(f"Gen 2 lane missing played/qualified fixture declaration: {name}")
         title = BY_NAME[name].title
@@ -1699,8 +1717,19 @@ class DuoRun:
             facts = gen2_fixtures.spec_route_facts(gen2_fixtures.BY_NAME[row["name"]], Path(REPO))
             env = inspect_env(gen2_fixtures.BY_NAME[row["name"]], row["fixture"].read_bytes(),
                               repo=Path(REPO))
+            if self.scenario == "gen2_ball_gate":
+                # the town fixture plays the errand: errand route facts + ledges, qualify facts over the same
+                # fingerprint, and the case flag the shared gate admits a town case with errand facts on
+                facts = gen2_fixtures.route_facts(row["title"], Path(REPO), errand=True)
+                qualify = json.loads(env["SLINK_GEN2_QUALIFY"])
+                qualify["facts"] = gen2_fixtures.qualify_facts(row["title"], Path(REPO), errand=True)
+                env.update(SLINK_GEN2_ROUTE_FACTS=json.dumps(facts), SLINK_GEN2_QUALIFY=json.dumps(qualify),
+                           SLINK_GEN2_ROUTE_LEDGES=json.dumps(gen2_fixtures.route_ledges(row["title"], facts,
+                                                                                        Path(REPO))))
             case = json.loads(env["SLINK_GEN2_FIXTURE_CASE"])
             case["attempt_id"] = f"duo-{self.scenario}-{inst}-{self.attempt}-{uuid.uuid4().hex}"
+            if self.scenario == "gen2_ball_gate":
+                case["ball_gate"] = True
             env["SLINK_GEN2_FIXTURE_CASE"] = json.dumps(case)
             env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, facts, row["qualification_attempt_id"]))
             if self.scenario in GEN2_TRADE_SCENARIOS:
@@ -1726,12 +1755,16 @@ class DuoRun:
             driver_files += ["lua/tests/gen2_poison_inputs.lua", "lua/tests/gen2_walk.lua"]
         if self.scenario in GEN2_CLAUSE_SCENARIOS:
             driver_files.append("lua/tests/duo/gen2_clause.lua")
+        if self.scenario == "gen2_ball_gate":
+            driver_files += ["lua/tests/duo/gen2_ball_gate_inputs.lua", "lua/tests/gen2_scripted_play.lua",
+                             "lua/tests/gen2_walk.lua"]
         for path in driver_files:
             if not (Path(REPO) / path).is_file():
                 raise FileNotFoundError(f"Gen 2 duo driver missing: {path}")
         oracle = importlib.import_module("gen2_duo_oracles")
         oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle", "gen2_faint_active": "faint_active_oracle", "gen2_reconnect": "reconnect_oracle",
                        "gen2_admit_wrong_rom": "admit_wrong_rom_oracle", "gen2_soft_reset": "soft_reset_oracle",
+                       "gen2_ball_gate": "ball_gate_oracle",
                        **{name: row[0] for name, row in GEN2_WAVE_C.items()},
                        **dict.fromkeys(GEN2_CLAUSE_SCENARIOS, "clause_oracle"),
                        **dict.fromkeys(GEN2_TRADE_SCENARIOS, "trade_oracle")}[self.scenario]
@@ -2056,6 +2089,12 @@ class DuoRun:
         oracle = importlib.import_module("gen2_duo_oracles")
         return oracle.faint_oracle(results, data_dir=self.data_dir,
             on_verified=self._record_gen2_facts,
+            ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
+
+    def assert_gen2_ball_gate_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.ball_gate_oracle(results, data_dir=self.data_dir, on_verified=self._record_gen2_facts,
             ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
             boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
 
@@ -5013,6 +5052,8 @@ def list_lines(game):
             targets = GEN2_TRADE_FIXTURES[game]
         if name == "gen2_poison":
             targets = {**targets, **GEN2_POISON_FIXTURES.get(game, {})}
+        if name == "gen2_ball_gate":
+            targets = GEN2_BALL_GATE_FIXTURES[game]
         shown = (", ".join(f"{inst}:{targets[inst]}" for inst in ("a", "b"))
                  if isinstance(targets, dict) else targets)
         lines.append(f"{name}  attempts={scenario_attempt_limit(name, game)}  targets={shown}")
@@ -5184,6 +5225,11 @@ def run_scenario_with_rng_retry(name, args):
                     early_finish=getattr(run, "_gen2_species_early_finish", None),
                     pending_snapshot=getattr(run, "_gen2_clause_pending", None))):
             print(f"[duo] {name}: duplicates-only hunt; retrying fresh lane")
+            continue
+        if (not ok and name == "gen2_ball_gate" and attempt < limit
+                and any(line.startswith("RESULT: FAIL") and GEN2_OUT_OF_BALLS in line
+                        for inst in ("a", "b") for line in (receipts.get(inst) or "").splitlines())):
+            print(f"[duo] {name}: a side ran out of the aide's natural Balls; retrying fresh lane")
             continue
         if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt, limit):
             return ok, attempt

@@ -30,7 +30,7 @@ from e2e_duo import (  # noqa: E402
 )
 
 EXPECTED_GEN2 = ["link", "gen2_faint", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison",
-                 "gen2_whiteout_rebuild",
+                 "gen2_whiteout_rebuild", "gen2_ball_gate",
                  "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause",
                  "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset"]
 EXPECTED_GEN2_TRADE = ["gen2_trade_decline_new", "gen2_trade_evolve", "gen2_trade_new", "gen2_trade_refuse_item",
@@ -272,6 +272,13 @@ def test_gen2_reconnect_orchestration_keeps_b_online_and_archives_initial_a(monk
 def test_gen2_new_selects_link_and_faint_with_required_evidence():
     assert "gen2_new" in GAMES
     assert scenarios_for("gen2_new") == EXPECTED_GEN2_TRADE + EXPECTED_GEN2
+    # gen2_ball_gate boots the zero-Ball town fixtures on C-C and G-S only (duo-pairs needs no C-G cell)
+    pairs = ("gen2_new", "gen2_gold_silver", "gen2_crystal_gold")
+    assert [scenario_applies("gen2_ball_gate", g) for g in pairs] == [True, True, False]
+    assert scenario_attempt_limit("gen2_ball_gate", "gen2_new") == 2
+    assert duo_module.GEN2_BALL_GATE_FIXTURES == {"gen2_new": {"a": "crystal_town", "b": "crystal_town_ot2"},
+                                                  "gen2_gold_silver": {"a": "gold_town", "b": "silver_town"}}
+    assert callable(getattr(DuoRun, SCENARIOS["gen2_ball_gate"]["oracle"], None))
     contract = duo_module.evidence_contract("gen2_new")
     assert contract.require_oracle and contract.witness_validator
     assert callable(getattr(DuoRun, contract.witness_validator, None))
@@ -293,7 +300,8 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
     assert GAMES[game]["game"] == "gen2_new"
     assert GAMES[game]["fixture"] == fixtures
     trade = EXPECTED_GEN2_TRADE if game != "gen2_crystal_gold" else []   # owner Q10: no C-G native trade
-    assert scenarios_for(game) == trade + EXPECTED_GEN2
+    expected = [one for one in EXPECTED_GEN2 if one != "gen2_ball_gate" or game != "gen2_crystal_gold"]
+    assert scenarios_for(game) == trade + expected
     assert duo_module.evidence_contract(game) is duo_module.evidence_contract("gen2_new")
     assert not GAMES[game].get("server_rom_routes")
     trade_fixtures = duo_module.GEN2_TRADE_FIXTURES.get(game)
@@ -303,7 +311,10 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
         f"{scenario}  attempts={3 if scenario in duo_module.GEN2_CLAUSE_SCENARIOS else 1}  targets="
         f"a:{'gold_battle_errand' if scenario == 'gen2_poison' and game == 'gen2_gold_silver' else fixtures['a']}, "
         f"b:{'crystal_battle_ot2' if scenario == 'gen2_admit_wrong_rom' else fixtures['b']}"
-        for scenario in EXPECTED_GEN2]
+        if scenario != "gen2_ball_gate" else
+        f"{scenario}  attempts=2  targets=a:{duo_module.GEN2_BALL_GATE_FIXTURES[game]['a']}, "
+        f"b:{duo_module.GEN2_BALL_GATE_FIXTURES[game]['b']}"
+        for scenario in expected]
 
 
 @pytest.mark.parametrize("game,titles,names", (
@@ -650,7 +661,7 @@ def test_the_pytest_wrappers_agree_with_the_runner():
     mod = __import__("test_duo_gen2_new")
     for game in mod.PAIRINGS:   # the wrapper skips what a pairing does not register (C-G trade, Q10)
         assert set(scenarios_for(game)) <= set(mod.SCENARIOS)
-        assert set(mod.SCENARIOS) - set(scenarios_for(game)) <= set(duo_module.GEN2_TRADE_SCENARIOS)
+        assert set(mod.SCENARIOS) - set(scenarios_for(game)) <= set(duo_module.GEN2_TRADE_SCENARIOS) | {"gen2_ball_gate"}
     assert set(mod.SCENARIOS) == set().union(*(scenarios_for(game) for game in mod.PAIRINGS))
 
 

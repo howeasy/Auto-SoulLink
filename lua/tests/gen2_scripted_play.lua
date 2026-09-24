@@ -84,9 +84,13 @@ function P.new(facts, case)
     -- The Gold errand (tools/gen2_fixtures.ERRAND_FIXTURES; docs/gen2/reviews/OMP_GOLD_ERRAND_FACTS_2026-09-23.md):
     -- only errand facts carry its events, maps and the naming-screen origin.
     local errand = facts.observer.errand_events ~= nil
+    -- The gen2_ball_gate duo (docs/gen2/reviews/DUO_WAVE_D_FACTS_2026-09-24.md): case.resume starts mid-chain
+    -- (a warm town fixture, the bedroom entry already behind it); case.natural_balls replaces the O-10 staging
+    -- with the errand, whose aide hands over the first Balls (C maps/ElmsLab.asm:504, G :461).
+    assert(case.natural_balls ~= true or errand, "natural Balls come only from the errand's aide: errand facts required")
     local handed, naming_start = false, true
     local self = {terminal="route-saved",phase="new-game",qualified=false}
-    local release, entered, injection_pending, save_counter = false, false, false, nil
+    local release, entered, injection_pending, save_counter = false, case.resume == true, false, nil
     assert(integer(case.title_idle_frames,0,40000), "bounded requested title idle required")
     local title_started = nil
 
@@ -319,7 +323,7 @@ function P.new(facts, case)
         if case.target == "battle" then
             local found,why = has_balls(point)
             if found == nil then return nil,why end
-            if not found then
+            if not found and case.natural_balls ~= true then
                 if injection_pending then return {},self.phase end
                 if not matches(point,maps.ElmsLab) or point.ball_pocket.count ~= 0 then
                     return nil,"O-10 only permits the empty Ball pocket at the settled lab checkpoint"

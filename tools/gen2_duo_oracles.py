@@ -333,7 +333,7 @@ def _ball_pocket(raw, layout):
 
 
 def _pair_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_saveram=None,
-                 status="alive", snapshots=None):
+                 status="alive", snapshots=None, pocket_check=None):
     """post-result oracle: `oracle(results, **oracle_kwargs)` (see module docstring).
 
     Compares the two flushed saves (PYDEC via gen2_codec, each decoded with ITS OWN side's
@@ -420,7 +420,9 @@ def _pair_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_sav
         before_pocket, after_pocket = _ball_pocket(boot, layout), _ball_pocket(flushed, layout)
         before_total = sum(qty for _item, qty in before_pocket)
         after_total = sum(qty for _item, qty in after_pocket)
-        if after_total >= before_total:
+        if pocket_check is not None:   # gen2_ball_gate: a zero-Ball boot, so "decreased" cannot hold
+            pocket_check(inst, before_pocket, after_pocket)
+        elif after_total >= before_total:
             raise RuntimeError(f"{inst}: Ball pocket did not decrease: {before_pocket} -> "
                                f"{after_pocket} -- unchanged Ball pocket")
 
@@ -2005,3 +2007,88 @@ def whiteout_rebuild_oracle(results, *, data_dir, area_id="route_29", ot_ids=Non
             on_verified(facts)
     except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError, StopIteration) as exc:
         raise RuntimeError(f"whiteout rebuild evidence missing or malformed: {exc}") from exc
+
+
+# --- gen2_ball_gate (D-2, card DUO-WAVE-D; docs/gen2/reviews/DUO_WAVE_D_FACTS_2026-09-24.md section 1) -----------
+
+POKE_BALL = 5            # const POKE_BALL ; 05 (C/G constants/item_constants.asm:13)
+AIDE_BALLS = 5           # giveitem POKE_BALL, 5 (C maps/ElmsLab.asm:504, G :461)
+
+
+def _ball_need(condition, reason):
+    if not condition:
+        raise RuntimeError(f"ball_gate: {reason}")
+
+
+def _ball_gate_side(inst, text, boot_path, layout):
+    """One side's zero-Ball start, pre-Ball encounter/faint and flip, in line order; returns the starter key."""
+    from server.adapters import gen2_codec as codec
+    from tools.gen2_fixtures import BY_NAME
+
+    duo = _duo_marker(inst, text)
+    _ball_need(BY_NAME[duo["case"]].target == "town", f"{inst} booted {duo['case']!r}, not a zero-Ball town fixture")
+    boot = Path(boot_path).read_bytes()[:CARTRAM_BYTES]
+    _ball_need(_ball_pocket(boot, layout) == [], f"{inst} boot fixture already holds Poke Balls")
+    starter = codec.key(codec.decode_saved_party(boot, layout, copy_name="primary")["mons"][0])
+    rows = {tag: _tag_rows(text, tag) for tag in ("HELLO", "BALL_PRE", "BALL_FLIP", "ENGINE_FAINT", "FAINT_SENT",
+                                                  "ENGINE_CAPTURE")}
+    for tag in ("HELLO", "BALL_PRE", "BALL_FLIP"):
+        _ball_need(len(rows[tag]) >= 1 and (tag == "HELLO" or len(rows[tag]) == 1), f"{inst} needs one {tag}")
+    (_, hello), (pre_at, pre), (flip_at, flip) = rows["HELLO"][0], rows["BALL_PRE"][0], rows["BALL_FLIP"][0]
+    _ball_need(hello.get("has_pokeballs") is False and hello.get("ball_count") == 0,
+               f"{inst} first hello already had Poke Balls")
+    _ball_need(pre.get("has_pokeballs") is False and pre.get("ball_count") == 0 and pre.get("area_id") == "route_29",
+               f"{inst} pre-Ball encounter is not a zero-Ball route_29 battle")
+    _ball_need(flip.get("has_pokeballs") is True and 1 <= (flip.get("ball_count") or 0) <= AIDE_BALLS
+               and pre_at < flip_at, f"{inst} Ball flip is not the aide's natural stack after the encounter")
+    captures = [at for at, _ in rows["ENGINE_CAPTURE"]]
+    _ball_need(captures and min(captures) > flip_at, f"{inst} caught before the Ball flip")
+    faints = [at for at, row in rows["ENGINE_FAINT"] if row.get("site_id") == "battle_faint" and at < flip_at]
+    _ball_need(faints and all(row.get("key") == starter for at, row in rows["ENGINE_FAINT"] if at < flip_at),
+               f"{inst} no pre-Ball battle_faint of the starter {starter}")
+    _ball_need(any(row.get("key") == starter and min(faints) < at < flip_at for at, row in rows["FAINT_SENT"]),
+               f"{inst} the pre-Ball starter faint was never sent")
+    for at, line in enumerate(text.splitlines()):
+        if line.startswith("TX ") and at < flip_at:
+            event = re.search(r'"event"\s*:\s*"(\w+)"', line)
+            _ball_need(not event or event.group(1) not in ("no_catch", "capture"),
+                       f"{inst} sent {event and event.group(1)} before the first Ball")
+        if line.startswith(("RX force_faint", "RX memorialize")):
+            _ball_need(False, f"{inst} received a death command: {line}")
+    return starter
+
+
+def ball_gate_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_saveram=None, on_verified=None):
+    """D-2: zero-Ball starts, a pre-Ball encounter that resolves nothing and a pre-Ball faint the server suppresses,
+    the aide's natural Balls opening the server gate, then one alive route_29 pair from the first post-Ball catches.
+    Every fact is re-read from the flushed saves, the boot fixtures, links.json and slink.log; the driver's marker
+    lines only locate them. No SYNTH field (O-33) is involved."""
+    from server.adapters import gen2_codec as codec
+
+    boot_saveram = dict(boot_saveram) if boot_saveram else {}
+    starters = {}
+    for inst in ("a", "b"):
+        text = (results or {}).get(inst) or ""
+        _witness, _client, title = _boot_marker(inst, text)
+        duo = _duo_marker(inst, text)
+        boot = Path(boot_saveram[inst]) if inst in boot_saveram else _fixture_path(duo["case"])
+        starters[inst] = _ball_gate_side(inst, text, boot if boot.is_absolute() else REPO_ROOT / boot,
+                                         codec.for_foundation(title))
+
+    def natural(inst, before, after):
+        _ball_need(before == [] and len(after) == 1 and after[0][0] == POKE_BALL
+                   and 1 <= after[0][1] < AIDE_BALLS,
+                   f"{inst} Ball pocket {before} -> {after} is not the aide's natural stack minus the thrown Balls")
+
+    decoded, _row, document = _pair_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids,
+                                           boot_saveram=boot_saveram, pocket_check=natural)
+    _ball_need(document.get("pokeballs_obtained") == {"a": True, "b": True},
+               f"server pokeballs_obtained {document.get('pokeballs_obtained')!r}, expected both True")
+    _ball_need(len(document.get("links") or []) == 1,
+               "expected exactly one link: the pre-Ball encounters and faints must form or kill none")
+    log = (Path(data_dir) / "slink.log").read_text(encoding="utf-8")
+    for inst in ("a", "b"):
+        _ball_need(f"[{inst}] faint key={starters[inst]}" in log, f"slink.log lacks {inst}'s pre-Ball starter faint")
+    _ball_need("faint →" not in log, "the server issued a death command for a pre-Ball faint")
+    if on_verified is not None:
+        on_verified(_verified_facts(decoded, area_id, "alive"))

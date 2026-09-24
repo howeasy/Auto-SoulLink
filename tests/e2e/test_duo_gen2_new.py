@@ -19,7 +19,7 @@ pytestmark = [
 ]
 
 GAME = "gen2_new"
-SCENARIOS = ("link", "gen2_faint", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset",
+SCENARIOS = ("link", "gen2_faint", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild", "gen2_ball_gate", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset",
              "gen2_trade_new", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait",
              "gen2_trade_reset_commit", "gen2_trade_refuse_item", "gen2_trade_evolve")
 LANE = "gen2-cc-link"

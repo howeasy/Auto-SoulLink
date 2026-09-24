@@ -139,7 +139,7 @@ C.send = function(line)
     rec.tx = rec.tx + 1
     if event == "tick" then rec.ticks = rec.ticks + 1 end
     if event == "hello" then
-        local hello = {frame=emu.framecount(), ot_id=msg.ot_id}
+        local hello = {frame=emu.framecount(), ot_id=msg.ot_id, has_pokeballs=msg.has_pokeballs, ball_count=msg.ball_count}
         rec.hellos[#rec.hellos + 1] = hello
         if sent.hello == nil then
             sent.hello = hello
@@ -221,7 +221,9 @@ end
 local ok, ctx = pcall(function()
     local c = SG.context(TR and TR.context_api(api, os.getenv) or api, os.getenv)
     assert(c.qualify ~= nil and c.qualify.stage == "boot", "SLINK_GEN2_QUALIFY stage \"boot\" required")
-    assert(c.case.target == "battle", "the link scenario runs on a battle fixture")
+    -- gen2_ball_gate (S.TOWN) is the one scenario that boots a zero-Ball town fixture, with the errand facts
+    assert(c.case.target == "battle" or (S.TOWN == true and c.case.target == "town" and c.case.ball_gate == true),
+           "the link scenario runs on a battle fixture")
     c.u1 = assert(json.decode(assert(os.getenv("SLINK_GEN2_U1_FACTS"), "SLINK_GEN2_U1_FACTS missing")))
     return c
 end)
@@ -288,7 +290,12 @@ gen2.on_event = function(self, ev)
         rec.client_saves = rec.client_saves + 1
         rec.save_completed_frame = emu.framecount()
     end
-    return _on_event(self, ev)
+    local result = _on_event(self, ev)
+    -- the area the production client resolved for the latest wild battle (its own area_of at wild_ready)
+    if type(ev) == "table" and ev.kind == "observation" and ev.site_id == "wild_ready" and type(self.battle) == "table" then
+        rec.wild_area = self.battle.area_id
+    end
+    return result
 end
 local _handle = gen2.handle_command
 gen2.handle_command = function(self, cmd)
@@ -571,6 +578,25 @@ function h.play(opts)
     return F.play(host, spec, driver, observe, {log=log, frame=api.framecount,
         screen=function() return SG.screen(ctx) end, where=function() return "-" end,
         trace=os.getenv("SLINK_GEN2_TRACE") == "1"})
+end
+-- Poke Balls in the live Ball pocket, through the gate's own decoder (never production's).
+function h.ball_count()
+    local pocket = ctx.reads.read_pocket("balls")
+    local n = 0
+    for _, entry in ipairs(pocket and pocket.entries or {}) do n = n + entry.quantity end
+    return n
+end
+-- gen2_ball_gate (lua/tests/duo/gen2_ball_gate_inputs.lua): mode "pre" (lab -> Route 29 grass, no Balls) or
+-- "post" (the errand and the aide's natural Balls -> Route 29 grass, a wild battle handed over still up).
+local BG = S.BALL_GATE and dofile(ROOT .. "/lua/tests/duo/gen2_ball_gate_inputs.lua") or nil
+function h.ball_gate_leg(mode)
+    local driver = BG.driver(ctx.Play, ctx.facts, ctx.case, mode)
+    local left = math.max(1, timeout - api.framecount())
+    return F.play(host, {name="duo-gen2-ball-gate-" .. mode, terminal=driver.terminal, terminal_idle=true,
+                         max_frames=left, max_phase_frames=math.min(D.max_phase_frames or 40000, left),
+                         settle_frames=F.BUDGET.settle_frames},
+                  driver, SG.observer(ctx), {log=log, frame=api.framecount, screen=function() return SG.screen(ctx) end,
+                                             where=function() return "-" end, trace=os.getenv("SLINK_GEN2_TRACE") == "1"})
 end
 -- The flushed native save: CartRAM digest == the first 0x8000 bytes of the flushed SaveRAM file.
 local function flushed()
