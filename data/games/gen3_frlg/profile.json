@@ -4,7 +4,7 @@
   "schema": "gen3-profile-v1",
   "source": {
     "file": "lua/games/gen3_frlge.lua",
-    "git_head": "897fefc351a0eebe998bf8a0658c9b882d5d118f",
+    "git_head": "0866f406889ee12b262704ecf52aecd11dd246fd",
     "sha256": "f1cdd07ace8cbd8d0de65b49ad38bc455f258906501e028a568bb43c4e9375fd"
   },
   "titles": {
