@@ -96,6 +96,28 @@ HOPS = {"HOP_RIGHT": ("Right",), "HOP_LEFT": ("Left",), "HOP_UP": ("Up",), "HOP_
         "HOP_UP_LEFT": ("Up", "Left")}
 
 
+def collision_names(ctx, name, facts_map):
+    """Every step tile's collision constant name (COLL_ stripped), from the ROM blocks + tileset collision."""
+    width, height = facts_map["width"] // 2, facts_map["height"] // 2
+    _, blocks = gen2_fixtures.rom_bytes(ctx, name + "_Blocks", width * height)
+    header = next(line for _, line in gen2_fixtures.source_lines(ctx.read_source("data/maps/maps.asm"), ctx.title)
+                  if line.startswith("map " + name + ","))
+    tilesets = gen2_fixtures.constants(ctx.read_source("constants/tileset_constants.asm"), "TILESET_", ctx.title)
+    table = [line.split()[1] for _, line in gen2_fixtures.source_lines(ctx.read_source("data/tilesets.asm"), ctx.title)
+             if line.startswith("tileset ")]
+    symbol = table[tilesets[header.split(",")[1].strip()]] + "Coll"
+    include = re.search(rf"^{symbol}::?\s*\nINCLUDE \"([^\"]+)\"", ctx.read_source("gfx/tilesets.asm"), re.M)
+    names = []
+    for _, line in gen2_fixtures.source_lines(ctx.read_source(include[1]), ctx.title):
+        names.extend(token.strip() for token in line[9:].split(","))
+    return [[names[blocks[(y // 2) * width + x // 2] * 4 + (y % 2) * 2 + x % 2] for x in range(width * 2)]
+            for y in range(height * 2)]
+
+
+def collision_name(ctx, name, facts_map, x, y):
+    return collision_names(ctx, name, facts_map)[y][x]
+
+
 def ledges(ctx, name, facts_map):
     """The map's HOP_* tiles and their hop directions, from the same ROM blocks + tileset collision
     tools/gen2_fixtures._map_facts reads (which keeps ledges out of the walkable grid). A ledge is LAND the
@@ -122,6 +144,36 @@ def ledges(ctx, name, facts_map):
     return out
 
 
+def edge_leg(ctx, maps, source, side, target):
+    """{map, side, exits}: the source edge tiles whose connection partner tile is walkable too
+    (data/maps/attributes.asm `connection`; the offset is in blocks, target = source - 2 * offset)."""
+    attributes = ctx.read_source("data/maps/attributes.asm")
+    block = attributes.split(f"map_attributes {source},", 1)[1].split("map_attributes", 1)[0]
+    found = re.search(rf"^\s*connection {side}, {target}, \w+, (-?\d+)", block, re.M)
+    assert found, f"source connection missing: {source} {side} {target}"
+    offset = int(found[1])
+    a, b = maps[source], maps[target]
+    exits = []
+    for i in range(a["width"] if side in ("north", "south") else a["height"]):
+        j = i - 2 * offset
+        if side in ("north", "south"):
+            if not 0 <= j < b["width"]:
+                continue
+            ay, by_ = (0, b["height"] - 1) if side == "north" else (a["height"] - 1, 0)
+            ok = a["grid"][ay * a["width"] + i] and b["grid"][by_ * b["width"] + j]
+            tile = {"x": i, "y": ay}
+        else:
+            if not 0 <= j < b["height"]:
+                continue
+            ax, bx = (0, b["width"] - 1) if side == "west" else (a["width"] - 1, 0)
+            ok = a["grid"][i * a["width"] + ax] and b["grid"][j * b["width"] + bx]
+            tile = {"x": ax, "y": i}
+        if ok:
+            exits.append(tile)
+    assert exits, f"no walkable edge tile: {source} -> {target}"
+    return {"map": source, "side": SIDE[side], "exits": exits}
+
+
 def connected(facts_map, start, goals, avoid):
     width, grid = facts_map["width"], facts_map["grid"]
     seen, todo = {start}, [start]
@@ -138,8 +190,90 @@ def connected(facts_map, start, goals, avoid):
     return False
 
 
+# card gen2-u1f-pc: after the U1e chain's closing whiteout, a second catch, then Bill's PC at the Cherrygrove
+# #MON CENTER (lua/tests/gen2_pc_inputs.lua). whiteout_before_heal is proven by its own guard-matching record
+# (F.whiteout_problem), not by the hit log, since `Special` is a hot shared site.
+U1F_TITLES = ("crystal", "gold", "silver")
+U1F_SITES = ("pc_deposit_begin", "pc_deposit_complete", "pc_withdraw_begin", "pc_withdraw_complete",
+             "change_box_begin", "change_box_loaded", "pc_release_box_begin", "pc_release_box_complete",
+             "pc_release_party_begin", "pc_release_party_complete")
+# where each title's closing whiteout lands: GetWhiteoutSpawn (engine/events/whiteout.asm) -> wLastSpawnMap,
+# SPAWN_HOME = PlayersHouse2F (3,3) before the errand; the errand's `blackoutmod CHERRYGROVE_CITY`
+# (pokegold maps/MrPokemonsHouse.asm:37) moves Gold's to Cherrygrove.
+U1F_TO_GRASS = {"PlayersHouse2F": ("warp", "PLAYERS_HOUSE_1F"), "PlayersHouse1F": ("warp", "NEW_BARK_TOWN"),
+                "NewBarkTown": ("edge", "west", "Route29"), "CherrygroveCity": ("edge", "east", "Route29"),
+                "CherrygrovePokecenter1F": ("warp", "CHERRYGROVE_CITY"), "Route29": ("grass",)}
+U1F_TO_PC = {"PlayersHouse2F": ("warp", "PLAYERS_HOUSE_1F"), "PlayersHouse1F": ("warp", "NEW_BARK_TOWN"),
+             "NewBarkTown": ("edge", "west", "Route29"), "Route29": ("edge", "west", "CherrygroveCity"),
+             "CherrygroveCity": ("warp", "CHERRYGROVE_POKECENTER_1F"), "CherrygrovePokecenter1F": ("pc",)}
+
+
 def expect_for(title):
-    return POISON_EXPECT if title in POISON_TITLES else EXPECT
+    out = POISON_EXPECT if title in POISON_TITLES else EXPECT
+    return out + U1F_SITES + ("whiteout_before_heal",) if title in U1F_TITLES else out
+
+
+def u1f_facts(ctx) -> dict:
+    """Maps, per-map legs to the Route 29 grass and to the Cherrygrove #MON CENTER PC, the PC tile, the Bill's PC
+    UI origins and the PC RAM symbols the PC leg reads its cursors and counts from."""
+    areas = {row["map_const"]: row for row in gen2_fixtures.build_area_map(ctx).values()}
+    by_name = {row["map_name"]: row for row in areas.values()}
+    names = sorted(set(U1F_TO_GRASS) | set(U1F_TO_PC) | {"Route29", "CherrygroveCity"})
+    maps = {name: gen2_fixtures._map_facts(ctx, by_name[name], areas) for name in names}
+    for name, facts_map in maps.items():
+        facts_map["ledges"] = ledges(ctx, name, facts_map)
+
+    def legs(plan):
+        out = {}
+        for name, step in plan.items():
+            if step[0] == "warp":
+                warp = next(w for w in maps[name]["warps"] if w["destination"] == step[1])
+                out[name] = {"kind": "warp", "tile": {"x": warp["x"], "y": warp["y"]}, "carpet": warp["carpet"]}
+            elif step[0] == "edge":
+                out[name] = dict(edge_leg(ctx, maps, name, step[1], step[2]), kind="edge")
+            else:
+                out[name] = {"kind": step[0]}
+        return out
+
+    center = maps["CherrygrovePokecenter1F"]
+    # The PC is the COLL_PC tile of the shared Pokecenter1F layout (row 1); it is used facing it from below
+    # (PokemonCenterPC, engine/events/pokecenter_pc.asm:15-41, via the facing-tile collision).
+    pc = [(x, y) for y in range(center["height"]) for x in range(center["width"])
+          if collision_name(ctx, "CherrygrovePokecenter1F", center, x, y) == "PC"]
+    assert len(pc) == 1, pc
+    stand = {"x": pc[0][0], "y": pc[0][1] + 1}
+    assert center["grid"][stand["y"] * center["width"] + stand["x"]] == 1, "PC stand tile not floor"
+
+    def site(symbol):
+        return {k: v for k, v in gen2_fixtures._code_site(ctx, symbol).items() if k != "symbol_offset"}
+
+    # Bill's PC UI origins, each read from the pinned source (C/G engine/events/pokecenter_pc.asm,
+    # engine/pokemon/bills_pc_top.asm, engine/pokemon/bills_pc.asm):
+    #   pc_top          PokemonCenterPC.loop (the BILL's PC / <PLAYER>'s PC / TURN OFF menu, :31-41)
+    #   bills_pc        _BillsPC.loop (WITHDRAW / DEPOSIT / CHANGE BOX / MOVE W/O MAIL / SEE YA!, :49-66)
+    #   deposit_list    _DepositPKMN.HandleJoypad (per frame, bills_pc.asm:72)
+    #   deposit_menu    _DepositPKMN.Submenu (DEPOSIT / STATS / RELEASE / CANCEL, :130-133, :228-240)
+    #   withdraw_list   _WithdrawPKMN.Joypad (per frame)
+    #   withdraw_menu   BillsPC_Withdraw (WITHDRAW / STATS / RELEASE / CANCEL)
+    #   box_list        _ChangeBox.loop (the BOX1..BOX14 scrolling list, SetDefaultBoxNames intro_menu.asm:148-178)
+    #   box_menu        BillsPC_ChangeBoxSubmenu (SWITCH / NAME / PRINT / QUIT)
+    ui = {"pc_top": site("PokemonCenterPC.loop"), "bills_pc": site("_BillsPC.loop"),
+          "deposit_list": site("_DepositPKMN.HandleJoypad"), "deposit_menu": site("_DepositPKMN.Submenu"),
+          "withdraw_list": site("_WithdrawPKMN.Joypad"), "withdraw_menu": site("BillsPC_Withdraw"),
+          "box_list": site("_ChangeBox.loop"), "box_menu": site("BillsPC_ChangeBoxSubmenu")}
+    ram = {}
+    for name in ("wBillsPC_CursorPosition", "wBillsPC_ScrollPosition", "wCurBox", "sBoxCount"):
+        symbol = ctx.symbol(name)
+        ram[name] = {"bank": symbol.bank, "addr": symbol.address}
+    common = "".join(ctx.read_source(f"data/text/common_{n}.asm") for n in (1, 2, 3))
+    source_pc = ctx.read_source("engine/pokemon/bills_pc.asm")
+    assert 'PCString_ReleasePKMN: db "Release <PK><MN>?@"' in source_pc, "release anchor left the source"
+    assert 'cont "will be saved. OK?"' in common, "change-box save anchor left the source"
+    return {"maps": maps, "to_grass": legs(U1F_TO_GRASS), "to_pc": legs(U1F_TO_PC), "center": "CherrygrovePokecenter1F",
+            "pc_stand": stand, "ui": ui, "menus": ["pc_top", "bills_pc", "deposit_menu", "withdraw_menu", "box_list",
+                                                   "box_menu"],
+            "loops": ["deposit_list", "withdraw_list"], "ram": ram,
+            "prompts": {"release": ["Release "], "change_box_save": ["will be saved"]}}
 
 
 def poison_facts(ctx) -> dict:
@@ -152,34 +286,10 @@ def poison_facts(ctx) -> dict:
     maps = {name: gen2_fixtures._map_facts(ctx, by_name[name], areas) for name in sorted(names)}
     for name, facts_map in maps.items():
         facts_map["ledges"] = ledges(ctx, name, facts_map)
-    attributes = ctx.read_source("data/maps/attributes.asm")
     legs = []
     for source, side, target in route:
-        block = attributes.split(f"map_attributes {source},", 1)[1].split("map_attributes", 1)[0]
-        found = re.search(rf"^\s*connection {side}, {target}, \w+, (-?\d+)", block, re.M)
-        assert found, f"source connection missing: {source} {side} {target}"
-        offset = int(found[1])
-        a, b = maps[source], maps[target]
-        exits = []
-        # the connection offset is in blocks: the target coordinate along the edge = source - 2 * offset
-        for i in range(a["width"] if side in ("north", "south") else a["height"]):
-            j = i - 2 * offset
-            if side in ("north", "south"):
-                if not 0 <= j < b["width"]:
-                    continue
-                ay, by_ = (0, b["height"] - 1) if side == "north" else (a["height"] - 1, 0)
-                ok = a["grid"][ay * a["width"] + i] and b["grid"][by_ * b["width"] + j]
-                tile = {"x": i, "y": ay}
-            else:
-                if not 0 <= j < b["height"]:
-                    continue
-                ax, bx = (0, b["width"] - 1) if side == "west" else (a["width"] - 1, 0)
-                ok = a["grid"][i * a["width"] + ax] and b["grid"][j * b["width"] + bx]
-                tile = {"x": ax, "y": i}
-            if ok:
-                exits.append(tile)
-        assert exits, f"no walkable edge tile: {source} -> {target}"
-        leg = {"map": source, "side": SIDE[side], "exits": exits}
+        leg = edge_leg(ctx, maps, source, side, target)
+        exits = leg["exits"]
         # Stay out of fixed-facing trainers' sight where the grid leaves another way (Gold Route 30: Joey at
         # (6,29) is avoided; Mikey's one tile (5,24) is the only aisle north, row 24 x=2-4 being HOP_DOWN ledges).
         avoid = []
@@ -278,6 +388,9 @@ def u1_facts(ctx, facts, qualification_attempt_id: str) -> dict:
         prompts["nurse_heal"] = ["Shall we heal your"]
     out = {"pack_ui": pack_ui, "faint_ui": {kind: site(symbol) for kind, symbol in FAINT_UI.items()},
            "decoy": decoy, "prompts": prompts, "qualification_attempt_id": qualification_attempt_id}
+    if ctx.title in U1F_TITLES:
+        out["pc"] = u1f_facts(ctx)
+        prompts.update(out["pc"]["prompts"])
     if ctx.title in POISON_TITLES:
         out["poison"] = poison_facts(ctx)
     return out
@@ -297,12 +410,15 @@ def verify(text: str, pack: dict, title: str) -> dict:
             assert (row["pc"], row["bank"], row["off_pin"]) == (sites[name]["addr"], sites[name]["bank"], 0), (name, row)
     previous = 0
     for name in expect:
+        if name == "whiteout_before_heal":   # a hot shared site: proven by its WHITEOUT record below
+            continue
         log = summary.get(name, {}).get("log") or []
         after = [hit["seq"] for hit in log if hit["seq"] > previous]
         assert after, f"{name} did not fire after the previous expected site"
         previous = after[0]
         assert all(hit["frame"] == hit.get("armed") for hit in log), (name, "callback frame != armed frame")
-    assert summary["capture_party"]["hits"] == 1
+    u1f = "whiteout_before_heal" in expect
+    assert summary["capture_party"]["hits"] == (2 if u1f else 1)
     assert summary.get("capture_box", {}).get("hits", 0) == 0, "capture_box fired on a party < 6 catch"
     align = tag_json(text, "ALIGN")
     a = align["align"]
@@ -335,6 +451,23 @@ def verify(text: str, pack: dict, title: str) -> dict:
     assert (f["party_species"], f["party_dvs"]) == (f["battle_species"], f["battle_dvs"]), f
     assert f["callback"] <= f["hp_zero_frame"] <= f["callback"] + 1, f
     assert {k: v for k, v in receipt["faint_alignment"].items() if k in f} == f, receipt["faint_alignment"]
+    if u1f:
+        # U1f: re-checked from the WHITEOUT / U1F_MODEL lines, independently of F.whiteout_problem
+        w, m = tag_json(text, "WHITEOUT"), tag_json(text, "U1F_MODEL")
+        assert w["callback"] == w["armed"] and w["de"] == 27 and w["party_hp"] and not any(w["party_hp"]), w
+        assert w["healed_frame"] > w["callback"], w
+        faints = [hit["seq"] for hit in summary["battle_faint"]["log"]]
+        assert w["seq"] > max(faints), (w, faints)
+        captures = [hit["seq"] for hit in summary["capture_party"]["log"]]
+        assert captures[0] < w["seq"] < captures[1] < summary["pc_deposit_begin"]["log"][0]["seq"], (captures, w)
+        counts = {}
+        for e in m["events"]:
+            k = f"pc_release_{e['collection']}" if e["kind"] == "pc_release" else e["kind"]
+            counts[k] = counts.get(k, 0) + 1
+        assert counts == {"whiteout": 1, "party_to_box": 2, "box_to_party": 1, "box_change": 1,
+                          "pc_release_box": 1, "pc_release_party": 1}, (counts, m)
+        assert receipt["pc_alignment"]["model_events"] == counts, receipt["pc_alignment"]
+        assert {k: v for k, v in receipt["whiteout_alignment"].items() if k in w} == w, receipt["whiteout_alignment"]
     if "poison_faint" in expect:
         # poison_faint: re-checked here from the POISON / POISON_MODEL lines, independently of F.poison_problem
         p, m = tag_json(text, "POISON"), tag_json(text, "POISON_MODEL")
@@ -368,7 +501,7 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, gen2_fixtures.spec_route_facts(spec, REPO),
                                                      qualification["attempt_id"]))
     passed, path, text = run_gate(GATE, rom_key=spec.title, target=spec.target,
-                                  timeout=2400 if title in POISON_TITLES else 1200,
+                                  timeout=3600 if title in POISON_TITLES else 1200,
                                   saveram_dir=str(REPO / ".cache/gen2-fixtures/u1-hook-proof" / spec.name),
                                   fixture_path=str(fixture), speed_percent=300, env_overrides=env)
     assert passed, f"gate FAILED; result {path}: {text[-3000:]}"
