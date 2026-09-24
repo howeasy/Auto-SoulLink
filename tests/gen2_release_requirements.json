@@ -36,14 +36,14 @@
         },
         {
           "scenario": "gen2_faint",
-          "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_faint --lane gen2-cc-faint --keep-data",
+          "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_faint --lane live3-cc-faint --keep-data",
           "receipts": {
             "a": {"path": "tests/fixtures/gen2/receipts/duo_faint_cc_a_result.txt",
-                  "sha256": "8def85fe97f386558d62a85415eaa35e00eb9f812e1091abb032d00501d74837"},
+                  "sha256": "094c36a0c876bd7ced5acbb08312aab44ae0024a2d0d315e018285b100f9f033"},
             "b": {"path": "tests/fixtures/gen2/receipts/duo_faint_cc_b_result.txt",
-                  "sha256": "d72efa6b0850ff6c89886cc0ef47fc87e439fbf2a77c16438491f66e5ba46b46"},
+                  "sha256": "fd6e4524822be6ac74ad458c629bf23fbb81bed826fdf47ab377d3907ab06c03"},
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_faint_cc_pydec_result.txt",
-                      "sha256": "d2a1ba09971baab2180251f3de58a0a62b1a1120b6cb20d6202e94b089ead802"}
+                      "sha256": "ebbc7dae899933dcbdf6256ff35274e02bcba47d9c5c8fd704215ae9b384c98c"}
           }
         },
         {
@@ -237,19 +237,19 @@
         },
         {
           "scenario": "gen2_type_clause",
-          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_type_clause --lane h10-gs-type --keep-data",
+          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_type_clause --lane live3-gs-type --keep-data",
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_type_clause_gs_a_result.txt",
-              "sha256": "b175468bf7628047b552ce6010f80f4e7641f82df25181a62eb3b5118ba74980"
+              "sha256": "4ac021cf1ae23c642f2a498327df41889afc9fed3323b8e06a52b2d605c15489"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_type_clause_gs_b_result.txt",
-              "sha256": "dae29135fbdeaac4c1434e5c242a70b0707c52272783ccac38e7bac8cf759a5e"
+              "sha256": "00e635cbbbbbc0fb51823de0db0960b5ef7554763b6fe16558fd5140931ea18b"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_type_clause_gs_pydec_result.txt",
-              "sha256": "2ffc86e7e9e0509288a70d1aeb086dee57135ec08e4aa56d9b359251bc775f1f"
+              "sha256": "29196ec4867e6023aa24958e1ddd6b234eb2c2b46fb88168fca2bf052715226f"
             }
           }
         },
