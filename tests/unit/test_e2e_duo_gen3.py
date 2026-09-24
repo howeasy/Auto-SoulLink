@@ -1918,16 +1918,18 @@ def test_rr_extension_receipt_that_names_another_file_fails(tmp_path, monkeypatc
         run.check_save_witness_gen3(receipts)
 
 
-def test_explode_runs_on_the_p_h_carrier_and_stays_a_control():
+def test_explode_runs_on_the_p_h_carrier_as_a_qualification_row():
     """Owner ruling 19: RR force_explode ends in the P+H hand-off, so explode_gen3 runs on the
-    P+H carrier's explode case. It stays a CONTROL until reviewed (lastUsedMovePlayer is stamped
-    before attackcanceler and +0x22 is unverified on RR), but its chain now also needs the
-    attacker's own faint site downstream of the stamp."""
+    P+H carrier's explode case. The chain needs the attacker's own faint site after the 153
+    stamp -- the downstream witness the old control label asked for -- so it qualifies
+    (G5-RR-ORACLES) and the summary carries no CONTROL tag."""
     row = duo.SCENARIOS["explode_gen3"]
     assert row["scenario_module"] == "linked_faint_active" and row["active_faint_case"] == "explode"
-    assert "NON-QUALIFYING" in row["control"] and "attackcanceler" in row["control"]
-    assert "CONTROL, not a qualification pass" in duo.summary_lines(
-        {"explode_gen3": (True, 1)}, "gen3_rr_new")[0]
+    assert "control" not in row
+    assert duo.summary_lines({"explode_gen3": (True, 1)}, "gen3_rr_new") == [
+        "  explode_gen3: PASS (attempt 1 of 1)"]
+    required, _, _ = duo.active_faint_chain("K0", "explode")
+    assert any("ACTIVE_FAINT_SITE" in r for r in required) and any("last_move=153" in r for r in required)
     assert not (REPO / "lua" / "tests" / "duo" / "scenario_gen3_explode.lua").exists()
 
 
@@ -4159,4 +4161,51 @@ def test_the_carrier_cpu_verdict_is_the_product_safety_over_the_pack(kind):
     broken.lua.execute("for k in pairs(rom) do rom[k] = (rom[k] + 1) % 256 end")   # anchors differ
     assert verdict(broken) is None                                             # no clause ran
     assert verdict(irq_world("firered", "clean", HALT_LR, cpsr=IRQ_CPSR)) is False   # FR admits none
+
+
+def test_a_berry_eaten_in_battle_is_not_a_record_change(pair):
+    """G5-RR-ORACLES (live R4/explode at f9171b9a): A's kept Treecko read held_item 139 -> 0.
+    Both RR fixtures hold 139 (pret ITEM_ORAN_BERRY), B's (a full-HP engine KO) still does, A's
+    was drained below half by lose_active: a consumed berry, not a decode error. Only a change
+    TO none is dropped."""
+    fixture = _fixture([dict(STARTER, held_item=139)])
+    k = _key(STARTER)
+    eaten = _saved(fixture, 3, [dict(STARTER, held_item=0)])
+    swapped = _saved(fixture, 3, [dict(STARTER, held_item=13)])
+    last = lambda saved: duo.gen3_last_mon_problems("a", _decoded(saved), _decoded(fixture), k, [], 13,
+                                                   limits=LIMITS)
+    assert last(eaten) == []
+    assert any("held_item" in p for p in last(swapped))
+    assert duo.gen3_consumed_ok([("held_item", 139, 0), ("friendship", 55, 54)]) == [("friendship", 55, 54)]
+
+
+RR_DUMP = REPO.parents[2] / "Pokemon - Radical Red.gba"
+FR_DUMP = REPO.parents[2] / "Pokemon - FireRed Version (USA).gba"
+
+
+@pytest.mark.skipif(not (RR_DUMP.is_file() and FR_DUMP.is_file()), reason="RR/FR dumps not in the checkout parent")
+def test_rr_party_menu_words_hold_in_the_rr_rom():
+    """The party-menu note in lua/tests/gen3_title_syms.lua, re-read from the dumps."""
+    import struct
+
+    fr, rr = FR_DUMP.read_bytes(), RR_DUMP.read_bytes()
+
+    def body(rom, addr, n):
+        return rom[addr - 0x08000000:addr - 0x08000000 + n]
+
+    def refs(rom, value):
+        lit, out, i = struct.pack("<I", value), [], rom.find(struct.pack("<I", value))
+        while i >= 0:
+            out.append(0x08000000 + i)
+            i = rom.find(lit, i + 1)
+        return out
+
+    assert body(rr, 0x0811EBA0, 0x1A) == body(fr, 0x0811EBA0, 0x1A)
+    assert refs(rr, 0x0811EBA1) == refs(fr, 0x0811EBA1) == [0x0811EE28, 0x0811EE70]
+    assert body(rr, 0x081203B8, 0x68) == body(fr, 0x081203B8, 0x68)
+    assert len(refs(rr, 0x0811FB29)) >= 28 and len(refs(rr, 0x08122C5D)) >= 4
+    assert len(refs(rr, 0x0203B0A0)) >= 150
+    lua_syms = (REPO / "lua" / "tests" / "gen3_title_syms.lua").read_text(encoding="utf-8")
+    for word in ("0x0811EBA1", "0x0811FB29", "0x081203B9", "0x08122C5D", "0x0203B0A0"):
+        assert f"radical_red = {word}" in lua_syms, word
 

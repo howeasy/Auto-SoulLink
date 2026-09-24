@@ -77,8 +77,20 @@ M.entries = {
     GMAIN_CALLBACK2_ADDR   = { symbol = "gMain", offset = 0x04,  firered = 0x030030F4, leafgreen = 0x030030F4,
                                 radical_red = 0x030030F4, rr_source = RR_PC_MENU_MD .. "63 (\"gMain.callback2 "
                                                                    .. "u32 030030F4\")" },
-    -- PARTY_MENU_ADDR (gPartyMenu) / CB2_UPDATE_PARTY_MENU below: no RR citation. ABSENT.
-    PARTY_MENU_ADDR        = { symbol = "gPartyMenu",            firered = 0x0203B0A0, leafgreen = 0x0203B0A0 },
+    -- The in-battle party menu on RR (G5-RR-ORACLES; live R1 on rr_battle2 at f9171b9a: with these
+    -- ABSENT, party_menu_up() compared callback2 against nil, so a forced send-out read as
+    -- "neither action nor forced party menu"). Party-menu note, from the RR 4.1 dump (sha1
+    -- 964f951a) against FR 1.0 (41cb23d8):
+    --   CB2_UpdatePartyMenu 0x0811EBA0: RR's 0x1A body is byte-identical to FR's, and its only two
+    --     literal referrers (0x0811EE28, 0x0811EE70, the party-menu init) are the same words at
+    --     the same addresses in both ROMs;
+    --   Task_ReturnToChooseMonAfterText 0x081203B8: body byte-identical (0x68 bytes);
+    --   Task_HandleChooseMonInput 0x0811FB28 / Task_HandleSelectionMenuInput 0x08122C5C: CFRU
+    --     detours the BODIES (RR 0x0811FB28 starts ldr r1,[pc]; bx r1) but the task pointers
+    --     (|1) stay what tasks store: 29 / 4 literal referrers in RR (28 / 4 in FR);
+    --   gPartyMenu 0x0203B0A0: 179 literal referrers in RR (153 in FR).
+    PARTY_MENU_ADDR        = { symbol = "gPartyMenu",            firered = 0x0203B0A0, leafgreen = 0x0203B0A0,
+                               radical_red = 0x0203B0A0, rr_source = "ROM byte anchor (G5-RR-ORACLES): lua/tests/gen3_title_syms.lua party-menu note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
     TASKS_BASE              = { symbol = "gTasks",                firered = 0x03005090, leafgreen = 0x03005090,
                                  radical_red = 0x03005090, rr_source = RR_OLD_CLIENT .. "372, cross-checked "
                                                                     .. "by " .. RR_PC_MENU_MD .. "36 (RR ROM "
@@ -115,17 +127,21 @@ M.entries = {
     HANDLE_INPUT_CHOOSE_ACTION = { symbol = "HandleInputChooseAction", thumb = true,
                                     firered = 0x0802E439, leafgreen = 0x0802E439,
                                     radical_red = 0x0802E439, rr_source = RR_DUO_PRECEDENT },
-    -- CB2_UPDATE_PARTY_MENU/TASK_CHOOSE_MON/TASK_RETURN_AFTER_TEXT/TASK_SELECTION_POPUP/
     -- CB2_BAG_MENU_RUN/PC_MULTICHOICE/PC_STORAGE_MAIN/PC_ON_SELECTED/PC_RELEASE_MON/
     -- PC_ON_B_PRESSED: no ROM anchor, no old-client use, not in rr_pc_menu.md. ABSENT.
+    -- (The four party-menu words below carry RR values: see the party-menu note above.)
     CB2_UPDATE_PARTY_MENU = { symbol = "CB2_UpdatePartyMenu", thumb = true,
-                               firered = 0x0811EBA1, leafgreen = 0x0811EB79 },
+                               firered = 0x0811EBA1, leafgreen = 0x0811EB79,
+                               radical_red = 0x0811EBA1, rr_source = "ROM byte anchor (G5-RR-ORACLES): lua/tests/gen3_title_syms.lua party-menu note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
     TASK_CHOOSE_MON = { symbol = "Task_HandleChooseMonInput", thumb = true,
-                         firered = 0x0811FB29, leafgreen = 0x0811FB01 },
+                         firered = 0x0811FB29, leafgreen = 0x0811FB01,
+                         radical_red = 0x0811FB29, rr_source = "ROM byte anchor (G5-RR-ORACLES): lua/tests/gen3_title_syms.lua party-menu note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
     TASK_RETURN_AFTER_TEXT = { symbol = "Task_ReturnToChooseMonAfterText", thumb = true,
-                                firered = 0x081203B9, leafgreen = 0x08120391 },
+                                firered = 0x081203B9, leafgreen = 0x08120391,
+                                radical_red = 0x081203B9, rr_source = "ROM byte anchor (G5-RR-ORACLES): lua/tests/gen3_title_syms.lua party-menu note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
     TASK_SELECTION_POPUP = { symbol = "Task_HandleSelectionMenuInput", thumb = true,
-                              firered = 0x08122C5D, leafgreen = 0x08122C35 },
+                              firered = 0x08122C5D, leafgreen = 0x08122C35,
+                              radical_red = 0x08122C5D, rr_source = "ROM byte anchor (G5-RR-ORACLES): lua/tests/gen3_title_syms.lua party-menu note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
     CB2_BAG_MENU_RUN = { symbol = "CB2_BagMenuRun", thumb = true,
                           firered = 0x08107EE1, leafgreen = 0x08107EB9 },
     -- The bag's input gates (pret src/item_menu.c:1044-1049): Task_BagMenu_HandleInput reads

@@ -295,13 +295,11 @@ SCENARIOS = {
     #                cartridge must refuse it and write nothing (trade port 78908fe8).
     # Owner ruling 19: RR force_explode's commit ends in the P+H hand-off, so it runs on the P+H
     # carrier (active_faint_case "explode"): no press after the commit, the same engine oracles,
-    # and the attacker's own faint site after the 153 stamp.
+    # and the attacker's own faint site after the 153 stamp. A QUALIFICATION row (G5-RR-ORACLES):
+    # the old control label asked for a witness downstream of attackcanceler/tryexplosion, and the
+    # attacker's own faint site (counter +1, HP 0, no SLink HP write) after the stamp is one -- a
+    # Damp/sleep/flinch cancel produces no self-KO.
     "explode_gen3": {"flags": ["--explode-mode"], "timeout": 900, "games": ("gen3_rr_new",),
-                     "control": "NON-QUALIFYING until reviewed: lastUsedMovePlayer 153 is stamped "
-                                "before attackcanceler/tryexplosion and its +0x22 offset is "
-                                "unverified on RR; the chain now also needs the attacker's own "
-                                "faint site (counter +1, HP 0, no SLink HP write) after the stamp, "
-                                "a downstream witness no Damp/sleep/flinch cancel produces",
                      "target": "battle", "frames": 1500000,
                      "scenario_module": "linked_faint_active", "active_faint_case": "explode",
                      "oracle": "assert_explode_gen3_saved"},
@@ -1395,6 +1393,14 @@ GEN3_RR_BOX_LOSSY = frozenset({"contest", "unknown"})
 RR_RIBBON_EXPANDED = 0x80000000
 
 
+def gen3_consumed_ok(changed):
+    """Drop a held item that went to NONE: a berry eaten in battle (G5-RR-ORACLES: RR's
+    rr_battle starter holds item 139, Oran Berry, pret include/constants/items.h:143, and A's
+    lose_active drains it below half HP; B's full-HP Perish/Explosion KO keeps it). Any other
+    held-item change stays a diff."""
+    return [c for c in changed if not (c[0] == "held_item" and c[2] == 0)]
+
+
 def gen3_record_diff(was, now, rr=False, mutable=GEN3_RECORD_MUTABLE):
     """(field, before, after) for every invariant field the two records share that differs.
     Fields only one side carries (a box record has no party tail) are not compared."""
@@ -1506,8 +1512,8 @@ def gen3_last_mon_problems(label, saved, fixture, key, deposited, memorial_box, 
         problems += gen3_record_problems(f"{label}: the kept {key}", now, rr, limits)
         # the walk to the PC and back crosses Route 1 grass, where playlib FIGHTS incidental
         # battles: the lone lead may level on the way
-        changed = gen3_record_diff(was, now, rr, GEN3_RECORD_MUTABLE | GEN3_ACTIVITY_MUTABLE
-                                   | GEN3_TRAINED_MUTABLE)
+        changed = gen3_consumed_ok(gen3_record_diff(was, now, rr, GEN3_RECORD_MUTABLE | GEN3_ACTIVITY_MUTABLE
+                                                    | GEN3_TRAINED_MUTABLE))
         if changed:
             problems.append(f"{label}: the kept {key} differs from the fixture in {changed}")
     moved = set(deposited)
@@ -1545,6 +1551,8 @@ def gen3_memorial_problems(label, saved, fixture, key, memorial_box, rr=False, l
         mutable = (GEN3_RECORD_MUTABLE | (GEN3_ACTIVITY_MUTABLE if battled else set())
                    | (GEN3_TRAINED_MUTABLE if trained else set()))
         changed = gen3_record_diff(was, boxes[where[0]], rr, mutable) if was else []
+        if battled:
+            changed = gen3_consumed_ok(changed)
         if changed:
             problems.append(f"{label}: the memorial {key} differs from the fixture record in "
                             f"{changed}")
@@ -6169,10 +6177,10 @@ class DuoRun:
 
     # ── RR-only oracles (P5, card C5-5) ─────────────────────────────────────────────────────
     def assert_explode_gen3_saved(self, results):
-        """explode_gen3 under owner ruling 19 (still a CONTROL until reviewed, SCENARIOS
-        `control`): the P+H carrier's explode chain -- keyed force_explode, the Explosion menu
-        skip ending in the hand-off, no input, lastUsedMovePlayer 153 at the KO, the attacker's
-        own faint site -- plus the linked oracle's saved-state half."""
+        """explode_gen3 under owner ruling 19, a qualification row: the P+H carrier's explode
+        chain -- keyed force_explode, the Explosion menu skip ending in the hand-off, no input,
+        lastUsedMovePlayer 153 at the KO, the attacker's own faint site -- plus the linked
+        oracle's saved-state half."""
         self.assert_linked_faint_active_gen3_saved(results)
 
     def assert_rival_swap_gen3_saved(self, results):
