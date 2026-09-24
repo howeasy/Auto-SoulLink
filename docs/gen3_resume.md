@@ -1,6 +1,55 @@
-# Gen 3 migration — resume note (updated 2026-09-24, checkpoint 16: FR/LG P+H 8/8 PASS live, RR gates 26/26, RR hello works; RR carrier move-menu + final-cut pass next)
+# Gen 3 migration — resume note (updated 2026-09-24, checkpoint 17: PAUSE — RR 12/13 live on the new client, old client deleted, final-cut runner rehearsed; RR whiteout + final pass next)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in the sweep worktree's `docs/gen1_reference/RC_MASTER_GUIDE.md` (`E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`). Requirements ledger: `docs/gen3_requirements.md`.
+
+## CHECKPOINT 17 (2026-09-24): PAUSE at the owner's request — resume here
+
+The tree is clean at HEAD (see git log; 62496988 is the rehearsal receipts). Nothing is in flight. Both lanes are free and clean: `.claude/worktrees/gen3-lane-clean` and `gen3-lane-2`, the latter added today (owner opened a 2nd lane). Owner rules this block:
+- subagents Haiku/Sonnet/Opus, as many as manageable;
+- **OMP for reviews only** (no OMP code);
+- no Codex;
+- nothing is released until G4+G5 are both done (ruling 22).
+
+- **Rulings 22-24** are in G4_request_draft §6:
+  - 22: no release until everything is done;
+  - 23: RR CPU irq_entry;
+  - 24: C5-6 archives the old client and drops Emerald/AP.
+- **RR on the new client, live** (lane 2, receipts in docs/gen3/probes/rr_* and ph_*_rr_*): **12/13 PASS**:
+  - all 5 P+H rows (wild, clean, L-hammer, whiteout, Explode+H), plus faint_cmd, reconnect, native_absent, link, deadzone and boxsync;
+  - rival_swap as a negative control (stale_battle_id);
+  - R5 (mega) is a signed limit (ruling 20).
+  - **OPEN: whiteout_gen3 on RR** fails leaving the Viridian Center: "step Left stalled at (25,27)" at c23a8f46. Two static path fixes didn't explain it; it needs a LIVE trace of player/object events at the door exit on RR.
+- **FR/LG:**
+  - P+H rows 8/8 PASS (6d6227c6); the trainer rows now boot the cached-native trainer fixtures, 80 s/67 s instead of 23-42 min (248d6ee9);
+  - RR opcode gates 26/26 (0995a82e).
+- **C5-6 done:**
+  - old client deleted (tag archive/gen3-old-client = f9171b9a);
+  - RR routed to lua/gen3;
+  - Emerald/AP refused by name;
+  - duo harness rename gen3_rr_new → gen3_rr (ac448144);
+  - admission hardened (405ef88b).
+- **Reviews:** today's code had independent OMP reviews (verified; outcomes recorded) plus R1/R2/F1. Fixes landed:
+  - stat-stage switch coherence, eb1b5c6b;
+  - CPU harden, 3fa789da/c29f3cf8;
+  - runner hardening, c737db8c;
+  - RR oracles, cc6ec42a/156a521f/e99c3760.
+- **Final-cut runner (tools/gen3_final_cut.py):**
+  - carry, shard and cache are hardened;
+  - the rehearsals pass: zip chain, probe_gates, bootcheck 8/8, release_gate_quick 2629/0 skipped (62496988);
+  - lane fixes: pinned-input copy, .cache/pret, index refresh; .gitattributes pins LF for the Gen 3 packs and pret files.
+- **Emulator time:**
+  - the trainer fixtures were the big win;
+  - rendering/sound off (5206fc8a) made no measurable difference; the bottleneck is emulation at ~700-800 fps, the 2.5 s EmuHawk launch, and the duo harness's 2.0 s wait_for poll;
+  - queued: poll 2.0 s → 0.2 s in tools/e2e_duo.py (about -2 s/row, W23 measured), plus fake-peer bystander rows (docs/gen3/research/emu_time_reduction_2026-09-24.md, c9ae7313; its minute estimates for the P+H rows are stale, since they measure 40-70 s live).
+- **Open qualifiers (recorded):**
+  - RR gSpecialVar_Result 127 is overwritten the same frame (suspect a CFRU writer), so RR uses a looser PC-exit check;
+  - an AP build with every pinned anchor intact would be admitted (by design, for randomizers);
+  - post-battle stage chip stale ≤30 frames (cosmetic).
+- **NEXT:**
+  1. RR whiteout live diagnosis → 13/13.
+  2. The e2e_duo poll interval.
+  3. Freeze a cut and run `python tools/gen3_final_cut.py --cut <sha> --carry --shard 1/2 --lane .claude/worktrees/gen3-lane-clean`, `--shard 2/2 --lane .claude/worktrees/gen3-lane-2`, then `--merge-summary`.
+  4. G4+G5 requests for the owner.
 
 ## CHECKPOINT 16 (2026-09-24): owner check-in after a 3-hour work block — resume here
 
