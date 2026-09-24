@@ -255,8 +255,9 @@ local function build_production(deps, c)
     local policy = {}
     function policy:snapshot() return safety:snapshot() end
     function policy:check(snapshot, reason, args) return safety:check(snapshot, reason, args) end
-    -- G4-PH: the pack's proven controller hand-off entry ({address, 4, value}) or nil
-    function policy:handoff_entry(battler) return safety:handoff_entry(battler) end
+    -- G4-PH: the pack's proven controller hand-off entry ({address, 4, value}) or nil; shape
+    -- "explode" (G5-EXPLODE-HANDOFF) only where the pack also proves the Explode+H plan
+    function policy:handoff_entry(battler, shape) return safety:handoff_entry(battler, shape) end
     local writes = Writes.new({
         safety = policy, frame = io_.framecount,
         io = io_,                                          -- writes.lua is the only caller of write_u8

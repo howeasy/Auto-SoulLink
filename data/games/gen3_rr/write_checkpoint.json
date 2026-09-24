@@ -149,6 +149,93 @@
       "commit_hold": "battle_commit held on RR: CFRU's parked controller stays live after the commit (L-throw RemoveBagItem 0x090AA114) unless the plan ends in the battle.handoff tail",
       "handoff": {
         "address": 50352096,
+        "explode": {
+          "head": [
+            {
+              "address": 33700848,
+              "group": "moves",
+              "name": "move_0",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700872,
+              "group": "moves",
+              "name": "pp_0",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700850,
+              "group": "moves",
+              "name": "move_1",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700873,
+              "group": "moves",
+              "name": "pp_1",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700852,
+              "group": "moves",
+              "name": "move_2",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700874,
+              "group": "moves",
+              "name": "pp_2",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700854,
+              "group": "moves",
+              "name": "move_3",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700875,
+              "group": "moves",
+              "name": "pp_3",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33701244,
+              "name": "chosen_action",
+              "value": 0,
+              "width": 1
+            },
+            {
+              "address": 33701316,
+              "name": "chosen_move",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "name": "chosen_move_position",
+              "offset": 128,
+              "ptr": 33701864,
+              "value": 0,
+              "width": 1
+            },
+            {
+              "name": "move_target",
+              "offset": 12,
+              "ptr": 33701864,
+              "value": 1,
+              "width": 1
+            }
+          ],
+          "source": "client.lua commit_plan rows, battler 0; profile.ram BATTLE_MONS/CHOSEN_ACTION/CHOSEN_MOVE/BATTLE_STRUCT_PTR + derived BATTLE_STRUCT_*_OFF; Explosion PP 5 read from rom.BATTLE_MOVES_ADDR in every RR ROM; constants lua/memory_gba.lua:1318-1345"
+        },
         "head": [
           {
             "address": 33701372,

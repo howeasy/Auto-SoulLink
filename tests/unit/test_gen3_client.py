@@ -419,21 +419,17 @@ def _policy_check(w, reason, args=None):
     return bool(ok), str(why)
 
 
-def test_rr_battle_commit_is_refused_until_a_controller_handoff_is_proven():
+def test_rr_battle_commit_is_refused_unless_the_plan_hands_the_controller_off():
     """REV-C5-RR-BW-FIX 2: the commit writes comm[b] = 3 while CFRU's parked controller is still
     live, and an L press then runs RemoveBagItem (0x090AA114) -- a ball lost. The RR pack holds
     battle_commit by name (pack data, enforced by safety.lua: client.lua names no title); the
-    battle state itself is admissible, so the hold is the ONLY failing clause."""
+    battle state itself is admissible, so the hold is the ONLY failing clause for a commit that
+    does not end in the hand-off (G4-PH / G5-EXPLODE-HANDOFF plans do, and are admitted)."""
     w, _base = _explode_world(lift_hold=False)
     assert _policy_check(w, "battle_faint")[0] is True        # the clause set itself admits
     ok, why = _policy_check(w, "battle_commit", {"battler": 0})
     assert ok is False and "battle_commit" in why and "0x090AA114" in why
     assert list(w.parts.safety.last_clauses.values()) == ["battle_commit_hold"]
-    w.command(cmd="force_explode", key=KA)
-    w.step(3)
-    assert w.writes == [] and write_reasons(w) == []
-    held = lua_to_py_list(w.client.battle_pending)[0]
-    assert "0x090AA114" in str(held.why)
 
 
 def test_frlg_battle_commit_policy_is_unchanged():
@@ -485,8 +481,9 @@ def test_the_full_commit_lands_through_the_real_writes_and_safety_with_the_guard
     comm = w.ram["BATTLE_COMM_ADDR"]
     commit = [x for x in w.writes if x[1] is not None]
     addrs = [x[0] for x in commit]
-    assert addrs[-1] == comm and addrs.count(comm) == 1           # the committing byte, last
-    assert len(commit) == 4 * 2 + 4 + 1 + 2 + 1 + 1 + 1           # moves, PP, action, move, pos, target, comm
+    assert addrs[-5] == comm and addrs.count(comm) == 1           # the committing byte, then the hand-off
+    assert addrs[-4:] == [P_SLOT + i for i in range(4)]           # G5-EXPLODE-HANDOFF: the tail, last
+    assert len(commit) == 4 * 2 + 4 + 1 + 2 + 1 + 1 + 1 + 4       # moves, PP, action, move, pos, target, comm, hand-off
     assert sum(int(r.len) for r in lua_to_py_list(w.parts.writes.log)) == len(commit)
 
 
@@ -506,7 +503,7 @@ def test_explode_control_sleep_or_flinch_rearms_the_commit_and_never_writes_hp(m
     w.command(cmd="force_explode", key=KA)
     w.step()
     for _ in range(3):                                         # three turns asleep / flinching
-        w.poke_int(w.ram["BATTLE_COMM_ADDR"], 1, 1)            # the next turn's input wait
+        _next_parked_menu(w)                                   # the next turn's input wait
         w.step()
         assert w._read(w.ram["BATTLE_COMM_ADDR"], 1) == 3
     assert _hp_writes(w) == [] and set(write_reasons(w)) == {"battle_commit"}
@@ -530,7 +527,7 @@ def test_rr_explosion_commit_is_rewritten_when_the_engine_resets_it():
     w, base = _explode_world()
     w.command(cmd="force_explode", key=KA)
     w.step()
-    w.poke_int(w.ram["BATTLE_COMM_ADDR"], 1, 1)                 # turn start reset, PP untouched
+    _next_parked_menu(w)                                        # turn start reset, PP untouched
     w.step()
     assert w._read(w.ram["BATTLE_COMM_ADDR"], 1) == 3
 
@@ -797,15 +794,52 @@ def test_ph_rr_a_locked_turn_writes_nothing_and_commits_at_the_next_parked_menu(
     assert _p_commit(w) == _p_plan_bytes(w, 0)
 
 
-def test_ph_rr_explode_mode_is_unchanged_still_held_by_commit_hold():
-    """Owner: Explode Mode must not change. Its commit_plan has no hand-off tail, so on RR it is
-    still refused by the hold (0x090AA114) with zero bytes."""
-    w, _base = _explode_world(lift_hold=False)
+def _explode_h_bytes(base, bs=0x02020000, with_moves=True):
+    """RR's Explode+H plan as (addr, byte) in write order: commit_plan's rows exactly (Explosion x4
+    + PP 5 x4 on the first commit, action 0, chosen move 153, the battle-struct slot/target when
+    the pointer is set), comm = 3, then the hand-off LAST (owner ruling 19, 2026-09-24)."""
+    out = []
+    if with_moves:
+        for i in range(4):
+            out += [(base + 0x0C + 2 * i, 153), (base + 0x0C + 2 * i + 1, 0), (base + 0x24 + i, 5)]
+    out += [(0x02023D7C, 0), (0x02023DC4, 153), (0x02023DC5, 0)]
+    if bs:
+        out += [(bs + 128, 0), (bs + 12, 1)]
+    return out + [(P_COMM, 3)] + [(P_SLOT + i, b) for i, b in enumerate(P_EXEC_COMPLETED.to_bytes(4, "little"))]
+
+
+def test_g5_rr_force_explode_commits_immediately_with_the_handoff_tail():
+    """G5-EXPLODE-HANDOFF (owner ruling 19; red at 9e227101, where the hold refused it): on RR the
+    menu skip ends in the same hand-off as P, so Explosion fires with no press and no L-throw."""
+    w, base = _explode_world(lift_hold=False)                       # the REAL pack: commit_hold present
     w.command(cmd="force_explode", key=KA)
-    w.step(3)
-    assert w.writes == []
+    w.step()
+    assert [(a, v) for a, v, _f in w.writes] == _explode_h_bytes(base)
+    assert set(write_reasons(w)) == {"battle_commit"} and len(write_reasons(w)) == 8 + 4 + 1 + 1
+    assert w._read(P_SLOT, 4) == P_EXEC_COMPLETED
     (held,) = lua_to_py_list(w.client.battle_pending)
-    assert "0x090AA114" in str(held.why) and "hand-off tail" not in str(held.why)
+    assert str(held.why) == "explosion committed"
+    assert any("force_explode: menu skip committed slot=0 battler=0 handoff=1" in line for line in w.logs)
+
+
+def test_g5_rr_an_explode_recommit_after_an_engine_reset_also_hands_off():
+    """Sleep/flinch: the move never ran, the next turn parks the menu again; the re-commit has no
+    move/PP rows (commit_plan's rule) and still ends in the hand-off."""
+    w, base = _explode_world(lift_hold=False)
+    w.command(cmd="force_explode", key=KA)
+    w.step()
+    n = len(w.writes)
+    _next_parked_menu(w)
+    w.step()
+    assert [(a, v) for a, v, _f in w.writes[n:]] == _explode_h_bytes(base, with_moves=False)
+
+
+def test_g5_rr_explode_without_the_battle_struct_pointer_still_hands_off():
+    w, base = _explode_world(lift_hold=False)
+    w.poke_int(w.ram["BATTLE_STRUCT_PTR_ADDR"], 0, 4)
+    w.command(cmd="force_explode", key=KA)
+    w.step()
+    assert [(a, v) for a, v, _f in w.writes] == _explode_h_bytes(base, bs=0)
 
 
 @pytest.mark.parametrize("outcome", [1, 4, 7])

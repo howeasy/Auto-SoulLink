@@ -212,29 +212,49 @@ function S.new(pack, deps, kind)
         end
     end
     local head_rules = {set = true, keep = true, value = true}
-    local function handoff_entry(battler)
-        local h = type(pack.battle) == "table" and pack.battle.handoff
-        if type(h) ~= "table" or battler ~= 0 then return nil end
-        local ok, entry = pcall(function()
-            local ctrl = assert(input_controller())
-            assert(uint(h.address, 4294967295) == ctrl.address + (ctrl.offset or 0))
-            assert(h.stride == 4 and h.width == 4 and uint(h.value, 4294967295) % 2 == 1)
-            -- R1 L1: the P head the plan must carry (generator: data/games/*/profile.json)
-            assert(type(h.head) == "table" and #h.head == 3)
-            for _, row in ipairs(h.head) do
+    -- P head rows: an address and exactly one rule (set / keep / value). Explode head rows
+    -- (G5-EXPLODE-HANDOFF): an address XOR a ptr + offset, a value, and an optional group "moves".
+    local function valid_rows(rows, explode)
+        assert(type(rows) == "table" and #rows > 0)
+        for _, row in ipairs(rows) do
+            assert(row.width == 1 or row.width == 2 or row.width == 4)
+            if explode then
+                assert((row.address == nil) ~= (row.ptr == nil))
+                if row.ptr then uint(row.ptr, 4294967295); uint(row.offset, 65535)
+                else uint(row.address, 4294967295) end
+                uint(row.value, 256 ^ row.width - 1)
+                assert(row.group == nil or row.group == "moves")
+            else
                 uint(row.address, 4294967295)
-                assert(row.width == 1 or row.width == 2 or row.width == 4)
                 local rules = 0
                 for rule in pairs(head_rules) do
                     if row[rule] ~= nil then rules = rules + 1; uint(row[rule], 256 ^ row.width - 1) end
                 end
                 assert(rules == 1)
             end
+        end
+    end
+    -- shape nil = P's hand-off; "explode" = the same entry, only when the pack also proves the
+    -- Explode+H shape (RR, owner ruling 19)
+    local function handoff_entry(battler, shape)
+        local h = type(pack.battle) == "table" and pack.battle.handoff
+        if type(h) ~= "table" or battler ~= 0 or (shape ~= nil and shape ~= "explode") then return nil end
+        local ok, entry = pcall(function()
+            local ctrl = assert(input_controller())
+            assert(uint(h.address, 4294967295) == ctrl.address + (ctrl.offset or 0))
+            assert(h.stride == 4 and h.width == 4 and uint(h.value, 4294967295) % 2 == 1)
+            -- R1 L1: the P head the plan must carry (generator: data/games/*/profile.json)
+            assert(type(h.head) == "table" and #h.head == 3)
+            valid_rows(h.head, false)
+            if shape == "explode" then
+                assert(type(h.explode) == "table")
+                valid_rows(h.explode.head, true)
+            end
             return {h.address, h.width, h.value}
         end)
         if ok then return entry end
     end
-    function self:handoff_entry(battler) return handoff_entry(battler) end
+    function self:handoff_entry(battler, shape) return handoff_entry(battler, shape) end
     -- R1 L2: a GBA bus alias is the same byte. IWRAM (0x03xxxxxx) repeats every 0x8000 and EWRAM
     -- (0x02xxxxxx) every 0x40000; fold both onto their base range before comparing.
     local function canonical(addr)
@@ -257,28 +277,65 @@ function S.new(pack, deps, kind)
         end)
         return not ok or hit
     end
-    -- R1 L1: the WHOLE plan, row for row: the pack's P head (status3 = live | PERISH, timer = live &
-    -- 0xF0, action = NOTHING_FAINTED), the commit write (the guard's byte := its value), then the
-    -- hand-off. Live values are read on this same frame; the client read them to build the plan.
-    local function check_handoff_plan(plan, battler)
-        assert(battler == 0, "the hand-off is battler 0 only")
-        local entry = assert(handoff_entry(battler), "no proven battle.handoff")
-        local guard = pack.battle.commit_guard
-        local want = {}
+    -- R1 L1: the WHOLE plan, row for row, must be one of the pack's shapes, then the commit write
+    -- (the guard's byte := its value), then the hand-off. Live values are read on this same frame;
+    -- the client read them to build the plan.
+    --   P+H: status3 = live | PERISH, timer = live & 0xF0, action = NOTHING_FAINTED.
+    --   Explode+H (G5-EXPLODE-HANDOFF, only where the pack carries handoff.explode): commit_plan's
+    --   rows; the "moves" group is all-or-none, a ptr row sits at read_u32(ptr) + offset and is
+    --   absent while that pointer reads 0 (commit_plan's own rules).
+    local function p_rows()
+        local rows = {}
         for i, row in ipairs(pack.battle.handoff.head) do
             local v = row.value
             if row.set then v = read(row.address, row.width) | row.set end
             if row.keep then v = read(row.address, row.width) & row.keep end
-            want[i] = {row.address, row.width, v, row.name}
+            rows[i] = {row.address, row.width, v, row.name}
         end
+        return rows
+    end
+    local function explode_rows(with_moves)
+        local rows = {}
+        for _, row in ipairs(pack.battle.handoff.explode.head) do
+            if row.group ~= "moves" or with_moves then
+                local addr = row.address
+                if row.ptr then
+                    local base = read(row.ptr, 4)
+                    addr = base ~= 0 and base + row.offset or nil
+                end
+                if addr then rows[#rows + 1] = {addr, row.width, row.value, row.name} end
+            end
+        end
+        return rows
+    end
+    local function matches(plan, head, entry, battler)
+        local guard = pack.battle.commit_guard
+        local want = {}
+        for i, w in ipairs(head) do want[i] = w end
         want[#want + 1] = {guard.address + (guard.offset or 0) + battler, guard.width, guard.value, "commit"}
         want[#want + 1] = {entry[1], entry[2], entry[3], "hand-off"}
-        assert(#plan == #want, "plan is not the P+H shape (" .. #plan .. " rows, want " .. #want .. ")")
+        if #plan ~= #want then return false, #plan .. " rows, want " .. #want end
         for i, w in ipairs(want) do
             local got = plan[i]
-            assert(got[1] == w[1] and got[2] == w[2] and got[3] == w[3],
-                "row " .. i .. " is not the " .. w[4] .. " write")
+            if not (got[1] == w[1] and got[2] == w[2] and got[3] == w[3]) then
+                return false, "row " .. i .. " is not the " .. w[4] .. " write"
+            end
         end
+        return true
+    end
+    local function check_handoff_plan(plan, battler)
+        assert(battler == 0, "the hand-off is battler 0 only")
+        local entry = assert(handoff_entry(battler), "no proven battle.handoff")
+        local ok, why = matches(plan, p_rows(), entry, battler)
+        if ok then return end
+        why = "not the P+H plan: " .. why
+        if handoff_entry(battler, "explode") then
+            for _, with_moves in ipairs({true, false}) do
+                if matches(plan, explode_rows(with_moves), entry, battler) then return end
+            end
+            why = why .. "; nor the Explode+H plan"
+        end
+        error(why, 0)
     end
 
     local function battle(reason, snapshot, args)

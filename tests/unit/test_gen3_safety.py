@@ -912,3 +912,77 @@ def test_r1_l2_an_iwram_mirror_of_the_slot_is_a_slot_write(title, kind, mirror):
                  [[mirror + 1, 1, 0]] + p_plan()):                       # a mirror byte in the head
         ok, why, clauses = w.check_reason("battle_commit", {"battler": 0, "plan": plan})
         assert ok is False and clauses == ["battle_commit_handoff"], (hex(mirror), clauses)
+
+
+# ── G5-EXPLODE-HANDOFF (owner ruling 19): RR's Explode menu skip ends in the hand-off too ──────
+# commit_plan's rows exactly (lua/gen3/client.lua commit_plan), battler 0: [Explosion, PP 5] x4 on
+# the first commit only, action USE_MOVE (0), chosen move 153, then -- when gBattleStruct is set --
+# chosenMovePositions[0] = 0 and moveTarget[0] = 1, comm = 3, the hand-off. Addresses re-typed from
+# the RR profile's old-client pins (BATTLE_MONS 0x02023BE4, CHOSEN_MOVE 0x02023DC4, BATTLE_STRUCT_PTR
+# 0x02023FE8, offsets 128 / 12).
+BS = 0x02020000
+
+
+def explode_h_plan(with_moves=True, bs=BS):
+    rows = []
+    if with_moves:
+        for i in range(4):
+            rows += [[0x02023BE4 + 0x0C + 2 * i, 2, 153], [0x02023BE4 + 0x24 + i, 1, 5]]
+    rows += [[0x02023D7C, 1, 0], [0x02023DC4, 2, 153]]
+    if bs:
+        rows += [[bs + 128, 1, 0], [bs + 12, 1, 1]]
+    return rows + [[H_COMM, 1, 3], [H_SLOT, 4, H_VALUE]]
+
+
+def explode_parked(title, kind, bs=BS):
+    w = parked(title, kind)
+    w.lua.globals().put(0x02023FE8, bs, 4)
+    return w
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+@pytest.mark.parametrize("with_moves,bs", [(True, BS), (False, BS), (True, 0), (False, 0)])
+def test_g5_rr_the_exact_explode_h_plan_is_admitted(kind, with_moves, bs):
+    """Red at 9e227101: only the P+H shape lifted the hold."""
+    ok, why, clauses = explode_parked("radical_red", kind, bs).check_reason(
+        "battle_commit", {"battler": 0, "plan": explode_h_plan(with_moves, bs)})
+    assert ok is True and clauses == [], why
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+@pytest.mark.parametrize("case", ["no_tail", "partial_moves", "p_rows_mixed_in", "wrong_move",
+                                  "wrong_target", "ptr_rows_without_pointer", "ptr_rows_missing",
+                                  "p_head_then_explode", "battler_2"])
+def test_g5_rr_every_other_explode_shape_is_refused(kind, case):
+    w = explode_parked("radical_red", kind, 0 if case == "ptr_rows_without_pointer" else BS)
+    good, battler = explode_h_plan(), 0
+    plan = {
+        "no_tail": good[:-1],
+        "partial_moves": good[:2] + good[4:],
+        "p_rows_mixed_in": p_plan()[:3] + good,
+        "wrong_move": good[:8] + [[0x02023D7C, 1, 0], [0x02023DC4, 2, 120]] + good[10:],
+        "wrong_target": good[:11] + [[BS + 12, 1, 0]] + good[12:],
+        "ptr_rows_without_pointer": good,
+        "ptr_rows_missing": good[:10] + good[12:],
+        "p_head_then_explode": p_plan()[:3] + good[8:],
+        "battler_2": good,
+    }[case]
+    if case == "battler_2":
+        battler = 2
+    ok, why, clauses = w.check_reason("battle_commit", {"battler": battler, "plan": plan})
+    assert ok is False, case
+    expect = ["battle_commit_hold"] if case == "no_tail" else ["battle_commit_handoff"]
+    assert clauses == expect, (case, clauses)
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_g5_frlg_packs_admit_no_explode_handoff(title):
+    """FR/LG Explode is unchanged: the pack carries no Explode shape, so even the exact RR plan
+    with a hand-off tail is refused there (and Explode is not capable on FR/LG anyway)."""
+    assert "explode" not in committed_pack(title)["battle"]["handoff"]
+    ok, why, clauses = explode_parked(title, "clean").check_reason(
+        "battle_commit", {"battler": 0, "plan": explode_h_plan()})
+    assert ok is False and clauses == ["battle_commit_handoff"]
+    w = explode_parked(title, "clean")
+    assert w.safety.handoff_entry(w.safety, 0, "explode") is None
+    assert w.safety.handoff_entry(w.safety, 0) is not None

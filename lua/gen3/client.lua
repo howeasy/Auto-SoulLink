@@ -643,10 +643,14 @@ function Client.new(p)
                 plan[#plan + 1] = { bs + d.BATTLE_STRUCT_MOVE_TARGET_OFF + battler, 1, TARGET_FOE_PRIMARY }
             end
         end
-        -- LAST: the committing state is itself the battle_commit guard (gBattleCommunication
-        -- [battler] < 3) and writes.lua re-validates before every write, so any write after it
-        -- would be refused mid-plan and leave a half-committed action
+        -- the committing state is itself the battle_commit guard (gBattleCommunication[battler]
+        -- < 3) and writes.lua re-validates before every write, so only the hand-off may follow it
         plan[#plan + 1] = { a.BATTLE_COMM_ADDR + battler, 1, STATE_ACTION_CONFIRMED_STANDBY }
+        -- G5-EXPLODE-HANDOFF (owner ruling 19): where the pack proves the Explode+H shape (RR,
+        -- whose parked CFRU menu outlives the commit), the same hand-off as P ends the menu, so
+        -- Explosion fires with no press. FR/LG packs carry no such shape: plan unchanged there.
+        local h = policy.handoff_entry and policy:handoff_entry(battler, "explode")
+        if h then plan[#plan + 1] = { h[1], h[2], h[3] }; plan.handoff = true end
         return plan
     end
 
@@ -689,12 +693,14 @@ function Client.new(p)
         end
         if ex and comm >= STATE_ACTION_CONFIRMED_STANDBY then return "hold", "explosion committed" end
         -- first commit, or the engine reset the commit state at turn start: (re)write it
-        local ok, why = armed_write("battle_commit", commit_plan(battler, not ex), { battler = battler })
+        local plan = commit_plan(battler, not ex)
+        local ok, why = armed_write("battle_commit", plan, { battler = battler })
         if not ok then return "hold", why end
         if not ex then
             e.explode = { battler = battler }
             mark_commanded(key(mon))
-            log("force_explode: menu skip committed slot=" .. slot .. " battler=" .. battler)
+            log("force_explode: menu skip committed slot=" .. slot .. " battler=" .. battler
+                .. " handoff=" .. (plan.handoff and 1 or 0))
         end
         return "hold", "explosion committed"
     end

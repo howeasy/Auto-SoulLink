@@ -493,6 +493,12 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
         unverified.append(f"battle.handoff: {why}")
     else:
         out["battle"]["handoff"] = handoff
+        if "commit_hold" in out["battle"]:
+            explode, why = explode_head(profile["titles"][title], roms)
+            if explode is None:
+                unverified.append(f"battle.handoff.explode: {why}")
+            else:
+                handoff["explode"] = explode
     if is_rr:
         native = native_block(profile)
         if native is not None:
@@ -781,6 +787,52 @@ def handoff_head(title_profile: dict) -> tuple[list | None, str]:
         rows.append({"name": name, "address": address, "width": width,
                      rule: derived[arg] if isinstance(arg, str) else arg})
     return rows, ""
+
+
+# G5-EXPLODE-HANDOFF (owner ruling 19, 2026-09-24): on a pack that HOLDS battle_commit (RR), Explode's
+# menu skip ends in the same hand-off, so the policy must know its exact rows too -- commit_plan's
+# (lua/gen3/client.lua), battler 0, in write order. `group: moves` rows are all-or-none (the first
+# commit only); `ptr` rows sit at read_u32(ptr) + offset and are absent while the pointer is 0.
+# Values: Explosion = 153 with PP 5 (asserted in this ROM's own gBattleMoves), B_ACTION_USE_MOVE = 0,
+# chosenMovePositions = 0, moveTarget = 1 (the old client's production constants,
+# lua/memory_gba.lua:1318-1345); BattlePokemon.moves +0x0C / .pp +0x24 (pret include/pokemon.h,
+# CFRU keeps the layout).
+EXPLODE_MOVE, EXPLODE_PP, EXPLODE_ACTION, EXPLODE_TARGET = 153, 5, 0, 1
+BATTLE_MON_MOVES_OFF, BATTLE_MON_PP_OFF = 0x0C, 0x24
+EXPLODE_SOURCE = ("client.lua commit_plan rows, battler 0; profile.ram BATTLE_MONS/CHOSEN_ACTION/"
+                  "CHOSEN_MOVE/BATTLE_STRUCT_PTR + derived BATTLE_STRUCT_*_OFF; Explosion PP 5 read from "
+                  "rom.BATTLE_MOVES_ADDR in every RR ROM; constants lua/memory_gba.lua:1318-1345")
+
+
+def explode_head(title_profile: dict, roms: dict[str, bytes]) -> tuple[dict | None, str]:
+    """({"head": rows, "source"}, "") for RR's Explode+H shape, or (None, why it is unproven)."""
+    ram, derived, rom_facts = (title_profile.get(k, {}) for k in ("ram", "derived", "rom"))
+    for section, key, table in (("ram", "BATTLE_MONS_ADDR", ram), ("ram", "CHOSEN_ACTION_ADDR", ram),
+                                ("ram", "CHOSEN_MOVE_ADDR", ram), ("rom", "BATTLE_MOVES_ADDR", rom_facts),
+                                ("derived", "BATTLE_MOVE_ENTRY_SIZE", derived),
+                                ("derived", "BATTLE_MOVE_PP_OFFSET", derived)):
+        if not isinstance(table.get(key), int):
+            return None, f"profile.{section}.{key} absent"
+    pp_at = rom_facts["BATTLE_MOVES_ADDR"] + EXPLODE_MOVE * derived["BATTLE_MOVE_ENTRY_SIZE"] \
+        + derived["BATTLE_MOVE_PP_OFFSET"]
+    for kind, rom in roms.items():
+        if kind != "_fr" and body(rom, pp_at, 1)[0] != EXPLODE_PP:
+            return None, f"move {EXPLODE_MOVE} PP at {pp_at:#010x} is not {EXPLODE_PP} in RR {kind}"
+    base = ram["BATTLE_MONS_ADDR"]
+    rows = [row for i in range(4) for row in (
+        {"name": f"move_{i}", "address": base + BATTLE_MON_MOVES_OFF + 2 * i, "width": 2,
+         "value": EXPLODE_MOVE, "group": "moves"},
+        {"name": f"pp_{i}", "address": base + BATTLE_MON_PP_OFF + i, "width": 1,
+         "value": EXPLODE_PP, "group": "moves"})]
+    rows += [{"name": "chosen_action", "address": ram["CHOSEN_ACTION_ADDR"], "width": 1, "value": EXPLODE_ACTION},
+             {"name": "chosen_move", "address": ram["CHOSEN_MOVE_ADDR"], "width": 2, "value": EXPLODE_MOVE}]
+    if isinstance(ram.get("BATTLE_STRUCT_PTR_ADDR"), int):
+        for name, key, value in (("chosen_move_position", "BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF", 0),
+                                 ("move_target", "BATTLE_STRUCT_MOVE_TARGET_OFF", EXPLODE_TARGET)):
+            if isinstance(derived.get(key), int):
+                rows.append({"name": name, "ptr": ram["BATTLE_STRUCT_PTR_ADDR"], "offset": derived[key],
+                             "width": 1, "value": value})
+    return {"head": rows, "source": EXPLODE_SOURCE}, ""
 
 
 def handoff_block(syms, sym_file: str, is_rr: bool, roms: dict[str, bytes],
