@@ -32,7 +32,9 @@
 local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_PENDING_FRAMES = 600,
                  MAX_HELD = 64,
                  -- P4.3b: an armed PROMPT the player never picks up is withdrawn after this many frames
-                 -- (the asm's own SLINK_TRADE_APPLY_FRAMES window, patch/gen2/src/trade_service.asm)
+                 -- (fits inside the proposer's SLINK_TRADE_APPLY_FRAMES = 3600 hold with ~29 s left for the
+                 -- YES/NO, patch/gen2/src/trade_service.asm; a waiting cartridge picks up an armed APPLY
+                 -- within a frame, so this never gives up before the cartridge does)
                  TRADE_PICKUP_FRAMES = 1800 }
 
 -- Gen 2: the wild battle types whose failure dead-zones the map are exactly the ones the
@@ -571,7 +573,7 @@ function Client.new(p)
         for i = 1, 4 do t[i] = math.random(1, 255) end
         return t
     end
-    -- the cartridge waits <= 30/180 frames for these answers: never hold them for a later hello
+    -- the cartridge waits <= SLINK_TRADE_QUERY/OFFER_FRAMES (600) for these answers: never hold them for a later hello
     local function send_now(event, fields)
         return self.hello_session:status().ready == true and send(event, fields)
     end
