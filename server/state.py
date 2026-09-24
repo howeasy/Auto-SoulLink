@@ -345,7 +345,7 @@ class SoulLinkState:
             self._handle_hello(player_id, msg)
             if not msg.get("_rejected"):
                 self.trade_prepare[player_id] = msg.get("trade_prepare") is True
-                self._trade_evidence(player_id, msg.get("party") or [])
+                self._trade_evidence(player_id, msg.get("party") or [], from_hello=True)
         elif event == "area_enter":
             self._handle_area_enter(player_id, msg)
         elif event == "ghost_pos":
@@ -603,6 +603,19 @@ class SoulLinkState:
         pt["age"] = pt.get("age", 0) + 1
         if pt["age"] > self.TRADE_WATCHDOG_EVENTS:
             if pt.get("phase") == "applying":
+                pt.setdefault("verdict", {"a": None, "b": None})
+                # MAJOR-4 (review e9d5e136): an armed APPLY nobody picked up yet could still commit
+                # AFTER an evidence rollback. First ask each silent side that speaks the prepare
+                # round to withdraw it: an unpicked lease answers a certain "none", a commit past
+                # its latch answers uncertain. Only a side still silent after that awaits evidence.
+                ask = [pid for pid in ("a", "b") if pt["verdict"][pid] is None and self.trade_prepare[pid]]
+                if ask and not pt.get("withdraw_asked"):
+                    pt["withdraw_asked"], pt["age"] = True, 0
+                    for pid in ask:
+                        self.queued_commands[pid].append({"cmd": "withdraw_trade", "token": pt["token"]})
+                    log.warning(f"trade watchdog: asked {ask} to withdraw 'applying' trade {pt.get('token')}")
+                    self._save()
+                    return
                 # apply_trade was already dispatched, so freeing the slot could strand keys the
                 # players no longer hold -- and guessing an outcome is worse (evolution, a failed
                 # append). Every side that never reported is now UNCERTAIN: its next party
@@ -951,6 +964,10 @@ class SoulLinkState:
             # decides. Journaled as the watchdog does, once, when the side first declares it.
             if pt["verdict"][player_id] is None:
                 pt["verdict"][player_id] = "await"
+                if msg.get("after_reset") is True:
+                    # MAJOR-5: a native result 2 holds a RAM party no save ever saw; only the
+                    # reloaded save (the post-reset hello) is evidence for this side
+                    pt.setdefault("hello_only", {})[player_id] = True
                 self._record_trade(pt, "uncertain")
             return
         if new_key == pt[f"{player_id}_key"]:
@@ -960,7 +977,7 @@ class SoulLinkState:
             pt["new"][player_id] = (new_key, new_species)
         self._settle_trade(pt)
 
-    def _trade_evidence(self, player_id: str, party: list):
+    def _trade_evidence(self, player_id: str, party: list, from_hello: bool = False):
         """A party snapshot from a side whose trade outcome is uncertain decides that side:
         outgoing key gone + the incoming key (or ONE unindexed descendant: same OT per the
         adapter, same evolution family, e.g. a trade evolution) present -> traded; outgoing
@@ -969,6 +986,8 @@ class SoulLinkState:
         pt = self.pending_trade
         if not pt or pt.get("verdict", {}).get(player_id) != "await":
             return
+        if (pt.get("hello_only") or {}).get(player_id) and not from_hello:
+            return                                      # MAJOR-5: wait for the reloaded save
         keys = {m.get("key") for m in party if m.get("key")}
         if not keys:
             return   # ponytail: an unreadable/empty party is no evidence; a real party is never empty

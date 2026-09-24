@@ -69,7 +69,7 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
 }
 # trade_done{token, uncertain: true}: the side's native commit was entered but no DONE came
 # (a reset, a result 2); its next party snapshot settles it (state.py _trade_evidence)
-UNCERTAIN_TRADE_DONE = {"trade_done": ({"token": "str", "uncertain": "bool"}, {"slot": "int"})}
+UNCERTAIN_TRADE_DONE = {"trade_done": ({"token": "str", "uncertain": "bool"}, {"slot": "int", "after_reset": "bool"})}
 # tick's optional set also applies to safe
 EVENTS["safe"] = ({}, dict(EVENTS["tick"][1]))
 
@@ -119,6 +119,8 @@ COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "choose_mon": ({"token": "str"}, {}),
     "apply_trade": ({"slot": "int", "blob_hex": "hex", "old_key": "key", "token": "str"}, {"partner_name": "str"}),
     "apply_prepare": ({"token": "str", "slot": "int", "old_key": "key"}, {}),
+    # MAJOR-4: the applying watchdog asks a silent prepared side to pull an unpicked APPLY
+    "withdraw_trade": ({"token": "str"}, {}),
     "ghost_pos": ({}, {}),
     "link_panel": ({"rows": "list"}, {}),
     # one-way replies to key_change (docs/protocol.md §5): no ACKS row, nothing to answer

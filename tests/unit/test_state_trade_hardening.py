@@ -259,3 +259,54 @@ def test_a_trade_blocked_player_makes_no_pair_eligible_on_either_side(tmp_path):
     assert state.pending_trade is None
     state.handle_event("b", {"event": "tick", "trade_blocked": False})
     assert state._eligible_trade_pairs("a")
+
+
+
+# ── MAJOR-4: the applying watchdog first asks each silent prepared side to withdraw ───────────────
+
+def _prepared_applying(tmp_path):
+    state, entry, token, _a, _b = _preparing(tmp_path)
+    state.handle_event("a", {"event": "apply_ready", "token": token, "ok": True})
+    state.handle_event("b", {"event": "apply_ready", "token": token, "ok": True})
+    assert state.pending_trade["phase"] == "applying"
+    _cmds(state, "a"), _cmds(state, "b")
+    return state, entry, token
+
+
+def _expire(state):
+    out = {"a": [], "b": []}
+    for _ in range(state.TRADE_WATCHDOG_EVENTS + 1):
+        out["a"] += state.handle_event("a", {"event": "noop"})
+    out["b"] += _cmds(state, "b")
+    return out
+
+
+def test_the_watchdog_asks_silent_sides_to_withdraw_before_anything_awaits(tmp_path):
+    """An armed-but-unpicked Gen 1 APPLY could be picked up AFTER a watchdog rollback (the review
+    probe P3): a silent side is first told to withdraw it, which gives a CERTAIN answer."""
+    state, _entry, token = _prepared_applying(tmp_path)
+    seen = []
+    state.on_trade_outcome = seen.append
+    out = _expire(state)
+    for pid in ("a", "b"):
+        assert {"cmd": "withdraw_trade", "token": token} in out[pid]
+    assert state.pending_trade["phase"] == "applying" and seen == [], "no await, no uncertain yet"
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": B_GETS, "new_species": 0})
+    _expire(state)                                                             # B stays silent
+    assert state.pending_trade["phase"] == "uncertain"
+    assert state.pending_trade["verdict"] == {"a": "none", "b": "await"}
+    assert [r["outcome"] for r in seen] == ["uncertain"]
+
+
+# ── MAJOR-5: a native result 2 is settled only by the post-reset hello, never the RAM tick ────────
+
+def test_a_result_2_side_is_settled_by_its_post_reset_hello_not_a_tick(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    state.handle_event("b", {"event": "trade_done", "token": token, "uncertain": True, "after_reset": True})
+    _tick(state, "b", _mon("0101:5678:99", 7))                   # the soft-locked RAM: neither mon
+    assert state.pending_trade["phase"] == "applying" and state.pending_trade["verdict"]["b"] == "await"
+    state.handle_event("b", {"event": "hello", "ot_id": "5678", "trainer_name": "Bob",
+                             "party": [_mon(B_GETS, 0x26)]})                     # the reloaded save
+    assert state.pending_trade is None
+    assert (entry.a.key, entry.b.key) == (A_GETS, B_GETS)
