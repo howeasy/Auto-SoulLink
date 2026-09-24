@@ -20,7 +20,7 @@
         "partner": "crystal",
         "fixtures": {"a": "crystal_battle", "b": "crystal_battle_ot2"},
         "trade_fixtures": {"a": "crystal_battle_errand", "b": "crystal_battle_ot2_errand"},
-        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset", "gen2_species_clause", "gen2_type_clause", "gen2_gender_clause", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item", "gen2_trade_refuse_contest", "gen2_trade_refuse_unsaved", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison"]
+        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset", "gen2_species_clause", "gen2_type_clause", "gen2_gender_clause", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item", "gen2_trade_refuse_contest", "gen2_trade_refuse_unsaved", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild"]
       },
       "proofs": [
         {
@@ -179,6 +179,24 @@
               "sha256": "ecbc154e6e42e98d1d44d6aee9beb1d727ae1f6ef490d1c2921c7a46499f7273"
             }
           }
+        },
+        {
+          "scenario": "gen2_pc_ops",
+          "command": "python tools/e2e_duo.py --keep-data --game gen2_new --scenario gen2_pc_ops --lane gen2-cc-pc-ops",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_pc_ops_cc_a_result.txt",
+              "sha256": "365b8895d834f42e844d8273a2cf6d874942ce35a751eaf2a414367dfbe7dade"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_pc_ops_cc_b_result.txt",
+              "sha256": "1288755d26aa1962c1a8d001f0218233b31161249f8c31b4302f472091fe0eed"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_pc_ops_cc_pydec_result.txt",
+              "sha256": "9faed9471dc5f012173caacb544f2509b796b268b269d4a594f7809c93df2774"
+            }
+          }
         }
       ]
     },
@@ -192,7 +210,7 @@
         "partner": "silver",
         "fixtures": {"a": "gold_battle", "b": "silver_battle"},
         "trade_fixtures": {"a": "gold_battle_errand", "b": "silver_battle_errand"},
-        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_reconnect", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item", "gen2_trade_refuse_contest", "gen2_trade_refuse_unsaved", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison"]
+        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_reconnect", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item", "gen2_trade_refuse_contest", "gen2_trade_refuse_unsaved", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild"]
       },
       "proofs": [
         {
@@ -363,7 +381,7 @@
         "initiator": "crystal",
         "partner": "gold",
         "fixtures": {"a": "crystal_battle", "b": "gold_battle"},
-        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_reconnect", "gen2_gender_clause", "gen2_type_clause", "gen2_species_clause", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison"]
+        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_reconnect", "gen2_gender_clause", "gen2_type_clause", "gen2_species_clause", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild"]
       },
       "proofs": [
         {

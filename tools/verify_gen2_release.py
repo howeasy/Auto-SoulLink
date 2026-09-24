@@ -252,12 +252,13 @@ DUO_REQUIRED_SCENARIOS = frozenset({"link"})
 SCENARIO_END_STATUS = {"link": {"alive"}, "gen2_faint": {"dead", "memorial"}, "gen2_faint_active": {"memorial"},
                        # DUO-WAVE-C contract (whiteout, pc_ops, changebox, poison)
                        "gen2_whiteout": {"memorial"}, "gen2_pc_ops": {"alive"}, "gen2_changebox": {"memorial"},
-                       "gen2_poison": {"dead", "memorial"}}
+                       "gen2_poison": {"dead", "memorial"}, "gen2_whiteout_rebuild": {"alive"}}
 # Per-scenario PYDEC tokens beyond a/b/titles/status (DUO-WAVE-C contract; the death=active rule's shape).
-SCENARIO_TOKENS = {"gen2_whiteout": {"repair": {"written", "memorial_first"}},
+SCENARIO_TOKENS = {"gen2_whiteout": {"repair": "run_over"},   # owner ruling (a), 4aa1ad5c: game over
                    "gen2_pc_ops": {"release": "unpropagated"},
                    "gen2_changebox": {"box_change": "BOX1->BOX14->BOX1"},
-                   "gen2_poison": {"death": "poison"}}
+                   "gen2_poison": {"death": "poison"},
+                   "gen2_whiteout_rebuild": {"rebuild": "restored"}}   # D-7, owner ruling (c), e8eb21df
 
 
 def _fixture_sha256(root: Path, fixture: str) -> str | None:
@@ -943,7 +944,10 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
         errors.extend(_active_faint_cell_errors(legs, axes))
     tokens = _pydec_tokens(legs.get("pydec", [])) or {}
     memorial_sides = ()
-    if scenario == "gen2_faint_active" or scenario == "gen2_faint" and tokens.get("status") == "memorial":
+    # gen2_changebox's memorial is the faint half (DUO-WAVE-C). Whiteout's preimage is the REVIVED record
+    # (HP > 0), so the HP-zero faint rule cannot apply to it; its oracle checks it instead.
+    if (scenario in ("gen2_faint_active", "gen2_changebox")
+            or scenario == "gen2_faint" and tokens.get("status") == "memorial"):
         memorial_sides = ("a", "b")
     elif scenario in ("gen2_type_clause", "gen2_gender_clause") and tokens.get("ending") == "memorial":
         memorial_sides = (tokens.get("rejected"),)

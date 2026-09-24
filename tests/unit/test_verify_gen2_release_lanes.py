@@ -2157,10 +2157,11 @@ def test_committed_g4_packet_is_red_until_the_owner_signs():
 
 # DUO-WAVE-C (whiteout, pc_ops, changebox, poison): the PYDEC line names its own cell's tokens.
 _WAVE_C_PYDEC = {
-    "gen2_whiteout": ("memorial", "scenario=gen2_whiteout repair=memorial_first", "repair=guessed"),
+    "gen2_whiteout": ("memorial", "scenario=gen2_whiteout repair=run_over", "repair=memorial_first"),
     "gen2_pc_ops": ("alive", "scenario=gen2_pc_ops release=unpropagated", "release=propagated"),
     "gen2_changebox": ("memorial", "scenario=gen2_changebox box_change=BOX1->BOX14->BOX1", "box_change=BOX1"),
     "gen2_poison": ("dead", "scenario=gen2_poison death=poison", "death=battle"),
+    "gen2_whiteout_rebuild": ("alive", "scenario=gen2_whiteout_rebuild rebuild=restored", "rebuild=lost"),
 }
 
 
@@ -2176,4 +2177,14 @@ def test_wave_c_pydec_requires_its_scenario_tokens(scenario):
     assert gate._pydec_cell_errors([bad], scenario, axes, keys) != []
     assert gate._pydec_cell_errors([f"{head.replace(status, 'alive' if status != 'alive' else 'dead')} {tokens}"],
                                    scenario, axes, keys) != []
-    assert scenario in gate.DUO_PAIRS_SCENARIOS
+
+
+@pytest.mark.parametrize(("scenario", "sides"), [("gen2_changebox", ["a", "b"]), ("gen2_whiteout", []),
+                                                 ("gen2_pc_ops", [])])
+def test_changebox_memorial_needs_the_hp_zero_preimage_but_whiteout_does_not(monkeypatch, scenario, sides):
+    """DUO-WAVE-C: changebox's memorial is the faint half; whiteout's preimage is the REVIVED record."""
+    seen = []
+    monkeypatch.setattr(gate, "_memorial_receipt_errors", lambda _lines, side: seen.append(side) or [])
+    axes = {"initiator": "crystal", "partner": "crystal", "fixtures": {"a": "x", "b": "y"}}
+    gate._receipt_errors(REPO, {"receipts": {}}, scenario, axes, {})
+    assert seen == sides
