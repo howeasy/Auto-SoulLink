@@ -394,3 +394,19 @@ def test_a_fainted_incoming_mon_is_fine_while_another_own_mon_lives(tmp_path):
     state.partner_blobs["a"].append({"slot": 0, "key": "ABCD:1234:99", "blob": bytes(66),
                                      "species_id": 0x99, "level": 5, "hp": 12})
     assert state._eligible_trade_pairs("a")
+
+
+# ── TRADE-DRIVER live G<->S evolve: a hello back-fill must not rewrite the other half's species ──
+
+def test_a_hello_holding_the_partners_key_mid_trade_does_not_break_the_evolution_check(tmp_path):
+    """Live gs2_evolve: after the native swap each party holds the PARTNER's key; the hello's
+    display back-fill wrote that species onto the player's OWN half, so B's trade-evolved report
+    (Kadabra -> Alakazam) failed the family check against the wrong species."""
+    state, entry, token = _gen1_applying(tmp_path)
+    state.handle_event("a", {"event": "hello", "ot_id": "1234", "trainer_name": "Alice",
+                             "party": [_mon(A_GETS, 0x15)]})            # A now holds B's mon
+    assert entry.a.species == 0x26, "A's half is still the Kadabra A gave"
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    state.handle_event("b", {"event": "trade_done", "token": token, "new_key": "ABCD:1234:95", "new_species": 0x95})
+    assert state.pending_trade is None, state.pending_trade and state.pending_trade.get("problem")
+    assert entry.b.key == "ABCD:1234:95" and entry.b.species == 0x95

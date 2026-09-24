@@ -1649,7 +1649,9 @@ class SoulLinkState:
             entry = self._key_index.get(key)
             if not entry:
                 continue
-            mon = entry.a if player_id == "a" else entry.b
+            # the half whose key this is: mid-trade a party holds the PARTNER's key, and writing
+            # its species onto this player's own half broke the trade-evolution family check
+            mon = next((h for h in (entry.a, entry.b) if h and h.key == key), None)
             if mon:
                 if nick and not mon.nickname:
                     mon.nickname = nick
