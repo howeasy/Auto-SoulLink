@@ -1679,7 +1679,8 @@ def test_clause_route29_species_are_exactly_the_decomp_grass_table(repo, start):
 from tests.unit.test_gen2_entry import World  # noqa: E402
 
 TRADE_LUA = ROOT / "lua/tests/duo/gen2_trade.lua"
-TRADE_CASES = ("new", "decline_new", "timeout", "reset_wait", "reset_commit", "refuse_item")
+TRADE_CASES = ("new", "evolve", "decline_new", "timeout", "reset_wait", "reset_commit", "refuse_item")
+HAUNTER, GENGAR, FLOWER_MAIL = 0x5D, 0x5E, 0x9E   # pokegold constants/pokemon_constants.asm, item_constants.asm
 TRADE_FILES = ("lua/tests/duo/gen2_trade.lua",) + tuple(f"lua/tests/duo/scenario_gen2_trade_{c}.lua" for c in TRADE_CASES)
 TOKEN = [0x11, 0x22, 0x33, 0x44]
 STACK = (0xDF03, 0xDFFF)   # gold/silver wStackBottom..wStackTop (data/gen2/gold_slink.sym)
@@ -1724,7 +1725,12 @@ def test_override_patches_each_entry_fragment_exactly_once_and_pins_the_publishe
         assert text.count(p["from"]) == 1 and patched.count(p["to"]) == 1 and p["from"] not in patched
     assert patched.count("\n") == text.count("\n")   # the prefix shares line 1: tracebacks keep their line numbers
     prov = json.loads((ROOT / "data/gen2/overlay_provenance.json").read_text())["outputs"]
-    assert dict(T.OVERLAY_SHA1.items()) == {prov[a]["slink_title"]: prov[a]["sha1"] for a in ("pokecrystal", "pokegold", "pokesilver")}
+    pins = T.load_pins(ROOT.as_posix(), lua.eval("dofile")((ROOT / "lua/json_codec.lua").as_posix()))
+    assert dict(pins.items()) == {prov[a]["slink_title"]: prov[a]["sha1"] for a in ("pokecrystal", "pokegold", "pokesilver")}
+    # the mail ids the verdict treats as plant-only are exactly every pack's mail_ids
+    for title in ("crystal", "gold", "silver"):
+        mail = json.loads((ROOT / f"data/games/gen2_{title}/items.json").read_text())["mail_ids"]
+        assert sorted(k for k, _ in T.MAIL.items()) == sorted(mail)
     # red: a fragment that moved (production edited) refuses, never patches blindly
     broken, why = T.patch_entry(text.replace('candidate.row.kind == "clean"', 'candidate.row.kind=="clean"'))
     assert broken is None and "kind" in why
@@ -1741,6 +1747,7 @@ class OverlayWorld(World):
         self.image = overlay if image is None else image(clean, overlay)
         lua = self.lua
         T = lua.eval("dofile")(TRADE_LUA.as_posix())
+        T.load_pins(ROOT.as_posix(), lua.eval("dofile")((ROOT / "lua/json_codec.lua").as_posix()))
         self.T = T
         if patched:
             text = (ROOT / "lua/gen2/entry.lua").read_text(encoding="utf-8")
@@ -1999,8 +2006,11 @@ def reload_leg(j, final_frame):
 
 def trade_stream(case, player, item=0):
     """The marker lines one side prints for `case`, shaped exactly as gen2_trade.lua's hooks print them."""
-    party = [{"species_marker": 155, "blob_hex": blob(155)}, {"species_marker": 16, "blob_hex": blob(16, item)}]
-    partner = {"species_marker": 161, "blob_hex": blob(161)}
+    own = HAUNTER if (case == "evolve" and player == "a") else (19 if player == "b" else 16)
+    held = FLOWER_MAIL if (case == "refuse_item" and player == "a") else item
+    party = [{"species_marker": 155, "blob_hex": blob(155)}, {"species_marker": own, "blob_hex": blob(own, held)}]
+    partner_species = HAUNTER if (case == "evolve" and player == "b") else (16 if player == "b" else 19)
+    partner = {"species_marker": partner_species, "blob_hex": blob(partner_species)}
     out = []
 
     def j(tag, value):
@@ -2015,8 +2025,17 @@ def trade_stream(case, player, item=0):
                           "override_manifest_sha256": "a" * 64, "trade_manifest_sha256": "b" * 64, "run_id": "g2trade_x"})
     j("BOOTED", {"frame": 10, "map_group": 24, "map_number": 3, "x": 1, "y": 1, "party_count": 1})
     j("HELLO", {"frame": 20, "ot_id": 1})
-    j("ENGINE_CAPTURE", {"frame": 500, "site_id": "capture_party_finalized", "acquisition": "wild", "key": KEY})
+    if case == "evolve" and player == "a":
+        j("HARNESS_WRITE", {"frame": 400, "domain": "WRAM", "bank": 1, "address": 0xD117, "symbol": "wTempWildMonSpecies",
+                            "wram_offset": 0x1117, "bytes_before": "10", "bytes_after": "%02x" % HAUNTER,
+                            "purpose": "trade_evolve_species", "species": "HAUNTER", "evolves_to": "GENGAR"})
+    j("ENGINE_CAPTURE", {"frame": 500, "site_id": "capture_party_finalized", "acquisition": "wild", "key": KEY,
+                         "species_id": own})
     out.append("CAUGHT " + KEY)
+    if case == "refuse_item" and player == "a":
+        j("HARNESS_WRITE", {"frame": 900, "domain": "WRAM", "bank": 1, "address": 0xDA2B + 48, "symbol": "wPartyMon1Item",
+                            "wram_offset": 0x1A5B, "bytes_before": "00", "bytes_after": "%02x" % FLOWER_MAIL,
+                            "purpose": "d3_mail_item", "slot": 1, "item": "FLOWER_MAIL"})
     base = image(1000, "baseline", "native_save")
     base.update(slot=1, count=2, key=KEY, party=party, dex={"primary": {"caught_hex": "00" * 32, "seen_hex": "00" * 32},
                                                             "backup": {"caught_hex": "00" * 32, "seen_hex": "00" * 32}})
@@ -2031,7 +2050,7 @@ def trade_stream(case, player, item=0):
     role, gen = (0, 5) if plan == "proposer" else (1, 9)
     j("TRADE_ENTRY", {"frame": 1200, "role": role, "site": site("SlinkTradeEntry" if role == 0 else "SlinkTradePromptEntry")})
     if case == "refuse_item":
-        before = {"frame": 1250, "site": site("SlinkTradeItemAllowed"), "registers": regs(A=item), "slot": 1,
+        before = {"frame": 1250, "site": site("SlinkTradeItemAllowed"), "registers": regs(A=held), "slot": 1,
                   "lease_hex": lease(1, 3, 3, 0, 0)}
         j("TRADE_EXIT", {"frame": 1260, "lease_hex": lease(0, 3, 3, 0, 0)})
         j("TRADE_CONTROL", {"kind": "d3", "before": before, "after": {"frame": 1260, "site": site("SlinkTradeExit"),
@@ -2045,11 +2064,11 @@ def trade_stream(case, player, item=0):
     if role == 1:
         offer.update(incoming_species_marker=partner["species_marker"], incoming_blob_hex=partner["blob_hex"])
     j("TRADE_OFFER", offer)
-    answer = {"new": "YES", "reset_commit": "YES"}.get(case, "NO")
+    answer = {"new": "YES", "evolve": "YES", "reset_commit": "YES"}.get(case, "NO")
     after = {"timeout": "TRADE_EXIT", "reset_wait": "REBOOTED"}.get(case)
     if role == 1:
         j("TRADE_ANSWER", {"frame": 1350, "answer": answer, "after": after})
-    committed = case in ("new", "reset_commit")
+    committed = case in ("new", "evolve", "reset_commit")
     recovered = case == "reset_commit" and player == "a"
     if role == 0 or committed:
         j("TRADE_WAIT_APPLY", {"frame": 1310 if role == 0 else 1360})
@@ -2073,6 +2092,9 @@ def trade_stream(case, player, item=0):
     if committed:
         for f, name in ((1900, "AddTempmonToParty"), (1901, "EvolvePokemon"), (1902, "SaveAfterLinkTrade")):
             j("TRADE_NATIVE_CALL", {"frame": f, **site(name, 3, 0x5A9C)})
+        received = GENGAR if (case == "evolve" and player == "b") else partner_species
+        out.append("TX " + json.dumps({"event": "trade_done", "token": "t1", "slot": 1,
+                                       "new_key": "1A2B:B542:%02X" % received, "new_species": received}))
         j("TRADE_SAVE_RETURNED", {"frame": 1950, "site": site("SlinkTradeCommit.cleanup"), "registers": regs()})
         if recovered:
             native = image(1950, "native", "native_trade_save")
@@ -2101,7 +2123,10 @@ def trade_stream(case, player, item=0):
         j("TRADE_NATIVE_SAVE", native)
         j("TRADE_EXIT", {"frame": 2050, "lease_hex": lease(0, gen + 1, gen + 1, 0, 1)})
         j("TRADE_FINAL", {**image(2200, "final", "flush"), "client_saves": 2})
-        j("TRADE_STACK", stack_row({"wait": (1200, 1401), "trade_animation": (1410, 1900), "native_save": (1902, 2000)}))
+        phases = {"wait": (1200, 1401), "trade_animation": (1410, 1900), "native_save": (1902, 2000)}
+        if case == "evolve" and player == "b":
+            phases["evolution_animation"] = (1901, 1902)
+        j("TRADE_STACK", stack_row(phases))
         reload_leg(j, 2200)
         return out
     if case == "decline_new" and player == "a":
@@ -2148,7 +2173,7 @@ def trade_verdict(lines, case, player):
 @pytest.mark.parametrize("case", TRADE_CASES)
 @pytest.mark.parametrize("player", ["a", "b"])
 def test_trade_verdict_passes_each_case_stream(case, player):
-    problems, facts = trade_verdict(trade_stream(case, player, item=0x9E if case == "refuse_item" else 0), case, player)
+    problems, facts = trade_verdict(trade_stream(case, player), case, player)
     assert problems == []
     assert facts.admission.admission_scope == "HARNESS_ONLY_OVERLAY"
 
@@ -2213,7 +2238,7 @@ def test_trade_verdict_red_controls_for_the_negative_cases():
         "timeout", "a", "timeout control")
     red(edit(trade_stream("reset_wait", "a"), "TRADE_CONTROL", lambda v: v["after"].update(lease_hex=lease(2, 5, 5, 0, 1))),
         "reset_wait", "a", "zeroed lease")
-    red(edit(trade_stream("refuse_item", "a", item=0x9E), "TRADE_CONTROL", lambda v: v["before"]["registers"].update(A=0x01)),
+    red(edit(trade_stream("refuse_item", "a"), "TRADE_CONTROL", lambda v: v["before"]["registers"].update(A=0x01)),
         "refuse_item", "a", "D3 control")
     red(trade_stream("new", "a"), "decline_new", "a", "unexpected TRADE_APPLY_PICKUP")
     red(edit(trade_stream("timeout", "b"), "TRADE_ANSWER", lambda v: v.update(after=None)), "timeout", "b", "before the partner")
@@ -2266,11 +2291,14 @@ for i = 0, 0x7FFF do sim.cart[i] = (i * 7) % 251 end
 console = {log=function() end}
 event = {onmemorywrite=function(fn, addr, name) sim.writes[addr] = fn return "w" .. addr end}
 local api = {}
+local function wram(a) return a < 0x1000 and 0xC000 + a or 0xD000 + a - 0x1000 end   -- bank 1 only (the sim's WRAMX)
 function api.read_u8(a, d)
     if d == "ROM" then return overlay_rom:byte(a + 1) end
     if d == "CartRAM" then return sim.cart[a] end
+    if d == "WRAM" then return sim.bus[wram(a)] end
     return sim.bus[a]
 end
+function api.write_u8(a, v, d) assert(d == "WRAM", "harness writes are WRAM-domain only") sim.bus[wram(a)] = v end
 function api.read_range(a, n, d) local out = {} for i = 1, n do out[i] = api.read_u8(a + i - 1, d) end return out end
 function api.register(r) return sim.regs[r] end
 function api.on_bus_exec(fn, addr, name) sim.exec[name:gsub("^SLink%-duo%-trade%-", "")] = fn return name end
@@ -2285,14 +2313,15 @@ function api.saveram()
     f:write(table.concat(chars) .. string.rep("\0", 22))
     f:close()
 end
-local ctx = {api=api, trade_facts=facts, profile=profile, env={title="gold", dir=dir, saveram="sim.SaveRAM"}}
+local ctx = {api=api, trade_facts=facts, profile=profile, env={title="gold", dir=dir, saveram="sim.SaveRAM"},
+             facts={maps={Route29={map_group=24, map_number=3}}}}
 local function jlog(tag, v) sim.lines[#sim.lines + 1] = tag .. " " .. assert(json.encode(v)) end
 local function log(s) sim.lines[#sim.lines + 1] = s end
 local h = {root=".", rec={client_saves=1}, slot_of=function() return 1 end, lines=sim.lines}
 local e = {h=h, ctx=ctx, SG=SG, F={}, api=api, D={player="a", result=dir .. "/sim_result.txt", trade_evidence_dir=dir,
                                               scenario="gen2_trade_new", trade_case="gen2_trade_new"}, host={}, case="new",
            gen2={handle_command=function() end}, parts={qualification="HARNESS_ONLY_OVERLAY"}, log=log, jlog=jlog, json=json}
-T.running = {title="gold", overlay_sha1=T.OVERLAY_SHA1.gold, base_sha1=profile.rom_sha1}
+T.running = {title="gold", overlay_sha1=facts.overlay_sha1, base_sha1=profile.rom_sha1}
 T.manifest_text, T.manifest_sha256 = '{"schema":"gen2-duo-overlay-override-v1"}', string.rep("a", 64)
 function sim.attach(player) e.D.player = player return T.attach(e) end
 function sim.put(addr, bytes) for i, b in ipairs(bytes) do sim.bus[addr + i - 1] = b end end
@@ -2448,6 +2477,9 @@ def test_attach_hooks_print_a_committed_proposer_visit_the_verdict_passes(tmp_pa
     t.frames(2)
     t.lease(0, 6, 6, 0)
     sim.fire("SlinkTradeExit")
+    # the client's trade_done (duo_gen2_main.lua logs every TX): the received partner's key
+    sim.lines[len(sim.lines) + 1] = "TX " + json.dumps({"event": "trade_done", "token": "t1", "slot": 1,
+                                                         "new_key": "1A2B:B542:A1", "new_species": 161})
     lines = t.finish("flush", reload=True)
     problems, facts = trade_verdict(lines, "new", "a")
     assert problems == []
@@ -2498,3 +2530,76 @@ def test_attach_hooks_prove_the_responder_decline_control(tmp_path, monkeypatch)
     t2.sim.fire("SlinkTradeExit")
     problems, _ = trade_verdict(t2.finish("flush"), "decline_new", "b")
     assert any("TRADE_CONTROL" in p for p in problems)
+
+
+# ── O-31: the disclosed harness writes (D3 mail item, trade-evolve wild species) ──
+def test_o31_plants_are_derived_from_the_decomp_and_the_overlay_table():
+    from tools.gen2_trade_facts import trade_facts
+    for title in ("gold", "crystal"):
+        plants = trade_facts(title)["plants"]
+        assert plants == {"evolve_species": {"name": "HAUNTER", "id": HAUNTER}, "evolves_to": {"name": "GENGAR", "id": GENGAR},
+                          "mail_item": {"name": "FLOWER_MAIL", "id": FLOWER_MAIL}}
+
+
+def test_o31_undisclosed_or_misplaced_plants_are_refused():
+    # the D3 mail item planted without its HARNESS_WRITE disclosure: refused, however native the refusal looked
+    red(drop(trade_stream("refuse_item", "a"), "HARNESS_WRITE"), "refuse_item", "a", "missing HARNESS_WRITE")
+    # a mail item in a case that plans no write (the baseline would carry an undisclosed plant)
+    red(edit(trade_stream("decline_new", "a"), "TRADE_BASELINE",
+             lambda v: v["party"][1].update(blob_hex=blob(16, FLOWER_MAIL))), "decline_new", "a", "undisclosed write")
+    # a HARNESS_WRITE where the plan has none
+    new = trade_stream("new", "a")
+    red(new[:8] + [line for line in trade_stream("refuse_item", "a") if line.startswith("HARNESS_WRITE ")] + new[8:],
+        "new", "a", "plans none")
+    # the planted mail must come after the link catch and before the baseline
+    rf = trade_stream("refuse_item", "a")
+    at = [i for i, line in enumerate(rf) if line.startswith("HARNESS_WRITE ")][0]
+    cap = [i for i, line in enumerate(rf) if line.startswith("ENGINE_CAPTURE ")][0]
+    red(rf[:cap] + [rf[at]] + [line for i, line in enumerate(rf[cap:], cap) if i != at], "refuse_item", "a", "before the link")
+    # the evolve plant: disclosed, before the catch, and the caught species must be the planted one
+    ev = trade_stream("evolve", "a")
+    red(drop(ev, "HARNESS_WRITE"), "evolve", "a", "missing HARNESS_WRITE")
+    red(edit(ev, "ENGINE_CAPTURE", lambda v: v.update(species_id=16)), "evolve", "a", "not the disclosed planted species")
+    red(edit(ev, "HARNESS_WRITE", lambda v: v.update(purpose="d3_mail_item")), "evolve", "a", "planned disclosed")
+
+
+def test_evolve_case_needs_the_native_trade_evolution_and_the_server_rekey():
+    b = trade_stream("evolve", "b")
+    red(edit(b, "TRADE_STACK", lambda v: v["phases"][2].update(visited=False, start=None, end=None, samples=[])),
+        "evolve", "b", "evolution_animation unvisited")
+    tx = [i for i, line in enumerate(b) if line.startswith("TX ")][0]
+    kept = b[:tx] + ["TX " + json.dumps({"event": "trade_done", "token": "t1", "slot": 1,
+                                         "new_key": "1A2B:B542:%02X" % HAUNTER, "new_species": HAUNTER})] + b[tx + 1:]
+    red(kept, "evolve", "b", "did not evolve natively")
+    red(b[:tx] + b[tx + 1:], "evolve", "b", "no trade_done")
+    # a non-evolving committed side never shows an evolution animation
+    red(edit(trade_stream("new", "b"), "TRADE_STACK", lambda v: v["phases"].__setitem__(2, {
+        "phase": "evolution_animation", "visited": True, "start": {"frame": 1901, "site": site("x")},
+        "end": {"frame": 1902, "site": site("y")},
+        "samples": [{"frame": 1901, "stack_addr": 0xDFDE, "sp": 0xDFE0, "pc": 1, "rom_bank": 1}]})), "new", "b", "forbids")
+
+
+def test_attach_plants_are_disclosed_wram_writes_that_read_back(tmp_path, monkeypatch):
+    t = TradeSim(tmp_path, "a", monkeypatch)
+    lua, sim = t.lua, t.sim
+    t.party(t.mon(16))
+    row = t.trade.plant_mail(1)
+    assert row.purpose == "d3_mail_item" and row.bytes_after == "9e" and row.domain == "WRAM"
+    assert sim.bus[t.ram["wPartyMon1"] + 48 + 1] == FLOWER_MAIL
+    # the species plant fires only at a Route 29 wild StartBattle, once
+    r = t.ram
+    t.trade.arm_species_plant()
+    sim.put(r["wOtherTrainerClass"], lua.table_from([0]))
+    sim.put(r["wBattleMode"], lua.table_from([1]))
+    sim.put(r["wBattleType"], lua.table_from([0]))
+    sim.put(r["wMapGroup"], lua.table_from([99]))
+    sim.fire("StartBattle")
+    lines = [sim.lines[i] for i in range(1, len(sim.lines) + 1)]
+    assert sum(1 for line in lines if line.startswith("HARNESS_WRITE ")) == 1   # wrong map: no write
+    sim.put(r["wMapGroup"], lua.table_from([24]))
+    sim.put(r["wMapNumber"], lua.table_from([3]))
+    sim.fire("StartBattle")
+    sim.fire("StartBattle")
+    writes = [json.loads(line[14:]) for i in range(1, len(sim.lines) + 1) if (line := sim.lines[i]).startswith("HARNESS_WRITE ")]
+    assert [w["purpose"] for w in writes] == ["d3_mail_item", "trade_evolve_species"]
+    assert writes[1]["bytes_after"] == "%02x" % HAUNTER and writes[1]["symbol"] == "wTempWildMonSpecies"

@@ -8,7 +8,8 @@
      only the clean catalog kind, asserts the clean profile sha1 twice, passes artifact_kind=nil). This file
      text-patches lua/gen2/entry.lua IN MEMORY (T.PATCHES, each fragment exactly once in the source) and serves
      that chunk to the unmodified lua/gen2/run.lua through a dofile interception scoped to the run.lua load.
-     Only the three published overlay sha1s (T.OVERLAY_SHA1, d09e76c1, caps 31) are admitted, each only for
+     Only the published overlay sha1s (T.load_pins: data/gen2/overlay_provenance.json outputs, read at load
+     and bound by its sha256 in the manifest; never hardcoded, the overlays get republished) are admitted, each only for
      its own title and only when the profile's overlay block names it. The patched graph reports qualification
      "HARNESS_ONLY_OVERLAY" (never "PHYSICAL_RECEIPTED": the U1/U2 receipts it re-validates are the CLEAN ones).
      Disclosure: TRADE_OVERRIDE <manifest json> (entry/run source sha256, the patches, the pins) and
@@ -69,6 +70,16 @@
     CHORD {frame, frames}  RESET_SEEN {frame, delta}  REBOOTED {...BOOTED}   PHONE {frame, text}
     TRADE_STACK {domain, stack_bank, stack_start, stack_end, armed_count, hook_failures, phases[4]}
     TRADE_HOOK_ERROR {text}   (any hook fault; the verdict refuses it)
+    HARNESS_WRITE {frame, domain="WRAM", bank, address, symbol, wram_offset, bytes_before, bytes_after, purpose, ...}
+        O-31 (owner, "Test-only setup"), the ONLY writes, each disclosed and listed in the receipt's
+        harness_write_scopes; production is unchanged:
+          d3_mail_item          refuse_item A: after the link, before TRADE_BASELINE, the offered linked mon's held
+                                item byte (wPartyMon1 + slot*48 + MON_ITEM) := FLOWER_MAIL. SlinkTradeItemAllowed is a
+                                pure item-id table lookup (patch/gen2/src/trade_items.asm, $9E -> 0), so no mail
+                                record is needed; the native CheckOwnSlot refuses it
+          trade_evolve_species  trade_evolve A: at StartBattle of the first Route 29 wild battle (after
+                                ChooseWildEncounter stored it, before StartBattle reads it), wTempWildMonSpecies :=
+                                HAUNTER; the catch, capture site, link and key are then all native
     RECEIPT {schema "gen2-duo-trade-v1", case, variant, outcome, ...}   PASS only
 --]]
 local T = {}
@@ -76,8 +87,12 @@ T.SCOPE = "HARNESS_ONLY_OVERLAY"
 T.SCHEMA = "gen2-duo-trade-v1"
 T.OVERRIDE_SCHEMA = "gen2-duo-overlay-override-v1"
 -- The published overlays (d09e76c1; data/gen2/overlay_provenance.json outputs.*.sha1, profile overlay blocks).
-T.OVERLAY_SHA1 = {crystal="651dc6bf0fccf8a3e4eb5e2d2895c55ad732d545", gold="d563669ec3ac5029be9464d2301aa3be27a5f163",
-                  silver="76c6c112fed6edc7ad88202ab6bc44d31da5f803"}
+T.OVERLAY_SHA1 = {}   -- filled by T.load_pins from the published provenance
+T.PROVENANCE = "data/gen2/overlay_provenance.json"
+-- Mail ids, identical in the three pinned packs (data/games/gen2_*/items.json mail_ids; the unit tests pin it):
+-- an offered mon holding one can only come from the disclosed D3 plant.
+T.MAIL = {[0x9E]=true}
+for id = 0xB5, 0xBD do T.MAIL[id] = true end
 T.CART, T.SAVERAM = 0x8000, 0x8000 + 22
 T.LEASE_OFF = 14                              -- slink_abi.inc SLINK_OFS_TRADE_LEASE
 T.CMD = {query=1, offer=2, prompt=3, apply=5, done=7, release=8}
@@ -149,6 +164,23 @@ function T.patch_entry(text)
     return T.PREFIX .. out
 end
 
+-- The published overlay pins: {title -> sha1} from outputs[*].slink_title/sha1; returns the file's sha256.
+function T.load_pins(root, json, sha256_text)
+    local raw = T.read(root .. "/" .. T.PROVENANCE)
+    local doc = assert(json.decode(raw, {items=1000000}), "overlay provenance unreadable")
+    assert(doc.schema == "gen2-overlay-provenance-v1", "unexpected overlay provenance schema")
+    local pins = {}
+    for _, out in pairs(doc.outputs) do
+        if type(out) == "table" and type(out.slink_title) == "string" and type(out.sha1) == "string" then
+            assert(pins[out.slink_title] == nil, "two published overlays for " .. out.slink_title)
+            pins[out.slink_title] = out.sha1:lower()
+        end
+    end
+    T.OVERLAY_SHA1 = pins
+    T.provenance_sha256 = sha256_text and sha256_text(raw) or nil
+    return pins
+end
+
 -- The harness seam the patched chunk receives as `...`. Exact-hash: only T.OVERLAY_SHA1[title], only when the
 -- profile's overlay block names that sha1 over the profile's own clean base.
 function T.harness()
@@ -189,7 +221,8 @@ function T.manifest(sha256_text, entry_text, run_text, title, running_sha1)
     return {schema=T.OVERRIDE_SCHEMA, admission_scope=T.SCOPE, prefix=T.PREFIX, patches=patches,
             entry={path="lua/gen2/entry.lua", sha256=sha256_text(entry_text)},
             run={path="lua/gen2/run.lua", sha256=sha256_text(run_text)},
-            overlay_sha1=T.OVERLAY_SHA1, title=title, running_sha1=running_sha1,
+            overlay_sha1=T.OVERLAY_SHA1, provenance={path=T.PROVENANCE, sha256=T.provenance_sha256},
+            title=title, running_sha1=running_sha1,
             dofile_scope="lua/gen2/run.lua load only"}
 end
 
@@ -206,6 +239,8 @@ T.read = read
 -- none of the UI/observer sites: each site's bytes are still re-validated at registration).
 function T.context_api(api, getenv)
     local title = getenv("SLINK_GEN2_TITLE")
+    local root = assert(getenv("SLINK_ROOT"), "SLINK_ROOT missing")
+    T.load_pins(root, dofile(root .. "/lua/json_codec.lua"))
     local want = T.OVERLAY_SHA1[title or ""]
     assert(want, "no pinned overlay for SLINK_GEN2_TITLE " .. tostring(title))
     local running = tostring(api.romhash()):lower()
@@ -220,6 +255,7 @@ end
 -- The unmodified run.lua, served the patched entry.lua. Returns client, parts (run.lua's globals).
 function T.start_production(root, SG, json)
     local sha = function(text) return SG.sha256(function(i) return text:byte(i + 1) end, #text) end
+    T.load_pins(root, json, sha)
     local entry_path, run_path = root .. "/lua/gen2/entry.lua", root .. "/lua/gen2/run.lua"
     local entry_text, run_text = read(entry_path), read(run_path)
     local patched = assert(T.patch_entry(entry_text))
@@ -615,6 +651,41 @@ function T.attach(e)
         jlog("TRADE_NATIVE_CALL", row)
     end
 
+    -- O-31: the only harness writes. WRAM domain at the symbol's named bank; read back; disclosed.
+    st.harness_writes = {}
+    local function harness_write(symbol, addr, bank, bytes, purpose, extra)
+        local off = SG.wram_offset(bank, addr, #bytes)
+        local before = api.read_range(off, #bytes, "WRAM")
+        for i, b in ipairs(bytes) do api.write_u8(off + i - 1, b, "WRAM") end
+        local after = api.read_range(off, #bytes, "WRAM")
+        local row = {frame=frame(), domain="WRAM", bank=bank, address=addr, symbol=symbol, wram_offset=off,
+                     bytes_before=hex(before), bytes_after=hex(after), purpose=purpose}
+        for k, val in pairs(extra or {}) do row[k] = val end
+        st.harness_writes[#st.harness_writes + 1] = {purpose=purpose, domain="WRAM", symbol=symbol, address=addr, bank=bank}
+        jlog("HARNESS_WRITE", row)
+        assert(hex(after) == hex(bytes), purpose .. ": the harness write did not read back")
+        return row
+    end
+    local plant = tf.plants
+    function h.trade.plant_mail(slot)
+        local r = tf.ram.wPartyMon1
+        return harness_write("wPartyMon1Item", r.addr + slot * L + c.MON_ITEM, r.bank, {plant.mail_item.id}, "d3_mail_item",
+                             {slot=slot, item=plant.mail_item.name})
+    end
+    function h.trade.arm_species_plant() st.plant_species = {map=ctx.facts.maps.Route29} end
+    local PRE = {}
+    function PRE.StartBattle()
+        local want = st.plant_species
+        if not want or want.done then return end
+        local r = tf.ram
+        if u8(r.wOtherTrainerClass.addr) ~= 0 or u8(r.wBattleMode.addr) ~= 1 or u8(r.wBattleType.addr) ~= 0
+           or u8(r.wMapGroup.addr) ~= want.map.map_group or u8(r.wMapNumber.addr) ~= want.map.map_number then return end
+        want.done = true
+        harness_write("wTempWildMonSpecies", r.wTempWildMonSpecies.addr, r.wTempWildMonSpecies.bank,
+                      {plant.evolve_species.id}, "trade_evolve_species", {species=plant.evolve_species.name,
+                      evolves_to=plant.evolves_to.name, site=site("StartBattle")})
+    end
+
     local H = {}
     function H.SlinkTradeEntry(name)
         st.role, st.entry_frame = 0, frame()
@@ -729,15 +800,16 @@ function T.attach(e)
         if st.wait_before == nil then st.wait_before = control_point(name, lease()[10]) end
     end
     function H.SlinkTradeItemAllowed(name)
-        st.item_before = control_point(name, u8(tf.ram.wCurPartyMon.addr))
+        if st.item_before == nil then st.item_before = control_point(name, u8(tf.ram.wCurPartyMon.addr)) end
     end
 
     local write = api.on_bus_write or function(fn, addr, name, domain) return event.onmemorywrite(fn, addr, name, domain) end
+    for name, fn in pairs(PRE) do H[name] = fn end
     for name, fn in pairs(H) do
         local s = tf.code[name]
         assert(api.read_u8(s.flat, "ROM") == tonumber(s.hex, 16), name .. ": the running overlay's byte differs from the facts")
         local handle = api.on_bus_exec(function()
-            if not st.armed or (s.addr >= 0x4000 and rom_bank() ~= s.bank) then return end
+            if not (st.armed or PRE[name]) or (s.addr >= 0x4000 and rom_bank() ~= s.bank) then return end
             local ok, err = pcall(fn, name)
             if not ok then fault(name .. ": " .. tostring(err)) end
         end, s.addr, "SLink-duo-trade-" .. name, "System Bus")
@@ -929,7 +1001,7 @@ for _, tag in ipairs({"DUO_GEN2", "CLIENT", "BOOTED", "HELLO", "ENGINE_CAPTURE",
                       "TRADE_READY", "TRADE_GO", "TRADE_ENTRY", "TRADE_OFFER", "TRADE_WAIT_APPLY", "TRADE_APPLY_PICKUP",
                       "TRADE_COMMIT_ENTRY", "TRADE_PRE_REMOVE", "TRADE_NATIVE_CALL", "TRADE_DONE", "TRADE_NATIVE_SAVE",
                       "TRADE_EXIT", "TRADE_RESET_ENTRY", "TRADE_ANSWER", "TRADE_CANCEL", "TRADE_CONTROL", "CHORD",
-                      "TRADE_SAVE_RETURNED", "TRADE_RECOVERED", "TRADE_RELOAD", "RELOAD_CHORD", "RELOADED",
+                      "TRADE_SAVE_RETURNED", "TRADE_RECOVERED", "TRADE_RELOAD", "RELOAD_CHORD", "RELOADED", "HARNESS_WRITE",
                       "SAVE_WITNESS",
                       "RESET_SEEN", "REBOOTED", "TRADE_FINAL", "TRADE_STACK", "TRADE_HOOK_ERROR"}) do
     T.JSON_TAGS[tag] = true
@@ -944,12 +1016,14 @@ T.CASES = {
                     b={role="responder", outcome="unchanged", visit="accepted", answer="NO", control="decline"}},
     timeout      = {a={role="proposer", outcome="unchanged", visit="accepted", control="timeout"},
                     b={role="responder", outcome="unchanged", visit="accepted", answer="NO", after="TRADE_EXIT"}},
+    evolve       = {a={role="proposer", outcome="committed", visit="accepted", plant="species"},
+                    b={role="responder", outcome="committed", visit="accepted", answer="YES", evolves=true}},
     reset_wait   = {a={role="proposer", outcome="unchanged", visit="accepted", chord="wait", control="reset_wait"},
                     b={role="responder", outcome="unchanged", visit="accepted", answer="NO", after="REBOOTED"}},
     reset_commit = {a={role="proposer", outcome="committed", visit="accepted", chord="commit", recovered=true,
                        control="reset_commit"},
                     b={role="responder", outcome="committed", visit="accepted", answer="YES"}},
-    refuse_item  = {a={role="proposer", outcome="unchanged", visit="query", control="d3"},
+    refuse_item  = {a={role="proposer", outcome="unchanged", visit="query", control="d3", plant="mail"},
                     b={role="responder", outcome="unchanged", visit="none", after="TRADE_EXIT"}},
 }
 local ANIM = {[0]="TradeAnimation", [1]="TradeAnimationPlayer2"}
@@ -1004,18 +1078,45 @@ function T.verdict(lines, json, case, player)
          "client is not the disclosed HARNESS_ONLY_OVERLAY composition")
     local a = v(adm)
     need(a.admission_scope == T.SCOPE and hex64(a.override_manifest_sha256) and hex64(a.trade_manifest_sha256)
-         and type(a.run_id) == "string" and a.run_id ~= "" and a.overlay_sha1 == T.OVERLAY_SHA1[v(head).title or ""],
+         and type(a.run_id) == "string" and a.run_id ~= "" and hexbytes(a.overlay_sha1, 20),
          "trade admission disclosure incomplete or not the pinned overlay")
     need((seen.CAUGHT or 0) == 1 and #all("ENGINE_CAPTURE") >= 1, "the linked catch was not reported")
 
     local base, ready, go, final = one("TRADE_BASELINE"), one("TRADE_READY"), one("TRADE_GO"), one("TRADE_FINAL")
+    -- O-31: exactly the planned disclosed write, nothing else; an undisclosed plant is refused below
+    local writes = all("HARNESS_WRITE")
+    local capture = all("ENGINE_CAPTURE")[1]
+    local mail_item, planted
+    if not plan.plant then
+        need(#writes == 0, "a harness write in a case that plans none")
+    else
+        planted = one("HARNESS_WRITE")
+        local w = v(planted)
+        local purpose = plan.plant == "mail" and "d3_mail_item" or "trade_evolve_species"
+        need(w.purpose == purpose and w.domain == "WRAM" and hexbytes(w.bytes_before, 1) and hexbytes(w.bytes_after, 1)
+             and integer(w.address, 0xC000, 0xDFFF), "harness write is not the planned disclosed " .. purpose)
+        if plan.plant == "mail" then
+            mail_item = hexbytes(w.bytes_after, 1) and tonumber(w.bytes_after, 16) or nil
+            need(capture and planted and planted.at > capture.at, "the mail item was planted before the link catch")
+            before(planted, base, "TRADE_BASELINE before the disclosed mail plant")
+        else
+            before(planted, capture, "the species plant came after the catch")
+            need(capture and w.bytes_after == fmt("%02x", v(capture).species_id or -1),
+                 "the caught species is not the disclosed planted species")
+        end
+    end
     image(base, "baseline"); image(final, "final")
     local b = v(base)
     need(type(b.party) == "table" and #b.party == b.count and integer(b.slot, 0, 5) and b.slot < (b.count or 0)
          and type(b.dex) == "table" and type(b.dex.primary) == "table" and type(b.dex.backup) == "table",
          "baseline party/dex incomplete")
-    for _, mon in ipairs(b.party or {}) do
+    for i, mon in ipairs(b.party or {}) do
         need(integer(mon.species_marker, 1, 255) and hexbytes(mon.blob_hex, 70), "baseline party record malformed")
+        if i == (b.slot or -1) + 1 and hexbytes(mon.blob_hex, 70) then
+            local item = tonumber(mon.blob_hex:sub(3, 4), 16)
+            need(plan.plant == "mail" and item == mail_item or plan.plant ~= "mail" and not T.MAIL[item],
+                 "the offered mon's held item is not the disclosed plant (undisclosed write?)")
+        end
     end
     before(base, ready, "TRADE_READY before TRADE_BASELINE")
     before(ready, go, "TRADE_GO before TRADE_READY")
@@ -1104,6 +1205,22 @@ function T.verdict(lines, json, case, player)
              and (recovered or v(done).result == 0), "DONE is not a successful native commit of this visit")
         need(hexbytes(v(pickup).incoming_blob_hex, 70) and integer(v(pickup).incoming_species_marker, 1, 255),
              "APPLY pickup lacks the staged incoming record")
+        -- the server re-key: this side's trade_done names the received (evolved when planned) species
+        local sent
+        for _, line in ipairs(lines) do
+            local body = tostring(line):match("^TX (.*)$")
+            local okd, msg = pcall(json.decode, body or "")
+            if okd and type(msg) == "table" and msg.event == "trade_done" then sent = msg end
+        end
+        need(sent ~= nil and type(sent.new_key) == "string" and integer(sent.new_species, 1, 251),
+             "no trade_done with the received key on the wire")
+        if plan.evolves and sent then
+            need(sent.new_species ~= v(pickup).incoming_species_marker
+                 and sent.new_key:sub(-2):lower() == fmt("%02x", sent.new_species),
+                 "the received trade evolver did not evolve natively (trade_done keeps the old species)")
+        elseif sent then
+            need(sent.new_species == v(pickup).incoming_species_marker, "a received mon changed species without a trade evolution")
+        end
         local ce = v(entry)
         need(ce.slot == o.slot and ce.role == role, "SlinkTradeCommit registers disagree with the offer")
         local p = v(pre)
@@ -1220,8 +1337,9 @@ function T.verdict(lines, json, case, player)
     for i, name in ipairs(T.PHASES) do
         local ph = phases[i] or {}
         need(ph.phase == name, "stack phase " .. i .. " is not " .. name)
-        local required = name == "wait" and plan.visit ~= "none" or (plan.outcome == "committed" and name ~= "evolution_animation")
-        local allowed = required or (commit and name ~= "wait")
+        local required = name == "wait" and plan.visit ~= "none"
+            or (plan.outcome == "committed" and (name ~= "evolution_animation" or plan.evolves == true))
+        local allowed = required or (commit and name ~= "wait" and name ~= "evolution_animation")
         need(not required or ph.visited == true, "required stack phase " .. name .. " unvisited")
         need(allowed or ph.visited ~= true, "stack phase " .. name .. " visited in a case that forbids it")
         local samples = ph.samples or {}
@@ -1268,6 +1386,7 @@ function T.scenario(case)
         h.party()
         if not h.wait(function() return h.sent.hello ~= nil end, S.HELLO_FRAMES) then return false, "the client never sent hello" end
         if not h.wait(h.go, S.GO_FRAMES) then return false, "no go-file" end
+        if plan.plant == "species" then tr.arm_species_plant() end   -- O-31: the next Route 29 wild battle
         -- the linked pair: the `link` route (catch, linked, native save)
         local played, outcome = h.play({settled=h.link_settled})
         if not played then return false, "link route failed: " .. tostring(outcome) end
@@ -1276,6 +1395,11 @@ function T.scenario(case)
         h.party()
         local walked, walk_why = tr.walk()
         if not walked then return false, "walk to the trade desk: " .. tostring(walk_why) end
+        if plan.plant == "mail" then   -- O-31: after the link, before the baseline save
+            local slot = h.slot_of(key)
+            if slot == nil then return false, "the linked key left the party" end
+            tr.plant_mail(slot)
+        end
         local saved, save_why = h.save()
         if not saved then return false, "baseline save: " .. tostring(save_why) end
         local base = tr.baseline(key)
@@ -1316,7 +1440,8 @@ function T.scenario(case)
             token=o.token or facts.query_token or h.json.null, generation=o.generation or facts.query_generation or h.json.null,
             key=key,
             baseline_sha256=facts.baseline.snapshot_sha256, final_sha256=facts.final.snapshot_sha256,
-            input_mode="normal_buttons", harness_write_scopes=h.json.array({})})
+            input_mode="normal_buttons", harness_write_scopes=h.json.array(h.trade.state.harness_writes),
+            harness_exception=#h.trade.state.harness_writes > 0 and "O-31" or h.json.null})
         return true, fmt("%s %s: %s", case, h.player, plan.outcome)
     end
     -- The persistence leg (traded sides): boot the flushed TRADE_FINAL image and read it back, never saving.
@@ -1349,16 +1474,7 @@ function T.scenario(case)
             end
             return true
         end
-        if plan.control == "d3" then
-            local mon = base.party[base.slot + 1]
-            local item = tonumber(mon.blob_hex:sub(3, 4), 16)
-            local items = h.json.decode(T.read(h.root .. "/data/games/gen2_" .. h.trade.title .. "/items.json"), {items=1000000})
-            local row = items.items[tostring(item)]
-            if item == 0 or (row and not row.mail and not row.placeholder and not row.key_item and row.permissions & 0x80 == 0) then
-                return false, fmt("SEED: the linked mon holds item %d, holdable on %s; D3 needs mail or an item "
-                                  .. "this cartridge refuses", item, h.trade.title)
-            end
-        end
+
         local opts = {role=plan.role, slot=base.slot, stand=tr.facts.stand}
         if plan.answer then
             opts.answer = function()

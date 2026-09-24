@@ -34,10 +34,16 @@ CODE = ("SlinkTradeEntry", "SlinkTradePromptEntry", "SlinkTradeWaitAck", "SlinkT
         # refinement 2 (TRADE_CONTROL): the decline/timeout/D3/reset triggers and their proof sites
         "SlinkTradePublishDone", "SlinkTradeWaitApply.wait", "SlinkTradeItemAllowed", "StartTitleScreen",
         # reset_commit: the native save returned (B=0 at .cleanup), before DONE is published
-        "SlinkTradeCommit.cleanup")
+        "SlinkTradeCommit.cleanup",
+        # O-31 trade-evolve plant: StartBattle reads wTempWildMonSpecies into wCurPartySpecies (G/S
+        # engine/battle/core.asm:7755-7768, C :8026+), after ChooseWildEncounter stored it (wildmons.asm:356-358)
+        "StartBattle")
 RAM = ("wStackBottom", "wStackTop", "wSlinkMailbox", "wPartyCount", "wPartySpecies", "wPartyMon1",
        "wPartyMonOTs", "wPartyMonNicknames", "wOTPartyCount", "wOTPartySpecies", "wOTPartyMon1",
-       "wOTPartyMonOTs", "wOTPartyMonNicknames", "wCurPartyMon")
+       "wOTPartyMonOTs", "wOTPartyMonNicknames", "wCurPartyMon",
+       "wTempWildMonSpecies", "wOtherTrainerClass", "wBattleMode", "wBattleType", "wMapGroup", "wMapNumber")
+# O-31 (owner, "Test-only setup"): the two disclosed plants, derived from the pinned decomps + overlay.
+EVOLVER, MAIL = "HAUNTER", "FLOWER_MAIL"
 INTRO_ANCHOR, CONFIRM_ANCHOR = "trade?", "SLINK TRADE?"
 
 
@@ -72,6 +78,22 @@ def trade_facts(title: str, root: Path = ROOT) -> dict:
     service = (root / "patch/gen2/src/trade_service.asm").read_text(encoding="utf-8")
     assert f'text "{CONFIRM_ANCHOR}"' in service, "SLINK TRADE confirm anchor left the overlay source"
 
+    # the trade evolver: EVOLVE_TRADE with no item (data/pokemon/evos_attacks.asm), no wild held items (so no
+    # Everstone roll: data/pokemon/base_stats/haunter.asm `db NO_ITEM, NO_ITEM`), harmless at Route 29 levels
+    species = gen2_fixtures.const_block(ctx.read_source("constants/pokemon_constants.asm"), "BULBASAUR")
+    evos = ctx.read_source("data/pokemon/evos_attacks.asm").split(EVOLVER.title() + "EvosAttacks:", 1)[1]
+    target = evos.split("db EVOLVE_TRADE, -1, ", 1)[1].split()[0]
+    assert evos.split("\n", 2)[1].strip().startswith("db EVOLVE_TRADE, -1,"), "evolver is not a plain trade evolver"
+    base = ctx.read_source(f"data/pokemon/base_stats/{EVOLVER.lower()}.asm")
+    assert "db NO_ITEM, NO_ITEM ; items" in base, "evolver can carry a wild held item"
+    # the D3 mail item: a mail id in the pack's items.json and 0 in the overlay's own SlinkTradeAllowedItems table
+    items = json.loads((root / f"data/games/gen2_{title}/items.json").read_text(encoding="utf-8"))
+    mail = gen2_fixtures.const_block(ctx.read_source("constants/item_constants.asm"), "NO_ITEM")[MAIL]
+    table = symbols["SlinkTradeAllowedItems"]
+    assert mail in items["mail_ids"] and rom[rom_offset(table.bank, table.address) + mail] == 0, "mail item not refused"
+    plants = {"evolve_species": {"name": EVOLVER, "id": species[EVOLVER]}, "evolves_to": {"name": target, "id": species[target]},
+              "mail_item": {"name": MAIL, "id": mail}}
+
     code = {}
     for name in CODE:
         s = symbols[name]
@@ -86,7 +108,7 @@ def trade_facts(title: str, root: Path = ROOT) -> dict:
                      "Pokecenter2F": {"kind": "stand"}},
             "stand": stand, "receptionist": {"x": desk["x"], "y": desk["y"]},
             "prompts": {"trade_intro": [INTRO_ANCHOR], "slink_trade": [CONFIRM_ANCHOR]},
-            "code": code, "ram": ram}
+            "code": code, "ram": ram, "plants": plants}
 
 
 if __name__ == "__main__":
