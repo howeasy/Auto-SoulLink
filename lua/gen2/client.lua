@@ -63,6 +63,7 @@ end
 function Client.new(p)
     local HelloSession = assert(p.hello_session, "shared hello_session factory required")
     local ReplyDispatch = assert(p.reply_dispatch, "shared reply_dispatch factory required")
+    local OwedReports = assert(p.owed_reports, "shared owed_reports factory required")
     local reads, wire, writes, safety, boxes = p.reads, p.wire, p.writes, p.safety, p.boxes
     local signals_factory = assert(p.signals, "Gen 2 signals factory required")
     local net, json, hud, io = p.net, p.json, p.hud, p.io
@@ -81,7 +82,9 @@ function Client.new(p)
         -- P4.3b: the lease the cartridge is waiting on ({kind, gen, token, frame, ...}) and this
         -- visit's role/token, kept from the first command (trade_mask/show_menu) through APPLY
         trade = trade, trade_state = nil, trade_visit = nil,
-        trade_owed = {}, -- trade_uncertain / withdraw_offer messages, sent in order once the hello is ready
+        -- post-DONE trade reports, trade_uncertain, withdraw_offer: sent in order once the hello is ready and
+        -- kept until the server answers them (lua/owed_reports.lua; review 2026-09-24 MAJOR-1)
+        owed = OwedReports.new(),
         seq = 0, frame = 0, hello_sent = false,
         writes_enabled = false, invalid_streak = 0, gate_revoked = false,
         box_cache = {}, resolved_areas = {}, config = {}, deferred = {},
@@ -103,6 +106,7 @@ function Client.new(p)
         -- echo of a death the server commanded (dropped once, never reported as a new faint).
         pending_battle_writes = {}, arrivals = 0, commanded = {},
     }
+    self.trade_owed = self.owed.list
 
     -- ── outbound ─────────────────────────────────────────────────────────────────────
     local function send(event, fields)
@@ -132,9 +136,17 @@ function Client.new(p)
         self.seq = self.seq + 1
         local msg = fields or {}
         msg.event, msg.player, msg.seq = event, self.player, self.seq
-        return net.send(json.encode(msg)) ~= false
+        if net.send(json.encode(msg)) == false then return false end
+        self.owed:line_sent()
+        return true
     end
     self.send = send
+
+    -- A report the server must receive (MAJOR-1): never dropped on a down socket, re-sent after a reconnect
+    local function owe(event, fields)
+        self.trade_owed[#self.trade_owed + 1] = { event = event, fields = fields }
+        self.owed:step(net.connected(), self.hello_session:status().ready == true, send)
+    end
 
     -- Gen 2: held messages belong to the save and the timeline that produced them.
     local function drop_held(why)
@@ -550,8 +562,8 @@ function Client.new(p)
         elseif c_ == "apply_trade" then
             -- Gen 2: no SLINK trade path on this cartridge: "nothing changed" with the pre-trade key (§5)
             local slot, mon = find_party_slot(cmd.old_key)
-            send("trade_done", { token = cmd.token, slot = slot or cmd.slot, new_key = cmd.old_key,
-                                 new_species = mon and mon.species_id or 0 })
+            owe("trade_done", { token = cmd.token, slot = slot or cmd.slot, new_key = cmd.old_key,
+                                new_species = mon and mon.species_id or 0 })
         elseif c_ == "link_panel" then
             -- P4.1f panel: held until the cartridge asks for it (panel.lua); no panel = nothing happened
             if panel then
@@ -602,7 +614,7 @@ function Client.new(p)
     end
     local function nothing_changed(token, slot, old_key, why)
         log("[SLink-gen2] apply_trade: " .. why .. "; nothing changed")
-        send("trade_done", { token = token, slot = slot, new_key = old_key, new_species = 0 })
+        owe("trade_done", { token = token, slot = slot, new_key = old_key, new_species = 0 })
     end
 
     function self:trade_answer_query(mask)
@@ -792,8 +804,8 @@ function Client.new(p)
             local received = party and party.mons[#party.mons]
             if received and not received.is_egg then
                 -- REMOVE+compact then APPEND: the received (possibly evolved) mon is the last slot
-                send("trade_done", { token = st.token, slot = received.slot, new_key = mon_key(received),
-                                     new_species = received.species_id })
+                owe("trade_done", { token = st.token, slot = received.slot, new_key = mon_key(received),
+                                    new_species = received.species_id })
             else
                 nothing_changed(st.token, st.slot, st.old_key, "native result " .. tostring(done.result))
             end
@@ -1178,7 +1190,11 @@ function Client.new(p)
 
     self.replies = ReplyDispatch.new({
         budget = math.huge, -- Gen 1 parity: drain every queued line each frame
-        receive = function() return net.receive() end,
+        receive = function()
+            local line = net.receive()
+            if line ~= nil then self.owed:reply_received() end
+            return line
+        end,
         decode = function(line) return json.decode(line) end,
         validate = function(reply)
             if type(reply) == "table" and type(reply.commands) == "table" then return reply.commands end
@@ -1453,11 +1469,7 @@ function Client.new(p)
             self.held, self.held_full = {}, false
             for _, m in ipairs(held) do send(m.event, m.fields) end
         end
-        if connected and #self.trade_owed > 0 then -- trade_uncertain / withdraw_offer, after any held messages
-            local owed = self.trade_owed
-            self.trade_owed = {}
-            for _, m in ipairs(owed) do send(m.event, m.fields) end
-        end
+        self.owed:step(net.connected(), connected == true, send) -- owed reports, after any held messages
         for _, batch in ipairs(self.signals and self.signals:drain() or {}) do
             for _, ev in ipairs(batch.events or {}) do
                 local ok, err = pcall(self.on_event, self, ev)

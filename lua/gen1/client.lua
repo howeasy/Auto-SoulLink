@@ -135,6 +135,7 @@ end
 function Client.new(p)
     local HelloSession = assert(p.hello_session, "shared hello_session factory required")
     local ReplyDispatch = assert(p.reply_dispatch, "shared reply_dispatch factory required")
+    local OwedReports = assert(p.owed_reports, "shared owed_reports factory required")
     local reads, signals_mod, writes, safety = p.reads, p.signals, p.writes, p.safety
     local net, json, hud, io = p.net, p.json, p.hud, p.io
     local profile, sites, ws_profile, area_map = p.profile, p.sites, p.write_checkpoint, p.area_map
@@ -166,11 +167,14 @@ function Client.new(p)
         -- deferred backing-box removals ({key, armed}) waiting for save_witness (gen1-box-durability)
         box_settle = {},
         trade = p.trade, trade_enabled = false, trade_state = nil,
-        trade_owed = {}, -- trade_uncertain messages, sent in order once the hello is ready
+        -- post-DONE trade reports and trade_uncertain: sent in order once the hello is ready and kept until
+        -- the server answers them (lua/owed_reports.lua; review 2026-09-24 MAJOR-1, mirror of Gen 2)
+        owed = OwedReports.new(),
         -- A1: server-seeded pending-capture keys (part of the APEX collision set) and the
         -- old->new alias held between a key_change and its ack
         pending_keys = {}, key_alias = nil, apex = nil, transforming = nil,
     }
+    self.trade_owed = self.owed.list
 
     -- ── outbound ─────────────────────────────────────────────────────────────────────
     local function send(event, fields)
@@ -183,9 +187,17 @@ function Client.new(p)
         msg.event, msg.player, msg.seq = event, self.player, self.seq
         -- connector.send queues successfully with no return value. Explicit false
         -- from an injected transport is refusal, not a successful hello.
-        return net.send(json.encode(msg)) ~= false
+        if net.send(json.encode(msg)) == false then return false end
+        self.owed:line_sent()
+        return true
     end
     self.send = send
+
+    -- A report the server must receive (MAJOR-1): never dropped on a down socket, re-sent after a reconnect
+    local function owe(event, fields)
+        self.trade_owed[#self.trade_owed + 1] = { event = event, fields = fields }
+        self.owed:step(net.connected(), self.hello_session:status().ready == true, send)
+    end
 
     -- ── reads → wire shapes ──────────────────────────────────────────────────────────
     local function mon_key(m) return reads.key(m) end
@@ -653,8 +665,8 @@ function Client.new(p)
             else
                 -- no trade path on this cartridge: "nothing changed" with the pre-trade key (§5)
                 local slot, mon = find_party_slot(cmd.old_key)
-                send("trade_done", { token = cmd.token, slot = slot or cmd.slot, new_key = cmd.old_key,
-                                     new_species = mon and mon.species or 0 })
+                owe("trade_done", { token = cmd.token, slot = slot or cmd.slot, new_key = cmd.old_key,
+                                    new_species = mon and mon.species or 0 })
             end
         elseif c == "link_panel" then
             -- Held, not painted: the cartridge asks for the screen when the player opens the
@@ -1745,7 +1757,11 @@ function Client.new(p)
 
     self.replies = ReplyDispatch.new({
         budget = math.huge, -- existing Gen 1 policy: drain every queued line each frame
-        receive = function() return net.receive() end,
+        receive = function()
+            local line = net.receive()
+            if line ~= nil then self.owed:reply_received() end
+            return line
+        end,
         decode = function(line) return json.decode(line) end,
         validate = function(reply)
             if type(reply) == "table" and type(reply.commands) == "table" then return reply.commands end
@@ -1886,7 +1902,7 @@ function Client.new(p)
         local slot = find_party_slot(cmd.old_key)
         if slot == nil then
             log("[SLink-gen1] apply_trade: old_key not in party; nothing changed")
-            send("trade_done", { token = cmd.token, slot = cmd.slot, new_key = cmd.old_key, new_species = 0 })
+            owe("trade_done", { token = cmd.token, slot = cmd.slot, new_key = cmd.old_key, new_species = 0 })
             return
         end
         local blob = hex_bytes(cmd.blob_hex)
@@ -1896,7 +1912,7 @@ function Client.new(p)
         end)
         if not gen then
             log("[SLink-gen1] apply_trade arm refused: " .. tostring(why))
-            send("trade_done", { token = cmd.token, slot = slot, new_key = cmd.old_key, new_species = 0 })
+            owe("trade_done", { token = cmd.token, slot = slot, new_key = cmd.old_key, new_species = 0 })
             return
         end
         self.trade_state = { kind = "apply", gen = gen, token = cmd.token, old_key = cmd.old_key, slot = slot,
@@ -1944,7 +1960,7 @@ function Client.new(p)
         if self.trade.phase == "armed" and trade_arm(function() return self.trade:withdraw() end) then
             self.trade_state = nil
             log("[SLink-gen1] apply_trade withdrawn before pickup; nothing changed")
-            send("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
+            owe("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
         elseif st.committing then
             trade_uncertain(st, "the server asked for a withdrawal")
         end
@@ -1984,13 +2000,13 @@ function Client.new(p)
                         local key = mon_key(received)
                         self.known_keys[st.old_key] = nil
                         self.known_keys[key] = true
-                        send("trade_done", { token = st.token, slot = received.slot, new_key = key, new_species = received.species })
+                        owe("trade_done", { token = st.token, slot = received.slot, new_key = key, new_species = received.species })
                     else
-                        send("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
+                        owe("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
                     end
                 else
                     log("[SLink-gen1] apply_trade refused natively (result " .. tostring(done.result) .. "); nothing changed")
-                    send("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
+                    owe("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
                 end
                 self.trade_state = nil
                 self.pending_change = { kind = "rescan", frame = self.frame }
@@ -2075,11 +2091,7 @@ function Client.new(p)
         self.hello_sent = connected == true
         if self.frame % Client.VALIDATE_EVERY == 0 then self:validate() end
         connected = connected and self.hello_session:status().ready
-        if connected and #self.trade_owed > 0 then -- trade_uncertain: never before the (post-reset) hello
-            local owed = self.trade_owed
-            self.trade_owed = {}
-            for _, m in ipairs(owed) do send(m.event, m.fields) end
-        end
+        self.owed:step(net.connected(), connected == true, send) -- never before the (post-reset) hello
         for _, sig in ipairs(self.signals and self.signals:drain() or {}) do
             local ok, err = pcall(self.on_signal, self, sig)
             if not ok then log("[SLink-gen1] signal " .. tostring(sig.kind) .. ": " .. tostring(err)) end

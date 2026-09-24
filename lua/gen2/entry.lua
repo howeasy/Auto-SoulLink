@@ -401,6 +401,7 @@ local function compose(deps, title, production)
                 rom_sha1=profile.rom_sha1, log=deps.log,
                 evolutions=data.evolutions.evolutions, -- force_faint's evolved-identity fallback
                 hello_session=load("lua/hello_session.lua"), reply_dispatch=load("lua/reply_dispatch.lua"),
+                owed_reports=load("lua/owed_reports.lua"),
             })
         end
         assert(io_.domain_size("ROM") == size and Admission.sha1(read_rom, size) == profile.rom_sha1

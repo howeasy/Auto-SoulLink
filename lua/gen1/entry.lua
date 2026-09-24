@@ -326,6 +326,7 @@ function Entry.build(deps)
     local Checkpoint = L("lua/gb_checkpoint.lua")
     local Scanner = L("lua/token_scanner.lua")
     local HelloSession, ReplyDispatch = L("lua/hello_session.lua"), L("lua/reply_dispatch.lua")
+    local OwedReports = L("lua/owed_reports.lua")
     if not shared_signals then
         shared_signals = L("lua/gen1/signals.lua").bind({registry=L("lua/hook_registry.lua"),
                                                          gb_binding=L("lua/gb_hook_binding.lua"), owner="SLink-gen1"})
@@ -393,7 +394,7 @@ function Entry.build(deps)
         player = assert(deps.player, "deps.player required"), rom_type = pack_def.rom_type[title],
         rom_sha1 = deps.rom_sha1, log = deps.log or function() end,
         foundation = pack, artifact_kind = deps.kind or "clean",
-        hello_session = HelloSession, reply_dispatch = ReplyDispatch,
+        hello_session = HelloSession, reply_dispatch = ReplyDispatch, owed_reports = OwedReports,
     })
     return client, { profile = profile, sites = sites, reads = reads, writes = writes, boxes = boxes,
                      rom = rom, json = json, panel = panel, box_io = box_io, pack = pack,
