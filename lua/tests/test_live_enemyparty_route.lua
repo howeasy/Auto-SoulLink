@@ -16,6 +16,9 @@ t.boot()
 -- COLD BOOT (G5-GATES-LIVE 2026-09-24): the beacon is up by frame ~12, before the game has set its save
 -- pointers, and writes:arm refuses until they are live ("safety.lua: invalid pointer: gPokemonStoragePtr").
 -- The client never arms that early (it waits for the server hello), so step until an arm would succeed.
+-- Idle alone never gets there (3000 frames, run 2); RR sets them when the main menu loads the save
+-- (lua/tests/mkstate.lua:38-46), so pulse Start through the intro/title (probe: armable ~8 frames
+-- after the first Start at the title). The field is never entered: no A, no CONTINUE.
 do
     local never = function() return false end
     local ready = false
@@ -23,7 +26,7 @@ do
         ready = pcall(function() t.writes:arm("native", never) end)
         t.writes:disarm()
         if ready then break end
-        t.step(nil)
+        t.step((_ % 32 == 0) and { Start = true } or nil)
     end
     if not ready then t.fail("save pointers live (native arm possible)", "frame " .. t.frame) end
     t.log(string.format("native arm possible at frame %d", t.frame))
