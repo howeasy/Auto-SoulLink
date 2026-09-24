@@ -267,11 +267,23 @@ local function subject(ctx, key, case)
     if not ctx.wait_received(cmd, key, ctx.D.timeout_secs or 1500) then
         return false, "no " .. cmd .. " for " .. key
     end
-    ctx.wait_until(function() return o.fail or (o.ko and o.site) end, 600, "the engine KO and its faint site")
+    -- no input until the KO (the window the observer polices); the faint site after it may sit
+    -- behind battle text that waits for a press -- RR explode_gen3 at 97672e6d: KO at frame 13308
+    -- with lastUsedMovePlayer 153, then no site for 600 s with nothing pressed. So: 5 s hands-off,
+    -- then A on the 16-frame cadence until the site (A on "Use next POKeMON?" is the YES the
+    -- send-out below takes anyway).
+    ctx.wait_until(function() return o.fail or o.ko end, 600, "the engine KO")
+    if o.ko and not o.site then
+        ctx.wait_until(function() return o.fail or o.site end, 5, "the faint site (hands-off)")
+        if not (o.fail or o.site) then
+            ctx.mash_until(function() return o.fail or o.site end, 120, "A")
+        end
+    end
     if o.fail then return false, o.fail end
-    if not o.commit then return false, "the client never committed P+H" end
+    if not o.commit then return false, "the client never committed the hand-off plan" end
     if not o.handoff then return false, "the controller hand-off never ran" end
-    if not (o.ko and o.site) then return false, "no in-battle Perish KO witnessed" end
+    if not o.ko then return false, "no in-battle engine KO witnessed" end
+    if not o.site then return false, "the KO's faint site never fired" end
     if hammer then
         local b1, id1 = balls(ctx)
         if b1 ~= b0 or id1 ~= id0 then return false, fmt("L hammer lost a ball: %d/%d -> %d/%d", b0, id0, b1, id1) end

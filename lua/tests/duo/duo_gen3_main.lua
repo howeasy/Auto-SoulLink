@@ -1091,14 +1091,18 @@ function ctx.choose_action(action)
     return false, "the action menu never took a game-read A press"
 end
 
---- The first move of battler 0 with base power 0 and PP left (gBattleMoves[m].power is byte 1 of
---- the 12-byte struct BattleMove, pret include/pokemon.h), else nil.
+--- The first move of battler 0 with base power 0 and PP left, else nil. The move table is the
+--- PACK's (rom.BATTLE_MOVES_ADDR, derived.BATTLE_MOVE_ENTRY_SIZE: RR's CFRU table sits elsewhere,
+--- 0x091521D0, and RR move ids run past FR's table; G5-RR-MOVEPICK), never pret FR's gBattleMoves
+--- on RR. Power is byte 1 of the entry (pret include/pokemon.h struct BattleMove; CFRU keeps it:
+--- RR's own Pound reads 40 and Leer 0 there, the entries the rr_battle Treecko carries).
 function ctx.status_move_slot()
     local base = S.gBattleMons                            -- battler 0
+    local table_at, size = profile.rom.BATTLE_MOVES_ADDR, profile.derived.BATTLE_MOVE_ENTRY_SIZE
     for slot = 0, 3 do
         local move = memory.read_u16_le(base + 0x0C + slot * 2)
         local pp = memory.read_u8(base + 0x24 + slot)
-        if move ~= 0 and pp > 0 and memory.read_u8(S.gBattleMoves + move * 12 + 1) == 0 then return slot end
+        if move ~= 0 and pp > 0 and memory.read_u8(table_at + move * size + 1) == 0 then return slot end
     end
 end
 
@@ -1234,7 +1238,13 @@ function ctx.lose_active(key, label)
         local m = ctx.find(key)
         return ctx.hp0(key) ~= nil or (m ~= nil and m.hp == 0)
     end
-    for turn_no = 1, 80 do
+    -- A foe that does not hurt us (status moves, misses) burns our no-damage PP for nothing: live
+    -- RR R4 at 97672e6d spent all 30 of Leer's PP on one foe and failed "no no-damage move with
+    -- PP". After STALL_TURNS turns with no HP lost, RUN and hunt a fresh foe (G5-RR-MOVEPICK).
+    local STALL_TURNS = 6
+    local function lead_hp() return memory.read_u16_le(S.gBattleMons + 0x28) end
+    local last_hp, stalled, hunts = nil, 0, 1
+    for turn_no = 1, 120 do
         if fainted() then return true end
         local turn = SP.verify_fight_cursor(cp, "incidental_battle")
         if turn ~= "fight" then
@@ -1243,13 +1253,28 @@ function ctx.lose_active(key, label)
         -- Only now: gBattleMons is copied in at BattleIntroDrawTrainersOrMonsSprites (pret
         -- battle_main.c:2576-2578), long after the encounter step the hunt returns on -- live FR
         -- 324aea87 read it there and got nil. No damaging fallback: it can KO the foe first.
-        local slot = ctx.status_move_slot()
-        if turn_no == 1 then log(fmt("LOSE %s status_move_slot=%s", key, tostring(slot))) end
-        if not slot then return false, label .. ": battler 0 has no no-damage move with PP" end
-        local ok, why = ctx.use_move(slot)
-        if not ok then return false, label .. ": " .. why end
+        local hp = lead_hp()
+        stalled = (last_hp and hp >= last_hp) and stalled + 1 or 0
+        last_hp = hp
+        if stalled >= STALL_TURNS and hunts < 6 then
+            log(fmt("LOSE_REHUNT %s turn=%d hp=%d foe_hp=%d", key, turn_no, hp,
+                    memory.read_u16_le(S.gBattleMons + 0x58 + 0x28)))
+            local ran, rwhy = ctx.run_away(label .. " rehunt")
+            if not ran then return false, label .. ": re-hunt escape: " .. tostring(rwhy) end
+            if not ctx.hunt(label .. " rehunt") then return false, label .. ": re-hunt found no encounter" end
+            hunts, stalled, last_hp = hunts + 1, 0, nil
+        else
+            local slot = ctx.status_move_slot()
+            if turn_no == 1 then log(fmt("LOSE %s status_move_slot=%s", key, tostring(slot))) end
+            if not slot then
+                return false, fmt("%s: battler 0 has no no-damage move with PP (turn %d, hp %d, hunts %d)",
+                                  label, turn_no, hp, hunts)
+            end
+            local ok, why = ctx.use_move(slot)
+            if not ok then return false, label .. ": " .. why end
+        end
     end
-    return false, label .. ": still standing after 80 turns"
+    return false, label .. ": still standing after 120 turns"
 end
 
 -- ── walking: the BFS-verified PATHS of gen3_scripted_play.lua, plus exact reversals ──────

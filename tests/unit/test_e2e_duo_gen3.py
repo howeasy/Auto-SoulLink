@@ -2276,6 +2276,11 @@ M = { ctrl = 0, pending = {}, prev = {}, cursor = 0, lead_hp = 27, over = false,
       frame = 0, read_every = 1, held = 0 }
 GMAIN = 0x03003000
 BITS = { A = 1, Right = 0x10, Left = 0x20, Up = 0x40, Down = 0x80 }
+-- the PACK's move table (G5-RR-MOVEPICK); with M.rr the pret-FR gBattleMoves address holds
+-- unrelated bytes (every "power" reads 99), as FR's table address does in a CFRU ROM
+RR_MOVES = 0x9000
+profile = { rom = { BATTLE_MOVES_ADDR = S.gBattleMoves }, derived = { BATTLE_MOVE_ENTRY_SIZE = 12 } }
+M.foe_hits, M.foe_hp, M.hunts, M.rr = true, 12, 0, false
 LOGS = {}
 function start(intro)                    -- the action menu comes up `intro` frames into the battle
     M.after = { n = intro, to = ACT, fill = true }
@@ -2286,12 +2291,15 @@ memory = {
     read_u16_le = function(a)
         if a == GMAIN + 0x2C then return M.held end          -- gMain.heldKeys, the game's own read
         if a == GMAIN + 0x2E then return 0 end
+        if a == S.gBattleMons + 0x28 then return M.lead_hp end
+        if a == S.gBattleMons + 0x58 + 0x28 then return M.foe_hp end
         return M.filled and M.moves[(a - S.gBattleMons - 0x0C) // 2 + 1] or 0
     end,
     read_u8 = function(a)
         if a == S.gActionSelectionCursor then return 0 end
         if a == S.gMoveSelectionCursor then return M.cursor end
-        if a >= S.gBattleMoves then return POWER[(a - S.gBattleMoves - 1) // 12] or 0 end
+        if a >= RR_MOVES then return POWER[(a - RR_MOVES - 1) // 12] or 0 end
+        if a >= S.gBattleMoves then return M.rr and 99 or POWER[(a - S.gBattleMoves - 1) // 12] or 0 end
         return M.filled and M.pp[a - S.gBattleMons - 0x24 + 1] or 0
     end,
 }
@@ -2316,7 +2324,11 @@ emu = { frameadvance = function()                           -- one frame: ReadKe
         M.used[#M.used + 1] = move
         M.ctrl = 0
         if POWER[move] > 0 then M.over = true              -- the foe goes down first
-        else M.lead_hp = math.max(0, M.lead_hp - 9); M.after = { n = 41, to = ACT } end
+        else
+            M.pp[M.cursor + 1] = M.pp[M.cursor + 1] - 1
+            if M.foe_hits then M.lead_hp = math.max(0, M.lead_hp - 9) end
+            M.after = { n = 41, to = ACT }
+        end
     elseif M.ctrl == MOVE then                              -- HandleInputChooseMove's bit toggles
         if new.Right then M.cursor = M.cursor | 1 elseif new.Left then M.cursor = M.cursor & 2
         elseif new.Down then M.cursor = M.cursor | 2 elseif new.Up then M.cursor = M.cursor & 1 end
@@ -2338,6 +2350,12 @@ function action_cursor() return 0 end
 ACTION_FIGHT = 0
 log, fmt, cp = function(s) LOGS[#LOGS + 1] = s end, string.format, {}
 ctx = { find = function() return { hp = M.lead_hp } end, hp0 = function() return nil end }
+function ctx.run_away() M.ctrl = 0; M.escaped = (M.escaped or 0) + 1; return true end
+function ctx.hunt()                          -- a fresh foe that does attack
+    M.hunts, M.foe_hits = M.hunts + 1, true
+    M.after = { n = 40, to = S.HandleInputChooseAction | 1 }
+    return true
+end
 function ctx.wait_until(pred, _, what)
     for _ = 1, 600 do local v = pred(); if v then return v end; emu.frameadvance() end
     LOGS[#LOGS + 1] = "TIMEOUT waiting for " .. tostring(what)
@@ -2414,6 +2432,32 @@ def test_game_press_names_a_press_the_game_never_reads(battle_model):
     lua.execute("M.read_every = 1000")
     ok, why = lua.eval("GAME_PRESS('A', joypad.set, G.advance, function() return 0 end, 0, 30)")
     assert ok is False and "never read A pressed in 30 frames" in why
+
+
+def test_lose_active_reads_the_packs_move_table_not_pret_frs(battle_model):
+    """G5-RR-MOVEPICK: on RR, pret FR's gBattleMoves address is not the move table (CFRU keeps
+    its own at the pack's rom.BATTLE_MOVES_ADDR). The known-negative control: pointed at the FR
+    address, every move reads 99 power and no status move is found."""
+    lua = battle_model
+    lua.execute("M.rr = true; profile.rom.BATTLE_MOVES_ADDR = S.gBattleMoves; start(40)")
+    ok, why = lua.globals().LOSE()
+    assert ok is False and "no no-damage move with PP" in why, why
+    lua.execute("M.ctrl, M.after, M.lead_hp, M.used = 0, nil, 27, {}")
+    lua.execute("profile.rom.BATTLE_MOVES_ADDR = RR_MOVES; start(40)")
+    ok, why = lua.globals().LOSE()
+    assert ok is True and set(lua.globals().M.used.values()) == {39}, why
+
+
+def test_lose_active_rehunts_a_foe_that_never_hurts(battle_model):
+    """Live RR R4 at 97672e6d: one foe that never hurt the lead ate all 30 of Leer's PP. After
+    six turns with no HP lost the carrier RUNs and hunts a fresh foe."""
+    lua = battle_model
+    lua.execute("M.foe_hits = false; M.pp[2] = 10; start(40)")
+    ok, why = lua.globals().LOSE()
+    m, logs = lua.globals().M, list(lua.globals().LOGS.values())
+    assert ok is True, (why, logs)
+    assert m.hunts == 1 and m.escaped == 1 and any(l.startswith("LOSE_REHUNT K0 turn=") for l in logs), logs
+    assert m.pp[2] > 0, "the stall was cut before the PP ran out"
 
 
 def test_lose_active_refuses_a_lead_without_a_no_damage_move(battle_model):
@@ -3608,7 +3652,9 @@ function PH(case, player, fault)
             e.keys, e.battle_hp = 0, 0
             if fault ~= "flag_kept" then e.status3 = e.status3 & ~0x20 end
             ko_at = frame
-        elseif ko_at and frame == ko_at + 1 then                -- the faint site, party HP follows
+        elseif ko_at and fault == "site_needs_a" and presses == 0 then
+            -- RR explode at 97672e6d: battle text after the KO waits for a press before the site
+        elseif ko_at and frame >= ko_at + 1 and #sites == 0 then -- the faint site, party HP follows
             party[1].hp = 0
             sites[#sites + 1] = { frame = frame, active = 0, battler0_slot = 0, battle_hp = 0, party_hp = 0,
                                   counter = fault == "counter" and e.counter or e.counter + 1 }
@@ -3622,7 +3668,9 @@ function PH(case, player, fault)
     ctx.wait_until = function(pred)
         for _ = 1, 400 do local v = pred(); if v then return v end; tick() end
     end
-    ctx.mash_until = function(pred) return ctx.wait_until(pred) end
+    ctx.mash_until = function(pred)
+        for _ = 1, 400 do local v = pred(); if v then return v end; presses = presses + 1; tick() end
+    end
     ctx.wait_go = function() return true end
     ctx.linked = function() return "K0" end
     ctx.party = function() return party end
@@ -3804,6 +3852,18 @@ def test_p_h_whiteout_walks_flee_and_name_a_whiteout_before_ready(ph):
 def test_p_h_whiteout_row_needs_the_last_mon_memorialize_settled(ph):
     ok, passed, msg, _ = ph("whiteout", "b", "mem_stuck")
     assert ok and passed is False and "last-mon memorialize was never settled" in msg
+
+
+def test_p_h_faint_site_behind_post_ko_text_is_pressed_through(ph):
+    """explode_gen3 on RR at 97672e6d: the KO came hands-off (last_move 153, inputs 0), but the
+    faint site sat behind battle text for 600 s while the carrier pressed nothing ("no in-battle
+    Perish KO witnessed"). After the KO -- where presses are allowed -- the carrier now presses A
+    until the site fires; the KO line still records zero inputs in the window."""
+    for case in ("explode", "wild"):
+        ok, passed, msg, log = ph(case, "b", "site_needs_a")
+        assert ok and passed is True, (case, msg, log)
+        assert re.search(r"^ACTIVE_KO K0 .* inputs=0 keys=0x0 hp_writes=0 ", log, re.M), log
+        assert re.search(r"^ACTIVE_FAINT_SITE K0 ", log, re.M), log
 
 
 def test_p_h_explode_case_names_a_ko_without_the_explosion(ph):
