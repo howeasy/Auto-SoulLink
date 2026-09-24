@@ -88,6 +88,8 @@ _LUA_ROOT = [
     "gb_hook_binding.lua",
     "hello_session.lua",
     "reply_dispatch.lua",
+    # the GB clients' owed trade reports (lua/gen1/entry.lua, lua/gen2/entry.lua; review MAJOR-1)
+    "owed_reports.lua",
     # Companion-patch modules (RR native features) — pcall-required by the Gen 3 client.
     # Required for the companion patch to work; harmless when the ROM is unpatched
     # (patch_present() stays false, so the client falls back to RAM-poke).
