@@ -43,7 +43,10 @@ CODE = ("SlinkTradeEntry", "SlinkTradePromptEntry", "SlinkTradeWaitAck", "SlinkT
         "SlinkTradeCommit.cleanup",
         # O-31 trade-evolve plant: StartBattle reads wTempWildMonSpecies into wCurPartySpecies (G/S
         # engine/battle/core.asm:7755-7768, C :8026+), after ChooseWildEncounter stored it (wildmons.asm:356-358)
-        "StartBattle")
+        "StartBattle",
+        # 9805ac1c: after the commit's PublishDone the service prints SlinkTradeSavedText/ErrorText at .held (the
+        # DONE frame is published, the host has not released yet) before jumping to SlinkTradeWaitRelease
+        "SlinkTradeApplyPickup.held")
 RAM = ("wStackBottom", "wStackTop", "wSlinkMailbox", "wPartyCount", "wPartySpecies", "wPartyMon1",
        "wPartyMonOTs", "wPartyMonNicknames", "wOTPartyCount", "wOTPartySpecies", "wOTPartyMon1",
        "wOTPartyMonOTs", "wOTPartyMonNicknames", "wCurPartyMon",

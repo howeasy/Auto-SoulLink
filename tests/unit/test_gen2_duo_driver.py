@@ -2508,6 +2508,9 @@ def test_attach_hooks_print_a_committed_proposer_visit_the_verdict_passes(tmp_pa
     sim.regs.A = 0
     sim.fire("SlinkTradePublishDone")
     t.lease(7, 6, 6, 0)
+    sim.fire("SlinkTradeApplyPickup.held")   # live trgs1: DONE is still held here ("Trade saved!" prints)...
+    t.frames(2)
+    t.lease(8, 6, 6, 0)                       # ...and the client has RELEASEd before SlinkTradeWaitRelease
     sim.fire("SlinkTradeWaitRelease")
     t.frames(2)
     t.lease(0, 6, 6, 0)

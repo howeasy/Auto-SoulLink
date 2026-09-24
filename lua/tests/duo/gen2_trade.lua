@@ -769,15 +769,19 @@ function T.attach(e)
         phase_end("evolution_animation", name)
         if st.committing then phase_start("native_save", name) end
     end
+    -- DONE is observed where the service still holds it: the commit path's .held (9805ac1c prints "Trade saved!"
+    -- there, so by SlinkTradeWaitRelease the client has already RELEASEd, live trgs1), and WaitRelease for the
+    -- responder's decline (PublishDone(1) jumps straight to it). First observation only.
     function H.SlinkTradeWaitRelease(name)
         local l = lease()
-        if l[6] ~= T.CMD.done then return end
+        if l[6] ~= T.CMD.done or st.done then return end
         st.done = {frame=frame(), lease_hex=hex(l), result=l[9]}
         jlog("TRADE_DONE", st.done)
         if l[9] == 0 and st.committing and not st.native then
             st.native = {frame=frame(), cart=api.read_range(0, T.CART, "CartRAM")}   -- the DONE-instant CartRAM
         end
     end
+    H["SlinkTradeApplyPickup.held"] = function(name) return H.SlinkTradeWaitRelease(name) end
     function H.SlinkTradeExit(name)
         st.exit_frame = frame()
         jlog("TRADE_EXIT", {frame=frame(), lease_hex=hex(lease())})
