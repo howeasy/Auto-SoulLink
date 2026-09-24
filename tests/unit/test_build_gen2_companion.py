@@ -43,7 +43,7 @@ def test_sfx_overlay_requires_exact_reset_hook_and_gates_caps(tmp_path, repo, co
     _write_real_delay_asm(checkout)
     anchor = "Reset::\n" + ("\tdi\n" if repo == "pokecrystal" else "") + "\tcall InitSound\n"
     path = checkout / "home/init.asm"
-    path.write_text(anchor * copies + "\txor a\n\tld c, 32\n\tcall DelayFrames\n")
+    path.write_text(anchor * copies + "\txor a\n\tld c, 32\n\tcall DelayFrames\n\n\tjr Init\n\n_Start::\n\tret\n")
     src = tmp_path / "src"
     src.mkdir()
     for name in ("slink.asm", "sfx.asm"):
@@ -59,7 +59,24 @@ def test_sfx_overlay_requires_exact_reset_hook_and_gates_caps(tmp_path, repo, co
         assert main.index("DEF SLINK_SFX_ENABLED EQU 1") < main.index('INCLUDE "engine/slink/slink.asm"')
         assert main.index('/slink.asm"') < main.index('/sfx.asm"')
         assert "call SlinkResetSoundBridge" in path.read_text()
-        assert "\tld c, 32\n\tcall DelayFrames\n" in path.read_text()
+        assert path.read_text().startswith(anchor)  # preserve the soft_reset U1 anchor
+        assert "\tld c, 32\n\tcall SlinkResetSoundBridge\n" in path.read_text()
+
+
+@pytest.mark.parametrize("repo", ["pokecrystal", "pokegold"])
+@pytest.mark.parametrize("copies", [0, 2])
+def test_reset_wait_hook_refuses_missing_or_duplicate_wait(tmp_path, repo, copies):
+    checkout = _fake_checkout(tmp_path, repo)
+    _write_real_delay_asm(checkout)
+    anchor = "Reset::\n" + ("\tdi\n" if repo == "pokecrystal" else "") + "\tcall InitSound\n"
+    wait = "\tld c, 32\n\tcall DelayFrames\n\n\tjr Init\n"
+    (checkout / "home/init.asm").write_text(anchor + wait * copies + "\n_Start::\n\tret\n")
+    src = tmp_path / "src"
+    src.mkdir()
+    for name in ("slink.asm", "sfx.asm"):
+        (src / name).write_text("; fixture\n")
+    with pytest.raises(RuntimeError, match="Reset"):
+        bc.apply_overlay(checkout, repo, src, _no_gb_dir(tmp_path))
 
 
 def test_sfx_absent_keeps_reset_and_caps_unchanged(tmp_path):

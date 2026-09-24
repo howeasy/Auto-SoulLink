@@ -26,12 +26,13 @@ def rgbds(name):
 PANEL_NAMES = ("GetSGBLayout", "ClearBGPalettes", "ClearTilemap", "ByteFill", "PlaceString",
                "WaitBGMap2", "WaitBGMap", "SetDefaultBGPAndOBP", "DelayFrame", "JoyTextDelay",
                "hInMenu", "hBGMapMode", "hJoyDown", "hJoyPressed", "wAttrmap", "wTilemap")
-SFX_NAMES = ("CheckSFX", "PlaySFX", "InitSound", "wMusicFade", "wAudioEnd")
+SFX_NAMES = ("CheckSFX", "PlaySFX", "InitSound", "DelayFrames", "wMusicFade", "wAudioEnd")
 
 
-def native_symbols(title):
+def native_symbols(title, path=None):
     rows = {}
-    for line in (ROOT / "data/gen2" / f"{title}_slink.sym").read_text().splitlines():
+    path = path or ROOT / "data/gen2" / f"{title}_slink.sym"
+    for line in path.read_text().splitlines():
         if line and not line.startswith(";") and ":" in line.split()[0]:
             location, name = line.split()
             bank, address = location.split(":")
@@ -51,7 +52,7 @@ def assemble(tmp_path, title, extra="", *, panel=False, panel_dir=None, sfx=Fals
         names += SFX_NAMES
     panel_defs = "".join(
         (f'SECTION "Native {name}", ROM0[${native[name][1]:04x}]\n{name}::\nret\n'
-         if name in ("CheckSFX", "PlaySFX", "InitSound")
+         if name in ("CheckSFX", "PlaySFX", "InitSound", "DelayFrames")
          else f"DEF {name} EQU ${native[name][1]:04x}\n") for name in names)
     prelude = ""
     if panel or sfx:
@@ -561,6 +562,7 @@ class SfxMachine(Machine):
         self.ram[self.native["wMusicFade"][1]] = fade
         self.played = []
         self.resets = 0
+        self.reset_waits = []
 
     def helper(self, address):
         if address == self.native["CheckSFX"][1]:
@@ -570,6 +572,12 @@ class SfxMachine(Machine):
             self.played.append(self.r["d"] << 8 | self.r["e"])
         elif address == self.native["InitSound"][1]:
             self.resets += 1
+        elif address == self.native["DelayFrames"][1]:
+            self.reset_waits.append((dict(self.r), self.state()))
+            assert self.r["c"] == 32 and self.state() == (0, 0xFF, 0)
+            # Native DelayFrames consumes C and clobbers AF. The bridge promises
+            # argument preservation BEFORE this call, not preservation afterward.
+            self.r.update(a=0, f=0xC0, c=0)
         else:
             return False
         return True
@@ -664,10 +672,12 @@ def test_sfx_compiled_reset_drops_reposts_until_native_clear(compiled_sfx):
     machine = SfxMachine(compiled_sfx)
     machine.request(1)
     machine.ram[machine.mailbox + 12:machine.mailbox + 14] = bytes([1, 37])
+    machine.r["c"] = 32
     registers = dict(machine.r)
     machine.run("SlinkResetSoundBridge")
-    assert machine.resets == 1
-    assert machine.r == registers and machine.bank == 7
+    assert machine.resets == 0  # InitSound is called once by native Reset, not this bridge
+    assert machine.reset_waits == [(registers, (0, 0xFF, 0))]
+    assert machine.r == {**registers, "a": 0, "f": 0xC0, "c": 0} and machine.bank == 7
     assert machine.state() == (0, 0xFF, 0)
     for visit in range(32):
         machine.request(visit % 5)  # includes empty visits: those must retain the latch too
@@ -719,6 +729,7 @@ def test_sfx_compiled_mutants_cannot_pass(compiled_sfx, mutation):
     machine.rom = bytes(rom)
     with pytest.raises(AssertionError):
         if mutation == "reset_latch":
+            machine.r["c"] = 32
             machine.run("SlinkResetSoundBridge")
             machine.request(1)
             machine.visit()
@@ -736,3 +747,31 @@ def test_sfx_compiled_mutants_cannot_pass(compiled_sfx, mutation):
                 assert machine.played == [] and machine.state() == (1, 1, 1)
             else:
                 assert machine.played == [0x01] and machine.state() == (0, 0, 0)
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_compiled_reset_keeps_admission_prefix_and_hooks_only_wait(tmp_path, title):
+    from tools import build_gen2_companion as builder
+
+    repo_name = "pokecrystal" if title == "crystal" else "pokegold"
+    pinned = ROOT / ".cache/gen2-build" / repo_name
+    original = (pinned / "home/init.asm").read_text()
+    checkout = tmp_path / "source"
+    (checkout / "home").mkdir(parents=True)
+    (checkout / "home/init.asm").write_text(original)
+    _, modified = builder._reset_sound_text(checkout, repo_name)
+    before = original.split("_Start::", 1)[0]
+    after = modified.split("_Start::", 1)[0]
+    assert "\tcall InitSound\n" in after
+    assert "\tld c, 32\n\tcall SlinkResetSoundBridge\n" in after
+    assert after.replace("call SlinkResetSoundBridge", "call DelayFrames") == before
+    symbols = native_symbols(title, pinned / f"poke{title}.sym")
+    extra = "".join(f"DEF {name} EQU ${symbols[name][1]:04x}\n"
+                    for name in ("hMapAnims", "wJoypadDisable", "ClearPalettes", "Init"))
+    extra += f'SECTION "Native Reset", ROM0[${symbols["Reset"][1]:04x}]\n' + after
+    rom, linked = assemble(tmp_path, title, extra, sfx=True)
+    start = linked["Reset"][1]
+    clean = (pinned / f"poke{title}.gbc").read_bytes()
+    expected = bytes.fromhex("f3cd4e3b" if title == "crystal" else "cd4f3daf")
+    assert clean[start:start + 4] == expected
+    assert rom[start:start + 4] == clean[start:start + 4]

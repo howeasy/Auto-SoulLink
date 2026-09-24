@@ -6,14 +6,15 @@
 DEF SLINK_SFX_MAX_HOLD EQU 240
 DEF SLINK_SFX_RESET_BLOCKED EQU $ff
 ASSERT SFX_ITEM == $01 && SFX_WRONG == $19 && SFX_BUMP == $24 && SFX_READ_TEXT_2 == $08
-ASSERT BANK(CheckSFX) == 0 && BANK(PlaySFX) == 0 && BANK(InitSound) == 0
+ASSERT BANK(CheckSFX) == 0 && BANK(PlaySFX) == 0 && BANK(DelayFrames) == 0
 ; InitSound clears wAudio..wAudioEnd, not the mailbox/reset latch.
 ASSERT wAudioEnd <= wSlinkMailbox
 
 SECTION "SLink Sound Reset", ROM0[$0080]
 SlinkResetSoundBridge::
-	; Same-size Reset call replacement, not another polling site. Latch before
-	; InitSound makes the channels idle, and retain it through all 32 waits.
+	; Same-size replacement of Reset's call DelayFrames, preserving C=32.
+	; Earlier InitSound/ClearPalettes do not call DelayFrame. Latch before the
+	; first service visit; keep Reset's four-byte U1 entry anchor unchanged.
 	push af
 	ld a, SLINK_SFX_RESET_BLOCKED
 	ld [wSlinkMailbox + SLINK_OFS_SFX_HOLD], a
@@ -21,7 +22,7 @@ SlinkResetSoundBridge::
 	ld [wSlinkMailbox + SLINK_OFS_SFX_REQUEST], a
 	ld [wSlinkMailbox + SLINK_OFS_SFX_HOLD_AT], a
 	pop af
-	jp InitSound
+	jp DelayFrames
 SlinkResetSoundBridgeEnd::
 ASSERT SlinkDelayFrameBridgeEnd <= SlinkResetSoundBridge
 ASSERT SlinkResetSoundBridgeEnd <= $0100

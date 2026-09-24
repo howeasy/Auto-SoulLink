@@ -112,6 +112,7 @@ RESET_ANCHORS = {
     "pokecrystal": "Reset::\n\tdi\n\tcall InitSound\n",
     "pokegold": "Reset::\n\tcall InitSound\n",
 }
+RESET_WAIT_ANCHOR = "\tld c, 32\n\tcall DelayFrames\n\n\tjr Init\n"
 
 
 def _reset_sound_text(checkout: pathlib.Path, repo: str) -> tuple[pathlib.Path, str]:
@@ -121,8 +122,13 @@ def _reset_sound_text(checkout: pathlib.Path, repo: str) -> tuple[pathlib.Path, 
     count = text.count(anchor)
     if count != 1:
         raise RuntimeError(f"Reset: expected InitSound anchor exactly once, found {count}")
-    replacement = anchor.replace("call InitSound", "call SlinkResetSoundBridge")
-    return path, text.replace(anchor, replacement, 1)
+    count = text.count(RESET_WAIT_ANCHOR)
+    if count != 1 or text.count("\n_Start::") != 1:
+        raise RuntimeError(f"Reset: expected one 32-frame wait and _Start boundary, found {count}")
+    if not text.index(anchor) < text.index(RESET_WAIT_ANCHOR) < text.index("\n_Start::"):
+        raise RuntimeError("Reset: 32-frame wait is outside Reset")
+    replacement = RESET_WAIT_ANCHOR.replace("call DelayFrames", "call SlinkResetSoundBridge")
+    return path, text.replace(RESET_WAIT_ANCHOR, replacement, 1)
 
 START_MENU_EDITS = (
     ("\tconst STARTMENUITEM_QUIT     ; 8\n",
