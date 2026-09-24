@@ -366,3 +366,31 @@ a8a6b740b0e396f49 (reapply scratchpad/fixtures_lane_staged.patch) -> RELEASE-LAN
 CODE-DIGEST) -> DUO-MATRIX-REPROOF a29f6e1c21f776ce9 (9 stale cells + trainer variant) -> DUO-WAVE-D abbc4cf2cb77a0b05
 (ball_gate) -> GEN1-RECEIPTS aa417b5feac05a49c (pureRGB batch). EVO-U1/U1G resume brief: scratchpad/evo_u1_resume_brief.md
 (superseded by U1G synth plan). Lanes: short non-Drive paths (BizHawk MAX_PATH silent SaveRAM failure).
+
+## Session 8, day 2 (2026-09-24 ~20:25Z): compaction point; heading to the MAJOR milestone
+
+Owner: stop only at a MAJOR milestone = release evidence complete (every verify_gen2_release lane green except the owner G4
+signature). Up to 3 subagents (Haiku/Sonnet/Opus); OMP headless allowed for reviews and small code (its model tier
+varies; ALWAYS validate: check findings at file:line, review the diff, scan for raw control bytes, run the tests
+yourself, commit by pathspec). Rulings today: O-32..O-36 (O-36: emulator speed as high as needed; qualification 100%).
+
+Landed since the last note (highlights): U1G engine sites PHYSICAL C/G/S from synth fixtures (cf4ef58e); ALL 21 native
+trades PHYSICAL C-C/G-S/C-G (a9c4a64c .. bd5f0f84; C-G registration 5e6d5382); wave-D duos ball_gate/egg_hatch/gift/
+boxed_capture/npc_trade PHYSICAL C-C+G-S; wave-C cc changebox/whiteout/whiteout_rebuild/poison + gs changebox; W6 Silver
+clock fix 253d4e99/164f78b2; Fable + OMP fixes (INV-SERVER/INV-CLIENT/KEY-SCOPE 71d68454 + 2b8fcf0f c6c84dc5 c26012ca,
+BOX-MEMORIAL 57e292dc); EMU-SPEED (preflight 375 s -> 9 s: 222956d2 db3075f2; trades 388 -> 184 s: d0633bf7; 3+
+parallel duo lanes; --speed-percent 70439d4f); oracle rollover b661fcdd.
+
+Running at compaction (resume by id with SendMessage; context intact):
+- DUO-WAVE-C abba0c5b5800bffe2: gs/cg poison, whiteout(+rebuild), changebox; pc_ops rerun after 57e292dc.
+- RELEASE-LANES a4d67676aa73f2900: CODE-DIGEST first (tools/gen2_code_digest.py) -> integrate scratchpad
+  fixtures_lane_staged.patch (fixtures lane) -> all release rows (scratchpad release_lanes_resume_additions.md items 0-9)
+  -> clock-setup-v1 check -> PROMOTION-HARDEN verify side (G4 signature parse, lane completeness).
+- FINAL-SWEEP a29f6e1c21f776ce9: finish faint_active trainer variant; build the parallel final-sweep driver; dry-run 2
+  cells; WAIT for the coordinator's "freeze".
+- OMP: cx-8db7d326 (stack canary hardening delegate: oracle/gen2_trade.lua/tests), cx-7d8b0e9a (PROMOTION-HARDEN admission
+  side: tools/gen_gen2_admission.py + tests), cx-7fe36bd8 (review 57e292dc), cx-4e252daa (re-review KEY-SCOPE-2).
+  Queued for OMP after RELEASE-LANES commits day_clock: apply day_clock to the plain test_gen2_frame_align Silver U1.
+Then: CODE FREEZE -> FINAL SWEEP (all duo/trade/gate cells with CODE_DIGEST, 3-5 parallel lanes) -> Gen 1/pureRGB receipts
+(stale after 61a693c4 + 57e292dc) -> npc_trade both-sided -> release-evidence green except G4 -> STOP and check in.
+Idle lanes to clean (unlink junctions first): C:/Users/howar/AppData/Local/Temp/{trl,tr2,tr3,spd,sp2}.
