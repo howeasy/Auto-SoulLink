@@ -92,12 +92,16 @@ def _trade_receptionist_text(checkout: pathlib.Path) -> tuple[pathlib.Path, str]
 
 def trade_export_text(checkout: pathlib.Path, repo: str) -> list[tuple[pathlib.Path, str]]:
     """Expose existing labels across object files; EXPORT emits no ROM bytes."""
-    names = ["LinkReceptionistScript_Trade", "Script_TradeCenterClosed", "Text_TradeReceptionistIntro"]
+    names = ["LinkReceptionistScript_Trade", "Script_TradeCenterClosed", "Text_TradeReceptionistIntro",
+             "Text_MustSaveGame", "Text_PleaseWait", "Text_PleaseComeAgain"]
     if repo == "pokecrystal":
         names += ["LinkReceptionistScript_Trade.Mobile", "Text_TradeReceptionistMobile"]
+    files = [("maps/Pokecenter2F.asm", names), ("engine/overworld/events.asm", ["NextOverworldFrame"]),
+             ("engine/menus/save.asm", ["Link_SaveGame"])]  # the responder's forced pre-trade save
+    if repo == "pokecrystal":
+        files.append(("mobile/mobile_41.asm", ["BackupGSBallFlag"]))  # native LinkTrade's post-save call
     edits = []
-    for relative, symbols in (("maps/Pokecenter2F.asm", names),
-                              ("engine/overworld/events.asm", ["NextOverworldFrame"])):
+    for relative, symbols in files:
         path = checkout / relative
         text = path.read_text(encoding="utf-8")
         declaration = "EXPORT " + ", ".join(symbols)

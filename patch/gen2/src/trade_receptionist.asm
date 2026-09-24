@@ -24,10 +24,21 @@ IF !DEF(_GOLD) && !DEF(_SILVER)
 	ifequal $1, .mobile
 ENDC
 .cable
+	; Vanilla's forced pre-trade save (Pokecenter2F LinkReceptionistScript_Trade).
+	writetext Text_MustSaveGame
+	yesorno
+	iffalse .didNotSave
+	special TryQuickSave
+	iffalse .didNotSave
+	writetext Text_PleaseWait
 	callasm SlinkTradeEntry
 .cancel
 	closetext
 	end
+
+.didNotSave
+	writetext Text_PleaseComeAgain
+	sjump .cancel
 IF !DEF(_GOLD) && !DEF(_SILVER)
 .mobile
 	sjump LinkReceptionistScript_Trade.Mobile

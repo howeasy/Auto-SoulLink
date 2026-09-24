@@ -52,6 +52,15 @@ SlinkTradeDispatch::
 	ld a, [wMapStatus]
 	cp MAPSTATUS_HANDLE
 	ret nz
+	; Vanilla opens text only when CheckPlayerState enabled events. Here, after
+	; this frame's HandleMapObjects and before its ScrollScreen, CONTINUE clear
+	; also means this frame adds no step vector: no mid-step BG reanchor.
+	ld a, [wPlayerStepFlags]
+	bit PLAYERSTEP_CONTINUE_F, a
+	ret nz
+	ld a, [wMapEventStatus]
+	cp MAPEVENTS_ON
+	ret nz
 	call SlinkTradeCheckHeader
 	ret c
 	ld a, [wSlinkMailbox + SLINK_OFS_TRADE_LEASE + 5]

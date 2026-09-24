@@ -54,6 +54,11 @@ class CommitSpies:
         for name, value in (("wPlayerName", 0x89), ("wOTPlayerName", 0x90),
                             ("wOTPartyMonOTs", 0x91), ("wOTPartyMonNicknames", 0x92)):
             self.ram[self.addr(name):self.addr(name) + 11] = bytes([value]) * 10 + b"\x50"
+        self.sram_open = False
+        mail = self.addr("sPartyMail")
+        for index in range(6):  # each member's mail message is its own marker byte
+            self.ram[mail + index * 0x2F:mail + (index + 1) * 0x2F] = bytes([0xC0 + index]) * 0x2F
+        self.mail_before = bytes(self.ram[mail:mail + 6 * 0x2F])
         self.r.update(a=slot, b=role, c=0xA2, d=0xB3, e=0xC4, h=0xD5, l=0xE6)
         self.before_regs = {name: self.r[name] for name in "bcdehl"}
         self.before_controls = {name: self.get(name) for name in CONTROLS}
@@ -67,6 +72,13 @@ class CommitSpies:
             self.set_word_pair("b", "c", 0)
         elif name == "SkipNames":
             self.set_word_pair("h", "l", self.word_pair("h", "l") + self.r["a"] * 11)
+        elif name == "AddNTimes":
+            self.set_word_pair("h", "l", self.word_pair("h", "l") + self.r["a"] * self.word_pair("b", "c"))
+        elif name == "OpenSRAM":
+            assert self.r["a"] == self.native["sPartyMail"][0]
+            self.sram_open = True
+        elif name == "CloseSRAM":
+            self.sram_open = False
         elif name == "GetPartyLocation":
             self.set_word_pair("h", "l", self.word_pair("h", "l") + self.r["a"] * 48)
         elif name == "GetCaughtGender":
@@ -74,10 +86,12 @@ class CommitSpies:
                                             self.addr("wOTPartyMon1Species"))
             self.r["c"] = 1
         elif name == "RemoveMonFromPartyOrBox":
-            assert self.get("wLinkMode") == 0
+            # MINOR-1: linked removal leaves sPartyMail alone (move_mon.asm .finish)
+            assert self.get("wLinkMode") == 2
             assert self.get("wPokemonWithdrawDepositParameter") == 0
             assert self.get("wCurPartyMon") == self.slot
             self.calls.append(name)
+            assert bytes(self.ram[self.addr("sPartyMail"):self.addr("sPartyMail") + 6 * 0x2F]) == self.mail_before
             if self.fault == "remove_nochange":
                 return True
             count = self.get("wPartyCount")
@@ -130,6 +144,16 @@ class CommitSpies:
         elif name == "SaveAfterLinkTrade":
             assert self.calls[-1] == "EvolvePokemon"
             assert self.get("wPartyCount") == self.initial_count
+            assert not self.sram_open
+            mail = self.addr("sPartyMail")
+            want = bytearray(self.mail_before)
+            moved = (self.initial_count - 1 - self.slot) * 0x2F
+            want[self.slot * 0x2F:self.slot * 0x2F + moved] = self.mail_before[(self.slot + 1) * 0x2F:
+                                                                             (self.slot + 1) * 0x2F + moved]
+            assert bytes(self.ram[mail:mail + 6 * 0x2F]) == bytes(want), "mail shifted only just before the save"
+            self.calls.append(name)
+        elif name == "BackupGSBallFlag":
+            assert self.title == "crystal" and self.calls[-1] == "SaveAfterLinkTrade"
             self.calls.append(name)
         elif name in ("DisableSpriteUpdates", "ClearTilemap", "LoadFontsBattleExtra", "GetSGBLayout",
                        "RestartMapMusic", "ReturnToMapWithSpeechTextbox"):
@@ -168,7 +192,8 @@ def test_native_commit_sequence_and_controls(compiled, role, slot, count, egg):
     assert machine.r["a"] == 0
     assert machine.calls == ["RemoveMonFromPartyOrBox",
                              "TradeAnimation" if role == 0 else "TradeAnimationPlayer2",
-                             "AddTempmonToParty", "EvolvePokemon", "SaveAfterLinkTrade"]
+                             "AddTempmonToParty", "EvolvePokemon", "SaveAfterLinkTrade"] + (
+                                 ["BackupGSBallFlag"] if machine.title == "crystal" else [])
     machine.verify_restored()
 
 
@@ -196,7 +221,7 @@ def test_invalid_commit_entry_has_no_native_mutation(compiled, slot, count, role
     machine.verify_restored()
 
 
-@pytest.mark.parametrize("mutation", ["linked_remove", "unchecked_list", "save_before_evolve", "register_restore"])
+@pytest.mark.parametrize("mutation", ["unlinked_remove", "unchecked_list", "save_before_evolve", "register_restore"])
 def test_compiled_commit_mutants_fail_native_contract(compiled, mutation):
     machine = CommitMachine(compiled)
     machine.prepare_case(fault="append_wrong_list" if mutation == "unchecked_list" else None)
@@ -204,10 +229,10 @@ def test_compiled_commit_mutants_fail_native_contract(compiled, mutation):
     bank, address = machine.symbols["SlinkTradeCommit"]
     start = bank * 0x4000 + address - 0x4000
     end = bank * 0x4000 + machine.symbols["SlinkTradeCommitEnd"][1] - 0x4000
-    if mutation == "linked_remove":
+    if mutation == "unlinked_remove":
         address = machine.addr("wLinkMode")
-        position = rom.index(bytes([0xAF, 0xEA, address & 255, address >> 8]), start, end)
-        rom[position] = 0  # retain nonzero animation-buffer A instead of clearing link mode
+        position = rom.index(bytes([0x3E, 2, 0xEA, address & 255, address >> 8]), start, end)
+        rom[position + 1] = 0  # the old unlinked removal: native RemoveMon shifts SRAM mail early
     elif mutation == "unchecked_list":
         address = machine.addr("wOTPartySpecies")
         position = rom.index(bytes([0xFA, address & 255, address >> 8, 0xBE, 0xC2]), start, end)

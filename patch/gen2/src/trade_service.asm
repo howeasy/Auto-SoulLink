@@ -1,5 +1,7 @@
 ; Held foreground transaction. Only the ten-byte context lives on the stack:
-; token[4], own slot, local role, generation, result, party count, release gate.
+; token[4], own slot, local role, generation, result, party count, flags
+; (bit 0 = PROMPT's RELEASE still owed before APPLY, bit 7 = this visit owns an
+; open text box that SlinkTradeExit closes).
 ; Snapshot storage is injected by SlinkTradeSnapshot/ValidateSnapshot.
 DEF SLINK_TRADE_CONTEXT_SIZE EQU 10
 ; Host waits, in frames (60 Hz). B cancels every one of them (SlinkTradeWaitFrame).
@@ -17,19 +19,15 @@ DEF SLINK_TRADE_APPLY_FRAMES EQU 3600
 
 SECTION "SLink Trade Service", ROMX, BANK[SLINK_SERVICE_BANK]
 
-SlinkTradeInit::
-	ld hl, SLINK_TRADE_FRAME
-	ld b, SLINK_TRADE_LEASE_SIZE
-	xor a
-.clear
-	ld [hli], a
-	dec b
-	jr nz, .clear
-	ret
-
 SlinkTradeEntry::
+	; The receptionist script (trade_receptionist.asm) has already forced the
+	; native full save (Pokecenter2F's Text_MustSaveGame / TryQuickSave).
 	add sp, -SLINK_TRADE_CONTEXT_SIZE
 	call SlinkTradeZeroContext
+	call SlinkTradeCheckSaved
+	jp c, SlinkTradeExit
+	call SlinkTradeCheckParty
+	jp c, SlinkTradeExit ; refused before any QUERY is published
 	call SlinkTradeWriteHeader
 	ld a, SLINK_TRADE_CMD_QUERY
 	ld [SLINK_TRADE_FRAME + 5], a
@@ -90,6 +88,8 @@ SlinkTradeEntry::
 	call PrintText
 	call YesNoBox
 	jp c, SlinkTradeExit
+	ld hl, SlinkTradeWaitText
+	call PrintText
 	call SlinkTradeCheckHeader
 	jp c, SlinkTradeExit
 	ld a, [SLINK_TRADE_FRAME + 5]
@@ -153,20 +153,37 @@ SlinkTradePromptEntry::
 	ld [SLINK_TRADE_FRAME + 7], a ; pickup before any native work
 	ld hl, sp + 5
 	ld [hl], 1 ; responder role is local
-	ld hl, sp + 9
-	ld [hl], 1 ; require PROMPT's matching RELEASE before accepting APPLY
 	ld hl, sp + 4
 	ld a, [hl]
 	call SlinkTradeCheckOwnSlot
-	jp c, SlinkTradeExit
+	jp c, SlinkTradeExit ; includes the contest/species-list refusal
+	ld hl, wOTPartyMonNicknames
+	call SlinkTradeCheckName
+	jp c, SlinkTradeExit ; the staged incoming name is rendered below
+	ld hl, sp + 4
+	ld a, [hl]
+	ld hl, wPartyMonNicknames
+	call GetNickname
 	call OpenText
-	ld hl, SlinkTradeConfirmText
+	ld hl, sp + 9
+	ld [hl], $81 ; RELEASE owed before APPLY; Exit closes this text box
+	ld hl, SlinkTradeOfferText
 	call PrintText
 	call YesNoBox
-	push af
-	call CloseText
-	pop af
-	jr c, .decline
+	jr c, SlinkTradePromptDecline
+SlinkTradeResponderSave::
+	; Vanilla forces a full save before any trade (Pokecenter2F.asm
+	; Text_MustSaveGame / TryQuickSave); SaveAfterLinkTrade saves only the party.
+	ld hl, SlinkTradeMustSaveText
+	call PrintText
+	call YesNoBox
+	jr c, SlinkTradePromptDecline
+	farcall Link_SaveGame ; the native overwrite prompt and full save
+	jr c, SlinkTradePromptDecline
+	call SlinkTradeCheckSaved
+	jr c, SlinkTradePromptDecline
+	ld hl, SlinkTradeWaitText
+	call PrintText
 	ld hl, sp + 0
 	call SlinkTradeCheckHeldFrame
 	jp c, SlinkTradeExit
@@ -185,7 +202,7 @@ SlinkTradePromptEntry::
 	call SlinkTradePublishDone
 	; PROMPT completion is not a commit. Hold the same visit through RELEASE.
 	jp SlinkTradeWaitApply
-.decline
+SlinkTradePromptDecline:
 	ld a, 1
 	call SlinkTradePublishDone
 	jp SlinkTradeWaitRelease
@@ -207,8 +224,7 @@ SlinkTradeWaitApply::
 	ld a, [SLINK_TRADE_FRAME + 5]
 	ld d, a
 	ld hl, sp + 9
-	ld a, [hl]
-	and a
+	bit 0, [hl]
 	jr z, .applyCommand
 	ld a, d
 	cp SLINK_TRADE_CMD_RELEASE
@@ -221,7 +237,7 @@ SlinkTradeWaitApply::
 	cp [hl]
 	jp nz, SlinkTradeExit
 	ld hl, sp + 9
-	ld [hl], 0
+	res 0, [hl]
 	jr .wait
 .applyCommand
 	ld a, d
@@ -283,6 +299,16 @@ SlinkTradeApplyPickup::
 	ld a, 2 ; no unexpected helper result may claim a safe refusal after mutation
 .commitResult
 	call SlinkTradePublishDone
+	; Both holds below have no B/timeout escape: tell the player a reset is safe
+	; (the save precedes DONE) or needed (result 2).
+	ld hl, sp + 7
+	ld a, [hl]
+	and a
+	ld hl, SlinkTradeSavedText
+	jr z, .held
+	ld hl, SlinkTradeErrorText
+.held
+	call PrintText
 	jp SlinkTradeWaitRelease
 
 SlinkTradeWaitRelease::
@@ -453,7 +479,47 @@ SlinkTradeWaitFrame::
 	scf
 	ret
 
+SlinkTradeCheckSaved::
+	; Carry unless a full native save exists (set by _SaveGameData).
+	ld a, [wSavedAtLeastOnce]
+	and a
+	ret nz
+	scf
+	ret
+
+SlinkTradeCheckParty::
+	; Carry refuses a Bug-Catching Contest party (ContestDropOffMons masks
+	; slots 2-6 until ContestReturnMons; RemoveMon would shift the hidden
+	; structs) and any species list whose $FF terminator is not at wPartyCount.
+	; Clobbers AF, C, HL.
+	ld a, [wStatusFlags2]
+	bit STATUSFLAGS2_BUG_CONTEST_TIMER_F, a
+	jr nz, .refuse
+	ld a, [wPartyCount]
+	and a
+	jr z, .refuse
+	cp PARTY_LENGTH + 1
+	jr nc, .refuse
+	ld c, a
+	ld hl, wPartySpecies
+.species
+	ld a, [hli]
+	cp $ff
+	jr z, .refuse
+	dec c
+	jr nz, .species
+	ld a, [hl]
+	cp $ff
+	ret z
+.refuse
+	scf
+	ret
+
 SlinkTradeCheckOwnSlot::
+	push af
+	call SlinkTradeCheckParty
+	jr c, .refuseParty
+	pop af
 	cp PARTY_LENGTH
 	jr nc, .refuse
 	ld c, a
@@ -474,6 +540,8 @@ SlinkTradeCheckOwnSlot::
 	jr nc, .refuse
 	ld a, [hl]
 	jp SlinkTradeItemAllowed
+.refuseParty
+	pop af
 .refuse
 	scf
 	ret
@@ -554,4 +622,35 @@ SlinkTradeCheckName::
 
 SlinkTradeConfirmText:
 	text "SLINK TRADE?"
+	done
+
+SlinkTradeOfferText:
+	text "Trade "
+	text_ram wStringBuffer1
+	text_start
+	line "for "
+	text_ram wOTPartyMonNicknames
+	text "?"
+	done
+
+SlinkTradeMustSaveText:
+	text "Before trading,"
+	line "you must save"
+	cont "your game."
+	done
+
+SlinkTradeWaitText:
+	text "Waiting for"
+	line "partner. B: cancel"
+	done
+
+SlinkTradeSavedText:
+	text "Trade saved!"
+	line "Waiting. Reset if"
+	cont "this never ends."
+	done
+
+SlinkTradeErrorText:
+	text "Trade error."
+	line "Please reset."
 	done

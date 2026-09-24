@@ -31,6 +31,8 @@ def assemble_trade(tmp_path, title, source_files=None, stub_names=None):
         bank, address = native[name]
         if address < 0x8000:
             calls.setdefault((bank, address), []).append(name)
+        elif 0xA000 <= address < 0xC000:  # SRAM label: the source asks for its BANK()
+            definitions.append(f'SECTION "Native {name}", SRAM[${address:04x}], BANK[${bank:x}]\n{name}::')
         else:
             definitions.append(f"DEF {name} EQU ${address:04x}")
     for (bank, address), names in calls.items():
@@ -255,10 +257,14 @@ class LeaseHost(TradeMachine):
         self.delays, self.menus, self.commits, self.closes = 0, 0, [], 0
         self.offered, self.applied = False, False
         self.events = []
-        self.responder, self.prompt_released, self.confirmations = False, False, 0
+        self.responder, self.prompt_released, self.confirmations, self.saves = False, False, 0, 0
         self.token = bytes([0x12, 0x34, 0x56, 0x78])
-        self.ram[self.address("wPartyCount")] = 2
-        self.ram[self.address("wPartySpecies"):self.address("wPartySpecies") + 3] = bytes([158, 16, 255])
+        self.ram[self.address("wSavedAtLeastOnce")] = 0 if fault in ("never_saved", "save_unrecorded") else 1
+        if fault == "contest":  # ContestDropOffMons: count 1, slot 1 masked, timer flag set
+            self.ram[self.address("wStatusFlags2")] = 1 << 2  # STATUSFLAGS2_BUG_CONTEST_TIMER_F
+        self.ram[self.address("wPartyCount")] = 1 if fault == "contest" else 2
+        species = {"contest": [158, 255, 255], "species_list": [158, 16, 16]}.get(fault, [158, 16, 255])
+        self.ram[self.address("wPartySpecies"):self.address("wPartySpecies") + 3] = bytes(species)
         for slot, species in enumerate((158, 16)):
             start = self.address("wPartyMon1") + slot * 48
             self.ram[start:start + 48] = bytes([species, 0]) + bytes(range(2, 48))
@@ -278,11 +284,17 @@ class LeaseHost(TradeMachine):
             self.r["f"] = 0x10 if self.fault == "menu_cancel" else 0
         elif name == "YesNoBox":
             self.confirmations += 1
-            self.r["f"] = 0x10 if self.fault == "decline" else 0
+            declined = self.fault == "decline" or (self.fault == "save_declined" and self.confirmations == 2)
+            self.r["f"] = 0x10 if declined else 0
             if self.fault == "ui_generation":
                 self.ram[self.frame + 6] += 1
-        elif name in ("PrintText", "OpenText"):
+        elif name in ("PrintText", "OpenText", "GetNickname"):
             pass
+        elif name == "Link_SaveGame":  # native AskOverwriteSaveFile + full save (_SaveGameData)
+            self.saves += 1
+            self.r["f"] = 0x10 if self.fault == "save_refused" else 0
+            if self.fault not in ("save_refused", "save_unrecorded"):
+                self.ram[self.address("wSavedAtLeastOnce")] = 1
         elif name == "CloseText":
             self.closes += 1
         elif name == "JoyTextDelay":
@@ -410,7 +422,7 @@ def test_compiled_init_during_held_wait_closes_without_commit(compiled):
                 # Model the native Init lease clear at the held boundary, not
                 # the complete hardware reset/CONTINUE path (a live obligation).
                 self.events.append("INIT")
-                self.run("SlinkTradeInit")
+                self.ram[self.frame:self.frame + 16] = bytes(16)  # native Init clears the whole mailbox
                 return
             super().host_step()
 
@@ -478,17 +490,23 @@ def test_compiled_dispatcher_accepts_only_real_idle_caller(compiled, svbk):
     machine.run("SlinkTradeDispatch")
     assert machine.sp == old_sp
     assert machine.commits == [(0, 1)]
-    assert machine.confirmations == 1 and machine.closes == 2
+    # offer YES/NO + the forced-save YES/NO; one text box, closed once by SlinkTradeExit
+    assert machine.confirmations == 2 and machine.saves == 1 and machine.closes == 1
     assert machine.events == ["DONE_PROMPT", "RELEASE", "APPLY", "DONE", "RELEASE"]
     assert machine.ram[machine.frame + 5] == 0
 
 
 @pytest.mark.parametrize("fault", ["bank", "delayframe", "delayframes", "overworld", "wScriptMode", "wBattleMode",
-                                  "wLinkMode", "wGameLogicPaused", "hInMenu", "wram", "map", "acked", "header", "token"])
+                                  "wLinkMode", "wGameLogicPaused", "hInMenu", "wram", "map", "acked", "header", "token",
+                                  "mid_step", "events_off"])
 def test_compiled_dispatcher_rejects_false_or_unsafe_callers(compiled, fault):
     machine = LeaseHost(compiled)
     start = machine.prepare_dispatch()
-    if fault in ("bank", "delayframe", "delayframes", "overworld"):
+    if fault == "mid_step":  # MAJOR-1: this frame adds a step vector after the pickup point
+        machine.ram[machine.address("wPlayerStepFlags")] = 1 << 5  # PLAYERSTEP_CONTINUE_F
+    elif fault == "events_off":  # CheckPlayerState disabled events last frame
+        machine.ram[machine.address("wMapEventStatus")] = 1  # MAPEVENTS_OFF
+    elif fault in ("bank", "delayframe", "delayframes", "overworld"):
         offset = {"bank": 5, "delayframe": 12, "delayframes": 14, "overworld": 16}[fault]
         machine.ram[start + offset] ^= 1
     elif fault.startswith(("w", "h")) and fault not in ("wram", "header"):
@@ -505,6 +523,8 @@ def test_compiled_dispatcher_rejects_false_or_unsafe_callers(compiled, fault):
         machine.ram[machine.frame + 12:machine.frame + 16] = bytes(4)
     machine.run("SlinkTradeDispatch")
     assert machine.commits == [] and machine.confirmations == 0 and machine.closes == 0
+    if fault in ("mid_step", "events_off"):
+        assert machine.ram[machine.frame + 5] == 3 and machine.ram[machine.frame + 7] == 4, "deferred, not taken"
 
 
 @pytest.mark.parametrize("fault", ["decline", "ui_generation", "reentry"])
@@ -512,8 +532,8 @@ def test_compiled_responder_cleanup_and_nested_dispatch(compiled, fault):
     machine = LeaseHost(compiled, fault)
     machine.prepare_dispatch()
     machine.run("SlinkTradeDispatch")
-    assert machine.confirmations == 1
-    assert machine.closes == (2 if fault == "reentry" else 1)
+    assert machine.confirmations == (1 if fault == "decline" else 2)
+    assert machine.closes == 1
     assert machine.commits == ([(0, 1)] if fault == "reentry" else [])
 
 
@@ -538,15 +558,6 @@ def test_compiled_non_normal_vblank_never_waits_or_commits(compiled):
     machine.ram[machine.address("hVBlank")] = 1
     machine.enter()
     assert machine.delays == machine.menus == 0 and not machine.commits
-
-
-def test_compiled_init_clears_exact_lease(compiled):
-    machine = LeaseHost(compiled)
-    machine.ram[machine.mailbox:machine.mailbox + 40] = bytes([0xA5] * 40)
-    machine.run("SlinkTradeInit")
-    assert machine.ram[machine.frame:machine.frame + 16] == bytes(16)
-    assert machine.ram[machine.mailbox:machine.frame] == bytes([0xA5] * 14)
-    assert machine.ram[machine.frame + 16:machine.mailbox + 39] == bytes([0xA5] * 9)
 
 
 @pytest.mark.parametrize("guard,fault", [("SlinkTradeCheckToken", "token_0"), ("SlinkTradeValidateSnapshot", "record")])
@@ -663,3 +674,49 @@ def test_compiled_old_bound_mutant_misses_a_slow_host(compiled, stage, old):
     assert control.commits == [(0, 0)], "the published bound serves this host"
     machine.enter()
     assert machine.commits == [], f"the old {old}-frame bound must drop a {lag}-frame host"
+
+
+@pytest.mark.parametrize("fault", ["never_saved", "contest", "species_list"])
+def test_compiled_proposer_refuses_before_query(compiled, fault):
+    """BLOCKER-1/2: no QUERY (so no host visit) for an unsaved game or a contest-masked/torn party."""
+    machine = LeaseHost(compiled, fault)
+    machine.enter()
+    assert machine.events == [] and machine.menus == 0 and machine.commits == []
+
+
+@pytest.mark.parametrize("fault", ["contest", "species_list"])
+def test_compiled_responder_refuses_contest_party_at_pickup(compiled, fault):
+    """BLOCKER-1: the PROMPT is picked up and closed before any native text; no DONE, no commit."""
+    machine = LeaseHost(compiled, fault)
+    machine.prepare_dispatch()
+    machine.run("SlinkTradeDispatch")
+    assert machine.confirmations == 0 and machine.closes == 0 and machine.commits == []
+    assert machine.ram[machine.frame + 7] == 5 and machine.ram[machine.frame + 5] == 0  # acked, then closed
+    assert "DONE_PROMPT" not in machine.events
+
+
+@pytest.mark.parametrize("fault", ["save_declined", "save_refused", "save_unrecorded"])
+def test_compiled_responder_without_the_forced_save_declines(compiled, fault):
+    """BLOCKER-2: YES without a completed native full save is a decline (DONE result 1), never a commit."""
+    machine = LeaseHost(compiled, fault)
+    machine.prepare_dispatch()
+    machine.run("SlinkTradeDispatch")
+    assert machine.commits == [] and machine.ram[machine.frame + 8] == 1
+    assert machine.events[:2] == ["DONE_PROMPT", "RELEASE"] and "APPLY" not in machine.events
+    assert machine.saves == (0 if fault == "save_declined" else 1) and machine.closes == 1
+
+
+def test_compiled_never_saved_responder_is_saved_then_trades(compiled):
+    machine = LeaseHost(compiled, "never_saved")
+    machine.prepare_dispatch()
+    machine.run("SlinkTradeDispatch")
+    assert machine.saves == 1 and machine.commits == [(0, 1)]
+
+
+def test_receptionist_forces_the_native_save_before_the_trade():
+    """BLOCKER-2 proposer: vanilla Text_MustSaveGame / TryQuickSave precede SlinkTradeEntry."""
+    script = (ROOT / "patch/gen2/src/trade_receptionist.asm").read_text()
+    cable = script[script.index("\n.cable\n"):script.index("callasm SlinkTradeEntry")]
+    lines = [line.strip() for line in cable.splitlines() if line.strip() and not line.strip().startswith(";")]
+    assert lines[1:] == ["writetext Text_MustSaveGame", "yesorno", "iffalse .didNotSave", "special TryQuickSave",
+                         "iffalse .didNotSave", "writetext Text_PleaseWait"]

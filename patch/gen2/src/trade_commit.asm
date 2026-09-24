@@ -6,8 +6,9 @@
 ; A=0 is NOT a durable host receipt: the host still independently verifies saves.
 ; No rollback exists after removal. No serial registers or exchanges are used.
 ;
-; Entry requires normal overworld WRAM bank 1, game logic unpaused, a current
-; save already established, and an open map speech textbox owned by the caller.
+; Entry requires normal overworld WRAM bank 1, game logic unpaused, the native
+; full save forced just before (receptionist script / SlinkTradeResponderSave),
+; and an open map speech textbox owned by the caller.
 ; BC/DE/HL and the listed native control bytes are restored. AF, temporary mon,
 ; string/animation scratch and evolution scratch are native caller-clobbered.
 SECTION "SLink Trade Commit", ROMX, BANK[SLINK_SERVICE_BANK]
@@ -77,11 +78,12 @@ SlinkTradeCommit::
 
 	call .PrepareAnimation
 	call DisableSpriteUpdates
-	; The cable path would skip normal mail compaction. We are outside a
-	; cable session and the selected mon carries no mail, so use native normal
-	; party removal to keep any OTHER party members' mail correctly aligned.
-	xor a
+	; Linked removal, as native LinkTrade: RemoveMon leaves sPartyMail alone, so a
+	; reset before SaveAfterLinkTrade cannot pair the saved pre-trade party with
+	; shifted mail. .ShiftMail compacts it immediately before the save.
+	ld a, LINK_TRADECENTER
 	ld [wLinkMode], a
+	xor a
 	ld [wPokemonWithdrawDepositParameter], a
 	ld a, [wCurTradePartyMon]
 	ld [wCurPartyMon], a
@@ -93,8 +95,6 @@ SlinkTradeCommit::
 	cp c
 	jp nz, .uncertain
 
-	ld a, LINK_TRADECENTER
-	ld [wLinkMode], a
 	call ClearTilemap
 	call LoadFontsBattleExtra
 	ld b, SCGB_DIPLOMA
@@ -154,7 +154,11 @@ SlinkTradeCommit::
 	ld a, [wPartyCount]
 	cp c
 	jp nz, .uncertain
+	call .ShiftMail
 	farcall SaveAfterLinkTrade
+IF !DEF(_GOLD) && !DEF(_SILVER)
+	farcall BackupGSBallFlag ; as native LinkTrade after SaveAfterLinkTrade
+ENDC
 	ld b, 0
 	jr .cleanup
 
@@ -202,6 +206,38 @@ SlinkTradeCommit::
 	ret z
 	ld a, 2
 	ret
+
+.ShiftMail:
+	; Native RemoveMon's unlinked mail shift (move_mon.asm): the members after the
+	; removed slot move up one; the appended mon holds no mail (D3), so the
+	; stale last entry is never read. The stack holds the original count/role.
+	ld hl, sp + 2
+	ld c, [hl] ; original party count
+	ld a, [wCurTradePartyMon]
+	ld b, a
+	ld a, c
+	dec a
+	sub b
+	ret z ; the removed mon was last: nothing moves
+	push af
+	ld a, BANK(sPartyMail)
+	call OpenSRAM
+	pop af
+	ld hl, 0
+	ld bc, MAIL_STRUCT_LENGTH
+	call AddNTimes
+	push hl ; bytes to move
+	ld a, [wCurTradePartyMon]
+	ld hl, sPartyMail
+	ld bc, MAIL_STRUCT_LENGTH
+	call AddNTimes
+	ld d, h
+	ld e, l
+	ld bc, MAIL_STRUCT_LENGTH
+	add hl, bc
+	pop bc
+	call CopyBytes ; forward copy, destination below source
+	jp CloseSRAM
 
 .PrepareAnimation:
 	; Native LinkTrade buffer preparation: C link.asm:1844-1935,
