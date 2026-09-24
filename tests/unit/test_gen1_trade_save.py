@@ -313,3 +313,26 @@ def _pure(ops: list[str]) -> list[str]:
 def test_purergb_overlay_carries_the_same_save_and_step_hunks(red, pure, start, end):
     mine = _ops(SOURCE / red, start, end)
     assert mine == _pure(_ops(PURE / pure, start, end))
+
+
+def _must_save_lines(path: Path) -> tuple[str, str]:
+    m = re.search(r'SlinkTradeUIMustSave::.*?text "([^"]+)"\s*line "([^"]+)"',
+                  path.read_text(encoding="utf-8"), re.S)
+    assert m, path
+    return m[1], m[2]
+
+
+@pytest.mark.parametrize("driver,before", [
+    ("lua/tests/test_gen1_receptionist_gate.lua", '"TRADE WHICH?", 22'),
+    ("lua/tests/duo/duo_gen1_main.lua", '"TRADE WHICH?", 22'),
+    ("lua/tests/duo/duo_gen1_main.lua", 'answer_must_save("PARTNER")'),
+])
+def test_physical_drivers_anchor_the_must_save_prompt_on_the_patch_text(driver, before):
+    """The live drivers answer the must-save YES before the picker (proposer) and before
+    menu_result (partner), anchored on the exact lines both builds print at +281/+321."""
+    first, second = _must_save_lines(SOURCE / "trade_ui.asm")
+    assert (first, second) == _must_save_lines(PURE / "trade_ui.asm")
+    text = (ROOT / driver).read_text(encoding="utf-8")
+    anchors = [f'"{first}", 281', f'"{second}", 321']
+    assert all(a in text for a in anchors), driver
+    assert text.index(anchors[0]) < text.index(before)

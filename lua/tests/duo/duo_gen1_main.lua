@@ -1034,6 +1034,24 @@ local function trade_scenario(decline)
         local text = file:read("*a");file:close()
         return text:find(mark, 1, true) ~= nil
     end
+    -- Both roles now answer vanilla's forced save before the host hears them (pret
+    -- engine/link/cable_club_npc.asm:56-67): SlinkTradeUIMustSave (patch/gen1/src/trade_ui.asm,
+    -- the overlay's trade_ui.asm) PrintTexts these two lines into the message box (text at
+    -- (1,14)/(1,16) = +281/+321), then YesNoChoice. The proposer meets it after SLINK TRADE
+    -- (trade_receptionist.asm:53-57), the partner after YES (trade_prompt.asm .choice).
+    local function must_save_drawn()
+        return tiles("We have to save", 281) and tiles("before trading.", 321) and tiles("YES") and tiles("NO")
+    end
+    local function answer_must_save(role)
+        if rd(ram.wCurrentMenuItem) ~= 0 then return false, role .. " must-save prompt did not default to YES" end
+        -- DisplayYesNoChoice restores Buffer1 on exit, which drops the YES/NO box: re-pulse A only
+        -- while the box is up, so no press leaks into the picker or the restored overworld.
+        for _ = 1, 120 do
+            if not must_save_drawn() then log(role .. "_MUST_SAVE_YES");return true end
+            yield_frame(frame % 16 < 2 and {A=true} or {})
+        end
+        return false, role .. " must-save YES was not taken"
+    end
 
     local first_done = seen.trade_done or 0
     local first_msgbox = seen.msgbox or 0
@@ -1077,8 +1095,14 @@ local function trade_scenario(decline)
         if not wait_tiles("NATIVE_MENU", function()
             return tiles("SLINK TRADE", 42) and tiles("CABLE CLUB", 82) and tiles("CANCEL", 122)
         end, 120) then return false, "SLINK TRADE native menu not drawn" end
-        if not wait_tiles("TRADE_WHICH", function() return tiles("TRADE WHICH?", 22) end, 180, "A") then
-            return false, "TRADE WHICH? picker not drawn"
+        if not wait_tiles("MUST_SAVE", must_save_drawn, 180, "A") then
+            return false, "proposer must-save YES/NO not drawn after SLINK TRADE"
+        end
+        local took, took_why = answer_must_save("PROPOSER")
+        if not took then return false, took_why end
+        -- SaveGameData plus the SFX_SAVE jingle run before the picker draws; no buttons meanwhile.
+        if not wait_tiles("TRADE_WHICH", function() return tiles("TRADE WHICH?", 22) end, 600) then
+            return false, "TRADE WHICH? picker not drawn after the must-save"
         end
         for _ = 1, 90 do
             if rd(ram.wCurrentMenuItem) == picker_row then break end
@@ -1127,10 +1151,21 @@ local function trade_scenario(decline)
                 yield_frame(frame % 16 < 2 and {Down=true} or {})
             end
             if rd(ram.wCurrentMenuItem) ~= 1 then return false, "native prompt cursor never reached NO" end
-        end
-        for _ = 1, 240 do
-            if (seen.menu_result or 0) > first_result then break end
-            yield_frame(frame % 16 < 2 and {A=true} or {})
+            for _ = 1, 240 do
+                if (seen.menu_result or 0) > first_result then break end
+                yield_frame(frame % 16 < 2 and {A=true} or {})
+            end
+        else
+            -- YES, then the must-save YES; menu_result follows the partner's own save.
+            if not wait_tiles("PARTNER_MUST_SAVE", must_save_drawn, 240, "A") then
+                return false, "partner must-save YES/NO not drawn after YES"
+            end
+            local took, took_why = answer_must_save("PARTNER")
+            if not took then return false, took_why end
+            for _ = 1, 600 do
+                if (seen.menu_result or 0) > first_result then break end
+                yield_frame({})
+            end
         end
         local want = decline and 0 or 1
         if (seen.menu_result or 0) ~= first_result + 1 or not sent_events.menu_result or
