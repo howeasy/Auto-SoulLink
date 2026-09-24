@@ -334,72 +334,177 @@ def test_existing_committed_matrices_are_valid():
 
 # --- P4.4 overlay promotion (--promote-overlays): ADMITTED only behind the G4 preconditions ---------
 
-def _overlay_build(tmp_path, built):
-    """_write_build plus a synthetic overlay provenance for the same lock (validator model only)."""
-    args = _write_build(tmp_path, built)
-    lock, _receipt = built
+def _canonical_overlay_build(tmp_path, built, monkeypatch):
+    """Build a disposable repository whose promotion paths are canonical for the tool."""
+    repo = tmp_path / "repo"
+    data = repo / "data/gen2"
+    out_dir = repo / "data/games"
+    dist = repo / "patch/dist"
+    data.mkdir(parents=True)
+    dist.mkdir(parents=True)
+    monkeypatch.setattr(admission, "ROOT", repo)
+
+    lock, receipt = built
+    lock_path = repo / "data/gen2_sources.lock.json"
+    lock_path.write_text(json.dumps(lock, indent=2) + "\n", newline="\n")
+    receipt_path = data / "build_provenance.json"
+    receipt_path.write_text(json.dumps(receipt), newline="\n")
+    for name in lock["outputs"]:
+        (data / f"{name}.sym").write_bytes(name.encode())
+        (data / f"{name}.map").write_bytes((name + " map").encode())
+
     outputs = {}
     for title, rows in admission.TITLE_OUTPUTS.items():
         artifact = rows[0][0]
-        outputs[artifact] = {"slink_title": title, "base_sha1": lock["outputs"][artifact]["sha1"],
-                             "identical_to_clean": False, "sha1": hashlib.sha1(title.encode()).hexdigest(),
-                             "md5": hashlib.md5(title.encode()).hexdigest(),
-                             "ups": {"file": f"patch/dist/SLink-{title}.ups",
-                                     "sha256": hashlib.sha256(title.encode()).hexdigest()}}
-    overlay = {"schema": "gen2-overlay-provenance-v1",
-               "sources": {name: {"commit": row["commit"]} for name, row in lock["sources"].items()},
-               "outputs": outputs}
-    (tmp_path / "overlay_provenance.json").write_text(json.dumps(overlay))
-    return [*args, "--overlay-provenance", str(tmp_path / "overlay_provenance.json")]
+        raw_ups = f"UPS {title}".encode()
+        ups_file = f"patch/dist/SLink-{title}.ups"
+        (repo / ups_file).write_bytes(raw_ups)
+        outputs[artifact] = {
+            "slink_title": title,
+            "base_sha1": lock["outputs"][artifact]["sha1"],
+            "identical_to_clean": False,
+            "sha1": hashlib.sha1(title.encode()).hexdigest(),
+            "md5": hashlib.md5(title.encode()).hexdigest(),
+            "ups": {"file": ups_file, "sha256": hashlib.sha256(raw_ups).hexdigest()},
+        }
+    overlay = {
+        "schema": "gen2-overlay-provenance-v1",
+        "sources": {name: {"commit": row["commit"]} for name, row in lock["sources"].items()},
+        "outputs": outputs,
+    }
+    overlay_path = data / "overlay_provenance.json"
+    overlay_path.write_text(json.dumps(overlay), newline="\n")
+    args = ["--provenance", str(receipt_path), "--overlay-provenance", str(overlay_path)]
+    paths = {"root": repo, "lock": lock_path, "provenance": receipt_path,
+             "overlay": overlay_path, "out": out_dir}
+    return args, paths
 
 
-def _overlay_statuses(tmp_path):
-    return {path.parent.name: next(row["status"] for row in json.loads(path.read_text())["artifacts"]
+def _overlay_rows(out_dir):
+    return {path.parent.name: next(row for row in json.loads(path.read_text())["artifacts"]
                                    if row["kind"] == "overlay")
-            for path in (tmp_path / "games").rglob("admission.json")}
+            for path in out_dir.rglob("admission.json")}
+
+
+def _overlay_statuses(out_dir):
+    return {pack: row["status"] for pack, row in _overlay_rows(out_dir).items()}
+
+
+def test_promotion_refuses_mutated_temp_overlay_provenance_without_writes(tmp_path, built, monkeypatch):
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
+    assert admission.main(args) == 0
+    before = {path: path.read_bytes() for path in paths["out"].rglob("*.json")}
+
+    mutated = json.loads(paths["overlay"].read_text())
+    mutated["outputs"]["pokecrystal"]["sha1"] = "0" * 40
+    mutated_path = tmp_path / "mutated-overlay-provenance.json"
+    mutated_path.write_text(json.dumps(mutated), newline="\n")
+    monkeypatch.setattr(admission, "promotion_blockers",
+                        lambda: pytest.fail("non-canonical promotion input was not rejected first"))
+
+    assert admission.main([*args[:-2], "--overlay-provenance", str(mutated_path),
+                           "--promote-overlays"]) == 1
+    assert before == {path: path.read_bytes() for path in before}
+    assert set(_overlay_statuses(paths["out"]).values()) == {"BUILT"}
 
 
 def test_promotion_is_refused_while_any_g4_precondition_is_open(tmp_path, built, monkeypatch):
-    args = _overlay_build(tmp_path, built)
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
     assert admission.main(args) == 0
-    before = {p: p.read_bytes() for p in (tmp_path / "games").rglob("*.json")}
+    before = {path: path.read_bytes() for path in paths["out"].rglob("*.json")}
     monkeypatch.setattr(admission, "promotion_blockers",
                         lambda: ["packet: docs/gen2/PLAN.md §6.1: the G4 ledger row carries no owner signature"])
     assert admission.main([*args, "--promote-overlays"]) == 1
-    assert before == {p: p.read_bytes() for p in before}
-    assert set(_overlay_statuses(tmp_path).values()) == {"BUILT"}
+    assert before == {path: path.read_bytes() for path in before}
+    assert set(_overlay_statuses(paths["out"]).values()) == {"BUILT"}
 
 
-def test_promotion_writes_admitted_only_when_nothing_blocks_and_never_downgrades(tmp_path, built, monkeypatch):
-    args = _overlay_build(tmp_path, built)
+def test_promotion_binds_one_grant_and_plain_regeneration_does_not_regrant(tmp_path, built, monkeypatch):
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
     assert admission.main(args) == 0
     monkeypatch.setattr(admission, "promotion_blockers", lambda: [])
     assert admission.main([*args, "--promote-overlays"]) == 0
-    assert set(_overlay_statuses(tmp_path).values()) == {"ADMITTED"}
-    # The promoted tree checks clean without the flag, and a plain regeneration keeps it promoted.
+    rows = _overlay_rows(paths["out"])
+    assert set(_overlay_statuses(paths["out"]).values()) == {"ADMITTED"}
+    assert len({row["grant_fingerprint"] for row in rows.values()}) == 1
+
+    # The promoted tree checks clean without the flag, and plain regeneration keeps this exact grant.
     monkeypatch.setattr(admission, "promotion_blockers", lambda: pytest.fail("no new grant is being made"))
     assert admission.main([*args, "--check"]) == 0
     assert admission.main(args) == 0
-    assert set(_overlay_statuses(tmp_path).values()) == {"ADMITTED"}
+    assert rows == _overlay_rows(paths["out"])
 
 
-def test_promotion_needs_both_build_receipts(tmp_path, built, monkeypatch):
-    args = _write_build(tmp_path, built)
+@pytest.mark.parametrize("omitted", ["provenance", "overlay"])
+def test_promotion_needs_both_canonical_build_receipts(tmp_path, built, monkeypatch, omitted):
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
     assert admission.main(args) == 0
     monkeypatch.setattr(admission, "promotion_blockers", lambda: [])
-    assert admission.main([*args, "--promote-overlays"]) == 1
+    index = 0 if omitted == "provenance" else 2
+    incomplete = args[:index] + args[index + 2:]
+    assert admission.main([*incomplete, "--promote-overlays"]) == 1
+    assert set(_overlay_statuses(paths["out"]).values()) == {"BUILT"}
+
+
+def test_changed_overlay_identity_requires_a_new_g4_promotion(tmp_path, built, monkeypatch, capsys):
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
+    assert admission.main(args) == 0
+    monkeypatch.setattr(admission, "promotion_blockers", lambda: [])
+    assert admission.main([*args, "--promote-overlays"]) == 0
+    before = {path: path.read_bytes() for path in paths["out"].rglob("*.json")}
+
+    changed = json.loads(paths["overlay"].read_text())
+    changed["outputs"]["pokecrystal"]["sha1"] = "0" * 40
+    paths["overlay"].write_text(json.dumps(changed), newline="\n")
+    monkeypatch.setattr(admission, "promotion_blockers", lambda: pytest.fail("stale grant was not rejected first"))
+
+    assert admission.main(args) == 1
+    assert "new G4 promotion is required" in capsys.readouterr().err
+    assert before == {path: path.read_bytes() for path in before}
+    assert set(_overlay_statuses(paths["out"]).values()) == {"ADMITTED"}
 
 
 def test_a_partial_or_hand_edited_promotion_is_refused(tmp_path, built, monkeypatch):
-    args = _overlay_build(tmp_path, built)
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
     assert admission.main(args) == 0
-    path = tmp_path / "games/gen2_gold/admission.json"
+    path = paths["out"] / "gen2_gold/admission.json"
     matrix = json.loads(path.read_text())
     next(row for row in matrix["artifacts"] if row["kind"] == "overlay")["status"] = "ADMITTED"
-    path.write_text(json.dumps(matrix, indent=2) + "\n")
+    path.write_text(json.dumps(matrix, indent=2) + "\n", newline="\n")
+    before = {candidate: candidate.read_bytes() for candidate in paths["out"].rglob("*.json")}
     monkeypatch.setattr(admission, "promotion_blockers", lambda: [])
     assert admission.main([*args, "--check"]) == 1
     assert admission.main([*args, "--promote-overlays"]) == 1
+    assert before == {candidate: candidate.read_bytes() for candidate in before}
+
+
+@pytest.mark.parametrize("failed_replace", [2, 3])
+def test_interrupted_atomic_publish_is_completed_by_the_same_promotion(
+        tmp_path, built, monkeypatch, failed_replace):
+    args, paths = _canonical_overlay_build(tmp_path, built, monkeypatch)
+    assert admission.main(args) == 0
+    monkeypatch.setattr(admission, "promotion_blockers", lambda: [])
+    real_replace = admission.os.replace
+    replace_calls = 0
+
+    def fail_one_publish(source, target):
+        nonlocal replace_calls
+        replace_calls += 1
+        if replace_calls == failed_replace:
+            raise OSError(f"injected replace failure {failed_replace}")
+        return real_replace(source, target)
+
+    monkeypatch.setattr(admission.os, "replace", fail_one_publish)
+    assert admission.main([*args, "--promote-overlays"]) == 1
+    assert sum(row["status"] == "ADMITTED" for row in _overlay_rows(paths["out"]).values()) == failed_replace - 1
+    assert not (paths["out"].parent / ".games.gen2_admission.publish.lock").exists()
+    assert not list(paths["out"].rglob("*.tmp"))
+
+    monkeypatch.setattr(admission.os, "replace", real_replace)
+    assert admission.main([*args, "--promote-overlays"]) == 0
+    rows = _overlay_rows(paths["out"])
+    assert set(_overlay_statuses(paths["out"]).values()) == {"ADMITTED"}
+    assert len({row["grant_fingerprint"] for row in rows.values()}) == 1
 
 
 def test_committed_tree_cannot_promote_until_the_owner_signs_g4():

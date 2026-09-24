@@ -11,6 +11,9 @@ an identity, never a runtime admission). Neither mode emits ADMITTED artifacts; 
 title in G1_ADMITTED (an owner ruling), only once its rows are BUILT, and the gate row
 is the grant, never the proof: lua/gen2/entry.lua re-validates that title's shipped
 PHYSICAL receipts at every load. Overlay/ghost qualification belongs to later owners.
+Promotion is bound to the canonical repository inputs. Each ADMITTED overlay row stores the
+exact lock/build/overlay/UPS grant fingerprint, so ordinary regeneration cannot carry an old
+grant onto changed evidence. Complete three-title catalogs are staged before locked replacement.
 
     python tools/gen_gen2_admission.py
     python tools/gen_gen2_admission.py --provenance data/gen2/build_provenance.json
@@ -21,10 +24,13 @@ PHYSICAL receipts at every load. Overlay/ghost qualification belongs to later ow
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
+import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,6 +56,10 @@ RGBDS_BINARIES = ("rgbasm", "rgblink", "rgbfix", "rgbgfx")
 # engine-site and U2 write-window receipts pass PHYSICAL (data/games/<pack>/receipts/).
 # O-23: Silver's U2 gate is Gold's write-window receipt while the checkpoint rows stay identical.
 G1_ADMITTED = {"crystal": "O-22", "gold": "O-22", "silver": "O-22+O-23"}
+
+
+def _repo_path(relative: str | Path) -> Path:
+    return (ROOT / relative).resolve()
 
 
 def _gate(title: str, built: bool) -> dict:
@@ -171,7 +181,8 @@ def validate_provenance(lock: dict, provenance: dict, *, lock_bytes: bytes | Non
                     f"provenance: {name}.{ext} hash mismatch")
 
 
-def overlay_row(title: str, lock: dict, overlay: dict, admitted: bool = False) -> dict:
+def overlay_row(title: str, lock: dict, overlay: dict, admitted: bool = False, *,
+                grant_fingerprint: str | None = None) -> dict:
     """The BUILT identity of one title's SLink companion build (data/gen2/overlay_provenance.json).
 
     The null (mailbox-only) build is byte-identical to the clean ROM and is refused: one hash
@@ -195,9 +206,15 @@ def overlay_row(title: str, lock: dict, overlay: dict, admitted: bool = False) -
     ups = object_at(out.get("ups"), f"overlay {artifact}.ups")
     require(isinstance(ups.get("file"), str) and is_hash(ups.get("sha256"), 64),
             f"overlay provenance: {artifact} UPS identity missing")
-    return {"id": f"{title}_overlay", "kind": "overlay", "revision": TITLE_OUTPUTS[title][0][1],
-            "selection": "FUTURE", "status": "ADMITTED" if admitted else "BUILT", "sha1": out["sha1"],
-            "md5": out["md5"], "base_sha1": clean, "ups": {"file": ups["file"], "sha256": ups["sha256"]}}
+    row = {"id": f"{title}_overlay", "kind": "overlay", "revision": TITLE_OUTPUTS[title][0][1],
+           "selection": "FUTURE", "status": "ADMITTED" if admitted else "BUILT", "sha1": out["sha1"],
+           "md5": out["md5"], "base_sha1": clean,
+           "ups": {"file": ups["file"], "sha256": ups["sha256"]}}
+    if admitted:
+        require(is_hash(grant_fingerprint, 64),
+                "overlay promotion: ADMITTED rows require a valid grant fingerprint")
+        row["grant_fingerprint"] = grant_fingerprint
+    return row
 
 
 def _planned_matrix(title: str, source_lock_sha256: str) -> dict:
@@ -230,9 +247,11 @@ def _planned_matrix(title: str, source_lock_sha256: str) -> dict:
 
 def build_matrices(lock: dict, provenance: dict | None = None, *,
                    lock_bytes: bytes | None = None, overlay: dict | None = None,
-                   promoted: bool = False) -> dict[str, dict]:
+                   promoted: bool = False, grant_fingerprint: str | None = None) -> dict[str, dict]:
     validate_lock(lock)
     require(not promoted or overlay is not None, "overlay promotion requires the overlay provenance")
+    require(not promoted or is_hash(grant_fingerprint, 64),
+            "overlay promotion requires a valid grant fingerprint")
     source_lock_sha256 = lock_sha256(lock, lock_bytes)
     if provenance is not None:
         validate_provenance(lock, provenance, lock_bytes=lock_bytes)
@@ -249,12 +268,14 @@ def build_matrices(lock: dict, provenance: dict | None = None, *,
         for matrix in matrices.values():
             rows = matrix["artifacts"]
             index = next(i for i, row in enumerate(rows) if row["kind"] == "overlay")
-            rows[index] = overlay_row(matrix["title"], lock, overlay, admitted=promoted)
+            rows[index] = overlay_row(matrix["title"], lock, overlay, admitted=promoted,
+                                      grant_fingerprint=grant_fingerprint)
     return matrices
 
 
 def validate_matrix(matrix: dict, lock: dict, provenance: dict | None = None, *,
-                    lock_bytes: bytes | None = None, overlay: dict | None = None) -> None:
+                    lock_bytes: bytes | None = None, overlay: dict | None = None,
+                    grant_fingerprint: str | None = None) -> None:
     validate_lock(lock)
     object_at(matrix, "matrix")
     require(isinstance(matrix.get("title"), str) and matrix["title"] in TITLE_OUTPUTS,
@@ -282,8 +303,9 @@ def validate_matrix(matrix: dict, lock: dict, provenance: dict | None = None, *,
         elif planned["kind"] == "overlay":
             require(status in ("BUILT", "ADMITTED") and overlay is not None,
                     "matrix: a BUILT overlay row requires the overlay provenance")
-            require(row == overlay_row(matrix["title"], lock, overlay, admitted=status == "ADMITTED"),
-                    "matrix: BUILT overlay identity mismatch")
+            require(row == overlay_row(matrix["title"], lock, overlay, admitted=status == "ADMITTED",
+                                       grant_fingerprint=grant_fingerprint),
+                    "matrix: overlay identity/hash/provenance/grant mismatch")
         else:
             require(status == "BUILT" and planned["kind"] == "clean", "matrix: unsupported artifact state/kind")
             built = {**planned, "status": "BUILT", "sha1": lock["outputs"][planned["id"]]["sha1"],
@@ -314,10 +336,85 @@ def _load(path: Path) -> dict:
     return _parse_json(path.read_bytes(), str(path))
 
 
+def grant_fingerprint(lock_bytes: bytes, provenance_bytes: bytes, overlay_bytes: bytes,
+                      overlay: dict) -> str:
+    """Hash the exact evidence and shipped UPS bytes covered by one G4 grant."""
+    require(isinstance(lock_bytes, bytes) and isinstance(provenance_bytes, bytes)
+            and isinstance(overlay_bytes, bytes), "grant fingerprint inputs must be bytes")
+    components = [("lock", lock_bytes), ("build-provenance", provenance_bytes),
+                  ("overlay-provenance", overlay_bytes)]
+    ups_paths: set[Path] = set()
+    outputs = object_at(overlay.get("outputs"), "overlay provenance.outputs")
+    for title in TITLE_OUTPUTS:
+        artifact = TITLE_OUTPUTS[title][0][0]
+        out = object_at(outputs.get(artifact), f"overlay {artifact}")
+        ups = object_at(out.get("ups"), f"overlay {artifact}.ups")
+        name = ups.get("file")
+        require(isinstance(name, str) and name, f"overlay {artifact}: UPS file missing")
+        relative = Path(name)
+        require(not relative.is_absolute(), f"overlay {artifact}: UPS path must be repo-relative")
+        path = (ROOT / relative).resolve()
+        require(path.is_relative_to(_repo_path(".")),
+                f"overlay {artifact}: UPS path escapes the repository")
+        require(path.is_file(), f"overlay {artifact}: UPS file is missing: {path}")
+        raw = path.read_bytes()
+        require(hashlib.sha256(raw).hexdigest() == ups.get("sha256"),
+                f"overlay {artifact}: on-disk UPS hash mismatch")
+        ups_paths.add(path)
+        components.append((f"ups:{title}", raw))
+    require(len(ups_paths) == len(TITLE_OUTPUTS),
+            "overlay grant fingerprint requires three distinct UPS files")
+    digest = hashlib.sha256()
+    for label, raw in components:
+        encoded_label = label.encode("ascii")
+        digest.update(len(encoded_label).to_bytes(2, "big"))
+        digest.update(encoded_label)
+        digest.update(len(raw).to_bytes(8, "big"))
+        digest.update(raw)
+    return digest.hexdigest()
+
+
+@contextlib.contextmanager
+def _exclusive_publication_lock(out_dir: Path):
+    out_dir.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = out_dir.parent / f".{out_dir.name}.gen2_admission.publish.lock"
+    try:
+        descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError as exc:
+        raise ValueError(f"admission publication lock is held: {lock_path}") from exc
+    try:
+        yield
+    finally:
+        os.close(descriptor)
+        lock_path.unlink(missing_ok=True)
+
+
+def _publish(pending: list[tuple[Path, str]]) -> None:
+    """Stage the complete catalog set before replacing any published admission file."""
+    staged: list[tuple[Path, Path]] = []
+    try:
+        for target, generated in pending:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            descriptor, name = tempfile.mkstemp(
+                dir=target.parent, prefix=f".{target.name}.", suffix=".tmp")
+            temporary = Path(name)
+            staged.append((temporary, target))
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(generated.encode("utf-8"))
+                handle.flush()
+                os.fsync(handle.fileno())
+        for temporary, target in staged:
+            os.replace(temporary, target)
+    finally:
+        for temporary, _target in staged:
+            with contextlib.suppress(FileNotFoundError):
+                temporary.unlink()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--lock", type=Path, default=ROOT / "data/gen2_sources.lock.json")
-    parser.add_argument("--out-dir", type=Path, default=ROOT / "data/games")
+    parser.add_argument("--lock", type=Path, default=_repo_path("data/gen2_sources.lock.json"))
+    parser.add_argument("--out-dir", type=Path, default=_repo_path("data/games"))
     parser.add_argument("--provenance", type=Path, help="explicitly promote verified clean builds to BUILT")
     parser.add_argument("--overlay-provenance", type=Path,
                         help="explicitly promote the SLink companion builds' overlay rows to BUILT")
@@ -327,61 +424,116 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="validate exact current files without writing")
     args = parser.parse_args(argv)
     try:
+        if args.promote_overlays:
+            expected = {
+                "--lock": _repo_path("data/gen2_sources.lock.json"),
+                "--provenance": _repo_path("data/gen2/build_provenance.json"),
+                "--overlay-provenance": _repo_path("data/gen2/overlay_provenance.json"),
+                "--out-dir": _repo_path("data/games"),
+            }
+            supplied = {"--lock": args.lock, "--provenance": args.provenance,
+                        "--overlay-provenance": args.overlay_provenance, "--out-dir": args.out_dir}
+            for option, path in supplied.items():
+                require(path is not None and path.resolve() == expected[option],
+                        f"--promote-overlays requires canonical {option} path: {expected[option]}")
+
         lock_bytes = args.lock.read_bytes()
         lock = _parse_json(lock_bytes, str(args.lock))
-        provenance = _load(args.provenance) if args.provenance else None
-        overlay = _load(args.overlay_provenance) if args.overlay_provenance else None
-        # An already-promoted tree re-renders as promoted (no new grant, no downgrade); a new
-        # promotion is only ever written behind the G4 preconditions.
-        promoted_now = [pack for pack in (f"gen2_{title}" for title in TITLE_OUTPUTS)
-                        if (args.out_dir / pack / "admission.json").exists()
-                        and any(row.get("kind") == "overlay" and row.get("status") == "ADMITTED"
-                                for row in _load(args.out_dir / pack / "admission.json").get("artifacts") or []
-                                if isinstance(row, dict))]
-        require(len(promoted_now) in (0, len(TITLE_OUTPUTS)),
-                f"existing overlay promotion is partial ({promoted_now}); P4.4 promotes all three titles at once")
-        promoted = args.promote_overlays or bool(promoted_now)
-        if args.promote_overlays and not promoted_now and not args.check:
-            require(provenance is not None and overlay is not None,
-                    "--promote-overlays requires --provenance and --overlay-provenance")
-            blockers = promotion_blockers()
-            require(not blockers, f"G4 promotion refused, {len(blockers)} blocker(s): " + "; ".join(blockers[:5]))
-        matrices = build_matrices(lock, provenance, lock_bytes=lock_bytes, overlay=overlay, promoted=promoted)
-        if provenance is not None:
-            for name, expected in provenance["symbols"].items():
-                artifact = args.provenance.parent / name
-                require(hashlib.sha256(artifact.read_bytes()).hexdigest() == expected,
-                        f"provenance: on-disk {name} hash mismatch")
-        pending = []
-        for pack, matrix in matrices.items():
-            path = args.out_dir / pack / "admission.json"
-            generated = render(matrix)
-            if path.exists():
+        provenance_bytes = args.provenance.read_bytes() if args.provenance else None
+        provenance = _parse_json(provenance_bytes, str(args.provenance)) if provenance_bytes is not None else None
+        overlay_bytes = (args.overlay_provenance.read_bytes()
+                         if args.overlay_provenance else None)
+        overlay = _parse_json(overlay_bytes, str(args.overlay_provenance)) if overlay_bytes is not None else None
+
+        lock_context = (contextlib.nullcontext() if args.check
+                        else _exclusive_publication_lock(args.out_dir))
+        with lock_context:
+            admitted: list[tuple[str, str]] = []
+            for title in TITLE_OUTPUTS:
+                pack = f"gen2_{title}"
+                path = args.out_dir / pack / "admission.json"
+                if not path.exists():
+                    continue
                 current = _load(path)
-                rows = current.get("artifacts", [])
+                rows = current.get("artifacts")
                 require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows),
                         "existing matrix: malformed artifacts")
-                require(all(row.get("status") != "ADMITTED" for row in rows if row.get("kind") != "overlay"),
+                require(all(row.get("status") != "ADMITTED" for row in rows
+                            if row.get("kind") != "overlay"),
                         "existing ADMITTED matrix belongs to G1 owner; P1 cannot overwrite it")
-                if provenance is None:
-                    require(all(row.get("status") == "PLANNED" for row in rows),
-                            "existing BUILT/ADMITTED matrix requires explicit provenance; refusing downgrade")
-                if overlay is None:
-                    require(all(row.get("status") == "PLANNED" for row in rows if row.get("kind") == "overlay"),
-                            "existing BUILT overlay row requires --overlay-provenance; refusing downgrade")
-                if args.check:
-                    validate_matrix(current, lock, provenance, lock_bytes=lock_bytes, overlay=overlay)
-            if args.check:
-                require(path.exists() and path.read_bytes() == generated.encode("utf-8"),
-                        f"{path}: stale or missing; regenerate the artifact matrix")
+                overlay_rows = [row for row in rows if row.get("kind") == "overlay"]
+                require(len(overlay_rows) == 1, "existing matrix: expected one overlay row")
+                row = overlay_rows[0]
+                if row.get("status") == "ADMITTED":
+                    stored = row.get("grant_fingerprint")
+                    require(is_hash(stored, 64),
+                            f"existing {pack}: ADMITTED overlay lacks a valid grant fingerprint; "
+                            "a new G4 promotion is required")
+                    admitted.append((pack, stored))
+
+            needs_grant = args.promote_overlays or bool(admitted)
+            require(not needs_grant or (provenance_bytes is not None and overlay_bytes is not None),
+                    "an existing overlay promotion requires explicit --provenance and "
+                    "--overlay-provenance")
+            current_grant = (grant_fingerprint(lock_bytes, provenance_bytes, overlay_bytes, overlay)
+                             if needs_grant else None)
+
+            if args.promote_overlays:
+                promoted = True
+                if not args.check:
+                    blockers = promotion_blockers()
+                    require(not blockers,
+                            f"G4 promotion refused, {len(blockers)} blocker(s): "
+                            + "; ".join(blockers[:5]))
+            elif admitted:
+                require(all(stored == current_grant for _pack, stored in admitted),
+                        "stored G4 grant differs from the current lock/build/overlay/UPS identity; "
+                        "a new G4 promotion is required")
+                require(len(admitted) == len(TITLE_OUTPUTS),
+                        f"partial G4 promotion ({[pack for pack, _ in admitted]}); "
+                        "rerun with --promote-overlays to complete it")
+                promoted = True
             else:
-                pending.append((path, generated))
-        # Validate every input and existing catalog before any publication.
-        for path, generated in pending:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(generated, encoding="utf-8", newline="\n")
-        print("Gen 2 artifact matrices are current; G1: " + ", ".join(
-            f"{m['title']} {m['gate']['state']}" for m in matrices.values()))
+                promoted = False
+
+            matrices = build_matrices(lock, provenance, lock_bytes=lock_bytes, overlay=overlay,
+                                      promoted=promoted, grant_fingerprint=current_grant)
+            if provenance is not None:
+                for name, expected_hash in provenance["symbols"].items():
+                    artifact = args.provenance.parent / name
+                    require(hashlib.sha256(artifact.read_bytes()).hexdigest() == expected_hash,
+                            f"provenance: on-disk {name} hash mismatch")
+            pending = []
+            for pack, matrix in matrices.items():
+                path = args.out_dir / pack / "admission.json"
+                generated = render(matrix)
+                if path.exists():
+                    current = _load(path)
+                    rows = current.get("artifacts", [])
+                    require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows),
+                            "existing matrix: malformed artifacts")
+                    require(all(row.get("status") != "ADMITTED" for row in rows
+                                if row.get("kind") != "overlay"),
+                            "existing ADMITTED matrix belongs to G1 owner; P1 cannot overwrite it")
+                    if provenance is None:
+                        require(all(row.get("status") == "PLANNED" for row in rows),
+                                "existing BUILT/ADMITTED matrix requires explicit provenance; refusing downgrade")
+                    if overlay is None:
+                        require(all(row.get("status") == "PLANNED" for row in rows
+                                    if row.get("kind") == "overlay"),
+                                "existing BUILT overlay row requires --overlay-provenance; refusing downgrade")
+                    if args.check:
+                        validate_matrix(current, lock, provenance, lock_bytes=lock_bytes, overlay=overlay,
+                                        grant_fingerprint=current_grant)
+                if args.check:
+                    require(path.exists() and path.read_bytes() == generated.encode("utf-8"),
+                            f"{path}: stale or missing; regenerate the artifact matrix")
+                else:
+                    pending.append((path, generated))
+            if not args.check:
+                _publish(pending)
+            print("Gen 2 artifact matrices are current; G1: " + ", ".join(
+                f"{matrix['title']} {matrix['gate']['state']}" for matrix in matrices.values()))
         return 0
     except (OSError, ValueError) as exc:
         print(f"Gen 2 artifact matrix refused: {exc}", file=sys.stderr)
