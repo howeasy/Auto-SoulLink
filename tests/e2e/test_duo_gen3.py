@@ -93,14 +93,14 @@ def _run_duo(game, scenario):
         f"{game} duo {scenario} failed:\n{proc.stdout[-4000:]}\n{proc.stderr[-1000:]}")
 
 
-# ── gen3_rr_new: the same NEW client on Radical Red (P5, card C5-5) ────────────────────────
+# ── gen3_rr: the same NEW client on Radical Red (P5, card C5-5) ─────────────────────────────
 # Several of these are currently BLOCKED: linked_faint_active/boxsync/whiteout/link/deadzone/
 # explode/rival_swap all need a "battle" target, and tests/fixtures/gen3/rr_battle{,_b}.sav do
 # not exist yet (only rr_town.sav/rr_town_b.sav are built) -- required_fixtures_rr below fails
 # them loudly with the missing fixture's name, the same policy the module docstring states for
 # gen3_frlg, rather than silently skipping. Only faint_cmd_gen3, reconnect_gen3 and
 # native_absent_gen3 (all "town") can actually run today.
-GAME_RR = "gen3_rr_new"
+GAME_RR = "gen3_rr"
 SCENARIOS_RR = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
                 "link_gen3", "deadzone_gen3", "reconnect_gen3",
                 "explode_gen3", "rival_swap_gen3", "native_absent_gen3",
@@ -120,7 +120,7 @@ def required_fixtures_rr(scenario):
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS_RR)
-def test_gen3_rr_new_duo(scenario):
+def test_gen3_rr_duo(scenario):
     if not os.path.exists(EMUHAWK):
         pytest.fail(f"EmuHawk missing: {EMUHAWK}")
     for stem in required_fixtures_rr(scenario):

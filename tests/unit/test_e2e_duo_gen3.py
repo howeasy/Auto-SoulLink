@@ -36,7 +36,7 @@ from server.adapters import gen3_codec as codec  # noqa: E402
 
 GEN3 = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
         "link_gen3", "deadzone_gen3", "reconnect_gen3")
-# P5 (card C5-5): RR-only, added on top of GEN3 above (which now also runs on gen3_rr_new).
+# P5 (card C5-5): RR-only, added on top of GEN3 above (which now also runs on gen3_rr).
 GEN3_RR_ONLY = ("explode_gen3", "rival_swap_gen3", "native_absent_gen3")
 OT_A = 0x99DE0D8A
 
@@ -52,7 +52,7 @@ def test_battle_window_registration(name, case, target, slot, attempts):
     for game in ("gen3_frlg", "gen3_lgfr"):
         assert duo.scenario_applies(name, game)
         assert duo.scenario_attempt_limit(name, game) == attempts
-    assert not duo.scenario_applies(name, "gen3_rr_new")
+    assert not duo.scenario_applies(name, "gen3_rr")
     assert callable(getattr(duo.DuoRun, "orchestrate_" + name))
     assert callable(getattr(duo.DuoRun, row["oracle"]))
 
@@ -452,9 +452,11 @@ def test_the_gen3_witness_runs_before_the_oracle(monkeypatch):
 
 
 def test_rows_without_the_flag_keep_their_verdict_paths():
-    """gen3_rr/gen2 scenarios carry no oracle and still return quietly; gen1_new still refuses."""
-    assert _oracle_run("faint", game="gen3_rr")._run_oracle({}) is None
+    """gen2 scenarios carry no oracle and still return quietly; the (renamed, new-client) gen3_rr row
+    and gen1_new refuse a verdict without a saved-state readback."""
     assert _oracle_run("memorialize", game="gen2")._run_oracle({}) is None
+    with pytest.raises(RuntimeError, match="a gen3_rr verdict needs a saved-state readback"):
+        _oracle_run("faint", game="gen3_rr")._run_oracle({})
     with pytest.raises(RuntimeError, match="a Gen 1 verdict"):
         _oracle_run("link_new", game="gen1_new", cfg={"flags": []})._run_oracle({})
 
@@ -640,7 +642,7 @@ def _native_absent_receipts(ka="KA", kb="KB"):
 
 def test_native_absent_oracle_needs_a_native_stage_and_a_clean_refusal():
     """Finding 6: the same VALID trade proves the companion's success and the clean refusal."""
-    run = _oracle_run("native_absent_gen3", game="gen3_rr_new")
+    run = _oracle_run("native_absent_gen3", game="gen3_rr")
     notes = []
     run._pydec_note = notes.append
     run._native_absent_keys = {"a": "KA", "b": "KB"}
@@ -665,9 +667,9 @@ def test_rival_swap_is_only_a_negative_characterization():
     control = duo.SCENARIOS["rival_swap_gen3"].get("control", "")
     assert "BLOCKED" in control and "negative" in control
     assert "CONTROL, not a qualification pass" in duo.summary_lines(
-        {"rival_swap_gen3": (True, 1)}, "gen3_rr_new")[0]
-    assert "CONTROL" not in duo.summary_lines({"faint_cmd_gen3": (True, 1)}, "gen3_rr_new")[0]
-    run = _oracle_run("rival_swap_gen3", game="gen3_rr_new")
+        {"rival_swap_gen3": (True, 1)}, "gen3_rr")[0]
+    assert "CONTROL" not in duo.summary_lines({"faint_cmd_gen3": (True, 1)}, "gen3_rr")[0]
+    run = _oracle_run("rival_swap_gen3", game="gen3_rr")
     notes = []
     run._pydec_note = notes.append
     a_untouched = ([STARTER], {})
@@ -697,7 +699,7 @@ def test_the_row_resolves_titles_fixtures_and_one_line_leafgreen():
     run.gcfg = dict(row, sides=dict(row["sides"], b=("firered", "firered_party_{target}_b")))
     assert run._gen3_title("b") == "firered"
     assert run._gen3_fixture_path("b").endswith("firered_party_town_b.sav")
-    # P5: radical_red joined (GAMES["gen3_rr_new"]) alongside firered/leafgreen.
+    # P5: radical_red joined (GAMES["gen3_rr"]) alongside firered/leafgreen.
     assert set(duo.GEN3_TITLES) == {"firered", "leafgreen", "radical_red"}
     for inst in ("a", "b"):
         assert row["sides"][inst][0] in duo.GEN3_TITLES
@@ -766,7 +768,7 @@ def test_gen3_rr_rom_companion_uses_the_staged_build_directly(monkeypatch, tmp_p
     """No dump search at all for the ordinary (default) kind: `staged` (ROM_REL) short-circuits
     it, so a companion-kind run never depends on a raw RR dump being reachable."""
     run = duo.DuoRun.__new__(duo.DuoRun)
-    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr_new"]), dict(duo.SCENARIOS["faint_cmd_gen3"])
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["faint_cmd_gen3"])
     root = tmp_path / "wt"
     (root / "patch" / "build").mkdir(parents=True)
     (root / duo.ROM_REL).write_bytes(b"rom")
@@ -776,7 +778,7 @@ def test_gen3_rr_rom_companion_uses_the_staged_build_directly(monkeypatch, tmp_p
 
 def test_gen3_rr_rom_companion_missing_build_refuses(monkeypatch, tmp_path):
     run = duo.DuoRun.__new__(duo.DuoRun)
-    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr_new"]), dict(duo.SCENARIOS["faint_cmd_gen3"])
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["faint_cmd_gen3"])
     (tmp_path / "empty").mkdir()
     monkeypatch.setattr(duo, "REPO", str(tmp_path / "empty"))
     with pytest.raises(FileNotFoundError, match="slink_RR"):
@@ -787,7 +789,7 @@ def test_gen3_rr_rom_clean_kind_searches_the_raw_dump(monkeypatch, tmp_path):
     """native_absent_gen3's `rom_kind: {"b": "clean"}` bypasses `staged` and searches for the
     raw dump (patch/tools/build.py:91 DEFAULT_RR / patch/README.md:18), same rule as firered."""
     run = duo.DuoRun.__new__(duo.DuoRun)
-    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr_new"]), dict(duo.SCENARIOS["native_absent_gen3"])
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["native_absent_gen3"])
     root = tmp_path / "main" / "wt"
     root.mkdir(parents=True)
     monkeypatch.setattr(duo, "REPO", str(root))
@@ -800,7 +802,7 @@ def test_gen3_rr_rom_clean_kind_searches_the_raw_dump(monkeypatch, tmp_path):
 
 def test_gen3_rr_battery_path_companion_kind_uses_the_pinned_saveram_name(tmp_path):
     run = duo.DuoRun.__new__(duo.DuoRun)
-    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr_new"]), dict(duo.SCENARIOS["faint_cmd_gen3"])
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["faint_cmd_gen3"])
     run._saveram_dir = lambda inst: str(tmp_path)
     assert os.path.basename(run._gen3_battery_path("a")) == "slink RR.SaveRAM"
 
@@ -809,7 +811,7 @@ def test_gen3_rr_battery_path_clean_kind_computes_the_saveram_name(monkeypatch, 
     """No hand-transcribed saveram name for the clean side: it is derived from whatever
     `_gen3_rom` actually staged (gen3_fixtures.saveram_name), avoiding a transcription error."""
     run = duo.DuoRun.__new__(duo.DuoRun)
-    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr_new"]), dict(duo.SCENARIOS["native_absent_gen3"])
+    run.gcfg, run.cfg = dict(duo.GAMES["gen3_rr"]), dict(duo.SCENARIOS["native_absent_gen3"])
     run._saveram_dir = lambda inst: str(tmp_path)
     monkeypatch.setattr(run, "_gen3_rom", lambda inst: "patch/build/gen3_Pokemon_-_Radical_Red.gba")
     path = run._gen3_battery_path("b")
@@ -830,19 +832,19 @@ def test_every_scenario_has_its_module_and_runner_half():
 
 
 def test_every_rr_only_scenario_has_its_module_oracle_and_runner_half():
-    """P5 (card C5-5): explode_gen3/rival_swap_gen3/native_absent_gen3, on gen3_rr_new."""
-    row = duo.GAMES["gen3_rr_new"]
+    """P5 (card C5-5): explode_gen3/rival_swap_gen3/native_absent_gen3, on gen3_rr."""
+    row = duo.GAMES["gen3_rr"]
     for name in GEN3_RR_ONLY:
         base = duo.SCENARIOS[name].get("scenario_module") or name[:-len("_gen3")]
         assert (REPO / "lua" / "tests" / "duo" / f"scenario_{row['scenario_prefix']}{base}.lua").is_file(), name
         assert callable(getattr(duo.DuoRun, f"orchestrate_{name}", None)), name
         oracle = duo.SCENARIOS[name]["oracle"]
         assert oracle == f"assert_{name}_saved" and callable(getattr(duo.DuoRun, oracle, None)), name
-        assert duo.SCENARIOS[name]["games"] == ("gen3_rr_new",), name
+        assert duo.SCENARIOS[name]["games"] == ("gen3_rr",), name
 
 
 # ── load-time pcall wrapping (card C4-LG2) ─────────────────────────────────────────────────
-# A live RR duo (gen3_rr_new faint_cmd_gen3) died silently: SLINK_GEN3_TITLE="radical_red" made
+# A live RR duo (gen3_rr faint_cmd_gen3) died silently: SLINK_GEN3_TITLE="radical_red" made
 # gen3_scripted_play.lua's dofile raise, the driver's first log line was its last, no RESULT was
 # ever written, and e2e_duo.py's harness just waited out its 120s MYKEY timeout. Every load-time
 # dofile in the driver's load section must now go through load_or_die, which pcalls and reports
@@ -1566,8 +1568,8 @@ def test_scenario_modules_fail_with_a_named_reason(lua, scenario, player, phase,
 # finding 1: RR saves decode as RR everywhere an oracle reads them
 def _rr_run(scenario="faint_cmd_gen3"):
     run = duo.DuoRun.__new__(duo.DuoRun)
-    run.scenario, run.game = scenario, "gen3_rr_new"
-    run.cfg, run.gcfg = dict(duo.SCENARIOS[scenario]), dict(duo.GAMES["gen3_rr_new"])
+    run.scenario, run.game = scenario, "gen3_rr"
+    run.cfg, run.gcfg = dict(duo.SCENARIOS[scenario]), dict(duo.GAMES["gen3_rr"])
     return run
 
 
@@ -1839,7 +1841,7 @@ def _rr_ext_run(tmp_path, monkeypatch, saves=1):
     if saves == 2:
         saved = _rr_saved(saved, 4, ext_byte=0x11)
     run, receipts, notes, build = _witness_run(tmp_path, monkeypatch, (fixture, saved))
-    run.game, run.gcfg = "gen3_rr_new", dict(duo.GAMES["gen3_rr_new"])
+    run.game, run.gcfg = "gen3_rr", dict(duo.GAMES["gen3_rr"])
     (tmp_path / "patch" / "build").mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(duo, "BUILD", str(tmp_path / "patch" / "build"))
     for inst in ("a", "b"):
@@ -1927,7 +1929,7 @@ def test_explode_runs_on_the_p_h_carrier_as_a_qualification_row():
     row = duo.SCENARIOS["explode_gen3"]
     assert row["scenario_module"] == "linked_faint_active" and row["active_faint_case"] == "explode"
     assert "control" not in row
-    assert duo.summary_lines({"explode_gen3": (True, 1)}, "gen3_rr_new") == [
+    assert duo.summary_lines({"explode_gen3": (True, 1)}, "gen3_rr") == [
         "  explode_gen3: PASS (attempt 1 of 1)"]
     required, _, _ = duo.active_faint_chain("K0", "explode")
     assert any("ACTIVE_FAINT_SITE" in r for r in required) and any("last_move=153" in r for r in required)
@@ -1951,8 +1953,7 @@ def test_no_scenario_passes_seconds_as_the_wait_go_marker():
 
 # the wire-log label: the gen3 battery rows run the NEW client
 def test_wire_logs_are_labelled_by_client(monkeypatch, tmp_path):
-    for game, label in (("gen3_frlg", "gen3_new"), ("gen3_rr_new", "gen3_new"),
-                        ("gen3_rr", "old_client")):
+    for game, label in (("gen3_frlg", "gen3_new"), ("gen3_rr", "gen3_new")):
         run = duo.DuoRun.__new__(duo.DuoRun)
         run.scenario, run.game, run.gcfg = "faint_cmd_gen3", game, dict(duo.GAMES[game])
         run.args = argparse.Namespace(wire_log=True)
@@ -2135,7 +2136,7 @@ def test_a_ball_miss_reads_as_the_gen1_cause(lua, scenario):
     assert duo.classify_gen1_result(f"RESULT: FAIL ({msg})") == "CAUSE_RNG"
 
 
-@pytest.mark.parametrize("game", ["gen3_frlg", "gen3_rr_new"])
+@pytest.mark.parametrize("game", ["gen3_frlg", "gen3_rr"])
 def test_gen3_ball_hunts_get_the_gen1_retry_budget(game):
     assert duo.rng_retry_family(game)
     assert duo.scenario_attempt_limit("link_gen3", game) == 3
@@ -2147,7 +2148,6 @@ def test_gen3_ball_hunts_get_the_gen1_retry_budget(game):
     assert duo.scenario_attempt_limit("ball_gate_new", "gen1_new") == 1
     assert duo.scenario_attempt_limit("link_new", "gen1_new") == 3
     assert duo.scenario_attempt_limit("species_clause_new", "gen1_new") == 8
-    assert duo.scenario_attempt_limit("faint", "gen3_rr") == 1       # the old RR client: none
 
 
 def test_gen3_pair_retries_only_on_the_out_of_balls_cause():
@@ -3924,14 +3924,14 @@ def test_active_faint_chain_is_red_on_the_old_hold_and_a_press(ph, mutate, probl
 
 
 def test_p_h_rows_are_registered_with_their_cases():
-    cases = {"linked_faint_active_gen3": ("wild", ("gen3_frlg", "gen3_rr_new")),
-             "linked_faint_active_whiteout_gen3": ("whiteout", ("gen3_frlg", "gen3_rr_new")),
+    cases = {"linked_faint_active_gen3": ("wild", ("gen3_frlg", "gen3_rr")),
+             "linked_faint_active_whiteout_gen3": ("whiteout", ("gen3_frlg", "gen3_rr")),
              "linked_faint_active_trainer_gen3": ("trainer", ("gen3_frlg",)),
              "active_end_gen3": ("command", ("gen3_frlg",)),
-             "linked_faint_active_clean_gen3": ("wild", ("gen3_rr_new",)),
-             "linked_faint_active_lhammer_gen3": ("lhammer", ("gen3_rr_new",)),
-             "linked_faint_active_mega_gen3": ("mega", ("gen3_rr_new",)),
-             "explode_gen3": ("explode", ("gen3_rr_new",))}
+             "linked_faint_active_clean_gen3": ("wild", ("gen3_rr",)),
+             "linked_faint_active_lhammer_gen3": ("lhammer", ("gen3_rr",)),
+             "linked_faint_active_mega_gen3": ("mega", ("gen3_rr",)),
+             "explode_gen3": ("explode", ("gen3_rr",))}
     for name, (case, games) in cases.items():
         row = duo.SCENARIOS[name]
         assert row.get("active_faint_case", "wild") == case and row["games"] == games, name
@@ -3945,7 +3945,7 @@ def test_p_h_rows_are_registered_with_their_cases():
           "linked_faint_active_lhammer_gen3": "battle2", "linked_faint_active_whiteout_gen3": "battle",
           "explode_gen3": "battle"}
     for name, target in rr.items():
-        assert duo.scenario_target(duo.SCENARIOS[name], "gen3_rr_new") == target, name
+        assert duo.scenario_target(duo.SCENARIOS[name], "gen3_rr") == target, name
     assert duo.scenario_target(duo.SCENARIOS["linked_faint_active_gen3"], "gen3_frlg") == "battle"
     assert duo.SCENARIOS["linked_faint_active_clean_gen3"]["rom_kind"] == {"a": "companion", "b": "clean"}
     assert duo.SCENARIOS["linked_faint_active_trainer_gen3"]["target"] == {"a": "battle", "b": "town"}
@@ -3971,19 +3971,19 @@ def test_active_end_queues_force_faint_only_after_ready_active(monkeypatch):
 
 def test_rr_rows_skip_until_their_battle_fixtures_exist(monkeypatch, tmp_path):
     monkeypatch.setattr(duo, "GEN3_FIXTURES", str(tmp_path))
-    why, allowed = duo.skip_reason("linked_faint_active_gen3", "gen3_rr_new")
+    why, allowed = duo.skip_reason("linked_faint_active_gen3", "gen3_rr")
     assert "rr_battle2.sav" in why and "rr_battle2_b.sav" in why and "not built yet" in why and not allowed
     assert duo.skip_reason("linked_faint_active_gen3", "gen3_frlg") is None     # FR never skips
     (tmp_path / "rr_battle.sav").write_bytes(b"")
     (tmp_path / "rr_battle_b.sav").write_bytes(b"")
-    assert duo.skip_reason("linked_faint_active_whiteout_gen3", "gen3_rr_new") is None   # R4: one-mon
-    assert duo.skip_reason("explode_gen3", "gen3_rr_new") is None
-    assert "rr_battle2" in duo.skip_reason("linked_faint_active_lhammer_gen3", "gen3_rr_new")[0]
+    assert duo.skip_reason("linked_faint_active_whiteout_gen3", "gen3_rr") is None   # R4: one-mon
+    assert duo.skip_reason("explode_gen3", "gen3_rr") is None
+    assert "rr_battle2" in duo.skip_reason("linked_faint_active_lhammer_gen3", "gen3_rr")[0]
     (tmp_path / "rr_battle2.sav").write_bytes(b"")
     (tmp_path / "rr_battle2_b.sav").write_bytes(b"")
     for name in ("linked_faint_active_gen3", "linked_faint_active_clean_gen3", "linked_faint_active_lhammer_gen3"):
-        assert duo.skip_reason(name, "gen3_rr_new") is None, name
-    why, allowed = duo.skip_reason("linked_faint_active_mega_gen3", "gen3_rr_new")
+        assert duo.skip_reason(name, "gen3_rr") is None, name
+    why, allowed = duo.skip_reason("linked_faint_active_mega_gen3", "gen3_rr")
     assert why.startswith("SIGNED LIMIT: owner ruling 20") and allowed is True
 
 
@@ -3993,9 +3993,9 @@ def test_a_skip_is_never_a_pass_but_a_signed_limit_is_allowed():
     assert duo.exit_code({"x": (True, 1)}) == 0
     assert duo.exit_code({"x": (True, 1), "r5": (None, 0, "ruling 20", True)}) == 0
     assert duo.exit_code({"r5": (None, 0, "ruling 20", True), "y": (None, 0, "missing", False)}) == 3
-    assert duo.summary_lines({"y": (None, 0, "fixture missing", False)}, "gen3_rr_new") == [
+    assert duo.summary_lines({"y": (None, 0, "fixture missing", False)}, "gen3_rr") == [
         "  y: SKIP — fixture missing"]
-    assert duo.summary_lines({"r5": (None, 0, "ruling 20", True)}, "gen3_rr_new") == [
+    assert duo.summary_lines({"r5": (None, 0, "ruling 20", True)}, "gen3_rr") == [
         "  r5: SKIP (allowed: signed limit) — ruling 20"]
 
 
@@ -4004,7 +4004,7 @@ def test_game_help_names_the_new_rows():
 
     src = inspect.getsource(duo.main)
     help_text = src[src.index('ap.add_argument("--game"'):src.index('ap.add_argument("--scenario"')]
-    for row in ("gen3_frlg", "gen3_lgfr", "gen3_rr_new", "gen1_new", "gen2"):
+    for row in ("gen3_frlg", "gen3_lgfr", "gen3_rr", "gen1_new", "gen2"):
         assert row in help_text, row
 
 

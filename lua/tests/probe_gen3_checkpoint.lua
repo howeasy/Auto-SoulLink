@@ -476,7 +476,7 @@ function P.press(btn, set, advance, held, gap)
     for _ = 1, gap or 0 do set({}); advance(); n = n + 1 end
     return true, n
 end
--- struct Pokemon is 100 bytes, hp u16 at +0x56 (pret include/pokemon.h; duo_main.lua:26)
+-- struct Pokemon is 100 bytes, hp u16 at +0x56 (pret include/pokemon.h; archive/gen3_old_client/duo_main.lua:26)
 P.PARTY_MON_SIZE, P.MON_HP_OFF = 100, 0x56
 
 --- OMP B5: the menu/party state a live miss needs, from one bw sample (nil: none fed yet).

@@ -23,11 +23,11 @@
 -- SAVE_WITNESS/SAVE_WITNESS_DUMP lines, scenario markers, and a final "RESULT: PASS|FAIL (why)".
 local D = SLINK_DUO
 assert(D and D.wt and D.player and D.scenario and D.result, "SLINK_DUO not configured (run via tools/e2e_duo.py)")
--- P5 (card C5-5): "gen3_rr_new" is the battery-boot RR row (tools/e2e_duo.py GAMES), sharing
+-- P5 (card C5-5): "gen3_rr" is the battery-boot RR row (tools/e2e_duo.py GAMES), sharing
 -- this driver with "gen3_frlg" -- everything below that reads a per-title pack/checkpoint path
 -- or symbol table branches on D.title ("radical_red" vs firered/leafgreen), not on D.game.
-assert(D.game == "gen3_frlg" or D.game == "gen3_rr_new",
-       "duo_gen3_main only serves game gen3_frlg/gen3_rr_new, got " .. tostring(D.game))
+assert(D.game == "gen3_frlg" or D.game == "gen3_rr",
+       "duo_gen3_main only serves game gen3_frlg/gen3_rr, got " .. tostring(D.game))
 assert(D.title, "SLINK_DUO.title missing (the GAMES row's sides)")
 
 local ROOT = D.wt

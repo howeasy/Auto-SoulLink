@@ -103,8 +103,8 @@ local BATTLE_RESULTS_ADDR = S.BATTLE_RESULTS_ADDR  -- gBattleResults; playerFain
 local B_OUTCOME_CAUGHT = 7
 local PARTY_BASE          = S.PARTY_BASE  -- gPlayerParty
 local MON_SIZE            = 100
-local OFF_HP, OFF_MAXHP   = 0x56, 0x58  -- lua/tests/duo/duo_main.lua:26-27
-local OFF_PID, OFF_OTID   = 0x00, 0x04  -- lua/tests/duo/duo_main.lua:23-24
+local OFF_HP, OFF_MAXHP   = 0x56, 0x58  -- lua/tests/archive/gen3_old_client/duo_main.lua:26-27
+local OFF_PID, OFF_OTID   = 0x00, 0x04  -- lua/tests/archive/gen3_old_client/duo_main.lua:23-24
 
 -- THE ACTION-MENU WITNESS (card gen3-P3-C3-21). FR run 19's coordinator replay showed the wild
 -- intro ("Wild RATTATA appeared!" -> "Go! SQUIRTLE!") is long enough to outlast a fixed A-tap
@@ -769,7 +769,7 @@ local H = {
     end,
     party_count = function() return memory.read_u8(PARTY_COUNT_ADDR) end,
     -- Party IDENTITY, for playlib's keyed snapshot. PID:OTID is the same handle the duo
-    -- harness follows a mon by (lua/tests/duo/duo_main.lua:86-98); it is plaintext (both sit
+    -- harness follows a mon by (lua/tests/archive/gen3_old_client/duo_main.lua:86-98); it is plaintext (both sit
     -- outside the encrypted substructures) and it survives a box round trip, which the
     -- record's bytes need not.
     party_key = function(i)

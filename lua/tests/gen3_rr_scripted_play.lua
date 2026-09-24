@@ -94,8 +94,8 @@ local ENEMY_BASE          = assert(profile.ram.ENEMY_BASE)
 local BATTLER_INDEX_ADDR  = assert(profile.ram.BATTLER_PARTY_INDEXES_ADDR)
 local BATTLER_POS_ADDR    = 0x02023BD6  -- gBattlerPositions (pret pokefirered.sym:81)
 local FAINTS_OFF          = 0x00        -- radical_red.BATTLE_RESULTS_PLAYER_FAINTS_OFF
-local MON_SIZE            = 100         -- vanilla 100-byte party record (lua/tests/duo/duo_main.lua)
-local OFF_PID, OFF_OTID   = 0x00, 0x04  -- lua/tests/duo/duo_main.lua:23-24
+local MON_SIZE            = 100         -- vanilla 100-byte party record (lua/tests/archive/gen3_old_client/duo_main.lua)
+local OFF_PID, OFF_OTID   = 0x00, 0x04  -- lua/tests/archive/gen3_old_client/duo_main.lua:23-24
 local BM_HP, BM_MAXHP     = 0x28, 0x2C  -- struct BattlePokemon (lua/tests/duo/scenario_explode.lua:25-26)
 local B_OUTCOME_CAUGHT    = 7           -- pret include/constants/battle.h:82
 -- RR Poke Balls are NOT in the vanilla SaveBlock1 pocket: the CFRU expanded bag puts them
@@ -346,7 +346,7 @@ play = PL.bind(H, {
 -- The keyed PC oracle's reasoning lives in playlib (party_snapshot / departed_key /
 -- survivors_intact); only these READS are RR's, and they are injected above as party_key and
 -- party_record. PID:OTID is the identity the duo harness follows a mon by
--- (lua/tests/duo/duo_main.lua:86-98): plaintext, and it survives the box round trip that RR's
+-- (lua/tests/archive/gen3_old_client/duo_main.lua:86-98): plaintext, and it survives the box round trip that RR's
 -- 58-byte CompressedPokemon makes lossy for the record's bytes.
 
 -- ── movement primitives (bounded, RAM-verified, never route-asserting) ─────────────────────
@@ -835,7 +835,7 @@ LEGS[#LEGS + 1] = {
         "docs/gen3_engine_sites.md pc_withdraw row (rr PINNED 08092FF2/+6; RR IN-PLACE, party sentinel 25 not vanilla 14)",
         "docs/gen3/probes/census_rr_pc_deposit_2026-09-21.txt (PHYSICAL: the five-A PC flow reaches Task_DepositMenu and TryStorePartyMonInBox; gPlayerPartyCount is NOT updated until the PC is closed)",
         "docs/gen3/research/rr_pc_menu.md (RR keeps the vanilla five-option storage menu with title-case labels; the earlier all-caps string search was a false negative)",
-        "lua/tests/duo/duo_main.lua:23-24 (PID/OTID offsets — the party record key this leg's oracle follows)",
+        "lua/tests/archive/gen3_old_client/duo_main.lua:23-24 (PID/OTID offsets — the party record key this leg's oracle follows)",
     },
     check = check_on_field,
     run = function(cp)

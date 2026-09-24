@@ -3,7 +3,7 @@
 -- SLINK_OVERHEAD_THROTTLE=1 adds realtime A/E/B/C/D after the fast A..H diagnostics.
 -- F/H discard pending inserts (real hooks, no frame poll); G closes all exec hooks.
 -- shadow_run.start/poll/teardown: lua/gen3/shadow_run.lua:184,296,321.
--- Registered onframeend order mirrors duo_main.lua:102-120; we verify actual order too.
+-- Registered onframeend order mirrors archive/gen3_old_client/duo_main.lua:102-120; we verify actual order too.
 local P = {FRAMES=600, WINDOWS=5}
 -- Hooks-only must not trip signals.MAX_PENDING=64: retain the real callback/byte
 -- checks and signal construction, but discard queue inserts synchronously.

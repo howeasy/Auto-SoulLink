@@ -1,6 +1,6 @@
 -- mkstate_gen3_rr_fill.lua — make a Radical Red savestate whose party holds N mons, from an
 -- existing 1-mon state, using the companion patch's native OP_CREATE_MON (the same filler the
--- duo stub uses, lua/tests/duo/duo_main.lua:57-77). A fixture-making tool: the fillers are a
+-- duo stub uses, lua/tests/archive/gen3_old_client/duo_main.lua:57-77). A fixture-making tool: the fillers are a
 -- harness write, but every PC operation the RR natural-play driver performs on them is the
 -- engine's own (PLAN §5.7 natural-play source for pc_* kinds; the game refuses to deposit its
 -- LAST mon, so a 1-mon state can never exercise the storage frontend).

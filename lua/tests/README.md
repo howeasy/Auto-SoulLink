@@ -2,13 +2,12 @@
 
 BizHawk Lua test scripts. Three families:
 
-- **`duo/`** — the TWO-INSTANCE headless E2E harness. Three wrappers, all of which run the
-  REAL production client (instance B mutates party OTIDs pre-hello so keys don't collide):
-  `duo_main.lua` for Gen 3 (GBA, boots a savestate), `duo_gen1_main.lua` for the rewritten
+- **`duo/`** — the TWO-INSTANCE headless E2E harness. The active wrappers run the real
+  production client (instance B mutates party OTIDs pre-hello so keys don't collide):
+  `duo_gen3_main.lua` for Gen 3 (battery boot), `duo_gen1_main.lua` for the rewritten
   Gen 1 client (Game Boy, boots a committed battery save; Red as player A, Blue as B — no
   Yellow pairing), and `duo_gb_main.lua` for Gen 2 only (Game Boy, boots a committed battery
-  save; the old Gen 1 pairing was removed from it in the harness deletion sweep, `2395145`/
-  `832d499`, alongside the legacy client's own deletion, `21ff0d7`). Driven by
+  save). The retired `duo_main.lua` is archived at `archive/gen3_old_client/duo_main.lua`. Driven by
   `tools/e2e_duo.py`, which boots a throwaway server + two concurrent EmuHawk instances
   (per-instance `--config` copies, and per-instance SaveRAM dirs so two Crystals can share
   one dump) and orchestrates via the debug HTTP API. This automates the old "two-instance
@@ -25,7 +24,7 @@ BizHawk Lua test scripts. Three families:
 
   | File(s) | Games |
   |---|---|
-  | `scenario_{faint,boxsync,trade,ghost,explode,infopanel}.lua` | Gen 3 only |
+  | `scenario_gen3_*.lua` | Gen 3 battery rows (`gen3_frlg`, `gen3_lgfr`, `gen3_rr`) |
   | `scenario_gb_{faint,boxsync,memorialize}.lua` | Gen 2 (shared-shape files any GB generation could use, but only Gen 2 resolves through them today) |
 
   The old `scenario_gen1_{whiteout,playthrough,deadzone,dupes,rivalswap,explode_g1}.lua`

@@ -10,8 +10,9 @@ via the server's debug HTTP API and waits for both instances' result files.
     python tools/e2e_duo.py --scenario all --keep-alive
 
 Per instance: a generated stub (patch/build/duo_{a,b}.lua) bakes SLINK_HOST/PORT/PLAYER
-plus the SLINK_DUO table and dofiles lua/tests/duo/duo_main.lua, which runs the REAL
-production client and the scenario coroutine (lua/tests/duo/scenario_<name>.lua).
+plus the SLINK_DUO table and dofiles the row's Lua driver (for example,
+lua/tests/duo/duo_gen3_main.lua for Gen 3), which runs the REAL production client and the
+scenario coroutine (lua/tests/duo/scenario_<name>.lua).
 Result protocol: patch/build/e2e_<scenario>_{a,b}_result.txt — incremental log lines,
 "MYKEY <slot> <key>" markers, final "RESULT: PASS|FAIL".
 
@@ -196,9 +197,9 @@ SCENARIOS = {
                              "target": "town", "no_setup": True, "frames": 100000,
                              "oracle": "assert_admit_randomized_saved"},
     # ── NEW Gen 3 client on vanilla FRLG (lua/gen3/*, game "gen3_frlg"; docs/gen3/PLAN.md §5.5,
-    # §6 P4). Keys are `<name>_gen3` because the bare `faint`/`boxsync` belong to the old RR
-    # client; P5 extends each `games` tuple with "gen3_rr" without a rename. Every entry names
-    # its saved-state oracle, and the row's check_save_witness_gen3 runs before it (_run_oracle).
+    # §6 P4). Keys are `<name>_gen3` so the new Gen 3 rows stay distinct from the shared
+    # `faint`/`boxsync` entries. Every entry names its saved-state oracle, and the row's
+    # check_save_witness_gen3 runs before it (_run_oracle).
     # The drivers are lua/tests/duo/scenario_gen3_<name>.lua under duo_gen3_main.lua; the
     # runner half of each is DuoRun.orchestrate_<key>. `no_save` names a half whose final
     # receipt legitimately saves nothing (reconnect's A ends on the wrong-save relaunch).
@@ -208,35 +209,34 @@ SCENARIOS = {
     #                       active mid-battle and takes mechanism P+H (owner rulings 15-18): the
     #                       Perish commit + controller hand-off, then the engine's own KO in
     #                       battle with no input (active_faint_chain).
-    # P5 (card C5-5): every `games` tuple below now names "gen3_rr_new" too -- these seven apply
+    # P5 (card C5-5): every `games` tuple below now names "gen3_rr" too -- these seven apply
     # to RR unchanged (PLAN §14 P5, owner ruling: RR under the standard). The five whose `target`
     # includes "battle" are blocked on the missing rr_battle{,_b}.sav fixture (see GAMES
-    # ["gen3_rr_new"]'s comment); faint_cmd (server-command only) and reconnect (target "town")
+    # ["gen3_rr"]'s comment); faint_cmd (server-command only) and reconnect (target "town")
     # have no such dependency. All seven also inherit an UNVERIFIED risk in common: their walking
     # (Route 1 grass) and PC-menu navigation come from lua/tests/gen3_scripted_play.lua's
-    # FR-pret-derived PATHS/symbols, reused for RR (duo_gen3_main.lua) because the OLD RR duo
-    # driver (lua/tests/duo/duo_main.lua) never walks at all -- there is no pinned RR walking
-    # flow anywhere in this repo to port instead. Only the specific functions
-    # docs/gen3/research/rr_pc_menu.md and rr_save_layout.md actually cross-checked against the
-    # RR binary (Task_DepositMenu/Task_WithdrawMon, a few battle-flag addresses) are confirmed
-    # identical to FR's; the rest (battle action/move cursors, map names/tile coordinates) are
-    # assumed, not verified.
-    "faint_cmd_gen3": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_rr_new"),
+    # FR-pret-derived PATHS/symbols, reused for RR (duo_gen3_main.lua); the retired savestate
+    # driver is archived, and there is no pinned RR walking flow in this repo to port instead.
+    # Only the specific functions docs/gen3/research/rr_pc_menu.md and rr_save_layout.md
+    # actually cross-checked against the RR binary (Task_DepositMenu/Task_WithdrawMon, a few
+    # battle-flag addresses) are confirmed identical to FR's; the rest (battle action/move
+    # cursors, map names/tile coordinates) are assumed, not verified.
+    "faint_cmd_gen3": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_rr"),
                        "target": "town", "frames": 2000000,
                        "oracle": "assert_faint_cmd_gen3_saved"},
     # A1 and R1 (RR companion): mechanism P+H on the wild battle (active_faint_case "wild").
     # `target_by_game` (scenario_target): RR's rr_battle.sav holds ONE mon and no balls, so R1's
     # send-out needs rr_battle2 (parcel -> 10 balls, then a Route 1 catch; driver 8103ddec).
     "linked_faint_active_gen3": {"flags": [], "timeout": 1800,
-                                 "games": ("gen3_frlg", "gen3_rr_new"),
-                                 "target": "battle", "target_by_game": {"gen3_rr_new": "battle2"},
+                                 "games": ("gen3_frlg", "gen3_rr"),
+                                 "target": "battle", "target_by_game": {"gen3_rr": "battle2"},
                                  "frames": 2500000,
                                  "oracle": "assert_linked_faint_active_gen3_saved"},
     # A1 (i) and R4: B's linked mon is its only mon -- a hand deposit of the slot-1 mon on FR/LG,
     # already so on RR's one-mon rr_battle.sav -- so the Perish KO whites out (ruling 18: P is not
     # held on the last mon; ruling 21: the game_over that follows is intended).
     "linked_faint_active_whiteout_gen3": {"flags": [], "timeout": 2400,
-                                          "games": ("gen3_frlg", "gen3_rr_new"),
+                                          "games": ("gen3_frlg", "gen3_rr"),
                                           "target": "battle", "frames": 3000000,
                                           "scenario_module": "linked_faint_active",
                                           "active_faint_case": "whiteout",
@@ -248,10 +248,10 @@ SCENARIOS = {
                                          "scenario_module": "linked_faint_active",
                                          "active_faint_case": "trainer",
                                          "oracle": "assert_linked_faint_active_trainer_gen3_saved"},
-    "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr_new"),
+    "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr"),
                      "target": {"a": "battle", "b": "town"}, "frames": 2500000,
                      "oracle": "assert_boxsync_gen3_saved"},
-    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr_new"),
+    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr"),
                       "target": {"a": "battle", "b": "town"}, "frames": 3000000,
                       "oracle": "assert_whiteout_gen3_saved"},
     # G4 item 2a (4): the Center 2F negative controls (the nurse rides whiteout_gen3). A walks
@@ -267,19 +267,19 @@ SCENARIOS = {
                              "oracle": "assert_save_then_write_gen3_saved"},
     # `ball_hunt`: a half throws Poke Balls, so "hunt ended out-of-balls" (the game's catch RNG
     # on a fixture's few balls) earns the Gen 1 standard's whole-run retry (RNG_RETRY_FAMILIES).
-    "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr_new"),
+    "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr"),
                   "ball_hunt": True,
                   "target": "battle", "frames": 2500000, "oracle": "assert_link_gen3_saved"},
-    "deadzone_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr_new"),
+    "deadzone_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr"),
                       "ball_hunt": True,
                       "target": "battle", "frames": 2500000,
                       "oracle": "assert_deadzone_gen3_saved"},
-    "reconnect_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_rr_new"),
+    "reconnect_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_rr"),
                        "target": "town", "frames": 2000000, "no_save": ("a",),
                        "oracle": "assert_reconnect_gen3_saved"},
-    # ── RR-only (P5, card C5-5): docs/gen3/PLAN.md §14 P5's nine minus ghost/trade/infopanel
-    # (the old client's row keeps those) and trade_abort (a later card; not built here, see the
-    # card's final report). All three below are BLOCKED the same way as the five "battle"-target
+    # ── RR-only (P5, card C5-5): docs/gen3/PLAN.md §14 P5's nine minus the retired old-client
+    # trade/ghost/infopanel rows and trade_abort (a later card; not built here, see the card's
+    # final report). All three below are BLOCKED the same way as the five "battle"-target
     # scenarios above (missing rr_battle{,_b}.sav); see each entry.
     #   explode      NON-QUALIFYING CONTROL (`control`): A loses its linked lead naturally,
     #                B must receive the KEYED force_explode, and B's receipt shows the engine
@@ -299,40 +299,40 @@ SCENARIOS = {
     # the old control label asked for a witness downstream of attackcanceler/tryexplosion, and the
     # attacker's own faint site (counter +1, HP 0, no SLink HP write) after the stamp is one -- a
     # Damp/sleep/flinch cancel produces no self-KO.
-    "explode_gen3": {"flags": ["--explode-mode"], "timeout": 900, "games": ("gen3_rr_new",),
+    "explode_gen3": {"flags": ["--explode-mode"], "timeout": 900, "games": ("gen3_rr",),
                      "target": "battle", "frames": 1500000,
                      "scenario_module": "linked_faint_active", "active_faint_case": "explode",
                      "oracle": "assert_explode_gen3_saved"},
     # `control`: a NEGATIVE/BLOCKED characterization, never a qualification PASS (Codex
     # C4-6b finding 6); summary_lines and the oracle's PYDEC line both say so.
-    "rival_swap_gen3": {"flags": [], "timeout": 600, "games": ("gen3_rr_new",),
+    "rival_swap_gen3": {"flags": [], "timeout": 600, "games": ("gen3_rr",),
                         "control": "BLOCKED negative control: a dummy team is refused with "
                                    "refresh_failed; no valid swap is proven until the refresh "
                                    "window lands (OMP C4-8)",
                         "target": "battle", "frames": 900000, "no_save": ("a", "b"),
                         "oracle": "assert_rival_swap_gen3_saved"},
-    "native_absent_gen3": {"flags": [], "timeout": 300, "games": ("gen3_rr_new",),
+    "native_absent_gen3": {"flags": [], "timeout": 300, "games": ("gen3_rr",),
                            "target": "town", "frames": 300000,
                            "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("a", "b"),
                            "oracle": "assert_native_absent_gen3_saved"},
     # RR rows R2/R3/R5 of rr_active_faint_parity_scope §5.5 (R1 = linked_faint_active_gen3 and
-    # R4 = linked_faint_active_whiteout_gen3 on gen3_rr_new). R1/R2/R3 boot rr_battle2{,_b}.sav
+    # R4 = linked_faint_active_whiteout_gen3 on gen3_rr). R1/R2/R3 boot rr_battle2{,_b}.sav
     # (a second mon for the send-out, balls for R3's L-throw) and SKIP by name until it is built
     # (skip_reason); R4 runs on the one-mon rr_battle{,_b}.sav.
     #   R2 clean   B boots the CLEAN RR dump: the P+H path is Lua-only, no companion needed.
     #   R3 lhammer B pulses L every frame from the commit to the KO; no ball may be lost.
     #   R5 mega    SIGNED G5 LIMIT (owner ruling 20): an allowed SKIP, never launched.
-    "linked_faint_active_clean_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr_new",),
+    "linked_faint_active_clean_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",),
                                        "target": "battle2", "frames": 2500000,
                                        "rom_kind": {"a": "companion", "b": "clean"},
                                        "scenario_module": "linked_faint_active",
                                        "oracle": "assert_linked_faint_active_clean_gen3_saved"},
-    "linked_faint_active_lhammer_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr_new",),
+    "linked_faint_active_lhammer_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",),
                                          "target": "battle2", "frames": 2500000,
                                          "scenario_module": "linked_faint_active",
                                          "active_faint_case": "lhammer",
                                          "oracle": "assert_linked_faint_active_lhammer_gen3_saved"},
-    "linked_faint_active_mega_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr_new",),
+    "linked_faint_active_mega_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",),
                                       "target": "battle", "frames": 2500000,
                                       "scenario_module": "linked_faint_active",
                                       "active_faint_case": "mega",
@@ -341,19 +341,6 @@ SCENARIOS = {
                                                       "reachable by normal inputs early in RR, and the "
                                                       "Perish path reads no mega state",
                                       "oracle": "assert_linked_faint_active_mega_gen3_saved"},
-    # The four below are Gen 3-only and say so explicitly. They load Radical Red savestates
-    # and two of them need the RR companion patch, so there is nothing for a Game Boy to run.
-    "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420,
-                "games": ("gen3_rr",)},
-    "ghost":   {"flags": ["--overworld-presence"], "savestate": "slink_overworld.State",
-                "timeout": 420, "games": ("gen3_rr",)},
-    # The native panel needs the RR patch present and a formed pair; no extra server flags.
-    "infopanel": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420,
-                  "games": ("gen3_rr",)},
-    "explode": {"flags": ["--explode-mode"],
-                "savestate": {"a": "slink_overworld.State", "b": "slink_prebattle.State"},
-                "fillers": {"a": True, "b": False}, "timeout": 600,
-                "games": ("gen3_rr",)},
 }
 
 
@@ -362,7 +349,7 @@ SCENARIOS = {
 # Titles that never inherit a scenario implicitly. An entry with no `games` key means "every
 # title", which is right for savestate-less shared scenarios like faint/boxsync — but not for
 # `gen1_new`, whose driver runs only the scenarios that name it, so opt-in is the whole rule.
-OPT_IN_GAMES = ("gen1_new", "gen3_frlg", "gen3_rr_new")
+OPT_IN_GAMES = ("gen1_new", "gen3_frlg", "gen3_rr")
 
 
 def is_pure_pairing(game) -> bool:
@@ -445,7 +432,7 @@ RNG_OUT_OF_BALLS = "RESULT: FAIL (hunt ended out-of-balls)"
 # (retryable_gen1_rng), the per-attempt idle jitter the driver echoes (jitter_problems) and the
 # attempt budget (scenario_attempt_limit). A Gen 3 scenario opts in with `ball_hunt`: only a
 # half that throws Poke Balls can end on the out-of-balls cause.
-RNG_RETRY_FAMILIES = ("gen1_new", "gen3_frlg", "gen3_rr_new")
+RNG_RETRY_FAMILIES = ("gen1_new", "gen3_frlg", "gen3_rr")
 # A partner half's own "I only failed because the other half did" line (the gen3 drivers phrase
 # it "CONSEQUENCE: <what>"). It never retries by itself: the pair still needs a CAUSE_RNG.
 CONSEQUENCE_PREFIX = "CONSEQUENCE: "
@@ -1841,14 +1828,7 @@ def gen3_returned(key):
 #   * The shared GB duo wrapper (duo_gb_main.lua), since the boot and the HP endianness
 #     differ from Gen 3. Gen 2 uses the same one.
 #
-# gen3_rr keeps exactly the previous behaviour and stays the default.
 GAMES = {
-    "gen3_rr": {
-        "main": "lua/tests/duo/duo_main.lua",
-        "rom": {"a": ROM_REL, "b": ROM_REL},
-        "uses_savestate": True,
-        "scenario_prefix": "",
-    },
     # The NEW Gen 1 client (lua/gen1/entry.lua composition root), Red as A and Blue as B, on
     # the battle fixtures rebuilt from scripted play (tools/gen1_fixtures.py). The scenarios it
     # runs are the ones that NAME it: `gen1_new` is opt-in (OPT_IN_GAMES), so the
@@ -1963,16 +1943,15 @@ GAMES = {
         "save_witness": "check_save_witness_gen3",
     },
     # P5 (card C5-5): the NEW Gen 3 client on Radical Red, battery-boot like gen3_frlg (the same
-    # `play`/duo_gen3_main.lua/witness method) instead of the OLD client's savestate row above
-    # ("gen3_rr", untouched). `sides` stems "rr_{target}" match tests/fixtures/gen3/README.md's
-    # naming (only "town" exists today: rr_town.sav / rr_town_b.sav, both boot-checked --
+    # `play`/duo_gen3_main.lua/witness method). `sides` stems "rr_{target}" match
+    # tests/fixtures/gen3/README.md's naming (only "town" exists today: rr_town.sav / rr_town_b.sav,
     # rr_battle{,_b}.sav do not exist, so every scenario below whose `target` is "battle" FAILS
     # at fixture lookup until the fixture worker builds them; this is a real, named blocker, not
     # a silent gap). `game` is its own family (not aliased to "gen3_frlg") so duo_gen3_main.lua
     # and the SYS/pack selection can tell RR apart; `rr=True` is read by check_save_witness_gen3.
-    "gen3_rr_new": {
+    "gen3_rr": {
         "main": "lua/tests/duo/duo_gen3_main.lua",
-        "game": "gen3_rr_new",
+        "game": "gen3_rr",
         "play": "gen3_fixtures",
         "sides": {"a": ("radical_red", "rr_{target}"), "b": ("radical_red", "rr_{target}_b")},
         "uses_savestate": False,
@@ -2259,7 +2238,7 @@ class DuoRun:
     def collect_wire_logs(self):
         """Promote this run's wire log to the golden-transcript path, and name what landed.
 
-        `tests/fixtures/gen3/wire/<scenario>_<player>_old_client.jsonl`, per that directory's
+        `tests/fixtures/gen3/wire/<scenario>_<player>_gen3_new.jsonl`, per that directory's
         README. Only a --wire-log run has anything to promote; the source is the server's own
         capture under the data dir, so this must run before the data dir is removed.
 
@@ -2278,8 +2257,8 @@ class DuoRun:
             player = name[len("wire_"):-len(".jsonl")]
             if player == "rejected":
                 continue
-            # the gen3 battery rows run the NEW client (lua/gen3); gen3_rr keeps "old_client"
-            label = "gen3_new" if self.is_gen3_battery else "old_client"
+            # All active Gen 3 rows use the new battery client; non-Gen3 rows keep their game key.
+            label = "gen3_new" if self.is_gen3_battery else self.game
             dest = os.path.join(WIRE_FIXTURES, f"{self.scenario}_{player}_{label}.jsonl")
             shutil.copyfile(os.path.join(wire, name), dest)
             print(f"[duo] wire log: {dest}")
@@ -6534,11 +6513,10 @@ def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--game", default="gen3_rr", choices=sorted(GAMES),
-                    help="the GAMES pairing row: gen3_rr (the OLD Radical Red client, savestates; "
-                         "default), gen3_frlg (new client, FireRed A / LeafGreen B), gen3_lgfr "
-                         "(LeafGreen A / FireRed B), gen3_rr_new (new client on Radical Red), "
-                         "gen1_new and the gen1_pure* rows (new Gen 1 client), gen2 (Crystal both "
-                         "sides); --list shows a row's scenarios")
+                    help="the GAMES pairing row: gen3_rr (new client on Radical Red, default), "
+                         "gen3_frlg (new client, FireRed A / LeafGreen B), gen3_lgfr "
+                         "(LeafGreen A / FireRed B), gen1_new and the gen1_pure* rows "
+                         "(new Gen 1 client), gen2 (Crystal both sides); --list shows a row's scenarios")
     ap.add_argument("--scenario", default="faint",
                     choices=list(SCENARIOS) + ["all"])
     ap.add_argument("--keep-alive", action="store_true",
@@ -6559,7 +6537,7 @@ def main():
                     help="extra flags for server.server")
     ap.add_argument("--wire-log", action="store_true",
                     help="capture every c2s/s2c line to "
-                         "tests/fixtures/gen3/wire/<scenario>_<player>_old_client.jsonl")
+                         "tests/fixtures/gen3/wire/<scenario>_<player>_gen3_new.jsonl")
     ap.add_argument("--list", action="store_true",
                     help="print the scenarios --scenario all would run for --game, then exit")
     args = ap.parse_args()
