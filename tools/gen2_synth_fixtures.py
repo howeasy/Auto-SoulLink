@@ -37,6 +37,9 @@ else:
 SCHEMA = "gen2-synth-disclosure-v1"
 BUILDER = "tools/gen2_synth_fixtures.py"
 CART = 0x8000
+SAVERAM = CART + 22   # the BizHawk 2.11.1 gambatte RTC trailer (tools/gen2_fixtures.SAVERAM_BYTES)
+EDIT_KEYS = frozenset({"party", "balls", "last_spawn", "step_count", "poison_step"})
+MAX_ITEM_STACK = 99   # MAX_ITEM_STACK, constants/item_constants.asm
 EGG_LEVEL = 5   # constants/pokemon_data_constants.asm EGG_LEVEL
 DEFAULT_HAPPINESS = 70   # BASE_HAPPINESS, constants/pokemon_data_constants.asm
 PSN = 1 << 3   # constants/battle_constants.asm PSN
@@ -86,10 +89,16 @@ class _Save:
                             "primary": primary, "backup": backup, "old_hex": old.hex(), "new_hex": data.hex()})
 
     def restore_checksums(self):
+        """SaveChecksum/SaveBackupChecksum (C/G engine/menus/save.asm): disclosed like any other field."""
         codec = _codec()
-        for copy_name in ("primary", "backup"):
+        for copy_name, symbol in (("primary", "sChecksum"), ("backup", "sBackupChecksum")):
             at = self.layout.checksum_offsets[copy_name]
-            self.raw[at:at + 2] = codec.sav_checksum(bytes(self.raw[:CART]), self.layout, copy_name).to_bytes(2, "little")
+            old = bytes(self.raw[at:at + 2])
+            new = codec.sav_checksum(bytes(self.raw[:CART]), self.layout, copy_name).to_bytes(2, "little")
+            self.raw[at:at + 2] = new
+            if new != old:
+                self.fields.append({"symbol": symbol, "offset": 0, "wram": None, "size": 2, "cart": at,
+                                    "old_hex": old.hex(), "new_hex": new.hex()})
 
 
 def _name(text, charmap, size):
@@ -116,7 +125,10 @@ def party_mon(spec, *, layout, species, moves, ot_id):
     exp = spec.get("exp", codec.exp_for_level(level, row["growth_rate"]))
     if codec.level_from_exp(exp, row["growth_rate"]) != level:
         raise ValueError(f"{spec['species']}: exp {exp} is not level {level}")
-    hp = stats["hp"] if spec.get("hp") is None else spec["hp"]
+    if egg and spec.get("hp") is not None:
+        raise ValueError("an egg's HP is set by GiveEgg, not the spec")
+    # GiveEgg zeroes an egg's current HP (C engine/pokemon/move_mon.asm:1210-1215)
+    hp = 0 if egg else stats["hp"] if spec.get("hp") is None else spec["hp"]
     if not 0 <= hp <= stats["hp"]:
         raise ValueError("hp above max")
     mon = {"raw_hex": "00" * layout.party_size, "species_id": row["index"], "held_item": 0,
@@ -130,8 +142,14 @@ def party_mon(spec, *, layout, species, moves, ot_id):
 def build(title, base_bytes, edits, *, root=ROOT, base_name=None):
     codec = _codec()
     root = Path(root)
-    if len(base_bytes) < CART:
-        raise ValueError("base save shorter than CartRAM")
+    if len(base_bytes) != SAVERAM:
+        raise ValueError(f"base save must be exactly {SAVERAM} bytes (CartRAM + RTC trailer)")
+    unknown = set(edits) - EDIT_KEYS
+    if unknown:
+        # No direct map relocation: CONTINUE keeps the saved object structs and skips LoadMapObjects
+        # (data/maps/setup_scripts.asm MapSetupScript_Continue), so a rewritten map would carry the base map's
+        # NPCs. A recipe moves the player natively instead (last_spawn + a poison whiteout, SYNTH_RECIPES).
+        raise ValueError(f"unsupported edit keys: {sorted(unknown)}")
     layout = codec.for_foundation(title, root=root)
     if not codec.strict_checksum_witness(bytes(base_bytes[:CART]), layout)["valid"]:
         raise ValueError("base save copies/checksums are not valid")
@@ -164,8 +182,12 @@ def build(title, base_bytes, edits, *, root=ROOT, base_name=None):
         facts += ["data/games/gen2_<title>/species_index.json base stats/growth", "data/games/gen2_<title>/moves.json PP",
                   "constants/charmap.asm names", "macros/ram.asm party_struct"]
     if "balls" in edits:
-        ids = {row["constant"]: int(i) for i, row in _pack(root, title, "items")["items"].items()}
+        items = _pack(root, title, "items")["items"]
+        ids = {row["constant"]: int(i) for i, row in items.items() if row.get("pocket") == "BALL"}
         pocket = edits["balls"]
+        names = [name for name, _ in pocket]
+        if len(set(names)) != len(names) or any(name not in ids for name in names)                 or any(not 1 <= qty <= MAX_ITEM_STACK for _, qty in pocket):
+            raise ValueError("Ball pocket entries must be unique BALL-pocket items with 1..99 each")
         size = layout.addresses["wNumPCItems"] - layout.addresses["wBalls"]
         body = b"".join(bytes([ids[name], qty]) for name, qty in pocket) + b"\xff"
         if len(body) > size:

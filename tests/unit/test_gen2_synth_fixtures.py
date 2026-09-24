@@ -27,7 +27,19 @@ def base(title):
     return path.read_bytes()
 
 
-@pytest.mark.parametrize("title", ["crystal", "gold"])
+TITLES = ["crystal", "gold", "silver"]
+
+
+def independent_checksums(raw, layout):
+    """The source Checksum: a 16-bit byte sum over the primary copy (the contiguous saved regions) and over the
+    backup copy's region spans (C/G engine/menus/save.asm SaveChecksum/SaveBackupChecksum), read little-endian."""
+    primary = sum(sum(raw[r.primary:r.primary + r.length]) for r in layout.regions) & 0xFFFF
+    backup = sum(sum(raw[r.backup:r.backup + r.length]) for r in layout.regions) & 0xFFFF
+    stored = {name: int.from_bytes(raw[at:at + 2], "little") for name, at in layout.checksum_offsets.items()}
+    return (primary, backup), (stored["primary"], stored["backup"])
+
+
+@pytest.mark.parametrize("title", TITLES)
 def test_the_built_save_is_valid_and_carries_the_spec(title):
     raw = base(title)
     out, disclosure = synth.build(title, raw, EDITS, base_name=f"{title}_battle")
@@ -38,33 +50,47 @@ def test_the_built_save_is_valid_and_carries_the_spec(title):
         party = codec.decode_saved_party(out[:synth.CART], layout, copy_name=copy_name)
         rows = [(m["species_id"], m["is_egg"], m["level"], m["exp"], m["hp"], m["status"], m["happiness"])
                 for m in party["mons"]]
-        assert rows == [(10, False, 6, 342, 23, 0, 70), (161, True, 5, 125, 20, 0, 1), (16, False, 5, 135, 1, 8, 70)]
+        assert rows == [(10, False, 6, 342, 23, 0, 70), (161, True, 5, 125, 0, 0, 1), (16, False, 5, 135, 1, 8, 70)]
+    computed, stored = independent_checksums(out, layout)
+    assert computed == stored
     assert disclosure["base_sha256"] != disclosure["sha256"] and disclosure["edits"] == EDITS
 
 
-def test_the_disclosure_names_every_changed_byte():
-    raw = base("crystal")
-    out, disclosure = synth.build("crystal", raw, EDITS)
-    layout = codec.for_foundation("crystal")
+@pytest.mark.parametrize("title", TITLES)
+def test_the_disclosure_names_every_changed_byte(title):
+    raw = base(title)
+    out, disclosure = synth.build(title, raw, EDITS)
     covered = set()
     for field in disclosure["fields"]:
-        for at in (field["primary"], field["backup"]):
+        for at in ([field["cart"]] if field.get("cart") is not None else [field["primary"], field["backup"]]):
             covered |= set(range(at, at + field["size"]))
             assert out[at:at + field["size"]].hex() == field["new_hex"]
             assert raw[at:at + field["size"]].hex() == field["old_hex"]
-    for at in layout.checksum_offsets.values():
-        covered |= {at, at + 1}
-    changed = {i for i in range(synth.CART) if raw[i] != out[i]}
-    assert changed and changed <= covered
-    assert {f["symbol"] for f in disclosure["fields"]} >= {"wPartyCount", "wPartyMon1", "wBalls",
-                                                           "wLastSpawnMapGroup", "wStepCount", "wPoisonStepCount"}
+    changed = {i for i in range(len(raw)) if raw[i] != out[i]}
+    assert changed and changed <= covered and len(out) == len(raw) == synth.SAVERAM
+    assert {f["symbol"] for f in disclosure["fields"]} >= {"wPartyCount", "wPartyMon1", "wBalls", "sChecksum",
+                                                           "sBackupChecksum", "wLastSpawnMapGroup", "wStepCount",
+                                                           "wPoisonStepCount"}
 
 
 @pytest.mark.parametrize("edits, match", [
     ({"party": [{"species": "CATERPIE", "level": 7, "exp": 342, "moves": ["TACKLE"]}]}, "not level"),
     ({"last_spawn": "ROUTE_29"}, "not a spawn point"),
     ({"party": [{"species": "CATERPIE", "level": 6, "moves": []}]}, "moves required"),
+    ({"map": {"map_const": "VIOLET_CITY", "x": 1, "y": 1}}, "unsupported edit keys"),
+    ({"events": ["EVENT_GOT_EEVEE"]}, "unsupported edit keys"),
+    ({"party": [{"species": "PIDGEY", "egg": True, "hp": 5, "moves": ["TACKLE"]}]}, "egg's HP"),
+    ({"balls": [["POTION", 5]]}, "BALL-pocket"),
+    ({"balls": [["POKE_BALL", 100]]}, "1..99"),
+    ({"balls": [["POKE_BALL", 5], ["POKE_BALL", 5]]}, "unique"),
 ])
 def test_contradictory_edits_are_refused(edits, match):
     with pytest.raises(ValueError, match=match):
         synth.build("crystal", base("crystal"), edits)
+
+
+def test_only_an_exact_saveram_is_accepted():
+    raw = base("crystal")
+    for bad in (raw[:synth.CART], raw + bytes(1)):
+        with pytest.raises(ValueError, match="exactly"):
+            synth.build("crystal", bad, {"step_count": 1})
