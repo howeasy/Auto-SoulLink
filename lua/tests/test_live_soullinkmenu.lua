@@ -1,8 +1,12 @@
 -- test_live_soullinkmenu.lua — the SOULLINK row in RR's START menu (ROADMAP §6, step 1).
 --
--- Proves the menu hook and NOTHING else: the row appears only when enabled, sits where we spliced
--- it, and its callback fires. No screen is drawn yet — that is deliberate, so the hook is gated
--- before a single pixel of the info screen exists.
+-- Proves the menu hook: the row appears only when enabled, sits where we spliced it, its callback
+-- fires, and choosing it opens the panel lua/gen3/native.lua staged (native:link_panel, the SlinkInfo
+-- staging the client does on the server's link_panel command).
+--
+-- The enable byte for the DISABLED probes is written raw on purpose: 0 is the boot default an
+-- unpatched-Lua session leaves, i.e. a precondition, not an op. native.lua has no "disable" path
+-- (link_panel always publishes enable=1), and it needs none.
 --
 -- The three things that would each ship a silently broken feature:
 --   1. boot-zero must be stock. EWRAM boots zeroed and an unpatched-Lua run never writes SI, so a
@@ -12,135 +16,80 @@
 --      still LOOK right.
 --
 --   python tools/run_gate.py lua/tests/test_live_soullinkmenu.lua --timeout 300
-local SDIR = "E:/Howard/Bizhawk/GBA/State"
-local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
-assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
-local OUT = WT .. "/patch/build/soullinkmenu_result.txt"
-local MB = dofile(WT .. "/lua/mailbox.lua")
+local G = dofile((SLINK_ROOT or os.getenv("SLINK_ROOT")) .. "/lua/tests/gen3_gatelib.lua")
+local t = G.open("soullinkmenu")
 
 local COUNT  = 0x020370F5   -- sNumStartMenuActions   \ both located live by
 local ORDER  = 0x020370F6   -- sStartMenuOrder        / lua/tests/test_live_startmenu.lua
-local SI     = 0x0203FD44   -- SlinkInfo: +0 enable, +1 opened
+local SI     = 0x0203FD44   -- SlinkInfo: +0 enable, +1 opened, +3 lines
 local SPLICE = 5            -- SOULLINK takes EXIT's index; EXIT moves to 6
+local SC2    = 0x03000F9C   -- sScriptContext2Enabled
 
-local lines = {}
-local function log(s) lines[#lines + 1] = s; console.log(s) end
-local function finish(ok)
-    log(ok and "RESULT: PASS" or "RESULT: FAIL")
-    local f = io.open(OUT, "w")
-    if f then f:write(table.concat(lines, "\n") .. "\n"); f:close() end
-    client.exit()
-end
-
-pcall(memory.usememorydomain, "System Bus")
-pcall(function() client.speedmode(400) end)
-
--- The addresses above are written out literally so this gate checks handlers.c independently of
--- the Lua client. Cross-check them against mailbox.lua anyway, or the two could drift apart and
--- both this gate and the client would keep passing while pointing at different structs.
-if MB.INFO ~= SI or MB.INFO_ENABLE ~= SI or MB.INFO_OPENED ~= SI + 1 then
-    log(string.format("FAIL: mailbox.lua SlinkInfo (0x%08X) disagrees with this gate (0x%08X)",
-                      MB.INFO, SI))
-    finish(false)
+-- SI is written out literally so this gate checks handlers.c independently of the client. Cross-check
+-- it against the profile native block anyway, or the two could drift apart and both this gate and
+-- native.lua would keep passing while pointing at different structs.
+if t.P.INFO ~= SI then
+    t.fail("profile native.INFO agrees with this gate's SlinkInfo",
+           string.format("profile 0x%08X, gate 0x%08X", t.P.INFO, SI))
 end
 
 local function boot(enable)
-    assert(pcall(savestate.load, SDIR .. "/slink_overworld.State"), "no overworld savestate")
-    emu.frameadvance()
-    local up = false
-    for _ = 1, 240 do emu.frameadvance(); if MB.present() then up = true; break end end
-    if not up then log("FAIL: no 'SLNK' beacon — unpatched ROM?"); finish(false) end
+    t.boot({ state = "slink_overworld.State", beacon = 240 })
     -- After the state load EWRAM is whatever the state held, so set enable every time.
     memory.write_u8(SI, enable and 1 or 0)
     memory.write_u8(SI + 1, 0)
 end
 
-local function tap(btn, frames)
-    for f = 1, (frames or 20) do
-        joypad.set(f <= 3 and { [btn] = true } or {})
-        emu.frameadvance()
-    end
-end
-
 local function order_str(n)
-    local t = {}
-    for i = 0, n - 1 do t[#t + 1] = tostring(memory.read_u8(ORDER + i)) end
-    return table.concat(t, " ")
+    local o = {}
+    for i = 0, n - 1 do o[#o + 1] = tostring(memory.read_u8(ORDER + i)) end
+    return table.concat(o, " ")
 end
 
 -- 1. disabled (the boot default) must be indistinguishable from stock.
 boot(false)
-tap("Start", 90)
+t.tap("Start", 90)
 local n0 = memory.read_u8(COUNT)
-log(string.format("disabled: count=%d order=[%s]", n0, order_str(math.max(n0, 1))))
-if n0 ~= 6 then
-    log("FAIL: enable=0 changed the menu — the boot default is not stock")
-    finish(false); return
-end
-for i = 0, 5 do
-    if memory.read_u8(ORDER + i) ~= i + 1 then
-        log("FAIL: enable=0 perturbed the row order")
-        finish(false); return
-    end
-end
+t.log(string.format("disabled: count=%d order=[%s]", n0, order_str(math.max(n0, 1))))
+t.check("enable=0 leaves the stock 6-row menu", n0 == 6, "count=" .. n0)
+local stock = true
+for i = 0, 5 do if memory.read_u8(ORDER + i) ~= i + 1 then stock = false end end
+t.check("enable=0 leaves the row order stock", stock)
 
 -- 2. enabled: exactly one extra row, spliced before EXIT.
 boot(true)
-tap("Start", 90)
+t.tap("Start", 90)
 local n1 = memory.read_u8(COUNT)
-log(string.format("enabled:  count=%d order=[%s]", n1, order_str(math.max(n1, 1))))
-if n1 ~= 7 then
-    log("FAIL: expected 7 rows with the feature enabled, got " .. n1)
-    finish(false); return
-end
-local want = { 1, 2, 3, 4, 5, 8, 6 }
-for i = 1, 7 do
-    if memory.read_u8(ORDER + i - 1) ~= want[i] then
-        log("FAIL: order is not [1 2 3 4 5 8 6] — SOULLINK is not where the gate thinks it is")
-        finish(false); return
-    end
-end
+t.log(string.format("enabled:  count=%d order=[%s]", n1, order_str(math.max(n1, 1))))
+t.check("7 rows with the feature enabled", n1 == 7, "count=" .. n1)
+local want, spliced = { 1, 2, 3, 4, 5, 8, 6 }, true
+for i = 1, 7 do if memory.read_u8(ORDER + i - 1) ~= want[i] then spliced = false end end
+t.check("order is [1 2 3 4 5 8 6] (SOULLINK where the gate thinks it is)", spliced)
 
 -- 3. the callback fires, and fires for exactly ONE row. Reloading between attempts keeps each
 -- probe independent, which is what makes "only index 5" a real claim rather than a lucky press.
 local fired = {}
 for k = 0, 6 do
     boot(true)
-    tap("Start", 90)
-    for _ = 1, k do tap("Down", 12) end
-    tap("A", 60)
+    t.tap("Start", 90)
+    for _ = 1, k do t.tap("Down", 12) end
+    t.tap("A", 60)
     if memory.read_u8(SI + 1) > 0 then fired[#fired + 1] = k end
 end
-log("rows whose callback bumped SI->opened: [" ..
-    (#fired > 0 and table.concat(fired, " ") or "none") .. "]")
-
-if #fired == 0 then
-    log("FAIL: no row fired slink_startmenu_cb — act[8].func never runs")
-    finish(false); return
-end
-if #fired > 1 then
-    log("FAIL: more than one row fired the callback")
-    finish(false); return
-end
-if fired[1] ~= SPLICE then
-    log(string.format("FAIL: the callback fired on row %d, expected %d", fired[1], SPLICE))
-    finish(false); return
-end
+t.log("rows whose callback bumped SI->opened: [" .. (#fired > 0 and table.concat(fired, " ") or "none") .. "]")
+t.check("some row fired slink_startmenu_cb (act[8].func runs)", #fired > 0)
+t.check("exactly one row fired the callback", #fired == 1, #fired .. " rows")
+t.check("the callback fired on row " .. SPLICE, fired[1] == SPLICE, "row " .. tostring(fired[1]))
 
 -- 4. and it must not fire while disabled (the callback tail-calls the row we displaced instead).
 boot(false)
-tap("Start", 90)
-for _ = 1, SPLICE do tap("Down", 12) end
-tap("A", 60)
-if memory.read_u8(SI + 1) ~= 0 then
-    log("FAIL: the callback ran with enable=0")
-    finish(false); return
-end
+t.tap("Start", 90)
+for _ = 1, SPLICE do t.tap("Down", 12) end
+t.tap("A", 60)
+t.check("the callback does not run with enable=0", memory.read_u8(SI + 1) == 0)
 
--- 5. END TO END: choosing the row must actually OPEN THE SCREEN, with no mailbox round-trip.
--- The callback only bumps a counter; drive_info in the frame hook is what turns that into a panel.
--- Without this the row could fire forever and never show the player anything -- and it has to work
--- even when the client is mid-command, which is exactly why it does not go through an opcode.
+-- 5. END TO END: choosing the row must actually OPEN THE SCREEN native.lua staged, with no mailbox
+-- round-trip. The callback only bumps a counter; drive_info in the frame hook turns that into a panel.
 local function vram_hash()
     local h = 0
     for a = 0x06000000, 0x0600FFFF, 4 do h = (h * 31 + memory.read_u32_le(a)) % 0x7FFFFFFF end
@@ -148,56 +97,40 @@ local function vram_hash()
 end
 
 boot(true)
-local PANEL = {}
-MB.info_pair(PANEL, "RT03", { name = "Bulbasaur", level = 12, hp = "19/23", bar = MB.info_bar(19, 23) },
-                            { name = "Squirtle",  level = 11, hp = "FNT",   bar = 0 })
-MB.write_info(PANEL, 0, 1)
+-- one linked pair in the patch's row vocabulary (5+ "\n" fields = a mon row; empty label = partner)
+local PANEL = { "RT03\nBulbasaur\n12\n19/23\n31\n\n", "\nSquirtle\n11\nFNT\n0\n\n" }
+local stage = t.native:link_panel({ rows = PANEL })
+t.check("native:link_panel queued the staging", stage ~= nil)
+t.step(nil)
+t.check("SlinkInfo published: enable=1, lines=" .. #PANEL,
+        memory.read_u8(SI) == 1 and memory.read_u8(SI + 3) == #PANEL,
+        string.format("enable=%d lines=%d", memory.read_u8(SI), memory.read_u8(SI + 3)))
 local before = vram_hash()
-tap("Start", 90)
-for _ = 1, SPLICE do tap("Down", 12) end
-tap("A", 60)
-for _ = 1, 150 do emu.frameadvance() end          -- start menu closes, then the script opens the panel
+t.tap("Start", 90)
+for _ = 1, SPLICE do t.tap("Down", 12) end
+t.tap("A", 60)
+t.idle(150)                                   -- start menu closes, then the script opens the panel
 local after = vram_hash()
-log(string.format("row -> panel: vram %d -> %d (drawn=%s)", before, after, tostring(before ~= after)))
-pcall(function() client.screenshot(WT .. "/patch/build/soullink_menu_panel.png") end)
-if before == after then
-    log("FAIL: choosing SOULLINK opened nothing — drive_info never ran the screen")
-    finish(false); return
-end
-if memory.read_u8(0x03000F9C) == 0 then
-    log("FAIL: no field script is locked — the panel is not up")
-    finish(false); return
-end
+t.log(string.format("row -> panel: vram %d -> %d (drawn=%s)", before, after, tostring(before ~= after)))
+pcall(function() client.screenshot(t.ROOT .. "/patch/build/soullink_menu_panel.png") end)
+t.check("choosing SOULLINK opened the panel (drive_info ran the screen)", before ~= after)
+t.check("a field script is locked (the panel is up)", memory.read_u8(SC2) ~= 0)
 -- THE SCREEN MUST NOT BE BLACK. When a start-menu row is chosen the engine fades to black unless
 -- the action function is one of three whitelisted ones, because every other stock row hands off to
 -- a screen that fades itself back in. Ours stays on the field, so the patch has to undo that fade.
--- This assertion exists because the first version did not, and everything above still passed: VRAM
--- changed, the script locked, the counters were right, and the player saw a black screen.
 local lit = 0
 for i = 1, 15 do if memory.read_u16_le(0x05000000 + i * 2) ~= 0 then lit = lit + 1 end end
-log("non-black entries in BG palette 0: " .. lit .. "/15")
-if lit < 8 then
-    log("FAIL: the screen is faded to black — the engine's start-menu fade was not undone")
-    finish(false); return
-end
-tap("A", 60)
-for _ = 1, 90 do emu.frameadvance() end
-if memory.read_u8(0x03000F9C) ~= 0 then
-    log("FAIL: the panel did not release the field when closed")
-    finish(false); return
-end
+t.check("the screen is not faded to black (>= 8/15 BG palette 0 entries lit)", lit >= 8, lit .. "/15")
+t.tap("A", 60)
+t.idle(90)
+t.check("the panel released the field when closed", memory.read_u8(SC2) == 0)
+
 -- and with nothing staged the row must be inert rather than drawing an empty box
 boot(true)
-memory.write_u8(MB.INFO_LINES, 0)
-tap("Start", 90)
-for _ = 1, SPLICE do tap("Down", 12) end
-tap("A", 60)
-for _ = 1, 150 do emu.frameadvance() end
-if memory.read_u8(0x03000F9C) ~= 0 then
-    log("FAIL: an unstaged panel still locked the field")
-    finish(false); return
-end
-log("row opens the panel with no opcode, closes cleanly, and is inert when nothing is staged")
-
-log("SOULLINK row: hidden when disabled, spliced at index 5 when enabled, callback fires there only")
-finish(true)
+memory.write_u8(SI + 3, 0)                    -- precondition: no lines staged
+t.tap("Start", 90)
+for _ = 1, SPLICE do t.tap("Down", 12) end
+t.tap("A", 60)
+t.idle(150)
+t.check("an unstaged panel does not lock the field", memory.read_u8(SC2) == 0)
+t.finish()
