@@ -910,6 +910,30 @@ def _qualification_row_errors(root: Path, fixture: str, receipt: dict) -> list[s
     return errors
 
 
+def _panel_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
+    """P4.1g (tests/live/test_gen2_panel_gate.py): a PHYSICAL PASS on the overlay build that is published NOW
+    (data/gen2/overlay_provenance.json), from the committed fixture's bytes, with a positive minimum-SP margin.
+    A rebuilt overlay makes the receipt stale until the gate is re-run."""
+    errors = []
+    if (receipt.get("schema") != "gen2-panel-gate-v1" or receipt.get("result") != "PASS"
+            or receipt.get("evidence_level") != "PHYSICAL" or receipt.get("title") != title):
+        errors.append(f"panel gate receipt is not a PHYSICAL PASS for {title}")
+    provenance = root / "data/gen2/overlay_provenance.json"
+    outputs = json.loads(provenance.read_text(encoding="utf-8"))["outputs"] if provenance.is_file() else {}
+    published = next((row.get("sha1") for row in outputs.values() if row.get("slink_title") == title), None)
+    if published is None or receipt.get("overlay_sha1") != published:
+        errors.append("panel gate receipt proves another overlay build than the published one")
+    fixture, want = receipt.get("fixture"), receipt.get("fixture_sha256")
+    # Both present first: a missing fixture and a missing hash must not compare None == None.
+    if (not isinstance(fixture, str) or not fixture or not isinstance(want, str) or not want
+            or _fixture_sha256(root, fixture) != want):
+        errors.append("panel gate receipt does not bind the committed fixture's bytes")
+    margin = (receipt.get("minimum_sp") or {}).get("margin_bytes")
+    if type(margin) is not int or margin <= 0:
+        errors.append("panel gate receipt has no positive minimum-SP margin")
+    return errors
+
+
 def new_gates_errors(root: Path | None = None, receipt_validate=None) -> list[str]:
     """Every gap in the live-new-gates lane's non-emulator evidence: U1 engine-site, U2 write-window
     (Silver via O-23) and fixture-qualification receipts, each pinned by sha256. An empty proof is a
@@ -950,6 +974,8 @@ def new_gates_errors(root: Path | None = None, receipt_validate=None) -> list[st
                     errors.append(f"{rid}: {why}")
             elif kind == "qualification":
                 errors.extend(f"{rid}: {e}" for e in _qualification_row_errors(root, axes["fixture"], receipt))
+            elif kind == "panel_gate":
+                errors.extend(f"{rid}: {e}" for e in _panel_gate_row_errors(root, axes["title"], receipt))
             else:
                 errors.append(f"{rid}: no validator for receipt kind {kind!r}")
     return errors

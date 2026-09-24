@@ -644,6 +644,11 @@ def _copy_new_gates_tree(tmp_path):
             fixture = row["axes"]["fixture"] + ".SaveRAM"
             (tmp_path / "tests/fixtures/gen2" / fixture).write_bytes(
                 (REPO / "tests/fixtures/gen2" / fixture).read_bytes())
+        if row["axes"]["kind"] == "panel_gate":
+            fixture = json.loads(src.read_text(encoding="utf-8"))["fixture"] + ".SaveRAM"
+            for rel in ("tests/fixtures/gen2/" + fixture, "data/gen2/overlay_provenance.json"):
+                (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+                (tmp_path / rel).write_bytes((REPO / rel).read_bytes())
     (tmp_path / gate.NEW_GATES).parent.mkdir(parents=True, exist_ok=True)
     (tmp_path / gate.NEW_GATES).write_text(json.dumps(doc), encoding="utf-8")
     return doc
@@ -700,6 +705,9 @@ _NEW_GATE_GAPS = {
     "qualification_failed": "fixture qualification receipt is not a passed run",
     "qualification_fixture_swapped": "does not confirm",
     "unknown_kind": "no validator for receipt kind",
+    "panel_gate_stale_overlay": "another overlay build than the published one",
+    "panel_gate_no_margin": "no positive minimum-SP margin",
+    "panel_gate_fixture_and_hash_absent": "does not bind the committed fixture's bytes",
 }
 
 
@@ -765,6 +773,27 @@ def test_every_new_gate_gap_is_red(tmp_path, mutation):
         _repin(tmp_path, entry)
     elif mutation == "unknown_kind":
         row("new-gates.engine-sites.crystal")["axes"]["kind"] = "badge_sites"
+    elif mutation == "panel_gate_stale_overlay":
+        # A rebuilt overlay (a new published sha1) leaves the old receipt proving the old build.
+        path = tmp_path / "data/gen2/overlay_provenance.json"
+        provenance = json.loads(path.read_text(encoding="utf-8"))
+        provenance["outputs"]["pokecrystal"]["sha1"] = "0" * 40
+        path.write_text(json.dumps(provenance), encoding="utf-8")
+    elif mutation == "panel_gate_fixture_and_hash_absent":
+        # None == None must not read as a bound fixture (Codex, P4.1g review).
+        entry = row("new-gates.panel.crystal")["proofs"][0]["receipts"]["receipt"]
+        path = tmp_path / entry["path"]
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        del receipt["fixture"], receipt["fixture_sha256"]
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        _repin(tmp_path, entry)
+    elif mutation == "panel_gate_no_margin":
+        entry = row("new-gates.panel.crystal")["proofs"][0]["receipts"]["receipt"]
+        path = tmp_path / entry["path"]
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        receipt["minimum_sp"]["margin_bytes"] = 0
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        _repin(tmp_path, entry)
 
     (tmp_path / gate.NEW_GATES).write_text(json.dumps(doc), encoding="utf-8")
     errors = gate.new_gates_errors(tmp_path)

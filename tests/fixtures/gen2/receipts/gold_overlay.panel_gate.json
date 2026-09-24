@@ -1,0 +1,34 @@
+{
+ "base_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
+ "checks": {
+  "fade_stress": true,
+  "fallback": true,
+  "menu": true,
+  "panel": true
+ },
+ "client_write_scope": "panel (lua/gen2/panel.lua permit, WRAM0 tilemap/attrmap/mailbox)",
+ "core_mode": "CGB",
+ "evidence_level": "PHYSICAL",
+ "fixture": "gold_battle",
+ "fixture_sha256": "6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6",
+ "harness_write_scopes": [],
+ "input_mode": "normal_buttons",
+ "minimum_sp": {
+  "armed": 253,
+  "below_sp_writes": 0,
+  "bottom": 57091,
+  "early_hits": 40,
+  "low_water_addr": 57223,
+  "low_water_frame": 12494,
+  "low_water_sp": 57223,
+  "margin_bytes": 132,
+  "pushes_seen": 112,
+  "span_frames": 9386,
+  "top": 57343
+ },
+ "overlay_sha1": "a9f3a26f3ee970eab1e99369bc77e1b2e6db50a2",
+ "qualification_attempt_id": "requal-gold-battle-n14b",
+ "result": "PASS",
+ "schema": "gen2-panel-gate-v1",
+ "title": "gold"
+}

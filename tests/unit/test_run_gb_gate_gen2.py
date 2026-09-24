@@ -216,3 +216,29 @@ def test_gen2_refusals_are_driven_by_explicit_descriptor_fields(host, monkeypatc
     with pytest.raises(ValueError, match="descriptor plan refused"):
         invoke(host)
     assert calls and not host["launches"] and not host["copies"] and not host["deletes"]
+
+
+def test_overlay_key_stages_the_published_ups_image_with_a_filename_save_name(host):
+    """P4.1g: `<title>_overlay` = clean base + the published UPS, sha1-bound by the build receipt;
+    the facts keep the clean sha1 and the patched hash rides SLINK_GEN2_OVERLAY_SHA1."""
+    provenance = "data/gen2/overlay_provenance.json"
+    out = json.loads((ROOT / provenance).read_text(encoding="utf-8"))["outputs"]["pokecrystal"]
+    for rel in (provenance, out["ups"]["file"]):
+        (host["root"] / rel).parent.mkdir(parents=True, exist_ok=True)
+        (host["root"] / rel).write_bytes((ROOT / rel).read_bytes())
+    descriptor = runner.describe_gen2("crystal_overlay")
+    assert descriptor["overlay"] is True and descriptor["cold"] is False
+    assert descriptor["saveram_name"] == "gen2 crystal overlay.SaveRAM"
+    assert invoke(host, rom_key="crystal_overlay", fixture_path=host["fixture"])[0]
+    command, options = host["launches"][0]
+    staged = host["root"] / "patch/build/gen2_crystal_overlay.gbc"
+    assert command[-1] == "patch/build/gen2_crystal_overlay.gbc"
+    assert hashlib.sha1(staged.read_bytes()).hexdigest() == out["sha1"] != descriptor["rom_sha1"]
+    assert options["env"]["SLINK_GEN2_OVERLAY_SHA1"] == out["sha1"]
+    assert options["env"]["SLINK_GEN2_ROM_SHA1"] == descriptor["rom_sha1"] == out["base_sha1"]
+    assert host["copies"][-1][1].endswith("gen2 crystal overlay.SaveRAM")
+    # A gamedb row for the patched hash would rename the save: refused before launch.
+    host["database"].write_text(host["database"].read_text() + out["sha1"].upper() + "\tG\tX\tGBC\n")
+    with pytest.raises(ValueError, match="overlay gamedb"):
+        invoke(host, rom_key="crystal_overlay", fixture_path=host["fixture"])
+    assert len(host["launches"]) == 1

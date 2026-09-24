@@ -39,7 +39,6 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 
 import gen1_playthrough as g1  # noqa: E402
-from gen2_source_data import load_context as load_gen2_context  # noqa: E402
 from gen1_playthrough import (  # noqa: E402
     BIZHAWK_CONFIG,
     BUILD,
@@ -47,6 +46,7 @@ from gen1_playthrough import (  # noqa: E402
     SAVERAM_DIR,
     write_run_config,
 )
+from gen2_source_data import load_context as load_gen2_context  # noqa: E402
 
 # The fixture builders, per generation. Gen 1's is tools/gen1_fixtures.py (the new client's
 # scripted pipeline); the old gen1_playthrough driver this message used to name is gone, and
@@ -64,15 +64,27 @@ _GEN2_IDENTITIES = {
 }
 
 
+# P4.1g: `<title>_overlay` is the SLink companion overlay, the clean build + patch/dist UPS
+# (data/gen2/overlay_provenance.json). rom_sha1 stays the CLEAN base the facts/profile bind; the
+# plan stages the patched image and checks its own sha1. BizHawk's gamedb does not know the
+# patched hash, so its SaveRAM name derives from the staged FILENAME (g1.save_name_for).
+_GEN2_OVERLAY_STAGE = "patch/build/gen2_{title}_overlay.gbc"
+_GEN2_OVERLAY_PROVENANCE = "data/gen2/overlay_provenance.json"
+_PATCH_TOOLS = os.path.join(REPO, "patch", "tools")   # make_ups.ups_apply
+
+
 def describe_gen2(rom_key: str):
     """Immutable metadata only; run_gate separately verifies every actual input."""
     cold = isinstance(rom_key, str) and rom_key.endswith("_cold")
-    title = rom_key[:-5] if cold else rom_key
+    overlay = isinstance(rom_key, str) and rom_key.endswith("_overlay")
+    title = rom_key[:-5] if cold else rom_key[:-8] if overlay else rom_key
     if title not in _GEN2_IDENTITIES:
         raise ValueError(f"unregistered Gen 2 gate key: {rom_key!r}")
     artifact, sha1, name = _GEN2_IDENTITIES[title]
+    if overlay:
+        name = g1.save_name_for(_GEN2_OVERLAY_STAGE.format(title=title))
     return MappingProxyType({"title": title, "artifact": artifact, "rom_sha1": sha1,
-                             "core_mode": "CGB", "saveram_name": name, "cold": cold})
+                             "core_mode": "CGB", "saveram_name": name, "cold": cold, "overlay": overlay})
 
 
 def _rebuild_command(play_name: str, rom_key: str, target: str) -> str:
@@ -167,8 +179,10 @@ GENS = {
         "implicit_staging": False,
         # plan/config are bound below, after their definitions.
         "protected_env": frozenset({"SLINK_GEN2_TITLE", "SLINK_GEN2_ROM_SHA1", "SLINK_GEN2_CORE_MODE",
-                                    "SLINK_GEN2_COLD", "SLINK_GEN2_SAVERAM_DIR", "SLINK_GEN2_SAVERAM_NAME"}),
-        "descriptors": {key: describe_gen2(key) for title in _GEN2_IDENTITIES for key in (title, title + "_cold")},
+                                    "SLINK_GEN2_COLD", "SLINK_GEN2_SAVERAM_DIR", "SLINK_GEN2_SAVERAM_NAME",
+                                    "SLINK_GEN2_OVERLAY_SHA1"}),
+        "descriptors": {key: describe_gen2(key) for title in _GEN2_IDENTITIES
+                        for key in (title, title + "_cold", title + "_overlay")},
         "saveram_names": {title: describe_gen2(title)["saveram_name"] for title in _GEN2_IDENTITIES},
         "patched": {},
     },
@@ -305,10 +319,29 @@ def _gen2_plan(rom_key, saveram_dir, fixture_path, speed_percent):
     rom = (ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"]).resolve()
     if not rom.is_relative_to(Path(REPO).resolve()) or hashlib.sha1(rom.read_bytes()).hexdigest() != descriptor["rom_sha1"]:
         raise ValueError("Gen 2 actual ROM differs from the selected descriptor")
+    launch_sha1, stage, extra_env = descriptor["rom_sha1"], None, {}
+    if descriptor.get("overlay"):
+        # The published overlay: clean base + UPS, both hash-bound by the build receipt.
+        sys.path.insert(0, _PATCH_TOOLS)
+        from make_ups import ups_apply
+        out = json.loads((Path(REPO) / _GEN2_OVERLAY_PROVENANCE).read_text(encoding="utf-8"))["outputs"][ctx.artifact]
+        ups = (Path(REPO) / out["ups"]["file"]).read_bytes()
+        if out["base_sha1"] != descriptor["rom_sha1"] or hashlib.sha256(ups).hexdigest() != out["ups"]["sha256"]:
+            raise ValueError("Gen 2 overlay provenance disagrees with the clean base or its UPS")
+        stage = ups_apply(rom.read_bytes(), ups)
+        launch_sha1 = hashlib.sha1(stage).hexdigest()
+        if launch_sha1 != out["sha1"]:
+            raise ValueError("Gen 2 overlay image differs from its provenance sha1")
+        rom = (Path(REPO) / _GEN2_OVERLAY_STAGE.format(title=descriptor["title"])).resolve()
+        extra_env["SLINK_GEN2_OVERLAY_SHA1"] = launch_sha1
     database = Path(EMUHAWK).resolve().parent / "gamedb/gamedb_gbc.txt"
     rows = [line.split("\t") for line in database.read_text(encoding="utf-8-sig").splitlines()
-            if line.split("\t", 1)[0].lower() == descriptor["rom_sha1"]]
-    if (len(rows) != 1 or len(rows[0]) < 4 or rows[0][1] != "G" or rows[0][3] != "GBC"
+            if line.split("\t", 1)[0].lower() == launch_sha1]
+    if stage is not None:
+        # An unknown hash is what makes BizHawk take the filename-derived SaveRAM name.
+        if rows or descriptor["saveram_name"] != g1.save_name_for(str(rom)):
+            raise ValueError("Gen 2 overlay gamedb/SaveRAM name binding contradictory")
+    elif (len(rows) != 1 or len(rows[0]) < 4 or rows[0][1] != "G" or rows[0][3] != "GBC"
             or rows[0][2] + ".SaveRAM" != descriptor["saveram_name"]):
         raise ValueError("Gen 2 SHA1/name/CGB gamedb binding missing or contradictory")
     config = json.loads(Path(BIZHAWK_CONFIG).read_text(encoding="utf-8-sig"))
@@ -317,9 +350,10 @@ def _gen2_plan(rom_key, saveram_dir, fixture_path, speed_percent):
         raise ValueError("Gen 2 requires a parseable config with an explicit GB Save RAM path entry")
     env = {"SLINK_GEN2_TITLE": descriptor["title"], "SLINK_GEN2_ROM_SHA1": descriptor["rom_sha1"],
            "SLINK_GEN2_CORE_MODE": descriptor["core_mode"], "SLINK_GEN2_COLD": "1" if descriptor["cold"] else "0",
-           "SLINK_GEN2_SAVERAM_DIR": str(directory), "SLINK_GEN2_SAVERAM_NAME": descriptor["saveram_name"]}
+           "SLINK_GEN2_SAVERAM_DIR": str(directory), "SLINK_GEN2_SAVERAM_NAME": descriptor["saveram_name"],
+           **extra_env}
     return {**descriptor, "rom": rom, "directory": directory, "fixture": fixture, "speed_percent": speed_percent,
-            "env": env}
+            "env": env, "launch_sha1": launch_sha1, "stage": stage}
 
 
 def _gen2_config(plan, path):
@@ -362,6 +396,9 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *,
 
     if plan:
         rom_rel = plan["rom"].relative_to(Path(REPO).resolve()).as_posix()
+        if plan.get("stage") is not None:
+            plan["rom"].parent.mkdir(parents=True, exist_ok=True)
+            plan["rom"].write_bytes(plan["stage"])
         plan["directory"].mkdir(parents=True, exist_ok=True)
         destination = plan["directory"] / plan["saveram_name"]
         if plan["cold"]:
@@ -414,7 +451,7 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *,
     if plan:
         env.pop("SLINK_GATE_TITLE", None)
         env.update(plan["env"])
-        if hashlib.sha1(plan["rom"].read_bytes()).hexdigest() != plan["rom_sha1"]:
+        if hashlib.sha1(plan["rom"].read_bytes()).hexdigest() != plan.get("launch_sha1", plan["rom_sha1"]):
             raise ValueError("planned ROM changed before launch")
     cmd = [EMUHAWK, f"--lua={script}"]
     if os.path.exists(os.path.join(REPO, cfg_rel)):

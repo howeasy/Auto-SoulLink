@@ -1,0 +1,34 @@
+{
+ "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+ "checks": {
+  "fade_stress": true,
+  "fallback": true,
+  "menu": true,
+  "panel": true
+ },
+ "client_write_scope": "panel (lua/gen2/panel.lua permit, WRAM0 tilemap/attrmap/mailbox)",
+ "core_mode": "CGB",
+ "evidence_level": "PHYSICAL",
+ "fixture": "silver_battle",
+ "fixture_sha256": "0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd",
+ "harness_write_scopes": [],
+ "input_mode": "normal_buttons",
+ "minimum_sp": {
+  "armed": 253,
+  "below_sp_writes": 0,
+  "bottom": 57091,
+  "early_hits": 40,
+  "low_water_addr": 57239,
+  "low_water_frame": 12509,
+  "low_water_sp": 57239,
+  "margin_bytes": 148,
+  "pushes_seen": 96,
+  "span_frames": 9558,
+  "top": 57343
+ },
+ "overlay_sha1": "b63d374a8c40b711779dce501d46f386921fa282",
+ "qualification_attempt_id": "requal-silver-battle-n14b",
+ "result": "PASS",
+ "schema": "gen2-panel-gate-v1",
+ "title": "silver"
+}

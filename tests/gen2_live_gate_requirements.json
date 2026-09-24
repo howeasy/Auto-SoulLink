@@ -169,6 +169,36 @@
         "path": "tests/fixtures/gen2/receipts/silver_battle.qualification.json",
         "sha256": "e8025867a0df6efe17c9acd0285e398a4c33727e39d61d83532939087a8a628a"
       }}}]
+    },
+    {
+      "id": "new-gates.panel.crystal",
+      "stage": "physical-live",
+      "description": "P4.1g Crystal overlay panel gate: O-28 START row, client panel + no-client fallback, CGB fade stress restore, minimum-SP margin (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_panel_gate.py -k crystal)",
+      "axes": {"kind": "panel_gate", "title": "crystal", "requirement_ids": ["N-1", "C-3"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_overlay.panel_gate.json",
+        "sha256": "3a8a6da3e212fd1c080e11855433e47ffc4f63f9018d4b7d093b959abf34c3bb"
+      }}}]
+    },
+    {
+      "id": "new-gates.panel.gold",
+      "stage": "physical-live",
+      "description": "P4.1g Gold overlay panel gate: O-28 START row, client panel + no-client fallback, CGB fade stress restore, minimum-SP margin (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_panel_gate.py -k gold)",
+      "axes": {"kind": "panel_gate", "title": "gold", "requirement_ids": ["N-1", "C-3"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_overlay.panel_gate.json",
+        "sha256": "bb855110071b666bceda8ca6d42250922666d907ff2449bac593bbbcc44cafa3"
+      }}}]
+    },
+    {
+      "id": "new-gates.panel.silver",
+      "stage": "physical-live",
+      "description": "P4.1g Silver overlay panel gate: O-28 START row, client panel + no-client fallback, CGB fade stress restore, minimum-SP margin (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_panel_gate.py -k silver)",
+      "axes": {"kind": "panel_gate", "title": "silver", "requirement_ids": ["N-1", "C-3"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_overlay.panel_gate.json",
+        "sha256": "5bc74b1b1bf7fdea01d073ceb7e155ee68d5677dba7a9c158ed8ab28ebb57ae4"
+      }}}]
     }
   ]
 }
