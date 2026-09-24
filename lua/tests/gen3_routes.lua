@@ -32,16 +32,64 @@ end
 -- incidental policy to preparation, restoring on success AND errors before the Rick fight.
 -- LG's captured trace (seq371/384/410) entered the second transit battle at8/25 then5/25;
 -- the inherited FIGHT policy had no health gate. Transit now always RUNs, even at full HP.
+-- A wild intro can own controls BEFORE gMain.inBattle is set (pret battle_setup.c
+-- Task_BattleStart -> CB2_InitBattle). Never interpret that interval as a blocked tile.
+function R.wait_walk(c, label, absorb, advance)
+    local battles=0
+    for waited=0,1799 do
+        if c.in_battle() then
+            if not absorb then return false,"in_battle" end -- hunt owns its encounter
+            battles=battles+1
+            assert(battles<=3,"PREPARATION repeated battle during walk settle")
+            c.log("PREP_TRANSITION battle "..label)
+            local ok,why=c.run_away(label.." incidental")
+            assert(ok,"incidental flee: "..tostring(why))
+        elseif c.on_field() and c.G.pred_ok(c.cp,"field_controls_locked")
+            and c.G.pred_ok(c.cp,"script_context_status") then
+            return true,battles>0,waited>0
+        end
+        advance()
+    end
+    error("PREPARATION walk transition never reached quiet field/battle: "..label)
+end
+
 function R.with_incidental_escape(c, label, fn)
-    local old = c.play.fight_through
+    local old,old_step = c.play.fight_through,c.play.step
     c.play.fight_through = function()
         c.log("PREP_ESCAPE incidental")
         local ok, why = c.run_away(label.." incidental")
         assert(ok,"incidental flee: "..tostring(why))
         return true
     end
+    -- SP's follow, grass-origin return, hunt and nurse routes close over this same table.
+    -- Preserve playlib's ledge/path semantics and enc=false ownership; add transition waits
+    -- around its step, restoring on every exit. No shared-module changes required.
+    if old_step then
+        c.play.step=function(cp,dir,start_map,want,enc)
+            local function advance() c.frames(1) end
+            for _=1,3 do
+                local ready,why=R.wait_walk(c,label,enc~=false,advance)
+                if not ready then return false,why end
+                local x,y=c.G.pos(cp)
+                local ok,reason=old_step(cp,dir,start_map,want,enc)
+                local settled,battled,waited=R.wait_walk(c,label,enc~=false,advance)
+                if not settled then return false,battled end
+                local u,v=c.G.pos(cp)
+                if ok then return true end
+                if battled or waited then
+                    if u~=x or v~=y then
+                        if want and (u~=x+delta[dir][1] or v~=y+delta[dir][2]) then
+                            return false,"PREPARATION unexpected step displacement"
+                        end
+                        return true -- never repeat a completed step
+                    end
+                else return false,reason end
+            end
+            return false,"PREPARATION repeated encounter before step"
+        end
+    end
     local ok, result = pcall(fn)
-    c.play.fight_through = old
+    c.play.fight_through,c.play.step = old,old_step
     return ok, result
 end
 
@@ -231,8 +279,17 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
             return g>=0 and g<255 and n>=0 and n<255 and (g~=from_g or n~=from_n)
         end
         local moved=false
-        for _=1,60 do
-            tick(dir)
+        for _=1,3 do
+            if flee then R.wait_walk(c,label,true,function() tick() end) end
+            for _=1,60 do
+                tick(dir)
+                local u,v=c.G.pos(c.cp)
+                if changed_map() or u~=x or v~=y then moved=true;break end
+                if flee and not quiet() then break end
+            end
+            if moved then break end
+            if not flee or quiet() then break end -- genuinely blocked, not a transition
+            R.wait_walk(c,label,true,function() tick() end)
             local u,v=c.G.pos(c.cp)
             if changed_map() or u~=x or v~=y then moved=true;break end
         end
@@ -241,10 +298,7 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
             error("route blocked going "..dir)
         end
         for _=1,24 do if c.in_battle() then break end;tick() end
-        if flee and c.in_battle() then
-            local ok,why=c.run_away(label.." incidental")
-            assert(ok,"incidental flee: "..tostring(why));guard()
-        end
+        if flee then R.wait_walk(c,label,true,function() tick() end);guard() end
         local u,v=c.G.pos(c.cp)
         -- Warp movement need not change x/y. Callers still enforce their exact segment
         -- map/end tile; recognizing a transition does not admit an unexpected destination.

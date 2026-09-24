@@ -395,6 +395,7 @@ def test_first_tutorial_leg_waits_for_controls_with_await_policy_loaded(env, blo
 def route_motion(lua):
     """Exercise the driver's real local step/warp functions, with only IO/time faked."""
     source = SOURCE.read_text()
+    lua.globals().R = lua.execute(source)
     step = source[source.index("    local function step("):source.index("    local function walk(")]
     warp = source[source.index("    local function warp("):source.index("    local function lead()", source.index("    local function warp("))]
     return lua.execute(step + warp + "\nreturn {step=step,warp=warp}")
@@ -463,6 +464,104 @@ def test_step_accepts_only_valid_map_change_without_coordinate_change(env, desti
         with pytest.raises(Exception, match="route blocked going Up"):
             motion.step("Up", False)
         assert lua.globals().presses == 60
+
+
+@pytest.mark.parametrize("shared", [False, True])
+@pytest.mark.parametrize("landed", [False, True])
+def test_walk_waits_for_delayed_encounter_and_does_not_repeat_completed_step(env, shared, landed):
+    lua, routes = env
+    lua.execute("""
+        f=0;x=10;y=56;phase='field';fled=0;presses=0;delta={Right={1,0}}
+        label='Route2';logs={}
+        quiet=function() return phase=='field' or phase=='escaped' end
+        c={cp={},in_battle=function() return phase=='battle' end,on_field=quiet,
+           log=function(s) logs[#logs+1]=s end,
+           G={pos=function() return x,y end,map=function() return 3,20 end,
+              pred_ok=quiet},play={fight_through=function() error('unmanaged fight') end}}
+        tick=function(button)
+            f=f+1
+            if phase=='field' and button then
+                phase='transition';presses=presses+1
+                if LANDED then x=x+1 end
+            elseif phase=='escaped' and button then x=x+1;presses=presses+1 end
+            if phase=='transition' and f>=180 then phase='battle' end
+            if phase=='exit' and f>=200 then phase='escaped' end
+        end
+        c.frames=function() tick() end
+        c.run_away=function() assert(phase=='battle');fled=fled+1;phase='exit';return true end
+        guard=function() end;field_diagnostic=function() end
+        old_step=function()
+            local oldx=x
+            for i=1,60 do tick('Right');if x~=oldx then return true end end
+            return false,'stalled'
+        end
+        c.play.step=old_step
+        follow=function() return c.play.step(c.cp,'Right',1,true,nil) end
+    """)
+    g = lua.globals()
+    g.LANDED = landed
+    if shared:
+        ok, result = routes.with_incidental_escape(g.c, "prep", g.follow)
+        assert ok and result
+        assert lua.eval("c.play.step==old_step")
+    else:
+        route_motion(lua).step("Right", True)
+    assert g.fled == 1 and g.x == 11 and g.phase == "escaped"
+    assert g.presses == (1 if landed else 2)
+
+
+@pytest.mark.parametrize("title", ROMS)
+def test_route2_blocked_tiles_are_tall_grass_on_both_roms(title):
+    rom = gba_map.load(ROOT.parents[2] / ROMS[title], sym_path=ROOT / f"data/gen3/pret/poke{title}.sym")
+    m = rom.map(3, 20)
+    assert [(m.collision[56][x], m.behaviour[56][x]) for x in (10, 11)] == [(0, 2), (0, 2)]
+
+
+@pytest.mark.parametrize("never_ready", [False, True])
+def test_shared_walk_transition_is_bounded_and_preserves_hunt_ownership(env, never_ready):
+    lua, routes = env
+    lua.execute("""
+        f=0;started=false
+        old=function() started=true;return false,'stalled' end
+        fight=function() end
+        c={cp={},play={step=old,fight_through=fight},log=function() end,
+           frames=function() f=f+1 end,on_field=function() return not started end,
+           in_battle=function() return started and f>=120 and not NEVER end,
+           run_away=function() error('hunt encounter was consumed') end,
+           G={pred_ok=function() return not started end,pos=function() return 10,56 end}}
+        fn=function()
+            local ok,why=c.play.step(c.cp,'Right',1,true,false)
+            assert(not ok);return why
+        end
+    """)
+    g = lua.globals()
+    g.NEVER = never_ready
+    ok, why = routes.with_incidental_escape(g.c, "hunt", g.fn)
+    assert lua.eval("c.play.step==old and c.play.fight_through==fight")
+    if never_ready:
+        assert not ok and "transition never reached" in why and g.f == 1800
+    else:
+        assert ok and why == "in_battle" and g.f == 120
+
+
+def test_shared_walk_retries_when_transition_returns_to_field_without_battle(env):
+    lua, routes = env
+    lua.execute("""
+        f=0;x=10;calls=0
+        c={cp={},log=function() end,frames=function() f=f+1 end,
+           on_field=function() return calls==0 or f>=120 end,in_battle=function() return false end,
+           run_away=function() error('no battle to escape') end,
+           G={pred_ok=function() return true end,pos=function() return x,56 end},
+           play={step=function()
+               calls=calls+1
+               if calls==1 then return false,'stalled' end
+               x=x+1;return true
+           end}}
+        fn=function() return c.play.step(c.cp,'Right',1,true,nil) end
+    """)
+    g = lua.globals()
+    assert routes.with_incidental_escape(g.c, "prep", g.fn) == (True, True)
+    assert g.calls == 2 and g.f == 120 and g.x == 11
 
 
 def test_preparation_wraps_actual_shared_follow_and_logs_nested_frames(env):
