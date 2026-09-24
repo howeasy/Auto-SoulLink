@@ -88,8 +88,9 @@ Entry.PACK_FILES = {
     },
 }
 -- Which packs lua/slink.lua's Gen 3 route sends to the rewritten client. The route reads this
--- table; the launcher keeps no copy of it. gen3_rr joins in G5.
-Entry.ROUTED = { gen3_frlg = true }
+-- table; the launcher keeps no copy of it. gen3_rr joined at G5 (C5-6): every admitted pack
+-- is routed, and anything else on a GBA core is refused by the launcher.
+Entry.ROUTED = { gen3_frlg = true, gen3_rr = true }
 
 Entry.ROM_TYPE = {}
 for _, pack in pairs(Entry.PACKS) do

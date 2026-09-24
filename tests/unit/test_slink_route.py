@@ -8,9 +8,10 @@ restatement of it -- run against the real pinned hashes in `data/games/gen3_{frl
 engine_signals.json`.
 
 Route (owner rulings 2026-09-23, docs/gen3/PLAN.md §0; docs/gen3/research/
-p4_gen1_contract_map.md §3.6): a cartridge admitted as pack `gen3_frlg` by HASH or ANCHORS goes
-to `lua/gen3/run.lua`. Header-only admissions, `gen3_rr`, Emerald and anything else fall
-through to `game_detect` -> the old client, exactly as today.
+p4_gen1_contract_map.md §3.6; C5-6 / owner ruling 24): a cartridge admitted as pack `gen3_frlg`
+or `gen3_rr` by HASH or ANCHORS goes to `lua/gen3/run.lua`. The old client is archived (tag
+archive/gen3-old-client): header-only admissions, Emerald and any other GBA cartridge are
+refused by name, never handed to `game_detect`.
 """
 from __future__ import annotations
 
@@ -132,29 +133,29 @@ def test_a_clean_leafgreen_sha1_reaches_the_new_gen3_client():
 
 
 @pytest.mark.parametrize("rr_sha1", [_RR_COMPANION_SHA1, _RR_CLEAN_SHA1])
-def test_a_radical_red_sha1_still_goes_to_the_old_client(rr_sha1):
-    """gen3_rr is not in the routed set until G5 (PLAN §0)."""
-    loaded = _run_launcher("GBA", _rom_gba(), rom_hash=rr_sha1,
-                           detected_game_id="gen3_frlge")
-    assert _NEW_GEN3_CLIENT not in loaded, loaded
-    assert _OLD_GEN3_CLIENT in loaded, loaded
+def test_a_radical_red_sha1_reaches_the_new_gen3_client(rr_sha1):
+    """gen3_rr joined the routed set at G5 (C5-6)."""
+    loaded = _run_launcher("GBA", _rom_gba(), rom_hash=rr_sha1)
+    assert _NEW_GEN3_CLIENT in loaded, loaded
+    assert _OLD_GEN3_CLIENT not in loaded, loaded
 
 
-def test_an_unknown_bpre_hash_is_admitted_by_header_and_goes_to_the_old_client():
-    """A header-named admission (admitted_by == 'header') is deliberately excluded: RR carries
-    FireRed's header code too, so routing on header alone would send an unpinned RR build to
-    the new client, which then refuses it."""
-    loaded = _run_launcher("GBA", _rom_gba(header_code="BPRE"), rom_hash="f" * 40,
-                           detected_game_id="gen3_frlge")
-    assert _NEW_GEN3_CLIENT not in loaded, loaded
-    assert _OLD_GEN3_CLIENT in loaded, loaded
+def test_an_unknown_bpre_hash_admitted_by_header_is_refused_by_name():
+    """A header-named admission (admitted_by == 'header') is refused, not routed: RR and the
+    Archipelago builds carry FireRed's header code too."""
+    with pytest.raises(lupa.LuaError, match="Unsupported Gen 3 cartridge.*not a pinned cartridge"):
+        _run_launcher("GBA", _rom_gba(header_code="BPRE"), rom_hash="f" * 40)
 
 
-def test_emerald_falls_through_to_the_old_client():
-    loaded = _run_launcher("GBA", _rom_gba(header_code="BPEE"), rom_hash="f" * 40,
-                           detected_game_id="gen3_frlge")
-    assert _NEW_GEN3_CLIENT not in loaded, loaded
-    assert _OLD_GEN3_CLIENT in loaded, loaded
+def test_emerald_is_refused_by_name():
+    with pytest.raises(lupa.LuaError, match="Unsupported Gen 3 cartridge: Pokemon Emerald"):
+        _run_launcher("GBA", _rom_gba(header_code="BPEE"), rom_hash="f" * 40)
+
+
+def test_an_unknown_gba_cartridge_is_refused_and_never_reaches_game_detect():
+    with pytest.raises(lupa.LuaError, match="Unsupported Gen 3 cartridge.*header AXVE"):
+        _run_launcher("GBA", _rom_gba(header_code="AXVE"), rom_hash="f" * 40,
+                      detected_game_id="gen3_frlge")
 
 
 def test_a_gb_cartridge_still_takes_the_unchanged_gen1_route():

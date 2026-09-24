@@ -36,7 +36,7 @@ def _rom(title: str) -> bytes:
 
 
 def _run_launcher(script: str, system_id: str | None, rom: bytes,
-                  detected_game_id: str = "gen3_frlge", bizhawk: str = "2.11.1") -> list[str]:
+                  detected_game_id: str = "gen2_crystal", bizhawk: str = "2.11.1") -> list[str]:
     """dofile `lua/<script>` with stub BizHawk globals; return the paths it dofile'd.
 
     Only `gen1/entry.lua` is executed for real -- every other dofile target is recorded
@@ -114,10 +114,11 @@ def test_an_old_bizhawk_is_refused_before_the_gen1_client_starts():
 
 
 def test_a_non_gameboy_core_is_untouched_by_the_gen1_route():
-    """Gen 2-5 keep going through game_detect; the GBA header even says RED."""
-    loaded = _run_launcher("slink.lua", "GBA", _rom("POKEMON RED"))
-    assert _NEW_CLIENT not in loaded, f"a GBA ROM was routed to Gen 1: {loaded}"
-    assert "lua/clients/gen3_frlge_client.lua" in loaded, loaded
+    """A GBA core goes to the Gen 3 route (the GBA header even says RED): gen3/entry.lua is
+    stubbed away here, so that route refuses it by name -- which it could only reach if the
+    Gen 1 route had not returned."""
+    with pytest.raises(lupa.LuaError, match="Unsupported Gen 3 cartridge: admission failed"):
+        _run_launcher("slink.lua", "GBA", _rom("POKEMON RED"))
 
 
 def test_an_unrecognised_gameboy_title_falls_through_to_game_detect():
