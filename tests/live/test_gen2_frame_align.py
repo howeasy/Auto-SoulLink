@@ -551,4 +551,4 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     receipt = verify(text, pack, title)
     assert receipt["fixture_sha256"] == hashlib.sha256(staged).hexdigest(), "receipt names other fixture bytes"
     assert receipt["qualification_attempt_id"] == qualification["attempt_id"]
-    (REPO / f"tests/fixtures/gen2/receipts/{title}.engine_sites.json").write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    (REPO / f"tests/fixtures/gen2/receipts/{title}.engine_sites.json").write_text(json.dumps(live.stamped(receipt), indent=1, sort_keys=True) + "\n", encoding="utf-8")

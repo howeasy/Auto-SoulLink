@@ -261,5 +261,5 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
                "writers": dict(sorted(writers.items())), "violation_count": 0,
                "input_mode": "normal_buttons", "harness_write_scopes": []}
     (REPO / live.RECEIPTS / f"{title}_overlay.w6_gate.json").write_text(
-        json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        json.dumps(live.stamped(receipt), indent=1, sort_keys=True) + "\n", encoding="utf-8")
 

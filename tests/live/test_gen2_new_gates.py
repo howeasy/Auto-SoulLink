@@ -49,7 +49,12 @@ sys.path.insert(0, str(REPO / "tools"))
 
 from server.adapters import gen2_codec as codec  # noqa: E402
 from server.adapters.gen2_rom_scan import Rom  # noqa: E402
-from tools import fixture_qualification, gen2_fixtures, gen2_source_data  # noqa: E402
+from tools import (  # noqa: E402
+    fixture_qualification,
+    gen2_code_digest,
+    gen2_fixtures,
+    gen2_source_data,
+)
 from tools.gen2_fixtures import FIXTURES  # noqa: E402
 
 pytestmark = [
@@ -60,6 +65,25 @@ pytestmark = [
 
 GATE = "lua/tests/gen2_inspect_gate.lua"
 RECEIPTS = "tests/fixtures/gen2/receipts"
+_CODE_STAMP: dict = {}
+
+
+def code_stamp() -> dict:
+    """CODE-DIGEST (5b1274c9): the production code this pytest session runs on, taken once, before the first gate
+    boots (the emuhawk fixtures call it). Every client-path gate receipt carries it as its top-level "code_digest"."""
+    if not _CODE_STAMP:
+        _CODE_STAMP.update(gen2_code_digest.run_stamp(REPO))
+    return dict(_CODE_STAMP)
+
+
+def stamped(receipt: dict, *, base: dict | None = None) -> dict:
+    """`receipt` with this session's code stamp. `base` is the committed receipt this one extends: its parts were earned
+    in another run, so the stamp is claimed only when base carries this very stamp (otherwise none, i.e.
+    STALE-UNKNOWN, never a stamp that covers another run's evidence)."""
+    out = {key: value for key, value in receipt.items() if key != "code_digest"}
+    if base is None or base.get("code_digest") == code_stamp():
+        out["code_digest"] = code_stamp()
+    return out
 CART_RAM_BYTES = 0x8000
 BADGE_FIELDS = ("johto", "kanto")
 
@@ -510,6 +534,7 @@ def emuhawk():
     from gen1_playthrough import EMUHAWK
     if not os.path.exists(EMUHAWK):
         pytest.skip(f"EmuHawk not found at {EMUHAWK}")
+    code_stamp()   # before any gate boots
     return EMUHAWK
 
 

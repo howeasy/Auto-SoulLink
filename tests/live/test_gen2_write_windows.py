@@ -268,7 +268,7 @@ def test_write_windows(title, emuhawk):  # noqa: F811 - pytest fixture
         assert (REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM").read_bytes() == staged[spec.name], \
             f"{spec.name} changed while the gates ran"
 
-    receipt = build_receipt(title, pack, {"town": town, "reload": reload, "battle": battle})
+    receipt = live.stamped(build_receipt(title, pack, {"town": town, "reload": reload, "battle": battle}))
     scope, why = lua_qualified(pack, title, receipt)
     assert scope is not None, why
     bound, why = lua_bind(receipt, reports)
@@ -395,6 +395,7 @@ def test_box_runs(title, emuhawk):  # noqa: F811 - pytest fixture
     if reason:
         pytest.skip(reason)
     receipt = json.loads(receipt_path(title).read_text(encoding="utf-8"))
+    receipt = live.stamped(receipt, base=receipt)   # extends a committed receipt: stamped only if that one is ours
     for mode in ("boxes", "boxes_reset", "boxes_reload"):
         receipt["runs"].pop(mode, None)
     fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
@@ -475,6 +476,7 @@ def test_battle_faint_run(title, emuhawk):  # noqa: F811 - pytest fixture
     if reason:
         pytest.skip(reason)
     receipt = json.loads(receipt_path(title).read_text(encoding="utf-8"))
+    receipt = live.stamped(receipt, base=receipt)   # extends a committed receipt: stamped only if that one is ours
     receipt["runs"].pop("battle_faint", None)
     fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
     staged = fixture.read_bytes()
@@ -554,6 +556,7 @@ def test_battle_bench_run(title, emuhawk):  # noqa: F811 - pytest fixture
         pytest.skip(reason)
     owner = "gold" if title == "silver" else title
     receipt = json.loads(receipt_path(owner).read_text(encoding="utf-8"))
+    receipt = live.stamped(receipt, base=receipt)   # extends a committed receipt: stamped only if that one is ours
     fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
     staged = fixture.read_bytes()
     live.qualified_identity(spec.name, staged)
@@ -615,4 +618,5 @@ def emuhawk():
     from gen1_playthrough import EMUHAWK
     if not os.path.exists(EMUHAWK):
         pytest.skip(f"EmuHawk not found at {EMUHAWK}")
+    live.code_stamp()   # before any gate boots
     return EMUHAWK

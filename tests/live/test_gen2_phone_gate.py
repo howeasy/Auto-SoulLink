@@ -137,4 +137,4 @@ def test_phone_on_the_patched_rom(emuhawk, title):  # noqa: F811
     receipt = verify(text, facts, title, staged)
     assert receipt["qualification_attempt_id"] == qualification["attempt_id"]
     (REPO / live.RECEIPTS / f"{title}_overlay.phone_gate.json").write_text(
-        json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        json.dumps(live.stamped(receipt), indent=1, sort_keys=True) + "\n", encoding="utf-8")

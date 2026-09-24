@@ -115,9 +115,11 @@ def merge(title):
         return None
     path = REPO / f"tests/fixtures/gen2/receipts/{title}.engine_sites.json"
     committed = json.loads(path.read_text(encoding="utf-8"))
-    runs = [r for r in committed.get("runs", [committed]) if r["fixture"] not in synth.SYNTH_FIXTURES]
+    bare = {key: value for key, value in committed.items() if key != "code_digest"}   # a v1 receipt is one run
+    runs = [r for r in committed.get("runs", [bare]) if r["fixture"] not in synth.SYNTH_FIXTURES]
     runs += [json.loads((RUNS / f"{n}.run.json").read_text(encoding="utf-8")) for n in names]
-    receipt = {"schema": "gen2-engine-site-receipt-v2", "title": title, "runs": runs}
+    # the kept non-synthetic runs came from test_gen2_frame_align: stamped only if earned on this same code
+    receipt = live.stamped({"schema": "gen2-engine-site-receipt-v2", "title": title, "runs": runs}, base=committed)
     path.write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     return receipt
 
