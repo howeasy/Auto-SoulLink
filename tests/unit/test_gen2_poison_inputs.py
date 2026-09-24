@@ -455,3 +455,13 @@ def test_the_heal_leg_talks_to_the_nurse_then_leaves_by_the_carpet():
         d.step(pt(rt, map_number=3, x=1, y=2, party=full))
     buttons, phase = d.step(pt(rt, map_number=1, x=1, y=0, party=full))
     assert buttons["Left"]                                                         # back on the route leg
+
+
+def test_a_worn_mon_in_a_trainer_fight_hands_over_to_a_fitter_mate():
+    rt = lua()
+    d = trainer_driver(rt, load(rt))
+    d.step(pt(rt, map_number=2, x=1, y=0))
+    worn = {"battle_mode": 2, "active_slot": 0, "active_hp": 5, "foe_sting": False, "overworld_ready": False}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **worn)[0] == ["Right"]                       # PKMN
+    alone = dict(worn, party={0: {"hp": 5, "status": 0}, 1: {"hp": 3, "status": 0}})
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **alone)[0] == ["A"]                          # FIGHT on

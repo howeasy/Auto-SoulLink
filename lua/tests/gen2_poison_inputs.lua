@@ -237,6 +237,10 @@ function PI.driver(F, facts, opts)
             if point.battle_mode ~= 1 and not trainer then return nil, "battle menu outside a wild or trainer battle" end
             if sting and fit then return choose(ui, "FIGHT", 2) end
             if sting and relief(point) ~= nil then return choose(ui, PI.PKMN_CELL, 2) end
+            -- a trainer fight keeps every party mon standing: a worn active mon hands over to a fitter mate
+            if trainer and not sting and not integer(point.active_hp, PI.LOW_HP + 1, 999) and relief(point) ~= nil then
+                return choose(ui, PI.PKMN_CELL, 2)
+            end
             return choose(ui, trainer and "FIGHT" or "RUN", 2)
         end
         if ui.kind == "move_menu" then
@@ -395,7 +399,7 @@ function PI.new(ctx, SG, F, FI, opts)
     -- Diagnostics only (never an oracle): after STUCK_FRAMES on one tile, log the map-event state and every
     -- map object / object struct once, labels from the title's rgblink .sym (Gold runs 1-2: a blocker at
     -- Route 30 (5,23) with no trainer battle).
-    local still, dumped, last = 0, false, nil
+    local still, dumped, last, logged_mode, logged_moves = 0, false, nil, nil, false
     local function dump()
         local syms = {}
         local f = io.open(ctx.root .. "/data/gen2/" .. F.SYM[ctx.env.title] .. ".sym", "rb")
@@ -458,6 +462,23 @@ function PI.new(ctx, SG, F, FI, opts)
             if list then point.ui.items, point.ui.cursor, point.ui.columns = list.items, list.cursor, list.columns
             else point.input_ready = false end
         end
+        -- Diagnostics only: one line per battle start/end and per move choice screen (party HP/status).
+        local mode = point.battle_mode
+        local moves = point.ui and point.ui.kind == "move_menu" and type(point.ui.items) == "table"
+        if ctx.log and (mode ~= logged_mode or (moves and not logged_moves)) then
+            local hp = {}
+            for slot = 0, 5 do
+                local m = point.party[slot]
+                if m then hp[#hp + 1] = fmt("%d:%s/%s:%s", slot, tostring(m.hp), tostring(m.max_hp), tostring(m.status)) end
+            end
+            ctx.log(fmt("  PI %s mode=%s map=%s:%s xy=%s,%s phase=%s active=%s foe_sting=%s party=%s%s",
+                moves and "moves" or "battle", tostring(mode), tostring(point.map_group), tostring(point.map_number),
+                tostring(point.x), tostring(point.y), tostring(driver.phase), tostring(point.active_slot),
+                tostring(point.foe_sting), table.concat(hp, " "),
+                moves and (" items=" .. table.concat(point.ui.items, "|")) or ""))
+            logged_mode = mode
+        end
+        logged_moves = moves
         return point
     end
     local spec = {name="u1e-poison", terminal=driver.terminal, terminal_idle=true,
