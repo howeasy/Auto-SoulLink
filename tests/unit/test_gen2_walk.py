@@ -104,3 +104,13 @@ def test_grass_oscillation_hops_off_a_ledge_onto_grass(rel, fn):
     grass = [1, 0, 0, 2]
     assert walk(column(lua, grid=grass), pt(lua, 0, 1, ON_LEDGE), None) == "Down"
     assert walk(column(lua, grid=grass, ledges=None), pt(lua, 0, 1, ON_LEDGE), None)[0] is None
+
+
+@pytest.mark.parametrize("rel", ["lua/tests/gen2_scripted_play.lua", "lua/tests/gen2_write_windows.lua",
+                                 "lua/tests/gen2_frame_align.lua", "lua/tests/gen2_poison_inputs.lua"])
+def test_a_walker_copied_away_from_its_sibling_loads_the_rule_from_slink_root(rel, tmp_path, monkeypatch):
+    """EVO-U1 ran a copy of gen2_frame_align.lua from a scratch path: no gen2_walk.lua beside it."""
+    copy = tmp_path / Path(rel).name
+    copy.write_text((ROOT / rel).read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setenv("SLINK_ROOT", ROOT.as_posix())
+    assert load(runtime(), copy) is not None   # ROOT / an absolute path is that path

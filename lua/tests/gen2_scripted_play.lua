@@ -4,7 +4,11 @@
 -- the coordinator's gate. Reaching route-saved is never fixture qualification.
 local P = {}
 -- the one shared step rule (ledges from the separate map.ledges field), from beside this file
-local W = dofile((debug.getinfo(1, "S").source:match("^@(.-)[^/\\]*$") or "lua/tests/") .. "gen2_walk.lua")
+local W = (function(dir)   -- beside this file, else $SLINK_ROOT/lua/tests (a copy run from elsewhere)
+    local f = io.open(dir .. "gen2_walk.lua", "rb")
+    if f then f:close() else dir = (os.getenv("SLINK_ROOT") or ".") .. "/lua/tests/" end
+    return dofile(dir .. "gen2_walk.lua")
+end)(debug.getinfo(1, "S").source:match("^@(.-)[^/\\]*$") or "lua/tests/")
 local DIRECTIONS = W.DIRECTIONS
 
 local function integer(value, low, high)

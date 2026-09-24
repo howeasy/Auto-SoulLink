@@ -13,7 +13,7 @@
   Phases:
     travel   Route 29 -> CherrygroveCity -> Route 30 (the facts' legs: a source-connection edge per map, crossed by
              holding the side; attributes.asm `connection`), then onto the nearest Route 30 grass tile. Paths are a
-             source-grid Dijkstra that prefers floor to grass (fewer encounters); ledges stay walls.
+             source-grid Dijkstra that prefers floor to grass (fewer encounters); ledges hop (gen2_walk.lua).
     hunt     oscillate in the grass. A wild battle whose foe knows no POISON_STING: RUN (retried through
              "Can't escape!"). A foe that knows it: FIGHT -> a passive move (LEER/GROWL/...; never damage it) each
              turn, or a switch to a party mate above LOW_HP (see PI.driver), until a party mon carries PSN, then
@@ -29,7 +29,11 @@
 --]]
 local PI = {}
 -- the one shared step rule (ledges from the separate map.ledges field), from beside this file
-local Walk = dofile((debug.getinfo(1, "S").source:match("^@(.-)[^/\\]*$") or "lua/tests/") .. "gen2_walk.lua")
+local Walk = (function(dir)   -- beside this file, else $SLINK_ROOT/lua/tests (a copy run from elsewhere)
+    local f = io.open(dir .. "gen2_walk.lua", "rb")
+    if f then f:close() else dir = (os.getenv("SLINK_ROOT") or ".") .. "/lua/tests/" end
+    return dofile(dir .. "gen2_walk.lua")
+end)(debug.getinfo(1, "S").source:match("^@(.-)[^/\\]*$") or "lua/tests/")
 PI.DIRECTIONS = Walk.DIRECTIONS
 PI.GRASS_COST = 4   -- ponytail: a weight, not a proof; the hunt only needs FEWER Route 29 encounters
 PI.HOLD = 12

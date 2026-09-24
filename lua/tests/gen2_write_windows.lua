@@ -55,7 +55,11 @@ U.TEXT_KINDS = {text=true, prompt_button=true, wait_button=true}
 U.MODES = {town="town", battle="battle", reload="town",   -- mode -> required fixture target
            boxes="battle", boxes_reset="battle", boxes_reload="battle", hello="battle", battle_faint="battle"}
 -- the one shared step rule (ledges from the separate map.ledges field), from beside this file
-local W = dofile((debug.getinfo(1, "S").source:match("^@(.-)[^/\\]*$") or "lua/tests/") .. "gen2_walk.lua")
+local W = (function(dir)   -- beside this file, else $SLINK_ROOT/lua/tests (a copy run from elsewhere)
+    local f = io.open(dir .. "gen2_walk.lua", "rb")
+    if f then f:close() else dir = (os.getenv("SLINK_ROOT") or ".") .. "/lua/tests/" end
+    return dofile(dir .. "gen2_walk.lua")
+end)(debug.getinfo(1, "S").source:match("^@(.-)[^/\\]*$") or "lua/tests/")
 U.DIRECTIONS = W.DIRECTIONS
 U.REPULSE = 60
 local fmt = string.format
