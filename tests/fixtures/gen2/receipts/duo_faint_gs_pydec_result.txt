@@ -1,2 +1,2 @@
 attempt 1 of 1
-PYDEC: PASS a=01A5:C4A6:10 b=F89B:C78C:10 area=route_29 titles=gold/silver status=memorial
+PYDEC: PASS a=01A5:C4A6:10 b=1D2C:C78C:10 area=route_29 titles=gold/silver status=memorial

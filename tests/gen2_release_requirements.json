@@ -144,11 +144,11 @@
           "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_faint --lane gen2-gs-faint --keep-data",
           "receipts": {
             "a": {"path": "tests/fixtures/gen2/receipts/duo_faint_gs_a_result.txt",
-                  "sha256": "4843853fc068d4a18a9bdfcd6991ae680c528e6126cc7af690c3f811667af1d4"},
+                  "sha256": "121414543d5cd2342af913fcfd7b90008d249854dded9e5bfb88294f2aa9623f"},
             "b": {"path": "tests/fixtures/gen2/receipts/duo_faint_gs_b_result.txt",
-                  "sha256": "87245edba2a9d3bf267e7c931af8ff609f59001430776a70136dcab2c14ffcab"},
+                  "sha256": "d57bc9a9393f5032a2288169fd0f19e86cf07c529bac482c1b01671d47ce33c7"},
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_faint_gs_pydec_result.txt",
-                      "sha256": "6407bef7d5e7a08fd5c4ca662a240ddbd3f7fce48d48d3c52974c7bbc4ac9e71"}
+                      "sha256": "00cda00f6362b710aa186010bad470e0fc53d8886be96249870e7ffa0cde0ada"}
           }
         },
         {
