@@ -29,6 +29,9 @@ from e2e_duo import (  # noqa: E402
     scenarios_for,
 )
 
+EXPECTED_GEN2 = ["link", "gen2_faint", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison",
+                 "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause",
+                 "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset"]
 EXPECTED_GEN2_TRADE = ["gen2_trade_decline_new", "gen2_trade_evolve", "gen2_trade_new", "gen2_trade_refuse_item",
                        "gen2_trade_reset_commit", "gen2_trade_reset_wait", "gen2_trade_timeout"]
 
@@ -267,7 +270,7 @@ def test_gen2_reconnect_orchestration_keeps_b_online_and_archives_initial_a(monk
 
 def test_gen2_new_selects_link_and_faint_with_required_evidence():
     assert "gen2_new" in GAMES
-    assert scenarios_for("gen2_new") == EXPECTED_GEN2_TRADE + ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset"]
+    assert scenarios_for("gen2_new") == EXPECTED_GEN2_TRADE + EXPECTED_GEN2
     contract = duo_module.evidence_contract("gen2_new")
     assert contract.require_oracle and contract.witness_validator
     assert callable(getattr(DuoRun, contract.witness_validator, None))
@@ -289,16 +292,17 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
     assert GAMES[game]["game"] == "gen2_new"
     assert GAMES[game]["fixture"] == fixtures
     trade = EXPECTED_GEN2_TRADE if game != "gen2_crystal_gold" else []   # owner Q10: no C-G native trade
-    assert scenarios_for(game) == trade + ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset"]
+    assert scenarios_for(game) == trade + EXPECTED_GEN2
     assert duo_module.evidence_contract(game) is duo_module.evidence_contract("gen2_new")
     assert not GAMES[game].get("server_rom_routes")
     trade_fixtures = duo_module.GEN2_TRADE_FIXTURES.get(game)
     assert duo_list_lines(game) == [
         f"{scenario}  attempts=1  targets=a:{trade_fixtures['a']}, b:{trade_fixtures['b']} artifact=overlay admission=HARNESS_ONLY_OVERLAY"
         for scenario in trade] + [
-        f"{scenario}  attempts={3 if scenario in duo_module.GEN2_CLAUSE_SCENARIOS else 1}  targets=a:{fixtures['a']}, "
+        f"{scenario}  attempts={3 if scenario in duo_module.GEN2_CLAUSE_SCENARIOS else 1}  targets="
+        f"a:{'gold_battle_errand' if scenario == 'gen2_poison' and game == 'gen2_gold_silver' else fixtures['a']}, "
         f"b:{'crystal_battle_ot2' if scenario == 'gen2_admit_wrong_rom' else fixtures['b']}"
-        for scenario in ("link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset")]
+        for scenario in EXPECTED_GEN2]
 
 
 @pytest.mark.parametrize("game,titles,names", (
@@ -901,3 +905,30 @@ def test_gen2_species_live_early_finish_retries_only_waiting_pending_partner(mon
     result = duo_module.run_scenario_with_rng_retry("gen2_species_clause", SimpleNamespace(game="gen2_new", idle_jitter=0))
     assert result[:2] == (False, attempts)
     assert len(runs) == attempts
+
+
+@pytest.mark.parametrize(("scenario", "oracle", "key"), [
+    ("gen2_whiteout", "whiteout_oracle", "repair"), ("gen2_pc_ops", "pc_ops_oracle", "release"),
+    ("gen2_changebox", "changebox_oracle", "box_change"), ("gen2_poison", "poison_oracle", "death")])
+def test_wave_c_scenarios_bind_their_own_saved_state_oracle(monkeypatch, scenario, oracle, key):
+    """DUO-WAVE-C contract: the faint body, each scenario's own oracle, faint-shaped kwargs."""
+    from types import SimpleNamespace
+    row = SCENARIOS[scenario]
+    assert row["oracle"] == f"assert_{scenario}_saved" and callable(getattr(DuoRun, row["oracle"]))
+    assert duo_module.GEN2_WAVE_C[scenario] == (oracle, key)
+    seen = []
+    monkeypatch.setitem(sys.modules, "gen2_duo_oracles",
+                        SimpleNamespace(**{oracle: lambda results, **kw: seen.append((results, kw)) or "ok"}))
+    run = object.__new__(DuoRun)
+    run.scenario, run.data_dir = scenario, "data"
+    run._gen2_inputs = {side: {"ot_id": n, "fixture": f"{side}.SaveRAM"} for n, side in enumerate("ab")}
+    assert getattr(run, row["oracle"])({"a": "A", "b": "B"}) == "ok"
+    results, kw = seen[0]
+    assert kw["data_dir"] == "data" and kw["ot_ids"] == {"a": 0, "b": 1}
+    assert kw["boot_saveram"] == {"a": "a.SaveRAM", "b": "b.SaveRAM"} and callable(kw["on_verified"])
+
+
+def test_gold_poison_a_plays_the_post_errand_save():
+    assert duo_module.GEN2_POISON_FIXTURES == {"gen2_gold_silver": {"a": "gold_battle_errand"}}
+    line = next(one for one in duo_list_lines("gen2_gold_silver") if one.startswith("gen2_poison "))
+    assert "a:gold_battle_errand, b:silver_battle" in line

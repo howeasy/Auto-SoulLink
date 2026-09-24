@@ -81,6 +81,12 @@ SCENARIOS = {
                    "no_setup": True, "frames": 432000,
                    "target": {"a": "battle", "b": "battle_ot2"},
                    "oracle": "assert_gen2_faint_saved", "oracle_kwargs": {}},
+    # DUO-WAVE-C (drivers fe4feb73, oracles c1adc8e8): the faint body plus its own verdict facts
+    **{name: {"flags": [], "timeout": 7200 if name == "gen2_poison" else 3600, "games": ("gen2_new",),
+              "no_setup": True, "frames": 900000 if name == "gen2_poison" else 432000,
+              "target": {"a": "battle", "b": "battle_ot2"},
+              "oracle": f"assert_{name}_saved", "oracle_kwargs": {}}
+       for name in ("gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison")},
     "gen2_faint_active": {"flags": [], "timeout": 3000, "games": ("gen2_new",),
                           "no_setup": True, "frames": 432000,
                           "target": {"a": "battle", "b": "battle_ot2"},
@@ -972,6 +978,13 @@ GEN2_TRADE_FIXTURES = {
 }
 
 
+# Gold has no day POISON_STING foe south of the Route 30 battle demo: its poison A plays the
+# post-errand save (U1 ruling, tests/live/test_gen2_frame_align.py U1_FIXTURE); cc/cg keep the pairing.
+GEN2_POISON_FIXTURES = {"gen2_gold_silver": {"a": "gold_battle_errand"}}
+GEN2_WAVE_C = {"gen2_whiteout": ("whiteout_oracle", "repair"), "gen2_pc_ops": ("pc_ops_oracle", "release"),
+               "gen2_changebox": ("changebox_oracle", "box_change"), "gen2_poison": ("poison_oracle", "death")}
+
+
 def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
     """Bind each side's fixture to its full qualification report and its title's pinned ROM."""
     root = Path(repo or REPO).resolve()
@@ -990,6 +1003,8 @@ def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
         name = "crystal_battle_ot2" if refused else pairing["fixture"][inst]
         if scenario in GEN2_TRADE_SCENARIOS:
             name = GEN2_TRADE_FIXTURES[game][inst]
+        if scenario == "gen2_poison":
+            name = GEN2_POISON_FIXTURES.get(game, {}).get(inst, name)
         if name not in BY_NAME:
             raise FileNotFoundError(f"Gen 2 lane missing played/qualified fixture declaration: {name}")
         title = BY_NAME[name].title
@@ -1699,8 +1714,14 @@ class DuoRun:
                         "lua/tests/duo/gen2_route29_inputs.lua"]
         if self.scenario in GEN2_TRADE_SCENARIOS:
             driver_files += ["lua/tests/duo/gen2_trade.lua", "tools/gen2_trade_facts.py"]
-        if self.scenario in ("gen2_faint", "gen2_faint_active"):
+        if self.scenario in GEN2_WAVE_C:
+            driver_files.append("lua/tests/duo/scenario_gen2_faint.lua")
+        if self.scenario in ("gen2_faint", "gen2_faint_active", "gen2_whiteout", "gen2_changebox", "gen2_poison"):
             driver_files.append("lua/tests/duo/gen2_faint_inputs.lua")
+        if self.scenario in ("gen2_pc_ops", "gen2_changebox"):
+            driver_files.append("lua/tests/gen2_pc_inputs.lua")
+        if self.scenario in ("gen2_pc_ops", "gen2_changebox", "gen2_poison"):
+            driver_files += ["lua/tests/gen2_poison_inputs.lua", "lua/tests/gen2_walk.lua"]
         if self.scenario in GEN2_CLAUSE_SCENARIOS:
             driver_files.append("lua/tests/duo/gen2_clause.lua")
         for path in driver_files:
@@ -1709,6 +1730,7 @@ class DuoRun:
         oracle = importlib.import_module("gen2_duo_oracles")
         oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle", "gen2_faint_active": "faint_active_oracle", "gen2_reconnect": "reconnect_oracle",
                        "gen2_admit_wrong_rom": "admit_wrong_rom_oracle", "gen2_soft_reset": "soft_reset_oracle",
+                       **{name: row[0] for name, row in GEN2_WAVE_C.items()},
                        **dict.fromkeys(GEN2_CLAUSE_SCENARIOS, "clause_oracle"),
                        **dict.fromkeys(GEN2_TRADE_SCENARIOS, "trade_oracle")}[self.scenario]
         witness = "check_admit_wrong_rom_witness" if self.scenario == "gen2_admit_wrong_rom" else "check_save_witness"
@@ -2034,6 +2056,15 @@ class DuoRun:
             on_verified=self._record_gen2_facts,
             ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
             boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
+
+    def _assert_gen2_wave_c(self, results, **kwargs):
+        oracle = getattr(importlib.import_module("gen2_duo_oracles"), GEN2_WAVE_C[self.scenario][0])
+        return oracle(results, data_dir=self.data_dir, on_verified=self._record_gen2_facts,
+            ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
+
+    assert_gen2_whiteout_saved = assert_gen2_pc_ops_saved = _assert_gen2_wave_c
+    assert_gen2_changebox_saved = assert_gen2_poison_saved = _assert_gen2_wave_c
 
     def assert_gen2_faint_active_saved(self, results, **kwargs):
         oracle = importlib.import_module("gen2_duo_oracles")
@@ -4918,6 +4949,9 @@ class DuoRun:
                         reason += f" scenario={self.scenario} rom_b={self._gen2_verified_facts['rom_b']}"
                     if self.scenario == "gen2_faint_active":
                         reason += " scenario=gen2_faint_active death=active"
+                    if self.scenario in GEN2_WAVE_C:
+                        key = GEN2_WAVE_C[self.scenario][1]
+                        reason += f" scenario={self.scenario} {key}={self._gen2_verified_facts[key]}"
                     if self.scenario in GEN2_TRADE_SCENARIOS:
                         reason += f" scenario={self.scenario} admission_scope=HARNESS_ONLY_OVERLAY"
                     if self.scenario in GEN2_CLAUSE_SCENARIOS:
@@ -4975,6 +5009,8 @@ def list_lines(game):
             targets = {**targets, "b": "crystal_battle_ot2"}
         if name in GEN2_TRADE_SCENARIOS:
             targets = GEN2_TRADE_FIXTURES[game]
+        if name == "gen2_poison":
+            targets = {**targets, **GEN2_POISON_FIXTURES.get(game, {})}
         shown = (", ".join(f"{inst}:{targets[inst]}" for inst in ("a", "b"))
                  if isinstance(targets, dict) else targets)
         lines.append(f"{name}  attempts={scenario_attempt_limit(name, game)}  targets={shown}")
