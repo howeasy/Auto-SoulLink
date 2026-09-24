@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.join(REPO, "tools"))
 
 from e2e_duo import (  # noqa: E402
     EMUHAWK,
+    scenario_target,
     GAMES as RUNNER_GAMES,
     GEN3_FIXTURES,
     SCENARIOS as RUNNER_SCENARIOS,
@@ -56,7 +57,7 @@ def deadline_for(scenario):
 
 def required_fixtures(scenario, game=GAME):
     """The fixture stems this scenario boots, one per instance (the row's sides x the target)."""
-    targets = RUNNER_SCENARIOS[scenario].get("target", "town")
+    targets = scenario_target(RUNNER_SCENARIOS[scenario], game)
     sides = RUNNER_GAMES[game]["sides"]
     return [sides[inst][1].format(target=targets[inst] if isinstance(targets, dict) else targets)
             for inst in ("a", "b")]
@@ -112,7 +113,7 @@ def deadline_for_rr(scenario):
 
 
 def required_fixtures_rr(scenario):
-    targets = RUNNER_SCENARIOS[scenario].get("target", "town")
+    targets = scenario_target(RUNNER_SCENARIOS[scenario], GAME_RR)
     sides = RUNNER_GAMES[GAME_RR]["sides"]
     return [sides[inst][1].format(target=targets[inst] if isinstance(targets, dict) else targets)
             for inst in ("a", "b")]

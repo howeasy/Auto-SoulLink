@@ -225,12 +225,16 @@ SCENARIOS = {
                        "target": "town", "frames": 2000000,
                        "oracle": "assert_faint_cmd_gen3_saved"},
     # A1 and R1 (RR companion): mechanism P+H on the wild battle (active_faint_case "wild").
+    # `target_by_game` (scenario_target): RR's rr_battle.sav holds ONE mon and no balls, so R1's
+    # send-out needs rr_battle2 (parcel -> 10 balls, then a Route 1 catch; driver 8103ddec).
     "linked_faint_active_gen3": {"flags": [], "timeout": 1800,
                                  "games": ("gen3_frlg", "gen3_rr_new"),
-                                 "target": "battle", "frames": 2500000,
+                                 "target": "battle", "target_by_game": {"gen3_rr_new": "battle2"},
+                                 "frames": 2500000,
                                  "oracle": "assert_linked_faint_active_gen3_saved"},
-    # A1 (i) and R4: B deposits its slot-1 mon by hand first, so the Perish KO whites out
-    # (ruling 18: P is not held on the last mon).
+    # A1 (i) and R4: B's linked mon is its only mon -- a hand deposit of the slot-1 mon on FR/LG,
+    # already so on RR's one-mon rr_battle.sav -- so the Perish KO whites out (ruling 18: P is not
+    # held on the last mon; ruling 21: the game_over that follows is intended).
     "linked_faint_active_whiteout_gen3": {"flags": [], "timeout": 2400,
                                           "games": ("gen3_frlg", "gen3_rr_new"),
                                           "target": "battle", "frames": 3000000,
@@ -289,13 +293,18 @@ SCENARIOS = {
     #                rr_town.sav). Both sides get the same VALID apply_trade (the partner
     #                fixture's slot-1 record): the companion must stage it natively, the clean
     #                cartridge must refuse it and write nothing (trade port 78908fe8).
+    # Owner ruling 19: RR force_explode's commit ends in the P+H hand-off, so it runs on the P+H
+    # carrier (active_faint_case "explode"): no press after the commit, the same engine oracles,
+    # and the attacker's own faint site after the 153 stamp.
     "explode_gen3": {"flags": ["--explode-mode"], "timeout": 900, "games": ("gen3_rr_new",),
-                     "control": "NON-QUALIFYING (BLOCKED): the only execution witness, "
-                                "gBattleResults.lastUsedMovePlayer, is stamped at action start "
-                                "before attackcanceler/tryexplosion (a Damp/sleep/flinch cancel "
-                                "still reads 153) and its +0x22 offset is unverified on RR; no "
-                                "RR-verified witness downstream of the cancellation exists yet",
-                     "target": "battle", "frames": 1500000, "oracle": "assert_explode_gen3_saved"},
+                     "control": "NON-QUALIFYING until reviewed: lastUsedMovePlayer 153 is stamped "
+                                "before attackcanceler/tryexplosion and its +0x22 offset is "
+                                "unverified on RR; the chain now also needs the attacker's own "
+                                "faint site (counter +1, HP 0, no SLink HP write) after the stamp, "
+                                "a downstream witness no Damp/sleep/flinch cancel produces",
+                     "target": "battle", "frames": 1500000,
+                     "scenario_module": "linked_faint_active", "active_faint_case": "explode",
+                     "oracle": "assert_explode_gen3_saved"},
     # `control`: a NEGATIVE/BLOCKED characterization, never a qualification PASS (Codex
     # C4-6b finding 6); summary_lines and the oracle's PYDEC line both say so.
     "rival_swap_gen3": {"flags": [], "timeout": 600, "games": ("gen3_rr_new",),
@@ -309,20 +318,19 @@ SCENARIOS = {
                            "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("a", "b"),
                            "oracle": "assert_native_absent_gen3_saved"},
     # RR rows R2/R3/R5 of rr_active_faint_parity_scope §5.5 (R1 = linked_faint_active_gen3 and
-    # R4 = linked_faint_active_whiteout_gen3 on gen3_rr_new). All SKIP until rr_battle{,_b}.sav
-    # exist (skip_reason).
+    # R4 = linked_faint_active_whiteout_gen3 on gen3_rr_new). R1/R2/R3 boot rr_battle2{,_b}.sav
+    # (a second mon for the send-out, balls for R3's L-throw) and SKIP by name until it is built
+    # (skip_reason); R4 runs on the one-mon rr_battle{,_b}.sav.
     #   R2 clean   B boots the CLEAN RR dump: the P+H path is Lua-only, no companion needed.
     #   R3 lhammer B pulses L every frame from the commit to the KO; no ball may be lost.
-    #   R5 mega    BLOCKED: an RR trainer battle with a mega toggled then backed out needs an RR
-    #              trainer route and a Mega Ring + stone holder, neither producible by normal
-    #              inputs from the fixtures.
+    #   R5 mega    SIGNED G5 LIMIT (owner ruling 20): an allowed SKIP, never launched.
     "linked_faint_active_clean_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr_new",),
-                                       "target": "battle", "frames": 2500000,
+                                       "target": "battle2", "frames": 2500000,
                                        "rom_kind": {"a": "companion", "b": "clean"},
                                        "scenario_module": "linked_faint_active",
                                        "oracle": "assert_linked_faint_active_clean_gen3_saved"},
     "linked_faint_active_lhammer_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr_new",),
-                                         "target": "battle", "frames": 2500000,
+                                         "target": "battle2", "frames": 2500000,
                                          "scenario_module": "linked_faint_active",
                                          "active_faint_case": "lhammer",
                                          "oracle": "assert_linked_faint_active_lhammer_gen3_saved"},
@@ -330,9 +338,10 @@ SCENARIOS = {
                                       "target": "battle", "frames": 2500000,
                                       "scenario_module": "linked_faint_active",
                                       "active_faint_case": "mega",
-                                      "blocked": "R5 needs an RR trainer route and a mega-capable "
-                                                 "party (Mega Ring + stone); neither is producible "
-                                                 "by normal inputs from rr_battle{,_b}.sav",
+                                      "signed_limit": "owner ruling 20 (docs/gen3/G4_request_draft.md "
+                                                      "§6 item 20): no Mega Ring or stone holder is "
+                                                      "reachable by normal inputs early in RR, and the "
+                                                      "Perish path reads no mega state",
                                       "oracle": "assert_linked_faint_active_mega_gen3_saved"},
     # The four below are Gen 3-only and say so explicitly. They load Radical Red savestates
     # and two of them need the RR companion patch, so there is nothing for a Game Boy to run.
@@ -1442,17 +1451,27 @@ def active_faint_chain(key, case):
     # the carrier prints its MEASURED press count and OR-ed heldKeysRaw (R1 L3); R3 presses L
     # on purpose, so there only the HP-write count is pinned
     inputs = r"\d+ keys=0x[0-9A-F]+" if case == "lhammer" else "0 keys=0x0"
-    chain = [rf"(?m)^READY_ACTIVE {k} case={re.escape(case)}$", gen3_rx("force_faint", key),
-             rf"(?m)^\[client\] \[SLink-gen3\] force_faint: Perish commit battler=0 handoff=1 {k}\b",
-             rf"(?m)^ACTIVE_COMMIT {k} frame=\d+ writes=5 attempted=\d+ handoff=1 ",
+    explode = case == "explode"
+    if explode:   # owner ruling 19: the Explosion menu skip ends in the same hand-off
+        commit = [gen3_rx("force_explode", key),
+                  r"(?m)^\[client\] \[SLink-gen3\] force_explode: menu skip committed slot=0 battler=0 handoff=1$",
+                  rf"(?m)^ACTIVE_COMMIT {k} frame=\d+ writes=\d+ attempted=\d+ handoff=1 "]
+    else:
+        commit = [gen3_rx("force_faint", key),
+                  rf"(?m)^\[client\] \[SLink-gen3\] force_faint: Perish commit battler=0 handoff=1 {k}\b",
+                  rf"(?m)^ACTIVE_COMMIT {k} frame=\d+ writes=5 attempted=\d+ handoff=1 "]
+    chain = [rf"(?m)^READY_ACTIVE {k} case={re.escape(case)}$", *commit,
              rf"(?m)^HANDOFF {k} from=0x[0-9A-F]{{8}} to=0x[0-9A-F]{{8}} frames=[12] exec_bit0=0$",
-             rf"(?m)^ACTIVE_KO {k} frame=\d+ in_battle=1 battle_hp=0 .* inputs={inputs} hp_writes=0 ",
+             rf"(?m)^ACTIVE_KO {k} frame=\d+ in_battle=1 battle_hp=0 .*"
+             rf"{' last_move=153' if explode else ''} inputs={inputs} hp_writes=0 ",
              rf"(?m)^ACTIVE_FAINT_SITE {k} frame=\d+ active=0 battler0_slot=0 battle_hp=0 party_hp=0 "
              rf"counter=(\d+)->(?!\1\b)\d+$"]
     if case == "lhammer":
         chain.append(rf"(?m)^LHAMMER_BALLS {k} balls=\d+ ball_id=\d+ unchanged$")
     if case == "whiteout":
         chain += [gen3_tx("whiteout", "-"), rf"(?m)^ACTIVE_OUTCOME {k} outcome=2 "]
+    elif explode:   # the foe usually falls too: a win, a send-out, a whiteout or a draw follows
+        chain.append(rf"(?m)^ACTIVE_OUTCOME {k} outcome=\d+ ")
     else:
         outcome = "4" if case == "command" else r"\d+"
         chain += [r"(?m)^SENT_OUT slot=1 battler_slot=1$", rf"(?m)^ACTIVE_OUTCOME {k} outcome={outcome} sent_out=1 "]
@@ -1477,7 +1496,7 @@ def gen3_last_mon_problems(label, saved, fixture, key, deposited, memorial_box, 
     f_party, f_boxes = fixture
     keys = [gen3_key(m) for m in party]
     problems = [] if keys == [key] else [f"{label}: saved party {keys}, expected [{key}] alone"]
-    if not deposited:
+    if not deposited and len(f_party) != 1:
         problems.append(f"{label}: no hand deposit built the one-mon party")
     if any(gen3_key(m) == key for m in boxes.values()):
         problems.append(f"{label}: {key} also has a boxed copy")
@@ -2388,9 +2407,10 @@ class DuoRun:
         A scenario declares `target` as a string (both halves) or per instance as
         {"a": ..., "b": ...}. poison_new is the reason for the second form: B has to boot the
         battle fixture (post parcel, standing on Route 1) while A idles on the town one, or the
-        idle half would meet wild mons of its own and muddle the receipt.
+        idle half would meet wild mons of its own and muddle the receipt. `target_by_game`
+        overrides it for one row (scenario_target).
         """
-        target = self.cfg.get("target", "town")
+        target = scenario_target(self.cfg, getattr(self, "game", ""))
         if isinstance(target, dict):
             return target[inst]
         return target
@@ -5842,48 +5862,54 @@ class DuoRun:
         self._gen3_flush_boundary()
         ka, kb = self._link_keys["a"], self._link_keys["b"]
         case = self.cfg.get("active_faint_case", "wild")
-        # whiteout: the only pair died, so game_over is latched and B's last-mon memorialize is
-        # dropped (lua/core/deferred.lua) -- the link stays DEAD with A's half alone memorialized
-        whiteout = case == "whiteout"
-        self._gen3_one_link("dead" if whiteout else "memorial", cause="battle")
+        cmd = "force_explode" if case == "explode" else "force_faint"
+        # a linked mon that is its party's LAST mon (a one-mon fixture, or the whiteout case) keeps
+        # its slot: the only pair died, game_over is latched, and lua/core/deferred.lua drops the
+        # last-mon memorialize (ruling 21) -- LAST_MON_KEPT in that side's receipt. The link then
+        # stays DEAD unless both halves were memorialized.
+        lone = {inst: re.search(rf"(?m)^LAST_MON_KEPT {re.escape(key)}$", results[inst] or "") is not None
+                for inst, key in (("a", ka), ("b", kb))}
+        self._gen3_one_link("dead" if any(lone.values()) else "memorial", cause="battle")
         with open(os.path.join(self.data_dir, "slink.log"), encoding="utf-8") as handle:
             log_text = handle.read()
-        dead = log_text.find(f"[a] faint → force_faint b:{kb}")
+        dead = log_text.find(f"[a] faint → {cmd} b:{kb}")
         memorial = log_text.find("fully memorialized")
         problems = []
-        if dead < 0 or (not whiteout and memorial <= dead):
-            problems.append("server log lacks DEAD propagation (force_faint b) before MEMORIAL")
+        if dead < 0 or (not any(lone.values()) and memorial <= dead):
+            problems.append(f"server log lacks DEAD propagation ({cmd} b) before MEMORIAL")
         box = self._gen3_memorial_box()
-        deposited = re.findall(rf"(?m)^ONE_MON_PARTY {re.escape(kb)} deposited=(\S+)$", results["b"] or "")
-        problems += gen3_memorial_problems("a", self._gen3_saved("a"), self._gen3_fixture_saved("a"), ka, box,
-                                           rr=self._gen3_rr, limits=self._gen3_limits("a"), battled=True)
-        if whiteout:
-            problems += gen3_last_mon_problems("b", self._gen3_saved("b"), self._gen3_fixture_saved("b"), kb,
-                                               deposited, box, rr=self._gen3_rr, limits=self._gen3_limits("b"))
-        else:
-            problems += gen3_memorial_problems("b", self._gen3_saved("b"), self._gen3_fixture_saved("b"), kb,
-                                               box, rr=self._gen3_rr, limits=self._gen3_limits("b"),
-                                               battled=True, trained=case == "trainer")
+        marks = {}   # inst -> (required, ordered, forbidden) for its memorial ending
+        for inst, key in (("a", ka), ("b", kb)):
+            saved, fixture = self._gen3_saved(inst), self._gen3_fixture_saved(inst)
+            if lone[inst]:
+                deposited = re.findall(rf"(?m)^ONE_MON_PARTY {re.escape(key)} deposited=(\S+)$", results[inst] or "")
+                problems += gen3_last_mon_problems(inst, saved, fixture, key, [d for d in deposited if d != "-"],
+                                                   box, rr=self._gen3_rr, limits=self._gen3_limits(inst))
+                kept = rf"(?m)^LAST_MON_KEPT {re.escape(key)}$"
+                dropped = rf"(?m)^\[client\] .*memorialize dropped: last mon after game over {re.escape(key)}\b"
+                marks[inst] = ([gen3_rx("memorialize", key), r"(?m)^RX game_over\b", dropped, kept],
+                              [(r"(?m)^RX game_over\b", dropped), (dropped, kept),
+                               (kept, r"(?m)^SAVE_WITNESS_DUMP ")],
+                              [gen3_tx("memorialize_done", key)])
+            else:
+                problems += gen3_memorial_problems(inst, saved, fixture, key, box, rr=self._gen3_rr,
+                                                   limits=self._gen3_limits(inst), battled=True,
+                                                   trained=inst == "b" and case == "trainer")
+                done = gen3_tx("memorialize_done", key)
+                marks[inst] = ([done], [(done, r"(?m)^SAVE_WITNESS_DUMP ")], [])
         site = r"(?m)^ENGINE_FAINT_SITE "
+        req_a, ord_a, forb_a = marks["a"]
         problems += gen3_receipt_problems(
-            "a", results["a"], required=[site, gen3_tx("faint", ka), gen3_tx("memorialize_done", ka)],
-            ordered=[(site, gen3_tx("faint", ka))])
+            "a", results["a"], required=[site, gen3_tx("faint", ka), *req_a],
+            ordered=[(site, gen3_tx("faint", ka)), *ord_a], forbidden=[r"(?m)^RX force_", *forb_a])
         required, ordered, forbidden = active_faint_chain(kb, case)
-        if whiteout:
-            kept = rf"(?m)^LAST_MON_KEPT {re.escape(kb)}$"
-            dropped = rf"(?m)^\[client\] .*memorialize dropped: last mon after game over {re.escape(kb)}\b"
-            required += [gen3_rx("memorialize", kb), r"(?m)^RX game_over\b", dropped, kept]
-            ordered += [(r"(?m)^RX game_over\b", dropped), (dropped, kept), (kept, r"(?m)^SAVE_WITNESS_DUMP ")]
-            forbidden.append(gen3_tx("memorialize_done", kb))
-        else:
-            done = gen3_tx("memorialize_done", kb)
-            required.append(done)
-            ordered.append((done, r"(?m)^SAVE_WITNESS_DUMP "))
-        problems += gen3_receipt_problems("b", results["b"], required=required, ordered=ordered,
-                                          forbidden=forbidden)
-        self._gen3_raise(problems, f"linked_faint_active[{case}]: engine faint {ka} -> P+H commit on "
-                                   f"active {kb} -> hand-off -> Perish KO in battle with no input; "
-                                   f"both memorials saved")
+        req_b, ord_b, forb_b = marks["b"]
+        problems += gen3_receipt_problems("b", results["b"], required=required + req_b,
+                                          ordered=ordered + ord_b, forbidden=forbidden + forb_b)
+        self._gen3_raise(problems, f"linked_faint_active[{case}]: engine faint {ka} -> {cmd} -> the "
+                                   f"hand-off commit on active {kb} -> engine KO in battle with no "
+                                   f"input; memorials saved (last mon kept: "
+                                   f"{','.join(i for i in 'ab' if lone[i]) or 'none'})")
 
     assert_linked_faint_active_whiteout_gen3_saved = assert_linked_faint_active_gen3_saved
     assert_linked_faint_active_trainer_gen3_saved = assert_linked_faint_active_gen3_saved
@@ -6143,41 +6169,11 @@ class DuoRun:
 
     # ── RR-only oracles (P5, card C5-5) ─────────────────────────────────────────────────────
     def assert_explode_gen3_saved(self, results):
-        """explode_gen3, a NON-QUALIFYING CONTROL (SCENARIOS `control`): A's linked lead fainted
-        in the engine (the faint site fired, then the client sent faint); the server chose
-        force_explode; B received it KEYED to its linked mon while that mon was the active
-        battler, and the engine then STARTED the Explosion action (EXPLOSION_ACTION_STARTED:
-        lastUsedMovePlayer read MOVE_EXPLOSION after the command, not before). That witness sits
-        upstream of attackcanceler/tryexplosion (pret battle_main.c:4021-4022,
-        data/battle_scripts_1.s:376-382), so a cancelled Explosion reads the same: this PASS is
-        never a qualification (Codex C4-6c finding 4). Both memorials saved."""
-        self._gen3_flush_boundary()
-        self._gen3_one_link("memorial", cause="battle")
-        ka, kb = self._link_keys["a"], self._link_keys["b"]
-        problems = []
-        with open(os.path.join(self.data_dir, "slink.log"), encoding="utf-8") as handle:
-            log_text = handle.read()
-        if f"[a] faint → force_explode b:{kb}" not in log_text:
-            problems.append("the server did not propagate A's faint as force_explode to B")
-        box = self._gen3_memorial_box()
-        for inst, key in (("a", ka), ("b", kb)):
-            problems += gen3_memorial_problems(inst, self._gen3_saved(inst),
-                                               self._gen3_fixture_saved(inst), key, box,
-                                               rr=self._gen3_rr, limits=self._gen3_limits(inst),
-                                               battled=True)
-        site = r"(?m)^ENGINE_FAINT_SITE "
-        problems += gen3_receipt_problems(
-            "a", results["a"], required=[site, gen3_tx("faint", ka), gen3_tx("memorialize_done", ka)],
-            ordered=[(site, gen3_tx("faint", ka))], forbidden=[r"(?m)^RX force_"])
-        chain = [rf"(?m)^READY_ACTIVE {re.escape(kb)} ", gen3_rx("force_explode", kb),
-                 rf"(?m)^EXPLOSION_ACTION_STARTED {re.escape(kb)} battler_slot=\d+ last_used=153\b",
-                 gen3_tx("memorialize_done", kb)]
-        problems += gen3_receipt_problems("b", results["b"], required=chain,
-                                          ordered=list(zip(chain, chain[1:], strict=False)),
-                                          forbidden=[r"(?m)^READY_ACTIVE \S+ last_used=153\b"])
-        self._gen3_raise(problems, f"explode NON-QUALIFYING CONTROL (not qualification): engine "
-                                   f"faint {ka} -> keyed force_explode {kb} -> the Explosion ACTION "
-                                   f"started (not proven executed); both memorials saved")
+        """explode_gen3 under owner ruling 19 (still a CONTROL until reviewed, SCENARIOS
+        `control`): the P+H carrier's explode chain -- keyed force_explode, the Explosion menu
+        skip ending in the hand-off, no input, lastUsedMovePlayer 153 at the KO, the attacker's
+        own faint site -- plus the linked oracle's saved-state half."""
+        self.assert_linked_faint_active_gen3_saved(results)
 
     def assert_rival_swap_gen3_saved(self, results):
         """rival_swap_gen3 is a BLOCKED NEGATIVE CONTROL, not a qualification (SCENARIOS
@@ -6372,7 +6368,7 @@ def list_lines(game):
     """
     lines = []
     for name in scenarios_for(game):
-        targets = SCENARIOS[name].get("target", "town")
+        targets = scenario_target(SCENARIOS[name], game)
         shown = (", ".join(f"{inst}:{targets[inst]}" for inst in ("a", "b"))
                  if isinstance(targets, dict) else targets)
         lines.append(f"{name}  attempts={scenario_attempt_limit(name, game)}  targets={shown}")
@@ -6387,7 +6383,8 @@ def summary_lines(results, game):
         ok, attempt = outcome[0], outcome[1]
         reason = f" — {outcome[2]}" if len(outcome) > 2 else ""
         if ok is None:
-            lines.append(f"  {name}: SKIP{reason}")
+            allowed = len(outcome) > 3 and outcome[3]
+            lines.append(f"  {name}: SKIP{' (allowed: signed limit)' if allowed else ''}{reason}")
             continue
         control = SCENARIOS.get(name, {}).get("control")
         if control:
@@ -6397,30 +6394,39 @@ def summary_lines(results, game):
     return lines
 
 
+def scenario_target(entry, game):
+    """A scenario's fixture `target` (a string, or {"a", "b"}) on `game`: `target_by_game[game]`
+    when the row needs a different fixture there (RR R1 boots rr_battle2)."""
+    return (entry.get("target_by_game") or {}).get(game, entry.get("target", "town"))
+
+
 def skip_reason(name, game):
-    """Why `name` cannot launch on `game` yet, or None. A declared `blocked` reason, or (RR rows,
-    GAMES[...]["rr"]) a missing fixture -- rr_battle{,_b}.sav are still being built, and a FAIL at
-    fixture lookup would read as a product failure. A SKIP is never a PASS (exit_code)."""
+    """(why, allowed) when `name` cannot launch on `game`, else None. `signed_limit` is an owner-
+    signed limit: an ALLOWED skip (exit_code 0). A missing fixture on an RR row (GAMES[...]["rr"])
+    is not: rr_battle2 is still being built, and a FAIL at fixture lookup would read as a product
+    failure, so it SKIPs by name and exit_code says 3. A SKIP is never a PASS."""
     entry, row = SCENARIOS.get(name, {}), GAMES.get(game, {})
-    if entry.get("blocked"):
-        return f"BLOCKED: {entry['blocked']}"
+    if entry.get("signed_limit"):
+        return f"SIGNED LIMIT: {entry['signed_limit']}", True
     if row.get("rr") and row.get("sides"):
-        target = entry.get("target", "town")
+        target = scenario_target(entry, game)
         missing = []
         for inst in ("a", "b"):
             stem = row["sides"][inst][1].format(target=target[inst] if isinstance(target, dict) else target)
             if not os.path.isfile(os.path.join(GEN3_FIXTURES, stem + ".sav")):
                 missing.append(f"tests/fixtures/gen3/{stem}.sav")
         if missing:
-            return f"fixture(s) {', '.join(missing)} not built yet (RR battle fixtures)"
+            return f"fixture(s) {', '.join(missing)} not built yet (RR battle fixtures)", False
     return None
 
 
 def exit_code(results) -> int:
-    """0 only when every scenario PASSed: a FAIL is 1, a SKIP (outcome None) with no FAIL is 3."""
+    """0 when every scenario PASSed or took an ALLOWED skip (a signed limit, outcome
+    (None, 0, why, True)); a FAIL is 1; any other SKIP with no FAIL is 3."""
     if any(outcome[0] is False for outcome in results.values()):
         return 1
-    return 3 if any(outcome[0] is None for outcome in results.values()) else 0
+    blocking = [o for o in results.values() if o[0] is None and not (len(o) > 3 and o[3])]
+    return 3 if blocking else 0
 
 
 def _archive_attempt(name, attempt, receipts):
@@ -6510,8 +6516,11 @@ def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--game", default="gen3_rr", choices=sorted(GAMES),
-                    help="gen3_rr (Radical Red, default), gen1 (Red as A, Blue as B), "
-                         "or gen2 (Crystal both sides)")
+                    help="the GAMES pairing row: gen3_rr (the OLD Radical Red client, savestates; "
+                         "default), gen3_frlg (new client, FireRed A / LeafGreen B), gen3_lgfr "
+                         "(LeafGreen A / FireRed B), gen3_rr_new (new client on Radical Red), "
+                         "gen1_new and the gen1_pure* rows (new Gen 1 client), gen2 (Crystal both "
+                         "sides); --list shows a row's scenarios")
     ap.add_argument("--scenario", default="faint",
                     choices=list(SCENARIOS) + ["all"])
     ap.add_argument("--keep-alive", action="store_true",
@@ -6565,10 +6574,11 @@ def main():
     results = {}
     for name in names:
         print(f"\n========== scenario: {name} ==========")
-        why = skip_reason(name, args.game)
-        if why:
-            print(f"[duo] {name}: SKIP ({args.game}) — {why}")
-            results[name] = (None, 0, why)
+        skip = skip_reason(name, args.game)
+        if skip:
+            why, allowed = skip
+            print(f"[duo] {name}: SKIP ({args.game}{', allowed' if allowed else ''}) — {why}")
+            results[name] = (None, 0, why, allowed)
             continue
         results[name] = run_scenario_with_rng_retry(name, args)
     print("\n========== summary ==========")

@@ -35,18 +35,28 @@
 --               RUNs, and saves the engine-written HP 0.
 --   "lhammer"   RR R3: as wild, but B pulses L every frame from the commit to the KO; the POKe
 --               BALLS count and CFRU's ball-id byte 0x0203AD30 must not change.
---   "mega"      RR R5: BLOCKED (no RR trainer route, no mega-capable party fixture).
+--   "mega"      RR R5: a signed G5 limit (owner ruling 20): no RR trainer route, no mega-capable
+--               party; the runner SKIPs it and this case refuses by name.
+--   "explode"   explode_gen3 (RR, --explode-mode; owner ruling 19): the server sends
+--               force_explode, and the client's Explosion menu skip ends in the SAME hand-off, so
+--               the same observer applies: commit (>= 2 lines, last the controller slot), hand-off,
+--               no input, then the engine's own Explosion stamps lastUsedMovePlayer 153 and the
+--               attacker faints (setatkhptozero -> tryfaintmon: the faint site, counter +1).
+--               No Perish flag and no PP check (the plan rewrites the moves and PP).
+-- A linked mon that is its party's LAST mon (a one-mon fixture: RR's rr_battle.sav, or the
+-- whiteout case) keeps its slot after game_over: its memorialize is dropped, logged LAST_MON_KEPT.
 local fmt = string.format
 local SLOT, BENCH = 0, 1
 local PERISH = 0x20                    -- STATUS3_PERISH_SONG, include/constants/battle.h:138
 local OUTCOME_LOST, OUTCOME_RAN = 2, 4 -- include/constants/battle.h
 local PLAN_ENTRIES = 5                 -- status3, perish timer, chosen action, comm, hand-off
 local RR_BALL_ID = 0x0203AD30          -- rr_active_faint_parity_scope §3.1 (the L-throw's store)
+local MOVE_EXPLOSION = 153             -- pret include/constants/moves.h
 
 local function hexbytes(t) local o = {} for i, v in ipairs(t) do o[i] = fmt("%d", v) end return table.concat(o, "/") end
 
 --- The engine observer, installed at READY_ACTIVE. Returns the state table the scenario polls.
-local function observe(ctx, key, slot, hammer)
+local function observe(ctx, key, slot, hammer, explode)
     local o = {}
     local H = ctx.handoff
     local w0, att0, in0, site0 = #ctx.write_lines(), ctx.attempted(), ctx.inputs(), #ctx.faint_sites()
@@ -77,16 +87,25 @@ local function observe(ctx, key, slot, hammer)
                 return
             end
             local last, e = c[#c], ctx.battle_hold(key)
-            if #c ~= PLAN_ENTRIES then return fail(fmt("commit wrote %d lines, not %d", #c, PLAN_ENTRIES)) end
+            if (explode and #c < 2) or (not explode and #c ~= PLAN_ENTRIES) then
+                return fail(fmt("commit wrote %d lines, not %s", #c, explode and ">= 2" or PLAN_ENTRIES))
+            end
             for _, l in ipairs(c) do if l.frame ~= c[1].frame then return fail("the commit spans frames") end end
             if last.address ~= H.slot_addr or last.len ~= 4 then return fail("the commit does not end in the hand-off") end
-            if ctx.received("force_faint", key) == 0 then return fail("commit without a force_faint RX") end
+            local cmd = explode and "force_explode" or "force_faint"
+            if ctx.received(cmd, key) == 0 then return fail("commit without a " .. cmd .. " RX") end
             if s.ctrl0 ~= H.from and not successor(s.ctrl0) then
                 return fail(fmt("controller slot 0x%08X after the commit", s.ctrl0))
             end
-            if s.status3 & PERISH == 0 then return fail("gStatuses3[0] lacks the Perish flag after the commit") end
-            if not (e and e.perish and e.handoff and e.why == "active faint committed") then
-                return fail("the entry is not a handed-off Perish commit: why=" .. tostring(e and e.why))
+            if explode then
+                if not (e and e.explode and e.why == "explosion committed") then
+                    return fail("the entry is not a committed Explosion: why=" .. tostring(e and e.why))
+                end
+            else
+                if s.status3 & PERISH == 0 then return fail("gStatuses3[0] lacks the Perish flag after the commit") end
+                if not (e and e.perish and e.handoff and e.why == "active faint committed") then
+                    return fail("the entry is not a handed-off Perish commit: why=" .. tostring(e and e.why))
+                end
             end
             o.base = o.base or s
             o.keys = s.keys
@@ -112,15 +131,21 @@ local function observe(ctx, key, slot, hammer)
             if not hammer and (s.keys ~= 0 or ctx.inputs() ~= in0) then
                 return fail(fmt("input between the commit and the KO (keys=0x%X presses=%d)", s.keys, ctx.inputs() - in0))
             end
-            for i = 1, 4 do if s.pp[i] < o.base.pp[i] then return fail("PP dropped: the mon acted") end end
+            if not explode then
+                for i = 1, 4 do if s.pp[i] < o.base.pp[i] then return fail("PP dropped: the mon acted") end end
+            end
             if s.battler0_slot ~= slot then return fail("battler 0 left the linked slot before the KO") end
             if not s.in_battle then return fail("the battle ended before the KO") end
             if s.battle_hp > 0 then
                 if hammer then ctx.press({ L = true }) end
                 return
             end
-            if s.status3 & PERISH ~= 0 then return fail("the Perish flag is still set at the KO") end
-            if not ctx.rr and s.last_move ~= o.base.last_move then return fail("lastUsedMovePlayer moved: the mon acted") end
+            if explode then
+                if s.last_move ~= MOVE_EXPLOSION then return fail("the KO came without the Explosion action") end
+            else
+                if s.status3 & PERISH ~= 0 then return fail("the Perish flag is still set at the KO") end
+                if not ctx.rr and s.last_move ~= o.base.last_move then return fail("lastUsedMovePlayer moved: the mon acted") end
+            end
             o.ko = s.frame
             ctx.log(fmt("ACTIVE_KO %s frame=%d in_battle=1 battle_hp=0 status3=0x%X pp=%s last_move=%d inputs=%d "
                         .. "keys=0x%X hp_writes=%d attempted=%d", key, s.frame, s.status3, hexbytes(s.pp),
@@ -168,8 +193,29 @@ local function one_mon_party(ctx, key)
     return true
 end
 
+--- After the battle: the linked key leaves for the memorial box -- or, when it is its party's
+--- only mon, game_over (the only pair is dead) makes lua/core/deferred.lua drop its memorialize.
+local function settle_memorial(ctx, key)
+    local party = ctx.party() or {}
+    if #party == 1 and party[1].key == key then
+        if not ctx.wait_until(function()
+            return ctx.received("game_over") > 0 and ctx.received("memorialize", key) > 0
+                   and not ctx.queued("memorialize", key)
+        end, 600, "game_over and the dropped last-mon memorialize") then
+            return false, "the last-mon memorialize was never settled after game_over"
+        end
+        ctx.log("LAST_MON_KEPT " .. key)
+        return true
+    end
+    if not ctx.wait_sent("memorialize_done", key, 600) then return false, "no memorialize_done for " .. key end
+    return true
+end
+
 local function enter(ctx, key, case)
-    if case == "whiteout" then
+    if case == "whiteout" and #(ctx.party() or {}) == 1 then
+        -- a one-mon fixture (RR rr_battle.sav) is already the lone-lead party: no PC trip
+        ctx.log(fmt("ONE_MON_PARTY %s deposited=-", key))
+    elseif case == "whiteout" then
         -- the walks FLEE every incidental battle: the lone lead must reach the parked battle
         -- alive (W3: a fought Route 1 encounter whited it out before READY_ACTIVE)
         if type(ctx.flee_incidentals) ~= "function" then return false, "missing flee_incidentals seam" end
@@ -199,7 +245,7 @@ local function enter(ctx, key, case)
         ctx.log(fmt("PREP_LEVEL before=%d after=%d floor=13", before, after.level))
         return true
     elseif case == "mega" then
-        return false, "BLOCKED R5: no RR trainer route and no mega-capable party fixture"
+        return false, "SIGNED LIMIT R5 (owner ruling 20): no RR trainer route and no mega-capable party"
     end
     if not ctx.hunt("linked_faint_active " .. case) then return false, "no wild encounter" end
     return true
@@ -213,14 +259,15 @@ local function subject(ctx, key, case)
     end
     if ctx.battler_slot() ~= SLOT then return false, "the linked lead is not battler 0" end
     ctx.frames(1)                                        -- the menu mash's last press is released
-    local hammer = case == "lhammer"
+    local hammer, explode = case == "lhammer", case == "explode"
+    local cmd = explode and "force_explode" or "force_faint"
     local b0, id0 = balls(ctx)
-    local o = observe(ctx, key, SLOT, hammer)
+    local o = observe(ctx, key, SLOT, hammer, explode)
     ctx.log(fmt("READY_ACTIVE %s case=%s", key, case))
-    if not ctx.wait_received("force_faint", key, ctx.D.timeout_secs or 1500) then
-        return false, "no force_faint for " .. key
+    if not ctx.wait_received(cmd, key, ctx.D.timeout_secs or 1500) then
+        return false, "no " .. cmd .. " for " .. key
     end
-    ctx.wait_until(function() return o.fail or (o.ko and o.site) end, 600, "the Perish KO and its faint site")
+    ctx.wait_until(function() return o.fail or (o.ko and o.site) end, 600, "the engine KO and its faint site")
     if o.fail then return false, o.fail end
     if not o.commit then return false, "the client never committed P+H" end
     if not o.handoff then return false, "the controller hand-off never ran" end
@@ -231,7 +278,14 @@ local function subject(ctx, key, case)
         ctx.log(fmt("LHAMMER_BALLS %s balls=%d ball_id=%d unchanged", key, b1, id1))
     end
     -- after the KO: the vanilla follow-up
-    if case == "whiteout" then
+    if explode then
+        -- Explosion usually takes the wild foe too: whatever follows (a win, a forced send-out,
+        -- a whiteout or a draw) is the scripted battle policy's
+        if ctx.in_battle() then
+            local fok, ferr = ctx.try(ctx.play.fight_through, ctx.cp, 4000)
+            if not fok and not (type(ferr) == "table" and ferr.whiteout) then return false, "after the Explosion: " .. tostring(ferr) end
+        end
+    elseif case == "whiteout" then
         local fok, ferr = ctx.try(ctx.play.fight_through, ctx.cp, 4000)
         if not fok and not (type(ferr) == "table" and ferr.whiteout) then return false, "whiteout: " .. tostring(ferr) end
         if not ctx.mash_until(function() return ctx.sent("whiteout") > 0 end, 180, "A") then
@@ -254,25 +308,17 @@ local function subject(ctx, key, case)
     ctx.play.wait_scene_settled(ctx.cp, 3000)
     ctx.log(fmt("ACTIVE_OUTCOME %s outcome=%d sent_out=%s whiteout_tx=%d", key, o.outcome or 0,
                 tostring(o.sent_out), ctx.sent("whiteout")))
-    if case ~= "whiteout" and not o.sent_out then return false, "battler 0 never became another slot" end
+    if case ~= "whiteout" and not explode and not o.sent_out then return false, "battler 0 never became another slot" end
     if case == "command" and o.outcome ~= OUTCOME_RAN then return false, "the battle did not end by RUN" end
-    if ctx.sent("faint", key) ~= 0 then return false, "the client echoed faint for its own Perish KO" end
-    if case == "whiteout" then
-        -- the only pair is dead, so the server latched game_over; the healed linked mon is the last
-        -- party mon, and lua/core/deferred.lua drops its memorialize instead of emptying the party
-        if not ctx.wait_until(function()
-            return ctx.received("game_over") > 0 and ctx.received("memorialize", key) > 0
-                   and not ctx.queued("memorialize", key)
-        end, 600, "game_over and the dropped last-mon memorialize") then
-            return false, "the last-mon memorialize was never settled after game_over"
-        end
-        ctx.log("LAST_MON_KEPT " .. key)
-    elseif case ~= "command" and not ctx.wait_sent("memorialize_done", key, 600) then
-        return false, "no memorialize_done for " .. key
+    if ctx.sent("faint", key) ~= 0 then return false, "the client echoed faint for its own engine KO" end
+    if case ~= "command" then
+        local mok, mwhy = settle_memorial(ctx, key)
+        if not mok then return false, mwhy end
     end
     local saved, svwhy = ctx.save("linked_faint_active")
     if not saved then return false, svwhy end
-    return true, "P+H: engine Perish KO in battle with no input (" .. case .. ")"
+    return true, (explode and "Explode+H: engine Explosion KO" or "P+H: engine Perish KO")
+                 .. " in battle with no input (" .. case .. ")"
 end
 
 local function natural(ctx, key)
@@ -289,7 +335,8 @@ local function natural(ctx, key)
     end
     ctx.play.wait_scene_settled(ctx.cp, 3000)
     if ctx.sent("faint", key) == 0 then return false, "the client never sent faint for " .. key end
-    if not ctx.wait_sent("memorialize_done", key, 600) then return false, "no memorialize_done for " .. key end
+    local mok, mwhy = settle_memorial(ctx, key)
+    if not mok then return false, mwhy end
     local ok, why2 = ctx.save("linked_faint_active")
     if not ok then return false, why2 end
     return true, "natural faint of the active linked " .. key
