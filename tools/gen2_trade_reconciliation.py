@@ -4,10 +4,12 @@ The caller decodes both final saves and projects any trade evolution independent
 This module never derives a save verdict from server state. ``events`` is the raw,
 newest-first events.json list; ``journal`` is ascending server_dispatch JSONL rows.
 Journal sequence numbers and an observed post-watchdog midpoint prove ordering:
-the journal has no per-dispatch timestamp. Qualification is watchdog-only; a fast
-``trade_done uncertain:true`` path without a native ``trade_uncertain`` outcome
-remains unqualified. No missing server event or intermediate state is invented.
-Source contract: server/state.py at 1ac09296 + 9a436c95.
+the journal has no per-dispatch timestamp. Exactly one ``trade_uncertain`` record
+qualifies: journaled by the watchdog (phase -> uncertain) or by the side's own
+``trade_done uncertain:true`` at the handler (phase still applying, TRADE-HARDEN
+fast path). Either way a later party snapshot decides the await side. No missing
+server event or intermediate state is invented.
+Source contract: server/state.py at 1ac09296 + 9a436c95 + the fast-path record.
 """
 from __future__ import annotations
 
@@ -206,11 +208,17 @@ def verify_reconciliation(*, token, before_keys, after_keys, final_party_keys,
                 _record(rec, token, before_keys, after_keys)
                 if not records or rec != records[-1]:
                     if rec["outcome"] == "uncertain":
-                        _need(stage == "watchdog" and relevant and prior["phase"] == "applying"
-                              and current and current.get("phase") == "uncertain"
+                        # watchdog: phase flips to uncertain. fast path: the side's own trade_done
+                        # uncertain:true declares it at the handler, phase still applying.
+                        watchdog = stage == "watchdog" and current and current.get("phase") == "uncertain"
+                        fast = (stage == "handler" and event == "trade_done" and message.get("token") == token
+                                and (message.get("uncertain") or not message.get("new_key"))
+                                and current and current.get("phase") == "applying"
+                                and prior["verdict"][side] is None and current["verdict"][side] == "await")
+                        _need(relevant and prior["phase"] == "applying" and (watchdog or fast)
                               and rec["verdict"] == current["verdict"]
                               and "await" in rec["verdict"].values() and rec["problem"] == "",
-                              "uncertain record does not describe an observed watchdog await state")
+                              "uncertain record does not describe an observed watchdog/declared await state")
                     else:
                         _need(stage == "handler" and relevant and rec == final
                               and problem == status["trade_problem"]

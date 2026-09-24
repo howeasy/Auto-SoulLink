@@ -277,13 +277,13 @@ async def test_real_dispatch_can_enter_await_and_settle_in_the_same_event(tmp_pa
             "final_party_keys": {"a": [b_key], "b": [a_key]}, "independent_verdicts": {"a": "traded", "b": "traded"},
             "events": list(srv._recent_events), "status": srv._build_status_dict(), "journal": journal,
         }
-        if qualification == "fast_report":
-            assert not any(item["type"] == "trade_uncertain" for item in srv._recent_events)
-            with pytest.raises(RuntimeError, match="outcomes"):
-                verify_reconciliation(**evidence)
+        result = verify_reconciliation(**evidence)
+        assert result["outcome"] == "committed"
+        if qualification == "fast_report":   # journaled at the trade_done handler, settled by the next party
+            assert [item["type"] for item in srv._recent_events if item["type"].startswith("trade_")][:2] == [
+                "trade_committed", "trade_uncertain"]
+            assert result["await_sequences"]["b"] < result["evidence"]["b"]["seq"]
         else:
-            result = verify_reconciliation(**evidence)
-            assert result["outcome"] == "committed"
             assert result["await_sequences"]["b"] == result["evidence"]["b"]["seq"]
             for mutation in ("missing", "unobserved", "end_state"):
                 changed = deepcopy(evidence)
@@ -300,3 +300,61 @@ async def test_real_dispatch_can_enter_await_and_settle_in_the_same_event(tmp_pa
         await close_a()
         await close_b()
         restore()
+
+
+def _fast():
+    """TRADE-HARDEN's client fast path: the reset side declares trade_done uncertain after its
+    post-reset hello; trade_uncertain is journaled from the HANDLER stage with phase still applying."""
+    evidence = _committed()
+    initial = _pending({"a": None, "b": None}, "applying")
+    reported = _pending({"a": None, "b": "traded"}, "applying")
+    declared = _pending({"a": "await", "b": "traded"}, "applying")
+    uncertain = _record(declared["verdict"], "uncertain", 1800000000.25)
+    final = evidence["status"]["trade_last"]
+    evidence["journal"] = [
+        _row(1, "b", {"event": "trade_done", "token": "t7", "new_key": NEW["b"], "new_species": 5},
+             initial, reported, None),
+        _row(2, "a", {"event": "hello", "party": [{"key": NEW["a"]}]}, reported, reported, None),
+        _row(3, "a", {"event": "trade_done", "token": "t7", "uncertain": True}, reported, declared, uncertain),
+        _row(4, "a", {"event": "tick", "party": [{"key": NEW["a"]}]}, declared, None, final,
+             watchdog_last=uncertain),
+    ]
+    evidence["journal"][2]["outcome"]["trade_last_after_watchdog"] = None   # recorded by the handler, not before
+    return evidence
+
+
+def test_fast_path_handler_stage_uncertain_settles_on_later_party():
+    result = verify_reconciliation(**_fast())
+    assert result["outcome"] == "committed"
+    assert result["await_sequences"] == {"a": 3}
+    assert result["evidence"] == {"a": {"kind": "party", "seq": 4}, "b": {"kind": "trade_done", "seq": 1}}
+
+
+def test_fast_path_then_watchdog_flip_writes_no_second_record():
+    evidence = _fast()
+    declared = evidence["journal"][2]["outcome"]["pending_trade"]
+    flipped = {**declared, "phase": "uncertain"}
+    uncertain = evidence["journal"][2]["outcome"]["trade_last"]
+    evidence["journal"][3] = _row(4, "a", {"event": "tick", "party": [{"key": NEW["a"]}]}, declared, None,
+                                  evidence["status"]["trade_last"], watchdog=flipped, watchdog_last=uncertain)
+    assert verify_reconciliation(**evidence)["outcome"] == "committed"
+
+
+@pytest.mark.parametrize("fault", ["not_uncertain", "tick_record", "remaining_await", "conflict", "phase_moved"])
+def test_fast_path_refuses_unproved_shapes(fault):
+    evidence = _fast()
+    row = evidence["journal"][2]
+    if fault == "not_uncertain":
+        row["message"] = {"player": "a", "event": "trade_done", "token": "t7", "new_key": NEW["a"]}
+    elif fault == "tick_record":
+        row["message"] = {"player": "a", "event": "tick", "party": [{"key": OLD["a"]}]}
+    elif fault == "remaining_await":
+        evidence["journal"].pop()
+        evidence["status"] = {"trade_last": row["outcome"]["trade_last"], "trade_problem": None}
+    elif fault == "conflict":
+        evidence["independent_verdicts"]["a"] = "none"
+    else:
+        row["outcome"]["pending_trade"]["phase"] = "uncertain"
+        row["outcome"]["trade_problem"] = {**row["outcome"]["pending_trade"], "problem": ""}
+    with pytest.raises(RuntimeError):
+        verify_reconciliation(**evidence)
