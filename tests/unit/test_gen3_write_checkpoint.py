@@ -470,9 +470,9 @@ def test_handoff_block_is_the_controller_slot_and_exec_completed(pack: str, titl
     ("companion", 0x0802E340),     # PlayerBufferExecCompleted's slot-addressing prefix
     ("clean", 0x0802E37C),         # its gBattlerControllerFuncs pool word
 ])
-def test_rr_handoff_byte_change_drops_the_block_and_the_hold_stands(monkeypatch, kind, address) -> None:
-    """§5.4 item 1: one changed byte drops battle.handoff (fail-closed); commit_hold stays, so
-    safety.lua keeps refusing P on RR (tests/unit/test_gen3_safety.py covers the refusal)."""
+def test_rr_handoff_byte_change_stops_the_build(monkeypatch, kind, address) -> None:
+    """§5.4 item 1: one changed byte leaves battle.handoff unproven. G5-CPU-HARDEN (F1 M5): on RR the
+    hand-off carries the Explode+H shape, so that is fatal -- no pack at all, not a quiet drop."""
     for k in ("clean", "companion"):
         rom_or_skip("gen3_rr", "radical_red", k)
     rom_or_skip("gen3_frlg", "firered", "clean")
@@ -485,9 +485,8 @@ def test_rr_handoff_byte_change_drops_the_block_and_the_hold_stands(monkeypatch,
         at = address - G.ROM_BASE
         return rom[:at] + bytes([rom[at] ^ 0xFF]) + rom[at + 1:]
     monkeypatch.setattr(G, "load_rom", mutated)
-    out, unverified = G.build_title("gen3_rr", "radical_red", "pokefirered.sym", ("clean", "companion"))
-    assert "handoff" not in out["battle"] and "commit_hold" in out["battle"]
-    assert any(row.startswith("battle.handoff:") for row in unverified)
+    with pytest.raises(SystemExit, match="battle.handoff .RR"):
+        G.build_title("gen3_rr", "radical_red", "pokefirered.sym", ("clean", "companion"))
 
 
 @pytest.mark.parametrize("title", ["firered", "leafgreen"])
@@ -599,3 +598,64 @@ def test_f1_m5_rr_explode_head_pins_the_move_identity_effect_explosion(monkeypat
 @pytest.mark.parametrize("title", ["firered", "leafgreen"])
 def test_irq_frlg_cpu_clause_has_no_irq_entry(title) -> None:
     assert "irq_entry" not in load("gen3_frlg")[title]["cpu"]
+
+
+# ── G5-CPU-HARDEN (F1 M5 follow-up): RR's Explode proof is structural, not gated on commit_hold ──
+
+def _rr_roms_or_skip() -> None:
+    for k in ("clean", "companion"):
+        rom_or_skip("gen3_rr", "radical_red", k)
+    rom_or_skip("gen3_frlg", "firered", "clean")
+
+
+def _no_hold(monkeypatch) -> None:
+    real = G.battle_block
+
+    def without_hold(*args, **kwargs):
+        block, dropped = real(*args, **kwargs)
+        block.pop("commit_hold", None)
+        return block, dropped
+    monkeypatch.setattr(G, "battle_block", without_hold)
+
+
+@pytest.mark.parametrize("hold", [True, False])
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+def test_harden_m5_every_rr_rom_must_prove_explosion_effect(monkeypatch, kind, hold) -> None:
+    """The effect byte is mutated in ONE artifact at a time; each alone stops the build, and a pack
+    without commit_hold is no exception."""
+    _rr_roms_or_skip()
+    real = G.load_rom
+
+    def mutated(pack, title, k):
+        rom = real(pack, title, k)
+        if pack != "gen3_rr" or k != kind:
+            return rom
+        at = 0x091521D0 + 153 * 12 - G.ROM_BASE                   # .effect, byte 0
+        return rom[:at] + bytes([rom[at] ^ 0x01]) + rom[at + 1:]
+    monkeypatch.setattr(G, "load_rom", mutated)
+    if not hold:
+        _no_hold(monkeypatch)
+    with pytest.raises(SystemExit, match=f"effect .* RR {kind}"):
+        G.build_title("gen3_rr", "radical_red", "pokefirered.sym", ("clean", "companion"))
+
+
+def test_harden_m5_rr_without_commit_hold_still_carries_the_explode_shape(monkeypatch) -> None:
+    _rr_roms_or_skip()
+    _no_hold(monkeypatch)
+    out, _ = G.build_title("gen3_rr", "radical_red", "pokefirered.sym", ("clean", "companion"))
+    assert out["battle"]["handoff"]["explode"]["head"] == RR_EXPLODE_HEAD
+
+
+def test_harden_m5_an_unproven_rr_handoff_is_fatal(monkeypatch) -> None:
+    """RR's Explode shape rides on the hand-off; a missing hand-off is not a quiet 'unverified'."""
+    _rr_roms_or_skip()
+    monkeypatch.setattr(G, "handoff_block", lambda *a, **k: (None, "forced"))
+    with pytest.raises(SystemExit, match="handoff"):
+        G.build_title("gen3_rr", "radical_red", "pokefirered.sym", ("clean", "companion"))
+
+
+@pytest.mark.parametrize("pack,title", PACK_TITLES)
+def test_harden_every_pack_names_its_title(pack: str, title: str) -> None:
+    """safety.lua honours cpu.irq_entry only on the pack titled radical_red."""
+    assert load(pack)[title]["title"] == title
+    assert ("irq_entry" in load(pack)[title]["cpu"]) == (title == "radical_red")

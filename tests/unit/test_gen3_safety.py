@@ -1062,3 +1062,80 @@ def test_f1_m4_an_explode_head_without_an_ungrouped_chosen_action_proves_nothing
     assert w.safety.handoff_entry(w.safety, 0, "explode") is None
     ok, why, clauses = w.check_reason("battle_commit", {"battler": 0, "plan": [[H_COMM, 1, 3], [H_SLOT, 4, H_VALUE]]})
     assert ok is False and clauses == ["battle_commit_handoff"]
+
+
+# ── G5-CPU-HARDEN: the IRQ entry is RR-only, R14 word-aligned; M4's chosen_action row is exact ──
+
+def irq_pack(title, **mutate):
+    pack = committed_pack(title)
+    pack["cpu"]["irq_entry"] = json.loads(json.dumps(committed_pack("radical_red")["cpu"]["irq_entry"]))
+    pack.update(mutate)
+    return pack
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_harden_an_frlg_pack_carrying_irq_entry_is_refused(title):
+    """Fail-closed invariant: irq_entry is honoured only on the radical_red pack, whatever R14 holds."""
+    w = World(title, "clean", irq_pack(title))
+    g = w.lua.globals()
+    g.cpu.R15, g.cpu.CPSR, g.cpu.R14 = 0x1C, IRQ_CPSR, HALT_LR
+    assert w.check() is False and list(w.safety.last_clauses.values()) == ["cpu"]
+
+
+@pytest.mark.parametrize("title_key", ["firered", None])
+def test_harden_an_rr_pack_not_titled_radical_red_gets_no_irq_entry(title_key):
+    pack = committed_pack("radical_red")
+    if title_key is None:
+        pack.pop("title", None)
+    else:
+        pack["title"] = title_key
+    w = World("radical_red", "companion", pack)
+    g = w.lua.globals()
+    assert w.check() is True                                   # the System-mode halt is unaffected
+    g.cpu.R15, g.cpu.CPSR, g.cpu.R14 = 0x1C, IRQ_CPSR, HALT_LR
+    assert w.check() is False and list(w.safety.last_clauses.values()) == ["cpu"]
+
+
+def test_harden_rr_pack_names_its_title():
+    assert committed_pack("radical_red")["title"] == "radical_red"
+    assert all(committed_pack(t)["title"] == t for t in ("firered", "leafgreen"))
+
+
+@pytest.mark.parametrize("r14", [0x1B9, 0x1BA, 0x1C2, 0x1C3])
+def test_harden_a_non_word_aligned_r14_is_refused(r14):
+    """ARM-state R14_irq is a word address; an odd one is not the halt's return."""
+    w = irq_world("radical_red", "companion", r14)
+    assert w.check() is False and list(w.safety.last_clauses.values()) == ["cpu"]
+
+
+CHOSEN_ACTION_ROW = {"name": "chosen_action", "address": 0x02023D7C, "width": 1, "value": 0}
+
+
+@pytest.mark.parametrize("mutation", ["zero_pointer_row", "wrong_value", "wrong_width",
+                                      "wrong_address", "duplicate"])
+def test_harden_m4_the_chosen_action_row_must_be_the_generators_exact_row(mutation):
+    """F1 M4 follow-up: an ungrouped row merely NAMED chosen_action proves nothing. The zero-pointer
+    ptr row vanishes from explode_rows(false), so [comm, hand-off] alone would match."""
+    pack = committed_pack("radical_red")
+    head = pack["battle"]["handoff"]["explode"]["head"]
+    at = next(i for i, row in enumerate(head) if row["name"] == "chosen_action")
+    assert head[at] == CHOSEN_ACTION_ROW
+    if mutation == "zero_pointer_row":
+        head[at] = {"name": "chosen_action", "ptr": 0x02023FE8, "offset": 0, "width": 1, "value": 0}
+    elif mutation == "wrong_value":
+        head[at]["value"] = 1
+    elif mutation == "wrong_width":
+        head[at]["width"] = 2
+    elif mutation == "wrong_address":
+        head[at]["address"] += 1
+    else:
+        head.append(dict(CHOSEN_ACTION_ROW))
+    w = World("radical_red", "companion", pack)
+    w.lua.globals().put(0x02023FE8, 0, 4)
+    assert w.safety.handoff_entry(w.safety, 0, "explode") is None
+    assert w.safety.handoff_entry(w.safety, 0) is not None
+
+
+def test_harden_m4_the_committed_rr_pack_proves_the_explode_shape():
+    w = World("radical_red", "companion")
+    assert w.safety.handoff_entry(w.safety, 0, "explode") is not None

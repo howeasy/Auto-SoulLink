@@ -475,6 +475,8 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
 
     out = {
         "version": VERSION,
+        # G5-CPU-HARDEN: safety.lua honours cpu.irq_entry only on the pack titled radical_red
+        "title": title,
         "sym": sym_file,
         "anchors": anchors,
         "predicates": predicates,
@@ -501,15 +503,20 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
             raise SystemExit(f"{title}: HandleInputChooseAction is not {PLAYER_CONTROLLER_OBJ}'s")
     slot = next(c["address"] for c in out["battle"]["clauses"] if c["name"] == "battle_input_controller")
     handoff, why = handoff_block(syms, sym_file, is_rr, roms, slot, profile["titles"][title])
-    if handoff is None:
+    if is_rr:
+        # F1 M5 / G5-CPU-HARDEN: structural, not gated on commit_hold. RR Explode's behaviour flips on
+        # this shape, so every RR build proves the hand-off AND move 153's effect + PP in every RR
+        # ROM, or it stops -- never a quiet drop to `unverified`.
+        if handoff is None:
+            raise SystemExit(f"{title}: battle.handoff (RR, carries Explode+H) unproven: {why}")
+        explode, why = explode_head(profile["titles"][title], roms)
+        if explode is None:
+            raise SystemExit(f"{title}: battle.handoff.explode (RR Explode+H) unproven: {why}")
+        handoff["explode"] = explode
+    elif handoff is None:
         unverified.append(f"battle.handoff: {why}")
-    else:
+    if handoff is not None:
         out["battle"]["handoff"] = handoff
-        if "commit_hold" in out["battle"]:
-            explode, why = explode_head(profile["titles"][title], roms)
-            if explode is None:  # F1 M5: RR Explode's behaviour flips on this shape -- never a quiet drop
-                raise SystemExit(f"{title}: battle.handoff.explode (RR Explode+H) unproven: {why}")
-            handoff["explode"] = explode
     if is_rr:
         native = native_block(profile)
         if native is not None:

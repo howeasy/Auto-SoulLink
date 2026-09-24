@@ -280,6 +280,32 @@ value kept in the JSON as `observed_pc` for reference only — the predicate tes
 the single value, because one savestate on one build is not a proof that no other BIOS address
 can be the parked PC.
 
+**RR's IRQ entry from the halt** (`cpu.irq_entry`, owner ruling 23, G5-RR-CPU-IRQ). With any exec
+hook registered (the client registers them), every RR frame ends one step later: on the BIOS IRQ
+vector entry taken from that halt, not in System mode
+(`docs/gen3/probes/rr_cpu_irq_bios_2026-09-24.txt`). The pack admits exactly that shape as a
+second parked form: **CPSR mode `0x12` (IRQ), `T == 0`, R15 == `0x1C`** (the vector at `0x18` + 4,
+before the handler runs), and **R14_irq in `[0x1B8,0x1C4]` and word-aligned**. R14 is read as
+`emu.getregister("R14")`, which returns the *current* mode's bank, so at the vector it is R14_irq;
+every safety facade (`lua/gen3/entry.lua`, the probe, the gate harness) forwards it. In mGBA's HLE
+BIOS, SWI 2 `Halt` is `0x1B4..0x1C0` (`mov r11,#0; mov r12,#0x04000000; strb r11,[r12,#0x301];
+bx lr`); an ARM-state IRQ saves the next instruction + 4, so R14_irq − 4 inside Halt's body means
+the interrupted PC was that halt (live: R14_irq = `0x1C4`, SPSR = the System-mode halt). An IRQ
+taken from game code (R14 in ROM or RAM), from another BIOS routine, inside the handler (R15 ≠
+`0x1C`), in Thumb or FIQ, or with an unreadable or unaligned R14 stays refused.
+
+The shape is **RR-only**: `lua/gen3/safety.lua` honours `irq_entry` only when the pack's `title`
+is `radical_red` (the generator writes each pack's own title). An FR/LG pack that carries
+`irq_entry` is refused, never honoured — a fail-closed invariant; FR/LG keep refusing every IRQ
+frame end (their census rows above). Two qualifiers:
+
+- **(a)** The shape proves only that the interrupted PC is the BIOS halt. Like the signed
+  System-mode halt shape, it does **not** by itself prove the game is idle; that is why the
+  overworld predicates, the task allow-list and the battle clauses exist alongside it.
+- **(b)** It is pinned to **BizHawk 2.11.1 / mGBA's HLE BIOS** (the receipt above). A different
+  BIOS (a real one, or another core) has a different Halt body and would need its own receipt.
+  `irq_entry.bios_sha1` is provenance for that receipt, **not** a runtime check.
+
 Not sampled in that run: menu, battle and save buckets (no input script). PLAN §6 P3's scripted
 play covers them, and until then this clause is a *necessary* condition only.
 

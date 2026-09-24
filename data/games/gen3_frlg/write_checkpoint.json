@@ -391,6 +391,7 @@
       "struct_size": 40,
       "symbol": "gTasks"
     },
+    "title": "firered",
     "version": "gen3-overworld-v1",
     "witnesses": {
       "save_dialog_cb": {
@@ -794,6 +795,7 @@
       "struct_size": 40,
       "symbol": "gTasks"
     },
+    "title": "leafgreen",
     "version": "gen3-overworld-v1",
     "witnesses": {
       "save_dialog_cb": {

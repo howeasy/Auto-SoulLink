@@ -570,6 +570,7 @@
       "struct_size": 40,
       "symbol": "gTasks"
     },
+    "title": "radical_red",
     "version": "gen3-overworld-v1",
     "witnesses": {
       "save_dialog_cb": {

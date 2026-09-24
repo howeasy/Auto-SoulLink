@@ -115,11 +115,14 @@ function S.new(pack, deps, kind)
             -- G5-RR-CPU-IRQ (owner ruling 23): a pack may also admit the IRQ vector entry, but only
             -- when the banked return address (R14 of the IRQ bank) - 4 is inside the halt it
             -- interrupted; an interrupt taken from game code stays refused (a write may be mid-way).
-            local irq = cpu.irq_entry
+            -- G5-CPU-HARDEN: RR-only by construction (the shape is pinned to RR's HLE-BIOS halt), so a
+            -- pack not titled radical_red that carries irq_entry is refused, never honoured; R14_irq
+            -- of an ARM-state IRQ is a word address, so an unaligned one is not that halt's return.
+            local irq = pack.title == "radical_red" and cpu.irq_entry or nil
             if not parked and irq and cpsr % 32 == irq.mode and math.floor(cpsr / 32) % 2 == irq.thumb then
                 local lr, at_vector = uint(regs.R14, 4294967295), false
                 for _, v in ipairs(irq.pc) do at_vector = at_vector or pc == v end
-                parked = at_vector and lr >= irq.lr_min and lr <= irq.lr_max
+                parked = at_vector and lr % 4 == 0 and lr >= irq.lr_min and lr <= irq.lr_max
             end
             assert(parked, "CPU outside parked checkpoint")
         end)
@@ -260,12 +263,22 @@ function S.new(pack, deps, kind)
                 assert(type(h.explode) == "table")
                 valid_rows(h.explode.head, true)
                 -- F1 M4: the shape must pin its chosen action outside the all-or-none "moves"
-                -- group, or an all-grouped head would admit [comm, hand-off] alone
-                local pinned = false
+                -- group, or an all-grouped head would admit [comm, hand-off] alone. G5-CPU-HARDEN:
+                -- exactly one such row, and exactly the generator's: a direct address (a ptr row
+                -- vanishes while its pointer reads 0), P's no_op_action address (both are
+                -- CHOSEN_ACTION_ADDR), width 1, value B_ACTION_USE_MOVE = 0.
+                local no_op
+                for _, row in ipairs(h.head) do if row.name == "no_op_action" then no_op = row end end
+                assert(no_op)
+                local pinned = 0
                 for _, row in ipairs(h.explode.head) do
-                    pinned = pinned or (row.name == "chosen_action" and row.group == nil)
+                    if row.name == "chosen_action" then
+                        assert(row.group == nil and row.ptr == nil and row.address == no_op.address
+                            and row.width == 1 and row.value == 0)
+                        pinned = pinned + 1
+                    end
                 end
-                assert(pinned)
+                assert(pinned == 1)
             end
             return {h.address, h.width, h.value}
         end)
