@@ -221,6 +221,18 @@
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_pydec_result.txt",
                       "sha256": "cc238a3451edf93756b4dc03bc0fe441794145b9d66bb91790368da3261f8ffb"}
           }
+        },
+        {
+          "scenario": "gen2_trade_timeout",
+          "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_timeout --lane cc_timeout --keep-data",
+          "receipts": {
+            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cc_a_result.txt",
+                  "sha256": "44e8c08defd82680e602c8d896a5fb6fadddb681ad1b7a256f21b1858980aae1"},
+            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cc_b_result.txt",
+                  "sha256": "4415e27ac745d9a32759c8bade8dc563fd0955debdc306758e1cddf01a6a8de9"},
+            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cc_pydec_result.txt",
+                      "sha256": "c9d12ae073a8090006ba3c5ff5e0c68bb003ddca68a1a6fe9e7e81deaf9d6536"}
+          }
         }
       ]
     },
