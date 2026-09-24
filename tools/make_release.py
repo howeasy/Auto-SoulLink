@@ -80,6 +80,8 @@ _LUA_ROOT = [
     "gb_checkpoint.lua",
     # lua/gen1/panel.lua dofiles its sibling ../gb_panel.lua (the shared GB panel, P4.1d).
     "gb_panel.lua",
+    # lua/gen1/trade_overlay.lua dofiles ../gb_trade_lease.lua (the shared GB trade lease, P4.3c).
+    "gb_trade_lease.lua",
     "token_scanner.lua",
     "admission.lua",
     "hook_registry.lua",
