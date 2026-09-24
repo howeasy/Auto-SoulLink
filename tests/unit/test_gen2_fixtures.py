@@ -194,7 +194,7 @@ def test_all_ten_fixture_identities_are_enumerated_with_distinct_ot2_controls():
     assert all(spec.title_idle_frames > 0 for spec in ot2)
     assert all(spec.title_idle_frames == 0 for spec in g.FIXTURES if spec.identity == "default")
     manifest = g.fixture_manifest(ROOT)
-    assert manifest["qualified"] is False and len(manifest["fixtures"]) == 10
+    assert manifest["qualified"] is False and len(manifest["fixtures"]) == len(g.FIXTURES) == 10
     for row in manifest["fixtures"]:
         assert row["filename"] == row["name"] + ".SaveRAM" and row["core_mode"] == "CGB"
         assert row["ball_exception"] == ("O-10" if row["target"] == "battle" else None)
@@ -233,10 +233,10 @@ def layout_party_offset(title):
 
 # --- static oracle: positive and refusal controls ------------------------------------------------
 
-def test_static_inventory_of_nine_passes_and_never_claims_physical_or_natural_balls(tmp_path):
+def test_static_inventory_passes_and_never_claims_physical_or_natural_balls(tmp_path):
     report = g.qualification_report(write_inventory(tmp_path / "inv"), root=ROOT)
     assert report["passed"], problems(report)
-    assert report["physical_qualification"] is False and len(report["fixtures"]) == 9
+    assert report["physical_qualification"] is False and len(report["fixtures"]) == len(g.FIXTURES)
     for row in report["fixtures"]:
         evidence = row["stages"][0]["evidence"]
         assert evidence["natural_ball_acquisition"] == "false"

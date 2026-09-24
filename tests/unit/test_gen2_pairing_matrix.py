@@ -348,3 +348,67 @@ def test_the_u5_cutover_moved_every_admitted_gen2_title_and_ap_routes_nowhere():
         assert game_id_for_rom_type(rom_type) is None, rom_type
     assert "gen2_gsc" in _REGISTRY
     assert "gen2_crystal" not in set(_ROM_TYPE_TO_GAME_ID.values())
+
+
+# ── artifact-kind pairing (P4.3d, ruling O-27 D4): patched<->patched, clean<->clean only ──
+# Before this card: `Gen2GSCAdapter.set_artifact_kind` required exactly "clean", so a hello
+# declaring "overlay" raised ValueError out of `_dispatch` instead of being admitted or
+# cleanly refused (an unhandled exception, not a graceful "Mixed artifact kinds" reply).
+# `pairing_kind` already returned its argument unchanged, so it needed no change here --
+# the fix is adapter DATA only (`set_artifact_kind`, `supports_info_panel`, `native_trade_ui`).
+
+def _cart_kind(rom_type: str, kind: str, declare: bool = False) -> dict:
+    cart = _cart(rom_type, declare)
+    cart["artifact_kind"] = kind
+    return cart
+
+
+def test_gen2_gsc_adapter_flips_native_capabilities_on_overlay_only():
+    """Direct adapter check, no server session: overlay is the only kind that opts in."""
+    from server.adapters.gen2_gsc import Gen2GSCAdapter
+
+    adapter = Gen2GSCAdapter("crystal")
+    assert not adapter.supports_info_panel() and not adapter.native_trade_ui()
+    adapter.set_artifact_kind("clean")
+    assert not adapter.supports_info_panel() and not adapter.native_trade_ui()
+    adapter.set_artifact_kind("overlay")
+    assert adapter.supports_info_panel() and adapter.native_trade_ui()
+    for bad in ("named", "rand", "rand_overlay", "companion", "ghost", ""):
+        with pytest.raises(ValueError):
+            adapter.set_artifact_kind(bad)
+    # A rejected kind must not have partially clobbered the committed one.
+    assert adapter.supports_info_panel() and adapter.native_trade_ui()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["clean", "overlay"])
+async def test_matching_artifact_kinds_pair_and_commit_the_run_wide_capability(tmp_path, kind):
+    """Falsifier: overlay<->overlay refused (or raising out of the hello) -> red."""
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        assert not _refused(await send(_hello("a", _cart_kind("Crystal", kind))))
+        assert not _refused(await send(_hello("b", _cart_kind("Gold", kind, declare=True))))
+        assert not srv.state.identity_error, srv.state.identity_error
+        assert srv.state.artifact_kind == kind
+        assert srv.adapter.supports_info_panel() == (kind == "overlay")
+        assert srv.adapter.native_trade_ui() == (kind == "overlay")
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("first_kind,second_kind", [("clean", "overlay"), ("overlay", "clean")])
+async def test_mixed_artifact_kinds_are_refused_not_admitted(tmp_path, first_kind, second_kind):
+    """The card's own falsifier: clean<->overlay admitted -> red."""
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        assert not _refused(await send(_hello("a", _cart_kind("Crystal", first_kind))))
+        before = _gate_snapshot(srv)
+        reply = await send(_hello("b", _cart_kind("Gold", second_kind, declare=True)))
+        assert _refused(reply), reply
+        assert "Mixed artifact kinds" in srv.state.identity_error["b"]
+        assert _deep(srv) == before, "a refused hello changed the run, links.json or a cache"
+    finally:
+        await close()

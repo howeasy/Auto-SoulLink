@@ -1,7 +1,11 @@
 """One inactive Gen 2 rules/presentation adapter, selected by an explicit title.
 
 Consumes generated C/G/S facts, not the legacy Crystal tables. Pack consistency
-checks are not ROM/runtime admission. Native capabilities stay disabled.
+checks are not ROM/runtime admission. Native capabilities follow the committed
+artifact kind (P4.3d, ruling O-27 D4): `overlay` is the SLink companion build,
+which carries the native panel and the receptionist-driven trade UI; `clean` has
+neither. Pairing itself needs no change here -- `pairing_kind` already returns
+the kind unchanged, so a clean half and an overlay half already compare unequal.
 SOURCE: pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 and
 pokegold@656583c939d30f920a316177311a502dd222b57c; per-pack source receipts.
 """
@@ -223,6 +227,7 @@ class Gen2GSCAdapter(GameAdapter):
             _require(self._encounters["map_areas"].get(key) == row["area_id"], "encounter/map area mismatch")
             self._area_names[row["area_id"]] = _display(row["name"])
         self._tables = self._presentation_tables()
+        self._artifact_kind = "clean"
         if artifact_kind is not None:
             self.set_artifact_kind(artifact_kind)
 
@@ -523,7 +528,12 @@ class Gen2GSCAdapter(GameAdapter):
         raise ValueError("Gen 2 client ROM-content admission is not qualified")
 
     def set_artifact_kind(self, kind):
-        _require(kind == "clean", "Gen 2 overlay/native artifact capabilities are not qualified")
+        # "clean" is the plain pret build; "overlay" is the SLink companion build (P4.1a).
+        # Neither "named" nor "rand*" applies to Gen 2 -- there is no per-cartridge patch or
+        # randomizer support here, unlike the Gen 1/Gen 3 foundations.
+        _require(kind in ("clean", "overlay"),
+                 "Gen 2 only supports the clean/overlay artifact kinds")
+        self._artifact_kind = kind
 
     @staticmethod
     def pairing_kind(kind):
@@ -533,10 +543,12 @@ class Gen2GSCAdapter(GameAdapter):
         return False
 
     def supports_info_panel(self):
-        return False
+        # The native panel ships in the SLink companion overlay (P4.1e/f), not a clean build.
+        return self._artifact_kind == "overlay"
 
     def native_trade_ui(self):
-        return False
+        # The receptionist + native trade scene ship in the same overlay (P4.3a).
+        return self._artifact_kind == "overlay"
 
     def supports_explode_mode(self):
         return False

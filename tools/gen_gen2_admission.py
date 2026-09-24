@@ -212,8 +212,14 @@ def _planned_matrix(title: str, source_lock_sha256: str) -> dict:
         "authorized_title_pairings": [["crystal", "crystal"], ["crystal", "gold"],
                                       ["crystal", "silver"], ["gold", "gold"],
                                       ["gold", "silver"], ["silver", "silver"]],
+        # P4.3d / ruling O-27 D4 (Option A): a pairing kind only ever pairs with itself.
+        # clean<->clean needs G1 (already ADMITTED for some titles); overlay<->overlay needs
+        # G4, the P4.4 promotion gate -- REQUIRES_G4 is a documented future state, not runtime
+        # admission, so the overlay artifact rows above stay "FUTURE" until P4.4 closes them.
+        # Every mixed or ghost pairing is REFUSED outright; the pureRGB rule never mixes kinds.
         "artifact_kind_compatibility": {
-            left: {right: "REQUIRES_G1" if left == right == "clean" else "REFUSED"
+            left: {right: ("REQUIRES_G1" if left == right == "clean" else
+                           "REQUIRES_G4" if left == right == "overlay" else "REFUSED")
                    for right in kinds} for left in kinds},
         "artifacts": rows,
     }

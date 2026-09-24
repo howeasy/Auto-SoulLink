@@ -51,7 +51,7 @@
     },
     "overlay": {
       "clean": "REFUSED",
-      "overlay": "REFUSED",
+      "overlay": "REQUIRES_G4",
       "ghost": "REFUSED"
     },
     "ghost": {
