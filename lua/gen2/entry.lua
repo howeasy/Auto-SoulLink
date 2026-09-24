@@ -194,7 +194,8 @@ local function proofs(root, json, data, title, pack)
     local proven, why = S.qualified_sites(title, data.sites, engine)
     if not proven then return nil, "U1 engine-site receipt: " .. tostring(why) end
     local bound
-    bound, why = S.bind_fixture_qualification(engine, reports[engine.fixture])
+    -- a v2 receipt (card U1G) binds each run to its own report: it takes them all by fixture name
+    bound, why = S.bind_fixture_qualification(engine, engine.runs and reports or reports[engine.fixture])
     if not bound then return nil, "U1 engine-site receipt: " .. tostring(why) end
     local scope
     scope, why = M.qualified(data.checkpoint, title, write)
@@ -325,7 +326,7 @@ local function compose(deps, title, production)
                                           load("lua/gb_hook_binding.lua")
             local options = {title=title, profile=data.profile, pack=data.sites, io=io_,
                 Registry=Registry, GB=GB, reads=reads, owner="SLink-gen2", max_pending=64,
-                areas=data.area_map, encounters=data.encounters, statics=data.statics}
+                areas=data.area_map, encounters=data.encounters, statics=data.statics, gifts=data.gifts}
             local signals
             if production then
                 -- signals.new registers exactly the receipt's proven sites, under PHYSICAL authority.

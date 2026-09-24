@@ -12,7 +12,8 @@
 -- Options: title, profile/pack wrappers, Registry, GB, io, reads (gen2/reads),
 -- authority={kind,allow_model_registration,capture,valid}, owner,max_pending,
 -- areas (generated area_map), encounters (generated encounter_tables),
--- statics (generated static_encounters).
+-- statics (generated static_encounters), gifts (generated gifts.json: card U1G qualifies a givepoke caller from it;
+-- without it gift_static stays OPEN).
 -- Authority.capture returns {generation,operation}; valid checks the same held
 -- observation. Operation ids must distinguish native attempts. boundary() is
 -- mandatory on failure/cancel/reset/reload/source change. The model API does not
@@ -88,7 +89,9 @@ local FAINTS = {battle_faint={cause="battle",slot="wCurBattleMon"},poison_faint=
 -- Operation starts whose routine has a native failure/cancel branch between start and
 -- completion (DepositPokemon .BoxFull, TryWithdrawPokemon .PartyFull, ChangeBoxSaveGame
 -- .refused): a new start of the same kind supersedes the unconsumed one (counted in drops).
-local SUPERSEDES = {change_box_begin=true}
+-- gift_begin (GivePoke entry, C engine/pokemon/move_mon.asm:1619) has a native no-room branch (.FailedToGiveMon)
+-- that never reaches a final: a later gift_begin supersedes it.
+local SUPERSEDES = {change_box_begin=true, gift_begin=true}
 for name,rule in pairs(STARTS) do if rule.operation then SUPERSEDES[name] = true end end
 -- BizHawk 2.11.1 Gambatte emu.getregister has PC/SP/A..L (plus the bank names) and no pairs
 -- (docs/purergb/PLAN.md A15): a pair is always composed from its halves, never requested (Gen 1
@@ -118,16 +121,26 @@ S.U1_FIXTURES = {crystal={"crystal_battle","crystal_synth_grass","crystal_synth_
     gold={"gold_battle","gold_battle_errand","gold_synth_grass","gold_synth_kyle","gold_synth_bill"},
     silver={"silver_battle","silver_synth_grass","silver_synth_kyle","silver_synth_bill"}}
 -- card U1G (O-33): the allow-listed fixtures built by tools/gen2_synth_fixtures.py. A run on one of them must carry
--- its disclosure and a live RAM-effect record for every S.SYNTH_EFFECT_SITES site it proves (S.qualified_sites).
+-- its disclosure and a live RAM-effect record for every mutating site it proves (S.mutating_site, S.qualified_sites).
 S.SYNTH_FIXTURES = {}
 for _,title in ipairs({"crystal","gold","silver"}) do
     for _,kind in ipairs({"grass","kyle","bill"}) do S.SYNTH_FIXTURES[#S.SYNTH_FIXTURES+1] = title .. "_synth_" .. kind end
 end
 S.SYNTH_SCHEMA = "gen2-synth-disclosure-v1"
 S.RECEIPT_SCHEMA_V2 = "gen2-engine-site-receipt-v2"
--- The sites whose effect is a party/box/species write: in a synthetic run each needs its own live transition.
-S.SYNTH_EFFECT_SITES = {capture_party=true, capture_box=true, hatch_species=true, evolution_species_published=true,
-    npc_trade_finalized=true, gift_party_finalized=true, gift_box_finalized=true}
+-- card U1G: a site mutates the party or a box when its signal is an acquisition/identity/storage transition and its
+-- phase is past the change (not a "before_"/"confirmed_before"/buffer-selection observation). In a synthetic run each
+-- such proven site needs its own live effect record, on one of these bytes at the pack's own address.
+S.MUTATING_SIGNALS = {capture_party=true, capture_box=true, contest_capture=true, roamer_capture=true,
+    evolution_species=true, egg_hatch=true, npc_trade=true, gift_static=true, link_trade=true, pc_deposit=true,
+    pc_withdraw=true, pc_release=true}
+S.EFFECT_SYMBOLS = {wPartyCount=1, wPartySpecies=6, sBoxCount=1}   -- symbol -> bytes an effect may span
+S.SYNTH_BUILDERS = {["tools/gen2_synth_fixtures.py"]=true}
+function S.mutating_site(site)
+    return type(site) == "table" and S.MUTATING_SIGNALS[site.signal] == true and type(site.phase) == "string"
+        and not site.phase:match("^before_") and not site.phase:match("^confirmed_before")
+        and not site.phase:match("_selected_before_")
+end
 local function synthetic(fixture)
     for _,name in ipairs(S.SYNTH_FIXTURES) do if name == fixture then return true end end
     return false
@@ -145,32 +158,55 @@ local function hex64(value) return type(value) == "string" and #value == 64 and 
 -- before_frame (at or after the run's arrival, before the armed frame), after_hex read inside the aligned callback,
 -- the two different, and the after bytes never the ones the setup wrote at the same addresses (a synthetic value
 -- may be the baseline, never the evidence).
-local function synth_problem(run, proven)
+local function synth_disclosure(d)
+    return type(d) == "table" and d.schema == S.SYNTH_SCHEMA and S.SYNTH_BUILDERS[d.builder] == true
+        and hex64(d.base_sha256) and hex64(d.sha256) and type(d.base_fixture) == "string"
+        and type(d.fields) == "table" and #d.fields > 0 and type(d.source_facts) == "table" and #d.source_facts > 0
+end
+-- Pure: nil when a synthetic run's disclosure and live effect records hold, else why (card U1G, O-33). Each effect is
+-- a transition sampled in this run on wPartyCount / wPartySpecies[slot] / sBoxCount at the pack's address: before_hex
+-- is the probe's arming-time read (arming_frame at or after the run's arrival, before the hit), after_hex is read in
+-- the aligned callback, the two differ, and the after bytes never equal the bytes the setup wrote there (a
+-- synthetic value may be the baseline, never the evidence). Every mutating site the run proves has its own record.
+local function synth_problem(run, proven, sites)
     local d = run.synth
-    if type(d) ~= "table" or d.schema ~= S.SYNTH_SCHEMA or type(d.builder) ~= "string" or not hex64(d.base_sha256)
-       or d.sha256 ~= run.fixture_sha256 or type(d.fields) ~= "table" or type(d.source_facts) ~= "table" then
-        return "synthetic run without its disclosure of these fixture bytes"
+    if not synth_disclosure(d) or d.sha256 ~= run.fixture_sha256 then
+        return "synthetic run without its schema-valid disclosure of these fixture bytes"
     end
     if type(run.effects) ~= "table" or not integer(run.arrival_frame,0,COUNT) then
         return "synthetic run without live effect records"
     end
+    local points = {}
+    for _,site in pairs(sites) do
+        for symbol,point in pairs(type(site.point_symbols) == "table" and site.point_symbols or {}) do
+            if S.EFFECT_SYMBOLS[symbol] and integer(point.addr,0,65535) then points[symbol] = point.addr end
+        end
+    end
     local covered = {}
     for _,e in ipairs(run.effects) do
-        local size = integer(e.size,1,64) and e.size
-        if not size or type(e.before_hex) ~= "string" or type(e.after_hex) ~= "string" or #e.before_hex ~= 2*size
-           or #e.after_hex ~= 2*size or not e.before_hex:match("^%x+$") or not e.after_hex:match("^%x+$") then
-            return "malformed effect record"
+        local size = integer(e.size,1,6) and e.size
+        local base, span = points[e.symbol], S.EFFECT_SYMBOLS[e.symbol]
+        if not size or not base or not integer(e.wram,base,base+span-size) then
+            return "effect record is not on a party/box effect byte at the pack's address: " .. tostring(e.site)
         end
-        if not integer(e.armed,0,COUNT) or e.callback ~= e.armed or not integer(e.before_frame,run.arrival_frame,COUNT)
-           or e.before_frame >= e.armed then
+        if not proven[e.site] then return "effect record names a site this run does not prove: " .. tostring(e.site) end
+        for _,field in ipairs({"arming_hex","before_hex","after_hex"}) do
+            local v = e[field]
+            if type(v) ~= "string" or #v ~= 2*size or not v:match("^%x+$") then return "malformed effect record" end
+        end
+        if not integer(e.hit_frame,0,COUNT) or e.callback ~= e.hit_frame
+           or not integer(e.arming_frame,run.arrival_frame,COUNT) or e.arming_frame >= e.hit_frame then
             return "effect record is not sampled live in this run before its aligned callback: " .. tostring(e.site)
         end
+        if e.before_hex:lower() ~= e.arming_hex:lower() then
+            return "effect before value is not the probe's arming-time read: " .. tostring(e.site)
+        end
         if e.before_hex:lower() == e.after_hex:lower() then return "effect record shows no transition: " .. tostring(e.site) end
-        if integer(e.wram,0,65535) then
-            for _,f in ipairs(d.fields) do
-                local lo, hi = math.max(e.wram, f.wram or -1), math.min(e.wram+size, (f.wram or -1)+(f.size or 0))
-                if type(f.new_hex) == "string" and lo < hi
-                   and e.after_hex:sub(2*(lo-e.wram)+1, 2*(hi-e.wram)):lower() == f.new_hex:sub(2*(lo-f.wram)+1, 2*(hi-f.wram)):lower() then
+        for _,f in ipairs(d.fields) do
+            if integer(f.wram,0,65535) and integer(f.size,1,4096) and type(f.new_hex) == "string" then
+                local lo, hi = math.max(e.wram, f.wram), math.min(e.wram+size, f.wram+f.size)
+                if lo < hi and e.after_hex:sub(2*(lo-e.wram)+1, 2*(hi-e.wram)):lower()
+                               == f.new_hex:sub(2*(lo-f.wram)+1, 2*(hi-f.wram)):lower() then
                     return "effect evidence equals the synthetic setup bytes: " .. tostring(e.site)
                 end
             end
@@ -178,7 +214,9 @@ local function synth_problem(run, proven)
         covered[e.site] = true
     end
     for name in pairs(proven) do
-        if S.SYNTH_EFFECT_SITES[name] and not covered[name] then return "synthetic run proves " .. name .. " without a live effect" end
+        if S.mutating_site(sites[name]) and not covered[name] then
+            return "synthetic run proves " .. name .. " without a live effect"
+        end
     end
     return nil
 end
@@ -227,6 +265,9 @@ function qualified_run(title, pack, receipt, v2)
        or receipt.rom_sha1 ~= pack.source.rom_sha1 or receipt.pack_commit ~= pack.source.commit
        or type(pack.specs_sha256) ~= "string" or receipt.pack_specs_sha256 ~= pack.specs_sha256 then
         return nil,"qualification receipt belongs to another title, ROM or engine-site pack"
+    end
+    if not v2 and synthetic(receipt.fixture) then
+        return nil,"a synthetic fixture is accepted only inside a v2 receipt run"
     end
     if not u1_fixture(owner, receipt.fixture) or receipt.core_mode ~= "CGB" or receipt.input_mode ~= "normal_buttons"
        or type(receipt.harness_write_scopes) ~= "table" or next(receipt.harness_write_scopes) ~= nil
@@ -295,7 +336,7 @@ function qualified_run(title, pack, receipt, v2)
     if next(proven) == nil then return nil,"qualification receipt proves no registrable site" end
     if v2 then
         if synthetic(receipt.fixture) then
-            local why = synth_problem(receipt, proven)
+            local why = synth_problem(receipt, proven, data.sites)
             if why then return nil,why end
         elseif receipt.synth ~= nil then
             return nil,"a synthetic disclosure on a non-synthetic fixture"
@@ -310,6 +351,30 @@ end
 -- card U1G: a v2 receipt takes the reports by fixture name; each run binds to its own report, and a synthetic run
 -- binds through its disclosure to its base fixture's report (the base bytes the builder started from).
 local bind_run
+-- A synthetic run binds to its fixture's COMMITTED disclosure (reports[<fixture>], shipped beside the qualification
+-- reports): the same bytes, base and changed fields as the run's own copy; then to the base fixture's passed report.
+local function same_fields(a, b)
+    if type(a) ~= "table" or type(b) ~= "table" or #a ~= #b then return false end
+    for i, f in ipairs(a) do
+        local g = b[i]
+        if type(f) ~= "table" or type(g) ~= "table" then return false end
+        for _, k in ipairs({"symbol","offset","wram","cart","size","old_hex","new_hex"}) do
+            if f[k] ~= g[k] then return false end
+        end
+    end
+    return true
+end
+local function bind_synthetic(run, reports)
+    local committed, d = reports[run.fixture], run.synth
+    if not synth_disclosure(committed) or not synth_disclosure(d) or committed.sha256 ~= run.fixture_sha256
+       or d.sha256 ~= committed.sha256 or d.base_sha256 ~= committed.base_sha256
+       or d.base_fixture ~= committed.base_fixture or not same_fields(d.fields, committed.fields) then
+        return nil,"synthetic run is not the committed disclosure's fixture bytes"
+    end
+    return bind_run({fixture=committed.base_fixture, title=run.title, rom_sha1=run.rom_sha1,
+                     fixture_sha256=committed.base_sha256, qualification_attempt_id=run.qualification_attempt_id},
+                    reports[committed.base_fixture])
+end
 function S.bind_fixture_qualification(receipt, qualification)
     if type(receipt) ~= "table" or receipt.schema ~= S.RECEIPT_SCHEMA_V2 then return bind_run(receipt, qualification) end
     if type(receipt.runs) ~= "table" or #receipt.runs == 0 or type(qualification) ~= "table" then
@@ -317,10 +382,8 @@ function S.bind_fixture_qualification(receipt, qualification)
     end
     for index,run in ipairs(receipt.runs) do
         local ok, why
-        if type(run) == "table" and synthetic(run.fixture) and type(run.synth) == "table" then
-            local base = run.synth.base_fixture
-            ok, why = bind_run({fixture=base, title=run.title, rom_sha1=run.rom_sha1, fixture_sha256=run.synth.base_sha256,
-                                qualification_attempt_id=run.qualification_attempt_id}, qualification[base])
+        if type(run) == "table" and synthetic(run.fixture) then
+            ok, why = bind_synthetic(run, qualification)
         else
             ok, why = bind_run(run, type(run) == "table" and qualification[run.fixture])
         end
@@ -397,6 +460,11 @@ function build(options, proven)
         assert(statics.schema == "gen2-static-encounters-v1" and type(statics.encounters) == "table",
                "generated static-encounter pack required")
         same_source(statics.source,pack.source)
+    end
+    local gifts = options.gifts
+    if gifts ~= nil then
+        assert(gifts.schema == "gen2-gifts-v1" and type(gifts.gifts) == "table", "generated gifts pack required")
+        same_source(gifts.source,pack.source)
     end
     local reads = assert(options.reads,"independent Gen 2 reads binding required")
     assert(callable(reads.read_party) and callable(reads.read_active_box),"party/active-box readers required")
@@ -799,6 +867,46 @@ function build(options, proven)
         return {kind="key_change",site_id=name,reason="evolution",old_key=old_key,new_key=mon.key,mon=mon,
                 slot=slot,identity_scope="party_only",global_identity_qualification="OPEN"}
     end
+    -- card U1G: gift_begin is GivePoke's entry, reached from Script_givepoke after it read the command's four
+    -- bytes (C engine/overworld/scripting.asm:1922-1945), so wScriptBank:wScriptPos points just past a givepoke
+    -- inside its caller script. The caller is the selected gifts.json givepoke row of this map whose script label
+    -- is the nearest one at or before that position in that bank.
+    -- ponytail: nearest preceding givepoke label; a row span end (not generated today) would make it exact.
+    local function gift_start(name,site,held)
+        local group,number,bank = scalar(site,"wMapGroup"),scalar(site,"wMapNumber"),scalar(site,"wScriptBank")
+        local pos = memory(point(site,"wScriptPos"),2)
+        local row
+        for _,r in ipairs(gifts.gifts) do
+            if r.operation == "givepoke" and type(r.applicability) == "table" and r.applicability.selected == true
+               and r.map_group == group and r.map_number == number and type(r.rom) == "table" and r.rom.bank == bank
+               and integer(r.rom.addr,0,65535) and r.rom.addr <= pos and (row == nil or r.rom.addr > row.rom.addr) then
+                row = r
+            end
+        end
+        need(row and type(row.area_id) == "string" and integer(row.species,1,251),
+             "OPEN: the gift caller is not a qualified givepoke row")
+        local party,why = reads.read_party()
+        need(party,"OPEN: party snapshot unavailable: " .. tostring(why))
+        return {site_id=name,row=row,count=party.count,fields={},generation=held.generation,operation=held.operation}
+    end
+    -- gift_party_finalized (GivePoke.skip_nickname, B = 0: the party branch): TryAddMonToParty appended the gift and
+    -- GivePoke set wCurPartyMon to it (move_mon.asm:1619-1631).
+    local function gift_event(name,site)
+        local before = assert(latches.gift_begin,"prior gift lost")
+        local party,why = reads.read_party()
+        need(party,"OPEN: party snapshot unavailable: " .. tostring(why))
+        local slot = party.count-1
+        need(party.count == before.count+1 and scalar(site,"wCurPartyMon") == slot,"the gift is not the one appended mon")
+        local mon = copy(party.mons[slot+1])
+        need(mon.is_egg == false and mon.species_id == before.row.species,"the appended mon is not the row's gift")
+        mon.key = key(mon)
+        for i,other in ipairs(party.mons) do
+            if i ~= slot+1 then need(key(other) ~= mon.key,"ambiguous gift identity") end
+        end
+        return {kind="capture",site_id=name,acquisition="gift",area_id=before.row.area_id,gift_id=before.row.id,
+                destination="party",slot=slot,mon=mon,classifications={},identity_scope="observed_destination_only",
+                global_identity_qualification="OPEN"}
+    end
     local function process(prepared)
         -- bank first: a wrong-bank hit (the common one) stamps and allocates nothing. Deferring
         -- the stamp is safe: every accepted hit and drain() stamp before any latch is read.
@@ -867,6 +975,11 @@ function build(options, proven)
                         mon.key = key(mon)
                     end
                     events[#events+1] = {kind="whiteout",site_id=name,party=party,phase=site.phase}
+                elseif name == "gift_begin" and gifts then
+                    starts[name] = gift_start(name,site,held)
+                elseif name == "gift_party_finalized" and gifts then
+                    events[#events+1] = gift_event(name,site)
+                    consume.gift_begin = true
                 elseif OPEN[name] or OPEN[site.signal] then
                     refusals[name] = "OPEN: " .. (OPEN[name] or OPEN[site.signal])
                 else
