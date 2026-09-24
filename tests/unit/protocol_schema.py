@@ -86,13 +86,15 @@ KEY_CHANGE_REASONS = ("nature_change", "evolution", "npc_trade", "trade_undo", "
 # cmd -> (required fields, optional fields); docs/protocol.md §5
 COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "noop": ({}, {}),
-    "force_faint": ({"key": "key"}, {"nickname": "str"}),
-    "force_explode": ({"key": "key"}, {"nickname": "str"}),
+    # "phone": the O-29 tag (docs/protocol.md §5); only the Gen 2 client acts on it
+    "force_faint": ({"key": "key"}, {"nickname": "str", "phone": "str"}),
+    "force_explode": ({"key": "key"}, {"nickname": "str", "phone": "str"}),
     "box_mon": ({"key": "key"}, {}),
     "party_mon": ({"key": "key"}, {"nickname": "str", "stats": "dict"}),
     "memorialize": ({"key": "key"}, {}),
     "game_over": ({}, {}),
-    "msgbox": ({"text": "str"}, {"fb": "str", "r": "int", "g": "int", "b": "int", "frames": "int"}),
+    "msgbox": ({"text": "str"}, {"fb": "str", "r": "int", "g": "int", "b": "int", "frames": "int",
+                                 "phone": "str"}),
     "gui_prompt": ({"text": "str"}, {"r": "int", "g": "int", "b": "int", "frames": "int"}),
     "hud_show": ({"text": "str"}, {"r": "int", "g": "int", "b": "int", "frames": "int",
                                    "color": "list", "duration": "int"}),

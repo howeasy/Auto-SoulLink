@@ -349,6 +349,13 @@ Every command is a JSON object with `cmd`. Fields are listed exhaustively. "Obli
 
 There is no `hud` command; the name is `hud_show`.
 
+Optional `phone:str` tag (O-29, `docs/gen2/reviews/P4_5_PHONE_CALLS_PLAN_2026-09-23.md` §3): the
+partner's `force_faint`/`force_explode` from a battle death carries `"fallen"` (never an
+`identity_lost` retirement), both dead-zone `msgbox`es carry `"dead_zone"`, and both "linked!"
+`msgbox`es of the run's first two-sided link carry `"first_link"`. Only the Gen 2 client acts on it
+(`lua/gen2/phone.lua`, a Pokégear call on a cartridge advertising `SLINK_CAP_PHONE`); every other
+client ignores the key.
+
 ### 5.0 Gen 1 LINK PANEL mailbox (Red/Blue companion patch)
 
 `link_panel{rows}` is a server payload, not permission to write whenever it arrives. The client holds sanitized, pre-rendered pages; the cartridge owns the screen, whites it out, draws a fallback and requests staging (`lua/gen1/panel.lua:1-10`, `:100-131`). This is separate from the native SLINK TRADE overlay ABI.
@@ -526,7 +533,7 @@ One per row above, plus the held item. Client = `lua/gen2/client.lua`, wire = `l
 
 | # | Gen 2 answer | Cite |
 |---|---|---|
-| 1 | **Recorded limit (OPEN, P4.2).** `play_sound` is bound to `request_sfx_local`, which plays nothing and logs once: no Gen 2 cartridge has a sound mailbox yet; the hello says `sfx:false`. The client's own cues (25/26/22/95) go through the same seam | client `:333-340`, `:381-382`, `:629`; `:202`, `:405`, `:463`, `:508` |
+| 1 | **Native sound (P4.2b/c, `ed8a0929`, `032b32ee`).** `play_sound` and the client's own cues go through `request_sfx_local`: `panel:sfx_code_for` maps 25→NOTIFY (SUCCESS on a cartridge without `SFX_NOTIFY`), 26→FAILURE, 22→BOO and 95→SUCCESS, one cue per frame through `lua/sfx_arbiter.lua` to the cartridge's sound service; any other id is dropped. The hello's `sfx` is `panel:sfx_present()`. PHYSICAL on the C/G/S SLink overlays; a clean ROM is unchanged (no beacon: nothing sent, the hello says `sfx:false`) | client `request_sfx_local`, hello `sfx`; `lua/gen2/panel.lua` `sfx_code_for`/`request_sfx` |
 | 2 | Inert: the trade prompts are answered with the protocol cancel and never rendered, so the `OAK:` text never shows (native trade UI is P4.3) | client `:303-306`, `:412-413`; adapter `native_trade_ui` `:452-453` |
 | 3 | Every `msgbox`/`gui_prompt`/`hud_show` text goes through `hud.show`/`hud.prompt`, which sanitise | client `:375-380`; `lua/hud.lua:69-86`, `:259-260`, `:285-286` |
 | 4 | `species_id` is always sent: capture, no_catch, key_change, every party/box/foe entry | client `:482`, `:525`, `:570`; wire `:154`, `:188`, `:219` |

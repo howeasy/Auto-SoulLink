@@ -1739,16 +1739,15 @@ class SoulLinkState:
             # to the HUD overlay (so unpatched clients are unaffected). Text is kept clean
             # ASCII for the FR-charmap message box; r/g/b/frames style the HUD fallback.
             box_text = f"{a_label} and {b_label} linked!"
+            linked_box = {"cmd": "msgbox", "text": box_text, "r": 100, "g": 255, "b": 160, "frames": 300}
+            # O-29 tag: the run's first two-sided link (dead-zone entries have a missing or
+            # key="" side). Derived from the persisted links, so it fires once per run.
+            if sum(1 for e in self.links if e.a and e.a.key and e.b and e.b.key) == 1:
+                linked_box["phone"] = "first_link"
             self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 25})   # SE_SUCCESS
             self.queued_commands[partner].append({"cmd": "play_sound", "sound": 25})
-            self.queued_commands[player_id].append({
-                "cmd": "msgbox", "text": box_text,
-                "r": 100, "g": 255, "b": 160, "frames": 300,
-            })
-            self.queued_commands[partner].append({
-                "cmd": "msgbox", "text": box_text,
-                "r": 100, "g": 255, "b": 160, "frames": 300,
-            })
+            self.queued_commands[player_id].append(dict(linked_box))
+            self.queued_commands[partner].append(dict(linked_box))
             # Un-quarantine: both mons were boxed while pending — retrieve to party
             # ONLY if both players have room. Both must stay in sync.
             a_has_room = self.party_size.get("a", 6) < 6
@@ -2041,13 +2040,13 @@ class SoulLinkState:
         self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 26})   # SE_FAILURE
         self.queued_commands[player_id].append({
             "cmd": "msgbox", "text": dz_text,
-            "r": 255, "g": 80, "b": 80, "frames": 480,
+            "r": 255, "g": 80, "b": 80, "frames": 480, "phone": "dead_zone",   # O-29 tag
         })
         partner     = _partner(player_id)
         self.queued_commands[partner].append({"cmd": "play_sound", "sound": 26})
         self.queued_commands[partner].append({
             "cmd": "msgbox", "text": dz_text,
-            "r": 255, "g": 80, "b": 80, "frames": 480,
+            "r": 255, "g": 80, "b": 80, "frames": 480, "phone": "dead_zone",
         })
         partner_cap = self.pending_captures.get(area_id, {}).get(partner)
 
@@ -3008,7 +3007,12 @@ class SoulLinkState:
             explode = cause == "battle" and self.explode_mode and bool(
                 self.adapter and self.adapter.supports_explode_mode())
             cmd_name = "force_explode" if explode else "force_faint"
-            self.queued_commands[partner].append({"cmd": cmd_name, "key": partner_mon.key, "nickname": partner_mon.nickname or ""})
+            death = {"cmd": cmd_name, "key": partner_mon.key, "nickname": partner_mon.nickname or ""}
+            if cause == "battle":
+                # O-29: an optional, generation-neutral tag; a client that can ring a phone
+                # call for it does (Gen 2 phone.lua), every other client ignores the key.
+                death["phone"] = "fallen"
+            self.queued_commands[partner].append(death)
             self.queued_commands[partner].append({"cmd": "play_sound", "sound": 26})   # SE_FAILURE — the KO notification's noise (HUD convention)
             self.party_keys[partner].discard(partner_mon.key)
             log.debug(f"[PARTY] player={partner}  party_keys remove {partner_mon.key[:8]}  ({cmd_name} from {player_id})")
