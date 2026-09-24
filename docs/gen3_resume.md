@@ -1,6 +1,41 @@
-# Gen 3 migration — resume note (updated 2026-09-23, checkpoint 15: BREAK — G4 2b rows all PASS live; mechanism P built, carrier update next)
+# Gen 3 migration — resume note (updated 2026-09-24, checkpoint 16: FR/LG P+H 8/8 PASS live, RR gates 26/26, RR hello works; RR carrier move-menu + final-cut pass next)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in the sweep worktree's `docs/gen1_reference/RC_MASTER_GUIDE.md` (`E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`). Requirements ledger: `docs/gen3_requirements.md`.
+
+## CHECKPOINT 16 (2026-09-24): owner check-in after a 3-hour work block — resume here
+
+Owner session rules for this block: up to 5 subagents (Haiku/Sonnet/Opus/Fable), no Codex/OMP, a SECOND emulator lane opened (`.claude/worktrees/gen3-lane-2`), "synth work" allowed (model/diff evidence instead of slow emulator re-runs). Nothing is released until G4+G5 are both done (ruling 22).
+- **Owner rulings 15-23** are in `docs/gen3/G4_request_draft.md` §6 (f6d503f4, 42df5f61, 6ab91745):
+  - 16: the P hand-off on every title;
+  - 17: the RR lost-ball window is a limit;
+  - 18: the DREW edge is accepted;
+  - 19: RR Explode gets the hand-off;
+  - 20: R5 (mega) is a limit;
+  - 21: the game-over whiteout is accepted;
+  - 22: no release until everything is done;
+  - 23: RR's CPU check accepts the IRQ entry from the BIOS halt.
+- **P+H (the in-battle faint with no press) is built on all titles:** 9719b519, 274fa486, 375cb963, cdc571f1, fixes 4a91daeb/9e227101. RR Explode+H is 904c134c, with M4/M5 in e9193bb2. Reviews: R1 26c7e281 and F1 40b863bd (Fable; the independent review of 904c134c, with its BLOCKER moot by ruling 22).
+- **FR/LG live:** all 8 P+H rows PASS (A1, A2, whiteout, trainer, on both title orders), 6d6227c6. They are REHEARSED: the final-cut pass re-takes them, and the runner currently carries nothing because the client changed afterwards.
+- **RR:**
+  - the companion is rebuilt (998666b6, md5 6cf77ba4) and the opcode gates are ported (gatelib 2aad8e2a..dfd8a96d, review R2 2ebfdf1f);
+  - **26/26 RR gates PASS live** (0995a82e), and the ported mkstate states rebuild live (95436847);
+  - the rr_battle2 two-mon fixture is built (80913bdf);
+  - **RR hello now works** (e9193bb2). The RR P+H rows still stop in the carrier: A's FIGHT press is not taken by CFRU's action menu, and the carrier's CPU-check copy lacks `irq_entry` (c12211c1). **W2 has this in flight** (card G5-RR-CARRIER-FIX; uncommitted edits in lua/tests/duo/duo_gen3_main.lua).
+- **Item 6:** DONE, no regression against master (b0483efe).
+- **Final-cut runner:** `tools/gen3_final_cut.py`, with `--carry`, `--shard i/n --lane` and `--merge-summary` (2aa46b8a, d9a08f5b). Runbook §5/§11 match it (7aa0aa47).
+- **C5-6 prep:**
+  - the plan is 6ed149b0 (35 dependents);
+  - mkstate is ported (01b1fe56);
+  - stat stages are read and wired in the new client (e3221685; a real feature gap);
+  - the profile native block comes from handlers.c (00e76c5b);
+  - C5-6 lands with the RR cutover.
+- **Tools:** mkstates `--saveram` targets BizHawk's real name (236ee593) and now backs up the player's save first (95461a92). The broken shared ref `codex/gen2-foundation (1)` was removed; it pointed at an ancestor, so nothing was lost.
+- **NEXT:**
+  1. Land W2's RR carrier fix, then re-run RR R4, Explode and R1-R3 on a lane.
+  2. Freeze a cut and run the final pass on BOTH lanes: `python tools/gen3_final_cut.py --cut <sha> --carry --shard 1/2 --lane .claude/worktrees/gen3-lane-clean`, then `--shard 2/2 --lane .claude/worktrees/gen3-lane-2`, then `--merge-summary`.
+  3. Execute C5-6 with the RR cutover.
+- **Owner decision pending:** C5-6 deleting the old client orphans Emerald and Archipelago FRLG, which PLAN §10 lists as "deferred" (plan doc risk 1).
+- **Lane hygiene:** the worktree is shared by concurrent workers. Commit by explicit path only; never `git commit -a` or `git reset`.
 
 ## CHECKPOINT 15 (2026-09-23): BREAK (owner) — resume here
 
