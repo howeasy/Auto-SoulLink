@@ -317,3 +317,53 @@ def test_a_fresh_hello_showing_no_trade_rolls_back(tmp_path):
     state.handle_event("a", {"event": "trade_done", "token": token, "new_key": B_GETS, "new_species": 0x26})
     _hello(state, "b", _mon(A_GETS, 0x15))
     assert state.pending_trade is None and state.trade_last["outcome"] == "rolled_back"
+
+
+# ── OMP review of 3b5b5a5a: coverage of the held hello faint ─────────────────────────────────────
+
+def test_a_hello_faint_is_held_in_the_watchdogs_uncertain_phase(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    state.pending_trade["age"] = state.TRADE_WATCHDOG_EVENTS
+    _cmds(state, "a")                                            # the real watchdog transition
+    assert state.pending_trade["phase"] == "uncertain"
+    _hello(state, "a", _fainted(A_GETS, 0x15), _mon("ABCD:1234:99", 7))
+    assert entry.status == LinkStatus.ALIVE and state.trade_held()
+    b_cmds = _tick(state, "b", _mon(B_GETS, 0x26)) + _cmds(state, "b")
+    assert _keys(b_cmds, "force_faint") == [B_GETS] and not _keys(_cmds(state, "a"), "force_faint")
+
+
+def test_a_held_hello_faint_survives_a_restart_and_replays_once(tmp_path):
+    from server.adapters.gen1_rby import Gen1Adapter
+    from server.state import SoulLinkState
+    state, _entry, _token = _one_sided(tmp_path)
+    _hello(state, "a", _fainted(A_GETS, 0x15), _mon("ABCD:1234:99", 7))
+    back = SoulLinkState.load(data_dir=str(tmp_path), adapter=Gen1Adapter())
+    assert back.trade_held() == [{"player": "a", "event": "faint", "key": A_GETS}]
+    b_cmds = _tick(back, "b", _mon(B_GETS, 0x26)) + _cmds(back, "b") + _cmds(back, "b")
+    a_cmds = _cmds(back, "a")
+    assert _keys(b_cmds, "force_faint") == [B_GETS], "exactly once, onto the mon B holds"
+    assert A_GETS not in _keys(a_cmds + b_cmds, "force_faint")
+    assert back.links[0].status == LinkStatus.DEAD
+
+
+def test_a_hello_faint_in_a_conflict_replays_once_through_the_split(tmp_path):
+    state, entry, token = _split_conflict(tmp_path)
+    _hello(state, "a", _fainted(A_GETS, 0x15), _mon("ABCD:1234:99", 7))    # A's copy fainted
+    assert entry.status == LinkStatus.ALIVE and state.trade_held()
+    assert state.resolve_trade(token, "adopt") == (True, "")
+    b_cmds, a_cmds = _cmds(state, "b"), _cmds(state, "a")
+    assert _keys(b_cmds, "force_faint") == [A_GETS], "B's real mon, once"
+    assert not _keys(a_cmds, "force_faint")
+    assert _keys(a_cmds, "memorialize") == [A_GETS] and _keys(b_cmds, "memorialize") == [A_GETS]
+
+
+def test_an_unrelated_hello_faint_propagates_while_the_trade_keys_waits(tmp_path):
+    state, entry, _token = _one_sided(tmp_path)
+    other = _dead_pair(state)
+    state.links[-1].status = LinkStatus.ALIVE
+    _hello(state, "a", _fainted(A_GETS, 0x15), _fainted(other, 0x77), _mon("ABCD:1234:99", 7))
+    assert _keys(_cmds(state, "b"), "force_faint") == ["1234:5678:77"], "the other pair dies now"
+    assert state.links[-1].status == LinkStatus.DEAD
+    assert entry.status == LinkStatus.ALIVE and state.trade_held() == [
+        {"player": "a", "event": "faint", "key": A_GETS}]
