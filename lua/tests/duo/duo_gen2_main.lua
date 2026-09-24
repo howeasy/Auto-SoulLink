@@ -476,7 +476,8 @@ if TR then
     if not tok then finish(false, "trade facts: " .. tostring(twhy)) end
 end
 local FI
-if S.FAINT_INPUTS or S.SYNTH == "trade" then   -- the faint route's UI origins (the trade's party menu too)
+if S.FAINT_INPUTS or S.SYNTH == "trade" or S.SYNTH == "evolve" then   -- the faint route's UI origins: the trade's
+    -- party menu, the evolve battle's move menu (live ecc run 1 stalled on an unhooked MoveSelectionScreen)
     FI = dofile(ROOT .. "/lua/tests/duo/gen2_faint_inputs.lua")
     local fok, fwhy = pcall(FI.prepare, ctx, SG, ctx.u1)
     if not fok then finish(false, "faint inputs: " .. tostring(fwhy)) end
