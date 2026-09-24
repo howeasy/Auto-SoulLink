@@ -1670,3 +1670,831 @@ def test_clause_route29_species_are_exactly_the_decomp_grass_table(repo, start):
     names = {line.split(",")[1].strip() for line in block if line.strip().startswith("db ") and "percent" not in line}
     ours = {mon.name.upper() for mon in K.SPECIES.values()}
     assert names <= ours and (names == ours if repo == "pokecrystal" else ours - names == {"HOPPIP"})
+
+
+# ── P4.3e: the native trade driver (lua/tests/duo/gen2_trade.lua + scenario_gen2_trade_*.lua), MODEL only ──────
+# The composition override against the real entry.lua/run.lua and the published overlay bytes; the saved-image
+# reader against the committed fixture and the codec; each case's verdict over a marker stream shaped exactly as
+# the hooks print it (one PASS per case/side, and red controls for the orderings and evidence the oracle needs).
+from tests.unit.test_gen2_entry import World  # noqa: E402
+
+TRADE_LUA = ROOT / "lua/tests/duo/gen2_trade.lua"
+TRADE_CASES = ("new", "decline_new", "timeout", "reset_wait", "reset_commit", "refuse_item")
+TRADE_FILES = ("lua/tests/duo/gen2_trade.lua",) + tuple(f"lua/tests/duo/scenario_gen2_trade_{c}.lua" for c in TRADE_CASES)
+TOKEN = [0x11, 0x22, 0x33, 0x44]
+STACK = (0xDF03, 0xDFFF)   # gold/silver wStackBottom..wStackTop (data/gen2/gold_slink.sym)
+
+
+def trade_lua():
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    T = lua.eval("dofile")(TRADE_LUA.as_posix())
+    J = lua.eval("dofile")((ROOT / "lua/json_codec.lua").as_posix())
+    return lua, T, J
+
+
+def test_trade_driver_files_compile_under_lua54():
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    check = lua.eval("function(s, n) local f, e = load(s, n) return e end")
+    for path in TRADE_FILES + (MAIN,):
+        assert check((ROOT / path).read_text(encoding="utf-8"), "@" + path) is None, path
+
+
+def test_trade_scenarios_name_their_case_and_share_one_harness():
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    for case in TRADE_CASES:
+        S = lua.eval("dofile")((ROOT / f"lua/tests/duo/scenario_gen2_trade_{case}.lua").as_posix())
+        assert S.TRADE is True and S.CASE == case and S.RECEIPT_SCHEMA == "gen2-duo-trade-v1" and S.T.SCOPE == "HARNESS_ONLY_OVERLAY"
+
+
+# ── the HARNESS_ONLY_OVERLAY composition override ──
+def overlay_image(title):
+    from patch.tools.make_ups import ups_apply
+    prov = json.loads((ROOT / "data/gen2/overlay_provenance.json").read_text())["outputs"]["poke" + title]
+    source = "pokecrystal" if title == "crystal" else "pokegold"
+    clean = (ROOT / f".cache/gen2-build/{source}/{prov['filename']}").read_bytes()
+    return clean, ups_apply(clean, (ROOT / prov["ups"]["file"]).read_bytes())
+
+
+def test_override_patches_each_entry_fragment_exactly_once_and_pins_the_published_overlays():
+    lua, T, _ = trade_lua()
+    text = (ROOT / "lua/gen2/entry.lua").read_text(encoding="utf-8")
+    patched = T.patch_entry(text)
+    assert isinstance(patched, str) and patched.startswith(T.PREFIX)
+    for p in T.PATCHES.values():
+        assert text.count(p["from"]) == 1 and patched.count(p["to"]) == 1 and p["from"] not in patched
+    assert patched.count("\n") == text.count("\n")   # the prefix shares line 1: tracebacks keep their line numbers
+    prov = json.loads((ROOT / "data/gen2/overlay_provenance.json").read_text())["outputs"]
+    assert dict(T.OVERLAY_SHA1.items()) == {prov[a]["slink_title"]: prov[a]["sha1"] for a in ("pokecrystal", "pokegold", "pokesilver")}
+    # red: a fragment that moved (production edited) refuses, never patches blindly
+    broken, why = T.patch_entry(text.replace('candidate.row.kind == "clean"', 'candidate.row.kind=="clean"'))
+    assert broken is None and "kind" in why
+    doubled, why = T.patch_entry(text + "\n-- " + T.PATCHES[5]["from"])
+    assert doubled is None and "twice" in why
+
+
+class OverlayWorld(World):
+    """World (test_gen2_entry.py) over the published overlay bytes, composing through the patched entry."""
+
+    def __init__(self, title, image=None, patched=True):
+        super().__init__(title)
+        clean, overlay = overlay_image(title)
+        self.image = overlay if image is None else image(clean, overlay)
+        lua = self.lua
+        T = lua.eval("dofile")(TRADE_LUA.as_posix())
+        self.T = T
+        if patched:
+            text = (ROOT / "lua/gen2/entry.lua").read_text(encoding="utf-8")
+            chunk = lua.eval("function(t, n) return assert(load(t, n, 't', _G)) end")(T.patch_entry(text), "@entry")
+            self.entry = chunk(T.harness())
+
+
+@pytest.mark.parametrize("title", ["gold", "crystal"])
+def test_patched_entry_admits_only_the_pinned_overlay_as_kind_overlay(title):
+    world = OverlayWorld(title)
+    decision = world.entry.admit(world.args())
+    assert not isinstance(decision, tuple), decision
+    assert (decision.title, decision.kind, decision.rom_sha1) == (title, "overlay", world.T.OVERLAY_SHA1[title])
+    # red: the unpatched production entry refuses the same bytes: its catalog row is FUTURE (production unchanged)
+    plain = OverlayWorld(title, patched=False)
+    decision, reason = plain.entry.admit(plain.args())
+    assert decision is None and "selection FUTURE is not admitted" in reason
+    # red: the clean cartridge is not admitted by the harness catalog, and one flipped overlay byte is refused
+    clean = OverlayWorld(title, image=lambda c, o: c)
+    decision, reason = clean.entry.admit(clean.args())
+    assert decision is None and "unknown artifact SHA-1" in reason
+    tampered = OverlayWorld(title, image=lambda c, o: o[:-1] + bytes([o[-1] ^ 1]))
+    decision, reason = tampered.entry.admit(tampered.args())
+    assert decision is None and "unknown artifact SHA-1" in reason
+
+
+def test_patched_production_graph_is_disclosed_overlay_kind_with_the_overlay_sha1():
+    world = OverlayWorld("gold")
+    lua = world.lua
+    io = lua.eval("""function(base, frame)
+        base.framecount = function() return frame end
+        base.register = function() return 0 end
+        base.on_bus_exec = function() return "h" end
+        base.unregister = function() end
+        return base end""")(world.io, 1)
+    args = world.args()
+    args.io = io
+    args.net = lua.eval("{init=function() end, send=function() return true end, connected=function() return true end, pump=function() end}")
+    args.hud = lua.eval("{show=function() end, render=function() end, sanitize=function(s) return s end}")
+    args.player = "a"
+    args.log = lua.eval("function() end")
+    parts = world.entry.build(args)
+    assert not isinstance(parts, tuple), parts
+    client = parts.client
+    assert parts.production_admitted is True and parts.qualification == "HARNESS_ONLY_OVERLAY"
+    assert client.artifact_kind == "overlay" and client.rom_sha1 == world.T.OVERLAY_SHA1["gold"]
+    assert client.trade is not None and parts.profile.rom_sha1 == world.profile["rom_sha1"]
+
+
+# ── the saved-image reads the baseline prints, against the codec the oracle decodes with ──
+@pytest.mark.parametrize("title,fixture", [("gold", "gold_battle_errand"), ("crystal", "crystal_battle")])
+def test_saved_party_and_dex_equal_the_codec_decode(title, fixture):
+    from server.adapters import gen2_codec as codec
+    lua, T, _ = trade_lua()
+    raw = (ROOT / f"tests/fixtures/gen2/{fixture}.SaveRAM").read_bytes()
+    profile = lua.table_from(json.loads((ROOT / f"data/games/gen2_{title}/profile.json").read_text())["titles"][title],
+                             recursive=True)
+    layout = codec.for_foundation(title, root=ROOT)
+    for copy in ("primary", "backup"):
+        want = [{"species_marker": m["species_marker"], "blob_hex": codec.encode_party_blob(m, layout).hex()}
+                for m in codec.decode_saved_party(raw[:0x8000], layout, copy_name=copy)["mons"]]
+        got = T.saved_party(raw, profile, title, copy)
+        assert [dict(r.items()) for r in got.values()] == want
+    dex = T.saved_dex(raw, profile, title)
+    for copy in ("primary", "backup"):
+        for kind, sym in (("caught_hex", "wPokedexCaught"), ("seen_hex", "wPokedexSeen")):
+            assert dex[copy][kind] == saved_bytes(raw, layout, sym, 32, copy).hex()
+
+
+REGION_START = {"player": "wPlayerData", "player1": "wPlayerData1", "player2": "wPlayerData2",
+                "player3": "wPlayerData3", "map": "wCurMapData", "pokemon": "wPokemonData"}
+
+
+def saved_bytes(raw, layout, symbol, count, copy):
+    """tools/gen2_trade_oracles._saved: the symbol inside its save region, primary or backup copy."""
+    address = layout.addresses[symbol]
+    for region in layout.regions:
+        base = layout.addresses[REGION_START[region.name]]
+        if base <= address and address + count <= base + region.length:
+            offset = getattr(region, copy) + address - base
+            return raw[offset:offset + count]
+    raise AssertionError(symbol)
+
+
+# ── the pure drivers ──
+def test_travel_driver_answers_the_phone_runs_from_battles_and_faces_the_desk():
+    lua, T, _ = trade_lua()
+    PI = lua.eval("dofile")((ROOT / "lua/tests/gen2_poison_inputs.lua").as_posix())
+    grid = [1] * (16 * 8)
+    maps = lua.table_from({"Pokecenter2F": {"map_group": 20, "map_number": 1, "width": 16, "height": 8,
+                                            "grid": lua.table_from(grid), "warps": lua.table()}}, recursive=True)
+    legs = lua.table_from({"Pokecenter2F": {"kind": "stand"}}, recursive=True)
+    drv = T.travel_driver(PI, maps, legs, lua.table_from({"x": 5, "y": 3}))
+    steps = lua.table_from({"Up": True, "Down": True, "Left": True, "Right": True})
+
+    def point(**kw):
+        base = {"map_group": 20, "map_number": 1, "x": 5, "y": 5, "overworld_ready": True, "battle_mode": 0,
+                "can_step": steps, "facing": "Down"}
+        base.update(kw)
+        return lua.table_from(base, recursive=True)
+    buttons, phase = drv.step(point())
+    assert dict(buttons.items()) == {"Up": True}
+    buttons, _ = drv.step(point(overworld_ready=False, ui={"kind": "wait_button"}, input_ready=True))   # the phone
+    assert dict(buttons.items()) == {"A": True}
+    for _ in range(12):
+        drv.step(point())
+    buttons, _ = drv.step(point(x=5, y=3, facing="Left"))
+    assert dict(buttons.items()) == {"Up": True}
+    for _ in range(12):
+        drv.step(point(x=5, y=3, facing="Left"))
+    buttons, phase = drv.step(point(x=5, y=3, facing="Up"))
+    assert phase == "at-desk" and dict(buttons.items()) == {}
+    # red: a trainer battle or an unmapped yes/no on the way is refused, never guessed through
+    drv2 = T.travel_driver(PI, maps, legs, lua.table_from({"x": 5, "y": 3}))
+    buttons, why = drv2.step(point(ui={"kind": "yes_no", "prompt": "save_confirm"}, input_ready=True))
+    assert buttons is None and "not valid while walking" in why
+
+
+def visit(T, lua, **opts):
+    table = {"role": "proposer", "slot": 1, "stand": {"x": 5, "y": 3}}
+    table.update(opts)
+    return T.visit_driver(lua.table_from(table, recursive=True))
+
+
+def vpoint(lua, trade=None, **kw):
+    base = {"x": 5, "y": 3, "facing": "Up", "overworld_ready": False, "battle_mode": 0,
+            "trade": trade or {"entered": False, "exited": False, "waiting": False, "committing": False}}
+    base.update(kw)
+    return lua.table_from(base, recursive=True)
+
+
+def drain(drv, point, frame):
+    for i in range(1, 13):
+        drv.step(point, frame + i)
+
+
+def test_visit_driver_proposer_talks_selects_the_linked_slot_and_confirms():
+    lua, T, _ = trade_lua()
+    drv = visit(T, lua)
+    b, _ = drv.step(vpoint(lua, overworld_ready=True), 100)
+    assert dict(b.items()) == {"A": True}   # talk
+    drain(drv, vpoint(lua, overworld_ready=True), 100)
+    b, _ = drv.step(vpoint(lua, overworld_ready=True), 150)
+    assert dict(b.items()) == {}             # no re-talk inside TALK_RETRY
+    yes_no = lambda prompt, cursor: {"kind": "yes_no", "prompt": prompt, "items": ["YES", "NO"], "cursor": cursor, "columns": 1}
+    b, _ = drv.step(vpoint(lua, ui=yes_no("trade_intro", 1), input_ready=True), 200)
+    assert dict(b.items()) == {"A": True}
+    drain(drv, vpoint(lua), 200)
+    b, _ = drv.step(vpoint(lua, ui={"kind": "trade_party"}, input_ready=True, party_cursor=0), 300)
+    assert dict(b.items()) == {"Down": True}
+    drain(drv, vpoint(lua), 300)
+    b, _ = drv.step(vpoint(lua, ui={"kind": "trade_party"}, input_ready=True, party_cursor=1), 400)
+    assert dict(b.items()) == {"A": True}
+    drain(drv, vpoint(lua), 400)
+    b, _ = drv.step(vpoint(lua, ui=yes_no("slink_trade", 1), input_ready=True), 500)
+    assert dict(b.items()) == {"A": True}
+    drain(drv, vpoint(lua), 500)
+    done = {"entered": True, "exited": True, "waiting": False, "committing": False}
+    b, phase = drv.step(vpoint(lua, trade=done, overworld_ready=True), 600)
+    assert phase == "visited"
+
+
+def test_visit_driver_responder_holds_the_prompt_until_told_and_never_presses_b():
+    lua, T, _ = trade_lua()
+    gate = {"open": False}
+    answers = []
+    drv = visit(T, lua, role="responder", answer=lambda p: "NO" if gate["open"] else None,
+                on_answer=lambda a: answers.append(a))
+    prompt = {"kind": "yes_no", "prompt": "slink_trade", "items": ["YES", "NO"], "cursor": 1, "columns": 1}
+    for f in range(10):
+        b, phase = drv.step(vpoint(lua, ui=prompt, input_ready=True), f)
+        assert dict(b.items()) == {} and phase == "hold"
+    gate["open"] = True
+    b, _ = drv.step(vpoint(lua, ui=prompt, input_ready=True), 20)
+    assert dict(b.items()) == {"Down": True} and answers == ["NO"]
+    # red: the responder never meets the party menu
+    b, why = visit(T, lua, role="responder", answer=lambda p: "YES").step(
+        vpoint(lua, ui={"kind": "trade_party"}, input_ready=True, party_cursor=0), 1)
+    assert b is None and "responder" in why
+
+
+def test_visit_driver_cancel_is_one_b_inside_the_held_wait_and_the_chord_is_four_frames():
+    lua, T, _ = trade_lua()
+    waiting = {"entered": True, "exited": False, "waiting": True, "committing": False, "wait_apply_frame": 10}
+    drv = visit(T, lua, cancel=lambda p: True)
+    b, _ = drv.step(vpoint(lua, trade=waiting), 50)
+    assert dict(b.items()) == {"B": True}
+    drain(drv, vpoint(lua, trade=waiting), 50)
+    b, _ = drv.step(vpoint(lua, trade=waiting), 70)
+    assert dict(b.items()) == {}             # one cancel only
+    drv = visit(T, lua, chord=lambda p: True)
+    frames = [dict(drv.step(vpoint(lua, trade=waiting), f)[0].items()) for f in range(4)]
+    assert frames == [{"A": True, "B": True, "Select": True, "Start": True}] * 4
+    assert drv.step(vpoint(lua, trade=waiting), 5)[1] == "visited"
+
+
+# ── the verdict over each case's marker stream ──
+def lease(cmd, gen, ack, result, slot, token=TOKEN):
+    return (b"SLT1" + bytes([1, cmd, gen % 256, ack % 256, result, slot, 1, 0]) + bytes(token)).hex()
+
+
+def blob(species, item=0):
+    struct = bytes([species, item]) + bytes(46)
+    return (struct + b"\x80" + bytes(10) + b"\x81" + bytes(10)).hex()
+
+
+def site(name, bank=19, address=0x4000):
+    return {"symbol": name, "bank": bank, "address": address}
+
+
+def image(frame, name, kind=None):
+    row = {"frame": frame, "snapshot_path": f"C:/b/{name}.SaveRAM", "snapshot_sha256": hashlib.sha256(name.encode()).hexdigest(),
+           "cartram_sha256": hashlib.sha256((name + "c").encode()).hexdigest(), "snapshot_bytes": 0x8000 + 22,
+           "cartram_bytes": 0x8000}
+    if kind:
+        row["kind"] = kind
+    return row
+
+
+def regs(**kw):
+    out = {r: 0 for r in ("A", "F", "B", "C", "D", "E", "H", "L", "SP", "PC")}
+    out.update(kw)
+    return out
+
+
+def stack_row(visited, native_end="SlinkTradePublishDone"):
+    phases = []
+    for i, name in enumerate(("wait", "trade_animation", "evolution_animation", "native_save")):
+        if name in visited:
+            lo, hi = visited[name]
+            phases.append({"phase": name, "visited": True, "start": {"frame": lo, "site": site("S" + name)},
+                           "end": {"frame": hi, "site": site(native_end if name == "native_save" else "E" + name)},
+                           "samples": [{"frame": lo + 1, "stack_addr": 0xDFDE, "sp": 0xDFE0, "pc": 0x4100, "rom_bank": 19},
+                                       {"frame": hi, "stack_addr": 0xDFC0, "sp": 0xDFC1, "pc": 0x0100, "rom_bank": 3}]})
+        else:
+            phases.append({"phase": name, "visited": False, "start": None, "end": None, "samples": []})
+    events = [{"action": "arm", "address": a, "frame": 1100, "hook_id": f"w{a}"} for a in range(STACK[0], STACK[1] + 1)]
+    low = {"frame": 1300, "stack_addr": 0xDFC0, "sp": 0xDFC1, "pc": 0x0100, "rom_bank": 3}
+    return {"domain": "System Bus", "stack_bank": 1, "stack_start": STACK[0], "stack_end": STACK[1],
+            "armed_count": STACK[1] - STACK[0] + 1, "hook_failures": 0, "phases": phases,
+            "registration_events": events, "continuous": True, "registration_complete_before_first_phase": True,
+            "coverage_started": {"frame": 1100, "site": "harness:trade_go"},
+            "coverage_ended": {"frame": 9000, "site": "harness:before_report"},
+            "global_low_water": low, "global_observations": 40, "global_minima": [low]}
+
+
+def reload_leg(j, final_frame):
+    final = image(final_frame, "final", "flush")
+    j("RELOAD_CHORD", {"frame": final_frame + 200, "frames": 4})
+    j("RELOADED", {"frame": final_frame + 3000, "map_group": 20, "map_number": 1, "x": 5, "y": 3, "party_count": 2})
+    dex = {"caught_hex": "00" * 32, "seen_hex": "00" * 32}
+    j("TRADE_RELOAD", {"frame": final_frame + 3010, "snapshot_sha256": final["snapshot_sha256"],
+                       "cartram_sha256": final["cartram_sha256"], "party_keys": ["0000:0001:9B", KEY],
+                       "dex": {"primary": dex, "backup": dex}})
+
+
+def trade_stream(case, player, item=0):
+    """The marker lines one side prints for `case`, shaped exactly as gen2_trade.lua's hooks print them."""
+    party = [{"species_marker": 155, "blob_hex": blob(155)}, {"species_marker": 16, "blob_hex": blob(16, item)}]
+    partner = {"species_marker": 161, "blob_hex": blob(161)}
+    out = []
+
+    def j(tag, value):
+        out.append(tag + " " + json.dumps(value))
+    j("DUO_GEN2", {"player": player, "scenario": "gen2_trade_" + case, "attempt": 1, "case": "gold_battle_errand",
+                   "title": "gold", "rom_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94", "fixture_sha256": "f" * 64})
+    j("CLIENT", {"qualification": "HARNESS_ONLY_OVERLAY", "production_admitted": True, "pack": "gen2_gold", "title": "gold",
+                 "rom_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94", "registered_sites": []})
+    out.append('TRADE_OVERRIDE {"schema":"gen2-duo-overlay-override-v1"}')
+    j("TRADE_ADMISSION", {"admission_scope": "HARNESS_ONLY_OVERLAY", "overlay_sha1": "d563669ec3ac5029be9464d2301aa3be27a5f163",
+                          "base_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94", "title": "gold",
+                          "override_manifest_sha256": "a" * 64, "trade_manifest_sha256": "b" * 64, "run_id": "g2trade_x"})
+    j("BOOTED", {"frame": 10, "map_group": 24, "map_number": 3, "x": 1, "y": 1, "party_count": 1})
+    j("HELLO", {"frame": 20, "ot_id": 1})
+    j("ENGINE_CAPTURE", {"frame": 500, "site_id": "capture_party_finalized", "acquisition": "wild", "key": KEY})
+    out.append("CAUGHT " + KEY)
+    base = image(1000, "baseline", "native_save")
+    base.update(slot=1, count=2, key=KEY, party=party, dex={"primary": {"caught_hex": "00" * 32, "seen_hex": "00" * 32},
+                                                            "backup": {"caught_hex": "00" * 32, "seen_hex": "00" * 32}})
+    j("TRADE_BASELINE", base)
+    j("TRADE_READY", {"frame": 1001, "snapshot_sha256": base["snapshot_sha256"], "slot": 1, "key": KEY})
+    j("TRADE_GO", {"frame": 1100, "run_id": "g2trade_x"})
+    plan = {"a": "proposer", "b": "responder"}[player]
+    if case == "refuse_item" and player == "b":
+        j("TRADE_FINAL", image(3000, "final", "flush"))
+        j("TRADE_STACK", stack_row({}))
+        return out
+    role, gen = (0, 5) if plan == "proposer" else (1, 9)
+    j("TRADE_ENTRY", {"frame": 1200, "role": role, "site": site("SlinkTradeEntry" if role == 0 else "SlinkTradePromptEntry")})
+    if case == "refuse_item":
+        before = {"frame": 1250, "site": site("SlinkTradeItemAllowed"), "registers": regs(A=item), "slot": 1,
+                  "lease_hex": lease(1, 3, 3, 0, 0)}
+        j("TRADE_EXIT", {"frame": 1260, "lease_hex": lease(0, 3, 3, 0, 0)})
+        j("TRADE_CONTROL", {"kind": "d3", "before": before, "after": {"frame": 1260, "site": site("SlinkTradeExit"),
+                                                                        "registers": regs(), "lease_hex": lease(0, 3, 3, 0, 0)}})
+        j("TRADE_FINAL", image(3000, "final", "flush"))
+        j("TRADE_STACK", stack_row({"wait": (1200, 1260)}))
+        return out
+    offer = {"frame": 1300, "site": site("SlinkTradeWaitAck"), "pc": 0x4343, "rom_bank": 19, "role": role, "slot": 1,
+             "count": 2, "token": TOKEN, "generation": gen,
+             "lease_hex": lease(2 if role == 0 else 3, gen, gen - 1, 0xFF, 1), **party[1]}
+    if role == 1:
+        offer.update(incoming_species_marker=partner["species_marker"], incoming_blob_hex=partner["blob_hex"])
+    j("TRADE_OFFER", offer)
+    answer = {"new": "YES", "reset_commit": "YES"}.get(case, "NO")
+    after = {"timeout": "TRADE_EXIT", "reset_wait": "REBOOTED"}.get(case)
+    if role == 1:
+        j("TRADE_ANSWER", {"frame": 1350, "answer": answer, "after": after})
+    committed = case in ("new", "reset_commit")
+    recovered = case == "reset_commit" and player == "a"
+    if role == 0 or committed:
+        j("TRADE_WAIT_APPLY", {"frame": 1310 if role == 0 else 1360})
+    if committed:
+        anim = "TradeAnimation" if role == 0 else "TradeAnimationPlayer2"
+        j("TRADE_APPLY_PICKUP", {"frame": 1400, "site": site("SlinkTradeApplyPickup"), "pc": 0x4237, "rom_bank": 19,
+                                 "role": role, "slot": 1, "lease_hex": lease(5, gen + 1, gen, 0xFF, 1),
+                                 "own_blob_hex": party[1]["blob_hex"], "incoming_species_marker": partner["species_marker"],
+                                 "incoming_blob_hex": partner["blob_hex"]})
+        j("TRADE_COMMIT_ENTRY", {"frame": 1401, "site": site("SlinkTradeCommit"), "slot": 1, "role": role,
+                                 "lease_hex": lease(5, gen + 1, gen + 1, 0xFF, 1)})
+        j("TRADE_NATIVE_CALL", {"frame": 1402, **site("RemoveMonFromPartyOrBox", 3, 0x603F)})
+        spans = lambda names, slot: {"domain": "System Bus", "bank": 1, "spans": [
+            {"symbol": names[0], "address": 0xDA2A + slot * 48, "hex": party[1]["blob_hex"][:96]},
+            {"symbol": names[1], "address": 0xDB00 + slot * 11, "hex": party[1]["blob_hex"][96:118]},
+            {"symbol": names[2], "address": 0xDB42 + slot * 11, "hex": party[1]["blob_hex"][118:]}]}
+        j("TRADE_PRE_REMOVE", {"frame": 1402, "site": site("RemoveMonFromPartyOrBox", 3, 0x603F), "slot": 1,
+                               "cur_party_mon": 1, "live": spans(("wPartyMon1", "wPartyMonOTs", "wPartyMonNicknames"), 1),
+                               "frozen": spans(("wOTPartyMon1", "wOTPartyMonOTs", "wOTPartyMonNicknames"), 1)})
+        j("TRADE_NATIVE_CALL", {"frame": 1410, **site(anim, 10, 0x4DEA)})
+    if committed:
+        for f, name in ((1900, "AddTempmonToParty"), (1901, "EvolvePokemon"), (1902, "SaveAfterLinkTrade")):
+            j("TRADE_NATIVE_CALL", {"frame": f, **site(name, 3, 0x5A9C)})
+        j("TRADE_SAVE_RETURNED", {"frame": 1950, "site": site("SlinkTradeCommit.cleanup"), "registers": regs()})
+        if recovered:
+            native = image(1950, "native", "native_trade_save")
+            native.update(capture_frame=1950, flush_frame=1951, save_entry_frame=1902, flushed_matches=False, client_saves=2)
+            j("TRADE_NATIVE_SAVE", native)
+            j("CHORD", {"frame": 1951, "frames": 4})
+            j("TRADE_RESET_ENTRY", {"frame": 1953})
+            j("RESET_SEEN", {"frame": 1990, "delta": 39})
+            j("TRADE_CONTROL", {"kind": "reset_commit",
+                                "commit": {"frame": 1401, "site": site("SlinkTradeCommit"), "slot": 1, "role": role,
+                                           "lease_hex": lease(5, gen + 1, gen + 1, 0xFF, 1)},
+                                "before": {"frame": 1953, "site": site("Reset", 0, 0x5B0), "registers": regs(),
+                                           "lease_hex": lease(5, gen + 1, gen + 1, 0xFF, 1)},
+                                "after": {"frame": 2600, "site": site("StartTitleScreen", 1, 0x624F), "registers": regs(),
+                                          "lease_hex": "00" * 16}})
+            j("REBOOTED", {"frame": 5000, "map_group": 20, "map_number": 1, "x": 5, "y": 3, "party_count": 2})
+            j("TRADE_RECOVERED", {"frame": 8000, "text": "Traded PIDGEY for SENTRET!"})
+            j("TRADE_FINAL", {**image(8100, "final", "flush"), "client_saves": 2})
+            j("TRADE_STACK", stack_row({"wait": (1200, 1401), "trade_animation": (1410, 1900), "native_save": (1902, 1953)},
+                                       native_end="Reset"))
+            reload_leg(j, 8100)
+            return out
+        j("TRADE_DONE", {"frame": 2000, "lease_hex": lease(7, gen + 1, gen + 1, 0, 1), "result": 0})
+        native = image(2000, "native", "native_trade_save")
+        native.update(capture_frame=2000, flush_frame=2001, save_entry_frame=1902, flushed_matches=True, client_saves=2)
+        j("TRADE_NATIVE_SAVE", native)
+        j("TRADE_EXIT", {"frame": 2050, "lease_hex": lease(0, gen + 1, gen + 1, 0, 1)})
+        j("TRADE_FINAL", {**image(2200, "final", "flush"), "client_saves": 2})
+        j("TRADE_STACK", stack_row({"wait": (1200, 1401), "trade_animation": (1410, 1900), "native_save": (1902, 2000)}))
+        reload_leg(j, 2200)
+        return out
+    if case == "decline_new" and player == "a":
+        j("TRADE_CANCEL", {"frame": 1500, "button": "B"})
+    if case == "reset_wait" and player == "a":
+        j("CHORD", {"frame": 1600, "frames": 4})
+        j("TRADE_RESET_ENTRY", {"frame": 1601})
+        j("RESET_SEEN", {"frame": 1640, "delta": 40})
+        if case == "reset_wait":
+            j("TRADE_CONTROL", {"kind": "reset_wait",
+                                "before": {"frame": 1601, "site": site("Reset", 0, 0x5B0), "registers": regs(),
+                                           "lease_hex": lease(2, gen, gen, 0, 1)},
+                                "after": {"frame": 2400, "site": site("StartTitleScreen", 1, 0x624F), "registers": regs(),
+                                          "lease_hex": "00" * 16}})
+        j("REBOOTED", {"frame": 3500, "map_group": 20, "map_number": 1, "x": 5, "y": 3, "party_count": 2})
+        j("TRADE_FINAL", image(3600, "final", "flush"))
+        j("TRADE_STACK", stack_row({"wait": (1200, 1601)}))
+        return out
+    exit_frame = 1310 + 1800 + 5 if (case == "timeout" and player == "a") else 1700
+    j("TRADE_EXIT", {"frame": exit_frame, "lease_hex": lease(0, gen, gen, 1, 1)})
+    if case == "timeout" and player == "a":
+        j("TRADE_CONTROL", {"kind": "timeout",
+                            "before": {"frame": 1311, "site": site("SlinkTradeWaitApply.wait"), "registers": regs(B=7, C=8),
+                                       "lease_hex": lease(2, gen, gen, 0, 1), "slot": 1},
+                            "after": {"frame": exit_frame, "site": site("SlinkTradeExit"), "registers": regs(),
+                                      "lease_hex": lease(0, gen, gen, 0, 1)}})
+    if case == "decline_new" and player == "b":
+        j("TRADE_CONTROL", {"kind": "decline",
+                            "before": {"frame": 1355, "site": site("SlinkTradePublishDone"), "registers": regs(A=1),
+                                       "lease_hex": lease(3, gen, gen, 0xFF, 1), "slot": 1},
+                            "after": {"frame": 1700, "site": site("SlinkTradeExit"), "registers": regs(),
+                                      "lease_hex": lease(8, gen, gen, 1, 1)}})
+    j("TRADE_FINAL", image(3000, "final", "flush"))
+    j("TRADE_STACK", stack_row({"wait": (1200, exit_frame)}))
+    return out
+
+
+def trade_verdict(lines, case, player):
+    lua, T, J = trade_lua()
+    problems, facts = T.verdict(lua.table_from(lines), J, case, player)
+    return list(problems.values()), facts
+
+
+@pytest.mark.parametrize("case", TRADE_CASES)
+@pytest.mark.parametrize("player", ["a", "b"])
+def test_trade_verdict_passes_each_case_stream(case, player):
+    problems, facts = trade_verdict(trade_stream(case, player, item=0x9E if case == "refuse_item" else 0), case, player)
+    assert problems == []
+    assert facts.admission.admission_scope == "HARNESS_ONLY_OVERLAY"
+
+
+def drop(lines, tag, nth=0):
+    idx = [i for i, line in enumerate(lines) if line.startswith(tag + " ")][nth]
+    return lines[:idx] + lines[idx + 1:]
+
+
+def edit(lines, tag, fn, nth=0):
+    idx = [i for i, line in enumerate(lines) if line.startswith(tag + " ")][nth]
+    value = json.loads(lines[idx][len(tag) + 1:])
+    fn(value)
+    return lines[:idx] + [tag + " " + json.dumps(value)] + lines[idx + 1:]
+
+
+def red(lines, case, player, fragment):
+    problems, _ = trade_verdict(lines, case, player)
+    assert any(fragment in p for p in problems), problems
+
+
+def test_trade_verdict_red_controls_for_the_committed_side():
+    s = trade_stream("new", "a")
+    red(drop(s, "TRADE_NATIVE_SAVE"), "new", "a", "missing TRADE_NATIVE_SAVE")
+    red(drop(s, "TRADE_NATIVE_CALL", 3), "new", "a", "native call")
+    red(edit(s, "TRADE_NATIVE_CALL", lambda v: v.update(symbol="TradeAnimationPlayer2"), 1), "new", "a", "TradeAnimation")
+    red(edit(s, "TRADE_DONE", lambda v: v.update(lease_hex=lease(7, 6, 6, 2, 1), result=2)), "new", "a", "DONE")
+    red(edit(s, "TRADE_APPLY_PICKUP", lambda v: v.update(lease_hex=lease(5, 6, 5, 0xFF, 1, [9, 9, 9, 9]))), "new", "a",
+        "APPLY pickup lease")
+    red(edit(s, "TRADE_PRE_REMOVE", lambda v: v["frozen"]["spans"][0].update(hex="00" * 48)), "new", "a", "frozen")
+    red(edit(s, "TRADE_NATIVE_SAVE", lambda v: v.update(frame=2001)), "new", "a", "DONE-instant")
+    red(edit(s, "TRADE_OFFER", lambda v: v.update(blob_hex=blob(19))), "new", "a", "differs from the baseline")
+    # main ruling: TRADE_FINAL is a flush of the native trade save; no ordinary save may run in between
+    red(edit(s, "TRADE_FINAL", lambda v: v.update(kind="native_save")), "new", "a", "not a flush of the native")
+    red(edit(s, "TRADE_FINAL", lambda v: v.update(client_saves=3)), "new", "a", "ordinary save ran between")
+    final_at = [i for i, line in enumerate(s) if line.startswith("TRADE_FINAL ")][0]
+    red(s[:final_at] + ['SAVE_WITNESS {"frame": 2100}'] + s[final_at:], "new", "a", "ordinary save ran between")
+    red(drop(s, "TRADE_RELOAD"), "new", "a", "missing TRADE_RELOAD")
+    red(edit(s, "TRADE_RELOAD", lambda v: v.update(snapshot_sha256="c" * 64)), "new", "a", "read back the TRADE_FINAL")
+    red(edit(s, "TRADE_STACK", lambda v: v["phases"][3].update(visited=False, samples=[])), "new", "a", "native_save unvisited")
+    red(edit(s, "TRADE_STACK", lambda v: v["phases"][0]["samples"][0].update(stack_addr=STACK[0] + 4, sp=STACK[0] + 5)),
+        "new", "a", "margin")
+    red(edit(s, "TRADE_STACK", lambda v: v.update(hook_failures=1)), "new", "a", "coverage incomplete")
+    red(edit(s, "CLIENT", lambda v: v.update(qualification="PHYSICAL_RECEIPTED")), "new", "a", "HARNESS_ONLY_OVERLAY")
+    # ordering: the baseline/ready/go handshake and nothing of the visit before the go
+    go = [i for i, line in enumerate(s) if line.startswith("TRADE_GO ")][0]
+    swapped = s[:go - 1] + [s[go], s[go - 1]] + s[go + 1:]
+    red(swapped, "new", "a", "TRADE_GO before TRADE_READY")
+    red(edit(s, "TRADE_GO", lambda v: v.update(run_id="other")), "new", "a", "run_id")
+    entry = [i for i, line in enumerate(s) if line.startswith("TRADE_ENTRY ")][0]
+    early = s[:go] + [s[entry]] + [line for i, line in enumerate(s[go:], go) if i != entry]
+    red(early, "new", "a", "TRADE_ENTRY before TRADE_GO")
+    red(s + ['TRADE_HOOK_ERROR {"text": "x"}'], "new", "a", "TRADE_HOOK_ERROR")
+
+
+def test_trade_verdict_red_controls_for_the_negative_cases():
+    # no mislabeled no-op: each negative case needs its trigger proven, and no native commit evidence
+    red(drop(trade_stream("decline_new", "b"), "TRADE_CONTROL"), "decline_new", "b", "missing TRADE_CONTROL")
+    red(edit(trade_stream("decline_new", "b"), "TRADE_CONTROL", lambda v: v["before"]["registers"].update(A=0)),
+        "decline_new", "b", "PublishDone(1)")
+    red(edit(trade_stream("timeout", "a"), "TRADE_CONTROL", lambda v: v["after"].update(frame=1500)),
+        "timeout", "a", "timeout control")
+    red(edit(trade_stream("reset_wait", "a"), "TRADE_CONTROL", lambda v: v["after"].update(lease_hex=lease(2, 5, 5, 0, 1))),
+        "reset_wait", "a", "zeroed lease")
+    red(edit(trade_stream("refuse_item", "a", item=0x9E), "TRADE_CONTROL", lambda v: v["before"]["registers"].update(A=0x01)),
+        "refuse_item", "a", "D3 control")
+    red(trade_stream("new", "a"), "decline_new", "a", "unexpected TRADE_APPLY_PICKUP")
+    red(edit(trade_stream("timeout", "b"), "TRADE_ANSWER", lambda v: v.update(after=None)), "timeout", "b", "before the partner")
+    red(edit(trade_stream("decline_new", "b"), "TRADE_ANSWER", lambda v: v.update(answer="YES")), "decline_new", "b", "answered YES")
+    red(drop(trade_stream("decline_new", "a"), "TRADE_CANCEL"), "decline_new", "a", "missing TRADE_CANCEL")
+    red(edit(trade_stream("decline_new", "a"), "TRADE_FINAL", lambda v: v.update(kind="native_save")), "decline_new", "a",
+        "native save after the baseline")
+    red(edit(trade_stream("decline_new", "a"), "TRADE_STACK", lambda v: v["phases"][1].update(
+        visited=True, start={"frame": 1300, "site": site("x")}, end={"frame": 1400, "site": site("y")},
+        samples=[{"frame": 1301, "stack_addr": 0xDFDE, "sp": 0xDFE0, "pc": 1, "rom_bank": 1}])), "decline_new", "a", "forbids")
+    peer = trade_stream("refuse_item", "b")
+    red(peer[:-2] + ['TRADE_ENTRY {"frame": 1200, "role": 1, "site": {"symbol": "SlinkTradePromptEntry", "bank": 19, "address": 1}}']
+        + peer[-2:], "refuse_item", "b", "unexpected TRADE_ENTRY")
+    # the uncertain branch: the commit was entered and the reset landed inside the animation, never a native save
+    # reset_commit (main ruling): the reset lands after the native save returned and before DONE; the side is
+    # committed by the server's watchdog + party evidence, never by a fabricated DONE
+    rc = trade_stream("reset_commit", "a")
+    red(drop(rc, "TRADE_RECOVERED"), "reset_commit", "a", "missing TRADE_RECOVERED")
+    red(drop(rc, "TRADE_NATIVE_CALL", 4), "reset_commit", "a", "native call")
+    red(rc[:-1] + ['TRADE_DONE {"frame": 1952, "lease_hex": "%s", "result": 0}' % lease(7, 6, 6, 0, 1)] + rc[-1:],
+        "reset_commit", "a", "unexpected TRADE_DONE")
+    red(edit(rc, "TRADE_FINAL", lambda v: v.update(kind="native_save")), "reset_commit", "a", "saved again")
+    red(drop(rc, "TRADE_RELOAD"), "reset_commit", "a", "missing TRADE_RELOAD")
+    red(edit(rc, "TRADE_NATIVE_SAVE", lambda v: v.update(frame=1990)), "reset_commit", "a", "save-returned")
+    red(drop(rc, "TRADE_CONTROL"), "reset_commit", "a", "missing TRADE_CONTROL")
+    red(edit(rc, "TRADE_CONTROL", lambda v: v["commit"].update(frame=1300)), "reset_commit", "a", "reset_commit control")
+
+
+def test_trade_verdict_red_controls_for_continuous_stack_coverage():
+    s = trade_stream("new", "a")
+    red(edit(s, "TRADE_STACK", lambda v: v.update(continuous=False)), "new", "a", "continuous registration")
+    red(edit(s, "TRADE_STACK", lambda v: v["registration_events"].pop()), "new", "a", "continuous registration")
+    red(edit(s, "TRADE_STACK", lambda v: v["registration_events"][1].update(address=STACK[0])), "new", "a", "repeated")
+    red(edit(s, "TRADE_STACK", lambda v: v["registration_events"][3].update(frame=1250)), "new", "a", "repeated")
+    red(edit(s, "TRADE_STACK", lambda v: v.update(global_low_water={"frame": 1, "stack_addr": STACK[0] + 8,
+                                                                    "sp": STACK[0] + 9, "pc": 1, "rom_bank": 1})),
+        "new", "a", "32-byte margin")
+    red(edit(s, "TRADE_STACK", lambda v: v.update(global_observations=0)), "new", "a", "32-byte margin")
+    red(edit(s, "TRADE_STACK", lambda v: v["phases"][3]["end"].update(site=site("SlinkTradeWaitRelease"))), "new", "a",
+        "successful DONE")
+
+
+# ── the attachment itself: overlay hooks -> markers -> the same verdict (a simulated bus, no emulator) ──
+TRADE_SIM = r"""
+local T, SG, json, facts, profile, overlay_rom, dir = ...
+local sim = {frame=100, bus={}, cart={}, regs={A=0, F=0, B=0, C=0, D=0, E=0, H=0, L=0, SP=0xDFE0, PC=0x4000},
+             exec={}, writes={}, lines={}}
+for i = 0, 0xFFFF do sim.bus[i] = 0 end
+for i = 0, 0x7FFF do sim.cart[i] = (i * 7) % 251 end
+console = {log=function() end}
+event = {onmemorywrite=function(fn, addr, name) sim.writes[addr] = fn return "w" .. addr end}
+local api = {}
+function api.read_u8(a, d)
+    if d == "ROM" then return overlay_rom:byte(a + 1) end
+    if d == "CartRAM" then return sim.cart[a] end
+    return sim.bus[a]
+end
+function api.read_range(a, n, d) local out = {} for i = 1, n do out[i] = api.read_u8(a + i - 1, d) end return out end
+function api.register(r) return sim.regs[r] end
+function api.on_bus_exec(fn, addr, name) sim.exec[name:gsub("^SLink%-duo%-trade%-", "")] = fn return name end
+function api.unregister(h) for a, _ in pairs(sim.writes) do if "w" .. a == h then sim.writes[a] = nil end end end
+function api.framecount() return sim.frame end
+function api.advance() sim.frame = sim.frame + 1 end
+function api.domain_size(d) return d == "CartRAM" and 0x8000 or 0x10000 end
+function api.saveram()
+    local chars = {}
+    for i = 0, 0x7FFF do chars[#chars + 1] = string.char(sim.cart[i]) end
+    local f = assert(io.open(dir .. "/sim.SaveRAM", "wb"))
+    f:write(table.concat(chars) .. string.rep("\0", 22))
+    f:close()
+end
+local ctx = {api=api, trade_facts=facts, profile=profile, env={title="gold", dir=dir, saveram="sim.SaveRAM"}}
+local function jlog(tag, v) sim.lines[#sim.lines + 1] = tag .. " " .. assert(json.encode(v)) end
+local function log(s) sim.lines[#sim.lines + 1] = s end
+local h = {root=".", rec={client_saves=1}, slot_of=function() return 1 end, lines=sim.lines}
+local e = {h=h, ctx=ctx, SG=SG, F={}, api=api, D={player="a", result=dir .. "/sim_result.txt", trade_evidence_dir=dir,
+                                              scenario="gen2_trade_new", trade_case="gen2_trade_new"}, host={}, case="new",
+           gen2={handle_command=function() end}, parts={qualification="HARNESS_ONLY_OVERLAY"}, log=log, jlog=jlog, json=json}
+T.running = {title="gold", overlay_sha1=T.OVERLAY_SHA1.gold, base_sha1=profile.rom_sha1}
+T.manifest_text, T.manifest_sha256 = '{"schema":"gen2-duo-overlay-override-v1"}', string.rep("a", 64)
+function sim.attach(player) e.D.player = player return T.attach(e) end
+function sim.put(addr, bytes) for i, b in ipairs(bytes) do sim.bus[addr + i - 1] = b end end
+function sim.fire(name)
+    local s = facts.code[name]
+    sim.bus[profile.hram.hROMBank] = s.bank
+    sim.regs.PC = s.addr
+    sim.exec[name]()
+end
+function sim.push(n)   -- n pushes below the current SP: the witness sees writes at SP-2..SP+1
+    for i = 0, n - 1 do
+        local a = sim.regs.SP - 2 - i
+        sim.regs.SP = sim.regs.SP - 1
+        if sim.writes[a] then sim.writes[a]() end
+    end
+    sim.regs.SP = sim.regs.SP + n
+end
+function sim.step() api.advance() end
+function sim.final(trade, kind) trade.image("TRADE_FINAL", "trade_final", trade.flush(), {kind=kind, client_saves=1}) end
+sim.jlog, sim.h = jlog, h
+return sim
+"""
+
+
+class TradeSim:
+    def __init__(self, tmp_path, player, monkeypatch):
+        from tools.gen2_trade_facts import trade_facts
+        self.lua, self.T, self.J = trade_lua()
+        self.facts = trade_facts("gold")
+        self.profile = json.loads((ROOT / "data/games/gen2_gold/profile.json").read_text())["titles"]["gold"]
+        _, overlay = overlay_image("gold")
+        self.lua.execute("SLINK_GEN2_GATE_LIBRARY = true")
+        SG = self.lua.eval("dofile")((ROOT / "lua/tests/test_gen2_scripted_gate.lua").as_posix())
+        manifest = {"schema": "gen2-trade-lane-v1", "run_id": "g2trade_sim", "evidence_class": "HARNESS_ONLY_OVERLAY",
+                    "players": {p: {"title": "gold", "artifact_kind": "overlay", "rom_sha1": self.facts["overlay_sha1"]}
+                                for p in ("a", "b")}}
+        path = tmp_path / "manifest.json"
+        raw = json.dumps(manifest).encode()
+        path.write_bytes(raw)
+        monkeypatch.setenv("SLINK_GEN2_TRADE_MANIFEST", str(path))
+        monkeypatch.setenv("SLINK_GEN2_TRADE_MANIFEST_SHA256", hashlib.sha256(raw).hexdigest())
+        self.sim = self.lua.execute(TRADE_SIM, self.T, SG, self.J, self.lua.table_from(self.facts, recursive=True),
+                                    self.lua.table_from(self.profile, recursive=True), overlay, tmp_path.as_posix())
+        head = trade_stream("new", player)[:9]   # DUO_GEN2 .. CAUGHT: the link half, unchanged by the trade
+        for line in head:
+            if not line.startswith("TRADE_"):
+                self.sim.lines[len(self.sim.lines) + 1] = line
+        self.trade = self.sim.attach(player)
+        self.ram = {k: v["addr"] for k, v in self.facts["ram"].items()}
+
+    def mon(self, species, item=0):
+        return list(bytes.fromhex(blob(species, item)))
+
+    def party(self, own):
+        """Live party [starter, own] and the same party in both saved copies (the native save the baseline flushes)."""
+        r, sim = self.ram, self.sim
+        mons = [self.mon(155), own]
+        sim.put(r["wPartyCount"], self.lua.table_from([2]))
+        sim.put(r["wPartySpecies"], self.lua.table_from([155, own[0], 0xFF]))
+        for slot, m in enumerate(mons):
+            sim.put(r["wPartyMon1"] + slot * 48, self.lua.table_from(m[:48]))
+            sim.put(r["wPartyMonOTs"] + slot * 11, self.lua.table_from(m[48:59]))
+            sim.put(r["wPartyMonNicknames"] + slot * 11, self.lua.table_from(m[59:]))
+        prof = self.lua.table_from(self.profile, recursive=True)
+        for copy in ("primary", "backup"):
+            def at(sym, off, data):
+                base = self.T.saved_offset(prof, "gold", copy, sym, off + len(data)) + off
+                for i, b in enumerate(data):
+                    sim.cart[base + i] = b
+            at("wPartyCount", 0, [2])
+            at("wPartySpecies", 0, [155, own[0], 0xFF])
+            for slot, m in enumerate(mons):
+                at("wPartyMon1", slot * 48, m[:48])
+                at("wPartyMonOTs", slot * 11, m[48:59])
+                at("wPartyMonNicknames", slot * 11, m[59:])
+
+    def lease(self, cmd, gen, ack, result, slot=1):
+        self.sim.put(self.ram["wSlinkMailbox"] + 14, self.lua.table_from(list(bytes.fromhex(lease(cmd, gen, ack, result, slot)))))
+
+    def ot(self, slot, m):
+        r = self.ram
+        self.sim.put(r["wOTPartyMon1"] + slot * 48, self.lua.table_from(m[:48]))
+        self.sim.put(r["wOTPartyMonOTs"] + slot * 11, self.lua.table_from(m[48:59]))
+        self.sim.put(r["wOTPartyMonNicknames"] + slot * 11, self.lua.table_from(m[59:]))
+        if slot == 0:
+            self.sim.put(r["wOTPartySpecies"], self.lua.table_from([m[0], 0xFF]))
+
+    def frames(self, n, pushes=0):
+        for _ in range(n):
+            self.sim.step()
+            if pushes:
+                self.sim.push(pushes)
+
+    def go(self):
+        base = self.trade.baseline(KEY)
+        self.sim.jlog("TRADE_READY", self.lua.table_from({"frame": self.sim.frame, "snapshot_sha256": base.snapshot_sha256,
+                                                          "slot": 1, "key": KEY}))
+        self.frames(5)
+        self.sim.jlog("TRADE_GO", self.lua.table_from({"frame": self.sim.frame, "run_id": "g2trade_sim"}))
+        self.trade.arm_stack()
+
+    def finish(self, kind, reload=False):
+        self.frames(3)
+        self.sim.final(self.trade, kind)
+        self.trade.stack()
+        self.trade.release()
+        lines = [self.sim.lines[i] for i in range(1, len(self.sim.lines) + 1)]
+        if reload:   # the reload leg is the scenario's (S.reload, a live soft reset); the sim models its markers only
+            final = json.loads(next(line for line in lines if line.startswith("TRADE_FINAL "))[12:])
+            lines.append('RELOAD_CHORD {"frame": 9000, "frames": 4}')
+            lines.append('RELOADED {"frame": 9500, "map_group": 20, "map_number": 1, "x": 5, "y": 3, "party_count": 2}')
+            lines.append("TRADE_RELOAD " + json.dumps({"frame": 9510, "snapshot_sha256": final["snapshot_sha256"],
+                         "cartram_sha256": final["cartram_sha256"], "party_keys": [KEY],
+                         "dex": {"primary": {"caught_hex": "00" * 32, "seen_hex": "00" * 32},
+                                 "backup": {"caught_hex": "00" * 32, "seen_hex": "00" * 32}}}))
+        return lines
+
+
+def test_attach_hooks_print_a_committed_proposer_visit_the_verdict_passes(tmp_path, monkeypatch):
+    t = TradeSim(tmp_path, "a", monkeypatch)
+    own = t.mon(16)
+    t.party(own)
+    t.go()
+    sim = t.sim
+    t.lease(1, 3, 3, 0, 0)
+    sim.fire("SlinkTradeEntry")
+    t.frames(4, pushes=6)
+    t.lease(2, 5, 4, 0xFF)
+    sim.fire("SlinkTradeWaitAck")
+    t.lease(2, 5, 5, 0xFF)
+    sim.fire("SlinkTradeWaitApply")
+    t.frames(4, pushes=4)
+    t.ot(1, own)                      # SlinkTradeSnapshot's frozen preimage
+    partner = t.mon(161)
+    t.ot(0, partner)                  # the host staged the partner's mon
+    t.lease(5, 6, 5, 0xFF)
+    sim.fire("SlinkTradeApplyPickup")
+    sim.regs.A, sim.regs.B = 1, 0
+    sim.fire("SlinkTradeCommit")
+    sim.fire("RemoveMonFromPartyOrBox")
+    sim.fire("TradeAnimation")
+    t.frames(6, pushes=8)
+    sim.fire("AddTempmonToParty")
+    sim.fire("EvolvePokemon")
+    sim.fire("SaveAfterLinkTrade")
+    t.frames(6, pushes=5)
+    sim.regs.B = 0
+    sim.fire("SlinkTradeCommit.cleanup")
+    sim.regs.A = 0
+    sim.fire("SlinkTradePublishDone")
+    t.lease(7, 6, 6, 0)
+    sim.fire("SlinkTradeWaitRelease")
+    t.frames(2)
+    t.lease(0, 6, 6, 0)
+    sim.fire("SlinkTradeExit")
+    lines = t.finish("flush", reload=True)
+    problems, facts = trade_verdict(lines, "new", "a")
+    assert problems == []
+    native = json.loads(next(l for l in lines if l.startswith("TRADE_NATIVE_SAVE "))[18:])
+    assert native["flushed_matches"] is True and native["snapshot_bytes"] == 0x8000 + 22
+    stack = json.loads(next(l for l in lines if l.startswith("TRADE_STACK "))[12:])
+    assert stack["armed_count"] == STACK[1] - STACK[0] + 1 and [p["visited"] for p in stack["phases"]] == [True, True, False, True]
+    # red: the same run with a hook fault can never pass
+    problems, _ = trade_verdict(lines + ['TRADE_HOOK_ERROR {"text": "x"}'], "new", "a")
+    assert problems
+
+
+def test_attach_hooks_prove_the_responder_decline_control(tmp_path, monkeypatch):
+    t = TradeSim(tmp_path, "b", monkeypatch)
+    own = t.mon(19)
+    t.party(own)
+    t.go()
+    sim = t.sim
+    t.ot(0, t.mon(16))
+    t.lease(3, 9, 8, 0xFF)
+    t.trade.state.control_kind = "decline"
+    sim.fire("SlinkTradePromptEntry")
+    sim.jlog("TRADE_ANSWER", t.lua.table_from({"frame": sim.frame, "answer": "NO"}))
+    t.frames(4, pushes=5)
+    t.lease(3, 9, 9, 0xFF)
+    sim.regs.A = 1
+    sim.fire("SlinkTradePublishDone")
+    t.frames(3, pushes=2)
+    t.lease(8, 9, 9, 1)
+    sim.fire("SlinkTradeExit")
+    lines = t.finish("flush")
+    problems, _ = trade_verdict(lines, "decline_new", "b")
+    assert problems == []
+    # red: an accept (A=0) at the same site is not a decline trigger: no control, no PASS
+    (tmp_path / "r").mkdir()
+    t2 = TradeSim(tmp_path / "r", "b", monkeypatch)
+    t2.party(own)
+    t2.go()
+    t2.ot(0, t2.mon(16))
+    t2.lease(3, 9, 8, 0xFF)
+    t2.trade.state.control_kind = "decline"
+    t2.sim.fire("SlinkTradePromptEntry")
+    t2.sim.jlog("TRADE_ANSWER", t2.lua.table_from({"frame": t2.sim.frame, "answer": "NO"}))
+    t2.frames(4, pushes=5)
+    t2.sim.regs.A = 0
+    t2.sim.fire("SlinkTradePublishDone")
+    t2.lease(8, 9, 9, 1)
+    t2.sim.fire("SlinkTradeExit")
+    problems, _ = trade_verdict(t2.finish("flush"), "decline_new", "b")
+    assert any("TRADE_CONTROL" in p for p in problems)

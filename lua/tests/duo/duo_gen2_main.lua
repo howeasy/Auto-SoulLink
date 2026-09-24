@@ -107,6 +107,8 @@ local R = dofile(ROOT .. "/lua/tests/duo/gen2_route29_inputs.lua")
 local name = D.scenario:gsub("^gen2_", "")
 local okS, S = pcall(dofile, ROOT .. "/lua/tests/duo/scenario_gen2_" .. name .. ".lua")
 if not okS then finish(false, "no gen2_new scenario " .. tostring(D.scenario)) end
+-- P4.3e native trade: the disclosed HARNESS_ONLY_OVERLAY harness (lua/tests/duo/gen2_trade.lua is its contract)
+local TR = S.TRADE and S.T or nil
 local wire = dofile(ROOT .. "/lua/gen2/wire.lua")
 
 local api = SG.bizhawk()
@@ -212,7 +214,7 @@ if D.expect_admission == "refused" then
 end
 
 local ok, ctx = pcall(function()
-    local c = SG.context(api, os.getenv)
+    local c = SG.context(TR and TR.context_api(api, os.getenv) or api, os.getenv)
     assert(c.qualify ~= nil and c.qualify.stage == "boot", "SLINK_GEN2_QUALIFY stage \"boot\" required")
     assert(c.case.target == "battle", "the link scenario runs on a battle fixture")
     c.u1 = assert(json.decode(assert(os.getenv("SLINK_GEN2_U1_FACTS"), "SLINK_GEN2_U1_FACTS missing")))
@@ -223,7 +225,7 @@ ctx.log = log
 jlog("DUO_GEN2", {player=D.player, scenario=D.scenario, attempt=D.attempt or 1, case=ctx.case.name,
                   title=ctx.env.title, rom_sha1=ctx.env.rom_sha1, fixture_sha256=ctx.qualify.stage_fingerprint})
 
-local started, gen2, parts = pcall(start_production)
+local started, gen2, parts = pcall(TR and function() return TR.start_production(ROOT, SG, json) end or start_production)
 if not started or type(gen2) ~= "table" or type(parts) ~= "table" then
     finish(false, "production client did not start: " .. tostring(started and "run.lua exposed no client" or gen2))
 end
@@ -435,6 +437,10 @@ end
 
 -- ── the gate hooks, the input host and the scenario harness ─────────────────────────────
 R.prepare(ctx, SG, ctx.u1)
+if TR then
+    local tok, twhy = pcall(TR.prepare, ctx, SG, os.getenv)
+    if not tok then finish(false, "trade facts: " .. tostring(twhy)) end
+end
 local FI
 if S.FAINT_INPUTS then   -- the faint route's UI origins are watched from the first hook on
     FI = dofile(ROOT .. "/lua/tests/duo/gen2_faint_inputs.lua")
@@ -634,6 +640,11 @@ function h.sacrifice(opts)
     return play(spec, driver, observe)
 end
 
+if TR then
+    local tok, twhy = pcall(TR.attach, {h=h, ctx=ctx, SG=SG, F=F, api=api, D=D, host=host, gen2=gen2, parts=parts,
+                                        log=log, jlog=jlog, json=json, FI=FI, case=S.CASE})
+    if not tok then finish(false, "trade harness: " .. tostring(twhy)) end
+end
 local ran, pass, msg = pcall(S.run, h)
 state.release()
 if not ran then finish(false, "scenario error: " .. tostring(pass)) end

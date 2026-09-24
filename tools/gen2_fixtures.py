@@ -336,7 +336,7 @@ def _map_facts(ctx, row, areas):
     expected = bytearray([len(warps)])
     for warp in warps:
         destination = areas[warp["destination"]]
-        expected.extend([warp["y"], warp["x"], warp["warp"], destination["map_group"], destination["map_number"]])
+        expected.extend([warp["y"], warp["x"], warp["warp"] & 0xFF, destination["map_group"], destination["map_number"]])
     _, observed = rom_bytes(ctx, name + "_MapEvents", len(expected), 2)
     _require(observed == expected, "source/ROM warp table mismatch")
     return {"map_group": row["map_group"], "map_number": row["map_number"], "map_const": map_const,
