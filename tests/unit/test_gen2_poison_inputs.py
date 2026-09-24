@@ -358,6 +358,27 @@ def test_trainer_battles_fight_non_stings_and_stall_a_sting_until_poisoned():
     assert step(rt, d, ui=ui("battle_menu", MENU, 4, 2), **dict(sting, active_hp=5))[0] == ["Up"]     # PKMN, not RUN
 
 
+def test_a_sting_absorber_uses_the_tighter_sting_low_hp_floor_not_low_hp():
+    """POISON-FLAKE: Wade1's Weedle (pokegold data/trainers/parties.asm:1429-1434, the only Poison Sting source
+    this card fights) can never deal more than 6 HP in one hit, crit and STAB included (decomp math in
+    lua/tests/gen2_poison_inputs.lua PI.STING_LOW_HP). While sting is true, the absorber should keep fighting one
+    HP lower than the general LOW_HP floor (7 -> 6) -- one more 30%-per-hit try -- and never below it."""
+    rt = lua()
+    PI = load(rt)
+    assert PI.STING_LOW_HP == 6 and PI.LOW_HP == 7
+    d = trainer_driver(rt, PI)
+    d.step(pt(rt, map_number=2, x=1, y=0))
+    at_seven = {"battle_mode": 2, "active_slot": 0, "active_hp": 7, "foe_sting": True, "overworld_ready": False}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **at_seven)[0] == ["A"]                # still FIGHTs (LEER)
+    at_six = dict(at_seven, active_hp=6, party={0: {"hp": 6, "status": 0}, 1: {"hp": 12, "status": 0}})
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **at_six)[0] == ["Right"]              # now hands to PKMN
+    # the general (non-sting) worn floor is untouched: hp=7 there still means "not healthy", same as before
+    d2 = trainer_driver(rt, load(rt))
+    d2.step(pt(rt, map_number=2, x=1, y=0))
+    worn_no_sting = dict(at_seven, foe_sting=False)
+    assert step(rt, d2, ui=ui("battle_menu", MENU, 1, 2), **worn_no_sting)[0] == ["Right"]      # PKMN, not FIGHT
+
+
 def test_a_trainer_battle_without_poison_is_a_stop_and_mom_gets_no():
     rt = lua()
     d = trainer_driver(rt, load(rt))

@@ -133,6 +133,17 @@ local function on(point, map) return point.map_group == map.map_group and point.
 --   * before the poison, a party mon below HEAL_FRACTION sends the hunt back to the #MON CENTER (facts.heal) and
 --     back into the grass: a worn party can neither stall a sting nor flee safely.
 PI.LOW_HP = 7
+-- POISON-FLAKE: Wade1 (Route 31 Bug Catcher, pokegold data/trainers/parties.asm:1429-1434) is the only TRAINER
+-- Poison Sting source this card fights (wild Weedles keep LOW_HP: their DVs vary, and a wild fight can RUN) (CaterpieEvosAttacks/WeedleEvosAttacks, data/pokemon/evos_attacks.asm:
+-- 169-202: only the Weedle line learns it). His L3 Weedle's BUG_CATCHER-class DV Attack (data/trainers/dvs.asm:40,
+-- engine/battle/read_trainer_dvs.asm) is a fixed 7 no matter who it hits; against ANY defender (every stat has a
+-- +5 floor, data/pokemon/base_stats/*.asm stat formula, so Defense >= 5 always) Poison Sting's worst single hit --
+-- crit x2 (engine/battle/effect_commands.asm .CriticalMultiplier :3106-3127), STAB x1.5 (BattleCommand_Stab
+-- :1273-1288; Weedle is Poison-type), MIN_DAMAGE=2 floor (BattleCommand_DamageCalc :3092-3096), max 85-100%
+-- variation (BattleCommand_DamageVariation :1503-1541) all included -- is 6 HP (at Defense=5 the pre-multiply
+-- quotient is 1: x2 crit=2, +2=4, STAB 4+floor(4/2)=6; a higher Defense only lowers it). A mon kept in the sting
+-- fight while its HP is above this floor can never be dropped to 0 by one more sting.
+PI.STING_LOW_HP = 6
 PI.PKMN_CELL = 2   -- BattleMenu 2x2 grid FIGHT|PKMN / PACK|RUN (engine/battle/menu.asm:32-45): by position
 function PI.driver(F, facts, opts)
     local self = {terminal="poisoned", phase="travel", battles=0}
@@ -229,12 +240,13 @@ function PI.driver(F, facts, opts)
         for _, mon in pairs(party(point)) do if integer(mon.hp, 1, 999) then return true end end
         return false
     end
-    -- a living, unpoisoned party mate of the active mon above LOW_HP (party HP; the active mon's own is its
-    -- battle copy); a poisoned target is never switched back in
-    local function relief(point)
+    -- a living, unpoisoned party mate of the active mon above low (party HP; the active mon's own is its battle
+    -- copy); a poisoned target is never switched back in. low defaults to PI.LOW_HP (the general worn/flee floor);
+    -- battle() passes PI.STING_LOW_HP instead while actually facing the sting (POISON-FLAKE).
+    local function relief(point, low)
         for slot = 0, 5 do
             local mon = party(point)[slot]
-            if slot ~= point.active_slot and mon and integer(mon.hp, PI.LOW_HP + 1, 999) and not psn(mon.status)
+            if slot ~= point.active_slot and mon and integer(mon.hp, (low or PI.LOW_HP) + 1, 999) and not psn(mon.status)
                and not (target ~= nil and slot == target and poisoned(point)) then return slot end
         end
     end
@@ -262,26 +274,30 @@ function PI.driver(F, facts, opts)
         local done = poisoned(point) or (point.active_psn == true and (target == nil or point.active_slot == target))
         local sting = (self.phase == "hunt" or trainer) and point.foe_sting == true and not done
         local active = point.active_slot
-        local risk = PI.LOW_HP + (point.active_psn == true and integer(point.active_max_hp, 1, 999)
+        -- POISON-FLAKE: while actually facing the sting, ride the tighter proven-safe floor (PI.STING_LOW_HP)
+        -- (trainer fights only: Wade's fixed-DV Weedle) instead of the general LOW_HP, so the absorbing mon (the target, or the U1 relief mate) takes more
+        -- stings per fight before being benched -- more 30%-per-hit tries without any added faint risk.
+        local low = (sting and trainer) and PI.STING_LOW_HP or PI.LOW_HP
+        local risk = low + (point.active_psn == true and integer(point.active_max_hp, 1, 999)
                                   and point.active_max_hp // 8 or 0)
         local healthy = integer(point.active_hp, risk + 1, 999)
         -- opts.target takes every sting itself: switched in while it is fit, never replaced by a mate
         local mine = target ~= nil and active == target
-        local target_fit = target ~= nil and integer((party(point)[target] or {}).hp, PI.LOW_HP + 1, 999)
+        local target_fit = target ~= nil and integer((party(point)[target] or {}).hp, low + 1, 999)
         local fit = healthy and (mine or (target == nil and not no_passive[active]))
         if ui.kind == "battle_menu" then
             if point.battle_mode ~= 1 and not trainer then return nil, "battle menu outside a wild or trainer battle" end
             if sting and fit then return choose(ui, "FIGHT", 2) end
             if sting and mine then   -- the worn target: RUN, or a trainer fight's mate takes over
-                if trainer and relief(point) ~= nil then return choose(ui, PI.PKMN_CELL, 2) end
+                if trainer and relief(point, low) ~= nil then return choose(ui, PI.PKMN_CELL, 2) end
                 return choose(ui, trainer and "FIGHT" or "RUN", 2)
             end
             if sting and target ~= nil and not mine and target_fit then return choose(ui, PI.PKMN_CELL, 2) end
             if sting and target ~= nil and not mine then return choose(ui, trainer and "FIGHT" or "RUN", 2) end
-            if sting and relief(point) ~= nil then return choose(ui, PI.PKMN_CELL, 2) end
+            if sting and relief(point, low) ~= nil then return choose(ui, PI.PKMN_CELL, 2) end
             -- a trainer fight keeps every party mon standing: a worn or poisoned active mon hands over to a fit,
             -- unpoisoned mate; a wild battle's at-risk mon does too unless the RUN is sure
-            if not sting and relief(point) ~= nil then
+            if not sting and relief(point, low) ~= nil then
                 if trainer and (not healthy or point.active_psn == true) then return choose(ui, PI.PKMN_CELL, 2) end
                 if not trainer and not healthy and point.flee_sure ~= true then return choose(ui, PI.PKMN_CELL, 2) end
             end
@@ -327,7 +343,7 @@ function PI.driver(F, facts, opts)
         end
         if ui.kind == "yes_no" and ui.prompt == "switch" then return choose(ui, "NO", 1) end
         if ui.kind == "battle_party" then
-            local want = relief(point) or (trainer and any_other(point) or nil)
+            local want = relief(point, low) or (trainer and any_other(point) or nil)
             if sting and target ~= nil and not mine and target_fit then want = target end
             if want == nil or not integer(point.party_cursor, 0, 5) then return press("B") end
             if point.party_cursor == want then return press("A") end
