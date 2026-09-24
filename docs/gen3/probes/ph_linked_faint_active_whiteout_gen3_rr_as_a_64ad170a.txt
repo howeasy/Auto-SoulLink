@@ -1,0 +1,87 @@
+G5-RR-CPU-IRQ (W1) live row R4: linked_faint_active_whiteout_gen3, RR as A (gen3_rr_new), cut 64ad170a
+lane: E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2 (detached at 64ad170a), clean before launch
+ROM: patch/build/slink_RR.gba sha1 ea5352f8a3b9..., md5 6cf77ba4...; fixtures per the IDENTITY line
+start_utc=2026-09-24T14:07:02Z
+VERDICT: FAIL (carrier): hello both sides again; A's scripted use_move pressed A on FIGHT and the action controller never left HandleInputChooseAction (duo_gen3_main.lua:1049 'move menu never opened'), so A's lead never fainted and no P+H commit was reached. Carrier RR gap, handed to W2; product path not exercised past hello
+server hello lines:
+  2026-09-24 10:07:11,203 [INFO] [b] hello rom=firered_rr area='route_1' party=1
+  2026-09-24 10:07:11,453 [INFO] [a] hello rom=firered_rr area='route_1' party=1
+
+--- run (verbatim) ---
+$ python tools/e2e_duo.py --game gen3_rr_new --scenario linked_faint_active_whiteout_gen3 --lane w1_linked_faint_active_whiteout_gen3
+
+========== scenario: linked_faint_active_whiteout_gen3 ==========
+[duo] linked_faint_active_whiteout_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=d9fe5eb6a0b3ea3dc778162584b9d7169fc3bdb38555f709f217113b33319c4b b=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=140ad05c6325180bdc7fae0bb590157310f250fa65c5b8b43b1fb24d6a3ffe2b write_checkpoint.json=476a1010520f02f9cf3e8a5c35a6faadc636f516de8b809414c440f191334a85 profile.json=2541afcc69c46185db7cf921460f4e17e598fa0de685bbeb2a6227d6451069fe source=64ad170a6eec08b84ca9ca3e69a6cd5ea7bcf67a
+[duo] server up: tcp=57628 http=57629 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_whiteout_gen3_qvak1y7b
+[duo] cleared 5 stale artifact(s) for linked_faint_active_whiteout_gen3: e2e_linked_faint_active_whiteout_gen3_a_attempt1_result.txt, e2e_linked_faint_active_whiteout_gen3_a_result.txt, e2e_linked_faint_active_whiteout_gen3_b_attempt1_result.txt, e2e_linked_faint_active_whiteout_gen3_b_result.txt, e2e_linked_faint_active_whiteout_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] RESULT_LINE a: RESULT: FAIL (the linked lead did not faint: linked_faint_active a: move menu never opened (action menu still up: true))
+[duo] RESULT_LINE b: (none)
+[duo] PYDEC: FAIL client RESULT before both RESULT lines
+[duo] linked_faint_active_whiteout_gen3: a client finished before 'both RESULT lines' (a: RESULT: FAIL (the linked lead did not faint: linked_faint_active a: move menu never opened (action menu still up: true)); b: no RESULT)
+--- linked_faint_active_whiteout_gen3 a result (last 25 lines) ---
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 4383
+[client] [SLink-gen3] write native 0x0203FD4C +26 frame 4383
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 4383
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 4383
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 4383
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 4383
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 4383
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 4383
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 4383
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 4383
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 4713
+[client] [SLink-gen3] write native 0x0203FD4C +26 frame 4713
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 4713
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 4713
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 4713
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 4713
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 4713
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 4713
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 4713
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 4713
+TIMEOUT waiting for the move menu [tasks=[] storage_state=-1 script_status=2 result=-1 menu_cursor=-1]
+WRITES 101
+RESULT: FAIL (the linked lead did not faint: linked_faint_active a: move menu never opened (action menu still up: true))
+--- linked_faint_active_whiteout_gen3 b result (last 25 lines) ---
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 4803
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 4803
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 4803
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 5313
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 5313
+[client] [SLink-gen3] write native 0x0203FD6C +23 frame 5313
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 5313
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 5313
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 5313
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 5313
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 5313
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 5313
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 5313
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 5763
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 5763
+[client] [SLink-gen3] write native 0x0203FD6C +23 frame 5763
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 5763
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 5763
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 5763
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 5763
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 5763
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 5763
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 5763
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_whiteout_gen3_qvak1y7b
+
+========== summary ==========
+  linked_faint_active_whiteout_gen3: FAIL (attempt 1 of 1)
