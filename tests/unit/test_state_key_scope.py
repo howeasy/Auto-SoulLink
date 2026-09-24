@@ -130,3 +130,48 @@ def test_a_key_in_the_partners_pending_shiny_bonus_is_no_collision(tmp_path):
     state.pending_bonus["b"].append("ABCD:1234:77")   # A's own shiny, queued for B
     cmds = state.handle_event("a", {"event": "key_change", "old_key": A1, "new_key": "ABCD:1234:77"})
     assert _named(cmds, "key_change_rejected"), "A's own pending shiny still collides"
+
+
+def _boxed_twin(state, key="1234:5678:15"):
+    """A live link whose A half, boxed in A's PC, has the key A is about to receive."""
+    twin = LinkEntry(area_id="route_9", a=MonInfo(key=key, species=0x15, level=9),
+                     b=MonInfo(key="5555:5678:44", species=0x44, level=9), status=LinkStatus.ALIVE)
+    state.links.append(twin)
+    state._index_entry(twin)
+    return twin
+
+
+def test_a_trade_offer_is_refused_when_the_recipient_already_indexes_the_incoming_key(tmp_path):
+    from tests.unit.test_state_trade_uncertain import _gen1_confirming
+    state, _entry, _token, _ = _gen1_confirming(tmp_path)
+    state.pending_trade = None
+    assert state._eligible_trade_pairs("a"), "control"
+    _boxed_twin(state)
+    assert not state._eligible_trade_pairs("a") and not state._eligible_trade_pairs("b")
+    ack = [c for c in state.handle_event("a", {"event": "trade_offer", "slot": 2})
+           if c.get("cmd") == "trade_offer_ack"]
+    assert ack == [{"cmd": "trade_offer_ack", "ok": False}] and state.pending_trade is None
+
+
+def _assert_fail_closed(state, entry, twin):
+    assert state.entry_for("a", A_GETS) is twin, "the existing link keeps A's index row"
+    assert twin.status == LinkStatus.ALIVE
+    assert entry.status == LinkStatus.DEAD and entry.cause == "identity_lost"
+
+
+def test_a_commit_onto_a_key_the_taker_already_holds_retires_the_traded_pair(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    twin = _boxed_twin(state)                     # appeared after the offer (the race)
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    state.handle_event("b", {"event": "trade_done", "token": token, "new_key": B_GETS, "new_species": 0x26})
+    assert state.pending_trade is None
+    _assert_fail_closed(state, entry, twin)
+
+
+def test_a_split_onto_a_key_the_taker_already_holds_retires_the_traded_pair(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    twin = _boxed_twin(state)
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    state.handle_event("b", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    assert state.resolve_trade(token, "adopt") == (True, "")
+    _assert_fail_closed(state, entry, twin)

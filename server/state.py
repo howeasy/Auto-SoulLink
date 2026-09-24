@@ -605,6 +605,8 @@ class SoulLinkState:
             par_be = next((e for e in par_blobs if e.get("key") == par_mon.key), None)
             if par_be is None or not self._trade_sane(player_id, be, par_be):
                 continue
+            if self._trade_key_clash(player_id, par_mon.key, k):
+                continue
             out.append((int(be.get("slot", 0)), k, entry, par_be))
         return out
 
@@ -935,11 +937,18 @@ class SoulLinkState:
         if all(pt["ready"].values()):
             self._execute_trade(pt)
 
+    def _trade_key_clash(self, player_id: str, gets: str, gives: str) -> bool:
+        """KEY-SCOPE-2: a recipient that already indexes the key it would receive (a boxed live
+        link, say) would hold two live links on one key; neither side may trade into that."""
+        return (self.entry_for(player_id, gets) is not None
+                or self.entry_for(_partner(player_id), gives) is not None)
+
     def _trade_unavailable(self, pt: dict) -> bool:
         """Re-validate at confirm: the players free-roam while the partner deliberates, so the offered
         pair may have fainted/died or been boxed since mon_chosen. Cancels (and says so) if it has."""
         entry = pt["link"]
         if (entry.status != LinkStatus.ALIVE
+                or self._trade_key_clash("a", pt["b_key"], pt["a_key"])
                 or pt["a_key"] not in self.party_keys["a"]
                 or pt["b_key"] not in self.party_keys["b"]
                 or (self.adapter.native_trade_ui()
@@ -1256,13 +1265,46 @@ class SoulLinkState:
             self.bonus_keys[taker].discard(gone)
             self.mon_stats.pop(gone, None)
         self.party_keys[taker].add(nk)
-        self._index_entry(entry)
+        clash = self._index_traded(pt, entry)
         self.pending_trade = None
         self._replay_trade_events(pt)
+        self._retire_traded_clash(entry, clash)
         self._save()
         log.warning(f"trade {pt['token']} split: {taker} holds a copy {nk}, its {old} is gone")
         self._record_trade(pt, "split")
         self._trade_settle_ticks[taker] = self.TRADE_SETTLE_TICKS
+
+    def _index_traded(self, pt: dict, entry: "LinkEntry") -> list:
+        """Index a swapped or split trade link. KEY-SCOPE-2: a half whose key already names
+        ANOTHER live link of the same player cannot be told apart from it; that link keeps the
+        index row, held events naming the key are dropped, and _retire_traded_clash retires
+        the traded pair (the U5 fail-closed rule of a colliding key_change)."""
+        clash = []
+        for pid, half in (("a", entry.a), ("b", entry.b)):
+            other = self._pidx[pid].get(half.key) if half else None
+            if other is not None and other is not entry and other.status == LinkStatus.ALIVE:
+                clash.append((pid, half.key, other))
+        self._index_entry(entry)
+        for pid, key, other in clash:
+            self._pidx[pid][key] = other
+            log.error(f"[{pid}] trade {pt['token']}: {key} already identifies a live link in "
+                      f"{other.area_id}; the traded pair in {entry.area_id} is retired identity_lost")
+        dropped = {(pid, key) for pid, key, _ in clash}
+        if dropped:
+            pt["held_events"] = [e for e in pt.get("held_events", [])
+                                 if (e[0], e[1].get("key")) not in dropped]
+        return clash
+
+    def _retire_traded_clash(self, entry: "LinkEntry", clash: list):
+        if not clash or entry.status != LinkStatus.ALIVE:
+            return
+        pid, key, _other = clash[0]
+        self._propagate_faint(pid, entry, cause="identity_lost")
+        for cpid, ckey, _ in clash:            # the key names a live mon too: never bury by it
+            self.pending_memorials[cpid].discard(ckey)
+            self.queued_commands[cpid] = [c for c in self.queued_commands[cpid]
+                                          if not (c.get("cmd") in ("memorialize",) + DEATH_COMMANDS
+                                                  and c.get("key") == ckey)]
 
     @staticmethod
     def _trade_old_keys(pt: dict, pid: str) -> set[str]:
@@ -1293,7 +1335,7 @@ class SoulLinkState:
         self.party_keys["a"].add(entry.a.key)
         self.party_keys["b"] -= self._trade_old_keys(pt, "b")
         self.party_keys["b"].add(entry.b.key)
-        self._index_entry(entry)                        # MINOR-6: a collision is logged loudly here too
+        clash = self._index_traded(pt, entry)           # KEY-SCOPE-2: a same-player clash fails closed
         # MINOR-6: per-key bookkeeping follows each mon to its new holder (and trade-evolved key)
         for giver, taker in (("a", "b"), ("b", "a")):
             new = (pt["new"].get(taker) or ("", 0))[0] or pt[f"{giver}_key"]
@@ -1313,6 +1355,7 @@ class SoulLinkState:
                 "r": 100, "g": 255, "b": 160, "frames": 300})
         self.pending_trade = None
         self._replay_trade_events(pt)                   # MAJOR-2: after the swap, against the real holders
+        self._retire_traded_clash(entry, clash)
         self._save()
         log.info(f"trade complete (token {pt['token']})")
         self._record_trade(pt, "committed")
