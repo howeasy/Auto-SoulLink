@@ -34,11 +34,15 @@
         NATIVE_SAVE (frame == TRADE_DONE.frame) adds capture_frame, flush_frame, save_entry_frame, flushed_matches;
         every image carries client_saves: TRADE_FINAL is a FLUSH (never an ordinary save), so on a traded side its
         client_saves equals the NATIVE_SAVE count (main ruling: no save between the native trade save and the final)
-    TRADE_FORCED_SAVE   proposer only, exactly one (coordinator ruling after 9805ac1c): the image right after the
-        receptionist's forced native save succeeded (TryQuickSave -> SlinkTradeEntry, which is reached only on a
-        successful save). CartRAM captured at the SlinkTradeEntry exec, flushed at the frame boundary; same image
-        fields + capture_frame, flush_frame, flushed_matches, client_saves (> the baseline's), save_completed_frame.
-        The oracle compares the negative cases' A final against THIS image, byte-exact.
+    TRADE_FORCED_SAVE   (coordinator ruling after 9805ac1c) the image right after a side's forced native save:
+          proposer   always, exactly one: TryQuickSave -> SlinkTradeEntry (reached only on a successful save);
+                     captured at the SlinkTradeEntry exec (frame == TRADE_ENTRY.frame)
+          responder  exactly one whenever it accepts (any side that reaches APPLY): SlinkTradeResponderSave's YES
+                     -> Link_SaveGame -> SlinkTradeCheckSaved -> SlinkTradePublishDone with A=0 on the PROMPT lease
+                     (trade_service.asm); captured at that exec, OFFER.frame <= frame <= APPLY_PICKUP.frame
+        flushed at the frame boundary; same image fields + capture_frame, flush_frame, flushed_matches, client_saves
+        (> the baseline's), save_completed_frame. The oracle compares a negative case's final against THIS image,
+        byte-exact, and uses it as the "before" of the trade delta.
     TRADE_READY {frame, snapshot_sha256 (the baseline image), slot, key}
     TRADE_GO {frame, run_id}   (the runner writes "TRADE_GO" into the go-file after freezing both baselines and
         the server links; run_id is the admission manifest's)
@@ -805,6 +809,9 @@ function T.attach(e)
     function H.SlinkTradePublishDone(name)
         local l = lease()
         if st.committing and api.register("A") == 0 then phase_end("native_save", name) end
+        if st.role == 1 and api.register("A") == 0 and l[6] == T.CMD.prompt and not st.forced then
+            st.forced = {frame=frame(), cart=api.read_range(0, T.CART, "CartRAM")}   -- the accepting responder's save
+        end
         if api.register("A") == 1 and l[6] == T.CMD.prompt and not st.decline_before then
             st.decline_before = control_point(name, l[10])
         end
@@ -1165,14 +1172,21 @@ function T.verdict(lines, json, case, player)
     end
 
     -- the proposer's forced native save (9805ac1c): one immutable image, after GO, before the visit's entry
-    if plan.role == "proposer" then
+    local accepting = plan.role == "responder" and plan.answer == "YES"
+    if plan.role == "proposer" or accepting then
         local fs = one("TRADE_FORCED_SAVE")
         image(fs, "forced save")
         local f = v(fs)
         need(f.flushed_matches == true and integer(f.client_saves, (b.client_saves or 0) + 1, 2^53)
              and integer(f.save_completed_frame, v(go).frame or 0, f.frame or -1),
              "forced save image is not the successful pre-lease native save")
-        need(f.frame == v(all("TRADE_ENTRY")[1]).frame, "forced save image is not captured at SlinkTradeEntry")
+        if plan.role == "proposer" then
+            need(f.frame == v(all("TRADE_ENTRY")[1]).frame, "forced save image is not captured at SlinkTradeEntry")
+        else
+            local of, pk = all("TRADE_OFFER")[1], all("TRADE_APPLY_PICKUP")[1]
+            need(of and pk and fs and integer(f.frame, v(of).frame or 0, v(pk).frame or -1) and fs.at > of.at and fs.at < pk.at,
+                 "the responder's forced save image is not between its offer and the APPLY pickup")
+        end
         need(f.snapshot_path ~= b.snapshot_path and f.snapshot_path ~= v(final).snapshot_path, "forced save image reused")
     else
         none("TRADE_FORCED_SAVE")

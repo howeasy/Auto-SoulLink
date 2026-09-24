@@ -2096,6 +2096,10 @@ def trade_stream(case, player, item=0):
     after = {"timeout": "TRADE_EXIT", "reset_wait": "REBOOTED"}.get(case)
     if role == 1:
         j("TRADE_ANSWER", {"frame": 1350, "answer": answer, "after": after})
+        if answer == "YES":   # the accepting responder's forced save (Link_SaveGame), captured at PublishDone(0)
+            j("TRADE_FORCED_SAVE", {**image(1355, "forced", "forced_native_save"), "capture_frame": 1355,
+                                    "flush_frame": 1356, "flushed_matches": True, "client_saves": 2,
+                                    "save_completed_frame": 1352})
     committed = case in ("new", "evolve", "reset_commit")
     recovered = case == "reset_commit" and player == "a"
     if role == 0 or committed:
@@ -2921,6 +2925,10 @@ def test_forced_save_image_is_required_on_the_proposer_only():
         "successful pre-lease native save")
     red(edit(trade_stream("timeout", "a"), "TRADE_FORCED_SAVE", lambda v: v.update(frame=1199)), "timeout", "a",
         "captured at SlinkTradeEntry")
-    b = trade_stream("new", "b")
-    red(b + [line for line in trade_stream("new", "a") if line.startswith("TRADE_FORCED_SAVE ")], "new", "b",
-        "unexpected TRADE_FORCED_SAVE")
+    # HARNESS: the accepting responder has one too (its Link_SaveGame), between its offer and the APPLY pickup
+    red(drop(trade_stream("new", "b"), "TRADE_FORCED_SAVE"), "new", "b", "missing TRADE_FORCED_SAVE")
+    red(edit(trade_stream("evolve", "b"), "TRADE_FORCED_SAVE", lambda v: v.update(frame=1500)), "evolve", "b",
+        "between its offer and the APPLY pickup")
+    declined = trade_stream("decline_new", "b")
+    red(declined + [line for line in trade_stream("new", "b") if line.startswith("TRADE_FORCED_SAVE ")], "decline_new",
+        "b", "unexpected TRADE_FORCED_SAVE")
