@@ -322,7 +322,11 @@ def poison_facts(ctx) -> dict:
         nurse = next(o for script, o in center["objects"].items() if script.endswith("NurseScript"))
         stand = {"x": nurse["x"], "y": nurse["y"] + 2}   # across the counter row, facing up
         assert center["grid"][stand["y"] * center["width"] + stand["x"]] == 1, "nurse stand tile not floor"
-        out["heal"] = {"city": city_name, "center": center_name, "door": {"x": door["x"], "y": door["y"]},
+        # the way back for a second heal: the hunt route's maps north of the city, by their south connections
+        back = [edge_leg(ctx, maps, "Route30", "south", city_name)]
+        if "Route31" in maps:
+            back.append(edge_leg(ctx, maps, "Route31", "south", "Route30"))
+        out["heal"] = {"city": city_name, "center": center_name, "door": {"x": door["x"], "y": door["y"]}, "back": back,
                        "stand": stand, "exit": {"x": exits[0]["x"], "y": exits[0]["y"], "carpet": exits[0]["carpet"]}}
     if title in POISON_TRAINER:
         x, y, sight = trainers(ctx, hunt_name)[POISON_TRAINER[title]]

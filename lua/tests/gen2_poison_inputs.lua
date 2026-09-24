@@ -109,6 +109,8 @@ end
 PI.WAIT_FRAMES = 600
 PI.STUCK_FRAMES = 900   -- diagnostics only
 PI.GIVE_UP_FRAMES = 3000
+PI.HEAL_FRACTION = 0.6
+PI.MAX_HEALS = 3
 PI.BUMP_FRAMES = 24   -- ponytail: 3 normal steps (8 frames each); a walk that has not moved in that long is bumping
 
 local function on(point, map) return point.map_group == map.map_group and point.map_number == map.map_number end
@@ -128,7 +130,7 @@ function PI.driver(F, facts, opts)
     local held, hold_left, release = nil, 0, false
     local here, from = nil, nil
     local maps, hunt = facts.maps, facts.maps[facts.hunt_map]
-    local passive, no_passive, fought, healed, talked = opts.moves, {}, false, false, false
+    local passive, no_passive, fought, healed, talked, heals = opts.moves, {}, false, false, false, 0
     local function press(button)
         release, held, hold_left = true, button, PI.HOLD - 1
         return {[button]=true}, self.phase
@@ -328,6 +330,27 @@ function PI.driver(F, facts, opts)
             -- std_scripts.asm:54-114: A at the nurse across the counter, YES to "Shall we heal your #MON?").
             local h = facts.heal
             local center, city = maps[h.center], maps[h.city]
+            -- Gold U1f run 1: Mikey and a spinning Don (Route 30) wore the party to 7 and 1 HP after the
+            -- first heal, and Wade's Caterpies then wiped it. Beaten trainers never battle again, so a party
+            -- mon below HEAL_FRACTION on the way north goes back to Cherrygrove (Route 30's south connection)
+            -- for another heal, at most MAX_HEALS times.
+            if healed and heals < PI.MAX_HEALS and not on(point, center) and not on(point, city) then
+                for _, mon in pairs(party(point)) do
+                    if integer(mon.hp, 1, 999) and integer(mon.max_hp, 1, 999) and mon.hp < mon.max_hp * PI.HEAL_FRACTION then
+                        healed, talked = false, false
+                    end
+                end
+            end
+            if not healed and h.back then
+                for _, leg in ipairs(h.back) do
+                    local map = maps[leg.map]
+                    if map and on(point, map) then
+                        local buttons, why = walk(map, point, leg.exits)
+                        if why == "arrived" then return {[leg.side]=true}, self.phase end
+                        return buttons, why
+                    end
+                end
+            end
             if on(point, center) then
                 local full = true
                 for _, mon in pairs(party(point)) do if mon.hp ~= mon.max_hp then full = false end end
@@ -345,6 +368,7 @@ function PI.driver(F, facts, opts)
                     return buttons, why
                 end
                 if point.facing ~= "Up" then return press("Up") end
+                if not talked then heals = heals + 1 end
                 talked = true
                 return press("A")
             end

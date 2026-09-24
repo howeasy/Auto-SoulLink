@@ -465,3 +465,31 @@ def test_a_worn_mon_in_a_trainer_fight_hands_over_to_a_fitter_mate():
     assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **worn)[0] == ["Right"]                       # PKMN
     alone = dict(worn, party={0: {"hp": 5, "status": 0}, 1: {"hp": 3, "status": 0}})
     assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **alone)[0] == ["A"]                          # FIGHT on
+
+
+def test_a_worn_party_on_the_way_north_goes_back_for_another_heal():
+    """Gold U1f run 1: Mikey and a spinning Don wore the party down after the first heal."""
+    rt = lua()
+    PI = load(rt)
+    center = a_map(3, grid=[1] * 15, width=5, height=3)
+    center["warps"] = lua_list([{"x": 1, "y": 2, "destination": "CITY", "carpet": "Down"}])
+    back = lua_list([{"map": "A", "side": "Down", "exits": lua_list([{"x": 2, "y": 2}])}])
+    facts = dict(FACTS, maps=dict(FACTS["maps"], C=center, K=a_map(4)),
+                 heal={"city": "K", "center": "C", "door": {"x": 0, "y": 0}, "stand": {"x": 3, "y": 1},
+                       "exit": {"x": 1, "y": 2, "carpet": "Down"}, "back": back})
+    F = rt.eval("{walk_direction=function() return 'Left' end}")
+    d = PI.driver(F, table(rt, facts), table(rt, {"moves": lua_list(["LEER"])}))
+    full = {0: {"hp": 20, "status": 0, "max_hp": 20}}
+    # first heal: talk, full HP, leave
+    assert step(rt, d, map_number=3, x=3, y=1, facing="Up", party={0: {"hp": 5, "status": 0, "max_hp": 20}})[0] == ["A"]
+    for _ in range(12):
+        d.step(pt(rt, map_number=3, x=3, y=1, party=full))
+    d.step(pt(rt, map_number=3, x=3, y=1, party=full))
+    # on the route leg map A with the lead at 5/20: walk the back edge (2,2) instead of the exit (0,0)
+    worn = {0: {"hp": 5, "status": 0, "max_hp": 20}}
+    buttons, phase = d.step(pt(rt, map_number=1, x=2, y=1, party=worn))
+    assert phase == "travel" and buttons["Down"]
+    buttons, phase = d.step(pt(rt, map_number=1, x=2, y=2, party=worn))
+    assert buttons["Down"]                                                 # cross south
+    buttons, phase = d.step(pt(rt, map_number=1, x=2, y=1, party=full))
+    assert buttons["Down"]                                   # once due, the heal stands until the nurse
