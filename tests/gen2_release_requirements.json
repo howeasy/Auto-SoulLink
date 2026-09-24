@@ -381,6 +381,30 @@
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_pydec_result.txt",
                       "sha256": "3de4bb09e9137269cc8a8062b96e110a859bcbf2b88e236861eca7123c3ba414"}
           }
+        },
+        {
+          "scenario": "gen2_trade_decline_new",
+          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_decline_new --lane gs_decline_new --keep-data",
+          "receipts": {
+            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_gs_a_result.txt",
+                  "sha256": "da44c797fa64b93ef4f7093581f61b86275949e6fc8eb33f0d9ac091070a61ff"},
+            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_gs_b_result.txt",
+                  "sha256": "5820f58a8a878879373be70dce8474dad7c4f21e685dddf26092b10cab3a3474"},
+            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_gs_pydec_result.txt",
+                      "sha256": "45291a3821d61e4b05e6f76d95d0822eb1184492a126c61f71fc8fbb4d717c83"}
+          }
+        },
+        {
+          "scenario": "gen2_trade_timeout",
+          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_timeout --lane gs_timeout --keep-data",
+          "receipts": {
+            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_a_result.txt",
+                  "sha256": "985c32f8b689dfea89710a84acbf123a6ea95794a6463d0f76da0f1c13020c18"},
+            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_b_result.txt",
+                  "sha256": "60c4cb0ca2b5779c7c0c399400e1d87bb528c8241819001df46e499c88471f1d"},
+            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_pydec_result.txt",
+                      "sha256": "e22ef2e50c0b8b998d7b1d29f76e4f843f2dbb1b1da3c01eb80fe4275e8337a0"}
+          }
         }
       ]
     },
