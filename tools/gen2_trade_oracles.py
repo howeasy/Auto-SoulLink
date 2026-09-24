@@ -1137,7 +1137,7 @@ def _staged(receipt, text, partner_text, root):
              ("wOTPartyMonNicknames", partner_blob[59:70]))]
 
 
-def _forced_view(raw, old, layout, symbols, staged):
+def _forced_view(raw, old, layout, symbols, staged, *, title, root=ROOT):
     """Comparison only: the baseline with the forced save's clocks/facings and the expected staging."""
     out = bytearray(old)
     for name, size in CLOCK:
@@ -1153,36 +1153,58 @@ def _forced_view(raw, old, layout, symbols, staged):
     for name, data in staged:
         for start in _saved_spans(layout, symbols[name].address, len(data)):
             out[start:start + len(data)] = data
-    _rollover(out, raw, old, layout, symbols)
+    _rollover(out, raw, old, layout, symbols, title, root)
     for copy, offset in layout.checksum_offsets.items():
         out[offset:offset + 2] = codec.sav_checksum(bytes(out[:CART]), layout, copy).to_bytes(2, "little")
     return bytes(out)
 
 
-def _rollover(out, raw, old, layout, symbols):
-    """Take the forced save's day-change bookkeeping into out, value-checked per byte, only when the saved
-    wCurDay moved (ROLLOVER_* above). A byte outside its native value set stays the baseline's and fails the
-    byte-exact comparison."""
+def _rollover(out, raw, old, layout, symbols, title, root=ROOT):
+    """Take the forced save's day-change bookkeeping into out only when the branch-level model accepts it."""
     days = _saved_spans(layout, symbols["wCurDay"].address, 1)
     _need(len(days) == 2, "unsaved wCurDay")
     if all(raw[at] == old[at] for at in days):
         return
-    crystal = "wKenjiBreakTimer" in symbols
+    rtc = _saved_spans(layout, symbols["wRTC"].address, 1)
+    _need(len(rtc) == 2 and all(raw[rtc[copy]] == raw[days[copy]] for copy in range(2)),
+          "day change lacks matching wRTC[0] in both save copies")
 
-    def take(name, offset, allowed):
-        for copy, at in enumerate(_saved_spans(layout, symbols[name].address + offset, 1)):
-            if raw[at] in allowed(old[at], raw[days[copy]]):
-                out[at] = raw[at]
+    from tools.gen2_fixtures import _ruled_problems
+    from tools.gen2_source_data import load_context
 
-    take("wCurDay", 0, lambda was, day: range(256))
-    take("wDailyResetTimer", 0, lambda was, day: (was, 1))
-    take("wDailyResetTimer", 1, lambda was, day: (was, day))
-    take("wTimerEventStartDay", 0, lambda was, day: (was, day))
-    for name, size in ROLLOVER_ZEROED["c" if crystal else "gs"]:
-        for offset in range(size):
-            take(name, offset, lambda was, day: (was, 0))
+    ctx = load_context(title, root=Path(root))
+    crystal = title == "crystal"
+    zeroed = ROLLOVER_ZEROED["c" if crystal else "gs"]
+    day_problem_names = {"wDailyResetTimer", "wTimerEventStartDay"}
+    day_problem_names.update(name for name, _ in zeroed)
     if crystal:
-        take("wKenjiBreakTimer", 0, lambda was, day: (was, was - 1) if was >= 2 else (was, 3, 4, 5, 6))
+        day_problem_names.add("wKenjiBreakTimer")
+
+    def reader(source, copy):
+        def read(name, size):
+            spans = _saved_spans(layout, ctx.symbol(name).address, size)
+            _need(len(spans) == 2, f"unsaved rollover field {name}")
+            start = spans[copy]
+            return source[start:start + size]
+        return read
+
+    fields = [("wCurDay", 0, 1), ("wDailyResetTimer", 0, 2), ("wTimerEventStartDay", 0, 1)]
+    fields.extend((name, 0, size) for name, size in zeroed)
+    if crystal:
+        fields.append(("wKenjiBreakTimer", 0, 1))
+    for copy in range(2):
+        before, after = reader(old, copy), reader(raw, copy)
+        problems = set(_ruled_problems(ctx, title, before, after))
+        day = raw[days[copy]]
+        if problems & day_problem_names:
+            continue
+        if after("wDailyResetTimer", 2)[1] != day or after("wTimerEventStartDay", 1)[0] != day:
+            continue
+        for name, offset, size in fields:
+            spans = _saved_spans(layout, ctx.symbol(name).address + offset, size)
+            _need(len(spans) == 2, f"unsaved rollover field {name}")
+            start = spans[copy]
+            out[start:start + size] = raw[start:start + size]
 
 
 def _pre_trade(text, receipt, old, layout, symbols, *, partner_text, root=ROOT):
@@ -1215,7 +1237,8 @@ def _pre_trade(text, receipt, old, layout, symbols, *, partner_text, root=ROOT):
     _need(codec.strict_checksum_witness(raw[:CART], layout)["valid"], "forced pre-trade save checksum/copy witness failed")
     actual = normalized_gameplay_cartram(raw, layout)
     staged = _staged(receipt, text, partner_text, root)[0]
-    _need(normalized_gameplay_cartram(_forced_view(raw, old, layout, symbols, staged), layout) == actual,
+    _need(normalized_gameplay_cartram(_forced_view(raw, old, layout, symbols, staged,
+                                                     title=receipt["title"], root=root), layout) == actual,
           "forced pre-trade save rewrote more than the clocks, facings, checksums and its own staging")
     return raw
 

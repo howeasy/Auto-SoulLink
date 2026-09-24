@@ -1283,11 +1283,13 @@ def test_continue_view_refuses_a_backup_change_beyond_the_clock(tmp_path, source
         invoke(case)
 
 
-def _rollover(case, sources, *, advance=1, forced_edits=()):
+def _rollover(case, sources, *, advance=1, forced_edits=(), base_count=1, forced_count=1,
+              base_flag=0x04, forced_flag=0x00, base_kenji=1, forced_kenji=5, rtc_mismatch=False):
     """MODEL of a day rollover between A's baseline and its forced save (HARNESS, unthrottled trgs: wCurDay,
-    wDailyResetTimer+1 and wTimerEventStartDay moved on the forced save). The baseline carries yesterday's
-    bookkeeping and set daily flags; the forced save (and the timeout final, byte-exact to it) carries what
-    CheckDailyResetTimer / CheckSwarmFlag (G) / CheckPokerusTick write (oracle.ROLLOVER_* citations)."""
+    wRTC[0], wDailyResetTimer+1 and wTimerEventStartDay moved on the forced save). The baseline carries
+    yesterday's bookkeeping and set daily flags; the forced save (and the timeout final, byte-exact to it)
+    carries what CheckDailyResetTimer / CheckSwarmFlag (G) / CheckPokerusTick write (oracle.ROLLOVER_*
+    citations)."""
     receipt = get(case, "a", "RECEIPT")
     layout = sources[receipt["title"]]["layout"]
     symbols = parse_symbols((ROOT / f"data/gen2/{receipt['title']}_slink.sym").read_text())
@@ -1296,8 +1298,12 @@ def _rollover(case, sources, *, advance=1, forced_edits=()):
     forced = bytearray(Path(get(case, "a", "TRADE_FORCED_SAVE")["snapshot_path"]).read_bytes())
     day = (oracle._saved(bytes(forced), layout, "wCurDay", 1, "primary")[0] + 3) % 140
     base = bytearray(Path(get(case, "a", "TRADE_BASELINE")["snapshot_path"]).read_bytes())
-    for raw, today, flag, kenji in ((base, (day - advance) % 140, 0x04, 1), (forced, day, 0x00, 5)):
-        for name, data in (("wCurDay", [today]), ("wDailyResetTimer", [1, today]), ("wTimerEventStartDay", [today])):
+    for raw, today, count, flag, kenji, rtc_day in (
+            (base, (day - advance) % 140, base_count, base_flag, base_kenji, (day - advance) % 140),
+            (forced, day, forced_count, forced_flag, forced_kenji,
+             (day + 1) % 140 if rtc_mismatch else day)):
+        for name, data in (("wCurDay", [today]), ("wRTC", [rtc_day]),
+                           ("wDailyResetTimer", [count, today]), ("wTimerEventStartDay", [today])):
             assert save_bytes(raw, layout, symbols, name, bytes(data))
         for name, size in zeroed:
             assert save_bytes(raw, layout, symbols, name, bytes([flag] * size))
@@ -1309,6 +1315,29 @@ def _rollover(case, sources, *, advance=1, forced_edits=()):
     get(case, "a", "TRADE_READY")["snapshot_sha256"] = get(case, "a", "TRADE_BASELINE")["snapshot_sha256"]
     _set_image(case, "a", "TRADE_FORCED_SAVE", checksum(forced, layout))
     _set_image(case, "a", "TRADE_FINAL", bytes(forced))
+
+
+@pytest.mark.parametrize("variant", ["gs", "cc"])
+def test_day_rollover_accepts_an_unexpired_one_day_countdown(tmp_path, sources, variant):
+    case = make_case(tmp_path, sources, variant, scenario="gen2_trade_timeout")
+    _rollover(case, sources, base_count=3, forced_count=2, forced_flag=0x04, forced_kenji=1)
+    assert invoke(case) is None
+
+
+@pytest.mark.parametrize("variant", ["gs", "cc"])
+def test_day_rollover_rejects_a_reset_countdown_with_cleared_flags_on_one_day(tmp_path, sources, variant):
+    case = make_case(tmp_path, sources, variant, scenario="gen2_trade_timeout")
+    _rollover(case, sources, base_count=3, forced_count=1, forced_kenji=1)
+    with pytest.raises(RuntimeError, match="rewrote more than"):
+        invoke(case)
+
+
+@pytest.mark.parametrize("variant", ["gs", "cc"])
+def test_day_rollover_requires_rtc_day_to_match_cur_day(tmp_path, sources, variant):
+    case = make_case(tmp_path, sources, variant, scenario="gen2_trade_timeout")
+    _rollover(case, sources, rtc_mismatch=True)
+    with pytest.raises(RuntimeError, match="wRTC"):
+        invoke(case)
 
 
 @pytest.mark.parametrize("variant", ["gs", "cc"])
