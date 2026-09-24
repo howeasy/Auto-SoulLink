@@ -1935,6 +1935,11 @@ def test_visit_driver_responder_holds_the_prompt_until_told_and_never_presses_b(
     gate["open"] = True
     b, _ = drv.step(vpoint(lua, ui=prompt, input_ready=True), 20)
     assert dict(b.items()) == {"Down": True} and answers == ["NO"]
+    # live trgs3: the same box, cursor now on NO, is ready again: confirm it (the answer is logged once)
+    drain(drv, vpoint(lua), 20)
+    on_no = dict(prompt, cursor=2)
+    b, phase = drv.step(vpoint(lua, ui=on_no, input_ready=True), 40)
+    assert b is not None and dict(b.items()) == {"A": True} and answers == ["NO"], phase
     # the accepting responder then makes the native forced save; a declining one never sees it
     yes = visit(T, lua, role="responder", answer=lambda p: "YES")
     ask = lambda prompt: vpoint(lua, ui={"kind": "yes_no", "prompt": prompt, "items": ["YES", "NO"], "cursor": 1,

@@ -513,6 +513,8 @@ function T.visit_driver(opts)
                 end
                 if prompt == "save_overwrite" and (role == "proposer" or answered == "YES") then return p.choose(ui, "YES") end
                 if role == "responder" and prompt == "trade_save" and answered == "YES" then return p.choose(ui, "YES") end
+                -- the answer is taken once; a NO first moves the cursor, so the same box comes back ready
+                if role == "responder" and prompt == "trade_offer" and answered ~= nil then return p.choose(ui, answered) end
                 if role == "responder" and prompt == "trade_offer" and answered == nil then
                     local answer = opts.answer(point)
                     if answer == nil then return {}, "hold" end
