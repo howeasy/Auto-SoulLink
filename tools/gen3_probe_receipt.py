@@ -239,15 +239,17 @@ def build_header(title, kind, lane, rows, timeout, tracked_before=None, bw_hashe
 RUN_RECEIPT_TAG = "# gen3_final_cut"
 
 
-def run_receipt_text(*, row, item, cut, lane, command, cwd, env, attempts, verdict):
+def run_receipt_text(*, row, item, cut, lane, command, cwd, env, attempts, verdict, note=""):
     """The receipt text. `attempts` is a list of dicts with start_utc, end_utc, rc, load,
     tracked_before, tracked_after, classification and output (verbatim); `verdict` is the
-    row's final word (PASS / FAIL <why> / SKIP-ALLOWED <ruling> / STOPPED)."""
+    row's final word (PASS / FAIL <why> / SKIP-ALLOWED <ruling> / STOPPED / CARRIED from ...).
+    `note` lines follow the verdict, each as a '# ' line (a CARRIED row's checked evidence)."""
     lines = [f"{RUN_RECEIPT_TAG} row={row} item={item} cut={cut}",
              f"# lane={lane}",
              f"# command: {command}   (cwd={cwd})",
              f"# env: {' '.join(f'{k}={v}' for k, v in env.items()) or '(none)'}",
              f"# verdict: {verdict}"]
+    lines += [f"# {ln}" for ln in note.splitlines()]
     for i, a in enumerate(attempts, 1):
         lines += [f"--- attempt {i} of {len(attempts)} ---",
                   f"LOAD {a['load']}",
@@ -263,9 +265,14 @@ def read_run_receipt(path):
     is not one (a hand-written receipt never counts as a runner PASS)."""
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
-            head = [next(f, "") for _ in range(5)]
+            return parse_run_receipt(f.read())
     except OSError:
         return None
+
+
+def parse_run_receipt(text):
+    """read_run_receipt on text already in hand."""
+    head = (text.splitlines() + [""] * 5)[:5]
     if not head[0].startswith(RUN_RECEIPT_TAG + " "):
         return None
     fields = dict(kv.split("=", 1) for kv in head[0][len(RUN_RECEIPT_TAG):].split() if "=" in kv)

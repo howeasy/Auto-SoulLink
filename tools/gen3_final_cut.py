@@ -91,6 +91,7 @@ class Row:
     # True: the tool applies its own fail-closed skip policy and its exit code is the verdict
     # (verify_gen3_release's ALLOWED_SKIPS; item6, whose case outputs may legitimately skip)
     own_verdict: bool = False
+    deps: list | None = None   # --carry: dependency globs (row_deps); None = never carried
 
     def command(self):
         return shlex.join(["python" if a == PY else a for a in self.argv])
@@ -190,6 +191,8 @@ def build_plan(cut, lane, master):
              Row("probe_gates", "§11 gate",
                  [PY, "-m", "pytest", "tests/live/test_gen3_probe_gates.py", "-q", "-p",
                   "no:randomly", "-rs"], lane, 3600, env={"SLINK_LIVE": "1"})]
+    for r in rows:
+        r.deps = row_deps(r)
     return rows
 
 
@@ -475,17 +478,19 @@ def run_row(row, cut, lane, deadline):
     return verdict, len(attempts), attempts[-1]["tracked_after"]
 
 
-def write_summary(cut, results):
+def write_summary(cut, results, suffix=""):
+    counts = {k: sum(status_of(v) == k for _r, v, _n, _p in results)
+              for k in ("RUN", "CARRIED", "FAIL")}
     lines = [f"# G4 final cut {cut} -- tools/gen3_final_cut.py summary "
-             f"(written {utcnow():%Y-%m-%dT%H:%M:%SZ})", "",
+             f"(written {utcnow():%Y-%m-%dT%H:%M:%SZ})",
+             f"# RUN {counts['RUN']} / CARRIED {counts['CARRIED']} / FAIL {counts['FAIL']}", "",
              "| # | row | runbook | verdict | attempts | receipt |", "|---|---|---|---|---|---|"]
     for i, (row, verdict, n, rec) in enumerate(results, 1):
         lines.append(f"| {i} | {row.id} | {row.item} | {verdict} | {n} | {rec} |")
-    passed = all(v.startswith(("PASS", "SKIP-ALLOWED")) for _r, v, _n, _p in results)
+    passed = counts["FAIL"] == 0
     lines += ["", f"OVERALL: {'PASS' if passed and results else 'FAIL'} "
-                  f"({sum(v.startswith(('PASS', 'SKIP-ALLOWED')) for _r, v, _n, _p in results)}"
-                  f"/{len(results)} rows)"]
-    path = os.path.join(PROBES, f"fc_SUMMARY_{cut[:8]}.txt")
+                  f"({counts['RUN'] + counts['CARRIED']}/{len(results)} rows)"]
+    path = os.path.join(PROBES, f"fc_SUMMARY_{cut[:8]}{suffix}.txt")
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     return path, passed
@@ -656,8 +661,315 @@ def item6(branch, master):
 
 
 # ---------------------------------------------------------------------------
+# --carry: synthetic evidence (owner-approved, card G4-FINALCUT-FAST). A row is CARRIED, not run,
+# when a PASS receipt for the same row+orientation exists at some cut X and `git diff --name-only
+# X <cut>` touches none of the row's dependency globs. The globs are CONSERVATIVE: everything the
+# row loads (the client closure, its carrier, the pack, the fixtures, the harness tools, the
+# server) -- when in doubt the path is in. `**` crosses directories, `*` does not.
+# ---------------------------------------------------------------------------
+
+GEN3_CLIENT = ["lua/*.lua", "lua/x64/**", "lua/gen3/**", "lua/core/**", "data/games/gen3_frlg/**"]
+GEN3_HARNESS = ["tools/run_gate.py", "tools/gen1_playthrough.py", "tools/gen3_fixtures.py",
+                "lua/tests/gen3_*.lua", "server/adapters/**"]
+FRLG_FIXTURES = ["tests/fixtures/gen3/firered_party_*", "tests/fixtures/gen3/leafgreen_party_*"]
+PROBE_DEPS = GEN3_CLIENT + GEN3_HARNESS + FRLG_FIXTURES + [
+    "lua/tests/probe_gen3_checkpoint.lua", "tools/gen3_probe_receipt.py", "tools/gen3_bw_hashes.py",
+    "tools/mkstates_gen3.py", "tools/mkstates_gen3_tutorials.py"]
+PROBE_GATES_DEPS = GEN3_CLIENT + GEN3_HARNESS + [
+    "data/games/gen3_*/**", "lua/tests/*gen3*", "tests/live/test_gen3_probe_gates.py",
+    "tests/conftest.py"]
+ITEM6_DEPS = ["lua/*.lua", "lua/gen1/**", "lua/gen2/**", "lua/core/**", "lua/clients/**",
+              "lua/games/**", "lua/tests/*gen1*", "lua/tests/*gb*", "lua/tests/duo/**", "server/**",
+              "tools/e2e_duo.py", "tools/run_gate.py", "tools/gen1_*.py", "tools/gen3_final_cut.py",
+              "tests/conftest.py", "tests/unit/test_gen1_client.py", "tests/unit/protocol_schema.py",
+              "tests/live/test_gen1_gates.py", "tests/fixtures/gen1/**", "tests/fixtures/gen2/**",
+              "data/games/gen1_rby/**", "data/games/gen2_crystal/**", "patch/gen1/**"]
+# builds are lane-local artifacts, the zip is built from the cut, the source gate IS the cut
+NEVER_CARRIED = ("states_*", "tutorials_*", "zip_*", "release_gate_quick")
+
+
+def duo_module(scenario):
+    """The carrier duo_gen3_main.lua dofiles (`D.scenario_module or scenario - _gen3`,
+    lua/tests/duo/duo_gen3_main.lua); every carrier when e2e_duo will not import."""
+    try:
+        import e2e_duo
+        return e2e_duo.SCENARIOS[scenario].get("scenario_module") or scenario[:-len("_gen3")]
+    except Exception:
+        return "*"
+
+
+def row_deps(row):
+    """The row's dependency globs, or None for a row that is never carried."""
+    if any(fnmatch.fnmatch(row.id, p) for p in NEVER_CARRIED):
+        return None
+    if row.id.endswith(("_fr_as_a", "_lg_as_a")):
+        scenario = row.id[:-len("_fr_as_a")]
+        return GEN3_CLIENT + GEN3_HARNESS + FRLG_FIXTURES + [
+            "server/**", "tools/e2e_duo.py", "lua/tests/duo/duo_gen3_main.lua",
+            f"lua/tests/duo/scenario_gen3_{duo_module(scenario)}.lua"]
+    if row.id.startswith("checkpoint_"):
+        return PROBE_DEPS
+    if row.id.startswith("bootcheck_"):
+        return GEN3_CLIENT + GEN3_HARNESS + [f"tests/fixtures/gen3/{row.id[len('bootcheck_'):]}.sav"]
+    if row.id == "item6_route_diff":
+        return ITEM6_DEPS
+    if row.id == "probe_gates":
+        return PROBE_GATES_DEPS
+    return None
+
+
+def _glob_re(glob):
+    out, i = "", 0
+    while i < len(glob):
+        if glob.startswith("**", i):
+            out, i = out + ".*", i + 2
+        else:
+            out += {"*": "[^/]*", "?": "[^/]"}.get(glob[i], re.escape(glob[i]))
+            i += 1
+    return re.compile(out + r"\Z")
+
+
+def touched(changed, deps):
+    """The changed paths that match any dependency glob."""
+    pats = [_glob_re(g) for g in deps]
+    return [f for f in changed if any(p.match(f) for p in pats)]
+
+
+@dataclass
+class Evidence:
+    row: str
+    receipt: str               # basename under docs/gen3/probes/
+    cut: str | None            # the full sha the receipt was taken at (None: not citable)
+    passed: bool
+    seconds: float | None = None
+    master: str | None = None  # item 6 only: the master sha8 its baseline side ran at
+
+
+_SHA = r"[0-9a-f]{40}"
+_PASS_LINE = "RESULT: PASS all checkpoint controls"
+
+
+def _one_sha(text, keys):
+    """The one sha the receipt names under `keys` (source=/sha=/lane=), else None."""
+    shas = set(re.findall(rf"\b(?:{'|'.join(keys)})=({_SHA})\b", text))
+    return shas.pop() if len(shas) == 1 else None
+
+
+def _seconds(text, pass_re=None):
+    """Summed start_utc..end_utc spans (only spans that show `pass_re`, if given)."""
+    total = None
+    for sec in re.split(r"(?=start_utc=)", text)[1:]:
+        start, end = re.match(r"start_utc=(\S+)", sec), re.search(r"end_utc=(\S+)", sec)
+        if end and (pass_re is None or pass_re.search(sec)):
+            total = (total or 0) + (parse_utc(end[1]) - parse_utc(start[1])).total_seconds()
+    return total
+
+
+def _duo_passed(text, scenario):
+    return bool(re.search(rf"^  {scenario}: PASS \(attempt", text, re.M)) and \
+        not re.search(rf"^  {scenario}: FAIL", text, re.M)
+
+
+def receipt_evidence(name, text):
+    """Map one receipt file to Evidence (row, cut, PASS?, duration), or None. The shapes in the
+    tree: fc_<row>_<cut8> (this runner), ph_<scenario>_<fr|lg>_as_a_<cut8> (G4-LANE-2),
+    duo_frlg_<scenario>[_clean]_<date>, {center_controls,save_then_write}_<o>_as_a_*,
+    center_receipt_whiteout_<o>_as_a_*, checkpoint_<fr|lg>_clean_* and, for durations only,
+    mkstates_gen3_<title>_<kind>_*. A receipt that names no single cut sha is not citable."""
+    m = re.fullmatch(r"fc_(.+)_[0-9a-f]{8}\.txt", name)
+    if m and not name.startswith("fc_SUMMARY_"):
+        hdr = receipts.parse_run_receipt(text)
+        if not hdr:
+            return None
+        v = hdr["verdict"]
+        c = re.match(rf"CARRIED from (\S+) @({_SHA})", v)
+        if c:   # a carry cites its origin, never itself
+            return Evidence(hdr["row"], c[1], c[2], True)
+        mm = re.search(r"on master \(([0-9a-f]{8})\)", text)
+        return Evidence(hdr["row"], name, hdr["cut"], v.startswith(("PASS", "SKIP-ALLOWED")),
+                        _seconds(text), mm[1] if mm else None)
+    m = re.fullmatch(r"ph_(.+)_(fr|lg)_as_a_[0-9a-f]{8}\.txt", name)
+    if m:
+        scen = m[1]
+        passed = bool(re.search(r"^note: PASS", text, re.M)) and bool(
+            re.search(rf"^  {scen}: PASS \(attempt", text, re.M))
+        secs = _seconds(text, re.compile(rf"^  {scen}: PASS", re.M))
+        note = re.search(r"^note: .*?~(\d+) min", text, re.M)
+        if secs is None and note:
+            secs = int(note[1]) * 60
+        return Evidence(f"{scen}_{m[2]}_as_a", name, _one_sha(text, ("sha", "source")), passed,
+                        secs)
+    for pat, scen_of in (
+            (r"duo_frlg_(.+?)_(?:clean_)?\d{4}-\d\d-\d\d[a-z]?\.txt", lambda m: (m[1], "fr")),
+            (r"(center_controls|save_then_write)_(fr|lg)_as_a_.*\.txt",
+             lambda m: (m[1] + "_gen3", m[2])),
+            (r"center_receipt_whiteout_(fr|lg)_as_a_.*\.txt", lambda m: ("whiteout_gen3", m[1]))):
+        m = re.fullmatch(pat, name)
+        if m:
+            scen, o = scen_of(m)
+            return Evidence(f"{scen}_{o}_as_a", name, _one_sha(text, ("source",)),
+                            _duo_passed(text, scen))
+    m = re.fullmatch(r"checkpoint_(fr|lg)_clean_.*\.txt", name)
+    if m:
+        first = text.splitlines()[0] if text else ""
+        last = next((ln for ln in reversed(text.splitlines()) if ln.strip()), "")
+        rows = re.search(r"^# SLINK_CHECKPOINT_ROWS=(\S+)", text, re.M)
+        full = bool(rows) and rows[1].split(",") == receipts.DEFAULT_ROWS
+        lane = re.search(rf"\blane=({_SHA})\b", first)
+        return Evidence(f"checkpoint_{'firered' if m[1] == 'fr' else 'leafgreen'}", name,
+                        lane[1] if lane else None,
+                        last.strip() == _PASS_LINE and "tracked_clean=True" in first and full)
+    m = re.fullmatch(r"mkstates_gen3_(firered|leafgreen)_(town|battle)_.*\.txt", name)
+    if m:
+        g = re.search(r"\[gate\] \S+: RESULT: PASS.*\((\d+)s\)", text)
+        return Evidence(f"states_{m[1]}_{m[2]}", name, None, False, int(g[1]) if g else None)
+    return None
+
+
+def collect_evidence(probes=None):
+    """{row: [Evidence, ...]} over every receipt in docs/gen3/probes/."""
+    probes = probes or PROBES
+    out = {}
+    for name in sorted(os.listdir(probes)):
+        if name.endswith(".txt"):
+            ev = receipt_evidence(name, _read(os.path.join(probes, name)))
+            if ev:
+                out.setdefault(ev.row, []).append(ev)
+    return out
+
+
+@dataclass
+class Decision:
+    kind: str                       # "CARRY" or "RUN"
+    reason: str
+    evidence: Evidence | None = None
+    checked: list = field(default_factory=list)   # the diff X..cut that was checked
+
+
+def carry_decision(row, cut, evidence, diff_names, master_sha=None):
+    """CARRY when some PASS receipt at a cut X != `cut` has a diff X..cut that touches none of
+    the row's dependency globs; RUN otherwise, with the reason. `diff_names(x, cut)` returns the
+    changed paths, or None when x is not in the repo. Receipts at `cut` itself are resume
+    material, not carry material."""
+    if row.deps is None:
+        return Decision("RUN", "never carried (built/checked at the cut itself)")
+    cands = [e for e in evidence if e.passed and e.cut and e.cut != cut]
+    if not cands:
+        return Decision("RUN", "no citable PASS receipt")
+    blocked = []
+    for e in cands:
+        if row.id == "item6_route_diff" and not (e.master and master_sha
+                                                  and master_sha.startswith(e.master)):
+            blocked.append(f"{e.receipt}: master moved or unrecorded")
+            continue
+        changed = diff_names(e.cut, cut)
+        if changed is None:
+            blocked.append(f"{e.receipt}: cut {e.cut[:8]} not in this repo")
+            continue
+        hit = touched(changed, row.deps)
+        if not hit:
+            return Decision("CARRY", f"CARRIED from {e.receipt} @{e.cut}", e, changed)
+        blocked.append(f"{e.receipt} @{e.cut[:8]}: {', '.join(hit[:3])}"
+                       f"{f' (+{len(hit) - 3})' if len(hit) > 3 else ''}")
+    return Decision("RUN", "dependency changed -- " + "; ".join(blocked))
+
+
+_DIFFS = {}
+
+
+def git_diff_names(x, cut):
+    if (x, cut) not in _DIFFS:
+        p = subprocess.run(["git", "-C", REPO, "diff", "--name-only", x, cut],
+                           capture_output=True, text=True)
+        _DIFFS[x, cut] = p.stdout.split() if p.returncode == 0 else None
+    return _DIFFS[x, cut]
+
+
+def estimate_seconds(evidence, cut):
+    """The row's historical duration: the longest recorded span among its receipts at other
+    cuts (receipts at `cut` are left out, so two shards compute the same estimate)."""
+    spans = [e.seconds for e in evidence if e.seconds and e.cut != cut]
+    return max(spans) if spans else None
+
+
+def carried_receipt(row, cut, lane, d):
+    """The CARRIED row's fc receipt: the cited receipt, its cut, and the checked diff."""
+    deps = row.deps or []
+    x = d.evidence.cut
+    note = (f"CARRIED from {d.evidence.receipt} @{x}; diff {x[:8]}..{cut[:8]} touches no "
+            f"dependency (list checked)\n"
+            f"dependencies checked ({len(deps)}): {' '.join(deps)}\n"
+            f"diff {x[:8]}..{cut[:8]} ({len(d.checked)} paths, none a dependency): "
+            f"{' '.join(d.checked) or '(empty)'}")
+    return receipts.run_receipt_text(row=row.id, item=row.item.replace(" ", "_"), cut=cut,
+                                     lane=lane, command=row.command(), cwd=row.cwd, env=row.env,
+                                     attempts=[], verdict=d.reason, note=note)
+
+
+# ---------------------------------------------------------------------------
+# --shard i/n: two runner instances split the RUN rows across two lanes
+# ---------------------------------------------------------------------------
+
+def parse_shard(text):
+    i, n = (int(x) for x in text.split("/"))
+    if not 1 <= i <= n:
+        raise SystemExit(f"--shard {text}: need 1 <= i <= n")
+    return i, n
+
+
+def shard_rows(rows, n, est):
+    """Deterministic longest-first split of `rows` into n lists (plan order inside each): every
+    row lands in exactly one shard. `est` maps row id -> seconds."""
+    order = {r.id: k for k, r in enumerate(rows)}
+    loads, out = [0.0] * n, [[] for _ in range(n)]
+    for r in sorted(rows, key=lambda r: (-est[r.id], order[r.id])):
+        k = min(range(n), key=lambda j: (loads[j], j))
+        out[k].append(r)
+        loads[k] += est[r.id]
+    return [sorted(o, key=lambda r: order[r.id]) for o in out]
+
+
+def status_of(verdict):
+    if verdict.startswith("CARRIED"):
+        return "CARRIED"
+    return "RUN" if verdict.startswith(("PASS", "SKIP-ALLOWED")) else "FAIL"
+
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
+
+def plan_decisions(rows, cut, carry):
+    """({row id: Decision}, {row id: est seconds or None}). Without --carry every row RUNs."""
+    ev = collect_evidence()
+    est = {r.id: estimate_seconds(ev.get(r.id, []), cut) for r in rows}
+    if not carry:
+        return {r.id: Decision("RUN", "no --carry") for r in rows}, est
+    master = _git(REPO, "rev-parse", "master", check=False).stdout.strip() or None
+    return {r.id: carry_decision(r, cut, ev.get(r.id, []), git_diff_names, master)
+            for r in rows}, est
+
+
+def _mins(s):
+    return f"{s / 60:.0f}m"
+
+
+def merge_summary(cut, rows):
+    """--merge-summary: one fc_SUMMARY_<cut8>.txt from every row's receipt at `cut`, whichever
+    shard (or lane) wrote it; a row with no receipt is NOT RUN, i.e. a failure."""
+    results = []
+    for row in rows:
+        path = receipt_path(row.id, cut)
+        got = receipts.read_run_receipt(path)
+        if got and got["cut"] == cut:
+            n = _read(path).count("\n--- attempt ")
+            results.append((row, got["verdict"], n, os.path.basename(path)))
+        else:
+            results.append((row, "NOT RUN (no receipt at this cut)", 0, "-"))
+    path, ok = write_summary(cut, results)
+    print(_read(path))
+    return 0 if ok else 1
+
 
 def run_pass(args):
     root = main_checkout()
@@ -675,49 +987,79 @@ def run_pass(args):
         for r in rows:
             print(f"{r.id:<48} {r.item}")
         return 0
+    if args.merge_summary:
+        return merge_summary(cut, rows)
+    decisions, est = plan_decisions(rows, cut, args.carry)
+    run_rows = [r for r in rows if decisions[r.id].kind == "RUN"]
+    carry_rows = [r for r in rows if decisions[r.id].kind == "CARRY"]
+    suffix = ""
+    if args.shard:
+        i, n = parse_shard(args.shard)
+        run_rows = shard_rows(run_rows, n, {r.id: est[r.id] or r.budget for r in run_rows})[i - 1]
+        carry_rows = carry_rows if i == 1 else []   # shard 1 writes the CARRIED receipts
+        suffix = f"_shard{i}of{n}"
+    mine = {r.id for r in run_rows + carry_rows}
+    rows_here = [r for r in rows if r.id in mine]
     if args.dry_run:
-        print(f"# G4 final cut {cut}  lane={lane}  master={master}  rows={len(rows)}")
+        print(f"# G4 final cut {cut}  lane={lane}  master={master}  rows={len(rows)}"
+              f"{f'  shard={args.shard}' if args.shard else ''}  carry={bool(args.carry)}")
         for step in provision_plan(lane, cut):
             print(f"# provision: {step}")
-        if any(r.id == "item6_route_diff" for r in rows):
+        if any(r.id == "item6_route_diff" for r in run_rows):
             print(f"# provision: the same for {master} at master")
-        for i, r in enumerate(rows, 1):
-            env = " ".join(f"{k}={v}" for k, v in r.env.items())
-            print(f"[{i:02d}] {r.id}  ({r.item}, budget {r.budget}s, cwd={r.cwd})\n"
-                  f"     $ {(env + ' ') if env else ''}{r.command()}")
-        print(f"# {len(rows)} rows; receipts docs/gen3/probes/fc_<row>_{cut[:8]}.txt, "
-              f"summary fc_SUMMARY_{cut[:8]}.txt")
+        for k, r in enumerate(rows, 1):
+            d, env = decisions[r.id], " ".join(f"{a}={b}" for a, b in r.env.items())
+            where = "" if r.id in mine else "  [other shard]"
+            e = est[r.id]
+            print(f"[{k:02d}] {r.id}  {d.kind}{where}  ({r.item}, "
+                  f"{'est ' + _mins(e) if e else 'no history, budget ' + _mins(r.budget)}, "
+                  f"cwd={r.cwd})\n     $ {(env + ' ') if env else ''}{r.command()}\n"
+                  f"     {d.reason}")
+        known = [est[r.id] for r in run_rows if est[r.id]]
+        unknown = [r for r in run_rows if not est[r.id]]
+        print(f"# {len(rows)} rows: RUN {len(run_rows)} (this shard) / CARRY {len(carry_rows)}"
+              f" -- lane time: {_mins(sum(known))} from {len(known)} rows' receipts + "
+              f"{len(unknown)} rows with no history (budget ceiling "
+              f"{_mins(sum(r.budget for r in unknown))})")
+        print(f"# receipts docs/gen3/probes/fc_<row>_{cut[:8]}.txt, summary "
+              f"fc_SUMMARY_{cut[:8]}{suffix}.txt")
         return 0
     deadline = parse_utc(args.stop_at).timestamp() if args.stop_at else None
     try:
-        provision(lane, cut, root)
-        copy_inputs(lane, root)
-        if any(r.id == "item6_route_diff" for r in rows):
+        if run_rows:
+            provision(lane, cut, root)
+            copy_inputs(lane, root)
+        if any(r.id == "item6_route_diff" for r in run_rows):
             provision(master, "master", root)
             copy_inputs(master, root)
     except LaneError as exc:
         print(f"[final_cut] ABORT: {exc}", file=sys.stderr)
         return 2
     results = []
-    for row in rows:
+    for row in rows_here:
         prior = prior_verdict(row.id, cut)
         rec = os.path.basename(receipt_path(row.id, cut))
         if prior and prior.startswith("FAIL"):
-            # never re-run an unchanged failed row automatically
+            # never re-run an unchanged failed row automatically, and never paper over it
             results.append((row, f"{prior} (prior receipt at this cut; not re-run)", 0, rec))
-        elif prior and args.resume and prior.startswith(("PASS", "SKIP-ALLOWED")):
+        elif prior and (args.resume or decisions[row.id].kind == "CARRY") and \
+                prior.startswith(("PASS", "SKIP-ALLOWED", "CARRIED")):
             results.append((row, f"{prior} (resumed)", 0, rec))
+        elif decisions[row.id].kind == "CARRY":
+            with open(receipt_path(row.id, cut), "w", encoding="utf-8") as f:
+                f.write(carried_receipt(row, cut, lane, decisions[row.id]))
+            results.append((row, decisions[row.id].reason, 0, rec))
         elif deadline and time.time() >= deadline:
             results.append((row, "NOT RUN (--stop-at)", 0, "-"))
         else:
             verdict, n, clean_after = run_row(row, cut, lane, deadline)
             results.append((row, verdict, n, rec))
             if not clean_after:
-                write_summary(cut, results)
+                write_summary(cut, results, suffix)
                 print("[final_cut] ABORT: the lane went tracked-dirty", file=sys.stderr)
                 return 2
-        path, _ok = write_summary(cut, results)
-    path, ok = write_summary(cut, results)
+        write_summary(cut, results, suffix)
+    path, ok = write_summary(cut, results, suffix)
     print(f"\n[final_cut] summary: {path}")
     print(_read(path))
     return 0 if ok else 1
@@ -753,6 +1095,14 @@ def main(argv=None):
                     help="skip rows whose receipt at this cut already says PASS")
     ap.add_argument("--stop-at", default=None,
                     help="UTC time (ISO 8601): no row starts after it, a running row is killed")
+    ap.add_argument("--carry", action="store_true",
+                    help="CARRY a row whose PASS receipt at an earlier cut has no dependency in "
+                         "the diff to --cut (owner-approved synthetic evidence)")
+    ap.add_argument("--shard", default=None,
+                    help="i/n: run only this instance's share of the RUN rows (use a distinct "
+                         "--lane per shard); shard 1 also writes the CARRIED receipts")
+    ap.add_argument("--merge-summary", action="store_true",
+                    help="write fc_SUMMARY_<cut8>.txt from every row's receipt at --cut, then exit")
     return run_pass(ap.parse_args(argv))
 
 

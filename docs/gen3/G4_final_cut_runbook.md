@@ -313,6 +313,7 @@ python tools/gen3_final_cut.py --cut <frozen cut> --dry-run    # the full comman
 python tools/gen3_final_cut.py --cut <frozen cut> --resume     # skip rows already PASSed at this cut
 python tools/gen3_final_cut.py --cut <frozen cut> --rows 'item2b,zip_*' --stop-at 2026-09-25T06:00Z
 python tools/gen3_final_cut.py --cut <frozen cut> --list       # the row ids
+# fast mode (--carry / --shard / --merge-summary): below
 ```
 It provisions `.claude/worktrees/gen3-lane-clean` (override `--lane`) detached at the cut — `git worktree add
 --detach` if absent, else `checkout --detach`, with W3's `update-ref --no-deref HEAD` + `read-tree`/`checkout-index`
@@ -339,6 +340,25 @@ item, cut, lane, command, env, verdict, then per attempt the LOAD snapshot, star
 the output verbatim, exit and classification), the probe's own `checkpoint_{fr,lg}_clean_<cut8>.txt`, and the summary
 table `fc_SUMMARY_<cut8>.txt` (rewritten after every row; `OVERALL: PASS` only when every selected row PASSed or was
 an allowed SKIP). Exit 0 = PASS, 1 = a row failed, 2 = aborted (lane).
+
+**Fast mode** (card G4-FINALCUT-FAST, owner-approved synthetic evidence):
+```
+python tools/gen3_final_cut.py --cut <cut> --carry --dry-run                         # RUN vs CARRY, est. minutes
+python tools/gen3_final_cut.py --cut <cut> --carry --shard 1/2 --lane <gen3-lane-clean>
+python tools/gen3_final_cut.py --cut <cut> --carry --shard 2/2 --lane <gen3-lane-2>
+python tools/gen3_final_cut.py --cut <cut> --merge-summary                           # one fc_SUMMARY_<cut8>.txt
+```
+`--carry`: a row is CARRIED, not run, when a PASS receipt for the same row+orientation exists at a cut X
+(`fc_*`, `ph_*`, and the older duo/center/save/checkpoint receipts that name a single cut sha) and
+`git diff --name-only X <cut>` touches none of the row's dependency globs (`row_deps` in the runner:
+the client closure `lua/*.lua`, `lua/gen3/**`, `lua/core/**`, the `gen3_frlg` pack, the harness tools and
+`lua/tests/gen3_*.lua`, `server/**`, `tools/e2e_duo.py`, `duo_gen3_main.lua` plus the row's own carrier,
+and the FRLG party fixtures; conservative by design). Its receipt says `CARRIED from <receipt> @X; diff X..cut
+touches no dependency (list checked)` and lists the checked globs and the diff. Builds, the zip rows and the
+source gate are never carried; item 6 carries only while `master` has not moved. `--shard i/n` splits the RUN
+rows deterministically (longest first by receipt history, else budget); shard 1 also writes the CARRIED
+receipts; each shard writes `fc_SUMMARY_<cut8>_shard<i>of<n>.txt`, and `--merge-summary` builds the one summary
+from every row's receipt (RUN / CARRIED / FAIL counted separately; a row with no receipt is NOT RUN = FAIL).
 
 `python tools/verify_gen3_release.py` (all lanes) stays the release gate's own entry point; the runner runs its
 `--quick` source lanes and its `probe-gates` lane, and replaces its `duo-pairs-gen3` pytest lane with the per-scenario
