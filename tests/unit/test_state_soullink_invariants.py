@@ -138,3 +138,19 @@ def test_a_release_of_a_received_mon_waits_for_the_trade(tmp_path):
         {"player": "a", "event": "release", "key": A_GETS}]
     b_cmds = _tick(state, "b", _mon(B_GETS, 0x26)) + _cmds(state, "b")        # B's evidence: traded
     assert _keys(b_cmds, "force_faint") == [B_GETS] and entry.cause == "release"
+
+
+# ── MINOR-4 (probe P2b): a whiteout's per-link kill of a trade key waits for the swap ─────────────
+
+def test_a_whiteout_in_the_trade_window_kills_by_the_swapped_link(tmp_path):
+    state, entry, _token = _one_sided(tmp_path)
+    a_cmds = state.handle_event("a", {"event": "whiteout"})
+    b_cmds = _cmds(state, "b")
+    assert entry.status == LinkStatus.ALIVE and not _keys(a_cmds + b_cmds, "force_faint")
+    assert not _keys(a_cmds + b_cmds, "memorialize")
+    assert state.trade_held() == [{"player": "a", "event": "faint", "key": B_GETS}]
+    b_cmds = _tick(state, "b", _mon(B_GETS, 0x26)) + _cmds(state, "b")       # B's evidence: traded
+    a_cmds = _cmds(state, "a")
+    assert _keys(b_cmds, "force_faint") == [B_GETS], "B holds B_GETS, A's received mon's partner"
+    assert _keys(a_cmds, "memorialize") == [A_GETS] and not _keys(a_cmds, "force_faint")
+    assert entry.status == LinkStatus.DEAD and entry.cause == "whiteout"

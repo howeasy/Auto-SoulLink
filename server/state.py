@@ -2218,7 +2218,7 @@ class SoulLinkState:
                 "trainer_class": msg.get("_trainer_class", ""),
             }
         self._propagate_faint(player_id, entry, killer=killer,
-                              level=msg.get("_level", 0))
+                              level=msg.get("_level", 0), cause="whiteout" if msg.get("_cause") == "whiteout" else "battle")
 
     def _handle_release(self, player_id: str, msg: dict):
         """Owner ruling O-35: a PC release of a linked mon loses it, so its partner dies and is
@@ -2541,6 +2541,9 @@ class SoulLinkState:
                 continue
             # Only act on mons we believe are in the whited-out player's party
             if player_mon.key not in self.party_keys[player_id]:
+                continue
+            # Invariant review MINOR-4: a link the pending trade names dies by the SWAPPED halves
+            if self._hold_for_trade(player_id, {"event": "faint", "key": player_mon.key, "_cause": "whiteout"}):
                 continue
             self.queued_commands[partner].append({"cmd": "force_faint", "key": partner_mon.key, "nickname": partner_mon.nickname or ""})
             self.party_keys[partner].discard(partner_mon.key)
