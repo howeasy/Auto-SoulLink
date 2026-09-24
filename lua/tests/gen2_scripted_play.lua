@@ -30,29 +30,36 @@ local function direction(map, point, goal)
     end
     if destination(point.x,point.y) then return "arrived" end
     if type(point.can_step) ~= "table" then return nil, "live collision observation missing" end
-    local blocked = {}
-    for _, object in ipairs(point.blocked or {}) do blocked[key(object.x,object.y)] = true end
-    for _, warp in ipairs(map.warps) do
-        if goal.grass or warp.x ~= goal.x or warp.y ~= goal.y then blocked[key(warp.x,warp.y)] = true end
-    end
-    for _, tile in ipairs(goal.avoid or {}) do blocked[key(tile.x,tile.y)] = true end
-    local queue, head, visited = {{point.x,point.y,false}}, 1, {[key(point.x,point.y)] = true}
-    while head <= #queue do
-        local node = queue[head]; head = head+1
-        for _, delta in ipairs(DIRECTIONS) do
-            local x,y = node[1]+delta[2],node[2]+delta[3]
-            if x >= 0 and x < map.width and y >= 0 and y < map.height then
-                local index = key(x,y)
-                local first = node[3] or delta[1]
-                if not visited[index] and map.grid[index] ~= 0 and not blocked[index]
-                   and (node[3] or point.can_step[delta[1]] == true) then
-                    visited[index] = true
-                    if destination(x,y) then return first end
-                    queue[#queue+1] = {x,y,first}
+    -- Observed objects first; when they close every path, retry without them: an object struct can
+    -- outlive its sprite on screen (the errand run and Crystal U1e run 1 both read a phantom at Route 29
+    -- (11,7), the one-tile aisle west), and a real NPC only bumps the step, re-planned next frame.
+    local function search(objects)
+        local blocked = {}
+        for _, object in ipairs(objects and point.blocked or {}) do blocked[key(object.x,object.y)] = true end
+        for _, warp in ipairs(map.warps) do
+            if goal.grass or warp.x ~= goal.x or warp.y ~= goal.y then blocked[key(warp.x,warp.y)] = true end
+        end
+        for _, tile in ipairs(goal.avoid or {}) do blocked[key(tile.x,tile.y)] = true end
+        local queue, head, visited = {{point.x,point.y,false}}, 1, {[key(point.x,point.y)] = true}
+        while head <= #queue do
+            local node = queue[head]; head = head+1
+            for _, delta in ipairs(DIRECTIONS) do
+                local x,y = node[1]+delta[2],node[2]+delta[3]
+                if x >= 0 and x < map.width and y >= 0 and y < map.height then
+                    local index = key(x,y)
+                    local first = node[3] or delta[1]
+                    if not visited[index] and map.grid[index] ~= 0 and not blocked[index]
+                       and (node[3] or point.can_step[delta[1]] == true) then
+                        visited[index] = true
+                        if destination(x,y) then return first end
+                        queue[#queue+1] = {x,y,first}
+                    end
                 end
             end
         end
     end
+    local found = search(true) or search(false)
+    if found then return found end
     local steps, objects = {}, {}
     for _, d in ipairs(DIRECTIONS) do steps[#steps+1] = d[1] .. "=" .. tostring(point.can_step[d[1]]) end
     for _, b in ipairs(point.blocked or {}) do objects[#objects+1] = b.x .. "," .. b.y end

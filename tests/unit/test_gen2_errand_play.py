@@ -161,3 +161,10 @@ def test_plain_facts_never_run_the_errand(name):
     driver = P.new(lua.table_from(plain, recursive=True), lua.table_from(case))
     assert driver.errand is not None   # the method exists, but nothing routes into it without errand events
     assert "errand_events" not in plain["observer"]
+
+
+def test_a_phantom_object_on_the_only_aisle_does_not_strand_the_route():
+    """Errand live attempt a1 (and Crystal U1e run 1): an object struct read at Route 29 (11,7), the one-tile
+    aisle west, closed every path. The planner retries without objects; a real NPC only bumps the step."""
+    r = Run()
+    assert r.step("Route29", x=11, y=6, blocked={1: {"x": 11, "y": 7}}) == (["Down"], "errand-west")
