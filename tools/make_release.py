@@ -68,18 +68,11 @@ _LUA_ROOT = [
     "game_detect.lua",
     "hud.lua",
     "memory_gb.lua",
-    "memory_gba.lua",
     "memory_nds.lua",
-    "sfx_arbiter.lua",
     "socket.lua",
     "json_codec.lua",
     # The Gen 1 client's closure: entry.lua dofiles both of these off the repo root.
     "gen1_write_safety.lua",
-    # Companion-patch modules (RR native features) — pcall-required by the Gen 3 client.
-    # Required for the companion patch to work; harmless when the ROM is unpatched
-    # (patch_present() stays false, so the client falls back to RAM-poke).
-    "mailbox.lua",
-    "peer_ghost_npc.lua",
     # Gen 2 area tables live in lua/ (loaded via _lua_root)
     "gen2_crystal_areas.lua",
     "gen2_crystal_locations.lua",
@@ -128,7 +121,6 @@ _LUA_CORE = [
 # lua/clients/
 _LUA_CLIENTS = [
     "gen2_crystal_client.lua",
-    "gen3_frlge_client.lua",
     "gen4_hgsspt_client.lua",
     "gen5_bw_client.lua",
 ]

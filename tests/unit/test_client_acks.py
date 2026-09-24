@@ -36,7 +36,7 @@ def test_there_are_clients_to_check():
     rather than a BizHawk entry script, and its acks are covered below against that path.
     Written as a lower bound so it holds before and after the old client's deletion.
     """
-    assert len(CLIENTS) >= 4
+    assert len(CLIENTS) >= 3
 
 
 GEN1_CLIENT = os.path.join(REPO, "lua", "gen1", "client.lua")

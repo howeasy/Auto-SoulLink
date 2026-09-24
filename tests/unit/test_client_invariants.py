@@ -51,7 +51,7 @@ def test_clients_exist():
     Four, not five: Gen 1 left lua/clients/ for lua/gen1/ (see the note above). Written as a
     lower bound so this passes both before and after the old client's deletion.
     """
-    assert len(CLIENTS) >= 4, f"expected at least 4 clients, found {CLIENTS}"
+    assert len(CLIENTS) >= 3, f"expected at least 3 clients, found {CLIENTS}"
 
 
 @pytest.mark.parametrize("path", CLIENTS, ids=lambda p: os.path.basename(p))
