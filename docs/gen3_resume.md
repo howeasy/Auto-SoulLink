@@ -1,6 +1,35 @@
-# Gen 3 migration — resume note (updated 2026-09-23, checkpoint 14: owner G4 rulings settled; save rows + probe rows PASS; 2b + G5 RR fixes in flight)
+# Gen 3 migration — resume note (updated 2026-09-23, checkpoint 15: BREAK — G4 2b rows all PASS live; mechanism P built, carrier update next)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in the sweep worktree's `docs/gen1_reference/RC_MASTER_GUIDE.md` (`E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`). Requirements ledger: `docs/gen3_requirements.md`.
+
+## CHECKPOINT 15 (2026-09-23): BREAK (owner) — resume here
+
+Tree clean at HEAD (see git log; cffe0a25 is the last receipt). Nothing in flight: no subagent, Codex/OMP told to stop, emulator lane free, `.claude/worktrees/gen3-lane-clean` detached at 2bee46f2 and verified clean.
+- **G4 now:**
+  - items 1, 2, 2a, 3 and the §3.2 save rows are PASS on both titles;
+  - **2b is PASS**: probe rows f58c8dd5, A1 c13cf7c7, A2 89442a97, T2 cffe0a25; D1-D5/N3/U3 are signed limits;
+  - all five owner scope decisions a-e are settled (G4 draft §6, 21ef6143/22cb85a8).
+  Remaining: the P carrier update (below), the final-cut re-takes (docs/gen3/G4_final_cut_runbook.md + tools/gen3_probe_receipt.py), item 6 route-differential, and the owner's Manager run.
+- **Mechanism P** (owner "A": the active battler faints in battle via the engine's Perish KO on FR/LG singles):
+  - built 1b3943e3; the Explode revert is 39bcc4f8, since the owner did not want Explode Mode changed and P is for force_faint only; the bench-first ordering + DREW doc is 66595498;
+  - adversarial review ACCEPT-WITH-FIXES, all fixed.
+  - **NEXT CARD:** the live carrier for P. A1 (`linked_faint_active_gen3`) and A2 (`active_end_gen3`) assert the OLD hold and are now semantically wrong on FR/LG; the P worker's report lists the replacement assertions (ACTIVE_COMMIT 7 bytes, O1-O7 in docs/gen3/research/active_faint_in_battle_scope_2026-09-23.md §5).
+  - Update them (Codex owns those carrier files), then run both titles plus the whiteout and trainer variants.
+- **Owner decisions OPEN** (asked, not yet answered):
+  1. add the controller hand-off on FR/LG too, so no A press is needed;
+  2. RR lag-frame lost-ball window: record as a limit, or add a companion opcode;
+  3. the DREW edge (an end-of-turn foe KO on the same turn as our last mon's Perish KO gives a whiteout): accept, or hold P on the last mon.
+- **G5 (RR) research landed:**
+  - save callers 76bc4486;
+  - battle tuple fixed 97082a62/a1bbc686 (required clause set; battle_commit_hold);
+  - FORCE_MOVE_SLOT 15a274ec/21df5314 (source only, companion rebuild = owner);
+  - RR P parity scope 11a7203e (no rebuild needed; hand-off write + a writes.lua write_plan).
+- **Other landed work:**
+  - LG CPU census 168fde14/b21a3431;
+  - receipt tools 587453bf/e8497461;
+  - UI-lane cherry-picks: manager unadmitted games, Gen 4/5 removed, RR sprites bundled 3235ddf3;
+  - Gen 1 SFX fix 48709f39.
+- **Lane rule:** check `git status --porcelain --untracked-files=no` is empty after every lane checkout (a Drive checkout once dropped 22 files).
 
 ## CHECKPOINT 14 (2026-09-23): G4 owner rulings recorded; the 2b in-battle rows wired and run; G5's RR battle permit fixed in source
 
