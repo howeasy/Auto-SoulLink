@@ -19,7 +19,7 @@
         "initiator": "crystal",
         "partner": "crystal",
         "fixtures": {"a": "crystal_battle", "b": "crystal_battle_ot2"},
-        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset", "gen2_species_clause"]
+        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset", "gen2_species_clause", "gen2_type_clause"]
       },
       "proofs": [
         {
@@ -128,6 +128,24 @@
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_species_clause_cc_pydec_result.txt",
               "sha256": "9adaea2d8a97d1cf50e9f0154ade2df5160cdb5c82b49a392ef0abfa0770ed50"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_type_clause",
+          "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_type_clause --lane h10-cc-type --keep-data",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_type_clause_cc_a_result.txt",
+              "sha256": "9954940e10ee31893bd7bdf052316be2cc00fd7ec9e2367d53ac8410863bc800"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_type_clause_cc_b_result.txt",
+              "sha256": "f4df01e6703e6b4c0b21b8471e1bfec380b8f0f999fe45261c1813bc71d33f3c"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_type_clause_cc_pydec_result.txt",
+              "sha256": "13aa9a8e63b8f936e1269f8042452b132339f29cb91b1a26d366d71347bcdf5f"
             }
           }
         }
