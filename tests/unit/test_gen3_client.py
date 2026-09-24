@@ -373,17 +373,13 @@ def test_a_held_battler_at_battle_end_lands_at_the_overworld_checkpoint():
     assert w.party_hp(0) == 0 and write_reasons(w) == ["overworld"]
 
 
-def test_frlg_force_explode_on_the_active_battler_is_the_active_faint_not_an_explosion():
-    """Scope doc §6 risk 1: the P fields (CHOSEN_ACTION/BATTLE_COMM) must not make vanilla
-    explode_capable. force_explode stays "a faint" on FR/LG: exactly the P plan, no move slot,
-    no PP, no chosen move, no battle-struct byte."""
-    assert "CHOSEN_MOVE_ADDR" not in World().ram               # explode_capable stays false
-    w = _p_world()
+def test_frlg_force_explode_on_the_active_battler_is_a_held_faint():
+    w = live()
+    w.battle_ok = True
+    w.enter_battle([FOE], active=(0,))
     w.command(cmd="force_explode", key=KA)
-    w.step()
-    assert _p_commit(w) == _p_plan_bytes(w, 0)
-    mons = w.ram["BATTLE_MONS_ADDR"]
-    assert not [x for x in w.writes if mons <= x[0] < mons + 4 * 0x58]
+    w.step(3)
+    assert w.writes == [] and w.client.battle_pending_count(w.client) == 1
 
 
 def _lift_rr_commit_hold(w):
@@ -585,6 +581,31 @@ def test_p_frlg_active_force_faint_commits_the_perish_plan_in_order_with_comm_la
     assert set(write_reasons(w)) == {"battle_commit"}
     held = lua_to_py_list(w.client.battle_pending)[0]
     assert "active faint committed" in str(held.why)
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_p_never_touches_explode_mode_force_explode_on_frlg_is_the_parents_hold(title):
+    """Owner 2026-09-23: Explode Mode is untouched. On FR/LG (explode not capable: no
+    CHOSEN_MOVE_ADDR) force_explode on the active battler is exactly the parent's behaviour:
+    held as "active battler", zero bytes, no Perish/no-op/commit byte, every frame of the turn;
+    it lands only on switch-out as battle_faint. The same world with force_faint commits P."""
+    assert "CHOSEN_MOVE_ADDR" not in World(title=title).ram      # explode_capable stays false
+    w = _p_world(title)
+    w.command(cmd="force_explode", key=KA)
+    w.step(30)
+    assert w.writes == [] and write_reasons(w) == []
+    (held,) = lua_to_py_list(w.client.battle_pending)
+    assert str(held.cmd) == "force_explode" and str(held.why) == "active battler"
+    assert w._read(P_STATUS3, 4) & STATUS3_PERISH_SONG == 0 and w._read(P_COMM, 1) == 1
+    w.set_active([1])                                            # the parent's landing: switch-out
+    w.step()
+    assert w.party_hp(0) == 0 and write_reasons(w) == ["battle_faint"]
+    assert w.client.battle_pending_count(w.client) == 0
+    # control: the linked-faint path on the same title still uses P
+    w = _p_world(title)
+    w.command(cmd="force_faint", key=KA)
+    w.step()
+    assert _p_commit(w) == _p_plan_bytes(w, 0)
 
 
 def test_p_f4_control_comm_first_is_refused_mid_plan_by_the_real_sink():

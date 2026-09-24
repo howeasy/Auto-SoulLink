@@ -751,9 +751,12 @@ function Client.new(p)
         local battler = battler_of(b, slot)
         if battler then
             if e.cmd == "force_explode" and explode_capable then return explode_step(e, slot, mon, battler) end
-            -- P on singles only: in doubles a partner B-cancel resets battler 0's commit while
-            -- the Perish flag stays (scope doc §2.1), and D1-D5 are signed limits
-            if active_faint_capable and battler == 0 and b.battlers_count == 2 and b.is_doubles ~= true then
+            -- P is the linked-faint path ONLY (owner 2026-09-23: Explode Mode is untouched, so a
+            -- non-capable force_explode keeps its hold below). Singles only: in doubles a partner
+            -- B-cancel resets battler 0's commit while the Perish flag stays (scope doc §2.1), and
+            -- D1-D5 are signed limits.
+            if e.cmd == "force_faint" and active_faint_capable and battler == 0
+               and b.battlers_count == 2 and b.is_doubles ~= true then
                 return active_faint_step(e, mon, battler)
             end
             -- Held until it switches out or the battle ends: a party-only HP write is undone by the
