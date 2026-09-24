@@ -213,6 +213,16 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
         return not c.in_battle() and c.on_field() and c.G.pred_ok(c.cp,"field_controls_locked")
             and c.G.pred_ok(c.cp,"script_context_status")
     end
+    local function field_diagnostic(tag, dir)
+        local function predicate(name)
+            local value,want=c.G.pred(c.cp,name)
+            return string.format("%s=%s/%s",name,tostring(value),tostring(want))
+        end
+        local g,n=c.G.map(c.cp);local x,y=c.G.pos(c.cp)
+        c.log(string.format("%s dir=%s map=%d.%d at=(%d,%d) frames=%d field=%s battle=%s %s %s",
+              tag,dir or "none",g,n,x,y,frame()-start,tostring(c.on_field()),tostring(c.in_battle()),
+              predicate("field_controls_locked"),predicate("script_context_status")))
+    end
     local function step(dir, flee)
         local x,y=c.G.pos(c.cp); local d=delta[dir]
         local moved=false
@@ -221,7 +231,10 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
             local u,v=c.G.pos(c.cp)
             if u~=x or v~=y then moved=true;break end
         end
-        assert(moved,"route blocked going "..dir)
+        if not moved then
+            field_diagnostic("PREP_BLOCKED",dir)
+            error("route blocked going "..dir)
+        end
         for _=1,24 do if c.in_battle() then break end;tick() end
         if flee and c.in_battle() then
             local ok,why=c.run_away(label.." incidental")
@@ -264,6 +277,20 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
     local function run()
         assert(expected==102,"unsupported preparation trainer")
         assert(at(3,1,T.START[1],T.START[2]),"T2 needs the town fixture")
+        -- boot_to_field only holds callback2/fade for60 frames, not field/script control.
+        -- Its save helper documents a CONTINUE control lock lasting100+ frames. Do not spend
+        -- the first step's60-tick movement budget on that independent settle interval.
+        -- No battle await/prompt reader runs here: those cannot clear this walk's inputs.
+        local stable=0
+        local ready=await(function()
+            stable=quiet() and stable+1 or 0
+            return stable>=60
+        end,1800)
+        if not ready then
+            field_diagnostic("PREP_BLOCKED_READY")
+            error("PREPARATION field/script controls never settled")
+        end
+        c.log(string.format("PREP_READY frames=%d stable=60",frame()-start))
         local sb1=c.peek("gSaveBlock1Ptr",4)
         local pocket={c.SP.SB1_KEYITEMS_POCKET_OFFSET,c.SP.BAG_KEYITEMS_COUNT}
         local already=T.after_scene(sb1,pocket)

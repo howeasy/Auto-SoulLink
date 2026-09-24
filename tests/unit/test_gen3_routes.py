@@ -345,6 +345,53 @@ def test_real_await_turn_uses_prompt_policy_and_releases_button_edges(env):
     assert list(g.presses.values()) == ["B", "Up", "A"]
 
 
+@pytest.mark.parametrize("blocked", [False, True, "locked"])
+def test_first_tutorial_leg_waits_for_controls_with_await_policy_loaded(env, blocked):
+    lua, routes = env
+    source = (ROOT / "lua/tests/duo/duo_gen3_main.lua").read_text()
+    body = source[source.index("function ctx.await_turn("):source.index("--- At the action menu")]
+    lua.globals().r = routes
+    lua.execute("""
+        f=0;x=24;y=39;presses=0;logs={};await_calls=0;first_press=nil
+        c={cp={},play={},party=function() return {{level=9,experience=428,hp=27,max_hp=27}} end,
+           find=function() return {slot=1,hp=17} end,in_battle=function() return false end,
+           on_field=function() return true end,peek=function() return 1 end,
+           log=function(s) logs[#logs+1]=s end,frames=function() f=f+1 end,
+           wait_until=function() await_calls=await_calls+1;error('battle wait during tutorial') end,
+           G={map=function() return 3,1 end,pos=function() return x,y end,
+              pred_ok=function(_,name) return f>=100 and BLOCKED~='locked' end,
+              pred=function(_,name) return f>=100 and BLOCKED~='locked' and 0 or 1,0 end,
+              tap=function(button)
+                  first_press=first_press or f;presses=presses+1;f=f+1
+                  if f>=100 and not BLOCKED and button=='Up' then y=y-1 end
+              end},
+           SP={DEST={route1_north={}},warp_to=function() error('PREFIX_COMPLETE') end}}
+        ctx=c
+        t={START={24,39},TRIGGER={24,30},SEGMENTS={{'Up',8,{24,31}}},
+           after_scene=function() return true end}
+        r.paths.tutorial_to_town={3,1,24,30,24,30,''}
+        prep={max_frames=5000,target_key='K',target_slot=1,target_hp=17,level_floor=13}
+    """)
+    lua.execute(body)  # actual new await/edge code is loaded, not a stand-in
+    g = lua.globals()
+    g.BLOCKED = blocked
+    ok, why = routes.enter_trainer(g.c, g.t, lambda: g.f, "prep", 102, g.prep)
+    assert not ok
+    assert g.await_calls == 0  # neither await nor its edge clearing runs on this path
+    if blocked == "locked":
+        assert "controls never settled" in why and g.presses == 0
+        assert any("PREP_BLOCKED_READY" in s and "field_controls_locked=1/0" in s
+                   and "script_context_status=1/0" in s for s in g.logs.values())
+    elif blocked:
+        assert "route blocked going Up" in why
+        assert any("PREP_BLOCKED" in s and "field_controls_locked=0/0" in s
+                   and "script_context_status=0/0" in s for s in g.logs.values())
+    else:
+        assert "PREFIX_COMPLETE" in why
+        assert (g.x, g.y, g.presses) == (24, 30, 9)
+        assert g.first_press >= 100
+
+
 def test_preparation_wraps_actual_shared_follow_and_logs_nested_frames(env):
     lua, routes = env
     lua.globals().r = routes
