@@ -311,3 +311,32 @@ State at this note (HEAD ~4a157d4a+; --new-gates and --duo-matrix green at last 
 - Open owner decision coming: trade-evolution / held-mail specimens may be unreachable early -> recorded limit or long play.
 - Shared-file commit rule: files several workers edit are staged with `git apply --cached` (own hunks) and committed
   without a pathspec; `git commit -- <path>` takes the whole working-tree file.
+
+## Session 8, day 2 (2026-09-24): compaction point, 7 subagents running; Codex + OMP DOWN
+
+Owner: Codex and OMP are down ("only you and your subagents"); up to 7 subagents allowed. Rulings since the last
+note: O-31 disclosed test-only setup (HARNESS_WRITE) for trade-evolution + D3 refusal (26564aed).
+
+Landed since 60aebf0b (all physical unless noted):
+- U1f PC sites + whiteout_before_heal on all three (C 3dd70162, S 2caf9126, G a882a763): 18 sites per receipt.
+- gen2_faint_active duo cc/gs/cg (8ba39408, 2e1bbf56, 3fca3cbd); duo matrix fully receipted (8 scenarios x 3).
+- W6 mailbox write-watch C/S 8e83b202, G bf655ef2; phone gate C/G/S eb49da00; panel/sfx re-pinned 4a157d4a.
+- Trade-ready seeds: crystal/crystal_ot2/silver/gold *_battle_errand (8b83ff52, 7e697c98, b6930da8, a7bf1773).
+- Server uncertain-trade reconciliation 1ac09296 + 9a436c95 (MODEL). P4.3e harness pieces 9c182ef2, 78aa49bb,
+  9debf1d5 (Codex); trade drivers e9e914fb + d482fd37 (MODEL; contract in coordinator scratchpad p43e_driver_contract.md).
+
+Running at compaction (subagent ids for SendMessage):
+- HARNESS a4b25b9791322bccf: took over Codex's UNCOMMITTED P4.3e runner/oracle (tools/e2e_duo.py, gen2_trade_oracles.py,
+  tests) + owns all Codex trade helpers + verify_gen2_release.py/release requirements; register 7 trade cases.
+- TRADE-ASM a301092ac0ba8f1ce: receptionist host-wait bounds (30 f -> >=300 f), republish overlays, re-pin
+  panel/sfx/phone/W6 (W6 U1 leg on the U1f chain for all three).
+- TRADE-HARDEN a2e4b167c1a20a405: server cancel on proposer leave (one-sided-commit bug), trade_done uncertain fast
+  path Gen 1 + Gen 2, server journals trade_uncertain for explicit claims.
+- DRIVER-ROBUST a95e01a5592ddb1eb: shared ledge helper (route_facts fingerprints unchanged) + poison-leg flake.
+- EVO-U1 ab5b9af5b6ee52bcc: prove the evolution engine site on C/G/S (Caterpie/Weedle L7) -> production key_change.
+- DUO-WAVE-C abba0c5b5800bffe2: pc_ops / changebox / whiteout / poison duos (registration via HARNESS).
+- Next after HARNESS + TRADE-ASM: a LIVE worker for trade lanes (gold-seed receptionist smoke, then G<->S trade_new, ...).
+
+Queue: trade_problem status banner (UI lane), conflict admin-resolve, ship errand qualification reports if needed,
+P4.4 promotion (owner G4 signature). Commit rule on shared files: `git apply --cached` own hunks, commit without a
+pathspec. End-of-turn orchestration hook: Codex/OMP removed from tracking (peers down).
