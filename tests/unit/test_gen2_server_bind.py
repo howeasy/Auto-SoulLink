@@ -66,11 +66,18 @@ def test_the_binder_covers_exactly_the_gen2_gsc_foundation_rows():
     {"rom_type": "crystal_ap"}, {"rom_type": "Crystal (AP)"}, {"rom_type": ""},
     {"rom_type": "CRYSTAL"}, {"rom_type": "red"}, {"rom_type": "firered_rr", "is_rr": True},
     {"rom_type": "Gold", "is_rr": True}, {"rom_type": "Gold", "title": "crystal"},
-    {"rom_type": "Gold", "artifact_kind": "overlay"}, {},
+    {"rom_type": "Gold", "artifact_kind": "built"}, {},
 ], ids=lambda k: repr(k))
 def test_the_binder_refuses_what_is_not_an_admitted_gen2_title(kwargs):
     with pytest.raises(ValueError):
         get_adapter("gen2_gsc", **kwargs)
+
+
+def test_the_binder_accepts_the_overlay_kind_but_admission_keeps_it_future():
+    """P4.3d (d5697cfb): the adapter binds the overlay kind (native trade UI / info panel on);
+    admitting a patched ROM is still refused by its FUTURE admission rows until P4.4."""
+    adapter = get_adapter("gen2_gsc", rom_type="Gold", artifact_kind="overlay")
+    assert adapter.native_trade_ui() and adapter.supports_info_panel()
 
 
 def test_the_live_rows_reflect_the_u5_cutover():
