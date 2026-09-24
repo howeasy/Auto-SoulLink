@@ -1508,22 +1508,38 @@ local function pc_storage()
     return ptr
 end
 
+-- BizHawk's memory.* is userdata: a nil address raises "Argument number 1 is invalid" rather
+-- than returning something inert. PC_STORAGE_PTR, PC_RESULT and PC_MENU_BASE (-> PC_MENU_CURSOR)
+-- have no radical_red entry in gen3_title_syms.lua, so on RR they ARE nil, and the unguarded
+-- reads below raised on the very check meant to explain a PC-stage failure (never printing) — a
+-- run 28c-class diagnostic gap, on RR. -1 stands in for "not proven on this title".
+local function safe_read(fn, addr)
+    if addr == nil then return -1 end
+    return fn(addr)
+end
+
 --- What owned input when a PC stage failed: every active task's func, gStorage->state and the
 --- script context status byte (sGlobalScriptContextStatus 0x03000EA8, 2 = shutdown). A named
---- stage without this left FR run 28c undiagnosable.
+--- stage without this left FR run 28c undiagnosable. Wrapped in pcall so an address this hasn't
+--- been proven for on some future title still can't turn a diagnostic dump into the crash that
+--- masks the timeout it was meant to explain.
 local function pc_state_dump()
-    local tasks = {}
-    for i = 0, 15 do
-        local base = PC_TASKS + i * PC_TASK_SIZE
-        if memory.read_u8(base + 4) ~= 0 then
-            tasks[#tasks + 1] = string.format("%08X", memory.read_u32_le(base))
+    local ok, result = pcall(function()
+        local tasks = {}
+        for i = 0, 15 do
+            local base = PC_TASKS + i * PC_TASK_SIZE
+            if memory.read_u8(base + 4) ~= 0 then
+                tasks[#tasks + 1] = string.format("%08X", memory.read_u32_le(base))
+            end
         end
-    end
-    local sp = memory.read_u32_le(PC_STORAGE_PTR)
-    local st = (sp >= 0x02000000 and sp < 0x02040000) and memory.read_u8(sp) or -1
-    return string.format("tasks=[%s] storage_state=%d script_status=%d result=%d menu_cursor=%d",
-        table.concat(tasks, ","), st, memory.read_u8(S.SCRIPT_CONTEXT_STATUS_ADDR),
-        memory.read_u16_le(PC_RESULT), memory.read_u8(PC_MENU_CURSOR))
+        local sp = safe_read(memory.read_u32_le, PC_STORAGE_PTR)
+        local st = (sp >= 0x02000000 and sp < 0x02040000) and memory.read_u8(sp) or -1
+        return string.format("tasks=[%s] storage_state=%d script_status=%d result=%d menu_cursor=%d",
+            table.concat(tasks, ","), st, safe_read(memory.read_u8, S.SCRIPT_CONTEXT_STATUS_ADDR),
+            safe_read(memory.read_u16_le, PC_RESULT), safe_read(memory.read_u8, PC_MENU_CURSOR))
+    end)
+    if ok then return result end
+    return "pc_state_dump failed: " .. tostring(result)
 end
 
 local function pc_fail(label, stage)

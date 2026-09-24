@@ -1106,3 +1106,45 @@ def test_start_oak_delivery_stops_as_soon_as_the_parcel_leaves(parcel_cp):
 
     assert not exits, "must return once the parcel leaves, not mash on to the frame budget"
     assert presses["n"] == 3, "no A press may follow the observed removal"
+
+
+@pytest.fixture
+def rr_module():
+    """The script loaded for radical_red, whose gen3_title_syms.lua entry leaves PC_STORAGE_PTR,
+    PC_RESULT and PC_MENU_BASE (-> PC_MENU_CURSOR) all ABSENT (no radical_red key) — the exact
+    condition that made pc_state_dump's timeout diagnostic raise "Argument number 1 is invalid"
+    instead of printing (line ~1522, `memory.read_u32_le(PC_STORAGE_PTR)` with PC_STORAGE_PTR
+    nil). `memory.read_*` here mimics BizHawk's real behaviour: a nil address blows up the call
+    instead of returning something inert, since the whole point of the fix is to never let a nil
+    address reach it."""
+    os.environ.setdefault("SLINK_ROOT", _REPO.replace("\\", "/"))
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    runtime.globals().SLINK_GEN3_TITLE = "radical_red"
+
+    def _read(a, *_):
+        if a is None:
+            raise ValueError("Argument number 1 is invalid")
+        return 0
+
+    runtime.globals().memory = runtime.table(
+        read_u8=_read, read_u16_le=_read, read_u32_le=_read, read_s16_le=_read)
+    mod = runtime.execute(f'return dofile("{_SCRIPT.replace(chr(92), "/")}")')
+    return mod
+
+
+def test_pc_dump_does_not_raise_on_radical_red(rr_module):
+    """The whole point: a caller mid-timeout must get a string back, never an exception, on RR."""
+    dump = rr_module.PC.dump()
+    assert isinstance(dump, str)
+
+
+def test_pc_dump_reports_the_fields_it_can_on_radical_red(rr_module):
+    """Not just swallowed into a generic failure message -- the task/status fields that ARE
+    proven on RR (script_status, from SCRIPT_CONTEXT_STATUS_ADDR) still come through, and the
+    ones that aren't (storage_state, result, menu_cursor) fall back to a sentinel instead of
+    crashing the whole dump."""
+    dump = rr_module.PC.dump()
+    assert "script_status=" in dump
+    assert "storage_state=-1" in dump
+    assert "result=-1" in dump
+    assert "menu_cursor=-1" in dump
