@@ -245,6 +245,18 @@
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cc_pydec_result.txt",
                       "sha256": "73ca3b7f9cc25923322ef09995baa4218b908ad3524364a331956ba3bfa84ab2"}
           }
+        },
+        {
+          "scenario": "gen2_trade_reset_commit",
+          "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_reset_commit --lane c4_reset_commit --keep-data",
+          "receipts": {
+            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cc_a_result.txt",
+                  "sha256": "3f64c6de5783a271bae92490874dcf0c4fbdbf104e6ffa2c8db86b163c17c41c"},
+            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cc_b_result.txt",
+                  "sha256": "ed446b301c3eae21d1286ec4d91c24e8839cedf0aedfa3612c8a01b930d8ead2"},
+            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cc_pydec_result.txt",
+                      "sha256": "538db9c1a5dcd5a4462943f142c178adae600aa729f52307b00c776f57809781"}
+          }
         }
       ]
     },
