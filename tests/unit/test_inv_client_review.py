@@ -208,6 +208,21 @@ def test_gen1_a_refused_hello_never_retires_the_owed_report():
     assert len(w.events("trade_done")) == 2
 
 
+# ── O-35 (owner ruling, server 8f662994): a PC release sends release{key}; the server kills the partner ────
+@pytest.mark.parametrize("collection", ["party", "box"])
+def test_gen2_a_pc_release_sends_release_not_a_deposit(collection):
+    world = g2.World()
+    lead, gone = mon(), mon(species=172, dvs=0x3AAA)
+    world.party([lead, gone])
+    world.hello()
+    record = world.parts.reads.read_party().mons[2]
+    ev = world.lua.table_from({"kind": "pc_release", "collection": collection, "mon": record, "box_index": 0})
+    world.client.on_event(world.client, ev)
+    world.frames(1)
+    assert [m["key"] for m in world.sent("release")] == [codec_key(gone)]
+    assert world.sent("party_to_box") == [], "a release is not a deposit"
+
+
 # ── MINOR-7: a landed death stays dead until its burial, whatever heals the party ────────────────────
 def g2_landed(world):
     lead, dead = mon(), mon(species=172, dvs=0x3AAA)

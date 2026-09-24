@@ -2086,7 +2086,8 @@ def test_a_standalone_box_removal_logs_a_release_marker_and_a_withdraw_does_not(
     marks = [ln for ln in world.logs[nlog:] if "RELEASE_SEEN" in ln]
     assert len(marks) == 1, marks
     assert f"RELEASE_SEEN key={codec.key(released)} box=0" in marks[0], marks[0]
-    assert [m for m in world.sent[n:] if m["event"] in ("party_to_box", "box_to_party")] == [],         "no wire event: the pair keeps a phantom boxed half (shared-protocol gap, limits list)"
+    assert [(m["event"], m["key"]) for m in world.sent[n:] if m["event"] in ("party_to_box", "box_to_party", "release")] \
+        == [("release", codec.key(released))], "O-35: a PC release sends release{key}; the server kills the partner"
     world.assert_all_conform()
 def test_an_ambiguous_key_writes_nothing_on_either_lookup_path(world):
     """A8/D-13: the client has TWO key lookups -- `find_party_slot` takes the FIRST match

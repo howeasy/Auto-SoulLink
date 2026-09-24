@@ -1110,8 +1110,11 @@ function Client.new(p)
             send("box_to_party", { key = mon_key(m), area_id = (area_of()) })
             self.pending_rescan = true
         elseif k == "pc_release" then
-            if ev.collection == "party" then send("party_to_box", { key = mon_key(m) }) -- release
-            else log(string.format("[SLink-gen2] RELEASE_SEEN key=%s box=%s", mon_key(m), tostring(ev.box_index))) end
+            -- owner ruling O-35 (server 8f662994): a PC release loses the mon, from the party or a box; the
+            -- server kills a linked partner and ignores an unlinked key. Mirrored by lua/gen1/client.lua.
+            log(string.format("[SLink-gen2] RELEASE_SEEN key=%s %s", mon_key(m),
+                              ev.collection == "party" and "party" or "box=" .. tostring(ev.box_index)))
+            send("release", { key = mon_key(m) })
             self.pending_rescan = true
         elseif k == "key_change" then
             local new_key = mon_key(m)

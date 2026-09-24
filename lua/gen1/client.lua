@@ -1268,11 +1268,13 @@ function Client.new(p)
                 -- discriminator. At this hook (site offset 0, home/move_mon.asm:20-21 jpfar
                 -- _RemovePokemon -- nothing has been shifted yet) the key is still in the BOX
                 -- either way; what tells them apart is that the WITHDRAW's MoveMon has already
-                -- installed it in the PARTY and a RELEASE (bills_pc.asm:310-312) has not. The
-                -- shared protocol has no release event and a party_to_box for a mon that was
-                -- never in the party would be a lie, so this is a marker for the receipts.
+                -- installed it in the PARTY and a RELEASE (bills_pc.asm:310-312) has not. Owner
+                -- ruling O-35 (server 8f662994): the release loses the mon, so release{key} goes on
+                -- the wire; the server kills a linked partner and ignores an unlinked key. Gen 1's
+                -- PC releases from the box only. Mirrored by lua/gen2/client.lua pc_release.
                 if key and not holds_key(party, key) and not trading then
                     log(string.format("[SLink-gen1] RELEASE_SEEN key=%s box=%d", key, (pt.box_num or 0) % 128))
+                    send("release", { key = key })
                 end
             else
                 -- from the SNAPSHOT, like the sibling branches: _RemovePokemon has already shifted
