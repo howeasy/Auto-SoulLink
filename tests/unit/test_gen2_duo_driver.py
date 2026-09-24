@@ -1901,9 +1901,13 @@ def test_visit_driver_proposer_talks_selects_the_linked_slot_and_confirms():
     b, _ = drv.step(vpoint(lua, overworld_ready=True), 150)
     assert dict(b.items()) == {}             # no re-talk inside TALK_RETRY
     yes_no = lambda prompt, cursor: {"kind": "yes_no", "prompt": prompt, "items": ["YES", "NO"], "cursor": cursor, "columns": 1}
-    b, _ = drv.step(vpoint(lua, ui=yes_no("trade_intro", 1), input_ready=True), 200)
+    for n, prompt in enumerate(("trade_intro", "must_save", "save_overwrite")):   # 9805ac1c: the forced save
+        b, _ = drv.step(vpoint(lua, ui=yes_no(prompt, 1), input_ready=True), 200 + 20 * n)
+        assert dict(b.items()) == {"A": True}, prompt
+        drain(drv, vpoint(lua), 200 + 20 * n)
+    b, _ = drv.step(vpoint(lua, ui={"kind": "prompt_button", "prompt": "save_overwrite_text"}, input_ready=True), 270)
     assert dict(b.items()) == {"A": True}
-    drain(drv, vpoint(lua), 200)
+    drain(drv, vpoint(lua), 270)
     b, _ = drv.step(vpoint(lua, ui={"kind": "trade_party"}, input_ready=True, party_cursor=0), 300)
     assert dict(b.items()) == {"Down": True}
     drain(drv, vpoint(lua), 300)
@@ -1924,13 +1928,26 @@ def test_visit_driver_responder_holds_the_prompt_until_told_and_never_presses_b(
     answers = []
     drv = visit(T, lua, role="responder", answer=lambda p: "NO" if gate["open"] else None,
                 on_answer=lambda a: answers.append(a))
-    prompt = {"kind": "yes_no", "prompt": "slink_trade", "items": ["YES", "NO"], "cursor": 1, "columns": 1}
+    prompt = {"kind": "yes_no", "prompt": "trade_offer", "items": ["YES", "NO"], "cursor": 1, "columns": 1}
     for f in range(10):
         b, phase = drv.step(vpoint(lua, ui=prompt, input_ready=True), f)
         assert dict(b.items()) == {} and phase == "hold"
     gate["open"] = True
     b, _ = drv.step(vpoint(lua, ui=prompt, input_ready=True), 20)
     assert dict(b.items()) == {"Down": True} and answers == ["NO"]
+    # the accepting responder then makes the native forced save; a declining one never sees it
+    yes = visit(T, lua, role="responder", answer=lambda p: "YES")
+    ask = lambda prompt: vpoint(lua, ui={"kind": "yes_no", "prompt": prompt, "items": ["YES", "NO"], "cursor": 1,
+                                         "columns": 1}, input_ready=True)
+    for n, name in enumerate(("trade_offer", "trade_save", "save_overwrite")):
+        b, _ = yes.step(ask(name), 100 + 20 * n)
+        assert dict(b.items()) == {"A": True}, name
+        drain(yes, vpoint(lua), 100 + 20 * n)
+    drain(drv, vpoint(lua), 20)
+    b, why = drv.step(ask("trade_save"), 300)
+    assert b is None and "unmapped" in why          # the NO responder never reaches the save prompt
+    b, why = visit(T, lua, role="responder", answer=lambda p: "YES").step(ask("slink_trade"), 1)
+    assert b is None and "unmapped" in why          # the proposer-only confirm is refused on the responder
     # red: the responder never meets the party menu
     b, why = visit(T, lua, role="responder", answer=lambda p: "YES").step(
         vpoint(lua, ui={"kind": "trade_party"}, input_ready=True, party_cursor=0), 1)

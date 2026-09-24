@@ -458,7 +458,7 @@ end
 function T.visit_driver(opts)
     local self = {terminal="visited", phase=opts.role == "proposer" and "talk" or "idle"}
     local p = presser(self)
-    local talked_at, cancelled, chord_left, chorded = nil, false, 0, false
+    local talked_at, cancelled, chord_left, chorded, answered = nil, false, 0, false, nil
     function self.step(point, frame)
         if type(point) ~= "table" then return nil, "observation missing" end
         if chord_left > 0 then
@@ -496,15 +496,22 @@ function T.visit_driver(opts)
                 return p.press(point.party_cursor < opts.slot and "Down" or "Up")
             end
             if ui.kind == "yes_no" then
-                if ui.prompt == "trade_intro" and opts.role == "proposer" then return p.choose(ui, "YES") end
-                if ui.prompt == "slink_trade" then
-                    if opts.role == "proposer" then return p.choose(ui, "YES") end
+                -- 9805ac1c: both roles make the native forced pre-trade save (must_save / trade_save, then the
+                -- native overwrite yes/no of an existing file); the responder decides at trade_offer
+                local role, prompt = opts.role, ui.prompt
+                if role == "proposer" and (prompt == "trade_intro" or prompt == "must_save" or prompt == "slink_trade") then
+                    return p.choose(ui, "YES")
+                end
+                if prompt == "save_overwrite" and (role == "proposer" or answered == "YES") then return p.choose(ui, "YES") end
+                if role == "responder" and prompt == "trade_save" and answered == "YES" then return p.choose(ui, "YES") end
+                if role == "responder" and prompt == "trade_offer" and answered == nil then
                     local answer = opts.answer(point)
                     if answer == nil then return {}, "hold" end
-                    if opts.on_answer and ui.cursor ~= nil then opts.on_answer(answer) end
+                    answered = answer
+                    if opts.on_answer then opts.on_answer(answer) end
                     return p.choose(ui, answer)
                 end
-                return nil, "unmapped yes/no during the trade visit: " .. tostring(ui.prompt)
+                return nil, "unmapped yes/no during the trade visit: " .. tostring(prompt) .. " (" .. tostring(role) .. ")"
             end
             if TEXT[ui.kind] then return p.press("A") end
             return nil, "UI is not valid during the trade visit: " .. tostring(ui.kind)

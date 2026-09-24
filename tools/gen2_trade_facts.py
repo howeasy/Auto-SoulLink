@@ -11,8 +11,14 @@ data/gen2/<title>_slink.sym; nothing here comes from a screenshot.
   stand     one tile below LinkReceptionistScript_Trade's object_event (C maps/Pokecenter2F.asm:1039,
             G/S :590, (5, 2) facing down), faced Up; the overlay only repoints that object's script
             (patch/gen2/src/trade_receptionist.asm)
-  prompts   yes/no anchors: Text_TradeReceptionistIntro's last row "trade?" (C :831-841, G/S :418-428) and
-            SlinkTradeConfirmText "SLINK TRADE?" (patch/gen2/src/trade_service.asm)
+  prompts   yes/no anchors, each the row still on screen when its YesNoBox opens:
+              trade_intro  Text_TradeReceptionistIntro's last row "trade?" (C :831-841, G/S :418-428)
+              must_save    the proposer's forced pre-trade save, vanilla Text_MustSaveGame "link, you must"
+                           (C :860-864, G/S :447-451; the overlay script, patch/gen2/src/trade_receptionist.asm)
+              slink_trade  the proposer's SlinkTradeConfirmText "SLINK TRADE?" (patch/gen2/src/trade_service.asm)
+              trade_offer  the responder's SlinkTradeOfferText "Trade <own>" / "for <incoming>?"
+              trade_save   the responder's SlinkTradeMustSaveText "you must save" (then native Link_SaveGame)
+            the native overwrite yes/no and its text are the qualification facts' save_overwrite(_text)
   symbols   the overlay's code sites (bank, addr, flat ROM offset, first byte of the PATCHED ROM) and RAM
             symbols the driver hooks/reads; sym_sha256 binds the file they came from
 """
@@ -45,6 +51,7 @@ RAM = ("wStackBottom", "wStackTop", "wSlinkMailbox", "wPartyCount", "wPartySpeci
 # O-31 (owner, "Test-only setup"): the two disclosed plants, derived from the pinned decomps + overlay.
 EVOLVER, MAIL = "HAUNTER", "FLOWER_MAIL"
 INTRO_ANCHOR, CONFIRM_ANCHOR = "trade?", "SLINK TRADE?"
+MUST_SAVE_ANCHOR, OFFER_ANCHOR, TRADE_SAVE_ANCHOR = "link, you must", "Trade ", "you must save"
 
 
 def trade_facts(title: str, root: Path = ROOT) -> dict:
@@ -77,6 +84,13 @@ def trade_facts(title: str, root: Path = ROOT) -> dict:
     assert f'line "{INTRO_ANCHOR}"' in intro, "receptionist intro anchor left the source"
     service = (root / "patch/gen2/src/trade_service.asm").read_text(encoding="utf-8")
     assert f'text "{CONFIRM_ANCHOR}"' in service, "SLINK TRADE confirm anchor left the overlay source"
+    must = text.split("Text_MustSaveGame:", 1)[1].split("done", 1)[0]
+    assert f'line "{MUST_SAVE_ANCHOR}"' in must, "Text_MustSaveGame anchor left the source"
+    assert "writetext Text_MustSaveGame" in (root / "patch/gen2/src/trade_receptionist.asm").read_text(encoding="utf-8")
+    offer = service.split("SlinkTradeOfferText:", 1)[1].split("done", 1)[0]
+    assert f'text "{OFFER_ANCHOR}"' in offer, "responder offer anchor left the overlay source"
+    save = service.split("SlinkTradeMustSaveText:", 1)[1].split("done", 1)[0]
+    assert f'line "{TRADE_SAVE_ANCHOR}"' in save, "responder must-save anchor left the overlay source"
 
     # the trade evolver: EVOLVE_TRADE with no item (data/pokemon/evos_attacks.asm), no wild held items (so no
     # Everstone roll: data/pokemon/base_stats/haunter.asm `db NO_ITEM, NO_ITEM`), harmless at Route 29 levels
@@ -107,7 +121,8 @@ def trade_facts(title: str, root: Path = ROOT) -> dict:
                                                  "carpet": stairs["carpet"]},
                      "Pokecenter2F": {"kind": "stand"}},
             "stand": stand, "receptionist": {"x": desk["x"], "y": desk["y"]},
-            "prompts": {"trade_intro": [INTRO_ANCHOR], "slink_trade": [CONFIRM_ANCHOR]},
+            "prompts": {"trade_intro": [INTRO_ANCHOR], "slink_trade": [CONFIRM_ANCHOR], "must_save": [MUST_SAVE_ANCHOR],
+                        "trade_offer": [OFFER_ANCHOR], "trade_save": [TRADE_SAVE_ANCHOR]},
             "code": code, "ram": ram, "plants": plants}
 
 
