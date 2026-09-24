@@ -431,3 +431,35 @@ def test_radical_red_refused_with_named_reason(monkeypatch, capsys):
     err = capsys.readouterr().err
     assert rc == 1
     assert "RR receipts are G5" in err
+
+
+# ---------------------------------------------------------------------------
+# the generic run-receipt header (card G4-FINALCUT-RUNNER)
+# ---------------------------------------------------------------------------
+
+def test_run_receipt_round_trip(tmp_path):
+    attempt = {"load": "2026-09-24T08:00:00 cpu=90% emuhawk=1 python=9",
+               "start_utc": "2026-09-24T12:00:00Z", "end_utc": "2026-09-24T12:01:00Z", "rc": 0,
+               "tracked_before": True, "tracked_after": True, "classification": "pass",
+               "output": "[duo] active_end_gen3: a=PASS b=PASS\n"}
+    text = receipt.run_receipt_text(
+        row="active_end_gen3_lg_as_a", item="§5_item2b", cut="a" * 40, lane="L:/lane",
+        command="python tools/e2e_duo.py --game gen3_lgfr --scenario active_end_gen3", cwd="L:/lane",
+        env={"SLINK_LIVE": "1"}, attempts=[attempt], verdict="PASS")
+    assert text.startswith(f"# gen3_final_cut row=active_end_gen3_lg_as_a item=§5_item2b cut={'a' * 40}\n")
+    for want in ("# env: SLINK_LIVE=1", "# verdict: PASS", "--- attempt 1 of 1 ---",
+                 "LOAD 2026-09-24T08:00:00 cpu=90%", "tracked_clean_before=True",
+                 "[duo] active_end_gen3: a=PASS b=PASS",
+                 "exit=0 end_utc=2026-09-24T12:01:00Z tracked_clean_after=True classification=pass"):
+        assert want in text
+    path = tmp_path / "fc.txt"
+    path.write_text(text, encoding="utf-8")
+    assert receipt.read_run_receipt(str(path)) == {
+        "row": "active_end_gen3_lg_as_a", "item": "§5_item2b", "cut": "a" * 40, "verdict": "PASS"}
+
+
+def test_read_run_receipt_ignores_hand_written_and_missing_files(tmp_path):
+    hand = tmp_path / "ph.txt"
+    hand.write_text("G4-LANE-2 P+H live row: active_end_gen3\nnote: PASS\n", encoding="utf-8")
+    assert receipt.read_run_receipt(str(hand)) is None
+    assert receipt.read_run_receipt(str(tmp_path / "nope.txt")) is None

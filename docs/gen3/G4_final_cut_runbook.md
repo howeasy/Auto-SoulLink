@@ -306,37 +306,69 @@ own receipt `tests/fixtures/gen1/receipts/test_gen1_sfx_gate_{red,blue}_{town,ba
 
 ## 11. The single mechanical pass (when the frozen cut is ready)
 
+**One command** (card G4-FINALCUT-RUNNER):
 ```
-python tools/verify_gen3_release.py            # every lane; --quick stops before the emulator lanes
-python tools/verify_gen3_release.py --list     # show the lanes
+python tools/gen3_final_cut.py --cut <frozen cut>              # the whole pass, sequential, one lane
+python tools/gen3_final_cut.py --cut <frozen cut> --dry-run    # the full command plan, no emulator
+python tools/gen3_final_cut.py --cut <frozen cut> --resume     # skip rows already PASSed at this cut
+python tools/gen3_final_cut.py --cut <frozen cut> --rows 'item2b,zip_*' --stop-at 2026-09-25T06:00Z
+python tools/gen3_final_cut.py --cut <frozen cut> --list       # the row ids
 ```
-Lanes (`tools/verify_gen3_release.py:49-71`): `unit` (every `tests/unit/test_gen3_*.py` plus
-conformance and the wire-log/verify tests), `lua-parse`, `pins` (`tools/gen3_pins.py --json`),
-`profile-generated` (`--check`), `probe-gates`
-(`SLINK_LIVE=1 pytest tests/live/test_gen3_probe_gates.py`, the P1 hook-probe matrix — a different
-row family from item 3's checkpoint probe), `duo-pairs-gen3`
-(`SLINK_E2E=1 SLINK_LIVE=1 pytest tests/e2e/test_duo_gen3.py`). Fail-closed: a lane that did not run
-did not pass, and a skip is a failure unless its reason is on `ALLOWED_SKIPS`.
-This is the mechanical pass for items 1-3; items 4/5/6 and the §3.2 rows are the invocations above.
-**Receipt**: this gate prints a per-lane verdict and a final verdict; no committed receipt pattern
-exists in `docs/gen3/probes/` yet — capture it beside the cut.
+It provisions `.claude/worktrees/gen3-lane-clean` (override `--lane`) detached at the cut — `git worktree add
+--detach` if absent, else `checkout --detach`, with W3's `update-ref --no-deref HEAD` + `read-tree`/`checkout-index`
+fallbacks for the broken shared ref — and aborts before any row unless `git status --porcelain --untracked-files=no`
+is empty (a lane that is already tracked-dirty is never touched). It copies the §0.3 gitignored inputs it lacks from
+the main checkout (root dumps, the staged `patch/build/gen3_*` copies, the Gen 1/Gen 2 inputs item 6 needs; no
+`.cache` item is read by any row). Then it runs **41 rows** in runbook order: §1 builds (6), §2-§3 FRLG scenarios (5:
+faint_cmd, link, boxsync, reconnect, deadzone), §4 whiteout + center_controls × FR/LG-as-A (4), §5 the P+H rows
+`linked_faint_active{,_whiteout,_trainer}_gen3` and `active_end_gen3` × FR/LG-as-A (8; they supersede the A1/A2 hold
+rows and T2, `G4_request_draft.md` @ `4aaaee7e`), §6 the probe × 2 titles (through `gen3_probe_receipt.py`, which runs
+`gen3_bw_hashes.py` first), §7 save_then_write × 2, §8 boot-check 8/8, §9 zip build/check/boot (3), §10 item 6 (1),
+§11 `verify_gen3_release.py --quick` and the `probe-gates` lane (2).
+
+Rules it enforces itself: one retry only for a failure classified as a CPU-contention timeout (a harness timeout with
+no failing verdict in the output), never for a real failure; a FAIL receipt at the same cut blocks that row on later
+invocations too (move the receipt aside to re-run it deliberately); it kills only the process tree of a child it
+launched (`taskkill /PID <child> /T`), never by image name; every BizHawk config a row wrote under the lane's
+`patch/build` is read back and rewind-on fails the row; a SKIP fails unless `ALLOWED_SKIPS` names the row with an
+owner ruling (today only RR R5, ruling 20, and no RR row is in the plan); a row that leaves the lane tracked-dirty
+fails and aborts the pass.
+
+**Receipts**: `docs/gen3/probes/fc_<row>_<cut8>.txt` per row (header by `gen3_probe_receipt.run_receipt_text`: row,
+item, cut, lane, command, env, verdict, then per attempt the LOAD snapshot, start/end UTC, tracked_clean before/after,
+the output verbatim, exit and classification), the probe's own `checkpoint_{fr,lg}_clean_<cut8>.txt`, and the summary
+table `fc_SUMMARY_<cut8>.txt` (rewritten after every row; `OVERALL: PASS` only when every selected row PASSed or was
+an allowed SKIP). Exit 0 = PASS, 1 = a row failed, 2 = aborted (lane).
+
+`python tools/verify_gen3_release.py` (all lanes) stays the release gate's own entry point; the runner runs its
+`--quick` source lanes and its `probe-gates` lane, and replaces its `duo-pairs-gen3` pytest lane with the per-scenario
+rows above so each scenario gets its own receipt.
 
 ---
 
-## 12. UNKNOWN / not found in the tree
+## 12. UNKNOWN / not found in the tree — status after G4-FINALCUT-RUNNER
 
-1. **Lane provisioning** (§0.1): no command creates `.claude/worktrees/gen3-lane-clean`; the receipts
-   only record its sha and `tracked_clean=True`.
-2. **`SLINK_BW_HASHES` producer** (§6): the probe reads a JSON with `pack`, `source` and per-state
-   `{fixture, prep, state}`; nothing in `tools/` writes it (`grep -rn SLINK_BW_HASHES` matches only
-   `lua/tests/probe_gen3_checkpoint.lua`). The last live bw lane supplied it ad hoc. It needs a small
-   writer (hash the pack, the source rev and each built state) before the bw rows can be re-taken
-   reproducibly.
-3. **Probe receipt wrapper** (§6): the `# probe…lane=… tracked_clean=True` header is written by a
-   wrapper that is not in this repo (`grep -rn tracked_clean` over tools/tests is empty).
-4. **Item 5's zip-boot step** (§9): described in prose in the rehearsal receipt; no tool.
-5. **Item 6's baseline differential** (§10): no script, no documented command.
-6. **T2/A2 receipt names and PASS lines** (§5): pending 2B-INTEGRATE-DUO.
-7. **`--game` help text** is stale in `tools/e2e_duo.py:6274-6276` (it lists only `gen3_rr`, `gen1`,
-   `gen2` while the real keys are `gen3_rr, gen1_new, gen1_pure, gen1_pure_overlay, gen1_pure_green,
-   gen2, gen3_frlg, gen3_lgfr, gen3_rr_new`). Use the keys, ignore the help.
+1. **Lane provisioning** (§0.1): **CLOSED** — `tools/gen3_final_cut.py` `provision()`/`copy_inputs()` (§11).
+2. **`SLINK_BW_HASHES` producer** (§6): **CLOSED** — `tools/gen3_bw_hashes.py` (`587453bf`) hashes the pack, the lane
+   sha and the four bw states the §1 builds produce; `gen3_probe_receipt.py` runs it before each bw probe, and the
+   runner runs the §1 builds first. (Its per-state `prep` strings are fixed text naming the builder tools, not the
+   runner's build receipts.)
+3. **Probe receipt wrapper** (§6): **CLOSED** — `tools/gen3_probe_receipt.py` (`587453bf`) writes the
+   `# probe…lane=… tracked_clean=…` header; every other row's header is its `run_receipt_text`.
+4. **Item 5's zip-boot step** (§9): **CLOSED** — `python tools/gen3_final_cut.py zip-boot --zip <zip> --lane <lane>`
+   extracts to a space-free temp dir, seeds `firered_party_town.sav`, writes a rewind-off config, runs the cut's
+   `python -m server.server` from the lane, taps A through CONTINUE and dofiles the extracted `lua/slink.lua`; PASS on
+   `[SLink-gen3] gen3_frlg/firered (clean by hash) player a`, `TCP connected` and the server's `hello rom=firered`.
+   The zip itself is `make_release.py --version g4-<cut8> --skip-generators` from the lane (the cut's committed data
+   ships) and `check_release_zip.py --rev <cut>`.
+5. **Item 6's baseline differential** (§10): **CLOSED** — `python tools/gen3_final_cut.py item6 --branch <lane>
+   --master <tree>` runs the three cases of `item6_route_diff_{master,branch}_2026-09-24.txt` paired back to back
+   (the `3941198c` ordering test as an untracked scratch file, the Gen 1 SFX town gate with its tracked receipts
+   restored, the legacy Gen 2 duo × 3) and fails only on a regression (master PASS, branch FAIL). Item 6 is already
+   DONE at `b0483efe`; the row re-takes it at the final cut.
+6. **T2/A2 receipt names and PASS lines** (§5): **SUPERSEDED** — mechanism P+H replaced the hold rows; the runner's
+   §5 rows are `fc_{linked_faint_active,active_end,linked_faint_active_whiteout,linked_faint_active_trainer}_gen3_{fr,lg}_as_a_<cut8>.txt`,
+   PASS = `e2e_duo.py` exit 0 (`<scenario>: PASS` in the summary, `PYDEC: PASS asserted scenario facts`).
+7. **`--game` help text** is stale in `tools/e2e_duo.py` (it lists only `gen3_rr`, `gen1`, `gen2` while the real keys
+   are `gen3_rr, gen1_new, gen1_pure, gen1_pure_overlay, gen1_pure_green, gen2, gen3_frlg, gen3_lgfr, gen3_rr_new`).
+   Still open (e2e_duo is not this card's file); use the keys, ignore the help.

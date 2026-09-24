@@ -229,6 +229,52 @@ def build_header(title, kind, lane, rows, timeout, tracked_before=None, bw_hashe
     return lines, env, rom_rel, tracked_before, tracked_after
 
 
+# ---------------------------------------------------------------------------
+# The generic run-receipt header (card G4-FINALCUT-RUNNER): every row tools/gen3_final_cut.py
+# runs -- a duo scenario, a state build, a boot-check, the zip rows, item 6 -- is written through
+# this, the same shape the G4-LANE-2 ph_* receipts were written by hand (lane, cut, tracked_clean
+# before/after, LOAD snapshot, start/end UTC, the command, the output verbatim, exit code).
+# ---------------------------------------------------------------------------
+
+RUN_RECEIPT_TAG = "# gen3_final_cut"
+
+
+def run_receipt_text(*, row, item, cut, lane, command, cwd, env, attempts, verdict):
+    """The receipt text. `attempts` is a list of dicts with start_utc, end_utc, rc, load,
+    tracked_before, tracked_after, classification and output (verbatim); `verdict` is the
+    row's final word (PASS / FAIL <why> / SKIP-ALLOWED <ruling> / STOPPED)."""
+    lines = [f"{RUN_RECEIPT_TAG} row={row} item={item} cut={cut}",
+             f"# lane={lane}",
+             f"# command: {command}   (cwd={cwd})",
+             f"# env: {' '.join(f'{k}={v}' for k, v in env.items()) or '(none)'}",
+             f"# verdict: {verdict}"]
+    for i, a in enumerate(attempts, 1):
+        lines += [f"--- attempt {i} of {len(attempts)} ---",
+                  f"LOAD {a['load']}",
+                  f"start_utc={a['start_utc']} tracked_clean_before={a['tracked_before']}",
+                  a["output"].rstrip("\n"),
+                  f"exit={a['rc']} end_utc={a['end_utc']} tracked_clean_after={a['tracked_after']}"
+                  f" classification={a['classification']}"]
+    return "\n".join(lines) + "\n"
+
+
+def read_run_receipt(path):
+    """{row, item, cut, verdict} from a run receipt's header, or None when `path` is missing or
+    is not one (a hand-written receipt never counts as a runner PASS)."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            head = [next(f, "") for _ in range(5)]
+    except OSError:
+        return None
+    if not head[0].startswith(RUN_RECEIPT_TAG + " "):
+        return None
+    fields = dict(kv.split("=", 1) for kv in head[0][len(RUN_RECEIPT_TAG):].split() if "=" in kv)
+    verdict = next((ln[len("# verdict: "):].strip() for ln in head
+                    if ln.startswith("# verdict: ")), "")
+    return {"row": fields.get("row"), "item": fields.get("item"), "cut": fields.get("cut"),
+            "verdict": verdict}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
