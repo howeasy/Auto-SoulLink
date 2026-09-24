@@ -62,10 +62,15 @@ M.entries = {
                               radical_red = 0x02024284, rr_source = RR_OLD_CLIENT .. "208" },
     BATTLER_CTRL_ADDR     = { symbol = "gBattlerControllerFuncs", firered = 0x03004FE0, leafgreen = 0x03004FE0,
                                radical_red = 0x03004FE0, rr_source = RR_DUO_PRECEDENT },
-    -- ACTION_CURSOR_ADDR (gActionSelectionCursor): NOT proven for RR. duo_gen3_main.lua's own
-    -- comment (its separate SYMS table, ~:119-125) says reusing the FR .sym value for this one
-    -- is "the best-supported available choice, not a confirmed fact" -- exactly the ABSENT case.
-    ACTION_CURSOR_ADDR    = { symbol = "gActionSelectionCursor", firered = 0x02023FF8, leafgreen = 0x02023FF8 },
+    -- ACTION_CURSOR_ADDR (gActionSelectionCursor): proven for RR from the bytes (G5-RR-CPU-IRQ):
+    -- CFRU's action menu (0x090A9EA0) loads 0x02023FF8 (LDR@0x090A9ED8, 0x090A9FE2, 0x090AA00C,
+    -- 0x090AA026, 0x090AA078; fact in tools/research/rr_active_faint.py), indexes it by
+    -- gActiveBattler (ldrb r0,[r6,r3] @0x090A9F1A), and on A switches on it (cmp #3; case_uqi
+    -- @0x090A9F20), case 0 emitting B_ACTION_USE_MOVE -- FR's 0 FIGHT / 1 BAG / 2 PKMN / 3 RUN.
+    ACTION_CURSOR_ADDR    = { symbol = "gActionSelectionCursor", firered = 0x02023FF8, leafgreen = 0x02023FF8,
+                              radical_red = 0x02023FF8,
+                              rr_source = "docs/gen3/research/rr_active_faint_parity_scope_2026-09-23.md "
+                                  .. "§3.1 (CFRU action menu) + ROM LDR@0x090A9ED8 = 0x02023FF8" },
     -- OBJ_EVENTS_ADDR (gObjectEvents): no RR citation found (no ROM anchor, no old-client use, not
     -- in rr_pc_menu.md). ABSENT.
     OBJ_EVENTS_ADDR        = { symbol = "gObjectEvents",         firered = 0x02036E38, leafgreen = 0x02036E38 },

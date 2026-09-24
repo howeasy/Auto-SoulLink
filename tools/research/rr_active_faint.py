@@ -54,6 +54,9 @@ LDRS = {
     0x090445B2: 0x090ACD8D,  # hook: CFRU bit-24 controller
     0x090445B6: 0x0802E3B5,  # hook: PlayerBufferRunCommand (FR)
     0x090445BC: 0x0802E34F,  # hook: back to FR's PlayerBufferExecCompleted+0x12 (link test, exec clear)
+    # G5-RR-CPU-IRQ: the CFRU action menu's cursor is FR's gActionSelectionCursor (the RR drivers' pin)
+    0x090A9ED8: 0x02023FF8,
+    0x090A9FE2: 0x02023FF8,
 }
 # (address, halfword, meaning): the instructions that fix the layout the Lua plan writes
 HALFWORDS = (
