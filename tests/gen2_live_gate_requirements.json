@@ -199,6 +199,36 @@
         "path": "tests/fixtures/gen2/receipts/silver_overlay.panel_gate.json",
         "sha256": "5bc74b1b1bf7fdea01d073ceb7e155ee68d5677dba7a9c158ed8ab28ebb57ae4"
       }}}]
+    },
+    {
+      "id": "new-gates.sfx.crystal",
+      "stage": "physical-live",
+      "description": "P4.2c Crystal overlay native-sound gate: the exact SFX id on ch5-8 within 300 frames in idle, movement, transition (held through the music fade), START menu, text, battle animation and battle menu; the battle's worst no-service stretch in bound; a reset drops a pending request (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sfx_gate.py -k crystal)",
+      "axes": {"kind": "sfx_gate", "title": "crystal", "requirement_ids": ["N-2"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_overlay.sfx_gate.json",
+        "sha256": "b83919a4b12b53e1c4558f482d5ff45132a5f8f4828fcdbc30ea103cabf53ba5"
+      }}}]
+    },
+    {
+      "id": "new-gates.sfx.gold",
+      "stage": "physical-live",
+      "description": "P4.2c Gold overlay native-sound gate: the exact SFX id on ch5-8 within 300 frames in idle, movement, transition (held through the music fade), START menu, text, battle animation and battle menu; the battle's worst no-service stretch in bound; a reset drops a pending request (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sfx_gate.py -k gold)",
+      "axes": {"kind": "sfx_gate", "title": "gold", "requirement_ids": ["N-2"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_overlay.sfx_gate.json",
+        "sha256": "e698feae49dc48efab702a74a6444ecc2ae1913dec403d212a9e562f93014ba0"
+      }}}]
+    },
+    {
+      "id": "new-gates.sfx.silver",
+      "stage": "physical-live",
+      "description": "P4.2c Silver overlay native-sound gate: the exact SFX id on ch5-8 within 300 frames in idle, movement, transition (held through the music fade), START menu, text, battle animation and battle menu; the battle's worst no-service stretch in bound; a reset drops a pending request (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sfx_gate.py -k silver)",
+      "axes": {"kind": "sfx_gate", "title": "silver", "requirement_ids": ["N-2"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_overlay.sfx_gate.json",
+        "sha256": "0ba19f08ae0cad5b98f204d5308ac48b8e2f6c482434763194d7c7d835232705"
+      }}}]
     }
   ]
 }

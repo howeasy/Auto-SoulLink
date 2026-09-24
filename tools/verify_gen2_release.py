@@ -912,27 +912,59 @@ def _qualification_row_errors(root: Path, fixture: str, receipt: dict) -> list[s
     return errors
 
 
-def _panel_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
-    """P4.1g (tests/live/test_gen2_panel_gate.py): a PHYSICAL PASS on the overlay build that is published NOW
-    (data/gen2/overlay_provenance.json), from the committed fixture's bytes, with a positive minimum-SP margin.
-    A rebuilt overlay makes the receipt stale until the gate is re-run."""
+def _overlay_gate_errors(root: Path, title: str, receipt: dict, schema: str, what: str) -> list[str]:
+    """A PHYSICAL PASS of `schema` on the overlay build that is published NOW (data/gen2/overlay_provenance.json),
+    from the committed fixture's bytes. A rebuilt overlay makes the receipt stale until the gate is re-run."""
     errors = []
-    if (receipt.get("schema") != "gen2-panel-gate-v1" or receipt.get("result") != "PASS"
+    if (receipt.get("schema") != schema or receipt.get("result") != "PASS"
             or receipt.get("evidence_level") != "PHYSICAL" or receipt.get("title") != title):
-        errors.append(f"panel gate receipt is not a PHYSICAL PASS for {title}")
+        errors.append(f"{what} receipt is not a PHYSICAL PASS for {title}")
     provenance = root / "data/gen2/overlay_provenance.json"
     outputs = json.loads(provenance.read_text(encoding="utf-8"))["outputs"] if provenance.is_file() else {}
     published = next((row.get("sha1") for row in outputs.values() if row.get("slink_title") == title), None)
     if published is None or receipt.get("overlay_sha1") != published:
-        errors.append("panel gate receipt proves another overlay build than the published one")
+        errors.append(f"{what} receipt proves another overlay build than the published one")
     fixture, want = receipt.get("fixture"), receipt.get("fixture_sha256")
     # Both present first: a missing fixture and a missing hash must not compare None == None.
     if (not isinstance(fixture, str) or not fixture or not isinstance(want, str) or not want
             or _fixture_sha256(root, fixture) != want):
-        errors.append("panel gate receipt does not bind the committed fixture's bytes")
+        errors.append(f"{what} receipt does not bind the committed fixture's bytes")
+    return errors
+
+
+def _panel_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
+    """P4.1g (tests/live/test_gen2_panel_gate.py): the overlay gate binding plus a positive minimum-SP margin."""
+    errors = _overlay_gate_errors(root, title, receipt, "gen2-panel-gate-v1", "panel gate")
     margin = (receipt.get("minimum_sp") or {}).get("margin_bytes")
     if type(margin) is not int or margin <= 0:
         errors.append("panel gate receipt has no positive minimum-SP margin")
+    return errors
+
+
+# P4.2c (tests/live/test_gen2_sfx_gate.py): every context the plan names (N-2), each played in its deadline.
+SFX_GATE_CONTEXTS = ("idle_1", "idle_2", "idle_3", "idle_4", "movement", "transition", "start_menu", "text",
+                     "battle_anim", "battle_menu")
+
+
+def _sfx_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
+    """P4.2c: the overlay gate binding, every sound context PASS within its deadline (the transition held
+    through its fade, the battle's worst no-service stretch in bound) and the reset drop."""
+    errors = _overlay_gate_errors(root, title, receipt, "gen2-sfx-gate-v1", "sfx gate")
+    contexts, deadline = receipt.get("contexts") or {}, receipt.get("deadline_frames")
+    for name in SFX_GATE_CONTEXTS:
+        c = contexts.get(name) or {}
+        played, posted = c.get("played"), c.get("posted")
+        start = c.get("fade_end") if name == "transition" else posted
+        if (c.get("result") != "PASS" or type(deadline) is not int or type(played) is not int
+                or type(start) is not int or not 0 <= played - start <= deadline):
+            errors.append(f"sfx gate context {name} did not play within its deadline")
+    gap = (contexts.get("battle_anim") or {}).get("battle_service_gap")
+    if type(gap) is not int or type(deadline) is not int or not 0 < gap <= deadline:
+        errors.append("sfx gate battle worst-case service gap is missing or past the deadline")
+    reset = receipt.get("reset") or {}
+    if (reset.get("result") != "PASS" or reset.get("pending_at_entry") is not True
+            or reset.get("played_id") is not None or reset.get("on_channel") is not None):
+        errors.append("sfx gate reset did not drop a pending request")
     return errors
 
 
@@ -978,6 +1010,8 @@ def new_gates_errors(root: Path | None = None, receipt_validate=None) -> list[st
                 errors.extend(f"{rid}: {e}" for e in _qualification_row_errors(root, axes["fixture"], receipt))
             elif kind == "panel_gate":
                 errors.extend(f"{rid}: {e}" for e in _panel_gate_row_errors(root, axes["title"], receipt))
+            elif kind == "sfx_gate":
+                errors.extend(f"{rid}: {e}" for e in _sfx_gate_row_errors(root, axes["title"], receipt))
             else:
                 errors.append(f"{rid}: no validator for receipt kind {kind!r}")
     return errors

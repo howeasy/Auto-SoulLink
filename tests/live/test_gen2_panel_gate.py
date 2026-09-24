@@ -51,7 +51,7 @@ RAM = ("wStackBottom", "wStackTop", "wBGPals1", "wBGPals2", "wOBPals1", "wOBPals
 CLOSE_BOUND = 240   # lua P.CLOSE_BOUND
 
 
-def panel_facts(title: str, *, repo: Path = REPO) -> dict:
+def panel_facts(title: str, *, repo: Path = REPO, sites=SITES, ram=RAM) -> dict:
     """Overlay sites/RAM from the pinned overlay .sym; site bytes from the provenance-bound image."""
     ctx = gen2_source_data.load_context(title, root=repo)
     provenance = json.loads((repo / PROVENANCE).read_text(encoding="utf-8"))
@@ -64,13 +64,13 @@ def panel_facts(title: str, *, repo: Path = REPO) -> dict:
     symbols = {}
     for bank, addr, name in re.findall(r"^([0-9a-f]{2}):([0-9a-f]{4}) (\S+)$", sym.decode("utf-8"), re.M):
         symbols[name] = (int(bank, 16), int(addr, 16))
-    sites = {}
-    for name in SITES:
+    bound = {}
+    for name in sites:
         bank, addr = symbols[name]
         flat = addr if bank == 0 else bank * 0x4000 + addr - 0x4000
-        sites[name] = {"symbol": name, "bank": bank, "addr": addr, "flat": flat, "hex": image[flat:flat + 3].hex()}
-    ram = {name: {"bank": symbols[name][0], "addr": symbols[name][1]} for name in RAM}
-    return {"overlay_sha1": out["sha1"], "sites": sites, "ram": ram}
+        bound[name] = {"symbol": name, "bank": bank, "addr": addr, "flat": flat, "hex": image[flat:flat + 3].hex()}
+    wram = {name: {"bank": symbols[name][0], "addr": symbols[name][1]} for name in ram}
+    return {"overlay_sha1": out["sha1"], "sites": bound, "ram": wram}
 
 
 def verify(text: str, facts: dict, title: str, staged: bytes) -> dict:

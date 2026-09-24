@@ -340,7 +340,9 @@ SFX_ASM = REPO / "patch" / "gen2" / "src" / "sfx.asm"
 def test_server_ids_map_to_the_gen2_semantic_codes(caps, success):
     c = Cart("crystal", caps=caps)
     c.step(2)
-    code = lambda sid: c.panel.sfx_code_for(c.panel, sid)
+
+    def code(sid):
+        return c.panel.sfx_code_for(c.panel, sid)
     assert [code(25), code(26), code(22), code(95)] == [success, 2, 3, 1]
     assert code(7) is None and code(193) is None and code(0) is None
 
@@ -363,8 +365,8 @@ def test_se_table_and_ranks_use_named_constants_never_literals():
 def test_semantic_codes_equal_the_abi_and_the_service_sound_table():
     abi = _abi()
     P = lupa.LuaRuntime().eval(f'dofile("{PANEL}")')
-    assert (P.SFX_SUCCESS, P.SFX_FAILURE, P.SFX_BOO, P.SFX_NOTIFY) == (
-        abi["SLINK_SFX_SUCCESS"], abi["SLINK_SFX_FAILURE"], abi["SLINK_SFX_BOO"], abi["SLINK_SFX_NOTIFY"])
+    lua_codes = (P.SFX_SUCCESS, P.SFX_FAILURE, P.SFX_BOO, P.SFX_NOTIFY)
+    assert lua_codes == tuple(abi[f"SLINK_SFX_{n}"] for n in ("SUCCESS", "FAILURE", "BOO", "NOTIFY"))
     sounds = re.search(r"^\.sounds\s*\n\s*db\s+(.+)$", SFX_ASM.read_text(), re.M).group(1)
     assert [s.strip() for s in sounds.split(",")] == ["SFX_ITEM", "SFX_WRONG", "SFX_BUMP", "SFX_READ_TEXT_2"]
 
@@ -392,8 +394,9 @@ def test_unknown_code_and_non_sfx_cartridge_are_refused_and_never_written():
     c2 = Cart("silver", caps=CAPS_FULL)
     c2.step(2)
     assert c2.panel.request_sfx(c2.panel, 5) is False and c2.panel.request_sfx(c2.panel, 0) is False
-    c.writes.clear(); c2.writes.clear()
-    c.step(2); c2.step(2)
+    for cart in (c, c2):
+        cart.writes.clear()
+        cart.step(2)
     assert c.writes == [] and c2.writes == [] and c2.mem[c2.mb + 7] == 0
 
 

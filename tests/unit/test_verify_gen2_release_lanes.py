@@ -644,7 +644,7 @@ def _copy_new_gates_tree(tmp_path):
             fixture = row["axes"]["fixture"] + ".SaveRAM"
             (tmp_path / "tests/fixtures/gen2" / fixture).write_bytes(
                 (REPO / "tests/fixtures/gen2" / fixture).read_bytes())
-        if row["axes"]["kind"] == "panel_gate":
+        if row["axes"]["kind"] in ("panel_gate", "sfx_gate"):
             fixture = json.loads(src.read_text(encoding="utf-8"))["fixture"] + ".SaveRAM"
             for rel in ("tests/fixtures/gen2/" + fixture, "data/gen2/overlay_provenance.json"):
                 (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -708,6 +708,11 @@ _NEW_GATE_GAPS = {
     "panel_gate_stale_overlay": "another overlay build than the published one",
     "panel_gate_no_margin": "no positive minimum-SP margin",
     "panel_gate_fixture_and_hash_absent": "does not bind the committed fixture's bytes",
+    "sfx_gate_stale_overlay": "sfx gate receipt proves another overlay build",
+    "sfx_gate_context_late": "sfx gate context text did not play within its deadline",
+    "sfx_gate_context_missing": "sfx gate context battle_anim did not play within its deadline",
+    "sfx_gate_battle_gap": "battle worst-case service gap is missing or past the deadline",
+    "sfx_gate_reset_played": "sfx gate reset did not drop a pending request",
 }
 
 
@@ -779,12 +784,31 @@ def test_every_new_gate_gap_is_red(tmp_path, mutation):
         provenance = json.loads(path.read_text(encoding="utf-8"))
         provenance["outputs"]["pokecrystal"]["sha1"] = "0" * 40
         path.write_text(json.dumps(provenance), encoding="utf-8")
+    elif mutation == "sfx_gate_stale_overlay":
+        path = tmp_path / "data/gen2/overlay_provenance.json"
+        provenance = json.loads(path.read_text(encoding="utf-8"))
+        provenance["outputs"]["pokegold"]["sha1"] = "0" * 40
+        path.write_text(json.dumps(provenance), encoding="utf-8")
     elif mutation == "panel_gate_fixture_and_hash_absent":
         # None == None must not read as a bound fixture (Codex, P4.1g review).
         entry = row("new-gates.panel.crystal")["proofs"][0]["receipts"]["receipt"]
         path = tmp_path / entry["path"]
         receipt = json.loads(path.read_text(encoding="utf-8"))
         del receipt["fixture"], receipt["fixture_sha256"]
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        _repin(tmp_path, entry)
+    elif mutation.startswith("sfx_gate_") and mutation != "sfx_gate_stale_overlay":
+        entry = row("new-gates.sfx.crystal")["proofs"][0]["receipts"]["receipt"]
+        path = tmp_path / entry["path"]
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        if mutation == "sfx_gate_context_late":
+            receipt["contexts"]["text"]["played"] = receipt["contexts"]["text"]["posted"] + receipt["deadline_frames"] + 1
+        elif mutation == "sfx_gate_context_missing":
+            del receipt["contexts"]["battle_anim"]
+        elif mutation == "sfx_gate_battle_gap":
+            receipt["contexts"]["battle_anim"]["battle_service_gap"] = receipt["deadline_frames"] + 1
+        else:
+            receipt["reset"]["played_id"] = receipt["reset"]["dropped"]
         path.write_text(json.dumps(receipt), encoding="utf-8")
         _repin(tmp_path, entry)
     elif mutation == "panel_gate_no_margin":
