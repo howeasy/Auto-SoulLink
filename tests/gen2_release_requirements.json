@@ -501,6 +501,18 @@
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_gs_pydec_result.txt",
                       "sha256": "ae4be43830e0dc794d68af594d6edb26433d924050e19d3bb63c18668f22ed7f"}
           }
+        },
+        {
+          "scenario": "gen2_trade_evolve",
+          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_evolve --lane g5_evolve --keep-data",
+          "receipts": {
+            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_a_result.txt",
+                  "sha256": "3d8dd4ec6da0009a430a786815ae421657a3f8104fb778c6a46f981a7d090253"},
+            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_b_result.txt",
+                  "sha256": "de9b9b7506141143f3193f13097f4c5fe411d133ba3cfeaf9d67c263eaa5b1f1"},
+            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_pydec_result.txt",
+                      "sha256": "ff26a6011473c239683da963dc904c48dda32431b0e82ca32a80d919bedc719a"}
+          }
         }
       ]
     },
