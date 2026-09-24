@@ -1183,6 +1183,65 @@ local function hunt_encounter(cp, label, cycles)
     return landed_in_battle
 end
 
+-- RR-WHITEOUT-TRACE (card G5-RR-WHITEOUT, temporary + env-gated): SLINK_GEN3_RR_TRACE=1 makes
+-- the RR pokecenter_door_to_route1_edge leg log one line per step instead of calling
+-- play.follow directly -- player pos/facing, whether the field is locked (script running), and
+-- every OTHER active object event's position, so a live run shows an NPC-in-the-way vs. a
+-- script lock vs. a door animation without guessing. One log per STEP (not per frame -- the
+-- inner press/settle loop inside play.step is untouched), so this cannot starve the emulator.
+-- traced_follow re-implements playlib.P.follow's own loop using only P's PUBLIC calls
+-- (play.step/play.map/play.wait_at/play.at, the same ones follow() itself calls, in the same
+-- order) so it reproduces the identical stall; it is inert (falls straight through to
+-- play.follow) whenever the env var is unset, which is every normal run including CI.
+local RR_TRACE = TITLE == "radical_red" and os.getenv("SLINK_GEN3_RR_TRACE") == "1"
+
+local function rr_trace_log(cp, path_name, step_no, dir)
+    local px, py = H.pos(cp)
+    local objs = {}
+    for i = 1, 15 do
+        local flags = memory.read_u8(OBJ_EVENTS_ADDR + i * 0x24)
+        if (flags & 0x01) ~= 0 then
+            local lid = memory.read_u8(OBJ_EVENTS_ADDR + i * 0x24 + 0x08)
+            local ox, oy = H.obj_pos(i)
+            objs[#objs + 1] = string.format("obj%d(id=%d@%d,%d)", i, lid, ox, oy)
+        end
+    end
+    console.log(string.format(
+        "[rr-trace] %s #%d dir=%s player=(%d,%d) facing=%d locked=%s %s",
+        path_name, step_no, tostring(dir), px, py, H.obj_facing(0),
+        tostring(not H.scene_quiet(cp)), table.concat(objs, " ")))
+end
+
+local function traced_follow(cp, path_name, label)
+    if not RR_TRACE then return play.follow(cp, path_name, label) end
+    local p = assert(PATHS[path_name], "no PATHS entry " .. tostring(path_name))
+    local start_map = play.map(cp)
+    if not play.wait_at(cp, p.from[1], p.from[2], 120) then
+        G.finish(false, string.format("%s (%s): [rr-trace] start tile never settled at (%d,%d)",
+            label, path_name, p.from[1], p.from[2]))
+        return
+    end
+    local enc = { n = 0, max = p.max_encounters or 12 }
+    for i, dir in ipairs(p.dirs) do
+        rr_trace_log(cp, path_name, i, dir)
+        if not play.step(cp, dir, start_map, nil, enc) then
+            rr_trace_log(cp, path_name, i, dir .. "-STALLED")
+            G.shot("stuck")
+            G.finish(false, string.format("%s (%s): [rr-trace] step %s stalled at %s",
+                label, path_name, dir, play.at(cp)))
+            return
+        end
+        local now = play.map(cp)
+        if now ~= nil and now ~= start_map then return end
+    end
+    local ex, ey = H.pos(cp)
+    if p.to and (ex ~= p.to[1] or ey ~= p.to[2]) then
+        G.finish(false, string.format(
+            "%s (%s): [rr-trace] walk ended at (%d,%d), not the path's to (%d,%d)",
+            label, path_name, ex, ey, p.to[1], p.to[2]))
+    end
+end
+
 --- Route either admitted respawn interior to Pallet Town (6,9), the shared resume origin.
 --- The house's actual door landing is (6,8); the following verified step reaches (6,9).
 local function recover_to_pallet_town(cp)
@@ -1196,7 +1255,7 @@ local function recover_to_pallet_town(cp)
     elseif dest.group == 5 and dest.num == 4 then
         play.follow(cp, "heal_center_to_door", "whiteout-recovery")
         warp_to(cp, "Down", 30, DEST.center_exit, "whiteout Center exit")
-        play.follow(cp, "pokecenter_door_to_route1_edge", "whiteout-recovery")
+        traced_follow(cp, "pokecenter_door_to_route1_edge", "whiteout-recovery")
         warp_to(cp, "Down", 30, DEST.route1_north, "whiteout Viridian->Route1")
         play.follow(cp, "route1_north_to_south_edge", "whiteout-recovery")
         warp_to(cp, "Down", 30, DEST.pallet_north, "whiteout Route1->Pallet")
