@@ -1,0 +1,2 @@
+attempt 1 of 3
+PYDEC: PASS a=630B:B541:10 b=688F:AC24:A1 area=route_29 titles=crystal/crystal status=clause_observed scenario=gen2_gender_clause clause=gender rejected=b ending=memorial
