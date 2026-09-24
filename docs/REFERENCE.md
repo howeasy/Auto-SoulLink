@@ -383,6 +383,7 @@ The status server (default port 8080) exposes these pages and endpoints.
 | `/api/debug/unlink` | POST | Remove a link entry |
 | `/api/debug/revive` | POST | Revive a dead/memorial link |
 | `/api/debug/resolve_trade` | POST | Settle a conflicted or stuck native trade (commit or rollback) |
+| `/api/debug/resolve_ambiguous_key` | POST | Clear an ambiguous-key latch after checking the cartridge (`{"player","key"}`) |
 | `/api/debug/rollback` | POST | Restore state from a backup slot |
 
 ### Pages
