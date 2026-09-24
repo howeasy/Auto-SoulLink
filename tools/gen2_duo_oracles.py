@@ -1995,8 +1995,10 @@ def _whiteout_rebuild_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram
                                           boot_saveram=boot_saveram, status="alive",
                                           snapshots={inst: stages[inst]["saveram_path"] for inst in ("a", "b")})
     _wave_need(not row.get("killed_at") and document.get("run_over") is not True, "the pair died or the run ended")
-    # both saves: the linked party order restored, every mon alive at full HP (HealParty / the withdraw's
-    # CalcMonStats), the linked key in no box, nothing else moved
+    # both saves: the linked party order restored, the linked key in no box, nothing else moved. HP: A whited out, so
+    # HealParty leaves every mon at full HP; B never whites out, so only its rebuilt linked mon is healed (the
+    # withdraw's CalcMonStats) and every other B mon keeps its LINK_SAVE HP/status (a starter hit in B's own capture
+    # battle stays hit: the df04e065 sweep's G-S cell, A4FC 17/20 at LINK_SAVE and in the final save)
     for inst in ("a", "b"):
         layout, witness = heads[inst][1], heads[inst][0]
         linked = codec.decode_saved_party(raws[inst][:CARTRAM_BYTES], layout, copy_name="primary")["mons"]
@@ -2004,7 +2006,12 @@ def _whiteout_rebuild_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram
         _, original = _clause_inventory(raws[inst], layout)
         _wave_need([codec.key(m) for m in final] == [codec.key(m) for m in linked] and set(inventory) == set(original),
                    f"{inst}: the rebuilt party/inventory differs from the linked save")
-        _wave_need(all(m["hp"] == m["max_hp"] > 0 and m["status"] == 0 for m in final), f"{inst}: a rebuilt mon is not at full HP")
+        at_link = {codec.key(m): (m["hp"], m["status"]) for m in linked}
+        rebuilt = decoded[inst]["key"]
+        _wave_need(all(m["hp"] == m["max_hp"] > 0 and m["status"] == 0 for m in final
+                       if inst == "a" or codec.key(m) == rebuilt), f"{inst}: a rebuilt mon is not at full HP")
+        _wave_need(inst == "a" or all((m["hp"], m["status"]) == at_link[codec.key(m)] for m in final
+                                      if codec.key(m) != rebuilt), "b: an unlinked mon's HP/status changed since LINK_SAVE")
     a, b = results["a"], results["b"]
     a_key, b_key = decoded["a"]["key"], decoded["b"]["key"]
     starter = next(codec.key(m) for m in codec.decode_saved_party(raws["a"][:CARTRAM_BYTES], heads["a"][1],
