@@ -289,6 +289,36 @@
         "path": "tests/fixtures/gen2/receipts/gold_overlay.w6_gate.json",
         "sha256": "a027fb6524d9c6f129289ad3add43d6c8f35bd808a123996bba53a7163752711"
       }}}]
+    },
+    {
+      "id": "new-gates.phone.crystal",
+      "stage": "physical-live",
+      "description": "P4.5d Crystal overlay phone gate (O-29): a request posted in battle, standing in town (the shipped binder), with START open, before a native save and behind a pending native ROBBED call rings SLink only on the next counted step with the ---------- call screen and its text, clears ARMED and the id, never overwrites the native id, and leaves the SRAM phone byte 0 (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_phone_gate.py -k crystal)",
+      "axes": {"kind": "phone_gate", "title": "crystal", "requirement_ids": ["O-29"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_overlay.phone_gate.json",
+        "sha256": "43ad519f85b645c2a4a38692697296d60c5b83a6b440a428f24d1bf68b2cfb5c"
+      }}}]
+    },
+    {
+      "id": "new-gates.phone.gold",
+      "stage": "physical-live",
+      "description": "P4.5d Gold overlay phone gate (O-29): a request posted in battle, standing in town (the shipped binder), with START open, before a native save and behind a pending native ROBBED call rings SLink only on the next counted step with the ---------- call screen and its text, clears ARMED and the id, never overwrites the native id, and leaves the SRAM phone byte 0 (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_phone_gate.py -k gold)",
+      "axes": {"kind": "phone_gate", "title": "gold", "requirement_ids": ["O-29"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_overlay.phone_gate.json",
+        "sha256": "bc26001c367273e31b1da6631c44cec68f0f1d02e5d2d89bd7b5acf645d856bb"
+      }}}]
+    },
+    {
+      "id": "new-gates.phone.silver",
+      "stage": "physical-live",
+      "description": "P4.5d Silver overlay phone gate (O-29): a request posted in battle, standing in town (the shipped binder), with START open, before a native save and behind a pending native ROBBED call rings SLink only on the next counted step with the ---------- call screen and its text, clears ARMED and the id, never overwrites the native id, and leaves the SRAM phone byte 0 (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_phone_gate.py -k silver)",
+      "axes": {"kind": "phone_gate", "title": "silver", "requirement_ids": ["O-29"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_overlay.phone_gate.json",
+        "sha256": "2a833107ce510ce8b58b45bf8411a08cebf01113f16a75481a9829a1a0075a26"
+      }}}]
     }
   ]
 }

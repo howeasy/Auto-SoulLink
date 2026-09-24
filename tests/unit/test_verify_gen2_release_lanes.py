@@ -644,7 +644,7 @@ def _copy_new_gates_tree(tmp_path):
             fixture = row["axes"]["fixture"] + ".SaveRAM"
             (tmp_path / "tests/fixtures/gen2" / fixture).write_bytes(
                 (REPO / "tests/fixtures/gen2" / fixture).read_bytes())
-        if row["axes"]["kind"] in ("panel_gate", "sfx_gate"):
+        if row["axes"]["kind"] in ("panel_gate", "sfx_gate", "phone_gate"):
             fixture = json.loads(src.read_text(encoding="utf-8"))["fixture"] + ".SaveRAM"
             for rel in ("tests/fixtures/gen2/" + fixture, "data/gen2/overlay_provenance.json"):
                 (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -723,6 +723,10 @@ _NEW_GATE_GAPS = {
     "w6_gate_control_missed": "w6 gate leg sfx known-positive control did not fire",
     "w6_gate_leg_missing": "w6 gate receipt does not cover the panel, sfx and u1 legs",
     "w6_gate_leg_fixture": "w6 gate leg u1 does not bind the committed fixture's bytes",
+    "phone_gate_early_ring": "phone gate case town did not ring SLink after its step",
+    "phone_gate_save_unproven": "phone gate save did not prove a real save left the SRAM phone id 0",
+    "phone_gate_native_late": "phone gate native call did not keep precedence",
+    "phone_gate_stale_overlay": "phone gate receipt proves another overlay build",
 }
 
 
@@ -819,6 +823,24 @@ def test_every_new_gate_gap_is_red(tmp_path, mutation):
             receipt["contexts"]["battle_anim"]["battle_service_gap"] = receipt["deadline_frames"] + 1
         else:
             receipt["reset"]["played_id"] = receipt["reset"]["dropped"]
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        _repin(tmp_path, entry)
+    elif mutation == "phone_gate_stale_overlay":
+        path = tmp_path / "data/gen2/overlay_provenance.json"
+        provenance = json.loads(path.read_text(encoding="utf-8"))
+        provenance["outputs"]["pokecrystal"]["sha1"] = "0" * 40
+        path.write_text(json.dumps(provenance), encoding="utf-8")
+    elif mutation.startswith("phone_gate_"):
+        entry = row("new-gates.phone.crystal")["proofs"][0]["receipts"]["receipt"]
+        path = tmp_path / entry["path"]
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        cases = receipt["cases"]
+        if mutation == "phone_gate_early_ring":
+            cases["town"]["ring"]["frame"] = cases["town"]["step_at"] - 1
+        elif mutation == "phone_gate_save_unproven":
+            cases["save"]["extra"]["sram_changed_bytes"] = 0
+        else:
+            cases["native"]["extra"]["native_ring"]["frame"] = cases["native"]["ring"]["frame"] + 1
         path.write_text(json.dumps(receipt), encoding="utf-8")
         _repin(tmp_path, entry)
     elif mutation.startswith("w6_gate_"):

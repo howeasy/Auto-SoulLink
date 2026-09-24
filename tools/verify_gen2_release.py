@@ -1074,6 +1074,33 @@ def _w6_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
     return errors
 
 
+# P4.5d (tests/live/test_gen2_phone_gate.py): every phone case the plan names, each ringing only after its step.
+PHONE_GATE_CASES = ("battle", "town", "start_menu", "save", "native")
+
+
+def _phone_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
+    """P4.5d: the overlay gate binding; every case rang SLink after its counted step; the save really ran with
+    ARMED != 0 and left 0 in both SRAM copies; a pending native call rang first."""
+    errors = _overlay_gate_errors(root, title, receipt, "gen2-phone-gate-v1", "phone gate")
+    cases = receipt.get("cases") or {}
+    for name in PHONE_GATE_CASES:
+        c = cases.get(name) or {}
+        ring, step = c.get("ring") or {}, c.get("step_at")
+        if (c.get("result") != "PASS" or type(step) is not int or type(ring.get("frame")) is not int
+                or ring["frame"] < step or ring.get("caller") != 0):
+            errors.append(f"phone gate case {name} did not ring SLink after its step")
+    save = (cases.get("save") or {}).get("extra") or {}
+    if (not save.get("armed_at_save") or save.get("sram_primary") != 0 or save.get("sram_backup") != 0
+            or type(save.get("sram_changed_bytes")) is not int or save["sram_changed_bytes"] <= 0):
+        errors.append("phone gate save did not prove a real save left the SRAM phone id 0")
+    native = ((cases.get("native") or {}).get("extra") or {}).get("native_ring") or {}
+    slink = (cases.get("native") or {}).get("ring") or {}
+    if (native.get("caller") in (None, 0) or type(native.get("frame")) is not int
+            or type(slink.get("frame")) is not int or native["frame"] >= slink["frame"]):
+        errors.append("phone gate native call did not keep precedence")
+    return errors
+
+
 def new_gates_errors(root: Path | None = None, receipt_validate=None) -> list[str]:
     """Every gap in the live-new-gates lane's non-emulator evidence: U1 engine-site, U2 write-window
     (Silver via O-23) and fixture-qualification receipts, each pinned by sha256. An empty proof is a
@@ -1120,6 +1147,8 @@ def new_gates_errors(root: Path | None = None, receipt_validate=None) -> list[st
                 errors.extend(f"{rid}: {e}" for e in _sfx_gate_row_errors(root, axes["title"], receipt))
             elif kind == "w6_gate":
                 errors.extend(f"{rid}: {e}" for e in _w6_gate_row_errors(root, axes["title"], receipt))
+            elif kind == "phone_gate":
+                errors.extend(f"{rid}: {e}" for e in _phone_gate_row_errors(root, axes["title"], receipt))
             else:
                 errors.append(f"{rid}: no validator for receipt kind {kind!r}")
     return errors
