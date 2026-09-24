@@ -1,0 +1,394 @@
+{
+ "corpus_frames": 64736,
+ "evidence_level": "PHYSICAL",
+ "facts": {
+  "allow": [
+   {
+    "bank": 117,
+    "hi": 32768,
+    "lo": 16384,
+    "name": "SLink service bank"
+   },
+   {
+    "bank": 0,
+    "hi": 122,
+    "lo": 99,
+    "name": "SlinkDelayFrameBridge"
+   },
+   {
+    "bank": 0,
+    "hi": 145,
+    "lo": 128,
+    "name": "SlinkResetSoundBridge"
+   },
+   {
+    "bank": 4,
+    "hi": 27111,
+    "lo": 27099,
+    "name": "SlinkStartMenuEntry"
+   }
+  ],
+  "control": 53171,
+  "hrombank": 65437,
+  "init": {
+   "entry": 381,
+   "hi": 441,
+   "lo": 433,
+   "name": "Init WRAM0 clear"
+  },
+  "overlay_sha1": "651dc6bf0fccf8a3e4eb5e2d2895c55ad732d545",
+  "regions": [
+   {
+    "hi": 56371,
+    "lo": 56369,
+    "name": "wSpecialPhoneCallID",
+    "slink_allow": [
+     "SLink service bank"
+    ],
+    "wram_bank": 1
+   }
+  ],
+  "span": [
+   53208,
+   53248
+  ]
+ },
+ "fixture": "crystal_battle",
+ "fixture_sha256": "f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6",
+ "harness_write_scopes": [],
+ "input_mode": "normal_buttons",
+ "legs": {
+  "panel": {
+   "allowed_writes": 136724,
+   "armed_frame": 1,
+   "boot_clear": {
+    "00:01B3 Init.ByteFill+0x2": 40
+   },
+   "boot_writes": 40,
+   "control": {
+    "lua_addr": 53228,
+    "lua_caught": true,
+    "lua_kind": "harness",
+    "lua_source": "main",
+    "native_addr": 53171,
+    "native_allowed": 11384,
+    "native_caught": true,
+    "native_flagged": 12314,
+    "native_writers": {
+     "00:0068 SlinkDelayFrameBridge+0x5": 11384,
+     "00:01B3 Init.ByteFill+0x2": 1,
+     "00:0300 VBlank_Normal.done_oam+0x4": 12072,
+     "00:0355 VBlank_Cutscene.done+0x4": 146,
+     "00:03B7 VBlank_CutsceneCGB.done+0x4": 44,
+     "33:4200 BattleAnimDelayFrame.wait+0x0": 51
+    }
+   },
+   "corpus_frames": 12562,
+   "driver": null,
+   "evidence_level": "PHYSICAL",
+   "fixture": "crystal_battle",
+   "fixture_sha256": "f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6",
+   "gate": "lua/tests/gen2_panel_gate.lua",
+   "init_entries": [
+    1
+   ],
+   "inner_completed": true,
+   "leg": "panel",
+   "lua_callbacks_fired": 0,
+   "lua_writes": {
+    "client": {
+     "lua/write_permit.lua": 16
+    },
+    "harness": {}
+   },
+   "overlay_sha1": "651dc6bf0fccf8a3e4eb5e2d2895c55ad732d545",
+   "qualification_attempt_id": "requal-crystal-battle-n14b",
+   "regions": {
+    "wSpecialPhoneCallID": {
+     "hi": 56371,
+     "lo": 56369,
+     "lua": {},
+     "lua_fired": 0,
+     "native": {
+      "00:302C CopyBytes.CopyByte+0x2": 2,
+      "00:3046 ByteFill.HandleLoop+0x0": 2
+     },
+     "other_bank": 36,
+     "slink": {},
+     "wram_bank": 1
+    }
+   },
+   "schema": "gen2-w6-leg-v1",
+   "span": [
+    53208,
+    53248
+   ],
+   "violation_count": 0,
+   "violations": [],
+   "writers": {
+    "75:4006 SlinkService+0x6": 11384,
+    "75:4009 SlinkService+0x9": 11384,
+    "75:400C SlinkService+0xc": 11384,
+    "75:400F SlinkService+0xf": 11384,
+    "75:4012 SlinkService+0x12": 11384,
+    "75:4017 SlinkService+0x17": 11384,
+    "75:4026 SlinkService+0x26": 1,
+    "75:402A SlinkService+0x2a": 1,
+    "75:402D SlinkService+0x2d": 1,
+    "75:403D SlinkService.sample+0xe": 11383,
+    "75:4045 SlinkService.remember+0x0": 11383,
+    "75:4049 SlinkService.remember+0x4": 11384,
+    "75:48B3 SlinkPanel+0xb": 15,
+    "75:48B6 SlinkPanel+0xe": 15,
+    "75:48B9 SlinkPanel+0x11": 15,
+    "75:48E8 SlinkPanel.page+0x2a": 16,
+    "75:48F3 SlinkPanel.ready+0x0": 8,
+    "75:491E SlinkPanel.ready+0x2b": 1,
+    "75:4924 SlinkPanel.close+0x4": 15,
+    "75:4927 SlinkPanel.close+0x7": 15,
+    "75:492A SlinkPanel.close+0xa": 15,
+    "75:4B6B SlinkSfxService.reset_blocked+0x0": 11384,
+    "75:4B6F SlinkSfxService.reset_blocked+0x4": 11384,
+    "75:4B72 SlinkSfxService.reset_blocked+0x7": 11384
+   }
+  },
+  "sfx": {
+   "allowed_writes": 68087,
+   "armed_frame": 1,
+   "boot_clear": {
+    "00:01B3 Init.ByteFill+0x2": 80
+   },
+   "boot_writes": 80,
+   "control": {
+    "lua_addr": 53228,
+    "lua_caught": true,
+    "lua_kind": "harness",
+    "lua_source": "main",
+    "native_addr": 53171,
+    "native_allowed": 5686,
+    "native_caught": true,
+    "native_flagged": 6463,
+    "native_writers": {
+     "00:0068 SlinkDelayFrameBridge+0x5": 5686,
+     "00:01B3 Init.ByteFill+0x2": 2,
+     "00:0300 VBlank_Normal.done_oam+0x4": 6220,
+     "00:0355 VBlank_Cutscene.done+0x4": 146,
+     "00:03B7 VBlank_CutsceneCGB.done+0x4": 44,
+     "33:4200 BattleAnimDelayFrame.wait+0x0": 51
+    }
+   },
+   "corpus_frames": 6485,
+   "driver": null,
+   "evidence_level": "PHYSICAL",
+   "fixture": "crystal_battle",
+   "fixture_sha256": "f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6",
+   "gate": "lua/tests/gen2_sfx_gate.lua",
+   "init_entries": [
+    1,
+    5614
+   ],
+   "inner_completed": true,
+   "leg": "sfx",
+   "lua_callbacks_fired": 0,
+   "lua_writes": {
+    "client": {
+     "lua/write_permit.lua": 11
+    },
+    "harness": {}
+   },
+   "overlay_sha1": "651dc6bf0fccf8a3e4eb5e2d2895c55ad732d545",
+   "qualification_attempt_id": "requal-crystal-battle-n14b",
+   "regions": {
+    "wSpecialPhoneCallID": {
+     "hi": 56371,
+     "lo": 56369,
+     "lua": {},
+     "lua_fired": 0,
+     "native": {
+      "00:302C CopyBytes.CopyByte+0x2": 2,
+      "00:3046 ByteFill.HandleLoop+0x0": 4
+     },
+     "other_bank": 8,
+     "slink": {},
+     "wram_bank": 1
+    }
+   },
+   "schema": "gen2-w6-leg-v1",
+   "span": [
+    53208,
+    53248
+   ],
+   "violation_count": 0,
+   "violations": [],
+   "writers": {
+    "00:0086 SlinkResetSoundBridge+0x6": 1,
+    "00:008A SlinkResetSoundBridge+0xa": 1,
+    "00:008D SlinkResetSoundBridge+0xd": 1,
+    "75:4006 SlinkService+0x6": 5686,
+    "75:4009 SlinkService+0x9": 5686,
+    "75:400C SlinkService+0xc": 5686,
+    "75:400F SlinkService+0xf": 5686,
+    "75:4012 SlinkService+0x12": 5686,
+    "75:4017 SlinkService+0x17": 5686,
+    "75:4026 SlinkService+0x26": 2,
+    "75:402A SlinkService+0x2a": 2,
+    "75:402D SlinkService+0x2d": 2,
+    "75:403D SlinkService.sample+0xe": 5684,
+    "75:4045 SlinkService.remember+0x0": 5684,
+    "75:4049 SlinkService.remember+0x4": 5686,
+    "75:4B40 SlinkSfxService.play+0xf": 10,
+    "75:4B43 SlinkSfxService.play+0x12": 10,
+    "75:4B46 SlinkSfxService.play+0x15": 10,
+    "75:4B57 SlinkSfxService.hold+0xc": 1,
+    "75:4B5B SlinkSfxService.count+0x0": 1,
+    "75:4B66 SlinkSfxService.count+0xb": 60,
+    "75:4B6B SlinkSfxService.reset_blocked+0x0": 5584,
+    "75:4B6F SlinkSfxService.reset_blocked+0x4": 5616,
+    "75:4B72 SlinkSfxService.reset_blocked+0x7": 5616
+   }
+  },
+  "u1": {
+   "allowed_writes": 298669,
+   "armed_frame": 1,
+   "boot_clear": {
+    "00:01B3 Init.ByteFill+0x2": 40
+   },
+   "boot_writes": 40,
+   "control": {
+    "lua_addr": 53228,
+    "lua_caught": true,
+    "lua_kind": "harness",
+    "lua_source": "main",
+    "native_addr": 53171,
+    "native_allowed": 24889,
+    "native_caught": true,
+    "native_flagged": 50674,
+    "native_writers": {
+     "00:0068 SlinkDelayFrameBridge+0x5": 24889,
+     "00:01B3 Init.ByteFill+0x2": 1,
+     "00:0300 VBlank_Normal.done_oam+0x4": 37172,
+     "00:0355 VBlank_Cutscene.done+0x4": 2628,
+     "00:03B7 VBlank_CutsceneCGB.done+0x4": 5534,
+     "33:4200 BattleAnimDelayFrame.wait+0x0": 5339
+    }
+   },
+   "corpus_frames": 45689,
+   "driver": {
+    "files": {
+     "lua/tests/duo/gen2_faint_inputs.lua": {
+      "ref": "c60c45c3",
+      "sha256": "6e7219666514545de52841a1498830afafb47f9c15cf793b4483d23b6b5ccee5"
+     },
+     "lua/tests/gen2_frame_align.lua": {
+      "ref": "a7bf1773",
+      "sha256": "984fc87a6dfcf80c145646e516ff0f9e935faccd8821c93ef1534530168d6e1b"
+     },
+     "lua/tests/gen2_poison_inputs.lua": {
+      "ref": "a7bf1773",
+      "sha256": "118ce2c49ad40311286c3cd9d3872e2c9b2ffddd3d580f9a6513679523f1095d"
+     },
+     "tests/live/test_gen2_frame_align.py": {
+      "ref": "a7bf1773",
+      "sha256": "64db98086ff386ab7dc11664aa84b4423a03e93f0781b211b2b76bb85f81c429"
+     }
+    },
+    "ref": "a7bf1773"
+   },
+   "evidence_level": "PHYSICAL",
+   "fixture": "crystal_battle",
+   "fixture_sha256": "f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6",
+   "gate": "lua/tests/gen2_frame_align.lua",
+   "init_entries": [
+    1
+   ],
+   "inner_completed": true,
+   "leg": "u1",
+   "lua_callbacks_fired": 0,
+   "lua_writes": {
+    "client": {},
+    "harness": {}
+   },
+   "overlay_sha1": "651dc6bf0fccf8a3e4eb5e2d2895c55ad732d545",
+   "qualification_attempt_id": "requal-crystal-battle-n14b",
+   "regions": {
+    "wSpecialPhoneCallID": {
+     "hi": 56371,
+     "lo": 56369,
+     "lua": {},
+     "lua_fired": 0,
+     "native": {
+      "00:302C CopyBytes.CopyByte+0x2": 2,
+      "00:3046 ByteFill.HandleLoop+0x0": 2
+     },
+     "other_bank": 6,
+     "slink": {},
+     "wram_bank": 1
+    }
+   },
+   "schema": "gen2-w6-leg-v1",
+   "span": [
+    53208,
+    53248
+   ],
+   "violation_count": 0,
+   "violations": [],
+   "writers": {
+    "75:4006 SlinkService+0x6": 24889,
+    "75:4009 SlinkService+0x9": 24889,
+    "75:400C SlinkService+0xc": 24889,
+    "75:400F SlinkService+0xf": 24889,
+    "75:4012 SlinkService+0x12": 24889,
+    "75:4017 SlinkService+0x17": 24889,
+    "75:4026 SlinkService+0x26": 1,
+    "75:402A SlinkService+0x2a": 1,
+    "75:402D SlinkService+0x2d": 1,
+    "75:403D SlinkService.sample+0xe": 24888,
+    "75:4045 SlinkService.remember+0x0": 24888,
+    "75:4049 SlinkService.remember+0x4": 24889,
+    "75:4B6B SlinkSfxService.reset_blocked+0x0": 24889,
+    "75:4B6F SlinkSfxService.reset_blocked+0x4": 24889,
+    "75:4B72 SlinkSfxService.reset_blocked+0x7": 24889
+   }
+  }
+ },
+ "overlay_sha1": "651dc6bf0fccf8a3e4eb5e2d2895c55ad732d545",
+ "result": "PASS",
+ "schema": "gen2-w6-gate-v1",
+ "title": "crystal",
+ "violation_count": 0,
+ "writers": {
+  "00:0086 SlinkResetSoundBridge+0x6": 1,
+  "00:008A SlinkResetSoundBridge+0xa": 1,
+  "00:008D SlinkResetSoundBridge+0xd": 1,
+  "75:4006 SlinkService+0x6": 41959,
+  "75:4009 SlinkService+0x9": 41959,
+  "75:400C SlinkService+0xc": 41959,
+  "75:400F SlinkService+0xf": 41959,
+  "75:4012 SlinkService+0x12": 41959,
+  "75:4017 SlinkService+0x17": 41959,
+  "75:4026 SlinkService+0x26": 4,
+  "75:402A SlinkService+0x2a": 4,
+  "75:402D SlinkService+0x2d": 4,
+  "75:403D SlinkService.sample+0xe": 41955,
+  "75:4045 SlinkService.remember+0x0": 41955,
+  "75:4049 SlinkService.remember+0x4": 41959,
+  "75:48B3 SlinkPanel+0xb": 15,
+  "75:48B6 SlinkPanel+0xe": 15,
+  "75:48B9 SlinkPanel+0x11": 15,
+  "75:48E8 SlinkPanel.page+0x2a": 16,
+  "75:48F3 SlinkPanel.ready+0x0": 8,
+  "75:491E SlinkPanel.ready+0x2b": 1,
+  "75:4924 SlinkPanel.close+0x4": 15,
+  "75:4927 SlinkPanel.close+0x7": 15,
+  "75:492A SlinkPanel.close+0xa": 15,
+  "75:4B40 SlinkSfxService.play+0xf": 10,
+  "75:4B43 SlinkSfxService.play+0x12": 10,
+  "75:4B46 SlinkSfxService.play+0x15": 10,
+  "75:4B57 SlinkSfxService.hold+0xc": 1,
+  "75:4B5B SlinkSfxService.count+0x0": 1,
+  "75:4B66 SlinkSfxService.count+0xb": 60,
+  "75:4B6B SlinkSfxService.reset_blocked+0x0": 41857,
+  "75:4B6F SlinkSfxService.reset_blocked+0x4": 41889,
+  "75:4B72 SlinkSfxService.reset_blocked+0x7": 41889
+ }
+}

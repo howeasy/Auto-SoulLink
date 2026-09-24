@@ -47,7 +47,7 @@ TITLES = ("crystal", "gold", "silver")
 COVERED_ELSEWHERE = {"crystal.write_window.json"}
 # Live-gate receipts are not production admission receipts: tools/verify_gen2_release.py validates them
 # (_panel_gate_row_errors, tested in tests/unit/test_verify_gen2_release_lanes.py). Listed by suffix, not skipped silently.
-GATE_SUFFIXES = (".panel_gate.json", ".sfx_gate.json")
+GATE_SUFFIXES = (".panel_gate.json", ".sfx_gate.json", ".w6_gate.json")
 
 _MODULES = {}
 

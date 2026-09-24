@@ -229,6 +229,26 @@
         "path": "tests/fixtures/gen2/receipts/silver_overlay.sfx_gate.json",
         "sha256": "51cf217f9b4df25cd5a4bd009f11bdead94b9d6e7a38dbbbbd6a68fc9d9c7ae7"
       }}}]
+    },
+    {
+      "id": "new-gates.w6.crystal",
+      "stage": "physical-live",
+      "description": "P4 W6 Crystal overlay mailbox write-watch tripwire (O-27 D1): the panel, sfx and frozen U1e (a7bf1773) corpus, every mailbox write from SLink code, Init's boot clear or the shipped Lua client, the wSpecialPhoneCallID word from the service bank only, both known-positive controls caught (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_w6_gate.py -k crystal)",
+      "axes": {"kind": "w6_gate", "title": "crystal", "requirement_ids": ["O-27"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_overlay.w6_gate.json",
+        "sha256": "339edfc5677a40e86a12ba014241e667adbe76ef1d3f56a2ecfb2bf5bdde1b82"
+      }}}]
+    },
+    {
+      "id": "new-gates.w6.silver",
+      "stage": "physical-live",
+      "description": "P4 W6 Silver overlay mailbox write-watch tripwire (O-27 D1): the panel, sfx and frozen U1e (a7bf1773) corpus, every mailbox write from SLink code, Init's boot clear or the shipped Lua client, the wSpecialPhoneCallID word from the service bank only, both known-positive controls caught (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_w6_gate.py -k silver)",
+      "axes": {"kind": "w6_gate", "title": "silver", "requirement_ids": ["O-27"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_overlay.w6_gate.json",
+        "sha256": "be54566bc733892dbbfeed8c5e603ba0bb86de756f4fbe04c2dfd976a72d9576"
+      }}}]
     }
   ]
 }

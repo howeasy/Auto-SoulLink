@@ -1041,6 +1041,39 @@ def _sfx_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
     return errors
 
 
+# card gen2-p4-w6 (tests/live/test_gen2_w6_gate.py): the live mailbox write-watch over the whole scripted corpus.
+W6_GATE_LEGS = ("panel", "sfx", "u1")
+
+
+def _w6_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
+    """O-27 D1 tripwire: the overlay gate binding, then every corpus leg ran to completion on its committed
+    fixture with no mailbox writer outside SLink code, and both known-positive controls fired in it."""
+    errors = _overlay_gate_errors(root, title, receipt, "gen2-w6-gate-v1", "w6 gate")
+    legs = receipt.get("legs") or {}
+    if set(legs) != set(W6_GATE_LEGS):
+        errors.append("w6 gate receipt does not cover the panel, sfx and u1 legs")
+    for name in sorted(legs):
+        leg = legs[name] or {}
+        fixture, want = leg.get("fixture"), leg.get("fixture_sha256")
+        if (not isinstance(fixture, str) or not fixture or not isinstance(want, str) or not want
+                or _fixture_sha256(root, fixture) != want):
+            errors.append(f"w6 gate leg {name} does not bind the committed fixture's bytes")
+        if leg.get("overlay_sha1") != receipt.get("overlay_sha1"):
+            errors.append(f"w6 gate leg {name} ran another overlay build")
+        frames, writes = leg.get("corpus_frames"), leg.get("allowed_writes")
+        if (leg.get("inner_completed") is not True or type(frames) is not int or frames <= 0
+                or type(writes) is not int or writes <= 0):
+            errors.append(f"w6 gate leg {name} did not watch a completed corpus")
+        if leg.get("violation_count") != 0 or leg.get("violations"):
+            errors.append(f"w6 gate leg {name} saw a mailbox writer outside SLink code")
+        control = leg.get("control") or {}
+        if control.get("native_caught") is not True or control.get("lua_caught") is not True:
+            errors.append(f"w6 gate leg {name} known-positive control did not fire")
+    if receipt.get("violation_count") != 0:
+        errors.append("w6 gate receipt records mailbox violations")
+    return errors
+
+
 def new_gates_errors(root: Path | None = None, receipt_validate=None) -> list[str]:
     """Every gap in the live-new-gates lane's non-emulator evidence: U1 engine-site, U2 write-window
     (Silver via O-23) and fixture-qualification receipts, each pinned by sha256. An empty proof is a
@@ -1085,6 +1118,8 @@ def new_gates_errors(root: Path | None = None, receipt_validate=None) -> list[st
                 errors.extend(f"{rid}: {e}" for e in _panel_gate_row_errors(root, axes["title"], receipt))
             elif kind == "sfx_gate":
                 errors.extend(f"{rid}: {e}" for e in _sfx_gate_row_errors(root, axes["title"], receipt))
+            elif kind == "w6_gate":
+                errors.extend(f"{rid}: {e}" for e in _w6_gate_row_errors(root, axes["title"], receipt))
             else:
                 errors.append(f"{rid}: no validator for receipt kind {kind!r}")
     return errors

@@ -649,6 +649,12 @@ def _copy_new_gates_tree(tmp_path):
             for rel in ("tests/fixtures/gen2/" + fixture, "data/gen2/overlay_provenance.json"):
                 (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
                 (tmp_path / rel).write_bytes((REPO / rel).read_bytes())
+        if row["axes"]["kind"] == "w6_gate":
+            legs = json.loads(src.read_text(encoding="utf-8"))["legs"].values()
+            for rel in ["tests/fixtures/gen2/" + leg["fixture"] + ".SaveRAM" for leg in legs] + [
+                    "data/gen2/overlay_provenance.json"]:
+                (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+                (tmp_path / rel).write_bytes((REPO / rel).read_bytes())
     (tmp_path / gate.NEW_GATES).parent.mkdir(parents=True, exist_ok=True)
     (tmp_path / gate.NEW_GATES).write_text(json.dumps(doc), encoding="utf-8")
     return doc
@@ -713,6 +719,10 @@ _NEW_GATE_GAPS = {
     "sfx_gate_context_missing": "sfx gate context battle_anim did not play within its deadline",
     "sfx_gate_battle_gap": "battle worst-case service gap is missing or past the deadline",
     "sfx_gate_reset_played": "sfx gate reset did not drop a pending request",
+    "w6_gate_violation": "w6 gate leg u1 saw a mailbox writer outside SLink code",
+    "w6_gate_control_missed": "w6 gate leg sfx known-positive control did not fire",
+    "w6_gate_leg_missing": "w6 gate receipt does not cover the panel, sfx and u1 legs",
+    "w6_gate_leg_fixture": "w6 gate leg u1 does not bind the committed fixture's bytes",
 }
 
 
@@ -809,6 +819,20 @@ def test_every_new_gate_gap_is_red(tmp_path, mutation):
             receipt["contexts"]["battle_anim"]["battle_service_gap"] = receipt["deadline_frames"] + 1
         else:
             receipt["reset"]["played_id"] = receipt["reset"]["dropped"]
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        _repin(tmp_path, entry)
+    elif mutation.startswith("w6_gate_"):
+        entry = row("new-gates.w6.crystal")["proofs"][0]["receipts"]["receipt"]
+        path = tmp_path / entry["path"]
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        if mutation == "w6_gate_violation":
+            receipt["legs"]["u1"]["violation_count"] = 1
+        elif mutation == "w6_gate_control_missed":
+            receipt["legs"]["sfx"]["control"]["native_caught"] = False
+        elif mutation == "w6_gate_leg_missing":
+            del receipt["legs"]["panel"]
+        else:
+            receipt["legs"]["u1"]["fixture_sha256"] = "0" * 64
         path.write_text(json.dumps(receipt), encoding="utf-8")
         _repin(tmp_path, entry)
     elif mutation == "panel_gate_no_margin":
