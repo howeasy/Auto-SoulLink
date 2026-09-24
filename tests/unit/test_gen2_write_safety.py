@@ -822,7 +822,8 @@ def test_the_committed_crystal_receipt_still_qualifies_and_binds():
     assert {run["evidence_level"] for run in receipt["runs"].values()} == {"PHYSICAL"}
     scope, why = u2.lua_qualified(pack_of("crystal"), "crystal", receipt)
     assert scope is not None, why
-    assert scope["kinds"] == sorted([*ALL_KINDS, "battle_faint"])   # card BOX box runs; O-30 the battle_faint run
+    # card BOX box runs; O-30 the battle_faint run; O-32 the battle_bench run
+    assert scope["kinds"] == sorted([*ALL_KINDS, "battle_bench", "battle_faint"])
     reports = {name: json.loads((receipts / f"{name}.qualification.json").read_text(encoding="utf-8"))
                for name in ("crystal_town", "crystal_battle")}
     bound, why = u2.lua_bind(receipt, reports)

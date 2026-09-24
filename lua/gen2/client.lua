@@ -17,6 +17,8 @@
 --   checkpoint_pc  production only: the checkpoint PC hooked for writes + hello readiness
 --   battle_hold    O-30: write_checkpoint.json battle_hold facts, the in-battle death site (before
 --                  `call DetermineMoveOrder`); production composes it only behind a battle_faint receipt
+--   battle_bench   O-32: true lands a BENCH death on receipt, at the battle frame end (Gen 1 battle_bench);
+--                  production composes it only behind a receipt covering battle_bench (and battle_faint)
 --   contest_mask   write_checkpoint.json contest_mask: the Bug-Catching Contest's party mask (ruling a)
 --   net      lua/connector.lua      newline-JSON TCP (send/receive/pump/connected)
 --   json/hud/io                     as Gen 1
@@ -50,6 +52,8 @@ local BOX_OPEN = "Gen 2 box executor not composed"
 local PARTY_HP = "party_hp"
 -- O-30: the write kind held at the battle hold (gen2_write_safety BATTLE_KINDS).
 local BATTLE_FAINT = "battle_faint"
+-- O-32: the receipt-time bench write kind (gen2_write_safety BENCH_KINDS), checked at a battle frame end.
+local BATTLE_BENCH = "battle_bench"
 
 local function nick_label(key, nickname)
     if nickname and nickname ~= "" then return nickname end
@@ -459,8 +463,10 @@ function Client.new(p)
             if battle and battle.mode ~= 0 then
                 if p.battle_hold then
                     -- O-30 (Gen 1 pending_battle_writes): the death lands at the next battle hold,
-                    -- active battler and bench alike; a battle that ends first hands it to the checkpoint
+                    -- active battler and bench alike; a battle that ends first hands it to the checkpoint.
+                    -- O-32: a bench death lands this frame instead (land_bench_deaths, from frame_end)
                     self.pending_battle_writes[#self.pending_battle_writes + 1] = entry
+                    self.bench_owed = true
                     return
                 end
                 if battle.active_slot == slot then
@@ -991,6 +997,7 @@ function Client.new(p)
                             -- scripted/static and special types resolve nothing (as the binder)
                             resolves = battle ~= nil and AREA_BATTLE_TYPES[battle.battle_type] == true
                                        and scripted ~= nil and math.floor(scripted / 128) % 2 == 0 }
+            self.bench_owed = true -- O-32: a death deferred before the battle lands at its first frame
             if self.battle.resolves and self.has_pokeballs and self.seeded and area_id ~= ""
                and not self.resolved_areas[area_id] then
                 hud.show("** NEW ENCOUNTER **\n" .. name, 255, 220, 60, 360)  -- area on its own line, as Gen 1
@@ -1000,6 +1007,7 @@ function Client.new(p)
             -- Gen 2: no trainer_battle_start: the (class, id) pair has no agreed single-int
             -- packing (gen2_gsc.trainer_info) and rival_trainer_ids() is empty
             self.battle = { wild = false }
+            self.bench_owed = true -- O-32: as wild_ready
         elseif k == "battle_end" then
             local b = self.battle
             if b and b.wild and b.resolves and not b.captured and b.area_id ~= ""
@@ -1353,6 +1361,56 @@ function Client.new(p)
         self.pending_battle_writes = keep
     end
 
+    -- O-32 (Gen 1 handle_command: a benched mon dies the frame the command arrives, owner 2026-09-22 "so it
+    -- can never be switched in"): at the battle frame end after the command's receipt, never inside a CPU
+    -- hold (gen2_write_safety evaluate_frame). Frame end is the game's DelayFrame boundary: every in-battle
+    -- read of a bench mon's party HP is a live read (CheckIfCurPartyMonIsFitToFight, C engine/battle/
+    -- core.asm:3650-3656, from TryPlayerSwitch :5176 and PickPartyMonInBattle :2852-2860; the party list
+    -- only draws it), so a death landed first refuses the switch. The entry stays queued, as Gen 1 keeps it:
+    -- a switch already past that check (TryPlayerSwitch :5176-5192 -> BattleMonEntrance -> InitBattleMon
+    -- :5249-5271, frames apart) is the active battler at the next hold and dies there by W-2 before it acts;
+    -- a revival by GiveExperiencePoints (fainted test :7004, level-up HP gain after the exp text :7121-7240;
+    -- G :6764/:6881-6990) is lifted by the quiet re-zero every landing leaves. A refused frame (an
+    -- animation's SVBK, the permit, the evaluation) retries the next one. Link battles never write (O-30).
+    function self:land_bench_deaths()
+        if not self.bench_owed or not p.battle_bench or not self.writes_enabled then return end
+        local battle, link = reads.read_battle(), wram_byte("wLinkMode")
+        if not battle or link == nil then return end
+        if battle.mode == 0 or link ~= 0 then self.bench_owed = false return end
+        if not safety.check(BATTLE_BENCH) or not current_party() then return end
+        self.bench_owed = false
+        lift_deferred_deaths()
+        local snapshot = { mode = battle.mode, battle_type = battle.battle_type,
+                           active_slot = battle.active_slot, link_mode = link }
+        for _, w in ipairs(self.pending_battle_writes) do
+            local slot, mon, _, why = find_party_slot(w.key, w.cmd)
+            if not w.landed and slot and not why and slot ~= battle.active_slot and mon.hp > 0 then
+                local ok, err = pcall(function()
+                    writes:arm(BATTLE_BENCH)
+                    writes:faint_party_slot(slot, snapshot)
+                end)
+                writes:disarm()
+                if ok then
+                    if w.quiet then
+                        log("[SLink-gen2] re-zeroed a revived dead mon on receipt " .. w.key .. " -> " .. mon_key(mon))
+                    else
+                        log("[SLink-gen2] bench write landed on receipt: slot " .. slot .. " " .. tostring(w.key))
+                        hud.show("!! " .. nick_label(w.key, w.nickname or mon.nickname) .. " KO'd", 255, 80, 80, 360)
+                    end
+                    -- still queued (landed, quiet): the hold settles a switch-in that beat the write
+                    w.landed, w.quiet = true, true
+                    defer_held({ cmd = "force_faint", key = w.key, nickname = w.nickname, arrival = w.arrival, quiet = true })
+                else
+                    self.bench_owed = true
+                    if not w.bench_refused then
+                        w.bench_refused = true
+                        log("[SLink-gen2] bench write refused on receipt, retried: " .. tostring(err) .. " " .. tostring(w.key))
+                    end
+                end
+            end
+        end
+    end
+
     -- Production: the CPU sits at the checkpoint PC (OWPlayerInput, before `call CheckAPressOW`),
     -- the only place check(kind) can accept. An accepted hold arms this frame's hello readiness
     -- and runs one deferred write inside the hold, exactly where the U2 gate wrote.
@@ -1435,6 +1493,7 @@ function Client.new(p)
             if not tok then log("[SLink-gen2] trade: " .. tostring(terr)) end
         end
         self.replies:step()
+        self:land_bench_deaths() -- O-32: a bench death lands the frame its command arrived (replies:step)
         self:run_deferred()
     end
 

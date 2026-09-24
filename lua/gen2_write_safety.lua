@@ -27,11 +27,12 @@ M.BOX_MODES = {"boxes", "boxes_reset", "boxes_reload"}
 -- pack physical.required_controls a receipt may declare covered (every run below is required anyway).
 M.COVERED_CONTROLS = {["idle reacquisition"]=true, ["warp/Continue"]=true}
 M.RUNS = {town="_town", reload="_town", battle="_battle",
-          boxes="_battle", boxes_reset="_battle", boxes_reload="_battle", battle_faint="_battle"}
+          boxes="_battle", boxes_reset="_battle", boxes_reload="_battle", battle_faint="_battle",
+          battle_bench="_battle"}
 -- The only harness scopes that may write bytes, per run (sorted).
 M.TEST_SCOPES = {town={"u2-test-box-write", "u2-test-party-write"}, reload={}, battle={},
                  boxes={"u2-box-ops"}, boxes_reset={"u2-box-ops"}, boxes_reload={},
-                 battle_faint={"u2-battle-faint"}}
+                 battle_faint={"u2-battle-faint"}, battle_bench={"u2-battle-bench"}}
 -- tools/fixture_qualification.py FULL_CHAIN: the stages a full-scope qualification report ran.
 M.FULL_CHAIN = {"qualify", "boot", "resave", "post_oracle"}
 -- Negative windows per run: minimum frames (at least frames-1 of them open at both edges), the
@@ -48,7 +49,7 @@ M.WINDOWS = {
     },
     reload = {},
     battle = {{name="battle", frames=30, stated={wBattleMode=true}}},
-    boxes = {}, boxes_reset = {}, boxes_reload = {}, battle_faint = {},
+    boxes = {}, boxes_reset = {}, boxes_reload = {}, battle_faint = {}, battle_bench = {},
 }
 -- Idle reacquisition: the phase entered after each window saw a NEW accepted hold (driver order).
 M.REACQUIRE = {
@@ -59,6 +60,7 @@ M.REACQUIRE = {
     boxes_reset = {{"idle", "ops"}, {"post_save", "done"}},
     boxes_reload = {{"idle", "done"}},
     battle_faint = {{"idle", "hunt"}, {"post_battle", "done"}},
+    battle_bench = {{"idle", "hunt"}, {"post_battle", "done"}},
 }
 -- The box runs: production-executor ops, one per accepted hold, on the two scripted catches (key 1, key 2).
 -- written = the permit kinds in write order (deposit/memorial: box first; withdraw: party first); party =
@@ -93,6 +95,10 @@ local COUNT = 9007199254740991
 -- receipt adds it only with its own passed battle run (phase 4); until then check() refuses it.
 M.BATTLE_KINDS = {battle_faint=true}
 M.BATTLE_MODES = {"battle_faint"}
+-- O-32 (card gen2-bench-write): a BENCH death lands on receipt, at any battle frame end (Gen 1's battle_bench),
+-- not at a CPU hold. check("battle_bench") evaluates the frame (evaluate_frame below); a receipt adds the kind
+-- only with its own passed battle_bench run AND the battle_faint run (the hold settles the switch-in race).
+M.BENCH_KINDS = {battle_bench=true}
 local REQUIRED = {
     wMapStatus=true, wMapEventStatus=true, wScriptRunning=true, wScriptMode=true,
     wScriptFlags=true, wScriptStackSize=true, wJoypadDisable=true, wGameLogicPaused=true,
@@ -258,6 +264,9 @@ function M.run_problem(run, mode, primary, hold)
     elseif mode == "battle_faint" then
         local problem = M.battle_faint_problem(run, hold)
         if problem then return problem end
+    elseif mode == "battle_bench" then
+        local problem = M.battle_bench_problem(run)
+        if problem then return problem end
     elseif mode == "boxes_reload" then
         local keep = run.persist
         if not hex64(run.boot_cartram_sha256) or type(keep) ~= "table" or not hexbytes(keep.party_hex, M.PARTY_BLOCK)
@@ -383,6 +392,53 @@ function M.battle_faint_problem(run, hold)
     return nil
 end
 
+-- nil, or why the battle_bench run (O-32; lua/tests/gen2_write_windows.lua U.battle_bench_main) does not prove the
+-- receipt-time bench kind: after ONE scripted catch, a wild battle in which a frame-end write (no CPU hold) zeroes
+-- the BENCH mon's party status/HP only; the same frame evaluation refused an overworld frame and faint_party_slot
+-- refused the active slot, bytes unchanged (the negative controls). Engine-read oracles in hook order (seq): the
+-- player opened the party list (BattleMenuPKMN_Loop, the hook's known-positive), SWITCH on the dead mon reached
+-- CheckIfCurPartyMonIsFitToFight, which sent it back to BattleMenuPKMN_Loop; PlayerSwitch never ran. Pure.
+function M.battle_bench_problem(run)
+    local catch = run.catch
+    if type(catch) ~= "table" or not integer(catch.party_before, 1, 5) or catch.party_after ~= catch.party_before + 1 then
+        return "the scripted catch did not land in the party"
+    end
+    local w = run.bench_write
+    if type(w) ~= "table" or w.ok ~= true or w.where ~= "frame_end" or not integer(w.seq, 1, COUNT)
+       or not integer(w.battle_mode, 1, 2) or not integer(w.slot, 0, 5) or not integer(w.active_slot, 0, 5)
+       or w.slot == w.active_slot or not hexbytes(w.hp_before_hex, 2) or w.hp_before_hex == "0000"
+       or w.hp_after_hex ~= "0000" or w.status_after_hex ~= "00" then
+        return "the bench write is not a read-back party HP/status zero of a living bench mon at a battle frame end"
+    end
+    if not hexbytes(w.battle_hp_before_hex, 2) or w.battle_hp_after_hex ~= w.battle_hp_before_hex
+       or not hexbytes(w.action_before_hex, 1) or w.action_after_hex ~= w.action_before_hex then
+        return "the bench write touched the active battler"
+    end
+    for _, name in ipairs({"overworld", "active"}) do
+        local r = type(run.refusals) == "table" and run.refusals[name]
+        if type(r) ~= "table" or r.refused ~= true or not named(r.reason) or not hexbytes(r.before_hex, 3)
+           or r.after_hex ~= r.before_hex then
+            return "the " .. name .. " control was not refused with its bytes unchanged"
+        end
+    end
+    local trace = run.trace
+    if not plain_array(trace) then return "no engine-read oracle trace" end
+    local opened, checked, refused = false, false, false
+    for _, t in ipairs(trace) do
+        if type(t) ~= "table" or not integer(t.seq, 1, COUNT) then return "malformed oracle trace entry" end
+        if t.seq > w.seq then
+            if t.what == "switch" then return "PlayerSwitch ran after the bench write: the dead mon was switched in" end
+            if t.what == "pkmn_loop" and not opened then opened = true
+            elseif t.what == "fit_check" and opened and t.party_mon == w.slot then checked = true
+            elseif t.what == "pkmn_loop" and checked then refused = true end
+        end
+    end
+    if not opened then return "the party list never opened after the bench write (the hook's known-positive)" end
+    if not checked then return "SWITCH on the dead bench mon never reached CheckIfCurPartyMonIsFitToFight" end
+    if not refused then return "CheckIfCurPartyMonIsFitToFight did not send the dead mon back to the party list" end
+    return nil
+end
+
 -- scope, or nil,why: `receipt` is a PHYSICAL write-window receipt that may authorize `title`.
 -- scope = {kinds=M.WRITE_KINDS, covered={declared, proven}, uncovered={pack controls still OPEN}}.
 function M.qualified(pack, title, receipt)
@@ -474,6 +530,13 @@ function M.qualified(pack, title, receipt)
         if problem then return nil, problem end
         for kind in pairs(M.BATTLE_KINDS) do kinds[kind] = true end
     end
+    if runs.battle_bench ~= nil then
+        -- O-32: a receipt-time bench death leaves the switch-in race to the battle hold (W-2)
+        if runs.battle_faint == nil then return nil, "write-window receipt battle_bench needs the battle_faint run" end
+        local problem = bound("battle_bench")
+        if problem then return nil, problem end
+        for kind in pairs(M.BENCH_KINDS) do kinds[kind] = true end
+    end
     return {kinds=kinds, covered=list, uncovered=uncovered}
 end
 
@@ -530,9 +593,9 @@ function M.bind_fixture_qualification(receipt, reports)
     if type(receipt) ~= "table" or type(receipt.runs) ~= "table" or type(reports) ~= "table" then
         return nil, "receipt and qualification reports required"
     end
-    for _, mode in ipairs({"town", "battle", "boxes", "battle_faint"}) do
+    for _, mode in ipairs({"town", "battle", "boxes", "battle_faint", "battle_bench"}) do
         local run = receipt.runs[mode]
-        if (mode == "boxes" or mode == "battle_faint") and run == nil then goto continue end
+        if mode ~= "town" and mode ~= "battle" and run == nil then goto continue end
         local report = type(run) == "table" and reports[run.fixture]
         if type(report) ~= "table" or report.schema ~= "fixture-qualification-v1" or report.passed ~= true
            or type(report.errors) ~= "table" or next(report.errors) ~= nil then
@@ -569,7 +632,7 @@ function M.new(pack, title, io, evaluator, ownership, receipt)
         assert(ownership[name] ~= nil, name .. " observation required")
     end
     local self = {}
-    local evaluate
+    local evaluate, evaluate_frame
     local scope, unqualified
     if receipt == nil then
         unqualified = "Gen 2 checkpoint is SOURCE_CANDIDATE; runtime qualification is OPEN"
@@ -584,6 +647,11 @@ function M.new(pack, title, io, evaluator, ownership, receipt)
     function self:check(kind)
         if not scope then return false, unqualified end
         if not scope.kinds[kind] then return false, "write kind not covered by the PHYSICAL receipt: " .. tostring(kind) end
+        if M.BENCH_KINDS[kind] then
+            local ok, matches, why = pcall(evaluate_frame)
+            if not ok then return false, "battle frame evidence unavailable: " .. tostring(matches) end
+            return matches == true, why
+        end
         local ok, matches, why = pcall(evaluate, M.BATTLE_KINDS[kind] and "battle_hold" or "primary")
         if not ok then return false, "checkpoint evidence unavailable: " .. tostring(matches) end
         return matches == true, why
@@ -591,8 +659,9 @@ function M.new(pack, title, io, evaluator, ownership, receipt)
     -- Whether the receipt proved `kind` at all (no checkpoint evaluation): a command needing an unproven
     -- kind is refused outright instead of waiting for a hold that can never authorize it.
     function self:covers(kind) return scope ~= nil and scope.kinds[kind] == true end
+    -- hold: "primary", "battle_hold" or "battle_frame" (O-32: evaluate_frame, no CPU hold)
     function self:inspect_candidate(hold)
-        local ok, matches, why = pcall(evaluate, hold or "primary")
+        local ok, matches, why = pcall(hold == "battle_frame" and evaluate_frame or evaluate, hold or "primary")
         return {candidate_match=ok and matches == true, runtime_authorized=false,
             evidence_level="SOURCE_MODEL", physical_status="OPEN",
             reason=ok and why or ("checkpoint evidence unavailable: " .. tostring(matches))}
@@ -603,6 +672,37 @@ function M.new(pack, title, io, evaluator, ownership, receipt)
         primary = {anchors={"ow_player_input", "player_events_caller"}, required=REQUIRED, count=15},
         battle_hold = {anchors={"battle_turn", "start_battle_caller"}, required={wLinkMode=true}, count=1},
     }
+    -- O-32: battle_bench has no CPU hold (any battle frame end, Gen 1's battle_bench). The frame must show the
+    -- held identity, WRAMX = the party's bank (the battle hold's effective_wram_bank), no serial transfer, the
+    -- battle hold's own predicates (wLinkMode 0) and the primary's wBattleMode predicate REFUSING (in battle).
+    function evaluate_frame()
+        local data = assert(type(pack) == "table" and type(pack.titles) == "table" and pack.titles[title], "checkpoint title missing")
+        local hold, primary = assert(data.battle_hold, "battle hold facts missing"), assert(data.primary, "checkpoint missing")
+        local owner = assert(hold.ownership_requirements, "game ownership facts required")
+        local held = ownership.capture()
+        if held == nil or ownership.valid(held) ~= true then return false, "frame identity unavailable" end
+        if ownership.admitted(title, pack.source.rom_sha1) ~= true then return false, "exact admitted identity unavailable" end
+        if ownership.no_conflicting_owner() ~= true then return false, "another writer, save or trade owns the game" end
+        if ownership.effective_wram_bank() ~= owner.effective_wram_bank then return false, "effective WRAM bank differs" end
+        local function read(address, domain)
+            local value = io.read_u8(address, domain)
+            assert(integer(value, 0, 255), "unavailable battle frame byte")
+            return value
+        end
+        local serial = owner.serial_control
+        if masked(read(serial.address, "System Bus"), serial.mask) ~= serial.value then return false, "serial transfer owns the game" end
+        local failed = M.failing_predicates(hold, read)
+        if failed[1] then return false, failed[1] .. " predicate refused" end
+        for _, condition in ipairs(primary.state_predicates) do
+            if condition.symbol == "wBattleMode" then
+                if masked(read(condition.address, condition.read_domain), condition.mask) == condition.value then
+                    return false, "not in a battle"
+                end
+                return true, "battle frame"
+            end
+        end
+        return false, "no wBattleMode predicate in the checkpoint pack"
+    end
     function evaluate(which)
         local shape = assert(HOLDS[which], "unknown checkpoint hold")
         do

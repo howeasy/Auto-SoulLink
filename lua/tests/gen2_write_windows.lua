@@ -35,6 +35,9 @@
     battle_faint  <title>_battle (card O-30, U.battle_faint_main): one catch, then a wild battle whose battle
             holds (write_checkpoint.json battle_hold) kill the bench mon, then the active lead; the native
             faint and whiteout follow (engine-read oracle order). Adds the battle_faint write kind.
+    battle_bench  <title>_battle (card O-32, U.battle_bench_main): one catch, then a wild battle in which a
+            battle FRAME END (no CPU hold) zeroes the bench mon; the engine then refuses to switch it in.
+            Adds the battle_bench write kind (with battle_faint).
   Per window the RAW mechanism is recorded: frames, frames open at BOTH edges (only their anchor hits
   count: a hold accepted just before a warp begins is idle by construction), raw in-bank anchor hits and
   inspect_candidate's refusal reasons at them, accepted holds, the failing-predicate set of every frame,
@@ -53,7 +56,8 @@ U.OBSERVE = 30
 U.BUDGET = {max_frames=60000, max_phase_frames=15000, settle_frames=4}
 U.TEXT_KINDS = {text=true, prompt_button=true, wait_button=true}
 U.MODES = {town="town", battle="battle", reload="town",   -- mode -> required fixture target
-           boxes="battle", boxes_reset="battle", boxes_reload="battle", hello="battle", battle_faint="battle"}
+           boxes="battle", boxes_reset="battle", boxes_reload="battle", hello="battle", battle_faint="battle",
+           battle_bench="battle"}
 -- the one shared step rule (ledges from the separate map.ledges field), from beside this file
 local W = (function(dir)   -- beside this file, else $SLINK_ROOT/lua/tests (a copy run from elsewhere)
     local f = io.open(dir .. "gen2_walk.lua", "rb")
@@ -403,6 +407,11 @@ function U.main(api, getenv, SG, IG)
     end
     if mode == "battle_faint" then
         return U.battle_faint_main({api=api, ctx=ctx, SG=SG, IG=IG, log=log, check=check, finish=finish,
+            profile=profile, Safety=Safety, primary=primary, pack=pack, title=title, evidence=evidence, getenv=getenv,
+            HROM=HROM, bank=bank, checkpoint=checkpoint, failures=function() return failures end})
+    end
+    if mode == "battle_bench" then
+        return U.battle_bench_main({api=api, ctx=ctx, SG=SG, IG=IG, log=log, check=check, finish=finish,
             profile=profile, Safety=Safety, primary=primary, pack=pack, title=title, evidence=evidence, getenv=getenv,
             HROM=HROM, bank=bank, checkpoint=checkpoint, failures=function() return failures end})
     end
@@ -1261,6 +1270,343 @@ function U.battle_faint_main(e)
     if played then
         local problem = Safety.run_problem(run, "battle_faint", primary, hold)
         check("run record proves the battle_faint controls", problem == nil, problem)
+    end
+    run.result = e.failures() == 0 and "PASS" or "FAIL"
+    log("U2_RUN " .. json.encode(run))
+    return finish()
+end
+
+-- ── card gen2-bench-write (O-32): the receipt-time bench death (battle_bench) ────────────────────────────
+-- battle_bench  <title>_battle: ONE catch by the U1 inputs (as battle_faint), then the grass into a second wild
+--         battle. At the frame END (the driver's decide, between frameadvances: never inside a CPU hold) of the
+--         first battle frame whose battle menu waits for input and whose frame evaluation
+--         (gen2_write_safety inspect_candidate "battle_frame") accepts, the harness first tries the ACTIVE slot
+--         (faint_party_slot refuses it; bytes unchanged) and then zeroes the BENCH mon (the catch) armed
+--         "battle_bench". The same evaluation already refused an overworld frame after the catch (the
+--         known-negative; bytes unchanged). Then the player tries to switch the dead mon in: PKMN -> the party
+--         list -> the catch -> SWITCH. Observation-only hooks on BattleMenuPKMN_Loop, CheckIfCurPartyMonIsFitToFight
+--         (with wCurPartyMon) and PlayerSwitch (SLINK_GEN2_BENCH_ORACLES, from the pinned .sym + ROM) stamp the
+--         engine order: the list opened, the check ran on the dead mon and sent it back, no switch ran. Then B
+--         out and RUN (retried through "Can't escape!"); liveness after. TEST scope u2-battle-bench.
+U.BB_ORACLES = {BattleMenuPKMN_Loop="pkmn_loop", CheckIfCurPartyMonIsFitToFight="fit_check", PlayerSwitch="switch"}
+U.BB_TRACE = 64
+U.PKMN_CELL = 2   -- BattleMenu grid FIGHT|PKMN / PACK|RUN, PKMN by position (its label is a glyph)
+
+-- Pure driver: idle -> catch (F.driver) -> hunt -> battle -> post_battle -> done. point.bench_dead: the harness
+-- write landed; point.bench_slot: the catch's party slot; point.party_cursor: the party list's arrow entry;
+-- point.bench_checked: the fit_check oracle ran on the dead mon (then B out and RUN).
+function U.battle_bench_driver(F, map)
+    local d = {terminal="done", phase="idle", tried=false}
+    local HOLD, held, hold_left, release = 12, nil, 0, false
+    local inner, mark, here, from = nil, nil, nil, nil
+    local function press(button)
+        release, held, hold_left = true, button, HOLD - 1
+        return {[button]=true}, d.phase
+    end
+    local function choose(ui, wanted, columns)
+        if type(ui.items) ~= "table" or not integer(ui.cursor, 1, #ui.items) or ui.columns ~= columns then
+            return nil, "source menu geometry unavailable"
+        end
+        local target = type(wanted) == "number" and wanted or nil
+        for index, label in ipairs(target == nil and ui.items or {}) do
+            if type(label) == "string" and label:upper() == wanted then
+                if target then return nil, "ambiguous menu label" end
+                target = index
+            end
+        end
+        if not integer(target, 1, #ui.items) then return nil, "required native menu item missing: " .. tostring(wanted) end
+        if target == ui.cursor then return press("A") end
+        local tx, cx = (target - 1) % columns, (ui.cursor - 1) % columns
+        if tx ~= cx then return press(tx > cx and "Right" or "Left") end
+        return press(target > ui.cursor and "Down" or "Up")
+    end
+    function d.step(point)
+        if type(point) ~= "table" then return nil, "observation missing" end
+        local idle = point.overworld_ready == true and point.ui == nil
+        if d.phase == "idle" then
+            mark = mark or point.accepted
+            if idle and point.accepted > mark then d.phase = "catch" end
+            return {}, d.phase
+        end
+        if d.phase == "catch" then
+            if inner == nil then inner = F.driver(map) end
+            point.probe_hits = {capture_party = point.party_count - point.party_base}
+            local buttons, phase = inner.step(point)
+            if buttons == nil then return nil, "catch: " .. tostring(phase) end
+            if inner.phase == inner.terminal then d.phase = "hunt" end
+            return buttons, d.phase
+        end
+        if hold_left > 0 then hold_left = hold_left - 1; return {[held]=true}, d.phase end
+        if release then release = false; return {}, d.phase end
+        if d.phase == d.terminal then return {}, d.phase end
+        local ui, ready = point.ui, point.input_ready == true
+        d.tried = d.tried or point.bench_checked == true   -- CheckIfCurPartyMonIsFitToFight ran on the dead mon
+        if d.phase == "hunt" then
+            if integer(point.battle_mode, 1, 255) then d.phase = "battle"; return {}, d.phase end
+            if not idle then return {}, d.phase end
+            if here and (here.x ~= point.x or here.y ~= point.y) then from = here end
+            here = {x=point.x, y=point.y}
+            local button, why = F.walk_direction(map, point, from)
+            if not button then return nil, why end
+            return {[button]=true}, d.phase
+        elseif d.phase == "battle" then
+            if point.battle_mode == 0 then
+                if idle then mark = point.accepted; d.phase = "post_battle"; return {}, d.phase end
+                if ui ~= nil and ready and U.TEXT_KINDS[ui.kind] then return press("A") end
+                return {}, d.phase
+            end
+            if ui == nil or not ready then return {}, d.phase end
+            if ui.kind == "battle_menu" then
+                if not point.bench_dead then return {}, d.phase end   -- the harness writes at this frame end
+                return choose(ui, d.tried and "RUN" or U.PKMN_CELL, 2)
+            end
+            if ui.kind == "battle_party" then
+                if d.tried then return press("B") end
+                if not integer(point.party_cursor, 0, 5) or not integer(point.bench_slot, 0, 5) then return {}, d.phase end
+                if point.party_cursor == point.bench_slot then return press("A") end
+                return press(point.party_cursor < point.bench_slot and "Down" or "Up")
+            end
+            if ui.kind == "battle_mon_menu" then
+                if d.tried then return press("B") end
+                return choose(ui, "SWITCH", 1)   -- again until the engine check ran (a press can land early)
+            end
+            if U.TEXT_KINDS[ui.kind] then return press("A") end
+            return nil, "UI is not valid in the battle: " .. tostring(ui.kind) .. "/" .. tostring(ui.prompt)
+        elseif d.phase == "post_battle" then
+            if idle and point.accepted > mark then d.phase = d.terminal end
+            return {}, d.phase
+        end
+        return nil, "unknown phase " .. tostring(d.phase)
+    end
+    return d
+end
+
+function U.battle_bench_main(e)
+    local api, ctx, SG, IG, log, check, finish = e.api, e.ctx, e.SG, e.IG, e.log, e.check, e.finish
+    local profile, Safety, primary, json = e.profile, e.Safety, e.primary, ctx.json
+    local hold = assert(e.pack.titles[e.title].battle_hold, "pack battle_hold missing")
+    local L = function(rel) return dofile(ctx.root .. "/" .. rel) end
+    local Writes = L("lua/gen2/writes.lua")
+    local F
+    do
+        local previous = SLINK_GEN2_GATE_LIBRARY
+        SLINK_GEN2_GATE_LIBRARY = true
+        local ok, lib = pcall(dofile, ctx.root .. "/" .. U.FRAME_ALIGN)
+        SLINK_GEN2_GATE_LIBRARY = previous
+        assert(ok and type(lib) == "table", "cannot load " .. U.FRAME_ALIGN .. ": " .. tostring(lib))
+        F = lib
+    end
+    local u1 = assert(json.decode(assert(e.getenv("SLINK_GEN2_U1_FACTS"), "SLINK_GEN2_U1_FACTS missing")))
+    for _, kind in ipairs(U.PACK_KINDS) do ctx.facts.ui_origins[kind] = assert(u1.pack_ui[kind], "U1 facts lack " .. kind) end
+    SG.MENU_KINDS.item_submenu = true
+    local prompts = {}
+    for k, v in pairs(ctx.obs.prompts) do prompts[k] = v end
+    for k, v in pairs(ctx.prompts) do prompts[k] = v end
+    for k, v in pairs(u1.prompts) do prompts[k] = v end
+    ctx.prompts = prompts
+    local FI = L(F.FAINT_INPUTS)
+    FI.prepare(ctx, SG, u1)   -- battle_party / battle_mon_menu origins (lua/tests/duo/gen2_faint_inputs.lua)
+    local oracles = assert(json.decode(assert(e.getenv("SLINK_GEN2_BENCH_ORACLES"), "SLINK_GEN2_BENCH_ORACLES missing")))
+
+    local arrived, detail, state = IG.arrive(ctx, SG)
+    if not check("post-CONTINUE overworld arrival", arrived, detail) then
+        state.release()
+        return finish("no arrival")
+    end
+
+    local in_frame, wrote = false, false
+    local function effective_wram_bank()
+        local v = api.read_u8(0xFF70, "System Bus") % 8
+        return v == 0 and 1 or v
+    end
+    local io_ = {write_u8=function(a, v, dom) wrote = true; api.write_u8(a, v, dom) end,
+        bank_valid=function(b, addr, n)
+            if addr >= 0xC000 and addr + n <= 0xD000 then return b == 0 end
+            return addr >= 0xD000 and addr + n <= 0xE000 and b == effective_wram_bank()
+        end}
+    local lifetime = {capture=api.framecount, valid=function(token) return token == api.framecount() end}
+    local writes = Writes.new(profile, io_, ctx.Permit, {
+        authorize=function(op) return in_frame and op == "battle_bench" end,
+        pointer_stable=function() return true end, lifetime=lifetime,
+        provenance=function() return {site="lua/tests/gen2_write_windows.lua", scope="TEST-ONLY"} end}, hold.write)
+
+    local seq, driver = 0, nil
+    local rec = {accepted=0, raw=0, refused=0, other_bank=0, reasons={}, hits={}, errors={}}
+    local frames = {accepted=0, refused=0, reasons={}}
+    local trace, refusals, bench = {}, {}, nil
+    local function on_checkpoint()
+        local fine, err = pcall(function()
+            local hit_bank = api.read_u8(e.HROM, "System Bus")
+            if hit_bank ~= e.bank then rec.other_bank = rec.other_bank + 1; return end
+            rec.raw = rec.raw + 1
+            local report = e.checkpoint:inspect_candidate()
+            if report.candidate_match ~= true then
+                rec.refused = rec.refused + 1
+                rec.reasons[report.reason] = (rec.reasons[report.reason] or 0) + 1
+                return
+            end
+            rec.accepted = rec.accepted + 1
+            if #rec.hits < 8 then rec.hits[#rec.hits + 1] = {frame=api.framecount(), pc=api.register("PC"), bank=hit_bank} end
+        end)
+        if not fine and #rec.errors < 8 then rec.errors[#rec.errors + 1] = tostring(err) end
+    end
+    local c = profile.constants
+    local function mon_bytes(slot)
+        local off = slot * c.PARTYMON_STRUCT_LENGTH
+        return hex(ctx.sym("wPartyMon1", off + c.MON_STATUS, 1)) .. hex(ctx.sym("wPartyMon1", off + c.MON_HP, 2))
+    end
+    local targets = hold.write.targets
+    local function byte_hex(name, n) return hex(api.read_range(targets[name].address, n, "System Bus")) end
+    local function snapshot()
+        return {mode=ctx.sym("wBattleMode")[1], battle_type=ctx.sym("wBattleType")[1],
+                active_slot=ctx.sym("wCurBattleMon")[1], link_mode=api.read_u8(ctx.profile.ram.wLinkMode, "System Bus")}
+    end
+    -- One attempt at this frame end: the frame evaluation is the ONLY authority (in_frame), as in production.
+    local function attempt(slot, snap)
+        local report = e.checkpoint:inspect_candidate("battle_frame")
+        in_frame = report.candidate_match == true
+        local ok, why = pcall(function()
+            writes:arm("battle_bench")
+            writes:faint_party_slot(slot, snap)
+        end)
+        writes:disarm()
+        in_frame = false
+        -- the refusal names the frame evaluation when it refused, else the permit's own reason
+        return ok, (ok or report.candidate_match ~= true) and report.reason or tostring(why), report
+    end
+    local function control(name, slot, snap)
+        local before = mon_bytes(slot)
+        local ok, why = attempt(slot, snap)
+        refusals[name] = {refused=not ok, reason=why, slot=slot, before_hex=before, after_hex=mon_bytes(slot)}
+        log(fmt("  %s control: %s (%s)", name, ok and "WROTE" or "refused", why))
+    end
+    local bench_slot
+    local function frame_end(point)
+        if not driver then return end
+        if driver.phase == "hunt" and refusals.overworld == nil and point.overworld_ready == true and point.ui == nil then
+            control("overworld", bench_slot, snapshot())
+        end
+        if driver.phase ~= "battle" or bench ~= nil or point.battle_mode == 0 or point.ui == nil
+           or point.ui.kind ~= "battle_menu" or point.input_ready ~= true then return end
+        local report = e.checkpoint:inspect_candidate("battle_frame")
+        if report.candidate_match ~= true then
+            frames.refused = frames.refused + 1
+            frames.reasons[report.reason] = (frames.reasons[report.reason] or 0) + 1
+            return
+        end
+        frames.accepted = frames.accepted + 1
+        local snap = snapshot()
+        if refusals.active == nil then control("active", snap.active_slot, snap) end
+        local off = bench_slot * c.PARTYMON_STRUCT_LENGTH
+        local r = {where="frame_end", frame=api.framecount(), slot=bench_slot, active_slot=snap.active_slot,
+                   battle_mode=snap.mode, battle_type=snap.battle_type, pc=api.register("PC"),
+                   hp_before_hex=hex(ctx.sym("wPartyMon1", off + c.MON_HP, 2)),
+                   battle_hp_before_hex=byte_hex("wBattleMonHP", 2), action_before_hex=byte_hex("wBattlePlayerAction", 1)}
+        local ok, why = attempt(bench_slot, snap)
+        if not ok then
+            frames.reasons[why] = (frames.reasons[why] or 0) + 1
+            log("  bench write refused, retried next frame: " .. tostring(why))
+            return
+        end
+        seq = seq + 1
+        r.ok, r.seq, r.reason = true, seq, why
+        r.status_after_hex = hex(ctx.sym("wPartyMon1", off + c.MON_STATUS, 1))
+        r.hp_after_hex = hex(ctx.sym("wPartyMon1", off + c.MON_HP, 2))
+        r.battle_hp_after_hex, r.action_after_hex = byte_hex("wBattleMonHP", 2), byte_hex("wBattlePlayerAction", 1)
+        bench = r
+        log(fmt("  bench write landed at frame end %d: slot %d, HP %s -> %s", r.frame, r.slot, r.hp_before_hex, r.hp_after_hex))
+    end
+
+    local handles = {api.on_bus_exec(on_checkpoint, primary.execution_before.pc, "SLink-gen2-u2-bb-checkpoint", "System Bus")}
+    local used = {}
+    for name, what in pairs(U.BB_ORACLES) do
+        local o = assert(oracles[name], "bench oracle missing: " .. name)
+        used[name] = {bank=o.bank, addr=o.addr, hex=o.hex}
+        local want = {}
+        for i = 1, #o.hex, 2 do want[#want + 1] = tonumber(o.hex:sub(i, i + 1), 16) end
+        handles[#handles + 1] = api.on_bus_exec(function()
+            if not driver or driver.phase ~= "battle" or #trace >= U.BB_TRACE then return end
+            if api.read_u8(e.HROM, "System Bus") ~= o.bank then return end
+            local live = api.read_range(o.addr, #want, "System Bus")
+            for i = 1, #want do if live[i] ~= want[i] then return end end
+            seq = seq + 1
+            local t = {seq=seq, what=what, frame=api.framecount()}
+            if what == "fit_check" or what == "pkmn_loop" then t.party_mon = ctx.sym("wCurPartyMon")[1] end
+            trace[#trace + 1] = t
+        end, o.addr, "SLink-gen2-u2-bb-" .. what, "System Bus")
+    end
+
+    local base = SG.qualify_observer(ctx)
+    local party_base = ctx.sym("wPartyCount")[1]
+    local function observe()
+        local point = base()
+        point.accepted, point.party_count, point.party_base = rec.accepted, ctx.sym("wPartyCount")[1], party_base
+        if point.ui and point.ui.kind == "pack_balls" then point.ball_cursor = F.ball_cursor(SG.screen(ctx)) end
+        if point.ui and point.ui.kind == "battle_menu" then
+            local menu = SG.parse_menu(SG.screen(ctx), ctx.obs.screen.width, ctx.obs.screen.height, SG.BATTLE_MENU_GRID)
+            if menu then point.ui.items, point.ui.cursor, point.ui.columns = menu.items, menu.cursor, menu.columns
+            else point.input_ready = false end
+        end
+        if point.ui and point.ui.kind == "battle_party" then point.party_cursor = FI.party_cursor(SG.screen(ctx)) end
+        if driver and driver.phase ~= "idle" and driver.phase ~= "catch" and bench_slot == nil then
+            bench_slot = point.party_count - 1   -- the catch: the last party slot, behind the lead
+        end
+        point.bench_slot = bench_slot
+        frame_end(point)
+        point.bench_dead = bench ~= nil
+        for _, t in ipairs(trace) do
+            if bench and t.what == "fit_check" and t.seq > bench.seq and t.party_mon == bench_slot then point.bench_checked = true end
+        end
+        return point
+    end
+    driver = U.battle_bench_driver(F, ctx.facts.maps.Route29)
+    local catch
+    local idle = {}
+    for _, name in ipairs(SG.BUTTONS) do idle[name] = false end
+    local host = ctx.Host.new({step=SG.button_step(ctx), frame=api.framecount, idle=idle})
+    local phases, pressing = {}, false
+    local played, outcome = pcall(host.run, {name="u2-battle_bench", terminal=driver.terminal,
+        max_frames=U.BUDGET.max_frames * 2, max_phase_frames=24000, settle_frames=30, terminal_idle=true},
+        function(frame)
+            local point = observe()
+            local buttons, phase = driver.step(point)
+            if buttons == nil then
+                log(F.state_line("stall", frame, driver.phase, point, "-"))
+                local shown, rows = pcall(SG.screen, ctx)
+                if shown then for y, row in ipairs(rows) do log(fmt("  screen %02d |%s|", y, table.concat(row))) end end
+                error(phase, 0)
+            end
+            if phase == "battle" and point.ui and next(buttons) and not pressing then   -- a new press, not its hold
+                local names = {}
+                for name in pairs(buttons) do names[#names + 1] = name end
+                log(fmt("  f%d %s cursor=%s party_cursor=%s -> %s", frame, tostring(point.ui.kind),
+                    tostring(point.ui.cursor), tostring(point.party_cursor), table.concat(names, "+")))
+            end
+            pressing = next(buttons) ~= nil
+            return buttons, phase, point
+        end,
+        function(_, phase, frame)
+            phases[#phases + 1] = {phase=phase, frame=frame, accepted=rec.accepted}
+            if phase == "hunt" and catch == nil then catch = {party_before=party_base, party_after=ctx.sym("wPartyCount")[1]} end
+        end)
+    for _, handle in ipairs(handles) do api.unregister(handle) end
+    state.release()
+    check("scripted battle_bench route completed with normal buttons", played, not played and outcome or nil)
+    check("hook callbacks raised no error", #rec.errors == 0, rec.errors[1])
+    local run = {schema=Safety.RUN_SCHEMA, mode="battle_bench", title=e.title, evidence_level=e.evidence, result="FAIL",
+        rom_sha1=ctx.env.rom_sha1, pack_commit=e.pack.source.commit, fixture=ctx.case.name,
+        fixture_sha256=ctx.qualify.stage_fingerprint, attempt_id=ctx.case.attempt_id,
+        qualification_attempt_id=ctx.u2.qualification_attempt_id, core_mode="CGB", input_mode="normal_buttons",
+        harness_write_scopes=json.array(wrote and {"u2-battle-bench"} or {}),
+        liveness={accepted=rec.accepted, raw=rec.raw, refused=rec.refused, other_bank=rec.other_bank,
+                  refusals=json.object(rec.reasons), hits=json.array(rec.hits)},
+        phases=json.array(phases), windows=json.object({}),
+        battle_frames={accepted=frames.accepted, refused=frames.refused, refusals=json.object(frames.reasons)},
+        bench_write=bench or json.null, refusals=json.object(refusals), oracles=used,
+        trace=json.array(trace), catch=catch or json.null}
+    if played then
+        local problem = Safety.run_problem(run, "battle_bench", primary, hold)
+        check("run record proves the battle_bench controls", problem == nil, problem)
     end
     run.result = e.failures() == 0 and "PASS" or "FAIL"
     log("U2_RUN " .. json.encode(run))

@@ -199,9 +199,9 @@ def test_a_committed_physical_receipt_still_validates(path):
         assert {run["evidence_level"] for run in receipt["runs"].values()} == {"PHYSICAL"}
         # (b) exactly the controls it declares covered, and the kinds those authorize
         assert proof["covered"] == sorted(receipt["covered_controls"])
-        # card BOX: the box runs; O-30: the battle_faint run
-        assert proof["kinds"] == ["backing_box", "battle_faint", "box_deposit", "box_withdraw", "party_collection",
-                                  "party_hp"]
+        # card BOX: the box runs; O-30: the battle_faint run; O-32: the battle_bench run
+        assert proof["kinds"] == ["backing_box", "battle_bench", "battle_faint", "box_deposit", "box_withdraw",
+                                  "party_collection", "party_hp"]
 
     # (c) title-keying: a Crystal receipt is refused as gold/silver and vice versa. A title the module
     # itself lets this receipt cover (Silver follows Gold) is skipped rather than mis-asserted.

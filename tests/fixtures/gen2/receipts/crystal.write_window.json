@@ -1057,6 +1057,193 @@
    },
    "write": null
   },
+  "battle_bench": {
+   "attempt_id": "u2-crystal_battle_bench",
+   "battle_frames": {
+    "accepted": 1,
+    "refusals": {},
+    "refused": 0
+   },
+   "bench_write": {
+    "action_after_hex": "00",
+    "action_before_hex": "00",
+    "active_slot": 0,
+    "battle_hp_after_hex": "000b",
+    "battle_hp_before_hex": "000b",
+    "battle_mode": 1,
+    "battle_type": 0,
+    "frame": 12652,
+    "hp_after_hex": "0000",
+    "hp_before_hex": "000d",
+    "ok": true,
+    "pc": 64,
+    "reason": "battle frame",
+    "seq": 2,
+    "slot": 1,
+    "status_after_hex": "00",
+    "where": "frame_end"
+   },
+   "catch": {
+    "party_after": 2,
+    "party_before": 1
+   },
+   "core_mode": "CGB",
+   "evidence_level": "PHYSICAL",
+   "fixture": "crystal_battle",
+   "fixture_sha256": "f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6",
+   "harness_write_scopes": [
+    "u2-battle-bench"
+   ],
+   "input_mode": "normal_buttons",
+   "liveness": {
+    "accepted": 66,
+    "hits": [
+     {
+      "bank": 37,
+      "frame": 3334,
+      "pc": 27011
+     },
+     {
+      "bank": 37,
+      "frame": 3344,
+      "pc": 27011
+     },
+     {
+      "bank": 37,
+      "frame": 3346,
+      "pc": 27011
+     },
+     {
+      "bank": 37,
+      "frame": 3362,
+      "pc": 27011
+     },
+     {
+      "bank": 37,
+      "frame": 3372,
+      "pc": 27011
+     },
+     {
+      "bank": 37,
+      "frame": 3374,
+      "pc": 27011
+     },
+     {
+      "bank": 37,
+      "frame": 3390,
+      "pc": 27011
+     },
+     {
+      "bank": 37,
+      "frame": 3400,
+      "pc": 27011
+     }
+    ],
+    "other_bank": 8,
+    "raw": 66,
+    "refusals": {},
+    "refused": 0
+   },
+   "mode": "battle_bench",
+   "oracles": {
+    "BattleMenuPKMN_Loop": {
+     "addr": 25241,
+     "bank": 15,
+     "hex": "cdfa52"
+    },
+    "CheckIfCurPartyMonIsFitToFight": {
+     "addr": 22663,
+     "bank": 15,
+     "hex": "fa09d1"
+    },
+    "PlayerSwitch": {
+     "addr": 25517,
+     "bank": 15,
+     "hex": "3e01ea"
+    }
+   },
+   "pack_commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+   "phases": [
+    {
+     "accepted": 0,
+     "frame": 3333,
+     "phase": "idle"
+    },
+    {
+     "accepted": 1,
+     "frame": 3335,
+     "phase": "catch"
+    },
+    {
+     "accepted": 35,
+     "frame": 11561,
+     "phase": "hunt"
+    },
+    {
+     "accepted": 49,
+     "frame": 12065,
+     "phase": "battle"
+    },
+    {
+     "accepted": 50,
+     "frame": 13125,
+     "phase": "post_battle"
+    },
+    {
+     "accepted": 51,
+     "frame": 13127,
+     "phase": "done"
+    }
+   ],
+   "qualification_attempt_id": "requal-crystal-battle-n14b",
+   "refusals": {
+    "active": {
+     "after_hex": "00000b",
+     "before_hex": "00000b",
+     "reason": "...nk/.claude/worktrees/gen2-foundation/lua/gen2/writes.lua:150: active faint timing is not qualified",
+     "refused": true,
+     "slot": 0
+    },
+    "overworld": {
+     "after_hex": "00000d",
+     "before_hex": "00000d",
+     "reason": "not in a battle",
+     "refused": true,
+     "slot": 1
+    }
+   },
+   "result": "PASS",
+   "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+   "schema": "gen2-write-window-run-v1",
+   "title": "crystal",
+   "trace": [
+    {
+     "frame": 12431,
+     "party_mon": 0,
+     "seq": 1,
+     "what": "fit_check"
+    },
+    {
+     "frame": 12671,
+     "party_mon": 0,
+     "seq": 3,
+     "what": "pkmn_loop"
+    },
+    {
+     "frame": 12763,
+     "party_mon": 1,
+     "seq": 4,
+     "what": "fit_check"
+    },
+    {
+     "frame": 12835,
+     "party_mon": 1,
+     "seq": 5,
+     "what": "pkmn_loop"
+    }
+   ],
+   "windows": {}
+  },
   "battle_faint": {
    "attempt_id": "u2-crystal_battle_faint",
    "battle_hold": {

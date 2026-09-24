@@ -141,14 +141,17 @@ function W.new(profile, io, Permit, policy, battle)
             assert(type(snapshot) == "table" and integer(snapshot.mode, 0, 2), "explicit battle snapshot required")
             assert(snapshot.link_mode == 0, "linked or unknown battle context refused")
             -- O-30: a bench faint inside the battle hold is qualified in every battle kind but link
-            -- (facts doc §3); anywhere else in battle the special types stay refused.
-            local held = gate.armed == "battle_hold"
+            -- (facts doc §3); O-32: so is one on receipt, at a battle frame end (armed "battle_bench",
+            -- its own U2 kind); anywhere else in battle the special types stay refused.
+            local held = gate.armed == "battle_hold" or gate.armed == "battle_bench"
             if snapshot.mode ~= 0 then
                 assert(held or snapshot.battle_type == 0, "special battle context not qualified")
                 assert(integer(snapshot.active_slot, 0, c.PARTY_LENGTH - 1), "active slot snapshot required")
                 assert(snapshot.active_slot ~= slot, "active faint timing is not qualified") -- faint_active_battler owns it
             end
-            authorized(held and "battle_faint" or "party_faint", {slot=slot, snapshot=snapshot})
+            local kind = gate.armed == "battle_bench" and "battle_bench" or held and "battle_faint" or "party_faint"
+            if kind == "battle_bench" then assert(snapshot.mode ~= 0, "battle_bench outside a battle") end
+            authorized(kind, {slot=slot, snapshot=snapshot})
             local status, hp = address + c.MON_STATUS, address + c.MON_HP
             -- The fields are discontiguous. The shared permit preflights BOTH
             -- complete spans, including mapping/pointer/provenance policies,

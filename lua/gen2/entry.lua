@@ -108,7 +108,9 @@ Entry.RECEIPT_FILES = {
 -- executor's CartRAM spans carry their own kinds (lua/gen2/boxes.lua B.kind_of).
 -- battle_faint (O-30): the active faint and a bench faint inside the battle hold; its kind is checked
 -- at that hold (gen2_write_safety BATTLE_KINDS), never at the overworld checkpoint.
-Entry.WRITE_KIND = {party_faint="party_hp", party_collection="party_collection", battle_faint="battle_faint"}
+-- battle_bench (O-32): a bench faint on receipt, at a battle frame end (gen2_write_safety BENCH_KINDS).
+Entry.WRITE_KIND = {party_faint="party_hp", party_collection="party_collection", battle_faint="battle_faint",
+                    battle_bench="battle_bench"}
 local titles = {"crystal", "gold", "silver"}
 local order = {"profile", "admission", "sites", "checkpoint", "area_map", "statics", "encounters",
                "species", "evolutions", "gifts", "moves", "trainers", "map_names", "items", "charmap"}
@@ -389,6 +391,9 @@ local function compose(deps, title, production)
                 -- behind a receipt covering battle_faint; until then battle deaths wait for the checkpoint.
                 battle_hold=(not production or checkpoint:covers("battle_faint"))
                     and hold_facts.battle_hold or nil,
+                -- O-32: bench deaths land on receipt; only with the hold (which settles the switch-in race)
+                -- and, in production, a receipt covering battle_bench
+                battle_bench=(not production or (checkpoint:covers("battle_faint") and checkpoint:covers("battle_bench"))),
                 contest_mask=hold_facts.contest_mask,
                 net=deps.net, json=json, hud=assert(deps.hud, "explicit hud required"), io=io_,
                 profile=profile, sites=data.sites.titles[title].sites, area_map=data.area_map,

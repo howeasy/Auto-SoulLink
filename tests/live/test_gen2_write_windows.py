@@ -11,6 +11,10 @@ Per title (Crystal first, then Gold) three EmuHawk launches of lua/tests/gen2_wr
   battle  <title>_battle: a Route 29 wild battle window, a refused party-only write to the active slot.
   battle_faint (test_battle_faint_run, O-30) <title>_battle: a catch, then the bench and active kills at the
           battle hold; adds the battle_faint kind and the pack's battle_hold rows to the committed receipt.
+  battle_bench (test_battle_bench_run, O-32) <title>_battle at 100% speed: a catch, then a bench kill at a battle
+          frame end and a refused switch-in; adds the battle_bench kind to the committed receipt. Silver runs
+          it too, on its own ROM and fixture: Gold's receipt keeps that run as its "confirmations" (O-23 still
+          authorizes Silver through Gold's runs; the confirmation is evidence, never authority).
 Each run prints its own record (U2_RUN; evidence_level is the gate's, never stamped here). This file
 re-derives liveness (phases + MEASURED PC/hROMBank at accepted holds) and persistence (raw offsets from the
 pinned .sym, never the profile or the PYDEC codec; the staged fixture bytes must differ before the save),
@@ -62,7 +66,8 @@ REACQUIRE = {"town": [("idle", "start_menu"), ("face", "talk"), ("to_save", "sav
              "boxes": [("idle", "walk"), ("post_save", "ops")],
              "boxes_reset": [("idle", "ops"), ("post_save", "done")],
              "boxes_reload": [("idle", "done")],
-             "battle_faint": [("idle", "hunt"), ("post_battle", "done")]}
+             "battle_faint": [("idle", "hunt"), ("post_battle", "done")],
+             "battle_bench": [("idle", "hunt"), ("post_battle", "done")]}
 
 
 def receipt_path(title: str, *, repo: Path = REPO) -> Path:
@@ -209,7 +214,7 @@ def lua_bind(receipt: dict, reports: dict):
 
 
 def _run(spec, fixture: Path, staged: bytes, mode: str, lane: str, qualification_attempt_id: str,
-         extra_env: dict | None = None):
+         extra_env: dict | None = None, speed_percent: int = 300):
     from run_gb_gate import run_gate
     env = live.inspect_env(spec, staged)
     env.update(extra_env or {})
@@ -219,7 +224,7 @@ def _run(spec, fixture: Path, staged: bytes, mode: str, lane: str, qualification
     env["SLINK_GEN2_U2"] = json.dumps({"mode": mode, "qualification_attempt_id": qualification_attempt_id})
     directory = REPO / ".cache/gen2-fixtures/u2-write-windows" / lane
     passed, path, text = run_gate(GATE, rom_key=spec.title, target=spec.target, timeout=1500,
-                                  saveram_dir=str(directory), fixture_path=str(fixture), speed_percent=300,
+                                  saveram_dir=str(directory), fixture_path=str(fixture), speed_percent=speed_percent,
                                   env_overrides=env)
     assert passed, f"{lane} FAILED; result {path}: {text[-3000:]}"
     return directory, text
@@ -496,6 +501,94 @@ def test_battle_faint_run(title, emuhawk):  # noqa: F811 - pytest fixture
         silver = json.loads((REPO / "data/games/gen2_silver/write_checkpoint.json").read_text(encoding="utf-8"))
         assert "battle_faint" in lua_qualified(silver, "silver", receipt)[0]["kinds"]
     receipt_path(title).write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"{title}: write kinds {scope['kinds']}")
+
+
+# --- card gen2-bench-write (O-32): the battle_bench run (the receipt-time bench kind) -----------------------------
+# lua/tests/gen2_write_windows.lua U.battle_bench_main: one scripted catch, then a wild battle in which a frame-end
+# write zeroes the bench mon; the switch-in attempt reaches CheckIfCurPartyMonIsFitToFight, which sends it back.
+BENCH_ORACLES = ("BattleMenuPKMN_Loop", "CheckIfCurPartyMonIsFitToFight", "PlayerSwitch")
+
+
+def bench_oracles(ctx) -> dict:
+    """The observation-only hook sites, from the pinned .sym and ROM (3 bytes of code each)."""
+    from tools import gen2_fixtures
+    out = {}
+    for symbol in BENCH_ORACLES:
+        site = gen2_fixtures._code_site(ctx, symbol)
+        out[symbol] = {"bank": site["bank"], "addr": site["addr"], "hex": ctx.rom[site["flat"]:site["flat"] + 3].hex()}
+    return out
+
+
+def verify_battle_bench(text: str, primary: dict, oracles: dict) -> dict:
+    run = run_record(text)
+    verify_liveness(run, primary)
+    assert run["oracles"] == oracles, ("the run hooked other sites than the pinned .sym", run["oracles"], oracles)
+    w = run["bench_write"]
+    assert w["where"] == "frame_end" and w["slot"] != w["active_slot"], w
+    assert w["hp_before_hex"] != "0000" and w["hp_after_hex"] == "0000" and w["status_after_hex"] == "00", w
+    assert (w["battle_hp_after_hex"], w["action_after_hex"]) == (w["battle_hp_before_hex"], w["action_before_hex"]), w
+    for name in ("overworld", "active"):
+        r = run["refusals"][name]
+        assert r["refused"] is True and r["after_hex"] == r["before_hex"], (name, r)
+    assert run["refusals"]["overworld"]["reason"] == "not in a battle", run["refusals"]
+    assert "active faint timing is not qualified" in run["refusals"]["active"]["reason"], run["refusals"]
+    order = [(t["seq"], t["what"], t.get("party_mon")) for t in run["trace"] if t["seq"] > w["seq"]]
+    assert all(what != "switch" for _, what, _ in order), ("the dead mon was switched in", order)
+    whats = [(what, mon if what == "fit_check" else None) for _, what, mon in order]
+    i = whats.index(("pkmn_loop", None))
+    j = whats.index(("fit_check", w["slot"]), i)
+    assert ("pkmn_loop", None) in whats[j:], ("the check did not send the dead mon back", order)
+    return run
+
+
+@pytest.mark.parametrize("title", ("crystal", "gold", "silver"))
+def test_battle_bench_run(title, emuhawk):  # noqa: F811 - pytest fixture
+    """Adds run battle_bench to the committed <title>.write_window.json (Silver: a confirmation in Gold's)."""
+    from tests.live.test_gen2_frame_align import u1_facts
+    from tools import gen2_fixtures, gen2_source_data
+    spec = gen2_fixtures.BY_NAME[f"{title}_battle"]
+    reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
+              or live.receipt_missing_reason(spec.name))
+    if reason:
+        pytest.skip(reason)
+    owner = "gold" if title == "silver" else title
+    receipt = json.loads(receipt_path(owner).read_text(encoding="utf-8"))
+    fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
+    staged = fixture.read_bytes()
+    live.qualified_identity(spec.name, staged)
+    report = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
+    pack = json.loads((REPO / f"data/games/gen2_{title}/write_checkpoint.json").read_text(encoding="utf-8"))
+    primary = pack["titles"][title]["primary"]
+    ctx = gen2_source_data.load_context(title, root=REPO)
+    q = report["attempt_id"]
+    oracles = bench_oracles(ctx)
+    env = {"SLINK_GEN2_U1_FACTS": json.dumps(u1_facts(ctx, gen2_fixtures.route_facts(title, REPO), q)),
+           "SLINK_GEN2_BENCH_ORACLES": json.dumps(oracles)}
+    _, text = _run(spec, fixture, staged, "battle_bench", f"{title}_battle_bench", q, env, speed_percent=100)
+    run = verify_battle_bench(text, primary, oracles)
+    assert fixture.read_bytes() == staged, f"{spec.name} changed while the gate ran"
+    assert (run["title"], run["fixture"], run["qualification_attempt_id"], run["fixture_sha256"]) ==         (title, spec.name, q, report["fixtures"][0]["artifacts"]["fixture"]["sha256"]), "run not bound to its fixture"
+    lua, module = _module()
+    problem = module.run_problem(lua.table_from(run, recursive=True), "battle_bench",
+                                 lua.table_from(primary, recursive=True))
+    assert problem is None, problem
+    if title == "silver":
+        receipt.setdefault("confirmations", {})["silver"] = {"battle_bench": run}
+    else:
+        receipt["runs"]["battle_bench"] = run
+    gold_pack = json.loads((REPO / f"data/games/gen2_{owner}/write_checkpoint.json").read_text(encoding="utf-8"))
+    scope, why = lua_qualified(gold_pack, owner, receipt)
+    assert scope is not None, why
+    assert "battle_bench" in scope["kinds"] or title == "silver", scope
+    reports = {name: json.loads((REPO / live.RECEIPTS / f"{name}.qualification.json").read_text(encoding="utf-8"))
+               for name in (f"{owner}_town", f"{owner}_battle")}
+    bound, why = lua_bind(receipt, reports)
+    assert bound is True, why
+    if owner == "gold":
+        silver = json.loads((REPO / "data/games/gen2_silver/write_checkpoint.json").read_text(encoding="utf-8"))
+        assert lua_qualified(silver, "silver", receipt)[0] is not None
+    receipt_path(owner).write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     print(f"{title}: write kinds {scope['kinds']}")
 
 

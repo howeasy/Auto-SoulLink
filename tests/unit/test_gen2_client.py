@@ -1262,8 +1262,8 @@ def test_production_registers_exactly_the_u1_proven_sites_and_the_u2_kinds(title
     status = world.client.signals.status(world.client.signals)
     assert status.evidence_level == "PHYSICAL" and status.runtime_authorized is True
     assert sorted(status.registered_sites.values()) == sorted(proven)
-    assert sorted(parts.write_scope.kinds.keys()) == ["backing_box", "battle_faint", "box_deposit", "box_withdraw",
-                                                      "party_collection", "party_hp"]
+    assert sorted(parts.write_scope.kinds.keys()) == ["backing_box", "battle_bench", "battle_faint", "box_deposit",
+                                                      "box_withdraw", "party_collection", "party_hp"]
     pc = CHECKPOINT[title]["primary"]["execution_before"]["pc"]
     assert world.emu.callbacks["SLink-gen2-checkpoint"].addr == pc
     assert len(world.hello()["party"]) == 1  # the title's own checkpoint hold arms the hello
@@ -1375,7 +1375,7 @@ def test_production_refuses_what_the_receipts_do_not_cover():
     """A receipt without its box runs (the pre-BOX schema) proves only party_hp + box_deposit: every box
     command NACKs at the hold with the missing kind, and no byte moves."""
     receipt = json.loads((ROOT / "data/games/gen2_crystal/receipts/crystal.write_window.json").read_text())
-    for mode in ("boxes", "boxes_reset", "boxes_reload", "battle_faint"):
+    for mode in ("boxes", "boxes_reset", "boxes_reload", "battle_faint", "battle_bench"):
         del receipt["runs"][mode]
     world = production(files={"/receipts/crystal.write_window.json": json.dumps(receipt)})
     active = mon()
