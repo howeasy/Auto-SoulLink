@@ -373,6 +373,7 @@ local function compose(deps, title, production)
                 profile=profile, sites=data.sites.titles[title].sites, area_map=data.area_map,
                 player=assert(deps.player, "explicit player required"), rom_type=def.rom_type,
                 rom_sha1=profile.rom_sha1, log=deps.log,
+                evolutions=data.evolutions.evolutions, -- force_faint's evolved-identity fallback
                 hello_session=load("lua/hello_session.lua"), reply_dispatch=load("lua/reply_dispatch.lua"),
             })
         end

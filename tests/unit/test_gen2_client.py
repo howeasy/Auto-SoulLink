@@ -425,6 +425,50 @@ def test_an_active_slot_forced_faint_is_never_reported_as_success():
                                                   "        if true then\n            hud.show(\"!! \"")))
 
 
+# O-30 phase 2: a death deferred past the battle follows the evolution-stable identity (DV word +
+# OT id) to the one party descendant; Gen 2 sends no key_change for evolution (U1 OPEN), so the
+# exact key is gone by the checkpoint and the mon used to escape (A2).
+def deferred_faint_then(world, party_after):
+    bulbasaur = mon(species=1, dvs=0x3AAA)
+    world.party([bulbasaur, mon()])
+    world.hello()
+    world.frames(60)                 # a live validation enables writes
+    world.checkpoint_ok = False      # in battle: no checkpoint hold
+    world.field("wBattleMode", 1)
+    world.reply({"cmd": "force_faint", "key": codec_key(bulbasaur), "nickname": "BULBA"})
+    world.frames(2)
+    world.field("wBattleMode", 0)
+    world.party(party_after)         # EvolveAfterBattle rewrote the species; no key_change followed
+    world.checkpoint_ok = True
+    world.frames(2)
+    return bulbasaur
+
+
+def test_a_deferred_faint_follows_the_mon_through_its_evolution():
+    world = World()
+    bulbasaur = mon(species=1, dvs=0x3AAA)
+    deferred_faint_then(world, [dict(bulbasaur, species=2), mon()])
+    assert world.hp_of(0) == (0, 0) and world.hp_of(1) == (30, 0)
+    assert any(f"force_faint matched evolved {codec_key(bulbasaur)}->{codec_key(dict(bulbasaur, species=2))}" in line
+               for line in world.logs.values())
+
+
+def test_an_ambiguous_evolved_match_is_refused():
+    world = World()
+    bulbasaur = mon(species=1, dvs=0x3AAA)
+    deferred_faint_then(world, [dict(bulbasaur, species=2), dict(bulbasaur, species=3)])
+    assert world.hp_of(0) == (30, 0) and world.hp_of(1) == (30, 0) and world.written() == []
+    assert any("ambiguous evolved match" in line for line in world.logs.values())
+
+
+def test_a_dv_ot_match_that_is_not_a_descendant_is_refused():
+    world = World()
+    bulbasaur = mon(species=1, dvs=0x3AAA)
+    deferred_faint_then(world, [dict(bulbasaur, species=4), mon()])   # Charmander: same DV/OT, other family
+    assert world.hp_of(0) == (30, 0) and world.written() == []
+    assert any("not a descendant" in line for line in world.logs.values())
+
+
 def test_a_reset_leaves_no_stale_latch():
     def check(world):
         world.hello()
@@ -917,7 +961,10 @@ def test_rewind_discards_old_key_alias_before_a_delayed_faint_command():
         world.frames(1)  # the loaded state retains the evolved mon but not the old key's alias
         world.reply({"cmd": "force_faint", "key": codec_key(old)})
         world.frames(1)
-        assert world.hp_of(1) == (30, 0) and world.written() == []
+        # O-30 (A2): the death still lands, but through the live-party evolved-identity proof
+        # (unique DV/OT, descendant species), never through the stale alias
+        assert world.hp_of(1) == (0, 0)
+        assert any("force_faint matched evolved" in line for line in world.logs.values())
 
     falsify(check, mutant("lua/gen2/client.lua", (
         "        -- A delayed retirement may be lost after rewinding a key change; retaining its alias could faint another record.\n"
@@ -1316,6 +1363,20 @@ def test_memorialize_moves_the_mon_into_box_14_and_acks_with_the_box():
     (done,) = world.sent("memorialize_done")
     assert done["key"] == codec_key(dead) and done["box"] == 13
     assert storage(world, 13)[0:3] == [1, 19, 255] and party_count(world) == 1
+
+
+def test_memorialize_follows_the_dead_mon_through_its_evolution():
+    """O-30: the linked mon evolved after its death (no Gen 2 key_change): the memorial still buries it
+    and acks under the key the server tracks."""
+    lead, dead = mon(), mon(species=1, dvs=0x7AAA, hp=0)
+    world = box_world([lead, dict(dead, species=2)])
+    world.checkpoint_ok = True
+    world.reply({"cmd": "memorialize", "key": codec_key(dead)})
+    world.frames(2)
+    (done,) = world.sent("memorialize_done")
+    assert done["key"] == codec_key(dead) and world.sent("memorialize_failed") == []
+    assert storage(world, 13)[0:3] == [1, 2, 255] and party_count(world) == 1
+    assert any("memorialize matched evolved" in line for line in world.logs.values())
 
 
 def test_a_whiteout_rebuild_party_mon_waits_behind_the_memorial_that_frees_a_slot():

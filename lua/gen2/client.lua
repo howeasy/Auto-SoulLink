@@ -321,7 +321,22 @@ function Client.new(p)
     -- sources (NPC trade, evolution) are refused by the binder when the old or new full key
     -- names a second record, and two answering slots refuse here. Ceiling: a record leaving
     -- and an identical one arriving before the ack (Gen 1 cx-fc0d91b7); port it if that bites.
-    local function find_party_slot(key)
+    --
+    -- `death` (the command name: force_faint/explode and memorialize, never the other box ops):
+    -- a missing exact key falls back to the evolution-stable identity. Gen 2 sends no key_change
+    -- for evolution (U1 OPEN), and EvolveAfterBattle both rewrites the species and adds the
+    -- max-HP gain to a fainted mon's HP, so a death owed past the battle would otherwise escape
+    -- (A2). The DV word + OT id
+    -- (key fields 1-2) must name exactly one party mon, and its species must descend from the
+    -- key's (evolutions.json), so a DV/OT collision never kills another mon.
+    local evolutions = p.evolutions or {}
+    local function descends(from, to)
+        for _, nxt in ipairs(evolutions[string.format("%d", from)] or {}) do
+            if nxt == to or descends(nxt, to) then return true end
+        end
+        return false
+    end
+    local function find_party_slot(key, death)
         local party = current_party()
         if not party then return nil end
         local target = self.retired_alias[key] or key
@@ -332,7 +347,20 @@ function Client.new(p)
                 slot, mon = m.slot, m
             end
         end
-        return slot, mon, party
+        if slot or not death then return slot, mon, party end
+        local stable, old = target:sub(1, 9), tonumber(target:sub(11), 16)
+        for _, m in ipairs(party.mons) do
+            if not m.is_egg and mon_key(m):sub(1, 9) == stable then
+                if mon then return nil, nil, party, "ambiguous evolved match" end
+                mon = m
+            end
+        end
+        if not mon then return nil, nil, party end
+        if not (old and descends(old, mon.species_id)) then
+            return nil, nil, party, "DV/OT match " .. mon_key(mon) .. " is not a descendant"
+        end
+        log("[SLink-gen2] " .. death .. " matched evolved " .. target .. "->" .. mon_key(mon))
+        return mon.slot, mon, party
     end
 
     local function hud_color(cmd)
@@ -354,7 +382,7 @@ function Client.new(p)
         if c_ == "noop" then return end
         if c_ == "force_faint" or c_ == "force_explode" then
             -- Gen 2: supports_explode_mode() is False; a stray explode is the bench faint.
-            local slot, mon, party, why = find_party_slot(cmd.key)
+            local slot, mon, party, why = find_party_slot(cmd.key, c_)
             if why then log("[SLink-gen2] " .. c_ .. ": " .. why .. " " .. tostring(cmd.key)) return end
             local entry = { cmd = c_, key = cmd.key, nickname = cmd.nickname }
             if not party then self.deferred[#self.deferred + 1] = entry return end
@@ -462,7 +490,7 @@ function Client.new(p)
         end
         local cmd = table.remove(self.deferred, 1)
         if BOX_NACK[cmd.cmd] then return self:run_box(cmd) end
-        local slot, mon, _, why = find_party_slot(cmd.key)
+        local slot, mon, _, why = find_party_slot(cmd.key, cmd.cmd)
         if not slot then
             -- the mon left the party before the checkpoint (PC deposit) or its key is ambiguous
             log("[SLink-gen2] " .. cmd.cmd .. " dropped at the checkpoint: " .. (why or "key not in party")
@@ -498,7 +526,9 @@ function Client.new(p)
     -- party_mon, or is dropped after game_over.
     function self:run_box(cmd)
         local phys = self.retired_alias[cmd.key] or cmd.key
-        local _, mon = find_party_slot(cmd.key)
+        -- O-30: a memorial follows the dead mon through an evolution like its force_faint did
+        local _, mon = find_party_slot(cmd.key, cmd.cmd == "memorialize" and cmd.cmd or nil)
+        if mon and cmd.cmd == "memorialize" then phys = mon_key(mon) end
         local name = nick_label(cmd.key, cmd.nickname or (mon and mon.nickname))
         if cmd.cmd == "box_mon" then
             if mon then send("stats_cache", { key = cmd.key, stats = { level = mon.level, maxHP = mon.max_hp } }) end
