@@ -104,6 +104,10 @@ def test_real_assembly_preserves_shared_abi(tmp_path):
                 "PANEL_STATE": 9, "PANEL_PAGE": 10, "PANEL_PAGES": 11,
                 "SFX_HOLD": 12, "SFX_HOLD_AT": 13, "TRADE_LEASE": 14}
     checks = [f"ASSERT SLINK_OFS_{key} == {value}" for key, value in expected.items()]
+    trade = {"MAGIC_0": 0x53, "MAGIC_1": 0x4c, "MAGIC_2": 0x54, "MAGIC_3": 0x31,
+             "VERSION": 1, "CMD_QUERY": 1, "CMD_OFFER": 2, "CMD_PROMPT": 3,
+             "CMD_APPLY": 5, "CMD_DONE": 7, "CMD_RELEASE": 8}
+    checks += [f"ASSERT SLINK_TRADE_{key} == {value}" for key, value in trade.items()]
     checks += ["ASSERT SLINK_ABI_VERSION == 3", "ASSERT SLINK_CORE_SIZE == 14",
                "ASSERT SLINK_TRADE_LEASE_SIZE == 16", "ASSERT SLINK_PUBLIC_SIZE == 30",
                "ASSERT SLINK_CAP_SFX == 1", "ASSERT SLINK_CAP_PANEL == 2",

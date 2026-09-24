@@ -74,6 +74,36 @@ REPO_MAILBOX_STUB = {
 OPTIONAL_SHARED_FILES = ["slink.asm"]
 PANEL_FILES = ("panel_flags.asm", "panel.asm", "panel_start.asm")
 SFX_FILE = "sfx.asm"
+TRADE_FILES = ("trade_frame.asm", "trade_items.asm", "trade_snapshot.asm",
+               "trade_commit.asm", "trade_service.asm", "trade_receptionist.asm", "trade_dispatch.asm")
+
+
+def _trade_receptionist_text(checkout: pathlib.Path) -> tuple[pathlib.Path, str]:
+    path = checkout / "maps/Pokecenter2F.asm"
+    text = path.read_text(encoding="utf-8")
+    anchor = ("\tobject_event  5,  2, SPRITE_LINK_RECEPTIONIST, SPRITEMOVEDATA_STANDING_DOWN, "
+              "0, 0, -1, -1, PAL_NPC_GREEN, OBJECTTYPE_SCRIPT, 0, LinkReceptionistScript_Trade, -1")
+    if text.count(anchor) != 1:
+        raise RuntimeError("trade receptionist object anchor must occur exactly once")
+    return path, text.replace(anchor, anchor.replace("LinkReceptionistScript_Trade",
+                                                   "SlinkTradeReceptionistScript"), 1)
+
+
+def trade_export_text(checkout: pathlib.Path, repo: str) -> list[tuple[pathlib.Path, str]]:
+    """Expose existing labels across object files; EXPORT emits no ROM bytes."""
+    names = ["LinkReceptionistScript_Trade", "Script_TradeCenterClosed", "Text_TradeReceptionistIntro"]
+    if repo == "pokecrystal":
+        names += ["LinkReceptionistScript_Trade.Mobile", "Text_TradeReceptionistMobile"]
+    edits = []
+    for relative, symbols in (("maps/Pokecenter2F.asm", names),
+                              ("engine/overworld/events.asm", ["NextOverworldFrame"])):
+        path = checkout / relative
+        text = path.read_text(encoding="utf-8")
+        declaration = "EXPORT " + ", ".join(symbols)
+        if declaration not in text.splitlines():
+            text = text.rstrip("\n") + "\n\n" + declaration + "\n"
+        edits.append((path, text))
+    return edits
 
 # The mailbox/panel ABI is shared with Gen 1 (patch/gb/slink_abi.inc), not per-generation source,
 # so it is copied -- never duplicated under patch/gen2 -- from its one committed location. It is
@@ -202,6 +232,9 @@ def overlay_plan(
     sfx = (src_dir / SFX_FILE).is_file()
     if sfx and not (src_dir / "slink.asm").is_file():
         raise RuntimeError("SFX overlay requires slink.asm")
+    trade = [name for name in TRADE_FILES if (src_dir / name).is_file()]
+    if trade and (len(trade) != len(TRADE_FILES) or not (src_dir / "slink.asm").is_file()):
+        raise RuntimeError("trade overlay requires its complete file family and slink.asm")
     stub = src_dir / REPO_MAILBOX_STUB[repo]
     if stub.is_file():
         plan.append(("slink_mailbox.asm", stub, True))
@@ -219,6 +252,8 @@ def overlay_plan(
                  ("panel_start.asm", src_dir / "panel_start.asm", False)]
     if sfx:
         plan.append((SFX_FILE, src_dir / SFX_FILE, True))
+    if trade:
+        plan += [(name, src_dir / name, True) for name in TRADE_FILES]
     return plan
 
 
@@ -233,6 +268,7 @@ def apply_overlay(
     if "panel.asm" in include_names:
         _start_menu_text(checkout)  # all three anchors validated before any checkout mutation
     reset_edit = _reset_sound_text(checkout, repo) if SFX_FILE in include_names else None
+    trade_edit = _trade_receptionist_text(checkout) if "trade_service.asm" in include_names else None
     main_path = checkout / "main.asm"
     if include_names:
         anchor = MAIN_ANCHORS[repo]
@@ -252,6 +288,7 @@ def apply_overlay(
         block = "\n".join(
             ['; SLink companion overlay (tools/build_gen2_companion.py)']
             + (["DEF SLINK_SFX_ENABLED EQU 1"] if SFX_FILE in include_names else [])
+            + (["DEF SLINK_TRADE_ENABLED EQU 1"] if trade_edit is not None else [])
             + [f'INCLUDE "{OVERLAY_DST}/{name}"' for name in include_names]
         )
         new_anchor = anchor.replace('\n\n\nSECTION', f'\n\n{block}\n\n\nSECTION', 1)
@@ -263,6 +300,11 @@ def apply_overlay(
     if reset_edit is not None:
         path, text = reset_edit
         path.write_text(text, encoding="utf-8", newline="\n")
+    if trade_edit is not None:
+        path, text = trade_edit
+        path.write_text(text, encoding="utf-8", newline="\n")
+        for path, text in trade_export_text(checkout, repo):
+            path.write_text(text, encoding="utf-8", newline="\n")
     return applied
 
 
@@ -323,6 +365,22 @@ def _symbols(path: pathlib.Path) -> dict[str, tuple[int, int]]:
     if not symbols:
         raise RuntimeError(f"{path}: no link symbols")
     return symbols
+
+
+def verify_trade_hook(base: bytes, overlay: bytes, overlay_sym: pathlib.Path, repo: str) -> None:
+    """The complete 13-byte object event changes only its two-byte script pointer."""
+    bank, address, original = {"pokecrystal": (0x64, 0x73b1, 0x689d),
+                               "pokegold": (0x5c, 0x545b, 0x4d6f)}[repo]
+    offset = bank * 0x4000 + address - 0x4000
+    target_bank, target = _symbols(overlay_sym).get("SlinkTradeReceptionistScript", (-1, -1))
+    if target_bank != bank or not 0x4000 <= target < 0x8000:
+        raise RuntimeError("trade receptionist must remain in its original map bank")
+    if len(base) != len(overlay) or base[offset:offset + 2] != original.to_bytes(2, "little"):
+        raise RuntimeError("trade receptionist clean pointer/ROM size differs")
+    expected = bytearray(base[offset - 9:offset + 4])
+    expected[9:11] = target.to_bytes(2, "little")
+    if overlay[offset - 9:offset + 4] != expected:
+        raise RuntimeError("trade receptionist changed outside its two-byte script pointer")
 
 
 def verify_symbol_scope(clean_sym: pathlib.Path, overlay_sym: pathlib.Path, *, panel: bool) -> None:
@@ -386,6 +444,8 @@ def build(*, crystal_repo: pathlib.Path | None = None, gold_repo: pathlib.Path |
         data = (checkout / spec["filename"]).read_bytes()
         verify_symbol_scope(clean_dir / f"{key}.sym", checkout / f"{key}.sym",
                             panel="panel.asm" in overlay_applied[repo])
+        if "trade_service.asm" in overlay_applied[repo]:
+            verify_trade_hook(base, data, checkout / f"{key}.sym", repo)
         ups = ups_create(base, data)
         if ups_apply(base, ups) != data:
             raise RuntimeError(f"{key}: UPS round trip failed")

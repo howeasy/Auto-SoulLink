@@ -109,6 +109,9 @@ ENDC
 .remember
 	ld a, b
 	ld [SLINK_LAST_SAMPLE], a
+IF DEF(SLINK_TRADE_ENABLED)
+	call SlinkTradeDispatch
+ENDC
 IF DEF(SLINK_SFX_ENABLED)
 	jp SlinkSfxService
 ELSE
@@ -120,4 +123,4 @@ SlinkServiceEnd::
 ; G/S :59-68). Reset first runs 32 DelayFrames before that clear. NewGame's narrower
 ; ResetWRAM excludes the mailbox. Future request/lease services need their own
 ; new-run lifecycle. The optional sound service has its own reset-entry latch;
-; trade requests are never consumed here.
+; trade pickup is restricted to the original idle-overworld caller chain.
