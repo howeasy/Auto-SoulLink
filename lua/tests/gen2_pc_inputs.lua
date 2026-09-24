@@ -42,29 +42,36 @@ function PC.prepare(ctx, SG, u1)
     for _, kind in ipairs(pc.loops) do SG.LOOP_KINDS[kind] = true end
 end
 
--- Pure: the PC plan's next step, given the observed counts; steps close on their RAM effect.
-PC.STEPS = {"deposit", "withdraw", "change_box", "deposit", "release_box", "release_party"}
+-- Pure: the U1 PC plan; opts.steps replaces it (the duo's pc_ops / changebox). Each step closes on its RAM effect
+-- against the counts when it began (`at`), never on a button count:
+--   {op="deposit"|"release_party", slot=<party list index>}   done: wPartyCount == at.party - 1
+--   {op="withdraw"}   the last box slot                        done: wPartyCount == at.party + 1
+--   {op="release_box"}   the last box slot                     done: sBoxCount == at.box - 1
+--   {op="change_box", box=<0-based wCurBox>|nil = the next}   done: wCurBox == box
+PC.STEPS = {{op="deposit", slot=1}, {op="withdraw"}, {op="change_box"}, {op="deposit", slot=2},
+            {op="release_box"}, {op="release_party", slot=1}}
 
 -- Pure point -> buttons, phase. point adds: party_count, box_count (active box), cur_box, pc_cursor (list index).
 function PC.driver(PI, facts, opts)
     local mode = opts.mode
     local self = {terminal=mode == "grass" and "grass" or "pc-done", phase=mode == "grass" and "to-grass" or "to-pc",
                   op_index=1}
+    local steps = opts.steps or PC.STEPS
     local held, hold_left, release, waited = nil, 0, false, 0
-    local start   -- counts when the PC was reached
+    local at   -- counts when the current step began (the first one: when the PC was reached)
     local function press(button)
         release, held, hold_left = true, button, PC.HOLD - 1
         return {[button]=true}, self.phase
     end
     -- by label prefix (Bill's PC rows read "WITHDRAW <PK><MN>", the top menu "BILL's PC")
-    local function choose(ui, wanted, columns)
+    local function choose(ui, wanted, columns, exact)
         columns = columns or 1
         if type(ui.items) ~= "table" or not integer(ui.cursor, 1, #ui.items) or ui.columns ~= columns then
             return nil, "source menu geometry unavailable"
         end
         local index
         for i, label in ipairs(ui.items) do
-            if type(label) == "string" and label:upper():sub(1, #wanted) == wanted then
+            if type(label) == "string" and (label:upper() == wanted or not exact and label:upper():sub(1, #wanted) == wanted) then
                 if index then return nil, "ambiguous menu label " .. wanted end
                 index = i
             end
@@ -90,27 +97,25 @@ function PC.driver(PI, facts, opts)
         if button == "arrived" then return nil, "arrived" end
         return {[button]=true}, self.phase
     end
-    local op = function() return PC.STEPS[self.op_index] end
-    -- the list index a step works on
+    local op = function() return steps[self.op_index] and steps[self.op_index].op end
+    -- the 0-based wCurBox a change_box step goes to
+    local function dest() return steps[self.op_index].box or at.cur + 1 end
+    -- the list index a step works on: a party slot, or the last box slot (the mon last deposited)
     local function target()
         local o = op()
-        if o == "deposit" then return self.op_index == 1 and 1 or 2 end
-        if o == "release_party" then return 1 end
-        if o == "withdraw" or o == "release_box" then return (start.box_step or 1) - 1 end
+        if o == "deposit" or o == "release_party" then return steps[self.op_index].slot end
+        if o == "withdraw" or o == "release_box" then return at.box - 1 end
     end
     local function advance(point)
-        if not start or not integer(point.party_count, 1, 6) or not integer(point.box_count, 0, 20) then return end
+        if not at or not integer(point.party_count, 1, 6) or not integer(point.box_count, 0, 20) then return end
         local o = op()
-        local done = (o == "deposit" and point.party_count == 2)
-            or (o == "withdraw" and point.party_count == 3)
-            or (o == "change_box" and point.cur_box == start.box + 1)
-            or (o == "release_box" and point.box_count == start.box_step - 1)
-            or (o == "release_party" and point.party_count == 1)
+        local done = ((o == "deposit" or o == "release_party") and point.party_count == at.party - 1)
+            or (o == "withdraw" and point.party_count == at.party + 1)
+            or (o == "change_box" and point.cur_box == dest())
+            or (o == "release_box" and point.box_count == at.box - 1)
         if done then
             self.op_index = self.op_index + 1
-            if PC.STEPS[self.op_index] == "withdraw" or PC.STEPS[self.op_index] == "release_box" then
-                start.box_step = point.box_count   -- the mon to take is the last one deposited
-            end
+            at = {party=point.party_count, box=point.box_count, cur=point.cur_box}
         end
     end
     local function battle(point, ui)
@@ -160,7 +165,15 @@ function PC.driver(PI, facts, opts)
         end
         if ui.kind == "box_list" then
             if o ~= "change_box" then return press("B") end
-            return choose(ui, fmt("BOX%d", start.box + 2))
+            -- _ChangeBox's list scrolls: a box outside the visible rows is reached by moving toward it
+            local want, low, high = dest() + 1, nil, nil
+            for _, label in ipairs(type(ui.items) == "table" and ui.items or {}) do
+                local n = tonumber(tostring(label):upper():match("^BOX(%d+)$"))
+                if n then low, high = math.min(low or n, n), math.max(high or n, n) end
+            end
+            if high and want > high then return press("Down") end
+            if low and want < low then return press("Up") end
+            return choose(ui, fmt("BOX%d", want), 1, true)
         end
         if ui.kind == "box_menu" then return choose(ui, o == "change_box" and "SWITCH" or "QUIT") end
         if ui.kind == "yes_no" then
@@ -208,7 +221,7 @@ function PC.driver(PI, facts, opts)
                     local buttons, why = walk(map, point, {stand})
                     if why ~= "arrived" then return buttons, why end
                     self.phase = "pc"
-                    start = start or {box=point.cur_box, party=point.party_count}
+                    at = at or {party=point.party_count, box=point.box_count, cur=point.cur_box}
                     if point.facing ~= "Up" then return press("Up") end
                     if op() then return press("A") end
                     self.phase = self.terminal

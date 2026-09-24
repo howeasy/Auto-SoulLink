@@ -216,3 +216,51 @@ def test_a_stale_bills_pc_context_showing_the_top_menu_is_waited_out():
     d.op_index = 7
     buttons, phase = d.step(pt(rt, ui=ui("bills_pc", TOP), **done))
     assert buttons is not None and not any(buttons.values()) and phase == "pc"
+
+
+def setup_steps(steps):
+    rt = LuaRuntime(unpack_returned_tuples=True)
+    pi = rt.execute(PI.read_text(encoding="utf-8"))
+    pc = rt.execute(PCI.read_text(encoding="utf-8"))
+    opts = rt.table_from({"mode": "pc", "steps": lua_list(steps)}, recursive=True)
+    return rt, pc.driver(pi, rt.table_from(FACTS, recursive=True), opts)
+
+
+def test_a_two_mon_party_plan_deposits_withdraws_redeposits_and_releases_the_catch():
+    """The duo's pc_ops plan (party [lead, catch]): every step closes on its effect relative to its own start."""
+    rt, d = setup_steps([{"op": "deposit", "slot": 1}, {"op": "withdraw"}, {"op": "deposit", "slot": 1},
+                         {"op": "release_box"}])
+    two = {"party_count": 2, "overworld_ready": False}
+    step(rt, d, party_count=2)                                                          # at the PC
+    assert step(rt, d, ui=ui("bills_pc", BILLS, 2), **two)[0] == ["A"]                 # DEPOSIT
+    assert step(rt, d, ui=ui("deposit_list"), pc_cursor=0, **two)[0] == ["Down"]       # slot 1
+    one = dict(two, party_count=1, box_count=1)
+    assert step(rt, d, ui=ui("deposit_list"), **one)[0] == ["B"]                        # deposited -> withdraw
+    assert step(rt, d, ui=ui("withdraw_list"), pc_cursor=0, **one)[0] == ["A"]
+    back = dict(two, box_count=0)
+    assert step(rt, d, ui=ui("withdraw_list"), **back)[0] == ["B"]                      # withdrawn -> deposit
+    assert step(rt, d, ui=ui("deposit_list"), pc_cursor=1, **back)[0] == ["A"]
+    again = dict(one)
+    assert step(rt, d, ui=ui("deposit_list"), **again)[0] == ["B"]                      # -> release_box
+    assert step(rt, d, ui=ui("withdraw_menu", ["WITHDRAW", "STATS", "RELEASE", "CANCEL"]), **again)[0] == ["Down"]
+    done = dict(one, box_count=0)
+    assert step(rt, d, ui=ui("bills_pc", BILLS, 1), **done)[0] == ["Down"]              # all done: to SEE YA!
+    assert d.op_index == 5
+
+
+def test_a_change_box_step_scrolls_to_an_unlisted_box_and_back():
+    """The duo's changebox plan: BOX14 (wCurBox 13) is below the visible rows, BOX1 above them on the way back."""
+    rt, d = setup_steps([{"op": "change_box", "box": 13}, {"op": "change_box", "box": 0}])
+    step(rt, d)
+    base = {"overworld_ready": False}
+    first = ["BOX1", "BOX2", "BOX3", "BOX4"]
+    assert step(rt, d, ui=ui("box_list", first, 1), **base)[0] == ["Down"]
+    last = ["BOX11", "BOX12", "BOX13", "BOX14"]
+    assert step(rt, d, ui=ui("box_list", last, 3), **base)[0] == ["Down"]
+    assert step(rt, d, ui=ui("box_list", last, 4), **base)[0] == ["A"]
+    at14 = dict(base, cur_box=13)
+    assert step(rt, d, ui=ui("box_list", last, 4), **at14)[0] == ["Up"]                # BOX1 is above
+    assert step(rt, d, ui=ui("box_list", ["BOX1", "BOX10", "BOX11", "BOX12"], 2), **at14)[0] == ["Up"]
+    assert step(rt, d, ui=ui("box_list", ["BOX1", "BOX10", "BOX11", "BOX12"], 1), **at14)[0] == ["A"]
+    step(rt, d, ui=ui("box_list", first, 1), **dict(base, cur_box=0))
+    assert d.op_index == 3
