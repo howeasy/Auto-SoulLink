@@ -205,6 +205,7 @@
       },
       "_src": {
         "derived.BASESTATS_GROWTH_RATE_OFFSET": "rom:patch/build/slink_RR.gba sha1=ea5352f8a3b9073f8ae20870ad12857925d442cd box_level:LDRB@0x3E85C",
+        "derived.BATTLE_MON_STAT_STAGES_OFF": "lua/memory_gba.lua:402-406 (old-client RR profile, production-tested: M.readStatStages; CFRU puts type3 at +0x18, so ATK..EVA start at +0x19)",
         "derived.BATTLE_MOVE_ENTRY_SIZE": "rom:patch/build/slink_RR.gba sha1=ea5352f8a3b9073f8ae20870ad12857925d442cd calculate_pp:0x41028..0x4102C index arithmetic",
         "derived.BATTLE_MOVE_PP_OFFSET": "rom:patch/build/slink_RR.gba sha1=ea5352f8a3b9073f8ae20870ad12857925d442cd calculate_pp:LDRB@0x41030",
         "derived.BATTLE_TYPE_DOUBLE_MASK": "lua/memory_gba.lua:385 (old-client RR profile, production-tested)",
@@ -243,6 +244,7 @@
         "BALL_POCKET_ENC": false,
         "BASESTATS_ENTRY_SIZE": 28,
         "BASESTATS_GROWTH_RATE_OFFSET": 19,
+        "BATTLE_MON_STAT_STAGES_OFF": 25,
         "BATTLE_MOVE_ENTRY_SIZE": 12,
         "BATTLE_MOVE_PP_OFFSET": 4,
         "BATTLE_RESULTS_FOE_FAINTS_OFF": 1,

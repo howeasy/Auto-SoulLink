@@ -107,6 +107,11 @@ FRLG_DERIVED = {
     "DISABLE_STRUCT_PERISH_TIMER_OFF": (0x0F, f"{PRET_PIN}:include/battle.h:153-154 "
                                         "(perishSongTimer:4 low nibble, perishSongTimerStartValue:4)"),
     "B_ACTION_NOTHING_FAINTED": (13, f"{PRET_PIN}:include/battle.h:48 (B_ACTION_NOTHING_FAINTED)"),
+    # C5-6: gBattleMons[b].statStages[STAT_ATK] -- ATK..EVA are the 7 bytes from here, in the
+    # wire order; statStages[STAT_HP] at +0x18 is never shown (reads.lua read_stat_stages).
+    "BATTLE_MON_STAT_STAGES_OFF": (0x19, f"{PRET_PIN}:include/pokemon.h:187 (BattlePokemon."
+                                   "statStages at 0x18); include/constants/pokemon.h:166-175 "
+                                   "(STAT_HP=0, STAT_ATK=1 .. STAT_EVASION=7)"),
 }
 
 # ── more P4 card C4-2a facts: symbols read straight out of each title's own .sym file (same
@@ -166,6 +171,9 @@ RR_DERIVED = {
     # the same id as pret's SPECIES_SHEDINJA (FRLG_DERIVED above).
     "SHEDINJA_SPECIES_ID": (303, 'data/games/gen3_frlge/rr_species.json:"303"="Shedinja" '
                             "(RR species table; CFRU keeps this id unrenumbered)"),
+    "BATTLE_MON_STAT_STAGES_OFF": (0x19, "lua/memory_gba.lua:402-406 (old-client RR profile, "
+                                   "production-tested: M.readStatStages; CFRU puts type3 at "
+                                   "+0x18, so ATK..EVA start at +0x19)"),
 }
 
 # RR-P5 binary witnesses: file offsets, NOT GBA virtual addresses. These bytes

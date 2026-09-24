@@ -216,20 +216,25 @@ function Client.new(p)
     end
 
     -- ── wire shapes ────────────────────────────────────────────────────────────────
+    -- stat_stages rides only the active battlers' entries (docs/protocol.md §4.1, old client parity)
+    local function stages_of(battler)
+        local s = battler and call("read_stat_stages", battler)
+        return type(s) == "table" and arr(s) or nil
+    end
     local function party_entry(m, active)
         local base = reads.party_base and reads.party_base()
         local raw = base and io.read_bytes(base + m.slot * R.PARTY_MON_SIZE, R.PARTY_MON_SIZE)
         return { key = key(m), slot = m.slot, species_id = m.species, nickname = m.nickname,
                  level = m.level, hp = m.hp, maxHP = m.max_hp, status_cond = m.status,
                  moves = arr(m.moves), pp = arr(m.pp), pp_bonuses = m.pp_bonuses,
-                 held_item_id = m.held_item, active = active[m.slot] or false,
-                 blob_hex = raw and hex_of(raw) or nil }
+                 held_item_id = m.held_item, active = active[m.slot] ~= nil,
+                 stat_stages = stages_of(active[m.slot]), blob_hex = raw and hex_of(raw) or nil }
     end
     local function party_wire(party)
         local active = {}
         if in_battle() then
             local b = battle_now()
-            for _, s in ipairs(b and b.active_player_battler_slots or {}) do active[s] = true end
+            for i, s in ipairs(b and b.active_player_battler_slots or {}) do active[s] = 2 * (i - 1) end
         end
         local out = arr({})
         for i, m in ipairs(party) do out[i] = party_entry(m, active) end
@@ -239,12 +244,13 @@ function Client.new(p)
         local out = arr({})
         if not b then return out end
         local idx, active = b.battler_party_indexes or {}, {}
-        if idx[2] then active[idx[2]] = true end
-        if (b.battlers_count or 0) >= 4 and idx[4] then active[idx[4]] = true end
+        if idx[2] then active[idx[2]] = 1 end
+        if (b.battlers_count or 0) >= 4 and idx[4] then active[idx[4]] = 3 end
         for _, m in ipairs(b.enemy_party or {}) do
             if m.species and m.species ~= 0 then
                 out[#out + 1] = { species_id = m.species, level = m.level, hp = m.hp, maxHP = m.max_hp,
-                                  active = active[m.slot] or false, held_item_id = m.held_item,
+                                  active = active[m.slot] ~= nil, held_item_id = m.held_item,
+                                  stat_stages = stages_of(active[m.slot]),
                                   status_cond = m.status, moves = arr(m.moves), pp = arr(m.pp),
                                   pp_bonuses = m.pp_bonuses }
             end

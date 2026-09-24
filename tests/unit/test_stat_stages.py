@@ -9,6 +9,7 @@ Tests:
 The chips themselves are rendered by the `stat_stages_row` macro in templates/_macros.html,
 covered by the page tests.
 """
+import pytest
 
 # ── party_details stat_stages passthrough ─────────────────────────────────────
 
@@ -148,34 +149,60 @@ class TestEnrichBattleStatePassthrough:
         assert enriched[0]["sprite_html"]
 
 # ── Offset correctness: 0x19 skips both vanilla HP-stage and CFRU type3 ──────
+# The Gen 3 client reads stat stages through lua/gen3/reads.lua read_stat_stages, which takes
+# the ATK offset from the pack: profile.derived.BATTLE_MON_STAT_STAGES_OFF. +0x18 is statStages
+# [STAT_HP] in vanilla (always 6, pret include/pokemon.h:187) but CFRU's type3 byte on RR.
+
+GEN3_TITLES = [("gen3_frlg", "firered"), ("gen3_frlg", "leafgreen"), ("gen3_rr", "radical_red")]
+TYPE3_FAIRY = 0x17                     # what a 0x18 read would surface as a "stage" on RR
+STAGES = [8, 4, 6, 7, 5, 6, 12]        # ATK+2 DEF-2 SPD SATK+1 SDEF-1 ACC EVA+6
+
+
+def _poke_battler(w, battler, stages, hp=20):
+    base = w.ram["BATTLE_MONS_ADDR"] + battler * 0x58   # sizeof(struct BattlePokemon)
+    w.poke(base + 0x18, bytes([TYPE3_FAIRY, *stages]))
+    w.poke_int(base + 0x28, hp, 2)
+    w.poke_int(base + 0x2C, hp, 2)
+
 
 class TestOffsetConstant:
-    """Regression guard: the magic offset 0x19 must never silently revert to 0x18."""
+    """Regression guard: the ATK stat-stage offset must never silently revert to 0x18."""
 
-    def test_stat_stages_offset_is_0x19(self):
-        """Read the constant directly from the memory_gba module source to ensure
-        it hasn't been changed back to 0x18 (which would read CFRU type3 as a stage)."""
-        import pathlib
-        import re
-        src = pathlib.Path("lua/memory_gba.lua").read_text(encoding="utf-8")
-        match = re.search(
-            r"M\.BATTLE_MON_STAT_STAGES_OFF\s*=\s*(0x[0-9a-fA-F]+|\d+)", src
-        )
-        assert match, "M.BATTLE_MON_STAT_STAGES_OFF constant not found in memory_gba.lua"
-        value = int(match.group(1), 0)
-        assert value == 0x19, (
-            f"M.BATTLE_MON_STAT_STAGES_OFF is 0x{value:02X}, expected 0x19. "
-            "Using 0x18 would read CFRU type3 (Fairy type ID) as a stat stage bonus."
-        )
+    @pytest.mark.parametrize("pack,title", GEN3_TITLES)
+    def test_stat_stages_offset_is_0x19(self, pack, title):
+        from tests.unit.gen3_world import World, lua_to_py
+        w = World(pack, title)
+        assert w.d["BATTLE_MON_STAT_STAGES_OFF"] == 0x19, (
+            "Using 0x18 would read CFRU type3 (or the vanilla HP stage) as the ATK stage.")
+        _poke_battler(w, 1, STAGES)
+        assert lua_to_py(w.parts.reads.read_stat_stages(1)) == STAGES
 
-    def test_stat_stage_offset_comment_mentions_cfru(self):
-        """The comment explaining the CFRU/vanilla difference should be present."""
-        import pathlib
-        src = pathlib.Path("lua/memory_gba.lua").read_text(encoding="utf-8")
-        assert "type3" in src or "CFRU" in src, (
-            "memory_gba.lua should document why 0x19 is used instead of 0x18 "
-            "(CFRU has type3 at +0x18, vanilla has HP-stage there — never display either)."
-        )
+    @pytest.mark.parametrize("pack,title,needle", [
+        ("gen3_frlg", "firered", "include/pokemon.h"),
+        ("gen3_rr", "radical_red", "type3"),
+    ])
+    def test_stat_stage_offset_is_sourced(self, pack, title, needle):
+        """The profile says WHY 0x19: pret for vanilla, the old client's CFRU type3 note for RR."""
+        from tests.unit.gen3_world import World
+        assert needle in World(pack, title).profile["_src"]["derived.BATTLE_MON_STAT_STAGES_OFF"]
+
+    @pytest.mark.parametrize("pack,title", [GEN3_TITLES[0], GEN3_TITLES[2]])
+    def test_the_active_mons_carry_stat_stages_on_the_tick(self, pack, title):
+        """Wire parity with the old client: active player mon + active foe carry stat_stages."""
+        from tests.unit.gen3_world import World, mon_record
+        w = World(pack, title)
+        w.set_party([mon_record(0x11111111, 0xABCD, species=4, hp=20),
+                     mon_record(0x22222222, 0xABCD, species=5, hp=20)])
+        w.step_to(60)
+        w.enter_battle([mon_record(0x77777777, 0x1234, species=19, level=3)])
+        _poke_battler(w, 0, [7, 6, 6, 6, 6, 6, 6])
+        _poke_battler(w, 1, STAGES)
+        w.step(61)
+        tick = [t for t in w.events("tick") if t["in_battle"]][-1]
+        mine = {m["slot"]: m for m in tick["party"]}
+        assert mine[0]["active"] is True and mine[0]["stat_stages"] == [7, 6, 6, 6, 6, 6, 6]
+        assert "stat_stages" not in mine[1]
+        assert tick["enemy_party"][0]["stat_stages"] == STAGES
 
 
 # ── the status_pill macro ─────────────────────────────────────────────────────

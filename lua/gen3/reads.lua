@@ -508,6 +508,18 @@ function R.new(profile, io, pointers)
         return out
     end
 
+    -- The 7 wire stat stages {ATK, DEF, SPD, SATK, SDEF, ACC, EVA} (raw 0-12, 6 neutral) of one
+    -- battler, from gBattleMons[battler] + derived.BATTLE_MON_STAT_STAGES_OFF. That offset is
+    -- 0x19 on every title and never 0x18: +0x18 is the vanilla HP stage (pret
+    -- include/pokemon.h:187) but CFRU's type3 byte on RR (test_stat_stages.py guards it).
+    function r.read_stat_stages(battler)
+        local off = d.BATTLE_MON_STAT_STAGES_OFF
+        if type(a.BATTLE_MONS_ADDR) ~= "number" or not off then
+            return nil, "profile has no ram.BATTLE_MONS_ADDR/derived.BATTLE_MON_STAT_STAGES_OFF"
+        end
+        return io.read_bytes(a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE + off, 7)
+    end
+
     -- In-battle state, type flags, the trainer opponent id, the battler->party-slot mapping
     -- and the enemy party. Booleans whose mask/address the pack has not pinned come back
     -- absent rather than failing the whole read (gen3_rr today: is_trainer/is_doubles).

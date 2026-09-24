@@ -168,6 +168,7 @@ def test_vanilla_storage_and_party_facts(name: str) -> None:
         # C4-ACTIVE-FAINT-P (mechanism P)
         "STATUS3_PERISH_SONG", "DISABLE_STRUCT_SIZE", "DISABLE_STRUCT_PERISH_TIMER_OFF",
         "B_ACTION_NOTHING_FAINTED",
+        "BATTLE_MON_STAT_STAGES_OFF",   # C5-6 (tests/unit/test_stat_stages.py)
     }
     c4_2a_sym_keys = {"ram.TRAINER_OPPONENT_ADDR", "rom.EXPERIENCE_TABLES_ADDR",
                        "rom.BATTLE_MOVES_ADDR", "rom.PP_UP_GET_MASK_ADDR",
@@ -227,7 +228,7 @@ def test_rr_party_capacity_comes_from_its_existing_detector() -> None:
     rr_c4_2a_keys = {
         "SB1_LOCATION_MAP_GROUP_OFFSET", "SB1_LOCATION_MAP_NUM_OFFSET", "SB1_BADGE_BYTE_OFFSET",
         "BATTLE_TYPE_TRAINER_MASK", "BATTLE_TYPE_DOUBLE_MASK", "OUTCOME_WON", "OUTCOME_LOST",
-        "OUTCOME_DREW",
+        "OUTCOME_DREW", "BATTLE_MON_STAT_STAGES_OFF",
     }
     for key in rr_c4_2a_keys:
         cite = title["_src"].get(f"derived.{key}")
