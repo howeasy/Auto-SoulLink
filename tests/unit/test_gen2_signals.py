@@ -1068,7 +1068,10 @@ def test_bind_fixture_qualification_names_the_qualified_bytes_and_attempt():
 # card gen2-u1e-poison (main's ruling (1)): the U1 receipt runs on an explicit per-title fixture allow-list. Gold
 # may also run on gold_battle_errand (post Mr. Pokemon errand, same Route 29 end point): the only Gold state that
 # reaches a day POISON_STING foe (Bug Catcher Wade, Route 31). No wildcard, no cross-title entry.
-U1_FIXTURES = {"crystal": ["crystal_battle"], "gold": ["gold_battle", "gold_battle_errand"], "silver": ["silver_battle"]}
+# card U1G (O-33): plus each title's three synthetic setup fixtures (tools/gen2_synth_fixtures.py).
+U1_FIXTURES = {title: sorted(base + [f"{title}_synth_{kind}" for kind in ("bill", "grass", "kyle")])
+               for title, base in (("crystal", ["crystal_battle"]), ("gold", ["gold_battle", "gold_battle_errand"]),
+                                   ("silver", ["silver_battle"]))}
 
 
 def test_the_u1_fixture_allow_list_is_the_data():

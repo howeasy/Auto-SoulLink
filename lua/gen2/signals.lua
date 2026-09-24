@@ -114,7 +114,24 @@ S.RECEIPT_NEGATIVES = {"wrong_pack_byte","script_bytecode_arm","wrong_bank_hit"}
 -- own passed qualification report (bind_fixture_qualification). gold_battle_errand is Gold after the Mr. Pokemon
 -- errand, ending where gold_battle ends: the only Gold state that reaches a day POISON_STING foe (card
 -- gen2-u1e-poison, main's ruling (1)).
-S.U1_FIXTURES = {crystal={"crystal_battle"}, gold={"gold_battle","gold_battle_errand"}, silver={"silver_battle"}}
+S.U1_FIXTURES = {crystal={"crystal_battle","crystal_synth_grass","crystal_synth_kyle","crystal_synth_bill"},
+    gold={"gold_battle","gold_battle_errand","gold_synth_grass","gold_synth_kyle","gold_synth_bill"},
+    silver={"silver_battle","silver_synth_grass","silver_synth_kyle","silver_synth_bill"}}
+-- card U1G (O-33): the allow-listed fixtures built by tools/gen2_synth_fixtures.py. A run on one of them must carry
+-- its disclosure and a live RAM-effect record for every S.SYNTH_EFFECT_SITES site it proves (S.qualified_sites).
+S.SYNTH_FIXTURES = {}
+for _,title in ipairs({"crystal","gold","silver"}) do
+    for _,kind in ipairs({"grass","kyle","bill"}) do S.SYNTH_FIXTURES[#S.SYNTH_FIXTURES+1] = title .. "_synth_" .. kind end
+end
+S.SYNTH_SCHEMA = "gen2-synth-disclosure-v1"
+S.RECEIPT_SCHEMA_V2 = "gen2-engine-site-receipt-v2"
+-- The sites whose effect is a party/box/species write: in a synthetic run each needs its own live transition.
+S.SYNTH_EFFECT_SITES = {capture_party=true, capture_box=true, hatch_species=true, evolution_species_published=true,
+    npc_trade_finalized=true, gift_party_finalized=true, gift_box_finalized=true}
+local function synthetic(fixture)
+    for _,name in ipairs(S.SYNTH_FIXTURES) do if name == fixture then return true end end
+    return false
+end
 local function u1_fixture(owner, fixture)
     for _,name in ipairs(S.U1_FIXTURES[owner] or {}) do if name == fixture then return true end end
     return false
@@ -123,6 +140,49 @@ end
 local COUNT = 9007199254740991
 local function hex64(value) return type(value) == "string" and #value == 64 and value:match("^%x+$") ~= nil end
 
+-- Pure: nil when a synthetic run's disclosure and live effect records hold, else why (card U1G, O-33). The
+-- disclosure names the run's own fixture bytes; each effect is a transition sampled in this run: before_hex read at
+-- before_frame (at or after the run's arrival, before the armed frame), after_hex read inside the aligned callback,
+-- the two different, and the after bytes never the ones the setup wrote at the same addresses (a synthetic value
+-- may be the baseline, never the evidence).
+local function synth_problem(run, proven)
+    local d = run.synth
+    if type(d) ~= "table" or d.schema ~= S.SYNTH_SCHEMA or type(d.builder) ~= "string" or not hex64(d.base_sha256)
+       or d.sha256 ~= run.fixture_sha256 or type(d.fields) ~= "table" or type(d.source_facts) ~= "table" then
+        return "synthetic run without its disclosure of these fixture bytes"
+    end
+    if type(run.effects) ~= "table" or not integer(run.arrival_frame,0,COUNT) then
+        return "synthetic run without live effect records"
+    end
+    local covered = {}
+    for _,e in ipairs(run.effects) do
+        local size = integer(e.size,1,64) and e.size
+        if not size or type(e.before_hex) ~= "string" or type(e.after_hex) ~= "string" or #e.before_hex ~= 2*size
+           or #e.after_hex ~= 2*size or not e.before_hex:match("^%x+$") or not e.after_hex:match("^%x+$") then
+            return "malformed effect record"
+        end
+        if not integer(e.armed,0,COUNT) or e.callback ~= e.armed or not integer(e.before_frame,run.arrival_frame,COUNT)
+           or e.before_frame >= e.armed then
+            return "effect record is not sampled live in this run before its aligned callback: " .. tostring(e.site)
+        end
+        if e.before_hex:lower() == e.after_hex:lower() then return "effect record shows no transition: " .. tostring(e.site) end
+        if integer(e.wram,0,65535) then
+            for _,f in ipairs(d.fields) do
+                local lo, hi = math.max(e.wram, f.wram or -1), math.min(e.wram+size, (f.wram or -1)+(f.size or 0))
+                if type(f.new_hex) == "string" and lo < hi
+                   and e.after_hex:sub(2*(lo-e.wram)+1, 2*(hi-e.wram)):lower() == f.new_hex:sub(2*(lo-f.wram)+1, 2*(hi-f.wram)):lower() then
+                    return "effect evidence equals the synthetic setup bytes: " .. tostring(e.site)
+                end
+            end
+        end
+        covered[e.site] = true
+    end
+    for name in pairs(proven) do
+        if S.SYNTH_EFFECT_SITES[name] and not covered[name] then return "synthetic run proves " .. name .. " without a live effect" end
+    end
+    return nil
+end
+
 -- The proven site set of a PHYSICAL receipt, or nil,why. Pure: the caller decodes the file.
 -- Summary flags are never trusted: alignment, RAM effect and decoy verdicts are recomputed
 -- from the receipt's raw measurements. A site is proven only when the receipt names it and
@@ -130,11 +190,34 @@ local function hex64(value) return type(value) == "string" and #value == 64 and 
 -- this title, ROM, pack and qualified battle fixture (normal buttons, CGB, no harness write).
 -- A proven site none of whose ANY-mode predecessors is proven is dropped (it could never
 -- publish); an ALL-mode site needs every predecessor proven.
+-- card U1G: a v2 receipt ({schema v2, title, runs = {v1 run, ...}}) proves the union of its runs. Each run is checked
+-- like a v1 receipt, except that the capture RAM-effect alignment is needed on at least one NON-synthetic run (every
+-- run still needs its hit alignment), and a run's sites need their predecessors proven in that SAME run: a run that
+-- would lose a site to the closure is refused (no causal prerequisite from another run).
+local qualified_run
 function S.qualified_sites(title, pack, receipt)
     local owner = S.PHYSICAL_TITLES[title]
     if not owner then
         return nil,"Gen 2 runtime signal qualification is OPEN for " .. tostring(title) .. ": no PHYSICAL receipt path"
     end
+    if type(receipt) ~= "table" or receipt.schema ~= S.RECEIPT_SCHEMA_V2 then return qualified_run(title, pack, receipt) end
+    if receipt.title ~= owner or type(receipt.runs) ~= "table" or #receipt.runs == 0 then
+        return nil,"v2 receipt names no runs for this title"
+    end
+    local union, live_capture = {}, false
+    for index,run in ipairs(receipt.runs) do
+        local proven, why = qualified_run(title, pack, run, true)
+        if not proven then return nil,"run " .. index .. ": " .. tostring(why) end
+        if type(run) == "table" and not synthetic(run.fixture) and type(run.frame_alignment) == "table"
+           and run.frame_alignment.battle_party ~= nil then live_capture = true end
+        for name in pairs(proven) do union[name] = true end
+    end
+    if not live_capture then return nil,"no non-synthetic run carries the capture RAM-effect frame alignment" end
+    return union
+end
+
+function qualified_run(title, pack, receipt, v2)
+    local owner = S.PHYSICAL_TITLES[title]
     if type(receipt) ~= "table" or receipt.schema ~= S.RECEIPT_SCHEMA or receipt.evidence_level ~= "PHYSICAL"
        or receipt.result ~= "PASS" then
         return nil,"PHYSICAL engine-site qualification receipt required"
@@ -152,13 +235,18 @@ function S.qualified_sites(title, pack, receipt)
         return nil,"qualification receipt is not a normal-button CGB run of an allow-listed qualified U1 fixture"
     end
     local a, d = receipt.frame_alignment, receipt.decoy
+    -- v2: a run without the capture effect (no battle_party) still needs its hit alignment
+    local capture_effect = not v2 or (type(a) == "table" and a.battle_party ~= nil)
     if receipt.bank_check ~= "live" or type(a) ~= "table" or a.passed ~= true
-       or not integer(a.armed,0,COUNT) or a.callback ~= a.armed
+       or not integer(a.aligned_hits,1,COUNT) or a.misaligned_hits ~= 0 then
+        return nil,"qualification receipt lacks the live bank check or the frame-alignment measurements"
+    end
+    if capture_effect and (not integer(a.armed,0,COUNT) or a.callback ~= a.armed
        -- TryAddMonToParty bumps wPartyCount before GeneratePartyMonStats (C move_mon.asm:3-19), frames ahead of
        -- the capture_party site: the baseline is the wild_ready party, the change frame at or before the callback.
        or not integer(a.battle_party,0,5) or a.callback_party ~= a.battle_party+1 or a.post_party ~= a.callback_party
        or not integer(a.party_changed,0,COUNT) or a.party_changed > a.callback
-       or not integer(a.aligned_hits,1,COUNT) or a.misaligned_hits ~= 0 then
+       or not integer(a.aligned_hits,1,COUNT) or a.misaligned_hits ~= 0) then
         return nil,"qualification receipt lacks the live bank check or the frame-alignment measurements"
     end
     if type(d) ~= "table" or not integer(d.raw,1,COUNT) or d.accepted ~= 0 or d.bank_rejects ~= d.raw then
@@ -183,6 +271,8 @@ function S.qualified_sites(title, pack, receipt)
         end
         proven[name] = true
     end
+    local claimed = {}
+    for name in pairs(proven) do claimed[name] = true end
     local changed = true
     while changed do
         changed = false
@@ -197,14 +287,49 @@ function S.qualified_sites(title, pack, receipt)
             end
         end
     end
+    if v2 then
+        for name in pairs(claimed) do
+            if not proven[name] then return nil,"a proven site lacks its prior in the same run: " .. name end
+        end
+    end
     if next(proven) == nil then return nil,"qualification receipt proves no registrable site" end
+    if v2 then
+        if synthetic(receipt.fixture) then
+            local why = synth_problem(receipt, proven)
+            if why then return nil,why end
+        elseif receipt.synth ~= nil then
+            return nil,"a synthetic disclosure on a non-synthetic fixture"
+        end
+    end
     return proven
 end
 
 -- U3 binding: true when a PHYSICAL engine-site receipt ran on exactly the fixture bytes a
 -- passed full-chain fixture qualification report (tests/fixtures/gen2/receipts/<fixture>.qualification.json,
 -- decoded by the caller) recorded, from that report's attempt; else nil,why. Pure.
+-- card U1G: a v2 receipt takes the reports by fixture name; each run binds to its own report, and a synthetic run
+-- binds through its disclosure to its base fixture's report (the base bytes the builder started from).
+local bind_run
 function S.bind_fixture_qualification(receipt, qualification)
+    if type(receipt) ~= "table" or receipt.schema ~= S.RECEIPT_SCHEMA_V2 then return bind_run(receipt, qualification) end
+    if type(receipt.runs) ~= "table" or #receipt.runs == 0 or type(qualification) ~= "table" then
+        return nil,"v2 receipt and its qualification reports required"
+    end
+    for index,run in ipairs(receipt.runs) do
+        local ok, why
+        if type(run) == "table" and synthetic(run.fixture) and type(run.synth) == "table" then
+            local base = run.synth.base_fixture
+            ok, why = bind_run({fixture=base, title=run.title, rom_sha1=run.rom_sha1, fixture_sha256=run.synth.base_sha256,
+                                qualification_attempt_id=run.qualification_attempt_id}, qualification[base])
+        else
+            ok, why = bind_run(run, type(run) == "table" and qualification[run.fixture])
+        end
+        if not ok then return nil,"run " .. index .. ": " .. tostring(why) end
+    end
+    return true
+end
+
+function bind_run(receipt, qualification)
     if type(receipt) ~= "table" or type(qualification) ~= "table" then return nil,"receipt and qualification report required" end
     if qualification.schema ~= "fixture-qualification-v1" or qualification.passed ~= true
        or type(qualification.errors) ~= "table" or next(qualification.errors) ~= nil then
