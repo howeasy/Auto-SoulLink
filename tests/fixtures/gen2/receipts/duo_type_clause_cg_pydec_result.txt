@@ -1,0 +1,2 @@
+attempt 1 of 3
+PYDEC: PASS a=C9BF:B541:10 b=C002:C4A6:10 area=route_29 titles=crystal/gold status=clause_observed scenario=gen2_type_clause clause=type rejected=a ending=memorial

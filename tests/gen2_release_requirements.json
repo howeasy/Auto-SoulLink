@@ -264,7 +264,7 @@
         "initiator": "crystal",
         "partner": "gold",
         "fixtures": {"a": "crystal_battle", "b": "gold_battle"},
-        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_reconnect", "gen2_gender_clause"]
+        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_reconnect", "gen2_gender_clause", "gen2_type_clause"]
       },
       "proofs": [
         {
@@ -373,6 +373,24 @@
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_gender_clause_cg_pydec_result.txt",
               "sha256": "f7945f75c2c713babd62be433acb00241f1d8c1d3665c0ea5cd22bae7797d30e"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_type_clause",
+          "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_type_clause --lane h10-cg-type --keep-data",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_type_clause_cg_a_result.txt",
+              "sha256": "ee3590090f7d538f0e8c7f2f8031455284c2d0a32282f66beab49f9742c9652a"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_type_clause_cg_b_result.txt",
+              "sha256": "538052c663d5230412e57e7d670ed48f7213abe037ee6289ceff87213e320460"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_type_clause_cg_pydec_result.txt",
+              "sha256": "2913ea146cf442bf6a241304202da85fca8db2095339be4d16153cd9dbda6f3a"
             }
           }
         }
