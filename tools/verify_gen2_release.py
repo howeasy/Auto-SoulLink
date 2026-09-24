@@ -272,7 +272,7 @@ SCENARIO_END_STATUS = {"link": {"alive"}, "gen2_faint": {"dead", "memorial"}, "g
                        "gen2_poison": {"dead", "memorial"}, "gen2_whiteout_rebuild": {"alive"},
                        # DUO-WAVE-D (D-2, S-8/O-15, S-2/S-3/D-3, S-5/D-1) and O-30 MINOR-5
                        "gen2_ball_gate": {"alive"}, "gen2_egg_hatch": {"alive"}, "gen2_gift": {"alive"},
-                       "gen2_boxed_capture": {"alive"}, "gen2_npc_trade": {"alive"},
+                       "gen2_boxed_capture": {"alive"}, "gen2_npc_trade": {"alive"}, "gen2_evolution": {"alive"},
                        "gen2_faint_active_trainer": {"memorial"}}
 # Per-scenario PYDEC tokens beyond a/b/titles/status (DUO-WAVE-C contract; the death=active rule's shape).
 SCENARIO_TOKENS = {"gen2_whiteout": {"repair": "run_over"},   # owner ruling (a), 4aa1ad5c: game over
@@ -302,7 +302,7 @@ def _engine_capture_key(lines: list[str]) -> str | None:
 
 # Cells whose linked mon changes key in the run (S-5/D-1 key_change), so the PYDEC names the final key: the
 # ENGINE_CAPTURE key followed through each ENGINE_KEY_CHANGE whose old_key is the current one, in order.
-KEY_CHANGE_SCENARIOS = frozenset({"gen2_npc_trade"})
+KEY_CHANGE_SCENARIOS = frozenset({"gen2_npc_trade", "gen2_evolution"})   # 4b08e007: key_change per side
 
 
 def _followed_key(lines: list[str], key: str | None) -> str | None:

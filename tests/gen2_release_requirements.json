@@ -53,7 +53,8 @@
           "gen2_gift",
           "gen2_boxed_capture",
           "gen2_npc_trade",
-          "gen2_faint_active_trainer"
+          "gen2_faint_active_trainer",
+          "gen2_evolution"
         ],
         "scenario_fixtures": {
           "gen2_ball_gate": {
@@ -79,6 +80,10 @@
           "gen2_faint_active_trainer": {
             "a": "crystal_battle_errand",
             "b": "crystal_battle_ot2_errand"
+          },
+          "gen2_evolution": {
+            "a": "crystal_synth_evolve",
+            "b": "crystal_synth_evolve_ot2"
           }
         }
       },
@@ -615,7 +620,8 @@
           "gen2_gift",
           "gen2_boxed_capture",
           "gen2_npc_trade",
-          "gen2_faint_active_trainer"
+          "gen2_faint_active_trainer",
+          "gen2_evolution"
         ],
         "scenario_fixtures": {
           "gen2_ball_gate": {
@@ -645,6 +651,10 @@
           "gen2_faint_active_trainer": {
             "a": "gold_battle_errand",
             "b": "silver_battle_errand"
+          },
+          "gen2_evolution": {
+            "a": "gold_synth_evolve",
+            "b": "silver_synth_evolve"
           }
         }
       },
