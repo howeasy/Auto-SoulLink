@@ -78,7 +78,7 @@ def test_the_disclosure_names_every_changed_byte(title):
     ({"last_spawn": "ROUTE_29"}, "not a spawn point"),
     ({"party": [{"species": "CATERPIE", "level": 6, "moves": []}]}, "moves required"),
     ({"map": {"map_const": "VIOLET_CITY", "x": 1, "y": 1}}, "unsupported edit keys"),
-    ({"events": ["EVENT_GOT_EEVEE"]}, "unsupported edit keys"),
+    ({"events": {"toggle": ["EVENT_GOT_EEVEE"]}}, "unsupported events keys"),
     ({"party": [{"species": "PIDGEY", "egg": True, "hp": 5, "moves": ["TACKLE"]}]}, "egg's HP"),
     ({"balls": [["POTION", 5]]}, "BALL-pocket"),
     ({"balls": [["POKE_BALL", 100]]}, "1..99"),
@@ -94,3 +94,24 @@ def test_only_an_exact_saveram_is_accepted():
     for bad in (raw[:synth.CART], raw + bytes(1)):
         with pytest.raises(ValueError, match="exactly"):
             synth.build("crystal", bad, {"step_count": 1})
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_event_flags_use_the_source_numbering_and_are_disclosed(title):
+    """constants/event_flags.asm jumps with const_next: EVENT_MET_BILL is set at new game
+    (engine/events/std_scripts.asm InitializeEventsScript) and hides Bill at home until it is cleared."""
+    from tools.gen2_source_data import load_context
+    raw = (ROOT / "tests/fixtures/gen2" / f"{title}_town.SaveRAM").read_bytes()
+    ctx = load_context(title)
+    ids = synth.event_ids(ctx, title)
+    layout = codec.for_foundation(title)
+    before = synth._Save(raw[:synth.CART], layout)
+
+    def flag(save, name):
+        return save.read("wEventFlags", 1, ids[name] // 8)[0] >> (ids[name] % 8) & 1
+
+    assert flag(before, "EVENT_INITIALIZED_EVENTS") == flag(before, "EVENT_MET_BILL") == 1
+    out, disclosure = synth.build(title, raw, {"events": {"clear": ["EVENT_MET_BILL"]}})
+    after = synth._Save(out[:synth.CART], layout)
+    assert flag(after, "EVENT_MET_BILL") == 0 and flag(after, "EVENT_INITIALIZED_EVENTS") == 1
+    assert [f["symbol"] for f in disclosure["fields"]][0] == "wEventFlags"

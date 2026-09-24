@@ -143,10 +143,13 @@ def test_shipped_receipts_are_the_committed_fixture_bytes_and_decode_alike_in_lu
     for pack in world.entry.RECEIPT_FILES.values():
         files = dict(pack.items())
         paths += [files["engine_sites"], files["write_window"], *dict(files["qualifications"].items()).values()]
-    assert len(paths) == 14  # + gold_battle_errand.qualification.json, the Gold U1 fixture's report
+    # + gold_battle_errand.qualification.json (the Gold U1 fixture's report); card U1G: + silver_town and the nine
+    # synthetic-fixture disclosures, which are committed beside their SaveRAM (tests/fixtures/gen2/<name>.synth.json)
+    assert len(paths) == 24
     for rel in paths:
         shipped = ROOT / rel
-        assert shipped.read_bytes() == (ROOT / "tests/fixtures/gen2/receipts" / shipped.name).read_bytes(), rel
+        source = ROOT / ("tests/fixtures/gen2" if shipped.name.endswith(".synth.json") else "tests/fixtures/gen2/receipts")
+        assert shipped.read_bytes() == (source / shipped.name).read_bytes(), rel
         text = shipped.read_text(encoding="utf-8")
         assert normal(python(to_python(json_codec, text))) == normal(json.loads(text)), rel
 

@@ -107,10 +107,29 @@ def _write_scope(title, receipt):
             "uncovered": list(scope.uncovered.values())}, None
 
 
+SYNTH_DIR = ROOT / "tests/fixtures/gen2"
+
+
+def _engine_runs(receipt):
+    """card U1G: an engine-site receipt is a v2 run list or one v1 run."""
+    return receipt["runs"] if "runs" in receipt else [receipt]
+
+
 def _bind(kind, receipt):
     """S.bind_fixture_qualification / M.bind_fixture_qualification: True, or nil and why."""
     lua, module = _module(SIGNALS if kind == "engine_sites" else WRITE_SAFETY)
-    if kind == "engine_sites":
+    if kind == "engine_sites" and "runs" in receipt:
+        # a v2 receipt takes every report by fixture name; a synthetic run's entry is its committed disclosure
+        reports = {}
+        for run in receipt["runs"]:
+            disclosure = SYNTH_DIR / f"{run['fixture']}.synth.json"
+            if disclosure.exists():
+                committed = _receipt(disclosure)
+                reports[run["fixture"]] = committed
+                reports[committed["base_fixture"]] = _receipt(_qualification(committed["base_fixture"]))
+            else:
+                reports[run["fixture"]] = _receipt(_qualification(run["fixture"]))
+    elif kind == "engine_sites":
         reports = _table(SIGNALS, _qualification(receipt["fixture"]))
     else:
         reports = {receipt["runs"][mode]["fixture"]: _receipt(_qualification(receipt["runs"][mode]["fixture"]))
@@ -155,9 +174,21 @@ def _owner(kind, title):
 
 
 def bindings(kind, receipt):
-    """fixture -> (recorded sha256, qualification attempt) for the runs the binding covers."""
+    """fixture -> (recorded sha256, qualification attempt) for the runs the binding covers. A synthetic run
+    binds through its committed disclosure to the base fixture; its own bytes are the committed .SaveRAM that the
+    disclosure names (checked here: the admission trust root is the disclosure, the bytes are the release lane's)."""
     if kind == "engine_sites":
-        return {receipt["fixture"]: (receipt["fixture_sha256"], receipt["qualification_attempt_id"])}
+        out = {}
+        for run in _engine_runs(receipt):
+            disclosure = SYNTH_DIR / f"{run['fixture']}.synth.json"
+            if disclosure.exists():
+                committed = _receipt(disclosure)
+                staged = (SYNTH_DIR / f"{run['fixture']}.SaveRAM").read_bytes()
+                assert hashlib.sha256(staged).hexdigest() == committed["sha256"] == run["fixture_sha256"], run["fixture"]
+                out[committed["base_fixture"]] = (committed["base_sha256"], run["qualification_attempt_id"])
+            else:
+                out[run["fixture"]] = (run["fixture_sha256"], run["qualification_attempt_id"])
+        return out
     return {receipt["runs"][mode]["fixture"]: (receipt["runs"][mode]["fixture_sha256"],
                                                receipt["runs"][mode]["qualification_attempt_id"])
             for mode in ("town", "battle")}
@@ -187,14 +218,16 @@ def test_a_committed_physical_receipt_still_validates(path):
 
     # (a) the receipt claims PHYSICAL evidence -- and says so for every run it rests on
     if kind == "engine_sites":
-        assert receipt["evidence_level"] == "PHYSICAL"
+        assert {run["evidence_level"] for run in _engine_runs(receipt)} == {"PHYSICAL"}
         # (b) exactly the proven site set the receipt claims: the pack pins each hit and the
         # predecessors are present, so a dropped or inflated claim would surface here
-        assert proof["proven"] == sorted(receipt["proven"])
         # (b2) card gen2-U1d: a proven battle_faint carries its own same-frame record, recomputed here from the
         # raw measurements (lua/tests/gen2_frame_align.lua F.faint_problem; S.qualified_sites does not read it)
-        if "battle_faint" in receipt["proven"]:
-            assert faint_aligned(receipt.get("faint_alignment")), receipt.get("faint_alignment")
+        claimed = sorted({name for run in _engine_runs(receipt) for name in run["proven"]})
+        assert proof["proven"] == claimed
+        for run in _engine_runs(receipt):
+            if "battle_faint" in run["proven"]:
+                assert faint_aligned(run.get("faint_alignment")), run.get("faint_alignment")
     else:
         assert {run["evidence_level"] for run in receipt["runs"].values()} == {"PHYSICAL"}
         # (b) exactly the controls it declares covered, and the kinds those authorize
@@ -269,6 +302,7 @@ def _flip_hex(value, at):
 
 def _proven_site_off(receipt, title, kind):
     """One proven site's recorded hit no longer matches the pack: off."""
+    receipt = _engine_runs(receipt)[0] if kind == "engine_sites" else receipt
     if kind == "engine_sites":
         name = sorted(receipt["proven"])[0]
         row = receipt["sites"][name]
@@ -281,6 +315,7 @@ def _proven_site_off(receipt, title, kind):
 
 def _proven_site_on(receipt, title, kind):
     """An unproven site is claimed as proven: on."""
+    receipt = _engine_runs(receipt)[0] if kind == "engine_sites" else receipt
     if kind == "engine_sites":
         silent = [name for name in sorted(receipt["sites"])
                   if name not in set(receipt["proven"]) and receipt["sites"][name]["hits"] == 0]
@@ -293,6 +328,7 @@ def _proven_site_on(receipt, title, kind):
 
 def _other_fixture_sha(receipt, title, kind):
     """Other fixture bytes than the qualified ones (the binding is what catches this)."""
+    receipt = _engine_runs(receipt)[0] if kind == "engine_sites" else receipt
     if kind == "engine_sites":
         _set(receipt, "fixture_sha256", "0" * 64)
     else:
@@ -302,6 +338,7 @@ def _other_fixture_sha(receipt, title, kind):
 
 def _model_evidence(receipt, title, kind):
     """A MODEL run relabelled PHYSICAL."""
+    receipt = _engine_runs(receipt)[0] if kind == "engine_sites" else receipt
     if kind == "engine_sites":
         _set(receipt, "evidence_level", "MODEL")
         return "PHYSICAL engine-site qualification receipt required"
@@ -311,8 +348,11 @@ def _model_evidence(receipt, title, kind):
 
 def _title_swap(receipt, title, kind):
     """The Crystal payload wearing another title's name: refused by this title's validator."""
-    _set(receipt, "title", next(other for other in TITLES if other != title))
-    return "another title, ROM"
+    other = next(other for other in TITLES if other != title)
+    for run in (_engine_runs(receipt) if kind == "engine_sites" else [receipt]):
+        _set(run, "title", other)
+    _set(receipt, "title", other)
+    return "another title"
 
 
 NEGATIVES = {

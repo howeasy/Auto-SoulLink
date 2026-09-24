@@ -198,6 +198,9 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "receipts/crystal.write_window.json",
         "receipts/crystal_battle.qualification.json",
         "receipts/crystal_town.qualification.json",
+        "receipts/crystal_synth_grass.synth.json",
+        "receipts/crystal_synth_kyle.synth.json",
+        "receipts/crystal_synth_bill.synth.json",
     ],
     "gen2_gold": [
         # Entry.PACK_FILES.gen2_gold -- Entry.build's admission catalog loads these for
@@ -224,6 +227,9 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "receipts/gold_battle.qualification.json",
         "receipts/gold_battle_errand.qualification.json",
         "receipts/gold_town.qualification.json",
+        "receipts/gold_synth_grass.synth.json",
+        "receipts/gold_synth_kyle.synth.json",
+        "receipts/gold_synth_bill.synth.json",
     ],
     "gen2_silver": [
         # Entry.PACK_FILES.gen2_silver -- same as Gold.
@@ -251,6 +257,10 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "receipts/gold_battle.qualification.json",
         "receipts/gold_town.qualification.json",
         "receipts/silver_battle.qualification.json",
+        "receipts/silver_town.qualification.json",
+        "receipts/silver_synth_grass.synth.json",
+        "receipts/silver_synth_kyle.synth.json",
+        "receipts/silver_synth_bill.synth.json",
     ],
     "gen3_frlge": [
         "gen3_frlge_areas.lua",

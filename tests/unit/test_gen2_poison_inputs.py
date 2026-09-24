@@ -307,6 +307,7 @@ def test_a_committed_receipt_that_proves_poison_faint_carries_a_passing_poison_r
     path = ROOT / f"tests/fixtures/gen2/receipts/{title}.engine_sites.json"
     receipt = json.loads(path.read_text(encoding="utf-8"))
     assert path.read_bytes() == (ROOT / f"data/games/gen2_{title}/receipts/{title}.engine_sites.json").read_bytes()
+    receipt = receipt.get("runs", [receipt])[0]   # card U1G: the v2 receipt's non-synthetic chain run
     if "poison_faint" not in receipt["proven"]:
         pytest.skip(f"{title} does not prove poison_faint yet")
     rt = lua()
@@ -374,7 +375,9 @@ def test_the_gate_fixture_list_mirrors_the_production_allow_list():
     F = frame_align(rt)
     S = rt.execute((ROOT / "lua/gen2/signals.lua").read_text(encoding="utf-8"))
     gate = {name: title for name, title in F.U1_FIXTURES.items()}
-    production = {name: title for title, names in S.U1_FIXTURES.items() for name in names.values()}
+    synthetic = set(S.SYNTH_FIXTURES.values())   # card U1G: synthetic runs arrive through case.synth, not this list
+    production = {name: title for title, names in S.U1_FIXTURES.items() for name in names.values()
+                  if name not in synthetic}
     assert gate == production
 
 

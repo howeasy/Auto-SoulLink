@@ -79,6 +79,10 @@ Entry.RECEIPT_FILES = {
         qualifications={
             crystal_battle="data/games/gen2_crystal/receipts/crystal_battle.qualification.json",
             crystal_town="data/games/gen2_crystal/receipts/crystal_town.qualification.json",
+            -- card U1G: the committed O-33 disclosures (the admission trust root for the synthetic runs' bytes)
+            crystal_synth_grass="data/games/gen2_crystal/receipts/crystal_synth_grass.synth.json",
+            crystal_synth_kyle="data/games/gen2_crystal/receipts/crystal_synth_kyle.synth.json",
+            crystal_synth_bill="data/games/gen2_crystal/receipts/crystal_synth_bill.synth.json",
         },
     },
     gen2_gold={
@@ -89,6 +93,9 @@ Entry.RECEIPT_FILES = {
             -- the Gold U1 engine-site receipt's fixture (card gen2-u1e-poison; S.U1_FIXTURES)
             gold_battle_errand="data/games/gen2_gold/receipts/gold_battle_errand.qualification.json",
             gold_town="data/games/gen2_gold/receipts/gold_town.qualification.json",
+            gold_synth_grass="data/games/gen2_gold/receipts/gold_synth_grass.synth.json",
+            gold_synth_kyle="data/games/gen2_gold/receipts/gold_synth_kyle.synth.json",
+            gold_synth_bill="data/games/gen2_gold/receipts/gold_synth_bill.synth.json",
         },
     },
     -- O-23: Silver's U2 proof is Gold's write-window receipt (gen2_write_safety M.RECEIPT_TITLE),
@@ -100,6 +107,11 @@ Entry.RECEIPT_FILES = {
             silver_battle="data/games/gen2_silver/receipts/silver_battle.qualification.json",
             gold_battle="data/games/gen2_silver/receipts/gold_battle.qualification.json",
             gold_town="data/games/gen2_silver/receipts/gold_town.qualification.json",
+            -- card U1G: silver_town is the base of the synthetic kyle/bill runs
+            silver_town="data/games/gen2_silver/receipts/silver_town.qualification.json",
+            silver_synth_grass="data/games/gen2_silver/receipts/silver_synth_grass.synth.json",
+            silver_synth_kyle="data/games/gen2_silver/receipts/silver_synth_kyle.synth.json",
+            silver_synth_bill="data/games/gen2_silver/receipts/silver_synth_bill.synth.json",
         },
     },
 }

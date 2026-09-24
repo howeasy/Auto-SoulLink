@@ -200,10 +200,11 @@ local function synth_problem(run, proven, sites)
         if symbol == nil or e.symbol ~= symbol or points[symbol] == nil or e.wram ~= points[symbol] or e.size ~= size then
             return "effect record is not the site's own effect span at the pack's address: " .. tostring(e.site)
         end
-        -- read inside the site's first recorded hit (the receipt's own first_frame), never before it
+        -- read inside one of the site's own hits: never before its first recorded hit (a shared-PC final such as
+        -- HatchEggs.next also runs for other mons first, so the transition may come at a later hit)
         local hit = type(run.sites) == "table" and run.sites[e.site]
-        if type(hit) ~= "table" or e.callback ~= hit.first_frame then
-            return "effect record is not read at the site's first recorded hit: " .. tostring(e.site)
+        if type(hit) ~= "table" or not integer(hit.first_frame,0,COUNT) or not integer(e.callback,hit.first_frame,COUNT) then
+            return "effect record precedes the site's first recorded hit: " .. tostring(e.site)
         end
         for _,field in ipairs({"arming_hex","before_hex","after_hex"}) do
             local v = e[field]
@@ -255,7 +256,7 @@ function S.qualified_sites(title, pack, receipt)
     end
     if type(receipt) ~= "table" or receipt.schema ~= S.RECEIPT_SCHEMA_V2 then return qualified_run(title, pack, receipt) end
     if receipt.title ~= owner or type(receipt.runs) ~= "table" or #receipt.runs == 0 then
-        return nil,"v2 receipt names no runs for this title"
+        return nil,"v2 receipt belongs to another title or names no runs"
     end
     local union, live_capture = {}, false
     for index,run in ipairs(receipt.runs) do

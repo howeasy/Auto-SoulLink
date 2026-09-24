@@ -18,6 +18,9 @@ edits (all optional):
                whiteout.asm:61-73; it must be a spawn point, data/maps/spawn_points.asm).
   step_count   wStepCount (DoEggStep runs when it reaches $80, engine/overworld/events.asm:880-900).
   poison_step  wPoisonStepCount (DoPoisonStep runs when it reaches 4, same routine).
+  events       {"set": [EVENT_*], "clear": [EVENT_*]}: bits of wEventFlags (constants/event_flags.asm; an
+               object_event's flag hides the object while set, e.g. EVENT_MET_BILL, set at new game by
+               engine/events/std_scripts.asm InitializeEventsScript, cleared when Bill leaves Ecruteak).
 """
 from __future__ import annotations
 
@@ -27,18 +30,18 @@ from pathlib import Path
 
 if __package__:
     from .gen2_source_data import ROOT, load_context
-    from .gen_gen2_area_map import build_area_map
+    from .gen_gen2_area_map import build_area_map, source_lines
     from .gen_gen2_charmap import encode, parse_charmap
 else:
     from gen2_source_data import ROOT, load_context
-    from gen_gen2_area_map import build_area_map
+    from gen_gen2_area_map import build_area_map, source_lines
     from gen_gen2_charmap import encode, parse_charmap
 
 SCHEMA = "gen2-synth-disclosure-v1"
 BUILDER = "tools/gen2_synth_fixtures.py"
 CART = 0x8000
 SAVERAM = CART + 22   # the BizHawk 2.11.1 gambatte RTC trailer (tools/gen2_fixtures.SAVERAM_BYTES)
-EDIT_KEYS = frozenset({"party", "balls", "last_spawn", "step_count", "poison_step"})
+EDIT_KEYS = frozenset({"party", "balls", "last_spawn", "step_count", "poison_step", "events"})
 MAX_ITEM_STACK = 99   # MAX_ITEM_STACK, constants/item_constants.asm
 EGG_LEVEL = 5   # constants/pokemon_data_constants.asm EGG_LEVEL
 DEFAULT_HAPPINESS = 70   # BASE_HAPPINESS, constants/pokemon_data_constants.asm
@@ -99,6 +102,29 @@ class _Save:
             if new != old:
                 self.fields.append({"symbol": symbol, "offset": 0, "wram": None, "size": 2, "cart": at,
                                     "old_hex": old.hex(), "new_hex": new.hex()})
+
+
+def event_ids(ctx, title):
+    """EVENT_* -> bit index from constants/event_flags.asm: const_def, const, const_skip [n] and const_next n
+    (rgbds macros/const.asm), over the title's conditional lines."""
+    ids, value = {}, 0
+    for _, line in source_lines(ctx.read_source("constants/event_flags.asm"), title):
+        words = line.split()
+        if not words:
+            continue
+        if words[0] == "const_def":
+            value = int(words[1].replace("$", "0x"), 0) if len(words) > 1 else 0
+        elif words[0] == "const_skip":
+            value += int(words[1].replace("$", "0x"), 0) if len(words) > 1 else 1
+        elif words[0] == "const_next":
+            target = int(words[1].replace("$", "0x"), 0)
+            if target < value:
+                raise ValueError("const_next moves backwards")
+            value = target
+        elif words[0] == "const" and len(words) == 2:
+            ids[words[1]] = value
+            value += 1
+    return ids
 
 
 def _name(text, charmap, size):
@@ -203,6 +229,18 @@ def build(title, base_bytes, edits, *, root=ROOT, base_name=None):
             raise ValueError("last_spawn is not a spawn point")
         save.write("wLastSpawnMapGroup", bytes([row["map_group"], row["map_number"]]))
         facts.append("data/maps/spawn_points.asm; engine/events/whiteout.asm GetWhiteoutSpawn")
+    if "events" in edits:
+        ids = event_ids(ctx, title)
+        unknown = set(edits["events"]) - {"set", "clear"}
+        if unknown:
+            raise ValueError(f"unsupported events keys: {sorted(unknown)}")
+        for op, names in sorted(edits["events"].items()):
+            for name in names:
+                index = ids[name]   # EventFlagAction: byte index // 8, bit index % 8 (home/flag.asm)
+                byte = save.read("wEventFlags", 1, index // 8)[0]
+                byte = byte | 1 << index % 8 if op == "set" else byte & ~(1 << index % 8) & 0xFF
+                save.write("wEventFlags", bytes([byte]), index // 8)
+        facts.append("constants/event_flags.asm; engine/events/std_scripts.asm InitializeEventsScript")
     for key, symbol in (("step_count", "wStepCount"), ("poison_step", "wPoisonStepCount")):
         if key in edits:
             save.write(symbol, bytes([edits[key]]))
@@ -229,8 +267,9 @@ def build(title, base_bytes, edits, *, root=ROOT, base_name=None):
 #          to wLastSpawnMap = VIOLET_CITY, whose map objects then load natively (a CONTINUE would keep the base
 #          map's object structs, data/maps/setup_scripts.asm MapSetupScript_Continue). NPC_TRADE_KYLE asks for a
 #          BELLSPROUT (data/events/npc_trades.asm; maps/VioletKylesHouse.asm).
-#   bill   the same whiteout to GOLDENROD_CITY, party of one (< PARTY_LENGTH, BillScript .NoRoom), EVENT_GOT_EEVEE
-#          and EVENT_MET_BILL clear in the base (maps/BillsFamilysHouse.asm: Bill is home, givepoke EEVEE, 20).
+#   bill   the same whiteout to GOLDENROD_CITY, party of one (< PARTY_LENGTH, BillScript .NoRoom); EVENT_MET_BILL
+#          cleared (set at new game, it hides Bill at home until he leaves Ecruteak Pokecenter,
+#          maps/EcruteakPokecenter1F.asm clearevent) and EVENT_GOT_EEVEE clear: givepoke EEVEE, 20.
 SYNTH_RECIPES = {
     "grass": ("battle", {"party": [
         {"species": "CATERPIE", "level": 6, "exp": 342, "moves": ["TACKLE", "STRING_SHOT"], "dvs": 0x9A61},
@@ -244,7 +283,9 @@ SYNTH_RECIPES = {
                       "poison_step": 3, "last_spawn": "VIOLET_CITY"}),
     "bill": ("town", {"party": [{"species": "SENTRET", "level": 5, "moves": ["SCRATCH", "DEFENSE_CURL"],
                                  "dvs": 0x4C29, "hp": 1, "status": PSN}],
-                      "poison_step": 3, "last_spawn": "GOLDENROD_CITY"}),
+                      "poison_step": 3, "last_spawn": "GOLDENROD_CITY",
+                      # Bill is home only after he leaves Ecruteak (EcruteakPokecenter1F clears the flag)
+                      "events": {"clear": ["EVENT_MET_BILL", "EVENT_GOT_EEVEE"]}}),
 }
 SYNTH_FIXTURES = tuple(f"{title}_synth_{kind}" for title in ("crystal", "gold", "silver") for kind in SYNTH_RECIPES)
 

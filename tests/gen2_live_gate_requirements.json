@@ -13,31 +13,31 @@
     {
       "id": "new-gates.engine-sites.crystal",
       "stage": "physical-live",
-      "description": "U1 Crystal engine-hook proof (wild_ready, capture_party, capture_party_finalized, battle_end, save_completed)",
+      "description": "U1 Crystal engine-hook proof (wild_ready, capture_party, capture_party_finalized, battle_end, save_completed); U1G v2 runs on the O-33 synthetic fixtures: hatch, evolution, capture_box, npc_trade, gift",
       "axes": {"kind": "engine_sites", "title": "crystal", "requirement_ids": ["F-2", "F-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal.engine_sites.json",
-        "sha256": "d27150aea60e23206d28a1da51ae3e8edad73ee6928deba636ae8233bc7f8b62"
+        "sha256": "dc5ef7ddf938d4247df7dd2f7f43318156f1af7797e64bdb0fb78bcd759b4274"
       }}}]
     },
     {
       "id": "new-gates.engine-sites.gold",
       "stage": "physical-live",
-      "description": "U1-GS Gold engine-hook proof (its own capture sites, 2 bytes above Silver's)",
+      "description": "U1-GS Gold engine-hook proof (its own capture sites, 2 bytes above Silver's); U1G v2 runs: hatch, evolution, capture_box, npc_trade, gift",
       "axes": {"kind": "engine_sites", "title": "gold", "requirement_ids": ["F-2", "F-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold.engine_sites.json",
-        "sha256": "b7ff85c8160fd6c1993e3ea73b24a84aa8b46f546d0911e1239906048ef6fec7"
+        "sha256": "e36991718df69a9e303c41102c7c4b58bfa960b4e8358afa55f316877d8f9ffa"
       }}}]
     },
     {
       "id": "new-gates.engine-sites.silver",
       "stage": "physical-live",
-      "description": "U1-GS Silver engine-hook proof (its own capture sites; not shared with Gold, see O-23)",
+      "description": "U1-GS Silver engine-hook proof (its own capture sites; not shared with Gold, see O-23); U1G v2 runs: hatch, evolution, capture_box, npc_trade, gift",
       "axes": {"kind": "engine_sites", "title": "silver", "requirement_ids": ["F-2", "F-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver.engine_sites.json",
-        "sha256": "73ffbab5a6be52411239fe3a45c8898d9101762a7aea364ad8fee95224513ab8"
+        "sha256": "049501cdd5d1680b0dc352158e43b9860290b0ffd1e480fdfcfe4f0242900050"
       }}}]
     },
     {

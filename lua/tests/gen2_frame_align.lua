@@ -81,6 +81,7 @@ F.U1F_BUDGET = {max_frames=60000, max_phase_frames=24000}
 -- switch-trained to L7 and evolves natively (lua/tests/gen2_evolution_inputs.lua); evolution_species_published joins
 -- the expected sites last, with its own same-frame record (F.evolution_problem) and MODEL key_change.
 F.EVOLUTION_INPUTS = "lua/tests/gen2_evolution_inputs.lua"
+F.U1G_INPUTS = "lua/tests/gen2_u1g_inputs.lua"   -- card U1G: the synthetic-fixture runs (receipt v2)
 F.EVOLUTION_SITE = "evolution_species_published"
 F.EVOLUTION_BUDGET = {max_frames=600000, max_phase_frames=30000}   -- ponytail: ~25 wins + heals, not measured
 function F.expect(poison, pc, evolution)
@@ -705,6 +706,7 @@ function F.probe(ctx, pack, decoy_site, expect)
                 if logged[name] and #s.log < F.HIT_LOG then
                     s.log[#s.log + 1] = {seq=record.seq, frame=hit.frame, armed=probe.armed}
                 end
+                if probe.on_hit then probe.on_hit(name, hit.frame, probe.armed) end   -- card U1G: live effect reads
                 if name == "wild_ready" and record.battle_party == nil then
                     record.battle_party = ctx.sym("wPartyCount")[1]   -- the party before any capture
                 end
@@ -798,7 +800,7 @@ end
 
 -- The production decoder (lua/gen2/signals.lua faint_event) on the live hook, as a MODEL instance holding only the
 -- poison_faint row: model_only IO whose bank check is the live hROMBank byte. Not PHYSICAL authority.
-function F.poison_model(ctx, Signals, wrapper, pack, names, reads)
+function F.poison_model(ctx, Signals, wrapper, pack, names, reads, extra)
     local api, title = ctx.api, ctx.env.title
     local only = copy(pack)
     local keep = {}
@@ -806,6 +808,7 @@ function F.poison_model(ctx, Signals, wrapper, pack, names, reads)
     only.titles[title].sites = keep
     local options = binder_options(ctx, wrapper, only, "gen2-u1-model-" .. (names and "u1f" or "poison"))
     options.reads = reads or options.reads
+    for key, value in pairs(extra or {}) do options[key] = value end   -- card U1G: areas/encounters/gifts packs
     -- The production mapping (lua/gen2/run.lua bank_valid): ROM0/WRAM0/HRAM bank 0, ROMX the hROMBank shadow,
     -- WRAMX the SVBK bank (0 selects 1). Live run 2: a ROM-only check refused the WRAM guard reads.
     local function wram_bank()
@@ -831,7 +834,7 @@ function F.poison_model(ctx, Signals, wrapper, pack, names, reads)
                 out.events[#out.events + 1] = {kind=e.kind, cause=e.cause, site_id=e.site_id, slot=e.slot,
                     species=e.mon and e.mon.species_id, dvs=e.mon and e.mon.dv_word, collection=e.collection,
                     old_box=e.old_box, new_box=e.new_box, box_index=e.box_index, reason=e.reason, old_key=e.old_key,
-                    new_key=e.new_key}
+                    new_key=e.new_key, acquisition=e.acquisition, destination=e.destination, area_id=e.area_id}
             end
         end
     end
@@ -906,9 +909,14 @@ function F.main(api, getenv, SG)
         SG = SG or F.scripted_gate(root)
         local c = SG.context(api, getenv)
         -- the per-title U1 fixtures (lua/gen2/signals.lua S.U1_FIXTURES; gold_battle_errand: card gen2-u1e-poison)
-        assert(F.SYM[c.env.title] and F.U1_FIXTURES[c.case.name] == c.env.title, "U1 runs on a listed U1 fixture only")
         assert(c.qualify ~= nil and c.qualify.stage == "boot", "SLINK_GEN2_QUALIFY stage \"boot\" required")
         c.u1 = assert(c.json.decode(assert(getenv("SLINK_GEN2_U1_FACTS"), "SLINK_GEN2_U1_FACTS missing")))
+        -- card U1G: a synthetic fixture arrives through its base's case (the shared gate names cases by their base);
+        -- case.synth names the bytes actually staged, one of this title's lua/gen2/signals.lua S.SYNTH_FIXTURES.
+        local synth = c.case.synth
+        assert(F.SYM[c.env.title] and (synth == nil and F.U1_FIXTURES[c.case.name] == c.env.title
+            or c.u1.u1g ~= nil and type(synth) == "string" and synth:match("^" .. c.env.title .. "_synth_%l+$") ~= nil),
+            "U1 runs on a listed U1 fixture only")
         return c
     end)
     if not check("environment, facts, profile and running ROM/CGB bound", ok, not ok and ctx or nil) then
@@ -952,6 +960,12 @@ function F.main(api, getenv, SG)
     if not check("post-CONTINUE overworld arrival", arrived, not arrived and result or nil) then
         state.release()
         return finish("no arrival")
+    end
+    -- card U1G: an O-33 synthetic fixture runs its own short leg (lua/tests/gen2_u1g_inputs.lua) and prints one v2 run.
+    if ctx.u1.u1g then
+        return dofile(ctx.root .. "/" .. F.U1G_INPUTS).run(F, ctx, SG, {api=api, host=host, state=state,
+            wrapper=wrapper, pack=pack, Signals=Signals, negatives=negatives, log=log, check=check, finish=finish,
+            FI=FI, read_json=function(rel) return read_json(ctx, rel) end, evidence=evidence})
     end
 
     local poison = ctx.u1.poison ~= nil

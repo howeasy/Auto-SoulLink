@@ -1280,7 +1280,9 @@ def test_production_registers_exactly_the_u1_proven_sites_and_the_u2_kinds(title
     parts = world.parts
     assert parts.production_admitted is True and parts.qualification == "PHYSICAL_RECEIPTED"
     assert parts.title == title and parts.data.admission.gate.state == "ADMITTED"
-    proven = json.loads((RECEIPTS / f"{title}.engine_sites.json").read_text())["proven"]
+    receipt = json.loads((RECEIPTS / f"{title}.engine_sites.json").read_text())
+    # card U1G: a v2 receipt proves the union of its runs
+    proven = sorted({name for run in receipt.get("runs", [receipt]) for name in run["proven"]})
     status = world.client.signals.status(world.client.signals)
     assert status.evidence_level == "PHYSICAL" and status.runtime_authorized is True
     assert sorted(status.registered_sites.values()) == sorted(proven)
@@ -1445,7 +1447,8 @@ def test_each_title_admits_only_with_its_own_receipts(title, name, other):
 
 
 @pytest.mark.parametrize("name,path,value", [
-    ("crystal.engine_sites.json", ("evidence_level",), "MODEL"),
+    ("crystal.engine_sites.json", ("runs", 0, "evidence_level"), "MODEL"),
+    ("crystal.engine_sites.json", ("runs", 1, "synth", "sha256"), "0" * 64),   # card U1G: a forged disclosure
     ("crystal.write_window.json", ("runs", "town", "evidence_level"), "MODEL"),
     ("crystal_battle.qualification.json", ("fixtures", 0, "artifacts", "fixture", "sha256"), "0" * 64),
 ])

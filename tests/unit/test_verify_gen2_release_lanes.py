@@ -745,10 +745,11 @@ def test_every_new_gate_gap_is_red(tmp_path, mutation):
         entry = row("new-gates.engine-sites.crystal")["proofs"][0]["receipts"]["receipt"]
         path = tmp_path / entry["path"]
         receipt = json.loads(path.read_text(encoding="utf-8"))
-        name = sorted(receipt["proven"])[0]
-        raw = bytearray(bytes.fromhex(receipt["sites"][name]["expected_hex"]))
+        run = receipt["runs"][0] if "runs" in receipt else receipt   # card U1G: a v2 receipt's first run
+        name = sorted(run["proven"])[0]
+        raw = bytearray(bytes.fromhex(run["sites"][name]["expected_hex"]))
         raw[0] ^= 0x01
-        receipt["sites"][name]["expected_hex"] = raw.hex()
+        run["sites"][name]["expected_hex"] = raw.hex()
         path.write_text(json.dumps(receipt), encoding="utf-8")
         _repin(tmp_path, entry)
     elif mutation == "write_window_flipped":
