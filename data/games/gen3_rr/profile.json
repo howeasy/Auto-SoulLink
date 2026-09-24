@@ -142,6 +142,14 @@
           "expected_hex": "2D4B2D4A1A60",
           "rom_offset": 17237542
         },
+        "battlemon_otid_store": {
+          "expected_hex": "201C01210EF069FE1590",
+          "rom_offset": 200462
+        },
+        "battlemon_personality_store": {
+          "expected_hex": "201C00210EF0BCFE1290",
+          "rom_offset": 200296
+        },
         "box_level": {
           "expected_hex": "70B5051C0B21002201F084FA041C2404240C281C1921002201F07CFA031C0122104E1149E000001B80004118C87C20256D01684304308019006898420BD80C1C0132FA2A07DC9100E07C68430918891908689842F4D9501E0006000E70BC02BC084700004C511509EC987B09",
           "rom_offset": 256048
@@ -205,10 +213,13 @@
       },
       "_src": {
         "derived.BASESTATS_GROWTH_RATE_OFFSET": "rom:patch/build/slink_RR.gba sha1=ea5352f8a3b9073f8ae20870ad12857925d442cd box_level:LDRB@0x3E85C",
+        "derived.BATTLE_MON_OT_ID_OFF": "rom:patch/build/slink_RR.gba sha1=ea5352f8a3b9073f8ae20870ad12857925d442cd battlemon_otid_store:0x08030F0E..0x08030F18 CopyPlayerMonData REQUEST_ALL_BATTLE (byte-identical to FireRed 0x08030C04), BL GetMonData 0x0803FBE8, movs r1,#1 (MON_DATA_OT_ID), str r0,[sp,#imm] @0x08030F16",
+        "derived.BATTLE_MON_PERSONALITY_OFF": "rom:patch/build/slink_RR.gba sha1=ea5352f8a3b9073f8ae20870ad12857925d442cd battlemon_personality_store:0x08030E68..0x08030E72 CopyPlayerMonData REQUEST_ALL_BATTLE (byte-identical to FireRed 0x08030C04), BL GetMonData 0x0803FBE8, movs r1,#0 (MON_DATA_PERSONALITY), str r0,[sp,#imm] @0x08030E70",
         "derived.BATTLE_MON_STAT_STAGES_OFF": "archive/gen3-old-client:lua/memory_gba.lua:402-406 (old-client RR profile, production-tested: M.readStatStages; CFRU puts type3 at +0x18, so ATK..EVA start at +0x19)",
         "derived.BATTLE_MOVE_ENTRY_SIZE": "rom:patch/build/slink_RR.gba sha1=ea5352f8a3b9073f8ae20870ad12857925d442cd calculate_pp:0x41028..0x4102C index arithmetic",
         "derived.BATTLE_MOVE_PP_OFFSET": "rom:patch/build/slink_RR.gba sha1=ea5352f8a3b9073f8ae20870ad12857925d442cd calculate_pp:LDRB@0x41030",
         "derived.BATTLE_TYPE_DOUBLE_MASK": "archive/gen3-old-client:lua/memory_gba.lua:385 (old-client RR profile, production-tested)",
+        "derived.BATTLE_TYPE_LINK_MASK": "rom:patch/build/slink_RR.gba sha1=ea5352f8a3b9073f8ae20870ad12857925d442cd intro_store_controllers:InitBattleControllers 0x0800D30C: LDR@0x0800D30E pool@0x0800D320 (gBattleTypeFlags 0x02022B4C), movs r1,#imm@0x0800D312, ands@0x0800D314",
         "derived.BATTLE_TYPE_TRAINER_MASK": "archive/gen3-old-client:lua/memory_gba.lua:378 (old-client RR profile, production-tested)",
         "derived.B_ACTION_NOTHING_FAINTED": "rom:patch/build/slink_RR.gba sha1=ea5352f8a3b9073f8ae20870ad12857925d442cd htas_absent_action:movs r1,#imm@0x08014132; turn_actions_nothing_fainted:0x0825006C = HandleAction_NothingIsFainted|1",
         "derived.DISABLE_STRUCT_PERISH_TIMER_OFF": "rom:patch/build/slink_RR.gba sha1=ea5352f8a3b9073f8ae20870ad12857925d442cd perish_state34:0x090923C8..0x0909243C (CFRU end-turn state 34) adds r2,#8 @0x09092406; ldrb [r2,#7] @0x09092408; low nibble @0x0909240A..0C",
@@ -244,6 +255,8 @@
         "BALL_POCKET_ENC": false,
         "BASESTATS_ENTRY_SIZE": 28,
         "BASESTATS_GROWTH_RATE_OFFSET": 19,
+        "BATTLE_MON_OT_ID_OFF": 84,
+        "BATTLE_MON_PERSONALITY_OFF": 72,
         "BATTLE_MON_STAT_STAGES_OFF": 25,
         "BATTLE_MOVE_ENTRY_SIZE": 12,
         "BATTLE_MOVE_PP_OFFSET": 4,
@@ -252,6 +265,7 @@
         "BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF": 128,
         "BATTLE_STRUCT_MOVE_TARGET_OFF": 12,
         "BATTLE_TYPE_DOUBLE_MASK": 1,
+        "BATTLE_TYPE_LINK_MASK": 2,
         "BATTLE_TYPE_TRAINER_MASK": 8,
         "BOXES_PER_STORE": 25,
         "BOX_NAMES_OFFSET": 33604,

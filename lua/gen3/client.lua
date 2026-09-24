@@ -216,28 +216,35 @@ function Client.new(p)
     end
 
     -- ── wire shapes ────────────────────────────────────────────────────────────────
-    -- stat_stages rides only the active battlers' entries (docs/protocol.md §4.1, old client parity)
-    local function stages_of(battler)
-        local s = battler and call("read_stat_stages", battler)
-        return type(s) == "table" and arr(s) or nil
+    -- `active` and stat_stages ride a battler's entry (docs/protocol.md §4.1, old client parity)
+    -- only while gBattleMons[battler] holds that very mon (reads.battler_holds: in a switch the
+    -- party index moves before the mon is copied in, so the index alone would pin the outgoing
+    -- mon's stages on the incoming one). No stages at all in a link battle, nor while the pack
+    -- cannot say it is not one: there battler ids are not positions (pret
+    -- battle_controllers.c:151-168). Returns active, stages.
+    local function stages_of(b, battler, m)
+        if not battler or call("battler_holds", battler, m) ~= true then return false, nil end
+        local s = b and b.is_link == false and call("read_stat_stages", battler)
+        return true, type(s) == "table" and arr(s) or nil
     end
-    local function party_entry(m, active)
+    local function party_entry(m, active, b)
         local base = reads.party_base and reads.party_base()
         local raw = base and io.read_bytes(base + m.slot * R.PARTY_MON_SIZE, R.PARTY_MON_SIZE)
+        local held, stages = stages_of(b, active[m.slot], m)
         return { key = key(m), slot = m.slot, species_id = m.species, nickname = m.nickname,
                  level = m.level, hp = m.hp, maxHP = m.max_hp, status_cond = m.status,
                  moves = arr(m.moves), pp = arr(m.pp), pp_bonuses = m.pp_bonuses,
-                 held_item_id = m.held_item, active = active[m.slot] ~= nil,
-                 stat_stages = stages_of(active[m.slot]), blob_hex = raw and hex_of(raw) or nil }
+                 held_item_id = m.held_item, active = held,
+                 stat_stages = stages, blob_hex = raw and hex_of(raw) or nil }
     end
     local function party_wire(party)
-        local active = {}
+        local active, b = {}, nil
         if in_battle() then
-            local b = battle_now()
+            b = battle_now()
             for i, s in ipairs(b and b.active_player_battler_slots or {}) do active[s] = 2 * (i - 1) end
         end
         local out = arr({})
-        for i, m in ipairs(party) do out[i] = party_entry(m, active) end
+        for i, m in ipairs(party) do out[i] = party_entry(m, active, b) end
         return out
     end
     local function enemy_wire(b)
@@ -248,9 +255,10 @@ function Client.new(p)
         if (b.battlers_count or 0) >= 4 and idx[4] then active[idx[4]] = 3 end
         for _, m in ipairs(b.enemy_party or {}) do
             if m.species and m.species ~= 0 then
+                local held, stages = stages_of(b, active[m.slot], m)
                 out[#out + 1] = { species_id = m.species, level = m.level, hp = m.hp, maxHP = m.max_hp,
-                                  active = active[m.slot] ~= nil, held_item_id = m.held_item,
-                                  stat_stages = stages_of(active[m.slot]),
+                                  active = held, held_item_id = m.held_item,
+                                  stat_stages = stages,
                                   status_cond = m.status, moves = arr(m.moves), pp = arr(m.pp),
                                   pp_bonuses = m.pp_bonuses }
             end

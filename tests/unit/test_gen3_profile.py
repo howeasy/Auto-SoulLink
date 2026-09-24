@@ -169,6 +169,8 @@ def test_vanilla_storage_and_party_facts(name: str) -> None:
         "STATUS3_PERISH_SONG", "DISABLE_STRUCT_SIZE", "DISABLE_STRUCT_PERISH_TIMER_OFF",
         "B_ACTION_NOTHING_FAINTED",
         "BATTLE_MON_STAT_STAGES_OFF",   # C5-6 (tests/unit/test_stat_stages.py)
+        # G5-STAGES-COHERENCE (tests/unit/test_stat_stages.py TestStagesCoherence)
+        "BATTLE_MON_PERSONALITY_OFF", "BATTLE_MON_OT_ID_OFF", "BATTLE_TYPE_LINK_MASK",
     }
     c4_2a_sym_keys = {"ram.TRAINER_OPPONENT_ADDR", "rom.EXPERIENCE_TABLES_ADDR",
                        "rom.BATTLE_MOVES_ADDR", "rom.PP_UP_GET_MASK_ADDR",
@@ -277,6 +279,11 @@ RR_BINARY_VALUES = {
     ("derived", "DISABLE_STRUCT_SIZE"): 0x1C,
     ("derived", "DISABLE_STRUCT_PERISH_TIMER_OFF"): 0x0F,
     ("derived", "B_ACTION_NOTHING_FAINTED"): 13,
+    # G5-STAGES-COHERENCE: gBattleMons identity (CopyPlayerMonData, byte-identical to FireRed's)
+    # and BATTLE_TYPE_LINK (InitBattleControllers), equal to FR/LG's pret values.
+    ("derived", "BATTLE_MON_PERSONALITY_OFF"): 0x48,
+    ("derived", "BATTLE_MON_OT_ID_OFF"): 0x54,
+    ("derived", "BATTLE_TYPE_LINK_MASK"): 0x02,
 }
 
 
@@ -304,7 +311,8 @@ def test_rr_rom_pins_are_in_the_generated_profile():
                                     "intro_store_controllers", "intro_store_begin",
                                     "intro_getmons_body", "perish_state34",
                                     "perish_state34_pool", "htas_absent_action",
-                                    "htas_absent_action_pool", "turn_actions_nothing_fainted"])
+                                    "htas_absent_action_pool", "turn_actions_nothing_fainted",
+                                    "battlemon_personality_store", "battlemon_otid_store"])
 def test_rr_rom_anchor_mutation_refuses_the_facts(anchor):
     from tools.gen_gen3_profile import RR_ROM_ANCHORS, rr_rom_facts
 
@@ -346,6 +354,13 @@ def test_rr_rom_anchors_match_both_admitted_binaries(path, digest):
     assert int.from_bytes(raw[0x1092764:0x1092768], "little") == 0x02023DFC
     assert int.from_bytes(raw[0x1092770:0x1092774], "little") == 0x02023E0C
     assert int.from_bytes(raw[0x14164:0x14168], "little") == 0x02023D7C
+    # G5-STAGES-COHERENCE: CopyPlayerMonData is FireRed's own code, so the struct it fills is
+    # FireRed's BattlePokemon (personality +0x48, otId +0x54).
+    fr = REPO / "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba"
+    if fr.exists():
+        fr_raw = fr.read_bytes()
+        if hashlib.sha1(fr_raw).hexdigest() == "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc":
+            assert raw[0x30C04:0x313B0] == fr_raw[0x30C04:0x313B0]
 
 
 def test_rr_p_fields_cite_the_cfru_perish_case_and_the_htas_absent_path():

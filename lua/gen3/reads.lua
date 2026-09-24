@@ -520,6 +520,23 @@ function R.new(profile, io, pointers)
         return io.read_bytes(a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE + off, 7)
     end
 
+    -- True only while gBattleMons[battler] IS `mon` (a decoded party/enemy record): battler <
+    -- gBattlersCount and the same personality and otId (derived.BATTLE_MON_PERSONALITY_OFF /
+    -- BATTLE_MON_OT_ID_OFF). gBattlerPartyIndexes alone is not enough: a switch writes the
+    -- incoming index first and copies the mon into gBattleMons (resetting its stages) later
+    -- (pret src/battle_script_commands.c:4452-4463 vs :4470-4503; the intro has the same order).
+    function r.battler_holds(battler, mon)
+        local pers, otid = d.BATTLE_MON_PERSONALITY_OFF, d.BATTLE_MON_OT_ID_OFF
+        if type(a.BATTLE_MONS_ADDR) ~= "number" or type(a.BATTLERS_COUNT_ADDR) ~= "number"
+           or not pers or not otid then
+            return nil, "profile has no ram.BATTLE_MONS_ADDR/BATTLERS_COUNT_ADDR/"
+                       .. "derived.BATTLE_MON_PERSONALITY_OFF/BATTLE_MON_OT_ID_OFF"
+        end
+        if type(mon) ~= "table" or battler >= io.read_u8(a.BATTLERS_COUNT_ADDR) then return false end
+        local base = a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE
+        return io.read_u32(base + pers) == mon.personality and io.read_u32(base + otid) == mon.ot_id
+    end
+
     -- In-battle state, type flags, the trainer opponent id, the battler->party-slot mapping
     -- and the enemy party. Booleans whose mask/address the pack has not pinned come back
     -- absent rather than failing the whole read (gen3_rr today: is_trainer/is_doubles).
@@ -546,6 +563,7 @@ function R.new(profile, io, pointers)
         local type_flags = io.read_u32(a.BATTLE_TYPE_ADDR)
         if d.BATTLE_TYPE_TRAINER_MASK then out.is_trainer = (type_flags & d.BATTLE_TYPE_TRAINER_MASK) ~= 0 end
         if d.BATTLE_TYPE_DOUBLE_MASK then out.is_doubles = (type_flags & d.BATTLE_TYPE_DOUBLE_MASK) ~= 0 end
+        if d.BATTLE_TYPE_LINK_MASK then out.is_link = (type_flags & d.BATTLE_TYPE_LINK_MASK) ~= 0 end
         if type(a.TRAINER_OPPONENT_ADDR) == "number" then
             out.trainer_id = io.read_u16(a.TRAINER_OPPONENT_ADDR)
         end

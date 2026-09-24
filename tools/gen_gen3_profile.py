@@ -114,6 +114,17 @@ FRLG_DERIVED = {
     "BATTLE_MON_STAT_STAGES_OFF": (0x19, f"{PRET_PIN}:include/pokemon.h:187 (BattlePokemon."
                                    "statStages at 0x18); include/constants/pokemon.h:166-175 "
                                    "(STAT_HP=0, STAT_ATK=1 .. STAT_EVASION=7)"),
+    # G5-STAGES-COHERENCE: the identity a battler's stages are attached by (reads.lua
+    # battler_holds) and the link flag that withholds them (battler ids are not positions in a
+    # link battle, pret src/battle_controllers.c:151-168).
+    "BATTLE_MON_PERSONALITY_OFF": (0x48, f"{PRET_PIN}:include/pokemon.h:202 (BattlePokemon."
+                                   "personality); data/gen3/pret/pokefirered.sym CopyPlayerMonData "
+                                   "0x08030C04: str r0,[sp,#0x48] @0x08030E70 after "
+                                   "GetMonData(MON_DATA_PERSONALITY)"),
+    "BATTLE_MON_OT_ID_OFF": (0x54, f"{PRET_PIN}:include/pokemon.h:205 (BattlePokemon.otId); "
+                             "CopyPlayerMonData: str r0,[sp,#0x54] @0x08030F16 after "
+                             "GetMonData(MON_DATA_OT_ID)"),
+    "BATTLE_TYPE_LINK_MASK": (0x02, f"{PRET_PIN}:include/constants/battle.h:48 (BATTLE_TYPE_LINK)"),
 }
 
 # ── more P4 card C4-2a facts: symbols read straight out of each title's own .sym file (same
@@ -241,6 +252,15 @@ RR_ROM_ANCHORS = {
     "htas_absent_action_pool": (0x14164, "7c3d0202"),
     # sTurnActionsFuncsTable[13] (table 0x08250038) = HandleAction_NothingIsFainted|1
     "turn_actions_nothing_fainted": (0x25006C, "3d6d0108"),
+    # G5-STAGES-COHERENCE: CopyPlayerMonData's REQUEST_ALL_BATTLE builds a struct BattlePokemon
+    # at sp+0 (pret src/battle_controller_player.c; the whole function is byte-identical to
+    # FireRed's 0x08030C04..0x080313B0 in this ROM): movs r0,r4; movs r1,#field; bl GetMonData;
+    # str r0,[sp,#off] -- MON_DATA_PERSONALITY (0) -> +0x48, MON_DATA_OT_ID (1) -> +0x54.
+    "battlemon_personality_store": (0x30E68, "201c00210ef0bcfe1290"),
+    "battlemon_otid_store": (0x30F0E, "201c01210ef069fe1590"),
+    # InitBattleControllers: ldr r0,=gBattleTypeFlags; ldr r0,[r0]; movs r1,#LINK; ands r0,r1;
+    # beq -> InitSinglePlayerBtlControllers, else bl InitLinkBtlControllers (pret
+    # battle_controllers.c InitBattleControllers). Inside intro_store_controllers above.
 }
 
 
@@ -324,6 +344,28 @@ def rr_rom_facts(rom: bytes | None = None) -> dict:
     if read(0x25006C, 4) != 0x08016D3D:
         raise ValueError("RR sTurnActionsFuncsTable[13] is not HandleAction_NothingIsFainted")
     perish_where = "perish_state34:0x090923C8..0x0909243C (CFRU end-turn state 34)"
+    # G5-STAGES-COHERENCE: gBattleMons identity offsets and BATTLE_TYPE_LINK.
+    def battlemon_store(off: int, field: int) -> int:
+        if read(off, 2) != 0x1C20 or read(off + 2, 2) != 0x2100 | field:  # movs r0,r4; movs r1,#field
+            raise ValueError(f"RR CopyPlayerMonData witness moved at 0x{off:X}")
+        hi, lo = read(off + 4, 2), read(off + 6, 2)
+        if hi & 0xF800 != 0xF000 or lo & 0xF800 != 0xF800:
+            raise ValueError(f"RR CopyPlayerMonData witness lost its BL at 0x{off + 4:X}")
+        rel = ((hi & 0x7FF) << 12) | ((lo & 0x7FF) << 1)
+        getmon = 0x08000000 + off + 8 + (rel - (1 << 23) if rel & (1 << 22) else rel)
+        store = read(off + 8, 2)
+        if store & 0xFF00 != 0x9000:                                       # str r0,[sp,#imm8*4]
+            raise ValueError(f"RR CopyPlayerMonData witness is not a str r0,[sp] at 0x{off + 8:X}")
+        return (store & 0xFF) * 4, getmon
+    personality_off, getmon_a = battlemon_store(0x30E68, 0)
+    ot_id_off, getmon_b = battlemon_store(0x30F0E, 1)
+    if getmon_a != getmon_b:
+        raise ValueError("RR CopyPlayerMonData identity stores call different getters")
+    if literal(0xD30E) != 0x02022B4C or read(0xD310, 2) != 0x6800 or read(0xD314, 2) != 0x4008:
+        raise ValueError("RR InitBattleControllers no longer tests gBattleTypeFlags")
+    link_mask = imm8(0xD312, 0x2100)                                       # movs r1,#LINK
+    battlemon_where = ("CopyPlayerMonData REQUEST_ALL_BATTLE (byte-identical to FireRed "
+                       f"0x08030C04), BL GetMonData 0x{getmon_a:08X}")
     facts = {
         ("ram", "STATUS3_ADDR"): (literal(0x10923CA),
             f"{perish_where} LDR@0x090923CA pool@0x09092764"),
@@ -335,6 +377,15 @@ def rr_rom_facts(rom: bytes | None = None) -> dict:
             f"{perish_where} 0x090923EE..0x090923FE (movs #0xfd, subs #0xfc, adds #0x1b, muls)"),
         ("derived", "DISABLE_STRUCT_PERISH_TIMER_OFF"): (timer_off,
             f"{perish_where} adds r2,#8 @0x09092406; ldrb [r2,#7] @0x09092408; low nibble @0x0909240A..0C"),
+        ("derived", "BATTLE_MON_PERSONALITY_OFF"): (personality_off,
+            f"battlemon_personality_store:0x08030E68..0x08030E72 {battlemon_where}, "
+            "movs r1,#0 (MON_DATA_PERSONALITY), str r0,[sp,#imm] @0x08030E70"),
+        ("derived", "BATTLE_MON_OT_ID_OFF"): (ot_id_off,
+            f"battlemon_otid_store:0x08030F0E..0x08030F18 {battlemon_where}, "
+            "movs r1,#1 (MON_DATA_OT_ID), str r0,[sp,#imm] @0x08030F16"),
+        ("derived", "BATTLE_TYPE_LINK_MASK"): (link_mask,
+            "intro_store_controllers:InitBattleControllers 0x0800D30C: LDR@0x0800D30E "
+            "pool@0x0800D320 (gBattleTypeFlags 0x02022B4C), movs r1,#imm@0x0800D312, ands@0x0800D314"),
         ("derived", "B_ACTION_NOTHING_FAINTED"): (nothing_fainted,
             "htas_absent_action:movs r1,#imm@0x08014132; "
             "turn_actions_nothing_fainted:0x0825006C = HandleAction_NothingIsFainted|1"),
