@@ -50,6 +50,8 @@ S.MEMORIAL_BOX = 13        -- boxes.memorial_box = NUM_BOXES - 1 (sBox14)
 S.SAVERAM_BYTES = 0x8000 + 22
 S.KEY = "^%x%x%x%x:%x%x%x%x:%x%x$"
 S.LINK = "lua/tests/duo/scenario_gen2_link.lua"
+-- The engine faint A's half proves (scenario_gen2_poison.lua reuses this file with poison_faint/poison).
+S.ENGINE = {site_id="battle_faint", cause="battle"}
 S.JSON_TAGS = {LINK_SAVE=true, ENGINE_FAINT=true, FAINT_SENT=true, PARTY_HP_WRITE=true, CLIENT=true,
                DUO_GEN2=true, SAVE_WITNESS=true, ENGINE_CAPTURE=true, MEMORIAL_PREIMAGE=true, MEMORIAL_ACK=true}
 
@@ -71,29 +73,73 @@ function S.bench_record(h, key)
     return byte(0x22) * 256 + byte(0x23), byte(0x20), "memorial_preimage"
 end
 
-function S.run(h)
-    local link = dofile(h.root .. "/" .. S.LINK)
-    if h.player == "a" and not has(h.registered, "battle_faint") then
-        return false, "production signals lack battle_faint"
-    end
+-- The shared opening (both halves): CONTINUE, hello, go-file, the link catch and its native LINK_SAVE -> key.
+-- Reused by the whiteout, poison and changebox scenarios.
+function S.link_prelude(h)
     h.jitter()
     local arrived, why = h.arrive()
-    if not arrived then return false, "no CONTINUE arrival: " .. tostring(why) end
+    if not arrived then return nil, "no CONTINUE arrival: " .. tostring(why) end
     h.party()
-    if not h.wait(function() return h.sent.hello ~= nil end, S.HELLO_FRAMES) then return false, "the client never sent hello" end
-    if not h.wait(h.go, S.GO_FRAMES) then return false, "no go-file" end
+    if not h.wait(function() return h.sent.hello ~= nil end, S.HELLO_FRAMES) then return nil, "the client never sent hello" end
+    if not h.wait(h.go, S.GO_FRAMES) then return nil, "no go-file" end
     local played, outcome = h.play({settled=h.link_settled})
-    if not played then return false, "link route failed: " .. tostring(outcome) end
+    if not played then return nil, "link route failed: " .. tostring(outcome) end
     h.party()
     local key = h.rec.caught
-    if not key then return false, "no linked catch" end
+    if not key then return nil, "no linked catch" end
     local saved, save_why = h.link_save(key)
-    if not saved then return false, "link save: " .. tostring(save_why) end
+    if not saved then return nil, "link save: " .. tostring(save_why) end
+    return key
+end
 
+-- A: B's LINK_SAVE first (no force_faint may race B's linked save).
+function S.await_partner_link(h)
+    return h.wait(function() return h.partner_has("LINK_SAVE") end, S.PARTNER_FRAMES)
+end
+
+-- B's half: idle in the overworld until force_faint, the production checkpoint write, the readback.
+function S.bench_half(h, key)
+    if not h.wait(function()
+        for _, r in ipairs(h.rec.rx) do if r.cmd == "force_faint" and r.key == key then return true end end
+        return false
+    end, S.FORCE_FRAMES) then return false, "force_faint never arrived for " .. key end
+    if not h.wait(function() return h.rec.hp_write ~= nil end, S.WRITE_FRAMES) then
+        return false, "the production client never wrote the bench faint"
+    end
+    local hp, status, source = S.bench_record(h, key)
+    if hp == nil then return false, source end
+    h.log(string.format("BENCH_HP_STATUS %04X %02X", hp, status))
+    if hp ~= 0 or status ~= 0 then return false, "the bench faint did not zero HP/status (" .. source .. ")" end
+    return true
+end
+
+-- Both halves: the fainted key's memorial ack, the final native save + witness, the verdict, RECEIPT.
+function S.close(h, key, verdict, done)
+    if not h.wait(function() return h.rec.memorial[key] ~= nil end, S.MEMORIAL_FRAMES) then
+        return false, "no memorialize ack for " .. key
+    end
+    local ack = h.rec.memorial[key]
+    if ack.event ~= "memorialize_done" then return false, "memorialize failed: " .. tostring(ack.reason) end
+    local resaved, resave_why = h.save()
+    if not resaved then return false, "final save failed: " .. tostring(resave_why) end
+    local witnessed, witness_why = h.witness()
+    if not witnessed then return false, "save witness: " .. tostring(witness_why) end
+    h.frames(S.SETTLE_FRAMES)
+    local problems, receipt = verdict(h.lines, h.json)
+    if #problems > 0 then return false, table.concat(problems, "; ") end
+    h.jlog("RECEIPT", receipt)
+    return true, done
+end
+
+function S.run(h)
+    local link = dofile(h.root .. "/" .. S.LINK)
+    if h.player == "a" and not has(h.registered, S.ENGINE.site_id) then
+        return false, "production signals lack " .. S.ENGINE.site_id
+    end
+    local key, why = S.link_prelude(h)
+    if not key then return false, why end
     if h.player == "a" then
-        if not h.wait(function() return h.partner_has("LINK_SAVE") end, S.PARTNER_FRAMES) then
-            return false, "B never printed LINK_SAVE"
-        end
+        if not S.await_partner_link(h) then return false, "B never printed LINK_SAVE" end
         local slot = h.slot_of(key)
         if slot == nil then return false, "the linked mon left the party" end
         local fought, fight_why = h.sacrifice({target=slot, fainted=function()
@@ -104,34 +150,12 @@ function S.run(h)
             return false, "the client never sent faint for the engine faint"
         end
     else
-        if not h.wait(function()
-            for _, r in ipairs(h.rec.rx) do if r.cmd == "force_faint" and r.key == key then return true end end
-            return false
-        end, S.FORCE_FRAMES) then return false, "force_faint never arrived for " .. key end
-        if not h.wait(function() return h.rec.hp_write ~= nil end, S.WRITE_FRAMES) then
-            return false, "the production client never wrote the bench faint"
-        end
-        local hp, status, source = S.bench_record(h, key)
-        if hp == nil then return false, source end
-        h.log(string.format("BENCH_HP_STATUS %04X %02X", hp, status))
-        if hp ~= 0 or status ~= 0 then return false, "the bench faint did not zero HP/status (" .. source .. ")" end
+        local ok, bench_why = S.bench_half(h, key)
+        if not ok then return false, bench_why end
     end
     -- The server memorializes the fainted key (both sides); the final save must hold the Box 14 record.
-    if not h.wait(function() return h.rec.memorial[key] ~= nil end, S.MEMORIAL_FRAMES) then
-        return false, "no memorialize ack for " .. key
-    end
-    local ack = h.rec.memorial[key]
-    if ack.event ~= "memorialize_done" then return false, "memorialize failed: " .. tostring(ack.reason) end
-
-    local resaved, resave_why = h.save()
-    if not resaved then return false, "final save failed: " .. tostring(resave_why) end
-    local witnessed, witness_why = h.witness()
-    if not witnessed then return false, "save witness: " .. tostring(witness_why) end
-    h.frames(S.SETTLE_FRAMES)
-    local problems, receipt = S.verdict(h.lines, h.json, link.verdict)
-    if #problems > 0 then return false, table.concat(problems, "; ") end
-    h.jlog("RECEIPT", receipt)
-    return true, (h.player == "a" and "fainted " or "force_faint applied to ") .. key
+    return S.close(h, key, function(lines, json) return S.verdict(lines, json, link.verdict) end,
+                   (h.player == "a" and "fainted " or "force_faint applied to ") .. key)
 end
 
 -- Pure: marker lines -> problems (empty = PASS) and the receipt. link_verdict = scenario_gen2_link's S.verdict.
@@ -195,12 +219,13 @@ function S.verdict(lines, json, link_verdict)
     end
     local detail = {}
     if player == "a" then
-        need(client ~= nil and has(client.value.registered_sites, "battle_faint"), "production signals lack battle_faint")
+        need(client ~= nil and has(client.value.registered_sites, S.ENGINE.site_id), "production signals lack " .. S.ENGINE.site_id)
         need(#rows("PARTY_HP_WRITE") == 0, "A's party was written")
         local faint, sent = one("ENGINE_FAINT"), one("FAINT_SENT")
         if faint then
             local f = faint.value
-            need(f.site_id == "battle_faint" and f.cause == "battle", "engine faint is not battle_faint/battle")
+            need(f.site_id == S.ENGINE.site_id and f.cause == S.ENGINE.cause,
+                 "engine faint is not " .. S.ENGINE.site_id .. "/" .. S.ENGINE.cause)
             need(f.key == key, "the engine faint names another mon than the linked catch")
             need(link ~= nil and faint.at > link.at, "engine faint before LINK_SAVE")
         end

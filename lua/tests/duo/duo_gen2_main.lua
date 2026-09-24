@@ -65,6 +65,10 @@
   The faint scenario adds LINK_SAVE, ENGINE_FAINT, FAINT_SENT, PARTY_HP_WRITE and BENCH_HP_STATUS;
   scenario_gen2_faint.lua's header is their contract. The faint_active scenario adds B_ACTIVE, LINKED_ACTIVE,
   BATTLE_HOLD_WRITE, BATTLE_TRACE, NEXT_MON, REPLACED and LINKED_HP_STATUS (scenario_gen2_faint_active.lua).
+  Every scenario also sees the binder's PC and whiteout events: ENGINE_PC {frame, kind party_to_box|box_to_party|
+  pc_release|box_change, site_id, key, collection, box_index, old_box, new_box} and ENGINE_WHITEOUT {frame, site_id,
+  party=[{key, hp}]} (the pre-heal party, whiteout_before_heal). The pc_ops, changebox, whiteout and poison
+  scenarios' headers list what they add.
   The PASS is scenario_gen2_<name>.lua S.verdict over these very lines: CAUGHT/PASS without an engine
   capture, a sent capture and a native save observed by both the gate site and the client is a FAIL.
 
@@ -116,7 +120,7 @@ local timeout = D.timeout_frames or 150000
 -- ── receipts the harness keeps (never an oracle of their own; S.verdict re-reads the lines) ──
 local rec = {captures=0, capture=nil, sent_keys={}, caught=nil, client_saves=0, save_completed_frame=nil,
              faint=nil, faint_sent=nil, rx={}, hp_write=nil,
-             hellos={}, tx=0, memorial={}}
+             hellos={}, tx=0, memorial={}, faint_keys={}, pc={}, whiteout=nil}
 local sent = {}
 local function maybe_caught()
     local key = rec.capture and rec.capture.key
@@ -263,6 +267,22 @@ gen2.on_event = function(self, ev)
                    slot=ev.slot}
         jlog("ENGINE_FAINT", f)
         rec.faint = rec.faint or f
+        rec.faint_keys[f.key] = rec.faint_keys[f.key] or f
+    elseif type(ev) == "table" and (ev.kind == "party_to_box" or ev.kind == "box_to_party" or ev.kind == "pc_release"
+                                    or ev.kind == "box_change") then
+        local m = type(ev.mon) == "table" and ev.mon or {}
+        local row = {frame=emu.framecount(), kind=ev.kind, site_id=tostring(ev.site_id), key=m.key and tostring(m.key) or nil,
+                     collection=ev.collection, box_index=ev.box_index, old_box=ev.old_box, new_box=ev.new_box}
+        jlog("ENGINE_PC", row)
+        rec.pc[#rec.pc + 1] = row
+    elseif type(ev) == "table" and ev.kind == "whiteout" then
+        local party = {}
+        for _, m in ipairs(type(ev.party) == "table" and ev.party.mons or {}) do
+            party[#party + 1] = {key=tostring(m.key), hp=m.hp}
+        end
+        local row = {frame=emu.framecount(), site_id=tostring(ev.site_id), party=json.array(party)}
+        jlog("ENGINE_WHITEOUT", row)
+        rec.whiteout = rec.whiteout or row
     elseif type(ev) == "table" and ev.kind == "observation" and ev.site_id == "save_completed" then
         rec.client_saves = rec.client_saves + 1
         rec.save_completed_frame = emu.framecount()
@@ -447,6 +467,15 @@ if S.FAINT_INPUTS then   -- the faint route's UI origins are watched from the fi
     local fok, fwhy = pcall(FI.prepare, ctx, SG, ctx.u1)
     if not fok then finish(false, "faint inputs: " .. tostring(fwhy)) end
 end
+-- The Bill's PC leg (lua/tests/gen2_pc_inputs.lua) watches its UI origins from the first hook on; the poison leg
+-- and the PC walk share lua/tests/gen2_poison_inputs.lua (PI.step_toward).
+local PC, PI
+if S.PC_INPUTS or S.POISON_INPUTS then PI = dofile(ROOT .. "/lua/tests/gen2_poison_inputs.lua") end
+if S.PC_INPUTS then
+    PC = dofile(ROOT .. "/lua/tests/gen2_pc_inputs.lua")
+    local pok, pwhy = pcall(PC.prepare, ctx, SG, ctx.u1)
+    if not pok then finish(false, "PC inputs: " .. tostring(pwhy)) end
+end
 local state = SG.hooks(ctx)
 local idle = {}
 for _, button in ipairs(SG.BUTTONS) do idle[button] = false end
@@ -487,6 +516,11 @@ function h.identity()
     local okq, count = pcall(ctx.sym, "wPartyCount", 0, 1)
     if not okp or not okq then return nil end
     return {ot_id=id[1] * 256 + id[2], party_count=count[1]}
+end
+-- sBoxCount of the ACTIVE box (SRAM, the PC leg's own RAM fact), 0-20.
+function h.box_count()
+    local sym = ctx.u1.pc.ram.sBoxCount
+    return api.read_u8(sym.bank * 0x2000 + sym.addr - 0xA000, "CartRAM")
 end
 -- The production writer's permit log length (0 for a stand-in client that composes none).
 function h.write_count() return #((parts.writes or {}).log or {}) end
@@ -635,8 +669,28 @@ end
 -- faint adds hold/any_move/observed and its own phase bound (scenario_gen2_faint_active.lua).
 function h.sacrifice(opts)
     local driver, observe, spec = FI.new(ctx, SG, F, {target=opts.target, fainted=opts.fainted, hold=opts.hold,
-        any_move=opts.any_move, observed=opts.observed, max_frames=math.max(1, timeout - api.framecount()),
+        any_move=opts.any_move, observed=opts.observed, max_battles=opts.max_battles,
+        max_frames=math.max(1, timeout - api.framecount()),
         max_phase_frames=opts.max_phase_frames or D.max_phase_frames})
+    return play(spec, driver, observe)
+end
+-- Bill's PC (gen2_pc_inputs.lua mode "pc"): walk to the Cherrygrove #MON CENTER PC, run `steps` (its opts.steps
+-- plan), TURN OFF, back on the overworld at the PC.
+function h.pc(steps)
+    local driver, observe, spec = PC.new(ctx, SG, F, PI, {mode="pc", steps=steps,
+        max_frames=math.max(1, timeout - api.framecount()), max_phase_frames=D.max_phase_frames or F.BUDGET.max_phase_frames})
+    return play(spec, driver, observe)
+end
+-- The overworld poison leg (gen2_poison_inputs.lua): opts.target (party slot) is poisoned and faints to
+-- DoPoisonStep once opts.fainted(); the leg ends on the park tile (phase "park"), never back in the grass.
+function h.poison(opts)
+    local driver, observe, spec = PI.new(ctx, SG, F, FI, {target=opts.target, fainted=opts.fainted,
+        max_frames=math.max(1, timeout - api.framecount()), max_phase_frames=F.POISON_BUDGET.max_phase_frames})
+    local step = driver.step
+    function driver.step(point)
+        if driver.phase == "park" then driver.phase = driver.terminal end
+        return step(point)
+    end
     return play(spec, driver, observe)
 end
 

@@ -2636,6 +2636,283 @@ def test_attach_plants_are_disclosed_wram_writes_that_read_back(tmp_path, monkey
     assert writes[1]["bytes_after"] == "%02x" % HAUNTER and writes[1]["symbol"] == "wTempWildMonSpecies"
 
 
+# --- DUO-WAVE-C: whiteout, pc_ops, changebox (roadmap rows 9-11) --------------------------------------
+
+DRIVER_FILES += ("lua/tests/duo/scenario_gen2_whiteout.lua", "lua/tests/duo/scenario_gen2_pc_ops.lua",
+                 "lua/tests/duo/scenario_gen2_changebox.lua", "lua/tests/gen2_pc_inputs.lua",
+                 "lua/tests/gen2_poison_inputs.lua")
+STARTER = "1111:B542:9E"
+OTHER = "0000:0000:01"
+
+
+def wave_c(name, lines):
+    """The pure verdict of scenario_gen2_<name>.lua (whiteout/pc_ops: over the link verdict; changebox: its B half)."""
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    json_codec = lua.execute((ROOT / "lua/json_codec.lua").read_text(encoding="utf-8"))
+    link = lua.execute(SCENARIO.read_text(encoding="utf-8"))
+    s = lua.execute((ROOT / f"lua/tests/duo/scenario_gen2_{name}.lua").read_text(encoding="utf-8"))
+    if name == "changebox":
+        problems, detail = s.verdict(lua.table_from(lines), json_codec)
+        return list(problems.values()), detail
+    problems, receipt = s.verdict(lua.table_from(lines), json_codec, link.verdict)
+    return list(problems.values()), receipt
+
+
+def retag(lines, player, scenario, sites):
+    out = []
+    for line in lines:
+        tag, body = line.split(" ", 1)
+        if tag in ("DUO_GEN2", "CLIENT"):
+            value = json.loads(body)
+            value.update({"player": player, "scenario": scenario} if tag == "DUO_GEN2" else {"registered_sites": sites})
+            line = f"{tag} {json.dumps(value)}"
+        out.append(line)
+    return out
+
+
+def edit_tag(lines, tag, index=0, **changes):
+    out, seen = [], 0
+    for line in lines:
+        if line.startswith(tag + " "):
+            if seen == index:
+                value = json.loads(line[len(tag) + 1:])
+                value.update(changes)
+                line = f"{tag} {json.dumps(value)}"
+            seen += 1
+        out.append(line)
+    return out
+
+
+def without(lines, prefix, index=None):
+    """Drop every line starting with prefix, or only its index-th occurrence."""
+    out, seen = [], 0
+    for line in lines:
+        if line.startswith(prefix):
+            seen += 1
+            if index is None or seen - 1 == index:
+                continue
+        out.append(line)
+    return out
+
+
+def move(lines, prefix, before_prefix):
+    """Move the first line starting with prefix to just before the first line starting with before_prefix."""
+    lines = list(lines)
+    row = next(line for line in lines if line.startswith(prefix))
+    lines.remove(row)
+    at = next(i for i, line in enumerate(lines) if line.startswith(before_prefix))
+    return lines[:at] + [row] + lines[at:]
+
+
+WHITEOUT_SITES = ["battle_faint", "capture_party", "whiteout_before_heal"]
+
+
+def whiteout_lines(write=False):
+    j = json.dumps
+    a = faint_lines("a")
+    base = retag(a[:9], "a", "gen2_whiteout", WHITEOUT_SITES)   # through LINK_SAVE
+    record = "00" * 32 + "0000" + "00" * 14
+    middle = [
+        "ENGINE_FAINT " + j({"frame": 2000, "site_id": "battle_faint", "cause": "battle", "key": STARTER, "slot": 0}),
+        "FAINT_SENT " + j({"frame": 2001, "key": STARTER, "seq": 18}),
+        "ENGINE_FAINT " + j({"frame": 3000, "site_id": "battle_faint", "cause": "battle", "key": KEY, "slot": 1}),
+        "FAINT_SENT " + j({"frame": 3001, "key": KEY, "seq": 20}),
+        "ENGINE_WHITEOUT " + j({"frame": 3050, "site_id": "whiteout_before_heal",
+                                "party": [{"key": STARTER, "hp": 0}, {"key": KEY, "hp": 0}]}),
+        "TX " + j({"event": "whiteout", "seq": 21}, separators=(",", ":")),
+        "REVIVED " + j({"frame": 3060, "key": KEY, "slot": 1, "hp": 14}),
+        "RX force_faint key=" + KEY]
+    if write:
+        middle.append("PARTY_HP_WRITE " + j({"frame": 3100, "key": KEY, "slot": 1, "kind": "party_hp", "ok": True}))
+    middle += ["MEMORIAL_PREIMAGE " + j({"frame": 3300, "key": KEY, "slot": 1, "raw_hex": record,
+                                         "ot_raw_hex": "80" * 11, "nickname_raw_hex": "81" * 11, "species_marker": 16}),
+               "MEMORIAL_ACK " + j({"frame": 3301, "event": "memorialize_done", "key": KEY, "box": 13})]
+    return base + middle + [a[-1]]
+
+
+@pytest.mark.parametrize("write", [False, True], ids=["memorial-first", "repair-written"])
+def test_whiteout_verdict_passes_either_repair_order(write):
+    problems, receipt = wave_c("whiteout", whiteout_lines(write))
+    assert problems == [], problems
+    assert receipt["schema"] == "gen2-duo-whiteout-v1" and receipt["revived"]["hp"] == 14
+    assert receipt["repair"]["outcome"] == ("written" if write else "memorial_first")
+
+
+TX_WHITEOUT = "TX " + json.dumps({"event": "whiteout", "seq": 30}, separators=(",", ":"))
+
+
+@pytest.mark.parametrize("lines,match", [
+    (retag(whiteout_lines(), "a", "gen2_whiteout", ["battle_faint"]), "lack whiteout_before_heal"),
+    (edit_tag(edit_tag(whiteout_lines(), "ENGINE_FAINT", 0, key=KEY), "ENGINE_FAINT", 1, key=STARTER), "did not faint last"),
+    (without(whiteout_lines(), "ENGINE_FAINT", 0), "1 ENGINE_FAINT markers"),
+    (edit_tag(whiteout_lines(), "ENGINE_WHITEOUT", party=[{"key": STARTER, "hp": 0}, {"key": KEY, "hp": 3}]), "had HP"),
+    (edit_tag(whiteout_lines(), "ENGINE_WHITEOUT", party=[{"key": STARTER, "hp": 0}]), "not [starter, linked catch]"),
+    (move(whiteout_lines(), "ENGINE_WHITEOUT", "ENGINE_FAINT"), "precedes the linked faint"),
+    (without(whiteout_lines(), "TX "), "0 whiteout events"),
+    (whiteout_lines()[:-1] + [TX_WHITEOUT, whiteout_lines()[-1]], "2 whiteout events"),
+    (without(whiteout_lines(), "REVIVED"), "missing REVIVED"),
+    (edit_tag(whiteout_lines(), "REVIVED", hp=0), "alive"),
+    (without(whiteout_lines(), "RX force_faint"), "no O-24 force_faint"),
+    (move(whiteout_lines(), "RX force_faint", "REVIVED"), "no O-24 force_faint"),
+    (move(whiteout_lines(True), "PARTY_HP_WRITE", "RX force_faint"), "precedes the re-issued force_faint"),
+    (edit_tag(whiteout_lines(True), "PARTY_HP_WRITE", key=OTHER), "hit another mon"),
+    (without(whiteout_lines(), "MEMORIAL_ACK"), "no memorial"),
+    (edit_tag(whiteout_lines(), "SAVE_WITNESS", gate_saves=1), "no native save after LINK_SAVE"),
+], ids=["no-site", "catch-first", "one-faint", "pre-heal-hp", "short-party", "whiteout-first", "no-tx", "two-tx",
+        "no-revived", "revived-dead", "no-repair", "repair-before-revive", "write-first", "write-other", "no-memorial",
+        "no-new-save"])
+def test_whiteout_verdict_refuses_a_tampered_or_reordered_half(lines, match):
+    problems, receipt = wave_c("whiteout", lines)
+    assert receipt is None and any(match in p for p in problems), problems
+
+
+PC_SITES = ["pc_deposit_begin", "pc_deposit_complete", "pc_withdraw_begin", "pc_withdraw_complete",
+            "pc_release_box_begin", "pc_release_box_complete"]
+
+
+def pc_lines(player):
+    j = json.dumps
+    a = faint_lines(player)
+    base = retag(a[:9], player, "gen2_pc_ops", PC_SITES if player == "a" else [])
+    base.insert(8, "RX box_mon key=" + KEY)   # the link's own quarantine traffic, before LINK_SAVE: never counted
+    if player == "a":
+        def pc(frame, kind, **extra):
+            return "ENGINE_PC " + j({"frame": frame, "kind": kind, "site_id": "x", "key": KEY, **extra})
+
+        def tx(event):
+            return "TX " + j({"event": event, "key": KEY, "seq": 1}, separators=(",", ":"))
+        middle = [pc(2000, "party_to_box", box_index=0), tx("party_to_box"),
+                  pc(2100, "box_to_party", box_index=0), tx("box_to_party"),
+                  "PC_STATE " + j({"frame": 2200, "phase": "deposit-withdraw", "party_count": 2, "box_count": 0, "cur_box": 0}),
+                  pc(2400, "party_to_box", box_index=0), tx("party_to_box"),
+                  pc(2500, "pc_release", collection="box", box_index=0),
+                  "PC_STATE " + j({"frame": 2600, "phase": "deposit-release", "party_count": 1, "box_count": 0, "cur_box": 0})]
+    else:
+        def partner(n, cmd, frame):
+            party = cmd == "party_mon"
+            return f"PC_PARTNER_{n} " + j({"frame": frame, "cmd": cmd, "key": KEY, "in_party": party,
+                                           "party_count": 2 if party else 1, "box_count": 0 if party else 1, "cur_box": 0})
+        middle = ["RX box_mon key=" + KEY, partner(1, "box_mon", 2050),
+                  "RX party_mon key=" + KEY, partner(2, "party_mon", 2150),
+                  "RX box_mon key=" + KEY, partner(3, "box_mon", 2450)]
+    return base + middle + [a[-1]]
+
+
+@pytest.mark.parametrize("player", ["a", "b"])
+def test_pc_ops_verdict_passes_each_complete_half(player):
+    problems, receipt = wave_c("pc_ops", pc_lines(player))
+    assert problems == [], problems
+    assert receipt["schema"] == "gen2-duo-pc-ops-v1" and receipt["player"] == player
+
+
+TX_OWN = "TX " + json.dumps({"event": "party_to_box", "key": KEY}, separators=(",", ":"))
+
+
+@pytest.mark.parametrize("lines,match", [
+    (retag(pc_lines("a"), "a", "gen2_pc_ops", PC_SITES[:4]), "lack pc_release_box_begin"),
+    (without(pc_lines("a"), "ENGINE_PC", 3), "3 ENGINE_PC"),
+    (edit_tag(pc_lines("a"), "ENGINE_PC", 3, collection="party"), "pc_release/box"),
+    (edit_tag(pc_lines("a"), "ENGINE_PC", 1, key=OTHER), "box_to_party for the linked key"),
+    (without(pc_lines("a"), "TX ", 1), "not party_to_box, box_to_party"),
+    (move(pc_lines("a"), "TX ", "ENGINE_PC"), "precedes its engine event"),
+    (edit_tag(pc_lines("a"), "PC_STATE", 1, box_count=1), "box empty"),
+    (pc_lines("a")[:-1] + ["RX force_faint key=" + KEY, pc_lines("a")[-1]], "death command"),
+    (without(pc_lines("b"), "PC_PARTNER_3"), "missing PC_PARTNER_3"),
+    (without(pc_lines("b"), "RX box_mon", 2), "no RX box_mon"),
+    (edit_tag(pc_lines("b"), "PC_PARTNER_2", in_party=False), "PC_PARTNER_2 state differs"),
+    (pc_lines("b")[:-1] + [TX_OWN, pc_lines("b")[-1]], "storage event of its own"),
+    (move(without(pc_lines("b"), "RX box_mon", 0), "PC_PARTNER_1", "RX box_mon"), "precedes its command"),
+], ids=["no-site", "no-release", "party-release", "withdraw-other-key", "no-withdraw-send", "send-first",
+        "box-not-empty", "a-death", "b-missing-third", "b-no-third-rx", "b-not-in-party", "b-sent", "b-early"])
+def test_pc_ops_verdict_refuses_a_tampered_or_reordered_half(lines, match):
+    problems, receipt = wave_c("pc_ops", lines)
+    assert receipt is None and any(match in p for p in problems), problems
+
+
+def changebox_lines():
+    j = json.dumps
+    b = retag(faint_lines("b"), "b", "gen2_changebox", ["change_box_begin", "change_box_loaded"])
+
+    def change(frame, old, new):
+        return "ENGINE_PC " + j({"frame": frame, "kind": "box_change", "site_id": "change_box_loaded",
+                                 "old_box": old, "new_box": new})
+    return b[:-1] + [change(3400, 0, 13), "CHANGEBOX_TO " + j({"frame": 3450, "cur_box": 13, "box_count": 1}),
+                     change(3500, 13, 0), "CHANGEBOX_BACK " + j({"frame": 3550, "cur_box": 0, "box_count": 0}), b[-1]]
+
+
+def test_changebox_verdict_passes_the_round_trip_on_top_of_the_faint_b_half():
+    problems, detail = wave_c("changebox", changebox_lines())
+    assert problems == [] and detail["to"]["box_count"] == 1
+    assert faint_verdict(changebox_lines())[0] == []   # the faint B half still holds under the extra markers
+
+
+@pytest.mark.parametrize("lines,match", [
+    (retag(changebox_lines(), "b", "gen2_changebox", []), "lack change_box_begin"),
+    (edit_tag(changebox_lines(), "CHANGEBOX_TO", box_count=0), "did not list the memorial"),
+    (edit_tag(changebox_lines(), "ENGINE_PC", 0, new_box=1), "box change 1 differs"),
+    (without(changebox_lines(), "CHANGEBOX_BACK"), "once each"),
+    (move(changebox_lines(), "SAVE_WITNESS", "CHANGEBOX_BACK"), "precedes the box change back"),
+    (changebox_lines()[:-1] + ['TX {"event":"box_to_party"}', changebox_lines()[-1]], "not a transfer"),
+], ids=["no-site", "memorial-unlisted", "wrong-box", "no-back", "save-first", "transfer"])
+def test_changebox_verdict_refuses_a_tampered_round_trip(lines, match):
+    problems, _ = wave_c("changebox", lines)
+    assert any(match in p for p in problems), problems
+
+
+@pytest.mark.parametrize("scenario,player,site", [
+    ("gen2_whiteout", "a", "battle_faint"), ("gen2_pc_ops", "a", "pc_deposit_begin"),
+    ("gen2_changebox", "b", "change_box_begin")])
+def test_wave_c_halves_refuse_before_any_input_without_their_sites(tmp_path, scenario, player, site):
+    lines, sim, _ = run_driver(tmp_path, scenario=scenario, player=player)
+    assert lines[-1] == f"RESULT: FAIL (production signals lack {site})", lines[-5:]
+    assert not sim.inputs
+
+
+# --- DUO-WAVE-C: poison (roadmap row 12) --------------------------------------------------------------
+
+DRIVER_FILES += ("lua/tests/duo/scenario_gen2_poison.lua",)
+
+
+def poison_verdict(lines):
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    json_codec = lua.execute((ROOT / "lua/json_codec.lua").read_text(encoding="utf-8"))
+    link = lua.execute(SCENARIO.read_text(encoding="utf-8"))
+    poison = lua.execute((ROOT / "lua/tests/duo/scenario_gen2_poison.lua").read_text(encoding="utf-8"))
+    faint = poison.faint(str(ROOT).replace("\\", "/"))
+    problems, receipt = faint.verdict(lua.table_from(lines), json_codec, link.verdict)
+    return list(problems.values()), receipt
+
+
+def poison_lines(player):
+    sites = ["battle_end", "capture_party", "poison_faint"]
+    lines = retag(faint_lines(player), player, "gen2_poison", sites)
+    return edit_tag(lines, "ENGINE_FAINT", site_id="poison_faint", cause="poison") if player == "a" else lines
+
+
+@pytest.mark.parametrize("player", ["a", "b"])
+def test_poison_verdict_passes_each_complete_half(player):
+    problems, receipt = poison_verdict(poison_lines(player))
+    assert problems == [], problems
+    assert receipt["schema"] == "gen2-duo-poison-v1" and receipt["player"] == player
+
+
+@pytest.mark.parametrize("lines,match", [
+    (edit_tag(poison_lines("a"), "ENGINE_FAINT", site_id="battle_faint", cause="battle"), "not poison_faint/poison"),
+    (retag(poison_lines("a"), "a", "gen2_poison", ["battle_faint"]), "lack poison_faint"),
+    (without(poison_lines("a"), "FAINT_SENT"), "missing FAINT_SENT"),
+    (without(poison_lines("b"), "PARTY_HP_WRITE"), "missing PARTY_HP_WRITE"),
+], ids=["battle-death", "no-site", "no-send", "b-no-write"])
+def test_poison_verdict_refuses_a_battle_death_or_a_missing_propagation(lines, match):
+    problems, receipt = poison_verdict(lines)
+    assert receipt is None and any(match in p for p in problems), problems
+
+
+def test_poison_a_refuses_before_any_input_without_a_registered_poison_faint(tmp_path):
+    lines, sim, _ = run_driver(tmp_path, scenario="gen2_poison", player="a")
+    assert lines[-1] == "RESULT: FAIL (production signals lack poison_faint)", lines[-5:]
+    assert not sim.inputs
+
+
 def test_forced_save_image_is_required_on_the_proposer_only():
     # coordinator ruling after 9805ac1c: the negative cases compare A's final against this image, byte-exact
     for case in ("decline_new", "timeout", "new"):
