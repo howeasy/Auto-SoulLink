@@ -347,13 +347,13 @@
       "overlay": {
         "artifact": "silver_overlay",
         "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
-        "md5": "7e1c733daeaa9c34ad1b6dd2247a1925",
+        "md5": "cf78aa10e5b29f3fe1b2b70ebbf8ee64",
         "ram": {
           "wAttrmap": 52441,
           "wSlinkMailbox": 49625,
           "wTilemap": 50080
         },
-        "rom_sha1": "76c6c112fed6edc7ad88202ab6bc44d31da5f803",
+        "rom_sha1": "942060eea71c38395584dfa42df302a30441b5af",
         "sym": "silver_slink.sym",
         "sym_sha256": "44c3821935b0a82c83c9ba1fb51dcde0bd74ab787d02618a7df9c8570a0e3dbb",
         "trade": {

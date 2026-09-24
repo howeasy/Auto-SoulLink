@@ -119,7 +119,7 @@ class TradeMachine(Machine):
         return (not self.r["f"] & 0x80, bool(self.r["f"] & 0x80),
                 not self.r["f"] & 0x10, bool(self.r["f"] & 0x10))[index]
 
-    def run(self, symbol, budget=200000):
+    def run(self, symbol, budget=1000000):  # a full 3600-frame APPLY wait fits
         old_pc, old_bank = self.pc, self.bank
         self.bank, self.pc = self.symbols[symbol]
         self.push(0xFFFF)
@@ -573,3 +573,93 @@ def test_compiled_dispatcher_bank_mutation_admits_wrong_caller(compiled):
     machine.rom = bytes(rom)
     machine.run("SlinkTradeDispatch")
     assert machine.commits == [(0, 1)]
+
+
+def trade_bounds():
+    source = (ROOT / "patch/gen2/src/trade_service.asm").read_text()
+    return {name: int(value) for name, value in
+            re.findall(r"DEF SLINK_TRADE_(QUERY|OFFER|APPLY)_FRAMES EQU (\d+)", source)}
+
+
+def test_host_wait_bounds_fit_real_play_and_the_lua_deadlines():
+    """Product floor: a network round trip at 1x, and the partner's PROMPT window inside APPLY."""
+    bounds = trade_bounds()
+    assert bounds["QUERY"] >= 300 and bounds["OFFER"] >= 300, "a real host answers over the internet"
+    lua = (ROOT / "lua/gen2/client.lua").read_text()
+    tick = int(re.search(r"TICK_INTERVAL = (\d+)", lua).group(1))
+    pickup = int(re.search(r"TRADE_PICKUP_FRAMES = (\d+)", lua).group(1))
+    # proposer holds APPLY while the partner's PROMPT is delivered (a tick), picked up (<= pickup),
+    # answered by a human (>= 20 s left), and our apply_trade is delivered (a tick)
+    assert bounds["APPLY"] - pickup - 2 * tick >= 1200
+
+
+class SlowHost(LeaseHost):
+    """Answers one stage's question only on the lag-th frame it has been pending (a slow network)."""
+
+    def __init__(self, compiled, stage, lag, press_b=None):
+        super().__init__(compiled)
+        self.stage, self.lag, self.press_b, self.waited = stage, lag, press_b, 0
+
+    def pending(self):
+        command, generation, ack = self.ram[self.frame + 5:self.frame + 8]
+        if self.stage == "query":
+            return command == 1 and generation != ack
+        if self.stage == "offer":
+            return command == 2 and not self.offered
+        return command == 2 and self.offered and not self.applied
+
+    def host_step(self):
+        if self.pending():
+            self.waited += 1
+            if self.waited == self.press_b:
+                self.ram[self.address("hJoyPressed")] = 2  # PAD_B
+                return
+            if self.waited < self.lag:
+                return
+        super().host_step()
+
+
+def accepted_lag(stage):
+    bounds = trade_bounds()
+    # WaitAck checks after its last frame; WaitApply spends its last frame on the countdown
+    return bounds[stage.upper()] - (1 if stage == "apply" else 0)
+
+
+@pytest.mark.parametrize("stage", ["query", "offer", "apply"])
+def test_compiled_slow_host_is_answered_up_to_the_exact_bound(compiled, stage):
+    last = accepted_lag(stage)
+    machine = SlowHost(compiled, stage, last)
+    machine.enter()
+    assert machine.commits == [(0, 0)], f"a host answering on frame {last} must still trade"
+    late = SlowHost(compiled, stage, last + 1)
+    late.enter()
+    assert late.commits == [] and "DONE" not in late.events
+
+
+@pytest.mark.parametrize("stage", ["query", "offer", "apply"])
+def test_compiled_b_cancels_during_the_long_wait(compiled, stage):
+    machine = SlowHost(compiled, stage, lag=10**9, press_b=120)
+    machine.enter()
+    assert machine.waited == 120, "B must end the wait on the frame it is pressed"
+    assert machine.commits == [] and machine.menus == (0 if stage == "query" else 1)
+
+
+@pytest.mark.parametrize("stage,old", [("query", 30), ("offer", 180)])
+def test_compiled_old_bound_mutant_misses_a_slow_host(compiled, stage, old):
+    lag = 300  # a 5 s round trip at 1x
+    assert SlowHost(compiled, stage, lag).enter() is None
+    machine = SlowHost(compiled, stage, lag)
+    new = trade_bounds()[stage.upper()]
+    wait_ack = machine.address("SlinkTradeWaitAck").to_bytes(2, "little")
+    needle = bytes([0x01, *new.to_bytes(2, "little"), 0xCD, *wait_ack])  # ld bc, N; call SlinkTradeWaitAck
+    rom = bytearray(machine.rom)
+    hits = [i for i in range(len(rom)) if rom[i:i + 6] == needle]
+    assert len(hits) == 2, "QUERY then OFFER wait loads"
+    at = hits[0 if stage == "query" else 1]
+    rom[at + 1:at + 3] = old.to_bytes(2, "little")
+    machine.rom = bytes(rom)
+    control = SlowHost(compiled, stage, lag)
+    control.enter()
+    assert control.commits == [(0, 0)], "the published bound serves this host"
+    machine.enter()
+    assert machine.commits == [], f"the old {old}-frame bound must drop a {lag}-frame host"

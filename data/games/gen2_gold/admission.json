@@ -77,12 +77,12 @@
       "revision": "US",
       "selection": "FUTURE",
       "status": "BUILT",
-      "sha1": "d563669ec3ac5029be9464d2301aa3be27a5f163",
-      "md5": "faf2b6350bbb9ad653eda44f540ebf45",
+      "sha1": "4a3d19771ff06457bad70cb87cad7bdea716254f",
+      "md5": "7034d89e6c6719803d553c9f951c1e14",
       "base_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
       "ups": {
         "file": "patch/dist/SLink-Gold.ups",
-        "sha256": "23ef4159b31d5861428d8c1872c7da7778580a193098beeca4441832f679f0f2"
+        "sha256": "cc4e79683cae3f2c9c4426b89b699f069d7c385a4bc8b9bd0c15b82e5ff6d84f"
       }
     },
     {

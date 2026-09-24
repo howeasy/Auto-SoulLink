@@ -2,7 +2,18 @@
 ; token[4], own slot, local role, generation, result, party count, release gate.
 ; Snapshot storage is injected by SlinkTradeSnapshot/ValidateSnapshot.
 DEF SLINK_TRADE_CONTEXT_SIZE EQU 10
-DEF SLINK_TRADE_APPLY_FRAMES EQU 1800 ; 30 seconds at nominal 60 Hz for peer UI
+; Host waits, in frames (60 Hz). B cancels every one of them (SlinkTradeWaitFrame).
+; QUERY/OFFER: the host answers in the reply to our own event (server/state.py
+; flushes queued commands into that reply; lua/gen2/client.lua send_now + per-frame
+; pump), so the need is one network round trip. 10 s covers TCP retransmission
+; at 1x and still ~2.5 s of wall time at 4x fast-forward.
+DEF SLINK_TRADE_QUERY_FRAMES EQU 600
+DEF SLINK_TRADE_OFFER_FRAMES EQU 600
+; APPLY: the partner's PROMPT (delivered on its next 30-frame tick) must be picked
+; up (client.lua TRADE_PICKUP_FRAMES = 1800), answered YES/NO by a human, and our
+; apply_trade delivered on our next tick. 60 s = that 30 s pickup window, two
+; ticks, and ~29 s for the partner's YES/NO and the round trips.
+DEF SLINK_TRADE_APPLY_FRAMES EQU 3600
 
 SECTION "SLink Trade Service", ROMX, BANK[SLINK_SERVICE_BANK]
 
@@ -26,7 +37,7 @@ SlinkTradeEntry::
 	ld [SLINK_TRADE_FRAME + 10], a
 	ld [SLINK_TRADE_FRAME + 11], a
 	call SlinkTradeNextGeneration
-	ld bc, 30
+	ld bc, SLINK_TRADE_QUERY_FRAMES
 	call SlinkTradeWaitAck
 	jp c, SlinkTradeExit
 	call SlinkTradeCheckHeader
@@ -105,7 +116,7 @@ SlinkTradeEntry::
 	call SlinkTradeNextGeneration
 	ld hl, sp + 6
 	ld [hl], a
-	ld bc, 180
+	ld bc, SLINK_TRADE_OFFER_FRAMES
 	call SlinkTradeWaitAck
 	jp c, SlinkTradeExit
 	call SlinkTradeCheckHeader
