@@ -22,6 +22,10 @@ do
     end
     if not ready then t.fail("save pointers live (native arm possible)", "frame " .. t.frame) end
     t.log(string.format("native arm possible at frame %d", t.frame))
+    -- The pointers go live during the title -> main-menu transition, and the companion hook then
+    -- lags past a 20-frame ack wait (mailbox_battle, live 731cf9b3: FORCE_FAINT posted, no ack in
+    -- 20 frames; with this settle it acks). Let the menu come up before the first post.
+    for _ = 1, 120 do t.step(nil) end
 end
 
 local job = t.watch(t.native:play_sound(25))   -- SE_SUCCESS (a real FRLG sound-effect id)
