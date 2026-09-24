@@ -185,16 +185,17 @@ SPEC = g.BY_NAME
 
 # --- identities and SaveRAM boundary -------------------------------------------------------------
 
-def test_all_ten_fixture_identities_are_enumerated_with_distinct_ot2_controls():
+def test_every_fixture_identity_is_enumerated_with_distinct_ot2_controls():
     assert sorted(SPEC) == sorted([f"{t}_{k}" for t in TITLES for k in ("town", "battle")]
-                                  + ["crystal_town_ot2", "crystal_battle_ot2", "gold_battle_ot2", "gold_battle_errand"])
+                                  + ["crystal_town_ot2", "crystal_battle_ot2", "gold_battle_ot2", "gold_battle_errand",
+                                     "crystal_battle_errand", "crystal_battle_ot2_errand", "silver_battle_errand"])
     ot2 = [spec for spec in g.FIXTURES if spec.identity == "ot2"]
     assert {(spec.title, spec.target) for spec in ot2} == {("crystal", "town"), ("crystal", "battle"), ("gold", "battle")}
     # The second OT comes from a different played name choice and a shifted title idle.
     assert all(spec.title_idle_frames > 0 for spec in ot2)
     assert all(spec.title_idle_frames == 0 for spec in g.FIXTURES if spec.identity == "default")
     manifest = g.fixture_manifest(ROOT)
-    assert manifest["qualified"] is False and len(manifest["fixtures"]) == len(g.FIXTURES) == 10
+    assert manifest["qualified"] is False and len(manifest["fixtures"]) == len(g.FIXTURES) == 13
     for row in manifest["fixtures"]:
         assert row["filename"] == row["name"] + ".SaveRAM" and row["core_mode"] == "CGB"
         assert row["ball_exception"] == ("O-10" if row["target"] == "battle" else None)

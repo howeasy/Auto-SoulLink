@@ -168,3 +168,13 @@ def test_a_phantom_object_on_the_only_aisle_does_not_strand_the_route():
     aisle west, closed every path. The planner retries without objects; a real NPC only bumps the step."""
     r = Run()
     assert r.step("Route29", x=11, y=6, blocked={1: {"x": 11, "y": 7}}) == (["Down"], "errand-west")
+
+
+@pytest.mark.parametrize("name", ["crystal_battle_errand", "crystal_battle_ot2_errand", "silver_battle_errand"])
+def test_every_errand_spec_builds_its_title_facts(name):
+    spec = g.BY_NAME[name]
+    errand = g.spec_route_facts(spec)
+    assert set(errand["observer"]["errand_events"]) == set(g.ERRAND_EVENTS)
+    assert {"CherrygroveCity", "Route30", "MrPokemonsHouse"} <= set(errand["maps"])
+    assert errand["title"] == spec.title and errand["ui_origins"]["naming"]["symbol"] == "NamingScreenJoypadLoop"
+    assert g.route_facts(spec.title)["fingerprint"] != errand["fingerprint"]

@@ -55,11 +55,18 @@ FIXTURES = tuple(FixtureSpec(f"{title}_{target}", title, target, "default", 0)
     # (Route 29 grass, O-10 Balls): the only Gold state that reaches a day POISON_STING foe (Bug Catcher Wade,
     # Route 31, behind the Route 30 battle demo that EVENT_ROUTE_30_BATTLE hides, pokegold maps/ElmsLab.asm:299-306).
     # Facts: docs/gen2/reviews/OMP_GOLD_ERRAND_FACTS_2026-09-23.md. Same default identity recipe as gold_battle.
-    FixtureSpec("gold_battle_errand", "gold", "battle", "default", 0),)
+    FixtureSpec("gold_battle_errand", "gold", "battle", "default", 0),
+    # The P4.3e trade duo seeds: the Cable Club trade receptionist opens only after the errand
+    # (`checkevent EVENT_GAVE_MYSTERY_EGG_TO_ELM`, C maps/PokeCenter2F.asm:70-71, G/S :60-61). Pairings C<->C
+    # (crystal + crystal_ot2), G<->S, C<->G. Same recipes as their battle fixtures.
+    FixtureSpec("crystal_battle_errand", "crystal", "battle", "default", 0),
+    FixtureSpec("crystal_battle_ot2_errand", "crystal", "battle", "ot2", 240),
+    FixtureSpec("silver_battle_errand", "silver", "battle", "default", 0),)
 MAPS = ("PlayersHouse2F", "PlayersHouse1F", "NewBarkTown", "ElmsLab", "Route29")
 # The errand's own route facts add its maps, events, prompts and the rival naming screen. Only an errand fixture
 # uses them, so every other fixture keeps its recorded route_facts_sha256.
-ERRAND_FIXTURES = frozenset({"gold_battle_errand"})
+ERRAND_FIXTURES = frozenset({"gold_battle_errand", "crystal_battle_errand", "crystal_battle_ot2_errand",
+                             "silver_battle_errand"})
 ERRAND_MAPS = MAPS + ("CherrygroveCity", "Route30", "MrPokemonsHouse")
 # Route29Tutorial1/2's yesorno (pokegold maps/Route29.asm:46-47/:71-72): CatchingTutorialIntroText's last two
 # rows stay on screen after its `cont` scroll (:264-266).
