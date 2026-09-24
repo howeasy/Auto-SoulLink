@@ -1807,6 +1807,23 @@ end
 --- The leaving itself is playlib's leave_menu: on_field goes true while the PC's "See you
 --- later!" textbox is still up, and stopping there shifts every press of the NEXT open by one
 --- (PHYSICAL, RR r5b/r5c -- it turned a withdraw into a second deposit).
+--- Has B closed the PC owner list (CreatePCMenu's multichoice) without choosing a row? FR/LG:
+--- Task_MultichoiceMenu_HandleInput wrote SCR_MENU_CANCEL (127) into gSpecialVar_Result (pret
+--- script_menu.c) -- `cancel_seen` latches it on any frame since the B. radical_red (G5-RR-PC):
+--- the whole path is FR's byte for byte -- EventScript_PC/PCMainMenu/ChoosePCMenu/TurnOffPC,
+--- CreatePCMenu, the multichoice task, and the TurnOffPC specials' gSpecials entries 0xD7/0x190
+--- and bodies -- yet live boxsync/whiteout at e99c3760 closed the list, shut the script down and
+--- landed on the field (live tasks: Task_WeatherMain, Task_RunPerStepCallback,
+--- Task_RunTimeBasedEvents and the Center's Union Room trio -- field tasks only) with
+--- gSpecialVar_Result reading 0 throughout. On RR the witness is therefore "the list closed
+--- and no PC task took over"; leave_storage's field-terminal wait after this is what proves the
+--- PC turned off (a chosen row would reopen storage or a message and never reach it). Self-
+--- contained (no upvalues) so tests run this exact body.
+local function owner_list_closed(multichoice_live, cancel_seen, title, pc_task_live)
+    if multichoice_live then return false end
+    if cancel_seen then return true end
+    return title == "radical_red" and not pc_task_live
+end
 local function leave_storage(cp, label)
     -- pc.inc:50-55 loops back to EventScript_PCMainMenu after storage; the
     -- first B exits storage, the second B cancels the owner list (VAR_RESULT
@@ -1846,9 +1863,13 @@ local function leave_storage(cp, label)
     local rows = memory.read_u8(PC_MENU_MAX_CURSOR) + 1
     if rows < 3 or rows > 5 then return pc_fail(label, "exit_owner_row_count") end
     G.tap("B", 3, 13)
+    local saw_cancel = false
     if not pc_wait(label, "exit_owner_not_canceled", function()
-        return not pc_task(PC_MULTICHOICE) and memory.read_u16_le(PC_RESULT) == 127
+        saw_cancel = saw_cancel or memory.read_u16_le(PC_RESULT) == 127
+        return owner_list_closed(pc_task(PC_MULTICHOICE) ~= nil, saw_cancel, TITLE,
+                                 pc_task(PC_MAIN_MENU) ~= nil or pc_task(PC_STORAGE_MAIN) ~= nil)
     end, 180) then return false end
+    G.phase("pc-exit", string.format("owner list closed cancel_seen=%s %s", tostring(saw_cancel), pc_state_dump()))
     if not pc_wait(label, "exit_not_field", function()
         return play.on_field(cp) and G.pred_ok(cp, "script_context_status")
            and G.pred_ok(cp, "field_controls_locked")

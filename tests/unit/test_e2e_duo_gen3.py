@@ -4532,3 +4532,21 @@ def test_every_harness_note_entry_keeps_its_fr_referrers():
     if not checked:
         pytest.skip("no RR artifact present")
 
+
+def test_the_pc_owner_list_exit_on_rr_rests_on_the_field_terminal():
+    """G5-RR-PC (live boxsync/whiteout at e99c3760: pc_exit_owner_not_canceled with result=0 and
+    only field tasks live). FR/LG still need SCR_MENU_CANCEL (127) seen; RR accepts the list
+    closing with no PC task taking over, and leave_storage's field-terminal wait follows."""
+    from lupa import LuaRuntime
+
+    text = SCRIPTED.read_text(encoding="utf-8")
+    body = re.search(r"^local function owner_list_closed\(.*?^end$", text, re.M | re.S).group(0)
+    closed = LuaRuntime().execute(body + "\nreturn owner_list_closed")
+    assert closed(True, True, "radical_red", False) is False          # still open
+    assert closed(False, True, "firered", False) is True               # FR: the 127 was seen
+    assert closed(False, False, "firered", False) is False             # FR: never without it
+    assert closed(False, False, "radical_red", False) is True          # RR: closed, nothing took over
+    assert closed(False, False, "radical_red", True) is False          # RR: a row reopened the PC
+    exit_wait = text[text.index('"exit_owner_not_canceled"'):text.index('"exit_not_field"')]
+    assert "owner_list_closed(" in exit_wait and "saw_cancel" in exit_wait
+
