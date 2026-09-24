@@ -2751,7 +2751,7 @@ def test_whiteout_rebuild_oracle_refuses(rebuild_case, fault, match, layout):
         oracles.whiteout_rebuild_oracle(results, data_dir=data_dir)
 
 
-def _hurt_b(results, layout, *, linked_too, rebuilt):
+def _hurt_b(results, layout, *, linked_too, rebuilt, field="MON_HP", value=(3).to_bytes(2, "big")):
     """Set B's final-save HP of the rebuilt mon (rebuilt=True) or of its unlinked starter to 3; linked_too applies the
     same hurt to B's LINK_SAVE copy (a starter hit in B's own capture battle)."""
     witness = oracles._last_tagged(results["b"], "SAVE_WITNESS")
@@ -2761,7 +2761,7 @@ def _hurt_b(results, layout, *, linked_too, rebuilt):
     text = results["b"]
     for row, tag in ((witness, "SAVE_WITNESS"), (link, "LINK_SAVE")) if linked_too else ((witness, "SAVE_WITNESS"),):
         path = Path(row["saveram_path"])
-        _edit_saved_record(path, layout, slot, layout.constants["MON_HP"], (3).to_bytes(2, "big"))
+        _edit_saved_record(path, layout, slot, layout.constants[field], value)
         text = text.replace(f"{tag} " + json.dumps(row),
                             f"{tag} " + json.dumps(dict(row, cartram_sha256=hashlib.sha256(path.read_bytes()[:CART]).hexdigest())))
     results["b"] = text
@@ -2776,9 +2776,10 @@ def test_whiteout_rebuild_oracle_keeps_bs_unlinked_hp_as_linked(rebuild_case, la
 
 
 @pytest.mark.parametrize("rebuilt,match", [(False, "HP/status changed since LINK_SAVE"), (True, "not at full HP")])
-def test_whiteout_rebuild_oracle_refuses_a_changed_b_mon(rebuild_case, layout, rebuilt, match):
+@pytest.mark.parametrize("field,value", [("MON_HP", (3).to_bytes(2, "big")), ("MON_STATUS", bytes([0x08]))])  # 3 HP / PSN
+def test_whiteout_rebuild_oracle_refuses_a_changed_b_mon(rebuild_case, layout, rebuilt, match, field, value):
     results, data_dir = rebuild_case
-    _hurt_b(results, layout, linked_too=False, rebuilt=rebuilt)
+    _hurt_b(results, layout, linked_too=False, rebuilt=rebuilt, field=field, value=value)
     with pytest.raises(RuntimeError, match=match):
         oracles.whiteout_rebuild_oracle(results, data_dir=data_dir)
 

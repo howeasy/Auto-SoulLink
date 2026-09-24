@@ -2060,6 +2060,7 @@ def _whiteout_rebuild_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram
                    f"{inst}: the rebuilt party/inventory differs from the linked save")
         at_link = {codec.key(m): (m["hp"], m["status"]) for m in linked}
         rebuilt = decoded[inst]["key"]
+        _wave_need(rebuilt in at_link, f"{inst}: the rebuilt key is not in the LINK_SAVE party")
         _wave_need(all(m["hp"] == m["max_hp"] > 0 and m["status"] == 0 for m in final
                        if inst == "a" or codec.key(m) == rebuilt), f"{inst}: a rebuilt mon is not at full HP")
         _wave_need(inst == "a" or all((m["hp"], m["status"]) == at_link[codec.key(m)] for m in final
