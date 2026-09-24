@@ -413,3 +413,61 @@ python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixtur
 FR's battle fixture has 4). Ball-throwing (`ball_hunt`) and two-mon scenarios cannot run from
 these fixtures as they stand; a second mon or balls need an RR scripted-play leg (purchase or
 story) that no card has pinned yet.
+
+## rr_battle2.sav / rr_battle2_b.sav (card G5-RR-FIXTURE-DRIVER) — **PENDING LIVE BUILD**
+
+The "a second mon or balls" gap `rr_battle.sav`'s own section above names. **Not committed
+yet** -- this section is a provenance stub, written before the fixture exists, so the build
+recipe and its sources are on record before the live run that produces the files.
+
+Route and mechanism: `docs/gen3/research/rr_fixture_route_2026-09-24.md` (cards
+G5-RR-FIXTURE-ROUTE / G5-RR-FIXTURE-DRIVER), which decodes RR's own compiled Viridian Mart and
+Oak's Lab scripts directly from the clean RR 4.1 ROM (never assumed from vanilla FireRed) and
+finds: the Mart will not sell Poké Balls until Oak's Parcel is delivered (RR keeps FR's exact
+quest gate, same flag/var ids, PROVEN by decoding the ROM's own bytecode against pret's
+`asm/macros/event.inc` opcode table), and delivering the parcel is free and grants **10** Poké
+Balls (RR's own `additem` operand -- not vanilla FireRed's 5).
+
+Driver: `lua/tests/gen3_rr_battle_fixture.lua`'s `run_route2()` (gated by
+`SLINK_GEN3_RR_FIXTURE_LEG=route2`; the unset default remains `run()`, `rr_battle.sav`'s own
+unmodified build). **Only scripted normal inputs -- no memory pokes, no save editing, no
+cheats**: seeded from `rr_battle.sav` itself (grass origin, one mon, empty ball pocket), it
+walks grass origin → Viridian Mart (auto-receives the parcel) → Pallet Town → Oak's Lab
+(delivers it, receives the Pokédex flag and 10 Poké Balls) → back to the grass origin, throws a
+Poké Ball at a wild encounter with the exact pinned sequence
+`lua/tests/gen3_rr_scripted_play.lua`'s `wild_catch` leg already proved live against real RR
+(2026-09-21, `docs/gen3/probes/census_rr_faint_v3b_catch_2026-09-21.txt`), then saves in-game.
+Every gate is a RAM read (`VAR_MAP_SCENE_VIRIDIAN_CITY_MART`, `FLAG_SYS_POKEDEX_GET`, the ball
+pocket via `profile.ram.BALL_POCKET_ADDR`), never a frame count.
+
+Expected live launch (mirrors the `rr_battle.sav` recipe above, `rr=True`,
+title `radical_red`, seeded from `rr_battle.sav` instead of `rr_town.sav`):
+
+```
+python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixture tests/fixtures/gen3/rr_battle.sav --rr
+# then, from the repo root, with SLINK_GEN3_RR_FIXTURE_LEG=route2 in the launched process's env:
+python - <<'PY'
+import os, sys; sys.path[:0] = ["tools", "."]
+os.environ["SLINK_GEN3_RR_FIXTURE_LEG"] = "route2"
+import gen3_fixtures as fx
+from server.adapters import gen3_codec as codec
+seed = codec.split_rtc(open("tests/fixtures/gen3/rr_battle.sav", "rb").read())[0]
+rom_rel, run_dir, battery = fx._prepare_run("rr_battle2_fixture", "patch/build/slink_RR.gba",
+                                             seed=seed, saveram_name_override=None)
+passed, text = fx._launch("lua/tests/gen3_rr_battle_fixture.lua", rom_rel, run_dir, rr=True,
+                          timeout=1800, title="radical_red")
+body = fx.import_savedata(fx._flushed_saveram(run_dir, battery).read_bytes(), rr=True)
+open("tests/fixtures/gen3/rr_battle2.sav", "wb").write(body)
+PY
+python tools/gen3_fixtures.py derive-b --rr tests/fixtures/gen3/rr_battle2.sav tests/fixtures/gen3/rr_battle2_b.sav
+python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixture tests/fixtures/gen3/rr_battle2.sav --rr
+python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixture tests/fixtures/gen3/rr_battle2_b.sav --rr
+```
+
+This driver has **not been run live** (this card is source-only, no emulator, same as its
+research predecessor); the walk/BFS and the ROM-script decode it depends on are regression-
+covered without an emulator by `tests/unit/test_gen3_rr_fixture_route.py`, but the *runtime*
+mechanics -- exact button timing, whether the walk actually lands where the BFS says, whether
+the pinned bag-throw sequence still works from this specific save state -- are unverified until
+someone runs it. Replace this stub with the real sha256/slot/counter/trainer/party facts (the
+same shape every other section in this file uses) once it has.

@@ -5,6 +5,16 @@ Static research only: no emulator/EmuHawk runs, no code changes. Every fact belo
 (reasoned from adjacent proven facts, not independently confirmed against RR's own compiled
 bytecode).
 
+**Update (card G5-RR-FIXTURE-DRIVER, same date):** the one INFERRED link this doc originally
+left open — whether RR's *compiled* map/NPC scripts still branch on the same flag/var **id
+numbers** as vanilla FireRed's decomp source, rather than merely keeping the same SaveBlock1
+*storage layout* — is now closed. §"RR bytecode disassembly" below decodes RR's own Viridian
+Mart and Oak's Lab scripts, byte for byte, out of the admitted clean ROM, against pret's own
+opcode table (`asm/macros/event.inc`). Every fact that section states is PROVEN from those
+bytes, not inferred from vanilla. It also corrects one number the first pass got wrong by
+extrapolating from vanilla instead of reading RR's own bytes: RR's Lab scene gives **10** free
+Poké Balls, not vanilla's 5.
+
 ## Sources used
 
 - ROM: `E:/Google Drive/SLink/Pokemon - Radical Red.gba`, the clean 4.1 dump, md5
@@ -33,10 +43,10 @@ bytecode).
 | Tile terrain | both tiles are `MB_TALL_GRASS` (0x02) | PROVEN | `tests/fixtures/gen3/README.md` §rr_battle.sav, cross-checked this session (`gba_map.py --find-behaviour 0x02` includes (7,33) and (12,37)) |
 | Party | 1 mon: Treecko (species 277) Lv.6, hp 22/22, key `EBEF11DA:2BDDC8BF` | PROVEN | fixture RESULT line + boot-check (party read back unchanged after a real cold-boot save/reload) |
 | Poké Ball pocket | **0** balls, 50-slot EWRAM pocket, all slots empty | PROVEN | `tools/e2e_duo.py::gen3_ball_count(rr_battle_body, "radical_red")` re-run this session → `0`; matches `tests/fixtures/gen3/README.md`'s prior claim |
-| `FLAG_SYS_POKEDEX_GET` (vanilla flag id 0x829) | **0** (not set) | PROVEN (bit read this session) — INFERRED that the RR flag numbering matches vanilla (see below) | `_rr_read(SaveBlock1+3808, 288)`, bit 0x829 |
-| `FLAG_BADGE01_GET` (0x820) | 0 | same caveat | same read |
-| `VAR_MAP_SCENE_VIRIDIAN_CITY_MART` (vanilla var 0x4057) | **0** | PROVEN (word read this session) — INFERRED var-numbering match | `_rr_read(SaveBlock1+4096, 512)`, index 0x57 |
-| `VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB` (vanilla var 0x4055) | **4** | same | same read, index 0x55 |
+| `FLAG_SYS_POKEDEX_GET` (vanilla flag id 0x829) | **0** (not set) | PROVEN — the save-byte read AND the id numbering (RR's own compiled Mart `OnLoad` script checks this exact id, §"RR bytecode disassembly") | `_rr_read(SaveBlock1+3808, 288)`, bit 0x829 |
+| `FLAG_BADGE01_GET` (0x820) | 0 | PROVEN (byte read; id numbering corroborated by RR's own Mart clerk script checking flags 0x820-0x827 for its badge-count flavor text, §"RR bytecode disassembly") | same read |
+| `VAR_MAP_SCENE_VIRIDIAN_CITY_MART` (vanilla var 0x4057) | **0** | PROVEN — the save-byte read AND the id numbering (RR's own compiled Mart `ON_FRAME_TABLE` entry and clerk script both use this exact id, §"RR bytecode disassembly") | `_rr_read(SaveBlock1+4096, 512)`, index 0x57 |
+| `VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB` (vanilla var 0x4055) | **4** | PROVEN (save-byte read; id numbering corroborated by RR's own Oak script using this id, §"RR bytecode disassembly") | same read, index 0x55 |
 | Money (SaveBlock1+0x290, right after the 600-byte party array) | raw `3120`, decrypted with `SaveBlock2+0xF20` XOR key `0` → **3120** | INFERRED offset (not in `profile.json`, never pinned by any tool in this repo; read this session as a byte-offset analogy, not independently proven) | ad-hoc read this session |
 
 **Why the flag/var numbering is trusted to carry over from vanilla FR, not just assumed:**
@@ -52,12 +62,152 @@ cold boot/save/reload). Since RR's item bag was moved **out of SaveBlock1 entire
 separate EWRAM/extension region (`"BAG_IN_EWRAM": true`, `ram.BALL_POCKET_ADDR` =
 `0x0203C354`, inside the sectors-30/31 extension `gen3_codec._rr_regions` already reads) rather
 than resized in place, nothing downstream of the old bag fields needed to shift — which is
-consistent with flags/vars sitting at their unmodified vanilla offsets. This is strong but not
-watertight: it proves the *storage layout* lines up, not that RR's *compiled map scripts* still
-branch on the same flag/var **id numbers** the way vanilla FR's decomp source does. I did not
-disassemble RR's Mart/Lab script bytecode to confirm the numbering directly (out of scope for a
-static, no-emulator card); that is the one live check the recommendation below should get
-before being trusted as fact rather than a strong inference.
+consistent with flags/vars sitting at their unmodified vanilla offsets. That storage-layout
+argument was, on its own, strong but not watertight: it proved the *storage layout* lines up,
+not that RR's *compiled map scripts* still branch on the same flag/var **id numbers** the way
+vanilla FR's decomp source does. §"RR bytecode disassembly" below settles that directly, by
+decoding RR's own script bytes rather than reasoning about them.
+
+## RR bytecode disassembly (PROVEN, card G5-RR-FIXTURE-DRIVER)
+
+Map event scripts are ROM bytecode interpreted by the game's own script engine — not ARM/THUMB
+CPU instructions — so they can be decoded the same way the map/collision data already was:
+parse the pointer, read the opcode table pret ships as an assembler macro file
+(`asm/macros/event.inc`, in the same cached pokefirered checkout), and confirm RR's bytes
+produce a well-formed, sensible script under that table (a wrong opcode table could not by
+accident decode into a coherent, source-matching command sequence).
+
+**Method.** `struct MapHeader.mapScripts` sits at header offset `0x08`
+(`include/global.fieldmap.h:195`, not `0x0C`/connections as an earlier pass without decomp
+access had assumed for a *different* field — connections are confirmed separately at `0x0C` and
+still correct). A `MAP_SCRIPT_ON_FRAME_TABLE` entry (type byte `2`) points to a
+`{u16 var; u16 compare; u32 script}` table (`asm/macros/map.inc:16-20`, the `map_script_2`
+macro), terminated by a `var == 0` entry. `struct ObjectEventTemplate` is 24 bytes
+(`asm/macros/map.inc:23-38`, the `object_event` macro) with its `script` pointer at byte offset
+`0x10` and `event_flag` at `0x14` — `tools/gba_map.py`'s own `ObjectEvent` dataclass does not
+parse these two fields, so they were read directly off the same `Rom` object with one extra
+`_ptr(base + 0x10)` call, not a change to the tool. The opcode table itself is the `.byte 0xNN`
+literal in each macro in `asm/macros/event.inc` (cited by mnemonic and address below).
+
+**Object-event cross-check (PROVEN, establishes local_id correspondence).** RR's map 5.3
+(ViridianCity_Mart) and 4.3 (OaksLab) object lists were compared field-by-field against vanilla
+FR's `data/maps/.../map.json` for the same maps: every position, elevation and
+`movement_type` numeric value (`MOVEMENT_TYPE_FACE_RIGHT=0xA`, `_WANDER_AROUND=0x2`,
+`_WANDER_UP_AND_DOWN=0x3`, `_FACE_DOWN=0x8`, `include/constants/event_object_movement.h`)
+matches exactly, for all 3 Mart objects and Oak specifically (`x=6,y=3,elevation=3,
+movement_type=8`, matching `LOCALID_OAKS_LAB_PROF_OAK`). Only the Mart clerk's cosmetic
+`graphics_id` differs (RR `25` vs. vanilla `OBJ_EVENT_GFX_CLERK=68`; the other two Mart NPCs'
+graphics ids, `18`/`23`, match `OBJ_EVENT_GFX_YOUNGSTER`/`OBJ_EVENT_GFX_WOMAN_1` exactly, and
+Oak's own graphics id `71` matches `OBJ_EVENT_GFX_PROF_OAK` exactly) — a sprite reskin, not a
+structural change. This is what makes "RR object index 0 in map 5.3 is the clerk" and "index 3
+in map 4.3 is Oak" PROVEN rather than assumed.
+
+**Viridian Mart `OnFrame` table (PROVEN).** Decoded at RR map 5.3's `mapScripts` pointer
+(ROM `0x0816a1d3`):
+```
+map_script table: type=1 (ON_LOAD) -> 0x0816a1de ; type=2 (ON_FRAME_TABLE) -> 0x0816a1fb ; end
+ON_FRAME_TABLE:  var=0x4057  compare=0  script=0x0816a205 ; end
+```
+`var=0x4057` is `VAR_MAP_SCENE_VIRIDIAN_CITY_MART`'s exact vanilla id — read directly out of
+RR's compiled table, not assumed. The `OnLoad` script at `0x0816a1de` decodes as
+`checkflag 0x829; goto_if 0(FALSE), 0x0816a1e8; end` — byte-identical in shape and id to
+vanilla's `goto_if_unset FLAG_SYS_POKEDEX_GET, ...HideQuestionnaire` (`FLAG_SYS_POKEDEX_GET =
+0x800+0x29 = 0x829`).
+
+**Mart `ParcelScene` (target of the table entry above, PROVEN, full decode):**
+```
+0x0816a205 lockall
+0x0816a206 textcolor 0
+0x0816a208 applymovement npc=1 movements=0x081a75ed   ; clerk: WalkInPlaceFasterDown
+0x0816a20f waitmovement
+0x0816a212 msgbox "YouCameFromPallet"                  ; loadword 0,text ; callstd 4
+0x0816a21a closemessage
+0x0816a21b applymovement npc=1   movements=0x0816a262   ; clerk: FacePlayer
+0x0816a222 applymovement npc=255 movements=0x0816a25c   ; player: ApproachCounter
+0x0816a229 waitmovement
+0x0816a22c msgbox "TakeThisToProfOak"
+0x0816a234 setvar 0x4057, 1                             -- VAR_MAP_SCENE_VIRIDIAN_CITY_MART = 1
+0x0816a239 additem item=0x15d(349=ITEM_OAKS_PARCEL), qty=1
+0x0816a23e msgbox "ReceivedOaksParcelFromClerk" (giveitem_msg's own message)
+0x0816a253 callstd 9 (STD_RECEIVED_ITEM)
+0x0816a255 setvar 0x4055, 5                             -- VAR_MAP_SCENE_..._OAKS_LAB = 5
+0x0816a25a releaseall
+0x0816a25b end
+```
+`item=0x15d` is exactly `349` decimal, `ITEM_OAKS_PARCEL`'s vanilla id
+(`include/constants/items.h:421`) — proven from RR's own bytes, not carried over from vanilla.
+This closes Candidate 1's rejection with certainty: the automatic scene really does fire on the
+first Mart visit, really does set `VAR_MAP_SCENE_VIRIDIAN_CITY_MART = 1`, and grants the parcel,
+never a purchase prompt.
+
+**Mart clerk's talk script (PROVEN, confirms the shop gate).** RR object index 0 in map 5.3,
+script at ROM `0x0871c6c0`:
+```
+lock; faceplayer
+compare_var_to_value 0x4057, 1
+goto_if 1(EQUAL), 0x0871c7a0            -- -> "say hi to Oak for me", NO shopping
+special 0x187
+compare_var_to_value 0x800d, 2 ; goto_if 4(>=), 0x0871c72f   -- RR-added badge-count branches
+checkflag 0x827 ; goto_if 1, ...   (and 0x826, 0x825, 0x824, 0x823, 0x822, 0x821, 0x820, in
+                                     order -- FLAG_BADGE08_GET down to FLAG_BADGE01_GET, RR's
+                                     own added "greeting varies by badge count" flavor text,
+                                     using the SAME vanilla badge-flag ids)
+goto 0x0871c78a                        -- the actual `pokemart` shop open, reached only if
+                                           VAR_MAP_SCENE_VIRIDIAN_CITY_MART is NOT 1
+```
+`goto_if 1(EQUAL)` on `compare_var_to_value 0x4057, 1` is checked **first**, before any of RR's
+own added badge-flavor branches — byte-identical in shape and id to vanilla's
+`goto_if_eq VAR_MAP_SCENE_VIRIDIAN_CITY_MART, 1, ...SayHiToOakForMe`. RR's own badge-count
+flavor text (new content, not in vanilla) uses `FLAG_BADGE01_GET`-`FLAG_BADGE08_GET` at their
+exact vanilla ids (0x820-0x827) too, which is further, independent corroboration that RR did
+not renumber the flags/vars namespace.
+
+**Oak's talk script (PROVEN, confirms the gate and the reward).** RR object index 3 in map 4.3
+("OaksLab"), script at ROM `0x09050959`:
+```
+lock; faceplayer
+checkitem 0x10b(=267), 1 ; compare_var_to_value 0x800d, 1 ; goto_if 4(>=), 0x090509cb  -- RR-added
+checkflag 0x2 ; goto_if 1, 0x08169600
+compare_var_to_value 0x4055, 9 ; goto_if 1, ...
+compare_var_to_value 0x4055, 8 ; goto_if 1, ...
+compare_var_to_value 0x4052, 1 ; goto_if 1, ...            -- RR-added
+compare_var_to_value 0x4055, 6 ; goto_if 1, ...
+compare_var_to_value 0x4057, 1 ; goto_if 4(>=), 0x0816961e  -- -> ReceiveDexScene
+compare_var_to_value 0x4055, 4 ; goto_if 1, ...
+compare_var_to_value 0x4055, 3 ; goto_if 1, ...
+msgbox "OakWhichOneWillYouChoose" (fallback)
+```
+`compare_var_to_value 0x4057, 1; goto_if 4(GREATER-THAN-OR-EQUAL), 0x0816961e` is
+byte-identical in shape and id to vanilla's `goto_if_ge VAR_MAP_SCENE_VIRIDIAN_CITY_MART, 1,
+...EventScript_ReceiveDexScene` (the RR ladder has extra branches spliced in around it, all
+RR-added var/flag content at ids vanilla never used for this ladder, e.g. `0x800d`/`0x10b`/
+`0x4052` — new content, not renumbering).
+
+**RR's `ReceiveDexScene` (target of the branch above, PROVEN, full decode) — the reward, and
+the one number the first pass got wrong:**
+```
+0x0816961e msgbox "..." ; textcolor 3 ; playfanfare 0x105 ; message "..." ; waitmessage
+           waitfanfare ; call 0x081a6675
+0x08169637 removeitem item=0x15d(349=ITEM_OAKS_PARCEL), qty=1
+0x0816963c msgbox "..."                                    -- parcel-delivered text
+           ... (badge-count-branched flavor text, RR-added, elided) ...
+0x0816976d setflag 0x829                                    -- FLAG_SYS_POKEDEX_GET
+0x08169770 special 0x181
+0x08169773 setvar 0x407c, 1                                 -- RR-added
+0x08169780 additem item=0x4(ITEM_POKE_BALL), qty=10          -- **10 Poke Balls, not vanilla's 5**
+0x08169785 msgbox "..." (giveitem_msg's own message) ; callstd 9
+0x081697a4 setvar 0x8004,0 ; setvar 0x8005,1 ; special 0x173 (famechecker-equivalent)
+           ... (more badge-branched flavor text) ...
+0x0816982a setvar 0x4055, 6
+0x0816982f setvar 0x4057, 2                                  -- shop now unlocked too
+0x08169834 setvar 0x4051, 1 ; setvar 0x4058, 1 ; setvar 0x4054, 1   -- RR-added
+0x08169843 release ; end
+```
+`item=0x4` is exactly `4`, `ITEM_POKE_BALL`'s vanilla id (`include/constants/items.h:8`) —
+proven from RR's own bytes. **The quantity is `10`, not vanilla's `5`**: the first pass of this
+doc extrapolated the vanilla figure (5) instead of reading RR's own `additem` operand; this is
+the one correction this update makes to the original recommendation, and it only strengthens
+it (more balls, same free mechanism, same gate).
 
 ## What the vars actually mean (from vanilla FR source, cross-referenced against the read above)
 
@@ -124,8 +274,9 @@ this session, PROVEN empty).
 
 ### Candidate 3 — parcel errand (RECOMMENDED)
 Walk grass origin → Mart (auto-receive `ITEM_OAKS_PARCEL`, no shopping) → Pallet Town → Oak's
-Lab (deliver the parcel to Oak, receive Pokédex flag + **5 free Poké Balls**) → back to Route 1
-grass → catch a wild mon. Satisfies (a) with balls to spare (5, not just 2) and sets up (b) via
+Lab (deliver the parcel to Oak, receive Pokédex flag + **10 free Poké Balls**, PROVEN by
+decoding RR's own `ReceiveDexScene` bytecode, §"RR bytecode disassembly") → back to Route 1
+grass → catch a wild mon. Satisfies (a) with balls to spare (10, not just 2) and sets up (b) via
 an ordinary wild catch — no purchase, no reliance on the unverified money offset.
 
 **Step list** (button-equivalent movement presses; BFS avoids collision/blocked-NPC tiles,
@@ -143,8 +294,8 @@ an ordinary wild catch — no purchase, no reliance on the unverified money offs
 | 2 | Route1 (12,0) | Route1 (12,39) | 59 | full north-south crossing (Viridian and Pallet do not connect directly; every leg between them re-crosses Route 1) |
 | 2 | — | cross into Pallet (12,0) | 1 | |
 | 2 | Pallet (12,0) | Pallet (16,14), just south of the Lab door | 18 | |
-| 2 | — | Lab door (16,13) | 1 | press Up; talk to Oak (a `faceplayer`+`lock` NPC, needs one A/interact press, then a long **forced, automatic** cutscene: dex/rival scene, no further choices, ends with the 5 Poké Balls) |
-| **Leg 2 total** | | | **116** | mart → parcel delivered, 5 balls in bag |
+| 2 | — | Lab door (16,13) | 1 | press Up; talk to Oak (a `faceplayer`+`lock` NPC, needs one A/interact press, then a long **forced, automatic** cutscene: dex/rival scene, no further choices, ends with 10 Poké Balls, PROVEN by decoding `ReceiveDexScene`) |
+| **Leg 2 total** | | | **116** | mart → parcel delivered, 10 balls in bag |
 | 3 | Pallet (16,14) | Pallet (12,0) | 18 | |
 | 3 | — | cross into Route1 (12,39) | 1 | |
 | 3 | Route1 (12,39) | Route1 (12,37) grass origin | 2 | |
@@ -160,7 +311,7 @@ by waiting on `waitmessage`/task completion the same way `gen3_scripted_play.lua
 legs already do for FR/LG, rather than a frame budget.
 
 ### Candidate 4 — catch after balls (not separate; folded into Candidate 3's tail)
-Once Candidate 3 grants 5 Poké Balls, catching mon #2 is an ordinary Route-1 grass encounter at
+Once Candidate 3 grants 10 Poké Balls, catching mon #2 is an ordinary Route-1 grass encounter at
 the grass origin — no new route needed.
 
 ### Not evaluated
@@ -172,13 +323,15 @@ scripts, out of scope for this static pass.
 ## Recommendation
 
 Build the driver as **Candidate 3**. It is the only route that reaches (a) at all (the Mart is
-gated shut and there are no ground items), and it reaches (b) for free as a side effect (5
-Poké Balls, not just the required 2) without touching the unverified money offset. Before
-committing driver work, get one **live** confirmation (a single BizHawk session, not part of
-this static card): step into the Mart from `rr_battle.sav` and confirm the parcel auto-fires
-exactly as the vanilla script predicts, then walk to Oak's Lab and confirm the 5-ball grant.
-That settles the one INFERRED link in the chain (RR's compiled scripts still branching on the
-same flag/var ids as vanilla FR) before code is written against it.
+gated shut and there are no ground items), and it reaches (b) for free as a side effect (10
+Poké Balls, not just the required 2, PROVEN by decoding RR's own compiled scripts) without
+touching the unverified money offset. The one INFERRED link the first pass of this doc left
+open — whether RR's compiled scripts branch on the same flag/var ids as vanilla FR — is now
+CLOSED (§"RR bytecode disassembly"): it does, byte for byte, confirmed from RR's own ROM. A
+live BizHawk run is still the only thing that can confirm the *runtime* mechanics this static
+pass cannot see (exact button timing, dialogue-box frame counts, the walk BFS holding up
+against real collision/step behavior), but the *scripted logic* this route depends on is no
+longer a live-only question.
 
 ## What a `lua/tests/gen3_routes.lua`-style driver needs
 
@@ -191,14 +344,16 @@ same flag/var ids as vanilla FR) before code is written against it.
 - A witness for the Mart auto-cutscene: since it fires on `OnFrame` the instant the map loads,
   the driver should wait for control to return (a `waitmessage`/menu-idle witness) rather than
   a frame budget, then dismiss text.
-- A witness for `ReceiveDexScene` completing at the Lab: the same "wait for the task/callback2,
-  never a frame count" rule already used elsewhere in this file. Since this session could not
-  read RR's compiled script for the exact witness signal (no live RAM access), the driver
-  should reuse `key_items_has_parcel`/ball-count-style **polling on save-state facts** (the
-  parcel leaving the bag, `gen3_ball_count` going from 0 to 5) as the completion oracle, the
-  same pattern `verify_parcel_delivered` already uses for FR/LG
-  (`lua/tests/gen3_scripted_play.lua:2150-2158`), rather than inventing a new RR-specific task
-  name blind.
+- A witness for `ReceiveDexScene` completing at the Lab: now that the scene is fully decoded
+  (§"RR bytecode disassembly"), its own terminal writes are the witness — poll
+  `VAR_MAP_SCENE_VIRIDIAN_CITY_MART == 2`, `FLAG_SYS_POKEDEX_GET == 1`, and the ball pocket
+  reading `ITEM_POKE_BALL x10`, the same "wait for the engine's own terminal state, never a
+  frame count" pattern `verify_parcel_delivered` already uses for FR/LG
+  (`lua/tests/gen3_scripted_play.lua:2150-2158`). RR has no equivalent key-items-pocket read
+  pinned yet (its bag moved to a custom EWRAM structure — see the flags/vars section above), so
+  a driver cannot witness "the parcel left the bag" mid-scene the way the FR/LG leg does; it can
+  only witness the scene's *completed* terminal state, which is sufficient here since nothing
+  else in this route can produce that same combination of writes.
 - Because `gen3_scripted_play.lua` explicitly refuses `radical_red` by name today (its own
   comment: "this file's story legs already refuse RR by name"), this route needs a **new** RR
   leg, not a title-branch inside the existing FR/LG parcel legs — the maps are byte-identical
@@ -208,10 +363,39 @@ same flag/var ids as vanilla FR) before code is written against it.
 
 ## Open questions for whoever builds the driver
 
-1. Does RR's compiled Mart/Lab script still branch on `VAR_MAP_SCENE_VIRIDIAN_CITY_MART`/
+1. ~~Does RR's compiled Mart/Lab script still branch on `VAR_MAP_SCENE_VIRIDIAN_CITY_MART`/
    `..._PALLET_TOWN_PROFESSOR_OAKS_LAB` at the same numeric ids, and still call
-   `giveitem ITEM_POKE_BALL, 5`? (This doc's one INFERRED link; settle live before trusting it.)
-2. Is `ITEM_POKE_BALL`'s item id unchanged in RR (needed if the driver wants to assert the
-   bag's *contents*, not just the ball-count total)? Not checked this session.
+   `giveitem ITEM_POKE_BALL, N`?~~ **CLOSED** (§"RR bytecode disassembly", card
+   G5-RR-FIXTURE-DRIVER): yes, at the same ids, and RR gives 10, not vanilla's 5.
+2. ~~Is `ITEM_POKE_BALL`'s item id unchanged in RR?~~ **CLOSED**: yes, `4`, read directly out of
+   RR's own `additem` operand in `ReceiveDexScene` (§"RR bytecode disassembly").
 3. Is `SB1_MONEY_OFFSET` (`0x0290`, used ad hoc this session, not in `profile.json`) worth
    pinning properly if a future scenario needs money — not needed for this route.
+4. RR's `ReceiveDexScene` writes several vars this doc did not decode the purpose of
+   (`0x407c=1`, `0x4051=1`, `0x4058=1`, `0x4054=1`) and reads a badge-count special var
+   (`0x800d`) repeatedly for its own added flavor-text branches — none of these gate this
+   route's outcome (traced: they sit after the `additem`/`setflag`/`setvar 0x4057,2` calls this
+   route depends on, or are read-only badge-count branches), but their meaning is otherwise
+   unresearched. Not needed for this route; flagged for whoever next touches RR's early-game
+   scripts.
+## Driver (card G5-RR-FIXTURE-DRIVER)
+
+Implemented as a second entry point in `lua/tests/gen3_rr_battle_fixture.lua` (W3's file for
+`rr_battle.sav`, extended rather than forked, gated by `SLINK_GEN3_RR_FIXTURE_LEG=route2` so the
+unset default is byte-for-byte the original `run()`): `run_route2()`, seeded from
+`rr_battle.sav` itself, walks grass origin → Mart → Oak's Lab → grass origin (the exact PATHS
+above, computed the same session against the same clean ROM), verifies every gate via the RAM
+reads this doc proves (`VAR_MAP_SCENE_VIRIDIAN_CITY_MART`, `FLAG_SYS_POKEDEX_GET`, the ball
+pocket), throws a Poké Ball at a wild encounter with the pinned sequence
+`lua/tests/gen3_rr_scripted_play.lua`'s `wild_catch` leg already proved live
+(2026-09-21), and saves in-game. It produces `rr_battle2.sav` (never touching `rr_battle*`)
+via the same `tools/gen3_fixtures.py` cold-boot/import pipeline the existing fixtures use. This
+driver has **not** been run live (no emulator in this card either); it is built entirely from
+this doc's PROVEN facts plus the one already-live-proven ball-throw sequence it cites.
+
+5. RR's Mart clerk and Oak scripts both branch on a "RR-added" var `0x800d` and (Oak only)
+   `checkitem 0x10b`/`compare 0x800d,1` at their very start — these run BEFORE this route's
+   relevant branch and were not followed to their targets (out of scope: they gate content this
+   route never reaches, confirmed by tracing the `goto_if` targets that matter and finding this
+   route's branch is unconditional relative to them). If a future scenario needs Mart/Lab
+   dialogue *content* (not just the shop/parcel mechanics), those targets need decoding too.
