@@ -2978,6 +2978,7 @@ return {
     -- test hooks (Codex review cx-378ce251): the in_battle polarity wrapper and the lab scene
     -- var address arithmetic, both independently checkable without an emulator.
     follow = play.follow,
+    traced_follow = traced_follow,
     in_battle = play.in_battle,
     LAB_SCENE_VAR_OFFSET = LAB_SCENE_VAR_OFFSET,
     -- Whiteout signal and checkpoint-battle-state guard (C3-18, C3-29).
