@@ -56,6 +56,18 @@ def test_observe_counts_and_lua_attribution():
     assert (st.control.native_flagged, st.control.native_allowed) == (1, 0)
 
 
+def test_region_verdict():
+    """A SLink-owned native region: native writers are the game's; SLink code only if slink_allow names it."""
+    lua, W = gate()
+    f = facts(lua)
+    closed = lua.table_from({"name": "wSpecialPhoneCallID", "slink_allow": lua.table_from([])})
+    opened = lua.table_from({"name": "wSpecialPhoneCallID", "slink_allow": lua.table_from(["bank"])})
+    assert W.classify_region(f, closed, 0x2A10, 0x24)[0] == "native"
+    assert W.classify_region(f, closed, 0x4013, 0x75)[0] == "violation"
+    assert W.classify_region(f, opened, 0x4013, 0x75) == ("slink", "bank")
+    assert W.classify_region(f, opened, 0x0068, 0)[0] == "violation"     # the bridge is not the service bank
+
+
 def test_lua_tag_and_span():
     lua, W = gate()
     client = lua.table_from(["@E:/x/lua/tests/test_gen2_scripted_gate.lua", "@E:\\x\\lua\\gen2\\panel.lua"])
@@ -85,3 +97,5 @@ def test_w6_facts_are_the_pinned_overlay():
         entry = next(r for r in f["allow"] if r["name"] == "SlinkStartMenuEntry")
         assert entry["bank"] == 4 and entry["hi"] - entry["lo"] == 12   # call FadeToMenu / farcall / ld a,6 / ret
         assert f["span"] == list(MAILBOX_SPANS[title])
+        (phone,) = f["regions"]
+        assert phone["hi"] - phone["lo"] == 2 and phone["wram_bank"] == 1 and phone["slink_allow"] == []

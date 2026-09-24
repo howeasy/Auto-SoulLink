@@ -23,6 +23,12 @@
               real native CPU writer).
     lua       after the inner gate, the harness itself rewrites one span byte with its current value (a
               no-op store) under a non-client tag: it MUST be caught as a Lua violation.
+  Regions (facts.regions): SLink-owned NATIVE spans (main 2026-09-23: the P4.5b phone service writes the two-byte
+  wSpecialPhoneCallID word). Native writers there are the game's own and only counted; a SLink code range
+  may write one only if the region's slink_allow names it (empty until the phone service lands: until then
+  any SLink write is a violation); any Lua store into a region is a violation. A region in WRAMX names its
+  wram_bank and only writes with SVBK selecting that bank count.
+  preroll_frames: idle frames (no input) before the inner gate boots; it only reseeds the RNG path.
   Environment: whatever the inner gate needs, plus SLINK_GEN2_W6 (json, tests/live/test_gen2_w6_gate.py).
   Result file: patch/build/gen2_w6_gate_result.txt. Printed: INNER (the inner gate's own RESULT line),
   W6 (json), then RESULT: PASS|FAIL last. The inner gate's full output stays in its own result file.
@@ -71,6 +77,14 @@ function W.lua_tag(sources)
     return "harness", sources[1] or "?"
 end
 
+-- Pure: one CPU write into a SLink-owned native region. Returns kind ("slink"|"native"|"violation"), label.
+function W.classify_region(facts, region, pc, bank)
+    local name = W.allowed(facts.allow, pc - 1, bank)
+    if name == nil then return "native", nil end
+    for _, ok in ipairs(region.slink_allow) do if ok == name then return "slink", name end end
+    return "violation", name .. " is not allowed to write " .. region.name
+end
+
 -- Pure: is a (domain, address) Lua write inside the span? System Bus uses bus addresses; "WRAM" is the
 -- flat bank-0-first domain (C000 -> 0).
 function W.in_span(span, addr, domain)
@@ -82,7 +96,7 @@ end
 function W.new(facts)
     return {facts=facts, writers={}, boot={}, violations={}, n_violations=0, n_allowed=0, n_boot=0,
             lua={client={}, harness={}}, lua_fired=0, control={native={}, native_allowed=0, native_flagged=0},
-            inits={}, lua_depth=0, lua_current=nil}
+            inits={}, lua_depth=0, regions={}}
 end
 
 local function bump(t, key) t[key] = (t[key] or 0) + 1 end
@@ -111,6 +125,21 @@ function W.observe(st, addr, pc, bank, frame, control)
         st.n_violations = st.n_violations + 1
         if #st.violations < W.MAX_EVENTS then
             st.violations[#st.violations + 1] = {pc=pc, bank=bank, addr=addr, frame=frame, why=label or "non-SLink writer"}
+        end
+    end
+end
+
+-- One CPU write into region r (its SVBK filter already applied).
+function W.observe_region(st, r, addr, pc, bank, frame)
+    local rec = st.regions[r.name]
+    if st.lua_depth > 0 then rec.lua_fired = rec.lua_fired + 1 return end
+    local kind, label = W.classify_region(st.facts, r, pc, bank)
+    local key = fmt("%02X:%04X", pc < 0x4000 and 0 or bank, pc)
+    bump(kind == "native" and rec.native or rec.slink, key)
+    if kind == "violation" then
+        st.n_violations = st.n_violations + 1
+        if #st.violations < W.MAX_EVENTS then
+            st.violations[#st.violations + 1] = {pc=pc, bank=bank, addr=addr, frame=frame, why=label}
         end
     end
 end
@@ -154,6 +183,23 @@ function W.main(root, getenv)
     for a = span.lo, span.hi - 1 do
         handles[#handles + 1] = event.onmemorywrite(cpu_write(a, false), a, "SLink-w6-" .. a, "System Bus")
     end
+    for _, r in ipairs(facts.regions or {}) do
+        st.regions[r.name] = {lo=r.lo, hi=r.hi, wram_bank=r.wram_bank, native={}, slink={}, lua={},
+                              lua_fired=0, other_bank=0}
+        for a = r.lo, r.hi - 1 do
+            handles[#handles + 1] = event.onmemorywrite(function()
+                if r.wram_bank then   -- CGB SVBK: 0 selects bank 1
+                    local svbk = memory.read_u8(0xFF70, "System Bus") % 8
+                    if (svbk == 0 and 1 or svbk) ~= r.wram_bank then
+                        st.regions[r.name].other_bank = st.regions[r.name].other_bank + 1
+                        return
+                    end
+                end
+                W.observe_region(st, r, a, emu.getregister("PC"), memory.read_u8(facts.hrombank, "System Bus"),
+                                 emu.framecount())
+            end, a, "SLink-w6-" .. r.name .. "-" .. a, "System Bus")
+        end
+    end
     handles[#handles + 1] = event.onmemorywrite(cpu_write(facts.control, true), facts.control, "SLink-w6-control", "System Bus")
     handles[#handles + 1] = event.onmemoryexecute(function() st.inits[#st.inits + 1] = emu.framecount() end,
                                                   facts.init.entry, "SLink-w6-init", "System Bus")
@@ -171,6 +217,15 @@ function W.main(root, getenv)
     for name, fn in pairs(wrapped) do
         memory[name] = function(addr, value, domain, ...)
             local hit = type(addr) == "number" and W.in_span(span, addr, domain)
+            for _, r in ipairs(type(addr) == "number" and facts.regions or {}) do
+                -- ponytail: bus address only; a region is never poked through a flat WRAMX domain offset here.
+                if (domain == nil or domain == "System Bus") and addr >= r.lo and addr < r.hi then
+                    bump(st.regions[r.name].lua, "any")
+                    st.n_violations = st.n_violations + 1
+                    st.violations[#st.violations + 1] = {lua="?", addr=addr, frame=emu.framecount(),
+                                                         why="Lua store into " .. r.name}
+                end
+            end
             if hit then
                 local sources = {}
                 for level = 2, 40 do
@@ -198,6 +253,7 @@ function W.main(root, getenv)
         -- every hooked site's bytes are re-validated against the running ROM (lua/gb_hook_binding.lua)
         gameinfo.getromhash = function() return cfg.base_sha1 end
     end
+    for _ = 1, cfg.preroll_frames or 0 do joypad.set({}) emu.frameadvance() end
     local ok, why = pcall(dofile, root .. "/" .. cfg.gate)
     gameinfo.getromhash = real_hash
     local inner_done = ok or tostring(why):find("slink-gate-finished", 1, true) ~= nil
@@ -229,6 +285,7 @@ function W.main(root, getenv)
         boot_clear=st.boot, boot_writes=st.n_boot, init_entries=json.array(st.inits),
         lua_writes={client=st.lua.client, harness=st.lua.harness}, lua_callbacks_fired=st.lua_fired,
         violations=json.array(st.violations), violation_count=st.n_violations,
+        preroll_frames=cfg.preroll_frames or 0, regions=st.regions,
         control={native_addr=facts.control, native_writers=st.control.native,
                  native_allowed=st.control.native_allowed, native_flagged=st.control.native_flagged,
                  native_caught=native_ok, lua_addr=probe, lua_caught=lua_caught,

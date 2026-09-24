@@ -59,6 +59,9 @@ SCHEMA = "gen2-w6-gate-v1"
 TITLES = ("crystal", "gold", "silver")
 LEGS = ("panel", "sfx", "u1")
 STAGGER = 60          # seconds between this lane's EmuHawk launches (other lanes share the machine)
+# The U1 leg on the G/S overlays loses its default RNG path (Gold: the lead faints in the catch battle; Silver:
+# the faint leg stalls on "no PP left"): idle frames before boot reseed it. Recorded in the receipt.
+PREROLL = {("gold", "u1"): 120, ("silver", "u1"): 120}
 INIT_LOOP = bytes.fromhex("3600230b78b120f8")   # Init.ByteFill: ld [hl],0 / inc hl / dec bc / ld a,b / or c / jr nz
 
 
@@ -87,7 +90,12 @@ def w6_facts(title: str, *, repo: Path = REPO) -> dict:
     init_bank, init_lo = symbols["Init.ByteFill"]
     assert init_bank == 0
     lo, hi = MAILBOX_SPANS[title]
-    return {"overlay_sha1": base["overlay_sha1"], "span": [lo, hi], "allow": allow,
+    # SLink-owned native regions (main 2026-09-23): the P4.5b phone service will write the WORD
+    # wSpecialPhoneCallID (+0, +1) from the service bank; until it lands no SLink range may write it.
+    phone_bank, phone = symbols["wSpecialPhoneCallID"]
+    assert phone_bank == 1 and 0xD000 <= phone < 0xE000, "wSpecialPhoneCallID left WRAMX bank 1"
+    regions = [{"name": "wSpecialPhoneCallID", "lo": phone, "hi": phone + 2, "wram_bank": 1, "slink_allow": []}]
+    return {"overlay_sha1": base["overlay_sha1"], "span": [lo, hi], "allow": allow, "regions": regions,
             "init": {"name": "Init WRAM0 clear", "entry": symbols["Init"][1], "lo": init_lo, "hi": init_lo + len(INIT_LOOP)},
             "hrombank": symbols["hROMBank"][1], "control": symbols["wVBlankOccurred"][1]}
 
@@ -136,6 +144,7 @@ def verify_leg(record: dict, leg: str, facts: dict) -> None:
     control = record["control"]
     assert control["native_caught"] is True and control["native_flagged"] > 0, control
     assert control["lua_caught"] is True and control["lua_kind"] == "harness", control
+    assert set(record["regions"]) == {r["name"] for r in facts["regions"]}, record["regions"]
 
 
 @pytest.mark.parametrize("title", TITLES)
@@ -160,7 +169,8 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
         source = gen2_source_data.load_context(title, root=REPO).source_record()
         env["SLINK_GEN2_W6"] = json.dumps({"leg": leg, "gate": gate, "inner_result": inner_result, "facts": facts,
                                            "overlay_sha1": facts["overlay_sha1"], "base_sha1": source["rom_sha1"],
-                                           "clean_view": leg == "u1", "lua_control_offset": 20})
+                                           "clean_view": leg == "u1", "lua_control_offset": 20,
+                                           "preroll_frames": PREROLL.get((title, leg), 0)})
         if launched:
             time.sleep(STAGGER)
         launched = True
@@ -178,6 +188,9 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
                      "qualification_attempt_id": qual["attempt_id"],
                      "writers": {symbolize(title, k): v for k, v in sorted(record["writers"].items())},
                      "boot_clear": {symbolize(title, k): v for k, v in sorted(record["boot_clear"].items())},
+                     "regions": {name: {**r, "native": {symbolize(title, k): v for k, v in sorted(r["native"].items())},
+                                        "slink": {symbolize(title, k): v for k, v in sorted(r["slink"].items())}}
+                                 for name, r in record["regions"].items()},
                      "control": {**record["control"], "native_writers": {
                          symbolize(title, k): v for k, v in sorted(record["control"]["native_writers"].items())}}}
 
