@@ -114,7 +114,9 @@ end
 
 -- hash (lowercase sha1 or md5) -> { pack, title, kind, rom_type } over every pack's
 -- admission set. Both digests are indexed: they cannot collide (40 vs 32 hex digits) and
--- BizHawk's gameinfo hash is not the same digest on every core.
+-- BizHawk's gameinfo hash is not the same digest on every core. A digest repeated across two
+-- rows would otherwise silently keep whichever row Lua's unordered pairs() visited last, so a
+-- collision is a hard build-time error naming both rows rather than a silent mis-admission.
 function Entry.admission_table(root, json)
     local table_ = {}
     for pack, def in pairs(Entry.PACKS) do
@@ -123,7 +125,18 @@ function Entry.admission_table(root, json)
                 local row = { pack = pack, title = title, kind = kind,
                               rom_type = def.rom_type[title] }
                 for _, key in ipairs({ "rom_sha1", "rom_md5" }) do
-                    if artifact[key] then table_[artifact[key]:lower()] = row end
+                    local digest = artifact[key]
+                    if digest then
+                        digest = digest:lower()
+                        local prior = table_[digest]
+                        if prior then
+                            error(string.format(
+                                "[gen3/entry] duplicate %s %s shared by %s/%s/%s and %s/%s/%s",
+                                key, digest, prior.pack, prior.title, prior.kind,
+                                row.pack, row.title, row.kind), 0)
+                        end
+                        table_[digest] = row
+                    end
                 end
             end
         end

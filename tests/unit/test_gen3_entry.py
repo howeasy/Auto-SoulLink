@@ -202,6 +202,40 @@ def test_anchors_alone_separate_every_shipped_artifact():
         assert [(m["pack"], m["title"], m["kind"]) for m in matches] == [(pack, title, kind)]
 
 
+def test_admission_table_refuses_a_duplicate_digest(tmp_path):
+    """G5-ADMIT-HARDEN: two artifact rows sharing one digest must be a hard error at table
+    build, naming both rows -- not a silent last-write-wins (Lua's pairs() order is
+    unspecified, so the row that silently won would be nondeterministic)."""
+    for pack, source in PACKS.items():
+        shutil.copytree(source, tmp_path / "data" / "games" / pack)
+    doctored = tmp_path / "data" / "games" / "gen3_frlg" / "engine_signals.json"
+    blob = json.loads(doctored.read_text(encoding="utf-8"))
+    dupe = blob["titles"]["firered"]["artifacts"]["clean"]["rom_sha1"]
+    blob["titles"]["leafgreen"]["artifacts"]["clean"]["rom_sha1"] = dupe
+    doctored.write_text(json.dumps(blob), encoding="utf-8")
+
+    world = World(pack="gen3_frlg", title="firered", build=False)
+    json_codec = world.lua.eval(
+        f'dofile("{(REPO / "lua" / "json_codec.lua").as_posix()}")')
+    with pytest.raises(lupa.LuaError) as excinfo:
+        world.Entry.admission_table(tmp_path.as_posix(), json_codec)
+    message = str(excinfo.value)
+    assert "duplicate" in message and dupe in message
+    assert "gen3_frlg/firered/clean" in message and "gen3_frlg/leafgreen/clean" in message
+
+
+def test_admission_table_has_no_duplicate_digest_in_the_shipped_packs():
+    """Guard the committed artifact data itself (data/games/gen3_frlg and gen3_rr
+    engine_signals.json), not just the code path above: `admission_table` now raises on the
+    first duplicate digest it finds, so simply building it over the real, unmodified packs
+    IS the assertion that none of their rom_sha1/rom_md5 pins collide."""
+    world = World(build=False)
+    json_codec = world.lua.eval(
+        f'dofile("{(REPO / "lua" / "json_codec.lua").as_posix()}")')
+    table = lua_to_py(world.Entry.admission_table(REPO.as_posix(), json_codec))
+    assert len(table) > 0
+
+
 def test_admission_refuses_an_ambiguous_rom(tmp_path):
     """Two artifacts that pin the same bytes cannot be told apart, so admission refuses
     instead of picking one. The shipped packs are not ambiguous (see the test above), so

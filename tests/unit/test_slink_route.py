@@ -50,10 +50,17 @@ def _rom_gba(header_code: str = "\0\0\0\0", size: int = 0x200) -> bytes:
     return bytes(image)
 
 
+_GETSYSTEMID_THROWS = "__throws__"  # sentinel: emu.getsystemid() errors (distinct from nil)
+
+
 def _run_launcher(system_id: str | None, rom: bytes, rom_hash: str = "0" * 40,
                   detected_game_id: str = "gen2_crystal", bizhawk: str = "2.11.1",
                   gb_title: str = "POKEMON RED") -> list[str]:
     """dofile `lua/slink.lua` with stub BizHawk globals; return the paths it dofile'd.
+
+    `system_id` is the system id `emu.getsystemid()` returns; `None` makes it return Lua
+    nil (a system BizHawk failed to identify, distinct from an error); the
+    `_GETSYSTEMID_THROWS` sentinel makes it raise instead.
 
     `lua/gen1/entry.lua`, `lua/gen3/entry.lua` and `lua/json_codec.lua` are executed for
     real (the admission logic under test); every other dofile target is recorded and
@@ -78,7 +85,7 @@ def _run_launcher(system_id: str | None, rom: bytes, rom_hash: str = "0" * 40,
         return None
 
     def getsystemid():
-        if system_id is None:
+        if system_id == _GETSYSTEMID_THROWS:
             raise RuntimeError("no core loaded")
         return system_id
 
@@ -173,3 +180,43 @@ def test_only_one_client_is_ever_loaded_for_a_routed_cartridge():
     loaded = _run_launcher("GBA", _rom_gba(), rom_hash=_FR_CLEAN_SHA1)
     clients = [p for p in loaded if "client" in p or p == _NEW_GEN3_CLIENT]
     assert clients == [_NEW_GEN3_CLIENT], f"expected exactly one client, got {clients}"
+
+
+# ── fail-closed system identification (G5-ADMIT-HARDEN) ────────────────────────────────
+#
+# emu.getsystemid() erroring, or returning anything that is neither "GBA" nor one of the
+# other systems game_detect is legitimately asked to route (GB/GBC/SGB for Gen 1, NDS for
+# Gen 4/5), must refuse by name -- never silently fall through to game_detect, which has no
+# row for an unidentified system and could otherwise misroute.
+
+def test_a_getsystemid_error_is_refused_and_never_reaches_game_detect():
+    with pytest.raises(lupa.LuaError, match="could not determine the loaded system"):
+        _run_launcher(_GETSYSTEMID_THROWS, _rom_gba(), rom_hash=_FR_CLEAN_SHA1)
+
+
+def test_a_nil_systemid_is_refused_and_never_reaches_game_detect():
+    with pytest.raises(lupa.LuaError, match="could not determine the loaded system"):
+        _run_launcher(None, _rom_gba(), rom_hash=_FR_CLEAN_SHA1)
+
+
+def test_a_gbc_cartridge_still_falls_through_to_game_detect():
+    """gb_title is deliberately not a Gen 1 title, so the Gen 1 route's own detector declines
+    and this ROM keeps falling through to game_detect, same as before this card."""
+    loaded = _run_launcher("GBC", _rom_gba(), rom_hash="f" * 40,
+                           detected_game_id="gen2_crystal", gb_title="POKEMON CRYSTAL")
+    assert _NEW_GEN1_CLIENT not in loaded
+    assert _NEW_GEN3_CLIENT not in loaded
+    assert "lua/clients/gen2_crystal_client.lua" in loaded
+
+
+def test_an_nds_cartridge_still_falls_through_to_game_detect():
+    loaded = _run_launcher("NDS", _rom_gba(), rom_hash="f" * 40,
+                           detected_game_id="gen4_hgsspt", gb_title="POKEMON CRYSTAL")
+    assert _NEW_GEN1_CLIENT not in loaded
+    assert _NEW_GEN3_CLIENT not in loaded
+    assert "lua/clients/gen4_hgsspt_client.lua" in loaded
+
+
+def test_an_unrecognized_systemid_is_refused_and_never_reaches_game_detect():
+    with pytest.raises(lupa.LuaError, match="could not determine the loaded system"):
+        _run_launcher("SNES", _rom_gba(), rom_hash="f" * 40)

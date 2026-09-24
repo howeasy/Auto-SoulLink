@@ -93,7 +93,18 @@ end
 -- The routed set lives in entry.lua (Entry.ROUTED); the launcher keeps no copy of it.
 do
     local sys_ok, sys = pcall(function() return emu.getsystemid() end)
-    if sys_ok and sys == "GBA" then
+    -- Fail closed: an unidentifiable system must never fall through to game_detect (the
+    -- Gen 2/4/5 registry), which could silently misroute a GBA cartridge that briefly failed
+    -- to identify itself. GB/GBC/SGB (Gen 1, handled above) and NDS (Gen 4/5) are the only
+    -- known non-GBA systems game_detect is ever asked to route.
+    if not sys_ok then
+        error("[SLink] could not determine the loaded system (emu.getsystemid failed): "
+              .. tostring(sys), 0)
+    elseif sys ~= "GBA" and sys ~= "GB" and sys ~= "GBC" and sys ~= "SGB" and sys ~= "NDS" then
+        error("[SLink] could not determine the loaded system: emu.getsystemid() returned "
+              .. tostring(sys) .. " (expected GB, GBC, SGB, GBA or NDS)", 0)
+    end
+    if sys == "GBA" then
         -- Admission itself is isolated in a pcall so an admission error becomes a named
         -- refusal. The BizHawk-version guard below is deliberately OUTSIDE this pcall so it
         -- propagates like the Gen 1 route's does.

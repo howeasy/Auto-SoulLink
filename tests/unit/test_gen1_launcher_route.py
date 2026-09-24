@@ -129,8 +129,11 @@ def test_an_unrecognised_gameboy_title_falls_through_to_game_detect():
 
 
 def test_a_failing_system_probe_does_not_route_to_gen1():
-    loaded = _run_launcher("slink.lua", None, _rom("POKEMON RED"))
-    assert _NEW_CLIENT not in loaded, loaded
+    """G5-ADMIT-HARDEN: a system BizHawk cannot identify at all is refused by name (the Gen 3
+    gate's fail-closed check runs for every route, not only GBA) rather than silently falling
+    through to game_detect -- see test_slink_route.py for the full fail-closed matrix."""
+    with pytest.raises(lupa.LuaError, match="could not determine the loaded system"):
+        _run_launcher("slink.lua", None, _rom("POKEMON RED"))
 
 
 def test_the_manual_gen1_launcher_loads_the_new_client():
