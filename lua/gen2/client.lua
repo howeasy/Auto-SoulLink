@@ -15,6 +15,9 @@
 --   safety   checkpoint, :check(kind) -> ok, why (lua/gen2_write_safety.lua: only a U2-receipted
 --            write kind in the held checkpoint frame)
 --   checkpoint_pc  production only: the checkpoint PC hooked for writes + hello readiness
+--   battle_hold    O-30: write_checkpoint.json battle_hold facts, the in-battle death site (before
+--                  `call DetermineMoveOrder`); production composes it only behind a battle_faint receipt
+--   contest_mask   write_checkpoint.json contest_mask: the Bug-Catching Contest's party mask (ruling a)
 --   net      lua/connector.lua      newline-JSON TCP (send/receive/pump/connected)
 --   json/hud/io                     as Gen 1
 --
@@ -38,6 +41,8 @@ local BOX_NACK = { box_mon = "box_mon_failed", party_mon = "sync_retrieve_failed
 local BOX_OPEN = "Gen 2 box executor not composed"
 -- The U2 write kind whose held checkpoint the hello snapshot and the bench faint wait for.
 local PARTY_HP = "party_hp"
+-- O-30: the write kind held at the battle hold (gen2_write_safety BATTLE_KINDS).
+local BATTLE_FAINT = "battle_faint"
 
 local function nick_label(key, nickname)
     if nickname and nickname ~= "" then return nickname end
@@ -76,6 +81,10 @@ function Client.new(p)
         -- Gen 2 (gen2-box-durability): backing withdraws whose box copy waits for a native SAVE
         -- ({key, armed}); a pending SaveBox after an active-box edit (OMP BOX F2, recorded, not blocking)
         settle = {}, box_save_pending = false,
+        -- O-30, Gen 1 parity (lua/gen1/client.lua pending_battle_writes / arrivals / defer_held): deaths
+        -- owed in battle wait for the next battle hold; `commanded` holds keys whose native faint is the
+        -- echo of a death the server commanded (dropped once, never reported as a new faint).
+        pending_battle_writes = {}, arrivals = 0, commanded = {},
     }
 
     -- ── outbound ─────────────────────────────────────────────────────────────────────
@@ -116,6 +125,19 @@ function Client.new(p)
             log("[SLink-gen2] " .. #self.held .. " pre-hello message(s) dropped: " .. why)
         end
         self.held, self.held_full = {}, false
+    end
+
+    -- Gen 1 parity (lua/gen1/client.lua defer_held): a battle-held death handed to the checkpoint keeps
+    -- its ARRIVAL position, so it never falls behind a later memorialize for the same key.
+    local function defer_held(entry)
+        entry.arrival = entry.arrival or self.arrivals
+        for i, queued in ipairs(self.deferred) do
+            if queued.arrival and queued.arrival > entry.arrival then
+                table.insert(self.deferred, i, entry)
+                return
+            end
+        end
+        self.deferred[#self.deferred + 1] = entry
     end
 
     -- Gen 2: a few point scalars (wBattleScriptFlags) exist only as the engine-site pack's
@@ -263,6 +285,9 @@ function Client.new(p)
         if self.signals then self.signals:boundary(kind) end
         self.faint_latches, self.battle, self.pending_rescan = {}, nil, false
         self.key_alias, self.retired_alias = nil, {}
+        -- O-30: a reset/reload leaves the battle; the owed deaths go to the checkpoint (Gen 1 battle_end)
+        for _, w in ipairs(self.pending_battle_writes) do defer_held(w) end
+        self.pending_battle_writes, self.commanded = {}, {}
         drop_held("the " .. kind .. " boundary")
         self.hello_session:invalidate(why or kind)
     end
@@ -276,6 +301,7 @@ function Client.new(p)
         self.epoch = self.epoch + 1
         if self.signals then self.signals:abandon(why) end
         self.faint_latches, self.deferred = {}, {}
+        self.pending_battle_writes, self.commanded = {}, {}
         self.battle, self.pending_safe, self.pending_rescan = nil, false, true
         -- A delayed retirement may be lost after rewinding a key change; retaining its alias could faint another record.
         self.key_alias, self.retired_alias = nil, {}
@@ -363,38 +389,60 @@ function Client.new(p)
         return mon.slot, mon, party
     end
 
+    -- O-30 ruling (a): the Bug-Catching Contest hides every party mon but the lead
+    -- (ContestDropOffMons) until ContestReturnMons; a death for a hidden mon waits for the return.
+    local contest = p.contest_mask
+    local function contest_masked()
+        if not contest or io.bank_valid(contest.bank, contest.address, 1) ~= true then return false end
+        return math.floor(io.read_u8(contest.address, "System Bus") / 2 ^ contest.bit) % 2 == 1
+    end
+
     local function hud_color(cmd)
         if type(cmd.color) == "table" then return cmd.color[1], cmd.color[2], cmd.color[3], cmd.duration end
         return cmd.r, cmd.g, cmd.b, cmd.frames
     end
 
-    -- Gen 2: the native-SFX seam (P4). No Gen 2 cartridge has a sound mailbox yet, so every
-    -- request is "unavailable", logged once, exactly Gen 1's no-panel path.
+    -- The one native-SFX gate (P4.2b, Gen 1's shape): a server `play_sound` and every LOCAL cue
+    -- request through this. panel:sfx_code_for maps the Gen 3 SE id on the wire to this
+    -- cartridge's semantic code; an id with no Gen 2 sound is dropped silently, never sent. The
+    -- panel's arbiter keeps one cue per frame (lua/sfx_arbiter.lua), so no per-frame set here.
     function self:request_sfx_local(gen3_id)
-        if not self.sfx_unavailable_logged then
+        local code = panel and panel:sfx_code_for(gen3_id)
+        if panel and not code then return end
+        if code and self.config and self.config.native_sounds == true and panel:sfx_present() then
+            panel:request_sfx(code)
+        elseif not self.sfx_unavailable_logged then
             self.sfx_unavailable_logged = true
-            log("[SLink-gen2] play_sound: no native sound path on Gen 2 yet (P4)")
+            log("[SLink-gen2] play_sound: native sounds off or no SFX-capable SLink cartridge")
         end
     end
 
     function self:handle_command(cmd)
         local c_ = cmd.cmd
         if c_ == "noop" then return end
+        self.arrivals = self.arrivals + 1 -- Gen 1 parity: every command's arrival order (defer_held)
         if c_ == "force_faint" or c_ == "force_explode" then
             -- Gen 2: supports_explode_mode() is False; a stray explode is the bench faint.
             local slot, mon, party, why = find_party_slot(cmd.key, c_)
             if why then log("[SLink-gen2] " .. c_ .. ": " .. why .. " " .. tostring(cmd.key)) return end
-            local entry = { cmd = c_, key = cmd.key, nickname = cmd.nickname }
+            local entry = { cmd = c_, key = cmd.key, nickname = cmd.nickname, arrival = self.arrivals }
             if not party then self.deferred[#self.deferred + 1] = entry return end
-            if not slot then log("[SLink-gen2] " .. c_ .. ": key not in party " .. tostring(cmd.key)) return end
+            if not slot and not contest_masked() then
+                log("[SLink-gen2] " .. c_ .. ": key not in party " .. tostring(cmd.key))
+                return
+            end
             local battle = reads.read_battle()
-            if battle and battle.mode ~= 0 and battle.active_slot == slot then
-                -- Gen 2: no qualified in-battle write site (writes.lua header). Ask the writer
-                -- anyway so its refusal is what the player sees; the command then waits for
-                -- the checkpoint, where the mon is benched (protocol §5: deferred to battle end).
-                local ok, err = pcall(function() return writes:faint_active_battler() end)
-                if not ok then
-                    log("[SLink-gen2] " .. c_ .. " held for the checkpoint: " .. tostring(err) .. " " .. cmd.key)
+            if slot and battle and battle.mode ~= 0 then
+                if p.battle_hold then
+                    -- O-30 (Gen 1 pending_battle_writes): the death lands at the next battle hold,
+                    -- active battler and bench alike; a battle that ends first hands it to the checkpoint
+                    self.pending_battle_writes[#self.pending_battle_writes + 1] = entry
+                    return
+                end
+                if battle.active_slot == slot then
+                    -- no battle hold composed (production before the battle_faint receipt): the
+                    -- command waits for the checkpoint (protocol §5: deferred to battle end)
+                    log("[SLink-gen2] " .. c_ .. " held for the checkpoint: no in-battle active faint composed " .. cmd.key)
                     hud.show("KO held: " .. nick_label(cmd.key, mon and mon.nickname) .. " is battling", 255, 160, 64, 300)
                 end
             end
@@ -408,7 +456,8 @@ function Client.new(p)
                 return
             end
             -- Gen 1 parity: queued in arrival order with the faints; run one per checkpoint hold
-            self.deferred[#self.deferred + 1] = { cmd = c_, key = cmd.key, nickname = cmd.nickname }
+            self.deferred[#self.deferred + 1] = { cmd = c_, key = cmd.key, nickname = cmd.nickname,
+                                                  arrival = self.arrivals }
             return
         end
         if c_ == "replace_rival_team" then
@@ -444,6 +493,8 @@ function Client.new(p)
             hud.show("IDENTITY CHANGE REFUSED: " .. tostring(cmd.reason or "collision"), 255, 64, 64, 600)
         elseif c_ == "config" then
             self.config = cmd
+            -- a cue accepted under the old setting must not post after it
+            if cmd.native_sounds ~= true and panel then panel:clear_sfx() end
         elseif c_ == "game_over" then
             self:request_sfx_local(26)
             hud.set_game_over()
@@ -491,12 +542,24 @@ function Client.new(p)
         local cmd = table.remove(self.deferred, 1)
         if BOX_NACK[cmd.cmd] then return self:run_box(cmd) end
         local slot, mon, _, why = find_party_slot(cmd.key, cmd.cmd)
+        if not slot and not why and contest_masked() then
+            -- ruling (a): kill on return; the hidden mon is back at the first checkpoint after
+            -- ContestReturnMons (tail requeue, bounded by the contest itself)
+            if not cmd.contest_logged then
+                cmd.contest_logged = true
+                log("[SLink-gen2] " .. cmd.cmd .. " held until the contest returns the party " .. tostring(cmd.key))
+            end
+            self.deferred[#self.deferred + 1] = cmd
+            return
+        end
         if not slot then
             -- the mon left the party before the checkpoint (PC deposit) or its key is ambiguous
             log("[SLink-gen2] " .. cmd.cmd .. " dropped at the checkpoint: " .. (why or "key not in party")
                 .. " " .. tostring(cmd.key))
             return
         end
+        -- the re-zero behind a landed battle write (O-30): a mon still at HP 0 needs nothing more
+        if cmd.quiet and mon.hp == 0 then return end
         local battle = reads.read_battle()
         -- Gen 2: faint_party_slot takes the battle snapshot and refuses the active slot and
         -- any linked/special battle itself; the client never pre-empts that decision.
@@ -508,7 +571,10 @@ function Client.new(p)
             writes:disarm()
         end)
         writes:disarm()
-        if ok then
+        if ok and cmd.quiet then
+            -- EvolveAfterBattle's max-HP gain or the Battle Tower's reload revived it: dead stays dead
+            log("[SLink-gen2] re-zeroed a revived dead mon " .. cmd.key .. " -> " .. mon_key(mon))
+        elseif ok then
             hud.show("!! " .. nick_label(cmd.key, cmd.nickname or (mon and mon.nickname)) .. " KO'd", 255, 80, 80, 360)
         else
             -- no force_faint NACK exists (protocol §5): the refusal is logged and shown, never
@@ -653,6 +719,10 @@ function Client.new(p)
                     self.resolved_areas[b.area_id] = true
                 end
             end
+            -- Gen 1 parity: a battle write that never reached a battle hold (the battle ended first,
+            -- a link battle) is still owed: the checkpoint zeroes it
+            for _, w in ipairs(self.pending_battle_writes) do defer_held(w) end
+            self.pending_battle_writes = {}
             self.battle = nil
             self.pending_safe = true
         elseif k == "bag_ball_received" then
@@ -683,6 +753,12 @@ function Client.new(p)
         if k == "capture" then publish_capture(ev)
         elseif k == "whiteout" then announce_whiteout()
         elseif k == "faint" then
+            if self.commanded[m.key] then
+                -- O-30: HandlePlayerMonFaint after our own battle write; the server commanded this death
+                self.commanded[m.key] = nil
+                log("[SLink-gen2] faint echo of a commanded death dropped " .. m.key)
+                return
+            end
             self.faint_latches[#self.faint_latches + 1] = { key = m.key, cause = ev.cause, frame = self.frame,
                                                             area_id = (area_of()) }
         elseif k == "party_to_box" then
@@ -756,10 +832,9 @@ function Client.new(p)
             writes_enabled = self.writes_enabled, rom_sha1 = self.rom_sha1,
             in_battle = battle.mode ~= 0,
             -- Gen 2: no rom_content (gen2_gsc.rom_content_fingerprint refuses: not qualified)
-            -- P4.1f panel: per CARTRIDGE, only a live SLink build with CAP_PANEL has it. Native
-            -- sound stays off until P4.2b binds the SE table and request_sfx_local posts to it.
+            -- P4.1f panel / P4.2b sound: per CARTRIDGE, only a live SLink build with the cap bit.
             panel = panel and panel:present() or false, panel_abi = panel and panel:abi() or 0,
-            sfx = false,
+            sfx = panel and panel:sfx_present() or false,
         }
         if hello_identity() ~= expected_identity then return false, "hello identity changed during snapshot" end
         return send("hello", payload)
@@ -864,6 +939,78 @@ function Client.new(p)
             end, p.checkpoint_pc,
                                                   "SLink-gen2-checkpoint", "System Bus")
         end
+        if p.battle_hold and not self.battle_hook then
+            self.battle_hook = io.on_bus_exec(function()
+                local ok, err = pcall(self.at_battle_hold, self)
+                if not ok then log("[SLink-gen2] battle hold: " .. tostring(err)) end
+            end, p.battle_hold.execution_before.pc, "SLink-gen2-battle-hold", "System Bus")
+        end
+    end
+
+    -- O-30, mirroring lua/gen1/client.lua on_battle_loop_head: inside the synchronous CPU hold before
+    -- `call DetermineMoveOrder` (the player committed this turn), land every owed death. Gen 2 differs
+    -- in the site (Gen 2 has no HP test at its loop head) and in W-2's action suppression (USEITEM, not
+    -- CANNOT_MOVE; lua/gen2/writes.lua). Link battles never write (the other Game Boy would desync).
+    local transformed_bit = p.battle_hold and p.battle_hold.transformed_bit
+    function self:at_battle_hold()
+        if #self.pending_battle_writes == 0 or not self.writes_enabled then return end
+        -- a bus-exec hit at this PC in another ROM bank is not BattleTurn: cheapest refusal first
+        if io.read_u8(profile.ram.hROMBank, "System Bus") ~= p.battle_hold.execution_before.bank then return end
+        if not safety.check(BATTLE_FAINT) then return end
+        -- an unreadable party keeps the queue (Gen 1: "gone" and "not readable yet" look alike)
+        if not current_party() then return end
+        local battle, link = reads.read_battle(), wram_byte("wLinkMode")
+        if not battle or battle.mode == 0 or link ~= 0 then return end
+        local targets = p.battle_hold.write.targets
+        local function target(name)
+            local t = targets[name]
+            if io.bank_valid(t.bank, t.address, 1) ~= true then return nil end
+            return io.read_u8(t.address, "System Bus")
+        end
+        local snapshot = { mode = battle.mode, battle_type = battle.battle_type,
+                           active_slot = battle.active_slot, link_mode = link }
+        local keep = {}
+        for _, w in ipairs(self.pending_battle_writes) do
+            local slot, mon, _, why = find_party_slot(w.key, w.cmd)
+            local landed, err = false, nil
+            if why then
+                log("[SLink-gen2] battle write dropped: " .. why .. " " .. tostring(w.key))
+            elseif not slot then
+                defer_held(w) -- a contest-hidden or departed mon: the checkpoint decides
+            elseif slot == battle.active_slot then
+                -- Gen 1 active_faint_guard: the battle struct must be this slot's (Transform excepted)
+                local species, sub5 = target("wBattleMonSpecies"), target("wPlayerSubStatus5")
+                local transformed = sub5 ~= nil and math.floor(sub5 / 2 ^ transformed_bit) % 2 == 1
+                if species == mon.species_id or transformed then
+                    local ok, e = pcall(function()
+                        writes:arm("battle_hold")
+                        writes:faint_active_battler(slot, snapshot)
+                    end)
+                    writes:disarm()
+                    landed, err = ok, e
+                else
+                    keep[#keep + 1] = w
+                end
+            else
+                local ok, e = pcall(function()
+                    writes:arm("battle_hold")
+                    writes:faint_party_slot(slot, snapshot)
+                end)
+                writes:disarm()
+                landed, err = ok, e
+            end
+            if landed then
+                -- only the active battler runs HandlePlayerMonFaint (the echo); a bench write has none
+                if slot == battle.active_slot then self.commanded[mon_key(mon)] = true end
+                hud.show("!! " .. nick_label(w.key, w.nickname or mon.nickname) .. " KO'd", 255, 80, 80, 360)
+                -- dead stays dead: EvolveAfterBattle and the Battle Tower reload can revive it (facts doc §2)
+                defer_held({ cmd = "force_faint", key = w.key, nickname = w.nickname, arrival = w.arrival, quiet = true })
+            elseif err ~= nil then
+                log("[SLink-gen2] battle write refused: " .. tostring(err) .. " " .. tostring(w.key))
+                keep[#keep + 1] = w
+            end
+        end
+        self.pending_battle_writes = keep
     end
 
     -- Production: the CPU sits at the checkpoint PC (OWPlayerInput, before `call CheckAPressOW`),
@@ -940,6 +1087,7 @@ function Client.new(p)
 
     function self:stop()
         if self.checkpoint_hook then io.unregister(self.checkpoint_hook); self.checkpoint_hook = nil end
+        if self.battle_hook then io.unregister(self.battle_hook); self.battle_hook = nil end
         if self.signals then self.signals:close() end
     end
 

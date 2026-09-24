@@ -327,3 +327,133 @@ def test_production_client_holds_link_panel_rows_and_paints_on_the_await_transit
     addrs = {x[0] for x in painted}
     assert tm in addrs and am in addrs and mb + 9 in addrs
     assert w.io.read_u8(mb + 9) == 2                        # STAGED published
+
+
+# -- P4.2b: the SE table and the request_sfx path (gb_panel + lua/sfx_arbiter.lua) -----------------
+
+CAP_SFX, CAP_SFX_NOTIFY = 0x01, 0x04
+CAPS_FULL = CAP_PANEL | CAP_SFX | CAP_SFX_NOTIFY      # sfx.asm with SLINK_PANEL_ENABLED
+SFX_ASM = REPO / "patch" / "gen2" / "src" / "sfx.asm"
+
+
+@pytest.mark.parametrize("caps, success", [(CAPS_FULL, 4), (CAP_PANEL | CAP_SFX, 1)])
+def test_server_ids_map_to_the_gen2_semantic_codes(caps, success):
+    c = Cart("crystal", caps=caps)
+    c.step(2)
+    code = lambda sid: c.panel.sfx_code_for(c.panel, sid)
+    assert [code(25), code(26), code(22), code(95)] == [success, 2, 3, 1]
+    assert code(7) is None and code(193) is None and code(0) is None
+
+
+def test_se_table_and_ranks_use_named_constants_never_literals():
+    """Review-red falsifier: a literal SE id or code in the binding instead of the named constant
+    (lua/sfx_arbiter.lua:20). Rank values are priorities, not ids, so only rank KEYS are checked."""
+    src = pathlib.Path(PANEL).read_text(encoding="utf-8")
+    table = src.split("P.SFX_CODE_FOR_GEN3_ID = {", 1)[1].split("}", 1)[0]
+    ranks = src.split("P.SFX_RANKS = {", 1)[1].split("}", 1)[0]
+    pairs = re.findall(r"\[([^\]]+)\]\s*=\s*([^,]+)", table)
+    assert len(pairs) == 4 and all(re.fullmatch(r"P\.SE_[A-Z]+", k.strip()) and re.fullmatch(r"P\.SFX_[A-Z]+", v.strip())
+                                   for k, v in pairs), pairs
+    keys = re.findall(r"\[([^\]]+)\]", ranks)
+    assert keys and all(re.fullmatch(r"P\.SFX_[A-Z]+", k.strip()) for k in keys), keys
+    P = lupa.LuaRuntime().eval(f'dofile("{PANEL}")')
+    assert (P.SFX_SUCCESS, P.SFX_FAILURE, P.SFX_BOO, P.SFX_NOTIFY) == (1, 2, 3, 4)
+
+
+def test_semantic_codes_equal_the_abi_and_the_service_sound_table():
+    abi = _abi()
+    P = lupa.LuaRuntime().eval(f'dofile("{PANEL}")')
+    assert (P.SFX_SUCCESS, P.SFX_FAILURE, P.SFX_BOO, P.SFX_NOTIFY) == (
+        abi["SLINK_SFX_SUCCESS"], abi["SLINK_SFX_FAILURE"], abi["SLINK_SFX_BOO"], abi["SLINK_SFX_NOTIFY"])
+    sounds = re.search(r"^\.sounds\s*\n\s*db\s+(.+)$", SFX_ASM.read_text(), re.M).group(1)
+    assert [s.strip() for s in sounds.split(",")] == ["SFX_ITEM", "SFX_WRONG", "SFX_BUMP", "SFX_READ_TEXT_2"]
+
+
+def test_one_cue_per_frame_the_failure_wins_and_posts_on_service():
+    c = Cart("gold", caps=CAPS_FULL)
+    c.step(2)
+    p = c.panel
+    assert p.request_sfx(p, 1) and p.request_sfx(p, 2) and p.request_sfx(p, 1)
+    assert c.mem[c.mb + 7] == 0                # nothing posted until service()
+    c.writes.clear()
+    c.step()
+    assert c.writes == [(c.mb + 7, [2])]
+    c.mem[c.mb + 7] = 0                        # the ROM played it
+    c.writes.clear()
+    c.step(3)
+    assert c.writes == []                      # the losing cues were dropped, not deferred
+
+
+def test_unknown_code_and_non_sfx_cartridge_are_refused_and_never_written():
+    c = Cart("silver", caps=CAP_PANEL)         # live, but no SFX bit
+    c.step(2)
+    p = c.panel
+    assert not p.sfx_present(p) and p.request_sfx(p, 1) is False
+    c2 = Cart("silver", caps=CAPS_FULL)
+    c2.step(2)
+    assert c2.panel.request_sfx(c2.panel, 5) is False and c2.panel.request_sfx(c2.panel, 0) is False
+    c.writes.clear(); c2.writes.clear()
+    c.step(2); c2.step(2)
+    assert c.writes == [] and c2.writes == [] and c2.mem[c2.mb + 7] == 0
+
+
+def test_clear_sfx_drops_the_pending_cue():
+    c = Cart("crystal", caps=CAPS_FULL)
+    c.step(2)
+    assert c.panel.request_sfx(c.panel, 2)
+    c.panel.clear_sfx(c.panel)
+    c.writes.clear()
+    c.step(2)
+    assert c.writes == []
+
+
+def _service_sfx(w, state, frames=1, caps=CAPS_FULL):
+    """_service, but leaving the host-owned request byte +7 alone (the ROM consumes it)."""
+    mb = w.profile["overlay"]["ram"]["wSlinkMailbox"]
+    for _ in range(frames):
+        state["counter"] = (state["counter"] + 1) & 0xFFFF
+        w.emu.poke("System Bus", mb, w.lua.table_from(
+            [0x53, 0x4C, 0x4E, 0x4B, 3, state["counter"] & 0xFF, state["counter"] >> 8]))
+        w.emu.poke("System Bus", mb + 8, w.lua.table_from([caps]))
+        w.emu.poke("System Bus", mb + 31, w.lua.table_from([0xA5]))
+        w.frames(1)
+
+
+def test_production_client_advertises_sfx_and_posts_the_mapped_code():
+    from tests.unit.test_gen2_client import World
+    w = World("gold", production=True)
+    mb = w.profile["overlay"]["ram"]["wSlinkMailbox"]
+    state = {"counter": 0}
+    _service_sfx(w, state, 3)
+    hello = w.hello()
+    assert hello["sfx"] is True and hello["panel"] is True
+    w.reply({"cmd": "config", "native_sounds": True})
+    _service_sfx(w, state, 2)
+    w.reply({"cmd": "play_sound", "sound": 7})              # no Gen 2 sound: dropped, never sent
+    _service_sfx(w, state, 3)
+    assert not [x for x in w.written() if x[0] == mb + 7]
+    w.reply({"cmd": "play_sound", "sound": 26})
+    _service_sfx(w, state, 3)
+    assert [x for x in w.written() if x[0] == mb + 7] and w.io.read_u8(mb + 7) == 2
+
+
+def test_production_client_native_sounds_off_posts_nothing():
+    from tests.unit.test_gen2_client import World
+    w = World("crystal", production=True)
+    mb = w.profile["overlay"]["ram"]["wSlinkMailbox"]
+    state = {"counter": 0}
+    _service_sfx(w, state, 3)
+    assert w.hello()["sfx"] is True
+    w.reply({"cmd": "config", "native_sounds": False})
+    w.reply({"cmd": "play_sound", "sound": 26})
+    _service_sfx(w, state, 4)
+    assert not [x for x in w.written() if x[0] == mb + 7]
+
+
+def test_production_client_live_panel_without_sfx_bit_says_sfx_false():
+    from tests.unit.test_gen2_client import World
+    w = World("crystal", production=True)
+    state = {"counter": 0}
+    _service_sfx(w, state, 3, caps=CAP_PANEL)
+    hello = w.hello()
+    assert hello["panel"] is True and hello["sfx"] is False

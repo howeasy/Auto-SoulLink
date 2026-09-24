@@ -11,6 +11,7 @@
 -- counter has moved within STALL frames. Until then the cartridge reads ABSENT and nothing paints.
 local module_dir = debug.getinfo(1, "S").source:match("^@(.+[/\\])[^/\\]+$")
 local G = dofile(assert(module_dir, "gen2/panel.lua must be dofile'd by path") .. "../gb_panel.lua")
+local Arbiter = dofile(module_dir .. "../sfx_arbiter.lua")
 local P = {}
 
 -- patch/gb/slink_abi.inc: version 3, the LE sampled counter at +5..6. patch/gen2/src/slink.asm:
@@ -30,8 +31,20 @@ P.DEADLINE = 60
 -- The counter only moves when DelayFrame runs the service; the START menu and the panel poll call
 -- it every frame. A second without movement means the service isn't running and the bytes are stale.
 P.STALL = 60
--- ponytail: P4.2b binds the Gen 2 SE table (caps SFX is 0 until P4.2a); no server id maps yet.
-P.SFX_CODE_FOR_GEN3_ID = {}
+-- P4.2b: the server speaks Gen 3 SE numbers (docs/protocol.md play_sound); this is the Gen 2
+-- binding onto gb_panel's semantic codes. The ROM owns the native ids (patch/gen2/src/sfx.asm
+-- .sounds: SUCCESS SFX_ITEM $01, FAILURE SFX_WRONG $19, BOO SFX_BUMP $24, NOTIFY SFX_READ_TEXT_2 $08).
+-- Gen 1's shape: SUCCESS is the fanfare kept for nuzlocke start / shiny (95); everyday success (25)
+-- is the short notify blip on a cartridge that advertises SFX_NOTIFY (sfx_code_for). An id with no
+-- row here is not a Gen 2 sound: sfx_code_for answers nil and nothing is ever sent for it.
+P.SE_BOO, P.SE_SUCCESS, P.SE_FAILURE, P.SE_SHINY = 22, 25, 26, 95
+P.SFX_SUCCESS, P.SFX_FAILURE, P.SFX_BOO, P.SFX_NOTIFY = G.SFX_SUCCESS, G.SFX_FAILURE, G.SFX_BOO, G.SFX_NOTIFY
+P.SFX_CODE_FOR_GEN3_ID = { [P.SE_SUCCESS] = P.SFX_SUCCESS, [P.SE_FAILURE] = P.SFX_FAILURE,
+                           [P.SE_BOO] = P.SFX_BOO, [P.SE_SHINY] = P.SFX_SUCCESS }
+-- One cue per frame (lua/sfx_arbiter.lua), ranked by semantic code: a terminal linked faint lands
+-- force_faint's play_sound 26 and game_over's local 26 beside anything else in one reply; the
+-- failure is the news. Unranked codes (success/notify) are generic.
+P.SFX_RANKS = { [P.SFX_FAILURE] = 2, [P.SFX_BOO] = 1 }
 P.BLANK = G.BLANK
 P.WRAM0_LO, P.WRAM0_HI = 0xC000, 0xD000   -- hardware: WRAM0 is never banked; every panel byte is in it
 
@@ -128,11 +141,37 @@ function P.new(profile, charmap, io, writes, sanitize)
     function self:fresh() return fresh end
 
     local base_present, base_sfx_present, base_service = self.present, self.sfx_present, self.service
+    local base_request, base_clear, base_clear_sfx, base_code_for =
+        self.request_sfx, self.clear, self.clear_sfx, self.sfx_code_for
+    local arbiter = Arbiter.new(P.SFX_RANKS)
+    local function drop() arbiter.flush(function() end) end
     function self:present() return fresh and base_present(self) end
     function self:sfx_present() return fresh and base_sfx_present(self) end
+
+    --- The code for a server play_sound id on THIS cartridge, or nil (dropped, never sent).
+    function self:sfx_code_for(sound_id)
+        if sound_id == P.SE_SUCCESS and self:caps_has(G.CAP_SFX_NOTIFY) then return P.SFX_NOTIFY end
+        return base_code_for(self, sound_id)
+    end
+
+    --- Record a semantic code for this frame; service() posts the frame's one winner through
+    --- gb_panel's queue. Only the four codes, only on a live SFX cartridge.
+    function self:request_sfx(code)
+        if code ~= P.SFX_SUCCESS and code ~= P.SFX_FAILURE and code ~= P.SFX_BOO and code ~= P.SFX_NOTIFY then
+            return false
+        end
+        if not self:sfx_present() then return false end
+        arbiter.request(code)
+        return true
+    end
+    function self:clear() drop() return base_clear(self) end
+    function self:clear_sfx() drop() return base_clear_sfx(self) end
+
     function self:service()
         local ok, err = pcall(observe)
         if not ok then fresh = false return nil, tostring(err) end
+        ok, err = pcall(arbiter.flush, function(code) base_request(self, code) end)
+        if not ok then return nil, tostring(err) end
         return base_service(self)
     end
     return self
