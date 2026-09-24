@@ -402,3 +402,4 @@ driver (8b8f37b2: `python tools/gen2_final_sweep.py --list` = 92 cells; `--lanes
 CODE_DIGEST (FINAL-SWEEP, using RELEASE-LANES' tools/gen2_code_digest.py). Running: RELEASE-LANES, FINAL-SWEEP + OMP jobs.
 
 Queued before freeze: KEY-SCOPE-3 (scratchpad key_scope_3_card.md) -> INV-SERVER ada59c171d19b1955.
+Also before freeze: BOX-MEMORIAL-2 (INV-CLIENT ab3f54b5bb3d2e92d, running): boxed memorialize durability + Gen 1 exact box twin (OMP cx-7fe36bd8).
