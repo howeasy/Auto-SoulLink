@@ -318,7 +318,8 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
         f"{scenario}  attempts=2  targets=a:{duo_module.GEN2_BALL_GATE_FIXTURES[game]['a']}, "
         f"b:{duo_module.GEN2_BALL_GATE_FIXTURES[game]['b']}"
         if scenario == "gen2_ball_gate" else
-        f"{scenario}  attempts=1  targets=a:{trade_fixtures['a']}, b:{trade_fixtures['b']}"
+        f"{scenario}  attempts=1  targets=a:{duo_module.GEN2_TRAINER_FIXTURES[game]['a']}, "
+        f"b:{duo_module.GEN2_TRAINER_FIXTURES[game]['b']}"
         if scenario == "gen2_faint_active_trainer" else
         f"{scenario}  attempts=1  targets=a:{duo_module.gen2_synth_name(scenario, game, 'a')}, "
         f"b:{duo_module.gen2_synth_name(scenario, game, 'b')}"

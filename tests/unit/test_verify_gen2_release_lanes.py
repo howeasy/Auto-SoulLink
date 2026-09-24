@@ -2456,9 +2456,12 @@ def _trainer_cell(tmp_path, pair="duo.crystal.crystal", trainer_id=1):
     axes = {**axes, "scenario_fixtures": _row(doc, pair)["axes"]["scenario_fixtures"]}
     fixtures = axes["scenario_fixtures"]["gen2_faint_active_trainer"]
     for name in fixtures.values():
-        (tmp_path / "tests/fixtures/gen2" / f"{name}.SaveRAM").write_bytes(
-            (REPO / "tests/fixtures/gen2" / f"{name}.SaveRAM").read_bytes())
+        for ext in (".SaveRAM", ".synth.json"):   # B boots an O-33 seed (gen2_synth_fixtures.TRAINER_RECIPES)
+            src = REPO / "tests/fixtures/gen2" / f"{name}{ext}"
+            if src.is_file():
+                (tmp_path / "tests/fixtures/gen2" / f"{name}{ext}").write_bytes(src.read_bytes())
     for side in ("a", "b"):
+        _fixture, case, synth = gate._cell_fixture(tmp_path, axes, "gen2_faint_active_trainer", side)
         out = []
         for line in text[side].splitlines():
             tag, _, body = line.partition(" ")
@@ -2467,8 +2470,10 @@ def _trainer_cell(tmp_path, pair="duo.crystal.crystal", trainer_id=1):
             if tag in ("DUO_GEN2", "RECEIPT", "LINKED_ACTIVE"):
                 row = json.loads(body)
                 if tag in ("DUO_GEN2", "RECEIPT"):
-                    row.update(scenario="gen2_faint_active_trainer", case=fixtures[side],
+                    row.update(scenario="gen2_faint_active_trainer", case=case,
                                fixture_sha256=gate._fixture_sha256(tmp_path, fixtures[side]))
+                    if synth and tag == "DUO_GEN2":
+                        row["synth"] = synth
                 if tag == "RECEIPT":
                     row["schema"] = "gen2-duo-faint-active-trainer-v1"
                     if side == "b":

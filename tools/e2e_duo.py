@@ -1013,7 +1013,10 @@ GEN2_TRADE_FIXTURES = {
 }
 # gen2_faint_active_trainer: B needs an errand seed (on Crystal the pre-errand Route 30 battle demo blocks the aisle,
 # C maps/Route30.asm:424-430, ElmsLab.asm:344-345); the trade seeds are the qualified errand pairs.
-GEN2_TRAINER_FIXTURES = {game: GEN2_TRADE_FIXTURES[game] for game in ("gen2_new", "gen2_gold_silver")}
+# B boots an O-33 seed: its errand base with the starter at L10 (tools/gen2_synth_fixtures.TRAINER_RECIPES), so the
+# replacement wins the trainer fight after the forced pick (final sweep: the native L5 starter whited out).
+GEN2_TRAINER_FIXTURES = {"gen2_new": {"a": "crystal_battle_errand", "b": "crystal_synth_trainer_ot2"},
+                         "gen2_gold_silver": {"a": "gold_battle_errand", "b": "silver_synth_trainer"}}
 
 
 # BizHawk writes a save whose path nears Windows MAX_PATH (260) SILENTLY not at all: a 255-char SaveRAM path left
@@ -1098,6 +1101,11 @@ def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
             kind = GEN2_SYNTH_SCENARIOS[scenario]
             target = {**gen2_synth_fixtures.SYNTH_RECIPES, **gen2_synth_fixtures.DUO_RECIPES}[kind][0]
             name = f"{title}_{target}{suffix}"
+        elif "_synth_" in name:   # an O-33 seed named directly (gen2_faint_active_trainer B): boot its PLAYED base
+            from tools import gen2_synth_fixtures
+
+            synth = name
+            name = gen2_synth_fixtures.build_named(synth, root=root)[1]["base_fixture"]
         if name not in BY_NAME:
             raise FileNotFoundError(f"Gen 2 lane missing played/qualified fixture declaration: {name}")
         title = BY_NAME[name].title

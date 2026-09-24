@@ -79,7 +79,7 @@
           },
           "gen2_faint_active_trainer": {
             "a": "crystal_battle_errand",
-            "b": "crystal_battle_ot2_errand"
+            "b": "crystal_synth_trainer_ot2"
           },
           "gen2_evolution": {
             "a": "crystal_synth_evolve",
@@ -650,7 +650,7 @@
           },
           "gen2_faint_active_trainer": {
             "a": "gold_battle_errand",
-            "b": "silver_battle_errand"
+            "b": "silver_synth_trainer"
           },
           "gen2_evolution": {
             "a": "gold_synth_evolve",

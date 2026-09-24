@@ -338,6 +338,18 @@ DUO_RECIPES = {
 DUO_FIXTURES = tuple(f"{title}_synth_{kind}" for title in ("crystal", "gold", "silver") for kind in DUO_RECIPES) + tuple(
     f"crystal_synth_{kind}_ot2" for kind in (*DUO_RECIPES, "bill"))
 
+# gen2_faint_active_trainer's B seed (O-30 review MINOR-5; the final sweep's C-C run whited out when Youngster Joey's L4
+# Rattata beat the native L5 starter after the forced party pick). The errand base (the only aisle to the Route 30
+# trainers is open after the errand) with its starter at L10: Totodile's natural moves below L13 are SCRATCH, LEER and
+# RAGE (C/G data/pokemon/evos_attacks.asm TotodileEvosAttacks). Only the lead's strength is synthetic; the link, the
+# commanded death at the battle hold, the forced pick and the live turns stay native. The base keeps its OT, so the
+# C-C B seed stays the second OT: crystal_battle_ot2_errand; G-S B is silver_battle_errand.
+TRAINER_RECIPES = {
+    "trainer": ("battle{ot2}_errand", {"party": [
+        {"species": "TOTODILE", "level": 10, "moves": ["SCRATCH", "LEER", "RAGE"]}]}),
+}
+TRAINER_FIXTURES = ("crystal_synth_trainer_ot2", "silver_synth_trainer")
+
 
 CLOCK_SCHEMA = "gen2-clock-setup-v1"
 
@@ -387,12 +399,14 @@ def day_clock(raw, *, hour, now, title):
 
 
 def build_named(name, *, root=ROOT):
-    """(bytes, disclosure) for a SYNTH_FIXTURES or DUO_FIXTURES name, from its committed base fixture."""
+    """(bytes, disclosure) for a SYNTH_FIXTURES, DUO_FIXTURES or TRAINER_FIXTURES name, from its committed base
+    fixture. A target with an {ot2} slot places the other-OT marker inside the base name (battle_ot2_errand)."""
     title, _, kind = name.split("_", 2)
     ot2 = kind.endswith("_ot2")
     kind = kind.removesuffix("_ot2")
-    target, edits = {**SYNTH_RECIPES, **DUO_RECIPES}[kind]
-    base = f"{title}_{target}" + ("_ot2" if ot2 else "")
+    target, edits = {**SYNTH_RECIPES, **DUO_RECIPES, **TRAINER_RECIPES}[kind]
+    marker = "_ot2" if ot2 else ""
+    base = f"{title}_{target.format(ot2=marker)}" if "{ot2}" in target else f"{title}_{target}{marker}"
     raw = (Path(root) / "tests/fixtures/gen2" / f"{base}.SaveRAM").read_bytes()
     return build(title, raw, edits, root=root, base_name=base)
 
