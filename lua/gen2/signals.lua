@@ -134,7 +134,16 @@ S.RECEIPT_SCHEMA_V2 = "gen2-engine-site-receipt-v2"
 S.MUTATING_SIGNALS = {capture_party=true, capture_box=true, contest_capture=true, roamer_capture=true,
     evolution_species=true, egg_hatch=true, npc_trade=true, gift_static=true, link_trade=true, pc_deposit=true,
     pc_withdraw=true, pc_release=true}
-S.EFFECT_SYMBOLS = {wPartyCount=1, wPartySpecies=6, sBoxCount=1}   -- symbol -> bytes an effect may span
+S.EFFECT_SYMBOLS = {wPartyCount=1, wPartySpecies=6, sBoxCount=1}   -- symbol -> the bytes an effect spans, whole
+-- Per-site effect contract: the one symbol whose whole span (at the pack's address) proves that site's mutation. A
+-- mutating site absent here can never be proven by a synthetic run.
+S.EFFECT_CONTRACT = {capture_party="wPartyCount", capture_party_finalized="wPartyCount", capture_box="sBoxCount",
+    capture_box_finalized="sBoxCount", contest_box_inserted="sBoxCount", contest_box_finalized="sBoxCount",
+    contest_party_finalized="wPartyCount", hatch_species="wPartySpecies", hatch_finalized="wPartySpecies",
+    evolution_species_published="wPartySpecies", npc_trade_finalized="wPartySpecies",
+    gift_party_finalized="wPartyCount", gift_box_finalized="sBoxCount", link_trade_received="wPartySpecies",
+    link_trade_saved="wPartySpecies", pc_deposit_complete="sBoxCount", pc_withdraw_complete="wPartyCount",
+    pc_release_box_complete="sBoxCount", pc_release_party_complete="wPartyCount"}
 S.SYNTH_BUILDERS = {["tools/gen2_synth_fixtures.py"]=true}
 function S.mutating_site(site)
     return type(site) == "table" and S.MUTATING_SIGNALS[site.signal] == true and type(site.phase) == "string"
@@ -184,12 +193,18 @@ local function synth_problem(run, proven, sites)
     end
     local covered = {}
     for _,e in ipairs(run.effects) do
-        local size = integer(e.size,1,6) and e.size
-        local base, span = points[e.symbol], S.EFFECT_SYMBOLS[e.symbol]
-        if not size or not base or not integer(e.wram,base,base+span-size) then
-            return "effect record is not on a party/box effect byte at the pack's address: " .. tostring(e.site)
-        end
         if not proven[e.site] then return "effect record names a site this run does not prove: " .. tostring(e.site) end
+        -- the site's own contract: its symbol, the whole span, at the pack's address
+        local symbol = S.EFFECT_CONTRACT[e.site]
+        local size = symbol and S.EFFECT_SYMBOLS[symbol]
+        if symbol == nil or e.symbol ~= symbol or points[symbol] == nil or e.wram ~= points[symbol] or e.size ~= size then
+            return "effect record is not the site's own effect span at the pack's address: " .. tostring(e.site)
+        end
+        -- read inside the site's first recorded hit (the receipt's own first_frame), never before it
+        local hit = type(run.sites) == "table" and run.sites[e.site]
+        if type(hit) ~= "table" or e.callback ~= hit.first_frame then
+            return "effect record is not read at the site's first recorded hit: " .. tostring(e.site)
+        end
         for _,field in ipairs({"arming_hex","before_hex","after_hex"}) do
             local v = e[field]
             if type(v) ~= "string" or #v ~= 2*size or not v:match("^%x+$") then return "malformed effect record" end
@@ -867,24 +882,27 @@ function build(options, proven)
         return {kind="key_change",site_id=name,reason="evolution",old_key=old_key,new_key=mon.key,mon=mon,
                 slot=slot,identity_scope="party_only",global_identity_qualification="OPEN"}
     end
-    -- card U1G: gift_begin is GivePoke's entry, reached from Script_givepoke after it read the command's four
-    -- bytes (C engine/overworld/scripting.asm:1922-1945), so wScriptBank:wScriptPos points just past a givepoke
-    -- inside its caller script. The caller is the selected gifts.json givepoke row of this map whose script label
-    -- is the nearest one at or before that position in that bank.
-    -- ponytail: nearest preceding givepoke label; a row span end (not generated today) would make it exact.
+    -- card U1G: gift_begin is GivePoke's entry, reached from Script_givepoke once it has read the command's argument
+    -- bytes (C engine/overworld/scripting.asm:1922-1945). A gifts.json row's rom anchor IS its givepoke command
+    -- (expected_hex = $2d species level item trainer, macros/scripts/events.asm givepoke), so wScriptBank:wScriptPos
+    -- must sit exactly one command past it: the caller is that row, of this map, with its exact arguments.
     local function gift_start(name,site,held)
         local group,number,bank = scalar(site,"wMapGroup"),scalar(site,"wMapNumber"),scalar(site,"wScriptBank")
         local pos = memory(point(site,"wScriptPos"),2)
         local row
         for _,r in ipairs(gifts.gifts) do
+            local anchor = type(r.rom) == "table" and r.rom
             if r.operation == "givepoke" and type(r.applicability) == "table" and r.applicability.selected == true
-               and r.map_group == group and r.map_number == number and type(r.rom) == "table" and r.rom.bank == bank
-               and integer(r.rom.addr,0,65535) and r.rom.addr <= pos and (row == nil or r.rom.addr > row.rom.addr) then
+               and r.map_group == group and r.map_number == number and anchor and anchor.bank == bank
+               and integer(anchor.addr,0,65535) and type(anchor.expected_hex) == "string"
+               and anchor.expected_hex:sub(1,2):lower() == "2d" and #anchor.expected_hex == 10
+               and pos == anchor.addr + #anchor.expected_hex//2 then
+                need(row == nil,"ambiguous givepoke caller")
                 row = r
             end
         end
-        need(row and type(row.area_id) == "string" and integer(row.species,1,251),
-             "OPEN: the gift caller is not a qualified givepoke row")
+        need(row and type(row.area_id) == "string" and integer(row.species,1,251) and integer(row.level,1,100)
+             and integer(row.item,0,255), "OPEN: the gift caller is not a qualified givepoke row")
         local party,why = reads.read_party()
         need(party,"OPEN: party snapshot unavailable: " .. tostring(why))
         return {site_id=name,row=row,count=party.count,fields={},generation=held.generation,operation=held.operation}
@@ -898,7 +916,10 @@ function build(options, proven)
         local slot = party.count-1
         need(party.count == before.count+1 and scalar(site,"wCurPartyMon") == slot,"the gift is not the one appended mon")
         local mon = copy(party.mons[slot+1])
-        need(mon.is_egg == false and mon.species_id == before.row.species,"the appended mon is not the row's gift")
+        local id = point(site,"wPlayerID")
+        local player = memory(id,1)*256 + memory({addr=id.addr+1,bank=id.bank},1)   -- big-endian dw
+        need(mon.is_egg == false and mon.species_id == before.row.species and mon.level == before.row.level
+             and mon.held_item == before.row.item and mon.ot_id == player,"the appended mon is not the row's gift")
         mon.key = key(mon)
         for i,other in ipairs(party.mons) do
             if i ~= slot+1 then need(key(other) ~= mon.key,"ambiguous gift identity") end

@@ -713,6 +713,28 @@ def test_a_hatched_egg_is_published_as_a_gift_daycare_capture():
         codec_key(hatched), "gift_daycare", True, False)
 
 
+def test_a_qualified_direct_gift_is_published_as_a_gift_capture_in_its_pack_area():
+    """Card U1G: Bill's `givepoke EEVEE, 20` (crystal gifts.json BillsFamilysHouse row) reaches the server as ONE
+    capture with gift=true in the row's area; the server trusts the flag (server/state.py capture handling)."""
+    world = World()
+    world.hello()
+    world.field("wMapGroup", 11)
+    world.field("wMapNumber", 6)
+    world.field("wScriptBank", 21)
+    world.field("wScriptPos", 19461 + 5, 2)   # just past the givepoke command
+    world.field("wCurPartySpecies", 133)
+    world.fire("gift_begin")
+    eevee = mon(species=133, dvs=0x5AAA, nickname=0x85)
+    world.party([mon(), eevee])
+    world.field("wCurPartyMon", 1)
+    world.emu.regs["B"], world.emu.regs["F"] = 0, 0x80   # GivePoke.skip_nickname party branch: B = 0, Z set
+    world.fire("gift_party_finalized")
+    world.frames(1)
+    (capture,) = world.sent("capture")
+    assert (capture["key"], capture["area_id"], capture["gift"], capture["in_box"]) == (
+        codec_key(eevee), "goldenrod_city", True, False)
+
+
 @pytest.mark.parametrize("kind", ["roamer", "contest"])
 def test_roamer_and_contest_link_under_the_adapter_namespaces(kind):
     world = World()

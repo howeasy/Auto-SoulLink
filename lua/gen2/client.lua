@@ -1007,9 +1007,10 @@ function Client.new(p)
             if self.battle then self.battle.capture_refused = true end
             return
         end
-        -- Gen 2: the hatch is the gift (O-15, gift_daycare); roamer (legend_<species>, O-17)
-        -- and contest (national_park_contest, O-18) ids come from the binder unchanged
-        local gift = ev.acquisition == "egg_hatch"
+        -- Gen 2: the hatch is the gift (O-15, gift_daycare) and so is a qualified direct givepoke
+        -- (card U1G: area from the gifts.json row); roamer (legend_<species>, O-17) and contest
+        -- (national_park_contest, O-18) ids come from the binder unchanged
+        local gift = ev.acquisition == "egg_hatch" or ev.acquisition == "gift"
         local in_box = ev.destination == "box"
         send("capture", { key = key, area_id = ev.area_id, species_id = m.species_id, level = m.level,
                           hp = m.hp, maxHP = m.max_hp, nickname = m.nickname, held_item_id = m.held_item,

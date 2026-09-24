@@ -52,6 +52,9 @@ def synth_run(world, proven=("capture_box", "capture_box_finalized"), effects=No
     run["synth"] = disclosure(world, run["fixture"])
     run["effects"] = effects if effects is not None else [
         effect(world, "capture_box", "sBoxCount", "00", "01"), effect(world, "capture_box_finalized", "sBoxCount", "00", "01")]
+    for e in run["effects"]:   # the effect is read inside the site's first recorded hit
+        if e["site"] in run["sites"]:
+            e["hit_frame"] = e["callback"] = run["sites"][e["site"]]["first_frame"]
     return run
 
 
@@ -101,6 +104,7 @@ FAULTS = ["no_disclosure", "disclosure_schema", "disclosure_builder", "disclosur
           "disclosure_other_bytes", "no_effect", "effect_unchanged", "effect_is_the_setup_value",
           "effect_before_not_the_arming_read", "effect_arming_before_arrival", "effect_arming_after_the_hit",
           "effect_misaligned", "effect_wram_null_equal_to_setup", "effect_wram_elsewhere", "effect_unrelated_site",
+          "effect_other_symbol_for_the_site", "effect_partial_span", "effect_before_the_sites_first_hit",
           "contest_insert_without_effect", "no_live_capture_alignment", "other_rom", "empty_runs"]
 
 
@@ -143,6 +147,13 @@ def test_a_faulty_v2_receipt_registers_nothing(title, fault):
         e["wram"] += 1
     elif fault == "effect_unrelated_site":
         e["site"] = "hatch_species"
+    elif fault == "effect_other_symbol_for_the_site":   # a box insert cannot be proven by a party count
+        second["effects"] = [effect(world, "capture_box", "wPartyCount", "01", "02"), second["effects"][1]]
+    elif fault == "effect_partial_span":
+        second = synth_run(world, ("hatch_species",), effects=[
+            effect(world, "hatch_species", "wPartySpecies", "fd", "10", offset=1)])
+    elif fault == "effect_before_the_sites_first_hit":
+        e["hit_frame"] = e["callback"] = e["hit_frame"] - 1
     elif fault == "contest_insert_without_effect":
         second = synth_run(world, ("contest_box_inserted",), effects=[])
     elif fault == "no_live_capture_alignment":
@@ -227,14 +238,17 @@ def gift_world(*, gifts=True):
     world.field("wMapGroup", BILL["group"])
     world.field("wMapNumber", BILL["number"])
     world.field("wScriptBank", BILL["bank"])
-    world.field("wScriptPos", BILL["addr"] + 40, 2)
+    world.field("wScriptPos", BILL["addr"] + 5, 2)   # just past `givepoke EEVEE, 20` (2d 85 14 00 00)
     world.field("wCurPartySpecies", BILL["species"])
+    player = world.p["ram"]["wPlayerID"]
+    world.memory["System Bus", player], world.memory["System Bus", player + 1] = 0x12, 0x34   # big-endian, the mon OT
     return world, binder
 
 
-def give(world, binder, species=BILL["species"]):
+def give(world, binder, species=BILL["species"], ot=0x1234, level=20):
     world.fire("gift_begin")
-    world.party([world.mon(), world.mon(species=species, dvs=0x1357)])
+    world.party([world.mon(), world.mon(species=species, dvs=0x1357, ot=ot)])
+    world.memory["System Bus", world.p["ram"]["wPartyCount"] + 8 + 48 + 31] = level   # slot 1's MON_LEVEL
     world.field("wCurPartyMon", 1)
     world.set_guards("gift_party_finalized")
     world.fire("gift_party_finalized")
@@ -251,7 +265,8 @@ def test_a_qualified_givepoke_publishes_one_gift_capture_with_the_pack_area():
 
 
 @pytest.mark.parametrize("fault", ["other_map", "script_before_the_label", "other_bank", "other_species",
-                                   "no_insert"])
+                                   "no_insert", "inside_the_command", "later_in_the_script", "other_ot",
+                                   "other_level"])
 def test_an_unqualified_gift_caller_or_result_publishes_nothing(fault):
     world, binder = gift_world()
     if fault == "other_map":
@@ -260,13 +275,19 @@ def test_an_unqualified_gift_caller_or_result_publishes_nothing(fault):
         world.field("wScriptPos", BILL["addr"] - 1, 2)
     elif fault == "other_bank":
         world.field("wScriptBank", BILL["bank"] + 1)
+    elif fault == "inside_the_command":
+        world.field("wScriptPos", BILL["addr"] + 3, 2)
+    elif fault == "later_in_the_script":
+        world.field("wScriptPos", BILL["addr"] + 40, 2)
+
     if fault == "no_insert":
         world.fire("gift_begin")
         world.set_guards("gift_party_finalized")
         world.fire("gift_party_finalized")
         events = world.events(binder)
     else:
-        events = give(world, binder, species=25 if fault == "other_species" else BILL["species"])
+        events = give(world, binder, species=25 if fault == "other_species" else BILL["species"],
+                      ot=0x4321 if fault == "other_ot" else 0x1234, level=21 if fault == "other_level" else 20)
     assert events == [] and binder.status(binder).refusals, fault
 
 
