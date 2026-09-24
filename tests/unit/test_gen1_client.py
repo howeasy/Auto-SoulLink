@@ -2050,10 +2050,10 @@ def test_a_standalone_box_removal_logs_a_release_marker_and_a_withdraw_does_not(
     separates them is an engine fact rather than a frame count: at this hook nothing has been
     removed yet (site offset 0 on `RemovePokemon`, home/move_mon.asm:20-21), so the key is in the
     BOX either way -- but the withdraw's MoveMon has already installed it in the PARTY and the
-    release has not. The shared protocol has no
-    release event (tests/unit/protocol_schema.py) and `_handle_party_to_box` (state.py:2066-2112)
-    never retires a pair, so a `party_to_box` for a key that was never in the party would be a
-    lie: the client LOGS `RELEASE_SEEN key=<key> box=<index>` and sends nothing.
+    release has not. The shared protocol has a release event (tests/unit/protocol_schema.py) and
+    the server retires the linked pair on it, so a `party_to_box` for a key that was never in the
+    party would be a lie. The client LOGS `RELEASE_SEEN key=<key> box=<index>` and sends
+    `release{key}`; a WITHDRAW sends neither.
     """
     r = world.ram
     rng = random.Random(31)

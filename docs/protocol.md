@@ -210,7 +210,7 @@ Fields the server reads from **enrichment-only** paths (server.py, not state.py)
 
 ### 3.3 PC RELEASE (owner ruling O-35)
 
-Releasing a linked mon from the PC counts as losing it: on `release{key}` the server kills and memorializes the partner like a faint (section 3.2 row `release`), which closes the former S-6 gap where the pair stayed ALIVE with a phantom boxed half. The emitters are still pending: the Gen 1 client only logs a boxed Bill's PC RELEASE as `RELEASE_SEEN key=... box=...` (told apart from the removal completing WITHDRAW), and the Gen 2 client logs a boxed `pc_release` the same way and sends a party release as `party_to_box`; each must send `release{key}` instead. Gen 3 sends neither.
+Releasing a linked mon from the PC counts as losing it: on `release{key}` the server kills and memorializes the partner like a faint (section 3.2 row `release`), which closes the former S-6 gap where the pair stayed ALIVE with a phantom boxed half. Gen 1 sends `release{key}` for a boxed Bill's PC RELEASE, distinguished from WITHDRAW; Gen 2 sends it for a party or box `pc_release` and no longer sends `party_to_box` for a release. The server ignores an unlinked key. Gen 3 sends neither.
 
 ### 3.4 `whiteout` → rebuild sequence
 
