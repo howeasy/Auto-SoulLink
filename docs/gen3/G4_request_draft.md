@@ -105,11 +105,10 @@ Since the last full pass through this draft, four things changed:
 Three rehearsal passes are committed: `docs/gen3/probes/fc_zip_*` / `fc_probe_gates_*` /
 `fc_bootcheck_*` @ `6e85ddfc` (zip chain + probe_gates PASS), `fc_bootcheck_*` @ `d0a4bba5`
 (cold-boot 8/8 PASS) and `fc_release_gate_quick_*` @ `2b926be1`/`6e85ddfc`/`d0a4bba5` (PASS,
-2629 passed / 0 unexplained skips). A fourth, fast-mode rehearsal ran the `--carry`/`--shard`/
-`--merge-summary` path end to end: `fc_SUMMARY_157e1ef7.txt` (7/7 rows PASS: the four probe
-states, the two tutorial states, `faint_cmd_gen3_fr_as_a`). None of these four is the frozen cut
-the gate signs — they are rehearsals of the runner itself, taken at whatever HEAD happened to be
-current when each ran (`6e85ddfc`, `d0a4bba5`, `2b926be1`, `157e1ef7`), not a single pinned sha.
+2629 passed / 0 unexplained skips). None of these three is the frozen cut the gate signs: they rehearse the runner itself at
+whatever HEAD was current (`6e85ddfc`, `d0a4bba5`, `2b926be1`). A pre-cut pass at `157e1ef7`
+(`fc_*_157e1ef7.txt`) collects receipts that `--carry` reuses at the frozen cut where no
+dependency changed.
 **S**/**P**
 
 **When the coordinator freezes a cut and runs the real final pass**, it fills in:

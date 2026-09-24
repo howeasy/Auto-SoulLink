@@ -205,14 +205,14 @@ on that basis — it is an internal gate request, not a release request. **S**
 3. **RR extension evidence** — `docs/gen3/G4_request_draft.md` §5 lists the RR save extension as
    OPEN in the duo harness (compared to a live-RAM copy or reported OPEN, `2cace0a9`). Carried
    forward here rather than re-litigated, since it is a harness limitation, not an RR-specific gap.
-4. **`explode_gen3` and `rival_swap_gen3` as harness controls, not qualification rows** — the duo
-   harness labels both `NON-QUALIFYING`/`CONTROL` in its own output (`2cace0a9`; see the `ph_explode_gen3`
-   receipts' bracketed note and §2 row 8's own `NEGATIVE CONTROL` wording). Their PASS verdicts in
-   §2 are real, but they qualify the P+H mechanism and the swap-refusal design respectively, not a
-   standalone "RR does X" claim the way the other rows do. `<<EVIDENCE?>>`: whether the owner wants
-   a qualifying (non-control) `explode_gen3` row before signing G5, or accepts the Explode+H row
-   (§2 row 13) as sufficient — this draft did not find a ruling on that distinction and does not
-   guess one.
+4. **`rival_swap_gen3` is a harness control, not a qualification row.** Its scenario entry
+   carries `control` (tools/e2e_duo.py, `rival_swap_gen3`): it qualifies the swap-refusal design
+   (stale_battle_id), not a standalone "RR does X" claim. `explode_gen3` is NOT a control any
+   more: its entry has no `control` key and the RR receipt
+   (`rr_explode_gen3_rr_as_a_156a521f.txt`) shows B's `Explode+H: engine Explosion KO` PASS,
+   the downstream witness the earlier NON-QUALIFYING label asked for. The block comment above
+   the RR-only scenarios in tools/e2e_duo.py still describes the old control status; it is
+   stale and is queued for correction after the final cut (editing it now would void carry).
 
 ---
 
