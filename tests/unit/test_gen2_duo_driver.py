@@ -2603,7 +2603,7 @@ def test_attach_hooks_print_a_committed_proposer_visit_the_verdict_passes(tmp_pa
     assert stack["armed_count"] == 96 and [p["visited"] for p in stack["phases"]] == [True, True, False, True]
     # the sim stack (SP $DFE0) never nears the floor: v2 reports ">floor+64", and the SP-1 canary proves the hooks
     assert stack["low_water_state"] == ">floor+64" and stack["global_low_water"] is None
-    assert stack["canary"] == {"address": 0xDFDF, "hit": True, "frame": stack["canary"]["frame"]}
+    assert stack["canary"] == {"address": 0xDFDF, "hit": True, "frame": stack["canary"]["frame"], "sp": 0xDFE0}
     # red: the same run with a hook fault can never pass
     problems, _ = trade_verdict(lines + ['TRADE_HOOK_ERROR {"text": "x"}'], "new", "a")
     assert problems

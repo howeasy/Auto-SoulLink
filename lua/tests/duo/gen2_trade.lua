@@ -871,6 +871,7 @@ function T.attach(e)
         st.canary = {address=canary, hits=0}
         local okc, hc = pcall(write, function()
             if st.canary.hits > 0 then return end
+            st.canary.sp = api.register("SP")
             st.canary.hits, st.canary.frame = 1, frame()
         end, canary, "SLink-duo-trade-sp-canary", "System Bus")
         if okc and hc ~= nil and hc ~= "" then st.canary_handle = hc else st.hook_failures = st.hook_failures + 1 end
@@ -1042,8 +1043,8 @@ function T.attach(e)
         local row = {domain="System Bus", stack_bank=stack_bank, stack_start=bottom, stack_end=top,
                      armed_start=st.armed_start, armed_end=st.armed_end, floor=bottom + T.MARGIN,
                      low_water_state=st.low and "exact" or ">floor+" .. T.EXACT,
-                     canary=st.canary and {address=st.canary.address, hit=st.canary.hits > 0,
-                                           frame=st.canary.frame or json.null} or json.null,
+                     canary=st.canary and {address=st.canary.address, sp=st.canary.sp or json.null,
+                                           hit=st.canary.hits > 0, frame=st.canary.frame or json.null} or json.null,
                      armed_count=st.armed_count, hook_failures=st.hook_failures, phases=json.array(phases),
                      registration_events=json.array(st.registration or {}), continuous=true,
                      global_low_water=st.low or json.null, global_observations=st.pushes or 0,
@@ -1411,7 +1412,7 @@ function T.verdict(lines, json, case, player)
     local stack = v(one("TRADE_STACK"))
     local canary = stack.canary
     need(stack.domain == "System Bus" and integer(stack.stack_start, 0xC000, 0xDFFF) and integer(stack.stack_end, 0xC000, 0xDFFF)
-         and stack.armed_start == stack.stack_start and stack.floor == stack.stack_start + T.MARGIN
+         and integer(stack.stack_bank, 0, 0xFFFF) and stack.armed_start == stack.stack_start and stack.floor == stack.stack_start + T.MARGIN
          and stack.armed_end == math.min(stack.stack_end, stack.stack_start + T.MARGIN + T.EXACT - 1)
          and stack.armed_count == stack.armed_end - stack.armed_start + 1 and stack.hook_failures == 0,
          "stack witness coverage incomplete")

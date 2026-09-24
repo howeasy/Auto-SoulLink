@@ -31,8 +31,8 @@ v1 wire keys (all frames are observed emulator frames):
   spans:[{address,hex} x3]}; actual records/OT/nicknames, 48+11+11 bytes.
 * TRADE_NATIVE_CALL: frame, symbol, bank, address; TRADE_DONE: frame, lease_hex.
 * TRADE_STACK: domain, stack_bank/start/end(inclusive), armed_count, hook_failures,
-  global_observations>0, global_low_water={frame,stack_addr,sp,pc,rom_bank},
-  continuous=true, registration_complete_before_first_phase=true,
+  canary={address,sp,hit,frame}, global_observations>0,
+  global_low_water={frame,stack_addr,sp,pc,rom_bank}, continuous=true,
   coverage_started/coverage_ended={frame,site}, registration_events=[
   {action:'arm',address,frame,hook_id} for every unique stack address]. The
   inventory includes all registration changes through coverage end; any
@@ -93,7 +93,9 @@ STABLE_SERVER_FIELDS = frozenset(("game_id", "rules", "area_states", "pending_ca
     "attempts_count", "rebuild_pending"))
 # TRADE-HARDEN 7de364f0 (review B1): the durable trade FSM. pending_trade must be settled (null) in
 # both the pre-visit baseline and the final document; trade_token is a counter that only goes up.
-TRADE_SERVER_FIELDS = frozenset(("pending_trade", "trade_token"))
+# KEY-SCOPE-3 a56ac407: ambiguous_keys latches a (player, key) after a trade-window clash; a clean trade
+# never creates one, so it must be empty (or absent, pre-a56ac407) in both documents.
+TRADE_SERVER_FIELDS = frozenset(("pending_trade", "trade_token", "ambiguous_keys"))
 
 
 class TradeStatus(StrEnum):
@@ -321,8 +323,9 @@ def _stack(marker, rom, symbols, *, committed, evolved=None, visit=True, partial
     the write hooks fire at all."""
     bottom, top = symbols["wStackBottom"].address, symbols["wStackTop"].address
     armed_end = min(top, bottom + STACK_MARGIN + STACK_EXACT - 1)
+    stack_bank = _integer(marker.get("stack_bank"), 0, 0xFFFF, "stack bank")
     _need(marker.get("domain") == "System Bus" and marker.get("stack_start") == bottom
-          and marker.get("stack_end") == top and marker.get("stack_bank") == symbols["wStackBottom"].bank
+          and marker.get("stack_end") == top and stack_bank == symbols["wStackBottom"].bank
           and marker.get("armed_start") == bottom and marker.get("armed_end") == armed_end
           and marker.get("floor") == bottom + STACK_MARGIN
           and marker.get("armed_count") == armed_end - bottom + 1
@@ -330,8 +333,10 @@ def _stack(marker, rom, symbols, *, committed, evolved=None, visit=True, partial
           "incomplete stack bus-write coverage")
     canary = _object(marker.get("canary"), "stack canary")
     _need(canary.get("hit") is True, "stack write hooks never proved live (no canary hit)")
-    _integer(canary.get("address"), 0xC000, 0xDFFF, "stack canary address")
-    _frame(canary)
+    canary_address = _integer(canary.get("address"), 0xC000, 0xDFFF, "stack canary address")
+    canary_frame = _frame(canary)
+    canary_sp = _integer(canary.get("sp"), bottom, top + 1, "stack canary SP")
+    _need(canary_address == canary_sp - 1, "stack canary is not a real push")
     _need(marker.get("continuous") is True and marker.get("registration_complete_before_first_phase") is True,
           "stack coverage was not declared continuous before phase entry")
     started = _object(marker.get("coverage_started"), "stack coverage start")
@@ -340,6 +345,7 @@ def _stack(marker, rom, symbols, *, committed, evolved=None, visit=True, partial
     _need(started.get("site") == "harness:trade_go"
           and ended.get("site") == "harness:before_report", "unknown stack harness coverage boundary")
     _need(first_covered <= last_covered, "reversed stack coverage boundaries")
+    _need(first_covered <= canary_frame <= last_covered, "stack canary outside observed coverage boundaries")
     events = marker.get("registration_events")
     _need(isinstance(events, list) and len(events) == armed_end - bottom + 1, "stack registration inventory incomplete/rearmed")
     addresses, handles, previous_frame = set(), set(), -1
@@ -750,6 +756,8 @@ def _server(transaction, data_dir, manifest, receipts, before_mons, after_mons, 
     _need(before.get("pending_trade") is None and final.get("pending_trade") is None
           and all(type(value) is int and value >= 0 for value in counters) and counters[0] <= counters[1],
           "durable pending_trade unsettled or trade_token went backwards")
+    _need(not any(any((document.get("ambiguous_keys") or {}).values()) for document in (before, final)),
+          "a trade left an ambiguous-key latch (KEY-SCOPE-3 clash)")
     _need(before_stable == final_stable, "server gameplay fields changed outside the native trade transition")
     rows = before.get("links")
     _need(isinstance(rows, list), "missing baseline links")
