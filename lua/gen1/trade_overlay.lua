@@ -67,6 +67,18 @@ function T.new(profile, io, writes)
         return lease_arm(self, command, own_slot, token4, {blob = blob66, name = partner_name11})
     end
     self.service_address = function() return T.service_address(profile) end
+    --- MAJOR-4: pull an armed, never-picked-up APPLY. The caller arms writes. The borrowed union gets
+    --- its preimage back (arm backed it up); a clobbered frame is already the game's again.
+    function self:withdraw()
+        if self.phase ~= "armed" then return false end
+        if not self:clobbered() then
+            local preimage = io.read_range(backup, 16)
+            if not valid_bytes(preimage, 16) then return false end
+            writes:write_bytes(overlay, preimage)
+        end
+        self.expected, self.phase = nil, nil
+        return true
+    end
     return self
 end
 

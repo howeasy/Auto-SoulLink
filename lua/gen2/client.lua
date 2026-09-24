@@ -77,6 +77,7 @@ function Client.new(p)
         -- P4.3b: the lease the cartridge is waiting on ({kind, gen, token, frame, ...}) and this
         -- visit's role/token, kept from the first command (trade_mask/show_menu) through APPLY
         trade = trade, trade_state = nil, trade_visit = nil,
+        trade_owed = {}, -- trade_uncertain / withdraw_offer messages, sent in order once the hello is ready
         seq = 0, frame = 0, hello_sent = false,
         writes_enabled = false, invalid_streak = 0, gate_revoked = false,
         box_cache = {}, resolved_areas = {}, config = {}, deferred = {},
@@ -525,6 +526,8 @@ function Client.new(p)
             self:trade_apply(cmd)
         elseif c_ == "apply_prepare" then
             self:trade_prepare_answer(cmd)
+        elseif c_ == "withdraw_trade" then
+            self:trade_withdraw(cmd)
         elseif c_ == "trade_mask" and self:trade_live() then
             self:trade_answer_query(cmd.mask or 0)
         elseif c_ == "trade_offer_ack" and self:trade_live() then
@@ -604,7 +607,8 @@ function Client.new(p)
     -- the partner side alone. Owed like trade_done: sent once the hello is ready (frame_end).
     local function withdraw_offer(server_token, why)
         log("[SLink-gen2] trade offer withdrawn: " .. why)
-        self.trade_owed = { event = "menu_result", fields = { token = server_token, choice = 0, withdraw = true } }
+        self.trade_owed[#self.trade_owed + 1] = { event = "menu_result",
+                                                  fields = { token = server_token, choice = 0, withdraw = true } }
     end
 
     function self:trade_answer_offer(accept, server_token)
@@ -685,10 +689,15 @@ function Client.new(p)
     -- the hello is ready (after a reset: the post-reset hello, frame_end); the server journals it and
     -- that side's next party snapshot settles the link, instead of the applying watchdog.
     -- Mirrored by lua/gen1/client.lua trade_uncertain.
-    local function trade_uncertain(st, why)
+    -- after_reset (MAJOR-5): a native result 2 holds until a reset, and its RAM party was never
+    -- saved; the server then takes evidence only from the reloaded save (the post-reset hello).
+    local function trade_uncertain(st, why, after_reset)
         hud.show("TRADE UNCERTAIN - CHECK PARTY", 255, 64, 64, 600)
         log("[SLink-gen2] apply_trade uncertain: " .. why .. "; no release, no key claim")
-        self.trade_owed = { event = "trade_done", fields = { token = st.token, uncertain = true } }
+        if st.declared then return end
+        st.declared = true
+        self.trade_owed[#self.trade_owed + 1] = { event = "trade_done",
+            fields = { token = st.token, uncertain = true, after_reset = after_reset or nil } }
     end
     function self:trade_forget(why)
         local st, visit = self.trade_state, self.trade_visit
@@ -697,7 +706,22 @@ function Client.new(p)
         self.trade_state, self.trade_visit = nil, nil
     end
 
-    local function trade_end(st, why)
+    local trade_end
+    -- MAJOR-4 (review e9d5e136): the server asks a silent side to withdraw its APPLY. Unpicked: pull
+    -- it and report nothing changed (certain). Past the commit entry: uncertain. Picked up but not
+    -- committing yet: the cartridge answers on its own (DONE or a close) within frames.
+    -- Mirror of lua/gen1/client.lua trade_withdraw.
+    function self:trade_withdraw(cmd)
+        local st = self.trade_state
+        if not (trade and st and st.kind == "apply" and st.token == cmd.token) then return end
+        if trade.phase == "armed" then
+            traded(function() trade:withdraw() return true end, "withdraw")
+            return trade_end(st, "the server withdrew the unpicked APPLY")
+        end
+        if trade.committing then trade_uncertain(st, "the server asked for a withdrawal") end
+    end
+
+    function trade_end(st, why)
         if st.kind == "prompt" then
             log("[SLink-gen2] trade prompt ended: " .. why)
             send("menu_result", { token = st.token, choice = 0 })
@@ -739,7 +763,7 @@ function Client.new(p)
                 -- native append uncertain (T-5 limit): the cartridge keeps the lease; no release, no claim
                 if not st.warned then
                     st.warned = true
-                    trade_uncertain(st, "native result 2; holding")
+                    trade_uncertain(st, "native result 2; holding until a reset", true)
                 end
                 return
             end
@@ -1357,10 +1381,10 @@ function Client.new(p)
             self.held, self.held_full = {}, false
             for _, m in ipairs(held) do send(m.event, m.fields) end
         end
-        if connected and self.trade_owed then -- trade_uncertain / withdraw_offer, after any held messages
+        if connected and #self.trade_owed > 0 then -- trade_uncertain / withdraw_offer, after any held messages
             local owed = self.trade_owed
-            self.trade_owed = nil
-            send(owed.event, owed.fields)
+            self.trade_owed = {}
+            for _, m in ipairs(owed) do send(m.event, m.fields) end
         end
         for _, batch in ipairs(self.signals and self.signals:drain() or {}) do
             for _, ev in ipairs(batch.events or {}) do

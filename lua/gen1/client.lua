@@ -166,6 +166,7 @@ function Client.new(p)
         -- deferred backing-box removals ({key, armed}) waiting for save_witness (gen1-box-durability)
         box_settle = {},
         trade = p.trade, trade_enabled = false, trade_state = nil,
+        trade_owed = {}, -- trade_uncertain messages, sent in order once the hello is ready
         -- A1: server-seeded pending-capture keys (part of the APEX collision set) and the
         -- old->new alias held between a key_change and its ack
         pending_keys = {}, key_alias = nil, apex = nil, transforming = nil,
@@ -637,6 +638,8 @@ function Client.new(p)
             self:trade_prompt(cmd)
         elseif c == "show_choices" or c == "show_menu" or c == "choose_mon" then
             ack_cancel(cmd) -- no native picker outside the receptionist flow
+        elseif c == "withdraw_trade" then
+            self:trade_withdraw(cmd)
         elseif c == "apply_prepare" then
             -- MAJOR-1 prepare round (mirror of lua/gen2/client.lua trade_prepare_answer): the
             -- service picks APPLY up anywhere, so ready = the mon is still here and no native
@@ -1904,10 +1907,16 @@ function Client.new(p)
     -- saved: no release, no key claim. It is DECLARED, trade_done{token, uncertain = true}, once the
     -- hello is ready (frame_end; after a reset, the post-reset hello); the server journals it and this
     -- side's next party snapshot settles the link. Mirror of lua/gen2/client.lua trade_uncertain.
-    local function trade_uncertain(st, why)
+    -- after_reset (MAJOR-5): result 2 holds the lease until a reset (trade_service.asm
+    -- .waitForReceipt), and its RAM party was never saved; the server then takes evidence only
+    -- from the reloaded save (the post-reset hello). Mirror of lua/gen2/client.lua.
+    local function trade_uncertain(st, why, after_reset)
         hud.show("TRADE UNCERTAIN - CHECK PARTY", 255, 64, 64, 600)
         log("[SLink-gen1] apply_trade uncertain: " .. why .. "; no release, no key claim")
-        self.trade_owed = { event = "trade_done", fields = { token = st.token, uncertain = true } }
+        if st.declared then return end
+        st.declared = true
+        self.trade_owed[#self.trade_owed + 1] = { event = "trade_done",
+            fields = { token = st.token, uncertain = true, after_reset = after_reset or nil } }
     end
     -- Mirror of Gen 2's trade_forget: before the commit boundary nothing was mutated and nothing
     -- is claimed; after it, uncertain.
@@ -1915,6 +1924,22 @@ function Client.new(p)
         local st = self.trade_state
         if st and st.kind == "apply" and st.committing then trade_uncertain(st, tostring(why)) end
         self.trade_state = nil
+    end
+
+    -- MAJOR-4 (review e9d5e136): the service picks APPLY up on any overworld frame, so an APPLY left
+    -- armed could commit after the server settled the trade. On the server's word: unpicked, give
+    -- the borrowed union back and report nothing changed (certain); past the commit boundary,
+    -- uncertain. Mirror of lua/gen2/client.lua trade_withdraw.
+    function self:trade_withdraw(cmd)
+        local st = self.trade_state
+        if not (self.trade and st and st.kind == "apply" and st.token == cmd.token) then return end
+        if self.trade.phase == "armed" and trade_arm(function() return self.trade:withdraw() end) then
+            self.trade_state = nil
+            log("[SLink-gen1] apply_trade withdrawn before pickup; nothing changed")
+            send("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
+        elseif st.committing then
+            trade_uncertain(st, "the server asked for a withdrawal")
+        end
     end
 
     -- Per-frame: watch the lease for the receptionist questions and the native completions.
@@ -1939,7 +1964,7 @@ function Client.new(p)
                     -- native append uncertain (T-5 limit): the cartridge keeps the lease; no release, no claim
                     if not st.warned then
                         st.warned = true
-                        trade_uncertain(st, "native result 2; holding")
+                        trade_uncertain(st, "native result 2; holding until a reset", true)
                     end
                     return
                 end
@@ -2042,10 +2067,10 @@ function Client.new(p)
         self.hello_sent = connected == true
         if self.frame % Client.VALIDATE_EVERY == 0 then self:validate() end
         connected = connected and self.hello_session:status().ready
-        if connected and self.trade_owed then -- trade_uncertain: never before the (post-reset) hello
+        if connected and #self.trade_owed > 0 then -- trade_uncertain: never before the (post-reset) hello
             local owed = self.trade_owed
-            self.trade_owed = nil
-            send(owed.event, owed.fields)
+            self.trade_owed = {}
+            for _, m in ipairs(owed) do send(m.event, m.fields) end
         end
         for _, sig in ipairs(self.signals and self.signals:drain() or {}) do
             local ok, err = pcall(self.on_signal, self, sig)

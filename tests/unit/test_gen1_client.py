@@ -2766,6 +2766,8 @@ def test_a_native_result_2_is_declared_uncertain_once_and_never_released():
     w.bus[base:base + 16] = bytes(done)
     w.step(5)
     assert _uncertain_done(w) == [("t30", True, False)]
+    assert [d.get("after_reset") for d in w.events("trade_done")] == [True], \
+        "MAJOR-5: the RAM party is no evidence; only the reloaded save (post-reset hello) is"
     assert _overlay(w)[5] == 7, "result 2 is never released"
     assert any("UNCERTAIN" in str(h) for h in w.hud)
     w.assert_all_conform()
@@ -3595,3 +3597,39 @@ def test_an_unpatched_cartridge_declares_no_prepare_round(world):
     world.connect()
     world.step(3)
     assert world.events("hello")[0].get("trade_prepare") is False
+
+
+# ── MAJOR-4 (review e9d5e136): an armed APPLY is withdrawn on the server's word ──────────────────
+
+def test_a_withdrawn_unpicked_apply_restores_the_union_and_reports_nothing_changed():
+    """The Gen 1 service picks APPLY up on any overworld frame (SlinkForeground): an APPLY left armed
+    past the server's settle could commit after a rollback (review probe P3)."""
+    w = _patched_world()
+    base = w.ram["wSerialPartyMonsPatchList"]
+    preimage = _overlay(w)
+    old_key = codec.key(w.party()[0])
+    rng = random.Random(31)
+    incoming = _mon(rng, 0xB1, level=7, nick="PIDGEY")
+    blob = codec.encode_party_mon(incoming) + codec.encode_name("BLUE") + codec.encode_name("PIDGEY")
+    w.reply({"cmd": "apply_trade", "slot": 0, "blob_hex": blob.hex().upper(), "old_key": old_key,
+             "token": "t50", "partner_name": "BLUE"})
+    w.step()
+    assert _overlay(w)[5] == 5
+    w.reply({"cmd": "withdraw_trade", "token": "t50"})
+    w.step()
+    assert _overlay(w) == preimage, "the borrowed union is given back untouched"
+    assert [(d["token"], d["new_key"]) for d in w.events("trade_done")] == [("t50", old_key)]
+    assert w.client.trade_state is None
+    w.assert_all_conform()
+
+
+def test_a_withdraw_past_the_commit_boundary_declares_uncertain():
+    w = _patched_world()
+    _applying(w, token="t51")
+    w.bus[w.ram["wRemoveMonFromBox"]] = 0
+    w.bus[w.ram["wWhichPokemon"]] = 0
+    w.fire("remove_pokemon")
+    w.step()
+    w.reply({"cmd": "withdraw_trade", "token": "t51"})
+    w.step(2)
+    assert _uncertain_done(w) == [("t51", True, False)]

@@ -2024,7 +2024,12 @@ def test_trade_a_native_result_2_is_declared_uncertain_once_and_never_released()
     cart.done(2)
     cart.w.frames(4)
     assert uncertain_done(cart.w) == [("t1", True, False)]
+    assert [d.get("after_reset") for d in cart.w.sent("trade_done")] == [True], \
+        "MAJOR-5: the RAM party is no evidence; only the reloaded save (post-reset hello) is"
     assert cart.frame()[5] == 7, "result 2 is never released"
+    cart.w.client.boundary(cart.w.client, "reset", "save_reset")         # the reset the hold requires
+    cart.w.frames(4)
+    assert len(cart.w.sent("trade_done")) == 1, "declared once"
 
 
 @pytest.mark.parametrize("how", ["apply_wait_timeout", "late_ack"])
@@ -2154,3 +2159,26 @@ def test_trade_blocked_rides_the_tick_while_the_contest_masks_the_party():
     in_contest(cart, on=False)
     cart.w.frames(60)
     assert cart.w.sent("tick")[-1].get("trade_blocked") is False
+
+
+# ── MAJOR-4 (review e9d5e136): the server asks a silent side to withdraw its APPLY ───────────────
+
+def test_trade_withdraw_pulls_an_unpicked_apply_and_reports_nothing_changed():
+    cart = TradeCart()
+    proposer_ready(cart)
+    cart.w.reply(apply_cmd())
+    cart.w.frames(1)
+    assert cart.frame()[5] == 5
+    cart.w.reply({"cmd": "withdraw_trade", "token": "t1"})
+    cart.w.frames(2)
+    assert cart.frame()[5] != 5, "the dispatcher can never pick it up now"
+    assert nothing_changed(cart.w)
+
+
+def test_trade_withdraw_after_the_commit_entry_declares_uncertain():
+    cart = TradeCart()
+    committing(cart)
+    cart.w.reply({"cmd": "withdraw_trade", "token": "t1"})
+    cart.w.frames(3)
+    assert uncertain_done(cart.w) == [("t1", True, False)]
+    assert [d.get("after_reset") for d in cart.w.sent("trade_done")] == [None]
