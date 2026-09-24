@@ -95,7 +95,7 @@ def forced_save(raw, layout, symbols, seconds=7, staged=None):
         save_bytes(raw, layout, symbols, name, bytes([facing]))
     if staged is not None:   # lua/gen2/trade_overlay.lua stage() on a PROMPT: the name is the incoming OT
         blob, marker = staged
-        for name, data in (("wOTPlayerName", blob[48:59]), ("wOTPartyCount", b""),
+        for name, data in (("wOTPlayerName", blob[48:59]), ("wOTPartyCount", b"\x01"),
                            ("wOTPartySpecies", bytes([marker, 0xFF])), ("wOTPartyMon1", blob[:48]),
                            ("wOTPartyMonOTs", blob[48:59]), ("wOTPartyMonNicknames", blob[59:70])):
             save_bytes(raw, layout, symbols, name, data)
@@ -1130,10 +1130,71 @@ def test_trgs2_shaped_forced_saves_pass(tmp_path, sources, variant):
     assert facts[0]["status"] == "committed"
 
 
+def test_responder_species_marker_must_match_partner_offer(tmp_path, sources):
+    case = make_case(tmp_path, sources, "gs")
+    offer = get(case, "b", "TRADE_OFFER")
+    wrong_marker = 17 if offer["incoming_species_marker"] != 17 else 18
+    offer["incoming_species_marker"] = wrong_marker
+    _resave(case, sources, "b", lambda raw, layout, symbols: save_bytes(
+        raw, layout, symbols, "wOTPartySpecies", bytes((wrong_marker, 0xFF))))
+    with pytest.raises(RuntimeError, match="staged incoming"):
+        invoke(case)
+
+
+def test_responder_staging_blob_must_match_partner_offer(tmp_path, sources):
+    case = make_case(tmp_path, sources, "gs")
+    offer = get(case, "b", "TRADE_OFFER")
+    other = next(row for row in get(case, "b", "TRADE_BASELINE")["party"]
+                 if row["blob_hex"] != offer["incoming_blob_hex"])
+    offer.update(incoming_blob_hex=other["blob_hex"], incoming_species_marker=other["species_marker"])
+
+    def rewrite(raw, layout, symbols):
+        blob = bytes.fromhex(other["blob_hex"])
+        writes = (
+            save_bytes(raw, layout, symbols, "wOTPlayerName", blob[48:59]),
+            save_bytes(raw, layout, symbols, "wOTPartySpecies", bytes((other["species_marker"], 0xFF))),
+            save_bytes(raw, layout, symbols, "wOTPartyMon1", blob[:48]),
+            save_bytes(raw, layout, symbols, "wOTPartyMonOTs", blob[48:59]),
+            save_bytes(raw, layout, symbols, "wOTPartyMonNicknames", blob[59:70]),
+        )
+        return all(writes)
+
+    _resave(case, sources, "b", rewrite)
+    with pytest.raises(RuntimeError, match="staged incoming"):
+        invoke(case)
+
+
+def test_responder_name_must_be_the_prompt_staging_name(tmp_path, sources):
+    case = make_case(tmp_path, sources, "gs")
+    offer = get(case, "b", "TRADE_OFFER")
+    receipt = get(case, "b", "RECEIPT")
+    incoming_ot = bytes.fromhex(offer["incoming_blob_hex"])[48:59]
+    alternate = saved_delta.encode_partner_name(receipt["title"], "MODEL-A", incoming_ot, root=ROOT)
+    assert alternate != incoming_ot
+    _resave(case, sources, "b", lambda raw, layout, symbols: save_bytes(
+        raw, layout, symbols, "wOTPlayerName", alternate))
+    with pytest.raises(RuntimeError, match="rewrote more"):
+        invoke(case)
+
+
+def test_explicit_prompt_partner_name_selects_that_name(tmp_path, sources):
+    case = make_case(tmp_path, sources, "gs")
+    offer = get(case, "b", "TRADE_OFFER")
+    receipt = get(case, "b", "RECEIPT")
+    incoming_ot = bytes.fromhex(offer["incoming_blob_hex"])[48:59]
+    alternate = saved_delta.encode_partner_name(receipt["title"], "MODEL-A", incoming_ot, root=ROOT)
+    offer["partner_name"] = "MODEL-A"
+    _resave(case, sources, "b", lambda raw, layout, symbols: save_bytes(
+        raw, layout, symbols, "wOTPlayerName", alternate))
+    assert invoke(case) is None
+
+
 FORCED_REWRITE_FAULTS = {
-    "ot_block_extra_byte": ("b", lambda raw, layout, sym: save_bytes(raw, layout, sym, "wOTPartySpecies", b"", 2)),
-    "ot_staging_wrong_mon": ("b", lambda raw, layout, sym: save_bytes(raw, layout, sym, "wOTPartyMon1", b"", 5)),
-    "ot_staging_on_the_proposer": ("a", lambda raw, layout, sym: save_bytes(raw, layout, sym, "wOTPartyCount", b"")),
+    # the host stages wOTPartyCount = 1 (lua/gen2/trade_overlay.lua stage); an unstaged count is not the staging
+    "ot_count_not_staged": ("b", lambda raw, layout, sym: save_bytes(raw, layout, sym, "wOTPartyCount", b"\x00")),
+    "ot_block_extra_byte": ("b", lambda raw, layout, sym: save_bytes(raw, layout, sym, "wOTPartySpecies", b"\x10", 2)),
+    "ot_staging_wrong_mon": ("b", lambda raw, layout, sym: save_bytes(raw, layout, sym, "wOTPartyMon1", b"\x07", 5)),
+    "ot_staging_on_the_proposer": ("a", lambda raw, layout, sym: save_bytes(raw, layout, sym, "wOTPartyCount", b"\x03")),
     "object_non_facing_byte": ("a", lambda raw, layout, sym: save_bytes(raw, layout, sym, "wObject1Struct", b"3",
                                                                    oracle.OBJECT_FACING + 1)),
     "player_non_facing_byte": ("b", lambda raw, layout, sym: save_bytes(raw, layout, sym, "wPlayerStruct", b"3",

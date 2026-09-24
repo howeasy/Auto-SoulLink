@@ -8,6 +8,11 @@ immutable pre-trade links image and a captured trade_done event journal.
 The contract is intentionally fail-closed while reset-after-commit reconciliation
 is unspecified. MODEL fixtures exercise these checks; they are not PHYSICAL runs.
 
+Every saved-image equality goes through gen2_duo_oracles.normalized_gameplay_cartram,
+which masks the native SRAM scratch (sScratch..sPartyMail, CartRAM 0x0000-0x0600) and,
+on G/S, the SRAM window stack (0x1800-0x2000). That masking is intentional, pre-existing
+design (the game rewrites both outside any save); it is not a trade-specific allowance.
+
 v1 wire keys (all frames are observed emulator frames):
 * RECEIPT: schema, player, title, case, run_id, rom_sha1, fixture_sha256,
   admission_scope=HARNESS_ONLY_OVERLAY, role, token[4], generation. Optional
@@ -18,7 +23,9 @@ v1 wire keys (all frames are observed emulator frames):
   BASELINE also has party=[{species_marker,blob_hex}], dex={primary,backup},
   each dex copy containing caught_hex/seen_hex (32 bytes each).
 * TRADE_READY: frame, snapshot_sha256; TRADE_GO: frame, run_id.
-* TRADE_OFFER: frame, token, generation, slot, count, species_marker, blob_hex.
+* TRADE_OFFER: frame, token, generation, slot, count, species_marker, blob_hex;
+  responder incoming_blob_hex/incoming_species_marker are the PROMPT staging witness.
+  An optional partner_name is accepted only when the PROMPT receipt carries it.
 * TRADE_APPLY_PICKUP: frame, lease_hex, incoming_blob_hex, incoming_species_marker.
 * TRADE_PRE_REMOVE: frame, site, live/frozen={domain:'System Bus',bank:1,
   spans:[{address,hex} x3]}; actual records/OT/nicknames, 48+11+11 bytes.
@@ -820,8 +827,8 @@ def trade_oracle(results, *, data_dir, baseline_saves, transaction_evidence,
         _need(old_marker.get("party") == party and old_marker.get("dex") == _dex(old, layout),
               "raw baseline party/dex differs from independently decoded native save")
         state = receipt.get("visit_state", "accepted")
-        partner = (baseline_server.get("player_identity") or {}).get("b" if side == "a" else "a") or {}
-        pre = _pre_trade(text, receipt, old, layout, symbols, partner_trainer=partner.get("trainer_name"), root=root)
+        other = "b" if side == "a" else "a"
+        pre = _pre_trade(text, receipt, old, layout, symbols, partner_text=results[other], root=root)
         if state == "none":
             _need(pre is old and normalized_gameplay_cartram(old, layout) == normalized_gameplay_cartram(final, layout),
                   "inactive peer changed saved gameplay bytes")
@@ -976,12 +983,13 @@ def trade_oracle(results, *, data_dir, baseline_saves, transaction_evidence,
 # forced pre-trade save (coordinator ruling), cited from the pinned decomps (pokegold | pokecrystal):
 # - the clocks: ram/wram.asm wRTC:: ds 4 (G 2416 | C 3011) and wGameTimeHours.. (G 2430 | C 3021);
 # - facing only: ram/wram.asm wPlayerStruct/wObject{n}Struct:: object_struct (G 2449-2452 | C 3039-3042),
-#   macros/ram.asm object_struct "Facing:: db" (G 287 | C 312) at constants/map_object_constants.asm:16
+#   macros/ram.asm object_struct "\1Facing:: db" (G 287 | C 312) at constants/map_object_constants.asm:16
 #   OBJECT_FACING (0d). The baseline is saved from START, the forced save facing the receptionist;
 # - the two checksums;
 # - on a responder, the host's PROMPT staging (lua/gen2/trade_overlay.lua stage()): G/S keep
 #   wOTPlayerName..wOTPartyDataEnd inside the saved wPokemonData (ram/wram.asm G 2755-2916 | C 2859 is
-#   outside it), so Link_SaveGame saves it. It is bound byte-exact to that side's own TRADE_OFFER.
+#   outside it), so Link_SaveGame saves it. Its mon bytes are bound to the partner's TRADE_OFFER;
+#   the current PROMPT has no partner_name and therefore stages the incoming mon's OT as wOTPlayerName.
 # Every other byte stays byte-exact.
 CLOCK = (("wGameTimeHours", 2), ("wGameTimeMinutes", 1), ("wGameTimeSeconds", 1), ("wGameTimeFrames", 1),
          ("wRTC", 4))
@@ -998,21 +1006,38 @@ def _saved_spans(layout, address, size):
     return []
 
 
-def _staged(receipt, text, root, partner_trainer):
-    """Responder only: candidate host PROMPT stagings from its own TRADE_OFFER (player name = incoming
-    OT on a PROMPT; the partner name when the host sent one)."""
+def _staged(receipt, text, partner_text, root):
+    """Responder only: the exact host PROMPT staging derived from the partner offer.
+
+    The production PROMPT currently carries no partner_name, so its sender name is
+    the incoming mon's OT.  An explicit partner_name on the PROMPT receipt selects
+    the other production branch; an absent name never authorizes that fallback.
+    """
     if receipt["role"] != 1:
         return [()]
     offer = _one(text, "TRADE_OFFER")
-    blob = _hex(offer.get("incoming_blob_hex"), 70, "staged incoming")
-    marker = _integer(offer.get("incoming_species_marker"), 1, 255, "staged incoming species")
-    names = [blob[48:59]]
-    if partner_trainer:
+    partner_offer = _one(partner_text, "TRADE_OFFER")
+    incoming_hex = offer.get("incoming_blob_hex")
+    partner_hex = partner_offer.get("blob_hex")
+    incoming_blob = _hex(incoming_hex, 70, "staged incoming")
+    partner_blob = _hex(partner_hex, 70, "partner offer")
+    incoming_marker = _integer(offer.get("incoming_species_marker"), 1, 255, "staged incoming species")
+    partner_marker = _integer(partner_offer.get("species_marker"), 1, 255, "partner offer species")
+    _need(incoming_hex == partner_hex
+          and incoming_marker == partner_marker == partner_blob[0] == incoming_blob[0],
+          "staged incoming record differs from partner offer")
+    name = partner_blob[48:59]
+    prompt_name = offer.get("partner_name")
+    if prompt_name is None:
+        prompt_name = receipt.get("prompt_partner_name")
+    if prompt_name is None:
+        prompt_name = receipt.get("partner_name")
+    if prompt_name:
         from tools.gen2_trade_save_delta import encode_partner_name
-        names.append(encode_partner_name(receipt["title"], partner_trainer, blob[48:59], root=root))
-    return [(("wOTPlayerName", name), ("wOTPartyCount", b""), ("wOTPartySpecies", bytes([marker, 0xFF])),
-             ("wOTPartyMon1", blob[:48]), ("wOTPartyMonOTs", blob[48:59]), ("wOTPartyMonNicknames", blob[59:70]))
-            for name in names]
+        name = encode_partner_name(receipt["title"], prompt_name, name, root=root)
+    return [(("wOTPlayerName", name), ("wOTPartyCount", b"\x01"), ("wOTPartySpecies", bytes((partner_marker, 0xFF))),
+             ("wOTPartyMon1", partner_blob[:48]), ("wOTPartyMonOTs", partner_blob[48:59]),
+             ("wOTPartyMonNicknames", partner_blob[59:70]))]
 
 
 def _forced_view(raw, old, layout, symbols, staged):
@@ -1036,7 +1061,7 @@ def _forced_view(raw, old, layout, symbols, staged):
     return bytes(out)
 
 
-def _pre_trade(text, receipt, old, layout, symbols, *, partner_trainer=None, root=ROOT):
+def _pre_trade(text, receipt, old, layout, symbols, *, partner_text, root=ROOT):
     """9805ac1c forced pre-trade native save (coordinator ruling): the proposer always saves before its
     lease opens; a responder saves only after its offer YES (always before APPLY). That image, not the
     pre-receptionist baseline, is the byte-exact "before" of every later comparison. Baseline -> forced
@@ -1065,8 +1090,8 @@ def _pre_trade(text, receipt, old, layout, symbols, *, partner_trainer=None, roo
           "forced pre-trade save reuses another image")
     _need(codec.strict_checksum_witness(raw[:CART], layout)["valid"], "forced pre-trade save checksum/copy witness failed")
     actual = normalized_gameplay_cartram(raw, layout)
-    _need(any(normalized_gameplay_cartram(_forced_view(raw, old, layout, symbols, staged), layout) == actual
-              for staged in _staged(receipt, text, root, partner_trainer)),
+    staged = _staged(receipt, text, partner_text, root)[0]
+    _need(normalized_gameplay_cartram(_forced_view(raw, old, layout, symbols, staged), layout) == actual,
           "forced pre-trade save rewrote more than the clocks, facings, checksums and its own staging")
     return raw
 
@@ -1210,9 +1235,9 @@ def _reset_commit_oracle(results, *, data_dir, baseline_saves, transaction_evide
         old_party = _party(baseline, layout)
         marker = _one(text, "TRADE_BASELINE")
         _need(marker.get("party") == old_party and marker.get("dex") == _dex(baseline, layout), "reset baseline raw party/dex mismatch")
-        partner = (baseline_links.get("player_identity") or {}).get("b" if side == "a" else "a") or {}
-        baseline = _pre_trade(text, receipt, baseline, layout, symbols,   # the forced pre-trade save is the "before"
-                              partner_trainer=partner.get("trainer_name"), root=root)
+        other = "b" if side == "a" else "a"
+        baseline = _pre_trade(text, receipt, baseline, layout, symbols,
+                              partner_text=results[other], root=root)
         state = receipt.get("visit_state", "accepted")
         offer = None
         if state != "none":
