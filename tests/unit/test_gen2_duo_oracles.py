@@ -2417,6 +2417,13 @@ def _pc_fault(pc_case, fault, layout):
         log.write_text(log.read_text(encoding="utf-8").replace("released linked", "released unlinked"), encoding="utf-8")
     elif fault == "no-release-send":
         results["a"] = results["a"].replace('TX {"event":"release"', 'TX {"event":"noop"')
+    elif fault == "b-reissue-ok":
+        key = decoded["b"]["key"]
+        results["b"] = results["b"].replace(f"RX party_mon key={key}", f"RX party_mon key={key}\nRX party_mon key={key}")
+        return results, data_dir
+    elif fault == "b-reissue-out-of-order":
+        key = decoded["b"]["key"]
+        results["b"] = results["b"].replace(f"RX memorialize key={key}", f"RX memorialize key={key}\nRX party_mon key={key}")
     elif fault == "b-no-memorialize":
         key = decoded["b"]["key"]
         results["b"] = results["b"].replace(f"RX memorialize key={key}\n", "")
@@ -2427,7 +2434,7 @@ def _pc_fault(pc_case, fault, layout):
     ("a-kept", "released key is still"), ("b-in-party", "not in the memorial box"), ("one-mirror", "mirror two deposits"),
     ("party-release", "engine PC events"), ("b-order", "box_mon, party_mon, box_mon, force_faint"), ("alive", "dead"),
     ("no-release-log", "exactly one release"), ("no-release-send", "and the release"),
-    ("b-no-memorialize", "force_faint, memorialize")])
+    ("b-no-memorialize", "force_faint, memorialize"), ("b-reissue-out-of-order", "force_faint, memorialize")])
 def test_pc_ops_oracle_refuses_independent_save_server_and_marker_faults(pc_case, fault, match, layout):
     results, data_dir = _pc_fault(pc_case, fault, layout)
     with pytest.raises(RuntimeError, match=match):
@@ -2682,3 +2689,9 @@ def test_whiteout_rebuild_oracle_refuses(rebuild_case, fault, match, layout):
         results["a"] = results["a"].replace("SAVE_WITNESS " + json.dumps(witness), "SAVE_WITNESS " + json.dumps(new))
     with pytest.raises(RuntimeError, match=match):
         oracles.whiteout_rebuild_oracle(results, data_dir=data_dir)
+
+
+def test_pc_ops_oracle_absorbs_a_consecutive_sync_reissue(pc_case, layout):
+    """Live G-S pc_ops: the server re-issued party_mon after its in-flight window; B received it twice in a row."""
+    results, data_dir = _pc_fault(pc_case, "b-reissue-ok", layout)
+    assert oracles.pc_ops_oracle(results, data_dir=data_dir) is None

@@ -1885,6 +1885,9 @@ def _pc_ops_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
     b = results["b"]
     rx = [line for _, line in _wave_after(_wave_lines(b, "RX "), link_at["b"])
           if line.split(" ")[1] in ("box_mon", "party_mon", "force_faint", "memorialize")]
+    # a sync command re-issued after its in-flight window arrives twice in a row and is absorbed by the client
+    # (state.py SYNC_INFLIGHT_RECONCILES; live G-S run: RX party_mon twice): consecutive repeats collapse
+    rx = [line for i, line in enumerate(rx) if i == 0 or line != rx[i - 1]]
     _wave_need(rx == [f"RX {cmd} key={keys['b']}" for cmd in ("box_mon", "party_mon", "box_mon", "force_faint", "memorialize")],
                "B's commands are not box_mon, party_mon, box_mon, force_faint, memorialize for its key")
     _wave_need(not any(l.split(" ")[1] in ("force_faint", "memorialize") for _, l in _wave_after(_wave_lines(a, "RX "), link_at["a"])),
