@@ -1276,8 +1276,16 @@ function T.verdict(lines, json, case, player)
             local okd, msg = pcall(json.decode, body or "")
             if okd and type(msg) == "table" and msg.event == "trade_done" then sent = msg end
         end
-        need(sent ~= nil and type(sent.new_key) == "string" and integer(sent.new_species, 1, 251),
-             "no trade_done with the received key on the wire")
+        if recovered then
+            -- the reset side cannot vouch: its client reports uncertain (no key) after CONTINUE, and the server
+            -- settles the side on the next party evidence (TRADE_RECOVERED carries its "Traded ..." notice)
+            need(sent ~= nil and sent.uncertain == true and sent.new_key == nil,
+                 "the recovered side's trade_done is not the uncertain report")
+            sent = nil
+        else
+            need(sent ~= nil and type(sent.new_key) == "string" and integer(sent.new_species, 1, 251),
+                 "no trade_done with the received key on the wire")
+        end
         if plan.evolves and sent then
             need(sent.new_species ~= v(pickup).incoming_species_marker
                  and sent.new_key:sub(-2):lower() == fmt("%02x", sent.new_species),

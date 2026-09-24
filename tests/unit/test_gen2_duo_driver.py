@@ -2130,7 +2130,7 @@ def trade_stream(case, player, item=0):
         for f, name in ((1900, "AddTempmonToParty"), (1901, "EvolvePokemon"), (1902, "SaveAfterLinkTrade")):
             j("TRADE_NATIVE_CALL", {"frame": f, **site(name, 3, 0x5A9C)})
         received = GENGAR if (case == "evolve" and player == "b") else partner_species
-        out.append("TX " + json.dumps({"event": "trade_done", "token": "t1", "slot": 1,
+        if not recovered: out.append("TX " + json.dumps({"event": "trade_done", "token": "t1", "slot": 1,
                                        "new_key": "1A2B:B542:%02X" % received, "new_species": received}))
         j("TRADE_SAVE_RETURNED", {"frame": 1950, "site": site("SlinkTradeCommit.cleanup"), "registers": regs()})
         if recovered:
@@ -2148,6 +2148,7 @@ def trade_stream(case, player, item=0):
                                 "after": {"frame": 2600, "site": site("StartTitleScreen", 1, 0x624F), "registers": regs(),
                                           "lease_hex": "00" * 16}})
             j("REBOOTED", {"frame": 5000, "map_group": 20, "map_number": 1, "x": 5, "y": 3, "party_count": 2})
+            out.append("TX " + json.dumps({"event": "trade_done", "player": "a", "token": "t1", "uncertain": True}))
             j("TRADE_RECOVERED", {"frame": 8000, "text": "Traded PIDGEY for SENTRET!"})
             j("TRADE_FINAL", {**image(8100, "final", "flush"), "client_saves": 2})
             j("TRADE_STACK", stack_row({"wait": (1200, 1401), "trade_animation": (1410, 1900), "native_save": (1902, 1953)},
@@ -2294,6 +2295,11 @@ def test_trade_verdict_red_controls_for_the_negative_cases():
     # committed by the server's watchdog + party evidence, never by a fabricated DONE
     rc = trade_stream("reset_commit", "a")
     red(drop(rc, "TRADE_RECOVERED"), "reset_commit", "a", "missing TRADE_RECOVERED")
+    # live gs reset_commit: the recovered side's wire report is the uncertain one, never a claimed key
+    tx = [i for i, line in enumerate(rc) if line.startswith("TX ")][-1]
+    claimed = rc[:tx] + ["TX " + json.dumps({"event": "trade_done", "player": "a", "token": "t1",
+                                             "new_key": "1A2B:B542:13", "new_species": 19})] + rc[tx + 1:]
+    red(claimed, "reset_commit", "a", "not the uncertain report")
     red(drop(rc, "TRADE_NATIVE_CALL", 4), "reset_commit", "a", "native call")
     red(rc[:-1] + ['TRADE_DONE {"frame": 1952, "lease_hex": "%s", "result": 0}' % lease(7, 6, 6, 0, 1)] + rc[-1:],
         "reset_commit", "a", "unexpected TRADE_DONE")
