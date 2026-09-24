@@ -94,10 +94,11 @@ def test_a_collision_with_a_DEAD_link_is_allowed(st):
     assert st._check_link_violation(_mon("AABB:30B8:10"), _mon("EEFF:7B0B:10")) is None
 
 
-def test_two_halves_reporting_one_key_is_refused(st):
-    """A pair that is its own alias — both lookups would return the same half."""
+def test_two_halves_reporting_one_key_are_two_players_mons(st):
+    """KEY-SCOPE: identity is per player, so the two halves may share a key (a fixed-DV/OT
+    NPC-trade or gift mon on both cartridges); each is looked up in its own player's index."""
     result = st._check_link_violation(_mon("AABB:30B8:10"), _mon("AABB:30B8:10"))
-    assert result is not None and "Key collision" in result[0]
+    assert result is None or "Key collision" not in result[0]
 
 
 def test_ordinary_distinct_keys_still_link(st):

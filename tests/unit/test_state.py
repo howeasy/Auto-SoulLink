@@ -4083,8 +4083,7 @@ def test_shiny_exemption_box_to_party_not_blocked(tmp_path, monkeypatch):
                                  a=MonInfo(key="A6:6", nickname="MON6A", species=6),
                                  b=MonInfo(key="B6:6", nickname="MON6B", species=7),
                                  status=LinkStatus.ALIVE))
-    state._key_index["A6:6"] = state.links[-1]
-    state._key_index["B6:6"] = state.links[-1]
+    state._index_entry(state.links[-1])
     # B retrieves B6 from box -- A's party is physically full (6), no exemption anymore
     cmds = state.handle_event("b", {"event": "box_to_party", "key": "B6:6"})
     # Should be bounced back (A's logical party is full: 5 linked + 1 unlinked shiny)
@@ -4104,8 +4103,7 @@ def test_linked_deposit_with_shiny_in_party_still_syncs_partner(tmp_path, monkey
                                  a=MonInfo(key="A2:2", nickname="MON2A", species=4),
                                  b=MonInfo(key="B2:2", nickname="MON2B", species=5),
                                  status=LinkStatus.ALIVE))
-    state._key_index["A2:2"] = state.links[-1]
-    state._key_index["B2:2"] = state.links[-1]
+    state._index_entry(state.links[-1])
     # A has 2 linked mons + 1 shiny; B has 2 linked mons (correctly synced)
     state.party_keys["a"] = {"A1:1", "A2:2", SHINY_KEY}
     state.party_keys["b"] = {"B1:1", "B2:2"}
@@ -4318,8 +4316,7 @@ def test_wildcard_B_can_pull_linked_mon_when_A_party_full_with_shiny(tmp_path, m
         ak, bk = f"AA{i:02X}:1111", f"BB{i:02X}:2222"
         entry = LinkEntry(area_id=f"area{i}", a=MonInfo(key=ak), b=MonInfo(key=bk), status=LinkStatus.ALIVE)
         state.links.append(entry)
-        state._key_index[ak] = entry
-        state._key_index[bk] = entry
+        state._index_entry(entry)
         state.party_keys["a"].add(ak)
         state.party_keys["b"].add(bk)
 
@@ -4333,8 +4330,7 @@ def test_wildcard_B_can_pull_linked_mon_when_A_party_full_with_shiny(tmp_path, m
     extra_a, extra_b = "AAFF:1111", "BBFF:2222"
     extra_entry = LinkEntry(area_id="area6", a=MonInfo(key=extra_a), b=MonInfo(key=extra_b), status=LinkStatus.ALIVE)
     state.links.append(extra_entry)
-    state._key_index[extra_a] = extra_entry
-    state._key_index[extra_b] = extra_entry
+    state._index_entry(extra_entry)
     # (neither is in party_keys yet — both in box)
 
     # B pulls their 6th linked mon; A's party is full (shiny takes up the 6th slot)
@@ -4359,8 +4355,7 @@ def test_wildcard_B_linked_mon_boxed_when_A_shiny_faints(tmp_path, monkeypatch):
         ak, bk = f"AA{i:02X}:1111", f"BB{i:02X}:2222"
         entry = LinkEntry(area_id=f"area{i}", a=MonInfo(key=ak), b=MonInfo(key=bk), status=LinkStatus.ALIVE)
         state.links.append(entry)
-        state._key_index[ak] = entry
-        state._key_index[bk] = entry
+        state._index_entry(entry)
         state.party_keys["a"].add(ak)
         state.party_keys["b"].add(bk)
 
@@ -4372,8 +4367,7 @@ def test_wildcard_B_linked_mon_boxed_when_A_shiny_faints(tmp_path, monkeypatch):
     extra_a, extra_b = "AAFF:1111", "BBFF:2222"
     extra_entry = LinkEntry(area_id="area6", a=MonInfo(key=extra_a), b=MonInfo(key=extra_b), status=LinkStatus.ALIVE)
     state.links.append(extra_entry)
-    state._key_index[extra_a] = extra_entry
-    state._key_index[extra_b] = extra_entry
+    state._index_entry(extra_entry)
     state.party_size["b"] = 5
     pull_cmds = state.handle_event("b", {"event": "box_to_party", "key": extra_b})
     # B is blocked (A's party is full with shiny occupying slot)
@@ -4583,8 +4577,7 @@ def test_no_wildcard_slot_during_pending_window(tmp_path, monkeypatch):
         ak, bk = f"AA{i:02X}:1111", f"BB{i:02X}:2222"
         entry = LinkEntry(area_id=f"area{i}", a=MonInfo(key=ak), b=MonInfo(key=bk), status=LinkStatus.ALIVE)
         state.links.append(entry)
-        state._key_index[ak] = entry
-        state._key_index[bk] = entry
+        state._index_entry(entry)
         state.party_keys["a"].add(ak)
         state.party_keys["b"].add(bk)
     # A catches shiny — A's party is now physically full (5 linked + 1 shiny = 6)
@@ -4595,8 +4588,7 @@ def test_no_wildcard_slot_during_pending_window(tmp_path, monkeypatch):
     extra_a, extra_b = "AAFF:1111", "BBFF:2222"
     extra_entry = LinkEntry(area_id="area6", a=MonInfo(key=extra_a), b=MonInfo(key=extra_b), status=LinkStatus.ALIVE)
     state.links.append(extra_entry)
-    state._key_index[extra_a] = extra_entry
-    state._key_index[extra_b] = extra_entry
+    state._index_entry(extra_entry)
     # B tries to pull their 6th linked mon — should be BLOCKED (A's party is physically full)
     state.party_size["b"] = 5
     cmds = state.handle_event("b", {"event": "box_to_party", "key": extra_b})

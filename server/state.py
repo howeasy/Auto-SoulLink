@@ -21,6 +21,7 @@ import time
 import logging
 import os
 from collections import deque
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum
@@ -127,6 +128,26 @@ class LinkEntry:
     initiating_player: str = ""              # "a" or "b" — whose action triggered the pair death
 
 
+class _KeyIndexView(Mapping):
+    """Read-only any-player view of the per-player key index (A's entry first). For display
+    and diagnostics only: rules code uses SoulLinkState.entry_for(player_id, key)."""
+
+    def __init__(self, pidx):
+        self._p = pidx
+
+    def __getitem__(self, key):
+        for pid in ("a", "b"):
+            if key in self._p[pid]:
+                return self._p[pid][key]
+        raise KeyError(key)
+
+    def __iter__(self):
+        return iter(self._p["a"].keys() | self._p["b"].keys())
+
+    def __len__(self):
+        return len(self._p["a"].keys() | self._p["b"].keys())
+
+
 def _partner(player_id: str) -> str:
     return "b" if player_id == "a" else "a"
 
@@ -165,8 +186,10 @@ class SoulLinkState:
         self.area_states: dict[str, AreaStatus] = {}
         # area_id → {player_id → MonInfo} for captures not yet linked
         self.pending_captures: dict[str, dict[str, MonInfo]] = {}
-        # monKey → LinkEntry for O(1) faint lookup
-        self._key_index: dict[str, LinkEntry] = {}
+        # KEY-SCOPE: {player: {monKey: LinkEntry}}. A mon's identity is scoped per player: two
+        # players may hold equal keys (an in-game NPC-trade or fixed-DV gift mon), one may not.
+        # entry_for() is the lookup; _key_index is a read-only any-player view for display.
+        self._pidx: dict[str, dict[str, LinkEntry]] = {"a": {}, "b": {}}
         # commands queued for delivery to each player on their next request
         self.queued_commands: dict[str, list[dict]] = {"a": [], "b": []}
         # SYNC_COMMANDS that have been DELIVERED but not yet answered, as
@@ -421,7 +444,7 @@ class SoulLinkState:
                     rb["queued_keys"] = [k for k in rb["queued_keys"] if k != key]
                     self._maybe_finish_rebuild(player_id)
                 # Find the linked partner and re-box them to maintain sync
-                entry = self._key_index.get(key)
+                entry = self.entry_for(player_id, key)
                 if entry and entry.status == LinkStatus.ALIVE:
                     partner = _partner(player_id)
                     partner_mon = entry.a if player_id == "b" else entry.b
@@ -572,7 +595,7 @@ class SoulLinkState:
         out = []
         for be in sorted(self.partner_blobs.get(player_id, []), key=lambda e: e.get("slot", 99)):
             k = be.get("key", "")
-            entry = self._key_index.get(k)
+            entry = self.entry_for(player_id, k)
             if not entry or entry.status != LinkStatus.ALIVE:
                 continue
             my_mon  = entry.a if player_id == "a" else entry.b
@@ -674,7 +697,7 @@ class SoulLinkState:
         gets = pt[f"{_partner(player_id)}_key"]
         # a key the trade names, or an unindexed one with the incoming mon's OT (its evolution)
         ours = (key in (pt["a_key"], pt["b_key"], *new)
-                or (key not in self._key_index
+                or (self.entry_for(player_id, key) is None
                     and self.adapter.parse_ot_id(key) == self.adapter.parse_ot_id(gets)))
         if not ours:
             return False
@@ -686,6 +709,11 @@ class SoulLinkState:
     def _replay_trade_events(self, pt: dict):
         """Run the events _hold_for_trade kept, now that the link says who holds which mon."""
         for player_id, msg in pt.pop("held_events", []):
+            if msg.get("_cause") == "whiteout":
+                # the whited-out player's WHOLE party died: the kill is of whatever half of this
+                # link that player holds now (KEY-SCOPE: its key is looked up in its own index)
+                half = pt["link"].a if player_id == "a" else pt["link"].b
+                msg = {**msg, "key": half.key if half else msg.get("key")}
             log.info(f"[{player_id}] replaying held {msg.get('event')} {msg.get('key')} (trade {pt['token']})")
             getattr(self, self.TRADE_HELD_EVENTS[msg["event"]])(player_id, msg)
 
@@ -1009,7 +1037,7 @@ class SoulLinkState:
         gets_half = pt["link"].b if player_id == "a" else pt["link"].a       # the link is not swapped yet
         fam = self.adapter.evo_family
         family = fam(gets_half.species) if gets_half and gets_half.species else None
-        return bool(family is not None and species and key not in self._key_index
+        return bool(family is not None and species and self.entry_for(player_id, key) is None
                     and self.adapter.parse_ot_id(key) == self.adapter.parse_ot_id(pt[f"{_partner(player_id)}_key"])
                     and fam(species) == family)
 
@@ -1223,7 +1251,7 @@ class SoulLinkState:
         if nk != src.key and src.key in self.mon_stats:
             self.mon_stats[nk] = dict(self.mon_stats[src.key])    # the partner still holds the original
         for gone in self._trade_old_keys(pt, taker):
-            self._key_index.pop(gone, None)
+            self._unindex(taker, gone, entry)
             self.party_keys[taker].discard(gone)
             self.bonus_keys[taker].discard(gone)
             self.mon_stats.pop(gone, None)
@@ -1248,11 +1276,12 @@ class SoulLinkState:
         # ── apply the swap atomically ─────────────────────────────────────────────
         # The mon DATA moves to the other player (entry.a now tracks the mon A holds, entry.b the mon B
         # holds); then each half's key/species is patched from that side's post-scene readback (captures
-        # trade-evolution). _key_index + party_keys are rebuilt from the two OLD keys to the two NEW keys.
+        # trade-evolution). The per-player index + party_keys are rebuilt from the two OLD keys to the two NEW keys.
         entry = pt["link"]
         entry.a, entry.b = entry.b, entry.a             # A now owns B's old mon and vice-versa
-        for old in self._trade_old_keys(pt, "a") | self._trade_old_keys(pt, "b"):
-            self._key_index.pop(old, None)
+        for pid in ("a", "b"):                          # KEY-SCOPE: each key leaves its giver's index
+            for old in self._trade_old_keys(pt, pid):
+                self._unindex(pid, old, entry)
         for pid, half in (("a", entry.a), ("b", entry.b)):
             nk, ns = (pt["new"].get(pid) or ("", 0))
             if half and nk:
@@ -1539,7 +1568,7 @@ class SoulLinkState:
         # Strip dead/memorial mons that may have been re-added (e.g. hp=0 mon still in party
         # slot when a reconnect happens before the Lua sends the faint event back).
         for _k in list(self.party_keys[player_id]):
-            _e = self._key_index.get(_k)
+            _e = self.entry_for(player_id, _k)
             if _e and _e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL):
                 self.party_keys[player_id].discard(_k)
 
@@ -1578,7 +1607,7 @@ class SoulLinkState:
                 continue
             if hp > 0:
                 # Mon is alive — log confirmation if it's a known linked mon.
-                entry = self._key_index.get(key)
+                entry = self.entry_for(player_id, key)
                 if entry and entry.status == LinkStatus.ALIVE:
                     log.debug(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=alive_confirmed")
                 continue
@@ -1587,7 +1616,7 @@ class SoulLinkState:
             if not self.pokeballs_obtained[player_id]:
                 log.debug(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=ignored  reason=pre_nuzlocke")
                 continue
-            entry = self._key_index.get(key)
+            entry = self.entry_for(player_id, key)
             if self._hold_for_trade(player_id, {"event": "faint", "key": key, "_level": m.get("level", 0)}):
                 continue                                # a trade key: replayed once the trade settles
             if entry and entry.status == LinkStatus.ALIVE:
@@ -1603,7 +1632,7 @@ class SoulLinkState:
         if not self.run_over:
             for m in party:
                 key, hp = m.get("key"), m.get("hp")
-                entry = self._key_index.get(key) if key else None
+                entry = self.entry_for(player_id, key) if key else None
                 half = entry and (entry.a if player_id == "a" else entry.b)
                 if (isinstance(hp, (int, float)) and hp > 0 and half and half.key == key
                         and entry.status != LinkStatus.ALIVE and not self._is_quarantined(player_id, key)
@@ -1625,7 +1654,7 @@ class SoulLinkState:
             key = m.get("key", "")
             if not key:
                 continue
-            entry = self._key_index.get(key)
+            entry = self.entry_for(player_id, key)
             if (entry and entry.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL)
                     and not any(c.get("cmd") == "memorialize" and c.get("key") == key
                                 for c in self.queued_commands[player_id])):
@@ -1646,7 +1675,7 @@ class SoulLinkState:
             sid  = m.get("species_id", 0)
             if not key or (not nick and not sid):
                 continue
-            entry = self._key_index.get(key)
+            entry = self.entry_for(player_id, key)
             if not entry:
                 continue
             # the half whose key this is: mid-trade a party holds the PARTNER's key, and writing
@@ -1720,7 +1749,7 @@ class SoulLinkState:
             for k in queued_keys:
                 if k in restored:
                     continue
-                entry = self._key_index.get(k)
+                entry = self.entry_for(player_id, k)
                 if not entry:
                     continue
                 mon = entry.a if player_id == "a" else entry.b
@@ -2269,7 +2298,7 @@ class SoulLinkState:
         if not self.pokeballs_obtained[player_id]:
             log.debug(f"[FAINT GATE] player={player_id}  key={key[:8]}  suppressed=True  reason=nuzlocke_not_active")
             return
-        entry = self._key_index.get(key)
+        entry = self.entry_for(player_id, key)
         if not entry or entry.status != LinkStatus.ALIVE:
             log.debug(f"[{player_id}] faint {key[:8]}: no alive linked entry — ignored "
                       f"(status={entry.status.value if entry else 'not_found'})")
@@ -2296,7 +2325,7 @@ class SoulLinkState:
         if not key:
             return
         self.party_keys[player_id].discard(key)
-        entry = self._key_index.get(key)
+        entry = self.entry_for(player_id, key)
         half = entry and (entry.a if player_id == "a" else entry.b)
         if (not self.pokeballs_obtained[player_id] or not entry or entry.status != LinkStatus.ALIVE
                 or not half or half.key != key):
@@ -2673,7 +2702,7 @@ class SoulLinkState:
             log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {self.party_size[player_id]}  (party_to_box)")
         self.party_keys[player_id].discard(key)
         log.debug(f"[PARTY] player={player_id}  party_keys remove {key[:8]}  (party_to_box)")
-        entry = self._key_index.get(key)
+        entry = self.entry_for(player_id, key)
         if not entry or entry.status != LinkStatus.ALIVE:
             return
         partner     = _partner(player_id)
@@ -2737,7 +2766,7 @@ class SoulLinkState:
                 })
                 return
 
-        entry = self._key_index.get(key)
+        entry = self.entry_for(player_id, key)
         if not entry:
             self.party_keys[player_id].add(key)
             return
@@ -2906,7 +2935,7 @@ class SoulLinkState:
                 spent.pop(key, None)          # the kill landed; a later revive is a new incident
                 stalled.pop(key, None)
                 continue
-            entry = self._key_index.get(key)
+            entry = self.entry_for(player_id, key)
             if entry is None or entry.status == LinkStatus.ALIVE or key in stalled:
                 continue
             half = entry.a if player_id == "a" else entry.b
@@ -2986,7 +3015,7 @@ class SoulLinkState:
                 continue
             if self._is_quarantined(player_id, key):
                 continue
-            entry = self._key_index.get(key)
+            entry = self.entry_for(player_id, key)
             if entry is None:
                 # Untracked mon (e.g. unlinked, never had a partner) — server
                 # has no opinion about box vs. party for it, so just sync.
@@ -3077,7 +3106,7 @@ class SoulLinkState:
                 # Partner has no more room. Per Soul Link co-location, both
                 # halves must move together — skip this and any further pairs.
                 break
-            entry = self._key_index.get(my_key)
+            entry = self.entry_for(player_id, my_key)
             if not entry:
                 continue
             my_mon = entry.a if player_id == "a" else entry.b
@@ -3194,15 +3223,20 @@ class SoulLinkState:
 
         reason = msg.get("reason", "nature_change")
         log.info(f"[{player_id}] key_change ({reason}): {old_key[:8]} → {new_key[:8]}")
-        entry = self._key_index.get(old_key)
+        side = player_id
+        entry = self.entry_for(player_id, old_key)
+        pt = self.pending_trade
+        if (entry is None and pt and pt.get("phase") in ("applying", "uncertain", "conflict")
+                and old_key in (pt.get("a_key"), pt.get("b_key"))):
+            entry = pt["link"]            # mid-trade a player holds the partner's (unswapped) half
 
         def _ack(migrated: bool):
             self.queued_commands[player_id].append(
                 {"cmd": "key_change_ack", "old_key": old_key, "new_key": new_key,
                  "migrated": migrated})
 
-        if entry is None and not self._key_refs(old_key):
-            if self._key_index.get(new_key) is not None:
+        if entry is None and not self._key_refs(old_key, player_id):
+            if self.entry_for(player_id, new_key) is not None:
                 # Replay: the migration already happened (resent after a reconnect).
                 log.info(f"[{player_id}] key_change replay for {new_key[:8]} — already migrated")
             else:
@@ -3215,15 +3249,16 @@ class SoulLinkState:
             return
 
         # Collision check BEFORE any mutation.
-        hit = self._key_index.get(new_key)
+        # KEY-SCOPE: only THIS player's keys can collide; the partner may hold an equal key
+        hit = self.entry_for(player_id, new_key)
         collision = ""
         if hit is not None and hit is not entry and hit.status == LinkStatus.ALIVE:
             collision = f"live link in {hit.area_id}"
         else:
-            refs = self._key_refs(new_key)
+            refs = self._key_refs(new_key, player_id)
             if refs:
                 collision = ", ".join(sorted(refs))
-            elif self.presentation_key_in_use and self.presentation_key_in_use(new_key):
+            elif self.presentation_key_in_use and self.presentation_key_in_use(new_key, player_id):
                 collision = "presentation cache"
         if collision:
             log.error(f"[{player_id}] key_change REJECTED: {new_key[:8]} is load-bearing "
@@ -3240,11 +3275,15 @@ class SoulLinkState:
         # ── accepted: migrate ────────────────────────────────────────────────────────
         # 1. Links + key index
         if entry is not None:
-            self._key_index.pop(old_key, None)
-            for mon in (entry.a, entry.b, entry.encounter_a, entry.encounter_b):
-                if mon and mon.key == old_key:
-                    mon.key = new_key
-            side = "a" if player_id == "a" else "b"
+            # this player's half; mid-trade the half it holds is the partner's (unswapped) one
+            own = getattr(entry, side)
+            sides = ([side] if own and own.key == old_key else
+                     [pid for pid in ("a", "b") if getattr(entry, pid) and getattr(entry, pid).key == old_key])
+            for pid in sides:
+                self._unindex(pid, old_key, entry)
+                for mon in ((entry.a, entry.encounter_a) if pid == "a" else (entry.b, entry.encounter_b)):
+                    if mon and mon.key == old_key:
+                        mon.key = new_key
             mon = getattr(entry, side)
             if mon and mon.key == new_key:
                 # Update species/nickname if provided (Gen 1 evolution changes species)
@@ -3340,24 +3379,27 @@ class SoulLinkState:
 
         self._save()
 
-    def _key_refs(self, key: str) -> set[str]:
+    def _key_refs(self, key: str, player_id: str) -> set[str]:
         """Names of the live tracking structures that reference `key` (empty = unreferenced).
 
         The collision preflight for `_handle_key_change`.  `_key_index` is judged separately
         (a DEAD/MEMORIAL hit is not load-bearing) and `mon_stats` is deliberately absent: it
         is a never-pruned cache that still holds every buried key, and the migration
         overwrites it -- counting it would turn "buried keys are reusable" into a pair kill.
+
+        KEY-SCOPE: only player_id's structures count (the partner may hold an equal key),
+        except the shared pending_bonus queues and the pending trade, which name both players'.
         """
         refs: set[str] = set()
-        for pid in ("a", "b"):
+        if any(key in self.pending_bonus[pid] for pid in ("a", "b")):
+            refs.add("pending_bonus")
+        for pid in (player_id,):
             if key in self.party_keys[pid]:
                 refs.add("party_keys")
             if key in self.bonus_keys[pid]:
                 refs.add("bonus_keys")
             if key in self.pending_memorials[pid]:
                 refs.add("pending_memorials")
-            if key in self.pending_bonus[pid]:
-                refs.add("pending_bonus")
             if any(be.get("key") == key for be in self.partner_blobs[pid]):
                 refs.add("partner_blobs")
             if any(c.get("key") == key or c.get("old_key") == key
@@ -3369,8 +3411,8 @@ class SoulLinkState:
             if rb and (key in rb.get("queued_keys", []) or key in rb.get("queued_partner_keys", [])
                        or key in rb.get("restored_keys", set())):
                 refs.add("rebuild_pending")
-        if any(cap.key == key for players in self.pending_captures.values()
-               for cap in players.values() if cap):
+        if any(players.get(player_id) and players[player_id].key == key
+               for players in self.pending_captures.values()):
             refs.add("pending_captures")
         pt = self.pending_trade
         if pt and key in (pt.get("a_key"), pt.get("b_key")):
@@ -3396,13 +3438,10 @@ class SoulLinkState:
         for mon, pid in ((a_mon, "a"), (b_mon, "b")):
             if not (mon and mon.key):
                 continue
-            existing = self._key_index.get(mon.key)
+            existing = self.entry_for(pid, mon.key)       # KEY-SCOPE: per player
             if existing is not None and existing.status == LinkStatus.ALIVE:
                 return (f"Key collision: {mon.key} already identifies a live link in "
                         f"{existing.area_id}", pid)
-        if a_mon and b_mon and a_mon.key and a_mon.key == b_mon.key:
-            # Both halves indexing one key would make the pair its own alias.
-            return (f"Key collision: both halves report the key {a_mon.key}", "")
 
         if self.species_lock and a_mon.species and b_mon.species:
             # Cross-player check: A and B can't be the same species/family
@@ -3545,16 +3584,35 @@ class SoulLinkState:
         here is reported loudly even though the write still happens -- a half-indexed link
         would be worse than an aliased one.
         """
-        for half in (entry.a, entry.b):
+        for pid, half in (("a", entry.a), ("b", entry.b)):
             if not half:
                 continue
-            prev = self._key_index.get(half.key)
+            prev = self._pidx[pid].get(half.key)
             if prev is not None and prev is not entry:
-                log.error("KEY COLLISION: %s now indexes the link in %s, displacing the one "
-                          "in %s — two different mons share a key and lookups by it "
+                log.error("KEY COLLISION: %s:%s now indexes the link in %s, displacing the one "
+                          "in %s — two of one player's mons share a key and lookups by it "
                           "(faint propagation especially) will resolve to the wrong pair",
-                          half.key, entry.area_id, prev.area_id)
-            self._key_index[half.key] = entry
+                          pid, half.key, entry.area_id, prev.area_id)
+            self._pidx[pid][half.key] = entry
+
+    @property
+    def _key_index(self) -> Mapping:
+        return _KeyIndexView(self._pidx)
+
+    def entry_for(self, player_id: str, key: str) -> "LinkEntry | None":
+        """The link whose `player_id` half is `key` (KEY-SCOPE: identity is per player)."""
+        return self._pidx[player_id].get(key) if key else None
+
+    def _unindex(self, player_id: str, key: str, entry: "LinkEntry | None" = None):
+        """Drop player_id's index row for key (only if it names `entry`, when given)."""
+        if entry is None or self._pidx[player_id].get(key) is entry:
+            self._pidx[player_id].pop(key, None)
+
+    def unindex_entry(self, entry: "LinkEntry"):
+        """Drop both halves of `entry` from the per-player index (an admin unlink)."""
+        for pid, half in (("a", entry.a), ("b", entry.b)):
+            if half:
+                self._unindex(pid, half.key, entry)
 
     def _queue_memorialize(self, player_id: str, key: str):
         """
@@ -3586,7 +3644,7 @@ class SoulLinkState:
         self.pending_memorials[player_id].discard(key)
         self.party_keys[player_id].discard(key)
         log.info(f"[{player_id}] memorialize_done key={key[:8]}")
-        entry = self._key_index.get(key)
+        entry = self.entry_for(player_id, key)
         if not entry or entry.status != LinkStatus.DEAD:
             self._save()
             return
@@ -3613,7 +3671,7 @@ class SoulLinkState:
         self.pending_memorials[player_id].discard(key)
         log.warning(f"[{player_id}] memorialize_failed key={key[:8]} reason={reason}")
         # Check if the pair can now be finalized despite the failure
-        entry = self._key_index.get(key)
+        entry = self.entry_for(player_id, key)
         if not entry or entry.status != LinkStatus.DEAD:
             self._save()
             return

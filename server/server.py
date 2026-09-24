@@ -1641,7 +1641,7 @@ class SLinkServer:
         name = (mon.nickname or "").strip() or self.adapter.species_name(mon.species) or "?"
         return name[:8]
 
-    def _cache_mon_info(self, key: str, detail: dict):
+    def _cache_mon_info(self, key: str, detail: dict, player_id: str | None = None):
         """Update the persistent per-monKey display cache from a detail dict.
 
         Also backfills level=0 and stale nicknames in any LinkEntry MonInfo
@@ -1666,10 +1666,13 @@ class SLinkServer:
         # Backfill level and nickname into link entries
         nick = detail.get("nickname", "")
         species_id = detail.get("species_id", 0)
-        if (lv or nick or species_id) and self.state._key_index.get(key):
-            link_entry = self.state._key_index[key]
+        link_entry = (self.state.entry_for(player_id, key) if player_id
+                      else self.state._key_index.get(key))
+        if (lv or nick or species_id) and link_entry:
             dirty = False
-            for mi in (link_entry.a, link_entry.b):
+            halves = ((link_entry.a if player_id == "a" else link_entry.b,) if player_id
+                      else (link_entry.a, link_entry.b))
+            for mi in halves:
                 if mi and mi.key == key:
                     if lv and not mi.level:
                         mi.level = lv
@@ -1695,11 +1698,10 @@ class SLinkServer:
         species_id = detail.get("species_id", 0) or cached.get("species_id", 0)
         if species_id:
             return self.adapter.species_name(species_id)
-        link_entry = self.state._key_index.get(key)
-        if link_entry:
-            for mon in (link_entry.a, link_entry.b):
-                if mon and mon.key == key:
-                    return mon.nickname or self.adapter.species_name(mon.species) or key[:8]
+        link_entry = self.state.entry_for(player_id, key)
+        mon = link_entry and (link_entry.a if player_id == "a" else link_entry.b)
+        if mon and mon.key == key:
+            return mon.nickname or self.adapter.species_name(mon.species) or key[:8]
         return key[:8]
 
     def _load_events(self):
@@ -1768,7 +1770,7 @@ class SLinkServer:
         _pre_battle = self.battle_state[player_id]["in_battle"]
         _pre_memorial_status = None
         if event == "memorialize_done":
-            _pre_memorial_link = self.state._key_index.get(msg.get("key", ""))
+            _pre_memorial_link = self.state.entry_for(player_id, msg.get("key", ""))
             if _pre_memorial_link:
                 _pre_memorial_status = _pre_memorial_link.status.value
 
@@ -1870,12 +1872,12 @@ class SLinkServer:
                 for bentry in msg["pc_boxes"]:
                     bk = bentry.get("key", "")
                     if bk:
-                        self._cache_mon_info(bk, bentry)
+                        self._cache_mon_info(bk, bentry, player_id)
                 self._check_memorial_box_contamination(player_id, msg["pc_boxes"])
             # Seed party_details from snapshot
             self.party_details[player_id] = self._party_snapshot(player_id, msg.get("party", []))
             for k, det in self.party_details[player_id].items():
-                self._cache_mon_info(k, det)
+                self._cache_mon_info(k, det, player_id)
             if _dirty or self.state.mon_stats != stats_before:
                 self.state._save()
             # Seed battle state from hello (so page reflects battle immediately)
@@ -1919,7 +1921,7 @@ class SLinkServer:
                     "gender":       self.adapter.gender_from_key(key, sid),
                 }
                 self.party_details[player_id][key] = detail
-                self._cache_mon_info(key, detail)
+                self._cache_mon_info(key, detail, player_id)
         elif event == "faint":
             key = msg.get("key", "")
             log.info(f"[{player_id}] faint key={key} area='{msg.get('area_id','')}'")
@@ -2000,7 +2002,7 @@ class SLinkServer:
                 for bentry in msg["pc_boxes"]:
                     bk = bentry.get("key", "")
                     if bk:
-                        self._cache_mon_info(bk, bentry)
+                        self._cache_mon_info(bk, bentry, player_id)
                 self._check_memorial_box_contamination(player_id, msg["pc_boxes"])
             if "in_battle" in msg:
                 was_in_battle = self.battle_state[player_id]["in_battle"]
@@ -2091,7 +2093,7 @@ class SLinkServer:
         if "party" in msg and event == "tick":
             self.party_details[player_id] = self._party_snapshot(player_id, msg["party"])
             for k, det in self.party_details[player_id].items():
-                self._cache_mon_info(k, det)
+                self._cache_mon_info(k, det, player_id)
 
         cmds = self.state.handle_event(player_id, msg)
 
@@ -2118,7 +2120,7 @@ class SLinkServer:
                 _sv = _new_state.value
                 if _sv == "linked":
                     _cap_key = msg.get("key", "")
-                    _link = self.state._key_index.get(_cap_key) if _cap_key else None
+                    _link = self.state.entry_for(player_id, _cap_key)
                     if _link:
                         _ma = _link.a if player_id == "a" else _link.b
                         _mb = _link.b if player_id == "a" else _link.a
@@ -2136,7 +2138,7 @@ class SLinkServer:
 
         if event == "faint" and msg.get("key"):
             _faint_key = msg["key"]
-            _link = self.state._key_index.get(_faint_key)
+            _link = self.state.entry_for(player_id, _faint_key)
             if _link:
                 _p_mon = _link.b if player_id == "a" else _link.a
                 _death = (self.state.queued_death_cmd(_partner, _p_mon.key)
@@ -2176,7 +2178,7 @@ class SLinkServer:
 
         if event == "memorialize_done":
             _mem_key = msg.get("key", "")
-            _link = self.state._key_index.get(_mem_key) if _mem_key else None
+            _link = self.state.entry_for(player_id, _mem_key)
             _post_status = getattr(getattr(_link, "status", None), "value", getattr(_link, "status", None))
             if _link and _post_status == "memorial" and _pre_memorial_status != "memorial":
                 _a_name = (_link.a.nickname or self.adapter.species_name(_link.a.species)) if _link.a else "?"
@@ -2250,7 +2252,7 @@ class SLinkServer:
             # link_death — partner receives a death command (force_faint or force_explode)
             _faint_key = msg.get("key", "")
             if _faint_key:
-                _link = self.state._key_index.get(_faint_key)
+                _link = self.state.entry_for(player_id, _faint_key)
                 if _link:
                     _p_mon = _link.b if player_id == "a" else _link.a
                     if _p_mon and self.state.queued_death_cmd(_partner, _p_mon.key):
@@ -3908,7 +3910,7 @@ class SLinkServer:
                 sid = det.get("species_id", 0)
                 sp_name = self.adapter.species_name(sid) if sid else "?"
                 lv = det.get("level", 0)
-                linked = key in s._key_index
+                linked = s.entry_for(pid, key) is not None
                 label = f"{nick or sp_name} Lv{lv} [{key[:8]}]"
                 pend = pending_key_to_area.get((pid, key), "")
                 opts.append({"key": key, "label": label, "linked": linked,
@@ -3923,7 +3925,7 @@ class SLinkServer:
                 sid = bentry.get("species_id", 0)
                 sp_name = self.adapter.species_name(sid) if sid else "?"
                 box_num = bentry.get("box", 0) + 1
-                linked = key in s._key_index
+                linked = s.entry_for(pid, key) is not None
                 label = f"{nick or sp_name} [Box{box_num}] [{key[:8]}]"
                 pend = pending_key_to_area.get((pid, key), "")
                 opts.append({"key": key, "label": label, "linked": linked,
@@ -4221,11 +4223,7 @@ class SLinkServer:
             return aiohttp_web.json_response(
                 {"ok": False, "error": f"No link found for area {area_id}"}, status=404)
 
-        # Remove from _key_index
-        if entry.a and entry.a.key in s._key_index:
-            del s._key_index[entry.a.key]
-        if entry.b and entry.b.key in s._key_index:
-            del s._key_index[entry.b.key]
+        s.unindex_entry(entry)
 
         # Remove from links list
         s.links.remove(entry)
@@ -4528,13 +4526,14 @@ class SLinkServer:
                         f"{rec['a_key']} <-> {rec['b_key']}: {rec['verdict']} {rec['problem']}".strip(),
                         key=rec["token"])
 
-    def _presentation_key_in_use(self, key: str) -> bool:
+    def _presentation_key_in_use(self, key: str, player_id: str | None = None) -> bool:
         """Is `key` a live mon in the presentation caches?  The state's key_change collision
         preflight asks this (PLAN A1): a party mon or a mon in a non-memorial box of either
         player is load-bearing; the memorial box holds buried keys, which are reusable, and
-        `_mon_cache` is never pruned, so neither counts."""
+        `_mon_cache` is never pruned, so neither counts. KEY-SCOPE: with a player, only that
+        player's caches count (the partner may hold an equal key)."""
         mem_idx = self.adapter.memorial_box_index if self.adapter else -1
-        for pid in ("a", "b"):
+        for pid in ((player_id,) if player_id else ("a", "b")):
             if key in self.party_details.get(pid, {}):
                 return True
             for bentry in self.pc_boxes.get(pid, []):
@@ -4765,13 +4764,10 @@ class SLinkServer:
 
         # If override requested, unlink existing entries for these keys
         if override:
-            for key_to_free in [a_key, b_key]:
-                old_entry = s._key_index.get(key_to_free)
+            for pid, key_to_free in (("a", a_key), ("b", b_key)):
+                old_entry = s.entry_for(pid, key_to_free)
                 if old_entry:
-                    if old_entry.a and old_entry.a.key in s._key_index:
-                        del s._key_index[old_entry.a.key]
-                    if old_entry.b and old_entry.b.key in s._key_index:
-                        del s._key_index[old_entry.b.key]
+                    s.unindex_entry(old_entry)
                     if old_entry in s.links:
                         s.links.remove(old_entry)
                     old_area = old_entry.area_id
@@ -4780,10 +4776,10 @@ class SLinkServer:
                     log.info(f"[inject_link] override: removed old link on {old_area}")
 
         # Reject already-linked keys (unless override already cleared them)
-        if a_key in s._key_index:
+        if s.entry_for("a", a_key) is not None:
             return aiohttp_web.json_response(
                 {"ok": False, "error": f"Player A mon {a_key[:8]} is already linked."}, status=400)
-        if b_key in s._key_index:
+        if s.entry_for("b", b_key) is not None:
             return aiohttp_web.json_response(
                 {"ok": False, "error": f"Player B mon {b_key[:8]} is already linked."}, status=400)
 

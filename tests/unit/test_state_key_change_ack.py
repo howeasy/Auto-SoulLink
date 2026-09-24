@@ -140,29 +140,29 @@ def test_a_key_that_is_load_bearing_anywhere_rejects_with_structures_untouched(s
     _link(st)
     seen = {"presentation": False}
     if structure == "party_keys":
-        st.party_keys["b"].add(NEW)
+        st.party_keys["a"].add(NEW)
     elif structure == "pending_captures":
-        st.pending_captures["route_9"] = {"b": MonInfo(key=NEW, level=3)}
+        st.pending_captures["route_9"] = {"a": MonInfo(key=NEW, level=3)}
     elif structure == "bonus_keys":
-        st.bonus_keys["b"].add(NEW)
+        st.bonus_keys["a"].add(NEW)
     elif structure == "pending_bonus":
         st.pending_bonus["b"].append(NEW)
     elif structure == "partner_blobs":
-        st.partner_blobs["b"] = [{"slot": 0, "key": NEW, "blob": b"\0" * 66, "species_id": 1, "level": 1}]
+        st.partner_blobs["a"] = [{"slot": 0, "key": NEW, "blob": b"\0" * 66, "species_id": 1, "level": 1}]
     elif structure == "rebuild_pending":
-        st.rebuild_pending["b"] = {"queued_keys": [NEW], "queued_partner_keys": [], "restored_keys": set()}
+        st.rebuild_pending["a"] = {"queued_keys": [NEW], "queued_partner_keys": [], "restored_keys": set()}
     elif structure == "pending_trade":
         st.pending_trade = {"phase": "menu", "initiator": "b", "token": "t1", "reprompts": 0, "age": 0,
                             "a_key": "1111:2222:33", "b_key": NEW}
     elif structure == "queued_commands":
-        st.queued_commands["b"].append({"cmd": "box_mon", "key": NEW})
+        st.queued_commands["a"].append({"cmd": "box_mon", "key": NEW})
     elif structure == "sync_inflight":
-        st.sync_inflight["b"][(NEW, "party_mon")] = 3
+        st.sync_inflight["a"][(NEW, "party_mon")] = 3
     elif structure == "pending_memorials":
-        st.pending_memorials["b"].add(NEW)
+        st.pending_memorials["a"].add(NEW)
     elif structure == "presentation":
-        def hook(key):
-            seen["presentation"] = key == NEW
+        def hook(key, player_id=None):
+            seen["presentation"] = key == NEW and player_id == "a"
             return key == NEW
         st.presentation_key_in_use = hook
     before = _snapshot(st)
@@ -303,6 +303,10 @@ def test_a_live_presentation_key_is_a_collision_but_the_memorial_box_is_not(tmp_
     assert srv._presentation_key_in_use(NEW) is False, "_mon_cache is never pruned; a cache hit is not a collision"
     srv.party_details["b"][NEW] = {"level": 1}
     assert srv._presentation_key_in_use(NEW) is True
+    # KEY-SCOPE: only the key-changing player's caches count
+    assert srv._presentation_key_in_use(NEW, "a") is False
+    srv.party_details["a"][NEW] = {"level": 1}
+    assert srv._presentation_key_in_use(NEW, "a") is True
     # The state consults it through the adapter-neutral hook.
     _link(srv.state)
     cmds = srv._dispatch("a", {"event": "key_change", "old_key": OLD, "new_key": NEW})

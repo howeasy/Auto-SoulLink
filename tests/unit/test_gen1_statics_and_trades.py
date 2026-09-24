@@ -77,7 +77,7 @@ def test_the_server_migrates_every_structure_on_a_key_change():
         src = f.read()
     body = src[src.index("def _handle_key_change"):]
     body = body[:body.index("\n    def ", 10)]
-    for structure in ("_key_index", "pending_captures", "party_keys", "mon_stats",
+    for structure in ("_unindex", "_index_entry", "pending_captures", "party_keys", "mon_stats",
                       "bonus_keys", "pending_memorials",
                       # the O2 census additions (PLAN A1): the structures the first cut missed
                       "sync_inflight", "pending_bonus", "partner_blobs", "rebuild_pending",
