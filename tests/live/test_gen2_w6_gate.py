@@ -90,11 +90,12 @@ def w6_facts(title: str, *, repo: Path = REPO) -> dict:
     init_bank, init_lo = symbols["Init.ByteFill"]
     assert init_bank == 0
     lo, hi = MAILBOX_SPANS[title]
-    # SLink-owned native regions (main 2026-09-23): the P4.5b phone service will write the WORD
-    # wSpecialPhoneCallID (+0, +1) from the service bank; until it lands no SLink range may write it.
+    # SLink-owned native regions (main 2026-09-23): the P4.5b phone service writes the WORD wSpecialPhoneCallID
+    # (+0, +1) from the service bank only; any other SLink range writing it is a violation.
     phone_bank, phone = symbols["wSpecialPhoneCallID"]
     assert phone_bank == 1 and 0xD000 <= phone < 0xE000, "wSpecialPhoneCallID left WRAMX bank 1"
-    regions = [{"name": "wSpecialPhoneCallID", "lo": phone, "hi": phone + 2, "wram_bank": 1, "slink_allow": []}]
+    regions = [{"name": "wSpecialPhoneCallID", "lo": phone, "hi": phone + 2, "wram_bank": 1,
+                "slink_allow": ["SLink service bank"]}]
     return {"overlay_sha1": base["overlay_sha1"], "span": [lo, hi], "allow": allow, "regions": regions,
             "init": {"name": "Init WRAM0 clear", "entry": symbols["Init"][1], "lo": init_lo, "hi": init_lo + len(INIT_LOOP)},
             "hrombank": symbols["hROMBank"][1], "control": symbols["wVBlankOccurred"][1]}
