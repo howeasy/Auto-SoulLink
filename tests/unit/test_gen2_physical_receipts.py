@@ -45,6 +45,9 @@ TITLES = ("crystal", "gold", "silver")
 # The one committed receipt this file must not re-test (see the module docstring): its sibling suite
 # validates it, this file validates every other receipt.
 COVERED_ELSEWHERE = {"crystal.write_window.json"}
+# Live-gate receipts are not production admission receipts: tools/verify_gen2_release.py validates them
+# (_panel_gate_row_errors, tested in tests/unit/test_verify_gen2_release_lanes.py). Listed by suffix, not skipped silently.
+GATE_SUFFIXES = (".panel_gate.json", ".sfx_gate.json")
 
 _MODULES = {}
 
@@ -165,7 +168,8 @@ def discovered():
     binding's inputs, not receipts."""
     params = []
     for path in sorted(RECEIPTS.glob("*.json")):
-        if path.name.endswith(".qualification.json") or path.name in COVERED_ELSEWHERE:
+        if (path.name.endswith(".qualification.json") or path.name in COVERED_ELSEWHERE
+                or path.name.endswith(GATE_SUFFIXES)):
             continue
         params.append(pytest.param(path, id=path.name))
     return params
