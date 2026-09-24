@@ -584,10 +584,17 @@ def test_non_git_inputs_must_match_the_lane(recorded, current):
     assert _decide(row, [_ev(row.id, inputs=recorded)], inputs=current).kind == "RUN"
 
 
-def test_builds_checkpoint_zip_and_the_source_gate_are_never_carried():
-    for rid in ("states_firered_town", "tutorials_leafgreen", "checkpoint_firered",
-                "zip_boot_firered", "release_gate_quick"):
+def test_builds_zip_and_the_source_gate_are_never_carried():
+    for rid in ("states_firered_town", "tutorials_leafgreen", "zip_boot_firered",
+                "release_gate_quick"):
         assert _decide(_row(rid), [_ev(rid)]).kind == "RUN"
+
+
+def test_the_checkpoint_carries_under_the_input_hash_rule():
+    row = _row("checkpoint_firered")               # G4-FINALCUT-CACHE: its states are known
+    assert _decide(row, [_ev(row.id)]).kind == "CARRY"
+    assert _decide(row, [_ev(row.id)], ["lua/tests/probe_gen3_checkpoint.lua"]).kind == "RUN"
+    assert _decide(row, [_ev(row.id, inputs={"rom:firered": "9" * 64})]).kind == "RUN"
 
 
 def test_item6_carries_only_while_master_has_not_moved():
@@ -607,10 +614,11 @@ def test_row_inputs_name_the_staged_roms_and_the_rebuilt_states(tmp_path):
     sd.mkdir(parents=True)
     (sd / "slink_oldman.State").write_bytes(b"s")
     got = fc.row_inputs(_row("checkpoint_firered"), str(tmp_path), root=str(tmp_path))
-    assert set(got) == {"rom:firered", "state:gen3_probe_states/slink_oldman.State"}
+    assert "state:gen3_probe_states/slink_oldman.State" in got and "rom:firered" in got
     assert set(fc.row_inputs(_row("whiteout_gen3_lg_as_a"), str(tmp_path))) == set(ROMS)
     h = fc.hash_inputs(got)
     assert h["rom:firered"] == "MISSING" and len(h["state:gen3_probe_states/slink_oldman.State"]) == 64
+    assert h["state:gen3_probe_states/slink_pokedude.State"] == "MISSING"   # declared, not listed
     assert fc.parse_inputs("# " + fc.inputs_note(h)) == h
 
 
@@ -745,7 +753,7 @@ def test_a_carried_row_writes_its_receipt_and_is_counted_as_carried(pass_env, mo
     got = receipts.read_run_receipt(str(probes / f"fc_{rid}_{cut[:8]}.txt"))
     assert got["verdict"].startswith(f"CARRIED from ph_{rid}_{X[:8]}.txt @{X}")
     summary = (probes / f"fc_SUMMARY_{cut[:8]}.txt").read_text(encoding="utf-8")
-    assert "# RUN 1 / CARRIED 1 / FAIL 0" in summary
+    assert "# RUN 1 / CARRIED 1 / CACHED 0 / FAIL 0" in summary
 
 
 # ---------------------------------------------------------------------------
@@ -809,7 +817,7 @@ def test_merge_summary_validates_every_row_receipt(pass_env):
     _carried(probes, "link_gen3_fr_as_a", f"ph_link_gen3_fr_as_a_{X[:8]}.txt", cut=cut)
     assert fc.main(base) == 0
     s = (probes / f"fc_SUMMARY_{cut[:8]}.txt").read_text(encoding="utf-8")
-    assert "# RUN 1 / CARRIED 1 / FAIL 0" in s
+    assert "# RUN 1 / CARRIED 1 / CACHED 0 / FAIL 0" in s
     # the origin disappears: the carried receipt no longer authenticates
     (probes / f"ph_link_gen3_fr_as_a_{X[:8]}.txt").unlink()
     assert fc.main(base) == 1
@@ -863,3 +871,199 @@ def test_provisioning_really_refreshes_the_index_before_the_clean_check(tmp_path
     assert fc.provision(str(lane), sha, str(lane)) == sha
     assert "update-index" in calls and calls.index("update-index") < calls.index("status")
     assert "--really-refresh" in fc.provision_plan(str(lane), sha)[1]
+
+
+# --- G4-FINALCUT-CACHE: content-addressed §1 builds ----------------------------------------
+
+BLOBS = {"tools/mkstates_gen3.py": "b1", "tools/mkstates_gen3_tutorials.py": "b2",
+         "tools/gen3_fixtures.py": "b3", "lua/tests/mkstates_gen3.lua": "b4",
+         "lua/tests/gen3_boot_check.lua": "b5", "lua/gen3/reads.lua": "b6",
+         "data/games/gen3_frlg/profile.json": "b7", "docs/gen3/PLAN.md": "b8",
+         "tests/fixtures/gen3/firered_party_town.sav": "f1",
+         "tests/fixtures/gen3/firered_party_battle.sav": "f2",
+         "lua/gen1/client.lua": "g1"}
+BIZ = {"EmuHawk.exe": "e" * 64, "config": "c" * 64}
+
+
+def _key(row_id, blobs=None, rom=b"FR dump", biz=None, tmp=None):
+    lane = tmp
+    (lane / fc.STAGED["firered"]).parent.mkdir(parents=True, exist_ok=True)
+    (lane / fc.STAGED["firered"]).write_bytes(rom)
+    return fc.build_key(_row(row_id), CUT, str(lane), blobs=dict(BLOBS, **(blobs or {})),
+                        bizhawk=dict(BIZ, **(biz or {})))[0]
+
+
+def test_the_build_key_covers_every_input_and_nothing_else(tmp_path):
+    base = _key("states_firered_town", tmp=tmp_path)
+    assert base and base == _key("states_firered_town", tmp=tmp_path)            # deterministic
+    assert _key("states_firered_town", {"docs/gen3/PLAN.md": "zz"}, tmp=tmp_path) == base
+    assert _key("states_firered_town", {"lua/gen1/client.lua": "zz"}, tmp=tmp_path) == base
+    assert _key("states_firered_town", {"tests/fixtures/gen3/firered_party_battle.sav": "zz"},
+                tmp=tmp_path) == base                       # another kind's fixture
+    for changed in ({"tests/fixtures/gen3/firered_party_town.sav": "zz"},   # the fixture
+                    {"tools/mkstates_gen3.py": "zz"}, {"lua/tests/mkstates_gen3.lua": "zz"},
+                    {"lua/tests/gen3_boot_check.lua": "zz"}, {"lua/gen3/reads.lua": "zz"},
+                    {"data/games/gen3_frlg/profile.json": "zz"}):
+        assert _key("states_firered_town", changed, tmp=tmp_path) != base, changed
+    assert _key("states_firered_town", rom=b"another dump", tmp=tmp_path) != base
+    assert _key("states_firered_town", biz={"EmuHawk.exe": "f" * 64}, tmp=tmp_path) != base
+    assert _key("states_firered_town", biz={"config": "d" * 64}, tmp=tmp_path) != base
+    assert _key("states_firered_battle", tmp=tmp_path) != base                  # per row
+    assert _key("tutorials_firered", tmp=tmp_path) != base
+
+
+def test_no_key_without_the_staged_rom(tmp_path):
+    key, why = fc.build_key(_row("states_firered_town"), CUT, str(tmp_path), blobs=BLOBS,
+                            bizhawk=BIZ)
+    assert key is None and "ROM" in why
+
+
+def test_bizhawk_fingerprint_hashes_the_exe_core_and_the_gba_config(tmp_path):
+    exe = tmp_path / "EmuHawk.exe"
+    exe.write_bytes(b"exe")
+    (tmp_path / "dll").mkdir()
+    (tmp_path / "dll" / "mgba.dll").write_bytes(b"core")
+    cfg = tmp_path / "config.ini"
+    mg = "BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk"
+    cfg.write_text(json.dumps({"PreferredCores": {"GBA": "mGBA"}, "WindowX": 1,
+                               "CoreSyncSettings": {mg: {"SkipBios": True}},
+                               "CoreSettings": {mg: {"x": 1}}}))
+    a = fc.bizhawk_fingerprint(str(exe), str(cfg))
+    cfg.write_text(json.dumps({"PreferredCores": {"GBA": "mGBA"}, "WindowX": 999,
+                               "CoreSyncSettings": {mg: {"SkipBios": True}},
+                               "CoreSettings": {mg: {"x": 1}}}))
+    assert fc.bizhawk_fingerprint(str(exe), str(cfg)) == a      # window position: irrelevant
+    cfg.write_text(json.dumps({"PreferredCores": {"GBA": "mGBA"}, "WindowX": 999,
+                               "CoreSyncSettings": {mg: {"SkipBios": False}},
+                               "CoreSettings": {mg: {"x": 1}}}))
+    assert fc.bizhawk_fingerprint(str(exe), str(cfg)) != a      # a sync setting: relevant
+    assert set(a) >= {"EmuHawk.exe", "dll/mgba.dll", "config"}
+
+
+def _outputs(out_dir, kind, body=b"state"):
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for name in fc.BUILD_OUTPUTS[kind]:
+        (out_dir / name).write_bytes(body + name.encode())
+
+
+def test_cache_store_then_lookup_round_trips_and_detects_corruption(tmp_path, monkeypatch):
+    monkeypatch.setattr(fc, "state_cache_root", lambda: str(tmp_path / "cache"))
+    row = _row("states_firered_town")
+    out = tmp_path / "out"
+    _outputs(out, "town")
+    assert fc.cache_lookup("k" * 64) is None
+    assert fc.cache_store("k" * 64, {"m": 1}, row, CUT, str(out), since=0)
+    meta = fc.cache_lookup("k" * 64)
+    assert meta["receipt"] == f"fc_states_firered_town_{CUT[:8]}.txt" and meta["cut"] == CUT
+    assert set(meta["files"]) == set(fc.BUILD_OUTPUTS["town"])
+    (tmp_path / "cache" / ("k" * 64) / "slink_door.State").write_bytes(b"tampered")
+    assert fc.cache_lookup("k" * 64) is None
+
+
+def test_cache_store_refuses_when_an_expected_output_is_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(fc, "state_cache_root", lambda: str(tmp_path / "cache"))
+    out = tmp_path / "out"
+    _outputs(out, "town")
+    (out / "slink_script.State").unlink()
+    assert not fc.cache_store("k" * 64, {}, _row("states_firered_town"), CUT, str(out), since=0)
+    assert fc.cache_lookup("k" * 64) is None
+
+
+@pytest.fixture
+def cache_env(pass_env, monkeypatch, tmp_path):
+    cut, ran, probes = pass_env
+    lane = tmp_path / "lane"
+    (lane / fc.STAGED["firered"]).parent.mkdir(parents=True, exist_ok=True)
+    (lane / fc.STAGED["firered"]).write_bytes(b"FR dump")
+    monkeypatch.setattr(fc, "state_cache_root", lambda: str(tmp_path / "cache"))
+    monkeypatch.setattr(fc, "bizhawk_fingerprint", lambda *a: dict(BIZ))
+    return cut, ran, probes, lane
+
+
+def test_a_cache_miss_builds_live_and_populates_the_cache(cache_env, monkeypatch):
+    cut, ran, probes, lane = cache_env
+
+    def build(row, cut_, lane_, deadline):
+        ran.append(row.id)
+        _outputs(lane / "patch/build/gen3_probe_states_c4p2/firered", "town")
+        _receipt(probes, row.id, cut_, "PASS")
+        return "PASS", 1, True
+    monkeypatch.setattr(fc, "run_row", build)
+    assert fc.main(["--cut", cut, "--lane", str(lane), "--master", MASTER,
+                    "--rows", "states_firered_town"]) == 0
+    assert ran == ["states_firered_town"]
+    key = fc.build_key(_row("states_firered_town"), cut, str(lane))[0]
+    assert fc.cache_lookup(key)["receipt"] == f"fc_states_firered_town_{cut[:8]}.txt"
+
+
+def test_a_cache_hit_copies_the_states_and_writes_a_cached_receipt(cache_env):
+    cut, ran, probes, lane = cache_env
+    row = [r for r in fc.build_plan(cut, str(lane), MASTER) if r.id == "states_firered_town"][0]
+    key = fc.build_key(row, cut, str(lane))[0]
+    src = lane.parent / "built"
+    _outputs(src, "town", body=b"cached")
+    _receipt(probes, row.id, "d" * 40, "PASS")           # the original build's receipt
+    assert fc.cache_store(key, {}, row, "d" * 40, str(src), since=0)
+    assert fc.main(["--cut", cut, "--lane", str(lane), "--master", MASTER,
+                    "--rows", "states_firered_town"]) == 0
+    assert ran == []                                       # no emulator
+    out = lane / "patch/build/gen3_probe_states_c4p2/firered"
+    assert (out / "slink_door.State").read_bytes() == b"cachedslink_door.State"
+    rec = (probes / f"fc_states_firered_town_{cut[:8]}.txt").read_text(encoding="utf-8")
+    hdr, ok, why = fc.fc_check(f"fc_states_firered_town_{cut[:8]}.txt", rec, str(probes))
+    assert ok, why
+    assert hdr["verdict"] == (f"CACHED key={key} from fc_states_firered_town_{'d' * 8}.txt "
+                              f"@{'d' * 40}")
+    summary = (probes / f"fc_SUMMARY_{cut[:8]}.txt").read_text(encoding="utf-8")
+    assert "# RUN 0 / CARRIED 0 / CACHED 1 / FAIL 0" in summary
+
+
+def test_a_cached_receipt_whose_cache_entry_is_gone_is_invalid(cache_env):
+    cut, ran, probes, lane = cache_env
+    test_a_cache_hit_copies_the_states_and_writes_a_cached_receipt(cache_env)
+    import shutil
+    shutil.rmtree(fc.state_cache_root())
+    name = f"fc_states_firered_town_{cut[:8]}.txt"
+    assert not fc.fc_check(name, (probes / name).read_text(encoding="utf-8"), str(probes))[1]
+
+
+def test_checkpoint_inputs_are_exactly_its_builds_outputs(tmp_path):
+    got = fc.row_inputs(_row("checkpoint_leafgreen"), str(tmp_path), root=str(tmp_path))
+    assert set(got) == {"rom:leafgreen"} | {
+        f"state:gen3_probe_states_c4p2/{n}" for n in
+        fc.BUILD_OUTPUTS["town"] + fc.BUILD_OUTPUTS["battle"]} | {
+        f"state:gen3_probe_states/{n}" for n in fc.BUILD_OUTPUTS["tutorials"]}
+
+
+def test_checkpoint_is_carry_eligible_only_when_all_its_builds_hit_the_cache(cache_env,
+                                                                              monkeypatch):
+    cut, _ran, _probes, lane = cache_env
+    rows = [r for r in fc.build_plan(cut, str(lane), MASTER)
+            if fc.chain_of(r.id) == "probe_firered"]
+    d, _est = fc.plan_decisions(rows, cut, True, str(lane))
+    assert d["checkpoint_firered"].kind == "RUN" and "rebuilt live" in d["checkpoint_firered"].reason
+    for r in rows[:-1]:                                    # warm the cache for all three builds
+        kind = fc.build_kind(r.id)[0]
+        src = lane.parent / f"src_{r.id}"
+        _outputs(src, kind)
+        assert fc.cache_store(fc.build_key(r, cut, str(lane))[0], {}, r, "d" * 40, str(src), 0)
+    predicted = fc.predicted_checkpoint_inputs(rows[-1], cut, str(lane))
+    assert predicted and all(v != "MISSING" for v in predicted.values())
+    seen = {}
+    monkeypatch.setattr(fc, "carry_decision",
+                        lambda row, cut, ev, dn, m, a, inputs: seen.setdefault(row.id, inputs)
+                        or fc.Decision("RUN", "x"))
+    fc.plan_decisions(rows, cut, True, str(lane))
+    assert seen["checkpoint_firered"] == predicted         # carry judged on the cached hashes
+    assert d["states_firered_town"].kind == "RUN"
+    d2, _ = fc.plan_decisions(rows[:-1], cut, True, str(lane))
+    assert all(d2[r.id].kind == "CACHED" for r in rows[:-1])
+
+
+def test_the_shard_plan_does_not_depend_on_carry_or_cache_decisions(pass_env):
+    """Shards are cut over ALL selected rows, so two instances agree even when one of them
+    finds a warmer cache or newer receipts."""
+    rows = fc.build_plan(CUT, LANE, MASTER)
+    est = {r.id: r.budget for r in rows}
+    a = [[r.id for r in s] for s in fc.shard_rows(rows, 2, est)]
+    assert a == [[r.id for r in s] for s in fc.shard_rows(list(rows), 2, dict(est))]

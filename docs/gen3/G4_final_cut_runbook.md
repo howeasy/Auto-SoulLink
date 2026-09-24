@@ -390,16 +390,29 @@ when all of these hold for some receipt of the same row+orientation at a cut X:
 
 Every runner receipt now records `# inputs:` (the staged ROMs, the checkpoint's `.State` files, the RR build and
 the root FR dump that probe_gates reads, item 6's Gen 1/2 inputs).
-Never carried: the state/tutorial builds, the checkpoint probe (it runs on states this pass rebuilds), the zip rows
-and the source gate; item 6 carries only while `master` has not moved. A carried row's receipt says `CARRIED from
+Never carried: the state/tutorial builds (they are cached instead, below), the zip rows and the source gate; the
+checkpoint probe carries only when its three builds are cache hits (then its `.State` inputs are known in advance);
+item 6 carries only while `master` has not moved. A carried row's receipt says `CARRIED from
 <receipt> @X; diff X..cut touches no dependency (list checked)` with the globs, the diff and the inputs.
 
-`--shard i/n` splits the RUN rows deterministically, longest first (receipt history, else budget), with each
-prerequisite chain kept whole and in order in one shard: a title's `states_*`/`tutorials_*` with its
-`checkpoint_*`, and `zip_build` with `zip_check`/`zip_boot_firered`. Shard 1 also writes the CARRIED receipts; each
-shard writes `fc_SUMMARY_<cut8>_shard<i>of<n>.txt`; the dry-run prints every shard's rows. `--merge-summary` builds
+**The §1 build cache** (G4-FINALCUT-CACHE, on every pass, with or without `--carry`): each state/tutorial build is
+content-addressed. Its key is the sha256 of the git blobs **at the cut** of the builder scripts, Lua drivers, packs,
+syms and the row's fixture (`BUILD_KEY_GLOBS`), the staged ROM's sha256, and the BizHawk fingerprint (EmuHawk.exe,
+`dll/mgba.dll`, and the base config's GBA preferred core + mGBA settings/sync settings; window fields are ignored).
+Entries live outside git in the main checkout's `patch/build/state_cache/<key>/` (the `.State` files + `meta.json`
+naming the build receipt, cut and file hashes). A hit copies the files into the lane and writes
+`CACHED key=<key> from <build receipt> @<cut>`; a miss builds live and, on PASS, populates the entry (every declared
+output must exist and be fresh, else nothing is cached). A CACHED receipt is valid only while its entry exists and
+hashes as recorded and its build receipt is a real PASS. The bw hashes JSON is not cached: it names the lane's
+cut, so `gen3_probe_receipt.py` regenerates it (cheap, no emulator).
+
+`--shard i/n` splits ALL selected rows deterministically (so two instances agree even when one sees a warmer cache or
+newer receipts), longest first (receipt history, else budget), with each prerequisite chain kept whole and in order in
+one shard: a title's `states_*`/`tutorials_*` with its `checkpoint_*`, and `zip_build` with
+`zip_check`/`zip_boot_firered`. Each shard writes its own rows' receipts (RUN, CACHED or CARRIED) and
+`fc_SUMMARY_<cut8>_shard<i>of<n>.txt`; the dry-run prints every shard's rows. `--merge-summary` builds
 the one summary from every row's receipt, validating each (header row and cut, structure, a carry's origin): a
-missing receipt is NOT RUN and an invalid one FAILs; RUN / CARRIED / FAIL are counted separately.
+missing receipt is NOT RUN and an invalid one FAILs; RUN / CARRIED / CACHED / FAIL are counted separately.
 
 `python tools/verify_gen3_release.py` (all lanes) stays the release gate's own entry point; the runner runs its
 `--quick` source lanes and its `probe-gates` lane, and replaces its `duo-pairs-gen3` pytest lane with the per-scenario

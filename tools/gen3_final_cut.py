@@ -114,6 +114,7 @@ class Row:
     # (verify_gen3_release's ALLOWED_SKIPS; item6, whose case outputs may legitimately skip)
     own_verdict: bool = False
     deps: list | None = None   # --carry: dependency globs (row_deps); None = never carried
+    outputs_dir: str | None = None   # §1 build rows: where the .State files land
 
     def command(self):
         return shlex.join(["python" if a == PY else a for a in self.argv])
@@ -152,14 +153,16 @@ def build_plan(cut, lane, master):
     # by gen3_bw_hashes.py, which gen3_probe_receipt.py runs before each probe row)
     for title in ("firered", "leafgreen"):
         for kind in ("town", "battle"):
+            out = f"{lane}/patch/build/gen3_probe_states_c4p2/{title}"
             rows.append(Row(f"states_{title}_{kind}", "§1.1 build",
                             [PY, "tools/mkstates_gen3.py", "--title", title, "--kind", kind,
-                             "--out-dir", f"{lane}/patch/build/gen3_probe_states_c4p2/{title}",
-                             "--rom", STAGED[title]], lane, 600))
+                             "--out-dir", out, "--rom", STAGED[title]], lane, 600,
+                            outputs_dir=out))
     for title in ("firered", "leafgreen"):
+        out = f"{lane}/patch/build/gen3_probe_states/{title}"
         rows.append(Row(f"tutorials_{title}", "§1.2 build",
                         [PY, "tools/mkstates_gen3_tutorials.py", "--title", title,
-                         "--out-dir", f"{lane}/patch/build/gen3_probe_states/{title}"], lane, 900))
+                         "--out-dir", out], lane, 900, outputs_dir=out))
     # §2 item 1 + §3 item 2 (faint_cmd is §2's row; whiteout moves to §4, linked_faint_active to §5)
     for s in ("faint_cmd_gen3", "link_gen3", "boxsync_gen3", "reconnect_gen3", "deadzone_gen3"):
         rows.append(_duo(s, "gen3_frlg", "§2-3 item1-2", lane))
@@ -599,16 +602,17 @@ def run_row(row, cut, lane, deadline):
 
 def write_summary(cut, results, suffix=""):
     counts = {k: sum(status_of(v) == k for _r, v, _n, _p in results)
-              for k in ("RUN", "CARRIED", "FAIL")}
+              for k in ("RUN", "CARRIED", "CACHED", "FAIL")}
     lines = [f"# G4 final cut {cut} -- tools/gen3_final_cut.py summary "
              f"(written {utcnow():%Y-%m-%dT%H:%M:%SZ})",
-             f"# RUN {counts['RUN']} / CARRIED {counts['CARRIED']} / FAIL {counts['FAIL']}", "",
+             f"# RUN {counts['RUN']} / CARRIED {counts['CARRIED']} / CACHED {counts['CACHED']} "
+             f"/ FAIL {counts['FAIL']}", "",
              "| # | row | runbook | verdict | attempts | receipt |", "|---|---|---|---|---|---|"]
     for i, (row, verdict, n, rec) in enumerate(results, 1):
         lines.append(f"| {i} | {row.id} | {row.item} | {verdict} | {n} | {rec} |")
     passed = counts["FAIL"] == 0
     lines += ["", f"OVERALL: {'PASS' if passed and results else 'FAIL'} "
-                  f"({counts['RUN'] + counts['CARRIED']}/{len(results)} rows)"]
+                  f"({counts['RUN'] + counts['CARRIED'] + counts['CACHED']}/{len(results)} rows)"]
     path = os.path.join(PROBES, f"fc_SUMMARY_{cut[:8]}{suffix}.txt")
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
@@ -812,10 +816,10 @@ ITEM6_DEPS = ["lua/*.lua", "lua/gen1/**", "lua/gen2/**", "lua/core/**", "lua/cli
               "tests/conftest.py", "tests/unit/test_gen1_client.py", "tests/unit/protocol_schema.py",
               "tests/live/test_gen1_gates.py", "tests/fixtures/gen1/**", "tests/fixtures/gen2/**",
               "data/games/gen1_rby/**", "data/games/gen2_crystal/**", "patch/gen1/**"]
-# builds are lane-local artifacts, the zip is built from the cut, the source gate IS the cut, and
-# the checkpoint probe runs on states this very pass rebuilds (its state hashes cannot be known
-# before the rebuild), so none of these is ever carried
-NEVER_CARRIED = ("states_*", "tutorials_*", "checkpoint_*", "zip_*", "release_gate_quick")
+# builds are content-addressed instead (the §1 build cache), the zip is built from the cut and
+# the source gate IS the cut, so none of these is ever carried. The checkpoint probe carries once
+# its states come from the cache with known hashes (predicted_checkpoint_inputs).
+NEVER_CARRIED = ("states_*", "tutorials_*", "zip_*", "release_gate_quick")
 
 
 def row_deps(row):
@@ -824,6 +828,8 @@ def row_deps(row):
         return None
     if row.id.endswith(("_fr_as_a", "_lg_as_a")):
         return DUO_DEPS
+    if row.id.startswith("checkpoint_"):
+        return PROBE_DEPS
     if row.id.startswith("bootcheck_"):
         return GEN3_CLIENT + GEN3_HARNESS + [f"tests/fixtures/gen3/{row.id[len('bootcheck_'):]}.sav"]
     if row.id == "item6_route_diff":
@@ -843,12 +849,10 @@ def row_inputs(row, lane, root=None):
     m = re.match(r"(states|tutorials|checkpoint|bootcheck)_(firered|leafgreen)", rid)
     if m:
         out = {f"rom:{m[2]}": at(STAGED[m[2]])}
-        if m[1] == "checkpoint":
-            for d in ("gen3_probe_states_c4p2", "gen3_probe_states"):
-                sd = at(f"patch/build/{d}/{m[2]}")
-                for name in sorted(os.listdir(sd)) if os.path.isdir(sd) else []:
-                    if name.endswith(".State"):
-                        out[f"state:{d}/{name}"] = os.path.join(sd, name)
+        if m[1] == "checkpoint":     # exactly the states its three builds produce
+            for kind, names in BUILD_OUTPUTS.items():
+                for n in names:
+                    out[f"state:{BUILD_DIRS[kind]}/{n}"] = at(f"patch/build/{BUILD_DIRS[kind]}/{m[2]}/{n}")
         return out
     if rid == "probe_gates":   # tests/live/test_gen3_probe_gates.py: the RR build + the root FR dump
         return {"rom:slink_RR": at("patch/build/slink_RR.gba"),
@@ -963,6 +967,13 @@ def fc_check(name, text, probes, depth=0):
     c = re.match(rf"CARRIED from (\S+) @({_SHA})", v)
     if c:
         return (hdr, *origin_ok(c[1], hdr["row"], c[2], probes, depth + 1))
+    c = re.match(rf"CACHED key=([0-9a-f]{{64}}) from (\S+) @({_SHA})$", v)
+    if c:
+        meta = cache_lookup(c[1])
+        if not meta or meta.get("row") != hdr["row"] or meta.get("receipt") != c[2] or \
+                meta.get("cut") != c[3]:
+            return hdr, False, f"cache entry {c[1][:12]} missing or not this build's"
+        return (hdr, *origin_ok(c[2], hdr["row"], c[3], probes, depth + 1))
     heads = re.findall(r"^--- attempt \d+ of \d+ ---$", text, re.M)
     ends = re.findall(r"^exit=(\S+) end_utc=\S+ tracked_clean_after=(\w+) classification=(\S+)$",
                       text, re.M)
@@ -1054,6 +1065,7 @@ class Decision:
     evidence: Evidence | None = None
     checked: list = field(default_factory=list)   # the diff X..cut that was checked
     inputs: dict = field(default_factory=dict)    # this lane's non-git input hashes
+    cache: tuple | None = None      # §1 build rows: (key, manifest, meta or None)
 
 
 def git_is_ancestor(x, cut):
@@ -1136,6 +1148,182 @@ def carried_receipt(row, cut, lane, d):
 
 
 # ---------------------------------------------------------------------------
+# the §1 build cache (card G4-FINALCUT-CACHE): a state build is content-addressed. Its key is
+# the sha256 of every input -- the git blobs AT THE CUT of the builder scripts, the Lua drivers,
+# the packs and syms they read, and the row's own fixture; the staged ROM's sha256; the BizHawk
+# exe/core hashes and the GBA config fields that can change emulation. A hit copies the cached
+# .State files into the lane and writes a CACHED receipt citing the original build receipt and
+# the key; a miss builds live and populates the cache. The checkpoint probe then runs on
+# known-hash states, which is what makes it carry-eligible.
+# ---------------------------------------------------------------------------
+
+# the tool docstrings: mkstates_gen3.py (town/battle) and mkstates_gen3_tutorials.py
+BUILD_OUTPUTS = {"town": ["slink_overworld.State", "slink_door.State", "slink_script.State"],
+                 "battle": ["slink_preintro.State", "slink_prebattle.State",
+                            "slink_postbattle.State"],
+                 "tutorials": ["slink_oldman.State", "slink_pokedude.State"]}
+BUILD_DIRS = {"town": "gen3_probe_states_c4p2", "battle": "gen3_probe_states_c4p2",
+              "tutorials": "gen3_probe_states"}
+BUILD_FIXTURE = {"town": "town", "battle": "battle", "tutorials": "town"}
+# what the builders read (mkstates_gen3*.lua -> gen3_boot_check / gen3_scripted_play / playlib /
+# gen3_title_syms / lua/gen3/reads.lua / json_codec, the title's profile.json via PROFILE_PACK;
+# gen3_fixtures.py / run_gate.py / gen1_playthrough.py launch and configure the run)
+BUILD_KEY_GLOBS = ["tools/mkstates_gen3.py", "tools/mkstates_gen3_tutorials.py",
+                   "tools/gen3_fixtures.py", "tools/run_gate.py", "tools/gen1_playthrough.py",
+                   "lua/tests/mkstate*.lua", "lua/tests/gen3_*.lua", "lua/tests/playlib.lua",
+                   "lua/json_codec.lua", "lua/gen3/**", "data/games/gen3_frlg/**",
+                   "data/games/gen3_frlge/**", "data/gen3/pret/**", "server/adapters/**"]
+_MGBA = "BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk"
+
+
+def build_kind(row_id):
+    """(kind, title) of a §1 build row -- kind town / battle / tutorials -- else None."""
+    m = re.fullmatch(r"states_(firered|leafgreen)_(town|battle)", row_id)
+    if m:
+        return m[2], m[1]
+    m = re.fullmatch(r"tutorials_(firered|leafgreen)", row_id)
+    return ("tutorials", m[1]) if m else None
+
+
+_BLOBS = {}
+
+
+def tree_blobs(cut):
+    """{path: blob sha} of every file at `cut` (git ls-tree), memoised per cut."""
+    if cut not in _BLOBS:
+        out = _git(REPO, "ls-tree", "-r", cut).stdout
+        _BLOBS[cut] = {ln.split("\t", 1)[1]: ln.split()[2] for ln in out.splitlines() if "\t" in ln}
+    return _BLOBS[cut]
+
+
+def bizhawk_fingerprint(exe=None, config=None):
+    """The emulator side of a build key: EmuHawk.exe and the mGBA core's hashes, and a hash of
+    the base config's GBA fields (preferred core, mGBA settings and sync settings). Window
+    positions, recent files and the like are left out on purpose."""
+    import run_gate
+    exe = exe or run_gate.EMUHAWK
+    config = config or run_gate.BIZHAWK_CONFIG
+    base = os.path.dirname(exe)
+    fp = {"EmuHawk.exe": file_sha256(exe) or "MISSING"}
+    for rel in ("dll/mgba.dll", "dll/libmgba.dll.so"):
+        h = file_sha256(os.path.join(base, rel))
+        if h:
+            fp[rel] = h
+    try:
+        with open(config, encoding="utf-8-sig") as f:
+            cfg = json.load(f)
+    except (OSError, ValueError):
+        cfg = {}
+    subset = {"PreferredCores.GBA": (cfg.get("PreferredCores") or {}).get("GBA"),
+              "CoreSettings": (cfg.get("CoreSettings") or {}).get(_MGBA),
+              "CoreSyncSettings": (cfg.get("CoreSyncSettings") or {}).get(_MGBA)}
+    fp["config"] = hashlib.sha256(json.dumps(subset, sort_keys=True).encode()).hexdigest()
+    return fp
+
+
+def build_key(row, cut, lane, blobs=None, bizhawk=None):
+    """(key, manifest) for a §1 build row, or (None, why) when an input is unavailable."""
+    kind, title = build_kind(row.id)
+    blobs = tree_blobs(cut) if blobs is None else blobs
+    pats = [_glob_re(g) for g in BUILD_KEY_GLOBS]
+    fixture = f"tests/fixtures/gen3/{title}_party_{BUILD_FIXTURE[kind]}.sav"
+    if fixture not in blobs:
+        return None, f"fixture {fixture} not in the cut"
+    rom = file_sha256(os.path.join(lane, STAGED[title]))
+    if not rom:
+        return None, f"staged ROM {STAGED[title]} missing in the lane"
+    manifest = {"row": row.id, "rom": rom,
+                "git": {p: b for p, b in blobs.items() if p == fixture or any(x.match(p) for x in pats)},
+                "bizhawk": bizhawk_fingerprint() if bizhawk is None else bizhawk}
+    return hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(), manifest
+
+
+def state_cache_root():
+    """Outside git, in the MAIN checkout, shared by every lane."""
+    return os.path.join(main_checkout(), "patch", "build", "state_cache")
+
+
+def cache_lookup(key):
+    """The cache entry's meta for `key`, or None -- only when every stored file still hashes
+    to what was recorded."""
+    d = os.path.join(state_cache_root(), key)
+    try:
+        with open(os.path.join(d, "meta.json"), encoding="utf-8") as f:
+            meta = json.load(f)
+    except (OSError, ValueError):
+        return None
+    files = meta.get("files") or {}
+    if meta.get("key") != key or not files or any(
+            file_sha256(os.path.join(d, n)) != h for n, h in files.items()):
+        return None
+    return dict(meta, dir=d)
+
+
+def cache_store(key, manifest, row, cut, out_dir, since):
+    """After a live PASS: copy the row's outputs (each must exist and be written since `since`)
+    into state_cache/<key>/ with a meta.json naming the build receipt. False if incomplete."""
+    kind, _title = build_kind(row.id)
+    srcs = [os.path.join(out_dir, n) for n in BUILD_OUTPUTS[kind]]
+    if not all(os.path.isfile(p) and os.path.getmtime(p) >= since for p in srcs):
+        return False
+    final = os.path.join(state_cache_root(), key)
+    tmp = final + ".tmp"
+    shutil.rmtree(tmp, ignore_errors=True)
+    os.makedirs(tmp)
+    for p in srcs:
+        shutil.copyfile(p, os.path.join(tmp, os.path.basename(p)))
+    meta = {"key": key, "row": row.id, "cut": cut,
+            "receipt": os.path.basename(receipt_path(row.id, cut)),
+            "built_utc": f"{utcnow():%Y-%m-%dT%H:%M:%SZ}", "manifest": manifest,
+            "files": {os.path.basename(p): file_sha256(os.path.join(tmp, os.path.basename(p)))
+                      for p in srcs}}
+    with open(os.path.join(tmp, "meta.json"), "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=1, sort_keys=True)
+    shutil.rmtree(final, ignore_errors=True)
+    os.replace(tmp, final)
+    return True
+
+
+def cache_restore(meta, out_dir):
+    """Copy a cache entry's files into the lane; True when every copy hashes as recorded."""
+    os.makedirs(out_dir, exist_ok=True)
+    for n, h in meta["files"].items():
+        dst = os.path.join(out_dir, n)
+        shutil.copyfile(os.path.join(meta["dir"], n), dst)
+        if file_sha256(dst) != h:
+            return False
+    return True
+
+
+def cached_receipt(row, cut, lane, key, meta):
+    note = (f"cache: {meta['dir']}\n"
+            f"outputs: {' '.join(f'{n}={h}' for n, h in sorted(meta['files'].items()))}\n"
+            f"key manifest: {json.dumps(meta.get('manifest'), sort_keys=True)}\n"
+            + inputs_note(hash_inputs(row_inputs(row, lane))))
+    return receipts.run_receipt_text(
+        row=row.id, item=row.item.replace(" ", "_"), cut=cut, lane=lane, command=row.command(),
+        cwd=row.cwd, env=row.env, attempts=[],
+        verdict=f"CACHED key={key} from {meta['receipt']} @{meta['cut']}", note=note)
+
+
+def predicted_checkpoint_inputs(row, cut, lane):
+    """The checkpoint row's input hashes as they WILL be once its title's three builds are
+    restored from the cache, or None when any of them misses (then it is rebuilt live and
+    its states' hashes cannot be known in advance)."""
+    title = row.id[len("checkpoint_"):]
+    out = {f"rom:{title}": file_sha256(os.path.join(lane, STAGED[title])) or "MISSING"}
+    for rid in (f"states_{title}_town", f"states_{title}_battle", f"tutorials_{title}"):
+        key, _m = build_key(Row(rid, "§1", [], lane, 0), cut, lane)
+        meta = cache_lookup(key) if key else None
+        if not meta:
+            return None
+        kind = build_kind(rid)[0]
+        for n, h in meta["files"].items():
+            out[f"state:{BUILD_DIRS[kind]}/{n}"] = h
+    return out
+
+
+# ---------------------------------------------------------------------------
 # --shard i/n: two runner instances split the RUN rows across two lanes
 # ---------------------------------------------------------------------------
 
@@ -1175,6 +1363,8 @@ def shard_rows(rows, n, est):
 def status_of(verdict):
     if verdict.startswith("CARRIED"):
         return "CARRIED"
+    if verdict.startswith("CACHED"):
+        return "CACHED"
     return "RUN" if verdict.startswith(("PASS", "SKIP-ALLOWED")) else "FAIL"
 
 
@@ -1183,16 +1373,34 @@ def status_of(verdict):
 # ---------------------------------------------------------------------------
 
 def plan_decisions(rows, cut, carry, lane):
-    """({row id: Decision}, {row id: est seconds or None}). Without --carry every row RUNs."""
+    """({row id: Decision}, {row id: est seconds or None}). A §1 build row is CACHED on a cache
+    hit, else RUN (built live, then cached); without --carry every other row RUNs."""
     ev = collect_evidence()
     est = {r.id: estimate_seconds(ev.get(r.id, []), cut) for r in rows}
-    if not carry:
-        return {r.id: Decision("RUN", "no --carry") for r in rows}, est
-    master = _git(REPO, "rev-parse", "master", check=False).stdout.strip() or None
-    return {r.id: carry_decision(r, cut, ev.get(r.id, []), git_diff_names, master,
-                                 git_is_ancestor,
-                                 hash_inputs(row_inputs(r, lane)) if r.deps else {})
-            for r in rows}, est
+    master = _git(REPO, "rev-parse", "master", check=False).stdout.strip() or None if carry else None
+    out = {}
+    for r in rows:
+        if build_kind(r.id):
+            key, manifest = build_key(r, cut, lane)
+            meta = cache_lookup(key) if key else None
+            out[r.id] = (Decision("CACHED", f"cache hit key={key[:12]} (built by {meta['receipt']})",
+                                  cache=(key, manifest, meta)) if meta else
+                         Decision("RUN", f"cache miss ({f'key={key[:12]}' if key else manifest}): "
+                                         f"build live, then cache", cache=(key, manifest, None)))
+        elif not carry:
+            out[r.id] = Decision("RUN", "no --carry")
+        elif r.id.startswith("checkpoint_"):
+            inputs = predicted_checkpoint_inputs(r, cut, lane)
+            out[r.id] = (Decision("RUN", "its states are rebuilt live this pass (a build missed "
+                                         "the cache), so their hashes are not known yet")
+                         if inputs is None else
+                         carry_decision(r, cut, ev.get(r.id, []), git_diff_names, master,
+                                        git_is_ancestor, inputs))
+        else:
+            out[r.id] = carry_decision(r, cut, ev.get(r.id, []), git_diff_names, master,
+                                       git_is_ancestor,
+                                       hash_inputs(row_inputs(r, lane)) if r.deps else {})
+    return out, est
 
 
 def _mins(s):
@@ -1239,17 +1447,18 @@ def run_pass(args):
     if args.merge_summary:
         return merge_summary(cut, rows)
     decisions, est = plan_decisions(rows, cut, args.carry, lane)
-    run_rows = [r for r in rows if decisions[r.id].kind == "RUN"]
-    carry_rows = [r for r in rows if decisions[r.id].kind == "CARRY"]
-    suffix, plan = "", None
+    suffix, plan, mine = "", None, {r.id for r in rows}
     if args.shard:
+        # cut over ALL selected rows (budget where no history), so two instances agree even when
+        # one sees a warmer cache or newer receipts; each shard writes its own rows' receipts
         i, n = parse_shard(args.shard)
-        plan = shard_rows(run_rows, n, {r.id: est[r.id] or r.budget for r in run_rows})
-        run_rows = plan[i - 1]
-        carry_rows = carry_rows if i == 1 else []   # shard 1 writes the CARRIED receipts
+        plan = shard_rows(rows, n, {r.id: est[r.id] or r.budget for r in rows})
+        mine = {r.id for r in plan[i - 1]}
         suffix = f"_shard{i}of{n}"
-    mine = {r.id for r in run_rows + carry_rows}
     rows_here = [r for r in rows if r.id in mine]
+    run_rows = [r for r in rows_here if decisions[r.id].kind == "RUN"]
+    carry_rows = [r for r in rows_here if decisions[r.id].kind == "CARRY"]
+    cached_rows = [r for r in rows_here if decisions[r.id].kind == "CACHED"]
     if args.dry_run:
         print(f"# G4 final cut {cut}  lane={lane}  master={master}  rows={len(rows)}"
               f"{f'  shard={args.shard}' if args.shard else ''}  carry={bool(args.carry)}")
@@ -1267,20 +1476,23 @@ def run_pass(args):
                   f"     {d.reason}")
         known = [est[r.id] for r in run_rows if est[r.id]]
         unknown = [r for r in run_rows if not est[r.id]]
-        print(f"# {len(rows)} rows: RUN {len(run_rows)} (this shard) / CARRY {len(carry_rows)}"
+        print(f"# {len(rows)} rows: RUN {len(run_rows)} / CACHED {len(cached_rows)} / "
+              f"CARRY {len(carry_rows)} (this shard)"
               f" -- lane time: {_mins(sum(known))} from {len(known)} rows' receipts + "
               f"{len(unknown)} rows with no history (budget ceiling "
               f"{_mins(sum(r.budget for r in unknown))})")
         for k, rs in enumerate(plan or [], 1):
-            secs = sum(est[r.id] or r.budget for r in rs)
-            print(f"# shard {k}/{len(plan)} ({len(rs)} rows, ~{_mins(secs)} with budget for "
-                  f"rows without history): {' '.join(r.id for r in rs)}")
+            live = [r for r in rs if decisions[r.id].kind == "RUN"]
+            secs = sum(est[r.id] or r.budget for r in live)
+            print(f"# shard {k}/{len(plan)} ({len(rs)} rows, {len(live)} live, ~{_mins(secs)} "
+                  f"with budget for rows without history): "
+                  f"{' '.join(r.id + ('' if decisions[r.id].kind == 'RUN' else '=' + decisions[r.id].kind) for r in rs)}")
         print(f"# receipts docs/gen3/probes/fc_<row>_{cut[:8]}.txt, summary "
               f"fc_SUMMARY_{cut[:8]}{suffix}.txt")
         return 0
     deadline = parse_utc(args.stop_at).timestamp() if args.stop_at else None
     try:
-        if run_rows:
+        if run_rows or cached_rows:
             provision(lane, cut, root)
             copy_inputs(lane, root)
         if any(r.id == "item6_route_diff" for r in run_rows):
@@ -1296,18 +1508,30 @@ def run_pass(args):
         if prior and prior.startswith("FAIL"):
             # never re-run an unchanged failed row automatically, and never paper over it
             results.append((row, f"{prior} (prior receipt at this cut; not re-run)", 0, rec))
-        elif prior and (args.resume or decisions[row.id].kind == "CARRY") and \
-                prior.startswith(("PASS", "SKIP-ALLOWED", "CARRIED")):
+        elif prior and (args.resume or decisions[row.id].kind in ("CARRY", "CACHED")) and \
+                prior.startswith(("PASS", "SKIP-ALLOWED", "CARRIED", "CACHED")):
             results.append((row, f"{prior} (resumed)", 0, rec))
         elif decisions[row.id].kind == "CARRY":
             with open(receipt_path(row.id, cut), "w", encoding="utf-8") as f:
                 f.write(carried_receipt(row, cut, lane, decisions[row.id]))
             results.append((row, decisions[row.id].reason, 0, rec))
+        elif decisions[row.id].kind == "CACHED" and \
+                cache_restore(decisions[row.id].cache[2], row.outputs_dir):
+            key, _manifest, meta = decisions[row.id].cache
+            with open(receipt_path(row.id, cut), "w", encoding="utf-8") as f:
+                f.write(cached_receipt(row, cut, lane, key, meta))
+            results.append((row, f"CACHED key={key} from {meta['receipt']} @{meta['cut']}", 0, rec))
         elif deadline and time.time() >= deadline:
             results.append((row, "NOT RUN (--stop-at)", 0, "-"))
         else:
+            t0 = time.time()
             verdict, n, clean_after = run_row(row, cut, lane, deadline)
             results.append((row, verdict, n, rec))
+            cache = decisions[row.id].cache
+            if cache and cache[0] and verdict == "PASS" and not cache_store(
+                    cache[0], cache[1], row, cut, row.outputs_dir, t0 - 2):
+                print(f"[final_cut] {row.id}: PASS but its outputs are incomplete; not cached",
+                      file=sys.stderr)
             if not clean_after:
                 write_summary(cut, results, suffix)
                 print("[final_cut] ABORT: the lane went tracked-dirty", file=sys.stderr)
