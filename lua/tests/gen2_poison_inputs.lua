@@ -103,23 +103,36 @@ PI.WAIT_FRAMES = 600
 PI.STUCK_FRAMES = 900   -- diagnostics only
 PI.GIVE_UP_FRAMES = 3000
 PI.HEAL_FRACTION = 0.6
-PI.MAX_HEALS = 3
+PI.MAX_HEALS = 4   -- ponytail: a bound, not measured; Crystal/Silver spend one on the first heal
 PI.BUMP_FRAMES = 24   -- ponytail: 3 normal steps (8 frames each); a walk that has not moved in that long is bumping
 
 local function on(point, map) return point.map_group == map.map_group and point.map_number == map.map_number end
 
--- Pure point -> buttons, phase. point adds: poison_fainted, active_slot, active_hp (the battle copy), party
--- ({slot -> {hp, status}}), foe_sting (the wild foe knows POISON_STING), active_psn (the battle mon carries
--- PSN), party_cursor (battle party list entry under the cursor).
+-- Pure point -> buttons, phase. point adds: poison_fainted, active_slot, active_hp / active_max_hp (the battle
+-- copy), party ({slot -> {hp, status, max_hp}}), foe_sting (the wild foe knows POISON_STING), active_psn (the
+-- battle mon carries PSN), flee_sure (our battle speed >= the foe's), party_cursor (battle party list entry
+-- under the cursor), ui.pp (the move list's PP, in list order).
 -- Against a POISON_STING foe the active mon passes turns with a passive move; a mon at or below LOW_HP, or one
 -- that knows no passive move, is switched out for a living party mate above LOW_HP instead (TryPlayerSwitch
 -- passes the turn and the incoming mon takes the hit, the U1d FI trick); with nobody above LOW_HP it RUNs.
--- ANY party mon carrying PSN ends the hunt (DoPoisonStep ticks every poisoned party mon). Silver live run 1:
--- flee failures and stings wore the lead down until a sting fainted it in battle.
+-- ANY party mon carrying PSN ends the hunt (DoPoisonStep ticks every poisoned party mon); opts.target (a party
+-- slot, DUO-WAVE-C's linked catch) narrows that to one slot, which then takes every sting itself.
+-- Silver live run 1: flee failures and stings wore the lead down until a sting fainted it in battle.
+-- Card driver-robust (the U1 flake classes, 2026-09-23 runs):
+--   * a worn active mon (at or below LOW_HP, plus max_hp/8 when poisoned: ResidualDamage) is at risk of one more
+--     foe turn. A failed RUN is such a turn ("Can't escape!"; TryToRunAwayFromBattle, engine/battle/core.asm,
+--     escapes for sure only when our speed >= the foe's), so an at-risk mon not sure to flee hands over to a fit,
+--     unpoisoned mate first (Crystal crystal_u1_869: the lead fainted to a Weedle);
+--   * in a trainer fight a poisoned mon sits out the rest behind an unpoisoned mate, and a poisoned mate is never
+--     the relief (Gold u1_fail_1790222460: the poisoned mate fought on at 4 HP and fainted, losing the poison);
+--   * a move with 0 PP is never chosen (MoveSelectionScreen lists it and refuses it; the c60c45c3 FI fix);
+--   * before the poison, a party mon below HEAL_FRACTION sends the hunt back to the #MON CENTER (facts.heal) and
+--     back into the grass: a worn party can neither stall a sting nor flee safely.
 PI.LOW_HP = 7
 PI.PKMN_CELL = 2   -- BattleMenu 2x2 grid FIGHT|PKMN / PACK|RUN (engine/battle/menu.asm:32-45): by position
 function PI.driver(F, facts, opts)
     local self = {terminal="poisoned", phase="travel", battles=0}
+    local target = opts.target
     local held, hold_left, release = nil, 0, false
     local here, from = nil, nil
     local maps, hunt = facts.maps, facts.maps[facts.hunt_map]
@@ -194,18 +207,31 @@ function PI.driver(F, facts, opts)
     local function psn(value) return integer(value, 0, 255) and (value // facts.psn_mask) % 2 == 1 end
     local function party(point) return type(point.party) == "table" and point.party or {} end
     local function poisoned(point)
-        for _, mon in pairs(party(point)) do if psn(mon.status) and integer(mon.hp, 1, 999) then return true end end
+        for slot, mon in pairs(party(point)) do
+            if (target == nil or slot == target) and psn(mon.status) and integer(mon.hp, 1, 999) then return true end
+        end
+        return false
+    end
+    -- a living party mon below HEAL_FRACTION of its max HP
+    local function worn(point)
+        for _, mon in pairs(party(point)) do
+            if integer(mon.hp, 1, 999) and integer(mon.max_hp, 1, 999) and mon.hp < mon.max_hp * PI.HEAL_FRACTION then
+                return true
+            end
+        end
         return false
     end
     local function alive(point)
         for _, mon in pairs(party(point)) do if integer(mon.hp, 1, 999) then return true end end
         return false
     end
-    -- a living party mate of the active mon above LOW_HP (party HP; the active mon's own is its battle copy)
+    -- a living, unpoisoned party mate of the active mon above LOW_HP (party HP; the active mon's own is its
+    -- battle copy); a poisoned target is never switched back in
     local function relief(point)
         for slot = 0, 5 do
             local mon = party(point)[slot]
-            if slot ~= point.active_slot and mon and integer(mon.hp, PI.LOW_HP + 1, 999) then return slot end
+            if slot ~= point.active_slot and mon and integer(mon.hp, PI.LOW_HP + 1, 999) and not psn(mon.status)
+               and not (target ~= nil and slot == target and poisoned(point)) then return slot end
         end
     end
     local function any_other(point)
@@ -222,42 +248,83 @@ function PI.driver(F, facts, opts)
     -- has no RUN (BattleMenu_Run refuses, engine/battle/core.asm): a non-POISON_STING foe is fought with the first
     -- damaging move; a POISON_STING foe gets the wild treatment (passive move / switch) until a party mon carries
     -- PSN, then it is fought too. "Will <PLAYER> change #MON?" (data/text/battle.asm:222-231) takes NO.
+    -- ui.pp[i]: PP left for ui.items[i]; unread PP is assumed usable
+    local function has_pp(ui, index)
+        local left = type(ui.pp) == "table" and ui.pp[index]
+        return type(left) ~= "number" or left > 0
+    end
     local function battle(point, ui)
         local trainer = point.battle_mode == 2
-        local sting = (self.phase == "hunt" or trainer) and point.foe_sting == true and point.active_psn ~= true
-            and not poisoned(point)
+        local done = poisoned(point) or (point.active_psn == true and (target == nil or point.active_slot == target))
+        local sting = (self.phase == "hunt" or trainer) and point.foe_sting == true and not done
         local active = point.active_slot
-        local fit = integer(point.active_hp, PI.LOW_HP + 1, 999) and not no_passive[active]
+        local risk = PI.LOW_HP + (point.active_psn == true and integer(point.active_max_hp, 1, 999)
+                                  and point.active_max_hp // 8 or 0)
+        local healthy = integer(point.active_hp, risk + 1, 999)
+        -- opts.target takes every sting itself: switched in while it is fit, never replaced by a mate
+        local mine = target ~= nil and active == target
+        local target_fit = target ~= nil and integer((party(point)[target] or {}).hp, PI.LOW_HP + 1, 999)
+        local fit = healthy and (mine or (target == nil and not no_passive[active]))
         if ui.kind == "battle_menu" then
             if point.battle_mode ~= 1 and not trainer then return nil, "battle menu outside a wild or trainer battle" end
             if sting and fit then return choose(ui, "FIGHT", 2) end
+            if sting and mine then   -- the worn target: RUN, or a trainer fight's mate takes over
+                if trainer and relief(point) ~= nil then return choose(ui, PI.PKMN_CELL, 2) end
+                return choose(ui, trainer and "FIGHT" or "RUN", 2)
+            end
+            if sting and target ~= nil and not mine and target_fit then return choose(ui, PI.PKMN_CELL, 2) end
+            if sting and target ~= nil and not mine then return choose(ui, trainer and "FIGHT" or "RUN", 2) end
             if sting and relief(point) ~= nil then return choose(ui, PI.PKMN_CELL, 2) end
-            -- a trainer fight keeps every party mon standing: a worn active mon hands over to a fitter mate
-            if trainer and not sting and not integer(point.active_hp, PI.LOW_HP + 1, 999) and relief(point) ~= nil then
-                return choose(ui, PI.PKMN_CELL, 2)
+            -- a trainer fight keeps every party mon standing: a worn or poisoned active mon hands over to a fit,
+            -- unpoisoned mate; a wild battle's at-risk mon does too unless the RUN is sure
+            if not sting and relief(point) ~= nil then
+                if trainer and (not healthy or point.active_psn == true) then return choose(ui, PI.PKMN_CELL, 2) end
+                if not trainer and not healthy and point.flee_sure ~= true then return choose(ui, PI.PKMN_CELL, 2) end
             end
             return choose(ui, trainer and "FIGHT" or "RUN", 2)
         end
         if ui.kind == "move_menu" then
             if type(ui.items) ~= "table" then return nil, "move list unreadable" end
+            local function first_damaging()
+                for i, label in ipairs(ui.items) do
+                    if type(label) == "string" and not is_passive(label) and has_pp(ui, i) then
+                        return choose(ui, label:upper(), 1)
+                    end
+                end
+            end
             if sting and fit then
                 for _, name in ipairs(passive) do
-                    for _, label in ipairs(ui.items) do
-                        if type(label) == "string" and label:upper() == name then return choose(ui, name, 1) end
+                    for i, label in ipairs(ui.items) do
+                        if type(label) == "string" and label:upper() == name and has_pp(ui, i) then
+                            return choose(ui, name, 1)
+                        end
                     end
+                end
+                if mine then
+                    local buttons, why = first_damaging()
+                    if buttons then return buttons, why end
+                    return choose(ui, tostring(ui.items[1]):upper(), 1)   -- nothing with PP: Struggle takes over
                 end
                 no_passive[active] = true   -- this mon passes turns by switching out instead
                 return press("B")
             end
             if not trainer then return press("B") end
+            local buttons, why = first_damaging()
+            if buttons then return buttons, why end
+            local damaging = false
             for _, label in ipairs(ui.items) do
-                if type(label) == "string" and not is_passive(label) then return choose(ui, label:upper(), 1) end
+                if type(label) == "string" and not is_passive(label) then damaging = true end
             end
-            return nil, "the active mon knows no damaging move"
+            if not damaging then return nil, "the active mon knows no damaging move" end
+            for i, label in ipairs(ui.items) do
+                if type(label) == "string" and has_pp(ui, i) then return choose(ui, label:upper(), 1) end
+            end
+            return choose(ui, tostring(ui.items[1]):upper(), 1)   -- nothing with PP: Struggle takes over
         end
         if ui.kind == "yes_no" and ui.prompt == "switch" then return choose(ui, "NO", 1) end
         if ui.kind == "battle_party" then
             local want = relief(point) or (trainer and any_other(point) or nil)
+            if sting and target ~= nil and not mine and target_fit then want = target end
             if want == nil or not integer(point.party_cursor, 0, 5) then return press("B") end
             if point.party_cursor == want then return press("A") end
             return press(point.party_cursor < want and "Down" or "Up")
@@ -297,6 +364,10 @@ function PI.driver(F, facts, opts)
             if poisoned(point) then self.phase = "tick" end
             -- main's ruling: the trainer is fought once per save; no poison from him is a stop, not a retry
             if self.phase == "hunt" and fought then return nil, "the trainer battle ended without a poisoned party mon" end
+            -- the retry: a worn hunt goes back for a heal (the travel leg below), then into the grass again
+            if self.phase == "hunt" and facts.heal and heals < PI.MAX_HEALS and worn(point) then
+                self.phase, healed, talked = "travel", false, false
+            end
         end
         if (self.phase == "tick" or self.phase == "park") and point.poison_fainted == true then self.phase = "park" end
         if self.phase == "park" then
@@ -327,12 +398,8 @@ function PI.driver(F, facts, opts)
             -- first heal, and Wade's Caterpies then wiped it. Beaten trainers never battle again, so a party
             -- mon below HEAL_FRACTION on the way north goes back to Cherrygrove (Route 30's south connection)
             -- for another heal, at most MAX_HEALS times.
-            if healed and heals < PI.MAX_HEALS and not on(point, center) and not on(point, city) then
-                for _, mon in pairs(party(point)) do
-                    if integer(mon.hp, 1, 999) and integer(mon.max_hp, 1, 999) and mon.hp < mon.max_hp * PI.HEAL_FRACTION then
-                        healed, talked = false, false
-                    end
-                end
+            if healed and heals < PI.MAX_HEALS and not on(point, center) and not on(point, city) and worn(point) then
+                healed, talked = false, false
             end
             if not healed and h.back then
                 for _, leg in ipairs(h.back) do
@@ -410,7 +477,7 @@ end
 -- opts.fainted() true once the probe saw the poison_faint hit; opts.max_frames bounds the leg.
 function PI.new(ctx, SG, F, FI, opts)
     local facts = assert(ctx.u1.poison, "SLINK_GEN2_U1_FACTS lacks poison")
-    local driver = PI.driver(F, facts, {moves=FI.PASSIVE_MOVES})
+    local driver = PI.driver(F, facts, {moves=FI.PASSIVE_MOVES, target=opts.target})
     local base = SG.qualify_observer(ctx)
     local sting = facts.moves.POISON_STING
     -- Diagnostics only (never an oracle): after STUCK_FRAMES on one tile, log the map-event state and every
@@ -466,7 +533,9 @@ function PI.new(ctx, SG, F, FI, opts)
             for _, move in ipairs(foe and foe.moves or {}) do if move == sting then point.foe_sting = true end end
             local mine = ctx.reads.read_battle_mon("player")
             point.active_psn = mine ~= nil and (mine.status // facts.psn_mask) % 2 == 1
-            point.active_hp = mine and mine.hp
+            point.active_hp, point.active_max_hp = mine and mine.hp, mine and mine.max_hp
+            -- TryToRunAwayFromBattle: our wBattleMonSpeed >= wEnemyMonSpeed always escapes
+            point.flee_sure = mine ~= nil and foe ~= nil and mine.stats.speed >= foe.stats.speed
         end
         if point.ui and point.ui.kind == "battle_party" then point.party_cursor = FI.party_cursor(SG.screen(ctx)) end
         point.party = {}
@@ -476,7 +545,11 @@ function PI.new(ctx, SG, F, FI, opts)
         end
         if point.ui and point.ui.kind == "move_menu" then
             local list = FI.move_list(SG.screen(ctx))
-            if list then point.ui.items, point.ui.cursor, point.ui.columns = list.items, list.cursor, list.columns
+            if list then
+                point.ui.items, point.ui.cursor, point.ui.columns = list.items, list.cursor, list.columns
+                -- PP per move in source order, aligned with the ListMoves rows (the c60c45c3 FI read)
+                local mine = battle and battle.mode ~= 0 and ctx.reads.read_battle_mon("player") or nil
+                point.ui.pp = mine and mine.pp or nil
             else point.input_ready = false end
         end
         -- Diagnostics only: one line per battle start/end and per move choice screen (party HP/status).

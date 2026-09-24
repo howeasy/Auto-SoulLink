@@ -493,3 +493,136 @@ def test_a_worn_party_on_the_way_north_goes_back_for_another_heal():
     assert buttons["Down"]                                                 # cross south
     buttons, phase = d.step(pt(rt, map_number=1, x=2, y=1, party=full))
     assert buttons["Down"]                                   # once due, the heal stands until the nurse
+
+
+# --- card driver-robust: the poison-leg flake classes (U1 runs 2026-09-23; red before the fixes) ---------------------
+
+def test_a_spent_passive_move_is_never_selected():
+    """0-PP class (the c60c45c3 fix, also needed here): a long Weedle stall drains LEER; MoveSelectionScreen keeps
+    listing it and refuses it ("no PP left", engine/battle/core.asm), so re-selecting it never ends the turn."""
+    rt = lua()
+    d = driver(rt, load(rt))
+    step(rt, d, map_number=2, x=1, y=1)
+    battle = {"battle_mode": 1, "active_slot": 0, "active_hp": 20, "foe_sting": True, "overworld_ready": False}
+    spent = ui("move_menu", ["SCRATCH", "LEER"], 2, pp={1: 30, 2: 0})
+    assert step(rt, d, ui=spent, **battle)[0] == ["B"]                             # back out, switch instead
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **battle)[0] == ["Right"]   # PKMN
+    t = trainer_driver(rt, load(rt))
+    t.step(pt(rt, map_number=2, x=1, y=0))
+    fight = {"battle_mode": 2, "active_slot": 0, "active_hp": 20, "foe_sting": False, "overworld_ready": False}
+    moves = ["SCRATCH", "LEER", "RAGE"]
+    assert step(rt, t, ui=ui("move_menu", moves, 1, pp={1: 0, 2: 5, 3: 9}), **fight)[0] == ["Down"]
+    assert step(rt, t, ui=ui("move_menu", moves, 3, pp={1: 0, 2: 5, 3: 9}), **fight)[0] == ["A"]
+
+
+def test_a_worn_active_mon_that_may_fail_to_flee_switches_out_first():
+    """Crystal U1 run (crystal_u1_869): the lead fainted to a Weedle in a wild battle. A failed RUN hands the foe a
+    free turn; TryToRunAwayFromBattle escapes for sure only when our speed is at least the foe speed
+    (engine/battle/core.asm .no_flee_item CompareBytes). A worn active mon that is not sure to escape hands over
+    to a fit, unpoisoned mate first; a poisoned one also loses max_hp/8 at every turn end (ResidualDamage)."""
+    rt = lua()
+    d = driver(rt, load(rt))
+    step(rt, d, map_number=2, x=1, y=1)
+    worn = {"battle_mode": 1, "active_slot": 0, "active_hp": 5, "foe_sting": False, "overworld_ready": False,
+            "flee_sure": False}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 2, 2), **worn)[0] == ["A"]                       # PKMN, not RUN
+    assert step(rt, d, ui=ui("battle_party"), party_cursor=0, **worn)[0] == ["Down"]
+    sure = dict(worn, flee_sure=True)
+    assert step(rt, d, ui=ui("battle_menu", MENU, 2, 2), **sure)[0] == ["Down"]                    # RUN is sure
+    poisoned = dict(worn, active_hp=9, active_max_hp=21, active_psn=True,
+                    party={0: {"hp": 9, "status": PSN}, 1: {"hp": 12, "status": 0}})
+    assert step(rt, d, ui=ui("battle_menu", MENU, 2, 2), **poisoned)[0] == ["A"]                   # 9 <= 7 + 21//8
+    assert step(rt, d, ui=ui("battle_menu", MENU, 2, 2), **dict(poisoned, active_hp=10))[0] == ["Down"]  # RUN
+
+
+def test_a_poisoned_mon_sits_out_the_rest_of_a_trainer_fight():
+    """Gold U1 run (u1_fail_1790222460, frame 46514): Wade's Weedle poisoned the switched-in mate at 4 HP, the lead
+    (7 HP) was no relief, and the poisoned mate fought on until it fainted in battle, losing the poison. The
+    poisoned active mon hands over to an unpoisoned mate; a poisoned mate is never the relief."""
+    rt = lua()
+    d = trainer_driver(rt, load(rt))
+    d.step(pt(rt, map_number=2, x=1, y=0))
+    psn = {"battle_mode": 2, "active_slot": 1, "active_hp": 12, "active_max_hp": 13, "active_psn": True,
+           "foe_sting": False, "overworld_ready": False,
+           "party": {0: {"hp": 15, "status": 0}, 1: {"hp": 12, "status": PSN}}}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **psn)[0] == ["Right"]                    # PKMN
+    assert step(rt, d, ui=ui("battle_party"), party_cursor=1, **psn)[0] == ["Up"]                  # the clean lead
+    lead = {"battle_mode": 2, "active_slot": 0, "active_hp": 5, "foe_sting": False, "overworld_ready": False,
+            "party": {0: {"hp": 5, "status": 0}, 1: {"hp": 12, "status": PSN}}}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **lead)[0] == ["A"]                       # FIGHT on
+
+
+def test_a_worn_wild_hunt_goes_back_to_heal_and_retries():
+    """The hunt wears the party down (stalled stings, failed RUNs) and a worn party can neither stall a sting nor
+    flee safely: before a party mon is poisoned, a mon below HEAL_FRACTION sends the hunt back to the #MON CENTER
+    (Crystal/Silver: Cherrygrove, the Route 30 south connection) and then back into the grass."""
+    rt = lua()
+    PI = load(rt)
+    center = a_map(3, grid=[1] * 15, width=5, height=3)
+    center["warps"] = lua_list([{"x": 1, "y": 2, "destination": "CITY", "carpet": "Down"}])
+    back = lua_list([{"map": "H", "side": "Down", "exits": lua_list([{"x": 2, "y": 2}])}])
+    facts = dict(FACTS, maps=dict(FACTS["maps"], C=center, K=a_map(4)),
+                 heal={"city": "K", "center": "C", "door": {"x": 0, "y": 0}, "stand": {"x": 3, "y": 1},
+                       "exit": {"x": 1, "y": 2, "carpet": "Down"}, "back": back})
+    F = rt.eval("{walk_direction=function() return 'Left' end}")
+    d = PI.driver(F, table(rt, facts), table(rt, {"moves": lua_list(["LEER"])}))
+    full = {0: {"hp": 20, "status": 0, "max_hp": 20}, 1: {"hp": 13, "status": 0, "max_hp": 13}}
+    assert step(rt, d, map_number=3, x=3, y=1, facing="Up", party=full)[0] == ["A"]       # the first heal
+    for _ in range(13):
+        d.step(pt(rt, map_number=3, x=3, y=1, party=full))
+    buttons, phase = d.step(pt(rt, map_number=2, x=1, y=1, party=full))
+    assert phase == "hunt" and buttons["Left"]                                           # oscillating
+    worn = {0: {"hp": 5, "status": 0, "max_hp": 20}, 1: {"hp": 13, "status": 0, "max_hp": 13}}
+    buttons, phase = d.step(pt(rt, map_number=2, x=1, y=1, party=worn))
+    assert phase == "travel" and buttons["Down"]                                          # to the south exit
+    poisoned = {0: {"hp": 5, "status": PSN, "max_hp": 20}, 1: {"hp": 13, "status": 0, "max_hp": 13}}
+    buttons, phase = d.step(pt(rt, map_number=2, x=1, y=1, party=poisoned))
+    assert phase == "tick"                                                                # poison first, never healed
+
+
+# --- DUO-WAVE-C: opts.target poisons ONE party slot (the linked catch) -------------------------------------------
+
+def target_driver(rt, PI, facts=FACTS):
+    F = rt.eval("{walk_direction=function() return 'Left' end}")
+    return PI.driver(F, table(rt, facts), table(rt, {"moves": lua_list(["GROWL", "LEER"]), "target": 1}))
+
+
+def test_a_target_poison_counts_only_the_target_slot():
+    rt = lua()
+    d = target_driver(rt, load(rt))
+    step(rt, d, map_number=2, x=1, y=1)
+    other = {0: {"hp": 20, "status": PSN}, 1: {"hp": 12, "status": 0}}
+    buttons, phase = d.step(pt(rt, x=1, y=1, party=other))
+    assert phase == "hunt"                                                     # the lead PSN is not the goal
+    mine = {0: {"hp": 20, "status": 0}, 1: {"hp": 12, "status": PSN}}
+    buttons, phase = d.step(pt(rt, x=1, y=1, party=mine))
+    assert phase == "tick"
+
+
+def test_a_target_takes_the_stings_itself():
+    rt = lua()
+    d = target_driver(rt, load(rt))
+    step(rt, d, map_number=2, x=1, y=1)
+    lead = {"battle_mode": 1, "active_slot": 0, "active_hp": 20, "foe_sting": True, "overworld_ready": False}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **lead)[0] == ["Right"]                    # PKMN
+    assert step(rt, d, ui=ui("battle_party"), party_cursor=0, **lead)[0] == ["Down"]                # the target
+    target = dict(lead, active_slot=1, active_hp=12)
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **target)[0] == ["A"]                     # FIGHT
+    assert step(rt, d, ui=ui("move_menu", ["TACKLE"]), **target)[0] == ["A"]                         # no passive: TACKLE
+    assert step(rt, d, ui=ui("move_menu", ["TACKLE", "GROWL"], 1, pp={1: 9, 2: 0}), **target)[0] == ["A"]
+    low = dict(target, active_hp=6)
+    assert step(rt, d, ui=ui("battle_menu", MENU, 2, 2), **low)[0] == ["Down"]                      # RUN
+    done = dict(lead, party={0: {"hp": 20, "status": 0}, 1: {"hp": 9, "status": PSN}})
+    assert step(rt, d, ui=ui("battle_menu", MENU, 2, 2), **done)[0] == ["Down"]                     # RUN, never back in
+
+
+def test_a_poisoned_target_sits_out_a_trainer_fight():
+    rt = lua()
+    d = target_driver(rt, load(rt), TRAINER_FACTS)
+    d.step(pt(rt, map_number=2, x=1, y=0))
+    psn = {"battle_mode": 2, "active_slot": 1, "active_hp": 12, "active_psn": True, "foe_sting": True,
+           "overworld_ready": False, "party": {0: {"hp": 20, "status": 0}, 1: {"hp": 12, "status": PSN}}}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **psn)[0] == ["Right"]                     # PKMN
+    assert step(rt, d, ui=ui("battle_party"), party_cursor=1, **psn)[0] == ["Up"]                   # the lead
+    lead = dict(psn, active_slot=0, active_hp=20, active_psn=False)
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **lead)[0] == ["A"]                        # it fights

@@ -67,8 +67,10 @@ POISON_HUNT = {"crystal": "Route30", "silver": "Route30", "gold": "Route31"}
 POISON_PARK = {"crystal": ({"x": 7, "y": 49}, {"x": 7, "y": 50}), "silver": ({"x": 7, "y": 49}, {"x": 7, "y": 50}),
                "gold": ({"x": 20, "y": 12}, {"x": 21, "y": 12})}
 POISON_TRAINER = {"gold": "TrainerBugCatcherWade1"}
-# Gold heals at the Cherrygrove #MON CENTER before Mikey/Don/Wade (Gold run 5 wore the party down).
-POISON_HEAL = {"gold": ("CherrygroveCity", "CherrygrovePokecenter1F")}
+# Gold heals at the Cherrygrove #MON CENTER before Mikey/Don/Wade (Gold run 5 wore the party down). Crystal and
+# Silver heal there too: a worn Route 30 hunt goes back through Route 30's south connection and retries (card
+# driver-robust; lua/tests/gen2_poison_inputs.lua worn()).
+POISON_HEAL = dict.fromkeys(("crystal", "gold", "silver"), ("CherrygroveCity", "CherrygrovePokecenter1F"))
 SIDE = {"north": "Up", "south": "Down", "west": "Left", "east": "Right"}
 FACING = {"UP": (0, -1), "DOWN": (0, 1), "LEFT": (-1, 0), "RIGHT": (1, 0)}
 
