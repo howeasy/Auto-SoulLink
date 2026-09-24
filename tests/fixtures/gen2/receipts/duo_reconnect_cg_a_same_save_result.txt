@@ -1,0 +1,16 @@
+DUO_GEN2 {"attempt":1,"case":"crystal_battle","fixture_sha256":"6d9a498c1707714c96ae33183182d61676fa14c70df921182f76397b18903ca4","player":"a","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","scenario":"gen2_reconnect","title":"crystal"}
+CLIENT {"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","poison_faint","save_completed","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  phase continue @3180
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":9,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"p
+HELLO {"frame":3303,"ot_id":46401}
+  phase loaded @3303
+RX resolved_areas
+RX config
+BOOTED {"frame":3333,"map_group":24,"map_number":3,"party_count":2,"x":53,"y":12}
+MYKEY 0 F794:B541:9E
+MYKEY 1 1FC6:B541:10
+RECONNECT_HELLO {"expected_key":"1FC6:B541:10","frame":3333,"hellos":1,"linked":true,"ot_id":46401,"phase":"same_save"}
+RECEIPT {"attempt":1,"case":"crystal_battle","client":{"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","poison_faint","save_completed","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"},"expected_key":"1FC6:B541:10","fixture_sha256":"6d9a498c1707714c96ae33183182d61676fa14c70df921182f76397b18903ca4","harness_write_scopes":[],"hello":{"frame":3303,"ot_id":46401},"input_mode":"normal_buttons","linked":true,"ot_id":46401,"phase":"same_save","player":"a","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","scenario":"gen2_reconnect","schema":"gen2-duo-reconnect-v1","title":"crystal"}
+RESULT: PASS (same_save hello observed once)

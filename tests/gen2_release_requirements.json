@@ -210,7 +210,7 @@
         "initiator": "crystal",
         "partner": "gold",
         "fixtures": {"a": "crystal_battle", "b": "gold_battle"},
-        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_soft_reset"]
+        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_reconnect"]
       },
       "proofs": [
         {
@@ -264,6 +264,43 @@
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_soft_reset_cg_pydec_result.txt",
               "sha256": "28f79cd3e6e350ace774e8a0e76523c1699c2c92796e75139393bfa0147f9e97"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_reconnect",
+          "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_reconnect --lane gen2-cg-reconnect --keep-data",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_reconnect_cg_a_result.txt",
+              "sha256": "0b9d77703ee5f27dcce25eee4617f8c86bc1f05391cd692ae5356d393830a104"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_reconnect_cg_b_result.txt",
+              "sha256": "eba787f8d1d76aa059bb7d9fcfcf43b2f6a43a56a92fd4a4fccf21ee5dac7fca"
+            },
+            "a_same_save": {
+              "path": "tests/fixtures/gen2/receipts/duo_reconnect_cg_a_same_save_result.txt",
+              "sha256": "914976811126070ac61daef4a49c7452af45ea283714ca55badfaff354a817af"
+            },
+            "a_wrong_save": {
+              "path": "tests/fixtures/gen2/receipts/duo_reconnect_cg_a_wrong_save_result.txt",
+              "sha256": "d1aa546ed22111dbf1af83607c0932ec9801d21c2539262aff33d0078d7a7034"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_reconnect_cg_pydec_result.txt",
+              "sha256": "14331e86f655ae423e4d177d30b905d9b590e84cb53aae6f0f06ac26105d1d6e"
+            }
+          },
+          "staged_saves": {
+            "same_save": {
+              "path": "tests/fixtures/gen2/receipts/duo_reconnect_cg_a_same_save_seed.SaveRAM",
+              "sha256": "6d9a498c1707714c96ae33183182d61676fa14c70df921182f76397b18903ca4"
+            },
+            "wrong_save": {
+              "path": "tests/fixtures/gen2/receipts/duo_reconnect_cg_a_wrong_save_seed.SaveRAM",
+              "sha256": "e2298243d3b10965b354184f1778d946a0909402c57b4ccaff574f819cfcc6dd",
+              "case": "crystal_battle_ot2"
             }
           }
         }

@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=1FC6:B541:10 b=7C4C:C4A6:10 area=route_29 titles=crystal/gold status=alive scenario=gen2_reconnect
