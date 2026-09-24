@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=ABF0:C4A6:85 b=4E6C:C78C:85 area=gift_goldenrod_city titles=gold/silver status=alive

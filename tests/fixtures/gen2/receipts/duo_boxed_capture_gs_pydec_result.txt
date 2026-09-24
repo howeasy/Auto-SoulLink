@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=2142:C4A6:A3 b=91E7:C78C:13 area=route_29 titles=gold/silver status=alive
