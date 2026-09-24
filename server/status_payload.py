@@ -41,6 +41,7 @@ def empty_status_payload() -> dict:
                     "calc_preview": None,
                 },
                 "identity_error": "",
+                "awaiting_save": False,
                 "admission": "admitted",
                 "admission_reason": "",
                 # No cartridge, so no capabilities: every flag False, every list empty.
@@ -81,6 +82,7 @@ def empty_status_payload() -> dict:
         "pending_bonus": {"a": [], "b": []},
         "faint_repair_stalled": {"a": [], "b": []},
         "trade_problem": None,
+        "trade_held": [],
         "trade_last": None,
         "badge_slugs": [],
     }

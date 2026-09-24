@@ -55,6 +55,7 @@ def test_gen2_launch_uses_cgb_300_percent_and_isolated_process_environment(monke
     monkeypatch.setattr(duo, "REPO", str(tmp_path))
     monkeypatch.setattr(duo, "WT_FWD", tmp_path.as_posix())
     monkeypatch.setattr(gate, "BIZHAWK_CONFIG", str(_config_file(tmp_path)))
+    monkeypatch.setattr(duo.importlib.import_module("gen2_code_digest"), "run_stamp", lambda *_a, **_k: {})
     launched = []
     monkeypatch.setattr(duo.subprocess, "Popen",
                         lambda cmd, **kwargs: launched.append((cmd, kwargs)) or SimpleNamespace())
@@ -411,6 +412,8 @@ def _run(monkeypatch, tmp_path, **overrides):
     # value; staged_rom just needs to resolve so launch_instance's Popen argv can be built. Real
     # cartridge dumps are a dev-box artifact, not present on a clean checkout.
     monkeypatch.setattr(g1, "staged_rom", lambda *_a, **_k: "fake.gb")
+    # CODE-DIGEST: the stamp shells out to git, which the Popen stub below would swallow
+    monkeypatch.setattr(duo.importlib.import_module("gen2_code_digest"), "run_stamp", lambda *_a, **_k: {})
     launched = []
     monkeypatch.setattr(duo.subprocess, "Popen", lambda argv, **kw: launched.append(argv))
     run = duo.DuoRun("link_new", _args(**overrides), attempt=1)
