@@ -296,14 +296,17 @@ def _lease(marker, token, generation, slot, command, *, picked_up=False):
         _need(raw[8] == 0, "DONE is not successful native commit")
 
 
-def _stack_sample(sample, rom, bottom, top, first, last):
+STACK_MARGIN, STACK_EXACT = 32, 64   # lua/tests/duo/gen2_trade.lua T.MARGIN / T.EXACT (stack witness v2)
+
+
+def _stack_sample(sample, rom, bottom, top, first, last, armed_end):
     sample = _object(sample, "stack sample")
     _need(first <= _frame(sample) <= last, "stack sample outside observed coverage boundaries")
     sp = _integer(sample.get("sp"), bottom, top + 1, "sample SP")
-    address = _integer(sample.get("stack_addr"), bottom, top, "stack write address")
+    address = _integer(sample.get("stack_addr"), bottom, armed_end, "stack write address (armed window)")
     _need(sp - 2 <= address <= sp + 1, "stack write unrelated to observed SP")
     margin = min(address, sp) - bottom
-    _need(margin >= 32, "stack safety margin below 32 bytes")
+    _need(margin >= STACK_MARGIN, "stack safety margin below 32 bytes")
     pc = _integer(sample.get("pc"), 0, 0x7FFF, "stack callback PC")
     bank = _integer(sample.get("rom_bank"), 0, 0xFFFF, "stack callback ROM bank")
     # rom_bank is the mapped switchable bank (MBC3 register); a PC in ROM0 executes bank 0 whatever it holds.
@@ -312,13 +315,23 @@ def _stack_sample(sample, rom, bottom, top, first, last):
 
 
 def _stack(marker, rom, symbols, *, committed, evolved=None, visit=True, partial_phases=None):
-    """Bus-write observations with full stack-span registration, never frame-only SP."""
+    """Bus-write observations, never frame-only SP. v2 (HARNESS contract): the hooks cover exactly
+    [wStackBottom, floor + 64), floor = wStackBottom + 32; a stack that never pushes inside that window is
+    ">floor+64" (no low-water row, zero observations: margin >= the window size). One SP-1 canary hook proves
+    the write hooks fire at all."""
     bottom, top = symbols["wStackBottom"].address, symbols["wStackTop"].address
+    armed_end = min(top, bottom + STACK_MARGIN + STACK_EXACT - 1)
     _need(marker.get("domain") == "System Bus" and marker.get("stack_start") == bottom
           and marker.get("stack_end") == top and marker.get("stack_bank") == symbols["wStackBottom"].bank
-          and marker.get("armed_count") == top - bottom + 1
+          and marker.get("armed_start") == bottom and marker.get("armed_end") == armed_end
+          and marker.get("floor") == bottom + STACK_MARGIN
+          and marker.get("armed_count") == armed_end - bottom + 1
           and type(marker.get("hook_failures")) is int and marker["hook_failures"] == 0,
           "incomplete stack bus-write coverage")
+    canary = _object(marker.get("canary"), "stack canary")
+    _need(canary.get("hit") is True, "stack write hooks never proved live (no canary hit)")
+    _integer(canary.get("address"), 0xC000, 0xDFFF, "stack canary address")
+    _frame(canary)
     _need(marker.get("continuous") is True and marker.get("registration_complete_before_first_phase") is True,
           "stack coverage was not declared continuous before phase entry")
     started = _object(marker.get("coverage_started"), "stack coverage start")
@@ -328,13 +341,13 @@ def _stack(marker, rom, symbols, *, committed, evolved=None, visit=True, partial
           and ended.get("site") == "harness:before_report", "unknown stack harness coverage boundary")
     _need(first_covered <= last_covered, "reversed stack coverage boundaries")
     events = marker.get("registration_events")
-    _need(isinstance(events, list) and len(events) == top - bottom + 1, "stack registration inventory incomplete/rearmed")
+    _need(isinstance(events, list) and len(events) == armed_end - bottom + 1, "stack registration inventory incomplete/rearmed")
     addresses, handles, previous_frame = set(), set(), -1
     for event in events:
         event = _object(event, "stack registration event")
         frame = _frame(event)
         _need(event.get("action") == "arm", "stack coverage contains a disarm/rearm/failure gap")
-        address = _integer(event.get("address"), bottom, top, "stack hook address")
+        address = _integer(event.get("address"), bottom, armed_end, "stack hook address")
         handle = event.get("hook_id")
         _need(isinstance(handle, str) and handle and handle not in handles and address not in addresses,
               "duplicate/missing stack hook registration")
@@ -342,22 +355,32 @@ def _stack(marker, rom, symbols, *, committed, evolved=None, visit=True, partial
         previous_frame = frame
         addresses.add(address)
         handles.add(handle)
-    _need(addresses == set(range(bottom, top + 1)), "stack address coverage has a hole")
-    # The instrumented driver updates this on EVERY qualifying bus-write callback,
+    _need(addresses == set(range(bottom, armed_end + 1)), "stack address coverage has a hole")
+    # The instrumented driver updates this on EVERY qualifying bus-write callback inside the window,
     # including gaps between named phases. Samples are minimum witnesses, not a
     # claimed complete trace; registration inventory and driver controls remain required.
-    observed = _integer(marker.get("global_observations"), 1, 2**53, "global stack observation count")
-    global_margin = _stack_sample(marker.get("global_low_water"), rom, bottom, top, first_covered, last_covered)
+    exact = marker.get("low_water_state") == "exact"
+    if exact:
+        observed = _integer(marker.get("global_observations"), 1, 2**53, "global stack observation count")
+        global_margin = _stack_sample(marker.get("global_low_water"), rom, bottom, top, first_covered, last_covered,
+                                      armed_end)
+        reported = global_margin
+    else:
+        _need(marker.get("low_water_state") == f">floor+{STACK_EXACT}" and "global_low_water" in marker
+              and marker["global_low_water"] is None and marker.get("global_observations") == 0,
+              "stack low water is neither exact nor above the armed window")
+        observed, global_margin, reported = 0, armed_end - bottom + 1, f">={armed_end - bottom + 1}"
     rows = marker.get("phases")
     _need(isinstance(rows, list) and len(rows) == 4, "stack phase coverage incomplete")
     _need([row.get("phase") for row in rows if isinstance(row, dict)] == list(PHASES),
           "stack phases missing, duplicate or reordered")
-    coverage = {"global": {"margin": global_margin, "observations": observed}}
+    coverage = {"global": {"margin": reported, "observations": observed}}
     sample_count = 0
     for row in rows:
         phase, visited, samples = row["phase"], row.get("visited"), row.get("samples")
         _need(type(visited) is bool and isinstance(samples, list), "invalid stack coverage record")
-        _need(bool(samples) == visited, "stack visitation/sample mismatch")
+        # v2: a visited phase may push nowhere near the floor (no samples); a sample still means a visit
+        _need(not samples or visited and exact, "stack visitation/sample mismatch")
         required = phase == "wait" and visit or committed and phase in ("trade_animation", "native_save")
         if partial_phases is not None:
             required = phase in partial_phases
@@ -376,7 +399,7 @@ def _stack(marker, rom, symbols, *, committed, evolved=None, visit=True, partial
             _site(start.get("site"), symbols)
             _site(end.get("site"), symbols)
         for sample in samples:
-            margin = _stack_sample(sample, rom, bottom, top, first, last)
+            margin = _stack_sample(sample, rom, bottom, top, first, last, armed_end)
             _need(global_margin <= margin, "global stack minimum contradicts a phase witness")
             minima.append(margin)
             sample_count += 1

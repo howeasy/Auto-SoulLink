@@ -2003,25 +2003,31 @@ def regs(**kw):
     return out
 
 
-def stack_row(visited, native_end="SlinkTradePublishDone"):
+def stack_row(visited, native_end="SlinkTradePublishDone", exact=True):
+    """TRADE_STACK v2: hooks on [wStackBottom, floor + 64); exact=False is a stack that never came that low."""
+    armed_end = min(STACK[1], STACK[0] + 32 + 64 - 1)
     phases = []
     for i, name in enumerate(("wait", "trade_animation", "evolution_animation", "native_save")):
         if name in visited:
             lo, hi = visited[name]
             phases.append({"phase": name, "visited": True, "start": {"frame": lo, "site": site("S" + name)},
                            "end": {"frame": hi, "site": site(native_end if name == "native_save" else "E" + name)},
-                           "samples": [{"frame": lo + 1, "stack_addr": 0xDFDE, "sp": 0xDFE0, "pc": 0x4100, "rom_bank": 19},
-                                       {"frame": hi, "stack_addr": 0xDFC0, "sp": 0xDFC1, "pc": 0x0100, "rom_bank": 3}]})
+                           "samples": [{"frame": lo + 1, "stack_addr": 0xDF5E, "sp": 0xDF60, "pc": 0x4100, "rom_bank": 19},
+                                       {"frame": hi, "stack_addr": 0xDF40, "sp": 0xDF41, "pc": 0x0100, "rom_bank": 3}]
+                                      if exact else []})
         else:
             phases.append({"phase": name, "visited": False, "start": None, "end": None, "samples": []})
-    events = [{"action": "arm", "address": a, "frame": 1100, "hook_id": f"w{a}"} for a in range(STACK[0], STACK[1] + 1)]
-    low = {"frame": 1300, "stack_addr": 0xDFC0, "sp": 0xDFC1, "pc": 0x0100, "rom_bank": 3}
+    events = [{"action": "arm", "address": a, "frame": 1100, "hook_id": f"w{a}"} for a in range(STACK[0], armed_end + 1)]
+    low = {"frame": 1300, "stack_addr": 0xDF40, "sp": 0xDF41, "pc": 0x0100, "rom_bank": 3} if exact else None
     return {"domain": "System Bus", "stack_bank": 1, "stack_start": STACK[0], "stack_end": STACK[1],
-            "armed_count": STACK[1] - STACK[0] + 1, "hook_failures": 0, "phases": phases,
+            "armed_start": STACK[0], "armed_end": armed_end, "floor": STACK[0] + 32,
+            "low_water_state": "exact" if exact else ">floor+64",
+            "canary": {"address": 0xDFDF, "hit": True, "frame": 1101},
+            "armed_count": armed_end - STACK[0] + 1, "hook_failures": 0, "phases": phases,
             "registration_events": events, "continuous": True, "registration_complete_before_first_phase": True,
             "coverage_started": {"frame": 1100, "site": "harness:trade_go"},
             "coverage_ended": {"frame": 9000, "site": "harness:before_report"},
-            "global_low_water": low, "global_observations": 40, "global_minima": [low]}
+            "global_low_water": low, "global_observations": 40 if exact else 0, "global_minima": [low] if exact else []}
 
 
 def reload_leg(j, final_frame):
@@ -2324,6 +2330,42 @@ def test_trade_verdict_red_controls_for_continuous_stack_coverage():
         "successful DONE")
 
 
+def _above_window(v):
+    """A live-shaped v2 row: the stack never came within 64 bytes of the floor (trgs2 low water ~0xDF73)."""
+    v.update(low_water_state=">floor+64", global_low_water=None, global_observations=0, global_minima=[])
+    for phase in v["phases"]:
+        phase["samples"] = []
+
+
+def test_trade_verdict_stack_v2_window_canary_and_low_water_state():
+    s = trade_stream("new", "a")
+    above = edit(s, "TRADE_STACK", _above_window)
+    assert trade_verdict(above, "new", "a")[0] == []   # visited phases with no samples: fine in v2
+    # the window is exactly [wStackBottom, floor + 64): v1's full-stack shape, or a shifted window, is refused
+    red(edit(s, "TRADE_STACK", lambda v: v.update(armed_end=STACK[1], armed_count=STACK[1] - STACK[0] + 1)),
+        "new", "a", "coverage incomplete")
+    red(edit(s, "TRADE_STACK", lambda v: v.update(floor=STACK[0] + 16)), "new", "a", "coverage incomplete")
+    red(edit(s, "TRADE_STACK", lambda v: v["registration_events"][-1].update(address=STACK[0] + 96)), "new", "a",
+        "repeated")
+    # the known positive: no canary hit, no proof the write hooks fire at all
+    red(edit(s, "TRADE_STACK", lambda v: v["canary"].update(hit=False)), "new", "a", "canary")
+    red(edit(s, "TRADE_STACK", lambda v: v.update(canary=None)), "new", "a", "canary")
+    # ">floor+64" claims no row and no push; a sample or an observation contradicts it
+    red(edit(above, "TRADE_STACK", lambda v: v.update(global_observations=3)), "new", "a", "above the armed window")
+    red(edit(above, "TRADE_STACK", lambda v: v.update(global_low_water={"frame": 1300, "stack_addr": 0xDF40,
+                                                                        "sp": 0xDF41, "pc": 1, "rom_bank": 1})),
+        "new", "a", "above the armed window")
+    red(edit(above, "TRADE_STACK", lambda v: v.update(low_water_state=">floor+96")), "new", "a", "above the armed window")
+    red(edit(above, "TRADE_STACK", lambda v: v["phases"][0]["samples"].append(
+        {"frame": 1201, "stack_addr": 0xDF5E, "sp": 0xDF60, "pc": 0x4100, "rom_bank": 19})), "new", "a", "sample mismatch")
+    # an exact sample outside the armed window is not a hook this witness registered
+    red(edit(s, "TRADE_STACK", lambda v: v["phases"][0]["samples"][0].update(stack_addr=0xDFDE, sp=0xDFE0)),
+        "new", "a", "outside bounds")
+    # a sample still means a visit
+    red(edit(s, "TRADE_STACK", lambda v: v["phases"][2].update(samples=v["phases"][0]["samples"])), "new", "a",
+        "visitation/sample mismatch")
+
+
 # ── the attachment itself: overlay hooks -> markers -> the same verdict (a simulated bus, no emulator) ──
 TRADE_SIM = r"""
 local T, SG, json, facts, profile, overlay_rom, dir = ...
@@ -2375,6 +2417,7 @@ function sim.fire(name)
     sim.exec[name]()
 end
 function sim.push(n)   -- n pushes below the current SP: the witness sees writes at SP-2..SP+1
+    if sim.writes[sim.regs.SP - 1] then sim.writes[sim.regs.SP - 1]() end   -- a real push writes SP-1 first
     for i = 0, n - 1 do
         local a = sim.regs.SP - 2 - i
         sim.regs.SP = sim.regs.SP - 1
@@ -2535,7 +2578,10 @@ def test_attach_hooks_print_a_committed_proposer_visit_the_verdict_passes(tmp_pa
     native = json.loads(next(l for l in lines if l.startswith("TRADE_NATIVE_SAVE "))[18:])
     assert native["flushed_matches"] is True and native["snapshot_bytes"] == 0x8000 + 22
     stack = json.loads(next(l for l in lines if l.startswith("TRADE_STACK "))[12:])
-    assert stack["armed_count"] == STACK[1] - STACK[0] + 1 and [p["visited"] for p in stack["phases"]] == [True, True, False, True]
+    assert stack["armed_count"] == 96 and [p["visited"] for p in stack["phases"]] == [True, True, False, True]
+    # the sim stack (SP $DFE0) never nears the floor: v2 reports ">floor+64", and the SP-1 canary proves the hooks
+    assert stack["low_water_state"] == ">floor+64" and stack["global_low_water"] is None
+    assert stack["canary"] == {"address": 0xDFDF, "hit": True, "frame": stack["canary"]["frame"]}
     # red: the same run with a hook fault can never pass
     problems, _ = trade_verdict(lines + ['TRADE_HOOK_ERROR {"text": "x"}'], "new", "a")
     assert problems

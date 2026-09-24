@@ -77,7 +77,8 @@
                       (the cartridge refuses its own selected mon at the query stage: no offer; the peer
                       never has a visit, visit_state "none")
     CHORD {frame, frames}  RESET_SEEN {frame, delta}  REBOOTED {...BOOTED}   PHONE {frame, text}
-    TRADE_STACK {domain, stack_bank, stack_start, stack_end, armed_count, hook_failures, phases[4]}
+    TRADE_STACK {domain, stack_bank, stack_start, stack_end, armed_start, armed_end, floor, low_water_state,
+                 canary, armed_count, hook_failures, phases[4]}   -- v2: hooks on [stack_start, floor + EXACT)
     TRADE_HOOK_ERROR {text}   (any hook fault; the verdict refuses it)
     HARNESS_WRITE {frame, domain="WRAM", bank, address, symbol, wram_offset, bytes_before, bytes_after, purpose, ...}
         O-31 (owner, "Test-only setup"), the ONLY writes, each disclosed and listed in the receipt's
@@ -109,6 +110,12 @@ T.CHORD = {A=true, B=true, Select=true, Start=true}
 T.CHORD_FRAMES = 4                            -- scenario_gen2_soft_reset.lua S.CHORD_FRAMES
 T.PHASES = {"wait", "trade_animation", "evolution_animation", "native_save"}
 T.MARGIN = 32
+-- EMU-SPEED (coordinator, stack witness v2): write hooks only on [wStackBottom, wStackBottom + MARGIN + EXACT):
+-- the forbidden MARGIN bytes plus EXACT bytes above the floor. A push there is recorded exactly; a stack that
+-- never comes within EXACT bytes of the floor fires no hook at all (low water ">floor+EXACT"). The full-stack
+-- hooks cost ~4M Lua callbacks per trade (G<->S trgs2). One self-disarming canary at the live SP proves the
+-- write hooks fire in this core/domain (the known positive).
+T.EXACT = 64
 T.HOLD = 12
 -- ponytail: live bounds, not measured; raise if a lane needs longer.
 T.WALK = {max_frames=40000, max_phase_frames=20000}
@@ -851,12 +858,23 @@ function T.attach(e)
     -- SP-2..SP+1) is classified into the open phase; the first push per address per phase is the sample.
     local function unarm_all()
         for a, handle in pairs(st.writes) do pcall(api.unregister, handle); st.writes[a] = nil end
+        if st.canary_handle then pcall(api.unregister, st.canary_handle); st.canary_handle = nil end
     end
     local function arm_all()
         assert(next(st.writes) == nil and not st.coverage_started, "the stack witness is armed once")
         st.registration, st.global, st.global_hit, st.low, st.pushes = {}, {}, {}, nil, 0
         local n = 0
-        for a = bottom, top do
+        st.armed_start, st.armed_end = bottom, math.min(top, bottom + T.MARGIN + T.EXACT - 1)
+        -- the canary: the byte just below the live SP is pushed by the next call; its first write proves the
+        -- hooks live, then it disarms (never counted as an observation)
+        local canary = api.register("SP") - 1
+        st.canary = {address=canary, hits=0}
+        local okc, hc = pcall(write, function()
+            if st.canary.hits > 0 then return end
+            st.canary.hits, st.canary.frame = 1, frame()
+        end, canary, "SLink-duo-trade-sp-canary", "System Bus")
+        if okc and hc ~= nil and hc ~= "" then st.canary_handle = hc else st.hook_failures = st.hook_failures + 1 end
+        for a = st.armed_start, st.armed_end do
             local ok, handle = pcall(write, function()
                 local sp = api.register("SP")
                 if a < sp - 2 or a > sp + 1 then return end
@@ -1022,6 +1040,10 @@ function T.attach(e)
         end
         local last_arm = st.registration and #st.registration > 0 and st.registration[#st.registration].frame or nil
         local row = {domain="System Bus", stack_bank=stack_bank, stack_start=bottom, stack_end=top,
+                     armed_start=st.armed_start, armed_end=st.armed_end, floor=bottom + T.MARGIN,
+                     low_water_state=st.low and "exact" or ">floor+" .. T.EXACT,
+                     canary=st.canary and {address=st.canary.address, hit=st.canary.hits > 0,
+                                           frame=st.canary.frame or json.null} or json.null,
                      armed_count=st.armed_count, hook_failures=st.hook_failures, phases=json.array(phases),
                      registration_events=json.array(st.registration or {}), continuous=true,
                      global_low_water=st.low or json.null, global_observations=st.pushes or 0,
@@ -1384,28 +1406,39 @@ function T.verdict(lines, json, case, player)
         if plan.after then need(v(ans).after == plan.after, "responder answered before the partner's " .. plan.after) end
     end
 
-    -- the stack witness shape and bounds (the oracle re-derives the bounds from the overlay .sym)
+    -- the stack witness shape and bounds (the oracle re-derives the bounds from the overlay .sym). v2: the hooks
+    -- cover only [stack_start, floor + EXACT); a stack that never comes that low is ">floor+EXACT" with no row.
     local stack = v(one("TRADE_STACK"))
+    local canary = stack.canary
     need(stack.domain == "System Bus" and integer(stack.stack_start, 0xC000, 0xDFFF) and integer(stack.stack_end, 0xC000, 0xDFFF)
-         and stack.armed_count == (stack.stack_end or 0) - (stack.stack_start or 0) + 1 and stack.hook_failures == 0,
+         and stack.armed_start == stack.stack_start and stack.floor == stack.stack_start + T.MARGIN
+         and stack.armed_end == math.min(stack.stack_end, stack.stack_start + T.MARGIN + T.EXACT - 1)
+         and stack.armed_count == stack.armed_end - stack.armed_start + 1 and stack.hook_failures == 0,
          "stack witness coverage incomplete")
+    need(type(canary) == "table" and canary ~= json.null and canary.hit == true and integer(canary.address, 0xC000, 0xDFFF)
+         and integer(canary.frame, 0, 2^53), "stack write hooks never proved live (no canary hit)")
     local events, addrs = stack.registration_events or {}, {}
     local cs, ce = stack.coverage_started or {}, stack.coverage_ended or {}
     need(stack.continuous == true and stack.registration_complete_before_first_phase == true
          and #events == stack.armed_count and integer(cs.frame, 0, 2^53) and integer(ce.frame, cs.frame or 0, 2^53),
          "stack witness is not one continuous registration")
     for _, ev in ipairs(events) do
-        need(ev.action == "arm" and not addrs[ev.address] and integer(ev.address, stack.stack_start or 0, stack.stack_end or -1)
+        need(ev.action == "arm" and not addrs[ev.address] and integer(ev.address, stack.armed_start or 0, stack.armed_end or -1)
              and integer(ev.frame, 0, cs.frame or -1) and type(ev.hook_id) == "string" and ev.hook_id ~= "",
              "stack registration event malformed or repeated")
         addrs[ev.address or -1] = true
     end
-    local low = stack.global_low_water
-    local low_margin = type(low) == "table" and integer(low.stack_addr, stack.stack_start or 0, stack.stack_end or -1)
+    local low, exact = stack.global_low_water, stack.low_water_state == "exact"
+    local low_margin = exact and type(low) == "table" and integer(low.stack_addr, stack.armed_start or 0, stack.armed_end or -1)
         and integer(low.sp, stack.stack_start or 0, (stack.stack_end or 0) + 1)
         and math.min(low.stack_addr, low.sp) - stack.stack_start or nil
-    need(low_margin ~= nil and low_margin >= T.MARGIN and integer(stack.global_observations, 1, 2^53),
-         "no global stack low-water mark with a 32-byte margin")
+    if exact then
+        need(low_margin ~= nil and low_margin >= T.MARGIN and integer(stack.global_observations, 1, 2^53),
+             "no global stack low-water mark with a 32-byte margin")
+    else
+        need(stack.low_water_state == ">floor+" .. T.EXACT and low == json.null and stack.global_observations == 0,
+             "stack low water is neither exact nor above the armed window")
+    end
     local phases = stack.phases or {}
     need(#phases == 4, "stack phases missing")
     for i, name in ipairs(T.PHASES) do
@@ -1417,7 +1450,8 @@ function T.verdict(lines, json, case, player)
         need(not required or ph.visited == true, "required stack phase " .. name .. " unvisited")
         need(allowed or ph.visited ~= true, "stack phase " .. name .. " visited in a case that forbids it")
         local samples = ph.samples or {}
-        need((#samples > 0) == (ph.visited == true), "stack phase " .. name .. " visitation/sample mismatch")
+        -- v2: a visited phase may push nowhere near the floor (no samples); a sample still means a visit
+        need(#samples == 0 or ph.visited == true and exact, "stack phase " .. name .. " visitation/sample mismatch")
         if ph.visited then
             local s, en = ph.start or {}, ph["end"] or {}
             need(type(s.site) == "table" and type(en.site) == "table" and integer(s.frame, cs.frame or 0, 2^53)
@@ -1428,7 +1462,7 @@ function T.verdict(lines, json, case, player)
             end
             for _, sm in ipairs(samples) do
                 need(integer(sm.frame, s.frame or 0, en.frame or -1) and integer(sm.sp, stack.stack_start or 0, (stack.stack_end or 0) + 1)
-                     and integer(sm.stack_addr, stack.stack_start or 0, stack.stack_end or -1)
+                     and integer(sm.stack_addr, stack.armed_start or 0, stack.armed_end or -1)
                      and sm.stack_addr >= sm.sp - 2 and sm.stack_addr <= sm.sp + 1
                      and math.min(sm.stack_addr, sm.sp) - stack.stack_start >= T.MARGIN
                      and (low_margin == nil or math.min(sm.stack_addr, sm.sp) - stack.stack_start >= low_margin),

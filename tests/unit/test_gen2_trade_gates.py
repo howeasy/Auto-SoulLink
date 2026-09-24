@@ -264,11 +264,15 @@ def make_case(tmp_path, sources, variant="cc", scenario="gen2_trade_new", mail_s
             entry = {"frame": first, "site": site(symbols, start_name)}
             end = {"frame": last, "site": site(symbols, end_name)}
             phases.append({"phase": phase, "visited": visited, "start": entry if visited else None,
-                "end": end if visited else None, "samples": [{"frame": first, "sp": bottom.address + 100,
-                "stack_addr": bottom.address + 99, "pc": symbols["SlinkTradeWaitApply"].address,
+                "end": end if visited else None, "samples": [{"frame": first, "sp": bottom.address + 61,
+                "stack_addr": bottom.address + 60, "pc": symbols["SlinkTradeWaitApply"].address,
                 "rom_bank": symbols["SlinkTradeWaitApply"].bank}] if visited else []})
+        armed_end = min(top.address, bottom.address + 95)   # stack witness v2: [wStackBottom, floor + 64)
         markers[side].append(("TRADE_STACK", {"domain": "System Bus", "stack_bank": bottom.bank,
-            "stack_start": bottom.address, "stack_end": top.address, "armed_count": top.address - bottom.address + 1,
+            "stack_start": bottom.address, "stack_end": top.address, "armed_start": bottom.address,
+            "armed_end": armed_end, "floor": bottom.address + 32, "low_water_state": "exact",
+            "canary": {"address": bottom.address + 200, "hit": True, "frame": 104},
+            "armed_count": armed_end - bottom.address + 1,
             "hook_failures": 0, "phases": phases,
             "continuous": True, "registration_complete_before_first_phase": True,
             "coverage_started": {"frame": 105, "site": "harness:trade_go"},
@@ -276,7 +280,7 @@ def make_case(tmp_path, sources, variant="cc", scenario="gen2_trade_new", mail_s
             "global_observations": sum(len(phase["samples"]) for phase in phases),
             "global_low_water": deepcopy(phases[0]["samples"][0]),
             "registration_events": [{"action": "arm", "address": address, "frame": 104, "hook_id": f"stack-{address}"}
-                                    for address in range(bottom.address, top.address + 1)]}))
+                                    for address in range(bottom.address, armed_end + 1)]}))
     if not committed and scenario != "gen2_trade_reset_commit":
         kind = {"gen2_trade_decline_new": "decline", "gen2_trade_timeout": "timeout",
                 "gen2_trade_reset_wait": "reset_wait", "gen2_trade_refuse_item": "refuse_item",
@@ -1340,4 +1344,55 @@ def test_day_rollover_kenji_break_timer_steps_natively(tmp_path, sources, kenji)
     case = make_case(tmp_path, sources, "cc", scenario="gen2_trade_timeout")
     _rollover(case, sources, forced_edits=(("wKenjiBreakTimer", bytes([kenji]), 0),))
     with pytest.raises(RuntimeError, match="rewrote more than"):
+        invoke(case)
+
+
+def _above_window(stack):
+    """The live shape (trgs2 low water ~0xDF73, 112 bytes up): no push inside [wStackBottom, floor + 64)."""
+    stack.update(low_water_state=">floor+64", global_low_water=None, global_observations=0)
+    for phase in stack["phases"]:
+        phase["samples"] = []
+
+
+@pytest.mark.parametrize("variant", ["gs", "cc"])
+def test_stack_v2_above_the_window_passes_with_a_lower_bound_margin(tmp_path, sources, variant):
+    case = make_case(tmp_path, sources, variant)
+    for side in ("a", "b"):
+        _above_window(get(case, side, "TRADE_STACK"))
+    facts = []
+    assert invoke(case, facts.append) is None
+    assert facts[0]["players"]["a"]["stack"]["global"] == {"margin": ">=96", "observations": 0}
+
+
+STACK_V2_FAULTS = {
+    # v1's full-stack inventory, or any other window, is not the v2 contract
+    "full_stack_window": (False, lambda s: s.update(armed_end=s["stack_end"], armed_count=s["stack_end"] - s["stack_start"] + 1)),
+    "shifted_floor": (False, lambda s: s.update(floor=s["stack_start"] + 16)),
+    "hook_outside_window": (False, lambda s: s["registration_events"][-1].update(address=s["armed_end"] + 1)),
+    # the known positive: hooks that never fired prove nothing
+    "canary_missed": (False, lambda s: s["canary"].update(hit=False)),
+    "canary_absent": (False, lambda s: s.pop("canary")),
+    # ">floor+64" claims no push at all
+    "above_with_observations": (True, lambda s: s.update(global_observations=2)),
+    "above_with_a_low_row": (True, lambda s: s.update(global_low_water={"frame": 115, "sp": s["stack_start"] + 61,
+                                                                        "stack_addr": s["stack_start"] + 60, "pc": 1,
+                                                                        "rom_bank": 1})),
+    "above_with_a_sample": (True, lambda s: s["phases"][0]["samples"].append(
+        {"frame": 115, "sp": s["stack_start"] + 61, "stack_addr": s["stack_start"] + 60, "pc": 1, "rom_bank": 1})),
+    "unknown_state": (True, lambda s: s.update(low_water_state=">floor+96")),
+    # an exact sample the window never armed
+    "sample_above_window": (False, lambda s: s["phases"][0]["samples"][0].update(
+        sp=s["armed_end"] + 3, stack_addr=s["armed_end"] + 1)),
+}
+
+
+@pytest.mark.parametrize("fault", sorted(STACK_V2_FAULTS))
+def test_stack_v2_refuses_anything_but_the_contract(tmp_path, sources, fault):
+    above, mutate = STACK_V2_FAULTS[fault]
+    case = make_case(tmp_path, sources, "gs")
+    stack = get(case, "a", "TRADE_STACK")
+    if above:
+        _above_window(stack)
+    mutate(stack)
+    with pytest.raises(RuntimeError):
         invoke(case)
