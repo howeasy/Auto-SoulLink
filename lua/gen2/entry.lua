@@ -357,14 +357,16 @@ local function compose(deps, title, production)
                 end})
             -- P4.1f panel: production only; it writes WRAM0 through its own panel permit. A clean
             -- cartridge has no live SLNK service, so it reads ABSENT and never paints.
-            local panel
+            local panel, phone
             if production then
                 local Panel = load("lua/gen2/panel.lua")
                 panel = Panel.new(profile, data.charmap, io_, Panel.writes(io_, Permit),
                                   assert(deps.hud, "explicit hud required").sanitize or function(s) return s end)
+                -- P4.5c: the phone calls post +32 through their own one-byte "phone" window
+                phone = panel and load("lua/gen2/phone.lua").new(panel, io_, Panel.writes(io_, Permit), deps.log)
             end
             client = load("lua/gen2/client.lua").new({
-                reads=reads, wire=wire, writes=writes, rom=rom, boxes=boxes, panel=panel,
+                reads=reads, wire=wire, writes=writes, rom=rom, boxes=boxes, panel=panel, phone=phone,
                 safety={check=function(kind) return checkpoint:check(kind) end},
                 signals=signals,
                 -- production only: the held checkpoint PC the client hooks (writes + hello readiness)

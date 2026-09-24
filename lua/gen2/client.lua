@@ -53,6 +53,7 @@ function Client.new(p)
     local profile, sites, area_map = p.profile, p.sites, p.area_map
     local log = p.log or function(...) end
     local panel = p.panel -- P4.1f panel: lua/gen2/panel.lua, or nil (no panel)
+    local phone = p.phone -- P4.5c phone calls: lua/gen2/phone.lua, or nil (no panel)
     local c = profile.constants
     local arr = json.array -- tag lists so an empty one encodes as [] not {}
 
@@ -386,6 +387,8 @@ function Client.new(p)
     function self:handle_command(cmd)
         local c_ = cmd.cmd
         if c_ == "noop" then return end
+        -- P4.5c: an optional "phone" tag rides force_faint/msgbox; phone.lua drops it off a phone build
+        if phone and cmd.phone ~= nil then phone:request(cmd.phone) end
         if c_ == "force_faint" or c_ == "force_explode" then
             -- Gen 2: supports_explode_mode() is False; a stray explode is the bench faint.
             local slot, mon, party, why = find_party_slot(cmd.key, c_)
@@ -900,6 +903,10 @@ function Client.new(p)
         if panel then
             local pok, perr = panel:service()
             if not pok then log("[SLink-gen2] panel: " .. tostring(perr)) end
+        end
+        if phone then -- P4.5c: after the panel refreshed freshness this frame
+            local pok, perr = pcall(phone.service, phone)
+            if not pok then log("[SLink-gen2] phone: " .. tostring(perr)) end
         end
         local connected = self.hello_session:step(self.frame)
         self.checkpoint_held = false -- one frame's hold arms one frame's readiness

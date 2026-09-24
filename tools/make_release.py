@@ -124,6 +124,7 @@ _LUA_GEN2 = [
     "wire.lua",
     "boxes.lua",
     "panel.lua",  # P4.1f: entry.lua composes it (production); it dofiles ../gb_panel.lua
+    "phone.lua",  # P4.5c: entry.lua composes it beside the panel
 ]
 
 # lua/clients/

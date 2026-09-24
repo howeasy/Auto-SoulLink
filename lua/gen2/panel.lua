@@ -69,7 +69,9 @@ function P.writes(io, Permit)
         write_u8 = function(addr, value, domain) return io.write_u8(addr, value, domain) end,
         domains = { ["System Bus"] = {
             bounds = function(addr, n, reason)
-                return reason == "panel" and addr >= P.WRAM0_LO and addr + n <= P.WRAM0_HI
+                -- P4.5c: lua/gen2/phone.lua posts one byte (+32 PHONE_REQUEST) under "phone"
+                return (reason == "panel" or reason == "phone" and n == 1)
+                       and addr >= P.WRAM0_LO and addr + n <= P.WRAM0_HI
             end,
             mapped = function() return true end,          -- WRAM0: no bank to check
             pointer_stable = function() return true end,  -- concrete addresses from the profile
