@@ -530,14 +530,15 @@ function Client.new(p)
         if c == "force_faint" or c == "force_explode" then
             local slot, mon, party, why = find_party_slot(cmd.key)
             if why then log("[SLink-gen1] " .. c .. ": " .. why .. " " .. tostring(cmd.key)) return end
-            if not party then
-                -- unreadable right now (AddPartyMon's AskName window): keep it; the checkpoint
-                -- re-finds the key (a server command is never resent)
+            if not party or not slot then
+                -- unreadable right now (AddPartyMon's AskName window), or a key not in the party:
+                -- deferred, never dropped on receipt (Gen 2 parity, 4e6aea39 MINOR-3; review
+                -- 2026-09-24 MINOR-9). The checkpoint re-finds the key or drops it with a log
+                -- (a server command is never resent).
                 self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname, arrival = cmd.arrival }
                 self.known_keys[cmd.key] = true
                 return
             end
-            if not slot then log("[SLink-gen1] " .. c .. ": key not in party " .. tostring(cmd.key)) return end
             local battle = reads.read_battle()
             if battle.in_battle ~= 0 then
                 -- in battle. The ACTIVE battler waits for the loop head (W-2: its HP lives in

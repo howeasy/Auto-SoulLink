@@ -1,9 +1,11 @@
 """Client findings of the independent Soul Link invariant review
-(docs/gen2/reviews/REVIEW_SOULLINK_INVARIANTS_2026-09-24.md): MAJOR-1, both GB clients.
+(docs/gen2/reviews/REVIEW_SOULLINK_INVARIANTS_2026-09-24.md): MAJOR-1, MINOR-9, both GB clients.
 Harnesses are reused from tests/unit/test_gen2_client.py and tests/unit/test_gen1_client.py.
 """
 
 import random
+
+import pytest
 
 from tests.unit import test_gen1_client as g1, test_gen2_client as g2
 from tests.unit.test_gen2_client import codec_key
@@ -124,3 +126,30 @@ def test_gen1_a_done_report_whose_line_died_with_the_socket_is_sent_again_until_
     w.connected = True
     w.step(3)
     assert len(w.events("trade_done")) == 2, "answered: never sent again"
+
+
+@pytest.fixture
+def world1():
+    w = g1.World("red")
+    rng = random.Random(1)
+    w.seed_party([g1._mon(rng, 0x99, nick="BULBA"), g1._mon(rng, 0xB1, nick="PIDGEY")])
+    w.set_map(0x0C)
+    w.give_poke_ball()
+    w.connect()
+    w.step(60)
+    return w
+
+
+# ── MINOR-9: Gen 1 defers a force_faint for a key not in the party, as Gen 2 does (4e6aea39) ───────────
+def test_gen1_a_force_faint_for_a_key_not_in_the_party_is_deferred_not_dropped(world1):
+    away = g1._mon(random.Random(7), 0x19, nick="PIKA")          # in the Day-Care / a box / a transient party
+    key = g1.codec.key(away)
+    world1.regs["PC"] = 0x1234                                   # no checkpoint yet
+    world1.reply({"cmd": "force_faint", "key": key, "nickname": "PIKA"})
+    world1.step()
+    assert [e["key"] for e in world1.client.deferred.values()] == [key]
+    assert not any("key not in party" in line for line in world1.logs)
+    world1.overworld_safe()
+    world1.step(2)                                               # the checkpoint decides: still away, dropped
+    assert len(world1.client.deferred) == 0
+    assert any("dropped at the checkpoint" in line for line in world1.logs)
