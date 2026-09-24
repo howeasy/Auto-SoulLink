@@ -68,7 +68,8 @@ gameinfo = { getromhash = function() return FAKE.hash end }
 """
 
 # A minimal companion: beacon up, ROM anchors pinned, save pointers valid, and a frame hook that
-# performs the copy ops and acks every posted opcode with FAKE.status (2 = ST_OK, 3 = ST_FAIL).
+# performs the copy ops and the battle-logic ops (handlers.c OP_FORCE_FAINT / OP_FORCE_MOVE), refuses
+# opcode 99 as unknown, and acks every other posted opcode with FAKE.status (2 = ST_OK, 3 = ST_FAIL).
 FAKE_PATCH = r"""
 local P, ram = ...
 FAKE.status = 2
@@ -89,16 +90,26 @@ FAKE.patch = function()
         copy(ram.ENEMY_BASE, n * 100)
         FAKE.mem[ram.ENEMY_COUNT_ADDR] = n
         FAKE.w(ram.ENEMY_BASE + n * 100 + 0x58, 0, 2)
+    elseif FAKE.status == 2 and op == P.OP_FORCE_FAINT then
+        FAKE.w(0x02023BE4 + (FAKE.mem[args] or 0) * 0x58 + 0x28, 0, 2)
+    elseif FAKE.status == 2 and op == P.OP_FORCE_MOVE then
+        local b, target, pos = FAKE.mem[args] or 0, FAKE.mem[args + 1] or 0, FAKE.mem[args + 2] or 0
+        FAKE.mem[0x02023D7C + b] = 0
+        FAKE.w(0x02023DC4 + b * 2, (FAKE.mem[args + 4] or 0) | ((FAKE.mem[args + 5] or 0) << 8), 2)
+        FAKE.mem[0x02023E82 + b] = 3
+        local bs = FAKE.r32(0x02023FE8)
+        if bs ~= 0 then FAKE.mem[bs + 0x80 + b] = pos; FAKE.mem[bs + 0x0C + b] = target end
     end
     FAKE.w(P.BASE + 12, FAKE.r16(P.BASE + 8), 2)      -- ack = seq
-    FAKE.w(P.BASE + 10, FAKE.status, 2)
+    FAKE.w(P.BASE + 10, op == 99 and 3 or FAKE.status, 2)
     FAKE.w(P.BASE + 6, 0, 2)                          -- opcode consumed
 end
 """
 
 
-def run_gate(gate, tmp_path, kind="companion", patch=None, beacon=False):
-    """Run one gate file under the stubs; returns the result text."""
+def world(tmp_path, kind="companion", patch=None, beacon=False):
+    """A lupa runtime with the BizHawk stubs, a ROM that admits as `kind`, valid save pointers,
+    and optionally a beacon or the fake patch."""
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     lua.execute(STUBS)
     g = lua.globals()
@@ -120,6 +131,12 @@ def run_gate(gate, tmp_path, kind="companion", patch=None, beacon=False):
     elif beacon:
         for i, b in enumerate(N["SIG"].to_bytes(4, "little") + N["ABI"].to_bytes(2, "little")):
             mem[N["BASE"] + i] = b
+    return lua
+
+
+def run_gate(gate, tmp_path, kind="companion", patch=None, beacon=False):
+    """Run one gate file under the stubs; returns the result text."""
+    lua = world(tmp_path, kind, patch, beacon)
     with pytest.raises(lupa.LuaError, match="slink-gate-finished"):
         lua.execute(f'dofile("{(GATE_DIR / gate).as_posix()}")')
     results = list(tmp_path.glob("*_result.txt"))
@@ -191,15 +208,18 @@ def test_absent_gate_fails_on_the_companion_artifact(tmp_path):
 
 # ── the native path really reaches the (fake) patch ──────────────────────────────────────
 
-@pytest.mark.parametrize("gate", ["test_live_playse.lua", "test_live_setpartymon.lua",
-                                  "test_live_enemyparty_route.lua"])
+COLD_BOOT_OP_GATES = ["test_live_playse.lua", "test_live_setpartymon.lua",
+                      "test_live_enemyparty_route.lua", "test_mailbox_ping.lua",
+                      "test_mailbox_battle.lua"]
+
+
+@pytest.mark.parametrize("gate", COLD_BOOT_OP_GATES)
 def test_cold_boot_gate_passes_against_a_working_patch(gate, tmp_path):
     text = run_gate(gate, tmp_path, patch=2)
     assert verdict(text).startswith("RESULT: PASS"), text
 
 
-@pytest.mark.parametrize("gate", ["test_live_playse.lua", "test_live_setpartymon.lua",
-                                  "test_live_enemyparty_route.lua"])
+@pytest.mark.parametrize("gate", COLD_BOOT_OP_GATES)
 def test_cold_boot_gate_fails_when_the_patch_refuses(gate, tmp_path):
     text = run_gate(gate, tmp_path, patch=3)
     assert verdict(text).startswith("RESULT: FAIL") and "native refused" in text, text
@@ -211,3 +231,74 @@ def test_ported_gate_body_runs_to_a_verdict_against_a_fake_patch(gate, tmp_path)
     text = run_gate(gate, tmp_path, patch=2)
     assert verdict(text).startswith("RESULT:"), text
     assert "native:service raised" not in text, text
+
+
+# ── the test-only raw poster (C5-4b) ─────────────────────────────────────────────────────
+
+RAW_PING = """
+local G = dofile(SLINK_ROOT .. "/lua/tests/gen3_gatelib.lua")
+local t = G.open("unit_raw")
+t.boot({ native = false })
+local job = t.raw("OP_PING", {})
+local posted = t.wait_posted(job, 5)
+local r = t.wait(job, 30)
+return t, posted, r
+"""
+
+
+def test_raw_poster_posts_through_the_native_write_window(tmp_path):
+    lua = world(tmp_path, patch=2)
+    t, posted, r = lua.execute(RAW_PING)
+    assert posted and r is not None and r.why is None
+    log = [(e.reason, e.address, e.len) for e in t.writes_log.values()]
+    base = N["BASE"]
+    assert log and all(reason == "native" for reason, _, _ in log)
+    assert all(base + 6 <= a and a + n <= base + 48 for _, a, n in log), log
+    assert log[-1][1] == base + 6, "the opcode is published last"
+
+
+def test_raw_poster_is_refused_while_the_mailbox_is_busy(tmp_path):
+    lua = world(tmp_path, beacon=True)
+    lua.globals().FAKE.w(N["BASE"] + 10, 1, 2)          # status = ST_BUSY (e.g. an armed FMS)
+    t, posted, r = lua.execute(RAW_PING)
+    assert not posted and r is None
+    assert len(t.writes_log) == 0, "a refused arm writes nothing"
+    assert "raw arm refused" in t.last_service
+
+
+def test_raw_poster_never_shares_a_gate_with_native_lua(tmp_path):
+    lua = world(tmp_path, patch=2)
+    with pytest.raises(lupa.LuaError, match="native = false"):
+        lua.execute("""
+            local t = dofile(SLINK_ROOT .. "/lua/tests/gen3_gatelib.lua").open("unit_raw")
+            t.boot()
+            t.raw("OP_PING", {})
+        """)
+
+
+def test_raw_poster_refuses_a_stage_outside_the_native_spans(tmp_path):
+    lua = world(tmp_path, patch=2)
+    with pytest.raises(lupa.LuaError, match="outside every profile.native span"):
+        lua.execute("""
+            local t = dofile(SLINK_ROOT .. "/lua/tests/gen3_gatelib.lua").open("unit_raw")
+            t.boot({ native = false })
+            t.raw("OP_PING", {}, { { 0x02024284, { 0 } } })   -- gPlayerParty: not a native arena
+        """)
+
+
+def test_evring_drain_reads_the_ring_and_advances_the_read_index(tmp_path):
+    lua = world(tmp_path, patch=2)
+    evr = N["EVR"]
+    fake = lua.globals().FAKE
+    fake.mem[evr] = 2                                   # wr = 2, rd = 0
+    fake.w(evr + 8, N["EV_PLAYER_FAINT"] | (3 << 8), 4)
+    fake.w(evr + 12, N["EV_EVOLVE"] | (1 << 8) | (26 << 16), 4)
+    fake.mem[evr + 2] = 1                               # overflow flagged
+    evs, ovf = lua.execute("""
+        local t = dofile(SLINK_ROOT .. "/lua/tests/gen3_gatelib.lua").open("unit_raw")
+        t.boot({ native = false })
+        return t.events_drain()
+    """)
+    got = [(e.type, e.a, e.b) for e in evs.values()]
+    assert got == [(N["EV_PLAYER_FAINT"], 3, 0), (N["EV_EVOLVE"], 1, 26)]
+    assert ovf is True and fake.mem[evr + 1] == 2 and fake.mem[evr + 2] == 0

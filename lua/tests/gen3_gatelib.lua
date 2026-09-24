@@ -21,8 +21,17 @@
 -- anything else is native.lua's own refusal (absent, poisoned, timeout, arm refused).
 --
 -- Raw memory access in a gate is INSTRUMENTATION only: preconditions, oracles, player placement,
--- paint patterns. The op under test always goes through t.native. An op native.lua does not expose
--- is a GAP in tests/live/test_lua_gates.py, never a raw post from here.
+-- paint patterns. A CLIENT op under test goes through t.native.
+--
+-- TEST-ONLY RAW POSTER (card C5-4b). Companion ops the client never uses (PING, CREATE_MON, box
+-- moves, FORCE_*, the EvRing, malformed stages for the patch guards) test the PATCH, not the client,
+-- so native.lua's op surface does not grow for them. t.raw(op, args, stages) posts them with
+-- native.lua's own ABI: writes:arm("native") over the real safety clauses, an allow window of exactly
+-- the mailbox command bytes + the stages (each stage must sit inside one profile.native span from
+-- write_checkpoint.json), staging first, then args, ack = seq - 1, seq, and the opcode LAST. It never
+-- shares a gate with a native.lua instance: t.raw refuses unless the gate booted with native = false,
+-- so no native job can be queued, posted or polled around it. One raw job in flight at a time; its
+-- receipt has the native.lua shape, with `reason` as the patch's raw FAIL word (a number).
 --
 -- Log/check/finish are the lua/tests/gen1_gate.lua shape; gatelib.lua keeps its copies inside
 -- Lib.start (GB-only), so there is nothing exported to reuse.
@@ -76,7 +85,9 @@ function Lib.open(name)
         if buttons then joypad.set(buttons) end
         emu.frameadvance()
         t.frame = t.frame + 1
-        if t.native then
+        if t.raw_job then
+            t.raw_service()
+        elseif t.native then
             local ok, err, why = pcall(t.native.service, t.native)
             t.last_service = ok and why or nil     -- e.g. "native arm refused: ..." while queued
             if not ok and not t.service_error then
@@ -163,11 +174,13 @@ function Lib.open(name)
         return admitted
     end
 
-    -- A fresh native instance over the entry.lua wiring (io surface, Safety, Writes, panel_closed).
-    local function build_native(kind)
+    -- A fresh Safety + Writes (+ native instance unless with_native is false) over the entry.lua
+    -- wiring (io surface, Safety, Writes, panel_closed).
+    local function build_parts(kind, with_native)
         local L = function(rel) return dofile(ROOT .. "/" .. rel) end
         local title = full.titles.radical_red
         local wc = load_json(json, ROOT .. "/data/games/gen3_rr/write_checkpoint.json").radical_red
+        t.spans = wc.native.spans
         local io_ = {
             read_u8    = function(a) return memory.read_u8(a, "System Bus") end,
             read_u16   = function(a) return memory.read_u16_le(a, "System Bus") end,
@@ -198,6 +211,8 @@ function Lib.open(name)
             safety = safety, frame = io_.framecount, io = io_,
             log = function(r) t.writes_log[#t.writes_log + 1] = r end,
         })
+        t.writes, t.reads = writes, reads
+        if with_native == false then return nil end
         local status = wc.predicates and wc.predicates.script_context_status
         native = L("lua/gen3/native.lua").new(full, {
             io = io_, writes = writes, reads = reads, array = json.array, artifact_kind = kind,
@@ -215,11 +230,12 @@ function Lib.open(name)
     -- opts.state   savestate file in Lib.STATE_DIR (nil = cold boot)
     -- opts.kind    admitted artifact kind required ("companion" default; "clean" for absent)
     -- opts.beacon  frames to wait for the beacon (default 600); false = do not wait
+    -- opts.native  false = build no native.lua instance (required by t.raw)
     function t.boot(opts)
         opts = opts or {}
         pcall(function() client.speedmode(opts.speed or 400) end)
         pcall(memory.usememorydomain, "System Bus")
-        t.native = nil
+        t.native, t.raw_job = nil, nil
         if opts.state then
             local ok = pcall(savestate.load, Lib.STATE_DIR .. "/" .. opts.state)
             if not ok then t.fail("savestate loaded", Lib.STATE_DIR .. "/" .. opts.state) end
@@ -232,7 +248,7 @@ function Lib.open(name)
                    a.title, a.kind, a.admitted_by))
         end
         t.kind, t.sent, t.writes_log = a.kind, {}, {}
-        t.native = build_native(a.kind)
+        t.native = build_parts(a.kind, opts.native)
         if opts.beacon ~= false then
             local up = t.present()
             for _ = 1, (opts.beacon or 600) do
@@ -243,6 +259,124 @@ function Lib.open(name)
             if not up then t.fail("'SLNK' beacon up (companion hook running)", "frame " .. t.frame) end
         end
         return t
+    end
+
+    -- ── test-only raw poster (see the header) ───────────────────────────────────────────────
+    -- Mailbox ABI v1 offsets: the same table as lua/gen3/native.lua (patch/src/ADDRESSES.md).
+    local O = { opcode = 6, seq = 8, status = 10, ack = 12, reason = 14, args = 16, result = 48 }
+    local ST_OK, ST_FAIL = 2, 3
+    local function r16(a) return memory.read_u16_le(a, "System Bus") end
+    local function span_of(addr, n)
+        for _, sp in ipairs(t.spans or {}) do
+            if addr >= sp.start and addr + n <= sp.start + sp.size then return sp.key end
+        end
+    end
+    local function try_post(job)
+        local B = t.P.BASE
+        local ranges = { { B + O.opcode, B + O.result } }
+        for _, st in ipairs(job.stages) do ranges[#ranges + 1] = { st[1], st[1] + #st[2] } end
+        local allow = function(addr, n)
+            for _, r in ipairs(ranges) do
+                if addr >= r[1] and addr + n <= r[2] then return true end
+            end
+            return false
+        end
+        local armed, why = pcall(function() t.writes:arm("native", allow) end)
+        if not armed then t.last_service = "raw arm refused: " .. tostring(why); return false end
+        local ok, err = pcall(function()
+            assert(r16(B + O.opcode) == 0, "mailbox opcode pending")
+            for _, st in ipairs(job.stages) do t.writes:write_bytes(st[1], st[2]) end
+            if job.op then
+                job.seq = (r16(B + O.seq) + 1) % 65536
+                if #job.args > 0 then t.writes:write_bytes(B + O.args, job.args) end
+                t.writes:write_u16(B + O.ack, (job.seq + 65535) % 65536)
+                t.writes:write_u16(B + O.seq, job.seq)
+                t.writes:write_u16(B + O.opcode, job.op)   -- publish last
+            end
+            job.posted = true
+        end)
+        t.writes:disarm()
+        if not ok then
+            job.receipt = { why = "raw post interrupted: " .. tostring(err), frame = t.frame }
+            t.raw_job = nil
+        elseif not job.op then
+            job.receipt = { why = nil, frame = t.frame }   -- stage-only: done when the bytes land
+            t.raw_job = nil
+        end
+        return ok
+    end
+    function t.raw_service()
+        local job = t.raw_job
+        if not job.posted then try_post(job); return end
+        local B = t.P.BASE
+        local status = r16(B + O.status)
+        if r16(B + O.ack) == job.seq and (status == ST_OK or status == ST_FAIL) then
+            job.receipt = { why = status == ST_FAIL and "native refused" or nil,
+                            result = memory.read_u8(B + O.result), reason = r16(B + O.reason),
+                            frame = t.frame }
+            t.raw_job = nil
+        end
+    end
+    -- op: a profile.native key ("OP_PING"), a raw number (an unknown opcode), or nil (stage only).
+    -- args: byte list. stages: {{addr, {bytes}}, ...}. Posts now if the window arms, else retries
+    -- each step; returns the job (t.wait_posted / t.wait work on it).
+    function t.raw(op, args, stages)
+        assert(t.native == nil, "t.raw needs t.boot({native = false}): never beside a native.lua job")
+        assert(t.raw_job == nil, "one raw op in flight at a time")
+        local code = type(op) == "string" and assert(t.P[op], "no " .. op .. " in profile.native") or op
+        local job = { op = code, args = args or {}, stages = stages or {} }
+        for _, st in ipairs(job.stages) do
+            assert(span_of(st[1], #st[2]), fmt("stage 0x%08X+%d is outside every profile.native span",
+                                              st[1], #st[2]))
+        end
+        t.raw_job = job
+        try_post(job)
+        return job
+    end
+    -- Post, wait for the publish, then for the ack: returns receipt (nil = never posted / no ack), job.
+    function t.raw_wait(op, args, stages, frames, drive)
+        local job = t.raw(op, args, stages)
+        if not t.wait_posted(job) then return nil, job end
+        return t.wait(job, frames or 120, drive), job
+    end
+    function t.acked_ok(r) return r ~= nil and r.why == nil end
+    -- Stage-only raw write into a native arena; true once the bytes landed.
+    function t.raw_stage(stages)
+        return t.wait_posted(t.raw(nil, nil, stages), 600)
+    end
+
+    -- FR-encode with the read facade's charmap, as native.lua's encode does ("\n" -> 0xFE,
+    -- unknown -> 0, terminator appended, `limit` bytes max including it).
+    function t.encode(text, limit)
+        local out, codes = {}, t.reads.charmap.codes
+        for _, cp in utf8.codes(tostring(text or "")) do
+            if limit and #out >= limit - 1 then break end
+            local g = utf8.char(cp)
+            out[#out + 1] = g == "\n" and 0xFE or codes[g] or 0
+        end
+        out[#out + 1] = t.reads.charmap.terminator
+        return out
+    end
+
+    -- EvRing (profile native.EVR): wr @+0, rd @+1, overflow @+2, prim @+6, u32[8] ring @+8.
+    -- init/drain write the read index / overflow through the raw poster's window.
+    function t.events_init()
+        local E = t.P.EVR
+        return t.raw_stage({ { E + 1, { memory.read_u8(E) } }, { E + 2, { 0 } } })
+    end
+    function t.events_drain()
+        local E, out = t.P.EVR, {}
+        local wr, rd = memory.read_u8(E), memory.read_u8(E + 1)
+        while rd ~= wr and #out < 8 do
+            local v = memory.read_u32_le(E + 8 + (rd % 8) * 4)
+            out[#out + 1] = { type = v & 0xFF, a = (v >> 8) & 0xFF, b = (v >> 16) & 0xFFFF }
+            rd = (rd + 1) % 256
+        end
+        local ovf = memory.read_u8(E + 2) ~= 0
+        local stages = { { E + 1, { rd } } }
+        if ovf then stages[2] = { E + 2, { 0 } } end
+        assert(t.raw_stage(stages), "EvRing drain write refused: " .. tostring(t.last_service))
+        return out, ovf
     end
 
     return t
