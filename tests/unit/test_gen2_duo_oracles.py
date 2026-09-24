@@ -1850,6 +1850,122 @@ def test_missing_links_json_refused(good_case, tmp_path):
         oracles.link_oracle(results, data_dir=str(empty_dir))
 
 
+def test_save_witness_authenticates_backup_before_native_scratch_change(good_case):
+    results, _, _ = good_case
+    witness = oracles._last_tagged(results["a"], "SAVE_WITNESS")
+    path = Path(witness["saveram_path"])
+    Path(str(path) + ".bak").write_bytes(path.read_bytes())
+    raw = bytearray(path.read_bytes())
+    raw[4] ^= 1
+    path.write_bytes(raw)
+    oracles.check_save_witness(results)
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+@pytest.mark.parametrize("snapshot", ["backup", "raw", "full"])
+def test_native_scratch_requires_authenticated_full_snapshot(tmp_path, title, snapshot):
+    layout = codec.for_foundation(title)
+    seed = (ROOT / f"tests/fixtures/gen2/{title}_battle.SaveRAM").read_bytes()
+    path = tmp_path / "exit.SaveRAM"
+    before = bytearray(seed)
+    # First actual cg_reconnect_run2 Gold .bak -> exit delta: byte4 121->6, then122->6.
+    before[4:12] = bytes([121, 122, 122, 122, 122, 122, 122, 122])
+    after = bytearray(before)
+    after[4:12] = bytes([6] * 8)
+    if title != "crystal":
+        after[0x1800] ^= 1
+        after[0x1FFF] ^= 1
+    after[-1] ^= 1
+    path.write_bytes(after)
+    witness = {"saveram_path": str(path), "saveram_bytes": CART + 22, "cartram_bytes": CART,
+               "cartram_sha256": hashlib.sha256(before[:CART]).hexdigest()}
+    baseline = Path(str(path) + ".bak") if snapshot == "backup" else tmp_path / "immutable.raw"
+    baseline.write_bytes(before[:CART] if snapshot == "raw" else before)
+    if snapshot != "backup":
+        witness["snapshot_path"] = str(baseline)
+    assert oracles.witness_save_bytes(witness, layout) == bytes(after)
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+@pytest.mark.parametrize("protected", ["mail", "mail_backup", "stack", "rtc_halt", "gap", "backup", "box", "boundary"])
+def test_native_scratch_never_masks_protected_save_bytes(tmp_path, title, protected):
+    layout = codec.for_foundation(title)
+    before = (ROOT / f"tests/fixtures/gen2/{title}_battle.SaveRAM").read_bytes()
+    def flat(symbol):
+        return layout.sram_banks[symbol] * 0x2000 + layout.addresses[symbol] - 0xA000
+    offsets = {"mail": flat("sPartyMail"), "mail_backup": flat("sPartyMailBackup"), "stack": flat("sStackTop"),
+               "rtc_halt": 0x17EF, "gap": 0x17FF, "backup": layout.regions[0].backup, "box": layout.storage_boxes[13][0], "boundary": 0x2000}
+    after = bytearray(before)
+    after[offsets[protected]] ^= 1
+    path = tmp_path / "protected.SaveRAM"
+    path.write_bytes(after)
+    Path(str(path) + ".bak").write_bytes(before)
+    witness = {"saveram_path": str(path), "saveram_bytes": CART + 22, "cartram_bytes": CART,
+               "cartram_sha256": hashlib.sha256(before[:CART]).hexdigest()}
+    with pytest.raises(RuntimeError):
+        oracles.witness_save_bytes(witness, layout)
+
+
+@pytest.mark.parametrize("fault", ["no_baseline", "wrong_backup", "short_backup", "wrong_explicit", "missing_explicit"])
+def test_native_scratch_refuses_unauthenticated_baselines(good_case, tmp_path, fault):
+    results, _, _ = good_case
+    witness = oracles._last_tagged(results["a"], "SAVE_WITNESS")
+    path = Path(witness["saveram_path"])
+    raw = path.read_bytes()
+    changed = bytearray(raw)
+    changed[0] ^= 1
+    if fault in ("wrong_explicit", "missing_explicit"):
+        witness["snapshot_path"] = str(tmp_path / "snapshot.raw")
+        if fault == "wrong_explicit":
+            Path(witness["snapshot_path"]).write_bytes(changed)
+        # Even a still-matching current file and backup may not excuse bad explicit provenance.
+        Path(str(path) + ".bak").write_bytes(raw)
+    else:
+        path.write_bytes(changed)
+        if fault == "wrong_backup":
+            Path(str(path) + ".bak").write_bytes(changed)
+        elif fault == "short_backup":
+            Path(str(path) + ".bak").write_bytes(raw[:CART])
+    with pytest.raises(RuntimeError):
+        oracles.witness_save_bytes(witness, codec.for_foundation("crystal"))
+
+
+@pytest.mark.parametrize("symbol", ["sScratch", "sPartyMail", "sWindowStackBottom", "sWindowStackTop"])
+def test_native_scratch_refuses_source_geometry_drift(symbol):
+    from dataclasses import replace
+
+    layout = codec.for_foundation("gold")
+    addresses = dict(layout.addresses)
+    addresses[symbol] += 1
+    with pytest.raises(RuntimeError, match="geometry"):
+        oracles.normalized_gameplay_cartram(bytes(CART), replace(layout, addresses=addresses))
+
+
+@pytest.mark.parametrize("where", ["stage", "exit", "protected"])
+def test_reconnect_same_save_only_normalizes_authenticated_native_scratch(reconnect_case, where):
+    results, kwargs = reconnect_case
+    if where == "exit":
+        witness = oracles._last_tagged(kwargs["initial_results"]["a"], "SAVE_WITNESS")
+        path = Path(witness["saveram_path"])
+        Path(str(path) + ".bak").write_bytes(path.read_bytes())
+    else:
+        path = kwargs["staged_saves"]["same_save"]
+    raw = bytearray(path.read_bytes())
+    raw[0x600 if where == "protected" else 0x5FF] ^= 1
+    path.write_bytes(raw)
+    if where != "exit":
+        for tag in ("DUO_GEN2", "RECEIPT"):
+            text = kwargs["relaunch_results"]["same_save"]
+            row = oracles._last_tagged(text, tag)
+            row["fixture_sha256"] = hashlib.sha256(raw).hexdigest()
+            kwargs["relaunch_results"]["same_save"] = _replace_tag(text, tag, row)
+    if where == "protected":
+        with pytest.raises(RuntimeError):
+            oracles.reconnect_oracle(results, **kwargs)
+    else:
+        oracles.reconnect_oracle(results, **kwargs)
+
+
 def test_no_matching_link_refused(good_case, tmp_path):
     results, _data_dir, _decoded = good_case
     data_dir = tmp_path / "other"

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -38,6 +40,16 @@ def test_required_phase_lanes_and_every_title_are_declared():
 
 def test_fixture_lane_declares_gold_wrong_save_control_as_input():
     assert "tests/fixtures/gen2/gold_battle_ot2.SaveRAM" in gate.PREREQUISITES["fixtures"]
+
+
+def test_duo_matrix_cli_imports_repo_without_pythonpath(tmp_path):
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    proc = subprocess.run([sys.executable, str(REPO / "tools/verify_gen2_release.py"), "--duo-matrix"],
+                          cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60)
+    assert proc.returncode in (0, 1), proc.stderr
+    assert "Traceback" not in proc.stderr, proc.stderr
+    assert "duo matrix:" in proc.stdout, proc.stdout
 
 
 def test_live_new_gates_lane_targets_the_p3b3a_inspect_driver():
@@ -936,6 +948,103 @@ def test_reconnect_matrix_binds_every_phase_and_staged_save(tmp_path):
     assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_reconnect") == []
 
 
+def _scratch_reconnect_cell(tmp_path, offset, *, title="crystal"):
+    proof, axes, lock, text = _reconnect_cell(tmp_path)
+    if title != "crystal":
+        axes["initiator"], axes["fixtures"]["a"] = title, f"{title}_battle"
+        wrong_case = f"{title}_battle_ot2"
+        wrong = (REPO / f"tests/fixtures/gen2/{wrong_case}.SaveRAM").read_bytes()
+        (tmp_path / f"tests/fixtures/gen2/{wrong_case}.SaveRAM").write_bytes(wrong)
+        (tmp_path / "wrong_save.SaveRAM").write_bytes(wrong)
+        proof["staged_saves"]["wrong_save"].update(case=wrong_case, sha256=hashlib.sha256(wrong).hexdigest())
+        for side in ("a", "a_same_save", "a_wrong_save"):
+            text[side] = text[side].replace('"title": "crystal"', f'"title": "{title}"').replace(
+                '"case": "crystal_battle"', f'"case": "{title}_battle"').replace(
+                lock["pokecrystal"]["sha1"], lock[f"poke{title}"]["sha1"])
+        text["a"] = _edit_header_field("fixture_sha256", gate._fixture_sha256(tmp_path, f"{title}_battle"))(text["a"])
+        text["a_wrong_save"] = _edit_header_field("fixture_sha256", hashlib.sha256(wrong).hexdigest())(text["a_wrong_save"])
+        text["pydec"] = _edit_pydec_token("titles", f"{title}/crystal")(text["pydec"])
+    baseline = (tmp_path / "same_save.SaveRAM").read_bytes()
+    (tmp_path / "initial_witness.SaveRAM").write_bytes(baseline)
+    proof["witness_snapshots"] = {"a": {"path": "initial_witness.SaveRAM", "sha256": hashlib.sha256(baseline).hexdigest()}}
+    changed = bytearray(baseline)
+    changed[offset] ^= 1
+    (tmp_path / "same_save.SaveRAM").write_bytes(changed)
+    digest = hashlib.sha256(changed).hexdigest()
+    proof["staged_saves"]["same_save"]["sha256"] = digest
+    text["a_same_save"] = _edit_header_field("fixture_sha256", digest)(text["a_same_save"])
+    # Receipt duplicates the seed fingerprint; update it too, as a real runner would.
+    text["a_same_save"] = text["a_same_save"].replace(hashlib.sha256(baseline).hexdigest(), digest)
+    if title != "crystal":
+        lines = text["a_wrong_save"].splitlines()
+        head = json.loads(lines[0].split(" ", 1)[1])
+        lines = ["RECEIPT " + json.dumps({**json.loads(line.split(" ", 1)[1]),
+                                       "fixture_sha256": head["fixture_sha256"]}) if line.startswith("RECEIPT ") else line
+                 for line in lines]
+        text["a_wrong_save"] = "\n".join(lines)
+    return proof, axes, lock, text
+
+
+@pytest.mark.parametrize("title,offset", [("crystal", 0), ("crystal", 0x5ff), ("gold", 0),
+                                         ("gold", 0x1800), ("gold", 0x1fff)])
+def test_reconnect_matrix_allows_only_authenticated_native_scratch(tmp_path, title, offset):
+    proof, axes, lock, text = _scratch_reconnect_cell(tmp_path, offset, title=title)
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_reconnect") == []
+
+
+def test_reconnect_matrix_accepts_authenticated_raw_cartram_snapshot(tmp_path):
+    proof, axes, lock, text = _scratch_reconnect_cell(tmp_path, 0)
+    snapshot = tmp_path / "initial_witness.SaveRAM"
+    snapshot.write_bytes(snapshot.read_bytes()[:32768])
+    proof["witness_snapshots"]["a"]["sha256"] = hashlib.sha256(snapshot.read_bytes()).hexdigest()
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_reconnect") == []
+
+
+def test_reconnect_matrix_rejects_explicit_bad_snapshot_even_with_unchanged_seed(tmp_path):
+    proof, axes, lock, text = _reconnect_cell(tmp_path)
+    proof["witness_snapshots"] = {"a": {"path": "same_save.SaveRAM", "sha256": "0" * 64}}
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_reconnect")
+
+
+def test_reconnect_matrix_fails_closed_when_scratch_authority_refuses(tmp_path, monkeypatch):
+    from tools import gen2_duo_oracles
+
+    proof, axes, lock, text = _scratch_reconnect_cell(tmp_path, 0)
+
+    def refuse(_raw, _layout):
+        raise RuntimeError("native sScratch geometry differs from audited source")
+
+    monkeypatch.setattr(gen2_duo_oracles, "normalized_gameplay_cartram", refuse)
+    errors = _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_reconnect")
+    assert len(errors) == 1 and "geometry differs" in errors[0]
+
+
+@pytest.mark.parametrize("mutation", ["absent_snapshot", "wrong_snapshot_pin", "forged_snapshot", "short_snapshot",
+                                     "live_stage_pin", "wrong_fixture_bytes", "crystal_window", "after_scratch", "next_bank"])
+def test_reconnect_matrix_scratch_cannot_hide_unbound_or_gameplay_changes(tmp_path, mutation):
+    offset = {"crystal_window": 0x1800, "after_scratch": 0x600, "next_bank": 0x2000}.get(mutation, 0)
+    proof, axes, lock, text = _scratch_reconnect_cell(tmp_path, offset)
+    if mutation == "absent_snapshot":
+        del proof["witness_snapshots"]
+    elif mutation == "wrong_snapshot_pin":
+        proof["witness_snapshots"]["a"]["sha256"] = "0" * 64
+    elif mutation in ("forged_snapshot", "short_snapshot"):
+        raw = (tmp_path / "same_save.SaveRAM").read_bytes()
+        if mutation == "short_snapshot":
+            raw = raw[:32768]
+        (tmp_path / "initial_witness.SaveRAM").write_bytes(raw)
+        proof["witness_snapshots"]["a"]["sha256"] = hashlib.sha256(raw).hexdigest()
+    elif mutation == "live_stage_pin":
+        proof["staged_saves"]["same_save"]["sha256"] = "0" * 64
+    elif mutation == "wrong_fixture_bytes":
+        wrong = bytearray((tmp_path / "wrong_save.SaveRAM").read_bytes())
+        wrong[0] ^= 1
+        (tmp_path / "wrong_save.SaveRAM").write_bytes(wrong)
+        proof["staged_saves"]["wrong_save"]["sha256"] = hashlib.sha256(wrong).hexdigest()
+        text["a_wrong_save"] = _edit_header_field("fixture_sha256", hashlib.sha256(wrong).hexdigest())(text["a_wrong_save"])
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_reconnect")
+
+
 @pytest.mark.parametrize("mutation", ["missing_phase", "missing_stage", "stage_pin", "stage_bytes",
     "wrong_fixture", "header_hash", "header_title", "initial_result", "initial_save", "b_result",
     "relaunch_result", "relaunch_save", "phase", "linked", "key", "hud", "b_repeat",
@@ -1169,14 +1278,18 @@ def test_memorial_preimage_uses_each_titles_party_codec(title):
 
 @pytest.mark.parametrize("pair", ["duo.crystal.crystal", "duo.gold.silver", "duo.crystal.gold"])
 def test_old_memorial_faint_receipts_require_real_preimage(tmp_path, pair):
-    doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
+    # Rebuild the historical NACK-only shape; fresh physical receipts must never remove this control.
+    doc = _green_tree(tmp_path)
     row = _row(doc, pair)
-    proof = next(proof for proof in row["proofs"] if proof["scenario"] == "gen2_faint")
-    if all("MEMORIAL_PREIMAGE " in (REPO / proof["receipts"][side]["path"]).read_text(encoding="utf-8")
-           for side in ("a", "b")):
-        pytest.skip("re-receipted with MEMORIAL_PREIMAGE; the matrix itself now judges this cell")
+    proof = row["proofs"][0]
+    text = {side: (tmp_path / entry["path"]).read_text(encoding="utf-8")
+            for side, entry in proof["receipts"].items()}
+    for side in ("a", "b"):
+        text[side] = text[side].replace('"scenario": "link"', '"scenario": "gen2_faint"')
+        text[side] += 'MEMORIAL_ACK {"event":"memorialize_failed","reason":"not implemented"}\n'
+    text["pydec"] = _edit_pydec_token("status", "memorial")(text["pydec"])
     lock = json.loads((REPO / "data/gen2_sources.lock.json").read_text(encoding="utf-8"))["outputs"]
-    errors = gate._receipt_errors(REPO, proof, "gen2_faint", row["axes"], lock)
+    errors = _check_admission_cell(tmp_path, proof, row["axes"], lock, text, "gen2_faint")
     assert any("a memorial" in error and "MEMORIAL_PREIMAGE" in error for error in errors), errors
     assert any("b memorial" in error and "MEMORIAL_PREIMAGE" in error for error in errors), errors
 

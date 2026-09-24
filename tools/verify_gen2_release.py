@@ -36,6 +36,8 @@ import release_lanes
 from release_lanes import Lane
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 _PY = sys.executable
 TITLES = ("crystal", "gold", "silver")
 REQUIREMENT_IDS = (
@@ -395,9 +397,21 @@ def _reconnect_receipt_errors(root: Path, proof: dict, axes: dict, lock: dict) -
                      and ready.get("player") == player, f"{side}: wrong RECONNECT_READY")
                 need(position(lines, "RECONNECT_READY") > position(lines, "SAVE_WITNESS"), "ready before save")
                 if player == "a":
-                    need(len(seeds["same_save"]) == save.get("saveram_bytes") == 32790
-                         and hashlib.sha256(seeds["same_save"][:32768]).hexdigest() == save.get("cartram_sha256"),
-                         "same-save stage does not bind initial A flushed save")
+                    seed = seeds["same_save"]
+                    need(len(seed) == save.get("saveram_bytes") == 32790, "same-save stage length differs")
+                    snapshot_entry = (proof.get("witness_snapshots") or {}).get("a")
+                    if snapshot_entry is not None or hashlib.sha256(seed[:32768]).hexdigest() != save.get("cartram_sha256"):
+                        from server.adapters import gen2_codec as codec
+                        from tools.gen2_duo_oracles import normalized_gameplay_cartram
+
+                        need(snapshot_entry is not None, "same-save scratch change lacks authenticated witness snapshot")
+                        baseline = pinned(snapshot_entry, binary=True)
+                        need(len(baseline) in (32768, 32790)
+                             and hashlib.sha256(baseline[:32768]).hexdigest() == save.get("cartram_sha256"),
+                             "same-save witness snapshot does not bind initial raw CartRAM digest")
+                        layout = codec.for_foundation(title)
+                        need(normalized_gameplay_cartram(seed, layout) == normalized_gameplay_cartram(baseline, layout),
+                             "same-save stage changed bytes outside native scratch")
                     need(not any(line.startswith("RECEIPT ") for line in lines), "killed initial A has receipt")
                 else:
                     stayed = one(lines, "B_STAYED")
@@ -440,7 +454,7 @@ def _reconnect_receipt_errors(root: Path, proof: dict, axes: dict, lock: dict) -
                 "titles": f"{axes['initiator']}/{axes['partner']}"}
         need(tokens and all(tokens.get(key) == value for key, value in want.items()), "pydec does not bind reconnect cell")
         need(sum(line.startswith("PYDEC:") for line in legs["pydec"]) == 1, "ambiguous pydec verdict")
-    except (KeyError, TypeError, ValueError, AttributeError, OSError, StopIteration) as exc:
+    except (KeyError, TypeError, ValueError, AttributeError, OSError, RuntimeError, StopIteration) as exc:
         return [f"reconnect proof invalid: {exc}"]
     return []
 

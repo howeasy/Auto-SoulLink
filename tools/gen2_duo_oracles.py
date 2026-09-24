@@ -44,7 +44,8 @@ One JSON object on the same line as its tag, in each instance's `results[inst]` 
   (sha256 of CartRAM[0:0x8000] -- the first 32768 bytes of the flushed file), cartram_bytes
   (32768), saveram_path (absolute, forward slashes), saveram_bytes (32768 + 22 = 32790, the
   22-byte RTC trailer included), flushed_matches (bool, the driver's own claim -- re-verified
-  here independently, never trusted alone).
+  here independently, never trusted alone). Optional snapshot_path names an immutable raw
+  CartRAM or full SaveRAM image, authenticated against cartram_sha256 before scratch comparison.
 - `CLIENT {...}`: qualification, production_admitted, pack, title ("crystal"/"gold"/"silver"),
   rom_sha1. `title` selects the gen2_codec layout for THIS side only -- Gold/Silver/Crystal never
   share a layout even when they share an area id (route_29 is title-independent, the party/save
@@ -215,6 +216,81 @@ def check_save_witness(results):
     _check_save_witness(results, ("a", "b"))
 
 
+def normalized_gameplay_cartram(raw, layout):
+    """Comparison view only: callers must authenticate a complete raw baseline first.
+
+    Exclude the audited native gfx scratch on C/G/S and G/S's SRAM window stack.
+    Mail, backup regions, boxes, sStackTop, RTC halt sentinel and gaps stay protected.
+    Pinned ram/sram.asm: C1-3/G1-11 ($60 tiles); G79-84 (window top byte included).
+    """
+    if not isinstance(raw, bytes) or len(raw) not in (CARTRAM_BYTES, SAVERAM_BYTES):
+        raise RuntimeError("gameplay CartRAM comparison requires 32768 or 32790 raw bytes")
+
+    def flat(symbol):
+        bank, addr = layout.sram_banks[symbol], layout.addresses[symbol]
+        if type(bank) is not int or not 0 <= bank < 4 or type(addr) is not int or not 0xA000 <= addr < 0xC000:
+            raise RuntimeError(f"invalid native scratch symbol geometry: {symbol}")
+        return bank * 0x2000 + addr - 0xA000
+
+    try:
+        if layout.title not in ("crystal", "gold", "silver"):
+            raise RuntimeError("unknown native scratch title")
+        scratch = flat("sScratch"), flat("sPartyMail")
+        if scratch != (0, 0x600):
+            raise RuntimeError("native sScratch geometry differs from audited source")
+        spans = [scratch]
+        if layout.title in ("gold", "silver"):
+            window = flat("sWindowStackBottom"), flat("sWindowStackTop") + 1
+            if window != (0x1800, 0x2000):
+                raise RuntimeError("native SRAM window-stack geometry differs from audited source")
+            spans.append(window)
+    except KeyError as exc:
+        raise RuntimeError(f"missing pinned native scratch symbol: {exc}") from exc
+    view = bytearray(raw[:CARTRAM_BYTES])
+    for start, end in spans:
+        view[start:end] = bytes(end - start)
+    return bytes(view)
+
+
+def witness_save_bytes(witness, layout):
+    """Read a save, accepting native scratch drift only against a fully authenticated image."""
+    try:
+        path = Path(witness["saveram_path"])
+        if not path.is_file():
+            raise RuntimeError(f"witness saveram_path does not exist: {path}")
+        current = path.read_bytes()
+        if witness.get("cartram_bytes") != CARTRAM_BYTES or witness.get("saveram_bytes") != SAVERAM_BYTES or len(current) != SAVERAM_BYTES:
+            raise RuntimeError("witness save byte length differs -- torn save")
+        sha = witness.get("cartram_sha256")
+        if not isinstance(sha, str) or re.fullmatch(r"[0-9a-fA-F]{64}", sha) is None:
+            raise RuntimeError("witness CartRAM digest malformed")
+
+        def matches(raw):
+            return hashlib.sha256(raw[:CARTRAM_BYTES]).hexdigest() == sha.lower()
+
+        if "snapshot_path" in witness:
+            snapshot = witness["snapshot_path"]
+            if not isinstance(snapshot, str) or not snapshot:
+                raise RuntimeError("explicit witness snapshot path malformed")
+            baseline = Path(snapshot).read_bytes()
+            if len(baseline) not in (CARTRAM_BYTES, SAVERAM_BYTES) or not matches(baseline):
+                raise RuntimeError("explicit witness snapshot length/digest differs")
+        elif matches(current):
+            return current
+        else:
+            backup = Path(str(path) + ".bak")
+            if not backup.is_file():
+                raise RuntimeError("current CartRAM digest does not match witness and no authenticated backup exists")
+            baseline = backup.read_bytes()
+            if len(baseline) != SAVERAM_BYTES or not matches(baseline):
+                raise RuntimeError("no authenticated witness baseline: backup length/digest differs")
+        if normalized_gameplay_cartram(current, layout) != normalized_gameplay_cartram(baseline, layout):
+            raise RuntimeError("witness gameplay bytes changed outside audited native scratch")
+        return current
+    except (KeyError, OSError, TypeError, ValueError) as exc:
+        raise RuntimeError(f"witness baseline missing or malformed: {exc}") from exc
+
+
 def _check_save_witness(results, instances):
     from server.adapters import gen2_codec as codec
 
@@ -240,20 +316,8 @@ def _check_save_witness(results, instances):
         if not (isinstance(sha, str) and re.fullmatch(r"[0-9a-fA-F]{64}", sha)):
             raise RuntimeError(f"{inst}: SAVE_WITNESS cartram_sha256 is not a 64-hex sha256: {sha!r}")
 
-        path = Path(witness["saveram_path"])
-        if not path.is_file():
-            raise RuntimeError(f"{inst}: SAVE_WITNESS saveram_path does not exist: {path}")
-        blob = path.read_bytes()
-        if len(blob) != witness["saveram_bytes"]:
-            raise RuntimeError(f"{inst}: flushed save is {len(blob)} bytes, SAVE_WITNESS claims "
-                               f"{witness['saveram_bytes']} -- torn save")
-        cartram = blob[:CARTRAM_BYTES]
-        computed = hashlib.sha256(cartram).hexdigest()
-        if computed.lower() != sha.lower():
-            raise RuntimeError(f"{inst}: independently recomputed sha256 {computed} does not "
-                               f"match the driver's reported {sha} -- torn/mismatched witness")
-
         layout = codec.for_foundation(title)
+        cartram = witness_save_bytes(witness, layout)[:CARTRAM_BYTES]
         report = codec.strict_checksum_witness(cartram, layout)
         if not report["valid"]:
             raise RuntimeError(f"{inst}: independent checksum/primary-backup/marker witness "
@@ -946,7 +1010,7 @@ def reconnect_oracle(results, *, data_dir, initial_results, relaunch_results, bo
         title, linked_key = decoded["a"]["title"], decoded["a"]["key"]
         layout = codec.for_foundation(title)
         witness = _one_marker(initial_results["a"], "SAVE_WITNESS")
-        initial_raw = Path(witness["saveram_path"]).read_bytes()
+        initial_raw = witness_save_bytes(witness, layout)
         original_ot = int.from_bytes(_saved_field(initial_raw, layout, "wPlayerID", 2), "big")
         _reconnect_need(_hello_ot_id("a", initial_results["a"]) == original_ot, "initial trainer OT differs from save")
         for phase in ("same_save", "wrong_save"):
@@ -964,7 +1028,8 @@ def reconnect_oracle(results, *, data_dir, initial_results, relaunch_results, bo
                             "relaunch marker identity differs from decoded save")
             keys = [codec.key(mon) for mon in new]
             if phase == "same_save":
-                _reconnect_need(seed[:CARTRAM_BYTES] == initial_raw[:CARTRAM_BYTES] and ot == original_ot and linked_key in keys,
+                _reconnect_need(normalized_gameplay_cartram(seed, layout) == normalized_gameplay_cartram(initial_raw, layout)
+                                and ot == original_ot and linked_key in keys,
                                 "same-save seed lost initial linked image")
             else:
                 qualified_ot = qualified_identity(f"{title}_battle_ot2", seed, repo=REPO_ROOT)
