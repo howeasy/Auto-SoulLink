@@ -1224,12 +1224,17 @@ end
 --- red-handed -- the path's #2 Left step started with the field unlocked, an RR-only object
 --- (local id 20, absent from FR/LG's map.json -- c23a8f46 / reference_rr_object_events.md: "RR
 --- adds objects 10-12, four more coord events") walked adjacent to the player and locked the
---- field mid-step (facing forced to 4/Right, toward that object), and P.step's own 6 short
---- press-and-clear_dialogue attempts ran out while the lock -- not a textbox, so clear_dialogue's
---- A-taps never touch it -- still held. So this re-implements P.follow's loop using only P's
---- PUBLIC calls (play.step/play.map/play.wait_at/play.at, same order), and on a stall caused by
---- that lock (never on a battle or a genuinely blocked tile), waits for it to clear then retries
---- the SAME step, bounded at 4 rounds so a real stall still fails.
+--- field mid-step (facing forced to 4/Right, toward that object). A PURE idle-wait (run 4, 4
+--- rounds x 300 frames) never saw the lock clear: locked=true held through every round, which
+--- means it is not a silent script -- it is a message box (or a trainer's "sees you" intro)
+--- waiting for A, exactly what playlib's own P.clear_dialogue exists for, and P.step's 6 short
+--- attempts (each already calling clear_dialogue once) simply ran out too early against a
+--- longer scene. So this re-implements P.follow's loop using only P's PUBLIC calls
+--- (play.step/play.clear_dialogue/play.in_battle/play.fight_through/play.map/play.wait_at/
+--- play.at, same primitives playlib itself uses), and on a stall taps A through the lock
+--- (fighting an incidental battle for real if the scene turns into one), then retries the SAME
+--- step -- bounded at 4 rounds, and it stops waiting the moment the field is neither locked nor
+--- in a battle, so a genuinely blocked tile still fails fast.
 local function traced_follow(cp, path_name, label)
     if TITLE ~= "radical_red" then return play.follow(cp, path_name, label) end
     local p = assert(PATHS[path_name], "no PATHS entry " .. tostring(path_name))
@@ -1244,16 +1249,27 @@ local function traced_follow(cp, path_name, label)
         if RR_TRACE then rr_trace_log(cp, path_name, i, dir) end
         local ok = play.step(cp, dir, start_map, nil, enc)
         local rounds = 0
-        while not ok and rounds < 4 and not H.scene_quiet(cp) do
-            for _ = 1, 300 do
-                H.advance()
-                if H.scene_quiet(cp) then break end
-            end
+        while not ok and rounds < 4 and (play.in_battle(cp) or not H.scene_quiet(cp)) do
             rounds = rounds + 1
+            if play.in_battle(cp) then
+                if not play.fight_through(cp, 1200) then
+                    G.shot("stuck")
+                    G.finish(false, string.format(
+                        "%s (%s): step %s: an incidental battle mid-step never ended",
+                        label, path_name, dir))
+                    return
+                end
+            else
+                for _ = 1, 20 do
+                    play.clear_dialogue(cp)
+                    if play.in_battle(cp) or H.scene_quiet(cp) then break end
+                end
+            end
             if RR_TRACE then
                 console.log(string.format(
-                    "[rr-trace] %s #%d dir=%s waited round %d locked=%s",
-                    path_name, i, tostring(dir), rounds, tostring(not H.scene_quiet(cp))))
+                    "[rr-trace] %s #%d dir=%s waited round %d locked=%s in_battle=%s",
+                    path_name, i, tostring(dir), rounds, tostring(not H.scene_quiet(cp)),
+                    tostring(play.in_battle(cp))))
             end
             ok = play.step(cp, dir, start_map, nil, enc)
         end
