@@ -1,0 +1,54 @@
+G4-LANE-2 P+H live row: active_end_gen3, FR as A (gen3_frlg), cut b0483efe
+lane: E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean (detached; HEAD moved with update-ref because the shared
+  broken ref refs/heads/codex/gen2-foundation (1) makes checkout die after updating the tree); tracked_clean before/after below
+ROMs: FR US 1.0 sha1 41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc, LG US 1.0 sha1 574fa542ffebb14be69902d1d36f1ec0a4afd71e (staged in patch/build)
+machine: shared with a live Gen 2 session; LOAD line = snapshot taken just before launch (local time; start/end are UTC)
+note: PASS, attempt 1 of 1
+
+--- run (verbatim) ---
+=== active_end_gen3 --game gen3_frlg  lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean sha=b0483efe38de8b9d0afa61088c4eac9229dfb4ab tracked_dirty_before=0
+LOAD 2026-09-24T08:08:12 cpu=96% emuhawk=1 python=11
+  emuhawk pid=28440 E:/Howard/Bizhawk\EmuHawk.exe --lua=patch/build/gen2_evo_dev.lua --config=patch/build/gate_cfg_gen2_evo_dev_crystal.ini .cache/gen2-build/pokecrystal/pokecrystal.gbc
+start_utc=2026-09-24T12:08:12Z
+$ python tools/e2e_duo.py --game gen3_frlg --scenario active_end_gen3
+
+========== scenario: active_end_gen3 ==========
+[duo] active_end_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=e96a7ba14f6f3a061d1de7302f7f6b9d3a5db6641c9d418811849f882fae0329 profile.json=da819ece2088bb35a2ae8f4942d2e987fc528ceb1595419a3b1efca3dda39668 source=b0483efe38de8b9d0afa61088c4eac9229dfb4ab
+[duo] server up: tcp=55486 http=55487 data=C:\Users\howar\AppData\Local\Temp\slink_duo_active_end_gen3_0tvwyfa6
+[duo] cleared 6 stale artifact(s) for active_end_gen3: e2e_active_end_gen3_a_1_witness.bin, e2e_active_end_gen3_a_attempt1_result.txt, e2e_active_end_gen3_a_result.txt, e2e_active_end_gen3_b_attempt1_result.txt, e2e_active_end_gen3_b_result.txt, e2e_active_end_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] BATTLE_WINDOW_AREA_CONTROL server_only=linked areas=viridian_city,route_1,route_2,viridian_forest encounter_rules=not_qualified
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'force_faint', 'key': '2D356A90:99DE0D8A'}
+[duo] RESULT_LINE a: RESULT: PASS (P+H: engine Perish KO in battle with no input (command))
+[duo] RESULT_LINE b: RESULT: PASS (idle (no save); the subject passed)
+[duo] SAVE_WITNESS_SHA256 inst=a site=50bb13bdc31f868cf07b510dfcfcabe56e69a75c43329466184addf7648c8f6c file=50bb13bdc31f868cf07b510dfcfcabe56e69a75c43329466184addf7648c8f6c match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] active_end: force_faint 2D356A90:99DE0D8A -> P+H commit -> hand-off -> Perish KO in battle with no input -> send-out -> RUN; saved HP 0
+[duo] MARKER a: READY_ACTIVE 2D356A90:99DE0D8A case=command
+[duo] MARKER a: RX force_faint key=2D356A90:99DE0D8A
+[duo] MARKER a: [client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 2D356A90:99DE0D8A
+[duo] MARKER a: ACTIVE_COMMIT 2D356A90:99DE0D8A frame=2222 writes=5 attempted=11 handoff=1 status3=0x20 ctrl=0x0802E33D counter=0 last_move=0 pp=35/30/30/0 why="active faint committed"
+[duo] MARKER a: HANDOFF 2D356A90:99DE0D8A from=0x0802E33D to=0x0802E3B5 frames=1 exec_bit0=0
+[duo] MARKER a: ACTIVE_KO 2D356A90:99DE0D8A frame=2686 in_battle=1 battle_hp=0 status3=0x0 pp=35/30/30/0 last_move=0 inputs=0 hp_writes=0 attempted=11
+[duo] MARKER a: ACTIVE_FAINT_SITE 2D356A90:99DE0D8A frame=2686 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+[duo] MARKER a: SENT_OUT slot=1 battler_slot=1
+[duo] MARKER a: ACTIVE_OUTCOME 2D356A90:99DE0D8A outcome=4 sent_out=1 whiteout_tx=0
+[duo] MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_active_end_gen3_a_1_witness.bin bytes=131072 saves=1 frame=4443 counter=8
+[duo] MARKER a: FORCED_HP0 2D356A90:99DE0D8A frame=2686 in_battle=1 battler=1
+[duo] MARKER b: WRITES 0
+[duo] PYDEC: PASS asserted scenario facts
+[duo] active_end_gen3: a=PASS b=PASS
+
+========== summary ==========
+  active_end_gen3: PASS (attempt 1 of 1)
+exit=0
+end_utc=2026-09-24T12:08:40Z
+tracked_dirty_after=0

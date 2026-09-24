@@ -1,0 +1,84 @@
+G4-LANE-2 P+H live row: linked_faint_active_trainer_gen3, FR as A (gen3_frlg), cut b0483efe
+lane: E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean (detached; HEAD moved with update-ref because the shared
+  broken ref refs/heads/codex/gen2-foundation (1) makes checkout die after updating the tree); tracked_clean before/after below
+ROMs: FR US 1.0 sha1 41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc, LG US 1.0 sha1 574fa542ffebb14be69902d1d36f1ec0a4afd71e (staged in patch/build)
+machine: shared with a live Gen 2 session; LOAD line = snapshot taken just before launch (local time; start/end are UTC)
+note: PASS, attempt 1 of 1 (~42 min wall-clock, 12:12->12:54 UTC). See the instrument incident appended at the end: an aborted overlapping launch that I caused; no effect on this verdict
+
+--- run (verbatim) ---
+=== linked_faint_active_trainer_gen3 --game gen3_frlg  lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean sha=b0483efe38de8b9d0afa61088c4eac9229dfb4ab tracked_dirty_before=0
+LOAD 2026-09-24T08:12:21 cpu=90% emuhawk=0 python=11
+start_utc=2026-09-24T12:12:21Z
+$ python tools/e2e_duo.py --game gen3_frlg --scenario linked_faint_active_trainer_gen3
+
+========== scenario: linked_faint_active_trainer_gen3 ==========
+[duo] linked_faint_active_trainer_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=e96a7ba14f6f3a061d1de7302f7f6b9d3a5db6641c9d418811849f882fae0329 profile.json=da819ece2088bb35a2ae8f4942d2e987fc528ceb1595419a3b1efca3dda39668 source=b0483efe38de8b9d0afa61088c4eac9229dfb4ab
+[duo] server up: tcp=50411 http=50412 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_trainer_gen3_2phrdpp0
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 2D356A90:99DE0D8A <-> BC73F9B0:1C600D89
+[duo] BATTLE_WINDOW_AREA_CONTROL server_only=linked areas=viridian_city,route_1,route_2,viridian_forest encounter_rules=not_qualified
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] RESULT_LINE a: RESULT: PASS (natural faint of the active linked 2D356A90:99DE0D8A)
+[duo] RESULT_LINE b: RESULT: PASS (P+H: engine Perish KO in battle with no input (trainer))
+[duo] SAVE_WITNESS_SHA256 inst=a site=d577f28f7ad88777e61017fd2ba702664cbfea48e42a983c1f1ef3cbd880d95f file=d577f28f7ad88777e61017fd2ba702664cbfea48e42a983c1f1ef3cbd880d95f match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=47154c70b99e66993491935f0ebde3e9be60f06d0797b388e4f8a562a41e735c file=47154c70b99e66993491935f0ebde3e9be60f06d0797b388e4f8a562a41e735c match=true saves=1 counter=3->4 rtc=normalized
+[duo] linked_faint_active[trainer]: engine faint 2D356A90:99DE0D8A -> P+H commit on active BC73F9B0:1C600D89 -> hand-off -> Perish KO in battle with no input; both memorials saved
+[duo] MARKER a: ENGINE_FAINT_SITE frame=376419 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+[duo] MARKER a: TX faint 2D356A90:99DE0D8A {"area_id":"route_1","event":"faint","key":"2D356A90:99DE0D8A","player":"a","seq":12534}
+[duo] MARKER a: TX memorialize_done 2D356A90:99DE0D8A {"box":13,"event":"memorialize_done","key":"2D356A90:99DE0D8A","player":"a","seq":12589}
+[duo] MARKER b: READY_ACTIVE BC73F9B0:1C600D89 case=trainer
+[duo] MARKER b: RX force_faint key=BC73F9B0:1C600D89
+[duo] MARKER b: [client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 BC73F9B0:1C600D89
+[duo] MARKER b: ACTIVE_COMMIT BC73F9B0:1C600D89 frame=273872 writes=5 attempted=41 handoff=1 status3=0x20 ctrl=0x0802E33D counter=0 last_move=0 pp=35/30/30/40 why="active faint committed"
+[duo] MARKER b: HANDOFF BC73F9B0:1C600D89 from=0x0802E33D to=0x0802E3B5 frames=1 exec_bit0=0
+[duo] MARKER b: ACTIVE_KO BC73F9B0:1C600D89 frame=274725 in_battle=1 battle_hp=0 status3=0x0 pp=35/30/30/40 last_move=0 inputs=0 hp_writes=0 attempted=41
+[duo] MARKER b: ACTIVE_FAINT_SITE BC73F9B0:1C600D89 frame=274725 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+[duo] MARKER b: SENT_OUT slot=1 battler_slot=1
+[duo] MARKER b: ACTIVE_OUTCOME BC73F9B0:1C600D89 outcome=2 sent_out=1 whiteout_tx=1
+[duo] MARKER b: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_trainer_gen3_b_1_witness.bin bytes=131072 saves=1 frame=282268 counter=4
+[duo] MARKER b: FORCED_HP0 BC73F9B0:1C600D89 frame=274725 in_battle=1 battler=1
+[duo] MARKER b: TX memorialize_done BC73F9B0:1C600D89 {"box":13,"event":"memorialize_done","key":"BC73F9B0:1C600D89","player":"b","seq":9564}
+[duo] PYDEC: PASS asserted scenario facts
+[duo] linked_faint_active_trainer_gen3: a=PASS b=PASS
+
+========== summary ==========
+  linked_faint_active_trainer_gen3: PASS (attempt 1 of 1)
+(wrapper note: the wrapper shell's exit/end lines were lost when I stopped the batch parent at 12:24 UTC; the summary above is e2e_duo's own. The PYDEC PASS was already in the log at 12:54:48 UTC; checked after exit at 12:59:58 UTC: tracked_dirty_after=0)
+
+--- instrument incident during this run (my own, not a product result) ---
+At 12:24 UTC I stopped my sequential batch's parent shell so that the LG trainer row would not start before the whiteout re-runs.
+The batch still launched `--game gen3_lgfr --scenario linked_faint_active_trainer_gen3` alongside this run. It aborted within 2 s, before any EmuHawk start,
+on PermissionError (WinError 32): this run's EmuHawk held patch/build/e2e_linked_faint_active_trainer_gen3_a_result.txt open.
+It left *_attempt1_result.txt copies and a pydec file, which this run's own PYDEC overwrote. This run's a/b result files stayed locked and intact.
+This run then PASSED.
+Stray log:
+=== linked_faint_active_trainer_gen3 --game gen3_lgfr  lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean sha=b0483efe38de8b9d0afa61088c4eac9229dfb4ab tracked_dirty_before=0
+LOAD 2026-09-24T08:24:01 cpu=100% emuhawk=3 python=14
+  emuhawk pid=21280 E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/duo_cfg_50411_a.ini --lua=patch/build/duo_50411_a.lua patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba
+  emuhawk pid=35652 E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/duo_cfg_50411_b.ini --lua=patch/build/duo_50411_b.lua patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba
+  emuhawk pid=38768 E:/Howard/Bizhawk\EmuHawk.exe --lua=lua/tests/gen2_frame_align.lua --config=patch/build/gate_cfg_gen2_frame_align_crystal.ini .cache/gen2-build/pokecrystal/pokecrystal.gbc
+start_utc=2026-09-24T12:24:01Z
+$ python tools/e2e_duo.py --game gen3_lgfr --scenario linked_faint_active_trainer_gen3
+
+========== scenario: linked_faint_active_trainer_gen3 ==========
+[duo] linked_faint_active_trainer_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=3922d561ff671b86f3f82e84be6068a2ce1f6a4a60df942831dadd9ebe6a01ae b=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=db60478826f16ff02c04ff5dc7df67579cf3e32ef99ca4dfbb36cd976047e213 write_checkpoint.json=e96a7ba14f6f3a061d1de7302f7f6b9d3a5db6641c9d418811849f882fae0329 profile.json=da819ece2088bb35a2ae8f4942d2e987fc528ceb1595419a3b1efca3dda39668 source=b0483efe38de8b9d0afa61088c4eac9229dfb4ab
+[duo] server up: tcp=63872 http=63873 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_trainer_gen3_krqrpjrj
+[duo] PYDEC: FAIL [WinError 32] The process cannot access the file because it is being used by another process: 'E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-lane-clean\\patch\\build\\e2e_linked_faint_active_trainer_gen3_a_result.txt'
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_trainer_gen3_krqrpjrj
+[duo] linked_faint_active_trainer_gen3: attempt 1 aborted — PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-lane-clean\\patch\\build\\e2e_linked_faint_active_trainer_gen3_a_result.txt'
+
+========== summary ==========
+  linked_faint_active_trainer_gen3: FAIL (attempt 1 of 1) — PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-lane-clean\\patch\\build\\e2e_linked_faint_active_trainer_gen3_a_result.txt'
+exit=1
+end_utc=2026-09-24T12:24:03Z
+tracked_dirty_after=0
