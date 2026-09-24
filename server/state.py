@@ -1193,10 +1193,11 @@ class SoulLinkState:
         nk, ns = pt["new"].get(taker) or (src.key, 0)
         old = pt[f"{taker}_key"]
         setattr(entry, taker, replace(src, key=nk, species=ns or src.species))
-        self._key_index.pop(old, None)
-        self.party_keys[taker].discard(old)
+        for gone in self._trade_old_keys(pt, taker):
+            self._key_index.pop(gone, None)
+            self.party_keys[taker].discard(gone)
+            self.bonus_keys[taker].discard(gone)
         self.party_keys[taker].add(nk)
-        self.bonus_keys[taker].discard(old)
         self._index_entry(entry)
         self.pending_trade = None
         self._replay_trade_events(pt)
@@ -1204,6 +1205,12 @@ class SoulLinkState:
         log.warning(f"trade {pt['token']} split: {taker} holds a copy {nk}, its {old} is gone")
         self._record_trade(pt, "split")
         self._trade_settle_ticks[taker] = self.TRADE_SETTLE_TICKS
+
+    @staticmethod
+    def _trade_old_keys(pt: dict, pid: str) -> set[str]:
+        """The key pid gave in the trade: current, plus the original a mid-window key_change
+        migrated (invariant review MINOR-8)."""
+        return {k for k in (pt[f"{pid}_key"], pt.get(f"{pid}_key0")) if k}
 
     def _commit_trade(self, pt: dict):
         """Apply the swap atomically, once both sides are known to have traded; pt["new"] holds
@@ -1214,7 +1221,7 @@ class SoulLinkState:
         # trade-evolution). _key_index + party_keys are rebuilt from the two OLD keys to the two NEW keys.
         entry = pt["link"]
         entry.a, entry.b = entry.b, entry.a             # A now owns B's old mon and vice-versa
-        for old in (pt["a_key"], pt["b_key"]):
+        for old in self._trade_old_keys(pt, "a") | self._trade_old_keys(pt, "b"):
             self._key_index.pop(old, None)
         for pid, half in (("a", entry.a), ("b", entry.b)):
             nk, ns = (pt["new"].get(pid) or ("", 0))
@@ -1223,20 +1230,20 @@ class SoulLinkState:
                 if ns:
                     half.species = ns
         # party_keys: A drops its traded-away key + gains the mon it now holds (entry.a's key); same for B.
-        self.party_keys["a"].discard(pt["a_key"])
+        self.party_keys["a"] -= self._trade_old_keys(pt, "a")
         self.party_keys["a"].add(entry.a.key)
-        self.party_keys["b"].discard(pt["b_key"])
+        self.party_keys["b"] -= self._trade_old_keys(pt, "b")
         self.party_keys["b"].add(entry.b.key)
         self._index_entry(entry)                        # MINOR-6: a collision is logged loudly here too
         # MINOR-6: per-key bookkeeping follows each mon to its new holder (and trade-evolved key)
         for giver, taker in (("a", "b"), ("b", "a")):
-            old = pt[f"{giver}_key"]
-            new = (pt["new"].get(taker) or ("", 0))[0] or old
-            if old in self.bonus_keys[giver]:
-                self.bonus_keys[giver].discard(old)
-                self.bonus_keys[taker].add(new)
-            if new != old and old in self.mon_stats:
-                self.mon_stats[new] = self.mon_stats.pop(old)
+            new = (pt["new"].get(taker) or ("", 0))[0] or pt[f"{giver}_key"]
+            for old in self._trade_old_keys(pt, giver):
+                if old in self.bonus_keys[giver]:
+                    self.bonus_keys[giver].discard(old)
+                    self.bonus_keys[taker].add(new)
+                if new != old and old in self.mon_stats:
+                    self.mon_stats[new] = self.mon_stats.pop(old)
 
         for pid in ("a", "b"):
             gives = pt["a_label"] if pid == "a" else pt["b_label"]
@@ -3261,7 +3268,11 @@ class SoulLinkState:
         if pt:
             for field in ("a_key", "b_key"):
                 if pt.get(field) == old_key:
+                    pt.setdefault(f"{field}0", old_key)   # MINOR-8: the commit also retires the original
                     pt[field] = new_key
+            for pid, n in (pt.get("new") or {}).items():
+                if n and n[0] == old_key:
+                    pt["new"][pid] = (new_key, msg.get("new_species") or n[1])
 
         _ack(True)
 

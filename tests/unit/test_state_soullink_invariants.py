@@ -196,3 +196,25 @@ def test_after_a_restart_the_hello_queues_force_faint_before_memorialize(tmp_pat
             if c.get("key") == A_GETS]
     assert cmds[:2] == [("force_faint", A_GETS), ("memorialize", A_GETS)], cmds
     assert [c for c, _ in cmds].count("force_faint") == 1
+
+
+# ── MINOR-8 (probe P6): a key_change in the trade window does not strand the original keys ────────
+
+@pytest.mark.parametrize("report_first", [True, False])
+def test_a_commit_after_a_mid_window_key_change_follows_the_migrated_key(tmp_path, report_first):
+    state, entry, token = _gen1_applying(tmp_path)
+    evolved = "1234:5678:16"                                   # A's received mon evolves (Gen 1/3 shape)
+    state.bonus_keys["b"].add(A_GETS)                          # B had caught it as a shiny
+    done_a = {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15}
+    if report_first:
+        state.handle_event("a", done_a)
+    state.handle_event("a", {"event": "key_change", "old_key": A_GETS, "new_key": evolved,
+                             "new_species": 0x16, "reason": "evolution"})
+    if not report_first:
+        state.handle_event("a", {**done_a, "new_key": evolved, "new_species": 0x16})
+    state.handle_event("b", {"event": "trade_done", "token": token, "new_key": B_GETS, "new_species": 0x26})
+    assert state.pending_trade is None
+    assert entry.a.key == evolved and state._key_index[evolved] is entry and A_GETS not in state._key_index
+    assert evolved in state.party_keys["a"] and B_GETS not in state.party_keys["a"]
+    assert A_GETS not in state.party_keys["b"], "no ghost of B's traded-away key"
+    assert evolved in state.bonus_keys["a"] and A_GETS not in state.bonus_keys["b"]
