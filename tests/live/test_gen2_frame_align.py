@@ -50,15 +50,59 @@ GATE = "lua/tests/gen2_frame_align.lua"
 TITLES = ("crystal", "gold", "silver")
 EXPECT = ("wild_ready", "capture_party", "capture_party_finalized", "battle_end", "save_completed", "battle_faint")
 # card gen2-u1e-poison: titles whose U1 run adds the overworld poison leg (lua/tests/gen2_poison_inputs.lua).
-# Gold has no day POISON_STING foe south of the Route 30 battle demo; it waits for its own fixture (main's ruling).
-POISON_TITLES = ("crystal", "silver")
+POISON_TITLES = ("crystal", "silver", "gold")
 POISON_EXPECT = EXPECT[:-1] + ("poison_faint",) + EXPECT[-1:]
-# Route 29 -> Cherrygrove -> Route 30 (C/G data/maps/attributes.asm `connection`); the Route 30 south grass is the hunt.
-POISON_ROUTE = (("Route29", "west", "CherrygroveCity"), ("CherrygroveCity", "north", "Route30"))
-POISON_HUNT = "Route30"
-# Two floor tiles on the Route 30 south exit, the first next to the south grass (the faint leg starts there).
-POISON_PARK = ({"x": 7, "y": 49}, {"x": 7, "y": 50})
+# The U1 fixture per title (lua/gen2/signals.lua S.U1_FIXTURES). Gold has no day POISON_STING foe south of the
+# Route 30 battle demo, so its U1 runs on the post-errand fixture (main's ruling (1)).
+U1_FIXTURE = {"crystal": "crystal_battle", "gold": "gold_battle_errand", "silver": "silver_battle"}
+# Route 29 -> Cherrygrove -> Route 30 (C/G data/maps/attributes.asm `connection`). Crystal/Silver hunt a wild
+# Weedle in the Route 30 south grass; Gold goes on to Route 31 and Bug Catcher Wade (pokegold data/trainers/
+# parties.asm BUG_CATCHER 4: Caterpie 2, Caterpie 2, WEEDLE 3, Caterpie 2; maps/Route31.asm:361).
+POISON_ROUTE = {"crystal": (("Route29", "west", "CherrygroveCity"), ("CherrygroveCity", "north", "Route30")),
+                "silver": (("Route29", "west", "CherrygroveCity"), ("CherrygroveCity", "north", "Route30")),
+                "gold": (("Route29", "west", "CherrygroveCity"), ("CherrygroveCity", "north", "Route30"),
+                         ("Route30", "north", "Route31"))}
+POISON_HUNT = {"crystal": "Route30", "silver": "Route30", "gold": "Route31"}
+# Two floor tiles off the hunt grass: Route 30's south exit (the first next to the south grass) / Route 31 (20,12)-(21,12).
+POISON_PARK = {"crystal": ({"x": 7, "y": 49}, {"x": 7, "y": 50}), "silver": ({"x": 7, "y": 49}, {"x": 7, "y": 50}),
+               "gold": ({"x": 20, "y": 12}, {"x": 21, "y": 12})}
+POISON_TRAINER = {"gold": "TrainerBugCatcherWade1"}
 SIDE = {"north": "Up", "south": "Down", "west": "Left", "east": "Right"}
+FACING = {"UP": (0, -1), "DOWN": (0, 1), "LEFT": (-1, 0), "RIGHT": (1, 0)}
+
+
+def trainers(ctx, name):
+    """{script: (x, y, sight tiles)} for a map's fixed-facing OBJECTTYPE_TRAINER objects (a SPINRANDOM trainer
+    faces anywhere and is left to the live battle rule)."""
+    out = {}
+    for line in ctx.read_source(f"maps/{name}.asm").splitlines():
+        line = line.strip()
+        if not line.startswith("object_event "):
+            continue
+        fields = [part.strip() for part in line[13:].split(",")]
+        move = re.fullmatch(r"SPRITEMOVEDATA_STANDING_(UP|DOWN|LEFT|RIGHT)", fields[3])
+        if fields[9] != "OBJECTTYPE_TRAINER" or not move:
+            continue
+        x, y, reach = int(fields[0]), int(fields[1]), int(fields[10])
+        dx, dy = FACING[move[1]]
+        out[fields[11]] = (x, y, [{"x": x + dx * n, "y": y + dy * n} for n in range(1, reach + 1)])
+    return out
+
+
+def connected(facts_map, start, goals, avoid):
+    width, grid = facts_map["width"], facts_map["grid"]
+    seen, todo = {start}, [start]
+    blocked = {(t["x"], t["y"]) for t in avoid} | {(w["x"], w["y"]) for w in facts_map["warps"]}
+    while todo:
+        x, y = todo.pop()
+        if (x, y) in goals:
+            return True
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if (0 <= nx < width and 0 <= ny < facts_map["height"] and grid[ny * width + nx]
+                    and (nx, ny) not in blocked and (nx, ny) not in seen):
+                seen.add((nx, ny))
+                todo.append((nx, ny))
+    return False
 
 
 def expect_for(title):
@@ -67,13 +111,15 @@ def expect_for(title):
 
 def poison_facts(ctx) -> dict:
     """Source/ROM-bound maps, connection edges, the POISON_STING id and the PSN mask for the poison leg."""
+    title = ctx.title
+    route, hunt_name, park = POISON_ROUTE[title], POISON_HUNT[title], POISON_PARK[title]
     areas = {row["map_const"]: row for row in gen2_fixtures.build_area_map(ctx).values()}
     by_name = {row["map_name"]: row for row in areas.values()}
-    names = {name for leg in POISON_ROUTE for name in (leg[0], leg[2])}
+    names = {name for leg in route for name in (leg[0], leg[2])}
     maps = {name: gen2_fixtures._map_facts(ctx, by_name[name], areas) for name in sorted(names)}
     attributes = ctx.read_source("data/maps/attributes.asm")
     legs = []
-    for source, side, target in POISON_ROUTE:
+    for source, side, target in route:
         block = attributes.split(f"map_attributes {source},", 1)[1].split("map_attributes", 1)[0]
         found = re.search(rf"^\s*connection {side}, {target}, \w+, (-?\d+)", block, re.M)
         assert found, f"source connection missing: {source} {side} {target}"
@@ -98,18 +144,37 @@ def poison_facts(ctx) -> dict:
             if ok:
                 exits.append(tile)
         assert exits, f"no walkable edge tile: {source} -> {target}"
-        legs.append({"map": source, "side": SIDE[side], "exits": exits})
-    hunt = maps[POISON_HUNT]
+        leg = {"map": source, "side": SIDE[side], "exits": exits}
+        # Stay out of fixed-facing trainers' sight where the grid leaves another way (Gold Route 30: Joey at
+        # (6,29) is avoided; Mikey's one tile (5,24) is the only aisle north, row 24 x=2-4 being HOP_DOWN ledges).
+        avoid = []
+        for _, _, sight in trainers(ctx, source).values():
+            trial = avoid + sight
+            entry = {(e["x"], e["y"]) for e in exits}
+            starts = [(x, y) for y in range(maps[source]["height"]) for x in range(maps[source]["width"])
+                      if (y in (0, maps[source]["height"] - 1) or x in (0, maps[source]["width"] - 1))
+                      and maps[source]["grid"][y * maps[source]["width"] + x] and (x, y) not in entry]
+            if all(connected(maps[source], start, entry, trial) for start in starts
+                   if connected(maps[source], start, entry, avoid)):
+                avoid = trial
+        if avoid:
+            leg["avoid"] = avoid
+        legs.append(leg)
+    hunt = maps[hunt_name]
     grass = [{"x": x, "y": y} for y in range(hunt["height"]) for x in range(hunt["width"])
              if hunt["grid"][y * hunt["width"] + x] == 2]
-    for tile in POISON_PARK:
+    for tile in park:
         assert hunt["grid"][tile["y"] * hunt["width"] + tile["x"]] == 1, f"park tile not floor: {tile}"
-    first = POISON_PARK[0]
-    assert hunt["grid"][first["y"] * hunt["width"] + first["x"] + 1] == 2, "park tile 1 not next to grass"
     moves = gen2_fixtures.const_block(ctx.read_source("constants/move_constants.asm"), "POISON_STING")
     status = gen2_fixtures.const_block(ctx.read_source("constants/battle_constants.asm"), "PSN")
-    return {"maps": maps, "legs": legs, "hunt_map": POISON_HUNT, "hunt_grass": grass, "park": list(POISON_PARK),
-            "moves": {"POISON_STING": moves["POISON_STING"]}, "psn_mask": 1 << status["PSN"]}
+    out = {"maps": maps, "legs": legs, "hunt_map": hunt_name, "hunt_grass": grass, "park": list(park),
+           "moves": {"POISON_STING": moves["POISON_STING"]}, "psn_mask": 1 << status["PSN"]}
+    if title in POISON_TRAINER:
+        x, y, sight = trainers(ctx, hunt_name)[POISON_TRAINER[title]]
+        tile = sight[-1]
+        assert hunt["grid"][tile["y"] * hunt["width"] + tile["x"]] == 1, "trainer sight tile not floor"
+        out["trainer"] = {"script": POISON_TRAINER[title], "x": x, "y": y, "tile": tile}
+    return out
 # BattlePack's per-pocket input states and ItemSubmenu's USE/QUIT box (engine/items/pack.asm:685-782
 # .ItemsPocketMenu/.KeyItemsPocketMenu/.TMHMPocketMenu/.BallsPocketMenu, :783-803 ItemSubmenu; the same
 # lines and pocket order in pokecrystal and pokegold, resolved per title from its own .sym).
@@ -154,9 +219,16 @@ def u1_facts(ctx, facts, qualification_attempt_id: str) -> dict:
     next_mon = "Use next"
     assert f'BattleText_UseNextMon:\n\ttext "{next_mon} #MON?"' in ctx.read_source("data/text/battle.asm"), \
         "use-next-mon anchor left the source"
+    prompts = {"catch_nickname": [anchor], "next_mon": [next_mon]}
+    if ctx.title in POISON_TRAINER:
+        # The trainer's "Will <PLAYER> change #MON?" (data/text/battle.asm BattleText_EnemyIsAboutToUse...
+        # :222-231; the row "change POKeMON?" stays on screen) and Mom's Route 31 lecture yesorno
+        # (data/phone/text/mom.asm:151-165, engine/phone/scripts/mom.asm:143-150).
+        assert 'line "change #MON?"' in ctx.read_source("data/text/battle.asm"), "switch anchor left the source"
+        assert 'line "Should I save it?"' in ctx.read_source("data/phone/text/mom.asm"), "mom anchor left the source"
+        prompts.update(switch=["change "], mom_save=["Should I save it?"])
     out = {"pack_ui": pack_ui, "faint_ui": {kind: site(symbol) for kind, symbol in FAINT_UI.items()},
-           "decoy": decoy, "prompts": {"catch_nickname": [anchor], "next_mon": [next_mon]},
-           "qualification_attempt_id": qualification_attempt_id}
+           "decoy": decoy, "prompts": prompts, "qualification_attempt_id": qualification_attempt_id}
     if ctx.title in POISON_TITLES:
         out["poison"] = poison_facts(ctx)
     return out
@@ -198,7 +270,7 @@ def verify(text: str, pack: dict, title: str) -> dict:
     assert sorted(production["registered"]) == sorted(expect), production
     assert production["refused_title"] != title, production
     receipt = tag_json(text, "RECEIPT")
-    assert receipt["title"] == title and receipt["fixture"] == f"{title}_battle", receipt
+    assert receipt["title"] == title and receipt["fixture"] == U1_FIXTURE[title], receipt
     source = pack["source"]
     assert (receipt["rom_sha1"], receipt["pack_commit"], receipt["pack_specs_sha256"]) == (
         source["rom_sha1"], source["commit"], pack["specs_sha256"])
@@ -231,7 +303,7 @@ def verify(text: str, pack: dict, title: str) -> dict:
 
 @pytest.mark.parametrize("title", TITLES)
 def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
-    spec = gen2_fixtures.BY_NAME[f"{title}_battle"]
+    spec = gen2_fixtures.BY_NAME[U1_FIXTURE[title]]
     reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
               or live.receipt_missing_reason(spec.name))
     if reason:

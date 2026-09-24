@@ -39,7 +39,7 @@ end
 
 -- Pure: first step of a cheapest path (floor 1, grass GRASS_COST) to any goal tile; "arrived" on a goal.
 -- Warps are walls (never entered by accident); the first step must be live-steppable.
-function PI.step_toward(map, point, goals)
+function PI.step_toward(map, point, goals, avoid)
     if not integer(point.x, 0, map.width - 1) or not integer(point.y, 0, map.height - 1) then
         return nil, "player coordinate outside the source map"
     end
@@ -52,6 +52,7 @@ function PI.step_toward(map, point, goals)
     local blocked = {}
     for _, object in ipairs(point.blocked or {}) do blocked[key(object.x, object.y)] = true end
     for _, warp in ipairs(map.warps or {}) do blocked[key(warp.x, warp.y)] = true end
+    for _, tile in ipairs(avoid or {}) do blocked[key(tile.x, tile.y)] = true end   -- e.g. a trainer's sight line
     -- bucket Dijkstra: costs are small integers
     local best, first, buckets, top = {[key(point.x, point.y)] = 0}, {}, {[0] = {{point.x, point.y}}}, 0
     local cost = 0
@@ -110,7 +111,7 @@ function PI.driver(F, facts, opts)
     local held, hold_left, release = nil, 0, false
     local here, from = nil, nil
     local maps, hunt = facts.maps, facts.maps[facts.hunt_map]
-    local passive, no_passive = opts.moves, {}
+    local passive, no_passive, fought = opts.moves, {}, false
     local function press(button)
         release, held, hold_left = true, button, PI.HOLD - 1
         return {[button]=true}, self.phase
@@ -134,17 +135,17 @@ function PI.driver(F, facts, opts)
         return press(index > ui.cursor and "Down" or "Up")
     end
     local waited = 0
-    local function walk(map, point, goals)
-        local button, why = PI.step_toward(map, point, goals)
+    local function walk(map, point, goals, avoid)
+        local button, why = PI.step_toward(map, point, goals, avoid)
         if not button then
             -- a stale object struct can close the only aisle (Route 29 (11,7), Crystal run 1 / Gold errand a1):
             -- plan without objects; a real NPC only bumps the step
-            button = PI.step_toward(map, {x=point.x, y=point.y, can_step=point.can_step}, goals)
+            button = PI.step_toward(map, {x=point.x, y=point.y, can_step=point.can_step}, goals, avoid)
         end
         if not button then
             -- the source grid alone has a path: a live step permission is in the way; wait it out
             local open = {x=point.x, y=point.y, can_step={Up=true, Down=true, Left=true, Right=true}}
-            if PI.step_toward(map, open, goals) and waited < PI.WAIT_FRAMES then
+            if PI.step_toward(map, open, goals, avoid) and waited < PI.WAIT_FRAMES then
                 waited = waited + 1
                 return {}, self.phase
             end
@@ -171,30 +172,52 @@ function PI.driver(F, facts, opts)
             if slot ~= point.active_slot and mon and integer(mon.hp, PI.LOW_HP + 1, 999) then return slot end
         end
     end
+    local function any_other(point)
+        for slot = 0, 5 do
+            local mon = party(point)[slot]
+            if slot ~= point.active_slot and mon and integer(mon.hp, 1, 999) then return slot end
+        end
+    end
+    local function is_passive(label)
+        for _, name in ipairs(passive) do if label:upper() == name then return true end end
+        return false
+    end
+    -- A TRAINER battle (wBattleMode 2: Gold's Route 30 Mikey on the only aisle north, Don, then Route 31 Wade)
+    -- has no RUN (BattleMenu_Run refuses, engine/battle/core.asm): a non-POISON_STING foe is fought with the first
+    -- damaging move; a POISON_STING foe gets the wild treatment (passive move / switch) until a party mon carries
+    -- PSN, then it is fought too. "Will <PLAYER> change #MON?" (data/text/battle.asm:222-231) takes NO.
     local function battle(point, ui)
-        local sting = self.phase == "hunt" and point.foe_sting == true and point.active_psn ~= true and not poisoned(point)
+        local trainer = point.battle_mode == 2
+        local sting = (self.phase == "hunt" or trainer) and point.foe_sting == true and point.active_psn ~= true
+            and not poisoned(point)
         local active = point.active_slot
         local fit = integer(point.active_hp, PI.LOW_HP + 1, 999) and not no_passive[active]
         if ui.kind == "battle_menu" then
-            if point.battle_mode ~= 1 then return nil, "battle menu outside a wild battle" end
-            if not sting then return choose(ui, "RUN", 2) end
-            if fit then return choose(ui, "FIGHT", 2) end
-            if relief(point) ~= nil then return choose(ui, PI.PKMN_CELL, 2) end
-            return choose(ui, "RUN", 2)
+            if point.battle_mode ~= 1 and not trainer then return nil, "battle menu outside a wild or trainer battle" end
+            if sting and fit then return choose(ui, "FIGHT", 2) end
+            if sting and relief(point) ~= nil then return choose(ui, PI.PKMN_CELL, 2) end
+            return choose(ui, trainer and "FIGHT" or "RUN", 2)
         end
         if ui.kind == "move_menu" then
-            if not (sting and fit) then return press("B") end
             if type(ui.items) ~= "table" then return nil, "move list unreadable" end
-            for _, name in ipairs(passive) do
-                for _, label in ipairs(ui.items) do
-                    if type(label) == "string" and label:upper() == name then return choose(ui, name, 1) end
+            if sting and fit then
+                for _, name in ipairs(passive) do
+                    for _, label in ipairs(ui.items) do
+                        if type(label) == "string" and label:upper() == name then return choose(ui, name, 1) end
+                    end
                 end
+                no_passive[active] = true   -- this mon passes turns by switching out instead
+                return press("B")
             end
-            no_passive[active] = true   -- this mon passes turns by switching out instead
-            return press("B")
+            if not trainer then return press("B") end
+            for _, label in ipairs(ui.items) do
+                if type(label) == "string" and not is_passive(label) then return choose(ui, label:upper(), 1) end
+            end
+            return nil, "the active mon knows no damaging move"
         end
+        if ui.kind == "yes_no" and ui.prompt == "switch" then return choose(ui, "NO", 1) end
         if ui.kind == "battle_party" then
-            local want = relief(point)
+            local want = relief(point) or (trainer and any_other(point) or nil)
             if want == nil or not integer(point.party_cursor, 0, 5) then return press("B") end
             if point.party_cursor == want then return press("A") end
             return press(point.party_cursor < want and "Down" or "Up")
@@ -211,6 +234,7 @@ function PI.driver(F, facts, opts)
         if self.phase == self.terminal then return {}, self.phase end
         local ui = point.ui
         if integer(point.battle_mode, 1, 255) then
+            if self.phase == "hunt" and point.battle_mode == 2 then fought = true end
             if self.phase == "tick" then return nil, "a battle started on the park tiles" end
             if self.phase == "park" then self.phase = self.terminal return {}, self.phase end   -- the faint leg's battle
             if ui == nil or point.input_ready ~= true then return {}, self.phase end
@@ -219,6 +243,9 @@ function PI.driver(F, facts, opts)
         if ui ~= nil then
             if point.input_ready ~= true then return {}, self.phase end
             if ui.kind == "text" or ui.kind == "prompt_button" or ui.kind == "wait_button" then return press("A") end
+            -- Mom's SPECIALCALL_WORRIED on entering Route 31 (pokegold maps/Route31.asm:14-22) runs
+            -- MomPhoneLectureScript's "Should I save it?" yesorno (engine/phone/scripts/mom.asm:143-150): NO.
+            if ui.kind == "yes_no" and ui.prompt == "mom_save" then return choose(ui, "NO", 1) end
             return nil, "UI is not valid in phase " .. self.phase .. ": " .. tostring(ui.kind)
         end
         if point.overworld_ready ~= true then return {}, self.phase end
@@ -227,6 +254,8 @@ function PI.driver(F, facts, opts)
                 if mon.hp == 0 then return nil, "a party mon fainted in battle before the poison" end
             end
             if poisoned(point) then self.phase = "tick" end
+            -- main's ruling: the trainer is fought once per save; no poison from him is a stop, not a retry
+            if self.phase == "hunt" and fought then return nil, "the trainer battle ended without a poisoned party mon" end
         end
         if (self.phase == "tick" or self.phase == "park") and point.poison_fainted == true then self.phase = "park" end
         if self.phase == "park" then
@@ -248,7 +277,9 @@ function PI.driver(F, facts, opts)
             return buttons, why
         end
         if self.phase == "travel" then
-            if on(point, hunt) then
+            if on(point, hunt) and facts.trainer then
+                self.phase = "hunt"
+            elseif on(point, hunt) then
                 local buttons, why = walk(hunt, point, facts.hunt_grass)
                 if why ~= "arrived" then return buttons, why end
                 self.phase = "hunt"
@@ -256,7 +287,7 @@ function PI.driver(F, facts, opts)
                 for _, leg in ipairs(facts.legs) do
                     local map = maps[leg.map]
                     if on(point, map) then
-                        local buttons, why = walk(map, point, leg.exits)
+                        local buttons, why = walk(map, point, leg.exits, leg.avoid)
                         if why == "arrived" then return {[leg.side]=true}, self.phase end   -- cross the connection
                         return buttons, why
                     end
@@ -264,8 +295,14 @@ function PI.driver(F, facts, opts)
                 return nil, fmt("map %s:%s is not on the source route", tostring(point.map_group), tostring(point.map_number))
             end
         end
-        -- hunt: oscillate between grass tiles (the U1 walk rule)
         if not on(point, hunt) then return nil, "left the hunt map" end
+        if facts.trainer then
+            -- step into the trainer's sight line and wait: he walks up and the battle starts
+            local buttons, why = walk(hunt, point, {facts.trainer.tile}, facts.trainer.avoid)
+            if why == "arrived" then return {}, self.phase end
+            return buttons, why
+        end
+        -- hunt: oscillate between grass tiles (the U1 walk rule)
         if here and (here.x ~= point.x or here.y ~= point.y) then from = here end
         here = {x=point.x, y=point.y}
         local button, why = F.walk_direction(hunt, point, from)

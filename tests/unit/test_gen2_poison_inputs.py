@@ -322,3 +322,57 @@ def test_a_phantom_object_on_the_only_aisle_is_walked_through():
     d = driver(rt, load(rt))
     buttons, phase = d.step(pt(rt, map_number=1, x=0, y=2, blocked=lua_list([{"x": 0, "y": 1}, {"x": 1, "y": 2}])))
     assert phase == "travel" and buttons["Up"]
+
+
+TRAINER_FACTS = dict(FACTS, trainer={"tile": {"x": 3, "y": 1}, "avoid": lua_list([])})
+
+
+def trainer_driver(rt, PI):
+    F = rt.eval("{walk_direction=function() return 'Left' end}")
+    return PI.driver(F, table(rt, TRAINER_FACTS), table(rt, {"moves": lua_list(["GROWL", "LEER"])}))
+
+
+def test_a_trainer_hunt_walks_into_the_sight_line_and_waits():
+    rt = lua()
+    d = trainer_driver(rt, load(rt))
+    buttons, phase = d.step(pt(rt, map_number=2, x=1, y=0))
+    assert phase == "hunt" and buttons["Right"]
+    buttons, phase = d.step(pt(rt, map_number=2, x=3, y=1))
+    assert phase == "hunt" and not any(buttons.values())
+
+
+def test_trainer_battles_fight_non_stings_and_stall_a_sting_until_poisoned():
+    rt = lua()
+    d = trainer_driver(rt, load(rt))
+    d.step(pt(rt, map_number=2, x=1, y=0))
+    fight = {"battle_mode": 2, "active_slot": 0, "active_hp": 20, "foe_sting": False, "overworld_ready": False}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **fight)[0] == ["A"]                          # FIGHT, no RUN
+    assert step(rt, d, ui=ui("move_menu", ["LEER", "SCRATCH"]), **fight)[0] == ["Down"]              # to SCRATCH
+    assert step(rt, d, ui=ui("move_menu", ["LEER", "SCRATCH"], 2), **fight)[0] == ["A"]
+    assert step(rt, d, ui=ui("yes_no", ["YES", "NO"], prompt="switch"), **fight)[0] == ["Down"]         # NO
+    sting = dict(fight, foe_sting=True)
+    assert step(rt, d, ui=ui("move_menu", ["LEER", "SCRATCH"]), **sting)[0] == ["A"]                   # LEER
+    poisoned = dict(sting, active_psn=True)
+    assert step(rt, d, ui=ui("move_menu", ["LEER", "SCRATCH"]), **poisoned)[0] == ["Down"]             # SCRATCH it
+    assert step(rt, d, ui=ui("battle_menu", MENU, 4, 2), **dict(sting, active_hp=5))[0] == ["Up"]     # PKMN, not RUN
+
+
+def test_a_trainer_battle_without_poison_is_a_stop_and_mom_gets_no():
+    rt = lua()
+    d = trainer_driver(rt, load(rt))
+    d.step(pt(rt, map_number=2, x=1, y=0))
+    d.step(pt(rt, battle_mode=2, map_number=2, x=3, y=1, overworld_ready=False))
+    buttons, why = d.step(pt(rt, map_number=2, x=3, y=1))
+    assert buttons is None and "without a poisoned party mon" in why
+    d2 = trainer_driver(rt, load(rt))
+    assert step(rt, d2, map_number=1, x=1, y=0, overworld_ready=False,
+                ui=ui("yes_no", ["YES", "NO"], prompt="mom_save"))[0] == ["Down"]
+
+
+def test_the_gate_fixture_list_mirrors_the_production_allow_list():
+    rt = lua()
+    F = frame_align(rt)
+    S = rt.execute((ROOT / "lua/gen2/signals.lua").read_text(encoding="utf-8"))
+    gate = {name: title for name, title in F.U1_FIXTURES.items()}
+    production = {name: title for title, names in S.U1_FIXTURES.items() for name in names.values()}
+    assert gate == production

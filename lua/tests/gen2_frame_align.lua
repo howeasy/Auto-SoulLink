@@ -92,6 +92,7 @@ F.DIRECTIONS = {{"Up", 0, -1}, {"Left", -1, 0}, {"Down", 0, 1}, {"Right", 1, 0}}
 F.SYM = {crystal="pokecrystal", gold="pokegold", silver="pokesilver"}
 F.REFUSE = {crystal="gold", gold="silver", silver="gold"}
 F.NAMES = {crystal="Crystal", gold="Gold", silver="Silver"}
+F.U1_FIXTURES = {crystal_battle="crystal", gold_battle="gold", gold_battle_errand="gold", silver_battle="silver"}
 
 local fmt = string.format
 local function integer(value, low, high)
@@ -699,7 +700,8 @@ function F.main(api, getenv, SG)
     local ok, ctx = pcall(function()
         SG = SG or F.scripted_gate(root)
         local c = SG.context(api, getenv)
-        assert(F.SYM[c.env.title] and c.case.name == c.env.title .. "_battle", "U1 runs on <title>_battle only")
+        -- the per-title U1 fixtures (lua/gen2/signals.lua S.U1_FIXTURES; gold_battle_errand: card gen2-u1e-poison)
+        assert(F.SYM[c.env.title] and F.U1_FIXTURES[c.case.name] == c.env.title, "U1 runs on a listed U1 fixture only")
         assert(c.qualify ~= nil and c.qualify.stage == "boot", "SLINK_GEN2_QUALIFY stage \"boot\" required")
         c.u1 = assert(c.json.decode(assert(getenv("SLINK_GEN2_U1_FACTS"), "SLINK_GEN2_U1_FACTS missing")))
         return c
