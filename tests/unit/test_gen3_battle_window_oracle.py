@@ -81,13 +81,20 @@ def test_first_falsifiers(fault):
         oracle.verify(**args)
 
 
-@pytest.mark.parametrize("case", ["trainer_bench", "active_end"])
-def test_complete_receipt_and_independent_save_pass(case):
-    facts = oracle.verify(**example(case))
+def test_complete_receipt_and_independent_save_pass():
+    facts = oracle.verify(**example())
     assert facts["witness"]["counter"] == (2, 3)
     assert facts["witness"]["site"] == facts["witness"]["file"]
     assert facts["observed_samples"] > 0
-    assert facts["active_unchanged"] is (True if case == "trainer_bench" else None)
+    assert facts["active_unchanged"] is True
+
+
+def test_active_end_is_no_longer_a_battle_window_case():
+    """A2 moved to the P+H carrier (e2e_duo assert_active_end_gen3_saved): the old held-until-
+    RUN receipt must not verify here any more."""
+    assert set(oracle.CASES) == {"trainer_bench"}
+    with pytest.raises(RuntimeError, match="unknown battle-window case"):
+        oracle.verify(**example("active_end"))
 
 
 @pytest.mark.parametrize("case,old,new", [
@@ -99,11 +106,6 @@ def test_complete_receipt_and_independent_save_pass(case):
     ("trainer_bench", "status=none", "status=poison"),
     ("trainer_bench", "counter=3", "counter=2"),
     ("trainer_bench", "saves=1", "saves=2"),
-    ("active_end", "outcome=4", "outcome=1"),
-    ("active_end", "reason=overworld", "reason=battle_faint"),
-    ("active_end", "frames=120", "frames=0"),
-    ("active_end", "attempted=0", "attempted=1"),
-    ("active_end", "samples=123", "samples=2"),
 ])
 def test_receipt_fields_are_evidence_not_labels(case, old, new):
     args = example(case)
@@ -173,14 +175,6 @@ def test_preparation_failure_does_not_earn_rng_retry():
     receipts = loss_receipts()
     receipts["a"] = "RESULT: FAIL (T2_RNG_LOSS: preparation failed)"
     assert oracle.classify_failure(case="trainer_bench", key=KEY, receipts=receipts) is None
-
-
-def test_active_end_before_run_is_not_the_subject_and_not_a_rng_retry():
-    args = example("active_end")
-    receipts = {"a": args["receipts"]["a"].splitlines()[0] +
-                "\nRESULT: FAIL (NOT_SUBJECT active_end: battle ended before RUN)", "b": ""}
-    result = oracle.classify_failure(case="active_end", key=args["key"], receipts=receipts)
-    assert result["status"] == "NOT_SUBJECT" and result["retry"] is False
 
 
 @pytest.mark.parametrize("kind", ["moved", "duplicate"])

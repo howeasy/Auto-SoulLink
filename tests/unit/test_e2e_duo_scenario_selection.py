@@ -253,16 +253,22 @@ def test_list_lines_carry_the_attempt_limit_and_the_targets():
 
 # ── gen3_frlg: the new Gen 3 client on vanilla FRLG (card C4-6a) ────────────────────────────────
 GEN3_FRLG_SCENARIOS = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3",
-                       "whiteout_gen3", "link_gen3", "deadzone_gen3", "reconnect_gen3")
+                       "whiteout_gen3", "link_gen3", "deadzone_gen3", "reconnect_gen3",
+                       # G4-PH: the P+H whiteout variant (A1 (i) on FR/LG, R4 on RR)
+                       "linked_faint_active_whiteout_gen3")
 # P5 (card C5-5): gen3_rr_new runs the same seven (their `games` tuples EXTENDED, never renamed)
 # plus three RR-only scenarios (docs/gen3/PLAN.md §14 P5, minus ghost/trade/infopanel -- the old
 # client's `gen3_rr` row keeps those -- and trade_abort, a later card).
-GEN3_RR_ONLY_SCENARIOS = ("explode_gen3", "rival_swap_gen3", "native_absent_gen3")
+GEN3_RR_ONLY_SCENARIOS = ("explode_gen3", "rival_swap_gen3", "native_absent_gen3",
+                          # G4-PH: RR rows R2/R3/R5 (rr_active_faint_parity_scope §5.5)
+                          "linked_faint_active_clean_gen3", "linked_faint_active_lhammer_gen3",
+                          "linked_faint_active_mega_gen3")
 GEN3_RR_NEW_SCENARIOS = GEN3_FRLG_SCENARIOS + GEN3_RR_ONLY_SCENARIOS
 # C4-6m: G4 item 2a's Center 2F controls run on FR/LG only; gen3_lgfr is the same family with
 # LeafGreen as A, so it selects exactly what gen3_frlg does.
 GEN3_FRLG_ONLY_SCENARIOS = ("center_controls_gen3", "save_then_write_gen3",
-                          "trainer_bench_gen3", "active_end_gen3")
+                          "trainer_bench_gen3", "active_end_gen3",
+                          "linked_faint_active_trainer_gen3")
 GEN3_FRLG_ROWS = ("gen3_frlg", "gen3_lgfr")
 
 

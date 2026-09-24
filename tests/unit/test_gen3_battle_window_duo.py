@@ -1,4 +1,7 @@
-"""T2/A2 carrier at its public returned-function boundary; no emulator or game-data writes."""
+"""T2 carrier at its public returned-function boundary; no emulator or game-data writes.
+
+A2 (active_end) moved to the P+H carrier (tests/unit/test_e2e_duo_gen3.py); this carrier now
+refuses the case by name."""
 from pathlib import Path
 
 import pytest
@@ -42,9 +45,6 @@ function world(mode, fault)
                     if fault == 'extra_write' then attempted=attempted+2 end
                     if fault == 'duplicate_rx' then rx=2 end
                 elseif fault == 'active_mutated' then write('battle_faint') end
-            end
-            if ready and rx > 0 and mode == 'active_end' and fault == 'last_hold_frame' and frame == 131 then
-                write('battle_faint')
             end
             for _,fn in ipairs(watchers) do fn() end
         end
@@ -131,7 +131,6 @@ def run(mode, fault=""):
 
 
 @pytest.mark.parametrize("mode,fault,reason", [
-    ("active_end", "active_mutated", "active target mutated"),
     ("trainer_bench", "wrong_key", "wrong key/slot"),
     ("trainer_bench", "wrong_slot", "wrong key/slot"),
     ("trainer_bench", "late_bench", "outside the in-battle bench window"),
@@ -143,25 +142,24 @@ def test_first_falsifiers_refuse_wrong_target_or_wrong_phase(mode, fault, reason
     assert "BATTLE_WINDOW_SAVED" not in log
 
 
-@pytest.mark.parametrize("mode", ["trainer_bench", "active_end"])
-def test_real_carrier_accepts_keyed_write_in_its_own_phase_and_normal_save(mode):
-    passed, why, (log, attempted, exiting, finished) = run(mode)
+def test_real_carrier_accepts_keyed_write_in_its_own_phase_and_normal_save():
+    passed, why, (log, attempted, exiting, finished) = run("trainer_bench")
     assert passed is True, (why, log)
-    assert attempted == 2
-    assert exiting == (mode == "active_end")
-    assert finished == (mode == "trainer_bench")
+    assert attempted == 2 and not exiting and finished
     assert log.index("READY_BATTLE_WINDOW") < log.index("BATTLE_WINDOW_LANDED")
     assert log.index("BATTLE_WINDOW_LANDED") < log.index("BATTLE_WINDOW_SAVED")
-    if mode == "active_end":
-        assert log.index("BATTLE_WINDOW_HELD") < log.index("BATTLE_WINDOW_EXIT_INPUT")
-        assert log.index("BATTLE_WINDOW_EXIT_INPUT") < log.index("BATTLE_WINDOW_EXIT active_end")
-        assert log.index("BATTLE_WINDOW_EXIT active_end") < log.index("BATTLE_WINDOW_LANDED")
-        assert "reason=overworld" in log
-    else:
-        assert "trainer=102" in log and "reason=battle_faint" in log
-        assert log.index("BATTLE_WINDOW_LANDED") < log.index("BATTLE_WINDOW_EXIT trainer_bench")
-        assert "active_hex=" in log and "samples=" in log and "PREP_LEVEL before=9 after=13" in log
-        assert "hp=full status=none" in log
+    assert "trainer=102" in log and "reason=battle_faint" in log
+    assert log.index("BATTLE_WINDOW_LANDED") < log.index("BATTLE_WINDOW_EXIT trainer_bench")
+    assert "active_hex=" in log and "samples=" in log and "PREP_LEVEL before=9 after=13" in log
+    assert "hp=full status=none" in log
+
+
+def test_active_end_left_this_carrier_for_p_h():
+    """A2's hold-until-battle-end model is gone (owner rulings 15-18): the case is refused by
+    name before any READY, never run as the old hold."""
+    passed, why, (log, *_) = run("active_end")
+    assert passed is False and "must be trainer_bench" in why
+    assert "READY_BATTLE_WINDOW" not in log
 
 
 @pytest.mark.parametrize("mode,fault,reason", [
@@ -174,16 +172,8 @@ def test_real_carrier_accepts_keyed_write_in_its_own_phase_and_normal_save(mode)
     ("trainer_bench", "denied_battle_write", "outside the in-battle bench window"),
     ("trainer_bench", "no_write", "no witnessed"),
     ("trainer_bench", "trainer_whiteout", "T2_RNG_LOSS"),
-    ("active_end", "missing_hold", "not held in battle_pending"),
-    ("active_end", "last_hold_frame", "active target mutated"),
-    ("active_end", "early_exit_write", "active target mutated"),
-    ("active_end", "denied_field_write", "active target mutated"),
-    ("active_end", "no_exit_write", "no witnessed"),
-    ("active_end", "no_rx", "no fresh keyed"),
-    ("active_end", "natural_end", "NOT_SUBJECT active_end"),
     ("trainer_bench", "snapshot_error", "observer error"),
     ("trainer_bench", "revived", "revived"),
-    ("active_end", "save_failed", "save failed"),
 ])
 def test_observed_failure_is_named_and_never_saved_as_a_pass(mode, fault, reason):
     passed, why, _ = run(mode, fault)
@@ -217,7 +207,7 @@ def test_bad_setup_does_not_publish_ready(fault, reason):
 def test_idle_peer_requires_a_terminal_partner_pass(terminal, want):
     lua = LuaRuntime(unpack_returned_tuples=True)
     lua.execute(MODEL)
-    ctx = lua.globals().world("active_end", "")
+    ctx = lua.globals().world("trainer_bench", "")
     ctx.player = "b"
     ctx.partner_result = lambda: f"noise\nRESULT: {terminal} (A)\n"
     scenario = lua.execute(SOURCE.read_text(encoding="utf-8"))
