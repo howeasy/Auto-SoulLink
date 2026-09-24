@@ -817,6 +817,9 @@ def trade_oracle(results, *, data_dir, baseline_saves, transaction_evidence,
         layouts[side] = layout
         old_marker, final_marker = _one(text, "TRADE_BASELINE"), _one(text, "TRADE_FINAL")
         old, final = _image(old_marker, "baseline"), _image(final_marker, "final")
+        if _markers(text, "REBOOTED"):   # a soft reset then CONTINUE: the backup copy's clock was rewritten
+            _need(_line(text, "REBOOTED") < _line(text, "TRADE_FINAL"), "the reboot follows the final image")
+            final = _continue_view(final, layout, symbols)
         _need(old == _read(baseline_saves.get(side), "runner baseline"), "baseline differs from runner's frozen image")
         for raw, label in ((old, "baseline"), (final, "final")):
             _need(codec.strict_checksum_witness(raw[:CART], layout)["valid"], f"{side} {label} checksum/copy witness failed")
@@ -1004,6 +1007,29 @@ def _saved_spans(layout, address, size):
         if base <= address and address + size <= base + region.length:
             return [region.primary + address - base, region.backup + address - base]
     return []
+
+
+def _continue_view(raw, layout, symbols):
+    """A rebooted side's final (REBOOTED: soft reset, then native CONTINUE): TryLoadSaveFile loads the primary
+    copy, then rewrites the BACKUP copy from WRAM (G engine/menus/save.asm:538-552, C :596-611) while the game
+    clock runs, so the backup clock bytes and the backup checksum move on and nothing else may. Returns the
+    image with the backup clock taken from the primary copy and the backup checksum recomputed; refuses any
+    other primary/backup disagreement, and a primary copy the load did not accept."""
+    image = bytearray(raw)
+    report = codec.checksum_report(bytes(image[:CART]), layout)
+    _need(report["primary"]["checksum_valid"] and report["primary"]["markers_valid"]
+          and report["backup"]["checksum_valid"] and report["backup"]["markers_valid"],
+          "rebooted final lacks the valid primary copy CONTINUE loaded and its valid backup rewrite")
+    for name, size in CLOCK:
+        spans = _saved_spans(layout, symbols[name].address, size)
+        _need(len(spans) == 2, f"unsaved clock {name}")
+        primary, backup = spans
+        image[backup:backup + size] = image[primary:primary + size]
+    offset = layout.checksum_offsets["backup"]
+    image[offset:offset + 2] = codec.sav_checksum(bytes(image[:CART]), layout, "backup").to_bytes(2, "little")
+    _need(codec.strict_checksum_witness(bytes(image[:CART]), layout)["valid"],
+          "rebooted final's backup copy differs from its primary beyond the CONTINUE clock rewrite")
+    return bytes(image)
 
 
 def _staged(receipt, text, partner_text, root):
@@ -1230,6 +1256,9 @@ def _reset_commit_oracle(results, *, data_dir, baseline_saves, transaction_evide
         layout = codec.for_foundation(receipt["title"], root=root)
         baseline = _image(_one(text, "TRADE_BASELINE"), "baseline")
         raw_final = _image(_one(text, "TRADE_FINAL"), "final raw reset image")
+        if _markers(text, "REBOOTED"):   # see _continue_view: CONTINUE rewrote the backup copy's clock
+            _need(_line(text, "REBOOTED") < _line(text, "TRADE_FINAL"), "the reboot follows the final image")
+            raw_final = _continue_view(raw_final, layout, symbols)
         _need(baseline == _read(baseline_saves.get(side), "frozen baseline")
               and codec.strict_checksum_witness(baseline[:CART], layout)["valid"], "invalid reset baseline")
         old_party = _party(baseline, layout)

@@ -1232,3 +1232,48 @@ def test_wait_may_end_at_the_same_frame_commit_entry(tmp_path, sources, frame_de
     else:
         with pytest.raises(RuntimeError):
             invoke(case)
+
+
+def _continue_rewrite(case, sources, side, symbol, delta=5):
+    """MODEL of CONTINUE's TryLoadSaveFile (G engine/menus/save.asm:538-552, C :596-611): the primary copy
+    is loaded, then the BACKUP copy is rewritten from WRAM with the clock a few frames on (live gs reset_wait)."""
+    receipt = get(case, side, "RECEIPT")
+    layout = sources[receipt["title"]]["layout"]
+    symbols = parse_symbols((ROOT / f"data/gen2/{receipt['title']}_slink.sym").read_text())
+    marker = get(case, side, "TRADE_FINAL")
+    raw = bytearray(Path(marker["snapshot_path"]).read_bytes())
+    backup = oracle._saved_spans(layout, symbols[symbol].address, 1)[1]
+    raw[backup] = (raw[backup] + delta) % 256
+    offset = layout.checksum_offsets["backup"]
+    raw[offset:offset + 2] = codec.sav_checksum(bytes(raw[:oracle.CART]), layout, "backup").to_bytes(2, "little")
+    _set_image(case, side, "TRADE_FINAL", bytes(raw))
+
+
+def _reboot(case, side):
+    rows = case["markers"][side]
+    at = next(i for i, (name, _) in enumerate(rows) if name == "TRADE_FINAL")
+    rows.insert(at, ("REBOOTED", {"frame": get(case, side, "TRADE_FINAL")["frame"] - 1, "map_group": 20,
+                                  "map_number": 1, "x": 5, "y": 3, "party_count": 2}))
+
+
+@pytest.mark.parametrize("variant", ["gs", "cc"])
+def test_rebooted_final_accepts_the_continue_backup_clock_rewrite(tmp_path, sources, variant):
+    case = make_case(tmp_path, sources, variant, scenario="gen2_trade_reset_wait")
+    _reboot(case, "a")
+    _continue_rewrite(case, sources, "a", "wGameTimeFrames")
+    assert invoke(case) is None
+
+
+def test_continue_rewrite_needs_the_observed_reboot(tmp_path, sources):
+    case = make_case(tmp_path, sources, "gs", scenario="gen2_trade_reset_wait")
+    _continue_rewrite(case, sources, "a", "wGameTimeFrames")
+    with pytest.raises(RuntimeError, match="checksum/copy witness"):
+        invoke(case)
+
+
+def test_continue_view_refuses_a_backup_change_beyond_the_clock(tmp_path, sources):
+    case = make_case(tmp_path, sources, "gs", scenario="gen2_trade_reset_wait")
+    _reboot(case, "a")
+    _continue_rewrite(case, sources, "a", "wNumItems", delta=1)
+    with pytest.raises(RuntimeError, match="beyond the CONTINUE clock rewrite"):
+        invoke(case)
