@@ -1,14 +1,21 @@
 """The companion-patch opcode gates, as pytest.
 
 `lua/tests/test_live_*.lua` and `test_mailbox_*.lua` are one headless BizHawk gate per
-opcode/feature — collectively the patch's executable spec.  They used to be launched by
-hand, one EmuHawk invocation at a time, which is why they rotted quietly.  This runs the
-whole set with one command:
+opcode/feature — collectively the patch's executable spec. P5 (docs/gen3/PLAN.md §14, card C5-4)
+binds them to the NEW Gen 3 client's native layer through `lua/tests/gen3_gatelib.lua`
+(`lua/gen3/native.lua` over the real writes/safety sink); none of the ported gates loads the old
+client (`lua/mailbox.lua`, `lua/memory_gba.lua`, `lua/clients/gen3_frlge_client.lua`).
 
-    SLINK_LIVE=1 pytest tests/live -q                 # everything
-    SLINK_LIVE=1 pytest tests/live -q -k memorialize  # one gate
+Every gate file is in exactly one of three lists (tests/unit/test_gen3_gatelib.py enforces it):
+  PORTED    runs live through gen3_gatelib;
+  DEFERRED  owner-deferred post-RC feature (docs/gen3/TODO.md) — reported as a skip with the reason;
+  GAP       needs an op lua/gen3/native.lua does not expose — reported as a skip naming the op.
+Deferred and gap gates still use the old binding and are never run here.
 
-Each gate is skipped (never hung) when its prerequisite is missing.  That matters for the
+    SLINK_LIVE=1 pytest tests/live/test_lua_gates.py -q                 # everything
+    SLINK_LIVE=1 pytest tests/live/test_lua_gates.py -q -k playse       # one gate
+
+Each gate is skipped (never hung) when its prerequisite is missing. That matters for the
 savestate in particular: BizHawk stops on a modal version dialog when handed a state from
 another release, so `savestate.load` on a stale file blocks forever rather than erroring.
 tools/mkstates.py owns the freshness check; see it for how to rebuild.
@@ -42,19 +49,77 @@ CLEAN_SRC = os.path.join(REPO, "Pokemon - Radical Red.gba")
 CLEAN_REL = "patch/build/rr_clean.gba"
 STATE_RE = re.compile(r"(slink_[a-z0-9]+\.State)")
 
-# Gates that need a live SLink server or a second instance rather than just the emulator —
-# those are tests/e2e/test_duo.py's job.
-NOT_STANDALONE = {"test_live_enemyparty_route.lua", "test_live_explode_route.lua",
-                  "test_live_msgbox_route.lua"}
+# Ported onto lua/tests/gen3_gatelib.lua.
+PORTED = (
+    "test_live_calctoggle.lua",        # native:config{battle_calc}
+    "test_live_choices.lua",           # native:show_choices
+    "test_live_choosepartymon.lua",    # native:choose_mon
+    "test_live_enemyparty_route.lua",  # native:transfer("enemy")  (savestate-free, standalone)
+    "test_live_ewramtail.lua",         # read-only watch + paint instrumentation
+    "test_live_menu.lua",              # native:show_menu
+    "test_live_pcnpc.lua",             # native:config{pc_trade_npc} + service() trade_request
+    "test_live_playse.lua",            # native:play_sound
+    "test_live_setpartymon.lua",       # native:transfer("party")
+    "test_live_soullinkmenu.lua",      # native:link_panel staging + the START-menu hook
+    "test_live_startmenu.lua",         # read-only START-menu recon
+    "test_live_tradescene.lua",        # native:transfer("enemy") then transfer("scene")
+    "test_mailbox_absent.lua",         # negative control: native absent on the clean ROM
+)
 # Negative controls: they assert the patch is ABSENT, so they need the unpatched ROM.
 CLEAN_ROM_GATES = {"test_mailbox_absent.lua"}
 
+_GHOST = "peer ghost deferred post-RC (owner 2026-09-22, docs/gen3/TODO.md): no lua/gen3/ghost.lua"
+_TEXT = "native text disabled for the RC (owner 2026-09-23, docs/gen3/TODO.md): no message opcodes"
+DEFERRED = {
+    "test_live_ghostavatar.lua": _GHOST,
+    "test_live_ghostbattle.lua": _GHOST,
+    "test_live_ghostdoor.lua": _GHOST,
+    "test_live_ghostlayer.lua": _GHOST,
+    "test_live_ghostorphan.lua": _GHOST,
+    "test_live_ghostreceiver.lua": _GHOST,
+    "test_live_ghostscript.lua": _GHOST + "; also OP_SHOW_MESSAGE (native text)",
+    "test_live_ghostshow.lua": _GHOST,
+    "test_live_ghoststutter.lua": _GHOST,
+    "test_live_ghosttint.lua": _GHOST,
+    "test_live_ghostwarp.lua": _GHOST,
+    "test_live_peerinteract.lua": _GHOST + " (OP_GHOST_SPAWN talk-to-ghost)",
+    "test_live_spawnnpc.lua": _GHOST + " (OP_SPAWN/DESPAWN_PEER_NPC, the ghost's engine NPC)",
+    "test_live_battlemsg.lua": _TEXT + " (OP_SHOW_BATTLE_MESSAGE)",
+    "test_live_message.lua": _TEXT + " (OP_SHOW_MESSAGE; also OP_PLAY_FANFARE, not in native.lua)",
+    "test_live_msgboxdismiss.lua": _TEXT + " (OP_SHOW_MESSAGE)",
+    "test_live_msgbox_route.lua": _TEXT + " (OP_SHOW_MESSAGE)",
+}
+GAP = {
+    "test_live_boxsync.lua": "OP_DEPOSIT_MON, OP_WITHDRAW_MON",
+    "test_live_choices_guards.lua": "a raw OP_SHOW_CHOICES post over malformed MENU_BUF "
+                                    "(native:show_choices validates in Lua and never posts one)",
+    "test_live_createmon.lua": "OP_CREATE_MON",
+    "test_live_enemyparty.lua": "OP_CREATE_MON (enemy party)",
+    "test_live_events.lua": "EvRing drain (events_init/events_drain)",
+    "test_live_explode_route.lua": "OP_FORCE_MOVE_SLOT",
+    "test_live_forcemove.lua": "OP_FORCE_MOVE_SLOT",
+    "test_live_givemon.lua": "OP_CREATE_MON (bump = GIVE_MON)",
+    "test_live_infoscreen.lua": "a direct OP_SHOW_INFO open, incl. raw posts over empty/unterminated "
+                                "SlinkInfo (native opens OP_SHOW_INFO only as a page turn after a "
+                                "START-menu panel close)",
+    "test_live_memorialize.lua": "OP_MEMORIALIZE (setup also OP_CREATE_MON, OP_DEPOSIT_MON)",
+    "test_live_partyevents.lua": "EvRing drain (events_init/events_drain)",
+    "test_mailbox_battle.lua": "OP_FORCE_FAINT, OP_FORCE_MOVE",
+    "test_mailbox_ping.lua": "OP_PING",
+}
+UNPORTED = {**{g: "DEFERRED: " + r for g, r in DEFERRED.items()},
+            **{g: "GAP: lua/gen3/native.lua has no " + r for g, r in GAP.items()}}
+
 
 def _gates():
-    names = sorted(f for f in os.listdir(GATE_DIR)
-                   if (f.startswith("test_live_") or f.startswith("test_mailbox_"))
-                   and f.endswith(".lua") and f not in NOT_STANDALONE)
-    return names
+    return sorted(PORTED)
+
+
+def gate_files():
+    """Every opcode gate file on disk (the manifest must cover exactly these)."""
+    return sorted(f for f in os.listdir(GATE_DIR)
+                  if (f.startswith("test_live_") or f.startswith("test_mailbox_"))
+                  and f.endswith(".lua"))
 
 
 def _required_state(gate):
@@ -95,3 +160,8 @@ def test_gate(gate, emu_version, request):
     passed, result_path, text = run_gate(f"lua/tests/{gate}", rom=rom, timeout=300, quiet=True)
     assert passed, (f"{gate} did not report PASS\n"
                     f"result: {result_path}\n{text[-2000:]}")
+
+
+@pytest.mark.parametrize("gate", sorted(UNPORTED))
+def test_unported_gate(gate):
+    pytest.skip(UNPORTED[gate])
