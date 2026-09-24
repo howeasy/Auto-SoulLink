@@ -28,6 +28,7 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -38,7 +39,7 @@ sys.path.insert(0, str(REPO / "tools"))
 
 from tests.live import test_gen2_new_gates as live  # noqa: E402
 from tests.live.test_gen2_new_gates import emuhawk  # noqa: E402,F401 - pytest fixture
-from tools import gen2_fixtures, gen2_source_data  # noqa: E402
+from tools import gen2_fixtures, gen2_source_data, gen2_synth_fixtures  # noqa: E402
 
 pytestmark = [
     pytest.mark.live,
@@ -55,6 +56,11 @@ POISON_EXPECT = EXPECT[:-1] + ("poison_faint",) + EXPECT[-1:]
 # The U1 fixture per title (lua/gen2/signals.lua S.U1_FIXTURES). Gold has no day POISON_STING foe south of the
 # Route 30 battle demo, so its U1 runs on the post-errand fixture (main's ruling (1)).
 U1_FIXTURE = {"crystal": "crystal_battle", "gold": "gold_battle_errand", "silver": "silver_battle"}
+# O-33 clock setup (tools/gen2_synth_fixtures.day_clock, disclosed in the receipt as clock_setup), as the W6 gate's U1 leg
+# (tests/live/test_gen2_w6_gate.py U1_CLOCK): the fixture RTC runs on with the host clock, and Silver's POISON_STING and
+# evolution hunts need Route 30 Weedle, morning/day only (pokegold data/wild/johto_grass.asm ROUTE_30, _SILVER nite:
+# Hoothoot/Rattata). Only the emulator RTC trailer changes; the CartRAM is the committed fixture's.
+U1_CLOCK = {"silver": 11}
 # Route 29 -> Cherrygrove -> Route 30 (C/G data/maps/attributes.asm `connection`). Crystal/Silver hunt a wild
 # Weedle in the Route 30 south grass; Gold goes on to Route 31 and Bug Catcher Wade (pokegold data/trainers/
 # parties.asm BUG_CATCHER 4: Caterpie 2, Caterpie 2, WEEDLE 3, Caterpie 2; maps/Route31.asm:361).
@@ -540,10 +546,16 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     qualification = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
     env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, gen2_fixtures.spec_route_facts(spec, REPO),
                                                      qualification["attempt_id"]))
+    source_path, clock = fixture, None
+    if title in U1_CLOCK:   # set right before the launch: the RTC runs on from here
+        raw, clock = gen2_synth_fixtures.day_clock(staged, hour=U1_CLOCK[title], now=int(time.time()), title=title)
+        source_path = REPO / ".cache/gen2-fixtures/u1-hook-proof" / f"{spec.name}-clock.SaveRAM"
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        source_path.write_bytes(raw)
     passed, path, text = run_gate(GATE, rom_key=spec.title, target=spec.target,
                                   timeout=7200 if title in EVOLUTION_TITLES else 3600 if title in POISON_TITLES else 1200,
                                   saveram_dir=str(REPO / ".cache/gen2-fixtures/u1-hook-proof" / spec.name),
-                                  fixture_path=str(fixture), speed_percent=300, env_overrides=env)
+                                  fixture_path=str(source_path), speed_percent=300, env_overrides=env)
     assert passed, f"gate FAILED; result {path}: {text[-3000:]}"
     assert fixture.read_bytes() == staged, "fixture changed while the gate ran"
 
@@ -551,4 +563,6 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     receipt = verify(text, pack, title)
     assert receipt["fixture_sha256"] == hashlib.sha256(staged).hexdigest(), "receipt names other fixture bytes"
     assert receipt["qualification_attempt_id"] == qualification["attempt_id"]
+    if clock is not None:
+        receipt["clock_setup"] = clock
     (REPO / f"tests/fixtures/gen2/receipts/{title}.engine_sites.json").write_text(json.dumps(live.stamped(receipt), indent=1, sort_keys=True) + "\n", encoding="utf-8")
