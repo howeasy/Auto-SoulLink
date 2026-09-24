@@ -221,12 +221,16 @@ def run_commands(commands, lane, timeout, log):
     """Run a cell's commands in order and stop at the first failure. Every gate result file a command wrote
     (patch/build/*_result.txt) is kept next to the log as <log stem>.cmd<i>.<name>. U1G reuses
     gen2_frame_align_result.txt, so without this copy a failing frame_align trace is overwritten."""
+    def stamps():   # compared by value: Windows file times tick coarser than time.time()
+        return {p: p.stat().st_mtime_ns for p in (lane / "patch/build").glob("*_result.txt")
+                if not p.name.startswith("e2e_")}
+
     codes = []
     for index, cmd in enumerate(commands, 1):
-        started = time.time()
+        before = stamps()
         codes.append(run(cmd, lane, timeout, log))
-        for result in (lane / "patch/build").glob("*_result.txt"):
-            if result.stat().st_mtime >= started and not result.name.startswith("e2e_"):
+        for result, stamp in stamps().items():
+            if before.get(result) != stamp:
                 shutil.copyfile(result, log.with_name(f"{log.stem}.cmd{index}.{result.name}"))
         if codes[-1] != 0:
             break
