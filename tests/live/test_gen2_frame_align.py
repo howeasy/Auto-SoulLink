@@ -256,8 +256,8 @@ def u1f_facts(ctx) -> dict:
     center = maps["CherrygrovePokecenter1F"]
     # The PC is the COLL_PC tile of the shared Pokecenter1F layout (row 1); it is used facing it from below
     # (PokemonCenterPC, engine/events/pokecenter_pc.asm:15-41, via the facing-tile collision).
-    pc = [(x, y) for y in range(center["height"]) for x in range(center["width"])
-          if collision_name(ctx, "CherrygrovePokecenter1F", center, x, y) == "PC"]
+    grid = collision_names(ctx, "CherrygrovePokecenter1F", center)   # once, not once per cell
+    pc = [(x, y) for y in range(center["height"]) for x in range(center["width"]) if grid[y][x] == "PC"]
     assert len(pc) == 1, pc
     stand = {"x": pc[0][0], "y": pc[0][1] + 1}
     assert center["grid"][stand["y"] * center["width"] + stand["x"]] == 1, "PC stand tile not floor"

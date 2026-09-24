@@ -96,6 +96,14 @@ class SourceContext:
             raise ValueError(f"{self.title}: required symbol {name!r} missing") from exc
 
     def read_source(self, relative: str) -> str:
+        # ponytail: per-context memo; the HEAD/tracked/clean checks run on a path's first read in this
+        # context (one context per run), later reads reuse the verified blob instead of 4 git spawns each
+        cache = self.__dict__.setdefault("_source_cache", {})
+        if relative not in cache:
+            cache[relative] = self._read_source_checked(relative)
+        return cache[relative]
+
+    def _read_source_checked(self, relative: str) -> str:
         path = (self.source_dir / relative).resolve()
         if not path.is_relative_to(self.source_dir):
             raise ValueError(f"source path escapes pinned checkout: {relative!r}")
