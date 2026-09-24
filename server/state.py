@@ -333,7 +333,9 @@ class SoulLinkState:
 
         self._tick_pending_trade()    # free the single trade slot if a side abandoned it (link untouched)
 
-        if event == "hello":
+        if self._hold_for_trade(player_id, msg):
+            pass                                        # replayed once the trade settles
+        elif event == "hello":
             self._handle_hello(player_id, msg)
             if not msg.get("_rejected"):
                 self._trade_evidence(player_id, msg.get("party") or [])
@@ -609,6 +611,38 @@ class SoulLinkState:
                 self.queued_commands[pid].append({
                     "cmd": "msgbox", "text": "Trade canceled - no response.",
                     "fb": "prompt"})
+
+    # MAJOR-2 (review e9d5e136): the link is swapped only at _commit_trade, but a mon changes hands
+    # at the cartridge's commit. Until the trade settles, an event naming a trade key would be routed
+    # by the unswapped halves (a received mon's faint killing the wrong partner, an evolved key lost as
+    # unlinked); such events wait in pt["held_events"] and replay after commit or rollback.
+    TRADE_HELD_EVENTS = {"faint": "_handle_faint", "party_to_box": "_handle_party_to_box",
+                         "box_to_party": "_handle_box_to_party"}
+
+    def _hold_for_trade(self, player_id: str, msg: dict) -> bool:
+        pt = self.pending_trade
+        key = msg.get("key") or ""
+        if (msg.get("event") not in self.TRADE_HELD_EVENTS or not key or not pt
+                or pt.get("phase") not in ("applying", "uncertain", "conflict")):
+            return False
+        new = [n[0] for n in (pt.get("new") or {}).values() if n]
+        gets = pt[f"{_partner(player_id)}_key"]
+        # a key the trade names, or an unindexed one with the incoming mon's OT (its evolution)
+        ours = (key in (pt["a_key"], pt["b_key"], *new)
+                or (key not in self._key_index
+                    and self.adapter.parse_ot_id(key) == self.adapter.parse_ot_id(gets)))
+        if not ours:
+            return False
+        pt.setdefault("held_events", []).append([player_id, dict(msg)])
+        log.info(f"[{player_id}] {msg.get('event')} {key} held until trade {pt['token']} settles")
+        self._save()
+        return True
+
+    def _replay_trade_events(self, pt: dict):
+        """Run the events _hold_for_trade kept, now that the link says who holds which mon."""
+        for player_id, msg in pt.pop("held_events", []):
+            log.info(f"[{player_id}] replaying held {msg.get('event')} {msg.get('key')} (trade {pt['token']})")
+            getattr(self, self.TRADE_HELD_EVENTS[msg["event"]])(player_id, msg)
 
     def _handle_trade_request(self, player_id: str, msg: dict):
         """Talk-to-partner → show the native action menu (TRADE / SAY HEY). TRADE opens the party
@@ -927,6 +961,7 @@ class SoulLinkState:
             log.info(f"trade {pt['token']} did not happen on either side — rolled back")
             self._record_trade(pt, "rolled_back")
             self.pending_trade = None
+            self._replay_trade_events(pt)
             self._save()
             for pid in ("a", "b"):
                 self.queued_commands[pid].append({
@@ -1041,6 +1076,7 @@ class SoulLinkState:
                 "cmd": "msgbox", "text": f"Traded {gives} for {gets}!",
                 "r": 100, "g": 255, "b": 160, "frames": 300})
         self.pending_trade = None
+        self._replay_trade_events(pt)                   # MAJOR-2: after the swap, against the real holders
         self._save()
         log.info(f"trade complete (token {pt['token']})")
         self._record_trade(pt, "committed")
