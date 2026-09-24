@@ -369,6 +369,18 @@
               "case": "gold_battle_ot2"
             }
           }
+        },
+        {
+          "scenario": "gen2_trade_new",
+          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_new --lane gsn --keep-data",
+          "receipts": {
+            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_a_result.txt",
+                  "sha256": "25c5eb9dc97560fc30ddb3df75b4eff74a8f063280209b75e94f204b034a06a2"},
+            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_b_result.txt",
+                  "sha256": "7524d505cd91f2e9f034f5d5ad3a6a32d59c405deab72feb9ff8daa0d092453a"},
+            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_pydec_result.txt",
+                      "sha256": "3de4bb09e9137269cc8a8062b96e110a859bcbf2b88e236861eca7123c3ba414"}
+          }
         }
       ]
     },
