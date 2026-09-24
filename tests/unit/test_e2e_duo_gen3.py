@@ -989,6 +989,7 @@ local MODULES = {{
   ["/repo/lua/tests/gen3_boot_check.lua"] = {{ title = "", budget = 0 }},
   ["/repo/lua/tests/gen3_scripted_play.lua"] = {{ play = {{}} }},
   ["/repo/lua/gen3/reads.lua"] = {{ new = function() return {{}} end }},
+  ["/repo/lua/tests/gen3_title_syms.lua"] = {{ entries = {{}}, for_title = function() return {{}} end }},
 }}
 local function dofile(path)
     local m = MODULES[path]
@@ -4163,32 +4164,57 @@ def test_the_carrier_cpu_verdict_is_the_product_safety_over_the_pack(kind):
     assert verdict(irq_world("firered", "clean", HALT_LR, cpsr=IRQ_CPSR)) is False   # FR admits none
 
 
-def test_a_berry_eaten_in_battle_is_not_a_record_change(pair):
-    """G5-RR-ORACLES (live R4/explode at f9171b9a): A's kept Treecko read held_item 139 -> 0.
-    Both RR fixtures hold 139 (pret ITEM_ORAN_BERRY), B's (a full-HP engine KO) still does, A's
-    was drained below half by lose_active: a consumed berry, not a decode error. Only a change
-    TO none is dropped."""
-    fixture = _fixture([dict(STARTER, held_item=139)])
+def test_only_a_battle_berry_eaten_in_battle_is_not_a_record_change(pair):
+    """G5-RR-ORACLES-2 (OMP review of 410d9578): the consumed-item rule is narrowed to a
+    GEN3_BATTLE_BERRIES id going to NONE on a mon that battled. Falsifiers: another item cleared
+    (13 -> 0) fails for the last-mon and the memorial checks; 139 -> 0 without a battle fails; a
+    berry swapped (139 -> 13) fails; 139 -> 0 in battle passes."""
     k = _key(STARTER)
-    eaten = _saved(fixture, 3, [dict(STARTER, held_item=0)])
-    swapped = _saved(fixture, 3, [dict(STARTER, held_item=13)])
-    def last(saved):
-        return duo.gen3_last_mon_problems("a", _decoded(saved), _decoded(fixture), k, [], 13, limits=LIMITS)
-    assert last(eaten) == []
-    assert any("held_item" in p for p in last(swapped))
-    assert duo.gen3_consumed_ok([("held_item", 139, 0), ("friendship", 55, 54)]) == [("friendship", 55, 54)]
+    fixture = _fixture([dict(STARTER, held_item=139), PIDGEY])
+    plain = _fixture([dict(STARTER, held_item=13), PIDGEY])
+
+    def last(fix, item, battled):
+        saved = _saved(fix, 3, [dict(STARTER, held_item=item)])
+        return duo.gen3_last_mon_problems("a", _decoded(saved), _decoded(fix), k, [PIDGEY and _key(PIDGEY)], 13,
+                                          limits=LIMITS, battled=battled)
+
+    def memorial(fix, item, battled):
+        saved = _saved(fix, 3, [PIDGEY], {(13, 0): dict(_mon(STARTER["personality"], party=False), held_item=item)})
+        return _mem("a", _decoded(saved), _decoded(fix), k, 13, battled=battled)
+
+    held = lambda problems: any("held_item" in p for p in problems)  # noqa: E731
+    assert not held(last(fixture, 0, True)) and not held(memorial(fixture, 0, True))
+    assert held(last(plain, 0, True)) and held(memorial(plain, 0, True))           # 13 -> 0
+    assert held(last(fixture, 0, False)) and held(memorial(fixture, 0, False))     # no battle
+    assert held(last(fixture, 13, True)) and held(memorial(fixture, 13, True))     # swapped
+    assert 139 in duo.GEN3_BATTLE_BERRIES and 13 not in duo.GEN3_BATTLE_BERRIES and 175 not in duo.GEN3_BATTLE_BERRIES
 
 
-RR_DUMP = REPO.parents[2] / "Pokemon - Radical Red.gba"
-FR_DUMP = REPO.parents[2] / "Pokemon - FireRed Version (USA).gba"
+def _rom_dump(name):
+    """A dump in the repo root or any parent (the _gen3_rom search), else None."""
+    for base in (REPO, *REPO.parents):
+        if (base / name).is_file():
+            return base / name
+    return None
 
 
-@pytest.mark.skipif(not (RR_DUMP.is_file() and FR_DUMP.is_file()), reason="RR/FR dumps not in the checkout parent")
+RR_DUMP = _rom_dump("Pokemon - Radical Red.gba")
+FR_DUMP = _rom_dump("Pokemon - FireRed Version (USA).gba")
+
+
+@pytest.mark.skipif(not (RR_DUMP and FR_DUMP), reason="the RR/FR dumps are not in the repo root or a parent")
 def test_rr_party_menu_words_hold_in_the_rr_rom():
-    """The party-menu note in lua/tests/gen3_title_syms.lua, re-read from the dumps."""
+    """The party-menu note in lua/tests/gen3_title_syms.lua, re-read from the dumps, pinned
+    exactly (G5-RR-ORACLES-2): sha1 first; CB2_UpdatePartyMenu's body and both referrers;
+    Task_ReturnToChooseMonAfterText's body; Task_HandleSelectionMenuInput's 188-byte prologue;
+    Task_HandleChooseMonInput's CFRU detour stub; gPartyMenu's exact literal count, and its
+    slotId field (+9) read by code in BOTH the FR-identical region and CFRU."""
+    import hashlib
     import struct
 
     fr, rr = FR_DUMP.read_bytes(), RR_DUMP.read_bytes()
+    assert hashlib.sha1(rr).hexdigest() == "964f951a0fdaf209e4ea1344883ef0d557bb3a80"
+    assert hashlib.sha1(fr).hexdigest() == "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc"
 
     def body(rom, addr, n):
         return rom[addr - 0x08000000:addr - 0x08000000 + n]
@@ -4200,14 +4226,63 @@ def test_rr_party_menu_words_hold_in_the_rr_rom():
             i = rom.find(lit, i + 1)
         return out
 
+    def field_reads(rom, lo, hi, value, offset):
+        """ldr rd,[pc,#] of `value`, then a later ldrb rX,[rd,#offset] before rd is reused."""
+        hits = []
+        for off in range(lo - 0x08000000, hi - 0x08000000, 2):
+            hw = struct.unpack_from("<H", rom, off)[0]
+            if hw & 0xF800 != 0x4800:
+                continue
+            rd, pc = (hw >> 8) & 7, 0x08000000 + off
+            pool = ((pc + 4) & ~3) + (hw & 0xFF) * 4
+            if struct.unpack_from("<I", rom, pool - 0x08000000)[0] != value:
+                continue
+            for k in range(1, 12):
+                nxt = struct.unpack_from("<H", rom, off + 2 * k)[0]
+                if nxt & 0xF800 == 0x7800 and (nxt >> 3) & 7 == rd and (nxt >> 6) & 0x1F == offset:
+                    hits.append(pc)
+                    break
+                if nxt & 7 == rd and nxt & 0xF800 not in (0x7000, 0x6000, 0x8000):   # rd rewritten
+                    break
+        return hits
+
     assert body(rr, 0x0811EBA0, 0x1A) == body(fr, 0x0811EBA0, 0x1A)
     assert refs(rr, 0x0811EBA1) == refs(fr, 0x0811EBA1) == [0x0811EE28, 0x0811EE70]
     assert body(rr, 0x081203B8, 0x68) == body(fr, 0x081203B8, 0x68)
-    assert len(refs(rr, 0x0811FB29)) >= 28 and len(refs(rr, 0x08122C5D)) >= 4
-    assert len(refs(rr, 0x0203B0A0)) >= 150
+    assert body(rr, 0x08122C5C, 188) == body(fr, 0x08122C5C, 188)
+    assert body(rr, 0x0811FB28, 4) == bytes.fromhex("00490847")                       # ldr r1,[pc]; bx r1
+    assert len(refs(rr, 0x0811FB29)) == 29 and len(refs(rr, 0x08122C5D)) == 4
+    assert len(refs(rr, 0x0203B0A0)) == 179 and len(refs(fr, 0x0203B0A0)) == 153
+    fr_reads = field_reads(fr, 0x0811E000, 0x08126000, 0x0203B0A0, 9)
+    assert field_reads(rr, 0x0811E000, 0x08126000, 0x0203B0A0, 9) == fr_reads and len(fr_reads) >= 20
+    assert 0x090B3360 in field_reads(rr, 0x090B0000, 0x090B7000, 0x0203B0A0, 9)       # CFRU reads +9 too
     lua_syms = (REPO / "lua" / "tests" / "gen3_title_syms.lua").read_text(encoding="utf-8")
     for word in ("0x0811EBA1", "0x0811FB29", "0x081203B9", "0x08122C5D", "0x0203B0A0"):
         assert f"radical_red = {word}" in lua_syms, word
+
+
+def test_the_forced_send_out_walks_back_from_confirm_or_cancel():
+    """R1-R3 at f4ef3f5a: forced_party_cursor_invalid -- the cursor read a row below the mons
+    (6 CONFIRM / 7 CANCEL). cursor_step walks Up from there; only a value that is no row fails."""
+    from lupa import LuaRuntime
+
+    text = SCRIPTED.read_text(encoding="utf-8")
+    body = re.search(r"^local function cursor_step\(.*?^end$", text, re.M | re.S).group(0)
+    step = LuaRuntime(unpack_returned_tuples=True).execute(body + "\nreturn cursor_step")
+    assert step(1, 1, 2)[0] == "done" if isinstance(step(1, 1, 2), tuple) else step(1, 1, 2) == "done"
+    first = lambda r: r[0] if isinstance(r, tuple) else r  # noqa: E731
+    assert first(step(0, 1, 2)) == "Down" and first(step(2, 1, 3)) == "Up"
+    assert first(step(7, 1, 2)) == "Up" and first(step(6, 1, 2)) == "Up"
+    ok, why = step(9, 1, 2)
+    assert ok is None and "no party-menu row" in why
+    assert "cursor_step(slot, target, count)" in text
+
+
+def test_the_carrier_takes_title_syms_values_first():
+    """G5-RR-ORACLES-2: duo_gen3_main.lua overlays every symbol gen3_title_syms proves for the
+    title on its .sym read (one source of truth with the helpers). On FR/LG the two agree."""
+    text = DRIVER.read_text(encoding="utf-8")
+    assert 'Titles.for_title(title)' in text and "S[e.symbol] = v - (e.offset or 0) - (e.thumb and 1 or 0)" in text
 
 
 def test_the_send_out_accepts_an_rr_record_without_a_checksum():

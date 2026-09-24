@@ -1291,6 +1291,16 @@ end
 --- nil passes on radical_red only -- vanilla still demands true. G5-RR-R1R3: rr_battle2's healthy
 --- slot-1 catch (18/18) was refused on nil and A failed forced_party_no_healthy_mon.
 -- ponytail: only the send-out uses it; the FR-only legs (verify_starter, owned_snapshot) keep `true`
+--- One step of the forced send-out's cursor walk: "done", "Up", "Down", or nil, why. slotId is
+--- gPartyMenu +9 on RR too (G5-RR-ORACLES-2: 13 CFRU sites load 0x0203B0A0 and ldrb +9, beside
+--- FR's 28 identical ones), and 6 / 7 are the menu's CONFIRM / CANCEL rows below every mon (pret
+--- party_menu.c, PARTY_SIZE / PARTY_SIZE + 1): R1-R3 at f4ef3f5a read one of those and failed
+--- forced_party_cursor_invalid. From there, Up walks back into the mons. Self-contained.
+local function cursor_step(slot, target, count)
+    if slot == target then return "done" end
+    if slot < 0 or slot > 7 then return nil, "slotId " .. slot .. " is no party-menu row" end
+    return (slot >= count or slot > target) and "Up" or "Down"
+end
 local function record_ok(mon, title)
     return mon.checksum_ok == true or (title == "radical_red" and mon.checksum_ok == nil)
 end
@@ -1336,17 +1346,19 @@ send_out_healthy_mon = function(cp, label)
         else G.advance() end
     end
     if not ready then G.finish(false, label .. ": forced_party_input_not_ready"); return false end
-    for _ = 1, 8 do
+    for _ = 1, 10 do
         local slot = memory.read_u8(PARTY_MENU_ADDR + PARTY_MENU_SLOT_OFF)
-        if slot == target then break end
-        if slot >= count then G.finish(false, label .. ": forced_party_cursor_invalid"); return false end
-        G.tap(slot < target and "Down" or "Up", 3, 20)
+        local step, bad = cursor_step(slot, target, count)
+        if step == "done" then break end
+        if not step then G.finish(false, label .. ": forced_party_cursor_invalid: " .. bad); return false end
+        G.tap(step, 3, 20)
         if party_task() ~= TASK_CHOOSE_MON then
             G.finish(false, label .. ": forced_party_cursor_lost_input"); return false
         end
     end
     if memory.read_u8(PARTY_MENU_ADDR + PARTY_MENU_SLOT_OFF) ~= target then
-        G.finish(false, label .. ": forced_party_cursor_stalled"); return false
+        G.finish(false, label .. ": forced_party_cursor_stalled at slotId "
+                 .. memory.read_u8(PARTY_MENU_ADDR + PARTY_MENU_SLOT_OFF) .. " for " .. target); return false
     end
     if memory.read_u16_le(PARTY_BASE + target * MON_SIZE + OFF_HP) == 0 then
         G.finish(false, label .. ": forced_party_target_fainted"); return false

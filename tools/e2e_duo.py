@@ -1393,12 +1393,20 @@ GEN3_RR_BOX_LOSSY = frozenset({"contest", "unknown"})
 RR_RIBBON_EXPANDED = 0x80000000
 
 
-def gen3_consumed_ok(changed):
-    """Drop a held item that went to NONE: a berry eaten in battle (G5-RR-ORACLES: RR's
-    rr_battle starter holds item 139, Oran Berry, pret include/constants/items.h:143, and A's
-    lose_active drains it below half HP; B's full-HP Perish/Explosion KO keeps it). Any other
-    held-item change stays a diff."""
-    return [c for c in changed if not (c[0] == "held_item" and c[2] == 0)]
+# The berries a holder EATS in battle: pret include/constants/items.h ITEM_CHERI_BERRY (133) ..
+# ITEM_IAPAPA_BERRY (147) and ITEM_LIECHI_BERRY (168) .. ITEM_STARF_BERRY (174) -- exactly the
+# berries whose src/data/items.json holdEffect is not HOLD_EFFECT_NONE (status cures, Leppa,
+# Oran/Sitrus, the confusion berries, the pinch berries). RR's rr_battle starter holds 139 (Oran).
+GEN3_BATTLE_BERRIES = frozenset(range(133, 148)) | frozenset(range(168, 175))
+
+
+def gen3_consumed_ok(changed, battled):
+    """Drop ONLY a battle berry eaten in battle: held_item from a GEN3_BATTLE_BERRIES id to NONE,
+    and only when the mon `battled` (G5-RR-ORACLES-2, OMP review of 410d9578). Any other
+    held-item change -- another item cleared, a berry swapped, a berry gone without a battle --
+    stays a diff, so an SLink write that clears an item still fails."""
+    return [c for c in changed
+            if not (battled and c[0] == "held_item" and c[1] in GEN3_BATTLE_BERRIES and c[2] == 0)]
 
 
 def gen3_record_diff(was, now, rr=False, mutable=GEN3_RECORD_MUTABLE):
@@ -1493,7 +1501,8 @@ def active_faint_chain(key, case):
     return chain + [hp0], ordered, forbidden
 
 
-def gen3_last_mon_problems(label, saved, fixture, key, deposited, memorial_box, rr=False, limits=None):
+def gen3_last_mon_problems(label, saved, fixture, key, deposited, memorial_box, rr=False, limits=None,
+                           battled=False):
     """linked_faint_active_whiteout_gen3's B: after the Perish KO whited it out, `key` is the
     saved party's ONLY mon (the Center heal restored it; its memorialize was dropped after
     game_over), boxed nowhere, valid, with the fixture record's invariants; each hand-`deposited`
@@ -1513,7 +1522,7 @@ def gen3_last_mon_problems(label, saved, fixture, key, deposited, memorial_box, 
         # the walk to the PC and back crosses Route 1 grass, where playlib FIGHTS incidental
         # battles: the lone lead may level on the way
         changed = gen3_consumed_ok(gen3_record_diff(was, now, rr, GEN3_RECORD_MUTABLE | GEN3_ACTIVITY_MUTABLE
-                                                    | GEN3_TRAINED_MUTABLE))
+                                                    | GEN3_TRAINED_MUTABLE), battled)
         if changed:
             problems.append(f"{label}: the kept {key} differs from the fixture in {changed}")
     moved = set(deposited)
@@ -1551,8 +1560,7 @@ def gen3_memorial_problems(label, saved, fixture, key, memorial_box, rr=False, l
         mutable = (GEN3_RECORD_MUTABLE | (GEN3_ACTIVITY_MUTABLE if battled else set())
                    | (GEN3_TRAINED_MUTABLE if trained else set()))
         changed = gen3_record_diff(was, boxes[where[0]], rr, mutable) if was else []
-        if battled:
-            changed = gen3_consumed_ok(changed)
+        changed = gen3_consumed_ok(changed, battled)
         if changed:
             problems.append(f"{label}: the memorial {key} differs from the fixture record in "
                             f"{changed}")
@@ -5891,8 +5899,10 @@ class DuoRun:
             saved, fixture = self._gen3_saved(inst), self._gen3_fixture_saved(inst)
             if lone[inst]:
                 deposited = re.findall(rf"(?m)^ONE_MON_PARTY {re.escape(key)} deposited=(\S+)$", results[inst] or "")
+                # both sides' linked mon fought: A's lost its lead, B's took the engine KO
                 problems += gen3_last_mon_problems(inst, saved, fixture, key, [d for d in deposited if d != "-"],
-                                                   box, rr=self._gen3_rr, limits=self._gen3_limits(inst))
+                                                   box, rr=self._gen3_rr, limits=self._gen3_limits(inst),
+                                                   battled=True)
                 kept = rf"(?m)^LAST_MON_KEPT {re.escape(key)}$"
                 dropped = rf"(?m)^\[client\] .*memorialize dropped: last mon after game over {re.escape(key)}\b"
                 marks[inst] = ([gen3_rx("memorialize", key), r"(?m)^RX game_over\b", dropped, kept],

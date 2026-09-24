@@ -210,6 +210,18 @@ do
             if name and want[name] and not S[name] then S[name] = tonumber(addr, 16) end
         end
         fh:close()
+        -- One source of truth with the scripted-play helpers (G5-RR-ORACLES-2, OMP review of
+        -- 410d9578): every symbol lua/tests/gen3_title_syms.lua proves for this title replaces the
+        -- .sym read -- on radical_red that is the ROM-proven value, not pokefirered.sym's. Its
+        -- values are FINAL (offset added, Thumb bit set when `thumb`), S holds the bare symbol.
+        local Titles = dofile(ROOT .. "/lua/tests/gen3_title_syms.lua")
+        local proven = Titles.for_title(title)
+        for name, e in pairs(Titles.entries) do
+            local v = proven[name]
+            if v and want[e.symbol] then
+                S[e.symbol] = v - (e.offset or 0) - (e.thumb and 1 or 0)
+            end
+        end
         local missing = {}
         for _, n in ipairs(SYMS) do if not S[n] then missing[#missing + 1] = n end end
         assert(#missing == 0,
