@@ -209,6 +209,18 @@
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_new_cc_pydec_result.txt",
                       "sha256": "d8736b70534179083cc16718cbad3ec989e3cc3c519c5d58c590a1969f499d8b"}
           }
+        },
+        {
+          "scenario": "gen2_trade_decline_new",
+          "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_decline_new --lane cc_decline_new --keep-data",
+          "receipts": {
+            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_a_result.txt",
+                  "sha256": "5e6fd54cf0444316dee23b872590ebf142cdcdc6a2a1c3781da11bdc580de636"},
+            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_b_result.txt",
+                  "sha256": "42a472337325a668faf014a104430961a1d5b3db5d0ae9a05b185231430e488e"},
+            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_pydec_result.txt",
+                      "sha256": "cc238a3451edf93756b4dc03bc0fe441794145b9d66bb91790368da3261f8ffb"}
+          }
         }
       ]
     },
