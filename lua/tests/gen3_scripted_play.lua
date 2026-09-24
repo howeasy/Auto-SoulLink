@@ -1183,16 +1183,12 @@ local function hunt_encounter(cp, label, cycles)
     return landed_in_battle
 end
 
--- RR-WHITEOUT-TRACE (card G5-RR-WHITEOUT, temporary + env-gated): SLINK_GEN3_RR_TRACE=1 makes
--- the RR pokecenter_door_to_route1_edge leg log one line per step instead of calling
--- play.follow directly -- player pos/facing, whether the field is locked (script running), and
--- every OTHER active object event's position, so a live run shows an NPC-in-the-way vs. a
--- script lock vs. a door animation without guessing. One log per STEP (not per frame -- the
--- inner press/settle loop inside play.step is untouched), so this cannot starve the emulator.
--- traced_follow re-implements playlib.P.follow's own loop using only P's PUBLIC calls
--- (play.step/play.map/play.wait_at/play.at, the same ones follow() itself calls, in the same
--- order) so it reproduces the identical stall; it is inert (falls straight through to
--- play.follow) whenever the env var is unset, which is every normal run including CI.
+-- RR-WHITEOUT (card G5-RR-WHITEOUT): SLINK_GEN3_RR_TRACE=1 makes traced_follow's RR-only loop
+-- (below) log one line per step -- player pos/facing, whether the field is locked (script
+-- running), and every OTHER active object event's position -- instead of running quietly. One
+-- log per STEP (not per frame -- the inner press/settle loop inside play.step is untouched), so
+-- this cannot starve the emulator. Off in every normal run including CI; it only ever adds a
+-- console.log, never changes which path is walked or how a stall is judged.
 local RR_TRACE = TITLE == "radical_red" and os.getenv("SLINK_GEN3_RR_TRACE") == "1"
 
 -- gen3_title_syms.lua's OBJ_EVENTS_ADDR entry carries no radical_red value ("no RR citation
@@ -1223,32 +1219,63 @@ local function rr_trace_log(cp, path_name, step_no, dir)
         tostring(not H.scene_quiet(cp)), table.concat(objs, " ")))
 end
 
+--- FR/LG: byte-identical to play.follow (this function IS play.follow for them). RR only: a
+--- live trace (patch/build/e2e_whiteout_gen3_a_result.txt, run 3) caught the whiteout_gen3 stall
+--- red-handed -- the path's #2 Left step started with the field unlocked, an RR-only object
+--- (local id 20, absent from FR/LG's map.json -- c23a8f46 / reference_rr_object_events.md: "RR
+--- adds objects 10-12, four more coord events") walked adjacent to the player and locked the
+--- field mid-step (facing forced to 4/Right, toward that object), and P.step's own 6 short
+--- press-and-clear_dialogue attempts ran out while the lock -- not a textbox, so clear_dialogue's
+--- A-taps never touch it -- still held. So this re-implements P.follow's loop using only P's
+--- PUBLIC calls (play.step/play.map/play.wait_at/play.at, same order), and on a stall caused by
+--- that lock (never on a battle or a genuinely blocked tile), waits for it to clear then retries
+--- the SAME step, bounded at 4 rounds so a real stall still fails.
 local function traced_follow(cp, path_name, label)
-    if not RR_TRACE then return play.follow(cp, path_name, label) end
+    if TITLE ~= "radical_red" then return play.follow(cp, path_name, label) end
     local p = assert(PATHS[path_name], "no PATHS entry " .. tostring(path_name))
     local start_map = play.map(cp)
     if not play.wait_at(cp, p.from[1], p.from[2], 120) then
-        G.finish(false, string.format("%s (%s): [rr-trace] start tile never settled at (%d,%d)",
+        G.finish(false, string.format("%s (%s): start tile never settled at (%d,%d)",
             label, path_name, p.from[1], p.from[2]))
         return
     end
     local enc = { n = 0, max = p.max_encounters or 12 }
     for i, dir in ipairs(p.dirs) do
-        rr_trace_log(cp, path_name, i, dir)
-        if not play.step(cp, dir, start_map, nil, enc) then
-            rr_trace_log(cp, path_name, i, dir .. "-STALLED")
+        if RR_TRACE then rr_trace_log(cp, path_name, i, dir) end
+        local ok = play.step(cp, dir, start_map, nil, enc)
+        local rounds = 0
+        while not ok and rounds < 4 and not H.scene_quiet(cp) do
+            for _ = 1, 300 do
+                H.advance()
+                if H.scene_quiet(cp) then break end
+            end
+            rounds = rounds + 1
+            if RR_TRACE then
+                console.log(string.format(
+                    "[rr-trace] %s #%d dir=%s waited round %d locked=%s",
+                    path_name, i, tostring(dir), rounds, tostring(not H.scene_quiet(cp))))
+            end
+            ok = play.step(cp, dir, start_map, nil, enc)
+        end
+        if not ok then
+            if RR_TRACE then rr_trace_log(cp, path_name, i, tostring(dir) .. "-STALLED") end
             G.shot("stuck")
-            G.finish(false, string.format("%s (%s): [rr-trace] step %s stalled at %s",
+            G.finish(false, string.format("%s (%s): step %s stalled at %s",
                 label, path_name, dir, play.at(cp)))
             return
         end
         local now = play.map(cp)
         if now ~= nil and now ~= start_map then return end
     end
+    if play.map(cp) == nil then
+        G.finish(false, string.format(
+            "%s (%s): the walk ended with the map id unreadable", label, path_name))
+        return
+    end
     local ex, ey = H.pos(cp)
     if p.to and (ex ~= p.to[1] or ey ~= p.to[2]) then
         G.finish(false, string.format(
-            "%s (%s): [rr-trace] walk ended at (%d,%d), not the path's to (%d,%d)",
+            "%s (%s): walk ended at (%d,%d), not the path's to (%d,%d)",
             label, path_name, ex, ey, p.to[1], p.to[2]))
     end
 end

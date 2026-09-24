@@ -1372,9 +1372,10 @@ end
 function ctx.walk_pc_to_grass(label)
     play.follow(cp, "pc_to_pokecenter_entrance", label)
     SP.warp_to(cp, "Down", 30, SP.DEST.center_exit, label .. " Center exit")
-    -- G5-RR-WHITEOUT: this is the whiteout_gen3 stall site on RR. SP.traced_follow is
-    -- play.follow itself unless SLINK_GEN3_RR_TRACE=1 (radical_red only), in which case it
-    -- logs one line per step first -- see gen3_scripted_play.lua for what it captures.
+    -- G5-RR-WHITEOUT: this is the whiteout_gen3 stall site on RR -- an RR-only object near the
+    -- Center door locks the field mid-step. SP.traced_follow is play.follow itself for FR/LG;
+    -- for radical_red it waits the lock out and retries the step (see gen3_scripted_play.lua),
+    -- and also logs one line per step when SLINK_GEN3_RR_TRACE=1.
     SP.traced_follow(cp, "pokecenter_door_to_route1_edge", label)
     SP.warp_to(cp, "Down", 30, SP.DEST.route1_north, label .. " Viridian->Route1")
     play.follow(cp, "route1_north_to_south_edge", label)
