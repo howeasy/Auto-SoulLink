@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=3F2D:C4A6:A3 b=A7D7:C78C:A3 area=route_29 titles=gold/silver status=memorial scenario=gen2_changebox box_change=BOX1->BOX14->BOX1

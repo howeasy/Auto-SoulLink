@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=18BC:B541:A3 b=7030:AC24:A3 area=route_29 titles=crystal/crystal status=alive scenario=gen2_whiteout_rebuild rebuild=restored
