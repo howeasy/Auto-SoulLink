@@ -50,6 +50,10 @@ LDRS = {
     0x0909E6F0: 0x0802E229,  # CFRU tryfaintmon: AdjustFriendshipOnBattleFaint (player side)
     0x090A9EFE: 0x0802E33D,  # CFRU HandleInputChooseAction commits through PlayerBufferExecCompleted
     0x090AA114: 0x0809A1D9,  # ... and its L-throw calls RemoveBagItem first
+    # G4-PH-FIX1b (R1 L7): the ExecCompleted hook (scope §3.2 step 2) picks the successor and returns
+    0x090445B2: 0x090ACD8D,  # hook: CFRU bit-24 controller
+    0x090445B6: 0x0802E3B5,  # hook: PlayerBufferRunCommand (FR)
+    0x090445BC: 0x0802E34F,  # hook: back to FR's PlayerBufferExecCompleted+0x12 (link test, exec clear)
 }
 # (address, halfword, meaning): the instructions that fix the layout the Lua plan writes
 HALFWORDS = (
@@ -82,6 +86,14 @@ PTR_CENSUS = {
 }
 COMPANION_ONLY = (0x08379000, 0x08380000)  # the companion's own FORCE_MOVE gate reads these pointers
 HTAS_CASE3 = (0x08014AA0, 0x08014B44)
+# G4-PH-FIX1b (R1 L7): PlayerBufferExecCompleted (0x0802E33C) in RR: FR's slot-addressing prefix, then
+# `bx r1` at +0x10 through the pool word at +0x48 (FR: PlayerBufferRunCommand|1, RR: the hook|1).
+EXEC_COMPLETED = 0x0802E33C
+EXEC_COMPLETED_HEAD = bytes.fromhex("10b581b00e490f4c2078800040180e490847")   # +0x00..+0x11
+EXEC_COMPLETED_DETOUR = 0x0904459B                                        # word at +0x48
+# the hook body 0x0904459A..0x090445BF: push {r0}; two CFRU mode calls; r1 = 0x090ACD8D or
+# PlayerBufferRunCommand; pop {r0}; str r1,[r0] (the slot); ldr r0,=0x0802E34F; bx r0
+HOOK = (0x0904459A, bytes.fromhex("01b430f0a0f8002806d169f036f8002804d02078022801d1114900e0114901bc016010480047"))
 
 
 def facts(r: rsc.Rom, fr: bytes) -> list[tuple[str, bool]]:
@@ -108,6 +120,14 @@ def facts(r: rsc.Rom, fr: bytes) -> list[tuple[str, bool]]:
                 struct.unpack_from("<I", rom, 0x08250038 + 4 * 13 - rsc.BASE)[0] == 0x08016D3D))
     out.append(("sPlayerBufferCommands[0x35 LINKSTANDBYMSG] == PlayerHandleLinkStandbyMsg",
                 struct.unpack_from("<I", rom, 0x0825089C + 4 * 0x35 - rsc.BASE)[0] == 0x080339B5))
+    o = EXEC_COMPLETED - rsc.BASE
+    out.append(("PlayerBufferExecCompleted: FR prefix + bx r1 via the +0x48 word 0x0904459B",
+                rom[o:o + len(EXEC_COMPLETED_HEAD)] == EXEC_COMPLETED_HEAD
+                and rom[o:o + 0x10] == fr[o:o + 0x10]
+                and struct.unpack_from("<I", rom, o + 0x48)[0] == EXEC_COMPLETED_DETOUR))
+    o = HOOK[0] - rsc.BASE
+    out.append(("ExecCompleted hook body bytes 0x0904459A..0x090445BF",
+                EXEC_COMPLETED_DETOUR == HOOK[0] | 1 and rom[o:o + len(HOOK[1])] == HOOK[1]))
     a, b = HTAS_CASE3
     out.append(("HTAS case 3 (standby) body == FR", rom[a - rsc.BASE:b - rsc.BASE] == fr[a - rsc.BASE:b - rsc.BASE]))
     for v, want in PTR_CENSUS.items():
@@ -126,6 +146,10 @@ def selftest() -> None:
     # known positive for the census: FR stores AfterDma3's pointer only from PlayerHandleChooseAction
     r = rsc.Rom(fr, None, rsc.parse_sym())
     assert sorted(s for k, s, _ in r.refs(0x08032B94) if k == "LDR") == [0x08032BE0]
+    # known negative for the hand-off pins: FR's ExecCompleted stores the slot itself (no detour)
+    o = EXEC_COMPLETED - rsc.BASE
+    assert fr[o:o + 0x10] == EXEC_COMPLETED_HEAD[:0x10] and fr[o + 0x10:o + 0x12] != EXEC_COMPLETED_HEAD[0x10:]
+    assert struct.unpack_from("<I", fr, o + 0x48)[0] == 0x0802E3B5
     print("selftest ok")
 
 

@@ -509,3 +509,22 @@ def test_r1_l1_handoff_head_needs_every_p_field_or_the_block_is_dropped(pack, ti
     del profile["titles"][title][section][key]
     head, why = G.handoff_head(profile["titles"][title])
     assert head is None and key in why
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+@pytest.mark.parametrize("address", [0x0802E33C, 0x0802E342, 0x0802E34B])   # push / ldrb gActiveBattler / last prefix byte
+def test_fix1b_frlg_handoff_needs_the_exec_completed_prefix_in_the_titles_own_rom(monkeypatch, title, address) -> None:
+    """R1 L7 / G4-PH-FIX1b (red at 4a91daeb): one changed byte in PlayerBufferExecCompleted's first 16
+    bytes (the slot address built from gActiveBattler, pret battle_controller_player.c:188) drops
+    battle.handoff on FR/LG, so the client keeps the A-press path."""
+    rom_or_skip("gen3_frlg", title, "clean")
+    real = G.load_rom
+
+    def mutated(pack, t, kind):
+        rom = real(pack, t, kind)
+        at = address - G.ROM_BASE
+        return rom[:at] + bytes([rom[at] ^ 0xFF]) + rom[at + 1:] if t == title else rom
+    monkeypatch.setattr(G, "load_rom", mutated)
+    out, unverified = G.build_title("gen3_frlg", title, G.PACKS["gen3_frlg"][title][0], ("clean",))
+    assert "handoff" not in out["battle"]
+    assert any(row.startswith("battle.handoff:") and "prefix" in row for row in unverified)

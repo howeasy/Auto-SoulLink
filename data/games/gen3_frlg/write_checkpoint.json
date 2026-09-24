@@ -154,7 +154,7 @@
             "width": 1
           }
         ],
-        "source": "PlayerBufferExecCompleted|1 (.sym, src/battle_controller_player.o); ROM body pools gBattlerControllerFuncs + PlayerBufferRunCommand|1; pret src/battle_controller_player.c:186-200,244",
+        "source": "PlayerBufferExecCompleted|1 (.sym, src/battle_controller_player.o); ROM body prefix +0..+0xF == the pret build, pools gBattlerControllerFuncs + PlayerBufferRunCommand|1; pret src/battle_controller_player.c:186-200,244",
         "stride": 4,
         "symbol": "gBattlerControllerFuncs",
         "value": 134406973,
@@ -557,7 +557,7 @@
             "width": 1
           }
         ],
-        "source": "PlayerBufferExecCompleted|1 (.sym, src/battle_controller_player.o); ROM body pools gBattlerControllerFuncs + PlayerBufferRunCommand|1; pret src/battle_controller_player.c:186-200,244",
+        "source": "PlayerBufferExecCompleted|1 (.sym, src/battle_controller_player.o); ROM body prefix +0..+0xF == the pret build, pools gBattlerControllerFuncs + PlayerBufferRunCommand|1; pret src/battle_controller_player.c:186-200,244",
         "stride": 4,
         "symbol": "gBattlerControllerFuncs",
         "value": 134406973,

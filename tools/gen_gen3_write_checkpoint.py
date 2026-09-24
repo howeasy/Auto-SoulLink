@@ -747,6 +747,11 @@ HANDOFF_FN = "PlayerBufferExecCompleted"
 RR_HANDOFF_VALUE_LDR = 0x090A9EFE
 HANDOFF_PREFIX = 0x10        # push; gActiveBattler -> slot address (before RR's detour at +0x10)
 HANDOFF_POOL = (0x40, 0x48)  # gBattlerControllerFuncs, gActiveBattler
+# G4-PH-FIX1b (R1 L7): FR/LG's first 16 bytes of PlayerBufferExecCompleted, the pret build of
+# src/battle_controller_player.c:186-188 at the .sym address (FR and LG identical):
+#   push {r4,lr}; sub sp,#4; ldr r1,=gBattlerControllerFuncs; ldr r4,=gActiveBattler;
+#   ldrb r0,[r4]; lsls r0,#2; adds r0,r0,r1; ldr r1,=PlayerBufferRunCommand
+FRLG_HANDOFF_PREFIX = bytes.fromhex("10b581b00e490f4c2078800040180e49")
 
 
 # R1 L1: the exact P head a hand-off plan must carry before [comm, hand-off] (battler 0), so the
@@ -813,11 +818,13 @@ def handoff_block(syms, sym_file: str, is_rr: bool, roms: dict[str, bytes],
                            f"{fn} prefix +0..+0x{HANDOFF_PREFIX - 1:X} and pool +0x40..+0x47 FR-identical")
     else:
         pool = body(roms["clean"], addr, size)
+        if pool[:len(FRLG_HANDOFF_PREFIX)] != FRLG_HANDOFF_PREFIX:
+            return None, f"{fn} @ {addr:#010x}: prefix +0..+0xF differs from the pret build"
         for word in (slot, syms["PlayerBufferRunCommand"][0] | 1):
             if not pool_offsets(pool, word):
                 return None, f"{fn} @ {addr:#010x}: pool lacks {word:#010x} in this ROM"
-        block["source"] = (f"{fn}|1 (.sym, {PLAYER_CONTROLLER_OBJ}); ROM body pools "
-                           f"gBattlerControllerFuncs + PlayerBufferRunCommand|1; pret "
+        block["source"] = (f"{fn}|1 (.sym, {PLAYER_CONTROLLER_OBJ}); ROM body prefix +0..+0xF == "
+                           f"the pret build, pools gBattlerControllerFuncs + PlayerBufferRunCommand|1; pret "
                            f"src/battle_controller_player.c:186-200,244")
     return block, ""
 
