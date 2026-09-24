@@ -1803,12 +1803,15 @@ function Client.new(p)
         budget = math.huge, -- existing Gen 1 policy: drain every queued line each frame
         receive = function()
             local line = net.receive()
-            if line ~= nil then self.owed:reply_received() end
+            if line ~= nil then self.owed:line_received() end
             return line
         end,
         decode = function(line) return json.decode(line) end,
         validate = function(reply)
-            if type(reply) == "table" and type(reply.commands) == "table" then return reply.commands end
+            if type(reply) == "table" and type(reply.commands) == "table" then
+                self.owed:answer(reply.commands) -- retires the owed report on that line, unless refused
+                return reply.commands
+            end
             return nil, "unreadable reply line"
         end,
         handle = function(cmd) return self:handle_command(cmd) end,

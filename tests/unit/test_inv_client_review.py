@@ -129,6 +129,85 @@ def test_gen1_a_done_report_whose_line_died_with_the_socket_is_sent_again_until_
     assert len(w.events("trade_done")) == 2, "answered: never sent again"
 
 
+# ── MAJOR-1 follow-up (OMP review of 15f1e786): a REFUSED reply never retires a report ────────────────
+# The identity/admission gate answers a line it did not process with {"cmd": "noop", "refused": ...}.
+REFUSED = {"cmd": "noop", "refused": "identity"}
+
+
+def owed_module():
+    import lupa
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    owed = lua.eval(f'dofile("{(g2.ROOT / "lua/owed_reports.lua").as_posix()}")').new()
+    sent = []
+
+    def send(event, fields):
+        sent.append(str(event))
+        owed.line_sent(owed)
+        return True
+    return lua, owed, sent, send
+
+
+def reply(lua, owed, *commands):
+    owed.line_received(owed)
+    owed.answer(owed, lua.table_from([lua.table_from(c) for c in commands]))
+
+
+def test_owed_interleaved_refused_and_answered_replies_retire_only_the_answered_report():
+    lua, owed, sent, send = owed_module()
+    for ev in ("A", "B"):
+        owed.list[len(owed.list) + 1] = lua.table_from({"event": ev, "fields": lua.table()})
+    owed.step(owed, True, True, send)
+    assert sent == ["A", "B"]
+    reply(lua, owed, REFUSED)                                  # line 1 (A) was not processed
+    reply(lua, owed, {"cmd": "noop"})                          # line 2 (B) was
+    assert [str(e.event) for e in owed.list.values()] == ["A"]
+    owed.step(owed, True, True, send)
+    assert sent == ["A", "B", "A"], "A goes again once the server answers normally"
+    reply(lua, owed, {"cmd": "noop"})
+    assert len(owed.list) == 0
+
+
+def test_owed_after_a_refusal_waits_for_an_accepted_reply_before_sending_again():
+    lua, owed, sent, send = owed_module()
+    owed.list[1] = lua.table_from({"event": "A", "fields": lua.table()})
+    owed.step(owed, True, True, send)
+    reply(lua, owed, REFUSED)
+    owed.step(owed, True, True, send)
+    assert sent == ["A"], "no resend into a gate that is still refusing (one per frame otherwise)"
+    send("tick", None)                                        # the next tick is answered normally
+    reply(lua, owed, {"cmd": "noop"})
+    owed.step(owed, True, True, send)
+    assert sent == ["A", "tick", "A"]
+
+
+def test_gen2_a_refused_hello_never_retires_the_owed_report():
+    cart = g2.TradeCart()
+    g2_done(cart, g2_up=False)
+    cart.w.net.up = True
+    before = len(cart.w.sent())
+    cart.w.frames(3)                                          # hello + trade_done, both refused
+    assert g2_received(cart.w) == [(codec_key(g2.PARTNER), 19)]
+    ack_all(before, lambda: len(cart.w.sent()), lambda: cart.w.reply(REFUSED))
+    cart.w.frames(1)
+    cart.w.reply()                                            # the gate accepts: the next line is answered
+    cart.w.frames(2)
+    assert g2_received(cart.w) == [(codec_key(g2.PARTNER), 19)] * 2
+
+
+def test_gen1_a_refused_hello_never_retires_the_owed_report():
+    w = g1._patched_world()
+    g1_apply(w, up=False)
+    w.connected = True
+    before = len(w.sent)
+    w.step(3)
+    assert len(w.events("trade_done")) == 1
+    ack_all(before, lambda: len(w.sent), lambda: w.reply(REFUSED))
+    w.step()
+    w.reply()
+    w.step(2)
+    assert len(w.events("trade_done")) == 2
+
+
 # ── MINOR-7: a landed death stays dead until its burial, whatever heals the party ────────────────────
 def g2_landed(world):
     lead, dead = mon(), mon(species=172, dvs=0x3AAA)
