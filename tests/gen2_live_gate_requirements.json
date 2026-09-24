@@ -273,11 +273,11 @@
     {
       "id": "new-gates.w6.silver",
       "stage": "physical-live",
-      "description": "P4 W6 Silver overlay mailbox write-watch tripwire (O-27 D1): the panel, sfx and frozen U1e (a7bf1773) corpus, every mailbox write from SLink code, Init's boot clear or the shipped Lua client, the wSpecialPhoneCallID word from the service bank only, both known-positive controls caught (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_w6_gate.py -k silver)",
+      "description": "P4 W6 Silver overlay mailbox write-watch tripwire (O-27 D1): the panel, sfx and frozen U1e (a7bf1773) corpus (its U1 leg on the O-33 clock setup: game 11:00, Silver's Route 30 Weedle is day-only), every mailbox write from SLink code, Init's boot clear or the shipped Lua client, the wSpecialPhoneCallID word from the service bank only, both known-positive controls caught (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_w6_gate.py -k silver)",
       "axes": {"kind": "w6_gate", "title": "silver", "requirement_ids": ["O-27"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.w6_gate.json",
-        "sha256": "be54566bc733892dbbfeed8c5e603ba0bb86de756f4fbe04c2dfd976a72d9576"
+        "sha256": "ddc6c39743064e817ee6e80f313ec0b91ce2818b2d00ee769da24a9737dd9ad4"
       }}}]
     },
     {
