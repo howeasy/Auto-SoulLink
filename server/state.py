@@ -3331,10 +3331,10 @@ class SoulLinkState:
             inflight[(new_key, ident[1])] = inflight.pop(ident)
 
         # 8. Pending bonus queue (shiny keys in partner's pending_bonus)
-        for pid in ("a", "b"):
-            self.pending_bonus[pid] = deque(
-                new_key if k == old_key else k for k in self.pending_bonus[pid]
-            )
+        owner_q = _partner(player_id)                   # KEY-SCOPE: this player's shiny waits there
+        self.pending_bonus[owner_q] = deque(
+            new_key if k == old_key else k for k in self.pending_bonus[owner_q]
+        )
 
         # 9. Partner blobs (rival team swap cache) and an active whiteout rebuild
         for be in self.partner_blobs[player_id]:
@@ -3387,11 +3387,12 @@ class SoulLinkState:
         is a never-pruned cache that still holds every buried key, and the migration
         overwrites it -- counting it would turn "buried keys are reusable" into a pair kill.
 
-        KEY-SCOPE: only player_id's structures count (the partner may hold an equal key),
-        except the shared pending_bonus queues and the pending trade, which name both players'.
+        KEY-SCOPE: only player_id's structures count (the partner may hold an equal key). A
+        player's own shiny waits in the PARTNER's pending_bonus queue; the pending trade names
+        both players' keys and still counts for either.
         """
         refs: set[str] = set()
-        if any(key in self.pending_bonus[pid] for pid in ("a", "b")):
+        if key in self.pending_bonus[_partner(player_id)]:
             refs.add("pending_bonus")
         for pid in (player_id,):
             if key in self.party_keys[pid]:

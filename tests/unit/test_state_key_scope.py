@@ -117,3 +117,16 @@ def test_a_split_indexes_the_copy_under_its_holder_only(tmp_path):
     assert state.entry_for("a", B_GETS) is None
     _tick(state, "a", _mon(A_GETS, 0x15))
     assert entry.status == LinkStatus.ALIVE
+
+
+# ── KEY-SCOPE-2 (OMP cx-e13143c8) ────────────────────────────────────────────────────────────────
+
+def test_a_key_in_the_partners_pending_shiny_bonus_is_no_collision(tmp_path):
+    state, (l1, l2) = _two_links(tmp_path)
+    state.pending_bonus["a"].append(ONIX)        # B caught a shiny ONIX; A's bonus encounter awaits
+    cmds = _npc_trade(state, "a", A2)
+    assert _named(cmds, "key_change_ack") and l2.status == LinkStatus.ALIVE
+    assert list(state.pending_bonus["a"]) == [ONIX], "B's shiny key is not A's to migrate"
+    state.pending_bonus["b"].append("ABCD:1234:77")   # A's own shiny, queued for B
+    cmds = state.handle_event("a", {"event": "key_change", "old_key": A1, "new_key": "ABCD:1234:77"})
+    assert _named(cmds, "key_change_rejected"), "A's own pending shiny still collides"
