@@ -59,8 +59,8 @@
         (refinement 2: the negative case's trigger, proven on the side that triggers it)
           decline     responder: SlinkTradePublishDone A=1 on the PROMPT lease -> SlinkTradeExit, lease DONE/RELEASE
                       with result 1
-          timeout     proposer: the first SlinkTradeWaitApply.wait (BC=1800) -> SlinkTradeExit with BC=0,
-                      >= 1800 frames later, before any APPLY
+          timeout     proposer: the first SlinkTradeWaitApply.wait (BC=T.APPLY_WAIT) -> SlinkTradeExit with BC=0,
+                      >= T.APPLY_WAIT frames later, before any APPLY
           reset_wait  proposer: Reset while pre-APPLY -> StartTitleScreen with the 16-byte lease zeroed
           reset_commit proposer: adds commit = its TRADE_COMMIT_ENTRY; Reset after SlinkTradeCommit (after the
                       native save returned, before DONE) -> StartTitleScreen with the lease zeroed
@@ -105,7 +105,7 @@ T.HOLD = 12
 T.WALK = {max_frames=40000, max_phase_frames=20000}
 T.VISIT_FRAMES = 30000
 T.TALK_RETRY = 180
-T.APPLY_WAIT = 1800                           -- SLINK_TRADE_APPLY_FRAMES (trade_service.asm)
+T.APPLY_WAIT = 3600                           -- SLINK_TRADE_APPLY_FRAMES (trade_service.asm, 67143736; a unit test pins it)
 T.CHORD_AFTER = 120                           -- frames into the held wait / the animation before the chord
 T.RESET_FRAMES = 120
 T.PARTNER_FRAMES = 54000
@@ -1275,7 +1275,7 @@ function T.verdict(lines, json, case, player)
             local bc = function(r) return type(r.B) == "number" and type(r.C) == "number" and r.B * 256 + r.C or nil end
             need(at(bf, "SlinkTradeWaitApply.wait") and bc(rb) == T.APPLY_WAIT and at(af, "SlinkTradeExit") and bc(ra) == 0
                  and af.frame - bf.frame >= T.APPLY_WAIT and lb[6] ~= T.CMD.apply and la[6] ~= T.CMD.apply,
-                 "timeout control is not WaitApply(BC=1800) -> Exit(BC=0) before APPLY")
+                 "timeout control is not WaitApply(BC=APPLY_FRAMES) -> Exit(BC=0) before APPLY")
         elseif lb and la and ctl.kind == "reset_wait" then
             local zero = true
             for i = 1, 16 do if la[i] ~= 0 then zero = false end end

@@ -1700,6 +1700,13 @@ def test_trade_driver_files_compile_under_lua54():
         assert check((ROOT / path).read_text(encoding="utf-8"), "@" + path) is None, path
 
 
+def test_apply_wait_bound_is_the_overlay_source_equ():
+    import re
+    lua, T, _ = trade_lua()
+    source = (ROOT / "patch/gen2/src/trade_service.asm").read_text(encoding="utf-8")
+    assert int(re.search(r"DEF SLINK_TRADE_APPLY_FRAMES EQU (\d+)", source)[1]) == T.APPLY_WAIT
+
+
 def test_trade_scenarios_name_their_case_and_share_one_harness():
     lua = LuaRuntime(unpack_returned_tuples=True)
     for case in TRADE_CASES:
@@ -2145,11 +2152,11 @@ def trade_stream(case, player, item=0):
         j("TRADE_FINAL", image(3600, "final", "flush"))
         j("TRADE_STACK", stack_row({"wait": (1200, 1601)}))
         return out
-    exit_frame = 1310 + 1800 + 5 if (case == "timeout" and player == "a") else 1700
+    exit_frame = 1310 + 3600 + 5 if (case == "timeout" and player == "a") else 1700
     j("TRADE_EXIT", {"frame": exit_frame, "lease_hex": lease(0, gen, gen, 1, 1)})
     if case == "timeout" and player == "a":
         j("TRADE_CONTROL", {"kind": "timeout",
-                            "before": {"frame": 1311, "site": site("SlinkTradeWaitApply.wait"), "registers": regs(B=7, C=8),
+                            "before": {"frame": 1311, "site": site("SlinkTradeWaitApply.wait"), "registers": regs(B=0x0E, C=0x10),
                                        "lease_hex": lease(2, gen, gen, 0, 1), "slot": 1},
                             "after": {"frame": exit_frame, "site": site("SlinkTradeExit"), "registers": regs(),
                                       "lease_hex": lease(0, gen, gen, 0, 1)}})
