@@ -199,3 +199,10 @@ def test_the_second_catch_weakens_a_full_hp_foe_once_then_throws():
     plain = F.driver(rt.table_from(a_map(1), recursive=True))
     p = rt.table_from(dict(base, ui=menu, foe_full=True), recursive=True)
     assert sorted(k for k, v in plain.step(p)[0].items() if v) == ["Down"]              # U1d path: PACK
+
+
+def test_a_stale_promptless_yes_no_after_a_release_is_waited_out():
+    rt, d = setup("pc")
+    step(rt, d)
+    buttons, phase = d.step(pt(rt, overworld_ready=False, ui=ui("yes_no", ["WITHDRAW", "STATS", "RELEASE", "CANCEL"], 3)))
+    assert buttons is not None and not any(buttons.values()) and phase == "pc"

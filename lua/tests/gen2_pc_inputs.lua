@@ -156,6 +156,9 @@ function PC.driver(PI, facts, opts)
             if ui.prompt == "release" or ui.prompt == "change_box_save" or ui.prompt == "save_overwrite" then
                 return choose(ui, "YES")
             end
+            -- A stale yes/no context: after a release the box is gone but no newer UI origin has run yet
+            -- (ReleasePKMN_ByePKMN's DelayFrames, bills_pc.asm; live U1f Crystal run 4). Wait for the next origin.
+            if ui.prompt == nil then return {}, self.phase end
             return nil, "unmapped PC yes/no prompt: " .. tostring(ui.prompt)
         end
         if ui.kind == "text" or ui.kind == "prompt_button" or ui.kind == "wait_button" then return press("A") end
