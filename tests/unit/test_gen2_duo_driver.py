@@ -2062,7 +2062,7 @@ def trade_stream(case, player, item=0):
                             "wram_offset": 0x1A5B, "bytes_before": "00", "bytes_after": "%02x" % FLOWER_MAIL,
                             "purpose": "d3_mail_item", "slot": 1, "item": "FLOWER_MAIL"})
     base = image(1000, "baseline", "native_save")
-    base.update(slot=1, count=2, key=KEY, party=party, dex={"primary": {"caught_hex": "00" * 32, "seen_hex": "00" * 32},
+    base.update(slot=1, count=2, key=KEY, client_saves=1, party=party, dex={"primary": {"caught_hex": "00" * 32, "seen_hex": "00" * 32},
                                                             "backup": {"caught_hex": "00" * 32, "seen_hex": "00" * 32}})
     j("TRADE_BASELINE", base)
     j("TRADE_READY", {"frame": 1001, "snapshot_sha256": base["snapshot_sha256"], "slot": 1, "key": KEY})
@@ -2074,6 +2074,9 @@ def trade_stream(case, player, item=0):
         return out
     role, gen = (0, 5) if plan == "proposer" else (1, 9)
     j("TRADE_ENTRY", {"frame": 1200, "role": role, "site": site("SlinkTradeEntry" if role == 0 else "SlinkTradePromptEntry")})
+    if role == 0:
+        j("TRADE_FORCED_SAVE", {**image(1200, "forced", "forced_native_save"), "capture_frame": 1200, "flush_frame": 1201,
+                                "flushed_matches": True, "client_saves": 2, "save_completed_frame": 1150})
     if case == "refuse_item":
         before = {"frame": 1250, "site": site("SlinkTradeItemAllowed"), "registers": regs(A=held), "slot": 1,
                   "lease_hex": lease(1, 3, 3, 0, 0)}
@@ -2365,7 +2368,9 @@ function sim.push(n)   -- n pushes below the current SP: the witness sees writes
     sim.regs.SP = sim.regs.SP + n
 end
 function sim.step() api.advance() end
-function sim.final(trade, kind) trade.image("TRADE_FINAL", "trade_final", trade.flush(), {kind=kind, client_saves=1}) end
+function sim.final(trade, kind)
+    trade.image("TRADE_FINAL", "trade_final", trade.flush(), {kind=kind, client_saves=sim.h.rec.client_saves})
+end
 sim.jlog, sim.h = jlog, h
 return sim
 """
@@ -2472,6 +2477,7 @@ def test_attach_hooks_print_a_committed_proposer_visit_the_verdict_passes(tmp_pa
     t.go()
     sim = t.sim
     t.lease(1, 3, 3, 0, 0)
+    sim.h.rec.client_saves, sim.h.rec.save_completed_frame = 2, sim.frame   # the forced pre-trade save
     sim.fire("SlinkTradeEntry")
     t.frames(4, pushes=6)
     t.lease(2, 5, 4, 0xFF)
@@ -2628,3 +2634,16 @@ def test_attach_plants_are_disclosed_wram_writes_that_read_back(tmp_path, monkey
     writes = [json.loads(line[14:]) for i in range(1, len(sim.lines) + 1) if (line := sim.lines[i]).startswith("HARNESS_WRITE ")]
     assert [w["purpose"] for w in writes] == ["d3_mail_item", "trade_evolve_species"]
     assert writes[1]["bytes_after"] == "%02x" % HAUNTER and writes[1]["symbol"] == "wTempWildMonSpecies"
+
+
+def test_forced_save_image_is_required_on_the_proposer_only():
+    # coordinator ruling after 9805ac1c: the negative cases compare A's final against this image, byte-exact
+    for case in ("decline_new", "timeout", "new"):
+        red(drop(trade_stream(case, "a"), "TRADE_FORCED_SAVE"), case, "a", "missing TRADE_FORCED_SAVE")
+    red(edit(trade_stream("timeout", "a"), "TRADE_FORCED_SAVE", lambda v: v.update(client_saves=1)), "timeout", "a",
+        "successful pre-lease native save")
+    red(edit(trade_stream("timeout", "a"), "TRADE_FORCED_SAVE", lambda v: v.update(frame=1199)), "timeout", "a",
+        "captured at SlinkTradeEntry")
+    b = trade_stream("new", "b")
+    red(b + [line for line in trade_stream("new", "a") if line.startswith("TRADE_FORCED_SAVE ")], "new", "b",
+        "unexpected TRADE_FORCED_SAVE")

@@ -34,6 +34,11 @@
         NATIVE_SAVE (frame == TRADE_DONE.frame) adds capture_frame, flush_frame, save_entry_frame, flushed_matches;
         every image carries client_saves: TRADE_FINAL is a FLUSH (never an ordinary save), so on a traded side its
         client_saves equals the NATIVE_SAVE count (main ruling: no save between the native trade save and the final)
+    TRADE_FORCED_SAVE   proposer only, exactly one (coordinator ruling after 9805ac1c): the image right after the
+        receptionist's forced native save succeeded (TryQuickSave -> SlinkTradeEntry, which is reached only on a
+        successful save). CartRAM captured at the SlinkTradeEntry exec, flushed at the frame boundary; same image
+        fields + capture_frame, flush_frame, flushed_matches, client_saves (> the baseline's), save_completed_frame.
+        The oracle compares the negative cases' A final against THIS image, byte-exact.
     TRADE_READY {frame, snapshot_sha256 (the baseline image), slot, key}
     TRADE_GO {frame, run_id}   (the runner writes "TRADE_GO" into the go-file after freezing both baselines and
         the server links; run_id is the admission manifest's)
@@ -695,6 +700,7 @@ function T.attach(e)
 
     local H = {}
     function H.SlinkTradeEntry(name)
+        if not st.forced then st.forced = {frame=frame(), cart=api.read_range(0, T.CART, "CartRAM")} end
         st.role, st.entry_frame = 0, frame()
         jlog("TRADE_ENTRY", {frame=frame(), role=0, site=site(name)})
         phase_start("wait", name)
@@ -870,9 +876,25 @@ function T.attach(e)
             flush_frame=frame(), save_entry_frame=st.save_entry_frame, flushed_matches=same, kind="native_trade_save",
             client_saves=h.rec.client_saves})
     end
+    local function forced_image()
+        local cap = st.forced
+        st.forced_done = true
+        local saved = SG.flush(ctx, SG.cart_digest(api))
+        local same = #saved == T.SAVERAM
+        for i = 1, T.CART do if saved:byte(i) ~= cap.cart[i] then same = false break end end
+        local chars = {}
+        for i = 1, T.CART do chars[i] = string.char(cap.cart[i]) end
+        h.trade.image("TRADE_FORCED_SAVE", "trade_forced_save", table.concat(chars) .. saved:sub(T.CART + 1),
+            {frame=cap.frame, capture_frame=cap.frame, flush_frame=frame(), flushed_matches=same, kind="forced_native_save",
+             client_saves=h.rec.client_saves, save_completed_frame=h.rec.save_completed_frame or json.null})
+    end
     local real_advance = api.advance
     api.advance = function()
         real_advance()
+        if st.forced and not st.forced_done then
+            local ok, err = pcall(forced_image)
+            if not ok then fault("forced save image: " .. tostring(err)) end
+        end
         if st.native and not st.native_done then
             local ok, err = pcall(native_image)
             if not ok then fault("native image: " .. tostring(err)) end
@@ -1009,6 +1031,7 @@ for _, tag in ipairs({"DUO_GEN2", "CLIENT", "BOOTED", "HELLO", "ENGINE_CAPTURE",
                       "TRADE_COMMIT_ENTRY", "TRADE_PRE_REMOVE", "TRADE_NATIVE_CALL", "TRADE_DONE", "TRADE_NATIVE_SAVE",
                       "TRADE_EXIT", "TRADE_RESET_ENTRY", "TRADE_ANSWER", "TRADE_CANCEL", "TRADE_CONTROL", "CHORD",
                       "TRADE_SAVE_RETURNED", "TRADE_RECOVERED", "TRADE_RELOAD", "RELOAD_CHORD", "RELOADED", "HARNESS_WRITE",
+                      "TRADE_FORCED_SAVE",
                       "SAVE_WITNESS",
                       "RESET_SEEN", "REBOOTED", "TRADE_FINAL", "TRADE_STACK", "TRADE_HOOK_ERROR"}) do
     T.JSON_TAGS[tag] = true
@@ -1141,6 +1164,19 @@ function T.verdict(lines, json, case, player)
         end
     end
 
+    -- the proposer's forced native save (9805ac1c): one immutable image, after GO, before the visit's entry
+    if plan.role == "proposer" then
+        local fs = one("TRADE_FORCED_SAVE")
+        image(fs, "forced save")
+        local f = v(fs)
+        need(f.flushed_matches == true and integer(f.client_saves, (b.client_saves or 0) + 1, 2^53)
+             and integer(f.save_completed_frame, v(go).frame or 0, f.frame or -1),
+             "forced save image is not the successful pre-lease native save")
+        need(f.frame == v(all("TRADE_ENTRY")[1]).frame, "forced save image is not captured at SlinkTradeEntry")
+        need(f.snapshot_path ~= b.snapshot_path and f.snapshot_path ~= v(final).snapshot_path, "forced save image reused")
+    else
+        none("TRADE_FORCED_SAVE")
+    end
     local offered = plan.visit ~= "none" and plan.visit ~= "query"
     local offer = offered and one("TRADE_OFFER") or nil
     local o = v(offer)
