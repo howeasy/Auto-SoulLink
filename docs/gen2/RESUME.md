@@ -400,3 +400,5 @@ C-C/G-S/C-G (15/15; rows relayed to RELEASE-LANES, notes in scratchpad duo_wave_
 driver (8b8f37b2: `python tools/gen2_final_sweep.py --list` = 92 cells; `--lanes 4 [--sha <frozen>]` after freeze;
 2-cell dry run PASS) and the faint_active trainer duo (68277bdb, unrun). Before freeze: live-gate runners must stamp
 CODE_DIGEST (FINAL-SWEEP, using RELEASE-LANES' tools/gen2_code_digest.py). Running: RELEASE-LANES, FINAL-SWEEP + OMP jobs.
+
+Queued before freeze: KEY-SCOPE-3 (scratchpad key_scope_3_card.md) -> INV-SERVER ada59c171d19b1955.
