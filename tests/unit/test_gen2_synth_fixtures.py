@@ -115,3 +115,37 @@ def test_event_flags_use_the_source_numbering_and_are_disclosed(title):
     after = synth._Save(out[:synth.CART], layout)
     assert flag(after, "EVENT_MET_BILL") == 0 and flag(after, "EVENT_INITIALIZED_EVENTS") == 1
     assert [f["symbol"] for f in disclosure["fields"]][0] == "wEventFlags"
+
+
+# --- O-33 clock setup: the U1 poison hunt needs a DAY Route 30 (card driver-robust, W6 Silver RED) -----------------
+
+def _rtc_seconds(raw, now):
+    """The gambatte trailer clock at host time `now`: registers + (now - base) unless halted (cartridge.cpp :504-580)."""
+    tail = raw[synth.CART:]
+    base, dh, dl, h, m, s = int.from_bytes(tail[:8], "big"), *tail[8:13]
+    days = ((dh & 1) << 8) | dl
+    return days * 86400 + h * 3600 + m * 60 + s + (0 if dh & 0x40 else max(0, now - base))
+
+
+def test_the_committed_silver_fixture_reads_the_measured_night_hour():
+    """EVO-U1 measured silver_battle at game 19:xx on 2026-09-24 08:23 local: game time = InitClock's 10:00 + RTC."""
+    raw = (ROOT / "tests/fixtures/gen2/silver_battle.SaveRAM").read_bytes()
+    base = int.from_bytes(raw[synth.CART:synth.CART + 8], "big")
+    now = base + (33 * 3600 + 41)   # 2026-09-22 23:22:19 + 33:00:41 = 2026-09-24 08:23:00
+    assert (10 + _rtc_seconds(raw, now) // 3600) % 24 == 19
+
+
+def test_day_clock_moves_the_game_hour_forward_and_keeps_the_cartram():
+    raw = (ROOT / "tests/fixtures/gen2/silver_battle.SaveRAM").read_bytes()
+    base = int.from_bytes(raw[synth.CART:synth.CART + 8], "big")
+    now = base + 33 * 3600 + 41
+    out, disclosure = synth.day_clock(raw, hour=11, now=now)
+    assert out[:synth.CART] == raw[:synth.CART] and len(out) == synth.SAVERAM
+    assert int.from_bytes(out[synth.CART:synth.CART + 8], "big") == now
+    before, after = _rtc_seconds(raw, now), _rtc_seconds(out, now)
+    assert after >= before and after - before < 86400                  # time never runs backwards
+    assert (10 * 3600 + after) % 86400 == 11 * 3600                    # game 11:00:00 at `now`
+    assert disclosure["game_hour"] == 11 and disclosure["field"] == "BizHawk gambatte RTC trailer"
+    assert disclosure["old_hex"] == raw[synth.CART:].hex() and disclosure["new_hex"] == out[synth.CART:].hex()
+    with pytest.raises(ValueError):
+        synth.day_clock(raw[:-1], hour=11, now=now)

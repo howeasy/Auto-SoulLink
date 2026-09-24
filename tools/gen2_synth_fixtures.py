@@ -323,6 +323,37 @@ DUO_FIXTURES = tuple(f"{title}_synth_{kind}" for title in ("crystal", "gold", "s
     f"crystal_synth_{kind}_ot2" for kind in (*DUO_RECIPES, "bill"))
 
 
+INIT_HOUR = 10   # InitClock's default hour, taken as-is by the scripted play (engine/rtc/timeset.asm:48-49)
+
+
+def day_clock(raw, *, hour, now):
+    """O-33 clock setup: (bytes, disclosure) with only the 22-byte BizHawk gambatte RTC trailer rewritten so the
+    game reads `hour`:00 at host time `now`. The trailer is emulator state, never save data (docs/gen2/reviews/
+    OMP_RTC_SOURCE_2026-09-22.md): an 8-byte big-endian base time, then dh, dl, h, m, s, the cycle counter and
+    the latched copies (libgambatte cartridge.cpp :504-580). The RTC runs on from base to host time, so the game
+    clock of a played fixture drifts with the wall clock (EVO-U1: silver_battle read 19:xx at 08:23 local).
+    Game time = INIT_HOUR:00 + RTC. The RTC only moves forward (the next matching hour), and CartRAM is untouched."""
+    if not isinstance(raw, (bytes, bytearray)) or len(raw) != SAVERAM:
+        raise ValueError(f"base save must be exactly {SAVERAM} bytes (CartRAM + RTC trailer)")
+    tail = bytearray(raw[CART:])
+    base, dh, dl, h, m, s = int.from_bytes(tail[:8], "big"), *tail[8:13]
+    if dh & 0x40:
+        raise ValueError("the RTC is halted")
+    total = (((dh & 1) << 8) | dl) * 86400 + h * 3600 + m * 60 + s + max(0, now - base)
+    total += ((hour - INIT_HOUR) * 3600 - total) % 86400
+    days = total // 86400
+    if days > 511:
+        raise ValueError("the RTC day counter would overflow")
+    regs = [(dh & 0xFE) | (days >> 8), days & 0xFF, total // 3600 % 24, total // 60 % 60, total % 60]
+    tail[:8] = int(now).to_bytes(8, "big")
+    tail[8:13] = bytes(regs)
+    tail[17:22] = bytes(regs)   # the latched copies
+    out = bytes(raw[:CART]) + bytes(tail)
+    return out, {"schema": SCHEMA, "builder": BUILDER, "field": "BizHawk gambatte RTC trailer", "game_hour": hour,
+                 "host_time": int(now), "old_hex": bytes(raw[CART:]).hex(), "new_hex": bytes(tail).hex(),
+                 "cartram_sha256": hashlib.sha256(out[:CART]).hexdigest(), "sha256": hashlib.sha256(out).hexdigest()}
+
+
 def build_named(name, *, root=ROOT):
     """(bytes, disclosure) for a SYNTH_FIXTURES or DUO_FIXTURES name, from its committed base fixture."""
     title, _, kind = name.split("_", 2)

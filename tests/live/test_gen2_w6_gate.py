@@ -46,7 +46,7 @@ from tests.live import (  # noqa: E402
     test_gen2_sfx_gate as sfx,
 )
 from tests.live.test_gen2_new_gates import emuhawk  # noqa: E402,F401 - pytest fixture
-from tools import gen2_fixtures, gen2_source_data  # noqa: E402
+from tools import gen2_fixtures, gen2_source_data, gen2_synth_fixtures  # noqa: E402
 from tools.gen2_mailbox_census import MAILBOX_SPANS  # noqa: E402
 
 pytestmark = [
@@ -78,6 +78,12 @@ U1_CHAINS = {"a7bf1773": {**dict.fromkeys(_U1, "a7bf1773"), "lua/tests/duo/gen2_
              "a882a763": dict.fromkeys(_U1F, "a882a763"),
              "76d715e6": dict.fromkeys(_U1F + ("lua/tests/gen2_walk.lua",), "76d715e6")}
 U1_CHAIN_FOR = {"crystal": "a882a763", "gold": "a882a763", "silver": "a7bf1773"}
+# O-33 clock setup for the U1 leg (tools/gen2_synth_fixtures.day_clock, disclosed in the leg as clock_setup): the
+# fixture RTC runs on with the host clock (game = 10:00 + RTC), and Silver Route 30 holds Weedle only by morning/day
+# (pokegold data/wild/johto_grass.asm ROUTE_30, _SILVER nite: Hoothoot/Rattata), so a night launch never meets a
+# POISON_STING foe (W6 Silver RED on every chain, 2026-09-24). Crystal (night Spinarak) and Gold (trainer Wade) hunt
+# at any hour. Only the emulator RTC trailer changes; the CartRAM is the committed fixture's.
+U1_CLOCK = {"silver": 11}
 IN_PLACE_CODE = ("SlinkStartMenuEntry",)   # patch/gen2/src/panel_start.asm, bank 4
 INIT_LOOP = bytes.fromhex("3600230b78b120f8")   # Init.ByteFill: ld [hl],0 / inc hl / dec bc / ld a,b / or c / jr nz
 
@@ -216,9 +222,15 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
         if launched:
             time.sleep(STAGGER)
         launched = True
+        source_path, clock = fixture, None
+        if leg == "u1" and title in U1_CLOCK:   # set right before the launch: the RTC runs on from here
+            raw, clock = gen2_synth_fixtures.day_clock(staged, hour=U1_CLOCK[title], now=int(time.time()))
+            source_path = REPO / ".cache/gen2-fixtures/w6" / f"{title}-{leg}-clock.SaveRAM"
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            source_path.write_bytes(raw)
         passed, path, text = run_gate(GATE, rom_key=f"{title}_overlay", target=spec.target, timeout=timeout,
                                       saveram_dir=str(REPO / ".cache/gen2-fixtures/w6" / f"{title}-{leg}"),
-                                      fixture_path=str(fixture), speed_percent=300, env_overrides=env)
+                                      fixture_path=str(source_path), speed_percent=300, env_overrides=env)
         inner_text = (REPO / inner_result).read_text(encoding="utf-8", errors="replace") \
             if (REPO / inner_result).is_file() else ""
         assert passed, f"{leg}: W6 gate FAILED; {path}: {text[-3000:]}\ninner: {inner_text[-2000:]}"
@@ -227,7 +239,7 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
         record = live.tag_json(text, "W6")
         verify_leg(record, leg, facts)
         legs[leg] = {**record, "fixture": spec.name, "fixture_sha256": hashlib.sha256(staged).hexdigest(),
-                     "qualification_attempt_id": qual["attempt_id"],
+                     "qualification_attempt_id": qual["attempt_id"], "clock_setup": clock,
                      "driver": {"ref": chain, "files": frozen_files} if leg == "u1" else None,
                      "writers": {symbolize(title, k): v for k, v in sorted(record["writers"].items())},
                      "boot_clear": {symbolize(title, k): v for k, v in sorted(record["boot_clear"].items())},
