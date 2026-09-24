@@ -311,6 +311,9 @@ class SoulLinkState:
         # MAJOR-1: clients that answer apply_prepare (hello trade_prepare: true); a trade takes the
         # prepare round only when BOTH declared it, so other clients keep the direct apply
         self.trade_prepare: dict[str, bool] = {"a": False, "b": False}
+        # tick `trade_blocked`: the cartridge refuses any trade right now (Gen 2: the Bug-Catching
+        # Contest masks the party, 9805ac1c SlinkTradeCheckParty), so no pair is eligible either way
+        self.trade_blocked: dict[str, bool] = {"a": False, "b": False}
         # Per-player tick countdown during which _reconcile_party_keys is suppressed after a trade
         # completes. A trade is a party↔party swap, so no box/party sync is ever legitimately needed
         # from it; but for a few ticks each client's party read is still settling, and the drift
@@ -453,6 +456,8 @@ class SoulLinkState:
         elif event == "rival_team_replaced":
             self._handle_rival_team_replaced(player_id, msg)
         elif event in ("safe", "tick"):
+            if "trade_blocked" in msg:
+                self.trade_blocked[player_id] = msg["trade_blocked"] is True
             # Accept pokéballs activation update from tick events so the server learns
             # the nuzlocke became active mid-session (between hello events).
             if msg.get("has_pokeballs") is True:
@@ -560,6 +565,8 @@ class SoulLinkState:
         LIVE link whose partner half is in the partner's party (blobs cached for both) — i.e. the only
         mons that may be traded. Sorted by party slot. This is the linked-pair invariant's source set."""
         partner = _partner(player_id)
+        if self.trade_blocked[player_id] or self.trade_blocked[partner]:
+            return []
         par_blobs = self.partner_blobs.get(partner, [])
         out = []
         for be in sorted(self.partner_blobs.get(player_id, []), key=lambda e: e.get("slot", 99)):

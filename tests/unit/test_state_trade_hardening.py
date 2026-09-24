@@ -242,3 +242,20 @@ def test_a_client_without_the_capability_keeps_the_direct_apply(tmp_path):
     b_cmds = state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})
     assert state.pending_trade["phase"] == "applying"
     assert _named(b_cmds, "apply_trade") and not _named(b_cmds, "apply_prepare")
+
+
+
+# ── a player in the Bug-Catching Contest (tick trade_blocked) has no eligible pair, nor does the partner ──
+
+def test_a_trade_blocked_player_makes_no_pair_eligible_on_either_side(tmp_path):
+    state, _entry, _token, _ = _gen1_confirming(tmp_path)
+    state.pending_trade = None
+    assert state._eligible_trade_pairs("a")
+    state.handle_event("b", {"event": "tick", "trade_blocked": True})
+    assert not state._eligible_trade_pairs("a") and not state._eligible_trade_pairs("b")
+    state._handle_trade_query("a")
+    assert state.queued_commands["a"][-1] == {"cmd": "trade_mask", "mask": 0}
+    state.handle_event("a", {"event": "trade_offer", "slot": 2})
+    assert state.pending_trade is None
+    state.handle_event("b", {"event": "tick", "trade_blocked": False})
+    assert state._eligible_trade_pairs("a")

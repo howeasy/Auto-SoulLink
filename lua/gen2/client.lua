@@ -593,6 +593,7 @@ function Client.new(p)
         local st = self.trade_state
         if not st or st.kind ~= "query" then return end
         local token = new_token()
+        if contest_masked() then mask = 0 end -- the cartridge refuses a contest trade (9805ac1c)
         local ok = traded(function() return trade:answer_query(st.gen, mask, token) end, "query answer")
         self.trade_state = nil
         self.trade_visit = (ok and mask ~= 0) and { role = "proposer", token = token } or nil
@@ -622,6 +623,12 @@ function Client.new(p)
 
     -- Responder: stage the proposer's mon and let the cartridge ask its own YES/NO.
     function self:trade_prompt(cmd)
+        if contest_masked() then
+            -- 9805ac1c: SlinkTradeCheckParty refuses during the Bug-Catching Contest; never arm it
+            self.trade_visit = nil
+            send("menu_result", { token = cmd.token, choice = 0 })
+            return
+        end
         local token = new_token()
         local gen = traded(function()
             return trade:arm(PROMPT, cmd.slot, token, { blob = hex_bytes(cmd.blob_hex) })
@@ -1165,6 +1172,8 @@ function Client.new(p)
             enemy_party = enemy_party(battle),
             badges = badges and badges.johto, kanto_badges = badges and badges.kanto,
             trainer_name = player and player.player_name, pc_boxes = pc_boxes_wire(),
+            -- the contest-masked party refuses any trade (9805ac1c): the server offers none meanwhile
+            trade_blocked = contest_masked(),
         })
     end
 

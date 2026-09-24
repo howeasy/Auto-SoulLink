@@ -270,6 +270,7 @@ Gen 3 does **not** send `ot`, `nature`, `gender` or `pp_ups` in the party entry;
 | `badges` | int bitmask | 8 gym circles, badges overlay, compact panel popcount | `server.py:3023-3024`, `4088-4103` |
 | `kanto_badges` | int bitmask | second-region badges (Gen 4) | `server.py:3025-3026` |
 | `trainer_name` | str | dashboard | `server.py:3027-3028` |
+| `trade_blocked` | bool | the cartridge refuses any trade right now (Gen 2: the Bug-Catching Contest party mask); while set, neither player has an eligible trade pair | `state.py` `_eligible_trade_pairs` |
 
 `money` and `frame` are **not** part of the protocol (nothing sends or reads them).
 

@@ -2116,3 +2116,41 @@ def test_trade_prepare_is_ready_only_while_the_cartridge_still_waits_for_the_app
     stray.w.reply(prepare_cmd())
     stray.w.frames(1)
     assert [m["ok"] for m in stray.w.sent("apply_ready")] == [False]
+
+
+# ── the Bug-Catching Contest refuses a trade (9805ac1c SlinkTradeCheckParty): the host never arms one ──
+
+def in_contest(cart, on=True):
+    mask = HOLDS[cart.w.title]["contest_mask"]
+    cart.poke(mask["address"], [(1 << mask["bit"]) if on else 0])
+
+
+def test_trade_in_the_contest_declines_a_prompt_without_arming_it_and_answers_a_zero_mask():
+    resp = TradeCart()
+    in_contest(resp)
+    before = len(resp.w.written())
+    resp.w.reply({"cmd": "show_menu", "token": "t2", "slot": 0, "blob_hex": blob70(PARTNER).hex()})
+    resp.w.frames(2)
+    assert [m["choice"] for m in resp.w.sent("menu_result")] == [0]
+    assert resp.w.written()[before:] == [], "no PROMPT armed during the contest"
+    assert resp.w.client.trade_visit is None
+
+    prop = TradeCart()
+    prop.publish(1, avail=0, mask=0)
+    prop.w.frames(1)
+    in_contest(prop)
+    prop.w.reply({"cmd": "trade_mask", "mask": 1})
+    prop.w.frames(2)
+    f = prop.frame()
+    assert f[7] == f[6] and f[11] == 0 and f[10] == 0, "the query is answered, with nothing eligible"
+    assert prop.w.client.trade_visit is None
+
+
+def test_trade_blocked_rides_the_tick_while_the_contest_masks_the_party():
+    cart = TradeCart()
+    in_contest(cart)
+    cart.w.frames(60)
+    assert cart.w.sent("tick")[-1].get("trade_blocked") is True
+    in_contest(cart, on=False)
+    cart.w.frames(60)
+    assert cart.w.sent("tick")[-1].get("trade_blocked") is False
