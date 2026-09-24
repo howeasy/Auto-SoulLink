@@ -2447,6 +2447,7 @@ class SLinkServer:
                     "queued":         len(s.queued_commands.get(pid, [])),
                     "battle_state":   _enrich_battle_state(pid),
                     "identity_error": s.identity_error.get(pid, ""),
+                    "awaiting_save": s.awaiting_save.get(pid, False),  # BURIAL-VISIBLE
                     # Surfaced rather than only logged: a player whose events are being
                     # dropped needs to be told which cartridge the run expects, otherwise
                     # the game simply appears not to be recording anything.

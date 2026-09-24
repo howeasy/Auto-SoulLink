@@ -342,6 +342,8 @@ class SoulLinkState:
         # tick `trade_blocked`: the cartridge refuses any trade right now (Gen 2: the Bug-Catching
         # Contest masks the party, 9805ac1c SlinkTradeCheckParty), so no pair is eligible either way
         self.trade_blocked: dict[str, bool] = {"a": False, "b": False}
+        # tick `awaiting_save` (BURIAL-VISIBLE): a GB client's boxed burial waits on an in-game SAVE
+        self.awaiting_save: dict[str, bool] = {"a": False, "b": False}
         # Per-player tick countdown during which _reconcile_party_keys is suppressed after a trade
         # completes. A trade is a party↔party swap, so no box/party sync is ever legitimately needed
         # from it; but for a few ticks each client's party read is still settling, and the drift
@@ -489,6 +491,8 @@ class SoulLinkState:
         elif event in ("safe", "tick"):
             if "trade_blocked" in msg:
                 self.trade_blocked[player_id] = msg["trade_blocked"] is True
+            if "awaiting_save" in msg:
+                self.awaiting_save[player_id] = msg["awaiting_save"] is True
             # Accept pokéballs activation update from tick events so the server learns
             # the nuzlocke became active mid-session (between hello events).
             if msg.get("has_pokeballs") is True:
@@ -1838,6 +1842,7 @@ class SoulLinkState:
             "pc_trade_npc": bool(self.pc_trade_npc),
         })
 
+        self.awaiting_save[player_id] = False   # BURIAL-VISIBLE: a waiting client re-asserts it on its ticks
         # INV-CLIENT-2: this player's dead/memorial keys, authoritative. The GB clients REPLACE their
         # re-zero set with it (a debug revive, an unlink, a rollback or another save with the same OT
         # leaves no stale kill); a client that does not know the command ignores it.

@@ -479,6 +479,7 @@
         "calc_preview": null
       },
       "identity_error": "",
+      "awaiting_save": false,
       "admission": "admitted",
       "admission_reason": "no randomized-ROM contract for this run",
       "capabilities": {
@@ -1040,6 +1041,7 @@
         "calc_preview": null
       },
       "identity_error": "",
+      "awaiting_save": false,
       "admission": "admitted",
       "admission_reason": "no randomized-ROM contract for this run",
       "capabilities": {

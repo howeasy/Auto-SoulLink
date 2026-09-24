@@ -508,6 +508,54 @@ def test_gen1_a_boxed_memorial_is_acked_only_after_the_save_witness_settles_it(w
     assert [c[0] for c in calls] == ["memorialize", "memorialize", "settle", "settle"]
 
 
+# ── BURIAL-VISIBLE (OMP re-review of d23f4011): a burial waiting on a save is shown, not silent ─────────
+def burial_prompts(shown):
+    return [s for s in shown if "SAVE TO FINISH BURIAL" in s]
+
+
+def test_gen2_a_burial_waiting_on_a_save_is_shown_and_reported_until_the_save_clears_it():
+    lead, dead = mon(), mon(species=19, dvs=0x7AAA)
+    world = g2.box_world([lead], [dead])
+    world.checkpoint_ok = True
+    world.reply({"cmd": "memorialize", "key": codec_key(dead)})
+    world.frames(2)
+    assert world.sent("memorialize_done") == [] and len(burial_prompts(world.shown())) == 1
+    world.frames(60)
+    assert world.sent("tick")[-1].get("awaiting_save") is True
+    world.frames(1200)                                        # Client.BURIAL_NAG_FRAMES
+    assert 2 <= len(burial_prompts(world.shown())) <= 3, "re-shown on a modest cadence, never per frame"
+    world.client.on_observation(world.client, world.lua.table_from({"site_id": "save_completed"}))
+    world.frames(2)
+    assert [m["key"] for m in world.sent("memorialize_done")] == [codec_key(dead)]
+    n = len(burial_prompts(world.shown()))
+    world.frames(1300)
+    assert len(burial_prompts(world.shown())) == n, "the save cleared it"
+    flags = [t.get("awaiting_save") for t in world.sent("tick")]
+    assert False in flags and flags[-1] is None, "false once when it clears, then absent (idle = master)"
+
+
+def test_gen1_a_burial_waiting_on_a_save_is_shown_and_reported_until_the_save_clears_it(world1):
+    def memorialize(_self, key, hint=None):
+        return True, "source removal waits for a native save"
+
+    def settle_memorial(_self, key):
+        return True
+    world1.client.boxes = world1.lua.table_from({"memorialize": memorialize, "settle_memorial": settle_memorial})
+    world1.reply({"cmd": "memorialize", "key": "ABCD:0001:99"})
+    world1.step(2)
+    shown = lambda: [h[1] for h in world1.hud if h[0] == "show"]    # noqa: E731
+    assert world1.events("memorialize_done") == [] and len(burial_prompts(shown())) == 1
+    world1.step(60)
+    assert world1.events("tick")[-1].get("awaiting_save") is True
+    world1.fire("save_witness")
+    world1.overworld_safe()
+    world1.step(2)
+    assert [m["key"] for m in world1.events("memorialize_done")] == ["ABCD:0001:99"]
+    world1.step(60)
+    flags = [t.get("awaiting_save") for t in world1.events("tick")]
+    assert False in flags and flags[-1] is None, "false once when it clears, then absent (idle = master)"
+
+
 # ── MINOR-9: Gen 1 defers a force_faint for a key not in the party, as Gen 2 does (4e6aea39) ───────────
 def test_gen1_a_force_faint_for_a_key_not_in_the_party_is_deferred_not_dropped(world1):
     away = g1._mon(random.Random(7), 0x19, nick="PIKA")          # in the Day-Care / a box / a transient party

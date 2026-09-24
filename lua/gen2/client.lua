@@ -55,6 +55,11 @@ local BATTLE_FAINT = "battle_faint"
 -- O-32: the receipt-time bench write kind (gen2_write_safety BENCH_KINDS), checked at a battle frame end.
 local BATTLE_BENCH = "battle_bench"
 
+-- BURIAL-VISIBLE: a boxed burial waiting on an in-game SAVE (BOX-MEMORIAL-2) is shown, every this many
+-- frames while it waits (hud.show sanitizes; the tick's awaiting_save puts it on the pair board)
+Client.BURIAL_NAG_FRAMES = 1200
+local BURIAL_TEXT = "SAVE TO FINISH BURIAL"
+
 local function nick_label(key, nickname)
     if nickname and nickname ~= "" then return nickname end
     return key and key:sub(1, 8) or "?"
@@ -933,6 +938,20 @@ function Client.new(p)
         end
     end
 
+    local function burial_waiting()
+        for _, s in ipairs(self.settle) do if s.memorial then return true end end
+        return false
+    end
+    local function show_burial() hud.show(BURIAL_TEXT, 255, 200, 64, 300) end
+    -- BURIAL-VISIBLE: true while a burial waits, false once when it clears, absent otherwise (an idle tick
+    -- stays byte-identical to master's); the server also resets it at every accepted hello
+    local function awaiting_save_field()
+        local waiting, flag = burial_waiting(), nil
+        if waiting then flag = true elseif self.burial_reported then flag = false end
+        self.burial_reported = waiting
+        return flag
+    end
+
     function self:memorial_done(key, phys, name)
         self.pending_rescan, self.retired_alias[key] = true, nil
         self.dead_keys[key], self.dead_keys[phys] = nil, nil -- buried: MINOR-7 is done with it
@@ -1013,6 +1032,7 @@ function Client.new(p)
                 for _, s in ipairs(self.settle) do if s.memorial and s.key == phys then return end end
                 self.settle[#self.settle + 1] = { key = phys, armed = false,
                                                   memorial = { key = cmd.key, nickname = cmd.nickname } }
+                show_burial()
             elseif done then
                 self:memorial_done(cmd.key, phys, name)
             elseif why == "last party mon" and self.game_over then
@@ -1309,6 +1329,7 @@ function Client.new(p)
             trainer_name = player and player.player_name, pc_boxes = pc_boxes_wire(),
             -- the contest-masked party refuses any trade (9805ac1c): the server offers none meanwhile
             trade_blocked = contest_masked(),
+            awaiting_save = awaiting_save_field(), -- BURIAL-VISIBLE: the pair board's "awaiting save"
         })
     end
 
@@ -1592,6 +1613,7 @@ function Client.new(p)
             local tok, terr = pcall(self.trade_tick, self)
             if not tok then log("[SLink-gen2] trade: " .. tostring(terr)) end
         end
+        if self.frame % Client.BURIAL_NAG_FRAMES == 0 and burial_waiting() then show_burial() end
         self.replies:step()
         self:land_bench_deaths() -- O-32: a bench death lands the frame its command arrived (replies:step)
         self:run_deferred()
