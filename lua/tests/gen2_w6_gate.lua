@@ -28,7 +28,6 @@
   may write one only if the region's slink_allow names it (empty until the phone service lands: until then
   any SLink write is a violation); any Lua store into a region is a violation. A region in WRAMX names its
   wram_bank and only writes with SVBK selecting that bank count.
-  preroll_frames: idle frames (no input) before the inner gate boots; it only reseeds the RNG path.
   Environment: whatever the inner gate needs, plus SLINK_GEN2_W6 (json, tests/live/test_gen2_w6_gate.py).
   Result file: patch/build/gen2_w6_gate_result.txt. Printed: INNER (the inner gate's own RESULT line),
   W6 (json), then RESULT: PASS|FAIL last. The inner gate's full output stays in its own result file.
@@ -253,7 +252,6 @@ function W.main(root, getenv)
         -- every hooked site's bytes are re-validated against the running ROM (lua/gb_hook_binding.lua)
         gameinfo.getromhash = function() return cfg.base_sha1 end
     end
-    for _ = 1, cfg.preroll_frames or 0 do joypad.set({}) emu.frameadvance() end
     local ok, why = pcall(dofile, root .. "/" .. cfg.gate)
     gameinfo.getromhash = real_hash
     local inner_done = ok or tostring(why):find("slink-gate-finished", 1, true) ~= nil
@@ -285,7 +283,7 @@ function W.main(root, getenv)
         boot_clear=st.boot, boot_writes=st.n_boot, init_entries=json.array(st.inits),
         lua_writes={client=st.lua.client, harness=st.lua.harness}, lua_callbacks_fired=st.lua_fired,
         violations=json.array(st.violations), violation_count=st.n_violations,
-        preroll_frames=cfg.preroll_frames or 0, regions=st.regions,
+        regions=st.regions,
         control={native_addr=facts.control, native_writers=st.control.native,
                  native_allowed=st.control.native_allowed, native_flagged=st.control.native_flagged,
                  native_caught=native_ok, lua_addr=probe, lua_caught=lua_caught,

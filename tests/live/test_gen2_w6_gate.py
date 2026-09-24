@@ -59,9 +59,6 @@ SCHEMA = "gen2-w6-gate-v1"
 TITLES = ("crystal", "gold", "silver")
 LEGS = ("panel", "sfx", "u1")
 STAGGER = 60          # seconds between this lane's EmuHawk launches (other lanes share the machine)
-# The U1 leg on the G/S overlays loses its default RNG path (Gold: the lead faints in the catch battle; Silver:
-# the faint leg stalls on "no PP left"): idle frames before boot reseed it. Recorded in the receipt.
-PREROLL = {("gold", "u1"): 120, ("silver", "u1"): 120}
 IN_PLACE_CODE = ("SlinkStartMenuEntry",)   # patch/gen2/src/panel_start.asm, bank 4
 INIT_LOOP = bytes.fromhex("3600230b78b120f8")   # Init.ByteFill: ld [hl],0 / inc hl / dec bc / ld a,b / or c / jr nz
 
@@ -173,8 +170,7 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
         source = gen2_source_data.load_context(title, root=REPO).source_record()
         env["SLINK_GEN2_W6"] = json.dumps({"leg": leg, "gate": gate, "inner_result": inner_result, "facts": facts,
                                            "overlay_sha1": facts["overlay_sha1"], "base_sha1": source["rom_sha1"],
-                                           "clean_view": leg == "u1", "lua_control_offset": 20,
-                                           "preroll_frames": PREROLL.get((title, leg), 0)})
+                                           "clean_view": leg == "u1", "lua_control_offset": 20})
         if launched:
             time.sleep(STAGGER)
         launched = True

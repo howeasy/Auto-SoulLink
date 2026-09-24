@@ -52,7 +52,9 @@ P.FRAME_ALIGN = "lua/tests/gen2_frame_align.lua"
 P.SCHEMA = "gen2-panel-gate-v1"
 -- gb_panel mailbox ABI (patch/gb/slink_abi.inc): state/page/pages at +9/+10/+11, cookie +31.
 P.CLOSED, P.AWAIT, P.STAGED = 0, 1, 2
-P.CAPS = 0x07                      -- PANEL | SFX | SFX_NOTIFY, the full overlay (patch/gen2/src/slink.asm)
+-- Required caps bits, masked like the P4.1f binder (lua/gb_panel.lua caps_has): later bits (PHONE, TRADE) never
+-- break the gate; $FF (open bus / erased) is never a grant.
+P.CAPS_REQUIRED = 0x02             -- PANEL (patch/gb/slink_abi.inc SLINK_CAP_PANEL)
 P.STAGE_TIMEOUT = 90               -- SlinkPanel.WaitForStage (patch/gen2/src/panel.asm)
 -- ponytail: live calibration knobs, not measured yet.
 P.HOLD, P.REST = 12, 8
@@ -388,8 +390,10 @@ function P.main(real, getenv, SG, F)
         local c0 = u8(MB + 5) + 256 * u8(MB + 6)
         idle(60)
         local c1 = u8(MB + 5) + 256 * u8(MB + 6)
-        check("mailbox beacon SLNK, ABI 3, caps 7, cookie $A5",
-              beacon == "SLNK" and u8(MB + 4) == 3 and u8(MB + 8) == P.CAPS and u8(MB + 31) == 0xA5,
+        local caps = u8(MB + 8)
+        check("mailbox beacon SLNK, ABI 3, caps has PANEL, cookie $A5",
+              beacon == "SLNK" and u8(MB + 4) == 3 and caps ~= 0xFF and caps & P.CAPS_REQUIRED == P.CAPS_REQUIRED
+              and u8(MB + 31) == 0xA5,
               fmt("beacon=%q abi=%d caps=%02X cookie=%02X", beacon, u8(MB + 4), u8(MB + 8), u8(MB + 31)))
         check("the sampled counter advances in the overworld", c1 ~= c0, fmt("%d -> %d over 60 frames", c0, c1))
         client = true

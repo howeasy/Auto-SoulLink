@@ -39,7 +39,9 @@ P.RESULT = "patch/build/gen2_sfx_gate_result.txt"
 P.SCRIPTED_GATE = "lua/tests/test_gen2_scripted_gate.lua"
 P.FRAME_ALIGN = "lua/tests/gen2_frame_align.lua"
 P.SCHEMA = "gen2-sfx-gate-v1"
-P.CAPS = 0x07                      -- PANEL | SFX | SFX_NOTIFY (patch/gen2/src/slink.asm)
+-- Required caps bits, masked like the P4.1f binder (lua/gb_panel.lua caps_has): later bits (PHONE, TRADE) never
+-- break the gate; $FF (open bus / erased) is never a grant. NOTIFY: this gate posts P.CODES.NOTIFY.
+P.CAPS_REQUIRED = 0x05             -- SFX | SFX_NOTIFY (patch/gb/slink_abi.inc)
 P.OFF_SFX, P.OFF_HOLD, P.OFF_HOLD_AT = 7, 12, 13     -- patch/gb/slink_abi.inc
 P.RESET_BLOCKED = 0xFF             -- sfx.asm SLINK_SFX_RESET_BLOCKED
 P.STANDING = 0xFF                  -- wWalkingDirection STANDING (-1)
@@ -399,9 +401,11 @@ function P.main(real, getenv, SG, F)
     local function walking() return wram1(sf.ram.wWalkingDirection) ~= P.STANDING end
 
     local play_ok, play_why = pcall(function()
-        check("mailbox beacon SLNK, ABI 3, caps 7, cookie $A5",
+        local caps = u8(MB + 8)
+        check("mailbox beacon SLNK, ABI 3, caps has SFX and SFX_NOTIFY, cookie $A5",
               u8(MB) == 0x53 and u8(MB + 1) == 0x4C and u8(MB + 2) == 0x4E and u8(MB + 3) == 0x4B
-              and u8(MB + 4) == 3 and u8(MB + 8) == P.CAPS and u8(MB + 31) == 0xA5,
+              and u8(MB + 4) == 3 and caps ~= 0xFF and caps & P.CAPS_REQUIRED == P.CAPS_REQUIRED
+              and u8(MB + 31) == 0xA5,
               fmt("abi=%d caps=%02X cookie=%02X", u8(MB + 4), u8(MB + 8), u8(MB + 31)))
         idle(2)
         check("the shipped binding reads the cartridge SFX-live", panel:sfx_present() == true and panel:fresh() == true)
