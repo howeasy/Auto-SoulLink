@@ -74,19 +74,27 @@ function W.new(deps)
         assert(deps.frame() == window.frame, "write window expired")
         local ok, why = safety:check(window.snapshot, window.reason, window.args)
         assert(ok == true, why)
-        for _, job in ipairs(jobs) do
-            for k, byte in ipairs(job.bytes) do
-                self.attempted = self.attempted + 1
-                deps.io.write_u8(job.addr + k - 1, byte, "System Bus")
+        local landed = 0
+        local wok, err = pcall(function()
+            for i, job in ipairs(jobs) do
+                for k, byte in ipairs(job.bytes) do
+                    self.attempted = self.attempted + 1
+                    deps.io.write_u8(job.addr + k - 1, byte, "System Bus")
+                end
+                landed = i
             end
-        end
-        for _, job in ipairs(jobs) do
+        end)
+        -- receipts after the last byte (no callbacks mid-plan), but for every entry that fully
+        -- landed even when the sink failed part-way (R1 L9); `attempted` covers the partial one
+        for i = 1, landed do
+            local job = jobs[i]
             local n = #job.bytes
             local record = {reason = window.reason, address = job.addr, len = n, frame = window.frame,
                 why = window.reason, addr = job.addr, n = n}
             self.log[#self.log + 1] = record
             if deps.log then deps.log(record) end
         end
+        if not wok then error(err, 0) end
     end
     function self:write_u16(addr, value)
         uint(value, 65535)

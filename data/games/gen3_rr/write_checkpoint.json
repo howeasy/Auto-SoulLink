@@ -149,6 +149,26 @@
       "commit_hold": "battle_commit held on RR: CFRU's parked controller stays live after the commit (L-throw RemoveBagItem 0x090AA114) unless the plan ends in the battle.handoff tail",
       "handoff": {
         "address": 50352096,
+        "head": [
+          {
+            "address": 33701372,
+            "name": "perish_status",
+            "set": 32,
+            "width": 4
+          },
+          {
+            "address": 33701403,
+            "keep": 240,
+            "name": "perish_timer",
+            "width": 1
+          },
+          {
+            "address": 33701244,
+            "name": "no_op_action",
+            "value": 13,
+            "width": 1
+          }
+        ],
         "source": "rom: slot = the battle_input_controller pin (LDR@0x08032BAC, HandleChooseActionAfterDma3, FR-identical); value LDR@0x090A9EFE (the PlayerBufferExecCompleted call every CFRU action-menu commit makes) == pokefirered.sym PlayerBufferExecCompleted|1; PlayerBufferExecCompleted prefix +0..+0xF and pool +0x40..+0x47 FR-identical",
         "stride": 4,
         "symbol": "gBattlerControllerFuncs",

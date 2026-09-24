@@ -1,7 +1,7 @@
 """C5-RR-BW: byte facts behind docs/gen3/research/rr_battle_tuple_2026-09-23.md.
 
 Static, no emulator.  Reuses tools/research/rr_save_callers.py (ROM pins, FR .sym, the Thumb
-BL/LDR decoder) and asserts, on BOTH RR artifacts (clean 964f951a, companion b7d1e075), every
+BL/LDR decoder) and asserts, on BOTH RR artifacts (clean 964f951a, companion ea5352f8), every
 byte fact the frame-phase table cites: which FR bodies RR keeps verbatim, where CFRU detours the
 player controller and the battle lifecycle, the literal-pool words that give the parked menu's
 controller pointer, and the census of stores that can put HandleTurnActionSelectionState into

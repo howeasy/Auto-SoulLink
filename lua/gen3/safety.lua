@@ -203,55 +203,82 @@ function S.new(pack, deps, kind)
 
     -- G4-PH (docs/gen3/research/rr_active_faint_parity_scope_2026-09-23.md §3.2, §5.3): the pack's
     -- battle.handoff is the one controller-slot write a battle_commit plan may carry, and only as
-    -- its LAST entry. The slot must be the word the battle_input_controller clause pins.
-    -- Returns {address, width, value} for the battler, or nil (absent / malformed / bad battler).
+    -- the LAST entry of exactly the P+H plan. BATTLER 0 ONLY (R1 M1): every battle clause pins
+    -- battler 0, so slot 0 is the only slot a clause proves parked.
+    -- Returns {address, width, value}, or nil (absent / malformed / battler ~= 0).
     local function input_controller()
         for _, c in ipairs(pack.battle and pack.battle.clauses or {}) do
             if c.name == "battle_input_controller" then return c end
         end
     end
+    local head_rules = {set = true, keep = true, value = true}
     local function handoff_entry(battler)
         local h = type(pack.battle) == "table" and pack.battle.handoff
-        if type(h) ~= "table" then return nil end
+        if type(h) ~= "table" or battler ~= 0 then return nil end
         local ok, entry = pcall(function()
             local ctrl = assert(input_controller())
             assert(uint(h.address, 4294967295) == ctrl.address + (ctrl.offset or 0))
             assert(h.stride == 4 and h.width == 4 and uint(h.value, 4294967295) % 2 == 1)
-            assert(type(battler) == "number" and battler % 1 == 0 and battler >= 0 and battler <= 3)
-            return {h.address + h.stride * battler, h.width, h.value}
+            -- R1 L1: the P head the plan must carry (generator: data/games/*/profile.json)
+            assert(type(h.head) == "table" and #h.head == 3)
+            for _, row in ipairs(h.head) do
+                uint(row.address, 4294967295)
+                assert(row.width == 1 or row.width == 2 or row.width == 4)
+                local rules = 0
+                for rule in pairs(head_rules) do
+                    if row[rule] ~= nil then rules = rules + 1; uint(row[rule], 256 ^ row.width - 1) end
+                end
+                assert(rules == 1)
+            end
+            return {h.address, h.width, h.value}
         end)
         if ok then return entry end
     end
     function self:handoff_entry(battler) return handoff_entry(battler) end
-    -- does any plan entry write a controller slot (the 4 words from the controller pin)?
-    -- A malformed plan counts as touching, so the hand-off clause judges (and refuses) it.
+    -- R1 L2: a GBA bus alias is the same byte. IWRAM (0x03xxxxxx) repeats every 0x8000 and EWRAM
+    -- (0x02xxxxxx) every 0x40000; fold both onto their base range before comparing.
+    local function canonical(addr)
+        if addr >= 0x03000000 and addr < 0x04000000 then return 0x03000000 + addr % 0x8000 end
+        if addr >= 0x02000000 and addr < 0x03000000 then return 0x02000000 + addr % 0x40000 end
+        return addr
+    end
+    -- does any plan entry write a controller slot (the 4 words from the controller pin, through
+    -- any mirror)? A malformed plan counts as touching, so the hand-off clause judges (and refuses) it.
     local function touches_slots(plan)
         if plan == nil then return false end
         local ok, hit = pcall(function()
             local ctrl = input_controller()
-            local lo = ctrl.address + (ctrl.offset or 0)
+            local lo = canonical(ctrl.address + (ctrl.offset or 0))
             for _, w in ipairs(plan) do
-                if w[1] < lo + 16 and w[1] + w[2] > lo then return true end
+                local a = canonical(w[1])
+                if a < lo + 16 and a + w[2] > lo then return true end
             end
             return false
         end)
         return not ok or hit
     end
-    -- the exact tail: [..., comm write (the guard's byte := its value), hand-off], nothing else
-    -- in the plan touching a controller slot
-    local function check_handoff_tail(plan, battler)
-        local entry = assert(handoff_entry(battler), "no proven battle.handoff for this battler")
-        local n = #plan
-        assert(n >= 2, "plan too short for a hand-off tail")
-        local last, comm = plan[n], plan[n - 1]
-        assert(last[1] == entry[1] and last[2] == entry[2] and last[3] == entry[3],
-            "last entry is not the hand-off")
+    -- R1 L1: the WHOLE plan, row for row: the pack's P head (status3 = live | PERISH, timer = live &
+    -- 0xF0, action = NOTHING_FAINTED), the commit write (the guard's byte := its value), then the
+    -- hand-off. Live values are read on this same frame; the client read them to build the plan.
+    local function check_handoff_plan(plan, battler)
+        assert(battler == 0, "the hand-off is battler 0 only")
+        local entry = assert(handoff_entry(battler), "no proven battle.handoff")
         local guard = pack.battle.commit_guard
-        assert(comm[1] == guard.address + (guard.offset or 0) + battler and comm[2] == guard.width
-            and comm[3] == guard.value, "the hand-off does not follow the commit write")
-        local head = {}
-        for i = 1, n - 1 do head[i] = plan[i] end
-        assert(not touches_slots(head), "an earlier entry writes a controller slot")
+        local want = {}
+        for i, row in ipairs(pack.battle.handoff.head) do
+            local v = row.value
+            if row.set then v = read(row.address, row.width) | row.set end
+            if row.keep then v = read(row.address, row.width) & row.keep end
+            want[i] = {row.address, row.width, v, row.name}
+        end
+        want[#want + 1] = {guard.address + (guard.offset or 0) + battler, guard.width, guard.value, "commit"}
+        want[#want + 1] = {entry[1], entry[2], entry[3], "hand-off"}
+        assert(#plan == #want, "plan is not the P+H shape (" .. #plan .. " rows, want " .. #want .. ")")
+        for i, w in ipairs(want) do
+            local got = plan[i]
+            assert(got[1] == w[1] and got[2] == w[2] and got[3] == w[3],
+                "row " .. i .. " is not the " .. w[4] .. " write")
+        end
     end
 
     local function battle(reason, snapshot, args)
@@ -286,11 +313,11 @@ function S.new(pack, deps, kind)
             local battler = args and args.battler
             local plan = args and args.plan
             if touches_slots(plan) then
-                -- G4-PH §5.3: a plan that writes a controller slot must end in the exact hand-off
-                -- tail; that clause REPLACES the hold (RR), and judges every such plan (FR/LG).
+                -- G4-PH §5.3 + R1 M1/L1: a plan that writes a controller slot must be exactly the
+                -- battler-0 P+H plan; that clause REPLACES the hold (RR), and judges every such plan (FR/LG).
                 -- A plan without a slot write (Explode, the pre-hand-off P) is untouched.
                 entries[#entries + 1] = {key = "battle_commit_handoff", fn = function()
-                    local ok, why = pcall(check_handoff_tail, plan, battler)
+                    local ok, why = pcall(check_handoff_plan, plan, battler)
                     if not ok then
                         error((hold or "battle_commit refused") .. " (hand-off tail: " .. tostring(why) .. ")", 0)
                     end

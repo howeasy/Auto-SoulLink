@@ -127,3 +127,18 @@ def test_write_plan_needs_an_armed_window(world):
     world.execute(f"plan = {PLAN}")
     with pytest.raises(lupa.LuaError, match="no armed"):
         world.execute("w:write_plan(plan)")
+
+
+def test_r1_l9_write_plan_logs_a_receipt_for_every_entry_that_landed_before_a_sink_failure(world):
+    """R1 L9 (red at cdc571f1): the sink throws on entry 3's first byte; entries 1 and 2 landed
+    and each keeps its receipt, entry 3 gets none, and the error still propagates."""
+    _arm_plan(world)
+    world.execute("""
+        local real = deps.io.write_u8
+        deps.io.write_u8 = function(a, v) if a == 102 then error('bus fault') end real(a, v) end
+    """)
+    with pytest.raises(lupa.LuaError, match="bus fault"):
+        world.execute("w:write_plan(plan)")
+    g = world.globals()
+    assert len(g.output) == 2 and g.w.attempted == 3
+    assert [(g.receipts[i].address, g.receipts[i].len) for i in range(1, len(g.receipts) + 1)] == [(100, 1), (101, 1)]

@@ -488,7 +488,7 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
         if not lo <= syms["HandleInputChooseAction"][0] < hi:
             raise SystemExit(f"{title}: HandleInputChooseAction is not {PLAYER_CONTROLLER_OBJ}'s")
     slot = next(c["address"] for c in out["battle"]["clauses"] if c["name"] == "battle_input_controller")
-    handoff, why = handoff_block(syms, sym_file, is_rr, roms, slot)
+    handoff, why = handoff_block(syms, sym_file, is_rr, roms, slot, profile["titles"][title])
     if handoff is None:
         unverified.append(f"battle.handoff: {why}")
     else:
@@ -749,10 +749,42 @@ HANDOFF_PREFIX = 0x10        # push; gActiveBattler -> slot address (before RR's
 HANDOFF_POOL = (0x40, 0x48)  # gBattlerControllerFuncs, gActiveBattler
 
 
+# R1 L1: the exact P head a hand-off plan must carry before [comm, hand-off] (battler 0), so the
+# policy judges the whole plan, not just its tail. Every number comes from the pack's own profile
+# (FR/LG: the title's .sym + pret; RR: read out of CFRU's Perish case, tools/gen_gen3_profile.py).
+# Row rules: set = live | mask, keep = live & mask (the timer's high nibble; the low nibble,
+# perishSongTimer:4, becomes 0), value = exactly this.
+HANDOFF_HEAD = (
+    # (name, ram address key, derived offset key, width, rule, derived value key or constant)
+    ("perish_status", "STATUS3_ADDR", None, 4, "set", "STATUS3_PERISH_SONG"),
+    ("perish_timer", "DISABLE_STRUCTS_ADDR", "DISABLE_STRUCT_PERISH_TIMER_OFF", 1, "keep", 0xF0),
+    ("no_op_action", "CHOSEN_ACTION_ADDR", None, 1, "value", "B_ACTION_NOTHING_FAINTED"),
+)
+
+
+def handoff_head(title_profile: dict) -> tuple[list | None, str]:
+    """([the three head rows], "") from one title's profile, or (None, the missing field)."""
+    ram, derived = title_profile.get("ram", {}), title_profile.get("derived", {})
+    rows = []
+    for name, addr_key, off_key, width, rule, arg in HANDOFF_HEAD:
+        need = [("ram", addr_key, ram)] + ([("derived", off_key, derived)] if off_key else []) \
+            + ([("derived", arg, derived)] if isinstance(arg, str) else [])
+        for section, key, table in need:
+            if not isinstance(table.get(key), int):
+                return None, f"profile.{section}.{key} absent"
+        address = ram[addr_key] + (derived[off_key] if off_key else 0)
+        rows.append({"name": name, "address": address, "width": width,
+                     rule: derived[arg] if isinstance(arg, str) else arg})
+    return rows, ""
+
+
 def handoff_block(syms, sym_file: str, is_rr: bool, roms: dict[str, bytes],
-                  slot: int) -> tuple[dict | None, str]:
+                  slot: int, title_profile: dict | None = None) -> tuple[dict | None, str]:
     """(the battle.handoff block, "") or (None, why it is unproven)."""
     fn = HANDOFF_FN
+    head, why = handoff_head(title_profile or {})
+    if head is None:
+        return None, f"head: {why}"
     if fn not in syms or "gBattlerControllerFuncs" not in syms:
         return None, f"{fn}: symbol absent"
     addr, size = syms[fn]
@@ -763,7 +795,7 @@ def handoff_block(syms, sym_file: str, is_rr: bool, roms: dict[str, bytes],
         return None, f"battle_input_controller slot {slot:#010x} is not gBattlerControllerFuncs"
     value = addr | 1
     block = {"symbol": "gBattlerControllerFuncs", "address": slot, "stride": 4, "width": 4,
-             "value": value, "value_symbol": fn}
+             "value": value, "value_symbol": fn, "head": head}
     if is_rr:
         fr = body(roms["_fr"], addr, size)
         for kind, rom in roms.items():

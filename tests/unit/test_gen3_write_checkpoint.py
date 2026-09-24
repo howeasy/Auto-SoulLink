@@ -429,6 +429,13 @@ def test_sound_block_names_the_m4a_fields_it_may_write(pack: str, title: str) ->
 # titles (FR/LG .sym; RR LDR@0x08032BAC / LDR@0x090A9EFE), re-typed so the pack is checked.
 HANDOFF = {"symbol": "gBattlerControllerFuncs", "address": 0x03004FE0, "stride": 4, "width": 4,
            "value": 0x0802E33D, "value_symbol": "PlayerBufferExecCompleted"}
+# R1 L1: the exact P head the policy requires before [comm, hand-off], battler 0 (FR/LG .sym and
+# pret; RR's profile reads the same numbers out of CFRU's Perish case)
+HANDOFF_HEAD = [
+    {"name": "perish_status", "address": 0x02023DFC, "width": 4, "set": 0x20},
+    {"name": "perish_timer", "address": 0x02023E0C + 0x0F, "width": 1, "keep": 0xF0},
+    {"name": "no_op_action", "address": 0x02023D7C, "width": 1, "value": 13},
+]
 
 
 @pytest.mark.parametrize("pack,title", PACK_TITLES)
@@ -436,6 +443,7 @@ def test_handoff_block_is_the_controller_slot_and_exec_completed(pack: str, titl
     block = load(pack)[title]["battle"]
     handoff = dict(block["handoff"])
     assert handoff.pop("source")
+    assert handoff.pop("head") == HANDOFF_HEAD
     assert handoff == HANDOFF
     ctrl = next(c for c in block["clauses"] if c["name"] == "battle_input_controller")
     assert ctrl["address"] + ctrl["offset"] == handoff["address"]       # the slot the permit pins
@@ -488,3 +496,16 @@ def test_frlg_handoff_needs_the_exec_completed_pool_in_the_titles_own_rom(monkey
     out, unverified = G.build_title("gen3_frlg", title, G.PACKS["gen3_frlg"][title][0], ("clean",))
     assert "handoff" not in out["battle"]
     assert any(row.startswith("battle.handoff:") for row in unverified)
+
+
+@pytest.mark.parametrize("pack,title", PACK_TITLES)
+@pytest.mark.parametrize("missing", ["ram.STATUS3_ADDR", "ram.DISABLE_STRUCTS_ADDR", "ram.CHOSEN_ACTION_ADDR",
+                                     "derived.STATUS3_PERISH_SONG", "derived.DISABLE_STRUCT_PERISH_TIMER_OFF",
+                                     "derived.B_ACTION_NOTHING_FAINTED"])
+def test_r1_l1_handoff_head_needs_every_p_field_or_the_block_is_dropped(pack, title, missing) -> None:
+    """R1 L1: the head comes from the pack's profile; a missing P field drops the hand-off."""
+    profile = json.loads((G.ROOT / "data/games" / pack / "profile.json").read_text(encoding="utf-8"))
+    section, key = missing.split(".")
+    del profile["titles"][title][section][key]
+    head, why = G.handoff_head(profile["titles"][title])
+    assert head is None and key in why

@@ -1,6 +1,6 @@
 """C5-RR-SAVECALLERS: static census of every flash-writing path in the Radical Red ROMs.
 
-Bytes only, no emulator.  For each admitted RR artifact (clean 964f951a, companion b7d1e075) and
+Bytes only, no emulator.  For each admitted RR artifact (clean 964f951a, companion ea5352f8) and
 FireRed 41cb23d8 as the vanilla control, this script:
 
   1. decodes every halfword-aligned Thumb BL pair (target = site + 4 + offset) and every

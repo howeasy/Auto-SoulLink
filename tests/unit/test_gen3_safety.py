@@ -748,10 +748,19 @@ def explode_plan(battler=0):
             [0x02023D80 + 2 * battler, 2, 153], [H_COMM + battler, 1, 3]]
 
 
+def seed_p_rows(w, status3=0, timer=0):
+    """The RAM P's head rows read (R1 L1: the policy checks their values against live RAM)."""
+    g = w.lua.globals()
+    g.put(0x02023DFC, status3, 4)
+    g.put(0x02023E0C + 0x0F, timer, 1)
+    g.put(0x02023D7C, 0, 1)
+    return w
+
+
 def parked(title, kind):
     if title == "radical_red":
-        return rr_battle_world(kind, 1, 1, 0x0802E439)
-    return battle_world(title, 1, 1, player(title, "HandleInputChooseAction"))
+        return seed_p_rows(rr_battle_world(kind, 1, 1, 0x0802E439))
+    return seed_p_rows(battle_world(title, 1, 1, player(title, "HandleInputChooseAction")))
 
 
 PH_TITLES = [("radical_red", "clean"), ("radical_red", "companion"), ("firered", "clean"),
@@ -759,11 +768,11 @@ PH_TITLES = [("radical_red", "clean"), ("radical_red", "companion"), ("firered",
 
 
 @pytest.mark.parametrize("title,kind", PH_TITLES)
-def test_ph_the_pack_proves_one_handoff_entry_per_battler(title, kind):
+def test_ph_the_pack_proves_the_handoff_entry_for_battler_0_only(title, kind):
+    """R1 M1: every battle clause pins battler 0, so only slot 0 is a word the permit checks."""
     w = parked(title, kind)
-    for b in range(4):
-        assert list(w.safety.handoff_entry(w.safety, b).values()) == [H_SLOT + 4 * b, 4, H_VALUE]
-    for bad in (None, -1, 4, 1.5):
+    assert list(w.safety.handoff_entry(w.safety, 0).values()) == [H_SLOT, 4, H_VALUE]
+    for bad in (1, 2, 3, None, -1, 4, 1.5):
         assert w.safety.handoff_entry(w.safety, bad) is None
 
 
@@ -854,3 +863,52 @@ def test_ph_a_malformed_handoff_block_proves_nothing(mutation):
     ok, why, clauses = w.check_reason("battle_commit", {"battler": 0, "plan": p_plan()})
     assert ok is False and "battle_commit_handoff" in clauses
     assert w.check_reason("battle_faint")[0] is True        # the battle block itself still stands
+
+
+# ── R1 review fixes (docs/gen3/reviews/R1_PH_REVIEW_2026-09-24.md) ─────────────────────────────
+
+@pytest.mark.parametrize("title,kind", PH_TITLES)
+@pytest.mark.parametrize("battler", [1, 2, 3])
+def test_r1_m1_a_consistent_handoff_plan_for_a_non_zero_battler_is_refused(title, kind, battler):
+    """R1 M1 (red at cdc571f1): comm[b] = 0 passes the guard and the tail is self-consistent, but
+    slot b is no word the permit pins; the policy, not only the client, refuses it."""
+    ok, why, clauses = parked(title, kind).check_reason(
+        "battle_commit", {"battler": battler, "plan": p_plan(battler=battler)})
+    assert ok is False and "battle_commit_handoff" in clauses, clauses
+
+
+@pytest.mark.parametrize("title,kind", PH_TITLES)
+@pytest.mark.parametrize("case", ["comm_and_handoff_only", "explode_plus_handoff", "extra_row",
+                                  "status3_not_or_of_live", "timer_high_nibble_dropped",
+                                  "action_not_13", "rows_reordered"])
+def test_r1_l1_a_slot_writing_plan_must_be_exactly_the_p_h_shape(title, kind, case):
+    """R1 L1 (red at cdc571f1): the whole plan is judged -- status3 = live | PERISH, timer = live
+    & 0xF0, action 13, comm, hand-off -- so no other head can lift the hold or hand off."""
+    w = parked(title, kind)
+    seed_p_rows(w, status3=0x100, timer=0x35)
+    good = p_plan()
+    good[0][2], good[1][2] = 0x120, 0x30
+    assert w.check_reason("battle_commit", {"battler": 0, "plan": good})[0] is True
+    comm, handoff = good[3], good[4]
+    plan = {
+        "comm_and_handoff_only": [comm, handoff],
+        "explode_plus_handoff": explode_plan() + [handoff],
+        "extra_row": good[:3] + [[0x02023BE4 + 0x28, 2, 0]] + good[3:],
+        "status3_not_or_of_live": [[good[0][0], 4, 0x20]] + good[1:],
+        "timer_high_nibble_dropped": [good[0], [good[1][0], 1, 0]] + good[2:],
+        "action_not_13": good[:2] + [[good[2][0], 1, 0]] + good[3:],
+        "rows_reordered": [good[1], good[0]] + good[2:],
+    }[case]
+    ok, why, clauses = w.check_reason("battle_commit", {"battler": 0, "plan": plan})
+    assert ok is False and clauses == ["battle_commit_handoff"], (case, clauses)
+
+
+@pytest.mark.parametrize("title,kind", PH_TITLES)
+@pytest.mark.parametrize("mirror", [0x0300CFE0, 0x0301CFE0, 0x03FFCFE0])
+def test_r1_l2_an_iwram_mirror_of_the_slot_is_a_slot_write(title, kind, mirror):
+    """R1 L2 (red at cdc571f1 on FR/LG): IWRAM repeats every 0x8000, so 0x0300CFE0 is slot 0."""
+    w = parked(title, kind)
+    for plan in (p_plan(tail=False) + [[mirror, 4, H_VALUE]],          # the tail through a mirror
+                 [[mirror + 1, 1, 0]] + p_plan()):                       # a mirror byte in the head
+        ok, why, clauses = w.check_reason("battle_commit", {"battler": 0, "plan": plan})
+        assert ok is False and clauses == ["battle_commit_handoff"], (hex(mirror), clauses)

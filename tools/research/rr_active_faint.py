@@ -1,7 +1,7 @@
 """C5-RR-ACTIVE-FAINT-SCOPE: byte facts behind docs/gen3/research/rr_active_faint_parity_scope_2026-09-23.md.
 
 Static, no emulator.  Reuses rr_battle_tuple.py (ldr/detour decoders) and rr_save_callers.py (ROM
-pins, FR .sym, BL/LDR census).  Asserts, on BOTH RR artifacts (clean 964f951a, companion b7d1e075),
+pins, FR .sym, BL/LDR census).  Asserts, on BOTH RR artifacts (clean 964f951a, companion ea5352f8),
 every byte fact the RR port of mechanism P rests on: where CFRU runs the end-of-turn Perish KO and
 what it reads, the struct layout that follows from those instructions, the script and opcode
 handlers the KO runs, the action-13 dispatch, and the controller hand-off (the value written, the
