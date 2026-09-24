@@ -1,0 +1,3 @@
+attempt 1 of 1
+CODE_DIGEST {"commit": "9fb96ad632b627ef97d824dceaed0cb9e5361620", "digest": "cc291ba5179e5f0a16fc18a60e755ff63921effdbf99d762c6d3c88595ff1afa", "dirty": [], "schema": "gen2-code-digest-v1", "scope": ["lua/*.lua", "lua/gen2/**", "lua/core/**", "server/**/*.py", "data/games/gen2_crystal/**", "data/games/gen2_gold/**", "data/games/gen2_silver/**"]}
+PYDEC: PASS a=DF76:B541:13 b=A30D:C4A6:A3 area=route_29 titles=crystal/gold status=alive scenario=gen2_whiteout_rebuild rebuild=restored
