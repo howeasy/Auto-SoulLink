@@ -25,7 +25,7 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
                "version": "str", "client": "str", "badges": "int", "has_pokeballs": "bool",
                "trainer_name": "str", "pc_boxes": "list", "area_id": "str", "loc_name": "str",
                "rom_sha1": "str", "caps": "dict", "rom_content": "dict",
-               "artifact_kind": "str", "foundation": "str"}),
+               "artifact_kind": "str", "foundation": "str", "trade_prepare": "bool"}),
     "tick": ({}, {"has_pokeballs": "bool", "party": "list", "area_id": "str", "loc_name": "str",
                   "in_battle": "bool", "is_trainer_battle": "bool", "trainer_id": "int",
                   "opponent_name": "str", "opponent_class": "str", "enemy_party": "list",
@@ -57,7 +57,9 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     # then offers one; the reply bytes must land within the receptionist's 30/180-frame waits
     "trade_query": ({}, {}),
     "trade_offer": ({"slot": "int"}, {}),
-    "menu_result": ({"token": "str", "choice": "int"}, {}),
+    "menu_result": ({"token": "str", "choice": "int"}, {"withdraw": "bool"}),
+    # MAJOR-1 prepare round: the answer to apply_prepare (ok = this side can still take its APPLY)
+    "apply_ready": ({"token": "str", "ok": "bool"}, {}),
     "mon_chosen": ({"token": "str", "slot": "int"}, {}),
     "trade_done": ({"new_key": "key", "new_species": "int"}, {"token": "str", "slot": "int", "uncertain": "bool"}),
     "status": ({"badges": "int"}, {}),
@@ -115,6 +117,7 @@ COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "trade_offer_ack": ({"ok": "bool"}, {"token": "str"}),
     "choose_mon": ({"token": "str"}, {}),
     "apply_trade": ({"slot": "int", "blob_hex": "hex", "old_key": "key", "token": "str"}, {"partner_name": "str"}),
+    "apply_prepare": ({"token": "str", "slot": "int", "old_key": "key"}, {}),
     "ghost_pos": ({}, {}),
     "link_panel": ({"rows": "list"}, {}),
     # one-way replies to key_change (docs/protocol.md §5): no ACKS row, nothing to answer
@@ -132,6 +135,7 @@ ACKS = {
     "show_menu": ("menu_result", "menu_result"),
     "choose_mon": ("mon_chosen", "mon_chosen"),
     "apply_trade": ("trade_done", None),
+    "apply_prepare": ("apply_ready", "apply_ready"),
 }
 PROMPT_CANCEL = {"show_choices": ("menu_result", "choice", 127),
                  "show_menu": ("menu_result", "choice", 0),

@@ -173,3 +173,72 @@ async def test_the_resolve_endpoint_drives_the_state(tmp_path):
     ok = await srv.handle_debug_resolve_trade(AsyncMock(json=AsyncMock(return_value={"token": token,
                                                                                       "action": "rollback"})))
     assert ok.status == 200 and srv.state.trade_problem() is None
+
+
+# ── MAJOR-1: a prepare round before either cartridge commits (opt-in per client) ─────────────────
+
+def _hello(state, pid, prepare=True):
+    key = {"a": B_GETS, "b": A_GETS}[pid]                                    # each side's own offered mon
+    msg = {"event": "hello", "party": [{"key": key, "species_id": 1, "hp": 10, "maxHP": 10}]}
+    if prepare:
+        msg["trade_prepare"] = True
+    state.handle_event(pid, msg)
+
+
+def _preparing(tmp_path):
+    state, entry, token, _ = _gen1_confirming(tmp_path)
+    _hello(state, "a")
+    _hello(state, "b")
+    b_cmds = state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})
+    a_cmds = _cmds(state, "a")
+    return state, entry, token, a_cmds, b_cmds
+
+
+def _named(cmds, name):
+    return [c for c in cmds if c.get("cmd") == name]
+
+
+def test_an_accept_prepares_both_sides_before_any_apply(tmp_path):
+    state, _entry, token, a_cmds, b_cmds = _preparing(tmp_path)
+    assert state.pending_trade["phase"] == "preparing"
+    assert not _named(a_cmds + b_cmds, "apply_trade"), "nothing may commit before both are ready"
+    assert _named(a_cmds, "apply_prepare") == [{"cmd": "apply_prepare", "token": token, "slot": 2,
+                                                "old_key": B_GETS}]
+    assert _named(b_cmds, "apply_prepare") == [{"cmd": "apply_prepare", "token": token, "slot": 4,
+                                                "old_key": A_GETS}]
+    a_cmds = state.handle_event("a", {"event": "apply_ready", "token": token, "ok": True})
+    assert state.pending_trade["phase"] == "preparing" and not _named(a_cmds, "apply_trade")
+    b_cmds = state.handle_event("b", {"event": "apply_ready", "token": token, "ok": True})
+    assert state.pending_trade["phase"] == "applying"
+    assert len(_named(b_cmds, "apply_trade")) == 1 and len(_named(_cmds(state, "a"), "apply_trade")) == 1
+
+
+def test_a_side_that_cannot_take_the_apply_cancels_both_before_any_commit(tmp_path):
+    """The dual-apply race: the proposer's cartridge left (or the responder's) between YES and APPLY."""
+    state, entry, token, _a, _b = _preparing(tmp_path)
+    state.handle_event("b", {"event": "apply_ready", "token": token, "ok": True})
+    a_cmds = state.handle_event("a", {"event": "apply_ready", "token": token, "ok": False})
+    b_cmds = _cmds(state, "b")
+    assert state.pending_trade is None
+    for cmds in (a_cmds, b_cmds):
+        assert not _named(cmds, "apply_trade")
+        assert any("did not go through" in c.get("text", "") for c in _named(cmds, "msgbox"))
+    assert (entry.a.key, entry.b.key) == (B_GETS, A_GETS)
+
+
+def test_an_initiator_withdrawal_while_preparing_cancels(tmp_path):
+    state, _entry, token, _a, _b = _preparing(tmp_path)
+    state.handle_event("a", {"event": "menu_result", "token": token, "choice": 0, "withdraw": True})
+    assert state.pending_trade is None
+    state.handle_event("b", {"event": "apply_ready", "token": token, "ok": True})
+    assert state.pending_trade is None and not _named(_cmds(state, "b"), "apply_trade")
+
+
+def test_a_client_without_the_capability_keeps_the_direct_apply(tmp_path):
+    """Gen 3 (and any client that does not declare trade_prepare) is byte-for-byte unchanged."""
+    state, _entry, token, _ = _gen1_confirming(tmp_path)
+    _hello(state, "a")
+    _hello(state, "b", prepare=False)
+    b_cmds = state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})
+    assert state.pending_trade["phase"] == "applying"
+    assert _named(b_cmds, "apply_trade") and not _named(b_cmds, "apply_prepare")

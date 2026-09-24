@@ -308,6 +308,9 @@ class SoulLinkState:
         # a native YES/NO menu before the faithful blob swap is applied.  None = no trade pending.
         self.pending_trade: dict | None = None
         self._trade_token: int = 0
+        # MAJOR-1: clients that answer apply_prepare (hello trade_prepare: true); a trade takes the
+        # prepare round only when BOTH declared it, so other clients keep the direct apply
+        self.trade_prepare: dict[str, bool] = {"a": False, "b": False}
         # Per-player tick countdown during which _reconcile_party_keys is suppressed after a trade
         # completes. A trade is a party↔party swap, so no box/party sync is ever legitimately needed
         # from it; but for a few ticks each client's party read is still settling, and the drift
@@ -338,6 +341,7 @@ class SoulLinkState:
         elif event == "hello":
             self._handle_hello(player_id, msg)
             if not msg.get("_rejected"):
+                self.trade_prepare[player_id] = msg.get("trade_prepare") is True
                 self._trade_evidence(player_id, msg.get("party") or [])
         elif event == "area_enter":
             self._handle_area_enter(player_id, msg)
@@ -357,6 +361,8 @@ class SoulLinkState:
             self._handle_menu_result(player_id, msg)
         elif event == "trade_done":
             self._handle_trade_done(player_id, msg)
+        elif event == "apply_ready":
+            self._handle_apply_ready(player_id, msg)
         elif event == "status":
             self._handle_status(player_id, msg)
         elif event == "capture":
@@ -800,21 +806,29 @@ class SoulLinkState:
             else:                                          # B-press / cancel (0x7F) → abort silently
                 self.pending_trade = None
             return
-        if phase == "confirming":                          # partner accepted / declined the offer
-            if player_id == pt["initiator"]:
-                # The initiator's cartridge left its offer (timed out, B, a late ack): cancel it
-                # BEFORE the partner answers, or a later YES would apply the partner side alone.
-                if choice != 1:
-                    self.pending_trade = None
-                    for pid in ("a", "b"):
-                        self.queued_commands[pid].append({
-                            "cmd": "msgbox", "text": "Trade did not go through.", "fb": "prompt"})
-                    log.info(f"[{player_id}] withdrew trade offer {pt['token']} before the partner answered")
+        if player_id == pt["initiator"] and phase in ("confirming", "preparing", "applying"):
+            # The initiator's cartridge left its offer (timed out, B, a late ack): an explicit
+            # `withdraw` (never a bare choice 0, which a Gen 3 menu replay can carry) cancels it
+            # BEFORE anything is applied, or a later YES would apply the partner side alone.
+            if msg.get("withdraw") is not True:
                 return
+            log.info(f"[{player_id}] withdrew trade offer {pt['token']} ({phase})")
+            if phase == "applying":
+                # MINOR-7: it never armed its APPLY, so it certainly did not trade
+                if pt.get("verdict", {}).get(player_id) is None:
+                    pt["verdict"][player_id] = "none"
+                    self._settle_trade(pt)
+                return
+            self._cancel_trade("Trade did not go through.")
+            return
+        if phase == "confirming":                          # partner accepted / declined the offer
             if player_id != _partner(pt["initiator"]):
                 return
             if choice == 1:
-                self._execute_trade(pt)
+                if all(self.trade_prepare.values()):
+                    self._prepare_trade(pt)
+                else:
+                    self._execute_trade(pt)
             else:
                 self.pending_trade = None
                 self.queued_commands[pt["initiator"]].append({
@@ -822,16 +836,41 @@ class SoulLinkState:
                 self.queued_commands[player_id].append({
                     "cmd": "msgbox", "text": "Trade declined.", "fb": "prompt"})
 
-    def _execute_trade(self, pt: dict):
-        """Both confirmed → tell each client to run the NATIVE trade (stage gEnemyParty[0] + the trade
-        scene) for its half. We do NOT mutate the link here. The swap is applied ATOMICALLY in
-        _handle_trade_done once BOTH sides report their post-trade mon, so a half-completed trade
-        (one side's scene fails / the player waits forever / disconnects) can NEVER leave the link
-        half-swapped with mismatched keys (the old 'pairs break if you wait too long' bug). The
-        watchdog (_tick_pending_trade) force-completes an 'applying' trade that never fully
-        reports (the clients WILL swap once the queued commands run)."""
-        # Re-validate: the offer was vetted at mon_chosen, but the players free-roam while the
-        # partner deliberates — the offered pair may have fainted/died or been boxed since.
+    def _cancel_trade(self, text: str):
+        """Clear a trade nothing was applied for, telling both players."""
+        self.pending_trade = None
+        for pid in ("a", "b"):
+            self.queued_commands[pid].append({"cmd": "msgbox", "text": text, "fb": "prompt"})
+
+    def _prepare_trade(self, pt: dict):
+        """MAJOR-1 (review e9d5e136): the dual-apply race. Before either cartridge may commit, ask
+        each client whether it can still take its APPLY (visit accepted, same slot, cartridge still
+        waiting); apply_trade goes out only after both answer ok, otherwise both cancel with
+        nothing staged. What is left is one delivery latency inside the cartridge APPLY wait."""
+        if self._trade_unavailable(pt):
+            return
+        pt.update(phase="preparing", ready={"a": False, "b": False}, age=0)
+        for pid in ("a", "b"):
+            self.queued_commands[pid].append({"cmd": "apply_prepare", "token": pt["token"],
+                                              "slot": pt[f"{pid}_slot"], "old_key": pt[f"{pid}_key"]})
+        log.info(f"trade {pt['token']} preparing: waiting for apply_ready from both sides")
+
+    def _handle_apply_ready(self, player_id: str, msg: dict):
+        pt = self.pending_trade
+        if not pt or pt.get("phase") != "preparing" or str(msg.get("token", "")) != pt["token"]:
+            return
+        pt["age"] = 0
+        if msg.get("ok") is not True:
+            log.info(f"[{player_id}] cannot take trade {pt['token']}; canceled before any apply")
+            self._cancel_trade("Trade did not go through.")
+            return
+        pt["ready"][player_id] = True
+        if all(pt["ready"].values()):
+            self._execute_trade(pt)
+
+    def _trade_unavailable(self, pt: dict) -> bool:
+        """Re-validate at confirm: the players free-roam while the partner deliberates, so the offered
+        pair may have fainted/died or been boxed since mon_chosen. Cancels (and says so) if it has."""
         entry = pt["link"]
         if (entry.status != LinkStatus.ALIVE
                 or pt["a_key"] not in self.party_keys["a"]
@@ -839,12 +878,20 @@ class SoulLinkState:
                 or (self.adapter.native_trade_ui()
                     and (pt["a_key"] in self.party_keys["b"]
                          or pt["b_key"] in self.party_keys["a"]))):
-            self.pending_trade = None
-            for pid in ("a", "b"):
-                self.queued_commands[pid].append({
-                    "cmd": "msgbox", "text": "Trade canceled - a POKeMON is\nno longer available.",
-                    "fb": "prompt"})
+            self._cancel_trade("Trade canceled - a POKeMON is\nno longer available.")
             log.info(f"trade aborted at confirm: pair no longer tradable (token {pt['token']})")
+            return True
+        return False
+
+    def _execute_trade(self, pt: dict):
+        """Both confirmed → tell each client to run the NATIVE trade (stage gEnemyParty[0] + the trade
+        scene) for its half. We do NOT mutate the link here. The swap is applied ATOMICALLY in
+        _handle_trade_done once BOTH sides report their post-trade mon, so a half-completed trade
+        (one side's scene fails / the player waits forever / disconnects) can NEVER leave the link
+        half-swapped with mismatched keys (the old 'pairs break if you wait too long' bug). The
+        watchdog (_tick_pending_trade) moves a side that never reports to UNCERTAIN: its next
+        party snapshot settles it (_trade_evidence), nothing is guessed."""
+        if self._trade_unavailable(pt):
             return
         # old_key lets the client re-locate the mon if the party was reordered after mon_chosen
         # (the slot index is a snapshot); token lets trade_done reports be matched to THIS trade.

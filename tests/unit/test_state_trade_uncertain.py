@@ -266,7 +266,7 @@ def test_the_initiator_withdrawing_cancels_the_offer_before_a_late_accept(tmp_pa
     choice 0 under the token its trade_offer_ack carried) cancels the offer; B's late YES is refused;
     both see the did-not-go-through path and nothing is applied."""
     state, entry, token, offer_cmds = _gen1_confirming(tmp_path)
-    a_cmds = state.handle_event("a", {"event": "menu_result", "token": token, "choice": 0})
+    a_cmds = state.handle_event("a", {"event": "menu_result", "token": token, "choice": 0, "withdraw": True})
     assert state.pending_trade is None
     b_cmds = state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})
     assert state.pending_trade is None
@@ -283,11 +283,14 @@ def test_the_initiator_withdrawing_cancels_the_offer_before_a_late_accept(tmp_pa
 
 def test_only_the_initiator_can_withdraw_and_only_with_the_offer_token(tmp_path):
     state, _entry, token, _ = _gen1_confirming(tmp_path)
-    state.handle_event("a", {"event": "menu_result", "token": "t999", "choice": 0})
+    state.handle_event("a", {"event": "menu_result", "token": "t999", "choice": 0, "withdraw": True})
     assert state.pending_trade["phase"] == "confirming"
+    state.handle_event("a", {"event": "menu_result", "token": token, "choice": 0})
+    assert state.pending_trade["phase"] == "confirming", "m3: a bare choice 0 (a Gen 3 menu replay) is not a withdrawal"
     state.handle_event("a", {"event": "menu_result", "token": token, "choice": 1})
     assert state.pending_trade["phase"] == "confirming", "the initiator cannot accept its own offer"
     state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})
     assert state.pending_trade["phase"] == "applying"
-    state.handle_event("a", {"event": "menu_result", "token": token, "choice": 0})
-    assert state.pending_trade["phase"] == "applying", "too late to withdraw once apply_trade went out"
+    state.handle_event("a", {"event": "menu_result", "token": token, "choice": 0, "withdraw": True})
+    assert state.pending_trade["phase"] == "applying", "apply_trade went out: the trade stays open"
+    assert state.pending_trade["verdict"]["a"] == "none", "m7: a withdrawn side certainly did not trade"
