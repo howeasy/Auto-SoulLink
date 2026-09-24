@@ -79,7 +79,7 @@ U1_CHAINS = {"a7bf1773": {**dict.fromkeys(_U1, "a7bf1773"), "lua/tests/duo/gen2_
              "76d715e6": dict.fromkeys(_U1F + ("lua/tests/gen2_walk.lua",), "76d715e6")}
 U1_CHAIN_FOR = {"crystal": "a882a763", "gold": "a882a763", "silver": "a7bf1773"}
 # O-33 clock setup for the U1 leg (tools/gen2_synth_fixtures.day_clock, disclosed in the leg as clock_setup): the
-# fixture RTC runs on with the host clock (game = 10:00 + RTC), and Silver Route 30 holds Weedle only by morning/day
+# fixture RTC runs on with the host clock (game = the save's wStart time + RTC), and Silver Route 30 holds Weedle only by morning/day
 # (pokegold data/wild/johto_grass.asm ROUTE_30, _SILVER nite: Hoothoot/Rattata), so a night launch never meets a
 # POISON_STING foe (W6 Silver RED on every chain, 2026-09-24). Crystal (night Spinarak) and Gold (trainer Wade) hunt
 # at any hour. Only the emulator RTC trailer changes; the CartRAM is the committed fixture's.
@@ -224,7 +224,8 @@ def test_mailbox_write_watch_on_the_overlay(emuhawk, title):  # noqa: F811
         launched = True
         source_path, clock = fixture, None
         if leg == "u1" and title in U1_CLOCK:   # set right before the launch: the RTC runs on from here
-            raw, clock = gen2_synth_fixtures.day_clock(staged, hour=U1_CLOCK[title], now=int(time.time()))
+            raw, clock = gen2_synth_fixtures.day_clock(staged, hour=U1_CLOCK[title], now=int(time.time()),
+                                                      title=title)
             source_path = REPO / ".cache/gen2-fixtures/w6" / f"{title}-{leg}-clock.SaveRAM"
             source_path.parent.mkdir(parents=True, exist_ok=True)
             source_path.write_bytes(raw)

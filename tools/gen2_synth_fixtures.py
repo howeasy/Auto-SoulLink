@@ -323,24 +323,36 @@ DUO_FIXTURES = tuple(f"{title}_synth_{kind}" for title in ("crystal", "gold", "s
     f"crystal_synth_{kind}_ot2" for kind in (*DUO_RECIPES, "bill"))
 
 
-INIT_HOUR = 10   # InitClock's default hour, taken as-is by the scripted play (engine/rtc/timeset.asm:48-49)
+CLOCK_SCHEMA = "gen2-clock-setup-v1"
 
 
-def day_clock(raw, *, hour, now):
+def start_time(raw, title):
+    """(wStartHour, wStartMinute, wStartSecond) from the save: the in-game time set at new game, which FixTime
+    adds to the RTC (pokegold/pokecrystal home/time.asm FixTime). The played fixtures carry 09:58:5x, not a
+    round 10:00."""
+    save = _Save(bytes(raw[:CART]), _codec().for_foundation(title, root=ROOT))
+    _day, hour, minute, second = save.read("wStartDay", 4)
+    return hour, minute, second
+
+
+def day_clock(raw, *, hour, now, title):
     """O-33 clock setup: (bytes, disclosure) with only the 22-byte BizHawk gambatte RTC trailer rewritten so the
-    game reads `hour`:00 at host time `now`. The trailer is emulator state, never save data (docs/gen2/reviews/
+    game reads `hour`:00:00 at host time `now`. The trailer is emulator state, never save data (docs/gen2/reviews/
     OMP_RTC_SOURCE_2026-09-22.md): an 8-byte big-endian base time, then dh, dl, h, m, s, the cycle counter and
     the latched copies (libgambatte cartridge.cpp :504-580). The RTC runs on from base to host time, so the game
     clock of a played fixture drifts with the wall clock (EVO-U1: silver_battle read 19:xx at 08:23 local).
-    Game time = INIT_HOUR:00 + RTC. The RTC only moves forward (the next matching hour), and CartRAM is untouched."""
+    Game time = the save's wStart time + RTC (FixTime). The RTC only moves forward (to the next matching
+    instant), and CartRAM is untouched. The disclosure (gen2-clock-setup-v1) re-derives from the base bytes:
+    verify_gen2_release re-runs this function on the committed fixture and compares every field."""
     if not isinstance(raw, (bytes, bytearray)) or len(raw) != SAVERAM:
         raise ValueError(f"base save must be exactly {SAVERAM} bytes (CartRAM + RTC trailer)")
+    start_h, start_m, start_s = start_time(raw, title)
     tail = bytearray(raw[CART:])
     base, dh, dl, h, m, s = int.from_bytes(tail[:8], "big"), *tail[8:13]
     if dh & 0x40:
         raise ValueError("the RTC is halted")
     total = (((dh & 1) << 8) | dl) * 86400 + h * 3600 + m * 60 + s + max(0, now - base)
-    total += ((hour - INIT_HOUR) * 3600 - total) % 86400
+    total += (hour * 3600 - (start_h * 3600 + start_m * 60 + start_s) - total) % 86400
     days = total // 86400
     if days > 511:
         raise ValueError("the RTC day counter would overflow")
@@ -349,9 +361,13 @@ def day_clock(raw, *, hour, now):
     tail[8:13] = bytes(regs)
     tail[17:22] = bytes(regs)   # the latched copies
     out = bytes(raw[:CART]) + bytes(tail)
-    return out, {"schema": SCHEMA, "builder": BUILDER, "field": "BizHawk gambatte RTC trailer", "game_hour": hour,
-                 "host_time": int(now), "old_hex": bytes(raw[CART:]).hex(), "new_hex": bytes(tail).hex(),
-                 "cartram_sha256": hashlib.sha256(out[:CART]).hexdigest(), "sha256": hashlib.sha256(out).hexdigest()}
+    return out, {"schema": CLOCK_SCHEMA, "builder": BUILDER, "title": title, "field": "BizHawk gambatte RTC trailer",
+                 "game_hour": hour, "host_time": int(now), "start_time": [start_h, start_m, start_s],
+                 "base_sha256": hashlib.sha256(bytes(raw)).hexdigest(),
+                 "old_hex": bytes(raw[CART:]).hex(), "new_hex": bytes(tail).hex(),
+                 "cartram_sha256": hashlib.sha256(out[:CART]).hexdigest(), "sha256": hashlib.sha256(out).hexdigest(),
+                 "source_facts": ["home/time.asm FixTime: game time = wStartHour/Minute/Second + RTC",
+                                  "libgambatte cartridge.cpp:504-580: the 22-byte RTC trailer"]}
 
 
 def build_named(name, *, root=ROOT):

@@ -1183,6 +1183,27 @@ def _sfx_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
 
 # card gen2-p4-w6 (tests/live/test_gen2_w6_gate.py): the live mailbox write-watch over the whole scripted corpus.
 W6_GATE_LEGS = ("panel", "sfx", "u1")
+# Legs that must carry an O-33 clock setup (tests/live/test_gen2_w6_gate.py U1_CLOCK: Silver hunts by day).
+W6_CLOCK_LEGS = {("silver", "u1")}
+
+
+def _clock_setup_errors(root: Path, title: str, leg: dict) -> list[str]:
+    """clock-setup-v1: the disclosure re-derives exactly from the committed fixture through
+    tools/gen2_synth_fixtures.day_clock (same hour and host time). That binds the base bytes, the start time,
+    both hashes and the trailer, and it proves that only bytes 32768..32790 (the RTC trailer) differ."""
+    import gen2_synth_fixtures as synth
+    setup = leg.get("clock_setup")
+    try:
+        raw = (root / "tests/fixtures/gen2" / f"{leg['fixture']}.SaveRAM").read_bytes()
+        out, again = synth.day_clock(raw, hour=setup["game_hour"], now=setup["host_time"], title=title)
+    except (OSError, KeyError, TypeError, ValueError, AttributeError) as exc:
+        return [f"clock setup does not re-derive from the committed fixture: {exc!r}"]
+    if setup != again:
+        wrong = sorted(key for key in set(setup) | set(again) if setup.get(key) != again.get(key))
+        return [f"clock setup differs from its day_clock re-derivation in {wrong}"]
+    if out[:synth.CART] != raw[:synth.CART] or len(out) != synth.SAVERAM:
+        return ["clock setup changes CartRAM (only the RTC trailer may differ)"]
+    return []
 
 
 def _w6_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
@@ -1209,6 +1230,10 @@ def _w6_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
         control = leg.get("control") or {}
         if control.get("native_caught") is not True or control.get("lua_caught") is not True:
             errors.append(f"w6 gate leg {name} known-positive control did not fire")
+        if leg.get("clock_setup") is not None:
+            errors.extend(f"w6 gate leg {name}: {e}" for e in _clock_setup_errors(root, title, leg))
+        elif (title, name) in W6_CLOCK_LEGS:
+            errors.append(f"w6 gate leg {name} has no clock setup disclosure (it hunts by day)")
     if receipt.get("violation_count") != 0:
         errors.append("w6 gate receipt records mailbox violations")
     return errors

@@ -128,24 +128,28 @@ def _rtc_seconds(raw, now):
 
 
 def test_the_committed_silver_fixture_reads_the_measured_night_hour():
-    """EVO-U1 measured silver_battle at game 19:xx on 2026-09-24 08:23 local: game time = InitClock's 10:00 + RTC."""
+    """EVO-U1 measured silver_battle at game 19:xx on 2026-09-24 08:23 local: game time = the save's wStart
+    time + RTC (home/time.asm FixTime)."""
     raw = (ROOT / "tests/fixtures/gen2/silver_battle.SaveRAM").read_bytes()
     base = int.from_bytes(raw[synth.CART:synth.CART + 8], "big")
     now = base + (33 * 3600 + 41)   # 2026-09-22 23:22:19 + 33:00:41 = 2026-09-24 08:23:00
-    assert (10 + _rtc_seconds(raw, now) // 3600) % 24 == 19
+    h, m, s = synth.start_time(raw, "silver")
+    assert (h, m) == (9, 58)   # set at new game by the scripted play, not a round 10:00
+    assert ((h * 3600 + m * 60 + s + _rtc_seconds(raw, now)) // 3600) % 24 == 19
 
 
 def test_day_clock_moves_the_game_hour_forward_and_keeps_the_cartram():
     raw = (ROOT / "tests/fixtures/gen2/silver_battle.SaveRAM").read_bytes()
     base = int.from_bytes(raw[synth.CART:synth.CART + 8], "big")
     now = base + 33 * 3600 + 41
-    out, disclosure = synth.day_clock(raw, hour=11, now=now)
+    out, disclosure = synth.day_clock(raw, hour=11, now=now, title="silver")
+    h, m, s = synth.start_time(raw, "silver")
     assert out[:synth.CART] == raw[:synth.CART] and len(out) == synth.SAVERAM
     assert int.from_bytes(out[synth.CART:synth.CART + 8], "big") == now
     before, after = _rtc_seconds(raw, now), _rtc_seconds(out, now)
     assert after >= before and after - before < 86400                  # time never runs backwards
-    assert (10 * 3600 + after) % 86400 == 11 * 3600                    # game 11:00:00 at `now`
+    assert (h * 3600 + m * 60 + s + after) % 86400 == 11 * 3600         # game 11:00:00 at `now`
     assert disclosure["game_hour"] == 11 and disclosure["field"] == "BizHawk gambatte RTC trailer"
     assert disclosure["old_hex"] == raw[synth.CART:].hex() and disclosure["new_hex"] == out[synth.CART:].hex()
     with pytest.raises(ValueError):
-        synth.day_clock(raw[:-1], hour=11, now=now)
+        synth.day_clock(raw[:-1], hour=11, now=now, title="silver")

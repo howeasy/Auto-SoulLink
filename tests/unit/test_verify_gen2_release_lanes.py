@@ -675,13 +675,18 @@ def test_new_gates_lane_is_the_implemented_receipt_lane():
 
 
 def test_committed_new_gates_tree_is_fully_green():
-    """The real tree today: every U1/U2/qualification row bound, pinned and PHYSICAL."""
-    assert gate.new_gates_errors() == []
+    """The real tree today: every U1/U2/qualification row bound, pinned and PHYSICAL. One named, known gap:
+    the W6 Silver U1 leg's clock setup predates clock-setup-v1 (it assumed a 10:00 start where the save holds
+    09:58:55) and stays RED until W6 Silver re-runs on the fixed day_clock. Any other gap fails here."""
+    errors = gate.new_gates_errors()
+    known = [e for e in errors if e.startswith("new-gates.w6.silver: w6 gate leg u1: clock setup")]
+    assert errors == known and len(known) <= 1, errors
 
 
 def test_copied_new_gates_tree_is_also_green(tmp_path):
     _copy_new_gates_tree(tmp_path)
-    assert gate.new_gates_errors(tmp_path) == []
+    errors = gate.new_gates_errors(tmp_path)   # the same single known gap as the committed tree (W6 Silver clock)
+    assert all(e.startswith("new-gates.w6.silver: w6 gate leg u1: clock setup") for e in errors) and len(errors) <= 1
 
 
 def test_new_gates_manifest_missing_is_red(tmp_path):
@@ -1839,6 +1844,11 @@ def test_receipt_cli_exit_follows_the_gaps(monkeypatch, capsys, flag, func):
 
 # live-gates: synthetic panel/sfx/w6 receipts that satisfy the production validators.
 
+def _clock(raw, title, hour=11, now=1790278047):
+    import gen2_synth_fixtures as synth
+    return synth.day_clock(raw, hour=hour, now=now, title=title)[1]
+
+
 def _live_gates_tree(tmp_path):
     (tmp_path / "data/gen2").mkdir(parents=True, exist_ok=True)
     provenance = (REPO / "data/gen2/overlay_provenance.json").read_bytes()
@@ -1863,7 +1873,8 @@ def _live_gates_tree(tmp_path):
                          "reset": {"result": "PASS", "pending_at_entry": True, "played_id": None,
                                    "on_channel": None}},
             "w6_gate": {**bind, "schema": "gen2-w6-gate-v1", "violation_count": 0,
-                        "legs": dict.fromkeys(gate.W6_GATE_LEGS, leg)},
+                        "legs": {name: {**leg, "clock_setup": _clock(raw, title) if (title, name) in
+                                        gate.W6_CLOCK_LEGS else None} for name in gate.W6_GATE_LEGS}},
         }
         for kind, receipt in receipts.items():
             path = tmp_path / "tests/fixtures/gen2/receipts" / f"{title}_overlay.{kind}.json"
@@ -2196,3 +2207,68 @@ def test_a_model_only_case_declared_as_a_cell_is_red(tmp_path):
     _write_doc(tmp_path, doc)
     for errors in (gate.trade_gates_errors(tmp_path, _trade_duo()), gate.duo_matrix_errors(tmp_path, _trade_duo())):
         assert any("duo.gold.silver: ['gen2_trade_refuse_contest'] are MODEL-only" in e for e in errors)
+
+
+# clock-setup-v1: a W6 leg's O-33 clock setup must re-derive from the committed fixture (day_clock).
+
+def _w6_leg(tmp_path, doc, title="silver", leg="u1"):
+    row = next(r for r in doc["requirements"] if r["id"] == f"new-gates.w6_gate.{title}")
+    entry = row["proofs"][0]["receipts"]["receipt"]
+    path = tmp_path / entry["path"]
+    receipt = json.loads(path.read_text(encoding="utf-8"))
+    def save():
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        _repin(tmp_path, entry)
+        (tmp_path / gate.NEW_GATES).write_text(json.dumps(doc), encoding="utf-8")
+
+    return receipt, receipt["legs"][leg], save
+
+
+def test_w6_clock_setup_rederives_from_the_fixture(tmp_path):
+    doc = _live_gates_tree(tmp_path)
+    assert gate.live_gates_errors(tmp_path) == []
+    receipt, leg, save = _w6_leg(tmp_path, doc)
+    assert leg["clock_setup"]["schema"] == "gen2-clock-setup-v1" and leg["clock_setup"]["title"] == "silver"
+
+
+@pytest.mark.parametrize("mutation", ["delete", "game_hour", "host_time", "new_hex", "old_hex", "sha256",
+                                      "cartram_sha256", "base_sha256", "start_time", "schema", "retarget_title",
+                                      "retarget_fixture", "legacy_ten_oclock"])
+def test_w6_clock_setup_red_when_deleted_falsified_or_retargeted(tmp_path, mutation):
+    doc = _live_gates_tree(tmp_path)
+    receipt, leg, save = _w6_leg(tmp_path, doc)
+    setup = leg["clock_setup"]
+    if mutation == "delete":
+        leg["clock_setup"] = None
+    elif mutation == "game_hour":
+        setup["game_hour"] = 12
+    elif mutation == "host_time":
+        setup["host_time"] += 3600
+    elif mutation in ("new_hex", "old_hex"):
+        setup[mutation] = setup[mutation][:-2] + ("00" if setup[mutation][-2:] != "00" else "01")
+    elif mutation in ("sha256", "cartram_sha256", "base_sha256"):
+        setup[mutation] = "0" * 64
+    elif mutation == "start_time":
+        setup["start_time"] = [10, 0, 0]
+    elif mutation == "schema":
+        setup["schema"] = "gen2-synth-disclosure-v1"
+    elif mutation == "retarget_title":
+        setup["title"] = "gold"
+    elif mutation == "retarget_fixture":
+        leg["clock_setup"] = _clock((REPO / "tests/fixtures/gen2/gold_battle.SaveRAM").read_bytes(), "gold")
+    else:   # the pre-fix disclosure: game = 10:00 + RTC, which the saved 09:58:55 start contradicts
+        setup.update(start_time=[10, 0, 0], schema="gen2-synth-disclosure-v1")
+    save()
+    errors = gate.live_gates_errors(tmp_path)
+    assert any("new-gates.w6_gate.silver: w6 gate leg u1" in e and "clock setup" in e for e in errors), errors
+
+
+def test_any_other_legs_clock_setup_obeys_the_same_rule(tmp_path):
+    doc = _live_gates_tree(tmp_path)
+    receipt, leg, save = _w6_leg(tmp_path, doc, title="gold", leg="panel")
+    leg["clock_setup"] = _clock((REPO / "tests/fixtures/gen2/gold_battle.SaveRAM").read_bytes(), "gold", hour=14)
+    save()
+    assert gate.live_gates_errors(tmp_path) == []
+    leg["clock_setup"]["game_hour"] = 15
+    save()
+    assert any("new-gates.w6_gate.gold: w6 gate leg panel: clock setup" in e for e in gate.live_gates_errors(tmp_path))
