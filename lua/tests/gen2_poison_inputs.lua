@@ -478,9 +478,10 @@ function PI.driver(F, facts, opts)
     return self
 end
 
--- opts.fainted() true once the probe saw the poison_faint hit; opts.max_frames bounds the leg.
+-- opts.fainted() true once the probe saw the poison_faint hit; opts.max_frames bounds the leg. opts.facts replaces
+-- ctx.u1.poison (gen2_faint_active_trainer's walk to a Route 30 trainer, duo_gen2_main.lua h.to_trainer).
 function PI.new(ctx, SG, F, FI, opts)
-    local facts = assert(ctx.u1.poison, "SLINK_GEN2_U1_FACTS lacks poison")
+    local facts = opts.facts or assert(ctx.u1.poison, "SLINK_GEN2_U1_FACTS lacks poison")
     local driver = PI.driver(F, facts, {moves=FI.PASSIVE_MOVES, target=opts.target})
     local base = SG.qualify_observer(ctx)
     local sting = facts.moves.POISON_STING

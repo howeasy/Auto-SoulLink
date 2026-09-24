@@ -15,6 +15,12 @@
     opts.any_move   with no passive move, use the first move with PP instead of switching the target out
                     (B: the battle hold's write lands before DetermineMoveOrder, so that move never runs)
     opts.observed(point)  FI.new calls it with every observation (B's NEXT_MON / REPLACED markers)
+    opts.trainer    (gen2_faint_active_trainer's B) the battle is a TRAINER battle (wBattleMode 2) already up when
+                    FI starts; after the target's faint it is WON, never run from: BattleMenu_Run refuses a trainer
+                    battle (TryToRunAwayFromBattle .cant_run_from_trainer, C engine/battle/core.asm:3700-3702). HandlePlayerMonFaint goes straight to
+                    ForcePlayerMonChoice with no "Use next #MON?" (AskUseNextPokemon returns at wBattleMode 2,
+                    :2695-2701); the replacement then FIGHTs with its first damaging move with PP, and any yes/no
+                    (only OfferSwitch's "Will <PLAYER> change #MON?", core.asm:3492-3496, C data/text/battle.asm:229-237) takes NO.
   It never saves: callers run F.driver with phase "save" afterwards (duo_gen2_main.lua h.save).
 
   Input plan = docs/gen2/reviews/OMP_O15_FAINT_FACTS_2026-09-23.md (15ed52e1), pinned decomps only.
@@ -165,13 +171,30 @@ function FI.driver(F, map, opts)
         end
         return choose(ui, tostring(ui.items[1]):upper(), 1)   -- nothing with PP left; let Struggle take over
     end
+    -- opts.trainer, after the target's faint: the replacement wins the battle with its first damaging move with PP
+    local function damaging_move(ui)
+        if type(ui.items) ~= "table" then return nil, "move list unreadable" end
+        for i, label in ipairs(ui.items) do
+            local passive_label = false
+            for _, name in ipairs(FI.PASSIVE_MOVES) do
+                if type(label) == "string" and label:upper() == name then passive_label = true end
+            end
+            if type(label) == "string" and not passive_label and has_pp(ui, i) then return choose(ui, label:upper(), 1) end
+        end
+        for i, label in ipairs(ui.items) do
+            if type(label) == "string" and has_pp(ui, i) then return choose(ui, label:upper(), 1) end
+        end
+        return choose(ui, tostring(ui.items[1]):upper(), 1)   -- nothing with PP left; let Struggle take over
+    end
     function self.step(point)
         if type(point) ~= "table" then return nil, "observation missing" end
         if hold_left > 0 then hold_left = hold_left - 1; return {[held]=true}, self.phase end
         if release then release = false; return {}, self.phase end
         if self.phase == self.terminal then return {}, self.phase end
         if self.phase == "walk" and integer(point.battle_mode, 1, 255) then
-            if point.battle_mode ~= 1 then return nil, "not a wild battle" end
+            if point.battle_mode ~= (opts.trainer and 2 or 1) then
+                return nil, opts.trainer and "not a trainer battle" or "not a wild battle"
+            end
             self.phase, self.battles, switched = "battle", self.battles + 1, false
         end
         if self.phase == "battle" and integer(point.active_slot, 0, 5) then
@@ -184,7 +207,8 @@ function FI.driver(F, map, opts)
             if point.input_ready ~= true then return {}, self.phase end
             local done = point.fainted == true
             if ui.kind == "battle_menu" then
-                if done or (point.foe_harmless and not switched) then return choose(ui, "RUN", 2) end
+                if opts.trainer and done then return choose(ui, "FIGHT", 2) end
+                if done or (point.foe_harmless and not switched and not opts.trainer) then return choose(ui, "RUN", 2) end
                 if opts.hold and point.active_slot == target and opts.hold(point) then return {}, self.phase end
                 local fight = point.active_slot == target and (not no_passive or living_other(point) == nil)
                 return choose(ui, fight and "FIGHT" or FI.PKMN_CELL, 2)
@@ -198,10 +222,12 @@ function FI.driver(F, map, opts)
             end
             if ui.kind == "battle_mon_menu" then return choose(ui, "SWITCH", 1) end
             if ui.kind == "move_menu" then
+                if done and opts.trainer then return damaging_move(ui) end
                 if done then return press("B") end
                 return pick_move(ui, point)
             end
             if ui.kind == "yes_no" then
+                if opts.trainer then return choose(ui, "NO", 1) end
                 if ui.prompt ~= "next_mon" then return nil, "unmapped battle yes/no prompt: " .. tostring(ui.prompt) end
                 return choose(ui, "YES", 1)
             end

@@ -102,6 +102,12 @@ SCENARIOS = {
                           "no_setup": True, "frames": 432000,
                           "target": {"a": "battle", "b": "battle_ot2"},
                           "oracle": "assert_gen2_faint_active_saved", "oracle_kwargs": {}},
+    # O-30 review MINOR-5: B's linked mon dies as the active battler of a Route 30 TRAINER battle (the trainer
+    # next-mon path); errand seeds (GEN2_TRAINER_FIXTURES), C-C and G-S cover all three titles
+    "gen2_faint_active_trainer": {"flags": [], "timeout": 3600, "games": ("gen2_new",),
+                                  "no_setup": True, "frames": 432000,
+                                  "target": {"a": "battle_errand", "b": "battle_ot2_errand"},
+                                  "oracle": "assert_gen2_faint_active_trainer_saved", "oracle_kwargs": {}},
     "gen2_admit_wrong_rom": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
                              "no_setup": True, "frames": 216000,
                              "oracle": "assert_gen2_admit_wrong_rom", "oracle_kwargs": {}},
@@ -303,6 +309,8 @@ def scenario_applies(name, game):
     if name in GEN2_TRADE_SCENARIOS and game not in GEN2_TRADE_FIXTURES:
         return False
     if name == "gen2_ball_gate" and game not in GEN2_BALL_GATE_FIXTURES:
+        return False
+    if name == "gen2_faint_active_trainer" and game not in GEN2_TRAINER_FIXTURES:
         return False
     if name in GEN2_SYNTH_SCENARIOS and game not in GEN2_SYNTH_PAIRS:
         return False
@@ -1003,6 +1011,9 @@ GEN2_TRADE_FIXTURES = {
     "gen2_gold_silver": {"a": "gold_battle_errand", "b": "silver_battle_errand"},
     "gen2_crystal_gold": {"a": "crystal_battle_errand", "b": "gold_battle_errand"},   # O-34
 }
+# gen2_faint_active_trainer: B needs an errand seed (on Crystal the pre-errand Route 30 battle demo blocks the aisle,
+# C maps/Route30.asm:424-430, ElmsLab.asm:344-345); the trade seeds are the qualified errand pairs.
+GEN2_TRAINER_FIXTURES = {game: GEN2_TRADE_FIXTURES[game] for game in ("gen2_new", "gen2_gold_silver")}
 
 
 # BizHawk writes a save whose path nears Windows MAX_PATH (260) SILENTLY not at all: a 255-char SaveRAM path left
@@ -1076,6 +1087,8 @@ def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
             name = GEN2_POISON_FIXTURES.get(game, {}).get(inst, name)
         if scenario == "gen2_ball_gate":
             name = GEN2_BALL_GATE_FIXTURES[game][inst]
+        if scenario == "gen2_faint_active_trainer":
+            name = GEN2_TRAINER_FIXTURES[game][inst]
         synth = None
         if scenario in GEN2_SYNTH_SCENARIOS:   # O-33: the base fixture's qualification, the synthetic bytes staged
             from tools import gen2_synth_fixtures
@@ -1878,8 +1891,11 @@ class DuoRun:
         if self.scenario in GEN2_WAVE_C:
             driver_files.append("lua/tests/duo/scenario_gen2_faint.lua")
         if self.scenario in ("gen2_faint", "gen2_faint_active", "gen2_whiteout", "gen2_changebox", "gen2_poison",
-                             "gen2_whiteout_rebuild"):
+                             "gen2_whiteout_rebuild", "gen2_faint_active_trainer"):
             driver_files.append("lua/tests/duo/gen2_faint_inputs.lua")
+        if self.scenario == "gen2_faint_active_trainer":
+            driver_files += ["lua/tests/duo/scenario_gen2_faint_active.lua", "lua/tests/gen2_poison_inputs.lua",
+                             "lua/tests/gen2_walk.lua"]
         if self.scenario in ("gen2_pc_ops", "gen2_changebox", "gen2_whiteout_rebuild"):
             driver_files.append("lua/tests/gen2_pc_inputs.lua")
         if self.scenario in ("gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild"):
@@ -1897,7 +1913,8 @@ class DuoRun:
             if not (Path(REPO) / path).is_file():
                 raise FileNotFoundError(f"Gen 2 duo driver missing: {path}")
         oracle = importlib.import_module("gen2_duo_oracles")
-        oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle", "gen2_faint_active": "faint_active_oracle", "gen2_reconnect": "reconnect_oracle",
+        oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle", "gen2_faint_active": "faint_active_oracle",
+                       "gen2_faint_active_trainer": "faint_active_oracle", "gen2_reconnect": "reconnect_oracle",
                        "gen2_admit_wrong_rom": "admit_wrong_rom_oracle", "gen2_soft_reset": "soft_reset_oracle",
                        "gen2_ball_gate": "ball_gate_oracle",
                        **dict.fromkeys(GEN2_SYNTH_SCENARIOS, "synth_duo_oracle"),
@@ -2257,6 +2274,9 @@ class DuoRun:
             ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
             boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
 
+    def assert_gen2_faint_active_trainer_saved(self, results, **kwargs):
+        return self.assert_gen2_faint_active_saved(results, trainer=True, **kwargs)
+
     def _release_gen2_active_faint(self):
         def active():
             text = read_result(self.artifact_name, "b") or ""
@@ -2273,7 +2293,8 @@ class DuoRun:
                     return None
                 raise RuntimeError("B LINKED_ACTIVE is malformed") from exc
             if (not isinstance(row, dict) or type(row.get("slot")) is not int or not 0 <= row["slot"] < 6
-                    or row.get("cur_battle_mon") != row["slot"] or row.get("battle_mode") != 1
+                    or row.get("cur_battle_mon") != row["slot"]
+                    or row.get("battle_mode") != (2 if self.scenario == "gen2_faint_active_trainer" else 1)
                     or row.get("link_mode") != 0 or not isinstance(row.get("key"), str) or not row["key"]):
                 raise RuntimeError("B LINKED_ACTIVE does not describe an active linked battler")
             return row
@@ -4755,7 +4776,7 @@ class DuoRun:
             self.go()
             if self.scenario in GEN2_TRADE_SCENARIOS:
                 self._release_gen2_trade()
-            elif self.scenario == "gen2_faint_active":
+            elif self.scenario in ("gen2_faint_active", "gen2_faint_active_trainer"):
                 self._release_gen2_active_faint()
             elif self.scenario == "gen2_reconnect":
                 self._orchestrate_gen2_reconnect()
@@ -5139,6 +5160,8 @@ class DuoRun:
                         reason += f" scenario={self.scenario} rom_b={self._gen2_verified_facts['rom_b']}"
                     if self.scenario == "gen2_faint_active":
                         reason += " scenario=gen2_faint_active death=active"
+                    if self.scenario == "gen2_faint_active_trainer":
+                        reason += " scenario=gen2_faint_active_trainer death=active battle=trainer"
                     if self.scenario in GEN2_WAVE_C:
                         key = GEN2_WAVE_C[self.scenario][1]
                         reason += f" scenario={self.scenario} {key}={self._gen2_verified_facts[key]}"
@@ -5205,6 +5228,8 @@ def list_lines(game):
             targets = {**targets, **GEN2_POISON_FIXTURES.get(game, {})}
         if name == "gen2_ball_gate":
             targets = GEN2_BALL_GATE_FIXTURES[game]
+        if name == "gen2_faint_active_trainer":
+            targets = GEN2_TRAINER_FIXTURES[game]
         if name in GEN2_SYNTH_SCENARIOS:
             targets = {inst: gen2_synth_name(name, game, inst) for inst in ("a", "b")}
         shown = (", ".join(f"{inst}:{targets[inst]}" for inst in ("a", "b"))

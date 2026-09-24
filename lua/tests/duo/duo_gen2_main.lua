@@ -735,9 +735,28 @@ end
 -- faint adds hold/any_move/observed and its own phase bound (scenario_gen2_faint_active.lua).
 function h.sacrifice(opts)
     local driver, observe, spec = FI.new(ctx, SG, F, {target=opts.target, fainted=opts.fainted, hold=opts.hold,
-        any_move=opts.any_move, observed=opts.observed, max_battles=opts.max_battles,
+        any_move=opts.any_move, observed=opts.observed, max_battles=opts.max_battles, trainer=opts.trainer,
         max_frames=math.max(1, timeout - api.framecount()),
         max_phase_frames=opts.max_phase_frames or D.max_phase_frames})
+    return play(spec, driver, observe)
+end
+-- gen2_faint_active_trainer (S.TRAINER): the poison leg's walk (Route 29 -> Cherrygrove -> Route 30, wild battles
+-- RUN) to Youngster Mikey's sight tile, handed over the frame a TRAINER battle is up (wBattleMode 2). Walking up the
+-- Route 30 aisle may meet Youngster Joey first (visible after the errand); either trainer battle serves.
+-- Mikey: object_event 5, 23, STANDING_DOWN, sight 1 (C maps/Route30.asm:426, G :340) -> his one sight tile (5,24).
+-- The walk hunts no poison: POISON_STING -1 never matches a foe move.
+function h.to_trainer()
+    local u = assert(ctx.u1.poison, "SLINK_GEN2_U1_FACTS lacks poison (the Route 30 maps and legs)")
+    local mikey = assert(u.maps.Route30 and u.maps.Route30.objects.TrainerYoungsterMikey, "Route 30 facts lack Mikey")
+    local facts = {maps=u.maps, legs=u.legs, hunt_map="Route30", psn_mask=u.psn_mask, moves={POISON_STING=-1},
+                   trainer={tile={x=mikey.x, y=mikey.y + 1}}}
+    local driver, observe, spec = PI.new(ctx, SG, F, FI, {facts=facts, fainted=function() return false end,
+        max_frames=math.max(1, timeout - api.framecount()), max_phase_frames=F.POISON_BUDGET.max_phase_frames})
+    local step = driver.step
+    function driver.step(point)
+        if point.battle_mode == 2 then driver.phase = driver.terminal return {}, driver.phase end
+        return step(point)
+    end
     return play(spec, driver, observe)
 end
 -- Bill's PC (gen2_pc_inputs.lua mode "pc"): walk to the Cherrygrove #MON CENTER PC, run `steps` (its opts.steps

@@ -45,6 +45,17 @@
     MEMORIAL_PREIMAGE / MEMORIAL_ACK / SAVE_WITNESS   as scenario_gen2_faint.lua (preimage after the write)
     RECEIPT {schema "gen2-duo-faint-active-v1", ...}  PASS only;  RESULT: PASS|FAIL  last line
   S.verdict re-reads these lines and is the only way to PASS.
+
+  S.TRAINER (scenario_gen2_faint_active_trainer.lua, O-30 review MINOR-5): B's battle is a TRAINER battle instead.
+  After LINK_SAVE B walks Route 29 -> Cherrygrove -> Route 30 until a Youngster engages (duo_gen2_main.lua
+  h.to_trainer), switches the catch in and idles exactly as above. The hold write, HandlePlayerMonFaint, then
+  ForcePlayerMonChoice with NO "Use next #MON?" (AskUseNextPokemon returns at wBattleMode 2, C engine/battle/
+  core.asm:2695-2701) -> the starter, which FIGHTs until the trainer is beaten (no RUN from a trainer). Changes:
+    LINKED_ACTIVE  battle_mode=2, plus other_trainer_class / other_trainer_id (wOtherTrainerClass/wOtherTrainerID)
+    NEXT_MON       never printed
+    REPLACED       after the native faint (the party pick is forced)
+    BATTLE_TRACE   at least one `enemy_turn` after REPLACED: a live turn with the replacement; still no `lost`
+    RECEIPT        schema "gen2-duo-faint-active-trainer-v1", receipt.trainer = {class, id}
 --]]
 local S = {}
 S.RECEIPT_SCHEMA = "gen2-duo-faint-active-v1"
@@ -91,6 +102,11 @@ local function run_b(h, key, faint)
     local slot, mon = h.slot_of(key)
     if slot == nil then return false, "the linked mon left the party" end
     local active, next_mon, replaced
+    local mode = S.TRAINER and 2 or 1
+    if S.TRAINER then
+        local walked, walk_why = h.to_trainer()
+        if not walked then return false, "trainer walk failed: " .. tostring(walk_why) end
+    end
     local function forced()
         for _, r in ipairs(h.rec.rx) do if r.cmd == "force_faint" and r.key == key then return true end end
         return false
@@ -99,13 +115,16 @@ local function run_b(h, key, faint)
         for _, w in ipairs(h.client.pending_battle_writes or {}) do if w.key == key then return true end end
         return false
     end
-    local fought, why = h.sacrifice({target=slot, any_move=true, max_phase_frames=S.HOLD_FRAMES,
+    local fought, why = h.sacrifice({target=slot, any_move=true, max_phase_frames=S.HOLD_FRAMES, trainer=S.TRAINER,
         hold=function()
             if not active then
                 local e = S.engine_battle(h)
-                if e.cur_battle_mon == slot and e.battle_mon_species == mon.species_id and e.battle_mode == 1
+                if e.cur_battle_mon == slot and e.battle_mon_species == mon.species_id and e.battle_mode == mode
                    and e.link_mode == 0 then
                     e.frame, e.key, e.slot = h.frame(), key, slot
+                    if S.TRAINER then
+                        e.other_trainer_class, e.other_trainer_id = h.sym("wOtherTrainerClass")[1], h.sym("wOtherTrainerID")[1]
+                    end
                     active = e
                     h.rec.trace_on = true
                     h.jlog("LINKED_ACTIVE", e)
@@ -122,7 +141,8 @@ local function run_b(h, key, faint)
                 h.jlog("NEXT_MON", next_mon)
             end
             local hp = point.active_slot ~= nil and point.party_hp[point.active_slot] or nil
-            if next_mon and not replaced and point.battle_mode ~= 0 and point.active_slot ~= slot and type(hp) == "number"
+            local forced_pick = S.TRAINER and S.after_write(h.rec) ~= nil   -- ForcePlayerMonChoice, no prompt
+            if (next_mon or forced_pick) and not replaced and point.battle_mode ~= 0 and point.active_slot ~= slot and type(hp) == "number"
                and hp > 0 then
                 replaced = {frame=h.frame(), active_slot=point.active_slot, hp=hp}
                 h.jlog("REPLACED", replaced)
@@ -257,9 +277,13 @@ function S.verdict(lines, json, link_verdict, faint_verdict)
     local active = one("LINKED_ACTIVE")
     if active then
         local a = active.value
-        need(a.key == key and a.cur_battle_mon == a.slot and a.battle_mode == 1 and a.link_mode == 0
+        need(a.key == key and a.cur_battle_mon == a.slot and a.battle_mode == (S.TRAINER and 2 or 1) and a.link_mode == 0
              and capture ~= nil and a.battle_mon_species == capture.value.species_id,
-             "LINKED_ACTIVE is not the linked catch as the active wild battler")
+             "LINKED_ACTIVE is not the linked catch as the active " .. (S.TRAINER and "trainer-battle" or "wild") .. " battler")
+        if S.TRAINER then
+            need(type(a.other_trainer_class) == "number" and a.other_trainer_class > 0 and type(a.other_trainer_id) == "number",
+                 "LINKED_ACTIVE names no opposing trainer")
+        end
         need(link ~= nil and active.at > link.at, "LINKED_ACTIVE before LINK_SAVE")
     end
     local got
@@ -294,8 +318,20 @@ function S.verdict(lines, json, link_verdict, faint_verdict)
     for _, r in ipairs(rows("PARTY_HP_WRITE")) do
         need(r.value.ok == true and r.value.before_party_hex == r.value.after_party_hex, "a checkpoint write changed B's party")
     end
-    local next_mon, replaced = one("NEXT_MON"), one("REPLACED")
-    if next_mon then need(first ~= nil and next_mon.at > first.at, "NEXT_MON before the native faint") end
+    local next_mon, replaced
+    if S.TRAINER then   -- ForcePlayerMonChoice with no prompt; then a live enemy turn against the replacement
+        need(#rows("NEXT_MON") == 0, "NEXT_MON in a trainer battle")
+        replaced = one("REPLACED")
+        next_mon = first
+        local live = false
+        for _, r in ipairs(rows("BATTLE_TRACE")) do
+            live = live or (replaced ~= nil and r.at > replaced.at and r.value.what == "enemy_turn")
+        end
+        need(live, "no live enemy turn against the replacement")
+    else
+        next_mon, replaced = one("NEXT_MON"), one("REPLACED")
+    end
+    if next_mon then need(first ~= nil and next_mon.at >= first.at, "NEXT_MON before the native faint") end
     if replaced then
         need(next_mon ~= nil and replaced.at > next_mon.at and active ~= nil
              and replaced.value.active_slot ~= active.value.slot and (tonumber(replaced.value.hp) or 0) > 0,
@@ -329,6 +365,7 @@ function S.verdict(lines, json, link_verdict, faint_verdict)
     receipt.battle_write = {frame=w.frame, seq=w.seq, slot=w.slot, pc=w.pc, hrom_bank=w.hrom_bank,
                             battle_hp_before_hex=w.battle_hp_before_hex, action_after_hex=w.action_after_hex}
     receipt.native_faint, receipt.replaced = first.value, replaced.value
+    if S.TRAINER then receipt.trainer = {class=active.value.other_trainer_class, id=active.value.other_trainer_id} end
     receipt.memorial = {preimage_frame=pre.value.frame, ack=done.value}
     return problems, receipt
 end

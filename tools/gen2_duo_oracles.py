@@ -651,9 +651,18 @@ def _memorial_party(text, key, layout, linked_path, witness):
     return party_before_deposit, preimage
 
 
-def validate_faint_active_markers(results, *, title_b, key_a, key_b, species_b):
-    """Source-bound active-hold evidence, shared with the receipt matrix; no save normalization."""
+# gen2_faint_active_trainer (O-30 review MINOR-5): the Route 30 youngsters B's walk meets (C maps/Route30.asm:424-426,
+# G :339-340: TrainerYoungsterJoey YOUNGSTER JOEY1, TrainerYoungsterMikey YOUNGSTER MIKEY).
+ROUTE30_TRAINERS = ("YOUNGSTER", ("JOEY1", "MIKEY"))
+
+
+def validate_faint_active_markers(results, *, title_b, key_a, key_b, species_b, trainer=False):
+    """Source-bound active-hold evidence, shared with the receipt matrix; no save normalization. trainer: B's
+    battle is a Route 30 trainer battle (ForcePlayerMonChoice, no NEXT_MON, a live enemy turn after REPLACED)."""
     from server.adapters import gen2_codec as codec
+
+    scenario = "gen2_faint_active_trainer" if trainer else "gen2_faint_active"
+    schema = "gen2-duo-faint-active-trainer-v1" if trainer else "gen2-duo-faint-active-v1"
 
     a, b = results["a"], results["b"]
     go, a_link, a_faint = (_one_marker(a, tag) for tag in ("B_ACTIVE", "LINK_SAVE", "ENGINE_FAINT"))
@@ -663,8 +672,8 @@ def validate_faint_active_markers(results, *, title_b, key_a, key_b, species_b):
     for side in ("a", "b"):
         _reconnect_pass(results[side])
         head, receipt = _one_marker(results[side], "DUO_GEN2"), _one_marker(results[side], "RECEIPT")
-        _faint_need(head.get("scenario") == "gen2_faint_active" and head.get("player") == side
-                    and receipt.get("schema") == "gen2-duo-faint-active-v1", "active faint scenario/schema differs")
+        _faint_need(head.get("scenario") == scenario and head.get("player") == side
+                    and receipt.get("schema") == schema, "active faint scenario/schema differs")
     layout = codec.for_foundation(title_b)
     client = _one_marker(b, "CLIENT")
     _faint_need(isinstance(client.get("registered_sites"), list) and "battle_faint" in client["registered_sites"],
@@ -677,8 +686,15 @@ def validate_faint_active_markers(results, *, title_b, key_a, key_b, species_b):
     _faint_need(type(slot) is int and 0 <= slot < layout.constants["PARTY_LENGTH"]
                 and all(type(active.get(field)) is int for field in ("cur_battle_mon", "battle_mon_species", "battle_mode", "link_mode", "battle_type"))
                 and active.get("key") == key_b and active.get("cur_battle_mon") == slot
-                and active.get("battle_mon_species") == species_b and active.get("battle_mode") == 1
-                and active.get("link_mode") == 0 and _frame(link) <= _frame(active), "linked mon not active in wild battle")
+                and active.get("battle_mon_species") == species_b and active.get("battle_mode") == (2 if trainer else 1)
+                and active.get("link_mode") == 0 and _frame(link) <= _frame(active),
+                f"linked mon not active in {'trainer' if trainer else 'wild'} battle")
+    if trainer:
+        pack = json.loads((REPO_ROOT / f"data/games/gen2_{title_b}/trainers.json").read_text(encoding="utf-8"))
+        cls, tid = active.get("other_trainer_class"), active.get("other_trainer_id")
+        party = pack["parties"].get(str(cls), {}).get(str(tid), {}) if type(cls) is int and type(tid) is int else {}
+        _faint_need(pack["class_constants"].get(str(cls)) == ROUTE30_TRAINERS[0]
+                    and party.get("constant") in ROUTE30_TRAINERS[1], f"opposing trainer {cls}/{tid} is not a Route 30 youngster")
     lines = b.splitlines()
     position = {tag: next(i for i, line in enumerate(lines) if line.startswith(tag + " "))
                 for tag in ("LINK_SAVE", "LINKED_ACTIVE", "BATTLE_HOLD_WRITE", "MEMORIAL_PREIMAGE", "MEMORIAL_ACK", "SAVE_WITNESS")}
@@ -727,11 +743,18 @@ def validate_faint_active_markers(results, *, title_b, key_a, key_b, species_b):
     _faint_need(not _tag_rows(b, "FAINT_SENT"), "B echoed the commanded faint")
     for pos, row in _tag_rows(b, "ENGINE_FAINT"):
         _faint_need(row.get("key") == key_b and pos > position["BATTLE_HOLD_WRITE"] and _frame(row) >= _frame(write), "B engine faint differs from command")
-    next_mon, replaced = _one_marker(b, "NEXT_MON"), _one_marker(b, "REPLACED")
-    next_pos = next(i for i, line in enumerate(lines) if line.startswith("NEXT_MON "))
+    replaced = _one_marker(b, "REPLACED")
     replacement_pos = next(i for i, line in enumerate(lines) if line.startswith("REPLACED "))
+    if trainer:   # ForcePlayerMonChoice asks nothing; the replacement then takes a live enemy turn
+        _faint_need(not _tag_rows(b, "NEXT_MON"), "NEXT_MON in a trainer battle")
+        next_mon, next_pos = after[0][1], after[0][0]
+        _faint_need(any(trace["what"] == "enemy_turn" and pos > replacement_pos for pos, trace in traces),
+                    "no live enemy turn against the replacement")
+    else:
+        next_mon = _one_marker(b, "NEXT_MON")
+        next_pos = next(i for i, line in enumerate(lines) if line.startswith("NEXT_MON "))
     readbacks = [(i, line) for i, line in enumerate(lines) if line.startswith("LINKED_HP_STATUS ")]
-    _faint_need(after[0][0] < next_pos < replacement_pos and _frame(after[0][1]) <= _frame(next_mon) <= _frame(replaced)
+    _faint_need(after[0][0] <= next_pos < replacement_pos and _frame(after[0][1]) <= _frame(next_mon) <= _frame(replaced)
                 and type(replaced.get("active_slot")) is int and 0 <= replaced["active_slot"] < 6 and replaced["active_slot"] != slot
                 and type(replaced.get("hp")) is int and replaced["hp"] > 0, "no living replacement after active faint")
     _faint_need(len(readbacks) == 1 and readbacks[0][1] == "LINKED_HP_STATUS 0000 00" and readbacks[0][0] > replacement_pos,
@@ -747,7 +770,8 @@ def validate_faint_active_markers(results, *, title_b, key_a, key_b, species_b):
     return {"active": active, "write": write, "next_mon": next_mon, "replaced": replaced}
 
 
-def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram, active=False, engine=("battle_faint", "battle")):
+def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram, active=False, engine=("battle_faint", "battle"),
+                  trainer=False):
     site, cause = engine
     from server.adapters import gen2_codec as codec
 
@@ -833,7 +857,8 @@ def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram, active=Fa
         _faint_need(_frame(sent) <= _frame(memorial_preimages["a"]), "A memorial preimage precedes faint")
     _faint_need(not any(line.startswith("PARTY_HP_WRITE ") for line in results["a"].splitlines()), "A used a harness/permit faint instead of battle")
     if active:
-        proof = validate_faint_active_markers(results, title_b=decoded["b"]["title"], key_a=a_key, key_b=b_key, species_b=decoded["b"]["species"])
+        proof = validate_faint_active_markers(results, title_b=decoded["b"]["title"], key_a=a_key, key_b=b_key,
+                                              species_b=decoded["b"]["species"], trainer=trainer)
         layout, linked, final, witness = parties["b"]
         slot = proof["active"]["slot"]
         replacement = proof["replaced"]["active_slot"]
@@ -901,10 +926,13 @@ def faint_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_sav
         raise RuntimeError(f"faint evidence missing or malformed: {exc}") from exc
 
 
-def faint_active_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_saveram=None, on_verified=None):
-    """Active battle-hold death + saved memorial proof; battle rewards are not quantified."""
+def faint_active_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_saveram=None, on_verified=None,
+                        trainer=False):
+    """Active battle-hold death + saved memorial proof; battle rewards are not quantified. trainer=True is
+    gen2_faint_active_trainer (a Route 30 trainer battle, O-30 review MINOR-5)."""
     try:
-        facts = _faint_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids, boot_saveram=boot_saveram, active=True)
+        facts = _faint_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids, boot_saveram=boot_saveram,
+                              active=True, trainer=trainer)
         if on_verified is not None:
             on_verified(facts)
     except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError) as exc:
