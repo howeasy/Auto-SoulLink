@@ -389,6 +389,18 @@
           }
         },
         {
+          "scenario": "gen2_faint_active",
+          "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_faint_active --lane live3-cg-active --keep-data",
+          "receipts": {
+            "a": {"path": "tests/fixtures/gen2/receipts/duo_faint_active_cg_a_result.txt",
+                  "sha256": "76ab1a418af000d0bceeba3dc670956b3735f8bb0da1e8d84084f6d4eb8afb1f"},
+            "b": {"path": "tests/fixtures/gen2/receipts/duo_faint_active_cg_b_result.txt",
+                  "sha256": "fe16525e7743ff37cffb72c99970e15d8e728eb827ecc5ebb774434f3d947a37"},
+            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_faint_active_cg_pydec_result.txt",
+                  "sha256": "3f31cfc1aa60b67fcdd81a17b489140bbab9df98023585b9bf8f5fba95fc8863"}
+          }
+        },
+        {
           "scenario": "gen2_admit_wrong_rom",
           "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_admit_wrong_rom --lane gen2-cg-admit-wrong-rom --keep-data",
           "receipts": {
