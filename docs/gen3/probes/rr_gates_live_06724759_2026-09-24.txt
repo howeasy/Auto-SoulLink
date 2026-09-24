@@ -1,0 +1,198 @@
+G5-GATES-LIVE: RR opcode gates, SLINK_LIVE=1 pytest tests/live/test_lua_gates.py (26 ported gates, 12 deferred skips)
+FINAL CUT 06724759, lane E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean (detached; checkout works again, the broken ref is gone)
+companion patch/build/slink_RR.gba md5 6cf77ba4a63634a0fd452be6f206bfc3 (copied from main; gen3_slink_RR.gba the same md5);
+clean 'Pokemon - Radical Red.gba' md5 8529f3a45d32bce4da637976fcf269d4 at the lane root (staged as patch/build/rr_clean.gba for mailbox_absent)
+savestates: E:/Howard/Bizhawk/GBA/State slink_{overworld,door,pokecenter,prebattle,battle,actionmenu,movemenu}.State.
+  W9 regenerated them at 13:24-13:25 UTC on lane 2 @35de6679 with the same companion md5 (town: `mkstates --force --only town`;
+  battle: seeded from rr_town.sav). mkstates --status: all current (2.11.1). I did not regenerate them again: that would be a
+  shared-directory overwrite of states already built on the same ROM. W9's note: mkstates SAVERAM_DST 'slink_RR.SaveRAM' !=
+  BizHawk's 'slink RR.SaveRAM', so --saveram never takes effect (a mkstates bug, still open).
+machine: shared with W9 lane 2 and the Gen 2 session (CPU 90-100%, 1-7 EmuHawk)
+
+RESULT AT 06724759: 26 passed, 12 skipped (all DEFERRED: ghost x8, native text x3; plus the empty GAP param)
+  PASS: boxsync calctoggle choices choices_guards choosepartymon createmon enemyparty enemyparty_route events ewramtail
+        explode_route forcemove givemon infoscreen memorialize menu partyevents pcnpc playse setpartymon soullinkmenu
+        startmenu tradescene mailbox_absent mailbox_battle mailbox_ping
+  forcemove and explode_route (the new C5-FMS-FIX FORCE_MOVE_SLOT semantics): PASS in every run (run 1 @6d6227c6 at 400% speed, runs 2 and 4)
+
+FAILURES ON THE WAY (all INSTRUMENT, gate files only; no product change):
+  run 1 @6d6227c6 (before a7bb4bd6/3e6f25e5 max speed): 21 PASS, 5 FAIL = enemyparty_route, playse, setpartymon, mailbox_battle, mailbox_ping.
+    All five are the cold-boot gates. The beacon is up at frame 12, before RR sets its save pointers, so writes:arm refused
+    ("safety.lua:54: invalid pointer: gPokemonStoragePtr") and every post timed out "never posted".
+    The client never arms before the server hello. Same result as W9's lane-2 run @35de6679.
+  fix 85e1906a: wait until an arm is possible. run 2 @85e1906a: the same 5 FAIL, "save pointers live" not reached in 3000 idle frames.
+    A scratch probe (not committed) showed the arm becomes possible about 8 frames after Start at the title (main menu loads the save).
+  fix 731cf9b3: pulse Start during the wait (the field is never entered). run 3 (the 5 gates): 4 PASS, mailbox_battle FAIL:
+    FORCE_FAINT posted at frame 388 (mid title->menu transition), no ack in its 20-frame wait. A scratch copy with a 120-frame settle: 11/11 ok.
+  fix 06724759: 120-frame settle after the wait, in all five gates. run 4 = full suite, below: 26/26.
+
+--- run 1 @6d6227c6 ---
+lane sha=6d6227c636b3c067b8d795ceb1df2618db933801 tracked_dirty=0
+6cf77ba4a63634a0fd452be6f206bfc3 *patch/build/slink_RR.gba
+8529f3a45d32bce4da637976fcf269d4 *Pokemon - Radical Red.gba
+LOAD 2026-09-24T09:29:59 cpu=90% emuhawk=1 python=10
+  emuhawk pid=13828 E:/Howard/Bizhawk\EmuHawk.exe --lua=lua/tests/gen2_frame_align.lua --config=patch/build/gate_cfg_gen2_frame_align_crystal.ini .cache/gen2-build/pokecrystal/pokecrystal.gbc
+start_utc=2026-09-24T13:29:59Z
+tests/live/test_lua_gates.py::test_gate[test_live_boxsync.lua] PASSED    [  2%]
+tests/live/test_lua_gates.py::test_gate[test_live_calctoggle.lua] PASSED [  5%]
+tests/live/test_lua_gates.py::test_gate[test_live_choices.lua] PASSED    [  7%]
+tests/live/test_lua_gates.py::test_gate[test_live_choices_guards.lua] PASSED [ 10%]
+tests/live/test_lua_gates.py::test_gate[test_live_choosepartymon.lua] PASSED [ 13%]
+tests/live/test_lua_gates.py::test_gate[test_live_createmon.lua] PASSED  [ 15%]
+tests/live/test_lua_gates.py::test_gate[test_live_enemyparty.lua] PASSED [ 18%]
+tests/live/test_lua_gates.py::test_gate[test_live_enemyparty_route.lua] FAILED [ 21%]
+tests/live/test_lua_gates.py::test_gate[test_live_events.lua] PASSED     [ 23%]
+tests/live/test_lua_gates.py::test_gate[test_live_ewramtail.lua] PASSED  [ 26%]
+tests/live/test_lua_gates.py::test_gate[test_live_explode_route.lua] PASSED [ 28%]
+tests/live/test_lua_gates.py::test_gate[test_live_forcemove.lua] PASSED  [ 31%]
+tests/live/test_lua_gates.py::test_gate[test_live_givemon.lua] PASSED    [ 34%]
+tests/live/test_lua_gates.py::test_gate[test_live_infoscreen.lua] PASSED [ 36%]
+tests/live/test_lua_gates.py::test_gate[test_live_memorialize.lua] PASSED [ 39%]
+tests/live/test_lua_gates.py::test_gate[test_live_menu.lua] PASSED       [ 42%]
+tests/live/test_lua_gates.py::test_gate[test_live_partyevents.lua] PASSED [ 44%]
+tests/live/test_lua_gates.py::test_gate[test_live_pcnpc.lua] PASSED      [ 47%]
+tests/live/test_lua_gates.py::test_gate[test_live_playse.lua] FAILED     [ 50%]
+tests/live/test_lua_gates.py::test_gate[test_live_setpartymon.lua] FAILED [ 52%]
+tests/live/test_lua_gates.py::test_gate[test_live_soullinkmenu.lua] PASSED [ 55%]
+tests/live/test_lua_gates.py::test_gate[test_live_startmenu.lua] PASSED  [ 57%]
+tests/live/test_lua_gates.py::test_gate[test_live_tradescene.lua] PASSED [ 60%]
+tests/live/test_lua_gates.py::test_gate[test_mailbox_absent.lua] PASSED  [ 63%]
+tests/live/test_lua_gates.py::test_gate[test_mailbox_battle.lua] FAILED  [ 65%]
+tests/live/test_lua_gates.py::test_gate[test_mailbox_ping.lua] FAILED    [ 68%]
+[test_lua_gates] ported gates executed: 26/26
+        reason, so a run in which nothing executed can never read as green (R2 M3). Deferred: skips."""
+        passed, result_path, text = run_gate(f"lua/tests/{gate}", rom=rom, timeout=300, quiet=True)
+>       assert passed, (f"{gate} did not report PASS\n"
+        reason, so a run in which nothing executed can never read as green (R2 M3). Deferred: skips."""
+        passed, result_path, text = run_gate(f"lua/tests/{gate}", rom=rom, timeout=300, quiet=True)
+>       assert passed, (f"{gate} did not report PASS\n"
+        reason, so a run in which nothing executed can never read as green (R2 M3). Deferred: skips."""
+        passed, result_path, text = run_gate(f"lua/tests/{gate}", rom=rom, timeout=300, quiet=True)
+>       assert passed, (f"{gate} did not report PASS\n"
+        reason, so a run in which nothing executed can never read as green (R2 M3). Deferred: skips."""
+        passed, result_path, text = run_gate(f"lua/tests/{gate}", rom=rom, timeout=300, quiet=True)
+>       assert passed, (f"{gate} did not report PASS\n"
+        reason, so a run in which nothing executed can never read as green (R2 M3). Deferred: skips."""
+        passed, result_path, text = run_gate(f"lua/tests/{gate}", rom=rom, timeout=300, quiet=True)
+>       assert passed, (f"{gate} did not report PASS\n"
+============ 5 failed, 21 passed, 12 skipped in 235.47s (0:03:55) =============
+end_utc=2026-09-24T13:33:56Z
+tracked_dirty_after=0
+
+--- run 2 @85e1906a ---
+lane sha=85e1906af8cb792b762f8990c58f8156fbe99212 tracked_dirty=0
+6cf77ba4a63634a0fd452be6f206bfc3 *patch/build/slink_RR.gba
+8529f3a45d32bce4da637976fcf269d4 *Pokemon - Radical Red.gba
+LOAD 2026-09-24T09:35:16 cpu=99% emuhawk=1 python=13
+  emuhawk pid=28220 E:/Howard/Bizhawk\EmuHawk.exe --lua=lua/tests/gen2_w6_gate.lua --config=patch/build/gate_cfg_gen2_w6_gate_gold_overlay.ini patch/build/gen2_gold_overlay.gbc
+start_utc=2026-09-24T13:35:17Z
+tests/live/test_lua_gates.py::test_gate[test_live_boxsync.lua] PASSED    [  2%]
+tests/live/test_lua_gates.py::test_gate[test_live_calctoggle.lua] PASSED [  5%]
+tests/live/test_lua_gates.py::test_gate[test_live_choices.lua] PASSED    [  7%]
+tests/live/test_lua_gates.py::test_gate[test_live_choices_guards.lua] PASSED [ 10%]
+tests/live/test_lua_gates.py::test_gate[test_live_choosepartymon.lua] PASSED [ 13%]
+tests/live/test_lua_gates.py::test_gate[test_live_createmon.lua] PASSED  [ 15%]
+tests/live/test_lua_gates.py::test_gate[test_live_enemyparty.lua] PASSED [ 18%]
+tests/live/test_lua_gates.py::test_gate[test_live_enemyparty_route.lua] FAILED [ 21%]
+tests/live/test_lua_gates.py::test_gate[test_live_events.lua] PASSED     [ 23%]
+tests/live/test_lua_gates.py::test_gate[test_live_ewramtail.lua] PASSED  [ 26%]
+tests/live/test_lua_gates.py::test_gate[test_live_explode_route.lua] PASSED [ 28%]
+tests/live/test_lua_gates.py::test_gate[test_live_forcemove.lua] PASSED  [ 31%]
+tests/live/test_lua_gates.py::test_gate[test_live_givemon.lua] PASSED    [ 34%]
+tests/live/test_lua_gates.py::test_gate[test_live_infoscreen.lua] PASSED [ 36%]
+tests/live/test_lua_gates.py::test_gate[test_live_memorialize.lua] PASSED [ 39%]
+tests/live/test_lua_gates.py::test_gate[test_live_menu.lua] PASSED       [ 42%]
+tests/live/test_lua_gates.py::test_gate[test_live_partyevents.lua] PASSED [ 44%]
+tests/live/test_lua_gates.py::test_gate[test_live_pcnpc.lua] PASSED      [ 47%]
+tests/live/test_lua_gates.py::test_gate[test_live_playse.lua] FAILED     [ 50%]
+tests/live/test_lua_gates.py::test_gate[test_live_setpartymon.lua] FAILED [ 52%]
+tests/live/test_lua_gates.py::test_gate[test_live_soullinkmenu.lua] PASSED [ 55%]
+tests/live/test_lua_gates.py::test_gate[test_live_startmenu.lua] PASSED  [ 57%]
+tests/live/test_lua_gates.py::test_gate[test_live_tradescene.lua] PASSED [ 60%]
+tests/live/test_lua_gates.py::test_gate[test_mailbox_absent.lua] PASSED  [ 63%]
+tests/live/test_lua_gates.py::test_gate[test_mailbox_battle.lua] FAILED  [ 65%]
+tests/live/test_lua_gates.py::test_gate[test_mailbox_ping.lua] FAILED    [ 68%]
+[test_lua_gates] ported gates executed: 26/26
+        reason, so a run in which nothing executed can never read as green (R2 M3). Deferred: skips."""
+        passed, result_path, text = run_gate(f"lua/tests/{gate}", rom=rom, timeout=300, quiet=True)
+>       assert passed, (f"{gate} did not report PASS\n"
+        reason, so a run in which nothing executed can never read as green (R2 M3). Deferred: skips."""
+        passed, result_path, text = run_gate(f"lua/tests/{gate}", rom=rom, timeout=300, quiet=True)
+>       assert passed, (f"{gate} did not report PASS\n"
+        reason, so a run in which nothing executed can never read as green (R2 M3). Deferred: skips."""
+        passed, result_path, text = run_gate(f"lua/tests/{gate}", rom=rom, timeout=300, quiet=True)
+>       assert passed, (f"{gate} did not report PASS\n"
+        reason, so a run in which nothing executed can never read as green (R2 M3). Deferred: skips."""
+        passed, result_path, text = run_gate(f"lua/tests/{gate}", rom=rom, timeout=300, quiet=True)
+>       assert passed, (f"{gate} did not report PASS\n"
+        reason, so a run in which nothing executed can never read as green (R2 M3). Deferred: skips."""
+        passed, result_path, text = run_gate(f"lua/tests/{gate}", rom=rom, timeout=300, quiet=True)
+>       assert passed, (f"{gate} did not report PASS\n"
+============ 5 failed, 21 passed, 12 skipped in 170.68s (0:02:50) =============
+end_utc=2026-09-24T13:38:09Z
+tracked_dirty_after=0
+
+--- run 3 @731cf9b3 (5 gates) ---
+lane sha=731cf9b3a7314540a4f4ca7fe7f2206e6595a7f2 tracked_dirty=0
+LOAD 2026-09-24T09:39:37 cpu=96% emuhawk=3 python=14
+  emuhawk pid=28220 E:/Howard/Bizhawk\EmuHawk.exe --lua=lua/tests/gen2_w6_gate.lua --config=patch/build/gate_cfg_gen2_w6_gate_gold_overlay.ini patch/build/gen2_gold_overlay.gbc
+  emuhawk pid=11588 E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/duo_cfg_w9_linked_faint_active_lhammer_gen3_a.ini --lua=patch/build/duo_w9_linked_faint_active_lhammer_gen3_a.lua patch/build/slink_RR.gba
+  emuhawk pid=33136 E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/duo_cfg_w9_linked_faint_active_lhammer_gen3_b.ini --lua=patch/build/duo_w9_linked_faint_active_lhammer_gen3_b.lua patch/build/slink_RR.gba
+start_utc=2026-09-24T13:39:37Z
+tests/live/test_lua_gates.py::test_gate[test_live_enemyparty_route.lua] PASSED [ 20%]
+tests/live/test_lua_gates.py::test_gate[test_live_playse.lua] PASSED     [ 40%]
+tests/live/test_lua_gates.py::test_gate[test_live_setpartymon.lua] PASSED [ 60%]
+tests/live/test_lua_gates.py::test_gate[test_mailbox_battle.lua] FAILED  [ 80%]
+tests/live/test_lua_gates.py::test_gate[test_mailbox_ping.lua] PASSED    [100%]
+[test_lua_gates] ported gates executed: 5/5
+        reason, so a run in which nothing executed can never read as green (R2 M3). Deferred: skips."""
+        passed, result_path, text = run_gate(f"lua/tests/{gate}", rom=rom, timeout=300, quiet=True)
+>       assert passed, (f"{gate} did not report PASS\n"
+================= 1 failed, 4 passed, 33 deselected in 25.72s =================
+end_utc=2026-09-24T13:40:04Z
+tracked_dirty_after=0
+RESULT: PASS ping (0 checks failed)
+RESULT: FAIL battle (3 checks failed)
+RESULT: PASS playse (0 checks failed)
+RESULT: PASS setpartymon (0 checks failed)
+
+--- run 4 @06724759 (FINAL, full suite) ---
+lane sha=067247593aae45731a2bbdef4baae0743c3cb65a tracked_dirty=0
+6cf77ba4a63634a0fd452be6f206bfc3 *patch/build/slink_RR.gba
+8529f3a45d32bce4da637976fcf269d4 *Pokemon - Radical Red.gba
+LOAD 2026-09-24T09:41:26 cpu=100% emuhawk=4 python=16
+  emuhawk pid=28220 E:/Howard/Bizhawk\EmuHawk.exe --lua=lua/tests/gen2_w6_gate.lua --config=patch/build/gate_cfg_gen2_w6_gate_gold_overlay.ini patch/build/gen2_gold_overlay.gbc
+  emuhawk pid=11588 E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/duo_cfg_w9_linked_faint_active_lhammer_gen3_a.ini --lua=patch/build/duo_w9_linked_faint_active_lhammer_gen3_a.lua patch/build/slink_RR.gba
+  emuhawk pid=33136 E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/duo_cfg_w9_linked_faint_active_lhammer_gen3_b.ini --lua=patch/build/duo_w9_linked_faint_active_lhammer_gen3_b.lua patch/build/slink_RR.gba
+  emuhawk pid=19992 E:/Howard/Bizhawk\EmuHawk.exe --lua=lua/tests/test_gen1_sfx_gate.lua --config=patch/build/gate_cfg_test_gen1_sfx_gate_red_patched.ini patch/gen1/build/slink_red.gb
+start_utc=2026-09-24T13:41:26Z
+tests/live/test_lua_gates.py::test_gate[test_live_boxsync.lua] PASSED    [  2%]
+tests/live/test_lua_gates.py::test_gate[test_live_calctoggle.lua] PASSED [  5%]
+tests/live/test_lua_gates.py::test_gate[test_live_choices.lua] PASSED    [  7%]
+tests/live/test_lua_gates.py::test_gate[test_live_choices_guards.lua] PASSED [ 10%]
+tests/live/test_lua_gates.py::test_gate[test_live_choosepartymon.lua] PASSED [ 13%]
+tests/live/test_lua_gates.py::test_gate[test_live_createmon.lua] PASSED  [ 15%]
+tests/live/test_lua_gates.py::test_gate[test_live_enemyparty.lua] PASSED [ 18%]
+tests/live/test_lua_gates.py::test_gate[test_live_enemyparty_route.lua] PASSED [ 21%]
+tests/live/test_lua_gates.py::test_gate[test_live_events.lua] PASSED     [ 23%]
+tests/live/test_lua_gates.py::test_gate[test_live_ewramtail.lua] PASSED  [ 26%]
+tests/live/test_lua_gates.py::test_gate[test_live_explode_route.lua] PASSED [ 28%]
+tests/live/test_lua_gates.py::test_gate[test_live_forcemove.lua] PASSED  [ 31%]
+tests/live/test_lua_gates.py::test_gate[test_live_givemon.lua] PASSED    [ 34%]
+tests/live/test_lua_gates.py::test_gate[test_live_infoscreen.lua] PASSED [ 36%]
+tests/live/test_lua_gates.py::test_gate[test_live_memorialize.lua] PASSED [ 39%]
+tests/live/test_lua_gates.py::test_gate[test_live_menu.lua] PASSED       [ 42%]
+tests/live/test_lua_gates.py::test_gate[test_live_partyevents.lua] PASSED [ 44%]
+tests/live/test_lua_gates.py::test_gate[test_live_pcnpc.lua] PASSED      [ 47%]
+tests/live/test_lua_gates.py::test_gate[test_live_playse.lua] PASSED     [ 50%]
+tests/live/test_lua_gates.py::test_gate[test_live_setpartymon.lua] PASSED [ 52%]
+tests/live/test_lua_gates.py::test_gate[test_live_soullinkmenu.lua] PASSED [ 55%]
+tests/live/test_lua_gates.py::test_gate[test_live_startmenu.lua] PASSED  [ 57%]
+tests/live/test_lua_gates.py::test_gate[test_live_tradescene.lua] PASSED [ 60%]
+tests/live/test_lua_gates.py::test_gate[test_mailbox_absent.lua] PASSED  [ 63%]
+tests/live/test_lua_gates.py::test_gate[test_mailbox_battle.lua] PASSED  [ 65%]
+tests/live/test_lua_gates.py::test_gate[test_mailbox_ping.lua] PASSED    [ 68%]
+[test_lua_gates] ported gates executed: 26/26
+================= 26 passed, 12 skipped in 135.26s (0:02:15) ==================
+end_utc=2026-09-24T13:43:43Z
+tracked_dirty_after=0
