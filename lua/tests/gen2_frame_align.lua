@@ -77,7 +77,13 @@ F.U1F_SITES = {"pc_deposit_begin", "pc_deposit_complete", "pc_withdraw_begin", "
                "change_box_begin", "change_box_loaded", "pc_release_box_begin", "pc_release_box_complete",
                "pc_release_party_begin", "pc_release_party_complete"}
 F.U1F_BUDGET = {max_frames=60000, max_phase_frames=24000}
-function F.expect(poison, pc)
+-- card EVO-U1: with SLINK_GEN2_U1_FACTS.evolution, after the PC leg a third catch (a Caterpie/Weedle on Route 30) is
+-- switch-trained to L7 and evolves natively (lua/tests/gen2_evolution_inputs.lua); evolution_species_published joins
+-- the expected sites last, with its own same-frame record (F.evolution_problem) and MODEL key_change.
+F.EVOLUTION_INPUTS = "lua/tests/gen2_evolution_inputs.lua"
+F.EVOLUTION_SITE = "evolution_species_published"
+F.EVOLUTION_BUDGET = {max_frames=600000, max_phase_frames=30000}   -- ponytail: ~25 wins + heals, not measured
+function F.expect(poison, pc, evolution)
     local out = {}
     for _, name in ipairs(F.EXPECT) do
         if poison and name == "battle_faint" then out[#out + 1] = "poison_faint" end
@@ -87,6 +93,7 @@ function F.expect(poison, pc)
         for _, name in ipairs(F.U1F_SITES) do out[#out + 1] = name end
         out[#out + 1] = "whiteout_before_heal"   -- proven by its own record (F.whiteout_problem), not the log order
     end
+    if evolution then out[#out + 1] = F.EVOLUTION_SITE end
     return out
 end
 F.ABSENT = {"capture_box"}
@@ -337,6 +344,8 @@ end
 -- Pure verdict over the probe record: problems (empty = PASS) and the proven site list.
 function F.verdict(record, expect, pc)
     expect = expect or F.EXPECT
+    local evolution = false
+    for _, name in ipairs(expect) do if name == F.EVOLUTION_SITE then evolution = true end end
     local problems = {}
     local function need(ok, what) if not ok then problems[#problems + 1] = what end end
     need(record.registry_failed == nil, "hook registry latched a failure: " .. tostring(record.registry_failed))
@@ -363,8 +372,9 @@ function F.verdict(record, expect, pc)
     if pc then
         -- the U1f second catch: exactly two captures, the second after the chain's closing whiteout
         local cp, w = sites.capture_party, record.whiteout
-        need(cp and cp.hits == 2 and cp.log[2] and w and cp.log[2].seq > (w.seq or math.huge),
-             "capture_party must fire once before the closing whiteout and once after it")
+        need(cp and cp.hits == (evolution and 3 or 2) and cp.log[2] and w and cp.log[2].seq > (w.seq or math.huge),
+             "capture_party must fire once before the closing whiteout and once after it"
+             .. (evolution and " (and once for the evolution leg)" or ""))
         local faint_log = sites.battle_faint and sites.battle_faint.log or {}
         local last_faint = faint_log[#faint_log]
         local why = F.whiteout_problem(w, last_faint and last_faint.seq)
@@ -385,6 +395,14 @@ function F.verdict(record, expect, pc)
             why = F.poison_emission_problem(record.poison_model, record.poison)
             need(why == nil, tostring(why))
         end
+    end
+    if evolution then
+        local why = F.evolution_problem(record.evolution, record.old_species_by_new)
+        need(why == nil, tostring(why))
+        why = F.evolution_emission_problem(record.evolution_model, record.evolution, record.old_species_by_new)
+        need(why == nil, tostring(why))
+        local cp, hit = sites.capture_party, sites[F.EVOLUTION_SITE] and sites[F.EVOLUTION_SITE].log[1]
+        need(cp and cp.log[3] and hit and hit.seq > cp.log[3].seq, "the evolution did not follow the evolution leg's catch")
     end
     for _, name in ipairs(F.ABSENT) do need(sites[name] and sites[name].hits == 0, name .. " fired on a party < 6 catch") end
     need(record.decoy.raw >= 1 and record.decoy.accepted == 0 and record.decoy.bank_rejects == record.decoy.raw,
@@ -560,6 +578,58 @@ function F.poison_emission_problem(m, p)
     return nil
 end
 
+-- evolution_species_published (EvolveAfterBattle_MasterLoop.skip_unown +6, C engine/pokemon/evolve.asm:312-317, G/S
+-- :313-318): the `push hl` right after `ld [hl], a` stored the new species (A) at wPartySpecies + wCurPartyMon, after
+-- the struct copy (:291-293) and LearnLevelMoves (:299). Inside the callback A, the species-list byte and the party
+-- struct's species are the new species and HL is that list byte; the main loop read the list byte as the generated
+-- unique pre-evolution (the pack's identity_migration.old_species_by_new) at the end of the frame before the armed
+-- one. wLinkMode 0: not a trade evolution. Still inside ExitBattle (wBattleMode not yet cleared, core.asm:8266-8298).
+function F.evolution_snapshot(ctx, armed, callback, pre)
+    local api = ctx.api
+    local slot = ctx.sym("wCurPartyMon")[1]
+    local at = math.min(slot, 5)
+    local off = party_offset(ctx, at)
+    return {armed=armed, callback=callback, slot=slot, party_count=ctx.sym("wPartyCount")[1],
+            a=api.register("A"), hl=api.register("H") * 256 + api.register("L"),
+            list_addr=ctx.profile.ram.wPartySpecies + at, list_species=ctx.sym("wPartySpecies", at)[1],
+            struct_species=ctx.sym("wPartyMon1Species", off)[1], dvs=word(ctx.sym("wPartyMon1DVs", off, 2)),
+            ot=word(ctx.sym("wPartyMon1ID", off, 2)), link_mode=ctx.sym("wLinkMode")[1],
+            battle_mode=ctx.sym("wBattleMode")[1], pre_list_species=pre and pre[slot] or nil}
+end
+
+-- Pure: the evolution record's rule (nil = holds, else why). old_by_new: the pack's old_species_by_new table.
+function F.evolution_problem(e, old_by_new)
+    if type(e) ~= "table" then return "evolution_species_published recorded no same-frame snapshot" end
+    if not integer(e.armed, 0, 2^53) or e.callback ~= e.armed then return "evolution callback frame != armed frame" end
+    if not integer(e.party_count, 1, 6) or not integer(e.slot, 0, e.party_count - 1) then return "wCurPartyMon is not a party slot" end
+    if e.link_mode ~= 0 then return "the evolution ran in a link (trade) context" end
+    if not integer(e.a, 1, 251) or e.list_species ~= e.a or e.struct_species ~= e.a then
+        return "A, the species-list byte and the party struct do not all carry the published species"
+    end
+    if e.hl ~= e.list_addr then return "HL is not wPartySpecies + wCurPartyMon" end
+    local old = type(old_by_new) == "table" and old_by_new[tostring(e.a)]
+    if not integer(old, 1, 251) then return "the published species has no generated pre-evolution" end
+    if e.pre_list_species ~= old then return "the species list did not read the pre-evolution before the armed frame" end
+    return nil
+end
+
+-- Pure: the MODEL binder, armed on this very hook during the leg, emitted ONE key_change (reason evolution) whose
+-- keys are the snapshot mon's DVs/OT with the pre-evolution and the published species (signals.lua key()).
+function F.evolution_emission_problem(m, e, old_by_new)
+    if type(m) ~= "table" or type(m.events) ~= "table" then return "the evolution model binder recorded nothing" end
+    if #m.events ~= 1 then return fmt("the model binder emitted %d evolution events, not 1", #m.events) end
+    local k = m.events[1]
+    if k.kind ~= "key_change" or k.reason ~= "evolution" or k.site_id ~= F.EVOLUTION_SITE then
+        return "the model event is not an evolution key_change"
+    end
+    local old = type(e) == "table" and type(old_by_new) == "table" and old_by_new[tostring(e.a)]
+    if not integer(old, 1, 251) or k.slot ~= e.slot
+       or k.old_key ~= fmt("%04X:%04X:%02X", e.dvs, e.ot, old) or k.new_key ~= fmt("%04X:%04X:%02X", e.dvs, e.ot, e.a) then
+        return "the model key_change names another mon than the callback snapshot"
+    end
+    return nil
+end
+
 -- Arm every pack site (grouped by bank:PC like lua/gen2/signals.lua) plus the wrong-bank decoy.
 function F.probe(ctx, pack, decoy_site, expect)
     local Registry = dofile(ctx.root .. "/lua/hook_registry.lua")
@@ -643,6 +713,9 @@ function F.probe(ctx, pack, decoy_site, expect)
                    and F.guard_holds(ctx, sites[name].guards) then
                     record.whiteout = F.whiteout_snapshot(ctx, probe.armed, hit.frame, record.seq)
                 end
+                if name == F.EVOLUTION_SITE and probe.watch_evolution and record.evolution == nil then
+                    record.evolution = F.evolution_snapshot(ctx, probe.armed, hit.frame, probe.species_list)
+                end
                 if name == "poison_faint" and record.poison == nil then
                     record.poison = F.poison_snapshot(ctx, probe.armed, hit.frame, probe.party_hp)
                 end
@@ -684,6 +757,10 @@ function F.probe(ctx, pack, decoy_site, expect)
                 if F.party_hp(ctx, slot) == 0 then healed = false end
             end
             if healed then w.healed_frame = frame end
+        end
+        if probe.watch_evolution and record.evolution == nil then   -- the species list at the end of every frame
+            probe.species_list = {}
+            for slot = 0, math.min(party, 6) - 1 do probe.species_list[slot] = ctx.sym("wPartySpecies", slot)[1] end
         end
         if probe.watch_poison then
             local poison = record.poison
@@ -753,7 +830,8 @@ function F.poison_model(ctx, Signals, wrapper, pack, names, reads)
             for _, e in ipairs(batch.events) do
                 out.events[#out.events + 1] = {kind=e.kind, cause=e.cause, site_id=e.site_id, slot=e.slot,
                     species=e.mon and e.mon.species_id, dvs=e.mon and e.mon.dv_word, collection=e.collection,
-                    old_box=e.old_box, new_box=e.new_box, box_index=e.box_index}
+                    old_box=e.old_box, new_box=e.new_box, box_index=e.box_index, reason=e.reason, old_key=e.old_key,
+                    new_key=e.new_key}
             end
         end
     end
@@ -878,7 +956,8 @@ function F.main(api, getenv, SG)
 
     local poison = ctx.u1.poison ~= nil
     local pcmode = ctx.u1.pc ~= nil
-    local expect = F.expect(poison, pcmode)
+    local evolution = ctx.u1.evolution ~= nil
+    local expect = F.expect(poison, pcmode, evolution)
     local probe = F.probe(ctx, pack, ctx.u1.decoy, expect)
     probe.watch_poison, probe.watch_whiteout = poison, pcmode
     local base = SG.qualify_observer(ctx)
@@ -993,6 +1072,21 @@ function F.main(api, getenv, SG)
         u1f_model.close()
         probe.record.u1f_model = u1f_model
     end
+    -- card EVO-U1: from the Cherrygrove #MON CENTER (the PC leg's end), a Route 30 Caterpie/Weedle is caught and
+    -- switch-trained to L7; it evolves after its last battle. The production decoder (MODEL) rides the evolution hook.
+    local evo_model
+    if played and evolution then
+        local EV = dofile(ctx.root .. "/" .. F.EVOLUTION_INPUTS)
+        local PI = dofile(ctx.root .. "/" .. F.POISON_INPUTS)
+        evo_model = F.poison_model(ctx, Signals, wrapper, pack, {F.EVOLUTION_SITE})
+        probe.watch_evolution = true
+        local edriver, eobserve, espec = EV.new(ctx, SG, F, PI, FI, {observe=observe,
+            max_frames=F.EVOLUTION_BUDGET.max_frames, max_phase_frames=F.EVOLUTION_BUDGET.max_phase_frames})
+        played, outcome = F.play(host, espec, edriver, eobserve, diag)
+        evo_model.close()
+        probe.record.evolution_model = evo_model
+        probe.record.old_species_by_new = pack.titles[title].sites[F.EVOLUTION_SITE].identity_migration.old_species_by_new
+    end
     probe.release()
     state.release()
     local record = probe.record
@@ -1016,6 +1110,11 @@ function F.main(api, getenv, SG)
         log("WHITEOUT " .. json.encode(record.whiteout or json.null))
         log("U1F_MODEL " .. json.encode(u1f_model and {events=json.array(u1f_model.events),
             refusals=json.object(u1f_model.refusals or {}), failed=u1f_model.failed or json.null} or json.null))
+    end
+    if evolution then
+        log("EVOLUTION " .. json.encode(record.evolution or json.null))
+        log("EVOLUTION_MODEL " .. json.encode(evo_model and {events=json.array(evo_model.events),
+            refusals=json.object(evo_model.refusals or {}), failed=evo_model.failed or json.null} or json.null))
     end
     if poison then
         log("POISON " .. json.encode(record.poison or json.null))
@@ -1080,6 +1179,19 @@ function F.main(api, getenv, SG)
         receipt.pc_alignment = {passed=true, rule="after the whiteout: a second catch, then Bill's PC deposit, "
             .. "withdraw, CHANGE BOX, deposit, box release, party release, each closed by its RAM effect; the MODEL "
             .. "decoder emitted exactly the listed operation events", model_events=counts,
+            capture_party_hits=record.sites.capture_party.hits}
+    end
+    if evolution then
+        local e = record.evolution
+        receipt.evolution_alignment = {passed=true, rule="evolution_species_published callback frame == armed; "
+            .. "wLinkMode 0; wCurPartyMon is a party slot; inside the callback A, the wPartySpecies byte and the party "
+            .. "struct species are the published species and HL is that list byte; the list byte read the pack's "
+            .. "pre-evolution at the end of the frame before; the production decoder (MODEL instance on the same hook) "
+            .. "emitted one key_change (reason evolution) with that mon's old and new keys",
+            armed=e.armed, callback=e.callback, slot=e.slot, party_count=e.party_count, a=e.a, hl=e.hl,
+            list_addr=e.list_addr, list_species=e.list_species, struct_species=e.struct_species, dvs=e.dvs, ot=e.ot,
+            link_mode=e.link_mode, battle_mode=e.battle_mode, pre_list_species=e.pre_list_species,
+            old_species=record.old_species_by_new[tostring(e.a)], model_event=evo_model.events[1],
             capture_party_hits=record.sites.capture_party.hits}
     end
     if poison then

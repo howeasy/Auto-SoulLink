@@ -167,9 +167,68 @@ U1F_TO_PC = {"PlayersHouse2F": ("warp", "PLAYERS_HOUSE_1F"), "PlayersHouse1F": (
              "CherrygroveCity": ("warp", "CHERRYGROVE_POKECENTER_1F"), "CherrygrovePokecenter1F": ("pc",)}
 
 
+# card EVO-U1: after the PC leg, a Route 30 day catch evolves at L7 (lua/tests/gen2_evolution_inputs.lua). Caterpie
+# (Crystal/Gold) and Weedle (Silver): data/pokemon/evos_attacks.asm CaterpieEvosAttacks/WeedleEvosAttacks (EVOLVE_LEVEL 7);
+# data/wild/johto_grass.asm ROUTE_30 day slots (C: Caterpie L3/L4 30%+20%; G: Caterpie L3 30% + L4 5%; S: Weedle L3 30%
+# + L4 5%).
+EVOLUTION_TITLES = ("crystal", "gold", "silver")
+EVOLUTION_TARGET = {"crystal": ("CATERPIE", "METAPOD"), "gold": ("CATERPIE", "METAPOD"), "silver": ("WEEDLE", "KAKUNA")}
+EVOLUTION_SITE = "evolution_species_published"
+EVOLUTION_DAMAGING = ("TACKLE", "SCRATCH", "POISON_STING", "RAGE", "WATER_GUN")   # EV.DAMAGING's constants
+
+
 def expect_for(title):
     out = POISON_EXPECT if title in POISON_TITLES else EXPECT
-    return out + U1F_SITES + ("whiteout_before_heal",) if title in U1F_TITLES else out
+    out = out + U1F_SITES + ("whiteout_before_heal",) if title in U1F_TITLES else out
+    return out + (EVOLUTION_SITE,) if title in EVOLUTION_TITLES else out
+
+
+def evolution_facts(ctx) -> dict:
+    """The Cherrygrove #MON CENTER (nurse, carpet), Cherrygrove <-> Route 30 edges, the south Route 30 grass patch, the
+    target/evolved species ids, POISON_STING and the damaging moves' ids, all from the pinned source."""
+    areas = {row["map_const"]: row for row in gen2_fixtures.build_area_map(ctx).values()}
+    by_name = {row["map_name"]: row for row in areas.values()}
+    names = ("CherrygrovePokecenter1F", "CherrygroveCity", "Route30", "Route29")
+    maps = {name: gen2_fixtures._map_facts(ctx, by_name[name], areas) for name in names}
+    for name, facts_map in maps.items():
+        facts_map["ledges"] = ledges(ctx, name, facts_map)
+    center, city, hunt = (maps[name] for name in names[:3])
+    door = next(w for w in city["warps"] if w["destination"] == by_name["CherrygrovePokecenter1F"]["map_const"])
+    exit_ = next(w for w in center["warps"] if w["destination"] == city["map_const"])
+    nurse = next(o for script, o in center["objects"].items() if script.endswith("NurseScript"))
+    stand = {"x": nurse["x"], "y": nurse["y"] + 2}   # across the counter row, facing up (PokecenterNurseScript)
+    assert center["grid"][stand["y"] * center["width"] + stand["x"]] == 1, "nurse stand tile not floor"
+    # the grass patch nearest the south connection: flood-fill the grass from its southernmost tile
+    width = hunt["width"]
+    grass = {(x, y) for y in range(hunt["height"]) for x in range(width) if hunt["grid"][y * width + x] == 2}
+    todo = [max(grass, key=lambda t: (t[1], -t[0]))]
+    patch = set(todo)
+    while todo:
+        x, y = todo.pop()
+        for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if n in grass and n not in patch:
+                patch.add(n)
+                todo.append(n)
+    sight = {(t["x"], t["y"]) for _, _, tiles in trainers(ctx, "Route30").values() for t in tiles}
+    assert not patch & sight, "a trainer sees the south Route 30 grass"
+    species = gen2_fixtures.const_block(ctx.read_source("constants/pokemon_constants.asm"), "CATERPIE")
+    moves = gen2_fixtures.const_block(ctx.read_source("constants/move_constants.asm"), "POISON_STING")
+    target, evolved = EVOLUTION_TARGET[ctx.title]
+    evos = ctx.read_source("data/pokemon/evos_attacks.asm")
+    assert f"{target.title()}EvosAttacks:\n\tdb EVOLVE_LEVEL, 7, {evolved}\n" in evos, "evolution row left the source"
+    nurse_anchor = "Shall we heal your"
+    assert f'para "{nurse_anchor}' in ctx.read_source("data/text/std_text.asm"), "nurse anchor left the source"
+    return {"maps": maps, "center": "CherrygrovePokecenter1F", "city": "CherrygroveCity", "hunt": "Route30",
+            "hunt_grass": [{"x": x, "y": y} for x, y in sorted(patch, key=lambda t: (t[1], t[0]))],
+            "door": {"x": door["x"], "y": door["y"]}, "stand": stand,
+            "exit": {"x": exit_["x"], "y": exit_["y"], "carpet": exit_["carpet"]},
+            "north": edge_leg(ctx, maps, "CherrygroveCity", "north", "Route30"),
+            "south": edge_leg(ctx, maps, "Route30", "south", "CherrygroveCity"),
+            "approach": edge_leg(ctx, maps, "Route29", "west", "CherrygroveCity"),   # a start on the fixture map
+            "target": species[target], "evolves_to": species[evolved], "poison_sting": moves["POISON_STING"],
+            "run_from_sting": target != "WEEDLE",   # a poisoned Caterpie loses HP on the walk; Weedle is POISON-type
+            "damaging_ids": {str(moves[name]): True for name in EVOLUTION_DAMAGING},
+            "prompts": {"nurse_heal": [nurse_anchor]}}
 
 
 def u1f_facts(ctx) -> dict:
@@ -356,6 +415,9 @@ def u1_facts(ctx, facts, qualification_attempt_id: str) -> dict:
         prompts.update(out["pc"]["prompts"])
     if ctx.title in POISON_TITLES:
         out["poison"] = poison_facts(ctx)
+    if ctx.title in EVOLUTION_TITLES:
+        out["evolution"] = evolution_facts(ctx)
+        prompts.update(out["evolution"]["prompts"])
     return out
 
 
@@ -381,7 +443,8 @@ def verify(text: str, pack: dict, title: str) -> dict:
         previous = after[0]
         assert all(hit["frame"] == hit.get("armed") for hit in log), (name, "callback frame != armed frame")
     u1f = "whiteout_before_heal" in expect
-    assert summary["capture_party"]["hits"] == (2 if u1f else 1)
+    evolution = EVOLUTION_SITE in expect
+    assert summary["capture_party"]["hits"] == (2 if u1f else 1) + (1 if evolution else 0)
     assert summary.get("capture_box", {}).get("hits", 0) == 0, "capture_box fired on a party < 6 catch"
     align = tag_json(text, "ALIGN")
     a = align["align"]
@@ -431,6 +494,20 @@ def verify(text: str, pack: dict, title: str) -> dict:
                           "pc_release_box": 1, "pc_release_party": 1}, (counts, m)
         assert receipt["pc_alignment"]["model_events"] == counts, receipt["pc_alignment"]
         assert {k: v for k, v in receipt["whiteout_alignment"].items() if k in w} == w, receipt["whiteout_alignment"]
+    if evolution:
+        # evolution: re-checked from the EVOLUTION / EVOLUTION_MODEL lines, independently of F.evolution_problem
+        e, m = tag_json(text, "EVOLUTION"), tag_json(text, "EVOLUTION_MODEL")
+        old = sites[EVOLUTION_SITE]["identity_migration"]["old_species_by_new"][str(e["a"])]
+        assert e["callback"] == e["armed"] and 0 <= e["slot"] < e["party_count"] and e["link_mode"] == 0, e
+        assert e["a"] == e["list_species"] == e["struct_species"] and e["hl"] == e["list_addr"], e
+        assert e["pre_list_species"] == old, (e, old)
+        assert summary[EVOLUTION_SITE]["log"][0]["seq"] > summary["capture_party"]["log"][2]["seq"], summary
+        assert len(m["events"]) == 1, m
+        k = m["events"][0]
+        assert (k["kind"], k["reason"], k["site_id"], k["slot"]) == ("key_change", "evolution", EVOLUTION_SITE, e["slot"]), k
+        assert (k["old_key"], k["new_key"]) == (f"{e['dvs']:04X}:{e['ot']:04X}:{old:02X}",
+                                                f"{e['dvs']:04X}:{e['ot']:04X}:{e['a']:02X}"), (k, e)
+        assert {key: v for key, v in receipt["evolution_alignment"].items() if key in e} == e, receipt["evolution_alignment"]
     if "poison_faint" in expect:
         # poison_faint: re-checked here from the POISON / POISON_MODEL lines, independently of F.poison_problem
         p, m = tag_json(text, "POISON"), tag_json(text, "POISON_MODEL")
@@ -464,7 +541,7 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, gen2_fixtures.spec_route_facts(spec, REPO),
                                                      qualification["attempt_id"]))
     passed, path, text = run_gate(GATE, rom_key=spec.title, target=spec.target,
-                                  timeout=3600 if title in POISON_TITLES else 1200,
+                                  timeout=7200 if title in EVOLUTION_TITLES else 3600 if title in POISON_TITLES else 1200,
                                   saveram_dir=str(REPO / ".cache/gen2-fixtures/u1-hook-proof" / spec.name),
                                   fixture_path=str(fixture), speed_percent=300, env_overrides=env)
     assert passed, f"gate FAILED; result {path}: {text[-3000:]}"
