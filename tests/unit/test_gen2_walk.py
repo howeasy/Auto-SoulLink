@@ -114,3 +114,14 @@ def test_a_walker_copied_away_from_its_sibling_loads_the_rule_from_slink_root(re
     copy.write_text((ROOT / rel).read_text(encoding="utf-8"), encoding="utf-8")
     monkeypatch.setenv("SLINK_ROOT", ROOT.as_posix())
     assert load(runtime(), copy) is not None   # ROOT / an absolute path is that path
+
+
+@pytest.mark.parametrize("rel", ["lua/tests/gen2_frame_align.lua", "lua/tests/gen2_write_windows.lua"])
+def test_a_top_level_gate_script_finds_the_rule_through_slink_root(rel, tmp_path, monkeypatch):
+    """EmuHawk runs a --lua= script with source "main" (no path) and relative dofile does not resolve from the
+    repo (EmuHawk probe 2026-09-24; the 76d715e6 Crystal U1 run idled to its 3600 s timeout, no result file).
+    Modelled here: the chunk text has no @path and the process cwd is elsewhere."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("SLINK_ROOT", ROOT.as_posix())
+    lua = runtime()
+    assert lua.execute((ROOT / rel).read_text(encoding="utf-8")) is not None
