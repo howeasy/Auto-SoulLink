@@ -477,3 +477,46 @@ python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixtur
 ```
 
 Runtime mechanics (button timing, walk landing, the pinned bag-throw) are now proven live by the receipt above.
+
+## {firered,leafgreen}_party_trainer{,_b}.sav (card G4-SYNTH-TRAINER, built live 2026-09-24)
+
+**Provenance: CACHED-NATIVE, not SYNTH.** Nothing here is tool-built game data. Each `a` file is
+the in-game save of one native run of `linked_faint_active_trainer_gen3`'s own T2 preparation
+(`lua/tests/gen3_routes.lua` `enter_trainer`, unchanged, with the production client connected).
+The run starts from the title's `*_party_town.sav`: the old-man tutorial, Lv13 Tackle training
+on Route 1 with nurse heals and fled incidentals, the last heal, Route 2, the gate, then the
+Forest. It **stops** at that walk's own end marker, `PREP_ROUTE map=1.0 at=(41,45)`, which is
+Viridian Forest one tile west of Bug Catcher Rick 102's sight line. Rick stands at (47,45)
+facing west with sight 5, so the line is (42..46,45) (pret `ViridianForest/map.json`). The run
+then saves in-game there. The `_b` file is `derive-b` over the `a` file (OT identity only). The
+carrier's live part is what the fixture leaves out: the Right step into the sight line, Rick's
+approach, the battle, force_faint, the P+H commit and the KO.
+
+- Producer: `tools/gen3_trainer_fixture.py --title <title>`. It runs one duo, with the title on
+  B (`gen3_frlg` puts LG on B, `gen3_lgfr` puts FR on B), from
+  `lua/tests/duo/scenario_gen3_trainer_fixture.lua`. A only idles. The runner applies the live
+  row's server-only area control. The oracle requires `TRAINER_FIXTURE`, `SAVE_WITNESS
+  trainer_fixture` and `WRITES 0`, so no SLink write happened. The saved file must qualify, sit
+  at 1.0 (41,45) and hold two mons, with the lead at Lv13 or higher, full HP and status 0
+  (`fixture_problems`, pinned by `tests/unit/test_gen3_trainer_fixture.py`, whose negative
+  controls are the town and battle fixtures). The producer scenario is registered only inside
+  the tool's `main()` and never in `e2e_duo.SCENARIOS`.
+- Built on lane `gen3-lane-clean` at 09e8e294, rewind off, one attempt each:
+  - FR: 12:20-12:34, 14 min wall, save at frame 173965, 10 heals.
+  - LG: 12:35-12:55, 20.5 min wall, save at frame 258132, 17 heals.
+
+| Fixture | sha256 | trainer | party | counter | boot-check |
+|---|---|---|---|---|---|
+| `firered_party_trainer.sav` | `3a0499341f55567fd8699cd41a215723b19fd46e5493fd616f539856d81a387b` | `JONN` #99DE0D8A | Squirtle Lv13 35/35, Pidgey Lv4 17/17 | 5 | PASS 5->6, 14/14 |
+| `firered_party_trainer_b.sav` | `df532b8045462a4340384ed38d783e88b577a920b36397e375ddf0e38ca4b4cc` | `JONNB` #6621F275 | same | 5 | PASS 5->6, 14/14 |
+| `leafgreen_party_trainer.sav` | `9f97460005caedfe12c7fc29f0f08bf6177d341a53994a311ed0758f131e9c77` | #1C600D89 | Squirtle Lv13 38/38, Rattata Lv3 15/15 | 4 | PASS 4->5, 14/14 |
+| `leafgreen_party_trainer_b.sav` | `be4dd4cad6e85b5c2cb10ae564aa7a9d5e12c8e86a43c04b532f284c44d11f12` | #E39FF276 | same | 4 | PASS 4->5, 14/14 |
+
+```
+python tools/gen3_trainer_fixture.py --title firered
+python tools/gen3_trainer_fixture.py --title leafgreen
+python tools/gen3_fixtures.py boot-check --title firered --rom "<FireRed.gba>" --saveram-name "Pokemon - FireRed Version (USA).SaveRAM" --fixture tests/fixtures/gen3/firered_party_trainer.sav
+```
+
+Rick 102 is still undefeated in all four files. The lead gets to Rick with full HP only if
+the save kept it that way, and the producer refuses a hurt lead.
