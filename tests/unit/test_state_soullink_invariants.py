@@ -103,3 +103,38 @@ def test_rollback_of_an_uncertain_side_splits_when_the_other_traded(tmp_path):
     assert state.resolve_trade(token, "rollback") == (True, "")
     assert (entry.a.key, entry.b.key) == (A_GETS, A_GETS)
 
+
+
+# ── O-35: a PC release of a linked mon loses it; its partner dies like a faint ────────────────────
+
+def _linked(tmp_path):
+    state, entry, _token = _gen1_applying(tmp_path)
+    state.pending_trade = None                                  # no trade in flight
+    return state, entry
+
+
+def test_releasing_a_linked_mon_kills_and_memorializes_its_partner(tmp_path):
+    state, entry = _linked(tmp_path)
+    a_cmds = state.handle_event("a", {"event": "release", "key": B_GETS})     # A's own mon (entry.a)
+    b_cmds = _cmds(state, "b")
+    assert entry.status == LinkStatus.DEAD and entry.cause == "release"
+    assert _keys(b_cmds, "force_faint") == [A_GETS] and _keys(b_cmds, "memorialize") == [A_GETS]
+    assert not _keys(a_cmds, "memorialize") and not _keys(a_cmds, "force_faint"), "A's mon no longer exists"
+    assert B_GETS not in state.pending_memorials["a"] and B_GETS not in state.party_keys["a"]
+
+
+def test_a_release_of_an_unlinked_or_dead_key_changes_nothing(tmp_path):
+    state, entry = _linked(tmp_path)
+    state.handle_event("a", {"event": "release", "key": "ABCD:1234:99"})
+    assert entry.status == LinkStatus.ALIVE and not _keys(_cmds(state, "b"), "force_faint")
+    state.handle_event("b", {"event": "release", "key": B_GETS})               # A's key, released by B?
+    assert entry.status == LinkStatus.ALIVE, "only the releaser's own half counts"
+
+
+def test_a_release_of_a_received_mon_waits_for_the_trade(tmp_path):
+    state, entry, _token = _one_sided(tmp_path)
+    state.handle_event("a", {"event": "release", "key": A_GETS})              # A releases B's old mon
+    assert entry.status == LinkStatus.ALIVE and state.trade_held() == [
+        {"player": "a", "event": "release", "key": A_GETS}]
+    b_cmds = _tick(state, "b", _mon(B_GETS, 0x26)) + _cmds(state, "b")        # B's evidence: traded
+    assert _keys(b_cmds, "force_faint") == [B_GETS] and entry.cause == "release"

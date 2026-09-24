@@ -371,6 +371,8 @@ class SoulLinkState:
             self._handle_capture(player_id, msg)
         elif event == "faint":
             self._handle_faint(player_id, msg)
+        elif event == "release":
+            self._handle_release(player_id, msg)
         elif event == "no_catch":
             self._handle_no_catch(player_id, msg)
         elif event == "whiteout":
@@ -660,7 +662,7 @@ class SoulLinkState:
     # by the unswapped halves (a received mon's faint killing the wrong partner, an evolved key lost as
     # unlinked); such events wait in pt["held_events"] and replay after commit or rollback.
     TRADE_HELD_EVENTS = {"faint": "_handle_faint", "party_to_box": "_handle_party_to_box",
-                         "box_to_party": "_handle_box_to_party"}
+                         "box_to_party": "_handle_box_to_party", "release": "_handle_release"}
 
     def _hold_for_trade(self, player_id: str, msg: dict) -> bool:
         pt = self.pending_trade
@@ -2217,6 +2219,27 @@ class SoulLinkState:
             }
         self._propagate_faint(player_id, entry, killer=killer,
                               level=msg.get("_level", 0))
+
+    def _handle_release(self, player_id: str, msg: dict):
+        """Owner ruling O-35: a PC release of a linked mon loses it, so its partner dies and is
+        memorialized like a faint. Only the releaser's own half of an ALIVE link counts; the
+        released mon no longer exists, so it gets no memorialize of its own."""
+        key = msg.get("key", "")
+        if not key:
+            return
+        self.party_keys[player_id].discard(key)
+        entry = self._key_index.get(key)
+        half = entry and (entry.a if player_id == "a" else entry.b)
+        if (not self.pokeballs_obtained[player_id] or not entry or entry.status != LinkStatus.ALIVE
+                or not half or half.key != key):
+            log.info(f"[{player_id}] release {key[:8]}: no alive linked half of this player — ignored")
+            return
+        log.info(f"[{player_id}] released linked {key[:8]} — the partner dies (O-35)")
+        self._propagate_faint(player_id, entry, cause="release")
+        self.pending_memorials[player_id].discard(key)
+        self.queued_commands[player_id] = [c for c in self.queued_commands[player_id]
+                                           if not (c.get("cmd") == "memorialize" and c.get("key") == key)]
+        self._save()
 
     def _dupes_reroll(self, player_id: str, area_id: str, text: str):
         """Send GUI prompt + unresolve_area so the player gets another encounter."""

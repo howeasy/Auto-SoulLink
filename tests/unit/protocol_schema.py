@@ -42,6 +42,7 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "whiteout": ({}, {}),
     "party_to_box": ({"key": "key"}, {"stats": "dict"}),
     "box_to_party": ({"key": "key"}, {"area_id": "str", "nickname": "str"}),
+    "release": ({"key": "key"}, {}),                  # O-35: a PC release of the player's own mon
     # reason vocabulary (free text on the wire): KEY_CHANGE_REASONS
     "key_change": ({"old_key": "key", "new_key": "key"},
                    {"reason": "str", "new_species": "int", "new_nickname": "str"}),
