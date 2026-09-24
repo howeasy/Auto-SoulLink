@@ -19,7 +19,7 @@ import gen2_trade_oracles as oracle  # noqa: E402
 from patch.tools.make_ups import ups_apply  # noqa: E402
 from tools.gen2_trade_lane import SCENARIOS, validate_manifest  # noqa: E402
 
-GAMES = ("gen2_new", "gen2_gold_silver", "gen2_crystal_gold")
+GAMES = ("gen2_new", "gen2_gold_silver")   # owner Q10: C-G native trade is refused, never registered
 
 
 def _run(monkeypatch, tmp_path, game="gen2_new", scenario="gen2_trade_new", lane="trade-model"):
@@ -335,7 +335,7 @@ def _stub(monkeypatch, run, side):
     return Path(run.stub_path(side)).read_text()
 
 
-@pytest.mark.parametrize(("game", "variant"), [("gen2_new", "cc"), ("gen2_gold_silver", "gs"), ("gen2_crystal_gold", "cg")])
+@pytest.mark.parametrize(("game", "variant"), [("gen2_new", "cc"), ("gen2_gold_silver", "gs")])
 @pytest.mark.parametrize("scenario", ["gen2_trade_new", "gen2_trade_reset_commit", "gen2_trade_evolve"])
 def test_trade_stub_carries_every_field_the_driver_reads(monkeypatch, tmp_path, game, variant, scenario):
     run = _run(monkeypatch, tmp_path, game, scenario)
@@ -393,3 +393,8 @@ def test_committed_trade_cases_require_every_native_phase(monkeypatch, tmp_path,
     run = _run(monkeypatch, tmp_path, scenario=scenario)
     _real_stages(run)
     assert run._gen2_trade_expected_case()["required_phases"] == ["wait", "trade_animation", "native_save"]
+
+
+def test_crystal_gold_never_registers_a_native_trade():
+    assert not set(SCENARIOS) & set(duo.scenarios_for("gen2_crystal_gold"))
+    assert "gen2_crystal_gold" not in duo.GEN2_TRADE_FIXTURES

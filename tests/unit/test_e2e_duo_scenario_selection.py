@@ -288,13 +288,14 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
     assert game in GAMES
     assert GAMES[game]["game"] == "gen2_new"
     assert GAMES[game]["fixture"] == fixtures
-    assert scenarios_for(game) == EXPECTED_GEN2_TRADE + ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset"]
+    trade = EXPECTED_GEN2_TRADE if game != "gen2_crystal_gold" else []   # owner Q10: no C-G native trade
+    assert scenarios_for(game) == trade + ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset"]
     assert duo_module.evidence_contract(game) is duo_module.evidence_contract("gen2_new")
     assert not GAMES[game].get("server_rom_routes")
-    trade_fixtures = duo_module.GEN2_TRADE_FIXTURES[game]
+    trade_fixtures = duo_module.GEN2_TRADE_FIXTURES.get(game)
     assert duo_list_lines(game) == [
         f"{scenario}  attempts=1  targets=a:{trade_fixtures['a']}, b:{trade_fixtures['b']} artifact=overlay admission=HARNESS_ONLY_OVERLAY"
-        for scenario in EXPECTED_GEN2_TRADE] + [
+        for scenario in trade] + [
         f"{scenario}  attempts={3 if scenario in duo_module.GEN2_CLAUSE_SCENARIOS else 1}  targets=a:{fixtures['a']}, "
         f"b:{'crystal_battle_ot2' if scenario == 'gen2_admit_wrong_rom' else fixtures['b']}"
         for scenario in ("link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset")]
@@ -642,8 +643,10 @@ def test_the_pytest_wrappers_agree_with_the_runner():
     the other way."""
     sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
     mod = __import__("test_duo_gen2_new")
-    for game in mod.PAIRINGS:
-        assert set(mod.SCENARIOS) == set(scenarios_for(game))
+    for game in mod.PAIRINGS:   # the wrapper skips what a pairing does not register (C-G trade, Q10)
+        assert set(scenarios_for(game)) <= set(mod.SCENARIOS)
+        assert set(mod.SCENARIOS) - set(scenarios_for(game)) <= set(duo_module.GEN2_TRADE_SCENARIOS)
+    assert set(mod.SCENARIOS) == set().union(*(scenarios_for(game) for game in mod.PAIRINGS))
 
 
 def test_every_gen1_new_scenario_declares_an_oracle_that_exists():

@@ -282,6 +282,9 @@ def scenario_applies(name, game):
     # trade/explode scenarios need the M3 overlay, admit_randomized the M5 UPR fork).
     if isinstance(GAMES, dict) and name in GAMES.get(game, {}).get("not_yet", ()):
         return False
+    # Native trade runs only on the pairings with trade seeds: C-C and G-S (owner Q10: C-G trade refused).
+    if name in GEN2_TRADE_SCENARIOS and game not in GEN2_TRADE_FIXTURES:
+        return False
     if allowed is None:
         return game not in OPT_IN_GAMES and family not in OPT_IN_GAMES
     return game in allowed or family in allowed
@@ -966,7 +969,6 @@ def evidence_contract(game):
 GEN2_TRADE_FIXTURES = {
     "gen2_new": {"a": "crystal_battle_errand", "b": "crystal_battle_ot2_errand"},
     "gen2_gold_silver": {"a": "gold_battle_errand", "b": "silver_battle_errand"},
-    "gen2_crystal_gold": {"a": "crystal_battle_errand", "b": "gold_battle_errand"},
 }
 
 
@@ -1773,7 +1775,7 @@ class DuoRun:
 
     def _gen2_trade_expected_case(self):
         return {"scenario": self.scenario,
-                "variant": {"gen2_new": "cc", "gen2_gold_silver": "gs", "gen2_crystal_gold": "cg"}[self.game],
+                "variant": {"gen2_new": "cc", "gen2_gold_silver": "gs"}[self.game],
                 "fixture_sha256": {side: row["sha256"] for side, row in self._gen2_inputs.items()},
                 "required_phases": ["wait", "trade_animation", "native_save"]
                     if self.scenario in ("gen2_trade_new", "gen2_trade_evolve") else ["wait"]}

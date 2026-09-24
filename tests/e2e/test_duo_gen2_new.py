@@ -80,4 +80,6 @@ def run_link_gate(game=GAME):
 @pytest.mark.parametrize("game", PAIRINGS)
 @pytest.mark.parametrize("scenario", SCENARIOS)
 def test_gen2_new_duo(game, scenario):
+    if scenario not in duo.scenarios_for(game):   # owner Q10: native trade only on C-C and G-S
+        pytest.skip(f"{scenario} is not registered for {game}")
     run_gate(game, scenario)
