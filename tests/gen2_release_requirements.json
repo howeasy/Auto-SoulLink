@@ -543,13 +543,14 @@
     {
       "id": "duo.crystal.gold",
       "stage": "live-duos",
-      "description": "Crystal A against Gold B: cross-title admission through one gen2_gsc foundation (O-16); native trade is refused on this pair (owner Q10, ticket 09: G to S and C to C only)",
+      "description": "Crystal A against Gold B: cross-title admission through one gen2_gsc foundation (O-16); native trades allowed and tested on this pair (owner O-34, 8a42b7f7)",
       "axes": {
         "pairing": "gen2_crystal_gold",
         "initiator": "crystal",
         "partner": "gold",
         "fixtures": {"a": "crystal_battle", "b": "gold_battle"},
-        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_reconnect", "gen2_gender_clause", "gen2_type_clause", "gen2_species_clause", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild"]
+        "trade_fixtures": {"a": "crystal_battle_errand", "b": "gold_battle_errand"},
+        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_reconnect", "gen2_gender_clause", "gen2_type_clause", "gen2_species_clause", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item", "gen2_trade_refuse_unsaved"]
       },
       "proofs": [
         {

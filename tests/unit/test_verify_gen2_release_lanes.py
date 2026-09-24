@@ -179,7 +179,6 @@ def test_list_works_without_future_files_and_never_runs_a_lane(monkeypatch, tmp_
     for lane in gate.LANES:
         assert any(line.split() and line.split()[0] == lane.name for line in out.splitlines())
     assert out.count("requirements:") == len(gate.LANES)
-    assert "UNIMPLEMENTED" in out
     assert "GATE PASSED" not in out
     assert sorted(tmp_path.rglob("*")) == before
 
@@ -244,20 +243,20 @@ def test_missing_source_inputs_fail_before_subprocess(monkeypatch, tmp_path):
     assert "pokecrystal11.gbc" in detail
 
 
-@pytest.mark.parametrize("name", ["fixtures"])
-def test_future_binding_cannot_pass_by_merely_adding_a_file(monkeypatch, tmp_path, name):
-    monkeypatch.setattr(gate, "ROOT", tmp_path)
-    lane = _lane(name)
-    for arg in lane.argv:
-        if arg.endswith(".py"):
-            target = tmp_path / arg
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text("# not a qualified implementation\n", encoding="utf-8")
-    monkeypatch.setattr(gate.release_lanes, "run_lane",
-                        lambda *_args, **_kwargs: pytest.fail("unimplemented lane executed"))
-    ok, detail = gate.run_lane(lane, quiet=True)
-    assert not ok
-    assert detail.startswith("UNIMPLEMENTED:")
+def test_fixtures_lane_cannot_pass_by_merely_adding_files(tmp_path):
+    """Every prerequisite path present, but as junk bytes with no receipt or disclosure: RED, never vacuous."""
+    for rel in gate.PREREQUISITES["fixtures"]:
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if rel.endswith(".SaveRAM"):
+            target.write_bytes(b"\x00" * (0x8000 + 22))
+        elif rel.endswith(".json"):
+            target.write_text(json.dumps({"requirements": []}), encoding="utf-8")
+        else:
+            target.mkdir(exist_ok=True)
+    errors = gate.fixtures_errors(tmp_path)
+    assert any("gold_battle_ot2: undisclosed" in e for e in errors), errors
+    assert any("crystal_battle_errand" in e and "missing" in e for e in errors), errors
 
 
 @pytest.mark.parametrize("args", [["--quick"], ["--lane", "unit"]])
@@ -280,19 +279,23 @@ def test_partial_runs_never_print_release_success(monkeypatch, capsys, args):
         assert calls == ["unit"]
 
 
-def test_full_skeleton_cannot_pass_when_source_lanes_are_green(monkeypatch, capsys):
+def test_full_skeleton_cannot_pass_when_source_lanes_are_green(monkeypatch, tmp_path, capsys):
+    """Every other lane green; the fixtures lane runs its real binding against an empty tree and stays RED."""
     real_binding = gate.run_lane
 
     def source_passes(lane, quiet):
-        if lane.name in gate.UNIMPLEMENTED:
+        if lane.name == "fixtures":
             return real_binding(lane, quiet)
         return True, "synthetic source/MODEL pass"
 
+    assert gate.UNIMPLEMENTED == {}
+    monkeypatch.setattr(gate, "ROOT", tmp_path)
+    monkeypatch.setattr(gate.release_lanes, "run_lane", lambda *_a, **_k: pytest.fail("lane executed"))
     monkeypatch.setattr(gate, "run_lane", source_passes)
     assert gate.main([]) == 1
     out = capsys.readouterr().out
     assert "GATE FAILED" in out
-    assert "UNIMPLEMENTED" in out
+    assert "missing prerequisites" in out
     assert "GATE PASSED" not in out
 
 
@@ -1718,7 +1721,7 @@ def _trade_proof(tmp_path, axes, scenario, tag="trade"):
 
 
 @pytest.mark.parametrize("scenario", sorted(gate.TRADE_END_STATUS))
-@pytest.mark.parametrize("pair", ["duo.crystal.crystal", "duo.gold.silver"])
+@pytest.mark.parametrize("pair", ["duo.crystal.crystal", "duo.gold.silver", "duo.crystal.gold"])
 def test_trade_matrix_accepts_a_bound_overlay_receipt(tmp_path, scenario, pair):
     _doc, proof, axes = _trade_cell(tmp_path, scenario, pair)
     assert gate._receipt_errors(tmp_path, proof, scenario, axes, {}) == []
@@ -1762,17 +1765,15 @@ def test_trade_matrix_refuses_a_republished_overlay(tmp_path):
 
 
 def test_every_cell_declares_all_trade_cases_with_the_runner_fixtures():
-    """Owner Q10: native trades on C-C and G-S only; the C-G row declares no trade case."""
+    """Owner O-34: native trades on every release pair, C-G included."""
     import e2e_duo as duo
     doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
     for row in doc["requirements"]:
         axes = row["axes"]
-        if (axes["initiator"], axes["partner"]) in gate.TRADE_PAIRS:
-            assert set(gate.TRADE_END_STATUS) <= set(axes["scenarios"])
+        assert set(gate.TRADE_END_STATUS) <= set(axes["scenarios"])
+        assert axes["trade_fixtures"] == _TRADE_FIXTURES[axes["pairing"]]
+        if axes["pairing"] in duo.GEN2_TRADE_FIXTURES:   # the runner re-adds C-G after O-34 in its own card
             assert axes["trade_fixtures"] == duo.GEN2_TRADE_FIXTURES[axes["pairing"]]
-        else:
-            assert not set(gate.TRADE_END_STATUS) & set(axes["scenarios"]) and "trade_fixtures" not in axes
-    assert {("crystal", "crystal"), ("gold", "silver")} == gate.TRADE_PAIRS
     # Every runner case is a release cell; the lane may demand more (refusal rows awaiting a driver).
     assert set(duo.GEN2_TRADE_SCENARIOS) <= set(gate.TRADE_END_STATUS)
     assert "gen2_trade_refuse_unsaved" in gate.TRADE_END_STATUS
@@ -1788,7 +1789,9 @@ _RECEIPT_LANES = {"live-gates": "--live-gates", "live-trade-gates": "--trade-gat
 
 
 def test_placeholder_lanes_are_bound_to_real_checks():
-    assert set(gate.UNIMPLEMENTED) == {"fixtures"}
+    assert gate.UNIMPLEMENTED == {}
+    assert _lane("fixtures").argv[1:] == ["tools/verify_gen2_release.py", "--fixtures"]
+    assert "fixtures" in gate._SLOW and "P3b" in _lane("fixtures").why
     assert _lane("patch-build").argv[1:] == ["tools/build_gen2_companion.py", "--check"]
     for name, flag in _RECEIPT_LANES.items():
         assert _lane(name).argv[1:] == ["tools/verify_gen2_release.py", flag]
@@ -1799,7 +1802,7 @@ def test_placeholder_lanes_are_bound_to_real_checks():
     assert gate.manifest_errors() == []
 
 
-@pytest.mark.parametrize("name", ["patch-build", *_RECEIPT_LANES])
+@pytest.mark.parametrize("name", ["fixtures", "patch-build", *_RECEIPT_LANES])
 def test_new_lanes_fail_on_missing_inputs_before_running(monkeypatch, tmp_path, name):
     monkeypatch.setattr(gate, "ROOT", tmp_path)
     monkeypatch.setattr(gate.release_lanes, "run_lane", lambda *_a, **_k: pytest.fail("lane executed"))
@@ -1821,7 +1824,8 @@ def test_patch_build_verdict_is_the_builders_check(monkeypatch, returncode, ok):
     assert seen[0][1:] == ["tools/build_gen2_companion.py", "--check"]
 
 
-@pytest.mark.parametrize(("flag", "func"), [("--live-gates", "live_gates_errors"),
+@pytest.mark.parametrize(("flag", "func"), [("--fixtures", "fixtures_errors"),
+                                            ("--live-gates", "live_gates_errors"),
                                             ("--trade-gates", "trade_gates_errors"),
                                             ("--duo-pairs", "duo_pairs_errors"),
                                             ("--release-evidence", "release_evidence_errors")])
@@ -1935,8 +1939,6 @@ def _trade_duo():
 def _trade_tree(tmp_path):
     doc = _green_tree(tmp_path)
     for row in doc["requirements"]:
-        if (row["axes"]["initiator"], row["axes"]["partner"]) not in gate.TRADE_PAIRS:
-            continue
         row["axes"]["trade_fixtures"] = _TRADE_FIXTURES[row["axes"]["pairing"]]
         row["axes"]["scenarios"] = ["link", *sorted(gate.TRADE_END_STATUS)]
         for scenario in sorted(gate.TRADE_END_STATUS):
@@ -1984,34 +1986,17 @@ def test_trade_gates_red_on_missing_or_stale_receipts(tmp_path, mutation):
 def test_committed_trade_gates_are_red_until_trade_duos_are_receipted():
     rows = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))["requirements"]
     receipted = {(row["id"], proof["scenario"]) for row in rows for proof in row["proofs"]}
-    if not all((f"duo.{a}.{b}", case) in receipted for a, b in gate.TRADE_PAIRS for case in gate.TRADE_END_STATUS):
+    if not all((f"duo.{a}.{b}", case) in receipted for a, b in gate.DUO_PAIRS for case in gate.TRADE_END_STATUS):
         assert gate.trade_gates_errors() != []
 
 
-def _declare_cg_trade(tmp_path, doc):
-    """Owner Q10: a positive C-G trade cell is red even when it carries a valid receipt."""
-    row = _row(doc, "duo.crystal.gold")
-    row["axes"]["trade_fixtures"] = _TRADE_FIXTURES["gen2_crystal_gold"]
-    row["axes"]["scenarios"].append("gen2_trade_new")
-    row["proofs"].append(_trade_proof(tmp_path, row["axes"], "gen2_trade_new", "cg_trade_new"))
-
-
-def test_c_g_positive_trade_cell_is_red_on_every_matrix_lane(tmp_path):
+def test_c_g_owes_every_trade_case_under_o34(tmp_path):
     doc = _trade_tree(tmp_path)
-    _declare_cg_trade(tmp_path, doc)
+    assert gate.trade_gates_errors(tmp_path, _trade_duo()) == []
+    _without(_row(doc, "duo.crystal.gold"), "gen2_trade_new")
     _write_doc(tmp_path, doc)
-    for errors in (gate.trade_gates_errors(tmp_path, _trade_duo()), gate.duo_matrix_errors(tmp_path, _trade_duo())):
-        assert any("duo.crystal.gold: native trade case(s) ['gen2_trade_new']" in e and "Q10" in e for e in errors)
-
-
-def test_c_g_owes_exactly_its_registered_refusal_case(tmp_path, monkeypatch):
-    doc = _trade_tree(tmp_path)
-    monkeypatch.setattr(gate, "TRADE_REFUSED_PAIR_CASES", frozenset({"gen2_trade_new"}))  # stand-in name
     assert "duo.crystal.gold: required scenario(s) ['gen2_trade_new'] not declared" in gate.trade_gates_errors(
         tmp_path, _trade_duo())
-    _declare_cg_trade(tmp_path, doc)
-    _write_doc(tmp_path, doc)
-    assert gate.trade_gates_errors(tmp_path, _trade_duo()) == []
 
 
 # duo-pairs: the P3b.7 + trade set on C-C and G-S. Per-cell receipt validators are covered above,
@@ -2024,11 +2009,9 @@ def _pairs_tree(tmp_path, monkeypatch):
     duo.SCENARIOS.update({name: {"oracle": "assert_gen2_link_saved"} for name in need})
     doc = _green_tree(tmp_path)
     for row in doc["requirements"]:
-        mine = need if (row["axes"]["initiator"], row["axes"]["partner"]) in gate.TRADE_PAIRS else [
-            name for name in need if name not in gate.TRADE_END_STATUS]
-        row["axes"]["scenarios"] = list(mine)
+        row["axes"]["scenarios"] = list(need)
         row["axes"]["trade_fixtures"] = _TRADE_FIXTURES[row["axes"]["pairing"]]
-        row["proofs"] = [{"scenario": name, "receipts": {}} for name in mine]
+        row["proofs"] = [{"scenario": name, "receipts": {}} for name in need]
     _write_doc(tmp_path, doc)
     return doc, duo
 
@@ -2041,13 +2024,15 @@ def _without(row, name):
 def test_duo_pairs_green_only_with_every_p3b7_and_trade_cell(tmp_path, monkeypatch):
     doc, duo = _pairs_tree(tmp_path, monkeypatch)
     assert gate.duo_pairs_errors(tmp_path, duo) == []
-    duo.scenarios_for = lambda game: ["link"]   # C-G owes only link; its trims are not duo-pairs gaps
+    duo.scenarios_for = lambda game: ["link"]
     for row in doc["requirements"]:
         row["axes"]["scenarios"], row["proofs"] = ["link"], [{"scenario": "link", "receipts": {}}]
     _write_doc(tmp_path, doc)
-    errors = gate.duo_pairs_errors(tmp_path, duo)
-    assert sorted(e.split(":")[0] for e in errors) == ["duo.crystal.crystal", "duo.gold.silver"]
-    assert all("required scenario(s)" in e and "gen2_ball_gate" in e and "gen2_trade_new" in e for e in errors)
+    errors = {e.split(":")[0]: e for e in gate.duo_pairs_errors(tmp_path, duo)}
+    assert sorted(errors) == ["duo.crystal.crystal", "duo.crystal.gold", "duo.gold.silver"]
+    assert all("required scenario(s)" in e and "gen2_trade_new" in e for e in errors.values())
+    # C-G owes the trade cases (O-34) but not the P3b.7 list.
+    assert "gen2_ball_gate" in errors["duo.gold.silver"] and "gen2_ball_gate" not in errors["duo.crystal.gold"]
 
 
 def test_duo_pairs_red_on_an_unreceipted_cell(tmp_path, monkeypatch):

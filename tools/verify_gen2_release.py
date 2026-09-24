@@ -3,8 +3,13 @@
 
 --list describes obligations without executing or qualifying them. --quick runs the
 source/MODEL frontier; --lane runs only the named obligations. Neither is a release
-verdict. Fixtures stay a deliberately unimplemented P3b binding and fail when requested, even if
-a file with the future name happens to exist.
+verdict.
+
+--fixtures (the fixtures lane, BINDING P3b.2) judges every Gen 2 fixture the release lanes reference,
+with no emulator. Each SaveRAM must pass the strict checksum witness and be either PLAYED or SYNTH.
+PLAYED means a sha256-pinned full-chain qualification receipt (GAME/PYDEC boot, re-save and reload
+stages) that binds these exact bytes. SYNTH means an O-33 disclosure whose rebuild from a PLAYED base
+reproduces the bytes. A missing, stale or undisclosed fixture is RED.
 
 --live-gates, --trade-gates, --duo-pairs and --release-evidence (lanes live-gates,
 live-trade-gates, duo-pairs, release-evidence) judge committed PHYSICAL receipts with no
@@ -131,8 +136,10 @@ LANES = [
         "--mode", "mapping",
     ],
          why="P2 mapping completeness only; unrun PHYSICAL obligations remain OPEN"),
-    Lane("fixtures", [_PY, "tools/gen2_fixtures.py", "--qualify"],
-         why="UNIMPLEMENTED P3b: eight played saves, independent codec and boot/reload chains"),
+    Lane("fixtures", [_PY, "tools/verify_gen2_release.py", "--fixtures"],
+         why="PHYSICAL receipts (BINDING P3b.2; F-6, S-7): every referenced fixture passes the checksum"
+             " witness and is PLAYED (pinned full-chain GAME/PYDEC boot/re-save/reload receipt over these"
+             " bytes) or SYNTH (O-33 disclosure that rebuilds the bytes from a PLAYED base)"),
     Lane("patch-build", [_PY, "tools/build_gen2_companion.py", "--check"],
          why="SOURCE (PLAN §6 P4 'UPS byte-reproducible'; BINDING P4.1): rebuild the three overlays from"
              " the pinned checkouts and compare UPS, sym, map and data/gen2/overlay_provenance.json"
@@ -152,7 +159,7 @@ LANES = [
              " hardware; client-conformance (P3b.6/P3b.7) stays a separate later card"),
     Lane("live-trade-gates", [_PY, "tools/verify_gen2_release.py", "--trade-gates"],
          why="PHYSICAL receipts (BINDING P4.3; T-1..T-4): every native trade case of TRADE_END_STATUS"
-             " declared and receipted on C-C and G-S (owner Q10; C-G carries no positive trade cell)"
+             " declared and receipted on C-C, G-S and C-G (owner O-34)"
              " in the release duo matrix, judged by the"
              " HARNESS_ONLY_OVERLAY trade oracle against the published overlay; runner is"
              " tools/e2e_duo.py's gen2_trade_* cases (tests/e2e/test_duo_gen2_new.py)"),
@@ -162,7 +169,8 @@ LANES = [
     Lane("duo-pairs", [_PY, "tools/verify_gen2_release.py", "--duo-pairs"],
          why="PHYSICAL receipts (BINDING P3b.7 + P4.3): the whole release duo matrix, and on C-C and G-S"
              " every P3b.7 scenario (DUO_PAIRS_SCENARIOS; shiny_bonus is the O-26 recorded limit) plus"
-             " every trade case; red until each is registered in tools/e2e_duo.py and receipted"),
+             " every trade case (C-G owes the trade cases too, O-34); red until each is registered in"
+             " tools/e2e_duo.py and receipted"),
     Lane("release-evidence", [_PY, "tools/verify_gen2_release.py", "--release-evidence"],
          why="G4 packet (PLAN §6 P4 exit + §6.1 ledger; BINDING P4.4, P6.3): published overlay bytes match"
              " their provenance, overlay rows ADMITTED at the published hashes, G4 ledger row signed,"
@@ -195,9 +203,7 @@ REQUIREMENTS = {
     "release-evidence": list(REQUIREMENT_IDS),
 }
 
-UNIMPLEMENTED = {
-    "fixtures": "P3b fixture qualifier, eight played fixtures and GAME/PYDEC reload evidence",
-}
+UNIMPLEMENTED: dict[str, str] = {}
 # --quick is source/MODEL feedback, including the P2 coverage map once bound. All
 # later-phase obligations stay in the full manifest; omitting them grants no release verdict.
 _SLOW = {"fixtures", "patch-build", "live-gates", "live-new-gates",
@@ -229,10 +235,12 @@ PREREQUISITES = {
     **{name: _SOURCE_INPUTS for name, _tool, _ids in _GENERATORS},
     "coverage-map": ("docs/gen2/gen2_coverage_map.md", "docs/gen2/gen2_requirements.md",
                      "docs/protocol.md", "data/gen2_sources.lock.json"),
-    "fixtures": tuple(
-        f"tests/fixtures/gen2/{name}.SaveRAM"
-        for name in (*(f"{title}_{kind}" for title in TITLES for kind in ("town", "battle")),
-                     "crystal_town_ot2", "crystal_battle_ot2", "gold_battle_ot2")
+    "fixtures": (
+        *(f"tests/fixtures/gen2/{name}.SaveRAM"
+          for name in (*(f"{title}_{kind}" for title in TITLES for kind in ("town", "battle")),
+                       "crystal_town_ot2", "crystal_battle_ot2", "gold_battle_ot2")),
+        "tests/gen2_live_gate_requirements.json", "tests/fixtures/gen2/receipts",
+        "tests/gen2_release_requirements.json",
     ),
     "patch-build": (*_SOURCE_INPUTS, "patch/gen2/src", _OVERLAY_PROVENANCE),
     "live-gates": ("tests/gen2_live_gate_requirements.json", "tests/fixtures/gen2/receipts",
@@ -835,10 +843,8 @@ TRADE_MODEL_ONLY = {
 }
 TRADE_PLANTED = {"gen2_trade_refuse_item", "gen2_trade_evolve"}   # O-31: a's disclosed HARNESS_WRITE
 TRADE_VARIANTS = {("crystal", "crystal"): "cc", ("gold", "silver"): "gs", ("crystal", "gold"): "cg"}
-# Owner Q10 (docs/gen2/REVIEW_RECORD.md, ticket 09): "G to S allowed. C to C only". Any other release pair
-# (C-G) must never carry a positive trade cell; it may carry only a registered refusal case listed here.
-TRADE_PAIRS = frozenset({("crystal", "crystal"), ("gold", "silver")})
-TRADE_REFUSED_PAIR_CASES = frozenset()
+# Owner ruling O-34 (8a42b7f7) supersedes the Q10 reading: native trades are allowed and tested on every
+# release pair, C-G included, so each pair owes every TRADE_END_STATUS case.
 
 
 def _trade_receipt_errors(root: Path, proof: dict, scenario: str, axes: dict) -> list[str]:
@@ -1010,13 +1016,9 @@ def duo_matrix_errors(root: Path | None = None, duo=None, *, required: dict | No
             pair = (axes.get("initiator"), axes.get("partner"))
             need = DUO_REQUIRED_SCENARIOS | required.get(pair, frozenset())
             missing_required = need - set(scenarios)
-            refused = frozenset() if pair in TRADE_PAIRS else frozenset(TRADE_END_STATUS) - TRADE_REFUSED_PAIR_CASES
             model_only = sorted(set(scenarios) & set(TRADE_MODEL_ONLY))
             if model_only:
                 errors.append(f"{rid}: {model_only} are MODEL-only (TRADE_MODEL_ONLY), never a PHYSICAL duo cell")
-            if set(scenarios) & refused:
-                errors.append(f"{rid}: native trade case(s) {sorted(set(scenarios) & refused)} declared on a pair"
-                              " owner Q10 refuses (native trades are C-C and G-S only)")
             if missing_required:
                 errors.append(f"{rid}: required scenario(s) {sorted(missing_required)} not declared")
             registered = []
@@ -1034,7 +1036,7 @@ def duo_matrix_errors(root: Path | None = None, duo=None, *, required: dict | No
                     errors.append(f"{rid}: {exc}")
                 errors.extend(f"{rid}: registered scenario {name} is not in the release matrix"
                               for name in registered
-                              if name not in scenarios and name not in refused and (only is None or name in only))
+                              if name not in scenarios and (only is None or name in only))
                 trade = getattr(duo, "GEN2_TRADE_FIXTURES", {}).get(game)
                 if set(scenarios) & set(TRADE_END_STATUS) and trade != axes.get("trade_fixtures"):
                     errors.append(f"{rid}: tools/e2e_duo.py {game} trade fixtures {trade} != matrix "
@@ -1324,11 +1326,9 @@ def live_gates_errors(root: Path | None = None, receipt_validate=None) -> list[s
 
 
 def trade_gates_errors(root: Path | None = None, duo=None) -> list[str]:
-    """live-trade-gates (BINDING P4.3, T-1..T-4): every trade case receipted on C-C and G-S (owner Q10);
-    other pairs owe only their registered refusal cases and may carry no positive trade cell."""
+    """live-trade-gates (BINDING P4.3, T-1..T-4): every trade case receipted on C-C, G-S and C-G (O-34)."""
     cases = frozenset(TRADE_END_STATUS)
-    required = {pair: cases if pair in TRADE_PAIRS else TRADE_REFUSED_PAIR_CASES for pair in DUO_PAIRS}
-    return duo_matrix_errors(root, duo, required=required, only=cases | TRADE_REFUSED_PAIR_CASES)
+    return duo_matrix_errors(root, duo, required=dict.fromkeys(DUO_PAIRS, cases), only=cases)
 
 
 # BINDING P3b.7's C-C / G-S scenario list, named as tools/e2e_duo.py registers Gen 2 cells (gen2_<name>;
@@ -1344,9 +1344,11 @@ DUO_PAIRS_SCENARIOS = frozenset({
 
 
 def duo_pairs_errors(root: Path | None = None, duo=None) -> list[str]:
-    """duo-pairs: the whole matrix, plus every P3b.7 scenario and trade case on C-C and G-S."""
-    need = DUO_PAIRS_SCENARIOS | frozenset(TRADE_END_STATUS)
-    return duo_matrix_errors(root, duo, required=dict.fromkeys((("crystal", "crystal"), ("gold", "silver")), need))
+    """duo-pairs: the whole matrix, every P3b.7 scenario on C-C and G-S, every trade case on all three (O-34)."""
+    trades = frozenset(TRADE_END_STATUS)
+    required = dict.fromkeys(DUO_PAIRS, trades)
+    required.update(dict.fromkeys((("crystal", "crystal"), ("gold", "silver")), DUO_PAIRS_SCENARIOS | trades))
+    return duo_matrix_errors(root, duo, required=required)
 
 
 def _lf_sha256(path: Path) -> str | None:
@@ -1477,7 +1479,167 @@ def release_evidence_errors(root: Path | None = None, duo=None, receipt_validate
     return [f"{lane}: {error}" for lane, errors in parts for error in errors]
 
 
+# fixtures (BINDING P3b.2; F-6, S-7). PLAYED = pinned full-chain qualification receipt; SYNTH = O-33 disclosure.
+FIXTURES_DIR = "tests/fixtures/gen2"
+SYNTH_SCHEMA = "gen2-synth-disclosure-v1"
+# A field is written into both save copies (primary/backup) or, outside the mirrored regions, at one
+# CartRAM offset (cart), e.g. the checksum words (tools/gen2_synth_fixtures.py).
+SYNTH_FIELD_SHAPES = (frozenset({"symbol", "offset", "wram", "size", "primary", "backup", "old_hex", "new_hex"}),
+                      frozenset({"symbol", "offset", "wram", "size", "cart", "old_hex", "new_hex"}))
+
+
+def _fixture_names(root: Path) -> tuple[set[str], list[str]]:
+    """Every fixture a release lane can stage: the played plan (tools/gen2_fixtures.py FIXTURES, which
+    tools/e2e_duo.py requires of every Gen 2 cell), the O-33 synth registry, every committed SaveRAM and
+    every name the release duo matrix pins."""
+    from tools import gen2_fixtures, gen2_synth_fixtures
+    names = set(gen2_fixtures.BY_NAME) | set(getattr(gen2_synth_fixtures, "SYNTH_FIXTURES", ()))
+    names |= {path.stem for path in (root / FIXTURES_DIR).glob("*.SaveRAM")}
+    try:
+        for row in json.loads((root / DUO_MATRIX).read_text(encoding="utf-8"))["requirements"]:
+            for key in ("fixtures", "trade_fixtures"):
+                names |= set((row["axes"].get(key) or {}).values())
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return names, [f"{DUO_MATRIX} missing or malformed"]
+    return names, []
+
+
+def _played_pins(root: Path) -> dict:
+    try:
+        rows = json.loads((root / NEW_GATES).read_text(encoding="utf-8"))["requirements"]
+        return {row["axes"]["fixture"]: ((row.get("proofs") or [{}])[0].get("receipts") or {}).get("receipt")
+                for row in rows if row["axes"]["kind"] == "qualification"}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return {}
+
+
+def _played_errors(root: Path, name: str, raw: bytes, pins: dict, identity) -> list[str]:
+    """The pinned receipt, then tests/live/test_gen2_new_gates.py's qualified_identity(): a passed full chain
+    (PYDEC qualify, GAME CONTINUE boot, native re-save + reload, post oracle) whose fixture sha256 is THESE bytes."""
+    entry = pins.get(name)
+    if not entry or entry.get("path") != f"{FIXTURES_DIR}/receipts/{name}.qualification.json":
+        return [f"no sha256-pinned qualification receipt in {NEW_GATES}"]
+    _receipt, why = _new_gate_receipt(root, entry)
+    if why:
+        return [why]
+    try:
+        identity(name, raw, repo=root)
+    except (AssertionError, ValueError, KeyError, TypeError, OSError) as exc:
+        return [str(exc)]
+    return []
+
+
+def _synth_errors(root: Path, name: str, raw: bytes, disclosure: dict, played, rebuild) -> list[str]:
+    """O-33: a tools/gen2_synth_fixtures.py disclosure over THESE bytes, built on a PLAYED fixture's current
+    bytes; rebuilding it from that base and its edits must reproduce the file and its changed-field list."""
+    title = name.split("_", 1)[0]
+    errors = []
+    if (disclosure.get("schema") != SYNTH_SCHEMA or disclosure.get("builder") != "tools/gen2_synth_fixtures.py"
+            or disclosure.get("title") != title):
+        errors.append(f"SYNTH disclosure is not a {SYNTH_SCHEMA} from tools/gen2_synth_fixtures.py for {title}")
+    if disclosure.get("sha256") != hashlib.sha256(raw).hexdigest():
+        errors.append("SYNTH disclosure does not cover the committed bytes")
+    fields = disclosure.get("fields")
+    if (not isinstance(fields, list) or not fields
+            or any(not isinstance(field, dict) or set(field) not in SYNTH_FIELD_SHAPES for field in fields)):
+        errors.append("SYNTH disclosure lists no changed fields")
+    if not disclosure.get("source_facts") or not isinstance(disclosure.get("edits"), dict):
+        errors.append("SYNTH disclosure names no edits or source facts")
+    base, base_raw = disclosure.get("base_fixture"), None
+    if not isinstance(base, str) or base == name or played(base):
+        errors.append(f"SYNTH base {base!r} is not a PLAYED, qualified fixture")
+    else:
+        base_raw = (root / FIXTURES_DIR / f"{base}.SaveRAM").read_bytes()
+        if hashlib.sha256(base_raw).hexdigest() != disclosure.get("base_sha256"):
+            errors.append(f"SYNTH base {base} bytes differ from the disclosed base_sha256 (stale)")
+    if errors:
+        return errors
+    try:
+        rebuilt, again = rebuild(title, base_raw, disclosure["edits"], root=root, base_name=base)
+    except (ValueError, KeyError, TypeError, OSError) as exc:
+        return [f"SYNTH rebuild failed: {exc}"]
+    if rebuilt != raw or again.get("fields") != fields:
+        return ["SYNTH rebuild from the disclosed base and edits does not reproduce the file (undisclosed change)"]
+    return []
+
+
+_LAYOUTS: dict = {}
+
+
+def _checksum_witness(root: Path, title: str, raw: bytes) -> str | None:
+    """gen2_codec.strict_checksum_witness over the CartRAM (both copies, checksums, markers)."""
+    from server.adapters import gen2_codec as codec
+    if len(raw) != 0x8000 + 22:
+        return "is not a 0x8000-byte CartRAM plus the 22-byte RTC trailer"
+    try:
+        key = (str(root), title)
+        if key not in _LAYOUTS:
+            _LAYOUTS[key] = codec.for_foundation(title, root=root)
+        if not codec.strict_checksum_witness(raw[:0x8000], _LAYOUTS[key])["valid"]:
+            return "fails the strict checksum/marker/copy witness"
+    except (ValueError, KeyError, TypeError, OSError) as exc:
+        return f"checksum witness unavailable: {exc}"
+    return None
+
+
+def fixtures_errors(root: Path | None = None, *, names=None, identity=None, witness=None,
+                    rebuild=None) -> list[str]:
+    """Every gap in the fixtures lane. Each referenced fixture exists, passes the checksum witness and is
+    PLAYED (a pinned, passed full-chain receipt binding these bytes) or SYNTH (a valid O-33 disclosure over a
+    PLAYED base). There is no third way in: a missing, stale or undisclosed fixture is RED."""
+    root = ROOT if root is None else root
+    errors = []
+    if names is None:
+        names, errors = _fixture_names(root)
+    if not names:
+        return errors + ["no fixtures referenced (an empty inventory is not a pass)"]
+    if identity is None:
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        from tests.live.test_gen2_new_gates import qualified_identity as identity
+    if rebuild is None:
+        from tools.gen2_synth_fixtures import build as rebuild
+    witness = witness or _checksum_witness
+    pins = _played_pins(root)
+    verdicts: dict[str, list[str]] = {}
+
+    def played(name: str) -> list[str]:
+        if name not in verdicts:
+            try:
+                raw = (root / FIXTURES_DIR / f"{name}.SaveRAM").read_bytes()
+            except OSError:
+                verdicts[name] = ["SaveRAM missing"]
+            else:
+                verdicts[name] = _played_errors(root, name, raw, pins, identity)
+        return verdicts[name]
+
+    for name in sorted(names):
+        path = root / FIXTURES_DIR / f"{name}.SaveRAM"
+        if not path.is_file():
+            errors.append(f"{name}: {FIXTURES_DIR}/{name}.SaveRAM missing")
+            continue
+        raw = path.read_bytes()
+        bad = witness(root, name.split("_", 1)[0], raw)
+        if bad:
+            errors.append(f"{name}: {bad}")
+        synth = root / FIXTURES_DIR / f"{name}.synth.json"   # beside the SaveRAM; receipts/*.json are receipts only
+        if name in pins:
+            why = played(name)
+        elif synth.is_file():
+            try:
+                disclosure = json.loads(synth.read_text(encoding="utf-8"))
+            except ValueError:
+                disclosure = None
+            why = _synth_errors(root, name, raw, disclosure if isinstance(disclosure, dict) else {},
+                                played, rebuild)
+        else:
+            why = ["undisclosed: no pinned PLAYED qualification receipt and no O-33 SYNTH disclosure"]
+        errors.extend(f"{name}: {e}" for e in why)
+    return errors
+
+
 _RECEIPT_CLIS = {
+    "--fixtures": ("fixtures", "fixtures_errors"),
     "--live-gates": ("live gates", "live_gates_errors"),
     "--trade-gates": ("trade gates", "trade_gates_errors"),
     "--duo-pairs": ("duo pairs", "duo_pairs_errors"),
