@@ -53,7 +53,7 @@ ROMS = {
         "964f951a0fdaf209e4ea1344883ef0d557bb3a80"),
     ("gen3_rr", "radical_red", "companion"): (
         ROOT / "patch" / "build" / "slink_RR.gba",
-        "b7d1e0756fcc66575878affc8f7b95c45386bb1c"),
+        "ea5352f8a3b9073f8ae20870ad12857925d442cd"),
 }
 
 # pack -> {title: (sym file, kinds...)}.  RR reads the FireRed symbols and proves each one

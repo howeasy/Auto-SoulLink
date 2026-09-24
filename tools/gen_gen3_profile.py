@@ -172,7 +172,7 @@ RR_DERIVED = {
 # were read from the admitted companion SHA1 below and checked against clean RR.
 # Keep complete reader bodies + literal pools, so a pointer alone is not evidence
 # for which field is being accessed. No Capstone dependency in the generator.
-RR_WITNESS_SHA1 = "b7d1e0756fcc66575878affc8f7b95c45386bb1c"
+RR_WITNESS_SHA1 = "ea5352f8a3b9073f8ae20870ad12857925d442cd"
 RR_ROM_ANCHORS = {
     "controller_exec_marker": (0x17248,
         "00b50006030e0848006802210840002810d0064a06499800401801680907106808431060"
