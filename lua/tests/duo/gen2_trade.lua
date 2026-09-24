@@ -587,9 +587,10 @@ function T.attach(e)
     local _console = console.log
     console.log = function(line)
         local s = tostring(line)
-        if s:find("[SLink-gen2]", 1, true) and st.armed then
-            st.logs[#st.logs + 1] = {frame=frame(), text=s}
+        if s:find("[SLink-gen2]", 1, true) then
+            -- the first-link call rings on the walk, before the baseline: logged whenever it happens
             if s:find("phone: call", 1, true) then jlog("PHONE", {frame=frame(), text=s}) end
+            if st.armed then st.logs[#st.logs + 1] = {frame=frame(), text=s} end
         end
         return _console(line)
     end
