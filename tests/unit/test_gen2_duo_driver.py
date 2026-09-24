@@ -694,6 +694,16 @@ def test_faint_route_switches_the_target_in_growls_says_yes_and_runs():
     assert phase == "fainted" and not any(buttons.values())
 
 
+def test_a_harden_or_splash_only_foe_is_harmless_and_anything_damaging_is_not():
+    """OVERLAY-STALL (df04e065 sweep, W6 Gold): a HARDEN-only wild Metapod against a DEFENSE CURL catch never dealt
+    damage, so the faint phase ran past its bound; the route now flees it like a SPLASH-only foe."""
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    FI = lua.execute(FAINT_INPUTS.read_text(encoding="utf-8"))
+    moves = lambda *m: lua.table_from(list(m))
+    assert FI.foe_harmless(moves(0x6a, 0, 0, 0)) and FI.foe_harmless(moves(150)) and FI.foe_harmless(moves(0x6a, 150))
+    assert not FI.foe_harmless(moves(0x6a, 33)) and not FI.foe_harmless(moves(33))   # HARDEN + TACKLE can hurt us
+
+
 def test_faint_route_flees_a_splash_only_foe_and_walks_on():
     lua, d = faint_driver()
     assert press(lua, d, ui=ui("battle_menu", MENU, 1, 2), foe_harmless=True)[0] == ["Right"]

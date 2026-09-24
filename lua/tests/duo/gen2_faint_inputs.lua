@@ -60,6 +60,15 @@ FI.PASSIVE_MOVES = {"GROWL", "TAIL WHIP", "SAND-ATTACK", "DEFENSE CURL", "FORESI
 FI.MAX_BATTLES = 3
 FI.PKMN_CELL = 2       -- BattleMenu 2x2 grid FIGHT|PKMN / PACK|RUN (engine/battle/menu.asm:32-45): by position
 FI.SPLASH = 150        -- constants/move_constants.asm SPLASH; a foe knowing nothing else cannot hurt us
+-- OVERLAY-STALL (df04e065 sweep, W6 Gold): a HARDEN-only Metapod (evos_attacks.asm MetapodEvosAttacks, also Kakuna)
+-- against a DEFENSE CURL catch is a no-damage standoff until HARDEN's 30 PP run out -- past the phase bound
+FI.HARMLESS_MOVES = {[FI.SPLASH]=true, [0x6a]=true}   -- SPLASH, HARDEN (constants/move_constants.asm)
+function FI.foe_harmless(moves)
+    for _, move in ipairs(moves or {}) do
+        if move ~= 0 and not FI.HARMLESS_MOVES[move] then return false end
+    end
+    return true
+end
 
 local function integer(value, low, high)
     return type(value) == "number" and value % 1 == 0 and value >= low and value <= high
@@ -262,10 +271,7 @@ function FI.new(ctx, SG, F, opts)
         point.active_slot = battle and battle.mode ~= 0 and battle.active_slot or nil
         local foe = battle and battle.mode ~= 0 and ctx.reads.read_battle_mon("enemy") or nil
         if foe then
-            point.foe_harmless = true
-            for _, move in ipairs(foe.moves) do
-                if move ~= 0 and move ~= FI.SPLASH then point.foe_harmless = false end
-            end
+            point.foe_harmless = FI.foe_harmless(foe.moves)
         end
         point.party_hp = {}
         local party = ctx.reads.read_party()
