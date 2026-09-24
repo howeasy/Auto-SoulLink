@@ -340,10 +340,11 @@ end
 SLINK_GEN3_CLIENT = nil
 -- Capture the REAL built policy through the harness composition seam; run.lua normally drops
 -- Entry.build's second return. Restore dofile even if startup fails. No production code changed.
+-- Always captured: ctx.center_state asks the client's own safety instance for its CPU verdict.
 local battle_parts
 local original_dofile = dofile
 local wants_routes = D.battle_window_case or D.active_faint_case == "trainer"
-if wants_routes then
+do
     dofile = function(path)
         local value = original_dofile(path)
         if path == ROOT .. "/lua/gen3/entry.lua" then
@@ -863,7 +864,7 @@ ctx.action_menu_up, ctx.party_menu_up = action_menu_up, party_menu_up
 --- value) -- and the Union Room background tasks (C4-UR, 5ecfae3b: every Center 1F runs
 --- CableClub_OnResume -> InitUnionRoom) that are NOT active. Self-contained (no upvalues) so
 --- tests/unit/test_e2e_duo_gen3.py runs this exact body. read(address, width) -> integer.
-local function center_predicates(cp, read, regs)
+local function center_predicates(cp, read, regs, parked_verdict)
     local t, active = cp.tasks, {}
     for i = 0, (t.count | 0) - 1 do
         local base = (t.address | 0) + i * (t.struct_size | 0)
@@ -884,11 +885,11 @@ local function center_predicates(cp, read, regs)
         parts[#parts + 1] = string.format("%s=0x%X%s", name, v, v == (p.expect | 0) and "" or "!")
         if v ~= (p.expect | 0) then bad[#bad + 1] = name end
     end
-    -- the CPU clause the overworld check applies (lua/gen3/safety.lua "cpu"): mode, Thumb, and
-    -- the parked PC range, all from the pack
-    local c, pc, cpsr = cp.cpu, (regs.R15 or -1) | 0, (regs.CPSR or -1) | 0
-    local parked = c ~= nil and cpsr % 32 == (c.mode | 0) and (cpsr >> 5) % 2 == (c.thumb | 0)
-                   and pc >= (c.pc_min | 0) and pc <= (c.pc_max | 0)
+    -- the CPU clause is the product's own (lua/gen3/safety.lua "cpu", over the pack's cpu block
+    -- incl. RR's irq_entry, owner ruling 23): the caller passes its verdict (cpu_parked), never a
+    -- second copy of the shape. nil (the verdict could not be taken) is reported as bad.
+    local pc, cpsr, lr = (regs.R15 or -1) | 0, (regs.CPSR or -1) | 0, (regs.R14 or -1) | 0
+    local parked = parked_verdict == true
     if not parked then bad[#bad + 1] = "cpu" end
     -- the pointer snapshot the write is judged against: each a sane, aligned EWRAM address
     local pnames, ptrs, pparts = {}, {}, {}
@@ -900,9 +901,21 @@ local function center_predicates(cp, read, regs)
         pparts[#pparts + 1] = string.format("%s=0x%08X", name, v)
         if v < 0x02000000 or v >= 0x02040000 or v % 4 ~= 0 then bad[#bad + 1] = "pointer:" .. name end
     end
-    return string.format("cpu=[R15=0x%08X,CPSR=0x%08X%s] ptrs=[%s] preds=[%s]", pc, cpsr,
+    return string.format("cpu=[R15=0x%08X,CPSR=0x%08X,R14=0x%08X%s] ptrs=[%s] preds=[%s]", pc, cpsr, lr,
                          parked and "" or "!", table.concat(pparts, ","), table.concat(parts, ",")),
            missing, bad, ptrs
+end
+--- The overworld CPU verdict of a lua/gen3/safety.lua instance, now: true (parked), false (its
+--- "cpu" clause refuses), nil (the pack preamble failed, so no clause ran). Self-contained (no
+--- upvalues) so tests run this exact body over the real safety.lua and each title's pack.
+local function cpu_parked(safety)
+    if not safety then return nil end
+    safety:check(nil, "overworld")
+    for _, k in ipairs(safety.last_clauses or {}) do
+        if k == "pack" then return nil end
+        if k == "cpu" then return false end
+    end
+    return true
 end
 --- (line, missing Union Room tasks, {group, num, x, y, frame, bad, ptrs}): map, tile, frame, the
 --- FULL active task list (SP.PC.dump), R15/CPSR, the save/storage pointers and every predicate,
@@ -915,7 +928,8 @@ function ctx.center_state()
         if width == 4 then return memory.read_u32_le(a, "System Bus") end
         if width == 2 then return memory.read_u16_le(a, "System Bus") end
         return memory.read_u8(a, "System Bus")
-    end, { R15 = emu.getregister("R15"), CPSR = emu.getregister("CPSR") })
+    end, { R15 = emu.getregister("R15"), CPSR = emu.getregister("CPSR"), R14 = emu.getregister("R14") },
+    cpu_parked(battle_parts and battle_parts.safety))
     local dumped, dump = pcall(SP.PC.dump)
     local frame = emu.framecount()
     return fmt("map=%d.%d at=(%d,%d) frame=%d %s %s", g, n, x, y, frame,
@@ -978,6 +992,42 @@ function ctx.hold_probe(name, cmd, key, live, frames, already_queued)
     return clause, why
 end
 
+--- One press the GAME read: wait until gMain.heldKeys (+0x2C) reads `btn` released, hold until it
+--- reads it pressed (that read IS the JOY_NEW edge a menu acts on), wait until it reads it
+--- released again, then idle `gap`; each phase bounded. The P.press rule of
+--- lua/tests/probe_gen3_checkpoint.lua (N7 live): a main-loop pass that overruns frames reads keys
+--- on fewer frames than the emulator runs, so a blind 3-frame tap can fall between two reads.
+--- RR (G5-RR-CARRIER-FIX, receipt c12211c1): CFRU's action menu (0x090A9EA0) acts only on
+--- gMain.newKeys (+0x2E) & A; the carrier's blind tap on FIGHT was never taken. Self-contained
+--- (no upvalues) so tests run this exact body. -> true, frames | false, why
+local function game_press(btn, set, advance, held, gap, bound)
+    local bits = { A = 0x1, B = 0x2, Select = 0x4, Start = 0x8, Right = 0x10, Left = 0x20, Up = 0x40,
+                   Down = 0x80, R = 0x100, L = 0x200 }
+    local bit, n = assert(bits[btn], "unknown button " .. tostring(btn)), 0
+    local function phase(keys, want, what)
+        for _ = 1, bound or 30 do
+            set(keys); advance(); n = n + 1
+            if ((held() & bit) ~= 0) == want then return true end
+        end
+        return false, string.format("%s: the game never read %s %s in %d frames", btn, btn, what, bound or 30)
+    end
+    local ok, why = phase({}, false, "released")
+    if ok then ok, why = phase({ [btn] = true }, true, "pressed") end
+    if ok then ok, why = phase({}, false, "released after the press") end
+    if not ok then set({}); return false, why end
+    for _ = 1, gap or 0 do set({}); advance(); n = n + 1 end
+    return true, n
+end
+-- gMain from the PACK (its callback2 predicate is gMain +4, both packs): RR's CFRU menu reads
+-- 0x030030F0 +0x2E (rr_active_faint_parity_scope §3.1), the same base as pret FR/LG's gMain
+local GMAIN = assert(cp.predicates.callback2.offset == 4 and cp.predicates.callback2.address,
+                     "the pack's callback2 predicate is not gMain+4")
+local function press(btn, gap)
+    return game_press(btn, joypad.set, G.advance,
+                      function() return memory.read_u16_le(GMAIN + 0x2C, "System Bus") end, gap, 30)
+end
+ctx.press_confirmed = press
+
 --- HandleInputChooseAction / HandleInputChooseMove: Left/Right toggle bit 0 of the cursor,
 --- Up/Down bit 1 (each only in its own direction). Bounded, then read back.
 local function steer(read, target)
@@ -1025,9 +1075,20 @@ function ctx.choose_action(action)
     -- (main.c:299): a tap that continues that hold is no press at all. Live linked_faint_active
     -- FR 324aea87: FIGHT already under the cursor (no steer tap to break the hold), A dropped,
     -- "TIMEOUT waiting for the move menu". Release one frame first.
-    G.idle(1)
-    G.tap("A", 3, 13)
-    return true
+    -- A game-confirmed press, then the menu must actually close; bounded re-press while it is
+    -- still up on the same cursor (a repeat A on the same choice is the same choice)
+    for attempt = 1, 3 do
+        local ok, why = press("A", 13)
+        if not ok then return false, "action A: " .. why end
+        if not action_menu_up() or ctx.wait_until(function() return not action_menu_up() end, 2,
+                                                  "the action menu to take A") then
+            return true
+        end
+        log(fmt("ACTION_PRESS_UNTAKEN attempt=%d ctrl0=0x%08X cursor=%d held=0x%X new=0x%X", attempt, ctrl0(),
+                memory.read_u8(S.gActionSelectionCursor), memory.read_u16_le(GMAIN + 0x2C, "System Bus"),
+                memory.read_u16_le(GMAIN + 0x2E, "System Bus")))
+    end
+    return false, "the action menu never took a game-read A press"
 end
 
 --- The first move of battler 0 with base power 0 and PP left (gBattleMoves[m].power is byte 1 of
@@ -1051,7 +1112,8 @@ function ctx.use_move(slot)
     if not steer(function() return memory.read_u8(S.gMoveSelectionCursor) end, slot) then
         return false, "move cursor stuck"
     end
-    G.tap("A", 3, 13)
+    local pok, pwhy = press("A", 13)
+    if not pok then return false, "move A: " .. pwhy end
     return true
 end
 
@@ -1069,11 +1131,13 @@ local function party_pick(slot)
         G.tap(at < slot and "Down" or "Up", 3, 20)
     end
     if memory.read_u8(S.gPartyMenu + 9) ~= slot then return false, "party cursor never reached slot " .. slot end
-    G.tap("A", 3, 20)
+    local pok, pwhy = press("A", 20)
+    if not pok then return false, "party A: " .. pwhy end
     if not ctx.wait_until(function() return party_task(S.Task_HandleSelectionMenuInput) end, 10, "SHIFT popup") then
         return false, "the SHIFT/SUMMARY/CANCEL popup never opened"
     end
-    G.tap("A", 3, 20)                                    -- SHIFT / SEND OUT
+    pok, pwhy = press("A", 20)                            -- SHIFT / SEND OUT
+    if not pok then return false, "popup A: " .. pwhy end
     if not ctx.wait_until(function() return ctx.battler_slot() == slot end, 60, "the switch") then
         return false, "battler 0 never became party slot " .. slot
     end

@@ -2272,7 +2272,10 @@ S = { gBattlerControllerFuncs = 0x100, HandleInputChooseAction = 0x1000, HandleI
 local ACT, MOVE = S.HandleInputChooseAction | 1, S.HandleInputChooseMove | 1
 POWER = { [33] = 40, [39] = 0, [145] = 20 }                 -- Tackle, Tail Whip, Bubble
 M = { ctrl = 0, pending = {}, prev = {}, cursor = 0, lead_hp = 27, over = false, filled = false,
-      moves = { 33, 39, 145, 0 }, pp = { 35, 30, 30, 0 }, after = nil, used = {} }
+      moves = { 33, 39, 145, 0 }, pp = { 35, 30, 30, 0 }, after = nil, used = {},
+      frame = 0, read_every = 1, held = 0 }
+GMAIN = 0x03003000
+BITS = { A = 1, Right = 0x10, Left = 0x20, Up = 0x40, Down = 0x80 }
 LOGS = {}
 function start(intro)                    -- the action menu comes up `intro` frames into the battle
     M.after = { n = intro, to = ACT, fill = true }
@@ -2280,7 +2283,11 @@ end
 joypad = { set = function(t) M.pending = t or {} end }
 memory = {
     read_u32_le = function(a) if a == S.gBattlerControllerFuncs then return M.ctrl end return 0 end,
-    read_u16_le = function(a) return M.filled and M.moves[(a - S.gBattleMons - 0x0C) // 2 + 1] or 0 end,
+    read_u16_le = function(a)
+        if a == GMAIN + 0x2C then return M.held end          -- gMain.heldKeys, the game's own read
+        if a == GMAIN + 0x2E then return 0 end
+        return M.filled and M.moves[(a - S.gBattleMons - 0x0C) // 2 + 1] or 0
+    end,
     read_u8 = function(a)
         if a == S.gActionSelectionCursor then return 0 end
         if a == S.gMoveSelectionCursor then return M.cursor end
@@ -2289,11 +2296,18 @@ memory = {
     end,
 }
 emu = { frameadvance = function()                           -- one frame: ReadKeys, then the controller
+    -- a main-loop pass that overruns (read_every > 1) reads the pad on fewer frames than the
+    -- emulator runs; a frame's input the game never read is simply gone (RR's CFRU battle frames)
+    M.frame = M.frame + 1
     local new = {}
-    for _, k in ipairs({ "A", "Up", "Down", "Left", "Right" }) do
-        local held = M.pending[k] == true
-        new[k] = held and not M.prev[k]
-        M.prev[k] = held
+    if M.frame % M.read_every == 0 then
+        M.held = 0
+        for _, k in ipairs({ "A", "Up", "Down", "Left", "Right" }) do
+            local held = M.pending[k] == true
+            new[k] = held and not M.prev[k]
+            M.prev[k] = held
+            if held then M.held = M.held | BITS[k] end
+        end
     end
     M.pending = {}
     if M.ctrl == ACT and new.A then M.ctrl = 0; M.after = { n = 3, to = MOVE }
@@ -2347,8 +2361,12 @@ def battle_model():
     menus = re.findall(r"^local function (?:ctrl0|action_menu_up|move_menu_up)\(\).*$", text, re.M)
     assert consts and len(menus) == 3
     runtime.execute("\n".join([consts.group(0), *menus,
+                               _lua_defs(DRIVER, ["game_press"]),
+                               "local function press(btn, gap) return game_press(btn, joypad.set, G.advance,"
+                               " function() return memory.read_u16_le(GMAIN + 0x2C) end, gap, 30) end",
                                _lua_defs(DRIVER, ["steer", "ctx.choose_action", "ctx.status_move_slot",
                                                   "ctx.use_move", "ctx.lose_active"]),
+                               "GAME_PRESS = game_press",
                                "function LOSE() local ok, why = ctx.lose_active('K0', 'test')"
                                " return ok, tostring(why) end"]))
     return runtime
@@ -2363,6 +2381,39 @@ def test_lose_active_selects_fight_off_the_mash_and_reads_moves_after_the_intro(
     assert ok is True, (why, logs)
     assert set(m.used.values()) == {39}, "only Tail Whip, never the damaging Tackle fallback"
     assert "LOSE K0 status_move_slot=1" in logs, logs
+
+
+@pytest.mark.parametrize("every", [3, 4, 5])
+def test_lose_active_on_an_overrunning_main_loop_uses_game_read_presses(battle_model, every):
+    """G5-RR-CARRIER-FIX (receipt c12211c1): on RR the carrier's blind 3-frame A on FIGHT was
+    never taken ("move menu never opened (action menu still up: true)"). A game that reads the
+    pad only every `every` frames still gets every press, because each one waits for the game's
+    own gMain.heldKeys to read released -> pressed -> released."""
+    lua = battle_model
+    lua.globals().M.read_every = every
+    lua.globals().start(40)
+    ok, why = lua.globals().LOSE()
+    m, logs = lua.globals().M, list(lua.globals().LOGS.values())
+    assert ok is True, (why, logs)
+    assert set(m.used.values()) == {39}
+
+
+def test_a_blind_tap_misses_an_overrunning_read_that_game_press_gets(battle_model):
+    """The known-negative control for the probe above: the old G.tap hold (3 frames, then
+    release) lands between two reads of a pass that reads every 5th frame."""
+    lua = battle_model
+    lua.execute("M.read_every = 5; M.frame = 1; M.ctrl = S.HandleInputChooseAction | 1")
+    lua.execute("G.tap('A', 3, 13)")          # frames 2,3,4 held: the reads fall on 5 and 10
+    assert lua.globals().M.ctrl == 0x1001, "the blind tap should have been missed"
+    ok, n = lua.eval("GAME_PRESS('A', joypad.set, G.advance, function() return memory.read_u16_le(GMAIN + 0x2C) end, 0, 30)")
+    assert ok is True and lua.globals().M.ctrl != 0x1001, n
+
+
+def test_game_press_names_a_press_the_game_never_reads(battle_model):
+    lua = battle_model
+    lua.execute("M.read_every = 1000")
+    ok, why = lua.eval("GAME_PRESS('A', joypad.set, G.advance, function() return 0 end, 0, 30)")
+    assert ok is False and "never read A pressed in 30 frames" in why
 
 
 def test_lose_active_refuses_a_lead_without_a_no_damage_move(battle_model):
@@ -2522,7 +2573,7 @@ def test_the_center_predicates_read_the_pack_union_room_set():
     read = lua.eval("function(m) return function(a) return m[a] or 0 end end")(lua.table_from(mem))
     cpu = cp["cpu"]
     parked = lua.table_from({"R15": cpu["pc_min"], "CPSR": cpu["mode"] | (cpu["thumb"] << 5)})
-    preds, missing, bad, _ = lua.globals().CENTER_PREDICATES(cp_lua, read, parked)
+    preds, missing, bad, _ = lua.globals().CENTER_PREDICATES(cp_lua, read, parked, True)
     assert list(missing.values()) == []
     assert "script_context_status=0x2," in preds and "link_players_received=0x0," in preds
     assert "callback1=0x0!" in preds                   # off CB1_Overworld on this bare bus
@@ -2535,14 +2586,16 @@ def test_the_center_predicates_read_the_pack_union_room_set():
         mem[cp["pointers"][name]["address"]] = 0x02025000 + 0x100 * i
     def ok():
         return lua.eval("function(m) return function(a, w) return m[a] or 0 end end")(lua.table_from(mem))
-    _, _, bad, ptrs = lua.globals().CENTER_PREDICATES(cp_lua, ok(), parked)
+    _, _, bad, ptrs = lua.globals().CENTER_PREDICATES(cp_lua, ok(), parked, True)
     assert list(bad.values()) == [], list(bad.values())
     assert ptrs["gSaveBlock1Ptr"] == mem[cp["pointers"]["gSaveBlock1Ptr"]["address"]]
     off = lua.table_from({"R15": cpu["pc_max"] + 2, "CPSR": cpu["mode"] | (cpu["thumb"] << 5)})
-    _, _, bad, _ = lua.globals().CENTER_PREDICATES(cp_lua, ok(), off)
+    _, _, bad, _ = lua.globals().CENTER_PREDICATES(cp_lua, ok(), off, False)
+    assert list(bad.values()) == ["cpu"]
+    _, _, bad, _ = lua.globals().CENTER_PREDICATES(cp_lua, ok(), parked, None)   # no verdict: bad
     assert list(bad.values()) == ["cpu"]
     mem[tasks + 2 * 40 + 4] = 0                         # Task_UnionRoomListen no longer active
-    _, missing, _, _ = lua.globals().CENTER_PREDICATES(cp_lua, ok(), parked)
+    _, missing, _, _ = lua.globals().CENTER_PREDICATES(cp_lua, ok(), parked, True)
     assert list(missing.values()) == ["Task_UnionRoomListen"]
 
 
@@ -4026,3 +4079,24 @@ def test_linked_faint_active_oracle_keeps_the_last_mon_on_both_sides(ph, monkeyp
     with pytest.raises(RuntimeError, match="memorialize dropped"):
         run.assert_linked_faint_active_whiteout_gen3_saved(
             dict(receipts, a=receipts["a"].replace("memorialize dropped", "memorialize kept")))
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+def test_the_carrier_cpu_verdict_is_the_product_safety_over_the_pack(kind):
+    """G5-RR-CARRIER-FIX item 2: the carrier no longer copies the CPU shape (its copy flagged
+    "cpu" on every RR frame once frames ended on the BIOS IRQ entry, owner ruling 23). Its
+    cpu_parked asks lua/gen3/safety.lua itself, over the committed RR pack's irq_entry."""
+    from test_gen3_safety import IRQ_CPSR, HALT_LR, World, irq_world
+
+    def verdict(world):
+        body = _lua_defs(DRIVER, ["cpu_parked"])
+        return world.lua.execute(body + "\nreturn cpu_parked")(world.safety)
+
+    assert verdict(irq_world("radical_red", kind, HALT_LR)) is True            # the halt's IRQ entry
+    assert verdict(World("radical_red", kind)) is True                         # the System halt
+    assert verdict(irq_world("radical_red", kind, 0x0800_0A1C)) is False       # IRQ from game code
+    broken = World("radical_red", kind)
+    broken.lua.execute("for k in pairs(rom) do rom[k] = (rom[k] + 1) % 256 end")   # anchors differ
+    assert verdict(broken) is None                                             # no clause ran
+    assert verdict(irq_world("firered", "clean", HALT_LR, cpsr=IRQ_CPSR)) is False   # FR admits none
+
