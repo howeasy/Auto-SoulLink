@@ -39,8 +39,10 @@ from pathlib import Path
 
 if __package__:
     from .duo_oracle_pipeline import EvidenceContract, run_pipeline, validate_pipeline
+    from .gen2_trade_lane import SCENARIOS as GEN2_TRADE_SCENARIOS
 else:
     from duo_oracle_pipeline import EvidenceContract, run_pipeline, validate_pipeline
+    from gen2_trade_lane import SCENARIOS as GEN2_TRADE_SCENARIOS
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EMUHAWK = "E:/Howard/Bizhawk/EmuHawk.exe"
@@ -65,6 +67,13 @@ WT_FWD = REPO.replace("\\", "/")
 # --game: Gen 3-only scenarios were run against a Game Boy, where they died on the savestate
 # they declare and no GB fixture has.
 SCENARIOS = {
+    # Driver FOR CODEX 4: reset_commit's proposer outlives the server watchdog (~4000 events) before
+    # party evidence settles it; every other trade leg keeps well over the driver's 150000 default.
+    **{name: {"flags": [], "timeout": 3600 if name == "gen2_trade_reset_commit" else 2400, "games": ("gen2_new",),
+              "no_setup": True, "artifact_kind": "overlay",
+              "frames": {"a": 600000, "b": 432000} if name == "gen2_trade_reset_commit" else 432000,
+              "oracle": "assert_gen2_trade_saved", "oracle_kwargs": {}}
+       for name in sorted(GEN2_TRADE_SCENARIOS)},
     "link": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
              "no_setup": True, "frames": 216000, "target": {"a": "battle", "b": "battle_ot2"},
              "oracle": "assert_gen2_link_saved", "oracle_kwargs": {}},
@@ -954,6 +963,13 @@ def evidence_contract(game):
     return FAMILY_EVIDENCE[family]
 
 
+GEN2_TRADE_FIXTURES = {
+    "gen2_new": {"a": "crystal_battle_errand", "b": "crystal_battle_ot2_errand"},
+    "gen2_gold_silver": {"a": "gold_battle_errand", "b": "silver_battle_errand"},
+    "gen2_crystal_gold": {"a": "crystal_battle_errand", "b": "gold_battle_errand"},
+}
+
+
 def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
     """Bind each side's fixture to its full qualification report and its title's pinned ROM."""
     root = Path(repo or REPO).resolve()
@@ -970,6 +986,10 @@ def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
     for inst in ("a", "b"):
         refused = scenario == "gen2_admit_wrong_rom" and inst == "b"
         name = "crystal_battle_ot2" if refused else pairing["fixture"][inst]
+        if scenario in GEN2_TRADE_SCENARIOS:
+            name = GEN2_TRADE_FIXTURES[game][inst]
+        if name not in BY_NAME:
+            raise FileNotFoundError(f"Gen 2 lane missing played/qualified fixture declaration: {name}")
         title = BY_NAME[name].title
         ctx = load_context(title, root=root)
         rom = ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"]
@@ -1251,6 +1271,9 @@ class DuoRun:
                "--port", str(self.tcp_port),
                "--http-port", str(self.http_port),
                "--data-dir", self.data_dir] + self.cfg["flags"] + self.args.server_flags
+        if self.scenario in GEN2_TRADE_SCENARIOS:
+            cmd = [sys.executable, "-m", "tools.gen2_trade_lane", "--manifest",
+                   str(self._gen2_trade_manifest_path), "--", *cmd[3:]]
         self.server = subprocess.Popen(
             cmd, cwd=REPO,
             # The handle is the server subprocess's stdout and must outlive this call —
@@ -1545,7 +1568,8 @@ class DuoRun:
             "mutate_otid": inst == "b", "result": result.replace("\\", "/"),
             "partner_result": self._result_path("b" if inst == "a" else "a").replace("\\", "/"),
             "go_file": self.go_files[inst].replace("\\", "/"),
-            "timeout_frames": self.cfg.get("frames", self.cfg["timeout"] * 60),
+            "timeout_frames": (lambda f: f[inst] if isinstance(f, dict) else f)(
+                self.cfg.get("frames", self.cfg["timeout"] * 60)),
             # The scenario's own wall budget, for the bodies that wait on a partner with a
             # bounded loop (poison_new's A half: `D.timeout_secs or 2400`).
             "timeout_secs": self.cfg["timeout"],
@@ -1553,6 +1577,12 @@ class DuoRun:
         env = None
         if self.gcfg.get("launch_profile") == "gen2":
             duo["mutate_otid"] = False
+            if self.scenario in GEN2_TRADE_SCENARIOS:
+                duo["trade_manifest"] = str(self._gen2_trade_manifest_path).replace("\\", "/")
+                duo["trade_manifest_sha256"] = self._gen2_trade_manifest_sha256
+                duo["trade_case"] = self.scenario
+                duo["trade_evidence_dir"] = str(Path(self.data_dir, "trade_evidence")).replace("\\", "/")
+                duo["variant"] = self._gen2_trade_expected_case()["variant"]
             if self._gen2_inputs[inst].get("expect_admission") == "refused":
                 duo["expect_admission"] = "refused"
             env = dict(os.environ, SLINK_ROOT=WT_FWD, **self._gen2_plans[inst]["env"],
@@ -1578,6 +1608,10 @@ class DuoRun:
                     f.write(f"  {k} = {v},\n")
             f.write("}\n")
             f.write(f'dofile("{WT_FWD}/{self.gcfg["main"]}")\n')
+        if self.gcfg.get("launch_profile") == "gen2" and self.scenario in GEN2_TRADE_SCENARIOS:
+            plan = self._gen2_plans[inst]
+            if hashlib.sha1(Path(plan["rom"]).read_bytes()).hexdigest() != plan["launch_sha1"]:
+                raise RuntimeError(f"{inst}: staged trade overlay changed before launch")
         p = subprocess.Popen(
             [EMUHAWK, f"--config=patch/build/duo_cfg_{self.lane}_{inst}.ini",
              f"--lua=patch/build/duo_{self.lane}_{inst}.lua",
@@ -1623,10 +1657,12 @@ class DuoRun:
         from tests.live.test_gen2_new_gates import inspect_env
         from tools import gen2_fixtures, gen2_source_data
 
+        suffix = "_overlay" if self.scenario in GEN2_TRADE_SCENARIOS else ""
         self._gen2_plans = {
-            inst: GENS["gen2"]["plan"](row["title"], self._saveram_dir(inst),
-                                       row["fixture"], 300)
+            inst: GENS["gen2"]["plan"](row["title"] + suffix, self._saveram_dir(inst), row["fixture"], 300)
             for inst, row in self._gen2_inputs.items()}
+        if self.scenario in GEN2_TRADE_SCENARIOS:
+            self._prepare_gen2_trade_manifest()
         self._gen2_env = {}
         for inst, row in self._gen2_inputs.items():
             if row.get("expect_admission") == "refused":
@@ -1641,17 +1677,26 @@ class DuoRun:
                 self._gen2_env[inst] = {}
                 continue
             ctx = gen2_source_data.load_context(row["title"], root=Path(REPO))
-            facts = gen2_fixtures.route_facts(row["title"], Path(REPO))
+            # errand fixtures play on their own spec's facts (the Gold errand maps), not the title's
+            facts = gen2_fixtures.spec_route_facts(gen2_fixtures.BY_NAME[row["name"]], Path(REPO))
             env = inspect_env(gen2_fixtures.BY_NAME[row["name"]], row["fixture"].read_bytes(),
                               repo=Path(REPO))
             case = json.loads(env["SLINK_GEN2_FIXTURE_CASE"])
             case["attempt_id"] = f"duo-{self.scenario}-{inst}-{self.attempt}-{uuid.uuid4().hex}"
             env["SLINK_GEN2_FIXTURE_CASE"] = json.dumps(case)
             env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, facts, row["qualification_attempt_id"]))
+            if self.scenario in GEN2_TRADE_SCENARIOS:
+                from tools.gen2_trade_facts import trade_facts
+
+                env["SLINK_GEN2_TRADE_MANIFEST"] = str(self._gen2_trade_manifest_path)
+                env["SLINK_GEN2_TRADE_MANIFEST_SHA256"] = self._gen2_trade_manifest_sha256
+                env["SLINK_GEN2_TRADE_FACTS"] = json.dumps(trade_facts(row["title"], root=Path(REPO)))
             self._gen2_env[inst] = env
         scenario_name = self.scenario.removeprefix("gen2_")
         driver_files = [self.gcfg["main"], f"lua/tests/duo/scenario_gen2_{scenario_name}.lua",
                         "lua/tests/duo/gen2_route29_inputs.lua"]
+        if self.scenario in GEN2_TRADE_SCENARIOS:
+            driver_files += ["lua/tests/duo/gen2_trade.lua", "tools/gen2_trade_facts.py"]
         if self.scenario in ("gen2_faint", "gen2_faint_active"):
             driver_files.append("lua/tests/duo/gen2_faint_inputs.lua")
         if self.scenario in GEN2_CLAUSE_SCENARIOS:
@@ -1662,14 +1707,158 @@ class DuoRun:
         oracle = importlib.import_module("gen2_duo_oracles")
         oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle", "gen2_faint_active": "faint_active_oracle", "gen2_reconnect": "reconnect_oracle",
                        "gen2_admit_wrong_rom": "admit_wrong_rom_oracle", "gen2_soft_reset": "soft_reset_oracle",
-                       **dict.fromkeys(GEN2_CLAUSE_SCENARIOS, "clause_oracle")}[self.scenario]
+                       **dict.fromkeys(GEN2_CLAUSE_SCENARIOS, "clause_oracle"),
+                       **dict.fromkeys(GEN2_TRADE_SCENARIOS, "trade_oracle")}[self.scenario]
         witness = "check_admit_wrong_rom_witness" if self.scenario == "gen2_admit_wrong_rom" else "check_save_witness"
         if self.scenario == "gen2_reconnect":
             witness = "check_reconnect_witness"
+        if self.scenario in GEN2_TRADE_SCENARIOS:
+            oracle = importlib.import_module("gen2_trade_oracles")
+            witness = "check_trade_witness"
         if not all(callable(getattr(oracle, name, None)) for name in (witness, oracle_name)):
             raise RuntimeError("Gen 2 duo witness/oracle implementation missing")
 
+    def _prepare_gen2_trade_manifest(self):
+        from tools.gen2_trade_lane import validate_manifest
+
+        root = Path(REPO).resolve()
+        raw = (root / "data/gen2/overlay_provenance.json").read_bytes()
+        provenance = json.loads(raw)
+        manifest = {"schema": "gen2-trade-lane-v1", "run_id": "g2trade_" + uuid.uuid4().hex,
+                    "scenario": self.scenario, "evidence_class": "HARNESS_ONLY_OVERLAY",
+                    "provenance_sha256": hashlib.sha256(raw).hexdigest(), "players": {}}
+        for inst, row in self._gen2_inputs.items():
+            title, plan = row["title"], self._gen2_plans[inst]
+            artifact = provenance["outputs"]["poke" + title]
+            stage = plan.get("stage")
+            if (not isinstance(stage, bytes) or hashlib.sha1(stage).hexdigest() != artifact["sha1"]
+                    or plan["launch_sha1"] != artifact["sha1"] or row["rom_sha1"] != artifact["base_sha1"]):
+                raise RuntimeError(f"{inst}: trade overlay stage/base binding differs")
+            manifest["players"][inst] = {"title": title, "rom_type": title, "foundation": "gen2_gsc",
+                "artifact_kind": "overlay", "rom_sha1": artifact["sha1"], "base_sha1": artifact["base_sha1"],
+                "ups_sha256": artifact["ups"]["sha256"], "sym_sha256": provenance["symbols"][title + "_slink.sym"]}
+        validate_manifest(manifest, root=root)
+        for inst, plan in self._gen2_plans.items():
+            target = Path(plan["rom"]).resolve()
+            if not target.is_relative_to(Path(BUILD).resolve()):
+                raise RuntimeError("trade staged ROM escapes the build directory")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if not target.is_file() or hashlib.sha1(target.read_bytes()).hexdigest() != plan["launch_sha1"]:
+                temporary = None
+                try:
+                    with tempfile.NamedTemporaryFile(dir=target.parent, suffix=".tmp", delete=False) as handle:
+                        temporary = Path(handle.name)
+                        handle.write(plan["stage"])
+                    os.replace(temporary, target)
+                finally:
+                    if temporary is not None and temporary.exists():
+                        temporary.unlink()
+            self._gen2_inputs[inst].update(source_rom_sha1=self._gen2_inputs[inst]["rom_sha1"],
+                                          rom_sha1=plan["launch_sha1"], rom=target)
+        path = Path(self.data_dir) / "gen2_trade_manifest.json"
+        encoded = (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
+        with path.open("xb") as handle:
+            handle.write(encoded)
+        self._gen2_trade_manifest_path = path
+        self._gen2_trade_manifest_sha256 = hashlib.sha256(encoded).hexdigest()
+        self._gen2_trade_manifest = manifest
+        Path(self.data_dir, "trade_evidence").mkdir(exist_ok=False)
+
+    def _gen2_trade_overlay_reference(self):
+        return {"manifest_path": str(self._gen2_trade_manifest_path),
+                "manifest_sha256": self._gen2_trade_manifest_sha256,
+                "players": {side: {"rom_path": str(self._gen2_plans[side]["rom"]),
+                                   "sym_path": str(Path(REPO, "data/gen2", row["title"] + "_slink.sym").resolve())}
+                            for side, row in self._gen2_inputs.items()}}
+
+    def _gen2_trade_expected_case(self):
+        return {"scenario": self.scenario,
+                "variant": {"gen2_new": "cc", "gen2_gold_silver": "gs", "gen2_crystal_gold": "cg"}[self.game],
+                "fixture_sha256": {side: row["sha256"] for side, row in self._gen2_inputs.items()},
+                "required_phases": ["wait", "trade_animation", "native_save"]
+                    if self.scenario in ("gen2_trade_new", "gen2_trade_evolve") else ["wait"]}
+
+    def _release_gen2_trade(self):
+        oracle = importlib.import_module("gen2_trade_oracles")
+
+        def ready():
+            found = {}
+            for side in ("a", "b"):
+                text = read_result(self.artifact_name, side) or ""
+                if not text.endswith("\n"):
+                    text = text.rsplit("\n", 1)[0] if "\n" in text else ""
+                if not any(line.startswith("TRADE_READY ") for line in text.splitlines()):
+                    return None
+                mark, baseline = oracle._one(text, "TRADE_READY"), oracle._one(text, "TRADE_BASELINE")
+                raw = oracle._image(baseline, side + " runner baseline")
+                if mark.get("snapshot_sha256") != baseline["snapshot_sha256"]:
+                    raise RuntimeError("trade READY does not bind its baseline")
+                found[side] = raw
+            return found
+
+        images = self.wait_for("both immutable trade baselines", ready, self.cfg["timeout"])
+        self._gen2_trade_baseline_saves = {}
+        for side, raw in images.items():
+            path = Path(self.data_dir, "trade_evidence", side + "_runner_baseline.SaveRAM")
+            with path.open("xb") as handle:
+                handle.write(raw)
+            self._gen2_trade_baseline_saves[side] = path
+        raw = Path(self.data_dir, "links.json").read_bytes()
+        path = Path(self.data_dir, "trade_evidence", "baseline_links.json")
+        with path.open("xb") as handle:
+            handle.write(raw)
+        self._gen2_trade_baseline_links = {"path": str(path), "sha256": hashlib.sha256(raw).hexdigest()}
+        self.go({side: ["TRADE_GO"] for side in ("a", "b")})
+
+    def assert_gen2_trade_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_trade_oracles")
+        source = Path(self.data_dir, "trade_lane_events.jsonl")
+        raw = source.read_bytes()
+        events = [json.loads(line) for line in raw.splitlines() if line.strip()]
+        tokens = set()
+        for event in events:
+            message, outcome = event.get("message", {}), event.get("outcome", {})
+            for candidate in (message.get("token"), (outcome.get("pending_trade") or {}).get("token")):
+                if isinstance(candidate, str) and re.fullmatch(r"t[0-9]+", candidate):
+                    tokens.add(candidate)
+        if len(tokens) > 1:
+            raise RuntimeError("trade lane observed multiple server transactions")
+        path = Path(self.data_dir, "trade_evidence", "server_events.jsonl")
+        with path.open("xb") as handle:
+            handle.write(raw)
+        transaction = {"schema": "gen2-duo-trade-transaction-v1",
+                       "tokens": {side: oracle._one(results[side], "RECEIPT").get("token") for side in ("a", "b")},
+                       "server_token": next(iter(tokens), None), "baseline_links": self._gen2_trade_baseline_links,
+                       "events": {"path": str(path), "sha256": hashlib.sha256(raw).hexdigest()}}
+        if self.scenario == "gen2_trade_reset_commit":
+            status = self._status()
+            if not isinstance(status, dict):
+                raise RuntimeError("trade reconciliation final status unavailable")
+            evidence = {"status": (json.dumps(status, sort_keys=True) + "\n").encode(),
+                        "events": Path(self.data_dir, "events.json").read_bytes()}
+            transaction["reconciliation"] = {}
+            for label, content in evidence.items():
+                snapshot = Path(self.data_dir, "trade_evidence", label + ".json")
+                with snapshot.open("xb") as handle:
+                    handle.write(content)
+                transaction["reconciliation"][label] = {"path": str(snapshot), "sha256": hashlib.sha256(content).hexdigest()}
+
+        def verified(facts):
+            if facts.get("scenario") != self.scenario or facts.get("admission_scope") != "HARNESS_ONLY_OVERLAY":
+                raise RuntimeError("trade oracle omitted its harness scope")
+            self._record_gen2_facts({"a": facts["players"]["a"]["key"], "b": facts["players"]["b"]["key"],
+                "area": facts["area_id"], "titles": "/".join(facts["players"][side]["title"] for side in ("a", "b")),
+                "status": facts["status"], "scenario": self.scenario, "admission_scope": facts["admission_scope"]})
+
+        return oracle.trade_oracle(results, data_dir=self.data_dir,
+            baseline_saves=self._gen2_trade_baseline_saves, transaction_evidence=transaction,
+            overlay_provenance=self._gen2_trade_overlay_reference(), expected_case=self._gen2_trade_expected_case(),
+            on_verified=verified, **kwargs)
+
     def check_gen2_save_witness(self, results):
+        if self.scenario in GEN2_TRADE_SCENARIOS:
+            return importlib.import_module("gen2_trade_oracles").check_trade_witness(results,
+                expected_case=self._gen2_trade_expected_case(), overlay_provenance=self._gen2_trade_overlay_reference())
         oracle = importlib.import_module("gen2_duo_oracles")
         if self.scenario == "gen2_admit_wrong_rom":
             return oracle.check_admit_wrong_rom_witness(results, **self._gen2_admit_paths())
@@ -1886,6 +2075,8 @@ class DuoRun:
             allowed = ("clause_observed",)
         if self.scenario == "gen2_species_clause":
             allowed = ("alive",)
+        if self.scenario in GEN2_TRADE_SCENARIOS:
+            allowed = ("committed", "unchanged")
         if facts["status"] not in allowed:
             raise RuntimeError("Gen 2 oracle verified status invalid")
         self._gen2_verified_facts = dict(facts)
@@ -4325,7 +4516,7 @@ class DuoRun:
             for path in (gf, gf + ".chord"):
                 if os.path.exists(path):
                     os.remove(path)
-        if passed and not self.args.keep_data:
+        if passed and not self.args.keep_data and self.scenario not in GEN2_TRADE_SCENARIOS:
             shutil.rmtree(self.data_dir, ignore_errors=True)
         else:
             print(f"[duo] data dir kept: {self.data_dir}")
@@ -4345,7 +4536,9 @@ class DuoRun:
             if self.scenario == "gen2_admit_wrong_rom":
                 self._gen2_admit_before = self._gen2_admit_snapshot()
             self.go()
-            if self.scenario == "gen2_faint_active":
+            if self.scenario in GEN2_TRADE_SCENARIOS:
+                self._release_gen2_trade()
+            elif self.scenario == "gen2_faint_active":
                 self._release_gen2_active_faint()
             elif self.scenario == "gen2_reconnect":
                 self._orchestrate_gen2_reconnect()
@@ -4723,6 +4916,8 @@ class DuoRun:
                         reason += f" scenario={self.scenario} rom_b={self._gen2_verified_facts['rom_b']}"
                     if self.scenario == "gen2_faint_active":
                         reason += " scenario=gen2_faint_active death=active"
+                    if self.scenario in GEN2_TRADE_SCENARIOS:
+                        reason += f" scenario={self.scenario} admission_scope=HARNESS_ONLY_OVERLAY"
                     if self.scenario in GEN2_CLAUSE_SCENARIOS:
                         extra = ("clause", "rerolls") if self.scenario == "gen2_species_clause" else ("clause", "rejected", "ending")
                         reason += f" scenario={self.scenario} " + " ".join(
@@ -4776,9 +4971,13 @@ def list_lines(game):
                    else SCENARIOS[name].get("target", "town"))
         if name == "gen2_admit_wrong_rom":
             targets = {**targets, "b": "crystal_battle_ot2"}
+        if name in GEN2_TRADE_SCENARIOS:
+            targets = GEN2_TRADE_FIXTURES[game]
         shown = (", ".join(f"{inst}:{targets[inst]}" for inst in ("a", "b"))
                  if isinstance(targets, dict) else targets)
         lines.append(f"{name}  attempts={scenario_attempt_limit(name, game)}  targets={shown}")
+        if name in GEN2_TRADE_SCENARIOS:
+            lines[-1] += " artifact=overlay admission=HARNESS_ONLY_OVERLAY"
     return lines
 
 

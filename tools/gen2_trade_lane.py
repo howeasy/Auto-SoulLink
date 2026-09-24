@@ -19,7 +19,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 SCENARIOS = frozenset({"gen2_trade_new", "gen2_trade_decline_new", "gen2_trade_timeout",
-                       "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item"})
+                       "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item",
+                       "gen2_trade_evolve"})
 ATTRIBUTION = "HARNESS_ONLY_OVERLAY"
 TITLES = {name: title for title in ("crystal", "gold", "silver") for name in (title, title.title())}
 TOP_KEYS = {"schema", "run_id", "scenario", "evidence_class", "provenance_sha256", "players"}
