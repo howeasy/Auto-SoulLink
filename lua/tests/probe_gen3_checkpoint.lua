@@ -675,13 +675,18 @@ function P.run()
     local plan = P.planned(title, kind, os.getenv("SLINK_CHECKPOINT_ROWS"))
     local active, callback_error, hook
     local rows = {} -- predicate-only evidence; NOT a writer execution test
-    local mb
+    local nb   -- the companion mailbox block (profile.json "native"), RR only
     if title == "radical_red" then
-        -- Loading mailbox.lua defines helpers; this probe calls ONLY present/busy.
-        mb = dofile(wt .. "/lua/mailbox.lua")
+        local f = assert(io.open(wt .. "/data/games/gen3_rr/profile.json", "rb"))
+        nb = dofile(wt .. "/lua/json_codec.lua").decode(f:read("a")).native
+        f:close()
     end
+    -- Present = signature + ABI word; idle = no opcode posted (the slot is free).
     local function native_idle()
-        if mb and mb.present() then return not mb.busy() end
+        if nb and memory.read_u32_le(nb.BASE) == nb.SIG
+           and memory.read_u16_le(nb.BASE + 4) == nb.ABI then
+            return memory.read_u16_le(nb.BASE + 6) == 0
+        end
         return true
     end
     local deps = P.build_deps(memory, emu, native_idle)
