@@ -212,11 +212,11 @@
           "command": "SLINK_GEN2_TRACE=1 python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_faint --lane gen2-cg-faint --keep-data",
           "receipts": {
             "a": {"path": "tests/fixtures/gen2/receipts/duo_faint_cg_a_result.txt",
-                  "sha256": "faa1923c6d0b40a2dd7ef14356897ef82100c9352e7df13a867c9ef66059a248"},
+                  "sha256": "8efc877799ce4897b092fb6e79ea72f68219affc419da72b25e5f98940ca0628"},
             "b": {"path": "tests/fixtures/gen2/receipts/duo_faint_cg_b_result.txt",
-                  "sha256": "828755c1330f3eb1e68752b748943847b23258ea89ca3d1cfe9d2f023c9915d9"},
+                  "sha256": "45085a1b4c115c9202e03c7ce7b2bb4a4662e27946424fb8e16b9bfdc1d80d41"},
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_faint_cg_pydec_result.txt",
-                      "sha256": "28983fd99a816991c560e3c95305cc359bad99251f46caea202e44d1c449eb8d"}
+                      "sha256": "cc7da2d19609980a7c65b324e98eab73f39f66f43ccafe76b75eb68d29795e44"}
           }
         },
         {
