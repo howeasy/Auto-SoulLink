@@ -111,6 +111,53 @@ SlinkTradeUIValidName::
 	and a
 	ret
 
+SlinkTradeUIMustSave::
+	; Vanilla asks before any link and saves on YES (engine/link/cable_club_npc.asm
+	; CableClubNPC .establishedConnection). Carry = NO or B. Asks only: the caller runs
+	; SlinkTradeUISave once every byte the save records is live again.
+	call SlinkTradeUIWaitReleased
+	ld hl, .text
+	call PrintText
+	call YesNoChoice
+	ld a, [wCurrentMenuItem]
+	and a
+	ret z
+	scf
+	ret
+.text
+	text "We have to save"
+	line "before trading."
+	done
+
+SlinkTradeUISave::
+	; The full native save and its jingle (CableClubNPC, the same file).
+	farcall SaveGameData
+	call WaitForSoundToFinish
+	ld a, SFX_SAVE
+	call PlaySoundWaitForCurrent
+	ret
+
+SlinkTradeUIResetNotice::
+	; Result 2 holds the lease with no exit (trade_service.asm .waitForReceipt):
+	; say so on screen. Preserves D.
+	push de
+	xor a
+	ld [wUpdateSpritesEnabled], a
+	ldh [hWY], a
+	ld a, 1
+	ld [wFontLoaded], a
+	ldh [hAutoBGTransferEnabled], a
+	call ClearSprites
+	call LoadFontTilePatterns
+	ld hl, .text
+	call PrintText
+	pop de
+	ret
+.text
+	text "Trade error."
+	line "Please reset."
+	done
+
 ; One flag per byte value: 1 = a literal glyph a nickname may carry through text_ram. From
 ; constants/charmap.asm: $7F space, $80-$BF letters/punctuation/é/apostrophe ligatures,
 ; $E0-$EB punctuation and the → + % glyphs, $EF-$FF symbols and digits. Excluded: control

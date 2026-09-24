@@ -2,7 +2,8 @@
 
 MODEL, never physical proof: the linked Red bank-$3F code runs in the Gen 2 trade MODEL CPU
 (tests/unit/test_gen2_trade_service.py TradeMachine) with every pret native a spy, resolved by
-address from data/pret/pokered.sym.
+address from data/pret/pokered.sym. The pureRGB overlay is a port of the same code linked into
+pureRGB, so it is held to the vanilla hunks by source parity instead.
 
 Vanilla facts (pret/pokered 405b624): CableClubNPC asks "we have to save the game" and runs
 `callfar SaveGameData` before any link (engine/link/cable_club_npc.asm:56-67); the Trade Center
@@ -24,6 +25,7 @@ from tests.unit.test_gen2_trade_service import TradeMachine
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "patch/gen1/src"
+PURE = ROOT / "patch/gen1/purergb/overlay"
 
 # pret/pokered 405b624 RAM (data/pret/pokered.sym)
 OVERLAY, BACKUP = 0xC508, 0xD8A4 + 44
@@ -277,10 +279,37 @@ def _ops(path: Path, start: str, end: str) -> list[str]:
     return ops[first + 1:ops.index(end, first + 1)]
 
 
-@pytest.mark.parametrize("src", [SOURCE], ids=["redblue"])
+@pytest.mark.parametrize("src", [SOURCE, PURE], ids=["redblue", "purergb"])
 def test_receptionist_saves_after_consent_and_before_the_party_picker(src):
     ops = _ops(src / "trade_receptionist.asm", "call .mainMenu", "call .offer")
     consent = ops.index("call SlinkTradeUIMustSave")
     assert ops[consent + 1:consent + 3] == ["jr c, .selectedCancel", "call SlinkTradeUISave"]
     assert ops.index("call .partyMenu") > consent + 2
 
+
+# pureRGB names the constants the Red/Blue source spells as literals (cited there).
+PURE_NAMES = {"NAME_LENGTH": "11", "SFX_SAVE": "SLINK_SFX_SAVE", "PAD_START": "1 << 3",
+              "1 << BIT_LEDGE_OR_FISHING": "1 << 6", "1 << BIT_SCRIPTED_MOVEMENT_STATE": "1 << 7",
+              "1 << BIT_WARP_FROM_CUR_SCRIPT": "1 << 3",
+              "(1 << BIT_FLY_WARP) | (1 << BIT_DUNGEON_WARP)": "(1 << 3) | (1 << 4)"}
+
+
+def _pure(ops: list[str]) -> list[str]:
+    out = []
+    for op in ops:
+        for name, literal in PURE_NAMES.items():
+            op = op.replace(name, literal)
+        out.append(op)
+    return out
+
+
+@pytest.mark.parametrize("red,pure,start,end", [
+    ("trade_ui.asm", "trade_ui.asm", "SlinkTradeUIMustSave::", "SlinkTradeUINameTable::"),
+    ("trade_prompt.asm", "trade_prompt.asm", ".choice", ".unavailable"),
+    ("native_trade.asm", "native_trade.asm", "call PlayDefaultMusic", ".refused"),
+    ("trade_service.asm", "trade_service.asm", ".apply", ".publish"),
+    ("trade_service.asm", "slink.asm", "ld a, [wWalkCounter]", "jp SlinkTradeService"),
+])
+def test_purergb_overlay_carries_the_same_save_and_step_hunks(red, pure, start, end):
+    mine = _ops(SOURCE / red, start, end)
+    assert mine == _pure(_ops(PURE / pure, start, end))
