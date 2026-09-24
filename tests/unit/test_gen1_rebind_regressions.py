@@ -359,6 +359,16 @@ def _one_clear_per_run(trace):
 # which clears the (pure-Lua) panel state again before the same re-hello (KEEP #2 and #3).
 KEEP = {"save_reset": _one_clear_per_run}
 
+# Intended hello fields master lacks, with the exact value the red fixture must send.
+HELLO_ADDED = {
+    "trade_prepare": False,  # a3e1f33d, review MAJOR-1 (REVIEW_TRADE_SERVER_2026-09-24): trades off here
+}
+
+
+def _with_added_hello_fields(trace):
+    return [("sent", {**e[1], **HELLO_ADDED}) if e[0] == "sent" and e[1].get("event") == "hello" else e
+            for e in trace]
+
 
 @pytest.mark.parametrize("name", sorted(SCENARIOS))
 def test_master_equivalence_differential(name, master_root, monkeypatch):
@@ -368,7 +378,8 @@ def test_master_equivalence_differential(name, master_root, monkeypatch):
         t = _trace(w)
         SCENARIOS[name](w, t)
         traces.append(KEEP.get(name, list)(t))
-    master, head = traces
+    master, head = _with_added_hello_fields(traces[0]), traces[1]
+    assert not any(k in e[1] for e in traces[0] if e[0] == "sent" for k in HELLO_ADDED), "master grew it"
     assert any(entry[0] == "sent" for entry in master), "the scenario must be observable"
     assert head == master
 
