@@ -207,7 +207,7 @@
       "axes": {"kind": "panel_gate", "title": "crystal", "requirement_ids": ["N-1", "C-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.panel_gate.json",
-        "sha256": "37e97c113626dfdc3149bb746a8c7d7abae57fb48e1c8af53a23c8130a220b19"
+        "sha256": "30b2f560b24f63053677e90eaa0697493456116ec53a5f1d013ccad5cde7afe2"
       }}}]
     },
     {
@@ -217,7 +217,7 @@
       "axes": {"kind": "panel_gate", "title": "gold", "requirement_ids": ["N-1", "C-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.panel_gate.json",
-        "sha256": "4f1a25f71169df47c6c9b1eb98ba9270612598f5b6cd06c6a7da39ac8408d0d1"
+        "sha256": "a117a908676e5dc3c5c1fee644108a1f14f87dfce26a9dc6c3c690f49f6671d1"
       }}}]
     },
     {
@@ -227,7 +227,7 @@
       "axes": {"kind": "panel_gate", "title": "silver", "requirement_ids": ["N-1", "C-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.panel_gate.json",
-        "sha256": "67a04a6694776c3aa616ab7b21af3808f3f2a5a730c43bba9490d64ed7194786"
+        "sha256": "425899ca851b9450f60f05aa2dfa2a1df22921733f913eeef0415386900b7251"
       }}}]
     },
     {
@@ -237,7 +237,7 @@
       "axes": {"kind": "sfx_gate", "title": "crystal", "requirement_ids": ["N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.sfx_gate.json",
-        "sha256": "84d152a475916cf20a128278e8aa1932b8111e1d6a41bb414e655e4394eaff6b"
+        "sha256": "b40b15052a2b96e5a83a89e4e53e08dd3b5788737a42fa24bb7303f300ffc0ba"
       }}}]
     },
     {
@@ -247,7 +247,7 @@
       "axes": {"kind": "sfx_gate", "title": "gold", "requirement_ids": ["N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.sfx_gate.json",
-        "sha256": "a638115c53ae8d86b671aa3261d2b77979447f3ede70036498f9006c39521177"
+        "sha256": "c04e7593eafb956c8e56c6fcc3438b6e8d2c2a64232c2f9886ffdede7a3bde4a"
       }}}]
     },
     {
@@ -257,17 +257,17 @@
       "axes": {"kind": "sfx_gate", "title": "silver", "requirement_ids": ["N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.sfx_gate.json",
-        "sha256": "51cf217f9b4df25cd5a4bd009f11bdead94b9d6e7a38dbbbbd6a68fc9d9c7ae7"
+        "sha256": "3c4bd1141cca3bb234aa7140abdee5b2090238f60fbad98d1ad15d12d6a8648a"
       }}}]
     },
     {
       "id": "new-gates.w6.crystal",
       "stage": "physical-live",
-      "description": "P4 W6 Crystal overlay mailbox write-watch tripwire (O-27 D1): the panel, sfx and frozen U1e (a7bf1773) corpus, every mailbox write from SLink code, Init's boot clear or the shipped Lua client, the wSpecialPhoneCallID word from the service bank only, both known-positive controls caught (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_w6_gate.py -k crystal)",
+      "description": "P4 W6 Crystal overlay mailbox write-watch tripwire (O-27 D1): the panel, sfx and U1f (a882a763: re-heal + Bill's PC leg) corpus, every mailbox write from SLink code, Init's boot clear or the shipped Lua client, the wSpecialPhoneCallID word from the service bank only, both known-positive controls caught (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_w6_gate.py -k crystal)",
       "axes": {"kind": "w6_gate", "title": "crystal", "requirement_ids": ["O-27"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.w6_gate.json",
-        "sha256": "339edfc5677a40e86a12ba014241e667adbe76ef1d3f56a2ecfb2bf5bdde1b82"
+        "sha256": "3360bb71de8471f64be31f369746743e9a4330e73986dde38e4572808fcf3a90"
       }}}]
     },
     {
@@ -287,7 +287,7 @@
       "axes": {"kind": "w6_gate", "title": "gold", "requirement_ids": ["O-27"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.w6_gate.json",
-        "sha256": "a027fb6524d9c6f129289ad3add43d6c8f35bd808a123996bba53a7163752711"
+        "sha256": "a95f684f23966c85ebc0b40edcd3246eb12be09dfade07abc879b65297c39e72"
       }}}]
     },
     {
@@ -297,7 +297,7 @@
       "axes": {"kind": "phone_gate", "title": "crystal", "requirement_ids": ["O-29"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.phone_gate.json",
-        "sha256": "43ad519f85b645c2a4a38692697296d60c5b83a6b440a428f24d1bf68b2cfb5c"
+        "sha256": "36b8543dadb20d4a73c6d6dc36517cc415775c017ee0e082678abbf3131a072b"
       }}}]
     },
     {
@@ -307,7 +307,7 @@
       "axes": {"kind": "phone_gate", "title": "gold", "requirement_ids": ["O-29"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.phone_gate.json",
-        "sha256": "bc26001c367273e31b1da6631c44cec68f0f1d02e5d2d89bd7b5acf645d856bb"
+        "sha256": "5f011848efb18e0f68383b04653117f6a6f4b50069a85b29a4ffca6132a9862a"
       }}}]
     },
     {
@@ -317,7 +317,7 @@
       "axes": {"kind": "phone_gate", "title": "silver", "requirement_ids": ["O-29"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.phone_gate.json",
-        "sha256": "2a833107ce510ce8b58b45bf8411a08cebf01113f16a75481a9829a1a0075a26"
+        "sha256": "071b2ed3c52c2693ba88b792c4e52349c6c0a164c842578c64cc45e182975d7b"
       }}}]
     }
   ]

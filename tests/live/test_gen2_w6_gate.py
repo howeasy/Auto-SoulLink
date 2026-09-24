@@ -64,12 +64,20 @@ STAGGER = 60          # seconds between this lane's EmuHawk launches (other lane
 #   a7bf1773  U1e: catch, save, poison, battle faint, whiteout; the faint driver at c60c45c3 (its 0-PP fix; live:
 #             the a7bf1773 driver loops on TAIL WHIP at 0 PP)
 #   a882a763  U1f (PHYSICAL on all three titles): U1e + the Cherrygrove re-heal (5c2ce468) + Bill's PC leg
-# Gold runs U1f: its U1e Route 31 hunt loses a party mon to attrition before the poison (frame 46514).
+#   76d715e6  U1f + the ledge-aware walker (0ce58e0d, its sibling gen2_walk.lua frozen too) + the poison leg's
+#             flake fixes; before EVO-U1 (ebfa3dcd)
+# Every title runs U1f (main 2026-09-24); Gold moved first: its U1e Route 31 hunt loses a party mon to attrition
+# before the poison (frame 46514). On the 9805ac1c overlays Silver's poison hunt stalls in battle on Route 26:1
+# (8,49) on EVERY chain (a882a763 twice at 72662, 76d715e6 at 75099, a7bf1773 at 71761), 0 overlay violations
+# each time (likely cause, unproven: the dispatcher's added reads shift rDIV-driven encounters) and the hunt never
+# meets its foe. Silver keeps its last PHYSICAL pin (a7bf1773, on d09e76c1) until the hunt is made RNG-robust.
 _U1 = ("lua/tests/gen2_frame_align.lua", "lua/tests/gen2_poison_inputs.lua", "lua/tests/duo/gen2_faint_inputs.lua",
        "tests/live/test_gen2_frame_align.py")
+_U1F = _U1 + ("lua/tests/gen2_pc_inputs.lua",)
 U1_CHAINS = {"a7bf1773": {**dict.fromkeys(_U1, "a7bf1773"), "lua/tests/duo/gen2_faint_inputs.lua": "c60c45c3"},
-             "a882a763": dict.fromkeys(_U1 + ("lua/tests/gen2_pc_inputs.lua",), "a882a763")}
-U1_CHAIN_FOR = {"crystal": "a7bf1773", "silver": "a7bf1773", "gold": "a882a763"}
+             "a882a763": dict.fromkeys(_U1F, "a882a763"),
+             "76d715e6": dict.fromkeys(_U1F + ("lua/tests/gen2_walk.lua",), "76d715e6")}
+U1_CHAIN_FOR = {"crystal": "a882a763", "gold": "a882a763", "silver": "a7bf1773"}
 IN_PLACE_CODE = ("SlinkStartMenuEntry",)   # patch/gen2/src/panel_start.asm, bank 4
 INIT_LOOP = bytes.fromhex("3600230b78b120f8")   # Init.ByteFill: ld [hl],0 / inc hl / dec bc / ld a,b / or c / jr nz
 

@@ -1,5 +1,5 @@
 {
- "corpus_frames": 84200,
+ "corpus_frames": 76790,
  "evidence_level": "PHYSICAL",
  "facts": {
   "allow": [
@@ -36,7 +36,7 @@
    "lo": 1541,
    "name": "Init WRAM0 clear"
   },
-  "overlay_sha1": "d563669ec3ac5029be9464d2301aa3be27a5f163",
+  "overlay_sha1": "15fc821327a22224925a6adaaa483525222883c2",
   "regions": [
    {
     "hi": 55677,
@@ -71,16 +71,16 @@
     "native_addr": 52970,
     "native_allowed": 11382,
     "native_caught": true,
-    "native_flagged": 12593,
+    "native_flagged": 12621,
     "native_writers": {
      "00:0068 SlinkDelayFrameBridge+0x5": 11382,
-     "00:01CE VBlank_Normal.done_oam+0x4": 12351,
+     "00:01CE VBlank_Normal.done_oam+0x4": 12379,
      "00:021D VBlank_Cutscene.skip_lcd+0x4": 190,
      "00:0607 Init.ByteFill+0x2": 1,
      "33:41DF BattleAnimDelayFrame.wait+0x0": 51
     }
    },
-   "corpus_frames": 12760,
+   "corpus_frames": 12788,
    "driver": null,
    "evidence_level": "PHYSICAL",
    "fixture": "gold_battle",
@@ -98,7 +98,7 @@
     },
     "harness": {}
    },
-   "overlay_sha1": "d563669ec3ac5029be9464d2301aa3be27a5f163",
+   "overlay_sha1": "15fc821327a22224925a6adaaa483525222883c2",
    "qualification_attempt_id": "requal-gold-battle-n14b",
    "regions": {
     "wSpecialPhoneCallID": {
@@ -135,23 +135,23 @@
     "13:403D SlinkService.sample+0xe": 11381,
     "13:4045 SlinkService.remember+0x0": 11381,
     "13:4049 SlinkService.remember+0x4": 11382,
-    "13:4891 SlinkPanel+0xb": 15,
-    "13:4894 SlinkPanel+0xe": 15,
-    "13:4897 SlinkPanel+0x11": 15,
-    "13:48C6 SlinkPanel.page+0x2a": 16,
-    "13:48D1 SlinkPanel.ready+0x0": 8,
-    "13:48FC SlinkPanel.ready+0x2b": 1,
-    "13:4902 SlinkPanel.close+0x4": 15,
-    "13:4905 SlinkPanel.close+0x7": 15,
-    "13:4908 SlinkPanel.close+0xa": 15,
-    "13:4B49 SlinkSfxService.reset_blocked+0x0": 11382,
-    "13:4B4D SlinkSfxService.reset_blocked+0x4": 11382,
-    "13:4B50 SlinkSfxService.reset_blocked+0x7": 11382
+    "13:49E6 SlinkPanel+0xb": 15,
+    "13:49E9 SlinkPanel+0xe": 15,
+    "13:49EC SlinkPanel+0x11": 15,
+    "13:4A1B SlinkPanel.page+0x2a": 16,
+    "13:4A26 SlinkPanel.ready+0x0": 8,
+    "13:4A51 SlinkPanel.ready+0x2b": 1,
+    "13:4A57 SlinkPanel.close+0x4": 15,
+    "13:4A5A SlinkPanel.close+0x7": 15,
+    "13:4A5D SlinkPanel.close+0xa": 15,
+    "13:4CAA SlinkSfxService.reset_blocked+0x0": 11382,
+    "13:4CAE SlinkSfxService.reset_blocked+0x4": 11382,
+    "13:4CB1 SlinkSfxService.reset_blocked+0x7": 11382
    }
   },
   "sfx": {
-   "allowed_writes": 62275,
-   "armed_frame": 1,
+   "allowed_writes": 62263,
+   "armed_frame": 2,
    "boot_clear": {
     "00:0607 Init.ByteFill+0x2": 39
    },
@@ -162,26 +162,26 @@
     "lua_kind": "harness",
     "lua_source": "main",
     "native_addr": 52970,
-    "native_allowed": 5202,
+    "native_allowed": 5201,
     "native_caught": true,
-    "native_flagged": 6352,
+    "native_flagged": 6383,
     "native_writers": {
-     "00:0068 SlinkDelayFrameBridge+0x5": 5202,
-     "00:01CE VBlank_Normal.done_oam+0x4": 6109,
+     "00:0068 SlinkDelayFrameBridge+0x5": 5201,
+     "00:01CE VBlank_Normal.done_oam+0x4": 6140,
      "00:021D VBlank_Cutscene.skip_lcd+0x4": 190,
      "00:0607 Init.ByteFill+0x2": 2,
      "33:41DF BattleAnimDelayFrame.wait+0x0": 51
     }
    },
-   "corpus_frames": 6404,
+   "corpus_frames": 6434,
    "driver": null,
    "evidence_level": "PHYSICAL",
    "fixture": "gold_battle",
    "fixture_sha256": "6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6",
    "gate": "lua/tests/gen2_sfx_gate.lua",
    "init_entries": [
-    1,
-    5533
+    2,
+    5564
    ],
    "inner_completed": true,
    "leg": "sfx",
@@ -192,7 +192,7 @@
     },
     "harness": {}
    },
-   "overlay_sha1": "d563669ec3ac5029be9464d2301aa3be27a5f163",
+   "overlay_sha1": "15fc821327a22224925a6adaaa483525222883c2",
    "qualification_attempt_id": "requal-gold-battle-n14b",
    "regions": {
     "wSpecialPhoneCallID": {
@@ -220,31 +220,31 @@
     "00:0086 SlinkResetSoundBridge+0x6": 1,
     "00:008A SlinkResetSoundBridge+0xa": 1,
     "00:008D SlinkResetSoundBridge+0xd": 1,
-    "13:4006 SlinkService+0x6": 5202,
-    "13:4009 SlinkService+0x9": 5202,
-    "13:400C SlinkService+0xc": 5202,
-    "13:400F SlinkService+0xf": 5202,
-    "13:4012 SlinkService+0x12": 5202,
-    "13:4017 SlinkService+0x17": 5202,
+    "13:4006 SlinkService+0x6": 5201,
+    "13:4009 SlinkService+0x9": 5201,
+    "13:400C SlinkService+0xc": 5201,
+    "13:400F SlinkService+0xf": 5201,
+    "13:4012 SlinkService+0x12": 5201,
+    "13:4017 SlinkService+0x17": 5201,
     "13:4026 SlinkService+0x26": 2,
     "13:402A SlinkService+0x2a": 2,
     "13:402D SlinkService+0x2d": 2,
-    "13:403D SlinkService.sample+0xe": 5200,
-    "13:4045 SlinkService.remember+0x0": 5200,
-    "13:4049 SlinkService.remember+0x4": 5202,
-    "13:4B1E SlinkSfxService.play+0xf": 10,
-    "13:4B21 SlinkSfxService.play+0x12": 10,
-    "13:4B24 SlinkSfxService.play+0x15": 10,
-    "13:4B35 SlinkSfxService.hold+0xc": 1,
-    "13:4B39 SlinkSfxService.count+0x0": 1,
-    "13:4B44 SlinkSfxService.count+0xb": 62,
-    "13:4B49 SlinkSfxService.reset_blocked+0x0": 5098,
-    "13:4B4D SlinkSfxService.reset_blocked+0x4": 5130,
-    "13:4B50 SlinkSfxService.reset_blocked+0x7": 5130
+    "13:403D SlinkService.sample+0xe": 5199,
+    "13:4045 SlinkService.remember+0x0": 5199,
+    "13:4049 SlinkService.remember+0x4": 5201,
+    "13:4C7F SlinkSfxService.play+0xf": 10,
+    "13:4C82 SlinkSfxService.play+0x12": 10,
+    "13:4C85 SlinkSfxService.play+0x15": 10,
+    "13:4C96 SlinkSfxService.hold+0xc": 1,
+    "13:4C9A SlinkSfxService.count+0x0": 1,
+    "13:4CA5 SlinkSfxService.count+0xb": 62,
+    "13:4CAA SlinkSfxService.reset_blocked+0x0": 5097,
+    "13:4CAE SlinkSfxService.reset_blocked+0x4": 5129,
+    "13:4CB1 SlinkSfxService.reset_blocked+0x7": 5129
    }
   },
   "u1": {
-   "allowed_writes": 393301,
+   "allowed_writes": 319321,
    "armed_frame": 1,
    "boot_clear": {},
    "boot_writes": 0,
@@ -254,18 +254,18 @@
     "lua_kind": "harness",
     "lua_source": "main",
     "native_addr": 52970,
-    "native_allowed": 32775,
+    "native_allowed": 26610,
     "native_caught": true,
-    "native_flagged": 72246,
+    "native_flagged": 65713,
     "native_writers": {
-     "00:0068 SlinkDelayFrameBridge+0x5": 32775,
-     "00:01CE VBlank_Normal.done_oam+0x4": 54831,
-     "00:021D VBlank_Cutscene.skip_lcd+0x4": 9868,
+     "00:0068 SlinkDelayFrameBridge+0x5": 26610,
+     "00:01CE VBlank_Normal.done_oam+0x4": 47085,
+     "00:021D VBlank_Cutscene.skip_lcd+0x4": 10208,
      "00:0607 Init.ByteFill+0x2": 1,
-     "33:41DF BattleAnimDelayFrame.wait+0x0": 7546
+     "33:41DF BattleAnimDelayFrame.wait+0x0": 8419
     }
    },
-   "corpus_frames": 65036,
+   "corpus_frames": 57568,
    "driver": {
     "files": {
      "lua/tests/duo/gen2_faint_inputs.lua": {
@@ -305,7 +305,7 @@
     "client": {},
     "harness": {}
    },
-   "overlay_sha1": "d563669ec3ac5029be9464d2301aa3be27a5f163",
+   "overlay_sha1": "15fc821327a22224925a6adaaa483525222883c2",
    "qualification_attempt_id": "requal-gold-battle-errand-e1",
    "regions": {
     "wSpecialPhoneCallID": {
@@ -332,25 +332,25 @@
    "violation_count": 0,
    "violations": [],
    "writers": {
-    "13:4006 SlinkService+0x6": 32775,
-    "13:4009 SlinkService+0x9": 32775,
-    "13:400C SlinkService+0xc": 32775,
-    "13:400F SlinkService+0xf": 32775,
-    "13:4012 SlinkService+0x12": 32775,
-    "13:4017 SlinkService+0x17": 32775,
+    "13:4006 SlinkService+0x6": 26610,
+    "13:4009 SlinkService+0x9": 26610,
+    "13:400C SlinkService+0xc": 26610,
+    "13:400F SlinkService+0xf": 26610,
+    "13:4012 SlinkService+0x12": 26610,
+    "13:4017 SlinkService+0x17": 26610,
     "13:4026 SlinkService+0x26": 1,
     "13:402A SlinkService+0x2a": 1,
     "13:402D SlinkService+0x2d": 1,
-    "13:403D SlinkService.sample+0xe": 32774,
-    "13:4045 SlinkService.remember+0x0": 32774,
-    "13:4049 SlinkService.remember+0x4": 32775,
-    "13:4B49 SlinkSfxService.reset_blocked+0x0": 32775,
-    "13:4B4D SlinkSfxService.reset_blocked+0x4": 32775,
-    "13:4B50 SlinkSfxService.reset_blocked+0x7": 32775
+    "13:403D SlinkService.sample+0xe": 26609,
+    "13:4045 SlinkService.remember+0x0": 26609,
+    "13:4049 SlinkService.remember+0x4": 26610,
+    "13:4CAA SlinkSfxService.reset_blocked+0x0": 26610,
+    "13:4CAE SlinkSfxService.reset_blocked+0x4": 26610,
+    "13:4CB1 SlinkSfxService.reset_blocked+0x7": 26610
    }
   }
  },
- "overlay_sha1": "d563669ec3ac5029be9464d2301aa3be27a5f163",
+ "overlay_sha1": "15fc821327a22224925a6adaaa483525222883c2",
  "result": "PASS",
  "schema": "gen2-w6-gate-v1",
  "title": "gold",
@@ -359,35 +359,35 @@
   "00:0086 SlinkResetSoundBridge+0x6": 1,
   "00:008A SlinkResetSoundBridge+0xa": 1,
   "00:008D SlinkResetSoundBridge+0xd": 1,
-  "13:4006 SlinkService+0x6": 49359,
-  "13:4009 SlinkService+0x9": 49359,
-  "13:400C SlinkService+0xc": 49359,
-  "13:400F SlinkService+0xf": 49359,
-  "13:4012 SlinkService+0x12": 49359,
-  "13:4017 SlinkService+0x17": 49359,
+  "13:4006 SlinkService+0x6": 43193,
+  "13:4009 SlinkService+0x9": 43193,
+  "13:400C SlinkService+0xc": 43193,
+  "13:400F SlinkService+0xf": 43193,
+  "13:4012 SlinkService+0x12": 43193,
+  "13:4017 SlinkService+0x17": 43193,
   "13:4026 SlinkService+0x26": 4,
   "13:402A SlinkService+0x2a": 4,
   "13:402D SlinkService+0x2d": 4,
-  "13:403D SlinkService.sample+0xe": 49355,
-  "13:4045 SlinkService.remember+0x0": 49355,
-  "13:4049 SlinkService.remember+0x4": 49359,
-  "13:4891 SlinkPanel+0xb": 15,
-  "13:4894 SlinkPanel+0xe": 15,
-  "13:4897 SlinkPanel+0x11": 15,
-  "13:48C6 SlinkPanel.page+0x2a": 16,
-  "13:48D1 SlinkPanel.ready+0x0": 8,
-  "13:48FC SlinkPanel.ready+0x2b": 1,
-  "13:4902 SlinkPanel.close+0x4": 15,
-  "13:4905 SlinkPanel.close+0x7": 15,
-  "13:4908 SlinkPanel.close+0xa": 15,
-  "13:4B1E SlinkSfxService.play+0xf": 10,
-  "13:4B21 SlinkSfxService.play+0x12": 10,
-  "13:4B24 SlinkSfxService.play+0x15": 10,
-  "13:4B35 SlinkSfxService.hold+0xc": 1,
-  "13:4B39 SlinkSfxService.count+0x0": 1,
-  "13:4B44 SlinkSfxService.count+0xb": 62,
-  "13:4B49 SlinkSfxService.reset_blocked+0x0": 49255,
-  "13:4B4D SlinkSfxService.reset_blocked+0x4": 49287,
-  "13:4B50 SlinkSfxService.reset_blocked+0x7": 49287
+  "13:403D SlinkService.sample+0xe": 43189,
+  "13:4045 SlinkService.remember+0x0": 43189,
+  "13:4049 SlinkService.remember+0x4": 43193,
+  "13:49E6 SlinkPanel+0xb": 15,
+  "13:49E9 SlinkPanel+0xe": 15,
+  "13:49EC SlinkPanel+0x11": 15,
+  "13:4A1B SlinkPanel.page+0x2a": 16,
+  "13:4A26 SlinkPanel.ready+0x0": 8,
+  "13:4A51 SlinkPanel.ready+0x2b": 1,
+  "13:4A57 SlinkPanel.close+0x4": 15,
+  "13:4A5A SlinkPanel.close+0x7": 15,
+  "13:4A5D SlinkPanel.close+0xa": 15,
+  "13:4C7F SlinkSfxService.play+0xf": 10,
+  "13:4C82 SlinkSfxService.play+0x12": 10,
+  "13:4C85 SlinkSfxService.play+0x15": 10,
+  "13:4C96 SlinkSfxService.hold+0xc": 1,
+  "13:4C9A SlinkSfxService.count+0x0": 1,
+  "13:4CA5 SlinkSfxService.count+0xb": 62,
+  "13:4CAA SlinkSfxService.reset_blocked+0x0": 43089,
+  "13:4CAE SlinkSfxService.reset_blocked+0x4": 43121,
+  "13:4CB1 SlinkSfxService.reset_blocked+0x7": 43121
  }
 }

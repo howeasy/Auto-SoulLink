@@ -53,7 +53,10 @@ def test_trade_overlay_refuses_partial_family(tmp_path):
 @pytest.mark.parametrize("repo", ["pokecrystal", "pokegold"])
 def test_trade_exports_only_append_linker_metadata(tmp_path, repo):
     originals = {}
-    for relative in ("maps/Pokecenter2F.asm", "engine/overworld/events.asm"):
+    files = ["maps/Pokecenter2F.asm", "engine/overworld/events.asm", "engine/menus/save.asm"]
+    if repo == "pokecrystal":
+        files.append("mobile/mobile_41.asm")  # BackupGSBallFlag (review 1b33bc31 NIT-2)
+    for relative in files:
         path = tmp_path / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         original = (ROOT / ".cache/gen2-build" / repo / relative).read_text(encoding="utf-8")

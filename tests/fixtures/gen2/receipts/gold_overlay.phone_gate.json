@@ -3,8 +3,8 @@
  "cases": {
   "battle": {
    "extra": {
-    "battle_from": 3821,
-    "battle_to": 4716,
+    "battle_from": 3667,
+    "battle_to": 4591,
     "rings_in_battle": 0
    },
    "id": 2,
@@ -12,10 +12,10 @@
    "ring": {
     "armed": 2,
     "caller": 0,
-    "frame": 5046,
+    "frame": 4921,
     "id": 0
    },
-   "step_at": 4950,
+   "step_at": 4825,
    "via": "permit"
   },
   "native": {
@@ -23,7 +23,7 @@
     "native_ring": {
      "armed": 1,
      "caller": 4,
-     "frame": 11158,
+     "frame": 11016,
      "id": 2
     }
    },
@@ -32,18 +32,18 @@
    "ring": {
     "armed": 1,
     "caller": 0,
-    "frame": 12318,
+    "frame": 12176,
     "id": 0
    },
-   "step_at": 12223,
+   "step_at": 12081,
    "via": "permit"
   },
   "save": {
    "extra": {
     "armed_at_save": 2,
-    "save_site_frame": 9454,
+    "save_site_frame": 9312,
     "sram_backup": 0,
-    "sram_changed_bytes": 932,
+    "sram_changed_bytes": 937,
     "sram_primary": 0
    },
    "id": 2,
@@ -51,10 +51,10 @@
    "ring": {
     "armed": 2,
     "caller": 0,
-    "frame": 9958,
+    "frame": 9816,
     "id": 0
    },
-   "step_at": 9863,
+   "step_at": 9721,
    "via": "permit"
   },
   "start_menu": {
@@ -67,10 +67,10 @@
    "ring": {
     "armed": 3,
     "caller": 0,
-    "frame": 7944,
+    "frame": 7801,
     "id": 0
    },
-   "step_at": 7849,
+   "step_at": 7707,
    "via": "permit"
   },
   "town": {
@@ -84,10 +84,10 @@
    "ring": {
     "armed": 1,
     "caller": 0,
-    "frame": 6472,
+    "frame": 6329,
     "id": 0
    },
-   "step_at": 6377,
+   "step_at": 6234,
    "via": "binder"
   }
  },
@@ -98,13 +98,13 @@
  "fixture_sha256": "6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6",
  "harness_write_scopes": [
   {
-   "frame": 10859,
+   "frame": 10717,
    "value": 2,
    "what": "wSpecialPhoneCallID = SPECIALCALL_ROBBED"
   }
  ],
  "input_mode": "normal_buttons",
- "overlay_sha1": "d563669ec3ac5029be9464d2301aa3be27a5f163",
+ "overlay_sha1": "15fc821327a22224925a6adaaa483525222883c2",
  "qualification_attempt_id": "requal-gold-battle-n14b",
  "result": "PASS",
  "schema": "gen2-phone-gate-v1",
