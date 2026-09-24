@@ -145,3 +145,35 @@ with its ledges, qualify facts over the same fingerprint.
   `gift_*`, `bag_ball_received` receipts.
 - Owner/Codex ruling: open `OPEN.gift_static` (binder) and a direct-gift publication path in the client.
 - Fixtures (`gen2_fixtures.run_play`): party-full; later a Violet-City save and a post-Falkner egg save.
+
+## Addendum (same day): unblocked by O-33 and U1G, all five built and PHYSICAL on C-C and G-S
+
+Owner ruling O-33 (synthetic SETUP fixtures) and U1G (cf4ef58e: `capture_box*`, `gift_*`, `npc_trade_*`, `hatch_*`
+PHYSICAL on C/G/S, client gift publish) removed every blocker above. The four blocked scenarios now start from
+builder-made setups (`tools/gen2_synth_fixtures.py` `DUO_RECIPES` full/hatch/trade, and the U1G `bill` recipe);
+each receipt's `DUO_GEN2.synth` names the setup, and `gen2_duo_oracles.synth_duo_oracle` re-derives those bytes
+with the builder and proves only deltas from them. Everything under test runs natively.
+
+| scenario | setup | C-C | G-S |
+|---|---|---|---|
+| `gen2_ball_gate` | none (town fixtures, errand in the duo) | PASS `2c50b60e` | PASS `0903a4ed` |
+| `gen2_egg_hatch` | `hatch`: lab, [Sentret, Pidgey egg on its last cycle], wStepCount $7F | PASS `4db75edf` | PASS `4db75edf` |
+| `gen2_gift` | U1G `bill`: poison whiteout to Goldenrod, Bill's `givepoke EEVEE, 20` | PASS `4db75edf` | PASS `c9c37a2f` |
+| `gen2_boxed_capture` | `full`: party of 6 on Route 29 grass, Master Balls | PASS `4db75edf` | PASS `c9c37a2f` |
+| `gen2_npc_trade` | `trade`: poison whiteout to Violet City, a Bellsprout egg hatching on step 2 | PASS `4db75edf` | PASS `c9c37a2f` |
+
+The npc_trade setup hatches the Bellsprout in the duo so that Kyle trades a mon that is already linked (the
+`gift_daycare` pair), so the `key_change` really migrates a live link half.
+
+### Finding: a Gen 2 NPC trade gives both players the SAME key
+
+`npctrade` rows fix the received mon's DVs and OT (C/G `data/events/npc_trades.asm:15`: Kyle's ONIX, DVs $96 $66,
+OT ID 48926). The Soul Link key is DV:OT:species, so every cartridge that trades with Kyle publishes the identical
+key `9666:BF1E:5F`. Live C-C run 1 (lane tcc at 5495b645): both sides traded their linked Bellsprouts; B's
+`key_change` was acked, A's was then rejected as a collision with a key already load-bearing in the pair
+(`server/state.py` `_handle_key_change`, the U5 fail-closed rule), so the pair died `identity_lost` and both halves
+were memorialized. The duo now trades on A only (cbd053e0). This is a protocol gap, not a harness one: any two
+players who both do the same Gen 2 in-game trade collide as soon as one of them already holds that key in a
+live link. **Owner ruling needed**
+(for example: the key of a fixed-identity NPC-trade mon gets a per-player discriminator, or the second trade is
+refused before the swap).
