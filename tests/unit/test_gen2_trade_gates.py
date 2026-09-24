@@ -271,7 +271,7 @@ def make_case(tmp_path, sources, variant="cc", scenario="gen2_trade_new", mail_s
         markers[side].append(("TRADE_STACK", {"domain": "System Bus", "stack_bank": bottom.bank,
             "stack_start": bottom.address, "stack_end": top.address, "armed_start": bottom.address,
             "armed_end": armed_end, "floor": bottom.address + 32, "low_water_state": "exact",
-            "canary": {"address": bottom.address + 200, "sp": bottom.address + 201, "hit": True, "frame": 105},
+            "canary": {"address": bottom.address + 200, "sp": bottom.address + 200, "hit": True, "frame": 105},
             "armed_count": armed_end - bottom.address + 1,
             "hook_failures": 0, "phases": phases,
             "continuous": True, "registration_complete_before_first_phase": True,
@@ -1402,7 +1402,7 @@ STACK_V2_FAULTS = {
     "canary_missed": (False, lambda s: s["canary"].update(hit=False)),
     "canary_absent": (False, lambda s: s.pop("canary")),
     "canary_before_coverage": (False, lambda s: s["canary"].update(frame=s["coverage_started"]["frame"] - 1)),
-    "canary_not_sp_minus_one": (False, lambda s: s["canary"].update(sp=s["canary"]["address"] + 2)),
+    "canary_not_at_sp": (False, lambda s: s["canary"].update(sp=s["canary"]["address"] + 1)),
     "canary_missing_sp": (False, lambda s: s["canary"].pop("sp")),
     "boolean_stack_bank": (False, lambda s: s.update(stack_bank=True)),
     # ">floor+64" claims no push at all

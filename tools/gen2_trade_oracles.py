@@ -336,7 +336,9 @@ def _stack(marker, rom, symbols, *, committed, evolved=None, visit=True, partial
     canary_address = _integer(canary.get("address"), 0xC000, 0xDFFF, "stack canary address")
     canary_frame = _frame(canary)
     canary_sp = _integer(canary.get("sp"), bottom, top + 1, "stack canary SP")
-    _need(canary_address == canary_sp - 1, "stack canary is not a real push")
+    # a real push under BizHawk gambatte: SP is decremented before the byte write, so the SP the write
+    # callback reads IS the written address (physical df04e065 sweep: A 49348/49348, B 49376/49376)
+    _need(canary_address == canary_sp, "stack canary is not a real push")
     _need(marker.get("continuous") is True and marker.get("registration_complete_before_first_phase") is True,
           "stack coverage was not declared continuous before phase entry")
     started = _object(marker.get("coverage_started"), "stack coverage start")
