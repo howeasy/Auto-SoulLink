@@ -166,6 +166,7 @@ local function hold(btn, n, stop)
 end
 
 client.speedmode(6399)   -- max; the intro alone is ~500 frames of logos and menus
+pcall(function() client.invisibleemulation(os.getenv("SLINK_EMU_VISIBLE") ~= "1") end)   -- W23 EMU-SPEED
 log("kind=" .. KIND .. " out=" .. OUT_STATE)
 
 -- ── kind = "battle" ─────────────────────────────────────────────────────────────────────────

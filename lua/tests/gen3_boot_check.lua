@@ -129,6 +129,9 @@ local out, lines = nil, {}
 
 function M.open(name)
     out = io.open(WT .. "/patch/build/" .. name .. "_result.txt", "w")
+    -- every fixture/mkstates/probe driver opens here first: rendering off (W23 EMU-SPEED);
+    -- screenshots still capture. SLINK_EMU_VISIBLE=1 keeps the window live
+    pcall(function() client.invisibleemulation(os.getenv("SLINK_EMU_VISIBLE") ~= "1") end)
 end
 
 function M.log(s)

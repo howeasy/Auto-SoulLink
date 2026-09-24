@@ -84,8 +84,14 @@ def write_gate_config(src, dst):
     except (OSError, ValueError) as exc:
         raise RuntimeError(f"cannot parse BizHawk config {src} ({exc}); refusing to write a gate "
                            f"config whose rewind cannot be turned off") from exc
+    disable_rewind(cfg)
+    # sound off, as gen1_playthrough.write_run_config does (W23 EMU-SPEED): runs read RAM only,
+    # and two duo instances need not both hold the audio device
+    for key in ("SoundEnabled", "SoundEnabledNormal", "SoundEnabledRWFF"):
+        cfg[key] = False
+    cfg["SoundVolume"] = 0
     with open(dst, "w", encoding="utf-8") as f:
-        json.dump(disable_rewind(cfg), f, indent=2)
+        json.dump(cfg, f, indent=2)
 
 
 def run_gate(script, rom=DEFAULT_ROM, timeout=240, quiet=False, shadow=False):

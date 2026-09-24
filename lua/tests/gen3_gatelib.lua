@@ -247,6 +247,8 @@ function Lib.open(name)
         opts = opts or {}
         -- max speed, as lua/tests/gatelib.lua: gates count frames, not wall time
         pcall(function() client.speedmode(opts.speed or 6399) end)
+        -- rendering off (W23 EMU-SPEED); screenshots still capture. opts.visible / SLINK_EMU_VISIBLE=1 opt out
+        pcall(function() client.invisibleemulation(not opts.visible and os.getenv("SLINK_EMU_VISIBLE") ~= "1") end)
         pcall(memory.usememorydomain, "System Bus")
         t.native, t.raw_job, t.raw_poisoned = nil, nil, nil
         if opts.state then

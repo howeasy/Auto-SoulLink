@@ -98,6 +98,9 @@ log(fmt("duo instance %s scenario=%s phase=%s title=%s attempt=%d", D.player, D.
         D.title, D.attempt or 1))
 pcall(memory.usememorydomain, "System Bus")
 pcall(function() client.speedmode(D.speed or 1600) end)
+-- Rendering off (W23 EMU-SPEED): oracles read RAM, and client.screenshot still captures the core's
+-- frame under invisibleemulation (checked on 2.11.1/mGBA). SLINK_EMU_VISIBLE=1 keeps the window live.
+pcall(function() client.invisibleemulation(not D.visible and os.getenv("SLINK_EMU_VISIBLE") ~= "1") end)
 
 -- pcall every load-time dofile (card C4-LG2): an unprotected dofile that errors (e.g.
 -- gen3_scripted_play.lua raising for a title Syms/the profile pack does not recognize) died
