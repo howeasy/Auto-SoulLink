@@ -364,17 +364,34 @@ python tools/gen3_final_cut.py --cut <cut> --carry --shard 1/2 --lane <gen3-lane
 python tools/gen3_final_cut.py --cut <cut> --carry --shard 2/2 --lane <gen3-lane-2>
 python tools/gen3_final_cut.py --cut <cut> --merge-summary                           # one fc_SUMMARY_<cut8>.txt
 ```
-`--carry`: a row is CARRIED, not run, when a PASS receipt for the same row+orientation exists at a cut X
-(`fc_*`, `ph_*`, and the older duo/center/save/checkpoint receipts that name a single cut sha) and
-`git diff --name-only X <cut>` touches none of the row's dependency globs (`row_deps` in the runner:
-the client closure `lua/*.lua`, `lua/gen3/**`, `lua/core/**`, the `gen3_frlg` pack, the harness tools and
-`lua/tests/gen3_*.lua`, `server/**`, `tools/e2e_duo.py`, `duo_gen3_main.lua` plus the row's own carrier,
-and the FRLG party fixtures; conservative by design). Its receipt says `CARRIED from <receipt> @X; diff X..cut
-touches no dependency (list checked)` and lists the checked globs and the diff. Builds, the zip rows and the
-source gate are never carried; item 6 carries only while `master` has not moved. `--shard i/n` splits the RUN
-rows deterministically (longest first by receipt history, else budget); shard 1 also writes the CARRIED
-receipts; each shard writes `fc_SUMMARY_<cut8>_shard<i>of<n>.txt`, and `--merge-summary` builds the one summary
-from every row's receipt (RUN / CARRIED / FAIL counted separately; a row with no receipt is NOT RUN = FAIL).
+`--carry` (hardened by G4-FINALCUT-HARDEN after OMP's review of `d9a08f5b`): a row is CARRIED, not run, only
+when all of these hold for some receipt of the same row+orientation at a cut X:
+- it is a citable PASS: one unambiguous final verdict (every summary line for the scenario PASS, every `exit=`
+  0, one `note:`, IDENTITY/`--game` matching the orientation; a mixed PASS+FAIL file such as
+  `ph_linked_faint_active_trainer_gen3_fr_as_a_b0483efe.txt` is not citable). An `fc_*` receipt must be well formed
+  (file name, header row and cut agree; attempt blocks whose last one supports the verdict); SKIP-ALLOWED is never
+  citable, and a CARRIED `fc_*` counts only through its origin, which must exist and be a citable PASS for the
+  same row at the cited cut;
+- X is an ancestor of the cut (`git merge-base --is-ancestor`);
+- `git diff --name-only X <cut>` touches none of the row's dependency globs (`row_deps`: the client closure
+  `lua/*.lua`, `lua/gen3/**`, `lua/core/**`, `lua/games/**`, the `gen3_frlg` and `gen3_frlge` packs, the pret syms
+  `data/gen3/pret/**`, the harness tools, `lua/tests/gen3_*.lua`, `playlib.lua`, `mkstates_gen3*.lua`,
+  `lua/tests/duo/**`, `server/**`, `tools/e2e_duo.py`, the FRLG party fixtures; conservative by design);
+- the non-git inputs (the staged ROMs' sha256, from e2e_duo's IDENTITY line or the receipt's `# inputs:` line)
+  match this lane's.
+
+Every runner receipt now records `# inputs:` (the staged ROMs, the checkpoint's `.State` files, the RR build and
+the root FR dump that probe_gates reads, item 6's Gen 1/2 inputs), and `copy_inputs` compares by content.
+Never carried: the state/tutorial builds, the checkpoint probe (it runs on states this pass rebuilds), the zip rows
+and the source gate; item 6 carries only while `master` has not moved. A carried row's receipt says `CARRIED from
+<receipt> @X; diff X..cut touches no dependency (list checked)` with the globs, the diff and the inputs.
+
+`--shard i/n` splits the RUN rows deterministically, longest first (receipt history, else budget), with each
+prerequisite chain kept whole and in order in one shard: a title's `states_*`/`tutorials_*` with its
+`checkpoint_*`, and `zip_build` with `zip_check`/`zip_boot_firered`. Shard 1 also writes the CARRIED receipts; each
+shard writes `fc_SUMMARY_<cut8>_shard<i>of<n>.txt`; the dry-run prints every shard's rows. `--merge-summary` builds
+the one summary from every row's receipt, validating each (header row and cut, structure, a carry's origin): a
+missing receipt is NOT RUN and an invalid one FAILs; RUN / CARRIED / FAIL are counted separately.
 
 `python tools/verify_gen3_release.py` (all lanes) stays the release gate's own entry point; the runner runs its
 `--quick` source lanes and its `probe-gates` lane, and replaces its `duo-pairs-gen3` pytest lane with the per-scenario
@@ -405,6 +422,5 @@ rows above so each scenario gets its own receipt.
 6. **T2/A2 receipt names and PASS lines** (§5): **SUPERSEDED** — mechanism P+H replaced the hold rows; the runner's
    §5 rows are `fc_{linked_faint_active,active_end,linked_faint_active_whiteout,linked_faint_active_trainer}_gen3_{fr,lg}_as_a_<cut8>.txt`,
    PASS = `e2e_duo.py` exit 0 (`<scenario>: PASS` in the summary, `PYDEC: PASS asserted scenario facts`).
-7. **`--game` help text** is stale in `tools/e2e_duo.py` (it lists only `gen3_rr`, `gen1`, `gen2` while the real keys
-   are `gen3_rr, gen1_new, gen1_pure, gen1_pure_overlay, gen1_pure_green, gen2, gen3_frlg, gen3_lgfr, gen3_rr_new`).
-   Still open (e2e_duo is not this card's file); use the keys, ignore the help.
+7. **`--game` help text** in `tools/e2e_duo.py` names the battery-boot rows: `gen3_rr` (Radical Red),
+   `gen3_frlg`, `gen3_lgfr`, the `gen1_*` rows, and `gen2`. The old savestate RR row is retired.

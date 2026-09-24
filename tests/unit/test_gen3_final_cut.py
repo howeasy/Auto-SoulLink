@@ -4,6 +4,7 @@ subprocesses are `git` against throwaway repos under tmp_path.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -224,8 +225,13 @@ def test_pass_and_plain_failure():
 # ---------------------------------------------------------------------------
 
 def _receipt(tmp_path, row, cut, verdict):
+    """A well-formed runner receipt: one attempt block that supports the verdict."""
+    ok = verdict.startswith(("PASS", "SKIP-ALLOWED"))
+    attempt = {"load": "cpu=1%", "start_utc": "2026-09-24T12:00:00Z",
+               "end_utc": "2026-09-24T12:01:00Z", "rc": 0 if ok else 1, "tracked_before": True,
+               "tracked_after": True, "classification": "pass" if ok else "real", "output": "out"}
     text = receipts.run_receipt_text(row=row, item="§x", cut=cut, lane=LANE, command="c",
-                                     cwd=".", env={}, attempts=[], verdict=verdict)
+                                     cwd=".", env={}, attempts=[attempt], verdict=verdict)
     (tmp_path / f"fc_{row}_{cut[:8]}.txt").write_text(text, encoding="utf-8")
 
 
@@ -363,68 +369,101 @@ def test_item6_runs_the_three_cases_of_the_2026_09_24_receipts():
 
 
 # ---------------------------------------------------------------------------
-# --carry (card G4-FINALCUT-FAST)
+# --carry (G4-FINALCUT-FAST, hardened by G4-FINALCUT-HARDEN)
 # ---------------------------------------------------------------------------
 
 X, CUT = "a" * 40, "b" * 40
+ROMS = {"rom:firered": "1" * 64, "rom:leafgreen": "3" * 64}
+DUO_ROWS = [r for r in EXPECTED_ROWS if r.endswith(("_fr_as_a", "_lg_as_a"))]
 
 
 def _row(row_id):
     return {r.id: r for r in fc.build_plan(CUT, LANE, MASTER)}[row_id]
 
 
-def _ev(row_id, cut=X, passed=True, **kw):
-    return fc.Evidence(row_id, f"ph_{row_id}.txt", cut, passed, **kw)
+def _ev(row_id, cut=X, passed=True, inputs=None, **kw):
+    return fc.Evidence(row_id, f"ph_{row_id}.txt", cut, passed,
+                       inputs=dict(ROMS) if inputs is None else inputs, **kw)
 
 
-def test_carry_when_the_diff_touches_no_dependency():
+def _decide(row, ev, changed=(), ancestor=True, inputs=None, master=None):
+    return fc.carry_decision(row, CUT, ev, lambda x, c: list(changed), master,
+                             lambda x, c: ancestor, dict(ROMS) if inputs is None else inputs)
+
+
+def test_carry_when_nothing_blocks_it():
     row = _row("active_end_gen3_fr_as_a")
-    d = fc.carry_decision(row, CUT, [_ev(row.id)], lambda x, c: ["docs/gen3/PLAN.md",
-                                                                  "lua/gen1/client.lua"])
+    d = _decide(row, [_ev(row.id)], ["docs/gen3/PLAN.md", "lua/gen1/client.lua"])
     assert d.kind == "CARRY" and d.reason == f"CARRIED from ph_{row.id}.txt @{X}"
 
 
-@pytest.mark.parametrize("path", [
-    "lua/gen3/client.lua", "lua/core/deferred.lua", "lua/slink.lua",
-    "data/games/gen3_frlg/write_checkpoint.json", "tools/e2e_duo.py", "server/state.py",
-    "lua/tests/duo/scenario_gen3_linked_faint_active.lua", "lua/tests/duo/duo_gen3_main.lua",
-    "tests/fixtures/gen3/leafgreen_party_battle_b.sav", "lua/tests/gen3_gatelib.lua"])
-def test_a_touched_dependency_runs_the_row(path):
-    row = _row("active_end_gen3_fr_as_a")      # carrier: scenario_gen3_linked_faint_active.lua
-    d = fc.carry_decision(row, CUT, [_ev(row.id)], lambda x, c: ["docs/a.md", path])
-    assert d.kind == "RUN" and path in d.reason
+# the coordinator's list (OMP review of d9a08f5b) plus the obvious client/carrier/server paths
+FORCING = ["data/games/gen3_frlge/area_map.json", "data/games/gen3_frlge/gen3_frlge_locations.lua",
+           "data/gen3/pret/pokefirered.sym", "lua/tests/playlib.lua",
+           "lua/tests/mkstates_gen3_tutorials.lua", "lua/tests/duo/scenario_gen3_whiteout.lua",
+           "lua/tests/duo/duo_gen3_main.lua", "tools/e2e_duo.py", "lua/gen3/client.lua",
+           "lua/core/deferred.lua", "lua/slink.lua", "data/games/gen3_frlg/write_checkpoint.json",
+           "server/state.py", "tests/fixtures/gen3/leafgreen_party_battle_b.sav",
+           "lua/tests/gen3_gatelib.lua"]
 
 
-def test_another_scenarios_carrier_is_not_a_dependency():
-    row = _row("faint_cmd_gen3_fr_as_a")
-    d = fc.carry_decision(row, CUT, [_ev(row.id)],
-                          lambda x, c: ["lua/tests/duo/scenario_gen3_whiteout.lua"])
-    assert d.kind == "CARRY"
+@pytest.mark.parametrize("row_id", DUO_ROWS)
+def test_every_listed_dependency_forces_every_duo_row_to_run(row_id):
+    row = _row(row_id)
+    for path in FORCING:
+        d = _decide(row, [_ev(row_id)], ["docs/a.md", path])
+        assert d.kind == "RUN" and path in d.reason, (row_id, path)
+
+
+def test_probe_gates_depends_on_the_games_table():
+    d = _decide(_row("probe_gates"), [_ev("probe_gates", inputs={})],
+                ["lua/games/gen3_frlge.lua"], inputs={})
+    assert d.kind == "RUN" and "lua/games/gen3_frlge.lua" in d.reason
 
 
 def test_no_receipt_or_no_pass_or_same_cut_runs():
     row = _row("active_end_gen3_fr_as_a")
-
-    def clean(x, c):
-        return []
-    assert fc.carry_decision(row, CUT, [], clean).kind == "RUN"
-    assert fc.carry_decision(row, CUT, [_ev(row.id, passed=False)], clean).kind == "RUN"
-    assert fc.carry_decision(row, CUT, [_ev(row.id, cut=CUT)], clean).kind == "RUN"
-    assert fc.carry_decision(row, CUT, [_ev(row.id, cut=None)], clean).kind == "RUN"
-    assert fc.carry_decision(row, CUT, [_ev(row.id)], lambda x, c: None).kind == "RUN"
+    assert _decide(row, []).kind == "RUN"
+    assert _decide(row, [_ev(row.id, passed=False)]).kind == "RUN"
+    assert _decide(row, [_ev(row.id, cut=CUT)]).kind == "RUN"
+    assert _decide(row, [_ev(row.id, cut=None)]).kind == "RUN"
+    assert fc.carry_decision(row, CUT, [_ev(row.id)], lambda x, c: None, None,
+                             lambda x, c: True, dict(ROMS)).kind == "RUN"
 
 
-def test_builds_zip_and_the_source_gate_are_never_carried():
-    for rid in ("states_firered_town", "tutorials_leafgreen", "zip_boot_firered",
-                "release_gate_quick"):
-        assert fc.carry_decision(_row(rid), CUT, [_ev(rid)], lambda x, c: []).kind == "RUN"
+def test_a_receipt_from_a_cut_that_is_not_an_ancestor_runs():
+    row = _row("active_end_gen3_fr_as_a")
+    d = _decide(row, [_ev(row.id)], ancestor=False)
+    assert d.kind == "RUN" and "not an ancestor" in d.reason
+
+
+def test_the_default_ancestor_check_is_git(tmp_path):
+    row = _row("active_end_gen3_fr_as_a")    # "a"*40 is no commit: the real git check refuses it
+    d = fc.carry_decision(row, CUT, [_ev(row.id)], lambda x, c: [], None, None, dict(ROMS))
+    assert d.kind == "RUN" and "not an ancestor" in d.reason
+
+
+@pytest.mark.parametrize("recorded,current", [
+    ({"rom:firered": "9" * 64, "rom:leafgreen": "3" * 64}, ROMS),     # a different ROM
+    ({}, ROMS),                                                       # nothing recorded
+    (ROMS, {"rom:firered": "MISSING", "rom:leafgreen": "3" * 64}),   # missing in this lane
+])
+def test_non_git_inputs_must_match_the_lane(recorded, current):
+    row = _row("active_end_gen3_fr_as_a")
+    assert _decide(row, [_ev(row.id, inputs=recorded)], inputs=current).kind == "RUN"
+
+
+def test_builds_checkpoint_zip_and_the_source_gate_are_never_carried():
+    for rid in ("states_firered_town", "tutorials_leafgreen", "checkpoint_firered",
+                "zip_boot_firered", "release_gate_quick"):
+        assert _decide(_row(rid), [_ev(rid)]).kind == "RUN"
 
 
 def test_item6_carries_only_while_master_has_not_moved():
     row = _row("item6_route_diff")
-    ev = [_ev(row.id, master="c" * 8)]
-    assert fc.carry_decision(row, CUT, ev, lambda x, c: [], "c" * 40).kind == "CARRY"
-    assert fc.carry_decision(row, CUT, ev, lambda x, c: [], "d" * 40).kind == "RUN"
+    ev = [_ev(row.id, master="c" * 8, inputs={})]
+    assert _decide(row, ev, inputs={}, master="c" * 40).kind == "CARRY"
+    assert _decide(row, ev, inputs={}, master="d" * 40).kind == "RUN"
 
 
 def test_glob_star_stays_in_its_directory():
@@ -432,62 +471,148 @@ def test_glob_star_stays_in_its_directory():
                       ["lua/*.lua", "lua/gen3/**"]) == ["lua/slink.lua", "lua/gen3/a/b.lua"]
 
 
-@pytest.mark.parametrize("name,row,cut8,secs", [
-    ("ph_active_end_gen3_fr_as_a_b0483efe.txt", "active_end_gen3_fr_as_a", "b0483efe", 28),
+def test_row_inputs_name_the_staged_roms_and_the_rebuilt_states(tmp_path):
+    sd = tmp_path / "patch" / "build" / "gen3_probe_states" / "firered"
+    sd.mkdir(parents=True)
+    (sd / "slink_oldman.State").write_bytes(b"s")
+    got = fc.row_inputs(_row("checkpoint_firered"), str(tmp_path), root=str(tmp_path))
+    assert set(got) == {"rom:firered", "state:gen3_probe_states/slink_oldman.State"}
+    assert set(fc.row_inputs(_row("whiteout_gen3_lg_as_a"), str(tmp_path))) == set(ROMS)
+    h = fc.hash_inputs(got)
+    assert h["rom:firered"] == "MISSING" and len(h["state:gen3_probe_states/slink_oldman.State"]) == 64
+    assert fc.parse_inputs("# " + fc.inputs_note(h)) == h
+
+
+# --- receipt -> row mapping ------------------------------------------------------------------
+
+def _ph(scen, o, x=X, tail=""):
+    title, other = ("firered", "leafgreen") if o == "fr" else ("leafgreen", "firered")
+    game = "gen3_frlg" if o == "fr" else "gen3_lgfr"
+    return (f"G4-LANE-2 P+H live row: {scen}\nnote: PASS, attempt 1 of 1\n"
+            f"=== {scen} --game {game}  lane=L sha={x} tracked_dirty_before=0\n"
+            f"start_utc=2026-09-24T12:00:00Z\n"
+            f"[duo] IDENTITY a={title}:rom={ROMS['rom:' + title]}:fixture={'2' * 64} "
+            f"b={other}:rom={ROMS['rom:' + other]}:fixture={'4' * 64} source={x}\n"
+            f"  {scen}: PASS (attempt 1 of 1)\nexit=0\nend_utc=2026-09-24T12:02:00Z\n{tail}")
+
+
+@pytest.mark.parametrize("name,row,cut8", [
+    ("ph_active_end_gen3_fr_as_a_b0483efe.txt", "active_end_gen3_fr_as_a", "b0483efe"),
     ("ph_linked_faint_active_whiteout_gen3_lg_as_a_28e48c9c.txt",
-     "linked_faint_active_whiteout_gen3_lg_as_a", "28e48c9c", None),
-    # PASS stands despite the aborted overlapping launch appended to the same file; the
-    # duration comes from the note (~42 min) since the passing run has no end_utc of its own
-    ("ph_linked_faint_active_trainer_gen3_fr_as_a_b0483efe.txt",
-     "linked_faint_active_trainer_gen3_fr_as_a", "b0483efe", 42 * 60),
+     "linked_faint_active_whiteout_gen3_lg_as_a", "28e48c9c"),
 ])
-def test_ph_receipts_map_to_their_rows(name, row, cut8, secs):
+def test_ph_receipts_map_to_their_rows(name, row, cut8):
     with open(os.path.join(fc.PROBES, name), encoding="utf-8") as f:
         ev = fc.receipt_evidence(name, f.read())
     assert ev.row == row and ev.passed and ev.cut.startswith(cut8) and len(ev.cut) == 40
-    if secs:
-        assert ev.seconds == secs
+    assert set(ev.inputs) == set(ROMS)          # the ROM sha256s from e2e_duo's IDENTITY line
+
+
+def test_the_mixed_trainer_receipt_is_not_citable():
+    """It PASSed, then an aborted overlapping launch appended a FAIL/exit=1: no single final
+    verdict, so it cannot be carried (its duration still counts for the estimate)."""
+    name = "ph_linked_faint_active_trainer_gen3_fr_as_a_b0483efe.txt"
+    with open(os.path.join(fc.PROBES, name), encoding="utf-8") as f:
+        ev = fc.receipt_evidence(name, f.read())
+    assert ev.row == "linked_faint_active_trainer_gen3_fr_as_a" and not ev.passed
+    assert ev.seconds == 42 * 60
+
+
+@pytest.mark.parametrize("text,ok", [
+    (_ph("active_end_gen3", "fr"), True),
+    (_ph("active_end_gen3", "fr", tail="  active_end_gen3: FAIL (attempt 1 of 1)\nexit=1\n"), False),
+    (_ph("active_end_gen3", "fr", tail="exit=1\n"), False),
+    (_ph("active_end_gen3", "fr", tail="note: PASS again\n"), False),
+    (_ph("active_end_gen3", "lg"), False),       # an LG-as-A run in an fr_as_a file
+])
+def test_ph_needs_one_unambiguous_final_verdict_for_its_orientation(text, ok):
+    ev = fc.receipt_evidence("ph_active_end_gen3_fr_as_a_aaaaaaaa.txt", text)
+    assert ev.passed is ok
 
 
 def test_every_ph_receipt_maps_to_a_plan_row():
     ids = {r.id for r in fc.build_plan(CUT, LANE, MASTER)}
-    names = [n for n in os.listdir(fc.PROBES) if n.startswith("ph_") and n.endswith(".txt")]
+    names = [n for n in os.listdir(fc.PROBES)
+             if re.fullmatch(r"ph_.+_(fr|lg)_as_a_[0-9a-f]{8}\.txt", n)]   # RR rows are G5
     assert names
     for name in names:
         with open(os.path.join(fc.PROBES, name), encoding="utf-8") as f:
             ev = fc.receipt_evidence(name, f.read())
-        if "_rr_as_a_" in name:
-            # G5 RR rows are not G4 final-cut rows: never citable, never mapped onto an FR/LG row
-            assert ev is None, name
-        else:
-            assert ev and ev.row in ids and ev.cut, name
+        assert ev and ev.row in ids and ev.cut, name
 
 
 def test_a_legacy_receipt_without_a_cut_sha_is_not_citable():
     text = "========== summary ==========\n  link_gen3: PASS (attempt 2 of 3)\n"
     ev = fc.receipt_evidence("duo_frlg_link_gen3_clean_2026-09-23b.txt", text)
-    assert ev.row == "link_gen3_fr_as_a" and ev.passed and ev.cut is None
+    assert ev.row == "link_gen3_fr_as_a" and ev.cut is None
 
 
-def test_a_carried_fc_receipt_cites_its_origin():
-    row = _row("active_end_gen3_fr_as_a")
-    d = fc.Decision("CARRY", f"CARRIED from ph_x.txt @{X}", _ev(row.id), ["docs/a.md"])
-    text = fc.carried_receipt(row, CUT, LANE, d)
-    assert "none a dependency): docs/a.md" in text
-    ev = fc.receipt_evidence(f"fc_{row.id}_{CUT[:8]}.txt", text)
-    assert (ev.receipt, ev.cut, ev.passed) == ("ph_x.txt", X, True)
+# --- CARRIED fc receipts must authenticate through their origin --------------------------------
+
+def _carried(probes, row_id, origin, x=X, cut=CUT):
+    d = fc.Decision("CARRY", f"CARRIED from {origin} @{x}", fc.Evidence(row_id, origin, x, True),
+                    ["docs/a.md"], dict(ROMS))
+    name = f"fc_{row_id}_{cut[:8]}.txt"
+    (probes / name).write_text(fc.carried_receipt(_row(row_id), cut, LANE, d), encoding="utf-8")
+    return name
+
+
+def _ev_of(probes, name):
+    return fc.receipt_evidence(name, (probes / name).read_text(encoding="utf-8"), str(probes))
+
+
+def test_a_carried_receipt_cites_its_validated_origin(tmp_path):
+    rid = "active_end_gen3_fr_as_a"
+    (tmp_path / "ph_active_end_gen3_fr_as_a_aaaaaaaa.txt").write_text(_ph("active_end_gen3", "fr"))
+    name = _carried(tmp_path, rid, "ph_active_end_gen3_fr_as_a_aaaaaaaa.txt")
+    text = (tmp_path / name).read_text(encoding="utf-8")
+    assert "none a dependency): docs/a.md" in text and "# inputs: rom:firered=" in text
+    ev = _ev_of(tmp_path, name)
+    assert (ev.receipt, ev.cut, ev.passed, ev.inputs) == (
+        "ph_active_end_gen3_fr_as_a_aaaaaaaa.txt", X, True, ROMS)
+
+
+def test_a_carried_receipt_with_a_bad_origin_is_not_citable(tmp_path):
+    rid = "active_end_gen3_fr_as_a"
+    # missing origin
+    assert not _ev_of(tmp_path, _carried(tmp_path, rid, "ph_nope_fr_as_a_aaaaaaaa.txt")).passed
+    # origin for another row
+    (tmp_path / "ph_whiteout_gen3_fr_as_a_aaaaaaaa.txt").write_text(_ph("whiteout_gen3", "fr"))
+    assert not _ev_of(tmp_path, _carried(tmp_path, rid, "ph_whiteout_gen3_fr_as_a_aaaaaaaa.txt")).passed
+    # origin at a different cut than the one cited
+    (tmp_path / "ph_active_end_gen3_fr_as_a_aaaaaaaa.txt").write_text(
+        _ph("active_end_gen3", "fr", x="c" * 40))
+    assert not _ev_of(tmp_path, _carried(tmp_path, rid, "ph_active_end_gen3_fr_as_a_aaaaaaaa.txt")).passed
+    # origin that is a SKIP-ALLOWED runner receipt: never citable for carry
+    _receipt(tmp_path, rid, X, "SKIP-ALLOWED owner ruling 20")
+    assert not _ev_of(tmp_path, _carried(tmp_path, rid, f"fc_{rid}_{X[:8]}.txt")).passed
+
+
+def test_a_header_only_or_wrong_row_fc_receipt_is_not_citable(tmp_path):
+    rid = "active_end_gen3_fr_as_a"
+    text = receipts.run_receipt_text(row=rid, item="x", cut=X, lane=LANE, command="c", cwd=".",
+                                     env={}, attempts=[], verdict="PASS")
+    (tmp_path / f"fc_{rid}_{X[:8]}.txt").write_text(text, encoding="utf-8")
+    assert not _ev_of(tmp_path, f"fc_{rid}_{X[:8]}.txt").passed
+    _receipt(tmp_path, "whiteout_gen3_fr_as_a", X, "PASS")
+    os.replace(tmp_path / f"fc_whiteout_gen3_fr_as_a_{X[:8]}.txt", tmp_path / f"fc_{rid}_{X[:8]}.txt")
+    assert not _ev_of(tmp_path, f"fc_{rid}_{X[:8]}.txt").passed
+    _receipt(tmp_path, rid, X, "PASS")
+    assert _ev_of(tmp_path, f"fc_{rid}_{X[:8]}.txt").passed
 
 
 def test_a_carried_row_writes_its_receipt_and_is_counted_as_carried(pass_env, monkeypatch):
     cut, ran, probes = pass_env
     rid = "faint_cmd_gen3_fr_as_a"
-    monkeypatch.setattr(fc, "collect_evidence", lambda probes=None: {rid: [_ev(rid)]})
+    (probes / f"ph_{rid}_{X[:8]}.txt").write_text(_ph("faint_cmd_gen3", "fr"))
     monkeypatch.setattr(fc, "git_diff_names", lambda x, c: ["docs/gen3/PLAN.md"])
+    monkeypatch.setattr(fc, "git_is_ancestor", lambda x, c: True)
+    monkeypatch.setattr(fc, "hash_inputs", lambda paths: {k: ROMS.get(k, "0" * 64) for k in paths})
     assert fc.main(["--cut", cut, "--lane", LANE, "--master", MASTER, "--carry",
                     "--rows", "faint_cmd_*,states_firered_town"]) == 0
     assert ran == ["states_firered_town"]
     got = receipts.read_run_receipt(str(probes / f"fc_{rid}_{cut[:8]}.txt"))
-    assert got["verdict"].startswith(f"CARRIED from ph_{rid}.txt @{X}")
+    assert got["verdict"].startswith(f"CARRIED from ph_{rid}_{X[:8]}.txt @{X}")
     summary = (probes / f"fc_SUMMARY_{cut[:8]}.txt").read_text(encoding="utf-8")
     assert "# RUN 1 / CARRIED 1 / FAIL 0" in summary
 
@@ -510,27 +635,64 @@ def test_sharding_covers_each_row_exactly_once(n):
         assert [r.id for r in s] == sorted((r.id for r in s), key=order.index)
 
 
+EDGES = [("states_firered_town", "checkpoint_firered"), ("states_firered_battle", "checkpoint_firered"),
+         ("tutorials_firered", "checkpoint_firered"), ("states_leafgreen_town", "checkpoint_leafgreen"),
+         ("states_leafgreen_battle", "checkpoint_leafgreen"),
+         ("tutorials_leafgreen", "checkpoint_leafgreen"),
+         ("zip_build", "zip_check"), ("zip_build", "zip_boot_firered")]
+
+
+@pytest.mark.parametrize("n", [2, 3, 4, 8])
+def test_a_prerequisite_and_its_dependent_share_a_shard_in_order(n):
+    rows = fc.build_plan(CUT, LANE, MASTER)
+    # adversarial estimates: make the builds and the probes look like the biggest units
+    est = {r.id: (10**6 if r.id.startswith(("states_", "tutorials_", "zip_")) else r.budget)
+           for r in rows}
+    for shard in fc.shard_rows(rows, n, est):
+        ids = [r.id for r in shard]
+        for pre, dep in EDGES:
+            if dep in ids or pre in ids:
+                assert pre in ids and dep in ids and ids.index(pre) < ids.index(dep), (pre, dep)
+
+
 def test_two_shards_run_disjoint_rows_and_their_union_is_the_plan(pass_env):
     cut, ran, probes = pass_env
-    base = ["--cut", cut, "--lane", LANE, "--master", MASTER, "--rows", "states_*,tutorials_*"]
+    base = ["--cut", cut, "--lane", LANE, "--master", MASTER,
+            "--rows", "states_*,tutorials_*,faint_cmd_*,link_gen3_*"]
     assert fc.main(base + ["--shard", "1/2"]) == 0
     first = list(ran)
     assert fc.main(base + ["--shard", "2/2"]) == 0
     second = ran[len(first):]
     assert first and second and not set(first) & set(second)
-    assert sorted(first + second) == sorted(EXPECTED_ROWS[:6])
+    assert sorted(first + second) == sorted(EXPECTED_ROWS[:8])
     for i in (1, 2):
         assert (probes / f"fc_SUMMARY_{cut[:8]}_shard{i}of2.txt").exists()
 
 
-def test_merge_summary_reads_every_row_receipt(pass_env):
+def test_merge_summary_validates_every_row_receipt(pass_env):
     cut, _ran, probes = pass_env
-    _receipt(probes, "states_firered_town", cut, "PASS")
-    _receipt(probes, "states_firered_battle", cut, f"CARRIED from ph_x.txt @{X}")
-    assert fc.main(["--cut", cut, "--lane", LANE, "--master", MASTER,
-                    "--rows", "states_firered_*", "--merge-summary"]) == 0
+    rows = "--rows", "faint_cmd_gen3_fr_as_a,link_gen3_fr_as_a"
+    base = ["--cut", cut, "--lane", LANE, "--master", MASTER, *rows, "--merge-summary"]
+    _receipt(probes, "faint_cmd_gen3_fr_as_a", cut, "PASS")
+    (probes / f"ph_link_gen3_fr_as_a_{X[:8]}.txt").write_text(_ph("link_gen3", "fr"))
+    _carried(probes, "link_gen3_fr_as_a", f"ph_link_gen3_fr_as_a_{X[:8]}.txt", cut=cut)
+    assert fc.main(base) == 0
     s = (probes / f"fc_SUMMARY_{cut[:8]}.txt").read_text(encoding="utf-8")
     assert "# RUN 1 / CARRIED 1 / FAIL 0" in s
-    # the other selected rows have no receipt: NOT RUN, which fails the merge
+    # the origin disappears: the carried receipt no longer authenticates
+    (probes / f"ph_link_gen3_fr_as_a_{X[:8]}.txt").unlink()
+    assert fc.main(base) == 1
+    # a header-only PASS
+    text = receipts.run_receipt_text(row="link_gen3_fr_as_a", item="x", cut=cut, lane=LANE,
+                                     command="c", cwd=".", env={}, attempts=[], verdict="PASS")
+    (probes / f"fc_link_gen3_fr_as_a_{cut[:8]}.txt").write_text(text, encoding="utf-8")
+    assert fc.main(base) == 1
+    # a well-formed PASS for ANOTHER row under this row's name
+    _receipt(probes, "whiteout_gen3_fr_as_a", cut, "PASS")
+    os.replace(probes / f"fc_whiteout_gen3_fr_as_a_{cut[:8]}.txt",
+               probes / f"fc_link_gen3_fr_as_a_{cut[:8]}.txt")
+    assert fc.main(base) == 1
+    assert "FAIL invalid receipt" in (probes / f"fc_SUMMARY_{cut[:8]}.txt").read_text(encoding="utf-8")
+    # and a missing receipt is NOT RUN
     assert fc.main(["--cut", cut, "--lane", LANE, "--master", MASTER,
                     "--rows", "states_*", "--merge-summary"]) == 1
