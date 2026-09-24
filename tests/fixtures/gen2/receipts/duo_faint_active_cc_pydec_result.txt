@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=3144:B541:A1 b=19E2:AC24:A1 area=route_29 titles=crystal/crystal status=memorial scenario=gen2_faint_active death=active
