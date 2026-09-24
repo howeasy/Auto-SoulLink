@@ -1,15 +1,18 @@
+# lane HEAD=cfbc0c90cfeee979d68a7af756e3ced6cd757ac7 git-status=clean at=2026-09-24T09:45:43-04:00
+# cmd: tools/e2e_duo.py --game gen1_new --scenario trade_new
 duo instance b scenario=trade_new game=gen1_new
 attempt 1 of 2
-[client] [SLink] TCP connecting to 127.0.0.1:65402 (non-blocking)…
-client built: title=blue player=b rom=9fc416a6 -> 127.0.0.1:65402
-[client] [SLink] TCP connected to 127.0.0.1:65402
+[client] [SLink] TCP connecting to 127.0.0.1:49787 (non-blocking)…
+client built: title=blue pack=gen1_rby kind=named player=b rom=1c10237e -> 127.0.0.1:49787
+[client] [SLink] TCP connected to 127.0.0.1:49787
 PARTY_COUNT nil -> 255 @1
 PARTY_COUNT 255 -> 0 @5
 PARTY_UNREADABLE @10 missing species terminator (count=0 species=00 00 00 00 00 00 00)
 PARTY_COUNT 0 -> 1 @649
 PARTY_READABLE @650  (count=1 species=B0 FF 00 00 00 00 00)
 [client] [SLink-gen1] writes ENABLED
-TX {"area_id":"route_1","badges":0,"ball_count":1,"event":"hello","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":44985,"panel":true,"panel_abi":3,"party":[{"active":false,"blob_hex":"B00013000014142D0A2
+[client] [SLink-gen1] nuzlocke ACTIVE (pokeballs already in bag at startup)
+TX {"area_id":"route_1","artifact_kind":"named","badges":0,"ball_count":1,"event":"hello","foundation":"gen1_rby","has_pokeballs":true,"in_battle":false,"loc_name":"Route 1","ot_id":44985,"panel":true,"panel_abi":3,"party":
 RX resolved_areas
 RX config
 RX link_panel
@@ -17,89 +20,95 @@ booted at frame 846 party=1 map=12 (10,35)
 MYKEY 0 4519:AFB9:B0
 PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=19
 JITTER requested=0 applied=0 attempt=1
-phase pace-grass @2179 (10,35) battle=0 party=1
-[hunt] encounter 1 at (10,35) mode=catch balls=1
-phase wild-intro @2249 (10,35) battle=1 party=1
-[hunt] turn 1 foe hp 16/16 odds 0.34 dmax nil -> fight
-phase wild-fight @3015 (10,35) battle=1 party=1
-heartbeat f=3600 party=1 connected=true
-[hunt] turn 2 foe hp 11/16 odds 0.67 dmax 6 -> fight
-[hunt] turn 3 foe hp 6/16 odds 1.00 dmax 6 -> throw
-phase wild-throw @4191 (10,35) battle=1 party=1
+phase pace-grass @933 (10,35) battle=0 party=1
+[client] [SLink-gen1] battle_begin with no opponent: ignored
+[client] [SLink-gen1] play_sound: native sounds off or no SFX-capable patch on this cartridge
+[hunt] encounter 1 at (10,34) mode=catch balls=1
+phase wild-intro @1088 (10,34) battle=1 party=1
+[hunt] turn 1 foe hp 15/15 odds 0.42 dmax nil -> fight
+phase wild-fight @1854 (10,34) battle=1 party=1
+[hunt] turn 2 foe hp 10/15 odds 0.63 dmax 6 -> fight
+[hunt] turn 3 foe hp 5/15 odds 1.00 dmax 6 -> throw
+phase wild-throw @2867 (10,34) battle=1 party=1
 [hunt] threw ball index 0 -> timeout
-PARTY_COUNT 1 -> 2 @6192
-PARTY_UNREADABLE @6200 species list and struct disagree (count=2 species=B0 24 FF 00 00 00 00)
+heartbeat f=3600 party=1 connected=true
+PARTY_COUNT 1 -> 2 @4868
+PARTY_UNREADABLE @4870 species list and struct disagree (count=2 species=B0 A5 FF 00 00 00 00)
 [client] [SLink-gen1] writes PAUSED: party unreadable
-TX {"area_id":"route_1","event":"capture","gift":false,"hp":6,"in_box":false,"key":"F598:AFB9:24","level":3,"maxHP":16,"nickname":"PIDGEY","player":"b","seq":181,"species_id":36,"stats":{"level":3,"maxHP":16}}
-TX {"event":"safe","player":"b","seq":182}
-RX box_mon key=F598:AFB9:24
+TX {"area_id":"route_1","event":"capture","gift":false,"hp":5,"in_box":false,"key":"C373:AFB9:A5","level":3,"maxHP":15,"nickname":"RATTATA","player":"b","seq":137,"species_id":165,"stats":{"level":3,"maxHP":15}}
+TX {"event":"safe","player":"b","seq":138}
+PARTY_READABLE @5390  (count=2 species=B0 A5 FF 00 00 00 00)
+RX box_mon key=C373:AFB9:A5
 [client] [SLink-gen1] writes re-enabled after a live validation
-PARTY_READABLE @6720  (count=2 species=B0 24 FF 00 00 00 00)
 [hunt] battle outcome battle_over receipts move1:player_move,move1:player_move,throw:timeout
-phase wild-battle_over @6729 (10,35) battle=0 party=2
+phase wild-battle_over @5405 (10,34) battle=0 party=2
 [hunt] after battle: outcome=battle_over result=2 party=2 balls=0 -> caught
-phase caught @6730 (10,35) battle=0 party=2
-HUNT caught after 4552 frames, 1 encounter(s)
+phase caught @5406 (10,34) battle=0 party=2
+HUNT caught after 4474 frames, 1 encounter(s)
 MYKEY 0 4519:AFB9:B0
 PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=9
-MYKEY 1 F598:AFB9:24
-PARTY slot=1 key=F598:AFB9:24 species=36 level=3 hp=6
-CAUGHT F598:AFB9:24
-TX {"event":"stats_cache","key":"F598:AFB9:24","player":"b","seq":185,"stats":{"level":3,"maxHP":16}}
-PARTY_COUNT 2 -> 1 @6761
+MYKEY 1 C373:AFB9:A5
+PARTY slot=1 key=C373:AFB9:A5 species=165 level=3 hp=5
+CAUGHT C373:AFB9:A5
+TX {"event":"stats_cache","key":"C373:AFB9:A5","player":"b","seq":141,"stats":{"level":3,"maxHP":15}}
+PARTY_COUNT 2 -> 1 @5437
 RX play_sound
-RX msgbox text=RATTATA and PIDGEY linked!
-RX party_mon key=F598:AFB9:24
+RX msgbox text=PIDGEY and RATTATA linked!
+RX party_mon key=C373:AFB9:A5
 RX link_panel
-TX {"event":"sync_retrieve_done","key":"F598:AFB9:24","player":"b","seq":188}
-PARTY_COUNT 1 -> 2 @6811
+TX {"event":"sync_retrieve_done","key":"C373:AFB9:A5","player":"b","seq":143}
+PARTY_COUNT 1 -> 2 @5461
 MYKEY 0 4519:AFB9:B0
 PARTY slot=0 key=4519:AFB9:B0 species=176 level=5 hp=9
-MYKEY 1 F598:AFB9:24
-PARTY slot=1 key=F598:AFB9:24 species=36 level=3 hp=6
+MYKEY 1 C373:AFB9:A5
+PARTY slot=1 key=C373:AFB9:A5 species=165 level=3 hp=5
 SEEN capture=1 box_mon=1 stats_cache=1 party_mon=1 sync_retrieve_done=1 sync_retrieve_failed=0 box_mon_failed=0
 SAVE_PHASE link_new save-open-start-menu
 SAVE_PHASE link_new save-close-foreign-menu
 SAVE_PHASE link_new save-select-save
 SAVE_PHASE link_new save-choose-save
 SAVE_PHASE link_new save-confirm
-SAVE_WITNESS_DUMP path=patch/build/e2e_trade_new_b_1_witness.bin bytes=31592 saves=1 frame=7200
-heartbeat f=7200 party=2 connected=true
+SAVE_WITNESS_DUMP path=patch/build/e2e_trade_new_b_1_witness.bin bytes=31592 saves=1 frame=5840
 SAVE_PHASE link_new save-await-close
 SAVE_PHASE link_new save-witnessed
-SAVE_WITNESS link_new frames=544
+SAVE_WITNESS link_new frames=533
 MYKEY 0 4519:AFB9:B0
 PRE_TRADE slot=0 key=4519:AFB9:B0 species=176 level=5 hp=9
-MYKEY 1 F598:AFB9:24
-PRE_TRADE slot=1 key=F598:AFB9:24 species=36 level=3 hp=6
-TX {"event":"safe","player":"b","seq":256}
-TX {"event":"safe","player":"b","seq":287}
-ROUTE route_one_north -> map 1 at (21,35) frame 9947
-TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"b","seq":295}
-ROUTE viridian_center -> map 41 at (23,25) frame 10220
+MYKEY 1 C373:AFB9:A5
+PRE_TRADE slot=1 key=C373:AFB9:A5 species=165 level=3 hp=5
+[client] [SLink-gen1] battle_begin with no opponent: ignored
+TX {"event":"safe","player":"b","seq":195}
+heartbeat f=7200 party=2 connected=true
+ROUTE route_one_north -> map 1 at (21,35) frame 7805
+TX {"area_id":"","event":"area_enter","loc_name":"map_1","player":"b","seq":223}
+ROUTE viridian_center -> map 41 at (23,25) frame 8078
 CENTER_RECEPTIONIST map=41 (11,3)
-RX show_menu text=Trade your PIDGEY for RATTATA?
-PARTNER_YES_NO tile=Trade PIDGEY       | for RATTATA?      
-heartbeat f=10800 party=2 connected=true
-TX {"choice":1,"event":"menu_result","player":"b","seq":325,"token":"t1"}
+RX show_menu text=Trade your RATTATA for PIDGEY?
+PARTNER_YES_NO tile=Trade RATTATA      | for PIDGEY?       
+PARTNER_MUST_SAVE tile=We have to save    | before trading.   
+PARTNER_MUST_SAVE_YES
+TX {"choice":1,"event":"menu_result","player":"b","seq":299,"token":"t1"}
 PARTNER_ACCEPTED
+RX apply_prepare
+TX {"event":"apply_ready","ok":true,"player":"b","seq":300,"token":"t1"}
 RX apply_trade
-TX {"event":"trade_done","new_key":"DC83:4190:A5","new_species":165,"player":"b","seq":411,"slot":1,"token":"t1"}
-TRADE_DONE slot=1 key=DC83:4190:A5 species=165
+heartbeat f=10800 party=2 connected=true
+TX {"event":"trade_done","new_key":"9EAE:4190:24","new_species":36,"player":"b","seq":388,"slot":1,"token":"t1"}
+TRADE_DONE slot=1 key=9EAE:4190:24 species=36
 MYKEY 0 4519:AFB9:B0
 POST_TRADE slot=0 key=4519:AFB9:B0 species=176 level=5 hp=9
-MYKEY 1 DC83:4190:A5
-POST_TRADE slot=1 key=DC83:4190:A5 species=165 level=3 hp=7
+MYKEY 1 9EAE:4190:24
+POST_TRADE slot=1 key=9EAE:4190:24 species=36 level=2 hp=5
 RX play_sound
-RX msgbox text=Traded PIDGEY for RATTATA!
+RX msgbox text=Traded RATTATA for PIDGEY!
 RX link_panel
 SAVE_PHASE trade_new save-open-start-menu
 SAVE_PHASE trade_new save-close-foreign-menu
 SAVE_PHASE trade_new save-select-save
 SAVE_PHASE trade_new save-choose-save
 SAVE_PHASE trade_new save-confirm
-SAVE_WITNESS_DUMP path=patch/build/e2e_trade_new_b_1_witness.bin bytes=31592 saves=2 frame=13760
+SAVE_WITNESS_DUMP path=patch/build/e2e_trade_new_b_1_witness.bin bytes=31592 saves=2 frame=13056
 SAVE_PHASE trade_new save-await-close
 SAVE_PHASE trade_new save-witnessed
-SAVE_WITNESS trade_new frames=520
+SAVE_WITNESS trade_new frames=524
 RESULT: PASS (native trade applied once)

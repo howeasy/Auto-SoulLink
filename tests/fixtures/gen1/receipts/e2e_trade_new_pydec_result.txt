@@ -1,9 +1,11 @@
+# lane HEAD=cfbc0c90cfeee979d68a7af756e3ced6cd757ac7 git-status=clean at=2026-09-24T09:45:43-04:00
+# cmd: tools/e2e_duo.py --game gen1_new --scenario trade_new
 attempt 1 of 3
 a main checksum/exp/recomputed stats valid; saved party/current box decode valid
-SAVE_WITNESS_SHA256 inst=a site=a8a65afa6884d0befddb636b9f478cb7fba4bb2b630b1a13967814bb630e6105 file=a8a65afa6884d0befddb636b9f478cb7fba4bb2b630b1a13967814bb630e6105 match=true saves=2
+SAVE_WITNESS_SHA256 inst=a site=68b3f9a248f1ddf422f56db734834a622717ed80909038d5a1075ba55f9e161a file=68b3f9a248f1ddf422f56db734834a622717ed80909038d5a1075ba55f9e161a match=true saves=2
 b main checksum/exp/recomputed stats valid; saved party/current box decode valid
-SAVE_WITNESS_SHA256 inst=b site=badb9d0a4e5f33653a5ffc3557ae0ebb33ab6103bc849c150674a91c62c5cea9 file=badb9d0a4e5f33653a5ffc3557ae0ebb33ab6103bc849c150674a91c62c5cea9 match=true saves=2
-a saved LAST slot F598:AFB9:24, OT BLUE, trade_done valid
-b saved LAST slot DC83:4190:A5, OT RED, trade_done valid
-T-3/T-4 durable swapped halves: a=F598:AFB9:24, b=DC83:4190:A5
+SAVE_WITNESS_SHA256 inst=b site=87121196f656a5b233fb96a995082b70ded54cdcb22d7c4d30b3681e614e3d27 file=87121196f656a5b233fb96a995082b70ded54cdcb22d7c4d30b3681e614e3d27 match=true saves=2
+a saved LAST slot C373:AFB9:A5, OT BLUE, trade_done valid
+b saved LAST slot 9EAE:4190:24, OT RED, trade_done valid
+T-3/T-4 durable swapped halves: a=C373:AFB9:A5, b=9EAE:4190:24
 PYDEC: PASS asserted scenario facts
