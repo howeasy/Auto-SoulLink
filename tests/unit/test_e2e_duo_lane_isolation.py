@@ -267,6 +267,7 @@ def test_gen2_final_pydec_requires_verified_facts(monkeypatch, tmp_path, verifie
         setattr(run, method, lambda: None)
     run.cleanup = lambda passed: None
     run.wait_results = lambda: ("RESULT: PASS", "RESULT: PASS")
+    run._wait_gen2_exit_flush = lambda: None
     facts = {"a": "key-a", "b": "key-b", "area": "route_29",
              "titles": "crystal/gold", "status": "dead"}
     run._run_oracle = lambda results: run._record_gen2_facts(facts) if verified else None
@@ -279,6 +280,43 @@ def test_gen2_final_pydec_requires_verified_facts(monkeypatch, tmp_path, verifie
         with pytest.raises(RuntimeError, match="did not report verified facts"):
             run.run()
         assert "PYDEC: PASS" not in Path(run._pydec_path).read_text()
+
+
+@pytest.mark.parametrize("fault", (None, "missing", "timeout", "crash"))
+def test_gen2_oracle_waits_for_both_exit_flushes(monkeypatch, tmp_path, fault):
+    monkeypatch.setattr(duo, "BUILD", str(tmp_path))
+    run = duo.DuoRun("link", _args(game="gen2_new", lane="cc", keep_alive=False))
+    for method in ("_prepare_gen2_lane", "start_server", "start_instances", "orchestrate"):
+        setattr(run, method, lambda: None)
+    run.wait_results = lambda: ("RESULT: PASS", "RESULT: PASS")
+    run.cleanup = lambda passed: None
+    actions = []
+    files = {side: tmp_path / f"exit-{side}.SaveRAM" for side in ("a", "b")}
+    for path in files.values():
+        path.write_bytes(b"pre-exit")
+    def wait(side, timeout):
+        assert 0 < timeout <= 30
+        actions.append(side)
+        if fault == "timeout" and side == "b":
+            raise duo.subprocess.TimeoutExpired("emu", timeout)
+        files[side].write_bytes(b"final-exit")
+        return 1 if fault == "crash" and side == "b" else 0
+    run.emu_by_inst = {side: SimpleNamespace(wait=lambda timeout, s=side: wait(s, timeout)) for side in ("a", "b")}
+    if fault == "missing":
+        del run.emu_by_inst["b"]
+    def oracle(results):
+        assert actions == ["a", "b"]
+        assert all(path.read_bytes() == b"final-exit" for path in files.values())
+        actions.append("oracle")
+        run._record_gen2_facts({"a": "a", "b": "b", "area": "route_29", "titles": "crystal/crystal", "status": "alive"})
+    run._run_oracle = oracle
+    if fault:
+        with pytest.raises(RuntimeError, match="exit|process"):
+            run.run()
+        assert "oracle" not in actions
+    else:
+        assert run.run()
+        assert actions == ["a", "b", "oracle"]
 
 
 def test_gen2_attempt_archive_reads_only_its_lane(monkeypatch, tmp_path):
@@ -302,6 +340,61 @@ def test_gen2_attempt_archive_reads_only_its_lane(monkeypatch, tmp_path):
 def _fresh_lane_registry(monkeypatch):
     """The lane ordinal is process state; a fresh table keeps each test's expectation local."""
     monkeypatch.setattr(duo, "_LANE_ORDINAL", {})
+
+
+@pytest.mark.parametrize("fault", (None, "digest", "missing", "stale", "cross_lane"))
+def test_gen2_archives_reconnect_initial_witness_and_preserves_retry(monkeypatch, tmp_path, fault):
+    monkeypatch.setattr(duo, "BUILD", str(tmp_path))
+    name = "gen2_reconnect_cc"
+    data = b"A" * 32790
+    texts = {}
+    for side in ("a", "b"):
+        snapshot = tmp_path / f"e2e_{name}_{side}_witness.SaveRAM"
+        snapshot.write_bytes(data)
+        exit_save = tmp_path / f"mutable_{side}.SaveRAM"
+        exit_save.write_bytes(b"E" * 32790)
+        header = {"player": side, "attempt": 2 if fault == "stale" else 1, "scenario": "gen2_reconnect"}
+        witness = {"snapshot_path": str(snapshot), "saveram_path": str(exit_save),
+                   "cartram_sha256": hashlib.sha256(data[:32768]).hexdigest()}
+        if fault == "cross_lane":
+            other = tmp_path / "other_witness.SaveRAM"
+            other.write_bytes(data)
+            witness["snapshot_path"] = str(other)
+        texts[side] = "DUO_GEN2 " + json.dumps(header) + "\nSAVE_WITNESS " + json.dumps(witness)
+    (tmp_path / f"e2e_{name}_a_initial_result.txt").write_text(texts["a"])
+    receipts = {"a": 'DUO_GEN2 {"player":"a","attempt":1,"scenario":"gen2_reconnect"}\nRESULT: PASS wrong_save',
+                "b": texts["b"]}
+    source = tmp_path / f"e2e_{name}_a_witness.SaveRAM"
+    if fault == "digest":
+        source.write_bytes(b"B" * 32790)
+    elif fault == "missing":
+        source.unlink()
+    if fault:
+        with pytest.raises((RuntimeError, FileNotFoundError)):
+            duo._archive_attempt(name, 1, receipts)
+        return
+    duo._archive_attempt(name, 1, receipts)
+    for side in ("a_initial", "b"):
+        assert (tmp_path / f"e2e_{name}_{side}_attempt1_witness.SaveRAM").read_bytes() == data
+    manifest = tmp_path / f"e2e_{name}_attempt1_manifest.json"
+    rows = json.loads(manifest.read_text())["witnesses"]
+    assert {row["sha256"] for row in rows} == {hashlib.sha256(data).hexdigest()}
+    for row in rows:
+        assert hashlib.sha256(Path(row["receipt"]).read_bytes()).hexdigest() == row["receipt_sha256"]
+        assert Path(row["exit_archive"]).read_bytes() == b"E" * 32790
+        assert row["exit_sha256"] == hashlib.sha256(b"E" * 32790).hexdigest()
+    with pytest.raises(RuntimeError, match="already exists"):
+        duo._archive_attempt(name, 1, receipts)
+    assert (tmp_path / f"e2e_{name}_a_initial_attempt1_result.txt").read_text() == texts["a"]
+    run = duo.DuoRun("gen2_reconnect", _args(game="gen2_new", lane="cc"), attempt=2)
+    run._clear_attempt_artifacts()
+    assert not source.exists()
+    assert manifest.exists()
+    assert (tmp_path / f"e2e_{name}_a_initial_attempt1_witness.SaveRAM").read_bytes() == data
+    # A fresh invocation starts at 1 and must not inherit earlier invocation's archives.
+    run.attempt = 1
+    run._clear_attempt_artifacts()
+    assert not manifest.exists()
 
 
 def _args(**overrides) -> argparse.Namespace:

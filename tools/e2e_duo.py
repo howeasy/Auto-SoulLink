@@ -1869,16 +1869,19 @@ class DuoRun:
 
         Freshness is identity here: a rerun (or a crashed attempt re-entered) leaves results,
         phase receipts, attempt archives, witnesses and PYDEC copies from OLDER runs in the same
-        build directory, and the lane's evidence collection has been picking them up. Everything
-        matching `e2e_<scenario>_*` under patch/build goes — this attempt's own PYDEC receipt is
-        opened before the launch and is the one exception — and the removal is printed so the
-        run's log says what it threw away.
+        build directory. Gen 2 attempt 1 clears those; later Gen 2 retries retain numbered archives
+        from this invocation, while clearing all live paths. The current PYDEC file is opened before
+        launch and retained. Removals are printed so the log records what was discarded.
         """
         keep = os.path.basename(getattr(self, "_pydec_path", "") or "")
         removed = []
         for path in sorted(glob.glob(os.path.join(BUILD, f"e2e_{self.artifact_name}_*"))):
             if keep and os.path.basename(path) == keep:
                 continue
+            archive = re.search(r"_attempt(\d+)_(?:result\.txt|witness\.SaveRAM|exit\.SaveRAM|manifest\.json)$", os.path.basename(path))
+            if (scenario_family(getattr(self, "game", "gen3_rr")) == "gen2_new"
+                    and archive and 0 < int(archive[1]) < getattr(self, "attempt", 1)):
+                continue  # Earlier attempts of THIS invocation remain replayable; attempt 1 clears all.
             os.remove(path)
             removed.append(os.path.basename(path))
         for inst in ("a", "b"):
@@ -4253,6 +4256,23 @@ class DuoRun:
             return None
         return self.wait_for("both RESULT lines", both, self.cfg["timeout"])
 
+    def _wait_gen2_exit_flush(self):
+        """RESULT precedes asynchronous client.exit; verify saves only after exit flushes."""
+        processes = getattr(self, "emu_by_inst", {})
+        if any(not callable(getattr(processes.get(side), "wait", None)) for side in ("a", "b")):
+            raise RuntimeError("Gen 2 exit validation requires both emulator processes")
+        deadline = time.monotonic() + 30
+        for side in ("a", "b"):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError("Gen 2 emulator exit flush deadline exceeded")
+            try:
+                code = processes[side].wait(timeout=remaining)
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(f"Gen 2 {side} emulator exit flush timed out") from exc
+            if code != 0:
+                raise RuntimeError(f"Gen 2 {side} emulator exited abnormally: {code}")
+
     def _result_path(self, inst):
         return os.path.join(BUILD, f"e2e_{self.artifact_name}_{inst}_result.txt")
 
@@ -4637,6 +4657,8 @@ class DuoRun:
             pa = "RESULT: PASS" in ra
             pb = "RESULT: PASS" in rb
             if pa and pb:
+                if scenario_family(getattr(self, "game", "")) == "gen2_new":
+                    self._wait_gen2_exit_flush()
                 self._gen2_verified_facts = None
                 self._run_oracle({"a": ra, "b": rb})
                 if scenario_family(getattr(self, "game", "")) == "gen2_new" and not self._gen2_verified_facts:
@@ -4743,7 +4765,10 @@ def _archive_attempt(name, attempt, receipts):
     Called on EVERY exit path, and on the give-up path only after the D-4 annotation is written,
     so the archived third attempt carries the line the summary prints.
     """
+    archived = _archive_gen2_witnesses(name, attempt, receipts)
     for inst in ("a", "b"):
+        if inst in archived:
+            continue
         if receipts[inst] is not None:
             with open(os.path.join(BUILD, f"e2e_{name}_{inst}_attempt{attempt}_result.txt"),
                       "w", encoding="utf-8") as handle:
@@ -4752,6 +4777,71 @@ def _archive_attempt(name, attempt, receipts):
     if os.path.exists(pydec):
         shutil.copyfile(pydec,
                         os.path.join(BUILD, f"e2e_{name}_pydec_attempt{attempt}_result.txt"))
+
+
+def _archive_gen2_witnesses(name, attempt, receipts):
+    """Authenticate and preserve immutable witnesses, retaining original marker text.
+
+    Reconnect's final A receipt has no witness; its initial-phase receipt still names the
+    original A snapshot. A manifest links those original paths to byte-identical archives.
+    """
+    if not any(line.startswith("DUO_GEN2 ") for text in receipts.values() for line in (text or "").splitlines()):
+        return set()
+    sources = {side: text for side, text in receipts.items() if text is not None}
+    for phase in ("initial", "same_save", "wrong_save"):
+        path = Path(BUILD, f"e2e_{name}_a_{phase}_result.txt")
+        if path.exists():
+            sources["a_" + phase] = path.read_text(encoding="utf-8")
+    planned, witnesses = {}, []
+    for side, text in sources.items():
+        headers = [json.loads(line.partition(" ")[2]) for line in text.splitlines() if line.startswith("DUO_GEN2 ")]
+        rows = [json.loads(line.partition(" ")[2]) for line in text.splitlines() if line.startswith("SAVE_WITNESS ")]
+        if not rows:
+            continue
+        if (len(headers) != 1 or not isinstance(headers[0], dict)
+                or headers[0].get("player") != side.split("_")[0] or headers[0].get("attempt") != attempt):
+            raise RuntimeError("Gen 2 archived witness has stale or contradictory header")
+        if len(rows) != 1 or not isinstance(rows[0], dict):
+            raise RuntimeError("Gen 2 archive requires one final SAVE_WITNESS")
+        witness = rows[0]
+        if "snapshot_path" not in witness:
+            continue  # Older failed attempts may predate the additive snapshot producer.
+        original_side = "a" if side == "a_initial" else side
+        source = Path(witness["snapshot_path"])
+        expected = Path(BUILD, f"e2e_{name}_{original_side}_witness.SaveRAM")
+        if not source.is_absolute() or source.resolve() != expected.resolve():
+            raise RuntimeError("Gen 2 witness snapshot belongs to another lane or phase")
+        raw = source.read_bytes()
+        if len(raw) != 32790 or hashlib.sha256(raw[:32768]).hexdigest() != witness.get("cartram_sha256"):
+            raise RuntimeError("Gen 2 archived snapshot differs from witness digest/length")
+        target = Path(BUILD, f"e2e_{name}_{side}_attempt{attempt}_witness.SaveRAM")
+        exit_source = Path(witness["saveram_path"])
+        if not exit_source.is_absolute():
+            raise RuntimeError("Gen 2 witness exit save path must be absolute")
+        exit_raw = exit_source.read_bytes()
+        exit_target = Path(BUILD, f"e2e_{name}_{side}_attempt{attempt}_exit.SaveRAM")
+        receipt_path = Path(BUILD, f"e2e_{name}_{side}_attempt{attempt}_result.txt")
+        planned[target] = raw
+        planned[exit_target] = exit_raw  # Preserve failures too: do not replace this with the snapshot.
+        if side not in ("a", "b"):
+            planned[receipt_path] = text.encode("utf-8")
+        witnesses.append({"source": str(source), "archive": str(target), "receipt": str(receipt_path),
+                          "sha256": hashlib.sha256(raw).hexdigest(), "receipt_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                          "exit_source": str(exit_source), "exit_archive": str(exit_target),
+                          "exit_sha256": hashlib.sha256(exit_raw).hexdigest(), "exit_bytes": len(exit_raw)})
+    if not planned:
+        return set()
+    # Byte-preserve every phase receipt, including the relaunches without a native save.
+    for side, text in sources.items():
+        planned[Path(BUILD, f"e2e_{name}_{side}_attempt{attempt}_result.txt")] = text.encode("utf-8")
+    manifest = Path(BUILD, f"e2e_{name}_attempt{attempt}_manifest.json")
+    planned[manifest] = json.dumps({"attempt": attempt, "witnesses": witnesses}, sort_keys=True).encode("utf-8")
+    if any(path.exists() for path in planned):
+        raise RuntimeError("Gen 2 witness archive already exists; refusing overwrite")
+    for path, raw in planned.items():
+        with path.open("xb") as handle:
+            handle.write(raw)
+    return set(sources)
 
 
 def run_scenario_with_rng_retry(name, args):

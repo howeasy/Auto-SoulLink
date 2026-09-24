@@ -138,7 +138,10 @@ def test_gen2_reconnect_stages_immutable_seeds_and_rebinds_boot_fingerprint(monk
     run.launch_instance = lambda *args, **kwargs: launched.append((args, kwargs))
     monkeypatch.setitem(gate.GENS["gen2"], "plan", lambda title, directory, seed, speed: {
         "directory": directory, "fixture": seed, "saveram_name": "crystal.SaveRAM"})
+    initial_witness = tmp_path / f"e2e_{run.artifact_name}_a_witness.SaveRAM"
+    initial_witness.write_bytes(b"initial link witness remains immutable")
     run._stage_gen2_reconnect(phase, source, "abcd:1234:01")
+    assert initial_witness.read_bytes() == b"initial link witness remains immutable"
     assert old["directory"] == tmp_path / "initial"
     assert run._gen2_staged_saves[phase] != source
     assert run._gen2_staged_saves[phase].read_bytes() == source.read_bytes()
