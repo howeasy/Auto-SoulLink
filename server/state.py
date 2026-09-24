@@ -210,6 +210,7 @@ class SoulLinkState:
         # The last native-trade outcome (uncertain | committed | rolled_back | conflict), token-bound,
         # for the status page and oracles; on_trade_outcome(record) lets the server journal it.
         self.trade_last: dict | None = None
+        self._trade_backlog: list[dict] = []   # a trade restored by load(), journaled once wired up
         self.on_trade_outcome = None
         # Title-sensitive acquisition policy; standalone states use their run adapter.
         # Species/evolution, gender/type, shiny and capability rules stay run-global:
@@ -600,6 +601,7 @@ class SoulLinkState:
                     pt["verdict"][pid] = "await"
                 if silent:                             # a side that declared itself was journaled then
                     self._record_trade(pt, "uncertain")
+                self._save()
                 return
             log.info(f"trade watchdog: abandoning stuck trade (phase {pt.get('phase')}, token {pt.get('token')})")
             self.pending_trade = None
@@ -830,6 +832,7 @@ class SoulLinkState:
         # "traded" | "none" | a conflict reason. _settle_trade acts once neither is None/"await".
         pt["verdict"] = {"a": None, "b": None}
         pt["age"]  = 0
+        self._save()                                    # BLOCKER-1: a restart from here restores it
         log.info(f"trade applying: A slot {pt['a_slot']} <-> B slot {pt['b_slot']} (link {pt['link'].area_id})")
 
     def _handle_trade_done(self, player_id: str, msg: dict):
@@ -915,6 +918,7 @@ class SoulLinkState:
         trade_problem(), never guessed."""
         v = pt["verdict"]
         if any(x in (None, "await") for x in v.values()):
+            self._save()                                # keep the persisted verdicts current
             return
         if v["a"] == v["b"] == "traded":
             self._commit_trade(pt)
@@ -923,6 +927,7 @@ class SoulLinkState:
             log.info(f"trade {pt['token']} did not happen on either side — rolled back")
             self._record_trade(pt, "rolled_back")
             self.pending_trade = None
+            self._save()
             for pid in ("a", "b"):
                 self.queued_commands[pid].append({
                     "cmd": "msgbox", "text": "Trade did not go through.", "fb": "prompt"})
@@ -932,10 +937,57 @@ class SoulLinkState:
                                   for pid in ("a", "b"))
         log.error(f"trade {pt['token']} CONFLICT — link left as it was, needs a human: {pt['problem']}")
         self._record_trade(pt, "conflict")
+        self._save()
         for pid in ("a", "b"):
             self.queued_commands[pid].append({
                 "cmd": "msgbox", "text": "TRADE ERROR - party mismatch.\nSee the status page.",
                 "fb": "prompt"})
+
+    @property
+    def on_trade_outcome(self):
+        return self._on_trade_outcome
+
+    @on_trade_outcome.setter
+    def on_trade_outcome(self, fn):
+        # load() restores a mid-apply trade before the server can wire its journal: flush it here
+        self._on_trade_outcome = fn
+        if fn:
+            backlog, self._trade_backlog = self._trade_backlog, []
+            for rec in backlog:
+                fn(rec)
+
+    def _trade_to_json(self) -> dict | None:
+        """The pending trade for links.json once apply_trade may have left (applying/uncertain/
+        conflict). Earlier phases applied nothing and may be dropped. The link is stored by index."""
+        pt = self.pending_trade
+        if not pt or pt.get("phase") not in ("applying", "uncertain", "conflict"):
+            return None
+        index = next((i for i, e in enumerate(self.links) if e is pt.get("link")), None)
+        if index is None:
+            return None
+        return {**{k: v for k, v in pt.items() if k != "link"}, "link_index": index}
+
+    def _restore_trade(self, saved: dict):
+        """BLOCKER-1 (review e9d5e136): a restart or rollback mid-trade may have lost reports and
+        commands, so an `applying` trade comes back UNCERTAIN: every undecided side awaits its next
+        party snapshot (_trade_evidence), and the outcome is journaled once the server wires it."""
+        index = saved.get("link_index")
+        if not isinstance(index, int) or not 0 <= index < len(self.links):
+            log.error(f"restored trade {saved.get('token')} names no link; dropped: {saved}")
+            return
+        pt = {k: v for k, v in saved.items() if k != "link_index"}
+        pt["link"] = self.links[index]
+        pt["new"] = {pid: tuple(v) if v else None for pid, v in (pt.get("new") or {}).items()}
+        pt.setdefault("verdict", {"a": None, "b": None})
+        self.pending_trade = pt
+        if pt.get("phase") == "applying":
+            pt["phase"] = "uncertain"
+            for pid in ("a", "b"):
+                if pt["verdict"].get(pid) is None:
+                    pt["verdict"][pid] = "await"
+            self._record_trade(pt, "uncertain")
+            self._trade_backlog.append(dict(self.trade_last))
+        log.warning(f"restored trade {pt['token']} as {pt['phase']}: {pt['verdict']}")
 
     def _record_trade(self, pt: dict, outcome: str):
         """Publish a trade outcome: trade_last (status) + on_trade_outcome (server journal)."""
@@ -988,10 +1040,10 @@ class SoulLinkState:
             self.queued_commands[pid].append({
                 "cmd": "msgbox", "text": f"Traded {gives} for {gets}!",
                 "r": 100, "g": 255, "b": 160, "frames": 300})
+        self.pending_trade = None
         self._save()
         log.info(f"trade complete (token {pt['token']})")
         self._record_trade(pt, "committed")
-        self.pending_trade = None
         # Arm the post-trade settle window on BOTH sides: the swap is party↔party, so suppress the
         # drift reconciler while each client's party read settles (no spurious "Unbox" party_mon).
         self._trade_settle_ticks = {"a": self.TRADE_SETTLE_TICKS, "b": self.TRADE_SETTLE_TICKS}
@@ -1126,6 +1178,9 @@ class SoulLinkState:
                         "queued_partner_keys": list(rb.get("queued_partner_keys", [])),
                         "restored_keys":      set(rb.get("restored_keys", [])),
                     }
+            state._trade_token = int(data.get("trade_token", 0) or 0)
+            if data.get("pending_trade"):
+                state._restore_trade(data["pending_trade"])
             log.info(f"Loaded {len(state.links)} links from {state._links_path}")
         except UnsafeGameMigration:
             # Operator-facing and fatal: this run must not start under either adapter.
@@ -3554,6 +3609,9 @@ class SoulLinkState:
             },
             "run_over": self.run_over,
             "attempts_count": self.attempts_count,
+            # BLOCKER-1: an applied-but-unsettled trade survives a restart; tokens never restart at t1
+            "pending_trade": self._trade_to_json(),
+            "trade_token": self._trade_token,
             "rebuild_pending": {
                 pid: (
                     {
