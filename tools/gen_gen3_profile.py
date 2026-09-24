@@ -217,6 +217,20 @@ RR_ROM_ANCHORS = {
         "207804f039f92878013028701de00000c43b020208480268002a16d16878013068700649"
         "0006000e097888420cd104490448086009e00000c83b0202cc3b0202844f000321300108"
         "2a7030bc01bc0047"),
+    # G4-PH (mechanism P on RR, docs/gen3/research/rr_active_faint_parity_scope_2026-09-23.md §2,
+    # facts re-asserted by tools/research/rr_active_faint.py): CFRU end-turn state 34, the Perish
+    # case (0x090923C8..0x0909243C) and its pool words (0x09092764..0x09092773).
+    "perish_state34": (0x10923C8,
+        "2027e64db30059599c46394201d1fff74ff9582002007243e14b9b181c8d002c01d1fff745f9fd23de48"
+        "0370fc3b43708370c3701b337343ff26db4ad2180832d3791b071b0f03714671d84809d16346b94359"
+        "51d64b1c60d64b03600068fff740f90f24d1790f332340a1430b43d371d14bf2e7"),
+    "perish_state34_pool": (0x1092764, "fc3d0202e43b0202b82a02020c3e0202"),
+    # HandleTurnActionSelectionState case 0, absent battler: gChosenActionByBattler[b] = 13
+    # (LDR@0x0801412E, movs r1,#0xd @0x08014132), pool 0x08014164.
+    "htas_absent_action": (0x14128, "0340002b26d00d4810180d21"),
+    "htas_absent_action_pool": (0x14164, "7c3d0202"),
+    # sTurnActionsFuncsTable[13] (table 0x08250038) = HandleAction_NothingIsFainted|1
+    "turn_actions_nothing_fainted": (0x25006C, "3d6d0108"),
 }
 
 
@@ -278,7 +292,44 @@ def rr_rom_facts(rom: bytes | None = None) -> dict:
     exec_flags = literal(0x1725A)
     if exec_flags != literal(0x1727C) or exec_flags != literal(0x141DC):
         raise ValueError("RR controller execution-flag writer/reader disagree")
+    # G4-PH: mechanism P's layout, read out of CFRU's own Perish case (state 34).
+    def imm8(off: int, op: int) -> int:        # the #imm8 of a Thumb `movs/adds/subs rN,#imm8`
+        ins = read(off, 2)
+        if ins & 0xFF00 != op:
+            raise ValueError(f"RR Perish witness moved: 0x{off:X} is 0x{ins:04X}")
+        return ins & 0xFF
+    perish_bit = imm8(0x10923C8, 0x2700)                                  # movs r7,#0x20
+    if read(0x10923D2, 2) != 0x4239 or read(0x1092418, 2) != 0x43B9:      # tst r1,r7 / bics r1,r7
+        raise ValueError("RR Perish case no longer tests/clears gStatuses3 with r7")
+    # movs r3,#0xfd; subs r3,#0xfc; adds r3,#0x1b; muls r3,r6 (r6 = battler)
+    disable_size = imm8(0x10923EE, 0x2300) - imm8(0x10923F4, 0x3B00) + imm8(0x10923FC, 0x3300)
+    if read(0x10923FE, 2) != 0x4373:
+        raise ValueError("RR Perish case no longer scales the battler by the DisableStruct size")
+    # adds r2,#8; ldrb r3,[r2,#7]; lsls r3,#0x1c; lsrs r3,#0x1c (the low nibble)
+    ldrb = read(0x1092408, 2)
+    if ldrb & 0xF83F != 0x7813 or read(0x109240A, 2) != 0x071B or read(0x109240C, 2) != 0x0F1B:
+        raise ValueError("RR Perish case no longer reads the timer as a low nibble")
+    timer_off = imm8(0x1092406, 0x3200) + ((ldrb >> 6) & 31)
+    nothing_fainted = imm8(0x14132, 0x2100)                                # movs r1,#0xd
+    if read(0x25006C, 4) != 0x08016D3D:
+        raise ValueError("RR sTurnActionsFuncsTable[13] is not HandleAction_NothingIsFainted")
+    perish_where = "perish_state34:0x090923C8..0x0909243C (CFRU end-turn state 34)"
     facts = {
+        ("ram", "STATUS3_ADDR"): (literal(0x10923CA),
+            f"{perish_where} LDR@0x090923CA pool@0x09092764"),
+        ("ram", "DISABLE_STRUCTS_ADDR"): (literal(0x1092402),
+            f"{perish_where} LDR@0x09092402 pool@0x09092770"),
+        ("derived", "STATUS3_PERISH_SONG"): (perish_bit,
+            f"{perish_where} movs r7,#imm@0x090923C8; tst@0x090923D2, bics@0x09092418"),
+        ("derived", "DISABLE_STRUCT_SIZE"): (disable_size,
+            f"{perish_where} 0x090923EE..0x090923FE (movs #0xfd, subs #0xfc, adds #0x1b, muls)"),
+        ("derived", "DISABLE_STRUCT_PERISH_TIMER_OFF"): (timer_off,
+            f"{perish_where} adds r2,#8 @0x09092406; ldrb [r2,#7] @0x09092408; low nibble @0x0909240A..0C"),
+        ("derived", "B_ACTION_NOTHING_FAINTED"): (nothing_fainted,
+            "htas_absent_action:movs r1,#imm@0x08014132; "
+            "turn_actions_nothing_fainted:0x0825006C = HandleAction_NothingIsFainted|1"),
+        ("ram", "CHOSEN_ACTION_ADDR"): (literal(0x1412E),
+            "htas_absent_action:LDR@0x0801412E pool@0x08014164 (HTAS case-0 absent path)"),
         ("ram", "BATTLE_CONTROLLER_EXEC_FLAGS_ADDR"): (exec_flags,
             "controller_exec_marker:LDR@0x1725A/0x1727C pools@0x17274/0x17290; "
             "OR/STR@0x17266..0x1726A,0x17284..0x1728A; "

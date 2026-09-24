@@ -267,6 +267,15 @@ RR_BINARY_VALUES = {
     ("rom", "BEGIN_BATTLE_INTRO_ADDR"): 0x080123C1,
     ("rom", "BEGIN_BATTLE_INTRO_DUMMY_ADDR"): 0x080123BD,
     ("rom", "BATTLE_INTRO_GET_MONS_DATA_ADDR"): 0x08012FAD,
+    # G4-PH: mechanism P on RR (rr_active_faint_parity_scope_2026-09-23.md §2, §5.1), each read
+    # out of CFRU's Perish case / the HTAS absent path, and equal to FR/LG's pret values.
+    ("ram", "STATUS3_ADDR"): 0x02023DFC,
+    ("ram", "DISABLE_STRUCTS_ADDR"): 0x02023E0C,
+    ("ram", "CHOSEN_ACTION_ADDR"): 0x02023D7C,
+    ("derived", "STATUS3_PERISH_SONG"): 0x20,
+    ("derived", "DISABLE_STRUCT_SIZE"): 0x1C,
+    ("derived", "DISABLE_STRUCT_PERISH_TIMER_OFF"): 0x0F,
+    ("derived", "B_ACTION_NOTHING_FAINTED"): 13,
 }
 
 
@@ -292,7 +301,9 @@ def test_rr_rom_pins_are_in_the_generated_profile():
                                     "action_callback_entry", "controller_exec_marker",
                                     "controller_exec_reader", "controller_exec_reader_pool",
                                     "intro_store_controllers", "intro_store_begin",
-                                    "intro_getmons_body"])
+                                    "intro_getmons_body", "perish_state34",
+                                    "perish_state34_pool", "htas_absent_action",
+                                    "htas_absent_action_pool", "turn_actions_nothing_fainted"])
 def test_rr_rom_anchor_mutation_refuses_the_facts(anchor):
     from tools.gen_gen3_profile import RR_ROM_ANCHORS, rr_rom_facts
 
@@ -330,6 +341,23 @@ def test_rr_rom_anchors_match_both_admitted_binaries(path, digest):
     assert int.from_bytes(raw[0x3E894:0x3E898], "little") == 0x0915514C
     assert raw[0x25DEA1:0x25DEA5] == bytes([3, 12, 48, 192])
     assert raw[0x11521D0 + 153 * 12 + 4] == 5  # Explosion PP, relocated table
+    # G4-PH: the P pool words, read directly (not through the LDR decoder)
+    assert int.from_bytes(raw[0x1092764:0x1092768], "little") == 0x02023DFC
+    assert int.from_bytes(raw[0x1092770:0x1092774], "little") == 0x02023E0C
+    assert int.from_bytes(raw[0x14164:0x14168], "little") == 0x02023D7C
+
+
+def test_rr_p_fields_cite_the_cfru_perish_case_and_the_htas_absent_path():
+    """§5.1: each P field's _src names the ROM site it was read from."""
+    src = _title("radical_red")["_src"]
+    for key, site in (("ram.STATUS3_ADDR", "LDR@0x090923CA"), ("ram.DISABLE_STRUCTS_ADDR", "LDR@0x09092402"),
+                      ("derived.STATUS3_PERISH_SONG", "0x090923C8"),
+                      ("derived.DISABLE_STRUCT_SIZE", "0x090923EE..0x090923FE"),
+                      ("derived.DISABLE_STRUCT_PERISH_TIMER_OFF", "0x09092406"),
+                      ("derived.B_ACTION_NOTHING_FAINTED", "0x08014132"),
+                      ("ram.CHOSEN_ACTION_ADDR", "LDR@0x0801412E")):
+        assert site in src[key], key
+    assert "0x0825006C" in src["derived.B_ACTION_NOTHING_FAINTED"]
 
 
 @pytest.mark.parametrize("name", ["firered", "leafgreen"])

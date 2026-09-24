@@ -162,6 +162,14 @@
           "expected_hex": "C83B0202",
           "rom_offset": 82484
         },
+        "htas_absent_action": {
+          "expected_hex": "0340002B26D00D4810180D21",
+          "rom_offset": 82216
+        },
+        "htas_absent_action_pool": {
+          "expected_hex": "7C3D0202",
+          "rom_offset": 82276
+        },
         "intro_getmons_body": {
           "expected_hex": "30B5034D2878002804D0012814D02EE0823E0202074C68782070002000210022FAF7EAFF207804F039F92878013028701DE00000C43B020208480268002A16D168780130687006490006000E097888420CD104490448086009E00000C83B0202CC3B0202844F0003213001082A7030BC01BC0047",
           "rom_offset": 77740
@@ -174,6 +182,14 @@
           "expected_hex": "80B4194919480860002219488046002318498C46184FFF26184D194C4046614604318C46043901C1D11908783043087050190370101903700132032AEEDDFFF7B9FF10480024046065F0FCF836F078FE00480047992B04090C48047008BC9846F0BC01BC00470000844F0003BD23010811E30208E04F0003D63B0202F83F0202FC3F0202C83B0202542B0202DC3D020230B50448006802210840002804D000F0BBF803E04C2B020200F01EF800F01EFA0B4800684021084000280ED10024094801788C4209DA051C2006000E00211AF12DFD013428788442F6DB30BC01BC00474C2B0202CC3B020210B50C4802680124131C2340002B4FD109490A480860802040021040002817D0074A084911600848037051604470074902206FE04C2B0202844F0003C1230108",
           "rom_offset": 53884
         },
+        "perish_state34": {
+          "expected_hex": "2027E64DB30059599C46394201D1FFF74FF9582002007243E14B9B181C8D002C01D1FFF745F9FD23DE480370FC3B43708370C3701B337343FF26DB4AD2180832D3791B071B0F03714671D84809D16346B9435951D64B1C60D64B03600068FFF740F90F24D1790F332340A1430B43D371D14BF2E7",
+          "rom_offset": 17376200
+        },
+        "perish_state34_pool": {
+          "expected_hex": "FC3D0202E43B0202B82A02020C3E0202",
+          "rom_offset": 17377124
+        },
         "pp_up_masks": {
           "expected_hex": "030C30C0",
           "rom_offset": 2481825
@@ -181,6 +197,10 @@
         "trainer_id": {
           "expected_hex": "06480268507B0006117B09040843D17A09020843917A0843704700000C500003",
           "rom_offset": 836068
+        },
+        "turn_actions_nothing_fainted": {
+          "expected_hex": "3D6D0108",
+          "rom_offset": 2424940
         }
       },
       "_src": {
@@ -189,6 +209,9 @@
         "derived.BATTLE_MOVE_PP_OFFSET": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c calculate_pp:LDRB@0x41030",
         "derived.BATTLE_TYPE_DOUBLE_MASK": "lua/memory_gba.lua:385 (old-client RR profile, production-tested)",
         "derived.BATTLE_TYPE_TRAINER_MASK": "lua/memory_gba.lua:378 (old-client RR profile, production-tested)",
+        "derived.B_ACTION_NOTHING_FAINTED": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c htas_absent_action:movs r1,#imm@0x08014132; turn_actions_nothing_fainted:0x0825006C = HandleAction_NothingIsFainted|1",
+        "derived.DISABLE_STRUCT_PERISH_TIMER_OFF": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c perish_state34:0x090923C8..0x0909243C (CFRU end-turn state 34) adds r2,#8 @0x09092406; ldrb [r2,#7] @0x09092408; low nibble @0x0909240A..0C",
+        "derived.DISABLE_STRUCT_SIZE": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c perish_state34:0x090923C8..0x0909243C (CFRU end-turn state 34) 0x090923EE..0x090923FE (movs #0xfd, subs #0xfc, adds #0x1b, muls)",
         "derived.EXPERIENCE_TABLE_ENTRY_COUNT": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c box_level:0x3E85E..0x3E862 row stride / u32",
         "derived.MAX_LEVEL": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c box_level:CMP@0x3E872",
         "derived.OUTCOME_DREW": "lua/memory_gba.lua:391 (old-client RR profile, production-tested: \"CFRU inserts DREW=3, shifting RAN from 3->4\")",
@@ -200,8 +223,12 @@
         "derived.SB1_LOCATION_MAP_NUM_OFFSET": "lua/memory_gba.lua:272,1113 (old-client RR profile, production-tested)",
         "derived.SB2_OT_ID_OFFSET": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c trainer_id:0xCC1E4 byte assembly +0xA..D",
         "derived.SHEDINJA_SPECIES_ID": "data/games/gen3_frlge/rr_species.json:\"303\"=\"Shedinja\" (RR species table; CFRU keeps this id unrenumbered)",
+        "derived.STATUS3_PERISH_SONG": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c perish_state34:0x090923C8..0x0909243C (CFRU end-turn state 34) movs r7,#imm@0x090923C8; tst@0x090923D2, bics@0x09092418",
         "ram.BATTLE_CONTROLLER_EXEC_FLAGS_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c controller_exec_marker:LDR@0x1725A/0x1727C pools@0x17274/0x17290; OR/STR@0x17266..0x1726A,0x17284..0x1728A; controller_exec_reader:LDR@0x141DC pool@0x14234,word-test@0x141FC..0x14204",
+        "ram.CHOSEN_ACTION_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c htas_absent_action:LDR@0x0801412E pool@0x08014164 (HTAS case-0 absent path)",
+        "ram.DISABLE_STRUCTS_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c perish_state34:0x090923C8..0x0909243C (CFRU end-turn state 34) LDR@0x09092402 pool@0x09092770",
         "ram.SB1_PTR_ADDR": "lua/games/gen3_frlge.lua:264 (the old client's address, kept for parity: it is a literal-pool constant inside IntrMain_Buffer, not the pointer -- the new client reads write_checkpoint.pointers.gSaveBlock1Ptr, which is ROM-derived)",
+        "ram.STATUS3_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c perish_state34:0x090923C8..0x0909243C (CFRU end-turn state 34) LDR@0x090923CA pool@0x09092764",
         "rom.BATTLE_INTRO_GET_MONS_DATA_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c intro_store_begin:LDR@0x123CC/0x123CE pools@0x123DC/0x123E0 STR@0x123D0 (the tail of BeginBattleIntro); the data-request phase is the intro_getmons_body anchor (0x12FAC)",
         "rom.BATTLE_MOVES_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c calculate_pp:LDR@0x41026 pool@0x4105C",
         "rom.BEGIN_BATTLE_INTRO_ADDR": "rom:patch/build/slink_RR.gba sha1=b7d1e0756fcc66575878affc8f7b95c45386bb1c intro_store_controllers:LDR@0xD374/0xD376 pools@0xD39C/0xD3A0 STR@0xD378; the BeginBattleIntro body is the intro_store_begin anchor (0x123C0, == FR)",
@@ -226,6 +253,7 @@
         "BATTLE_TYPE_TRAINER_MASK": 8,
         "BOXES_PER_STORE": 25,
         "BOX_NAMES_OFFSET": 33604,
+        "B_ACTION_NOTHING_FAINTED": 13,
         "CFRU_BOX_BASES": [
           33723160,
           33724900,
@@ -256,6 +284,8 @@
         "CFRU_COMPRESSED_BOX": true,
         "CFRU_NO_ENCRYPT": true,
         "COMPRESSED_MON_SIZE": 58,
+        "DISABLE_STRUCT_PERISH_TIMER_OFF": 15,
+        "DISABLE_STRUCT_SIZE": 28,
         "EXPERIENCE_TABLE_ENTRY_COUNT": 256,
         "GMAIN_CB2_OFFSET": 4,
         "MAX_LEVEL": 250,
@@ -281,6 +311,7 @@
         "SE_NEW_LINK": 2,
         "SE_NUZLOCKE_START": 268,
         "SHEDINJA_SPECIES_ID": 303,
+        "STATUS3_PERISH_SONG": 32,
         "TASK_STRUCT_SIZE": 40
       },
       "ram": {
@@ -299,6 +330,7 @@
         "CHOSEN_ACTION_ADDR": 33701244,
         "CHOSEN_MOVE_ADDR": 33701316,
         "CHOSEN_MOVE_ADDRS": null,
+        "DISABLE_STRUCTS_ADDR": 33701388,
         "ENEMY_BASE": 33701932,
         "ENEMY_COUNT_ADDR": 33701930,
         "GMAIN_ADDR": null,
@@ -312,6 +344,7 @@
         "SB2_PTR_ADDR": 50346040,
         "SPECIAL_VAR_BOX_ID_ADDR": 33779926,
         "SPECIAL_VAR_BOX_POS_ADDR": 33779928,
+        "STATUS3_ADDR": 33701372,
         "TASKS_BASE_ADDR": 50352272,
         "TRAINER_OPPONENT_ADDR": 33785518
       },
