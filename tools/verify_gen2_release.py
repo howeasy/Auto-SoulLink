@@ -776,8 +776,10 @@ def _memorial_receipt_errors(lines: list[str], side: str) -> list[str]:
     return []
 
 
-def _active_faint_cell_errors(legs: dict, axes: dict) -> list[str]:
-    """Bind archived active-death receipts; bench-death evidence cannot fill this cell."""
+def _active_faint_cell_errors(legs: dict, axes: dict, trainer: bool = False) -> list[str]:
+    """Bind archived active-death receipts; bench-death evidence cannot fill this cell. trainer: the O-30
+    MINOR-5 variant (gen2_faint_active_trainer) - a Route 30 youngster battle, ForcePlayerMonChoice, no NEXT_MON,
+    a live enemy turn after REPLACED (the shared validator's trainer=True), and B's receipt names the trainer."""
     def need(condition, why):
         if not condition:
             raise ValueError(why)
@@ -795,10 +797,11 @@ def _active_faint_cell_errors(legs: dict, axes: dict) -> list[str]:
         # Same SOURCE validator as the independent save oracle: exact battle-hold PC/bank,
         # four ordered permit spans, trace sequence, replacement and observed HP/status.
         validate_faint_active_markers(results, title_b=axes["partner"], key_a=caps["a"]["key"],
-                                     key_b=caps["b"]["key"], species_b=caps["b"]["species_id"])
+                                     key_b=caps["b"]["key"], species_b=caps["b"]["species_id"], trainer=trainer)
+        schema = "gen2-duo-faint-active-trainer-v1" if trainer else "gen2-duo-faint-active-v1"
         for side in ("a", "b"):
             head, receipt, save, link = (one(side, tag) for tag in ("DUO_GEN2", "RECEIPT", "SAVE_WITNESS", "LINK_SAVE"))
-            need(receipt.get("schema") == "gen2-duo-faint-active-v1"
+            need(receipt.get("schema") == schema
                  and all(receipt.get(key) == head.get(key) for key in
                          ("player", "scenario", "attempt", "case", "title", "rom_sha1", "fixture_sha256"))
                  and receipt.get("capture") == caps[side] and receipt.get("key") == caps[side]["key"]
@@ -837,6 +840,11 @@ def _active_faint_cell_errors(legs: dict, axes: dict) -> list[str]:
                      and receipt.get("force_faint_key") == caps["b"]["key"] and receipt.get("battle_write") == expected_write
                      and receipt.get("native_faint") == first and receipt.get("replaced") == one("b", "REPLACED"),
                      "B receipt does not bind active write/native faint/replacement")
+                if trainer:
+                    active = one("b", "LINKED_ACTIVE")
+                    need(receipt.get("trainer") == {"class": active.get("other_trainer_class"),
+                                                    "id": active.get("other_trainer_id")},
+                         "B receipt does not name the opposing trainer from LINKED_ACTIVE")
                 memorial = receipt.get("memorial") or {}
                 need(memorial.get("preimage_frame") == one("b", "MEMORIAL_PREIMAGE").get("frame")
                      and memorial.get("ack") == one("b", "MEMORIAL_ACK"), "B receipt memorial differs")
@@ -952,6 +960,8 @@ def _runner_cell_fixtures(duo, game: str, scenario: str) -> dict | None:
         return None
     if scenario == "gen2_ball_gate":
         return (getattr(duo, "GEN2_BALL_GATE_FIXTURES", {}) or {}).get(game)
+    if scenario == "gen2_faint_active_trainer":
+        return (getattr(duo, "GEN2_TRAINER_FIXTURES", {}) or {}).get(game)
     if scenario in (getattr(duo, "GEN2_SYNTH_SCENARIOS", {}) or {}):
         return {inst: duo.gen2_synth_name(scenario, game, inst) for inst in ("a", "b")}
     fixtures = dict(duo.GAMES[game].get("fixture") or {})
@@ -1030,6 +1040,8 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
         errors.extend(_clause_cell_errors(legs, scenario, axes))
     if scenario == "gen2_faint_active":
         errors.extend(_active_faint_cell_errors(legs, axes))
+    if scenario == "gen2_faint_active_trainer":
+        errors.extend(_active_faint_cell_errors(legs, axes, trainer=True))
     tokens = _pydec_tokens(legs.get("pydec", [])) or {}
     memorial_sides = ()
     # gen2_changebox's memorial is the faint half (DUO-WAVE-C). Whiteout's preimage is the REVIVED record

@@ -2445,3 +2445,69 @@ def test_release_evidence_needs_a_committed_inspect_run_row(tmp_path):
 
 def test_the_promotion_verdict_includes_fixtures_and_the_inspect_run():
     assert {"fixtures_errors", "inspect_run_errors"} <= set(_PARTS)
+
+
+# gen2_faint_active_trainer (O-30 MINOR-5): the active-faint binding with the trainer markers.
+
+def _trainer_cell(tmp_path, pair="duo.crystal.crystal", trainer_id=1):
+    """The synthetic active-faint cell rewritten the way scenario_gen2_faint_active.lua S.TRAINER emits it."""
+    proof, axes, lock, text = _active_faint_cell(tmp_path, pair)
+    doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
+    axes = {**axes, "scenario_fixtures": _row(doc, pair)["axes"]["scenario_fixtures"]}
+    fixtures = axes["scenario_fixtures"]["gen2_faint_active_trainer"]
+    for name in fixtures.values():
+        (tmp_path / "tests/fixtures/gen2" / f"{name}.SaveRAM").write_bytes(
+            (REPO / "tests/fixtures/gen2" / f"{name}.SaveRAM").read_bytes())
+    for side in ("a", "b"):
+        out = []
+        for line in text[side].splitlines():
+            tag, _, body = line.partition(" ")
+            if tag == "NEXT_MON":
+                continue
+            if tag in ("DUO_GEN2", "RECEIPT", "LINKED_ACTIVE"):
+                row = json.loads(body)
+                if tag in ("DUO_GEN2", "RECEIPT"):
+                    row.update(scenario="gen2_faint_active_trainer", case=fixtures[side],
+                               fixture_sha256=gate._fixture_sha256(tmp_path, fixtures[side]))
+                if tag == "RECEIPT":
+                    row["schema"] = "gen2-duo-faint-active-trainer-v1"
+                    if side == "b":
+                        row["trainer"] = {"class": 22, "id": trainer_id}
+                        row["linked_active"].update(battle_mode=2, other_trainer_class=22, other_trainer_id=trainer_id)
+                if tag == "LINKED_ACTIVE":
+                    row.update(battle_mode=2, other_trainer_class=22, other_trainer_id=trainer_id)
+                line = f"{tag} {json.dumps(row)}"
+            out.append(line)
+            if tag == "REPLACED":
+                out.append(f'BATTLE_TRACE {json.dumps({"seq": 3, "what": "enemy_turn", "frame": 230})}')
+        text[side] = "\n".join(out) + "\n"
+    text["pydec"] = text["pydec"].replace("scenario=gen2_faint_active", "scenario=gen2_faint_active_trainer").replace(
+        "death=active", "death=active battle=trainer")
+    return proof, axes, lock, text
+
+
+@pytest.mark.parametrize("pair", ["duo.crystal.crystal", "duo.gold.silver"])
+def test_trainer_active_faint_accepts_the_route30_youngster_cell(tmp_path, pair):
+    proof, axes, lock, text = _trainer_cell(tmp_path, pair)
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_faint_active_trainer") == []
+
+
+@pytest.mark.parametrize("mutation", ["wild_mode", "next_mon", "no_enemy_turn", "other_trainer", "receipt_trainer",
+                                      "plain_schema"])
+def test_trainer_active_faint_refuses_wild_or_unbound_evidence(tmp_path, mutation):
+    proof, axes, lock, text = _trainer_cell(tmp_path)
+    b = text["b"]
+    if mutation == "wild_mode":
+        b = b.replace('"battle_mode": 2', '"battle_mode": 1')
+    elif mutation == "next_mon":
+        b = b.replace("REPLACED ", 'NEXT_MON {"frame": 210}\nREPLACED ', 1)
+    elif mutation == "no_enemy_turn":
+        b = "\n".join(line for line in b.splitlines() if "enemy_turn" not in line) + "\n"
+    elif mutation == "other_trainer":
+        b = b.replace('"other_trainer_id": 1', '"other_trainer_id": 9')
+    elif mutation == "receipt_trainer":
+        b = b.replace('"trainer": {"class": 22, "id": 1}', '"trainer": {"class": 22, "id": 2}')
+    else:
+        b = b.replace("gen2-duo-faint-active-trainer-v1", "gen2-duo-faint-active-v1")
+    text["b"] = b
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_faint_active_trainer") != []
