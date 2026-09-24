@@ -1135,7 +1135,7 @@ def test_sync_retrieve_failed_reboxes_partner(tmp_path, monkeypatch):
     stats = {"level": 12, "maxHP": 44, "attack": 20, "defense": 18, "speed": 22, "spAtk": 15, "spDef": 16}
     state.handle_event("a", {"event": "capture", "key": "A:1", "area_id": "route_1",
                               "level": 12, "in_box": True, "stats": stats})
-    assert state.mon_stats.get("A:1") == stats
+    assert state.mon_stats["a"].get("A:1") == stats
 
 
 def test_box_capture_no_stats_still_links(tmp_path, monkeypatch):
@@ -1147,7 +1147,7 @@ def test_box_capture_no_stats_still_links(tmp_path, monkeypatch):
                               "level": 5, "in_box": True})
     state.handle_event("b", {"event": "capture", "key": "B:2", "area_id": "route_1", "level": 7})
     assert state.area_states["route_1"] == AreaStatus.LINKED
-    assert "A:1" not in state.mon_stats  # No stats to cache
+    assert "A:1" not in state.mon_stats["a"]  # No stats to cache
 
 
 def test_sync_retrieve_failed_removes_from_party_keys(tmp_path, monkeypatch):
@@ -1165,7 +1165,7 @@ def test_box_to_party_no_premature_partner_party_keys(tmp_path, monkeypatch):
     state = make_state_with_link()
     state.party_keys["a"].discard("A:1")
     state.party_keys["b"].discard("B:2")
-    state.mon_stats["B:2"] = {"level": 12, "maxHP": 40}
+    state.mon_stats["b"]["B:2"] = {"level": 12, "maxHP": 40}
 
     state.handle_event("a", {"event": "box_to_party", "key": "A:1"})
     # B:2 should NOT be in party_keys — awaiting sync_retrieve_done.
@@ -1211,7 +1211,7 @@ def test_pc_swap_party_to_box_before_box_to_party(tmp_path, monkeypatch):
     state.party_keys["a"] = {"A:1", "A:3", "FILL_A:1", "FILL_A:2", "FILL_A:3", "FILL_A:4"}
     state.party_keys["b"] = {"B:2", "B:4", "FILL_B:1", "FILL_B:2", "FILL_B:3", "FILL_B:4"}
     state.party_size = {"a": 6, "b": 6}
-    state.mon_stats["B:6"] = {"level": 5, "maxHP": 20}
+    state.mon_stats["b"]["B:6"] = {"level": 5, "maxHP": 20}
 
     # Simulate the CORRECT event ordering (deposit first, then retrieve):
     # A deposits A:1 → server queues box_mon(B:2) for B
@@ -1257,7 +1257,7 @@ def test_pc_swap_wrong_order_box_to_party_first_fails(tmp_path, monkeypatch):
     state.party_keys["a"] = {"A:1", "FILL_A:1", "FILL_A:2", "FILL_A:3", "FILL_A:4", "FILL_A:5"}
     state.party_keys["b"] = {"B:2", "FILL_B:1", "FILL_B:2", "FILL_B:3", "FILL_B:4", "FILL_B:5"}
     state.party_size = {"a": 6, "b": 6}
-    state.mon_stats["B:6"] = {"level": 5, "maxHP": 20}
+    state.mon_stats["b"]["B:6"] = {"level": 5, "maxHP": 20}
 
     # WRONG ORDER: box_to_party arrives first (old bug)
     # Server sees B at 6/6 with 0 pending box_mons → blocks
@@ -1862,7 +1862,7 @@ def test_box_to_party_queues_pending_sync_for_partner(tmp_path, monkeypatch):
     # Both boxed; pre-populate stats cache as if B:2 was deposited earlier
     state.party_keys["a"].discard("A:1")
     state.party_keys["b"].discard("B:2")
-    state.mon_stats["B:2"] = {"level": 12, "maxHP": 40, "attack": 25}
+    state.mon_stats["b"]["B:2"] = {"level": 12, "maxHP": 40, "attack": 25}
 
     cmds_a = state.handle_event("a", {"event": "box_to_party", "key": "A:1"})
     assert noop_only(cmds_a)
@@ -2273,7 +2273,7 @@ def test_pending_memorials_requeued_on_reconnect(tmp_path, monkeypatch):
     cmds_b_step2 = state.handle_event("b", {"event": "party_to_box", "key": "B:2",
                                              "stats": stats_b})
     assert noop_only(cmds_b_step2), "B's stats-cache party_to_box should not re-trigger box_mon for A"
-    assert state.mon_stats.get("B:2") == stats_b, "B's stats must be cached on server"
+    assert state.mon_stats["b"].get("B:2") == stats_b, "B's stats must be cached on server"
     # A's mon is already boxed — no duplicate box_mon for A
     cmds_a_check = state.handle_event("a", {"event": "tick"})
     assert noop_only(cmds_a_check), "No spurious box_mon sent back to A"
@@ -4256,11 +4256,11 @@ def test_key_change_migrates_mon_stats(tmp_path, monkeypatch):
     """key_change should migrate cached mon stats."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = make_state_with_link(a_key="AAAA:1111", b_key="BBBB:2222")
-    state.mon_stats["AAAA:1111"] = {"level": 15, "maxHP": 50}
+    state.mon_stats["a"]["AAAA:1111"] = {"level": 15, "maxHP": 50}
     state.handle_event("a", {"event": "key_change", "old_key": "AAAA:1111", "new_key": "CCCC:1111"})
-    assert "CCCC:1111" in state.mon_stats
-    assert "AAAA:1111" not in state.mon_stats
-    assert state.mon_stats["CCCC:1111"]["level"] == 15
+    assert "CCCC:1111" in state.mon_stats["a"]
+    assert "AAAA:1111" not in state.mon_stats["a"]
+    assert state.mon_stats["a"]["CCCC:1111"]["level"] == 15
 
 
 def test_key_change_migrates_queued_commands(tmp_path, monkeypatch):
@@ -4660,7 +4660,7 @@ def test_triple_swap_all_pairs_sync(tmp_path, monkeypatch):
     state.party_keys["a"] = {"A:1", "A:3", "FILL_A:1", "FILL_A:2"}
     state.party_keys["b"] = {"B:1", "B:3", "FILL_B:1", "FILL_B:2"}
     state.party_size = {"a": 4, "b": 4}
-    state.mon_stats["B:2"] = {"level": 5, "maxHP": 20}
+    state.mon_stats["b"]["B:2"] = {"level": 5, "maxHP": 20}
 
     # A deposits pair1
     state.handle_event("a", {"event": "party_to_box", "key": "A:1", "stats": {"level": 5, "maxHP": 20}})
@@ -4694,7 +4694,7 @@ def test_box_to_party_with_stale_party_size(tmp_path, monkeypatch):
     state.party_keys["a"] = {"A:1", "FILL_A:1", "FILL_A:2", "FILL_A:3", "FILL_A:4"}
     state.party_keys["b"] = {"B:1", "FILL_B:1", "FILL_B:2", "FILL_B:3", "FILL_B:4"}
     state.party_size = {"a": 5, "b": 5}
-    state.mon_stats["B:2"] = {"level": 5, "maxHP": 20}
+    state.mon_stats["b"]["B:2"] = {"level": 5, "maxHP": 20}
 
     # A deposits pair1 → box_mon for B:1 queued (B adjusted size: 5-1=4)
     state.handle_event("a", {"event": "party_to_box", "key": "A:1", "stats": {"level": 5, "maxHP": 20}})
@@ -4881,7 +4881,7 @@ def test_faint_after_sync_retrieve_done(tmp_path, monkeypatch):
     # Both boxed initially
     state.party_keys["a"].discard("A:1")
     state.party_keys["b"].discard("B:2")
-    state.mon_stats["B:2"] = {"level": 7, "maxHP": 30}
+    state.mon_stats["b"]["B:2"] = {"level": 7, "maxHP": 30}
 
     # A retrieves → party_mon queued for B
     state.handle_event("a", {"event": "box_to_party", "key": "A:1"})
@@ -4940,7 +4940,7 @@ def test_adjusted_party_size_with_three_pending_box_mons(tmp_path, monkeypatch):
     for i in range(1, 4):
         state.queued_commands["b"].append({"cmd": "box_mon", "key": f"B:{i}"})
 
-    state.mon_stats["B:0"] = {"level": 5, "maxHP": 20}
+    state.mon_stats["b"]["B:0"] = {"level": 5, "maxHP": 20}
 
     # A:0 is in party, B:0 is in party. A deposits A:0 → server queues box_mon for B:0
     state.handle_event("a", {"event": "party_to_box", "key": "A:0", "stats": {"level": 5, "maxHP": 20}})
@@ -4949,7 +4949,7 @@ def test_adjusted_party_size_with_three_pending_box_mons(tmp_path, monkeypatch):
     # Now A retrieves some linked mon (A:1) — B's partner (B:1) needs to come to party
     # B:1 not in party_keys, B has box_mon queued for B:1 but let's test with A:2
     # Actually let's just verify the adjusted size is computed: try withdrawing A:1
-    state.mon_stats["B:1"] = {"level": 5, "maxHP": 20}
+    state.mon_stats["b"]["B:1"] = {"level": 5, "maxHP": 20}
     cmds = state.handle_event("a", {"event": "box_to_party", "key": "A:1"})
     # B:1's partner needs party_mon; B has adjusted_party_size = 6-4 = 2, logical_size = max(linked=2, 2) = 2 < 6
     assert not has_cmd(cmds, "box_mon", "A:1"), "A:1 should NOT be re-deposited (B has room after adjustments)"
@@ -5055,7 +5055,7 @@ def test_save_load_round_trip(tmp_path, monkeypatch):
     state.area_states["route_6"] = AreaStatus.PENDING_B
 
     # Add mon_stats
-    state.mon_stats["AA:11"] = {"level": 10, "maxHP": 35}
+    state.mon_stats["a"]["AA:11"] = {"level": 10, "maxHP": 35}
 
     # Add bonus_keys and pending_bonus
     state.bonus_keys["a"].add("SHINY:1111")
@@ -5080,7 +5080,7 @@ def test_save_load_round_trip(tmp_path, monkeypatch):
     assert loaded.species_lock is True
     assert loaded.gender_lock is True
     assert loaded.type_lock is True
-    assert loaded.mon_stats.get("AA:11", {}).get("level") == 10
+    assert loaded.mon_stats["a"].get("AA:11", {}).get("level") == 10
     assert "SHINY:1111" in loaded.bonus_keys["a"]
     assert list(loaded.pending_bonus["b"]) == ["SHINY:1111"]
     assert loaded.pending_captures["route_6"]["a"].key == "CC:33"
@@ -5170,7 +5170,7 @@ def test_box_mon_then_party_mon_same_pair(tmp_path, monkeypatch):
     """A deposits then immediately withdraws same mon — box_mon cancelled, party_mon sent."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = make_state_with_link()
-    state.mon_stats["B:2"] = {"level": 7, "maxHP": 30}
+    state.mon_stats["b"]["B:2"] = {"level": 7, "maxHP": 30}
 
     # A deposits A:1 → box_mon queued for B:2
     state.handle_event("a", {"event": "party_to_box", "key": "A:1",
@@ -5197,7 +5197,7 @@ def test_party_mon_then_box_mon_same_pair(tmp_path, monkeypatch):
     # Both boxed initially
     state.party_keys["a"].discard("A:1")
     state.party_keys["b"].discard("B:2")
-    state.mon_stats["B:2"] = {"level": 7, "maxHP": 30}
+    state.mon_stats["b"]["B:2"] = {"level": 7, "maxHP": 30}
 
     # A withdraws A:1 → party_mon queued for B:2
     state.handle_event("a", {"event": "box_to_party", "key": "A:1"})
@@ -5235,7 +5235,7 @@ def test_mixed_sync_and_hud_commands_all_delivered(tmp_path, monkeypatch):
     state.party_keys["a"] = {"A:1"}
     state.party_keys["b"] = {"B:1"}
     state.party_size = {"a": 3, "b": 3}
-    state.mon_stats["B:2"] = {"level": 5, "maxHP": 20}
+    state.mon_stats["b"]["B:2"] = {"level": 5, "maxHP": 20}
 
     # Queue a mix of commands for B
     state.queued_commands["b"].append({"cmd": "hud_show", "text": "Hello!", "r": 0, "g": 255, "b": 0})
@@ -5311,7 +5311,7 @@ def test_key_change_undo_restores_link_entry(tmp_path, monkeypatch):
     TRADED_KEY = "CCCC:3333"
 
     state = make_state_with_link(a_key=ORIG_KEY, b_key="BBBB:2222")
-    state.mon_stats[ORIG_KEY] = {"level": 20, "maxHP": 60}
+    state.mon_stats["a"][ORIG_KEY] = {"level": 20, "maxHP": 60}
 
     # Forward: NPC trade — A's mon gets a new key
     state.handle_event("a", {"event": "key_change", "old_key": ORIG_KEY, "new_key": TRADED_KEY})
@@ -5319,7 +5319,7 @@ def test_key_change_undo_restores_link_entry(tmp_path, monkeypatch):
     assert TRADED_KEY in state._key_index
     assert ORIG_KEY not in state._key_index
     assert TRADED_KEY in state.party_keys["a"]
-    assert TRADED_KEY in state.mon_stats
+    assert TRADED_KEY in state.mon_stats["a"]
 
     # Undo: freeze fires within 5 frames; Lua sends trade_undo B→A
     state.handle_event("a", {"event": "key_change", "old_key": TRADED_KEY, "new_key": ORIG_KEY,
@@ -5329,9 +5329,9 @@ def test_key_change_undo_restores_link_entry(tmp_path, monkeypatch):
     assert TRADED_KEY not in state._key_index
     assert ORIG_KEY in state.party_keys["a"]
     assert TRADED_KEY not in state.party_keys["a"]
-    assert ORIG_KEY in state.mon_stats
-    assert TRADED_KEY not in state.mon_stats
-    assert state.mon_stats[ORIG_KEY]["level"] == 20
+    assert ORIG_KEY in state.mon_stats["a"]
+    assert TRADED_KEY not in state.mon_stats["a"]
+    assert state.mon_stats["a"][ORIG_KEY]["level"] == 20
 
 
 def test_key_change_undo_restores_pending_capture(tmp_path, monkeypatch):
@@ -5397,7 +5397,7 @@ def test_tick_reconcile_ghost_boxed_mon_readds_and_pulls_partner(tmp_path, monke
     # and B's mon got physically boxed in response.
     state.party_keys["a"].discard("A:1")
     state.party_keys["b"].discard("B:2")
-    state.mon_stats["B:2"] = {"level": 7, "maxHP": 22, "attack": 10, "defense": 9,
+    state.mon_stats["b"]["B:2"] = {"level": 7, "maxHP": 22, "attack": 10, "defense": 9,
                               "speed": 12, "spAtk": 8, "spDef": 8}
 
     state.handle_event("a", {"event": "tick", "party": [{"key": "A:1"}]})

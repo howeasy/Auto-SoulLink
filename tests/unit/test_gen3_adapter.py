@@ -547,17 +547,17 @@ class TestCFRUBoxHandling:
             for i in range(5)
         ]
         for bentry in entries:
-            tracker._cache_mon_info(bentry["key"], bentry)
+            tracker._cache_mon_info(bentry["key"], bentry, "a")
         for i in range(5):
             key = f"MON{i}:000{i}"
-            assert tracker.state.mon_stats[key]["level"] == 10 + i
+            assert tracker.state.mon_stats["a"][key]["level"] == 10 + i
 
     def test_mon_stats_no_cross_slot_overwrite(self, tracker):
         """Later slot caching must not overwrite earlier slot's mon_stats entry."""
-        tracker._cache_mon_info("FIRST:0001", {"species_id": 4, "level": 10})
-        tracker._cache_mon_info("SECOND:0002", {"species_id": 7, "level": 20})
-        assert tracker.state.mon_stats["FIRST:0001"]["level"] == 10
-        assert tracker.state.mon_stats["SECOND:0002"]["level"] == 20
+        tracker._cache_mon_info("FIRST:0001", {"species_id": 4, "level": 10}, "a")
+        tracker._cache_mon_info("SECOND:0002", {"species_id": 7, "level": 20}, "a")
+        assert tracker.state.mon_stats["a"]["FIRST:0001"]["level"] == 10
+        assert tracker.state.mon_stats["a"]["SECOND:0002"]["level"] == 20
 
     # ── _lookup_mon_detail: correct slot returned ──────────────────────────
 

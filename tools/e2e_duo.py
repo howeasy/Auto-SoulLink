@@ -403,6 +403,15 @@ GEN1_RNG_REASON_CLASS = {
 }
 
 
+
+def _flat_mon_stats(stats):
+    """links.json `mon_stats` as one {key: stats} map. The server keeps it per player
+    ({"a": {...}, "b": {...}}, KEY-SCOPE-2); an older document is already flat."""
+    stats = stats or {}
+    if set(stats) <= {"a", "b"} and all(isinstance(v, dict) for v in stats.values()):
+        return {**(stats.get("a") or {}), **(stats.get("b") or {})}   # ponytail: an equal key merges
+    return stats
+
 class GameRngMiss(Exception):
     """The only early orchestration exit eligible for a whole-run Gen 1 retry."""
 
@@ -2290,7 +2299,7 @@ class DuoRun:
         """The persisted `mon_stats` keys, or [] when the document is absent/unreadable."""
         try:
             with open(os.path.join(self.data_dir, "links.json"), encoding="utf-8") as handle:
-                return sorted((json.load(handle).get("mon_stats") or {}).keys())
+                return sorted(_flat_mon_stats(json.load(handle).get("mon_stats")).keys())
         except (OSError, ValueError):
             return []
 
@@ -2956,8 +2965,8 @@ class DuoRun:
         # hello and the end state holds both: a write that was already owed before the chord, not
         # a change the reset caused. So the node is reconciled rather than diffed — values may not
         # move and no key outside the two boot mons may appear — and then dropped from the compare.
-        base_stats = original.pop("mon_stats", None) or {}
-        now_stats = current.pop("mon_stats", None) or {}
+        base_stats = _flat_mon_stats(original.pop("mon_stats", None))
+        now_stats = _flat_mon_stats(current.pop("mon_stats", None))
         moved = {key: (was, now_stats.get(key, "<missing>"))
                  for key, was in base_stats.items() if now_stats.get(key) != was}
         if moved:

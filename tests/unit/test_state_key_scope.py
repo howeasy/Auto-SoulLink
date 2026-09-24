@@ -175,3 +175,33 @@ def test_a_split_onto_a_key_the_taker_already_holds_retires_the_traded_pair(tmp_
     state.handle_event("b", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
     assert state.resolve_trade(token, "adopt") == (True, "")
     _assert_fail_closed(state, entry, twin)
+
+
+def test_the_other_players_stats_never_overwrite_a_shared_key(tmp_path):
+    state, (l1, l2) = _two_links(tmp_path)
+    _npc_trade(state, "b", B1)
+    _npc_trade(state, "a", A2)                                   # both hold ONIX now
+    state.handle_event("a", {"event": "stats_cache", "key": ONIX, "stats": {"level": 14, "maxHP": 40}})
+    state.handle_event("b", {"event": "stats_cache", "key": ONIX, "stats": {"level": 55, "maxHP": 150}})
+    assert state.mon_stats["a"][ONIX]["level"] == 14 and state.mon_stats["b"][ONIX]["level"] == 55
+    # A's partner withdraws its half: A's party_mon for ONIX carries A's stats, not B's
+    state.party_keys["b"].discard(B2)
+    state.handle_event("b", {"event": "box_to_party", "key": B2})
+    a_cmds = state.handle_event("a", {"event": "noop"})
+    pm = [c for c in a_cmds if c.get("cmd") == "party_mon" and c.get("key") == ONIX]
+    assert pm and pm[0]["stats"]["level"] == 14
+
+
+def test_an_old_flat_mon_stats_file_is_migrated_per_player(tmp_path):
+    import json
+    state, (l1, l2) = _two_links(tmp_path)
+    state._save()
+    path = tmp_path / "links.json"
+    doc = json.loads(path.read_text())
+    doc["mon_stats"] = {A1: {"level": 3}, B2: {"level": 4}, "FFFF:0000:01": {"level": 5}}
+    path.write_text(json.dumps(doc))
+    back = SoulLinkState.load(data_dir=str(tmp_path), adapter=Gen1Adapter())
+    assert back.mon_stats["a"] == {A1: {"level": 3}, "FFFF:0000:01": {"level": 5}}
+    assert back.mon_stats["b"] == {B2: {"level": 4}, "FFFF:0000:01": {"level": 5}}
+    back._save()
+    assert set(json.loads(path.read_text())["mon_stats"]) == {"a", "b"}

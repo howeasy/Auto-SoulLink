@@ -1657,12 +1657,15 @@ class SLinkServer:
         # Backfill mon_stats for PC box level display (covers shiny/bonus mons)
         lv = detail.get("level", 0)
         maxhp = detail.get("maxHP", 0)
-        if lv and key not in self.state.mon_stats:
-            self.state.mon_stats[key] = {"level": lv}
+        stats = self.state.mon_stats[player_id] if player_id else None   # KEY-SCOPE-2: per player
+        if stats is None:
+            pass
+        elif lv and key not in stats:
+            stats[key] = {"level": lv}
             if maxhp:
-                self.state.mon_stats[key]["maxHP"] = maxhp
-        elif lv and not self.state.mon_stats.get(key, {}).get("level"):
-            self.state.mon_stats[key]["level"] = lv
+                stats[key]["maxHP"] = maxhp
+        elif lv and not stats.get(key, {}).get("level"):
+            stats[key]["level"] = lv
         # Backfill level and nickname into link entries
         nick = detail.get("nickname", "")
         species_id = detail.get("species_id", 0)
@@ -2667,7 +2670,7 @@ class SLinkServer:
                 mi = lnk.a if pid == "a" else lnk.b
                 if not mi or not mi.key or mi.key in party_key_set:
                     continue
-                stats = s.mon_stats.get(mi.key, {})
+                stats = s.mon_stats[pid].get(mi.key, {})
                 detail = {
                     "species_id":   mi.species,
                     "level":        mi.level or stats.get("level", 0),
@@ -4625,7 +4628,7 @@ class SLinkServer:
                                 f"[{player_id}] Quarantined mon {key[:8]} found in memorial box! "
                                 f"Queueing party_mon + box_mon to relocate."
                             )
-                            stats = s.mon_stats.get(key, {})
+                            stats = s.mon_stats[player_id].get(key, {})
                             s.queued_commands[player_id].append({"cmd": "party_mon", "key": key, "stats": stats})
                             s.queued_commands[player_id].append({"cmd": "box_mon", "key": key})
                             break
@@ -4677,7 +4680,7 @@ class SLinkServer:
         if mi.level:
             return mi.level
         # Try mon_stats cache (set when mon was deposited to box)
-        cached = self.state.mon_stats.get(mi.key)
+        cached = self.state.mon_stats[player_id].get(mi.key)
         if cached and cached.get("level"):
             return cached["level"]
         # Try live party_details from either player
@@ -4709,7 +4712,7 @@ class SLinkServer:
                     return {"nickname": mon.nickname, "species_id": mon.species, "level": mon.level}
         # Enrich with level from mon_stats cache or existing link entry
         if result and not result.get("level"):
-            cached = self.state.mon_stats.get(key)
+            cached = self.state.mon_stats[player_id].get(key)
             if cached and cached.get("level"):
                 result["level"] = cached["level"]
             else:

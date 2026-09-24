@@ -307,15 +307,15 @@ def test_contradictory_evidence_is_never_filled_by_the_action(tmp_path):
 
 def test_a_split_copies_the_stats_to_an_evolved_copy_and_drops_the_gone_mon(tmp_path):
     state, entry, token = _gen1_applying(tmp_path)
-    state.mon_stats.update({A_GETS: {"atk": 7}, B_GETS: {"atk": 9}})
+    state.mon_stats["b"][A_GETS], state.mon_stats["a"][B_GETS] = {"atk": 7}, {"atk": 9}
     evolved = "1234:5678:16"
     state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
     state.pending_trade["new"]["a"] = (evolved, 0x16)            # A's copy evolved on arrival
     state.handle_event("b", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
     assert state.resolve_trade(token, "adopt") == (True, "")
-    assert entry.a.key == evolved and state.mon_stats[evolved] == {"atk": 7}
-    assert state.mon_stats[A_GETS] == {"atk": 7}, "B still holds the original"
-    assert B_GETS not in state.mon_stats, "A's own mon is gone"
+    assert entry.a.key == evolved and state.mon_stats["a"][evolved] == {"atk": 7}
+    assert state.mon_stats["b"][A_GETS] == {"atk": 7}, "B still holds the original"
+    assert B_GETS not in state.mon_stats["a"], "A's own mon is gone"
 
 
 import asyncio  # noqa: E402

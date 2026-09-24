@@ -344,12 +344,12 @@ def test_a_reported_trade_evolution_is_accepted(tmp_path):
 def test_a_commit_moves_the_shiny_dedup_and_the_stats_cache_with_the_mon(tmp_path):
     state, entry, token = _gen1_applying(tmp_path)
     state.bonus_keys["a"].add(B_GETS)                       # A caught its offered mon as a shiny
-    state.mon_stats[B_GETS] = {"atk": 9}
+    state.mon_stats["a"][B_GETS] = {"atk": 9}
     state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
     state.handle_event("b", {"event": "trade_done", "token": token, "new_key": "ABCD:1234:95", "new_species": 0x95})
     assert state.pending_trade is None
     assert B_GETS not in state.bonus_keys["a"] and "ABCD:1234:95" in state.bonus_keys["b"]
-    assert state.mon_stats.get("ABCD:1234:95") == {"atk": 9} and B_GETS not in state.mon_stats
+    assert state.mon_stats["b"].get("ABCD:1234:95") == {"atk": 9} and B_GETS not in state.mon_stats["a"]
 
 
 

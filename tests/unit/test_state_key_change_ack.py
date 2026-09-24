@@ -195,10 +195,10 @@ def test_mon_stats_alone_is_a_cache_not_a_collision(st):
     """mon_stats is never pruned, so every buried key lives there forever; treating it as
     load-bearing would turn the reusable-buried-key rule into a pair kill."""
     _link(st)
-    st.mon_stats[NEW] = {"level": 99}
-    st.mon_stats[OLD] = {"level": 5}
+    st.mon_stats["a"][NEW] = {"level": 99}
+    st.mon_stats["a"][OLD] = {"level": 5}
     assert _one(_change(st), "key_change_ack")["migrated"] is True
-    assert st.mon_stats[NEW] == {"level": 5}
+    assert st.mon_stats["a"][NEW] == {"level": 5}
 
 
 # ── every structure migrates ──────────────────────────────────────────────────────────────
@@ -206,7 +206,7 @@ def test_mon_stats_alone_is_a_cache_not_a_collision(st):
 def test_every_structure_in_the_census_migrates(st):
     entry = _link(st)
     entry.encounter_a = MonInfo(key=OLD, species=1)
-    st.mon_stats[OLD] = {"level": 5}
+    st.mon_stats["a"][OLD] = {"level": 5}
     st.bonus_keys["a"].add(OLD)
     st.pending_memorials["a"].add(OLD)
     st.pending_bonus["b"].append(OLD)
@@ -222,7 +222,7 @@ def test_every_structure_in_the_census_migrates(st):
     assert entry.encounter_a.key == NEW
     assert st._key_index[NEW] is entry and OLD not in st._key_index
     assert st.party_keys["a"] == {NEW}
-    assert st.mon_stats == {NEW: {"level": 5}}
+    assert st.mon_stats == {"a": {NEW: {"level": 5}}, "b": {}}
     assert st.bonus_keys["a"] == {NEW}
     assert st.pending_memorials["a"] == {NEW}
     assert list(st.pending_bonus["b"]) == [NEW]

@@ -1703,6 +1703,9 @@ def test_soft_reset_oracle_reads_a_missing_mon_stats_document_as_empty(tmp_path,
     (tmp_path / "links.json").write_text(
         json.dumps({"mon_stats": {"BBBB:2222:02": {"level": 5}}}), encoding="utf-8")
     assert run._mon_stats_keys() == ["BBBB:2222:02"]
+    (tmp_path / "links.json").write_text(json.dumps({"mon_stats": {           # KEY-SCOPE-2 shape
+        "a": {"AAAA:1111:01": {"level": 5}}, "b": {"BBBB:2222:02": {"level": 5}}}}), encoding="utf-8")
+    assert run._mon_stats_keys() == ["AAAA:1111:01", "BBBB:2222:02"]
     (tmp_path / "links.json").unlink()
     assert run._mon_stats_keys() == []
 

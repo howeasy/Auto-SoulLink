@@ -217,7 +217,8 @@ class SoulLinkState:
         # set of monKeys known to be in each player's party right now
         self.party_keys: dict[str, set[str]] = {"a": set(), "b": set()}
         # cached party stats per monKey (populated by party_to_box events, echoed in party_mon)
-        self.mon_stats: dict[str, dict] = {}
+        # KEY-SCOPE-2: {player: {monKey: stats}} -- two players may hold equal keys
+        self.mon_stats: dict[str, dict[str, dict]] = {"a": {}, "b": {}}
         # True once the player has entered a non-gift encounter area (Pokéballs guaranteed).
         # no_catch and area state transitions are suppressed until this activates.
         self.pokeballs_obtained: dict[str, bool] = {"a": False, "b": False}
@@ -416,7 +417,7 @@ class SoulLinkState:
             key = msg.get("key", "")
             stats = msg.get("stats")
             if key and stats:
-                self.mon_stats[key] = stats
+                self.mon_stats[player_id][key] = stats
                 if key in self.party_keys[player_id]:
                     self.party_size[player_id] = max(0, self.party_size.get(player_id, 0) - 1)
                 self.party_keys[player_id].discard(key)
@@ -1257,13 +1258,15 @@ class SoulLinkState:
         nk, ns = pt["new"].get(taker) or (src.key, 0)
         old = pt[f"{taker}_key"]
         setattr(entry, taker, replace(src, key=nk, species=ns or src.species))
-        if nk != src.key and src.key in self.mon_stats:
-            self.mon_stats[nk] = dict(self.mon_stats[src.key])    # the partner still holds the original
+        giver = _partner(taker)
+        if src.key in self.mon_stats[giver]:                      # the partner still holds the original
+            self.mon_stats[taker][nk] = dict(self.mon_stats[giver][src.key])
         for gone in self._trade_old_keys(pt, taker):
             self._unindex(taker, gone, entry)
             self.party_keys[taker].discard(gone)
             self.bonus_keys[taker].discard(gone)
-            self.mon_stats.pop(gone, None)
+            if gone != nk:
+                self.mon_stats[taker].pop(gone, None)
         self.party_keys[taker].add(nk)
         clash = self._index_traded(pt, entry)
         self.pending_trade = None
@@ -1273,6 +1276,22 @@ class SoulLinkState:
         log.warning(f"trade {pt['token']} split: {taker} holds a copy {nk}, its {old} is gone")
         self._record_trade(pt, "split")
         self._trade_settle_ticks[taker] = self.TRADE_SETTLE_TICKS
+
+    def _load_mon_stats(self, saved: dict) -> dict:
+        """KEY-SCOPE-2: links.json keeps mon_stats per player ({"a": {...}, "b": {...}}). An older
+        file has one flat {key: stats} map: each key goes to the player whose link, party or
+        pending capture names it (keys were unique across players then), else to both."""
+        if set(saved) <= {"a", "b"} and all(isinstance(v, dict) for v in saved.values()):
+            return {"a": dict(saved.get("a") or {}), "b": dict(saved.get("b") or {})}
+        out = {"a": {}, "b": {}}
+        for key, stats in saved.items():
+            owners = [pid for pid in ("a", "b")
+                      if self.entry_for(pid, key) is not None or key in self.party_keys[pid]
+                      or any(players.get(pid) and players[pid].key == key
+                             for players in self.pending_captures.values())] or ["a", "b"]
+            for pid in owners:
+                out[pid][key] = stats
+        return out
 
     def _index_traded(self, pt: dict, entry: "LinkEntry") -> list:
         """Index a swapped or split trade link. KEY-SCOPE-2: a half whose key already names
@@ -1343,8 +1362,8 @@ class SoulLinkState:
                 if old in self.bonus_keys[giver]:
                     self.bonus_keys[giver].discard(old)
                     self.bonus_keys[taker].add(new)
-                if new != old and old in self.mon_stats:
-                    self.mon_stats[new] = self.mon_stats.pop(old)
+                if old in self.mon_stats[giver]:           # the stats move to the new holder
+                    self.mon_stats[taker][new] = self.mon_stats[giver].pop(old)
 
         for pid in ("a", "b"):
             gives = pt["a_label"] if pid == "a" else pt["b_label"]
@@ -1397,7 +1416,7 @@ class SoulLinkState:
                     pid: MonInfo(**mon_data)
                     for pid, mon_data in players.items()
                 }
-            state.mon_stats = data.get("mon_stats", {})
+            state.mon_stats = state._load_mon_stats(data.get("mon_stats") or {})
             # Restore Pokéball gate; default True for both if any links exist
             # (backwards-compat: old saves without this field).
             saved_pb = data.get("pokeballs_obtained", {})
@@ -1912,7 +1931,7 @@ class SoulLinkState:
             if stats is None:
                 stats = {}
             stats["species_id"] = species  # always store, even if 0
-            self.mon_stats[key] = stats
+            self.mon_stats[player_id][key] = stats
             self._save()
             return
 
@@ -1924,7 +1943,7 @@ class SoulLinkState:
             partner = _partner(player_id)
 
             # Reconstruct MonInfo for the shiny side using cached stats
-            shiny_stats = self.mon_stats.get(shiny_key, {})
+            shiny_stats = self.mon_stats[partner].get(shiny_key, {})
             shiny_species = shiny_stats.get("species_id", 0)
             shiny_mon_info = MonInfo(key=shiny_key, species=shiny_species,
                                      level=shiny_stats.get("level", 0),
@@ -1995,7 +2014,7 @@ class SoulLinkState:
                     stats_local = {"level": lv, "maxHP": mhp}
             if stats_local:
                 stats_local["species_id"] = cap_species_local
-                self.mon_stats[key] = stats_local
+                self.mon_stats[player_id][key] = stats_local
 
             # Party sync at formation: both mons should be in the same location.
             bonus_in_box = msg.get("in_box", False)
@@ -2207,7 +2226,7 @@ class SoulLinkState:
             if lv and mhp:
                 stats = {"level": lv, "maxHP": mhp}
         if stats:
-            self.mon_stats[key] = stats
+            self.mon_stats[player_id][key] = stats
 
         partner     = _partner(player_id)
         partner_cap = self.pending_captures[area_id].get(partner)
@@ -2291,7 +2310,7 @@ class SoulLinkState:
                     cmd: dict = {"cmd": "party_mon", "key": mon_obj.key}
                     if mon_obj.nickname:
                         cmd["nickname"] = mon_obj.nickname
-                    cached = self.mon_stats.get(mon_obj.key)
+                    cached = self.mon_stats[pid].get(mon_obj.key)
                     if cached:
                         cmd["stats"] = cached
                     # Cancel any pending box_mon for this key (quarantine command may still be queued)
@@ -2735,7 +2754,7 @@ class SoulLinkState:
         # Cache stats so we can echo them back in the partner's party_mon command later.
         stats = msg.get("stats")
         if stats:
-            self.mon_stats[key] = stats
+            self.mon_stats[player_id][key] = stats
         # Decrement party_size immediately (same reason as stats_cache handler): avoids a
         # false "partner's party full" block if the partner tries to withdraw their linked mon
         # before the next tick arrives and corrects the count.
@@ -2866,7 +2885,7 @@ class SoulLinkState:
             cmd: dict = {"cmd": "party_mon", "key": partner_mon.key}
             if partner_mon.nickname:
                 cmd["nickname"] = partner_mon.nickname
-            cached = self.mon_stats.get(partner_mon.key)
+            cached = self.mon_stats[partner].get(partner_mon.key)
             if cached:
                 cmd["stats"] = cached
             # Cancel any pending box_mon for the same key before queuing party_mon.
@@ -3081,7 +3100,7 @@ class SoulLinkState:
                 cmd: dict = {"cmd": "party_mon", "key": partner_mon.key}
                 if partner_mon.nickname:
                     cmd["nickname"] = partner_mon.nickname
-                cached = self.mon_stats.get(partner_mon.key)
+                cached = self.mon_stats[partner].get(partner_mon.key)
                 if cached:
                     cmd["stats"] = cached
                 self.queued_commands[partner].append(cmd)
@@ -3179,7 +3198,7 @@ class SoulLinkState:
             cmd: dict = {"cmd": "party_mon", "key": mon.key}
             if mon.nickname:
                 cmd["nickname"] = mon.nickname
-            cached = self.mon_stats.get(mon.key)
+            cached = self.mon_stats[pid].get(mon.key)
             if cached:
                 cmd["stats"] = cached
             self.queued_commands[pid].append(cmd)
@@ -3350,8 +3369,8 @@ class SoulLinkState:
             self.party_keys[player_id].add(new_key)
 
         # 4. Mon stats cache
-        if old_key in self.mon_stats:
-            self.mon_stats[new_key] = self.mon_stats.pop(old_key)
+        if old_key in self.mon_stats[player_id]:
+            self.mon_stats[player_id][new_key] = self.mon_stats[player_id].pop(old_key)
 
         # 5. Bonus keys (shiny clause)
         if old_key in self.bonus_keys[player_id]:
@@ -3604,11 +3623,11 @@ class SoulLinkState:
         entry.initiating_player = player_id
         # Update MonInfo levels to death-time values so memorial shows current level.
         if player_mon:
-            lv = level or self.mon_stats.get(player_mon.key, {}).get("level", 0)
+            lv = level or self.mon_stats[player_id].get(player_mon.key, {}).get("level", 0)
             if lv:
                 player_mon.level = lv
         if partner_mon:
-            lv = self.mon_stats.get(partner_mon.key, {}).get("level", 0)
+            lv = self.mon_stats[partner].get(partner_mon.key, {}).get("level", 0)
             if lv:
                 partner_mon.level = lv
         if player_mon:
