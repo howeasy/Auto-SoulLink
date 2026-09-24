@@ -1898,7 +1898,8 @@ class DuoRun:
                 found[side] = raw
             return found
 
-        images = self.wait_for("both immutable trade baselines", ready, self.cfg["timeout"])
+        with self._timed("trade_ready"):   # launch -> both TRADE_READY (catch, walk, baseline)
+            images = self.wait_for("both immutable trade baselines", ready, self.cfg["timeout"])
         self._gen2_trade_baseline_saves = {}
         for side, raw in images.items():
             path = Path(self.data_dir, "trade_evidence", side + "_runner_baseline.SaveRAM")
@@ -4995,21 +4996,24 @@ class DuoRun:
                 self.start_server()
             self.start_instances()
             try:
-                self.orchestrate()
+                with self._timed("orchestrate"):
+                    self.orchestrate()
             except GameRngMiss:
                 ra, rb = self.wait_results()
                 if not retryable_gen1_rng(self.game, {"a": ra, "b": rb}, self.attempt,
                                           scenario_attempt_limit(self.scenario, self.game)):
                     raise  # an unrelated failed half is never a game-RNG retry
             else:
-                ra, rb = self.wait_results()
+                with self._timed("results"):
+                    ra, rb = self.wait_results()
             pa = "RESULT: PASS" in ra
             pb = "RESULT: PASS" in rb
             if pa and pb:
                 if scenario_family(getattr(self, "game", "")) == "gen2_new":
                     self._wait_gen2_exit_flush()
                 self._gen2_verified_facts = None
-                self._run_oracle({"a": ra, "b": rb})
+                with self._timed("oracle"):
+                    self._run_oracle({"a": ra, "b": rb})
                 if scenario_family(getattr(self, "game", "")) == "gen2_new" and not self._gen2_verified_facts:
                     raise RuntimeError("Gen 2 oracle did not report verified facts")
             if pa and pb and scenario_family(getattr(self, "game", "")) == "gen1_new":
