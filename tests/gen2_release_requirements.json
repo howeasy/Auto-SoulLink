@@ -756,6 +756,18 @@
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cg_pydec_result.txt",
                       "sha256": "b457c8b53a738b7e57d2c33afb99944ea65762b3a17b84b72f3fbd931fac0bc4"}
           }
+        },
+        {
+          "scenario": "gen2_trade_reset_commit",
+          "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_trade_reset_commit --lane g2_reset_commit --keep-data",
+          "receipts": {
+            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cg_a_result.txt",
+                  "sha256": "e8ede0301a919a2e6726a03340e394ab9d995e792077f785c3671b7f3ba11b0f"},
+            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cg_b_result.txt",
+                  "sha256": "f75d77c18e024dca2b1dcafecf137d954a701199d13e485c7b1bfec31de3db20"},
+            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cg_pydec_result.txt",
+                      "sha256": "46b10c90c38192de548812e78ba133cf74354138abd775bd2c8d5d99a855e4c8"}
+          }
         }
       ]
     }
