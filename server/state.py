@@ -595,10 +595,11 @@ class SoulLinkState:
                             f"waiting for party evidence ({pt.get('verdict')})")
                 pt["phase"] = "uncertain"
                 pt.setdefault("verdict", {"a": None, "b": None})
-                for pid in ("a", "b"):
-                    if pt["verdict"][pid] is None:
-                        pt["verdict"][pid] = "await"
-                self._record_trade(pt, "uncertain")
+                silent = [pid for pid in ("a", "b") if pt["verdict"][pid] is None]
+                for pid in silent:
+                    pt["verdict"][pid] = "await"
+                if silent:                             # a side that declared itself was journaled then
+                    self._record_trade(pt, "uncertain")
                 return
             log.info(f"trade watchdog: abandoning stuck trade (phase {pt.get('phase')}, token {pt.get('token')})")
             self.pending_trade = None
@@ -668,7 +669,10 @@ class SoulLinkState:
                         self._handle_mon_chosen(player_id, {"token": pt["token"], "slot": slot})
                         accepted = bool(self.pending_trade and
                                         self.pending_trade.get("phase") == "confirming")
-        self.queued_commands[player_id].append({"cmd": "trade_offer_ack", "ok": accepted})
+        ack = {"cmd": "trade_offer_ack", "ok": accepted}
+        if accepted:
+            ack["token"] = self.pending_trade["token"]   # the initiator withdraws under it (_handle_menu_result)
+        self.queued_commands[player_id].append(ack)
 
     def _handle_mon_chosen(self, player_id: str, msg: dict):
         """The initiator picked a party slot. Enforce the linked-pair invariant: the slot MUST be one
@@ -761,6 +765,16 @@ class SoulLinkState:
                 self.pending_trade = None
             return
         if phase == "confirming":                          # partner accepted / declined the offer
+            if player_id == pt["initiator"]:
+                # The initiator's cartridge left its offer (timed out, B, a late ack): cancel it
+                # BEFORE the partner answers, or a later YES would apply the partner side alone.
+                if choice != 1:
+                    self.pending_trade = None
+                    for pid in ("a", "b"):
+                        self.queued_commands[pid].append({
+                            "cmd": "msgbox", "text": "Trade did not go through.", "fb": "prompt"})
+                    log.info(f"[{player_id}] withdrew trade offer {pt['token']} before the partner answered")
+                return
             if player_id != _partner(pt["initiator"]):
                 return
             if choice == 1:
@@ -842,8 +856,13 @@ class SoulLinkState:
         if pt["verdict"][player_id] not in (None, "await"):
             return                                      # already decided (a replayed report)
         if msg.get("uncertain") or not new_key:
-            pt["verdict"][player_id] = "await"          # the side finished but cannot vouch: party evidence decides
-        elif new_key == pt[f"{player_id}_key"]:
+            # the side cannot vouch (a reset after its commit entry, a native result 2): party evidence
+            # decides. Journaled as the watchdog does, once, when the side first declares it.
+            if pt["verdict"][player_id] is None:
+                pt["verdict"][player_id] = "await"
+                self._record_trade(pt, "uncertain")
+            return
+        if new_key == pt[f"{player_id}_key"]:
             pt["verdict"][player_id] = "none"           # the client still holds its own mon: refused / never swapped
         else:
             pt["verdict"][player_id] = "traded"

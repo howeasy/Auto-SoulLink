@@ -62,7 +62,9 @@ def test_query_mask_uses_own_eligible_slots_and_busy_is_zero(tmp_path):
 def test_offer_confirms_without_gen3_action_menu_and_stages_partner_prompt(tmp_path):
     state, entry, a_blob, _b_blob = _linked(tmp_path)
     reply = state.handle_event("a", {"event": "trade_offer", "slot": 2})
-    assert _cmd(reply, "trade_offer_ack") == {"cmd": "trade_offer_ack", "ok": True}
+    # the token lets the initiator withdraw the offer before the partner answers
+    assert _cmd(reply, "trade_offer_ack") == {"cmd": "trade_offer_ack", "ok": True,
+                                              "token": state.pending_trade["token"]}
     assert not any(command["cmd"] in ("show_choices", "choose_mon") for command in reply)
     assert state.pending_trade and state.pending_trade["phase"] == "confirming"
     prompt = _cmd(state.handle_event("b", {"event": "tick"}), "show_menu")

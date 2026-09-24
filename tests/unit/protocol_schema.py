@@ -59,11 +59,14 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "trade_offer": ({"slot": "int"}, {}),
     "menu_result": ({"token": "str", "choice": "int"}, {}),
     "mon_chosen": ({"token": "str", "slot": "int"}, {}),
-    "trade_done": ({"new_key": "key", "new_species": "int"}, {"token": "str", "slot": "int"}),
+    "trade_done": ({"new_key": "key", "new_species": "int"}, {"token": "str", "slot": "int", "uncertain": "bool"}),
     "status": ({"badges": "int"}, {}),
     "ghost_pos": ({}, {}),  # ints only; relayed opaquely
     "peer_interact": ({}, {}),
 }
+# trade_done{token, uncertain: true}: the side's native commit was entered but no DONE came
+# (a reset, a result 2); its next party snapshot settles it (state.py _trade_evidence)
+UNCERTAIN_TRADE_DONE = {"trade_done": ({"token": "str", "uncertain": "bool"}, {"slot": "int"})}
 # tick's optional set also applies to safe
 EVENTS["safe"] = ({}, dict(EVENTS["tick"][1]))
 
@@ -109,7 +112,7 @@ COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "show_choices": ({"token": "str", "options": "list", "text": "str"}, {}),
     "show_menu": ({"token": "str", "text": "str"}, {"slot": "int", "blob_hex": "hex"}),
     "trade_mask": ({"mask": "int"}, {}),
-    "trade_offer_ack": ({"ok": "bool"}, {}),
+    "trade_offer_ack": ({"ok": "bool"}, {"token": "str"}),
     "choose_mon": ({"token": "str"}, {}),
     "apply_trade": ({"slot": "int", "blob_hex": "hex", "old_key": "key", "token": "str"}, {"partner_name": "str"}),
     "ghost_pos": ({}, {}),
@@ -190,7 +193,10 @@ def validate_event(msg: dict, *, strict: bool = False) -> list[str]:
         problems.append("envelope: player must be 'a' or 'b'")
     if problems:
         return problems
-    problems = _validate("event", msg["event"], EVENTS, msg, extra_ok=not strict)
+    table = EVENTS
+    if msg["event"] == "trade_done" and msg.get("uncertain") is True:
+        table = UNCERTAIN_TRADE_DONE           # a side that cannot vouch names no key
+    problems = _validate("event", msg["event"], table, msg, extra_ok=not strict)
     return problems + _hello_pairing(msg) if msg["event"] == "hello" else problems
 
 
