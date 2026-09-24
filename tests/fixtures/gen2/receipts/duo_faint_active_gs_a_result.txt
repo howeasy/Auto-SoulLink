@@ -1,0 +1,49 @@
+DUO_GEN2 {"attempt":1,"case":"gold_battle","fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","player":"a","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","scenario":"gen2_faint_active","title":"gold"}
+CLIENT {"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","poison_faint","save_completed","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  phase continue @3218
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":50342,"panel":false,"
+HELLO {"frame":3338,"ot_id":50342}
+  phase loaded @3338
+RX resolved_areas
+RX config
+BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 EC63:C4A6:9E
+  phase walk @3702 xy=53,12
+  phase battle @4258 xy=52,12
+RX hud_show
+RX_TEXT {"cmd":"hud_show","frame":5552,"text":"Partner caught SENTRET in Route 29"}
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":6829,"key":"F470:C4A6:10","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":16}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":14,"in_box":false,"key":"F470:C4A6:10","level":2,"maxHP":14,"nickname":"PIDGEY","player":"a","seq":118,"species_id":16,"stats":{"level":2,"maxHP"
+CAPTURE_SENT {"frame":6829,"key":"F470:C4A6:10","seq":118}
+CAUGHT F470:C4A6:10
+RX play_sound sound=25
+RX msgbox
+RX_TEXT {"cmd":"msgbox","frame":6832,"text":"PIDGEY and SENTRET linked!"}
+RX party_mon key=F470:C4A6:10
+TX {"event":"safe","player":"a","seq":119}
+TX {"event":"sync_retrieve_done","key":"F470:C4A6:10","player":"a","seq":122}
+  phase save @6889 xy=52,12
+  phase saved @7583 xy=52,12
+MYKEY 0 EC63:C4A6:9E
+MYKEY 1 F470:C4A6:10
+LINK_SAVE {"cartram_bytes":32768,"cartram_sha256":"34cbf394172000f41b9436a2e4377d9bae5a446430be62cf6def02fb244e9791","client_saves":1,"frame":7613,"gate_saves":1,"key":"F470:C4A6:10","save_completed_frame":7583,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/e2e_gen2_faint_active_live3-gs-active_a_link_save.SaveRAM"}
+B_ACTIVE {"frame":9864}
+  phase walk @9864 xy=52,12
+  phase battle @10223 xy=52,12
+ENGINE_FAINT {"cause":"battle","frame":14804,"key":"F470:C4A6:10","site_id":"battle_faint","slot":1}
+TX {"area_id":"route_29","event":"faint","key":"F470:C4A6:10","player":"a","seq":387}
+FAINT_SENT {"frame":14804,"key":"F470:C4A6:10","seq":387}
+RX memorialize key=F470:C4A6:10
+RX game_over
+TX {"event":"safe","player":"a","seq":406}
+MEMORIAL_PREIMAGE {"frame":15382,"key":"F470:C4A6:10","nickname_raw_hex":"8f88838684985050505050","ot_raw_hex":"868e8b8350000000000000","raw_hex":"100021000000c4a600000900000000000000000000f47022000000450000000200000000000e00070006000700060006","slot":1,"species_marker":16}
+TX {"box":13,"event":"memorialize_done","key":"F470:C4A6:10","player":"a","seq":408}
+MEMORIAL_ACK {"box":13,"event":"memorialize_done","frame":15382,"key":"F470:C4A6:10"}
+  phase fainted @15383 xy=52,12
+  phase save @15413 xy=52,12
+  phase saved @16108 xy=52,12
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"af2a55d82f267f932d1648fe907a4c04bfcc83bd2212f8057ded52cc9118ab0a","client_saves":2,"flushed_matches":true,"frame":16138,"gate_saves":2,"save_completed_frame":16108,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/saveram_gen2_faint_active_live3-gs-active_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/e2e_gen2_faint_active_live3-gs-active_a_witness.SaveRAM"}
+RECEIPT {"attempt":1,"b_active":{"frame":9864},"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":6829,"key":"F470:C4A6:10","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":16},"case":"gold_battle","client":{"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","poison_faint","save_completed","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"},"faint":{"cause":"battle","frame":14804,"key":"F470:C4A6:10","site_id":"battle_faint","slot":1},"faint_sent":{"frame":14804,"key":"F470:C4A6:10","seq":387},"fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","harness_write_scopes":[],"hello":{"frame":3338,"ot_id":50342},"input_mode":"normal_buttons","key":"F470:C4A6:10","link_save":{"cartram_bytes":32768,"cartram_sha256":"34cbf394172000f41b9436a2e4377d9bae5a446430be62cf6def02fb244e9791","client_saves":1,"frame":7613,"gate_saves":1,"key":"F470:C4A6:10","save_completed_frame":7583,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/e2e_gen2_faint_active_live3-gs-active_a_link_save.SaveRAM"},"memorial":{"ack":{"box":13,"event":"memorialize_done","frame":15382,"key":"F470:C4A6:10"},"preimage_frame":15382},"player":"a","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","save":{"cartram_bytes":32768,"cartram_sha256":"af2a55d82f267f932d1648fe907a4c04bfcc83bd2212f8057ded52cc9118ab0a","client_saves":2,"flushed_matches":true,"frame":16138,"gate_saves":2,"save_completed_frame":16108,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/saveram_gen2_faint_active_live3-gs-active_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/e2e_gen2_faint_active_live3-gs-active_a_witness.SaveRAM"},"scenario":"gen2_faint_active","schema":"gen2-duo-faint-active-v1","title":"gold"}
+RESULT: PASS (fainted F470:C4A6:10)

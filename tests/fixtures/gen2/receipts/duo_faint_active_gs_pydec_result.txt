@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=F470:C4A6:10 b=A5C2:C78C:A1 area=route_29 titles=gold/silver status=memorial scenario=gen2_faint_active death=active
