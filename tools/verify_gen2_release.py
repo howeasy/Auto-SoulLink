@@ -80,6 +80,11 @@ _GENERATORS = (
     ("admission-generated", "admission", ("F-7g", "C-1", "C-6g")),
 )
 
+# The committed admission matrices carry BUILT rows, which the generator only re-derives from the
+# explicit build receipts; a bare --check refuses them as a downgrade (the lane was red for that alone).
+_GENERATOR_ARGS = {"admission": ("--provenance", "data/gen2/build_provenance.json",
+                                 "--overlay-provenance", "data/gen2/overlay_provenance.json")}
+
 
 def _pytest(path: str) -> list[str]:
     return [_PY, "-m", "pytest", path, "-q", "-p", "no:randomly", "-rs"]
@@ -97,7 +102,7 @@ LANES = [
            [_PY, "tools/gen_gen2_profile.py", "--title", title, "--check"],
            why=f"{title} profile against its locked source/build; SOURCE only")
       for title in TITLES],
-    *[Lane(name, [_PY, f"tools/gen_gen2_{tool}.py", "--check"],
+    *[Lane(name, [_PY, f"tools/gen_gen2_{tool}.py", *_GENERATOR_ARGS.get(tool, ()), "--check"],
            why="all three title packs regenerated from pinned facts; SOURCE only")
       for name, tool, _ids in _GENERATORS],
     Lane("coverage-map", [
@@ -1347,7 +1352,7 @@ def _lf_sha256(path: Path) -> str | None:
         return None
 
 
-def g4_packet_errors(root: Path | None = None, release_ups=None) -> list[str]:
+def g4_packet_errors(root: Path | None = None, release_ups=None, require_admitted: bool = True) -> list[str]:
     """The non-receipt half of the G4 packet (PLAN §6 P4 exit, §6.1; BINDING P4.4): published overlay
     bytes match their provenance, each overlay row is ADMITTED at those hashes, the owner signed the G4
     ledger row, and the release bundle (tools/make_release.py) ships every overlay UPS."""
@@ -1383,8 +1388,10 @@ def g4_packet_errors(root: Path | None = None, release_ups=None) -> list[str]:
             row = next(r for r in matrix["artifacts"] if r.get("kind") == "overlay")
         except (OSError, ValueError, KeyError, TypeError, StopIteration):
             row = {}
-        if (row.get("status") != "ADMITTED" or row.get("sha1") != out.get("sha1")
-                or (row.get("ups") or {}).get("sha256") != ups.get("sha256")):
+        # require_admitted=False is the P4.4 promotion's own precondition (tools/gen_gen2_admission.py
+        # --promote-overlays): every other packet item, before the rows it is about to write.
+        if require_admitted and (row.get("status") != "ADMITTED" or row.get("sha1") != out.get("sha1")
+                                 or (row.get("ups") or {}).get("sha256") != ups.get("sha256")):
             errors.append(f"{title}_overlay: admitted-artifact row is not ADMITTED at the published overlay "
                           f"hashes (P4.4 promotion; today status={row.get('status')!r})")
         if Path(ups.get("file") or "?").name not in release_ups:
@@ -1400,9 +1407,9 @@ def g4_packet_errors(root: Path | None = None, release_ups=None) -> list[str]:
 
 
 def release_evidence_errors(root: Path | None = None, duo=None, receipt_validate=None,
-                            release_ups=None) -> list[str]:
+                            release_ups=None, require_admitted: bool = True) -> list[str]:
     """release-evidence: the G4 packet and every receipt lane it rests on, one prefixed line per gap."""
-    parts = (("packet", g4_packet_errors(root, release_ups)),
+    parts = (("packet", g4_packet_errors(root, release_ups, require_admitted)),
              ("live-new-gates", new_gates_errors(root, receipt_validate)),
              ("live-gates", live_gates_errors(root, receipt_validate)),
              ("live-trade-gates", trade_gates_errors(root, duo)),

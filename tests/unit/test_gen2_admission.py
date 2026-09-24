@@ -330,3 +330,81 @@ def test_existing_committed_matrices_are_valid():
         # P4.1f: the overlay rows are BUILT from the SLink companion build receipt.
         overlay = json.loads((ROOT / "data/gen2/overlay_provenance.json").read_text())
         admission.validate_matrix(matrix, lock, receipt, lock_bytes=lock_bytes, overlay=overlay)
+
+
+# --- P4.4 overlay promotion (--promote-overlays): ADMITTED only behind the G4 preconditions ---------
+
+def _overlay_build(tmp_path, built):
+    """_write_build plus a synthetic overlay provenance for the same lock (validator model only)."""
+    args = _write_build(tmp_path, built)
+    lock, _receipt = built
+    outputs = {}
+    for title, rows in admission.TITLE_OUTPUTS.items():
+        artifact = rows[0][0]
+        outputs[artifact] = {"slink_title": title, "base_sha1": lock["outputs"][artifact]["sha1"],
+                             "identical_to_clean": False, "sha1": hashlib.sha1(title.encode()).hexdigest(),
+                             "md5": hashlib.md5(title.encode()).hexdigest(),
+                             "ups": {"file": f"patch/dist/SLink-{title}.ups",
+                                     "sha256": hashlib.sha256(title.encode()).hexdigest()}}
+    overlay = {"schema": "gen2-overlay-provenance-v1",
+               "sources": {name: {"commit": row["commit"]} for name, row in lock["sources"].items()},
+               "outputs": outputs}
+    (tmp_path / "overlay_provenance.json").write_text(json.dumps(overlay))
+    return [*args, "--overlay-provenance", str(tmp_path / "overlay_provenance.json")]
+
+
+def _overlay_statuses(tmp_path):
+    return {path.parent.name: next(row["status"] for row in json.loads(path.read_text())["artifacts"]
+                                   if row["kind"] == "overlay")
+            for path in (tmp_path / "games").rglob("admission.json")}
+
+
+def test_promotion_is_refused_while_any_g4_precondition_is_open(tmp_path, built, monkeypatch):
+    args = _overlay_build(tmp_path, built)
+    assert admission.main(args) == 0
+    before = {p: p.read_bytes() for p in (tmp_path / "games").rglob("*.json")}
+    monkeypatch.setattr(admission, "promotion_blockers",
+                        lambda: ["packet: docs/gen2/PLAN.md §6.1: the G4 ledger row carries no owner signature"])
+    assert admission.main([*args, "--promote-overlays"]) == 1
+    assert before == {p: p.read_bytes() for p in before}
+    assert set(_overlay_statuses(tmp_path).values()) == {"BUILT"}
+
+
+def test_promotion_writes_admitted_only_when_nothing_blocks_and_never_downgrades(tmp_path, built, monkeypatch):
+    args = _overlay_build(tmp_path, built)
+    assert admission.main(args) == 0
+    monkeypatch.setattr(admission, "promotion_blockers", lambda: [])
+    assert admission.main([*args, "--promote-overlays"]) == 0
+    assert set(_overlay_statuses(tmp_path).values()) == {"ADMITTED"}
+    # The promoted tree checks clean without the flag, and a plain regeneration keeps it promoted.
+    monkeypatch.setattr(admission, "promotion_blockers", lambda: pytest.fail("no new grant is being made"))
+    assert admission.main([*args, "--check"]) == 0
+    assert admission.main(args) == 0
+    assert set(_overlay_statuses(tmp_path).values()) == {"ADMITTED"}
+
+
+def test_promotion_needs_both_build_receipts(tmp_path, built, monkeypatch):
+    args = _write_build(tmp_path, built)
+    assert admission.main(args) == 0
+    monkeypatch.setattr(admission, "promotion_blockers", lambda: [])
+    assert admission.main([*args, "--promote-overlays"]) == 1
+
+
+def test_a_partial_or_hand_edited_promotion_is_refused(tmp_path, built, monkeypatch):
+    args = _overlay_build(tmp_path, built)
+    assert admission.main(args) == 0
+    path = tmp_path / "games/gen2_gold/admission.json"
+    matrix = json.loads(path.read_text())
+    next(row for row in matrix["artifacts"] if row["kind"] == "overlay")["status"] = "ADMITTED"
+    path.write_text(json.dumps(matrix, indent=2) + "\n")
+    monkeypatch.setattr(admission, "promotion_blockers", lambda: [])
+    assert admission.main([*args, "--check"]) == 1
+    assert admission.main([*args, "--promote-overlays"]) == 1
+
+
+def test_committed_tree_cannot_promote_until_the_owner_signs_g4():
+    plan = (ROOT / "docs/gen2/PLAN.md").read_text(encoding="utf-8")
+    if "| G4 | — |" in plan:
+        blockers = admission.promotion_blockers()
+        assert "packet: docs/gen2/PLAN.md §6.1: the G4 ledger row carries no owner signature" in blockers
+        assert not any("not ADMITTED at the published overlay" in b for b in blockers)

@@ -5,7 +5,9 @@ Without --provenance, generate hashless PLANNED rows. Passing a verified builder
 receipt explicitly promotes the four clean rows to BUILT after checking the
 adjacent .sym/.map files; --overlay-provenance (P4.1f) likewise promotes the three
 overlay rows to BUILT from the SLink companion build receipt (still FUTURE: BUILT is
-an identity, never a runtime admission). Neither mode emits ADMITTED artifacts. G1 opens only for a
+an identity, never a runtime admission). Neither mode emits ADMITTED artifacts; only
+--promote-overlays does (P4.4), and it refuses unless the owner signed the G4 row of PLAN
+§6.1 and every release-evidence receipt lane is clean. G1 opens only for a
 title in G1_ADMITTED (an owner ruling), only once its rows are BUILT, and the gate row
 is the grant, never the proof: lua/gen2/entry.lua re-validates that title's shipped
 PHYSICAL receipts at every load. Overlay/ghost qualification belongs to later owners.
@@ -14,6 +16,7 @@ PHYSICAL receipts at every load. Overlay/ghost qualification belongs to later ow
     python tools/gen_gen2_admission.py --provenance data/gen2/build_provenance.json
     python tools/gen_gen2_admission.py --provenance data/gen2/build_provenance.json --check
     python tools/gen_gen2_admission.py --provenance data/gen2/build_provenance.json         --overlay-provenance data/gen2/overlay_provenance.json --check
+    python tools/gen_gen2_admission.py --provenance data/gen2/build_provenance.json         --overlay-provenance data/gen2/overlay_provenance.json --promote-overlays   # G4 only
 """
 from __future__ import annotations
 
@@ -168,7 +171,7 @@ def validate_provenance(lock: dict, provenance: dict, *, lock_bytes: bytes | Non
                     f"provenance: {name}.{ext} hash mismatch")
 
 
-def overlay_row(title: str, lock: dict, overlay: dict) -> dict:
+def overlay_row(title: str, lock: dict, overlay: dict, admitted: bool = False) -> dict:
     """The BUILT identity of one title's SLink companion build (data/gen2/overlay_provenance.json).
 
     The null (mailbox-only) build is byte-identical to the clean ROM and is refused: one hash
@@ -193,8 +196,8 @@ def overlay_row(title: str, lock: dict, overlay: dict) -> dict:
     require(isinstance(ups.get("file"), str) and is_hash(ups.get("sha256"), 64),
             f"overlay provenance: {artifact} UPS identity missing")
     return {"id": f"{title}_overlay", "kind": "overlay", "revision": TITLE_OUTPUTS[title][0][1],
-            "selection": "FUTURE", "status": "BUILT", "sha1": out["sha1"], "md5": out["md5"],
-            "base_sha1": clean, "ups": {"file": ups["file"], "sha256": ups["sha256"]}}
+            "selection": "FUTURE", "status": "ADMITTED" if admitted else "BUILT", "sha1": out["sha1"],
+            "md5": out["md5"], "base_sha1": clean, "ups": {"file": ups["file"], "sha256": ups["sha256"]}}
 
 
 def _planned_matrix(title: str, source_lock_sha256: str) -> dict:
@@ -226,8 +229,10 @@ def _planned_matrix(title: str, source_lock_sha256: str) -> dict:
 
 
 def build_matrices(lock: dict, provenance: dict | None = None, *,
-                   lock_bytes: bytes | None = None, overlay: dict | None = None) -> dict[str, dict]:
+                   lock_bytes: bytes | None = None, overlay: dict | None = None,
+                   promoted: bool = False) -> dict[str, dict]:
     validate_lock(lock)
+    require(not promoted or overlay is not None, "overlay promotion requires the overlay provenance")
     source_lock_sha256 = lock_sha256(lock, lock_bytes)
     if provenance is not None:
         validate_provenance(lock, provenance, lock_bytes=lock_bytes)
@@ -244,7 +249,7 @@ def build_matrices(lock: dict, provenance: dict | None = None, *,
         for matrix in matrices.values():
             rows = matrix["artifacts"]
             index = next(i for i, row in enumerate(rows) if row["kind"] == "overlay")
-            rows[index] = overlay_row(matrix["title"], lock, overlay)
+            rows[index] = overlay_row(matrix["title"], lock, overlay, admitted=promoted)
     return matrices
 
 
@@ -270,18 +275,28 @@ def validate_matrix(matrix: dict, lock: dict, provenance: dict | None = None, *,
     for row, planned in zip(rows, expected["artifacts"], strict=True):
         object_at(row, "matrix artifact")
         status = row.get("status")
-        require(status != "ADMITTED", "matrix: ADMITTED requires separate owner G1 acceptance; P1 cannot grant it")
+        require(status != "ADMITTED" or planned["kind"] == "overlay",
+                "matrix: ADMITTED requires separate owner G1 acceptance; P1 cannot grant it")
         if status == "PLANNED":
             require(row == planned, "matrix: PLANNED row must match selected facts and carry no hash")
         elif planned["kind"] == "overlay":
-            require(status == "BUILT" and overlay is not None,
+            require(status in ("BUILT", "ADMITTED") and overlay is not None,
                     "matrix: a BUILT overlay row requires the overlay provenance")
-            require(row == overlay_row(matrix["title"], lock, overlay), "matrix: BUILT overlay identity mismatch")
+            require(row == overlay_row(matrix["title"], lock, overlay, admitted=status == "ADMITTED"),
+                    "matrix: BUILT overlay identity mismatch")
         else:
             require(status == "BUILT" and planned["kind"] == "clean", "matrix: unsupported artifact state/kind")
             built = {**planned, "status": "BUILT", "sha1": lock["outputs"][planned["id"]]["sha1"],
                      "build_provenance_sha256": content_sha256(provenance)}
             require(row == built, "matrix: BUILT identity/hash/provenance mismatch")
+
+
+def promotion_blockers() -> list[str]:
+    """P4.4 / G4 (PLAN §6.1): everything the release-evidence lane demands except the ADMITTED rows
+    this promotion writes -- the owner's G4 signature, published overlay bytes, the shipped UPS and
+    every receipt lane (tools/verify_gen2_release.py). Empty is the only permission to promote."""
+    import verify_gen2_release as release
+    return release.release_evidence_errors(require_admitted=False)
 
 
 def _parse_json(raw: bytes, label: str) -> dict:
@@ -306,6 +321,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--provenance", type=Path, help="explicitly promote verified clean builds to BUILT")
     parser.add_argument("--overlay-provenance", type=Path,
                         help="explicitly promote the SLink companion builds' overlay rows to BUILT")
+    parser.add_argument("--promote-overlays", action="store_true",
+                        help="P4.4: write the overlay rows ADMITTED; refused unless the G4 row of PLAN §6.1 is "
+                             "signed and every release-evidence receipt lane is clean")
     parser.add_argument("--check", action="store_true", help="validate exact current files without writing")
     args = parser.parse_args(argv)
     try:
@@ -313,7 +331,22 @@ def main(argv: list[str] | None = None) -> int:
         lock = _parse_json(lock_bytes, str(args.lock))
         provenance = _load(args.provenance) if args.provenance else None
         overlay = _load(args.overlay_provenance) if args.overlay_provenance else None
-        matrices = build_matrices(lock, provenance, lock_bytes=lock_bytes, overlay=overlay)
+        # An already-promoted tree re-renders as promoted (no new grant, no downgrade); a new
+        # promotion is only ever written behind the G4 preconditions.
+        promoted_now = [pack for pack in (f"gen2_{title}" for title in TITLE_OUTPUTS)
+                        if (args.out_dir / pack / "admission.json").exists()
+                        and any(row.get("kind") == "overlay" and row.get("status") == "ADMITTED"
+                                for row in _load(args.out_dir / pack / "admission.json").get("artifacts") or []
+                                if isinstance(row, dict))]
+        require(len(promoted_now) in (0, len(TITLE_OUTPUTS)),
+                f"existing overlay promotion is partial ({promoted_now}); P4.4 promotes all three titles at once")
+        promoted = args.promote_overlays or bool(promoted_now)
+        if args.promote_overlays and not promoted_now and not args.check:
+            require(provenance is not None and overlay is not None,
+                    "--promote-overlays requires --provenance and --overlay-provenance")
+            blockers = promotion_blockers()
+            require(not blockers, f"G4 promotion refused, {len(blockers)} blocker(s): " + "; ".join(blockers[:5]))
+        matrices = build_matrices(lock, provenance, lock_bytes=lock_bytes, overlay=overlay, promoted=promoted)
         if provenance is not None:
             for name, expected in provenance["symbols"].items():
                 artifact = args.provenance.parent / name
@@ -328,7 +361,7 @@ def main(argv: list[str] | None = None) -> int:
                 rows = current.get("artifacts", [])
                 require(isinstance(rows, list) and all(isinstance(row, dict) for row in rows),
                         "existing matrix: malformed artifacts")
-                require(all(row.get("status") != "ADMITTED" for row in rows),
+                require(all(row.get("status") != "ADMITTED" for row in rows if row.get("kind") != "overlay"),
                         "existing ADMITTED matrix belongs to G1 owner; P1 cannot overwrite it")
                 if provenance is None:
                     require(all(row.get("status") == "PLANNED" for row in rows),
