@@ -14,6 +14,7 @@ duplicated or reordered marker.
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import shutil
@@ -109,6 +110,13 @@ event.onframeend(function() client:frame_end() end)
 """
 
 
+@functools.lru_cache(maxsize=None)
+def _u1_facts(title):
+    """u1_facts once per title: it re-reads the pinned ROM/source for every map (~2 min per DuoSim under load,
+    which made the ~100 duo tests look hung, coordinator 2026-09-24)."""
+    return json.dumps(u1_facts(context(title), facts(title), "q-model"))
+
+
 class DuoSim(QualifySim):
     """CONTINUE onto Route 29 grass, walk, one wild battle caught with a Poke Ball (NO nickname), save."""
 
@@ -116,7 +124,7 @@ class DuoSim(QualifySim):
         self.emit_capture, self.client_save, self.link_reply = emit_capture, client_save, link_reply
         self.frame_hooks, self.caught = [], False
         super().__init__(lua, title, "battle", where=grass_start(title))
-        self.u1 = u1_facts(context(title), facts(title), "q-model")
+        self.u1 = json.loads(_u1_facts(title))   # a fresh copy: tests edit it
         self.sites.update(self.u1["pack_ui"])
         lua.execute("function SLINK_TEST_PUSH(ev) SLINK_TEST_EVENTS = SLINK_TEST_EVENTS or {};"
                     " table.insert(SLINK_TEST_EVENTS, ev) end")
@@ -134,7 +142,11 @@ class DuoSim(QualifySim):
         if kind == "save_completed" and self.client_save:
             self.push({"kind": "observation", "site_id": "save_completed"})
 
+    MAX_FRAMES = 60000   # ponytail: a bound, not a budget; the link run takes ~700 frames, duo timeout_frames 12000
+
     def advance(self):
+        # every sim run fails instead of hanging (coordinator 2026-09-24)
+        assert self.frame < self.MAX_FRAMES, f"DuoSim frame bound {self.MAX_FRAMES} reached: the driver made no progress"
         super().advance()
         for fn in self.frame_hooks:
             fn()
@@ -321,6 +333,16 @@ def test_link_happy_path_catches_reports_saves_and_passes(tmp_path, title):
     assert receipt["harness_write_scopes"] == [] and sim.writes == []
     # Normal buttons only.
     assert all(set(row) <= {"Up", "Down", "Left", "Right", "A", "B", "Start", "Select"} for row in sim.inputs)
+
+
+def test_a_sim_run_without_progress_stops_at_the_frame_bound(tmp_path, monkeypatch):
+    monkeypatch.setattr(DuoSim, "MAX_FRAMES", 50)
+    with pytest.raises((AssertionError, LuaError), match="DuoSim frame bound 50 reached"):   # lupa re-raises it
+        root = make_root(tmp_path, "crystal")
+        sim = DuoSim(LuaRuntime(unpack_returned_tuples=True), "crystal")
+        sim.lua.globals().emu = sim.lua.table_from({"frameadvance": sim.advance})
+        sim.lua.execute("while true do emu.frameadvance() end")
+    assert root.is_dir()
 
 
 def test_save_witness_archives_its_exact_bytes_next_to_the_result(tmp_path):
