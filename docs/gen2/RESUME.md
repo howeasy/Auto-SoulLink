@@ -340,3 +340,29 @@ Running at compaction (subagent ids for SendMessage):
 Queue: trade_problem status banner (UI lane), conflict admin-resolve, ship errand qualification reports if needed,
 P4.4 promotion (owner G4 signature). Commit rule on shared files: `git apply --cached` own hunks, commit without a
 pathspec. End-of-turn orchestration hook: Codex/OMP removed from tracking (peers down).
+
+## Session 8, day 2 (2026-09-24, afternoon): usage-limit stop; resuming at 3 subagents
+
+A session usage limit (~14:15Z) stopped every worker mid-step; no emulator/python process survived. Owner: resume with at
+most 3 subagents (Haiku/Sonnet/Opus), no Codex/OMP. Uncommitted WIP from the stopped workers remains in the tree, owned by
+its worker; resume each worker by agent id (SendMessage keeps its context) rather than re-dispatching.
+
+Owner rulings today: O-32 (Gen 2 bench death immediate, PHYSICAL 0752a3ab), O-33 (synthetic setup fixtures allowed,
+disclosed SYNTH), O-34 (native C<->G/S trades allowed and tested on all three pairings), O-35 (a PC release kills and
+memorializes the partner). Coordinator: contest trade refusal is MODEL-only (f7597d62).
+
+Landed today (highlights): trade asm review fixes 9805ac1c; server trade hardening (7de364f0 .. 2676c2f9); O-30 follow-ups
+00c9373c/4e6aea39; Gen 1 forced trade save 61a693c4/6a4269d8 + receipts ff4df383; release lanes wired 71773b26/bad46a70,
+bundle ships Gen 2 UPS f4f1167d, promotion path 6f9e5579; first PHYSICAL native trade G<->S (trgs2; oracle fix bec9eea2);
+pc_ops cc PHYSICAL 84c18cb2; Fable invariant review 7b36cf2b with fixes 15f1e786, 14df4aee, 3b5b5a5a, 779c73c2, 7e9e5543;
+synth builder ca6c2229; engine-site receipt v2 050caf08.
+
+Running (resumed): INV-SERVER ada59c171d19b1955 (O-35 + Fable server minors), INV-CLIENT ab3f54b5bb3d2e92d (MINOR-7
+durable dead-key re-zero), TRADE-ASM a301092ac0ba8f1ce (single re-pin of panel/sfx/phone/W6 on 9805ac1c; W6 Silver left).
+Resume queue, one per freed slot: U1G ab5b9af5b6ee52bcc (synth grass/kyle/bill runs, signals v2) -> TRADE-DRIVER
+a925de0c09c73c33f (trade matrix G-S, C-C, C-G) -> DRIVER-ROBUST a95e01a5592ddb1eb (hanging test_gen2_duo_driver silver case)
+-> DUO-WAVE-C abba0c5b5800bffe2 (changebox, C-G registration, path guard, pc_ops O-35 flip) -> FIXTURES-LANE
+a8a6b740b0e396f49 (reapply scratchpad/fixtures_lane_staged.patch) -> RELEASE-LANES a4d67676aa73f2900 (O-34 rows,
+CODE-DIGEST) -> DUO-MATRIX-REPROOF a29f6e1c21f776ce9 (9 stale cells + trainer variant) -> DUO-WAVE-D abbc4cf2cb77a0b05
+(ball_gate) -> GEN1-RECEIPTS aa417b5feac05a49c (pureRGB batch). EVO-U1/U1G resume brief: scratchpad/evo_u1_resume_brief.md
+(superseded by U1G synth plan). Lanes: short non-Drive paths (BizHawk MAX_PATH silent SaveRAM failure).
