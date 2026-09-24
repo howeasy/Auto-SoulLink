@@ -784,10 +784,75 @@ def _active_faint_cell_errors(legs: dict, axes: dict) -> list[str]:
     return []
 
 
+# P4.3e native trade cases (tools/gen2_trade_lane.py SCENARIOS) -> the oracle's end status.
+TRADE_END_STATUS = {"gen2_trade_new": "committed", "gen2_trade_evolve": "committed",
+                    "gen2_trade_reset_commit": "committed", "gen2_trade_decline_new": "unchanged",
+                    "gen2_trade_timeout": "unchanged", "gen2_trade_reset_wait": "unchanged",
+                    "gen2_trade_refuse_item": "unchanged"}
+TRADE_PLANTED = {"gen2_trade_refuse_item", "gen2_trade_evolve"}   # O-31: a's disclosed HARNESS_WRITE
+TRADE_VARIANTS = {("crystal", "crystal"): "cc", ("gold", "silver"): "gs", ("crystal", "gold"): "cg"}
+
+
+def _trade_receipt_errors(root: Path, proof: dict, scenario: str, axes: dict) -> list[str]:
+    """A HARNESS_ONLY_OVERLAY trade proof: the driver RECEIPTs and the PYDEC name this cell, its
+    errand fixtures, the CURRENT published overlay pins and the O-31 disclosure; never a clean-ROM PASS."""
+    errors = []
+    want_status = TRADE_END_STATUS[scenario]
+    titles = {"a": axes["initiator"], "b": axes["partner"]}
+    fixtures = axes.get("trade_fixtures") or {}
+    try:
+        outputs = json.loads((root / "data/gen2/overlay_provenance.json").read_text(encoding="utf-8"))["outputs"]
+    except (OSError, ValueError, KeyError):
+        return ["trade proof: data/gen2/overlay_provenance.json unreadable"]
+    legs = {}
+    for side in ("a", "b", "pydec"):
+        entry = (proof.get("receipts") or {}).get(side)
+        path = root / entry["path"] if entry else None
+        if not entry or not path.is_file():
+            errors.append(f"{side} receipt not registered or missing")
+            continue
+        raw = path.read_bytes().replace(b"\r\n", b"\n")
+        if hashlib.sha256(raw).hexdigest() != entry.get("sha256"):
+            errors.append(f"{side} receipt {entry['path']} sha256 differs from its pin")
+            continue
+        legs[side] = raw.decode("utf-8", errors="replace").splitlines()
+    for side in ("a", "b"):
+        lines = legs.get(side)
+        if lines is None:
+            continue
+        verdicts = [line.split()[1:2] for line in lines if line.startswith("RESULT:")]
+        if not verdicts or any(verdict != ["PASS"] for verdict in verdicts):
+            errors.append(f"{side} receipt has no RESULT: PASS verdict, or a non-PASS one")
+        bodies = [line[len("RECEIPT "):] for line in lines if line.startswith("RECEIPT ")]
+        try:
+            receipt = json.loads(bodies[0]) if len(bodies) == 1 else None
+        except ValueError:
+            receipt = None
+        pin = next((row for row in outputs.values() if row.get("slink_title") == titles[side]), {})
+        want = {"schema": "gen2-duo-trade-v1", "case": scenario, "player": side, "title": titles[side],
+                "variant": TRADE_VARIANTS.get((titles["a"], titles["b"])), "outcome": want_status,
+                "admission_scope": "HARNESS_ONLY_OVERLAY", "rom_sha1": pin.get("sha1"),
+                "fixture_sha256": _fixture_sha256(root, fixtures.get(side, "")),
+                "harness_exception": "O-31" if scenario in TRADE_PLANTED and side == "a" else None}
+        if (not isinstance(receipt, dict) or any(receipt.get(key) != value for key, value in want.items())
+                or want["rom_sha1"] is None or want["fixture_sha256"] is None):
+            errors.append(f"{side} trade RECEIPT does not name {want}")
+    tokens = _pydec_tokens(legs.get("pydec", [])) or {}
+    want = {"scenario": scenario, "admission_scope": "HARNESS_ONLY_OVERLAY",
+            "titles": f"{titles['a']}/{titles['b']}", "status": want_status}
+    errors.extend(f"pydec receipt does not name this cell: {key}={tokens.get(key)!r}, want {value!r}"
+                  for key, value in want.items() if tokens.get(key) != value)
+    errors.extend(f"pydec receipt does not name this cell: {key}= is empty or missing"
+                  for key in ("a", "b", "area") if not tokens.get(key))
+    return errors
+
+
 def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: dict) -> list[str]:
     """One registered proof: pinned bytes, PASS verdicts, and headers naming this exact cell."""
     if scenario == "gen2_reconnect":
         return _reconnect_receipt_errors(root, proof, axes, lock)
+    if scenario in TRADE_END_STATUS:
+        return _trade_receipt_errors(root, proof, scenario, axes)
     errors = []
     receipts = proof.get("receipts") or {}
     titles = {"a": axes["initiator"], "b": axes["partner"]}
@@ -904,6 +969,10 @@ def duo_matrix_errors(root: Path | None = None, duo=None) -> list[str]:
                     errors.append(f"{rid}: {exc}")
                 errors.extend(f"{rid}: registered scenario {name} is not in the release matrix"
                               for name in registered if name not in scenarios)
+                trade = getattr(duo, "GEN2_TRADE_FIXTURES", {}).get(game)
+                if set(scenarios) & set(TRADE_END_STATUS) and trade != axes.get("trade_fixtures"):
+                    errors.append(f"{rid}: tools/e2e_duo.py {game} trade fixtures {trade} != matrix "
+                                  f"{axes.get('trade_fixtures')}")
             # F4 (review O16): a scenario proof-listed twice, or naming a scenario axes.scenarios
             # never declared, is reported -- a dict comprehension would silently keep only one.
             proof_list = row.get("proofs", [])

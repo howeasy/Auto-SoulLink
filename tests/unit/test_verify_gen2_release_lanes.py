@@ -1683,3 +1683,89 @@ def test_clause_matrix_refuses_unobserved_or_rebound_receipts(tmp_path, kind, mu
     elif mutation == "two_rejected":
         text["a"] = text["a"].replace('"partner_rejected"', '"rejected"')
     assert _check_admission_cell(tmp_path, proof, axes, lock, text, f"gen2_{kind}_clause")
+
+
+def _trade_cell(tmp_path, scenario="gen2_trade_new", pair="duo.crystal.crystal"):
+    """A HARNESS_ONLY_OVERLAY trade proof for one cell, bound to the CURRENT published overlay pins."""
+    doc = _green_tree(tmp_path)
+    axes = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
+    axes = _row(axes, pair)["axes"]
+    (tmp_path / "data/gen2").mkdir(parents=True, exist_ok=True)
+    provenance = (REPO / "data/gen2/overlay_provenance.json").read_bytes()
+    (tmp_path / "data/gen2/overlay_provenance.json").write_bytes(provenance)
+    pins = {row["slink_title"]: row["sha1"] for row in json.loads(provenance)["outputs"].values()}
+    titles = {"a": axes["initiator"], "b": axes["partner"]}
+    variant = gate.TRADE_VARIANTS[(titles["a"], titles["b"])]
+    status = gate.TRADE_END_STATUS[scenario]
+    text = {}
+    for side in ("a", "b"):
+        fixture = axes["trade_fixtures"][side]
+        raw = (REPO / "tests/fixtures/gen2" / f"{fixture}.SaveRAM").read_bytes()
+        (tmp_path / "tests/fixtures/gen2" / f"{fixture}.SaveRAM").write_bytes(raw)
+        receipt = {"schema": "gen2-duo-trade-v1", "case": scenario, "player": side, "title": titles[side],
+                   "variant": variant, "outcome": status, "admission_scope": "HARNESS_ONLY_OVERLAY",
+                   "rom_sha1": pins[titles[side]], "fixture_sha256": hashlib.sha256(raw).hexdigest(),
+                   "harness_exception": "O-31" if scenario in gate.TRADE_PLANTED and side == "a" else None}
+        text[side] = "RECEIPT " + json.dumps(receipt) + "\nRESULT: PASS\n"
+    text["pydec"] = (f"PYDEC: PASS a=AAAA:1:01 b=BBBB:2:02 area=route_29 titles={titles['a']}/{titles['b']} "
+                     f"status={status} scenario={scenario} admission_scope=HARNESS_ONLY_OVERLAY\n")
+    proof = {"scenario": scenario, "receipts": {}}
+    for side, body in text.items():
+        path = tmp_path / "receipts" / f"trade_{side}.txt"
+        path.write_text(body, encoding="utf-8", newline="\n")
+        proof["receipts"][side] = {"path": path.relative_to(tmp_path).as_posix(), "sha256": _lf_sha(path)}
+    return doc, proof, axes
+
+
+@pytest.mark.parametrize("scenario", sorted(gate.TRADE_END_STATUS))
+@pytest.mark.parametrize("pair", ["duo.crystal.crystal", "duo.gold.silver", "duo.crystal.gold"])
+def test_trade_matrix_accepts_a_bound_overlay_receipt(tmp_path, scenario, pair):
+    _doc, proof, axes = _trade_cell(tmp_path, scenario, pair)
+    assert gate._receipt_errors(tmp_path, proof, scenario, axes, {}) == []
+
+
+def _retext(tmp_path, proof, side, old, new):
+    path = tmp_path / proof["receipts"][side]["path"]
+    body = path.read_text(encoding="utf-8")
+    assert old in body
+    path.write_text(body.replace(old, new), encoding="utf-8", newline="\n")
+    proof["receipts"][side]["sha256"] = _lf_sha(path)
+
+
+_TRADE_GAPS = {
+    "clean_rom_pin": ("a", '"rom_sha1": "', '"rom_sha1": "0'),
+    "battle_fixture": ("b", '"fixture_sha256": "', '"fixture_sha256": "0'),
+    "wrong_variant": ("a", '"variant": "cc"', '"variant": "gs"'),
+    "production_scope": ("b", '"admission_scope": "HARNESS_ONLY_OVERLAY"', '"admission_scope": "PHYSICAL"'),
+    "undisclosed_plant": ("a", '"harness_exception": null', '"harness_exception": "O-31"'),
+    "other_case": ("a", '"case": "gen2_trade_new"', '"case": "gen2_trade_timeout"'),
+    "fail_verdict": ("b", "RESULT: PASS", "RESULT: FAIL"),
+    "pydec_scope": ("pydec", "admission_scope=HARNESS_ONLY_OVERLAY", "admission_scope=PHYSICAL"),
+    "pydec_status": ("pydec", "status=committed", "status=unchanged"),
+}
+
+
+@pytest.mark.parametrize("gap", sorted(_TRADE_GAPS))
+def test_trade_matrix_refuses_unbound_receipts(tmp_path, gap):
+    _doc, proof, axes = _trade_cell(tmp_path)
+    _retext(tmp_path, proof, *_TRADE_GAPS[gap])
+    assert gate._receipt_errors(tmp_path, proof, "gen2_trade_new", axes, {}) != []
+
+
+def test_trade_matrix_refuses_a_republished_overlay(tmp_path):
+    _doc, proof, axes = _trade_cell(tmp_path)
+    path = tmp_path / "data/gen2/overlay_provenance.json"
+    doc = json.loads(path.read_text())
+    doc["outputs"]["pokecrystal"]["sha1"] = "0" * 40
+    path.write_text(json.dumps(doc))
+    assert gate._receipt_errors(tmp_path, proof, "gen2_trade_new", axes, {}) != []
+
+
+def test_every_cell_declares_all_trade_cases_with_the_runner_fixtures():
+    import e2e_duo as duo
+    doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
+    for row in doc["requirements"]:
+        axes = row["axes"]
+        assert set(gate.TRADE_END_STATUS) <= set(axes["scenarios"])
+        assert axes["trade_fixtures"] == duo.GEN2_TRADE_FIXTURES[axes["pairing"]]
+    assert set(gate.TRADE_END_STATUS) == set(duo.GEN2_TRADE_SCENARIOS)
