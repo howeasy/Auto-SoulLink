@@ -335,3 +335,27 @@ def test_a_reported_trade_evolution_is_accepted(tmp_path):
     state.handle_event("b", {"event": "trade_done", "token": token, "new_key": "ABCD:1234:95", "new_species": 0x95})
     assert state.pending_trade is None
     assert entry.b.key == "ABCD:1234:95" and entry.b.species == 0x95
+
+
+
+# ── MINOR-6: per-key bookkeeping follows the traded mon to its new holder and key ─────────────────
+
+def test_a_commit_moves_the_shiny_dedup_and_the_stats_cache_with_the_mon(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    state.bonus_keys["a"].add(B_GETS)                       # A caught its offered mon as a shiny
+    state.mon_stats[B_GETS] = {"atk": 9}
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    state.handle_event("b", {"event": "trade_done", "token": token, "new_key": "ABCD:1234:95", "new_species": 0x95})
+    assert state.pending_trade is None
+    assert B_GETS not in state.bonus_keys["a"] and "ABCD:1234:95" in state.bonus_keys["b"]
+    assert state.mon_stats.get("ABCD:1234:95") == {"atk": 9} and B_GETS not in state.mon_stats
+
+
+
+# ── NIT: a trade_done without the dispatched token counts toward nothing ─────────────────────────
+
+def test_a_tokenless_trade_done_is_ignored(tmp_path):
+    state, _entry, _token = _gen1_applying(tmp_path)
+    state.handle_event("a", {"event": "trade_done", "new_key": A_GETS, "new_species": 0x15})
+    state.handle_event("a", {"event": "trade_done", "token": "", "new_key": A_GETS, "new_species": 0x15})
+    assert state.pending_trade["verdict"] == {"a": None, "b": None}

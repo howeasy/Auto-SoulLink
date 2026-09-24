@@ -322,10 +322,10 @@ def test_partner_accept_then_done_reconciles(tmp_path, monkeypatch):
     e = state.links[0]
     assert e.a.key == "A:1" and e.b.key == "B:2"             # NOT swapped yet — wait for both trade_done
     # post-scene readback: A's received mon trade-EVOLVED (species -> 5).
-    state.handle_event("a", {"event": "trade_done", "slot": 0, "new_key": "B:2", "new_species": 5})
+    state.handle_event("a", {"event": "trade_done", "token": token, "slot": 0, "new_key": "B:2", "new_species": 5})
     assert state.pending_trade is not None, "still waiting on B's trade_done"
     assert e.a.key == "A:1", "link stays UNCHANGED until BOTH report (no half-swapped state)"
-    cmds_b2 = state.handle_event("b", {"event": "trade_done", "slot": 1, "new_key": "A:1", "new_species": 1})
+    cmds_b2 = state.handle_event("b", {"event": "trade_done", "token": token, "slot": 1, "new_key": "A:1", "new_species": 1})
     assert state.pending_trade is None
     assert e.a.key == "B:2" and e.b.key == "A:1"             # atomic ownership swap on both-done
     assert e.a.species == 5
@@ -341,7 +341,7 @@ def test_trade_one_side_done_leaves_link_untouched(tmp_path, monkeypatch):
     token = _offer_and_pick(state, slot=0)
     state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})   # accept
     state.handle_event("a", {"event": "tick"})                                       # deliver A's apply_trade
-    state.handle_event("a", {"event": "trade_done", "slot": 0, "new_key": "B:2", "new_species": 5})
+    state.handle_event("a", {"event": "trade_done", "token": token, "slot": 0, "new_key": "B:2", "new_species": 5})
     e = state.links[0]
     assert state.pending_trade is not None and state.pending_trade["phase"] == "applying"
     assert e.a.key == "A:1" and e.b.key == "B:2", "no swap until B also reports"
@@ -370,7 +370,7 @@ def test_trade_watchdog_makes_applying_uncertain_then_evidence_commits(tmp_path,
     token = _offer_and_pick(state, slot=0)
     state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})   # accept
     # A reports; B's scene hangs forever.
-    state.handle_event("a", {"event": "trade_done", "slot": 0, "new_key": "B:2", "new_species": 5})
+    state.handle_event("a", {"event": "trade_done", "token": token, "slot": 0, "new_key": "B:2", "new_species": 5})
     for _ in range(state.TRADE_WATCHDOG_EVENTS + 5):
         state.handle_event("a", {"event": "tick"})
     e = state.links[0]
@@ -500,8 +500,8 @@ def test_trade_done_arms_post_trade_settle_window(tmp_path, monkeypatch):
     token = _offer_and_pick(state, slot=0)
     state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})   # accept
     state.handle_event("a", {"event": "tick"})                                       # deliver A's apply_trade
-    state.handle_event("a", {"event": "trade_done", "slot": 0, "new_key": "B:2", "new_species": 5})
-    state.handle_event("b", {"event": "trade_done", "slot": 1, "new_key": "A:1", "new_species": 1})
+    state.handle_event("a", {"event": "trade_done", "token": token, "slot": 0, "new_key": "B:2", "new_species": 5})
+    state.handle_event("b", {"event": "trade_done", "token": token, "slot": 1, "new_key": "A:1", "new_species": 1})
     assert state.pending_trade is None
     assert state._trade_settle_ticks["a"] == state.TRADE_SETTLE_TICKS
     assert state._trade_settle_ticks["b"] == state.TRADE_SETTLE_TICKS

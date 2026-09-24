@@ -943,10 +943,10 @@ class SoulLinkState:
         pt = self.pending_trade
         if not pt or pt.get("phase") != "applying":
             return
-        # A stale report from an earlier aborted trade must not count toward this one. Clients
-        # that predate the token echo omit the field — accept those (empty token) for compat.
-        tok = str(msg.get("token", "") or "")
-        if tok and tok != pt["token"]:
+        # A stale report from an earlier aborted trade must not count toward this one. Every
+        # client echoes apply_trade's token (Gen 3 emit_trade_done, Gen 1/2 trade_*), so a report
+        # without it matches no trade (review e9d5e136 NIT: the empty-token compat path is gone).
+        if str(msg.get("token", "") or "") != pt["token"]:
             return
         pt["age"] = 0                                   # progress — reset the abandonment watchdog
         new_key = str(msg.get("new_key", "") or "")
@@ -1170,8 +1170,16 @@ class SoulLinkState:
         self.party_keys["a"].add(entry.a.key)
         self.party_keys["b"].discard(pt["b_key"])
         self.party_keys["b"].add(entry.b.key)
-        self._key_index[entry.a.key] = entry
-        self._key_index[entry.b.key] = entry
+        self._index_entry(entry)                        # MINOR-6: a collision is logged loudly here too
+        # MINOR-6: per-key bookkeeping follows each mon to its new holder (and trade-evolved key)
+        for giver, taker in (("a", "b"), ("b", "a")):
+            old = pt[f"{giver}_key"]
+            new = (pt["new"].get(taker) or ("", 0))[0] or old
+            if old in self.bonus_keys[giver]:
+                self.bonus_keys[giver].discard(old)
+                self.bonus_keys[taker].add(new)
+            if new != old and old in self.mon_stats:
+                self.mon_stats[new] = self.mon_stats.pop(old)
 
         for pid in ("a", "b"):
             gives = pt["a_label"] if pid == "a" else pt["b_label"]
