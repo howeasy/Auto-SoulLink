@@ -5,6 +5,10 @@
 -- engine's own (PLAN §5.7 natural-play source for pc_* kinds; the game refuses to deposit its
 -- LAST mon, so a 1-mon state can never exercise the storage frontend).
 --
+-- OP_CREATE_MON is patch ABI the client never uses, so it is posted through the test-only raw poster
+-- in lua/tests/gen3_gatelib.lua (t.raw: native.lua's own ABI and write window), not lua/mailbox.lua
+-- (card C5-6-MKSTATE).
+--
 -- Environment: SLINK_ROOT, SLINK_GEN3_CHECKPOINT/TITLE (gen3_boot_check helpers),
 --   SLINK_STATE      source savestate (default E:/Howard/Bizhawk/GBA/State/slink_pokecenter.State)
 --   SLINK_STATE_OUT  destination (default <source dir>/slink_pokecenter_full.State)
@@ -14,6 +18,12 @@ local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
 assert(WT, "SLINK_ROOT unset")
 local G = dofile(WT .. "/lua/tests/gen3_boot_check.lua")
 G.open("gen3_rr_fill")
+local t = dofile(WT .. "/lua/tests/gen3_gatelib.lua").open("gen3_rr_fill")
+t.log = G.log              -- one result file: gatelib checks/verdicts land in G's
+t.finish = function(extra)
+    G.finish(t.failures == 0, extra)
+    error("slink-gate-finished", 0)     -- client.exit() is async; stop here for real
+end
 pcall(client.speedmode, 6399)
 local cp, title = G.checkpoint()
 G.phase("start", "title=" .. tostring(title))
@@ -27,19 +37,19 @@ local ok = pcall(savestate.load, SRC)
 if not ok then G.finish(false, "savestate load failed: " .. SRC) end
 G.idle(30)
 pcall(memory.usememorydomain, "System Bus")
-local MB = dofile(WT .. "/lua/mailbox.lua")
 G.idle(60)
-if not MB.present() then G.finish(false, "no SLNK beacon: not the companion ROM") end
+if not t.present() then t.fail("SLNK beacon up", "not the companion ROM") end
+t.boot({ native = false, beacon = false })   -- admit + the raw poster's write window; no state load
 local count = memory.read_u8(PARTY_COUNT)
 G.phase("before", "party=" .. count)
 local FILLERS = { 1, 4, 7, 10, 13, 16 }   -- Bulbasaur, Charmander, Squirtle, Caterpie, Weedle, Pidgey
 while count < TARGET do
-    local seq = MB.send(MB.OP_CREATE_MON, MB.create_mon_args(count, FILLERS[count + 1], 5, 0, 1))
-    local st
-    for _ = 1, 120 do G.advance(); st = MB.poll(seq); if st then break end end
-    if st ~= MB.ST_OK then G.finish(false, "OP_CREATE_MON failed: " .. tostring(st)) end
+    -- args {slot, party 0 = player, species lo, species hi, level 5, bump 1 = a real member}
+    local sp = FILLERS[count + 1]
+    local r = t.raw_wait("OP_CREATE_MON", { count, 0, sp & 0xFF, sp >> 8, 5, 1 }, nil, 120)
+    if not t.acked_ok(r) then t.fail("OP_CREATE_MON acked OK", t.receipt_str(r)) end
     local now = memory.read_u8(PARTY_COUNT)
-    if now ~= count + 1 then G.finish(false, string.format("party count %d -> %d after create", count, now)) end
+    if now ~= count + 1 then t.fail("party count +1 after create", string.format("%d -> %d", count, now)) end
     count = now
 end
 -- SLINK_GIVE_BALLS=N: put N Poke Balls in the FIRST EMPTY slot of the RR ball pocket. RR keeps
