@@ -2458,7 +2458,7 @@ def test_lose_active_rehunts_a_foe_that_never_hurts(battle_model):
     ok, why = lua.globals().LOSE()
     m, logs = lua.globals().M, list(lua.globals().LOGS.values())
     assert ok is True, (why, logs)
-    assert m.hunts == 1 and m.escaped == 1 and any(l.startswith("LOSE_REHUNT K0 turn=") for l in logs), logs
+    assert m.hunts == 1 and m.escaped == 1 and any(line.startswith("LOSE_REHUNT K0 turn=") for line in logs), logs
     assert m.pp[2] > 0, "the stall was cut before the PP ran out"
 
 
@@ -4148,7 +4148,7 @@ def test_the_carrier_cpu_verdict_is_the_product_safety_over_the_pack(kind):
     """G5-RR-CARRIER-FIX item 2: the carrier no longer copies the CPU shape (its copy flagged
     "cpu" on every RR frame once frames ended on the BIOS IRQ entry, owner ruling 23). Its
     cpu_parked asks lua/gen3/safety.lua itself, over the committed RR pack's irq_entry."""
-    from test_gen3_safety import IRQ_CPSR, HALT_LR, World, irq_world
+    from test_gen3_safety import HALT_LR, IRQ_CPSR, World, irq_world
 
     def verdict(world):
         body = _lua_defs(DRIVER, ["cpu_parked"])
@@ -4172,8 +4172,8 @@ def test_a_berry_eaten_in_battle_is_not_a_record_change(pair):
     k = _key(STARTER)
     eaten = _saved(fixture, 3, [dict(STARTER, held_item=0)])
     swapped = _saved(fixture, 3, [dict(STARTER, held_item=13)])
-    last = lambda saved: duo.gen3_last_mon_problems("a", _decoded(saved), _decoded(fixture), k, [], 13,
-                                                   limits=LIMITS)
+    def last(saved):
+        return duo.gen3_last_mon_problems("a", _decoded(saved), _decoded(fixture), k, [], 13, limits=LIMITS)
     assert last(eaten) == []
     assert any("held_item" in p for p in last(swapped))
     assert duo.gen3_consumed_ok([("held_item", 139, 0), ("friendship", 55, 54)]) == [("friendship", 55, 54)]
@@ -4208,4 +4208,27 @@ def test_rr_party_menu_words_hold_in_the_rr_rom():
     lua_syms = (REPO / "lua" / "tests" / "gen3_title_syms.lua").read_text(encoding="utf-8")
     for word in ("0x0811EBA1", "0x0811FB29", "0x081203B9", "0x08122C5D", "0x0203B0A0"):
         assert f"radical_red = {word}" in lua_syms, word
+
+
+def test_the_send_out_accepts_an_rr_record_without_a_checksum():
+    """G5-RR-R1R3 (R1/R2/R3 on rr_battle2 at 410d9578: forced_party_no_healthy_mon). The fixture is
+    sound (Treecko 22/22 + the Route 1 catch 18/18, gen3_codec rr=True); RR's reader leaves
+    checksum_ok nil (CFRU has no secure checksum) and the send-out demanded true. record_ok takes
+    nil on radical_red only; the send-out uses it."""
+    from lupa import LuaRuntime
+
+    text = SCRIPTED.read_text(encoding="utf-8")
+    body = re.search(r"^local function record_ok\(.*?^end$", text, re.M | re.S).group(0)
+    lua = LuaRuntime()
+    ok = lua.execute(body + "\nreturn record_ok")
+    def rec(v):
+        return lua.table_from({"checksum_ok": v} if v is not None else {})
+    assert ok(rec(None), "radical_red") is True and ok(rec(True), "radical_red") is True
+    assert ok(rec(False), "radical_red") is False
+    assert ok(rec(None), "firered") is False and ok(rec(True), "leafgreen") is True
+    start = text.index("send_out_healthy_mon = function")
+    send = text[start:text.index("forced_party_no_healthy_mon", start)]
+    assert "record_ok(mon, TITLE)" in send and "mon.checksum_ok" not in send
+    fixture = duo.gen3_decode((REPO / "tests/fixtures/gen3/rr_battle2.sav").read_bytes(), rr=True)[0]
+    assert [(m["hp"], m["checksum_ok"]) for m in fixture] == [(22, None), (18, None)]
 

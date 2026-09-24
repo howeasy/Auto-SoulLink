@@ -1286,6 +1286,14 @@ end
 --- optional trainer shift prompt. In FR, an A on the fainted slot just prints
 --- "has no energy" (party_menu.c:5916-5933). Read callback, input task, cursor,
 --- and plaintext party HP before each selection. Never infer a slot from pixels.
+--- A party record the helper may send in. RR (CFRU) keeps no secure checksum: lua/gen3/reads.lua
+--- leaves checksum_ok nil there (the production rule; e2e_duo's gen3_record_problems agrees), so
+--- nil passes on radical_red only -- vanilla still demands true. G5-RR-R1R3: rr_battle2's healthy
+--- slot-1 catch (18/18) was refused on nil and A failed forced_party_no_healthy_mon.
+-- ponytail: only the send-out uses it; the FR-only legs (verify_starter, owned_snapshot) keep `true`
+local function record_ok(mon, title)
+    return mon.checksum_ok == true or (title == "radical_red" and mon.checksum_ok == nil)
+end
 send_out_healthy_mon = function(cp, label)
     if not party_menu_up() then G.finish(false, label .. ": forced_party_menu_missing"); return false end
     local kind = memory.read_u8(PARTY_MENU_ADDR + 8) & 0x0F
@@ -1309,7 +1317,7 @@ send_out_healthy_mon = function(cp, label)
         local mon = records[slot + 1]
         if memory.read_u16_le(base + OFF_HP) > 0
            and memory.read_u16_le(base + OFF_MAXHP) > 0
-           and mon.species ~= 0 and mon.has_species == 1 and mon.checksum_ok
+           and mon.species ~= 0 and mon.has_species == 1 and record_ok(mon, TITLE)
            and mon.is_bad_egg == 0 and mon.is_egg == 0
            and mon.is_egg_flag == 0 then target = slot; break end
     end
