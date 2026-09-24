@@ -21,7 +21,7 @@ import time
 import logging
 import os
 from collections import deque
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum
 
@@ -1144,26 +1144,64 @@ class SoulLinkState:
         return {"phase": pt["phase"], "token": pt["token"], "a_key": pt["a_key"], "b_key": pt["b_key"],
                 "verdict": dict(pt["verdict"]), "problem": pt.get("problem", "")}
 
+    def trade_held(self) -> list[dict]:
+        """Invariant review MAJOR-3: the events waiting on the pending trade, for the board banner
+        (kept out of trade_problem(), whose shape the Gen 2 reconciliation verifier pins)."""
+        pt = self.pending_trade or {}
+        return [{"player": pid, "event": m.get("event"), "key": m.get("key")}
+                for pid, m in pt.get("held_events", [])]
+
     def resolve_trade(self, token: str, action: str) -> tuple[bool, str]:
-        """MAJOR-3 (review e9d5e136): an admin settles a conflicted or stuck trade by hand, once the
-        two parties are checked. `commit` swaps the link (each side's reported new key, else the
-        other's old key); `rollback` leaves it. Either way the slot clears, held events replay and
-        the outcome is journaled with problem "resolved by admin: <action>"."""
+        """MAJOR-3 (review e9d5e136, invariant review MAJOR-3): an admin settles a conflicted or
+        stuck trade by hand. A side whose outcome is KNOWN (verdict traded/none, from its report or
+        its party) keeps it whatever the action, so every link half ends up naming the mon that side
+        holds; the action decides only the sides the server cannot: `commit` -> traded, `rollback`
+        -> none, `adopt` -> nothing (refused while a side is undecided). Both traded commits the
+        swap, both none rolls back, one of each splits (_split_trade). The slot clears, held events
+        replay against the result and the outcome is journaled with "resolved by admin: <action>"."""
         pt = self.pending_trade
         if not pt or str(token) != pt.get("token") or pt.get("phase") not in ("applying", "uncertain", "conflict"):
             return False, "no applied trade with that token"
-        if action not in ("commit", "rollback"):
-            return False, "action must be commit or rollback"
+        fill = {"commit": "traded", "rollback": "none", "adopt": None}
+        if action not in fill:
+            return False, "action must be commit, rollback or adopt"
+        v = pt.get("verdict") or {}
+        sides = {pid: v.get(pid) if v.get(pid) in ("traded", "none") else fill[action] for pid in ("a", "b")}
+        if None in sides.values():
+            return False, "adopt needs both sides' outcome known; use commit or rollback"
         pt["problem"] = f"resolved by admin: {action}"
-        log.warning(f"trade {pt['token']} {pt['problem']} (verdict {pt.get('verdict')})")
-        if action == "commit":
+        log.warning(f"trade {pt['token']} {pt['problem']} (verdict {v}) -> {sides}")
+        if sides["a"] == sides["b"] == "traded":
             self._commit_trade(pt)
-        else:
+        elif sides["a"] == sides["b"] == "none":
             self._record_trade(pt, "rolled_back")
             self.pending_trade = None
             self._replay_trade_events(pt)
             self._save()
+        else:
+            self._split_trade(pt, "a" if sides["a"] == "traded" else "b")
         return True, ""
+
+    def _split_trade(self, pt: dict, taker: str):
+        """Only `taker` traded: it holds a copy of the partner's mon (its reported key, else the
+        partner's), its own mon is gone; the partner still holds its own. Point the taker's half
+        at the copy and leave the partner's, so a death on either side reaches the other's mon."""
+        entry = pt["link"]
+        src = entry.b if taker == "a" else entry.a
+        nk, ns = pt["new"].get(taker) or (src.key, 0)
+        old = pt[f"{taker}_key"]
+        setattr(entry, taker, replace(src, key=nk, species=ns or src.species))
+        self._key_index.pop(old, None)
+        self.party_keys[taker].discard(old)
+        self.party_keys[taker].add(nk)
+        self.bonus_keys[taker].discard(old)
+        self._index_entry(entry)
+        self.pending_trade = None
+        self._replay_trade_events(pt)
+        self._save()
+        log.warning(f"trade {pt['token']} split: {taker} holds a copy {nk}, its {old} is gone")
+        self._record_trade(pt, "split")
+        self._trade_settle_ticks[taker] = self.TRADE_SETTLE_TICKS
 
     def _commit_trade(self, pt: dict):
         """Apply the swap atomically, once both sides are known to have traded; pt["new"] holds

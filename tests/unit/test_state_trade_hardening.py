@@ -132,7 +132,7 @@ def _conflicted(tmp_path):
     return state, entry, token
 
 
-def test_admin_rollback_clears_the_conflict_leaves_the_link_and_journals_it(tmp_path):
+def test_admin_rollback_clears_the_conflict_and_journals_it(tmp_path):
     state, entry, token = _conflicted(tmp_path)
     seen = []
     state.on_trade_outcome = seen.append
@@ -140,11 +140,12 @@ def test_admin_rollback_clears_the_conflict_leaves_the_link_and_journals_it(tmp_
     assert state.resolve_trade(token, "bogus")[0] is False
     assert state.resolve_trade(token, "rollback") == (True, "")
     assert state.pending_trade is None and state.trade_problem() is None
-    assert (entry.a.key, entry.b.key) == (B_GETS, A_GETS)                     # untouched: A:ABCD, B:1234
-    assert [(r["outcome"], r["problem"]) for r in seen] == [("rolled_back", "resolved by admin: rollback")]
+    # invariant review MAJOR-3: A's known "traded" stands, so A's half names the copy it holds
+    assert (entry.a.key, entry.b.key) == (A_GETS, A_GETS)
+    assert [(r["outcome"], r["problem"]) for r in seen] == [("split", "resolved by admin: rollback")]
     assert _reload(tmp_path).pending_trade is None
-    state._handle_trade_query("a")
-    assert state.queued_commands["a"][-1] == {"cmd": "trade_mask", "mask": 1 << 2}, "trading works again"
+    state._handle_trade_request("a", {})
+    assert state.pending_trade is not None, "the trade slot is free again"
 
 
 def test_admin_commit_swaps_with_the_reported_keys_and_replays_held_events(tmp_path):

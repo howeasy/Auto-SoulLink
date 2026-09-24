@@ -92,3 +92,17 @@ async def test_last_trade_note_shows_only_when_nothing_is_currently_wrong(board)
     html = await _html(client)
     assert "trade-problem-uncertain" in html
     assert "trade-last-note" not in html
+
+
+@pytest.mark.asyncio
+async def test_held_events_are_listed_on_the_banner(board):
+    """Invariant review MAJOR-3: what waits on the trade is visible next to the resolve hint."""
+    srv, client = board
+    srv.state.trade_problem = lambda: {
+        "phase": "conflict", "token": "tok5", "a_key": "A:1", "b_key": "B:2",
+        "verdict": {"a": "traded", "b": "none"}, "problem": "",
+    }
+    srv.state.trade_held = lambda: [{"player": "b", "event": "faint", "key": "B:2"}]
+    html = await _html(client)
+    assert "trade-problem-held" in html and "B faint B:2" in html
+    assert '"adopt"' in html

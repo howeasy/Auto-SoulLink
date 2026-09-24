@@ -2565,6 +2565,7 @@ class SLinkServer:
             },
             # An uncertain / conflicted native trade awaiting party evidence or a human (None = none).
             "trade_problem": s.trade_problem(),
+            "trade_held": s.trade_held(),
             "trade_last": s.trade_last,
             "badge_slugs": self.adapter.gym_badge_slugs(s.rom_type or ""),
         }
@@ -4251,8 +4252,9 @@ class SLinkServer:
         })
 
     async def handle_debug_resolve_trade(self, request):
-        """POST /api/debug/resolve_trade {"token": "t7", "action": "commit"|"rollback"} — settle a
-        conflicted or stuck native trade by hand (the board's trade banner names this)."""
+        """POST /api/debug/resolve_trade {"token": "t7", "action": "commit"|"rollback"|"adopt"} —
+        settle a conflicted or stuck native trade by hand (the board's trade banner names this);
+        see SoulLinkState.resolve_trade for how a side's known outcome binds."""
         try:
             body = await request.json()
         except Exception:
