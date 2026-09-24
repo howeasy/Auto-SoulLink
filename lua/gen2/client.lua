@@ -303,6 +303,13 @@ function Client.new(p)
         self.pending_battle_writes, self.commanded = {}, {}
         -- P4.3b: Init clears the lease on reset; a reload leaves the Trade Center. The hello resyncs.
         self:trade_forget("the " .. kind .. " boundary")
+        -- review m2: a trade report held for the hello is lost with the timeline; the side cannot vouch
+        for _, m in ipairs(self.held) do
+            if m.event == "trade_done" and m.fields and m.fields.token then
+                self.trade_owed[#self.trade_owed + 1] = { event = "trade_done",
+                    fields = { token = m.fields.token, uncertain = true } }
+            end
+        end
         drop_held("the " .. kind .. " boundary")
         self.hello_session:invalidate(why or kind)
     end
@@ -702,6 +709,13 @@ function Client.new(p)
     function self:trade_forget(why)
         local st, visit = self.trade_state, self.trade_visit
         if st and st.kind == "apply" and trade and trade.committing then trade_uncertain(st, tostring(why))
+        elseif st and st.kind == "apply" then
+            -- review m2: before SlinkTradeCommit nothing was mutated or saved: a certain none, owed
+            log("[SLink-gen2] apply_trade forgotten before the commit entry (" .. tostring(why) .. "); nothing changed")
+            self.trade_owed[#self.trade_owed + 1] = { event = "trade_done",
+                fields = { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 } }
+        elseif st and st.kind == "prompt" then
+            self.trade_owed[#self.trade_owed + 1] = { event = "menu_result", fields = { token = st.token, choice = 0 } }
         elseif not st and visit and visit.server_token then withdraw_offer(visit.server_token, tostring(why)) end
         self.trade_state, self.trade_visit = nil, nil
     end

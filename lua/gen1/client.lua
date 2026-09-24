@@ -1922,7 +1922,15 @@ function Client.new(p)
     -- is claimed; after it, uncertain.
     function self:trade_forget(why)
         local st = self.trade_state
-        if st and st.kind == "apply" and st.committing then trade_uncertain(st, tostring(why)) end
+        if st and st.kind == "apply" and st.committing then trade_uncertain(st, tostring(why))
+        elseif st and st.kind == "apply" then
+            -- review m2: before the RemovePokemon nothing was mutated or saved: a certain none, owed
+            log("[SLink-gen1] apply_trade forgotten before the commit boundary (" .. tostring(why) .. "); nothing changed")
+            self.trade_owed[#self.trade_owed + 1] = { event = "trade_done",
+                fields = { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 } }
+        elseif st and st.kind == "prompt" then
+            self.trade_owed[#self.trade_owed + 1] = { event = "menu_result", fields = { token = st.token, choice = 0 } }
+        end
         self.trade_state = nil
     end
 

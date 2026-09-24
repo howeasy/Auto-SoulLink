@@ -2809,16 +2809,21 @@ def test_a_reset_after_the_commit_boundary_is_declared_uncertain_after_the_new_h
     w.assert_all_conform()
 
 
-def test_a_reset_before_the_commit_boundary_claims_nothing():
-    """Before the RemovePokemon nothing was mutated: the visit is forgotten, no claim either way
-    (Gen 2's trade_forget before SlinkTradeCommit); the server's watchdog/evidence settles it."""
+def test_a_reset_before_the_commit_boundary_reports_a_certain_nothing_changed():
+    """Before the RemovePokemon nothing was mutated or saved, so the reset lost nothing: review m2 --
+    say so after the new hello (a certain none) instead of leaving it to the 17-minute watchdog."""
     w = _patched_world()
+    old_key = codec.key(w.party()[0])
     _applying(w)
     _reset_and_reload(w)
     w.step(5)
-    assert w.events("trade_done") == []
+    assert [(d["token"], d["new_key"], d.get("uncertain")) for d in w.events("trade_done")] == [
+        ("t30", old_key, None)]
+    names = [m["event"] for m in w.sent]
+    assert names.index("trade_done") > len(names) - 1 - names[::-1].index("hello"), "after the new hello"
     assert w.client.trade_state is None
     assert not any("UNCERTAIN" in str(h) for h in w.hud)
+    w.assert_all_conform()
 
 
 def test_an_undecodable_snapshot_classifies_nothing_and_says_which_half_was_missing(world):

@@ -2182,3 +2182,35 @@ def test_trade_withdraw_after_the_commit_entry_declares_uncertain():
     cart.w.frames(3)
     assert uncertain_done(cart.w) == [("t1", True, False)]
     assert [d.get("after_reset") for d in cart.w.sent("trade_done")] == [None]
+
+
+# ── review m2: a reset before the commit entry reports a certain nothing-changed after the hello ──
+
+def test_trade_a_reset_before_the_commit_entry_reports_nothing_changed_after_the_hello():
+    cart = TradeCart()
+    proposer_ready(cart)
+    cart.w.reply(apply_cmd())
+    cart.w.frames(1)
+    cart.pick_up("SlinkTradeApplyPickup")          # picked up, not committing
+    cart.w.checkpoint_ok = False
+    cart.w.client.boundary(cart.w.client, "reset", "save_reset")
+    cart.w.frames(3)
+    assert cart.w.sent("trade_done") == []
+    cart.w.checkpoint_ok = True
+    cart.w.frames(3)
+    assert nothing_changed(cart.w)
+    assert not any("UNCERTAIN" in s for s in cart.w.shown())
+
+
+def test_trade_a_held_report_dropped_at_a_boundary_becomes_an_uncertain_declaration():
+    cart = TradeCart()
+    proposer_ready(cart)
+    cart.w.checkpoint_ok = False
+    cart.w.client.hello_session.invalidate(cart.w.client.hello_session, "test: hello pending")
+    cart.w.client.send("trade_done", cart.w.lua.table_from({"token": "t1", "new_key": codec_key(PARTNER),
+                                                              "new_species": 19}))
+    assert cart.w.sent("trade_done") == [], "held until the hello"
+    cart.w.client.boundary(cart.w.client, "reset", "save_reset")
+    cart.w.checkpoint_ok = True
+    cart.w.frames(3)
+    assert uncertain_done(cart.w) == [("t1", True, False)]
