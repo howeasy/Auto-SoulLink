@@ -93,6 +93,8 @@ function PI.step_toward(map, point, goals, avoid)
 end
 -- A path blocked only by a live object or a closed first step waits for it (walking NPCs move on).
 PI.WAIT_FRAMES = 600
+PI.STUCK_FRAMES = 900   -- diagnostics only
+PI.GIVE_UP_FRAMES = 3000
 PI.BUMP_FRAMES = 24   -- ponytail: 3 normal steps (8 frames each); a walk that has not moved in that long is bumping
 
 local function on(point, map) return point.map_group == map.map_group and point.map_number == map.map_number end
@@ -161,6 +163,9 @@ function PI.driver(F, facts, opts)
         -- BUMP_FRAMES so the events (and any trainer) run.
         local at = point.x * 1000 + point.y
         if at == bumped_at then bumped = bumped + 1 else bumped_at, bumped = at, 0 end
+        if bumped > PI.GIVE_UP_FRAMES then
+            return nil, fmt("the walk has not moved for %d frames at %d,%d (%s)", bumped, point.x, point.y, button)
+        end
         if bumped % (2 * PI.BUMP_FRAMES) >= PI.BUMP_FRAMES then return {}, self.phase end
         return {[button]=true}, self.phase
     end
@@ -327,8 +332,50 @@ function PI.new(ctx, SG, F, FI, opts)
     local driver = PI.driver(F, facts, {moves=FI.PASSIVE_MOVES})
     local base = SG.qualify_observer(ctx)
     local sting = facts.moves.POISON_STING
+    -- Diagnostics only (never an oracle): after STUCK_FRAMES on one tile, log the map-event state and every
+    -- map object / object struct once, labels from the title's rgblink .sym (Gold runs 1-2: a blocker at
+    -- Route 30 (5,23) with no trainer battle).
+    local still, dumped, last = 0, false, nil
+    local function dump()
+        local syms = {}
+        local f = io.open(ctx.root .. "/data/gen2/" .. F.SYM[ctx.env.title] .. ".sym", "rb")
+        if not f then return end
+        for bank, addr, name in f:read("a"):gmatch("(%x%x):(%x%x%x%x) (%S+)") do
+            syms[name] = tonumber(addr, 16)
+        end
+        f:close()
+        local function u8(addr) return ctx.api.read_u8(addr, "System Bus") end
+        local out = {}
+        for _, name in ipairs({"wPlayerStepFlags", "wMapEventStatus", "wEnabledPlayerEvents", "wScriptRunning",
+                               "wPlayerMapX", "wPlayerMapY"}) do
+            if syms[name] then out[#out + 1] = fmt("%s=%02X", name, u8(syms[name])) end
+        end
+        ctx.log("  STUCK " .. table.concat(out, " "))
+        for i = 0, 15 do   -- MAPOBJECT_LENGTH 16: struct id, sprite, y, x, movement, radius, h1, h2, type, sight, script, flag
+            local a = (syms.wMapObjects or 0) + i * 16
+            if u8(a + 1) ~= 0 then
+                ctx.log(fmt("  STUCK mapobj %d struct=%02X sprite=%02X y=%d x=%d move=%02X type=%02X sight=%d script=%02X%02X flag=%02X%02X",
+                    i, u8(a), u8(a + 1), u8(a + 2) - 4, u8(a + 3) - 4, u8(a + 4), u8(a + 8), u8(a + 9),
+                    u8(a + 11), u8(a + 10), u8(a + 13), u8(a + 12)))
+            end
+        end
+        local o = ctx.obs.object
+        for i = 0, o.count - 1 do
+            local a = (syms.wObjectStructs or 0) + i * o.length
+            if u8(a) ~= 0 then
+                ctx.log(fmt("  STUCK struct %d sprite=%02X mapobj=%d move=%02X dir=%02X facing=%02X x=%d y=%d",
+                    i, u8(a), u8(a + 1), u8(a + 3), u8(a + 8), u8(a + 13), u8(a + 16) - 4, u8(a + 17) - 4))
+            end
+        end
+    end
     local function observe()
         local point = base()
+        local here = fmt("%s:%s:%s:%s", tostring(point.map_group), tostring(point.map_number), tostring(point.x), tostring(point.y))
+        if here == last and point.overworld_ready == true then still = still + 1 else still, last = 0, here end
+        if still > PI.STUCK_FRAMES and not dumped and ctx.log then
+            dumped = true
+            pcall(dump)
+        end
         point.poison_fainted = opts.fainted() == true
         local battle = ctx.reads.read_battle()
         point.active_slot = battle and battle.mode ~= 0 and battle.active_slot or nil
