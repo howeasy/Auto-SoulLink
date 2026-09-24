@@ -335,6 +335,7 @@ class SLinkServer:
                                         battle_calc=battle_calc,
                                         pc_trade_npc=pc_trade_npc)
         self.state.presentation_key_in_use = self._presentation_key_in_use
+        self.state.on_trade_outcome = self._journal_trade
         # Game adapter — shared with state machine for consistent behavior.
         # Provides both rules and presentation methods.
         self.adapter = self.state.adapter
@@ -2564,6 +2565,7 @@ class SLinkServer:
             },
             # An uncertain / conflicted native trade awaiting party evidence or a human (None = none).
             "trade_problem": s.trade_problem(),
+            "trade_last": s.trade_last,
             "badge_slugs": self.adapter.gym_badge_slugs(s.rom_type or ""),
         }
 
@@ -4387,6 +4389,7 @@ class SLinkServer:
             battle_calc=self.state.battle_calc,
             pc_trade_npc=self.state.pc_trade_npc)
         self.state.presentation_key_in_use = self._presentation_key_in_use
+        self.state.on_trade_outcome = self._journal_trade
         self.adapter = self.state.adapter
         self._player_adapters = {}
         self.state.player_adapter_for = self.adapter_for
@@ -4429,6 +4432,7 @@ class SLinkServer:
                                    battle_calc=self.state.battle_calc,
                                    pc_trade_npc=self.state.pc_trade_npc)
         self.state.presentation_key_in_use = self._presentation_key_in_use
+        self.state.on_trade_outcome = self._journal_trade
         self.adapter = self.state.adapter
         self._player_adapters = {}
         self.state.player_adapter_for = self.adapter_for
@@ -4494,6 +4498,12 @@ class SLinkServer:
             if mem_idx - i >= 0:
                 indices.add(mem_idx - i)
         return indices
+
+    def _journal_trade(self, rec: dict) -> None:
+        """events.json: one trade_<outcome> entry per native-trade outcome; key = the trade token."""
+        self._log_event("", f"trade_{rec['outcome']}",
+                        f"{rec['a_key']} <-> {rec['b_key']}: {rec['verdict']} {rec['problem']}".strip(),
+                        key=rec["token"])
 
     def _presentation_key_in_use(self, key: str) -> bool:
         """Is `key` a live mon in the presentation caches?  The state's key_change collision

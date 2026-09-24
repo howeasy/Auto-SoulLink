@@ -17,6 +17,7 @@ this to give each run its own isolated data directory.
 """
 
 import json
+import time
 import logging
 import os
 from collections import deque
@@ -206,6 +207,10 @@ class SoulLinkState:
         # party_details, _mon_cache) consulted by the key_change collision preflight.
         # Adapter-neutral: the rules layer never sees what the presentation layer stores.
         self.presentation_key_in_use = None
+        # The last native-trade outcome (uncertain | committed | rolled_back | conflict), token-bound,
+        # for the status page and oracles; on_trade_outcome(record) lets the server journal it.
+        self.trade_last: dict | None = None
+        self.on_trade_outcome = None
         # Title-sensitive acquisition policy; standalone states use their run adapter.
         # Species/evolution, gender/type, shiny and capability rules stay run-global:
         # admitted titles share those semantics, but their static map sites can differ.
@@ -593,6 +598,7 @@ class SoulLinkState:
                 for pid in ("a", "b"):
                     if pt["verdict"][pid] is None:
                         pt["verdict"][pid] = "await"
+                self._record_trade(pt, "uncertain")
                 return
             log.info(f"trade watchdog: abandoning stuck trade (phase {pt.get('phase')}, token {pt.get('token')})")
             self.pending_trade = None
@@ -896,6 +902,7 @@ class SoulLinkState:
             return
         if v["a"] == v["b"] == "none":
             log.info(f"trade {pt['token']} did not happen on either side — rolled back")
+            self._record_trade(pt, "rolled_back")
             self.pending_trade = None
             for pid in ("a", "b"):
                 self.queued_commands[pid].append({
@@ -905,10 +912,22 @@ class SoulLinkState:
         pt["problem"] = "; ".join(f"{pid}: {v[pid]}" if v[pid] in ("traded", "none") else v[pid]
                                   for pid in ("a", "b"))
         log.error(f"trade {pt['token']} CONFLICT — link left as it was, needs a human: {pt['problem']}")
+        self._record_trade(pt, "conflict")
         for pid in ("a", "b"):
             self.queued_commands[pid].append({
                 "cmd": "msgbox", "text": "TRADE ERROR - party mismatch.\nSee the status page.",
                 "fb": "prompt"})
+
+    def _record_trade(self, pt: dict, outcome: str):
+        """Publish a trade outcome: trade_last (status) + on_trade_outcome (server journal)."""
+        new = pt.get("new") or {}
+        self.trade_last = {
+            "token": pt["token"], "outcome": outcome, "at": time.time(),
+            "a_key": pt["a_key"], "b_key": pt["b_key"],
+            "a_new": (new.get("a") or (None,))[0], "b_new": (new.get("b") or (None,))[0],
+            "verdict": dict(pt.get("verdict") or {}), "problem": pt.get("problem", "")}
+        if self.on_trade_outcome:
+            self.on_trade_outcome(dict(self.trade_last))
 
     def trade_problem(self) -> dict | None:
         """The uncertain/conflicted trade for the status page, or None."""
@@ -952,6 +971,7 @@ class SoulLinkState:
                 "r": 100, "g": 255, "b": 160, "frames": 300})
         self._save()
         log.info(f"trade complete (token {pt['token']})")
+        self._record_trade(pt, "committed")
         self.pending_trade = None
         # Arm the post-trade settle window on BOTH sides: the swap is party↔party, so suppress the
         # drift reconciler while each client's party read settles (no spurious "Unbox" party_mon).

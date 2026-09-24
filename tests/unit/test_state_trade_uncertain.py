@@ -198,3 +198,41 @@ def test_status_payload_surfaces_the_trade_problem(tmp_path):
     srv.state.pending_trade = {"phase": "conflict", "token": "t1", "a_key": "A:1", "b_key": "B:2",
                                "verdict": {"a": "traded", "b": "b: holds NEITHER"}, "problem": "x"}
     assert srv._build_status_dict()["trade_problem"]["phase"] == "conflict"
+
+
+def test_every_outcome_is_recorded_with_its_token(tmp_path, monkeypatch):
+    """trade_last + on_trade_outcome: the durable, token-bound record an oracle binds to."""
+    seen = []
+    state, token = _applying(tmp_path, monkeypatch)
+    state.on_trade_outcome = seen.append
+    _fire_watchdog(state)
+    assert state.trade_last["token"] == token and state.trade_last["outcome"] == "uncertain"
+    _tick(state, "a", _mon("A:1", 1))
+    _tick(state, "b", _mon("B:2", 4))
+    assert [r["outcome"] for r in seen] == ["uncertain", "rolled_back"]
+    last = state.trade_last
+    assert last["token"] == token and last["verdict"] == {"a": "none", "b": "none"}
+    assert last["a_key"] == "A:1" and last["b_key"] == "B:2" and last["at"]
+    assert last["a_new"] is None and last["b_new"] is None
+
+    state2, token2 = _applying(tmp_path, monkeypatch)
+    state2.handle_event("a", {"event": "trade_done", "token": token2, "new_key": "B:2", "new_species": 4})
+    state2.handle_event("b", {"event": "trade_done", "token": token2, "new_key": "A:1", "new_species": 1})
+    assert state2.trade_last["outcome"] == "committed" and state2.trade_last["b_new"] == "A:1"
+
+    state3, token3 = _applying(tmp_path, monkeypatch)
+    state3.handle_event("a", {"event": "trade_done", "token": token3, "new_key": "B:2", "new_species": 4})
+    state3.handle_event("b", {"event": "trade_done", "token": token3, "new_key": "B:2", "new_species": 0})
+    assert state3.trade_last["outcome"] == "conflict" and state3.trade_last["problem"]
+
+
+def test_server_journals_trade_outcomes_and_status_carries_trade_last(tmp_path):
+    from server.server import SLinkServer
+    srv = SLinkServer(data_dir=str(tmp_path))
+    assert srv._build_status_dict()["trade_last"] is None
+    srv.state._record_trade({"token": "t7", "a_key": "A:1", "b_key": "B:2",
+                             "verdict": {"a": "traded", "b": "traded"},
+                             "new": {"a": ("B:2", 4), "b": ("A:1", 1)}}, "committed")
+    assert srv._build_status_dict()["trade_last"]["outcome"] == "committed"
+    ev = srv._recent_events[0]
+    assert ev["type"] == "trade_committed" and ev["key"] == "t7"

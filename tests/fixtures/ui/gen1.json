@@ -1839,6 +1839,8 @@
     "a": [],
     "b": []
   },
+  "trade_problem": null,
+  "trade_last": null,
   "badge_slugs": [
     [
       1,
