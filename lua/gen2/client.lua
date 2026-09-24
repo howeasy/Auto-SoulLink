@@ -105,6 +105,10 @@ function Client.new(p)
         -- owed in battle wait for the next battle hold; `commanded` holds keys whose native faint is the
         -- echo of a death the server commanded (dropped once, never reported as a new faint).
         pending_battle_writes = {}, arrivals = 0, commanded = {},
+        -- review 2026-09-24 MINOR-7: every key whose death landed here, until its burial. A heal before the
+        -- burial (a Pokemon Center, the Battle Tower's HealParty before battle 1) revives it; the checkpoint
+        -- and the battle holds zero it again, quietly. Kept across a reset (the client outlives it).
+        dead_keys = {},
     }
     self.trade_owed = self.owed.list
 
@@ -838,11 +842,25 @@ function Client.new(p)
         end
     end
 
+    -- MINOR-7: a landed death is remembered under the server's key and the key the mon holds now (an
+    -- evolved match), so the exact-key sweep below needs no evolution fallback (and logs nothing per frame)
+    local function mark_dead(key, mon)
+        self.dead_keys[key] = true
+        if mon then self.dead_keys[mon_key(mon)] = true end
+    end
+    local function revived_dead()
+        for key in pairs(self.dead_keys) do
+            local slot, mon = find_party_slot(key)
+            if slot and mon.hp > 0 then return key end
+        end
+    end
+
     -- Deferred queue: one command per frame, only at the verified checkpoint, inside the permit.
     function self:run_deferred()
         local armed
         for i, s in ipairs(self.settle) do if s.armed then armed = armed or i end end
-        if (#self.deferred == 0 and not armed) or not self.writes_enabled or not net.connected() then return end
+        if (#self.deferred == 0 and not armed and not next(self.dead_keys)) or not self.writes_enabled
+           or not net.connected() then return end
         local safe = safety.check(PARTY_HP)
         if not safe then return end
         if armed then
@@ -853,6 +871,9 @@ function Client.new(p)
             log("[SLink-gen2] box copy settle " .. s.key .. ": " .. (done and "done" or tostring(why)))
             return
         end
+        local revived = revived_dead()
+        if revived then table.insert(self.deferred, 1, { cmd = "force_faint", key = revived, quiet = true }) end
+        if #self.deferred == 0 then return end
         local cmd = table.remove(self.deferred, 1)
         if BOX_NACK[cmd.cmd] then return self:run_box(cmd) end
         local slot, mon, _, why = find_party_slot(cmd.key, cmd.cmd)
@@ -872,8 +893,10 @@ function Client.new(p)
                 .. " " .. tostring(cmd.key))
             return
         end
-        -- the re-zero behind a landed battle write (O-30): a mon still at HP 0 needs nothing more
-        if cmd.quiet and mon.hp == 0 then return end
+        -- the re-zero behind a landed battle write (O-30), or a death this client already landed (MINOR-7,
+        -- the server's O-24 re-issue): a mon still at HP 0 needs nothing more
+        local quiet = cmd.quiet or self.dead_keys[cmd.key]
+        if quiet and mon.hp == 0 then return end
         local battle = reads.read_battle()
         -- Gen 2: faint_party_slot takes the battle snapshot and refuses the active slot and
         -- any linked/special battle itself; the client never pre-empts that decision.
@@ -885,7 +908,8 @@ function Client.new(p)
             writes:disarm()
         end)
         writes:disarm()
-        if ok and cmd.quiet then
+        if ok then mark_dead(cmd.key, mon) end
+        if ok and quiet then
             -- EvolveAfterBattle's max-HP gain or the Battle Tower's reload revived it: dead stays dead
             log("[SLink-gen2] re-zeroed a revived dead mon " .. cmd.key .. " -> " .. mon_key(mon))
         elseif ok then
@@ -951,6 +975,7 @@ function Client.new(p)
             local done, why = boxes.memorialize(phys)
             if done then
                 self.pending_rescan, self.retired_alias[cmd.key] = true, nil
+                self.dead_keys[cmd.key], self.dead_keys[phys] = nil, nil -- buried: MINOR-7 is done with it
                 send("memorialize_done", { key = cmd.key, box = boxes.memorial_box })
                 hud.show("† " .. name .. " buried", 255, 140, 40, 300)
             elseif why == "last party mon" and self.game_over then
@@ -1181,7 +1206,7 @@ function Client.new(p)
             -- Gen 2: another save's identity; what was held belongs to the previous one. A transient
             -- identity_unavailable keeps the queue (the same identity returning is not a change).
             if reason == "identity_changed" then
-                self.key_alias, self.retired_alias = nil, {}
+                self.key_alias, self.retired_alias, self.dead_keys = nil, {}, {}
                 drop_held("identity change")
             end
         end,
@@ -1306,9 +1331,20 @@ function Client.new(p)
             end
         end
         self.deferred = stay
+        -- MINOR-7: a dead key revived since its death landed (the tower's HealParty before battle 1) dies here too
+        for key in pairs(self.dead_keys) do
+            local queued = false
+            for _, w in ipairs(self.pending_battle_writes) do queued = queued or w.key == key end
+            local slot, mon = find_party_slot(key)
+            if slot and mon.hp > 0 and not queued then
+                self.pending_battle_writes[#self.pending_battle_writes + 1] = { cmd = "force_faint", key = key, quiet = true,
+                                                                               arrival = self.arrivals }
+            end
+        end
     end
     function self:at_battle_hold()
-        if (#self.pending_battle_writes == 0 and #self.deferred == 0) or not self.writes_enabled then return end
+        if (#self.pending_battle_writes == 0 and #self.deferred == 0 and not next(self.dead_keys))
+           or not self.writes_enabled then return end
         -- a bus-exec hit at this PC in another ROM bank is not BattleTurn: cheapest refusal first
         if io.read_u8(profile.ram.hROMBank, "System Bus") ~= p.battle_hold.execution_before.bank then return end
         if not safety.check(BATTLE_FAINT) then return end
@@ -1362,7 +1398,9 @@ function Client.new(p)
             if landed then
                 -- only the active battler runs HandlePlayerMonFaint (the echo); a bench write has none
                 if slot == battle.active_slot then self.commanded[mon_key(mon)] = true end
-                if w.quiet then
+                local quiet = w.quiet or self.dead_keys[w.key]
+                mark_dead(w.key, mon)
+                if quiet then
                     log("[SLink-gen2] re-zeroed a revived dead mon in battle " .. w.key .. " -> " .. mon_key(mon))
                 else
                     hud.show("!! " .. nick_label(w.key, w.nickname or mon.nickname) .. " KO'd", 255, 80, 80, 360)
@@ -1407,7 +1445,9 @@ function Client.new(p)
                 end)
                 writes:disarm()
                 if ok then
-                    if w.quiet then
+                    local quiet = w.quiet or self.dead_keys[w.key]
+                    mark_dead(w.key, mon)
+                    if quiet then
                         log("[SLink-gen2] re-zeroed a revived dead mon on receipt " .. w.key .. " -> " .. mon_key(mon))
                     else
                         log("[SLink-gen2] bench write landed on receipt: slot " .. slot .. " " .. tostring(w.key))

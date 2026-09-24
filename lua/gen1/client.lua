@@ -173,6 +173,10 @@ function Client.new(p)
         -- A1: server-seeded pending-capture keys (part of the APEX collision set) and the
         -- old->new alias held between a key_change and its ack
         pending_keys = {}, key_alias = nil, apex = nil, transforming = nil,
+        -- review 2026-09-24 MINOR-7 (mirror of lua/gen2/client.lua dead_keys): every key whose death landed
+        -- here, until its burial; a heal before the burial is re-zeroed at the checkpoint and the loop head,
+        -- quietly. Kept across a reset (the client outlives it).
+        dead_keys = {},
     }
     self.trade_owed = self.owed.list
 
@@ -522,6 +526,18 @@ function Client.new(p)
         self.deferred[#self.deferred + 1] = entry
     end
 
+    -- MINOR-7 (mirror of lua/gen2/client.lua)
+    local function mark_dead(key, mon)
+        self.dead_keys[key] = true
+        if mon then self.dead_keys[mon_key(mon)] = true end
+    end
+    local function revived_dead()
+        for key in pairs(self.dead_keys) do
+            local slot, mon = find_party_slot(key)
+            if slot and mon.hp > 0 then return key end
+        end
+    end
+
     function self:handle_command(cmd)
         local c = cmd.cmd
         if c == "noop" then return end
@@ -564,7 +580,8 @@ function Client.new(p)
                     if ok then
                         w.landed = true
                         log("[SLink-gen1] bench write landed on receipt: slot " .. slot .. " " .. tostring(cmd.key))
-                        hud.show("!! " .. nick_label(cmd.key, cmd.nickname) .. " KO'd", 255, 80, 80, 360)
+                        if not self.dead_keys[cmd.key] then hud.show("!! " .. nick_label(cmd.key, cmd.nickname) .. " KO'd", 255, 80, 80, 360) end
+                        mark_dead(cmd.key, mon)
                     else
                         log("[SLink-gen1] bench write refused on receipt, the loop head retries: " .. tostring(err))
                     end
@@ -805,7 +822,8 @@ function Client.new(p)
     function self:run_deferred()
         local armed
         for i, s in ipairs(self.box_settle) do if s.armed then armed = armed or i end end
-        if (#self.deferred == 0 and not armed) or not self.writes_enabled or not net.connected() then return end
+        if (#self.deferred == 0 and not armed and not next(self.dead_keys)) or not self.writes_enabled
+           or not net.connected() then return end
         local safe, why = safety.check(ws_profile, io)
         if not safe then return end
         if armed then
@@ -823,6 +841,9 @@ function Client.new(p)
             self:rescan_boxes()
             return
         end
+        local revived = revived_dead()
+        if revived then table.insert(self.deferred, 1, { cmd = "force_faint", key = revived, quiet = true }) end
+        if #self.deferred == 0 then return end
         local cmd = table.remove(self.deferred, 1)
         -- the key the cartridge holds for cmd.key and, for a retired alias, the validated slot:
         -- the box module takes both so a duplicate of the new key elsewhere cannot block the
@@ -842,9 +863,15 @@ function Client.new(p)
                 log("[SLink-gen1] " .. cmd.cmd .. " refused for the retired key: " .. refused .. " " .. tostring(cmd.key))
                 send(cmd.cmd .. "_failed", { key = cmd.key, reason = refused })
             elseif cmd.cmd == "force_faint" or cmd.cmd == "force_explode" then
-                local slot, _, _, why = find_party_slot(cmd.key)
-                if slot then
+                local slot, mon, _, why = find_party_slot(cmd.key)
+                -- MINOR-7: a death this client already landed (the server's O-24 re-issue) is quiet, and a
+                -- mon still at HP 0 needs nothing more
+                local quiet = cmd.quiet or self.dead_keys[cmd.key]
+                if slot and quiet and mon.hp == 0 then
+                    mark_dead(cmd.key, mon)
+                elseif slot then
                     writes:faint_party_slot(slot)
+                    mark_dead(cmd.key, mon)
                     -- Gen 3 parity (gen3_frlge_client.lua:760-800): text only, never a local
                     -- SFX -- but not for one uniform reason (cx-6bedd222). A terminal/linked
                     -- battle faint's force_faint already carries a play_sound 26 to this player
@@ -853,7 +880,7 @@ function Client.new(p)
                     -- at all -- the whiteout case gets its own local cue from announce_whiteout
                     -- above instead, and the dead-key requeue is silent by design (a link
                     -- already resolved, not a new event). One banner rule covers all three.
-                    if not cmd.quiet then hud.show("!! " .. nick_label(cmd.key, cmd.nickname) .. " KO'd", 255, 80, 80, 360) end
+                    if not quiet then hud.show("!! " .. nick_label(cmd.key, cmd.nickname) .. " KO'd", 255, 80, 80, 360) end
                 else
                     -- the mon left the party before the checkpoint (PC deposit), or a duplicate
                     -- arrived and the key no longer names one mon: no byte moves. The protocol
@@ -914,6 +941,7 @@ function Client.new(p)
                 if done then
                     send("memorialize_done", { key = cmd.key, box = box_count - 1 }); self:rescan_boxes()
                     self.retired_alias[cmd.key] = nil
+                    self.dead_keys[cmd.key], self.dead_keys[phys] = nil, nil -- buried: MINOR-7 is done with it
                     hud.show("† " .. nick_label(cmd.key, mem_mon and mem_mon.nickname) .. " buried", 255, 140, 40, 300)
                 elseif reason == "last party mon" and self.game_over then
                     log("[SLink-gen1] memorialize dropped: last mon after game over")
@@ -1506,12 +1534,23 @@ function Client.new(p)
             end
         end
         self.deferred = stay
+        -- MINOR-7: a dead key revived since its death landed (a heal, then a battle) dies here too, as `landed`
+        for key in pairs(self.dead_keys) do
+            local queued = false
+            for _, w in ipairs(self.pending_battle_writes) do queued = queued or w.key == key end
+            local slot, mon = find_party_slot(key)
+            if slot and mon.hp > 0 and not queued then
+                self.pending_battle_writes[#self.pending_battle_writes + 1] = { cmd = "force_faint", key = key, landed = true,
+                                                                               arrival = self.arrivals }
+            end
+        end
     end
 
     -- Inside the MainInBattleLoop hook: apply the queued in-battle faints/explodes now (W-2).
     -- Returns true when a byte moved (the pureRGB no-move re-entry moves PC only then).
     function self:on_battle_loop_head(sig)
-        if (#self.pending_battle_writes == 0 and #self.deferred == 0) or not self.writes_enabled then return false end
+        if (#self.pending_battle_writes == 0 and #self.deferred == 0 and not next(self.dead_keys))
+           or not self.writes_enabled then return false end
         local pt = sig.point
         -- an unreadable party keeps the queue: find_party_slot could not tell "gone" from
         -- "not readable yet", and a dropped in-battle write never comes back
@@ -1541,7 +1580,9 @@ function Client.new(p)
                     wrote = true
                     -- Gen 3 parity (gen3_frlge_client.lua:760-800): same text-only banner as
                     -- the bench-mon write in run_deferred above.
-                    if not w.landed then hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360) end
+                    local quiet = w.landed or self.dead_keys[w.key]
+                    mark_dead(w.key, mon)
+                    if not quiet then hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360) end
                 else
                     keep[#keep + 1] = w
                 end
@@ -1554,7 +1595,9 @@ function Client.new(p)
                     writes:faint_party_slot(slot)
                     writes:disarm()
                     wrote = true
-                    if not w.landed then hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360) end
+                    local quiet = w.landed or self.dead_keys[w.key]
+                    mark_dead(w.key, mon)
+                    if not quiet then hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360) end
                 end
             elseif slot then
                 -- link battle: leave the bench alone until the checkpoint (a special battle never
@@ -1750,7 +1793,7 @@ function Client.new(p)
             self.hello_sent = false
             if self.panel then self.panel:clear() end
             if reason == "identity_changed" then
-                self.pending_change, self.key_alias, self.retired_alias = nil, nil, {}
+                self.pending_change, self.key_alias, self.retired_alias, self.dead_keys = nil, nil, {}, {}
             end
         end,
         on_error = function(stage, why) log("[SLink-gen1] hello " .. stage .. ": " .. tostring(why)) end,
