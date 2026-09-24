@@ -1,0 +1,75 @@
+G4-LANE-1 Part A: tests/fixtures/gen3/rr_battle{,_b}.sav (committed 4c66c113)
+lane: E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean @ f6d503f4 (tracked_clean=True before every run); ROM patch/build/slink_RR.gba sha1 b7d1e0756fcc66575878affc8f7b95c45386bb1c (staged as gen3_slink_RR.gba, same sha1)
+driver: lua/tests/gen3_rr_battle_fixture.lua (copied untracked into the lane for the run), launched via tools/gen3_fixtures.py _prepare_run/_launch(rr=True, title=radical_red); seed tests/fixtures/gen3/rr_town.sav
+
+--- build
+LOAD 2026-09-24T07:42:42 cpu=94% emuhawk=0 python=14
+cold boot: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_fixture_runs\rr_battle_fixture battery=gen3 slink RR.SaveRAM rom=patch/build/gen3_slink_RR.gba
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_rr_battle_fixture.ini --lua=lua/tests/gen3_rr_battle_fixture.lua patch/build/gen3_slink_RR.gba
+[gate] gen3_rr_battle_fixture: RESULT: PASS counter 2 -> 3 at map=787 at=(12,37) healed=true party=[1] species=277 level=6 hp=22/22  (8s)
+phase start frame=1 title=radical_red
+phase seeded frame=1 counter=2
+phase field frame=545 map=(3,19)
+phase party frame=545 [1] species=277 level=6 hp=22/22
+phase grass-origin frame=692 map=787 at=(12,37)
+phase save-menu frame=692 counter=2
+phase save-dialog frame=823 row=3
+phase saved frame=886 counter=2->3
+phase slot-complete frame=1761 sectors=14/14
+RESULT: PASS counter 2 -> 3 at map=787 at=(12,37) healed=true party=[1] species=277 level=6 hp=22/22
+wrote <scratch>/rr_battle.sav sha256=d9fe5eb6a0b3ea3dc778162584b9d7169fc3bdb38555f709f217113b33319c4b slot=1 counter=3 trainer='B'#2BDDC8BF map=3.19 pos=(12, 37) party=[{'key': 'EBEF11DA:2BDDC8BF', 'species': 277, 'level': 6}]
+
+--- derive-b --rr
+wrote <scratch>\rr_battle_b.sav (131072 bytes) sha256=140ad05c6325180bdc7fae0bb590157310f250fa65c5b8b43b1fb24d6a3ffe2b
+manifest:
+  sb2 playerTrainerId 0x2bddc8bf -> 0xd4223740
+  sb2 playerName 'B' -> 'BB'
+  selected slot=1 counter=3 unchanged; inactive rotating slot preserved (retains original identity); extension is shared
+  daycare/mail/history and SaveBlock2.encryptionKey preserved; boot-check still required
+  party[0] RAM=0x02025564 OTID+0x04/OT-name+0x14 re-keyed; plaintext preserved
+  sector[17] id=0 chunk checksum recomputed
+  sector[18] id=1 chunk checksum recomputed
+
+--- boot-check (both)
+0
+LOAD 2026-09-24T07:43:11 cpu=100% emuhawk=0 python=16
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_fixture_runs\bootcheck_rr_battle\gen3 slink RR.SaveRAM from <scratch>\rr_battle.sav (counter=3)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_slink_RR.gba
+[gate] gen3_boot_check: RESULT: PASS counter 3 -> 4  (7s)
+phase start frame=1 title=radical_red
+phase domain frame=1 SRAM
+phase seeded frame=1 counter=3
+phase field frame=545 map=(3,19)
+phase save-menu frame=545 counter=3
+phase save-dialog frame=676 row=3
+phase saved frame=739 counter=3->4
+phase slot-complete frame=1617 sectors=14/14
+phase flushed frame=1774
+RESULT: PASS counter 3 -> 4
+BOOT-CHECK PASS <scratch>\rr_battle.sav counter=3->4 party=[{'key': 'EBEF11DA:2BDDC8BF', 'species': 277, 'level': 6}]
+== exit 0
+0
+LOAD 2026-09-24T07:43:20 cpu=99% emuhawk=0 python=13
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_fixture_runs\bootcheck_rr_battle_b\gen3 slink RR.SaveRAM from <scratch>\rr_battle_b.sav (counter=3)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_slink_RR.gba
+[gate] gen3_boot_check: RESULT: PASS counter 3 -> 4  (9s)
+phase start frame=1 title=radical_red
+phase domain frame=1 SRAM
+phase seeded frame=1 counter=3
+phase field frame=545 map=(3,19)
+phase save-menu frame=545 counter=3
+phase save-dialog frame=676 row=3
+phase saved frame=739 counter=3->4
+phase slot-complete frame=1617 sectors=14/14
+phase flushed frame=1774
+RESULT: PASS counter 3 -> 4
+BOOT-CHECK PASS <scratch>\rr_battle_b.sav counter=3->4 party=[{'key': 'EBEF11DA:D4223740', 'species': 277, 'level': 6}]
+== exit 0
+
+--- runtime grass confirmation (scratch lua/tests/gen3_rr_grass_probe.lua, removed after; a first attempt died on a string.format multi-return bug in the scratch probe itself and run_gate killed its own EmuHawk PID at 600s)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_rr_grass_probe.ini --lua=lua/tests/gen3_rr_grass_probe.lua patch/build/gen3_slink_RR.gba
+[gate] gen3_rr_grass_probe: RESULT: PASS wild battle after 11 grass steps at (13,38)  (6s)
+phase field frame=545 map=(3,19)
+phase start frame=545 map=3.19 at=(12,37)
+RESULT: PASS wild battle after 11 grass steps at (13,38)
+

@@ -1,0 +1,39 @@
+G4 item 6 route-differential, MASTER side (card G4-LANE-1, owner ruling 10 / G4_request_draft.md §6 item 10)
+tree: E:/Google Drive/SLink/.claude/worktrees/gen3-lane-master, `git worktree add --detach ... master`
+sha: a20d4886b641f5109b2f2ce653b11d42cc6b15e4 (master), tracked_clean=True before and after every run
+gitignored inputs copied in (same bytes the branch lane uses): patch/gen1/build/* (slink_red.gb sha1 a8ad7ee5...),
+  patch/build/gen2_crystal.gbc (sha1 f4cd194b...), "Pokemon - Crystal Version (USA).gbc", and the three clean Gen 1 dumps
+  from the root checkout as patch/build/gen1_{red,blue}.gb / gen1_yellow.gbc (neither tree had them; without them
+  tests/unit/test_gen1_client.py skips every test). patch/gen1 and patch/gen2 sources are identical on master and f6d503f4.
+Machine: shared with a live Gen 2 session (many pytest processes, 0-2 Gen 2 EmuHawk gates); load snapshot before each run.
+Each master run was paired back to back with the same branch run (see item6_route_diff_branch_2026-09-24.txt).
+
+CASE 1  Gen 1 command-ordering (3941198c's named case, copied verbatim into an untracked
+        tests/unit/test_zz_item6_gen1_ordering_scratch.py importing this tree's own `world` fixture; removed after)
+  $ python -m pytest tests/unit/test_zz_item6_gen1_ordering_scratch.py -q -p no:randomly
+  run 1  LOAD 07:58:15 cpu=93% emuhawk=0 python=13
+    FAILED ...force_faint_keeps_its_place_ahead_of_the_later_memorialize[False]  assert ['memorialize', 'force_faint'] == ['force_faint', 'memorialize']
+    FAILED ...[True]  same
+    2 failed
+  run 2  LOAD 07:59:06 cpu=88% emuhawk=1 python=13   2 failed (same two, same assertion)
+  context: python -m pytest tests/unit/test_gen1_client.py -q -p no:randomly -> 164 passed
+
+CASE 2  Gen 1 SFX town gate
+  $ SLINK_LIVE=1 python -m pytest "tests/live/test_gen1_gates.py::test_gen1_sfx_matrix" -k town -q -p no:randomly -rs
+  run 1  LOAD 07:59:27 cpu=90% emuhawk=2 (Gen 2: gen2_sfx_gate crystal_overlay, gen2_evo_dev) python=13
+    red_patched/town  RESULT: FAIL title=red map=0 (1 checks failed)
+    blue_patched/town RESULT: FAIL title=blue map=0 (1 checks failed)
+    the failed check: [FAIL] A: the client turned play_sound 25 into request code 1 and the ROM played $89 -- wrote_at=nil CHAN5=$00
+    (the stale case-A expectation 44bf25d6/48709f39 fixes; the product sends code 4 since f6229e77)
+  run 2  LOAD 08:00:13 cpu=96% emuhawk=1 python=12   red FAIL, blue FAIL (same check)
+  the gate rewrites tracked tests/fixtures/gen1/receipts/*; restored with `git checkout --` after each run
+
+CASE 3  legacy Gen 2 duo (tests/e2e/test_duo_gen2.py: faint, boxsync, memorialize)
+  run 1  $ SLINK_E2E=1 python -m pytest tests/e2e/test_duo_gen2.py -q -p no:randomly -rs
+         LOAD 08:01:01 cpu=97% emuhawk=1 (Gen 2 gen2_evo_dev) python=12
+         3 failed in 19.54s; every half: RESULT: FAIL (never booted into the overworld from the battery save)
+  run 2  $ python tools/e2e_duo.py --game gen2 --scenario {faint,boxsync,memorialize}   (the vehicle the pytest wraps)
+         LOAD 08:02:09 cpu=96% / 08:02:18 cpu=93% / 08:02:27 cpu=90%, emuhawk=1 (Gen 2)
+         faint: FAIL (attempt 1 of 1)   boxsync: FAIL (attempt 1 of 1)   memorialize: FAIL (attempt 1 of 1)
+         a and b both: RESULT: FAIL (never booted into the overworld from the battery save), ~7 s per scenario
+  (matches the 2026-09-23 baseline on master 7957c24c in gen2_route_boot_crystal_2026-09-23.txt)
