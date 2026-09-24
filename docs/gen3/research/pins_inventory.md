@@ -55,3 +55,20 @@ LeafGreen: no dump found under E:/Howard or E:/Google Drive/SLink (depth 3) -> o
 |---|---|---|---|
 | `E:/Google Drive/SLink/Pokemon - LeafGreen Version (USA).gba` | `574fa542ffebb14be69902d1d36f1ec0a4afd71e` | `612ca9473451fa42b51d1711031ed5f6` | MATCH pret leafgreen.sha1 (US 1.0) |
 | `patch/build/slink_RR.gba` rebuilt from `patch/dist/SLink-RR.ups` over the verified base via `patch/tools/make_ups.py ups_apply` | `b7d1e0756fcc66575878affc8f7b95c45386bb1c` | `bf8e94a01c0aee0aa7eb37c7333329af` | MISMATCH vs `server/patcher.py:72` |
+
+## C5-3 companion rebuild (2026-09-24)
+
+Owner approved the RR companion rebuild on 2026-09-24. It was built from `patch/src` at `f6d503f4`, which adds FORCE_MOVE_SLOT fix `15a274ec` + `21df5314`, the handlers.c guards, and OP_RIVAL_SWAP 28 `2dc1b750` on top of the `cd11fca7` build. Build command: `python patch/tools/build.py` (Battle Calc included), with xPack arm-none-eabi-gcc 15.2.1-1.1 and base RR md5 `8529f3a45d32bce4da637976fcf269d4`. Control check: the same toolchain on the `cd11fca7` source reproduces the old `bf8e94a0…` ROM and a UPS byte-identical to the old one.
+
+| Artifact | sha1 | md5 | Note |
+|---|---|---|---|
+| `patch/dist/SLink-RR.ups` (12744 B) | `e3d16c3374d4e05647524522d292abf90998fa81` | `c4cb17a641569e848d1c4f4a6dcbdca2` | sha256 `9cd75e6442ca937c3c46eb1a1aa642d0746a549e81204e164a74bd29a3cd82e6` |
+| `patch/build/slink_RR.gba` (33554432 B) | `ea5352f8a3b9073f8ae20870ad12857925d442cd` | `6cf77ba4a63634a0fd452be6f206bfc3` | `ups_apply(base, ups)` == built ROM byte for byte |
+
+The old→new diff touches only SLink-owned bytes: backup BL `0x0804C10E`/`0x0804C214`, the start-menu setup literal `0x0806ED58`, the battletext detour BL `0x080D87C0`, start-menu words `0x09148FDC` and `0x09149030..35`, and the code region `0x08378F74..0x0837B2E5`. The hook BL at `0x0800051A` and CODE_BASE `0x08378F70` did not move.
+
+Re-pinned: `server/patcher.py` (RR `patched_md5`), `patch/README.md` (result md5), `data/games/gen3_rr/engine_signals.json` (companion `rom_md5`/`rom_sha1`, regenerated), `docs/gen3_engine_sites.md` (regenerated), `tools/pin_gen3_site.py` (ROM_SPECS), and `tools/research/rr_save_callers.py` (ROMS). The profile and write_checkpoint pins (`tools/gen_gen3_profile.py`, `tools/gen_gen3_write_checkpoint.py`, `tests/unit/test_gen3_profile.py`, and the RR `profile.json`/`write_checkpoint.json`) are re-pinned by W1's regeneration.
+
+Anchors: all 19 PINNED companion sites in `engine_signals.json` are unchanged (address, offset and bytes). The only regenerated-inventory changes are two UNVERIFIED diagnostics: the backup literal's aligned hit moved from 0x8379708 to 0x8379724, and the party-base literal count went from 910 to 911. There is no `data/games/gen3_rr/admission.json`: Gen 3 admission is the `engine_signals.json` artifact table (`lua/gen3/entry.lua`).
+
+The rollback bundle stays frozen at the old `bf8e94a0…`/`84082ec3…` build (owner ruling (c)).
