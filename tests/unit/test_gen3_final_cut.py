@@ -456,7 +456,11 @@ def test_every_ph_receipt_maps_to_a_plan_row():
     for name in names:
         with open(os.path.join(fc.PROBES, name), encoding="utf-8") as f:
             ev = fc.receipt_evidence(name, f.read())
-        assert ev and ev.row in ids and ev.cut, name
+        if "_rr_as_a_" in name:
+            # G5 RR rows are not G4 final-cut rows: never citable, never mapped onto an FR/LG row
+            assert ev is None, name
+        else:
+            assert ev and ev.row in ids and ev.cut, name
 
 
 def test_a_legacy_receipt_without_a_cut_sha_is_not_citable():
