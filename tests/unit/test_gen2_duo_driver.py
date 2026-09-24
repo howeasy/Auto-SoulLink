@@ -1570,6 +1570,23 @@ def test_species_verdict_passes_each_complete_half():
         assert problems == [] and receipt["path"] == path, (player, encounters, problems)
 
 
+def test_species_verdict_accepts_the_prompt_during_the_battle_intro():
+    """C<->C species RED run 2 (physical order): the server rerolls on the first in_battle tick
+    (state.py:1843-1930), so the prompt's RX lands during the intro text, before ENCOUNTER (printed at the
+    BattleMenu). The window is the previous REROLL (or A_PENDING) .. this REROLL, the hunt's own cursor."""
+    lines = species_lines("b", ((16, True), (16, True), (19, False)))
+    for n in (1, 2):
+        enc = next(i for i, x in enumerate(lines) if x.startswith("ENCOUNTER ") and f'"n": {n},' in x)
+        rx = next(i for i, x in enumerate(lines) if i > enc and x.startswith("RX gui_prompt"))
+        lines[enc:rx + 2] = lines[rx:rx + 2] + lines[enc:rx]
+    problems, receipt = clause_verdict("species_clause", lines)
+    assert problems == [] and receipt["rerolls"] == 2, problems
+    # the second reroll's prompt is gone: the first battle's prompt cannot stand in for it
+    second = [i for i, x in enumerate(lines) if x.startswith("RX_TEXT") and "reroll" in x][1]
+    problems, receipt = clause_verdict("species_clause", lines[:second] + lines[second + 1:])
+    assert receipt is None and any("behind REROLL 2" in p for p in problems), problems
+
+
 SB = species_lines("b")
 
 

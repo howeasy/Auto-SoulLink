@@ -197,9 +197,14 @@ function S.verdict(lines, json, link_verdict)
                 if need(r ~= nil and r.value.n == i and r.value.species_id == v.species_id and r.at > e.at
                         and r.at < enc[i + 1].at, "no REROLL after duplicate encounter " .. i) then
                     need(r.value.prompt == dupes_text(v.species_id), "REROLL names another prompt")
+                    -- The server rerolls on the first in_battle tick, so the RX may land in the intro text
+                    -- before ENCOUNTER (printed at the BattleMenu): the window is the hunt's own cursor,
+                    -- the previous REROLL (or A_PENDING) .. this REROLL (C<->C live run 2).
+                    local prev = i == 1 and ap or rr[i - 1]
+                    local from = prev and prev.at or 0
                     local got
                     for _, t in ipairs(rows("RX_TEXT")) do
-                        if t.value.cmd == "gui_prompt" and t.value.text == r.value.prompt and t.at > e.at and t.at < r.at then got = true end
+                        if t.value.cmd == "gui_prompt" and t.value.text == r.value.prompt and t.at > from and t.at < r.at then got = true end
                     end
                     need(got, "no RX dupes-clause prompt behind REROLL " .. i)
                 end
