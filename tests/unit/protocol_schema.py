@@ -108,6 +108,7 @@ COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "play_sound": ({"sound": "int"}, {}),
     "resolved_areas": ({"areas": "list"}, {}),
     "unresolve_area": ({"area_id": "str"}, {}),
+    "dead_keys": ({"keys": "list"}, {}),  # INV-CLIENT-2: every accepted hello; the GB clients REPLACE their re-zero set
     "config": ({}, {"overworld_presence": "bool", "native_messages": "bool", "native_sounds": "bool",
                     "battle_calc": "bool", "pc_trade_npc": "bool"}),
     "rebuild_start": ({"text": "str", "keys": "list"}, {}),

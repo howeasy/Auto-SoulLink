@@ -152,17 +152,18 @@ def reply(lua, owed, *commands):
     owed.answer(owed, lua.table_from([lua.table_from(c) for c in commands]))
 
 
-def test_owed_interleaved_refused_and_answered_replies_retire_only_the_answered_report():
+def test_owed_a_refused_report_keeps_every_later_report_behind_it():
     lua, owed, sent, send = owed_module()
     for ev in ("A", "B"):
         owed.list[len(owed.list) + 1] = lua.table_from({"event": ev, "fields": lua.table()})
     owed.step(owed, True, True, send)
     assert sent == ["A", "B"]
     reply(lua, owed, REFUSED)                                  # line 1 (A) was not processed
-    reply(lua, owed, {"cmd": "noop"})                          # line 2 (B) was
-    assert [str(e.event) for e in owed.list.values()] == ["A"]
+    reply(lua, owed, {"cmd": "noop"})                          # line 2 (B) was, but ahead of A
+    assert [str(e.event) for e in owed.list.values()] == ["A", "B"], "B stays behind A (INV-CLIENT-2 order)"
     owed.step(owed, True, True, send)
-    assert sent == ["A", "B", "A"], "A goes again once the server answers normally"
+    assert sent == ["A", "B", "A", "B"], "both go again, in order, once the server answers normally"
+    reply(lua, owed, {"cmd": "noop"})
     reply(lua, owed, {"cmd": "noop"})
     assert len(owed.list) == 0
 
@@ -244,7 +245,8 @@ def test_gen2_a_landed_death_healed_before_its_burial_dies_again_quietly(where):
     lead, dead = g2_landed(world)
     healed = [lead, dict(dead, hp=30)]
     if where == "after_reset":
-        world.client.boundary(world.client, "reset", "save_reset")   # the client state survives a soft reset
+        world.client.boundary(world.client, "reset", "save_reset")
+        world.reply({"cmd": "dead_keys", "keys": [codec_key(dead)]})   # the post-reset hello's sync
     world.party(healed)                                       # HealParty
     if where in ("checkpoint", "after_reset"):
         world.frames(3)
@@ -316,6 +318,146 @@ def test_gen1_a_landed_death_healed_before_its_burial_dies_again_quietly(world1,
     else:
         world1.fire("battle_loop_head")
     assert len(world1.writes) == n, "idempotent: HP 0 needs nothing more"
+
+
+# ── INV-CLIENT-2 (OMP cx-40ba318d on 5d7cbe1c / f5c8193b / 149b38e2) ─────────────────────────────────
+def test_owed_a_refused_report_is_replayed_in_its_original_order():
+    """A/B/C in flight; A refused, B answered: everything from the first unanswered line goes again, A, B, C."""
+    lua, owed, sent, send = owed_module()
+    for ev in ("A", "B", "C"):
+        owed.list[len(owed.list) + 1] = lua.table_from({"event": ev, "fields": lua.table()})
+    owed.step(owed, True, True, send)
+    reply(lua, owed, REFUSED)
+    reply(lua, owed, {"cmd": "noop"})
+    reply(lua, owed, REFUSED)
+    send("tick", None)
+    reply(lua, owed, {"cmd": "noop"})                          # the gate answers normally again
+    owed.step(owed, True, True, send)
+    assert sent == ["A", "B", "C", "tick", "A", "B", "C"]
+    for _ in range(3):
+        reply(lua, owed, {"cmd": "noop"})
+    assert len(owed.list) == 0
+
+
+def test_gen2_a_release_while_the_socket_is_down_is_sent_once_after_the_hello():
+    world = g2.World()
+    lead, gone = mon(), mon(species=172, dvs=0x3AAA)
+    world.party([lead, gone])
+    world.hello()
+    record = world.parts.reads.read_party().mons[2]
+    world.net.up = False
+    world.frames(2)
+    world.client.on_event(world.client, world.lua.table_from({"kind": "pc_release", "collection": "box",
+                                                               "mon": record, "box_index": 0}))
+    world.frames(2)
+    assert world.sent("release") == []
+    world.net.up = True
+    world.frames(3)
+    assert [m["key"] for m in world.sent("release")] == [codec_key(gone)]
+    events = [m["event"] for m in world.sent()]
+    assert events.index("release") > max(i for i, e in enumerate(events) if e == "hello")
+
+
+def test_gen1_a_release_while_the_socket_is_down_is_sent_once_after_the_hello(world1):
+    r = world1.ram
+    released = g1._box_mon(random.Random(5), 0x15, level=8)
+    g1._seed_active_box(world1, [released])
+    world1.step(3)
+    world1.connected = False
+    world1.step()
+    world1.bus[r["wRemoveMonFromBox"]] = 1
+    world1.bus[r["wWhichPokemon"]] = 0
+    world1.fire("remove_pokemon")
+    world1.step()
+    assert world1.events("release") == []
+    world1.overworld_safe()
+    world1.connected = True
+    world1.step(3)
+    assert [m["key"] for m in world1.events("release")] == [g1.codec.key(released)]
+
+
+def test_gen2_a_released_dead_key_is_forgotten_so_a_reused_key_lives():
+    world = g2.World()
+    lead, dead = g2_landed(world)
+    record = world.parts.reads.read_party().mons[2]
+    world.party([lead])
+    world.client.on_event(world.client, world.lua.table_from({"kind": "pc_release", "collection": "party",
+                                                              "mon": record}))
+    assert not world.client.dead_keys[codec_key(dead)]
+    world.party([lead, dict(dead, hp=30)])                    # a new mon under the same key
+    world.frames(3)
+    assert world.hp_of(1) == (30, 0)
+
+
+def test_gen2_the_hello_sync_replaces_the_dead_set_so_a_revived_mon_survives():
+    """A debug revive (or an unlink, a rollback) before the burial: the server no longer lists the key."""
+    world = g2.World()
+    lead, dead = g2_landed(world)
+    world.reply({"cmd": "dead_keys", "keys": []})
+    world.frames(1)
+    n = len(world.written())
+    world.party([lead, dict(dead, hp=30)])                    # the manual restore
+    world.frames(3)
+    assert world.hp_of(1) == (30, 0) and len(world.written()) == n
+
+
+def test_gen2_a_different_save_with_the_same_ot_gets_no_stale_write():
+    world = g2.World()
+    lead, dead = g2_landed(world)
+    n = len(world.written())
+    world.client.boundary(world.client, "reload", "save_reload")   # another save, same OT
+    world.party([lead, dict(dead, hp=30)])
+    world.frames(3)                                           # its checkpoints, before the hello's sync
+    assert world.hp_of(1) == (30, 0) and len(world.written()) == n
+    world.reply({"cmd": "dead_keys", "keys": []})             # this run never killed it on that save
+    world.frames(3)
+    assert world.hp_of(1) == (30, 0) and len(world.written()) == n
+
+
+def test_gen2_a_failed_memorial_of_an_absent_key_forgets_it():
+    world = g2.box_world([mon(), mon(species=172, dvs=0x3AAA)])
+    lead, dead = mon(), mon(species=172, dvs=0x3AAA)
+    world.checkpoint_ok = True
+    world.reply({"cmd": "force_faint", "key": codec_key(dead)})
+    world.frames(2)
+    assert world.hp_of(1) == (0, 0)
+    world.party([lead])                                       # gone (released, traded, lost)
+    world.reply({"cmd": "memorialize", "key": codec_key(dead)})
+    world.frames(2)
+    assert [m["key"] for m in world.sent("memorialize_failed")] == [codec_key(dead)]
+    world.party([lead, dict(dead, hp=30)])                    # the key comes back as another mon
+    world.frames(3)
+    assert world.hp_of(1) == (30, 0)
+
+
+@pytest.mark.parametrize("present", [True, False])
+def test_gen1_a_failed_memorial_keeps_a_present_key_and_forgets_an_absent_one(world1, present):
+    key = g1.codec.key(world1.party()[1])
+    world1.reply({"cmd": "force_faint", "key": key, "nickname": "PIDGEY"})
+    world1.step(2)
+    assert world1.party()[1]["hp"] == 0
+    world1.client.boxes = world1.lua.table(memorialize=lambda self, k, hint: (None, "memorial box full"))
+    mons = world1.party()
+    if not present:
+        world1.seed_party([mons[0]])
+    world1.reply({"cmd": "memorialize", "key": key})
+    world1.step()
+    assert bool(world1.client.dead_keys[key]) is present
+    world1.seed_party(mons)
+    g1_heal(world1)
+    world1.step(3)
+    assert (world1.party()[1]["hp"] == 0) is present
+
+
+def test_gen1_the_hello_sync_replaces_the_dead_set(world1):
+    key = g1.codec.key(world1.party()[1])
+    world1.reply({"cmd": "force_faint", "key": key, "nickname": "PIDGEY"})
+    world1.step(2)
+    world1.reply({"cmd": "dead_keys", "keys": []})
+    world1.step()
+    g1_heal(world1)
+    world1.step(3)
+    assert world1.party()[1]["hp"] == 7
 
 
 # ── MINOR-9: Gen 1 defers a force_faint for a key not in the party, as Gen 2 does (4e6aea39) ───────────

@@ -40,9 +40,9 @@ def make_state_with_link(a_key="A:1", b_key="B:2", area="route_1",
 
 
 def noop_only(cmds: list) -> bool:
-    # `config` (overworld_presence rule) and `resolved_areas` are benign informational pushes the
-    # server always queues on hello — they never represent a sync action.
-    return all(c.get("cmd") in ("noop", "play_sound", "resolved_areas", "config") for c in cmds)
+    # `config` (overworld_presence rule), `resolved_areas` and `dead_keys` (INV-CLIENT-2) are benign
+    # informational pushes the server always queues on hello — they never represent a sync action.
+    return all(c.get("cmd") in ("noop", "play_sound", "resolved_areas", "config", "dead_keys") for c in cmds)
 
 
 def has_cmd(cmds: list, cmd: str, key: str | None = None) -> bool:

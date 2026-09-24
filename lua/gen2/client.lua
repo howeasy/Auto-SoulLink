@@ -109,6 +109,10 @@ function Client.new(p)
         -- burial (a Pokemon Center, the Battle Tower's HealParty before battle 1) revives it; the checkpoint
         -- and the battle holds zero it again, quietly. Kept across a reset (the client outlives it).
         dead_keys = {},
+        -- INV-CLIENT-2: the server's dead/memorial keys for this player, sent at every accepted hello
+        -- (`dead_keys`), REPLACE the set; after a reset/reload/identity change the sweep waits for that sync
+        -- (another save with the same OT must never get a stale write)
+        dead_synced = true,
     }
     self.trade_owed = self.owed.list
 
@@ -315,6 +319,7 @@ function Client.new(p)
     -- together, so nothing observed before a reset/reload can settle after it.
     function self:boundary(kind, why)
         self.epoch = self.epoch + 1
+        self.dead_synced = false -- INV-CLIENT-2: the reloaded save waits for the hello's dead_keys
         if self.signals then self.signals:boundary(kind) end
         self.faint_latches, self.battle, self.pending_rescan = {}, nil, false
         self.key_alias, self.retired_alias = nil, {}
@@ -341,6 +346,7 @@ function Client.new(p)
     -- epoch moves so a settled observation stamped before the load is stale.
     function self:abandon_timeline(why)
         self.epoch = self.epoch + 1
+        self.dead_synced = false
         if self.signals then self.signals:abandon(why) end
         self.faint_latches, self.deferred = {}, {}
         self.battle, self.pending_safe, self.pending_rescan = nil, false, true
@@ -524,6 +530,9 @@ function Client.new(p)
             self.seeded = true
         elseif c_ == "unresolve_area" then
             self.resolved_areas[cmd.area_id] = nil
+        elseif c_ == "dead_keys" then
+            self.dead_keys, self.dead_synced = {}, true
+            for _, k in ipairs(cmd.keys or {}) do self.dead_keys[k] = true end
         elseif c_ == "key_change_ack" then
             local a = self.key_alias
             if a and a.old_key == cmd.old_key then self.key_alias = nil end
@@ -849,6 +858,7 @@ function Client.new(p)
         if mon then self.dead_keys[mon_key(mon)] = true end
     end
     local function revived_dead()
+        if not self.dead_synced then return nil end
         for key in pairs(self.dead_keys) do
             local slot, mon = find_party_slot(key)
             if slot and mon.hp > 0 then return key end
@@ -859,7 +869,7 @@ function Client.new(p)
     function self:run_deferred()
         local armed
         for i, s in ipairs(self.settle) do if s.armed then armed = armed or i end end
-        if (#self.deferred == 0 and not armed and not next(self.dead_keys)) or not self.writes_enabled
+        if (#self.deferred == 0 and not armed and not (self.dead_synced and next(self.dead_keys))) or not self.writes_enabled
            or not net.connected() then return end
         local safe = safety.check(PARTY_HP)
         if not safe then return end
@@ -983,6 +993,9 @@ function Client.new(p)
             elseif why == "last party mon" then
                 self.deferred[#self.deferred + 1] = cmd
             else
+                -- INV-CLIENT-2: a key no longer in the party is forgotten (a later mon under it is another
+                -- mon); one still there (memorial box full) stays dead
+                if not mon then self.dead_keys[cmd.key], self.dead_keys[phys] = nil, nil end
                 log("[SLink-gen2] memorialize refused: " .. tostring(why) .. " " .. cmd.key)
                 send("memorialize_failed", { key = cmd.key, reason = tostring(why) })
                 hud.show("X Mem fail: " .. name, 255, 80, 80, 300)
@@ -1115,7 +1128,8 @@ function Client.new(p)
             -- server kills a linked partner and ignores an unlinked key. Mirrored by lua/gen1/client.lua.
             log(string.format("[SLink-gen2] RELEASE_SEEN key=%s %s", mon_key(m),
                               ev.collection == "party" and "party" or "box=" .. tostring(ev.box_index)))
-            send("release", { key = mon_key(m) })
+            self.dead_keys[mon_key(m)] = nil -- the mon is gone: a later mon under this key is another mon
+            owe("release", { key = mon_key(m) }) -- INV-CLIENT-2: durable, like a trade report
             self.pending_rescan = true
         elseif k == "key_change" then
             local new_key = mon_key(m)
@@ -1210,7 +1224,7 @@ function Client.new(p)
             -- Gen 2: another save's identity; what was held belongs to the previous one. A transient
             -- identity_unavailable keeps the queue (the same identity returning is not a change).
             if reason == "identity_changed" then
-                self.key_alias, self.retired_alias, self.dead_keys = nil, {}, {}
+                self.key_alias, self.retired_alias, self.dead_keys, self.dead_synced = nil, {}, {}, false
                 drop_held("identity change")
             end
         end,
@@ -1339,7 +1353,7 @@ function Client.new(p)
         end
         self.deferred = stay
         -- MINOR-7: a dead key revived since its death landed (the tower's HealParty before battle 1) dies here too
-        for key in pairs(self.dead_keys) do
+        for key in pairs(self.dead_synced and self.dead_keys or {}) do
             local queued = false
             for _, w in ipairs(self.pending_battle_writes) do queued = queued or w.key == key end
             local slot, mon = find_party_slot(key)
@@ -1350,7 +1364,7 @@ function Client.new(p)
         end
     end
     function self:at_battle_hold()
-        if (#self.pending_battle_writes == 0 and #self.deferred == 0 and not next(self.dead_keys))
+        if (#self.pending_battle_writes == 0 and #self.deferred == 0 and not (self.dead_synced and next(self.dead_keys)))
            or not self.writes_enabled then return end
         -- a bus-exec hit at this PC in another ROM bank is not BattleTurn: cheapest refusal first
         if io.read_u8(profile.ram.hROMBank, "System Bus") ~= p.battle_hold.execution_before.bank then return end

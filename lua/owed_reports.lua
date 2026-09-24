@@ -28,13 +28,18 @@ function OwedReports.new()
     function self:line_received() self.replies = self.replies + 1 end
 
     -- a readable reply's command list (after line_received): retires the report its line carried, or,
-    -- refused, marks it unsent and holds every resend until the server answers a line normally again
+    -- refused, marks it AND every later report unsent, so they go again in their original order
+    -- (OMP cx-40ba318d), and holds every resend until the server answers a line normally again
     function self:answer(commands)
         local no = refused(commands)
         self.paused = no
         for i, e in ipairs(self.list) do
             if e.line == self.replies then
-                if no then e.line = nil else table.remove(self.list, i) end
+                if no then
+                    for j = i, #self.list do self.list[j].line = nil end
+                else
+                    table.remove(self.list, i)
+                end
                 return
             end
         end

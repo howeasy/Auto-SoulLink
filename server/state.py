@@ -1694,6 +1694,13 @@ class SoulLinkState:
             "pc_trade_npc": bool(self.pc_trade_npc),
         })
 
+        # INV-CLIENT-2: this player's dead/memorial keys, authoritative. The GB clients REPLACE their
+        # re-zero set with it (a debug revive, an unlink, a rollback or another save with the same OT
+        # leaves no stale kill); a client that does not know the command ignores it.
+        self.queued_commands[player_id].append({"cmd": "dead_keys", "keys": sorted(
+            half.key for e in self.links if e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL)
+            for half in ((e.a if player_id == "a" else e.b),) if half and half.key)})
+
         # Re-arm an in-flight rebuild: reconcile restored_keys from the fresh
         # party snapshot (some party_mons may have executed before disconnect),
         # then re-queue party_mon + rebuild_start for any still-outstanding
