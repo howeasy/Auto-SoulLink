@@ -86,6 +86,61 @@ card). **S**
 
 ---
 
+## 1a. Status at checkpoint 17 (2026-09-24) and the final cut
+
+Since the last full pass through this draft, four things changed:
+
+- **The old Gen 3 client is deleted.** Its last version is tagged `archive/gen3-old-client`
+  (`f9171b9a`) before removal, per ruling 24 (§6). RR now routes to `lua/gen3` like FR/LG. **S**
+- **Emerald and Archipelago FireRed are refused by name**, not silently mis-admitted — the old
+  client was their only code path and neither is in this release (ruling 24, §6). **S**
+- **FR/LG P+H is 8/8 PASS**, not merely built — see item 2b below and ruling 15-16/19 (§6). This
+  is REHEARSED evidence (finding H2), re-taken on the frozen cut, not a final gate row yet. **S**/**P**
+- **The 2b trainer rows now boot from cached-native trainer fixtures**: 80 s (FR) / 67 s (LG),
+  down from 23-42 min walking a trainer battle live each time
+  (`ph_linked_faint_active_trainer_gen3_{fr,lg}_as_a_2b926be1.txt` @ `248d6ee9`). This is a harness
+  speed-up, not a behaviour change; the trainer row's verdict is unaffected. **S**/**P**
+
+**The final-cut runner (`tools/gen3_final_cut.py`) is rehearsed, not yet run for the record.**
+Three rehearsal passes are committed: `docs/gen3/probes/fc_zip_*` / `fc_probe_gates_*` /
+`fc_bootcheck_*` @ `6e85ddfc` (zip chain + probe_gates PASS), `fc_bootcheck_*` @ `d0a4bba5`
+(cold-boot 8/8 PASS) and `fc_release_gate_quick_*` @ `2b926be1`/`6e85ddfc`/`d0a4bba5` (PASS,
+2629 passed / 0 unexplained skips). A fourth, fast-mode rehearsal ran the `--carry`/`--shard`/
+`--merge-summary` path end to end: `fc_SUMMARY_157e1ef7.txt` (7/7 rows PASS: the four probe
+states, the two tutorial states, `faint_cmd_gen3_fr_as_a`). None of these four is the frozen cut
+the gate signs — they are rehearsals of the runner itself, taken at whatever HEAD happened to be
+current when each ran (`6e85ddfc`, `d0a4bba5`, `2b926be1`, `157e1ef7`), not a single pinned sha.
+**S**/**P**
+
+**When the coordinator freezes a cut and runs the real final pass**, it fills in:
+
+- Final cut sha: `<<FINAL_CUT_SHA>>`
+- Final-cut result table (paste from `docs/gen3/probes/fc_SUMMARY_<cut8>.txt`):
+
+`<<FINAL_CUT_TABLE>>`
+
+### Open qualifiers carried into this gate
+
+These are recorded limits, not blockers, and the receipts behind them are cited where they land
+(§2, §5):
+
+1. **RR's `gSpecialVar_Result` (127) is overwritten the same frame** it is set, by a write this
+   branch suspects but has not proven is a CFRU writer at that address; the checkpoint therefore
+   uses a looser RR PC-exit check than the byte-exact one FR/LG get (`docs/gen3/G5_request_draft.md`
+   carries the RR-side detail; this is an FR/LG-vs-RR asymmetry the owner should see at G4 too,
+   since it is the reason RR and FR/LG are not proven to the same standard on this one predicate).
+   **S**
+2. **An AP build with every pinned anchor intact would be admitted.** This is by design — the
+   admission check is anchor-based so a randomizer that reshuffles content but keeps the pinned
+   bytes still boots — not a gap found late. Archipelago FRLG is refused today only because no
+   AP-patched dump on disk carries those anchors (ruling 24, §6); a future AP FRLG dump that does
+   would pass admission on its own merits. **S**
+3. **The post-battle stage chip can read stale for up to 30 frames.** Cosmetic only — it is a
+   display value, not a checkpoint predicate or a write gate, and no scenario in §2 depends on it
+   settling faster than that. **S**
+
+---
+
 ## 2. Per-item status
 
 Status vocabulary: **DONE** = a citable receipt exists (its cut named); **REHEARSED** = a receipt
