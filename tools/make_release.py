@@ -134,7 +134,6 @@ _LUA_GAMES = [
     # launcher-rooted closure caught it -- the require runs at module load, so a Crystal
     # player's release build failed to start the client at all.
     "gen2_crystal_trainers.lua",
-    "gen3_frlge.lua",
     "gen4_hgsspt.lua",
     "gen5_bw.lua",
 ]

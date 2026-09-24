@@ -201,3 +201,11 @@ def test_gb_companion_bundle_names_every_pure_overlay_ups():
         "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups"}
     for name in make_release._GB_COMPANION_UPS:
         assert "Yellow" not in name  # no Yellow build exists (no free WRAM for the mailbox)
+
+
+def test_the_retired_gen3_modules_are_not_shipped(archive):
+    """C5-6 (owner ruling 24): the old Gen 3 client is deleted and lua/games/gen3_frlge.lua stays
+    only as cited source material; neither may ship in the player ZIP."""
+    assert "lua/clients/gen3_frlge_client.lua" not in archive
+    assert "lua/games/gen3_frlge.lua" not in archive
+    assert "gen3_frlge.lua" not in make_release._LUA_GAMES
