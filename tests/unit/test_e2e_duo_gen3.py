@@ -833,7 +833,7 @@ def test_every_rr_only_scenario_has_its_module_oracle_and_runner_half():
     """P5 (card C5-5): explode_gen3/rival_swap_gen3/native_absent_gen3, on gen3_rr_new."""
     row = duo.GAMES["gen3_rr_new"]
     for name in GEN3_RR_ONLY:
-        base = name[:-len("_gen3")]
+        base = duo.SCENARIOS[name].get("scenario_module") or name[:-len("_gen3")]
         assert (REPO / "lua" / "tests" / "duo" / f"scenario_{row['scenario_prefix']}{base}.lua").is_file(), name
         assert callable(getattr(duo.DuoRun, f"orchestrate_{name}", None)), name
         oracle = duo.SCENARIOS[name]["oracle"]
@@ -1526,10 +1526,7 @@ def _run_module(lua, scenario, player, phase, spec):
     ("reconnect", "a", "wrong_save", {}, ["RECONNECT_HELLO wrong_save count=1",
                                           "WRONG_SAVE_ZERO attempted=0 writes=0 party=unchanged "
                                           "box=unchanged"]),
-    # RR-only: explode now reads the engine through ctx (no raw memory/joypad), so it runs here.
-    ("explode", "a", "initial", {"linked": "K0"}, ["LINKED_FAINTED K0"]),
-    ("explode", "b", "initial", {"linked": "K0"},
-     ["READY_ACTIVE K0 last_used=0", "EXPLOSION_ACTION_STARTED K0 battler_slot=0 last_used=153"]),
+    # explode runs on the P+H model (_PH_MODEL, case "explode")
     ("rival_swap", "b", "initial", {}, ["READY_IN_BATTLE"]),
     ("rival_swap", "a", "initial", {}, []),
     ("native_absent", "a", "initial", {}, ["TRADE_PHASE scene", "NATIVE_STAGED phase=scene writes=3"]),
@@ -1559,8 +1556,6 @@ def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spe
     # finding 2's falsifier: the mirrored deposit ACKed (stats_cache) but moved nothing
     ("whiteout", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
     ("boxsync", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
-    # finding 5: force_explode delivered but the engine never executed Explosion
-    ("explode", "b", "initial", {"linked": "K0", "executes": "lua:false"}, "never started Explosion"),
 ])
 def test_scenario_modules_fail_with_a_named_reason(lua, scenario, player, phase, spec, reason):
     ok, passed, msg, _ = _run_module(lua, scenario, player, phase, spec)
@@ -1923,50 +1918,17 @@ def test_rr_extension_receipt_that_names_another_file_fails(tmp_path, monkeypatc
         run.check_save_witness_gen3(receipts)
 
 
-# finding 5: explode needs a keyed command and the engine's execution, not a stamped slot
-def _explode_receipts(ka, kb):
-    return {"a": (f"ENGINE_FAINT_SITE frame=10\nTX faint {ka} {{}}\n"
-                  f"TX memorialize_done {ka} {{}}\n"),
-            "b": (f"READY_ACTIVE {kb} last_used=0\nRX force_explode key={kb}\n"
-                  f"EXPLOSION_ACTION_STARTED {kb} battler_slot=0 last_used=153\n"
-                  f"TX memorialize_done {kb} {{}}\n")}
-
-
-def test_explode_oracle_needs_the_engine_to_execute_the_keyed_command(monkeypatch, tmp_path):
-    fixture = _fixture([STARTER, PIDGEY])
-    saved = _saved(fixture, 3, [PIDGEY], {(13, 0): _mon(STARTER["personality"], party=False)})
-    k = _key(STARTER)
-    run, notes = _oracle_stub(monkeypatch, tmp_path, "faint_cmd_gen3", {"a": saved, "b": saved},
-                              fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "memorial",
-                                         "cause": "battle"}])
-    run._link_keys = {"a": k, "b": k}
-    (tmp_path / "slink.log").write_text(f"[a] faint → force_explode b:{k}\n", encoding="utf-8")
-    receipts = _explode_receipts(k, k)
-    run.assert_explode_gen3_saved(receipts)
-    assert notes and "NON-QUALIFYING CONTROL (not qualification)" in notes[-1]
-    assert "not proven executed" in notes[-1]
-    stamped_only = dict(receipts, b=receipts["b"].replace(
-        f"EXPLOSION_ACTION_STARTED {k} battler_slot=0 last_used=153\n", "Explosion stamped into move slot 0\n"))
-    with pytest.raises(RuntimeError, match="EXPLOSION_ACTION_STARTED"):
-        run.assert_explode_gen3_saved(stamped_only)
-    unkeyed = dict(receipts, b=receipts["b"].replace(f"RX force_explode key={k}", "RX force_explode"))
-    with pytest.raises(RuntimeError, match="force_explode"):
-        run.assert_explode_gen3_saved(unkeyed)
-    poked = dict(receipts, a=receipts["a"].replace("ENGINE_FAINT_SITE frame=10\n", ""))
-    with pytest.raises(RuntimeError, match="ENGINE_FAINT_SITE"):
-        run.assert_explode_gen3_saved(poked)
-
-
-def test_explode_is_a_non_qualifying_control():
-    """Codex C4-6c finding 4: lastUsedMovePlayer is stamped before attackcanceler/tryexplosion,
-    so a cancelled Explosion reads 153 too; without a downstream witness explode never
-    qualifies, and nothing in the driver calls the action 'executed'."""
-    control = duo.SCENARIOS["explode_gen3"].get("control", "")
-    assert "NON-QUALIFYING" in control and "attackcanceler" in control
+def test_explode_runs_on_the_p_h_carrier_and_stays_a_control():
+    """Owner ruling 19: RR force_explode ends in the P+H hand-off, so explode_gen3 runs on the
+    P+H carrier's explode case. It stays a CONTROL until reviewed (lastUsedMovePlayer is stamped
+    before attackcanceler and +0x22 is unverified on RR), but its chain now also needs the
+    attacker's own faint site downstream of the stamp."""
+    row = duo.SCENARIOS["explode_gen3"]
+    assert row["scenario_module"] == "linked_faint_active" and row["active_faint_case"] == "explode"
+    assert "NON-QUALIFYING" in row["control"] and "attackcanceler" in row["control"]
     assert "CONTROL, not a qualification pass" in duo.summary_lines(
         {"explode_gen3": (True, 1)}, "gen3_rr_new")[0]
-    text = (REPO / "lua" / "tests" / "duo" / "scenario_gen3_explode.lua").read_text(encoding="utf-8")
-    assert "EXPLOSION_EXECUTED" not in text and "EXPLOSION_ACTION_STARTED" in text
+    assert not (REPO / "lua" / "tests" / "duo" / "scenario_gen3_explode.lua").exists()
 
 
 def test_no_driver_pokes_game_memory():
@@ -3542,12 +3504,14 @@ def test_no_tool_copies_the_bizhawk_config_raw():
 _PH_MODEL = r"""
 function PH(case, player, fault)
     fault = fault or ""
+    local explode = case == "explode"
     local FROM, TO, SLOTADDR = 0x0802E33D, 0x0802E3B5, 0x03004FE0
     local PARTY_HP, BATTLE_HP = 0x02024284 + 0x56, 0x02023BE4 + 0x28
     local logs, lines, watchers, sites = {}, {}, {}, {}
     local frame, rx, entry, sent = 100, 0, nil, { faint = 0, whiteout = 0, memorialize_done = 0 }
     local party = { { slot = 0, key = "K0", hp = 20, max_hp = 20, level = 9, experience = 400 },
                     { slot = 1, key = "K1", hp = 17, max_hp = 17, level = 4 } }
+    if fault == "lone" then party[2] = nil end           -- RR rr_battle.sav: one mon
     local e = { in_battle = false, ctrl0 = 0x08030001, exec = 1, keys = 0, battler0_slot = 0,
                 battle_hp = 20, pp = { 35, 30, 0, 0 }, status3 = 0, counter = 0, last_move = 0,
                 outcome = 0 }
@@ -3559,16 +3523,23 @@ function PH(case, player, fault)
         frame = frame + 1
         if rx == 1 and not commit_at and e.in_battle then          -- the client commits P+H
             commit_at = frame
-            local n = fault == "four_writes" and 4 or 5
+            local n = explode and 14 or (fault == "four_writes" and 4 or 5)
             for i = 1, n do
                 local last = i == n
                 lines[#lines + 1] = { reason = "battle_commit", address = last and SLOTADDR or 0x02023DFC + i,
                                       len = last and 4 or 1, frame = frame }
             end
-            logs[#logs + 1] = "[client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 K0"
-            e.status3, e.ctrl0 = e.status3 | 0x20, FROM
-            entry = fault == "old_hold" and { key = "K0", perish = true, why = "active faint committed (press A)" }
-                    or { key = "K0", perish = true, handoff = true, why = "active faint committed" }
+            e.ctrl0 = FROM
+            if explode then
+                logs[#logs + 1] = "[client] [SLink-gen3] force_explode: menu skip committed slot=0 battler=0 handoff=1"
+                entry = { key = "K0", explode = { battler = 0 }, why = "explosion committed" }
+                e.pp = { 5, 5, 5, 5 }
+            else
+                logs[#logs + 1] = "[client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 K0"
+                e.status3 = e.status3 | 0x20
+                entry = fault == "old_hold" and { key = "K0", perish = true, why = "active faint committed (press A)" }
+                        or { key = "K0", perish = true, handoff = true, why = "active faint committed" }
+            end
         elseif commit_at and frame == commit_at + 1 and fault ~= "no_handoff" then
             e.ctrl0, e.exec = TO, fault == "exec_set" and 1 or 0
         elseif commit_at and frame == commit_at + 3 then
@@ -3578,7 +3549,9 @@ function PH(case, player, fault)
             if fault == "acted" then e.last_move = 33 end
             if fault == "hp_write" then lines[#lines + 1] = { reason = "battle_faint", address = PARTY_HP, len = 2, frame = frame } end
             if fault == "lost_ball" then balls = balls - 1 end
-        elseif commit_at and frame == commit_at + 6 then        -- the Perish KO
+        elseif commit_at and frame == commit_at + 5 and explode and fault ~= "no_boom" then
+            e.last_move, e.pp[1] = 153, 4                         -- the Explosion action runs
+        elseif commit_at and frame == commit_at + 6 then        -- the engine KO
             e.keys, e.battle_hp = 0, 0
             if fault ~= "flag_kept" then e.status3 = e.status3 & ~0x20 end
             ko_at = frame
@@ -3624,7 +3597,7 @@ function PH(case, player, fault)
     end
     ctx.battle_hold = function(k) if entry and entry.key == k then return entry end end
     ctx.received = function(cmd)
-        if cmd == "force_faint" then return rx end
+        if cmd == (explode and "force_explode" or "force_faint") then return rx end
         return (cmd == "game_over" or cmd == "memorialize") and 1 or 0
     end
     -- the whiteout row: game_over latched, the last-mon memorialize dropped at the checkpoint
@@ -3641,7 +3614,7 @@ function PH(case, player, fault)
     ctx.wait_received = function()
         if fault == "no_rx" then return nil end
         rx = 1
-        logs[#logs + 1] = "RX force_faint key=K0"
+        logs[#logs + 1] = (explode and "RX force_explode" or "RX force_faint") .. " key=K0"
         return true
     end
     ctx.balls = function() return balls end
@@ -3701,6 +3674,7 @@ function PH(case, player, fault)
         return ctx.hunt()
     end
     ctx.partner_result = function() return "x\nRESULT: PASS (subject)\n" end
+    ctx.lose_active = function() party[1].hp = 0; e.in_battle = false; sent.faint = 1; return true end
     local fn = dofile(SCENARIO_DIR .. "/scenario_gen3_linked_faint_active.lua")
     local ok, pass, msg = pcall(fn, ctx)
     return ok, pass, tostring(ok and msg or pass), table.concat(logs, "\n") .. "\n"
@@ -3719,7 +3693,7 @@ def ph():
 
 
 @pytest.mark.parametrize("case,player", [("wild", "b"), ("whiteout", "b"), ("trainer", "b"),
-                                         ("command", "a"), ("lhammer", "b")])
+                                         ("command", "a"), ("lhammer", "b"), ("explode", "b")])
 def test_p_h_carrier_happy_path_satisfies_the_runner_chain(ph, case, player):
     ok, passed, msg, log = ph(case, player)
     assert ok and passed is True, (msg, log)
@@ -3735,6 +3709,8 @@ def test_p_h_carrier_happy_path_satisfies_the_runner_chain(ph, case, player):
     assert re.search(r"ACTIVE_FAINT_SITE K0 .* counter=0->1$", log, re.M)
     if case == "whiteout":
         assert "ONE_MON_PARTY K0 deposited=K1" in log and "ACTIVE_OUTCOME K0 outcome=2 " in log
+    if case == "explode":
+        assert "last_move=153 inputs=0 keys=0x0 hp_writes=0 attempted=14" in log
     if case == "trainer":
         assert "PREP_LEVEL before=9 after=13 floor=13" in log
 
@@ -3777,14 +3753,30 @@ def test_p_h_whiteout_row_needs_the_last_mon_memorialize_settled(ph):
     assert ok and passed is False and "last-mon memorialize was never settled" in msg
 
 
+def test_p_h_explode_case_names_a_ko_without_the_explosion(ph):
+    ok, passed, msg, log = ph("explode", "b", "no_boom")
+    assert ok and passed is False and "without the Explosion action" in msg, (msg, log)
+
+
+def test_p_h_one_mon_fixture_needs_no_deposit_and_keeps_its_last_mon(ph):
+    """RR's rr_battle.sav holds one mon: R4 builds no party (no PC trip), and after game_over the
+    last-mon memorialize is dropped (LAST_MON_KEPT) -- on the subject and on A's natural side."""
+    ok, passed, msg, log = ph("whiteout", "b", "lone")
+    assert ok and passed is True, (msg, log)
+    assert "ONE_MON_PARTY K0 deposited=-" in log and "LAST_MON_KEPT K0" in log
+    ok, passed, msg, log = ph("wild", "a", "lone")
+    assert ok and passed is True and "LAST_MON_KEPT K0" in log, (msg, log)
+    assert "TX memorialize_done" not in log
+
+
 def test_p_h_carrier_rr_l_hammer_names_a_lost_ball(ph):
     ok, passed, msg, _ = ph("lhammer", "b", "lost_ball")
     assert ok and passed is False and "L hammer lost a ball" in msg
 
 
-def test_p_h_carrier_mega_row_is_blocked_by_name(ph):
+def test_p_h_carrier_mega_row_is_a_signed_limit_by_name(ph):
     ok, passed, msg, _ = ph("mega", "b")
-    assert ok and passed is False and msg.startswith("BLOCKED R5")
+    assert ok and passed is False and msg.startswith("SIGNED LIMIT R5 (owner ruling 20)")
 
 
 def test_p_h_command_case_idles_b_without_saving(ph):
@@ -3822,7 +3814,8 @@ def test_p_h_rows_are_registered_with_their_cases():
              "active_end_gen3": ("command", ("gen3_frlg",)),
              "linked_faint_active_clean_gen3": ("wild", ("gen3_rr_new",)),
              "linked_faint_active_lhammer_gen3": ("lhammer", ("gen3_rr_new",)),
-             "linked_faint_active_mega_gen3": ("mega", ("gen3_rr_new",))}
+             "linked_faint_active_mega_gen3": ("mega", ("gen3_rr_new",)),
+             "explode_gen3": ("explode", ("gen3_rr_new",))}
     for name, (case, games) in cases.items():
         row = duo.SCENARIOS[name]
         assert row.get("active_faint_case", "wild") == case and row["games"] == games, name
@@ -3831,6 +3824,13 @@ def test_p_h_rows_are_registered_with_their_cases():
         assert callable(getattr(duo.DuoRun, "orchestrate_" + name)) and callable(getattr(duo.DuoRun, row["oracle"]))
         for game in games:
             assert duo.scenario_applies(name, game)
+    # RR fixtures: R1/R2/R3 need rr_battle2 (a second mon, balls); R4 and explode run on rr_battle
+    rr = {"linked_faint_active_gen3": "battle2", "linked_faint_active_clean_gen3": "battle2",
+          "linked_faint_active_lhammer_gen3": "battle2", "linked_faint_active_whiteout_gen3": "battle",
+          "explode_gen3": "battle"}
+    for name, target in rr.items():
+        assert duo.scenario_target(duo.SCENARIOS[name], "gen3_rr_new") == target, name
+    assert duo.scenario_target(duo.SCENARIOS["linked_faint_active_gen3"], "gen3_frlg") == "battle"
     assert duo.SCENARIOS["linked_faint_active_clean_gen3"]["rom_kind"] == {"a": "companion", "b": "clean"}
     assert duo.SCENARIOS["linked_faint_active_trainer_gen3"]["target"] == {"a": "battle", "b": "town"}
     assert duo.SCENARIOS["active_end_gen3"]["no_save"] == ("b",)
@@ -3855,21 +3855,41 @@ def test_active_end_queues_force_faint_only_after_ready_active(monkeypatch):
 
 def test_rr_rows_skip_until_their_battle_fixtures_exist(monkeypatch, tmp_path):
     monkeypatch.setattr(duo, "GEN3_FIXTURES", str(tmp_path))
-    why = duo.skip_reason("linked_faint_active_gen3", "gen3_rr_new")
-    assert "rr_battle.sav" in why and "rr_battle_b.sav" in why and "not built yet" in why
+    why, allowed = duo.skip_reason("linked_faint_active_gen3", "gen3_rr_new")
+    assert "rr_battle2.sav" in why and "rr_battle2_b.sav" in why and "not built yet" in why and not allowed
     assert duo.skip_reason("linked_faint_active_gen3", "gen3_frlg") is None     # FR never skips
     (tmp_path / "rr_battle.sav").write_bytes(b"")
     (tmp_path / "rr_battle_b.sav").write_bytes(b"")
-    assert duo.skip_reason("linked_faint_active_lhammer_gen3", "gen3_rr_new") is None
-    assert duo.skip_reason("linked_faint_active_mega_gen3", "gen3_rr_new").startswith("BLOCKED: R5")
+    assert duo.skip_reason("linked_faint_active_whiteout_gen3", "gen3_rr_new") is None   # R4: one-mon
+    assert duo.skip_reason("explode_gen3", "gen3_rr_new") is None
+    assert "rr_battle2" in duo.skip_reason("linked_faint_active_lhammer_gen3", "gen3_rr_new")[0]
+    (tmp_path / "rr_battle2.sav").write_bytes(b"")
+    (tmp_path / "rr_battle2_b.sav").write_bytes(b"")
+    for name in ("linked_faint_active_gen3", "linked_faint_active_clean_gen3", "linked_faint_active_lhammer_gen3"):
+        assert duo.skip_reason(name, "gen3_rr_new") is None, name
+    why, allowed = duo.skip_reason("linked_faint_active_mega_gen3", "gen3_rr_new")
+    assert why.startswith("SIGNED LIMIT: owner ruling 20") and allowed is True
 
 
-def test_a_skip_is_never_a_pass():
-    assert duo.exit_code({"x": (True, 1), "y": (None, 0, "fixture missing")}) == 3
-    assert duo.exit_code({"x": (False, 1), "y": (None, 0, "why")}) == 1
+def test_a_skip_is_never_a_pass_but_a_signed_limit_is_allowed():
+    assert duo.exit_code({"x": (True, 1), "y": (None, 0, "fixture missing", False)}) == 3
+    assert duo.exit_code({"x": (False, 1), "y": (None, 0, "why", False)}) == 1
     assert duo.exit_code({"x": (True, 1)}) == 0
-    assert duo.summary_lines({"y": (None, 0, "fixture missing")}, "gen3_rr_new") == [
+    assert duo.exit_code({"x": (True, 1), "r5": (None, 0, "ruling 20", True)}) == 0
+    assert duo.exit_code({"r5": (None, 0, "ruling 20", True), "y": (None, 0, "missing", False)}) == 3
+    assert duo.summary_lines({"y": (None, 0, "fixture missing", False)}, "gen3_rr_new") == [
         "  y: SKIP — fixture missing"]
+    assert duo.summary_lines({"r5": (None, 0, "ruling 20", True)}, "gen3_rr_new") == [
+        "  r5: SKIP (allowed: signed limit) — ruling 20"]
+
+
+def test_game_help_names_the_new_rows():
+    import inspect
+
+    src = inspect.getsource(duo.main)
+    help_text = src[src.index('ap.add_argument("--game"'):src.index('ap.add_argument("--scenario"')]
+    for row in ("gen3_frlg", "gen3_lgfr", "gen3_rr_new", "gen1_new", "gen2"):
+        assert row in help_text, row
 
 
 def test_memorial_problems_accept_trained_growth_only_when_trained(pair):
@@ -3922,7 +3942,7 @@ def test_active_end_oracle_reads_the_engine_written_hp0(ph, monkeypatch, tmp_pat
         run.assert_active_end_gen3_saved(receipts)
 
 
-@pytest.mark.parametrize("case", ["wild", "whiteout"])
+@pytest.mark.parametrize("case", ["wild", "whiteout", "explode"])
 def test_linked_faint_active_oracle_on_p_h_receipts(ph, monkeypatch, tmp_path, case):
     """A1's runner oracle over the model's receipts: wild ends in both memorials; whiteout keeps
     B's last mon (dropped memorialize after game_over) with the slot-1 mon hand-deposited."""
@@ -3930,21 +3950,25 @@ def test_linked_faint_active_oracle_on_p_h_receipts(ph, monkeypatch, tmp_path, c
     k = _key(STARTER)
     memorial = _saved(fixture, 3, [PIDGEY], {(13, 0): _mon(STARTER["personality"], party=False)})
     kept = _saved(fixture, 3, [STARTER], {(0, 0): _mon(PIDGEY["personality"], party=False, species=16)})
-    name = "linked_faint_active_gen3" if case == "wild" else "linked_faint_active_whiteout_gen3"
-    status = "memorial" if case == "wild" else "dead"
+    name = {"wild": "linked_faint_active_gen3", "whiteout": "linked_faint_active_whiteout_gen3",
+            "explode": "explode_gen3"}[case]
+    status = "dead" if case == "whiteout" else "memorial"
     run, notes = _oracle_stub(monkeypatch, tmp_path, name,
-                              {"a": memorial, "b": memorial if case == "wild" else kept}, fixture,
+                              {"a": memorial, "b": kept if case == "whiteout" else memorial}, fixture,
                               [{"a": {"key": k}, "b": {"key": k}, "status": status, "cause": "battle"}])
     run._link_keys = {"a": k, "b": k}
-    (tmp_path / "slink.log").write_text(f"[a] faint → force_faint b:{k}\n"
-                                        + ("fully memorialized\n" if case == "wild" else ""), encoding="utf-8")
+    cmd = "force_explode" if case == "explode" else "force_faint"
+    (tmp_path / "slink.log").write_text(f"[a] faint → {cmd} b:{k}\n"
+                                        + ("" if case == "whiteout" else "fully memorialized\n"), encoding="utf-8")
     _, _, _, log = ph(case, "b")
-    receipts = {"a": f"ENGINE_FAINT_SITE frame=1\nTX faint {k} {{}}\nTX memorialize_done {k} {{}}\n",
+    receipts = {"a": f"ENGINE_FAINT_SITE frame=1\nTX faint {k} {{}}\nTX memorialize_done {k} {{}}\n"
+                     "SAVE_WITNESS_DUMP path=p\n",
                 "b": log.replace("K0", k).replace("K1", _key(PIDGEY))}
-    run.assert_linked_faint_active_gen3_saved(receipts)
+    oracle = getattr(run, duo.SCENARIOS[name]["oracle"])
+    oracle(receipts)
     assert notes and f"linked_faint_active[{case}]" in notes[-1]
     with pytest.raises(RuntimeError, match="ACTIVE_HOLD"):
-        run.assert_linked_faint_active_gen3_saved(
+        oracle(
             dict(receipts, b=receipts["b"].replace("ACTIVE_COMMIT", f"ACTIVE_HOLD {k} why=active battler\nACTIVE_COMMIT")))
 
 
@@ -3981,3 +4005,24 @@ def test_a_throwing_watcher_is_reported_by_name_before_it_is_dropped():
     assert reports == [("observer", "boom")]
     assert len(watchers) == 1 and names[1] == "keeps"
     assert "WATCHER_ERROR scenario=%s watcher=%s" in text
+
+
+def test_linked_faint_active_oracle_keeps_the_last_mon_on_both_sides(ph, monkeypatch, tmp_path):
+    """R4 on RR's one-mon rr_battle.sav: A's natural faint and B's Perish KO both leave the lone
+    linked mon in its party after game_over (ruling 21); no deposit, link DEAD, no memorial."""
+    fixture = _fixture([STARTER])
+    k = _key(STARTER)
+    kept = _saved(fixture, 3, [STARTER])
+    run, notes = _oracle_stub(monkeypatch, tmp_path, "linked_faint_active_whiteout_gen3", {"a": kept, "b": kept},
+                              fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "dead", "cause": "battle"}])
+    run._link_keys = {"a": k, "b": k}
+    (tmp_path / "slink.log").write_text(f"[a] faint → force_faint b:{k}\n", encoding="utf-8")
+    _, _, _, log_a = ph("wild", "a", "lone")
+    _, _, _, log_b = ph("whiteout", "b", "lone")
+    receipts = {"a": f"ENGINE_FAINT_SITE frame=1\nTX faint {k} {{}}\n" + log_a.replace("K0", k)
+                + "SAVE_WITNESS_DUMP path=p\n", "b": log_b.replace("K0", k)}
+    run.assert_linked_faint_active_whiteout_gen3_saved(receipts)
+    assert "last mon kept: a,b" in notes[-1]
+    with pytest.raises(RuntimeError, match="memorialize dropped"):
+        run.assert_linked_faint_active_whiteout_gen3_saved(
+            dict(receipts, a=receipts["a"].replace("memorialize dropped", "memorialize kept")))
