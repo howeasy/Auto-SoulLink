@@ -1465,14 +1465,36 @@ function Client.new(p)
         end
     end
 
+    -- O-30 review MAJOR-1/2 (mirror of lua/gen2/client.lua lift_deferred_deaths): a death deferred
+    -- before the battle (a script window refused the checkpoint) and a quiet re-zero whose mon was
+    -- revived with no checkpoint in between land at this loop head, not at battle end. A quiet
+    -- entry rides as `landed` (no second banner, no explode); one still at HP 0 stays deferred.
+    local function lift_deferred_deaths()
+        local stay = {}
+        for _, e in ipairs(self.deferred) do
+            local slot, mon
+            if e.cmd == "force_faint" or e.cmd == "force_explode" then slot, mon = find_party_slot(e.key) end
+            if slot and not (e.quiet and mon.hp == 0) then
+                e.landed = e.quiet
+                self.pending_battle_writes[#self.pending_battle_writes + 1] = e
+            else
+                stay[#stay + 1] = e
+            end
+        end
+        self.deferred = stay
+    end
+
     -- Inside the MainInBattleLoop hook: apply the queued in-battle faints/explodes now (W-2).
     -- Returns true when a byte moved (the pureRGB no-move re-entry moves PC only then).
     function self:on_battle_loop_head(sig)
-        if #self.pending_battle_writes == 0 or not self.writes_enabled then return false end
+        if (#self.pending_battle_writes == 0 and #self.deferred == 0) or not self.writes_enabled then return false end
         local pt = sig.point
         -- an unreadable party keeps the queue: find_party_slot could not tell "gone" from
         -- "not readable yet", and a dropped in-battle write never comes back
         if not current_party() then return false end
+        -- link battles never write in battle; a special battle never reaches this hook natively
+        if pt.link_state ~= 4 and pt.battle_type == 0 then lift_deferred_deaths() end
+        if #self.pending_battle_writes == 0 then return false end
         local keep, wrote = {}, false
         for _, w in ipairs(self.pending_battle_writes) do
             -- the same ambiguity-aware resolver the checkpoint uses: this one used to take the
