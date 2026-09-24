@@ -123,6 +123,36 @@ def test_releasing_a_linked_mon_kills_and_memorializes_its_partner(tmp_path):
     assert B_GETS not in state.pending_memorials["a"] and B_GETS not in state.party_keys["a"]
 
 
+def test_duplicate_release_queues_partner_kill_and_memorial_once(tmp_path):
+    state, _entry = _linked(tmp_path)
+    release = {"event": "release", "key": B_GETS}
+    state.handle_event("a", release)
+    state.handle_event("a", release)
+    b_cmds = _cmds(state, "b")
+    assert _keys(b_cmds, "force_faint") == [A_GETS]
+    assert _keys(b_cmds, "memorialize") == [A_GETS]
+
+
+def test_release_of_an_already_dead_link_changes_no_state_or_queue(tmp_path):
+    state, entry = _linked(tmp_path)
+    state.handle_event("a", {"event": "faint", "key": B_GETS})
+    assert entry.status == LinkStatus.DEAD
+    queued_before = {pid: list(cmds) for pid, cmds in state.queued_commands.items()}
+    state.handle_event("a", {"event": "release", "key": B_GETS})
+    queued_after = {pid: list(cmds) for pid, cmds in state.queued_commands.items()}
+    assert entry.status == LinkStatus.DEAD
+    assert queued_after == queued_before
+
+
+def test_release_queues_partner_force_faint_before_memorialize(tmp_path):
+    state, _entry = _linked(tmp_path)
+    state.handle_event("a", {"event": "release", "key": B_GETS})
+    b_queued = state.queued_commands["b"]
+    force_index = next(i for i, cmd in enumerate(b_queued) if cmd.get("cmd") == "force_faint")
+    memorialize_index = next(i for i, cmd in enumerate(b_queued) if cmd.get("cmd") == "memorialize")
+    assert force_index < memorialize_index
+
+
 def test_a_release_of_an_unlinked_or_dead_key_changes_nothing(tmp_path):
     state, entry = _linked(tmp_path)
     state.handle_event("a", {"event": "release", "key": "ABCD:1234:99"})
