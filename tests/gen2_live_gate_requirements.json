@@ -259,6 +259,16 @@
         "path": "tests/fixtures/gen2/receipts/silver_overlay.w6_gate.json",
         "sha256": "be54566bc733892dbbfeed8c5e603ba0bb86de756f4fbe04c2dfd976a72d9576"
       }}}]
+    },
+    {
+      "id": "new-gates.w6.gold",
+      "stage": "physical-live",
+      "description": "P4 W6 Gold overlay mailbox write-watch tripwire (O-27 D1): the panel, sfx and U1f (a882a763: re-heal + Bill's PC leg) corpus, every mailbox write from SLink code, Init's boot clear or the shipped Lua client, the wSpecialPhoneCallID word from the service bank only, both known-positive controls caught (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_w6_gate.py -k gold)",
+      "axes": {"kind": "w6_gate", "title": "gold", "requirement_ids": ["O-27"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_overlay.w6_gate.json",
+        "sha256": "a027fb6524d9c6f129289ad3add43d6c8f35bd808a123996bba53a7163752711"
+      }}}]
     }
   ]
 }
