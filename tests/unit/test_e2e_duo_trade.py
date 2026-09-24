@@ -19,7 +19,7 @@ import gen2_trade_oracles as oracle  # noqa: E402
 from patch.tools.make_ups import ups_apply  # noqa: E402
 from tools.gen2_trade_lane import SCENARIOS, validate_manifest  # noqa: E402
 
-GAMES = ("gen2_new", "gen2_gold_silver")   # owner Q10: C-G native trade is refused, never registered
+GAMES = ("gen2_new", "gen2_gold_silver", "gen2_crystal_gold")   # O-34: C-G native trade is allowed and tested
 
 
 def _run(monkeypatch, tmp_path, game="gen2_new", scenario="gen2_trade_new", lane="trade-model"):
@@ -395,9 +395,12 @@ def test_committed_trade_cases_require_every_native_phase(monkeypatch, tmp_path,
     assert run._gen2_trade_expected_case()["required_phases"] == ["wait", "trade_animation", "native_save"]
 
 
-def test_crystal_gold_never_registers_a_native_trade():
-    assert not set(SCENARIOS) & set(duo.scenarios_for("gen2_crystal_gold"))
-    assert "gen2_crystal_gold" not in duo.GEN2_TRADE_FIXTURES
+def test_crystal_gold_registers_every_native_trade_on_the_errand_seeds():
+    """O-34 (supersedes Q10): C-G trades natively, Crystal initiating, on the two errand seeds."""
+    assert set(SCENARIOS) <= set(duo.scenarios_for("gen2_crystal_gold"))
+    assert duo.GEN2_TRADE_FIXTURES["gen2_crystal_gold"] == {"a": "crystal_battle_errand", "b": "gold_battle_errand"}
+    for name in duo.GEN2_TRADE_FIXTURES["gen2_crystal_gold"].values():
+        assert (ROOT / "tests/fixtures/gen2" / f"{name}.SaveRAM").is_file()
 
 
 @pytest.mark.parametrize(("speed", "scale"), [(None, 1), (300, 1), (100, 1), (1200, 4), (0, 20)])

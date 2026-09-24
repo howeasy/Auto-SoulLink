@@ -300,7 +300,7 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
     assert game in GAMES
     assert GAMES[game]["game"] == "gen2_new"
     assert GAMES[game]["fixture"] == fixtures
-    trade = EXPECTED_GEN2_TRADE if game != "gen2_crystal_gold" else []   # owner Q10: no C-G native trade
+    trade = EXPECTED_GEN2_TRADE   # O-34: every pairing, C-G included, runs the native trade
     c_g_only_not = {"gen2_ball_gate", *duo_module.GEN2_SYNTH_SCENARIOS}   # C-C and G-S rows only
     expected = [one for one in EXPECTED_GEN2 if one not in c_g_only_not or game != "gen2_crystal_gold"]
     assert scenarios_for(game) == trade + expected
