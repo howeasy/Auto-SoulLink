@@ -390,3 +390,15 @@ def test_a_bumping_walk_releases_the_direction_so_map_events_run():
     assert all(held[:PI.BUMP_FRAMES]) and not any(held[PI.BUMP_FRAMES:])
     buttons, phase = d.step(pt(rt, map_number=1, x=1, y=0))
     assert buttons["Left"]                                    # and tries again
+
+
+def test_a_walk_bumping_into_an_object_talks_to_it():
+    rt = lua()
+    PI = load(rt)
+    d = driver(rt, PI)
+    blocked = lua_list([{"x": 0, "y": 0}])      # the exit tile itself is occupied
+    pressed = []
+    for _ in range(PI.BUMP_FRAMES + 1):
+        buttons, phase = d.step(pt(rt, map_number=1, x=1, y=0, blocked=blocked))
+        pressed.append(sorted(k for k, v in buttons.items() if v))
+    assert pressed[0] == ["Left"] and pressed[PI.BUMP_FRAMES] == ["A"]

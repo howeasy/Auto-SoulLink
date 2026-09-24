@@ -166,6 +166,19 @@ function PI.driver(F, facts, opts)
         if bumped > PI.GIVE_UP_FRAMES then
             return nil, fmt("the walk has not moved for %d frames at %d,%d (%s)", bumped, point.x, point.y, button)
         end
+        if bumped % (2 * PI.BUMP_FRAMES) == PI.BUMP_FRAMES then
+            -- Gold run 3: Youngster Mikey (Route 30 (5,23), unbeaten, facing down, sight 1) stood on the only
+            -- aisle north and never spotted the player at (5,24) (see the STUCK log). An object on the bumped
+            -- tile is talked to instead: a trainer's talk path (TalkToTrainer, home/trainers.asm) starts the
+            -- same battle.
+            for _, d in ipairs(PI.DIRECTIONS) do
+                if d[1] == button then
+                    for _, object in ipairs(point.blocked or {}) do
+                        if object.x == point.x + d[2] and object.y == point.y + d[3] then return press("A") end
+                    end
+                end
+            end
+        end
         if bumped % (2 * PI.BUMP_FRAMES) >= PI.BUMP_FRAMES then return {}, self.phase end
         return {[button]=true}, self.phase
     end
