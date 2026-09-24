@@ -330,4 +330,8 @@ Fixture sizes and the `.jsonl.gz` recommendation are in
   issue report itself (§3 mGBA hook feasibility note).
 - **Deaths 33-35 normative resolution**: benched `force_faint` is deferred to the checkpoint (as
   Gen 1 does), not delivered same-frame; item 33 is rewritten in P6 rather than left contradicting
-  shipped behaviour (§5.6).
+  shipped behaviour (§5.6). **Update (2026-09-24):** the active-battler half of item 33 was rewritten
+  early, ahead of P6 — owner rulings 15-16 (`docs/gen3/G4_request_draft.md` §6, 2026-09-23/24) replace
+  the held-until-switch-out window with mechanism P+H on FR/LG singles (W-4's "no held window" design
+  intent, above, is now the shipped rule, not just intent); RR gets parity at G5. The benched half
+  (W-3, this note's own subject) is unchanged.
