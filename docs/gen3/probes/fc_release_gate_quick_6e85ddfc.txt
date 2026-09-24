@@ -1,0 +1,102 @@
+# gen3_final_cut row=release_gate_quick item=§11_gate cut=6e85ddfcb0ce7c5032f3118820d32d04a20d20af
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/verify_gen3_release.py --quick   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-24T12:59:34 cpu=83% emuhawk=0 python=4
+start_utc=2026-09-24T16:59:33Z tracked_clean_before=True
+Gen 3 release gate — 4 lanes
+
+[ .. ] unit
+  skips with no entry in ALLOWED_SKIPS:
+    - SKIPPED [1] tests\unit\test_gen3_patch_sources.py:336: arm-none-eabi-gcc not found (vendored under patch/vendor in the ROOT checkout, or set $SLINK_ARMGCC): the patch sources are UNCOMPILED here
+    - SKIPPED [1] tests\unit\test_gen3_patch_sources.py:355: arm-none-eabi-gcc not found (vendored under patch/vendor in the ROOT checkout, or set $SLINK_ARMGCC): section placement is UNCHECKED here
+    - SKIPPED [1] tests\unit\test_gen3_shadow_diff.py:294: shadow captures not present in patch/build/shadow_wire
+', kind = 'companion'
+
+    def load_rom(pack: str, title: str, kind: str) -> bytes:
+        path, sha1 = ROMS[(pack, title, kind)]
+        if not path.exists():
+            raise SystemExit(f"ROM not present at {path}")
+        rom = path.read_bytes()
+        if hashlib.sha1(rom).hexdigest() != sha1:
+>           raise SystemExit(f"{path}: sha1 differs from the pinned dump")
+E           SystemExit: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\slink_RR.gba: sha1 differs from the pinned dump
+
+tools\gen_gen3_write_checkpoint.py:303: SystemExit
+____ test_harden_m5_rr_without_commit_hold_still_carries_the_explode_shape ____
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001FBE4E66D20>
+
+    def test_harden_m5_rr_without_commit_hold_still_carries_the_explode_shape(monkeypatch) -> None:
+>       _rr_roms_or_skip()
+
+tests\unit\test_gen3_write_checkpoint.py:643: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\unit\test_gen3_write_checkpoint.py:607: in _rr_roms_or_skip
+    rom_or_skip("gen3_rr", "radical_red", k)
+tests\unit\test_gen3_write_checkpoint.py:30: in rom_or_skip
+    return G.load_rom(pack, title, kind)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+pack = 'gen3_rr', title = 'radical_red', kind = 'companion'
+
+    def load_rom(pack: str, title: str, kind: str) -> bytes:
+        path, sha1 = ROMS[(pack, title, kind)]
+        if not path.exists():
+            raise SystemExit(f"ROM not present at {path}")
+        rom = path.read_bytes()
+        if hashlib.sha1(rom).hexdigest() != sha1:
+>           raise SystemExit(f"{path}: sha1 differs from the pinned dump")
+E           SystemExit: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\slink_RR.gba: sha1 differs from the pinned dump
+
+tools\gen_gen3_write_checkpoint.py:303: SystemExit
+_______________ test_harden_m5_an_unproven_rr_handoff_is_fatal ________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001FBE4E6F1A0>
+
+    def test_harden_m5_an_unproven_rr_handoff_is_fatal(monkeypatch) -> None:
+        """RR's Explode shape rides on the hand-off; a missing hand-off is not a quiet 'unverified'."""
+>       _rr_roms_or_skip()
+
+tests\unit\test_gen3_write_checkpoint.py:651: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\unit\test_gen3_write_checkpoint.py:607: in _rr_roms_or_skip
+    rom_or_skip("gen3_rr", "radical_red", k)
+tests\unit\test_gen3_write_checkpoint.py:30: in rom_or_skip
+    return G.load_rom(pack, title, kind)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+pack = 'gen3_rr', title = 'radical_red', kind = 'companion'
+
+    def load_rom(pack: str, title: str, kind: str) -> bytes:
+        path, sha1 = ROMS[(pack, title, kind)]
+        if not path.exists():
+            raise SystemExit(f"ROM not present at {path}")
+        rom = path.read_bytes()
+        if hashlib.sha1(rom).hexdigest() != sha1:
+>           raise SystemExit(f"{path}: sha1 differs from the pinned dump")
+E           SystemExit: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\slink_RR.gba: sha1 differs from the pinned dump
+
+tools\gen_gen3_write_checkpoint.py:303: SystemExit
+=========================== short test summary info ===========================
+SKIPPED [1] tests\unit\test_gen3_patch_sources.py:336: arm-none-eabi-gcc not found (vendored under patch/vendor in the ROOT checkout, or set $SLINK_ARMGCC): the patch sources are UNCOMPILED here
+SKIPPED [1] tests\unit\test_gen3_patch_sources.py:355: arm-none-eabi-gcc not found (vendored under patch/vendor in the ROOT checkout, or set $SLINK_ARMGCC): section placement is UNCHECKED here
+SKIPPED [1] tests\unit\test_gen3_shadow_diff.py:294: shadow captures not present in patch/build/shadow_wire
+33 failed, 2571 passed, 3 skipped, 4 errors in 75.29s (0:01:15)
+
+[FAIL] unit               2571 passed, 3 skipped (3 unexplained), 33 failed, 0 xfailed, 0 deselected  (76s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] pins
+[PASS] pins               exit 0  (0s)
+[ .. ] profile-generated
+[PASS] profile-generated  exit 0  (1s)
+
+GATE FAILED — unit
+A skipped, xfailed or deselected test counts as a failure here: it did not run, and 'did not run' is not 'passed'.
+exit=1 end_utc=2026-09-24T17:00:52Z tracked_clean_after=True classification=real

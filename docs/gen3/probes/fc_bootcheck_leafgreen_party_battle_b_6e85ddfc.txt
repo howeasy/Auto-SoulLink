@@ -1,0 +1,17 @@
+# gen3_final_cut row=bootcheck_leafgreen_party_battle_b item=§8_item4 cut=6e85ddfcb0ce7c5032f3118820d32d04a20d20af
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/gen3_fixtures.py boot-check --rom 'patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba' --fixture tests/fixtures/gen3/leafgreen_party_battle_b.sav --title leafgreen   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc
+--- attempt 1 of 1 ---
+LOAD 2026-09-24T12:58:50 cpu=42% emuhawk=0 python=3
+start_utc=2026-09-24T16:58:49Z tracked_clean_before=True
+BOOT-CHECK FAIL tests\fixtures\gen3\leafgreen_party_battle_b.sav: the emulator driver did not report PASS
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_fixture_runs\bootcheck_leafgreen_party_battle_b\gen3 gen3 Pokemon - LeafGreen Version (USA).SaveRAM from tests\fixtures\gen3\leafgreen_party_battle_b.sav (counter=4)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_gen3_Pokemon_-_LeafGreen_Version_(USA).gba
+[gate] gen3_boot_check: RESULT: FAIL the battery is erased at boot — the fixture was not seeded into the per-run SaveRAM directory BizHawk was configured with  (3s)
+phase start frame=1 title=leafgreen
+phase domain frame=1 SRAM
+RESULT: FAIL the battery is erased at boot — the fixture was not seeded into the per-run SaveRAM directory BizHawk was configured with
+exit=1 end_utc=2026-09-24T16:58:54Z tracked_clean_after=True classification=real
