@@ -1781,7 +1781,8 @@ def test_every_cell_declares_all_trade_cases_with_the_runner_fixtures():
             assert axes["trade_fixtures"] == duo.GEN2_TRADE_FIXTURES[axes["pairing"]]
     # Every runner case is a release cell; the lane may demand more (refusal rows awaiting a driver).
     assert set(duo.GEN2_TRADE_SCENARIOS) <= set(gate.TRADE_END_STATUS)
-    assert "gen2_trade_refuse_unsaved" in gate.TRADE_END_STATUS
+    assert {"gen2_trade_refuse_unsaved", "gen2_trade_refuse_contest"} <= set(gate.TRADE_MODEL_ONLY)
+    assert not set(gate.TRADE_MODEL_ONLY) & set(gate.TRADE_END_STATUS)
     assert "gen2_trade_refuse_contest" not in gate.TRADE_END_STATUS  # MODEL-only (coordinator ruling)
 
 
@@ -2021,6 +2022,7 @@ def _pairs_tree(tmp_path, monkeypatch):
     doc = _green_tree(tmp_path)
     for row in doc["requirements"]:
         row["axes"]["scenarios"] = list(need)
+        row["axes"].pop("scenario_fixtures", None)   # the fake runner stages the pairing fixtures for every cell
         row["axes"]["trade_fixtures"] = _TRADE_FIXTURES[row["axes"]["pairing"]]
         row["proofs"] = [{"scenario": name, "receipts": {}} for name in need]
     _write_doc(tmp_path, doc)
@@ -2157,7 +2159,9 @@ def test_committed_g4_packet_is_red_until_the_owner_signs():
 # DUO-WAVE-C (whiteout, pc_ops, changebox, poison): the PYDEC line names its own cell's tokens.
 _WAVE_C_PYDEC = {
     "gen2_whiteout": ("memorial", "scenario=gen2_whiteout repair=run_over", "repair=memorial_first"),
-    "gen2_pc_ops": ("alive", "scenario=gen2_pc_ops release=unpropagated", "release=propagated"),
+    "gen2_pc_ops": ("memorial", "scenario=gen2_pc_ops release=propagated", "release=unpropagated"),   # O-35
+    "gen2_faint_active_trainer": ("memorial", "scenario=gen2_faint_active_trainer death=active battle=trainer",
+                                  "battle=wild"),
     "gen2_changebox": ("memorial", "scenario=gen2_changebox box_change=BOX1->BOX14->BOX1", "box_change=BOX1"),
     "gen2_poison": ("dead", "scenario=gen2_poison death=poison", "death=battle"),
     "gen2_whiteout_rebuild": ("alive", "scenario=gen2_whiteout_rebuild rebuild=restored", "rebuild=lost"),
@@ -2272,3 +2276,101 @@ def test_any_other_legs_clock_setup_obeys_the_same_rule(tmp_path):
     leg["clock_setup"]["game_hour"] = 15
     save()
     assert any("new-gates.w6_gate.gold: w6 gate leg panel: clock setup" in e for e in gate.live_gates_errors(tmp_path))
+
+
+# DUO-WAVE-D: per-scenario fixture overrides, O-33 synth headers and the npc_trade key change.
+
+def _synth_proof(tmp_path, scenario, axes, headers, pydec):
+    receipts = {}
+    for side, text in (*headers.items(), ("pydec", pydec)):
+        path = tmp_path / "receipts" / f"{scenario}_{side}.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8", newline="\n")
+        receipts[side] = {"path": path.relative_to(tmp_path).as_posix(), "sha256": _lf_sha(path)}
+    return {"scenario": scenario, "receipts": receipts}
+
+
+def _cell(tmp_path, scenario, fixtures, *, synth_header=True, key_change=None):
+    """A C-C cell on the COMMITTED fixtures/disclosures (copied), with headers built the runner's way."""
+    lock = json.loads((REPO / "data/gen2_sources.lock.json").read_text(encoding="utf-8"))["outputs"]
+    (tmp_path / "tests/fixtures/gen2").mkdir(parents=True, exist_ok=True)
+    headers, keys = {}, {"a": "AAAA:B541:13", "b": "BBBB:AC24:13"}
+    for side, name in fixtures.items():
+        for ext in (".SaveRAM", ".synth.json"):
+            src = REPO / "tests/fixtures/gen2" / f"{name}{ext}"
+            if src.is_file():
+                (tmp_path / "tests/fixtures/gen2" / f"{name}{ext}").write_bytes(src.read_bytes())
+        _fixture, case, synth = gate._cell_fixture(tmp_path, {"scenario_fixtures": {scenario: fixtures}}, scenario, side)
+        head = {"player": side, "scenario": scenario, "case": case, "title": "crystal",
+                "rom_sha1": lock["pokecrystal"]["sha1"], "fixture_sha256": gate._fixture_sha256(tmp_path, name)}
+        if synth and synth_header:
+            head["synth"] = synth
+        lines = [f"DUO_GEN2 {json.dumps(head)}", f'ENGINE_CAPTURE {json.dumps({"key": keys[side]})}',
+                 "SAVE_WITNESS {}", "RESULT: PASS"]
+        if key_change and side == "a":
+            lines.insert(2, f'ENGINE_KEY_CHANGE {json.dumps({"old_key": keys["a"], "new_key": key_change})}')
+        headers[side] = "\n".join(lines) + "\n"
+    final_a = key_change or keys["a"]
+    pydec = f"PYDEC: PASS a={final_a} b={keys['b']} area=route_29 titles=crystal/crystal status=alive\n"
+    axes = {"initiator": "crystal", "partner": "crystal", "fixtures": {"a": "crystal_battle", "b": "crystal_battle_ot2"},
+            "scenario_fixtures": {scenario: fixtures}}
+    return _synth_proof(tmp_path, scenario, axes, headers, pydec), axes, lock
+
+
+SYNTH_CC = {"a": "crystal_synth_full", "b": "crystal_synth_full_ot2"}
+
+
+def test_a_synth_cell_binds_base_case_synth_name_and_synth_bytes(tmp_path):
+    proof, axes, lock = _cell(tmp_path, "gen2_boxed_capture", SYNTH_CC)
+    assert gate._receipt_errors(tmp_path, proof, "gen2_boxed_capture", axes, lock) == []
+
+
+def test_a_synth_cell_without_its_synth_disclosure_is_red(tmp_path):
+    proof, axes, lock = _cell(tmp_path, "gen2_boxed_capture", SYNTH_CC, synth_header=False)
+    assert any("header does not name" in e for e in gate._receipt_errors(tmp_path, proof, "gen2_boxed_capture", axes, lock))
+
+
+def test_a_plain_cell_claiming_a_synth_is_red(tmp_path):
+    proof, axes, lock = _cell(tmp_path, "gen2_ball_gate", {"a": "crystal_town", "b": "crystal_town_ot2"})
+    assert gate._receipt_errors(tmp_path, proof, "gen2_ball_gate", axes, lock) == []
+    path = tmp_path / proof["receipts"]["a"]["path"]
+    text = path.read_text(encoding="utf-8").replace('"scenario": "gen2_ball_gate"',
+                                                    '"scenario": "gen2_ball_gate", "synth": "crystal_synth_full"')
+    path.write_text(text, encoding="utf-8", newline="\n")
+    proof["receipts"]["a"]["sha256"] = _lf_sha(path)
+    assert any("header does not name" in e for e in gate._receipt_errors(tmp_path, proof, "gen2_ball_gate", axes, lock))
+
+
+def test_npc_trade_pydec_names_the_key_after_the_trade(tmp_path):
+    proof, axes, lock = _cell(tmp_path, "gen2_npc_trade", SYNTH_CC, key_change="9666:BF1E:5F")
+    assert gate._receipt_errors(tmp_path, proof, "gen2_npc_trade", axes, lock) == []
+    path = tmp_path / proof["receipts"]["pydec"]["path"]
+    path.write_text(path.read_text(encoding="utf-8").replace("a=9666:BF1E:5F", "a=AAAA:B541:13"), encoding="utf-8")
+    proof["receipts"]["pydec"]["sha256"] = _lf_sha(path)
+    assert any("pydec receipt does not name" in e
+               for e in gate._receipt_errors(tmp_path, proof, "gen2_npc_trade", axes, lock))
+
+
+def test_scenario_fixture_overrides_must_match_what_the_runner_stages():
+    duo = SimpleNamespace(GAMES={"gen2_new": {"fixture": {"a": "crystal_battle", "b": "crystal_battle_ot2"}}},
+                          GEN2_BALL_GATE_FIXTURES={"gen2_new": {"a": "crystal_town", "b": "crystal_town_ot2"}},
+                          GEN2_SYNTH_SCENARIOS={"gen2_gift": "bill"},
+                          gen2_synth_name=lambda scenario, game, inst: "crystal_synth_bill" + ("_ot2" if inst == "b" else ""),
+                          GEN2_POISON_FIXTURES={})
+    assert gate._runner_cell_fixtures(duo, "gen2_new", "gen2_ball_gate") == {"a": "crystal_town", "b": "crystal_town_ot2"}
+    assert gate._runner_cell_fixtures(duo, "gen2_new", "gen2_gift") == {"a": "crystal_synth_bill",
+                                                                         "b": "crystal_synth_bill_ot2"}
+    assert gate._runner_cell_fixtures(duo, "gen2_new", "link") == {"a": "crystal_battle", "b": "crystal_battle_ot2"}
+    assert gate._runner_cell_fixtures(duo, "gen2_new", "gen2_trade_new") is None
+
+
+def test_committed_matrix_overrides_agree_with_the_runner():
+    import e2e_duo as duo
+    doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
+    for row in doc["requirements"]:
+        axes = row["axes"]
+        for name in axes["scenarios"]:
+            if name in duo.scenarios_for(axes["pairing"]):
+                staged = gate._runner_cell_fixtures(duo, axes["pairing"], name)
+                if staged is not None:
+                    assert staged == ((axes.get("scenario_fixtures") or {}).get(name) or axes["fixtures"]), (row["id"], name)

@@ -265,15 +265,20 @@ DUO_REQUIRED_SCENARIOS = frozenset({"link"})
 # titles=<a-title>/<b-title> status=<alive|dead|memorial>" -- link ends alive; gen2_faint ends dead, or
 # memorial once the Gen 2 memorialize NACK lets the server finish the pair (owner, via Codex H5).
 SCENARIO_END_STATUS = {"link": {"alive"}, "gen2_faint": {"dead", "memorial"}, "gen2_faint_active": {"memorial"},
-                       # DUO-WAVE-C contract (whiteout, pc_ops, changebox, poison)
-                       "gen2_whiteout": {"memorial"}, "gen2_pc_ops": {"alive"}, "gen2_changebox": {"memorial"},
-                       "gen2_poison": {"dead", "memorial"}, "gen2_whiteout_rebuild": {"alive"}}
+                       # DUO-WAVE-C contract (whiteout, pc_ops, changebox, poison); pc_ops per O-35
+                       "gen2_whiteout": {"memorial"}, "gen2_pc_ops": {"memorial"}, "gen2_changebox": {"memorial"},
+                       "gen2_poison": {"dead", "memorial"}, "gen2_whiteout_rebuild": {"alive"},
+                       # DUO-WAVE-D (D-2, S-8/O-15, S-2/S-3/D-3, S-5/D-1) and O-30 MINOR-5
+                       "gen2_ball_gate": {"alive"}, "gen2_egg_hatch": {"alive"}, "gen2_gift": {"alive"},
+                       "gen2_boxed_capture": {"alive"}, "gen2_npc_trade": {"alive"},
+                       "gen2_faint_active_trainer": {"memorial"}}
 # Per-scenario PYDEC tokens beyond a/b/titles/status (DUO-WAVE-C contract; the death=active rule's shape).
 SCENARIO_TOKENS = {"gen2_whiteout": {"repair": "run_over"},   # owner ruling (a), 4aa1ad5c: game over
-                   "gen2_pc_ops": {"release": "unpropagated"},
+                   "gen2_pc_ops": {"release": "propagated"},   # O-35: a PC release kills the partner
                    "gen2_changebox": {"box_change": "BOX1->BOX14->BOX1"},
                    "gen2_poison": {"death": "poison"},
-                   "gen2_whiteout_rebuild": {"rebuild": "restored"}}   # D-7, owner ruling (c), e8eb21df
+                   "gen2_whiteout_rebuild": {"rebuild": "restored"},   # D-7, owner ruling (c), e8eb21df
+                   "gen2_faint_active_trainer": {"death": "active", "battle": "trainer"}}   # 68277bdb
 
 
 def _fixture_sha256(root: Path, fixture: str) -> str | None:
@@ -291,6 +296,23 @@ def _engine_capture_key(lines: list[str]) -> str | None:
         return json.loads(line[len("ENGINE_CAPTURE "):]).get("key")
     except ValueError:
         return None
+
+
+# Cells whose linked mon changes key in the run (S-5/D-1 key_change), so the PYDEC names the final key: the
+# ENGINE_CAPTURE key followed through each ENGINE_KEY_CHANGE whose old_key is the current one, in order.
+KEY_CHANGE_SCENARIOS = frozenset({"gen2_npc_trade"})
+
+
+def _followed_key(lines: list[str], key: str | None) -> str | None:
+    for line in lines:
+        if line.startswith("ENGINE_KEY_CHANGE "):
+            try:
+                change = json.loads(line[len("ENGINE_KEY_CHANGE "):])
+            except ValueError:
+                return None
+            if isinstance(change, dict) and key is not None and change.get("old_key") == key:
+                key = change.get("new_key")
+    return key
 
 
 def _pydec_tokens(lines: list[str]) -> dict | None:
@@ -825,10 +847,7 @@ def _active_faint_cell_errors(legs: dict, axes: dict) -> list[str]:
 TRADE_END_STATUS = {"gen2_trade_new": "committed", "gen2_trade_evolve": "committed",
                     "gen2_trade_reset_commit": "committed", "gen2_trade_decline_new": "unchanged",
                     "gen2_trade_timeout": "unchanged", "gen2_trade_reset_wait": "unchanged",
-                    "gen2_trade_refuse_item": "unchanged",
-                    # 26e58062 refusal row; PHYSICAL via a synthetic wSavedAtLeastOnce=0 fixture (O-33), red
-                    # here until a driver is registered in tools/e2e_duo.py and C-C/G-S receipts exist.
-                    "gen2_trade_refuse_unsaved": "unchanged"}
+                    "gen2_trade_refuse_item": "unchanged"}
 # Coordinator ruling 2026-09-24: MODEL-ONLY trade cases, never a PHYSICAL cell. Server 2676c2f9 blocks a
 # trade during the Bug-Catching Contest before any prompt, and the contest cannot be saved mid-way, so the
 # cartridge refusal is unreachable in real play (defence in depth). Its evidence is these unit tests.
@@ -839,6 +858,13 @@ TRADE_MODEL_ONLY = {
         "tests/unit/test_gen2_client.py::test_trade_in_the_contest_declines_a_prompt_without_arming_it_and_answers_a_zero_mask",
         "tests/unit/test_gen2_client.py::test_trade_blocked_rides_the_tick_while_the_contest_masks_the_party",
         "tests/unit/test_state_trade_hardening.py::test_a_trade_blocked_player_makes_no_pair_eligible_on_either_side",
+    ),
+    # Coordinator ruling 2026-09-24: the never-saved refusal is MODEL-only too (its oracle MODEL rows).
+    "gen2_trade_refuse_unsaved": (
+        "tests/unit/test_gen2_trade_gates.py::test_refusal_model_rows_leave_both_saves_unchanged",
+        "tests/unit/test_gen2_trade_gates.py::test_refusal_model_rows_require_their_native_proof",
+        "tests/unit/test_gen2_trade_service.py::test_compiled_proposer_refuses_before_query",
+        "tests/unit/test_gen2_trade_service.py::test_compiled_never_saved_responder_is_saved_then_trades",
     ),
 }
 TRADE_PLANTED = {"gen2_trade_refuse_item", "gen2_trade_evolve"}   # O-31: a's disclosed HARNESS_WRITE
@@ -901,6 +927,37 @@ def _trade_receipt_errors(root: Path, proof: dict, scenario: str, axes: dict) ->
     return errors
 
 
+def _cell_fixture(root: Path, axes: dict, scenario: str, side: str) -> tuple[str, str | None, str | None]:
+    """(staged fixture, header case, synth name) for one side of a cell. axes.scenario_fixtures overrides the
+    pairing's fixtures per scenario (duo_matrix_errors checks it against the runner). An O-33 synth fixture
+    boots through its PLAYED base, so the header names the base as `case`, the synth as `synth`, and the
+    synth bytes as `fixture_sha256`."""
+    fixture = ((axes.get("scenario_fixtures") or {}).get(scenario) or axes["fixtures"])[side]
+    if "_synth_" not in fixture:
+        return fixture, fixture, None
+    try:
+        base = json.loads((root / "tests/fixtures/gen2" / f"{fixture}.synth.json").read_text(encoding="utf-8"))
+        base = base["base_fixture"]
+    except (OSError, ValueError, KeyError, TypeError):
+        base = None
+    return fixture, base, fixture
+
+
+def _runner_cell_fixtures(duo, game: str, scenario: str) -> dict | None:
+    """What tools/e2e_duo.py stages for this cell (gen2_preflight's rules), or None for trade cells (trade_fixtures).
+    ponytail: mirrors the runner's staging maps; a new runner override must be added here too."""
+    if scenario in TRADE_END_STATUS:
+        return None
+    if scenario == "gen2_ball_gate":
+        return (getattr(duo, "GEN2_BALL_GATE_FIXTURES", {}) or {}).get(game)
+    if scenario in (getattr(duo, "GEN2_SYNTH_SCENARIOS", {}) or {}):
+        return {inst: duo.gen2_synth_name(scenario, game, inst) for inst in ("a", "b")}
+    fixtures = dict(duo.GAMES[game].get("fixture") or {})
+    if scenario == "gen2_poison":
+        fixtures.update((getattr(duo, "GEN2_POISON_FIXTURES", {}) or {}).get(game, {}))
+    return fixtures
+
+
 def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: dict) -> list[str]:
     """One registered proof: pinned bytes, PASS verdicts, and headers naming this exact cell."""
     if scenario == "gen2_reconnect":
@@ -935,6 +992,8 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
             errors.extend(_pydec_cell_errors(lines, scenario, axes, capture_keys, lock))
             continue
         capture_keys[side] = _engine_capture_key(lines)
+        if scenario in KEY_CHANGE_SCENARIOS:
+            capture_keys[side] = _followed_key(lines, capture_keys[side])
         title = titles[side]
         lock_key = f"poke{title}"
         refused = scenario == "gen2_admit_wrong_rom" and side == "b"
@@ -944,9 +1003,9 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
             errors.append(f"{side}: axes title {title!r} has no {lock_key!r} entry in "
                           f"data/gen2_sources.lock.json")
             continue
-        want = {"player": side, "scenario": scenario, "case": axes["fixtures"][side], "title": title,
-                "rom_sha1": lock[lock_key].get("sha1"),
-                "fixture_sha256": _fixture_sha256(root, axes["fixtures"][side])}
+        fixture, case, synth = _cell_fixture(root, axes, scenario, side)
+        want = {"player": side, "scenario": scenario, "case": case, "title": title,
+                "rom_sha1": lock[lock_key].get("sha1"), "fixture_sha256": _fixture_sha256(root, fixture)}
         if refused:
             want = {"player": side, "scenario": scenario, "title": title,
                     "rom_sha1": lock[lock_key].get("sha1"), "expect_admission": "refused"}
@@ -955,6 +1014,8 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
             header = json.loads(headers[0]) if len(headers) == 1 else None
         except ValueError:
             header = None
+        if not refused and (synth is not None or (isinstance(header, dict) and header.get("synth"))):
+            want["synth"] = synth   # O-33: a synth name exactly when the cell stages a synthetic setup
         if not isinstance(header, dict) or any(header.get(key) != value for key, value in want.items()):
             errors.append(f"{side} receipt header does not name {want}")
         if refused:
@@ -971,7 +1032,7 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
     memorial_sides = ()
     # gen2_changebox's memorial is the faint half (DUO-WAVE-C). Whiteout's preimage is the REVIVED record
     # (HP > 0), so the HP-zero faint rule cannot apply to it; its oracle checks it instead.
-    if (scenario in ("gen2_faint_active", "gen2_changebox")
+    if (scenario in ("gen2_faint_active", "gen2_faint_active_trainer", "gen2_changebox")
             or scenario == "gen2_faint" and tokens.get("status") == "memorial"):
         memorial_sides = ("a", "b")
     elif scenario in ("gen2_type_clause", "gen2_gender_clause") and tokens.get("ending") == "memorial":
@@ -1037,6 +1098,12 @@ def duo_matrix_errors(root: Path | None = None, duo=None, *, required: dict | No
                 errors.extend(f"{rid}: registered scenario {name} is not in the release matrix"
                               for name in registered
                               if name not in scenarios and (only is None or name in only))
+                for name in scenarios:
+                    staged = _runner_cell_fixtures(duo, game, name) if name in registered else None
+                    declared = (axes.get("scenario_fixtures") or {}).get(name) or axes["fixtures"]
+                    if staged is not None and staged != declared:
+                        errors.append(f"{rid}/{name}: tools/e2e_duo.py stages {staged} but the matrix binds "
+                                      f"{declared} (axes.scenario_fixtures)")
                 trade = getattr(duo, "GEN2_TRADE_FIXTURES", {}).get(game)
                 if set(scenarios) & set(TRADE_END_STATUS) and trade != axes.get("trade_fixtures"):
                     errors.append(f"{rid}: tools/e2e_duo.py {game} trade fixtures {trade} != matrix "
