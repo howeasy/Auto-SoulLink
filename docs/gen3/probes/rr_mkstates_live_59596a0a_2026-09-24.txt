@@ -1,0 +1,132 @@
+G5-MKSTATE-LIVE: tools/mkstates.py on the ported mkstate.lua (01b1fe56, native.lua/gen3_gatelib; no lua/mailbox.lua)
+and the --saveram name fix (236ee593: SAVERAM_DST = gen3_fixtures.saveram_name -> 'slink RR.SaveRAM')
+cut 59596a0a, lane E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean, tracked_clean before and after
+companion patch/build/slink_RR.gba md5 6cf77ba4a63634a0fd452be6f206bfc3; states -> E:/Howard/Bizhawk/GBA/State
+
+VERDICT
+ (a) every state rebuilds: town (overworld, door, pokecenter) PASS and battle (prebattle, battle, actionmenu, movemenu) PASS;
+     --status afterwards: all 7 current (2.11.1). battle2/partyfreeze remain hand-capture only (no gate needs them).
+ (b) 'slink RR.SaveRAM' is the chosen save: after each run its flash body (RTC footer stripped) equals the --saveram source.
+     town: a copy of the owner's own save (map 3.1 Viridian, SB1 pos (26,27) -> field tile (33,34), in front of the Center);
+     battle: tests/fixtures/gen3/rr_town.sav (map 3.19 Route 1 grass (7,33)).
+     NOTE: since 236ee593 the default discovery skips 'slink RR.SaveRAM' itself, so a bare `--only town` would
+     now pick the newest other rr/radical battery ('rr clean.SaveRAM', not a town save). Pass --saveram for both kinds.
+ (c) the pokecenter step's trade-NPC write is admitted: native:config{pc_trade_npc} applied (mkstate.lua:361-366 fails the
+     run otherwise), then "patch spawned the trade NPC at oe=7 tile=(9,9) - map (5,4) is a recognised Pokemon Center".
+ owner's 'slink RR.SaveRAM' backed up before the runs (sha256 72637440...) and restored byte for byte afterwards (cmp: identical).
+ smoke at 59596a0a on the new states: pcnpc, createmon and forcemove all PASS (3/3 executed).
+
+--- log (verbatim) ---
+7263744033ab1fe9fd69f670a641cfb03fb75e047d282215c71a5f37f9ca9a0e *E:/Howard/Bizhawk/GBA/SaveRAM/slink RR.SaveRAM
+7263744033ab1fe9fd69f670a641cfb03fb75e047d282215c71a5f37f9ca9a0e *<scratch>/owner_slink_RR.SaveRAM.bak
+LOAD 2026-09-24T10:06:56 cpu=94% emuhawk=1 python=10
+  emuhawk pid=28144 E:/Howard/Bizhawk\EmuHawk.exe --lua=lua/tests/gen2_w6_gate.lua --config=patch/build/gate_cfg_gen2_w6_gate_silver_overlay.ini patch/build/gen2_silver_overlay.gbc
+$ python tools/mkstates.py --status
+[mkstates] EmuHawk 2.11.1  states in E:/Howard/Bizhawk\GBA\State
+[mkstates] battery save: slink_RR.SaveRAM
+  ok    slink_actionmenu.State     current (2.11.1)
+  ok    slink_battle.State         current (2.11.1)
+  STALE slink_battle2.State        written by BizHawk 2.9.1, running 2.11.1
+  ok    slink_door.State           current (2.11.1)
+  ok    slink_movemenu.State       current (2.11.1)
+  ok    slink_overworld.State      current (2.11.1)
+  STALE slink_partyfreeze.State    written by BizHawk 2.9.1, running 2.11.1
+  ok    slink_pokecenter.State     current (2.11.1)
+  ok    slink_prebattle.State      current (2.11.1)
+start_utc=2026-09-24T14:06:56Z
+$ python tools/mkstates.py --force --only town --saveram <scratch>/town_src_slink_RR.SaveRAM   (a copy of the owner's slink RR.SaveRAM: map 3.1 Viridian (26,27))
+[mkstates] EmuHawk 2.11.1  states in E:/Howard/Bizhawk\GBA\State
+[mkstates] battery save: town_src_slink_RR.SaveRAM
+  ok    slink_actionmenu.State     current (2.11.1)
+  ok    slink_battle.State         current (2.11.1)
+  STALE slink_battle2.State        written by BizHawk 2.9.1, running 2.11.1
+  ok    slink_door.State           current (2.11.1)
+  ok    slink_movemenu.State       current (2.11.1)
+  ok    slink_overworld.State      current (2.11.1)
+  STALE slink_partyfreeze.State    written by BizHawk 2.9.1, running 2.11.1
+  ok    slink_pokecenter.State     current (2.11.1)
+  ok    slink_prebattle.State      current (2.11.1)
+[mkstates] seeded slink RR.SaveRAM from town_src_slink_RR.SaveRAM
+[mkstates] E:/Howard/Bizhawk\EmuHawk.exe --config=patch/build/mkstate_cfg.ini --lua=lua/tests/mkstate.lua patch/build/slink_RR.gba
+kind=town out=E:/Howard/Bizhawk/GBA/State/slink_pokecenter.State
+walkable field at frame 530: map=(3,1) tile=(33,34) party=1
+walked 1800 frames with no wild encounter — safe for the walking scenarios
+saved slink_door.State  map=(3,1) tile=(33,34)
+saved slink_overworld.State  map=(3,1) tile=(33,34)
+slink_door.State / slink_overworld.State: map=(3,1) tile=(33,34) facing=2 (north)
+entered map=(5,4) tile=(14,15)
+patch spawned the trade NPC at oe=7 tile=(9,9) — map (5,4) is a recognised Pokémon Center
+saved slink_pokecenter.State  map=(5,4) tile=(14,15)
+RESULT: PASS (overworld + door + pokecenter states captured)
+
+[mkstates] These need a hand capture in EmuHawk 2.11.1 (they sit at a specific map/battle context):
+    slink_battle2.State
+    slink_partyfreeze.State
+  Gates that need one are skipped while it is stale — nothing hangs.
+exit=0
+end_utc=2026-09-24T14:07:05Z
+
+LOAD 2026-09-24T10:07:27 cpu=97% emuhawk=3 python=13
+  emuhawk pid=28144 E:/Howard/Bizhawk\EmuHawk.exe --lua=lua/tests/gen2_w6_gate.lua --config=patch/build/gate_cfg_gen2_w6_gate_silver_overlay.ini patch/build/gen2_silver_overlay.gbc
+  emuhawk pid=35744 E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/duo_cfg_w1_linked_faint_active_whiteout_gen3_a.ini --lua=patch/build/duo_w1_linked_faint_active_whiteout_gen3_a.lua patch/build/slink_RR.gba
+  emuhawk pid=36688 E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/duo_cfg_w1_linked_faint_active_whiteout_gen3_b.ini --lua=patch/build/duo_w1_linked_faint_active_whiteout_gen3_b.lua patch/build/slink_RR.gba
+start_utc=2026-09-24T14:07:27Z
+$ python tools/mkstates.py --force --only battle --saveram tests/fixtures/gen3/rr_town.sav
+[mkstates] EmuHawk 2.11.1  states in E:/Howard/Bizhawk\GBA\State
+[mkstates] battery save: rr_town.sav
+  ok    slink_actionmenu.State     current (2.11.1)
+  ok    slink_battle.State         current (2.11.1)
+  STALE slink_battle2.State        written by BizHawk 2.9.1, running 2.11.1
+  ok    slink_door.State           current (2.11.1)
+  ok    slink_movemenu.State       current (2.11.1)
+  ok    slink_overworld.State      current (2.11.1)
+  STALE slink_partyfreeze.State    written by BizHawk 2.9.1, running 2.11.1
+  ok    slink_pokecenter.State     current (2.11.1)
+  ok    slink_prebattle.State      current (2.11.1)
+[mkstates] seeded slink RR.SaveRAM from rr_town.sav
+[mkstates] E:/Howard/Bizhawk\EmuHawk.exe --config=patch/build/mkstate_cfg.ini --lua=lua/tests/mkstate.lua patch/build/slink_RR.gba
+kind=battle out=E:/Howard/Bizhawk/GBA/State/slink_battle.State
+walkable field at frame 530: map=(3,19) tile=(14,40) party=1
+start tile=(14,40) party=1
+wild encounter at frame 847
+saved slink_battle.State
+saved slink_actionmenu.State
+saved slink_movemenu.State
+saved slink_prebattle.State (last in-grass position before the encounter)
+RESULT: PASS (battle states captured)
+
+[mkstates] These need a hand capture in EmuHawk 2.11.1 (they sit at a specific map/battle context):
+    slink_battle2.State
+    slink_partyfreeze.State
+  Gates that need one are skipped while it is stale — nothing hangs.
+exit=0
+end_utc=2026-09-24T14:07:34Z
+
+--- restore
+7263744033ab1fe9fd69f670a641cfb03fb75e047d282215c71a5f37f9ca9a0e *E:/Howard/Bizhawk/GBA/SaveRAM/slink RR.SaveRAM
+7263744033ab1fe9fd69f670a641cfb03fb75e047d282215c71a5f37f9ca9a0e *<scratch>/owner_slink_RR.SaveRAM.bak
+restored byte-for-byte: yes
+
+[mkstates] EmuHawk 2.11.1  states in E:/Howard/Bizhawk\GBA\State
+[mkstates] battery save: slink_RR.SaveRAM
+  ok    slink_actionmenu.State     current (2.11.1)
+  ok    slink_battle.State         current (2.11.1)
+  STALE slink_battle2.State        written by BizHawk 2.9.1, running 2.11.1
+  ok    slink_door.State           current (2.11.1)
+  ok    slink_movemenu.State       current (2.11.1)
+  ok    slink_overworld.State      current (2.11.1)
+  STALE slink_partyfreeze.State    written by BizHawk 2.9.1, running 2.11.1
+  ok    slink_pokecenter.State     current (2.11.1)
+  ok    slink_prebattle.State      current (2.11.1)
+
+--- smoke gates
+LOAD 2026-09-24T10:07:46 cpu=93% emuhawk=2 python=10
+  emuhawk pid=28144 E:/Howard/Bizhawk\EmuHawk.exe --lua=lua/tests/gen2_w6_gate.lua --config=patch/build/gate_cfg_gen2_w6_gate_silver_overlay.ini patch/build/gen2_silver_overlay.gbc
+  emuhawk pid=39232 E:/Howard/Bizhawk\EmuHawk.exe --lua=lua/tests/test_gen1_patch_gate.lua --config=patch/build/gate_cfg_test_gen1_patch_gate_red_patched.ini patch/gen1/build/slink_red.gb
+$ SLINK_LIVE=1 pytest tests/live/test_lua_gates.py -k 'pcnpc or createmon or forcemove' -v -rs
+tests/live/test_lua_gates.py::test_gate[test_live_createmon.lua] PASSED  [ 33%]
+tests/live/test_lua_gates.py::test_gate[test_live_forcemove.lua] PASSED  [ 66%]
+tests/live/test_lua_gates.py::test_gate[test_live_pcnpc.lua] PASSED      [100%]
+[test_lua_gates] ported gates executed: 3/3
+====================== 3 passed, 35 deselected in 12.52s ======================
+tracked_dirty_after=0
