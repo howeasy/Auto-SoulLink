@@ -179,3 +179,20 @@ def test_a_dead_mon_alive_in_party_is_re_killed_during_an_applying_trade(tmp_pat
     state, _entry, _token = _gen1_applying(tmp_path)
     dead = _dead_pair(state)
     assert _keys(_tick(state, "a", _mon(B_GETS, 0x26), _mon(dead, 0x77)), "force_faint") == [dead]
+
+
+# ── MINOR-6 (probe P3b): a restart loses the queue; the hello kills before it buries ──────────────
+
+def test_after_a_restart_the_hello_queues_force_faint_before_memorialize(tmp_path):
+    from server.adapters.gen1_rby import Gen1Adapter
+    from server.state import SoulLinkState
+    state, entry = _linked(tmp_path)
+    _dead_pair(state)                                             # a second pair keeps the run alive
+    state.links[-1].status = LinkStatus.ALIVE
+    state.handle_event("a", {"event": "faint", "key": B_GETS})
+    assert entry.status == LinkStatus.DEAD and state.queued_death_cmd("b", A_GETS) and not state.run_over
+    back = SoulLinkState.load(data_dir=str(tmp_path), adapter=Gen1Adapter())   # B never polled
+    cmds = [(c["cmd"], c.get("key")) for c in _hello(back, "b", _mon(A_GETS, 0x15))
+            if c.get("key") == A_GETS]
+    assert cmds[:2] == [("force_faint", A_GETS), ("memorialize", A_GETS)], cmds
+    assert [c for c, _ in cmds].count("force_faint") == 1

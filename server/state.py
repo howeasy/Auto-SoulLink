@@ -1553,6 +1553,21 @@ class SoulLinkState:
                 reason = "not_linked" if not entry else f"status={entry.status.value}"
                 log.debug(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=ignored  reason={reason}")
 
+        # Invariant review MINOR-6: a dead mon alive in the party (a restart lost its queued
+        # force_faint) is killed BEFORE the memorials below bury it -- the client runs commands in
+        # arrival order, and a memorialize first would bury it at full HP. Same guards as O-24.
+        if not self.run_over:
+            for m in party:
+                key, hp = m.get("key"), m.get("hp")
+                entry = self._key_index.get(key) if key else None
+                half = entry and (entry.a if player_id == "a" else entry.b)
+                if (isinstance(hp, (int, float)) and hp > 0 and half and half.key == key
+                        and entry.status != LinkStatus.ALIVE and not self._is_quarantined(player_id, key)
+                        and not self._has_pending_command(player_id, key, *DEATH_COMMANDS)):
+                    self.queued_commands[player_id].append(
+                        {"cmd": "force_faint", "key": key, "nickname": half.nickname or ""})
+                    log.warning(f"[{player_id}] hello: dead {key[:8]} alive in party — force_faint before burial")
+
         # Re-queue any memorials that were not yet confirmed before disconnecting
         for key in list(self.pending_memorials[player_id]):
             if not any(c.get("cmd") == "memorialize" and c.get("key") == key
