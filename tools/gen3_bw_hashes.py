@@ -33,9 +33,9 @@ _STATE_SPECS = [
     ("slink_prebattle.State", "gen3_probe_states_c4p2", "battle",
      "tools/mkstates_gen3.py kind=battle (C4-PROBE2 states, gen3_probe_states_c4p2)"),
     ("slink_oldman.State", "gen3_probe_states", "town",
-     "tools/mkstates_gen3_tutorials.py at lane e4c30fff (gen3_probe_states)"),
+     "tools/mkstates_gen3_tutorials.py at lane {source} (gen3_probe_states)"),
     ("slink_pokedude.State", "gen3_probe_states", "town",
-     "tools/mkstates_gen3_tutorials.py at lane e4c30fff (gen3_probe_states)"),
+     "tools/mkstates_gen3_tutorials.py at lane {source} (gen3_probe_states)"),
 ]
 
 
@@ -54,7 +54,7 @@ def build(title, lane=DEFAULT_LANE):
     for name, subdir, scene, prep in _STATE_SPECS:
         state_path = f"{lane}/patch/build/{subdir}/{title}/{name}"
         fixture_path = f"{lane}/tests/fixtures/gen3/{title}_party_{scene}.sav"
-        states[name] = {"state": _sha256(state_path), "fixture": _sha256(fixture_path), "prep": prep}
+        states[name] = {"state": _sha256(state_path), "fixture": _sha256(fixture_path), "prep": prep.format(source=sha[:8])}
     doc = {"pack": _sha256(f"{lane}/data/games/gen3_frlg/write_checkpoint.json"),
            "source": sha, "states": states}
     return f"{lane}/patch/build/bw_hashes_{title}.json", doc
