@@ -270,7 +270,8 @@ def test_a_path_blocked_only_by_a_live_object_waits_then_fails_with_the_live_fac
     PI = load(rt)
     PI.WAIT_FRAMES = 3
     d = driver(rt, PI)
-    wall = {"map_number": 1, "x": 0, "y": 2, "blocked": lua_list([{"x": 0, "y": 1}, {"x": 1, "y": 2}])}
+    closed = {"Up": False, "Down": False, "Left": False, "Right": False}
+    wall = {"map_number": 1, "x": 0, "y": 2, "can_step": closed, "blocked": lua_list([{"x": 0, "y": 1}, {"x": 1, "y": 2}])}
     for _ in range(3):
         buttons, phase = d.step(pt(rt, **wall))
         assert phase == "travel" and not any(buttons.values())
@@ -314,3 +315,10 @@ def test_a_committed_receipt_that_proves_poison_faint_carries_a_passing_poison_r
     assert F.poison_problem(table(rt, p), p["psn_mask"]) is None
     assert F.poison_emission_problem(table(rt, {"events": lua_list([p["model_event"]])}), table(rt, p)) is None
     assert p["psn_mask"] == PSN and receipt["evidence_level"] == "PHYSICAL"
+
+
+def test_a_phantom_object_on_the_only_aisle_is_walked_through():
+    rt = lua()
+    d = driver(rt, load(rt))
+    buttons, phase = d.step(pt(rt, map_number=1, x=0, y=2, blocked=lua_list([{"x": 0, "y": 1}, {"x": 1, "y": 2}])))
+    assert phase == "travel" and buttons["Up"]

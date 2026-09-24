@@ -137,7 +137,12 @@ function PI.driver(F, facts, opts)
     local function walk(map, point, goals)
         local button, why = PI.step_toward(map, point, goals)
         if not button then
-            -- the source grid alone has a path: a live object or step permission is in the way; wait it out
+            -- a stale object struct can close the only aisle (Route 29 (11,7), Crystal run 1 / Gold errand a1):
+            -- plan without objects; a real NPC only bumps the step
+            button = PI.step_toward(map, {x=point.x, y=point.y, can_step=point.can_step}, goals)
+        end
+        if not button then
+            -- the source grid alone has a path: a live step permission is in the way; wait it out
             local open = {x=point.x, y=point.y, can_step={Up=true, Down=true, Left=true, Right=true}}
             if PI.step_toward(map, open, goals) and waited < PI.WAIT_FRAMES then
                 waited = waited + 1
