@@ -1,0 +1,153 @@
+{
+ "attempt_id": "requal-silver-battle-errand-e1",
+ "errors": [],
+ "fixtures": [
+  {
+   "artifacts": {
+    "boot:game_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1f-pc\\.cache\\gen2-fixtures\\requal-silver-battle-errand-e1\\silver_battle_errand\\qualify\\boot-2add789a5f8fbcd0\\silver_battle_errand.boot.witness.json",
+     "sha256": "3aefae5486d31db4c4d160d27f1b6a4652becae1c642c622c6b3a17f1b73ba26",
+     "size": 1954
+    },
+    "fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1f-pc\\tests\\fixtures\\gen2\\silver_battle_errand.SaveRAM",
+     "sha256": "93a821df8bdb1e916835a994c7d5fc7960e80bea8f23a8265762efbfc4ba1307",
+     "size": 32790
+    },
+    "played_receipt": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1f-pc\\.cache\\gen2-fixtures\\errand-silver-a1\\silver_battle_errand\\saveram\\silver_battle_errand.played.json",
+     "sha256": "1fdb0cf0d54feddf5c537536b36991248d84cbb70455ac3e6ad55a5549ff02c0",
+     "size": 1306
+    },
+    "profile": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1f-pc\\data\\games\\gen2_silver\\profile.json",
+     "sha256": "c828bcdbaac174ae1199c9ca329e548685a764a67b6778d6fd7e45c6bea93558",
+     "size": 74830
+    },
+    "resave:fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1f-pc\\.cache\\gen2-fixtures\\requal-silver-battle-errand-e1\\silver_battle_errand\\qualify\\resave-4d02b54e9f5b180c\\silver_battle_errand.resaved.SaveRAM",
+     "sha256": "ed3d708e9fa6c1602aeebb58e44d23f1e397e88c765e5884e803dee85ce430ff",
+     "size": 32790
+    },
+    "resave:reload_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1f-pc\\.cache\\gen2-fixtures\\requal-silver-battle-errand-e1\\silver_battle_errand\\qualify\\reload-4d02b54e9f5b180c\\silver_battle_errand.reload.witness.json",
+     "sha256": "2d5807ea0241b53682b328bd620da720293c4466f7d1a44fc0b326ad063b6cd2",
+     "size": 1956
+    },
+    "resave:save_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1f-pc\\.cache\\gen2-fixtures\\requal-silver-battle-errand-e1\\silver_battle_errand\\qualify\\resave-4d02b54e9f5b180c\\silver_battle_errand.resave.witness.json",
+     "sha256": "b5746a42bc756c883da54cabc46d6db864ca9eaacde868b0f5bde90cc0acb03c",
+     "size": 2078
+    },
+    "rom": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1f-pc\\.cache\\gen2-build\\pokegold\\pokesilver.gbc",
+     "sha256": "72b190859a59623cbef6c49d601f8de52c1d2331b4f08a8d2acc17274fc19a8c",
+     "size": 2097152
+    },
+    "route_facts": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1f-pc\\.cache\\gen2-fixtures\\requal-silver-battle-errand-e1\\silver_battle_errand\\qualify\\silver_route_facts.json",
+     "sha256": "6b3862b8f032f2a65a87715dcf11e9db565e0840078397e0a580608b402bf98d",
+     "size": 22385
+    }
+   },
+   "name": "silver_battle_errand",
+   "passed": true,
+   "problems": [],
+   "provenance": {
+    "rom_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+    "route_facts_sha256": "69dd227b077a929f7087feb6771988537dad6905f6ea13a5388720cf3e65a090",
+    "scope": "candidate fixture",
+    "title": "silver"
+   },
+   "stages": [
+    {
+     "evidence": {
+      "ball_origin": "O-10 harness injection",
+      "natural_ball_acquisition": "false",
+      "oracle": "independent Gen2 PYDEC",
+      "player_id": "51084"
+     },
+     "fingerprint": "38f77d6f096249d0e271cf1f969acc4033e574f640274d72400d089f015ceadb",
+     "notes": [
+      "Static bytes do not prove played origin, RTC or GAME qualification."
+     ],
+     "problems": [],
+     "stage": "qualify",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "cartram_sha256": "beb10e678f1bac71c9693dcddc07a324403ee1811d62289790683b9bc3f88975",
+      "location": "[24, 3]",
+      "observer": "independent_GAME CONTINUE",
+      "position": "[53, 12]"
+     },
+     "fingerprint": "2add789a5f8fbcd0c966fcea8cdc671426a2ed13e04afd5ffccf4c23db99e888",
+     "notes": [],
+     "outputs": {
+      "boot:game_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1f-pc\\.cache\\gen2-fixtures\\requal-silver-battle-errand-e1\\silver_battle_errand\\qualify\\boot-2add789a5f8fbcd0\\silver_battle_errand.boot.witness.json",
+       "sha256": "3aefae5486d31db4c4d160d27f1b6a4652becae1c642c622c6b3a17f1b73ba26",
+       "size": 1954
+      }
+     },
+     "problems": [],
+     "stage": "boot",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "observer": "independent_GAME re-save + reload",
+      "resave_cartram_sha256": "d2352162b8b4b9f11861f29f7276f6cf749bedc2bc1897a78ed4c19fe32a3933"
+     },
+     "fingerprint": "4d02b54e9f5b180c7f681893a2dffaad3c9f91aeebf4f6e22c3889c1bd3d7dd9",
+     "notes": [],
+     "outputs": {
+      "resave:fixture": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1f-pc\\.cache\\gen2-fixtures\\requal-silver-battle-errand-e1\\silver_battle_errand\\qualify\\resave-4d02b54e9f5b180c\\silver_battle_errand.resaved.SaveRAM",
+       "sha256": "ed3d708e9fa6c1602aeebb58e44d23f1e397e88c765e5884e803dee85ce430ff",
+       "size": 32790
+      },
+      "resave:reload_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1f-pc\\.cache\\gen2-fixtures\\requal-silver-battle-errand-e1\\silver_battle_errand\\qualify\\reload-4d02b54e9f5b180c\\silver_battle_errand.reload.witness.json",
+       "sha256": "2d5807ea0241b53682b328bd620da720293c4466f7d1a44fc0b326ad063b6cd2",
+       "size": 1956
+      },
+      "resave:save_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1f-pc\\.cache\\gen2-fixtures\\requal-silver-battle-errand-e1\\silver_battle_errand\\qualify\\resave-4d02b54e9f5b180c\\silver_battle_errand.resave.witness.json",
+       "sha256": "b5746a42bc756c883da54cabc46d6db864ca9eaacde868b0f5bde90cc0acb03c",
+       "size": 2078
+      }
+     },
+     "problems": [],
+     "stage": "resave",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "oracle": "independent re-save PYDEC + GAME raw-party witness"
+     },
+     "fingerprint": "54cd122fe7c5e4ded8fdb813a9e4ede3c68de050c9c0e36b571cdabd29b1f44a",
+     "notes": [],
+     "problems": [],
+     "stage": "post_oracle",
+     "status": "PASS"
+    }
+   ]
+  }
+ ],
+ "open_obligations": [
+  "coordinator GAME/RTC/played-origin review",
+  "recorded source/physical gate sign-off"
+ ],
+ "passed": true,
+ "physical_qualification": false,
+ "required_stages": [
+  "qualify",
+  "boot",
+  "resave",
+  "post_oracle"
+ ],
+ "schema": "fixture-qualification-v1",
+ "scope": "full"
+}

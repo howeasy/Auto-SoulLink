@@ -151,6 +151,16 @@
       }}}]
     },
     {
+      "id": "new-gates.qualification.silver_battle_errand",
+      "stage": "physical-live",
+      "description": "Silver battle fixture after the Mr. Pokemon errand (G<->S trade seed partner)",
+      "axes": {"kind": "qualification", "fixture": "silver_battle_errand", "requirement_ids": ["F-6"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_battle_errand.qualification.json",
+        "sha256": "ea39ec1b1ee970caaf4839dea307fec227aead2670f42a7f283dea56c8ebe8ba"
+      }}}]
+    },
+    {
       "id": "new-gates.qualification.crystal_battle_ot2_errand",
       "stage": "physical-live",
       "description": "Crystal OT2 battle fixture after the Mr. Pokemon errand (C<->C trade seed partner)",
