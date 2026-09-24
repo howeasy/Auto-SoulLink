@@ -405,6 +405,18 @@
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_pydec_result.txt",
                       "sha256": "e22ef2e50c0b8b998d7b1d29f76e4f843f2dbb1b1da3c01eb80fe4275e8337a0"}
           }
+        },
+        {
+          "scenario": "gen2_trade_refuse_item",
+          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_refuse_item --lane gs_refuse_item --keep-data",
+          "receipts": {
+            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_gs_a_result.txt",
+                  "sha256": "26a0eb4966b78f36b21bf6671562ddb98d1d6e7c51b5a7ff29ba7adcd89ef87c"},
+            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_gs_b_result.txt",
+                  "sha256": "6268a7f8e148710fab6017e32fc0b97fa3709bf9c350db648977d545aa449f64"},
+            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_gs_pydec_result.txt",
+                      "sha256": "ca89a310b8191647eff9ffbc64b11105e80188dff36304b494423115fd8dad42"}
+          }
         }
       ]
     },

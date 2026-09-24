@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=A61B:C4A6:A1 b=EAAE:C78C:A3 area=route_29 titles=gold/silver status=unchanged scenario=gen2_trade_refuse_item admission_scope=HARNESS_ONLY_OVERLAY
