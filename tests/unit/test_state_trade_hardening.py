@@ -1,6 +1,8 @@
 """TRADE-HARDEN-2: the server trade state machine fixes from review e9d5e136
 (docs/gen2/reviews/REVIEW_TRADE_SERVER_2026-09-24.md). One section per review item."""
 
+import pytest
+
 from server.adapters.gen1_rby import Gen1Adapter
 from server.state import SoulLinkState
 from tests.unit.test_state_trade_uncertain import _gen1_applying, _gen1_confirming, _mon, _tick
@@ -118,3 +120,56 @@ def test_an_unrelated_faint_is_not_held(tmp_path):
     state, _entry, _token = _gen1_applying(tmp_path)
     state.handle_event("a", {"event": "faint", "key": "ABCD:1234:99"})       # A's own OT: not the trade's
     assert not state.pending_trade.get("held_events")
+
+
+# ── MAJOR-3: an admin resolves a conflict or a stuck uncertain trade ─────────────────────────────
+
+def _conflicted(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    state.handle_event("b", {"event": "trade_done", "token": token, "new_key": "1234:5678:15", "new_species": 0})
+    assert state.trade_problem()["phase"] == "conflict"
+    return state, entry, token
+
+
+def test_admin_rollback_clears_the_conflict_leaves_the_link_and_journals_it(tmp_path):
+    state, entry, token = _conflicted(tmp_path)
+    seen = []
+    state.on_trade_outcome = seen.append
+    assert state.resolve_trade("t999", "rollback")[0] is False, "the token guards it"
+    assert state.resolve_trade(token, "bogus")[0] is False
+    assert state.resolve_trade(token, "rollback") == (True, "")
+    assert state.pending_trade is None and state.trade_problem() is None
+    assert (entry.a.key, entry.b.key) == (B_GETS, A_GETS)                     # untouched: A:ABCD, B:1234
+    assert [(r["outcome"], r["problem"]) for r in seen] == [("rolled_back", "resolved by admin: rollback")]
+    assert _reload(tmp_path).pending_trade is None
+    state._handle_trade_query("a")
+    assert state.queued_commands["a"][-1] == {"cmd": "trade_mask", "mask": 1 << 2}, "trading works again"
+
+
+def test_admin_commit_swaps_with_the_reported_keys_and_replays_held_events(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    state.handle_event("a", {"event": "faint", "key": A_GETS})
+    for _ in range(state.TRADE_WATCHDOG_EVENTS + 1):
+        state.handle_event("a", {"event": "noop"})
+    assert state.trade_problem()["phase"] == "uncertain"                     # B never came back
+    assert state.resolve_trade(token, "commit") == (True, "")
+    assert state.pending_trade is None
+    assert (entry.a.key, entry.b.key) == (A_GETS, B_GETS)                     # B's side defaults to unevolved
+    assert entry.status.value != "alive", "A's held faint replayed after the swap"
+    assert state.trade_last["outcome"] == "committed" and "admin" in state.trade_last["problem"]
+
+
+@pytest.mark.asyncio
+async def test_the_resolve_endpoint_drives_the_state(tmp_path):
+    from unittest.mock import AsyncMock
+    from server.server import SLinkServer
+    srv = SLinkServer(data_dir=str(tmp_path))
+    srv.state, _entry, token = _conflicted(tmp_path)
+    bad = await srv.handle_debug_resolve_trade(AsyncMock(json=AsyncMock(return_value={"token": "t0",
+                                                                                       "action": "commit"})))
+    assert bad.status == 400
+    ok = await srv.handle_debug_resolve_trade(AsyncMock(json=AsyncMock(return_value={"token": token,
+                                                                                      "action": "rollback"})))
+    assert ok.status == 200 and srv.state.trade_problem() is None

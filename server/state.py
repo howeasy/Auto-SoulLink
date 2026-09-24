@@ -1043,6 +1043,27 @@ class SoulLinkState:
         return {"phase": pt["phase"], "token": pt["token"], "a_key": pt["a_key"], "b_key": pt["b_key"],
                 "verdict": dict(pt["verdict"]), "problem": pt.get("problem", "")}
 
+    def resolve_trade(self, token: str, action: str) -> tuple[bool, str]:
+        """MAJOR-3 (review e9d5e136): an admin settles a conflicted or stuck trade by hand, once the
+        two parties are checked. `commit` swaps the link (each side's reported new key, else the
+        other's old key); `rollback` leaves it. Either way the slot clears, held events replay and
+        the outcome is journaled with problem "resolved by admin: <action>"."""
+        pt = self.pending_trade
+        if not pt or str(token) != pt.get("token") or pt.get("phase") not in ("applying", "uncertain", "conflict"):
+            return False, "no applied trade with that token"
+        if action not in ("commit", "rollback"):
+            return False, "action must be commit or rollback"
+        pt["problem"] = f"resolved by admin: {action}"
+        log.warning(f"trade {pt['token']} {pt['problem']} (verdict {pt.get('verdict')})")
+        if action == "commit":
+            self._commit_trade(pt)
+        else:
+            self._record_trade(pt, "rolled_back")
+            self.pending_trade = None
+            self._replay_trade_events(pt)
+            self._save()
+        return True, ""
+
     def _commit_trade(self, pt: dict):
         """Apply the swap atomically, once both sides are known to have traded; pt["new"] holds
         each side's post-trade (key, species), including any trade-evolution."""

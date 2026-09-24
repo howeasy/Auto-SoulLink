@@ -4250,6 +4250,19 @@ class SLinkServer:
             "message": f"Unlinked {a_name} <-> {b_name} on {self.adapter.area_display_name(area_id)}. Area reset.",
         })
 
+    async def handle_debug_resolve_trade(self, request):
+        """POST /api/debug/resolve_trade {"token": "t7", "action": "commit"|"rollback"} — settle a
+        conflicted or stuck native trade by hand (the board's trade banner names this)."""
+        try:
+            body = await request.json()
+        except Exception:
+            return aiohttp_web.json_response({"ok": False, "error": "invalid JSON"}, status=400)
+        ok, error = self.state.resolve_trade(body.get("token", ""), body.get("action", ""))
+        if not ok:
+            return aiohttp_web.json_response({"ok": False, "error": error}, status=400)
+        self._notify_sse()
+        return aiohttp_web.json_response({"ok": True})
+
     async def handle_debug_revive(self, request):
         """POST /api/debug/revive — revive a dead/memorial link back to alive.
 
@@ -4942,6 +4955,7 @@ def build_app(srv):
     app.router.add_post("/api/debug/clear_pending",    srv.handle_debug_clear_pending)
     app.router.add_post("/api/debug/unlink",            srv.handle_debug_unlink)
     app.router.add_post("/api/debug/revive",            srv.handle_debug_revive)
+    app.router.add_post("/api/debug/resolve_trade",     srv.handle_debug_resolve_trade)
     app.router.add_get("/api/debug/backups",            srv.handle_debug_list_backups)
     app.router.add_post("/api/debug/rollback",          srv.handle_debug_rollback)
     # RR Damage Calculator routes
