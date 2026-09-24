@@ -177,7 +177,7 @@
       "axes": {"kind": "panel_gate", "title": "crystal", "requirement_ids": ["N-1", "C-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.panel_gate.json",
-        "sha256": "3a8a6da3e212fd1c080e11855433e47ffc4f63f9018d4b7d093b959abf34c3bb"
+        "sha256": "37e97c113626dfdc3149bb746a8c7d7abae57fb48e1c8af53a23c8130a220b19"
       }}}]
     },
     {
@@ -187,7 +187,7 @@
       "axes": {"kind": "panel_gate", "title": "gold", "requirement_ids": ["N-1", "C-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.panel_gate.json",
-        "sha256": "bb855110071b666bceda8ca6d42250922666d907ff2449bac593bbbcc44cafa3"
+        "sha256": "4f1a25f71169df47c6c9b1eb98ba9270612598f5b6cd06c6a7da39ac8408d0d1"
       }}}]
     },
     {
@@ -197,7 +197,7 @@
       "axes": {"kind": "panel_gate", "title": "silver", "requirement_ids": ["N-1", "C-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.panel_gate.json",
-        "sha256": "5bc74b1b1bf7fdea01d073ceb7e155ee68d5677dba7a9c158ed8ab28ebb57ae4"
+        "sha256": "67a04a6694776c3aa616ab7b21af3808f3f2a5a730c43bba9490d64ed7194786"
       }}}]
     },
     {
@@ -207,7 +207,7 @@
       "axes": {"kind": "sfx_gate", "title": "crystal", "requirement_ids": ["N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.sfx_gate.json",
-        "sha256": "b83919a4b12b53e1c4558f482d5ff45132a5f8f4828fcdbc30ea103cabf53ba5"
+        "sha256": "84d152a475916cf20a128278e8aa1932b8111e1d6a41bb414e655e4394eaff6b"
       }}}]
     },
     {
@@ -217,7 +217,7 @@
       "axes": {"kind": "sfx_gate", "title": "gold", "requirement_ids": ["N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.sfx_gate.json",
-        "sha256": "e698feae49dc48efab702a74a6444ecc2ae1913dec403d212a9e562f93014ba0"
+        "sha256": "a638115c53ae8d86b671aa3261d2b77979447f3ede70036498f9006c39521177"
       }}}]
     },
     {
@@ -227,7 +227,7 @@
       "axes": {"kind": "sfx_gate", "title": "silver", "requirement_ids": ["N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.sfx_gate.json",
-        "sha256": "0ba19f08ae0cad5b98f204d5308ac48b8e2f6c482434763194d7c7d835232705"
+        "sha256": "51cf217f9b4df25cd5a4bd009f11bdead94b9d6e7a38dbbbbd6a68fc9d9c7ae7"
       }}}]
     }
   ]
