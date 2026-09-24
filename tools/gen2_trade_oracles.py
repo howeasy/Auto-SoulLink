@@ -62,7 +62,12 @@ ROOT = Path(__file__).resolve().parents[1]
 CART = 0x8000
 CASES = frozenset(("gen2_trade_new", "gen2_trade_decline_new", "gen2_trade_timeout",
                    "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item",
-                   "gen2_trade_evolve"))
+                   "gen2_trade_evolve", "gen2_trade_refuse_contest", "gen2_trade_refuse_unsaved"))
+# MODEL-only refusal rows (TRADE-ASM 9805ac1c refusal-site contract): no driver yet, so they are NOT in
+# tools/gen2_trade_lane.py SCENARIOS and validate_manifest refuses them until a lane admits them.
+#   contest: the responder's SlinkTradeCheckOwnSlot.refuseParty with wStatusFlags2 bit 2
+#            (STATUSFLAGS2_BUG_CONTEST_TIMER_F) -> SlinkTradeExit; the PROMPT lease is never answered.
+#   unsaved: SlinkTradeResponderSave ran, then the decline path (PublishDone A=1 -> Exit, DONE result 1).
 COMMITTED = frozenset(("gen2_trade_new", "gen2_trade_evolve"))
 # O-31 (docs/gen2/REVIEW_RECORD.md): the ONLY disclosed harness writes, proposer side a only.
 PLANTS = {"gen2_trade_refuse_item": "d3_mail_item", "gen2_trade_evolve": "trade_evolve_species"}
@@ -415,7 +420,8 @@ def check_trade_witness(results, *, expected_case=None, overlay_provenance=None)
             _need(not _markers(text, "TRADE_OFFER"), "unoffered visit contains fabricated OFFER")
             upper = _frame(final)
             if state == "none":
-                _need(all(not _markers(text, tag) for tag in ("TRADE_NATIVE_CALL", "TRADE_CONTROL", "TRADE_APPLY_PICKUP", "TRADE_DONE")),
+                _need(all(not _markers(text, tag) for tag in ("TRADE_NATIVE_CALL", "TRADE_CONTROL", "TRADE_APPLY_PICKUP",
+                                                                "TRADE_DONE", "TRADE_FORCED_SAVE")),
                       "inactive peer entered a native trade/control path")
         ready, go = _one(text, "TRADE_READY"), _one(text, "TRADE_GO")
         _need(_frame(baseline) <= _frame(ready) <= _frame(go) <= upper
@@ -609,7 +615,8 @@ def _apply_frames(root):
 
 def _negative_controls(results, case, receipts, offers, decoded, invalid_items, root=ROOT):
     kind = {"gen2_trade_decline_new": "decline", "gen2_trade_timeout": "timeout",
-            "gen2_trade_reset_wait": "reset_wait", "gen2_trade_refuse_item": "d3"}[case]
+            "gen2_trade_reset_wait": "reset_wait", "gen2_trade_refuse_item": "d3",
+            "gen2_trade_refuse_contest": "contest", "gen2_trade_refuse_unsaved": "unsaved"}[case]
     observed = 0
     for side in SIDES:
         controls = _markers(results[side], "TRADE_CONTROL")
@@ -621,7 +628,19 @@ def _negative_controls(results, case, receipts, offers, decoded, invalid_items, 
             _need(_frame(offers[side]) <= _frame(before) <= _frame(after)
                   <= _frame(_one(results[side], "TRADE_FINAL")), "control outside offered visit")
             registers = _object(before.get("registers"), "control registers")
-            if kind == "decline":
+            if kind == "unsaved":   # the save refusal is what separates it from an offer-NO decline
+                save = _object(control.get("save"), "responder save")
+                _site(save.get("site"), symbols, "SlinkTradeResponderSave")
+                _need(_frame(offers[side]) <= _frame(save) < _frame(before), "save refusal does not precede its decline")
+            if kind == "contest":
+                _site(before.get("site"), symbols, "SlinkTradeCheckOwnSlot.refuseParty")
+                _site(after.get("site"), symbols, "SlinkTradeExit")
+                flags = _object(before.get("wram"), "contest WRAM proof")
+                _need(receipt["role"] == 1 and _integer(flags.get("wStatusFlags2"), 0, 255, "wStatusFlags2") & 4,
+                      "contest refusal lacks the native Bug-Catching Contest flag")
+                _control_lease(before, receipt, slot, {3})
+                _control_lease(after, receipt, slot, {3})
+            elif kind in ("decline", "unsaved"):
                 _site(before.get("site"), symbols, "SlinkTradePublishDone")
                 _need(_register(registers, "A") == 1 and receipt["role"] == 1, "decline lacks native No result")
                 _control_lease(before, receipt, slot, {3})
@@ -798,8 +817,9 @@ def trade_oracle(results, *, data_dir, baseline_saves, transaction_evidence,
         _need(old_marker.get("party") == party and old_marker.get("dex") == _dex(old, layout),
               "raw baseline party/dex differs from independently decoded native save")
         state = receipt.get("visit_state", "accepted")
+        pre = _pre_trade(text, receipt, old, layout)
         if state == "none":
-            _need(normalized_gameplay_cartram(old, layout) == normalized_gameplay_cartram(final, layout),
+            _need(pre is old and normalized_gameplay_cartram(old, layout) == normalized_gameplay_cartram(final, layout),
                   "inactive peer changed saved gameplay bytes")
             baseline[side] = old
             decoded[side] = {"rom": rom, "symbols": symbols, "old_party": party, "saved": final, "final": final}
@@ -821,7 +841,7 @@ def trade_oracle(results, *, data_dir, baseline_saves, transaction_evidence,
         blob = _hex(offer["blob_hex"], 70, "offer")
         mon = codec.decode_party_blob(blob, layout, species_marker=offer["species_marker"])
         mon["key"] = codec.key(mon)
-        before_mons[side], baseline[side], offers[side] = mon, old, offer
+        before_mons[side], baseline[side], offers[side] = mon, pre, offer
         calls = _markers(text, "TRADE_NATIVE_CALL")
         calls = [event for event in calls if _frame(event) >= _frame(old_marker)]
         for event in calls:
@@ -850,7 +870,7 @@ def trade_oracle(results, *, data_dir, baseline_saves, transaction_evidence,
                   "final save differs from immediate native trade image")
         else:
             _need(not calls and not _markers(text, "TRADE_APPLY_PICKUP"), "negative case entered native commit path")
-            _need(normalized_gameplay_cartram(old, layout) == normalized_gameplay_cartram(final, layout),
+            _need(normalized_gameplay_cartram(pre, layout) == normalized_gameplay_cartram(final, layout),
                   "negative case changed saved gameplay bytes")
             saved = final
         decoded[side] = {"rom": rom, "symbols": symbols, "old_party": party, "saved": saved, "final": final}
@@ -946,6 +966,60 @@ def trade_oracle(results, *, data_dir, baseline_saves, transaction_evidence,
                         "species_id": after_mons[side]["species_id"], "stack": coverage[side]} for side in SIDES}, **server}
     if on_verified is not None:
         on_verified(facts)
+
+
+# pokecrystal/pokegold engine/menus/save.asm SaveGameData rewrites the whole checksummed game data; between
+# two saves at the same spot only the play-time clock (ram/wram.asm wGameTime*) and the checksums move.
+CLOCK = (("wGameTimeHours", 2), ("wGameTimeMinutes", 1), ("wGameTimeSeconds", 1), ("wGameTimeFrames", 1))
+
+
+def _with_clock(raw, source, layout):
+    """Comparison only: raw with source's play-time bytes in BOTH copies and both checksums recomputed."""
+    out = bytearray(raw)
+    for name, size in CLOCK:
+        address = layout.addresses[name]
+        regions = [region for region in layout.regions
+                   if layout.addresses[REGIONS[region.name]] <= address
+                   and address + size <= layout.addresses[REGIONS[region.name]] + region.length]
+        _need(len(regions) == 1, "ambiguous play-time save region")
+        offset = address - layout.addresses[REGIONS[regions[0].name]]
+        for start in (regions[0].primary + offset, regions[0].backup + offset):
+            out[start:start + size] = source[start:start + size]
+    for copy, offset in layout.checksum_offsets.items():
+        out[offset:offset + 2] = codec.sav_checksum(bytes(out[:CART]), layout, copy).to_bytes(2, "little")
+    return bytes(out)
+
+
+def _pre_trade(text, receipt, old, layout):
+    """9805ac1c forced pre-trade native save (coordinator ruling): the proposer always saves before its
+    lease opens; a responder saves only after its offer YES (always before APPLY). That image, not the
+    pre-receptionist baseline, is the byte-exact "before" of every later comparison. Baseline -> forced
+    may differ only in the play-time clock and the checksums. Returns the before image."""
+    markers = _markers(text, "TRADE_FORCED_SAVE")
+    role, pickup = receipt["role"], _markers(text, "TRADE_APPLY_PICKUP")
+    _need(len(markers) <= 1 and (markers or role == 1 and not pickup),
+          "missing/duplicate forced pre-trade save (proposer always; responder before APPLY)")
+    if not markers:
+        return old
+    marker = markers[0]
+    raw = _image(marker, "forced pre-trade save")
+    baseline, final = _one(text, "TRADE_BASELINE"), _one(text, "TRADE_FINAL")
+    offers = _markers(text, "TRADE_OFFER")
+    first = _frame(offers[0]) if offers else None
+    if role == 0:
+        upper = [first] if first is not None else []
+        upper += [_frame(row["before"]) for row in _markers(text, "TRADE_CONTROL") if isinstance(row.get("before"), dict)]
+        window = all(_frame(marker) <= frame for frame in upper)
+    else:
+        window = first is not None and first <= _frame(marker) and all(_frame(marker) <= _frame(row) for row in pickup)
+    _need(_frame(_one(text, "TRADE_GO")) <= _frame(marker) < _frame(final) and window,
+          "forced pre-trade save outside its native window")
+    _need(len({Path(row["snapshot_path"]).resolve() for row in (baseline, marker, final)}) == 3,
+          "forced pre-trade save reuses another image")
+    _need(codec.strict_checksum_witness(raw[:CART], layout)["valid"], "forced pre-trade save checksum/copy witness failed")
+    _need(normalized_gameplay_cartram(_with_clock(raw, old, layout), layout) == normalized_gameplay_cartram(old, layout),
+          "forced pre-trade save rewrote more than the play-time clock and checksums")
+    return raw
 
 
 def _reset_comparison(raw, layout):
@@ -1087,6 +1161,7 @@ def _reset_commit_oracle(results, *, data_dir, baseline_saves, transaction_evide
         old_party = _party(baseline, layout)
         marker = _one(text, "TRADE_BASELINE")
         _need(marker.get("party") == old_party and marker.get("dex") == _dex(baseline, layout), "reset baseline raw party/dex mismatch")
+        baseline = _pre_trade(text, receipt, baseline, layout)   # the forced pre-trade save is the "before"
         state = receipt.get("visit_state", "accepted")
         offer = None
         if state != "none":

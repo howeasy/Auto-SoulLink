@@ -76,6 +76,14 @@ def party_save(raw, layout, party, dex_species=()):
     return checksum(raw, layout)
 
 
+def forced_save(raw, layout, seconds=7):
+    """MODEL of the 9805ac1c forced pre-trade native save at the same spot: only the clock moves."""
+    raw = bytearray(raw)
+    value = oracle._saved(bytes(raw), layout, "wGameTimeSeconds", 1, "primary")[0]
+    put(raw, layout, "wGameTimeSeconds", bytes([(value + seconds) % 60]))
+    return checksum(raw, layout)
+
+
 def image(path, raw, frame):
     path.write_bytes(raw)
     return {"frame": frame, "snapshot_path": str(path), "snapshot_sha256": digest(raw),
@@ -183,18 +191,23 @@ def make_case(tmp_path, sources, variant="cc", scenario="gen2_trade_new", mail_s
                          ("TRADE_GO", {"frame": 108, "run_id": manifest["run_id"]}), ("TRADE_OFFER", offers[side])]
     for side, partner in (("a", "b"), ("b", "a")):
         layout, symbols = sources[titles[side]]["layout"], syms[side]
+        saved_before = old[side]
+        if side == "a" or committed:   # the proposer always saves; a responder only after its YES
+            saved_before = forced_save(old[side], layout)
+            markers[side].append(("TRADE_FORCED_SAVE", image(tmp_path / f"{side}.forced.SaveRAM", saved_before,
+                                                             109 if side == "a" else 115)))
         if committed:
             offered = offers[partner]
             p = projection.project_received_mon(bytes.fromhex(offered["blob_hex"]),
                                                 species_marker=offered_species[partner], title=titles[side])
             projected[side] = p
-            party = oracle._party(old[side], layout)[1:] + [{"species_marker": p["species_marker"], "blob_hex": p["blob_hex"]}]
+            party = oracle._party(saved_before, layout)[1:] + [{"species_marker": p["species_marker"], "blob_hex": p["blob_hex"]}]
             # MODEL construction uses the separate source-derived saved-delta model;
             # corruption controls alter its bytes independently and re-checksum them.
             sender = saved_delta.encode_partner_name(titles[side], f"MODEL-{partner.upper()}",
                         bytes.fromhex(before[partner]["ot_raw_hex"]), root=ROOT)
-            dex = oracle._expected_dex(oracle._dex(old[side], layout), p["expected_dex_species"])
-            final = saved_delta._expected(old[side], layout, party, dex, offers[partner], offers[side], sender)
+            dex = oracle._expected_dex(oracle._dex(saved_before, layout), p["expected_dex_species"])
+            final = saved_delta._expected(saved_before, layout, party, dex, offers[partner], offers[side], sender)
             generation = (generations[side] + 1) % 256
             markers[side] += [("TRADE_APPLY_PICKUP", {"frame": 120,
                 "lease_hex": lease(5, tokens[side], generation, 0), "incoming_blob_hex": offered["blob_hex"],
@@ -208,7 +221,7 @@ def make_case(tmp_path, sources, variant="cc", scenario="gen2_trade_new", mail_s
             markers[side] += [("TRADE_DONE", {"frame": 170, "lease_hex": lease(7, tokens[side], generation, 0, True)}),
                              ("TRADE_NATIVE_SAVE", image(tmp_path / f"{side}.native.SaveRAM", final, 170))]
         else:
-            final = old[side]
+            final = saved_before
         final_marker = image(tmp_path / f"{side}.final.SaveRAM", final, 200)
         markers[side].append(("TRADE_FINAL", final_marker))
         if committed:   # refinement 7: cold-boot the flushed final, CONTINUE, read back (no save)
@@ -245,28 +258,36 @@ def make_case(tmp_path, sources, variant="cc", scenario="gen2_trade_new", mail_s
                                     for address in range(bottom.address, top.address + 1)]}))
     if not committed and scenario != "gen2_trade_reset_commit":
         kind = {"gen2_trade_decline_new": "decline", "gen2_trade_timeout": "timeout",
-                "gen2_trade_reset_wait": "reset_wait", "gen2_trade_refuse_item": "refuse_item"}[scenario]
-        active = "b" if kind == "decline" else "a"
+                "gen2_trade_reset_wait": "reset_wait", "gen2_trade_refuse_item": "refuse_item",
+                "gen2_trade_refuse_contest": "contest", "gen2_trade_refuse_unsaved": "unsaved"}[scenario]
+        active = "b" if kind in ("decline", "contest", "unsaved") else "a"
         symbols = syms[active]
         before_name, after_name = {"decline": ("SlinkTradePublishDone", "SlinkTradeExit"),
             "timeout": ("SlinkTradeWaitApply.wait", "SlinkTradeExit"),
-            "reset_wait": ("Reset", "StartTitleScreen"), "refuse_item": ("SlinkTradeItemAllowed", "SlinkTradeExit")}[kind]
-        command = {"decline": 3, "timeout": 2, "reset_wait": 2, "refuse_item": 1}[kind]
+            "reset_wait": ("Reset", "StartTitleScreen"), "refuse_item": ("SlinkTradeItemAllowed", "SlinkTradeExit"),
+            "contest": ("SlinkTradeCheckOwnSlot.refuseParty", "SlinkTradeExit"),
+            "unsaved": ("SlinkTradePublishDone", "SlinkTradeExit")}[kind]
+        command = {"decline": 3, "timeout": 2, "reset_wait": 2, "refuse_item": 1, "contest": 3, "unsaved": 3}[kind]
         old_lease = lease(command, tokens[active], generations[active], 0, True)
         new_lease = bytearray.fromhex(old_lease)
-        if kind == "decline":
+        if kind in ("decline", "unsaved"):
             new_lease[5], new_lease[8] = 7, 1
         if kind == "reset_wait":
             new_lease = bytearray(16)
         bound = oracle._apply_frames(ROOT)   # SLINK_TRADE_APPLY_FRAMES, 3600 since 67143736
         last = 115 + bound + 15 if kind == "timeout" else 150 if kind == "reset_wait" else 116
-        registers = {"A": 1} if kind == "decline" else {"B": bound >> 8, "C": bound & 255} if kind == "timeout" else {
+        registers = {"A": 1} if kind in ("decline", "unsaved") else {"B": bound >> 8, "C": bound & 255} if kind == "timeout" else {
             "A": before[active]["held_item"]} if kind == "refuse_item" else {}
         markers[active].append(("TRADE_CONTROL", {"kind": "d3" if kind == "refuse_item" else kind,   # driver's D3 name
             "before": {"frame": 115, "site": site(symbols, before_name), "registers": registers,
                        "slot": 0, "lease_hex": old_lease},
             "after": {"frame": last, "site": site(symbols, after_name),
                       "registers": {"B": 0, "C": 0} if kind == "timeout" else {}, "lease_hex": new_lease.hex()}}))
+        control = get({"markers": markers}, active, "TRADE_CONTROL")
+        if kind == "contest":
+            control["before"]["wram"] = {"wStatusFlags2": 0x04}   # STATUSFLAGS2_BUG_CONTEST_TIMER_F
+        if kind == "unsaved":
+            control["save"] = {"frame": 112, "site": site(symbols, "SlinkTradeResponderSave")}
         if kind == "timeout":
             for rows in markers.values():
                 next(row for name, row in rows if name == "TRADE_FINAL")["frame"] = last + 85
@@ -725,7 +746,8 @@ def reset_case(tmp_path, sources, outcome="committed", variant="cc", *, unentere
         reset = side == "a" or rolled and not unentered
         if rolled:
             final_marker = get(case, side, "TRADE_FINAL")
-            final_marker.update(image(Path(final_marker["snapshot_path"]), baseline, 200))
+            before_image = Path(get(case, side, "TRADE_FORCED_SAVE")["snapshot_path"]).read_bytes()
+            final_marker.update(image(Path(final_marker["snapshot_path"]), before_image, 200))
             forbidden = {"TRADE_NATIVE_CALL", "TRADE_PRE_REMOVE", "TRADE_DONE", "TRADE_NATIVE_SAVE", "TRADE_RELOAD"}
             case["markers"][side] = [(tag, row) for tag, row in case["markers"][side] if tag not in forbidden]
             for phase in get(case, side, "TRADE_STACK")["phases"][1:]:
@@ -968,4 +990,101 @@ def test_timeout_control_uses_the_overlay_apply_bound(tmp_path, sources):
     case = make_case(tmp_path, sources, scenario="gen2_trade_timeout")
     get(case, "a", "TRADE_CONTROL")["before"]["registers"] = {"B": 7, "C": 8}
     with pytest.raises(RuntimeError, match="exhausted native APPLY wait"):
+        invoke(case)
+
+
+@pytest.fixture
+def refusal_lane(monkeypatch):
+    """MODEL rows only: no driver yet, so the lane does not admit these cases outside this test."""
+    from tools import gen2_trade_lane
+    monkeypatch.setattr(gen2_trade_lane, "SCENARIOS",
+                        gen2_trade_lane.SCENARIOS | {"gen2_trade_refuse_contest", "gen2_trade_refuse_unsaved"})
+
+
+def test_refusal_rows_are_not_admitted_by_any_lane_yet(tmp_path, sources):
+    case = make_case(tmp_path, sources, scenario="gen2_trade_refuse_contest")
+    with pytest.raises(RuntimeError, match="unknown trade scenario"):
+        invoke(case)
+
+
+@pytest.mark.parametrize("scenario", ["gen2_trade_refuse_contest", "gen2_trade_refuse_unsaved"])
+def test_refusal_model_rows_leave_both_saves_unchanged(tmp_path, sources, refusal_lane, scenario):
+    facts = []
+    assert invoke(make_case(tmp_path, sources, scenario=scenario), facts.append) is None
+    assert facts[0]["status"] == "unchanged"
+
+
+REFUSAL_FAULTS = {
+    "contest_flag_clear": ("gen2_trade_refuse_contest",
+                           lambda c: get(c, "b", "TRADE_CONTROL")["before"].update(wram={"wStatusFlags2": 0}),
+                           "Bug-Catching Contest flag"),
+    "contest_flag_missing": ("gen2_trade_refuse_contest",
+                             lambda c: get(c, "b", "TRADE_CONTROL")["before"].pop("wram"), "contest WRAM"),
+    "unsaved_is_plain_decline": ("gen2_trade_refuse_unsaved",
+                                 lambda c: get(c, "b", "TRADE_CONTROL").pop("save"), "responder save"),
+    "unsaved_save_after_decline": ("gen2_trade_refuse_unsaved",
+                                   lambda c: get(c, "b", "TRADE_CONTROL")["save"].update(frame=115),
+                                   "precede its decline"),
+    "unsaved_never_declined": ("gen2_trade_refuse_unsaved",
+                               lambda c: get(c, "b", "TRADE_CONTROL")["before"]["registers"].update(A=0),
+                               "native No result"),
+}
+
+
+@pytest.mark.parametrize("fault", sorted(REFUSAL_FAULTS))
+def test_refusal_model_rows_require_their_native_proof(tmp_path, sources, refusal_lane, fault):
+    scenario, mutate, message = REFUSAL_FAULTS[fault]
+    case = make_case(tmp_path, sources, scenario=scenario)
+    mutate(case)
+    with pytest.raises(RuntimeError, match=message):
+        invoke(case)
+
+
+def _set_image(case, side, tag, raw):
+    marker = get(case, side, tag)
+    marker.update(image(Path(marker["snapshot_path"]), raw, marker["frame"]))
+
+
+def _drop(case, side, tag):
+    case["markers"][side] = [(name, row) for name, row in case["markers"][side] if name != tag]
+
+
+def _forced_rewrites_items(case, sources):
+    layout = sources[get(case, "a", "RECEIPT")["title"]]["layout"]
+    raw = bytearray(Path(get(case, "a", "TRADE_FORCED_SAVE")["snapshot_path"]).read_bytes())
+    put(raw, layout, "wNumItems", bytes([oracle._saved(bytes(raw), layout, "wNumItems", 1, "primary")[0] ^ 1]))
+    _set_image(case, "a", "TRADE_FORCED_SAVE", checksum(raw, layout))
+
+
+FORCED_FAULTS = {
+    # coordinator ruling: A's negative final is byte-exact against the forced save, not the old baseline
+    "a_final_is_the_pre_receptionist_baseline": ("gen2_trade_decline_new", lambda c, s: _set_image(
+        c, "a", "TRADE_FINAL", Path(get(c, "a", "TRADE_BASELINE")["snapshot_path"]).read_bytes()), "changed saved gameplay"),
+    "proposer_without_forced_save": ("gen2_trade_timeout", lambda c, s: _drop(c, "a", "TRADE_FORCED_SAVE"),
+                                     "forced pre-trade save"),
+    "forced_save_rewrites_more_than_the_clock": ("gen2_trade_reset_wait", _forced_rewrites_items, "rewrote more"),
+    "forced_save_after_the_offer": ("gen2_trade_decline_new",
+                                    lambda c, s: get(c, "a", "TRADE_FORCED_SAVE").update(frame=111), "native window"),
+    "responder_applied_without_its_save": ("gen2_trade_new", lambda c, s: _drop(c, "b", "TRADE_FORCED_SAVE"),
+                                           "forced pre-trade save"),
+    "responder_save_before_its_prompt": ("gen2_trade_new",
+                                         lambda c, s: get(c, "b", "TRADE_FORCED_SAVE").update(frame=109), "native window"),
+}
+
+
+@pytest.mark.parametrize("fault", sorted(FORCED_FAULTS))
+def test_forced_pre_trade_save_is_the_byte_exact_before_image(tmp_path, sources, fault):
+    scenario, mutate, message = FORCED_FAULTS[fault]
+    case = make_case(tmp_path, sources, scenario=scenario)
+    mutate(case, sources)
+    with pytest.raises(RuntimeError, match=message):
+        invoke(case)
+
+
+def test_inactive_peer_never_saves_for_a_trade(tmp_path, sources):
+    case = make_case(tmp_path, sources, scenario="gen2_trade_refuse_item")
+    early_d3(case)
+    forced = dict(get(case, "a", "TRADE_FORCED_SAVE"))
+    case["markers"]["b"].append(("TRADE_FORCED_SAVE", forced))
+    with pytest.raises(RuntimeError, match="inactive peer"):
         invoke(case)
