@@ -1930,32 +1930,44 @@ def test_clause_observed_refuses_mutations(clause_case, fault):
         oracles.clause_oracle(results, **kwargs)
 
 
-def _bench_kill(text):
+def _bench_kill(text, mode=1):
     """O-32: the rejected catch killed on receipt while its capture battle is still up (final sweep
-    gen2_type_clause, frame 5761: pc 0x0040 at the frame end, hROMBank 3, wBattleMode 1, why=battle_bench)."""
+    gen2_type_clause, frame 5761: pc 0x0040 at the frame end, hROMBank 3, wBattleMode 1, why=battle_bench),
+    with the harness's write-time battle snapshot (the lead, slot 0, is the active battler)."""
     row = oracles._last_tagged(text, "PARTY_HP_WRITE")
     row["checkpoint"].update(pc=0x0040, hrom_bank=3, sc=124)
-    row["checkpoint"]["state"].update(wBattleMode=1, wScriptFlags=4, wScriptMode=1, wScriptRunning=255, wStateFlags=64)
+    row["checkpoint"]["state"].update(wBattleMode=mode, wScriptFlags=4, wScriptMode=1, wScriptRunning=255, wStateFlags=64)
+    row["battle"] = {"mode": mode, "active_slot": 0}
     for permit in row["log"]:
         permit["why"] = "battle_bench"
     return _replace_tag_in_place(text, "PARTY_HP_WRITE", row), row
 
 
-def test_clause_rejection_bench_kill_in_the_capture_battle_passes(clause_case):
+@pytest.mark.parametrize("mode", [1, 2])      # WILD_BATTLE, TRAINER_BATTLE
+def test_clause_rejection_bench_kill_in_the_capture_battle_passes(clause_case, mode):
     results, kwargs = clause_case
-    results["b"], _ = _bench_kill(results["b"])
+    results["b"], _ = _bench_kill(results["b"], mode)
     facts = []
     oracles.clause_oracle(results, **kwargs, on_verified=facts.append)
     assert facts[0]["rejected"] == "b"
 
 
 @pytest.mark.parametrize("fault", ["mixed_why", "overworld_why", "active", "box_capture", "late_capture",
-                                   "not_in_battle", "link_battle", "pc", "serial", "site"])
+                                   "not_in_battle", "link_battle", "pc", "serial", "site", "active_battler",
+                                   "no_battle", "battle_error", "battle_mode_0", "battle_mode_3", "battle_mode_255"])
 def test_clause_rejection_bench_kill_refuses(clause_case, fault):
     results, kwargs = clause_case
-    text, row = _bench_kill(results["b"])
+    text, row = _bench_kill(results["b"], int(fault.rsplit("_", 1)[1]) if fault.startswith("battle_mode_") else 1)
     capture = oracles._last_tagged(text, "ENGINE_CAPTURE")
-    if fault == "mixed_why":
+    if fault.startswith("battle_mode_"):      # outside wild/trainer (reads.lua read_battle's enumeration)
+        pass
+    elif fault == "active_battler":           # the write-time snapshot names the target as the active battler
+        row["battle"]["active_slot"] = row["slot"]
+    elif fault == "no_battle":
+        del row["battle"]
+    elif fault == "battle_error":
+        row["battle"] = {"error": "battle mode outside source enumeration"}
+    elif fault == "mixed_why":
         row["log"][0]["why"] = "overworld"
     elif fault == "overworld_why":            # the checkpoint's permit with battle evidence
         for permit in row["log"]:

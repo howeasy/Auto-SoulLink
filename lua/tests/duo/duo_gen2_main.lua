@@ -396,6 +396,11 @@ if _faint_party_slot then W.faint_party_slot = function(self, slot, snapshot)
     for _, m in ipairs(party and party.mons or {}) do if m.slot == slot then row.key = wire.mon_key(m) end end
     local eok, evidence = pcall(checkpoint_evidence)
     row.checkpoint = eok and evidence or {error=tostring(evidence)}
+    -- The battle snapshot at write time (production's read_battle): the oracle proves a battle_bench
+    -- target is not the active battler from it (O-32).
+    local bok, battle, why = pcall(ctx.reads.read_battle)
+    row.battle = bok and battle and {mode=battle.mode, active_slot=battle.active_slot}
+        or {error=tostring(bok and why or battle)}
     row.before_party_hex = bus_hex(base, n)
     local ok, result = pcall(_faint_party_slot, self, slot, snapshot)
     row.after_party_hex = bus_hex(base, n)

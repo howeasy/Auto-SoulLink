@@ -567,12 +567,14 @@ RECEIPT_TITLE = {"crystal": "crystal", "gold": "gold", "silver": "gold"}
 
 
 def _faint_battle_bench(write, layout, captured):
-    """O-32 (0752a3ab): a bench death on receipt at a battle frame end. The frame evidence is what
-    gen2_write_safety.lua evaluate_frame accepts (the battle hold's WRAM bank, serial and wLinkMode
-    predicates; the primary's wBattleMode predicate REFUSING), the PC is the frame end the U2 receipt's
-    battle_bench run measured, and that receipt carries the battle_faint run it needs and this pack's
-    battle hold rows. `captured` is the ENGINE_CAPTURE of the target: a mon caught in this battle is
-    appended to the party and never sent out, so it is not the active battler."""
+    """O-32 (0752a3ab): a bench death on receipt at a battle frame end. The frame evidence follows
+    gen2_write_safety.lua evaluate_frame (the battle hold's WRAM bank, serial and wLinkMode predicates)
+    with wBattleMode WILD or TRAINER (reads.lua read_battle's enumeration). PC == the frame end the U2
+    receipt's battle_bench run measured (0x0040) is a documented HARNESS invariant, stricter than
+    evaluate_frame (which checks no PC): it can only false-negative. The receipt is cross-referenced
+    (battle_bench + battle_faint PASS/PHYSICAL, this pack's battle hold rows); its full qualification is
+    the release verifier's write-window lane. Not the active battler: the harness's write-time battle
+    snapshot (row.battle, read_battle), and `captured` binds the target to the mon this battle caught."""
     title = layout.title
     data = json.loads((REPO_ROOT / f"data/games/gen2_{title}/write_checkpoint.json").read_text())["titles"][title]
     owner = RECEIPT_TITLE[title]
@@ -590,10 +592,12 @@ def _faint_battle_bench(write, layout, captured):
     _faint_owner(point, data["battle_hold"])
     for predicate in data["battle_hold"]["state_predicates"]:
         _faint_need(_faint_predicate(point, predicate), f"battle_bench predicate {predicate['symbol']} refused")
-    mode = next(p for p in data["primary"]["state_predicates"] if p["symbol"] == "wBattleMode")
-    _faint_need(type(point["state"].get(mode["symbol"])) is int and not _faint_predicate(point, mode),
-                "battle_bench outside a battle")
-    # ponytail: the log has no wCurBattleMon; proof is "caught in this battle". Upgrade: harness logs the active slot.
+    wild_or_trainer = (layout.constants["WILD_BATTLE"], layout.constants["TRAINER_BATTLE"])
+    _faint_need(point["state"].get("wBattleMode") in wild_or_trainer, "battle_bench outside a wild/trainer battle")
+    battle = write.get("battle")
+    _faint_need(isinstance(battle, dict) and not battle.get("error") and battle.get("mode") in wild_or_trainer
+                and type(battle.get("active_slot")) is int and 0 <= battle["active_slot"] < layout.constants["PARTY_LENGTH"]
+                and battle["active_slot"] != write.get("slot"), "battle_bench write-time snapshot missing or names the active battler")
     _faint_need(isinstance(captured, dict) and captured.get("key") == write.get("key")
                 and captured.get("destination") == "party" and captured.get("slot") == write.get("slot")
                 and _frame(captured) <= _frame(write), "battle_bench target not proven off the active battler")
