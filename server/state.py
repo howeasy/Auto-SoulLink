@@ -3374,9 +3374,19 @@ class SoulLinkState:
             collision = f"live link in {hit.area_id}"
         else:
             refs = self._key_refs(new_key, player_id)
+            # KEY-SCOPE-4: this player's own tick can beat its key_change here.  When the latest
+            # party snapshot holds new_key exactly once and old_key nowhere, that party hit IS the
+            # changing mon; a real twin shows as a second copy, or old_key still in the party.
+            snap = [be.get("key") for be in self.partner_blobs[player_id]]
+            self_report = (snap.count(new_key) == 1 and old_key not in snap
+                           and old_key not in self.party_keys[player_id])
+            if self_report:
+                refs -= {"party_keys", "partner_blobs"}
             if refs:
                 collision = ", ".join(sorted(refs))
-            elif self.presentation_key_in_use and self.presentation_key_in_use(new_key, player_id):
+            elif self.presentation_key_in_use and (
+                    self.presentation_key_in_use(new_key, player_id, party=False) if self_report
+                    else self.presentation_key_in_use(new_key, player_id)):
                 collision = "presentation cache"
         if collision:
             log.error(f"[{player_id}] key_change REJECTED: {new_key[:8]} is load-bearing "

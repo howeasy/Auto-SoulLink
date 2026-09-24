@@ -273,3 +273,43 @@ def test_the_resolve_ambiguous_key_endpoint(tmp_path):
         AsyncMock(json=AsyncMock(return_value=body))))
     assert call(None).status == 400 and call({"player": "a", "key": "x"}).status == 400
     assert call({"player": "a", "key": A_GETS}).status == 200 and not srv.state.ambiguous_keys["a"]
+
+
+# ── KEY-SCOPE-4 (DUO-WAVE-D G<->S): the changing player's own tick may win the race ─────────────
+
+def _srv_two_links(tmp_path):
+    from server.server import SLinkServer
+    srv = SLinkServer(data_dir=str(tmp_path))
+    srv.state, links = _two_links(tmp_path)
+    srv.state.adapter = srv.adapter = Gen1Adapter(variant="red")
+    srv.state.presentation_key_in_use = srv._presentation_key_in_use
+    return srv, links
+
+
+def _snap(*keys):
+    blob = "00" * Gen1Adapter().party_blob_size()
+    return [{**_mon(k, 0x5F), "slot": i, "level": 20, "blob_hex": blob} for i, k in enumerate(keys)]
+
+
+def test_a_tick_reporting_the_new_key_before_the_key_change_is_the_same_mon(tmp_path):
+    srv, (l1, l2) = _srv_two_links(tmp_path)
+    srv._dispatch("b", {"event": "tick", "party": _snap(ONIX, B2)})     # the tick wins the race
+    cmds = srv._dispatch("b", {"event": "key_change", "old_key": B1, "new_key": ONIX,
+                               "new_species": 0x5F, "reason": "npc_trade"})
+    assert _named(cmds, "key_change_ack") and not _named(cmds, "key_change_rejected")
+    assert l1.status == LinkStatus.ALIVE and srv.state.entry_for("b", ONIX) is l1
+
+
+def test_a_tick_first_true_duplicate_in_the_party_still_rejects(tmp_path):
+    srv, (l1, l2) = _srv_two_links(tmp_path)
+    srv._dispatch("b", {"event": "tick", "party": _snap(ONIX, ONIX, B2)})   # B already had an Onix
+    cmds = srv._dispatch("b", {"event": "key_change", "old_key": B1, "new_key": ONIX, "reason": "npc_trade"})
+    assert _named(cmds, "key_change_rejected") and l1.cause == "identity_lost"
+
+
+def test_a_tick_first_change_onto_a_boxed_twin_still_rejects(tmp_path):
+    srv, (l1, l2) = _srv_two_links(tmp_path)
+    srv.pc_boxes["b"] = [{"box": 0, "slot": 0, "key": ONIX, "species_id": 0x5F}]
+    srv._dispatch("b", {"event": "tick", "party": _snap(ONIX, B2)})
+    cmds = srv._dispatch("b", {"event": "key_change", "old_key": B1, "new_key": ONIX, "reason": "npc_trade"})
+    assert _named(cmds, "key_change_rejected") and l1.cause == "identity_lost"

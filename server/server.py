@@ -4547,15 +4547,16 @@ class SLinkServer:
                         f"{rec['a_key']} <-> {rec['b_key']}: {rec['verdict']} {rec['problem']}".strip(),
                         key=rec["token"])
 
-    def _presentation_key_in_use(self, key: str, player_id: str | None = None) -> bool:
+    def _presentation_key_in_use(self, key: str, player_id: str | None = None, party: bool = True) -> bool:
         """Is `key` a live mon in the presentation caches?  The state's key_change collision
         preflight asks this (PLAN A1): a party mon or a mon in a non-memorial box of either
         player is load-bearing; the memorial box holds buried keys, which are reusable, and
         `_mon_cache` is never pruned, so neither counts. KEY-SCOPE: with a player, only that
-        player's caches count (the partner may hold an equal key)."""
+        player's caches count (the partner may hold an equal key). `party=False` skips the party
+        cache (the state already proved that party hit is the key-changing mon itself)."""
         mem_idx = self.adapter.memorial_box_index if self.adapter else -1
         for pid in ((player_id,) if player_id else ("a", "b")):
-            if key in self.party_details.get(pid, {}):
+            if party and key in self.party_details.get(pid, {}):
                 return True
             for bentry in self.pc_boxes.get(pid, []):
                 if bentry.get("key") == key and bentry.get("box") != mem_idx:
