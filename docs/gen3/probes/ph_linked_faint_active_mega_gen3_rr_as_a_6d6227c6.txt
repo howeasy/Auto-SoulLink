@@ -1,0 +1,22 @@
+G5-LANE-2 P+H live row: linked_faint_active_mega_gen3, RR as A (gen3_rr_new), cut 6d6227c6
+lane: E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2 (detached at 6d6227c636b3c067b8d795ceb1df2618db933801)
+ROM: patch/build/slink_RR.gba md5 6cf77ba4a63634a0fd452be6f206bfc3; fixtures rr_battle2.sav sha256 4145232b..., rr_battle2_b.sav 7fd07ae3...
+machine: shared (Gen 2 session + lane 1); LOAD line = snapshot taken just before launch
+
+--- run (verbatim) ---
+=== linked_faint_active_mega_gen3 --game gen3_rr_new  lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2 sha=6d6227c636b3c067b8d795ceb1df2618db933801 tracked_dirty_before=0
+LOAD 2026-09-24T09:39:11 cpu=99% emuhawk=3 python=16
+  emuhawk pid=28220 E:/Howard/Bizhawk\EmuHawk.exe --lua=lua/tests/gen2_w6_gate.lua --config=patch/build/gate_cfg_gen2_w6_gate_gold_overlay.ini patch/build/gen2_gold_overlay.gbc
+  emuhawk pid=30692 E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/duo_cfg_gen2-cc-changebox_a.ini --lua=patch/build/duo_gen2-cc-changebox_a.lua .cache/gen2-build/pokecrystal/pokecrystal.gbc
+  emuhawk pid=18284 E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/duo_cfg_gen2-cc-changebox_b.ini --lua=patch/build/duo_gen2-cc-changebox_b.lua .cache/gen2-build/pokecrystal/pokecrystal.gbc
+start_utc=2026-09-24T13:39:11Z
+$ python tools/e2e_duo.py --game gen3_rr_new --scenario linked_faint_active_mega_gen3 --lane w9_linked_faint_active_mega_gen3
+
+========== scenario: linked_faint_active_mega_gen3 ==========
+[duo] linked_faint_active_mega_gen3: SKIP (gen3_rr_new, allowed) — SIGNED LIMIT: owner ruling 20 (docs/gen3/G4_request_draft.md §6 item 20): no Mega Ring or stone holder is reachable by normal inputs early in RR, and the Perish path reads no mega state
+
+========== summary ==========
+  linked_faint_active_mega_gen3: SKIP (allowed: signed limit) — SIGNED LIMIT: owner ruling 20 (docs/gen3/G4_request_draft.md §6 item 20): no Mega Ring or stone holder is reachable by normal inputs early in RR, and the Perish path reads no mega state
+exit=0
+end_utc=2026-09-24T13:39:11Z
+tracked_dirty_after=0

@@ -1,0 +1,30 @@
+G5-LANE-2 P+H live row: linked_faint_active_whiteout_gen3, RR as A (gen3_rr_new), cut 6d6227c6
+lane: E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2 (detached at 6d6227c636b3c067b8d795ceb1df2618db933801)
+ROM: patch/build/slink_RR.gba md5 6cf77ba4a63634a0fd452be6f206bfc3; fixtures rr_battle2.sav sha256 4145232b..., rr_battle2_b.sav 7fd07ae3...
+machine: shared (Gen 2 session + lane 1); LOAD line = snapshot taken just before launch
+
+--- run (verbatim) ---
+=== linked_faint_active_whiteout_gen3 --game gen3_rr_new  lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2 sha=6d6227c636b3c067b8d795ceb1df2618db933801 tracked_dirty_before=0
+LOAD 2026-09-24T09:30:49 cpu=91% emuhawk= python=11
+  emuhawk pid=13828 E:/Howard/Bizhawk\EmuHawk.exe --lua=lua/tests/gen2_frame_align.lua --config=patch/build/gate_cfg_gen2_frame_align_crystal.ini .cache/gen2-build/pokecrystal/pokecrystal.gbc
+start_utc=2026-09-24T13:30:49Z
+$ python tools/e2e_duo.py --game gen3_rr_new --scenario linked_faint_active_whiteout_gen3 --lane w9_linked_faint_active_whiteout_gen3
+
+========== scenario: linked_faint_active_whiteout_gen3 ==========
+[duo] linked_faint_active_whiteout_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=d9fe5eb6a0b3ea3dc778162584b9d7169fc3bdb38555f709f217113b33319c4b b=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=140ad05c6325180bdc7fae0bb590157310f250fa65c5b8b43b1fb24d6a3ffe2b write_checkpoint.json=5fac25094d0eb369613e7860a3e470f2c73a80c6f46d236aa7e92601d2708781 profile.json=476d16beffc9372ffb36bce0fb728e75664fc1c0534cd5616f1a692f0b60f68d source=6d6227c636b3c067b8d795ceb1df2618db933801
+[duo] server up: tcp=56901 http=56902 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_whiteout_gen3_jslu1wzm
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] PYDEC: FAIL timed out after 120s waiting for both players hello'd
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_whiteout_gen3_jslu1wzm
+[duo] linked_faint_active_whiteout_gen3: attempt 1 aborted — TimeoutError: timed out after 120s waiting for both players hello'd
+
+========== summary ==========
+  linked_faint_active_whiteout_gen3: FAIL (attempt 1 of 1) — TimeoutError: timed out after 120s waiting for both players hello'd
+exit=1
+end_utc=2026-09-24T13:33:00Z
+tracked_dirty_after=0

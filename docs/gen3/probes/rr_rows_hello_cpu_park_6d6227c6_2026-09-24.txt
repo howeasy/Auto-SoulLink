@@ -1,0 +1,45 @@
+G5-LANE-2 (W9): why every RR P+H row stopped before hello. Cut 6d6227c6, lane gen3-lane-2, 2026-09-24.
+
+Rows (receipts ph_<scenario>_rr_as_a_6d6227c6.txt, all run as attempt 1 of 1):
+  R1 linked_faint_active_gen3            FAIL  hello never sent (A and B), 120s
+  R2 linked_faint_active_clean_gen3      FAIL  same
+  R3 linked_faint_active_lhammer_gen3    FAIL  same
+  R4 linked_faint_active_whiteout_gen3   FAIL  same
+  explode_gen3 (RR, ruling 19)           FAIL  same
+  R5 linked_faint_active_mega_gen3       SKIP  signed limit (ruling 20), never launched
+The fixtures boot fine: every side reaches the field at frame 545 (map 3.19 (12,37)) with the right party, and the
+server log shows both TCP connections but no hello line. This is not CPU contention: it happens on
+every side of every row the same way, and in the single-instance probe below with no server.
+
+Probe 1: save pointers. A standalone Lua probe booted rr_battle2.sav (no client).
+  frame 1 (title): SB1/SB2/PSP = 0.  Field (frame 545+): SB1=0202552C SB2=02024588 PSP=02029314, all
+  aligned and stable. So the pointers are valid on the field. (The cold-boot opcode gates that fail with
+  "invalid pointer: gPokemonStoragePtr" arm at the title, where all three are 0, and gPokemonStoragePtr
+  is just the first name in sorted order.)
+Probe 2: the RR overworld predicate, with no client loaded. The same safety.lua is built over the same
+  write_checkpoint.json, kind "companion", and check(snapshot, "overworld") is called after each
+  frameadvance:
+  frames 575/605 refuse on "unknown active task"; from frame 635 on it ADMITS ("verified overworld
+  checkpoint").
+Probe 3: the production client loaded. This is a copy of duo_gen3_main.lua (untracked, since deleted), and
+  the only change is that its hello wait logs session.driver.hello_ready(). It ran with R4's A config and
+  battery and no server:
+  frames 545..713, every sample: R15=0000001C CPSR=20000092 (IRQ mode, ARM, BIOS IRQ vector)
+  game_is_live=true, hello_ready=false "safety.lua:113: CPU outside parked checkpoint"
+  The RR pack's cpu clause wants mode 31 (System), ARM, pc 0..0x3FFF: the BIOS VBlankIntrWait halt,
+  census observed_pc 0x1C4. That comes from docs/gen3/probes/census_rr_overworld_2026-09-21.txt,
+  which was taken without the client.
+
+Diagnosis (product/binding, not instrument): with lua/gen3/run.lua loaded, and so with its
+event.on_bus_exec signal hooks registered, every RR frame end lands on the BIOS IRQ vector in IRQ mode.
+It never lands in the halted System-mode park that the pack admits. hello_ready() therefore never
+passes, and no RR duo row can get past hello. The same predicate with no hooks admits from
+frame 635. FR/LG are unaffected because their park is the game's own ROM WaitForVBlank busy loop
+(thumb, mode 31), not the BIOS halt. As far as the probes in docs/gen3/probes show, this is the first
+live RR hello on the new client.
+Needs an owner/coordinator call, because the overworld predicate is G3-signed "VERBATIM". There are two options:
+admit the BIOS IRQ-entry park for RR (R15 in BIOS, mode 0x12), or re-census RR's park with the client's
+hooks registered.
+Secondary instrument bug, seen on every RR side: the hello-timeout dump
+(gen3_scripted_play.lua:1522, pc_state_dump) raises "Argument number 1 is invalid", so the dump never
+prints on RR.
