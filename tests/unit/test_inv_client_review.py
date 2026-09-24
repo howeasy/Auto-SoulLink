@@ -468,10 +468,44 @@ def test_gen2_a_boxed_dead_partner_is_memorialized_from_its_box():
     world.reply({"cmd": "force_faint", "key": codec_key(dead)},     # the O-35 pair: faint + memorialize
                 {"cmd": "memorialize", "key": codec_key(dead)})
     world.frames(4)
-    assert [(m["key"], m["box"]) for m in world.sent("memorialize_done")] == [(codec_key(dead), 13)]
-    assert world.sent("memorialize_failed") == []
     assert g2.active(world)[0] == 0 and g2.storage(world, 13)[0:3] == [1, 19, 255]
+    # BOX-MEMORIAL-2: the removal from the active sBox is volatile until a native save; no ack before it
+    assert world.sent("memorialize_done") == [] and world.sent("memorialize_failed") == []
+    world.client.on_observation(world.client, world.lua.table_from({"site_id": "save_completed"}))
+    world.frames(2)
+    assert [(m["key"], m["box"]) for m in world.sent("memorialize_done")] == [(codec_key(dead), 13)]
     assert g2.party_count(world) == 1 and not world.client.dead_keys[codec_key(dead)]
+    world.reply({"cmd": "memorialize", "key": codec_key(dead)})            # a hello re-queue: nothing more
+    world.frames(2)
+    assert len(world.sent("memorialize_done")) == 2 and len(world.client.settle) == 0
+
+
+def test_gen1_a_boxed_memorial_is_acked_only_after_the_save_witness_settles_it(world1):
+    """BOX-MEMORIAL-2 (mirror of the Gen 2 row above): boxes:memorialize answers (true, note) while the
+    WRAM box edit is volatile; memorialize_done waits for settle_memorial after the save witness."""
+    calls = []
+
+    def memorialize(_self, key, hint=None):
+        calls.append(("memorialize", key))
+        return True, "source removal waits for a native save"
+
+    def settle_memorial(_self, key):
+        calls.append(("settle", key))
+        first = sum(1 for c in calls if c[0] == "settle") == 1
+        return (True, "source removal waits for a native save") if first else True
+    world1.client.boxes = world1.lua.table_from({"memorialize": memorialize, "settle_memorial": settle_memorial})
+    world1.reply({"cmd": "memorialize", "key": "ABCD:0001:99"}, {"cmd": "memorialize", "key": "ABCD:0001:99"})
+    world1.step(3)
+    assert world1.events("memorialize_done") == [] and len(world1.client.box_settle) == 1, "one settle, deduped"
+    world1.fire("save_witness")
+    world1.overworld_safe()
+    world1.step(2)
+    assert world1.events("memorialize_done") == [], "the settle itself waited for another save"
+    world1.fire("save_witness")
+    world1.overworld_safe()
+    world1.step(2)
+    assert [m["key"] for m in world1.events("memorialize_done")] == ["ABCD:0001:99"]
+    assert [c[0] for c in calls] == ["memorialize", "memorialize", "settle", "settle"]
 
 
 # ── MINOR-9: Gen 1 defers a force_faint for a key not in the party, as Gen 2 does (4e6aea39) ───────────

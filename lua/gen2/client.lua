@@ -877,6 +877,7 @@ function Client.new(p)
             -- one op per hold: the saved party now holds the mon, so its backing copy goes (full-record
             -- match); a reset before the save left it in the box only, and settle is a no-op
             local s = table.remove(self.settle, armed)
+            if s.memorial then return self:settle_memorial(s) end
             local done, why = boxes.settle(s.key)
             log("[SLink-gen2] box copy settle " .. s.key .. ": " .. (done and "done" or tostring(why)))
             return
@@ -932,6 +933,27 @@ function Client.new(p)
         end
     end
 
+    function self:memorial_done(key, phys, name)
+        self.pending_rescan, self.retired_alias[key] = true, nil
+        self.dead_keys[key], self.dead_keys[phys] = nil, nil -- buried: MINOR-7 is done with it
+        send("memorialize_done", { key = key, box = boxes.memorial_box })
+        hud.show("† " .. name .. " buried", 255, 140, 40, 300)
+    end
+    -- BOX-MEMORIAL-2: after a native save witnessed the box edits, finish a boxed memorial; ack only once durable
+    function self:settle_memorial(s)
+        local done, why = boxes.settle_memorial(s.key)
+        if done and why then
+            s.armed = false
+            self.settle[#self.settle + 1] = s
+            log("[SLink-gen2] memorial settle " .. s.key .. ": " .. why)
+        elseif done then
+            self:memorial_done(s.memorial.key, s.key, nick_label(s.memorial.key, s.memorial.nickname))
+        else
+            log("[SLink-gen2] memorial settle refused: " .. tostring(why) .. " " .. s.memorial.key)
+            send("memorialize_failed", { key = s.memorial.key, reason = tostring(why) })
+        end
+    end
+
     -- One box command inside the held checkpoint (lua/gen1/client.lua run_deferred is the reference):
     -- stats_cache before a deposit; replies keep cmd.key (what the server tracks) while the executor
     -- looks the mon up by the key the cartridge holds (a rejected key change's alias). Tail requeues
@@ -983,11 +1005,16 @@ function Client.new(p)
             end
         else
             local done, why = boxes.memorialize(phys)
-            if done then
-                self.pending_rescan, self.retired_alias[cmd.key] = true, nil
-                self.dead_keys[cmd.key], self.dead_keys[phys] = nil, nil -- buried: MINOR-7 is done with it
-                send("memorialize_done", { key = cmd.key, box = boxes.memorial_box })
-                hud.show("† " .. name .. " buried", 255, 140, 40, 300)
+            if done and why then
+                -- BOX-MEMORIAL-2: a boxed memorial that touched the volatile active sBox is not durable until
+                -- a native save; memorialize_done waits for the settle after the save witness
+                self.pending_rescan = true
+                log("[SLink-gen2] memorialize " .. cmd.key .. ": " .. why)
+                for _, s in ipairs(self.settle) do if s.memorial and s.key == phys then return end end
+                self.settle[#self.settle + 1] = { key = phys, armed = false,
+                                                  memorial = { key = cmd.key, nickname = cmd.nickname } }
+            elseif done then
+                self:memorial_done(cmd.key, phys, name)
             elseif why == "last party mon" and self.game_over then
                 log("[SLink-gen2] memorialize dropped: last mon after game over " .. cmd.key)
             elseif why == "last party mon" then

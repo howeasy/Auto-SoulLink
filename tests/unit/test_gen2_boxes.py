@@ -332,7 +332,7 @@ def test_inspect_only_preflight_succeeds_and_execute_receives_fresh_sealed_copy(
 # :1222-1370, CalcMonStatC :1424-1618, GetSquareRoot engine/math/get_square_root.asm, ComputeMaxPP
 # engine/items/item_effects.asm:2752-2798. The stat/PP oracle below is independent Python.
 EXEC = r"""
-return function(root, profile, sys, cart, covers, held, base, pp, mail)
+return function(root, profile, sys, cart, covers, held, base, pp, mail, fault)
     local Permit = dofile(root .. "/lua/write_permit.lua")
     local B = dofile(root .. "/lua/gen2/boxes.lua")
     local io = {cart_ram_linear = true}
@@ -355,6 +355,11 @@ return function(root, profile, sys, cart, covers, held, base, pp, mail)
         check = function(kind) return held() and covers(kind) end,
         provenance = function() return {site = "test"} end})
     local box = B.new(profile, gate)
+    local real_commit = box.commit
+    box.commit = function(plan)                  -- BOX-MEMORIAL-2: a reset between two commits
+        if fault and fault() then error("fault: reset before this commit", 0) end
+        return real_commit(plan)
+    end
     local key = function(m) return string.format("%04X:%04X:%02X", m.dv_word, m.ot_id, m.species_id) end
     return B.executor({profile = profile, reads = reads, key = key, writes = writes, box = box, io = io,
         base_stats = function(s) return base end, move_pp = function(m) return pp end, mail = mail,
@@ -411,6 +416,7 @@ class Exec:
         self.kinds = set(kinds if kinds is not None else
                          ("party_collection", "box_deposit", "box_withdraw", "backing_box"))
         self.held = True
+        self.commits_left = None                  # None: never fault; n: the (n+1)-th commit faults
         self.sys[p["ram"]["wCurBox"]], self.sys[p["ram"]["wSavedAtLeastOnce"]] = current, saved
         self.poke_sys(p["ram"]["wPartyCount"], self.party_block(list(party)))
         self.current = current
@@ -424,7 +430,15 @@ class Exec:
             ("hp", "attack", "defense", "speed", "special_attack", "special_defense"), self.BASE)))
         self.ex = self.lua.execute(EXEC)(ROOT.as_posix(), self.lua.table_from(p, recursive=True), self.sys,
                                          self.cart, lambda k: k in self.kinds, lambda: self.held, self.base, pp,
-                                         self.lua.table_from({0x9E: True}))
+                                         self.lua.table_from({0x9E: True}), self._fault)
+
+    def _fault(self):
+        if self.commits_left is None:
+            return False
+        if self.commits_left == 0:
+            return True
+        self.commits_left -= 1
+        return False
 
     def poke_sys(self, a, data):
         for i, b in enumerate(data):
@@ -529,13 +543,76 @@ def test_memorialize_moves_a_boxed_dead_key_into_box_14(source, kinds):
     lead, dead = mon48(), mon48(species=19, dvs=0x7AAA)
     w = Exec(party=[lead], boxes={source: [dead]}, kinds=kinds)
     party = w.party()
-    assert w.run("memorialize", dead) == (True, None)
+    assert w.run("memorialize", dead)[0] is True           # an active source waits for a save (BOX-MEMORIAL-2)
     assert w.box(source)[0] == 0 and w.party() == party
     memorial = w.box(13)
     assert memorial[0:3] == bytes([1, 19, 255]) and memorial[22:54] == dead[:32]
     assert memorial[662:673] == Exec.names(19 % 16)[0] and memorial[882:893] == Exec.names(19 % 16)[1]
     before = w.snapshot()
     assert w.run("memorialize", dead) == (True, None) and w.snapshot() == before, "idempotent"
+
+
+# ── BOX-MEMORIAL-2 (OMP review of 57e292dc): never make a removal durable before its copy ──────────────
+# sBox (the ACTIVE copy) is volatile: TryLoadSaveFile runs LoadBox, which reloads it from the current box's
+# backing sBoxN, and only SaveBox (every native save) makes it durable (C engine/menus/save.asm:275, :601).
+def native_save(w):
+    """SaveBox: the active copy becomes the current box's backing copy."""
+    flat = w.profile["storage_boxes"][w.current]["flat"]
+    for i, b in enumerate(w.box(w.current)):
+        w.cart[flat + i] = b
+
+
+def power_cycle(w):
+    """A reset before the native save: LoadBox reloads the active copy from the backing copy."""
+    flat, active = w.profile["storage_boxes"][w.current]["flat"], w.profile["derived"]["active_box_flat"]
+    for i in range(1102):
+        w.cart[active + i] = w.cart[flat + i]
+
+
+def saved_boxes_holding(w, species):
+    out = []
+    for index in range(14):
+        flat = w.profile["storage_boxes"][index]["flat"]
+        count = w.cart[flat]
+        out += [index] * sum(1 for s in range(count) if w.cart[flat + 1 + s] == species)
+    return out
+
+
+@pytest.mark.parametrize("fault", [None, 1], ids=["whole", "fault_after_commit_1"])
+@pytest.mark.parametrize("current,source", [(0, 4), (0, 0), (13, 4)],
+                         ids=["backing_to_backing", "active_to_backing", "backing_to_active"])
+def test_a_boxed_memorial_is_never_lost_and_ends_with_one_durable_copy(current, source, fault):
+    lead, dead = mon48(), mon48(species=19, dvs=0x7AAA)
+    w = Exec(party=[lead], boxes={source: [dead]}, current=current)
+    native_save(w)                                           # a saved game: every backing copy is current
+    w.commits_left = fault
+    w.run("memorialize", dead)
+    w.commits_left = None
+    power_cycle(w)
+    assert len(saved_boxes_holding(w, 19)) >= 1, "a reset never loses the mon"
+    # the retry protocol: the server re-sends the memorial until it is acked; the client settles after each save
+    for _ in range(4):
+        ok, note = w.run("memorialize", dead)
+        assert ok is True
+        if note is None:
+            break
+        native_save(w)
+        ok, note = w.run("settle_memorial", dead)
+        assert ok is True
+        if note is None:
+            break
+    native_save(w)
+    assert saved_boxes_holding(w, 19) == [13], "exactly one durable copy, in box 14"
+
+
+@pytest.mark.parametrize("current,source", [(0, 0), (13, 4)], ids=["active_source", "active_memorial"])
+def test_a_boxed_memorial_touching_the_active_copy_is_not_done_until_a_native_save(current, source):
+    lead, dead = mon48(), mon48(species=19, dvs=0x7AAA)
+    w = Exec(party=[lead], boxes={source: [dead]}, current=current)
+    ok, note = w.run("memorialize", dead)
+    assert ok is True and note and "native save" in note
+    if current == 13:
+        assert w.box(source)[0] == 1, "the durable source stays until the memorial copy is durable"
 
 
 def test_memorialize_of_a_boxed_key_finishes_after_a_reset_between_its_two_writes():

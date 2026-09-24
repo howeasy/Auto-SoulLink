@@ -480,9 +480,25 @@ function B.new(profile, reads, io)
 
     -- BOX-MEMORIAL (O-35, mirror of lua/gen2/boxes.lua): a dead key in the PC, not the party. A box release
     -- kills a partner that is usually boxed too (box_mon co-locates the pair), and any partner can die while
-    -- in the PC. The box record moves as is into sBox12, then leaves its source box: a reset in between
-    -- leaves a duplicate, never a loss, and the replay removes only the source copy.
-    local function memorialize_boxed(key, current, memorial)
+    -- in the PC. The box record moves as is into sBox12, then leaves its source box.
+    -- BOX-MEMORIAL-2 (OMP review of 57e292dc): the CURRENT box is WRAM (wBoxData), durable only when a native
+    -- save copies it to SRAM, while a saved box's bank slot is durable at once. The removal never becomes
+    -- durable before the copy: a memorial copy in the current box waits for a native save (`saved`: the
+    -- caller's save witness) before the saved source may go, and a removal from the current box is itself
+    -- volatile until the next native save. Either answers (true, note): the caller settles again after the
+    -- next save witness (settle_memorial) and acks only on a plain true. A reset in between leaves a
+    -- duplicate, never a loss. Box to box compares EVERY byte, OT and nickname (box_twin): same_transfer is
+    -- the party->box rule (it skips BoxLevel and the nickname) and would pass a different record.
+    local function box_twin(a, b)
+        if not a or not b or a.species ~= b.species then return false end
+        for i = 1, d.box_struct_size do if a.blob[i] ~= b.blob[i] then return false end end
+        for i = 1, d.name_length do
+            if a.ot[i] ~= b.ot[i] or a.nick[i] ~= b.nick[i] then return false end
+        end
+        return true
+    end
+    local WAIT_COPY, WAIT_REMOVAL = "memorial copy waits for a native save", "source removal waits for a native save"
+    local function memorialize_boxed(key, current, memorial, saved)
         local copy, why
         for index = 0, box_count - 1 do
             if index ~= memorial and (index == current.index or current.initialized) then
@@ -518,11 +534,10 @@ function B.new(profile, reads, io)
             if done then return true end -- idempotent after a completed move
             return nil, "key not in party or boxes"
         end
-        if done then
-            if not same_transfer(copy.entry, t.list[done]) then
-                return nil, "ambiguous key exists in both box and memorial"
-            end
-        else
+        if done and not box_twin(copy.entry, t.list[done]) then
+            return nil, "ambiguous key exists in both box and memorial"
+        end
+        if not done then
             if #t.list >= box.capacity then return nil, "memorial box full" end
             local e = copy.entry
             local boxes = {}
@@ -533,6 +548,7 @@ function B.new(profile, reads, io)
             if not newbox then return nil, why end
             write_target(t, newbox)
         end
+        if t.current and (not done or not saved) then return true, WAIT_COPY end
         -- re-read: the memorial write rewrote (and re-sealed) a whole bank the source may share
         local again, slot, rest
         again, why = target(copy.index, current)
@@ -542,7 +558,16 @@ function B.new(profile, reads, io)
         rest, why = compose(again.raw, box, without(again.list, slot))
         if not rest then return nil, why end
         write_target(again, rest)
+        if again.current then return true, WAIT_REMOVAL end
         return true
+    end
+
+    -- After a native save witnessed the box edits: finish a boxed memorial that answered (true, note).
+    function self.settle_memorial(key, colon_key)
+        if type(key) == "table" then key = colon_key end
+        local current, why = current_box()
+        if not current then return nil, why end
+        return memorialize_boxed(key, current, box_count - 1, true)
     end
 
     function self.memorialize(key, colon_key, slot_hint)

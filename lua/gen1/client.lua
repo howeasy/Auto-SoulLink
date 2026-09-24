@@ -827,6 +827,13 @@ function Client.new(p)
         end
     end
 
+    local function memorial_done(key, phys, nickname)
+        send("memorialize_done", { key = key, box = box_count - 1 }); self:rescan_boxes()
+        self.retired_alias[key] = nil
+        self.dead_keys[key], self.dead_keys[phys] = nil, nil -- buried: MINOR-7 is done with it
+        hud.show("† " .. nick_label(key, nickname) .. " buried", 255, 140, 40, 300)
+    end
+
     -- Deferred queue: one command per frame, only at the verified overworld checkpoint.
     function self:run_deferred()
         local armed
@@ -843,9 +850,25 @@ function Client.new(p)
             local s = table.remove(self.box_settle, armed)
             local ok, done, reason = pcall(function()
                 writes:arm("overworld")
+                if s.memorial then return self.boxes:settle_memorial(s.key) end
                 return self.boxes:withdraw(s.key)
             end)
             writes:disarm()
+            if s.memorial then
+                -- BOX-MEMORIAL-2: a boxed memorial is acked only once a native save made it durable
+                if ok and done and reason then
+                    s.armed = false
+                    self.box_settle[#self.box_settle + 1] = s
+                    log("[SLink-gen1] memorial settle " .. s.key .. ": " .. tostring(reason))
+                elseif ok and done then
+                    memorial_done(s.memorial.key, s.key, s.memorial.nickname)
+                else
+                    log("[SLink-gen1] memorial settle refused: " .. tostring(ok and reason or done) .. " " .. s.memorial.key)
+                    send("memorialize_failed", { key = s.memorial.key, reason = tostring(ok and reason or done) })
+                end
+                self:rescan_boxes()
+                return
+            end
             log("[SLink-gen1] box copy settle " .. s.key .. ": " .. (ok and done and "done" or tostring(reason or done)))
             self:rescan_boxes()
             return
@@ -947,11 +970,19 @@ function Client.new(p)
                 local _, mem_mon = find_party_slot(cmd.key)
                 local done, reason = nil, "no box module"
                 if self.boxes then done, reason = self.boxes:memorialize(phys, hint) end
-                if done then
-                    send("memorialize_done", { key = cmd.key, box = box_count - 1 }); self:rescan_boxes()
-                    self.retired_alias[cmd.key] = nil
-                    self.dead_keys[cmd.key], self.dead_keys[phys] = nil, nil -- buried: MINOR-7 is done with it
-                    hud.show("† " .. nick_label(cmd.key, mem_mon and mem_mon.nickname) .. " buried", 255, 140, 40, 300)
+                if done and reason then
+                    -- BOX-MEMORIAL-2: a boxed memorial touching the WRAM box waits for a native save; the ack
+                    -- goes out from the settle after the save witness (mirror of lua/gen2/client.lua)
+                    log("[SLink-gen1] memorialize " .. tostring(cmd.key) .. ": " .. tostring(reason))
+                    self:rescan_boxes()
+                    local queued = false
+                    for _, s in ipairs(self.box_settle) do queued = queued or (s.memorial ~= nil and s.key == phys) end
+                    if not queued then
+                        self.box_settle[#self.box_settle + 1] = { key = phys, armed = false,
+                                                                  memorial = { key = cmd.key, nickname = cmd.nickname } }
+                    end
+                elseif done then
+                    memorial_done(cmd.key, phys, mem_mon and mem_mon.nickname)
                 elseif reason == "last party mon" and self.game_over then
                     log("[SLink-gen1] memorialize dropped: last mon after game over")
                 elseif reason == "last party mon" then
