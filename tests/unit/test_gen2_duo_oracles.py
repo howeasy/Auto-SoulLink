@@ -2593,3 +2593,76 @@ def test_poison_oracle_refuses(poison_case, fault, match):
     results["a"] = a
     with pytest.raises(RuntimeError, match=match):
         oracles.poison_oracle(results, data_dir=data_dir)
+
+
+@pytest.fixture
+def rebuild_case(good_case, layout, tmp_path):
+    results, data_dir, decoded = good_case
+    j = json.dumps
+    rom = layout.profile["titles"]["crystal"]["rom_sha1"]
+    for inst in ("a", "b"):
+        text = results[inst]
+        final = oracles._last_tagged(text, "SAVE_WITNESS")
+        path = Path(final["saveram_path"])
+        link_path = tmp_path / f"{inst}.linked.SaveRAM"
+        link_path.write_bytes(path.read_bytes())   # the rebuilt save: the linked party again, all at full HP
+        key = decoded[inst]["key"]
+        final.update(frame=9000, save_completed_frame=8990, gate_saves=2, client_saves=2)
+        link = {"frame": 5000, "key": key, "gate_saves": 1, "client_saves": 1, "save_completed_frame": 4990,
+                "saveram_path": str(link_path), "saveram_bytes": len(link_path.read_bytes()), "cartram_bytes": CART,
+                "cartram_sha256": hashlib.sha256(link_path.read_bytes()[:CART]).hexdigest()}
+        insert = ["LINK_SAVE " + j(link)]
+        if inst == "a":
+            starter = codec.key(codec.decode_saved_party(link_path.read_bytes()[:CART], layout, copy_name="primary")["mons"][0])
+            insert += ["ENGINE_PC " + j({"frame": 6000, "kind": "party_to_box", "key": key}),
+                       'TX {"event":"party_to_box"}',
+                       "ENGINE_FAINT " + j({"frame": 7000, "site_id": "battle_faint", "cause": "battle", "key": starter, "slot": 0}),
+                       "ENGINE_WHITEOUT " + j({"frame": 7050, "site_id": "whiteout_before_heal", "party": [{"key": starter, "hp": 0}]}),
+                       'TX {"event":"whiteout"}', "RX rebuild_start", f"RX party_mon key={key}", "RX rebuild_done"]
+        else:
+            insert += [f"RX box_mon key={key}", f"RX party_mon key={key}"]
+        text = _wave_text(text, scenario="gen2_whiteout_rebuild", schema="gen2-duo-whiteout-rebuild-v1", insert=insert,
+                          witness=final)
+        results[inst] = text.replace('"rom_sha1": "' + "deadbeef" * 5 + '"', f'"rom_sha1": "{rom}"').replace(
+            '"player": "a"', f'"player": "{inst}"')
+    a, b = decoded["a"]["key"][:8], decoded["b"]["key"][:8]
+    (Path(data_dir) / "server.log").write_text(
+        f"[a] party_to_box {a} → box_mon b:{b}\n[a] whiteout rebuild armed — restoring 1 mon(s); partner mirrors 1\n"
+        f"[a] whiteout\n[a] rebuild complete — 1 restored, 0 dropped\n", encoding="utf-8")
+    return results, data_dir
+
+
+def test_whiteout_rebuild_oracle_passes_the_pc_rebuild(rebuild_case):
+    results, data_dir = rebuild_case
+    facts = []
+    assert oracles.whiteout_rebuild_oracle(results, data_dir=data_dir, on_verified=facts.append) is None
+    assert facts[0]["status"] == "alive" and facts[0]["rebuild"] == "restored"
+
+
+@pytest.mark.parametrize("fault,match", [
+    ("no-armed", "armed rebuild"), ("killed", "killed something"), ("two-whiteout-party", "starter alone"),
+    ("no-done", "rebuild_start then rebuild_done"), ("b-death", "b received a death command"),
+    ("b-start", "B received rebuild_start"), ("hurt", "not at full HP")])
+def test_whiteout_rebuild_oracle_refuses(rebuild_case, fault, match, layout):
+    results, data_dir = rebuild_case
+    log = Path(data_dir) / "server.log"
+    if fault == "no-armed":
+        log.write_text(log.read_text(encoding="utf-8").replace("rebuild armed", "rebuild skipped"), encoding="utf-8")
+    elif fault == "killed":
+        log.write_text(log.read_text(encoding="utf-8") + "[a] faint → force_faint b:X\n", encoding="utf-8")
+    elif fault == "two-whiteout-party":
+        results["a"] = results["a"].replace('"hp": 0}]', '"hp": 0}, {"key": "x", "hp": 0}]')
+    elif fault == "no-done":
+        results["a"] = results["a"].replace("RX rebuild_done\n", "")
+    elif fault == "b-death":
+        results["b"] = results["b"].replace("\nSAVE_WITNESS", "\nRX game_over\nSAVE_WITNESS")
+    elif fault == "b-start":
+        results["b"] = results["b"].replace("\nSAVE_WITNESS", "\nRX rebuild_start\nSAVE_WITNESS")
+    elif fault == "hurt":
+        witness = oracles._last_tagged(results["a"], "SAVE_WITNESS")
+        path = Path(witness["saveram_path"])
+        _edit_saved_record(path, layout, 0, layout.constants["MON_HP"], (3).to_bytes(2, "big"))
+        new = dict(witness, cartram_sha256=hashlib.sha256(path.read_bytes()[:CART]).hexdigest())
+        results["a"] = results["a"].replace("SAVE_WITNESS " + json.dumps(witness), "SAVE_WITNESS " + json.dumps(new))
+    with pytest.raises(RuntimeError, match=match):
+        oracles.whiteout_rebuild_oracle(results, data_dir=data_dir)

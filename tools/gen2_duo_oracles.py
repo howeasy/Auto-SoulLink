@@ -1942,3 +1942,66 @@ def poison_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_sa
             on_verified(facts)
     except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError, StopIteration) as exc:
         raise RuntimeError(f"poison evidence missing or malformed: {exc}") from exc
+
+
+def _whiteout_rebuild_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
+    from server.adapters import gen2_codec as codec
+
+    check_save_witness(results)
+    heads, stages, raws = {}, {}, {}
+    for inst in ("a", "b"):
+        heads[inst] = _wave_head(results, inst, "gen2_whiteout_rebuild", "gen2-duo-whiteout-rebuild-v1")
+        stages[inst], raws[inst] = _wave_stage(results[inst], inst, heads[inst][1], heads[inst][0])
+    decoded, row, document = _pair_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids,
+                                          boot_saveram=boot_saveram, status="alive",
+                                          snapshots={inst: stages[inst]["saveram_path"] for inst in ("a", "b")})
+    _wave_need(not row.get("killed_at") and document.get("run_over") is not True, "the pair died or the run ended")
+    # both saves: the linked party order restored, every mon alive at full HP (HealParty / the withdraw's
+    # CalcMonStats), the linked key in no box, nothing else moved
+    for inst in ("a", "b"):
+        layout, witness = heads[inst][1], heads[inst][0]
+        linked = codec.decode_saved_party(raws[inst][:CARTRAM_BYTES], layout, copy_name="primary")["mons"]
+        final, inventory = _clause_inventory(Path(witness["saveram_path"]).read_bytes(), layout)
+        _, original = _clause_inventory(raws[inst], layout)
+        _wave_need([codec.key(m) for m in final] == [codec.key(m) for m in linked] and set(inventory) == set(original),
+                   f"{inst}: the rebuilt party/inventory differs from the linked save")
+        _wave_need(all(m["hp"] == m["max_hp"] > 0 and m["status"] == 0 for m in final), f"{inst}: a rebuilt mon is not at full HP")
+    a, b = results["a"], results["b"]
+    a_key, b_key = decoded["a"]["key"], decoded["b"]["key"]
+    starter = next(codec.key(m) for m in codec.decode_saved_party(raws["a"][:CARTRAM_BYTES], heads["a"][1],
+                                                                   copy_name="primary")["mons"] if codec.key(m) != a_key)
+    whiteout = _one_marker(a, "ENGINE_WHITEOUT")
+    _wave_need(whiteout.get("site_id") == "whiteout_before_heal"
+               and [(m.get("key"), m.get("hp")) for m in whiteout.get("party") or []] == [(starter, 0)],
+               "the pre-heal whiteout party is not the starter alone at HP 0")
+    _wave_need(len([l for _, l in _wave_lines(a, "TX ") if '"event":"whiteout"' in l]) == 1
+               and not any('"event":"whiteout"' in l for _, l in _wave_lines(b, "TX ")), "exactly one whiteout event, from A only")
+    lines_a = a.splitlines()
+    at = next(i for i, l in enumerate(lines_a) if l.startswith("ENGINE_WHITEOUT "))
+    _wave_need([l for l in lines_a[at:] if l in ("RX rebuild_start", "RX rebuild_done")] == ["RX rebuild_start", "RX rebuild_done"],
+               "A was not told rebuild_start then rebuild_done once each")
+    for inst, key in (("a", a_key), ("b", b_key)):
+        text = results[inst].splitlines()
+        link_at = next(i for i, l in enumerate(text) if l.startswith("LINK_SAVE "))
+        _wave_need(not any(l.startswith(("RX force_faint", "RX memorialize", "RX game_over")) for l in text[link_at:]),
+                   f"{inst} received a death command")
+        _wave_need(f"RX party_mon key={key}" in text[link_at:], f"{inst} never received the rebuild party_mon")
+    _wave_need("RX rebuild_start" not in b.splitlines(), "B received rebuild_start")
+    log = (Path(data_dir) / "server.log").read_text(encoding="utf-8", errors="replace")
+    mirror = re.search(r"\[a\] party_to_box " + re.escape(a_key[:8]) + r" → box_mon b:" + re.escape(b_key[:8]), log)
+    armed = re.search(r"\[a\] whiteout rebuild armed — restoring 1 mon\(s\)", log)
+    done = re.search(r"\[a\] rebuild complete — 1 restored", log)
+    _wave_need(mirror and armed and done and mirror.start() < armed.start() < done.start(),
+               "server log lacks the mirrored deposit, the armed rebuild and its completion, in order")
+    _wave_need("→ force_faint" not in log and "GAME OVER" not in log, "the server killed something or ended the run")
+    return {**_verified_facts(decoded, area_id, "alive"), "rebuild": "restored"}
+
+
+def whiteout_rebuild_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_saveram=None, on_verified=None):
+    """D-7: a whiteout with both linked halves boxed rebuilds the pair from the PCs; no death, the pair stays ALIVE."""
+    try:
+        facts = _whiteout_rebuild_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids, boot_saveram=boot_saveram)
+        if on_verified is not None:
+            on_verified(facts)
+    except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError, StopIteration) as exc:
+        raise RuntimeError(f"whiteout rebuild evidence missing or malformed: {exc}") from exc

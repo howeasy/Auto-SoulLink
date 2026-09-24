@@ -2933,3 +2933,64 @@ def test_forced_save_image_is_required_on_the_proposer_only():
     declined = trade_stream("decline_new", "b")
     red(declined + [line for line in trade_stream("new", "b") if line.startswith("TRADE_FORCED_SAVE ")], "decline_new",
         "b", "unexpected TRADE_FORCED_SAVE")
+
+
+# --- DUO-WAVE-C: whiteout_rebuild (D-7, owner ruling 2026-09-24 option (c)) ---------------------------
+
+DRIVER_FILES += ("lua/tests/duo/scenario_gen2_whiteout_rebuild.lua",)
+REBUILD_SITES = ["battle_faint", "whiteout_before_heal", "pc_deposit_begin", "pc_deposit_complete"]
+
+
+def rebuild_lines(player):
+    j = json.dumps
+    a = faint_lines(player)
+    base = retag(a[:9], player, "gen2_whiteout_rebuild", REBUILD_SITES if player == "a" else [])
+    base.insert(8, "RX box_mon key=" + KEY)   # the link's own quarantine traffic, before LINK_SAVE: never counted
+    rebuilt = "REBUILT " + j({"frame": 4000, "key": KEY, "slot": 1, "hp": 14, "party_count": 2, "box_count": 0})
+    if player == "a":
+        middle = ["ENGINE_PC " + j({"frame": 2000, "kind": "party_to_box", "site_id": "pc_deposit_complete", "key": KEY}),
+                  "TX " + j({"event": "party_to_box", "key": KEY}, separators=(",", ":")),
+                  "ENGINE_FAINT " + j({"frame": 3000, "site_id": "battle_faint", "cause": "battle", "key": STARTER, "slot": 0}),
+                  "ENGINE_WHITEOUT " + j({"frame": 3050, "site_id": "whiteout_before_heal", "party": [{"key": STARTER, "hp": 0}]}),
+                  "TX " + j({"event": "whiteout", "seq": 30}, separators=(",", ":")),
+                  "RX party_mon key=" + KEY, "RX rebuild_start", "RX party_mon key=" + KEY, "RX rebuild_done", rebuilt]
+        # (an early party_mon before rebuild_start is tolerated: the rebuild's own is the one after it)
+    else:
+        middle = ["RX box_mon key=" + KEY,
+                  "PARTNER_BOXED " + j({"frame": 2100, "key": KEY, "party_count": 1, "box_count": 1}),
+                  "RX hud_show", "RX party_mon key=" + KEY, rebuilt]
+    return base + middle + [a[-1]]
+
+
+@pytest.mark.parametrize("player", ["a", "b"])
+def test_whiteout_rebuild_verdict_passes_each_complete_half(player):
+    problems, receipt = wave_c("whiteout_rebuild", rebuild_lines(player))
+    assert problems == [], problems
+    assert receipt["schema"] == "gen2-duo-whiteout-rebuild-v1" and receipt["rebuilt"]["party_count"] == 2
+
+
+@pytest.mark.parametrize("lines,match", [
+    (retag(rebuild_lines("a"), "a", "gen2_whiteout_rebuild", REBUILD_SITES[:2]), "lack pc_deposit_begin"),
+    (edit_tag(rebuild_lines("a"), "ENGINE_FAINT", key=KEY), "not the starter's"),
+    (edit_tag(rebuild_lines("a"), "ENGINE_WHITEOUT", party=[{"key": STARTER, "hp": 0}, {"key": KEY, "hp": 0}]),
+     "starter alone"),
+    (without(rebuild_lines("a"), "RX rebuild_done"), "no rebuild_start, party_mon, rebuild_done"),
+    (without(rebuild_lines("a"), "RX rebuild_start"), "no rebuild_start, party_mon, rebuild_done"),
+    (without(rebuild_lines("a"), "TX ", 1), "one party_to_box and one whiteout"),
+    (rebuild_lines("a")[:-1] + ["RX game_over", rebuild_lines("a")[-1]], "death command"),
+    (edit_tag(rebuild_lines("a"), "REBUILT", party_count=1), "two-mon party"),
+    (without(rebuild_lines("b"), "PARTNER_BOXED"), "missing PARTNER_BOXED"),
+    (move(rebuild_lines("b"), "RX party_mon", "PARTNER_BOXED"), "no rebuild party_mon"),
+    (rebuild_lines("b")[:-1] + ["RX rebuild_start", rebuild_lines("b")[-1]], "B received rebuild_start"),
+    (rebuild_lines("b")[:-1] + ["RX force_faint key=" + KEY, rebuild_lines("b")[-1]], "death command"),
+], ids=["no-site", "catch-fainted", "two-in-whiteout", "no-done", "no-start", "no-whiteout-send", "game-over",
+        "one-mon", "b-not-boxed", "b-early-withdraw", "b-rebuild-start", "b-death"])
+def test_whiteout_rebuild_verdict_refuses_a_tampered_half(lines, match):
+    problems, receipt = wave_c("whiteout_rebuild", lines)
+    assert receipt is None and any(match in p for p in problems), problems
+
+
+def test_whiteout_rebuild_a_refuses_before_any_input_without_its_sites(tmp_path):
+    lines, sim, _ = run_driver(tmp_path, scenario="gen2_whiteout_rebuild", player="a")
+    assert lines[-1] == "RESULT: FAIL (production signals lack battle_faint)", lines[-5:]
+    assert not sim.inputs

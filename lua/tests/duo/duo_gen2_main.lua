@@ -682,6 +682,13 @@ function h.pc(steps)
         max_frames=math.max(1, timeout - api.framecount()), max_phase_frames=D.max_phase_frames or F.BUDGET.max_phase_frames})
     return play(spec, driver, observe)
 end
+-- Back to Route 29 grass from the Cherrygrove #MON CENTER (gen2_pc_inputs.lua mode "grass"; a wild battle that
+-- starts on the way is handed over, still up, to the caller's next driver).
+function h.to_grass()
+    local driver, observe, spec = PC.new(ctx, SG, F, PI, {mode="grass",
+        max_frames=math.max(1, timeout - api.framecount()), max_phase_frames=D.max_phase_frames or F.BUDGET.max_phase_frames})
+    return play(spec, driver, observe)
+end
 -- The overworld poison leg (gen2_poison_inputs.lua): opts.target (party slot) is poisoned and faints to
 -- DoPoisonStep once opts.fainted(); the leg ends on the park tile (phase "park"), never back in the grass.
 function h.poison(opts)
