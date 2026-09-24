@@ -575,10 +575,13 @@ def test_the_engine_faint_echo_of_a_commanded_death_is_not_reported():
     assert any("faint echo of a commanded death" in line for line in world.logs.values())
 
 
-@pytest.mark.parametrize("after", ["evolved", "tower_reload"])
+@pytest.mark.parametrize("after", ["evolved", "tower_challenge_end"])
 def test_a_battle_death_is_re_zeroed_at_the_checkpoint_after_a_revive(after):
     """EvolveAfterBattle adds the max-HP gain to a fainted mon; the Battle Tower reloads and heals the party.
-    Dead stays dead: every landed battle write leaves a quiet checkpoint re-zero."""
+    Dead stays dead: every landed battle write leaves a quiet checkpoint re-zero. The tower row is the
+    reload after the LAST battle only (the player walks out to a checkpoint); between tower battles there
+    is no checkpoint (Script_BattleRoomLoop), and tests/unit/test_o30_faint_followups.py
+    test_gen2_a_tower_revival_between_battles_is_re_zeroed_at_the_next_battle_hold covers that."""
     world = World()
     lead = mon(species=1, dvs=0x3AAA)
     in_battle(world, [lead, mon()])
