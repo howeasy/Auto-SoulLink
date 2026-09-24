@@ -1,0 +1,2 @@
+attempt 1 of 3
+PYDEC: PASS a=CAC9:C4A6:A1 b=34E6:C78C:10 area=route_29 titles=gold/silver status=clause_observed scenario=gen2_type_clause clause=type rejected=b ending=memorial
