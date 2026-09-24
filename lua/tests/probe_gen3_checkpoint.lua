@@ -646,7 +646,9 @@ function P.build_deps(mem, emulator, native_idle)
             read_u16_le = function(a,d) return mem.read_u16_le(a,d) end,
             read_u32_le = function(a,d) return mem.read_u32_le(a,d) end,
         },
-        regs = function() return {R15=emulator.getregister("R15"), CPSR=emulator.getregister("CPSR")} end,
+        -- R14 is the current mode's bank (R14_irq at an IRQ entry), as lua/gen3/entry.lua forwards it
+        regs = function() return {R15=emulator.getregister("R15"), CPSR=emulator.getregister("CPSR"),
+            R14=emulator.getregister("R14")} end,
         frame = function() return emulator.framecount() end,
         native_idle = native_idle,
     }

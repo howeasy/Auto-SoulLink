@@ -339,16 +339,27 @@ def test_read_only_dependencies_forward_domain_and_raw_registers(module):
     mem = lua.eval("""{read_u8=function(a,d) return d == 'ROM' and a or -1 end,
         read_u16_le=function(a,d) return d == 'System Bus' and a+1 or -1 end,
         read_u32_le=function(a,d) return d == 'System Bus' and a+2 or -1 end}""")
-    emulator = lua.eval("""{getregister=function(n) return n == 'R15' and 452 or -2147483617 end,
-        framecount=function() return 73 end}""")
+    emulator = lua.eval("""{getregister=function(n)
+            if n == 'R15' then return 452 elseif n == 'R14' then return 0x1C4 end
+            return -2147483617
+        end, framecount=function() return 73 end}""")
     deps = probe.build_deps(mem, emulator, lua.eval("function() return true end"))
     assert deps.io.read_u8(5, "ROM") == 5
     assert deps.io.read_u16_le(5, "System Bus") == 6
     assert deps.io.read_u32_le(5, "System Bus") == 7
     assert deps.regs().R15 == 452
     assert deps.regs().CPSR == -2147483617  # probe must not hide core register behavior
+    # G5-CPU-HARDEN: R14 (the current mode's bank, R14_irq at an IRQ entry) reaches safety.lua's
+    # irq_entry clause, as lua/gen3/entry.lua forwards it
+    assert deps.regs().R14 == 0x1C4
     assert deps.frame() == 73 and deps.native_idle()
     assert all(not key.startswith("write") for key in deps.io)
+
+
+def test_gatelib_safety_regs_forward_r14():
+    """G5-CPU-HARDEN: the gate harness's safety facade forwards R14 like lua/gen3/entry.lua."""
+    gatelib = (ROOT / "lua/tests/gen3_gatelib.lua").read_text(encoding="utf-8")
+    assert 'R14 = emu.getregister("R14")' in gatelib
 
 
 def test_real_safety_frame_end_sampling_and_save_witness_are_wired():

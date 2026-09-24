@@ -213,7 +213,10 @@ function Lib.open(name)
                 read_u16_le = function(a) return io_.read_u16(a) end,
                 read_u32_le = function(a) return io_.read_u32(a) end,
             },
-            regs = function() return { R15 = emu.getregister("R15"), CPSR = emu.getregister("CPSR") } end,
+            -- R14 is the current mode's bank (R14_irq at an IRQ entry), as lua/gen3/entry.lua forwards it
+            regs = function()
+                return { R15 = emu.getregister("R15"), CPSR = emu.getregister("CPSR"), R14 = emu.getregister("R14") }
+            end,
             native_idle = function() return native == nil or native:idle() end,
         }, kind)
         local writes = L("lua/gen3/writes.lua").new({
