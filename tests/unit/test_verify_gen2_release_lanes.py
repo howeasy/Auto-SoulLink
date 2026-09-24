@@ -1774,7 +1774,8 @@ def test_every_cell_declares_all_trade_cases_with_the_runner_fixtures():
     assert {("crystal", "crystal"), ("gold", "silver")} == gate.TRADE_PAIRS
     # Every runner case is a release cell; the lane may demand more (refusal rows awaiting a driver).
     assert set(duo.GEN2_TRADE_SCENARIOS) <= set(gate.TRADE_END_STATUS)
-    assert {"gen2_trade_refuse_contest", "gen2_trade_refuse_unsaved"} <= set(gate.TRADE_END_STATUS)
+    assert "gen2_trade_refuse_unsaved" in gate.TRADE_END_STATUS
+    assert "gen2_trade_refuse_contest" not in gate.TRADE_END_STATUS  # MODEL-only (coordinator ruling)
 
 
 # --- RELEASE-LANES: patch-build, live-gates, live-trade-gates, duo-pairs, release-evidence -----------
@@ -2188,3 +2189,23 @@ def test_changebox_memorial_needs_the_hp_zero_preimage_but_whiteout_does_not(mon
     axes = {"initiator": "crystal", "partner": "crystal", "fixtures": {"a": "x", "b": "y"}}
     gate._receipt_errors(REPO, {"receipts": {}}, scenario, axes, {})
     assert seen == sides
+
+
+def test_contest_refusal_is_model_only_and_its_named_tests_exist():
+    """Coordinator ruling: the contest refusal is unreachable in real play; its evidence is the
+    named unit tests, and declaring it as a duo cell is a gap on every matrix lane."""
+    for name, tests in gate.TRADE_MODEL_ONLY.items():
+        assert name not in gate.TRADE_END_STATUS
+        for node in tests:
+            path, func = node.split("::")
+            assert f"def {func}(" in (REPO / path).read_text(encoding="utf-8"), node
+    doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
+    assert not any(set(gate.TRADE_MODEL_ONLY) & set(row["axes"]["scenarios"]) for row in doc["requirements"])
+
+
+def test_a_model_only_case_declared_as_a_cell_is_red(tmp_path):
+    doc = _trade_tree(tmp_path)
+    _row(doc, "duo.gold.silver")["axes"]["scenarios"].append("gen2_trade_refuse_contest")
+    _write_doc(tmp_path, doc)
+    for errors in (gate.trade_gates_errors(tmp_path, _trade_duo()), gate.duo_matrix_errors(tmp_path, _trade_duo())):
+        assert any("duo.gold.silver: ['gen2_trade_refuse_contest'] are MODEL-only" in e for e in errors)

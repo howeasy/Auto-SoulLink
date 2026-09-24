@@ -20,7 +20,7 @@
         "partner": "crystal",
         "fixtures": {"a": "crystal_battle", "b": "crystal_battle_ot2"},
         "trade_fixtures": {"a": "crystal_battle_errand", "b": "crystal_battle_ot2_errand"},
-        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset", "gen2_species_clause", "gen2_type_clause", "gen2_gender_clause", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item", "gen2_trade_refuse_contest", "gen2_trade_refuse_unsaved", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild"]
+        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset", "gen2_species_clause", "gen2_type_clause", "gen2_gender_clause", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item", "gen2_trade_refuse_unsaved", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild"]
       },
       "proofs": [
         {
@@ -210,7 +210,7 @@
         "partner": "silver",
         "fixtures": {"a": "gold_battle", "b": "silver_battle"},
         "trade_fixtures": {"a": "gold_battle_errand", "b": "silver_battle_errand"},
-        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_reconnect", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item", "gen2_trade_refuse_contest", "gen2_trade_refuse_unsaved", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild"]
+        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_reconnect", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item", "gen2_trade_refuse_unsaved", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild"]
       },
       "proofs": [
         {

@@ -811,9 +811,21 @@ TRADE_END_STATUS = {"gen2_trade_new": "committed", "gen2_trade_evolve": "committ
                     "gen2_trade_reset_commit": "committed", "gen2_trade_decline_new": "unchanged",
                     "gen2_trade_timeout": "unchanged", "gen2_trade_reset_wait": "unchanged",
                     "gen2_trade_refuse_item": "unchanged",
-                    # 26e58062 MODEL rows (TRADE-ASM 9805ac1c refusal sites); red here until a driver is
-                    # registered in tools/e2e_duo.py and C-C/G-S receipts exist.
-                    "gen2_trade_refuse_contest": "unchanged", "gen2_trade_refuse_unsaved": "unchanged"}
+                    # 26e58062 refusal row; PHYSICAL via a synthetic wSavedAtLeastOnce=0 fixture (O-33), red
+                    # here until a driver is registered in tools/e2e_duo.py and C-C/G-S receipts exist.
+                    "gen2_trade_refuse_unsaved": "unchanged"}
+# Coordinator ruling 2026-09-24: MODEL-ONLY trade cases, never a PHYSICAL cell. Server 2676c2f9 blocks a
+# trade during the Bug-Catching Contest before any prompt, and the contest cannot be saved mid-way, so the
+# cartridge refusal is unreachable in real play (defence in depth). Its evidence is these unit tests.
+TRADE_MODEL_ONLY = {
+    "gen2_trade_refuse_contest": (
+        "tests/unit/test_gen2_trade_service.py::test_compiled_proposer_refuses_before_query",
+        "tests/unit/test_gen2_trade_service.py::test_compiled_responder_refuses_contest_party_at_pickup",
+        "tests/unit/test_gen2_client.py::test_trade_in_the_contest_declines_a_prompt_without_arming_it_and_answers_a_zero_mask",
+        "tests/unit/test_gen2_client.py::test_trade_blocked_rides_the_tick_while_the_contest_masks_the_party",
+        "tests/unit/test_state_trade_hardening.py::test_a_trade_blocked_player_makes_no_pair_eligible_on_either_side",
+    ),
+}
 TRADE_PLANTED = {"gen2_trade_refuse_item", "gen2_trade_evolve"}   # O-31: a's disclosed HARNESS_WRITE
 TRADE_VARIANTS = {("crystal", "crystal"): "cc", ("gold", "silver"): "gs", ("crystal", "gold"): "cg"}
 # Owner Q10 (docs/gen2/REVIEW_RECORD.md, ticket 09): "G to S allowed. C to C only". Any other release pair
@@ -992,6 +1004,9 @@ def duo_matrix_errors(root: Path | None = None, duo=None, *, required: dict | No
             need = DUO_REQUIRED_SCENARIOS | required.get(pair, frozenset())
             missing_required = need - set(scenarios)
             refused = frozenset() if pair in TRADE_PAIRS else frozenset(TRADE_END_STATUS) - TRADE_REFUSED_PAIR_CASES
+            model_only = sorted(set(scenarios) & set(TRADE_MODEL_ONLY))
+            if model_only:
+                errors.append(f"{rid}: {model_only} are MODEL-only (TRADE_MODEL_ONLY), never a PHYSICAL duo cell")
             if set(scenarios) & refused:
                 errors.append(f"{rid}: native trade case(s) {sorted(set(scenarios) & refused)} declared on a pair"
                               " owner Q10 refuses (native trades are C-C and G-S only)")
