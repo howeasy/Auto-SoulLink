@@ -20,6 +20,7 @@ containing the "Google Drive" space break BizHawk's CLI parser); absolute paths 
 INSIDE Lua. Per-instance --config copies avoid the shared config.ini write race.
 """
 import argparse
+import contextlib
 import glob
 import hashlib
 import importlib
@@ -1673,6 +1674,18 @@ class DuoRun:
             p.wait(timeout=15)
         print(f"[duo] terminated {inst} pid={p.pid}; server retained")
 
+    @contextlib.contextmanager
+    def _timed(self, phase):
+        """EMU-SPEED item 1: one wall-clock line per run phase ('[duo] timing <phase> <s>s')."""
+        start = time.perf_counter()
+        try:
+            yield
+        finally:
+            elapsed = time.perf_counter() - start
+            times = self.__dict__.setdefault("_phase_times", {})
+            times[phase] = times.get(phase, 0.0) + elapsed
+            print(f"[duo] timing {phase} {elapsed:.1f}s", flush=True)
+
     def start_instances(self):
         if self.battery_boot and self.gcfg.get("launch_profile") != "gen2":
             play = importlib.import_module(self.gcfg["play"])
@@ -1680,13 +1693,15 @@ class DuoRun:
                 play.staged_rom(key)  # space-free relative ROM paths for BizHawk
         self._clear_attempt_artifacts()
         for inst in ("a", "b"):
-            self.launch_instance(inst, seed=not self.cfg.get("cold_boot"))
+            with self._timed(f"launch_{inst}"):
+                self.launch_instance(inst, seed=not self.cfg.get("cold_boot"))
         print("[duo] two EmuHawk instances launched")
 
     def _prepare_gen2_lane(self):
         if not Path(EMUHAWK).is_file():
             raise FileNotFoundError(f"EmuHawk missing for Gen 2 duo: {EMUHAWK}")
-        self._gen2_inputs = gen2_preflight(game=self.game, scenario=self.scenario)
+        with self._timed("gen2_preflight"):
+            self._gen2_inputs = gen2_preflight(game=self.game, scenario=self.scenario)
         from run_gb_gate import GENS
 
         from tests.live.test_gen2_frame_align import u1_facts
@@ -1694,11 +1709,13 @@ class DuoRun:
         from tools import gen2_fixtures, gen2_source_data
 
         suffix = "_overlay" if self.scenario in GEN2_TRADE_SCENARIOS else ""
-        self._gen2_plans = {
-            inst: GENS["gen2"]["plan"](row["title"] + suffix, self._saveram_dir(inst), row["fixture"], 300)
-            for inst, row in self._gen2_inputs.items()}
+        with self._timed("plans"):
+            self._gen2_plans = {
+                inst: GENS["gen2"]["plan"](row["title"] + suffix, self._saveram_dir(inst), row["fixture"], 300)
+                for inst, row in self._gen2_inputs.items()}
         if self.scenario in GEN2_TRADE_SCENARIOS:
-            self._prepare_gen2_trade_manifest()
+            with self._timed("trade_manifest"):
+                self._prepare_gen2_trade_manifest()
         self._gen2_env = {}
         for inst, row in self._gen2_inputs.items():
             if row.get("expect_admission") == "refused":
@@ -1712,6 +1729,8 @@ class DuoRun:
                 plan["env"].update(SLINK_GEN2_ROM_SHA1=row["rom_sha1"], SLINK_GEN2_SAVERAM_NAME=plan["saveram_name"])
                 self._gen2_env[inst] = {}
                 continue
+            timer = self._timed(f"env_{inst}")
+            timer.__enter__()
             ctx = gen2_source_data.load_context(row["title"], root=Path(REPO))
             # errand fixtures play on their own spec's facts (the Gold errand maps), not the title's
             facts = gen2_fixtures.spec_route_facts(gen2_fixtures.BY_NAME[row["name"]], Path(REPO))
@@ -1739,6 +1758,7 @@ class DuoRun:
                 env["SLINK_GEN2_TRADE_MANIFEST_SHA256"] = self._gen2_trade_manifest_sha256
                 env["SLINK_GEN2_TRADE_FACTS"] = json.dumps(trade_facts(row["title"], root=Path(REPO)))
             self._gen2_env[inst] = env
+            timer.__exit__(None, None, None)
         scenario_name = self.scenario.removeprefix("gen2_")
         driver_files = [self.gcfg["main"], f"lua/tests/duo/scenario_gen2_{scenario_name}.lua",
                         "lua/tests/duo/gen2_route29_inputs.lua"]
@@ -4942,11 +4962,14 @@ class DuoRun:
             validate_pipeline(self, evidence_contract(getattr(self, "game", "gen3_rr")),
                               self.cfg)
             if getattr(self, "gcfg", {}).get("launch_profile") == "gen2":
-                self._prepare_gen2_lane()
+                from tools.gen2_source_data import shared_contexts
+                with shared_contexts(), self._timed("preflight"):   # one verified context per title per run
+                    self._prepare_gen2_lane()
                 self._clear_attempt_artifacts()  # startup waits must not see an older RESULT
             if self.scenario == "admit_randomized_new":
                 self.prepare_admit_randomized_new()
-            self.start_server()
+            with self._timed("server"):
+                self.start_server()
             self.start_instances()
             try:
                 self.orchestrate()

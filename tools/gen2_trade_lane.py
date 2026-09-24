@@ -120,9 +120,12 @@ def _hello_problem(manifest, player, msg):
     return None
 
 
-def install_server_gate(server_module, manifest, *, root=ROOT, audit_path=None):
-    """Install on the imported server class, returning an idempotent restoration callback."""
-    doc = validate_manifest(manifest, root=root)
+def install_server_gate(server_module, manifest, *, root=ROOT, audit_path=None, validated=False):
+    """Install on the imported server class, returning an idempotent restoration callback.
+
+    ``validated=True``: ``manifest`` is the dict main() just returned from validate_manifest (one UPS
+    application per child, EMU-SPEED item 3); anything else is validated here."""
+    doc = copy.deepcopy(manifest) if validated and isinstance(manifest, dict) else validate_manifest(manifest, root=root)
     cls = server_module.SLinkServer
     original_decide, original_handle = cls._decide_admission, cls.handle_client
     original_dispatch = cls._dispatch
@@ -307,7 +310,7 @@ def main(argv=None):
 
     data_dir = Path(args["data_dir"])
     data_dir.mkdir(parents=True, exist_ok=True)
-    restore = install_server_gate(server_module, doc, audit_path=data_dir / "trade_lane_events.jsonl")
+    restore = install_server_gate(server_module, doc, audit_path=data_dir / "trade_lane_events.jsonl", validated=True)
     print(f"{ATTRIBUTION} run={doc['run_id']} scenario={doc['scenario']}", flush=True)
     try:
         asyncio.run(server_module.main(**args))

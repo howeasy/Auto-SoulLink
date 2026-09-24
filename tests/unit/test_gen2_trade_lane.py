@@ -256,9 +256,12 @@ def test_cli_calls_the_same_imported_server_with_original_argument_names(tmp_pat
 
     signature = inspect.signature(server_module.main)
     monkeypatch.setattr(server_module, "main", main)
+    validations = []   # EMU-SPEED item 3: the child applies the UPS pins once, not again inside the gate
+    real_validate = module.validate_manifest
+    monkeypatch.setattr(module, "validate_manifest", lambda *a, **k: validations.append(a) or real_validate(*a, **k))
     assert module.main(["--manifest", str(path), "--", "--data-dir", str(tmp_path), "--port", "54329",
                         "--http-port", "8089", "--gender-clause", "--no-battle-calc", "--verbose"]) == 0
-    assert len(called) == 1
+    assert len(called) == 1 and len(validations) == 1
     signature.bind(**called[0])
     assert called[0]["run_id"] == doc["run_id"] and called[0]["gender_lock"] is True
     assert called[0]["battle_calc"] is False and called[0]["port"] == 54329

@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -131,7 +132,33 @@ class SourceContext:
         }
 
 
+_SHARED: dict | None = None   # {(title, root): SourceContext} inside shared_contexts()
+
+
+@contextmanager
+def shared_contexts():
+    """One verified SourceContext per title per run (the e2e_duo preflight): every load_context inside the
+    block returns the same object, so its per-context read_source memo serves route/qualify/U1/trade facts
+    alike instead of each caller re-verifying the pinned checkout. Outside the block nothing is shared."""
+    global _SHARED
+    outer = _SHARED
+    _SHARED = {} if outer is None else outer
+    try:
+        yield
+    finally:
+        _SHARED = outer
+
+
 def load_context(title: str, root: Path = ROOT) -> SourceContext:
+    if _SHARED is None:
+        return _load_context(title, root)
+    key = (title, Path(root).resolve())
+    if key not in _SHARED:
+        _SHARED[key] = _load_context(title, root)
+    return _SHARED[key]
+
+
+def _load_context(title: str, root: Path = ROOT) -> SourceContext:
     if title not in ARTIFACTS:
         raise ValueError(f"unsupported selected title {title!r}; expected {tuple(ARTIFACTS)}")
     root = Path(root).resolve()

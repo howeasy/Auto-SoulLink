@@ -189,3 +189,16 @@ def test_source_symlink_resolution_cannot_escape_checkout(monkeypatch):
     monkeypatch.setattr(Path, "resolve", redirected)
     with pytest.raises(ValueError, match="escapes pinned checkout"):
         ctx.read_source(relative)
+
+
+def test_shared_contexts_hand_every_caller_one_verified_context_per_title():
+    """EMU-SPEED item 2: inside shared_contexts() route/qualify/U1/trade facts reuse one context (and
+    its read_source memo); outside, every load_context verifies afresh."""
+    from tools import gen2_source_data as source
+    with source.shared_contexts():
+        first = source.load_context("gold")
+        assert source.load_context("gold") is first
+        with source.shared_contexts():   # nested blocks share the outer run's contexts
+            assert source.load_context("gold") is first
+        assert source.load_context("silver") is not first
+    assert source.load_context("gold") is not first
