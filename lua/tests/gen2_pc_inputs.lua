@@ -27,6 +27,7 @@
 local PC = {}
 PC.HOLD = 12
 PC.WAIT_FRAMES = 600
+PC.YES_NO_SETTLE = 8   -- the scripted gate's UI_SETTLE_FRAMES
 
 local fmt = string.format
 local function integer(value, low, high)
@@ -233,8 +234,29 @@ function PC.new(ctx, SG, F, PI, opts)
     local base = SG.qualify_observer(ctx)
     local ram, api = facts.ram, ctx.api
     local function cart(sym) return api.read_u8(sym.bank * 0x2000 + sym.addr - 0xA000, "CartRAM") end
+    local yes_no_since
     local function observe()
         local point = base()
+        -- The release yes/no (PlaceYesNoBox at 14,11 over the WITHDRAW/DEPOSIT submenu, bills_pc.asm .release /
+        -- BillsPCDepositFuncRelease) shares the screen with the submenu's own cursor, so the boxed parser refuses
+        -- it (live U1f Crystal run 2). Read its YES/NO rows directly; ready 8 frames after it appeared.
+        local ui = point.ui
+        if ui and ui.kind == "yes_no" and ui.items == nil then
+            yes_no_since = yes_no_since or api.framecount()
+            local rows = SG.screen(ctx)
+            local cursor
+            for _, row in ipairs(rows) do
+                local text = table.concat(row)
+                if text:find("▶YES", 1, true) then cursor = 1 end
+                if text:find("▶NO", 1, true) then cursor = cursor and -1 or 2 end
+            end
+            if cursor == 1 or cursor == 2 then
+                ui.items, ui.cursor, ui.columns = {"YES", "NO"}, cursor, 1
+                point.input_ready = api.framecount() - yes_no_since >= PC.YES_NO_SETTLE
+            end
+        else
+            yes_no_since = nil
+        end
         point.cur_box = ctx.sym("wCurBox")[1]
         point.box_count = cart(ram.sBoxCount)
         point.pc_cursor = api.read_u8(ram.wBillsPC_CursorPosition.addr, "System Bus")
