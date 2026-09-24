@@ -198,6 +198,13 @@ def test_a_pytest_skip_is_a_failure_even_on_exit_0():
     assert fc.judge("probe_gates", 0, "3 passed, 1 skipped in 9s")[1] is False
 
 
+def test_a_no_save_witness_line_is_not_a_skip():
+    # reconnect_gen3 at 157e1ef7: A is no_save by design and PASSed, but "saves=0 skipped" read as a skip
+    out = "[duo] SAVE_WITNESS_SHA256 inst=a site=- file=- match=- saves=0 skipped (no_save)\n"
+    assert fc.judge("reconnect_gen3_fr_as_a", 0, out) == ("PASS", True)
+    assert fc.detect_skip(0, "==== 3 passed, 1 skipped in 9s ====")
+
+
 def test_the_r5_mega_skip_is_allowed_by_ruling_20():
     out = ("  linked_faint_active_mega_gen3: SKIP — BLOCKED: R5 needs an RR trainer route and a "
            "mega-capable party")

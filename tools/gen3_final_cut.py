@@ -269,7 +269,8 @@ def detect_skip(rc, output):
     line, or a pytest summary that counts a skip."""
     text = output or ""
     return (rc == 3 or bool(re.search(r"^\s+\S+: SKIP\b", text, re.M))
-            or bool(re.search(r"\b\d+ skipped\b", text)))
+            # a pytest count, not e2e_duo's "SAVE_WITNESS_SHA256 ... saves=0 skipped (no_save)"
+            or bool(re.search(r"(?:^|[\s,])\d+ skipped\b", text, re.M)))
 
 
 def allowed_skip(row_id, output):
