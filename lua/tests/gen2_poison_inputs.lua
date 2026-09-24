@@ -93,6 +93,7 @@ function PI.step_toward(map, point, goals, avoid)
 end
 -- A path blocked only by a live object or a closed first step waits for it (walking NPCs move on).
 PI.WAIT_FRAMES = 600
+PI.BUMP_FRAMES = 24   -- ponytail: 3 normal steps (8 frames each); a walk that has not moved in that long is bumping
 
 local function on(point, map) return point.map_group == map.map_group and point.map_number == map.map_number end
 
@@ -134,7 +135,7 @@ function PI.driver(F, facts, opts)
         if tx ~= cx then return press(tx > cx and "Right" or "Left") end
         return press(index > ui.cursor and "Down" or "Up")
     end
-    local waited = 0
+    local waited, bumped, bumped_at = 0, 0, nil
     local function walk(map, point, goals, avoid)
         local button, why = PI.step_toward(map, point, goals, avoid)
         if not button then
@@ -152,7 +153,15 @@ function PI.driver(F, facts, opts)
             return nil, why
         end
         waited = 0
-        if button == "arrived" then return nil, "arrived" end
+        if button == "arrived" then bumped = 0 return nil, "arrived" end
+        -- Holding a direction into a blocker keeps the player bumping in place, and MapEvents runs no
+        -- PlayerEvents (trainer sight included) while a step continues (engine/overworld/events.asm
+        -- CheckPlayerState, :155-167). Gold run 1 pushed into Mikey (Route 30 (5,23), sight 1) for 60000
+        -- frames and he never saw us. A step that has not moved after BUMP_FRAMES is released for
+        -- BUMP_FRAMES so the events (and any trainer) run.
+        local at = point.x * 1000 + point.y
+        if at == bumped_at then bumped = bumped + 1 else bumped_at, bumped = at, 0 end
+        if bumped % (2 * PI.BUMP_FRAMES) >= PI.BUMP_FRAMES then return {}, self.phase end
         return {[button]=true}, self.phase
     end
     local function psn(value) return integer(value, 0, 255) and (value // facts.psn_mask) % 2 == 1 end

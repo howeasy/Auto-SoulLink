@@ -376,3 +376,17 @@ def test_the_gate_fixture_list_mirrors_the_production_allow_list():
     gate = {name: title for name, title in F.U1_FIXTURES.items()}
     production = {name: title for title, names in S.U1_FIXTURES.items() for name in names.values()}
     assert gate == production
+
+
+def test_a_bumping_walk_releases_the_direction_so_map_events_run():
+    """Gold run 1: holding Up into Mikey kept the step continuing; PlayerEvents (trainer sight) never ran."""
+    rt = lua()
+    PI = load(rt)
+    d = driver(rt, PI)
+    held = []
+    for _ in range(2 * PI.BUMP_FRAMES):
+        buttons, phase = d.step(pt(rt, map_number=1, x=1, y=0))
+        held.append(any(buttons.values()))
+    assert all(held[:PI.BUMP_FRAMES]) and not any(held[PI.BUMP_FRAMES:])
+    buttons, phase = d.step(pt(rt, map_number=1, x=1, y=0))
+    assert buttons["Left"]                                    # and tries again
