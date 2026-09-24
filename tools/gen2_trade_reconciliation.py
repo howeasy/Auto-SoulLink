@@ -7,7 +7,9 @@ Journal sequence numbers and an observed post-watchdog midpoint prove ordering:
 the journal has no per-dispatch timestamp. Exactly one ``trade_uncertain`` record
 qualifies: journaled by the watchdog (phase -> uncertain) or by the side's own
 ``trade_done uncertain:true`` at the handler (phase still applying, TRADE-HARDEN
-fast path). Either way a later party snapshot decides the await side. No missing
+fast path), or by a fresh hello from a side that never reported (hello path, settled by that
+same hello; the lane journals every record of a dispatch). A party snapshot decides the
+await side. No missing
 server event or intermediate state is invented.
 Source contract: server/state.py at 1ac09296 + 9a436c95 + the fast-path record.
 """
@@ -185,6 +187,16 @@ def verify_reconciliation(*, token, before_keys, after_keys, final_party_keys,
                 _need(records and rec == records[-1], "unobserved watchdog cannot establish an outcome")
             continue
         event = message.get("event")
+        settled_declaration = (event == "trade_done" and message.get("token") == token
+                               and message.get("uncertain") and not message.get("new_key")
+                               and before is None and midpoint is None and after is None
+                               and records and records[-1] == final and side in evidence
+                               and evidence[side]["kind"] == "party")
+        if settled_declaration:
+            # the reset side's own uncertain declaration follows its post-reset hello, which already
+            # settled the trade on party evidence (state.py hello path); the server ignores it
+            done.add(side)
+            continue
         if event == "trade_done" and (message.get("token") == token
                                       or before and before.get("token") == token):
             _need(midpoint and midpoint.get("token") == token and midpoint.get("phase") == "applying"
@@ -193,10 +205,10 @@ def verify_reconciliation(*, token, before_keys, after_keys, final_party_keys,
             done.add(side)
         stages = (
             ("watchdog", before, midpoint, result["trade_last_after_watchdog"],
-             result["trade_problem_after_watchdog"]),
-            ("handler", midpoint, after, result["trade_last"], result["trade_problem"]),
+             result["trade_problem_after_watchdog"], result.get("trade_records_after_watchdog")),
+            ("handler", midpoint, after, result["trade_last"], result["trade_problem"], result.get("trade_records")),
         )
-        for stage, prior, current, rec, problem in stages:
+        for stage, prior, current, rec, problem, stage_records in stages:
             relevant = prior and prior.get("token") == token and prior.get("phase") in CRITICAL
             if stage == "watchdog" and relevant:
                 expected_midpoint = {**prior, "phase": "uncertain", "verdict": {
@@ -204,28 +216,46 @@ def verify_reconciliation(*, token, before_keys, after_keys, final_party_keys,
                     for player, verdict in prior["verdict"].items()}}
                 _need(current == prior or prior["phase"] == "applying" and current == expected_midpoint,
                       "watchdog midpoint is not a source-permitted transition")
-            if isinstance(rec, dict) and rec.get("token") == token:
-                _record(rec, token, before_keys, after_keys)
-                if not records or rec != records[-1]:
-                    if rec["outcome"] == "uncertain":
-                        # watchdog: phase flips to uncertain. fast path: the side's own trade_done
-                        # uncertain:true declares it at the handler, phase still applying.
-                        watchdog = stage == "watchdog" and current and current.get("phase") == "uncertain"
-                        fast = (stage == "handler" and event == "trade_done" and message.get("token") == token
-                                and (message.get("uncertain") or not message.get("new_key"))
-                                and current and current.get("phase") == "applying"
-                                and prior["verdict"][side] is None and current["verdict"][side] == "await")
-                        _need(relevant and prior["phase"] == "applying" and (watchdog or fast)
-                              and rec["verdict"] == current["verdict"]
-                              and "await" in rec["verdict"].values() and rec["problem"] == "",
-                              "uncertain record does not describe an observed watchdog/declared await state")
-                    else:
-                        _need(stage == "handler" and relevant and rec == final
-                              and problem == status["trade_problem"]
-                              and (current is None if expected != "conflict" else
-                                   current is not None and current.get("phase") == "conflict"),
-                              "terminal record disagrees with its dispatch state")
-                    records.append(rec)
+            # Every outcome recorded in this stage (gen2_trade_lane journals them since the hello path);
+            # an older journal only has the stage's last trade_last.
+            if stage_records is None:
+                stage_records = [rec] if isinstance(rec, dict) and rec.get("token") == token else []
+            else:
+                _need(isinstance(stage_records, list), "invalid journaled stage records")
+                stage_records = [item for item in stage_records if isinstance(item, dict) and item.get("token") == token]
+                _need(not stage_records or stage_records[-1] == rec, "journaled stage records disagree with trade_last")
+            declared = set()
+            for index, item in enumerate(stage_records):
+                _record(item, token, before_keys, after_keys)
+                if records and item == records[-1]:
+                    continue
+                if item["outcome"] == "uncertain":
+                    # watchdog: phase flips to uncertain. fast path: the side declares itself with
+                    # trade_done uncertain:true at the handler, phase still applying. hello path: a side
+                    # that never reported sends a fresh hello; it is declared await and that party decides.
+                    others = [player for player in SIDES if player != side]
+                    watchdog = (stage == "watchdog" and current and current.get("phase") == "uncertain"
+                                and item["verdict"] == current["verdict"])
+                    fast = (stage == "handler" and event == "trade_done" and message.get("token") == token
+                            and (message.get("uncertain") or not message.get("new_key"))
+                            and current and current.get("phase") == "applying"
+                            and prior["verdict"][side] is None and current["verdict"][side] == "await"
+                            and item["verdict"] == current["verdict"])
+                    hello = (stage == "handler" and event == "hello" and prior["verdict"][side] is None
+                             and item["verdict"][side] == "await"
+                             and all(item["verdict"][player] == prior["verdict"][player] for player in others))
+                    _need(relevant and prior["phase"] == "applying" and (watchdog or fast or hello)
+                          and "await" in item["verdict"].values() and item["problem"] == "",
+                          "uncertain record does not describe an observed watchdog/declared await state")
+                    if hello and not (watchdog or fast):
+                        declared.add(side)
+                else:
+                    _need(stage == "handler" and relevant and index == len(stage_records) - 1 and item == final
+                          and problem == status["trade_problem"]
+                          and (current is None if expected != "conflict" else
+                               current is not None and current.get("phase") == "conflict"),
+                          "terminal record disagrees with its dispatch state")
+                records.append(item)
             if not relevant:
                 continue
             _need(current is None or current.get("token") == token, "pending token changed during reconciliation")
@@ -236,6 +266,9 @@ def verify_reconciliation(*, token, before_keys, after_keys, final_party_keys,
             next_verdict = rec["verdict"] if terminal_now else current["verdict"]
             for player in SIDES:
                 was, now = prior["verdict"][player], next_verdict[player]
+                if player in declared:   # hello path: awaited from this very dispatch
+                    _need(player not in await_seq, "invalid repeated await declaration")
+                    await_seq[player], was = seq, "await"
                 if now == "await" and was != "await":
                     _need(was is None and player not in await_seq
                           and (stage == "watchdog" or event == "trade_done" and player == side

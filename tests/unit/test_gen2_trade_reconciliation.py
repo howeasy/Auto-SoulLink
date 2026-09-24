@@ -358,3 +358,76 @@ def test_fast_path_refuses_unproved_shapes(fault):
         row["outcome"]["trade_problem"] = {**row["outcome"]["pending_trade"], "problem": ""}
     with pytest.raises(RuntimeError):
         verify_reconciliation(**evidence)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prepare", [False, True])
+@pytest.mark.parametrize("path", ["reset_hello", "fast_report"])
+async def test_real_prepare_round_and_hello_settled_reset_reconcile(tmp_path, prepare, path):
+    """Live gs reset_commit (TRADE-DRIVER): the prepare round (MAJOR-1) must be journaled (apply_ready,
+    ticks while preparing) or the pending chain breaks; and a reset side whose FIRST post-reset message is
+    its hello is declared uncertain and settled by that same hello (state.py MAJOR-2), so the journal must
+    carry every outcome recorded inside one dispatch, not only the last trade_last."""
+    from server import server as server_module
+    from server.state import LinkEntry, LinkStatus, MonInfo
+    from tests.unit.test_gen2_trade_lane import hello, manifest
+    from tests.unit.test_mixed_foundations import _session
+    from tools.gen2_trade_lane import install_server_gate
+
+    doc = manifest()
+    audit = tmp_path / "wire.jsonl"
+    restore = install_server_gate(server_module, doc, audit_path=audit)
+    srv = server_module.SLinkServer(data_dir=str(tmp_path), run_id=doc["run_id"])
+    send_a, close_a = await _session(srv)
+    send_b, close_b = await _session(srv)
+    a_key, b_key = "1234:30B8:10", "5678:7B0B:13"
+
+    def greet(side):
+        return {**hello(doc, side), "trade_prepare": True} if prepare else hello(doc, side)
+    try:
+        await send_a(greet("a"))
+        await send_b(greet("b"))
+        entry = LinkEntry(area_id="route_29", a=MonInfo(key=a_key, species=16, level=5),
+                          b=MonInfo(key=b_key, species=19, level=5), status=LinkStatus.ALIVE)
+        srv.state.links.append(entry)
+        srv.state._index_entry(entry)
+        for side, half in (("a", entry.a), ("b", entry.b)):
+            srv.state.party_keys[side].add(half.key)
+            srv.state.partner_blobs[side] = [{"slot": 0, "key": half.key, "blob": bytes(70),
+                                              "species_id": half.species, "level": half.level, "hp": 10}]
+        await send_a({"event": "trade_offer", "player": "a", "slot": 0})
+        token = srv.state.pending_trade["token"]
+        await send_b({"event": "menu_result", "player": "b", "token": token, "choice": 1})
+        if prepare:
+            assert srv.state.pending_trade["phase"] == "preparing"
+            await send_a({"event": "tick", "player": "a"})
+            for side, send in (("a", send_a), ("b", send_b)):
+                await send({"event": "apply_ready", "player": side, "token": token, "ok": True})
+        assert srv.state.pending_trade["phase"] == "applying"
+        await send_a({"event": "trade_done", "player": "a", "token": token, "new_key": b_key, "new_species": 19})
+        party = [{"key": a_key, "species_id": 16, "hp": 10, "maxHP": 10, "slot": 0, "level": 5}]
+        if path == "fast_report":
+            await send_b({"event": "trade_done", "player": "b", "token": token, "uncertain": True})
+            await send_b({"event": "tick", "player": "b", "party": party})
+        else:   # B reset past its commit; its first message after reboot is the hello
+            await send_b({**greet("b"), "party": party})
+        assert srv.state.pending_trade is None and srv.state.trade_last["outcome"] == "committed"
+        journal = [json.loads(line) for line in audit.read_text().splitlines()]
+        result = verify_reconciliation(
+            token=token, before_keys={"a": a_key, "b": b_key}, after_keys={"a": b_key, "b": a_key},
+            final_party_keys={"a": [b_key], "b": [a_key]}, independent_verdicts={"a": "traded", "b": "traded"},
+            events=list(srv._recent_events), status=srv._build_status_dict(), journal=journal)
+        assert result["outcome"] == "committed" and result["evidence"]["b"]["kind"] == "party"
+        if path == "reset_hello":   # the declaration inside the settling hello is load-bearing
+            settling = next(row for row in journal if row["message"].get("event") == "hello"
+                            and row["outcome"].get("trade_records"))
+            settling["outcome"]["trade_records"] = settling["outcome"]["trade_records"][-1:]
+            with pytest.raises(RuntimeError):
+                verify_reconciliation(
+                    token=token, before_keys={"a": a_key, "b": b_key}, after_keys={"a": b_key, "b": a_key},
+                    final_party_keys={"a": [b_key], "b": [a_key]}, independent_verdicts={"a": "traded", "b": "traded"},
+                    events=list(srv._recent_events), status=srv._build_status_dict(), journal=journal)
+    finally:
+        await close_a()
+        await close_b()
+        restore()

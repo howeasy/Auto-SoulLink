@@ -27,7 +27,9 @@ TOP_KEYS = {"schema", "run_id", "scenario", "evidence_class", "provenance_sha256
 PLAYER_KEYS = {"title", "rom_type", "foundation", "artifact_kind", "rom_sha1", "base_sha1", "ups_sha256", "sym_sha256"}
 # Native Gen 2 client emissions; query/offer are handled by state.handle_event even
 # though server._dispatch's explicit logging list only names menu_result/trade_done.
-TRADE_EVENTS = frozenset({"trade_query", "trade_offer", "menu_result", "trade_done"})
+TRADE_EVENTS = frozenset({"trade_query", "trade_offer", "menu_result", "apply_ready", "trade_done"})
+# pending_trade phases whose hello/tick/safe traffic is journaled (preparing: the MAJOR-1 prepare round)
+JOURNAL_PHASES = frozenset({"preparing", "applying", "uncertain", "conflict"})
 
 
 def _need(condition, message):
@@ -131,14 +133,31 @@ def install_server_gate(server_module, manifest, *, root=ROOT, audit_path=None, 
     original_dispatch = cls._dispatch
     state_cls = server_module.SoulLinkState
     original_watchdog = state_cls._tick_pending_trade
+    original_record = state_cls._record_trade
     _need(not getattr(original_decide, "_gen2_trade_lane", False), "trade gate already installed")
     # The returned restore callback owns this handle for the server's whole lifetime.
     audit = Path(audit_path).open("x", encoding="utf-8", newline="\n") if audit_path is not None else None  # noqa: SIM115
     audit_seq = 0
     active_dispatches = []
 
+    def record_trade(state, pt, outcome):
+        # Every outcome recorded inside a dispatch, by stage: one hello can declare a side uncertain AND
+        # settle it (state.py MAJOR-2), which trade_last alone would collapse into the final record.
+        result = original_record(state, pt, outcome)
+        if active_dispatches and active_dispatches[-1]["state"] is state:
+            context = active_dispatches[-1]
+            stage = "trade_records_after_watchdog" if context.get("in_watchdog") else "trade_records"
+            context[stage].append(copy.deepcopy(state.trade_last))
+        return result
+
     def watchdog(state):
-        result = original_watchdog(state)
+        if active_dispatches and active_dispatches[-1]["state"] is state:
+            active_dispatches[-1]["in_watchdog"] = True
+        try:
+            result = original_watchdog(state)
+        finally:
+            if active_dispatches and active_dispatches[-1]["state"] is state:
+                active_dispatches[-1]["in_watchdog"] = False
         if active_dispatches:
             context = active_dispatches[-1]
             if context["state"] is state and not context["watchdog_observed"]:
@@ -164,7 +183,8 @@ def install_server_gate(server_module, manifest, *, root=ROOT, audit_path=None, 
         before = pending_trade(self.state) if audit is not None else None
         original_message = copy.deepcopy(msg) if audit is not None else None
         context = {"state": self.state, "watchdog_observed": False, "pending_trade_after_watchdog": None,
-                   "trade_problem_after_watchdog": None, "trade_last_after_watchdog": None}
+                   "trade_problem_after_watchdog": None, "trade_last_after_watchdog": None,
+                   "trade_records_after_watchdog": [], "trade_records": [], "in_watchdog": False}
 
         def after_dispatch(outcome):
             if audit is None:
@@ -178,13 +198,13 @@ def install_server_gate(server_module, manifest, *, root=ROOT, audit_path=None, 
             into_await = any((now.get(side) == "await" or during.get(side) == "await")
                              and was.get(side) != "await" for side in ("a", "b"))
             observed = (isinstance(event, str) and event in TRADE_EVENTS
-                        or event in ("hello", "tick", "safe") and bool(phases & {"applying", "uncertain", "conflict"})
+                        or event in ("hello", "tick", "safe") and bool(phases & JOURNAL_PHASES)
                         or into_await)
             if observed:
                 outcome.update(pending_trade_before=before, pending_trade=after,
                                trade_problem=copy.deepcopy(self.state.trade_problem()),
                                trade_last=copy.deepcopy(self.state.trade_last))
-                outcome.update({key: value for key, value in context.items() if key != "state"})
+                outcome.update({key: value for key, value in context.items() if key not in ("state", "in_watchdog")})
                 record(player, original_message, outcome)
 
         if audit is not None:
@@ -264,6 +284,7 @@ def install_server_gate(server_module, manifest, *, root=ROOT, audit_path=None, 
     decide._gen2_trade_lane = True
     cls._decide_admission, cls.handle_client, cls._dispatch = decide, handle, dispatch
     state_cls._tick_pending_trade = watchdog
+    state_cls._record_trade = record_trade
 
     def restore():
         if cls._decide_admission is decide:
@@ -274,6 +295,8 @@ def install_server_gate(server_module, manifest, *, root=ROOT, audit_path=None, 
             cls._dispatch = original_dispatch
         if state_cls._tick_pending_trade is watchdog:
             state_cls._tick_pending_trade = original_watchdog
+        if state_cls._record_trade is record_trade:
+            state_cls._record_trade = original_record
         if audit is not None:
             audit.close()
     return restore

@@ -365,7 +365,8 @@ def test_audit_records_failure_and_does_not_swallow_original_exception(tmp_path,
         assert row["outcome"] == {"dispatch": "raised", "exception": "RuntimeError", "pending_trade": None,
                                   "pending_trade_before": None, "trade_problem": None, "trade_last": None,
                                   "watchdog_observed": False, "pending_trade_after_watchdog": None,
-                                  "trade_problem_after_watchdog": None, "trade_last_after_watchdog": None}
+                                  "trade_problem_after_watchdog": None, "trade_last_after_watchdog": None,
+                                  "trade_records_after_watchdog": [], "trade_records": []}
         assert message["_rejected"] is True, "wrapper must not alter the original dispatch behavior"
     finally:
         restore()
