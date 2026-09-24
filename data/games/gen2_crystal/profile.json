@@ -370,13 +370,13 @@
       "overlay": {
         "artifact": "crystal_overlay",
         "base_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
-        "md5": "1560dd95bf1418f2a323888face95b1c",
+        "md5": "c9272653d26986d6c4f8cd9aa77ede9f",
         "ram": {
           "wAttrmap": 52697,
           "wSlinkMailbox": 53208,
           "wTilemap": 50336
         },
-        "rom_sha1": "9f8c0345e03012d1da5e2e75c6828a699a1e40e8",
+        "rom_sha1": "3e620195bbe6dfd92bf89eb78f813b7bd94d5c6b",
         "sym": "crystal_slink.sym",
         "sym_sha256": "df3af5c938724f5b04b27ae91115077f4135392eda948738cd85a456f7ceca23"
       },
