@@ -356,8 +356,10 @@ class World:
         self.poke(self.ram["ENEMY_BASE"], bytes(6 * codec.PARTY_MON_SIZE))
         for i, rec in enumerate(enemy):
             self.poke(self.ram["ENEMY_BASE"] + i * codec.PARTY_MON_SIZE, self.encode(rec))
-        # battler 0 live: the CFRU in-battle detector reads its maxHP (reads.lua read_battle)
+        # battler 0 live: the CFRU in-battle detector reads its maxHP (reads.lua read_battle);
+        # its hp is live too (an active battler at a parked menu never reads 0 in the engine)
         self.poke_int(self.ram["BATTLE_MONS_ADDR"] + 0x28 + 4, 20, 2)
+        self.poke_int(self.ram["BATTLE_MONS_ADDR"] + 0x28, 20, 2)
         self.in_battle_state = True
         self.apply_battle_clauses()
         if fire:

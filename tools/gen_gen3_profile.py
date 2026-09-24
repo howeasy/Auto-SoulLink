@@ -98,6 +98,15 @@ FRLG_DERIVED = {
                                      "(struct SpeciesInfo.growthRate)"),
     "SHEDINJA_SPECIES_ID": (303, f"{PRET_PIN}:include/constants/species.h:312 (SPECIES_SHEDINJA); "
                             "used by CalculateMonStats' 1-HP exception, src/pokemon.c:2124-2132"),
+    # C4-ACTIVE-FAINT-P: mechanism P (docs/gen3/research/active_faint_in_battle_scope_2026-09-23.md
+    # §2d) -- the Perish-counter-0 + no-op commit. Together with the ram fields below these are
+    # the pack's active_faint capability; RR ships none of them (CFRU layout OPEN, G5).
+    "STATUS3_PERISH_SONG": (0x20, f"{PRET_PIN}:include/constants/battle.h:138 (STATUS3_PERISH_SONG)"),
+    "DISABLE_STRUCT_SIZE": (0x1C, f"{PRET_PIN}:include/battle.h:139-172 (sizeof(struct DisableStruct)); "
+                            "data/gen3/pret/pokefirered.sym:126 gDisableStructs 0x70 bytes / 4"),
+    "DISABLE_STRUCT_PERISH_TIMER_OFF": (0x0F, f"{PRET_PIN}:include/battle.h:153-154 "
+                                        "(perishSongTimer:4 low nibble, perishSongTimerStartValue:4)"),
+    "B_ACTION_NOTHING_FAINTED": (13, f"{PRET_PIN}:include/battle.h:48 (B_ACTION_NOTHING_FAINTED)"),
 }
 
 # ── more P4 card C4-2a facts: symbols read straight out of each title's own .sym file (same
@@ -109,6 +118,12 @@ FRLG_SYM_ADDR = {
     ("rom", "EXPERIENCE_TABLES_ADDR"): "gExperienceTables",
     ("rom", "BATTLE_MOVES_ADDR"): "gBattleMoves",
     ("rom", "PP_UP_GET_MASK_ADDR"): "gPPUpGetMask",
+    # C4-ACTIVE-FAINT-P (mechanism P). CHOSEN_ACTION_ADDR/BATTLE_COMM_ADDR share RR's names on
+    # purpose; CHOSEN_MOVE_ADDR is deliberately absent, so vanilla stays not explode_capable.
+    ("ram", "STATUS3_ADDR"): "gStatuses3",
+    ("ram", "DISABLE_STRUCTS_ADDR"): "gDisableStructs",
+    ("ram", "CHOSEN_ACTION_ADDR"): "gChosenActionByBattler",
+    ("ram", "BATTLE_COMM_ADDR"): "gBattleCommunication",
 }
 
 # C5-9: the same three values for the vanilla titles, taken from each title's own .sym.  They are

@@ -1102,16 +1102,22 @@ def test_world_force_faint_on_a_benched_mon_lands_immediately_with_no_faint_repo
 
 @world_item("34")
 def test_world_force_explode_is_handled_at_least_as_force_faint_on_vanilla_frlg():
-    """FRLG has no menu-skip capability (the pack ships no CHOSEN_ACTION_ADDR/CHOSEN_MOVE_ADDR/
-    BATTLE_COMM_ADDR: explode_capable == false, client.lua:429-430): force_explode degrades to
-    exactly force_faint's active-battler hold/land behaviour."""
+    """FRLG has no menu-skip capability (the pack ships no CHOSEN_MOVE_ADDR: explode_capable ==
+    false): force_explode degrades to exactly force_faint's active-battler behaviour. Since
+    C4-ACTIVE-FAINT-P that is mechanism P on FR/LG singles: the Perish-counter-0 + no-op commit
+    under battle_commit, no Explosion byte and no HP byte; the entry stays held until the engine
+    faints the mon (or it leaves, or the battle ends). Switching out lands the bench write."""
     w = _live()
     w.battle_ok = True
     w.enter_battle([_FOE], active=(0,))
     w.command(cmd="force_explode", key=_KA)
     w.step(3)
-    assert w.writes == [] and w.client.battle_pending_count(w.client) == 1
-    w.set_active([1])
+    assert {str(r.reason) for r in (w.parts.writes.log[i] for i in range(1, len(w.parts.writes.log) + 1))} \
+        == {"battle_commit"}
+    assert w.party_hp(0) == 20 and w.client.battle_pending_count(w.client) == 1
+    assert w._read(0x02023D7C, 1) == 13                          # B_ACTION_NOTHING_FAINTED, not a move
+    w.set_active([1])                                             # dragged out before the turn end
+    w.poke_int(0x02023E82, 1, 1)                                  # the next parked menu
     w.step()
     assert w.party_hp(0) == 0
 

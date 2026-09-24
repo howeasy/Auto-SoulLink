@@ -165,9 +165,14 @@ def test_vanilla_storage_and_party_facts(name: str) -> None:
         "BATTLE_TYPE_DOUBLE_MASK", "GMAIN_INBATTLE_OFFSET", "GMAIN_INBATTLE_MASK",
         "BATTLE_MOVE_ENTRY_SIZE", "BATTLE_MOVE_PP_OFFSET", "BASESTATS_GROWTH_RATE_OFFSET",
         "SHEDINJA_SPECIES_ID",
+        # C4-ACTIVE-FAINT-P (mechanism P)
+        "STATUS3_PERISH_SONG", "DISABLE_STRUCT_SIZE", "DISABLE_STRUCT_PERISH_TIMER_OFF",
+        "B_ACTION_NOTHING_FAINTED",
     }
     c4_2a_sym_keys = {"ram.TRAINER_OPPONENT_ADDR", "rom.EXPERIENCE_TABLES_ADDR",
-                       "rom.BATTLE_MOVES_ADDR", "rom.PP_UP_GET_MASK_ADDR"}
+                       "rom.BATTLE_MOVES_ADDR", "rom.PP_UP_GET_MASK_ADDR",
+                       "ram.STATUS3_ADDR", "ram.DISABLE_STRUCTS_ADDR", "ram.CHOSEN_ACTION_ADDR",
+                       "ram.BATTLE_COMM_ADDR"}
     for key in c4_2a_derived_keys:
         assert f"derived.{key}" in title["_src"], f"{name}: derived.{key} has no _src citation"
         base_src[f"derived.{key}"] = title["_src"][f"derived.{key}"]
@@ -363,6 +368,10 @@ def test_leafgreen_base_stats_address_comes_from_its_own_symbol():
     ("leafgreen", "gBattleMoves", "rom", "BATTLE_MOVES_ADDR"),
     ("firered", "gPPUpGetMask", "rom", "PP_UP_GET_MASK_ADDR"),
     ("leafgreen", "gPPUpGetMask", "rom", "PP_UP_GET_MASK_ADDR"),
+    *[(t, sym, "ram", key) for t in ("firered", "leafgreen") for sym, key in (
+        ("gStatuses3", "STATUS3_ADDR"), ("gDisableStructs", "DISABLE_STRUCTS_ADDR"),
+        ("gChosenActionByBattler", "CHOSEN_ACTION_ADDR"),
+        ("gBattleCommunication", "BATTLE_COMM_ADDR"))],
 ])
 def test_p4_c4_2a_sym_addresses_match_the_titles_own_sym_file(name, symbol, section, key) -> None:
     """P4 card C4-2a: independently re-derives each new address straight from the title's own
@@ -476,6 +485,19 @@ def test_p4_c4_2a_engine_constants_match_the_pinned_pret_header() -> None:
         badge01 = _num(re.search(r"^#define FLAG_BADGE01_GET\s+\(SYS_FLAGS \+ (0x[0-9A-Fa-f]+)\)",
                                   flags_h, re.M)[1])
         assert (0x800 + badge01) >> 3 == derived["SB1_BADGE_BYTE_OFFSET"]
+        # C4-ACTIVE-FAINT-P: the mechanism-P constants and the DisableStruct geometry
+        battle_struct_h = (pin_dir / "include" / "battle.h").read_text(encoding="utf-8")
+        assert derived["STATUS3_PERISH_SONG"] == 1 << int(re.search(
+            r"^#define STATUS3_PERISH_SONG\s+\(1 << (\d+)\)", battle_h, re.M)[1])
+        assert derived["B_ACTION_NOTHING_FAINTED"] == int(re.search(
+            r"^#define B_ACTION_NOTHING_FAINTED\s+(\d+)", battle_struct_h, re.M)[1])
+        assert re.search(r"/\*0x0F\*/ u8 perishSongTimer : 4;", battle_struct_h)
+        assert derived["DISABLE_STRUCT_PERISH_TIMER_OFF"] == 0x0F
+        assert re.search(r"/\*0x1A\*/ u8 unk1A\[2\];\s*};", battle_struct_h)   # ends at 0x1C
+        assert derived["DISABLE_STRUCT_SIZE"] == 0x1C
+        sym = (REPO / f"data/gen3/pret/poke{name}.sym").read_text(encoding="utf-8")
+        size = re.search(r"^[0-9a-f]{8}\s+g\s+([0-9a-f]{8})\s+gDisableStructs$", sym, re.M)[1]
+        assert int(size, 16) == 4 * derived["DISABLE_STRUCT_SIZE"]           # MAX_BATTLERS_COUNT
         growth_off = re.search(r"/\* 0x13 \*/ u8 growthRate;", pokemon_h)
         assert growth_off, "growthRate moved in pokemon.h"
         assert derived["BASESTATS_GROWTH_RATE_OFFSET"] == 0x13

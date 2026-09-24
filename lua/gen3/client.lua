@@ -546,6 +546,14 @@ function Client.new(p)
     -- ── in-battle writes (owner ruling 2026-09-23: parity with RR on vanilla) ──────
     local explode_capable = num(a.BATTLE_MONS_ADDR) and num(a.CHOSEN_ACTION_ADDR)
                             and num(a.CHOSEN_MOVE_ADDR) and num(a.BATTLE_COMM_ADDR) and true or false
+    -- mechanism P (C4-ACTIVE-FAINT-P): its own flag, so the P fields never flip explode_capable
+    -- (vanilla ships CHOSEN_ACTION/BATTLE_COMM but no CHOSEN_MOVE). RR ships no STATUS3 /
+    -- DISABLE_STRUCTS (CFRU layout OPEN, G5), so it keeps the hold by data, not by title.
+    local active_faint_capable = num(a.BATTLE_MONS_ADDR) and num(a.STATUS3_ADDR)
+                                 and num(a.DISABLE_STRUCTS_ADDR) and num(a.CHOSEN_ACTION_ADDR)
+                                 and num(a.BATTLE_COMM_ADDR) and num(d.STATUS3_PERISH_SONG)
+                                 and num(d.DISABLE_STRUCT_SIZE) and num(d.DISABLE_STRUCT_PERISH_TIMER_OFF)
+                                 and num(d.B_ACTION_NOTHING_FAINTED) and true or false
 
     -- one armed window, one reason, one allow set; returns true or nil, why
     -- args: what the reason's clause set needs (battle_commit: {battler}; sound: {player, track})
@@ -687,6 +695,49 @@ function Client.new(p)
         return "hold", "explosion committed"
     end
 
+    -- Mechanism P (docs/gen3/research/active_faint_in_battle_scope_2026-09-23.md §2d; owner
+    -- ruling PLAN §0 "In-battle faint"): at the parked action menu, the battler gets the Perish
+    -- flag with its counter at 0 and a committed no-op action. After the player's one (discarded)
+    -- A press the turn runs, and BattleTurnPassed's HandleWishPerishSongOnTurnEnd runs the
+    -- engine's own BattleScript_PerishSongTakesLife: HP drain, datahpupdate (gBattleMons AND the
+    -- party), tryfaintmon ("X fainted!"), then the vanilla send-out / whiteout. No HP byte is
+    -- written here. The no-op commit is what stops the mon acting (or Baton Passing the Perish
+    -- flag on). gStatuses3 is read and OR-ed on the same parked frame.
+    local function perish_plan(battler)
+        local s3 = a.STATUS3_ADDR + battler * 4
+        return {
+            { s3, 4, io.read_u32(s3) | d.STATUS3_PERISH_SONG },
+            -- the whole byte: timer 0 (low nibble); the StartValue nibble is read only by Baton Pass
+            { a.DISABLE_STRUCTS_ADDR + battler * d.DISABLE_STRUCT_SIZE + d.DISABLE_STRUCT_PERISH_TIMER_OFF, 1, 0 },
+            { a.CHOSEN_ACTION_ADDR + battler, 1, d.B_ACTION_NOTHING_FAINTED },
+            -- LAST, as in commit_plan: comm is the battle_commit guard, re-checked before every byte
+            { a.BATTLE_COMM_ADDR + battler, 1, STATE_ACTION_CONFIRMED_STANDBY },
+        }
+    end
+
+    -- commit -> held until gBattleMons[b].hp == 0 (done: the engine's faint, or a foe KO first).
+    -- The battler leaving (Roar) takes battle_write's bench path; the battle ending first (flee,
+    -- catch) takes its overworld path. A reset commit (comm < 3) with the mon alive is re-armed;
+    -- mid-turn the permit refuses that, so it can only land at a parked menu.
+    local function active_faint_step(e, mon, battler)
+        local bhp = io.read_u16(a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE + R.BATTLE_MON_HP_OFF)
+        if e.perish and bhp == 0 then
+            hud.show("!! " .. (e.nickname or mon.nickname or key(mon)) .. " fainted", 255, 80, 80, 360)
+            return "done"
+        end
+        if e.perish and io.read_u8(a.BATTLE_COMM_ADDR + battler) >= STATE_ACTION_CONFIRMED_STANDBY then
+            return "hold", "active faint committed (press A)"
+        end
+        local ok, why = armed_write("battle_commit", perish_plan(battler), { battler = battler })
+        if not ok then return "hold", why end
+        if not e.perish then
+            e.perish = true
+            mark_commanded(key(mon))                          -- the engine's faint is not an echo
+            log("force_faint: Perish commit battler=" .. battler .. " " .. e.key)
+        end
+        return "hold", "active faint committed (press A)"
+    end
+
     local function battle_write(e, slot, mon, ending)
         local k = key(mon)
         if ending then
@@ -700,8 +751,13 @@ function Client.new(p)
         local battler = battler_of(b, slot)
         if battler then
             if e.cmd == "force_explode" and explode_capable then return explode_step(e, slot, mon, battler) end
-            -- the engine refreshes an active battler's gBattleMons: a direct write races it
-            -- (old client :2555-2596). Held until it switches out or the battle ends.
+            -- P on singles only: in doubles a partner B-cancel resets battler 0's commit while
+            -- the Perish flag stays (scope doc §2.1), and D1-D5 are signed limits
+            if active_faint_capable and battler == 0 and b.battlers_count == 2 and b.is_doubles ~= true then
+                return active_faint_step(e, mon, battler)
+            end
+            -- Held until it switches out or the battle ends: a party-only HP write is undone by the
+            -- next datahpupdate, and a both-words write is a silent faint (scope doc §1.4, §2a).
             return "hold", "active battler"
         end
         local plan = faint_plan(slot, nil)
