@@ -132,7 +132,18 @@ function PC.driver(PI, facts, opts)
         if point.pc_cursor == t then return press("A") end
         return press(point.pc_cursor < t and "Down" or "Up")
     end
+    local pc_ui_inner
+    -- A menu origin can outlive its menu: after SEE YA! the _BillsPC context is still the newest while the top
+    -- menu is redrawn (_BillsPC.LogOut, live U1f Crystal run 6). A label missing from a PC menu waits for the
+    -- next origin instead of failing; the phase bound still catches a real stall.
     local function pc_ui(point, ui)
+        local buttons, why = pc_ui_inner(point, ui)
+        if buttons == nil and tostring(why):find("required native menu item missing", 1, true) then
+            return {}, self.phase
+        end
+        return buttons, why
+    end
+    function pc_ui_inner(point, ui)
         local o = op()
         if ui.kind == "pc_top" then return choose(ui, o and "BILL" or "TURN OFF") end
         if ui.kind == "bills_pc" then

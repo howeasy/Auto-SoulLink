@@ -206,3 +206,13 @@ def test_a_stale_promptless_yes_no_after_a_release_is_waited_out():
     step(rt, d)
     buttons, phase = d.step(pt(rt, overworld_ready=False, ui=ui("yes_no", ["WITHDRAW", "STATS", "RELEASE", "CANCEL"], 3)))
     assert buttons is not None and not any(buttons.values()) and phase == "pc"
+
+
+def test_a_stale_bills_pc_context_showing_the_top_menu_is_waited_out():
+    """Live U1f Crystal run 6: after SEE YA! the _BillsPC origin is still the newest while the top menu shows."""
+    rt, d = setup("pc")
+    step(rt, d)
+    done = {"party_count": 1, "cur_box": 1, "overworld_ready": False}
+    d.op_index = 7
+    buttons, phase = d.step(pt(rt, ui=ui("bills_pc", TOP), **done))
+    assert buttons is not None and not any(buttons.values()) and phase == "pc"
