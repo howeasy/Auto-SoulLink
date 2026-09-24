@@ -115,8 +115,8 @@ def test_verifier_names_each_stale_cell_and_passes_bound_ones(tmp_path):
 
 
 def test_stale_is_red_for_release_evidence_and_a_warning_elsewhere(monkeypatch, capsys):
-    for part in ("g4_packet_errors", "new_gates_errors", "live_gates_errors", "trade_gates_errors",
-                 "duo_pairs_errors"):
+    for part in ("g4_packet_errors", "fixtures_errors", "inspect_run_errors", "new_gates_errors", "live_gates_errors",
+                 "trade_gates_errors", "duo_pairs_errors"):
         monkeypatch.setattr(gate, part, lambda *_a, **_k: [])
     monkeypatch.setattr(gate, "stale_errors", lambda *_a, **_k: ["duo.c.c/link: STALE-UNKNOWN: receipt records no code digest"])
     assert gate.release_evidence_errors() == ["code: duo.c.c/link: STALE-UNKNOWN: receipt records no code digest"]

@@ -40,8 +40,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import gen2_code_digest as code_digest
@@ -1383,6 +1385,8 @@ def new_gates_errors(root: Path | None = None, receipt_validate=None, kinds=None
                 errors.extend(f"{rid}: {e}" for e in _w6_gate_row_errors(root, axes["title"], receipt))
             elif kind == "phone_gate":
                 errors.extend(f"{rid}: {e}" for e in _phone_gate_row_errors(root, axes["title"], receipt))
+            elif kind == "inspect_run":
+                errors.extend(f"{rid}: {e}" for e in _inspect_run_row_errors(receipt))
             else:
                 errors.append(f"{rid}: no validator for receipt kind {kind!r}")
     return errors
@@ -1496,17 +1500,86 @@ def g4_packet_errors(root: Path | None = None, release_ups=None, require_admitte
             errors.append(f"{title}: tools/make_release.py does not ship {ups.get('file')}")
     try:
         plan = (root / "docs/gen2/PLAN.md").read_text(encoding="utf-8")
-        signed = next(line for line in plan.splitlines() if line.startswith("| G4 |")).split("|")[2].strip()
-    except (OSError, StopIteration, IndexError):
-        signed = ""
-    if signed in ("", "—", "-"):
-        errors.append("docs/gen2/PLAN.md §6.1: the G4 ledger row carries no owner signature")
+    except OSError:
+        plan = ""
+    errors.extend(f"docs/gen2/PLAN.md §6.1: {e}" for e in g4_signature_errors(plan))
     return errors
+
+
+# PLAN §6.1: "owner signatures are chat rulings, quoted". The Signed cell of the G4 row must read
+#     owner YYYY-MM-DD: "<the owner's ruling, quoted verbatim>"
+# and the G4 row must be the only one, inside §6.1. Placeholders never sign.
+_SIGNATURE = re.compile(r'owner (\d{4}-\d{2}-\d{2}): "([^"|]+)"')
+_PLACEHOLDERS = frozenset({"", "tbd", "x", "pending", "awaiting owner", "-", "—", "signed", "todo", "n/a"})
+
+
+def g4_signature_errors(plan: str) -> list[str]:
+    lines = plan.splitlines()
+    start = next((i for i, line in enumerate(lines) if line.startswith("### 6.1 ")), None)
+    if start is None:
+        return ["no §6.1 gate ledger section"]
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith(("## ", "### "))), len(lines))
+    rows = [i for i, line in enumerate(lines) if line.replace(" ", "").startswith("|G4|")]
+    inside = [i for i in rows if start < i < end]
+    if len(inside) != 1 or len(rows) != 1:
+        return [f"the G4 ledger row must appear exactly once, inside §6.1 (found {len(inside)} inside, "
+                f"{len(rows)} in the file)"]
+    cells = [cell.strip() for cell in lines[inside[0]].strip().strip("|").split("|")]
+    signed = cells[1] if len(cells) > 1 else ""
+    match = _SIGNATURE.fullmatch(signed)
+    if not match:
+        return ["the G4 ledger row carries no owner signature"]   # grammar: see the comment above
+    try:
+        datetime.strptime(match.group(1), "%Y-%m-%d")
+    except ValueError:
+        return [f"the G4 signature date {match.group(1)!r} is not a date"]
+    if match.group(2).strip().lower() in _PLACEHOLDERS:
+        return [f"the G4 signature quotes a placeholder ({match.group(2)!r}), not an owner ruling"]
+    return []
+
+
+# The live-new-gates run attestation (R-1/R-2/R-3/R-4/R-5g): those rows have no receipt of their own; a
+# SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py run on all three titles writes one committed
+# attestation, pinned in tests/gen2_live_gate_requirements.json as the single kind "inspect_run" row.
+INSPECT_RUN_SCHEMA = "gen2-live-new-gates-attestation-v1"
+INSPECT_RUN_IDS = ("R-1", "R-2", "R-3", "R-4", "R-5g")
+
+
+def _inspect_run_row_errors(receipt: dict) -> list[str]:
+    errors = []
+    if (receipt.get("schema") != INSPECT_RUN_SCHEMA or receipt.get("result") != "PASS"
+            or receipt.get("evidence_level") != "PHYSICAL" or receipt.get("test") != "tests/live/test_gen2_new_gates.py"):
+        errors.append(f"inspect run attestation is not a PHYSICAL PASS {INSPECT_RUN_SCHEMA} of tests/live/test_gen2_new_gates.py")
+    if not set(INSPECT_RUN_IDS) <= set(receipt.get("requirement_ids") or ()):
+        errors.append(f"inspect run attestation does not cover {list(INSPECT_RUN_IDS)}")
+    titles = receipt.get("titles") or {}
+    if any(titles.get(title) != "PASS" for title in TITLES):
+        errors.append("inspect run attestation lacks a PASS for every title (crystal, gold, silver)")
+    counts = receipt.get("pytest") or {}
+    if (type(counts.get("passed")) is not int or counts["passed"] <= 0
+            or any(counts.get(key) != 0 for key in ("failed", "skipped", "errors", "xfailed", "xpassed", "deselected"))):
+        errors.append("inspect run attestation is not a clean pytest run (passes only, zero skips)")
+    return errors
+
+
+def inspect_run_errors(root: Path | None = None) -> list[str]:
+    """Presence of the one inspect_run row; its receipt is validated (pin, content) by new_gates_errors."""
+    root = ROOT if root is None else root
+    try:
+        rows = json.loads((root / NEW_GATES).read_text(encoding="utf-8"))["requirements"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return [f"{NEW_GATES} missing or malformed"]
+    found = [row for row in rows if (row.get("axes") or {}).get("kind") == "inspect_run"]
+    if len(found) != 1 or not found[0].get("proofs"):
+        return [f"no committed live-new-gates run attestation ({'/'.join(INSPECT_RUN_IDS)}): {NEW_GATES} needs "
+                f"exactly one kind inspect_run row with a pinned {INSPECT_RUN_SCHEMA} receipt"]
+    return []
 
 
 # CODE-DIGEST: gate receipt kinds whose verdict runs through the shipped client or server code. Fixture
 # qualification rows prove save bytes through the codec, not the client, so they are not included.
-CLIENT_PATH_GATE_KINDS = ("engine_sites", "write_window", "panel_gate", "sfx_gate", "w6_gate", "phone_gate")
+CLIENT_PATH_GATE_KINDS = ("engine_sites", "write_window", "panel_gate", "sfx_gate", "w6_gate", "phone_gate",
+                          "inspect_run")
 
 
 def code_staleness(root: Path | None = None, head: str | None = None) -> list[tuple[str, str]]:
@@ -1564,6 +1637,8 @@ def release_evidence_errors(root: Path | None = None, duo=None, receipt_validate
     A receipt that does not bind HEAD's production code (STALE / STALE-UNKNOWN) is RED here."""
     parts = (("packet", g4_packet_errors(root, release_ups, require_admitted)),
              ("code", stale_errors(root, head)),
+             ("fixtures", fixtures_errors(root)),
+             ("live-new-gates-run", inspect_run_errors(root)),
              ("live-new-gates", new_gates_errors(root, receipt_validate)),
              ("live-gates", live_gates_errors(root, receipt_validate)),
              ("live-trade-gates", trade_gates_errors(root, duo)),

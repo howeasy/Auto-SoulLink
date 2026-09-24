@@ -195,6 +195,8 @@ push, the release claim.
 
 ### 6.1 Gate ledger (coordinator-maintained; owner signatures are chat rulings, quoted)
 
+Signed cell grammar (tools/verify_gen2_release.py g4_signature_errors): `owner YYYY-MM-DD: "<the owner's ruling, quoted verbatim>"`; one row per gate, only in this table; placeholders (TBD, pending, —) never sign.
+
 | Gate | Signed | Tree | Evidence | Drift watch (Gen 3 tip sha, diff result) |
 |---|---|---|---|---|
 | G0 | — | — | — | — |

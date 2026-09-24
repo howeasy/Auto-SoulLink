@@ -2064,7 +2064,12 @@ def test_shiny_bonus_is_the_recorded_limit_not_a_duo_pairs_cell():
 
 # release-evidence: the G4 packet (synthetic published overlay) plus the receipt lanes.
 
-_SIGNED = '| G4 | owner 2026-10-01: "signed" | abc1234 | release-evidence green | none |\n'
+_SIGNED = '| G4 | owner 2026-10-01: "G4 signed, ship the overlay RC" | abc1234 | release-evidence green | none |\n'
+
+
+_LEDGER = ("## 6. Phases\n\n### 6.1 Gate ledger (owner signatures are chat rulings, quoted)\n\n"
+           "| Gate | Signed | Tree | Evidence | Drift |\n|---|---|---|---|---|\n| G3 | — | — | — | — |\n{g4}"
+           "| G5 | — | — | — | — |\n\n## 7. Worker dispatch\n")
 
 
 def _packet_tree(tmp_path):
@@ -2091,7 +2096,7 @@ def _packet_tree(tmp_path):
     (tmp_path / "data/gen2/overlay_provenance.json").write_text(
         json.dumps({"outputs": outputs, "symbols": symbols}), encoding="utf-8")
     (tmp_path / "docs/gen2").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "docs/gen2/PLAN.md").write_text("| Gate | Signed |\n" + _SIGNED, encoding="utf-8")
+    (tmp_path / "docs/gen2/PLAN.md").write_text(_LEDGER.format(g4=_SIGNED), encoding="utf-8")
     return tuple(f"SLink-{title.capitalize()}.ups" for title in gate.TITLES)
 
 
@@ -2138,8 +2143,8 @@ def test_g4_packet_red_on_each_missing_piece(tmp_path, mutation):
     assert gate.g4_packet_errors(tmp_path, shipped) != []
 
 
-_PARTS = ("g4_packet_errors", "stale_errors", "new_gates_errors", "live_gates_errors", "trade_gates_errors",
-          "duo_pairs_errors")
+_PARTS = ("g4_packet_errors", "stale_errors", "fixtures_errors", "inspect_run_errors", "new_gates_errors",
+          "live_gates_errors", "trade_gates_errors", "duo_pairs_errors")
 
 
 @pytest.mark.parametrize("red", [None, *_PARTS])
@@ -2374,3 +2379,69 @@ def test_committed_matrix_overrides_agree_with_the_runner():
                 staged = gate._runner_cell_fixtures(duo, axes["pairing"], name)
                 if staged is not None:
                     assert staged == ((axes.get("scenario_fixtures") or {}).get(name) or axes["fixtures"]), (row["id"], name)
+
+
+# PROMOTION-HARDEN (verify side): the strict G4 signature and the complete verdict.
+
+@pytest.mark.parametrize("row", [
+    '| G4 | owner 2026-10-01: "G4 signed, ship the overlay RC" | t | e | d |\n',
+    '| G4 | owner 2026-10-01: "yes" | — | — | — |\n'])
+def test_a_quoted_dated_owner_ruling_signs_g4(row):
+    assert gate.g4_signature_errors(_LEDGER.format(g4=row)) == []
+
+
+@pytest.mark.parametrize("row", [
+    "| G4 | — | — | — | — |\n", "| G4 | TBD | t | e | d |\n", '| G4 | owner 2026-10-01: "TBD" | t | e | d |\n',
+    '| G4 | owner 2026-10-01: "pending" | t | e | d |\n', '| G4 | owner 2026-10-01: "awaiting owner" | t | e | d |\n',
+    '| G4 | owner 2026-10-01: "x" | t | e | d |\n', '| G4 | owner 2026-10-01: "—" | t | e | d |\n',
+    '| G4 | owner 2026-13-40: "ship it" | t | e | d |\n', "| G4 | owner 2026-10-01: ship it | t | e | d |\n",
+    '| G4 | coordinator 2026-10-01: "ship it" | t | e | d |\n'])
+def test_placeholders_and_unquoted_or_undated_rows_never_sign(row):
+    assert gate.g4_signature_errors(_LEDGER.format(g4=row)) != []
+
+
+def test_a_duplicate_or_misplaced_g4_row_never_signs():
+    good = '| G4 | owner 2026-10-01: "ship it" | t | e | d |\n'
+    assert gate.g4_signature_errors(_LEDGER.format(g4=good + good)) != []
+    assert gate.g4_signature_errors(_LEDGER.format(g4="") + good) != []   # a signed row outside §6.1
+    assert gate.g4_signature_errors(good) != []                           # no §6.1 at all
+
+
+def _attestation(**changes):
+    receipt = {"schema": gate.INSPECT_RUN_SCHEMA, "result": "PASS", "evidence_level": "PHYSICAL",
+               "test": "tests/live/test_gen2_new_gates.py", "requirement_ids": list(gate.INSPECT_RUN_IDS),
+               "titles": dict.fromkeys(gate.TITLES, "PASS"),
+               "pytest": {"passed": 12, "failed": 0, "skipped": 0, "errors": 0, "xfailed": 0, "xpassed": 0,
+                          "deselected": 0}}
+    receipt.update(changes)
+    return receipt
+
+
+@pytest.mark.parametrize("changes", [
+    {"schema": "other"}, {"result": "FAIL"}, {"evidence_level": "MODEL"}, {"test": "tests/live/x.py"},
+    {"requirement_ids": ["R-1", "R-2"]}, {"titles": {"crystal": "PASS", "gold": "PASS"}},
+    {"titles": {"crystal": "PASS", "gold": "PASS", "silver": "FAIL"}},
+    {"pytest": {"passed": 12, "failed": 0, "skipped": 1, "errors": 0, "xfailed": 0, "xpassed": 0, "deselected": 0}},
+    {"pytest": {"passed": 0, "failed": 0, "skipped": 0, "errors": 0, "xfailed": 0, "xpassed": 0, "deselected": 0}}])
+def test_the_inspect_run_attestation_must_be_a_clean_physical_pass(changes):
+    assert gate._inspect_run_row_errors(_attestation()) == []
+    assert gate._inspect_run_row_errors(_attestation(**changes)) != []
+
+
+def test_release_evidence_needs_a_committed_inspect_run_row(tmp_path):
+    (tmp_path / "tests").mkdir()
+    (tmp_path / gate.NEW_GATES).write_text(json.dumps({"requirements": []}), encoding="utf-8")
+    assert "no committed live-new-gates run attestation" in gate.inspect_run_errors(tmp_path)[0]
+    path = tmp_path / "attest.json"
+    path.write_text(json.dumps(_attestation()), encoding="utf-8")
+    row = {"id": "new-gates.inspect-run", "axes": {"kind": "inspect_run"},
+           "proofs": [{"receipts": {"receipt": {"path": "attest.json", "sha256": _lf_sha(path)}}}]}
+    (tmp_path / gate.NEW_GATES).write_text(json.dumps({"requirements": [row]}), encoding="utf-8")
+    assert gate.inspect_run_errors(tmp_path) == []
+    assert gate.new_gates_errors(tmp_path, kinds={"inspect_run"}) == []
+    path.write_text(json.dumps(_attestation(result="FAIL")), encoding="utf-8")
+    assert gate.new_gates_errors(tmp_path, kinds={"inspect_run"}) != []   # the pin, then the content
+
+
+def test_the_promotion_verdict_includes_fixtures_and_the_inspect_run():
+    assert {"fixtures_errors", "inspect_run_errors"} <= set(_PARTS)
