@@ -359,3 +359,37 @@ def test_a_tokenless_trade_done_is_ignored(tmp_path):
     state.handle_event("a", {"event": "trade_done", "new_key": A_GETS, "new_species": 0x15})
     state.handle_event("a", {"event": "trade_done", "token": "", "new_key": A_GETS, "new_species": 0x15})
     assert state.pending_trade["verdict"] == {"a": None, "b": None}
+
+
+
+# ── asm review 1b33bc31 MINOR-4: vanilla trade sanity is a host-owned invariant ──────────────────
+
+import pytest as _pytest
+
+
+@_pytest.mark.parametrize("broken, why", [
+    ({"b": {"hp": 0}}, "A would keep no living mon: its only mon goes, a fainted one comes"),
+    ({"b": {"species_id": 0xFF}}, "an invalid incoming species (CheckAnyOtherAliveMonsForTrade/ValidateOTTrademon)"),
+    ({"b": {"level": 0}}, "an abnormal incoming level"),
+    ({"a": {"level": 101}}, "the partner would receive an abnormal mon"),
+])
+def test_an_abnormal_or_last_living_trade_is_never_eligible(tmp_path, broken, why):
+    state, _entry, _token, _ = _gen1_confirming(tmp_path)
+    state.pending_trade = None
+    for pid in ("a", "b"):
+        state.partner_blobs[pid][0].update(level=30, hp=40)
+    assert state._eligible_trade_pairs("a") and state._eligible_trade_pairs("b"), "control: a sane pair trades"
+    for pid, fields in broken.items():
+        state.partner_blobs[pid][0].update(fields)
+    assert not state._eligible_trade_pairs("a"), why
+    assert not state._eligible_trade_pairs("b"), why
+
+
+def test_a_fainted_incoming_mon_is_fine_while_another_own_mon_lives(tmp_path):
+    state, _entry, _token, _ = _gen1_confirming(tmp_path)
+    state.pending_trade = None
+    state.partner_blobs["a"][0].update(level=30, hp=40)
+    state.partner_blobs["b"][0].update(level=30, hp=0)
+    state.partner_blobs["a"].append({"slot": 0, "key": "ABCD:1234:99", "blob": bytes(66),
+                                     "species_id": 0x99, "level": 5, "hp": 12})
+    assert state._eligible_trade_pairs("a")

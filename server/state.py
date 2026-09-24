@@ -579,10 +579,28 @@ class SoulLinkState:
             if not my_mon or not par_mon or my_mon.key != k:
                 continue
             par_be = next((e for e in par_blobs if e.get("key") == par_mon.key), None)
-            if par_be is None:
+            if par_be is None or not self._trade_sane(player_id, be, par_be):
                 continue
             out.append((int(be.get("slot", 0)), k, entry, par_be))
         return out
+
+    def _trade_sane(self, player_id: str, mine: dict, theirs: dict) -> bool:
+        """Vanilla trade sanity (CheckAnyOtherAliveMonsForTrade / ValidateOTTrademon), which the GB
+        overlays leave to the host (asm review 1b33bc31 MINOR-4): neither mon may be abnormal
+        (a species the adapter does not know, a level outside 1-100), and neither player may be
+        left with no living mon. A field the snapshot did not carry is not held against it."""
+        def normal(e):
+            return (("species_id" not in e or self.adapter.species_types(e["species_id"]) is not None)
+                    and ("level" not in e or 1 <= int(e["level"] or 0) <= 100))
+
+        def alive(e):
+            return e.get("hp") is None or e["hp"] > 0
+
+        def keeps_one(pid, gives, gets):
+            return alive(gets) or any(alive(e) for e in self.partner_blobs.get(pid, [])
+                                      if e.get("key") != gives.get("key"))
+        return (normal(mine) and normal(theirs)
+                and keeps_one(player_id, mine, theirs) and keeps_one(_partner(player_id), theirs, mine))
 
     # A trade holds the single `pending_trade` slot. If a side abandons it (walks away from a menu /
     # the scene, or disconnects) the slot would wedge every future trade. `age` counts events seen
@@ -3508,6 +3526,8 @@ class SoulLinkState:
                 "level": int(s.get("level", 0) or 0),
                 "key": str(s.get("key", "") or ""),
                 "blob": blob,
+                # trade sanity (_trade_sane): only when the snapshot carries it
+                **({"hp": int(s["hp"])} if isinstance(s.get("hp"), int) else {}),
             })
         self.partner_blobs[player_id] = accepted
 
