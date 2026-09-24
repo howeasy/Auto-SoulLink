@@ -151,6 +151,16 @@
       }}}]
     },
     {
+      "id": "new-gates.qualification.crystal_battle_ot2_errand",
+      "stage": "physical-live",
+      "description": "Crystal OT2 battle fixture after the Mr. Pokemon errand (C<->C trade seed partner)",
+      "axes": {"kind": "qualification", "fixture": "crystal_battle_ot2_errand", "requirement_ids": ["F-6"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_battle_ot2_errand.qualification.json",
+        "sha256": "3561544b07a64237b86e1d0cd2204c20ab8f7aab8894d89602162e6c33d29b42"
+      }}}]
+    },
+    {
       "id": "new-gates.qualification.crystal_battle_errand",
       "stage": "physical-live",
       "description": "Crystal battle fixture after the Mr. Pokemon errand (Cable Club open: the P4.3e trade seed)",
