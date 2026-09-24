@@ -49,6 +49,45 @@ function W.new(deps)
         self.log[#self.log + 1] = record
         if deps.log then deps.log(record) end
     end
+    -- G4-PH (docs/gen3/research/rr_active_faint_parity_scope_2026-09-23.md §3.3): a whole plan,
+    -- {{addr, width, value}, ...}, validated ONCE. A plan ending in the controller hand-off has
+    -- two self-invalidating writes (comm = 3, then the slot), so write_bytes' per-write
+    -- revalidation would refuse the last after the rest landed. Same invariant as write_bytes:
+    -- every entry is checked (shape, allow) and the policy re-run immediately before the first
+    -- byte, then no reads/callbacks until the last byte. Only the plan the window was armed with
+    -- (args.plan, which the policy judged) may be written this way.
+    function self:write_plan(plan)
+        assert(window, "write refused: no armed write window")
+        assert(type(plan) == "table" and #plan > 0, "plan required")
+        assert(window.args and window.args.plan == plan, "write_plan: not the armed plan")
+        local jobs = {}
+        for i, w in ipairs(plan) do
+            local addr, width, value = uint(w[1], 4294967295), w[2], w[3]
+            assert(width == 1 or width == 2 or width == 4, "invalid plan width")
+            uint(value, 256 ^ width - 1)
+            assert(addr + width - 1 <= 4294967295, "invalid write interval")
+            assert(window.allow(addr, width) == true, "write outside allow range")
+            local bytes = {}
+            for k = 1, width do bytes[k] = value % 256; value = math.floor(value / 256) end
+            jobs[i] = {addr = addr, bytes = bytes}
+        end
+        assert(deps.frame() == window.frame, "write window expired")
+        local ok, why = safety:check(window.snapshot, window.reason, window.args)
+        assert(ok == true, why)
+        for _, job in ipairs(jobs) do
+            for k, byte in ipairs(job.bytes) do
+                self.attempted = self.attempted + 1
+                deps.io.write_u8(job.addr + k - 1, byte, "System Bus")
+            end
+        end
+        for _, job in ipairs(jobs) do
+            local n = #job.bytes
+            local record = {reason = window.reason, address = job.addr, len = n, frame = window.frame,
+                why = window.reason, addr = job.addr, n = n}
+            self.log[#self.log + 1] = record
+            if deps.log then deps.log(record) end
+        end
+    end
     function self:write_u16(addr, value)
         uint(value, 65535)
         self:write_bytes(addr, {value % 256, math.floor(value / 256)})
