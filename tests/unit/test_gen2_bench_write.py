@@ -101,6 +101,20 @@ def test_a_switch_in_that_beat_the_write_dies_at_the_hold_before_it_acts():
     assert battle_hp(world) == 0 and action(world) == 1              # dies before it acts
     assert kod(world) == ["show:!! PICHU KO'd"]                      # announced once
 
+def test_a_switch_before_the_command_dies_at_the_active_hold():
+    """PlayerSwitch selects the incoming slot before InitBattleMon replaces the outgoing battle view."""
+    world, party = bench_world()
+    only(world, "battle_bench", "battle_faint")
+    world.field("wCurBattleMon", 1)                                  # PlayerSwitch selected Pichu
+    world.reply({"cmd": "force_faint", "key": codec_key(party[1]), "nickname": "PICHU"})
+    world.frames(1)
+    assert world.written() == [] and world.hp_of(1) == (30, 0)      # active slot: no bench write
+    assert battle_hp(world) == 30 and kod(world) == []
+    world.emu.poke("System Bus", hold_ram(world, "wBattleMonSpecies"), world.lua.table_from([172]))
+    battle_hold(world)                                               # InitBattleMon has copied Pichu
+    assert battle_hp(world) == 0 and world.hp_of(1) == (0, 0)       # battle view and party mirror
+    assert world.hp_of(0) == (30, 0) and action(world) == 1
+    assert kod(world) == ["show:!! PICHU KO'd"]                      # one active-path KO
 
 def test_a_revived_bench_mon_is_re_zeroed_quietly_at_the_next_hold():
     """GiveExperiencePoints tests HP before the exp text and adds the level-up HP gain after it
