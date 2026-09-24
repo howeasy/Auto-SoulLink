@@ -64,7 +64,7 @@ Corrections already honoured: Gen 1's pack is not uniformly generated (RBY `writ
 | R11 | Adapter boundary | Satisfied structurally; but shared `is_rr` branches exist in `server.py:965, 1280-1294` and `_mixed_games_error` (`server.py:491-510`) compares game_id only, so clean FR beside clean RR pairs today. | cites | pack-aware compatibility (§5.4) |
 | R12 | Native UI ownership | Partial. Mailbox queue doesn't own payload buffers (`mailbox.lua:480-486`). | `mailbox.lua:475-528` | `lua/gen3/native.lua` owns staging |
 | R13 | Unit layers on the production graph | Partial. | `test_client_invariants.py:106-184` | `test_gen3_{entry,reads,signals,writes,safety,client}.py` |
-| R14 | Live gates | Partial (39 opcode gates on savestates). | `tests/live/test_lua_gates.py` | probe gates, checkpoint negative controls, wrong-ROM refusal, battery inspect |
+| R14 | Live gates | Partial (39 opcode gates on savestates; the gen3_gatelib port runs 26, defers 11 and archives 6, 21dfa6e7). | `tests/live/test_lua_gates.py` | probe gates, checkpoint negative controls, wrong-ROM refusal, battery inspect |
 | R15 | Duo oracles | **Missing.** 6 RR scenarios, client-RESULT verdicts, savestate boot, B's OTIDs patched in RAM (works only because RR party is unencrypted). | `e2e_duo.py:58-60, 185-197, 896-981`; `duo_main.lua:79-93` | oracles + witness + battery rows (§5.5) |
 | R16 | Release runner + ledger | **Missing.** | — | `tools/verify_gen3_release.py` on a shared lane core from P2 |
 | R17 | Launcher/packaging | Partial. | `slink.lua:86-99`, `game_detect.lua:25-31`, `make_release.py:60-157` | route + manifest from `PACK_FILES` at the FRLG cutover |
@@ -98,7 +98,7 @@ data/games/gen3_rr/     same (+ profile.native block for kind `companion`; kinds
 data/games/gen3_frlge/  unchanged server-side adapter inputs (rr_*.json, area/location Lua, rom_map_names)
 server/adapters/gen3_codec.py   independent decoder/encoder + flash-save parser (PYDEC oracle)
 tests/fixtures/gen3/    {firered,leafgreen,rr}_{town,battle}.sav + `_b` variants (distinct OT), each boot-qualified
-lua/tests/gen3_gatelib.lua      binding the 39 opcode gates to lua/gen3/native.lua (P5)
+lua/tests/gen3_gatelib.lua      binding the opcode gates to lua/gen3/native.lua (P5; as built 2026-09-24: 26 run, 11 deferred behind SLINK_GATES_DEFERRED, 6 archived in lua/tests/archive/gen3_old_client/, 21dfa6e7)
 ```
 
 Shared modules bound unchanged: `lua/connector.lua`, `lua/hud.lua`, `lua/json_codec.lua`, `server/state.py`. One bounded shared change in P3a (§5.1): `server/server.py` (`_mixed_games_error` ordering + derived foundation), `server/adapters/__init__.py` (`foundation_for_rom_type`), `server/adapters/base.py` (`pairing_kind` hook). Deleted at P5: `lua/clients/gen3_frlge_client.lua`, `lua/games/gen3_frlge.lua`, `lua/memory_gba.lua`, `lua/mailbox.lua`, `lua/peer_ghost_npc.lua`; 52 files reference them (39 `lua/tests/test_live_*.lua`/`test_mailbox_*.lua`, 12 `lua/tests/*.lua` diagnostics that `require("memory_gba")` incl. `test_1/2/3_*.lua`, probes, `duo_main.lua`, `tools/make_release.py:71` which ships `memory_gba.lua`, `tests/unit/test_stat_stages.py:160,174` which asserts on its source text, docs) and every one is assigned in P5 — the deletion is not a Gen-3-only edit.
