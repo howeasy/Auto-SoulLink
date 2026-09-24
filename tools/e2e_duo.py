@@ -6223,9 +6223,13 @@ class DuoRun:
         native_write = r"(?m)^\[client\] \[SLink-gen3\] write native "
         queued = rf"(?m)^\[client\] \[SLink-gen3\] apply_trade received for {re.escape(ka)}: queued"
         staged = r"(?m)^NATIVE_STAGED phase=\S+ writes=[1-9]"
+        # the trade's own native write FOLLOWS the queued line: the companion's link panel
+        # (RX link_panel) legitimately writes native before any trade arrives (live 156a521f),
+        # so the first `write native` line proves nothing about the trade
+        trade_write = (rf"(?ms)^\[client\] \[SLink-gen3\] apply_trade received for {re.escape(ka)}: queued.*?"
+                       r"^\[client\] \[SLink-gen3\] write native .*?^NATIVE_STAGED phase=\S+ writes=[1-9]")
         problems = gen3_receipt_problems(
-            "a", results["a"], required=[r"(?m)^RX apply_trade\b", queued, native_write, staged],
-            ordered=[(queued, native_write), (native_write, staged)])
+            "a", results["a"], required=[r"(?m)^RX apply_trade\b", queued, native_write, staged, trade_write])
         refused = (rf"(?m)^\[client\] \[SLink-gen3\] apply_trade refused: no trade path on this "
                    rf"cartridge \(nothing written\) {re.escape(kb)}")
         problems += gen3_receipt_problems(

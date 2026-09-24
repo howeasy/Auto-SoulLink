@@ -48,6 +48,15 @@ local RR_OLD_CLIENT = "old-client RR (production-tested): lua/games/gen3_frlge.l
 local RR_DUO_PRECEDENT = "old-client RR (production-tested): lua/tests/probe_gen3_rr_bag.lua:29 "
                        .. "(duo-precedent constant from scenario_explode.lua)"
 local RR_PC_MENU_MD = "docs/gen3/research/rr_pc_menu.md:"
+-- G5-RR-BATTERY-2: the harness words proven by FR-referrer retention (every FR literal-pool word
+-- holding the value is still at the same ROM address in RR, clean and companion) -- the
+-- evidence, hashes and derivation command live in the note, not here.
+-- The hand-off pair has no FR literal to keep (FR reaches ExecCompleted by bl): its RR proof is
+-- the CFRU action menu's own pool word and the ExecCompleted hook (parity scope §3.2).
+local RR_HANDOFF = "docs/gen3/research/rr_active_faint_parity_scope_2026-09-23.md §3.2 (LDR@0x090A9EFE = "
+                   .. "0x0802E33D; the ExecCompleted hook 0x0904459A stores 0x0802E3B5)"
+local RR_HARNESS = "docs/gen3/research/rr_harness_syms_2026-09-24.md (FR referrers kept in RR; "
+                   .. "tools/research/rr_harness_syms.py --check)"
 
 M.entries = {
     -- ── plaintext RAM observables (WRAM data — identical in FR/LG, verified) ─────────────────
@@ -77,20 +86,9 @@ M.entries = {
     GMAIN_CALLBACK2_ADDR   = { symbol = "gMain", offset = 0x04,  firered = 0x030030F4, leafgreen = 0x030030F4,
                                 radical_red = 0x030030F4, rr_source = RR_PC_MENU_MD .. "63 (\"gMain.callback2 "
                                                                    .. "u32 030030F4\")" },
-    -- The in-battle party menu on RR (G5-RR-ORACLES; live R1 on rr_battle2 at f9171b9a: with these
-    -- ABSENT, party_menu_up() compared callback2 against nil, so a forced send-out read as
-    -- "neither action nor forced party menu"). Party-menu note, from the RR 4.1 dump (sha1
-    -- 964f951a) against FR 1.0 (41cb23d8):
-    --   CB2_UpdatePartyMenu 0x0811EBA0: RR's 0x1A body is byte-identical to FR's, and its only two
-    --     literal referrers (0x0811EE28, 0x0811EE70, the party-menu init) are the same words at
-    --     the same addresses in both ROMs;
-    --   Task_ReturnToChooseMonAfterText 0x081203B8: body byte-identical (0x68 bytes);
-    --   Task_HandleChooseMonInput 0x0811FB28 / Task_HandleSelectionMenuInput 0x08122C5C: CFRU
-    --     detours the BODIES (RR 0x0811FB28 starts ldr r1,[pc]; bx r1) but the task pointers
-    --     (|1) stay what tasks store: 29 / 4 literal referrers in RR (28 / 4 in FR);
-    --   gPartyMenu 0x0203B0A0: 179 literal referrers in RR (153 in FR).
+    -- The in-battle party menu on RR: the note (RR_HARNESS) has the evidence (G5-RR-ORACLES).
     PARTY_MENU_ADDR        = { symbol = "gPartyMenu",            firered = 0x0203B0A0, leafgreen = 0x0203B0A0,
-                               radical_red = 0x0203B0A0, rr_source = "ROM byte anchor (G5-RR-ORACLES): lua/tests/gen3_title_syms.lua party-menu note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+                               radical_red = 0x0203B0A0, rr_source = RR_HARNESS },
     TASKS_BASE              = { symbol = "gTasks",                firered = 0x03005090, leafgreen = 0x03005090,
                                  radical_red = 0x03005090, rr_source = RR_OLD_CLIENT .. "372, cross-checked "
                                                                     .. "by " .. RR_PC_MENU_MD .. "36 (RR ROM "
@@ -99,29 +97,37 @@ M.entries = {
     -- BAG_MENU_STATE_ADDR/SPECIAL_VAR_ITEM_ID_ADDR: CFRU replaces the bag UI entirely
     -- (probe_gen3_rr_bag.lua's own header: "the FR driver's Right -> B_ACTION_USE_ITEM toggle
     -- does not carry over"), so the FR gBagMenuState-based flow does not apply at all. ABSENT.
-    BAG_MENU_STATE_ADDR     = { symbol = "gBagMenuState",         firered = 0x0203ACFC, leafgreen = 0x0203ACFC },
-    SPECIAL_VAR_ITEM_ID_ADDR = { symbol = "gSpecialVar_ItemId",   firered = 0x0203AD30, leafgreen = 0x0203AD30 },
+    BAG_MENU_STATE_ADDR     = { symbol = "gBagMenuState",         firered = 0x0203ACFC, leafgreen = 0x0203ACFC,
+        radical_red = 0x0203ACFC, rr_source = RR_HARNESS },
+    SPECIAL_VAR_ITEM_ID_ADDR = { symbol = "gSpecialVar_ItemId",   firered = 0x0203AD30, leafgreen = 0x0203AD30,
+        radical_red = 0x0203AD30, rr_source = RR_HARNESS },
     SAVEBLOCK2_PTR_ADDR       = { symbol = "gSaveBlock2Ptr",       firered = 0x0300500C, leafgreen = 0x0300500C,
                                    -- DIFFERS from FR/LG: CFRU relocated gSaveBlock2Ptr.
                                    radical_red = 0x03003838, rr_source = RR_OLD_CLIENT .. "265 (SB2_PTR_ADDR)" },
     -- PC_RESULT/PC_CURSOR_AREA/PC_CURSOR_POS/PC_STORAGE_PTR/PC_DEPOSIT_BOX_ID/PC_MENU_BASE: the
-    -- PC's storage backend is CFRU's own (25 compressed boxes via sPokemonBoxPtrs, not pret's
-    -- gStorage), and rr_pc_menu.md:65 says explicitly: FR's sCursorArea/sCursorPosition/
-    -- sDepositBoxId/gStorage are "candidate RR instrumentation, not fully rebound" and "do not
-    -- guess a gStorage structure offset". ABSENT.
-    PC_RESULT                  = { symbol = "gSpecialVar_Result",   firered = 0x020370D0, leafgreen = 0x020370D0 },
-    PC_CURSOR_AREA               = { symbol = "sCursorArea",         firered = 0x02039820, leafgreen = 0x02039820 },
-    PC_CURSOR_POS                 = { symbol = "sCursorPosition",     firered = 0x02039821, leafgreen = 0x02039821 },
-    PC_STORAGE_PTR                 = { symbol = "gStorage",            firered = 0x020397B0, leafgreen = 0x020397B0 },
-    PC_DEPOSIT_BOX_ID               = { symbol = "sDepositBoxId",       firered = 0x020397B6, leafgreen = 0x020397B6 },
+    -- PC's box BACKEND is CFRU's own (25 compressed boxes), but rr_pc_menu.md:65's "candidate RR
+    -- instrumentation, not fully rebound" is closed by the harness note (RR_HARNESS): every FR
+    -- code site that loads each of these words is still at the same ROM address in RR -- the
+    -- storage UI that reads them is FR's (gStorage: all 339 FR sites kept). The harness still
+    -- guesses no gStorage structure offset beyond the ones those kept sites use.
+    PC_RESULT                  = { symbol = "gSpecialVar_Result",   firered = 0x020370D0, leafgreen = 0x020370D0,
+        radical_red = 0x020370D0, rr_source = RR_HARNESS },
+    PC_CURSOR_AREA               = { symbol = "sCursorArea",         firered = 0x02039820, leafgreen = 0x02039820,
+        radical_red = 0x02039820, rr_source = RR_HARNESS },
+    PC_CURSOR_POS                 = { symbol = "sCursorPosition",     firered = 0x02039821, leafgreen = 0x02039821,
+        radical_red = 0x02039821, rr_source = RR_HARNESS },
+    PC_STORAGE_PTR                 = { symbol = "gStorage",            firered = 0x020397B0, leafgreen = 0x020397B0,
+        radical_red = 0x020397B0, rr_source = RR_HARNESS },
+    PC_DEPOSIT_BOX_ID               = { symbol = "sDepositBoxId",       firered = 0x020397B6, leafgreen = 0x020397B6,
+        radical_red = 0x020397B6, rr_source = RR_HARNESS },
     SCRIPT_CONTEXT_STATUS_ADDR       = { symbol = "sGlobalScriptContextStatus",
                                           firered = 0x03000EA8, leafgreen = 0x03000EA8,
                                           radical_red = 0x03000EA8, rr_source = RR_PC_MENU_MD .. "64 (RR "
                                                                              .. "checkpoint predicate)" },
     -- occurrence 1: pokemon_storage_system.c's sMenu. Occurrence 0 (0x020399C0) is
     -- mon_markings.c's unrelated sMenu pointer (the code at every use site already says so).
-    -- No RR citation (see the PC_STORAGE_PTR block above). ABSENT.
-    PC_MENU_BASE = { symbol = "sMenu", occurrence = 1, firered = 0x0203ADE4, leafgreen = 0x0203ADE4 },
+    PC_MENU_BASE = { symbol = "sMenu", occurrence = 1, firered = 0x0203ADE4, leafgreen = 0x0203ADE4,
+        radical_red = 0x0203ADE4, rr_source = RR_HARNESS },
 
     -- ── code entry points used as function-POINTER VALUES (Thumb bit set; SHIFT per title) ───
     HANDLE_INPUT_CHOOSE_ACTION = { symbol = "HandleInputChooseAction", thumb = true,
@@ -130,69 +136,58 @@ M.entries = {
     -- PC_MULTICHOICE/PC_STORAGE_MAIN/PC_ON_SELECTED/PC_RELEASE_MON/PC_ON_B_PRESSED: no ROM
     -- anchor, no old-client use, not in rr_pc_menu.md. ABSENT.
     -- (The four party-menu words below carry RR values: see the party-menu note above.)
-    -- Battle/bag note (G5-RR-BATTERY; the carrier's RR symbol table reads ONLY this file, the RR
-    -- profile and the RR pack -- no pokefirered.sym fallback), RR 4.1 (964f951a) vs FR (41cb23d8):
-    --   gActiveBattler 0x02023BC4: CFRU's action menu loads it (pool 0x090A9EA4 region, the
-    --     `ldr r4,=0x02023bc4` at 0x090A9EA4); the RR faint site's census reads it
-    --     (docs/gen3/research/rr_faint_repin.md R5);
-    --   PlayerBufferExecCompleted|1 0x0802E33D / PlayerBufferRunCommand|1 0x0802E3B5: the
-    --     hand-off pair (rr_active_faint_parity_scope §3.2); RunCommand's referrers are FR's pool
-    --     0x0802E334 and CFRU's ExecCompleted hook 0x090445FC;
-    --   HandleInputChooseMove|1 0x0802EA11: FR's four referrers (0x0802E79C, 0x0802F398,
-    --     0x0802F3FC, HandleChooseMoveAfterDma3's pool 0x08032C8C) all kept; CFRU detours the
-    --     body (00 48 00 47 -> 0x090AB8B9) and compares the word at four more sites;
-    --   gMoveSelectionCursor 0x02023FFC: 51 literal referrers in RR, CFRU's move menu among them;
-    --   CB2_BagMenuRun 0x08107EE0 and Task_AnimateWin0v 0x08108CFC: bodies byte-identical, the
-    --     same referrers as FR; Task_BagMenu_HandleInput 0x08108F0C: CFRU edits the body past
-    --     byte 64, the four task-pointer referrers are FR's.
+    -- Battle-controller / bag / PC words on RR: the note (RR_HARNESS) has the evidence.
     CB2_UPDATE_PARTY_MENU = { symbol = "CB2_UpdatePartyMenu", thumb = true,
                                firered = 0x0811EBA1, leafgreen = 0x0811EB79,
-                               radical_red = 0x0811EBA1, rr_source = "ROM byte anchor (G5-RR-ORACLES): lua/tests/gen3_title_syms.lua party-menu note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+                               radical_red = 0x0811EBA1, rr_source = RR_HARNESS },
     TASK_CHOOSE_MON = { symbol = "Task_HandleChooseMonInput", thumb = true,
                          firered = 0x0811FB29, leafgreen = 0x0811FB01,
-                         radical_red = 0x0811FB29, rr_source = "ROM byte anchor (G5-RR-ORACLES): lua/tests/gen3_title_syms.lua party-menu note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+                         radical_red = 0x0811FB29, rr_source = RR_HARNESS },
     TASK_RETURN_AFTER_TEXT = { symbol = "Task_ReturnToChooseMonAfterText", thumb = true,
                                 firered = 0x081203B9, leafgreen = 0x08120391,
-                                radical_red = 0x081203B9, rr_source = "ROM byte anchor (G5-RR-ORACLES): lua/tests/gen3_title_syms.lua party-menu note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+                                radical_red = 0x081203B9, rr_source = RR_HARNESS },
     TASK_SELECTION_POPUP = { symbol = "Task_HandleSelectionMenuInput", thumb = true,
                               firered = 0x08122C5D, leafgreen = 0x08122C35,
-                              radical_red = 0x08122C5D, rr_source = "ROM byte anchor (G5-RR-ORACLES): lua/tests/gen3_title_syms.lua party-menu note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+                              radical_red = 0x08122C5D, rr_source = RR_HARNESS },
     CB2_BAG_MENU_RUN = { symbol = "CB2_BagMenuRun", thumb = true,
                           firered = 0x08107EE1, leafgreen = 0x08107EB9,
-                          radical_red = 0x08107EE1, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+                          radical_red = 0x08107EE1, rr_source = RR_HARNESS },
     -- The bag's input gates (pret src/item_menu.c:1044-1049): Task_BagMenu_HandleInput reads
     -- no press while the palette fade or Task_AnimateWin0v runs. Verified against both .sym
     -- files (pokefirered.sym:10212/10205, pokeleafgreen.sym:10214/10207). No RR value: ABSENT.
     TASK_BAG_MENU_HANDLE_INPUT = { symbol = "Task_BagMenu_HandleInput", thumb = true,
                                     firered = 0x08108F0D, leafgreen = 0x08108EE5,
-                                    radical_red = 0x08108F0D, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+                                    radical_red = 0x08108F0D, rr_source = RR_HARNESS },
     TASK_ANIMATE_WIN0V = { symbol = "Task_AnimateWin0v", thumb = true,
                             firered = 0x08108CFD, leafgreen = 0x08108CD5,
-                            radical_red = 0x08108CFD, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+                            radical_red = 0x08108CFD, rr_source = RR_HARNESS },
     ACTIVE_BATTLER_ADDR = { symbol = "gActiveBattler", firered = 0x02023BC4, leafgreen = 0x02023BC4,
-                            radical_red = 0x02023BC4, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+                            radical_red = 0x02023BC4, rr_source = RR_HARNESS },
     PLAYER_BUFFER_EXEC_COMPLETED = { symbol = "PlayerBufferExecCompleted", thumb = true,
                                      firered = 0x0802E33D, leafgreen = 0x0802E33D,
-                                     radical_red = 0x0802E33D, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+                                     radical_red = 0x0802E33D, rr_source = RR_HANDOFF },
     PLAYER_BUFFER_RUN_COMMAND = { symbol = "PlayerBufferRunCommand", thumb = true,
                                   firered = 0x0802E3B5, leafgreen = 0x0802E3B5,
-                                  radical_red = 0x0802E3B5, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+                                  radical_red = 0x0802E3B5, rr_source = RR_HANDOFF },
     HANDLE_INPUT_CHOOSE_MOVE = { symbol = "HandleInputChooseMove", thumb = true,
                                  firered = 0x0802EA11, leafgreen = 0x0802EA11,
-                                 radical_red = 0x0802EA11, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+                                 radical_red = 0x0802EA11, rr_source = RR_HARNESS },
     MOVE_CURSOR_ADDR = { symbol = "gMoveSelectionCursor", firered = 0x02023FFC, leafgreen = 0x02023FFC,
-                         radical_red = 0x02023FFC, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+                         radical_red = 0x02023FFC, rr_source = RR_HARNESS },
     PC_MULTICHOICE = { symbol = "Task_MultichoiceMenu_HandleInput", thumb = true,
-                        firered = 0x0809CC99, leafgreen = 0x0809CC6D },
+                        firered = 0x0809CC99, leafgreen = 0x0809CC6D,
+        radical_red = 0x0809CC99, rr_source = RR_HARNESS },
     -- pret ROM address unchanged in RR (rr_pc_menu.md:29,36: only two 8-byte windows patched
     -- inside the function body; the function itself was not relocated).
     PC_MAIN_MENU = { symbol = "Task_PCMainMenu", thumb = true,
                       firered = 0x0808C39D, leafgreen = 0x0808C371,
                       radical_red = 0x0808C39D, rr_source = RR_PC_MENU_MD .. "29,36" },
     PC_STORAGE_MAIN = { symbol = "Task_PokeStorageMain", thumb = true,
-                         firered = 0x0808D2BD, leafgreen = 0x0808D291 },
+                         firered = 0x0808D2BD, leafgreen = 0x0808D291,
+        radical_red = 0x0808D2BD, rr_source = RR_HARNESS },
     PC_ON_SELECTED = { symbol = "Task_OnSelectedMon", thumb = true,
-                        firered = 0x0808D879, leafgreen = 0x0808D84D },
+                        firered = 0x0808D879, leafgreen = 0x0808D84D,
+        radical_red = 0x0808D879, rr_source = RR_HARNESS },
     -- pret ROM address unchanged in RR (rr_pc_menu.md:29: "retained ... byte-for-byte in direct
     -- comparisons against FireRed").
     PC_DEPOSIT_MENU = { symbol = "Task_DepositMenu", thumb = true,
@@ -204,9 +199,11 @@ M.entries = {
                          firered = 0x0808DC9D, leafgreen = 0x0808DC71,
                          radical_red = 0x0808DC9D, rr_source = RR_PC_MENU_MD .. "80" },
     PC_RELEASE_MON = { symbol = "Task_ReleaseMon", thumb = true,
-                        firered = 0x0808DECD, leafgreen = 0x0808DEA1 },
+                        firered = 0x0808DECD, leafgreen = 0x0808DEA1,
+        radical_red = 0x0808DECD, rr_source = RR_HARNESS },
     PC_ON_B_PRESSED = { symbol = "Task_OnBPressed", thumb = true,
-                         firered = 0x0808ECE5, leafgreen = 0x0808ECB9 },
+                         firered = 0x0808ECE5, leafgreen = 0x0808ECB9,
+        radical_red = 0x0808ECE5, rr_source = RR_HARNESS },
 
     -- ── witnesses for the scripted NEW GAME intro (card C4-LGF2, coordinator steer) ───────────
     -- Replace gen3_fr_newgame_inputs.lua's old fixed-frame-count waits (tuned once on FR,
@@ -240,7 +237,8 @@ M.entries = {
     START_CB_SAVE1 = { symbol = "StartCB_Save1", thumb = true, firered = 0x0806F5A5, leafgreen = 0x0806F5A5 },
     START_CB_SAVE2 = { symbol = "StartCB_Save2", thumb = true, firered = 0x0806F5C9, leafgreen = 0x0806F5C9 },
     TASK_YES_NO_MENU = { symbol = "Task_YesNoMenu_HandleInput", thumb = true,
-                         firered = 0x0809CE55, leafgreen = 0x0809CE29 },
+                         firered = 0x0809CE55, leafgreen = 0x0809CE29,
+        radical_red = 0x0809CE55, rr_source = RR_HARNESS },
 }
 
 local TITLES = { firered = true, leafgreen = true, radical_red = true }

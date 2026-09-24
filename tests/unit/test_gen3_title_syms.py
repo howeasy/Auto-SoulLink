@@ -138,6 +138,15 @@ def test_every_radical_red_value_has_a_citation(entries):
         )), f"{name}: rr_source does not look like one of the card's evidence tiers: {source!r}"
 
 
+def test_no_radical_red_value_cites_this_table_itself(entries):
+    """G5-RR-BATTERY-2 (OMP review of 156a521f): an rr_source naming gen3_title_syms.lua is the
+    table vouching for itself. The evidence must live in a committed note or a production-tested
+    file; this rejects any self-citation."""
+    for name, e in entries.items():
+        source = e.get("rr_source") or ""
+        assert "gen3_title_syms" not in source, f"{name}: rr_source cites the table itself: {source!r}"
+
+
 def test_radical_red_citations_point_at_real_files(entries):
     """Every rr_source names a file that exists in this repo (a citation to a file that was
     never committed is not evidence)."""

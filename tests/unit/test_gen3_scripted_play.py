@@ -1145,6 +1145,7 @@ def test_pc_dump_reports_the_fields_it_can_on_radical_red(rr_module):
     crashing the whole dump."""
     dump = rr_module.PC.dump()
     assert "script_status=" in dump
-    assert "storage_state=-1" in dump
-    assert "result=-1" in dump
-    assert "menu_cursor=-1" in dump
+    assert "storage_state=-1" in dump          # the fake bus holds no storage pointer
+    # G5-RR-BATTERY-2: gSpecialVar_Result and sMenu are proven for RR now
+    # (docs/gen3/research/rr_harness_syms_2026-09-24.md), so they read instead of the sentinel
+    assert "result=0" in dump and "menu_cursor=0" in dump

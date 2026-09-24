@@ -376,6 +376,11 @@ local function bag_cursor_slot(pocket)
     return above + cursor
 end
 local function bag_pokeballs_item_id(cp, slot)
+    -- RR (CFRU) keeps its bag in EWRAM, not SaveBlock1: the pack's derived.BAG_IN_EWRAM +
+    -- ram.BALL_POCKET_ADDR, the same pocket lua/gen3/reads.lua read_balls reads (G5-RR-BATTERY-2)
+    if profile.derived.BAG_IN_EWRAM then
+        return memory.read_u16_le(profile.ram.BALL_POCKET_ADDR + slot * 4)
+    end
     local sb1 = sb1_ptr(cp)
     if not sb1 then return -1 end
     return memory.read_u16_le(sb1 + SB1_POKEBALLS_POCKET_OFFSET + slot * 4)
@@ -453,7 +458,7 @@ end
 -- reader/offset (SaveBlock1.bagPocket_PokeBalls +0x0430); BAG_POKEBALLS_COUNT=13
 -- (include/constants/global.h:38). Scanned, not assumed at slot 0, for the same reason as the
 -- key-items scan above.
-local BAG_POKEBALLS_COUNT = 13
+local BAG_POKEBALLS_COUNT = profile.derived.SB1_BALL_POCKET_COUNT or 13   -- RR: 50
 local function pokeballs_pocket_has_poke_ball(cp)
     for slot = 0, BAG_POKEBALLS_COUNT - 1 do
         if bag_pokeballs_item_id(cp, slot) == ITEM_POKE_BALL then return true end

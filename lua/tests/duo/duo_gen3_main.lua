@@ -579,6 +579,22 @@ end
 function ctx.attempted() return session.deferred.exec.write_count() end
 --- The party region (count byte + six records) and the PC storage (current box + every box's
 --- records), as byte strings: a before/after compare needs no write log at all.
+--- The PC storage bytes a before/after compare covers, as {address, length} spans. Vanilla: pret
+--- include/pokemon_storage_system.h struct PokemonStorage -- currentBox, the boxes (from
+--- BOX_DATA_OFFSET), boxNames[n][9], boxWallpapers[n] -- one span, 0x83D0 on FR/LG. RR (CFRU,
+--- G5-RR-BATTERY-2: reconnect_gen3 died on the vanilla formula, the RR pack has no
+--- MONS_PER_BOX/BOX_DATA_OFFSET): the pack's CFRU_BOX_BASES, each 30 * COMPRESSED_MON_SIZE (58),
+--- the exact regions lua/gen3/reads.lua read_box decodes. Self-contained (no upvalues).
+local function storage_spans(d, store, mons_per_box_default)
+    local per_box = d.MONS_PER_BOX or mons_per_box_default
+    if d.CFRU_COMPRESSED_BOX then
+        local out = {}
+        for _, base in ipairs(d.CFRU_BOX_BASES) do out[#out + 1] = { base, per_box * d.COMPRESSED_MON_SIZE } end
+        return out
+    end
+    local n = d.BOXES_PER_STORE
+    return { { store, d.BOX_DATA_OFFSET + n * per_box * 80 + n * 9 + n } }
+end
 function ctx.mutable_bytes()
     local function bytes(addr, n)
         local out = {}
@@ -587,13 +603,11 @@ function ctx.mutable_bytes()
     end
     local party = bytes(profile.ram.PARTY_COUNT_ADDR, 1) .. bytes(profile.ram.PARTY_BASE, 6 * Reads.PARTY_MON_SIZE)
     local store = memory.read_u32_le(cp.pointers.gPokemonStoragePtr.address, "System Bus")
-    local d = profile.derived
-    -- pret include/pokemon_storage_system.h struct PokemonStorage: currentBox, the boxes (from
-    -- BOX_DATA_OFFSET), then boxNames[n][9] and boxWallpapers[n] -- the whole struct, 0x83D0 on
-    -- FR/LG. RR's 25-box storage is sized by the same formula from its pack (layout unverified).
-    local n = d.BOXES_PER_STORE
-    local box = bytes(store, d.BOX_DATA_OFFSET + n * d.MONS_PER_BOX * 80 + n * 9 + n)
-    return party, box
+    local parts = {}
+    for _, span in ipairs(storage_spans(profile.derived, store, Reads.MONS_PER_BOX)) do
+        parts[#parts + 1] = bytes(span[1], span[2])
+    end
+    return party, table.concat(parts)
 end
 function ctx.party_base() return reader.party_base() end
 --- A script variable (0x4000..), read through gSaveBlock1Ptr + SB1_VARS_OFFSET (pret
@@ -747,9 +761,11 @@ function ctx.inputs() return presses end
 function ctx.press(buttons) joypad.set(buttons) end
 function ctx.faint_sites() return faint_sites end
 function ctx.peek_u8(addr) return memory.read_u8(addr, "System Bus") end
---- The hand-off words, from pret's .sym (independent of the pack): the slot, the value the plan
---- writes, and the successor(s) PlayerBufferExecCompleted installs -- RR's CFRU hook may store its
---- bit-24 alternative 0x090ACD8D instead (rr_active_faint_parity_scope §3.2 step 2).
+--- The hand-off words, from the carrier's symbol table S (FR/LG: pret's .sym; radical_red:
+--- gen3_title_syms' ROM-proven values, docs/gen3/research/rr_harness_syms_2026-09-24.md -- never
+--- the client's pack block this checks): the slot, the value the plan writes, and the
+--- successor(s) PlayerBufferExecCompleted installs -- RR's CFRU hook may store its bit-24
+--- alternative 0x090ACD8D instead (rr_active_faint_parity_scope §3.2 step 2).
 ctx.handoff = { slot_addr = S.gBattlerControllerFuncs, from = S.PlayerBufferExecCompleted | 1,
                 to = { S.PlayerBufferRunCommand | 1, ctx.rr and 0x090ACD8D or nil } }
 --- The two HP words of party `slot` as battler 0 (pret pokemon.h: party hp +0x56, BattlePokemon

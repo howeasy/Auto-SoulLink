@@ -659,6 +659,14 @@ def test_native_absent_oracle_needs_a_native_stage_and_a_clean_refusal():
     clean_wrote = dict(receipts, b=receipts["b"] + "[client] [SLink-gen3] write overworld 0x1 +2 frame 3\n")
     with pytest.raises(RuntimeError, match="forbidden"):
         run.assert_native_absent_gen3_saved(clean_wrote)
+    # live 156a521f: the companion's link panel writes native BEFORE the trade arrives; the
+    # trade's own write is the one after the queued line, and that is what must exist
+    panel = "RX link_panel\n[client] [SLink-gen3] write native 0x0203FD44 +1 frame 4\n"
+    run.assert_native_absent_gen3_saved(dict(receipts, a=panel + receipts["a"]))
+    panel_only = dict(receipts, a=panel + receipts["a"].replace(
+        "[client] [SLink-gen3] write native 0x0203F800 +100 frame 9\n", ""))
+    with pytest.raises(RuntimeError, match="missing"):
+        run.assert_native_absent_gen3_saved(panel_only)
 
 
 def test_rival_swap_is_only_a_negative_characterization():
@@ -4461,4 +4469,66 @@ def test_rr_rows_that_link_or_throw_boot_rr_battle2():
     fixture = duo.gen3_decode((REPO / "tests/fixtures/gen3/rr_battle2.sav").read_bytes(), rr=True)[0]
     assert len(fixture) == 2 and duo.gen3_ball_count((REPO / "tests/fixtures/gen3/rr_battle2.sav").read_bytes(),
                                                      "radical_red") == 9
+
+
+def test_rr_storage_spans_are_the_cfru_box_regions():
+    """G5-RR-BATTERY-2 (reconnect_gen3 on RR: 'arithmetic on a nil value (field MONS_PER_BOX)'):
+    the carrier's PC byte compare covers each CFRU box region from the RR pack (30 * 58 bytes at
+    every CFRU_BOX_BASES entry, as reads.lua read_box decodes them); FR/LG keep the one
+    PokemonStorage span (0x83D0)."""
+    from lupa import LuaRuntime
+
+    text = DRIVER.read_text(encoding="utf-8")
+    body = re.search(r"^local function storage_spans\(.*?^end$", text, re.M | re.S).group(0)
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    spans = lua.execute(body + "\nreturn storage_spans")
+    rr = json.loads((REPO / "data/games/gen3_rr/profile.json").read_text(encoding="utf-8"))["titles"]["radical_red"]
+    got = spans(lua.table_from(rr["derived"], recursive=True), 0x02029314, 30)
+    assert [(got[i][1], got[i][2]) for i in range(1, len(got) + 1)] == [
+        (base, 30 * 58) for base in rr["derived"]["CFRU_BOX_BASES"]]
+    fr = json.loads((REPO / "data/games/gen3_frlg/profile.json").read_text(encoding="utf-8"))["titles"]["firered"]
+    one = spans(lua.table_from(fr["derived"], recursive=True), 0x02029314, 30)
+    assert len(one) == 1 and (one[1][1], one[1][2]) == (0x02029314, 0x83D0)
+
+
+def test_rr_bag_pocket_is_read_from_ewram():
+    """G5-RR-BATTERY-2: the throw helper's POKe BALLS pocket read on RR is the pack's EWRAM pocket
+    (BAG_IN_EWRAM, ram.BALL_POCKET_ADDR, 50 slots), not SaveBlock1 +0x430."""
+    from lupa import LuaRuntime
+
+    text = SCRIPTED.read_text(encoding="utf-8")
+    body = re.search(r"^local function bag_pokeballs_item_id\(.*?^end$", text, re.M | re.S).group(0)
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    rr = json.loads((REPO / "data/games/gen3_rr/profile.json").read_text(encoding="utf-8"))["titles"]["radical_red"]
+    lua.globals().profile = lua.table_from(rr, recursive=True)
+    lua.execute("reads = {}; memory = {read_u16_le = function(a) reads[#reads + 1] = a; return 4 end}; "
+                "SB1_POKEBALLS_POCKET_OFFSET = 0x430; function sb1_ptr() error('SaveBlock1 read on RR') end")
+    fn = lua.execute(body + "\nreturn bag_pokeballs_item_id")
+    assert fn(None, 3) == 4 and lua.globals().reads[1] == rr["ram"]["BALL_POCKET_ADDR"] + 12
+    assert "profile.derived.SB1_BALL_POCKET_COUNT or 13" in text
+
+
+def test_every_harness_note_entry_keeps_its_fr_referrers():
+    """G5-RR-BATTERY-2: the rule in docs/gen3/research/rr_harness_syms_2026-09-24.md, run through
+    its own derivation tool on every artifact present -- each gen3_title_syms entry citing the note
+    keeps ALL FR literal-pool referrers at the same ROM address, and its RR value is FR's."""
+    sys.path.insert(0, str(REPO / "tools" / "research"))
+    import rr_harness_syms as tool
+
+    fr = tool.load("Pokemon - FireRed Version (USA).gba", tool.FR_SHA1)
+    if fr is None:
+        pytest.skip("the FR dump is not in the repo root or a parent")
+    cited = tool.cited_entries()
+    assert len(cited) >= 25 and not any(name.startswith("PLAYER_BUFFER") for name, *_ in cited)
+    sizes, checked = tool.sym_sizes(), 0
+    for sha, rel in tool.RR_ARTIFACTS.items():
+        rr = tool.load(rel, sha)
+        if rr is None:
+            continue
+        for name, _symbol, value, thumb, rr_value in cited:
+            ev = tool.evidence(fr, rr, value, thumb, sizes)
+            assert ev["fr_refs"] > 0 and ev["kept"] and rr_value == value, (sha[:8], name, ev)
+        checked += 1
+    if not checked:
+        pytest.skip("no RR artifact present")
 
