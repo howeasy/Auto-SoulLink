@@ -1450,7 +1450,7 @@ class SLinkServer:
                         no_hello_warned = True
                         log.warning(f"[{player_id}] {msg.get('event', '?')!r} before hello from "
                                     f"{peer} — dropping this connection's events until it says hello")
-                    await self._respond(writer, [{"cmd": "noop"}])
+                    await self._respond(writer, [{"cmd": "noop", "refused": "no_hello"}])
                     continue
 
                 # Duplicate-event guard, per CONNECTION: a seq counter belongs to a socket,
@@ -1461,7 +1461,7 @@ class SLinkServer:
                 if seq != -1:
                     if seq <= last_seq:
                         log.debug(f"[{player_id}] duplicate seq {seq}, skipping")
-                        await self._respond(writer, [{"cmd": "noop"}])
+                        await self._respond(writer, [{"cmd": "noop", "refused": "duplicate"}])
                         continue
                     log.debug(f"[TCP] player={player_id}  seq={seq}  last={last_seq}  outcome=accepted  event={msg.get('event','?')}")
                     last_seq = seq
@@ -1774,8 +1774,10 @@ class SLinkServer:
 
         # Block all events from a player whose identity was rejected.
         # Only a hello with correct identity can clear the error.
+        # `refused` (INV-CLIENT contract): the line was NOT processed, so the client must not
+        # retire an owed report on this reply. Older clients read a plain noop.
         if event != "hello" and self.state.identity_error.get(player_id):
-            return [{"cmd": "noop"}]
+            return [{"cmd": "noop", "refused": "identity"}]
 
         # Block everything but hello until the player's cartridge is admitted. Same shape as
         # the identity gate above and for the same reason: only a hello can change the
@@ -1783,7 +1785,7 @@ class SLinkServer:
         # have already decided not to trust. `tick` is NOT exempt -- it carries the party
         # snapshot that diff_party turns into captures, which is exactly a semantic event.
         if event != "hello" and not self.is_admitted(player_id):
-            return [{"cmd": "noop"}]
+            return [{"cmd": "noop", "refused": "admission"}]
 
         if event == "hello":
             # Pick up a contract written after this server started, before deciding.
@@ -1804,7 +1806,7 @@ class SLinkServer:
                 self._log_event(player_id, "hello",
                                 f"REJECTED — {verdict['reason']}",
                                 msg.get("loc_name", "") or msg.get("area_id", ""))
-                return [{"cmd": "noop"}]
+                return [{"cmd": "noop", "refused": "admission"}]
 
             area    = msg.get("area_id", "")
             loc     = msg.get("loc_name", "")

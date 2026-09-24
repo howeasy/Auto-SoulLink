@@ -232,7 +232,7 @@ def test_the_dispatch_gate_blocks_everything_but_hello():
     guard = 'if event != "hello" and not self.is_admitted(player_id):'
     assert guard in src, "the admission guard is gone from _dispatch"
     body = src[src.index(guard):src.index(guard) + 200]
-    assert 'return [{"cmd": "noop"}]' in body
+    assert 'return [{"cmd": "noop", "refused": "admission"}]' in body
     # It has to run before the event handlers, not after them.
     assert src.index(guard) < src.index('elif event == "capture":')
     assert src.index(guard) < src.index('elif event == "tick":')
@@ -305,7 +305,7 @@ class TestTheGateItself:
             "party": [{"key": "DEAD:BEEF:01", "species_id": 1, "level": 5}],
             "rom_content": {"variant": "red", "wild": {}},
         })
-        assert cmds == [{"cmd": "noop"}], "a rejected hello must return nothing to run"
+        assert cmds == [{"cmd": "noop", "refused": "admission"}], "a rejected hello must return nothing to run"
         assert not any(c.get("cmd") == "box_mon" for c in cmds)
         assert s.state.player_identity.get("a") in (None, ""), \
             "identity was locked to a cartridge we refused"

@@ -92,7 +92,7 @@ KEY_CHANGE_REASONS = ("nature_change", "evolution", "npc_trade", "trade_undo", "
 
 # cmd -> (required fields, optional fields); docs/protocol.md §5
 COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
-    "noop": ({}, {}),
+    "noop": ({}, {"refused": "str"}),   # refused: the line was not processed (identity|admission|no_hello|duplicate)
     # "phone": the O-29 tag (docs/protocol.md §5); only the Gen 2 client acts on it
     "force_faint": ({"key": "key"}, {"nickname": "str", "phone": "str"}),
     "force_explode": ({"key": "key"}, {"nickname": "str", "phone": "str"}),
