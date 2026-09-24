@@ -273,3 +273,20 @@ This note summarises it; it is not a second ledger.
 - Stat formula doubles base AND DV; full identity is DV:OT:species; GSC SaveRAM = 32768 SRAM + 22-byte RTC trailer, oracles compare the first 32768 bytes.
 - No push, master merge or release without owner authority. Remote authority covers only the exact P1 commit.
 - Sole authority: E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2/docs/gen1_reference/RC_MASTER_GUIDE.md and WORKTREE_REGISTER.md. Coordinator: Claude session 1d2b4c9a.
+
+## Session 8, night (2026-09-24): duo matrix fully receipted
+
+- `python tools/verify_gen2_release.py --duo-matrix`: every pair x scenario cell RECEIPTED (a69f3526):
+  admit_wrong_rom, gen2_faint (memorial preimage), reconnect, soft_reset, type/gender/species clause on C<->C, G<->S, C<->G.
+  `--new-gates`: every engine-site, write-window and qualification receipt bound and PHYSICAL.
+- P4 on the overlays (final sha1 C 3e620195, G a9f3a26f, S b63d374a; 7af14c7d): panel gate PHYSICAL (9eba863f),
+  native sound gate PHYSICAL (032b32ee). BUILT admission rows stay FUTURE until P4.4.
+- Product fixes found live: hello flap in battle (c7c3fe08), box-withdraw loss window Gen 2 (699930b6, live 368547fa)
+  and Gen 1 (84a9f88a), clause violation events (468bab0f), evolution-escape of a deferred faint (e0442e96).
+- Owner rulings O-28 (SLINK replaces EXIT), O-29 (phone easter egg, plan 427d1a0a + amendment 328a87c0),
+  O-30 (all faints land in battle; Gen 1 19d87a24; Gen 2 USEITEM at `call DetermineMoveOrder`, facts
+  docs/gen2/reviews/INBATTLE_FAINT_FACTS_2026-09-23.md).
+- In flight at this note: U1e Gold via gold_battle_errand (then U1f PC/change_box/whiteout), in-battle faint
+  phases 3-4, P4.5c phone Lua, W6 write-watch, Codex P4.3a trade asm (then P4.5b phone asm).
+- Next: P4.3b trade overlay, P4.3e trade duos, linked_faint_active duo, P4.4 promotion, re-pin panel/sfx gates after
+  each overlay publication (`SLINK_LIVE=1 pytest tests/live/test_gen2_panel_gate.py`, `.../test_gen2_sfx_gate.py`).
