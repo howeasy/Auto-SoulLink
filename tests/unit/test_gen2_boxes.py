@@ -521,6 +521,44 @@ def test_memorialize_goes_to_sbox14_or_to_the_active_copy_when_box_14_is_current
     assert w.box(13)[0] == 1 and w.party()[0] == 1
 
 
+@pytest.mark.parametrize("source,kinds", [(0, {"box_withdraw", "backing_box"}), (4, {"backing_box"})])
+def test_memorialize_moves_a_boxed_dead_key_into_box_14(source, kinds):
+    """BOX-MEMORIAL (O-35): a box release kills a partner that is usually boxed too (box_mon co-locates),
+    and any partner can die while in the PC. Its memorialize moves the box record, as is, into box 14:
+    the active copy or a backing sBoxN, and the party (one mon here) is never touched."""
+    lead, dead = mon48(), mon48(species=19, dvs=0x7AAA)
+    w = Exec(party=[lead], boxes={source: [dead]}, kinds=kinds)
+    party = w.party()
+    assert w.run("memorialize", dead) == (True, None)
+    assert w.box(source)[0] == 0 and w.party() == party
+    memorial = w.box(13)
+    assert memorial[0:3] == bytes([1, 19, 255]) and memorial[22:54] == dead[:32]
+    assert memorial[662:673] == Exec.names(19 % 16)[0] and memorial[882:893] == Exec.names(19 % 16)[1]
+    before = w.snapshot()
+    assert w.run("memorialize", dead) == (True, None) and w.snapshot() == before, "idempotent"
+
+
+def test_memorialize_of_a_boxed_key_finishes_after_a_reset_between_its_two_writes():
+    """sBox14 took the memorial but the source still holds the record: the source copy goes, nothing else."""
+    lead, dead = mon48(), mon48(species=19, dvs=0x7AAA)
+    w = Exec(party=[lead], boxes={4: [dead], 13: [dead]}, kinds={"backing_box"})
+    assert w.run("memorialize", dead) == (True, None)
+    assert w.box(4)[0] == 0 and w.box(13)[0:3] == bytes([1, 19, 255])
+
+
+def test_memorialize_of_a_boxed_key_refuses_a_full_memorial_box_and_an_unproven_kind():
+    lead, dead = mon48(), mon48(species=19, dvs=0x7AAA)
+    full = [mon48(species=40 + i, dvs=0x2000 + i) for i in range(20)]
+    w = Exec(party=[lead], boxes={4: [dead], 13: full})
+    before = w.snapshot()
+    ok, why = w.run("memorialize", dead)
+    assert ok is None and "memorial box full" in why and w.snapshot() == before
+    w = Exec(party=[lead], boxes={0: [dead]}, kinds={"backing_box"})       # no box_withdraw receipt
+    before = w.snapshot()
+    ok, why = w.run("memorialize", dead)
+    assert ok is None and "box_withdraw" in why and w.snapshot() == before
+
+
 def test_memorialize_after_a_reset_finishes_by_removing_only_the_party_copy():
     """Reset before save: sBox14 kept the memorial (plain SRAM) while the party reverted. A full-record
     match completes it with a party-only write; any other record under the same key refuses."""

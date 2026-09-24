@@ -478,6 +478,73 @@ function B.new(profile, reads, io)
         return true
     end
 
+    -- BOX-MEMORIAL (O-35, mirror of lua/gen2/boxes.lua): a dead key in the PC, not the party. A box release
+    -- kills a partner that is usually boxed too (box_mon co-locates the pair), and any partner can die while
+    -- in the PC. The box record moves as is into sBox12, then leaves its source box: a reset in between
+    -- leaves a duplicate, never a loss, and the replay removes only the source copy.
+    local function memorialize_boxed(key, current, memorial)
+        local copy, why
+        for index = 0, box_count - 1 do
+            if index ~= memorial and (index == current.index or current.initialized) then
+                local t
+                t, why = target(index, current)
+                if not t then return nil, why end
+                local slot
+                slot, why = find(t.list, key)
+                if why then return nil, why end
+                if slot then
+                    if copy then return nil, "ambiguous duplicate boxed key" end
+                    copy = {index = index, slot = slot, entry = t.list[slot]}
+                end
+            end
+        end
+        if not copy and memorial ~= current.index and not current.initialized then
+            return nil, "key not in party or boxes" -- nothing boxed and no memorial box to hold it yet
+        end
+        if memorial ~= current.index and not current.initialized then
+            -- the source is the current box and sBox12 was never written: as the party path does
+            local ok
+            ok, why = self.ensure_boxes_initialised()
+            if not ok then return nil, why end
+            current, why = current_box()
+            if not current then return nil, why end
+        end
+        local t, done
+        t, why = target(memorial, current)
+        if not t then return nil, why end
+        done, why = find(t.list, key)
+        if why then return nil, why end
+        if not copy then
+            if done then return true end -- idempotent after a completed move
+            return nil, "key not in party or boxes"
+        end
+        if done then
+            if not same_transfer(copy.entry, t.list[done]) then
+                return nil, "ambiguous key exists in both box and memorial"
+            end
+        else
+            if #t.list >= box.capacity then return nil, "memorial box full" end
+            local e = copy.entry
+            local boxes = {}
+            for i, entry in ipairs(t.list) do boxes[i] = entry end
+            boxes[#boxes + 1] = {species = e.species, blob = e.blob, ot = e.ot, nick = e.nick}
+            local newbox
+            newbox, why = compose(t.raw, box, boxes)
+            if not newbox then return nil, why end
+            write_target(t, newbox)
+        end
+        -- re-read: the memorial write rewrote (and re-sealed) a whole bank the source may share
+        local again, slot, rest
+        again, why = target(copy.index, current)
+        if not again then return nil, why end
+        slot, why = find(again.list, key)
+        if not slot then return nil, why or "box copy vanished" end
+        rest, why = compose(again.raw, box, without(again.list, slot))
+        if not rest then return nil, why end
+        write_target(again, rest)
+        return true
+    end
+
     function self.memorialize(key, colon_key, slot_hint)
         -- Accept both boxes.memorialize(key[, hint]) and client boxes:memorialize(key[, hint]).
         if type(key) == "table" then key = colon_key else slot_hint = colon_key end
@@ -487,16 +554,7 @@ function B.new(profile, reads, io)
         source, why = party_source(key, slot_hint)
         if not source then return nil, why end
         local memorial = box_count - 1 -- sBox12: ram/sram.asm:44-49
-        if not source.slot then
-            local t
-            t, why = target(memorial, current)
-            if not t then return nil, why end
-            local slot
-            slot, why = find(t.list, key)
-            if why then return nil, why end
-            if slot then return true end -- idempotent after completed move
-            return nil, "key not in party"
-        end
+        if not source.slot then return memorialize_boxed(key, current, memorial) end
         if #source.list <= 1 then return nil, "last party mon" end
         if memorial ~= current.index and not current.initialized then
             local ok

@@ -460,6 +460,20 @@ def test_gen1_the_hello_sync_replaces_the_dead_set(world1):
     assert world1.party()[1]["hp"] == 7
 
 
+# ── BOX-MEMORIAL (O-35): a boxed dead partner is buried from its box, not refused ────────────────────
+def test_gen2_a_boxed_dead_partner_is_memorialized_from_its_box():
+    lead, dead = mon(), mon(species=19, dvs=0x7AAA)
+    world = g2.box_world([lead], [dead])
+    world.checkpoint_ok = True
+    world.reply({"cmd": "force_faint", "key": codec_key(dead)},     # the O-35 pair: faint + memorialize
+                {"cmd": "memorialize", "key": codec_key(dead)})
+    world.frames(4)
+    assert [(m["key"], m["box"]) for m in world.sent("memorialize_done")] == [(codec_key(dead), 13)]
+    assert world.sent("memorialize_failed") == []
+    assert g2.active(world)[0] == 0 and g2.storage(world, 13)[0:3] == [1, 19, 255]
+    assert g2.party_count(world) == 1 and not world.client.dead_keys[codec_key(dead)]
+
+
 # ── MINOR-9: Gen 1 defers a force_faint for a key not in the party, as Gen 2 does (4e6aea39) ───────────
 def test_gen1_a_force_faint_for_a_key_not_in_the_party_is_deferred_not_dropped(world1):
     away = g1._mon(random.Random(7), 0x19, nick="PIKA")          # in the Day-Care / a box / a transient party

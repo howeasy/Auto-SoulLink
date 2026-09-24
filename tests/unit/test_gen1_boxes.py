@@ -454,6 +454,55 @@ def test_memorial_last_mon_and_full_box_refuse_without_writes():
     assert (wram, cart) == old and not calls["cart"] and not calls["wram"]
 
 
+@pytest.mark.parametrize("where", ["active", "saved", "memorial_bank"])
+def test_memorial_of_a_boxed_dead_key_moves_it_into_the_memorial_box(where):
+    """BOX-MEMORIAL (O-35, mirror of Gen 2): a box release kills a partner that is usually boxed too, and
+    any partner can die while in the PC. Its memorialize moves the box record into sBox12; the party (one
+    mon here: a boxed memorial never needs a second one) is never touched."""
+    title = "red"
+    dead, lead = _mon(ot_id=55, hp=0), _mon(ot_id=56)
+    source = {"active": None, "saved": 4, "memorial_bank": 8}[where]
+    if source is None:
+        wram, cart = _seed(title, [lead], active=[dead])
+    else:
+        wram, cart = _seed(title, [lead], saved={source: [dead]})
+    _, _, boxes, gate, calls = _runtime(title, wram, cart)
+    gate.arm(gate, "overworld")
+    key = oracle.key(oracle.decode_party_mon(dead["blob"]))
+    party = wram[PROFILE[title]["ram"]["wPartyCount"]:][:oracle.PARTY_LAYOUT["size"]]
+    assert boxes.memorialize(key) is True
+    assert [m["ot_id"] for m in _saved(title, cart, 11)] == [55]
+    assert (_active(title, wram) if source is None else _saved(title, cart, source)) == []
+    assert wram[PROFILE[title]["ram"]["wPartyCount"]:][:oracle.PARTY_LAYOUT["size"]] == party
+    assert all(box["valid"] for box in oracle.verify_boxes(cart)["boxes"].values())
+    assert all(bank["valid"] for bank in oracle.verify_boxes(cart)["banks"].values())
+    prior = (wram[:], cart[:])
+    assert boxes.memorialize(key) is True
+    assert (wram, cart) == prior, "idempotent"
+
+
+def test_memorial_of_a_boxed_key_in_an_uninitialised_pc_initialises_the_saved_boxes_first():
+    title = "red"
+    dead = _mon(ot_id=55, hp=0)
+    wram, cart = _seed(title, [_mon(ot_id=56)], active=[dead], initialized=False)
+    _, _, boxes, gate, calls = _runtime(title, wram, cart)
+    gate.arm(gate, "overworld")
+    assert boxes.memorialize(oracle.key(oracle.decode_party_mon(dead["blob"]))) is True
+    assert _active(title, wram) == [] and [m["ot_id"] for m in _saved(title, cart, 11)] == [55]
+    assert all(bank["valid"] for bank in oracle.verify_boxes(cart)["banks"].values())
+
+
+def test_memorial_of_a_boxed_key_finishes_after_a_reset_between_its_two_writes():
+    title = "red"
+    dead = _mon(ot_id=55, hp=0)
+    wram, cart = _seed(title, [_mon(ot_id=56)], saved={4: [dead], 11: [dead]})
+    _, _, boxes, gate, calls = _runtime(title, wram, cart)
+    gate.arm(gate, "overworld")
+    assert boxes.memorialize(oracle.key(oracle.decode_party_mon(dead["blob"]))) is True
+    assert _saved(title, cart, 4) == [] and [m["ot_id"] for m in _saved(title, cart, 11)] == [55]
+    assert all(box["valid"] for box in oracle.verify_boxes(cart)["boxes"].values())
+
+
 def test_memorial_current_box_uses_wram_mirror_only():
     title = "yellow"
     dead = _mon(ot_id=42, hp=0)

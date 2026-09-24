@@ -516,15 +516,56 @@ function B.executor(p)
         commit(p.box.plan_withdraw(state(cur), hit.index, hit.raw, hit.slot))
         return true
     end
+    -- BOX-MEMORIAL (O-35): a dead key in the PC, not the party. A box release kills a partner that is usually
+    -- boxed too (box_mon co-locates the pair), and any partner can die while in the PC. The box record moves
+    -- as is (a box-to-box move, like the native MOVE PKMN) into the memorial box, then leaves its source box:
+    -- a reset in between leaves a duplicate, never a loss, and the replay removes only the source copy.
+    local function box_twin(a, b)
+        for i = 1, c.BOXMON_STRUCT_LENGTH do if brec(a, a.slot)[i] ~= brec(b, b.slot)[i] then return false end end
+        local o1, o2 = bname(a, X.ots, a.slot), bname(b, X.ots, b.slot)
+        local n1, n2 = bname(a, X.nicks, a.slot), bname(b, X.nicks, b.slot)
+        for i = 1, NAME do if o1[i] ~= o2[i] or n1[i] ~= n2[i] then return false end end
+        return a.raw[2 + a.slot] == b.raw[2 + b.slot]
+    end
+    local function memorialize_boxed(key, cur, mem)
+        local source
+        for index = 0, c.NUM_BOXES - 1 do
+            if index ~= MEMORIAL then
+                local b = load_box(index, cur)
+                local slot = find(b.list, key)
+                if slot then
+                    if source then refuse("ambiguous duplicate boxed key") end
+                    b.slot, source = slot, b
+                end
+            end
+        end
+        if not source then
+            if mem.slot then return true end -- idempotent after a completed memorial
+            refuse("key not in party or boxes")
+        end
+        local drop = source.active and "box_withdraw" or "backing_box"
+        if mem.slot then
+            if not box_twin(source, mem) then refuse("key exists in both box and memorial box") end
+            need(drop)
+            commit(p.box.plan_withdraw(state(cur), source.index, source.raw, source.slot))
+            return true
+        end
+        if #mem.list >= c.MONS_PER_BOX then refuse("memorial box full") end
+        need(mem.active and "box_deposit" or "backing_box", drop)
+        local incoming = {bytes = brec(source, source.slot), ot = bname(source, X.ots, source.slot),
+                          nickname = bname(source, X.nicks, source.slot), species_marker = source.raw[2 + source.slot]}
+        local st = state(cur)
+        commit(mem.active and p.box.plan_deposit(st, MEMORIAL, mem.raw, incoming) or p.box.plan_memorial(st, mem.raw, incoming))
+        commit(p.box.plan_withdraw(state(cur), source.index, source.raw, source.slot))
+        return true
+    end
+
     function ops.memorialize(key)
         local cur = current()
         local praw, pmons = party()
         local ps, mem = find(pmons, key), load_box(MEMORIAL, cur)
         mem.slot = find(mem.list, key)
-        if not ps then
-            if mem.slot then return true end
-            refuse("key not in party")
-        end
+        if not ps then return memorialize_boxed(key, cur, mem) end
         if praw[1] <= 1 then refuse("last party mon") end
         no_mail_from(praw, ps)
         if mem.slot then
