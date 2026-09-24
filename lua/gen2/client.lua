@@ -525,7 +525,7 @@ function Client.new(p)
         elseif c_ == "trade_mask" and self:trade_live() then
             self:trade_answer_query(cmd.mask or 0)
         elseif c_ == "trade_offer_ack" and self:trade_live() then
-            self:trade_answer_offer(cmd.ok == true)
+            self:trade_answer_offer(cmd.ok == true, type(cmd.token) == "string" and cmd.token or nil)
         elseif c_ == "show_choices" or c_ == "show_menu" or c_ == "choose_mon" then
             ack_cancel(cmd) -- Gen 2: no picker; a native trade prompt needs the trade build (above)
         elseif c_ == "apply_trade" then
@@ -595,15 +595,25 @@ function Client.new(p)
         self.trade_visit = (ok and mask ~= 0) and { role = "proposer", token = token } or nil
     end
 
-    function self:trade_answer_offer(accept)
+    -- The server holds an offer until the partner answers; a proposer whose cartridge has left
+    -- withdraws it (menu_result choice 0 under the ack's token), or the partner's YES would apply
+    -- the partner side alone. Owed like trade_done: sent once the hello is ready (frame_end).
+    local function withdraw_offer(server_token, why)
+        log("[SLink-gen2] trade offer withdrawn: " .. why)
+        self.trade_owed = { event = "menu_result", fields = { token = server_token, choice = 0 } }
+    end
+
+    function self:trade_answer_offer(accept, server_token)
         local st, visit = self.trade_state, self.trade_visit
         if not st or st.kind ~= "offer" then return end
         local ok = traded(function() return trade:answer_offer(st.gen, accept) end, "offer answer")
         self.trade_state = nil
         if ok and accept and visit then
-            visit.slot, visit.accepted = st.slot, true
+            visit.slot, visit.accepted, visit.server_token = st.slot, true, server_token
         else
             self.trade_visit = nil
+            -- the ack came after the cartridge's offer wait (SLINK_TRADE_OFFER_FRAMES): the server accepted, the game did not
+            if accept and server_token then withdraw_offer(server_token, "the offer wait expired before the ack") end
         end
     end
 
@@ -650,14 +660,19 @@ function Client.new(p)
     end
 
     -- An entered native commit that never published DONE may have mutated or saved: Gen 1's result-2
-    -- handling (no release, no trade_done claim); the server's applying watchdog settles the link.
-    local function trade_uncertain(why)
+    -- handling (no release, no key claim). It is DECLARED, trade_done{token, uncertain = true}, once
+    -- the hello is ready (after a reset: the post-reset hello, frame_end); the server journals it and
+    -- that side's next party snapshot settles the link, instead of the applying watchdog.
+    -- Mirrored by lua/gen1/client.lua trade_uncertain.
+    local function trade_uncertain(st, why)
         hud.show("TRADE UNCERTAIN - CHECK PARTY", 255, 64, 64, 600)
-        log("[SLink-gen2] apply_trade uncertain: " .. why .. "; no release, no claim")
+        log("[SLink-gen2] apply_trade uncertain: " .. why .. "; no release, no key claim")
+        self.trade_owed = { event = "trade_done", fields = { token = st.token, uncertain = true } }
     end
     function self:trade_forget(why)
-        local st = self.trade_state
-        if st and st.kind == "apply" and trade and trade.committing then trade_uncertain(tostring(why)) end
+        local st, visit = self.trade_state, self.trade_visit
+        if st and st.kind == "apply" and trade and trade.committing then trade_uncertain(st, tostring(why))
+        elseif not st and visit and visit.server_token then withdraw_offer(visit.server_token, tostring(why)) end
         self.trade_state, self.trade_visit = nil, nil
     end
 
@@ -703,7 +718,7 @@ function Client.new(p)
                 -- native append uncertain (T-5 limit): the cartridge keeps the lease; no release, no claim
                 if not st.warned then
                     st.warned = true
-                    trade_uncertain("native result 2; holding")
+                    trade_uncertain(st, "native result 2; holding")
                 end
                 return
             end
@@ -720,6 +735,12 @@ function Client.new(p)
             self.trade_state, self.trade_visit = nil, nil
             self.pending_rescan = true
             return
+        end
+        local visit = self.trade_visit
+        if not st and visit and visit.server_token and trade:closed() then
+            -- SLINK_TRADE_APPLY_FRAMES ran out (or B) before the APPLY: the proposer left its offer
+            self.trade_visit = nil
+            return withdraw_offer(visit.server_token, "the cartridge left before APPLY")
         end
         local q = trade:poll_query()
         if q and not (st and st.kind == "query" and st.gen == q.gen) then
@@ -1283,6 +1304,11 @@ function Client.new(p)
             local held = self.held
             self.held, self.held_full = {}, false
             for _, m in ipairs(held) do send(m.event, m.fields) end
+        end
+        if connected and self.trade_owed then -- trade_uncertain / withdraw_offer, after any held messages
+            local owed = self.trade_owed
+            self.trade_owed = nil
+            send(owed.event, owed.fields)
         end
         for _, batch in ipairs(self.signals and self.signals:drain() or {}) do
             for _, ev in ipairs(batch.events or {}) do

@@ -1985,6 +1985,10 @@ def committing(cart):
     cart.pick_up("SlinkTradeCommit")
 
 
+def uncertain_done(world):
+    return [(d["token"], d.get("uncertain"), "new_key" in d) for d in world.sent("trade_done")]
+
+
 @pytest.mark.parametrize("how", ["init_clears_the_lease", "reset_boundary"])
 def test_trade_a_reset_after_the_commit_entry_is_uncertain_never_a_refusal(how):
     cart = TradeCart()
@@ -1993,12 +1997,68 @@ def test_trade_a_reset_after_the_commit_entry_is_uncertain_never_a_refusal(how):
     if how == "init_clears_the_lease":
         cart.poke(cart.lease, [0] * 16)             # Init after a hardware reset: no DONE ever comes
     else:
+        cart.w.checkpoint_ok = False                # the post-reset hello waits for its checkpoint
         cart.w.client.boundary(cart.w.client, "reset", "save_reset")
+        cart.w.frames(5)
+        assert cart.w.sent("trade_done") == [], "nothing but the hello goes before the post-reset hello"
+        cart.w.checkpoint_ok = True
     cart.w.frames(2)
-    assert cart.w.sent("trade_done") == [], "an entered commit may have saved: never claim nothing changed"
+    # an entered commit may have saved: never claim nothing changed -- declare it uncertain, once
+    assert uncertain_done(cart.w) == [("t1", True, False)]
+    if how == "reset_boundary":
+        names = [m["event"] for m in cart.w.sent()]
+        assert names.index("trade_done") > len(names) - 1 - names[::-1].index("hello"), "after the new hello"
+    cart.w.frames(3)
+    assert len(cart.w.sent("trade_done")) == 1
     assert cart.w.written()[before:] == [], "no RELEASE and no restage"
     assert any("UNCERTAIN" in s for s in cart.w.shown())
     assert cart.w.client.trade_state is None and cart.w.client.trade_visit is None
+
+
+def test_trade_a_native_result_2_is_declared_uncertain_once_and_never_released():
+    cart = TradeCart()
+    committing(cart)
+    cart.done(2)
+    cart.w.frames(4)
+    assert uncertain_done(cart.w) == [("t1", True, False)]
+    assert cart.frame()[5] == 7, "result 2 is never released"
+
+
+@pytest.mark.parametrize("how", ["apply_wait_timeout", "late_ack"])
+def test_trade_the_proposer_leaving_before_apply_withdraws_the_offer(how):
+    """Trade-driver finding: B's late YES used to reach a server that still thought A was waiting;
+    A's cartridge had left, so B committed alone. A withdraws under its ack's token instead."""
+    cart = TradeCart()
+    cart.query(mask=1)
+    cart.publish(2, slot=0, result=0xFF)
+    cart.w.frames(1)
+    if how == "late_ack":
+        cart.close()                                # the cartridge's offer wait expired first
+        cart.w.reply({"cmd": "trade_offer_ack", "ok": True, "token": "t1"})
+        cart.w.frames(2)
+    else:
+        cart.w.reply({"cmd": "trade_offer_ack", "ok": True, "token": "t1"})
+        cart.w.frames(2)
+        assert cart.w.sent("menu_result") == [] and cart.w.client.trade_visit.accepted
+        cart.close()                                # SLINK_TRADE_APPLY_FRAMES ran out: SlinkTradeExit
+        cart.w.frames(2)
+    assert [(m["token"], m["choice"]) for m in cart.w.sent("menu_result")] == [("t1", 0)]
+    assert cart.w.client.trade_visit is None
+    cart.w.frames(3)
+    assert len(cart.w.sent("menu_result")) == 1
+
+
+def test_trade_a_refused_offer_or_a_tokenless_ack_withdraws_nothing():
+    for ack in ({"cmd": "trade_offer_ack", "ok": False}, {"cmd": "trade_offer_ack", "ok": True}):
+        cart = TradeCart()
+        cart.query(mask=1)
+        cart.publish(2, slot=0, result=0xFF)
+        cart.w.frames(1)
+        cart.w.reply(ack)
+        cart.w.frames(2)
+        cart.close()
+        cart.w.frames(2)
+        assert cart.w.sent("menu_result") == []
 
 
 def test_trade_a_validation_close_after_pickup_before_the_commit_is_a_refusal():
