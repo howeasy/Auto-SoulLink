@@ -96,6 +96,23 @@ def test_offer_refuses_incoming_key_collision_without_mutation(tmp_path, which):
     assert not any(command["cmd"] in ("show_menu", "apply_trade") for command in reply)
 
 
+def test_a_declined_or_unsaved_trade_is_a_clean_refusal(tmp_path):
+    """Review 1b33bc31 BLOCKER-2 (Gen 1): a proposer who declines the forced save never
+    offers (the query alone opens nothing), and a partner's NO to the trade or to the save
+    arrives as menu_result choice 0: nothing pending, no apply_trade to either side."""
+    state, entry, _a, _b = _linked(tmp_path)
+    state.handle_event("a", {"event": "trade_query"})
+    assert state.pending_trade is None
+    assert not any(c["cmd"] == "show_menu" for c in state.handle_event("b", {"event": "tick"}))
+    state.handle_event("a", {"event": "trade_offer", "slot": 2})
+    token = state.pending_trade["token"]
+    reply = state.handle_event("b", {"event": "menu_result", "token": token, "choice": 0})
+    assert state.pending_trade is None
+    assert not any(c["cmd"] == "apply_trade" for c in reply)
+    assert not any(c["cmd"] == "apply_trade" for c in state.handle_event("a", {"event": "tick"}))
+    assert entry.a.key == "ABCD:1234:99" and entry.b.key == "1234:5678:15"
+
+
 def test_offer_refuses_unknown_slot_and_inflight_trade(tmp_path):
     state, _entry, _a, _b = _linked(tmp_path)
     for slot in (-1, 0, 6, "not a slot"):

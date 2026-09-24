@@ -17,14 +17,13 @@ from tools._build_tools_bootstrap import ensure_rgbds
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "patch/gen1/build"
 SOURCE = ROOT / "patch/gen1/src"
-RC_SOURCE = ROOT.parent / "gen1-rby-code-sweep-8d06e2/patch/gen1/src"
 TARGETS = ("red", "blue")
 SPAN_SYMBOLS = (
-    ("SlinkForeground", "SlinkTradeServiceEnd", 0x4500, 319),
-    ("SlinkTradeApply", "SlinkTradeApplyEnd", 0x4800, 653),
-    ("SlinkReceptionist", "SlinkReceptionistEnd", 0x4C00, 1252),
-    ("SlinkTradeUIWaitReleased", "SlinkTradeUIEnd", 0x5400, 414),
-    ("SlinkPartnerPrompt", "SlinkPartnerPromptEnd", 0x5800, 423),
+    ("SlinkForeground", "SlinkTradeServiceEnd", 0x4500, 369),
+    ("SlinkTradeApply", "SlinkTradeApplyEnd", 0x4800, 656),
+    ("SlinkReceptionist", "SlinkReceptionistEnd", 0x4C00, 1260),
+    ("SlinkTradeUIWaitReleased", "SlinkTradeUIEnd", 0x5400, 539),
+    ("SlinkPartnerPrompt", "SlinkPartnerPromptEnd", 0x5800, 438),
 )
 
 
@@ -71,20 +70,8 @@ def built() -> dict[str, bytes]:
     result = subprocess.run([sys.executable, str(ROOT / "patch/gen1/tools/build.py")],
                             cwd=ROOT, env=env, capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "assembled 6567 bytes" in result.stderr
+    assert "assembled 6582 bytes" in result.stderr
     return {key: (BUILD / f"slink_{key}.gb").read_bytes() for key in TARGETS}
-
-
-def test_four_asm_files_are_byte_identical_to_rc_sources():
-    # trade_service.asm left the RC text on purpose: the DelayFrame bridge now farcalls
-    # SlinkForeground (SFX dispatch + the trade predicate moved into bank $3F), so it is
-    # covered by the byte pins below and the live gates instead of RC provenance.
-    if not RC_SOURCE.is_dir():
-        pytest.skip(f"RC source checkout absent: {RC_SOURCE}")
-    for name in ("native_trade.asm", "trade_receptionist.asm",
-                 "trade_ui.asm", "trade_prompt.asm"):
-        # git's autocrlf rewrites the checkout's line endings; the assembler does not care
-        assert (SOURCE / name).read_bytes().splitlines() == (RC_SOURCE / name).read_bytes().splitlines(), name
 
 
 @pytest.mark.parametrize("key", TARGETS)
@@ -112,16 +99,19 @@ def test_defs_match_committed_red_and_blue_symbols_and_pret_tables():
         "SLINK_TRADE_BANK", "SLINK_YELLOW", "SLINK_TRADE_UI",
         "SLINK_TRADE_MUSIC_BANK", "SLINK_TRADE_MUSIC_ID",
         "SlinkDelayFrameHalt", "SlinkOverworldReturn", "SlinkOverworldLessReturn",
-        "SLINK_SFX_REQUEST",
+        "SLINK_SFX_REQUEST", "SLINK_SFX_SAVE",
     }
     definitions = re.findall(r"^DEF (\w+) EQU \$?([0-9A-Fa-f]+)\s*; ([^\n]+)", defs, re.M)
-    assert len(definitions) == 134
+    assert len(definitions) == 146
     values = {name: int(hex_value, 16) for name, hex_value, _citation in definitions}
     assert values["SLINK_TRADE_BANK"] == 0x3F
     assert values["SLINK_YELLOW"] == 0 and values["SLINK_TRADE_UI"] == 1
     assert values["SLINK_TRADE_MUSIC_BANK"] == red["Music_SafariZone"][0] == 2
     assert values["SLINK_TRADE_MUSIC_ID"] == (
         red["Music_SafariZone"][1] - red["SFX_Headers_1"][1]) // 3 == 0xE5
+    for bank in ("_1", "_3"):  # the two overworld audio banks; the trade never runs in battle
+        assert values["SLINK_SFX_SAVE"] == (
+            red["SFX_Save" + bank][1] - red["SFX_Headers" + bank][1]) // 3 == 0xB6
     assert values["SlinkDelayFrameHalt"] == red["DelayFrame.halt"][1]
     assert values["SlinkOverworldReturn"] == red["OverworldLoop"][1] + 3
     assert values["SlinkOverworldLessReturn"] == red["OverworldLoopLessDelay"][1] + 3

@@ -108,6 +108,53 @@ SlinkTradeUIValidName::
     jr z, .invalid
     and a
     ret
+
+SlinkTradeUIMustSave::
+    ; Vanilla asks before any link and saves on YES (pret engine/link/
+    ; cable_club_npc.asm:56-67). Carry = NO or B. Asks only: the caller runs
+    ; SlinkTradeUISave once every byte the save records is live again.
+    call SlinkTradeUIWaitReleased
+    ld hl, .text
+    nativecall PrintText
+    nativecall YesNoChoice
+    ld a, [wCurrentMenuItem]
+    and a
+    ret z
+    scf
+    ret
+.text
+    text "We have to save"
+    line "before trading."
+    done
+
+SlinkTradeUISave::
+    ; The full native save and its jingle (cable_club_npc.asm:67-70).
+    nativecall SaveGameData
+    nativecall WaitForSoundToFinish
+    ld a, SLINK_SFX_SAVE
+    nativecall PlaySoundWaitForCurrent
+    ret
+
+SlinkTradeUIResetNotice::
+    ; Result 2 holds the lease with no exit (trade_service.asm .waitForReceipt):
+    ; say so on screen. Preserves D.
+    push de
+    xor a
+    ld [wUpdateSpritesEnabled], a
+    ldh [hWY], a
+    ld a, 1
+    ld [wFontLoaded], a
+    ldh [hAutoBGTransferEnabled], a
+    nativecall ClearSprites
+    nativecall LoadFontTilePatterns
+    ld hl, .text
+    nativecall PrintText
+    pop de
+    ret
+.text
+    text "Trade error."
+    line "Please reset."
+    done
 SlinkTradeUINameTable::
     slink_name_table
 SlinkTradeUIEnd::

@@ -1017,6 +1017,30 @@ def test_partner_prompt_and_apply_drive_the_lease_and_report_the_received_mon(wo
     w.assert_all_conform()
 
 
+@pytest.mark.parametrize("result", [1, 3])
+def test_partner_prompt_decline_or_refused_save_is_a_clean_refusal(world, result):
+    """Review 1b33bc31 BLOCKER-2 (Gen 1): a NO to the trade, a NO to the forced save
+    (trade_prompt.asm, both DONE result 1) or an unavailable prompt (3) answers choice 0,
+    releases the lease and leaves no trade state to apply or declare uncertain."""
+    w = _patched_world()
+    rng = random.Random(14)
+    blob = (codec.encode_party_mon(_mon(rng, 0xB1, level=7, nick="PIDGEY")) +
+            codec.encode_name("BLUE") + codec.encode_name("PIDGEY"))
+    base = w.ram["wSerialPartyMonsPatchList"]
+    w.reply({"cmd": "show_menu", "token": "t7", "text": "Trade?", "slot": 0, "blob_hex": blob.hex().upper()})
+    w.step()
+    gen = _overlay(w)[6]
+    w.bus[base + 5], w.bus[base + 8], w.bus[base + 7] = 7, result, gen  # game: DONE, refusal, ack
+    w.step()
+    mr = w.events("menu_result")[-1]
+    assert mr["token"] == "t7" and mr["choice"] == 0
+    assert _overlay(w)[5] == 8, "released after the refusal"
+    assert w.client.trade_state is None and len(w.client.trade_owed) == 0
+    w.step(3)
+    assert w.events("trade_done") == [] and len(w.events("menu_result")) == 1
+    w.assert_all_conform()
+
+
 def test_slink_trade_reports_trade_done_and_never_key_change(world):
     """S-5: a SLINK trade is neither an evolution nor an NPC trade, so it emits no `key_change`.
 
