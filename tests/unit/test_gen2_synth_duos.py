@@ -238,3 +238,11 @@ def test_oracle_refuses_a_death_command_in_the_server_log(hatch_case):
     (hatch_case[1] / "slink.log").write_text("INFO [a] faint → force_faint b:X\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match="death command"):
         run(hatch_case)
+
+
+def test_trade_b_keeps_the_hatched_bellsprout_and_needs_no_key_change():
+    """Kyle's ONIX has one fixed key (DVs $96 $66, OT 48926): only A trades (live tcc run 1 collided on B)."""
+    rows = [x.replace('"player": "a"', '"player": "b"') for x in lines("hatch")]
+    rows = [x.replace("crystal_synth_hatch", "crystal_synth_trade") for x in rows]
+    problems, receipt = verdict("trade", rows)
+    assert problems == [] and receipt["key"] == KEY and receipt["key_change"] is None

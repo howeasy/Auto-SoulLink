@@ -2165,7 +2165,11 @@ def _synth_side(inst, text, kind, boot_path):
                     f"{inst} the egg was not the one hatched")
         _synth_need(keys_after == keys_before + [final_key] and after[1]["species_id"] == PIDGEY,
                     f"{inst} the hatchling {final_key} is not the party's second slot")
-    else:   # trade: the hatched Bellsprout (linked), then Kyle's ONIX in its slot
+    elif inst == "b":   # trade, B: the hatched Bellsprout only (Kyle's ONIX has one fixed key, see gen2_synth_duo.lua)
+        _synth_need([m["is_egg"] for m in before] == [False, True] and not any(m["is_egg"] for m in after)
+                    and keys_after == keys_before + [final_key] and after[1]["species_id"] == BELLSPROUT
+                    and not _tag_rows(text, "ENGINE_KEY_CHANGE"), f"{inst} is not the untraded hatched Bellsprout")
+    else:   # trade, A: the hatched Bellsprout (linked), then Kyle's ONIX in its slot
         changes = [row for _, row in _tag_rows(text, "ENGINE_KEY_CHANGE")
                    if row.get("reason") == "npc_trade" and row.get("site_id") == "npc_trade_finalized"]
         _synth_need(len(changes) == 1 and changes[0].get("old_key") == capture["key"],

@@ -11,9 +11,13 @@
                                              (gen2_u1g_inputs.lua kind bill; gift_party_finalized)       (S-8 gifts)
   hatch  <t>_synth_hatch  lab, [Sentret,     one step: DoEggStep hatches it (hatch_finalized)      gift_daycare (S-8, O-15)
          Pidgey egg], wStepCount $7F
-  trade  <t>_synth_trade  lab, [PSN Sentret, step 1 whites out to Violet City, step 2 hatches the   gift_daycare, then the
-         Bellsprout egg], $7E, VIOLET_CITY   Bellsprout (linked), Kyle trades it for ONIX          key_change npc_trade
-                                             (gen2_u1g_inputs.lua kind kyle, give_slot 1)          migrates it (S-5, D-1)
+  trade  <t>_synth_trade  lab, [PSN Sentret, step 1 whites out to Violet City, step 2 hatches the   gift_daycare, then A's
+         Bellsprout egg], $7E, VIOLET_CITY   Bellsprout (linked); A alone then trades it to Kyle   key_change npc_trade
+                                             for ONIX (gen2_u1g_inputs.lua kind kyle, give_slot 1) migrates A's half
+                                             (S-5, D-1). B stops after the hatch: Kyle's ONIX has a FIXED identity
+                                             (DVs $96 $66, OT 48926, data/events/npc_trades.asm:15), so a second
+                                             trade on B would publish the SAME key 9666:BF1E:5F and the server
+                                             refuses the collision as identity_lost (live tcc run 1, 2026-09-24).
   MARKER CONTRACT (duo_gen2_main.lua prints them): DUO_GEN2 {..., synth}, CLIENT, BOOTED, HELLO, ENGINE_CAPTURE,
   CAPTURE_SENT, RX msgbox + RX_TEXT "<a> and <b> linked!", ENGINE_KEY_CHANGE {site_id, reason, old_key, new_key} (trade),
   TX key_change / RX key_change_ack (trade), SAVE_WITNESS; RECEIPT {schema M.SCHEMA[kind], key, capture, key_change,
@@ -111,9 +115,10 @@ function M.new(kind)
             local played, outcome = h.play({settled=h.link_settled})   -- catch, report, link settled, native save
             if not played then return false, "box catch failed: " .. tostring(outcome) end
         else
-            local ok, leg_why = h.synth_leg(kind == "hatch" and M.hatch_driver() or nil)
+            local hatch_only = kind == "hatch" or kind == "trade" and h.player == "b"
+            local ok, leg_why = h.synth_leg(hatch_only and M.hatch_driver() or nil)
             if not ok then return false, kind .. " leg failed: " .. tostring(leg_why) end
-            if kind == "trade" and not h.wait(function() return acked(h) end, M.ACK_FRAMES) then
+            if kind == "trade" and h.player == "a" and not h.wait(function() return acked(h) end, M.ACK_FRAMES) then
                 return false, "the server never acked the npc_trade key_change"
             end
             if not h.wait(function() return linked(h) and h.box_idle() end, M.LINK_FRAMES) then
@@ -189,7 +194,7 @@ function M.new(kind)
         end
         need(link_at ~= nil, "the server never announced the link")
         local change
-        if kind == "trade" then
+        if kind == "trade" and head and head.value.player == "a" then
             for _, row in ipairs(seen.ENGINE_KEY_CHANGE or {}) do
                 local v = row.value
                 if v.reason == "npc_trade" and v.site_id == "npc_trade_finalized" and v.old_key == key and capture
