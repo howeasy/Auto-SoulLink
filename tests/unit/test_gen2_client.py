@@ -1925,3 +1925,24 @@ def test_trade_block_is_all_or_none():
     assert gen_gen2_profile.trade_block(parse_symbols(sym)) is None       # the published panel build
     with pytest.raises(ValueError, match="partial trade family"):
         gen_gen2_profile.trade_block(parse_symbols(sym + "75:4154 SlinkTradePromptEntry\n"))
+
+
+@pytest.mark.parametrize("partner", ["BOB", None])
+def test_trade_ot_player_name_is_the_partner_trainer_not_the_mon_ot(partner):
+    """wOTPlayerName is the SENDER (trade_commit.asm copies it to wOTTrademonSenderName): the server's
+    partner_name through the pack charmap; the incoming OT only when the server sent no name."""
+    cart = TradeCart()
+    proposer_ready(cart)
+    cmd = apply_cmd()
+    if partner is None:
+        del cmd["partner_name"]
+    cart.w.reply(cmd)
+    cart.w.frames(1)
+    addr = cart.trade["ram"]["wOTPlayerName"]["addr"]
+    got = [cart.w.io.read_u8(addr + i) for i in range(11)]
+    enc = cart.w.lua.eval("dofile")((ROOT / "data/games/gen2_crystal/charmap.lua").as_posix()).encoding
+    if partner is None:
+        assert got == list(blob70(PARTNER)[48:59])               # the incoming OT ("A")
+    else:
+        assert got == [enc[ch] for ch in partner] + [0x50] * (11 - len(partner))
+        assert got != list(blob70(PARTNER)[48:59])

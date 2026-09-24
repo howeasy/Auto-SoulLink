@@ -376,7 +376,7 @@ local function compose(deps, title, production)
             local trade
             if profile.overlay and profile.overlay.trade then
                 local T = load("lua/gen2/trade_overlay.lua")
-                trade = T.new(profile, io_, Permit, T.holdable(data.items))
+                trade = T.new(profile, io_, Permit, T.holdable(data.items), data.charmap)
             end
             client = load("lua/gen2/client.lua").new({
                 trade=trade, artifact_kind=(not production) and deps.artifact_kind or nil,

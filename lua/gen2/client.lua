@@ -638,7 +638,8 @@ function Client.new(p)
             return nothing_changed(cmd.token, slot, cmd.old_key, "the cartridge already left the Trade Center")
         end
         local gen = traded(function()
-            return trade:arm(APPLY, slot, visit.token, { blob = hex_bytes(cmd.blob_hex) })
+            return trade:arm(APPLY, slot, visit.token, { blob = hex_bytes(cmd.blob_hex),
+                                                         partner_name = cmd.partner_name })
         end, "apply arm")
         if not gen then
             self.trade_visit = nil

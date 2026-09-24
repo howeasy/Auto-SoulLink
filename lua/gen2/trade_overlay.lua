@@ -89,6 +89,23 @@ function T.writes(io, Permit, profile)
     }
 end
 
+--- A trainer name (the server's partner_name, decoded from the partner's hello) -> n bytes in the
+--- pack charmap, or nil when nothing encodes. Only font glyphs (>= GLYPH_MIN) are kept, so the
+--- result always passes SlinkTradeCheckName; control codes and unmapped characters are dropped.
+function T.encode_name(charmap, text, n)
+    if type(text) ~= "string" or not charmap then return nil end
+    local enc, out = charmap.encoding, {}
+    for ch in text:gmatch(utf8.charpattern) do
+        local code = enc[ch]
+        if type(code) == "number" and code >= T.GLYPH_MIN and code <= 0xFF and #out < n - 1 then
+            out[#out + 1] = code
+        end
+    end
+    if #out == 0 then return nil end
+    while #out < n do out[#out + 1] = T.TERMINATOR end
+    return out
+end
+
 local function valid_name(bytes, first, last)
     for i = first, last do
         if bytes[i] == T.TERMINATOR then return true end
@@ -103,11 +120,13 @@ local function copy(bytes, first, last)
 end
 
 --- profile: the selected title profile with overlay.trade; io: read_u8/read_range/bank_valid/
---- write_u8/framecount; Permit: lua/write_permit.lua; holdable: T.holdable(items).
---- Returns the lease (gb_trade_lease) with: arm(command, own_slot, token4, {blob = 70 bytes}),
+--- write_u8/framecount; Permit: lua/write_permit.lua; holdable: T.holdable(items); charmap: the
+--- pack's charmap.lua (partner names).
+--- Returns the lease (gb_trade_lease) with: arm(command, own_slot, token4, {blob = 70 bytes,
+--- partner_name = string or nil}),
 --- advertised(), closed(), withdraw(), hooks {label = {bank, addr}}, writes. Every mutating call
 --- runs inside the trade permit (armed and disarmed here), so callers never arm it.
-function T.new(profile, io, Permit, holdable)
+function T.new(profile, io, Permit, holdable, charmap)
     local ov = assert(profile.overlay and profile.overlay.trade and profile.overlay, "overlay.trade block required")
     assert(type(holdable) == "table", "holdable item set required")
     local d = profile.derived
@@ -130,8 +149,10 @@ function T.new(profile, io, Permit, holdable)
     local function stage(p)
         local blob = p.blob
         local ot = copy(blob, S + 1, S + NAME)
-        -- wOTPlayerName is the incoming OT (the animation's trainer name; the asm checks it)
-        writes:write_bytes(st.player.addr, ot)
+        -- wOTPlayerName is the partner TRAINER (trade_commit.asm copies it to wOTTrademonSenderName,
+        -- vanilla link.asm fills it from the partner's player data): the server's partner_name, the
+        -- incoming OT only when none was sent (a PROMPT; the APPLY restages with the name)
+        writes:write_bytes(st.player.addr, T.encode_name(charmap, p.partner_name, NAME) or ot)
         writes:write_bytes(st.count.addr, {1})
         writes:write_bytes(st.species.addr, {blob[1], 0xFF})
         writes:write_bytes(st.mon.addr, copy(blob, 1, S))
