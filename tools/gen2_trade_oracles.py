@@ -710,6 +710,25 @@ def _negative_controls(results, case, receipts, offers, decoded, invalid_items, 
     _need(observed > 0, "negative case has no observed native control trigger")
 
 
+def _nickname_text(mon, title, root=ROOT):
+    """The saved nickname as display text via the pinned charmap (tools/gen_gen2_charmap.py), up to the $50
+    terminator; None when a byte has no single-character glyph."""
+    from tools.gen2_source_data import load_context
+    from tools.gen_gen2_charmap import build
+    glyphs = {}
+    for char, byte in build(load_context(title, root=Path(root)))["encoding"].items():
+        if len(char) == 1:
+            glyphs.setdefault(byte, char)
+    text = []
+    for byte in bytes.fromhex(mon.get("nickname_raw_hex", "")):
+        if byte == 0x50:
+            break
+        if byte not in glyphs:
+            return None
+        text.append(glyphs[byte])
+    return "".join(text)
+
+
 def _server(transaction, data_dir, manifest, receipts, before_mons, after_mons, committed, *, reconciled=None):
     transaction = _object(transaction, "transaction evidence")
     _need(transaction.get("schema") == "gen2-duo-trade-transaction-v1", "missing transaction evidence schema")
@@ -749,8 +768,16 @@ def _server(transaction, data_dir, manifest, receipts, before_mons, after_mons, 
     if committed:
         row = expected_rows[index]
         row["a"], row["b"] = row["b"], row["a"]
+        finals = final.get("links")
         for side in SIDES:
             row[side]["key"], row[side]["species"] = after_mons[side]["key"], after_mons[side]["species_id"]
+            # the server back-fills the display nickname from the party readback (server.py _mon_cache link
+            # back-fill); a native trade evolution renames an un-nicknamed mon, so the half may carry the
+            # received mon's SAVED nickname instead of the carried one, and nothing else
+            shown = (finals[index].get(side) or {}).get("nickname") if isinstance(finals, list) and len(finals) > index \
+                and isinstance(finals[index], dict) else None
+            if shown != row[side].get("nickname") and shown == _nickname_text(after_mons[side], receipts[side]["title"]):
+                row[side]["nickname"] = shown
     _need(final.get("links") == expected_rows, "durable links do not show exactly the expected atomic transaction")
     for mon in after_mons.values():
         _need(occurrences(final["links"], mon["key"]) == 1, "received identity duplicated in durable links")

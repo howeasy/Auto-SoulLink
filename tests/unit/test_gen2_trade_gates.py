@@ -1396,3 +1396,52 @@ def test_stack_v2_refuses_anything_but_the_contract(tmp_path, sources, fault):
     mutate(stack)
     with pytest.raises(RuntimeError):
         invoke(case)
+
+
+@pytest.mark.parametrize("title", ["gold", "silver", "crystal"])
+def test_saved_nickname_decodes_with_the_pinned_charmap(title):
+    assert oracle._nickname_text({"nickname_raw_hex": "86848d8680915050505050"}, title) == "GENGAR"
+    assert oracle._nickname_text({"nickname_raw_hex": "0150"}, title) is None
+
+
+def _display_nicknames(tmp_path, carried, shown_b):
+    """links.json display nicknames: the baseline carries `carried` on both halves; the final shows shown_b on
+    the committed half b now holds (live tr3 G-S evolve: HAUNTER -> GENGAR via server.py's party back-fill)."""
+    for name, value in (("baseline-links.json", carried), ("links.json", None)):
+        path = tmp_path / name
+        payload = json.loads(path.read_text())
+        for side in ("a", "b"):
+            payload["links"][0][side]["nickname"] = carried
+        if value is None and shown_b is not None:
+            payload["links"][0]["b"]["nickname"] = shown_b
+        path.write_text(json.dumps(payload))
+
+
+def _rebind_baseline_links(case, tmp_path):
+    raw = (tmp_path / "baseline-links.json").read_bytes()
+    case["kwargs"]["transaction_evidence"]["baseline_links"]["sha256"] = digest(raw)
+
+
+@pytest.mark.parametrize("scenario", ["gen2_trade_evolve", "gen2_trade_new"])
+def test_committed_half_may_show_the_received_mons_saved_nickname(tmp_path, sources, scenario):
+    case = make_case(tmp_path, sources, "gs", scenario=scenario)
+    receipt = get(case, "b", "RECEIPT")
+    _display_nicknames(tmp_path, "CARRIED", None)
+    _rebind_baseline_links(case, tmp_path)
+    assert invoke(case) is None                           # the carried nickname stays valid
+    # the received mon's nickname as b's final save holds it (after any native evolution rename)
+    final = Path(get(case, "b", "TRADE_FINAL")["snapshot_path"]).read_bytes()
+    saved = codec.decode_saved_party(final[:oracle.CART], sources[receipt["title"]]["layout"], copy_name="primary")
+    shown = oracle._nickname_text(saved["mons"][-1], receipt["title"])
+    assert shown and shown != "CARRIED"
+    _display_nicknames(tmp_path, "CARRIED", shown)
+    _rebind_baseline_links(case, tmp_path)
+    assert invoke(case) is None
+
+
+def test_committed_half_display_nickname_is_nothing_else(tmp_path, sources):
+    case = make_case(tmp_path, sources, "gs", scenario="gen2_trade_evolve")
+    _display_nicknames(tmp_path, "CARRIED", "ZAPDOS")
+    _rebind_baseline_links(case, tmp_path)
+    with pytest.raises(RuntimeError, match="expected atomic transaction"):
+        invoke(case)
