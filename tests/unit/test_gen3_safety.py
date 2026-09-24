@@ -725,3 +725,132 @@ def test_a_finished_save_leaves_the_field_writable(title, kind):
     w.lua.globals().put(s["sSaveDialogCB"], s["SaveDialogCB_ReturnSuccess"] | 1, 4)
     ok, why, clauses = w.check_reason("overworld")
     assert ok is True and clauses == [], (why, clauses)
+
+
+# ── G4-PH: the hand-off tail (rr_active_faint_parity_scope_2026-09-23.md §5.3, §5.4 item 2) ─────
+# Addresses and values re-typed from the spec's byte facts (FR/LG .sym agree): the plan is P's
+# four writes, comm, then gBattlerControllerFuncs[b] = PlayerBufferExecCompleted|1 LAST.
+H_SLOT, H_VALUE, H_COMM = 0x03004FE0, 0x0802E33D, 0x02023E82
+
+
+def p_plan(battler=0, tail=True, value=H_VALUE, slot=None, order="comm_then_handoff"):
+    plan = [[0x02023DFC + 4 * battler, 4, 0x20], [0x02023E0C + 0x1C * battler + 0x0F, 1, 0],
+            [0x02023D7C + battler, 1, 13]]
+    comm = [H_COMM + battler, 1, 3]
+    handoff = [H_SLOT + 4 * battler if slot is None else slot, 4, value]
+    if not tail:
+        return plan + [comm]
+    return plan + ([comm, handoff] if order == "comm_then_handoff" else [handoff, comm])
+
+
+def explode_plan(battler=0):
+    return [[0x02023BE4 + 0x58 * battler + 0x0C, 2, 153], [0x02023D7C + battler, 1, 0],
+            [0x02023D80 + 2 * battler, 2, 153], [H_COMM + battler, 1, 3]]
+
+
+def parked(title, kind):
+    if title == "radical_red":
+        return rr_battle_world(kind, 1, 1, 0x0802E439)
+    return battle_world(title, 1, 1, player(title, "HandleInputChooseAction"))
+
+
+PH_TITLES = [("radical_red", "clean"), ("radical_red", "companion"), ("firered", "clean"),
+             ("leafgreen", "clean")]
+
+
+@pytest.mark.parametrize("title,kind", PH_TITLES)
+def test_ph_the_pack_proves_one_handoff_entry_per_battler(title, kind):
+    w = parked(title, kind)
+    for b in range(4):
+        assert list(w.safety.handoff_entry(w.safety, b).values()) == [H_SLOT + 4 * b, 4, H_VALUE]
+    for bad in (None, -1, 4, 1.5):
+        assert w.safety.handoff_entry(w.safety, bad) is None
+
+
+@pytest.mark.parametrize("title,kind", PH_TITLES)
+def test_ph_a_p_plan_with_the_handoff_tail_is_admitted_at_the_parked_menu(title, kind):
+    ok, why, clauses = parked(title, kind).check_reason("battle_commit", {"battler": 0, "plan": p_plan()})
+    assert ok is True and clauses == [], why
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+def test_ph_rr_the_same_plan_without_the_tail_is_held(kind):
+    ok, why, clauses = parked("radical_red", kind).check_reason(
+        "battle_commit", {"battler": 0, "plan": p_plan(tail=False)})
+    assert ok is False and clauses == ["battle_commit_hold"] and "0x090AA114" in why
+
+
+@pytest.mark.parametrize("title,kind", PH_TITLES)
+@pytest.mark.parametrize("case,args", [
+    ("wrong_value", {"battler": 0, "plan": p_plan(value=0x0802E3B5)}),
+    ("even_value", {"battler": 0, "plan": p_plan(value=H_VALUE - 1)}),
+    ("wrong_slot", {"battler": 0, "plan": p_plan(slot=H_SLOT + 4)}),
+    ("wrong_battler", {"battler": 2, "plan": p_plan(battler=0)}),
+    ("handoff_before_comm", {"battler": 0, "plan": p_plan(order="handoff_then_comm")}),
+    ("earlier_slot_write", {"battler": 0, "plan": [[H_SLOT + 8, 4, H_VALUE]] + p_plan()}),
+    ("tail_only", {"battler": 0, "plan": [[H_SLOT, 4, H_VALUE]]}),
+    ("byte_into_the_slot", {"battler": 0, "plan": p_plan(tail=False) + [[H_SLOT + 1, 1, 0]]}),
+])
+def test_ph_a_wrong_handoff_tail_is_refused(title, kind, case, args):
+    ok, why, clauses = parked(title, kind).check_reason("battle_commit", args)
+    assert ok is False and "battle_commit_handoff" in clauses and "hand-off tail" in why, (case, clauses)
+    if title == "radical_red":
+        assert "0x090AA114" in why                        # it keeps refusing with the hold's text
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+def test_ph_rr_explode_commit_plan_stays_held(kind):
+    ok, why, clauses = parked("radical_red", kind).check_reason(
+        "battle_commit", {"battler": 0, "plan": explode_plan()})
+    assert ok is False and clauses == ["battle_commit_hold"] and "0x090AA114" in why
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_ph_frlg_a_plan_without_a_slot_write_is_judged_as_before(title):
+    """No commit_hold on FR/LG: a plan that never writes a controller slot (the A-press P, and
+    Explode's shape) is admitted exactly as before G4-PH; only slot writes meet the tail check."""
+    w = parked(title, "clean")
+    for plan in (None, p_plan(tail=False), explode_plan()):
+        args = {"battler": 0} if plan is None else {"battler": 0, "plan": plan}
+        ok, why, clauses = w.check_reason("battle_commit", args)
+        assert ok is True and clauses == [], (plan, why)
+
+
+@pytest.mark.parametrize("title,kind", PH_TITLES)
+def test_ph_a_pack_without_handoff_refuses_every_slot_write_and_is_otherwise_unchanged(title, kind):
+    """The generator dropped the block (a changed byte): the tail cannot be proven, so a hand-off
+    plan is refused (RR: with the hold text), and every other plan is judged as before."""
+    pack = committed_pack(title)
+    del pack["battle"]["handoff"]
+    w = (rr_battle_world(kind, 1, 1, 0x0802E439, pack) if title == "radical_red"
+         else World(title, kind, pack))
+    if title != "radical_red":
+        s, g = pret_syms(title), w.lua.globals()
+        g.put(s["gBattlerControllerFuncs"][0], player(title, "HandleInputChooseAction") | 1, 4)
+    assert w.safety.handoff_entry(w.safety, 0) is None
+    ok, why, clauses = w.check_reason("battle_commit", {"battler": 0, "plan": p_plan()})
+    assert ok is False and clauses == ["battle_commit_handoff"]
+    ok, why, clauses = w.check_reason("battle_commit", {"battler": 0, "plan": p_plan(tail=False)})
+    if title == "radical_red":
+        assert ok is False and clauses == ["battle_commit_hold"]
+    else:
+        assert ok is True and clauses == []
+
+
+@pytest.mark.parametrize("mutation", ["stride", "width", "slot_not_the_controller_pin", "not_a_table"])
+def test_ph_a_malformed_handoff_block_proves_nothing(mutation):
+    pack = committed_pack("radical_red")
+    h = pack["battle"]["handoff"]
+    if mutation == "stride":
+        h["stride"] = 8
+    elif mutation == "width":
+        h["width"] = 2
+    elif mutation == "slot_not_the_controller_pin":
+        h["address"] += 4
+    else:
+        pack["battle"]["handoff"] = "yes"
+    w = rr_battle_world("companion", 1, 1, 0x0802E439, pack)
+    assert w.safety.handoff_entry(w.safety, 0) is None
+    ok, why, clauses = w.check_reason("battle_commit", {"battler": 0, "plan": p_plan()})
+    assert ok is False and "battle_commit_handoff" in clauses
+    assert w.check_reason("battle_faint")[0] is True        # the battle block itself still stands

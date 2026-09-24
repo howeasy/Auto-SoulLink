@@ -6,8 +6,9 @@ First falsifiers:
   * an injected faint signal for a party mon yields exactly one schema-valid faint event with
     the right key;
   * no hello is sent before the checkpoint predicate holds;
-  * a force_faint on the active battler holds where mechanism P does not apply (RR), then
-    lands on a simulated switch-out; on FR/LG singles it commits P (C4-ACTIVE-FAINT-P).
+  * a force_faint on the active battler holds where mechanism P does not apply (doubles), then
+    lands on a simulated switch-out; in singles it commits P+H on every title (C4-ACTIVE-FAINT-P,
+    G4-PH).
 """
 from __future__ import annotations
 
@@ -81,15 +82,16 @@ def test_in_battle_hello_does_not_wait_for_the_checkpoint():
 
 
 def test_falsifier_an_active_battler_force_faint_holds_then_lands_on_switch_out():
-    """RR: no active_faint capability (and battle_commit is held there), so the hold stands."""
-    w = live("gen3_rr", "radical_red")
+    """RR doubles: mechanism P is singles-only, so the active-battler hold stands (G4-PH made RR
+    singles P+H; this falsifier moved to doubles to keep the hold-then-switch-out path covered)."""
+    w = live("gen3_rr", "radical_red", pids=(A, B, C))
     w.battle_ok = True
-    w.enter_battle([FOE], active=(0,))
+    w.enter_battle([FOE, FOE], doubles=True, active=(0, 2))
     w.command(cmd="force_faint", key=KA)
     w.step(5)
     assert w.party_hp(0) == 20 and w.writes == []            # held: the active battler
     assert w.client.battle_pending_count(w.client) == 1
-    w.set_active([1])                                         # switched out
+    w.set_active([1, 2])                                      # switched out
     w.step()
     assert w.party_hp(0) == 0 and w.client.battle_pending_count(w.client) == 0
     assert write_reasons(w) == ["battle_faint"]
@@ -540,6 +542,9 @@ def test_rr_explosion_commit_is_rewritten_when_the_engine_resets_it():
 P_STATUS3, P_DISABLE, P_PERISH_OFF = 0x02023DFC, 0x02023E0C, 0x0F
 P_CHOSEN_ACTION, P_COMM = 0x02023D7C, 0x02023E82
 STATUS3_PERISH_SONG, B_ACTION_NOTHING_FAINTED = 0x20, 13
+# G4-PH: the hand-off, gBattlerControllerFuncs[0] = PlayerBufferExecCompleted|1 (FR/LG .sym; RR
+# LDR@0x090A9EFE), re-typed here so the pack is checked, not trusted.
+P_SLOT, P_EXEC_COMPLETED = 0x03004FE0, 0x0802E33D
 
 
 def _p_world(title="firered", pids=(A, B)):
@@ -549,12 +554,20 @@ def _p_world(title="firered", pids=(A, B)):
     return w
 
 
-def _p_plan_bytes(w, status3_before):
-    """The P plan as (addr, byte) in write order: gStatuses3[0] (u32 LE), the perish timer,
-    the no-op action, gBattleCommunication[0] LAST."""
+def _p_plan_bytes(w, status3_before, timer_before=0, handoff=True):
+    """The P+H plan as (addr, byte) in write order: gStatuses3[0] (u32 LE), the perish timer
+    (high nibble kept), the no-op action, gBattleCommunication[0], then the hand-off LAST."""
     s3 = (status3_before | STATUS3_PERISH_SONG).to_bytes(4, "little")
+    tail = P_EXEC_COMPLETED.to_bytes(4, "little")
     return ([(P_STATUS3 + i, s3[i]) for i in range(4)]
-            + [(P_DISABLE + P_PERISH_OFF, 0), (P_CHOSEN_ACTION, B_ACTION_NOTHING_FAINTED), (P_COMM, 3)])
+            + [(P_DISABLE + P_PERISH_OFF, timer_before & 0xF0), (P_CHOSEN_ACTION, B_ACTION_NOTHING_FAINTED),
+               (P_COMM, 3)]
+            + ([(P_SLOT + i, tail[i]) for i in range(4)] if handoff else []))
+
+
+def _next_parked_menu(w):
+    """The next action menu: comm[0] = 1, exec bit 0 set, the input controller back in the slot."""
+    w.battle_ok = True
 
 
 def _p_commit(w):
@@ -570,17 +583,22 @@ def _engine_perish_ko(w, slot=0):
 
 
 @pytest.mark.parametrize("title", ["firered", "leafgreen"])
-def test_p_frlg_active_force_faint_commits_the_perish_plan_in_order_with_comm_last(title):
-    """F4 + plan shape: exactly the four P writes, under battle_commit only, comm LAST."""
+def test_p_frlg_active_force_faint_commits_the_perish_plan_in_order_with_the_handoff_last(title):
+    """F4 + plan shape (G4-PH): the P writes, comm, then the hand-off LAST, under battle_commit
+    only; the hold carries no press hint (owner ruling 16: no A press on any title)."""
     w = _p_world(title)
     w.poke_int(P_STATUS3, 0x100, 4)                              # an unrelated status3 bit survives
     w.command(cmd="force_faint", key=KA)
     w.step()
     assert _p_commit(w) == _p_plan_bytes(w, 0x100)
-    assert _p_commit(w)[-1] == (P_COMM, 3)
-    assert set(write_reasons(w)) == {"battle_commit"}
-    held = lua_to_py_list(w.client.battle_pending)[0]
-    assert "active faint committed" in str(held.why)
+    tail = [(P_SLOT + i, b) for i, b in enumerate(P_EXEC_COMPLETED.to_bytes(4, "little"))]
+    assert _p_commit(w)[-5:] == [(P_COMM, 3)] + tail
+    assert write_reasons(w) == ["battle_commit"] * 5
+    (held,) = lua_to_py_list(w.client.battle_pending)
+    assert str(held.why) == "active faint committed" and held.perish is True and held.handoff is True
+    assert any("force_faint: Perish commit battler=0 handoff=1 " in line for line in w.logs)
+    w.step(3)                                                    # held, no press hint, nothing more written
+    assert str(held.why) == "active faint committed" and len(w.writes) == 11
 
 
 @pytest.mark.parametrize("title", ["firered", "leafgreen"])
@@ -606,6 +624,30 @@ def test_p_never_touches_explode_mode_force_explode_on_frlg_is_the_parents_hold(
     w.command(cmd="force_faint", key=KA)
     w.step()
     assert _p_commit(w) == _p_plan_bytes(w, 0)
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_ph_frlg_a_pack_without_handoff_keeps_the_press_a_path(title):
+    """G4-PH: the hand-off is data. With no battle.handoff (the policy proves no entry) the plan is
+    the pre-G4-PH P plan, comm LAST, written entry by entry, and the hold keeps its press hint."""
+    w = _p_world(title)
+    w.parts.policy.handoff_entry = lambda *_a: None
+    w.command(cmd="force_faint", key=KA)
+    w.step()
+    assert _p_commit(w) == _p_plan_bytes(w, 0, handoff=False)
+    (held,) = lua_to_py_list(w.client.battle_pending)
+    assert str(held.why) == "active faint committed (press A)" and not held.handoff
+    assert any("Perish commit battler=0 handoff=0 " in line for line in w.logs)
+    assert w._read(P_SLOT, 4) == 0x0802E439                      # the parked controller, untouched
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen", "radical_red"])
+def test_ph_row_2_keeps_the_timer_high_nibble(title):
+    w = _p_world(title) if title != "radical_red" else _rr_p_world()
+    w.poke_int(P_DISABLE + P_PERISH_OFF, 0x35, 1)                # StartValue 3, timer 5
+    w.command(cmd="force_faint", key=KA)
+    w.step()
+    assert _p_commit(w) == _p_plan_bytes(w, 0, timer_before=0x35)
 
 
 def test_p_f4_control_comm_first_is_refused_mid_plan_by_the_real_sink():
@@ -681,7 +723,7 @@ def test_p_the_commit_is_rewritten_when_the_engine_resets_it_with_the_mon_alive(
     n = len(w.writes)
     w.step(3)
     assert len(w.writes) == n                                    # committed: nothing more
-    w.poke_int(P_COMM, 1, 1)                                     # a new parked menu, hp > 0
+    _next_parked_menu(w)                                         # a new parked menu, hp > 0
     w.poke_int(P_STATUS3, 0, 4)
     w.step()
     assert _p_commit(w)[n:] == _p_plan_bytes(w, 0) and _hp_writes(w) == []
@@ -698,15 +740,72 @@ def test_p_doubles_battlers_zero_and_two_stay_held(slot):
     assert str(lua_to_py_list(w.client.battle_pending)[0].why) == "active battler"
 
 
-@pytest.mark.parametrize("lift_hold", [False, True])
-def test_p_rr_stays_held_by_capability_not_by_title(lift_hold):
-    """RR ships no STATUS3/DISABLE_STRUCTS: not active_faint_capable. Even with battle_commit_hold
-    lifted nothing is written; without the lift the hold is still the rule."""
-    w, _base = _explode_world(lift_hold=lift_hold)
+# ── G4-PH: mechanism P+H on RR (rr_active_faint_parity_scope_2026-09-23.md §5.4 items 4, 5) ──
+# The RR profile now proves the six P fields out of CFRU's Perish case and the pack proves the
+# hand-off, so RR runs the same data-gated path as FR/LG: no title name in client.lua.
+
+def _rr_p_world(pids=(A, B)):
+    w = live("gen3_rr", "radical_red", pids=pids)                # the REAL pack: commit_hold present
+    w.battle_ok = True
+    w.enter_battle([FOE], active=(0,))
+    return w
+
+
+def test_ph_falsifier_rr_active_force_faint_commits_p_with_the_handoff_through_the_hold():
+    """§5.4 item 5 (red on f6d503f4, where RR held "active battler"): the five-entry plan lands
+    whole under the pack's commit_hold, because its hand-off tail replaces the hold clause."""
+    w = _rr_p_world()
+    assert "commit_hold" in w.wc["battle"] and w.wc["battle"]["handoff"]["value"] == P_EXEC_COMPLETED
+    w.poke_int(P_STATUS3, 0x100, 4)
     w.command(cmd="force_faint", key=KA)
+    w.step()
+    assert _p_commit(w) == _p_plan_bytes(w, 0x100) and _hp_writes(w) == []
+    assert write_reasons(w) == ["battle_commit"] * 5
+    (held,) = lua_to_py_list(w.client.battle_pending)
+    assert str(held.why) == "active faint committed" and held.handoff is True
+    assert w._read(P_SLOT, 4) == P_EXEC_COMPLETED and w._read(P_COMM, 1) == 3
+
+
+def test_ph_rr_the_engines_perish_ko_settles_the_entry_without_an_echo():
+    w = _rr_p_world()
+    w.command(cmd="force_faint", key=KA)
+    w.step(30)
+    _engine_perish_ko(w)
+    w.step()
+    assert w.events("faint") == [] and w.client.battle_pending_count(w.client) == 0
+
+
+@pytest.mark.parametrize("slot", [0, 2])
+def test_ph_rr_doubles_battlers_zero_and_two_stay_held(slot):
+    w = live("gen3_rr", "radical_red", pids=(A, B, C))
+    w.battle_ok = True
+    w.enter_battle([FOE, FOE], doubles=True, active=(0, 2))
+    w.command(cmd="force_faint", key=(KA, KB, KC)[slot])
     w.step(3)
+    assert w.writes == [] and str(lua_to_py_list(w.client.battle_pending)[0].why) == "active battler"
+
+
+def test_ph_rr_a_locked_turn_writes_nothing_and_commits_at_the_next_parked_menu():
+    """MULTIPLETURNS / recharge: no parked menu, so the permit refuses and nothing is written."""
+    w = _rr_p_world()
+    w.battle_ok = False
+    w.command(cmd="force_faint", key=KA)
+    w.step(10)
     assert w.writes == [] and w.client.battle_pending_count(w.client) == 1
-    assert str(lua_to_py_list(w.client.battle_pending)[0].why) == "active battler"
+    w.battle_ok = True
+    w.step()
+    assert _p_commit(w) == _p_plan_bytes(w, 0)
+
+
+def test_ph_rr_explode_mode_is_unchanged_still_held_by_commit_hold():
+    """Owner: Explode Mode must not change. Its commit_plan has no hand-off tail, so on RR it is
+    still refused by the hold (0x090AA114) with zero bytes."""
+    w, _base = _explode_world(lift_hold=False)
+    w.command(cmd="force_explode", key=KA)
+    w.step(3)
+    assert w.writes == []
+    (held,) = lua_to_py_list(w.client.battle_pending)
+    assert "0x090AA114" in str(held.why) and "hand-off tail" not in str(held.why)
 
 
 @pytest.mark.parametrize("outcome", [1, 4, 7])
@@ -722,7 +821,7 @@ def test_p_the_battle_ending_before_the_turn_falls_back_to_the_overworld_write(o
     w.leave_battle(outcome=outcome)
     w.step(3)
     assert w.client.battle_pending_count(w.client) == 0
-    assert w.party_hp(0) == 0 and write_reasons(w) == ["battle_commit"] * 4 + ["overworld"]
+    assert w.party_hp(0) == 0 and write_reasons(w) == ["battle_commit"] * 5 + ["overworld"]
     assert w.events("faint") == []
 
 
@@ -754,7 +853,7 @@ def test_p_a_pending_bench_write_lands_before_the_perish_commit(arrival):
     addrs = [a for a, _v, _f in w.writes]
     assert addrs[:2] == [bench, bench + 1]                       # the bench write came first
     assert _p_commit(w)[2:] == _p_plan_bytes(w, 0)               # then exactly one P commit
-    assert write_reasons(w) == ["battle_faint"] + ["battle_commit"] * 4
+    assert write_reasons(w) == ["battle_faint"] + ["battle_commit"] * 5
     assert w.client.battle_pending_count(w.client) == 1          # the active entry, committed
     _engine_perish_ko(w)
     w.step()
@@ -770,7 +869,7 @@ def test_p_a_bench_entry_arriving_after_the_commit_waits_for_the_next_parked_men
     w.command(cmd="force_faint", key=KB)
     w.step(3)
     assert w.party_hp(1) == 20 and w.client.battle_pending_count(w.client) == 2
-    w.poke_int(P_COMM, 1, 1)                                     # the next parked menu
+    _next_parked_menu(w)                                         # the next parked menu
     w.step()
     assert w.party_hp(1) == 0
 
@@ -797,7 +896,7 @@ def test_p_draw_edge_today_an_end_of_turn_foe_ko_plus_our_last_mons_perish_ko_is
     w.leave_battle(outcome=3)
     w.step(3)
     assert len(w.events("whiteout")) == 1 and w.events("faint") == []
-    assert len(w.writes) == n and write_reasons(w) == ["battle_commit"] * 4
+    assert len(w.writes) == n and write_reasons(w) == ["battle_commit"] * 5
 
 
 # ── command seams ───────────────────────────────────────────────────────────────────────

@@ -1116,6 +1116,27 @@ def test_world_force_explode_is_handled_at_least_as_force_faint_on_vanilla_frlg(
     w.set_active([1])
     w.step()
     assert w.party_hp(0) == 0
+    # G4-PH: RR force_faint on the active battler is now mechanism P+H (the Perish KO, no A
+    # press), while force_explode is untouched (owner: no Explode side effect). Its menu-skip
+    # commit carries no hand-off tail, so the RR pack's commit_hold still refuses it: held, zero
+    # bytes, and it lands as a bench battle_faint at switch-out -- the pre-P force_faint rule.
+    # Handling it "at least as force_faint" on RR is the rr_active_faint_parity_scope §5.7
+    # follow-up (commit_plan gains the tail), not done here.
+    w = _live("gen3_rr", "radical_red", "companion")
+    w.battle_ok = True
+    w.enter_battle([_FOE], active=(0,))
+    w.command(cmd="force_explode", key=_KA)
+    w.step(3)
+    assert w.writes == [] and w.client.battle_pending_count(w.client) == 1
+    w.set_active([1])
+    w.step()
+    assert w.party_hp(0) == 0 and w.client.battle_pending_count(w.client) == 0
+    w = _live("gen3_rr", "radical_red", "companion")
+    w.battle_ok = True
+    w.enter_battle([_FOE], active=(0,))
+    w.command(cmd="force_faint", key=_KA)
+    w.step()
+    assert w._read(0x03004FE0, 4) == 0x0802E33D and w.party_hp(0) == 20   # P+H committed
 
 
 @world_item("35")

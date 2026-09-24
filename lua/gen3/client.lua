@@ -569,6 +569,7 @@ function Client.new(p)
         return type(v) == "number" and v % 1 == 0 and v >= 0 and v <= max
     end
     local function armed_write(reason, plan, args)
+        if args then args.plan = plan end                     -- G4-PH: the policy judges the plan itself
         for i, w in ipairs(plan) do
             local max = UINT_MAX[w[2]]
             if not (max and uint_ok(w[1], 4294967296 - w[2]) and uint_ok(w[3], max)) then
@@ -586,6 +587,9 @@ function Client.new(p)
         local before = writes.attempted
         local wok, err = pcall(function()
             writes:arm(reason, function(x, n) return allow[x .. ":" .. n] == true end, args)
+            -- G4-PH §3.3: a plan ending in the controller hand-off carries two self-invalidating
+            -- writes (comm, then the slot); it is validated once and written whole
+            if plan.handoff then return writes:write_plan(plan) end
             for _, w in ipairs(plan) do
                 if w[2] == 4 then writes:write_u32(w[1], w[3])
                 elseif w[2] == 2 then writes:write_u16(w[1], w[3])
@@ -697,22 +701,31 @@ function Client.new(p)
 
     -- Mechanism P (docs/gen3/research/active_faint_in_battle_scope_2026-09-23.md §2d; owner
     -- ruling PLAN §0 "In-battle faint"): at the parked action menu, the battler gets the Perish
-    -- flag with its counter at 0 and a committed no-op action. After the player's one (discarded)
-    -- A press the turn runs, and BattleTurnPassed's HandleWishPerishSongOnTurnEnd runs the
+    -- flag with its counter at 0 and a committed no-op action. The turn runs, and the end-of-turn
+    -- Perish check (FR/LG HandleWishPerishSongOnTurnEnd, RR CFRU end-turn state 34) runs the
     -- engine's own BattleScript_PerishSongTakesLife: HP drain, datahpupdate (gBattleMons AND the
     -- party), tryfaintmon ("X fainted!"), then the vanilla send-out / whiteout. No HP byte is
     -- written here. The no-op commit is what stops the mon acting (or Baton Passing the Perish
-    -- flag on). gStatuses3 is read and OR-ed on the same parked frame.
+    -- flag on). gStatuses3 and the timer byte are read on the same parked frame.
+    -- G4-PH (P+H, owner rulings 15-18; rr_active_faint_parity_scope_2026-09-23.md §3.2): when the
+    -- pack proves battle.handoff, the plan ends by handing the controller slot to
+    -- PlayerBufferExecCompleted, AFTER comm = 3 (with comm 1 the stale buffer-B action replays).
+    -- The engine then ends the menu itself: no A press on any title, and CFRU's parked menu (the
+    -- RR L-throw) is gone. Without the block the plan is P alone and the player presses A once.
     local function perish_plan(battler)
         local s3 = a.STATUS3_ADDR + battler * 4
-        return {
+        local timer = a.DISABLE_STRUCTS_ADDR + battler * d.DISABLE_STRUCT_SIZE + d.DISABLE_STRUCT_PERISH_TIMER_OFF
+        local plan = {
             { s3, 4, io.read_u32(s3) | d.STATUS3_PERISH_SONG },
-            -- the whole byte: timer 0 (low nibble); the StartValue nibble is read only by Baton Pass
-            { a.DISABLE_STRUCTS_ADDR + battler * d.DISABLE_STRUCT_SIZE + d.DISABLE_STRUCT_PERISH_TIMER_OFF, 1, 0 },
+            -- timer 0 (low nibble); the high nibble is kept, as the engine's own decrement does
+            { timer, 1, io.read_u8(timer) & 0xF0 },
             { a.CHOSEN_ACTION_ADDR + battler, 1, d.B_ACTION_NOTHING_FAINTED },
-            -- LAST, as in commit_plan: comm is the battle_commit guard, re-checked before every byte
+            -- comm is the battle_commit guard: only the hand-off may follow it
             { a.BATTLE_COMM_ADDR + battler, 1, STATE_ACTION_CONFIRMED_STANDBY },
         }
+        local h = policy.handoff_entry and policy:handoff_entry(battler)
+        if h then plan[#plan + 1] = { h[1], h[2], h[3] }; plan.handoff = true end
+        return plan
     end
 
     -- commit -> held until gBattleMons[b].hp == 0 (done: the engine's faint, or a foe KO first).
@@ -743,18 +756,23 @@ function Client.new(p)
             hud.show("!! " .. (e.nickname or mon.nickname or key(mon)) .. " fainted", 255, 80, 80, 360)
             return "done"
         end
+        -- the carrier's contract (W2, G4-PH): e.why is exactly "active faint committed" after a
+        -- hand-off; a pack without battle.handoff keeps the press hint
         if e.perish and io.read_u8(a.BATTLE_COMM_ADDR + battler) >= STATE_ACTION_CONFIRMED_STANDBY then
-            return "hold", "active faint committed (press A)"
+            return "hold", e.handoff and "active faint committed" or "active faint committed (press A)"
         end
         if bench_write_pending(e, b) then return "hold", "bench write first" end
-        local ok, why = armed_write("battle_commit", perish_plan(battler), { battler = battler })
+        local plan = perish_plan(battler)
+        local ok, why = armed_write("battle_commit", plan, { battler = battler })
         if not ok then return "hold", why end
+        e.handoff = plan.handoff == true
         if not e.perish then
             e.perish = true
             mark_commanded(key(mon))                          -- the engine's faint is not an echo
-            log("force_faint: Perish commit battler=" .. battler .. " " .. e.key)
+            log("force_faint: Perish commit battler=" .. battler .. " handoff=" .. (e.handoff and 1 or 0)
+                .. " " .. e.key)
         end
-        return "hold", "active faint committed (press A)"
+        return "hold", e.handoff and "active faint committed" or "active faint committed (press A)"
     end
 
     local function battle_write(e, slot, mon, ending)
