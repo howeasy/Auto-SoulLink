@@ -1236,6 +1236,66 @@ def test_reconnect_independent_three_phase_evidence(reconnect_case):
     assert facts[0]["status"] == "alive" and facts[0]["a"] != facts[0]["b"]
 
 
+def _advance_backup_clock(raw, layout, symbol="wGameTimeFrames", byte=0):
+    raw = bytearray(raw)
+    region, offset = _region_and_offset(layout, symbol)
+    raw[region.backup + offset + byte] += 5
+    at = layout.checksum_offsets["backup"]
+    raw[at:at + 2] = codec.sav_checksum(bytes(raw[:CART]), layout, "backup").to_bytes(2, "little")
+    return bytes(raw)
+
+
+@pytest.mark.parametrize("phase", ["same_save", "wrong_save"])
+def test_reconnect_native_continue_clock_difference_is_allowed(reconnect_case, phase):
+    results, kwargs = reconnect_case
+    layout = codec.for_foundation("crystal")
+    path = kwargs["relaunch_saves"][phase]
+    path.write_bytes(_advance_backup_clock(path.read_bytes(), layout))
+    report = codec.strict_checksum_witness(path.read_bytes()[:CART], layout)
+    assert report["primary"]["checksum_valid"] and report["backup"]["checksum_valid"] and not report["copies_agree"]
+    oracles.reconnect_oracle(results, **kwargs)
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+@pytest.mark.parametrize("symbol,byte", [("wGameTimeHours", 0), ("wGameTimeHours", 1), ("wGameTimeMinutes", 0),
+                                       ("wGameTimeSeconds", 0), ("wGameTimeFrames", 0)])
+def test_relaunch_clock_witness_maps_each_source_field(title, symbol, byte):
+    layout = codec.for_foundation(title)
+    raw = (ROOT / f"tests/fixtures/gen2/{title}_battle.SaveRAM").read_bytes()
+    changed = _advance_backup_clock(raw, layout, symbol, byte)
+    assert not codec.strict_checksum_witness(changed[:CART], layout)["valid"]
+    assert oracles._relaunch_checksum_witness(changed[:CART], layout)
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+@pytest.mark.parametrize("fault", ["checksum", "marker", "wGameTimeCap", "wPlayerID", "wCurMapData", "wPartyMon1", "after_clock"])
+def test_relaunch_clock_witness_refuses_other_copy_corruption(title, fault):
+    layout = codec.for_foundation(title)
+    raw = bytearray((ROOT / f"tests/fixtures/gen2/{title}_battle.SaveRAM").read_bytes()[:CART])
+    if fault == "checksum":
+        raw[layout.checksum_offsets["backup"]] ^= 1
+    elif fault == "marker":
+        raw[layout.markers["backup"][0][0]] ^= 1
+    else:
+        symbol = "wGameTimeFrames" if fault == "after_clock" else fault
+        region, offset = _region_and_offset(layout, symbol)
+        raw[region.backup + offset + (fault == "after_clock")] ^= 1
+        at = layout.checksum_offsets["backup"]
+        raw[at:at + 2] = codec.sav_checksum(bytes(raw), layout, "backup").to_bytes(2, "little")
+    assert not oracles._relaunch_checksum_witness(bytes(raw), layout)
+
+
+def test_ordinary_save_witness_still_refuses_clock_copy_difference(good_case):
+    results, _, _ = good_case
+    layout = codec.for_foundation("crystal")
+    witness = oracles._last_tagged(results["a"], "SAVE_WITNESS")
+    path = Path(witness["saveram_path"])
+    path.write_bytes(_advance_backup_clock(path.read_bytes(), layout))
+    _refresh_faint_hash(results, "a")
+    with pytest.raises(RuntimeError, match="independent checksum"):
+        oracles.check_save_witness(results)
+
+
 @pytest.mark.parametrize("fault", ["same_hash", "wrong_hash", "same_seed", "wrong_seed", "same_final",
     "wrong_final", "same_witness", "wrong_witness", "same_hello", "wrong_hud", "b_faint", "not_killed",
     "link_changed", "identity_changed", "duplicate_capture", "wrong_accepted", "b_disconnected", "result_swap",

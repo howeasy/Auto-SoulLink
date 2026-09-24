@@ -996,6 +996,39 @@ def check_reconnect_witness(results, *, initial_results, relaunch_results, stage
         raise RuntimeError(f"reconnect evidence missing or malformed: {exc}") from exc
 
 
+def _relaunch_checksum_witness(raw, layout):
+    """CONTINUE rewrites backup player data while VBlank can advance the five clock bytes.
+
+    C save.asm:596-609; G/S:538-550. Both checksums/markers still must be valid.
+    Compare each codec copy region separately: G/S backup player data is split.
+    This exception is only for a relaunch flush, never an ordinary SAVE_WITNESS.
+    """
+    from server.adapters import gen2_codec as codec
+    from tools.gen2_fixtures import _REGION_STARTS
+
+    if not isinstance(raw, bytes) or len(raw) != CARTRAM_BYTES:
+        return False
+    report = codec.checksum_report(raw, layout)
+    if not all(report[copy]["checksum_valid"] and report[copy]["markers_valid"] for copy in ("primary", "backup")):
+        return False
+    clock = (("wGameTimeHours", 2), ("wGameTimeMinutes", 1), ("wGameTimeSeconds", 1), ("wGameTimeFrames", 1))
+    hours = layout.addresses["wGameTimeHours"]
+    if tuple(layout.addresses[name] for name, _ in clock) != (hours, hours + 2, hours + 3, hours + 4):
+        return False
+    allowed = {region.name: set() for region in layout.regions}
+    for symbol, width in clock:
+        address = layout.addresses[symbol]
+        found = [region for region in layout.regions if layout.addresses[_REGION_STARTS[region.name]] <= address
+                 and address + width <= layout.addresses[_REGION_STARTS[region.name]] + region.length]
+        if len(found) != 1:
+            return False
+        region = found[0]
+        offset = address - layout.addresses[_REGION_STARTS[region.name]]
+        allowed[region.name].update(range(offset, offset + width))
+    return all(all(raw[region.primary + offset] == raw[region.backup + offset] or offset in allowed[region.name]
+                   for offset in range(region.length)) for region in layout.regions)
+
+
 def reconnect_oracle(results, *, data_dir, initial_results, relaunch_results, boot_saveram,
                      staged_saves, relaunch_saves, snapshots, on_verified=None):
     """Independent saved identities and unchanged links across a kill and both required reconnects."""
@@ -1017,7 +1050,7 @@ def reconnect_oracle(results, *, data_dir, initial_results, relaunch_results, bo
             seed, flushed = Path(staged_saves[phase]).read_bytes(), Path(relaunch_saves[phase]).read_bytes()
             _reconnect_need(len(seed) == len(flushed) == SAVERAM_BYTES, "relaunch save size differs")
             _reconnect_need(codec.strict_checksum_witness(seed[:CARTRAM_BYTES], layout)["valid"]
-                            and codec.strict_checksum_witness(flushed[:CARTRAM_BYTES], layout)["valid"], "relaunch checksum refused")
+                            and _relaunch_checksum_witness(flushed[:CARTRAM_BYTES], layout), "relaunch checksum refused")
             old = codec.decode_saved_party(seed[:CARTRAM_BYTES], layout, copy_name="primary")["mons"]
             new = codec.decode_saved_party(flushed[:CARTRAM_BYTES], layout, copy_name="primary")["mons"]
             ot = int.from_bytes(_saved_field(seed, layout, "wPlayerID", 2), "big")
