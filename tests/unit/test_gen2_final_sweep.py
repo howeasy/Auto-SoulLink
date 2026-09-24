@@ -98,3 +98,13 @@ def test_a_cell_stops_at_its_first_failing_command_and_keeps_each_gate_result(tm
     assert calls == [["first"]]   # the second command never overwrites the failing trace
     kept = log.with_name("gate__engine_sites__gold.cmd1.gen2_frame_align_result.txt")
     assert kept.read_text(encoding="utf-8") == "trace of first"
+
+
+def test_only_rng_stalls_earn_the_one_retry():
+    for text in ("RESULT: FAIL (hunt ended out-of-balls)",
+                 "RESULT: FAIL (poison route failed: the trainer battle ended without a poisoned party mon)",
+                 "[FAIL] poison_faint did not fire after the previous expected site"):
+        assert sweep.RNG_STALL.search(text), text
+    for text in ("trade: stack canary is not a real push", "no memorialize ack for the released partner X",
+                 "wave-c: b: a rebuilt mon is not at full HP", "LostBattle ran (a whiteout)"):
+        assert not sweep.RNG_STALL.search(text), text

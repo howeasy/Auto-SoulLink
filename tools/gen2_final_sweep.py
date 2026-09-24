@@ -53,7 +53,10 @@ JUNCTION = ("pret", "build-tools", "downloads")
 PAIRS = {"gen2_new": "cc", "gen2_gold_silver": "gs", "gen2_crystal_gold": "cg"}
 TITLES = ("crystal", "gold", "silver")
 # ponytail: the stall phrases seen in lane logs; widen here if a new RNG stall class shows up
-RNG_STALL = re.compile(r"out-of-balls|survived \d+ battles|duplicates-only hunt|clause unobserved")
+# The trainer poison leg (Bug Catcher Wade, G-S poison and Gold's U1 chain) is capped near 83% a fight by the
+# 15-HP target (coordinator, re-run pass): a fight that ends unpoisoned retries once like out-of-balls.
+RNG_STALL = re.compile(r"out-of-balls|survived \d+ battles|duplicates-only hunt|clause unobserved"
+                       r"|the trainer battle ended without a poisoned party mon|poison_faint did not fire")
 GATE_TIMEOUT = 3600
 PIN_FILES = ("tests/gen2_release_requirements.json", "tests/gen2_live_gate_requirements.json")
 ATTESTATION = "tests/fixtures/gen2/receipts/live_new_gates.inspect_run.json"   # tests/live/conftest.py
