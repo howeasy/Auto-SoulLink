@@ -709,17 +709,95 @@ def test_p_rr_stays_held_by_capability_not_by_title(lift_hold):
     assert str(lua_to_py_list(w.client.battle_pending)[0].why) == "active battler"
 
 
-def test_p_the_battle_ending_before_the_turn_falls_back_to_the_overworld_write():
-    """The foe fled / was caught: BattleTurnPassed never runs, Perish never fires. The entry
-    takes the existing path: one last battle_write(ending) -> the overworld checkpoint."""
+@pytest.mark.parametrize("outcome", [1, 4, 7])
+def test_p_the_battle_ending_before_the_turn_falls_back_to_the_overworld_write(outcome):
+    """The foe fled (RAN), was caught, or KO'd its own last mon DURING an action (recoil,
+    Self-Destruct): HandleAction_TryFinish -> checkteamslost sets WON, RunTurnActionsFunctions
+    jumps to HandleEndTurn_BattleWon and BattleTurnPassed never runs, so Perish never fires
+    (pret battle_main.c:4433-4440, 3706-3714). The entry takes the existing path: one last
+    battle_write(ending) -> the overworld checkpoint."""
     w = _p_world()
     w.command(cmd="force_faint", key=KA)
     w.step(30)
-    w.leave_battle(outcome=4)
+    w.leave_battle(outcome=outcome)
     w.step(3)
     assert w.client.battle_pending_count(w.client) == 0
     assert w.party_hp(0) == 0 and write_reasons(w) == ["battle_commit"] * 4 + ["overworld"]
     assert w.events("faint") == []
+
+
+def _bench_hp_addr(w, slot=1):
+    return w.party_base() + slot * 100 + 0x56
+
+
+@pytest.mark.parametrize("arrival", ["same_reply_frame", "held_then_permit_opens"])
+def test_p_a_pending_bench_write_lands_before_the_perish_commit(arrival):
+    """Review follow-up 2 item 1: the P commit sets gBattleCommunication[0] = 3, which fails every
+    later battle_faint (battle_comm_0) until the next parked menu -- AFTER the Perish KO's party
+    screen, where the still-alive bench mon could be sent in. An active entry flushed ahead of a
+    bench entry must therefore wait for it: the bench HP write lands first, the commit next frame."""
+    w = _p_world(pids=(A, B))
+    if arrival == "held_then_permit_opens":
+        w.battle_ok = False                                      # both arrive while refused
+        w.command(cmd="force_faint", key=KA)
+        w.step(2)
+        w.command(cmd="force_faint", key=KB)
+        w.step(2)
+        assert w.writes == [] and w.client.battle_pending_count(w.client) == 2
+        w.battle_ok = True
+    else:
+        w.command(cmd="force_faint", key=KA)                     # active first, bench second
+        w.command(cmd="force_faint", key=KB)
+    w.step(3)
+    bench = _bench_hp_addr(w)
+    assert w.party_hp(1) == 0
+    addrs = [a for a, _v, _f in w.writes]
+    assert addrs[:2] == [bench, bench + 1]                       # the bench write came first
+    assert _p_commit(w)[2:] == _p_plan_bytes(w, 0)               # then exactly one P commit
+    assert write_reasons(w) == ["battle_faint"] + ["battle_commit"] * 4
+    assert w.client.battle_pending_count(w.client) == 1          # the active entry, committed
+    _engine_perish_ko(w)
+    w.step()
+    assert w.events("faint") == [] and w.client.battle_pending_count(w.client) == 0
+
+
+def test_p_a_bench_entry_arriving_after_the_commit_waits_for_the_next_parked_menu():
+    """Documents the residual order: once comm[0] = 3 is written, a LATER bench arrival is refused
+    (battle_comm_0) until the next parked menu; it is held, never deferred, and lands there."""
+    w = _p_world(pids=(A, B))
+    w.command(cmd="force_faint", key=KA)
+    w.step()
+    w.command(cmd="force_faint", key=KB)
+    w.step(3)
+    assert w.party_hp(1) == 20 and w.client.battle_pending_count(w.client) == 2
+    w.poke_int(P_COMM, 1, 1)                                     # the next parked menu
+    w.step()
+    assert w.party_hp(1) == 0
+
+
+def test_p_draw_edge_today_an_end_of_turn_foe_ko_plus_our_last_mons_perish_ko_is_a_whiteout():
+    """Review follow-up 2 item 2, DOCUMENTED, NOT FIXED (owner call pending). If the foe's LAST mon
+    faints to an END-OF-TURN effect (poison, burn, Leech Seed, weather, Curse, trap damage) on the
+    turn our LAST usable mon is P-committed: BattleTurnPassed's HandleFaintedMonActions ->
+    checkteamslost sets WON, HandleWishPerishSongOnTurnEnd is NOT gated on the outcome
+    (pret battle_main.c:2958-2968) and fires, our KO's checkteamslost ORs LOST -> DREW (3), and
+    sEndTurnFuncsTable[DREW] = HandleEndTurn_BattleLost: a whiteout in a battle the player won.
+    Today the client does not intervene: the entry settles on the engine's KO, no faint echo,
+    the engine's whiteout is reported, no further byte is written."""
+    w = _p_world(pids=(A,))                                      # one usable mon
+    w.command(cmd="force_faint", key=KA)
+    w.step(30)
+    n = len(w.writes)
+    w.poke_int(w.ram["ENEMY_BASE"] + 0x56, 0, 2)                  # the foe's last mon: poison KO
+    _engine_perish_ko(w)                                          # then our Perish KO, same turn end
+    w.step()
+    assert w.client.battle_pending_count(w.client) == 0
+    w.poke_int(w.ram["BATTLE_OUTCOME_ADDR"], 3, 1)                # WON | LOST = DREW
+    w.fire("whiteout")
+    w.leave_battle(outcome=3)
+    w.step(3)
+    assert len(w.events("whiteout")) == 1 and w.events("faint") == []
+    assert len(w.writes) == n and write_reasons(w) == ["battle_commit"] * 4
 
 
 # ── command seams ───────────────────────────────────────────────────────────────────────

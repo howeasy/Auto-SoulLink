@@ -1102,9 +1102,11 @@ def test_world_force_faint_on_a_benched_mon_lands_immediately_with_no_faint_repo
 
 @world_item("34")
 def test_world_force_explode_is_handled_at_least_as_force_faint_on_vanilla_frlg():
-    """FRLG has no menu-skip capability (the pack ships no CHOSEN_ACTION_ADDR/CHOSEN_MOVE_ADDR/
-    BATTLE_COMM_ADDR: explode_capable == false, client.lua:429-430): force_explode degrades to
-    exactly force_faint's active-battler hold/land behaviour."""
+    """FRLG has no menu-skip capability: the pack ships no CHOSEN_MOVE_ADDR, so explode_capable
+    == false (lua/gen3/client.lua:547-548). Its CHOSEN_ACTION_ADDR/BATTLE_COMM_ADDR serve only
+    force_faint's Perish commit (C4-ACTIVE-FAINT-P, client.lua:777). force_explode keeps the
+    active-battler hold ("active battler", client.lua:783, zero bytes) and lands as a bench
+    battle_faint once the mon is switched out."""
     w = _live()
     w.battle_ok = True
     w.enter_battle([_FOE], active=(0,))

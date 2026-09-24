@@ -719,7 +719,25 @@ function Client.new(p)
     -- The battler leaving (Roar) takes battle_write's bench path; the battle ending first (flee,
     -- catch) takes its overworld path. A reset commit (comm < 3) with the mon alive is re-armed;
     -- mid-turn the permit refuses that, so it can only land at a parked menu.
-    local function active_faint_step(e, mon, battler)
+    -- Review follow-up 2: the commit's comm[b] = 3 fails every later battle_faint (battle_comm_0)
+    -- until the next parked menu, which comes AFTER the Perish KO's party screen, where a bench
+    -- mon still alive could be sent in. So the commit waits while another pending entry resolves
+    -- to a bench slot: that entry lands later in this same flush (same permit, minus the guard)
+    -- and the commit follows next frame. Only this step is delayed; the core's arrival order of
+    -- battle_pending and each entry's arrival stamp (684bbb7a) are untouched.
+    local function bench_write_pending(e, b)
+        local party = party_read()
+        if not party then return false end
+        for _, o in ipairs(session.battle_pending) do
+            if o ~= e then
+                local slot = session.identity:find_party_slot(o.key, party)
+                if slot and not battler_of(b, slot) then return true end
+            end
+        end
+        return false
+    end
+
+    local function active_faint_step(e, mon, battler, b)
         local bhp = io.read_u16(a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE + R.BATTLE_MON_HP_OFF)
         if e.perish and bhp == 0 then
             hud.show("!! " .. (e.nickname or mon.nickname or key(mon)) .. " fainted", 255, 80, 80, 360)
@@ -728,6 +746,7 @@ function Client.new(p)
         if e.perish and io.read_u8(a.BATTLE_COMM_ADDR + battler) >= STATE_ACTION_CONFIRMED_STANDBY then
             return "hold", "active faint committed (press A)"
         end
+        if bench_write_pending(e, b) then return "hold", "bench write first" end
         local ok, why = armed_write("battle_commit", perish_plan(battler), { battler = battler })
         if not ok then return "hold", why end
         if not e.perish then
@@ -757,7 +776,7 @@ function Client.new(p)
             -- D1-D5 are signed limits.
             if e.cmd == "force_faint" and active_faint_capable and battler == 0
                and b.battlers_count == 2 and b.is_doubles ~= true then
-                return active_faint_step(e, mon, battler)
+                return active_faint_step(e, mon, battler, b)
             end
             -- Held until it switches out or the battle ends: a party-only HP write is undone by the
             -- next datahpupdate, and a both-words write is a silent faint (scope doc §1.4, §2a).
