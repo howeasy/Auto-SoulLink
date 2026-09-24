@@ -103,7 +103,7 @@
       <span class="trade-problem-verdict">A: {{ tp.verdict.get('a') or 'awaiting' }} &middot; B: {{ tp.verdict.get('b') or 'awaiting' }}</span>
       {% if tp.problem %}<span class="trade-problem-text">{{ tp.problem }}</span>{% endif %}
       {% if status.trade_held %}<span class="trade-problem-text trade-problem-held">Waiting on this trade: {% for h in status.trade_held %}{{ h.player | upper }} {{ h.event }} {{ h.key }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
-      <span class="trade-problem-hint">Resolve after checking both parties: POST /api/debug/resolve_trade {"token": "{{ tp.token }}", "action": "adopt", "commit" or "rollback"} (a side's known traded/none always stands)</span>
+      <span class="trade-problem-hint">Resolve after checking both parties: POST /api/debug/resolve_trade {"token": "{{ tp.token }}", "action": "adopt", "commit" or "rollback"} (a side's known traded/none stands; name a contradicted side with "sides": {"a": "traded"|"none"})</span>
     </div>
   {% elif status.trade_last %}
     {# Quiet by design: a settled trade is not a banner-worthy event once trade_problem

@@ -233,3 +233,70 @@ def test_an_after_reset_report_in_the_uncertain_phase_waits_for_the_hello(tmp_pa
     assert state.pending_trade and state.pending_trade["verdict"]["b"] == "await"
     _hello(state, "b", _mon(B_GETS, 0x26))                       # the reloaded save
     assert state.pending_trade is None and (entry.a.key, entry.b.key) == (A_GETS, B_GETS)
+
+
+# ── OMP review of 779c73c2: resolve_trade hardening ──────────────────────────────────────────────
+
+def _queued(state, pid, *names):
+    return [c for c in state.queued_commands[pid] if c.get("cmd") in names]
+
+
+def test_resolve_refuses_while_a_side_never_answered_its_apply(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    state.handle_event("b", {"event": "trade_done", "token": token, "uncertain": True})
+    assert _queued(state, "a", "apply_trade"), "control: A has not picked up its apply yet"
+    ok, why = state.resolve_trade(token, "rollback")
+    assert not ok and "answer" in why and state.pending_trade is not None
+
+
+def test_resolve_purges_an_undelivered_apply_for_the_trade(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    state.handle_event("b", {"event": "trade_done", "token": token, "uncertain": True})
+    state.pending_trade["age"] = state.TRADE_WATCHDOG_EVENTS
+    state.handle_event("b", {"event": "noop"})                  # A still silent: uncertain, a awaits
+    assert state.pending_trade["verdict"] == {"a": "await", "b": "await"}
+    assert _queued(state, "a", "apply_trade")
+    assert state.resolve_trade(token, "rollback") == (True, "")
+    assert not _queued(state, "a", "apply_trade", "apply_prepare"), "a stale apply would still commit"
+
+
+def test_contradictory_evidence_is_never_filled_by_the_action(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    state.handle_event("b", {"event": "trade_done", "token": token, "uncertain": True})
+    _tick(state, "b", _mon("0101:5678:99", 7))                  # B holds NEITHER
+    assert state.pending_trade["phase"] == "conflict"
+    for action in ("commit", "rollback", "adopt"):
+        ok, why = state.resolve_trade(token, action)
+        assert not ok and "NEITHER" in why, action
+    ok, _ = state.resolve_trade(token, "commit", sides={"b": "bogus"})
+    assert not ok
+    assert state.resolve_trade(token, "commit", sides={"b": "traded"}) == (True, "")
+    assert (entry.a.key, entry.b.key) == (A_GETS, B_GETS)
+
+
+def test_a_split_copies_the_stats_to_an_evolved_copy_and_drops_the_gone_mon(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    state.mon_stats.update({A_GETS: {"atk": 7}, B_GETS: {"atk": 9}})
+    evolved = "1234:5678:16"
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    state.pending_trade["new"]["a"] = (evolved, 0x16)            # A's copy evolved on arrival
+    state.handle_event("b", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    assert state.resolve_trade(token, "adopt") == (True, "")
+    assert entry.a.key == evolved and state.mon_stats[evolved] == {"atk": 7}
+    assert state.mon_stats[A_GETS] == {"atk": 7}, "B still holds the original"
+    assert B_GETS not in state.mon_stats, "A's own mon is gone"
+
+
+import asyncio  # noqa: E402
+
+
+@pytest.mark.parametrize("body", [None, [], {"token": 5, "action": "commit"},
+                                  {"token": "t1", "action": ["commit"]},
+                                  {"token": "t1", "action": "commit", "sides": "a"}])
+def test_the_resolve_endpoint_answers_400_to_a_malformed_body(tmp_path, body):
+    from unittest.mock import AsyncMock
+    from server.server import SLinkServer
+    srv = SLinkServer(data_dir=str(tmp_path))
+    resp = asyncio.run(srv.handle_debug_resolve_trade(AsyncMock(json=AsyncMock(return_value=body))))
+    assert resp.status == 400

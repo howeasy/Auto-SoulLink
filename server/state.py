@@ -1156,24 +1156,48 @@ class SoulLinkState:
         return [{"player": pid, "event": m.get("event"), "key": m.get("key")}
                 for pid, m in pt.get("held_events", [])]
 
-    def resolve_trade(self, token: str, action: str) -> tuple[bool, str]:
+    def resolve_trade(self, token: str, action: str, sides: dict | None = None) -> tuple[bool, str]:
         """MAJOR-3 (review e9d5e136, invariant review MAJOR-3): an admin settles a conflicted or
         stuck trade by hand. A side whose outcome is KNOWN (verdict traded/none, from its report or
         its party) keeps it whatever the action, so every link half ends up naming the mon that side
         holds; the action decides only the sides the server cannot: `commit` -> traded, `rollback`
-        -> none, `adopt` -> nothing (refused while a side is undecided). Both traded commits the
-        swap, both none rolls back, one of each splits (_split_trade). The slot clears, held events
-        replay against the result and the outcome is journaled with "resolved by admin: <action>"."""
+        -> none, `adopt` -> nothing (refused while a side is undecided). Contradictory evidence
+        (a conflict reason such as "holds NEITHER") is never filled: the admin names that side's
+        outcome in `sides` ({"a"|"b": "traded"|"none"}, which overrides any verdict). Refused while
+        a side has not answered its apply at all (verdict None): its APPLY may still land. Both
+        traded commits the swap, both none rolls back, one of each splits (_split_trade). Any
+        undelivered apply for the trade is dropped, the slot clears, held events replay against the
+        result and the outcome is journaled with "resolved by admin: <action>"."""
         pt = self.pending_trade
         if not pt or str(token) != pt.get("token") or pt.get("phase") not in ("applying", "uncertain", "conflict"):
             return False, "no applied trade with that token"
         fill = {"commit": "traded", "rollback": "none", "adopt": None}
         if action not in fill:
             return False, "action must be commit, rollback or adopt"
+        sides = sides or {}
+        if not isinstance(sides, dict) or any(pid not in ("a", "b") or o not in ("traded", "none")
+                                              for pid, o in sides.items()):
+            return False, 'sides must map "a"/"b" to "traded" or "none"'
         v = pt.get("verdict") or {}
-        sides = {pid: v.get(pid) if v.get(pid) in ("traded", "none") else fill[action] for pid in ("a", "b")}
-        if None in sides.values():
-            return False, "adopt needs both sides' outcome known; use commit or rollback"
+        out = {}
+        for pid in ("a", "b"):
+            if pid in sides:
+                out[pid] = sides[pid]
+            elif v.get(pid) is None:
+                return False, f"{pid} has not answered its apply yet; wait for its report or the watchdog"
+            elif v[pid] in ("traded", "none"):
+                out[pid] = v[pid]
+            elif v[pid] != "await":
+                return False, f"{v[pid]}: contradictory evidence; name that side in sides"
+            elif fill[action] is None:
+                return False, "adopt needs both sides' outcome known; use commit or rollback"
+            else:
+                out[pid] = fill[action]
+        sides = out
+        for pid in ("a", "b"):                          # OMP review: an undelivered APPLY must never land
+            self.queued_commands[pid] = [c for c in self.queued_commands[pid]
+                                         if not (c.get("cmd") in ("apply_trade", "apply_prepare")
+                                                 and c.get("token") == pt["token"])]
         pt["problem"] = f"resolved by admin: {action}"
         log.warning(f"trade {pt['token']} {pt['problem']} (verdict {v}) -> {sides}")
         if sides["a"] == sides["b"] == "traded":
@@ -1196,10 +1220,13 @@ class SoulLinkState:
         nk, ns = pt["new"].get(taker) or (src.key, 0)
         old = pt[f"{taker}_key"]
         setattr(entry, taker, replace(src, key=nk, species=ns or src.species))
+        if nk != src.key and src.key in self.mon_stats:
+            self.mon_stats[nk] = dict(self.mon_stats[src.key])    # the partner still holds the original
         for gone in self._trade_old_keys(pt, taker):
             self._key_index.pop(gone, None)
             self.party_keys[taker].discard(gone)
             self.bonus_keys[taker].discard(gone)
+            self.mon_stats.pop(gone, None)
         self.party_keys[taker].add(nk)
         self._index_entry(entry)
         self.pending_trade = None

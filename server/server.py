@@ -4252,14 +4252,20 @@ class SLinkServer:
         })
 
     async def handle_debug_resolve_trade(self, request):
-        """POST /api/debug/resolve_trade {"token": "t7", "action": "commit"|"rollback"|"adopt"} —
+        """POST /api/debug/resolve_trade {"token": "t7", "action": "commit"|"rollback"|"adopt",
+        "sides"?: {"a"|"b": "traded"|"none"}} —
         settle a conflicted or stuck native trade by hand (the board's trade banner names this);
         see SoulLinkState.resolve_trade for how a side's known outcome binds."""
         try:
             body = await request.json()
         except Exception:
             return aiohttp_web.json_response({"ok": False, "error": "invalid JSON"}, status=400)
-        ok, error = self.state.resolve_trade(body.get("token", ""), body.get("action", ""))
+        if (not isinstance(body, dict) or not isinstance(body.get("token"), str)
+                or not isinstance(body.get("action"), str)
+                or not isinstance(body.get("sides") or {}, dict)):
+            return aiohttp_web.json_response(
+                {"ok": False, "error": 'body must be {"token": str, "action": str, "sides"?: object}'}, status=400)
+        ok, error = self.state.resolve_trade(body["token"], body["action"], body.get("sides"))
         if not ok:
             return aiohttp_web.json_response({"ok": False, "error": error}, status=400)
         self._notify_sse()
