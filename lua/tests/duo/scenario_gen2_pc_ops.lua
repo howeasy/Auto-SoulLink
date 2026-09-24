@@ -23,6 +23,9 @@
     B: RX box_mon|party_mon key=<key>                                 (plain text, the driver's RX line)
        PC_PARTNER_1 / _2 / _3 {frame, cmd, key, in_party, party_count, box_count}   after box_mon, party_mon, box_mon ran
        RX force_faint key=<key>, RX memorialize key=<key>, MEMORIAL_ACK {event memorialize_done, box 13}   after PC_PARTNER_3
+       BURIAL_WAIT {frame, key}   only when the production client withheld memorialize_done (BOX-MEMORIAL-2, d23f4011:
+         the partner sits in the volatile ACTIVE box, so the memorial settles only after a native save). Then B saves
+         first and the settled MEMORIAL_ACK must follow that save (its frame > SAVE_WITNESS.save_completed_frame).
     A: TX release {key}   after the box release's ENGINE_PC; A receives no death command
     both: SAVE_WITNESS (the final save, newer than LINK_SAVE), RECEIPT {schema "gen2-duo-pc-ops-v2"}
 --]]
@@ -38,7 +41,8 @@ S.SITES = {"pc_deposit_begin", "pc_deposit_complete", "pc_withdraw_begin", "pc_w
 S.PARTNER = {"box_mon", "party_mon", "box_mon"}   -- B's mirrored commands, in order
 S.ENGINE = {{"party_to_box"}, {"box_to_party"}, {"party_to_box"}, {"pc_release", "box"}}
 S.JSON_TAGS = {LINK_SAVE=true, ENGINE_PC=true, PC_STATE=true, PC_PARTNER_1=true, PC_PARTNER_2=true, PC_PARTNER_3=true,
-               SAVE_WITNESS=true, ENGINE_CAPTURE=true, DUO_GEN2=true, CLIENT=true, MEMORIAL_ACK=true}
+               SAVE_WITNESS=true, ENGINE_CAPTURE=true, DUO_GEN2=true, CLIENT=true, MEMORIAL_ACK=true,
+               BURIAL_WAIT=true}
 
 local function has(list, value)
     for _, v in ipairs(list or {}) do if v == value then return true end end
@@ -62,6 +66,14 @@ function S.run(h)
     if not key then return false, why end
     local rx0 = #h.rec.rx   -- the link's own quarantine box_mon/party_mon are already in the log; count past them
     local function verdict(lines, json) return S.verdict(lines, json, link.verdict) end
+    -- BOX-MEMORIAL-2 (d23f4011): a memorial touching the active sBox rides the client's save-witness settle queue
+    local function burial_waiting()
+        for _, s in ipairs(h.client.settle or {}) do
+            if s.memorial and s.memorial.key == key then return true end
+        end
+        return false
+    end
+    local burial = false
 
     if h.player == "b" then
         for n, cmd in ipairs(S.PARTNER) do
@@ -79,11 +91,15 @@ function S.run(h)
             row.phase, row.cmd, row.key, row.in_party = nil, cmd, key, want_party
             h.jlog("PC_PARTNER_" .. n, row)
         end
-        -- O-35: A's release kills the pair; B's boxed partner is memorialized into Box 14
-        if not h.wait(function() return h.rec.memorial[key] ~= nil end, S.SYNC_FRAMES) then
-            return false, "no memorialize ack for the released partner " .. key
+        -- O-35: A's release kills the pair; B's boxed partner is memorialized into Box 14. When the partner sits in
+        -- the active box the ack waits for B's native save below (BURIAL_WAIT).
+        if not h.wait(function() return h.rec.memorial[key] ~= nil or burial_waiting() end, S.SYNC_FRAMES) then
+            return false, "no memorialize ack (or burial waiting on a save) for the released partner " .. key
         end
-        if h.rec.memorial[key].event ~= "memorialize_done" then
+        if h.rec.memorial[key] == nil then
+            burial = true
+            h.jlog("BURIAL_WAIT", {frame=h.frame(), key=key})
+        elseif h.rec.memorial[key].event ~= "memorialize_done" then
             return false, "the partner's memorial failed: " .. tostring(h.rec.memorial[key].reason)
         end
     else
@@ -100,11 +116,28 @@ function S.run(h)
         if not ok then return false, "PC deposit/release: " .. tostring(pc_why) end
         h.jlog("PC_STATE", state(h, "deposit-release"))
     end
-    if not h.wait(h.box_idle, S.SYNC_FRAMES) then return false, "box commands still pending before the save" end
+    -- idle but for the burial itself, which only the save below can settle
+    local function idle()
+        if #(h.client.deferred or {}) > 0 then return false end
+        for _, s in ipairs(h.client.settle or {}) do
+            if not (burial and s.memorial and s.memorial.key == key) then return false end
+        end
+        return true
+    end
+    if not h.wait(idle, S.SYNC_FRAMES) then return false, "box commands still pending before the save" end
     local saved, save_why = h.save()
     if not saved then return false, "final save failed: " .. tostring(save_why) end
     local witnessed, witness_why = h.witness()
     if not witnessed then return false, "save witness: " .. tostring(witness_why) end
+    if burial then
+        if not h.wait(function() return h.rec.memorial[key] ~= nil end, S.SYNC_FRAMES) then
+            return false, "no memorialize ack for the released partner " .. key .. " after the save"
+        end
+        if h.rec.memorial[key].event ~= "memorialize_done" then
+            return false, "the partner's memorial failed: " .. tostring(h.rec.memorial[key].reason)
+        end
+        if not h.wait(h.box_idle, S.SYNC_FRAMES) then return false, "the burial settle is still pending" end
+    end
     h.frames(FS.SETTLE_FRAMES)
     local problems, receipt = verdict(h.lines, h.json)
     if #problems > 0 then return false, table.concat(problems, "; ") end
@@ -226,7 +259,8 @@ function S.verdict(lines, json, link_verdict)
                 need(prev == nil or p.at > prev.at, "PC_PARTNER markers out of order")
             end
         end
-        -- O-35: after the third mirror, the death (force_faint, memorialize) and its Box 14 ack, before the save
+        -- O-35: after the third mirror, the death (force_faint, memorialize) and its Box 14 ack, before the save;
+        -- or, when the client withheld the ack for an active-box memorial (BURIAL_WAIT), settled after the save
         local third = rows("PC_PARTNER_3")[1]
         local kill, bury
         for _, r in ipairs(rx) do
@@ -239,9 +273,21 @@ function S.verdict(lines, json, link_verdict)
         for _, r in ipairs(rows("MEMORIAL_ACK")) do
             if r.value.key == key and r.value.event == "memorialize_done" and r.value.box == 13 then ack = ack or r end
         end
-        need(ack ~= nil and bury ~= nil and ack.at > bury.at and save ~= nil and save.at > ack.at,
-             "no memorialize_done (box 13) for B's partner before the final save")
-        detail = {partner_commands=S.PARTNER, partner_memorial=ack and ack.value}
+        local waits = rows("BURIAL_WAIT")
+        local wait = waits[1]
+        if wait then
+            need(#waits == 1, string.format("%d BURIAL_WAIT markers (expected one)", #waits))
+            need(wait.value.key == key, "BURIAL_WAIT names another key")
+            need(bury ~= nil and wait.at > bury.at, "BURIAL_WAIT precedes its memorialize")
+            need(ack ~= nil and ack.at > wait.at and save ~= nil and save.at > wait.at
+                 and type(ack.value.frame) == "number" and type(save.value.save_completed_frame) == "number"
+                 and ack.value.frame > save.value.save_completed_frame,
+                 "no memorialize_done (box 13) for B's partner, or its burial ack is not after the final save")
+        else
+            need(ack ~= nil and bury ~= nil and ack.at > bury.at and save ~= nil and save.at > ack.at,
+                 "no memorialize_done (box 13) for B's partner before the final save")
+        end
+        detail = {partner_commands=S.PARTNER, partner_memorial=ack and ack.value, burial_waited=wait ~= nil}
     else
         need(false, "DUO_GEN2 names no player a|b")
     end

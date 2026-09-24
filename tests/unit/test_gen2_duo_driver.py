@@ -2929,6 +2929,42 @@ def test_pc_ops_verdict_refuses_a_tampered_or_reordered_half(lines, match):
     assert receipt is None and any(match in p for p in problems), problems
 
 
+def pc_burial_lines(ack_frame=3950, ack_after_witness=True):
+    """BOX-MEMORIAL-2 (d23f4011): B's partner sits in the ACTIVE box, so memorialize_done is withheld until a
+    native save settles it. B logs BURIAL_WAIT, saves, and only then gets the settled ack."""
+    lines = pc_lines("b")
+    ack = next(line for line in lines if line.startswith("MEMORIAL_ACK "))
+    lines = [line for line in lines if line != ack]
+    ack = edit_tag([ack], "MEMORIAL_ACK", frame=ack_frame)[0]
+    wait = "BURIAL_WAIT " + json.dumps({"frame": 2600, "key": KEY})
+    save = lines.pop()
+    return lines + [wait] + ([save, ack] if ack_after_witness else [ack, save])
+
+
+@pytest.mark.parametrize("after", [True, False], ids=["ack-after-witness-line", "ack-in-save-settle"])
+def test_pc_ops_verdict_accepts_an_active_box_burial_settled_by_the_save(after):
+    problems, receipt = wave_c("pc_ops", pc_burial_lines(ack_after_witness=after))
+    assert problems == [], problems
+    assert receipt["partner_memorial"]["frame"] == 3950 and receipt["burial_waited"] is True
+
+
+@pytest.mark.parametrize("lines,match", [
+    (pc_burial_lines(ack_frame=3800, ack_after_witness=False), "not after the final save"),
+    (without(pc_burial_lines(), "MEMORIAL_ACK"), "no memorialize_done"),
+    (edit_tag(pc_burial_lines(), "MEMORIAL_ACK", event="memorialize_failed"), "no memorialize_done"),
+    (edit_tag(pc_burial_lines(), "BURIAL_WAIT", key=OTHER), "names another key"),
+    (move(pc_burial_lines(), "BURIAL_WAIT", "RX memorialize"), "precedes its memorialize"),
+    (move(["MEMORIAL_ACK " + json.dumps({"frame": 2550, "event": "memorialize_done", "key": KEY, "box": 13})]
+          + pc_burial_lines(), "MEMORIAL_ACK", "BURIAL_WAIT"), "not after the final save"),
+    # no burial wait: the ack must still precede the save (a backing-only memorial acks at once)
+    (pc_lines("b")[:-2] + [pc_lines("b")[-1], pc_lines("b")[-2]], "before the final save"),
+], ids=["ack-before-save", "no-ack", "ack-failed", "wait-other-key", "wait-before-memorialize", "early-ack",
+        "no-wait-ack-after-save"])
+def test_pc_ops_verdict_refuses_a_burial_not_settled_by_the_save(lines, match):
+    problems, receipt = wave_c("pc_ops", lines)
+    assert receipt is None and any(match in p for p in problems), problems
+
+
 def changebox_lines():
     j = json.dumps
     b = retag(faint_lines("b"), "b", "gen2_changebox", ["change_box_begin", "change_box_loaded"])
