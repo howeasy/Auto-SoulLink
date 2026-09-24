@@ -382,6 +382,7 @@ The status server (default port 8080) exposes these pages and endpoints.
 | `/api/debug/clear_pending` | POST | Clear pending captures |
 | `/api/debug/unlink` | POST | Remove a link entry |
 | `/api/debug/revive` | POST | Revive a dead/memorial link |
+| `/api/debug/resolve_trade` | POST | Settle a conflicted or stuck native trade (commit or rollback) |
 | `/api/debug/rollback` | POST | Restore state from a backup slot |
 
 ### Pages
@@ -742,6 +743,17 @@ curl -X POST http://localhost:8080/api/debug/revive \
   -H "Content-Type: application/json" \
   -d '{"area_id": "route_1"}'
 # {"ok": true, "area_id": "route_1", "message": "Link revived to alive"}
+```
+
+---
+
+**`POST /api/debug/resolve_trade`** — Settle a native trade the server cannot settle on its own (the board's "Trade conflict" / stuck "Trade uncertain" banner, which shows the token). Check both players' parties first. `commit` swaps the link, using each side's reported new key or else the other side's old key. `rollback` leaves the link as it is. Either action clears the trade, replays any held faint/box events and journals the outcome with `problem: "resolved by admin: <action>"`.
+
+```bash
+curl -X POST http://localhost:8080/api/debug/resolve_trade \
+  -H "Content-Type: application/json" \
+  -d '{"token": "t7", "action": "rollback"}'
+# {"ok": true}
 ```
 
 ---
