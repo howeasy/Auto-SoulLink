@@ -30,6 +30,7 @@ from e2e_duo import (  # noqa: E402
 )
 
 EXPECTED_GEN2 = ["link", "gen2_faint", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison",
+                 "gen2_whiteout_rebuild",
                  "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause",
                  "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset"]
 EXPECTED_GEN2_TRADE = ["gen2_trade_decline_new", "gen2_trade_evolve", "gen2_trade_new", "gen2_trade_refuse_item",
@@ -909,7 +910,8 @@ def test_gen2_species_live_early_finish_retries_only_waiting_pending_partner(mon
 
 @pytest.mark.parametrize(("scenario", "oracle", "key"), [
     ("gen2_whiteout", "whiteout_oracle", "repair"), ("gen2_pc_ops", "pc_ops_oracle", "release"),
-    ("gen2_changebox", "changebox_oracle", "box_change"), ("gen2_poison", "poison_oracle", "death")])
+    ("gen2_changebox", "changebox_oracle", "box_change"), ("gen2_poison", "poison_oracle", "death"),
+    ("gen2_whiteout_rebuild", "whiteout_rebuild_oracle", "rebuild")])
 def test_wave_c_scenarios_bind_their_own_saved_state_oracle(monkeypatch, scenario, oracle, key):
     """DUO-WAVE-C contract: the faint body, each scenario's own oracle, faint-shaped kwargs."""
     from types import SimpleNamespace
