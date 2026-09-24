@@ -1,7 +1,9 @@
--- T2 / A2: A receives one keyed force_faint, B idles without saving. Run each case with
--- gen3_frlg and gen3_lgfr to exercise both titles. The runner queues ONLY force_faint after
+-- T2: A receives one keyed force_faint, B idles without saving. Run with gen3_frlg and
+-- gen3_lgfr to exercise both titles. The runner queues ONLY force_faint after
 -- READY_BATTLE_WINDOW (not an injected death + memorialize); the target must remain in party.
--- D.battle_window_case = "trainer_bench" (town seed, slot1) or "active_end" (battle seed, slot0).
+-- D.battle_window_case = "trainer_bench" (town seed, slot1). A2 (active_end_gen3) left this
+-- carrier with mechanism P+H (owner rulings 15-18): the active battler is no longer held to the
+-- battle's end, so it runs on scenario_gen3_linked_faint_active.lua's "command" case.
 --
 -- New injected seams required at integration (this module neither pokes nor stages game data):
 -- SINGLES ONLY; doubles player slots belong to D1-D5, not this carrier.
@@ -44,20 +46,16 @@
 --     The carrier serializes samples/active_hex/in_battle/target_hp/trainer_id itself; tuple
 --     must not duplicate those fields or frame/slot/hp. Include the remaining full clause/CPU
 --     values in tuple. active_bytes must be exactly0x58 (pret pokemon.h BattlePokemon).
--- Runner sets D.battle_window_case, town/slot1 for T2 and battle/slot0 for A2, then queues one
--- force_faint ONLY after READY. Both orientations run A as the mutation subject; B never saves.
--- NOT_SUBJECT active_end means a natural battle end before the requested RUN; it is NOT a
--- qualifying PASS or a product failure. The oracle/integrator must retain that distinction.
+-- Runner sets D.battle_window_case, town/slot1 for T2, then queues one force_faint ONLY after
+-- READY. Both orientations run A as the mutation subject; B never saves.
 -- Existing ctx.watch runs after EVERY client frame, including frames inside game helpers.
 -- Existing ctx.on_write runs synchronously inside the sink's completed-write log callback.
 --
 -- pret: party HP +0x56, record100 bytes (pokemon.h); active exclusion client.battler_of;
 -- battle_controller_player.c:186-244 commits choices; battle.h outcomes WON=1, RAN=4.
--- A2 must not confuse an overworld application with an in-battle success. T2 must not accept
--- whiteout recovery healing its bench target. The Python oracle must independently decode the
+-- T2 must not accept whiteout recovery healing its bench target. The Python oracle must independently decode the
 -- final save (unique key/slot, HP0, no boxed duplicate) and verify save-witness hashes/counters.
 local fmt = string.format
-local HOLD_FRAMES = 120
 local TRAINER_ID = 102
 
 local function integer(n) return type(n) == "number" and n % 1 == 0 end
@@ -67,7 +65,7 @@ local function peer(ctx)
         local s = ctx.partner_result()
         if s and s:find("\nRESULT:", 1, true) then return s end
         if s and s:match("^RESULT:") then return s end
-    end, ctx.D.battle_window_case=="trainer_bench" and 7200 or 1800, "battle-window A result")
+    end, 7200, "battle-window A result")
     local verdict
     for line in ((text or "") .. "\n"):gmatch("([^\r\n]+)") do
         verdict = line:match("^RESULT: (%u+)") or verdict
@@ -78,9 +76,7 @@ end
 
 return function(ctx)
     local mode = ctx.D.battle_window_case
-    if mode ~= "trainer_bench" and mode ~= "active_end" then
-        return false, "battle_window_case must be trainer_bench or active_end"
-    end
+    if mode ~= "trainer_bench" then return false, "battle_window_case must be trainer_bench" end
     if not ctx.wait_go(nil, 1800) then return false, "no go-file" end
     if ctx.player == "b" then return peer(ctx) end
     if ctx.player ~= "a" then return false, "unknown battle-window player" end
@@ -88,12 +84,12 @@ return function(ctx)
         return false, "missing battle_window_snapshot integration seam"
     end
     local key = ctx.linked()
-    local slot = mode == "trainer_bench" and 1 or 0
+    local slot = 1
     local mon = key and ctx.find(key)
     if not mon or mon.key ~= key or mon.slot ~= slot or mon.hp <= 0 then
         return false, "battle-window target must be a living unique key in slot " .. slot
     end
-    if mode == "trainer_bench" then
+    do
         if type(ctx.enter_trainer) ~= "function" then return false, "missing enter_trainer route seam" end
         local floor = ctx.D.battle_window_level_floor or 13
         if floor ~= 13 then return false, "invalid preparation level floor (budget pinned to13)" end
@@ -133,11 +129,6 @@ return function(ctx)
             return false, "PREPARATION lead must enter at full HP with no status"
         end
         ctx.log(fmt("PREP_LEVEL before=%d after=%d floor=%d hp=full status=none", before.level, after.level, floor))
-    else
-        if not ctx.hunt("battle_window active_end") then return false, "no wild encounter" end
-        if ctx.SP.verify_fight_cursor(ctx.cp, "incidental_battle") ~= "fight" then
-            return false, "active_end: no action menu"
-        end
     end
 
     local function snapshot()
@@ -165,13 +156,11 @@ return function(ctx)
     end
     local initial, why = snapshot()
     if not initial then return false, why end
-    local trainer = mode == "trainer_bench"
     if not initial.in_battle or initial.outcome ~= 0 or not initial.battle_permit
-        or initial.target.hp == 0 or initial.is_trainer ~= trainer
-        or (trainer and initial.trainer_id ~= TRAINER_ID) then
+        or initial.target.hp == 0 or not initial.is_trainer or initial.trainer_id ~= TRAINER_ID then
         return false, "wrong trainer/type or unparked battle-window start"
     end
-    if (initial.active_slots[1] == slot) == trainer then
+    if initial.active_slots[1] == slot then
         return false, "wrong active/bench target slot at battle-window start"
     end
     local rx0, attempts0 = ctx.received("force_faint", key), ctx.attempted()
@@ -182,7 +171,7 @@ return function(ctx)
         return fmt("samples=%d active_hex=%s in_battle=%d target_hp=%d trainer_id=%d %s",
             s.samples, hex, s.in_battle and 1 or 0, s.target.hp, s.trainer_id or 0, s.tuple)
     end
-    local failed, landed, closed, ending, exit_frame
+    local failed, landed, closed, exit_frame
     local function fail(s) failed = failed or s end
     local function note_exit(s)
         if not exit_frame then
@@ -195,9 +184,6 @@ return function(ctx)
         if closed then return end
         local s, err = snapshot()
         if not s then return fail(err) end
-        if not trainer and not ending and not s.in_battle then
-            return fail("NOT_SUBJECT active_end: battle ended before RUN")
-        end
         local lines = ctx.write_lines()
         local w = lines[#lines]
         if ctx.received("force_faint", key) ~= rx0 + 1 then return fail("write without fresh keyed RX") end
@@ -208,20 +194,12 @@ return function(ctx)
             or ctx.attempted() - attempts0 ~= 2 then
             return fail("write lacks exclusive two-byte HP0 readback")
         end
-        if trainer then
-            if reason ~= "battle_faint" or not s.in_battle or s.outcome ~= 0
-                or not s.battle_permit or not s.is_trainer or s.trainer_id ~= TRAINER_ID
-                or s.active_slots[1] == slot then
-                return fail("trainer bench faint landed outside the in-battle bench window")
-            end
-            if s.active_bytes ~= initial.active_bytes then return fail("active battle record changed at bench write") end
-        else
-            if reason ~= "overworld" or s.in_battle or not ending or s.outcome ~= 4
-                or not s.overworld_permit then
-                return fail("active target mutated before the normal battle end/overworld window")
-            end
-            note_exit(s) -- the write can precede this frame's watcher; RAM is already out of battle
+        if reason ~= "battle_faint" or not s.in_battle or s.outcome ~= 0
+            or not s.battle_permit or not s.is_trainer or s.trainer_id ~= TRAINER_ID
+            or s.active_slots[1] == slot then
+            return fail("trainer bench faint landed outside the in-battle bench window")
         end
+        if s.active_bytes ~= initial.active_bytes then return fail("active battle record changed at bench write") end
         landed = s.frame
         ctx.log(fmt("BATTLE_WINDOW_LANDED %s %s slot=%d frame=%d reason=%s address=0x%08X len=2 hp=0 %s",
                     mode, key, slot, s.frame, reason, address, evidence(s)))
@@ -241,59 +219,34 @@ return function(ctx)
         local s, err = snapshot()
         if not s then return fail(err) end
         if s.party_base ~= initial.party_base then return fail("party base changed") end
-        if not trainer and not ending and not s.in_battle then
-            return fail("NOT_SUBJECT active_end: battle ended before RUN")
-        end
         if ctx.received("force_faint", key) > rx0 + 1 then return fail("duplicate force_faint during carrier") end
         if landed then
             if ctx.attempted() - attempts0 ~= 2 then return fail("extra client write after target HP write") end
-            if trainer and s.outcome == 2 and s.trainer_id == TRAINER_ID then
+            if s.outcome == 2 and s.trainer_id == TRAINER_ID then
                 note_exit(s)
                 return fail("T2_RNG_LOSS: lead fainted to Rick after the SLink write landed")
             end
             if s.target.hp ~= 0 then fail("target revived after the witnessed faint") end
-            if trainer and not s.in_battle then note_exit(s) end
+            if not s.in_battle then note_exit(s) end
             return
         end
         if s.target.hp == 0 or ctx.attempted() ~= attempts0 then
             return fail("target mutated without the required write witness")
         end
-        if trainer then
-            if not s.in_battle then fail("trainer bench write was deferred until battle end") end
-        elseif s.in_battle then
-            if s.active_slots[1] ~= slot then return fail("active_end target switched out") end
-            if ctx.received("force_faint", key) > rx0 and not ctx.battle_hold(key) then
-                fail("active target is not held in battle_pending")
-            end
-        else
-            if not ending or s.outcome ~= 4 then return fail("unexpected battle end") end
-            note_exit(s)
-        end
+        if not s.in_battle then fail("trainer bench write was deferred until battle end") end
     end))
     local function finish(ok, message) closed = true; return ok, message end
     ctx.log(fmt("READY_BATTLE_WINDOW %s %s slot=%d frame=%d trainer=%d %s", mode, key, slot,
-                initial.frame, trainer and TRAINER_ID or 0, evidence(initial)))
+                initial.frame, TRAINER_ID, evidence(initial)))
     local got = ctx.wait_until(function()
         return failed or ctx.received("force_faint", key) > rx0
     end, 120, "fresh battle-window force_faint")
     if failed then return finish(false, failed) end
     if not got then return finish(false, "no fresh keyed force_faint") end
-    if not trainer then
-        for _ = 1, HOLD_FRAMES do
-            ctx.frames(1)
-            if failed then return finish(false, failed) end
-        end
-        ctx.log(fmt("BATTLE_WINDOW_HELD active_end %s frames=%d attempted=0", key, HOLD_FRAMES))
-        ending = true
-        ctx.log("BATTLE_WINDOW_EXIT_INPUT active_end " .. key)
-        local ok, err = ctx.run_away("battle_window active_end")
-        if failed then return finish(false, failed) end
-        if not ok then return finish(false, "RUN failed: " .. tostring(err)) end
-    end
     local hit = ctx.wait_until(function() return failed or landed end, 90, "battle-window HP write")
     if failed then return finish(false, failed) end
     if not hit then return finish(false, "no witnessed battle-window HP write") end
-    if trainer then
+    do
         local ok, err = ctx.try(ctx.play.fight_through, ctx.cp, 4000)
         if failed then return finish(false, failed) end
         if not ok then
@@ -309,10 +262,10 @@ return function(ctx)
     local final, err = snapshot()
     if failed then return finish(false, failed) end
     if not final then return finish(false, err) end
-    if final.in_battle or final.outcome ~= (trainer and 1 or 4) or final.target.hp ~= 0 then
+    if final.in_battle or final.outcome ~= 1 or final.target.hp ~= 0 then
         return finish(false, "battle did not finish normally with target HP0 (whiteout is not persistence)")
     end
-    if trainer then note_exit(final) end
+    note_exit(final)
     local saved, swhy = ctx.save("battle_window " .. mode)
     if failed then return finish(false, failed) end
     if not saved then return finish(false, "save: " .. tostring(swhy)) end

@@ -84,6 +84,16 @@ console.log = function(s)
     if helper and not finished then finish(false, "helper: " .. helper) end
 end
 
+-- Every harness press, counted (ctx.inputs): the P+H carrier's "no input between the commit and
+-- the KO" is checked on this AND on the engine's own gMain.heldKeysRaw. Wrapped before any helper
+-- loads, so a helper that captures joypad.set captures this one.
+local presses, raw_joypad_set = 0, joypad.set
+joypad.set = function(buttons, ...)
+    if type(buttons) == "table" then
+        for _, v in pairs(buttons) do if v == true then presses = presses + 1; break end end
+    end
+    return raw_joypad_set(buttons, ...)
+end
 log(fmt("duo instance %s scenario=%s phase=%s title=%s attempt=%d", D.player, D.scenario, phase,
         D.title, D.attempt or 1))
 pcall(memory.usememorydomain, "System Bus")
@@ -175,7 +185,11 @@ local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInpu
                -- new_game.c:37)
                "sSaveDialogDelay", "gDifferentSaveFile", "SaveDialogCB_AskSaveHandleInput",
                "SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput", "sStartMenuCursorPos",
-               "sNumStartMenuItems", "sStartMenuOrder" }
+               "sNumStartMenuItems", "sStartMenuOrder",
+               -- P+H carrier (scenario_gen3_linked_faint_active.lua): the engine oracles O1-O7 and
+               -- the hand-off (rr_active_faint_parity_scope §3.2; RR reuses FR's, byte-proven there)
+               "gActiveBattler", "gBattleResults", "gStatuses3", "PlayerBufferExecCompleted",
+               "PlayerBufferRunCommand" }
 local S = {}
 do
     local want = {}
@@ -265,6 +279,15 @@ local function pending_count()
     local sigs = SLINK_GEN3_CLIENT and SLINK_GEN3_CLIENT.signals
     return sigs and #sigs.pending or 0
 end
+local faint_sites = {}
+local function faint_site_now()
+    local slot = memory.read_u16_le(S.gBattlerPartyIndexes, "System Bus")
+    local base = reader.party_base()
+    return { frame = emu.framecount(), active = memory.read_u8(S.gActiveBattler, "System Bus"),
+             battler0_slot = slot, battle_hp = memory.read_u16_le(S.gBattleMons + 0x28, "System Bus"),
+             party_hp = base and memory.read_u16_le(base + slot * 100 + 0x56, "System Bus") or -1,
+             counter = memory.read_u8(S.gBattleResults, "System Bus") }
+end
 local raw_on_bus_exec = event.on_bus_exec
 event.on_bus_exec = function(fn, addr, name, ...)
     local tag, fire = tostring(name or ""), fn
@@ -286,7 +309,14 @@ event.on_bus_exec = function(fn, addr, name, ...)
         fn = function(...)
             local before = pending_count()
             fire(...)
-            if validated(before, "faint") then log(fmt("ENGINE_FAINT_SITE frame=%d", emu.framecount())) end
+            if validated(before, "faint") then
+                -- read INSIDE the callback: at Cmd_tryfaintmon +0x11C the counter store is done and
+                -- datahpupdate's party write has completed (scripts wait on the exec flags)
+                local f = faint_site_now()
+                faint_sites[#faint_sites + 1] = f
+                log(fmt("ENGINE_FAINT_SITE frame=%d active=%d battler0_slot=%d battle_hp=%d party_hp=%d counter=%d",
+                        f.frame, f.active, f.battler0_slot, f.battle_hp, f.party_hp, f.counter))
+            end
         end
     end
     return raw_on_bus_exec(fn, addr, name, ...)
@@ -312,7 +342,8 @@ SLINK_GEN3_CLIENT = nil
 -- Entry.build's second return. Restore dofile even if startup fails. No production code changed.
 local battle_parts
 local original_dofile = dofile
-if D.battle_window_case then
+local wants_routes = D.battle_window_case or D.active_faint_case == "trainer"
+if wants_routes then
     dofile = function(path)
         local value = original_dofile(path)
         if path == ROOT .. "/lua/gen3/entry.lua" then
@@ -640,6 +671,39 @@ function ctx.last_used_move_player()
     return memory.read_u16_le(profile.ram.BATTLE_RESULTS_ADDR + 0x22, "System Bus")
 end
 function ctx.battle_outcome() return memory.read_u8(S.gBattleOutcome) end
+
+-- ── P+H engine oracles (scenario_gen3_linked_faint_active.lua) ─────────────────────────────
+ctx.rr = title == "radical_red"
+function ctx.inputs() return presses end
+function ctx.press(buttons) joypad.set(buttons) end
+function ctx.faint_sites() return faint_sites end
+function ctx.peek_u8(addr) return memory.read_u8(addr, "System Bus") end
+--- The hand-off words, from pret's .sym (independent of the pack): the slot, the value the plan
+--- writes, and the successor(s) PlayerBufferExecCompleted installs -- RR's CFRU hook may store its
+--- bit-24 alternative 0x090ACD8D instead (rr_active_faint_parity_scope §3.2 step 2).
+ctx.handoff = { slot_addr = S.gBattlerControllerFuncs, from = S.PlayerBufferExecCompleted | 1,
+                to = { S.PlayerBufferRunCommand | 1, ctx.rr and 0x090ACD8D or nil } }
+--- The two HP words of party `slot` as battler 0 (pret pokemon.h: party hp +0x56, BattlePokemon
+--- hp +0x28), as a set: no SLink write may touch either.
+function ctx.hp_addrs(slot)
+    local base = reader.party_base() or profile.ram.PARTY_BASE
+    return { [base + slot * 100 + 0x56] = true, [S.gBattleMons + 0x28] = true }
+end
+--- One frame's engine reads for the carrier. gMain.heldKeysRaw +0x28 (pret include/main.h);
+--- gBattleResults playerFaintCounter +0 / lastUsedMovePlayer +0x22 (include/battle.h); battler 0's
+--- PP +0x24..+0x27 of BattlePokemon.
+function ctx.engine_sample(slot)
+    local function u8(a) return memory.read_u8(a, "System Bus") end
+    local function u16(a) return memory.read_u16_le(a, "System Bus") end
+    local function u32(a) return memory.read_u32_le(a, "System Bus") end
+    local bm, base = S.gBattleMons, reader.party_base()
+    return { frame = emu.framecount(), in_battle = play.in_battle(cp) and true or false,
+             ctrl0 = u32(S.gBattlerControllerFuncs), exec = u32(S.gBattleControllerExecFlags),
+             keys = u16(S.gMain + 0x28), battler0_slot = u16(S.gBattlerPartyIndexes),
+             battle_hp = u16(bm + 0x28), pp = { u8(bm + 0x24), u8(bm + 0x25), u8(bm + 0x26), u8(bm + 0x27) },
+             status3 = u32(S.gStatuses3), counter = u8(S.gBattleResults), last_move = u16(S.gBattleResults + 0x22),
+             outcome = u8(S.gBattleOutcome), party_hp = base and u16(base + slot * 100 + 0x56) or -1 }
+end
 --- The client's own trade FSM phase (lua/gen3/client.lua st.trade_apply.phase), nil when idle.
 function ctx.trade_phase()
     local t = session.state and session.state.trade_apply
@@ -974,10 +1038,10 @@ function ctx.use_move(slot)
     return true
 end
 
---- POKeMON -> party `slot` -> SHIFT (popup row 0), then wait for the switch to land.
-function ctx.switch_to(slot)
-    local ok, why = ctx.choose_action(ACTION_SWITCH)
-    if not ok then return false, why end
+--- The in-battle party menu is taking input: move to `slot`, A, popup row 0 (SHIFT on a voluntary
+--- switch, SEND OUT on the forced one after a faint -- pret src/data/party_menu.h), then wait for
+--- battler 0 to become `slot`.
+local function party_pick(slot)
     if not ctx.wait_until(function() return party_menu_up() and party_task(S.Task_HandleChooseMonInput) end,
                           20, "the in-battle party menu") then
         return false, "the party menu never took input"
@@ -992,11 +1056,24 @@ function ctx.switch_to(slot)
     if not ctx.wait_until(function() return party_task(S.Task_HandleSelectionMenuInput) end, 10, "SHIFT popup") then
         return false, "the SHIFT/SUMMARY/CANCEL popup never opened"
     end
-    G.tap("A", 3, 20)                                    -- SHIFT
+    G.tap("A", 3, 20)                                    -- SHIFT / SEND OUT
     if not ctx.wait_until(function() return ctx.battler_slot() == slot end, 60, "the switch") then
         return false, "battler 0 never became party slot " .. slot
     end
     return true
+end
+--- POKeMON -> party `slot` -> SHIFT, then wait for the switch to land.
+function ctx.switch_to(slot)
+    local ok, why = ctx.choose_action(ACTION_SWITCH)
+    if not ok then return false, why end
+    return party_pick(slot)
+end
+--- The FORCED party screen after a faint (the caller saw it come up): SEND OUT `slot`.
+function ctx.send_out(slot)
+    if not party_menu_up() then return false, "no forced party screen" end
+    local ok, why = party_pick(slot)
+    if ok then log(fmt("SENT_OUT slot=%d battler_slot=%d", slot, ctx.battler_slot())) end
+    return ok, why
 end
 
 --- RUN until the battle ends (a failed escape costs a turn and returns to the action menu).
@@ -1191,7 +1268,7 @@ if not ctx.wait_until(function() return seen_tx.hello end, 120, "the client's he
 end
 
 -- ── the scenario ─────────────────────────────────────────────────────────────────────────
-if D.battle_window_case then
+if wants_routes then
     local Routes = load_or_die("/lua/tests/gen3_routes.lua", "battle-window routes")
     local Tutorial = load_or_die("/lua/tests/mkstates_gen3_tutorials.lua", "tutorial helpers")
     assert(battle_parts and battle_parts.policy, "no actual battle-window policy captured")

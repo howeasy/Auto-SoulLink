@@ -62,9 +62,12 @@ SCENARIOS = {
         "target": {"a": "town", "b": "town"}, "frames": 8000000, "no_save": ("b",),
         "scenario_module": "battle_window", "battle_window_case": "trainer_bench", "battle_window_slot": 1,
         "oracle": "assert_trainer_bench_gen3_saved"},
+    # A2 under mechanism P+H (owner rulings 15-18): the command-only single-subject row. A parks
+    # with its lead active, gets ONE keyed force_faint, and the engine's own Perish KO faints it in
+    # battle with no input; A sends out slot 1, RUNs and saves the engine-written HP 0. B idles.
     "active_end_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",),
         "target": {"a": "battle", "b": "town"}, "frames": 2000000, "no_save": ("b",),
-        "scenario_module": "battle_window", "battle_window_case": "active_end", "battle_window_slot": 0,
+        "scenario_module": "linked_faint_active", "active_faint_case": "command",
         "oracle": "assert_active_end_gen3_saved"},
     "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
@@ -202,8 +205,9 @@ SCENARIOS = {
     #   faint_cmd           server-command/persistence only: an injected faint propagates, B's
     #                       force_faint lands at the overworld checkpoint, both memorials save.
     #   linked_faint_active natural engine faint of A's ACTIVE linked mon; B's partner sits
-    #                       active mid-battle (held), is switched out, and must drop to HP 0
-    #                       while the battle is still running (owner ruling 2026-09-23).
+    #                       active mid-battle and takes mechanism P+H (owner rulings 15-18): the
+    #                       Perish commit + controller hand-off, then the engine's own KO in
+    #                       battle with no input (active_faint_chain).
     # P5 (card C5-5): every `games` tuple below now names "gen3_rr_new" too -- these seven apply
     # to RR unchanged (PLAN §14 P5, owner ruling: RR under the standard). The five whose `target`
     # includes "battle" are blocked on the missing rr_battle{,_b}.sav fixture (see GAMES
@@ -220,10 +224,26 @@ SCENARIOS = {
     "faint_cmd_gen3": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_rr_new"),
                        "target": "town", "frames": 2000000,
                        "oracle": "assert_faint_cmd_gen3_saved"},
+    # A1 and R1 (RR companion): mechanism P+H on the wild battle (active_faint_case "wild").
     "linked_faint_active_gen3": {"flags": [], "timeout": 1800,
                                  "games": ("gen3_frlg", "gen3_rr_new"),
                                  "target": "battle", "frames": 2500000,
                                  "oracle": "assert_linked_faint_active_gen3_saved"},
+    # A1 (i) and R4: B deposits its slot-1 mon by hand first, so the Perish KO whites out
+    # (ruling 18: P is not held on the last mon).
+    "linked_faint_active_whiteout_gen3": {"flags": [], "timeout": 2400,
+                                          "games": ("gen3_frlg", "gen3_rr_new"),
+                                          "target": "battle", "frames": 3000000,
+                                          "scenario_module": "linked_faint_active",
+                                          "active_faint_case": "whiteout",
+                                          "oracle": "assert_linked_faint_active_whiteout_gen3_saved"},
+    # A1 (ii): B takes T2's route to Bug Catcher Rick 102 (cffe0a25); the forced party screen
+    # follows the KO. B boots the town fixture (the route starts there), A the battle one.
+    "linked_faint_active_trainer_gen3": {"flags": [], "timeout": 7200, "games": ("gen3_frlg",),
+                                         "target": {"a": "battle", "b": "town"}, "frames": 8000000,
+                                         "scenario_module": "linked_faint_active",
+                                         "active_faint_case": "trainer",
+                                         "oracle": "assert_linked_faint_active_trainer_gen3_saved"},
     "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr_new"),
                      "target": {"a": "battle", "b": "town"}, "frames": 2500000,
                      "oracle": "assert_boxsync_gen3_saved"},
@@ -288,6 +308,32 @@ SCENARIOS = {
                            "target": "town", "frames": 300000,
                            "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("a", "b"),
                            "oracle": "assert_native_absent_gen3_saved"},
+    # RR rows R2/R3/R5 of rr_active_faint_parity_scope §5.5 (R1 = linked_faint_active_gen3 and
+    # R4 = linked_faint_active_whiteout_gen3 on gen3_rr_new). All SKIP until rr_battle{,_b}.sav
+    # exist (skip_reason).
+    #   R2 clean   B boots the CLEAN RR dump: the P+H path is Lua-only, no companion needed.
+    #   R3 lhammer B pulses L every frame from the commit to the KO; no ball may be lost.
+    #   R5 mega    BLOCKED: an RR trainer battle with a mega toggled then backed out needs an RR
+    #              trainer route and a Mega Ring + stone holder, neither producible by normal
+    #              inputs from the fixtures.
+    "linked_faint_active_clean_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr_new",),
+                                       "target": "battle", "frames": 2500000,
+                                       "rom_kind": {"a": "companion", "b": "clean"},
+                                       "scenario_module": "linked_faint_active",
+                                       "oracle": "assert_linked_faint_active_clean_gen3_saved"},
+    "linked_faint_active_lhammer_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr_new",),
+                                         "target": "battle", "frames": 2500000,
+                                         "scenario_module": "linked_faint_active",
+                                         "active_faint_case": "lhammer",
+                                         "oracle": "assert_linked_faint_active_lhammer_gen3_saved"},
+    "linked_faint_active_mega_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr_new",),
+                                      "target": "battle", "frames": 2500000,
+                                      "scenario_module": "linked_faint_active",
+                                      "active_faint_case": "mega",
+                                      "blocked": "R5 needs an RR trainer route and a mega-capable "
+                                                 "party (Mega Ring + stone); neither is producible "
+                                                 "by normal inputs from rr_battle{,_b}.sav",
+                                      "oracle": "assert_linked_faint_active_mega_gen3_saved"},
     # The four below are Gen 3-only and say so explicitly. They load Radical Red savestates
     # and two of them need the RR companion patch, so there is nothing for a Game Boy to run.
     "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420,
@@ -1379,11 +1425,88 @@ def gen3_withdrawn_problems(label, mon, limits, rr=False):
     return problems
 
 
+# A mon trained up the T2 route (linked_faint_active_trainer_gen3): the growth fields move.
+GEN3_TRAINED_MUTABLE = frozenset({"level", "experience", "evs", "max_hp", "attack", "defense",
+                                  "speed", "sp_attack", "sp_defense", "moves"})
+
+
+def active_faint_chain(key, case):
+    """(required, ordered, forbidden) receipt markers of the P+H subject (scenario_gen3_linked_
+    faint_active.lua), in chain order: READY_ACTIVE, the keyed RX, the client's own hand-off
+    commit line, ACTIVE_COMMIT (5 writes), HANDOFF (successor within 2 frames, exec bit 0 clear),
+    the driver's FORCED_HP0 IN battle, ACTIVE_KO with inputs=0 (R3 lhammer: -1, it presses L on
+    purpose), ACTIVE_FAINT_SITE (counter +1), then the case's aftermath: SENT_OUT (wild,
+    trainer, command, lhammer) or TX whiteout (whiteout), ACTIVE_OUTCOME and a save. Forbidden:
+    the old hold's markers and a `faint` echo for the key."""
+    k = re.escape(key)
+    inputs = "-1" if case == "lhammer" else "0"
+    chain = [rf"(?m)^READY_ACTIVE {k} case={re.escape(case)}$", gen3_rx("force_faint", key),
+             rf"(?m)^\[client\] \[SLink-gen3\] force_faint: Perish commit battler=0 handoff=1 {k}\b",
+             rf"(?m)^ACTIVE_COMMIT {k} frame=\d+ writes=5 attempted=\d+ handoff=1 ",
+             rf"(?m)^HANDOFF {k} from=0x[0-9A-F]{{8}} to=0x[0-9A-F]{{8}} frames=[12] exec_bit0=0$",
+             rf"(?m)^ACTIVE_KO {k} frame=\d+ in_battle=1 battle_hp=0 .* inputs={inputs} hp_writes=0 ",
+             rf"(?m)^ACTIVE_FAINT_SITE {k} frame=\d+ active=0 battler0_slot=0 battle_hp=0 party_hp=0 "
+             rf"counter=(\d+)->(?!\1\b)\d+$"]
+    if case == "lhammer":
+        chain.append(rf"(?m)^LHAMMER_BALLS {k} balls=\d+ ball_id=\d+ unchanged$")
+    if case == "whiteout":
+        chain += [gen3_tx("whiteout", "-"), rf"(?m)^ACTIVE_OUTCOME {k} outcome=2 "]
+    else:
+        outcome = "4" if case == "command" else r"\d+"
+        chain += [r"(?m)^SENT_OUT slot=1 battler_slot=1$", rf"(?m)^ACTIVE_OUTCOME {k} outcome={outcome} sent_out=1 "]
+    chain.append(r"(?m)^SAVE_WITNESS_DUMP ")
+    # the driver's own HP-0 watcher (party HP, in battle, battler 0): after the commit and before
+    # the aftermath, but not ordered against ACTIVE_KO/the site -- the party word follows
+    # gBattleMons by the controller's SetMonData, and all three can land in one frame
+    hp0 = rf"(?m)^FORCED_HP0 {k} frame=\d+ in_battle=1 battler=1$"
+    ordered = list(zip(chain, chain[1:], strict=False)) + [(chain[3], hp0), (hp0, chain[8 if case == "lhammer" else 7])]
+    forbidden = [rf"(?m)^ACTIVE_HOLD {k}\b", rf"(?m)^SWITCHED_OUT {k}\b", rf"(?m)^BENCH_HP0_IN_BATTLE {k}\b",
+                 gen3_tx("faint", key), rf"(?m)^FORCED_HP0 {k} .*in_battle=0",
+                 r"(?m)^\[client\] .*active faint committed \(press A\)"]
+    return chain + [hp0], ordered, forbidden
+
+
+def gen3_last_mon_problems(label, saved, fixture, key, deposited, memorial_box, rr=False, limits=None):
+    """linked_faint_active_whiteout_gen3's B: after the Perish KO whited it out, `key` is the
+    saved party's ONLY mon (the Center heal restored it; its memorialize was dropped after
+    game_over), boxed nowhere, valid, with the fixture record's invariants; each hand-`deposited`
+    key sits once in a non-memorial box, and no other box changed."""
+    party, boxes = saved
+    f_party, f_boxes = fixture
+    keys = [gen3_key(m) for m in party]
+    problems = [] if keys == [key] else [f"{label}: saved party {keys}, expected [{key}] alone"]
+    if not deposited:
+        problems.append(f"{label}: no hand deposit built the one-mon party")
+    if any(gen3_key(m) == key for m in boxes.values()):
+        problems.append(f"{label}: {key} also has a boxed copy")
+    now = next((m for m in party if gen3_key(m) == key), None)
+    was = next((m for m in f_party if gen3_key(m) == key), None)
+    if now and was:
+        problems += gen3_record_problems(f"{label}: the kept {key}", now, rr, limits)
+        # the walk to the PC and back crosses Route 1 grass, where playlib FIGHTS incidental
+        # battles: the lone lead may level on the way
+        changed = gen3_record_diff(was, now, rr, GEN3_RECORD_MUTABLE | GEN3_ACTIVITY_MUTABLE
+                                   | GEN3_TRAINED_MUTABLE)
+        if changed:
+            problems.append(f"{label}: the kept {key} differs from the fixture in {changed}")
+    moved = set(deposited)
+    others = {pos: gen3_key(m) for pos, m in boxes.items() if gen3_key(m) not in moved}
+    if others != {pos: gen3_key(m) for pos, m in f_boxes.items()}:
+        problems.append(f"{label}: boxes other than the hand deposit changed")
+    for mon in sorted(moved):
+        at = [pos for pos, m in boxes.items() if gen3_key(m) == mon]
+        if len(at) != 1 or at[0][0] == memorial_box or not any(gen3_key(m) == mon for m in f_party):
+            problems.append(f"{label}: the hand-deposited {mon} is saved at {at}, not once in a "
+                            f"non-memorial box")
+    return problems
+
+
 def gen3_memorial_problems(label, saved, fixture, key, memorial_box, rr=False, limits=None,
-                           battled=False):
+                           battled=False, trained=False):
     """`key` left the party for exactly one slot of the memorial box; nothing else moved. The
     memorial record must be valid for the cartridge and, when the fixture carried the mon, keep
-    every invariant field of the record it was cut from (friendship only if it `battled`)."""
+    every invariant field of the record it was cut from (friendship only if it `battled`, the
+    growth fields only if it was `trained`)."""
     party, boxes = saved
     f_party, f_boxes = fixture
     keys = [gen3_key(m) for m in party]
@@ -1398,7 +1521,8 @@ def gen3_memorial_problems(label, saved, fixture, key, memorial_box, rr=False, l
         problems += gen3_record_problems(f"{label}: the memorial record for {key}",
                                          boxes[where[0]], rr, limits)
         was = next((m for m in f_party if gen3_key(m) == key), None)
-        mutable = GEN3_RECORD_MUTABLE | (GEN3_ACTIVITY_MUTABLE if battled else set())
+        mutable = (GEN3_RECORD_MUTABLE | (GEN3_ACTIVITY_MUTABLE if battled else set())
+                   | (GEN3_TRAINED_MUTABLE if trained else set()))
         changed = gen3_record_diff(was, boxes[where[0]], rr, mutable) if was else []
         if changed:
             problems.append(f"{label}: the memorial {key} differs from the fixture record in "
@@ -2426,7 +2550,7 @@ class DuoRun:
             # title's pack files and pret symbols by `title`.
             duo.update({"title": self._gen3_title(inst),
                         "scenario_prefix": self.gcfg["scenario_prefix"]})
-            for field in ("scenario_module", "battle_window_case"):
+            for field in ("scenario_module", "battle_window_case", "active_faint_case"):
                 if field in self.cfg:
                     duo[field] = self.cfg[field]
             if self._gen3_rr:
@@ -5298,18 +5422,21 @@ class DuoRun:
         return self.wait_for(f"{inst}: {what}", lambda: re.search(
             pattern, read_result(self.scenario, inst) or "", re.M), timeout or self.cfg["timeout"])
 
-    def orchestrate_trainer_bench_gen3(self):
-        ka, kb = self._gen3_prelude()  # command-only carrier: no death/memorialize event or injected link
-        # These are write-window controls, NOT encounter-rule qualification. A normal RUN or
-        # training KO otherwise dead-zones its area and queues play_sound to BOTH clients
-        # (state._handle_no_catch), violating the carrier's intentionally isolated two-byte
-        # write and B's idle contract. Resolve only SERVER test state before GO; no RAM/save edit.
+    def _gen3_area_control(self):
+        """Write-window controls, NOT encounter-rule qualification. A normal RUN or training KO
+        otherwise dead-zones its area and queues play_sound to BOTH clients
+        (state._handle_no_catch), violating an isolated write and an idle peer's contract.
+        Resolve only SERVER test state before GO; no RAM/save edit."""
         for area in ("viridian_city", "route_1", "route_2", "viridian_forest"):
             reply = api(self.http_port, "POST", "/api/debug/set_area_state", {"area_id": area, "state": "linked"})
             if not reply.get("ok"):
                 raise RuntimeError(f"battle-window area control refused: {area}: {reply}")
         self._pydec_note("BATTLE_WINDOW_AREA_CONTROL server_only=linked "
                          "areas=viridian_city,route_1,route_2,viridian_forest encounter_rules=not_qualified")
+
+    def orchestrate_trainer_bench_gen3(self):
+        ka, kb = self._gen3_prelude()  # command-only carrier: no death/memorialize event or injected link
+        self._gen3_area_control()
         slot = self.cfg["battle_window_slot"]
         self._link_keys = {"a": ka[slot], "b": kb[slot]}
         self.go(self._gen3_linked_lines())
@@ -5318,7 +5445,16 @@ class DuoRun:
                         "battle-window READY")
         self.queue_command("a", {"cmd": "force_faint", "key": key})
 
-    orchestrate_active_end_gen3 = orchestrate_trainer_bench_gen3
+    def orchestrate_active_end_gen3(self):
+        """A2 under P+H: no pair and no death -- one keyed force_faint to A, queued only once A
+        parks with its lead as battler 0 (READY_ACTIVE). B idles and never saves."""
+        ka, kb = self._gen3_prelude()
+        self._gen3_area_control()
+        self._link_keys = {"a": ka[0], "b": kb[0]}
+        self.go(self._gen3_linked_lines())
+        key = self._link_keys["a"]
+        self._gen3_mark("a", rf"^READY_ACTIVE {re.escape(key)} case=command\b", "A parked, lead active")
+        self.queue_command("a", {"cmd": "force_faint", "key": key})
 
     def assert_battle_window_gen3_saved(self, results):
         # _run_oracle already called check_save_witness_gen3: path/mtime/ordinal/flush are bound.
@@ -5334,7 +5470,6 @@ class DuoRun:
                          f"slot={facts['slot']} hp=0 samples={facts['observed_samples']}")
 
     assert_trainer_bench_gen3_saved = assert_battle_window_gen3_saved
-    assert_active_end_gen3_saved = assert_battle_window_gen3_saved
 
     def orchestrate_faint_cmd_gen3(self):
         """Server-command/persistence-only (PLAN §5.5): link the two slot-1 mons, then inject A's
@@ -5358,16 +5493,24 @@ class DuoRun:
               f"{[c.get('cmd') for c in reply.get('commands_returned') or []]}")
 
     def orchestrate_linked_faint_active_gen3(self):
-        """The in-battle path (owner ruling 2026-09-23). Link the two ACTIVE starters; B enters a
-        wild battle and parks on its action menu with the linked mon out (READY_ACTIVE); only then
-        is A released to lose its own active linked mon to the wild foe. B's force_faint must be
-        HELD while that mon is the battler and land (HP 0, still in battle) once B switches it
-        out -- the receipts and the oracle read which happened."""
+        """The in-battle path, mechanism P+H (owner rulings 15-18). Link the two ACTIVE leads; B
+        parks on its action menu with the linked mon out (READY_ACTIVE: a wild battle, or Rick
+        after the T2 route); only then is A released to lose its own active linked mon. B's
+        force_faint becomes the Perish commit + hand-off and the engine faints the mon in battle
+        with no press -- the receipts and the oracle read the engine."""
         self._gen3_prelude(link_slot=0)
+        if self.cfg.get("active_faint_case") == "trainer":
+            self._gen3_area_control()
         lines = self._gen3_linked_lines()
         self._go_one("b", lines["b"])
         self._gen3_mark("b", r"^READY_ACTIVE ", "READY_ACTIVE (linked mon active at the action menu)")
         self._go_one("a", lines["a"])
+
+    orchestrate_linked_faint_active_whiteout_gen3 = orchestrate_linked_faint_active_gen3
+    orchestrate_linked_faint_active_trainer_gen3 = orchestrate_linked_faint_active_gen3
+    orchestrate_linked_faint_active_clean_gen3 = orchestrate_linked_faint_active_gen3
+    orchestrate_linked_faint_active_lhammer_gen3 = orchestrate_linked_faint_active_gen3
+    orchestrate_linked_faint_active_mega_gen3 = orchestrate_linked_faint_active_gen3
 
     def orchestrate_boxsync_gen3(self):
         """A deposits its linked half at the Viridian PC by hand; the server mirrors box_mon to
@@ -5690,37 +5833,91 @@ class DuoRun:
                                    f"B's HP 0 came from an overworld-armed write")
 
     def assert_linked_faint_active_gen3_saved(self, results):
-        """W-2 on FRLG, the in-battle path. A: the engine's faint site fired, THEN the client sent
-        faint for the linked key. Server: DEAD by battle, force_faint to B, then MEMORIAL. B: the
-        force_faint arrived while the linked mon was the active battler and was HELD (HP > 0), B
-        switched it out, and its HP reached 0 while the battle was still running -- the owner's
-        in-battle requirement. Both memorials saved."""
+        """W-2 on FRLG/RR, the in-battle path under mechanism P+H. A: the engine's faint site
+        fired, THEN the client sent faint for the linked key. Server: DEAD by battle, force_faint
+        to B, then MEMORIAL. B: active_faint_chain (the commit, the hand-off, the KO with no
+        input, the faint site, the case's aftermath) and no `faint` echo. Both memorials saved."""
         self._gen3_flush_boundary()
-        self._gen3_one_link("memorial", cause="battle")
         ka, kb = self._link_keys["a"], self._link_keys["b"]
+        case = self.cfg.get("active_faint_case", "wild")
+        # whiteout: the only pair died, so game_over is latched and B's last-mon memorialize is
+        # dropped (lua/core/deferred.lua) -- the link stays DEAD with A's half alone memorialized
+        whiteout = case == "whiteout"
+        self._gen3_one_link("dead" if whiteout else "memorial", cause="battle")
         with open(os.path.join(self.data_dir, "slink.log"), encoding="utf-8") as handle:
             log_text = handle.read()
         dead = log_text.find(f"[a] faint → force_faint b:{kb}")
         memorial = log_text.find("fully memorialized")
         problems = []
-        if dead < 0 or memorial <= dead:
+        if dead < 0 or (not whiteout and memorial <= dead):
             problems.append("server log lacks DEAD propagation (force_faint b) before MEMORIAL")
         box = self._gen3_memorial_box()
-        for inst, key in (("a", ka), ("b", kb)):
-            problems += gen3_memorial_problems(inst, self._gen3_saved(inst),
-                                               self._gen3_fixture_saved(inst), key, box, rr=self._gen3_rr,
-                                               limits=self._gen3_limits(inst), battled=True)
+        deposited = re.findall(rf"(?m)^ONE_MON_PARTY {re.escape(kb)} deposited=(\S+)$", results["b"] or "")
+        problems += gen3_memorial_problems("a", self._gen3_saved("a"), self._gen3_fixture_saved("a"), ka, box,
+                                           rr=self._gen3_rr, limits=self._gen3_limits("a"), battled=True)
+        if whiteout:
+            problems += gen3_last_mon_problems("b", self._gen3_saved("b"), self._gen3_fixture_saved("b"), kb,
+                                               deposited, box, rr=self._gen3_rr, limits=self._gen3_limits("b"))
+        else:
+            problems += gen3_memorial_problems("b", self._gen3_saved("b"), self._gen3_fixture_saved("b"), kb,
+                                               box, rr=self._gen3_rr, limits=self._gen3_limits("b"),
+                                               battled=True, trained=case == "trainer")
         site = r"(?m)^ENGINE_FAINT_SITE "
         problems += gen3_receipt_problems(
             "a", results["a"], required=[site, gen3_tx("faint", ka), gen3_tx("memorialize_done", ka)],
             ordered=[(site, gen3_tx("faint", ka))])
-        chain = [rf"(?m)^READY_ACTIVE {re.escape(kb)}\b", gen3_rx("force_faint", kb),
-                 rf"(?m)^ACTIVE_HOLD {re.escape(kb)}\b", rf"(?m)^SWITCHED_OUT {re.escape(kb)}\b",
-                 rf"(?m)^BENCH_HP0_IN_BATTLE {re.escape(kb)}\b", gen3_tx("memorialize_done", kb)]
-        problems += gen3_receipt_problems("b", results["b"], required=chain,
-                                          ordered=list(zip(chain, chain[1:], strict=False)))
-        self._gen3_raise(problems, f"linked_faint_active: engine faint {ka} -> held active {kb} "
-                                   f"-> switched out -> HP 0 in battle; both memorials saved")
+        required, ordered, forbidden = active_faint_chain(kb, case)
+        if whiteout:
+            kept = rf"(?m)^LAST_MON_KEPT {re.escape(kb)}$"
+            dropped = rf"(?m)^\[client\] .*memorialize dropped: last mon after game over {re.escape(kb)}\b"
+            required += [gen3_rx("memorialize", kb), r"(?m)^RX game_over\b", dropped, kept]
+            ordered += [(r"(?m)^RX game_over\b", dropped), (dropped, kept), (kept, r"(?m)^SAVE_WITNESS_DUMP ")]
+            forbidden.append(gen3_tx("memorialize_done", kb))
+        else:
+            done = gen3_tx("memorialize_done", kb)
+            required.append(done)
+            ordered.append((done, r"(?m)^SAVE_WITNESS_DUMP "))
+        problems += gen3_receipt_problems("b", results["b"], required=required, ordered=ordered,
+                                          forbidden=forbidden)
+        self._gen3_raise(problems, f"linked_faint_active[{case}]: engine faint {ka} -> P+H commit on "
+                                   f"active {kb} -> hand-off -> Perish KO in battle with no input; "
+                                   f"both memorials saved")
+
+    assert_linked_faint_active_whiteout_gen3_saved = assert_linked_faint_active_gen3_saved
+    assert_linked_faint_active_trainer_gen3_saved = assert_linked_faint_active_gen3_saved
+    assert_linked_faint_active_clean_gen3_saved = assert_linked_faint_active_gen3_saved
+    assert_linked_faint_active_lhammer_gen3_saved = assert_linked_faint_active_gen3_saved
+    assert_linked_faint_active_mega_gen3_saved = assert_linked_faint_active_gen3_saved
+
+    def assert_active_end_gen3_saved(self, results):
+        """A2 under P+H: A's chain (active_faint_chain "command"), its saved party the fixture's
+        with the key's HP 0 in slot 0 (the ENGINE wrote it: no SLink HP write, ACTIVE_KO) and no
+        boxed copy; B idle -- no write, no save, battery unchanged."""
+        self._gen3_flush_boundary()
+        key = self._link_keys["a"]
+        required, ordered, forbidden = active_faint_chain(key, "command")
+        forbidden += [gen3_rx("memorialize", key), r"(?m)^TX whiteout "]
+        problems = gen3_receipt_problems("a", results["a"], required=required, ordered=ordered,
+                                         forbidden=forbidden)
+        problems += gen3_receipt_problems("b", results["b"], required=[r"(?m)^WRITES 0$"],
+                                          forbidden=[r"(?m)^SAVE_WITNESS_DUMP ", r"(?m)^RX force_faint "])
+        party, boxes = self._gen3_saved("a")
+        f_party, _ = self._gen3_fixture_saved("a")
+        keys = [gen3_key(m) for m in party]
+        if keys != [gen3_key(m) for m in f_party] or not keys or keys[0] != key:
+            problems.append(f"a: saved party {keys} is not the fixture's with {key} in slot 0")
+        elif party[0]["hp"] != 0:
+            problems.append(f"a: the saved {key} has HP {party[0]['hp']}, not 0")
+        else:
+            problems += gen3_record_problems(f"a: the saved {key}", party[0], self._gen3_rr,
+                                             self._gen3_limits("a"))
+        if any(gen3_key(m) == key for m in boxes.values()):
+            problems.append(f"a: {key} also has a boxed copy")
+        codec = gen3_codec()
+        if codec.split_rtc(self._gen3_flushed("b"))[0] != codec.split_rtc(self._gen3_fixture_bytes("b"))[0]:
+            problems.append("b: the idle peer's battery changed")
+        self._gen3_raise(problems, f"active_end: force_faint {key} -> P+H commit -> hand-off -> Perish "
+                                   f"KO in battle with no input -> send-out -> RUN; saved HP 0")
 
     def assert_boxsync_gen3_saved(self, results):
         """The linked pair made a full round trip on both cartridges: deposit and withdraw by hand
@@ -6187,6 +6384,9 @@ def summary_lines(results, game):
     for name, outcome in results.items():
         ok, attempt = outcome[0], outcome[1]
         reason = f" — {outcome[2]}" if len(outcome) > 2 else ""
+        if ok is None:
+            lines.append(f"  {name}: SKIP{reason}")
+            continue
         control = SCENARIOS.get(name, {}).get("control")
         if control:
             reason += f" [CONTROL, not a qualification pass: {control}]"
@@ -6195,8 +6395,30 @@ def summary_lines(results, game):
     return lines
 
 
+def skip_reason(name, game):
+    """Why `name` cannot launch on `game` yet, or None. A declared `blocked` reason, or (RR rows,
+    GAMES[...]["rr"]) a missing fixture -- rr_battle{,_b}.sav are still being built, and a FAIL at
+    fixture lookup would read as a product failure. A SKIP is never a PASS (exit_code)."""
+    entry, row = SCENARIOS.get(name, {}), GAMES.get(game, {})
+    if entry.get("blocked"):
+        return f"BLOCKED: {entry['blocked']}"
+    if row.get("rr") and row.get("sides"):
+        target = entry.get("target", "town")
+        missing = []
+        for inst in ("a", "b"):
+            stem = row["sides"][inst][1].format(target=target[inst] if isinstance(target, dict) else target)
+            if not os.path.isfile(os.path.join(GEN3_FIXTURES, stem + ".sav")):
+                missing.append(f"tests/fixtures/gen3/{stem}.sav")
+        if missing:
+            return f"fixture(s) {', '.join(missing)} not built yet (RR battle fixtures)"
+    return None
+
+
 def exit_code(results) -> int:
-    return 0 if all(outcome[0] for outcome in results.values()) else 1
+    """0 only when every scenario PASSed: a FAIL is 1, a SKIP (outcome None) with no FAIL is 3."""
+    if any(outcome[0] is False for outcome in results.values()):
+        return 1
+    return 3 if any(outcome[0] is None for outcome in results.values()) else 0
 
 
 def _archive_attempt(name, attempt, receipts):
@@ -6341,6 +6563,11 @@ def main():
     results = {}
     for name in names:
         print(f"\n========== scenario: {name} ==========")
+        why = skip_reason(name, args.game)
+        if why:
+            print(f"[duo] {name}: SKIP ({args.game}) — {why}")
+            results[name] = (None, 0, why)
+            continue
         results[name] = run_scenario_with_rng_retry(name, args)
     print("\n========== summary ==========")
     for line in summary_lines(results, args.game):

@@ -1,29 +1,260 @@
--- scenario_gen3_linked_faint_active.lua — linked_faint_active_gen3, the IN-BATTLE path.
+-- scenario_gen3_linked_faint_active.lua — the in-battle ACTIVE faint, mechanism P+H.
 --
--- Owner ruling 2026-09-23 (docs/gen3/PLAN.md §0 "In-battle faint"): a benched party mon is set to
--- HP 0 immediately in battle; the active battler is held and applied on switch-out or battle
--- end. The runner links the two party LEADS (slot 0) and releases A only once B reports
--- READY_ACTIVE.
+-- Owner rulings 15-18 (docs/gen3/G4_request_draft.md §6): when the linked partner dies while our
+-- linked mon is the ACTIVE battler, the client commits Perish counter 0 + a no-op action and
+-- ends the plan with the controller hand-off (gBattlerControllerFuncs[0] =
+-- PlayerBufferExecCompleted), so the engine's own Perish KO faints the mon IN BATTLE with NO
+-- button press. Spec: docs/gen3/research/active_faint_in_battle_scope_2026-09-23.md §2d/§5 (O1-O7)
+-- and rr_active_faint_parity_scope_2026-09-23.md §3.2/§5.5 (the hand-off oracle, R1-R5).
 --
---   B: into a wild battle on the fixture's Route 1 grass, parked on the action menu with the
---      linked lead as battler 0 (no input: the menu waits). When the server's force_faint
---      arrives the client must HOLD it (lua/gen3/client.lua battle_write: "active battler") --
---      HP stays > 0 and the session's battle_pending carries the entry. B then switches to slot
---      1 (POKeMON -> slot 1 -> SHIFT); the linked mon is now benched and the held write must land
---      while the battle is still running (BENCH_HP0_IN_BATTLE), not at the battle's end. B runs,
---      waits for its memorial, saves.
---   A: into a wild battle, choosing only a no-damage move (the first move of battler 0 with base
---      power 0 in gBattleMoves, pret) until its linked lead faints -- a natural engine faint
---      through Cmd_tryfaintmon (ENGINE_FAINT_SITE) that the client reports as `faint`. The rest
---      of the battle is the scripted-play battle policy (send out slot 1, fight); a whiteout is
---      an acceptable ending. A waits for its memorial and saves.
+-- The SUBJECT parks with its linked lead as battler 0 (READY_ACTIVE), gets force_faint, and
+-- presses NOTHING from READY_ACTIVE until the KO. The carrier then reads the engine, never the
+-- client's own word:
+--   commit   5 `battle_commit` write lines on one frame, the last the 4-byte controller slot;
+--            the entry reads perish/handoff/"active faint committed"; gStatuses3[0] & 0x20 set
+--   hand-off the slot goes PlayerBufferExecCompleted -> PlayerBufferRunCommand (RR: or CFRU's
+--            bit-24 successor) within 2 frames with exec bit 0 clear                      (R1)
+--   window   no harness press and gMain.heldKeysRaw == 0 on every frame (R3 inverts: pulse L)
+--   KO       gBattleMons[0].hp == 0 with battler 0 still the linked slot and in battle; Perish
+--            flag cleared (O5); PP never dropped and lastUsedMovePlayer unchanged (O3); no
+--            SLink write ever touched an HP word (O4)
+--   site     the faint site fires with gActiveBattler 0, battler 0 = the slot, both HP words 0
+--            and playerFaintCounter = commit + 1 (O1, O2, O4)
+--   after    wild/trainer: the send-out puts another slot in (O6); whiteout: outcome LOST plus
+--            TX whiteout (O6); the subject never sends `faint` for the key (O7)
+--
+-- D.active_faint_case (tools/e2e_duo.py SCENARIOS):
+--   nil/"wild"  A1: B hunts on the Route 1 grass. A loses its linked lead naturally.
+--   "whiteout"  B deposits its slot-1 mon at the Viridian PC first (normal inputs), so the linked
+--               lead is its only mon: the Perish KO whites out (ruling 18: P is not held). The run
+--               is over (the only pair died), so B keeps its last mon: memorialize is dropped.
+--   "trainer"   B takes the T2 route to Bug Catcher Rick 102 (lua/tests/gen3_routes.lua); the
+--               forced party screen follows the KO.
+--   "command"   A2 (active_end_gen3): no pair death. A is the subject; the runner queues
+--               force_faint to A after READY_ACTIVE; B idles and never saves. A sends out slot 1,
+--               RUNs, and saves the engine-written HP 0.
+--   "lhammer"   RR R3: as wild, but B pulses L every frame from the commit to the KO; the POKe
+--               BALLS count and CFRU's ball-id byte 0x0203AD30 must not change.
+--   "mega"      RR R5: BLOCKED (no RR trainer route, no mega-capable party fixture).
 local fmt = string.format
+local SLOT, BENCH = 0, 1
+local PERISH = 0x20                    -- STATUS3_PERISH_SONG, include/constants/battle.h:138
+local OUTCOME_LOST, OUTCOME_RAN = 2, 4 -- include/constants/battle.h
+local PLAN_ENTRIES = 5                 -- status3, perish timer, chosen action, comm, hand-off
+local RR_BALL_ID = 0x0203AD30          -- rr_active_faint_parity_scope §3.1 (the L-throw's store)
 
-local function a_side(ctx, linked)
+local function hexbytes(t) local o = {} for i, v in ipairs(t) do o[i] = fmt("%d", v) end return table.concat(o, "/") end
+
+--- The engine observer, installed at READY_ACTIVE. Returns the state table the scenario polls.
+local function observe(ctx, key, slot, hammer)
+    local o = {}
+    local H = ctx.handoff
+    local w0, att0, in0, site0 = #ctx.write_lines(), ctx.attempted(), ctx.inputs(), #ctx.faint_sites()
+    local hp_addr = ctx.hp_addrs(slot)
+    local function fail(s) o.fail = o.fail or s end
+    local function successor(v) for _, t in ipairs(H.to) do if v == t then return true end end end
+    ctx.watch(function()
+        if o.fail or o.done then return true end
+        local s = ctx.engine_sample(slot)
+        local lines = ctx.write_lines()
+        for i = w0 + 1, #lines do
+            if hp_addr[lines[i].address] then return fail(fmt("SLink wrote an HP word 0x%08X", lines[i].address)) end
+        end
+        if not o.commit then
+            local c = {}
+            for i = w0 + 1, #lines do if lines[i].reason == "battle_commit" then c[#c + 1] = lines[i] end end
+            if #c == 0 then
+                if not s.in_battle or s.battle_hp == 0 then return fail("the battle or the mon ended before any commit") end
+                if not hammer and (s.keys ~= 0 or ctx.inputs() ~= in0) then return fail("input before the commit") end
+                o.base = s                                   -- the last parked frame before the commit
+                return
+            end
+            local last, e = c[#c], ctx.battle_hold(key)
+            if #c ~= PLAN_ENTRIES then return fail(fmt("commit wrote %d lines, not %d", #c, PLAN_ENTRIES)) end
+            for _, l in ipairs(c) do if l.frame ~= c[1].frame then return fail("the commit spans frames") end end
+            if last.address ~= H.slot_addr or last.len ~= 4 then return fail("the commit does not end in the hand-off") end
+            if ctx.received("force_faint", key) == 0 then return fail("commit without a force_faint RX") end
+            if s.ctrl0 ~= H.from and not successor(s.ctrl0) then
+                return fail(fmt("controller slot 0x%08X after the commit", s.ctrl0))
+            end
+            if s.status3 & PERISH == 0 then return fail("gStatuses3[0] lacks the Perish flag after the commit") end
+            if not (e and e.perish and e.handoff and e.why == "active faint committed") then
+                return fail("the entry is not a handed-off Perish commit: why=" .. tostring(e and e.why))
+            end
+            o.base = o.base or s
+            o.commit = { frame = s.frame, attempted = ctx.attempted() - att0, ctrl = s.ctrl0 }
+            ctx.log(fmt('ACTIVE_COMMIT %s frame=%d writes=%d attempted=%d handoff=1 status3=0x%X ctrl=0x%08X '
+                        .. 'counter=%d last_move=%d pp=%s why="%s"', key, s.frame, #c, o.commit.attempted,
+                        s.status3, s.ctrl0, o.base.counter, o.base.last_move, hexbytes(o.base.pp), e.why))
+            if hammer then ctx.press({ L = true }) end
+            return
+        end
+        if not o.handoff then
+            if successor(s.ctrl0) then
+                o.handoff = s.frame - o.commit.frame
+                if (s.exec & 1) ~= 0 then return fail("exec bit 0 still set at the hand-off") end
+                ctx.log(fmt("HANDOFF %s from=0x%08X to=0x%08X frames=%d exec_bit0=0", key, H.from, s.ctrl0, o.handoff))
+            elseif s.ctrl0 ~= H.from or s.frame - o.commit.frame > 2 then
+                return fail(fmt("no hand-off successor within 2 frames (ctrl=0x%08X)", s.ctrl0))
+            end
+        end
+        if not o.ko then
+            if not hammer and (s.keys ~= 0 or ctx.inputs() ~= in0) then
+                return fail(fmt("input between the commit and the KO (keys=0x%X presses=%d)", s.keys, ctx.inputs() - in0))
+            end
+            for i = 1, 4 do if s.pp[i] < o.base.pp[i] then return fail("PP dropped: the mon acted") end end
+            if s.battler0_slot ~= slot then return fail("battler 0 left the linked slot before the KO") end
+            if not s.in_battle then return fail("the battle ended before the KO") end
+            if s.battle_hp > 0 then
+                if hammer then ctx.press({ L = true }) end
+                return
+            end
+            if s.status3 & PERISH ~= 0 then return fail("the Perish flag is still set at the KO") end
+            if not ctx.rr and s.last_move ~= o.base.last_move then return fail("lastUsedMovePlayer moved: the mon acted") end
+            o.ko = s.frame
+            ctx.log(fmt("ACTIVE_KO %s frame=%d in_battle=1 battle_hp=0 status3=0x%X pp=%s last_move=%d inputs=%d "
+                        .. "hp_writes=0 attempted=%d", key, s.frame, s.status3, hexbytes(s.pp), s.last_move,
+                        hammer and -1 or 0, ctx.attempted() - att0))
+        end
+        if not o.site then
+            local sites = ctx.faint_sites()
+            for i = site0 + 1, #sites do
+                local f = sites[i]
+                if f.active == 0 and f.battler0_slot == slot then
+                    if f.battle_hp ~= 0 or f.party_hp ~= 0 then return fail("the faint site saw a non-zero HP word") end
+                    if f.counter ~= (o.base.counter + 1) % 256 then
+                        return fail(fmt("playerFaintCounter %d -> %d, not +1", o.base.counter, f.counter))
+                    end
+                    o.site = f.frame
+                    ctx.log(fmt("ACTIVE_FAINT_SITE %s frame=%d active=0 battler0_slot=%d battle_hp=0 party_hp=0 counter=%d->%d",
+                                key, f.frame, slot, o.base.counter, f.counter))
+                end
+            end
+        end
+        if s.in_battle then
+            if s.outcome ~= 0 then o.outcome = s.outcome end
+            if s.battler0_slot ~= slot then o.sent_out = o.sent_out or s.battler0_slot end
+        else
+            o.done = true
+        end
+    end)
+    return o
+end
+
+--- The engine-side check of R3's L presses: the ball count and CFRU's ball-id byte.
+local function balls(ctx) return ctx.balls(), ctx.peek_u8(RR_BALL_ID) end
+
+local function enter(ctx, key, case)
+    if case == "whiteout" then
+        -- ruling 18: build the one-mon party by normal inputs (PC deposit of the slot-1 mon)
+        local bench = (ctx.party() or {})[BENCH + 1]
+        if not bench or bench.key == key then return false, "no slot-1 mon to deposit" end
+        ctx.walk_to_pc("linked_faint_active whiteout")
+        local gone, why = ctx.pc_deposit("linked_faint_active whiteout deposit")
+        if gone ~= bench.key then return false, "the deposit moved " .. tostring(gone or why) end
+        if not ctx.observe_boxed(bench.key) then return false, bench.key .. " was never read back boxed" end
+        if #(ctx.party() or {}) ~= 1 then return false, "the party is not the linked lead alone" end
+        ctx.log(fmt("ONE_MON_PARTY %s deposited=%s", key, bench.key))
+        ctx.walk_pc_to_grass("linked_faint_active whiteout")
+    elseif case == "trainer" then
+        if type(ctx.enter_trainer) ~= "function" then return false, "missing enter_trainer route seam" end
+        local party = ctx.party() or {}
+        local lead, bench = party[1], party[BENCH + 1]
+        if not (lead and bench) then return false, "the trainer route needs a lead and a slot-1 mon" end
+        local before = lead.level
+        local ok, budget = pcall(ctx.preparation_budget, lead, 13)
+        if not ok then return false, "PREPARATION budget: " .. tostring(budget) end
+        -- the route's per-frame guard protects the BENCH (the send-out replacement), unchanged
+        local entered, why = ctx.enter_trainer("linked_faint_active trainer", 102,
+            { level_floor = 13, max_frames = budget, target_key = bench.key, target_slot = BENCH,
+              target_hp = bench.hp })
+        if not entered then return false, "trainer route: " .. tostring(why) end
+        local after = (ctx.party() or {})[1]
+        if not after or after.level < 13 then return false, "PREPARATION did not reach the level floor" end
+        ctx.log(fmt("PREP_LEVEL before=%d after=%d floor=13", before, after.level))
+        return true
+    elseif case == "mega" then
+        return false, "BLOCKED R5: no RR trainer route and no mega-capable party fixture"
+    end
+    if not ctx.hunt("linked_faint_active " .. case) then return false, "no wild encounter" end
+    return true
+end
+
+local function subject(ctx, key, case)
+    local ok, why = enter(ctx, key, case)
+    if not ok then return false, why end
+    if ctx.SP.verify_fight_cursor(ctx.cp, "incidental_battle") ~= "fight" then
+        return false, "never reached the action menu"
+    end
+    if ctx.battler_slot() ~= SLOT then return false, "the linked lead is not battler 0" end
+    ctx.frames(1)                                        -- the menu mash's last press is released
+    local hammer = case == "lhammer"
+    local b0, id0 = balls(ctx)
+    local o = observe(ctx, key, SLOT, hammer)
+    ctx.log(fmt("READY_ACTIVE %s case=%s", key, case))
+    if not ctx.wait_received("force_faint", key, ctx.D.timeout_secs or 1500) then
+        return false, "no force_faint for " .. key
+    end
+    ctx.wait_until(function() return o.fail or (o.ko and o.site) end, 600, "the Perish KO and its faint site")
+    if o.fail then return false, o.fail end
+    if not o.commit then return false, "the client never committed P+H" end
+    if not o.handoff then return false, "the controller hand-off never ran" end
+    if not (o.ko and o.site) then return false, "no in-battle Perish KO witnessed" end
+    if hammer then
+        local b1, id1 = balls(ctx)
+        if b1 ~= b0 or id1 ~= id0 then return false, fmt("L hammer lost a ball: %d/%d -> %d/%d", b0, id0, b1, id1) end
+        ctx.log(fmt("LHAMMER_BALLS %s balls=%d ball_id=%d unchanged", key, b1, id1))
+    end
+    -- after the KO: the vanilla follow-up
+    if case == "whiteout" then
+        local fok, ferr = ctx.try(ctx.play.fight_through, ctx.cp, 4000)
+        if not fok and not (type(ferr) == "table" and ferr.whiteout) then return false, "whiteout: " .. tostring(ferr) end
+        if not ctx.mash_until(function() return ctx.sent("whiteout") > 0 end, 180, "A") then
+            return false, "the client never sent whiteout"
+        end
+        if o.outcome ~= OUTCOME_LOST then return false, "outcome " .. tostring(o.outcome) .. ", not LOST" end
+    else
+        local turn = ctx.SP.verify_fight_cursor(ctx.cp, "incidental_battle")   -- A answers "Use next?" YES
+        if turn ~= "party" then return false, "no send-out party screen after the KO (" .. tostring(turn) .. ")" end
+        local sok, swhy = ctx.send_out(BENCH)
+        if not sok then return false, "send-out: " .. tostring(swhy) end
+        if case == "trainer" then
+            local fok, ferr = ctx.try(ctx.play.fight_through, ctx.cp, 4000)
+            if not fok and not (type(ferr) == "table" and ferr.whiteout) then return false, "after the send-out: " .. tostring(ferr) end
+        else
+            local rok, rwhy = ctx.run_away("linked_faint_active " .. case)
+            if not rok then return false, rwhy end
+        end
+    end
+    ctx.play.wait_scene_settled(ctx.cp, 3000)
+    ctx.log(fmt("ACTIVE_OUTCOME %s outcome=%d sent_out=%s whiteout_tx=%d", key, o.outcome or 0,
+                tostring(o.sent_out), ctx.sent("whiteout")))
+    if case ~= "whiteout" and not o.sent_out then return false, "battler 0 never became another slot" end
+    if case == "command" and o.outcome ~= OUTCOME_RAN then return false, "the battle did not end by RUN" end
+    if ctx.sent("faint", key) ~= 0 then return false, "the client echoed faint for its own Perish KO" end
+    if case == "whiteout" then
+        -- the only pair is dead, so the server latched game_over; the healed linked mon is the last
+        -- party mon, and lua/core/deferred.lua drops its memorialize instead of emptying the party
+        if not ctx.wait_until(function()
+            return ctx.received("game_over") > 0 and ctx.received("memorialize", key) > 0
+                   and not ctx.queued("memorialize", key)
+        end, 600, "game_over and the dropped last-mon memorialize") then
+            return false, "the last-mon memorialize was never settled after game_over"
+        end
+        ctx.log("LAST_MON_KEPT " .. key)
+    elseif case ~= "command" and not ctx.wait_sent("memorialize_done", key, 600) then
+        return false, "no memorialize_done for " .. key
+    end
+    local saved, svwhy = ctx.save("linked_faint_active")
+    if not saved then return false, svwhy end
+    return true, "P+H: engine Perish KO in battle with no input (" .. case .. ")"
+end
+
+local function natural(ctx, key)
     if not ctx.hunt("linked_faint_active a") then return false, "no wild encounter" end
-    local fainted, why = ctx.lose_active(linked, "linked_faint_active a")
+    local fainted, why = ctx.lose_active(key, "linked_faint_active a")
     if not fainted then return false, "the linked lead did not faint: " .. tostring(why) end
-    ctx.log("LINKED_FAINTED " .. linked)
+    ctx.log("LINKED_FAINTED " .. key)
     if ctx.in_battle() then
         local ok, err = ctx.try(ctx.play.fight_through, ctx.cp, 4000)
         if not ok and not (type(err) == "table" and err.whiteout) then
@@ -32,66 +263,31 @@ local function a_side(ctx, linked)
         if ok and ctx.in_battle() then return false, "the battle never ended after the faint" end
     end
     ctx.play.wait_scene_settled(ctx.cp, 3000)
-    if ctx.sent("faint", linked) == 0 then return false, "the client never sent faint for " .. linked end
-    if not ctx.wait_sent("memorialize_done", linked, 600) then
-        return false, "no memorialize_done for " .. linked
-    end
+    if ctx.sent("faint", key) == 0 then return false, "the client never sent faint for " .. key end
+    if not ctx.wait_sent("memorialize_done", key, 600) then return false, "no memorialize_done for " .. key end
     local ok, why2 = ctx.save("linked_faint_active")
     if not ok then return false, why2 end
-    return true, "natural faint of the active linked " .. linked
+    return true, "natural faint of the active linked " .. key
 end
 
-local function b_side(ctx, linked)
-    if not ctx.hunt("linked_faint_active b") then return false, "no wild encounter" end
-    if ctx.SP.verify_fight_cursor(ctx.cp, "incidental_battle") ~= "fight" then
-        return false, "never reached the action menu"
-    end
-    if ctx.battler_slot() ~= 0 then return false, "the linked lead is not battler 0" end
-    ctx.log("READY_ACTIVE " .. linked)
-    if not ctx.wait_received("force_faint", linked, 1500) then
-        return false, "no force_faint for " .. linked
-    end
-    ctx.frames(120)                              -- the session flushes battle writes every frame
-    local mon, held = ctx.find(linked), ctx.battle_hold(linked)
-    if not mon or mon.hp == 0 then return false, "the ACTIVE battler was written instead of held" end
-    if not held then return false, "the force_faint for the active battler is not held" end
-    ctx.log(fmt("ACTIVE_HOLD %s why=%s hp=%d", linked, tostring(held.why), mon.hp))
-    local ok, why = ctx.switch_to(1)
-    if not ok then return false, "switch: " .. tostring(why) end
-    ctx.log("SWITCHED_OUT " .. linked)
-    local h = ctx.wait_until(function()
-        return ctx.hp0(linked) or (not ctx.in_battle() and "over") or nil
-    end, 90, "HP 0 on the switched-out linked mon")
-    local landed = type(h) == "table" and h.in_battle and not h.battler
-    if landed then
-        ctx.log(fmt("BENCH_HP0_IN_BATTLE %s frame=%d", linked, h.frame))
-    else
-        local e = ctx.battle_hold(linked)
-        ctx.log(fmt("BENCH_HOLD %s why=%s", linked, e and tostring(e.why) or tostring(h)))
-    end
-    if ctx.in_battle() then
-        ok, why = ctx.run_away("linked_faint_active b")
-        if not ok then return false, why end
-    end
-    ctx.play.wait_scene_settled(ctx.cp, 3000)
-    if not ctx.wait_sent("memorialize_done", linked, 600) then
-        return false, "no memorialize_done for " .. linked
-    end
-    ok, why = ctx.save("linked_faint_active")
-    if not ok then return false, why end
-    if not landed then
-        return false, "the switched-out linked mon never reached HP 0 in battle (owner ruling "
-                   .. "2026-09-23: in-battle faint must work on vanilla)"
-    end
-    return true, "held while active; HP 0 in battle once switched out"
+local function idle(ctx)
+    local text = ctx.wait_until(function() return ctx.partner_result() end, ctx.D.timeout_secs or 1800,
+                                "the subject's RESULT")
+    if not (text and text:find("\nRESULT: PASS", 1, true)) then return false, "the subject did not PASS" end
+    return true, "idle (no save); the subject passed"
 end
 
 return function(ctx)
-    if not ctx.wait_go(nil, 1800) then return false, "no go-file" end
-    local linked = ctx.linked()
-    local lead = linked and ctx.find(linked)
-    if not lead or lead.slot ~= 0 then return false, "the LINKED key must be the party lead" end
+    local case = ctx.D.active_faint_case or "wild"
+    if not ctx.wait_go(nil, ctx.D.timeout_secs or 1800) then return false, "no go-file" end
+    local key = ctx.linked()
+    local lead = key and ctx.find(key)
+    if not lead or lead.slot ~= SLOT then return false, "the LINKED key must be the party lead" end
     if lead.hp == 0 then return false, "the fixture's linked lead is already fainted" end
-    if ctx.player == "a" then return a_side(ctx, linked) end
-    return b_side(ctx, linked)
+    if case == "command" then
+        if ctx.player == "b" then return idle(ctx) end
+        return subject(ctx, key, case)
+    end
+    if ctx.player == "a" then return natural(ctx, key) end
+    return subject(ctx, key, case)
 end

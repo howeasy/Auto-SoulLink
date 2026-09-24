@@ -1,4 +1,7 @@
-"""Independent T2/A2 receipt + saved-state oracle (FRLG, singles only).
+"""Independent T2 receipt + saved-state oracle (FRLG, singles only).
+
+A2 (active_end) left this carrier with mechanism P+H (owner rulings 15-18): its oracle is
+tools/e2e_duo.py assert_active_end_gen3_saved over active_faint_chain.
 
 Call after the runner's normal check_save_witness_gen3: that check binds dump paths, ordinals,
 mtime and flush completion to THIS attempt. Pass the actual hook/flushed/seed bytes here, never
@@ -17,7 +20,7 @@ import re
 
 from server.adapters import gen3_codec as codec
 
-CASES = {"trainer_bench": (1, 102, "battle_faint", 1), "active_end": (0, 0, "overworld", 4)}
+CASES = {"trainer_bench": (1, 102, "battle_faint", 1)}
 B_EXPECTATIONS = {"no_save": True, "completed_writes": 0, "flushed_flash": "unchanged", "result": "PASS"}
 B_FORBIDDEN = (
     r"(?m)^RX (?:force_faint|force_explode|box_mon|party_mon|memorialize)(?:\s|$)",
@@ -101,12 +104,6 @@ def classify_failure(*, case, key, receipts, attempt=1, helpers=None):
         if "RESULT: FAIL" in b:
             _require(_line(b, "RESULT:").startswith("RESULT: FAIL (battle-window partner did not PASS"),
                      "unrelated B failure")
-        if case == "active_end" and terminal.startswith("RESULT: FAIL (NOT_SUBJECT active_end:"):
-            _require(_number(ready, "in_battle") == 1 and _number(ready, "target_hp") > 0,
-                     "invalid A2 start")
-            _require("BATTLE_WINDOW_EXIT_INPUT" not in a and "BATTLE_WINDOW_LANDED" not in a,
-                     "A2 already entered its subject phase")
-            return {"status": "NOT_SUBJECT", "retry": False, "reason": terminal}
         if case != "trainer_bench" or not terminal.startswith("RESULT: FAIL (T2_RNG_LOSS:"):
             return None
         landed = _stage(a, "BATTLE_WINDOW_LANDED", case, key)
@@ -159,20 +156,12 @@ def verify(*, case, key, receipts, fixture, witness, flushed, peer_fixture, peer
     saved = _stage(a, "BATTLE_WINDOW_SAVED", case, key)
     dump = _fields(_line(a, "SAVE_WITNESS_DUMP"))
     _require(_line(a, "RX force_faint").startswith(f"RX force_faint key={key}"), "wrong force_faint RX")
-    chain = [_pattern("READY_BATTLE_WINDOW", case, key), h.gen3_rx("force_faint", key)]
-    if case == "active_end":
-        held = _stage(a, "BATTLE_WINDOW_HELD", case, key)
-        _stage(a, "BATTLE_WINDOW_EXIT_INPUT", case, key)
-        _require(_number(held, "frames") >= 120 and _number(held, "attempted") == 0, "active hold not proved")
-        chain += [_pattern(n, case, key) for n in ("BATTLE_WINDOW_HELD", "BATTLE_WINDOW_EXIT_INPUT",
-                                                   "BATTLE_WINDOW_EXIT", "BATTLE_WINDOW_LANDED")]
-    else:
-        chain += [_pattern(n, case, key) for n in ("BATTLE_WINDOW_LANDED", "BATTLE_WINDOW_EXIT")]
-        prep = _fields(_line(a, "PREP_LEVEL"))
-        _require(_number(prep, "floor") >= 13 and _number(prep, "after") >= _number(prep, "floor")
-                 and _number(prep, "after") >= _number(prep, "before")
-                 and prep.get("hp") == "full" and prep.get("status") == "none", "preparation level floor not proved")
-        chain.insert(0, r"(?m)^PREP_LEVEL ")
+    chain = [r"(?m)^PREP_LEVEL ", _pattern("READY_BATTLE_WINDOW", case, key), h.gen3_rx("force_faint", key)]
+    chain += [_pattern(n, case, key) for n in ("BATTLE_WINDOW_LANDED", "BATTLE_WINDOW_EXIT")]
+    prep = _fields(_line(a, "PREP_LEVEL"))
+    _require(_number(prep, "floor") >= 13 and _number(prep, "after") >= _number(prep, "floor")
+             and _number(prep, "after") >= _number(prep, "before")
+             and prep.get("hp") == "full" and prep.get("status") == "none", "preparation level floor not proved")
     chain += [r"(?m)^SAVE_WITNESS_DUMP ", _pattern("BATTLE_WINDOW_SAVED", case, key), r"(?m)^RESULT: PASS "]
     forbidden = forbidden_sets(key, helpers=h)
     problems = h.gen3_receipt_problems("a", a, required=chain, forbidden=forbidden["a"],
@@ -196,13 +185,9 @@ def verify(*, case, key, receipts, fixture, witness, flushed, peer_fixture, peer
         _require(re.fullmatch(r"[0-9a-fA-F]{176}", record.get("active_hex", "")) is not None,
                  "missing full active record")
     _require(_number(exited, "outcome") == outcome, "wrong battle exit outcome")
-    if case == "trainer_bench":
-        _require(_number(landed, "trainer_id") == 102, "wrong landed trainer id")
-        _require(_number(landed, "in_battle") == 1 and lf < ef, "T2 landed after battle exit")
-        _require(ready["active_hex"].lower() == landed["active_hex"].lower(), "active record changed at bench write")
-    else:
-        _require(_number(landed, "in_battle") == 0 and rf < ef <= lf, "A2 landed before battle exit")
-        _require(ls - rs >= _number(held, "frames") and ef - rf >= _number(held, "frames"), "active hold has too few samples")
+    _require(_number(landed, "trainer_id") == 102, "wrong landed trainer id")
+    _require(_number(landed, "in_battle") == 1 and lf < ef, "T2 landed after battle exit")
+    _require(ready["active_hex"].lower() == landed["active_hex"].lower(), "active record changed at bench write")
     _require(df >= max(lf, ef) and _number(dump, "bytes") == codec.FLASH_SIZE
              and _number(dump, "saves") == 1, "wrong save boundary/ordinal")
     facts = h.check_gen3_witness(witness, flushed, fixture, saves=1, rr=False)
@@ -219,4 +204,4 @@ def verify(*, case, key, receipts, fixture, witness, flushed, peer_fixture, peer
              "saved target healed or invalid")
     _require(codec.split_rtc(peer_flushed)[0] == codec.split_rtc(peer_fixture)[0], "idle peer battery changed")
     return {"case": case, "key": key, "slot": slot, "observed_samples": ls - rs,
-            "active_unchanged": True if case == "trainer_bench" else None, "witness": facts}
+            "active_unchanged": True, "witness": facts}
