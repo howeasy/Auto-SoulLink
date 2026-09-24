@@ -827,3 +827,39 @@ def test_merge_summary_validates_every_row_receipt(pass_env):
     # and a missing receipt is NOT RUN
     assert fc.main(["--cut", cut, "--lane", LANE, "--master", MASTER,
                     "--rows", "states_*", "--merge-summary"]) == 1
+
+
+# --- G4-FINALCUT-LIVEFIX-2 ------------------------------------------------------------------
+
+def test_the_pret_clones_the_unit_suite_reads_are_unpinned_inputs(tmp_path):
+    """tests/unit/test_gen1_trade_patch.py (and the Gen 3 profile/route tests) read
+    .cache/pret/{pokered,pokefirered,pokecrystal}; a lane worktree has no .cache."""
+    clones = [r for r in fc.UNPINNED_INPUTS if r.startswith(".cache/pret/")]
+    assert sorted(clones) == [".cache/pret/pokecrystal/", ".cache/pret/pokefirered/",
+                              ".cache/pret/pokered/"]
+    root, repo, lane = (tmp_path / d for d in ("root", "repo", "lane"))
+    _seed(root, unpinned=b"root copy")
+    _seed(lane)
+    import shutil
+    shutil.rmtree(lane / ".cache")
+    repo.mkdir()
+    fc.copy_inputs(str(lane), str(root), str(repo), pins=_pins())
+    assert (lane / ".cache/pret/pokered/cap.shadow.log").read_bytes() == b"root copy"
+    assert not any(r.startswith(".cache/") for r in fc.ITEM6_INPUTS)
+
+
+def test_provisioning_really_refreshes_the_index_before_the_clean_check(tmp_path, monkeypatch):
+    """After a .gitattributes change a lane's index can be stat-only dirty; the pass must
+    re-hash (git update-index --really-refresh) before judging it."""
+    lane = tmp_path / "lane"
+    sha = _repo(lane)
+    calls = []
+    real_git = fc._git
+
+    def spy(tree, *args, check=True):
+        calls.append(args[0])
+        return real_git(tree, *args, check=check)
+    monkeypatch.setattr(fc, "_git", spy)
+    assert fc.provision(str(lane), sha, str(lane)) == sha
+    assert "update-index" in calls and calls.index("update-index") < calls.index("status")
+    assert "--really-refresh" in fc.provision_plan(str(lane), sha)[1]

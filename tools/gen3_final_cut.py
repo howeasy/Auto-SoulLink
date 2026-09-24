@@ -85,7 +85,10 @@ UNPINNED_INPUTS = ["Pokemon - Crystal Version (USA).gbc",
                    "patch/gen1/build/slink_red.gb", "patch/gen1/build/slink_blue.gb",
                    "patch/gen1/build/slink.sym",
                    # tests/unit/test_gen3_shadow_diff.py parses these physical P3 captures
-                   "patch/build/shadow_wire/"]
+                   "patch/build/shadow_wire/",
+                   # the pret clones the unit suite reads (test_gen1_trade_patch, the Gen 3
+                   # profile/route/tutorial tests); only these three, not all ~630 MB of .cache/pret
+                   ".cache/pret/pokered/", ".cache/pret/pokefirered/", ".cache/pret/pokecrystal/"]
 GITIGNORED_INPUTS = list(PINNED_INPUTS) + UNPINNED_INPUTS
 ITEM6_INPUTS = [p for p in UNPINNED_INPUTS if not p.endswith("/")]   # the Gen 1/2 dumps and builds
 
@@ -333,13 +336,22 @@ def main_checkout():
 def provision_plan(tree, rev):
     """The commands provision() may run, for --dry-run."""
     return [f"git worktree add --detach {tree} {rev}   (only if {tree} does not exist)",
-            f"git -C {tree} status --porcelain --untracked-files=no   (must be empty, else abort)",
+            f"git -C {tree} update-index -q --really-refresh && git -C {tree} status --porcelain "
+            f"--untracked-files=no   (must be empty, else abort)",
             f"git -C {tree} checkout --detach {rev}   (if HEAD differs)",
             f"git -C {tree} update-ref --no-deref HEAD {rev}   (fallback: the broken shared ref)",
             f"git -C {tree} read-tree {rev} && git -C {tree} checkout-index -a -f   (fallback)",
             f"pinned inputs (sha1 vs the tree's own pins; lane, then this worktree, then the main "
             f"checkout; no match aborts): {', '.join(PINNED_INPUTS)}",
             f"unpinned inputs, copied only when missing: {', '.join(UNPINNED_INPUTS)}"]
+
+
+def _refreshed_clean(tree):
+    """tracked_clean after `git update-index -q --really-refresh`: a .gitattributes change (e.g.
+    the LF pins of 17d190ce..f6400e74) can leave the index stat-only dirty; re-hashing every
+    tracked file settles it, and only real content differences still count as dirty."""
+    _git(tree, "update-index", "-q", "--really-refresh", check=False)
+    return tracked_clean(tree)
 
 
 def provision(tree, rev, root):
@@ -354,16 +366,16 @@ def provision(tree, rev, root):
         _git(root, "worktree", "add", "--detach", tree, sha, check=False)
         if not os.path.isdir(tree):
             raise LaneError(f"git worktree add could not create {tree}")
-    elif not tracked_clean(tree):
+    elif not _refreshed_clean(tree):
         raise LaneError(f"{tree} is tracked-dirty before provisioning; refusing to touch it")
     elif head(tree) != sha:
         _git(tree, "checkout", "--detach", sha, check=False)
     if head(tree) != sha:
         _git(tree, "update-ref", "--no-deref", "HEAD", sha)
-    if not tracked_clean(tree) or _git(tree, "diff", "--quiet", sha, check=False).returncode:
+    if not _refreshed_clean(tree) or _git(tree, "diff", "--quiet", sha, check=False).returncode:
         _git(tree, "read-tree", sha)
         _git(tree, "checkout-index", "-a", "-f")
-    if head(tree) != sha or not tracked_clean(tree):
+    if head(tree) != sha or not _refreshed_clean(tree):
         raise LaneError(f"{tree} is not a clean detached checkout of {sha} after provisioning")
     return sha
 

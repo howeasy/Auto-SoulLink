@@ -339,8 +339,10 @@ is empty (a lane that is already tracked-dirty is never touched). It brings the 
 `patch/build/slink_RR.gba`) must match the lane's own pins (`tools/gen_gen3_write_checkpoint.py` ROMS sha1s and
 `server/patcher.py` `patched_md5`) and are taken from the first source that matches (the lane, then the runner's
 worktree, then the main checkout), and no match aborts the pass, so a stale root file never wins. The UNPINNED ones
-(the Gen 1/2 inputs item 6 needs, the `patch/build/shadow_wire/` P3 captures the unit gate parses) are copied only when
-the lane lacks them. No `.cache` item is read by any row. `release_gate_quick` gets `SLINK_ARMGCC` = the main
+(the Gen 1/2 inputs item 6 needs, the `patch/build/shadow_wire/` P3 captures the unit gate parses, and the pret clones
+it reads, `.cache/pret/{pokered,pokefirered,pokecrystal}/`) are copied only when the lane lacks them. The clean check
+runs after `git update-index -q --really-refresh`, so a stat-only dirty index (after a `.gitattributes` change) does not
+abort the pass. No `.cache` item is read by any row. `release_gate_quick` gets `SLINK_ARMGCC` = the main
 checkout's vendored `patch/vendor/armgcc/*/bin`; the boot-check rows pass the root dump name and the gamedb battery
 name (`--saveram-name 'Pokemon - <Title> Version (USA).SaveRAM'`). Then it runs **41 rows** in runbook order: §1 builds (6), §2-§3 FRLG scenarios (5:
 faint_cmd, link, boxsync, reconnect, deadzone), §4 whiteout + center_controls × FR/LG-as-A (4), §5 the P+H rows
