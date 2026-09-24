@@ -290,3 +290,24 @@ This note summarises it; it is not a second ledger.
   phases 3-4, P4.5c phone Lua, W6 write-watch, Codex P4.3a trade asm (then P4.5b phone asm).
 - Next: P4.3b trade overlay, P4.3e trade duos, linked_faint_active duo, P4.4 promotion, re-pin panel/sfx gates after
   each overlay publication (`SLINK_LIVE=1 pytest tests/live/test_gen2_panel_gate.py`, `.../test_gen2_sfx_gate.py`).
+
+## Session 8, late night (2026-09-24): break point, workers still running
+
+State at this note (HEAD ~4a157d4a+; --new-gates and --duo-matrix green at last check):
+- Owner rulings added: O-30 all faints land in battle (Gen 2 USEITEM at `call DetermineMoveOrder`; Gen 1 19d87a24);
+  Perish Song rejected for Gen 2 (facts §6 of docs/gen2/reviews/INBATTLE_FAINT_FACTS_2026-09-23.md). Contest = kill
+  on ContestReturnMons; Battle Tower = kill in battle + checkpoint re-zero.
+- In-battle faint PHYSICAL on C/G (S follows Gold): e0442e96, a8e93be7, ade01a6e. Regression duos still pass (9e38810b).
+- poison_faint PHYSICAL on all three (G via gold_battle_errand, a7bf1773). Gift deferred post-RC.
+- P4: trade asm bd6c68b1 + phone asm, published d09e76c1 (C 651dc6bf, G d563669e, S 76c6c112, caps 31); panel +
+  sfx re-pinned on them (4a157d4a); trade binder ff576e02/8c561345/ed7f87c6; phone Lua 2f1c018e/2173e3f1/f24b2a2b.
+- Workers still running at the break (owner: "let them work"):
+  U1f PC/change_box/whiteout (then crystal/crystal_ot2/silver errand fixtures for trades);
+  W6 mailbox write-watch (then P4.5d phone gate);
+  LIVE3 gen2_faint_active (driver 9ea2a319; waits on Codex H11 lane);
+  TRADE-RECON server uncertain-trade reconciliation (shared server);
+  TRADE-DRIVER P4.3e drivers (contract: coordinator scratchpad p43e_driver_contract.md, also relayed);
+  Codex: H11 then P4.3e harness; OMP: P4.3a adversarial review (cx-a14b449a).
+- Open owner decision coming: trade-evolution / held-mail specimens may be unreachable early -> recorded limit or long play.
+- Shared-file commit rule: files several workers edit are staged with `git apply --cached` (own hunks) and committed
+  without a pathspec; `git commit -- <path>` takes the whole working-tree file.
