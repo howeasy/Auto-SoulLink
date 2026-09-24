@@ -218,3 +218,18 @@ def test_a_commit_after_a_mid_window_key_change_follows_the_migrated_key(tmp_pat
     assert evolved in state.party_keys["a"] and B_GETS not in state.party_keys["a"]
     assert A_GETS not in state.party_keys["b"], "no ghost of B's traded-away key"
     assert evolved in state.bonus_keys["a"] and A_GETS not in state.bonus_keys["b"]
+
+
+# ── NIT-11 (probe P5): an after_reset declaration still counts once the trade is `uncertain` ──────
+
+def test_an_after_reset_report_in_the_uncertain_phase_waits_for_the_hello(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    state.pending_trade["age"] = state.TRADE_WATCHDOG_EVENTS
+    _cmds(state, "a")
+    assert state.pending_trade["phase"] == "uncertain" and state.pending_trade["verdict"]["b"] == "await"
+    state.handle_event("b", {"event": "trade_done", "token": token, "uncertain": True, "after_reset": True})
+    _tick(state, "b", _mon("0101:5678:99", 7))                   # the soft-locked RAM: neither mon
+    assert state.pending_trade and state.pending_trade["verdict"]["b"] == "await"
+    _hello(state, "b", _mon(B_GETS, 0x26))                       # the reloaded save
+    assert state.pending_trade is None and (entry.a.key, entry.b.key) == (A_GETS, B_GETS)

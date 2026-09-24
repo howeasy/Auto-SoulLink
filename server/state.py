@@ -960,7 +960,9 @@ class SoulLinkState:
         We BUFFER each side's result and apply the whole swap ATOMICALLY only once BOTH have reported,
         so the link is never observable in a half-swapped state. Then play the jingle + 'Traded!' box."""
         pt = self.pending_trade
-        if not pt or pt.get("phase") != "applying":
+        # NIT-11 (invariant review): an `uncertain` trade (watchdog, restore) still takes a side's
+        # report while that side awaits, so a later after_reset declaration is not lost
+        if not pt or pt.get("phase") not in ("applying", "uncertain"):
             return
         # A stale report from an earlier aborted trade must not count toward this one. Every
         # client echoes apply_trade's token (Gen 3 emit_trade_done, Gen 1/2 trade_*), so a report
@@ -981,13 +983,14 @@ class SoulLinkState:
         if msg.get("uncertain") or not new_key:
             # the side cannot vouch (a reset after its commit entry, a native result 2): party evidence
             # decides. Journaled as the watchdog does, once, when the side first declares it.
+            if msg.get("after_reset") is True:
+                # MAJOR-5: a native result 2 holds a RAM party no save ever saw; only the
+                # reloaded save (the post-reset hello) is evidence for this side
+                pt.setdefault("hello_only", {})[player_id] = True
             if pt["verdict"][player_id] is None:
                 pt["verdict"][player_id] = "await"
-                if msg.get("after_reset") is True:
-                    # MAJOR-5: a native result 2 holds a RAM party no save ever saw; only the
-                    # reloaded save (the post-reset hello) is evidence for this side
-                    pt.setdefault("hello_only", {})[player_id] = True
                 self._record_trade(pt, "uncertain")
+            self._save()
             return
         gets = pt[f"{_partner(player_id)}_key"]
         if new_key == pt[f"{player_id}_key"]:
