@@ -20,7 +20,7 @@
         "partner": "crystal",
         "fixtures": {"a": "crystal_battle", "b": "crystal_battle_ot2"},
         "trade_fixtures": {"a": "crystal_battle_errand", "b": "crystal_battle_ot2_errand"},
-        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset", "gen2_species_clause", "gen2_type_clause", "gen2_gender_clause", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item"]
+        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset", "gen2_species_clause", "gen2_type_clause", "gen2_gender_clause", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item", "gen2_trade_refuse_contest", "gen2_trade_refuse_unsaved", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison"]
       },
       "proofs": [
         {
@@ -192,7 +192,7 @@
         "partner": "silver",
         "fixtures": {"a": "gold_battle", "b": "silver_battle"},
         "trade_fixtures": {"a": "gold_battle_errand", "b": "silver_battle_errand"},
-        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_reconnect", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item"]
+        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_reconnect", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item", "gen2_trade_refuse_contest", "gen2_trade_refuse_unsaved", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison"]
       },
       "proofs": [
         {
@@ -357,14 +357,13 @@
     {
       "id": "duo.crystal.gold",
       "stage": "live-duos",
-      "description": "Crystal A against Gold B: cross-title admission through one gen2_gsc foundation (O-16)",
+      "description": "Crystal A against Gold B: cross-title admission through one gen2_gsc foundation (O-16); native trade is refused on this pair (owner Q10, ticket 09: G to S and C to C only)",
       "axes": {
         "pairing": "gen2_crystal_gold",
         "initiator": "crystal",
         "partner": "gold",
         "fixtures": {"a": "crystal_battle", "b": "gold_battle"},
-        "trade_fixtures": {"a": "crystal_battle_errand", "b": "gold_battle_errand"},
-        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_reconnect", "gen2_gender_clause", "gen2_type_clause", "gen2_species_clause", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item"]
+        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_reconnect", "gen2_gender_clause", "gen2_type_clause", "gen2_species_clause", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison"]
       },
       "proofs": [
         {

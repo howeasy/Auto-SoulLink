@@ -1717,7 +1717,7 @@ def _trade_proof(tmp_path, axes, scenario, tag="trade"):
 
 
 @pytest.mark.parametrize("scenario", sorted(gate.TRADE_END_STATUS))
-@pytest.mark.parametrize("pair", ["duo.crystal.crystal", "duo.gold.silver", "duo.crystal.gold"])
+@pytest.mark.parametrize("pair", ["duo.crystal.crystal", "duo.gold.silver"])
 def test_trade_matrix_accepts_a_bound_overlay_receipt(tmp_path, scenario, pair):
     _doc, proof, axes = _trade_cell(tmp_path, scenario, pair)
     assert gate._receipt_errors(tmp_path, proof, scenario, axes, {}) == []
@@ -1761,13 +1761,20 @@ def test_trade_matrix_refuses_a_republished_overlay(tmp_path):
 
 
 def test_every_cell_declares_all_trade_cases_with_the_runner_fixtures():
+    """Owner Q10: native trades on C-C and G-S only; the C-G row declares no trade case."""
     import e2e_duo as duo
     doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
     for row in doc["requirements"]:
         axes = row["axes"]
-        assert set(gate.TRADE_END_STATUS) <= set(axes["scenarios"])
-        assert axes["trade_fixtures"] == duo.GEN2_TRADE_FIXTURES[axes["pairing"]]
-    assert set(gate.TRADE_END_STATUS) == set(duo.GEN2_TRADE_SCENARIOS)
+        if (axes["initiator"], axes["partner"]) in gate.TRADE_PAIRS:
+            assert set(gate.TRADE_END_STATUS) <= set(axes["scenarios"])
+            assert axes["trade_fixtures"] == duo.GEN2_TRADE_FIXTURES[axes["pairing"]]
+        else:
+            assert not set(gate.TRADE_END_STATUS) & set(axes["scenarios"]) and "trade_fixtures" not in axes
+    assert {("crystal", "crystal"), ("gold", "silver")} == gate.TRADE_PAIRS
+    # Every runner case is a release cell; the lane may demand more (refusal rows awaiting a driver).
+    assert set(duo.GEN2_TRADE_SCENARIOS) <= set(gate.TRADE_END_STATUS)
+    assert {"gen2_trade_refuse_contest", "gen2_trade_refuse_unsaved"} <= set(gate.TRADE_END_STATUS)
 
 
 # --- RELEASE-LANES: patch-build, live-gates, live-trade-gates, duo-pairs, release-evidence -----------
@@ -1911,18 +1918,24 @@ def test_live_gates_red_on_missing_or_stale_receipts(tmp_path, mutation):
 
 # live-trade-gates: every trade case on every pair, judged by the real trade receipt validator.
 
+_TRADE_FIXTURES = {"gen2_new": {"a": "crystal_battle_errand", "b": "crystal_battle_ot2_errand"},
+                   "gen2_gold_silver": {"a": "gold_battle_errand", "b": "silver_battle_errand"},
+                   "gen2_crystal_gold": {"a": "crystal_battle_errand", "b": "gold_battle_errand"}}
+
+
 def _trade_duo():
     scenarios = {name: {"oracle": "assert_gen2_link_saved"} for name in ["link", *gate.TRADE_END_STATUS]}
     duo = _fake_duo(scenarios=scenarios)
-    matrix = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
-    duo.GEN2_TRADE_FIXTURES = {row["axes"]["pairing"]: row["axes"]["trade_fixtures"]
-                               for row in matrix["requirements"]}
+    duo.GEN2_TRADE_FIXTURES = dict(_TRADE_FIXTURES)
     return duo
 
 
 def _trade_tree(tmp_path):
     doc = _green_tree(tmp_path)
     for row in doc["requirements"]:
+        if (row["axes"]["initiator"], row["axes"]["partner"]) not in gate.TRADE_PAIRS:
+            continue
+        row["axes"]["trade_fixtures"] = _TRADE_FIXTURES[row["axes"]["pairing"]]
         row["axes"]["scenarios"] = ["link", *sorted(gate.TRADE_END_STATUS)]
         for scenario in sorted(gate.TRADE_END_STATUS):
             row["proofs"].append(_trade_proof(tmp_path, row["axes"], scenario, f"{row['id']}_{scenario}"))
@@ -1942,7 +1955,7 @@ def test_trade_gates_green_only_when_every_case_is_receipted(tmp_path):
 
 
 def _undeclare_case(tmp_path, doc):
-    row = _row(doc, "duo.crystal.gold")
+    row = _row(doc, "duo.gold.silver")
     row["axes"]["scenarios"].remove("gen2_trade_timeout")
     row["proofs"] = [p for p in row["proofs"] if p["scenario"] != "gen2_trade_timeout"]
 
@@ -1969,8 +1982,34 @@ def test_trade_gates_red_on_missing_or_stale_receipts(tmp_path, mutation):
 def test_committed_trade_gates_are_red_until_trade_duos_are_receipted():
     rows = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))["requirements"]
     receipted = {(row["id"], proof["scenario"]) for row in rows for proof in row["proofs"]}
-    if not all((f"duo.{a}.{b}", case) in receipted for a, b in gate.DUO_PAIRS for case in gate.TRADE_END_STATUS):
+    if not all((f"duo.{a}.{b}", case) in receipted for a, b in gate.TRADE_PAIRS for case in gate.TRADE_END_STATUS):
         assert gate.trade_gates_errors() != []
+
+
+def _declare_cg_trade(tmp_path, doc):
+    """Owner Q10: a positive C-G trade cell is red even when it carries a valid receipt."""
+    row = _row(doc, "duo.crystal.gold")
+    row["axes"]["trade_fixtures"] = _TRADE_FIXTURES["gen2_crystal_gold"]
+    row["axes"]["scenarios"].append("gen2_trade_new")
+    row["proofs"].append(_trade_proof(tmp_path, row["axes"], "gen2_trade_new", "cg_trade_new"))
+
+
+def test_c_g_positive_trade_cell_is_red_on_every_matrix_lane(tmp_path):
+    doc = _trade_tree(tmp_path)
+    _declare_cg_trade(tmp_path, doc)
+    _write_doc(tmp_path, doc)
+    for errors in (gate.trade_gates_errors(tmp_path, _trade_duo()), gate.duo_matrix_errors(tmp_path, _trade_duo())):
+        assert any("duo.crystal.gold: native trade case(s) ['gen2_trade_new']" in e and "Q10" in e for e in errors)
+
+
+def test_c_g_owes_exactly_its_registered_refusal_case(tmp_path, monkeypatch):
+    doc = _trade_tree(tmp_path)
+    monkeypatch.setattr(gate, "TRADE_REFUSED_PAIR_CASES", frozenset({"gen2_trade_new"}))  # stand-in name
+    assert "duo.crystal.gold: required scenario(s) ['gen2_trade_new'] not declared" in gate.trade_gates_errors(
+        tmp_path, _trade_duo())
+    _declare_cg_trade(tmp_path, doc)
+    _write_doc(tmp_path, doc)
+    assert gate.trade_gates_errors(tmp_path, _trade_duo()) == []
 
 
 # duo-pairs: the P3b.7 + trade set on C-C and G-S. Per-cell receipt validators are covered above,
@@ -1983,8 +2022,11 @@ def _pairs_tree(tmp_path, monkeypatch):
     duo.SCENARIOS.update({name: {"oracle": "assert_gen2_link_saved"} for name in need})
     doc = _green_tree(tmp_path)
     for row in doc["requirements"]:
-        row["axes"]["scenarios"] = list(need)
-        row["proofs"] = [{"scenario": name, "receipts": {}} for name in need]
+        mine = need if (row["axes"]["initiator"], row["axes"]["partner"]) in gate.TRADE_PAIRS else [
+            name for name in need if name not in gate.TRADE_END_STATUS]
+        row["axes"]["scenarios"] = list(mine)
+        row["axes"]["trade_fixtures"] = _TRADE_FIXTURES[row["axes"]["pairing"]]
+        row["proofs"] = [{"scenario": name, "receipts": {}} for name in mine]
     _write_doc(tmp_path, doc)
     return doc, duo
 
@@ -2111,3 +2153,27 @@ def test_committed_g4_packet_is_red_until_the_owner_signs():
     plan = (REPO / "docs/gen2/PLAN.md").read_text(encoding="utf-8")
     if "| G4 | — |" in plan:
         assert "docs/gen2/PLAN.md §6.1: the G4 ledger row carries no owner signature" in gate.g4_packet_errors()
+
+
+# DUO-WAVE-C (whiteout, pc_ops, changebox, poison): the PYDEC line names its own cell's tokens.
+_WAVE_C_PYDEC = {
+    "gen2_whiteout": ("memorial", "scenario=gen2_whiteout repair=memorial_first", "repair=guessed"),
+    "gen2_pc_ops": ("alive", "scenario=gen2_pc_ops release=unpropagated", "release=propagated"),
+    "gen2_changebox": ("memorial", "scenario=gen2_changebox box_change=BOX1->BOX14->BOX1", "box_change=BOX1"),
+    "gen2_poison": ("dead", "scenario=gen2_poison death=poison", "death=battle"),
+}
+
+
+@pytest.mark.parametrize("scenario", sorted(_WAVE_C_PYDEC))
+def test_wave_c_pydec_requires_its_scenario_tokens(scenario):
+    status, tokens, wrong = _WAVE_C_PYDEC[scenario]
+    axes = {"initiator": "gold", "partner": "silver"}
+    keys = {"a": "AAAA:1111:01", "b": "BBBB:2222:02"}
+    head = f"PYDEC: PASS a={keys['a']} b={keys['b']} area=route_29 titles=gold/silver status={status}"
+    assert gate._pydec_cell_errors([f"{head} {tokens}"], scenario, axes, keys) == []
+    assert gate._pydec_cell_errors([head], scenario, axes, keys) != []
+    bad = f"{head} {tokens.rsplit(' ', 1)[0]} {wrong}"
+    assert gate._pydec_cell_errors([bad], scenario, axes, keys) != []
+    assert gate._pydec_cell_errors([f"{head.replace(status, 'alive' if status != 'alive' else 'dead')} {tokens}"],
+                                   scenario, axes, keys) != []
+    assert scenario in gate.DUO_PAIRS_SCENARIOS

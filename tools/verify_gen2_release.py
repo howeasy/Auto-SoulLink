@@ -145,7 +145,8 @@ LANES = [
              " hardware; client-conformance (P3b.6/P3b.7) stays a separate later card"),
     Lane("live-trade-gates", [_PY, "tools/verify_gen2_release.py", "--trade-gates"],
          why="PHYSICAL receipts (BINDING P4.3; T-1..T-4): every native trade case of TRADE_END_STATUS"
-             " declared and receipted on C-C, G-S and C-G in the release duo matrix, judged by the"
+             " declared and receipted on C-C and G-S (owner Q10; C-G carries no positive trade cell)"
+             " in the release duo matrix, judged by the"
              " HARNESS_ONLY_OVERLAY trade oracle against the published overlay; runner is"
              " tools/e2e_duo.py's gen2_trade_* cases (tests/e2e/test_duo_gen2_new.py)"),
     Lane("duo-link", [_PY, "tools/verify_gen2_release.py", "--duo-matrix"],
@@ -248,7 +249,15 @@ DUO_REQUIRED_SCENARIOS = frozenset({"link"})
 # Codex's H5 PYDEC format (review O16 F1): "PYDEC: PASS a=<key> b=<key> area=<id>
 # titles=<a-title>/<b-title> status=<alive|dead|memorial>" -- link ends alive; gen2_faint ends dead, or
 # memorial once the Gen 2 memorialize NACK lets the server finish the pair (owner, via Codex H5).
-SCENARIO_END_STATUS = {"link": {"alive"}, "gen2_faint": {"dead", "memorial"}, "gen2_faint_active": {"memorial"}}
+SCENARIO_END_STATUS = {"link": {"alive"}, "gen2_faint": {"dead", "memorial"}, "gen2_faint_active": {"memorial"},
+                       # DUO-WAVE-C contract (whiteout, pc_ops, changebox, poison)
+                       "gen2_whiteout": {"memorial"}, "gen2_pc_ops": {"alive"}, "gen2_changebox": {"memorial"},
+                       "gen2_poison": {"dead", "memorial"}}
+# Per-scenario PYDEC tokens beyond a/b/titles/status (DUO-WAVE-C contract; the death=active rule's shape).
+SCENARIO_TOKENS = {"gen2_whiteout": {"repair": {"written", "memorial_first"}},
+                   "gen2_pc_ops": {"release": "unpropagated"},
+                   "gen2_changebox": {"box_change": "BOX1->BOX14->BOX1"},
+                   "gen2_poison": {"death": "poison"}}
 
 
 def _fixture_sha256(root: Path, fixture: str) -> str | None:
@@ -298,6 +307,8 @@ def _pydec_cell_errors(lines: list[str], scenario: str, axes: dict, capture_keys
                 "titles": f"{axes['initiator']}/{axes['partner']}", "status": "unchanged"}
     elif scenario == "gen2_faint_active":
         want.update(scenario=scenario, area="route_29", death="active")
+    elif scenario in SCENARIO_TOKENS:
+        want.update(scenario=scenario, **SCENARIO_TOKENS[scenario])
     errors = [f"pydec receipt does not name this cell: {key}={tokens.get(key)!r}, want {value!r}"
               for key, value in want.items()
               if value is not None and not (tokens.get(key) in value if isinstance(value, set) else tokens.get(key) == value)]
@@ -798,9 +809,16 @@ def _active_faint_cell_errors(legs: dict, axes: dict) -> list[str]:
 TRADE_END_STATUS = {"gen2_trade_new": "committed", "gen2_trade_evolve": "committed",
                     "gen2_trade_reset_commit": "committed", "gen2_trade_decline_new": "unchanged",
                     "gen2_trade_timeout": "unchanged", "gen2_trade_reset_wait": "unchanged",
-                    "gen2_trade_refuse_item": "unchanged"}
+                    "gen2_trade_refuse_item": "unchanged",
+                    # 26e58062 MODEL rows (TRADE-ASM 9805ac1c refusal sites); red here until a driver is
+                    # registered in tools/e2e_duo.py and C-C/G-S receipts exist.
+                    "gen2_trade_refuse_contest": "unchanged", "gen2_trade_refuse_unsaved": "unchanged"}
 TRADE_PLANTED = {"gen2_trade_refuse_item", "gen2_trade_evolve"}   # O-31: a's disclosed HARNESS_WRITE
 TRADE_VARIANTS = {("crystal", "crystal"): "cc", ("gold", "silver"): "gs", ("crystal", "gold"): "cg"}
+# Owner Q10 (docs/gen2/REVIEW_RECORD.md, ticket 09): "G to S allowed. C to C only". Any other release pair
+# (C-G) must never carry a positive trade cell; it may carry only a registered refusal case listed here.
+TRADE_PAIRS = frozenset({("crystal", "crystal"), ("gold", "silver")})
+TRADE_REFUSED_PAIR_CASES = frozenset()
 
 
 def _trade_receipt_errors(root: Path, proof: dict, scenario: str, axes: dict) -> list[str]:
@@ -966,8 +984,13 @@ def duo_matrix_errors(root: Path | None = None, duo=None, *, required: dict | No
         try:
             rid, axes = row["id"], row["axes"]
             game, scenarios = axes["pairing"], axes.get("scenarios") or []
-            need = DUO_REQUIRED_SCENARIOS | required.get((axes.get("initiator"), axes.get("partner")), frozenset())
+            pair = (axes.get("initiator"), axes.get("partner"))
+            need = DUO_REQUIRED_SCENARIOS | required.get(pair, frozenset())
             missing_required = need - set(scenarios)
+            refused = frozenset() if pair in TRADE_PAIRS else frozenset(TRADE_END_STATUS) - TRADE_REFUSED_PAIR_CASES
+            if set(scenarios) & refused:
+                errors.append(f"{rid}: native trade case(s) {sorted(set(scenarios) & refused)} declared on a pair"
+                              " owner Q10 refuses (native trades are C-C and G-S only)")
             if missing_required:
                 errors.append(f"{rid}: required scenario(s) {sorted(missing_required)} not declared")
             registered = []
@@ -984,7 +1007,8 @@ def duo_matrix_errors(root: Path | None = None, duo=None, *, required: dict | No
                 except RuntimeError as exc:
                     errors.append(f"{rid}: {exc}")
                 errors.extend(f"{rid}: registered scenario {name} is not in the release matrix"
-                              for name in registered if name not in scenarios and (only is None or name in only))
+                              for name in registered
+                              if name not in scenarios and name not in refused and (only is None or name in only))
                 trade = getattr(duo, "GEN2_TRADE_FIXTURES", {}).get(game)
                 if set(scenarios) & set(TRADE_END_STATUS) and trade != axes.get("trade_fixtures"):
                     errors.append(f"{rid}: tools/e2e_duo.py {game} trade fixtures {trade} != matrix "
@@ -1272,9 +1296,11 @@ def live_gates_errors(root: Path | None = None, receipt_validate=None) -> list[s
 
 
 def trade_gates_errors(root: Path | None = None, duo=None) -> list[str]:
-    """live-trade-gates (BINDING P4.3, T-1..T-4): every trade case on every release pair, receipted."""
+    """live-trade-gates (BINDING P4.3, T-1..T-4): every trade case receipted on C-C and G-S (owner Q10);
+    other pairs owe only their registered refusal cases and may carry no positive trade cell."""
     cases = frozenset(TRADE_END_STATUS)
-    return duo_matrix_errors(root, duo, required=dict.fromkeys(DUO_PAIRS, cases), only=cases)
+    required = {pair: cases if pair in TRADE_PAIRS else TRADE_REFUSED_PAIR_CASES for pair in DUO_PAIRS}
+    return duo_matrix_errors(root, duo, required=required, only=cases | TRADE_REFUSED_PAIR_CASES)
 
 
 # BINDING P3b.7's C-C / G-S scenario list, named as tools/e2e_duo.py registers Gen 2 cells (gen2_<name>;

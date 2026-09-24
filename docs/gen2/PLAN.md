@@ -127,7 +127,7 @@ tests/fixtures/gen2/{crystal,gold,silver}_{town,battle}.SaveRAM + crystal_{town,
 tests/unit/test_gen2_{profile,engine_sites,rom_tables,species,evos,encounters,write_checkpoint,admission,coverage_map}.py   (P2)
 tests/unit/test_gen2_{codec,entry,reads,signals,writes,boxes,client,adapter,fixtures}.py                        (P3b)
 tests/unit/test_gen2_{build,overlay,ghost}.py  tests/unit/test_gen2_pairing_matrix.py  tests/unit/test_gen2_coverage_map.py
-tests/live/test_gen2_new_gates.py  tests/live/test_gen2_trade_gates.py  tests/e2e/test_duo_gen2_new.py
+tests/live/test_gen2_new_gates.py  tests/live/test_gen2_{panel,sfx,w6,phone}_gate.py  tests/e2e/test_duo_gen2_new.py
 tests/gen2_release_requirements.json  docs/gen2/gen2_requirements.md  docs/gen2/gen2_engine_sites.md
 patch/gen2/{README.md,src/*.asm,tools/build.py}  patch/dist/SLink-{Gold,Silver,Crystal}.ups
 ```
