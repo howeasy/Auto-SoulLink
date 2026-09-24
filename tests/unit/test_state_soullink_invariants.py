@@ -154,3 +154,28 @@ def test_a_whiteout_in_the_trade_window_kills_by_the_swapped_link(tmp_path):
     assert _keys(b_cmds, "force_faint") == [B_GETS], "B holds B_GETS, A's received mon's partner"
     assert _keys(a_cmds, "memorialize") == [A_GETS] and not _keys(a_cmds, "force_faint")
     assert entry.status == LinkStatus.DEAD and entry.cause == "whiteout"
+
+
+# ── MINOR-5 (probe P8): the O-24 repair runs while a rebuild or a trade owns party bookkeeping ────
+
+def _dead_pair(state, a_key="ABCD:1234:77"):
+    from server.state import LinkEntry, MonInfo
+    dead = LinkEntry(area_id="route_9", a=MonInfo(key=a_key, species=0x77, level=9),
+                     b=MonInfo(key="1234:5678:77", species=0x77, level=9), status=LinkStatus.DEAD)
+    state.links.append(dead)
+    state._index_entry(dead)
+    return a_key
+
+
+def test_a_dead_mon_alive_in_party_is_re_killed_during_a_rebuild(tmp_path):
+    state, _entry = _linked(tmp_path)
+    dead = _dead_pair(state)
+    state.rebuild_pending["a"] = {"started_at": "", "queued_keys": ["ABCD:1234:99"],
+                                  "queued_partner_keys": [], "restored_keys": set()}
+    assert _keys(_tick(state, "a", _mon(dead, 0x77)), "force_faint") == [dead]
+
+
+def test_a_dead_mon_alive_in_party_is_re_killed_during_an_applying_trade(tmp_path):
+    state, _entry, _token = _gen1_applying(tmp_path)
+    dead = _dead_pair(state)
+    assert _keys(_tick(state, "a", _mon(B_GETS, 0x26), _mon(dead, 0x77)), "force_faint") == [dead]

@@ -2881,6 +2881,10 @@ class SoulLinkState:
           - Active rebuild (rebuild_pending owns party_keys bookkeeping for its
             duration; let it finish, then next tick reconciles cleanly).
         """
+        # O-24 is keyed by link status and death_inflight, not by the party bookkeeping the gates
+        # below protect, so it runs first (invariant review MINOR-5: a rebuild whose answer was
+        # lost, or an `applying` trade, used to switch it off for as long as they lasted).
+        self._repair_lost_faints(player_id, party, in_battle)
         if self.rebuild_pending.get(player_id):
             return
         # A trade owns party bookkeeping while the swap is in flight + a short settle window after.
@@ -2898,7 +2902,6 @@ class SoulLinkState:
 
         # This pass is a real chance for the client to have answered what we sent it.
         self._expire_inflight(player_id)
-        self._repair_lost_faints(player_id, party, in_battle)
 
         actual_keys = {mon.get("key", "") for mon in party if mon.get("key")}
         # An uncertain/conflicted trade still owns its two keys: until it settles, either key may be
