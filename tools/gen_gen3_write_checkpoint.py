@@ -487,6 +487,12 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
         lo, hi = text_span(SYM_DIR / sym_file.replace(".sym", ".map"), PLAYER_CONTROLLER_OBJ)
         if not lo <= syms["HandleInputChooseAction"][0] < hi:
             raise SystemExit(f"{title}: HandleInputChooseAction is not {PLAYER_CONTROLLER_OBJ}'s")
+    slot = next(c["address"] for c in out["battle"]["clauses"] if c["name"] == "battle_input_controller")
+    handoff, why = handoff_block(syms, sym_file, is_rr, roms, slot)
+    if handoff is None:
+        unverified.append(f"battle.handoff: {why}")
+    else:
+        out["battle"]["handoff"] = handoff
     if is_rr:
         native = native_block(profile)
         if native is not None:
@@ -589,8 +595,10 @@ RR_INPUT_CONTROLLER = ("HandleChooseActionAfterDma3", 0x18, 0x22)
 # press then runs its ball shortcut -- RemoveBagItem at 0x090AA114 -- before the engine takes the
 # coerced action (docs/gen3/research/rr_battle_tuple_2026-09-23.md §1 e).  FR/LG's parked handler
 # has no side effect.  Drop this only with a proven controller-handoff design (G5).
+# G4-PH: the hold stays in the pack; safety.lua replaces it by the battle_commit_handoff clause
+# only for a plan that ends in the exact battle.handoff tail (mechanism P), so Explode stays held.
 RR_COMMIT_HOLD = ("battle_commit held on RR: CFRU's parked controller stays live after the commit "
-                  "(L-throw RemoveBagItem 0x090AA114); controller handoff unproven (G5)")
+                  "(L-throw RemoveBagItem 0x090AA114) unless the plan ends in the battle.handoff tail")
 BATTLE_COMMIT_GUARD = {"symbol": "gBattleCommunication", "offset": 0, "width": 1, "compare": "lt",
                        "value": 3, "indexed_by": "battler"}
 BATTLE_COMMIT_GUARD_RR = {"symbol": "BATTLE_COMM_ADDR", "offset": 0, "width": 1, "compare": "lt",
@@ -723,6 +731,63 @@ def battle_block(title: str, syms, is_rr: bool, profile: dict | None,
         guard["source"] = BATTLE_SOURCE_FRLG
         hold = {}
     return {"version": "gen3-battle-v1", "clauses": clauses, "commit_guard": guard, **hold}, dropped
+
+
+# G4-PH (owner rulings 15-18, 2026-09-24; docs/gen3/research/rr_active_faint_parity_scope_2026-09-23.md
+# §3.2, §5.1): mechanism P's plan ends by handing battler 0's controller slot to
+# PlayerBufferExecCompleted, so the engine itself installs PlayerBufferRunCommand and clears the exec
+# bit on the next BattleMainCB1 pass -- exactly how a real commit ends, with no A press. The slot is the
+# battle_input_controller clause's word. FR/LG: the value is the player controller's .sym spelling,
+# proven in the title's own ROM by the body's pool words (the slot array and PlayerBufferRunCommand|1,
+# pret battle_controller_player.c:186-200). RR: the value is the word CFRU's action menu commits through
+# (LDR@0x090A9EFE), equal in every RR ROM, equal to FR's symbol, and FR's slot-addressing prefix and
+# pool are kept verbatim there (the body detours after it). Any failed check drops the block: FR/LG
+# then keep the A press, RR keeps the commit hold (fail-closed).
+HANDOFF_FN = "PlayerBufferExecCompleted"
+RR_HANDOFF_VALUE_LDR = 0x090A9EFE
+HANDOFF_PREFIX = 0x10        # push; gActiveBattler -> slot address (before RR's detour at +0x10)
+HANDOFF_POOL = (0x40, 0x48)  # gBattlerControllerFuncs, gActiveBattler
+
+
+def handoff_block(syms, sym_file: str, is_rr: bool, roms: dict[str, bytes],
+                  slot: int) -> tuple[dict | None, str]:
+    """(the battle.handoff block, "") or (None, why it is unproven)."""
+    fn = HANDOFF_FN
+    if fn not in syms or "gBattlerControllerFuncs" not in syms:
+        return None, f"{fn}: symbol absent"
+    addr, size = syms[fn]
+    lo, hi = text_span(SYM_DIR / sym_file.replace(".sym", ".map"), PLAYER_CONTROLLER_OBJ)
+    if not lo <= addr < hi:
+        return None, f"{fn} @ {addr:#010x} is not {PLAYER_CONTROLLER_OBJ}'s"
+    if slot != syms["gBattlerControllerFuncs"][0]:
+        return None, f"battle_input_controller slot {slot:#010x} is not gBattlerControllerFuncs"
+    value = addr | 1
+    block = {"symbol": "gBattlerControllerFuncs", "address": slot, "stride": 4, "width": 4,
+             "value": value, "value_symbol": fn}
+    if is_rr:
+        fr = body(roms["_fr"], addr, size)
+        for kind, rom in roms.items():
+            if kind == "_fr":
+                continue
+            got = body(rom, addr, size)
+            if got[:HANDOFF_PREFIX] != fr[:HANDOFF_PREFIX] or \
+                    got[HANDOFF_POOL[0]:HANDOFF_POOL[1]] != fr[HANDOFF_POOL[0]:HANDOFF_POOL[1]]:
+                return None, f"{fn} @ {addr:#010x}: prefix/pool differs from FR in RR {kind}"
+            if ldr_literal(rom, RR_HANDOFF_VALUE_LDR) != value:
+                return None, f"LDR@0x{RR_HANDOFF_VALUE_LDR:08X} does not load {value:#010x} in RR {kind}"
+        block["source"] = (f"rom: slot = the battle_input_controller pin (LDR@0x08032BAC, "
+                           f"HandleChooseActionAfterDma3, FR-identical); value LDR@0x{RR_HANDOFF_VALUE_LDR:08X} "
+                           f"(the {fn} call every CFRU action-menu commit makes) == pokefirered.sym {fn}|1; "
+                           f"{fn} prefix +0..+0x{HANDOFF_PREFIX - 1:X} and pool +0x40..+0x47 FR-identical")
+    else:
+        pool = body(roms["clean"], addr, size)
+        for word in (slot, syms["PlayerBufferRunCommand"][0] | 1):
+            if not pool_offsets(pool, word):
+                return None, f"{fn} @ {addr:#010x}: pool lacks {word:#010x} in this ROM"
+        block["source"] = (f"{fn}|1 (.sym, {PLAYER_CONTROLLER_OBJ}); ROM body pools "
+                           f"gBattlerControllerFuncs + PlayerBufferRunCommand|1; pret "
+                           f"src/battle_controller_player.c:186-200,244")
+    return block, ""
 
 
 def native_block(profile: dict | None) -> dict | None:

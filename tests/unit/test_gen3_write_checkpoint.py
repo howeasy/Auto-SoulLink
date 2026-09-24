@@ -290,9 +290,9 @@ def test_overworld_section_is_untouched_by_the_new_blocks(pack: str, title: str)
     assert block["version"] == "gen3-overworld-v1"
     assert tuple(sorted(block["predicates"])) == tuple(sorted(OVERWORLD_PREDICATES))
     assert block["cpu"]["mode"] == 0x1F
-    # RR alone HOLDS battle_commit (REV-C5-RR-BW-FIX 2); FR/LG's block shape is unchanged
+    # RR alone HOLDS battle_commit (REV-C5-RR-BW-FIX 2); every title proves the G4-PH hand-off
     hold = {"commit_hold"} if pack == "gen3_rr" else set()
-    assert set(block["battle"]) == {"clauses", "commit_guard", "version"} | hold
+    assert set(block["battle"]) == {"clauses", "commit_guard", "version", "handoff"} | hold
     assert "sound" in block
 
 
@@ -351,7 +351,7 @@ def test_rr_battle_clauses_are_rr_facts_not_sym_assertions() -> None:
     assert (ctrl["address"], ctrl["offset"], ctrl["width"], ctrl["compare"], ctrl["expect"]) ==         (0x03004FE0, 0, 4, "eq", 0x0802E439)
     assert "LDR@0x08032BB6" in ctrl["source"] and "LDR@0x08032BAC" in ctrl["source"]
     assert "expect_symbol" not in ctrl  # a ROM literal, never the FR HandleInputChooseAction symbol
-    assert "0x090AA114" in block["commit_hold"]      # battle_commit held until a G5 handoff design
+    assert "0x090AA114" in block["commit_hold"]      # still refuses every plan without the hand-off tail
 
 
 def test_rr_input_controller_pool_word_change_is_fatal(monkeypatch) -> None:
@@ -422,3 +422,69 @@ def test_sound_block_names_the_m4a_fields_it_may_write(pack: str, title: str) ->
         assert block["player_se1"]["address"] == syms["gMPlayInfo_SE1"][0]
         assert block["sound_info"]["address"] == syms["gSoundInfo"][0]
         assert block["sound_info_ptr"]["address"] == syms["SOUND_INFO_PTR"][0]
+
+
+# ── G4-PH: battle.handoff (rr_active_faint_parity_scope_2026-09-23.md §5.1) ───────────────────
+# gBattlerControllerFuncs = 0x03004FE0 and PlayerBufferExecCompleted = 0x0802E33C on all three
+# titles (FR/LG .sym; RR LDR@0x08032BAC / LDR@0x090A9EFE), re-typed so the pack is checked.
+HANDOFF = {"symbol": "gBattlerControllerFuncs", "address": 0x03004FE0, "stride": 4, "width": 4,
+           "value": 0x0802E33D, "value_symbol": "PlayerBufferExecCompleted"}
+
+
+@pytest.mark.parametrize("pack,title", PACK_TITLES)
+def test_handoff_block_is_the_controller_slot_and_exec_completed(pack: str, title: str) -> None:
+    block = load(pack)[title]["battle"]
+    handoff = dict(block["handoff"])
+    assert handoff.pop("source")
+    assert handoff == HANDOFF
+    ctrl = next(c for c in block["clauses"] if c["name"] == "battle_input_controller")
+    assert ctrl["address"] + ctrl["offset"] == handoff["address"]       # the slot the permit pins
+    syms = G.parse_sym(G.SYM_DIR / G.PACKS[pack][title][0])
+    assert syms["PlayerBufferExecCompleted"][0] | 1 == handoff["value"]
+    lo, hi = G.text_span(G.SYM_DIR / G.PACKS[pack][title][0].replace(".sym", ".map"), G.PLAYER_CONTROLLER_OBJ)
+    assert lo <= handoff["value"] - 1 < hi
+    if pack == "gen3_rr":
+        assert "LDR@0x090A9EFE" in block["handoff"]["source"] and "LDR@0x08032BAC" in block["handoff"]["source"]
+        assert "commit_hold" in block                                     # Explode stays held
+
+
+@pytest.mark.parametrize("kind,address", [
+    ("companion", 0x090AA190),     # the LDR@0x090A9EFE pool word (the hand-off value)
+    ("clean", 0x090AA190),
+    ("companion", 0x0802E340),     # PlayerBufferExecCompleted's slot-addressing prefix
+    ("clean", 0x0802E37C),         # its gBattlerControllerFuncs pool word
+])
+def test_rr_handoff_byte_change_drops_the_block_and_the_hold_stands(monkeypatch, kind, address) -> None:
+    """§5.4 item 1: one changed byte drops battle.handoff (fail-closed); commit_hold stays, so
+    safety.lua keeps refusing P on RR (tests/unit/test_gen3_safety.py covers the refusal)."""
+    for k in ("clean", "companion"):
+        rom_or_skip("gen3_rr", "radical_red", k)
+    rom_or_skip("gen3_frlg", "firered", "clean")
+    real = G.load_rom
+
+    def mutated(pack, title, k):
+        rom = real(pack, title, k)
+        if pack != "gen3_rr" or k != kind:
+            return rom
+        at = address - G.ROM_BASE
+        return rom[:at] + bytes([rom[at] ^ 0xFF]) + rom[at + 1:]
+    monkeypatch.setattr(G, "load_rom", mutated)
+    out, unverified = G.build_title("gen3_rr", "radical_red", "pokefirered.sym", ("clean", "companion"))
+    assert "handoff" not in out["battle"] and "commit_hold" in out["battle"]
+    assert any(row.startswith("battle.handoff:") for row in unverified)
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+@pytest.mark.parametrize("address", [0x0802E37C, 0x0802E384])   # the slot array / RunCommand|1 pool words
+def test_frlg_handoff_needs_the_exec_completed_pool_in_the_titles_own_rom(monkeypatch, title, address) -> None:
+    rom_or_skip("gen3_frlg", title, "clean")
+    real = G.load_rom
+
+    def mutated(pack, t, kind):
+        rom = real(pack, t, kind)
+        at = address - G.ROM_BASE
+        return rom[:at] + bytes([rom[at] ^ 0xFF]) + rom[at + 1:] if t == title else rom
+    monkeypatch.setattr(G, "load_rom", mutated)
+    out, unverified = G.build_title("gen3_frlg", title, G.PACKS["gen3_frlg"][title][0], ("clean",))
+    assert "handoff" not in out["battle"]
+    assert any(row.startswith("battle.handoff:") for row in unverified)
