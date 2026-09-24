@@ -2737,6 +2737,88 @@ def test_a_trade_removal_is_suppressed_by_the_apply_state_across_the_whole_movie
     w.assert_all_conform()
 
 
+def _applying(w, token="t30"):
+    """An armed APPLY the cartridge has picked up; returns the armed frame."""
+    rng = random.Random(30)
+    incoming = _mon(rng, 0xB1, level=7, nick="PIDGEY")
+    blob = codec.encode_party_mon(incoming) + codec.encode_name("BLUE") + codec.encode_name("PIDGEY")
+    w.reply({"cmd": "apply_trade", "slot": 0, "blob_hex": blob.hex().upper(),
+             "old_key": codec.key(w.party()[0]), "token": token, "partner_name": "BLUE"})
+    w.step()
+    armed = _overlay(w)
+    assert armed[5] == 5, "apply armed"
+    _fire_trade_service(w)
+    return armed, incoming
+
+
+def _uncertain_done(w):
+    return [(d["token"], d.get("uncertain"), "new_key" in d) for d in w.events("trade_done")]
+
+
+def test_a_native_result_2_is_declared_uncertain_once_and_never_released():
+    """native_trade.asm .unreachableAppendFailure (D=2): the append may or may not have happened.
+    The side declares trade_done{token, uncertain} (no key claim) once; the lease is kept."""
+    w = _patched_world()
+    armed, _ = _applying(w)
+    base = w.ram["wSerialPartyMonsPatchList"]
+    done = bytearray(armed)
+    done[5], done[8], done[7] = 7, 2, done[6]
+    w.bus[base:base + 16] = bytes(done)
+    w.step(5)
+    assert _uncertain_done(w) == [("t30", True, False)]
+    assert _overlay(w)[5] == 7, "result 2 is never released"
+    assert any("UNCERTAIN" in str(h) for h in w.hud)
+    w.assert_all_conform()
+
+
+def _reset_and_reload(w):
+    """home/init.asm zero-fills WRAM (wPlayerID 0) until CONTINUE reloads the same save."""
+    saved = bytes(w.bus)
+    r = w.ram
+    for a in range(r["wPartyCount"], r["wPartyCount"] + 8):
+        w.bus[a] = 0
+    w.bus[r["wPlayerID"]] = w.bus[r["wPlayerID"] + 1] = 0
+    w.step(90)
+    assert w.events("trade_done") == [], "nothing is declared before the post-reset hello"
+    w.bus[:] = saved
+    w.overworld_safe()
+    w.step(60)
+    assert len(w.events("hello")) == 2
+
+
+def test_a_reset_after_the_commit_boundary_is_declared_uncertain_after_the_new_hello():
+    """Mirror of Gen 2's SlinkTradeCommit latch (lua/gen2/client.lua trade_forget, ed7f87c6): the
+    apply's first mutation is its RemovePokemon (native_trade.asm:156-158, after every .refused
+    check). A reset after it may have saved the trade (SavePartyAndDexData) before DONE."""
+    w = _patched_world()
+    _applying(w)
+    w.bus[w.ram["wRemoveMonFromBox"]] = 0
+    w.bus[w.ram["wWhichPokemon"]] = 0
+    w.fire("remove_pokemon")
+    w.step()
+    _reset_and_reload(w)
+    assert _uncertain_done(w) == [("t30", True, False)]
+    names = [m["event"] for m in w.sent]
+    assert names.index("trade_done") > len(names) - 1 - names[::-1].index("hello"), "after the new hello"
+    w.step(5)
+    assert len(w.events("trade_done")) == 1
+    assert w.client.trade_state is None
+    assert any("UNCERTAIN" in str(h) for h in w.hud)
+    w.assert_all_conform()
+
+
+def test_a_reset_before_the_commit_boundary_claims_nothing():
+    """Before the RemovePokemon nothing was mutated: the visit is forgotten, no claim either way
+    (Gen 2's trade_forget before SlinkTradeCommit); the server's watchdog/evidence settles it."""
+    w = _patched_world()
+    _applying(w)
+    _reset_and_reload(w)
+    w.step(5)
+    assert w.events("trade_done") == []
+    assert w.client.trade_state is None
+    assert not any("UNCERTAIN" in str(h) for h in w.hud)
+
+
 def test_an_undecodable_snapshot_classifies_nothing_and_says_which_half_was_missing(world):
     """A removal is classified by what the snapshot HOLDS, so an absence only means something when
     both collections decoded. A party that does not decode (client.lua:473-476 returns nil for a

@@ -350,6 +350,7 @@ function Client.new(p)
             -- NEW GAME hellos a fresh wPlayerID and is refused (C-1)
             if reads.read_player_id() == 0 then
                 self.hello_session:invalidate("save_reset")
+                self:trade_forget("save_reset") -- the lease went with the WRAM; DONE never comes
                 self.pending_change = nil -- an acquisition cannot outlive a reset/new save
                 -- ...and so does every identity alias: the record each pointed at is gone with
                 -- the WRAM, and a reloaded pre-change save holds the OLD key again, which the
@@ -1181,6 +1182,10 @@ function Client.new(p)
             -- trade_service.asm:106-113): only the APPLY state spans that gap, which is why this
             -- is a state test and not an age window.
             local pc0 = self.pending_change
+            -- the commit boundary (mirror of Gen 2's SlinkTradeCommit latch, trade_overlay
+            -- commit_entered): this RemovePokemon is the apply's first mutation, after every
+            -- .refused check (native_trade.asm:156-158); from here a missing DONE is uncertain
+            if self.trade_state and self.trade_state.kind == "apply" then self.trade_state.committing = true end
             local trading = (self.trade_state and self.trade_state.kind == "apply")
                             -- an NPC trade owns this removal: vanilla's repinned npc_trade site
                             -- (before RemovePokemon) and pureRGB's npc_trade_remove alike (row 25)
@@ -1863,6 +1868,23 @@ function Client.new(p)
                              arm = { APPLY, slot, blob, name } }
     end
 
+    -- An apply past its commit boundary with no usable DONE (a result 2, a reset) may have mutated or
+    -- saved: no release, no key claim. It is DECLARED, trade_done{token, uncertain = true}, once the
+    -- hello is ready (frame_end; after a reset, the post-reset hello); the server journals it and this
+    -- side's next party snapshot settles the link. Mirror of lua/gen2/client.lua trade_uncertain.
+    local function trade_uncertain(st, why)
+        hud.show("TRADE UNCERTAIN - CHECK PARTY", 255, 64, 64, 600)
+        log("[SLink-gen1] apply_trade uncertain: " .. why .. "; no release, no key claim")
+        self.trade_owed = { event = "trade_done", fields = { token = st.token, uncertain = true } }
+    end
+    -- Mirror of Gen 2's trade_forget: before the commit boundary nothing was mutated and nothing
+    -- is claimed; after it, uncertain.
+    function self:trade_forget(why)
+        local st = self.trade_state
+        if st and st.kind == "apply" and st.committing then trade_uncertain(st, tostring(why)) end
+        self.trade_state = nil
+    end
+
     -- Per-frame: watch the lease for the receptionist questions and the native completions.
     function self:trade_tick()
         if not self.trade_enabled or not self.trade then return end
@@ -1885,8 +1907,7 @@ function Client.new(p)
                     -- native append uncertain (T-5 limit): the cartridge keeps the lease; no release, no claim
                     if not st.warned then
                         st.warned = true
-                        hud.show("TRADE UNCERTAIN - CHECK PARTY", 255, 64, 64, 600)
-                        log("[SLink-gen1] apply_trade: native result 2 (uncertain); holding, no release")
+                        trade_uncertain(st, "native result 2; holding")
                     end
                     return
                 end
@@ -1989,6 +2010,11 @@ function Client.new(p)
         self.hello_sent = connected == true
         if self.frame % Client.VALIDATE_EVERY == 0 then self:validate() end
         connected = connected and self.hello_session:status().ready
+        if connected and self.trade_owed then -- trade_uncertain: never before the (post-reset) hello
+            local owed = self.trade_owed
+            self.trade_owed = nil
+            send(owed.event, owed.fields)
+        end
         for _, sig in ipairs(self.signals and self.signals:drain() or {}) do
             local ok, err = pcall(self.on_signal, self, sig)
             if not ok then log("[SLink-gen1] signal " .. tostring(sig.kind) .. ": " .. tostring(err)) end
