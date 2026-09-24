@@ -60,11 +60,12 @@ SCHEMA = "gen2-w6-gate-v1"
 TITLES = ("crystal", "gold", "silver")
 LEGS = ("panel", "sfx", "u1")
 STAGGER = 60          # seconds between this lane's EmuHawk launches (other lanes share the machine)
-# main 2026-09-23: the U1 leg runs the FROZEN U1e chain (catch, save, poison, battle faint, whiteout), not U1f's
-# in-development PC leg, which joins the corpus once it passes and is receipted (one more W6 re-run then).
+# main 2026-09-23: the U1 leg runs the FROZEN U1e chain (catch, save, poison, battle faint, whiteout) at a7bf1773,
+# not U1f's in-development PC leg, which joins the corpus once it passes and is receipted (one more W6 re-run
+# then). The faint driver is taken at c60c45c3: its 0-PP fix (live: the frozen driver loops on TAIL WHIP at 0 PP).
 U1_REF = "a7bf1773"
-U1_FROZEN = ("lua/tests/gen2_frame_align.lua", "lua/tests/gen2_poison_inputs.lua", "lua/tests/duo/gen2_faint_inputs.lua",
-             "tests/live/test_gen2_frame_align.py")
+U1_FROZEN = {"lua/tests/gen2_frame_align.lua": U1_REF, "lua/tests/gen2_poison_inputs.lua": U1_REF,
+             "lua/tests/duo/gen2_faint_inputs.lua": "c60c45c3", "tests/live/test_gen2_frame_align.py": U1_REF}
 IN_PLACE_CODE = ("SlinkStartMenuEntry",)   # patch/gen2/src/panel_start.asm, bank 4
 INIT_LOOP = bytes.fromhex("3600230b78b120f8")   # Init.ByteFill: ld [hl],0 / inc hl / dec bc / ld a,b / or c / jr nz
 
@@ -117,17 +118,17 @@ def symbolize(title: str, key: str, repo: Path = REPO) -> str:
     return f"{key} {best[1]}+0x{addr - best[0]:x}" if best else key
 
 
-def frozen_u1(ref: str = U1_REF):
-    """U1_FROZEN at `ref` under .cache/gen2-w6-frozen/<ref> (the Lua wrapper serves them in place of the worktree
-    files), their sha256s, and the frozen test module (u1_facts, verify, U1_FIXTURE, GATE)."""
-    base = REPO / ".cache/gen2-w6-frozen" / ref
+def frozen_u1():
+    """Each U1_FROZEN file at its ref under .cache/gen2-w6-frozen/<U1_REF> (the Lua wrapper serves them in place of
+    the worktree files), {path: {ref, sha256}}, and the frozen test module (u1_facts, verify, U1_FIXTURE, GATE)."""
+    base = REPO / ".cache/gen2-w6-frozen" / U1_REF
     files = {}
-    for rel in U1_FROZEN:
+    for rel, ref in U1_FROZEN.items():
         data = subprocess.run(["git", "show", f"{ref}:{rel}"], cwd=REPO, capture_output=True, check=True).stdout
         (base / rel).parent.mkdir(parents=True, exist_ok=True)
         (base / rel).write_bytes(data)
-        files[rel] = hashlib.sha256(data).hexdigest()
-    spec = importlib.util.spec_from_file_location("w6_frozen_u1", base / U1_FROZEN[-1])
+        files[rel] = {"ref": ref, "sha256": hashlib.sha256(data).hexdigest()}
+    spec = importlib.util.spec_from_file_location("w6_frozen_u1", base / "tests/live/test_gen2_frame_align.py")
     module = importlib.util.module_from_spec(spec)
     path = list(sys.path)
     spec.loader.exec_module(module)
