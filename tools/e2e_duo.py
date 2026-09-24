@@ -1001,7 +1001,7 @@ def terminal_result(text):
     return lines[-1] if lines else ""
 
 
-def wait_for(desc, pred, timeout, interval=2.0):
+def wait_for(desc, pred, timeout, interval=0.2):
     deadline = time.time() + timeout
     while time.time() < deadline:
         v = pred()
@@ -2161,7 +2161,7 @@ class DuoRun:
         return gen3_decode(self._gen3_fixture_bytes(inst), rr=self._gen3_rr)
 
     # ── lifecycle ────────────────────────────────────────────────────────────
-    def wait_for(self, desc, pred, timeout, interval=2.0):
+    def wait_for(self, desc, pred, timeout, interval=0.2):  # ponytail: 0.2 s cut ~2 s/row (W23); raise if polling ever costs CPU
         """`wait_for`, with the cartridges' terminal RESULT lines as a second exit.
 
         Every orchestrate-time wait goes through this (the module-level `wait_for` stays for
