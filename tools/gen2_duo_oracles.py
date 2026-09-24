@@ -745,7 +745,8 @@ def validate_faint_active_markers(results, *, title_b, key_a, key_b, species_b):
     return {"active": active, "write": write, "next_mon": next_mon, "replaced": replaced}
 
 
-def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram, active=False):
+def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram, active=False, engine=("battle_faint", "battle")):
+    site, cause = engine
     from server.adapters import gen2_codec as codec
 
     check_save_witness(results)
@@ -758,7 +759,7 @@ def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram, active=Fa
                     f"{inst}: save counters must be integers")
         if inst == "a":
             _faint_need(isinstance(client.get("registered_sites"), list)
-                        and "battle_faint" in client["registered_sites"], "A production signals lack battle_faint")
+                        and site in client["registered_sites"], f"A production signals lack {site}")
         layout = codec.for_foundation(title)
         _faint_need(client.get("rom_sha1") == layout.profile["titles"][title]["rom_sha1"], f"{inst}: wrong ROM pin")
         stage = _one_marker(text, "LINK_SAVE")
@@ -819,7 +820,7 @@ def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram, active=Fa
                             "B other mons or target non-HP/status bytes changed")
     a_key, b_key = decoded["a"]["key"], decoded["b"]["key"]
     faint, sent = _one_marker(results["a"], "ENGINE_FAINT"), _one_marker(results["a"], "FAINT_SENT")
-    _faint_need(faint.get("site_id") == "battle_faint" and faint.get("cause") == "battle"
+    _faint_need(faint.get("site_id") == site and faint.get("cause") == cause
                 and faint.get("key") == sent.get("key") == a_key, "A faint event/key/cause differs")
     _faint_need(type(faint.get("slot")) is int and 0 <= faint["slot"] < len(parties["a"][2])
                 and codec.key(parties["a"][2][faint["slot"]]) == a_key
@@ -1639,3 +1640,308 @@ def clause_oracle(results, *, kind, data_dir, boot_saveram, pending_snapshot=Non
             on_verified(facts)
     except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError) as exc:
         raise RuntimeError(f"clause evidence missing or malformed: {exc}") from exc
+
+
+# --- DUO-WAVE-C: whiteout, pc_ops, changebox (roadmap rows 9-11) ------------------------------------
+#
+# Each oracle re-derives its claim from the immutable LINK_SAVE images, the final flushed saves (PYDEC via
+# gen2_codec, each side with its own title's layout), the server's links.json and server.log. The marker
+# verdicts of lua/tests/duo/scenario_gen2_{whiteout,pc_ops,changebox}.lua are never trusted alone.
+
+def _wave_need(condition, reason):
+    if not condition:
+        raise RuntimeError(f"wave-c: {reason}")
+
+
+def _wave_head(results, inst, scenario, schema):
+    """Sole PASS, production client, scenario/player header, receipt schema -> (witness, layout, title)."""
+    from server.adapters import gen2_codec as codec
+
+    text = results[inst]
+    _reconnect_pass(text)
+    witness, client, title = _boot_marker(inst, text)
+    head, receipt = _one_marker(text, "DUO_GEN2"), _one_marker(text, "RECEIPT")
+    _wave_need(client.get("production_admitted") is True and head.get("player") == inst
+               and head.get("scenario") == scenario and receipt.get("schema") == schema,
+               f"{inst}: production/header/receipt schema differs")
+    layout = codec.for_foundation(title)
+    _wave_need(client.get("rom_sha1") == layout.profile["titles"][title]["rom_sha1"], f"{inst}: wrong ROM pin")
+    return witness, layout, title
+
+
+def _wave_stage(text, inst, layout, witness):
+    """LINK_SAVE: an immutable checksum-valid image, older than the final witnessed save -> (stage, raw)."""
+    from server.adapters import gen2_codec as codec
+
+    stage = _one_marker(text, "LINK_SAVE")
+    raw = Path(stage["saveram_path"]).read_bytes()
+    _wave_need(stage.get("saveram_bytes") == len(raw) == SAVERAM_BYTES and stage.get("cartram_bytes") == CARTRAM_BYTES
+               and hashlib.sha256(raw[:CARTRAM_BYTES]).hexdigest() == stage.get("cartram_sha256"),
+               f"{inst}: LINK_SAVE size/hash differs")
+    _wave_need(codec.strict_checksum_witness(raw[:CARTRAM_BYTES], layout)["valid"], f"{inst}: LINK_SAVE checksum refused")
+    _wave_need(type(stage.get("gate_saves")) is int and type(witness.get("gate_saves")) is int
+               and witness["gate_saves"] > stage["gate_saves"] >= 1
+               and _frame(stage, "save_completed_frame") < _frame(witness, "save_completed_frame"),
+               f"{inst}: the final save is not newer than LINK_SAVE")
+    return stage, raw
+
+
+def _wave_lines(text, prefix):
+    return [(at, line) for at, line in enumerate(text.splitlines()) if line.startswith(prefix)]
+
+
+def _wave_after(rows, at):
+    return [row for row in rows if row[0] > at]
+
+
+def _wave_saved_current_box(raw, layout):
+    from tools.gen2_fixtures import _saved_field
+
+    return _saved_field(raw[:CARTRAM_BYTES], layout, "wCurBox", 1)[0]
+
+
+def _wave_b_bench(results, decoded, layout, stage_raw, witness, stages):
+    """B's half of a propagated death (as faint_oracle): memorial of the zeroed record, only HP/status changed."""
+    from server.adapters import gen2_codec as codec
+
+    key = decoded["b"]["key"]
+    linked = codec.decode_saved_party(stage_raw[:CARTRAM_BYTES], layout, copy_name="primary")["mons"]
+    observed, _ = _memorial_party(results["b"], key, layout, stages["b"]["saveram_path"], witness)
+    _wave_need([codec.key(m) for m in linked] == [codec.key(m) for m in observed], "B party order/identity changed")
+    for before, after in zip(linked, observed, strict=True):
+        expected = bytearray.fromhex(before["raw_hex"])
+        if codec.key(before) == key:
+            expected[layout.constants["MON_STATUS"]] = 0
+            at = layout.constants["MON_HP"]
+            expected[at:at + 2] = bytes(2)
+        _wave_need(after["raw_hex"] == expected.hex()
+                   and all(after[f] == before[f] for f in ("ot_raw_hex", "nickname_raw_hex", "species_marker")),
+                   "B other mons or target non-HP/status bytes changed")
+    _bench_faint_writes(results, {"b": (layout, linked, observed, witness)}, stages, key)
+
+
+def _wave_memorial_settled(log, since, decoded, document, area_id):
+    end = log.find(f"pair in {area_id} fully memorialized", since)
+    _wave_need(end >= 0, "server lacks the memorial transition after the death")
+    pending = document.get("pending_memorials")
+    for inst in ("a", "b"):
+        key = decoded[inst]["key"]
+        ack = re.search(rf"\[{inst}\] memorialize_done key=" + re.escape(key[:8]) + r"(?:\s|$)", log[since:end])
+        _wave_need(ack and isinstance(pending, dict) and isinstance(pending.get(inst), list) and key not in pending[inst],
+                   f"server lacks a settled {inst} memorial")
+
+
+def _whiteout_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
+    from server.adapters import gen2_codec as codec
+
+    check_save_witness(results)
+    heads, stages, raws = {}, {}, {}
+    for inst in ("a", "b"):
+        heads[inst] = _wave_head(results, inst, "gen2_whiteout", "gen2-duo-whiteout-v1")
+        stages[inst], raws[inst] = _wave_stage(results[inst], inst, heads[inst][1], heads[inst][0])
+    decoded, row, document = _pair_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids,
+                                          boot_saveram=boot_saveram, status="memorial",
+                                          snapshots={inst: stages[inst]["saveram_path"] for inst in ("a", "b")})
+    _wave_need(row.get("cause") == "battle" and row.get("initiating_player") == "a" and row.get("killed_at"),
+               "server death is not A's battle faint")
+    a_key, b_key = decoded["a"]["key"], decoded["b"]["key"]
+    a, (witness, layout, _title) = results["a"], heads["a"]
+    # A: the starter's engine faint, then the linked key's; the pre-heal whiteout party all at HP 0; the heal revives
+    faints = _tag_rows(a, "ENGINE_FAINT")
+    linked = codec.decode_saved_party(raws["a"][:CARTRAM_BYTES], layout, copy_name="primary")["mons"]
+    linked_keys = [codec.key(m) for m in linked]
+    _wave_need(len(linked) == 2 and a_key in linked_keys, "A's linked party is not [starter, linked catch]")
+    starter = next(k for k in linked_keys if k != a_key)
+    _wave_need([f.get("key") for _, f in faints] == [starter, a_key]
+               and all(f.get("site_id") == "battle_faint" and f.get("cause") == "battle" for _, f in faints),
+               "A's engine faints are not the starter's, then the linked key's")
+    whiteout, revived = _one_marker(a, "ENGINE_WHITEOUT"), _one_marker(a, "REVIVED")
+    party = whiteout.get("party")
+    _wave_need(whiteout.get("site_id") == "whiteout_before_heal" and isinstance(party, list)
+               and sorted(m.get("key") for m in party) == sorted(linked_keys) and all(m.get("hp") == 0 for m in party),
+               "the pre-heal whiteout party is not the linked party at HP 0")
+    _wave_need(revived.get("key") == a_key and type(revived.get("hp")) is int and revived["hp"] > 0
+               and _frame(faints[1][1]) <= _frame(whiteout) <= _frame(revived), "no revived linked mon after the whiteout")
+    whiteouts = [line for _, line in _wave_lines(a, "TX ") if '"event":"whiteout"' in line]
+    _wave_need(len(whiteouts) == 1 and not any('"event":"whiteout"' in line for _, line in _wave_lines(results["b"], "TX ")),
+               "exactly one whiteout event, from A only")
+    # A's final save: the dead key only in Box 14 (the native deposit of the observed record); the starter healed
+    saved = Path(witness["saveram_path"]).read_bytes()
+    final, inventory = _clause_inventory(saved, layout)
+    _, original = _clause_inventory(raws["a"], layout)
+    _wave_need(set(inventory) == set(original), "A's saved inventory changed identity")
+    box_number = layout.constants["NUM_BOXES"] - 1
+    _wave_need(inventory[a_key][0] == box_number and [codec.key(m) for m in final] == [starter]
+               and final[0]["hp"] == final[0]["max_hp"] > 0 and final[0]["status"] == 0,
+               "A's save is not the healed starter with the dead key in Box 14")
+    preimage, ack = _one_marker(a, "MEMORIAL_PREIMAGE"), _one_marker(a, "MEMORIAL_ACK")
+    raw = _hex_bytes(preimage.get("raw_hex"), layout.party_size, "memorial preimage")
+    ot = _hex_bytes(preimage.get("ot_raw_hex"), layout.name_size, "memorial OT")
+    nickname = _hex_bytes(preimage.get("nickname_raw_hex"), layout.nickname_size, "memorial nickname")
+    mon = codec.decode_party_mon(raw, layout, species_marker=preimage.get("species_marker"), ot=ot, nickname=nickname)
+    boxed = inventory[a_key][1]
+    _wave_need(codec.key(mon) == preimage.get("key") == a_key and ack.get("event") == "memorialize_done"
+               and ack.get("key") == a_key and ack.get("box") == box_number
+               and boxed["raw_hex"] == _deposited_record(mon["raw_hex"], layout).hex()
+               and boxed["ot_raw_hex"] == mon["ot_raw_hex"] and boxed["nickname_raw_hex"] == mon["nickname_raw_hex"],
+               "A's Box 14 record is not the native deposit of the observed dead mon")
+    writes = _tag_rows(a, "PARTY_HP_WRITE")
+    _wave_need(len(writes) <= 1, "more than one repair write on A")
+    repair = "memorial_first"
+    if writes:
+        _, write = writes[0]
+        n = layout.party_size * layout.constants["PARTY_LENGTH"]
+        before, after = (_hex_bytes(write.get(f), n, f) for f in ("before_party_hex", "after_party_hex"))
+        mons = [codec.decode_party_mon(before[i * layout.party_size:(i + 1) * layout.party_size], layout,
+                                       species_marker=before[i * layout.party_size]) for i in range(len(linked))]
+        done = [codec.decode_party_mon(after[i * layout.party_size:(i + 1) * layout.party_size], layout,
+                                       species_marker=after[i * layout.party_size]) for i in range(len(linked))]
+        _wave_need(mons[write["slot"]]["hp"] > 0, "the repair write zeroed a mon that was not revived")
+        _faint_write(write, layout, mons, done, a_key)
+        _wave_need(mon["hp"] == 0 and _frame(revived) <= _frame(write) <= _frame(preimage), "repair write chronology differs")
+        repair = "written"
+    # B: the propagated bench death, exactly as faint_oracle
+    _wave_b_bench(results, decoded, heads["b"][1], raws["b"], heads["b"][0], stages)
+    # server: A's faint -> force_faint to B; the O-24 re-issue of A's own revived key; both memorials settled
+    log = (Path(data_dir) / "server.log").read_text(encoding="utf-8", errors="replace")
+    issued = re.search(r"\[a\] faint → force_faint b:" + re.escape(b_key) + r"(?:\s|$)", log)
+    _wave_need(issued, "server did not issue force_faint to B")
+    rekill = re.search(r"\[a\] " + re.escape(a_key) + r" is dead but alive in party \(hp=\d+\) — re-issued force_faint",
+                       log[issued.end():])
+    _wave_need(rekill, "server did not re-issue force_faint (O-24) for A's revived key")
+    _wave_need(f"RX force_faint key={a_key}" in a.splitlines(), "A never received the O-24 force_faint")
+    _wave_memorial_settled(log, issued.end(), decoded, document, area_id)
+    return {**_verified_facts(decoded, area_id, "memorial"), "repair": repair}
+
+
+def whiteout_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_saveram=None, on_verified=None):
+    """D-7/W-7 + O-24: the heal revives the dead linked mon, the server re-kills it, the memorial holds it."""
+    try:
+        facts = _whiteout_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids, boot_saveram=boot_saveram)
+        if on_verified is not None:
+            on_verified(facts)
+    except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError, StopIteration) as exc:
+        raise RuntimeError(f"whiteout evidence missing or malformed: {exc}") from exc
+
+
+def _pc_ops_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
+    from server.adapters import gen2_codec as codec
+
+    check_save_witness(results)
+    heads, stages, raws = {}, {}, {}
+    for inst in ("a", "b"):
+        heads[inst] = _wave_head(results, inst, "gen2_pc_ops", "gen2-duo-pc-ops-v1")
+        stages[inst], raws[inst] = _wave_stage(results[inst], inst, heads[inst][1], heads[inst][0])
+    decoded, row, _document = _pair_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids,
+                                           boot_saveram=boot_saveram, status="alive",
+                                           snapshots={inst: stages[inst]["saveram_path"] for inst in ("a", "b")})
+    keys = {inst: decoded[inst]["key"] for inst in ("a", "b")}
+    link_at = {inst: _wave_lines(results[inst], "LINK_SAVE ")[0][0] for inst in ("a", "b")}
+    # A: the binder's PC events and the wire, in order, all for the linked key; the box release is not sent (S-6)
+    a = results["a"]
+    events = [(at, row_) for at, row_ in _tag_rows(a, "ENGINE_PC") if at > link_at["a"]]
+    _wave_need([(e.get("kind"), e.get("collection"), e.get("key")) for _, e in events]
+               == [("party_to_box", None, keys["a"]), ("box_to_party", None, keys["a"]),
+                   ("party_to_box", None, keys["a"]), ("pc_release", "box", keys["a"])],
+               "A's engine PC events are not deposit, withdraw, deposit, box release of the linked key")
+    # TX lines are clipped at 220 chars by the driver: read the two fields, never the whole object
+    sends = [(at, {"event": (re.search(r'"event":"(\w+)"', line) or [None, None])[1],
+                   "key": (re.search(r'"key":"([^"]+)"', line) or [None, None])[1]})
+             for at, line in _wave_after(_wave_lines(a, "TX "), link_at["a"])]
+    storage = [(at, m) for at, m in sends if m.get("event") in ("party_to_box", "box_to_party")]
+    _wave_need([(m["event"], m.get("key")) for _, m in storage]
+               == [("party_to_box", keys["a"]), ("box_to_party", keys["a"]), ("party_to_box", keys["a"])]
+               and all(storage[i][0] > events[i][0] for i in range(3)) and events[3][0] > storage[2][0],
+               "A's storage sends are not the three transfers after their engine events")
+    # B: box_mon, party_mon, box_mon for its own linked key, each physically run, and nothing of its own on the wire
+    b = results["b"]
+    rx = [line for _, line in _wave_after(_wave_lines(b, "RX "), link_at["b"])
+          if line.split(" ")[1] in ("box_mon", "party_mon", "force_faint", "memorialize")]
+    _wave_need(rx == [f"RX {cmd} key={keys['b']}" for cmd in ("box_mon", "party_mon", "box_mon")],
+               "B's mirrored commands are not box_mon, party_mon, box_mon for its key")
+    _wave_need(not any('"event":"party_to_box"' in l or '"event":"box_to_party"' in l for _, l in _wave_lines(b, "TX ")),
+               "B sent a storage event of its own")
+    # the saves: A's catch released (in no party or box), B's boxed; every other mon where the link left it
+    finals = {}
+    for inst in ("a", "b"):
+        layout, witness = heads[inst][1], heads[inst][0]
+        final, inventory = _clause_inventory(Path(witness["saveram_path"]).read_bytes(), layout)
+        _, original = _clause_inventory(raws[inst], layout)
+        others = set(original) - {keys[inst]}
+        _wave_need(others <= set(inventory) and all(inventory[k][0] == original[k][0] for k in others),
+                   f"{inst}: an unrelated mon moved")
+        finals[inst] = (final, inventory)
+    _wave_need(keys["a"] not in finals["a"][1] and set(finals["a"][1]) == set(_clause_inventory(raws["a"], heads["a"][1])[1]) - {keys["a"]},
+               "A's released key is still in its save")
+    place = finals["b"][1].get(keys["b"], (None,))[0]
+    _wave_need(place not in (None, "party") and place == _wave_saved_current_box(Path(heads["b"][0]["saveram_path"]).read_bytes(), heads["b"][1]),
+               "B's linked key is not in its current box")
+    # the server: two mirrored deposits and one withdrawal; the release is invisible, the pair stays ALIVE
+    log = (Path(data_dir) / "server.log").read_text(encoding="utf-8", errors="replace")
+    box_mon = re.findall(r"\[a\] party_to_box " + re.escape(keys["a"][:8]) + r" → box_mon b:" + re.escape(keys["b"][:8]), log)
+    party_mon = re.findall(r"\[a\] box_to_party " + re.escape(keys["a"][:8]) + r" → party_mon b:" + re.escape(keys["b"][:8]), log)
+    _wave_need(len(box_mon) == 2 and len(party_mon) == 1, "server did not mirror two deposits and one withdrawal")
+    _wave_need(row.get("status") == "alive" and not row.get("killed_at"),
+               "the released pair is no longer alive (the S-6 release gap is the documented rule)")
+    return {**_verified_facts(decoded, area_id, "alive"), "release": "unpropagated"}
+
+
+def pc_ops_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_saveram=None, on_verified=None):
+    """S-6 by play: deposit/withdraw/deposit mirrored to B physically; the box release stays local (S-6 gap)."""
+    try:
+        facts = _pc_ops_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids, boot_saveram=boot_saveram)
+        if on_verified is not None:
+            on_verified(facts)
+    except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError, StopIteration) as exc:
+        raise RuntimeError(f"pc_ops evidence missing or malformed: {exc}") from exc
+
+
+def changebox_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_saveram=None, on_verified=None):
+    """W-5: the gen2_faint proof, then B's BOX14 round trip keeps the memorial and ends on BOX1."""
+    try:
+        facts = _faint_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids, boot_saveram=boot_saveram)
+        _wave_need(facts["status"] == "memorial", "changebox needs the memorial pair")
+        b = results["b"]
+        for inst in ("a", "b"):
+            _wave_head(results, inst, "gen2_changebox", "gen2-duo-changebox-v1")
+        changes = [(at, c) for at, c in _tag_rows(b, "ENGINE_PC")]
+        _wave_need([(c.get("kind"), c.get("site_id"), c.get("old_box"), c.get("new_box")) for _, c in changes]
+                   == [("box_change", "change_box_loaded", 0, 13), ("box_change", "change_box_loaded", 13, 0)],
+                   "B's box changes are not BOX1 -> BOX14 -> BOX1")
+        to, back = _one_marker(b, "CHANGEBOX_TO"), _one_marker(b, "CHANGEBOX_BACK")
+        _wave_need(to.get("cur_box") == 13 and type(to.get("box_count")) is int and to["box_count"] >= 1
+                   and back.get("cur_box") == 0, "BOX14 did not list the memorial or B did not return to BOX1")
+        _wave_need(not any('"event":"party_to_box"' in l or '"event":"box_to_party"' in l for _, l in _wave_lines(b, "TX ")),
+                   "B sent a storage event; a box change is not a transfer")
+        _wave_need(not _tag_rows(results["a"], "ENGINE_PC"), "A changed its PC state")
+        from server.adapters import gen2_codec as codec
+
+        witness, _client, title = _boot_marker("b", b)
+        layout = codec.for_foundation(title)
+        saved = Path(witness["saveram_path"]).read_bytes()
+        _wave_need(_wave_saved_current_box(saved, layout) == 0, "B's saved current box is not BOX1")
+        _, inventory = _clause_inventory(saved, layout)
+        _wave_need(inventory.get(facts["b"], (None,))[0] == layout.constants["NUM_BOXES"] - 1,
+                   "B's memorial left Box 14 across the box change")
+        facts = {**facts, "box_change": "BOX1->BOX14->BOX1"}
+        if on_verified is not None:
+            on_verified(facts)
+    except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError, StopIteration) as exc:
+        raise RuntimeError(f"changebox evidence missing or malformed: {exc}") from exc
+
+
+def poison_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_saveram=None, on_verified=None):
+    """S-4 poison half / D-7: A's linked mon faints to overworld poison (poison_faint), B's partner is force-fainted.
+
+    The faint_oracle proof with A's engine faint bound to poison_faint/poison. The server records the death as
+    cause "battle": the wire `faint` carries no cause (state.py _handle_faint -> _propagate_faint default)."""
+    try:
+        for inst in ("a", "b"):
+            _wave_head(results, inst, "gen2_poison", "gen2-duo-poison-v1")
+        facts = _faint_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids, boot_saveram=boot_saveram,
+                              engine=("poison_faint", "poison"))
+        facts = {**facts, "death": "poison"}
+        if on_verified is not None:
+            on_verified(facts)
+    except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError, StopIteration) as exc:
+        raise RuntimeError(f"poison evidence missing or malformed: {exc}") from exc

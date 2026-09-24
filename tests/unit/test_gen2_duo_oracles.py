@@ -2275,3 +2275,304 @@ def test_duplicate_key_elsewhere_in_links_json_refused(good_case, tmp_path):
     (Path(data_dir) / "links.json").write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(RuntimeError, match="accepted something the saves don't show"):
         oracles.link_oracle(results, data_dir=data_dir)
+
+
+# ---------------------------------------------------------------------------
+# DUO-WAVE-C: whiteout, pc_ops, changebox (tools/gen2_duo_oracles.py *_oracle)
+# ---------------------------------------------------------------------------
+
+def _save_move(path, layout, *, box):
+    """The save's last party mon leaves the party: into Box `box` (0-based), or released (None)."""
+    raw = bytearray(path.read_bytes())
+    party = codec.decode_saved_party(bytes(raw[:CART]), layout, copy_name="primary")["mons"]
+    mon = party[-1]
+    if box is not None:
+        stored = codec.verify_boxes(bytes(raw[:CART]), layout)[box]
+        stored.update(count=len(stored["mons"]) + 1,
+                      mons=stored["mons"] + [{**mon, "raw_hex": mon["raw_hex"][:layout.box_mon_size * 2]}])
+        start, length = layout.storage_boxes[box]
+        raw[start:start + length] = codec.encode_box(stored, layout)
+    region = next(r for r in layout.regions if r.name == "pokemon")
+    _poke(raw, region, layout.addresses["wPartyCount"] - layout.addresses["wPokemonData"], bytes([len(party) - 1]))
+    _poke(raw, region, layout.addresses["wPartySpecies"] - layout.addresses["wPokemonData"] + len(party) - 1, bytes([255]))
+    _rechecksum(raw, layout)
+    path.write_bytes(raw)
+    return mon
+
+
+def _rechecksum(raw, layout):
+    for copy_name in ("primary", "backup"):
+        offset = layout.checksum_offsets[copy_name]
+        raw[offset:offset + 2] = codec.sav_checksum(bytes(raw[:CART]), layout, copy_name).to_bytes(2, "little")
+
+
+def _wave_text(text, *, scenario, schema, sites=None, drop=(), insert=(), before="SAVE_WITNESS ", witness=None):
+    """Retag a result for a wave-C scenario: header/receipt, drop tags, insert lines before `before`."""
+    client = oracles._last_tagged(text, "CLIENT")
+    header = oracles._last_tagged(text, "DUO_GEN2")
+    if sites is not None:
+        client["registered_sites"] = sites
+    header["scenario"] = scenario
+    out = []
+    for line in text.splitlines():
+        tag = line.split(" ", 1)[0]
+        if tag in drop or line.startswith(("RECEIPT ", "RESULT:")):
+            continue
+        if line.startswith(before):
+            out += list(insert)
+        if tag == "CLIENT":
+            line = "CLIENT " + json.dumps(client)
+        elif tag == "DUO_GEN2":
+            line = "DUO_GEN2 " + json.dumps(header)
+        elif tag == "SAVE_WITNESS" and witness is not None:
+            line = "SAVE_WITNESS " + json.dumps(witness)
+        out.append(line)
+    receipt = {"schema": schema, "title": client["title"], "rom_sha1": client["rom_sha1"]}
+    return "\n".join(out + ["RECEIPT " + json.dumps(receipt), "RESULT: PASS"])
+
+
+@pytest.fixture
+def pc_case(good_case, layout, tmp_path):
+    results, data_dir, decoded = good_case
+    rom = layout.profile["titles"]["crystal"]["rom_sha1"]
+    for inst in ("a", "b"):
+        text = results[inst]
+        final = oracles._last_tagged(text, "SAVE_WITNESS")
+        path = Path(final["saveram_path"])
+        link_path = tmp_path / f"{inst}.linked.SaveRAM"
+        link_path.write_bytes(path.read_bytes())
+        key = decoded[inst]["key"]
+        _save_move(path, layout, box=None if inst == "a" else 0)
+        final.update(frame=9000, save_completed_frame=8990, gate_saves=2, client_saves=2,
+                     cartram_sha256=hashlib.sha256(path.read_bytes()[:CART]).hexdigest())
+        link = {"frame": 5000, "key": key, "gate_saves": 1, "client_saves": 1, "save_completed_frame": 4990,
+                "saveram_path": str(link_path), "saveram_bytes": len(link_path.read_bytes()), "cartram_bytes": CART,
+                "cartram_sha256": hashlib.sha256(link_path.read_bytes()[:CART]).hexdigest()}
+        insert = ["LINK_SAVE " + json.dumps(link)]
+        if inst == "a":
+            def pc(frame, kind, **extra):
+                return "ENGINE_PC " + json.dumps({"frame": frame, "kind": kind, "site_id": "x", "key": key, **extra})
+
+            def tx(event):
+                return "TX " + json.dumps({"event": event, "key": key, "seq": 1}, separators=(",", ":"))
+            insert += [pc(6000, "party_to_box"), tx("party_to_box"), pc(6100, "box_to_party"), tx("box_to_party"),
+                       pc(6400, "party_to_box"), tx("party_to_box"), pc(6500, "pc_release", collection="box")]
+        else:
+            insert += [f"RX {cmd} key={key}" for cmd in ("box_mon", "party_mon", "box_mon")]
+        text = _wave_text(text, scenario="gen2_pc_ops", schema="gen2-duo-pc-ops-v1", insert=insert, witness=final)
+        results[inst] = text.replace('"rom_sha1": "' + "deadbeef" * 5 + '"', f'"rom_sha1": "{rom}"')
+        results[inst] = results[inst].replace('"player": "a"', f'"player": "{inst}"')
+    a, b = decoded["a"]["key"][:8], decoded["b"]["key"][:8]
+    (Path(data_dir) / "server.log").write_text(
+        f"[a] party_to_box {a} → box_mon b:{b}\n[a] box_to_party {a} → party_mon b:{b} (stats cached)\n"
+        f"[a] party_to_box {a} → box_mon b:{b}\n", encoding="utf-8")
+    return results, data_dir, decoded
+
+
+def test_pc_ops_oracle_passes_the_mirrored_moves_and_the_documented_release_gap(pc_case):
+    results, data_dir, decoded = pc_case
+    facts = []
+    assert oracles.pc_ops_oracle(results, data_dir=data_dir, on_verified=facts.append) is None
+    assert facts[0]["status"] == "alive" and facts[0]["release"] == "unpropagated"
+
+
+def _pc_fault(pc_case, fault, layout):
+    results, data_dir, decoded = pc_case
+    if fault == "a-kept":
+        witness = oracles._last_tagged(results["a"], "SAVE_WITNESS")
+        link = Path(oracles._last_tagged(results["a"], "LINK_SAVE")["saveram_path"])
+        path = Path(witness["saveram_path"])
+        path.write_bytes(link.read_bytes())
+        _save_move(path, layout, box=0)
+        new = dict(witness, cartram_sha256=hashlib.sha256(path.read_bytes()[:CART]).hexdigest())
+        results["a"] = results["a"].replace("SAVE_WITNESS " + json.dumps(witness), "SAVE_WITNESS " + json.dumps(new))
+    elif fault == "b-in-party":
+        witness = oracles._last_tagged(results["b"], "SAVE_WITNESS")
+        link = Path(oracles._last_tagged(results["b"], "LINK_SAVE")["saveram_path"])
+        Path(witness["saveram_path"]).write_bytes(link.read_bytes())
+        new = dict(witness, cartram_sha256=hashlib.sha256(link.read_bytes()[:CART]).hexdigest())
+        results["b"] = results["b"].replace("SAVE_WITNESS " + json.dumps(witness), "SAVE_WITNESS " + json.dumps(new))
+    elif fault == "one-mirror":
+        log = Path(data_dir) / "server.log"
+        log.write_text("\n".join(log.read_text(encoding="utf-8").splitlines()[:2]) + "\n", encoding="utf-8")
+    elif fault == "party-release":
+        results["a"] = results["a"].replace('"collection": "box"', '"collection": "party"')
+    elif fault == "b-order":
+        key = decoded["b"]["key"]
+        results["b"] = results["b"].replace(f"RX party_mon key={key}", "RX tmp").replace(
+            f"RX box_mon key={key}\nRX tmp", f"RX party_mon key={key}\nRX box_mon key={key}", 1)
+    elif fault == "dead":
+        path = Path(data_dir) / "links.json"
+        doc = json.loads(path.read_text())
+        doc["links"][0].update(status="dead", killed_at="2026-09-24T00:00:00Z")
+        path.write_text(json.dumps(doc))
+    return results, data_dir
+
+
+@pytest.mark.parametrize("fault,match", [
+    ("a-kept", "released key is still"), ("b-in-party", "not in its current box"), ("one-mirror", "mirror two deposits"),
+    ("party-release", "engine PC events"), ("b-order", "mirrored commands"), ("dead", "alive")])
+def test_pc_ops_oracle_refuses_independent_save_server_and_marker_faults(pc_case, fault, match, layout):
+    results, data_dir = _pc_fault(pc_case, fault, layout)
+    with pytest.raises(RuntimeError, match=match):
+        oracles.pc_ops_oracle(results, data_dir=data_dir)
+
+
+@pytest.fixture
+def changebox_case(faint_case):
+    results, data_dir = _memorial_case(faint_case)
+    j = json.dumps
+    changes = ["ENGINE_PC " + j({"frame": 7400, "kind": "box_change", "site_id": "change_box_loaded", "old_box": 0, "new_box": 13}),
+               "CHANGEBOX_TO " + j({"frame": 7450, "cur_box": 13, "box_count": 1}),
+               "ENGINE_PC " + j({"frame": 7500, "kind": "box_change", "site_id": "change_box_loaded", "old_box": 13, "new_box": 0}),
+               "CHANGEBOX_BACK " + j({"frame": 7550, "cur_box": 0, "box_count": 0})]
+    for inst in ("a", "b"):
+        results[inst] = _wave_text(results[inst], scenario="gen2_changebox", schema="gen2-duo-changebox-v1",
+                                   insert=changes if inst == "b" else ())
+    return results, data_dir
+
+
+def test_changebox_oracle_passes_the_box14_round_trip(changebox_case):
+    results, data_dir = changebox_case
+    facts = []
+    assert oracles.changebox_oracle(results, data_dir=data_dir, on_verified=facts.append) is None
+    assert facts[0]["status"] == "memorial" and facts[0]["box_change"] == "BOX1->BOX14->BOX1"
+
+
+@pytest.mark.parametrize("fault,match", [
+    ("wrong-box", "not BOX1 -> BOX14 -> BOX1"), ("unlisted", "did not list the memorial"),
+    ("transfer", "not a transfer"), ("saved-box", "saved current box is not BOX1"), ("schema", "receipt schema")])
+def test_changebox_oracle_refuses(changebox_case, fault, match, layout):
+    results, data_dir = changebox_case
+    b = results["b"]
+    if fault == "wrong-box":
+        b = b.replace('"new_box": 13', '"new_box": 12', 1)
+    elif fault == "unlisted":
+        b = b.replace('"cur_box": 13, "box_count": 1', '"cur_box": 13, "box_count": 0')
+    elif fault == "transfer":
+        b = b.replace("\nSAVE_WITNESS", '\nTX {"event":"party_to_box"}\nSAVE_WITNESS')
+    elif fault == "saved-box":
+        witness = oracles._last_tagged(b, "SAVE_WITNESS")
+        path = Path(witness["saveram_path"])
+        raw = bytearray(path.read_bytes())
+        region, offset = _region_and_offset(layout, "wCurBox")
+        _poke(raw, region, offset, bytes([13]))
+        _rechecksum(raw, layout)
+        path.write_bytes(raw)
+        new = dict(witness, cartram_sha256=hashlib.sha256(bytes(raw[:CART])).hexdigest())
+        b = b.replace("SAVE_WITNESS " + json.dumps(witness), "SAVE_WITNESS " + json.dumps(new))
+    elif fault == "schema":
+        b = b.replace("gen2-duo-changebox-v1", "gen2-duo-faint-v1")
+    results["b"] = b
+    with pytest.raises(RuntimeError, match=match):
+        oracles.changebox_oracle(results, data_dir=data_dir)
+
+
+@pytest.fixture
+def whiteout_case(faint_case):
+    results, data_dir = _memorial_case(faint_case)
+    j = json.dumps
+    layout = codec.for_foundation("crystal")
+    a = results["a"]
+    key = oracles._last_tagged(a, "ENGINE_FAINT")["key"]
+    link = Path(oracles._last_tagged(a, "LINK_SAVE")["saveram_path"]).read_bytes()
+    starter = codec.key(codec.decode_saved_party(link[:CART], layout, copy_name="primary")["mons"][0])
+    insert = ["ENGINE_FAINT " + j({"frame": 6900, "site_id": "battle_faint", "cause": "battle", "key": starter, "slot": 0}),
+              "ENGINE_FAINT " + j({"frame": 7000, "site_id": "battle_faint", "cause": "battle", "key": key, "slot": 1}),
+              "FAINT_SENT " + j({"frame": 7001, "key": key, "seq": 42}),
+              "ENGINE_WHITEOUT " + j({"frame": 7050, "site_id": "whiteout_before_heal",
+                                      "party": [{"key": starter, "hp": 0}, {"key": key, "hp": 0}]}),
+              "TX " + j({"event": "whiteout", "seq": 43}, separators=(",", ":")),
+              "REVIVED " + j({"frame": 7060, "key": key, "slot": 1, "hp": 14}),
+              f"RX force_faint key={key}"]
+    results["a"] = _wave_text(a, scenario="gen2_whiteout", schema="gen2-duo-whiteout-v1",
+                              sites=["battle_faint", "whiteout_before_heal"], drop=("ENGINE_FAINT", "FAINT_SENT"),
+                              insert=insert, before="MEMORIAL_PREIMAGE ")
+    results["b"] = _wave_text(results["b"], scenario="gen2_whiteout", schema="gen2-duo-whiteout-v1")
+    log = Path(data_dir) / "server.log"
+    first, rest = log.read_text(encoding="utf-8").split("\n", 1)
+    log.write_text(f"{first}\n[a] {key} is dead but alive in party (hp=14) — re-issued force_faint (1/3)\n{rest}",
+                   encoding="utf-8")
+    return results, data_dir
+
+
+def test_whiteout_oracle_passes_revive_rekill_and_memorial(whiteout_case):
+    results, data_dir = whiteout_case
+    facts = []
+    assert oracles.whiteout_oracle(results, data_dir=data_dir, on_verified=facts.append) is None
+    assert facts[0]["status"] == "memorial" and facts[0]["repair"] == "memorial_first"
+
+
+@pytest.mark.parametrize("fault,match", [
+    ("no-rekill", "O-24"), ("catch-first", "starter's, then the linked"), ("pre-heal-hp", "linked party at HP 0"),
+    ("not-revived", "no revived linked mon"), ("two-whiteouts", "exactly one whiteout"), ("b-whiteout", "exactly one whiteout"),
+    ("no-rx", "never received the O-24"), ("starter-hurt", "healed starter")])
+def test_whiteout_oracle_refuses(whiteout_case, fault, match, layout):
+    results, data_dir = whiteout_case
+    a = results["a"]
+    key = oracles._last_tagged(a, "REVIVED")["key"]
+    if fault == "no-rekill":
+        log = Path(data_dir) / "server.log"
+        log.write_text("\n".join(l for l in log.read_text(encoding="utf-8").splitlines() if "re-issued" not in l) + "\n",
+                       encoding="utf-8")
+    elif fault == "catch-first":
+        lines = a.splitlines()
+        i = [n for n, l in enumerate(lines) if l.startswith("ENGINE_FAINT ")]
+        lines[i[0]], lines[i[1]] = lines[i[1]], lines[i[0]]
+        a = "\n".join(lines)
+    elif fault == "pre-heal-hp":
+        a = a.replace(f'{{"key": "{key}", "hp": 0}}', f'{{"key": "{key}", "hp": 5}}')
+    elif fault == "not-revived":
+        a = a.replace('"hp": 14}', '"hp": 0}')
+    elif fault == "two-whiteouts":
+        a = a.replace("\nREVIVED", '\nTX {"event":"whiteout","seq":44}\nREVIVED')
+    elif fault == "b-whiteout":
+        results["b"] = results["b"].replace("\nSAVE_WITNESS", '\nTX {"event":"whiteout"}\nSAVE_WITNESS')
+    elif fault == "no-rx":
+        a = a.replace(f"RX force_faint key={key}\n", "")
+    elif fault == "starter-hurt":
+        witness = oracles._last_tagged(a, "SAVE_WITNESS")
+        path = Path(witness["saveram_path"])
+        _edit_saved_record(path, layout, 0, layout.constants["MON_HP"], (3).to_bytes(2, "big"))
+        new = dict(witness, cartram_sha256=hashlib.sha256(path.read_bytes()[:CART]).hexdigest())
+        a = a.replace("SAVE_WITNESS " + json.dumps(witness), "SAVE_WITNESS " + json.dumps(new))
+    results["a"] = a
+    with pytest.raises(RuntimeError, match=match):
+        oracles.whiteout_oracle(results, data_dir=data_dir)
+
+
+@pytest.fixture
+def poison_case(faint_case):
+    results, data_dir = _memorial_case(faint_case)
+    j = json.dumps
+    for inst in ("a", "b"):
+        text = results[inst]
+        if inst == "a":
+            faint = oracles._last_tagged(text, "ENGINE_FAINT")
+            text = text.replace("ENGINE_FAINT " + j(faint), "ENGINE_FAINT " + j({**faint, "site_id": "poison_faint", "cause": "poison"}))
+        results[inst] = _wave_text(text, scenario="gen2_poison", schema="gen2-duo-poison-v1",
+                                   sites=["poison_faint", "save_completed"] if inst == "a" else None)
+    return results, data_dir
+
+
+def test_poison_oracle_binds_the_death_to_poison_faint(poison_case):
+    results, data_dir = poison_case
+    facts = []
+    assert oracles.poison_oracle(results, data_dir=data_dir, on_verified=facts.append) is None
+    assert facts[0]["status"] == "memorial" and facts[0]["death"] == "poison"
+
+
+@pytest.mark.parametrize("fault,match", [
+    ("battle-death", "cause differs"), ("no-site", "lack poison_faint"), ("schema", "receipt schema")])
+def test_poison_oracle_refuses(poison_case, fault, match):
+    results, data_dir = poison_case
+    a = results["a"]
+    if fault == "battle-death":
+        a = a.replace('"site_id": "poison_faint", "cause": "poison"', '"site_id": "battle_faint", "cause": "battle"')
+    elif fault == "no-site":
+        a = a.replace('"registered_sites": ["poison_faint", "save_completed"]', '"registered_sites": ["battle_faint"]')
+    elif fault == "schema":
+        a = a.replace("gen2-duo-poison-v1", "gen2-duo-faint-v1")
+    results["a"] = a
+    with pytest.raises(RuntimeError, match=match):
+        oracles.poison_oracle(results, data_dir=data_dir)
