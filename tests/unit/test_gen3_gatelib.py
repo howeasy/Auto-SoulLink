@@ -168,7 +168,10 @@ def test_deferred_list_is_explicit_with_reasons():
     assert set(gates.UNPORTED) == set(gates.DEFERRED) | set(gates.GAP)
 
 
-@pytest.mark.parametrize("gate", gates.PORTED)
+BOUND = sorted(gates.PORTED) + sorted(gates.DEFERRED)      # every gate file in lua/tests/
+
+
+@pytest.mark.parametrize("gate", BOUND)
 def test_ported_gate_is_bound_to_gen3_gatelib_only(gate):
     src = code_of(GATE_DIR / gate)
     assert "gen3_gatelib.lua" in src
@@ -177,7 +180,7 @@ def test_ported_gate_is_bound_to_gen3_gatelib_only(gate):
 
 
 def test_ported_gates_write_distinct_result_files():
-    paths = [_result_path_for(f"lua/tests/{g}") for g in gates.PORTED]
+    paths = [_result_path_for(f"lua/tests/{g}") for g in BOUND]
     assert len(set(paths)) == len(paths)
 
 
@@ -187,7 +190,7 @@ def test_gatelib_itself_needs_no_old_client():
 
 # ── every ported gate loads and can FAIL ─────────────────────────────────────────────────
 
-@pytest.mark.parametrize("gate", [g for g in gates.PORTED if g not in gates.CLEAN_ROM_GATES])
+@pytest.mark.parametrize("gate", [g for g in BOUND if g not in gates.CLEAN_ROM_GATES])
 def test_ported_gate_fails_without_the_companion(gate, tmp_path):
     text = run_gate(gate, tmp_path)
     assert verdict(text).startswith("RESULT: FAIL"), text
@@ -225,7 +228,7 @@ def test_cold_boot_gate_fails_when_the_patch_refuses(gate, tmp_path):
     assert verdict(text).startswith("RESULT: FAIL") and "native refused" in text, text
 
 
-@pytest.mark.parametrize("gate", [g for g in gates.PORTED if g not in gates.CLEAN_ROM_GATES])
+@pytest.mark.parametrize("gate", [g for g in BOUND if g not in gates.CLEAN_ROM_GATES])
 def test_ported_gate_body_runs_to_a_verdict_against_a_fake_patch(gate, tmp_path):
     """Past the prologue: the whole gate body executes (no Lua error) and reports a verdict."""
     text = run_gate(gate, tmp_path, patch=2)
@@ -302,3 +305,43 @@ def test_evring_drain_reads_the_ring_and_advances_the_read_index(tmp_path):
     got = [(e.type, e.a, e.b) for e in evs.values()]
     assert got == [(N["EV_PLAYER_FAINT"], 3, 0), (N["EV_EVOLVE"], 1, 26)]
     assert ovf is True and fake.mem[evr + 1] == 2 and fake.mem[evr + 2] == 0
+
+
+# ── C5-4c: no gate loads the old client; the archive is never run ────────────────────────
+
+OLD_LOAD = re.compile(r"\b(?:require|dofile)\s*\(?[^\n]*?"
+                      r"(?:mailbox|memory_gba|game_detect|clients/gen3_frlge_client|peer_ghost_npc)")
+ARCHIVE = GATE_DIR / "archive" / "gen3_old_client"
+
+
+def test_old_load_pattern_catches_every_old_module():
+    for line in ['local MB = dofile(WT .. "/lua/mailbox.lua")', 'local M = require("memory_gba")',
+                 'require("game_detect")', 'dofile(ROOT .. "/lua/clients/gen3_frlge_client.lua")',
+                 'local R = require("peer_ghost_npc")', 'local MB = require "mailbox"']:
+        assert OLD_LOAD.search(line), line
+    assert not OLD_LOAD.search('local G = dofile(ROOT .. "/lua/tests/gen3_gatelib.lua")')
+
+
+def test_no_gate_requires_or_dofiles_an_old_client_module():
+    files = sorted(GATE_DIR.glob("test_live_*.lua")) + sorted(GATE_DIR.glob("test_mailbox_*.lua"))
+    assert len(files) == len(gates.gate_files()) > 0
+    hits = [f"{f.name}: {m.group(0)}" for f in files for m in [OLD_LOAD.search(code_of(f))] if m]
+    assert not hits, hits
+
+
+def test_archive_is_documented_and_never_loaded_by_the_live_runner():
+    archived = sorted(f.name for f in ARCHIVE.glob("*.lua"))
+    assert archived, "the archive holds the old-driver gates"
+    readme = (ARCHIVE / "README.md").read_text(encoding="utf-8")
+    for name in archived:
+        assert sum(1 for ln in readme.splitlines() if ln.startswith(f"- `{name}`")) == 1, name
+    listed = set(gates.gate_files()) | set(gates.PORTED) | set(gates.DEFERRED) | set(gates.GAP)
+    assert not listed & set(archived)
+    assert Path(gates.GATE_DIR).resolve() == GATE_DIR.resolve()
+    runner = (ROOT / "tests/live/test_lua_gates.py").read_text(encoding="utf-8")
+    assert "archive" not in re.sub(r'""".*?"""|#[^\n]*', "", runner, flags=re.S)
+
+
+def test_deferred_gates_are_opt_in_only():
+    assert gates.DEFERRED_OPT_IN == "SLINK_GATES_DEFERRED"
+    assert set(gates.DEFERRED).isdisjoint(gates._gates())

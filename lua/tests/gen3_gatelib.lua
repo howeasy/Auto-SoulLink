@@ -358,6 +358,56 @@ function Lib.open(name)
         return out
     end
 
+    -- ── DEFERRED-feature helpers (C5-4c): peer ghost (post-RC) and native text (off for the RC) ──
+    -- Only the opt-in deferred gates use these; they are patch ABI, not client surface.
+    local function le(v, n)
+        local out = {}
+        for i = 1, n do out[i] = v % 256; v = v // 256 end
+        return out
+    end
+    -- GhostState (profile native.GH; handlers.c struct GhostState): +1 oeId, +6 s16 wx, +8 s16 wy,
+    -- +10 face, +11 mv, +14 snap, +15 an, +16 run, +17 avatarDirty, +20 u32 imgs, +24 u32 anims.
+    function t.player_oe()
+        local id = memory.read_u8(t.P.GPLAYER_AVATAR + 0x05)
+        if id >= 16 then id = 0 end
+        return t.P.OBJECT_EVENTS_BASE + id * 0x24
+    end
+    function t.ghost_oe() return memory.read_u8(t.P.GH + 1) end   -- 0xFF until spawned
+    function t.ghost_set_pos(wx, wy, face, mv, an, run)
+        local GH = t.P.GH
+        return t.raw_stage({ { GH + 6, le(wx & 0xFFFF, 2) }, { GH + 8, le(wy & 0xFFFF, 2) },
+            { GH + 10, { (face and face >= 1 and face <= 4) and face or 1, mv and mv ~= 0 and 1 or 0 } },
+            { GH + 15, { an and (an & 0xFF) or 0, run and 1 or 0 } } })
+    end
+    function t.ghost_snap() return t.raw_stage({ { t.P.GH + 14, { 1 } } }) end
+    -- imgs/anims: the partner's live sprite ROM ptrs; pcol_hex: 16 BGR555 u16 as "%04X" each.
+    -- avatarDirty goes last so the patch applies a complete avatar.
+    function t.ghost_set_avatar(imgs, anims, pcol_hex)
+        local stages = { { t.P.GH + 20, le(imgs or 0, 4) }, { t.P.GH + 24, le(anims or 0, 4) } }
+        if pcol_hex and #pcol_hex >= 64 then
+            local pal = {}
+            for i = 0, 15 do
+                for _, b in ipairs(le((tonumber(pcol_hex:sub(i * 4 + 1, i * 4 + 4), 16) or 0) & 0xFFFF, 2)) do
+                    pal[#pal + 1] = b
+                end
+            end
+            stages[#stages + 1] = { t.P.GHOST_PAL_BUF, pal }
+        end
+        stages[#stages + 1] = { t.P.GH + 17, { 1 } }
+        return t.raw_stage(stages)
+    end
+    function t.ghost_spawn(gfx) return t.raw_wait("OP_GHOST_SPAWN", { gfx or 0, t.P.LOCALID }, nil, 30) end
+    function t.ghost_clear() return t.raw_wait("OP_GHOST_CLEAR", {}, nil, 30) end
+    function t.peer_interact_count() return memory.read_u8(t.P.PI_COUNT) end
+
+    -- TEXT_BUF stage for the message opcodes: FR text, optional colour prefix 0xFC 0x01 <id>,
+    -- truncated to the 256-byte buffer (old client MB.write_message layout).
+    function t.message_stage(text, color)
+        local bytes = color and { 0xFC, 0x01, color } or {}
+        for _, b in ipairs(t.encode(text, 256 - #bytes)) do bytes[#bytes + 1] = b end
+        return { t.P.TEXT_BUF, bytes }
+    end
+
     -- EvRing (profile native.EVR): wr @+0, rd @+1, overflow @+2, prim @+6, u32[8] ring @+8.
     -- init/drain write the read index / overflow through the raw poster's window.
     function t.events_init()

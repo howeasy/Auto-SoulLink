@@ -10,12 +10,15 @@ new native.lua surface.
 
 Every gate file is in exactly one of three lists (tests/unit/test_gen3_gatelib.py enforces it):
   PORTED    runs live through gen3_gatelib;
-  DEFERRED  owner-deferred post-RC feature (docs/gen3/TODO.md) — reported as a skip with the reason;
+  DEFERRED  owner-deferred post-RC feature (docs/gen3/TODO.md). Also bound to gen3_gatelib (C5-4c),
+            but skipped with the reason unless SLINK_GATES_DEFERRED=1 opts in;
   GAP       needs something neither native.lua nor the raw poster provides — a skip naming it.
-Deferred and gap gates still use the old binding and are never run here.
+Gates that tested the old client's own driver live in lua/tests/archive/gen3_old_client/ (see its
+README); this file only ever scans lua/tests/ itself, so they are never loaded.
 
-    SLINK_LIVE=1 pytest tests/live/test_lua_gates.py -q                 # everything
-    SLINK_LIVE=1 pytest tests/live/test_lua_gates.py -q -k playse       # one gate
+    SLINK_LIVE=1 pytest tests/live/test_lua_gates.py -q                           # the RC set
+    SLINK_LIVE=1 pytest tests/live/test_lua_gates.py -q -k playse                 # one gate
+    SLINK_LIVE=1 SLINK_GATES_DEFERRED=1 pytest tests/live/test_lua_gates.py -q    # + deferred
 
 Each gate is skipped (never hung) when its prerequisite is missing. That matters for the
 savestate in particular: BizHawk stops on a modal version dialog when handed a state from
@@ -83,26 +86,21 @@ PORTED = (
 # Negative controls: they assert the patch is ABSENT, so they need the unpatched ROM.
 CLEAN_ROM_GATES = {"test_mailbox_absent.lua"}
 
-_GHOST = "peer ghost deferred post-RC (owner 2026-09-22, docs/gen3/TODO.md): no lua/gen3/ghost.lua"
-_TEXT = "native text disabled for the RC (owner 2026-09-23, docs/gen3/TODO.md): no message opcodes"
+_GHOST = "peer ghost deferred post-RC (owner 2026-09-22, docs/gen3/TODO.md)"
+_TEXT = "native text disabled for the RC (owner 2026-09-23, docs/gen3/TODO.md)"
+DEFERRED_OPT_IN = "SLINK_GATES_DEFERRED"
 DEFERRED = {
     "test_live_ghostavatar.lua": _GHOST,
     "test_live_ghostbattle.lua": _GHOST,
-    "test_live_ghostdoor.lua": _GHOST,
     "test_live_ghostlayer.lua": _GHOST,
-    "test_live_ghostorphan.lua": _GHOST,
-    "test_live_ghostreceiver.lua": _GHOST,
-    "test_live_ghostscript.lua": _GHOST + "; also OP_SHOW_MESSAGE (native text)",
     "test_live_ghostshow.lua": _GHOST,
-    "test_live_ghoststutter.lua": _GHOST,
     "test_live_ghosttint.lua": _GHOST,
     "test_live_ghostwarp.lua": _GHOST,
     "test_live_peerinteract.lua": _GHOST + " (OP_GHOST_SPAWN talk-to-ghost)",
     "test_live_spawnnpc.lua": _GHOST + " (OP_SPAWN/DESPAWN_PEER_NPC, the ghost's engine NPC)",
     "test_live_battlemsg.lua": _TEXT + " (OP_SHOW_BATTLE_MESSAGE)",
-    "test_live_message.lua": _TEXT + " (OP_SHOW_MESSAGE; also OP_PLAY_FANFARE, not in native.lua)",
+    "test_live_message.lua": _TEXT + " (OP_SHOW_MESSAGE; OP_PLAY_FANFARE rides with it)",
     "test_live_msgboxdismiss.lua": _TEXT + " (OP_SHOW_MESSAGE)",
-    "test_live_msgbox_route.lua": _TEXT + " (OP_SHOW_MESSAGE)",
 }
 GAP = {}   # C5-4b ported every former gap onto the raw poster
 UNPORTED = {**{g: "DEFERRED: " + r for g, r in DEFERRED.items()},
@@ -114,7 +112,8 @@ def _gates():
 
 
 def gate_files():
-    """Every opcode gate file on disk (the manifest must cover exactly these)."""
+    """Every opcode gate file on disk (the manifest must cover exactly these). lua/tests/ only:
+    the archive folder is never listed, so an archived gate can never be run from here."""
     return sorted(f for f in os.listdir(GATE_DIR)
                   if (f.startswith("test_live_") or f.startswith("test_mailbox_"))
                   and f.endswith(".lua"))
@@ -146,8 +145,8 @@ def clean_rom():
     return CLEAN_REL
 
 
-@pytest.mark.parametrize("gate", _gates())
-def test_gate(gate, emu_version, request):
+def _run(gate, request):
+    emu_version = request.getfixturevalue("emu_version")
     need = _required_state(gate)
     if need:
         path = os.path.join(mkstates.STATE_DIR, need)
@@ -160,6 +159,18 @@ def test_gate(gate, emu_version, request):
                     f"result: {result_path}\n{text[-2000:]}")
 
 
-@pytest.mark.parametrize("gate", sorted(UNPORTED))
-def test_unported_gate(gate):
-    pytest.skip(UNPORTED[gate])
+@pytest.mark.parametrize("gate", _gates())
+def test_gate(gate, request):
+    _run(gate, request)
+
+
+@pytest.mark.parametrize("gate", sorted(DEFERRED))
+def test_deferred_gate(gate, request):
+    if os.environ.get(DEFERRED_OPT_IN) != "1":
+        pytest.skip(f"DEFERRED: {DEFERRED[gate]} — set {DEFERRED_OPT_IN}=1 to run it")
+    _run(gate, request)
+
+
+@pytest.mark.parametrize("gate", sorted(GAP))
+def test_gap_gate(gate):
+    pytest.skip("GAP: " + GAP[gate])
