@@ -17,10 +17,13 @@ Packs (PLAN §4, §5.1):
                                         firered_ap (`.ap`) and emerald (`.emerald`), copied
                                         verbatim so no data is lost
     data/games/gen3_rr/profile.json     title radical_red (`.radical_red`) + a `native` block
-                                        for kind `companion`: the companion-patch mailbox ABI
-                                        (lua/mailbox.lua) and the ghost/object-event addresses
-                                        (lua/peer_ghost_npc.lua), each with its source file:line
-                                        in the sibling `_src` map
+                                        for kind `companion`: the companion-patch mailbox ABI and
+                                        the ghost/object-event addresses, sourced from the patch's
+                                        own C (patch/src/handlers.c -- the companion is BUILT from
+                                        it, so it is the ABI's actual authority, not a copy of it;
+                                        C5-6 deleted the old lua/mailbox.lua + lua/peer_ghost_npc.lua
+                                        scrape targets), each with its source file:line in the
+                                        sibling `_src` map
 
     python tools/gen_gen3_profile.py            # rewrite both profiles
     python tools/gen_gen3_profile.py --check    # exit 1 if either committed file is stale
@@ -38,8 +41,7 @@ import sys
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 SRC = "lua/games/gen3_frlge.lua"
-MAILBOX_SRC = "lua/mailbox.lua"
-GHOST_SRC = "lua/peer_ghost_npc.lua"
+HANDLERS_SRC = "patch/src/handlers.c"
 PRET_PIN = "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788"
 STORAGE_HEADER = f"{PRET_PIN}:include/pokemon_storage_system.h"
 
@@ -558,44 +560,104 @@ def parse_profiles(text: str) -> dict:
 
 
 # ── the companion-patch native ABI (gen3_rr only) ────────────────────────────────
-# Every `MB.NAME = <literal>` module constant in lua/mailbox.lua, plus the
-# ghost/object-event addresses lua/peer_ghost_npc.lua carries as inline literals.
-MAILBOX_RE = re.compile(r"^MB\.([A-Z][A-Z0-9_]*)\s*=\s*(0x[0-9A-Fa-f]+|\d+)\s*(?:--.*)?$", re.M)
-
-# name -> regex over lua/peer_ghost_npc.lua; group 1 (and 2, when named) is the address.
-GHOST_RE = {
-    "OBJECT_EVENTS_BASE": re.compile(r"^local OE = (0x[0-9A-Fa-f]+)", re.M),
-    "GMAIN_CB2_PTR|CB2_OVERWORLD": re.compile(
-        r"memory\.read_u32_le\((0x[0-9A-Fa-f]+)\) ~= (0x[0-9A-Fa-f]+)"),
-    "SPRITES_BASE": re.compile(r"memory\.read_u32_le\((0x[0-9A-Fa-f]+) \+ lsid\*0x44"),
-    "OBJ_PALETTE_BUF": re.compile(r"memory\.read_u16_le\((0x[0-9A-Fa-f]+) \+ lslot\*0x20"),
-    "CAMERA_Y_ADDR": re.compile(r"memory\.read_s16_le\((0x[0-9A-Fa-f]+)\) \+ 8"),
+# C5-6 deleted lua/mailbox.lua and lua/peer_ghost_npc.lua (the old Lua client's copies of the
+# ABI). The companion patch is BUILT from patch/src/handlers.c, so that C source -- not a Lua
+# mirror of it -- is the actual authority; every name below is read out of it, never re-typed.
+# Two naming conventions collide here on purpose: every MB.OP_* opcode already shares its exact
+# name with handlers.c's opcode enum (both say "OP_PING"), so those are looked up by name alone;
+# everything else predates this generator and keeps its old Lua-side name via an explicit map to
+# whatever handlers.c calls the same literal (e.g. MB.BASE is handlers.c's MAILBOX_ADDR).
+MAILBOX_C_SYMBOL = {
+    "BASE": "MAILBOX_ADDR", "SIG": "SLNK_SIG", "ABI": "ABI_VER",
+    "BLOB_BUF": "SLINK_BLOB_BUF", "TEXT_BUF": "SLINK_TEXT_BUF", "MENU_BUF": "SLINK_MENU_BUF",
+    "BATTLE_NOTIF": "BN", "TN_ENABLE": "TN", "CALC_OFF": "SLINK_CALC_OFF", "INFO": "SI",
+    "INFO_MAXLINES": "INFO_ROWS", "INFO_PAGESLOT": "INFO_PAGE_SLOT", "INFO_BAR_W": "BAR_W",
+    "EVR": "EV", "GH": "GH", "GHOST_PAL_BUF": "GHOST_PAL_BUF", "GPLAYER_AVATAR": "gPlayerAvatar",
+    "SW": "SW", "EV_PLAYER_FAINT": "EV_PLAYER_FAINT", "EV_FOE_FAINT": "EV_FOE_FAINT",
+    "EV_OUTCOME": "EV_OUTCOME", "EV_PARTY_ADD": "EV_PARTY_ADD", "EV_EVOLVE": "EV_EVOLVE",
 }
+# ghost/object-event addresses (post-RC feature; kept for the same byte-identical reason as
+# everything else above -- native.lua doesn't read these today, but the profile shape must not
+# change out from under a future consumer). Every one is ALSO a plain handlers.c #define.
+GHOST_C_SYMBOL = {
+    "OBJECT_EVENTS_BASE": "gObjectEvents", "CB2_OVERWORLD": "CB2_OVERWORLD",
+    "SPRITES_BASE": "gSprites", "OBJ_PALETTE_BUF": "gPlttBufferUnfaded_OBJ",
+    "CAMERA_Y_ADDR": "gSpriteCoordOffsetY",
+}
+# every MB.OP_* name is spelled identically in handlers.c's opcode enum
+MAILBOX_OPCODES = (
+    "OP_PING", "OP_FORCE_FAINT", "OP_FORCE_MOVE", "OP_CREATE_MON", "OP_FORCE_MOVE_SLOT",
+    "OP_SPAWN_PEER_NPC", "OP_DESPAWN_PEER_NPC", "OP_SHOW_MESSAGE", "OP_PLAY_FANFARE",
+    "OP_ARM_PEER_INTERACT", "OP_GHOST_SPAWN", "OP_GHOST_CLEAR", "OP_SET_ENEMY_PARTY",
+    "OP_SHOW_MENU", "OP_SET_PARTY_MON", "OP_PLAY_SE", "OP_CHOOSE_PARTY_MON", "OP_TRADE_SCENE",
+    "OP_SHOW_CHOICES", "OP_SHOW_BATTLE_MESSAGE", "OP_DEPOSIT_MON", "OP_WITHDRAW_MON",
+    "OP_MEMORIALIZE", "OP_SHOW_INFO", "OP_RIVAL_SWAP",
+)
+
+# `#define NAME <literal>` or the pointer-cast form `#define NAME ((Type *)<literal>)`.
+_CDEFINE_RE = (r"^#define\s+{name}\s+(?:\(\(\s*[A-Za-z_ ]+\*\)\s*)?"
+              r"(0[xX][0-9A-Fa-f]+|\d+)u?\)?\s*(?://.*|/\*.*)?$")
 
 
 def _line_of(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
 
 
+def _c_define(text: str, cname: str) -> tuple[int, int]:
+    """(value, match offset) of `#define cname ...` in handlers.c (plain or pointer-cast)."""
+    m = re.search(_CDEFINE_RE.format(name=re.escape(cname)), text, re.M)
+    if not m:
+        sys.exit(f"gen_gen3_profile: {HANDLERS_SRC} no longer defines {cname}")
+    lit = m.group(1)
+    return (int(lit, 16) if lit[:2].lower() == "0x" else int(lit)), m.start()
+
+
 def native_block() -> dict:
     values: dict[str, int] = {}
     src: dict[str, str] = {}
-    text = (REPO / MAILBOX_SRC).read_text(encoding="utf-8", errors="replace")
-    for m in MAILBOX_RE.finditer(text):
-        name, lit = m.group(1), m.group(2)
-        values[name] = int(lit, 16) if lit[:2].lower() == "0x" else int(lit)
-        src[name] = f"{MAILBOX_SRC}:{_line_of(text, m.start())}"
-    ghost = (REPO / GHOST_SRC).read_text(encoding="utf-8", errors="replace")
-    for names, pat in GHOST_RE.items():
-        m = pat.search(ghost)
+    text = (REPO / HANDLERS_SRC).read_text(encoding="utf-8", errors="replace")
+
+    def put(name: str, cname: str) -> int:
+        value, off = _c_define(text, cname)
+        values[name] = value
+        src[name] = f"{HANDLERS_SRC}:{_line_of(text, off)} ({cname})"
+        return value
+
+    for name, cname in MAILBOX_C_SYMBOL.items():
+        put(name, cname)
+    for name, cname in GHOST_C_SYMBOL.items():
+        put(name, cname)
+    for op in MAILBOX_OPCODES:
+        m = re.search(rf"\b{op}\s*=\s*(\d+)", text)
         if not m:
-            sys.exit(f"gen_gen3_profile: {GHOST_SRC} no longer carries {names}")
-        line = f"{GHOST_SRC}:{_line_of(ghost, m.start())}"
-        for i, name in enumerate(names.split("|"), start=1):
-            if name in values:
-                sys.exit(f"gen_gen3_profile: native name collision on {name}")
-            values[name] = int(m.group(i), 16)
-            src[name] = line
+            sys.exit(f"gen_gen3_profile: {HANDLERS_SRC} no longer defines {op}")
+        values[op] = int(m.group(1))
+        src[op] = f"{HANDLERS_SRC}:{_line_of(text, m.start())} (opcode enum)"
+    # GMAIN_CB2_PTR = gMain + 4 (gMain.callback2 -- peer_ghost_npc.lua used to read this directly)
+    gmain, gmain_off = _c_define(text, "gMain")
+    values["GMAIN_CB2_PTR"] = gmain + 4
+    src["GMAIN_CB2_PTR"] = f"{HANDLERS_SRC}:{_line_of(text, gmain_off)} (gMain + 4, callback2)"
+    # PI_COUNT = SlinkState.pi_count -- SS + 3 (struct field order: _rsvd0, pi_armed, pi_oe, pi_count)
+    ss, ss_off = _c_define(text, "SS")
+    values["PI_COUNT"] = ss + 3
+    src["PI_COUNT"] = f"{HANDLERS_SRC}:{_line_of(text, ss_off)} (SlinkState.pi_count, SS + 3)"
+    # EVR_PRIM = EvRing.prim -- EV + 6 (struct field order: wr,rd,overflow,inb,pfc,ofc,prim)
+    values["EVR_PRIM"] = values["EVR"] + 6
+    src["EVR_PRIM"] = src["EVR"] + " (EvRing.prim, EV + 6)"
+    # INFO_LINEW: SlinkInfo.line[8][N] row width is a struct array dimension, not a #define.
+    m = re.search(r"volatile u8 line\[8\]\[(\d+)\]", text)
+    if not m:
+        sys.exit(f"gen_gen3_profile: {HANDLERS_SRC} no longer carries SlinkInfo.line[8][N]")
+    values["INFO_LINEW"] = int(m.group(1))
+    src["INFO_LINEW"] = f"{HANDLERS_SRC}:{_line_of(text, m.start())} (SlinkInfo.line[8][N])"
+    # LOCALID: the ghost's sentinel localId (0xF0), checked inline rather than named -- its
+    # documented neighbor TN_LOCALID (0xF1) calls it out: "exclusive sentinel (ghost uses 0xF0)".
+    m = re.search(r"R8\(oo \+ 0x08\) == (0x[0-9A-Fa-f]+)u", text)
+    if not m:
+        sys.exit(f"gen_gen3_profile: {HANDLERS_SRC} no longer checks the ghost sentinel localId")
+    values["LOCALID"] = int(m.group(1), 16)
+    src["LOCALID"] = f"{HANDLERS_SRC}:{_line_of(text, m.start())} (ghost sentinel localId check)"
+
     values["_src"] = src  # type: ignore[assignment]
     return values
 

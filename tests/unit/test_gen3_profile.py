@@ -554,14 +554,15 @@ def test_thumb_addresses_are_kept_verbatim_and_marked() -> None:
 
 
 def test_c511a_the_rival_opcode_is_in_the_native_block() -> None:
-    """C5-11a: the profile's native opcode keys are generated from lua/mailbox.lua, so the new
-    rival opcode must appear there with its ABI number and its own source citation -- the Lua side
-    (native.lua's transfer("rival")) reads it from this block, and handlers.c owns the number."""
+    """C5-11a: the profile's native opcode keys are generated from patch/src/handlers.c (C5-6:
+    the old lua/mailbox.lua scrape target is deleted), so the new rival opcode must appear there
+    with its ABI number and its own source citation -- the Lua side (native.lua's
+    transfer("rival")) reads it from this block, and handlers.c owns the number."""
     title = _title("radical_red")
     native = _load("gen3_rr")["native"]
     assert native["OP_RIVAL_SWAP"] == 28
     assert native["OP_SET_ENEMY_PARTY"] == 16, "opcode 16 stays the trade's"
-    assert "lua/mailbox.lua" in native["_src"]["OP_RIVAL_SWAP"]
+    assert "patch/src/handlers.c" in native["_src"]["OP_RIVAL_SWAP"]
     assert title["rom"]["BATTLE_INTRO_GET_MONS_DATA_ADDR"] == 0x08012FAD
 
 
@@ -593,22 +594,33 @@ def test_native_is_present_only_in_gen3_rr() -> None:
 
 
 def test_native_matches_the_mailbox_and_ghost_sources() -> None:
+    """C5-6 deleted lua/mailbox.lua and lua/peer_ghost_npc.lua; the native ABI block is now
+    generated from patch/src/handlers.c (the companion is BUILT from it, so it is the actual
+    authority). Every value is pinned here, independent of the generator's own extraction
+    tables, since the ABI is frozen at v1 (ADDRESSES.md: "ABI version stays 1 ... the mailbox
+    layout is unchanged") -- a regression here means the frozen ABI silently moved."""
     native = dict(_load("gen3_rr")["native"])
     src = native.pop("_src")
-    mailbox = (REPO / "lua" / "mailbox.lua").read_text(encoding="utf-8")
-    want = {m.group(1): _num(m.group(2)) for m in
-            re.finditer(r"^MB\.([A-Z][A-Z0-9_]*)\s*=\s*(0x[0-9A-Fa-f]+|\d+)\s*(?:--.*)?$",
-                        mailbox, re.M)}
-    ghost = (REPO / "lua" / "peer_ghost_npc.lua").read_text(encoding="utf-8")
-    want["OBJECT_EVENTS_BASE"] = int(re.search(r"^local OE = (0x[0-9A-Fa-f]+)", ghost, re.M)[1], 16)
-    cb2 = re.search(r"memory\.read_u32_le\((0x[0-9A-Fa-f]+)\) ~= (0x[0-9A-Fa-f]+)", ghost)
-    want["GMAIN_CB2_PTR"], want["CB2_OVERWORLD"] = int(cb2[1], 16), int(cb2[2], 16)
-    want["SPRITES_BASE"] = int(
-        re.search(r"read_u32_le\((0x[0-9A-Fa-f]+) \+ lsid\*0x44", ghost)[1], 16)
-    want["OBJ_PALETTE_BUF"] = int(
-        re.search(r"read_u16_le\((0x[0-9A-Fa-f]+) \+ lslot\*0x20", ghost)[1], 16)
-    want["CAMERA_Y_ADDR"] = int(
-        re.search(r"read_s16_le\((0x[0-9A-Fa-f]+)\) \+ 8", ghost)[1], 16)
+    want = {"ABI": 1, "BASE": 0x0203F800, "BATTLE_NOTIF": 0x0203FD00,
+        "BLOB_BUF": 0x0203FA00, "CALC_OFF": 0x0203F8D8, "CAMERA_Y_ADDR": 0x02021BCA,
+        "CB2_OVERWORLD": 0x080565B5, "EVR": 0x0203FD10, "EVR_PRIM": 0x0203FD16,
+        "EV_EVOLVE": 5, "EV_FOE_FAINT": 2, "EV_OUTCOME": 3, "EV_PARTY_ADD": 4,
+        "EV_PLAYER_FAINT": 1, "GH": 0x0203F850, "GHOST_PAL_BUF": 0x0203FC60,
+        "GMAIN_CB2_PTR": 0x030030F4, "GPLAYER_AVATAR": 0x02037078, "INFO": 0x0203FD44,
+        "INFO_BAR_W": 38, "INFO_LINEW": 32, "INFO_MAXLINES": 6, "INFO_PAGESLOT": 7,
+        "LOCALID": 0xF0, "MENU_BUF": 0x0203FC90, "OBJECT_EVENTS_BASE": 0x02036E38,
+        "OBJ_PALETTE_BUF": 0x020373F8, "OP_ARM_PEER_INTERACT": 13,
+        "OP_CHOOSE_PARTY_MON": 20, "OP_CREATE_MON": 4, "OP_DEPOSIT_MON": 24,
+        "OP_DESPAWN_PEER_NPC": 7, "OP_FORCE_FAINT": 2, "OP_FORCE_MOVE": 3,
+        "OP_FORCE_MOVE_SLOT": 5, "OP_GHOST_CLEAR": 15, "OP_GHOST_SPAWN": 14,
+        "OP_MEMORIALIZE": 26, "OP_PING": 1, "OP_PLAY_FANFARE": 9, "OP_PLAY_SE": 19,
+        "OP_RIVAL_SWAP": 28, "OP_SET_ENEMY_PARTY": 16, "OP_SET_PARTY_MON": 18,
+        "OP_SHOW_BATTLE_MESSAGE": 23, "OP_SHOW_CHOICES": 22, "OP_SHOW_INFO": 27,
+        "OP_SHOW_MENU": 17, "OP_SHOW_MESSAGE": 8, "OP_SPAWN_PEER_NPC": 6,
+        "OP_TRADE_SCENE": 21, "OP_WITHDRAW_MON": 25, "PI_COUNT": 0x0203F8D3,
+        "SIG": 0x4B4E4C53, "SPRITES_BASE": 0x0202063C, "SW": 0x0203F840,
+        "TEXT_BUF": 0x0203F900, "TN_ENABLE": 0x0203F8D4,
+    }
     assert native == want
     # the ABI anchors the card names, spelled out so a silent regex drift is caught
     assert native["BASE"] == 0x0203F800 and native["BLOB_BUF"] == 0x0203FA00
@@ -619,11 +631,12 @@ def test_native_matches_the_mailbox_and_ghost_sources() -> None:
     assert native["GH"] == 0x0203F850 and native["SW"] == 0x0203F840
     assert native["OBJECT_EVENTS_BASE"] == 0x02036E38
     assert set(src) == set(native)
+    handlers = (REPO / "patch" / "src" / "handlers.c").read_text(encoding="utf-8").splitlines()
     for name, where in src.items():
-        path, line = where.rsplit(":", 1)
-        assert path in ("lua/mailbox.lua", "lua/peer_ghost_npc.lua")
-        text = (REPO / path).read_text(encoding="utf-8").splitlines()[int(line) - 1]
-        assert re.search(r"0x[0-9A-Fa-f]+|= *\d", text), f"{name}: {where} has no literal"
+        assert where.startswith("patch/src/handlers.c:"), f"{name}: {where} not from handlers.c"
+        line = int(where.split(":", 1)[1].split(" ", 1)[0])
+        text = handlers[line - 1]
+        assert re.search(r"0x[0-9A-Fa-f]+|\d", text), f"{name}: {where} has no literal"
 
 
 # ── the P2 exit condition + file hygiene ─────────────────────────────────────────
