@@ -277,8 +277,10 @@ _COMPANION_UPS = "patch/dist/SLink-RR.ups"
 _COMPANION_README = "patch/README.md"
 # The Game Boy companion UPS files bundled with --with-patch: vanilla Red/Blue (patch/gen1) and
 # the pureRGB overlay per pure title (patch/gen1/purergb, PLAN M3). No Yellow (no free WRAM).
+# Gen 2: the companion overlay per title (tools/build_gen2_companion.py, data/gen2/overlay_provenance.json).
 _GB_COMPANION_UPS = ("SLink-RB-Red.ups", "SLink-RB-Blue.ups",
-                     "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups")
+                     "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups",
+                     "SLink-Crystal.ups", "SLink-Gold.ups", "SLink-Silver.ups")
 _COMPANION_ROM_ARCNAME = "Pokemon - Radical Red (SLink companion).gba"
 
 # Launcher scripts (relative to lua/) whose SLINK_* lines get patched

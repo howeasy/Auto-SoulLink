@@ -209,6 +209,27 @@ def test_gb_companion_bundle_names_every_pure_overlay_ups():
     pureRGB overlays (PLAN M3). A missing name here is a title whose players get no native trade."""
     assert set(make_release._GB_COMPANION_UPS) == {
         "SLink-RB-Red.ups", "SLink-RB-Blue.ups",
-        "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups"}
+        "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups",
+        "SLink-Crystal.ups", "SLink-Gold.ups", "SLink-Silver.ups"}
     for name in make_release._GB_COMPANION_UPS:
         assert "Yellow" not in name  # no Yellow build exists (no free WRAM for the mailbox)
+
+
+def test_with_patch_ships_every_published_gen2_overlay_ups_and_nothing_else_changes(tmp_path):
+    """RELEASE-EVIDENCE-TOOLING: each UPS named by data/gen2/overlay_provenance.json lands under
+    companion/ with its published bytes; the Gen 1 / pureRGB / RR companion set is unchanged."""
+    import hashlib
+    import json
+    from pathlib import Path
+
+    outputs = json.loads((Path(_REPO) / "data/gen2/overlay_provenance.json").read_text(encoding="utf-8"))["outputs"]
+    zip_path = make_release.build_release(version="t", out_dir=tmp_path, skip_generators=True, with_patch=True)
+    with zipfile.ZipFile(zip_path) as zf:
+        companion = {n.split("/", 1)[1]: zf.read(n) for n in zf.namelist() if "/companion/" in n}
+    for row in outputs.values():
+        name = Path(row["ups"]["file"]).name
+        assert hashlib.sha256(companion[f"companion/{name}"]).hexdigest() == row["ups"]["sha256"]
+    assert set(companion) - {f"companion/{Path(r['ups']['file']).name}" for r in outputs.values()} == {
+        "companion/SLink-RR.ups", "companion/COMPANION_PATCH.md", "companion/SLink-RB-Red.ups",
+        "companion/SLink-RB-Blue.ups", "companion/SLink-PureRed.ups", "companion/SLink-PureBlue.ups",
+        "companion/SLink-PureGreen.ups"}
