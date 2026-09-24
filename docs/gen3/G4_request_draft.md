@@ -278,6 +278,9 @@ All five owner scope decisions (a)–(e) are settled and recorded above.
 16. **P hands off the battle controller on every title** (owner, 2026-09-24): the plan ends by setting `gBattlerControllerFuncs[0] = PlayerBufferExecCompleted`, so no A press is needed on FR, LG or RR (RR scope §3.2, §5.1). **S**
 17. **The RR lag-frame lost-ball window is a signed limit** (owner, 2026-09-24): about 1e-4 to 1e-3 per commit, and only when L is newly pressed on that exact frame (RR scope §3.5). This is the same class as ruling 14. The companion opcode (§5.6) is not built. **S**
 18. **The DREW edge is accepted** (owner, 2026-09-24): if our last usable mon takes the Perish KO on the same turn that the foe's last mon faints at end of turn, the engine scores a draw and we white out through the normal Center heal and rebuild (active-faint scope §2.1). P is not held on the last mon. **S**
+19. **RR Explode gains the controller hand-off** (owner, 2026-09-24): on RR, `force_explode`'s commit plan ends in the same `battle.handoff` tail as P, so Explode fires immediately again, as it did on the old RR client, and protocol item 34 holds on RR. FR/LG Explode is untouched. G5. **S**
+20. **RR row R5 (no mega evolution during the forced faint in a trainer battle) is a signed G5 limit** (owner, 2026-09-24): no Mega Ring or stone holder can be reached by normal inputs early in RR, and the source shows the Perish path reads no mega state (RR scope §4). The row stays in the tree as a named SKIP. **S**
+21. **The whiteout-with-only-pair outcome is accepted as intended** (owner, 2026-09-24): when the last linked pair dies, the server's `game_over` ends the run. B's in-game whiteout heal and the dropped last-mon memorial do not matter after game over. The whiteout row asserts exactly this. **S**
 
 ---
 
