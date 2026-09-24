@@ -76,11 +76,29 @@ def party_save(raw, layout, party, dex_species=()):
     return checksum(raw, layout)
 
 
-def forced_save(raw, layout, seconds=7):
-    """MODEL of the 9805ac1c forced pre-trade native save at the same spot: only the clock moves."""
+def save_bytes(raw, layout, symbols, name, data, delta=0):
+    """Write data at a saved WRAM symbol (+delta) in BOTH copies; False when the title does not save it."""
+    spans = oracle._saved_spans(layout, symbols[name].address + delta, len(data))
+    for start in spans:
+        raw[start:start + len(data)] = data
+    return bool(spans)
+
+
+def forced_save(raw, layout, symbols, seconds=7, staged=None):
+    """MODEL of the 9805ac1c forced pre-trade native save, trgs2-shaped: the clocks move, the player and
+    two object structs face another way (START menu -> receptionist), a responder saves its PROMPT staging."""
     raw = bytearray(raw)
     value = oracle._saved(bytes(raw), layout, "wGameTimeSeconds", 1, "primary")[0]
     put(raw, layout, "wGameTimeSeconds", bytes([(value + seconds) % 60]))
+    save_bytes(raw, layout, symbols, "wRTC", bytes([0x12]), delta=2)
+    for name, facing in (("wPlayerFacing", 0x04), ("wObject1Facing", 0x00), ("wObject2Facing", 0x00)):
+        save_bytes(raw, layout, symbols, name, bytes([facing]))
+    if staged is not None:   # lua/gen2/trade_overlay.lua stage() on a PROMPT: the name is the incoming OT
+        blob, marker = staged
+        for name, data in (("wOTPlayerName", blob[48:59]), ("wOTPartyCount", b""),
+                           ("wOTPartySpecies", bytes([marker, 0xFF])), ("wOTPartyMon1", blob[:48]),
+                           ("wOTPartyMonOTs", blob[48:59]), ("wOTPartyMonNicknames", blob[59:70])):
+            save_bytes(raw, layout, symbols, name, data)
     return checksum(raw, layout)
 
 
@@ -192,8 +210,11 @@ def make_case(tmp_path, sources, variant="cc", scenario="gen2_trade_new", mail_s
     for side, partner in (("a", "b"), ("b", "a")):
         layout, symbols = sources[titles[side]]["layout"], syms[side]
         saved_before = old[side]
+        offers[side].update(incoming_blob_hex=offers[partner]["blob_hex"],
+                            incoming_species_marker=offers[partner]["species_marker"])
         if side == "a" or committed:   # the proposer always saves; a responder only after its YES
-            saved_before = forced_save(old[side], layout)
+            staged = (bytes.fromhex(offers[partner]["blob_hex"]), offers[partner]["species_marker"]) if side == "b" else None
+            saved_before = forced_save(old[side], layout, symbols, staged=staged)
             markers[side].append(("TRADE_FORCED_SAVE", image(tmp_path / f"{side}.forced.SaveRAM", saved_before,
                                                              109 if side == "a" else 115)))
         if committed:
@@ -1088,3 +1109,65 @@ def test_inactive_peer_never_saves_for_a_trade(tmp_path, sources):
     case["markers"]["b"].append(("TRADE_FORCED_SAVE", forced))
     with pytest.raises(RuntimeError, match="inactive peer"):
         invoke(case)
+
+
+
+def _resave(case, sources, side, mutate):
+    """Rewrite a side's forced image (re-checksummed) and re-bind its marker."""
+    receipt = get(case, side, "RECEIPT")
+    layout = sources[receipt["title"]]["layout"]
+    symbols = parse_symbols((ROOT / f"data/gen2/{receipt['title']}_slink.sym").read_text())
+    raw = bytearray(Path(get(case, side, "TRADE_FORCED_SAVE")["snapshot_path"]).read_bytes())
+    assert mutate(raw, layout, symbols), "the mutated span is not saved on this title"
+    _set_image(case, side, "TRADE_FORCED_SAVE", checksum(raw, layout))
+
+
+@pytest.mark.parametrize("variant", ["cc", "gs"])
+def test_trgs2_shaped_forced_saves_pass(tmp_path, sources, variant):
+    """Clocks, the player/object facings and (G/S) the responder's own PROMPT staging are native."""
+    facts = []
+    assert invoke(make_case(tmp_path, sources, variant), facts.append) is None
+    assert facts[0]["status"] == "committed"
+
+
+FORCED_REWRITE_FAULTS = {
+    "ot_block_extra_byte": ("b", lambda raw, layout, sym: save_bytes(raw, layout, sym, "wOTPartySpecies", b"", 2)),
+    "ot_staging_wrong_mon": ("b", lambda raw, layout, sym: save_bytes(raw, layout, sym, "wOTPartyMon1", b"", 5)),
+    "ot_staging_on_the_proposer": ("a", lambda raw, layout, sym: save_bytes(raw, layout, sym, "wOTPartyCount", b"")),
+    "object_non_facing_byte": ("a", lambda raw, layout, sym: save_bytes(raw, layout, sym, "wObject1Struct", b"3",
+                                                                   oracle.OBJECT_FACING + 1)),
+    "player_non_facing_byte": ("b", lambda raw, layout, sym: save_bytes(raw, layout, sym, "wPlayerStruct", b"3",
+                                                                   oracle.OBJECT_FACING - 1)),
+}
+
+
+@pytest.mark.parametrize("fault", sorted(FORCED_REWRITE_FAULTS))
+def test_forced_save_allows_nothing_beyond_the_decomp_rewrites(tmp_path, sources, fault):
+    side, mutate = FORCED_REWRITE_FAULTS[fault]
+    case = make_case(tmp_path, sources, "gs")
+    _resave(case, sources, side, mutate)
+    with pytest.raises(RuntimeError, match="rewrote more than"):
+        invoke(case)
+
+
+def test_stack_callback_in_rom0_ignores_the_mapped_bank(tmp_path, sources):
+    """trgs2: global_low_water pc=$041c with rom_bank 13; a ROM0 PC executes bank 0 whatever MBC3 maps."""
+    case = make_case(tmp_path, sources)
+    for side in ("a", "b"):
+        stack = get(case, side, "TRADE_STACK")
+        stack["global_low_water"].update(pc=0x041C, rom_bank=13)
+    assert invoke(case) is None
+
+
+@pytest.mark.parametrize(("frame_delta", "ok"), [(0, True), (1, False)])
+def test_wait_may_end_at_the_same_frame_commit_entry(tmp_path, sources, frame_delta, ok):
+    """9805ac1c: APPLY pickup falls into SlinkTradeCommit in the same frame; the driver ends the wait there."""
+    case = make_case(tmp_path, sources)
+    symbols = parse_symbols((ROOT / "data/gen2/crystal_slink.sym").read_text())
+    wait = get(case, "a", "TRADE_STACK")["phases"][0]
+    wait["end"] = {"frame": wait["end"]["frame"] + frame_delta, "site": site(symbols, "SlinkTradeCommit")}
+    if ok:
+        assert invoke(case) is None
+    else:
+        with pytest.raises(RuntimeError):
+            invoke(case)

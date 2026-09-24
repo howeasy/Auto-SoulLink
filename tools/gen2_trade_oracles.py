@@ -72,6 +72,7 @@ COMMITTED = frozenset(("gen2_trade_new", "gen2_trade_evolve"))
 # O-31 (docs/gen2/REVIEW_RECORD.md): the ONLY disclosed harness writes, proposer side a only.
 PLANTS = {"gen2_trade_refuse_item": "d3_mail_item", "gen2_trade_evolve": "trade_evolve_species"}
 SIDES = ("a", "b")
+WAIT_END = frozenset(("SlinkTradeApplyPickup", "SlinkTradeCommit"))   # same frame: pickup, then the commit entry
 PHASES = ("wait", "trade_animation", "evolution_animation", "native_save")
 CALLS = ("RemoveMonFromPartyOrBox", "AddTempmonToParty", "EvolvePokemon", "SaveAfterLinkTrade")
 REGIONS = {"player": "wPlayerData", "player1": "wPlayerData1", "player2": "wPlayerData2",
@@ -298,7 +299,8 @@ def _stack_sample(sample, rom, bottom, top, first, last):
     _need(margin >= 32, "stack safety margin below 32 bytes")
     pc = _integer(sample.get("pc"), 0, 0x7FFF, "stack callback PC")
     bank = _integer(sample.get("rom_bank"), 0, 0xFFFF, "stack callback ROM bank")
-    _need(rom_offset(bank, pc) < len(rom), "stack callback outside overlay ROM")
+    # rom_bank is the mapped switchable bank (MBC3 register); a PC in ROM0 executes bank 0 whatever it holds.
+    _need(rom_offset(0 if pc < 0x4000 else bank, pc) < len(rom), "stack callback outside overlay ROM")
     return margin
 
 
@@ -478,7 +480,8 @@ def _stack_windows(text, committed, evolved):
         return
     pickup, done = _one(text, "TRADE_APPLY_PICKUP"), _one(text, "TRADE_DONE")
     calls = {event["symbol"]: event for event in _markers(text, "TRADE_NATIVE_CALL")}
-    _need(wait["end"]["site"]["symbol"] == "SlinkTradeApplyPickup"
+    # 9805ac1c: the pickup falls straight into SlinkTradeCommit in the same frame (the driver ends the wait there)
+    _need(wait["end"]["site"]["symbol"] in WAIT_END
           and _frame(wait["end"]) == _frame(pickup), "wait coverage does not reach APPLY pickup")
     animation = rows["trade_animation"]
     animation_name = "TradeAnimation" if _one(text, "RECEIPT")["role"] == 0 else "TradeAnimationPlayer2"
@@ -817,7 +820,8 @@ def trade_oracle(results, *, data_dir, baseline_saves, transaction_evidence,
         _need(old_marker.get("party") == party and old_marker.get("dex") == _dex(old, layout),
               "raw baseline party/dex differs from independently decoded native save")
         state = receipt.get("visit_state", "accepted")
-        pre = _pre_trade(text, receipt, old, layout)
+        partner = (baseline_server.get("player_identity") or {}).get("b" if side == "a" else "a") or {}
+        pre = _pre_trade(text, receipt, old, layout, symbols, partner_trainer=partner.get("trainer_name"), root=root)
         if state == "none":
             _need(pre is old and normalized_gameplay_cartram(old, layout) == normalized_gameplay_cartram(final, layout),
                   "inactive peer changed saved gameplay bytes")
@@ -968,33 +972,76 @@ def trade_oracle(results, *, data_dir, baseline_saves, transaction_evidence,
         on_verified(facts)
 
 
-# pokecrystal/pokegold engine/menus/save.asm SaveGameData rewrites the whole checksummed game data; between
-# two saves at the same spot only the play-time clock (ram/wram.asm wGameTime*) and the checksums move.
-CLOCK = (("wGameTimeHours", 2), ("wGameTimeMinutes", 1), ("wGameTimeSeconds", 1), ("wGameTimeFrames", 1))
+# What a native full save legitimately rewrites between the pre-receptionist baseline and the
+# forced pre-trade save (coordinator ruling), cited from the pinned decomps (pokegold | pokecrystal):
+# - the clocks: ram/wram.asm wRTC:: ds 4 (G 2416 | C 3011) and wGameTimeHours.. (G 2430 | C 3021);
+# - facing only: ram/wram.asm wPlayerStruct/wObject{n}Struct:: object_struct (G 2449-2452 | C 3039-3042),
+#   macros/ram.asm object_struct "Facing:: db" (G 287 | C 312) at constants/map_object_constants.asm:16
+#   OBJECT_FACING (0d). The baseline is saved from START, the forced save facing the receptionist;
+# - the two checksums;
+# - on a responder, the host's PROMPT staging (lua/gen2/trade_overlay.lua stage()): G/S keep
+#   wOTPlayerName..wOTPartyDataEnd inside the saved wPokemonData (ram/wram.asm G 2755-2916 | C 2859 is
+#   outside it), so Link_SaveGame saves it. It is bound byte-exact to that side's own TRADE_OFFER.
+# Every other byte stays byte-exact.
+CLOCK = (("wGameTimeHours", 2), ("wGameTimeMinutes", 1), ("wGameTimeSeconds", 1), ("wGameTimeFrames", 1),
+         ("wRTC", 4))
+OBJECT_FACING = 0x0D
+OBJECT_STRUCTS = ("wPlayer", *(f"wObject{number}" for number in range(1, 13)))
 
 
-def _with_clock(raw, source, layout):
-    """Comparison only: raw with source's play-time bytes in BOTH copies and both checksums recomputed."""
-    out = bytearray(raw)
+def _saved_spans(layout, address, size):
+    """Both SaveRAM offsets of a saved WRAM span, or [] when the title does not save it."""
+    for region in layout.regions:
+        base = layout.addresses[REGIONS[region.name]]
+        if base <= address and address + size <= base + region.length:
+            return [region.primary + address - base, region.backup + address - base]
+    return []
+
+
+def _staged(receipt, text, root, partner_trainer):
+    """Responder only: candidate host PROMPT stagings from its own TRADE_OFFER (player name = incoming
+    OT on a PROMPT; the partner name when the host sent one)."""
+    if receipt["role"] != 1:
+        return [()]
+    offer = _one(text, "TRADE_OFFER")
+    blob = _hex(offer.get("incoming_blob_hex"), 70, "staged incoming")
+    marker = _integer(offer.get("incoming_species_marker"), 1, 255, "staged incoming species")
+    names = [blob[48:59]]
+    if partner_trainer:
+        from tools.gen2_trade_save_delta import encode_partner_name
+        names.append(encode_partner_name(receipt["title"], partner_trainer, blob[48:59], root=root))
+    return [(("wOTPlayerName", name), ("wOTPartyCount", b""), ("wOTPartySpecies", bytes([marker, 0xFF])),
+             ("wOTPartyMon1", blob[:48]), ("wOTPartyMonOTs", blob[48:59]), ("wOTPartyMonNicknames", blob[59:70]))
+            for name in names]
+
+
+def _forced_view(raw, old, layout, symbols, staged):
+    """Comparison only: the baseline with the forced save's clocks/facings and the expected staging."""
+    out = bytearray(old)
     for name, size in CLOCK:
-        address = layout.addresses[name]
-        regions = [region for region in layout.regions
-                   if layout.addresses[REGIONS[region.name]] <= address
-                   and address + size <= layout.addresses[REGIONS[region.name]] + region.length]
-        _need(len(regions) == 1, "ambiguous play-time save region")
-        offset = address - layout.addresses[REGIONS[regions[0].name]]
-        for start in (regions[0].primary + offset, regions[0].backup + offset):
-            out[start:start + size] = source[start:start + size]
+        spans = _saved_spans(layout, symbols[name].address, size)
+        _need(len(spans) == 2, f"unsaved clock {name}")
+        for start in spans:
+            out[start:start + size] = raw[start:start + size]
+    for prefix in OBJECT_STRUCTS:
+        facing = symbols[prefix + "Facing"].address
+        _need(facing - symbols[prefix + "Struct"].address == OBJECT_FACING, "object_struct facing offset differs from the decomp")
+        for start in _saved_spans(layout, facing, 1):
+            out[start] = raw[start]
+    for name, data in staged:
+        for start in _saved_spans(layout, symbols[name].address, len(data)):
+            out[start:start + len(data)] = data
     for copy, offset in layout.checksum_offsets.items():
         out[offset:offset + 2] = codec.sav_checksum(bytes(out[:CART]), layout, copy).to_bytes(2, "little")
     return bytes(out)
 
 
-def _pre_trade(text, receipt, old, layout):
+def _pre_trade(text, receipt, old, layout, symbols, *, partner_trainer=None, root=ROOT):
     """9805ac1c forced pre-trade native save (coordinator ruling): the proposer always saves before its
     lease opens; a responder saves only after its offer YES (always before APPLY). That image, not the
     pre-receptionist baseline, is the byte-exact "before" of every later comparison. Baseline -> forced
-    may differ only in the play-time clock and the checksums. Returns the before image."""
+    may differ only as _forced_view allows (clocks, facings, checksums, a responder's own staging).
+    Returns the before image."""
     markers = _markers(text, "TRADE_FORCED_SAVE")
     role, pickup = receipt["role"], _markers(text, "TRADE_APPLY_PICKUP")
     _need(len(markers) <= 1 and (markers or role == 1 and not pickup),
@@ -1017,8 +1064,10 @@ def _pre_trade(text, receipt, old, layout):
     _need(len({Path(row["snapshot_path"]).resolve() for row in (baseline, marker, final)}) == 3,
           "forced pre-trade save reuses another image")
     _need(codec.strict_checksum_witness(raw[:CART], layout)["valid"], "forced pre-trade save checksum/copy witness failed")
-    _need(normalized_gameplay_cartram(_with_clock(raw, old, layout), layout) == normalized_gameplay_cartram(old, layout),
-          "forced pre-trade save rewrote more than the play-time clock and checksums")
+    actual = normalized_gameplay_cartram(raw, layout)
+    _need(any(normalized_gameplay_cartram(_forced_view(raw, old, layout, symbols, staged), layout) == actual
+              for staged in _staged(receipt, text, root, partner_trainer)),
+          "forced pre-trade save rewrote more than the clocks, facings, checksums and its own staging")
     return raw
 
 
@@ -1094,11 +1143,11 @@ def _reset_phases(text, receipt, calls, control, *, traded, evolved):
           "reset wait starts at unrelated site")
     required = {"wait"}
     if state == "unentered":
-        allowed = {"SlinkTradeExit", "SlinkTradeApplyPickup"}
+        allowed = {"SlinkTradeExit", *WAIT_END}
         _need(wait["end"]["site"]["symbol"] in allowed, "unentered wait lost terminal boundary")
         return required
     pickup = _one(text, "TRADE_APPLY_PICKUP")
-    _need(wait["end"]["site"]["symbol"] == "SlinkTradeApplyPickup" and _frame(wait["end"]) == _frame(pickup),
+    _need(wait["end"]["site"]["symbol"] in WAIT_END and _frame(wait["end"]) == _frame(pickup),
           "reset wait coverage does not reach pickup")
     by_name = {call["symbol"]: call for call in calls}
     animation = "TradeAnimation" if receipt["role"] == 0 else "TradeAnimationPlayer2"
@@ -1161,7 +1210,9 @@ def _reset_commit_oracle(results, *, data_dir, baseline_saves, transaction_evide
         old_party = _party(baseline, layout)
         marker = _one(text, "TRADE_BASELINE")
         _need(marker.get("party") == old_party and marker.get("dex") == _dex(baseline, layout), "reset baseline raw party/dex mismatch")
-        baseline = _pre_trade(text, receipt, baseline, layout)   # the forced pre-trade save is the "before"
+        partner = (baseline_links.get("player_identity") or {}).get("b" if side == "a" else "a") or {}
+        baseline = _pre_trade(text, receipt, baseline, layout, symbols,   # the forced pre-trade save is the "before"
+                              partner_trainer=partner.get("trainer_name"), root=root)
         state = receipt.get("visit_state", "accepted")
         offer = None
         if state != "none":
