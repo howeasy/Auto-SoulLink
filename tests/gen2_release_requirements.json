@@ -39,11 +39,11 @@
           "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_faint --lane gen2-cc-faint --keep-data",
           "receipts": {
             "a": {"path": "tests/fixtures/gen2/receipts/duo_faint_cc_a_result.txt",
-                  "sha256": "edad646a80123aad992c72a1a7f7e119f06bbdaee54cc40e1cb5dc2ec16a6ec1"},
+                  "sha256": "8def85fe97f386558d62a85415eaa35e00eb9f812e1091abb032d00501d74837"},
             "b": {"path": "tests/fixtures/gen2/receipts/duo_faint_cc_b_result.txt",
-                  "sha256": "3a48040450de017a4fde0f48924f14c7cb19c04ac794576b81c2a5f14a6e988e"},
+                  "sha256": "d72efa6b0850ff6c89886cc0ef47fc87e439fbf2a77c16438491f66e5ba46b46"},
             "pydec": {"path": "tests/fixtures/gen2/receipts/duo_faint_cc_pydec_result.txt",
-                      "sha256": "dc3d563a0e38f4eeac83a66d98890897cebdc62f71246c4f40e3820182ce3807"}
+                      "sha256": "d2a1ba09971baab2180251f3de58a0a62b1a1120b6cb20d6202e94b089ead802"}
           }
         },
         {

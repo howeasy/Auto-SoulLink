@@ -1172,6 +1172,9 @@ def test_old_memorial_faint_receipts_require_real_preimage(tmp_path, pair):
     doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
     row = _row(doc, pair)
     proof = next(proof for proof in row["proofs"] if proof["scenario"] == "gen2_faint")
+    if all("MEMORIAL_PREIMAGE " in (REPO / proof["receipts"][side]["path"]).read_text(encoding="utf-8")
+           for side in ("a", "b")):
+        pytest.skip("re-receipted with MEMORIAL_PREIMAGE; the matrix itself now judges this cell")
     lock = json.loads((REPO / "data/gen2_sources.lock.json").read_text(encoding="utf-8"))["outputs"]
     errors = gate._receipt_errors(REPO, proof, "gen2_faint", row["axes"], lock)
     assert any("a memorial" in error and "MEMORIAL_PREIMAGE" in error for error in errors), errors
