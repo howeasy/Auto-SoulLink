@@ -30,7 +30,7 @@ local panims = memory.read_u32_le(GS + sid*GST + 0x08)
 
 -- spawn + give it the distinct avatar
 t.ghost_set_pos(p_tx()*16, (p_ty()-1)*16, 1, 0, 0)
-t.ghost_spawn(0)
+t.check("OP_GHOST_SPAWN acked OK", t.acked_ok(t.ghost_spawn(0)))
 for _ = 1, 90 do if t.ghost_oe() < 16 then break end; t.step(nil) end
 t.check("ghost spawned", t.ghost_oe() < 16, "oeId=" .. t.ghost_oe())
 t.ghost_set_avatar(pimgs, panims, pcol)

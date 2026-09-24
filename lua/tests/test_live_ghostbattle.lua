@@ -15,7 +15,7 @@ t.check("savestate is in-battle (maxHP>0 && outcome==0)", maxhp > 0 and outcome 
 
 -- request a ghost + post a target; the patch must REFUSE to spawn/drive while in battle.
 t.ghost_set_pos(160, 160, 1, 0, 0, false)
-t.ghost_spawn(0)
+t.check("OP_GHOST_SPAWN acked OK (the op is accepted; the driver suspends)", t.acked_ok(t.ghost_spawn(0)))
 local spawned = false
 for _ = 1, 120 do t.step(nil); if t.ghost_oe() < 16 then spawned = true; break end end
 t.check("ghost did NOT spawn while in battle (suspended)", not spawned, "oeId=" .. t.ghost_oe())

@@ -30,7 +30,7 @@ t.log(string.format("partner imgs=0x%08X anims=0x%08X", pimgs, panims))
 
 -- spawn the stand-in ghost, place it next to the player, then post the partner avatar.
 t.ghost_set_pos((p_tx()+1)*16, p_ty()*16, 4, 0, 0)
-t.ghost_spawn(p_gfx())
+t.check("OP_GHOST_SPAWN acked OK", t.acked_ok(t.ghost_spawn(p_gfx())))
 local oe = 16
 for _ = 1, 120 do oe = t.ghost_oe(); if oe < 16 then break end; t.step(nil) end
 t.check("ghost spawned", oe < 16, "oeId=" .. oe); if oe >= 16 then t.finish() end

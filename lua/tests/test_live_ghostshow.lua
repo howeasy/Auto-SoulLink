@@ -37,7 +37,7 @@ local pcol = table.concat(cols)
 -- spawn 2 tiles east of the player, then apply the distinct avatar
 local wy = py * 16
 t.ghost_set_pos((px+2)*16, wy, 3, 0, 0)
-t.ghost_spawn(gfx)
+t.check("OP_GHOST_SPAWN acked OK", t.acked_ok(t.ghost_spawn(gfx)))
 for _ = 1, 90 do if t.ghost_oe() < 16 then break end; t.step(nil) end
 t.check("ghost spawned", t.ghost_oe() < 16, "oeId=" .. t.ghost_oe())
 t.ghost_set_avatar(pimgs, panims, pcol)

@@ -20,7 +20,8 @@ local function ghost_oe_count()
 end
 
 local function spawn()
-    t.ghost_set_pos(p_sx() * 16, p_sy() * 16, 1, 0, 0); t.ghost_spawn(p_gfx())
+    t.ghost_set_pos(p_sx() * 16, p_sy() * 16, 1, 0, 0)
+    t.check("OP_GHOST_SPAWN acked OK", t.acked_ok(t.ghost_spawn(p_gfx())))
     for _ = 1, 120 do if t.ghost_oe() < 16 then return t.ghost_oe() end; t.step(nil) end
     return 16
 end

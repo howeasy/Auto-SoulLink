@@ -20,11 +20,13 @@ README); this file only ever scans lua/tests/ itself, so they are never loaded.
     SLINK_LIVE=1 pytest tests/live/test_lua_gates.py -q -k playse                 # one gate
     SLINK_LIVE=1 SLINK_GATES_DEFERRED=1 pytest tests/live/test_lua_gates.py -q    # + deferred
 
-Each gate is skipped (never hung) when its prerequisite is missing. That matters for the
-savestate in particular: BizHawk stops on a modal version dialog when handed a state from
-another release, so `savestate.load` on a stale file blocks forever rather than erroring.
-tools/mkstates.py owns the freshness check; see it for how to rebuild.
+A gate is never launched (never hung) when its prerequisite is missing: EmuHawk, the ROM, or a
+fresh savestate (BizHawk stops on a modal version dialog when handed a state from another
+release, so `savestate.load` on a stale file blocks forever; tools/mkstates.py owns the freshness
+check). Under SLINK_LIVE=1 a PORTED gate with a missing prerequisite FAILS with the reason, and
+the module fails if zero ported gates executed; deferred gates skip.
 """
+import functools
 import os
 import re
 import shutil
@@ -126,49 +128,78 @@ def _required_state(gate):
     return m.group(1) if m else None
 
 
-@pytest.fixture(scope="session")
-def emu_version():
-    if not os.path.exists(mkstates.EMUHAWK):
-        pytest.skip(f"EmuHawk not found at {mkstates.EMUHAWK}")
-    if not os.path.exists(ROM):
-        pytest.skip("patched ROM missing — python patch/tools/build.py")
+@functools.cache
+def _emu_version():
     return mkstates.emuhawk_version()
 
 
-@pytest.fixture(scope="session")
-def clean_rom():
-    if not os.path.exists(CLEAN_SRC):
-        pytest.skip(f"unpatched ROM missing: {os.path.basename(CLEAN_SRC)}")
+def prerequisite_problem(gate):
+    """Why `gate` cannot run on this host (EmuHawk, ROM, fresh savestate), or None."""
+    if not os.path.exists(mkstates.EMUHAWK):
+        return f"EmuHawk not found at {mkstates.EMUHAWK}"
+    if gate in CLEAN_ROM_GATES:
+        if not os.path.exists(CLEAN_SRC):
+            return f"unpatched ROM missing: {os.path.basename(CLEAN_SRC)}"
+    elif not os.path.exists(ROM):
+        return "patched ROM missing — python patch/tools/build.py"
+    need = _required_state(gate)
+    if need:
+        stale, why = mkstates.is_stale(os.path.join(mkstates.STATE_DIR, need), _emu_version())
+        if stale:
+            return f"{need} {why} — rebuild with `python tools/mkstates.py`"
+    return None
+
+
+def _clean_rom():
     dst = os.path.join(REPO, CLEAN_REL)
     if not os.path.exists(dst) or os.path.getmtime(dst) < os.path.getmtime(CLEAN_SRC):
         shutil.copyfile(CLEAN_SRC, dst)
     return CLEAN_REL
 
 
-def _run(gate, request):
-    emu_version = request.getfixturevalue("emu_version")
-    need = _required_state(gate)
-    if need:
-        path = os.path.join(mkstates.STATE_DIR, need)
-        stale, why = mkstates.is_stale(path, emu_version)
-        if stale:
-            pytest.skip(f"{need} {why} — rebuild with `python tools/mkstates.py`")
-    rom = request.getfixturevalue("clean_rom") if gate in CLEAN_ROM_GATES else ROM_REL
+EXECUTED = []   # ported gates that actually launched EmuHawk this session
+
+
+def _run(gate, strict):
+    """Run one gate. strict (a PORTED gate under SLINK_LIVE=1): a missing prerequisite FAILS with its
+    reason, so a run in which nothing executed can never read as green (R2 M3). Deferred: skips."""
+    problem = prerequisite_problem(gate)
+    if problem:
+        (pytest.fail if strict else pytest.skip)(f"{gate}: prerequisite missing — {problem}")
+    rom = _clean_rom() if gate in CLEAN_ROM_GATES else ROM_REL
+    if strict:
+        EXECUTED.append(gate)
     passed, result_path, text = run_gate(f"lua/tests/{gate}", rom=rom, timeout=300, quiet=True)
     assert passed, (f"{gate} did not report PASS\n"
                     f"result: {result_path}\n{text[-2000:]}")
 
 
+def check_executed(selected, executed):
+    """Session guard: selected ported gates but none executed is a failure, never a green run."""
+    if selected and not executed:
+        pytest.fail(f"zero of {selected} selected ported gates executed", pytrace=False)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _ported_gates_executed(request):
+    yield
+    selected = sum(1 for i in request.session.items if getattr(i, "originalname", "") == "test_gate")
+    tr = request.config.pluginmanager.get_plugin("terminalreporter")
+    if tr and selected:
+        tr.write_line(f"[test_lua_gates] ported gates executed: {len(EXECUTED)}/{selected}")
+    check_executed(selected, len(EXECUTED))
+
+
 @pytest.mark.parametrize("gate", _gates())
-def test_gate(gate, request):
-    _run(gate, request)
+def test_gate(gate):
+    _run(gate, strict=True)
 
 
 @pytest.mark.parametrize("gate", sorted(DEFERRED))
-def test_deferred_gate(gate, request):
+def test_deferred_gate(gate):
     if os.environ.get(DEFERRED_OPT_IN) != "1":
         pytest.skip(f"DEFERRED: {DEFERRED[gate]} — set {DEFERRED_OPT_IN}=1 to run it")
-    _run(gate, request)
+    _run(gate, strict=False)
 
 
 @pytest.mark.parametrize("gate", sorted(GAP))

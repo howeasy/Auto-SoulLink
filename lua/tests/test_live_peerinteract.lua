@@ -22,7 +22,7 @@ local px, py = p_tx(), p_ty()
 t.check("partner line staged in TEXT_BUF", t.raw_stage({ t.message_stage("Hi from your partner!") }),
         t.last_service)
 t.ghost_set_pos((px + 1) * 16, py * 16, 3, 0, 0)   -- 1 tile EAST (world px); collision tile pinned there
-t.ghost_spawn(p_gfx())
+t.check("OP_GHOST_SPAWN acked OK", t.acked_ok(t.ghost_spawn(p_gfx())))
 local oe = 16
 for _ = 1, 150 do
     oe = t.ghost_oe()

@@ -39,7 +39,7 @@ for i = 0, 15 do local v = 8 + i; pcol_t[#pcol_t+1] = string.format("%04X", v | 
 local pcol = table.concat(pcol_t)
 
 t.ghost_set_pos((memory.read_s16_le(poe + 0x10) + 1) * 16, memory.read_s16_le(poe + 0x12) * 16, 4, 0, 0)
-t.ghost_spawn(memory.read_u8(poe + 0x05))
+t.check("OP_GHOST_SPAWN acked OK", t.acked_ok(t.ghost_spawn(memory.read_u8(poe + 0x05))))
 local oe = 16
 for _ = 1, 120 do oe = t.ghost_oe(); if oe < 16 then break end; t.step(nil) end
 t.check("ghost spawned", oe < 16, "oeId=" .. oe); if oe >= 16 then t.finish() end

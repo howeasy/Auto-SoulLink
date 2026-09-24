@@ -28,10 +28,15 @@
 -- so native.lua's op surface does not grow for them. t.raw(op, args, stages) posts them with
 -- native.lua's own ABI: writes:arm("native") over the real safety clauses, an allow window of exactly
 -- the mailbox command bytes + the stages (each stage must sit inside one profile.native span from
--- write_checkpoint.json), staging first, then args, ack = seq - 1, seq, and the opcode LAST. It never
--- shares a gate with a native.lua instance: t.raw refuses unless the gate booted with native = false,
--- so no native job can be queued, posted or polled around it. One raw job in flight at a time; its
--- receipt has the native.lua shape, with `reason` as the patch's raw FAIL word (a number).
+-- write_checkpoint.json, never the mailbox header span), staging first, then args, ack = seq - 1, seq,
+-- and the opcode LAST. It never shares a gate with a native.lua instance: t.raw refuses unless the gate
+-- booted with native = false, so no native job can be queued, posted or polled around it. One raw job
+-- in flight at a time; its receipt has the native.lua shape, with `reason` as the patch's raw FAIL
+-- word (a number). A receipt needs ack == this job's seq AND a final status (OK/FAIL): ST_BUSY is an
+-- armed async op, never a receipt. Like native.lua, a job that outlives its deadline (or a wait that
+-- gives up on it) is finished with a "raw timeout" receipt naming the last status, and a timed-out or
+-- partially written post POISONS the poster: every later t.raw fails the gate until t.boot (a
+-- savestate load / reset is the recovery boundary, as for native.lua).
 --
 -- Log/check/finish are the lua/tests/gen1_gate.lua shape; gatelib.lua keeps its copies inside
 -- Lib.start (GB-only), so there is nothing exported to reuse.
@@ -122,6 +127,9 @@ function Lib.open(name)
             if not job or job.receipt then break end
             t.step(drive and drive(i) or nil)
         end
+        if job and not job.receipt and job == t.raw_job then
+            t.raw_expire(job, "no ack within " .. frames .. " frames")
+        end
         return job and job.receipt
     end
     -- Step until native.lua has PUBLISHED the job's opcode (job.posted) or finished it. A job whose
@@ -133,6 +141,7 @@ function Lib.open(name)
         end
         local ok = job ~= nil and job.posted == true
         if not ok and t.last_service then t.log("  last native:service refusal: " .. t.last_service) end
+        if not ok and job and job == t.raw_job then t.raw_expire(job, "never posted") end
         return ok
     end
     function t.receipt_str(r)
@@ -235,7 +244,7 @@ function Lib.open(name)
         opts = opts or {}
         pcall(function() client.speedmode(opts.speed or 400) end)
         pcall(memory.usememorydomain, "System Bus")
-        t.native, t.raw_job = nil, nil
+        t.native, t.raw_job, t.raw_poisoned = nil, nil, nil
         if opts.state then
             local ok = pcall(savestate.load, Lib.STATE_DIR .. "/" .. opts.state)
             if not ok then t.fail("savestate loaded", Lib.STATE_DIR .. "/" .. opts.state) end
@@ -265,11 +274,29 @@ function Lib.open(name)
     -- Mailbox ABI v1 offsets: the same table as lua/gen3/native.lua (patch/src/ADDRESSES.md).
     local O = { opcode = 6, seq = 8, status = 10, ack = 12, reason = 14, args = 16, result = 48 }
     local ST_OK, ST_FAIL = 2, 3
+    local RAW_DEADLINE = 1800          -- frames; longer than any patch-side async timeout (FMS 600)
     local function r16(a) return memory.read_u16_le(a, "System Bus") end
+    -- A stage must sit inside one profile.native span and never touch the mailbox header span
+    -- (BASE: signature, ABI, command bytes, result) -- native.lua never stages there either.
     local function span_of(addr, n)
+        local B = t.P.BASE
+        if addr < B + 64 and addr + n > B then return nil end
         for _, sp in ipairs(t.spans or {}) do
             if addr >= sp.start and addr + n <= sp.start + sp.size then return sp.key end
         end
+    end
+    local function last_status()
+        local B = t.P.BASE
+        return fmt("last status=%d ack=%d seq=%d opcode=%d", r16(B + O.status), r16(B + O.ack),
+                   r16(B + O.seq), r16(B + O.opcode))
+    end
+    -- Finish a raw job that will never get a receipt. A posted op may still be owned by the patch,
+    -- so, as in native.lua, the slot is never reused: the poster is poisoned until t.boot.
+    function t.raw_expire(job, why)
+        job.receipt = { why = "raw timeout: " .. why .. " (" .. last_status() .. ")", frame = t.frame }
+        t.log("  " .. job.receipt.why)
+        if t.raw_job == job then t.raw_job = nil end
+        if job.posted and job.op then t.raw_poisoned = job.receipt.why end
     end
     local function try_post(job)
         local B = t.P.BASE
@@ -299,6 +326,7 @@ function Lib.open(name)
         if not ok then
             job.receipt = { why = "raw post interrupted: " .. tostring(err), frame = t.frame }
             t.raw_job = nil
+            t.raw_poisoned = job.receipt.why     -- a partial post: never post over it (native.lua)
         elseif not job.op then
             job.receipt = { why = nil, frame = t.frame }   -- stage-only: done when the bytes land
             t.raw_job = nil
@@ -307,6 +335,7 @@ function Lib.open(name)
     end
     function t.raw_service()
         local job = t.raw_job
+        if t.frame > job.deadline then t.raw_expire(job, "deadline " .. RAW_DEADLINE .. " frames"); return end
         if not job.posted then try_post(job); return end
         local B = t.P.BASE
         local status = r16(B + O.status)
@@ -322,12 +351,13 @@ function Lib.open(name)
     -- each step; returns the job (t.wait_posted / t.wait work on it).
     function t.raw(op, args, stages)
         assert(t.native == nil, "t.raw needs t.boot({native = false}): never beside a native.lua job")
-        assert(t.raw_job == nil, "one raw op in flight at a time")
+        if t.raw_poisoned then t.fail("raw poster usable (not poisoned)", t.raw_poisoned) end
+        if t.raw_job then t.fail("one raw op in flight at a time", "a previous raw job is still pending") end
         local code = type(op) == "string" and assert(t.P[op], "no " .. op .. " in profile.native") or op
-        local job = { op = code, args = args or {}, stages = stages or {} }
+        local job = { op = code, args = args or {}, stages = stages or {}, deadline = t.frame + RAW_DEADLINE }
         for _, st in ipairs(job.stages) do
-            assert(span_of(st[1], #st[2]), fmt("stage 0x%08X+%d is outside every profile.native span",
-                                              st[1], #st[2]))
+            assert(span_of(st[1], #st[2]), fmt("stage 0x%08X+%d is outside every profile.native span "
+                                              .. "(or touches the mailbox header)", st[1], #st[2]))
         end
         t.raw_job = job
         try_post(job)
@@ -372,7 +402,15 @@ function Lib.open(name)
         if id >= 16 then id = 0 end
         return t.P.OBJECT_EVENTS_BASE + id * 0x24
     end
-    function t.ghost_oe() return memory.read_u8(t.P.GH + 1) end   -- 0xFF until spawned
+    -- GH->oeId, but only when that object event is really ours (active, localId == LOCALID): zeroed or
+    -- stale EWRAM reads oeId 0, which must never count as a spawned ghost. 0xFF otherwise.
+    function t.ghost_oe()
+        local oe = memory.read_u8(t.P.GH + 1)
+        if oe >= 16 then return 0xFF end
+        local base = t.P.OBJECT_EVENTS_BASE + oe * 0x24
+        if memory.read_u8(base) & 1 ~= 1 or memory.read_u8(base + 0x08) ~= t.P.LOCALID then return 0xFF end
+        return oe
+    end
     function t.ghost_set_pos(wx, wy, face, mv, an, run)
         local GH = t.P.GH
         return t.raw_stage({ { GH + 6, le(wx & 0xFFFF, 2) }, { GH + 8, le(wy & 0xFFFF, 2) },
