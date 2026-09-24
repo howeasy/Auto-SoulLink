@@ -141,6 +141,16 @@
       }}}]
     },
     {
+      "id": "new-gates.qualification.gold_battle_errand",
+      "stage": "physical-live",
+      "description": "Gold battle fixture after the Mr. Pokemon errand (the Gold U1 fixture: Route 31 Wade, U1e poison_faint)",
+      "axes": {"kind": "qualification", "fixture": "gold_battle_errand", "requirement_ids": ["F-6"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_battle_errand.qualification.json",
+        "sha256": "4fc69c96507419096c12565041878c90719aa4ed7327bf52cac993d379d24732"
+      }}}]
+    },
+    {
       "id": "new-gates.qualification.silver_town",
       "stage": "physical-live",
       "description": "Silver town fixture: cold boot, resave, reload PYDEC/GAME agreement",
