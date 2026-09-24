@@ -1,15 +1,11 @@
 -- scenario_gen3_rival_swap.lua — rival_swap_gen3 (RR only): a BLOCKED NEGATIVE CONTROL.
 --
--- NOT a qualification of the rival swap (Codex C4-6b finding 6). The runner sends a DUMMY blob
--- (100 zero bytes, not a real party), and lua/gen3/native.lua answers refresh_failed because
--- entry.lua's refresh_enemy has no write window in the battle's first frames yet (commit
--- 9505648b; the window is OMP card C4-8's design, docs/gen3/research/rival_swap_refresh_window.md).
--- What this characterizes is only the refusal path: the command reaches a real battle and is
--- answered with the documented error instead of hanging or writing. The swap stays BLOCKED until
--- a valid team is sent and refreshed in battle; SCENARIOS["rival_swap_gen3"]["control"] says so.
---
--- Also blocked on tests/fixtures/gen3/rr_battle{,_b}.sav (not built yet) and on RR walking/battle
--- symbols reused from FR (SCENARIOS' comment).
+-- NOT a qualification of the rival swap (Codex C4-6b finding 6). The runner queues a DUMMY blob
+-- (100 zero bytes) with NO session/battle_id, straight to B's queue. The new client declares
+-- battle_identity, so the C5-10 identity gate (2dc1b750; docs/gen3/research/
+-- rival_swap_refresh_window.md §3.3: missing -> refuse, nothing written) answers stale_battle_id
+-- before anything is staged. What this characterizes is only that refusal path: the command
+-- reaches a real battle and is refused by name instead of hanging or writing.
 --
 -- A idles; B walks into a real battle and parks at the action menu -- no input, so pressing A
 -- cannot pre-empt the server's command. Once B logs READY_IN_BATTLE the runner
@@ -35,9 +31,9 @@ return function(ctx)
         return false, "no rival_team_replaced reply"
     end
     local reply = ctx.last_sent("rival_team_replaced") or {}
-    if reply.error ~= "refresh_failed" then
-        return false, "expected error=refresh_failed, got " .. tostring(reply.error)
+    if reply.error ~= "stale_battle_id" then
+        return false, "expected error=stale_battle_id, got " .. tostring(reply.error)
     end
     ctx.run_away("rival_swap")
-    return true, "NEGATIVE CONTROL: dummy team refused with refresh_failed (swap BLOCKED, not qualified)"
+    return true, "NEGATIVE CONTROL: identity-less dummy team refused with stale_battle_id (not qualified)"
 end

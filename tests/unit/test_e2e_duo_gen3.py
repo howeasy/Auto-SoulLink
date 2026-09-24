@@ -42,7 +42,7 @@ OT_A = 0x99DE0D8A
 
 
 @pytest.mark.parametrize("name,case,target,slot,attempts", [
-    ("trainer_bench_gen3", "trainer_bench", "town", 1, 2),
+    ("trainer_bench_gen3", "trainer_bench", "trainer", 1, 2),
 ])
 def test_battle_window_registration(name, case, target, slot, attempts):
     row = duo.SCENARIOS[name]
@@ -676,11 +676,14 @@ def test_rival_swap_is_only_a_negative_characterization():
     run._gen3_saved = lambda inst: a_untouched
     run._gen3_fixture_saved = lambda inst: a_untouched
     b_receipt = ("READY_IN_BATTLE\nRX replace_rival_team\n"
-                 'TX rival_team_replaced - {"error":"refresh_failed","species_ids":[],"trainer_id":0}\n')
+                 'TX rival_team_replaced - {"error":"stale_battle_id","species_ids":[],"trainer_id":0}\n')
     run.assert_rival_swap_gen3_saved({"a": "", "b": b_receipt})
     assert notes and "NEGATIVE CONTROL (not qualification)" in notes[-1]
-    with pytest.raises(RuntimeError, match="expected 'refresh_failed'"):
-        run.assert_rival_swap_gen3_saved({"a": "", "b": b_receipt.replace("refresh_failed", "ok")})
+    # the C5-10 identity gate answers first (live 3fa789da); refresh_failed would mean an
+    # identity-less command got past it
+    for other in ("refresh_failed", "ok"):
+        with pytest.raises(RuntimeError, match="expected 'stale_battle_id'"):
+            run.assert_rival_swap_gen3_saved({"a": "", "b": b_receipt.replace("stale_battle_id", other)})
     with pytest.raises(RuntimeError, match="READY_IN_BATTLE"):
         run.assert_rival_swap_gen3_saved({"a": "", "b": b_receipt.replace("READY_IN_BATTLE\n", "")})
 
@@ -720,6 +723,7 @@ def test_launch_seeds_the_flash_body_and_writes_a_gba_config(monkeypatch, tmp_pa
     (fixtures / "firered_party_town.sav").write_bytes(fixture + b"\x07" * 16)   # RTC suffix dropped
     (fixtures / "firered_party_town_b.sav").write_bytes(fixture)
     (fixtures / "firered_party_battle.sav").write_bytes(fixture)
+    (fixtures / "firered_party_trainer.sav").write_bytes(fixture + b"\x07" * 16)
     monkeypatch.setattr(duo, "GEN3_FIXTURES", str(fixtures))
     monkeypatch.setattr(duo, "BUILD", str(tmp_path))
     monkeypatch.setattr(duo, "BIZHAWK_CONFIG", str(_gba_config(tmp_path)))
@@ -1233,7 +1237,7 @@ function FAKE(scenario, player, phase, spec)
         return spec.received ~= false
     end
     ctx.last_sent = function(event)
-        if event == "rival_team_replaced" then return spec.rival_reply or { error = "refresh_failed" } end
+        if event == "rival_team_replaced" then return spec.rival_reply or { error = "stale_battle_id" } end
         return { area_id = "route_1", species_id = 16 }
     end
     ctx.await_turn = function() return spec.turn or "action" end
@@ -1552,7 +1556,7 @@ def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spe
     ("reconnect", "a", "wrong_save", {"bytes_change": "lua:true"}, "live party/PC RAM changed"),
     ("reconnect", "a", "initial", {}, "the runner never killed A"),
     ("rival_swap", "b", "initial", {"turn": "party"}, "never reached the action menu"),
-    ("rival_swap", "b", "initial", {"rival_reply": "lua:{error='ok'}"}, "expected error=refresh_failed"),
+    ("rival_swap", "b", "initial", {"rival_reply": "lua:{error='refresh_failed'}"}, "expected error=stale_battle_id"),
     ("native_absent", "b", "initial", {"received": "lua:false"}, "apply_trade never arrived"),
     ("native_absent", "b", "initial", {"writes": 1}, "the clean cartridge wrote 1 time(s)"),
     ("native_absent", "a", "initial", {"trade_phase": "fallback"}, "the native stage failed"),
@@ -3948,7 +3952,10 @@ def test_p_h_rows_are_registered_with_their_cases():
         assert duo.scenario_target(duo.SCENARIOS[name], "gen3_rr") == target, name
     assert duo.scenario_target(duo.SCENARIOS["linked_faint_active_gen3"], "gen3_frlg") == "battle"
     assert duo.SCENARIOS["linked_faint_active_clean_gen3"]["rom_kind"] == {"a": "companion", "b": "clean"}
-    assert duo.SCENARIOS["linked_faint_active_trainer_gen3"]["target"] == {"a": "battle", "b": "town"}
+    # G4-SYNTH-TRAINER (6e85ddfc): the cached-native trainer fixture replaces the T2 walk
+    trainer = duo.SCENARIOS["linked_faint_active_trainer_gen3"]
+    assert trainer["target"] == {"a": "battle", "b": "trainer"}
+    assert (trainer["timeout"], trainer["frames"]) == (1800, 2500000)
     assert duo.SCENARIOS["active_end_gen3"]["no_save"] == ("b",)
 
 
@@ -4094,7 +4101,7 @@ def test_p_h_receipt_values_are_measured_not_literal(ph):
     (before the named FAIL), and the happy wild line reads all zeros."""
     _, passed, _, log = ph("wild", "b")
     assert passed is True
-    assert re.search(r"^ACTIVE_KO K0 .* inputs=0 keys=0x0 hp_writes=0 attempted=5$", log, re.M), log
+    assert re.search(r"^ACTIVE_KO K0 .* inputs=0 keys=0x0 hp_writes=0 attempted=5 case=wild$", log, re.M), log
     _, passed, _, log = ph("lhammer", "b")
     presses = int(re.search(r"^ACTIVE_KO K0 .* inputs=(\d+) keys=", log, re.M).group(1))
     assert passed is True and presses >= 5, log            # one L per frame, commit to KO
@@ -4187,7 +4194,10 @@ def test_only_a_battle_berry_eaten_in_battle_is_not_a_record_change(pair):
     assert held(last(plain, 0, True)) and held(memorial(plain, 0, True))           # 13 -> 0
     assert held(last(fixture, 0, False)) and held(memorial(fixture, 0, False))     # no battle
     assert held(last(fixture, 13, True)) and held(memorial(fixture, 13, True))     # swapped
-    assert 139 in duo.GEN3_BATTLE_BERRIES and 13 not in duo.GEN3_BATTLE_BERRIES and 175 not in duo.GEN3_BATTLE_BERRIES
+    # F2 (OMP cx-ba4598d7): the whole set, pinned -- and, when the pret cache is present, equal
+    # to the berries src/data/items.json gives a battle holdEffect
+    assert frozenset(range(133, 148)) | frozenset(range(168, 175)) == duo.GEN3_BATTLE_BERRIES
+    assert len(duo.GEN3_BATTLE_BERRIES) == 22
 
 
 def _rom_dump(name):
@@ -4202,22 +4212,74 @@ RR_DUMP = _rom_dump("Pokemon - Radical Red.gba")
 FR_DUMP = _rom_dump("Pokemon - FireRed Version (USA).gba")
 
 
-@pytest.mark.skipif(not (RR_DUMP and FR_DUMP), reason="the RR/FR dumps are not in the repo root or a parent")
-def test_rr_party_menu_words_hold_in_the_rr_rom():
-    """The party-menu note in lua/tests/gen3_title_syms.lua, re-read from the dumps, pinned
-    exactly (G5-RR-ORACLES-2): sha1 first; CB2_UpdatePartyMenu's body and both referrers;
-    Task_ReturnToChooseMonAfterText's body; Task_HandleSelectionMenuInput's 188-byte prologue;
-    Task_HandleChooseMonInput's CFRU detour stub; gPartyMenu's exact literal count, and its
-    slotId field (+9) read by code in BOTH the FR-identical region and CFRU."""
+RR_ARTIFACTS = {  # sha1 -> path: the clean 4.1 dump and the companion build SLink ships
+    "964f951a0fdaf209e4ea1344883ef0d557bb3a80": RR_DUMP,
+    "ea5352f8a3b9073f8ae20870ad12857925d442cd": REPO / "patch" / "build" / "slink_RR.gba",
+}
+
+
+COMPANION_EXTRA_REFS = {0x0811FB29: [0x0837A298], 0x02023FFC: [0x08378F44, 0x09360318], 0x0802EA11: [0x0837992C]}
+
+
+def _pret_battle_berries():
+    import json as _json
+
+    for base in (REPO, *REPO.parents):
+        items = base / ".cache" / "pret" / "pokefirered" / "src" / "data" / "items.json"
+        if items.is_file():
+            ids = {}
+            for line in (items.parent.parent.parent / "include" / "constants" / "items.h").read_text().splitlines():
+                m = re.match(r"#define (ITEM_\w+) (\d+)$", line)
+                if m:
+                    ids[m.group(1)] = int(m.group(2))
+            doc = _json.loads(items.read_text(encoding="utf-8"))
+            return {ids[i["itemId"]] for i in (doc["items"] if isinstance(doc, dict) else doc)
+                    if "_BERRY" in i["itemId"] and i["itemId"] != "ITEM_BERRY_JUICE"
+                    and i.get("holdEffect", "HOLD_EFFECT_NONE") != "HOLD_EFFECT_NONE"}
+    return None
+
+
+def test_the_battle_berry_set_is_pret_s():
+    """F2: GEN3_BATTLE_BERRIES is exactly pret's battle-holdEffect berries (skip only without
+    the pret cache)."""
+    pret = _pret_battle_berries()
+    if pret is None:
+        pytest.skip("no pret pokefirered cache in the repo root or a parent")
+    assert frozenset(pret) == duo.GEN3_BATTLE_BERRIES
+
+
+def _rr_rom(sha):
+    import hashlib
+
+    path = RR_ARTIFACTS[sha]
+    if not (path and path.is_file() and FR_DUMP):
+        return None
+    rom = path.read_bytes()
+    assert hashlib.sha1(rom).hexdigest() == sha, f"{path} is not the pinned artifact {sha}"
+    return rom
+
+
+@pytest.mark.parametrize("sha", sorted(RR_ARTIFACTS))
+def test_rr_party_menu_words_hold_in_the_rr_rom(sha):
+    """The party-menu and battle/bag notes in lua/tests/gen3_title_syms.lua, re-read from each
+    RR artifact (G5-RR-ORACLES-2/-3 F6: the clean dump AND the shipped companion), sha1 first.
+    Pinned exactly: identical bodies and referrers; Task_HandleSelectionMenuInput's 188-byte
+    prologue; the CFRU detour stubs; exact literal counts; the +9 slotId reads in both the
+    FR-identical region and CFRU; the battle-controller and bag words."""
     import hashlib
     import struct
 
-    fr, rr = FR_DUMP.read_bytes(), RR_DUMP.read_bytes()
-    assert hashlib.sha1(rr).hexdigest() == "964f951a0fdaf209e4ea1344883ef0d557bb3a80"
+    rr = _rr_rom(sha)
+    if rr is None:
+        pytest.skip(f"RR artifact {sha[:8]} or the FR dump is not present")
+    fr = FR_DUMP.read_bytes()
     assert hashlib.sha1(fr).hexdigest() == "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc"
 
     def body(rom, addr, n):
         return rom[addr - 0x08000000:addr - 0x08000000 + n]
+
+    def word(rom, addr):
+        return struct.unpack_from("<I", rom, addr - 0x08000000)[0]
 
     def refs(rom, value):
         lit, out, i = struct.pack("<I", value), [], rom.find(struct.pack("<I", value))
@@ -4246,19 +4308,80 @@ def test_rr_party_menu_words_hold_in_the_rr_rom():
                     break
         return hits
 
+    # party menu (G5-RR-ORACLES)
     assert body(rr, 0x0811EBA0, 0x1A) == body(fr, 0x0811EBA0, 0x1A)
     assert refs(rr, 0x0811EBA1) == refs(fr, 0x0811EBA1) == [0x0811EE28, 0x0811EE70]
     assert body(rr, 0x081203B8, 0x68) == body(fr, 0x081203B8, 0x68)
     assert body(rr, 0x08122C5C, 188) == body(fr, 0x08122C5C, 188)
     assert body(rr, 0x0811FB28, 4) == bytes.fromhex("00490847")                       # ldr r1,[pc]; bx r1
-    assert len(refs(rr, 0x0811FB29)) == 29 and len(refs(rr, 0x08122C5D)) == 4
-    assert len(refs(rr, 0x0203B0A0)) == 179 and len(refs(fr, 0x0203B0A0)) == 153
+    # the companion's own code (0x0837xxxx / 0x0936xxxx) adds these referrers, nothing else
+    extra = COMPANION_EXTRA_REFS if sha.startswith("ea5352f8") else {}
+
+    def exact(value, base):
+        got = refs(rr, value)
+        assert len(got) == base + len(extra.get(value, [])) and set(extra.get(value, [])) <= set(got), hex(value)
+
+    exact(0x0811FB29, 29)
+    exact(0x08122C5D, 4)
+    exact(0x0203B0A0, 179)
+    assert len(refs(fr, 0x0203B0A0)) == 153
     fr_reads = field_reads(fr, 0x0811E000, 0x08126000, 0x0203B0A0, 9)
     assert field_reads(rr, 0x0811E000, 0x08126000, 0x0203B0A0, 9) == fr_reads and len(fr_reads) >= 20
     assert 0x090B3360 in field_reads(rr, 0x090B0000, 0x090B7000, 0x0203B0A0, 9)       # CFRU reads +9 too
+    # battle controller / bag (G5-RR-BATTERY)
+    assert word(rr, 0x090AA178) == 0x02023BC4                     # CFRU action menu: ldr r4,=gActiveBattler
+    assert refs(rr, 0x0802E3B5) == [0x0802E334, 0x090445FC]       # PlayerBufferRunCommand
+    assert refs(rr, 0x0802EA11)[:4] == refs(fr, 0x0802EA11) == [0x0802E79C, 0x0802F398, 0x0802F3FC, 0x08032C8C]
+    assert body(rr, 0x0802EA10, 4) == bytes.fromhex("00480047") and word(rr, 0x0802EA14) == 0x090AB8B9
+    exact(0x02023FFC, 51)                                          # gMoveSelectionCursor
+    exact(0x0802EA11, 8)
+    assert body(rr, 0x08107EE0, 0x1A) == body(fr, 0x08107EE0, 0x1A)
+    assert body(rr, 0x08108CFC, 0x64) == body(fr, 0x08108CFC, 0x64)
+    for task in (0x08107EE1, 0x08108F0D, 0x08108CFD):
+        assert refs(rr, task) == refs(fr, task), hex(task)
     lua_syms = (REPO / "lua" / "tests" / "gen3_title_syms.lua").read_text(encoding="utf-8")
-    for word in ("0x0811EBA1", "0x0811FB29", "0x081203B9", "0x08122C5D", "0x0203B0A0"):
-        assert f"radical_red = {word}" in lua_syms, word
+    for w in ("0x0811EBA1", "0x0811FB29", "0x081203B9", "0x08122C5D", "0x0203B0A0", "0x02023BC4",
+              "0x0802E3B5", "0x0802EA11", "0x02023FFC", "0x08107EE1", "0x08108F0D", "0x08108CFD"):
+        assert f"radical_red = {w}" in lua_syms, w
+
+
+def test_the_rr_carrier_symbols_are_proven_only_and_fail_closed():
+    """F4 (OMP cx-ba4598d7): on radical_red the carrier's symbol table comes ONLY from
+    gen3_title_syms, the RR profile and the RR pack -- never pokefirered.sym -- and a symbol no
+    source proves raises by name at its use. Sentinel: every symbol the RR rows read is present;
+    an FR-only one (the Cable Club script) raises."""
+    from lupa import LuaError, LuaRuntime
+
+    text = DRIVER.read_text(encoding="utf-8")
+    body = re.search(r"^local function rr_symbols\(.*?^end$", text, re.M | re.S).group(0)
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    build = lua.execute(body + "\nreturn rr_symbols")
+    syms = re.findall(r'"(\w+)"', text[text.index("local SYMS = {"):text.index("--- radical_red's symbol table")])
+    titles = lua.execute(f'return dofile("{(REPO / "lua/tests/gen3_title_syms.lua").as_posix()}")')
+    ram = json.loads((REPO / "data/games/gen3_rr/profile.json").read_text(encoding="utf-8"))["titles"]["radical_red"]["ram"]
+    pack = json.loads((REPO / "data/games/gen3_rr/write_checkpoint.json").read_text(encoding="utf-8"))["radical_red"]
+    s = build(lua.table_from(dict.fromkeys(syms, True)), titles.for_title("radical_red"), titles.entries,
+              lua.table_from(ram, recursive=True), lua.table_from(pack, recursive=True))
+    rr_rows_read = {"gBattlerControllerFuncs": 0x03004FE0, "HandleInputChooseAction": 0x0802E438,
+                    "HandleInputChooseMove": 0x0802EA10, "gActionSelectionCursor": 0x02023FF8,
+                    "gMoveSelectionCursor": 0x02023FFC, "gBattleMons": 0x02023BE4,
+                    "gBattlerPartyIndexes": 0x02023BCE, "gBattleControllerExecFlags": 0x02023BC8,
+                    "gBattleOutcome": 0x02023E8A, "gMain": 0x030030F0, "gTasks": 0x03005090,
+                    "gPartyMenu": 0x0203B0A0, "CB2_UpdatePartyMenu": 0x0811EBA0,
+                    "Task_HandleChooseMonInput": 0x0811FB28, "Task_HandleSelectionMenuInput": 0x08122C5C,
+                    "Task_ReturnToChooseMonAfterText": 0x081203B8, "gActiveBattler": 0x02023BC4,
+                    "gBattleResults": 0x03004F90, "gStatuses3": 0x02023DFC,
+                    "PlayerBufferExecCompleted": 0x0802E33C, "PlayerBufferRunCommand": 0x0802E3B4,
+                    "CB2_BagMenuRun": 0x08107EE0, "Task_BagMenu_HandleInput": 0x08108F0C,
+                    "Task_AnimateWin0v": 0x08108CFC, "gPaletteFade": 0x02037AB8,
+                    "Task_DepositMenu": 0x0808DD88, "Task_WithdrawMon": 0x0808DC9C,
+                    "gSaveBlock1Ptr": 0x03005008}
+    for name, want in rr_rows_read.items():
+        assert s[name] == want, (name, hex(s[name]))
+    with pytest.raises(LuaError, match="CableClub_EventScript_WelcomeToCableClub is unproven for radical_red"):
+        lua.eval("function(s) return s.CableClub_EventScript_WelcomeToCableClub end")(s)
+    rr_branch = text[text.index('if title == "radical_red" then\n    local want'):text.index("else\n    local want")]
+    assert ".sym" not in rr_branch and "pokefirered" not in rr_branch
 
 
 def test_the_forced_send_out_walks_back_from_confirm_or_cancel():
@@ -4306,4 +4429,36 @@ def test_the_send_out_accepts_an_rr_record_without_a_checksum():
     assert "record_ok(mon, TITLE)" in send and "mon.checksum_ok" not in send
     fixture = duo.gen3_decode((REPO / "tests/fixtures/gen3/rr_battle2.sav").read_bytes(), rr=True)[0]
     assert [(m["hp"], m["checksum_ok"]) for m in fixture] == [(22, None), (18, None)]
+
+
+def test_a_caught_keys_memorial_is_compared_against_its_capture_event(pair):
+    """F3 (OMP cx-ba4598d7): a key the fixture never carried (deadzone's refused catch) had its
+    memorial record compared against nothing. It is now checked against the client's own capture
+    event (species, held item), and a missing event is a problem, never a skip."""
+    fixture, _ = pair
+    catch = _mon(CATCH["personality"], party=False, species=19)
+    catch["held_item"] = 0
+    saved = _saved(fixture, 3, [STARTER, PIDGEY], {(13, 0): catch})
+    k = _key(CATCH)
+    sent = {"species_id": 19, "held_item_id": 0}
+    assert _mem("b", _decoded(saved), _decoded(fixture), k, 13, battled=True, captured=sent) == []
+    assert any("capture event" in p for p in _mem("b", _decoded(saved), _decoded(fixture), k, 13, battled=True))
+    assert any("held_item" in p for p in
+               _mem("b", _decoded(saved), _decoded(fixture), k, 13, battled=True, captured=dict(sent, held_item_id=139)))
+    assert any("species" in p for p in
+               _mem("b", _decoded(saved), _decoded(fixture), k, 13, battled=True, captured=dict(sent, species_id=16)))
+
+
+def test_rr_rows_that_link_or_throw_boot_rr_battle2():
+    """G5-RR-BATTERY (live 3fa789da: KeyError 1 on slot-1 links over the one-mon rr_town, no
+    balls on rr_battle): every RR row that links/trades slot 1 or throws a ball boots rr_battle2."""
+    for name in ("faint_cmd_gen3", "boxsync_gen3", "whiteout_gen3", "link_gen3", "deadzone_gen3",
+                 "reconnect_gen3", "native_absent_gen3", "linked_faint_active_gen3"):
+        assert duo.scenario_target(duo.SCENARIOS[name], "gen3_rr") == "battle2", name
+    fr = {"faint_cmd_gen3": "town", "link_gen3": "battle", "boxsync_gen3": {"a": "battle", "b": "town"}}
+    for name, want in fr.items():
+        assert duo.scenario_target(duo.SCENARIOS[name], "gen3_frlg") == want, name
+    fixture = duo.gen3_decode((REPO / "tests/fixtures/gen3/rr_battle2.sav").read_bytes(), rr=True)[0]
+    assert len(fixture) == 2 and duo.gen3_ball_count((REPO / "tests/fixtures/gen3/rr_battle2.sav").read_bytes(),
+                                                     "radical_red") == 9
 

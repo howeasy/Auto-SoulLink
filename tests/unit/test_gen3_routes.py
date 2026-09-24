@@ -156,9 +156,10 @@ def test_runner_and_partner_allow_the_full_preparation_budget(env):
 
     lua, _ = env
     cfg = e2e_duo.SCENARIOS["trainer_bench_gen3"]
-    # At the configured 16x, a 1.8M-frame prep needs 1875 ideal seconds; allow CPU/I/O
-    # contention and post-READY proof. B must wait just as long without its frame guard firing.
-    assert cfg["timeout"] >= 7200
+    # G4-SYNTH-TRAINER: A boots the cached-native trainer fixture (one step to Rick), so the row
+    # needs no 1.8M-frame prep; the frame guard still covers the whole wall budget at 16x, and
+    # B must wait at least as long as the runner does.
+    assert cfg["target"]["a"] == "trainer"
     assert cfg["frames"] >= cfg["timeout"] * 60 * 16
     carrier = lua.execute((ROOT / "lua/tests/duo/scenario_gen3_battle_window.lua").read_text())
     lua.execute("""
@@ -597,3 +598,42 @@ def test_preparation_wraps_actual_shared_follow_and_logs_nested_frames(env):
     progress = [s for s in g.logs.values() if s.startswith("PREP_PROGRESS")]
     assert len(progress) >= 3
     assert all("level=13 exp=1261 hp=30/30" in s and "frames=" in s for s in progress)
+
+
+def test_a_cached_trainer_fixture_skips_the_t2_walk_and_meets_rick(env):
+    """G4-SYNTH-TRAINER (6e85ddfc): {firered,leafgreen}_party_trainer.sav stands at (41,45) on
+    Viridian Forest 1.0, one step west of Rick 102's sight line. run() settles, logs PREP_READY,
+    then PREP_FIXTURE -- no tutorial, training, heal or walk -- and takes the one step Right into
+    the same Rick asserts. A save anywhere else still needs the town start tile."""
+    lua, routes = env
+    lua.globals().r = routes
+    lua.execute("""
+        f=0;x=41;y=45;g=1;n=0;logs={};battling=false;steps={}
+        c={cp={},battler_slot=function() return 0 end,
+           party=function() return {{level=13,experience=1261,hp=40,max_hp=40,status=0}} end,
+           find=function() return {slot=1,hp=15} end,in_battle=function() return battling end,
+           on_field=function() return true end,
+           peek=function() error('the tutorial precondition ran') end,
+           log=function(s) logs[#logs+1]=s end,frames=function() f=f+1 end,
+           walk_to_pc=function() error('HEAL_REACHED') end,
+           battle_window_snapshot=function()
+               return {battle_permit=true,is_trainer=true,trainer_id=102,outcome=0} end,
+           G={map=function() return g,n end,pos=function() return x,y end,
+              tap=function(dir) f=f+1; steps[#steps+1]=dir; if dir=='Right' then x=x+1; battling=true end end,
+              pred_ok=function() return not battling end},
+           play={fight_through=function() error('no fight') end,follow=function() error('no walk') end}}
+        t={START={24,39},TRIGGER={24,38},SEGMENTS={}}
+        prep={max_frames=30000,target_key='K',target_slot=1,target_hp=15,level_floor=13}
+    """)
+    g = lua.globals()
+    assert routes.enter_trainer(g.c, g.t, lambda: g.f, "prep", 102, g.prep) is True
+    logs = list(g.logs.values())
+    assert any(s.startswith("PREP_READY ") for s in logs)
+    assert "PREP_FIXTURE trainer at=(41,45)" in logs
+    assert logs.index(next(s for s in logs if s.startswith("PREP_READY "))) < logs.index(
+        "PREP_FIXTURE trainer at=(41,45)")
+    assert not any(s.startswith(("PREP_TUTORIAL", "PREP_ROUTE", "PREP_HEAL")) for s in logs)
+    assert list(g.steps.values()) == ["Right"]
+    lua.execute("x=12;y=37;g=3;n=19;battling=false")              # neither fixture tile
+    ok, why = routes.enter_trainer(g.c, g.t, lambda: g.f, "prep", 102, g.prep)
+    assert not ok and "T2 needs the town or the trainer fixture" in why

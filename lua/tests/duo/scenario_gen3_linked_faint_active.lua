@@ -33,8 +33,11 @@
 --   "command"   A2 (active_end_gen3): no pair death. A is the subject; the runner queues
 --               force_faint to A after READY_ACTIVE; B idles and never saves. A sends out slot 1,
 --               RUNs, and saves the engine-written HP 0.
---   "lhammer"   RR R3: as wild, but B pulses L every frame from the commit to the KO; the POKe
---               BALLS count and CFRU's ball-id byte 0x0203AD30 must not change.
+--   "lhammer"   RR R3: as wild, but B pulses L from the commit to the KO -- pressed while the
+--               game last READ L released (gMain.heldKeysRaw, bit 0x200), released once it read it
+--               pressed, so every game read sees a fresh edge even on an overrunning main loop --
+--               and releases at the KO. The pre-commit input guard stays on. The POKe BALLS count
+--               and CFRU's ball-id byte 0x0203AD30 must not change.
 --   "mega"      RR R5: a signed G5 limit (owner ruling 20): no RR trainer route, no mega-capable
 --               party; the runner SKIPs it and this case refuses by name.
 --   "explode"   explode_gen3 (RR, --explode-mode; owner ruling 19): the server sends
@@ -52,16 +55,25 @@ local OUTCOME_LOST, OUTCOME_RAN = 2, 4 -- include/constants/battle.h
 local PLAN_ENTRIES = 5                 -- status3, perish timer, chosen action, comm, hand-off
 local RR_BALL_ID = 0x0203AD30          -- rr_active_faint_parity_scope §3.1 (the L-throw's store)
 local MOVE_EXPLOSION = 153             -- pret include/constants/moves.h
+local L_BIT = 0x200                    -- KEYINPUT L (pret include/gba/io_reg.h L_BUTTON)
 
 local function hexbytes(t) local o = {} for i, v in ipairs(t) do o[i] = fmt("%d", v) end return table.concat(o, "/") end
 
 --- The engine observer, installed at READY_ACTIVE. Returns the state table the scenario polls.
-local function observe(ctx, key, slot, hammer, explode)
+local function observe(ctx, key, slot, hammer, explode, case)
     local o = {}
     local H = ctx.handoff
     local w0, att0, in0, site0 = #ctx.write_lines(), ctx.attempted(), ctx.inputs(), #ctx.faint_sites()
     local hp_addr = ctx.hp_addrs(slot)
-    local function fail(s) o.fail = o.fail or s end
+    local l_held = false
+    local function set_l(held)
+        ctx.press(held and { L = true } or {})
+        l_held = held
+    end
+    local function fail(s)
+        if hammer and l_held then set_l(false) end
+        o.fail = o.fail or s
+    end
     local function successor(v) for _, t in ipairs(H.to) do if v == t then return true end end end
     -- R1 L3: every count the receipt prints is MEASURED here, never a literal
     local function hp_writes()
@@ -76,13 +88,19 @@ local function observe(ctx, key, slot, hammer, explode)
         for i = w0 + 1, #lines do
             if hp_addr[lines[i].address] then return fail(fmt("SLink wrote an HP word 0x%08X", lines[i].address)) end
         end
-        if o.commit and not o.ko then o.keys = o.keys | s.keys end   -- heldKeysRaw, OR-ed over the window
+        if o.commit and not o.ko then
+            o.keys = o.keys | s.keys
+            if not hammer and o.keys ~= 0 then
+                return fail(fmt("input between the commit and the KO (keys=0x%X presses=%d)",
+                                o.keys, ctx.inputs() - in0))
+            end
+        end
         if not o.commit then
+            if s.keys ~= 0 or ctx.inputs() ~= in0 then return fail("input before the commit") end
             local c = {}
             for i = w0 + 1, #lines do if lines[i].reason == "battle_commit" then c[#c + 1] = lines[i] end end
             if #c == 0 then
                 if not s.in_battle or s.battle_hp == 0 then return fail("the battle or the mon ended before any commit") end
-                if not hammer and (s.keys ~= 0 or ctx.inputs() ~= in0) then return fail("input before the commit") end
                 o.base = s                                   -- the last parked frame before the commit
                 return
             end
@@ -108,12 +126,12 @@ local function observe(ctx, key, slot, hammer, explode)
                 end
             end
             o.base = o.base or s
-            o.keys = s.keys
+            o.keys = s.keys                               -- 0: the pre-commit guard ran this frame
             o.commit = { frame = s.frame, attempted = ctx.attempted() - att0, ctrl = s.ctrl0 }
             ctx.log(fmt('ACTIVE_COMMIT %s frame=%d writes=%d attempted=%d handoff=1 status3=0x%X ctrl=0x%08X '
-                        .. 'counter=%d last_move=%d pp=%s why="%s"', key, s.frame, #c, o.commit.attempted,
-                        s.status3, s.ctrl0, o.base.counter, o.base.last_move, hexbytes(o.base.pp), e.why))
-            if hammer then ctx.press({ L = true }) end
+                        .. 'counter=%d last_move=%d pp=%s why="%s" case=%s', key, s.frame, #c, o.commit.attempted,
+                        s.status3, s.ctrl0, o.base.counter, o.base.last_move, hexbytes(o.base.pp), e.why, case))
+            if hammer then set_l(true) end
             return
         end
         if not o.handoff then
@@ -137,9 +155,10 @@ local function observe(ctx, key, slot, hammer, explode)
             if s.battler0_slot ~= slot then return fail("battler 0 left the linked slot before the KO") end
             if not s.in_battle then return fail("the battle ended before the KO") end
             if s.battle_hp > 0 then
-                if hammer then ctx.press({ L = true }) end
+                if hammer then set_l((s.keys & L_BIT) == 0) end   -- press on a read release, release on a read press
                 return
             end
+            if hammer then set_l(false) end
             if explode then
                 if s.last_move ~= MOVE_EXPLOSION then return fail("the KO came without the Explosion action") end
             else
@@ -148,8 +167,8 @@ local function observe(ctx, key, slot, hammer, explode)
             end
             o.ko = s.frame
             ctx.log(fmt("ACTIVE_KO %s frame=%d in_battle=1 battle_hp=0 status3=0x%X pp=%s last_move=%d inputs=%d "
-                        .. "keys=0x%X hp_writes=%d attempted=%d", key, s.frame, s.status3, hexbytes(s.pp),
-                        s.last_move, ctx.inputs() - in0, o.keys, hp_writes(), ctx.attempted() - att0))
+                        .. "keys=0x%X hp_writes=%d attempted=%d case=%s", key, s.frame, s.status3, hexbytes(s.pp),
+                        s.last_move, ctx.inputs() - in0, o.keys, hp_writes(), ctx.attempted() - att0, case))
         end
         if not o.site then
             local sites = ctx.faint_sites()
@@ -262,7 +281,7 @@ local function subject(ctx, key, case)
     local hammer, explode = case == "lhammer", case == "explode"
     local cmd = explode and "force_explode" or "force_faint"
     local b0, id0 = balls(ctx)
-    local o = observe(ctx, key, SLOT, hammer, explode)
+    local o = observe(ctx, key, SLOT, hammer, explode, case)
     ctx.log(fmt("READY_ACTIVE %s case=%s", key, case))
     if not ctx.wait_received(cmd, key, ctx.D.timeout_secs or 1500) then
         return false, "no " .. cmd .. " for " .. key
@@ -330,7 +349,8 @@ local function subject(ctx, key, case)
     local saved, svwhy = ctx.save("linked_faint_active")
     if not saved then return false, svwhy end
     return true, (explode and "Explode+H: engine Explosion KO" or "P+H: engine Perish KO")
-                 .. " in battle with no input (" .. case .. ")"
+                 .. " in battle with " .. (hammer and "alternating L input" or "no input")
+                 .. " (" .. case .. ")"
 end
 
 local function natural(ctx, key)

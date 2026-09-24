@@ -106,6 +106,7 @@ def test_collection_names_files_by_scenario_and_player(tmp_path, monkeypatch):
     monkeypatch.setattr(duo, "WIRE_FIXTURES", str(tmp_path / "fixtures"))
     run = _run(tmp_path, wire_log=True)
     run.scenario = "boxsync"
+    run.gcfg = duo.GAMES["gen3_rr"]   # every active Gen 3 row is the new battery client (ac448144)
     os.makedirs(run._wire_dir())
     for player in ("a", "b"):
         with open(os.path.join(run._wire_dir(), f"wire_{player}.jsonl"), "w",
@@ -117,7 +118,7 @@ def test_collection_names_files_by_scenario_and_player(tmp_path, monkeypatch):
     landed = run.collect_wire_logs()
 
     assert sorted(os.path.basename(p) for p in landed) == [
-        "boxsync_a_old_client.jsonl", "boxsync_b_old_client.jsonl"]
+        "boxsync_a_gen3_new.jsonl", "boxsync_b_gen3_new.jsonl"]
     with open(landed[0], encoding="utf-8") as handle:
         assert json.loads(handle.read())["msg"]["player"] == "a"
 

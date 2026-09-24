@@ -348,8 +348,10 @@ def test_the_gen3_rr_wrapper_lists_the_shared_set_plus_its_own_rows():
         assert scenario_applies(name, "gen3_rr")
         assert mod.deadline_for_rr(name) == (SCENARIOS[name]["timeout"]
                                              * scenario_attempt_limit(name, "gen3_rr") + 300)
-    assert mod.required_fixtures_rr("boxsync_gen3") == ["rr_battle", "rr_town_b"]
-    assert mod.required_fixtures_rr("faint_cmd_gen3") == ["rr_town", "rr_town_b"]
+    # G5-RR-BATTERY: rows that link slot 1 or throw balls boot rr_battle2 on RR
+    assert mod.required_fixtures_rr("boxsync_gen3") == ["rr_battle2", "rr_battle2_b"]
+    assert mod.required_fixtures_rr("faint_cmd_gen3") == ["rr_battle2", "rr_battle2_b"]
+    assert mod.required_fixtures_rr("explode_gen3") == ["rr_battle", "rr_battle_b"]
 
 
 def test_the_gen3_wrapper_lists_exactly_the_gen3_frlg_scenarios():

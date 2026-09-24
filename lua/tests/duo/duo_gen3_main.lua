@@ -173,7 +173,7 @@ local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInpu
                "gActionSelectionCursor", "gMoveSelectionCursor", "gBattleMons", "gBattlerPartyIndexes",
                "gBattleOutcome", "gMain", "gTasks", "gPartyMenu", "CB2_UpdatePartyMenu",
                "Task_HandleChooseMonInput", "Task_HandleSelectionMenuInput",
-               "Task_ReturnToChooseMonAfterText", "gBattleMoves", "Task_DepositMenu", "Task_WithdrawMon",
+               "Task_ReturnToChooseMonAfterText", "Task_DepositMenu", "Task_WithdrawMon",
                "CB2_BagMenuRun", "Task_BagMenu_HandleInput", "Task_AnimateWin0v", "gPaletteFade",
                "Task_LinkupAwaitConnection", "sGlobalScriptContext",
                "CableClub_EventScript_WelcomeToCableClub", "CableClub_EventScript_UnusedWelcomeToCableClub",
@@ -190,19 +190,58 @@ local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInpu
                -- the hand-off (rr_active_faint_parity_scope §3.2; RR reuses FR's, byte-proven there)
                "gActiveBattler", "gBattleResults", "gStatuses3", "PlayerBufferExecCompleted",
                "PlayerBufferRunCommand" }
+--- radical_red's symbol table (G5-RR-ORACLES-3 F4): ONLY proven sources -- gen3_title_syms'
+--- radical_red values (ROM byte anchors / cited notes), the RR profile's ram block, and the RR
+--- pack's own words (predicates / witnesses: symbol + base address; save pointers; hand-off). No pokefirered.sym fallback: RR is a hack of FR, not a
+--- pret tree, and an FR address that CFRU moved would be read silently. A symbol no source proves
+--- is ABSENT, and reading it raises by name (fail closed at the point of use, not at load, so a
+--- row that never touches, say, the Cable Club words still runs). Self-contained (no upvalues)
+--- so tests run this exact body over the committed RR files.
+local function rr_symbols(want, proven, entries, ram, pack)
+    local out = {}
+    for name, e in pairs(entries) do
+        local v = proven[name]
+        if v and want[e.symbol] then out[e.symbol] = v - (e.offset or 0) - (e.thumb and 1 or 0) end
+    end
+    local RAM = { gBattleMons = "BATTLE_MONS_ADDR", gBattlerPartyIndexes = "BATTLER_PARTY_INDEXES_ADDR",
+                  gBattleControllerExecFlags = "BATTLE_CONTROLLER_EXEC_FLAGS_ADDR",
+                  gBattleCommunication = "BATTLE_COMM_ADDR", gStatuses3 = "STATUS3_ADDR",
+                  gBattleOutcome = "BATTLE_OUTCOME_ADDR", gBattleResults = "BATTLE_RESULTS_ADDR",
+                  gTasks = "TASKS_BASE_ADDR" }
+    for sym, field in pairs(RAM) do
+        if want[sym] and out[sym] == nil and type(ram[field]) == "number" then out[sym] = ram[field] end
+    end
+    for _, group in ipairs({ pack.predicates or {}, pack.witnesses or {} }) do
+        for _, p in pairs(group) do
+            if type(p) == "table" and want[p.symbol] and out[p.symbol] == nil and type(p.address) == "number" then
+                out[p.symbol] = p.address
+            end
+        end
+    end
+    for sym, p in pairs(pack.pointers or {}) do
+        if want[sym] and out[sym] == nil and type(p.address) == "number" then out[sym] = p.address end
+    end
+    local handoff = pack.battle and pack.battle.handoff
+    if handoff and handoff.value_symbol and want[handoff.value_symbol] and out[handoff.value_symbol] == nil then
+        out[handoff.value_symbol] = handoff.value - 1
+    end
+    return setmetatable(out, { __index = function(_, k)
+        error("symbol " .. tostring(k) .. " is unproven for radical_red (no gen3_title_syms entry, RR "
+              .. "profile field or RR pack word; no pokefirered.sym fallback)", 2)
+    end })
+end
 local S = {}
-do
+if title == "radical_red" then
     local want = {}
     for _, n in ipairs(SYMS) do want[n] = true end
-    -- radical_red has no pret .sym of its own (RR is a hack of FR, not a pret source tree): RR
-    -- retains FR's addresses for every function this file's own docs/gen3/research notes
-    -- actually cross-checked against the RR binary (Task_DepositMenu/Task_WithdrawMon,
-    -- TryStorePartyMonInBox -- docs/gen3/research/rr_pc_menu.md:29,79-80). The REST of SYMS
-    -- (battle action/move cursors, gBattlerControllerFuncs, gBattleMons/gBattleMoves) are NOT
-    -- independently verified for RR -- reusing pokefirered.sym for them is the best-supported
-    -- available choice, not a confirmed fact; see the card's final report.
-    local sym_title = title == "radical_red" and "firered" or title
-    local path = ROOT .. "/data/gen3/pret/poke" .. sym_title .. ".sym"
+    S = guard("radical_red symbols (gen3_title_syms + RR profile + RR pack)", function()
+        local Titles = dofile(ROOT .. "/lua/tests/gen3_title_syms.lua")
+        return rr_symbols(want, Titles.for_title(title), Titles.entries, profile.ram, cp)
+    end)
+else
+    local want = {}
+    for _, n in ipairs(SYMS) do want[n] = true end
+    local path = ROOT .. "/data/gen3/pret/poke" .. title .. ".sym"
     guard("pret symbols in " .. path, function()
         local fh = assert(io.open(path, "r"), "cannot read " .. path)
         for line in fh:lines() do

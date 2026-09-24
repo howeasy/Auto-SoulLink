@@ -127,9 +127,24 @@ M.entries = {
     HANDLE_INPUT_CHOOSE_ACTION = { symbol = "HandleInputChooseAction", thumb = true,
                                     firered = 0x0802E439, leafgreen = 0x0802E439,
                                     radical_red = 0x0802E439, rr_source = RR_DUO_PRECEDENT },
-    -- CB2_BAG_MENU_RUN/PC_MULTICHOICE/PC_STORAGE_MAIN/PC_ON_SELECTED/PC_RELEASE_MON/
-    -- PC_ON_B_PRESSED: no ROM anchor, no old-client use, not in rr_pc_menu.md. ABSENT.
+    -- PC_MULTICHOICE/PC_STORAGE_MAIN/PC_ON_SELECTED/PC_RELEASE_MON/PC_ON_B_PRESSED: no ROM
+    -- anchor, no old-client use, not in rr_pc_menu.md. ABSENT.
     -- (The four party-menu words below carry RR values: see the party-menu note above.)
+    -- Battle/bag note (G5-RR-BATTERY; the carrier's RR symbol table reads ONLY this file, the RR
+    -- profile and the RR pack -- no pokefirered.sym fallback), RR 4.1 (964f951a) vs FR (41cb23d8):
+    --   gActiveBattler 0x02023BC4: CFRU's action menu loads it (pool 0x090A9EA4 region, the
+    --     `ldr r4,=0x02023bc4` at 0x090A9EA4); the RR faint site's census reads it
+    --     (docs/gen3/research/rr_faint_repin.md R5);
+    --   PlayerBufferExecCompleted|1 0x0802E33D / PlayerBufferRunCommand|1 0x0802E3B5: the
+    --     hand-off pair (rr_active_faint_parity_scope §3.2); RunCommand's referrers are FR's pool
+    --     0x0802E334 and CFRU's ExecCompleted hook 0x090445FC;
+    --   HandleInputChooseMove|1 0x0802EA11: FR's four referrers (0x0802E79C, 0x0802F398,
+    --     0x0802F3FC, HandleChooseMoveAfterDma3's pool 0x08032C8C) all kept; CFRU detours the
+    --     body (00 48 00 47 -> 0x090AB8B9) and compares the word at four more sites;
+    --   gMoveSelectionCursor 0x02023FFC: 51 literal referrers in RR, CFRU's move menu among them;
+    --   CB2_BagMenuRun 0x08107EE0 and Task_AnimateWin0v 0x08108CFC: bodies byte-identical, the
+    --     same referrers as FR; Task_BagMenu_HandleInput 0x08108F0C: CFRU edits the body past
+    --     byte 64, the four task-pointer referrers are FR's.
     CB2_UPDATE_PARTY_MENU = { symbol = "CB2_UpdatePartyMenu", thumb = true,
                                firered = 0x0811EBA1, leafgreen = 0x0811EB79,
                                radical_red = 0x0811EBA1, rr_source = "ROM byte anchor (G5-RR-ORACLES): lua/tests/gen3_title_syms.lua party-menu note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
@@ -143,14 +158,30 @@ M.entries = {
                               firered = 0x08122C5D, leafgreen = 0x08122C35,
                               radical_red = 0x08122C5D, rr_source = "ROM byte anchor (G5-RR-ORACLES): lua/tests/gen3_title_syms.lua party-menu note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
     CB2_BAG_MENU_RUN = { symbol = "CB2_BagMenuRun", thumb = true,
-                          firered = 0x08107EE1, leafgreen = 0x08107EB9 },
+                          firered = 0x08107EE1, leafgreen = 0x08107EB9,
+                          radical_red = 0x08107EE1, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
     -- The bag's input gates (pret src/item_menu.c:1044-1049): Task_BagMenu_HandleInput reads
     -- no press while the palette fade or Task_AnimateWin0v runs. Verified against both .sym
     -- files (pokefirered.sym:10212/10205, pokeleafgreen.sym:10214/10207). No RR value: ABSENT.
     TASK_BAG_MENU_HANDLE_INPUT = { symbol = "Task_BagMenu_HandleInput", thumb = true,
-                                    firered = 0x08108F0D, leafgreen = 0x08108EE5 },
+                                    firered = 0x08108F0D, leafgreen = 0x08108EE5,
+                                    radical_red = 0x08108F0D, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
     TASK_ANIMATE_WIN0V = { symbol = "Task_AnimateWin0v", thumb = true,
-                            firered = 0x08108CFD, leafgreen = 0x08108CD5 },
+                            firered = 0x08108CFD, leafgreen = 0x08108CD5,
+                            radical_red = 0x08108CFD, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+    ACTIVE_BATTLER_ADDR = { symbol = "gActiveBattler", firered = 0x02023BC4, leafgreen = 0x02023BC4,
+                            radical_red = 0x02023BC4, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+    PLAYER_BUFFER_EXEC_COMPLETED = { symbol = "PlayerBufferExecCompleted", thumb = true,
+                                     firered = 0x0802E33D, leafgreen = 0x0802E33D,
+                                     radical_red = 0x0802E33D, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+    PLAYER_BUFFER_RUN_COMMAND = { symbol = "PlayerBufferRunCommand", thumb = true,
+                                  firered = 0x0802E3B5, leafgreen = 0x0802E3B5,
+                                  radical_red = 0x0802E3B5, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+    HANDLE_INPUT_CHOOSE_MOVE = { symbol = "HandleInputChooseMove", thumb = true,
+                                 firered = 0x0802EA11, leafgreen = 0x0802EA11,
+                                 radical_red = 0x0802EA11, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
+    MOVE_CURSOR_ADDR = { symbol = "gMoveSelectionCursor", firered = 0x02023FFC, leafgreen = 0x02023FFC,
+                         radical_red = 0x02023FFC, rr_source = "ROM byte anchor (G5-RR-BATTERY): lua/tests/gen3_title_syms.lua battle/bag note; re-checked by tests/unit/test_e2e_duo_gen3.py when the ROMs are present" },
     PC_MULTICHOICE = { symbol = "Task_MultichoiceMenu_HandleInput", thumb = true,
                         firered = 0x0809CC99, leafgreen = 0x0809CC6D },
     -- pret ROM address unchanged in RR (rr_pc_menu.md:29,36: only two 8-byte windows patched

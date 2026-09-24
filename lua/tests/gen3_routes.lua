@@ -349,7 +349,11 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
     end
     local function run()
         assert(expected==102,"unsupported preparation trainer")
-        assert(at(3,1,T.START[1],T.START[2]),"T2 needs the town fixture")
+        -- G4-SYNTH-TRAINER (6e85ddfc): {firered,leafgreen}_party_trainer.sav is CACHED-NATIVE at
+        -- (41,45) on Viridian Forest 1.0, one step west of Rick's sight line, Lv13 lead: the
+        -- tutorial/train/heal/Route 2/gate/forest walk is already done by normal inputs there.
+        local cached=at(1,0,41,45)
+        assert(cached or at(3,1,T.START[1],T.START[2]),"T2 needs the town or the trainer fixture")
         -- boot_to_field only holds callback2/fade for60 frames, not field/script control.
         -- Its save helper documents a CONTINUE control lock lasting100+ frames. Do not spend
         -- the first step's60-tick movement budget on that independent settle interval.
@@ -364,6 +368,9 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
             error("PREPARATION field/script controls never settled")
         end
         c.log(string.format("PREP_READY frames=%d stable=60",frame()-start))
+        if cached then
+            c.log("PREP_FIXTURE trainer at=(41,45)")
+        else
         local sb1=c.peek("gSaveBlock1Ptr",4)
         local pocket={c.SP.SB1_KEYITEMS_POCKET_OFFSET,c.SP.BAG_KEYITEMS_COUNT}
         local already=T.after_scene(sb1,pocket)
@@ -402,6 +409,7 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
         warp("Up",{group=1,num=0,x=29,y=62})
         walk(R.paths.forest_arrival)
         walk(R.paths.forest)
+        end
         step("Right",false)
         assert(await(c.in_battle,1800,"A"),"Rick encounter did not start")
         assert(await(function()

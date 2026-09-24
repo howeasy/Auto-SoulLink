@@ -59,8 +59,10 @@ WT_FWD = REPO.replace("\\", "/")
 # --game: Gen 3-only scenarios were run against a Game Boy, where they died on the savestate
 # they declare and no GB fixture has.
 SCENARIOS = {
-    "trainer_bench_gen3": {"flags": [], "timeout": 7200, "games": ("gen3_frlg",),
-        "target": {"a": "town", "b": "town"}, "frames": 8000000, "no_save": ("b",),
+    # A boots {firered,leafgreen}_party_trainer.sav (6e85ddfc): CACHED-NATIVE at (41,45) on map
+    # 1.0, one step west of Rick 102's sight line, Lv13 lead -- gen3_routes skips the T2 walk.
+    "trainer_bench_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg",),
+        "target": {"a": "trainer", "b": "town"}, "frames": 2500000, "no_save": ("b",),
         "scenario_module": "battle_window", "battle_window_case": "trainer_bench", "battle_window_slot": 1,
         "oracle": "assert_trainer_bench_gen3_saved"},
     # A2 under mechanism P+H (owner rulings 15-18): the command-only single-subject row. A parks
@@ -222,8 +224,12 @@ SCENARIOS = {
     # battle-flag addresses) are confirmed identical to FR's; the rest (battle action/move
     # cursors, map names/tile coordinates) are assumed, not verified.
     "faint_cmd_gen3": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_rr"),
-                       "target": "town", "frames": 2000000,
+                       "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 2000000,
                        "oracle": "assert_faint_cmd_gen3_saved"},
+    # G5-RR-BATTERY: on gen3_rr every row that links or trades the slot-1 mon, or throws a Poke
+    # Ball, boots rr_battle2{,_b}.sav (two mons, nine balls; 80913bdf) via target_by_game --
+    # rr_town / rr_battle hold ONE mon and no balls (live 3fa789da: KeyError 1 on the slot-1 key,
+    # "the fixture starts with no Poke Balls", no no_catch without balls).
     # A1 and R1 (RR companion): mechanism P+H on the wild battle (active_faint_case "wild").
     # `target_by_game` (scenario_target): RR's rr_battle.sav holds ONE mon and no balls, so R1's
     # send-out needs rr_battle2 (parcel -> 10 balls, then a Route 1 catch; driver 8103ddec).
@@ -243,16 +249,16 @@ SCENARIOS = {
                                           "oracle": "assert_linked_faint_active_whiteout_gen3_saved"},
     # A1 (ii): B takes T2's route to Bug Catcher Rick 102 (cffe0a25); the forced party screen
     # follows the KO. B boots the town fixture (the route starts there), A the battle one.
-    "linked_faint_active_trainer_gen3": {"flags": [], "timeout": 7200, "games": ("gen3_frlg",),
-                                         "target": {"a": "battle", "b": "town"}, "frames": 8000000,
+    "linked_faint_active_trainer_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg",),
+                                         "target": {"a": "battle", "b": "trainer"}, "frames": 2500000,
                                          "scenario_module": "linked_faint_active",
                                          "active_faint_case": "trainer",
                                          "oracle": "assert_linked_faint_active_trainer_gen3_saved"},
     "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr"),
-                     "target": {"a": "battle", "b": "town"}, "frames": 2500000,
+                     "target_by_game": {"gen3_rr": "battle2"}, "target": {"a": "battle", "b": "town"}, "frames": 2500000,
                      "oracle": "assert_boxsync_gen3_saved"},
     "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr"),
-                      "target": {"a": "battle", "b": "town"}, "frames": 3000000,
+                      "target_by_game": {"gen3_rr": "battle2"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
                       "oracle": "assert_whiteout_gen3_saved"},
     # G4 item 2a (4): the Center 2F negative controls (the nurse rides whiteout_gen3). A walks
     # from the Route 1 grass to the 2F; its one in-game save is the Cable Club's own
@@ -269,13 +275,13 @@ SCENARIOS = {
     # on a fixture's few balls) earns the Gen 1 standard's whole-run retry (RNG_RETRY_FAMILIES).
     "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr"),
                   "ball_hunt": True,
-                  "target": "battle", "frames": 2500000, "oracle": "assert_link_gen3_saved"},
+                  "target_by_game": {"gen3_rr": "battle2"}, "target": "battle", "frames": 2500000, "oracle": "assert_link_gen3_saved"},
     "deadzone_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr"),
                       "ball_hunt": True,
-                      "target": "battle", "frames": 2500000,
+                      "target_by_game": {"gen3_rr": "battle2"}, "target": "battle", "frames": 2500000,
                       "oracle": "assert_deadzone_gen3_saved"},
     "reconnect_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_rr"),
-                       "target": "town", "frames": 2000000, "no_save": ("a",),
+                       "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 2000000, "no_save": ("a",),
                        "oracle": "assert_reconnect_gen3_saved"},
     # ── RR-only (P5, card C5-5): docs/gen3/PLAN.md §14 P5's nine minus the retired old-client
     # trade/ghost/infopanel rows and trade_abort (a later card; not built here, see the card's
@@ -286,9 +292,10 @@ SCENARIOS = {
     #                STARTING the Explosion action (lastUsedMovePlayer). That is upstream of
     #                attackcanceler/tryexplosion, so it cannot prove execution (Codex C4-6c
     #                finding 4); blocked until an RR-verified downstream witness exists.
-    #   rival_swap   BLOCKED NEGATIVE CONTROL (`control`): a dummy team is refused with
-    #                refresh_failed; no valid swap is proven until refresh_enemy gets a write
-    #                window (commit 9505648b, OMP C4-8).
+    #   rival_swap   BLOCKED NEGATIVE CONTROL (`control`): a dummy, identity-less team is
+    #                refused with stale_battle_id -- the C5-10 battle-identity gate (2dc1b750;
+    #                docs/gen3/research/rival_swap_refresh_window.md §3.3: missing session /
+    #                battle_id -> refuse, nothing written) answers before any refresh window.
     #   native_absent B boots the CLEAN RR dump (rom_kind clean/companion split; runs on
     #                rr_town.sav). Both sides get the same VALID apply_trade (the partner
     #                fixture's slot-1 record): the companion must stage it natively, the clean
@@ -306,13 +313,13 @@ SCENARIOS = {
     # `control`: a NEGATIVE/BLOCKED characterization, never a qualification PASS (Codex
     # C4-6b finding 6); summary_lines and the oracle's PYDEC line both say so.
     "rival_swap_gen3": {"flags": [], "timeout": 600, "games": ("gen3_rr",),
-                        "control": "BLOCKED negative control: a dummy team is refused with "
-                                   "refresh_failed; no valid swap is proven until the refresh "
-                                   "window lands (OMP C4-8)",
+                        "control": "BLOCKED negative control: a dummy, identity-less team is "
+                                   "refused with stale_battle_id by the C5-10 battle-identity "
+                                   "gate; no valid swap is proven here",
                         "target": "battle", "frames": 900000, "no_save": ("a", "b"),
                         "oracle": "assert_rival_swap_gen3_saved"},
     "native_absent_gen3": {"flags": [], "timeout": 300, "games": ("gen3_rr",),
-                           "target": "town", "frames": 300000,
+                           "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 300000,
                            "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("a", "b"),
                            "oracle": "assert_native_absent_gen3_saved"},
     # RR rows R2/R3/R5 of rr_active_faint_parity_scope §5.5 (R1 = linked_faint_active_gen3 and
@@ -1453,18 +1460,19 @@ def active_faint_chain(key, case):
     # on purpose, so there only the HP-write count is pinned
     inputs = r"\d+ keys=0x[0-9A-F]+" if case == "lhammer" else "0 keys=0x0"
     explode = case == "explode"
+    tag = rf" case={re.escape(case)}$"      # the carrier closes both lines with its case
     if explode:   # owner ruling 19: the Explosion menu skip ends in the same hand-off
         commit = [gen3_rx("force_explode", key),
                   r"(?m)^\[client\] \[SLink-gen3\] force_explode: menu skip committed slot=0 battler=0 handoff=1$",
-                  rf"(?m)^ACTIVE_COMMIT {k} frame=\d+ writes=\d+ attempted=\d+ handoff=1 "]
+                  rf"(?m)^ACTIVE_COMMIT {k} frame=\d+ writes=\d+ attempted=\d+ handoff=1 .*{tag}"]
     else:
         commit = [gen3_rx("force_faint", key),
                   rf"(?m)^\[client\] \[SLink-gen3\] force_faint: Perish commit battler=0 handoff=1 {k}\b",
-                  rf"(?m)^ACTIVE_COMMIT {k} frame=\d+ writes=5 attempted=\d+ handoff=1 "]
+                  rf"(?m)^ACTIVE_COMMIT {k} frame=\d+ writes=5 attempted=\d+ handoff=1 .*{tag}"]
     chain = [rf"(?m)^READY_ACTIVE {k} case={re.escape(case)}$", *commit,
              rf"(?m)^HANDOFF {k} from=0x[0-9A-F]{{8}} to=0x[0-9A-F]{{8}} frames=[12] exec_bit0=0$",
              rf"(?m)^ACTIVE_KO {k} frame=\d+ in_battle=1 battle_hp=0 .*"
-             rf"{' last_move=153' if explode else ''} inputs={inputs} hp_writes=0 ",
+             rf"{' last_move=153' if explode else ''} inputs={inputs} hp_writes=0 attempted=\d+{tag}",
              rf"(?m)^ACTIVE_FAINT_SITE {k} frame=\d+ active=0 battler0_slot=0 battle_hp=0 party_hp=0 "
              rf"counter=(\d+)->(?!\1\b)\d+$"]
     if case == "lhammer":
@@ -1525,7 +1533,7 @@ def gen3_last_mon_problems(label, saved, fixture, key, deposited, memorial_box, 
 
 
 def gen3_memorial_problems(label, saved, fixture, key, memorial_box, rr=False, limits=None,
-                           battled=False, trained=False):
+                           battled=False, trained=False, captured=None):
     """`key` left the party for exactly one slot of the memorial box; nothing else moved. The
     memorial record must be valid for the cartridge and, when the fixture carried the mon, keep
     every invariant field of the record it was cut from (friendship only if it `battled`, the
@@ -1546,8 +1554,18 @@ def gen3_memorial_problems(label, saved, fixture, key, memorial_box, rr=False, l
         was = next((m for m in f_party if gen3_key(m) == key), None)
         mutable = (GEN3_RECORD_MUTABLE | (GEN3_ACTIVITY_MUTABLE if battled else set())
                    | (GEN3_TRAINED_MUTABLE if trained else set()))
-        changed = gen3_record_diff(was, boxes[where[0]], rr, mutable) if was else []
-        changed = gen3_consumed_ok(changed, battled)
+        now = boxes[where[0]]
+        changed = gen3_consumed_ok(gen3_record_diff(was, now, rr, mutable), battled) if was else []
+        if was is None:
+            # a key the fixture never carried (a catch): compare against its own capture event,
+            # never skip (G5-RR-ORACLES-3 F3) -- species and held item as the client reported them
+            if captured is None:
+                problems.append(f"{label}: {key} is not in the fixture and no capture event was "
+                                f"given to compare its memorial record against")
+            else:
+                for field, sent in (("species", "species_id"), ("held_item", "held_item_id")):
+                    if now.get(field) != captured.get(sent):
+                        changed.append((field, captured.get(sent), now.get(field)))
         if changed:
             problems.append(f"{label}: the memorial {key} differs from the fixture record in "
                             f"{changed}")
@@ -6132,7 +6150,8 @@ class DuoRun:
             problems.append("A's saved party/boxes are not the fixture's")
         problems += gen3_memorial_problems("b", self._gen3_saved("b"), self._gen3_fixture_saved("b"),
                                            b_key, self._gen3_memorial_box(), rr=self._gen3_rr,
-                                           limits=self._gen3_limits("b"), battled=True)
+                                           limits=self._gen3_limits("b"), battled=True,
+                                           captured=self._gen3_sent_event(results["b"], "capture", b_key))
         problems += gen3_receipt_problems(
             "b", results["b"], required=[rf"(?m)^FAINTED {re.escape(b_key)}\b",
                                          gen3_rx("memorialize", b_key),
@@ -6174,25 +6193,26 @@ class DuoRun:
 
     def assert_rival_swap_gen3_saved(self, results):
         """rival_swap_gen3 is a BLOCKED NEGATIVE CONTROL, not a qualification (SCENARIOS
-        `control`; Codex C4-6b finding 6): the runner sends a dummy team (100 zero bytes) and the
-        only thing characterized is the refusal -- B reached a real battle, the command arrived
-        and was answered refresh_failed (no refresh window yet, commit 9505648b), A untouched. A
-        PASS here says nothing about a working swap; the swap stays BLOCKED until a valid team is
-        refreshed in battle (OMP C4-8)."""
+        `control`; Codex C4-6b finding 6): the runner queues a dummy team (100 zero bytes) with no
+        session/battle_id, and the only thing characterized is the refusal -- B reached a real
+        battle, the command arrived and was answered stale_battle_id: the new client declares
+        battle_identity, and the C5-10 gate refuses a missing identity before anything is staged
+        (2dc1b750; rival_swap_refresh_window.md §3.3). A untouched. A PASS says nothing about a
+        working swap."""
         problems = gen3_receipt_problems(
             "b", results["b"], required=[r"(?m)^READY_IN_BATTLE\b",
                                          r"(?m)^RX replace_rival_team\b",
                                          gen3_tx("rival_team_replaced", "-")])
         err = self._gen3_sent_field(results["b"], "rival_team_replaced", "-", "error")
-        if err != "refresh_failed":
-            problems.append(f"b: rival_team_replaced error={err!r}, expected 'refresh_failed' "
-                            f"(the characterized refusal)")
+        if err != "stale_battle_id":
+            problems.append(f"b: rival_team_replaced error={err!r}, expected 'stale_battle_id' "
+                            f"(the identity gate's refusal of an identity-less command)")
         a_party, _ = self._gen3_saved("a")
         f_party, _ = self._gen3_fixture_saved("a")
         if [gen3_key(m) for m in a_party] != [gen3_key(m) for m in f_party]:
             problems.append("a's saved party is not the fixture's (rival_swap only drives b)")
-        self._gen3_raise(problems, "rival_swap NEGATIVE CONTROL (not qualification): the dummy "
-                                   "team was refused with refresh_failed; the swap stays BLOCKED")
+        self._gen3_raise(problems, "rival_swap NEGATIVE CONTROL (not qualification): the dummy, "
+                                   "identity-less team was refused with stale_battle_id")
 
     def assert_native_absent_gen3_saved(self, results):
         """native_absent_gen3: the same valid apply_trade, two outcomes. A (companion): the client
