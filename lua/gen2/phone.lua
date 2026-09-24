@@ -7,7 +7,7 @@
 -- A clean ROM has no beacon, and a build without SLINK_CAP_PHONE never gets a byte.
 local Phone = {}
 
-Phone.OFF_REQUEST, Phone.OFF_ARMED = 32, 33   -- plan §2.1 (Gen 2-only offsets, P4.5b's slink source)
+Phone.OFF_REQUEST, Phone.OFF_ARMED = 32, 33   -- patch/gb/slink_abi.inc SLINK_OFS_PHONE_REQUEST/ARMED
 Phone.CAP = 0x08                              -- plan §6: SLINK_CAP_PHONE = 1 << 3 (patch/gb/slink_abi.inc)
 -- The call ids double as the priority: a lower id outranks a higher one.
 Phone.IDS = { fallen = 1, dead_zone = 2, first_link = 3 }

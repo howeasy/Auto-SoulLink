@@ -9,10 +9,10 @@ freshness loss. The ROM half (P4.5b) is modelled here from §2.2; nothing is liv
 from __future__ import annotations
 
 import pathlib
-import re
 
 import pytest
 
+from tests.unit.test_gb_panel import _abi
 from tests.unit.test_gen2_panel import CAP_PANEL, PERMIT, Cart
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
@@ -196,13 +196,11 @@ def test_a_freshness_loss_forgets_the_call_and_starts_no_gap():
     assert c.posts() == [FALLEN, DEAD_ZONE], "no retry of FALLEN, no gap from an undelivered call"
 
 
-def test_constants_match_the_plan_and_the_abi_once_it_lands():
+def test_constants_equal_patch_gb_slink_abi_inc():
     P = PhoneCart().lua.eval(f'dofile("{PHONE}")')
-    assert (P.OFF_REQUEST, P.OFF_ARMED, P.CAP) == (REQ, ARMED, CAP_PHONE)
-    inc = (REPO / "patch/gb/slink_abi.inc").read_text()
-    m = re.search(r"DEF SLINK_CAP_PHONE\s+EQU 1 << (\d+)", inc)
-    if m:   # P4.5b (Codex) adds it; until then the plan's value is the pin
-        assert 1 << int(m.group(1)) == CAP_PHONE
+    abi = _abi()
+    assert (P.OFF_REQUEST, P.OFF_ARMED, P.CAP) == (REQ, ARMED, CAP_PHONE) == (
+        abi["SLINK_OFS_PHONE_REQUEST"], abi["SLINK_OFS_PHONE_ARMED"], abi["SLINK_CAP_PHONE"])
 
 
 # -- the production client: the tag on a real command reaches the binder -------------------------
