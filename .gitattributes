@@ -17,5 +17,4 @@ data/purergb/*.map text eol=lf
 # published provenance). A fresh Windows lane checkout (core.autocrlf=true) turned both CRLF and
 # failed the G4 release gate rehearsal (docs/gen3/probes/fc_release_gate_quick_d0a4bba5.txt).
 data/games/gen3_*/*.json text eol=lf
-data/gen3/pret/*.sym text eol=lf
-data/gen3/pret/*.map text eol=lf
+data/gen3/pret/* text eol=lf
