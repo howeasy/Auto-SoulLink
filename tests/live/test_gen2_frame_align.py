@@ -89,6 +89,37 @@ def trainers(ctx, name):
     return out
 
 
+HOPS = {"HOP_RIGHT": ("Right",), "HOP_LEFT": ("Left",), "HOP_UP": ("Up",), "HOP_DOWN": ("Down",),
+        "HOP_DOWN_RIGHT": ("Down", "Right"), "HOP_DOWN_LEFT": ("Down", "Left"), "HOP_UP_RIGHT": ("Up", "Right"),
+        "HOP_UP_LEFT": ("Up", "Left")}
+
+
+def ledges(ctx, name, facts_map):
+    """The map's HOP_* tiles and their hop directions, from the same ROM blocks + tileset collision
+    tools/gen2_fixtures._map_facts reads (which keeps ledges out of the walkable grid). A ledge is LAND the
+    player stands on; moving in its hop direction from it jumps two tiles (engine/overworld/player_movement.asm
+    .TryJump reads the stood-on tile, :354-377; .CheckWalkable, :735-741)."""
+    width, height = facts_map["width"] // 2, facts_map["height"] // 2
+    _, blocks = gen2_fixtures.rom_bytes(ctx, name + "_Blocks", width * height)
+    header = next(line for _, line in gen2_fixtures.source_lines(ctx.read_source("data/maps/maps.asm"), ctx.title)
+                  if line.startswith("map " + name + ","))
+    tilesets = gen2_fixtures.constants(ctx.read_source("constants/tileset_constants.asm"), "TILESET_", ctx.title)
+    table = [line.split()[1] for _, line in gen2_fixtures.source_lines(ctx.read_source("data/tilesets.asm"), ctx.title)
+             if line.startswith("tileset ")]
+    symbol = table[tilesets[header.split(",")[1].strip()]] + "Coll"
+    include = re.search(rf"^{symbol}::?\s*\nINCLUDE \"([^\"]+)\"", ctx.read_source("gfx/tilesets.asm"), re.M)
+    names = []
+    for _, line in gen2_fixtures.source_lines(ctx.read_source(include[1]), ctx.title):
+        names.extend(token.strip() for token in line[9:].split(","))
+    out = []
+    for y in range(height * 2):
+        for x in range(width * 2):
+            hop = HOPS.get(names[blocks[(y // 2) * width + x // 2] * 4 + (y % 2) * 2 + x % 2])
+            if hop:
+                out.append({"x": x, "y": y, "dirs": list(hop)})
+    return out
+
+
 def connected(facts_map, start, goals, avoid):
     width, grid = facts_map["width"], facts_map["grid"]
     seen, todo = {start}, [start]
@@ -117,6 +148,8 @@ def poison_facts(ctx) -> dict:
     by_name = {row["map_name"]: row for row in areas.values()}
     names = {name for leg in route for name in (leg[0], leg[2])}
     maps = {name: gen2_fixtures._map_facts(ctx, by_name[name], areas) for name in sorted(names)}
+    for name, facts_map in maps.items():
+        facts_map["ledges"] = ledges(ctx, name, facts_map)
     attributes = ctx.read_source("data/maps/attributes.asm")
     legs = []
     for source, side, target in route:

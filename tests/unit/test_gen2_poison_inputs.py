@@ -402,3 +402,27 @@ def test_a_walk_bumping_into_an_object_talks_to_it():
         buttons, phase = d.step(pt(rt, map_number=1, x=1, y=0, blocked=blocked))
         pressed.append(sorted(k for k, v in buttons.items() if v))
     assert pressed[0] == ["Left"] and pressed[PI.BUMP_FRAMES] == ["A"]
+
+
+def test_a_ledge_tile_is_walkable_land_and_hops_two_tiles_in_its_direction():
+    """Gold run 4: the Route 30 aisle north runs (5,24) -> the HOP_DOWN ledge (4,24) -> (4,23)."""
+    rt = lua()
+    PI = load(rt)
+    # 2x5: (0,0) goal, (0,1) floor, (0,2) ledge (grid 0), (1,2) start, (0,4) floor below a wall (0,3)
+    grid = [1, 0,
+            1, 0,
+            0, 1,
+            0, 0,
+            1, 0]
+    m = a_map(1, grid=grid, width=2, height=5)
+    m["ledges"] = lua_list([{"x": 0, "y": 2, "dirs": lua_list(["Down"])}])
+    closed_left = dict(ALL, Left=False)          # the observer's passable set excludes HOP_*
+    assert PI.step_toward(table(rt, m), table(rt, {"x": 1, "y": 2, "can_step": closed_left}),
+                          table(rt, lua_list([{"x": 0, "y": 0}]))) == "Left"
+    # standing on the ledge, Down jumps over the wall row to (0,4)
+    assert PI.step_toward(table(rt, m), table(rt, {"x": 0, "y": 2, "can_step": ALL}),
+                          table(rt, lua_list([{"x": 0, "y": 4}]))) == "Down"
+    # without ledge facts the conservative grid has no path
+    del m["ledges"]
+    assert PI.step_toward(table(rt, m), table(rt, {"x": 1, "y": 2, "can_step": closed_left}),
+                          table(rt, lua_list([{"x": 0, "y": 0}])))[0] is None
