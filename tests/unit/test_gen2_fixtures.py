@@ -29,10 +29,18 @@ TRAILER = bytes(range(22))
 ROUTE_FACTS = g.route_facts
 
 
-def facts(title):
-    if title not in _FACTS:
-        _FACTS[title] = ROUTE_FACTS(title, ROOT)
-    return _FACTS[title]
+def facts(title, errand=False):
+    if (title, errand) not in _FACTS:
+        _FACTS[title, errand] = ROUTE_FACTS(title, ROOT, errand=True) if errand else ROUTE_FACTS(title, ROOT)
+    return _FACTS[title, errand]
+
+
+def spec_facts(spec):
+    return facts(spec.title, spec.name in g.ERRAND_FIXTURES)
+
+
+def facts_file(spec):
+    return f"{spec.title}{'_errand' if spec.name in g.ERRAND_FIXTURES else ''}_route_facts.json"
 
 
 def context(title):
@@ -53,7 +61,7 @@ def profile(title):
 @pytest.fixture(autouse=True)
 def cached_sources(monkeypatch):
     # Route facts are pure functions of the pinned source; recomputing them per test only costs time.
-    monkeypatch.setattr(g, "route_facts", lambda title, root=ROOT: facts(title))
+    monkeypatch.setattr(g, "route_facts", lambda title, root=ROOT, errand=False: facts(title, errand))
     monkeypatch.setattr(g, "load_context", lambda title, root=ROOT: context(title))
 
 
@@ -121,11 +129,14 @@ def cart(title, target, player_id):
 
 def receipt(spec, cart_bytes, **changes):
     phases = ["new-game", "leave-bedroom", "mom", "to-elm", "starter"]
-    if spec.target == "battle":
+    if spec.name in g.ERRAND_FIXTURES:
+        phases += ["o10-balls", "leave-elm", "to-route29", "errand-west", "errand-mr-pokemon", "errand-egg",
+                   "errand-east", "errand-elm", "errand-handoff", "leave-elm", "to-route29", "route29-grass"]
+    elif spec.target == "battle":
         phases += ["o10-balls", "leave-elm", "to-route29", "route29-grass"]
     phases += ["native-save", "route-saved"]
-    row = {"schema": "gen2-played-route-v1", "case": spec.name, "facts_fingerprint": facts(spec.title)["fingerprint"],
-           "cartram_sha256": hashlib.sha256(cart_bytes).hexdigest(), "rom_sha1": facts(spec.title)["rom_sha1"],
+    row = {"schema": "gen2-played-route-v1", "case": spec.name, "facts_fingerprint": spec_facts(spec)["fingerprint"],
+           "cartram_sha256": hashlib.sha256(cart_bytes).hexdigest(), "rom_sha1": spec_facts(spec)["rom_sha1"],
            "core_mode": "CGB", "speed_percent": 300, "input_mode": "normal_buttons",
            "phases": [{"phase": phase, "frame": 10 * n} for n, phase in enumerate(phases)],
            "harness_write_scopes": ["O-10:BallPocket"] if spec.target == "battle" else []}
@@ -142,6 +153,7 @@ def write_inventory(directory, *, ids=ot_for, receipts=None):
     for title in TITLES:
         (directory / f"{title}_route_facts.json").write_text(json.dumps(facts(title)))
     for spec in g.FIXTURES:
+        (directory / facts_file(spec)).write_text(json.dumps(spec_facts(spec)))
         body = cart(spec.title, spec.target, ids(spec))
         (directory / f"{spec.name}.SaveRAM").write_bytes(body + TRAILER)
         row = (receipts or {}).get(spec.name) or receipt(spec, body)
@@ -152,12 +164,12 @@ def write_inventory(directory, *, ids=ot_for, receipts=None):
 def case(directory, spec, **paths):
     artifacts = {"fixture": directory / f"{spec.name}.SaveRAM",
                  "profile": ROOT / f"data/games/gen2_{spec.title}/profile.json", "rom": rom_path(spec.title),
-                 "route_facts": directory / f"{spec.title}_route_facts.json",
+                 "route_facts": directory / facts_file(spec),
                  "played_receipt": directory / f"{spec.name}.played.json"}
     artifacts.update(paths)
     return qualification.FixtureCase(spec.name, artifacts, {
-        "title": spec.title, "rom_sha1": facts(spec.title)["rom_sha1"], "scope": "candidate fixture",
-        "route_facts_sha256": g._facts_sha256(facts(spec.title))})
+        "title": spec.title, "rom_sha1": spec_facts(spec)["rom_sha1"], "scope": "candidate fixture",
+        "route_facts_sha256": g._facts_sha256(spec_facts(spec))})
 
 
 def static(directory, spec, **paths):
@@ -173,16 +185,16 @@ SPEC = g.BY_NAME
 
 # --- identities and SaveRAM boundary -------------------------------------------------------------
 
-def test_all_nine_fixture_identities_are_enumerated_with_distinct_ot2_controls():
+def test_all_ten_fixture_identities_are_enumerated_with_distinct_ot2_controls():
     assert sorted(SPEC) == sorted([f"{t}_{k}" for t in TITLES for k in ("town", "battle")]
-                                  + ["crystal_town_ot2", "crystal_battle_ot2", "gold_battle_ot2"])
+                                  + ["crystal_town_ot2", "crystal_battle_ot2", "gold_battle_ot2", "gold_battle_errand"])
     ot2 = [spec for spec in g.FIXTURES if spec.identity == "ot2"]
     assert {(spec.title, spec.target) for spec in ot2} == {("crystal", "town"), ("crystal", "battle"), ("gold", "battle")}
     # The second OT comes from a different played name choice and a shifted title idle.
     assert all(spec.title_idle_frames > 0 for spec in ot2)
     assert all(spec.title_idle_frames == 0 for spec in g.FIXTURES if spec.identity == "default")
     manifest = g.fixture_manifest(ROOT)
-    assert manifest["qualified"] is False and len(manifest["fixtures"]) == 9
+    assert manifest["qualified"] is False and len(manifest["fixtures"]) == 10
     for row in manifest["fixtures"]:
         assert row["filename"] == row["name"] + ".SaveRAM" and row["core_mode"] == "CGB"
         assert row["ball_exception"] == ("O-10" if row["target"] == "battle" else None)
@@ -409,8 +421,8 @@ def fake_gate(*, land=None, resave=resave_in_place, trailer=b"\xff" * 22, witnes
         case = json.loads(env_overrides["SLINK_GEN2_FIXTURE_CASE"])
         spec = SPEC[case["name"]]
         assert script == g.GATE_SCRIPT and rom_key == spec.title and speed_percent == 100 and target == spec.target
-        assert json.loads(env_overrides["SLINK_GEN2_ROUTE_FACTS"])["fingerprint"] == facts(spec.title)["fingerprint"]
-        assert q["facts"]["route_facts_fingerprint"] == facts(spec.title)["fingerprint"]
+        assert json.loads(env_overrides["SLINK_GEN2_ROUTE_FACTS"])["fingerprint"] == spec_facts(spec)["fingerprint"]
+        assert q["facts"]["route_facts_fingerprint"] == spec_facts(spec)["fingerprint"]
         if calls is not None:
             calls.append((q["stage"], case["name"], Path(fixture_path).read_bytes()))
         raw = Path(fixture_path).read_bytes()

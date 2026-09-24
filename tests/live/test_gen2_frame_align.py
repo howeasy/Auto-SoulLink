@@ -244,7 +244,7 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     ctx = gen2_source_data.load_context(spec.title, root=REPO)
     env = live.inspect_env(spec, staged)
     qualification = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
-    env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, gen2_fixtures.route_facts(spec.title, REPO),
+    env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, gen2_fixtures.spec_route_facts(spec, REPO),
                                                      qualification["attempt_id"]))
     passed, path, text = run_gate(GATE, rom_key=spec.title, target=spec.target,
                                   timeout=2400 if title in POISON_TITLES else 1200,

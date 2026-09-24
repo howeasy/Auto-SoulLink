@@ -50,8 +50,23 @@ FIXTURES = tuple(FixtureSpec(f"{title}_{target}", title, target, "default", 0)
     FixtureSpec(f"crystal_{target}_ot2", "crystal", target, "ot2", 240) for target in ("town", "battle")) + (
     # The G<->S reconnect wrong-save control: same ot2 recipe (preset name 3 = HIRO, 240-frame title idle).
     # ponytail: battle only; add gold_town_ot2 / silver ot2 when a lane needs them.
-    FixtureSpec("gold_battle_ot2", "gold", "battle", "ot2", 240),)
+    FixtureSpec("gold_battle_ot2", "gold", "battle", "ot2", 240),
+    # Card gen2-u1e-poison (main's ruling (1)): Gold after the Mr. Pokemon errand, ending where gold_battle ends
+    # (Route 29 grass, O-10 Balls): the only Gold state that reaches a day POISON_STING foe (Bug Catcher Wade,
+    # Route 31, behind the Route 30 battle demo that EVENT_ROUTE_30_BATTLE hides, pokegold maps/ElmsLab.asm:299-306).
+    # Facts: docs/gen2/reviews/OMP_GOLD_ERRAND_FACTS_2026-09-23.md. Same default identity recipe as gold_battle.
+    FixtureSpec("gold_battle_errand", "gold", "battle", "default", 0),)
 MAPS = ("PlayersHouse2F", "PlayersHouse1F", "NewBarkTown", "ElmsLab", "Route29")
+# The errand's own route facts add its maps, events, prompts and the rival naming screen. Only an errand fixture
+# uses them, so every other fixture keeps its recorded route_facts_sha256.
+ERRAND_FIXTURES = frozenset({"gold_battle_errand"})
+ERRAND_MAPS = MAPS + ("CherrygroveCity", "Route30", "MrPokemonsHouse")
+# Route29Tutorial1/2's yesorno (pokegold maps/Route29.asm:46-47/:71-72): CatchingTutorialIntroText's last two
+# rows stay on screen after its `cont` scroll (:264-266).
+ERRAND_PROMPTS = {"tutorial": ("to show you how to",)}
+ERRAND_PROMPT_SOURCES = ("maps/Route29.asm",)
+# The errand's progress: MrPokemonsHouse.asm:36 (egg received), ElmsLab.asm:299 (egg handed to Elm).
+ERRAND_EVENTS = ("EVENT_GOT_MYSTERY_EGG_FROM_MR_POKEMON", "EVENT_GAVE_MYSTERY_EGG_TO_ELM")
 BY_NAME = {spec.name: spec for spec in FIXTURES}
 # docs/gen2/reviews/OMP_RTC_SOURCE_2026-09-22.md: 32 KiB CartRAM plus the 22-byte BizHawk 2.11.1
 # gambatte RTC trailer. Only the CartRAM is compared; the trailer changes on every save.
@@ -327,7 +342,7 @@ def _code_site(ctx, symbol, offset=0):
             "flat": flat, "hex": ctx.rom[flat:flat + 1].hex()}
 
 
-def _observer_facts(ctx, root):
+def _observer_facts(ctx, root, errand=False):
     """Source constants and code sites the played-route gate observes; RAM addresses stay in the profile."""
     ram_constants = ctx.read_source("constants/ram_constants.asm")
     objects = ctx.read_source("constants/map_object_constants.asm")
@@ -361,8 +376,8 @@ def _observer_facts(ctx, root):
               for key in ("width", "height")}
     events = const_block(ctx.read_source("constants/event_flags.asm"), "EVENT_GOT_A_POKEMON_FROM_ELM")
     prompts = {}
-    texts = [ctx.read_source(path) for path in PROMPT_SOURCES]
-    for prompt, anchors in PROMPT_ANCHORS.items():
+    texts = [ctx.read_source(path) for path in PROMPT_SOURCES + (ERRAND_PROMPT_SOURCES if errand else ())]
+    for prompt, anchors in {**PROMPT_ANCHORS, **(ERRAND_PROMPTS if errand else {})}.items():
         found = [anchor for anchor in anchors
                  if any(re.search(r'^\s*(?:text|line|cont|para)\s+"[^"]*' + re.escape(anchor), text, re.M)
                         for text in texts)]
@@ -379,7 +394,11 @@ def _observer_facts(ctx, root):
     scenes = {name: f"w{name}SceneID" for name in ("PlayersHouse1F", "ElmsLab", "NewBarkTown")}
     for symbol in scenes.values():
         ctx.symbol(symbol)
-    return {"overworld_tick": _code_site(ctx, "OWPlayerInput"),
+    extra = {}
+    if errand:
+        flags = const_block(ctx.read_source("constants/event_flags.asm"), ERRAND_EVENTS[0])
+        extra["errand_events"] = {name: flags[name] for name in ERRAND_EVENTS}
+    return {**extra, "overworld_tick": _code_site(ctx, "OWPlayerInput"),
             "save_completed": {"symbol": save["symbol"], "symbol_offset": save["symbol_offset"], "bank": save["bank"],
                                "addr": save["addr"], "flat": start, "hex": save["expected_hex"]},
             "facing": facing, "screen": screen, "scene_symbols": scenes, "prompts": prompts,
@@ -392,8 +411,9 @@ def _observer_facts(ctx, root):
             "got_starter_event": events["EVENT_GOT_A_POKEMON_FROM_ELM"]}
 
 
-def route_facts(title, root=ROOT):
-    """Source/ROM-bound candidate navigation facts; no live route qualification."""
+def route_facts(title, root=ROOT, errand=False):
+    """Source/ROM-bound candidate navigation facts; no live route qualification. `errand` adds the Gold errand's
+    maps, events, prompts and naming-screen origin (spec_route_facts), leaving every other fixture's facts as-is."""
     ctx = load_context(title, root=root)
     profile_path = Path(root) / "data/games" / f"gen2_{title}/profile.json"
     wrapper = _json(profile_path.read_bytes())
@@ -401,7 +421,7 @@ def route_facts(title, root=ROOT):
     selected = wrapper["titles"][title]
     areas = {row["map_const"]: row for row in build_area_map(ctx).values()}
     by_name = {row["map_name"]: row for row in areas.values()}
-    maps = {name: _map_facts(ctx, by_name[name], areas) for name in MAPS}
+    maps = {name: _map_facts(ctx, by_name[name], areas) for name in (ERRAND_MAPS if errand else MAPS)}
     script = ctx.read_source("maps/ElmsLab.asm")
     _require("setmapscene NEW_BARK_TOWN, SCENE_NEWBARKTOWN_NOOP" in script,
              "starter west-exit release source missing")
@@ -427,6 +447,14 @@ def route_facts(title, root=ROOT):
                  "day_picker": "SetDayOfWeek.loop2"}
     if title == "crystal":
         ui_labels["gender"] = "InitGender"
+    if errand:
+        # The officer's `special NameRival` (pokegold maps/ElmsLab.asm:508-518, unavoidable: the lab's only
+        # north aisle is its coord tiles (4,5)/(5,5)): the naming screen's per-frame loop. START parks the cursor on
+        # END (engine/menus/naming_screen.asm:404-418), A there stores the entry (:393-399, :424-428).
+        ui_labels["naming"] = "NamingScreenJoypadLoop"
+        # The unavoidable Cherrygrove rival (CANLOSE) is lost behind LEER: the move list's joypad pass
+        # (MoveSelectionScreen.interpret_joypad, the U1d faint leg's move_menu origin; same label in pokegold).
+        ui_labels["move_menu"] = "MoveSelectionScreen.interpret_joypad"
     ui = {kind: {key: value for key, value in _code_site(ctx, symbol).items() if key != "symbol_offset"}
           for kind, symbol in ui_labels.items()}
     result = {"schema": "gen2-scripted-route-facts-v1", "title": title,
@@ -436,7 +464,7 @@ def route_facts(title, root=ROOT):
               "balls": {"item": items["POKE_BALL"], "quantity": 10, "capacity": capacity,
                         "count_address": ctx.symbol("wNumBalls").address,
                         "data_address": ctx.symbol("wBalls").address, "bank": ctx.symbol("wBalls").bank},
-              "observer": _observer_facts(ctx, root),
+              "observer": _observer_facts(ctx, root, errand),
               "required_observer": ["source-bound UI context", "CGB bank-valid point", "script-idle overworld input",
                                     "live movement blocking", "native successful-save counter"],
               "open_obligations": ["live_point_observer_binding", "played_route_and_OT_separation",
@@ -446,10 +474,16 @@ def route_facts(title, root=ROOT):
     return result
 
 
-def qualify_facts(title, root=ROOT):
+def spec_route_facts(spec, root=ROOT):
+    """The route facts one fixture spec plays and qualifies on."""
+    # ponytail: the keyword only for an errand spec keeps every plain call route_facts(title, root)
+    return route_facts(spec.title, root, errand=True) if spec.name in ERRAND_FIXTURES else route_facts(spec.title, root)
+
+
+def qualify_facts(title, root=ROOT, errand=False):
     """Source-bound CONTINUE/re-save facts for the qualification gate; the route facts stay unchanged."""
     ctx = load_context(title, root=root)
-    route = route_facts(title, root)
+    route = route_facts(title, root, errand=True) if errand else route_facts(title, root)
     texts = [ctx.read_source(path) for path in PROMPT_SOURCES]
     for anchors in QUALIFY_PROMPTS.values():
         for anchor in anchors:
@@ -489,7 +523,7 @@ def run_play(spec, binding, *, root=ROOT, runner=None):
     describe = getattr(run_gb_gate, "describe_gen2", None)
     _require(callable(describe), "shared runner Gen2 descriptor binding missing")
     descriptor = describe(spec.title + "_cold")
-    facts = route_facts(spec.title, root)
+    facts = spec_route_facts(spec, root)
     _require(descriptor["cold"] is True and descriptor["core_mode"] == "CGB"
              and descriptor["rom_sha1"] == facts["rom_sha1"] and descriptor["title"] == spec.title,
              "shared runner descriptor differs from selected source")
@@ -598,7 +632,11 @@ def validate_played_receipt(receipt, spec, facts, inspection):
     _require(receipt.get("core_mode") == "CGB" and receipt.get("speed_percent") == 300
              and receipt.get("input_mode") == "normal_buttons", "played-origin input/core witness incomplete")
     required = ["new-game", "leave-bedroom", "mom", "to-elm", "starter"]
-    if spec.target == "battle":
+    if spec.name in ERRAND_FIXTURES:
+        # lua/tests/gen2_scripted_play.lua errand phases, in played order
+        required += ["o10-balls", "leave-elm", "to-route29", "errand-west", "errand-mr-pokemon", "errand-egg",
+                     "errand-east", "errand-elm", "errand-handoff", "leave-elm", "to-route29", "route29-grass"]
+    elif spec.target == "battle":
         required += ["o10-balls", "leave-elm", "to-route29", "route29-grass"]
     required += ["native-save", "route-saved"]
     trace = receipt.get("phases")
@@ -875,7 +913,7 @@ def _stage_gate(context, stage, fixture, *, label, attempt_id, root, runner, tim
 
     spec = BY_NAME[context.fixture]
     facts_text = context.artifacts["route_facts"].decode("utf-8")
-    qfacts = qualify_facts(spec.title, root)
+    qfacts = qualify_facts(spec.title, root, errand=True) if spec.name in ERRAND_FIXTURES else qualify_facts(spec.title, root)
     _require(qfacts["route_facts_fingerprint"] == _json(facts_text)["fingerprint"],
              "qualification facts differ from the recorded route facts")
     directory = (Path(root).resolve() / ".cache/gen2-fixtures" / attempt_id / spec.name / "qualify"
@@ -967,7 +1005,7 @@ def qualify(spec_or_name, candidate_path, attempt_id, *, receipt_path=None, root
                  **game_callbacks(attempt_id, root=root, runner=runner, timeout=timeout)}
     candidate = Path(candidate_path)
     receipt = Path(receipt_path) if receipt_path else candidate.parent / (spec.name + ".played.json")
-    facts = route_facts(spec.title, root)
+    facts = spec_route_facts(spec, root)
     snapshot = Path(root).resolve() / ".cache/gen2-fixtures" / attempt_id / spec.name / "qualify"
     snapshot.mkdir(parents=True, exist_ok=True)
     facts_path = snapshot / (spec.title + "_route_facts.json")
@@ -993,11 +1031,12 @@ def qualification_report(directory, *, root=ROOT, scope="static", game_callbacks
         cases, facts_by_title = [], {}
         for path in paths:
             spec = by_name[path.stem]
-            if spec.title not in facts_by_title:
-                facts_by_title[spec.title] = route_facts(spec.title, root)
+            errand = spec.name in ERRAND_FIXTURES
+            if (spec.title, errand) not in facts_by_title:
+                facts_by_title[spec.title, errand] = spec_route_facts(spec, root)
             cases.append(_fixture_case(spec, path, Path(directory) / (spec.name + ".played.json"),
-                                       Path(directory) / (spec.title + "_route_facts.json"),
-                                       facts_by_title[spec.title], root))
+                                       Path(directory) / (spec.title + ("_errand" if errand else "") + "_route_facts.json"),
+                                       facts_by_title[spec.title, errand], root))
         report = qualification.qualify_fixtures(cases, callbacks, scope=scope, max_fixtures=len(by_name))
         if report["passed"]:
             try:

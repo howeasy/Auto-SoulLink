@@ -142,7 +142,7 @@ def qualified_identity(name: str, fixture_bytes: bytes, *, repo: Path = REPO) ->
     if provenance["rom_sha1"] != source["rom_sha1"]:
         raise AssertionError(f"{name}: ROM SHA-1 differs from the pinned source")
     # qualify() records the hash of the complete route-facts dict (including its fingerprint).
-    facts = gen2_fixtures.route_facts(spec.title, repo)
+    facts = gen2_fixtures.spec_route_facts(spec, repo)
     if provenance["route_facts_sha256"] != gen2_fixtures._facts_sha256(facts):
         raise AssertionError(f"{name}: route facts differ from the pinned source")
     outputs = {"qualify": set(), "boot": {"boot:game_witness"},
@@ -492,11 +492,12 @@ def verify_capture(text: str, profile_wrapper: dict, title: str) -> dict:
 def inspect_env(spec, fixture_bytes: bytes, *, repo: Path = REPO) -> dict:
     """The fixture-qualification CONTINUE binding the gate arrives through (stage "boot"), bound to
     the staged bytes by the stage fingerprint."""
-    facts = gen2_fixtures.route_facts(spec.title, repo)
+    facts = gen2_fixtures.spec_route_facts(spec, repo)
     case = {**vars(spec), "title_idle_frames": 0, "attempt_id": "inspect-" + spec.name,
             **gen2_fixtures.QUALIFY_BUDGET}
     qualify = {"stage": "boot", "stage_fingerprint": hashlib.sha256(fixture_bytes).hexdigest(),
-               "facts": gen2_fixtures.qualify_facts(spec.title, repo)}
+               "facts": gen2_fixtures.qualify_facts(spec.title, repo, errand=True)
+               if spec.name in gen2_fixtures.ERRAND_FIXTURES else gen2_fixtures.qualify_facts(spec.title, repo)}
     return {"SLINK_GEN2_FIXTURE_CASE": json.dumps(case), "SLINK_GEN2_ROUTE_FACTS": json.dumps(facts),
             "SLINK_GEN2_QUALIFY": json.dumps(qualify)}
 

@@ -35,6 +35,7 @@ local function direction(map, point, goal)
     for _, warp in ipairs(map.warps) do
         if goal.grass or warp.x ~= goal.x or warp.y ~= goal.y then blocked[key(warp.x,warp.y)] = true end
     end
+    for _, tile in ipairs(goal.avoid or {}) do blocked[key(tile.x,tile.y)] = true end
     local queue, head, visited = {{point.x,point.y,false}}, 1, {[key(point.x,point.y)] = true}
     while head <= #queue do
         local node = queue[head]; head = head+1
@@ -65,6 +66,10 @@ function P.new(facts, case)
         and (case.target == "town" or case.target == "battle"), "selected fixture case required")
     assert(type(case.attempt_id) == "string" and #case.attempt_id > 0, "attempt identity required")
     local maps, starter, balls = facts.maps, facts.starter, facts.balls
+    -- The Gold errand (tools/gen2_fixtures.ERRAND_FIXTURES; docs/gen2/reviews/OMP_GOLD_ERRAND_FACTS_2026-09-23.md):
+    -- only errand facts carry its events, maps and the naming-screen origin.
+    local errand = facts.observer.errand_events ~= nil
+    local handed, naming_start = false, true
     local self = {terminal="route-saved",phase="new-game",qualified=false}
     local release, entered, injection_pending, save_counter = false, false, false, nil
     assert(integer(case.title_idle_frames,0,40000), "bounded requested title idle required")
@@ -117,6 +122,77 @@ function P.new(facts, case)
         return found
     end
 
+    -- One map at a time, by the two errand events. Edges are source connections (data/maps/attributes.asm),
+    -- crossed by pressing the side from the edge tile, like the New Bark west exit above.
+    local function edge(point,map,tile,side)
+        if point.x == tile.x and point.y == tile.y then return press(side) end
+        return walk(point,map,tile)
+    end
+    function self.errand(point)
+        local egg = point.got_egg == true
+        if not egg then
+            if matches(point,maps.ElmsLab) then
+                self.phase="leave-elm"
+                return walk(point,maps.ElmsLab,warp_to(maps.ElmsLab,"NEW_BARK_TOWN"))
+            end
+            if matches(point,maps.NewBarkTown) then
+                self.phase="to-route29"
+                local target = maps.NewBarkTown.coord_events[1]
+                if not target then return nil,"west-exit source coordinate missing" end
+                return edge(point,maps.NewBarkTown,{x=0,y=target.y},"Left")
+            end
+            -- Route 29 west -> Cherrygrove (Route 29 west connection, offset 0) -> north to Route 30 (offset 5).
+            if matches(point,maps.Route29) then self.phase="errand-west" return edge(point,maps.Route29,{x=0,y=6},"Left") end
+            if matches(point,maps.CherrygroveCity) then
+                self.phase="errand-west"
+                return edge(point,maps.CherrygroveCity,{x=16,y=0},"Up")
+            end
+            if matches(point,maps.Route30) then
+                self.phase="errand-mr-pokemon"
+                return walk(point,maps.Route30,warp_to(maps.Route30,"MR_POKEMONS_HOUSE"))
+            end
+            -- MrPokemonsHouse's sdefer scene (pokegold maps/MrPokemonsHouse.asm:12-13) walks the player and runs
+            -- to the egg and Oak's scene: A-press waits only, taken by the UI branch above.
+            if matches(point,maps.MrPokemonsHouse) then self.phase="errand-mr-pokemon" return {},self.phase end
+            return nil,"errand left source-supported maps before the egg"
+        end
+        if matches(point,maps.MrPokemonsHouse) then
+            self.phase="errand-egg"
+            return walk(point,maps.MrPokemonsHouse,warp_to(maps.MrPokemonsHouse,"ROUTE_30"))
+        end
+        -- Elm's ROBBED call rings on the first outdoor step (engine/phone/phone.asm:306-317): text + waitbutton.
+        if matches(point,maps.Route30) then self.phase="errand-egg" return edge(point,maps.Route30,{x=7,y=53},"Down") end
+        if matches(point,maps.CherrygroveCity) then
+            -- The rival's coord tiles (33,6)/(33,7) (pokegold maps/CherrygroveCity.asm:558-559, armed by
+            -- MrPokemonsHouse.asm:124) are the only way east: rows 4-5 end at x=31 and rows 8-9 at x=33, so the
+            -- battle is unavoidable. It is BATTLETYPE_CANLOSE (no whiteout, party healed, no flags); the lead
+            -- LEERs until it faints so it gains no experience (inspect_candidate's fresh level-5 guard).
+            self.phase="errand-east"
+            return edge(point,maps.CherrygroveCity,{x=39,y=6},"Right")
+        end
+        if matches(point,maps.Route29) then self.phase="errand-east" return edge(point,maps.Route29,{x=59,y=8},"Right") end
+        if matches(point,maps.NewBarkTown) then
+            self.phase="errand-elm"
+            return walk(point,maps.NewBarkTown,warp_to(maps.NewBarkTown,"ELMS_LAB"))
+        end
+        if matches(point,maps.ElmsLab) then
+            -- The officer's coord tiles (4,5)/(5,5) are the lab's only north aisle (MeetCopScript, naming screen);
+            -- once he has left, Elm (5,2) is faced from (5,3) and ElmAfterTheftScript takes the egg (:283-309).
+            self.phase="errand-elm"
+            local elm = maps.ElmsLab.objects.ProfElmScript
+            local goal = {x=elm.x,y=elm.y+1}
+            for _, object in ipairs(point.blocked or {}) do
+                if object.x == goal.x and object.y == goal.y then
+                    goal = {x=elm.x,y=elm.y+2}
+                    if point.x == goal.x and point.y == goal.y then return {},self.phase end
+                end
+            end
+            if point.x ~= goal.x or point.y ~= goal.y then return walk(point,maps.ElmsLab,goal) end
+            return press(point.facing == "Up" and "A" or "Up")
+        end
+        return nil,"errand left source-supported maps after the egg"
+    end
+
     function self.step(point, frame)
         if type(point) ~= "table" or point.title ~= case.title or point.rom_sha1 ~= facts.rom_sha1
            or point.core_mode ~= "CGB" or point.attempt_id ~= case.attempt_id
@@ -152,6 +228,14 @@ function P.new(facts, case)
             -- keep OWPlayerInput from running (engine/overworld/events.asm:241-246), so these are the
             -- only UI a script shows between its yes/no boxes. A on the picker's .loop2
             -- (engine/rtc/timeset.asm:420-423) accepts the shown day, never navigated with Up/Down.
+            -- The officer's NameRival (pokegold maps/ElmsLab.asm:508-518): START parks the cursor on END
+            -- (engine/menus/naming_screen.asm:404-418), A on END stores the entry (:393-399, :424-428); an empty
+            -- entry takes the default rival name (engine/events/specials.asm:80-94). A stray A on a letter only
+            -- adds it to the rival's name.
+            if ui.kind == "naming" then
+                naming_start = not naming_start
+                return press(naming_start and "A" or "Start")
+            end
             if ui.kind == "clock_hour" or ui.kind == "clock_minute" or ui.kind == "text" or ui.kind == "prompt_button"
                or ui.kind == "wait_button" or ui.kind == "day_picker" then return press("A") end
             if ui.kind == "yes_no" then
@@ -163,12 +247,17 @@ function P.new(facts, case)
                 -- timeset.asm:398-399; .loop keeps it), so SUNDAY is confirmed, and re-confirmed on a
                 -- "No" loop-back (timeset.asm:429 jr c, .loop).
                 local known = {nickname=true,clock_confirm=true,mom_dst=true,mom_dst_confirm=true,
-                    mom_phone=true,elm_mission=true,starter_confirm=true,save_confirm=true,day_confirm=true}
+                    mom_phone=true,elm_mission=true,starter_confirm=true,save_confirm=true,day_confirm=true,
+                    tutorial=errand}
                 if not known[ui.prompt] then return nil,"unmapped yes/no prompt" end
-                return choose(ui,ui.prompt == "nickname" and "NO" or "YES",1)
+                -- The Route 29 catching tutorial: NO (pokegold maps/Route29.asm:47-48 -> Script_RefusedTutorial1,
+                -- :89-95): YES would run the auto-input catch and could add its Rattata to the party.
+                return choose(ui,(ui.prompt == "nickname" or ui.prompt == "tutorial") and "NO" or "YES",1)
             end
             if ui.kind == "start_menu" and save_counter ~= nil then return choose(ui,"SAVE",1) end
             if ui.kind == "battle_menu" and point.battle_mode == 1 then return choose(ui,"RUN",2) end
+            if errand and ui.kind == "battle_menu" and point.battle_mode == 2 then return choose(ui,"FIGHT",2) end
+            if errand and ui.kind == "move_menu" and point.battle_mode == 2 then return choose(ui,"LEER",1) end
             return nil,"UI is not valid for current source route"
         end
         if point.overworld_ready ~= true then return {},self.phase end
@@ -229,7 +318,13 @@ function P.new(facts, case)
                     writes={{address=balls.data_address,value=balls.item},{address=balls.data_address+1,value=balls.quantity},
                             {address=balls.data_address+2,value=255},{address=balls.count_address,value=1}}}
             end
+            if errand and not point.gave_egg then return self.errand(point) end
             if matches(point,maps.ElmsLab) then
+                if errand and not handed then
+                    handed = true
+                    self.phase = "errand-handoff"   -- ElmAfterTheftScript ran (EVENT_GAVE_MYSTERY_EGG_TO_ELM)
+                    return {},self.phase
+                end
                 self.phase="leave-elm"
                 return walk(point,maps.ElmsLab,warp_to(maps.ElmsLab,"NEW_BARK_TOWN"))
             end

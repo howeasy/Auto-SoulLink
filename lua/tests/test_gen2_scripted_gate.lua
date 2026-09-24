@@ -55,7 +55,8 @@ G.MENU_KINDS = {main_menu=true, gender=true, name_choices=true, yes_no=true, sta
 -- LOOP_WINDOW frames was answered, so it is shown but never ready (no stale re-pulse into the next UI).
 -- InitClock .SetHourLoop/.SetMinutesLoop DelayFrame per idle pass too (engine/rtc/timeset.asm:66-69, SetHour/SetMinutes).
 -- WaitPressAorB_BlinkCursor .loop (text) spins within a frame (home/joypad.asm:358-367): same rule.
-G.LOOP_KINDS = {prompt_button=true, wait_button=true, day_picker=true, clock_hour=true, clock_minute=true, text=true}
+G.LOOP_KINDS = {prompt_button=true, wait_button=true, day_picker=true, clock_hour=true, clock_minute=true, text=true,
+    naming=true}   -- NamingScreenJoypadLoop: DelayFrame per pass (engine/menus/naming_screen.asm:302-311), errand only
 G.LOOP_WINDOW = 2
 -- A confirm here starts a map load, so a re-pulse would land in the loaded overworld before any newer
 -- context exists (live attempt n2-crystal-town-a7: the re-pulsed A talked to Elm, ProfElmScript). The
@@ -193,7 +194,12 @@ function G.inputs(getenv, json)
     local case, facts = decode("SLINK_GEN2_FIXTURE_CASE"), decode("SLINK_GEN2_ROUTE_FACTS")
     assert(case.title == env.title and (case.target == "town" or case.target == "battle")
            and (case.identity == "default" or case.identity == "ot2"), "fixture case differs from the selected title")
-    assert(case.name == env.title .. "_" .. case.target .. (case.identity == "ot2" and "_ot2" or ""), "fixture case name mismatch")
+    -- An errand fixture (tools/gen2_fixtures.ERRAND_FIXTURES) is named by its facts: only errand facts carry
+    -- the errand events, so a plain battle case can never run the errand route or vice versa.
+    local errand = type(facts.observer) == "table" and facts.observer.errand_events ~= nil
+    assert(case.name == env.title .. "_" .. case.target .. (case.identity == "ot2" and "_ot2" or "")
+           .. (errand and "_errand" or ""), "fixture case name mismatch")
+    assert(not errand or case.target == "battle", "the errand ends as a battle fixture")
     assert(type(case.attempt_id) == "string" and #case.attempt_id <= 80 and case.attempt_id:match("^[%w_%-]+$"),
            "bounded attempt ID required")
     assert(integer(case.max_frames, 1, 1000000) and integer(case.max_phase_frames, 1, case.max_frames)
@@ -497,6 +503,12 @@ function G.observer(ctx)
                 if u.kind == "yes_no" then view.prompt = G.classify_prompt(rows, ctx.prompts) end
             elseif u.kind == "prompt_button" then
                 view.prompt = G.classify_prompt(G.screen(ctx), ctx.prompts)   -- which text is waiting
+            elseif u.kind == "move_menu" then
+                -- The errand's rival battle: the move list by its source geometry (the U1d faint leg's reader).
+                ctx.move_list = ctx.move_list or dofile(ctx.root .. "/lua/tests/duo/gen2_faint_inputs.lua").move_list
+                local list = ctx.move_list(G.screen(ctx))
+                if list then view.items, view.cursor, view.columns = list.items, list.cursor, list.columns
+                else ready = false end
             end
             point.ui, point.input_ready = view, ready
         end
@@ -533,6 +545,11 @@ function G.observer(ctx)
         point.pokegear_obtained = (ctx.sym("wPokegearFlags")[1] >> obs.pokegear_obtained_bit) & 1 == 1
         local event = obs.got_starter_event
         point.got_starter = (ctx.sym("wEventFlags", event // 8)[1] >> (event % 8)) & 1 == 1
+        if obs.errand_events then
+            local function flag(id) return (ctx.sym("wEventFlags", id // 8)[1] >> (id % 8)) & 1 == 1 end
+            point.got_egg = flag(obs.errand_events.EVENT_GOT_MYSTERY_EGG_FROM_MR_POKEMON)
+            point.gave_egg = flag(obs.errand_events.EVENT_GAVE_MYSTERY_EGG_TO_ELM)
+        end
         point.can_step = {Up=passable[ctx.sym("wTileUp")[1]] == true, Down=passable[ctx.sym("wTileDown")[1]] == true,
                           Left=passable[ctx.sym("wTileLeft")[1]] == true, Right=passable[ctx.sym("wTileRight")[1]] == true}
         local structs = ctx.sym("wObjectStructs", 0, o.length * o.count)
