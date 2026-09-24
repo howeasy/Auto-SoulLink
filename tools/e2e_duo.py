@@ -93,7 +93,7 @@ SCENARIOS = {
     # DUO-WAVE-D (O-33): the four duos that start from a synthetic setup (GEN2_SYNTH_SCENARIOS), C-C and G-S only
     **{name: {"flags": [], "timeout": 1800, "games": ("gen2_new",), "no_setup": True, "frames": 216000,
               "oracle": "assert_gen2_synth_saved", "oracle_kwargs": {}}
-       for name in ("gen2_boxed_capture", "gen2_gift", "gen2_egg_hatch", "gen2_npc_trade")},
+       for name in ("gen2_boxed_capture", "gen2_gift", "gen2_egg_hatch", "gen2_npc_trade", "gen2_evolution")},
     "gen2_ball_gate": {"flags": [], "timeout": 7200, "games": ("gen2_new",),
                        "no_setup": True, "frames": 600000,
                        "target": {"a": "town", "b": "town_ot2"},
@@ -1043,7 +1043,7 @@ GEN2_OUT_OF_BALLS = "no Poke Ball left in the pocket"
 # DUO-WAVE-D O-33 setups (tools/gen2_synth_fixtures.py): scenario -> recipe kind. Each side boots
 # <title>_synth_<kind> (C<->C B: crystal_synth_<kind>_ot2) through its BASE fixture's qualified CONTINUE (case.synth).
 GEN2_SYNTH_SCENARIOS = {"gen2_boxed_capture": "full", "gen2_gift": "bill", "gen2_egg_hatch": "hatch",
-                        "gen2_npc_trade": "trade"}
+                        "gen2_npc_trade": "trade", "gen2_evolution": "evolve"}
 GEN2_SYNTH_PAIRS = {"gen2_new": {"a": ("crystal", ""), "b": ("crystal", "_ot2")},
                     "gen2_gold_silver": {"a": ("gold", ""), "b": ("silver", "")}}
 
@@ -1867,10 +1867,11 @@ class DuoRun:
             env["SLINK_GEN2_FIXTURE_CASE"] = json.dumps(case)
             env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, facts, row["qualification_attempt_id"]))
             kind = GEN2_SYNTH_SCENARIOS.get(self.scenario)
-            if kind in ("bill", "trade"):   # the U1G route driver (lua/tests/gen2_u1g_inputs.lua) and its facts
+            if kind in ("bill", "trade", "evolve"):   # the U1G route driver (lua/tests/gen2_u1g_inputs.lua), its facts
                 from tests.live.test_gen2_u1g import run_facts
 
-                u1g = run_facts(ctx, gen2_fixtures.BY_NAME[row["name"]], "kyle" if kind == "trade" else "bill",
+                u1g = run_facts(ctx, gen2_fixtures.BY_NAME[row["name"]],
+                                {"trade": "kyle", "evolve": "grass"}.get(kind, kind),
                                 row["synth"], row["qualification_attempt_id"])
                 if kind == "trade":
                     u1g["u1g"]["give_slot"] = 1   # the hatched Bellsprout is slot 2 (DUO_RECIPES trade)

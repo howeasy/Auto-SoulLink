@@ -31,6 +31,7 @@ from e2e_duo import (  # noqa: E402
 
 EXPECTED_GEN2 = ["link", "gen2_faint", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison",
                  "gen2_whiteout_rebuild", "gen2_boxed_capture", "gen2_gift", "gen2_egg_hatch", "gen2_npc_trade",
+                 "gen2_evolution",
                  "gen2_ball_gate",
                  "gen2_faint_active", "gen2_faint_active_trainer", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause",
                  "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset"]

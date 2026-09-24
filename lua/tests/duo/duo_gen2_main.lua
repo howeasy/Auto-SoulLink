@@ -619,6 +619,7 @@ end
 -- U.driver, SLINK_GEN2_U1_FACTS.u1g) over the scripted gate's point plus party species, the party cursor and the box
 -- count, exactly as U.run observes; terminal at its own done(). mode "hatch" is the one-step hatch leg (S.hatch).
 local UG = S.SYNTH and dofile(ROOT .. "/lua/tests/gen2_u1g_inputs.lua") or nil
+function h.evolve_driver(M) return M.evolve_driver(UG, F, PI, ctx.u1.u1g) end
 function h.synth_leg(driver)
     local base = SG.qualify_observer(ctx)
     local function observe()

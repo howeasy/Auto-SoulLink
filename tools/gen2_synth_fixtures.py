@@ -149,7 +149,13 @@ def party_mon(spec, *, layout, species, moves, ot_id):
     ids += [0] * (4 - len(ids))
     pp = [moves[name]["pp"] for name in spec["moves"]] + [0] * (4 - len(spec["moves"]))
     exp = spec.get("exp", codec.exp_for_level(level, row["growth_rate"]))
-    if codec.level_from_exp(exp, row["growth_rate"]) != level:
+    # An egg may carry more exp than its level: HatchEggs keeps the struct level (EGG_LEVEL feeds CalcMonStats) and
+    # never touches the exp (C engine/pokemon/breeding.asm HatchEggs), so the hatchling levels up on its first exp gain
+    # (the gen2_evolution setup). Never below the level's floor; a non-egg's exp must match its level exactly.
+    if egg and "exp" in spec:
+        if exp < codec.exp_for_level(level, row["growth_rate"]):
+            raise ValueError(f"{spec['species']}: egg exp {exp} is below level {level}")
+    elif codec.level_from_exp(exp, row["growth_rate"]) != level:
         raise ValueError(f"{spec['species']}: exp {exp} is not level {level}")
     if egg and spec.get("hp") is not None:
         raise ValueError("an egg's HP is set by GiveEgg, not the spec")
@@ -317,6 +323,16 @@ DUO_RECIPES = {
         {"species": "SENTRET", "level": 5, "moves": ["SCRATCH", "DEFENSE_CURL"], "dvs": 0x4C29, "hp": 1, "status": PSN},
         {"species": "BELLSPROUT", "egg": True, "happiness": 1, "moves": ["VINE_WHIP", "GROWTH"], "dvs": 0x6B38}],
         "poison_step": 3, "step_count": 0x7E, "last_spawn": "VIOLET_CITY"}),
+    # evolve  Route 29 grass, [a one-cycle Caterpie EGG at 342 exp (L7 = 343, GROWTH_MEDIUM_FAST; EVOLVE_LEVEL 7,
+    #         data/pokemon/evos_attacks.asm CaterpieEvosAttacks), a filler], wStepCount $7F, an EMPTY Ball pocket: the
+    #         first step hatches it (a native gift_daycare link), the next wild battle's exp lifts the hatchling to L7
+    #         and EvolveAfterBattle publishes METAPOD (evolution_species_published). No Balls: no wild catch can
+    #         form a second link, and the client's no_catch stays withheld.
+    "evolve": ("battle", {"party": [
+        {"species": "CATERPIE", "egg": True, "happiness": 1, "exp": 342, "moves": ["TACKLE", "STRING_SHOT"],
+         "dvs": 0x9A61},
+        {"species": "RATTATA", "level": 5, "moves": ["TACKLE", "TAIL_WHIP"], "dvs": 0x3C83}],
+        "balls": [], "step_count": 0x7F}),
 }
 # gen2_gift reuses the U1G bill recipe; its C<->C B side needs the ot2 copy too.
 DUO_FIXTURES = tuple(f"{title}_synth_{kind}" for title in ("crystal", "gold", "silver") for kind in DUO_RECIPES) + tuple(

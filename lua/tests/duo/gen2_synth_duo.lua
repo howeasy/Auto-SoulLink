@@ -11,13 +11,15 @@
                                              (gen2_u1g_inputs.lua kind bill; gift_party_finalized)       (S-8 gifts)
   hatch  <t>_synth_hatch  lab, [Sentret,     one step: DoEggStep hatches it (hatch_finalized)      gift_daycare (S-8, O-15)
          Pidgey egg], wStepCount $7F
-  trade  <t>_synth_trade  lab, [PSN Sentret, step 1 whites out to Violet City, step 2 hatches the   gift_daycare, then A's
-         Bellsprout egg], $7E, VIOLET_CITY   Bellsprout (linked); A alone then trades it to Kyle   key_change npc_trade
-                                             for ONIX (gen2_u1g_inputs.lua kind kyle, give_slot 1) migrates A's half
-                                             (S-5, D-1). B stops after the hatch: Kyle's ONIX has a FIXED identity
-                                             (DVs $96 $66, OT 48926, data/events/npc_trades.asm:15), so a second
-                                             trade on B would publish the SAME key 9666:BF1E:5F and the server
-                                             refuses the collision as identity_lost (live tcc run 1, 2026-09-24).
+  trade  <t>_synth_trade  lab, [PSN Sentret, step 1 whites out to Violet City, step 2 hatches the   gift_daycare, then each
+         Bellsprout egg], $7E, VIOLET_CITY   Bellsprout (linked); each side trades it to Kyle      side's key_change
+                                             for ONIX (gen2_u1g_inputs.lua kind kyle, give_slot 1) npc_trade migrates its
+                                             own half (S-5, D-1). Kyle's ONIX has a FIXED identity (DVs $96 $66, OT
+                                             48926, data/events/npc_trades.asm:15): both halves end as 9666:BF1E:5F,
+                                             which KEY-SCOPE (71d68454: keys are per player) accepts.
+  evolve <t>_synth_evolve Route 29 grass,    step 1 hatches the Caterpie (linked); the next wild     gift_daycare, then each
+         [Caterpie egg at 342 exp, filler],  battle's exp lifts it L5 -> L7 and it evolves:        side's key_change
+         no Balls, wStepCount $7F            METAPOD (gen2_u1g_inputs.lua kind grass, FIGHT/TACKLE) evolution migrates it
   MARKER CONTRACT (duo_gen2_main.lua prints them): DUO_GEN2 {..., synth}, CLIENT, BOOTED, HELLO, ENGINE_CAPTURE,
   CAPTURE_SENT, RX msgbox + RX_TEXT "<a> and <b> linked!", ENGINE_KEY_CHANGE {site_id, reason, old_key, new_key} (trade),
   TX key_change / RX key_change_ack (trade), SAVE_WITNESS; RECEIPT {schema M.SCHEMA[kind], key, capture, key_change,
@@ -25,12 +27,16 @@
 --]]
 local M = {}
 M.SCHEMA = {full="gen2-duo-boxed-capture-v1", bill="gen2-duo-gift-v1", hatch="gen2-duo-egg-hatch-v1",
-            trade="gen2-duo-npc-trade-v1"}
+            trade="gen2-duo-npc-trade-v1", evolve="gen2-duo-evolution-v1"}
+-- the key_change each kind must publish (and have acked), and its engine site
+M.CHANGE = {trade={reason="npc_trade", site="npc_trade_finalized"},
+            evolve={reason="evolution", site="evolution_species_published"}}
 -- the engine capture that forms each kind's link (area nil: the binder's gifts.json row area, checked non-empty)
 M.EXPECT = {full={site="capture_box_finalized", acquisition="wild", destination="box", area="route_29"},
             bill={site="gift_party_finalized", acquisition="gift", destination="party"},
             hatch={site="hatch_finalized", acquisition="egg_hatch", destination="party", area="gift_daycare"},
-            trade={site="hatch_finalized", acquisition="egg_hatch", destination="party", area="gift_daycare"}}
+            trade={site="hatch_finalized", acquisition="egg_hatch", destination="party", area="gift_daycare"},
+            evolve={site="hatch_finalized", acquisition="egg_hatch", destination="party", area="gift_daycare"}}
 M.EGG = 0xFD   -- EGG, constants/pokemon_constants.asm
 M.LINK_FRAMES = 36000   -- ponytail: the partner's whole leg; raise if a lane lags
 M.ACK_FRAMES = 3600
@@ -87,6 +93,47 @@ function M.hatch_driver()
     return self
 end
 
+-- The evolve leg: gen2_u1g_inputs.lua's grass driver (FIGHT/TACKLE while the lead is the Caterpie), terminal once the
+-- lead is the evolved species back in the overworld; a wild battle met before the hatch (the lead is still the egg, the
+-- filler fights) is RUN, never a PACK visit (the pocket is empty).
+function M.evolve_driver(U, F, PI, facts)
+    local inner = U.driver(F, PI, facts)
+    local self = {terminal="evolved", phase="walk"}
+    local held, hold_left, release = nil, 0, false
+    local function press(button)
+        release, held, hold_left = true, button, M.HOLD - 1
+        return {[button]=true}, self.phase
+    end
+    function self.step(point)
+        if hold_left > 0 then hold_left = hold_left - 1; return {[held]=true}, self.phase end
+        if release then release = false; return {}, self.phase end
+        if self.phase == self.terminal then return {}, self.phase end
+        local party = type(point.party) == "table" and point.party or {count=0, species={}}
+        local lead = party.species[1]
+        if point.overworld_ready == true and point.ui == nil and lead == facts.evolved then
+            self.phase = self.terminal
+            return {}, self.phase
+        end
+        local ui = point.ui
+        if integer(point.battle_mode, 1, 255) and lead ~= facts.lead and lead ~= facts.evolved and ui ~= nil
+           and ui.kind == "battle_menu" and point.input_ready == true then
+            if type(ui.items) ~= "table" or not integer(ui.cursor, 1, #ui.items) then return {}, self.phase end
+            local run
+            for i, label in ipairs(ui.items) do if tostring(label):upper() == "RUN" then run = i end end
+            if not run then return nil, "no RUN on the battle menu" end
+            if run == ui.cursor then return press("A") end
+            local tx, cx = (run - 1) % 2, (ui.cursor - 1) % 2
+            if tx ~= cx then return press(tx > cx and "Right" or "Left") end
+            return press(run > ui.cursor and "Down" or "Up")
+        end
+        local buttons, phase = inner.step(point)
+        if buttons == nil then return nil, phase end
+        self.phase = phase
+        return buttons, phase
+    end
+    return self
+end
+
 local function linked(h)
     for _, r in ipairs(h.rec.rx) do
         if r.cmd == "msgbox" and type(r.text) == "string" and r.text:sub(-8) == " linked!" then return true end
@@ -115,11 +162,12 @@ function M.new(kind)
             local played, outcome = h.play({settled=h.link_settled})   -- catch, report, link settled, native save
             if not played then return false, "box catch failed: " .. tostring(outcome) end
         else
-            local hatch_only = kind == "hatch" or kind == "trade" and h.player == "b"
-            local ok, leg_why = h.synth_leg(hatch_only and M.hatch_driver() or nil)
+            local driver = kind == "hatch" and M.hatch_driver() or nil
+            if kind == "evolve" then driver = h.evolve_driver(M) end
+            local ok, leg_why = h.synth_leg(driver)
             if not ok then return false, kind .. " leg failed: " .. tostring(leg_why) end
-            if kind == "trade" and h.player == "a" and not h.wait(function() return acked(h) end, M.ACK_FRAMES) then
-                return false, "the server never acked the npc_trade key_change"
+            if M.CHANGE[kind] and not h.wait(function() return acked(h) end, M.ACK_FRAMES) then
+                return false, "the server never acked the " .. M.CHANGE[kind].reason .. " key_change"
             end
             if not h.wait(function() return linked(h) and h.box_idle() end, M.LINK_FRAMES) then
                 return false, "the pair never linked"
@@ -194,13 +242,14 @@ function M.new(kind)
         end
         need(link_at ~= nil, "the server never announced the link")
         local change
-        if kind == "trade" and head and head.value.player == "a" then
+        local want_change = M.CHANGE[kind]
+        if want_change then
             for _, row in ipairs(seen.ENGINE_KEY_CHANGE or {}) do
                 local v = row.value
-                if v.reason == "npc_trade" and v.site_id == "npc_trade_finalized" and v.old_key == key and capture
+                if v.reason == want_change.reason and v.site_id == want_change.site and v.old_key == key and capture
                    and row.at > capture.at then change = change or row end
             end
-            if need(change ~= nil, "no npc_trade key_change of the linked hatchling") then
+            if need(change ~= nil, "no " .. want_change.reason .. " key_change of the linked hatchling") then
                 local tx_at, ack_at
                 for _, t in ipairs(tx) do if t.event == "key_change" and t.at > change.at then tx_at = tx_at or t.at end end
                 for _, r in ipairs(rx) do if r.cmd == "key_change_ack" and tx_at and r.at > tx_at then ack_at = ack_at or r.at end end

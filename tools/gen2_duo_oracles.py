@@ -2136,10 +2136,19 @@ def ball_gate_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot
 # fixture: they are re-derived from their base fixture by tools/gen2_synth_fixtures.build_named and must equal the
 # committed disclosure's sha256, and every claim is a DELTA from them (the synthetic fields are never evidence, O-33).
 
-SYNTH_KINDS = {"gen2_boxed_capture": "full", "gen2_gift": "bill", "gen2_egg_hatch": "hatch", "gen2_npc_trade": "trade"}
+SYNTH_KINDS = {"gen2_boxed_capture": "full", "gen2_gift": "bill", "gen2_egg_hatch": "hatch", "gen2_npc_trade": "trade",
+               "gen2_evolution": "evolve"}
+# Kinds whose two halves may end on the SAME key: Kyle's ONIX has fixed DVs and OT on every cartridge
+# (C/G data/events/npc_trades.asm:15); KEY-SCOPE (71d68454) scopes identity per player.
+SYNTH_SAME_KEY_OK = {"trade"}
+# kind -> (key_change reason, engine site) the linked hatchling must publish and have acked
+SYNTH_CHANGE = {"trade": ("npc_trade", "npc_trade_finalized"), "evolve": ("evolution", "evolution_species_published")}
 SYNTH_CAPTURE = {"full": ("capture_box_finalized", "wild", "box"), "bill": ("gift_party_finalized", "gift", "party"),
-                 "hatch": ("hatch_finalized", "egg_hatch", "party"), "trade": ("hatch_finalized", "egg_hatch", "party")}
+                 "hatch": ("hatch_finalized", "egg_hatch", "party"), "trade": ("hatch_finalized", "egg_hatch", "party"),
+                 "evolve": ("hatch_finalized", "egg_hatch", "party")}
 EEVEE, PIDGEY, BELLSPROUT, ONIX = 133, 16, 69, 95   # constants/pokemon_constants.asm (national order in Gen 2)
+CATERPIE, METAPOD = 10, 11
+EVOLVE_LEVEL = 7                                     # CaterpieEvosAttacks (data/pokemon/evos_attacks.asm)
 KYLE_OT = 48926                                      # NPC_TRADE_KYLE OT ID (C/G data/events/npc_trades.asm:15)
 
 
@@ -2202,20 +2211,23 @@ def _synth_side(inst, text, kind, boot_path):
                     f"{inst} the egg was not the one hatched")
         _synth_need(keys_after == keys_before + [final_key] and after[1]["species_id"] == PIDGEY,
                     f"{inst} the hatchling {final_key} is not the party's second slot")
-    elif inst == "b":   # trade, B: the hatched Bellsprout only (Kyle's ONIX has one fixed key, see gen2_synth_duo.lua)
-        _synth_need([m["is_egg"] for m in before] == [False, True] and not any(m["is_egg"] for m in after)
-                    and keys_after == keys_before + [final_key] and after[1]["species_id"] == BELLSPROUT
-                    and not _tag_rows(text, "ENGINE_KEY_CHANGE"), f"{inst} is not the untraded hatched Bellsprout")
-    else:   # trade, A: the hatched Bellsprout (linked), then Kyle's ONIX in its slot
+    else:   # trade / evolve: the hatched mon (linked), then its native key_change in the same slot
+        reason, change_site = SYNTH_CHANGE[kind]
         changes = [row for _, row in _tag_rows(text, "ENGINE_KEY_CHANGE")
-                   if row.get("reason") == "npc_trade" and row.get("site_id") == "npc_trade_finalized"]
+                   if row.get("reason") == reason and row.get("site_id") == change_site]
         _synth_need(len(changes) == 1 and changes[0].get("old_key") == capture["key"],
-                    f"{inst} no single npc_trade key_change of the hatched Bellsprout {capture['key']}")
-        _synth_need(capture.get("species_id") == BELLSPROUT, f"{inst} the hatchling is not a Bellsprout")
+                    f"{inst} no single {reason} key_change of the hatched mon {capture['key']}")
+        slot = 1 if kind == "trade" else 0
+        was = BELLSPROUT if kind == "trade" else CATERPIE
+        _synth_need(capture.get("species_id") == was, f"{inst} the hatchling is not species {was}")
         final_key = changes[0]["new_key"]
-        _synth_need(len(after) == 2 and codec.key(after[1]) == final_key and after[1]["species_id"] == ONIX
-                    and after[1]["ot_id"] == KYLE_OT and capture["key"] not in keys_after,
-                    f"{inst} slot 2 is not Kyle's ONIX {final_key}")
+        mon = after[slot] if len(after) > slot else {}
+        if kind == "trade":
+            ok = mon.get("species_id") == ONIX and mon.get("ot_id") == KYLE_OT
+        else:
+            ok = mon.get("species_id") == METAPOD and mon.get("level", 0) >= EVOLVE_LEVEL
+        _synth_need(ok and codec.key(mon) == final_key and capture["key"] not in keys_after,
+                    f"{inst} slot {slot + 1} is not the {reason} result {final_key}")
         lines = text.splitlines()
         tx = [i for i, line in enumerate(lines) if line.startswith("TX ") and '"event":"key_change"' in line]
         _synth_need(bool(tx) and any(line.startswith("RX key_change_ack") for line in lines[tx[0]:]),
@@ -2236,7 +2248,7 @@ def synth_duo_oracle(results, *, scenario, data_dir, boot_saveram, ot_ids=None, 
     kind = SYNTH_KINDS[scenario]
     check_save_witness(results)
     sides = {inst: _synth_side(inst, (results or {}).get(inst) or "", kind, boot_saveram[inst]) for inst in ("a", "b")}
-    _synth_need(sides["a"]["key"] != sides["b"]["key"], "both sides hold the identical key")
+    _synth_need(kind in SYNTH_SAME_KEY_OK or sides["a"]["key"] != sides["b"]["key"], "both sides hold the identical key")
     areas = {Gen2GSCAdapter(side["title"]).gift_link_area(side["area"]) if kind != "full" else side["area"]
              for side in sides.values()}
     _synth_need(len(areas) == 1, f"the two captures resolve to different link areas: {sorted(areas)}")

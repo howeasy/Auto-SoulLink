@@ -240,9 +240,146 @@ def test_oracle_refuses_a_death_command_in_the_server_log(hatch_case):
         run(hatch_case)
 
 
-def test_trade_b_keeps_the_hatched_bellsprout_and_needs_no_key_change():
-    """Kyle's ONIX has one fixed key (DVs $96 $66, OT 48926): only A trades (live tcc run 1 collided on B)."""
-    rows = [x.replace('"player": "a"', '"player": "b"') for x in lines("hatch")]
-    rows = [x.replace("crystal_synth_hatch", "crystal_synth_trade") for x in rows]
+def test_trade_b_trades_too_now_that_keys_are_per_player():
+    """KEY-SCOPE (71d68454): both players may hold Kyle's ONIX 9666:BF1E:5F, so B trades as A does."""
+    rows = [x.replace('"player": "a"', '"player": "b"') for x in lines("trade")]
     problems, receipt = verdict("trade", rows)
-    assert problems == [] and receipt["key"] == KEY and receipt["key_change"] is None
+    assert problems == [] and receipt["key"] == ONIX_KEY and receipt["key_change"]["reason"] == "npc_trade"
+    untraded = [x.replace('"player": "a"', '"player": "b"') for x in lines("hatch")]
+    untraded = [x.replace("crystal_synth_hatch", "crystal_synth_trade") for x in untraded]
+    problems, receipt = verdict("trade", untraded)
+    assert receipt is None and any("no npc_trade key_change" in p for p in problems)
+
+
+# --- gen2_evolution (the linked hatchling evolves natively after one battle) -------------------------------------------
+
+CATERPIE, METAPOD = 10, 11
+EVO_KEY = "9A61:B541:0B"
+
+
+def evolve_lines():
+    rows = [x.replace("crystal_synth_hatch", "crystal_synth_evolve").replace('"species_id": 69', '"species_id": 10')
+            for x in lines("hatch")]
+    j = json.dumps
+    return rows[:-1] + ["ENGINE_KEY_CHANGE " + j({"frame": 30, "site_id": "evolution_species_published",
+                                                  "reason": "evolution", "old_key": KEY, "new_key": EVO_KEY,
+                                                  "species_id": METAPOD}),
+                        'TX {"event":"key_change","old_key":"' + KEY + '","reason":"evolution"}', "RX key_change_ack",
+                        rows[-1]]
+
+
+def test_evolve_verdict_passes_and_names_the_new_key():
+    problems, receipt = verdict("evolve", evolve_lines())
+    assert problems == [] and receipt["key"] == EVO_KEY and receipt["schema"] == "gen2-duo-evolution-v1"
+    assert receipt["key_change"]["reason"] == "evolution"
+
+
+@pytest.mark.parametrize("edit,match", [
+    (lambda r: [x for x in r if not x.startswith("ENGINE_KEY_CHANGE")], "no evolution key_change"),
+    (lambda r: [x for x in r if x != "RX key_change_ack"], "not sent and acked"),
+    (lambda r: [x.replace('"reason": "evolution"', '"reason": "npc_trade"') for x in r], "no evolution key_change"),
+    (lambda r: r[:-1] + ["RX memorialize key=" + KEY, r[-1]], "death command"),
+], ids=["no-change", "no-ack", "wrong-reason", "death"])
+def test_evolve_verdict_refuses(edit, match):
+    problems, receipt = verdict("evolve", edit(evolve_lines()))
+    assert receipt is None and any(match in p for p in problems), problems
+
+
+def test_evolve_setup_is_a_one_cycle_caterpie_egg_one_battle_from_level_7():
+    """The egg keeps its struct level 5 through HatchEggs (C engine/pokemon/breeding.asm HatchEggs: MON_LEVEL feeds
+    CalcMonStats, the exp is untouched), so a 342-exp egg hatches at L5 and any battle's exp lifts it to L7
+    (GROWTH_MEDIUM_FAST L7 = 343; CaterpieEvosAttacks EVOLVE_LEVEL 7)."""
+    for title in ("crystal", "gold", "silver"):
+        raw, disclosure = synth.build_named(f"{title}_synth_evolve")
+        layout = codec.for_foundation(title)
+        party = codec.decode_saved_party(raw[:oracles.CARTRAM_BYTES], layout, copy_name="primary")["mons"]
+        egg = party[0]
+        assert egg["is_egg"] and egg["species_id"] == CATERPIE and egg["level"] == 5 and egg["exp"] == 342
+        assert egg["happiness"] == 1 and {f["symbol"] for f in disclosure["fields"]} >= {"wStepCount", "wBalls"}
+        assert oracles._ball_pocket(raw[:oracles.CARTRAM_BYTES], layout) == []
+
+
+def test_non_egg_exp_must_still_match_its_level():
+    raw = (FIX / "crystal_battle.SaveRAM").read_bytes()
+    with pytest.raises(ValueError, match="is not level"):
+        synth.build("crystal", raw, {"party": [{"species": "CATERPIE", "level": 5, "exp": 342, "moves": ["TACKLE"]}]})
+
+
+def test_evolve_leg_runs_from_a_battle_met_before_the_hatch_and_ends_evolved():
+    lua, M = lua_module(DUO)
+    U = lua.execute(U1G.read_text(encoding="utf-8"))
+    facts = lua.table_from({"kind": "grass", "maps": {}, "lead": CATERPIE, "evolved": METAPOD}, recursive=True)
+    d = M.evolve_driver(U, lua.table_from({}), lua.table_from({}), facts)
+    menu = {"kind": "battle_menu", "items": {1: "FIGHT", 2: "<PK><MN>", 3: "PACK", 4: "RUN"}, "cursor": 1, "columns": 2}
+    pre = point(lua, battle_mode=1, overworld_ready=False, input_ready=True, ui=menu,
+                party={"count": 2, "species": {1: 0xFD, 2: 19}})
+    assert buttons(d.step(pre))[0] == ["Right"]   # toward RUN, never PACK
+    d = M.evolve_driver(U, lua.table_from({}), lua.table_from({}), facts)
+    assert buttons(d.step(point(lua, party={"count": 2, "species": {1: METAPOD, 2: 19}}))) == ([], "evolved")
+
+
+def evolved_save(name, title="crystal"):
+    raw = (FIX / f"{name}.SaveRAM").read_bytes()
+    party = [{"species": "METAPOD", "level": 7, "moves": ["TACKLE", "STRING_SHOT", "HARDEN"], "dvs": 0x9A61},
+             dict(synth.DUO_RECIPES["evolve"][1]["party"][1])]
+    out, _ = synth.build(title, raw, {"party": party}, base_name=name)
+    layout = codec.for_foundation(title)
+    mons = codec.decode_saved_party(out[:oracles.CARTRAM_BYTES], layout, copy_name="primary")["mons"]
+    caterpie = dict(mons[0], species_id=CATERPIE)
+    return out, codec.key(caterpie), codec.key(mons[0])
+
+
+def evolve_text(inst, name, save_path, cart, old, new, ack=True):
+    j = json.dumps
+    text = oracle_text(inst, name, save_path, cart, old).replace('"species_id": 16', '"species_id": 10')
+    text = text.replace('"scenario": "gen2_egg_hatch"', '"scenario": "gen2_evolution"')
+    rows = text.splitlines()
+    extra = ["ENGINE_KEY_CHANGE " + j({"frame": 30, "site_id": "evolution_species_published", "reason": "evolution",
+                                      "old_key": old, "new_key": new, "species_id": METAPOD}),
+             'TX {"event":"key_change","old_key":"' + old + '"}'] + (["RX key_change_ack"] if ack else [])
+    return "\n".join(rows[:3] + extra + rows[3:])
+
+
+@pytest.fixture
+def evolve_case(tmp_path):
+    results, boots, keys = {}, {}, {}
+    for inst, name in (("a", "crystal_synth_evolve"), ("b", "crystal_synth_evolve_ot2")):
+        save, old, new = evolved_save(name)
+        path = tmp_path / f"{inst}.SaveRAM"
+        path.write_bytes(save)
+        results[inst] = evolve_text(inst, name, path, save[:oracles.CARTRAM_BYTES], old, new)
+        boots[inst], keys[inst] = FIX / f"{name}.SaveRAM", new
+    data = tmp_path / "data"
+    data.mkdir(exist_ok=True)
+    (data / "links.json").write_text(json.dumps({"links": [{"area_id": "gift_daycare", "status": "alive",
+                                                             "a": {"key": keys["a"]}, "b": {"key": keys["b"]}}]}))
+    (data / "slink.log").write_text("INFO hello\n", encoding="utf-8")
+    return results, data, boots, keys
+
+
+def test_oracle_passes_an_evolved_pair_under_its_new_keys(evolve_case):
+    results, data, boots, keys = evolve_case
+    facts = []
+    oracles.synth_duo_oracle(results, scenario="gen2_evolution", data_dir=str(data), boot_saveram=boots,
+                             on_verified=facts.append)
+    assert facts[0]["a"] == keys["a"] and facts[0]["a"].endswith(":0B") and facts[0]["area"] == "gift_daycare"
+
+
+def test_oracle_refuses_an_unacked_evolution(evolve_case):
+    results, data, boots, _ = evolve_case
+    results = dict(results, a=results["a"].replace("\nRX key_change_ack", ""))
+    with pytest.raises(RuntimeError, match="not acked"):
+        oracles.synth_duo_oracle(results, scenario="gen2_evolution", data_dir=str(data), boot_saveram=boots)
+
+
+def test_oracle_refuses_a_link_still_under_the_old_key(evolve_case):
+    results, data, boots, keys = evolve_case
+    old = results["a"].split('"old_key": "')[1].split('"')[0]
+    (data / "links.json").write_text(json.dumps({"links": [{"area_id": "gift_daycare", "status": "alive",
+                                                             "a": {"key": old}, "b": {"key": keys["b"]}}]}))
+    with pytest.raises(RuntimeError, match="links.json a.key"):
+        oracles.synth_duo_oracle(results, scenario="gen2_evolution", data_dir=str(data), boot_saveram=boots)
+
+
+def test_trade_oracle_accepts_both_halves_holding_kyles_onix():
+    assert "gen2_npc_trade" in oracles.SYNTH_KINDS and oracles.SYNTH_SAME_KEY_OK == {"trade"}
