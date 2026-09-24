@@ -85,14 +85,14 @@ def test_a_received_mon_fainting_in_the_one_sided_window_kills_the_real_partner_
 
 def test_an_evolved_received_mon_fainting_before_its_report_is_not_lost(tmp_path):
     state, entry, token = _gen1_applying(tmp_path)
-    evolved = "1234:5678:16"                                                 # unindexed, the partner's OT
-    state.handle_event("a", {"event": "faint", "key": evolved})
+    evolved = "ABCD:1234:95"            # B's received Kadabra (0x26) trade-evolved into Alakazam (0x95)
+    state.handle_event("b", {"event": "faint", "key": evolved})
     assert state.pending_trade["held_events"], "an unindexed key with the partner's OT is the trade's"
-    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": evolved, "new_species": 0x16})
-    b_cmds = state.handle_event("b", {"event": "trade_done", "token": token, "new_key": B_GETS, "new_species": 0x26})
-    assert state.pending_trade is None and entry.a.key == evolved
+    state.handle_event("b", {"event": "trade_done", "token": token, "new_key": evolved, "new_species": 0x95})
+    a_cmds = state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    assert state.pending_trade is None and entry.b.key == evolved
     assert entry.status.value != "alive", "the faint replayed into the swapped link"
-    assert B_GETS in _keys(b_cmds, "force_faint")
+    assert A_GETS in _keys(a_cmds, "force_faint")
 
 
 def test_a_deposit_of_a_received_mon_boxes_the_real_partner_after_the_swap(tmp_path):
@@ -310,3 +310,28 @@ def test_a_result_2_side_is_settled_by_its_post_reset_hello_not_a_tick(tmp_path)
                              "party": [_mon(B_GETS, 0x26)]})                     # the reloaded save
     assert state.pending_trade is None
     assert (entry.a.key, entry.b.key) == (A_GETS, B_GETS)
+
+
+
+# ── MINOR-1: trade_done.new_key is not taken on trust ─────────────────────────────────────────────
+
+def test_a_reported_key_that_is_neither_the_incoming_mon_nor_its_evolution_is_a_conflict(tmp_path):
+    from server.state import LinkEntry, LinkStatus, MonInfo
+    state, entry, token = _gen1_applying(tmp_path)
+    other = LinkEntry(area_id="route_2", a=MonInfo(key="9999:1234:05", species=5, level=9),
+                      b=MonInfo(key="9999:5678:06", species=6, level=9), status=LinkStatus.ALIVE)
+    state.links.append(other)
+    state._index_entry(other)
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": "9999:5678:06", "new_species": 6})
+    assert state.pending_trade["verdict"]["a"] not in ("traded", None, "await")
+    state.handle_event("b", {"event": "trade_done", "token": token, "new_key": B_GETS, "new_species": 0x26})
+    assert state.pending_trade["phase"] == "conflict"
+    assert state._key_index["9999:5678:06"] is other, "another live link is never overwritten"
+
+
+def test_a_reported_trade_evolution_is_accepted(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    state.handle_event("b", {"event": "trade_done", "token": token, "new_key": "ABCD:1234:95", "new_species": 0x95})
+    assert state.pending_trade is None
+    assert entry.b.key == "ABCD:1234:95" and entry.b.species == 0x95

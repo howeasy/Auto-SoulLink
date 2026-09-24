@@ -970,12 +970,26 @@ class SoulLinkState:
                     pt.setdefault("hello_only", {})[player_id] = True
                 self._record_trade(pt, "uncertain")
             return
+        gets = pt[f"{_partner(player_id)}_key"]
         if new_key == pt[f"{player_id}_key"]:
             pt["verdict"][player_id] = "none"           # the client still holds its own mon: refused / never swapped
-        else:
+        elif new_key == gets or self._is_trade_descendant(pt, player_id, new_key, new_species):
             pt["verdict"][player_id] = "traded"
             pt["new"][player_id] = (new_key, new_species)
+        else:
+            # MINOR-1 (review e9d5e136): never index a key the trade cannot have produced
+            pt["verdict"][player_id] = f"{player_id}: reported {new_key}, neither {gets} nor its evolution"
         self._settle_trade(pt)
+
+    def _is_trade_descendant(self, pt: dict, player_id: str, key: str, species: int) -> bool:
+        """An unindexed key with the incoming mon's OT (per the adapter) and evolution family: the
+        received mon under a new key, e.g. a trade evolution. Never another live link's key."""
+        gets_half = pt["link"].b if player_id == "a" else pt["link"].a       # the link is not swapped yet
+        fam = self.adapter.evo_family
+        family = fam(gets_half.species) if gets_half and gets_half.species else None
+        return bool(family is not None and species and key not in self._key_index
+                    and self.adapter.parse_ot_id(key) == self.adapter.parse_ot_id(pt[f"{_partner(player_id)}_key"])
+                    and fam(species) == family)
 
     def _trade_evidence(self, player_id: str, party: list, from_hello: bool = False):
         """A party snapshot from a side whose trade outcome is uncertain decides that side:
@@ -998,12 +1012,9 @@ class SoulLinkState:
         if gets in keys:
             got = [(gets, gets_half.species if gets_half else 0)]
         else:
-            ot, fam = self.adapter.parse_ot_id(gets), self.adapter.evo_family
-            family = fam(gets_half.species) if gets_half and gets_half.species else None
             got = [(m["key"], int(m.get("species_id") or 0)) for m in party
-                   if m.get("key") and m["key"] not in self._key_index and family is not None
-                   and m.get("species_id") and self.adapter.parse_ot_id(m["key"]) == ot
-                   and fam(int(m["species_id"])) == family]
+                   if m.get("key") and self._is_trade_descendant(pt, player_id, m["key"],
+                                                                  int(m.get("species_id") or 0))]
         kept = gives in keys
         if not kept and len(got) == 1:
             pt["verdict"][player_id] = "traded"
