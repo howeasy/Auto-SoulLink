@@ -20,18 +20,18 @@ lua/
 ├── socket.lua             ← LuaSocket loader
 ├── memory_gb.lua          ← GB/GBC memory helpers (Gen 2 only — the rewritten Gen 1 client
 │                             uses lua/gen1/{reads,writes,boxes}.lua instead)
-├── memory_gba.lua         ← GBA memory helpers (Gen 3)
 ├── memory_nds.lua         ← NDS memory helpers (Gen 4 & Gen 5)
 ├── games/                 ← Game modules (this directory)
 │   ├── gen2_crystal.lua       — Gen 2 (Crystal)
-│   ├── gen3_frlge.lua         — Gen 3 (FRLG / Emerald)
+│   ├── gen3_frlge.lua         — Gen 3 reference profiles (no longer loaded at runtime)
 │   ├── gen4_hgsspt.lua        — Gen 4 (HGSS / Platinum)
 │   └── gen5_bw.lua            — Gen 5 (Black / White / BW2)
 ├── gen1/                  ← Gen 1 (Red / Blue / Yellow) — composition root, not a
 │                             games/ module; see lua/gen1/entry.lua
+├── gen3/                  ← Gen 3 (FireRed / LeafGreen / Radical Red) — composition root;
+│                             see lua/gen3/entry.lua (Entry.admit / Entry.ROUTED)
 ├── clients/               ← Game-specific client scripts
 │   ├── gen2_crystal_client.lua — Gen 2 client (Crystal)
-│   ├── gen3_frlge_client.lua  — Gen 3 client (FRLG / Emerald / RR)
 │   ├── gen4_hgsspt_client.lua — Gen 4 client (HGSS / Platinum)
 │   └── gen5_bw_client.lua     — Gen 5 client (Black / White / BW2)
 ├── tests/                 ← BizHawk test scripts
@@ -98,19 +98,24 @@ Gen 1 is its own composition root. See `lua/gen1/entry.lua` (wiring) and
 `lua/gen1/{client,reads,writes,signals,boxes,rom,panel,trade_overlay}.lua` (the modules it
 composes), and `docs/gen1_gen2_runtime_checks.md` for the live-verification story.
 
-### Gen 3 — `gen3_frlge.lua`
+### Gen 3 — `gen3_frlge.lua` (reference only)
 
-Game module for FireRed, LeafGreen, and Emerald.
+The old Gen 3 client's game module (FireRed, LeafGreen, Emerald). Since C5-6 nothing loads it at
+runtime: `lua/slink.lua` admits FireRed/LeafGreen/Radical Red into the rewritten client under
+`lua/gen3/` and refuses every other GBA cartridge (Emerald, Archipelago builds) by name. The file
+stays as the cited source of the profile facts in `data/games/gen3_frlg/profile.json`; the old
+client, its `memory_gba.lua` and the helpers described below are at tag `archive/gen3-old-client`.
+The description below is of that archived client.
 
 - **ROM codes**: `BPRE` (FireRed US), `BPGE` (LeafGreen US) — read from GBA ROM header at `0x080000AC` (System Bus)
 - **Variants**: `vanilla`, `ap` (Archipelago), `radical_red` (CFRU-based), `emerald` (stub)
-- **Platform**: GBA — uses `memory_gba.lua` for party/box reads
+- **Platform**: GBA — the old client read party/box through `memory_gba.lua` (archive/gen3-old-client:lua/memory_gba.lua)
 - **Memory domain**: System Bus (EWRAM/IWRAM addresses)
 - **Area lookup**: `mapGroup * 256 + mapNum` → area_id via `data/games/gen3_frlge/gen3_frlge_areas.lua` (184 entries)
 - **Gift areas**: `oaks_lab`, `intro`, `gift`, `cinnabar_lab`, `celadon_condominiums`, `silph_co_7f`, `saffron_dojo` (gift/egg captures emit `gift=true` → server files them under the `gift_<area>` namespace)
 - **Commands**: `force_faint`, `force_explode` (RR — auto-Explode on partner death), `box_mon`, `party_mon`, `memorialize`, `replace_rival_team` (RR — swap the rival's team for the partner's party), `hud_show`, `resolved_areas`, `unresolve_area`, `game_over`
 - **Exports**: `profiles` (vanilla/ap/radical_red address tables), `detect()`, `detect_variant()`, `rom_type_for_variant()`, `is_gift_area()`
-- **Rival-team-swap helpers** (`memory_gba.lua`, RR only): `readPartyBlob(slot)`, `refreshEnemyPartyNative(count)` / `refreshActiveEnemyBattlers()`, `bytesToHex()` / `hexToBytes()` — read the partner's 100-byte party-mon blobs (sender) and, after the companion patch's `OP_SET_ENEMY_PARTY` byte-copies them into `gEnemyParty`, refresh the active foe + read back species for the `replace_rival_team` ack. **The RR companion ROM patch is REQUIRED** — the old `writeEnemyParty` RAM-poke fallback was removed; `replace_rival_team` errors with `patch_required` when the patch is absent. `forceExplodeBattler(idx)` backs `force_explode`.
+- **Rival-team-swap helpers** (archive/gen3-old-client:lua/memory_gba.lua, RR only): `readPartyBlob(slot)`, `refreshEnemyPartyNative(count)` / `refreshActiveEnemyBattlers()`, `bytesToHex()` / `hexToBytes()` — read the partner's 100-byte party-mon blobs (sender) and, after the companion patch's `OP_SET_ENEMY_PARTY` byte-copies them into `gEnemyParty`, refresh the active foe + read back species for the `replace_rival_team` ack. **The RR companion ROM patch is REQUIRED** — the old `writeEnemyParty` RAM-poke fallback was removed; `replace_rival_team` errors with `patch_required` when the patch is absent. `forceExplodeBattler(idx)` backs `force_explode`.
 
 ### Gen 4 — `gen4_hgsspt.lua`
 
