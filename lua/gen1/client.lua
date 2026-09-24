@@ -532,9 +532,15 @@ function Client.new(p)
                 -- 2026-09-22): its party struct has no battle shadow, HasMonFainted refuses it
                 -- (core.asm:1473-1482, .notAlreadyOut :2402-2404) and GainExperience skips HP 0
                 -- (experience.asm:10-13). Explode = faint on the bench (EXPLOSION needs the field).
+                -- O-30: the old man tutorial / Safari (wBattleType ~= 0) never send a mon out and
+                -- never reach MainInBattleLoop (core.asm:164-207), so every slot is bench, slot 0
+                -- too (wPlayerMonNumber is InitBattleVariables' zero), and receipt is the only
+                -- in-battle landing. Link battles stay held (the other Game Boy would desync).
+                -- ponytail: a refused write in a special battle has no loop head to retry at; the
+                -- battle_end flush lands it at the checkpoint. Add a per-frame retry if that shows.
                 local w = { cmd = c, key = cmd.key, nickname = cmd.nickname, arrival = cmd.arrival }
                 if self.writes_enabled and (battle.in_battle == 1 or battle.in_battle == 2)
-                   and battle.type == 0 and battle.link_state ~= 4 and slot ~= battle.player_mon_number then
+                   and battle.link_state ~= 4 and (battle.type ~= 0 or slot ~= battle.player_mon_number) then
                     local ok, err = pcall(function()
                         writes:arm("battle_bench")
                         writes:faint_party_slot(slot)
@@ -1500,7 +1506,8 @@ function Client.new(p)
                     if not w.landed then hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360) end
                 end
             elseif slot then
-                -- special/link battle: leave the bench alone until the checkpoint
+                -- link battle: leave the bench alone until the checkpoint (a special battle never
+                -- reaches this hook natively; its bench write landed on receipt, O-30)
                 defer_held({ cmd = "force_faint", key = w.key, nickname = w.nickname, arrival = w.arrival })
             end
         end

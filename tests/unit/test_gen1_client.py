@@ -660,15 +660,39 @@ def test_a_landed_bench_write_switched_in_is_settled_by_the_active_path(world):
     assert len(world.client.pending_battle_writes) == 0
 
 
-@pytest.mark.parametrize("setup", ["special", "link"])
-def test_bench_write_in_a_special_or_link_battle_still_waits_for_the_checkpoint(world, setup):
+@pytest.mark.parametrize("battle_type,slot,cmd", [(1, 0, "force_faint"), (1, 1, "force_faint"),
+                                                  (2, 0, "force_faint"), (2, 1, "force_explode")])
+def test_special_battle_bench_death_lands_in_battle(world, battle_type, slot, cmd):
+    """O-30 (owner: every faint lands in battle, link excepted). The old man tutorial (1) and a
+    Safari battle (2) never send a player mon out: StartBattle takes .displaySafariZoneBattleMenu
+    for any wBattleType != 0 and loops back to .checkAnyPartyAlive, never MainInBattleLoop
+    (pokered core.asm:164-207). So the loop head never fires and EVERY party mon is bench,
+    slot 0 included (wPlayerMonNumber is only InitBattleVariables' zero, init_battle_variables.asm:16).
+    The write must land on receipt; the checkpoint only re-zeroes it quietly."""
     world.connect()
     world.step(60)
     world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
-    if setup == "special":
-        world.bus[world.ram["wBattleType"]] = 1  # BATTLE_TYPE_OLD_MAN
-    else:
-        world.bus[world.ram["wLinkState"]] = 4  # LINK_STATE_BATTLING
+    world.bus[world.ram["wBattleType"]] = battle_type
+    world.fire("wild_begin")
+    world.step()
+    key = codec.key(world.party()[slot])
+    world.reply({"cmd": cmd, "key": key})
+    world.step()
+    assert world.party()[slot]["hp"] == 0, "lands in battle, on receipt"
+    assert len(_kod(world)) == 1
+    world.bus[world.ram["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.overworld_safe()
+    world.step(2)
+    assert world.party()[slot]["hp"] == 0 and len(_kod(world)) == 1, "quiet backstop, no second banner"
+
+
+def test_bench_write_in_a_link_battle_still_waits_for_the_checkpoint(world):
+    """O-30's one exception: a link battle would desync the other Game Boy."""
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    world.bus[world.ram["wLinkState"]] = 4  # LINK_STATE_BATTLING
     world.fire("wild_begin")
     world.step()
     key = codec.key(world.party()[1])

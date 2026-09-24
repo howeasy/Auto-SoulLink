@@ -38,6 +38,7 @@ end
 --   party_mon: the decoded party entry the server named (species = internal index)
 function W.active_faint_guard(battle, slot, party_mon)
     if battle.in_battle ~= 1 and battle.in_battle ~= 2 then return false, "not in a battle" end
+    -- not an O-30 exclusion: old man / Safari never load wBattleMon (no active battler exists)
     if battle.type ~= 0 then return false, "special battle type (old man / safari)" end
     if battle.link_state == 4 then return false, "link battle" end
     if battle.player_mon_number ~= slot then return false, "target is not the active battler" end
