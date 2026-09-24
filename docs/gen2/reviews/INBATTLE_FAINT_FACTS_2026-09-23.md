@@ -316,3 +316,51 @@ fewer escape paths.
   - `HandlePerishSong` writes both HP copies.
   - Nothing copies party → battle mid-battle except a switch-in (`InitBattleMon`).
   - So a bench write is never overwritten, and the active mirror is overwritten only with the same 0.
+
+## 7. Phase 4: PHYSICAL proof (U2 `battle_faint` run, 2026-09-23)
+
+`SLINK_LIVE=1 pytest tests/live/test_gen2_write_windows.py -k battle_faint_run` ran
+`lua/tests/gen2_write_windows.lua` mode `battle_faint` on `<title>_battle`:
+
+1. One scripted catch.
+2. A second Route 29 wild battle, fought with a status move.
+3. The first accepted battle hold kills the bench mon (the catch).
+4. The next accepted hold kills the active lead, which is now the last able mon.
+
+The engine order comes from observation-only hooks at the pack oracles, as `seq` values below. Silver
+follows Gold under O-23 (the `battle_hold` rows are identical), and the Silver pack qualifies from Gold's
+receipt.
+
+### Crystal
+
+- **Battle hold:** PC $4194, bank $0F. 7 holds accepted and 473 hits in other banks rejected.
+- **Bench write (seq 6):**
+  - party HP 000f → 0000
+  - battle HP 0013 unchanged
+  - action byte unchanged
+- **The foe moves (seq 7):** the known-positive control.
+- **Active write (seq 8):**
+  - battle HP 0011 → 0000
+  - party HP 0011 → 0000
+  - action 00 → 01 (USEITEM)
+- **HandlePlayerMonFaint (seq 9):** same frame as the write (13575). No foe turn came in between.
+- **LostBattle (seq 10):** the native whiteout, followed by a fresh overworld hold after the warp.
+
+### Gold
+
+- **Battle hold:** PC $4168, bank $0F. 3 holds accepted and 28 hits in other banks rejected.
+- **Bench write (seq 2):** party HP 0010 → 0000, battle HP 0011 unchanged.
+- **The foe moves (seq 3).**
+- **Active write (seq 4):**
+  - battle HP 000e → 0000
+  - party HP 000e → 0000
+  - action 00 → 01
+- **HandlePlayerMonFaint (seq 5), then LostBattle (seq 6).**
+
+### What changed
+
+- Receipts: `tests/fixtures/gen2/receipts/{crystal,gold}.write_window.json` gain `runs.battle_faint` and the
+  pack's `battle_hold` rows. The shipped copies are synced and the release pins are re-pinned (`--new-gates`
+  green).
+- `M.qualified` now adds the `battle_faint` kind. Production composes the battle hold on Crystal, Gold and
+  Silver.

@@ -96,6 +96,26 @@
           }
         },
         "id": "battle-turn-before-determine-move-order",
+        "oracles": {
+          "EnemyTurn_EndOpponentProtectEndureDestinyBond": {
+            "address": 18142,
+            "bank": 15,
+            "evidence": "SYM",
+            "expected_hex": "CD8939"
+          },
+          "HandlePlayerMonFaint": {
+            "address": 20814,
+            "bank": 15,
+            "evidence": "SYM",
+            "expected_hex": "CDF14E"
+          },
+          "LostBattle": {
+            "address": 21390,
+            "bank": 15,
+            "evidence": "SYM",
+            "expected_hex": "3E01EA"
+          }
+        },
         "ownership_requirements": {
           "cached_frame_acceptance_allowed": false,
           "effective_wram_bank": 1,

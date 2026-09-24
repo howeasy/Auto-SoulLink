@@ -1,4 +1,272 @@
 {
+ "battle_hold": {
+  "acceptance": "ALL_REQUIRED_SAME_HELD_EXECUTION",
+  "anchors": {
+   "battle_turn": {
+    "address": 16778,
+    "bank": 15,
+    "evidence": "SOURCE",
+    "expected_hex": "CD344420EACD0043382ACD14433805CDFE451803CD6446",
+    "instruction_set": "SM83",
+    "rom_offset": 246154,
+    "source": {
+     "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+     "line_end": 211,
+     "line_start": 198,
+     "path": "engine/battle/core.asm",
+     "source_text_sha256": "0f5b7011f6206517ca3ee946f82f2a2dcb55120d249673c66d8c9b11723a23c6"
+    }
+   },
+   "start_battle_caller": {
+    "address": 29901,
+    "bank": 15,
+    "evidence": "SOURCE",
+    "expected_hex": "CD0040CD9E76F1EA41D837C9",
+    "instruction_set": "SM83",
+    "rom_offset": 259277,
+    "source": {
+     "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+     "line_end": 8042,
+     "line_start": 8037,
+     "path": "engine/battle/core.asm",
+     "source_text_sha256": "0f5b7011f6206517ca3ee946f82f2a2dcb55120d249673c66d8c9b11723a23c6"
+    }
+   }
+  },
+  "caller_stack": {
+   "bank": 0,
+   "exclusive_stack_end": 49407,
+   "minimum_sp": 49152,
+   "must_fit_entire_read": true,
+   "read_domain": "System Bus",
+   "region": "WRAM0",
+   "required_read_bytes": 2,
+   "required_words": [
+    {
+     "endianness": "little",
+     "offset_from_sp": 0,
+     "value": 29904
+    }
+   ],
+   "search_for_return_address": false,
+   "source": [
+    {
+     "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+     "line_end": 6,
+     "line_start": 1,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "084247eff9c68e886b834fad864857ca6fa22089e5ea0b8e5ab72649c8871403"
+    },
+    {
+     "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+     "line_end": 77,
+     "line_start": 77,
+     "path": "home/init.asm",
+     "source_text_sha256": "5a73c1f85a5ab2c47c60b6508b1b4f622b1d897ff3c62a5ce31ab5b808c902ae"
+    }
+   ]
+  },
+  "execution_before": {
+   "bank": 15,
+   "instruction": "call DetermineMoveOrder",
+   "instruction_offset": 10,
+   "pc": 16788,
+   "rom_offset": 246164,
+   "source": {
+    "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+    "line_end": 205,
+    "line_start": 205,
+    "path": "engine/battle/core.asm",
+    "source_text_sha256": "0f5b7011f6206517ca3ee946f82f2a2dcb55120d249673c66d8c9b11723a23c6"
+   }
+  },
+  "id": "battle-turn-before-determine-move-order",
+  "oracles": {
+   "EnemyTurn_EndOpponentProtectEndureDestinyBond": {
+    "address": 18142,
+    "bank": 15,
+    "evidence": "SYM",
+    "expected_hex": "CD8939"
+   },
+   "HandlePlayerMonFaint": {
+    "address": 20814,
+    "bank": 15,
+    "evidence": "SYM",
+    "expected_hex": "CDF14E"
+   },
+   "LostBattle": {
+    "address": 21390,
+    "bank": 15,
+    "evidence": "SYM",
+    "expected_hex": "3E01EA"
+   }
+  },
+  "ownership_requirements": {
+   "cached_frame_acceptance_allowed": false,
+   "effective_wram_bank": 1,
+   "host": [
+    "admitted exact ROM identity",
+    "unchanged session/reset epoch",
+    "no pending trade or serial-owner lease",
+    "no save, box-load, or staged-writer owner",
+    "synchronous CPU hold before the instruction",
+    "recheck every anchor in ROM and mapped System Bus",
+    "all reads and bank/PC/stack evidence available in the same hold"
+   ],
+   "mapped_rom_bank": 15,
+   "mapped_rom_bank_must_equal_shadow": true,
+   "rom_bank_shadow": {
+    "address": 65437,
+    "bank": 0,
+    "equals": 15,
+    "read_domain": "System Bus",
+    "region": "HRAM",
+    "source": {
+     "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+     "line_end": 29,
+     "line_start": 29,
+     "path": "ram/hram.asm",
+     "source_text_sha256": "985bde23a008423cecbecfe745cb23a65359712945189daee6b89e3679b9e776"
+    },
+    "symbol": "hROMBank",
+    "width": 1
+   },
+   "serial_control": {
+    "address": 65282,
+    "mask": 128,
+    "source": [
+     {
+      "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+      "line_end": 133,
+      "line_start": 133,
+      "path": "constants/hardware.inc",
+      "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+     },
+     {
+      "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+      "line_end": 135,
+      "line_start": 135,
+      "path": "constants/hardware.inc",
+      "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+     }
+    ],
+    "value": 0
+   },
+   "wram_bank_register": {
+    "address": 65392,
+    "binding": "CGB effective bank 1; DMG fixed-bank mapping must be qualified separately",
+    "source": {
+     "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+     "line_end": 688,
+     "line_start": 688,
+     "path": "constants/hardware.inc",
+     "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+    }
+   }
+  },
+  "state_predicates": [
+   {
+    "address": 49884,
+    "bank": 0,
+    "mask": 255,
+    "operator": "masked_equal",
+    "qualification": "PROPOSED_STRICT_CONJUNCTION",
+    "read_domain": "System Bus",
+    "reason": "LINK_NULL: a write in a link battle desyncs the other Game Boy",
+    "region": "WRAM0",
+    "semantic_source": [
+     {
+      "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+      "line_end": 4,
+      "line_start": 2,
+      "path": "constants/serial_constants.asm",
+      "source_text_sha256": "eef59591e6f3e544a73076513aede7a0c008c1182079e3a5733c52b866315991"
+     }
+    ],
+    "source": {
+     "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+     "line_end": 144,
+     "line_start": 144,
+     "path": "ram/wram.asm",
+     "source_text_sha256": "084247eff9c68e886b834fad864857ca6fa22089e5ea0b8e5ab72649c8871403"
+    },
+    "symbol": "wLinkMode",
+    "value": 0,
+    "width": 1
+   }
+  ],
+  "transformed_bit": 3,
+  "transformed_source": {
+   "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+   "line_end": 213,
+   "line_start": 209,
+   "path": "constants/battle_constants.asm",
+   "source_text_sha256": "31250380980b500362f54f808f11ba39484fd16bb4bd741a04825a35cb33feda"
+  },
+  "write": {
+   "skip_action": 1,
+   "sources": [
+    {
+     "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+     "line_end": 259,
+     "line_start": 256,
+     "path": "constants/battle_constants.asm",
+     "source_text_sha256": "31250380980b500362f54f808f11ba39484fd16bb4bd741a04825a35cb33feda"
+    },
+    {
+     "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+     "line_end": 6,
+     "line_start": 4,
+     "path": "engine/battle/effect_commands.asm",
+     "source_text_sha256": "3f549ae0e7062e47f45a6794f1b580e089563c1b491395f760e9e087c8f61723"
+    }
+   ],
+   "targets": {
+    "wBattleMonHP": {
+     "address": 50748,
+     "bank": 0,
+     "evidence": "SYM",
+     "symbol": "wBattleMonHP",
+     "width": 2
+    },
+    "wBattleMonSpecies": {
+     "address": 50732,
+     "bank": 0,
+     "evidence": "SYM",
+     "symbol": "wBattleMonSpecies",
+     "width": 1
+    },
+    "wBattlePlayerAction": {
+     "address": 53484,
+     "bank": 1,
+     "evidence": "SYM",
+     "symbol": "wBattlePlayerAction",
+     "width": 1
+    },
+    "wBattleType": {
+     "address": 53808,
+     "bank": 1,
+     "evidence": "SYM",
+     "symbol": "wBattleType",
+     "width": 1
+    },
+    "wCurBattleMon": {
+     "address": 53460,
+     "bank": 1,
+     "evidence": "SYM",
+     "symbol": "wCurBattleMon",
+     "width": 1
+    },
+    "wPlayerSubStatus5": {
+     "address": 50796,
+     "bank": 0,
+     "evidence": "SYM",
+     "symbol": "wPlayerSubStatus5",
+     "width": 1
+    }
+   }
+  }
+ },
  "checkpoint": {
   "acceptance": "ALL_REQUIRED_SAME_HELD_EXECUTION",
   "anchors": {
@@ -788,6 +1056,212 @@
     }
    },
    "write": null
+  },
+  "battle_faint": {
+   "attempt_id": "u2-crystal_battle_faint",
+   "battle_hold": {
+    "accepted": 7,
+    "hits": [
+     {
+      "bank": 15,
+      "frame": 4989,
+      "pc": 16788,
+      "seq": 1
+     },
+     {
+      "bank": 15,
+      "frame": 6124,
+      "pc": 16788,
+      "seq": 2
+     },
+     {
+      "bank": 15,
+      "frame": 7138,
+      "pc": 16788,
+      "seq": 3
+     },
+     {
+      "bank": 15,
+      "frame": 8293,
+      "pc": 16788,
+      "seq": 4
+     },
+     {
+      "bank": 15,
+      "frame": 9380,
+      "pc": 16788,
+      "seq": 5
+     },
+     {
+      "bank": 15,
+      "frame": 12966,
+      "pc": 16788,
+      "seq": 6
+     },
+     {
+      "bank": 15,
+      "frame": 13575,
+      "pc": 16788,
+      "seq": 8
+     }
+    ],
+    "other_bank": 473,
+    "raw": 7,
+    "refusals": {},
+    "refused": 0
+   },
+   "battle_writes": [
+    {
+     "action_after_hex": "00",
+     "action_before_hex": "00",
+     "active_slot": 0,
+     "battle_hp_after_hex": "0013",
+     "battle_hp_before_hex": "0013",
+     "frame": 12966,
+     "hp_after_hex": "0000",
+     "hp_before_hex": "000f",
+     "ok": true,
+     "reason": null,
+     "seq": 6,
+     "slot": 1,
+     "status_after_hex": "00",
+     "status_before_hex": "00"
+    },
+    {
+     "action_after_hex": "01",
+     "action_before_hex": "00",
+     "active_slot": 0,
+     "battle_hp_after_hex": "0000",
+     "battle_hp_before_hex": "0011",
+     "frame": 13575,
+     "hp_after_hex": "0000",
+     "hp_before_hex": "0011",
+     "ok": true,
+     "reason": null,
+     "seq": 8,
+     "slot": 0,
+     "status_after_hex": "00",
+     "status_before_hex": "00"
+    }
+   ],
+   "catch": {
+    "party_after": 2,
+    "party_before": 1
+   },
+   "core_mode": "CGB",
+   "evidence_level": "PHYSICAL",
+   "fixture": "crystal_battle",
+   "fixture_sha256": "f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6",
+   "harness_write_scopes": [
+    "u2-battle-faint"
+   ],
+   "input_mode": "normal_buttons",
+   "liveness": {
+    "accepted": 48,
+    "hits": [
+     {
+      "bank": 37,
+      "frame": 3334,
+      "pc": 27011
+     },
+     {
+      "bank": 37,
+      "frame": 3344,
+      "pc": 27011
+     },
+     {
+      "bank": 37,
+      "frame": 3346,
+      "pc": 27011
+     },
+     {
+      "bank": 37,
+      "frame": 3362,
+      "pc": 27011
+     },
+     {
+      "bank": 37,
+      "frame": 3372,
+      "pc": 27011
+     },
+     {
+      "bank": 37,
+      "frame": 3374,
+      "pc": 27011
+     },
+     {
+      "bank": 37,
+      "frame": 3390,
+      "pc": 27011
+     },
+     {
+      "bank": 37,
+      "frame": 3400,
+      "pc": 27011
+     }
+    ],
+    "other_bank": 8,
+    "raw": 48,
+    "refusals": {},
+    "refused": 0
+   },
+   "mode": "battle_faint",
+   "pack_commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+   "phases": [
+    {
+     "accepted": 0,
+     "frame": 3333,
+     "phase": "idle"
+    },
+    {
+     "accepted": 1,
+     "frame": 3335,
+     "phase": "catch"
+    },
+    {
+     "accepted": 11,
+     "frame": 11784,
+     "phase": "hunt"
+    },
+    {
+     "accepted": 31,
+     "frame": 12344,
+     "phase": "battle"
+    },
+    {
+     "accepted": 32,
+     "frame": 14056,
+     "phase": "post_battle"
+    },
+    {
+     "accepted": 33,
+     "frame": 14059,
+     "phase": "done"
+    }
+   ],
+   "qualification_attempt_id": "requal-crystal-battle-n14b",
+   "result": "PASS",
+   "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+   "schema": "gen2-write-window-run-v1",
+   "title": "crystal",
+   "trace": [
+    {
+     "frame": 13262,
+     "seq": 7,
+     "what": "enemy_turn"
+    },
+    {
+     "frame": 13575,
+     "seq": 9,
+     "what": "faint"
+    },
+    {
+     "frame": 13733,
+     "seq": 10,
+     "what": "lost"
+    }
+   ],
+   "windows": {}
   },
   "boxes": {
    "attempt_id": "u2-crystal_boxes",

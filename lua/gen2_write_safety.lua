@@ -27,10 +27,11 @@ M.BOX_MODES = {"boxes", "boxes_reset", "boxes_reload"}
 -- pack physical.required_controls a receipt may declare covered (every run below is required anyway).
 M.COVERED_CONTROLS = {["idle reacquisition"]=true, ["warp/Continue"]=true}
 M.RUNS = {town="_town", reload="_town", battle="_battle",
-          boxes="_battle", boxes_reset="_battle", boxes_reload="_battle"}
+          boxes="_battle", boxes_reset="_battle", boxes_reload="_battle", battle_faint="_battle"}
 -- The only harness scopes that may write bytes, per run (sorted).
 M.TEST_SCOPES = {town={"u2-test-box-write", "u2-test-party-write"}, reload={}, battle={},
-                 boxes={"u2-box-ops"}, boxes_reset={"u2-box-ops"}, boxes_reload={}}
+                 boxes={"u2-box-ops"}, boxes_reset={"u2-box-ops"}, boxes_reload={},
+                 battle_faint={"u2-battle-faint"}}
 -- tools/fixture_qualification.py FULL_CHAIN: the stages a full-scope qualification report ran.
 M.FULL_CHAIN = {"qualify", "boot", "resave", "post_oracle"}
 -- Negative windows per run: minimum frames (at least frames-1 of them open at both edges), the
@@ -47,7 +48,7 @@ M.WINDOWS = {
     },
     reload = {},
     battle = {{name="battle", frames=30, stated={wBattleMode=true}}},
-    boxes = {}, boxes_reset = {}, boxes_reload = {},
+    boxes = {}, boxes_reset = {}, boxes_reload = {}, battle_faint = {},
 }
 -- Idle reacquisition: the phase entered after each window saw a NEW accepted hold (driver order).
 M.REACQUIRE = {
@@ -57,6 +58,7 @@ M.REACQUIRE = {
     boxes = {{"idle", "walk"}, {"post_save", "ops"}},
     boxes_reset = {{"idle", "ops"}, {"post_save", "done"}},
     boxes_reload = {{"idle", "done"}},
+    battle_faint = {{"idle", "hunt"}, {"post_battle", "done"}},
 }
 -- The box runs: production-executor ops, one per accepted hold, on the two scripted catches (key 1, key 2).
 -- written = the permit kinds in write order (deposit/memorial: box first; withdraw: party first); party =
@@ -90,6 +92,7 @@ local COUNT = 9007199254740991
 -- pack's battle_hold (before `call DetermineMoveOrder` in BattleTurn), never at the overworld primary. A
 -- receipt adds it only with its own passed battle run (phase 4); until then check() refuses it.
 M.BATTLE_KINDS = {battle_faint=true}
+M.BATTLE_MODES = {"battle_faint"}
 local REQUIRED = {
     wMapStatus=true, wMapEventStatus=true, wScriptRunning=true, wScriptMode=true,
     wScriptFlags=true, wScriptStackSize=true, wJoypadDisable=true, wGameLogicPaused=true,
@@ -171,7 +174,7 @@ end
 
 -- nil, or why the raw measurements of one gate run (`mode`) do not prove its controls. Pure; ignores
 -- evidence_level/result/bindings (M.qualified checks those). The gate calls it for its own verdict.
-function M.run_problem(run, mode, primary)
+function M.run_problem(run, mode, primary, hold)
     if type(run) ~= "table" or not M.RUNS[mode] then return "run record missing" end
     local pc, bank = primary.execution_before.pc, primary.execution_before.bank
     local live = run.liveness
@@ -252,6 +255,9 @@ function M.run_problem(run, mode, primary)
                 return "reset control lacks the booted CartRAM hash or the post-CONTINUE bytes"
             end
         end
+    elseif mode == "battle_faint" then
+        local problem = M.battle_faint_problem(run, hold)
+        if problem then return problem end
     elseif mode == "boxes_reload" then
         local keep = run.persist
         if not hex64(run.boot_cartram_sha256) or type(keep) ~= "table" or not hexbytes(keep.party_hex, M.PARTY_BLOCK)
@@ -314,6 +320,69 @@ function M.box_ops_problem(run, mode)
     return nil
 end
 
+-- nil, or why the battle_faint run (O-30; lua/tests/gen2_write_windows.lua U.battle_faint_main) does not prove
+-- the in-battle write kind: after ONE scripted catch, a wild battle whose first accepted battle hold kills the
+-- BENCH mon (party status/HP only) and whose next one kills the ACTIVE, now last able, mon (battle HP 0, the
+-- party mirror, the action byte = the pack's skip_action). The engine-read oracles, in hook order (seq): the foe
+-- still moves after the bench write (the known-positive control), never between the active write and
+-- HandlePlayerMonFaint, and LostBattle (the native whiteout) follows that faint. Pure.
+function M.battle_faint_problem(run, hold)
+    if type(hold) ~= "table" or type(hold.execution_before) ~= "table" or type(hold.write) ~= "table"
+       or not integer(hold.write.skip_action, 1, 255) then
+        return "battle hold facts missing"
+    end
+    local h = run.battle_hold
+    if type(h) ~= "table" or not integer(h.accepted, 2, COUNT) or not plain_array(h.hits) or #h.hits < 2 then
+        return "fewer than two accepted battle holds"
+    end
+    for _, hit in ipairs(h.hits) do
+        if type(hit) ~= "table" or hit.pc ~= hold.execution_before.pc or hit.bank ~= hold.execution_before.bank then
+            return "a battle hold was accepted at a measured PC/hROMBank other than the pack's"
+        end
+    end
+    local catch = run.catch
+    if type(catch) ~= "table" or not integer(catch.party_before, 1, 5) or catch.party_after ~= catch.party_before + 1 then
+        return "the scripted catch did not land in the party"
+    end
+    local w = run.battle_writes
+    if not plain_array(w) or #w ~= 2 then return "not exactly two battle writes (bench, then active)" end
+    for i, rec in ipairs(w) do
+        if type(rec) ~= "table" or rec.ok ~= true or not integer(rec.seq, 1, COUNT) or not integer(rec.slot, 0, 5)
+           or not integer(rec.active_slot, 0, 5) or not hexbytes(rec.hp_before_hex, 2) or rec.hp_before_hex == "0000"
+           or rec.hp_after_hex ~= "0000" or rec.status_after_hex ~= "00" or not hexbytes(rec.battle_hp_before_hex, 2)
+           or not hexbytes(rec.battle_hp_after_hex, 2) or not hexbytes(rec.action_before_hex, 1)
+           or not hexbytes(rec.action_after_hex, 1) then
+            return "battle write " .. i .. " is not a read-back party HP/status zero of a living mon"
+        end
+    end
+    local bench, active = w[1], w[2]
+    if bench.slot == bench.active_slot or bench.battle_hp_after_hex ~= bench.battle_hp_before_hex
+       or bench.action_after_hex ~= bench.action_before_hex then
+        return "the bench write touched the active battler"
+    end
+    if active.slot ~= active.active_slot or active.battle_hp_before_hex == "0000" or active.battle_hp_after_hex ~= "0000"
+       or active.action_after_hex ~= string.format("%02x", hold.write.skip_action) then
+        return "the active write is not battle HP 0 with the action byte suppressed"
+    end
+    if bench.seq >= active.seq then return "the battle writes ran out of order" end
+    local trace = run.trace
+    if not plain_array(trace) then return "no engine-read oracle trace" end
+    local control, first_after, faint, lost = false, nil, nil, nil
+    for _, t in ipairs(trace) do
+        if type(t) ~= "table" or not integer(t.seq, 1, COUNT) then return "malformed oracle trace entry" end
+        if t.what == "enemy_turn" and t.seq > bench.seq and t.seq < active.seq then control = true end
+        if t.seq > active.seq and (t.what == "enemy_turn" or t.what == "faint") and first_after == nil then first_after = t end
+        if t.what == "faint" and t.seq > active.seq and faint == nil then faint = t end
+        if t.what == "lost" and faint ~= nil and t.seq > faint.seq and lost == nil then lost = t end
+    end
+    if not control then return "the foe never moved after the bench write (the known-positive control)" end
+    if first_after == nil or first_after.what ~= "faint" then
+        return "the foe moved before the native faint of the active battler"
+    end
+    if lost == nil then return "LostBattle (the native whiteout) did not follow the faint" end
+    return nil
+end
+
 -- scope, or nil,why: `receipt` is a PHYSICAL write-window receipt that may authorize `title`.
 -- scope = {kinds=M.WRITE_KINDS, covered={declared, proven}, uncovered={pack controls still OPEN}}.
 function M.qualified(pack, title, receipt)
@@ -355,7 +424,7 @@ function M.qualified(pack, title, receipt)
         if not exact then
             return "write-window receipt " .. mode .. " run wrote outside the declared test scopes"
         end
-        local problem = M.run_problem(run, mode, data.primary)
+        local problem = M.run_problem(run, mode, data.primary, data.battle_hold)
         if problem then return "write-window receipt " .. mode .. " run: " .. problem end
     end
     for _, mode in ipairs({"town", "reload", "battle"}) do
@@ -395,6 +464,15 @@ function M.qualified(pack, title, receipt)
         local problem = M.box_chain_problem(runs.boxes, runs.boxes_reset, runs.boxes_reload)
         if problem then return nil, "write-window receipt box runs: " .. problem end
         for kind in pairs(M.BOX_KINDS) do kinds[kind] = true end
+    end
+    if runs.battle_faint ~= nil then
+        -- O-30: the in-battle kind, proved at the pack's own battle hold rows (Silver: identical to Gold's)
+        if not same(receipt.battle_hold, data.battle_hold) then
+            return nil, "write-window receipt proved other battle hold rows than this pack's"
+        end
+        local problem = bound("battle_faint")
+        if problem then return nil, problem end
+        for kind in pairs(M.BATTLE_KINDS) do kinds[kind] = true end
     end
     return {kinds=kinds, covered=list, uncovered=uncovered}
 end
@@ -452,9 +530,9 @@ function M.bind_fixture_qualification(receipt, reports)
     if type(receipt) ~= "table" or type(receipt.runs) ~= "table" or type(reports) ~= "table" then
         return nil, "receipt and qualification reports required"
     end
-    for _, mode in ipairs({"town", "battle", "boxes"}) do
+    for _, mode in ipairs({"town", "battle", "boxes", "battle_faint"}) do
         local run = receipt.runs[mode]
-        if mode == "boxes" and run == nil then break end
+        if (mode == "boxes" or mode == "battle_faint") and run == nil then goto continue end
         local report = type(run) == "table" and reports[run.fixture]
         if type(report) ~= "table" or report.schema ~= "fixture-qualification-v1" or report.passed ~= true
            or type(report.errors) ~= "table" or next(report.errors) ~= nil then
@@ -478,6 +556,7 @@ function M.bind_fixture_qualification(receipt, reports)
         if not hex64(run.fixture_sha256) or artifact.sha256 ~= run.fixture_sha256 then
             return nil, mode .. ": run ran on other fixture bytes than the qualified ones"
         end
+        ::continue::
     end
     return true
 end

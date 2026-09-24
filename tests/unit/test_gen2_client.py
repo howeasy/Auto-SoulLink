@@ -1259,7 +1259,8 @@ def test_production_registers_exactly_the_u1_proven_sites_and_the_u2_kinds(title
     status = world.client.signals.status(world.client.signals)
     assert status.evidence_level == "PHYSICAL" and status.runtime_authorized is True
     assert sorted(status.registered_sites.values()) == sorted(proven)
-    assert sorted(parts.write_scope.kinds.keys()) == ["backing_box", "box_deposit", "box_withdraw", "party_collection", "party_hp"]
+    assert sorted(parts.write_scope.kinds.keys()) == ["backing_box", "battle_faint", "box_deposit", "box_withdraw",
+                                                      "party_collection", "party_hp"]
     pc = CHECKPOINT[title]["primary"]["execution_before"]["pc"]
     assert world.emu.callbacks["SLink-gen2-checkpoint"].addr == pc
     assert len(world.hello()["party"]) == 1  # the title's own checkpoint hold arms the hello
@@ -1314,21 +1315,39 @@ def test_production_bench_faint_lands_only_inside_the_checkpoint_hold():
     assert "show:!! PICHU KO'd" in world.shown()
 
 
-def test_production_composes_no_battle_hold_before_a_battle_faint_receipt():
-    """O-30 transition: until a receipt covers battle_faint, battle deaths wait for the overworld checkpoint."""
+def production_battle_hold(world, caller=True):
+    """Production: the CPU at the pack battle hold (before `call DetermineMoveOrder`) on StartBattle's stack."""
+    hold = HOLDS[world.title]["battle_hold"]
+    stack = hold["caller_stack"]
+    sp = stack["minimum_sp"] + 16
+    word = stack["required_words"][0]["value"] + (0 if caller else 1)
+    world.emu.poke("System Bus", sp, world.lua.table_from([word & 255, word >> 8]))
+    world.emu.regs.SP = sp
+    hit = world.emu.fire(hold["execution_before"]["bank"], hold["execution_before"]["pc"])
+    world.emu.regs.PC = 0
+    return hit
+
+
+def test_production_active_death_lands_only_inside_the_battle_hold():
+    """O-30: behind the PHYSICAL battle_faint receipt the production graph hooks the battle hold; the write lands
+    only when the held evaluation accepts it (here: the StartBattle caller word), never elsewhere in battle."""
     world = production()
-    assert world.emu.callbacks["SLink-gen2-battle-hold"] is None
     active = mon()
     world.party([active, mon(species=172, dvs=0x3AAA)])
     world.hello()
     world.frames(60)
     world.field("wBattleMode", 1)
+    world.field("wCurBattleMon", 0)
+    world.emu.poke("System Bus", hold_ram(world, "wBattleMonSpecies"), world.lua.table_from([active["species"]]))
+    world.emu.poke("System Bus", hold_ram(world, "wBattleMonHP"), world.lua.table_from([0, 30]))
     world.reply({"cmd": "force_faint", "key": codec_key(active), "nickname": "PIKA"})
-    world.frames(2)
-    assert any("no in-battle active faint composed" in line for line in world.logs.values())
-    world.field("wBattleMode", 0)
-    world.hold()
-    assert world.hp_of(0) == (0, 0)
+    world.frames(3)
+    assert production_battle_hold(world, caller=False) == 1          # another caller: refused, nothing moves
+    assert world.written() == [] and battle_hp(world) == 30
+    production_battle_hold(world)
+    assert battle_hp(world) == 0 and world.hp_of(0) == (0, 0) and action(world) == 1
+    assert {r["site"] for r in world.parts.writes.log.values()} == {"lua/gen2/entry.lua production"}
+    assert "show:!! PIKA KO'd" in world.shown()
 
 
 def test_production_box_mon_lands_only_inside_the_checkpoint_hold():
@@ -1353,7 +1372,7 @@ def test_production_refuses_what_the_receipts_do_not_cover():
     """A receipt without its box runs (the pre-BOX schema) proves only party_hp + box_deposit: every box
     command NACKs at the hold with the missing kind, and no byte moves."""
     receipt = json.loads((ROOT / "data/games/gen2_crystal/receipts/crystal.write_window.json").read_text())
-    for mode in ("boxes", "boxes_reset", "boxes_reload"):
+    for mode in ("boxes", "boxes_reset", "boxes_reload", "battle_faint"):
         del receipt["runs"][mode]
     world = production(files={"/receipts/crystal.write_window.json": json.dumps(receipt)})
     active = mon()

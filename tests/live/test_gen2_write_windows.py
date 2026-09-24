@@ -9,6 +9,8 @@ Per title (Crystal first, then Gold) three EmuHawk launches of lua/tests/gen2_wr
           the gate as <fixture>.u2_saved.SaveRAM (saved_image).
   reload  that post-save image, cold-booted through CONTINUE: the written bytes must be there.
   battle  <title>_battle: a Route 29 wild battle window, a refused party-only write to the active slot.
+  battle_faint (test_battle_faint_run, O-30) <title>_battle: a catch, then the bench and active kills at the
+          battle hold; adds the battle_faint kind and the pack's battle_hold rows to the committed receipt.
 Each run prints its own record (U2_RUN; evidence_level is the gate's, never stamped here). This file
 re-derives liveness (phases + MEASURED PC/hROMBank at accepted holds) and persistence (raw offsets from the
 pinned .sym, never the profile or the PYDEC codec; the staged fixture bytes must differ before the save),
@@ -59,7 +61,8 @@ REACQUIRE = {"town": [("idle", "start_menu"), ("face", "talk"), ("to_save", "sav
              "battle": [("idle", "walk"), ("post_battle", "done")],
              "boxes": [("idle", "walk"), ("post_save", "ops")],
              "boxes_reset": [("idle", "ops"), ("post_save", "done")],
-             "boxes_reload": [("idle", "done")]}
+             "boxes_reload": [("idle", "done")],
+             "battle_faint": [("idle", "hunt"), ("post_battle", "done")]}
 
 
 def receipt_path(title: str, *, repo: Path = REPO) -> Path:
@@ -426,6 +429,72 @@ def test_box_runs(title, emuhawk):  # noqa: F811 - pytest fixture
     if title == "gold":
         silver = json.loads((REPO / "data/games/gen2_silver/write_checkpoint.json").read_text(encoding="utf-8"))
         assert lua_qualified(silver, "silver", receipt)[0] is not None
+    receipt_path(title).write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"{title}: write kinds {scope['kinds']}")
+
+
+# --- card O-30: the battle_faint run (the in-battle write kind), added to the committed receipt -------------
+# lua/tests/gen2_write_windows.lua U.battle_faint_main: one scripted catch, then a wild battle whose first accepted
+# battle hold kills the bench mon and whose next one kills the active lead (the last able mon): the native faint
+# and whiteout follow. The engine-read oracle order (seq) is re-checked here, independently of the gate.
+def verify_battle_faint(text: str, primary: dict, hold: dict) -> dict:
+    run = run_record(text)
+    verify_liveness(run, primary)
+    pc, bank = hold["execution_before"]["pc"], hold["execution_before"]["bank"]
+    hits = run["battle_hold"]["hits"]
+    assert run["battle_hold"]["accepted"] >= 2 and all((h["pc"], h["bank"]) == (pc, bank) for h in hits), hits
+    bench, active = run["battle_writes"]
+    assert bench["slot"] != bench["active_slot"] and active["slot"] == active["active_slot"], run["battle_writes"]
+    assert bench["hp_after_hex"] == active["hp_after_hex"] == "0000", run["battle_writes"]
+    assert bench["battle_hp_after_hex"] == bench["battle_hp_before_hex"], "the bench write touched the battle struct"
+    assert active["battle_hp_after_hex"] == "0000", active
+    assert int(active["action_after_hex"], 16) == hold["write"]["skip_action"], active
+    order = [(t["seq"], t["what"]) for t in run["trace"]]
+    assert any(bench["seq"] < seq < active["seq"] and what == "enemy_turn" for seq, what in order), \
+        ("the known-positive control: the foe moves after a bench-only write", order)
+    after = [what for seq, what in order if seq > active["seq"] and what in ("enemy_turn", "faint")]
+    assert after and after[0] == "faint", ("the foe moved before the native faint", order)
+    faint = next(seq for seq, what in order if seq > active["seq"] and what == "faint")
+    assert any(what == "lost" and seq > faint for seq, what in order), ("no native whiteout", order)
+    return run
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_battle_faint_run(title, emuhawk):  # noqa: F811 - pytest fixture
+    """Adds run battle_faint (and the pack's battle_hold rows) to the committed <title>.write_window.json."""
+    from tests.live.test_gen2_frame_align import u1_facts
+    from tools import gen2_fixtures, gen2_source_data
+    spec = gen2_fixtures.BY_NAME[f"{title}_battle"]
+    reason = (live.rom_missing_reason(spec.title) or live.fixture_missing_reason(spec.name)
+              or live.receipt_missing_reason(spec.name))
+    if reason:
+        pytest.skip(reason)
+    receipt = json.loads(receipt_path(title).read_text(encoding="utf-8"))
+    receipt["runs"].pop("battle_faint", None)
+    fixture = REPO / "tests/fixtures/gen2" / f"{spec.name}.SaveRAM"
+    staged = fixture.read_bytes()
+    live.qualified_identity(spec.name, staged)
+    report = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
+    pack = json.loads((REPO / f"data/games/gen2_{title}/write_checkpoint.json").read_text(encoding="utf-8"))
+    primary, hold = pack["titles"][title]["primary"], pack["titles"][title]["battle_hold"]
+    ctx = gen2_source_data.load_context(title, root=REPO)
+    q = report["attempt_id"]
+    facts = {"SLINK_GEN2_U1_FACTS": json.dumps(u1_facts(ctx, gen2_fixtures.route_facts(title, REPO), q))}
+    _, text = _run(spec, fixture, staged, "battle_faint", f"{title}_battle_faint", q, facts)
+    run = verify_battle_faint(text, primary, hold)
+    assert fixture.read_bytes() == staged, f"{spec.name} changed while the gate ran"
+    receipt["runs"]["battle_faint"] = run
+    receipt["battle_hold"] = hold
+    scope, why = lua_qualified(pack, title, receipt)
+    assert scope is not None, why
+    assert "battle_faint" in scope["kinds"], scope
+    reports = {name: json.loads((REPO / live.RECEIPTS / f"{name}.qualification.json").read_text(encoding="utf-8"))
+               for name in (f"{title}_town", f"{title}_battle")}
+    bound, why = lua_bind(receipt, reports)
+    assert bound is True, why
+    if title == "gold":
+        silver = json.loads((REPO / "data/games/gen2_silver/write_checkpoint.json").read_text(encoding="utf-8"))
+        assert "battle_faint" in lua_qualified(silver, "silver", receipt)[0]["kinds"]
     receipt_path(title).write_text(json.dumps(receipt, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     print(f"{title}: write kinds {scope['kinds']}")
 

@@ -110,6 +110,52 @@ def test_the_battle_hold_is_its_own_held_execution_and_never_authorizes_unreceip
     assert binder.inspect_candidate(binder, "battle_hold").candidate_match is False
 
 
+def _battle_faint_run(hold):
+    """A battle_faint run record as U.battle_faint_main prints it (synthetic numbers, the pack's own PC/bank)."""
+    pc, bank = hold["execution_before"]["pc"], hold["execution_before"]["bank"]
+    write = {"ok": True, "status_after_hex": "00", "hp_after_hex": "0000", "hp_before_hex": "0012",
+             "action_before_hex": "00"}
+    return {"battle_hold": {"accepted": 2, "hits": [{"pc": pc, "bank": bank, "seq": 1}, {"pc": pc, "bank": bank, "seq": 4}]},
+            "catch": {"party_before": 1, "party_after": 2},
+            "battle_writes": [
+                {**write, "seq": 1, "slot": 1, "active_slot": 0, "battle_hp_before_hex": "0015",
+                 "battle_hp_after_hex": "0015", "action_after_hex": "00"},
+                {**write, "seq": 4, "slot": 0, "active_slot": 0, "battle_hp_before_hex": "0013",
+                 "battle_hp_after_hex": "0000", "action_after_hex": f"{hold['write']['skip_action']:02x}"}],
+            "trace": [{"seq": 2, "what": "enemy_turn"}, {"seq": 3, "what": "enemy_turn"},
+                      {"seq": 5, "what": "faint"}, {"seq": 6, "what": "lost"}]}
+
+
+@pytest.mark.parametrize("fault", [None, "no_control", "foe_first", "no_lost", "action", "bench_touches_battle",
+                                   "one_write", "off_pc", "no_catch"])
+def test_battle_faint_problem_recomputes_the_engine_order(fault):
+    """O-30: the bench write lets the foe move (control); the active write faints natively before any foe turn,
+    then LostBattle; the action byte is the pack's skip_action."""
+    candidate = Candidate()
+    hold = candidate.data["battle_hold"]
+    run = _battle_faint_run(hold)
+    if fault == "no_control":
+        run["trace"] = [t for t in run["trace"] if t["seq"] not in (2, 3)]
+    elif fault == "foe_first":
+        run["trace"].insert(2, {"seq": 5, "what": "enemy_turn"})
+        run["trace"][3]["seq"], run["trace"][4]["seq"] = 6, 7
+    elif fault == "no_lost":
+        run["trace"] = run["trace"][:3]
+    elif fault == "action":
+        run["battle_writes"][1]["action_after_hex"] = "00"
+    elif fault == "bench_touches_battle":
+        run["battle_writes"][0]["battle_hp_after_hex"] = "0000"
+    elif fault == "one_write":
+        run["battle_writes"] = run["battle_writes"][:1]
+    elif fault == "off_pc":
+        run["battle_hold"]["hits"][0]["pc"] += 1
+    elif fault == "no_catch":
+        run["catch"]["party_after"] = 1
+    problem = candidate.module.battle_faint_problem(candidate.lua.table_from(run, recursive=True),
+                                                     candidate.lua.table_from(hold, recursive=True))
+    assert (problem is None) == (fault is None), problem
+
+
 @pytest.mark.parametrize("symbol", ["wMapStatus", "wMapEventStatus", "wScriptRunning", "wScriptMode",
     "wScriptFlags", "wScriptStackSize", "wJoypadDisable", "wGameLogicPaused", "wInputType",
     "wBattleMode", "wStateFlags", "hMapEntryMethod", "wLinkMode", "hSerialConnectionStatus", "wSavedAtLeastOnce"])
@@ -776,7 +822,7 @@ def test_the_committed_crystal_receipt_still_qualifies_and_binds():
     assert {run["evidence_level"] for run in receipt["runs"].values()} == {"PHYSICAL"}
     scope, why = u2.lua_qualified(pack_of("crystal"), "crystal", receipt)
     assert scope is not None, why
-    assert scope["kinds"] == ALL_KINDS   # card BOX: the live box runs joined the receipt
+    assert scope["kinds"] == sorted([*ALL_KINDS, "battle_faint"])   # card BOX box runs; O-30 the battle_faint run
     reports = {name: json.loads((receipts / f"{name}.qualification.json").read_text(encoding="utf-8"))
                for name in ("crystal_town", "crystal_battle")}
     bound, why = u2.lua_bind(receipt, reports)

@@ -440,6 +440,14 @@ def _battle_hold(ctx) -> dict:
         # The write set (facts doc §2): HP 0 and the action byte LAST; the party mirror in between.
         "write": {"skip_action": action["BATTLEPLAYERACTION_USEITEM"], "sources": [action_cite, skip],
                   "targets": targets},
+        # Observation-only engine sites the U2 battle_faint run hooks (never written): the native faint
+        # (HandlePlayerMonFaint), the whiteout (LostBattle) and the foe's turn, which must not run between the
+        # active write and the faint. Entry bytes from the ROM, so a hit is checked at its pinned bank.
+        "oracles": {name: {"bank": ctx.symbol(name).bank, "address": ctx.symbol(name).address,
+                           "expected_hex": ctx.rom[rom_offset(ctx.symbol(name).bank, ctx.symbol(name).address):
+                                                   rom_offset(ctx.symbol(name).bank, ctx.symbol(name).address) + 3]
+                           .hex().upper(), "evidence": "SYM"}
+                    for name in ("HandlePlayerMonFaint", "LostBattle", "EnemyTurn_EndOpponentProtectEndureDestinyBond")},
         # Transform rewrites wBattleMonSpecies to the foe's; the slot is still ours (Gen 1 active_faint_guard).
         "transformed_bit": 3,
         "transformed_source": _cite(ctx, "constants/battle_constants.asm",
