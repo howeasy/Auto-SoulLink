@@ -1244,6 +1244,9 @@ class DuoRun:
         self._lane = getattr(args, "lane", None)
         self._pydec_path = (os.path.join(BUILD, f"e2e_{self.artifact_name}_pydec_result.txt")
                             if evidence_contract(self.game).require_oracle else None)
+        # CODE-DIGEST (5b1274c9): the production code this run exercised, one line per pydec receipt
+        self._code_stamp = (importlib.import_module("gen2_code_digest").run_stamp()
+                            if scenario_family(getattr(self, "game", "")) == "gen2_new" else None)
         self.server = None
         self.emus = []
         self.emu_by_inst = {}
@@ -5145,6 +5148,8 @@ class DuoRun:
                         extra = ("clause", "rerolls") if self.scenario == "gen2_species_clause" else ("clause", "rejected", "ending")
                         reason += f" scenario={self.scenario} " + " ".join(
                             f"{key}={self._gen2_verified_facts[key]}" for key in extra)
+                if getattr(self, "_code_stamp", None) is not None:
+                    self._pydec_note("CODE_DIGEST " + json.dumps(self._code_stamp, sort_keys=True))
                 self._pydec_note(f"PYDEC: {'PASS' if passed else 'FAIL'} {reason}")
             print(f"[duo] {self.scenario}: a={'PASS' if pa else 'FAIL'} "
                   f"b={'PASS' if pb else 'FAIL'}")
