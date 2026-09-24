@@ -1,0 +1,43 @@
+DUO_GEN2 {"attempt":2,"case":"gold_battle","fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","player":"a","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","scenario":"gen2_gender_clause","title":"gold"}
+CLIENT {"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","save_completed","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"}
+JITTER requested=37 applied=37 attempt=2
+  phase title @38
+  phase continue @3218
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":50342,"panel":false,"
+HELLO {"frame":3338,"ot_id":50342}
+  phase loaded @3338
+RX resolved_areas
+RX config
+BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 EC63:C4A6:9E
+  phase walk @3408 xy=53,12
+  phase battle @3712 xy=53,12
+RX hud_show
+RX_TEXT {"cmd":"hud_show","frame":5732,"text":"Partner caught PIDGEY in Route 29"}
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":6241,"key":"CE5B:C4A6:10","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":16}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":15,"in_box":false,"key":"CE5B:C4A6:10","level":3,"maxHP":15,"nickname":"PIDGEY","player":"a","seq":99,"species_id":16,"stats":{"level":3,"maxHP":
+CAPTURE_SENT {"frame":6241,"key":"CE5B:C4A6:10","seq":99}
+CAUGHT CE5B:C4A6:10
+RX force_faint key=CE5B:C4A6:10
+RX memorialize key=CE5B:C4A6:10
+RX play_sound sound=26
+RX gui_prompt
+RX_TEXT {"cmd":"gui_prompt","frame":6244,"text":"[x] Gender clause: both are ♂"}
+RX unresolve_area area_id=route_29
+TX {"event":"safe","player":"a","seq":100}
+PARTY_HP_WRITE {"after_party_hex":"9ead0a2b0000c4a600008700000000000000000000ec63231e00004600000005000000110014000c000c00090009000a100021000000c4a600003900000000000000000000ce5b22000000460000000300000000000f00080008000800070007000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","before_party_hex":"9ead0a2b0000c4a600008700000000000000000000ec63231e00004600000005000000110014000c000c00090009000a100021000000c4a600003900000000000000000000ce5b2200000046000000030000000f000f00080008000800070007000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","checkpoint":{"anchor_hex":"cd236ad8a720123e04210444cf380acdcc683807cd636a3802afc9f53e04212244cff137c9","anchors":{"ow_player_input":{"mapped_hex":"cd236ad8a720123e04210444cf380acdcc683807cd636a3802afc9f53e04212244cff137c9","rom_hex":"cd236ad8a720123e04210444cf380acdcc683807cd636a3802afc9f53e04212244cff137c9"},"player_events_caller":{"mapped_hex":"affa5fd1a7c0cd1168cd9767381bcda4673816cd617a3811cd1968380ccd67683807cda7683802afc9","rom_hex":"affa5fd1a7c0cd1168cd9767381bcda4673816cd617a3811cd1968380ccd67683807cda7683802afc9"}},"hrom_bank":37,"pc":26806,"sc":124,"sp":57325,"stack_hex":"8367","state":{"hMapEntryMethod":0,"hSerialConnectionStatus":255,"wBattleMode":0,"wGameLogicPaused":0,"wInputType":0,"wJoypadDisable":0,"wLinkMode":0,"wMapEventStatus":0,"wMapStatus":2,"wSavedAtLeastOnce":1,"wScriptFlags":0,"wScriptMode":0,"wScriptRunning":0,"wScriptStackSize":0,"wStateFlags":1},"svbk":0},"frame":6300,"key":"CE5B:C4A6:10","kind":"party_hp","log":[{"addr":55930,"artifact":"pokegold","attempted":1,"batch_index":1,"batch_size":2,"completed":1,"domain":"System Bus","evidence":"U2 PHYSICAL receipt","n":1,"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","site":"lua/gen2/entry.lua production","status":"written","title":"gold","why":"overworld"},{"addr":55932,"artifact":"pokegold","attempted":2,"batch_index":2,"batch_size":2,"completed":2,"domain":"System Bus","evidence":"U2 PHYSICAL receipt","n":2,"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","site":"lua/gen2/entry.lua production","status":"written","title":"gold","why":"overworld"}],"ok":true,"slot":1}
+  phase save @6301 xy=53,12
+MEMORIAL_PREIMAGE {"frame":6302,"key":"CE5B:C4A6:10","nickname_raw_hex":"8f88838684985050505050","ot_raw_hex":"868e8b8350000000000000","raw_hex":"100021000000c4a600003900000000000000000000ce5b22000000460000000300000000000f00080008000800070007","slot":1,"species_marker":16}
+TX {"box":13,"event":"memorialize_done","key":"CE5B:C4A6:10","player":"a","seq":103}
+MEMORIAL_ACK {"box":13,"event":"memorialize_done","frame":6302,"key":"CE5B:C4A6:10"}
+  phase saved @6995 xy=53,12
+MYKEY 0 EC63:C4A6:9E
+CLAUSE_CAPTURE {"area_id":"route_29","frame":7025,"gender":"male","key":"CE5B:C4A6:10","species_id":16,"types":["Normal","Flying"]}
+CLAUSE_VERDICT {"frame":7025,"verdict":"rejected"}
+REJECTED_MON {"box":13,"ending":"memorial","frame":7025,"in_party":false,"key":"CE5B:C4A6:10"}
+  phase settle @7025 xy=53,12
+  phase save @7200 xy=53,12
+  phase saved @7725 xy=53,12
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"1e064e606066bd1f47c34f45cb24a0262bc9ce4f7a0680d57dacf5f5abd75acb","client_saves":2,"flushed_matches":true,"frame":7755,"gate_saves":2,"save_completed_frame":7725,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/saveram_gen2_gender_clause_h10-gs-gender_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/e2e_gen2_gender_clause_h10-gs-gender_a_witness.SaveRAM"}
+RECEIPT {"attempt":2,"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":6241,"key":"CE5B:C4A6:10","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":16},"case":"gold_battle","clause":"gender","client":{"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","save_completed","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"},"ending":"memorial","fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","gender":"male","harness_write_scopes":[],"hello":{"frame":3338,"ot_id":50342},"input_mode":"normal_buttons","key":"CE5B:C4A6:10","path":"clause_observed","player":"a","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","save":{"cartram_bytes":32768,"cartram_sha256":"1e064e606066bd1f47c34f45cb24a0262bc9ce4f7a0680d57dacf5f5abd75acb","client_saves":2,"flushed_matches":true,"frame":7755,"gate_saves":2,"save_completed_frame":7725,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/saveram_gen2_gender_clause_h10-gs-gender_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/e2e_gen2_gender_clause_h10-gs-gender_a_witness.SaveRAM"},"scenario":"gen2_gender_clause","schema":"gen2-duo-gender-clause-v1","species_id":16,"title":"gold","types":["Normal","Flying"],"verdict":"rejected"}
+RESULT: PASS (gender clause rejected CE5B:C4A6:10 (clause_observed))

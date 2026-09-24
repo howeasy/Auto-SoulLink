@@ -142,7 +142,7 @@
         "initiator": "gold",
         "partner": "silver",
         "fixtures": {"a": "gold_battle", "b": "silver_battle"},
-        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_type_clause"]
+        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_type_clause", "gen2_gender_clause"]
       },
       "proofs": [
         {
@@ -214,6 +214,24 @@
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_type_clause_gs_pydec_result.txt",
               "sha256": "2ffc86e7e9e0509288a70d1aeb086dee57135ec08e4aa56d9b359251bc775f1f"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_gender_clause",
+          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_gender_clause --lane h10-gs-gender --keep-data",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_gender_clause_gs_a_result.txt",
+              "sha256": "d0f1799d2d6187a1599ac1f3e37897d9de8d384861f0bfa52bf1564574523949"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_gender_clause_gs_b_result.txt",
+              "sha256": "21129a837e1cadd480fa0b649902ccd28fc00b9bcfbd2014e735127e67f5ce67"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_gender_clause_gs_pydec_result.txt",
+              "sha256": "1ab3616f2a9b3717b6363e053dcd4c4675bc9ea001586e0203741a9ceafd12b1"
             }
           }
         }
