@@ -9,6 +9,21 @@ local t = G.open("ping")
 
 -- 1. wait for the beacon (t.boot fails the gate if it never comes)
 t.boot({ native = false, beacon = 2000, speed = 800 })
+-- COLD BOOT (G5-GATES-LIVE 2026-09-24): the beacon is up by frame ~12, before the game has set its save
+-- pointers, and writes:arm refuses until they are live ("safety.lua: invalid pointer: gPokemonStoragePtr").
+-- The client never arms that early (it waits for the server hello), so step until an arm would succeed.
+do
+    local never = function() return false end
+    local ready = false
+    for _ = 1, 3000 do
+        ready = pcall(function() t.writes:arm("native", never) end)
+        t.writes:disarm()
+        if ready then break end
+        t.step(nil)
+    end
+    if not ready then t.fail("save pointers live (native arm possible)", "frame " .. t.frame) end
+    t.log(string.format("native arm possible at frame %d", t.frame))
+end
 t.log(string.format("beacon 'SLNK' seen at frame %d  (sig=0x%08X abi=%d)", t.frame,
                     memory.read_u32_le(t.P.BASE), memory.read_u16_le(t.P.BASE + 4)))
 

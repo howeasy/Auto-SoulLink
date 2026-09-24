@@ -13,6 +13,21 @@ local gBattleMons, gAction, gMoves, gComm, gBS =
       0x02023BE4, 0x02023D7C, 0x02023DC4, 0x02023E82, 0x02023FE8
 
 t.boot({ native = false, beacon = 2000, speed = 800 })
+-- COLD BOOT (G5-GATES-LIVE 2026-09-24): the beacon is up by frame ~12, before the game has set its save
+-- pointers, and writes:arm refuses until they are live ("safety.lua: invalid pointer: gPokemonStoragePtr").
+-- The client never arms that early (it waits for the server hello), so step until an arm would succeed.
+do
+    local never = function() return false end
+    local ready = false
+    for _ = 1, 3000 do
+        ready = pcall(function() t.writes:arm("native", never) end)
+        t.writes:disarm()
+        if ready then break end
+        t.step(nil)
+    end
+    if not ready then t.fail("save pointers live (native arm possible)", "frame " .. t.frame) end
+    t.log(string.format("native arm possible at frame %d", t.frame))
+end
 -- Our controlled BattleStruct: the patch text buffer (a native arena, so the dirty bytes are staged
 -- through the raw poster's window; nothing else uses it in this gate).
 local BS_SCRATCH = t.P.TEXT_BUF

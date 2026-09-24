@@ -13,6 +13,21 @@
 local G = dofile((SLINK_ROOT or os.getenv("SLINK_ROOT")) .. "/lua/tests/gen3_gatelib.lua")
 local t = G.open("enemypartyroute")
 t.boot()
+-- COLD BOOT (G5-GATES-LIVE 2026-09-24): the beacon is up by frame ~12, before the game has set its save
+-- pointers, and writes:arm refuses until they are live ("safety.lua: invalid pointer: gPokemonStoragePtr").
+-- The client never arms that early (it waits for the server hello), so step until an arm would succeed.
+do
+    local never = function() return false end
+    local ready = false
+    for _ = 1, 3000 do
+        ready = pcall(function() t.writes:arm("native", never) end)
+        t.writes:disarm()
+        if ready then break end
+        t.step(nil)
+    end
+    if not ready then t.fail("save pointers live (native arm possible)", "frame " .. t.frame) end
+    t.log(string.format("native arm possible at frame %d", t.frame))
+end
 
 local MON = 100
 local ENEMY = t.ram.ENEMY_BASE
