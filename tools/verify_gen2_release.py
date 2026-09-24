@@ -3,9 +3,15 @@
 
 --list describes obligations without executing or qualifying them. --quick runs the
 source/MODEL frontier; --lane runs only the named obligations. Neither is a release
-verdict. Fixtures, companion builds, cartridge gates, the non-link duo scenarios and final
-evidence closure are deliberately unimplemented P3b/P4/P6 bindings and fail when requested,
-even if a file with the future name happens to exist.
+verdict. Fixtures stay a deliberately unimplemented P3b binding and fail when requested, even if
+a file with the future name happens to exist.
+
+--live-gates, --trade-gates, --duo-pairs and --release-evidence (lanes live-gates,
+live-trade-gates, duo-pairs, release-evidence) judge committed PHYSICAL receipts with no
+emulator, reusing the validators below: each is RED while a required receipt is missing, edited
+or proves another overlay build than the one published now, and green only when every required
+cell is present and valid. patch-build rebuilds the overlays (tools/build_gen2_companion.py
+--check) and compares them to the published provenance.
 
 --duo-matrix (the duo-link lane) checks the release duo matrix of
 tests/gen2_release_requirements.json: C<->C, G<->S and C<->G, every scenario the pairing
@@ -121,10 +127,14 @@ LANES = [
     Lane("fixtures", [_PY, "tools/gen2_fixtures.py", "--qualify"],
          why="UNIMPLEMENTED P3b: eight played saves, independent codec and boot/reload chains"),
     Lane("patch-build", [_PY, "tools/build_gen2_companion.py", "--check"],
-         why="UNIMPLEMENTED P4: reproducible overlays and reopened artifact obligations"),
-    Lane("live-gates", _pytest("tests/live/test_gen2_trade_gates.py"),
-         env={"SLINK_LIVE": "1"},
-         why="UNIMPLEMENTED P4: panel/sound and transient receipts on qualified overlays"),
+         why="SOURCE (PLAN §6 P4 'UPS byte-reproducible'; BINDING P4.1): rebuild the three overlays from"
+             " the pinned checkouts and compare UPS, sym, map and data/gen2/overlay_provenance.json"
+             " byte-for-byte; any drift is red"),
+    Lane("live-gates", [_PY, "tools/verify_gen2_release.py", "--live-gates"],
+         why="PHYSICAL receipts (BINDING P4.1 panel + GBC fade, P4.2 sound, W-6 writer exclusion): the"
+             " committed panel/sfx/w6 gate receipts of tests/gen2_live_gate_requirements.json for Crystal,"
+             " Gold and Silver, each a PASS on the overlay published NOW; runners are"
+             " tests/live/test_gen2_{panel,sfx,w6}_gate.py. Phone (P4.5, O-29 flavour) stays in live-new-gates"),
     Lane("live-new-gates", _pytest("tests/live/test_gen2_new_gates.py"),
          env={"SLINK_LIVE": "1"},
          why="PHYSICAL receipts: the U1 engine-site, U2 write-window (Silver via O-23) and fixture"
@@ -133,18 +143,22 @@ LANES = [
              " EmuHawk. R-1/R-2/R-3/R-4/R-5g have no committed receipt and still need a fresh"
              " SLINK_LIVE=1 run of the live inspect gate (lua/tests/gen2_inspect_gate.lua) on real"
              " hardware; client-conformance (P3b.6/P3b.7) stays a separate later card"),
-    Lane("live-trade-gates", _pytest("tests/live/test_gen2_trade_gates.py"),
-         env={"SLINK_LIVE": "1"},
-         why="UNIMPLEMENTED P4: native trade, held items, refusal and exact-record reload"),
+    Lane("live-trade-gates", [_PY, "tools/verify_gen2_release.py", "--trade-gates"],
+         why="PHYSICAL receipts (BINDING P4.3; T-1..T-4): every native trade case of TRADE_END_STATUS"
+             " declared and receipted on C-C, G-S and C-G in the release duo matrix, judged by the"
+             " HARNESS_ONLY_OVERLAY trade oracle against the published overlay; runner is"
+             " tools/e2e_duo.py's gen2_trade_* cases (tests/e2e/test_duo_gen2_new.py)"),
     Lane("duo-link", [_PY, "tools/verify_gen2_release.py", "--duo-matrix"],
          why="PHYSICAL receipts: the C-C, G-S and C-G link matrix of tests/gen2_release_requirements.json;"
              " a missing pair, scenario, oracle or receipt is red"),
-    Lane("duo-pairs", _pytest("tests/e2e/test_duo_gen2_new.py"),
-         env={"SLINK_E2E": "1", "SLINK_LIVE": "1"},
-         why="UNIMPLEMENTED P3b/P4: the C-C and G-S rules/trade scenarios beyond link (link is"
-             " duo-link's matrix); independent oracles"),
-    Lane("release-evidence", [],
-         why="UNIMPLEMENTED P6: signed applicability, all artifact receipts and two-person review"),
+    Lane("duo-pairs", [_PY, "tools/verify_gen2_release.py", "--duo-pairs"],
+         why="PHYSICAL receipts (BINDING P3b.7 + P4.3): the whole release duo matrix, and on C-C and G-S"
+             " every P3b.7 scenario (DUO_PAIRS_SCENARIOS; shiny_bonus is the O-26 recorded limit) plus"
+             " every trade case; red until each is registered in tools/e2e_duo.py and receipted"),
+    Lane("release-evidence", [_PY, "tools/verify_gen2_release.py", "--release-evidence"],
+         why="G4 packet (PLAN §6 P4 exit + §6.1 ledger; BINDING P4.4, P6.3): published overlay bytes match"
+             " their provenance, overlay rows ADMITTED at the published hashes, G4 ledger row signed,"
+             " the release bundle ships every overlay UPS, and every receipt lane above is clean"),
 ]
 
 REQUIREMENTS = {
@@ -175,14 +189,6 @@ REQUIREMENTS = {
 
 UNIMPLEMENTED = {
     "fixtures": "P3b fixture qualifier, eight played fixtures and GAME/PYDEC reload evidence",
-    "patch-build": "P4 companion build command and patched-artifact qualification",
-    "live-gates": "P4 panel/sound gate and transient-receipt contract",
-    "live-trade-gates": "P4 trade and held-item persistence/refusal gates",
-    "duo-pairs": ("P3b.7 scenarios beyond link (ball_gate, boxed_capture, faints, poison, whiteout,"
-                  " pc_ops, changebox, clauses, shiny_bonus, reconnect, soft_reset, evolution,"
-                  " npc_trade, gift, egg_hatch, admit_wrong_rom) are not registered in"
-                  " tools/e2e_duo.py; P4 trade"),
-    "release-evidence": "P3b machine ledger plus P6 applicability/artifact/receipt evaluation",
 }
 # --quick is source/MODEL feedback, including the P2 coverage map once bound. All
 # later-phase obligations stay in the full manifest; omitting them grants no release verdict.
@@ -203,6 +209,9 @@ _SOURCE_INPUTS = (
                              ("pokegold", "pokegold.gbc"),
                              ("pokegold", "pokesilver.gbc"))),
 )
+_OVERLAY_PROVENANCE = "data/gen2/overlay_provenance.json"
+_DUO_INPUTS = ("tests/gen2_release_requirements.json", "tools/e2e_duo.py", "data/gen2_sources.lock.json",
+               _OVERLAY_PROVENANCE)
 PREREQUISITES = {
     "unit": ("tests/unit",),
     "source-build": _SOURCE_INPUTS,
@@ -217,14 +226,15 @@ PREREQUISITES = {
         for name in (*(f"{title}_{kind}" for title in TITLES for kind in ("town", "battle")),
                      "crystal_town_ot2", "crystal_battle_ot2", "gold_battle_ot2")
     ),
-    "patch-build": _SOURCE_INPUTS,
-    "live-gates": (),
+    "patch-build": (*_SOURCE_INPUTS, "patch/gen2/src", _OVERLAY_PROVENANCE),
+    "live-gates": ("tests/gen2_live_gate_requirements.json", "tests/fixtures/gen2/receipts",
+                   _OVERLAY_PROVENANCE),
     "live-new-gates": ("tests/gen2_live_gate_requirements.json", "tests/fixtures/gen2/receipts"),
-    "live-trade-gates": (),
-    "duo-link": ("tests/gen2_release_requirements.json", "tools/e2e_duo.py",
-                 "data/gen2_sources.lock.json"),
-    "duo-pairs": (),
-    "release-evidence": ("tests/gen2_release_requirements.json",),
+    "live-trade-gates": _DUO_INPUTS,
+    "duo-link": _DUO_INPUTS[:3],
+    "duo-pairs": _DUO_INPUTS,
+    "release-evidence": (*_DUO_INPUTS, "tests/gen2_live_gate_requirements.json", "docs/gen2/PLAN.md",
+                         "tools/make_release.py"),
 }
 
 
@@ -924,13 +934,18 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
     return errors
 
 
-def duo_matrix_errors(root: Path | None = None, duo=None) -> list[str]:
+def duo_matrix_errors(root: Path | None = None, duo=None, *, required: dict | None = None,
+                      only: frozenset | None = None) -> list[str]:
     """Every gap in the release duo matrix, one message per gap; [] only when fully receipted.
 
     Registry side (tools/e2e_duo.py): every Gen 2 pairing is declared, every scenario it
     registers is in the matrix, and each has a post-result oracle under a require_oracle
-    evidence contract. Evidence side: each cell has pinned PASS receipts for its own pair."""
+    evidence contract. Evidence side: each cell has pinned PASS receipts for its own pair.
+    `required` maps (initiator, partner) to scenarios that pair must declare on top of
+    DUO_REQUIRED_SCENARIOS; `only` narrows the per-cell checks to those scenarios (row-level
+    identity checks always run), so a narrowed lane still cannot pass on an empty row."""
     root = ROOT if root is None else root
+    required = required or {}
     if duo is None:
         import e2e_duo as duo
     doc = json.loads((root / DUO_MATRIX).read_text(encoding="utf-8"))
@@ -951,7 +966,8 @@ def duo_matrix_errors(root: Path | None = None, duo=None) -> list[str]:
         try:
             rid, axes = row["id"], row["axes"]
             game, scenarios = axes["pairing"], axes.get("scenarios") or []
-            missing_required = DUO_REQUIRED_SCENARIOS - set(scenarios)
+            need = DUO_REQUIRED_SCENARIOS | required.get((axes.get("initiator"), axes.get("partner")), frozenset())
+            missing_required = need - set(scenarios)
             if missing_required:
                 errors.append(f"{rid}: required scenario(s) {sorted(missing_required)} not declared")
             registered = []
@@ -968,7 +984,7 @@ def duo_matrix_errors(root: Path | None = None, duo=None) -> list[str]:
                 except RuntimeError as exc:
                     errors.append(f"{rid}: {exc}")
                 errors.extend(f"{rid}: registered scenario {name} is not in the release matrix"
-                              for name in registered if name not in scenarios)
+                              for name in registered if name not in scenarios and (only is None or name in only))
                 trade = getattr(duo, "GEN2_TRADE_FIXTURES", {}).get(game)
                 if set(scenarios) & set(TRADE_END_STATUS) and trade != axes.get("trade_fixtures"):
                     errors.append(f"{rid}: tools/e2e_duo.py {game} trade fixtures {trade} != matrix "
@@ -987,6 +1003,8 @@ def duo_matrix_errors(root: Path | None = None, duo=None) -> list[str]:
             for proof in proof_list:
                 proofs.setdefault(proof.get("scenario"), proof)
             for name in scenarios:
+                if only is not None and name not in only:
+                    continue
                 cell = f"{rid}/{name}"
                 if name not in registered:
                     errors.append(f"{cell}: scenario not registered for {game} in tools/e2e_duo.py")
@@ -1170,7 +1188,7 @@ def _phone_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
     return errors
 
 
-def new_gates_errors(root: Path | None = None, receipt_validate=None) -> list[str]:
+def new_gates_errors(root: Path | None = None, receipt_validate=None, kinds=None) -> list[str]:
     """Every gap in the live-new-gates lane's non-emulator evidence: U1 engine-site, U2 write-window
     (Silver via O-23) and fixture-qualification receipts, each pinned by sha256. An empty proof is a
     release blocker. R-1/R-2/R-3/R-4/R-5g are NOT covered here -- they have no committed receipt and
@@ -1192,6 +1210,8 @@ def new_gates_errors(root: Path | None = None, receipt_validate=None) -> list[st
     errors = []
     for row in doc.get("requirements", []):
         rid, axes, kind = row["id"], row["axes"], row["axes"]["kind"]
+        if kinds is not None and kind not in kinds:
+            continue
         proofs = row.get("proofs") or []
         if not proofs:
             errors.append(f"{rid}: no receipt registered (an empty proof is a release blocker)")
@@ -1231,6 +1251,137 @@ def _new_gates_main() -> int:
         print(f"new gates: {len(errors)} gap(s); a missing/edited/unproven receipt is not a pass")
         return 1
     print("new gates: every engine-site, write-window and qualification receipt bound and PHYSICAL")
+    return 0
+
+
+# live-gates (BINDING P4.1 panel/fade, P4.2 sound, W-6 writer exclusion): one PHYSICAL row per kind x title,
+# pinned here so deleting a row from tests/gen2_live_gate_requirements.json cannot shrink the lane.
+LIVE_GATE_KINDS = ("panel_gate", "sfx_gate", "w6_gate")
+
+
+def live_gates_errors(root: Path | None = None, receipt_validate=None) -> list[str]:
+    root = ROOT if root is None else root
+    try:
+        rows = json.loads((root / NEW_GATES).read_text(encoding="utf-8"))["requirements"]
+        have = {(row["axes"]["kind"], row["axes"].get("title")) for row in rows}
+    except (OSError, ValueError, KeyError, TypeError):
+        return [f"{NEW_GATES} missing or malformed"]
+    errors = [f"{kind} {title}: no row in {NEW_GATES}"
+              for kind in LIVE_GATE_KINDS for title in TITLES if (kind, title) not in have]
+    return errors + new_gates_errors(root, receipt_validate, kinds=LIVE_GATE_KINDS)
+
+
+def trade_gates_errors(root: Path | None = None, duo=None) -> list[str]:
+    """live-trade-gates (BINDING P4.3, T-1..T-4): every trade case on every release pair, receipted."""
+    cases = frozenset(TRADE_END_STATUS)
+    return duo_matrix_errors(root, duo, required=dict.fromkeys(DUO_PAIRS, cases), only=cases)
+
+
+# BINDING P3b.7's C-C / G-S scenario list, named as tools/e2e_duo.py registers Gen 2 cells (gen2_<name>;
+# linked_faint_bench is gen2_faint). shiny_bonus is absent: O-26 records it as a release limit.
+# ponytail: names not yet registered are guesses from docs/gen2/reviews/DUO_SCENARIO_ROADMAP_2026-09-23.md;
+# a different registered name keeps the lane red until this set is edited, never green.
+DUO_PAIRS_SCENARIOS = frozenset({
+    "link", "gen2_ball_gate", "gen2_boxed_capture", "gen2_faint", "gen2_faint_active", "gen2_poison",
+    "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_species_clause", "gen2_gender_clause",
+    "gen2_type_clause", "gen2_reconnect", "gen2_soft_reset", "gen2_evolution", "gen2_npc_trade", "gen2_gift",
+    "gen2_egg_hatch", "gen2_admit_wrong_rom",
+})
+
+
+def duo_pairs_errors(root: Path | None = None, duo=None) -> list[str]:
+    """duo-pairs: the whole matrix, plus every P3b.7 scenario and trade case on C-C and G-S."""
+    need = DUO_PAIRS_SCENARIOS | frozenset(TRADE_END_STATUS)
+    return duo_matrix_errors(root, duo, required=dict.fromkeys((("crystal", "crystal"), ("gold", "silver")), need))
+
+
+def _lf_sha256(path: Path) -> str | None:
+    try:
+        return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+    except OSError:
+        return None
+
+
+def g4_packet_errors(root: Path | None = None, release_ups=None) -> list[str]:
+    """The non-receipt half of the G4 packet (PLAN §6 P4 exit, §6.1; BINDING P4.4): published overlay
+    bytes match their provenance, each overlay row is ADMITTED at those hashes, the owner signed the G4
+    ledger row, and the release bundle (tools/make_release.py) ships every overlay UPS."""
+    root = ROOT if root is None else root
+    try:
+        provenance = json.loads((root / _OVERLAY_PROVENANCE).read_text(encoding="utf-8"))
+        published = {row["slink_title"]: row for row in provenance["outputs"].values()}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return [f"{_OVERLAY_PROVENANCE} missing or malformed"]
+    if release_ups is None:
+        import make_release
+        release_ups = make_release._GB_COMPANION_UPS
+    errors = []
+    symbols = provenance.get("symbols") or {}
+    for title in TITLES:
+        out = published.get(title)
+        if out is None:
+            errors.append(f"{title}: no published overlay in {_OVERLAY_PROVENANCE}")
+            continue
+        ups = out.get("ups") or {}
+        try:
+            ups_sha = hashlib.sha256((root / ups["file"]).read_bytes()).hexdigest()
+        except (OSError, KeyError, TypeError):
+            ups_sha = None
+        if ups_sha is None or ups_sha != ups.get("sha256"):
+            errors.append(f"{title}: {ups.get('file')} is missing or differs from its published sha256")
+        for ext in ("sym", "map"):
+            name = f"{title}_slink.{ext}"
+            if not symbols.get(name) or _lf_sha256(root / "data/gen2" / name) != symbols[name]:
+                errors.append(f"{title}: data/gen2/{name} is missing or differs from its published sha256")
+        try:
+            matrix = json.loads((root / f"data/games/gen2_{title}/admission.json").read_text(encoding="utf-8"))
+            row = next(r for r in matrix["artifacts"] if r.get("kind") == "overlay")
+        except (OSError, ValueError, KeyError, TypeError, StopIteration):
+            row = {}
+        if (row.get("status") != "ADMITTED" or row.get("sha1") != out.get("sha1")
+                or (row.get("ups") or {}).get("sha256") != ups.get("sha256")):
+            errors.append(f"{title}_overlay: admitted-artifact row is not ADMITTED at the published overlay "
+                          f"hashes (P4.4 promotion; today status={row.get('status')!r})")
+        if Path(ups.get("file") or "?").name not in release_ups:
+            errors.append(f"{title}: tools/make_release.py does not ship {ups.get('file')}")
+    try:
+        plan = (root / "docs/gen2/PLAN.md").read_text(encoding="utf-8")
+        signed = next(line for line in plan.splitlines() if line.startswith("| G4 |")).split("|")[2].strip()
+    except (OSError, StopIteration, IndexError):
+        signed = ""
+    if signed in ("", "—", "-"):
+        errors.append("docs/gen2/PLAN.md §6.1: the G4 ledger row carries no owner signature")
+    return errors
+
+
+def release_evidence_errors(root: Path | None = None, duo=None, receipt_validate=None,
+                            release_ups=None) -> list[str]:
+    """release-evidence: the G4 packet and every receipt lane it rests on, one prefixed line per gap."""
+    parts = (("packet", g4_packet_errors(root, release_ups)),
+             ("live-new-gates", new_gates_errors(root, receipt_validate)),
+             ("live-gates", live_gates_errors(root, receipt_validate)),
+             ("live-trade-gates", trade_gates_errors(root, duo)),
+             ("duo-pairs", duo_pairs_errors(root, duo)))
+    return [f"{lane}: {error}" for lane, errors in parts for error in errors]
+
+
+_RECEIPT_CLIS = {
+    "--live-gates": ("live gates", "live_gates_errors"),
+    "--trade-gates": ("trade gates", "trade_gates_errors"),
+    "--duo-pairs": ("duo pairs", "duo_pairs_errors"),
+    "--release-evidence": ("release evidence", "release_evidence_errors"),
+}
+
+
+def _receipt_cli(flag: str) -> int:
+    label, check = _RECEIPT_CLIS[flag]
+    errors = globals()[check]()
+    for error in errors:
+        print(f"RED  {error}")
+    if errors:
+        print(f"{label}: {len(errors)} gap(s); a missing, stale or unproven receipt is not a pass")
+        return 1
+    print(f"{label}: every required receipt bound and valid")
     return 0
 
 
@@ -1291,6 +1442,8 @@ def main(argv: list[str] | None = None) -> int:
         return _duo_matrix_main()
     if given == ["--new-gates"]:
         return _new_gates_main()
+    if len(given) == 1 and given[0] in _RECEIPT_CLIS:
+        return _receipt_cli(given[0])
     errors = manifest_errors()
     if errors:
         print("Gen 2 manifest invalid: " + "; ".join(errors), file=sys.stderr)

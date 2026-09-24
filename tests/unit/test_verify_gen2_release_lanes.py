@@ -84,7 +84,7 @@ def test_all_requirement_ids_are_mapped_without_deferred_rows_becoming_passes():
     assert "R-2" in gate.REQUIREMENTS["live-new-gates"]
     assert set(gate.REQUIREMENTS["coverage-map"]) == ids
     assert set(gate.REQUIREMENTS["release-evidence"]) == ids
-    assert "release-evidence" in gate.UNIMPLEMENTED
+    assert "release-evidence" not in gate.UNIMPLEMENTED
     assert "tests/gen2_release_requirements.json" in gate.PREREQUISITES["release-evidence"]
 
 
@@ -194,10 +194,8 @@ def test_manifest_mutations_fail_before_any_lane_runs(monkeypatch, capsys, mutat
     elif mutation == "duplicate_lane":
         monkeypatch.setattr(gate, "LANES", [*gate.LANES, gate.LANES[0]])
     elif mutation == "empty_future_binding":
-        monkeypatch.setattr(gate, "UNIMPLEMENTED", {
-            name: reason for name, reason in gate.UNIMPLEMENTED.items()
-            if name != "release-evidence"
-        })
+        monkeypatch.setattr(gate, "LANES", [gate.Lane(lane.name, []) if lane.name == "release-evidence"
+                                            else lane for lane in gate.LANES])
     else:
         rows = {name: list(ids) for name, ids in gate.REQUIREMENTS.items()}
         if mutation == "missing_mapping":
@@ -246,10 +244,7 @@ def test_missing_source_inputs_fail_before_subprocess(monkeypatch, tmp_path):
     assert "pokecrystal11.gbc" in detail
 
 
-@pytest.mark.parametrize("name", [
-    "fixtures", "patch-build", "live-gates", "live-trade-gates",
-    "duo-pairs", "release-evidence",
-])
+@pytest.mark.parametrize("name", ["fixtures"])
 def test_future_binding_cannot_pass_by_merely_adding_a_file(monkeypatch, tmp_path, name):
     monkeypatch.setattr(gate, "ROOT", tmp_path)
     lane = _lane(name)
@@ -431,8 +426,8 @@ def test_duo_link_lane_is_the_implemented_physical_matrix_lane():
     assert gate.REQUIREMENTS["duo-link"] == ["D-1", "C-6g"]
     assert gate.DUO_MATRIX in gate.PREREQUISITES["duo-link"]
     assert sorted(gate.DUO_PAIRS) == [("crystal", "crystal"), ("crystal", "gold"), ("gold", "silver")]
-    # The non-link P3b.7 scenarios stay an unimplemented, red lane: nothing reads them as covered.
-    assert "duo-pairs" in gate.UNIMPLEMENTED and "D-2" in gate.REQUIREMENTS["duo-pairs"]
+    # The non-link P3b.7 scenarios are duo-pairs' pinned, red-until-receipted set.
+    assert "D-2" in gate.REQUIREMENTS["duo-pairs"] and "gen2_ball_gate" in gate.DUO_PAIRS_SCENARIOS
 
 
 def test_committed_matrix_is_red_exactly_where_a_pair_has_no_receipt():
@@ -1690,6 +1685,10 @@ def _trade_cell(tmp_path, scenario="gen2_trade_new", pair="duo.crystal.crystal")
     doc = _green_tree(tmp_path)
     axes = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
     axes = _row(axes, pair)["axes"]
+    return doc, _trade_proof(tmp_path, axes, scenario), axes
+
+
+def _trade_proof(tmp_path, axes, scenario, tag="trade"):
     (tmp_path / "data/gen2").mkdir(parents=True, exist_ok=True)
     provenance = (REPO / "data/gen2/overlay_provenance.json").read_bytes()
     (tmp_path / "data/gen2/overlay_provenance.json").write_bytes(provenance)
@@ -1711,10 +1710,10 @@ def _trade_cell(tmp_path, scenario="gen2_trade_new", pair="duo.crystal.crystal")
                      f"status={status} scenario={scenario} admission_scope=HARNESS_ONLY_OVERLAY\n")
     proof = {"scenario": scenario, "receipts": {}}
     for side, body in text.items():
-        path = tmp_path / "receipts" / f"trade_{side}.txt"
+        path = tmp_path / "receipts" / f"{tag}_{side}.txt"
         path.write_text(body, encoding="utf-8", newline="\n")
         proof["receipts"][side] = {"path": path.relative_to(tmp_path).as_posix(), "sha256": _lf_sha(path)}
-    return doc, proof, axes
+    return proof
 
 
 @pytest.mark.parametrize("scenario", sorted(gate.TRADE_END_STATUS))
@@ -1769,3 +1768,346 @@ def test_every_cell_declares_all_trade_cases_with_the_runner_fixtures():
         assert set(gate.TRADE_END_STATUS) <= set(axes["scenarios"])
         assert axes["trade_fixtures"] == duo.GEN2_TRADE_FIXTURES[axes["pairing"]]
     assert set(gate.TRADE_END_STATUS) == set(duo.GEN2_TRADE_SCENARIOS)
+
+
+# --- RELEASE-LANES: patch-build, live-gates, live-trade-gates, duo-pairs, release-evidence -----------
+# Each lane is RED while its receipts are missing or stale and green only on a valid tree (MODEL
+# fixtures here; the committed tree's verdict is whatever the receipts say today).
+
+_RECEIPT_LANES = {"live-gates": "--live-gates", "live-trade-gates": "--trade-gates",
+                  "duo-pairs": "--duo-pairs", "release-evidence": "--release-evidence"}
+
+
+def test_placeholder_lanes_are_bound_to_real_checks():
+    assert set(gate.UNIMPLEMENTED) == {"fixtures"}
+    assert _lane("patch-build").argv[1:] == ["tools/build_gen2_companion.py", "--check"]
+    for name, flag in _RECEIPT_LANES.items():
+        assert _lane(name).argv[1:] == ["tools/verify_gen2_release.py", flag]
+        assert name in gate._SLOW
+    for name in ("patch-build", *_RECEIPT_LANES):
+        assert "P4" in _lane(name).why or "P6" in _lane(name).why, name
+    assert not any("test_gen2_trade_gates.py" in " ".join(lane.argv) for lane in gate.LANES)
+    assert gate.manifest_errors() == []
+
+
+@pytest.mark.parametrize("name", ["patch-build", *_RECEIPT_LANES])
+def test_new_lanes_fail_on_missing_inputs_before_running(monkeypatch, tmp_path, name):
+    monkeypatch.setattr(gate, "ROOT", tmp_path)
+    monkeypatch.setattr(gate.release_lanes, "run_lane", lambda *_a, **_k: pytest.fail("lane executed"))
+    ok, detail = gate.run_lane(_lane(name), quiet=True)
+    assert not ok and "missing prerequisites" in detail
+
+
+@pytest.mark.parametrize(("returncode", "ok"), [(1, False), (0, True)])
+def test_patch_build_verdict_is_the_builders_check(monkeypatch, returncode, ok):
+    """The builder's --check rebuilds and compares to the published provenance; drift exits 1."""
+    seen = []
+
+    def run(argv, **_kwargs):
+        seen.append(argv)
+        return SimpleNamespace(returncode=returncode, stdout="", stderr="")
+
+    monkeypatch.setattr(gate.release_lanes.subprocess, "run", run)
+    assert gate.run_lane(_lane("patch-build"), quiet=True)[0] is ok
+    assert seen[0][1:] == ["tools/build_gen2_companion.py", "--check"]
+
+
+@pytest.mark.parametrize(("flag", "func"), [("--live-gates", "live_gates_errors"),
+                                            ("--trade-gates", "trade_gates_errors"),
+                                            ("--duo-pairs", "duo_pairs_errors"),
+                                            ("--release-evidence", "release_evidence_errors")])
+def test_receipt_cli_exit_follows_the_gaps(monkeypatch, capsys, flag, func):
+    monkeypatch.setattr(gate, func, lambda: ["x: stale"])
+    assert gate.main([flag]) == 1
+    assert "RED  x: stale" in capsys.readouterr().out
+    monkeypatch.setattr(gate, func, lambda: [])
+    assert gate.main([flag]) == 0
+
+
+# live-gates: synthetic panel/sfx/w6 receipts that satisfy the production validators.
+
+def _live_gates_tree(tmp_path):
+    (tmp_path / "data/gen2").mkdir(parents=True, exist_ok=True)
+    provenance = (REPO / "data/gen2/overlay_provenance.json").read_bytes()
+    (tmp_path / "data/gen2/overlay_provenance.json").write_bytes(provenance)
+    pins = {row["slink_title"]: row["sha1"] for row in json.loads(provenance)["outputs"].values()}
+    (tmp_path / "tests/fixtures/gen2/receipts").mkdir(parents=True, exist_ok=True)
+    rows = []
+    for title in gate.TITLES:
+        fixture = f"{title}_battle"
+        raw = (REPO / "tests/fixtures/gen2" / f"{fixture}.SaveRAM").read_bytes()
+        (tmp_path / "tests/fixtures/gen2" / f"{fixture}.SaveRAM").write_bytes(raw)
+        bind = {"result": "PASS", "evidence_level": "PHYSICAL", "title": title, "overlay_sha1": pins[title],
+                "fixture": fixture, "fixture_sha256": hashlib.sha256(raw).hexdigest()}
+        leg = {"fixture": fixture, "fixture_sha256": bind["fixture_sha256"], "overlay_sha1": pins[title],
+               "inner_completed": True, "corpus_frames": 100, "allowed_writes": 3, "violation_count": 0,
+               "violations": [], "control": {"native_caught": True, "lua_caught": True}}
+        receipts = {
+            "panel_gate": {**bind, "schema": "gen2-panel-gate-v1", "minimum_sp": {"margin_bytes": 16}},
+            "sfx_gate": {**bind, "schema": "gen2-sfx-gate-v1", "deadline_frames": 300,
+                         "contexts": {name: {"result": "PASS", "posted": 0, "fade_end": 0, "played": 9,
+                                             "battle_service_gap": 5} for name in gate.SFX_GATE_CONTEXTS},
+                         "reset": {"result": "PASS", "pending_at_entry": True, "played_id": None,
+                                   "on_channel": None}},
+            "w6_gate": {**bind, "schema": "gen2-w6-gate-v1", "violation_count": 0,
+                        "legs": dict.fromkeys(gate.W6_GATE_LEGS, leg)},
+        }
+        for kind, receipt in receipts.items():
+            path = tmp_path / "tests/fixtures/gen2/receipts" / f"{title}_overlay.{kind}.json"
+            path.write_text(json.dumps(receipt), encoding="utf-8", newline="\n")
+            rows.append({"id": f"new-gates.{kind}.{title}", "axes": {"kind": kind, "title": title},
+                         "proofs": [{"receipts": {"receipt": {"path": path.relative_to(tmp_path).as_posix(),
+                                                              "sha256": _lf_sha(path)}}}]})
+    doc = {"requirements": rows}
+    (tmp_path / gate.NEW_GATES).write_text(json.dumps(doc), encoding="utf-8")
+    return doc
+
+
+def test_live_gates_green_only_on_a_valid_tree(tmp_path):
+    _live_gates_tree(tmp_path)
+    assert gate.live_gates_errors(tmp_path) == []
+    assert gate.live_gates_errors(tmp_path / "empty") == [f"{gate.NEW_GATES} missing or malformed"]
+
+
+def _drop_row(tmp_path, doc):
+    doc["requirements"] = [row for row in doc["requirements"] if row["id"] != "new-gates.sfx_gate.gold"]
+
+
+def _empty_proof(tmp_path, doc):
+    doc["requirements"][0]["proofs"] = []
+
+
+def _delete_receipt(tmp_path, doc):
+    (tmp_path / doc["requirements"][1]["proofs"][0]["receipts"]["receipt"]["path"]).unlink()
+
+
+def _edit_receipt(tmp_path, doc):
+    path = tmp_path / doc["requirements"][2]["proofs"][0]["receipts"]["receipt"]["path"]
+    path.write_text(path.read_text(encoding="utf-8").replace('"violation_count": 0', '"violation_count": 1', 1),
+                    encoding="utf-8")
+
+
+def _republish_overlay(tmp_path, _doc):
+    path = tmp_path / "data/gen2/overlay_provenance.json"
+    provenance = json.loads(path.read_text(encoding="utf-8"))
+    provenance["outputs"]["pokegold"]["sha1"] = "0" * 40
+    path.write_text(json.dumps(provenance), encoding="utf-8")
+
+
+def _change_fixture(tmp_path, _doc):
+    path = tmp_path / "tests/fixtures/gen2/silver_battle.SaveRAM"
+    raw = path.read_bytes()
+    path.write_bytes(bytes([raw[0] ^ 1]) + raw[1:])
+
+
+@pytest.mark.parametrize("mutation", [_drop_row, _empty_proof, _delete_receipt, _edit_receipt,
+                                      _republish_overlay, _change_fixture])
+def test_live_gates_red_on_missing_or_stale_receipts(tmp_path, mutation):
+    doc = _live_gates_tree(tmp_path)
+    mutation(tmp_path, doc)
+    (tmp_path / gate.NEW_GATES).write_text(json.dumps(doc), encoding="utf-8")
+    assert gate.live_gates_errors(tmp_path) != []
+
+
+# live-trade-gates: every trade case on every pair, judged by the real trade receipt validator.
+
+def _trade_duo():
+    scenarios = {name: {"oracle": "assert_gen2_link_saved"} for name in ["link", *gate.TRADE_END_STATUS]}
+    duo = _fake_duo(scenarios=scenarios)
+    matrix = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
+    duo.GEN2_TRADE_FIXTURES = {row["axes"]["pairing"]: row["axes"]["trade_fixtures"]
+                               for row in matrix["requirements"]}
+    return duo
+
+
+def _trade_tree(tmp_path):
+    doc = _green_tree(tmp_path)
+    for row in doc["requirements"]:
+        row["axes"]["scenarios"] = ["link", *sorted(gate.TRADE_END_STATUS)]
+        for scenario in sorted(gate.TRADE_END_STATUS):
+            row["proofs"].append(_trade_proof(tmp_path, row["axes"], scenario, f"{row['id']}_{scenario}"))
+    _write_doc(tmp_path, doc)
+    return doc
+
+
+def test_trade_gates_green_only_when_every_case_is_receipted(tmp_path):
+    doc = _trade_tree(tmp_path)
+    assert gate.trade_gates_errors(tmp_path, _trade_duo()) == []
+    # The lane is narrowed to trade cells: a missing link proof is a duo-link gap, not a trade gap.
+    row = _row(doc, "duo.gold.silver")
+    row["proofs"] = [p for p in row["proofs"] if p["scenario"] != "link"]
+    _write_doc(tmp_path, doc)
+    assert gate.trade_gates_errors(tmp_path, _trade_duo()) == []
+    assert gate.duo_matrix_errors(tmp_path, _trade_duo()) != []
+
+
+def _undeclare_case(tmp_path, doc):
+    row = _row(doc, "duo.crystal.gold")
+    row["axes"]["scenarios"].remove("gen2_trade_timeout")
+    row["proofs"] = [p for p in row["proofs"] if p["scenario"] != "gen2_trade_timeout"]
+
+
+def _unreceipt_case(tmp_path, doc):
+    row = _row(doc, "duo.crystal.crystal")
+    row["proofs"] = [p for p in row["proofs"] if p["scenario"] != "gen2_trade_refuse_item"]
+
+
+def _edit_trade_receipt(tmp_path, doc):
+    proof = next(p for p in _row(doc, "duo.gold.silver")["proofs"] if p["scenario"] == "gen2_trade_new")
+    path = tmp_path / proof["receipts"]["a"]["path"]
+    path.write_text(path.read_text(encoding="utf-8").replace("PASS", "FAIL"), encoding="utf-8")
+
+
+@pytest.mark.parametrize("mutation", [_undeclare_case, _unreceipt_case, _edit_trade_receipt, _republish_overlay])
+def test_trade_gates_red_on_missing_or_stale_receipts(tmp_path, mutation):
+    doc = _trade_tree(tmp_path)
+    mutation(tmp_path, doc)
+    _write_doc(tmp_path, doc)
+    assert gate.trade_gates_errors(tmp_path, _trade_duo()) != []
+
+
+def test_committed_trade_gates_are_red_until_trade_duos_are_receipted():
+    rows = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))["requirements"]
+    receipted = {(row["id"], proof["scenario"]) for row in rows for proof in row["proofs"]}
+    if not all((f"duo.{a}.{b}", case) in receipted for a, b in gate.DUO_PAIRS for case in gate.TRADE_END_STATUS):
+        assert gate.trade_gates_errors() != []
+
+
+# duo-pairs: the P3b.7 + trade set on C-C and G-S. Per-cell receipt validators are covered above,
+# so this stubs _receipt_errors and checks only which cells the lane demands.
+
+def _pairs_tree(tmp_path, monkeypatch):
+    monkeypatch.setattr(gate, "_receipt_errors", lambda *_a: [])
+    need = sorted(gate.DUO_PAIRS_SCENARIOS | set(gate.TRADE_END_STATUS))
+    duo = _trade_duo()
+    duo.SCENARIOS.update({name: {"oracle": "assert_gen2_link_saved"} for name in need})
+    doc = _green_tree(tmp_path)
+    for row in doc["requirements"]:
+        row["axes"]["scenarios"] = list(need)
+        row["proofs"] = [{"scenario": name, "receipts": {}} for name in need]
+    _write_doc(tmp_path, doc)
+    return doc, duo
+
+
+def _without(row, name):
+    row["axes"]["scenarios"] = [s for s in row["axes"]["scenarios"] if s != name]
+    row["proofs"] = [p for p in row["proofs"] if p["scenario"] != name]
+
+
+def test_duo_pairs_green_only_with_every_p3b7_and_trade_cell(tmp_path, monkeypatch):
+    doc, duo = _pairs_tree(tmp_path, monkeypatch)
+    assert gate.duo_pairs_errors(tmp_path, duo) == []
+    duo.scenarios_for = lambda game: ["link"]   # C-G owes only link; its trims are not duo-pairs gaps
+    for row in doc["requirements"]:
+        row["axes"]["scenarios"], row["proofs"] = ["link"], [{"scenario": "link", "receipts": {}}]
+    _write_doc(tmp_path, doc)
+    errors = gate.duo_pairs_errors(tmp_path, duo)
+    assert sorted(e.split(":")[0] for e in errors) == ["duo.crystal.crystal", "duo.gold.silver"]
+    assert all("required scenario(s)" in e and "gen2_ball_gate" in e and "gen2_trade_new" in e for e in errors)
+
+
+def test_duo_pairs_red_on_an_unreceipted_cell(tmp_path, monkeypatch):
+    doc, duo = _pairs_tree(tmp_path, monkeypatch)
+    row = _row(doc, "duo.gold.silver")
+    row["proofs"] = [p for p in row["proofs"] if p["scenario"] != "gen2_egg_hatch"]
+    _write_doc(tmp_path, doc)
+    assert gate.duo_pairs_errors(tmp_path, duo) == [
+        "duo.gold.silver/gen2_egg_hatch: no receipt registered (an empty proof is a release blocker)"]
+
+
+def test_shiny_bonus_is_the_recorded_limit_not_a_duo_pairs_cell():
+    assert "gen2_shiny_bonus" not in gate.DUO_PAIRS_SCENARIOS
+    assert {"link", "gen2_faint", "gen2_faint_active", "gen2_reconnect"} <= gate.DUO_PAIRS_SCENARIOS
+
+
+# release-evidence: the G4 packet (synthetic published overlay) plus the receipt lanes.
+
+_SIGNED = '| G4 | owner 2026-10-01: "signed" | abc1234 | release-evidence green | none |\n'
+
+
+def _packet_tree(tmp_path):
+    outputs, symbols = {}, {}
+    for title in gate.TITLES:
+        ups = tmp_path / f"patch/dist/SLink-{title.capitalize()}.ups"
+        ups.parent.mkdir(parents=True, exist_ok=True)
+        ups.write_bytes(b"UPS1" + title.encode())
+        for ext in ("sym", "map"):
+            path = tmp_path / "data/gen2" / f"{title}_slink.{ext}"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(f"{title} {ext}\n".encode())
+            symbols[path.name] = _lf_sha(path)
+        sha1 = hashlib.sha1(title.encode()).hexdigest()
+        ups_pin = {"file": ups.relative_to(tmp_path).as_posix(),
+                   "sha256": hashlib.sha256(ups.read_bytes()).hexdigest()}
+        outputs[f"poke{title}"] = {"slink_title": title, "sha1": sha1, "ups": ups_pin}
+        matrix = tmp_path / f"data/games/gen2_{title}/admission.json"
+        matrix.parent.mkdir(parents=True, exist_ok=True)
+        matrix.write_text(json.dumps({"artifacts": [
+            {"id": f"poke{title}", "kind": "clean", "status": "BUILT"},
+            {"id": f"{title}_overlay", "kind": "overlay", "status": "ADMITTED", "sha1": sha1, "ups": ups_pin}]}),
+            encoding="utf-8")
+    (tmp_path / "data/gen2/overlay_provenance.json").write_text(
+        json.dumps({"outputs": outputs, "symbols": symbols}), encoding="utf-8")
+    (tmp_path / "docs/gen2").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "docs/gen2/PLAN.md").write_text("| Gate | Signed |\n" + _SIGNED, encoding="utf-8")
+    return tuple(f"SLink-{title.capitalize()}.ups" for title in gate.TITLES)
+
+
+def test_g4_packet_green_only_on_a_complete_packet(tmp_path):
+    shipped = _packet_tree(tmp_path)
+    assert gate.g4_packet_errors(tmp_path, shipped) == []
+
+
+def _unsign(tmp_path):
+    plan = tmp_path / "docs/gen2/PLAN.md"
+    plan.write_text(plan.read_text(encoding="utf-8").replace(_SIGNED, "| G4 | — | — | — | — |\n"),
+                    encoding="utf-8")
+
+
+def _unadmit(tmp_path):
+    path = tmp_path / "data/games/gen2_gold/admission.json"
+    path.write_text(path.read_text(encoding="utf-8").replace('"ADMITTED"', '"BUILT"'), encoding="utf-8")
+
+
+def _stale_admission(tmp_path):
+    _republish_overlay(tmp_path, None)
+
+
+def _edit_ups(tmp_path):
+    (tmp_path / "patch/dist/SLink-Silver.ups").write_bytes(b"other")
+
+
+def _edit_sym(tmp_path):
+    (tmp_path / "data/gen2/crystal_slink.map").write_bytes(b"other\n")
+
+
+def _missing_provenance(tmp_path):
+    (tmp_path / "data/gen2/overlay_provenance.json").unlink()
+
+
+@pytest.mark.parametrize("mutation", [_unsign, _unadmit, _stale_admission, _edit_ups, _edit_sym,
+                                      _missing_provenance, "unshipped"])
+def test_g4_packet_red_on_each_missing_piece(tmp_path, mutation):
+    shipped = _packet_tree(tmp_path)
+    if mutation == "unshipped":
+        shipped = shipped[:2]
+    else:
+        mutation(tmp_path)
+    assert gate.g4_packet_errors(tmp_path, shipped) != []
+
+
+_PARTS = ("g4_packet_errors", "new_gates_errors", "live_gates_errors", "trade_gates_errors", "duo_pairs_errors")
+
+
+@pytest.mark.parametrize("red", [None, *_PARTS])
+def test_release_evidence_is_green_only_when_every_part_is(monkeypatch, red):
+    for part in _PARTS:
+        monkeypatch.setattr(gate, part, lambda *_a, _p=part, **_k: [f"{_p} gap"] if _p == red else [])
+    errors = gate.release_evidence_errors()
+    assert errors == [] if red is None else len(errors) == 1 and errors[0].endswith(f"{red} gap")
+
+
+def test_committed_g4_packet_is_red_until_the_owner_signs():
+    plan = (REPO / "docs/gen2/PLAN.md").read_text(encoding="utf-8")
+    if "| G4 | — |" in plan:
+        assert "docs/gen2/PLAN.md §6.1: the G4 ledger row carries no owner signature" in gate.g4_packet_errors()
