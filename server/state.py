@@ -266,6 +266,10 @@ class SoulLinkState:
         # Pending bonus encounters: when a player catches a shiny, the partner gets
         # a slot in this FIFO queue.  Their next non-shiny capture becomes the bonus pair partner.
         self.pending_bonus: dict[str, deque[str]] = {"a": deque(), "b": deque()}
+        # KEY-SCOPE-3: {player: {key: {"since", "refused"}}}. A trade-window clash left this
+        # player holding two mons with one key; events naming it are refused until an admin
+        # resolves it (resolve_ambiguous_key), because the server cannot tell which mon they mean.
+        self.ambiguous_keys: dict[str, dict[str, dict]] = {"a": {}, "b": {}}
         # True once the run is definitively over (no alive links, no pending captures).
         self.run_over: bool = False
         # Manual attempts counter (set by the user via the stream index page).
@@ -363,7 +367,9 @@ class SoulLinkState:
 
         self._tick_pending_trade()    # free the single trade slot if a side abandoned it (link untouched)
 
-        if self._hold_for_trade(player_id, msg):
+        if self._refuse_ambiguous(player_id, msg):
+            pass                                        # KEY-SCOPE-3: which of two mons? refused
+        elif self._hold_for_trade(player_id, msg):
             pass                                        # replayed once the trade settles
         elif event == "hello":
             self._handle_hello(player_id, msg)           # runs this hello's trade evidence too
@@ -689,6 +695,37 @@ class SoulLinkState:
     # unlinked); such events wait in pt["held_events"] and replay after commit or rollback.
     TRADE_HELD_EVENTS = {"faint": "_handle_faint", "party_to_box": "_handle_party_to_box",
                          "box_to_party": "_handle_box_to_party", "release": "_handle_release"}
+
+    AMBIGUITY_GATED = ("faint", "party_to_box", "box_to_party", "release", "key_change", "stats_cache",
+                       "sync_retrieve_done", "sync_retrieve_failed", "box_mon_failed",
+                       "memorialize_done", "memorialize_failed")
+
+    def _refuse_ambiguous(self, player_id: str, msg: dict) -> bool:
+        """KEY-SCOPE-3: an event naming a key this player holds twice (a trade-window clash) is
+        refused and counted in the persisted latch; routing it by the index would act on the
+        surviving twin's link."""
+        key = msg.get("key") or msg.get("old_key") or ""
+        latch = self.ambiguous_keys[player_id].get(key)
+        if msg.get("event") not in self.AMBIGUITY_GATED or latch is None:
+            return False
+        latch["refused"] = latch.get("refused", 0) + 1
+        log.error(f"[{player_id}] {msg.get('event')} {key} REFUSED: the key names two of this "
+                  f"player's mons (trade clash); resolve with POST /api/debug/resolve_ambiguous_key")
+        if msg.get("event") == "key_change":
+            self.queued_commands[player_id].append(
+                {"cmd": "key_change_rejected", "old_key": key, "new_key": msg.get("new_key", ""),
+                 "reason": "ambiguous key (trade clash)"})
+        self._save()
+        return True
+
+    def resolve_ambiguous_key(self, player_id: str, key: str) -> tuple[bool, str]:
+        """An admin checked the cartridge: `key` now names ONE mon again (the duplicate was
+        released, memorialized or traded away), so events naming it route normally."""
+        if player_id not in ("a", "b") or self.ambiguous_keys[player_id].pop(key, None) is None:
+            return False, "no ambiguous key for that player"
+        log.warning(f"[{player_id}] ambiguous key {key} resolved by admin")
+        self._save()
+        return True, ""
 
     def _hold_for_trade(self, player_id: str, msg: dict) -> bool:
         pt = self.pending_trade
@@ -1259,7 +1296,9 @@ class SoulLinkState:
         old = pt[f"{taker}_key"]
         setattr(entry, taker, replace(src, key=nk, species=ns or src.species))
         giver = _partner(taker)
-        if src.key in self.mon_stats[giver]:                      # the partner still holds the original
+        other = self._pidx[taker].get(nk)
+        clashing = other is not None and other is not entry and other.status == LinkStatus.ALIVE
+        if src.key in self.mon_stats[giver] and not clashing:     # the partner still holds the original
             self.mon_stats[taker][nk] = dict(self.mon_stats[giver][src.key])
         for gone in self._trade_old_keys(pt, taker):
             self._unindex(taker, gone, entry)
@@ -1267,7 +1306,8 @@ class SoulLinkState:
             self.bonus_keys[taker].discard(gone)
             if gone != nk:
                 self.mon_stats[taker].pop(gone, None)
-        self.party_keys[taker].add(nk)
+        if not clashing:
+            self.party_keys[taker].add(nk)
         clash = self._index_traded(pt, entry)
         self.pending_trade = None
         self._replay_trade_events(pt)
@@ -1306,6 +1346,8 @@ class SoulLinkState:
         self._index_entry(entry)
         for pid, key, other in clash:
             self._pidx[pid][key] = other
+            self.ambiguous_keys[pid][key] = {"since": datetime.now(UTC).isoformat(), "refused": 0}
+            self.party_keys[pid].discard(key)
             log.error(f"[{pid}] trade {pt['token']}: {key} already identifies a live link in "
                       f"{other.area_id}; the traded pair in {entry.area_id} is retired identity_lost")
         dropped = {(pid, key) for pid, key, _ in clash}
@@ -1356,8 +1398,11 @@ class SoulLinkState:
         self.party_keys["b"].add(entry.b.key)
         clash = self._index_traded(pt, entry)           # KEY-SCOPE-2: a same-player clash fails closed
         # MINOR-6: per-key bookkeeping follows each mon to its new holder (and trade-evolved key)
+        clashed = {(pid, key) for pid, key, _ in clash}
         for giver, taker in (("a", "b"), ("b", "a")):
             new = (pt["new"].get(taker) or ("", 0))[0] or pt[f"{giver}_key"]
+            if (taker, new) in clashed:
+                continue                                # KEY-SCOPE-3: never onto the surviving twin
             for old in self._trade_old_keys(pt, giver):
                 if old in self.bonus_keys[giver]:
                     self.bonus_keys[giver].discard(old)
@@ -1501,6 +1546,8 @@ class SoulLinkState:
             saved_pending = data.get("pending_bonus", {})
             state.pending_bonus["a"] = deque(saved_pending.get("a", []))
             state.pending_bonus["b"] = deque(saved_pending.get("b", []))
+            saved_amb = data.get("ambiguous_keys") or {}
+            state.ambiguous_keys = {pid: dict(saved_amb.get(pid) or {}) for pid in ("a", "b")}
             # Restore in-flight auto-rebuild context.
             saved_rebuild = data.get("rebuild_pending", {})
             for pid in ("a", "b"):
@@ -1631,7 +1678,8 @@ class SoulLinkState:
         # slot when a reconnect happens before the Lua sends the faint event back).
         for _k in list(self.party_keys[player_id]):
             _e = self.entry_for(player_id, _k)
-            if _e and _e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL):
+            if (_e and _e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL)
+                    or _k in self.ambiguous_keys[player_id]):
                 self.party_keys[player_id].discard(_k)
 
         # Re-quarantine: if any pending (unlinked) captures are in the party,
@@ -1679,6 +1727,9 @@ class SoulLinkState:
                 log.debug(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=ignored  reason=pre_nuzlocke")
                 continue
             entry = self.entry_for(player_id, key)
+            if key in self.ambiguous_keys[player_id]:
+                log.error(f"[{player_id}] hello: {key} at hp 0 is ambiguous (trade clash) — not propagated")
+                continue
             if self._hold_for_trade(player_id, {"event": "faint", "key": key, "_level": m.get("level", 0)}):
                 continue                                # a trade key: replayed once the trade settles
             if entry and entry.status == LinkStatus.ALIVE:
@@ -3066,7 +3117,7 @@ class SoulLinkState:
         # An uncertain/conflicted trade still owns its two keys: until it settles, either key may be
         # on either side, so drift enforcement on them would issue a spurious Unbox/deposit.
         frozen = ({self.pending_trade["a_key"], self.pending_trade["b_key"]}
-                  if self.trade_problem() else set())
+                  if self.trade_problem() else set()) | set(self.ambiguous_keys[player_id])
         tracked_keys = self.party_keys[player_id]
         partner = _partner(player_id)
 
@@ -4041,6 +4092,7 @@ class SoulLinkState:
             "pending_bonus": {
                 pid: list(q) for pid, q in self.pending_bonus.items()
             },
+            "ambiguous_keys": self.ambiguous_keys,
             "run_over": self.run_over,
             "attempts_count": self.attempts_count,
             # BLOCKER-1: an applied-but-unsettled trade survives a restart; tokens never restart at t1

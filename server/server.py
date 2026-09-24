@@ -4274,6 +4274,23 @@ class SLinkServer:
         self._notify_sse()
         return aiohttp_web.json_response({"ok": True})
 
+    async def handle_debug_resolve_ambiguous_key(self, request):
+        """POST /api/debug/resolve_ambiguous_key {"player": "a"|"b", "key": str} — after checking
+        the cartridge, clear a KEY-SCOPE-3 latch (the key names one mon again)."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = None
+        if not isinstance(body, dict) or not isinstance(body.get("player"), str) \
+                or not isinstance(body.get("key"), str):
+            return aiohttp_web.json_response(
+                {"ok": False, "error": 'body must be {"player": "a"|"b", "key": str}'}, status=400)
+        ok, error = self.state.resolve_ambiguous_key(body["player"], body["key"])
+        if not ok:
+            return aiohttp_web.json_response({"ok": False, "error": error}, status=400)
+        self._notify_sse()
+        return aiohttp_web.json_response({"ok": True})
+
     async def handle_debug_revive(self, request):
         """POST /api/debug/revive — revive a dead/memorial link back to alive.
 
@@ -4965,6 +4982,7 @@ def build_app(srv):
     app.router.add_post("/api/debug/unlink",            srv.handle_debug_unlink)
     app.router.add_post("/api/debug/revive",            srv.handle_debug_revive)
     app.router.add_post("/api/debug/resolve_trade",     srv.handle_debug_resolve_trade)
+    app.router.add_post("/api/debug/resolve_ambiguous_key", srv.handle_debug_resolve_ambiguous_key)
     app.router.add_get("/api/debug/backups",            srv.handle_debug_list_backups)
     app.router.add_post("/api/debug/rollback",          srv.handle_debug_rollback)
     # RR Damage Calculator routes

@@ -205,3 +205,71 @@ def test_an_old_flat_mon_stats_file_is_migrated_per_player(tmp_path):
     assert back.mon_stats["b"] == {B2: {"level": 4}, "FFFF:0000:01": {"level": 5}}
     back._save()
     assert set(json.loads(path.read_text())["mon_stats"]) == {"a", "b"}
+
+
+# ── KEY-SCOPE-3 (OMP cx-4e252daa): a trade-window clash latches the key as ambiguous ─────────────
+
+def _clashing_commit(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    twin = _boxed_twin(state)
+    state.mon_stats["a"][A_GETS] = {"level": 9}                 # the twin's stats
+    state.mon_stats["b"][A_GETS] = {"level": 30}                # the traded mon's, on B
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    state.handle_event("b", {"event": "trade_done", "token": token, "new_key": B_GETS, "new_species": 0x26})
+    assert state.pending_trade is None and entry.status == LinkStatus.DEAD
+    for pid in ("a", "b"):
+        state.handle_event(pid, {"event": "noop"})
+    return state, entry, twin
+
+
+def test_after_a_clash_a_faint_of_the_key_never_reaches_the_twins_partner(tmp_path):
+    state, _entry, twin = _clashing_commit(tmp_path)
+    assert A_GETS in state.ambiguous_keys["a"]
+    state.handle_event("a", {"event": "faint", "key": A_GETS})       # which of the two? unknown
+    b_cmds = state.handle_event("b", {"event": "noop"})
+    assert twin.status == LinkStatus.ALIVE and not [c for c in b_cmds if c.get("cmd") == "force_faint"]
+    assert state.ambiguous_keys["a"][A_GETS]["refused"] == 1
+    for event in ("party_to_box", "box_to_party", "release"):
+        state.handle_event("a", {"event": event, "key": A_GETS})
+    assert twin.status == LinkStatus.ALIVE and not state.queued_commands["b"]
+    state.handle_event("a", {"event": "hello", "ot_id": "1234", "trainer_name": "Alice",
+                             "party": [{**_mon(A_GETS, 0x15), "hp": 0}]})
+    assert twin.status == LinkStatus.ALIVE, "nor through the hello's hp-0 scan"
+    back = SoulLinkState.load(data_dir=str(tmp_path), adapter=Gen1Adapter())
+    assert A_GETS in back.ambiguous_keys["a"], "the latch is persisted"
+
+
+def test_an_admin_resolves_the_latch_and_the_key_routes_to_the_twin_again(tmp_path):
+    state, _entry, twin = _clashing_commit(tmp_path)
+    assert state.resolve_ambiguous_key("a", "nope")[0] is False
+    assert state.resolve_ambiguous_key("a", A_GETS) == (True, "")
+    state.handle_event("a", {"event": "faint", "key": A_GETS})
+    assert twin.status == LinkStatus.DEAD
+
+
+def test_a_clashing_commit_leaves_the_twins_stats_alone(tmp_path):
+    state, _entry, _twin = _clashing_commit(tmp_path)
+    assert state.mon_stats["a"][A_GETS] == {"level": 9}
+
+
+def test_a_clashing_split_leaves_the_twins_stats_alone(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    _boxed_twin(state)
+    state.mon_stats["a"][A_GETS] = {"level": 9}
+    state.mon_stats["b"][A_GETS] = {"level": 30}
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    state.handle_event("b", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    assert state.resolve_trade(token, "adopt") == (True, "")
+    assert state.mon_stats["a"][A_GETS] == {"level": 9} and A_GETS in state.ambiguous_keys["a"]
+
+
+def test_the_resolve_ambiguous_key_endpoint(tmp_path):
+    import asyncio
+    from unittest.mock import AsyncMock
+    from server.server import SLinkServer
+    srv = SLinkServer(data_dir=str(tmp_path))
+    srv.state, _entry, _twin = _clashing_commit(tmp_path)
+    call = lambda body: asyncio.run(srv.handle_debug_resolve_ambiguous_key(
+        AsyncMock(json=AsyncMock(return_value=body))))
+    assert call(None).status == 400 and call({"player": "a", "key": "x"}).status == 400
+    assert call({"player": "a", "key": A_GETS}).status == 200 and not srv.state.ambiguous_keys["a"]
