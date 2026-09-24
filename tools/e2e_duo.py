@@ -996,6 +996,21 @@ GEN2_TRADE_FIXTURES = {
 }
 
 
+# BizHawk writes a save whose path nears Windows MAX_PATH (260) SILENTLY not at all: a 255-char SaveRAM path left
+# the seed file on disk while the run went on (DUO-WAVE-C cc changebox, 2026-09-24; a 249-char one saved). The
+# limit keeps a margin for BizHawk's own temp/backup suffixes.
+BIZHAWK_PATH_LIMIT = 240
+
+
+def bizhawk_path_problem(paths, limit=BIZHAWK_PATH_LIMIT):
+    """The first path (absolute, as Windows sees it) at or over `limit` characters, else None."""
+    for path in paths:
+        full = os.path.abspath(str(path))
+        if len(full) >= limit:
+            return full
+    return None
+
+
 # Gold has no day POISON_STING foe south of the Route 30 battle demo: its poison A plays the
 # post-errand save (U1 ruling, tests/live/test_gen2_frame_align.py U1_FIXTURE); cc/cg keep the pairing.
 GEN2_POISON_FIXTURES = {"gen2_gold_silver": {"a": "gold_battle_errand"}}
@@ -1754,6 +1769,20 @@ class DuoRun:
                 self.launch_instance(inst, seed=not self.cfg.get("cold_boot"))
         print("[duo] two EmuHawk instances launched")
 
+    def _check_bizhawk_paths(self):
+        """Refuse, before any launch, a lane whose SaveRAM or result/save-copy paths BizHawk would fail to write."""
+        paths = []
+        for inst, plan in self._gen2_plans.items():
+            result = self._result_path(inst)
+            stem = result[:-len("_result.txt")] if result.endswith("_result.txt") else result
+            paths += [result, stem + "_link_save.SaveRAM", stem + "_witness.SaveRAM"]
+            if plan.get("directory") and plan.get("saveram_name"):   # a real run_gb_gate plan (stubs carry neither)
+                paths.append(Path(plan["directory"]) / plan["saveram_name"])
+        long = bizhawk_path_problem(paths)
+        if long:
+            raise RuntimeError(f"path too long for BizHawk ({len(long)} >= {BIZHAWK_PATH_LIMIT} chars; its saves "
+                               f"fail SILENTLY there): {long} -- use a shorter checkout/lane path or lane name")
+
     def _prepare_gen2_lane(self):
         if not Path(EMUHAWK).is_file():
             raise FileNotFoundError(f"EmuHawk missing for Gen 2 duo: {EMUHAWK}")
@@ -1771,6 +1800,7 @@ class DuoRun:
                 inst: GENS["gen2"]["plan"](row["title"] + suffix, self._saveram_dir(inst), row["fixture"],
                                            self.gen2_speed())
                 for inst, row in self._gen2_inputs.items()}
+        self._check_bizhawk_paths()
         if self.scenario in GEN2_TRADE_SCENARIOS:
             with self._timed("trade_manifest"):
                 self._prepare_gen2_trade_manifest()

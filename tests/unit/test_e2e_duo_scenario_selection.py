@@ -950,3 +950,18 @@ def test_gold_poison_a_plays_the_post_errand_save():
     assert duo_module.GEN2_POISON_FIXTURES == {"gen2_gold_silver": {"a": "gold_battle_errand"}}
     line = next(one for one in duo_list_lines("gen2_gold_silver") if one.startswith("gen2_poison "))
     assert "a:gold_battle_errand, b:silver_battle" in line
+
+
+def test_bizhawk_path_guard_refuses_a_save_path_near_max_path(tmp_path):
+    """A 255-char SaveRAM path was never written by BizHawk (silent); the lane refuses at 240 before any launch."""
+    from types import SimpleNamespace
+    assert duo_module.bizhawk_path_problem(["C:/x/" + "a" * 200]) is None
+    long = "C:/x/" + "a" * 250
+    assert duo_module.bizhawk_path_problem(["C:/x/short", long]) == os.path.abspath(long)
+    run = object.__new__(DuoRun)
+    run._gen2_plans = {"a": {"directory": "C:/x", "saveram_name": "s.SaveRAM"}}
+    run._result_path = lambda inst: "C:/x/e2e_gen2_changebox_a_result.txt"
+    run._check_bizhawk_paths()   # short: fine
+    run._gen2_plans["a"]["directory"] = "C:/" + "d" * 240
+    with pytest.raises(RuntimeError, match="path too long for BizHawk"):
+        run._check_bizhawk_paths()
