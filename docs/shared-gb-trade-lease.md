@@ -55,4 +55,10 @@ they disagree.
   `wLinkEnemyTrainerName`, and backs the union up after the enemy battle
   struct. It keeps its `arm(command, slot, blob66, name11, token4)` surface and
   `service_address`.
-- **Gen 2** (P4.3b): the lease is `mailbox + L.OFF_LEASE`.
+- **Gen 2** (`lua/gen2/trade_overlay.lua`, P4.3b): the lease is `mailbox + L.OFF_LEASE`,
+  owned, so there is no preimage backup. The payload is the 70-byte mon. `check` refuses a
+  mail holder or an item this cartridge cannot hold (D3). `stage` writes only incoming OT
+  slot 0, its names, `wOTPlayerName`, count 1 and species0 + `$FF`. OT slot 1 holds the
+  cartridge's outgoing preimage, and the binder's own permit cannot reach it. The client
+  keeps one visit token from the query answer or PROMPT through APPLY. It binds
+  `picked_up` at `SlinkTradePromptEntry` and `SlinkTradeApplyPickup`.

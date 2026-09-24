@@ -52,6 +52,13 @@ RAM_SYMBOLS = (
 # P4.1f: the Gen 2 panel binder's addresses (lua/gen2/panel.lua), read from the SLink build's
 # own pinned .sym, never the clean one's. All three live in WRAM0.
 OVERLAY_RAM = ("wSlinkMailbox", "wTilemap", "wAttrmap")
+# P4.3b: the trade binder's addresses (lua/gen2/trade_overlay.lua), from the same .sym. The two
+# pickup labels (patch/gen2/src/trade_service.asm) run BEFORE the ACK changes; the OT names are
+# the incoming slot 0 staging (never slot 1: the native preimage). All or none: a build without
+# the P4.3a trade family (the published panel build) gets no trade block, so no trade path.
+OVERLAY_TRADE_ROM = ("SlinkTradePromptEntry", "SlinkTradeApplyPickup")
+OVERLAY_TRADE_RAM = ("wOTPlayerName", "wOTPartyCount", "wOTPartySpecies", "wOTPartyMon1",
+                     "wOTPartyMonOTs", "wOTPartyMonNicknames")
 STAT_STAGE_FIELDS = (
     ("ATTACK", "Atk"), ("DEFENSE", "Def"), ("SPEED", "Spd"),
     ("SP_ATTACK", "SAtk"), ("SP_DEFENSE", "SDef"), ("ACCURACY", "Acc"), ("EVASION", "Eva"),
@@ -536,8 +543,36 @@ def overlay_block(ctx, title: str, root: Path) -> dict | None:
         if bank != 0 or not 0xC000 <= address < 0xD000:
             raise ValueError(f"{name}: {sym} outside WRAM0")
         ram[sym] = address
-    return {"artifact": f"{title}_overlay", "base_sha1": clean_sha1, "rom_sha1": out["sha1"],
-            "md5": out["md5"], "sym": name, "sym_sha256": sha, "ram": ram}
+    block = {"artifact": f"{title}_overlay", "base_sha1": clean_sha1, "rom_sha1": out["sha1"],
+             "md5": out["md5"], "sym": name, "sym_sha256": sha, "ram": ram}
+    trade = trade_block(symbols, name)
+    if trade is not None:
+        block["trade"] = trade
+    return block
+
+
+def trade_block(symbols: dict, name: str = "overlay sym") -> dict | None:
+    """{rom: {label: {bank, addr}}, ram: {label: {bank, addr}}} or None when the build has no trade."""
+    wanted = OVERLAY_TRADE_ROM + OVERLAY_TRADE_RAM
+    present = [sym for sym in OVERLAY_TRADE_ROM if sym in symbols]
+    if not present:
+        return None
+    missing = [sym for sym in wanted if sym not in symbols]
+    if missing:
+        raise ValueError(f"{name}: partial trade family, missing {missing}")
+    out = {"rom": {}, "ram": {}}
+    for sym in OVERLAY_TRADE_ROM:
+        bank, address = symbols[sym]
+        if bank < 1 or not 0x4000 <= address < 0x8000:
+            raise ValueError(f"{name}: {sym} is not a ROMX label")
+        out["rom"][sym] = {"bank": bank, "addr": address}
+    for sym in OVERLAY_TRADE_RAM:
+        bank, address = symbols[sym]
+        # WRAM0 is bank 0; the OT party lives in WRAMX bank 1 (the link buffers)
+        if not ((bank == 0 and 0xC000 <= address < 0xD000) or (bank == 1 and 0xD000 <= address < 0xE000)):
+            raise ValueError(f"{name}: {sym} outside WRAM0/WRAMX bank 1")
+        out["ram"][sym] = {"bank": bank, "addr": address}
+    return out
 
 
 def render(profile: dict) -> str:

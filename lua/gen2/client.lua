@@ -26,9 +26,14 @@
 -- save, reset); nothing is inferred by polling. A binder refusal is logged once per reason. Writes happen only inside the armed permit at the
 -- checkpoint. P4 native sound and SLINK trade are not here: those commands get the protocol's
 -- "nothing happened" replies (handle_command) and request_sfx_local is the sound seam. The
--- native panel (P4.1f) is the optional p.panel (lua/gen2/panel.lua); nil means no panel.
+-- native panel (P4.1f) is the optional p.panel (lua/gen2/panel.lua); nil means no panel. The
+-- native SLINK TRADE (P4.3b) is the optional p.trade (lua/gen2/trade_overlay.lua) with its own
+-- trade permit; without it (or off an advertising overlay) trade commands get the same replies.
 local Client = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, MAX_PENDING_FRAMES = 600,
-                 MAX_HELD = 64 }
+                 MAX_HELD = 64,
+                 -- P4.3b: an armed PROMPT the player never picks up is withdrawn after this many frames
+                 -- (the asm's own SLINK_TRADE_APPLY_FRAMES window, patch/gen2/src/trade_service.asm)
+                 TRADE_PICKUP_FRAMES = 1800 }
 
 -- Gen 2: the wild battle types whose failure dead-zones the map are exactly the ones the
 -- binder links to the map's area (signals.lua final_event: NORMAL 0, FISH 4, TREE 8);
@@ -59,13 +64,17 @@ function Client.new(p)
     local log = p.log or function(...) end
     local panel = p.panel -- P4.1f panel: lua/gen2/panel.lua, or nil (no panel)
     local phone = p.phone -- P4.5c phone calls: lua/gen2/phone.lua, or nil (no panel)
+    local trade = p.trade -- P4.3b native SLINK TRADE: lua/gen2/trade_overlay.lua, or nil (no trade build)
     local c = profile.constants
     local arr = json.array -- tag lists so an empty one encodes as [] not {}
 
     local self = {
         player = p.player, rom_type = p.rom_type, rom_sha1 = p.rom_sha1,
         -- Gen 2: one pairing foundation for all three packs (O-16; gen2_gsc.py game_id)
-        foundation = "gen2_gsc", artifact_kind = "clean",
+        foundation = "gen2_gsc", artifact_kind = p.artifact_kind or "clean",
+        -- P4.3b: the lease the cartridge is waiting on ({kind, gen, token, frame, ...}) and this
+        -- visit's role/token, kept from the first command (trade_mask/show_menu) through APPLY
+        trade = trade, trade_state = nil, trade_visit = nil,
         seq = 0, frame = 0, hello_sent = false,
         writes_enabled = false, invalid_streak = 0, gate_revoked = false,
         box_cache = {}, resolved_areas = {}, config = {}, deferred = {},
@@ -289,6 +298,8 @@ function Client.new(p)
         -- O-30: a reset/reload leaves the battle; the owed deaths go to the checkpoint (Gen 1 battle_end)
         for _, w in ipairs(self.pending_battle_writes) do defer_held(w) end
         self.pending_battle_writes, self.commanded = {}, {}
+        -- P4.3b: Init clears the lease on reset; a reload leaves the Trade Center. The hello resyncs.
+        self.trade_state, self.trade_visit = nil, nil
         drop_held("the " .. kind .. " boundary")
         self.hello_session:invalidate(why or kind)
     end
@@ -304,6 +315,7 @@ function Client.new(p)
         self.faint_latches, self.deferred = {}, {}
         self.battle, self.pending_safe, self.pending_rescan = nil, false, true
         self.pending_battle_writes, self.commanded = {}, {}
+        self.trade_state, self.trade_visit = nil, nil
         -- A delayed retirement may be lost after rewinding a key change; retaining its alias could faint another record.
         self.key_alias, self.retired_alias = nil, {}
         drop_held(why)
@@ -506,10 +518,18 @@ function Client.new(p)
             hud.set_rebuilding(cmd.text)
         elseif c_ == "rebuild_done" then
             hud.clear_rebuilding()
+        elseif c_ == "show_menu" and self:trade_live() and cmd.blob_hex and cmd.slot ~= nil then
+            self:trade_prompt(cmd)
+        elseif c_ == "apply_trade" and self:trade_live() then
+            self:trade_apply(cmd)
+        elseif c_ == "trade_mask" and self:trade_live() then
+            self:trade_answer_query(cmd.mask or 0)
+        elseif c_ == "trade_offer_ack" and self:trade_live() then
+            self:trade_answer_offer(cmd.ok == true)
         elseif c_ == "show_choices" or c_ == "show_menu" or c_ == "choose_mon" then
-            ack_cancel(cmd) -- Gen 2: no native picker until P4
+            ack_cancel(cmd) -- Gen 2: no picker; a native trade prompt needs the trade build (above)
         elseif c_ == "apply_trade" then
-            -- Gen 2: no SLINK trade path until P4: "nothing changed" with the pre-trade key (§5)
+            -- Gen 2: no SLINK trade path on this cartridge: "nothing changed" with the pre-trade key (§5)
             local slot, mon = find_party_slot(cmd.old_key)
             send("trade_done", { token = cmd.token, slot = slot or cmd.slot, new_key = cmd.old_key,
                                  new_species = mon and mon.species_id or 0 })
@@ -524,6 +544,181 @@ function Client.new(p)
             -- Gen 2: P4 trade/panel/presence (pending_keys feeds Gen 1's APEX set only)
         else
             log("[SLink-gen2] unknown command " .. tostring(c_))
+        end
+    end
+
+    -- ── in-game SLINK TRADE (P4.3b; O-27 D2-D4; Gen 1's shape, lua/gen1/client.lua trade_*) ──────
+    -- The cartridge (patch/gen2/src/trade_*.asm) waits in the Trade Center for our lease bytes; the
+    -- binder (p.trade) owns the frame, the staging and its own permit. Gen 2 differs from Gen 1:
+    --   * ONE token per visit: minted at the query answer (proposer) or the PROMPT (responder) and
+    --     reused through APPLY; the asm refuses an APPLY whose token is not the accepted one.
+    --   * the role is the first command of the visit (trade_mask -> proposer, show_menu -> responder);
+    --     there is no role byte.
+    --   * the lease is owned, so a frame that changes before pickup, or closes without DONE, is the
+    --     cartridge ending the visit (B, its own timeout, a reset): nothing was committed.
+    -- Live only on a trade build (p.trade), an overlay kind, and a cartridge advertising the cap.
+    local PROMPT, APPLY = 3, 5 -- gb_trade_lease commands
+    function self:trade_live()
+        return trade ~= nil and self.artifact_kind == "overlay" and trade:advertised()
+    end
+    local function hex_bytes(hex)
+        local out = {}
+        for pair in tostring(hex or ""):gmatch("%x%x") do out[#out + 1] = tonumber(pair, 16) end
+        return out
+    end
+    local function new_token()
+        local t = {}
+        for i = 1, 4 do t[i] = math.random(1, 255) end
+        return t
+    end
+    -- the cartridge waits <= 30/180 frames for these answers: never hold them for a later hello
+    local function send_now(event, fields)
+        return self.hello_session:status().ready == true and send(event, fields)
+    end
+    local function traded(fn, what)
+        local ok, a, b = pcall(fn)
+        if not ok then a, b = nil, tostring(a) end
+        if not a then log("[SLink-gen2] trade " .. what .. " refused: " .. tostring(b)) end
+        return a, b
+    end
+    local function nothing_changed(token, slot, old_key, why)
+        log("[SLink-gen2] apply_trade: " .. why .. "; nothing changed")
+        send("trade_done", { token = token, slot = slot, new_key = old_key, new_species = 0 })
+    end
+
+    function self:trade_answer_query(mask)
+        local st = self.trade_state
+        if not st or st.kind ~= "query" then return end
+        local token = new_token()
+        local ok = traded(function() return trade:answer_query(st.gen, mask, token) end, "query answer")
+        self.trade_state = nil
+        self.trade_visit = (ok and mask ~= 0) and { role = "proposer", token = token } or nil
+    end
+
+    function self:trade_answer_offer(accept)
+        local st, visit = self.trade_state, self.trade_visit
+        if not st or st.kind ~= "offer" then return end
+        local ok = traded(function() return trade:answer_offer(st.gen, accept) end, "offer answer")
+        self.trade_state = nil
+        if ok and accept and visit then
+            visit.slot, visit.accepted = st.slot, true
+        else
+            self.trade_visit = nil
+        end
+    end
+
+    -- Responder: stage the proposer's mon and let the cartridge ask its own YES/NO.
+    function self:trade_prompt(cmd)
+        local token = new_token()
+        local gen = traded(function()
+            return trade:arm(PROMPT, cmd.slot, token, { blob = hex_bytes(cmd.blob_hex) })
+        end, "prompt arm")
+        if not gen then
+            self.trade_visit = nil
+            send("menu_result", { token = cmd.token, choice = 0 })
+            return
+        end
+        self.trade_visit = { role = "responder", token = token, slot = cmd.slot }
+        self.trade_state = { kind = "prompt", gen = gen, token = cmd.token, frame = self.frame }
+    end
+
+    -- Both sides: stage the OTHER mon under the accepted visit token; the cartridge commits.
+    function self:trade_apply(cmd)
+        local visit = self.trade_visit
+        local slot = find_party_slot(cmd.old_key)
+        if not visit or not visit.accepted then
+            return nothing_changed(cmd.token, slot or cmd.slot, cmd.old_key, "no accepted trade visit")
+        end
+        if slot == nil or slot ~= visit.slot then
+            self.trade_visit = nil
+            return nothing_changed(cmd.token, slot or cmd.slot, cmd.old_key, "old_key is not the visit's slot")
+        end
+        if trade:closed() then
+            self.trade_visit = nil
+            return nothing_changed(cmd.token, slot, cmd.old_key, "the cartridge already left the Trade Center")
+        end
+        local gen = traded(function()
+            return trade:arm(APPLY, slot, visit.token, { blob = hex_bytes(cmd.blob_hex) })
+        end, "apply arm")
+        if not gen then
+            self.trade_visit = nil
+            return nothing_changed(cmd.token, slot, cmd.old_key, "apply arm refused")
+        end
+        self.trade_state = { kind = "apply", gen = gen, token = cmd.token, old_key = cmd.old_key, slot = slot,
+                             frame = self.frame }
+    end
+
+    local function trade_end(st, why)
+        if st.kind == "prompt" then
+            log("[SLink-gen2] trade prompt ended: " .. why)
+            send("menu_result", { token = st.token, choice = 0 })
+        else
+            nothing_changed(st.token, st.slot, st.old_key, why)
+        end
+        self.trade_state, self.trade_visit = nil, nil
+    end
+
+    -- Per-frame: watch the lease for the receptionist questions and the native completions.
+    function self:trade_tick()
+        if not self:trade_live() then return end
+        local st = self.trade_state
+        if st and (st.kind == "prompt" or st.kind == "apply") then
+            local done = trade:poll_done()
+            if not done then
+                if trade:clobbered() or trade:closed() then return trade_end(st, "the cartridge ended the visit") end
+                if trade.phase == "armed" and self.frame - st.frame > Client.TRADE_PICKUP_FRAMES then
+                    traded(function() trade:withdraw() return true end, "withdraw")
+                    return trade_end(st, "never picked up (timeout)")
+                end
+                return
+            end
+            if st.kind == "prompt" then
+                local released = traded(function() return trade:release(st.gen) end, "prompt release")
+                local yes = done.result == 0 and released == true
+                send("menu_result", { token = st.token, choice = yes and 1 or 0 })
+                if yes then self.trade_visit.accepted = true else self.trade_visit = nil end
+                self.trade_state = nil
+                return
+            end
+            if done.result == 2 then
+                -- native append uncertain (T-5 limit): the cartridge keeps the lease; no release, no claim
+                if not st.warned then
+                    st.warned = true
+                    hud.show("TRADE UNCERTAIN - CHECK PARTY", 255, 64, 64, 600)
+                    log("[SLink-gen2] apply_trade: native result 2 (uncertain); holding, no release")
+                end
+                return
+            end
+            traded(function() return trade:release(st.gen) end, "apply release")
+            local party = done.result == 0 and current_party() or nil
+            local received = party and party.mons[#party.mons]
+            if received and not received.is_egg then
+                -- REMOVE+compact then APPEND: the received (possibly evolved) mon is the last slot
+                send("trade_done", { token = st.token, slot = received.slot, new_key = mon_key(received),
+                                     new_species = received.species_id })
+            else
+                nothing_changed(st.token, st.slot, st.old_key, "native result " .. tostring(done.result))
+            end
+            self.trade_state, self.trade_visit = nil, nil
+            self.pending_rescan = true
+            return
+        end
+        local q = trade:poll_query()
+        if q and not (st and st.kind == "query" and st.gen == q.gen) then
+            self.trade_state, self.trade_visit = { kind = "query", gen = q.gen }, nil
+            if not send_now("trade_query", {}) then
+                traded(function() return trade:answer_query(q.gen, 0, new_token()) end, "offline query answer")
+                self.trade_state = nil
+            end
+            return
+        end
+        local o = trade:poll_offer()
+        if o and not (st and st.kind == "offer" and st.gen == o.gen) then
+            self.trade_state = { kind = "offer", gen = o.gen, slot = o.slot }
+            if not send_now("trade_offer", { slot = o.slot }) then
+                traded(function() return trade:answer_offer(o.gen, false) end, "offline offer answer")
+                self.trade_state, self.trade_visit = nil, nil
+            end
         end
     end
 
@@ -948,6 +1143,18 @@ function Client.new(p)
                 if not ok then log("[SLink-gen2] battle hold: " .. tostring(err)) end
             end, p.battle_hold.execution_before.pc, "SLink-gen2-battle-hold", "System Bus")
         end
+        if trade and not self.trade_hooks then
+            -- P4.3b: SlinkTradePromptEntry / SlinkTradeApplyPickup run BEFORE the cartridge writes
+            -- the ACK; from pickup the frame is the cartridge's and clobber checks stop (Lease:picked_up)
+            self.trade_hooks = {}
+            for label, site in pairs(trade.hooks) do
+                self.trade_hooks[#self.trade_hooks + 1] = io.on_bus_exec(function()
+                    if io.read_u8(profile.ram.hROMBank, "System Bus") ~= site.bank then return end
+                    local ok, err = pcall(trade.picked_up, trade)
+                    if not ok then log("[SLink-gen2] trade pickup: " .. tostring(err)) end
+                end, site.addr, "SLink-gen2-trade-" .. label, "System Bus")
+            end
+        end
     end
 
     -- O-30, mirroring lua/gen1/client.lua on_battle_loop_head: inside the synchronous CPU hold before
@@ -1088,6 +1295,10 @@ function Client.new(p)
             local battle = reads.read_battle()
             if battle and battle.mode == 0 then self.pending_safe = false; send("safe", {}) end
         end
+        if trade then
+            local tok, terr = pcall(self.trade_tick, self)
+            if not tok then log("[SLink-gen2] trade: " .. tostring(terr)) end
+        end
         self.replies:step()
         self:run_deferred()
     end
@@ -1095,6 +1306,8 @@ function Client.new(p)
     function self:stop()
         if self.checkpoint_hook then io.unregister(self.checkpoint_hook); self.checkpoint_hook = nil end
         if self.battle_hook then io.unregister(self.battle_hook); self.battle_hook = nil end
+        for _, id in ipairs(self.trade_hooks or {}) do io.unregister(id) end
+        self.trade_hooks = nil
         if self.signals then self.signals:close() end
     end
 

@@ -125,6 +125,7 @@ _LUA_GEN2 = [
     "boxes.lua",
     "panel.lua",  # P4.1f: entry.lua composes it (production); it dofiles ../gb_panel.lua
     "phone.lua",  # P4.5c: entry.lua composes it beside the panel
+    "trade_overlay.lua",  # P4.3b: entry.lua composes it on a trade build; dofiles ../gb_trade_lease.lua
 ]
 
 # lua/clients/

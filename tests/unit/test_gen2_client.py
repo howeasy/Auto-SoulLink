@@ -168,7 +168,7 @@ class Refused(Exception):
 
 
 class World:
-    def __init__(self, title="crystal", swaps=None, production=False, files=None):
+    def __init__(self, title="crystal", swaps=None, production=False, files=None, artifact_kind=None):
         self.title = title
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         if swaps:
@@ -201,7 +201,8 @@ class World:
         else:
             args = self.lua.table(root=ROOT.as_posix(), title=title, io=self.io, candidate_only=True,
                                   write_policy=self.lua.execute(POLICY)(lambda op, slot: self.owned(op, slot)),
-                                  net=self.net, hud=self.hud, player="a", checkpoint=checkpoint, log=log)
+                                  net=self.net, hud=self.hud, player="a", checkpoint=checkpoint, log=log,
+                                  artifact_kind=artifact_kind)
             result = entry.build_candidate(args)
         parts = result[0] if isinstance(result, tuple) else result
         if production and parts is None:
@@ -1638,3 +1639,289 @@ def test_a_backing_box_withdraw_settles_its_box_copy_only_after_the_native_save(
     world.fire("save_completed")
     world.frames(3)
     assert storage(world, 4)[0] == 0 and party_count(world) == 2
+
+
+# ── P4.3b: the native SLINK TRADE lease (lua/gen2/trade_overlay.lua + the client trade phases) ──────
+# The cartridge side is a Python stand-in for patch/gen2/src/trade_service.asm (SOURCE at bd6c68b1):
+# it publishes QUERY/OFFER, picks up at the two hook labels BEFORE writing the ACK, and publishes DONE.
+# The trade block is built by tools/gen_gen2_profile.trade_block over the pinned overlay .sym plus the
+# P4.3a labels (the published sym predates them), so the addresses are generator output, never literals.
+import re  # noqa: E402
+
+sys.path.insert(0, str(ROOT / "tools"))
+import gen_gen2_profile  # noqa: E402
+from rgbds_symbols import parse_symbols  # noqa: E402
+
+CAP_TRADE = 0x10
+TRADE_LABELS = {"crystal": (0x75, 0x4154, 0x4237), "gold": (0x13, 0x4154, 0x4237),
+                "silver": (0x13, 0x4154, 0x4237)}
+MAIL = 158  # FLOWER_MAIL: items.json mail_ids, all three packs
+
+
+def trade_profile_text(title):
+    wrapper = json.loads((ROOT / f"data/games/gen2_{title}/profile.json").read_text())
+    ov = wrapper["titles"][title]["overlay"]
+    bank, prompt, pickup = TRADE_LABELS[title]
+    sym = (ROOT / "data/gen2" / ov["sym"]).read_text() + (
+        f"{bank:02x}:{prompt:04x} SlinkTradePromptEntry\n{bank:02x}:{pickup:04x} SlinkTradeApplyPickup\n")
+    ov["trade"] = gen_gen2_profile.trade_block(parse_symbols(sym))
+    return json.dumps(wrapper)
+
+
+def blob70(m, item=0):
+    raw = collection([m], 6, 48)
+    rec = raw[8:8 + 48]
+    rec[1] = item
+    ot = bytes([0x80, 0x50]) + bytes([0x50] * 9)
+    nick = bytes([m["nickname"], 0x50]) + bytes([0x50] * 9)
+    return bytes(rec) + ot + nick
+
+
+class TradeCart:
+    """World + the trade-capable overlay: caps has CAP_TRADE, the lease is mailbox+14."""
+
+    def __init__(self, title="crystal", caps=CAP_TRADE, artifact_kind="overlay"):
+        text = trade_profile_text(title)
+        self.w = World(title, files={f"gen2_{title}/profile.json": text}, artifact_kind=artifact_kind)
+        ov = json.loads(text)["titles"][title]["overlay"]
+        self.trade = ov["trade"]
+        self.mb = ov["ram"]["wSlinkMailbox"]
+        self.lease = self.mb + 14
+        self.poke(self.mb, [0x53, 0x4C, 0x4E, 0x4B, 3, 0, 0, 0, caps])
+        self.w.hello()
+        self.token = None                          # the cartridge's private visit token
+
+    def poke(self, addr, data):
+        self.w.emu.poke("System Bus", addr, self.w.lua.table_from(list(data)))
+
+    def frame(self):
+        return [self.w.io.read_u8(self.lease + i) for i in range(16)]
+
+    def publish(self, cmd, **fields):
+        f = self.frame()
+        f[0:5] = [0x53, 0x4C, 0x54, 0x31, 1]
+        f[5] = cmd
+        for k, v in fields.items():
+            f[{"result": 8, "slot": 9, "avail": 10, "mask": 11}[k]] = v
+        f[7] = f[6]                                 # SlinkTradeNextGeneration: ack = old gen,
+        f[6] = (f[6] + 1) & 255                     # gen = old + 1, published last
+        self.poke(self.lease, f)
+
+    def query(self, mask, frames=3):
+        self.publish(1, avail=0, mask=0)
+        self.w.frames(1)
+        assert self.w.sent("trade_query"), self.w.logs.values()
+        self.w.reply({"cmd": "trade_mask", "mask": mask})
+        self.w.frames(frames)
+        f = self.frame()
+        assert f[7] == f[6], "host must acknowledge the query"
+        self.token = f[12:16]
+
+    def offer(self, slot, ok=True):
+        self.publish(2, slot=slot, result=0xFF)
+        self.w.frames(1)
+        assert self.w.sent("trade_offer")[-1]["slot"] == slot
+        self.w.reply({"cmd": "trade_offer_ack", "ok": ok})
+        self.w.frames(2)
+
+    def pick_up(self, label):
+        """The asm reaches the hook label with the armed frame untouched, then writes the ACK."""
+        bank, addr = self.trade["rom"][label]["bank"], self.trade["rom"][label]["addr"]
+        assert self.w.emu.fire(bank, addr) == 1, label
+        self.w.emu.regs.PC = 0
+        f = self.frame()
+        if self.token is None:
+            self.token = f[12:16]                   # the responder captures the PROMPT token
+        f[7] = f[6]
+        self.poke(self.lease, f)
+
+    def done(self, result, token=None):
+        """SlinkTradePublishDone: header, private token, own slot, cmd DONE, gen == ack."""
+        f = self.frame()
+        f[0:5] = [0x53, 0x4C, 0x54, 0x31, 1]
+        f[8], f[5] = result, 7
+        f[12:16] = token if token is not None else self.token
+        f[7] = f[6]
+        self.poke(self.lease, f)
+
+    def close(self):
+        """SlinkTradeClose: command/available/mask zeroed, evidence kept."""
+        f = self.frame()
+        f[5] = f[10] = f[11] = 0
+        self.poke(self.lease, f)
+
+    def ot_slot1_spans(self):
+        ram = self.trade["ram"]
+        return [(ram["wOTPartyMon1"]["addr"] + 48, 48), (ram["wOTPartyMonOTs"]["addr"] + 11, 11),
+                (ram["wOTPartyMonNicknames"]["addr"] + 11, 11)]
+
+    def writes_in(self, spans):
+        return [x for x in self.w.written() if any(a <= x[0] < a + n for a, n in spans)]
+
+
+LEAD, PARTNER = mon(), mon(species=19, dvs=0x7AAA, ot=0x4321, nickname=0x82)
+
+
+def apply_cmd(item=0, old=LEAD):
+    return {"cmd": "apply_trade", "slot": 0, "blob_hex": blob70(PARTNER, item).hex(),
+            "old_key": codec_key(old), "token": "t1", "partner_name": "BOB"}
+
+
+def nothing_changed(world):
+    return [(d["new_key"], d["new_species"]) for d in world.sent("trade_done")] == [(codec_key(LEAD), 0)]
+
+
+def proposer_ready(cart):
+    cart.query(mask=1)
+    cart.offer(0)
+    return cart.token
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_trade_proposer_apply_keeps_the_offer_token_and_reports_the_received_mon(title):
+    cart = TradeCart(title)
+    token = proposer_ready(cart)
+    cart.w.reply(apply_cmd())
+    cart.w.frames(1)
+    f = cart.frame()
+    assert f[5] == 5 and f[12:16] == token, "APPLY must carry the accepted OFFER token (the asm refuses another)"
+    assert f[9] == 0 and f[6] == (f[7] + 1) & 255
+    cart.pick_up("SlinkTradeApplyPickup")
+    cart.w.party([PARTNER])                        # REMOVE+compact then APPEND (the native commit)
+    cart.done(0)
+    cart.w.frames(2)
+    assert cart.frame()[5] == 8, "a matching DONE is released"
+    done = cart.w.sent("trade_done")
+    assert [(d["new_key"], d["new_species"]) for d in done] == [(codec_key(PARTNER), 19)]
+
+
+def test_trade_a_stale_token_never_completes():
+    cart = TradeCart()
+    token = proposer_ready(cart)
+    cart.w.reply(apply_cmd())
+    cart.w.frames(1)
+    cart.pick_up("SlinkTradeApplyPickup")
+    cart.done(0, token=[(b % 255) + 1 for b in token])
+    cart.w.frames(5)
+    assert not cart.w.sent("trade_done") and cart.frame()[5] == 7, "a foreign DONE is neither released nor reported"
+    cart.close()                                    # the cartridge ends the visit without our DONE
+    cart.w.frames(2)
+    assert nothing_changed(cart.w)
+
+
+@pytest.mark.parametrize("item", [MAIL, 0xFF, 7])   # mail, the $FF sentinel, an unholdable placeholder
+def test_trade_a_mail_or_unholdable_item_is_refused_before_any_write(item):
+    cart = TradeCart()
+    proposer_ready(cart)
+    before = len(cart.w.written())
+    cart.w.reply(apply_cmd(item=item))
+    cart.w.frames(2)
+    assert cart.w.written()[before:] == [], "D3: refused before staging or publishing"
+    assert nothing_changed(cart.w)
+    # the partner side too: a PROMPT carrying mail is declined, nothing written
+    resp = TradeCart()
+    before = len(resp.w.written())
+    resp.w.reply({"cmd": "show_menu", "token": "t2", "slot": 0, "blob_hex": blob70(PARTNER, item).hex()})
+    resp.w.frames(2)
+    assert resp.w.written()[before:] == []
+    assert [m["choice"] for m in resp.w.sent("menu_result")] == [0]
+
+
+def test_trade_ot_slot_1_is_never_written_and_the_permit_refuses_it():
+    cart = TradeCart()
+    proposer_ready(cart)
+    cart.w.reply(apply_cmd())
+    cart.w.frames(1)
+    ram = cart.trade["ram"]
+    staged = cart.writes_in([(ram["wOTPartyMon1"]["addr"], 48), (ram["wOTPartyCount"]["addr"], 1),
+                             (ram["wOTPartySpecies"]["addr"], 2)])
+    assert staged, "incoming slot 0 is staged"
+    assert cart.w.io.read_u8(ram["wOTPartySpecies"]["addr"] + 1) == 0xFF
+    assert cart.writes_in(cart.ot_slot1_spans()) == []
+    trade = cart.w.client.trade
+    probe = cart.w.lua.eval("function(t, a) return pcall(function() t.writes:arm() "
+                            "t.writes:write_bytes(a, {1}) end) end")
+    for addr, _ in cart.ot_slot1_spans():
+        ok = probe(trade, addr)
+        trade.writes.disarm(trade.writes)
+        assert (ok[0] if isinstance(ok, tuple) else ok) is False, hex(addr)
+
+
+def test_trade_role_comes_from_the_first_command():
+    resp = TradeCart()
+    resp.w.reply({"cmd": "show_menu", "token": "t2", "slot": 0, "blob_hex": blob70(PARTNER).hex()})
+    resp.w.frames(1)
+    assert resp.w.client.trade_visit.role == "responder"
+    prompt_token = resp.frame()[12:16]
+    resp.pick_up("SlinkTradePromptEntry")
+    resp.done(0)
+    resp.w.frames(2)
+    assert [m["choice"] for m in resp.w.sent("menu_result")] == [1] and resp.frame()[5] == 8
+    resp.w.reply(apply_cmd())
+    resp.w.frames(1)
+    assert resp.frame()[5] == 5 and resp.frame()[12:16] == prompt_token, "APPLY reuses the PROMPT token"
+
+    prop = TradeCart()
+    prop.query(mask=1)
+    assert prop.w.client.trade_visit.role == "proposer"
+
+    stray = TradeCart()                             # no visit: an apply is refused, nothing armed
+    before = len(stray.w.written())
+    stray.w.reply(apply_cmd())
+    stray.w.frames(2)
+    assert stray.w.written()[before:] == []
+    assert nothing_changed(stray.w)
+
+
+def test_trade_a_timeout_commits_nothing():
+    # the cartridge's own APPLY wait expires (SLINK_TRADE_APPLY_FRAMES): it closes, we report nothing
+    cart = TradeCart()
+    proposer_ready(cart)
+    cart.w.reply(apply_cmd())
+    cart.w.frames(1)
+    cart.close()
+    cart.w.frames(2)
+    assert nothing_changed(cart.w)
+    assert cart.frame()[5] == 0, "no RELEASE after a timeout"
+    # a PROMPT the player never picks up is withdrawn after the host deadline and declined
+    resp = TradeCart()
+    resp.w.reply({"cmd": "show_menu", "token": "t2", "slot": 0, "blob_hex": blob70(PARTNER).hex()})
+    resp.w.frames(1)
+    assert resp.frame()[5] == 3
+    frames = resp.w.lua.eval("dofile")((ROOT / "lua/gen2/client.lua").as_posix()).TRADE_PICKUP_FRAMES
+    resp.w.frames(frames + 2)
+    assert resp.frame()[5] != 3, "withdrawn: the dispatcher can never pick it up"
+    assert [m["choice"] for m in resp.w.sent("menu_result")] == [0]
+    assert resp.w.client.trade_visit is None
+
+
+@pytest.mark.parametrize("caps,kind", [(0x02, "overlay"), (CAP_TRADE, None)])
+def test_trade_is_off_without_the_cap_bit_or_the_overlay_kind(caps, kind):
+    cart = TradeCart(caps=caps, artifact_kind=kind)
+    before = len(cart.w.written())
+    cart.w.reply({"cmd": "show_menu", "token": "t2", "slot": 0, "blob_hex": blob70(PARTNER).hex()})
+    cart.w.reply(apply_cmd())
+    cart.w.frames(2)
+    assert [m["choice"] for m in cart.w.sent("menu_result")] == [0]
+    assert cart.w.written()[before:] == []
+    assert [d["new_key"] for d in cart.w.sent("trade_done")] == [codec_key(LEAD)]   # the pre-P4 reply
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_trade_holdable_set_equals_the_asm_allowed_items_table(title):
+    asm = (ROOT / "patch/gen2/src/trade_items.asm").read_text()
+    rows = re.findall(r"^\s*db ([01,]+) ; \$", asm, re.M)
+    table = [int(x) for row in rows for x in row.split(",")]
+    assert len(table) == 256
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    T = lua.eval("dofile")((ROOT / "lua/gen2/trade_overlay.lua").as_posix())
+    items = lua.table_from(json.loads((ROOT / f"data/games/gen2_{title}/items.json").read_text()), recursive=True)
+    allowed = T.holdable(items)
+    assert [1 if allowed[i] else 0 for i in range(256)] == table
+
+
+def test_trade_block_is_all_or_none():
+    sym = (ROOT / "data/gen2/crystal_slink.sym").read_text()
+    assert gen_gen2_profile.trade_block(parse_symbols(sym)) is None       # the published panel build
+    with pytest.raises(ValueError, match="partial trade family"):
+        gen_gen2_profile.trade_block(parse_symbols(sym + "75:4154 SlinkTradePromptEntry\n"))

@@ -370,7 +370,16 @@ local function compose(deps, title, production)
                 -- P4.5c: the phone calls post +32 through their own one-byte "phone" window
                 phone = panel and load("lua/gen2/phone.lua").new(panel, io_, Panel.writes(io_, Permit), deps.log)
             end
+            -- P4.3b native trade: only a profile whose overlay .sym carries the P4.3a trade family
+            -- (gen_gen2_profile trade_block); the client still gates on the kind and the cap bit.
+            -- ponytail: production passes no artifact_kind until the overlay admission lands.
+            local trade
+            if profile.overlay and profile.overlay.trade then
+                local T = load("lua/gen2/trade_overlay.lua")
+                trade = T.new(profile, io_, Permit, T.holdable(data.items))
+            end
             client = load("lua/gen2/client.lua").new({
+                trade=trade, artifact_kind=(not production) and deps.artifact_kind or nil,
                 reads=reads, wire=wire, writes=writes, rom=rom, boxes=boxes, panel=panel, phone=phone,
                 safety={check=function(kind) return checkpoint:check(kind) end},
                 signals=signals,
