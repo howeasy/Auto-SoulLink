@@ -21,16 +21,16 @@ expressions, evaluated).
 ## `native` (kind `companion`)
 
 Present only in this pack. It is the SLink companion patch's ABI, lifted from the two production
-modules that carry it as literals today: `lua/mailbox.lua` (mailbox base, blob/text/menu buffers,
+modules that carry it as literals today: `archive/gen3-old-client:lua/mailbox.lua` (mailbox base, blob/text/menu buffers,
 battle-notification struct, event ring, the plain-EWRAM config bytes, the SOULLINK info struct,
-ghost and swap structs, opcode ids) and `lua/peer_ghost_npc.lua` (object-event base, the
+ghost and swap structs, opcode ids) and `archive/gen3-old-client:lua/peer_ghost_npc.lua` (object-event base, the
 `gMain.callback2`/`CB2_Overworld` field gate, sprite base, OBJ palette buffer, camera Y).
 `native._src` maps every name to its `file:line`, so each address is traceable to the line it
 came from and `tests/unit/test_gen3_profile.py` re-derives all of them independently.
 
 Not yet lifted (relative expressions rather than literals, so a first cut cannot parse them from
 an assignment): the mailbox field offsets `O_SIG…O_RESULT` (a single multi-assignment at
-`lua/mailbox.lua:17-18`) and the `MB.GH_*` / `MB.INFO_*` sub-field offsets written as `MB.GH + n`.
+`archive/gen3-old-client:lua/mailbox.lua:17-18`) and the `MB.GH_*` / `MB.INFO_*` sub-field offsets written as `MB.GH + n`.
 `lua/gen3/native.lua` needs them before P5; pinning them against `patch/src/ADDRESSES.md` is the
 follow-up.
 

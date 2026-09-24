@@ -5,7 +5,7 @@ Hand-derived from pret/pokefirered at commit
 ``file#Lstart-Lend`` range at that immutable commit) and, for the CFRU/RR
 divergence, from the SOURCE note ``docs/gen3/research/flash_save.md``.
 
-This module is deliberately independent of ``lua/memory_gba.lua``: it is the
+This module is deliberately independent of ``archive/gen3-old-client:lua/memory_gba.lua``: it is the
 Python side of the ``reads == PYDEC`` differential (PLAN §5.7), so it must
 *agree* with the Lua decoders without sharing code, constants or bugs with
 them.  It reads no JSON profile and touches no emulator.
@@ -68,7 +68,7 @@ SUBSTRUCT_ORDER = (
 )
 # CFRU stores the substructs in fixed order and does not encrypt them
 # (flash_save.md §3; lua/games/gen3_frlge.lua:342 CFRU_NO_ENCRYPT = true,
-# lua/memory_gba.lua:570-572).
+# archive/gen3-old-client:lua/memory_gba.lua:570-572).
 _FIXED_ORDER = (0, 1, 2, 3)
 
 # ---------------------------------------------------------------------------
@@ -267,7 +267,7 @@ def _decode_mon(raw: bytes, rr: bool, party: bool) -> dict:
     }
     mon.update(_decode_secure(ordered))
     # CFRU never validates the BoxPokemon checksum, and its reconstruction
-    # leaves the field zero (flash_save.md §3; lua/memory_gba.lua:1075-1083),
+    # leaves the field zero (flash_save.md §3; archive/gen3-old-client:lua/memory_gba.lua:1075-1083),
     # so there is nothing to check in rr mode.
     mon["checksum_ok"] = None if rr else (secure_checksum(plain) == stored_checksum)
     if party:
@@ -332,7 +332,7 @@ def encode_box_mon(mon: dict, rr: bool = False) -> bytes:
 # ---------------------------------------------------------------------------
 # CFRU CompressedPokemon (58 bytes) -> BoxPokemon (80 bytes).
 # Field map mirrors CFRU's CreateBoxMonFromCompressedMon as transcribed in
-# lua/memory_gba.lua:1037-1104 (and flash_save.md §3 / CFRU
+# archive/gen3-old-client:lua/memory_gba.lua:1037-1104 (and flash_save.md §3 / CFRU
 # include/new/pokemon_storage_system.h#L16-L57):
 #   +0x00..0x1B header copied verbatim; checksum/unknown left ZERO
 #   +0x1C..0x26 (11 B) -> Growth substruct at +0x20, pad byte +0x2B = 0

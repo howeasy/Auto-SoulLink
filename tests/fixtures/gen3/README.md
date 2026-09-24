@@ -118,7 +118,7 @@ the CHOICE at each screen is still a citation-backed pin, never the timing:
 list, so Down+A accepts a preset instead of opening the keyboard; †3 the
 rival-name screen has the same shape.
 Everything after the intro is signalled, not timed: the walk out is keyed to
-the SaveBlock1 map id (`lua/memory_gba.lua:1109-1114`) and the save to the
+the SaveBlock1 map id (`archive/gen3-old-client:lua/memory_gba.lua:1109-1114`) and the save to the
 flash sector counter, so a mistuned intro fails on a budget with a
 screenshot rather than writing a fixture from the wrong game state.
 

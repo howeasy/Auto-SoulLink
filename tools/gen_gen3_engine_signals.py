@@ -138,7 +138,7 @@ CANDIDATES = [
               reason="static HP-store/caller site and one-per-mon filter not pinned"),
     candidate("borrowed_party", "RR backup/restore hooks", "src/battle_main.c#L612-L646",
               "RR-specific source/binary census required: existing client freeze/restore handling "
-              "at lua/clients/gen3_frlge_client.lua:3005-3379 is behavior to preserve, not pret proof.",
+              "at archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:3005-3379 is behavior to preserve, not pret proof.",
               reason="RR-specific mutation and restore pairing not pinned"),
     candidate("nature_change", "RR nature-changer special", "src/pokemon.c#L3686-L3706",
               "RR-specific PID identity update; existing client.lua:3399-3557 is only a local behavior "

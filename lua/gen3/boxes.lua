@@ -10,7 +10,7 @@
 --     pret include/pokemon.h:238-249; gBattleMoves sym size 0x10A4 / 355.
 --   derived.SHEDINJA_SPECIES_ID=303 (pret include/constants/species.h:312).
 -- RR-OPEN: compressed layout is from the RR profile's CFRU_BOX_BASES/stride and
--- old memory_gba.lua:1015-1104; this unit suite has no RR-binary save readback.
+-- old archive/gen3-old-client:lua/memory_gba.lua:1015-1104; this unit suite has no RR-binary save readback.
 -- Experience and PP use the RR binary-pinned tables and dimensions. Full RR stat
 -- calculation is a replacement routine (ROM 0x0803E47C detours to 0x090788FC),
 -- so table layout alone does not establish vanilla stat semantics. Keep complete
@@ -154,7 +154,7 @@ function B.new(profile, reads, io)
             for i = 0, 7 do result[0x32 + i + 1] = raw[0x44 + i + 1] end
             return result
         end
-        -- Unlike the old Lua helper's raw 80-byte copy (memory_gba.lua:1774-1807),
+        -- Unlike the old Lua helper's raw 80-byte copy (archive/gen3-old-client:lua/memory_gba.lua:1774-1807),
         -- the GAME calls BoxMonRestorePP before placing a mon in a PC box
         -- (pret pokemon_storage_system_data.c:625-633; pokemon.c:5998-6010).
         local result = copy(raw, 0, BOX_SIZE)

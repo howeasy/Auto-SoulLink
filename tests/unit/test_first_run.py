@@ -16,7 +16,7 @@ def _read(rel):
 
 
 def test_every_client_defaults_to_the_documented_tcp_port():
-    """gen3_frlge_client.lua defaulted to 54322 while its own usage comment — and 13 other
+    """archive/gen3-old-client:lua/clients/gen3_frlge_client.lua defaulted to 54322 while its own usage comment — and 13 other
     references — said 54321. Loading it the documented way produced a client that connected
     nowhere, with no error, forever."""
     ports = set()

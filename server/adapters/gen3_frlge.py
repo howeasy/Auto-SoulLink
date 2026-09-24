@@ -347,7 +347,7 @@ class Gen3Adapter(GameAdapter):
 
     def supports_explode_mode(self) -> bool:
         """Explode Mode is Radical Red only — only its client handles `force_explode`
-        (the Variant-3 menu-skip path in gen3_frlge_client.lua)."""
+        (the Variant-3 menu-skip path in archive/gen3-old-client:lua/clients/gen3_frlge_client.lua)."""
         return self._is_rr
 
     # ── GamePresentationAdapter ──────────────────────────────────────────

@@ -1192,10 +1192,10 @@ def test_a_queued_request_does_not_post_after_native_sounds_is_switched_off(worl
     world.assert_all_conform()
 
 
-# ── local HUD/SFX moments (Gen 3 parity: gen3_frlge_client.lua's client-only cues) ────────
+# ── local HUD/SFX moments (Gen 3 parity: archive/gen3-old-client:lua/clients/gen3_frlge_client.lua's client-only cues) ────────
 
 def test_nuzlocke_banner_not_shown_at_a_hello_that_already_has_balls(world):
-    """gen3_frlge_client.lua:1921-1926: a hello snapshot with balls already in the bag is a
+    """archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:1921-1926: a hello snapshot with balls already in the bag is a
     resume, not the moment of acquisition -- log only, no banner (the `world` fixture starts
     with one Poke Ball already given)."""
     world.connect()
@@ -1311,7 +1311,7 @@ def test_new_encounter_banner_on_area_enter_via_tick(world):
 
 
 def test_kod_banner_on_a_bench_force_faint_is_text_only(world):
-    """gen3_frlge_client.lua:760-800: the server already queues play_sound 26 to this player
+    """archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:760-800: the server already queues play_sound 26 to this player
     in the same turn (state.py:2073/2884) -- no local SFX alongside the banner."""
     _patch_sfx(world)
     world.connect()
@@ -1344,7 +1344,7 @@ def test_kod_banner_on_an_active_battler_force_faint(world):
 
 
 def test_game_over_command_plays_a_local_failure_cue(world):
-    """gen3_frlge_client.lua:1026-1027: the server's game_over command carries no play_sound
+    """archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:1026-1027: the server's game_over command carries no play_sound
     of its own (server/state.py:2103, :3202) -- the client supplies it locally. This is the
     LONE case of the coalescing pair in test_terminal_linked_faint_batch_posts_the_failure_cue_
     once below: game_over with no accompanying play_sound this frame still posts its cue."""
@@ -1358,7 +1358,7 @@ def test_game_over_command_plays_a_local_failure_cue(world):
 
 
 def test_whiteout_plays_a_local_boo_cue_once(world):
-    """gen3_frlge_client.lua:3804-3816: the client's own whiteout detection gets a local cue --
+    """archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:3804-3816: the client's own whiteout detection gets a local cue --
     the server's reply to `whiteout` never queues a play_sound (server/state.py _handle_whiteout)."""
     _patch_sfx(world)
     world.connect()
@@ -1454,7 +1454,7 @@ def test_memorialize_failure_shows_the_fail_banner(world):
 
 def test_new_encounter_banner_withheld_for_a_static_encounter(world):
     """A scripted encounter (Route 12's Snorlax) resolves nothing about the route's own wild
-    slot -- gen3_frlge_client.lua's own gate excludes it the same way."""
+    slot -- archive/gen3-old-client:lua/clients/gen3_frlge_client.lua's own gate excludes it the same way."""
     world.connect()
     world.reply({"cmd": "resolved_areas", "areas": []})
     world.client.statics = world.lua.table_from({"23": world.lua.table_from([0x84])})  # SNORLAX

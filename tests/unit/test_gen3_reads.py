@@ -425,7 +425,7 @@ def test_rr_pack_gracefully_lacks_trainer_ot_id_today():
 def test_rr_location_and_badges_work_from_old_client_evidence():
     """SaveBlock1 location/badge offsets ARE evidenced for RR: the old client reads them
     generically off M.SB1_PTR_ADDR/M.SB1_FLAGS_OFFSET with no RR-specific branch
-    (lua/memory_gba.lua:271-273,1112-1114,1174-1181), so they now carry over to gen3_rr too."""
+    (archive/gen3-old-client:lua/memory_gba.lua:271-273,1112-1114,1174-1181), so they now carry over to gen3_rr too."""
     world = World(pack="gen3_rr", title="radical_red")
     derived = world.profile["derived"]
     sb1_addr = place_sb1(world, 0x02026000)
@@ -465,7 +465,7 @@ def test_read_battle_vanilla_not_in_battle():
 def test_read_battle_rr_in_battle_via_battle_mons_hp():
     """RR/CFRU has no reliable gMain (ram.GMAIN_ADDR is null in the pack), so read_battle must
     take the OVERWORLD_MODE == 'battle_outcome' branch: gBattleMons[0].maxHP > 0 and
-    gBattleOutcome == 0 (lua/memory_gba.lua M.isInBattle, the production-proven RR detector)."""
+    gBattleOutcome == 0 (archive/gen3-old-client:lua/memory_gba.lua M.isInBattle, the production-proven RR detector)."""
     world = World(pack="gen3_rr", title="radical_red")
     ram, derived = world.profile["ram"], world.profile["derived"]
     assert ram["GMAIN_ADDR"] is None and derived["OVERWORLD_MODE"] == "battle_outcome"
@@ -512,7 +512,7 @@ def test_read_battle_doubles_battler_mapping_and_enemy_party():
 # ── read_enemy_party: occupancy, not gEnemyPartyCount ────────────────────────────────────────
 # Item 15 (docs/protocol.md:548) failed live on the new client: every in-battle tick carried
 # `enemy_party: []`. The cause was the port dropping the old client's scan
-# (lua/memory_gba.lua:1545-1553) for a loop bounded by ram.ENEMY_COUNT_ADDR -- a byte the engine
+# (archive/gen3-old-client:lua/memory_gba.lua:1545-1553) for a loop bounded by ram.ENEMY_COUNT_ADDR -- a byte the engine
 # never maintains in battle (pret writes gEnemyPartyCount only from CalculateEnemyPartyCount,
 # src/pokemon.c:3756-3767, called only from trade.c:942,1139). These cases pin the occupancy
 # rule and the tail terminator that replaced it.

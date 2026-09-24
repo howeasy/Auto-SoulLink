@@ -21,7 +21,7 @@ Packs (PLAN §4, §5.1):
                                         the ghost/object-event addresses, sourced from the patch's
                                         own C (patch/src/handlers.c -- the companion is BUILT from
                                         it, so it is the ABI's actual authority, not a copy of it;
-                                        C5-6 deleted the old lua/mailbox.lua + lua/peer_ghost_npc.lua
+                                        C5-6 deleted the old archive/gen3-old-client:lua/mailbox.lua + archive/gen3-old-client:lua/peer_ghost_npc.lua
                                         scrape targets), each with its source file:line in the
                                         sibling `_src` map
 
@@ -147,33 +147,33 @@ FRLG_SYM_THUMB_ADDR = {
 INTRO_THUMB_KEYS = ("BEGIN_BATTLE_INTRO_ADDR", "BEGIN_BATTLE_INTRO_DUMMY_ADDR",
                     "BATTLE_INTRO_GET_MONS_DATA_ADDR")
 
-# ── gen3_rr facts sourced from the OLD client (lua/memory_gba.lua), per the owner's 2026-09-23
+# ── gen3_rr facts sourced from the OLD client (archive/gen3-old-client:lua/memory_gba.lua), per the owner's 2026-09-23
 # ruling relayed on card C4-2a: the old RR client is production-tested, so its RAM offsets are
 # acceptable RR evidence where no ROM/pret evidence exists. Every one of these is read from
-# memory_gba.lua GENERICALLY (no RR-only branch), i.e. the exact same code path already serves
+# archive/gen3-old-client:lua/memory_gba.lua GENERICALLY (no RR-only branch), i.e. the exact same code path already serves
 # RR live today -- never a value the pack already derives from the ROM (that trap is
 # SB1_PTR_ADDR/SB2_PTR_ADDR above, which this dict does not touch).
 RR_DERIVED = {
-    "SB1_LOCATION_MAP_GROUP_OFFSET": (0x04, "lua/memory_gba.lua:271,1112 (old-client RR profile, "
+    "SB1_LOCATION_MAP_GROUP_OFFSET": (0x04, "archive/gen3-old-client:lua/memory_gba.lua:271,1112 (old-client RR profile, "
                                       "production-tested: mapGroup read generically off SB1_PTR_ADDR)"),
-    "SB1_LOCATION_MAP_NUM_OFFSET": (0x05, "lua/memory_gba.lua:272,1113 (old-client RR profile, "
+    "SB1_LOCATION_MAP_NUM_OFFSET": (0x05, "archive/gen3-old-client:lua/memory_gba.lua:272,1113 (old-client RR profile, "
                                     "production-tested)"),
-    "SB1_BADGE_BYTE_OFFSET": (0x104, "lua/memory_gba.lua:1177,1181 (old-client RR profile, "
+    "SB1_BADGE_BYTE_OFFSET": (0x104, "archive/gen3-old-client:lua/memory_gba.lua:1177,1181 (old-client RR profile, "
                               "production-tested: M.readBadges is generic over M.SB1_FLAGS_OFFSET)"),
-    "BATTLE_TYPE_TRAINER_MASK": (0x08, "lua/memory_gba.lua:378 (old-client RR profile, "
+    "BATTLE_TYPE_TRAINER_MASK": (0x08, "archive/gen3-old-client:lua/memory_gba.lua:378 (old-client RR profile, "
                                  "production-tested)"),
-    "BATTLE_TYPE_DOUBLE_MASK": (0x01, "lua/memory_gba.lua:385 (old-client RR profile, "
+    "BATTLE_TYPE_DOUBLE_MASK": (0x01, "archive/gen3-old-client:lua/memory_gba.lua:385 (old-client RR profile, "
                                 "production-tested)"),
-    "OUTCOME_WON": (1, "lua/memory_gba.lua:389 (old-client RR profile, production-tested; "
+    "OUTCOME_WON": (1, "archive/gen3-old-client:lua/memory_gba.lua:389 (old-client RR profile, production-tested; "
                     "unconditional, never overridden per-profile)"),
-    "OUTCOME_LOST": (2, "lua/memory_gba.lua:390 (old-client RR profile, production-tested)"),
-    "OUTCOME_DREW": (3, "lua/memory_gba.lua:391 (old-client RR profile, production-tested: "
+    "OUTCOME_LOST": (2, "archive/gen3-old-client:lua/memory_gba.lua:390 (old-client RR profile, production-tested)"),
+    "OUTCOME_DREW": (3, "archive/gen3-old-client:lua/memory_gba.lua:391 (old-client RR profile, production-tested: "
                      "\"CFRU inserts DREW=3, shifting RAN from 3->4\")"),
     # Confirmed unrenumbered by CFRU: data/games/gen3_frlge/rr_species.json["303"] == "Shedinja",
     # the same id as pret's SPECIES_SHEDINJA (FRLG_DERIVED above).
     "SHEDINJA_SPECIES_ID": (303, 'data/games/gen3_frlge/rr_species.json:"303"="Shedinja" '
                             "(RR species table; CFRU keeps this id unrenumbered)"),
-    "BATTLE_MON_STAT_STAGES_OFF": (0x19, "lua/memory_gba.lua:402-406 (old-client RR profile, "
+    "BATTLE_MON_STAT_STAGES_OFF": (0x19, "archive/gen3-old-client:lua/memory_gba.lua:402-406 (old-client RR profile, "
                                    "production-tested: M.readStatStages; CFRU puts type3 at "
                                    "+0x18, so ATK..EVA start at +0x19)"),
 }
@@ -560,7 +560,7 @@ def parse_profiles(text: str) -> dict:
 
 
 # ── the companion-patch native ABI (gen3_rr only) ────────────────────────────────
-# C5-6 deleted lua/mailbox.lua and lua/peer_ghost_npc.lua (the old Lua client's copies of the
+# C5-6 deleted archive/gen3-old-client:lua/mailbox.lua and archive/gen3-old-client:lua/peer_ghost_npc.lua (the old Lua client's copies of the
 # ABI). The companion patch is BUILT from patch/src/handlers.c, so that C source -- not a Lua
 # mirror of it -- is the actual authority; every name below is read out of it, never re-typed.
 # Two naming conventions collide here on purpose: every MB.OP_* opcode already shares its exact
@@ -633,7 +633,7 @@ def native_block() -> dict:
             sys.exit(f"gen_gen3_profile: {HANDLERS_SRC} no longer defines {op}")
         values[op] = int(m.group(1))
         src[op] = f"{HANDLERS_SRC}:{_line_of(text, m.start())} (opcode enum)"
-    # GMAIN_CB2_PTR = gMain + 4 (gMain.callback2 -- peer_ghost_npc.lua used to read this directly)
+    # GMAIN_CB2_PTR = gMain + 4 (gMain.callback2 -- archive/gen3-old-client:lua/peer_ghost_npc.lua used to read this directly)
     gmain, gmain_off = _c_define(text, "gMain")
     values["GMAIN_CB2_PTR"] = gmain + 4
     src["GMAIN_CB2_PTR"] = f"{HANDLERS_SRC}:{_line_of(text, gmain_off)} (gMain + 4, callback2)"

@@ -284,7 +284,7 @@ def test_rr_keeps_its_pointer_to_the_same_table():
     rr = p.gen3.profiles.radical_red
     assert rr.CFRU_BASESTATS_PTR == 0x080001BC
     assert int.from_bytes(rom[WORD_OFF:WORD_OFF + 4], "little") == CFRU_WORD
-    # memory_gba.lua resolves the table by dereferencing that word; the map must not leak in
+    # archive/gen3-old-client:lua/memory_gba.lua resolves the table by dereferencing that word; the map must not leak in
     assert "BASESTATS_ADDR_BY_GAME_CODE" not in p.gen3.profiles.radical_red
 
 

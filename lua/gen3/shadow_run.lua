@@ -2,7 +2,7 @@
   lua/gen3/shadow_run.lua — P3 shadow observer bootstrap (PLAN §5.7, §4).
 
   Loaded by the duo stub (lua/tests/duo/duo_main.lua) AFTER
-  lua/clients/gen3_frlge_client.lua, only when SLINK_SHADOW is set. It builds a SECOND,
+  archive/gen3-old-client:lua/clients/gen3_frlge_client.lua, only when SLINK_SHADOW is set. It builds a SECOND,
   read-only client instance over `gen3.entry` (deps.mode = "observer") that runs alongside
   the old production client and never touches game state: `deps.io` decodes memory but every
   write_* throws, `deps.net`/`deps.hud` are nil, every BizHawk hook it registers is named

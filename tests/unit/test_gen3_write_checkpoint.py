@@ -415,7 +415,7 @@ def test_sound_block_names_the_m4a_fields_it_may_write(pack: str, title: str) ->
     assert (block["iwram_min"], block["iwram_max"]) == (0x03000000, 0x03008000)
     assert block["player_head_off"] == 0x24 and block["player_next_off"] == 0x3C
     fields = {f["name"]: f for f in block["fields"]}
-    # exactly the fields the old client's M.playSE pokes (lua/memory_gba.lua:2003-2055)
+    # exactly the fields the old client's M.playSE pokes (archive/gen3-old-client:lua/memory_gba.lua:2003-2055)
     assert set(fields) == {"songHeader", "status", "trackCount", "priority", "clock", "tracks",
                            "ident", "flags", "bendRange", "volX", "lfoSpeed", "chan", "cmdPtr"}
     for name, field in fields.items():

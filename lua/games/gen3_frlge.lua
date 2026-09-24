@@ -608,7 +608,7 @@ do
     -- Per-title gSpeciesInfo address: the shared vanilla table carries FireRed's value as a
     -- literal, and a LeafGreen cartridge would otherwise read FireRed's table (card C-OC2).
     -- The module is required before any M.applyProfile(), so this lands before the client
-    -- copies BASESTATS_ADDR into memory_gba.
+    -- copies BASESTATS_ADDR into memory_gba (archive/gen3-old-client:lua/memory_gba.lua).
     local by_code = GEN3.profiles.vanilla.BASESTATS_ADDR_BY_GAME_CODE
     if GEN3._game_code then
         local addr = by_code[GEN3._game_code]

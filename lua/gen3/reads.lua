@@ -27,7 +27,7 @@ R.PARTY_CAPACITY = 6            -- PARTY_SIZE
 R.MONS_PER_BOX = 30             -- IN_BOX_COUNT
 
 -- P4 card C4-2a: engine-fixed struct geometry, shared by every title (vanilla and CFRU/RR
--- alike -- lua/memory_gba.lua's production isInBattle() uses this same HP offset on both).
+-- alike -- archive/gen3-old-client:lua/memory_gba.lua's production isInBattle() uses this same HP offset on both).
 -- include/pokemon.h:170-206 (pret/pokefirered@c75f3523) struct BattlePokemon.
 R.BATTLE_MON_SIZE = 0x58        -- sizeof(struct BattlePokemon)
 R.BATTLE_MON_HP_OFF = 0x28      -- BattlePokemon.hp (u16); .maxHP is HP_OFF + 4
@@ -277,7 +277,7 @@ function R.new(profile, io, pointers)
     function r.decode_box_mon(raw) return decode_mon(raw, false) end
 
     -- docs/protocol.md mon key, as the shipped Gen 3 client spells it
-    -- (lua/memory_gba.lua:651): PERSONALITY:OTID, upper-case hex, eight digits each.
+    -- (archive/gen3-old-client:lua/memory_gba.lua:651): PERSONALITY:OTID, upper-case hex, eight digits each.
     function r.key(mon) return string.format("%08X:%08X", mon.personality, mon.ot_id) end
 
     -- SaveBlock / storage pointers. SetSaveBlocksPointers relocates all three on every load,
@@ -491,7 +491,7 @@ function R.new(profile, io, pointers)
     -- The array is filled BEFORE the battle flag rises (wild_encounter.c:391-397 GenerateWildMon
     -- -> StartWildBattle; battle_main.c:707 CreateNPCTrainerParty -> :711 gMain.inBattle = TRUE),
     -- so this scan is populated on the first in-battle tick. Terminate on species == 0 or
-    -- max_hp == 0: the rule the old client used (lua/memory_gba.lua:1545-1553) and the one the
+    -- max_hp == 0: the rule the old client used (archive/gen3-old-client:lua/memory_gba.lua:1545-1553) and the one the
     -- companion patch's staging preserves (patch/src/handlers.c:1813-1815 zeroes maxHP on the
     -- trailing slots). ZeroEnemyPartyMons clears all six slots first in both battle kinds.
     function r.read_enemy_party()
@@ -530,7 +530,7 @@ function R.new(profile, io, pointers)
                        .. "BATTLERS_COUNT_ADDR/BATTLER_PARTY_INDEXES_ADDR/ENEMY_*"
         end
         local out = {}
-        -- Two production-proven in-battle detectors (lua/memory_gba.lua M.isInBattle),
+        -- Two production-proven in-battle detectors (archive/gen3-old-client:lua/memory_gba.lua M.isInBattle),
         -- selected by the pack: vanilla reads a gMain bit, CFRU/RR has no reliable gMain so
         -- it reads the live battler-0 BattlePokemon instead.
         -- profile.json's JSON `null` (e.g. RR's ram.GMAIN_ADDR) decodes to a truthy sentinel

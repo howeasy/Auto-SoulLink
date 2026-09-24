@@ -22,7 +22,7 @@
 --
 -- Companion access goes through the NEW Gen 3 layer (card C5-6-MKSTATE): lua/tests/gen3_gatelib.lua
 -- builds lua/gen3/native.lua over the real writes/safety window, and the PC trade-NPC flag is set by
--- native:config({pc_trade_npc}) exactly as test_live_pcnpc.lua and the client do. No lua/mailbox.lua.
+-- native:config({pc_trade_npc}) exactly as test_live_pcnpc.lua and the client do. No archive/gen3-old-client:lua/mailbox.lua.
 
 local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
 assert(WT, "SLINK_ROOT unset — run via: python tools/mkstates.py")
@@ -43,7 +43,7 @@ local BM_MAXHP      = 0x2C
 local CTRL          = 0x03004FE0   -- gBattlerControllerFuncs[0]
 local ACTION_MENU   = 0x0802E439   -- action-select controller (same constant the duo uses)
 -- The authoritative "player is standing in the walkable field" signal, the same one
--- peer_ghost_npc.lua gates on. A party-count check is NOT enough: RR loads the save into RAM
+-- archive/gen3-old-client:lua/peer_ghost_npc.lua gates on. A party-count check is NOT enough: RR loads the save into RAM
 -- during the intro so the main menu can show CONTINUE stats, so gPlayerParty is already
 -- populated while the GAME FREAK splash is still on screen — an earlier version of this script
 -- snapshotted the splash because of exactly that. callback2 only becomes CB2_Overworld once
@@ -75,8 +75,8 @@ local function poe()
     if id >= 16 then id = 0 end
     return P.OBJECT_EVENTS_BASE + id * 0x24
 end
--- The CURRENT map, from the SaveBlock1 pointer chain — the same source memory_gba.getCurrentMap
--- uses. The object-event's own map fields (+0x0A/+0x09) LAG a warp: mid-door they still report
+-- The CURRENT map, from the SaveBlock1 pointer chain — the same source the old client's
+-- getCurrentMap used (archive/gen3-old-client:lua/memory_gba.lua). The object-event's own map fields (+0x0A/+0x09) LAG a warp: mid-door they still report
 -- the map you came from, so a door-transition capture keyed off them lands inside the building.
 local SB1_PTR = GL.ram.SB1_PTR_ADDR  -- 0x03003840, data/games/gen3_rr/profile.json
 local function _sb1()

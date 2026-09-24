@@ -41,17 +41,17 @@ local Client = {}
 
 -- Record geometry and game constants the packs do not ship yet (requested from C4-2a).
 -- pret/pokefirered@c75f352 include/pokemon.h struct Pokemon / struct BattlePokemon, and the
--- old client's production values (lua/memory_gba.lua:395-416); CFRU keeps the same layout.
+-- old client's production values (archive/gen3-old-client:lua/memory_gba.lua:395-416); CFRU keeps the same layout.
 local PARTY_HP_OFF = 0x56            -- struct Pokemon.hp (u16)
 local BATTLE_MON_MOVES_OFF = 0x0C    -- BattlePokemon.moves[4] (u16 each)
 local BATTLE_MON_PP_OFF = 0x24       -- BattlePokemon.pp[4] (u8 each)
 local MOVE_EXPLOSION = 153           -- include/constants/moves.h
 local EXPLODE_PP = 5                 -- Explosion's PP, so a PP drop proves the move executed
--- CFRU action-commit values (lua/memory_gba.lua:1318-1345, production-tested on RR):
+-- CFRU action-commit values (archive/gen3-old-client:lua/memory_gba.lua:1318-1345, production-tested on RR):
 local B_ACTION_USE_MOVE = 0
 local STATE_ACTION_CONFIRMED_STANDBY = 3
 local TARGET_FOE_PRIMARY = 1
--- The m4a SE1 poke (the old client's M.playSE, lua/memory_gba.lua:2021-2066, production-tested
+-- The m4a SE1 poke (the old client's M.playSE, archive/gen3-old-client:lua/memory_gba.lua:2021-2066, production-tested
 -- on FR/LG and RR). Every address and field offset comes from the checkpoint pack's sound block
 -- (p.sound: player_se1 / sound_info_ptr, player_head_off / player_next_off / tracks_off, and
 -- `fields`, the exact m4a fields a sound write may touch); only the VALUES the old client
@@ -292,7 +292,7 @@ function Client.new(p)
     end
     -- The stats shape server/state.py caches (stats_cache, party_to_box, boxed capture) and
     -- boxes.lua needs to rebuild a CFRU record on withdraw (level, maxHP, five stats, PP):
-    -- the old client's snapshot, gen3_frlge_client.lua:1625-1639.
+    -- the old client's snapshot, archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:1625-1639.
     local function stats_of(m)
         local s = { level = m.level, maxHP = m.max_hp, attack = m.attack, defense = m.defense,
                     speed = m.speed, spAtk = m.sp_attack, spDef = m.sp_defense }
@@ -625,7 +625,7 @@ function Client.new(p)
         return plan
     end
 
-    -- The Variant-3 menu skip (lua/memory_gba.lua:1303-1345): every move slot of the battler
+    -- The Variant-3 menu skip (archive/gen3-old-client:lua/memory_gba.lua:1303-1345): every move slot of the battler
     -- reads Explosion, and the action-commit state says "already chosen", so the action menu is
     -- skipped. Addresses come from the pack (RR pins CHOSEN_*/BATTLE_COMM/BATTLE_STRUCT_PTR);
     -- a pack without them (vanilla FRLG) is not explode_capable and force_explode is a faint.
@@ -1121,7 +1121,7 @@ function Client.new(p)
     end
 
     -- rival swap is a companion-mailbox feature (OP_RIVAL_SWAP 28, C5-11a; 16 stays the trade's).
-    -- Without the patch: the old client's refusal (gen3_frlge_client.lua:824-837).
+    -- Without the patch: the old client's refusal (archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:824-837).
     C.replace_rival_team = function(cmd)
         local function refuse(why)
             send("rival_team_replaced", { trainer_id = cmd.trainer_id or 0, species_ids = arr({}),
@@ -1173,7 +1173,7 @@ function Client.new(p)
     -- the disabled-foundation write guard (PLAN §10): no trade path -> nothing written, no reply
     -- ── the RR PC trade (apply_trade), PLAN §5.6, docs/protocol.md §6.2 ───────────
     -- The Gen 1 standard's shape (lua/gen1/client.lua:1594-1765) over the old RR client's native
-    -- sequence (gen3_frlge_client.lua:2211-2293): every byte is a native.lua transfer, i.e.
+    -- sequence (archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:2211-2293): every byte is a native.lua transfer, i.e.
     -- writes:arm("native") over the mailbox and BLOB_BUF; this FSM writes nothing itself.
     --   wait      buffered until a clear field (the overworld checkpoint) with an eligible
     --             session; the offered mon is re-located by old_key (the slot is a snapshot).
@@ -1420,7 +1420,7 @@ function Client.new(p)
     end
     C.ghost_pos = function() return true end                   -- peer ghost: post-RC (PLAN §0)
     -- Sound: the native SE when the companion is present, else the old client's m4a SE1 poke
-    -- (lua/memory_gba.lua M.playSE) as a GATED write, writes:arm("sound", allow, {player, track})
+    -- (archive/gen3-old-client:lua/memory_gba.lua M.playSE) as a GATED write, writes:arm("sound", allow, {player, track})
     -- over exactly the pack block's fields. WHETHER it may land (driver initialised, addresses in
     -- IWRAM) is safety's sound clause set, re-checked before every byte; the client only
     -- resolves addresses. Any refusal means no sound, logged once per reason.

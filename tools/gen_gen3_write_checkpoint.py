@@ -642,7 +642,7 @@ NATIVE_LAYOUT = {"opcode_off": 6, "status_off": 10, "busy": 1, "abi_off": 4,
                  "info_drawn_off": 1, "info_ack_off": 2}
 NATIVE_SOURCE = "profile.native + patch/src/ADDRESSES.md:59-77"
 
-# m4a: the exact fields the old client's M.playSE pokes (lua/memory_gba.lua:2003-2055).  The
+# m4a: the exact fields the old client's M.playSE pokes (archive/gen3-old-client:lua/memory_gba.lua:2003-2055).  The
 # clause set is {the driver is up (ident magic), the player/track are in IWRAM}; no save or
 # transition clause is needed -- a Lua write lands between frames, so the engine cannot observe a
 # half-written player, and the ISR skips a player whose ident is the lock value by design
@@ -658,7 +658,7 @@ SOUND_CONSTANTS = {"sound_info_ptr": "SOUND_INFO_PTR", "sound_info": "gSoundInfo
                    "player_head_off": 0x24, "player_next_off": 0x3C,
                    "iwram_min": 0x03000000, "iwram_max": 0x03008000}
 SOUND_SOURCE_FRLG = "pokefirered.sym/pokeleafgreen.sym; pret include/gba/m4a_internal.h"
-SOUND_SOURCE_RR = "old client lua/memory_gba.lua:1945-1996 (SOUND_INFO_PTR + the linked-list walk)"
+SOUND_SOURCE_RR = "old client archive/gen3-old-client:lua/memory_gba.lua:1945-1996 (SOUND_INFO_PTR + the linked-list walk)"
 
 
 def ldr_literal(rom: bytes, site: int) -> int | None:
@@ -806,7 +806,7 @@ def handoff_head(title_profile: dict) -> tuple[list | None, str]:
 # commit only); `ptr` rows sit at read_u32(ptr) + offset and are absent while the pointer is 0.
 # Values: Explosion = 153 with PP 5 (asserted in this ROM's own gBattleMoves), B_ACTION_USE_MOVE = 0,
 # chosenMovePositions = 0, moveTarget = 1 (the old client's production constants,
-# lua/memory_gba.lua:1318-1345); BattlePokemon.moves +0x0C / .pp +0x24 (pret include/pokemon.h,
+# archive/gen3-old-client:lua/memory_gba.lua:1318-1345); BattlePokemon.moves +0x0C / .pp +0x24 (pret include/pokemon.h,
 # CFRU keeps the layout).
 EXPLODE_MOVE, EXPLODE_PP, EXPLODE_ACTION, EXPLODE_TARGET = 153, 5, 0, 1
 # F1 M5: the move identity, not just its PP -- gBattleMoves[153].effect (byte 0 of struct BattleMove,
@@ -816,7 +816,7 @@ BATTLE_MON_MOVES_OFF, BATTLE_MON_PP_OFF = 0x0C, 0x24
 EXPLODE_SOURCE = ("client.lua commit_plan rows, battler 0; profile.ram BATTLE_MONS/CHOSEN_ACTION/"
                   "CHOSEN_MOVE/BATTLE_STRUCT_PTR + derived BATTLE_STRUCT_*_OFF; Explosion effect "
                   "EFFECT_EXPLOSION and PP 5 read from rom.BATTLE_MOVES_ADDR in every RR ROM; constants "
-                  "lua/memory_gba.lua:1318-1345")
+                  "archive/gen3-old-client:lua/memory_gba.lua:1318-1345")
 
 
 def explode_head(title_profile: dict, roms: dict[str, bytes]) -> tuple[dict | None, str]:

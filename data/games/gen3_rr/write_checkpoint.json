@@ -234,7 +234,7 @@
               "width": 1
             }
           ],
-          "source": "client.lua commit_plan rows, battler 0; profile.ram BATTLE_MONS/CHOSEN_ACTION/CHOSEN_MOVE/BATTLE_STRUCT_PTR + derived BATTLE_STRUCT_*_OFF; Explosion effect EFFECT_EXPLOSION and PP 5 read from rom.BATTLE_MOVES_ADDR in every RR ROM; constants lua/memory_gba.lua:1318-1345"
+          "source": "client.lua commit_plan rows, battler 0; profile.ram BATTLE_MONS/CHOSEN_ACTION/CHOSEN_MOVE/BATTLE_STRUCT_PTR + derived BATTLE_STRUCT_*_OFF; Explosion effect EFFECT_EXPLOSION and PP 5 read from rom.BATTLE_MOVES_ADDR in every RR ROM; constants archive/gen3-old-client:lua/memory_gba.lua:1318-1345"
         },
         "head": [
           {
@@ -547,7 +547,7 @@
       "iwram_min": 50331648,
       "player_head_off": 36,
       "player_next_off": 60,
-      "source": "old client lua/memory_gba.lua:1945-1996 (SOUND_INFO_PTR + the linked-list walk)",
+      "source": "old client archive/gen3-old-client:lua/memory_gba.lua:1945-1996 (SOUND_INFO_PTR + the linked-list walk)",
       "track0_off": 0,
       "tracks_off": 44,
       "version": "gen3-sound-v1"

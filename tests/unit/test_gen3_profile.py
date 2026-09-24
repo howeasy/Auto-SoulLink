@@ -224,7 +224,7 @@ def test_rr_party_capacity_comes_from_its_existing_detector() -> None:
             "write_checkpoint.pointers.gSaveBlock1Ptr, which is ROM-derived)",
     }
     # P4 card C4-2a addendum 4/5: old-client-evidenced RR facts, every citation naming
-    # lua/memory_gba.lua (production-tested), never a pret path (RR has no pret source).
+    # archive/gen3-old-client:lua/memory_gba.lua (production-tested), never a pret path (RR has no pret source).
     rr_c4_2a_keys = {
         "SB1_LOCATION_MAP_GROUP_OFFSET", "SB1_LOCATION_MAP_NUM_OFFSET", "SB1_BADGE_BYTE_OFFSET",
         "BATTLE_TYPE_TRAINER_MASK", "BATTLE_TYPE_DOUBLE_MASK", "OUTCOME_WON", "OUTCOME_LOST",
@@ -232,7 +232,7 @@ def test_rr_party_capacity_comes_from_its_existing_detector() -> None:
     }
     for key in rr_c4_2a_keys:
         cite = title["_src"].get(f"derived.{key}")
-        assert cite and "lua/memory_gba.lua" in cite, f"radical_red: derived.{key} needs an old-client citation"
+        assert cite and "archive/gen3-old-client:lua/memory_gba.lua" in cite, f"radical_red: derived.{key} needs an old-client citation"
         base_src[f"derived.{key}"] = cite
     # SHEDINJA_SPECIES_ID comes from the RR species table, not the old client.
     shedinja_cite = title["_src"].get("derived.SHEDINJA_SPECIES_ID")
@@ -555,7 +555,7 @@ def test_thumb_addresses_are_kept_verbatim_and_marked() -> None:
 
 def test_c511a_the_rival_opcode_is_in_the_native_block() -> None:
     """C5-11a: the profile's native opcode keys are generated from patch/src/handlers.c (C5-6:
-    the old lua/mailbox.lua scrape target is deleted), so the new rival opcode must appear there
+    the old archive/gen3-old-client:lua/mailbox.lua scrape target is deleted), so the new rival opcode must appear there
     with its ABI number and its own source citation -- the Lua side (native.lua's
     transfer("rival")) reads it from this block, and handlers.c owns the number."""
     title = _title("radical_red")
@@ -594,7 +594,7 @@ def test_native_is_present_only_in_gen3_rr() -> None:
 
 
 def test_native_matches_the_mailbox_and_ghost_sources() -> None:
-    """C5-6 deleted lua/mailbox.lua and lua/peer_ghost_npc.lua; the native ABI block is now
+    """C5-6 deleted archive/gen3-old-client:lua/mailbox.lua and archive/gen3-old-client:lua/peer_ghost_npc.lua; the native ABI block is now
     generated from patch/src/handlers.c (the companion is BUILT from it, so it is the actual
     authority). Every value is pinned here, independent of the generator's own extraction
     tables, since the ABI is frozen at v1 (ADDRESSES.md: "ABI version stays 1 ... the mailbox

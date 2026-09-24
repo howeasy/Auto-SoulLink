@@ -1,5 +1,5 @@
 """C5-6: tools/gen_gen3_profile.py's native (companion) block must not depend on
-lua/mailbox.lua or lua/peer_ghost_npc.lua -- C5-6 deletes both files. It is generated from
+archive/gen3-old-client:lua/mailbox.lua or archive/gen3-old-client:lua/peer_ghost_npc.lua -- C5-6 deletes both files. It is generated from
 patch/src/handlers.c instead (docs/gen3/research/c5_6_deletion_plan_2026-09-24.md risk 4).
 
 This runs native_block() against a REPO that carries ONLY patch/src/handlers.c (no lua/ dir
@@ -19,8 +19,8 @@ HANDLERS = REPO / "patch" / "src" / "handlers.c"
 
 
 def _isolated_repo(tmp_path: pathlib.Path) -> pathlib.Path:
-    """A REPO subset containing only patch/src/handlers.c -- notably NOT lua/mailbox.lua or
-    lua/peer_ghost_npc.lua, which this generator must no longer read."""
+    """A REPO subset containing only patch/src/handlers.c -- notably NOT archive/gen3-old-client:lua/mailbox.lua or
+    archive/gen3-old-client:lua/peer_ghost_npc.lua, which this generator must no longer read."""
     dest = tmp_path / "patch" / "src" / "handlers.c"
     dest.parent.mkdir(parents=True)
     dest.write_text(HANDLERS.read_text(encoding="utf-8"), encoding="utf-8")

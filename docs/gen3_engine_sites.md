@@ -357,7 +357,7 @@ Unless an RR-specific binding is described below, RR entry checks use the FR ent
 
 ### borrowed_party — RR backup/restore hooks
 
-[pret src/battle_main.c#L612-L646](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_main.c#L612-L646). RR-specific source/binary census required: existing client freeze/restore handling at lua/clients/gen3_frlge_client.lua:3005-3379 is behavior to preserve, not pret proof.
+[pret src/battle_main.c#L612-L646](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/battle_main.c#L612-L646). RR-specific source/binary census required: existing client freeze/restore handling at archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:3005-3379 is behavior to preserve, not pret proof.
 
 | ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
 |---|---|---|---|---|

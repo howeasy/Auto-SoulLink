@@ -200,7 +200,7 @@ function M.pred_ok(cp, name)
     return v == want
 end
 
---- The SaveBlock1-derived (mapGroup, mapNum), the pointer chain lua/memory_gba.lua:1109-1114
+--- The SaveBlock1-derived (mapGroup, mapNum), the pointer chain archive/gen3-old-client:lua/memory_gba.lua:1109-1114
 --- reads (+0x04 / +0x05). -1,-1 while the pointer is not yet a sane EWRAM address.
 function M.map(cp)
     local ptr = assert(cp.pointers and cp.pointers.gSaveBlock1Ptr, "no gSaveBlock1Ptr")

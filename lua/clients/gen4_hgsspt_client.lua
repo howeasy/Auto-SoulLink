@@ -939,7 +939,7 @@ local pending_safe         = false
 local battle_box_snapshot  = nil  -- {[pid_hex]=true} — snapshot of current box at battle start (party==6)
 local battle_enc_species   = 0    -- enemy species cached during battle for no_catch
 local battle_enc_level     = 0    -- enemy level cached during battle for no_catch
--- Enemy team accumulator (mirrors gen3 battle_seen_enemies in gen3_frlge_client.lua).
+-- Enemy team accumulator (mirrors gen3 battle_seen_enemies in archive/gen3-old-client:lua/clients/gen3_frlge_client.lua).
 -- Tracks the full opponent roster as it's revealed via switches across the battle.
 -- Keyed by "species:level" (PID:OTID isn't always available pre-decryption for the
 -- inactive slots in the buffer). Reset at every battle start. Each entry is the

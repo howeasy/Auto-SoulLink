@@ -184,7 +184,7 @@ function Client.new(p)
     -- ── reads → wire shapes ──────────────────────────────────────────────────────────
     local function mon_key(m) return reads.key(m) end
 
-    -- Gen 3 parity (nick_label, gen3_frlge_client.lua:476-477): a nickname when the caller
+    -- Gen 3 parity (nick_label, archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:476-477): a nickname when the caller
     -- has one, else the key's short form -- shared by the local HUD moments below.
     local function nick_label(key, nickname)
         if nickname and nickname ~= "" then return nickname end
@@ -262,7 +262,7 @@ function Client.new(p)
         return n
     end
 
-    -- Gen 3 parity (gen3_frlge_client.lua:4112-4119): banner + SFX once, on the transition
+    -- Gen 3 parity (archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:4112-4119): banner + SFX once, on the transition
     -- INTO the run -- bag_received fires it directly, send_tick catches the ball-count edge
     -- for anything that reaches the bag another way. Never at hello (send_hello below), which
     -- can only ever observe a bag already stocked from a previous session.
@@ -270,7 +270,7 @@ function Client.new(p)
         if self.nuzlocke_announced then return end
         self.nuzlocke_announced = true
         hud.nuzlocke_start("Nuzlocke Start!")
-        self:request_sfx_local(95) -- SE_SHINY, Gen 3's default SE_NUZLOCKE_START (memory_gba.lua:1963)
+        self:request_sfx_local(95) -- SE_SHINY, Gen 3's default SE_NUZLOCKE_START (archive/gen3-old-client:lua/memory_gba.lua:1963)
     end
 
     local function pc_boxes_wire()
@@ -555,10 +555,10 @@ function Client.new(p)
             -- a queued notification accepted under the old setting must not post after it
             if cmd.native_sounds ~= true and self.panel then self.panel:clear_sfx() end
         elseif c == "game_over" then
-            -- Gen 3 parity (gen3_frlge_client.lua:1026-1027): the server's game_over command
+            -- Gen 3 parity (archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:1026-1027): the server's game_over command
             -- carries no play_sound of its own (server/state.py:2103, :3202) -- the client
             -- supplies the cue locally, same as the whiteout detection below.
-            self:request_sfx_local(26) -- SE_FAILURE, Gen 3's default SE_GAME_OVER (memory_gba.lua:1964)
+            self:request_sfx_local(26) -- SE_FAILURE, Gen 3's default SE_GAME_OVER (archive/gen3-old-client:lua/memory_gba.lua:1964)
             hud.set_game_over()
             self.game_over = true
         elseif c == "rebuild_start" then
@@ -740,7 +740,7 @@ function Client.new(p)
                 local slot, _, _, why = find_party_slot(cmd.key)
                 if slot then
                     writes:faint_party_slot(slot)
-                    -- Gen 3 parity (gen3_frlge_client.lua:760-800): text only, never a local
+                    -- Gen 3 parity (archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:760-800): text only, never a local
                     -- SFX -- but not for one uniform reason (cx-6bedd222). A terminal/linked
                     -- battle faint's force_faint already carries a play_sound 26 to this player
                     -- (state.py:2884); the whiteout-driven retire loop (state.py:2073) and the
@@ -884,7 +884,7 @@ function Client.new(p)
         return out
     end
 
-    -- Gen 3 parity (gen3_frlge_client.lua:3804-3816): the client's OWN whiteout detection
+    -- Gen 3 parity (archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:3804-3816): the client's OWN whiteout detection
     -- gets a local cue -- the server's reply to `whiteout` (state.py _handle_whiteout) never
     -- queues a play_sound, so there is nothing to double up with.
     local function announce_whiteout()
@@ -943,7 +943,7 @@ function Client.new(p)
                             break
                         end
                     end
-                    -- Gen 3 parity (gen3_frlge_client.lua:2840-2852): flag a wild encounter in
+                    -- Gen 3 parity (archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:2840-2852): flag a wild encounter in
                     -- an area this run hasn't resolved yet. self.battle.area_id already carries
                     -- the static-encounter override above, matching the id no_catch/capture key
                     -- off of; area_of() never returns a "gift_map_*" id (that prefix only exists
@@ -1395,7 +1395,7 @@ function Client.new(p)
                     writes:arm("battle_loop_head")
                     if w.cmd == "force_explode" then writes:explode_active_battler(slot) else writes:faint_active_battler(slot) end
                     writes:disarm()
-                    -- Gen 3 parity (gen3_frlge_client.lua:760-800): same text-only banner as
+                    -- Gen 3 parity (archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:760-800): same text-only banner as
                     -- the bench-mon write in run_deferred above.
                     hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360)
                 else
@@ -1516,7 +1516,7 @@ function Client.new(p)
         local had_balls = self.has_pokeballs
         self.has_pokeballs = self.has_pokeballs or ball_count() > 0
         -- A hello snapshot with balls already in the bag is a resume/reconnect, not the
-        -- moment of acquisition (gen3_frlge_client.lua:1921-1926): log only, no banner.
+        -- moment of acquisition (archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:1921-1926): log only, no banner.
         if not had_balls and self.has_pokeballs then
             self.nuzlocke_announced = true
             log("[SLink-gen1] nuzlocke ACTIVE (pokeballs already in bag at startup)")
@@ -1563,7 +1563,7 @@ function Client.new(p)
         local in_battle = battle.in_battle ~= 0
         if self.last_area ~= nil and self.last_area ~= area_id then
             send("area_enter", { area_id = area_id, loc_name = loc })
-            -- Gen 3 parity (gen3_frlge_client.lua:2722-2735): flag entry into a map this
+            -- Gen 3 parity (archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:2722-2735): flag entry into a map this
             -- cartridge's OWN wild table (self.wild_maps, from rom.rom_content() at hello) says
             -- can encounter something. "not gift_map_*" is not "not a gift area" (cx-6bedd222):
             -- the server's gift-area list is server-side only, but a gift area has no wild

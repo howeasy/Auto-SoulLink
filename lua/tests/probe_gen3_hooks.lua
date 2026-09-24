@@ -1,7 +1,7 @@
 -- P1 capability only; coordinator runs this gate, never production clients.
 -- BR: docs/rr_reference/BIZHAWK_MGBA_CALLBACKS.md:150-170:
 -- callback addr=0800051A, raw R15=0800051C (NOT callback addr=...51C).
--- games/gen3_frlge.lua:85,211-212: return pointer; mailbox.lua:13,475:
+-- games/gen3_frlge.lua:85,211-212: return pointer; archive/gen3-old-client:lua/mailbox.lua:13,475:
 -- 0203F800 is the signature/beacon, opcode is +6. No opcodes are dispatched.
 local WT = os.getenv("SLINK_ROOT")
 assert(WT, "launch via tools/run_gate.py")

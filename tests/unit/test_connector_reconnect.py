@@ -5,7 +5,7 @@ An event queued the same frame the socket died survived into the NEW connection 
 flushed by pump() (connector.lua:195-202) before the client got a chance to queue its
 reconnect hello -- every real client calls net.pump() first and only then (re)sends hello
 in the same frame_end, e.g. lua/gen1/client.lua:929-941 and
-lua/clients/gen3_frlge_client.lua:1912-1937. Since server/server.py:1235-1240 answers any
+archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:1912-1937. Since server/server.py:1235-1240 answers any
 pre-hello event on a connection with a `noop` + WARNING, that stale event was not merely
 reordered ahead of hello -- it was silently dropped by the server anyway, just later and
 with a same log noise. Clearing _send_queue in disconnect() drops it locally instead, and a

@@ -1081,7 +1081,7 @@ class SoulLinkState:
         log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {len(party)}  (hello)")
         # Rival Team Swap: refresh the per-player blob cache from the same
         # snapshot.  Each party entry carries blob_hex (200 chars) from
-        # build_party_snapshot — see lua/clients/gen3_frlge_client.lua.
+        # build_party_snapshot — see archive/gen3-old-client:lua/clients/gen3_frlge_client.lua.
         self._ingest_party_blobs(player_id, party)
 
         # Accept pokéballs status from Lua (M.hasPokeballs() reads actual bag).

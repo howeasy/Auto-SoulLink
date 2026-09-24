@@ -1,7 +1,7 @@
 """lua/tests/mkstate.lua + mkstate_gen3_rr_fill.lua on the NEW Gen 3 layer (card C5-6-MKSTATE).
 
 Both are production savestate tooling (tools/mkstates.py, the RR opcode gates' fixtures), so they
-must run without lua/mailbox.lua before C5-6 deletes it. No emulator: each script runs under the
+must run without archive/gen3-old-client:lua/mailbox.lua before C5-6 deletes it. No emulator: each script runs under the
 BizHawk stubs + fake companion of test_gen3_gatelib.py, with every dofile/require recorded.
 """
 import sys

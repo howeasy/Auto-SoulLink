@@ -26,7 +26,7 @@ _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__))
 _LUA = os.path.join(_REPO, "lua").replace("\\", "/")
 _NEW_GEN3_CLIENT = "lua/gen3/run.lua"
 _NEW_GEN1_CLIENT = "lua/gen1/run.lua"
-_OLD_GEN3_CLIENT = "lua/clients/gen3_frlge_client.lua"
+_OLD_GEN3_CLIENT = "lua/clients/gen3_frlge_client.lua"  # deleted; see archive/gen3-old-client:lua/clients/
 
 
 def _sha1(pack: str, title: str, kind: str) -> str:

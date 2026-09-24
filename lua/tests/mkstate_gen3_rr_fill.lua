@@ -6,7 +6,7 @@
 -- LAST mon, so a 1-mon state can never exercise the storage frontend).
 --
 -- OP_CREATE_MON is patch ABI the client never uses, so it is posted through the test-only raw poster
--- in lua/tests/gen3_gatelib.lua (t.raw: native.lua's own ABI and write window), not lua/mailbox.lua
+-- in lua/tests/gen3_gatelib.lua (t.raw: native.lua's own ABI and write window), not archive/gen3-old-client:lua/mailbox.lua
 -- (card C5-6-MKSTATE).
 --
 -- Environment: SLINK_ROOT, SLINK_GEN3_CHECKPOINT/TITLE (gen3_boot_check helpers),

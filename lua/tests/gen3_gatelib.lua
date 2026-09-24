@@ -1,7 +1,7 @@
 -- lua/tests/gen3_gatelib.lua — headless harness for the RR companion opcode gates, bound to the
 -- NEW Gen 3 client's native layer (lua/gen3/native.lua). PLAN §4 / §14 P5, card C5-4.
 --
--- Replaces the old binding (lua/mailbox.lua over lua/memory_gba.lua). A gate drives native.lua the
+-- Replaces the old binding (archive/gen3-old-client:lua/mailbox.lua over archive/gen3-old-client:lua/memory_gba.lua). A gate drives native.lua the
 -- way production does: ONE injected instance over the real lua/gen3/writes.lua sink and the real
 -- lua/gen3/safety.lua "native" clause set, serviced once per frame at frame end (t.step). Only the
 -- send() sink and the done() receipts belong to the harness, so every opcode reaches the patch

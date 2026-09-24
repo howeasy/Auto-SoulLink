@@ -96,7 +96,7 @@ def test_box_round_trip_every_permutation(index):
 
 def test_permutation_table_matches_pret():
     """src/pokemon.c#L2846-L2890. Rows 3 and 4 are the ones the Lua table
-    (lua/memory_gba.lua:622) has swapped; pin them explicitly."""
+    (archive/gen3-old-client:lua/memory_gba.lua:622) has swapped; pin them explicitly."""
     assert codec.SUBSTRUCT_ORDER[0] == (0, 1, 2, 3)
     assert codec.SUBSTRUCT_ORDER[3] == (0, 3, 1, 2)
     assert codec.SUBSTRUCT_ORDER[4] == (0, 2, 3, 1)
@@ -155,7 +155,7 @@ def test_wrong_size_is_refused():
 
 def test_rr_record_is_plaintext_in_fixed_order():
     """CFRU_NO_ENCRYPT: Growth/Attacks/EVs/Misc sit at +0x20/+0x2C/+0x38/+0x44
-    with no XOR (lua/games/gen3_frlge.lua:342, lua/memory_gba.lua:570-572)."""
+    with no XOR (lua/games/gen3_frlge.lua:342, archive/gen3-old-client:lua/memory_gba.lua:570-572)."""
     mon = _mon(0x18005)          # a PID whose vanilla order is NOT fixed
     assert codec.SUBSTRUCT_ORDER[5] != (0, 1, 2, 3)
     raw = codec.encode_party_mon(mon, rr=True)
@@ -188,7 +188,7 @@ def test_rr_checksum_field_round_trips_as_stored():
 # --- CFRU CompressedPokemon expansion ---------------------------------------
 
 def test_expand_compressed_box_mon_matches_the_lua_field_map():
-    """Mirrors lua/memory_gba.lua:1037-1104 (createBoxMonFromCompressed)."""
+    """Mirrors archive/gen3-old-client:lua/memory_gba.lua:1037-1104 (createBoxMonFromCompressed)."""
     src = bytearray(codec.COMPRESSED_MON_SIZE)
     header = bytes(range(0x1C))
     src[0x00:0x1C] = header

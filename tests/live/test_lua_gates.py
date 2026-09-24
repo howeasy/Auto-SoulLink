@@ -4,7 +4,7 @@
 opcode/feature — collectively the patch's executable spec. P5 (docs/gen3/PLAN.md §14, card C5-4)
 binds them to the NEW Gen 3 client's native layer through `lua/tests/gen3_gatelib.lua`
 (`lua/gen3/native.lua` over the real writes/safety sink); none of the ported gates loads the old
-client (`lua/mailbox.lua`, `lua/memory_gba.lua`, `lua/clients/gen3_frlge_client.lua`). Patch ops
+client (`archive/gen3-old-client:lua/mailbox.lua`, `archive/gen3-old-client:lua/memory_gba.lua`, `archive/gen3-old-client:lua/clients/gen3_frlge_client.lua`). Patch ops
 the client never sends go through gen3_gatelib's test-only raw poster (card C5-4b), never through
 new native.lua surface.
 
