@@ -1354,6 +1354,179 @@ def _add_memorial_preimage(text, key):
     return text.replace("MEMORIAL_ACK ", "MEMORIAL_PREIMAGE " + json.dumps(pre) + "\nMEMORIAL_ACK ")
 
 
+def _active_faint_cell(tmp_path, pair="duo.crystal.crystal"):
+    doc = _green_tree(tmp_path)
+    row = _row(doc, pair)
+    proof, axes = row["proofs"][0], row["axes"]
+    lock = json.loads((REPO / "data/gen2_sources.lock.json").read_text())["outputs"]
+    keys, text = {"a": "1234:5678:10", "b": "2234:5678:13"}, {}
+    for side, title in (("a", axes["initiator"]), ("b", axes["partner"])):
+        profile = json.loads((REPO / f"data/games/gen2_{title}/profile.json").read_text())["titles"][title]
+        hold = json.loads((REPO / f"data/games/gen2_{title}/write_checkpoint.json").read_text())["titles"][title]["battle_hold"]
+        head = {"player": side, "scenario": "gen2_faint_active", "title": title, "case": axes["fixtures"][side],
+                "attempt": 1, "rom_sha1": lock[f"poke{title}"]["sha1"],
+                "fixture_sha256": gate._fixture_sha256(tmp_path, axes["fixtures"][side])}
+        cap = {"frame": 100, "key": keys[side], "slot": 1, "species_id": 16 if side == "a" else 19,
+               "area_id": "route_29"}
+        link = {"frame": 110, "key": keys[side], "cartram_bytes": 32768, "saveram_bytes": 32790,
+                "cartram_sha256": "b" * 64, "gate_saves": 1, "client_saves": 1}
+        save = {"frame": 300, "save_completed_frame": 299, "gate_saves": 2, "client_saves": 2,
+                "cartram_bytes": 32768, "flushed_matches": True, "cartram_sha256": "c" * 64}
+        rows = [("DUO_GEN2", head), ("CLIENT", {"production_admitted": True, "registered_sites": ["battle_faint"]}),
+                ("ENGINE_CAPTURE", cap), ("LINK_SAVE", link)]
+        receipt = {**head, "schema": "gen2-duo-faint-active-v1", "capture": cap, "key": keys[side],
+                   "save": save, "link_save": link}
+        if side == "a":
+            go = {"frame": 120}
+            faint = {"frame": 190, "key": keys[side], "site_id": "battle_faint", "cause": "battle", "slot": 1}
+            rows.extend([("B_ACTIVE", go), ("ENGINE_FAINT", faint), ("FAINT_SENT", faint)])
+            receipt["b_active"] = go
+            receipt.update(faint=faint, faint_sent=faint)
+        else:
+            active = {"frame": 120, "key": keys[side], "slot": 1, "cur_battle_mon": 1,
+                      "battle_mon_species": 19, "battle_mode": 1, "battle_type": 0, "link_mode": 0}
+            address = profile["ram"]["wPartyMons"] + 48
+            targets = hold["write"]["targets"]
+            spans = [(targets["wBattleMonHP"]["address"], 2), (address + 32, 1), (address + 34, 2),
+                     (targets["wBattlePlayerAction"]["address"], 1)]
+            log = [{"domain": "System Bus", "addr": addr, "n": n, "batch_index": i, "batch_size": 4,
+                    "status": "written", "completed": n, "attempted": n, "why": "battle_hold", "title": title,
+                    "artifact": profile["artifact"], "rom_sha1": profile["rom_sha1"],
+                    "site": "lua/gen2/entry.lua production", "evidence": "U2 PHYSICAL receipt"}
+                   for i, (addr, n) in enumerate(spans, 1)]
+            write = {"frame": 200, "seq": 1, "key": keys[side], "slot": 1, "active_slot": 1,
+                     "kind": "battle_faint", "ok": True, "pc": hold["execution_before"]["pc"],
+                     "hrom_bank": hold["execution_before"]["bank"], "battle_hp_before_hex": "000A",
+                     "battle_hp_after_hex": "0000", "hp_before_hex": "000A", "hp_after_hex": "0000",
+                     "status_after_hex": "00", "action_before_hex": "00", "action_after_hex": "01", "log": log}
+            trace = {"seq": 2, "what": "faint", "frame": 200}
+            replaced = {"frame": 220, "active_slot": 0, "hp": 20}
+            rows.extend([("LINKED_ACTIVE", active), ("RX", "force_faint key=" + keys[side]),
+                         ("BATTLE_HOLD_WRITE", write), ("BATTLE_TRACE", trace), ("NEXT_MON", {"frame": 210}),
+                         ("REPLACED", replaced), ("LINKED_HP_STATUS", "0000 00")])
+            receipt.update(linked_active=active, force_faint_key=keys[side],
+                battle_write={key: write[key] for key in ("frame", "seq", "slot", "pc", "hrom_bank", "battle_hp_before_hex", "action_after_hex")},
+                native_faint=trace, replaced=replaced)
+        ack = {"frame": 250, "key": keys[side], "event": "memorialize_done", "box": 13}
+        if side == "b":
+            receipt["memorial"] = {"preimage_frame": 240, "ack": ack}
+        rows.extend([("MEMORIAL_ACK", ack), ("SAVE_WITNESS", save), ("RECEIPT", receipt)])
+        body = "\n".join(tag + " " + (value if isinstance(value, str) else json.dumps(value)) for tag, value in rows)
+        body = _add_memorial_preimage(body, keys[side]).replace('"frame": 201', '"frame": 240')
+        text[side] = body + "\nRESULT: PASS\n"
+    text["pydec"] = (f"PYDEC: PASS scenario=gen2_faint_active a={keys['a']} b={keys['b']} area=route_29 "
+                     f"titles={axes['initiator']}/{axes['partner']} status=memorial death=active\n")
+    return proof, axes, lock, text
+
+
+@pytest.mark.parametrize("pair", ["duo.crystal.crystal", "duo.gold.silver", "duo.crystal.gold"])
+def test_active_faint_matrix_accepts_the_pack_bound_active_write(tmp_path, pair):
+    proof, axes, lock, text = _active_faint_cell(tmp_path, pair)
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_faint_active") == []
+
+
+def test_active_faint_is_required_for_each_existing_duo_pairing():
+    doc = json.loads((REPO / gate.DUO_MATRIX).read_text(encoding="utf-8"))
+    expected = {"duo.crystal.crystal": "gen2_new", "duo.gold.silver": "gen2_gold_silver",
+                "duo.crystal.gold": "gen2_crystal_gold"}
+    for rid, game in expected.items():
+        axes = _row(doc, rid)["axes"]
+        assert axes["pairing"] == game
+        assert axes["scenarios"].count("gen2_faint_active") == 1
+
+
+def test_active_faint_matrix_allows_readback_after_memorial_ack(tmp_path):
+    proof, axes, lock, text = _active_faint_cell(tmp_path)
+    lines = text["b"].splitlines()
+    readback = next(line for line in lines if line.startswith("LINKED_HP_STATUS "))
+    lines.remove(readback)
+    at = next(i for i, line in enumerate(lines) if line.startswith("MEMORIAL_ACK "))
+    lines.insert(at + 1, readback)
+    text["b"] = "\n".join(lines)
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_faint_active") == []
+
+
+@pytest.mark.parametrize("mutation", ["schema", "bench_only", "pc", "bank", "span_addr", "span_count", "span_order",
+    "span_status", "span_title", "nonzero_hp", "wrong_action", "wrong_slot", "no_force", "early_force", "enemy_first",
+    "faint_next_frame", "lost", "trace_seq", "echo", "replacement_dead", "replacement_same", "no_readback",
+    "a_go_early", "a_go_missing", "a_no_send", "a_other_cause", "a_written", "save_early", "pydec_bench", "pydec_pass", "repeat_mutates"])
+def test_active_faint_matrix_refuses_bench_or_incomplete_active_evidence(tmp_path, mutation):
+    proof, axes, lock, text = _active_faint_cell(tmp_path)
+    lines = text["b"].splitlines()
+    at = next(i for i, line in enumerate(lines) if line.startswith("BATTLE_HOLD_WRITE "))
+    write = json.loads(lines[at].split(" ", 1)[1])
+    if mutation == "pc":
+        write["pc"] += 1
+    elif mutation == "bank":
+        write["hrom_bank"] += 1
+    elif mutation == "span_addr":
+        write["log"][0]["addr"] += 1
+    elif mutation == "span_count":
+        write["log"].pop()
+    elif mutation == "span_order":
+        write["log"].reverse()
+    elif mutation == "span_status":
+        write["log"][0]["status"] = "error"
+    elif mutation == "span_title":
+        write["log"][0]["title"] = "gold"
+    elif mutation == "nonzero_hp":
+        write["hp_after_hex"] = "0001"
+    elif mutation == "wrong_action":
+        write["action_after_hex"] = "00"
+    elif mutation == "wrong_slot":
+        write["active_slot"] = 0
+    lines[at] = "BATTLE_HOLD_WRITE " + json.dumps(write)
+    if mutation == "schema":
+        lines = [line.replace("gen2-duo-faint-active-v1", "gen2-duo-faint-v1") for line in lines]
+    elif mutation == "bench_only":
+        lines[at] = 'PARTY_HP_WRITE {"ok":true,"before_party_hex":"00","after_party_hex":"00"}'
+    elif mutation == "no_force":
+        lines = [line for line in lines if not line.startswith("RX force_faint ")]
+    elif mutation == "early_force":
+        i = next(i for i, line in enumerate(lines) if line.startswith("LINKED_ACTIVE "))
+        lines[i], lines[i + 1] = lines[i + 1], lines[i]
+    elif mutation in ("enemy_first", "faint_next_frame", "lost", "trace_seq"):
+        i = next(i for i, line in enumerate(lines) if line.startswith("BATTLE_TRACE "))
+        trace = json.loads(lines[i].split(" ", 1)[1])
+        if mutation == "enemy_first":
+            trace["what"] = "enemy_turn"
+        elif mutation == "lost":
+            trace["what"] = "lost"
+        elif mutation == "trace_seq":
+            trace["seq"] = 1
+        else:
+            trace["frame"] = 201
+        lines[i] = "BATTLE_TRACE " + json.dumps(trace)
+    elif mutation == "echo":
+        lines.append('FAINT_SENT {"key":"2234:5678:13"}')
+    elif mutation in ("replacement_dead", "replacement_same"):
+        old, new = ('"hp": 20', '"hp": 0') if mutation == "replacement_dead" else ('"active_slot": 0', '"active_slot": 1')
+        lines = [line.replace(old, new)
+                 if line.startswith("REPLACED ") else line for line in lines]
+    elif mutation == "no_readback":
+        lines = [line for line in lines if not line.startswith("LINKED_HP_STATUS ")]
+    elif mutation == "save_early":
+        lines = [line.replace('"save_completed_frame": 299', '"save_completed_frame": 199') for line in lines]
+    elif mutation == "repeat_mutates":
+        lines.append('PARTY_HP_WRITE {"ok":true,"before_party_hex":"00","after_party_hex":"01"}')
+    text["b"] = "\n".join(lines)
+    if mutation == "a_go_missing":
+        text["a"] = "\n".join(line for line in text["a"].splitlines() if not line.startswith("B_ACTIVE "))
+    elif mutation == "a_no_send":
+        text["a"] = "\n".join(line for line in text["a"].splitlines() if not line.startswith("FAINT_SENT "))
+    elif mutation == "a_other_cause":
+        text["a"] = text["a"].replace('"cause": "battle"', '"cause": "poison"')
+    elif mutation == "a_written":
+        text["a"] += '\nPARTY_HP_WRITE {"ok":true}\n'
+    elif mutation == "a_go_early":
+        text["a"] = text["a"].replace('"frame": 120', '"frame": 99')
+    elif mutation == "pydec_bench":
+        text["pydec"] = text["pydec"].replace("death=active", "death=bench")
+    elif mutation == "pydec_pass":
+        text["pydec"] = "PYDEC: PASS\n"
+    assert _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_faint_active")
+
+
 @pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
 def test_memorial_preimage_uses_each_titles_party_codec(title):
     rows = [("DUO_GEN2", {"title": title}), ("ENGINE_CAPTURE", {"key": "2234:5678:13", "species_id": 19}),

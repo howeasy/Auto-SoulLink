@@ -649,7 +649,103 @@ def _memorial_party(text, key, layout, linked_path, witness):
     return party_before_deposit, preimage
 
 
-def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
+def validate_faint_active_markers(results, *, title_b, key_a, key_b, species_b):
+    """Source-bound active-hold evidence, shared with the receipt matrix; no save normalization."""
+    from server.adapters import gen2_codec as codec
+
+    a, b = results["a"], results["b"]
+    go, a_link, a_faint = (_one_marker(a, tag) for tag in ("B_ACTIVE", "LINK_SAVE", "ENGINE_FAINT"))
+    _faint_need(a.index("LINK_SAVE ") < a.index("B_ACTIVE ") < a.index("ENGINE_FAINT ")
+                and _frame(a_link) <= _frame(go) <= _frame(a_faint) and a_faint.get("key") == key_a,
+                "A faint did not wait for B_ACTIVE")
+    for side in ("a", "b"):
+        _reconnect_pass(results[side])
+        head, receipt = _one_marker(results[side], "DUO_GEN2"), _one_marker(results[side], "RECEIPT")
+        _faint_need(head.get("scenario") == "gen2_faint_active" and head.get("player") == side
+                    and receipt.get("schema") == "gen2-duo-faint-active-v1", "active faint scenario/schema differs")
+    layout = codec.for_foundation(title_b)
+    client = _one_marker(b, "CLIENT")
+    _faint_need(isinstance(client.get("registered_sites"), list) and "battle_faint" in client["registered_sites"],
+                "B production signals lack battle_faint")
+    pack = json.loads((REPO_ROOT / f"data/games/gen2_{title_b}/write_checkpoint.json").read_text())
+    _faint_need(pack["source"] == layout.profile["source"], "battle hold source differs")
+    hold = pack["titles"][title_b]["battle_hold"]
+    active, write, link = (_one_marker(b, tag) for tag in ("LINKED_ACTIVE", "BATTLE_HOLD_WRITE", "LINK_SAVE"))
+    slot = active.get("slot")
+    _faint_need(type(slot) is int and 0 <= slot < layout.constants["PARTY_LENGTH"]
+                and all(type(active.get(field)) is int for field in ("cur_battle_mon", "battle_mon_species", "battle_mode", "link_mode", "battle_type"))
+                and active.get("key") == key_b and active.get("cur_battle_mon") == slot
+                and active.get("battle_mon_species") == species_b and active.get("battle_mode") == 1
+                and active.get("link_mode") == 0 and _frame(link) <= _frame(active), "linked mon not active in wild battle")
+    lines = b.splitlines()
+    position = {tag: next(i for i, line in enumerate(lines) if line.startswith(tag + " "))
+                for tag in ("LINK_SAVE", "LINKED_ACTIVE", "BATTLE_HOLD_WRITE", "MEMORIAL_PREIMAGE", "MEMORIAL_ACK", "SAVE_WITNESS")}
+    commands = [i for i, line in enumerate(lines) if line == f"RX force_faint key={key_b}"]
+    _faint_need(commands and position["LINK_SAVE"] < position["LINKED_ACTIVE"] < commands[0] < position["BATTLE_HOLD_WRITE"],
+                "battle write precedes active witness/force_faint")
+    _faint_need(write.get("ok") is True and not write.get("error") and write.get("kind") == "battle_faint"
+                and all(type(write.get(field)) is int for field in ("slot", "active_slot", "pc", "hrom_bank"))
+                and write.get("key") == key_b and write.get("slot") == write.get("active_slot") == slot,
+                "active battle write ownership/result differs")
+    _faint_need(write.get("pc") == hold["execution_before"]["pc"] and write.get("hrom_bank") == hold["execution_before"]["bank"],
+                "active battle write PC/bank differs")
+    _faint_need(_hex_bytes(write.get("battle_hp_before_hex"), 2, "active HP before") != bytes(2), "active battler was already fainted")
+    _hex_bytes(write.get("hp_before_hex"), 2, "party HP before")
+    _hex_bytes(write.get("action_before_hex"), 1, "action before")
+    for field, expected in (("battle_hp_after_hex", bytes(2)), ("hp_after_hex", bytes(2)),
+                            ("status_after_hex", bytes(1)), ("action_after_hex", bytes([hold["write"]["skip_action"]]))):
+        _faint_need(_hex_bytes(write.get(field), len(expected), field) == expected, "active write readback differs: " + field)
+    log = write.get("log")
+    _faint_need(isinstance(log, list) and len(log) == 4, "active battle write requires four permit spans")
+    targets = hold["write"]["targets"]
+    base = layout.addresses["wPartyMon1"] + slot * layout.party_size
+    spans = ((targets["wBattleMonHP"]["address"], 2), (base + layout.constants["MON_STATUS"], 1),
+             (base + layout.constants["MON_HP"], 2), (targets["wBattlePlayerAction"]["address"], 1))
+    profile = layout.profile["titles"][title_b]
+    for index, ((address, length), row) in enumerate(zip(spans, log, strict=True), 1):
+        expected = {"domain": "System Bus", "addr": address, "n": length, "why": "battle_hold",
+                    "status": "written", "completed": length, "attempted": length, "batch_index": index, "batch_size": 4,
+                    "site": "lua/gen2/entry.lua production", "evidence": "U2 PHYSICAL receipt", "title": title_b,
+                    "artifact": profile["artifact"], "rom_sha1": profile["rom_sha1"]}
+        _faint_need(isinstance(row, dict) and all(type(row.get(k)) is type(v) and row[k] == v for k, v in expected.items())
+                    and not row.get("error"), "active battle permit span/provenance differs")
+    seq = write.get("seq")
+    _faint_need(type(seq) is int and seq > 0 and _frame(active) <= _frame(write), "active write sequence/frame invalid")
+    traces = _tag_rows(b, "BATTLE_TRACE")
+    previous = 0
+    after = []
+    for pos, trace in traces:
+        _faint_need(type(trace.get("seq")) is int and trace["seq"] > previous and trace["seq"] != seq
+                    and trace.get("what") in ("faint", "enemy_turn") and _frame(trace) >= _frame(active), "lost/unknown/unordered battle trace")
+        previous = trace["seq"]
+        if trace["seq"] > seq:
+            _faint_need(pos > position["BATTLE_HOLD_WRITE"], "post-write trace printed before write")
+            after.append((pos, trace))
+    _faint_need(after and after[0][1]["what"] == "faint" and _frame(after[0][1]) == _frame(write), "first engine trace is not same-frame faint")
+    _faint_need(not _tag_rows(b, "FAINT_SENT"), "B echoed the commanded faint")
+    for pos, row in _tag_rows(b, "ENGINE_FAINT"):
+        _faint_need(row.get("key") == key_b and pos > position["BATTLE_HOLD_WRITE"] and _frame(row) >= _frame(write), "B engine faint differs from command")
+    next_mon, replaced = _one_marker(b, "NEXT_MON"), _one_marker(b, "REPLACED")
+    next_pos = next(i for i, line in enumerate(lines) if line.startswith("NEXT_MON "))
+    replacement_pos = next(i for i, line in enumerate(lines) if line.startswith("REPLACED "))
+    readbacks = [(i, line) for i, line in enumerate(lines) if line.startswith("LINKED_HP_STATUS ")]
+    _faint_need(after[0][0] < next_pos < replacement_pos and _frame(after[0][1]) <= _frame(next_mon) <= _frame(replaced)
+                and type(replaced.get("active_slot")) is int and 0 <= replaced["active_slot"] < 6 and replaced["active_slot"] != slot
+                and type(replaced.get("hp")) is int and replaced["hp"] > 0, "no living replacement after active faint")
+    _faint_need(len(readbacks) == 1 and readbacks[0][1] == "LINKED_HP_STATUS 0000 00" and readbacks[0][0] > replacement_pos,
+                "active linked readback differs or precedes replacement")
+    pre, save = _one_marker(b, "MEMORIAL_PREIMAGE"), _one_marker(b, "SAVE_WITNESS")
+    _faint_need(position["BATTLE_HOLD_WRITE"] < position["MEMORIAL_PREIMAGE"] < position["MEMORIAL_ACK"] < position["SAVE_WITNESS"]
+                and _frame(pre) >= _frame(write) and _frame(save, "save_completed_frame") > _frame(write), "active memorial/save chronology differs")
+    for pos, repeat in _tag_rows(b, "PARTY_HP_WRITE"):
+        _faint_need(position["BATTLE_HOLD_WRITE"] < pos < position["MEMORIAL_PREIMAGE"] and repeat.get("ok") is True
+                    and repeat.get("kind") == "party_hp" and repeat.get("key") == key_b
+                    and _hex_bytes(repeat.get("before_party_hex"), 288, "repeat before") == _hex_bytes(repeat.get("after_party_hex"), 288, "repeat after"),
+                    "active checkpoint repeat is not idempotent")
+    return {"active": active, "write": write, "next_mon": next_mon, "replaced": replaced}
+
+
+def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram, active=False):
     from server.adapters import gen2_codec as codec
 
     check_save_witness(results)
@@ -688,6 +784,8 @@ def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
                                          boot_saveram=boot_saveram, status=("dead", "memorial"), snapshots=snapshots)
     _faint_need(row.get("cause") == "battle" and row.get("initiating_player") == "a" and row.get("killed_at"),
                 "server death is not A's battle faint")
+    if active:
+        _faint_need(row["status"] == "memorial", "active faint requires independently saved memorial pair")
     memorial_preimages = {}
     if row["status"] == "memorial":
         for inst in ("a", "b"):
@@ -705,6 +803,12 @@ def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
         if inst == "b":
             _faint_need(old_keys == new_keys, "B party order changed")
             for before, after in zip(linked, final, strict=True):
+                if active:
+                    _faint_need(all(after[field] == before[field] for field in ("species_id", "dv_word", "ot_id", "ot_raw_hex", "nickname_raw_hex", "species_marker")),
+                                "active B identity/names changed")
+                    _faint_need((after["hp"] == 0 and after["status"] == 0) if codec.key(before) == key else after["hp"] > 0,
+                                "active B linked preimage not dead or starter not alive")
+                    continue  # Actual battle reward/PP/stat changes are not independently quantified here.
                 expected = bytearray.fromhex(before["raw_hex"])
                 if codec.key(before) == key:
                     expected[parties[inst][0].constants["MON_STATUS"]] = 0
@@ -725,6 +829,43 @@ def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
     if memorial_preimages:
         _faint_need(_frame(sent) <= _frame(memorial_preimages["a"]), "A memorial preimage precedes faint")
     _faint_need(not any(line.startswith("PARTY_HP_WRITE ") for line in results["a"].splitlines()), "A used a harness/permit faint instead of battle")
+    if active:
+        proof = validate_faint_active_markers(results, title_b=decoded["b"]["title"], key_a=a_key, key_b=b_key, species_b=decoded["b"]["species"])
+        layout, linked, final, witness = parties["b"]
+        slot = proof["active"]["slot"]
+        replacement = proof["replaced"]["active_slot"]
+        _faint_need(slot < len(final) and codec.key(final[slot]) == b_key and replacement < len(final)
+                    and codec.key(final[replacement]) != b_key and final[replacement]["hp"] > 0, "active/replacement slots differ from saved identities")
+        for _, repeat in _tag_rows(results["b"], "PARTY_HP_WRITE"):
+            raw = _hex_bytes(repeat.get("before_party_hex"), layout.party_size * layout.constants["PARTY_LENGTH"], "active idempotent party")
+            observed = [codec.decode_party_mon(raw[index * layout.party_size:(index + 1) * layout.party_size], layout,
+                          species_marker=raw[index * layout.party_size]) for index in range(len(final))]
+            _faint_need([codec.key(mon) for mon in observed] == [codec.key(mon) for mon in final], "active checkpoint repeat changes identity")
+            _faint_write(repeat, layout, observed, observed, b_key)
+    else:
+        _bench_faint_writes(results, parties, stages, b_key)
+    log = (Path(data_dir) / "server.log").read_text(encoding="utf-8", errors="replace")
+    issued = re.search(r"\[a\] faint → force_faint b:" + re.escape(b_key) + r"(?:\s|$)", log)
+    _faint_need(issued, "server did not issue force_faint to B")
+    if row["status"] == "memorial":
+        end = log.find(f"pair in {area_id} fully memorialized", issued.end())
+        _faint_need(end >= 0, "server lacks successful memorial transition after death")
+        pending = document.get("pending_memorials")
+        _faint_need(isinstance(pending, dict), "server memorial pending state missing")
+        for inst in ("a", "b"):
+            key = decoded[inst]["key"]
+            pattern = rf"\[{inst}\] memorialize_done key=" + re.escape(key[:8]) + r"(?:\s|$)"
+            ack = re.search(pattern, log[issued.end():end])
+            _faint_need(ack and isinstance(pending.get(inst), list) and key not in pending[inst],
+                        f"server lacks settled {inst} memorial success after death")
+    facts = _verified_facts(decoded, area_id, row["status"])
+    if active:
+        facts["death"] = "active"
+    return facts
+
+
+def _bench_faint_writes(results, parties, stages, b_key):
+    """Unchanged bench-write proof, kept distinct from the active battle-hold contract."""
     writes = [(index, json.loads(line.removeprefix("PARTY_HP_WRITE ")))
               for index, line in enumerate(results["b"].splitlines()) if line.startswith("PARTY_HP_WRITE ")]
     _faint_need(1 <= len(writes) <= 2 and all(isinstance(row, dict) for _, row in writes),
@@ -745,21 +886,6 @@ def _faint_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
                         and bytes.fromhex(write["after_party_hex"]) == bytes.fromhex(write["before_party_hex"]),
                         "B repeat is not idempotent")
         previous = write
-    log = (Path(data_dir) / "server.log").read_text(encoding="utf-8", errors="replace")
-    issued = re.search(r"\[a\] faint → force_faint b:" + re.escape(b_key) + r"(?:\s|$)", log)
-    _faint_need(issued, "server did not issue force_faint to B")
-    if row["status"] == "memorial":
-        end = log.find(f"pair in {area_id} fully memorialized", issued.end())
-        _faint_need(end >= 0, "server lacks successful memorial transition after death")
-        pending = document.get("pending_memorials")
-        _faint_need(isinstance(pending, dict), "server memorial pending state missing")
-        for inst in ("a", "b"):
-            key = decoded[inst]["key"]
-            pattern = rf"\[{inst}\] memorialize_done key=" + re.escape(key[:8]) + r"(?:\s|$)"
-            ack = re.search(pattern, log[issued.end():end])
-            _faint_need(ack and isinstance(pending.get(inst), list) and key not in pending[inst],
-                        f"server lacks settled {inst} memorial success after death")
-    return _verified_facts(decoded, area_id, row["status"])
 
 
 def faint_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_saveram=None, on_verified=None):
@@ -770,6 +896,16 @@ def faint_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_sav
             on_verified(facts)
     except (KeyError, TypeError, ValueError, OSError, IndexError) as exc:
         raise RuntimeError(f"faint evidence missing or malformed: {exc}") from exc
+
+
+def faint_active_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_saveram=None, on_verified=None):
+    """Active battle-hold death + saved memorial proof; battle rewards are not quantified."""
+    try:
+        facts = _faint_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids, boot_saveram=boot_saveram, active=True)
+        if on_verified is not None:
+            on_verified(facts)
+    except (KeyError, TypeError, ValueError, OSError, IndexError, AttributeError) as exc:
+        raise RuntimeError(f"active faint evidence missing or malformed: {exc}") from exc
 
 
 def _admit_need(condition, reason):

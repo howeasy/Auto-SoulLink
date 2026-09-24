@@ -184,6 +184,176 @@ def test_faint_accepts_independently_saved_memorial_with_preimages(faint_case):
     assert facts[0]["status"] == "memorial"
 
 
+@pytest.fixture
+def active_faint_case(faint_case, request):
+    results, data_dir = _memorial_case(faint_case)
+    layout = codec.for_foundation("crystal")
+    hold = json.loads((ROOT / "data/games/gen2_crystal/write_checkpoint.json").read_text())["titles"]["crystal"]["battle_hold"]
+    target = oracles._last_tagged(results["b"], "ENGINE_CAPTURE")
+    slot = 1
+    profile = layout.profile["titles"]["crystal"]
+    spans = [(hold["write"]["targets"]["wBattleMonHP"]["address"], 2),
+             (layout.addresses["wPartyMon1"] + 48 + layout.constants["MON_STATUS"], 1),
+             (layout.addresses["wPartyMon1"] + 48 + layout.constants["MON_HP"], 2),
+             (hold["write"]["targets"]["wBattlePlayerAction"]["address"], 1)]
+    log = [{"domain": "System Bus", "addr": address, "n": n, "why": "battle_hold", "status": "written",
+            "completed": n, "attempted": n, "batch_index": index, "batch_size": 4,
+            "site": "lua/gen2/entry.lua production", "evidence": "U2 PHYSICAL receipt", "title": "crystal",
+            "artifact": profile["artifact"], "rom_sha1": profile["rom_sha1"]} for index, (address, n) in enumerate(spans, 1)]
+    write = {"frame": 7100, "seq": 1, "key": target["key"], "slot": slot, "active_slot": slot,
+             "kind": "battle_faint", "ok": True, "pc": hold["execution_before"]["pc"], "hrom_bank": hold["execution_before"]["bank"],
+             "battle_hp_before_hex": "000c", "battle_hp_after_hex": "0000", "hp_before_hex": "000c", "hp_after_hex": "0000",
+             "status_after_hex": "00", "action_before_hex": "00", "action_after_hex": "01", "log": log}
+    active = {"frame": 6000, "key": target["key"], "slot": slot, "cur_battle_mon": slot,
+              "battle_mon_species": target["species_id"], "battle_mode": 1, "battle_type": 0, "link_mode": 0}
+    for side in ("a", "b"):
+        head = oracles._last_tagged(results[side], "DUO_GEN2")
+        head["scenario"] = "gen2_faint_active"
+        results[side] = _replace_tag_in_place(results[side], "DUO_GEN2", head)
+        lines = []
+        for line in results[side].splitlines():
+            if line.startswith("PARTY_HP_WRITE ") and side == "b":
+                lines += ["BATTLE_HOLD_WRITE " + json.dumps(write), "BATTLE_TRACE " + json.dumps({"frame": 7100, "seq": 2, "what": "faint"}),
+                          "NEXT_MON " + json.dumps({"frame": 7110}), "REPLACED " + json.dumps({"frame": 7120, "active_slot": 0, "hp": 12}),
+                          "LINKED_HP_STATUS 0000 00"]
+                if getattr(request, "param", None):
+                    repeat = json.loads(line[len("PARTY_HP_WRITE "):])
+                    repeat.update(frame=7150, before_party_hex=repeat["after_party_hex"])
+                    if request.param == "changed_repeat":
+                        raw = bytearray.fromhex(repeat["after_party_hex"])
+                        raw[1] ^= 1
+                        repeat["after_party_hex"] = raw.hex()
+                    lines.append("PARTY_HP_WRITE " + json.dumps(repeat))
+                continue
+            if line.startswith("RESULT:"):
+                lines.append("RECEIPT " + json.dumps({**head, "schema": "gen2-duo-faint-active-v1"}))
+            lines.append(line)
+            if line.startswith("LINK_SAVE "):
+                lines.append(("B_ACTIVE " + json.dumps({"frame": 6000})) if side == "a" else "LINKED_ACTIVE " + json.dumps(active))
+        results[side] = "\n".join(lines)
+    return results, data_dir
+
+
+def test_faint_active_independent_memorial_proof(active_faint_case):
+    results, data_dir = active_faint_case
+    facts = []
+    oracles.faint_active_oracle(results, data_dir=data_dir, on_verified=facts.append)
+    assert facts[0]["status"] == "memorial" and facts[0]["death"] == "active"
+
+
+@pytest.mark.parametrize("active_faint_case", ["repeat", "changed_repeat"], indirect=True)
+def test_faint_active_checkpoint_repeat_must_be_idempotent(active_faint_case, request):
+    results, data_dir = active_faint_case
+    if request.node.callspec.params["active_faint_case"] == "repeat":
+        oracles.faint_active_oracle(results, data_dir=data_dir)
+    else:
+        with pytest.raises(RuntimeError, match="idempotent"):
+            oracles.faint_active_oracle(results, data_dir=data_dir)
+
+
+def test_faint_active_allows_survivor_battle_changes_not_reward_quantified(active_faint_case):
+    results, data_dir = active_faint_case
+    layout = codec.for_foundation("crystal")
+    save = Path(oracles._last_tagged(results["b"], "SAVE_WITNESS")["saveram_path"])
+    for field, value in (("MON_PP", b"\x01"), ("MON_EXP", b"\0\0\x90"), ("MON_HP", b"\0\x01"), ("MON_STATUS", b"\x08")):
+        _edit_saved_record(save, layout, 0, layout.constants[field], value)
+    _refresh_faint_hash(results, "b")
+    oracles.faint_active_oracle(results, data_dir=data_dir)
+
+
+def test_faint_active_readback_can_follow_memorial_ack(active_faint_case):
+    results, data_dir = active_faint_case
+    text = results["b"].replace("LINKED_HP_STATUS 0000 00\n", "")
+    lines = []
+    for line in text.splitlines():
+        lines.append(line)
+        if line.startswith("MEMORIAL_ACK "):
+            lines.append("LINKED_HP_STATUS 0000 00")
+    results["b"] = "\n".join(lines)
+    oracles.faint_active_oracle(results, data_dir=data_dir)
+
+
+@pytest.mark.parametrize("fault", ["missing_box_key", "starter_dead", "starter_identity", "starter_name", "preimage_status", "server_not_memorial"])
+def test_faint_active_refuses_independent_save_and_server_mutations(active_faint_case, fault):
+    results, data_dir = active_faint_case
+    layout = codec.for_foundation("crystal")
+    if fault == "server_not_memorial":
+        path = Path(data_dir) / "links.json"
+        document = json.loads(path.read_text())
+        document["links"][0]["status"] = "dead"
+        path.write_text(json.dumps(document))
+    elif fault == "preimage_status":
+        marker = oracles._last_tagged(results["b"], "MEMORIAL_PREIMAGE")
+        raw = bytearray.fromhex(marker["raw_hex"])
+        raw[layout.constants["MON_STATUS"]] = 1
+        marker["raw_hex"] = raw.hex()
+        results["b"] = _replace_tag_in_place(results["b"], "MEMORIAL_PREIMAGE", marker)
+    else:
+        path = Path(oracles._last_tagged(results["b"], "SAVE_WITNESS")["saveram_path"])
+        if fault == "starter_dead":
+            _edit_saved_record(path, layout, 0, layout.constants["MON_HP"], bytes(2))
+        elif fault == "starter_identity":
+            _edit_saved_record(path, layout, 0, layout.constants["MON_DVS"], b"\0\0")
+        else:
+            raw = bytearray(path.read_bytes())
+            if fault == "missing_box_key":
+                at = layout.storage_boxes[13][0]
+                raw[at:at + 2] = bytes([0, 255])
+            else:
+                region, offset = _region_and_offset(layout, "wPartyMonNicknames")
+                _poke(raw, region, offset, bytes([0x81]))
+                for copy_name in ("primary", "backup"):
+                    at = layout.checksum_offsets[copy_name]
+                    raw[at:at + 2] = codec.sav_checksum(bytes(raw[:CART]), layout, copy_name).to_bytes(2, "little")
+            path.write_bytes(raw)
+        _refresh_faint_hash(results, "b")
+    with pytest.raises(RuntimeError):
+        oracles.faint_active_oracle(results, data_dir=data_dir)
+
+
+@pytest.mark.parametrize("fault", ["slot", "key", "battle_mode", "pc", "bank", "zero_before", "party_hp", "status", "action",
+    "permit", "enemy_first", "later_frame", "lost", "echo", "no_replacement", "same_slot", "dead_starter", "readback", "go", "schema"])
+def test_faint_active_refuses_marker_mutations(active_faint_case, fault):
+    results, data_dir = active_faint_case
+    if fault in ("slot", "key", "battle_mode"):
+        tag = "LINKED_ACTIVE"
+        row = oracles._last_tagged(results["b"], tag)
+        row[{"slot": "cur_battle_mon", "key": "key", "battle_mode": "battle_mode"}[fault]] = "bad" if fault == "key" else 0
+    elif fault in ("pc", "bank", "zero_before", "party_hp", "status", "action", "permit"):
+        tag = "BATTLE_HOLD_WRITE"
+        row = oracles._last_tagged(results["b"], tag)
+        if fault == "permit":
+            row["log"][3]["addr"] -= 1
+        else:
+            field, value = {"pc": ("pc", 0), "bank": ("hrom_bank", 0), "zero_before": ("battle_hp_before_hex", "0000"),
+                            "party_hp": ("hp_after_hex", "0001"), "status": ("status_after_hex", "01"), "action": ("action_after_hex", "00")}[fault]
+            row[field] = value
+    elif fault in ("enemy_first", "later_frame", "lost"):
+        tag = "BATTLE_TRACE"
+        row = oracles._last_tagged(results["b"], tag)
+        row["frame" if fault == "later_frame" else "what"] = 7101 if fault == "later_frame" else ("lost" if fault == "lost" else "enemy_turn")
+    elif fault in ("same_slot", "dead_starter"):
+        tag = "REPLACED"
+        row = oracles._last_tagged(results["b"], tag)
+        row["active_slot" if fault == "same_slot" else "hp"] = 1 if fault == "same_slot" else 0
+    else:
+        tag = None
+        if fault == "echo":
+            results["b"] += "\nFAINT_SENT {}"
+        elif fault == "no_replacement":
+            results["b"] = "\n".join(line for line in results["b"].splitlines() if not line.startswith("REPLACED "))
+        elif fault == "readback":
+            results["b"] = results["b"].replace("LINKED_HP_STATUS 0000 00", "LINKED_HP_STATUS 0001 00")
+        elif fault == "go":
+            results["a"] = "\n".join(line for line in results["a"].splitlines() if not line.startswith("B_ACTIVE "))
+        else:
+            results["b"] = results["b"].replace("gen2-duo-faint-active-v1", "gen2-duo-faint-v1")
+    if tag:
+        results["b"] = _replace_tag_in_place(results["b"], tag, row)
+    with pytest.raises(RuntimeError):
+        oracles.faint_active_oracle(results, data_dir=data_dir)
+
+
 def test_faint_refuses_nack_only_memorial_without_saved_boxes(faint_case):
     results, data_dir = _memorial_case(faint_case, native=False)
     with pytest.raises(RuntimeError):

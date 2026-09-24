@@ -264,7 +264,7 @@ def test_gen2_reconnect_orchestration_keeps_b_online_and_archives_initial_a(monk
 
 def test_gen2_new_selects_link_and_faint_with_required_evidence():
     assert "gen2_new" in GAMES
-    assert scenarios_for("gen2_new") == ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset"]
+    assert scenarios_for("gen2_new") == ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset"]
     contract = duo_module.evidence_contract("gen2_new")
     assert contract.require_oracle and contract.witness_validator
     assert callable(getattr(DuoRun, contract.witness_validator, None))
@@ -285,13 +285,13 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
     assert game in GAMES
     assert GAMES[game]["game"] == "gen2_new"
     assert GAMES[game]["fixture"] == fixtures
-    assert scenarios_for(game) == ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset"]
+    assert scenarios_for(game) == ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset"]
     assert duo_module.evidence_contract(game) is duo_module.evidence_contract("gen2_new")
     assert not GAMES[game].get("server_rom_routes")
     assert duo_list_lines(game) == [
         f"{scenario}  attempts={3 if scenario in duo_module.GEN2_CLAUSE_SCENARIOS else 1}  targets=a:{fixtures['a']}, "
         f"b:{'crystal_battle_ot2' if scenario == 'gen2_admit_wrong_rom' else fixtures['b']}"
-        for scenario in ("link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset")]
+        for scenario in ("link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset")]
 
 
 @pytest.mark.parametrize("game,titles,names", (
@@ -457,16 +457,18 @@ def test_gen2_duo_wrapper_requires_both_results_and_pydec(monkeypatch, tmp_path,
             wrapper.run_gate(scenario=scenario)
 
 
-def test_gen2_faint_oracle_receives_qualified_inputs_and_requires_witness(monkeypatch, tmp_path):
+@pytest.mark.parametrize("scenario", ["gen2_faint", "gen2_faint_active"])
+def test_gen2_faint_oracle_receives_qualified_inputs_and_requires_witness(monkeypatch, tmp_path, scenario):
     from types import SimpleNamespace
 
     seen = []
     results = {"a": "A receipt", "b": "B receipt"}
     module = SimpleNamespace(check_save_witness=lambda res: seen.append(("witness", res)),
-        faint_oracle=lambda res, **kwargs: seen.append((kwargs, res)))
+        faint_oracle=lambda res, **kwargs: seen.append((kwargs, res)),
+        faint_active_oracle=lambda res, **kwargs: seen.append((kwargs, res)))
     monkeypatch.setitem(sys.modules, "gen2_duo_oracles", module)
     run = object.__new__(DuoRun)
-    run.game, run.scenario = "gen2_gold_silver", "gen2_faint"
+    run.game, run.scenario = "gen2_gold_silver", scenario
     run.cfg, run.data_dir = SCENARIOS[run.scenario], str(tmp_path)
     run._gen2_inputs = {"a": {"ot_id": 101, "fixture": tmp_path / "gold.SaveRAM"},
                         "b": {"ot_id": 202, "fixture": tmp_path / "silver.SaveRAM"}}
@@ -480,8 +482,46 @@ def test_gen2_faint_oracle_receives_qualified_inputs_and_requires_witness(monkey
         run._run_oracle(results)
 
 
+@pytest.mark.parametrize("fault", [None, "missing", "duplicate", "malformed", "partial", "not_active"])
+def test_gen2_active_release_requires_one_valid_b_marker(monkeypatch, fault):
+    import json
+    from types import SimpleNamespace
+
+    row = {"key": "1234:5678:0013", "slot": 1, "cur_battle_mon": 1, "battle_mode": 1, "link_mode": 0}
+    if fault == "not_active":
+        row["cur_battle_mon"] = 0
+    text = "LINKED_ACTIVE " + json.dumps(row) + "\n"
+    text = {"missing": "", "duplicate": text + text, "malformed": "LINKED_ACTIVE {bad}\n",
+            "partial": "LINKED_ACTIVE {"}.get(fault, text)
+    monkeypatch.setattr(duo_module, "read_result", lambda name, side: text if side == "b" else "")
+    run = object.__new__(DuoRun)
+    run.game, run.scenario = "gen2_new", "gen2_faint_active"
+    run.args, run.cfg = SimpleNamespace(lane="cc"), {"timeout": 3000}
+    seen = []
+
+    def wait(description, observe, timeout):
+        assert timeout == 3000
+        seen.append("wait")
+        result = observe()
+        if result is None:
+            raise TimeoutError(description)
+        return result
+
+    run.wait_for = wait
+    run._go_one = lambda inst, lines: seen.append((inst, lines))
+    if fault:
+        with pytest.raises((RuntimeError, TimeoutError)):
+            run._release_gen2_active_faint()
+        assert seen == ["wait"]
+    else:
+        run._release_gen2_active_faint()
+        assert seen == ["wait", ("a", ["B_ACTIVE"])]
+        assert run._gen2_active_release == row
+
+
 @pytest.mark.parametrize("missing", ("driver", "faint_inputs", "witness", "oracle", None))
-def test_gen2_faint_prelaunch_requires_its_driver_and_oracle(monkeypatch, tmp_path, missing):
+@pytest.mark.parametrize("scenario", ["gen2_faint", "gen2_faint_active"])
+def test_gen2_faint_prelaunch_requires_its_driver_and_oracle(monkeypatch, tmp_path, missing, scenario):
     from types import SimpleNamespace
 
     emulator = tmp_path / "EmuHawk.exe"
@@ -494,17 +534,19 @@ def test_gen2_faint_prelaunch_requires_its_driver_and_oracle(monkeypatch, tmp_pa
     for name in ("duo_gen2_main.lua", "scenario_gen2_link.lua", "gen2_route29_inputs.lua"):
         (driver_dir / name).touch()
     if missing != "driver":
-        (driver_dir / "scenario_gen2_faint.lua").touch()
+        (driver_dir / f"scenario_{scenario}.lua").touch()
     if missing != "faint_inputs":
         (driver_dir / "gen2_faint_inputs.lua").touch()
     callbacks = {"link_oracle": lambda results: None,
-                 "faint_oracle": lambda results: None,
-                 "check_save_witness": lambda results: None}
+                  "faint_oracle": lambda results: None,
+                  "faint_active_oracle": lambda results: None,
+                  "check_save_witness": lambda results: None}
     if missing in ("witness", "oracle"):
-        del callbacks["check_save_witness" if missing == "witness" else "faint_oracle"]
+        oracle_name = "faint_active_oracle" if scenario == "gen2_faint_active" else "faint_oracle"
+        del callbacks["check_save_witness" if missing == "witness" else oracle_name]
     monkeypatch.setitem(sys.modules, "gen2_duo_oracles", SimpleNamespace(**callbacks))
     run = object.__new__(DuoRun)
-    run.game, run.scenario = "gen2_new", "gen2_faint"
+    run.game, run.scenario = "gen2_new", scenario
     run.gcfg = GAMES[run.game]
     if missing == "driver":
         with pytest.raises(FileNotFoundError, match="scenario_gen2_faint"):

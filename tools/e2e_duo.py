@@ -72,6 +72,10 @@ SCENARIOS = {
                    "no_setup": True, "frames": 432000,
                    "target": {"a": "battle", "b": "battle_ot2"},
                    "oracle": "assert_gen2_faint_saved", "oracle_kwargs": {}},
+    "gen2_faint_active": {"flags": [], "timeout": 3000, "games": ("gen2_new",),
+                          "no_setup": True, "frames": 432000,
+                          "target": {"a": "battle", "b": "battle_ot2"},
+                          "oracle": "assert_gen2_faint_active_saved", "oracle_kwargs": {}},
     "gen2_admit_wrong_rom": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
                              "no_setup": True, "frames": 216000,
                              "oracle": "assert_gen2_admit_wrong_rom", "oracle_kwargs": {}},
@@ -1648,7 +1652,7 @@ class DuoRun:
         scenario_name = self.scenario.removeprefix("gen2_")
         driver_files = [self.gcfg["main"], f"lua/tests/duo/scenario_gen2_{scenario_name}.lua",
                         "lua/tests/duo/gen2_route29_inputs.lua"]
-        if self.scenario == "gen2_faint":
+        if self.scenario in ("gen2_faint", "gen2_faint_active"):
             driver_files.append("lua/tests/duo/gen2_faint_inputs.lua")
         if self.scenario in GEN2_CLAUSE_SCENARIOS:
             driver_files.append("lua/tests/duo/gen2_clause.lua")
@@ -1656,7 +1660,7 @@ class DuoRun:
             if not (Path(REPO) / path).is_file():
                 raise FileNotFoundError(f"Gen 2 duo driver missing: {path}")
         oracle = importlib.import_module("gen2_duo_oracles")
-        oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle", "gen2_reconnect": "reconnect_oracle",
+        oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle", "gen2_faint_active": "faint_active_oracle", "gen2_reconnect": "reconnect_oracle",
                        "gen2_admit_wrong_rom": "admit_wrong_rom_oracle", "gen2_soft_reset": "soft_reset_oracle",
                        **dict.fromkeys(GEN2_CLAUSE_SCENARIOS, "clause_oracle")}[self.scenario]
         witness = "check_admit_wrong_rom_witness" if self.scenario == "gen2_admit_wrong_rom" else "check_save_witness"
@@ -1839,6 +1843,36 @@ class DuoRun:
             on_verified=self._record_gen2_facts,
             ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
             boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
+
+    def assert_gen2_faint_active_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.faint_active_oracle(results, data_dir=self.data_dir,
+            on_verified=self._record_gen2_facts,
+            ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
+
+    def _release_gen2_active_faint(self):
+        def active():
+            text = read_result(self.artifact_name, "b") or ""
+            rows = [line[len("LINKED_ACTIVE "):] for line in text.splitlines()
+                    if line.startswith("LINKED_ACTIVE ")]
+            if len(rows) > 1:
+                raise RuntimeError("B emitted more than one LINKED_ACTIVE")
+            if not rows:
+                return None
+            try:
+                row = json.loads(rows[0])
+            except json.JSONDecodeError as exc:
+                if not text.endswith("\n"):
+                    return None
+                raise RuntimeError("B LINKED_ACTIVE is malformed") from exc
+            if (not isinstance(row, dict) or type(row.get("slot")) is not int or not 0 <= row["slot"] < 6
+                    or row.get("cur_battle_mon") != row["slot"] or row.get("battle_mode") != 1
+                    or row.get("link_mode") != 0 or not isinstance(row.get("key"), str) or not row["key"]):
+                raise RuntimeError("B LINKED_ACTIVE does not describe an active linked battler")
+            return row
+        self._gen2_active_release = self.wait_for("B linked catch active in battle", active, self.cfg["timeout"])
+        self._go_one("a", ["B_ACTIVE"])
 
     def _record_gen2_facts(self, facts):
         fields = ("a", "b", "area", "titles", "status")
@@ -4311,7 +4345,9 @@ class DuoRun:
             if self.scenario == "gen2_admit_wrong_rom":
                 self._gen2_admit_before = self._gen2_admit_snapshot()
             self.go()
-            if self.scenario == "gen2_reconnect":
+            if self.scenario == "gen2_faint_active":
+                self._release_gen2_active_faint()
+            elif self.scenario == "gen2_reconnect":
                 self._orchestrate_gen2_reconnect()
             elif self.scenario == "gen2_soft_reset":
                 self._orchestrate_gen2_soft_reset()
@@ -4685,6 +4721,8 @@ class DuoRun:
                         reason += f" scenario={self.scenario}"
                     if self.scenario == "gen2_admit_wrong_rom":
                         reason += f" scenario={self.scenario} rom_b={self._gen2_verified_facts['rom_b']}"
+                    if self.scenario == "gen2_faint_active":
+                        reason += " scenario=gen2_faint_active death=active"
                     if self.scenario in GEN2_CLAUSE_SCENARIOS:
                         extra = ("clause", "rerolls") if self.scenario == "gen2_species_clause" else ("clause", "rejected", "ending")
                         reason += f" scenario={self.scenario} " + " ".join(

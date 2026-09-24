@@ -19,7 +19,7 @@
         "initiator": "crystal",
         "partner": "crystal",
         "fixtures": {"a": "crystal_battle", "b": "crystal_battle_ot2"},
-        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset", "gen2_species_clause", "gen2_type_clause", "gen2_gender_clause"]
+        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset", "gen2_species_clause", "gen2_type_clause", "gen2_gender_clause"]
       },
       "proofs": [
         {
@@ -178,7 +178,7 @@
         "initiator": "gold",
         "partner": "silver",
         "fixtures": {"a": "gold_battle", "b": "silver_battle"},
-        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_reconnect"]
+        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_reconnect"]
       },
       "proofs": [
         {
@@ -337,7 +337,7 @@
         "initiator": "crystal",
         "partner": "gold",
         "fixtures": {"a": "crystal_battle", "b": "gold_battle"},
-        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_reconnect", "gen2_gender_clause", "gen2_type_clause", "gen2_species_clause"]
+        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_reconnect", "gen2_gender_clause", "gen2_type_clause", "gen2_species_clause"]
       },
       "proofs": [
         {

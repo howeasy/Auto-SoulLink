@@ -238,7 +238,7 @@ DUO_REQUIRED_SCENARIOS = frozenset({"link"})
 # Codex's H5 PYDEC format (review O16 F1): "PYDEC: PASS a=<key> b=<key> area=<id>
 # titles=<a-title>/<b-title> status=<alive|dead|memorial>" -- link ends alive; gen2_faint ends dead, or
 # memorial once the Gen 2 memorialize NACK lets the server finish the pair (owner, via Codex H5).
-SCENARIO_END_STATUS = {"link": {"alive"}, "gen2_faint": {"dead", "memorial"}}
+SCENARIO_END_STATUS = {"link": {"alive"}, "gen2_faint": {"dead", "memorial"}, "gen2_faint_active": {"memorial"}}
 
 
 def _fixture_sha256(root: Path, fixture: str) -> str | None:
@@ -286,6 +286,8 @@ def _pydec_cell_errors(lines: list[str], scenario: str, axes: dict, capture_keys
     elif scenario == "gen2_soft_reset":
         want = {"scenario": scenario, "a": "reset", "b": "idle", "area": "none",
                 "titles": f"{axes['initiator']}/{axes['partner']}", "status": "unchanged"}
+    elif scenario == "gen2_faint_active":
+        want.update(scenario=scenario, area="route_29", death="active")
     errors = [f"pydec receipt does not name this cell: {key}={tokens.get(key)!r}, want {value!r}"
               for key, value in want.items()
               if value is not None and not (tokens.get(key) in value if isinstance(value, set) else tokens.get(key) == value)]
@@ -713,6 +715,75 @@ def _memorial_receipt_errors(lines: list[str], side: str) -> list[str]:
     return []
 
 
+def _active_faint_cell_errors(legs: dict, axes: dict) -> list[str]:
+    """Bind archived active-death receipts; bench-death evidence cannot fill this cell."""
+    def need(condition, why):
+        if not condition:
+            raise ValueError(why)
+
+    def one(side, tag):
+        rows = [json.loads(line[len(tag) + 1:]) for line in legs[side] if line.startswith(tag + " ")]
+        need(len(rows) == 1 and isinstance(rows[0], dict), f"expected one {side} {tag}")
+        return rows[0]
+
+    try:
+        from tools.gen2_duo_oracles import validate_faint_active_markers
+
+        caps = {side: one(side, "ENGINE_CAPTURE") for side in ("a", "b")}
+        results = {side: "\n".join(legs[side]) for side in ("a", "b")}
+        # Same SOURCE validator as the independent save oracle: exact battle-hold PC/bank,
+        # four ordered permit spans, trace sequence, replacement and observed HP/status.
+        validate_faint_active_markers(results, title_b=axes["partner"], key_a=caps["a"]["key"],
+                                     key_b=caps["b"]["key"], species_b=caps["b"]["species_id"])
+        for side in ("a", "b"):
+            head, receipt, save, link = (one(side, tag) for tag in ("DUO_GEN2", "RECEIPT", "SAVE_WITNESS", "LINK_SAVE"))
+            need(receipt.get("schema") == "gen2-duo-faint-active-v1"
+                 and all(receipt.get(key) == head.get(key) for key in
+                         ("player", "scenario", "attempt", "case", "title", "rom_sha1", "fixture_sha256"))
+                 and receipt.get("capture") == caps[side] and receipt.get("key") == caps[side]["key"]
+                 and receipt.get("save") == save and receipt.get("link_save") == link,
+                 f"{side}: active faint receipt does not bind header/capture/saves")
+            client = one(side, "CLIENT")
+            need(client.get("production_admitted") is True and "battle_faint" in client.get("registered_sites", []),
+                 f"{side}: active faint production hook missing")
+            need(link.get("key") == caps[side]["key"] and link.get("cartram_bytes") == 32768
+                 and link.get("saveram_bytes") == 32790, f"{side}: link save identity/size differs")
+            for counter in ("gate_saves", "client_saves"):
+                need(type(link.get(counter)) is int and type(save.get(counter)) is int
+                     and 1 <= link[counter] < save[counter], f"{side}: final native save missing")
+            if side == "a":
+                need(receipt.get("b_active") == one("a", "B_ACTIVE"), "A receipt does not bind B_ACTIVE")
+                faint, sent = one("a", "ENGINE_FAINT"), one("a", "FAINT_SENT")
+                need(faint.get("site_id") == "battle_faint" and faint.get("cause") == "battle"
+                     and faint.get("key") == sent.get("key") == caps["a"]["key"]
+                     and type(sent.get("frame")) is int and faint["frame"] <= sent["frame"] < save["save_completed_frame"],
+                     "A faint send does not bind its natural engine faint/final save")
+                a_lines = legs["a"]
+                faint_at, sent_at, save_at = (next(i for i, line in enumerate(a_lines) if line.startswith(tag + " "))
+                                              for tag in ("ENGINE_FAINT", "FAINT_SENT", "SAVE_WITNESS"))
+                need(faint_at < sent_at < save_at
+                     and not any(line.startswith(("PARTY_HP_WRITE ", "BATTLE_HOLD_WRITE ")) for line in a_lines),
+                     "A natural faint was written or sent out of order")
+                need(receipt.get("faint") == faint and receipt.get("faint_sent") == sent,
+                     "A receipt faint evidence differs")
+            else:
+                write = one("b", "BATTLE_HOLD_WRITE")
+                expected_write = {key: write[key] for key in
+                    ("frame", "seq", "slot", "pc", "hrom_bank", "battle_hp_before_hex", "action_after_hex")}
+                traces = [json.loads(line[len("BATTLE_TRACE "):]) for line in legs["b"] if line.startswith("BATTLE_TRACE ")]
+                first = next(row for row in traces if row["seq"] > write["seq"])
+                need(receipt.get("linked_active") == one("b", "LINKED_ACTIVE")
+                     and receipt.get("force_faint_key") == caps["b"]["key"] and receipt.get("battle_write") == expected_write
+                     and receipt.get("native_faint") == first and receipt.get("replaced") == one("b", "REPLACED"),
+                     "B receipt does not bind active write/native faint/replacement")
+                memorial = receipt.get("memorial") or {}
+                need(memorial.get("preimage_frame") == one("b", "MEMORIAL_PREIMAGE").get("frame")
+                     and memorial.get("ack") == one("b", "MEMORIAL_ACK"), "B receipt memorial differs")
+    except (KeyError, TypeError, ValueError, AttributeError, RuntimeError, ImportError, OSError, StopIteration) as exc:
+        return [f"active faint proof invalid: {exc}"]
+    return []
+
+
 def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: dict) -> list[str]:
     """One registered proof: pinned bytes, PASS verdicts, and headers naming this exact cell."""
     if scenario == "gen2_reconnect":
@@ -775,9 +846,11 @@ def _receipt_errors(root: Path, proof: dict, scenario: str, axes: dict, lock: di
             errors.extend(_soft_reset_receipt_errors(lines, side))
     if scenario in ("gen2_species_clause", "gen2_type_clause", "gen2_gender_clause"):
         errors.extend(_clause_cell_errors(legs, scenario, axes))
+    if scenario == "gen2_faint_active":
+        errors.extend(_active_faint_cell_errors(legs, axes))
     tokens = _pydec_tokens(legs.get("pydec", [])) or {}
     memorial_sides = ()
-    if scenario == "gen2_faint" and tokens.get("status") == "memorial":
+    if scenario == "gen2_faint_active" or scenario == "gen2_faint" and tokens.get("status") == "memorial":
         memorial_sides = ("a", "b")
     elif scenario in ("gen2_type_clause", "gen2_gender_clause") and tokens.get("ending") == "memorial":
         memorial_sides = (tokens.get("rejected"),)
