@@ -1195,20 +1195,31 @@ end
 -- play.follow) whenever the env var is unset, which is every normal run including CI.
 local RR_TRACE = TITLE == "radical_red" and os.getenv("SLINK_GEN3_RR_TRACE") == "1"
 
+-- gen3_title_syms.lua's OBJ_EVENTS_ADDR entry carries no radical_red value ("no RR citation
+-- found" -- line ~83 there), so OBJ_EVENTS_ADDR (and H.obj_pos/H.obj_facing, which read it) are
+-- nil on RR; a live run confirmed the nil-arithmetic crash. reference_rr_object_events.md
+-- independently confirms RR uses the SAME fixed EWRAM gObjectEvents layout as FR/LG
+-- (0x02036E38, stride 0x24, 16 slots, proven live via lua/tests/test_overworld_discovery.lua's
+-- anchor walk + byte dump) -- diagnostic-only, never gates a pass/fail, only feeds this log line.
+local RR_OBJ_EVENTS_ADDR = 0x02036E38
+
 local function rr_trace_log(cp, path_name, step_no, dir)
     local px, py = H.pos(cp)
+    local base = OBJ_EVENTS_ADDR or RR_OBJ_EVENTS_ADDR
     local objs = {}
     for i = 1, 15 do
-        local flags = memory.read_u8(OBJ_EVENTS_ADDR + i * 0x24)
+        local flags = memory.read_u8(base + i * 0x24)
         if (flags & 0x01) ~= 0 then
-            local lid = memory.read_u8(OBJ_EVENTS_ADDR + i * 0x24 + 0x08)
-            local ox, oy = H.obj_pos(i)
+            local lid = memory.read_u8(base + i * 0x24 + 0x08)
+            local ox = memory.read_s16_le(base + i * 0x24 + 0x10) - 7
+            local oy = memory.read_s16_le(base + i * 0x24 + 0x12) - 7
             objs[#objs + 1] = string.format("obj%d(id=%d@%d,%d)", i, lid, ox, oy)
         end
     end
+    local facing = memory.read_u8(base + 0x18) & 0x0F
     console.log(string.format(
         "[rr-trace] %s #%d dir=%s player=(%d,%d) facing=%d locked=%s %s",
-        path_name, step_no, tostring(dir), px, py, H.obj_facing(0),
+        path_name, step_no, tostring(dir), px, py, facing,
         tostring(not H.scene_quiet(cp)), table.concat(objs, " ")))
 end
 
