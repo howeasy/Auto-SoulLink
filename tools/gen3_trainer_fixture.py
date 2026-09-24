@@ -27,7 +27,9 @@ GAME_FOR = {"leafgreen": "gen3_frlg", "firered": "gen3_lgfr"}   # the pairing wi
 STOP = (1, 0, 41, 45)   # Viridian Forest; Rick 102 at (47,45) facing west, sight 5 -> 42..46
 FLOOR = 13              # gen3_routes.lua's preparation level floor
 
-e2e_duo.SCENARIOS[SCENARIO] = {
+# Registered into e2e_duo.SCENARIOS only by main(): a producer, never one of the carrier's rows
+# (an import-time registration leaked into test_e2e_duo_scenario_selection's pytest process).
+ENTRY = {
     "flags": [], "timeout": 7200, "games": ("gen3_frlg",), "frames": 8000000,
     "target": {"a": "battle", "b": "town"}, "scenario_module": "trainer_fixture",
     "active_faint_case": "trainer",   # duo_gen3_main.lua binds the T2 route seams on this
@@ -88,6 +90,7 @@ def main() -> int:
     run_args = argparse.Namespace(game=GAME_FOR[args.title], lane=args.lane, idle_jitter=0,
                                   keep_alive=False, keep_data=False, server_flags=[],
                                   wrong_save=None, wire_log=False, scenario=SCENARIO)
+    e2e_duo.SCENARIOS[SCENARIO] = ENTRY
     run = TrainerFixtureRun(SCENARIO, run_args)
     run.out = Path(args.out or os.path.join(e2e_duo.GEN3_FIXTURES, f"{args.title}_party_trainer.sav"))
     return 0 if run.run() else 1
