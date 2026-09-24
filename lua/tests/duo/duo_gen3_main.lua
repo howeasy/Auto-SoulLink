@@ -575,16 +575,33 @@ local alive, hp0 = {}, {}
 -- client write of that frame), whatever the driver is doing -- including inside a helper that
 -- advances frames itself (playlib's incidental battle, which can settle a whole whiteout and its
 -- heal script before it returns: live gen3_lgfr whiteout_gen3 r6). A truthy return removes it.
-local watchers = {}
-function ctx.watch(fn) watchers[#watchers + 1] = fn end
+local watchers, watcher_names = {}, {}
+--- `name` labels the watcher in a WATCHER_ERROR line (default: its defining source:line).
+function ctx.watch(fn, name)
+    if not name then
+        local info = debug and debug.getinfo and debug.getinfo(fn, "S")
+        name = info and (tostring(info.short_src) .. ":" .. tostring(info.linedefined)) or "?"
+    end
+    watchers[#watchers + 1] = fn
+    watcher_names[#watchers] = name
+end
 -- Plaintext fields only (PID/OTID at +0/+4, hp at +0x56 of struct Pokemon, pret
 -- include/pokemon.h): no per-frame decryption.
+--- One pass over the watchers: a truthy return removes one; so does an error, but never silently
+--- (R1 L4): report(name, err) runs first, so the FAIL it causes downstream ("no ... witnessed") is
+--- diagnosable from the receipt. Self-contained (no upvalues) so tests run this exact body.
+local function run_watchers(list, names, report)
+    for i = #list, 1, -1 do
+        local ok, done = pcall(list[i])
+        if not ok then report(tostring(names[i]), tostring(done)) end
+        if not ok or done then table.remove(list, i); table.remove(names, i) end
+    end
+end
 local PARTY_COUNT_ADDR, MON_SIZE, HP_OFF = profile.ram.PARTY_COUNT_ADDR, Reads.PARTY_MON_SIZE, 0x56
 event.onframeend(function()
-    for i = #watchers, 1, -1 do
-        local ok, done = pcall(watchers[i])
-        if not ok or done then table.remove(watchers, i) end
-    end
+    run_watchers(watchers, watcher_names, function(name, err)
+        log(fmt("WATCHER_ERROR scenario=%s watcher=%s frame=%d err=%s", D.scenario, name, emu.framecount(), err))
+    end)
     local count, base = memory.read_u8(PARTY_COUNT_ADDR, "System Bus"), reader.party_base()
     if not base or count > 6 then return end
     for slot = 0, count - 1 do
@@ -1289,6 +1306,14 @@ if wants_routes then
         u32=function(a) return memory.read_u32_le(a,"System Bus") end,
     },S,log)
 end
+if D.active_faint_case == "whiteout" then
+    --- fn() with every incidental battle FLED instead of fought (T2's proven escape policy,
+    --- gen3_routes.lua with_incidental_escape); the lone-lead walks of linked_faint_active's
+    --- whiteout case (W3, live FR-as-A at b0483efe: the walk back fought a Route 1 encounter,
+    --- lost and whited out before READY_ACTIVE). -> ok, result
+    local Routes = load_or_die("/lua/tests/gen3_routes.lua", "escape routes")
+    ctx.flee_incidentals = function(label, fn) return Routes.with_incidental_escape(ctx, label, fn) end
+end
 local base = D.scenario_module or D.scenario:gsub("_gen3$", "")
 local file = fmt("%s/lua/tests/duo/scenario_%s%s.lua", ROOT, D.scenario_prefix or "gen3_", base)
 local okload, scenario = pcall(dofile, file)
@@ -1299,7 +1324,15 @@ local ok, pass, msg = pcall(scenario, ctx)
 idle_jitter(false)              -- the echo, for a phase that never waited for GO (see wait_go)
 if not ok then
     if pass == FINISHED then return end
-    finish(false, "scenario error: " .. tostring(pass))
+    -- a raised table (playlib's {whiteout=true, map=...}) names its fields, not its address
+    local why = pass
+    if type(why) == "table" then
+        local parts = {}
+        for k, v in pairs(why) do parts[#parts + 1] = tostring(k) .. "=" .. tostring(v) end
+        table.sort(parts)
+        why = "{" .. table.concat(parts, ",") .. "}"
+    end
+    finish(false, "scenario error: " .. tostring(why))
 end
 log(fmt("WRITES %d", writes))
 finish(pass and true or false, msg)

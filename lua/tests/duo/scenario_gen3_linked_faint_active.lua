@@ -53,6 +53,12 @@ local function observe(ctx, key, slot, hammer)
     local hp_addr = ctx.hp_addrs(slot)
     local function fail(s) o.fail = o.fail or s end
     local function successor(v) for _, t in ipairs(H.to) do if v == t then return true end end end
+    -- R1 L3: every count the receipt prints is MEASURED here, never a literal
+    local function hp_writes()
+        local n, lines = 0, ctx.write_lines()
+        for i = w0 + 1, #lines do if hp_addr[lines[i].address] then n = n + 1 end end
+        return n
+    end
     ctx.watch(function()
         if o.fail or o.done then return true end
         local s = ctx.engine_sample(slot)
@@ -60,6 +66,7 @@ local function observe(ctx, key, slot, hammer)
         for i = w0 + 1, #lines do
             if hp_addr[lines[i].address] then return fail(fmt("SLink wrote an HP word 0x%08X", lines[i].address)) end
         end
+        if o.commit and not o.ko then o.keys = o.keys | s.keys end   -- heldKeysRaw, OR-ed over the window
         if not o.commit then
             local c = {}
             for i = w0 + 1, #lines do if lines[i].reason == "battle_commit" then c[#c + 1] = lines[i] end end
@@ -82,6 +89,7 @@ local function observe(ctx, key, slot, hammer)
                 return fail("the entry is not a handed-off Perish commit: why=" .. tostring(e and e.why))
             end
             o.base = o.base or s
+            o.keys = s.keys
             o.commit = { frame = s.frame, attempted = ctx.attempted() - att0, ctrl = s.ctrl0 }
             ctx.log(fmt('ACTIVE_COMMIT %s frame=%d writes=%d attempted=%d handoff=1 status3=0x%X ctrl=0x%08X '
                         .. 'counter=%d last_move=%d pp=%s why="%s"', key, s.frame, #c, o.commit.attempted,
@@ -92,8 +100,10 @@ local function observe(ctx, key, slot, hammer)
         if not o.handoff then
             if successor(s.ctrl0) then
                 o.handoff = s.frame - o.commit.frame
-                if (s.exec & 1) ~= 0 then return fail("exec bit 0 still set at the hand-off") end
-                ctx.log(fmt("HANDOFF %s from=0x%08X to=0x%08X frames=%d exec_bit0=0", key, H.from, s.ctrl0, o.handoff))
+                local bit0 = s.exec & 1
+                ctx.log(fmt("HANDOFF %s from=0x%08X to=0x%08X frames=%d exec_bit0=%d", key, H.from, s.ctrl0,
+                            o.handoff, bit0))
+                if bit0 ~= 0 then return fail("exec bit 0 still set at the hand-off") end
             elseif s.ctrl0 ~= H.from or s.frame - o.commit.frame > 2 then
                 return fail(fmt("no hand-off successor within 2 frames (ctrl=0x%08X)", s.ctrl0))
             end
@@ -113,8 +123,8 @@ local function observe(ctx, key, slot, hammer)
             if not ctx.rr and s.last_move ~= o.base.last_move then return fail("lastUsedMovePlayer moved: the mon acted") end
             o.ko = s.frame
             ctx.log(fmt("ACTIVE_KO %s frame=%d in_battle=1 battle_hp=0 status3=0x%X pp=%s last_move=%d inputs=%d "
-                        .. "hp_writes=0 attempted=%d", key, s.frame, s.status3, hexbytes(s.pp), s.last_move,
-                        hammer and -1 or 0, ctx.attempted() - att0))
+                        .. "keys=0x%X hp_writes=%d attempted=%d", key, s.frame, s.status3, hexbytes(s.pp),
+                        s.last_move, ctx.inputs() - in0, o.keys, hp_writes(), ctx.attempted() - att0))
         end
         if not o.site then
             local sites = ctx.faint_sites()
@@ -144,18 +154,33 @@ end
 --- The engine-side check of R3's L presses: the ball count and CFRU's ball-id byte.
 local function balls(ctx) return ctx.balls(), ctx.peek_u8(RR_BALL_ID) end
 
+local function one_mon_party(ctx, key)
+    -- ruling 18: build the one-mon party by normal inputs (PC deposit of the slot-1 mon)
+    local bench = (ctx.party() or {})[BENCH + 1]
+    if not bench or bench.key == key then return false, "no slot-1 mon to deposit" end
+    ctx.walk_to_pc("linked_faint_active whiteout")
+    local gone, why = ctx.pc_deposit("linked_faint_active whiteout deposit")
+    if gone ~= bench.key then return false, "the deposit moved " .. tostring(gone or why) end
+    if not ctx.observe_boxed(bench.key) then return false, bench.key .. " was never read back boxed" end
+    if #(ctx.party() or {}) ~= 1 then return false, "the party is not the linked lead alone" end
+    ctx.log(fmt("ONE_MON_PARTY %s deposited=%s", key, bench.key))
+    ctx.walk_pc_to_grass("linked_faint_active whiteout")
+    return true
+end
+
 local function enter(ctx, key, case)
     if case == "whiteout" then
-        -- ruling 18: build the one-mon party by normal inputs (PC deposit of the slot-1 mon)
-        local bench = (ctx.party() or {})[BENCH + 1]
-        if not bench or bench.key == key then return false, "no slot-1 mon to deposit" end
-        ctx.walk_to_pc("linked_faint_active whiteout")
-        local gone, why = ctx.pc_deposit("linked_faint_active whiteout deposit")
-        if gone ~= bench.key then return false, "the deposit moved " .. tostring(gone or why) end
-        if not ctx.observe_boxed(bench.key) then return false, bench.key .. " was never read back boxed" end
-        if #(ctx.party() or {}) ~= 1 then return false, "the party is not the linked lead alone" end
-        ctx.log(fmt("ONE_MON_PARTY %s deposited=%s", key, bench.key))
-        ctx.walk_pc_to_grass("linked_faint_active whiteout")
+        -- the walks FLEE every incidental battle: the lone lead must reach the parked battle
+        -- alive (W3: a fought Route 1 encounter whited it out before READY_ACTIVE)
+        if type(ctx.flee_incidentals) ~= "function" then return false, "missing flee_incidentals seam" end
+        local ok, res = ctx.flee_incidentals("linked_faint_active whiteout", function()
+            return table.pack(one_mon_party(ctx, key))
+        end)
+        if not ok then
+            local e = type(res) == "table" and (res.whiteout and "whited out" or "table error") or tostring(res)
+            return false, "one-mon party walk: " .. e
+        end
+        if not res[1] then return false, res[2] end
     elseif case == "trainer" then
         if type(ctx.enter_trainer) ~= "function" then return false, "missing enter_trainer route seam" end
         local party = ctx.party() or {}

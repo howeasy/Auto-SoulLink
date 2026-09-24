@@ -1434,12 +1434,14 @@ def active_faint_chain(key, case):
     """(required, ordered, forbidden) receipt markers of the P+H subject (scenario_gen3_linked_
     faint_active.lua), in chain order: READY_ACTIVE, the keyed RX, the client's own hand-off
     commit line, ACTIVE_COMMIT (5 writes), HANDOFF (successor within 2 frames, exec bit 0 clear),
-    the driver's FORCED_HP0 IN battle, ACTIVE_KO with inputs=0 (R3 lhammer: -1, it presses L on
-    purpose), ACTIVE_FAINT_SITE (counter +1), then the case's aftermath: SENT_OUT (wild,
+    the driver's FORCED_HP0 IN battle, ACTIVE_KO with measured inputs=0 keys=0x0 hp_writes=0 (R3
+    lhammer presses L on purpose: any count), ACTIVE_FAINT_SITE (counter +1), then the case's aftermath: SENT_OUT (wild,
     trainer, command, lhammer) or TX whiteout (whiteout), ACTIVE_OUTCOME and a save. Forbidden:
     the old hold's markers and a `faint` echo for the key."""
     k = re.escape(key)
-    inputs = "-1" if case == "lhammer" else "0"
+    # the carrier prints its MEASURED press count and OR-ed heldKeysRaw (R1 L3); R3 presses L
+    # on purpose, so there only the HP-write count is pinned
+    inputs = r"\d+ keys=0x[0-9A-F]+" if case == "lhammer" else "0 keys=0x0"
     chain = [rf"(?m)^READY_ACTIVE {k} case={re.escape(case)}$", gen3_rx("force_faint", key),
              rf"(?m)^\[client\] \[SLink-gen3\] force_faint: Perish commit battler=0 handoff=1 {k}\b",
              rf"(?m)^ACTIVE_COMMIT {k} frame=\d+ writes=5 attempted=\d+ handoff=1 ",

@@ -3683,8 +3683,16 @@ function PH(case, player, fault)
         return true
     end
     ctx.walk_to_pc = function() end
-    ctx.walk_pc_to_grass = function() end
-    ctx.pc_deposit = function() table.remove(party, 2); return "K1" end
+    ctx.walk_pc_to_grass = function()
+        if fault == "walk_whiteout" then error({ whiteout = true, map = 1284 }, 0) end
+    end
+    local fled = false
+    ctx.flee_incidentals = function(_, fn) fled = true; return pcall(fn) end
+    ctx.pc_deposit = function()
+        assert(fled, "the one-mon walks must run under flee_incidentals")
+        table.remove(party, 2)
+        return "K1"
+    end
     ctx.observe_boxed = function() return "0:0" end
     ctx.preparation_budget = function() return 1800000 end
     ctx.enter_trainer = function(_, id, prep)
@@ -3755,6 +3763,15 @@ def test_p_h_carrier_fails_each_engine_oracle_by_name(ph, fault, reason):
     assert "SAVE_WITNESS_DUMP" not in log
 
 
+def test_p_h_whiteout_walks_flee_and_name_a_whiteout_before_ready(ph):
+    """W3's live FR-as-A failure at b0483efe: the lone lead fought an incidental encounter on the
+    walk back, whited out, and the raw table escaped as "scenario error: table: 0x...". The walks
+    now run under flee_incidentals (the model asserts it), and a whiteout there is named."""
+    ok, passed, msg, log = ph("whiteout", "b", "walk_whiteout")
+    assert ok and passed is False and msg == "one-mon party walk: whited out", msg
+    assert "READY_ACTIVE" not in log
+
+
 def test_p_h_whiteout_row_needs_the_last_mon_memorialize_settled(ph):
     ok, passed, msg, _ = ph("whiteout", "b", "mem_stuck")
     assert ok and passed is False and "last-mon memorialize was never settled" in msg
@@ -3780,6 +3797,10 @@ def test_p_h_command_case_idles_b_without_saving(ph):
     (lambda t: t.replace("ACTIVE_COMMIT K0", "ACTIVE_HOLD K0 why=active battler\nACTIVE_COMMIT K0"), "forbidden"),
     (lambda t: t.replace("inputs=0 ", "inputs=1 "), "missing"),
     (lambda t: t.replace("frames=1 exec_bit0=0", "frames=3 exec_bit0=0"), "missing"),
+    # R1 L3: the measured values, each nonzero on its own
+    (lambda t: t.replace("keys=0x0 ", "keys=0x100 "), "missing"),
+    (lambda t: t.replace("hp_writes=0 ", "hp_writes=1 "), "missing"),
+    (lambda t: t.replace("exec_bit0=0", "exec_bit0=1"), "missing"),
     (lambda t: t.replace("counter=0->1", "counter=0->0"), "missing"),
     (lambda t: t + "TX faint K0 {}\n", "forbidden"),
     (lambda t: t.replace("in_battle=1 battler=1", "in_battle=0 battler=0"), "forbidden"),
@@ -3925,3 +3946,38 @@ def test_linked_faint_active_oracle_on_p_h_receipts(ph, monkeypatch, tmp_path, c
     with pytest.raises(RuntimeError, match="ACTIVE_HOLD"):
         run.assert_linked_faint_active_gen3_saved(
             dict(receipts, b=receipts["b"].replace("ACTIVE_COMMIT", f"ACTIVE_HOLD {k} why=active battler\nACTIVE_COMMIT")))
+
+
+def test_p_h_receipt_values_are_measured_not_literal(ph):
+    """R1 L3: the counts on HANDOFF/ACTIVE_KO come from the observer's own reads. R3 presses L,
+    and its KO line carries the real press count and held keys; a set exec bit is logged as 1
+    (before the named FAIL), and the happy wild line reads all zeros."""
+    _, passed, _, log = ph("wild", "b")
+    assert passed is True
+    assert re.search(r"^ACTIVE_KO K0 .* inputs=0 keys=0x0 hp_writes=0 attempted=5$", log, re.M), log
+    _, passed, _, log = ph("lhammer", "b")
+    presses = int(re.search(r"^ACTIVE_KO K0 .* inputs=(\d+) keys=", log, re.M).group(1))
+    assert passed is True and presses >= 5, log            # one L per frame, commit to KO
+    required, _, _ = duo.active_faint_chain("K0", "lhammer")
+    assert duo.gen3_receipt_problems("b", log, required=required) == []
+    _, passed, msg, log = ph("wild", "b", "exec_set")
+    assert passed is False and "exec_bit0=1" in log and "exec bit 0 still set" in msg
+
+
+def test_a_throwing_watcher_is_reported_by_name_before_it_is_dropped():
+    """R1 L4: the driver's own run_watchers body, under lupa."""
+    from lupa import LuaRuntime
+
+    text = DRIVER.read_text(encoding="utf-8")
+    body = re.search(r"^local function run_watchers\(.*?^end$", text, re.M | re.S).group(0)
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    run = lua.execute(body + "\nreturn run_watchers")
+    reports = []
+    watchers = lua.table(lua.eval("function() error('boom', 0) end"),
+                         lua.eval("function() return true end"),
+                         lua.eval("function() return nil end"))
+    names = lua.table("observer", "done", "keeps")
+    run(watchers, names, lambda name, err: reports.append((name, err)))
+    assert reports == [("observer", "boom")]
+    assert len(watchers) == 1 and names[1] == "keeps"
+    assert "WATCHER_ERROR scenario=%s watcher=%s" in text
