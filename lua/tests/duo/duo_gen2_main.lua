@@ -63,7 +63,8 @@
   line is `RX <cmd>[ key=<k>][ sound=<n>][ area_id=<a>]`. Each scenario's header lists the markers it adds.
   CLIENT also carries registered_sites (the production binder's status().registered_sites after start).
   The faint scenario adds LINK_SAVE, ENGINE_FAINT, FAINT_SENT, PARTY_HP_WRITE and BENCH_HP_STATUS;
-  scenario_gen2_faint.lua's header is their contract.
+  scenario_gen2_faint.lua's header is their contract. The faint_active scenario adds B_ACTIVE, LINKED_ACTIVE,
+  BATTLE_HOLD_WRITE, BATTLE_TRACE, NEXT_MON, REPLACED and LINKED_HP_STATUS (scenario_gen2_faint_active.lua).
   The PASS is scenario_gen2_<name>.lua S.verdict over these very lines: CAUGHT/PASS without an engine
   capture, a sent capture and a native save observed by both the gate site and the client is a FAIL.
 
@@ -372,6 +373,66 @@ if _faint_party_slot then W.faint_party_slot = function(self, slot, snapshot)
     return result
 end end
 
+-- BATTLE_HOLD_WRITE / BATTLE_TRACE (S.BATTLE_TRACE; scenario_gen2_faint_active.lua's header is the contract):
+-- the PRODUCTION faint_active_battler call inside the client's battle hold, observed around the call like
+-- PARTY_HP_WRITE, and observation-only exec hooks at the pack's battle_hold oracles (in-bank + expected bytes,
+-- as lua/tests/gen2_write_windows.lua battle_faint), logged while rec.trace_on. One seq counter orders both.
+rec.seq, rec.trace = 0, {}
+local battle_hold = S.BATTLE_TRACE and parts.data and parts.data.checkpoint
+    and parts.data.checkpoint.titles[ctx.env.title].battle_hold or nil
+if S.BATTLE_TRACE and not (battle_hold and W.faint_active_battler) then
+    finish(false, "the production client composes no battle hold")
+end
+if battle_hold then
+    local targets, c = battle_hold.write.targets, parts.profile.constants
+    local _faint_active = W.faint_active_battler
+    W.faint_active_battler = function(self, slot, snapshot)
+        local record = parts.profile.ram.wPartyMons + slot * c.PARTYMON_STRUCT_LENGTH
+        local function snap()
+            return {battle_hp=bus_hex(targets.wBattleMonHP.address, 2), action=bus_hex(targets.wBattlePlayerAction.address, 1),
+                    hp=bus_hex(record + c.MON_HP, 2), status=bus_hex(record + c.MON_STATUS, 1)}
+        end
+        rec.seq = rec.seq + 1
+        local row = {frame=emu.framecount(), seq=rec.seq, slot=slot, kind="battle_faint",
+                     active_slot=type(snapshot) == "table" and snapshot.active_slot or nil,
+                     pc=api.register("PC"), hrom_bank=api.read_u8(ctx.profile.hram.hROMBank, "System Bus")}
+        local party = ctx.reads.read_party()
+        for _, m in ipairs(party and party.mons or {}) do if m.slot == slot then row.key = wire.mon_key(m) end end
+        local before, mark = snap(), #(self.log or {})
+        local ok, result = pcall(_faint_active, self, slot, snapshot)
+        local after = snap()
+        row.battle_hp_before_hex, row.battle_hp_after_hex = before.battle_hp, after.battle_hp
+        row.hp_before_hex, row.hp_after_hex, row.status_after_hex = before.hp, after.hp, after.status
+        row.action_before_hex, row.action_after_hex = before.action, after.action
+        row.ok, row.error = ok, not ok and tostring(result) or nil
+        local added = {}
+        for i = mark + 1, #(self.log or {}) do added[#added + 1] = self.log[i] end
+        row.log = json.array(added)
+        jlog("BATTLE_HOLD_WRITE", row)
+        if ok and rec.battle_write == nil then rec.battle_write = row end
+        if not ok then error(result, 0) end
+        return result
+    end
+    local ORACLES = {HandlePlayerMonFaint="faint", EnemyTurn_EndOpponentProtectEndureDestinyBond="enemy_turn",
+                     LostBattle="lost"}
+    for name, what in pairs(ORACLES) do
+        local o = battle_hold.oracles[name]
+        if not o then finish(false, "pack battle_hold oracle missing: " .. name) end
+        local want = {}
+        for i = 1, #o.expected_hex, 2 do want[#want + 1] = tonumber(o.expected_hex:sub(i, i + 1), 16) end
+        api.on_bus_exec(function()
+            if not rec.trace_on or #rec.trace >= 64 then return end
+            if api.read_u8(ctx.profile.hram.hROMBank, "System Bus") ~= o.bank then return end
+            local live = api.read_range(o.address, #want, "System Bus")
+            for i = 1, #want do if live[i] ~= want[i] then return end end
+            rec.seq = rec.seq + 1
+            local row = {seq=rec.seq, what=what, frame=emu.framecount()}
+            rec.trace[#rec.trace + 1] = row
+            jlog("BATTLE_TRACE", row)
+        end, o.address, "SLink-duo-trace-" .. what, "System Bus")
+    end
+end
+
 -- ── the gate hooks, the input host and the scenario harness ─────────────────────────────
 R.prepare(ctx, SG, ctx.u1)
 local FI
@@ -388,7 +449,7 @@ local host = ctx.Host.new({step=step, frame=api.framecount, idle=idle})
 
 local h = {lines=lines, json=json, sent=sent, log=log, jlog=jlog, player=D.player, rec=rec, registered=registered,
            root=ROOT, client=gen2, parts=parts, phase=D.phase, expected_key=D.expected_key, go_file=D.go_file,
-           file_has=file_has, frame=api.framecount}
+           file_has=file_has, frame=api.framecount, sym=ctx.sym}
 function h.frames(n)
     for _ = 1, n do
         if api.framecount() > timeout then error("scenario timeout after " .. timeout .. " frames", 0) end
@@ -564,10 +625,12 @@ function h.flee()
         max_phase_frames=D.max_phase_frames})
     return play(spec, driver, observe)
 end
--- The faint route (gen2_faint_inputs.lua): the opts.target party slot fights until opts.fainted().
+-- The faint route (gen2_faint_inputs.lua): the opts.target party slot fights until opts.fainted(). The active
+-- faint adds hold/any_move/observed and its own phase bound (scenario_gen2_faint_active.lua).
 function h.sacrifice(opts)
-    local driver, observe, spec = FI.new(ctx, SG, F, {target=opts.target, fainted=opts.fainted,
-        max_frames=math.max(1, timeout - api.framecount()), max_phase_frames=D.max_phase_frames})
+    local driver, observe, spec = FI.new(ctx, SG, F, {target=opts.target, fainted=opts.fainted, hold=opts.hold,
+        any_move=opts.any_move, observed=opts.observed, max_frames=math.max(1, timeout - api.framecount()),
+        max_phase_frames=opts.max_phase_frames or D.max_phase_frames})
     return play(spec, driver, observe)
 end
 

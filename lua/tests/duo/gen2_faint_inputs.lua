@@ -10,6 +10,11 @@
     opts.moves      move names to prefer in the FIGHT list (default FI.PASSIVE_MOVES); with none, a switch passes
                     the turn (the first move only when no other mon is alive)
     opts.max_battles  wild battles tried before giving up (default 3; the target may win a battle instead)
+    opts.hold(point)  (gen2_faint_active's B) while true, the ACTIVE target idles at the battle menu: no turn
+                    is committed, so the foe never moves (the switch-in itself is never held)
+    opts.any_move   with no passive move, use the first move with PP instead of switching the target out
+                    (B: the battle hold's write lands before DetermineMoveOrder, so that move never runs)
+    opts.observed(point)  FI.new calls it with every observation (B's NEXT_MON / REPLACED markers)
   It never saves: callers run F.driver with phase "save" afterwards (duo_gen2_main.lua h.save).
 
   Input plan = docs/gen2/reviews/OMP_O15_FAINT_FACTS_2026-09-23.md (15ed52e1), pinned decomps only.
@@ -154,7 +159,7 @@ function FI.driver(F, map, opts)
                 end
             end
         end
-        if living_other(point) ~= nil then no_passive = true; return press("B") end
+        if not opts.any_move and living_other(point) ~= nil then no_passive = true; return press("B") end
         for i, label in ipairs(ui.items) do
             if type(label) == "string" and has_pp(ui, i) then return choose(ui, label:upper(), 1) end
         end
@@ -180,6 +185,7 @@ function FI.driver(F, map, opts)
             local done = point.fainted == true
             if ui.kind == "battle_menu" then
                 if done or (point.foe_harmless and not switched) then return choose(ui, "RUN", 2) end
+                if opts.hold and point.active_slot == target and opts.hold(point) then return {}, self.phase end
                 local fight = point.active_slot == target and (not no_passive or living_other(point) == nil)
                 return choose(ui, fight and "FIGHT" or FI.PKMN_CELL, 2)
             end
@@ -248,6 +254,7 @@ function FI.new(ctx, SG, F, opts)
                 point.ui.pp = mine and mine.pp or nil
             else point.input_ready = false end
         end
+        if opts.observed then opts.observed(point) end
         return point
     end
     local budget = F.BUDGET
