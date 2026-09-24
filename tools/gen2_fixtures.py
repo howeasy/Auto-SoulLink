@@ -273,7 +273,10 @@ def _map_facts(ctx, row, areas):
     _require((attrs[1], attrs[2], attrs[3], int.from_bytes(attrs[4:6], "little")) ==
              (height, width, block_symbol.bank, block_symbol.address), "map block header mismatch")
     _, blocks = rom_bytes(ctx, name + "_Blocks", width * height)
-    source_blocks = (ctx.source_dir / "maps" / (name + ".blk")).read_bytes()
+    # A shared layout (every Pokecenter1F) INCBINs another map's .blk (data/maps/blocks.asm): follow the INCBIN.
+    blk = re.search(rf"^{name}_Blocks:\s*\n(?:\w+_Blocks:\s*\n)*\s*INCBIN \"(maps/[^\"]+\.blk)\"",
+                    ctx.read_source("data/maps/blocks.asm"), re.M)
+    source_blocks = (ctx.source_dir / (blk[1] if blk else f"maps/{name}.blk")).read_bytes()
     _require(source_blocks == blocks, f"source/ROM block data mismatch: {name}")
     header = next(line for _, line in source_lines(ctx.read_source("data/maps/maps.asm"), ctx.title)
                   if line.startswith("map " + name + ","))

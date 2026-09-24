@@ -56,7 +56,9 @@ function PI.step_toward(map, point, goals, avoid)
     if type(point.can_step) ~= "table" then return nil, "live collision observation missing" end
     local blocked = {}
     for _, object in ipairs(point.blocked or {}) do blocked[key(object.x, object.y)] = true end
-    for _, warp in ipairs(map.warps or {}) do blocked[key(warp.x, warp.y)] = true end
+    for _, warp in ipairs(map.warps or {}) do
+        if not goal[key(warp.x, warp.y)] then blocked[key(warp.x, warp.y)] = true end   -- a door only as the goal
+    end
     for _, tile in ipairs(avoid or {}) do blocked[key(tile.x, tile.y)] = true end   -- e.g. a trainer's sight line
     local ledge = {}
     for _, l in ipairs(map.ledges or {}) do
@@ -126,7 +128,7 @@ function PI.driver(F, facts, opts)
     local held, hold_left, release = nil, 0, false
     local here, from = nil, nil
     local maps, hunt = facts.maps, facts.maps[facts.hunt_map]
-    local passive, no_passive, fought = opts.moves, {}, false
+    local passive, no_passive, fought, healed, talked = opts.moves, {}, false, false, false
     local function press(button)
         release, held, hold_left = true, button, PI.HOLD - 1
         return {[button]=true}, self.phase
@@ -285,6 +287,7 @@ function PI.driver(F, facts, opts)
             -- Mom's SPECIALCALL_WORRIED on entering Route 31 (pokegold maps/Route31.asm:14-22) runs
             -- MomPhoneLectureScript's "Should I save it?" yesorno (engine/phone/scripts/mom.asm:143-150): NO.
             if ui.kind == "yes_no" and ui.prompt == "mom_save" then return choose(ui, "NO", 1) end
+            if ui.kind == "yes_no" and ui.prompt == "nurse_heal" then return choose(ui, "YES", 1) end
             return nil, "UI is not valid in phase " .. self.phase .. ": " .. tostring(ui.kind)
         end
         if point.overworld_ready ~= true then return {}, self.phase end
@@ -314,6 +317,38 @@ function PI.driver(F, facts, opts)
             local buttons, why = walk(hunt, point, {goal})
             if why == "arrived" then return {}, self.phase end
             return buttons, why
+        end
+        if self.phase == "travel" and facts.heal then
+            -- Gold run 5: Mikey, Don and Wade's Caterpies wore the party down until the catch fainted in
+            -- Wade's battle. Heal first at the Cherrygrove #MON CENTER (PokecenterNurseScript, engine/events/
+            -- std_scripts.asm:54-114: A at the nurse across the counter, YES to "Shall we heal your #MON?").
+            local h = facts.heal
+            local center, city = maps[h.center], maps[h.city]
+            if on(point, center) then
+                local full = true
+                for _, mon in pairs(party(point)) do if mon.hp ~= mon.max_hp then full = false end end
+                healed = healed or (talked and full)
+                if healed then
+                    local exit = h.exit
+                    if point.x == exit.x and point.y == exit.y then return press(exit.carpet or "Down") end
+                    local buttons, why = walk(center, point, {exit})
+                    if why == "arrived" then return press(exit.carpet or "Down") end
+                    return buttons, why
+                end
+                if point.x ~= h.stand.x or point.y ~= h.stand.y then
+                    local buttons, why = walk(center, point, {h.stand})
+                    if why == "arrived" then return {}, self.phase end
+                    return buttons, why
+                end
+                if point.facing ~= "Up" then return press("Up") end
+                talked = true
+                return press("A")
+            end
+            if not healed and on(point, city) then
+                local buttons, why = walk(city, point, {h.door})
+                if why == "arrived" then return {}, self.phase end
+                return buttons, why
+            end
         end
         if self.phase == "travel" then
             if on(point, hunt) and facts.trainer then
@@ -415,7 +450,9 @@ function PI.new(ctx, SG, F, FI, opts)
         if point.ui and point.ui.kind == "battle_party" then point.party_cursor = FI.party_cursor(SG.screen(ctx)) end
         point.party = {}
         local party = ctx.reads.read_party()
-        for _, m in ipairs(party and party.mons or {}) do point.party[m.slot] = {hp=m.hp, status=m.status} end
+        for _, m in ipairs(party and party.mons or {}) do
+            point.party[m.slot] = {hp=m.hp, status=m.status, max_hp=m.max_hp}
+        end
         if point.ui and point.ui.kind == "move_menu" then
             local list = FI.move_list(SG.screen(ctx))
             if list then point.ui.items, point.ui.cursor, point.ui.columns = list.items, list.cursor, list.columns

@@ -67,6 +67,8 @@ POISON_HUNT = {"crystal": "Route30", "silver": "Route30", "gold": "Route31"}
 POISON_PARK = {"crystal": ({"x": 7, "y": 49}, {"x": 7, "y": 50}), "silver": ({"x": 7, "y": 49}, {"x": 7, "y": 50}),
                "gold": ({"x": 20, "y": 12}, {"x": 21, "y": 12})}
 POISON_TRAINER = {"gold": "TrainerBugCatcherWade1"}
+# Gold heals at the Cherrygrove #MON CENTER before Mikey/Don/Wade (Gold run 5 wore the party down).
+POISON_HEAL = {"gold": ("CherrygroveCity", "CherrygrovePokecenter1F")}
 SIDE = {"north": "Up", "south": "Down", "west": "Left", "east": "Right"}
 FACING = {"UP": (0, -1), "DOWN": (0, 1), "LEFT": (-1, 0), "RIGHT": (1, 0)}
 
@@ -146,7 +148,7 @@ def poison_facts(ctx) -> dict:
     route, hunt_name, park = POISON_ROUTE[title], POISON_HUNT[title], POISON_PARK[title]
     areas = {row["map_const"]: row for row in gen2_fixtures.build_area_map(ctx).values()}
     by_name = {row["map_name"]: row for row in areas.values()}
-    names = {name for leg in route for name in (leg[0], leg[2])}
+    names = {name for leg in route for name in (leg[0], leg[2])} | set(POISON_HEAL.get(title, ()))
     maps = {name: gen2_fixtures._map_facts(ctx, by_name[name], areas) for name in sorted(names)}
     for name, facts_map in maps.items():
         facts_map["ledges"] = ledges(ctx, name, facts_map)
@@ -202,6 +204,16 @@ def poison_facts(ctx) -> dict:
     status = gen2_fixtures.const_block(ctx.read_source("constants/battle_constants.asm"), "PSN")
     out = {"maps": maps, "legs": legs, "hunt_map": hunt_name, "hunt_grass": grass, "park": list(park),
            "moves": {"POISON_STING": moves["POISON_STING"]}, "psn_mask": 1 << status["PSN"]}
+    if title in POISON_HEAL:
+        city_name, center_name = POISON_HEAL[title]
+        city, center = maps[city_name], maps[center_name]
+        door = next(w for w in city["warps"] if w["destination"] == by_name[center_name]["map_const"])
+        exits = [w for w in center["warps"] if w["destination"] == city["map_const"]]
+        nurse = next(o for script, o in center["objects"].items() if script.endswith("NurseScript"))
+        stand = {"x": nurse["x"], "y": nurse["y"] + 2}   # across the counter row, facing up
+        assert center["grid"][stand["y"] * center["width"] + stand["x"]] == 1, "nurse stand tile not floor"
+        out["heal"] = {"city": city_name, "center": center_name, "door": {"x": door["x"], "y": door["y"]},
+                       "stand": stand, "exit": {"x": exits[0]["x"], "y": exits[0]["y"], "carpet": exits[0]["carpet"]}}
     if title in POISON_TRAINER:
         x, y, sight = trainers(ctx, hunt_name)[POISON_TRAINER[title]]
         tile = sight[-1]
@@ -260,6 +272,10 @@ def u1_facts(ctx, facts, qualification_attempt_id: str) -> dict:
         assert 'line "change #MON?"' in ctx.read_source("data/text/battle.asm"), "switch anchor left the source"
         assert 'line "Should I save it?"' in ctx.read_source("data/phone/text/mom.asm"), "mom anchor left the source"
         prompts.update(switch=["change "], mom_save=["Should I save it?"])
+    if ctx.title in POISON_HEAL:
+        # NurseAskHealText (data/text/std_text.asm:21-27), asked by PokecenterNurseScript (std_scripts.asm:80-81)
+        assert 'para "Shall we heal your"' in ctx.read_source("data/text/std_text.asm"), "nurse anchor left the source"
+        prompts["nurse_heal"] = ["Shall we heal your"]
     out = {"pack_ui": pack_ui, "faint_ui": {kind: site(symbol) for kind, symbol in FAINT_UI.items()},
            "decoy": decoy, "prompts": prompts, "qualification_attempt_id": qualification_attempt_id}
     if ctx.title in POISON_TITLES:

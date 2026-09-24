@@ -426,3 +426,32 @@ def test_a_ledge_tile_is_walkable_land_and_hops_two_tiles_in_its_direction():
     del m["ledges"]
     assert PI.step_toward(table(rt, m), table(rt, {"x": 1, "y": 2, "can_step": closed_left}),
                           table(rt, lua_list([{"x": 0, "y": 0}])))[0] is None
+
+
+def test_the_heal_leg_talks_to_the_nurse_then_leaves_by_the_carpet():
+    rt = lua()
+    PI = load(rt)
+    center = a_map(3, grid=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], width=5, height=3)
+    center["warps"] = lua_list([{"x": 1, "y": 2, "destination": "CITY", "carpet": "Down"}])
+    facts = dict(FACTS, maps=dict(FACTS["maps"], C=center),
+                 heal={"city": "A", "center": "C", "door": {"x": 0, "y": 0}, "stand": {"x": 3, "y": 1},
+                       "exit": {"x": 1, "y": 2, "carpet": "Down"}})
+    F = rt.eval("{walk_direction=function() return 'Left' end}")
+    d = PI.driver(F, table(rt, facts), table(rt, {"moves": lua_list(["LEER"])}))
+    hurt = {0: {"hp": 5, "status": 0, "max_hp": 20}}
+    buttons, phase = d.step(pt(rt, map_number=1, x=2, y=0, party=hurt))
+    assert phase == "travel" and buttons["Left"]                                  # to the door (0,0)
+    assert step(rt, d, map_number=3, x=3, y=1, facing="Up", party=hurt)[0] == ["A"]
+    for _ in range(12):                                                           # the talk press's hold + release
+        d.step(pt(rt, map_number=3, x=3, y=1, facing="Up", party=hurt))
+    assert step(rt, d, map_number=3, x=3, y=1, facing="Up", overworld_ready=False, party=hurt,
+                ui=ui("yes_no", ["YES", "NO"], prompt="nurse_heal"))[0] == ["A"]   # YES
+    full = {0: {"hp": 20, "status": 0, "max_hp": 20}}
+    d.step(pt(rt, map_number=3, x=3, y=1, party=full))                            # the press's release frame
+    buttons, phase = d.step(pt(rt, map_number=3, x=3, y=1, party=full))
+    assert buttons["Down"] or buttons["Left"]                                     # heading for the carpet
+    assert step(rt, d, map_number=3, x=1, y=2, party=full)[0] == ["Down"]
+    for _ in range(12):                                                           # the carpet press's hold + release
+        d.step(pt(rt, map_number=3, x=1, y=2, party=full))
+    buttons, phase = d.step(pt(rt, map_number=1, x=1, y=0, party=full))
+    assert buttons["Left"]                                                         # back on the route leg
