@@ -634,24 +634,7 @@ own nudge, which clears battler 0's exec flags every frame while comm < 2 or >= 
 parked menu (so comm reached 2 under the action controller) and every hung controller exec. Together these
 likely explain the 2026-06 real-play softlock (INFERRED; nothing here was run on an emulator).
 
-**REBUILD REQUIRED before this reaches players.** `patch/src/handlers.c` changes are source-only. The
-fix ships only after the companion ROM is rebuilt and `patch/dist/SLink-RR.ups` is regenerated; the new
-companion hash (today md5 `bf8e94a01c0aee0aa7eb37c7333329af`, sha1
-`b7d1e0756fcc66575878affc8f7b95c45386bb1c`) must then be re-pinned EVERYWHERE, together:
-- `server/patcher.py` (`patched_md5`, RR row)
-- `data/games/gen3_rr/engine_signals.json` (`titles.radical_red.artifacts.companion.rom_md5`/`rom_sha1`;
-  consumed by `lua/gen3/entry.lua`)
-- `data/games/gen3_rr/profile.json`, `data/games/gen3_rr/write_checkpoint.json` (generated; regenerate)
-- `tools/gen_gen3_profile.py` (`RR_WITNESS_SHA1`), `tools/gen_gen3_write_checkpoint.py` (ROMS),
-  `tools/pin_gen3_site.py`, `tools/research/rr_save_callers.py` (ROMS)
-- `tests/unit/test_gen3_profile.py`
-- records: `docs/gen3/research/pins_inventory.md` (the inventory; start there),
-  `docs/gen3/G2_report_2026-09-21.md`, `patch/README.md`, and the other `docs/gen3*` notes that quote it.
-`tests/unit/test_patch_force_move_slot.py::test_companion_hash_pins_agree` fails if the code/data pins
-disagree with `engine_signals.json`. None of that was done here; the owner decides when. After the
-rebuild, re-run `test_live_forcemove.lua` with its nudge loop re-derived for the 0-based enum (it still
-reads `c < 2 or c >= 4`), and prove the turn completes (the battle reaches the next action menu), not
-just the PP drop.
+**REBUILT 2026-09-24 (C5-3, `998666b6`; owner-approved).** The companion now carries this fix: patched ROM md5 `6cf77ba4a63634a0fd452be6f206bfc3`, sha1 `ea5352f8a3b9073f8ae20870ad12857925d442cd` (was `bf8e94a0…`/`b7d1e075…`). The re-pinned sites are listed in `docs/gen3/research/pins_inventory.md` ("C5-3 companion rebuild (2026-09-24)"); `tests/unit/test_patch_force_move_slot.py::test_companion_hash_pins_agree` keeps them together. Still owed: a live re-run of `test_live_forcemove.lua` with its nudge loop re-derived for the 0-based enum (the C5-4b port), proving that the turn completes (the battle reaches the next action menu), not just the PP drop.
 
 **RR-build-specific addresses (runtime-discovered — re-discover per RR version):**
 action-menu controller `0x0802E439` (`HandleInputChooseAction`; `0x0802E3B5` is `PlayerBufferRunCommand`,

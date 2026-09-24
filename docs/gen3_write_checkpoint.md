@@ -21,7 +21,7 @@ Nothing here was measured on an emulator except the CPU census, which is cited w
 | source | pret/pokefirered `c75f352304d529f6ba92d4f74b9cf8b5c3810788`, agbcc `da598c1d` (`data/gen3/pret/provenance.json`) |
 | built ROM sha1 | `41cb23d8…` (FR) / `574fa542…` (LG) — identical to the admitted US 1.0 dumps, so a `.sym` address is a real address in the shipped ROM |
 | FR / LG ROMs | `Pokemon - FireRed Version (USA).gba`, `Pokemon - LeafGreen Version (USA).gba` |
-| RR ROMs | `Pokemon - Radical Red.gba` (clean 4.1) and `patch/build/slink_RR.gba` (companion, sha1 `b7d1e075…`) |
+| RR ROMs | `Pokemon - Radical Red.gba` (clean 4.1) and `patch/build/slink_RR.gba` (companion, sha1 `ea5352f8…` since the C5-3 rebuild `998666b6`; was `b7d1e075…`) |
 | CPU census | `docs/gen3/probes/census_fr_overworld_2026-09-21.txt` (FR), `census_rr_overworld_2026-09-21.txt` (RR); none for LG |
 | hook probes | `docs/gen3/probes/hooks_fr_clean_2026-09-21.txt`, `hooks_rr_companion_2026-09-21.txt` |
 
