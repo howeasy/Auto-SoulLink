@@ -217,7 +217,8 @@ function F.play(host, spec, driver, observe, diag)
 end
 
 -- Pure point -> buttons, phase. Phases walk -> battle -> save -> saved (terminal).
-function F.driver(map)
+function F.driver(map, opts)
+    opts = opts or {}
     local self = {terminal="saved", phase="walk"}
     local HOLD, held, hold_left, release = 12, nil, 0, false
     local here, from, save_counter, confirmed, ups = nil, nil, nil, false, 0
@@ -258,7 +259,20 @@ function F.driver(map)
             if self.phase == "battle" then
                 if ui.kind == "battle_menu" then
                     if point.battle_mode ~= 1 then return nil, "battle menu outside a wild battle" end
+                    -- opts.weaken (the U1f second catch, Crystal U1f run 1 ran out of its ten O-10 Balls): one
+                    -- damaging hit on a foe still at full HP first; a Poke Ball's odds rise as the foe's HP falls
+                    -- (PokeBallEffect, engine/items/item_effects.asm: (3*maxHP - 2*HP) * rate / (3*maxHP))
+                    if opts.weaken and point.foe_full == true then return choose(ui, "FIGHT", 2) end
                     return choose(ui, "PACK", 2)
+                end
+                if ui.kind == "move_menu" and opts.weaken then
+                    if point.foe_full ~= true or type(ui.items) ~= "table" then return press("B") end
+                    for _, label in ipairs(ui.items) do
+                        local passive = false
+                        for _, name in ipairs(opts.passive or {}) do if label:upper() == name then passive = true end end
+                        if not passive then return choose(ui, label:upper(), 1) end
+                    end
+                    return press("B")
                 end
                 if F.TOWARD_BALLS[ui.kind] then return press(F.TOWARD_BALLS[ui.kind]) end
                 if ui.kind == "pack_balls" then
@@ -499,7 +513,8 @@ function F.whiteout_problem(w, faint_seq)
         return "the whiteout record has no party snapshot"
     end
     for _, hp in ipairs(w.party_hp) do if hp ~= 0 then return "a party mon had HP inside the pre-heal whiteout" end end
-    if not integer(w.healed_frame, 0, 2^53) or w.healed_frame <= w.callback then return "the whiteout heal was not observed after the hit" end
+    -- HealParty runs in the same frame right after the dispatch (live U1f Crystal run 1: healed_frame == callback)
+    if not integer(w.healed_frame, 0, 2^53) or w.healed_frame < w.callback then return "the whiteout heal was not observed after the hit" end
     if not integer(faint_seq, 1, 2^53) or not integer(w.seq, 1, 2^53) or w.seq <= faint_seq then
         return "the whiteout did not follow the closing battle faint"
     end
@@ -941,10 +956,18 @@ function F.main(api, getenv, SG)
         played, outcome = F.play(host, gspec, gdriver, gobserve, diag)
         if played then
             local caught = probe.record.sites.capture_party.hits
-            local cdriver = F.driver(ctx.facts.maps.Route29)
+            local cdriver = F.driver(ctx.facts.maps.Route29, {weaken=true, passive=FI.PASSIVE_MOVES})
             local function cobserve()
                 local point = observe()
                 point.probe_hits.capture_party = probe.record.sites.capture_party.hits - caught
+                local battle = ctx.reads.read_battle()
+                local foe = battle and battle.mode ~= 0 and ctx.reads.read_battle_mon("enemy") or nil
+                point.foe_full = foe ~= nil and foe.hp == foe.max_hp
+                if point.ui and point.ui.kind == "move_menu" then
+                    local list = FI.move_list(SG.screen(ctx))
+                    if list then point.ui.items, point.ui.cursor, point.ui.columns = list.items, list.cursor, list.columns
+                    else point.input_ready = false end
+                end
                 return point
             end
             played, outcome = F.play(host, {name="u1f-catch-" .. title, terminal=cdriver.terminal,

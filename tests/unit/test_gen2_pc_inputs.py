@@ -147,7 +147,7 @@ GOOD = {"armed": 900, "callback": 900, "seq": 50, "de": 27, "party_count": 2, "p
 
 @pytest.mark.parametrize("change,match", [
     ({}, None), ({"callback": 901}, "callback frame"), ({"de": 26}, "DE != 27"), ({"party_hp": [0, 3]}, "had HP"),
-    ({"party_hp": [0]}, "party snapshot"), ({"healed_frame": 900}, "heal"), ({"seq": 40}, "closing battle faint")])
+    ({"party_hp": [0]}, "party snapshot"), ({"healed_frame": 899}, "heal"), ({"seq": 40}, "closing battle faint")])
 def test_whiteout_rule(change, match):
     rt, F = frame_align()
     record = dict(GOOD, **change)
@@ -175,3 +175,27 @@ def test_the_u1f_expect_order_appends_the_pc_sites_after_the_faints():
     names = list(F.expect(True, True).values())
     assert names[:len(F.EXPECT) + 1] == list(F.expect(True).values())
     assert names[-10:] == list(F.U1F_SITES.values())
+
+
+def test_the_second_catch_weakens_a_full_hp_foe_once_then_throws():
+    rt, F = frame_align()
+    d = F.driver(rt.table_from(a_map(1), recursive=True),
+                 rt.table_from({"weaken": True, "passive": lua_list(["LEER", "GROWL"])}, recursive=True))
+    menu = ui("battle_menu", ["FIGHT", "<PK><MN>", "PACK", "RUN"], 1, 2)
+    base = {"battle_mode": 1, "input_ready": True, "hits": {}, "probe_hits": {"capture_party": 0}}
+
+    def go(**fields):
+        p = rt.table_from(dict(base, **fields), recursive=True)
+        buttons, phase = d.step(p)
+        assert buttons is not None, phase
+        for _ in range(12):
+            d.step(p)
+        return sorted(k for k, v in buttons.items() if v)
+
+    assert go(ui=menu, foe_full=True) == ["A"]                                            # FIGHT
+    assert go(ui=ui("move_menu", ["LEER", "SCRATCH"]), foe_full=True) == ["Down"]         # not LEER
+    assert go(ui=ui("move_menu", ["LEER", "SCRATCH"], 2), foe_full=True) == ["A"]
+    assert go(ui=menu, foe_full=False) == ["Down"]                                        # PACK now
+    plain = F.driver(rt.table_from(a_map(1), recursive=True))
+    p = rt.table_from(dict(base, ui=menu, foe_full=True), recursive=True)
+    assert sorted(k for k, v in plain.step(p)[0].items() if v) == ["Down"]              # U1d path: PACK

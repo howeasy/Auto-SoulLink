@@ -455,7 +455,7 @@ def verify(text: str, pack: dict, title: str) -> dict:
         # U1f: re-checked from the WHITEOUT / U1F_MODEL lines, independently of F.whiteout_problem
         w, m = tag_json(text, "WHITEOUT"), tag_json(text, "U1F_MODEL")
         assert w["callback"] == w["armed"] and w["de"] == 27 and w["party_hp"] and not any(w["party_hp"]), w
-        assert w["healed_frame"] > w["callback"], w
+        assert w["healed_frame"] >= w["callback"], w
         faints = [hit["seq"] for hit in summary["battle_faint"]["log"]]
         assert w["seq"] > max(faints), (w, faints)
         captures = [hit["seq"] for hit in summary["capture_party"]["log"]]
