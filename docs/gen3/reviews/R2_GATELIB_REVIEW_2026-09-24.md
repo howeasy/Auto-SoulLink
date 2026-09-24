@@ -9,7 +9,7 @@ Emulator not run (per the brief). `pytest tests/unit -q -k "gate or native or ge
 Note: the worktree has another session's uncommitted edits to `lua/gen3/safety.lua` / `writes.lua` (battle reasons).
 None of them touches the `native` clause set, so they do not affect this review.
 
-**Verdict: ACCEPT-WITH-FIXES.** HIGH 0 / MEDIUM 3 / LOW 8. No port weakened a decisive oracle, and the raw poster matches native.lua's ABI.
+**Verdict: ACCEPT-WITH-FIXES.** HIGH 0 / MEDIUM 3 / LOW 9. No port weakened a decisive oracle, and the raw poster matches native.lua's ABI.
 The fixes needed are test coverage for the stale-ack path, the ghost "spawned" oracle, and treating skips as green.
 
 ## What holds (verified)
