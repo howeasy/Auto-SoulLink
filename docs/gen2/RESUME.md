@@ -394,3 +394,9 @@ Running at compaction (resume by id with SendMessage; context intact):
 Then: CODE FREEZE -> FINAL SWEEP (all duo/trade/gate cells with CODE_DIGEST, 3-5 parallel lanes) -> Gen 1/pureRGB receipts
 (stale after 61a693c4 + 57e292dc) -> npc_trade both-sided -> release-evidence green except G4 -> STOP and check in.
 Idle lanes to clean (unlink junctions first): C:/Users/howar/AppData/Local/Temp/{trl,tr2,tr3,spd,sp2}.
+
+Update (~20:35Z, just before compaction): DUO-WAVE-C DONE: pc_ops/changebox/whiteout/whiteout_rebuild/poison PHYSICAL on
+C-C/G-S/C-G (15/15; rows relayed to RELEASE-LANES, notes in scratchpad duo_wave_c_rows.md). FINAL-SWEEP built the sweep
+driver (8b8f37b2: `python tools/gen2_final_sweep.py --list` = 92 cells; `--lanes 4 [--sha <frozen>]` after freeze;
+2-cell dry run PASS) and the faint_active trainer duo (68277bdb, unrun). Before freeze: live-gate runners must stamp
+CODE_DIGEST (FINAL-SWEEP, using RELEASE-LANES' tools/gen2_code_digest.py). Running: RELEASE-LANES, FINAL-SWEEP + OMP jobs.
