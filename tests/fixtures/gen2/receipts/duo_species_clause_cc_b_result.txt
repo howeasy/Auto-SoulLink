@@ -1,0 +1,54 @@
+DUO_GEN2 {"attempt":1,"case":"crystal_battle_ot2","fixture_sha256":"e2298243d3b10965b354184f1778d946a0909402c57b4ccaff574f819cfcc6dd","player":"b","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","scenario":"gen2_species_clause","title":"crystal"}
+CLIENT {"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","poison_faint","save_completed","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  phase continue @3180
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":44068,"panel":false,"
+HELLO {"frame":3303,"ot_id":44068}
+  phase loaded @3303
+RX resolved_areas
+RX config
+BOOTED {"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 21BC:AC24:9E
+RX hud_show
+RX_TEXT {"cmd":"hud_show","frame":6842,"text":"Partner caught SENTRET in Route 29"}
+A_PENDING {"frame":7883,"species_id":161}
+  phase walk @7883 xy=53,12
+  phase battle @8177 xy=53,12
+RX gui_prompt
+RX_TEXT {"cmd":"gui_prompt","frame":8432,"text":"Dupes clause: Sentret -- reroll!"}
+RX unresolve_area area_id=route_29
+  phase encounter @8753 xy=53,12
+ENCOUNTER {"dupe":true,"frame":8783,"n":1,"species_id":161}
+  phase battle @8783 xy=53,12
+TX {"area_id":"route_29","event":"no_catch","level":3,"player":"b","seq":177,"species_id":161}
+TX {"event":"safe","player":"b","seq":178}
+RX unresolve_area area_id=route_29
+  phase escaped @9005 xy=53,12
+REROLL {"frame":9035,"n":1,"prompt":"Dupes clause: Sentret -- reroll!","species_id":161}
+  phase walk @9035 xy=53,12
+  phase battle @9356 xy=52,12
+  phase encounter @9935 xy=52,12
+ENCOUNTER {"dupe":false,"frame":9965,"n":2,"species_id":16}
+  phase battle @9965 xy=52,12
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":11023,"key":"FE4A:AC24:10","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":16}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":13,"in_box":false,"key":"FE4A:AC24:10","level":2,"maxHP":13,"nickname":"PIDGEY","player":"b","seq":221,"species_id":16,"stats":{"level":2,"maxHP"
+CAPTURE_SENT {"frame":11023,"key":"FE4A:AC24:10","seq":221}
+CAUGHT FE4A:AC24:10
+RX play_sound sound=25
+RX msgbox
+RX_TEXT {"cmd":"msgbox","frame":11025,"text":"SENTRET and PIDGEY linked!"}
+RX party_mon key=FE4A:AC24:10
+TX {"event":"safe","player":"b","seq":222}
+TX {"event":"sync_retrieve_done","key":"FE4A:AC24:10","player":"b","seq":225}
+  phase save @11090 xy=52,12
+  phase saved @11755 xy=52,12
+MYKEY 0 21BC:AC24:9E
+MYKEY 1 FE4A:AC24:10
+LINKED {"frame":11785,"text":"SENTRET and PIDGEY linked!"}
+  phase settle @11785 xy=52,12
+  phase save @11942 xy=52,12
+  phase saved @12438 xy=52,12
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"664bf048c38e76bcb3cceb0cca24d76b1bcba5b67e52f59400a6ff7820036402","client_saves":2,"flushed_matches":true,"frame":12468,"gate_saves":2,"save_completed_frame":12438,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/saveram_gen2_species_clause_h10-cc-species_b/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/e2e_gen2_species_clause_h10-cc-species_b_witness.SaveRAM"}
+RECEIPT {"attempt":1,"booted":{"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":11023,"key":"FE4A:AC24:10","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":16},"case":"crystal_battle_ot2","client":{"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","poison_faint","save_completed","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"},"dupe_species":161,"fixture_sha256":"e2298243d3b10965b354184f1778d946a0909402c57b4ccaff574f819cfcc6dd","harness_write_scopes":[],"hello":{"frame":3303,"ot_id":44068},"input_mode":"normal_buttons","key":"FE4A:AC24:10","linked":{"frame":11785,"text":"SENTRET and PIDGEY linked!"},"path":"reroll_observed","player":"b","rerolls":1,"role":"reroller","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","save":{"cartram_bytes":32768,"cartram_sha256":"664bf048c38e76bcb3cceb0cca24d76b1bcba5b67e52f59400a6ff7820036402","client_saves":2,"flushed_matches":true,"frame":12468,"gate_saves":2,"save_completed_frame":12438,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/saveram_gen2_species_clause_h10-cc-species_b/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/e2e_gen2_species_clause_h10-cc-species_b_witness.SaveRAM"},"scenario":"gen2_species_clause","schema":"gen2-duo-species-clause-v1","species_id":16,"title":"crystal"}
+RESULT: PASS (reroll_observed: B linked FE4A:AC24:10 after 1 reroll(s))

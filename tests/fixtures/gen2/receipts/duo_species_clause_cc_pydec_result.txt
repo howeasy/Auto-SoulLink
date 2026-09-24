@@ -1,0 +1,2 @@
+attempt 1 of 3
+PYDEC: PASS a=03DE:B541:A1 b=FE4A:AC24:10 area=route_29 titles=crystal/crystal status=alive scenario=gen2_species_clause clause=species rerolls=1
