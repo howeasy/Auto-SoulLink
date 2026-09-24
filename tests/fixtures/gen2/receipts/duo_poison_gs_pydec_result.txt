@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=6A77:C4A6:A1 b=4469:C78C:13 area=route_29 titles=gold/silver status=memorial scenario=gen2_poison death=poison

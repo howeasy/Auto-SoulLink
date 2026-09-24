@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=497B:C4A6:13 b=77AE:C78C:A3 area=route_29 titles=gold/silver status=memorial scenario=gen2_whiteout repair=run_over
