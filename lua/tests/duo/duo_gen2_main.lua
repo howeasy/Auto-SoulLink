@@ -120,7 +120,7 @@ local timeout = D.timeout_frames or 150000
 -- ── receipts the harness keeps (never an oracle of their own; S.verdict re-reads the lines) ──
 local rec = {captures=0, capture=nil, sent_keys={}, caught=nil, client_saves=0, save_completed_frame=nil,
              faint=nil, faint_sent=nil, rx={}, hp_write=nil,
-             hellos={}, tx=0, memorial={}, faint_keys={}, pc={}, whiteout=nil}
+             hellos={}, tx=0, ticks=0, memorial={}, faint_keys={}, pc={}, whiteout=nil}
 local sent = {}
 local function maybe_caught()
     local key = rec.capture and rec.capture.key
@@ -137,6 +137,7 @@ C.send = function(line)
     local event = okd and type(msg) == "table" and msg.event or "?"
     if event ~= "tick" then log("TX " .. tostring(line):sub(1, 220)) end
     rec.tx = rec.tx + 1
+    if event == "tick" then rec.ticks = rec.ticks + 1 end
     if event == "hello" then
         local hello = {frame=emu.framecount(), ot_id=msg.ot_id}
         rec.hellos[#rec.hellos + 1] = hello
@@ -151,7 +152,7 @@ C.send = function(line)
         jlog("CAPTURE_SENT", {frame=emu.framecount(), key=msg.key, seq=msg.seq})
         maybe_caught()
     elseif (event == "memorialize_done" or event == "memorialize_failed") and type(msg.key) == "string" then
-        local ack = {frame=emu.framecount(), event=event, key=msg.key, box=msg.box, reason=msg.reason}
+        local ack = {frame=emu.framecount(), event=event, key=msg.key, box=msg.box, reason=msg.reason, ticks=rec.ticks}
         rec.memorial[msg.key] = rec.memorial[msg.key] or ack
         jlog("MEMORIAL_ACK", ack)
     elseif event == "faint" and type(msg.key) == "string" then

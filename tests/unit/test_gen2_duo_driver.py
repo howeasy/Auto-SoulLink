@@ -2711,38 +2711,38 @@ def move(lines, prefix, before_prefix):
 WHITEOUT_SITES = ["battle_faint", "capture_party", "whiteout_before_heal"]
 
 
-def whiteout_lines(write=False):
+def whiteout_lines():
     j = json.dumps
     a = faint_lines("a")
     base = retag(a[:9], "a", "gen2_whiteout", WHITEOUT_SITES)   # through LINK_SAVE
-    record = "00" * 32 + "0000" + "00" * 14
+    revived = "00" * 34 + "000e" + "00" * 12   # 48 bytes: MON_HP 0x22 = 14, the healed record
     middle = [
         "ENGINE_FAINT " + j({"frame": 2000, "site_id": "battle_faint", "cause": "battle", "key": STARTER, "slot": 0}),
         "FAINT_SENT " + j({"frame": 2001, "key": STARTER, "seq": 18}),
         "ENGINE_FAINT " + j({"frame": 3000, "site_id": "battle_faint", "cause": "battle", "key": KEY, "slot": 1}),
         "FAINT_SENT " + j({"frame": 3001, "key": KEY, "seq": 20}),
+        "RX memorialize key=" + KEY,
+        "RX game_over",
         "ENGINE_WHITEOUT " + j({"frame": 3050, "site_id": "whiteout_before_heal",
                                 "party": [{"key": STARTER, "hp": 0}, {"key": KEY, "hp": 0}]}),
         "TX " + j({"event": "whiteout", "seq": 21}, separators=(",", ":")),
-        "REVIVED " + j({"frame": 3060, "key": KEY, "slot": 1, "hp": 14}),
-        "RX force_faint key=" + KEY]
-    if write:
-        middle.append("PARTY_HP_WRITE " + j({"frame": 3100, "key": KEY, "slot": 1, "kind": "party_hp", "ok": True}))
-    middle += ["MEMORIAL_PREIMAGE " + j({"frame": 3300, "key": KEY, "slot": 1, "raw_hex": record,
-                                         "ot_raw_hex": "80" * 11, "nickname_raw_hex": "81" * 11, "species_marker": 16}),
-               "MEMORIAL_ACK " + j({"frame": 3301, "event": "memorialize_done", "key": KEY, "box": 13})]
+        "REVIVED " + j({"frame": 3050, "key": KEY, "slot": 1, "hp": 14, "ticks": 40}),
+        "MEMORIAL_PREIMAGE " + j({"frame": 3079, "key": KEY, "slot": 1, "raw_hex": revived,
+                                  "ot_raw_hex": "80" * 11, "nickname_raw_hex": "81" * 11, "species_marker": 16}),
+        "MEMORIAL_ACK " + j({"frame": 3079, "event": "memorialize_done", "key": KEY, "box": 13, "ticks": 40}),
+        "MEMORIAL_TICKS " + j({"frame": 3080, "key": KEY, "ticks_alive": 0})]
     return base + middle + [a[-1]]
 
 
-@pytest.mark.parametrize("write", [False, True], ids=["memorial-first", "repair-written"])
-def test_whiteout_verdict_passes_either_repair_order(write):
-    problems, receipt = wave_c("whiteout", whiteout_lines(write))
+def test_whiteout_verdict_passes_revive_and_burial_under_game_over():
+    problems, receipt = wave_c("whiteout", whiteout_lines())
     assert problems == [], problems
     assert receipt["schema"] == "gen2-duo-whiteout-v1" and receipt["revived"]["hp"] == 14
-    assert receipt["repair"]["outcome"] == ("written" if write else "memorial_first")
+    assert receipt["repair"]["outcome"] == "run_over" and receipt["repair"]["ticks_alive"] == 0
 
 
 TX_WHITEOUT = "TX " + json.dumps({"event": "whiteout", "seq": 30}, separators=(",", ":"))
+WRITE = "PARTY_HP_WRITE " + json.dumps({"frame": 3060, "key": KEY, "slot": 1, "kind": "party_hp", "ok": True})
 
 
 @pytest.mark.parametrize("lines,match", [
@@ -2756,15 +2756,16 @@ TX_WHITEOUT = "TX " + json.dumps({"event": "whiteout", "seq": 30}, separators=("
     (whiteout_lines()[:-1] + [TX_WHITEOUT, whiteout_lines()[-1]], "2 whiteout events"),
     (without(whiteout_lines(), "REVIVED"), "missing REVIVED"),
     (edit_tag(whiteout_lines(), "REVIVED", hp=0), "alive"),
-    (without(whiteout_lines(), "RX force_faint"), "no O-24 force_faint"),
-    (move(whiteout_lines(), "RX force_faint", "REVIVED"), "no O-24 force_faint"),
-    (move(whiteout_lines(True), "PARTY_HP_WRITE", "RX force_faint"), "precedes the re-issued force_faint"),
-    (edit_tag(whiteout_lines(True), "PARTY_HP_WRITE", key=OTHER), "hit another mon"),
+    (without(whiteout_lines(), "RX game_over"), "no game_over"),
+    (whiteout_lines()[:-1] + ["RX force_faint key=" + KEY, whiteout_lines()[-1]], "run_over suppresses O-24"),
+    (whiteout_lines()[:-1] + [WRITE, whiteout_lines()[-1]], "party was written"),
+    (edit_tag(whiteout_lines(), "MEMORIAL_PREIMAGE", raw_hex="00" * 48), "not the revived record"),
     (without(whiteout_lines(), "MEMORIAL_ACK"), "no memorial"),
+    (without(whiteout_lines(), "MEMORIAL_TICKS"), "missing MEMORIAL_TICKS"),
     (edit_tag(whiteout_lines(), "SAVE_WITNESS", gate_saves=1), "no native save after LINK_SAVE"),
 ], ids=["no-site", "catch-first", "one-faint", "pre-heal-hp", "short-party", "whiteout-first", "no-tx", "two-tx",
-        "no-revived", "revived-dead", "no-repair", "repair-before-revive", "write-first", "write-other", "no-memorial",
-        "no-new-save"])
+        "no-revived", "revived-dead", "no-game-over", "o24-issued", "a-written", "preimage-not-revived", "no-memorial",
+        "no-ticks", "no-new-save"])
 def test_whiteout_verdict_refuses_a_tampered_or_reordered_half(lines, match):
     problems, receipt = wave_c("whiteout", lines)
     assert receipt is None and any(match in p for p in problems), problems

@@ -2477,43 +2477,55 @@ def whiteout_case(faint_case):
     key = oracles._last_tagged(a, "ENGINE_FAINT")["key"]
     link = Path(oracles._last_tagged(a, "LINK_SAVE")["saveram_path"]).read_bytes()
     starter = codec.key(codec.decode_saved_party(link[:CART], layout, copy_name="primary")["mons"][0])
+    # the memorialized record is the HEALED one: HP back at 14 (HealParty), the rest as observed
+    preimage = oracles._last_tagged(a, "MEMORIAL_PREIMAGE")
+    raw = bytearray.fromhex(preimage["raw_hex"])
+    at = layout.constants["MON_HP"]
+    raw[at:at + 2] = (14).to_bytes(2, "big")
+    a = a.replace("MEMORIAL_PREIMAGE " + j(preimage), "MEMORIAL_PREIMAGE " + j({**preimage, "raw_hex": raw.hex()}))
     insert = ["ENGINE_FAINT " + j({"frame": 6900, "site_id": "battle_faint", "cause": "battle", "key": starter, "slot": 0}),
               "ENGINE_FAINT " + j({"frame": 7000, "site_id": "battle_faint", "cause": "battle", "key": key, "slot": 1}),
               "FAINT_SENT " + j({"frame": 7001, "key": key, "seq": 42}),
+              "RX game_over",
               "ENGINE_WHITEOUT " + j({"frame": 7050, "site_id": "whiteout_before_heal",
                                       "party": [{"key": starter, "hp": 0}, {"key": key, "hp": 0}]}),
               "TX " + j({"event": "whiteout", "seq": 43}, separators=(",", ":")),
-              "REVIVED " + j({"frame": 7060, "key": key, "slot": 1, "hp": 14}),
-              f"RX force_faint key={key}"]
+              "REVIVED " + j({"frame": 7060, "key": key, "slot": 1, "hp": 14, "ticks": 3})]
     results["a"] = _wave_text(a, scenario="gen2_whiteout", schema="gen2-duo-whiteout-v1",
                               sites=["battle_faint", "whiteout_before_heal"], drop=("ENGINE_FAINT", "FAINT_SENT"),
                               insert=insert, before="MEMORIAL_PREIMAGE ")
-    results["b"] = _wave_text(results["b"], scenario="gen2_whiteout", schema="gen2-duo-whiteout-v1")
+    results["b"] = _wave_text(results["b"], scenario="gen2_whiteout", schema="gen2-duo-whiteout-v1",
+                              insert=["RX game_over"], before="MEMORIAL_PREIMAGE ")
     log = Path(data_dir) / "server.log"
     first, rest = log.read_text(encoding="utf-8").split("\n", 1)
-    log.write_text(f"{first}\n[a] {key} is dead but alive in party (hp=14) — re-issued force_faint (1/3)\n{rest}",
-                   encoding="utf-8")
+    log.write_text(f"{first}\nGAME OVER — no alive links and no pending captures remain\n{rest}", encoding="utf-8")
+    path = Path(data_dir) / "links.json"
+    doc = json.loads(path.read_text())
+    doc["run_over"] = True
+    path.write_text(json.dumps(doc))
     return results, data_dir
 
 
-def test_whiteout_oracle_passes_revive_rekill_and_memorial(whiteout_case):
+def test_whiteout_oracle_passes_revive_and_burial_under_game_over(whiteout_case):
     results, data_dir = whiteout_case
     facts = []
     assert oracles.whiteout_oracle(results, data_dir=data_dir, on_verified=facts.append) is None
-    assert facts[0]["status"] == "memorial" and facts[0]["repair"] == "memorial_first"
+    assert facts[0]["status"] == "memorial" and facts[0]["repair"] == "run_over"
 
 
 @pytest.mark.parametrize("fault,match", [
-    ("no-rekill", "O-24"), ("catch-first", "starter's, then the linked"), ("pre-heal-hp", "linked party at HP 0"),
-    ("not-revived", "no revived linked mon"), ("two-whiteouts", "exactly one whiteout"), ("b-whiteout", "exactly one whiteout"),
-    ("no-rx", "never received the O-24"), ("starter-hurt", "healed starter")])
+    ("no-game-over", "did not end the run"), ("catch-first", "starter's, then the linked"),
+    ("pre-heal-hp", "linked party at HP 0"), ("not-revived", "no revived linked mon"),
+    ("two-whiteouts", "exactly one whiteout"), ("b-whiteout", "exactly one whiteout"),
+    ("b-no-game-over", "b never received game_over"), ("o24", "re-issued force_faint under run_over"),
+    ("dead-preimage", "not the revived record"), ("starter-hurt", "healed starter")])
 def test_whiteout_oracle_refuses(whiteout_case, fault, match, layout):
     results, data_dir = whiteout_case
     a = results["a"]
     key = oracles._last_tagged(a, "REVIVED")["key"]
-    if fault == "no-rekill":
-        log = Path(data_dir) / "server.log"
-        log.write_text("\n".join(l for l in log.read_text(encoding="utf-8").splitlines() if "re-issued" not in l) + "\n",
+    log = Path(data_dir) / "server.log"
+    if fault == "no-game-over":
+        log.write_text("\n".join(l for l in log.read_text(encoding="utf-8").splitlines() if "GAME OVER" not in l) + "\n",
                        encoding="utf-8")
     elif fault == "catch-first":
         lines = a.splitlines()
@@ -2523,13 +2535,18 @@ def test_whiteout_oracle_refuses(whiteout_case, fault, match, layout):
     elif fault == "pre-heal-hp":
         a = a.replace(f'{{"key": "{key}", "hp": 0}}', f'{{"key": "{key}", "hp": 5}}')
     elif fault == "not-revived":
-        a = a.replace('"hp": 14}', '"hp": 0}')
+        a = a.replace('"hp": 14, "ticks"', '"hp": 0, "ticks"')
     elif fault == "two-whiteouts":
         a = a.replace("\nREVIVED", '\nTX {"event":"whiteout","seq":44}\nREVIVED')
     elif fault == "b-whiteout":
         results["b"] = results["b"].replace("\nSAVE_WITNESS", '\nTX {"event":"whiteout"}\nSAVE_WITNESS')
-    elif fault == "no-rx":
-        a = a.replace(f"RX force_faint key={key}\n", "")
+    elif fault == "b-no-game-over":
+        results["b"] = results["b"].replace("RX game_over\n", "")
+    elif fault == "o24":
+        log.write_text(log.read_text(encoding="utf-8") + f"[a] {key} is dead but alive in party (hp=14) — re-issued force_faint (1/3)\n",
+                       encoding="utf-8")
+    elif fault == "dead-preimage":
+        a = a.replace('"hp": 14, "ticks"', '"hp": 9, "ticks"')
     elif fault == "starter-hurt":
         witness = oracles._last_tagged(a, "SAVE_WITNESS")
         path = Path(witness["saveram_path"])

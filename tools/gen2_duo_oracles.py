@@ -1785,37 +1785,34 @@ def _whiteout_oracle(results, *, data_dir, area_id, ot_ids, boot_saveram):
                and boxed["raw_hex"] == _deposited_record(mon["raw_hex"], layout).hex()
                and boxed["ot_raw_hex"] == mon["ot_raw_hex"] and boxed["nickname_raw_hex"] == mon["nickname_raw_hex"],
                "A's Box 14 record is not the native deposit of the observed dead mon")
-    writes = _tag_rows(a, "PARTY_HP_WRITE")
-    _wave_need(len(writes) <= 1, "more than one repair write on A")
-    repair = "memorial_first"
-    if writes:
-        _, write = writes[0]
-        n = layout.party_size * layout.constants["PARTY_LENGTH"]
-        before, after = (_hex_bytes(write.get(f), n, f) for f in ("before_party_hex", "after_party_hex"))
-        mons = [codec.decode_party_mon(before[i * layout.party_size:(i + 1) * layout.party_size], layout,
-                                       species_marker=before[i * layout.party_size]) for i in range(len(linked))]
-        done = [codec.decode_party_mon(after[i * layout.party_size:(i + 1) * layout.party_size], layout,
-                                       species_marker=after[i * layout.party_size]) for i in range(len(linked))]
-        _wave_need(mons[write["slot"]]["hp"] > 0, "the repair write zeroed a mon that was not revived")
-        _faint_write(write, layout, mons, done, a_key)
-        _wave_need(mon["hp"] == 0 and _frame(revived) <= _frame(write) <= _frame(preimage), "repair write chronology differs")
-        repair = "written"
+    # The revived record itself was buried: no write zeroed it first (run_over suppresses O-24, owner ruling
+    # 2026-09-24; state.py _repair_lost_faints returns while run_over), so the preimage carries the healed HP.
+    _wave_need(mon["hp"] == revived["hp"] > 0 and _frame(revived) <= _frame(preimage),
+               "A's memorial is not the revived record")
+    _wave_need(not _tag_rows(a, "PARTY_HP_WRITE"), "A's party was written")
     # B: the propagated bench death, exactly as faint_oracle
     _wave_b_bench(results, decoded, heads["b"][1], raws["b"], heads["b"][0], stages)
-    # server: A's faint -> force_faint to B; the O-24 re-issue of A's own revived key; both memorials settled
+    # server: A's faint -> force_faint to B; the only pair dead -> GAME OVER, game_over to both; no re-issue
     log = (Path(data_dir) / "server.log").read_text(encoding="utf-8", errors="replace")
     issued = re.search(r"\[a\] faint → force_faint b:" + re.escape(b_key) + r"(?:\s|$)", log)
     _wave_need(issued, "server did not issue force_faint to B")
-    rekill = re.search(r"\[a\] " + re.escape(a_key) + r" is dead but alive in party \(hp=\d+\) — re-issued force_faint",
-                       log[issued.end():])
-    _wave_need(rekill, "server did not re-issue force_faint (O-24) for A's revived key")
-    _wave_need(f"RX force_faint key={a_key}" in a.splitlines(), "A never received the O-24 force_faint")
+    _wave_need("GAME OVER" in log[issued.start():] and document.get("run_over") is True, "the server did not end the run")
+    _wave_need(not re.search(re.escape(a_key) + r" is dead but alive in party", log),
+               "the server re-issued force_faint under run_over")
+    for inst in ("a", "b"):
+        lines = results[inst].splitlines()
+        faint_line = next(i for i, l in enumerate(lines) if l.startswith("ENGINE_FAINT ") and a_key in l) if inst == "a" else             next(i for i, l in enumerate(lines) if l == f"RX force_faint key={b_key}")
+        _wave_need(any(l == "RX game_over" for l in lines[faint_line:]), f"{inst} never received game_over after the death")
+    _wave_need(f"RX force_faint key={a_key}" not in a.splitlines(), "A received force_faint for its own key")
     _wave_memorial_settled(log, issued.end(), decoded, document, area_id)
-    return {**_verified_facts(decoded, area_id, "memorial"), "repair": repair}
+    return {**_verified_facts(decoded, area_id, "memorial"), "repair": "run_over"}
 
 
 def whiteout_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot_saveram=None, on_verified=None):
-    """D-7/W-7 + O-24: the heal revives the dead linked mon, the server re-kills it, the memorial holds it."""
+    """W-7: the whiteout heal revives the dead linked mon and the memorial buries the revived record.
+
+    O-24 is not exercised: the only pair's death ends the run and run_over suppresses _repair_lost_faints
+    (owner ruling 2026-09-24); tests/unit/test_state_faint_repair.py covers O-24. facts["repair"] == "run_over"."""
     try:
         facts = _whiteout_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids, boot_saveram=boot_saveram)
         if on_verified is not None:
