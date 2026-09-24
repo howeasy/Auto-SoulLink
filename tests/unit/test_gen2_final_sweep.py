@@ -80,3 +80,21 @@ def test_live_conftest_buckets_like_pytest():
     assert outcome(R(skipped=False, failed=True, when="call")) == "failed"
     assert outcome(R(skipped=True, failed=False, when="call", wasxfail="")) == "xfailed"
     assert outcome(R(skipped=False, failed=False, when="teardown")) is None
+
+
+def test_a_cell_stops_at_its_first_failing_command_and_keeps_each_gate_result(tmp_path, monkeypatch):
+    lane, log = tmp_path / "lane", tmp_path / "logs/gate__engine_sites__gold.log"
+    (lane / "patch/build").mkdir(parents=True)
+    log.parent.mkdir()
+    calls = []
+
+    def fake_run(cmd, cwd, timeout, path):
+        calls.append(cmd)
+        (cwd / "patch/build/gen2_frame_align_result.txt").write_text(f"trace of {cmd[0]}", encoding="utf-8")
+        return {"first": 1, "second": 0}[cmd[0]]
+
+    monkeypatch.setattr(sweep, "run", fake_run)
+    assert sweep.run_commands([["first"], ["second"]], lane, 60, log) == [1]
+    assert calls == [["first"]]   # the second command never overwrites the failing trace
+    kept = log.with_name("gate__engine_sites__gold.cmd1.gen2_frame_align_result.txt")
+    assert kept.read_text(encoding="utf-8") == "trace of first"

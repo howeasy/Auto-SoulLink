@@ -214,6 +214,22 @@ def pin(out, root=REPO):
     return sorted(rel for rel in pins if rel not in named and rel.endswith((".txt", ".json")))
 
 
+def run_commands(commands, lane, timeout, log):
+    """Run a cell's commands in order and stop at the first failure. Every gate result file a command wrote
+    (patch/build/*_result.txt) is kept next to the log as <log stem>.cmd<i>.<name>. U1G reuses
+    gen2_frame_align_result.txt, so without this copy a failing frame_align trace is overwritten."""
+    codes = []
+    for index, cmd in enumerate(commands, 1):
+        started = time.time()
+        codes.append(run(cmd, lane, timeout, log))
+        for result in (lane / "patch/build").glob("*_result.txt"):
+            if result.stat().st_mtime >= started and not result.name.startswith("e2e_"):
+                shutil.copyfile(result, log.with_name(f"{log.stem}.cmd{index}.{result.name}"))
+        if codes[-1] != 0:
+            break
+    return codes
+
+
 def run_cell(cell, lane, n, out, stagger):
     lane_id = f"s{n}"   # unique per cell: e2e_duo refuses to overwrite a lane's archived witnesses
     log = out / "logs" / (cell["id"].replace("/", "__") + ".log")
@@ -228,7 +244,7 @@ def run_cell(cell, lane, n, out, stagger):
         stagger()
         result["attempts"] = attempt
         commands = [duo_command(cell, f"{lane_id}{attempt}")] if cell["kind"] == "duo" else cell["commands"]
-        codes = [run(cmd, lane, cell["timeout"], log) for cmd in commands]
+        codes = run_commands(commands, lane, cell["timeout"], log)
         result["ok"] = all(code == 0 for code in codes)
         if cell["kind"] == "duo":
             result["receipts"] = collect_duo(cell, f"{lane_id}{attempt}", lane, out)
