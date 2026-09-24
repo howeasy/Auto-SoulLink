@@ -174,7 +174,7 @@ def test_the_u1f_expect_order_appends_the_pc_sites_after_the_faints():
     rt, F = frame_align()
     names = list(F.expect(True, True).values())
     assert names[:len(F.EXPECT) + 1] == list(F.expect(True).values())
-    assert names[-10:] == list(F.U1F_SITES.values())
+    assert names[-11:-1] == list(F.U1F_SITES.values()) and names[-1] == "whiteout_before_heal"
 
 
 def test_the_second_catch_weakens_a_full_hp_foe_once_then_throws():

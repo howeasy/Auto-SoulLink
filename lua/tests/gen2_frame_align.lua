@@ -83,7 +83,10 @@ function F.expect(poison, pc)
         if poison and name == "battle_faint" then out[#out + 1] = "poison_faint" end
         out[#out + 1] = name
     end
-    if pc then for _, name in ipairs(F.U1F_SITES) do out[#out + 1] = name end end
+    if pc then
+        for _, name in ipairs(F.U1F_SITES) do out[#out + 1] = name end
+        out[#out + 1] = "whiteout_before_heal"   -- proven by its own record (F.whiteout_problem), not the log order
+    end
     return out
 end
 F.ABSENT = {"capture_box"}
