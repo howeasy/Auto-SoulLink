@@ -110,8 +110,18 @@ function S.new(pack, deps, kind)
         clause("cpu", function()
             local cpu, regs = assert(pack.cpu), deps.regs()
             local pc, cpsr = uint(regs.R15, 4294967295), uint(regs.CPSR, 4294967295)
-            assert(cpsr % 32 == cpu.mode and math.floor(cpsr / 32) % 2 == cpu.thumb
-                and pc >= cpu.pc_min and pc <= cpu.pc_max, "CPU outside parked checkpoint")
+            local parked = cpsr % 32 == cpu.mode and math.floor(cpsr / 32) % 2 == cpu.thumb
+                and pc >= cpu.pc_min and pc <= cpu.pc_max
+            -- G5-RR-CPU-IRQ (owner ruling 23): a pack may also admit the IRQ vector entry, but only
+            -- when the banked return address (R14 of the IRQ bank) - 4 is inside the halt it
+            -- interrupted; an interrupt taken from game code stays refused (a write may be mid-way).
+            local irq = cpu.irq_entry
+            if not parked and irq and cpsr % 32 == irq.mode and math.floor(cpsr / 32) % 2 == irq.thumb then
+                local lr, at_vector = uint(regs.R14, 4294967295), false
+                for _, v in ipairs(irq.pc) do at_vector = at_vector or pc == v end
+                parked = at_vector and lr >= irq.lr_min and lr <= irq.lr_max
+            end
+            assert(parked, "CPU outside parked checkpoint")
         end)
         clause("task", function()
             local t, allowed = assert(pack.tasks), {}
@@ -249,6 +259,13 @@ function S.new(pack, deps, kind)
             if shape == "explode" then
                 assert(type(h.explode) == "table")
                 valid_rows(h.explode.head, true)
+                -- F1 M4: the shape must pin its chosen action outside the all-or-none "moves"
+                -- group, or an all-grouped head would admit [comm, hand-off] alone
+                local pinned = false
+                for _, row in ipairs(h.explode.head) do
+                    pinned = pinned or (row.name == "chosen_action" and row.group == nil)
+                end
+                assert(pinned)
             end
             return {h.address, h.width, h.value}
         end)

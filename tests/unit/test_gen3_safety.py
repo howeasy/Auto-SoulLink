@@ -986,3 +986,79 @@ def test_g5_frlg_packs_admit_no_explode_handoff(title):
     w = explode_parked(title, "clean")
     assert w.safety.handoff_entry(w.safety, 0, "explode") is None
     assert w.safety.handoff_entry(w.safety, 0) is not None
+
+
+# ── G5-RR-CPU-IRQ (owner ruling 23): RR's frame may end on the BIOS IRQ entry taken from the halt ──
+# Live, BizHawk 2.11.1 / mGBA HLE BIOS (docs/gen3/probes/rr_cpu_irq_bios_2026-09-24.txt): with an
+# exec hook registered every RR frame ends at R15=0x1C, CPSR=0x20000092 (IRQ, I set, ARM) and the
+# banked R14_irq = 0x1C4 -- the IRQ taken right after Halt's HALTCNT write (strb @0x1BC, SWI 2 =
+# 0x1B4..0x1C0); SPSR = 0x2000001F (the System-mode halt). Values re-typed, not read from the pack.
+IRQ_CPSR, HALT_LR = 0x20000092, 0x1C4
+
+
+def irq_world(title, kind, r14, r15=0x1C, cpsr=IRQ_CPSR):
+    w = World(title, kind)
+    g = w.lua.globals()
+    g.cpu.R15, g.cpu.CPSR, g.cpu.R14 = r15, cpsr, r14
+    return w
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+@pytest.mark.parametrize("r14", [HALT_LR, 0x1B8])        # the IRQ taken after / inside Halt's body
+def test_irq_rr_irq_entry_from_the_bios_halt_is_parked(kind, r14):
+    """Red at 904c134c: the signed clause admitted only the System-mode halt."""
+    w = irq_world("radical_red", kind, r14)
+    assert w.check() is True, list(w.safety.last_clauses.values())
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+@pytest.mark.parametrize("r14,r15,cpsr", [
+    (0x0800_0A1C, 0x1C, IRQ_CPSR),        # the IRQ interrupted game code (ROM): a write may be mid-way
+    (0x0300_1234, 0x1C, IRQ_CPSR),        # ... or IWRAM code
+    (0x1B4, 0x1C, IRQ_CPSR),              # before Halt's body (the SWI dispatcher)
+    (0x1C8, 0x1C, IRQ_CPSR),              # past it (VBlankIntrWait's entry)
+    (0x1F8, 0x1C, IRQ_CPSR),              # IntrWait's halt: not witnessed on RR, not admitted
+    (HALT_LR, 0x188, IRQ_CPSR),           # inside the handler, not at the vector entry
+    (HALT_LR, 0x1C, 0x200000B2),          # IRQ mode but Thumb
+    (HALT_LR, 0x1C, 0x20000091),          # FIQ mode
+    (None, 0x1C, IRQ_CPSR),               # R14 unreadable
+])
+def test_irq_rr_every_other_irq_frame_end_is_refused(kind, r14, r15, cpsr):
+    w = irq_world("radical_red", kind, r14, r15, cpsr)
+    assert w.check() is False and list(w.safety.last_clauses.values()) == ["cpu"]
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+def test_irq_rr_the_system_mode_halt_is_unchanged(kind):
+    w = World("radical_red", kind)
+    assert w.lua.globals().cpu.R15 == 0x1C4 and w.check() is True
+    w.lua.globals().cpu.R14 = 0x0800_0A1C                 # R14 is not consulted for the System halt
+    assert w.check() is True
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_irq_frlg_packs_admit_no_irq_entry(title):
+    """FR/LG park in ROM WaitForVBlank; an IRQ entry is refused whatever R14 holds (unchanged)."""
+    assert "irq_entry" not in committed_pack(title)["cpu"]
+    for r14 in (HALT_LR, 0x080008B0):
+        w = irq_world(title, "clean", r14)
+        assert w.check() is False and list(w.safety.last_clauses.values()) == ["cpu"]
+    assert World(title, "clean").check() is True
+
+
+# ── F1 M4: the Explode shape must pin its chosen-action row outside the "moves" group ──────────
+
+@pytest.mark.parametrize("mutation", ["all_rows_grouped", "no_chosen_action"])
+def test_f1_m4_an_explode_head_without_an_ungrouped_chosen_action_proves_nothing(mutation):
+    pack = committed_pack("radical_red")
+    head = pack["battle"]["handoff"]["explode"]["head"]
+    if mutation == "all_rows_grouped":
+        for row in head:
+            row["group"] = "moves"
+    else:
+        head[:] = [row for row in head if row["name"] != "chosen_action"]
+    w = seed_p_rows(rr_battle_world("companion", 1, 1, 0x0802E439, pack))
+    w.lua.globals().put(0x02023FE8, 0, 4)
+    assert w.safety.handoff_entry(w.safety, 0, "explode") is None
+    ok, why, clauses = w.check_reason("battle_commit", {"battler": 0, "plan": [[H_COMM, 1, 3], [H_SLOT, 4, H_VALUE]]})
+    assert ok is False and clauses == ["battle_commit_handoff"]

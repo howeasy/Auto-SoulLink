@@ -178,8 +178,14 @@ def test_missing_parked_symbol_has_named_error(title: str) -> None:
 
 def test_rr_cpu_is_the_bios_census() -> None:
     cpu = load("gen3_rr")["radical_red"]["cpu"]
+    irq = cpu.pop("irq_entry")                            # G5-RR-CPU-IRQ, below
     assert cpu == {"mode": 0x1F, "thumb": 0, "pc_min": 0, "pc_max": 0x3FFF, "observed_pc": 0x1C4,
                    "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt"}
+    # owner ruling 23: the BIOS IRQ entry taken from Halt (mGBA HLE BIOS: SWI 2 = 0x1B4..0x1C0,
+    # HALTCNT strb @0x1BC; live R14_irq = 0x1C4)
+    assert {k: irq[k] for k in ("mode", "thumb", "pc", "lr_min", "lr_max")} == {
+        "mode": 0x12, "thumb": 0, "pc": [0x1C], "lr_min": 0x1B8, "lr_max": 0x1C4}
+    assert "rr_cpu_irq_bios" in irq["evidence"] and irq["bios_sha1"]
     assert census_rows(cpu["census"]) == {0x1C4: 1800}
 
 
@@ -566,6 +572,30 @@ def test_g5_rr_explode_head_needs_explosion_pp_5_in_the_rom(monkeypatch) -> None
         at = 0x091521D0 + 153 * 12 + 4 - G.ROM_BASE
         return rom[:at] + bytes([rom[at] ^ 0xFF]) + rom[at + 1:]
     monkeypatch.setattr(G, "load_rom", mutated)
-    out, unverified = G.build_title("gen3_rr", "radical_red", "pokefirered.sym", ("clean", "companion"))
-    assert "handoff" in out["battle"] and "explode" not in out["battle"]["handoff"]
-    assert any(row.startswith("battle.handoff.explode:") for row in unverified)
+    # F1 M5: RR Explode's behaviour flips on this shape, so a failed proof is fatal, not a quiet drop
+    with pytest.raises(SystemExit, match="Explode"):
+        G.build_title("gen3_rr", "radical_red", "pokefirered.sym", ("clean", "companion"))
+
+
+def test_f1_m5_rr_explode_head_pins_the_move_identity_effect_explosion(monkeypatch) -> None:
+    """F1 M5: PP 5 alone is decorative; gBattleMoves[153].effect must be EFFECT_EXPLOSION (7, pret
+    include/constants/battle_move_effects.h:11) in every RR ROM, or the generator stops."""
+    for k in ("clean", "companion"):
+        rom_or_skip("gen3_rr", "radical_red", k)
+    rom_or_skip("gen3_frlg", "firered", "clean")
+    real = G.load_rom
+
+    def mutated(pack, title, k):
+        rom = real(pack, title, k)
+        if pack != "gen3_rr" or k != "clean":
+            return rom
+        at = 0x091521D0 + 153 * 12 - G.ROM_BASE                   # .effect, byte 0
+        return rom[:at] + bytes([rom[at] ^ 0x01]) + rom[at + 1:]
+    monkeypatch.setattr(G, "load_rom", mutated)
+    with pytest.raises(SystemExit, match="effect"):
+        G.build_title("gen3_rr", "radical_red", "pokefirered.sym", ("clean", "companion"))
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_irq_frlg_cpu_clause_has_no_irq_entry(title) -> None:
+    assert "irq_entry" not in load("gen3_frlg")[title]["cpu"]

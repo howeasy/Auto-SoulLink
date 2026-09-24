@@ -242,7 +242,10 @@ local function build_production(deps, c)
             read_u16_le = function(addr) return io_.read_u16(addr) end,
             read_u32_le = function(addr) return io_.read_u32(addr) end,
         },
-        regs = function() return { R15 = io_.register("R15"), CPSR = io_.register("CPSR") } end,
+        -- R14 is the CURRENT mode's bank (R14_irq at an IRQ entry; G5-RR-CPU-IRQ live probe)
+        regs = function()
+            return { R15 = io_.register("R15"), CPSR = io_.register("CPSR"), R14 = io_.register("R14") }
+        end,
         native_idle = function()
             if native and native.idle then return native:idle() end
             return true                                    -- no native part: nothing in flight

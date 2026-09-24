@@ -205,14 +205,26 @@ FRLG_CENSUS = {"firered": (0x080008AC, "docs/gen3/probes/census_fr_overworld_202
                "leafgreen": (0x080008AC, "docs/gen3/probes/census_lg_overworld_2026-09-23.txt")}
 # RR (CFRU) parks in the BIOS instead (docs/gen3/probes/census_rr_overworld_2026-09-21.txt):
 # 1800/1800 frames at R15=0x000001C4 with CPSR mode 0x1F (System) and T=0.
+# G5-RR-CPU-IRQ (owner ruling 23, 2026-09-24): with the client's exec hooks registered, every RR frame
+# instead ends on the BIOS IRQ vector entry taken from that halt (docs/gen3/probes/
+# rr_cpu_irq_bios_2026-09-24.txt): R15 = 0x1C (the vector at 0x18 + 4, before the handler runs), CPSR
+# mode 0x12, ARM, and the banked R14_irq = 0x1C4 (emu.getregister("R14") is the current mode's bank).
+# The BIOS is mGBA's HLE BIOS (BizHawk 2.11.1, no firmware): SWI 2 Halt = 0x1B4..0x1C0 (mov r11,#0;
+# mov r12,#0x04000000; strb r11,[r12,#0x301]; bx lr), so R14_irq - 4 = 0x1C0 is the instruction after
+# the HALTCNT write. The shape admits an IRQ entry only when R14_irq - 4 lies in Halt's body
+# (0x1B4..0x1C0): an interrupt taken from game code (R14 in ROM/RAM) stays refused.
+RR_IRQ_ENTRY = {"mode": 0x12, "thumb": 0, "pc": [0x1C], "lr_min": 0x1B8, "lr_max": 0x1C4,
+                "bios_sha1": "d0418465f8783dc6cbb180a16808fc9d3a7bae1d",
+                "evidence": "docs/gen3/probes/rr_cpu_irq_bios_2026-09-24.txt"}
 RR_CPU = {"mode": 0x1F, "thumb": 0, "pc_min": 0x00000000, "pc_max": 0x00003FFF,
           "observed_pc": 0x000001C4,
-          "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt"}
+          "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt",
+          "irq_entry": RR_IRQ_ENTRY}
 
 
 def cpu_clause(title: str, syms, is_rr: bool) -> dict:
     if is_rr:
-        return dict(RR_CPU)
+        return json.loads(json.dumps(RR_CPU))            # a deep copy: irq_entry is a nested dict
     if PARKED_SYMBOL not in syms:
         raise SystemExit(f"{title}: missing parked-CPU symbol {PARKED_SYMBOL}")
     addr, size = syms[PARKED_SYMBOL]
@@ -495,10 +507,9 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
         out["battle"]["handoff"] = handoff
         if "commit_hold" in out["battle"]:
             explode, why = explode_head(profile["titles"][title], roms)
-            if explode is None:
-                unverified.append(f"battle.handoff.explode: {why}")
-            else:
-                handoff["explode"] = explode
+            if explode is None:  # F1 M5: RR Explode's behaviour flips on this shape -- never a quiet drop
+                raise SystemExit(f"{title}: battle.handoff.explode (RR Explode+H) unproven: {why}")
+            handoff["explode"] = explode
     if is_rr:
         native = native_block(profile)
         if native is not None:
@@ -798,10 +809,14 @@ def handoff_head(title_profile: dict) -> tuple[list | None, str]:
 # lua/memory_gba.lua:1318-1345); BattlePokemon.moves +0x0C / .pp +0x24 (pret include/pokemon.h,
 # CFRU keeps the layout).
 EXPLODE_MOVE, EXPLODE_PP, EXPLODE_ACTION, EXPLODE_TARGET = 153, 5, 0, 1
+# F1 M5: the move identity, not just its PP -- gBattleMoves[153].effect (byte 0 of struct BattleMove,
+# pret include/pokemon.h) must be EFFECT_EXPLOSION (pret include/constants/battle_move_effects.h:11)
+EFFECT_EXPLOSION = 7
 BATTLE_MON_MOVES_OFF, BATTLE_MON_PP_OFF = 0x0C, 0x24
 EXPLODE_SOURCE = ("client.lua commit_plan rows, battler 0; profile.ram BATTLE_MONS/CHOSEN_ACTION/"
-                  "CHOSEN_MOVE/BATTLE_STRUCT_PTR + derived BATTLE_STRUCT_*_OFF; Explosion PP 5 read from "
-                  "rom.BATTLE_MOVES_ADDR in every RR ROM; constants lua/memory_gba.lua:1318-1345")
+                  "CHOSEN_MOVE/BATTLE_STRUCT_PTR + derived BATTLE_STRUCT_*_OFF; Explosion effect "
+                  "EFFECT_EXPLOSION and PP 5 read from rom.BATTLE_MOVES_ADDR in every RR ROM; constants "
+                  "lua/memory_gba.lua:1318-1345")
 
 
 def explode_head(title_profile: dict, roms: dict[str, bytes]) -> tuple[dict | None, str]:
@@ -813,10 +828,14 @@ def explode_head(title_profile: dict, roms: dict[str, bytes]) -> tuple[dict | No
                                 ("derived", "BATTLE_MOVE_PP_OFFSET", derived)):
         if not isinstance(table.get(key), int):
             return None, f"profile.{section}.{key} absent"
-    pp_at = rom_facts["BATTLE_MOVES_ADDR"] + EXPLODE_MOVE * derived["BATTLE_MOVE_ENTRY_SIZE"] \
-        + derived["BATTLE_MOVE_PP_OFFSET"]
+    entry_at = rom_facts["BATTLE_MOVES_ADDR"] + EXPLODE_MOVE * derived["BATTLE_MOVE_ENTRY_SIZE"]
+    pp_at = entry_at + derived["BATTLE_MOVE_PP_OFFSET"]
     for kind, rom in roms.items():
-        if kind != "_fr" and body(rom, pp_at, 1)[0] != EXPLODE_PP:
+        if kind == "_fr":
+            continue
+        if body(rom, entry_at, 1)[0] != EFFECT_EXPLOSION:
+            return None, f"move {EXPLODE_MOVE} effect at {entry_at:#010x} is not EFFECT_EXPLOSION in RR {kind}"
+        if body(rom, pp_at, 1)[0] != EXPLODE_PP:
             return None, f"move {EXPLODE_MOVE} PP at {pp_at:#010x} is not {EXPLODE_PP} in RR {kind}"
     base = ram["BATTLE_MONS_ADDR"]
     rows = [row for i in range(4) for row in (
