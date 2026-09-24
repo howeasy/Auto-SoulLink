@@ -242,6 +242,109 @@ def test_training_can_finish_normal_four_hit_pidgey_before_healing(env):
     assert g.hits == 4 and g.heals == 1
 
 
+@pytest.mark.parametrize("title", ROMS)
+def test_learning_prompt_command_pins_match_both_roms(title):
+    syms = {}
+    for line in (ROOT / f"data/gen3/pret/poke{title}.sym").read_text().splitlines():
+        parts = line.split()
+        if len(parts) == 4:
+            syms.setdefault(parts[3], int(parts[0], 16))
+    rom = (ROOT.parents[2] / ROMS[title]).read_bytes()
+    start = syms["BattleScript_AskToLearnMove"] - 0x08000000
+    assert rom[start + 17] == 0x5A
+    assert rom[start + 32] == 0x5B
+    assert int.from_bytes(rom[start + 33:start + 37], "little") == start + 0x08000000
+    assert syms["BattleScript_ForgotAndLearnedNewMove"] == start + 0x08000000 + 45
+
+
+def test_prompt_declines_first_question_and_confirms_stop_only_when_ready(env):
+    lua, routes = env
+    lua.execute("""
+        logs={};mem={};s={gBattlescriptCurrInstr=1,gBattleScripting=100,
+          gBattleCommunication=200,gBattleControllerExecFlags=2,gMoveToLearn=3,
+          BattleScript_AskToLearnMove=1000,BattleScript_ForgotAndLearnedNewMove=1045}
+        io_={u8=function(a) return mem[a] or 0 end,u16=function(a) return mem[a] or 0 end,
+             u32=function(a) return mem[a] or 0 end}
+        mem[3]=55;mem[1017]=0x5A;mem[1032]=0x5B
+        log=function(t) logs[#logs+1]=t end
+    """)
+    g = lua.globals()
+    prompt = routes.move_prompt(g.io_, g.s, g.log)
+    g.mem[1] = 1017
+    assert prompt() == (True, None)  # window not initialized
+    g.mem[131] = 1
+    assert prompt() == (True, "B")
+    g.mem[1] = 1032
+    g.mem[201] = 1
+    assert prompt() == (True, "Up")  # never A on NO
+    g.mem[201] = 0
+    assert prompt() == (True, "A")
+    g.mem[2] = 1
+    assert prompt() == (True, None)
+    g.mem[1] = 2000
+    assert prompt() is False
+    assert any("PREP_MOVE_PROMPT" in s and "move=55" in s for s in g.logs.values())
+
+
+def test_training_handles_level13_prompt_while_battle_is_still_live(env):
+    lua, routes = env
+    lua.execute("""
+        m={level=12,hp=35,max_hp=35,status=0,moves={33},pp={30}}
+        battle=false;prompt=false;handled=0
+        policy=function() handled=handled+1;prompt=false;return true,'A' end
+        c={party=function() return {m} end,log=function() end,move_prompt=policy,
+           hunt=function() battle=true;return true end,in_battle=function() return battle end,
+           await_turn=function(_,_,handler)
+               if prompt then
+                   assert(handler,'B-only wait loops at Stop learning Water Gun')
+                   assert(battle and m.level==13)
+                   handler();battle=false;return 'over'
+               end
+               return 'action'
+           end,
+           use_move=function() m.level=13;prompt=true;return true end,
+           play={wait_scene_settled=function() return true end}}
+        heal=function() end;guard=function() end
+    """)
+    g = lua.globals()
+    routes.train(g.c, "prep", 13, g.heal, g.guard)
+    assert g.handled == 1 and not g.battle
+
+
+def test_real_await_turn_uses_prompt_policy_and_releases_button_edges(env):
+    lua, _ = env
+    source = (ROOT / "lua/tests/duo/duo_gen3_main.lua").read_text()
+    body = source[source.index("function ctx.await_turn("):source.index("--- At the action menu")]
+    lua.execute("""
+        phase='forget';cursor=1;held=nil;presses={};battle=true;cp={}
+        ctx={wait_until=function(fn)
+            for i=1,100 do
+                local result=fn()
+                if result then return result end
+                if held then
+                    presses[#presses+1]=held
+                    if phase=='forget' and held=='B' then phase='stop'
+                    elseif phase=='stop' and held=='Up' then cursor=0
+                    elseif phase=='stop' and held=='A' and cursor==0 then phase='done';battle=false
+                    elseif phase=='stop' and held=='B' then phase='forget' end
+                end
+            end
+        end}
+        joypad={set=function(buttons) held=nil;for k in pairs(buttons) do held=k end end}
+        play={in_battle=function() return battle end}
+        party_menu_up=function() return false end;action_menu_up=function() return false end
+        policy=function()
+            if phase=='forget' then return true,'B' end
+            if phase=='stop' then return true,cursor==0 and 'A' or 'Up' end
+            return false
+        end
+    """)
+    lua.execute(body)
+    g = lua.globals()
+    assert g.ctx.await_turn(60, "B", g.policy) == "over"
+    assert list(g.presses.values()) == ["B", "Up", "A"]
+
+
 def test_preparation_wraps_actual_shared_follow_and_logs_nested_frames(env):
     lua, routes = env
     lua.globals().r = routes

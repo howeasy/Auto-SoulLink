@@ -62,6 +62,34 @@ local function tackle(m)
     for i,id in ipairs(m.moves) do if id==33 and m.pp[i]>0 then return i-1 end end
 end
 
+-- pret c75f3523 battle_scripts_1.s:3122-3135: Ask+17 is opcode5A (forget?),
+-- Ask+32 is opcode5B (stop?). battle_script_commands.c:5142-5325: state1 accepts
+-- JOY_NEW; B at5A declines, but B at5B RESTARTS the question. At5B choose YES(0), A.
+-- battle_script_commands.h:24,32 pins learnMoveState +0x1F and cursor +1.
+-- Offsets/opcodes/branch target independently pinned against BOTH title ROMs in unit tests.
+function R.move_prompt(io, s, log)
+    local last
+    return function()
+        local pc=io.u32(s.gBattlescriptCurrInstr)
+        local ask=s.BattleScript_AskToLearnMove
+        if pc<ask or pc>=s.BattleScript_ForgotAndLearnedNewMove then
+            last=nil;return false
+        end
+        local state=io.u8(s.gBattleScripting+0x1F)
+        local cursor=io.u8(s.gBattleCommunication+1)
+        local which = pc==ask+17 and "forget" or pc==ask+32 and "stop" or nil
+        if not which then return true,"B" end -- ordinary text within this exact script
+        assert(io.u8(pc)==(which=="forget" and 0x5A or 0x5B),"PREP move prompt opcode mismatch")
+        if state~=1 or io.u32(s.gBattleControllerExecFlags)~=0 then return true,nil end
+        assert(cursor==0 or cursor==1,"PREP move prompt invalid cursor")
+        local button=which=="forget" and "B" or cursor==0 and "A" or "Up"
+        local marker=string.format("PREP_MOVE_PROMPT phase=%s move=%d pc=0x%X state=%d cursor=%d input=%s",
+                                  which,io.u16(s.gMoveToLearn),pc,state,cursor,button)
+        if marker~=last then log(marker);last=marker end
+        return true,button
+    end
+end
+
 function R.train(c, label, floor, heal, guard)
     local function lead() return c.party()[1] end
     while lead().level < floor do
@@ -75,7 +103,7 @@ function R.train(c, label, floor, heal, guard)
         local rest=false
         for _=1,80 do
             guard()
-            local turn=c.await_turn(60,"B")
+            local turn=c.await_turn(60,"B",c.move_prompt)
             if turn=="over" then break end
             assert(turn=="action","training forced party menu or stalled")
             m=lead();move=tackle(m)

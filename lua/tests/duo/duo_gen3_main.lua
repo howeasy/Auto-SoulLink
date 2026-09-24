@@ -157,6 +157,9 @@ end)
 -- pret's symbols for THIS title (the first definition of a name: HandleInputChooseAction is also
 -- a static in the Oak/old-man and Pokedude controllers, which sort after the player's).
 local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInputChooseMove",
+               "gBattlescriptCurrInstr", "gBattleScripting", "gBattleCommunication",
+               "gBattleControllerExecFlags", "gMoveToLearn", "BattleScript_AskToLearnMove",
+               "BattleScript_ForgotAndLearnedNewMove",
                "gActionSelectionCursor", "gMoveSelectionCursor", "gBattleMons", "gBattlerPartyIndexes",
                "gBattleOutcome", "gMain", "gTasks", "gPartyMenu", "CB2_UpdatePartyMenu",
                "Task_HandleChooseMonInput", "Task_HandleSelectionMenuInput",
@@ -909,14 +912,22 @@ end
 --- Wait for the player's next decision point: "action", "party", "over" (the battle ended) or
 --- nil (timeout). `button` is pressed on a 16-frame cadence, never on a frame the action menu
 --- is up: B for text, the nickname prompt (B = NO, Cmd_trygivecaughtmonnick) and the dex page.
-function ctx.await_turn(secs, button)
+function ctx.await_turn(secs, button, prompt_policy)
     local n = 0
     return ctx.wait_until(function()
-        if not play.in_battle(cp) then return "over" end
+        -- T2's move-learning policy witnesses the actual script command BEFORE deciding
+        -- whether this frame accepts B or the stop-learning confirmation. Other rows retain
+        -- the existing text policy. Sampling also continues after the lead reaches Lv13.
+        local handled, prompt_button = false, nil
+        if prompt_policy then handled,prompt_button=prompt_policy() end
+        if not handled and not play.in_battle(cp) then return "over" end
         if party_menu_up() then return "party" end
-        if action_menu_up() then return "action" end
+        if not handled and action_menu_up() then return "action" end
         n = n + 1
-        if button and n % 16 == 0 then joypad.set({ [button] = true }) end
+        local press=button
+        if handled then press=prompt_button end
+        if prompt_policy then joypad.set({}) end -- guarantee released edges between decisions
+        if press and n % 16 == 0 then joypad.set({ [press] = true }) end
         return nil
     end, secs or 120, "the next battle decision")
 end
@@ -1195,6 +1206,11 @@ if D.battle_window_case then
         return Routes.enter_trainer(ctx,Tutorial,emu.framecount,label,expected,prep)
     end
     ctx.preparation_budget = Routes.preparation_budget
+    ctx.move_prompt = Routes.move_prompt({
+        u8=function(a) return memory.read_u8(a,"System Bus") end,
+        u16=function(a) return memory.read_u16_le(a,"System Bus") end,
+        u32=function(a) return memory.read_u32_le(a,"System Bus") end,
+    },S,log)
 end
 local base = D.scenario_module or D.scenario:gsub("_gen3$", "")
 local file = fmt("%s/lua/tests/duo/scenario_%s%s.lua", ROOT, D.scenario_prefix or "gen3_", base)
