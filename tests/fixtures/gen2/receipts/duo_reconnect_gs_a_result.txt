@@ -1,0 +1,32 @@
+DUO_GEN2 {"attempt":1,"case":"gold_battle","fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","player":"a","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","scenario":"gen2_reconnect","title":"gold"}
+CLIENT {"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","save_completed","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  phase continue @3218
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":50342,"panel":false,"
+HELLO {"frame":3338,"ot_id":50342}
+  phase loaded @3338
+RX resolved_areas
+RX config
+BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 EC63:C4A6:9E
+  phase walk @3482 xy=53,12
+  phase battle @4374 xy=52,12
+RX hud_show
+RX_TEXT {"cmd":"hud_show","frame":6662,"text":"Partner caught RATTATA in Route 29"}
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":6945,"key":"6191:C4A6:10","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":16}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":13,"in_box":false,"key":"6191:C4A6:10","level":2,"maxHP":13,"nickname":"PIDGEY","player":"a","seq":122,"species_id":16,"stats":{"level":2,"maxHP"
+CAPTURE_SENT {"frame":6945,"key":"6191:C4A6:10","seq":122}
+CAUGHT 6191:C4A6:10
+RX play_sound sound=25
+RX msgbox
+RX_TEXT {"cmd":"msgbox","frame":6948,"text":"PIDGEY and RATTATA linked!"}
+RX party_mon key=6191:C4A6:10
+TX {"event":"safe","player":"a","seq":123}
+TX {"event":"sync_retrieve_done","key":"6191:C4A6:10","player":"a","seq":126}
+  phase save @7005 xy=52,12
+  phase saved @7699 xy=52,12
+MYKEY 0 EC63:C4A6:9E
+MYKEY 1 6191:C4A6:10
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"ee38a7e7cf6fca7ef806366574a588cf3c57fe9c20678154433919878ebdda42","client_saves":1,"flushed_matches":true,"frame":7729,"gate_saves":1,"save_completed_frame":7699,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/saveram_gen2_reconnect_gen2-gs-reconnect_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/e2e_gen2_reconnect_gen2-gs-reconnect_a_witness.SaveRAM"}
+RECONNECT_READY {"frame":7729,"key":"6191:C4A6:10","phase":"initial","player":"a"}

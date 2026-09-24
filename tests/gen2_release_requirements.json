@@ -178,7 +178,7 @@
         "initiator": "gold",
         "partner": "silver",
         "fixtures": {"a": "gold_battle", "b": "silver_battle"},
-        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause"]
+        "scenarios": ["link", "gen2_faint", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_reconnect"]
       },
       "proofs": [
         {
@@ -286,6 +286,43 @@
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_species_clause_gs_pydec_result.txt",
               "sha256": "70dcb1c1a1926fd576b4072ca4c8f2aa87f96de5edd3e15b610818e6b0a1bee1"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_reconnect",
+          "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_reconnect --lane gen2-gs-reconnect --keep-data",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_reconnect_gs_a_result.txt",
+              "sha256": "7cc225b712a62abca2d9f4c3ab903a496692347d11c1925c1ade5f325d7aa910"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_reconnect_gs_b_result.txt",
+              "sha256": "f714c71defb632302a163c5a50b7b5da7c1796f48657a5556059d04bcb64b44a"
+            },
+            "a_same_save": {
+              "path": "tests/fixtures/gen2/receipts/duo_reconnect_gs_a_same_save_result.txt",
+              "sha256": "1705ccde5dd9165cd0c10fff92be07cb594cd03b22ce3fb85f1c05802a868dd7"
+            },
+            "a_wrong_save": {
+              "path": "tests/fixtures/gen2/receipts/duo_reconnect_gs_a_wrong_save_result.txt",
+              "sha256": "66786b30f6f2de6a3eef94a70a7a83b0db7a2c0d89a4f16c81ce36a0d063193a"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_reconnect_gs_pydec_result.txt",
+              "sha256": "37b381dabd07a8a6b953de20d61882ea87617906285929a4157f92b865db16a5"
+            }
+          },
+          "staged_saves": {
+            "same_save": {
+              "path": "tests/fixtures/gen2/receipts/duo_reconnect_gs_a_same_save_seed.SaveRAM",
+              "sha256": "5f3241aa73b0ca785f6dea6178bf7f250b995a83a5f90b86f3452d499472b51f"
+            },
+            "wrong_save": {
+              "path": "tests/fixtures/gen2/receipts/duo_reconnect_gs_a_wrong_save_seed.SaveRAM",
+              "sha256": "37a469b1ed2e6f1ca72b923aa3ac4ad9628166df567aa68bfbcef7bfb07ad7fa",
+              "case": "gold_battle_ot2"
             }
           }
         }
