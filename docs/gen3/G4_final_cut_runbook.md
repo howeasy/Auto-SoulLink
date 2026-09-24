@@ -334,9 +334,15 @@ python tools/gen3_final_cut.py --cut <frozen cut> --list       # the row ids
 It provisions `.claude/worktrees/gen3-lane-clean` (override `--lane`) detached at the cut — `git worktree add
 --detach` if absent, else `checkout --detach`, with W3's `update-ref --no-deref HEAD` + `read-tree`/`checkout-index`
 fallbacks for the broken shared ref — and aborts before any row unless `git status --porcelain --untracked-files=no`
-is empty (a lane that is already tracked-dirty is never touched). It copies the §0.3 gitignored inputs it lacks from
-the main checkout (root dumps, the staged `patch/build/gen3_*` copies, the Gen 1/Gen 2 inputs item 6 needs; no
-`.cache` item is read by any row). Then it runs **41 rows** in runbook order: §1 builds (6), §2-§3 FRLG scenarios (5:
+is empty (a lane that is already tracked-dirty is never touched). It brings the §0.3 gitignored inputs in line
+(G4-FINALCUT-LIVEFIX): the PINNED ones (the FR/LG root dumps and staged `patch/build/gen3_*` copies, and
+`patch/build/slink_RR.gba`) must match the lane's own pins (`tools/gen_gen3_write_checkpoint.py` ROMS sha1s and
+`server/patcher.py` `patched_md5`) and are taken from the first source that matches (the lane, then the runner's
+worktree, then the main checkout), and no match aborts the pass, so a stale root file never wins. The UNPINNED ones
+(the Gen 1/2 inputs item 6 needs, the `patch/build/shadow_wire/` P3 captures the unit gate parses) are copied only when
+the lane lacks them. No `.cache` item is read by any row. `release_gate_quick` gets `SLINK_ARMGCC` = the main
+checkout's vendored `patch/vendor/armgcc/*/bin`; the boot-check rows pass the root dump name and the gamedb battery
+name (`--saveram-name 'Pokemon - <Title> Version (USA).SaveRAM'`). Then it runs **41 rows** in runbook order: §1 builds (6), §2-§3 FRLG scenarios (5:
 faint_cmd, link, boxsync, reconnect, deadzone), §4 whiteout + center_controls × FR/LG-as-A (4), §5 the P+H rows
 `linked_faint_active{,_whiteout,_trainer}_gen3` and `active_end_gen3` × FR/LG-as-A (8; they supersede the A1/A2 hold
 rows and T2, `G4_request_draft.md` @ `4aaaee7e`), §6 the probe × 2 titles (through `gen3_probe_receipt.py`, which runs
@@ -381,7 +387,7 @@ when all of these hold for some receipt of the same row+orientation at a cut X:
   match this lane's.
 
 Every runner receipt now records `# inputs:` (the staged ROMs, the checkpoint's `.State` files, the RR build and
-the root FR dump that probe_gates reads, item 6's Gen 1/2 inputs), and `copy_inputs` compares by content.
+the root FR dump that probe_gates reads, item 6's Gen 1/2 inputs).
 Never carried: the state/tutorial builds, the checkpoint probe (it runs on states this pass rebuilds), the zip rows
 and the source gate; item 6 carries only while `master` has not moved. A carried row's receipt says `CARRIED from
 <receipt> @X; diff X..cut touches no dependency (list checked)` with the globs, the diff and the inputs.

@@ -346,9 +346,140 @@ def test_a_dirty_lane_aborts_the_pass_before_any_row(monkeypatch, tmp_path):
 
 
 def test_copy_inputs_fails_closed_on_a_missing_source(tmp_path):
-    (tmp_path / "root").mkdir()
-    with pytest.raises(fc.LaneError, match="gitignored input missing"):
-        fc.copy_inputs(str(tmp_path / "lane"), str(tmp_path / "root"))
+    for d in ("root", "repo", "lane"):
+        (tmp_path / d).mkdir()
+    with pytest.raises(fc.LaneError, match="no source matches"):
+        fc.copy_inputs(str(tmp_path / "lane"), str(tmp_path / "root"), str(tmp_path / "repo"),
+                       pins=_pins())
+
+
+# --- G4-FINALCUT-LIVEFIX: pinned inputs never lose to a stale root file ------------------------
+
+GOOD = {"firered": b"FR dump", "leafgreen": b"LG dump", "radical_red_companion": b"RR companion new"}
+
+
+def _pins():
+    import hashlib
+    pins = {k: hashlib.sha1(v).hexdigest() for k, v in GOOD.items()}
+    pins["radical_red_companion:md5"] = hashlib.md5(GOOD["radical_red_companion"]).hexdigest()
+    return pins
+
+
+def _seed(base, companion=GOOD["radical_red_companion"], unpinned=b"u"):
+    """A checkout holding every input copy_inputs looks for."""
+    for t in ("firered", "leafgreen"):
+        for rel in (fc.ROOT_DUMPS[t], fc.STAGED[t]):
+            (base / rel).parent.mkdir(parents=True, exist_ok=True)
+            (base / rel).write_bytes(GOOD[t])
+    rr = base / "patch" / "build" / "slink_RR.gba"
+    rr.parent.mkdir(parents=True, exist_ok=True)
+    rr.write_bytes(companion)
+    for rel in fc.UNPINNED_INPUTS:
+        p = base / rel
+        if rel.endswith("/"):
+            p.mkdir(parents=True, exist_ok=True)
+            (p / "cap.shadow.log").write_bytes(unpinned)
+        else:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(unpinned)
+
+
+def test_a_stale_root_companion_never_overwrites_the_lane(tmp_path):
+    """The live rehearsal: root held the pre-rebuild companion (bf8e94a0), the lane the rebuilt
+    one (6cf77ba4); the old size-compare copied root over the lane."""
+    root, repo, lane = (tmp_path / d for d in ("root", "repo", "lane"))
+    _seed(root, companion=b"RR companion OLD")          # same size, different content
+    _seed(repo)
+    _seed(lane)
+    fc.copy_inputs(str(lane), str(root), str(repo), pins=_pins())
+    assert (lane / "patch/build/slink_RR.gba").read_bytes() == GOOD["radical_red_companion"]
+
+
+def test_a_wrong_lane_input_is_replaced_from_a_source_that_matches_its_pin(tmp_path):
+    root, repo, lane = (tmp_path / d for d in ("root", "repo", "lane"))
+    _seed(root, companion=b"RR companion OLD")
+    _seed(repo)
+    _seed(lane, companion=b"RR companion OLD")
+    fc.copy_inputs(str(lane), str(root), str(repo), pins=_pins())
+    assert (lane / "patch/build/slink_RR.gba").read_bytes() == GOOD["radical_red_companion"]
+
+
+def test_no_source_matching_the_pin_aborts_without_touching_the_lane(tmp_path):
+    root, repo, lane = (tmp_path / d for d in ("root", "repo", "lane"))
+    for d in (root, repo, lane):
+        _seed(d, companion=b"RR companion OLD")
+    with pytest.raises(fc.LaneError, match="radical_red_companion"):
+        fc.copy_inputs(str(lane), str(root), str(repo), pins=_pins())
+    assert (lane / "patch/build/slink_RR.gba").read_bytes() == b"RR companion OLD"
+
+
+def test_the_companion_md5_pin_is_checked_too(tmp_path):
+    root, repo, lane = (tmp_path / d for d in ("root", "repo", "lane"))
+    for d in (root, repo, lane):
+        _seed(d)
+    pins = _pins()
+    pins["radical_red_companion:md5"] = "0" * 32         # server/patcher.py disagrees
+    with pytest.raises(fc.LaneError, match="radical_red_companion"):
+        fc.copy_inputs(str(lane), str(root), str(repo), pins=pins)
+
+
+def test_an_unpinned_lane_input_is_kept_and_a_missing_one_copied(tmp_path):
+    root, repo, lane = (tmp_path / d for d in ("root", "repo", "lane"))
+    _seed(root, unpinned=b"root copy")
+    _seed(repo, unpinned=b"repo copy")
+    _seed(lane, unpinned=b"lane copy")
+    kept = fc.UNPINNED_INPUTS[0]
+    missing = next(r for r in fc.UNPINNED_INPUTS if r.endswith("/"))   # the shadow captures
+    import shutil
+    shutil.rmtree(lane / missing)
+    fc.copy_inputs(str(lane), str(root), str(repo), pins=_pins())
+    assert (lane / kept).read_bytes() == b"lane copy"
+    assert (lane / missing / "cap.shadow.log").read_bytes() == b"repo copy"   # repo before root
+
+
+def test_the_master_tree_gets_only_the_item6_inputs(tmp_path):
+    root, repo, master = (tmp_path / d for d in ("root", "repo", "master"))
+    _seed(root)
+    master.mkdir()
+    fc.copy_inputs(str(master), str(root), str(repo), only=fc.ITEM6_INPUTS)   # no pin tables
+    assert (master / "patch/build/gen1_red.gb").exists()
+    assert not (master / "patch/build/slink_RR.gba").exists()
+    assert not (master / "patch/build/shadow_wire").exists()
+
+
+def test_rom_pins_come_from_the_trees_own_pin_tables():
+    pins = fc.rom_pins(fc.REPO)
+    assert pins["firered"] == "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc"
+    assert pins["leafgreen"] == "574fa542ffebb14be69902d1d36f1ec0a4afd71e"
+    assert len(pins["radical_red_companion"]) == 40
+    assert len(pins["radical_red_companion:md5"]) == 32     # server/patcher.py TARGETS["rr"]
+
+
+def test_bootcheck_passes_the_root_dump_and_the_gamedb_battery_name():
+    """The rehearsal: --rom <already staged name> was staged AGAIN (gen3_gen3_...) and seeded
+    as 'gen3 gen3 ....SaveRAM' while BizHawk filed the battery under the gamedb title."""
+    rows = {r.id: r for r in fc.build_plan("c" * 40, LANE, MASTER)}
+    assert rows["bootcheck_leafgreen_party_battle_b"].command() == (
+        "python tools/gen3_fixtures.py boot-check --rom 'Pokemon - LeafGreen Version (USA).gba' "
+        "--fixture tests/fixtures/gen3/leafgreen_party_battle_b.sav --title leafgreen "
+        "--saveram-name 'Pokemon - LeafGreen Version (USA).SaveRAM'")
+    assert rows["bootcheck_firered_party_town"].command() == (
+        "python tools/gen3_fixtures.py boot-check --rom 'Pokemon - FireRed Version (USA).gba' "
+        "--fixture tests/fixtures/gen3/firered_party_town.sav --title firered "
+        "--saveram-name 'Pokemon - FireRed Version (USA).SaveRAM'")
+
+
+def test_the_unit_gate_row_gets_the_vendored_toolchain(tmp_path):
+    for ver in ("xpack-arm-none-eabi-gcc-14.0.0-1", "xpack-arm-none-eabi-gcc-15.2.1-1.1"):
+        b = tmp_path / "patch" / "vendor" / "armgcc" / ver / "bin"
+        b.mkdir(parents=True)
+        (b / ("arm-none-eabi-gcc" + (".exe" if os.name == "nt" else ""))).write_bytes(b"")
+    got = fc.armgcc_bin(str(tmp_path))
+    assert got.replace("\\", "/").endswith("xpack-arm-none-eabi-gcc-15.2.1-1.1/bin")
+    assert fc.armgcc_bin(str(tmp_path / "nowhere")) is None
+    row = {r.id: r for r in fc.build_plan("c" * 40, LANE, MASTER)}["release_gate_quick"]
+    if fc.armgcc_bin(fc.main_checkout()):
+        assert row.env["SLINK_ARMGCC"] == fc.armgcc_bin(fc.main_checkout())
 
 
 # ---------------------------------------------------------------------------

@@ -33,8 +33,8 @@ from __future__ import annotations
 import argparse
 import contextlib
 import datetime as dt
-import filecmp
 import fnmatch
+import glob
 import hashlib
 import json
 import os
@@ -62,16 +62,32 @@ STAGED = {"firered": "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba",
           "leafgreen": "patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba"}
 ROOT_DUMPS = {"firered": "Pokemon - FireRed Version (USA).gba",
               "leafgreen": "Pokemon - LeafGreen Version (USA).gba"}
-# Runbook §0.3 plus item 6's inputs (item6_route_diff_{branch,master}_2026-09-24.txt): gitignored,
-# copied from the main checkout by the same relative path when the tree lacks them. No .cache item
-# is read by any row here (the only .cache consumer in e2e_duo is the Gen 1 randomizer's UPR jar).
-GITIGNORED_INPUTS = [ROOT_DUMPS["firered"], ROOT_DUMPS["leafgreen"],
-                     "Pokemon - Crystal Version (USA).gbc",
-                     "patch/build/gen1_red.gb", "patch/build/gen1_blue.gb",
-                     "patch/build/gen1_yellow.gbc", "patch/build/gen2_crystal.gbc",
-                     "patch/gen1/build/slink_red.gb", "patch/gen1/build/slink_blue.gb",
-                     "patch/gen1/build/slink.sym",
-                     "patch/build/slink_RR.gba"]   # probe_gates (tests/live/test_gen3_probe_gates.py)
+# The gitignored inputs a lane needs (runbook §0.3, item 6's inputs per
+# item6_route_diff_{branch,master}_2026-09-24.txt). PINNED ones are verified against the tree's
+# own pins (rom_pins) and taken from the first source whose content matches -- the lane itself,
+# then this runner's worktree, then the main checkout -- so a stale root file can never win
+# (G4-FINALCUT-LIVEFIX: root's pre-rebuild companion bf8e94a0 once overwrote the lane's
+# 6cf77ba4). No match anywhere aborts the pass. UNPINNED ones are copied only when the lane lacks
+# them (the lane's own copy is never overwritten), from this worktree first, then the main
+# checkout. No .cache item is read by any row here (the only .cache consumer in e2e_duo is the
+# Gen 1 randomizer's UPR jar).
+PINNED_INPUTS = {   # lane path -> (pin key, relative paths a source may hold it under)
+    ROOT_DUMPS["firered"]: ("firered", [ROOT_DUMPS["firered"], STAGED["firered"]]),
+    STAGED["firered"]: ("firered", [STAGED["firered"], ROOT_DUMPS["firered"]]),
+    ROOT_DUMPS["leafgreen"]: ("leafgreen", [ROOT_DUMPS["leafgreen"], STAGED["leafgreen"]]),
+    STAGED["leafgreen"]: ("leafgreen", [STAGED["leafgreen"], ROOT_DUMPS["leafgreen"]]),
+    # probe_gates and the unit gate's pinned-dump tests read the RR companion build
+    "patch/build/slink_RR.gba": ("radical_red_companion", ["patch/build/slink_RR.gba"]),
+}
+UNPINNED_INPUTS = ["Pokemon - Crystal Version (USA).gbc",
+                   "patch/build/gen1_red.gb", "patch/build/gen1_blue.gb",
+                   "patch/build/gen1_yellow.gbc", "patch/build/gen2_crystal.gbc",
+                   "patch/gen1/build/slink_red.gb", "patch/gen1/build/slink_blue.gb",
+                   "patch/gen1/build/slink.sym",
+                   # tests/unit/test_gen3_shadow_diff.py parses these physical P3 captures
+                   "patch/build/shadow_wire/"]
+GITIGNORED_INPUTS = list(PINNED_INPUTS) + UNPINNED_INPUTS
+ITEM6_INPUTS = [p for p in UNPINNED_INPUTS if not p.endswith("/")]   # the Gen 1/2 dumps and builds
 
 # (row-id glob, reason substring the output must carry, the owner ruling that signs it)
 ALLOWED_SKIPS = [
@@ -167,9 +183,15 @@ def build_plan(cut, lane, master):
         for scene in ("town", "battle"):
             for side in ("", "_b"):
                 fx = f"{title}_party_{scene}{side}"
+                # the ROOT dump name (copy_inputs puts the pinned dump in the lane root), so
+                # stage_rom yields patch/build/gen3_Pokemon_... once, and the gamedb battery name
+                # BizHawk files a clean dump under (PARTY_TITLES saveram); an already-staged
+                # --rom was staged AGAIN as gen3_gen3_... and seeded under the wrong name
                 rows.append(Row(f"bootcheck_{fx}", "§8 item4",
-                                [PY, "tools/gen3_fixtures.py", "boot-check", "--rom", STAGED[title],
-                                 "--fixture", f"tests/fixtures/gen3/{fx}.sav", "--title", title],
+                                [PY, "tools/gen3_fixtures.py", "boot-check",
+                                 "--rom", ROOT_DUMPS[title],
+                                 "--fixture", f"tests/fixtures/gen3/{fx}.sav", "--title", title,
+                                 "--saveram-name", ROOT_DUMPS[title][:-len(".gba")] + ".SaveRAM"],
                                 lane, 600))
     # §9 item 5: the zip built FROM the cut, checked AT the cut, then booted
     zip_path = f"{lane}/dist/SLink-player-g4-{cut8}.zip"
@@ -188,9 +210,10 @@ def build_plan(cut, lane, master):
                     REPO, 5400, own_verdict=True))
     # §11: the release gate's source lanes, then its P1 hook-probe lane (the duo lane is the
     # rows above, run one scenario at a time instead of through its pytest wrapper)
+    gcc = armgcc_bin(main_checkout())
     rows += [Row("release_gate_quick", "§11 gate",
                  [PY, "tools/verify_gen3_release.py", "--quick"], lane, 3600, emulator=False,
-                 own_verdict=True),
+                 own_verdict=True, env={"SLINK_ARMGCC": gcc} if gcc else {}),
              Row("probe_gates", "§11 gate",
                  [PY, "-m", "pytest", "tests/live/test_gen3_probe_gates.py", "-q", "-p",
                   "no:randomly", "-rs"], lane, 3600, env={"SLINK_LIVE": "1"})]
@@ -314,8 +337,9 @@ def provision_plan(tree, rev):
             f"git -C {tree} checkout --detach {rev}   (if HEAD differs)",
             f"git -C {tree} update-ref --no-deref HEAD {rev}   (fallback: the broken shared ref)",
             f"git -C {tree} read-tree {rev} && git -C {tree} checkout-index -a -f   (fallback)",
-            f"copy missing gitignored inputs from the main checkout: {', '.join(GITIGNORED_INPUTS)}",
-            f"stage {STAGED['firered']} / {STAGED['leafgreen']} from the root dumps"]
+            f"pinned inputs (sha1 vs the tree's own pins; lane, then this worktree, then the main "
+            f"checkout; no match aborts): {', '.join(PINNED_INPUTS)}",
+            f"unpinned inputs, copied only when missing: {', '.join(UNPINNED_INPUTS)}"]
 
 
 def provision(tree, rev, root):
@@ -344,19 +368,93 @@ def provision(tree, rev, root):
     return sha
 
 
-def copy_inputs(tree, root):
-    """Copy each gitignored input the tree lacks (or holds with different CONTENT) from `root`,
-    and stage the FR/LG dumps under patch/build. A missing source fails closed."""
-    pairs = [(p, p) for p in GITIGNORED_INPUTS] + \
-            [(ROOT_DUMPS[t], STAGED[t]) for t in ("firered", "leafgreen")]
-    for src_rel, dst_rel in pairs:
-        src, dst = os.path.join(root, src_rel), os.path.join(tree, dst_rel)
-        if not os.path.isfile(src):
-            raise LaneError(f"gitignored input missing from {root}: {src_rel}")
-        if os.path.isfile(dst) and filecmp.cmp(src, dst, shallow=False):
+_HASHES = {}
+
+
+def file_digest(path, algo="sha256"):
+    """A file's hex digest, memoised on (path, size, mtime, algo); None when absent."""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    if not os.path.isfile(path):
+        return None
+    key = (path, st.st_size, st.st_mtime_ns, algo)
+    if key not in _HASHES:
+        h = hashlib.new(algo)
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        _HASHES[key] = h.hexdigest()
+    return _HASHES[key]
+
+
+def rom_pins(tree):
+    """{pin key: digest} from the tree's OWN pin tables: tools/gen_gen3_write_checkpoint.py ROMS
+    (sha1 of the FR/LG clean dumps and the RR companion) and server/patcher.py TARGETS["rr"]
+    patched_md5 (the companion's md5). Missing tables raise LaneError (fail closed)."""
+    src = _read(os.path.join(tree, "tools", "gen_gen3_write_checkpoint.py"))
+    pins = {}
+    for title, kind, sha in re.findall(
+            r'\("gen3_\w+", "(\w+)", "(\w+)"\):\s*\(.*?"([0-9a-f]{40})"\)', src, re.S):
+        pins[title if kind == "clean" and title in STAGED else f"{title}_{kind}"] = sha
+    md5 = re.search(r'"rr":\s*\{.*?"patched_md5":\s*"([0-9a-f]{32})"',
+                    _read(os.path.join(tree, "server", "patcher.py")), re.S)
+    if md5:
+        pins["radical_red_companion:md5"] = md5[1]
+    need = {"firered", "leafgreen", "radical_red_companion", "radical_red_companion:md5"}
+    if not need <= set(pins):
+        raise LaneError(f"{tree}: pin tables incomplete (have {sorted(pins)})")
+    return pins
+
+
+def _matches_pin(path, key, pins):
+    return file_digest(path, "sha1") == pins[key] and \
+        (f"{key}:md5" not in pins or file_digest(path, "md5") == pins[f"{key}:md5"])
+
+
+def copy_inputs(tree, root, repo=None, pins=None, only=None):
+    """Bring the tree's gitignored inputs in line (see PINNED_INPUTS / UNPINNED_INPUTS).
+    `only`: just these unpinned inputs, no pinned ones (item 6's master tree needs only the
+    Gen 1/2 inputs, and an older master may not carry the Gen 3 pin tables at all)."""
+    repo = repo or REPO
+    pins = {} if only is not None else (pins or rom_pins(tree))
+    for dst_rel, (key, rels) in ({} if only is not None else PINNED_INPUTS).items():
+        dst = os.path.join(tree, dst_rel)
+        if _matches_pin(dst, key, pins):
             continue
+        cands = [os.path.join(base, rel) for base in (tree, repo, root) for rel in rels]
+        src = next((c for c in cands if _matches_pin(c, key, pins)), None)
+        if src is None:
+            raise LaneError(f"{dst_rel}: no source matches pin {key} (sha1 {pins[key]}); "
+                            f"checked {', '.join(cands)}")
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copyfile(src, dst)
+    for rel in UNPINNED_INPUTS if only is None else only:
+        dst = os.path.join(tree, rel)
+        if os.path.exists(dst):
+            continue                     # the lane's own copy is never overwritten
+        src = next((os.path.join(b, rel) for b in (repo, root)
+                    if os.path.exists(os.path.join(b, rel))), None)
+        if src is None:
+            raise LaneError(f"gitignored input missing from {repo} and {root}: {rel}")
+        if rel.endswith("/"):
+            shutil.copytree(src, dst)
+        else:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copyfile(src, dst)
+
+
+def armgcc_bin(root):
+    """The vendored arm-none-eabi bin dir under the main checkout (patch/tools/build.py's search:
+    patch/vendor/armgcc/*/bin, newest first), or None. A lane worktree has no patch/vendor, so
+    the unit gate's patch-source tests skip there unless $SLINK_ARMGCC points here."""
+    exe = "arm-none-eabi-gcc" + (".exe" if os.name == "nt" else "")
+    for d in sorted(glob.glob(os.path.join(root, "patch", "vendor", "armgcc", "*", "bin")),
+                    reverse=True):
+        if os.path.isfile(os.path.join(d, exe)):
+            return d
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -744,27 +842,12 @@ def row_inputs(row, lane, root=None):
         return {"rom:slink_RR": at("patch/build/slink_RR.gba"),
                 "rom:firered_root": os.path.join(root or main_checkout(), ROOT_DUMPS["firered"])}
     if rid == "item6_route_diff":
-        return {f"input:{p}": at(p) for p in GITIGNORED_INPUTS if p.startswith("patch/")}
+        return {f"input:{p}": at(p) for p in ITEM6_INPUTS if p.startswith("patch/")}
     return {}
 
 
-_HASHES = {}
-
-
 def file_sha256(path):
-    """sha256 of a file, memoised on (path, size, mtime); None when absent."""
-    try:
-        st = os.stat(path)
-    except OSError:
-        return None
-    key = (path, st.st_size, st.st_mtime_ns)
-    if key not in _HASHES:
-        h = hashlib.sha256()
-        with open(path, "rb") as f:
-            for chunk in iter(lambda: f.read(1 << 20), b""):
-                h.update(chunk)
-        _HASHES[key] = h.hexdigest()
-    return _HASHES[key]
+    return file_digest(path, "sha256")
 
 
 def hash_inputs(paths):
@@ -1190,7 +1273,7 @@ def run_pass(args):
             copy_inputs(lane, root)
         if any(r.id == "item6_route_diff" for r in run_rows):
             provision(master, "master", root)
-            copy_inputs(master, root)
+            copy_inputs(master, root, only=ITEM6_INPUTS)
     except LaneError as exc:
         print(f"[final_cut] ABORT: {exc}", file=sys.stderr)
         return 2
