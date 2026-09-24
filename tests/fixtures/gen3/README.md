@@ -414,11 +414,23 @@ FR's battle fixture has 4). Ball-throwing (`ball_hunt`) and two-mon scenarios ca
 these fixtures as they stand; a second mon or balls need an RR scripted-play leg (purchase or
 story) that no card has pinned yet.
 
-## rr_battle2.sav / rr_battle2_b.sav (card G5-RR-FIXTURE-DRIVER) — **PENDING LIVE BUILD**
+## rr_battle2.sav / rr_battle2_b.sav (cards G5-RR-FIXTURE-DRIVER, G5-LANE-2) — built live 2026-09-24
 
-The "a second mon or balls" gap `rr_battle.sav`'s own section above names. **Not committed
-yet** -- this section is a provenance stub, written before the fixture exists, so the build
-recipe and its sources are on record before the live run that produces the files.
+The "a second mon or balls" gap `rr_battle.sav`'s own section above names.
+
+| file | sha256 | slot / counter | trainer | party |
+|---|---|---|---|---|
+| `rr_battle2.sav` | `4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac` | 0 / 4 | `B`#2BDDC8BF | 277 L6 22/22 (`EBEF11DA`), 1324 L4 18/18 (`F56D8C1D`) |
+| `rr_battle2_b.sav` | `7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97` | 0 / 4 | `BB`#D4223740 | same two mons, OT re-keyed by `derive-b --rr` |
+
+Built from `rr_battle.sav` (sha256 `d9fe5eb6a0b3ea3dc778162584b9d7169fc3bdb38555f709f217113b33319c4b`, counter 3) on
+`patch/build/slink_RR.gba` (md5 `6cf77ba4a63634a0fd452be6f206bfc3`), driver at 35de6679, lane
+`gen3-lane-2`. Cut: saved in-game at the grass origin (map 3.19, (12,37)), 9 Poké Balls left
+after one throw. Receipt: `docs/gen3/probes/rr_battle2_fixture_build_35de6679_2026-09-24.txt`
+(RESULT: PASS counter 3 -> 4, every route phase witnessed: VAR_MART 0->1->2, dex=1, balls=10).
+Both files boot-checked PASS (counter 4 -> 5, 14/14 sectors). The first live run (driver at
+904c134c) also passed in-emulator but run_gate watched `run()`'s result file, not route2's;
+35de6679 fixed that (route2 now writes the same result file).
 
 Route and mechanism: `docs/gen3/research/rr_fixture_route_2026-09-24.md` (cards
 G5-RR-FIXTURE-ROUTE / G5-RR-FIXTURE-DRIVER), which decodes RR's own compiled Viridian Mart and
@@ -464,10 +476,4 @@ python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixtur
 python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixture tests/fixtures/gen3/rr_battle2_b.sav --rr
 ```
 
-This driver has **not been run live** (this card is source-only, no emulator, same as its
-research predecessor); the walk/BFS and the ROM-script decode it depends on are regression-
-covered without an emulator by `tests/unit/test_gen3_rr_fixture_route.py`, but the *runtime*
-mechanics -- exact button timing, whether the walk actually lands where the BFS says, whether
-the pinned bag-throw sequence still works from this specific save state -- are unverified until
-someone runs it. Replace this stub with the real sha256/slot/counter/trainer/party facts (the
-same shape every other section in this file uses) once it has.
+Runtime mechanics (button timing, walk landing, the pinned bag-throw) are now proven live by the receipt above.
