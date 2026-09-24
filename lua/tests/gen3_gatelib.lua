@@ -242,7 +242,7 @@ function Lib.open(name)
     -- opts.native  false = build no native.lua instance (required by t.raw)
     function t.boot(opts)
         opts = opts or {}
-        pcall(function() client.speedmode(opts.speed or 400) end)
+        pcall(function() client.speedmode(opts.speed or 6399)  -- max, as lua/tests/gatelib.lua; gates count frames, not wall time end)
         pcall(memory.usememorydomain, "System Bus")
         t.native, t.raw_job, t.raw_poisoned = nil, nil, nil
         if opts.state then
