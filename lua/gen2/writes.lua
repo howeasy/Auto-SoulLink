@@ -7,20 +7,20 @@
 -- Native faint clears status: C engine/battle/core.asm:2656-2670; G:2551-2565.
 -- Battle-to-party copy: C home/battle.asm:110-124; G:111-125.
 --
--- Active faint at BattleTurn+0 is NOT implemented: C core.asm:160-208,912-928 /
--- G:146-184,860-876 can parse/select and execute a move before HasPlayerFainted.
--- SOURCE-only candidate CheckTurn+0 (C effect_commands.asm:110-118; G:121-129)
--- can suppress a pending player USEMOVE, but needs generated facts and a qualified
--- held site/player-context contract. No selected-move address is guessed here.
--- Conditional explode likewise remains disabled; this module grants no write
--- timing, checkpoint, fixture, storage, client or physical qualification.
+-- Active faint (W-2, O-30): only inside the battle hold, before `call DetermineMoveOrder` in
+-- BattleTurn (write_checkpoint.json battle_hold; docs/gen2/reviews/INBATTLE_FAINT_FACTS_2026-09-23.md).
+-- BattleTurn+0 is NOT the site: C core.asm:160-208 / G:146-184 parse and execute a move before any
+-- HasPlayerFainted. Conditional explode remains disabled; this module grants no write timing,
+-- checkpoint, fixture, storage, client or physical qualification.
 local W = {}
 
 local function integer(value, low, high)
     return type(value) == "number" and value % 1 == 0 and value >= low and value <= high
 end
 
-function W.new(profile, io, Permit, policy)
+-- battle (optional): write_checkpoint.json titles[t].battle_hold.write ({skip_action, targets}); nil
+-- composes no in-battle write (faint_active_battler refuses).
+function W.new(profile, io, Permit, policy, battle)
     assert(type(profile) == "table" and ({crystal=true, gold=true, silver=true})[profile.title],
            "selected generated Gen 2 profile required")
     assert(Permit and type(Permit.new) == "function" and type(Permit.sequence_length) == "function",
@@ -58,14 +58,34 @@ function W.new(profile, io, Permit, policy)
     assert(type(profile.artifact) == "string" and type(profile.rom_sha1) == "string"
            and #profile.rom_sha1 == 40, "profile artifact provenance required")
 
+    -- O-30: the battle hold's exact targets (battle struct HP, the player action byte), each with its
+    -- own WRAM bank; nothing else outside the party block is ever writable.
+    local targets = {}
+    if battle ~= nil then
+        assert(type(battle) == "table" and type(battle.targets) == "table" and integer(battle.skip_action, 1, 255),
+               "battle hold write facts required")
+        for _, name in ipairs({"wBattleMonHP", "wBattlePlayerAction"}) do
+            local t = assert(battle.targets[name], "battle target missing: " .. name)
+            assert(integer(t.address, 0xC000, 0xDFFF) and integer(t.bank, 0, 7) and integer(t.width, 1, 2),
+                   "battle target coordinates required: " .. name)
+            targets[name] = t
+        end
+    end
+    local function target_of(addr, n)
+        for _, t in pairs(targets) do if addr == t.address and n == t.width then return t end end
+    end
+    local function in_block(addr, n) return addr >= block and addr + n <= block + block_length end
     local gate = Permit.new({
         write_u8 = io.write_u8,
         domains = {
             ["System Bus"] = {
-                bounds = function(addr, n) return addr >= block and addr + n <= block + block_length end,
+                bounds = function(addr, n) return in_block(addr, n) or target_of(addr, n) ~= nil end,
                 -- Same explicit platform mapping seam as gen2/reads.lua. There is
                 -- no assumed DMG mode, selected WRAM bank or bank-switch fallback.
-                mapped = function(addr, n) return io.bank_valid(bank, addr, n) == true end,
+                mapped = function(addr, n)
+                    local t = not in_block(addr, n) and target_of(addr, n)
+                    return io.bank_valid(t and t.bank or bank, addr, n) == true
+                end,
                 pointer_stable = function(addr, n, _reason, token)
                     return policy.pointer_stable(token, addr, n) == true
                 end,
@@ -120,12 +140,15 @@ function W.new(profile, io, Permit, policy)
             local address = slot_base(slot)
             assert(type(snapshot) == "table" and integer(snapshot.mode, 0, 2), "explicit battle snapshot required")
             assert(snapshot.link_mode == 0, "linked or unknown battle context refused")
+            -- O-30: a bench faint inside the battle hold is qualified in every battle kind but link
+            -- (facts doc §3); anywhere else in battle the special types stay refused.
+            local held = gate.armed == "battle_hold"
             if snapshot.mode ~= 0 then
-                assert(snapshot.battle_type == 0, "special battle context not qualified")
+                assert(held or snapshot.battle_type == 0, "special battle context not qualified")
                 assert(integer(snapshot.active_slot, 0, c.PARTY_LENGTH - 1), "active slot snapshot required")
-                assert(snapshot.active_slot ~= slot, "active faint timing is not qualified")
+                assert(snapshot.active_slot ~= slot, "active faint timing is not qualified") -- faint_active_battler owns it
             end
-            authorized("party_faint", {slot=slot, snapshot=snapshot})
+            authorized(held and "battle_faint" or "party_faint", {slot=slot, snapshot=snapshot})
             local status, hp = address + c.MON_STATUS, address + c.MON_HP
             -- The fields are discontiguous. The shared permit preflights BOTH
             -- complete spans, including mapping/pointer/provenance policies,
@@ -147,8 +170,27 @@ function W.new(profile, io, Permit, policy)
         end)
     end
 
-    function self:faint_active_battler()
-        return gate:guard(function() error("active faint action-suppression path is not qualified", 0) end)
+    -- W-2, mirroring lua/gen1/writes.lua faint_active_battler: battle struct HP 0, the party mirror,
+    -- and the corpse's action suppressed. Gen 2 differs on purpose: the site is the battle hold (not
+    -- MainInBattleLoop+0, which Gen 2 lacks) and the suppression is wBattlePlayerAction = USEITEM,
+    -- written LAST (not CANNOT_MOVE): DetermineMoveOrder then puts the player first, DoPlayerTurn
+    -- returns, and Battle_PlayerFirst's HasPlayerFainted runs the native HandlePlayerMonFaint before
+    -- the foe can move (facts doc §2, §6).
+    function self:faint_active_battler(slot, snapshot)
+        return gate:guard(function()
+            assert(targets.wBattleMonHP, "no in-battle write composed")
+            assert(gate.armed == "battle_hold", "active-battler faint only inside the battle hold")
+            local address = slot_base(slot)
+            assert(type(snapshot) == "table" and snapshot.link_mode == 0, "linked or unknown battle context refused")
+            assert(snapshot.active_slot == slot, "target is not the active battler")
+            authorized("battle_faint", {slot=slot, snapshot=snapshot, active=true})
+            return gate:write_batch({
+                {domain="System Bus", addr=targets.wBattleMonHP.address, bytes={0, 0}},
+                {domain="System Bus", addr=address + c.MON_STATUS, bytes={0}},
+                {domain="System Bus", addr=address + c.MON_HP, bytes={0, 0}},
+                {domain="System Bus", addr=targets.wBattlePlayerAction.address, bytes={battle.skip_action}},
+            })
+        end)
     end
     function self:explode_active_battler()
         return gate:guard(function() error("conditional explode action-selection path is not qualified", 0) end)

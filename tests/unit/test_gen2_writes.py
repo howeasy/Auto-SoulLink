@@ -10,8 +10,14 @@ from lupa.lua54 import LuaError, LuaRuntime
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def hold_write(title):
+    """write_checkpoint.json battle_hold.write: the O-30 in-battle targets and the USEITEM action byte."""
+    pack = json.loads((ROOT / f"data/games/gen2_{title}/write_checkpoint.json").read_text())
+    return pack["titles"][title]["battle_hold"]["write"]
+
+
 class World:
-    def __init__(self, title="crystal", profile=None):
+    def __init__(self, title="crystal", profile=None, battle=False):
         self.profile = profile or json.loads(
             (ROOT / f"data/games/gen2_{title}/profile.json").read_text()
         )["titles"][title]
@@ -21,6 +27,7 @@ class World:
         self.bank_checks = []
         self.bank = 1
         self.reject_bank_at = None
+        self.bank_any = battle      # the battle targets live in WRAM0 and WRAMX
         self.fail_on = None
         self.state = self.lua.table(epoch=1, frame=10, authorized=True, pointer_ok=True)
         factory = self.lua.eval("dofile")((ROOT / "lua/write_permit.lua").as_posix())
@@ -43,7 +50,8 @@ class World:
                 end,
             }
         end""")(self.state)
-        self.binder = module.new(self.lua.table_from(self.profile, recursive=True), io, factory, policy)
+        facts = self.lua.table_from(hold_write(title), recursive=True) if battle else None
+        self.binder = module.new(self.lua.table_from(self.profile, recursive=True), io, factory, policy, facts)
 
     def emit(self, address, value, domain):
         if self.fail_on == len(self.writes) + 1:
@@ -54,7 +62,7 @@ class World:
 
     def bank_valid(self, bank, address, length):
         self.bank_checks.append((int(bank), int(address), int(length)))
-        return bank == self.bank and address != self.reject_bank_at
+        return (self.bank_any or bank == self.bank) and address != self.reject_bank_at
 
     def call(self, name, *args):
         return self.binder[name](self.binder, *args)
@@ -181,13 +189,58 @@ def test_second_faint_span_policy_refusal_never_emits_status(policy):
     assert world.binder.armed is None and len(world.binder.log) == 0
 
 
-@pytest.mark.parametrize("operation", ["faint_active_battler", "explode_active_battler"])
-def test_unproved_active_action_path_is_explicitly_disabled(operation):
+def test_unproved_explode_path_is_explicitly_disabled():
     world = World()
-    world.call("arm", "battle_loop_head")
+    world.call("arm", "battle_hold")
     with pytest.raises(LuaError, match="not qualified"):
-        world.call(operation, 0)
+        world.call("explode_active_battler", 0)
     assert world.writes == [] and world.binder.armed is None
+
+
+def test_active_faint_without_battle_facts_is_refused():
+    world = World()
+    world.call("arm", "battle_hold")
+    with pytest.raises(LuaError, match="no in-battle write composed"):
+        world.call("faint_active_battler", 0, world.snapshot(mode=1, active=0))
+    assert world.writes == []
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_active_faint_writes_battle_hp_party_mirror_and_the_action_byte_last(title):
+    """O-30 W-2: wBattleMonHP 0, the party slot's status/HP 0, then wBattlePlayerAction = USEITEM."""
+    world = World(title, battle=True)
+    facts = hold_write(title)
+    hp, act = facts["targets"]["wBattleMonHP"]["address"], facts["targets"]["wBattlePlayerAction"]["address"]
+    base = world.profile["ram"]["wPartyMons"] + 48
+    world.call("arm", "battle_hold")
+    world.call("faint_active_battler", 1, world.snapshot(mode=1, active=1))
+    assert world.writes == [(hp, 0, "System Bus"), (hp + 1, 0, "System Bus"), (base + 32, 0, "System Bus"),
+                            (base + 34, 0, "System Bus"), (base + 35, 0, "System Bus"),
+                            (act, facts["skip_action"], "System Bus")]
+    assert facts["skip_action"] == 1
+
+
+@pytest.mark.parametrize("reason,snapshot,match", [
+    ("overworld", {"mode": 1, "active": 0}, "only inside the battle hold"),
+    ("battle_hold", {"mode": 1, "active": 0, "link_mode": 1}, "linked"),
+    ("battle_hold", {"mode": 1, "active": 1}, "not the active battler"),
+])
+def test_active_faint_refuses_outside_the_hold_in_link_or_off_the_active_slot(reason, snapshot, match):
+    world = World(battle=True)
+    world.call("arm", reason)
+    with pytest.raises(LuaError, match=match):
+        world.call("faint_active_battler", 0, world.snapshot(**snapshot))
+    assert world.writes == []
+
+
+def test_a_bench_faint_inside_the_battle_hold_is_allowed_in_a_special_battle():
+    world = World(battle=True)
+    world.call("arm", "battle_hold")
+    world.call("faint_party_slot", 1, world.snapshot(mode=1, active=0, battle_type=6))
+    assert len(world.writes) == 3
+    world.call("arm", "model_overworld")
+    with pytest.raises(LuaError, match="special battle context"):
+        world.call("faint_party_slot", 1, world.snapshot(mode=1, active=0, battle_type=6))
 
 
 def test_partial_io_error_disarms_without_claiming_rollback():

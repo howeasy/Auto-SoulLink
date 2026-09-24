@@ -411,18 +411,16 @@ def test_lua_key_agrees_with_the_python_codec_on_the_same_record():
 def test_an_active_slot_forced_faint_is_never_reported_as_success():
     def check(world):
         active, bench = mon(), mon(species=172, dvs=0x3AAA)
-        world.party([active, bench])
-        world.hello()
-        world.field("wBattleMode", 1)  # the stub checkpoint ignores the battle: writes.lua must not
+        in_battle(world, [active, bench])
         world.reply({"cmd": "force_faint", "key": codec_key(active), "nickname": "PIKA"})
-        world.frames(130)
-        assert world.hp_of(0) == (30, 0) and world.written() == []
+        world.frames(130)            # no battle hold yet: nothing moves, nothing is claimed
+        world.owned = lambda op, slot: False   # the write policy refuses at the hold
+        battle_hold(world)
+        assert world.hp_of(0) == (30, 0) and world.written() == [] and battle_hp(world) == 30
         assert not any("KO'd" in text for text in world.shown())
-        assert any(text.startswith("show:KO held") for text in world.shown())
-        assert any("active faint" in line for line in world.logs.values())
+        assert any("battle write refused" in line for line in world.logs.values())
 
-    falsify(check, mutant("lua/gen2/client.lua", ("        if ok then\n            hud.show(\"!! \"",
-                                                  "        if true then\n            hud.show(\"!! \"")))
+    falsify(check, mutant("lua/gen2/client.lua", ("            if landed then\n", "            if landed or err ~= nil then\n")))
 
 
 # O-30 phase 2: a death deferred past the battle follows the evolution-stable identity (DV word +
@@ -437,7 +435,7 @@ def deferred_faint_then(world, party_after):
     world.field("wBattleMode", 1)
     world.reply({"cmd": "force_faint", "key": codec_key(bulbasaur), "nickname": "BULBA"})
     world.frames(2)
-    world.field("wBattleMode", 0)
+    end_battle(world)                # the battle ended before a battle hold: the death is owed at the checkpoint
     world.party(party_after)         # EvolveAfterBattle rewrote the species; no key_change followed
     world.checkpoint_ok = True
     world.frames(2)
@@ -467,6 +465,156 @@ def test_a_dv_ot_match_that_is_not_a_descendant_is_refused():
     deferred_faint_then(world, [dict(bulbasaur, species=4), mon()])   # Charmander: same DV/OT, other family
     assert world.hp_of(0) == (30, 0) and world.written() == []
     assert any("not a descendant" in line for line in world.logs.values())
+
+
+# ── O-30 phase 3: deaths land IN battle, at the battle hold (before `call DetermineMoveOrder`) ──────────
+HOLDS = {t: json.loads((ROOT / f"data/games/gen2_{t}/write_checkpoint.json").read_text())["titles"][t]
+         for t in ("crystal", "gold", "silver")}
+
+
+def hold_ram(world, name):
+    return HOLDS[world.title]["battle_hold"]["write"]["targets"][name]["address"]
+
+
+def in_battle(world, party, active=0, battle_type=0, link=0):
+    """A committed turn: party on the field, the active mon's battle struct loaded."""
+    world.party(party)
+    world.hello()
+    world.frames(60)                 # a live validation enables writes
+    world.field("wBattleMode", 1)
+    world.field("wBattleType", battle_type)
+    world.field("wLinkMode", link)
+    world.field("wCurBattleMon", active)
+    world.emu.poke("System Bus", hold_ram(world, "wBattleMonSpecies"), world.lua.table_from([party[active]["species"]]))
+    world.emu.poke("System Bus", hold_ram(world, "wBattleMonHP"), world.lua.table_from([0, 30]))
+    world.emu.poke("System Bus", hold_ram(world, "wBattlePlayerAction"), world.lua.table_from([0]))
+
+
+def battle_hold(world):
+    """The player committed the turn: the CPU is at `call DetermineMoveOrder`."""
+    execution = HOLDS[world.title]["battle_hold"]["execution_before"]
+    return world.emu.fire(execution["bank"], execution["pc"])
+
+
+def battle_hp(world):
+    address = hold_ram(world, "wBattleMonHP")
+    return world.io.read_u8(address) * 256 + world.io.read_u8(address + 1)
+
+
+def action(world):
+    return world.io.read_u8(hold_ram(world, "wBattlePlayerAction"))
+
+
+def test_an_active_battler_death_lands_at_the_battle_hold():
+    world = World()
+    active, bench = mon(), mon(species=172, dvs=0x3AAA)
+    in_battle(world, [active, bench])
+    world.reply({"cmd": "force_faint", "key": codec_key(active), "nickname": "PIKA"})
+    world.frames(3)
+    assert battle_hp(world) == 30 and world.hp_of(0) == (30, 0) and world.written() == []   # waits for the hold
+    assert battle_hold(world) >= 1
+    assert battle_hp(world) == 0 and world.hp_of(0) == (0, 0) and world.hp_of(1) == (30, 0)
+    assert action(world) == 1                                        # BATTLEPLAYERACTION_USEITEM
+    assert world.written()[-1][0] == hold_ram(world, "wBattlePlayerAction")   # the action byte LAST
+    assert "show:!! PIKA KO'd" in world.shown()
+
+
+def test_a_bench_death_lands_at_the_battle_hold_in_a_special_battle():
+    world = World()
+    active, bench = mon(), mon(species=172, dvs=0x3AAA)
+    in_battle(world, [active, bench], battle_type=6)                 # BATTLETYPE_CONTEST
+    world.reply({"cmd": "force_faint", "key": codec_key(bench), "nickname": "PICHU"})
+    world.frames(2)
+    battle_hold(world)
+    assert world.hp_of(1) == (0, 0) and world.hp_of(0) == (30, 0)
+    assert battle_hp(world) == 30 and action(world) == 0             # the active battler is untouched
+
+
+def test_a_link_battle_death_never_writes_in_battle_and_lands_at_the_checkpoint():
+    world = World()
+    active = mon()
+    in_battle(world, [active, mon(species=172, dvs=0x3AAA)], link=1)
+    world.checkpoint_ok = False
+    world.reply({"cmd": "force_faint", "key": codec_key(active)})
+    world.frames(2)
+    battle_hold(world)
+    assert world.written() == [] and battle_hp(world) == 30
+    world.field("wLinkMode", 0)
+    end_battle(world)                                                # still owed: the checkpoint zeroes it
+    world.checkpoint_ok = True
+    world.frames(2)
+    assert world.hp_of(0) == (0, 0)
+
+
+def test_a_transformed_battler_still_dies_and_a_foreign_struct_waits():
+    world = World()
+    active = mon()
+    in_battle(world, [active, mon(species=172, dvs=0x3AAA)])
+    world.emu.poke("System Bus", hold_ram(world, "wBattleMonSpecies"), world.lua.table_from([132]))   # not ours
+    world.reply({"cmd": "force_faint", "key": codec_key(active)})
+    world.frames(2)
+    battle_hold(world)
+    assert world.written() == [] and battle_hp(world) == 30          # the struct is not the slot's: wait
+    world.emu.poke("System Bus", hold_ram(world, "wPlayerSubStatus5"), world.lua.table_from([1 << 3]))  # TRANSFORMED
+    battle_hold(world)
+    assert battle_hp(world) == 0 and world.hp_of(0) == (0, 0)
+
+
+def test_the_engine_faint_echo_of_a_commanded_death_is_not_reported():
+    """A clause-rejection kill can name a key whose link is still ALIVE: its engine faint must not read as new."""
+    world = World()
+    active = mon()
+    in_battle(world, [active, mon(species=172, dvs=0x3AAA)])
+    world.reply({"cmd": "force_faint", "key": codec_key(active)})
+    world.frames(2)
+    battle_hold(world)
+    world.fire("battle_faint")                                       # HandlePlayerMonFaint: UpdateFaintedPlayerMon
+    world.frames(2)
+    assert world.sent("faint") == []
+    assert any("faint echo of a commanded death" in line for line in world.logs.values())
+
+
+@pytest.mark.parametrize("after", ["evolved", "tower_reload"])
+def test_a_battle_death_is_re_zeroed_at_the_checkpoint_after_a_revive(after):
+    """EvolveAfterBattle adds the max-HP gain to a fainted mon; the Battle Tower reloads and heals the party.
+    Dead stays dead: every landed battle write leaves a quiet checkpoint re-zero."""
+    world = World()
+    lead = mon(species=1, dvs=0x3AAA)
+    in_battle(world, [lead, mon()])
+    world.emu.poke("System Bus", hold_ram(world, "wBattleMonSpecies"), world.lua.table_from([1]))
+    world.checkpoint_ok = False
+    world.reply({"cmd": "force_faint", "key": codec_key(lead), "nickname": "BULBA"})
+    world.frames(2)
+    world.checkpoint_ok = True       # the stub stands for both holds; the frame below is not a checkpoint yet
+    battle_hold(world)
+    assert world.hp_of(0) == (0, 0)
+    world.checkpoint_ok = False
+    end_battle(world)
+    revived = dict(lead, species=2 if after == "evolved" else 1, hp=7)
+    world.party([revived, mon()])
+    world.checkpoint_ok = True
+    world.frames(2)
+    assert world.hp_of(0) == (0, 0)
+    assert world.shown().count("show:!! BULBA KO'd") == 1           # the re-zero is quiet
+
+
+def test_a_contest_hidden_mon_dies_when_the_contest_returns_it():
+    """Ruling (a): ContestDropOffMons masks the party to one; a death for a hidden mon is held, never dropped."""
+    world = World()
+    lead, hidden = mon(), mon(species=172, dvs=0x3AAA)
+    world.party([lead, hidden])
+    world.hello()
+    world.frames(60)
+    mask = HOLDS[world.title]["contest_mask"]
+    world.party([lead])                                              # masked: count 1
+    world.emu.poke("System Bus", mask["address"], world.lua.table_from([1 << mask["bit"]]))
+    world.reply({"cmd": "force_faint", "key": codec_key(hidden), "nickname": "PICHU"})
+    world.frames(5)
+    assert not any("key not in party" in line for line in world.logs.values())
+    world.emu.poke("System Bus", mask["address"], world.lua.table_from([0]))
+    world.party([lead, hidden])                                      # ContestReturnMons
+    world.frames(2)
+    assert world.hp_of(1) == (0, 0)
 
 
 def test_a_reset_leaves_no_stale_latch():
@@ -1163,6 +1311,23 @@ def test_production_bench_faint_lands_only_inside_the_checkpoint_hold():
     receipts = [dict(r.items()) for r in world.parts.writes.log.values()]
     assert {r["site"] for r in receipts} == {"lua/gen2/entry.lua production"}
     assert "show:!! PICHU KO'd" in world.shown()
+
+
+def test_production_composes_no_battle_hold_before_a_battle_faint_receipt():
+    """O-30 transition: until a receipt covers battle_faint, battle deaths wait for the overworld checkpoint."""
+    world = production()
+    assert world.emu.callbacks["SLink-gen2-battle-hold"] is None
+    active = mon()
+    world.party([active, mon(species=172, dvs=0x3AAA)])
+    world.hello()
+    world.frames(60)
+    world.field("wBattleMode", 1)
+    world.reply({"cmd": "force_faint", "key": codec_key(active), "nickname": "PIKA"})
+    world.frames(2)
+    assert any("no in-battle active faint composed" in line for line in world.logs.values())
+    world.field("wBattleMode", 0)
+    world.hold()
+    assert world.hp_of(0) == (0, 0)
 
 
 def test_production_box_mon_lands_only_inside_the_checkpoint_hold():

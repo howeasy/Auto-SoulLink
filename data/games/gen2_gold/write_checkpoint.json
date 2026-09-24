@@ -14,6 +14,300 @@
   },
   "titles": {
     "gold": {
+      "battle_hold": {
+        "acceptance": "ALL_REQUIRED_SAME_HELD_EXECUTION",
+        "anchors": {
+          "battle_turn": {
+            "address": 16734,
+            "bank": 15,
+            "evidence": "SOURCE",
+            "expected_hex": "CDEB4320EACDB7423824CDCB423805CDB6451803CD1446",
+            "instruction_set": "SM83",
+            "rom_offset": 246110,
+            "source": {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 187,
+              "line_start": 174,
+              "path": "engine/battle/core.asm",
+              "source_text_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137"
+            }
+          },
+          "start_battle_caller": {
+            "address": 29516,
+            "bank": 15,
+            "evidence": "SOURCE",
+            "expected_hex": "CD0040CD5674F1EA68D537C9",
+            "instruction_set": "SM83",
+            "rom_offset": 258892,
+            "source": {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 7825,
+              "line_start": 7820,
+              "path": "engine/battle/core.asm",
+              "source_text_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137"
+            }
+          }
+        },
+        "caller_stack": {
+          "bank": 1,
+          "exclusive_stack_end": 57343,
+          "minimum_sp": 57091,
+          "must_fit_entire_read": true,
+          "read_domain": "System Bus",
+          "region": "WRAMX",
+          "required_read_bytes": 2,
+          "required_words": [
+            {
+              "endianness": "little",
+              "offset_from_sp": 0,
+              "value": 29519
+            }
+          ],
+          "search_for_return_address": false,
+          "source": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 2926,
+              "line_start": 2921,
+              "path": "ram/wram.asm",
+              "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+            },
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 70,
+              "line_start": 70,
+              "path": "home/init.asm",
+              "source_text_sha256": "1bb5a1a7f2d877b88f963365bd8f62949de1cc555dfe222d0f30c3a6c99c15b8"
+            }
+          ]
+        },
+        "execution_before": {
+          "bank": 15,
+          "instruction": "call DetermineMoveOrder",
+          "instruction_offset": 10,
+          "pc": 16744,
+          "rom_offset": 246120,
+          "source": {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 181,
+            "line_start": 181,
+            "path": "engine/battle/core.asm",
+            "source_text_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137"
+          }
+        },
+        "id": "battle-turn-before-determine-move-order",
+        "ownership_requirements": {
+          "cached_frame_acceptance_allowed": false,
+          "effective_wram_bank": 1,
+          "host": [
+            "admitted exact ROM identity",
+            "unchanged session/reset epoch",
+            "no pending trade or serial-owner lease",
+            "no save, box-load, or staged-writer owner",
+            "synchronous CPU hold before the instruction",
+            "recheck every anchor in ROM and mapped System Bus",
+            "all reads and bank/PC/stack evidence available in the same hold"
+          ],
+          "mapped_rom_bank": 15,
+          "mapped_rom_bank_must_equal_shadow": true,
+          "rom_bank_shadow": {
+            "address": 65439,
+            "bank": 0,
+            "equals": 15,
+            "read_domain": "System Bus",
+            "region": "HRAM",
+            "source": {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 26,
+              "line_start": 26,
+              "path": "ram/hram.asm",
+              "source_text_sha256": "8c0bd40f0ef444d4ab8267f10a37de083513bb227d1008be35511bf58931431d"
+            },
+            "symbol": "hROMBank",
+            "width": 1
+          },
+          "serial_control": {
+            "address": 65282,
+            "mask": 128,
+            "source": [
+              {
+                "commit": "656583c939d30f920a316177311a502dd222b57c",
+                "line_end": 133,
+                "line_start": 133,
+                "path": "constants/hardware.inc",
+                "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+              },
+              {
+                "commit": "656583c939d30f920a316177311a502dd222b57c",
+                "line_end": 135,
+                "line_start": 135,
+                "path": "constants/hardware.inc",
+                "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+              }
+            ],
+            "value": 0
+          },
+          "wram_bank_register": {
+            "address": 65392,
+            "binding": "CGB effective bank 1; DMG fixed-bank mapping must be qualified separately",
+            "source": {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 688,
+              "line_start": 688,
+              "path": "constants/hardware.inc",
+              "source_text_sha256": "e69800d00c6acdea4e62f6de3bb9337a82c55970339ff333f02470638f43b4fe"
+            }
+          }
+        },
+        "state_predicates": [
+          {
+            "address": 53314,
+            "bank": 1,
+            "mask": 255,
+            "operator": "masked_equal",
+            "qualification": "PROPOSED_STRICT_CONJUNCTION",
+            "read_domain": "System Bus",
+            "reason": "LINK_NULL: a write in a link battle desyncs the other Game Boy",
+            "region": "WRAMX",
+            "semantic_source": [
+              {
+                "commit": "656583c939d30f920a316177311a502dd222b57c",
+                "line_end": 4,
+                "line_start": 2,
+                "path": "constants/serial_constants.asm",
+                "source_text_sha256": "a49f867cc8f41cbce61a43d53d5fcf04566bb8b3e43d4449d7b78f67f3f1868a"
+              }
+            ],
+            "source": {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 1955,
+              "line_start": 1955,
+              "path": "ram/wram.asm",
+              "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+            },
+            "symbol": "wLinkMode",
+            "value": 0,
+            "width": 1
+          }
+        ],
+        "transformed_bit": 3,
+        "transformed_source": {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "line_end": 211,
+          "line_start": 207,
+          "path": "constants/battle_constants.asm",
+          "source_text_sha256": "572366d8332373ff255173eb57539fb751df09e880eb5b078a94548ee64aa2d3"
+        },
+        "write": {
+          "skip_action": 1,
+          "sources": [
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 257,
+              "line_start": 254,
+              "path": "constants/battle_constants.asm",
+              "source_text_sha256": "572366d8332373ff255173eb57539fb751df09e880eb5b078a94548ee64aa2d3"
+            },
+            {
+              "commit": "656583c939d30f920a316177311a502dd222b57c",
+              "line_end": 7,
+              "line_start": 5,
+              "path": "engine/battle/effect_commands.asm",
+              "source_text_sha256": "899551eed12752fb9c712b36ffa1b4134485f42e069ef218fe58fb66e13fe38b"
+            }
+          ],
+          "targets": {
+            "wBattleMonHP": {
+              "address": 51996,
+              "bank": 0,
+              "evidence": "SYM",
+              "symbol": "wBattleMonHP",
+              "width": 2
+            },
+            "wBattleMonSpecies": {
+              "address": 51980,
+              "bank": 0,
+              "evidence": "SYM",
+              "symbol": "wBattleMonSpecies",
+              "width": 1
+            },
+            "wBattlePlayerAction": {
+              "address": 53220,
+              "bank": 0,
+              "evidence": "SYM",
+              "symbol": "wBattlePlayerAction",
+              "width": 1
+            },
+            "wBattleType": {
+              "address": 53529,
+              "bank": 1,
+              "evidence": "SYM",
+              "symbol": "wBattleType",
+              "width": 1
+            },
+            "wCurBattleMon": {
+              "address": 53190,
+              "bank": 0,
+              "evidence": "SYM",
+              "symbol": "wCurBattleMon",
+              "width": 1
+            },
+            "wPlayerSubStatus5": {
+              "address": 52042,
+              "bank": 0,
+              "evidence": "SYM",
+              "symbol": "wPlayerSubStatus5",
+              "width": 1
+            }
+          }
+        }
+      },
+      "contest_mask": {
+        "address": 54642,
+        "bank": 1,
+        "bit": 2,
+        "read_domain": "System Bus",
+        "region": "WRAMX",
+        "source": {
+          "commit": "656583c939d30f920a316177311a502dd222b57c",
+          "line_end": 2489,
+          "line_start": 2489,
+          "path": "ram/wram.asm",
+          "source_text_sha256": "0d23a8daf35cc7dbd47635ab6615e35aa17fff0fee94ed26e0dc89285d93d9a4"
+        },
+        "sources": [
+          {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 235,
+            "line_start": 232,
+            "path": "constants/ram_constants.asm",
+            "source_text_sha256": "b4ce7fd857e3f912f32dbf657e7641e2d04b57a25582b99a298f6fd6dcaf9a62"
+          },
+          {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 34,
+            "line_start": 34,
+            "path": "data/events/engine_flags.asm",
+            "source_text_sha256": "53221289c0a7b6921bb67464c25bbd363544694df2c054c31a36ff45de0ad43a"
+          },
+          {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 83,
+            "line_start": 81,
+            "path": "engine/events/bug_contest/contest_2.asm",
+            "source_text_sha256": "f254735541e54be9302b147fcd9e46bfc892d059871ff82dc34b7b8c8acfe820"
+          },
+          {
+            "commit": "656583c939d30f920a316177311a502dd222b57c",
+            "line_end": 5,
+            "line_start": 2,
+            "path": "engine/events/misc_scripts.asm",
+            "source_text_sha256": "93026f9885a21c8a45171d9fb6f4f5eabddaf9e387de2bbd09d2286501035c99"
+          }
+        ],
+        "symbol": "wStatusFlags2",
+        "width": 1
+      },
       "irq_anchor": {
         "reason": "No generated IRQ anchor proof in this pack; never substitute Gen 1 DelayFrame offsets or stack words.",
         "status": "UNAVAILABLE"

@@ -102,9 +102,11 @@ Entry.RECEIPT_FILES = {
     },
 }
 -- Permit operation (lua/gen2/writes.lua) -> the U2 write kind that authorizes it. Anything
--- else (write_party_bytes, active faint, explode) has no receipt kind and is refused. The box
+-- else (write_party_bytes, explode) has no receipt kind and is refused. The box
 -- executor's CartRAM spans carry their own kinds (lua/gen2/boxes.lua B.kind_of).
-Entry.WRITE_KIND = {party_faint="party_hp", party_collection="party_collection"}
+-- battle_faint (O-30): the active faint and a bench faint inside the battle hold; its kind is checked
+-- at that hold (gen2_write_safety BATTLE_KINDS), never at the overworld checkpoint.
+Entry.WRITE_KIND = {party_faint="party_hp", party_collection="party_collection", battle_faint="battle_faint"}
 local titles = {"crystal", "gold", "silver"}
 local order = {"profile", "admission", "sites", "checkpoint", "area_map", "statics", "encounters",
                "species", "evolutions", "gifts", "moves", "trainers", "map_names", "items", "charmap"}
@@ -310,7 +312,8 @@ local function compose(deps, title, production)
         else
             write_policy = assert(deps.write_policy, "explicit candidate write policy required")
         end
-        local writes = Writes.new(profile, io_, Permit, write_policy)
+        local hold_facts = data.checkpoint.titles[title]
+        local writes = Writes.new(profile, io_, Permit, write_policy, hold_facts.battle_hold.write)
         local rom = Rom.new(profile, io_)
         local client
         if production or deps.net ~= nil then
@@ -371,6 +374,11 @@ local function compose(deps, title, production)
                 signals=signals,
                 -- production only: the held checkpoint PC the client hooks (writes + hello readiness)
                 checkpoint_pc=production and data.checkpoint.titles[title].primary.execution_before.pc or nil,
+                -- O-30: the battle hold the client hooks for in-battle deaths. Production composes it only
+                -- behind a receipt covering battle_faint; until then battle deaths wait for the checkpoint.
+                battle_hold=(not production or checkpoint:covers("battle_faint"))
+                    and hold_facts.battle_hold or nil,
+                contest_mask=hold_facts.contest_mask,
                 net=deps.net, json=json, hud=assert(deps.hud, "explicit hud required"), io=io_,
                 profile=profile, sites=data.sites.titles[title].sites, area_map=data.area_map,
                 player=assert(deps.player, "explicit player required"), rom_type=def.rom_type,

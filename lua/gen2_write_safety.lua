@@ -86,6 +86,10 @@ M.BOX_OPS = {
 }
 M.PARTY_BLOCK, M.BOX_COPY = 428, 1102
 local COUNT = 9007199254740991
+-- O-30 in-battle faint (docs/gen2/reviews/INBATTLE_FAINT_FACTS_2026-09-23.md): a write kind held at the
+-- pack's battle_hold (before `call DetermineMoveOrder` in BattleTurn), never at the overworld primary. A
+-- receipt adds it only with its own passed battle run (phase 4); until then check() refuses it.
+M.BATTLE_KINDS = {battle_faint=true}
 local REQUIRED = {
     wMapStatus=true, wMapEventStatus=true, wScriptRunning=true, wScriptMode=true,
     wScriptFlags=true, wScriptStackSize=true, wJoypadDisable=true, wGameLogicPaused=true,
@@ -501,20 +505,27 @@ function M.new(pack, title, io, evaluator, ownership, receipt)
     function self:check(kind)
         if not scope then return false, unqualified end
         if not scope.kinds[kind] then return false, "write kind not covered by the PHYSICAL receipt: " .. tostring(kind) end
-        local ok, matches, why = pcall(evaluate)
+        local ok, matches, why = pcall(evaluate, M.BATTLE_KINDS[kind] and "battle_hold" or "primary")
         if not ok then return false, "checkpoint evidence unavailable: " .. tostring(matches) end
         return matches == true, why
     end
     -- Whether the receipt proved `kind` at all (no checkpoint evaluation): a command needing an unproven
     -- kind is refused outright instead of waiting for a hold that can never authorize it.
     function self:covers(kind) return scope ~= nil and scope.kinds[kind] == true end
-    function self:inspect_candidate()
-        local ok, matches, why = pcall(evaluate)
+    function self:inspect_candidate(hold)
+        local ok, matches, why = pcall(evaluate, hold or "primary")
         return {candidate_match=ok and matches == true, runtime_authorized=false,
             evidence_level="SOURCE_MODEL", physical_status="OPEN",
             reason=ok and why or ("checkpoint evidence unavailable: " .. tostring(matches))}
     end
-    function evaluate()
+    -- hold: "primary" (the overworld checkpoint) or "battle_hold" (O-30); each names its own anchors
+    -- and predicate set, the rest of the held-execution contract is shared.
+    local HOLDS = {
+        primary = {anchors={"ow_player_input", "player_events_caller"}, required=REQUIRED, count=15},
+        battle_hold = {anchors={"battle_turn", "start_battle_caller"}, required={wLinkMode=true}, count=1},
+    }
+    function evaluate(which)
+        local shape = assert(HOLDS[which], "unknown checkpoint hold")
         do
             assert(type(pack) == "table" and pack.schema == "gen2-write-checkpoint-v1", "unsupported Gen 2 checkpoint pack")
             assert(type(title) == "string" and type(pack.titles) == "table", "selected title required")
@@ -526,7 +537,7 @@ function M.new(pack, title, io, evaluator, ownership, receipt)
             -- its proven write kinds and leaves scope.uncovered OPEN (see the header).
             assert(data.runtime_authorized == false and data.maturity == "SOURCE_CANDIDATE"
                 and data.physical.status == "OPEN", "source-candidate authorization metadata differs")
-            local primary = assert(data.primary, "source checkpoint unavailable")
+            local primary = assert(data[which], "source checkpoint unavailable")
             assert(primary.acceptance == "ALL_REQUIRED_SAME_HELD_EXECUTION", "held execution contract required")
             local owner = assert(primary.ownership_requirements, "game ownership facts required")
             assert(owner.cached_frame_acceptance_allowed == false and owner.mapped_rom_bank_must_equal_shadow == true,
@@ -544,7 +555,7 @@ function M.new(pack, title, io, evaluator, ownership, receipt)
             local rom_size = io.domain_size("ROM")
             assert(integer(rom_size, 1, 0x800000), "actual ROM domain size unavailable")
             local anchors = {}
-            for _, name in ipairs({"ow_player_input", "player_events_caller"}) do
+            for _, name in ipairs(shape.anchors) do
                 local anchor = assert(primary.anchors[name], "required source anchor missing")
                 assert(anchor.bank == owner.mapped_rom_bank and anchor.instruction_set == "SM83", "anchor bank/instruction set differs")
                 anchors[#anchors + 1] = {domain="ROM", address=anchor.rom_offset, expected_hex=anchor.expected_hex}
@@ -568,14 +579,14 @@ function M.new(pack, title, io, evaluator, ownership, receipt)
             end
             local seen, count_predicates = {}, 0
             for key, condition in pairs(primary.state_predicates) do
-                assert(integer(key, 1, 15) and type(condition) == "table" and REQUIRED[condition.symbol]
+                assert(integer(key, 1, 15) and type(condition) == "table" and shape.required[condition.symbol]
                     and not seen[condition.symbol], "missing, duplicate or unknown game predicate")
                 seen[condition.symbol], count_predicates = true, count_predicates + 1
                 assert(condition.width == 1 and condition.operator == "masked_equal"
                     and condition.read_domain == "System Bus" and integer(condition.mask, 1, 255)
                     and integer(condition.value, 0, 255), "unsupported game predicate")
             end
-            assert(count_predicates == 15, "complete Gen 2 state predicate required")
+            assert(count_predicates == shape.count, "complete Gen 2 state predicate required")
             local spec = {
                 domains={ROM={first=0, limit=rom_size}, ["System Bus"]={first=0, limit=0x10000}},
                 anchors=anchors, pc=primary.execution_before.pc,

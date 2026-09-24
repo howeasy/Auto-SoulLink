@@ -20,11 +20,11 @@ from tests.live import test_gen2_write_windows as u2  # noqa: E402
 
 
 class Candidate:
-    def __init__(self, title="crystal"):
+    def __init__(self, title="crystal", hold="primary"):
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         self.pack = json.loads((ROOT / f"data/games/gen2_{title}/write_checkpoint.json").read_text())
         self.data = self.pack["titles"][title]
-        self.primary = self.data["primary"]
+        self.primary = self.data[hold]      # the held execution this candidate CPU sits in
         self.memory, self.reads = {}, []
         self.epoch, self.admitted, self.unowned = 1, True, True
         self.rom_bank = self.primary["execution_before"]["bank"]
@@ -88,6 +88,26 @@ def test_matching_source_candidate_never_grants_runtime_writes(title):
     assert candidate.inspect().candidate_match is False
     binder = candidate.binder()
     assert binder.check(binder)[0] is False
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_the_battle_hold_is_its_own_held_execution_and_never_authorizes_unreceipted(title):
+    """O-30: battle_faint is evaluated at the battle hold only, and no receipt covers it yet."""
+    candidate = Candidate(title, hold="battle_hold")
+    binder = candidate.binder()
+    report = binder.inspect_candidate(binder, "battle_hold")
+    assert report.candidate_match is True, report.reason
+    assert binder.inspect_candidate(binder, "primary").candidate_match is False     # another PC
+    assert binder.check(binder, "battle_faint")[0] is False
+    assert binder.covers(binder, "battle_faint") is False
+    link = next(row for row in candidate.primary["state_predicates"] if row["symbol"] == "wLinkMode")
+    candidate.memory["System Bus", link["address"]] = 1                                # a link battle
+    report = binder.inspect_candidate(binder, "battle_hold")
+    assert report.candidate_match is False and "wLinkMode" in report.reason
+    candidate.memory["System Bus", link["address"]] = 0
+    word = candidate.primary["caller_stack"]["required_words"][0]
+    candidate.memory["System Bus", candidate.registers["SP"]] = (word["value"] + 1) & 255   # not StartBattle's DoBattle
+    assert binder.inspect_candidate(binder, "battle_hold").candidate_match is False
 
 
 @pytest.mark.parametrize("symbol", ["wMapStatus", "wMapEventStatus", "wScriptRunning", "wScriptMode",

@@ -341,6 +341,138 @@ ret"""))
     return result
 
 
+CORE = "engine/battle/core.asm"
+TURN_SOURCE = """.skip_iteration
+call ParsePlayerAction
+jr nz, .loop1
+call EnemyTriesToFlee
+jr c, .quit
+call DetermineMoveOrder
+jr c, .false
+call Battle_EnemyFirst
+jr .proceed
+.false
+call Battle_PlayerFirst
+.proceed
+"""
+START_TAIL_SOURCE = """call DoBattle
+call ExitBattle
+pop af
+ld [wTimeOfDayPal], a
+scf
+ret
+"""
+
+
+def _census(ctx, name: str, pattern: str) -> list[tuple[str, int, str]]:
+    """Every direct transfer to `name` in the pinned assembly tree."""
+    census = subprocess.run(["git", "-C", str(ctx.source_dir), "grep", "-l", "-z", "-F", name, "--", "*.asm"],
+                            capture_output=True, check=False)
+    if census.returncode != 0:
+        raise ValueError(f"{ctx.title}: cannot enumerate {name} source references")
+    regex = re.compile(pattern)
+    return [(rel, line_no, line) for rel in sorted(census.stdout.decode("utf-8").rstrip("\0").split("\0"))
+            for line_no, line in _code(ctx.read_source(rel)) if regex.fullmatch(line)]
+
+
+def _battle_hold(ctx) -> dict:
+    """O-30 in-battle faint site (docs/gen2/reviews/INBATTLE_FAINT_FACTS_2026-09-23.md §2): before
+    `call DetermineMoveOrder` in BattleTurn, the player's action committed. Held on the StartBattle ->
+    DoBattle -> (jp) BattleTurn main thread: [SP] is StartBattle's return from `call DoBattle`."""
+    turns = _census(ctx, "BattleTurn", r"(?:call|jp|jr) (?:\w+, )?BattleTurn")
+    if [line for _, _, line in turns] != ["jp BattleTurn"] or turns[0][0] != CORE:
+        raise ValueError(f"{ctx.title}: BattleTurn entry missing/ambiguous: {turns}")
+    orders = _census(ctx, "DetermineMoveOrder", r"(?:call|jp|jr|farcall|callfar) (?:\w+, )?DetermineMoveOrder")
+    if [line for _, _, line in orders] != ["call DetermineMoveOrder"]:
+        raise ValueError(f"{ctx.title}: DetermineMoveOrder caller missing/ambiguous: {orders}")
+    turn = _Encoder(ctx, "BattleTurn.skip_iteration")
+    turn.call("ParsePlayerAction")
+    turn.branch(0x20, "BattleTurn.loop1")
+    turn.call("EnemyTriesToFlee")
+    turn.branch(0x38, "BattleTurn.quit")
+    pc = turn.pc
+    turn.call("DetermineMoveOrder")
+    turn.branch(0x38, "BattleTurn.false")
+    turn.call("Battle_EnemyFirst")
+    turn.branch(0x18, "BattleTurn.proceed")
+    turn.label("BattleTurn.false")
+    turn.call("Battle_PlayerFirst")
+    turn.label("BattleTurn.proceed")
+    # StartBattle's tail: the one executed `call DoBattle` (Crystal's CallDoBattle is unreferenced).
+    start = ctx.symbol("StartBattle")
+    tail = bytearray()
+    for name in ("DoBattle", "ExitBattle"):
+        target = ctx.symbol(name)
+        if target.bank != start.bank:
+            raise ValueError(f"near call crosses ROM bank: {name}")
+        tail.extend(b"\xcd" + _word(target.address))
+    tail.extend(b"\xf1\xea" + _word(ctx.symbol("wTimeOfDayPal").address) + b"\x37\xc9")
+    base = rom_offset(start.bank, start.address)
+    window = ctx.rom[base:rom_offset(start.bank, 0x7FFF) + 1]
+    hits = [i for i in range(len(window)) if window.startswith(bytes(tail), i)]
+    if len(hits) != 1:
+        raise ValueError(f"{ctx.title}: StartBattle tail missing/ambiguous in ROM: {hits}")
+    tail_address = start.address + hits[0]
+    caller = {"bank": start.bank, "address": tail_address, "rom_offset": rom_offset(start.bank, tail_address),
+              "expected_hex": bytes(tail).hex().upper(), "source": _cite(ctx, CORE, START_TAIL_SOURCE),
+              "instruction_set": "SM83", "evidence": "SOURCE"}
+    link_cite = _cite(ctx, "constants/serial_constants.asm", "const_def\nconst LINK_NULL\nconst LINK_TIMECAPSULE")
+    action, action_cite = _enum(ctx, "constants/battle_constants.asm",
+                                ("BATTLEPLAYERACTION_USEMOVE", "BATTLEPLAYERACTION_USEITEM", "BATTLEPLAYERACTION_SWITCH"))
+    skip = _cite(ctx, "engine/battle/effect_commands.asm",
+                 "ld a, [wBattlePlayerAction]\nand a ; BATTLEPLAYERACTION_USEMOVE?\nret nz")
+    # Struct fields (battle_struct wBattleMon) have no `name::` line: the pinned .sym (sym_sha256 in
+    # the source record) is their evidence.
+    targets = {name: {"symbol": name, "bank": ctx.symbol(name).bank, "address": ctx.symbol(name).address,
+                      "width": width, "evidence": "SYM"}
+               for name, width in (("wBattleMonHP", 2), ("wBattlePlayerAction", 1), ("wCurBattleMon", 1),
+                                   ("wBattleMonSpecies", 1), ("wPlayerSubStatus5", 1), ("wBattleType", 1))}
+    return {
+        "id": "battle-turn-before-determine-move-order", "acceptance": "ALL_REQUIRED_SAME_HELD_EXECUTION",
+        "execution_before": {"bank": turn.bank, "pc": pc, "rom_offset": rom_offset(turn.bank, pc),
+                             "instruction": "call DetermineMoveOrder", "instruction_offset": pc - turn.start,
+                             "source": _cite(ctx, CORE, "call DetermineMoveOrder")},
+        "anchors": {"battle_turn": turn.anchor(_cite(ctx, CORE, TURN_SOURCE)), "start_battle_caller": caller},
+        "caller_return": tail_address + 3,
+        "state_predicates": [{**_memory(ctx, "wLinkMode"), "operator": "masked_equal", "mask": 255, "value": 0,
+                              "reason": "LINK_NULL: a write in a link battle desyncs the other Game Boy",
+                              "semantic_source": [link_cite], "qualification": "PROPOSED_STRICT_CONJUNCTION"}],
+        # The write set (facts doc §2): HP 0 and the action byte LAST; the party mirror in between.
+        "write": {"skip_action": action["BATTLEPLAYERACTION_USEITEM"], "sources": [action_cite, skip],
+                  "targets": targets},
+        # Transform rewrites wBattleMonSpecies to the foe's; the slot is still ours (Gen 1 active_faint_guard).
+        "transformed_bit": 3,
+        "transformed_source": _cite(ctx, "constants/battle_constants.asm",
+                                    "const_def\nconst SUBSTATUS_TOXIC\nconst_skip\nconst_skip\nconst SUBSTATUS_TRANSFORMED"),
+    }
+
+
+CONTEST_DROP_SOURCE = """ld hl, wPartyCount
+ld a, 1
+ld [hli], a
+"""
+CONTEST_ABORT_SOURCE = """checkflag ENGINE_BUG_CONTEST_TIMER
+iffalse .finish
+setflag ENGINE_DAILY_BUG_CONTEST
+special ContestReturnMons
+"""
+
+
+def _contest_mask(ctx) -> dict:
+    """O-30 ruling (a): ContestDropOffMons masks the party to one mon for the whole Bug-Catching
+    Contest; ContestReturnMons restores it. The contest timer flag brackets that window at every
+    checkpoint hold (BugContestResultsScript clears it inside the same script that returns the mons,
+    WarpToSpawnPoint after Script_AbortBugContest returned them): a death for a masked-out mon waits."""
+    names = ("STATUSFLAGS2_ROCKETS_IN_RADIO_TOWER_F", "STATUSFLAGS2_SAFARI_GAME_F", "STATUSFLAGS2_BUG_CONTEST_TIMER_F")
+    bits, bit_cite = _enum(ctx, RAM_CONSTANTS, names)
+    return {**_memory(ctx, "wStatusFlags2"), "bit": bits["STATUSFLAGS2_BUG_CONTEST_TIMER_F"], "sources": [
+        bit_cite,
+        _cite(ctx, "data/events/engine_flags.asm", "engine_flag wStatusFlags2, STATUSFLAGS2_BUG_CONTEST_TIMER_F"),
+        _cite(ctx, "engine/events/bug_contest/contest_2.asm", CONTEST_DROP_SOURCE),
+        _cite(ctx, "engine/events/misc_scripts.asm", CONTEST_ABORT_SOURCE),
+    ]}
+
+
 def build_title(ctx) -> dict:
     if ctx.title not in TITLES:
         raise ValueError(f"unsupported selected title: {ctx.title}")
@@ -364,34 +496,45 @@ def build_title(ctx) -> dict:
     rom_bank = anchors["ow_player_input"]["bank"]
     if rom_bank != anchors["player_events_caller"]["bank"]:
         raise ValueError("caller and checkpoint ROM banks disagree")
+    def caller_stack(value: int) -> dict:
+        return {"read_domain": "System Bus", "region": stack_kind, "bank": expected_bank,
+                "minimum_sp": bottom.address, "exclusive_stack_end": top.address,
+                "required_words": [{"offset_from_sp": 0, "value": value, "endianness": "little"}],
+                "required_read_bytes": 2, "must_fit_entire_read": True,
+                "source": [stack_cite, stack_init], "search_for_return_address": False}
+
+    def ownership(bank: int) -> dict:
+        return {
+            "rom_bank_shadow": {**_memory(ctx, "hROMBank"), "equals": bank},
+            "mapped_rom_bank": bank, "mapped_rom_bank_must_equal_shadow": True,
+            "effective_wram_bank": 1,
+            "wram_bank_register": {"address": wram_register, "source": wram_cite,
+                                   "binding": "CGB effective bank 1; DMG fixed-bank mapping must be qualified separately"},
+            "serial_control": {"address": serial_register, "mask": 1 << serial_bit, "value": 0,
+                               "source": [sc_cite, sc_bit_cite]},
+            "host": ["admitted exact ROM identity", "unchanged session/reset epoch",
+                     "no pending trade or serial-owner lease", "no save, box-load, or staged-writer owner",
+                     "synchronous CPU hold before the instruction", "recheck every anchor in ROM and mapped System Bus",
+                     "all reads and bank/PC/stack evidence available in the same hold"],
+            "cached_frame_acceptance_allowed": False,
+        }
+
+    hold = _battle_hold(ctx)
+    hold["caller_stack"] = caller_stack(hold.pop("caller_return"))
+    hold["ownership_requirements"] = ownership(hold["execution_before"]["bank"])
     candidate = {
         "maturity": "SOURCE_CANDIDATE", "runtime_authorized": False,
+        "battle_hold": hold,
+        "contest_mask": _contest_mask(ctx),
         "primary": {
             "id": "ow-player-input-before-check-a-press", "acceptance": "ALL_REQUIRED_SAME_HELD_EXECUTION",
             "execution_before": {"bank": rom_bank, "pc": pc, "rom_offset": rom_offset(rom_bank, pc),
                                  "instruction": "call CheckAPressOW", "instruction_offset": pc - anchors["ow_player_input"]["address"],
                                  "source": _cite(ctx, EVENTS, "call CheckAPressOW")},
             "anchors": anchors,
-            "caller_stack": {"read_domain": "System Bus", "region": stack_kind, "bank": expected_bank,
-                             "minimum_sp": bottom.address, "exclusive_stack_end": top.address,
-                             "required_words": [{"offset_from_sp": 0, "value": return_pc, "endianness": "little"}],
-                             "required_read_bytes": 2, "must_fit_entire_read": True,
-                             "source": [stack_cite, stack_init], "search_for_return_address": False},
+            "caller_stack": caller_stack(return_pc),
             "state_predicates": predicates,
-            "ownership_requirements": {
-                "rom_bank_shadow": {**_memory(ctx, "hROMBank"), "equals": rom_bank},
-                "mapped_rom_bank": rom_bank, "mapped_rom_bank_must_equal_shadow": True,
-                "effective_wram_bank": 1,
-                "wram_bank_register": {"address": wram_register, "source": wram_cite,
-                                       "binding": "CGB effective bank 1; DMG fixed-bank mapping must be qualified separately"},
-                "serial_control": {"address": serial_register, "mask": 1 << serial_bit, "value": 0,
-                                   "source": [sc_cite, sc_bit_cite]},
-                "host": ["admitted exact ROM identity", "unchanged session/reset epoch",
-                         "no pending trade or serial-owner lease", "no save, box-load, or staged-writer owner",
-                         "synchronous CPU hold before the instruction", "recheck every anchor in ROM and mapped System Bus",
-                         "all reads and bank/PC/stack evidence available in the same hold"],
-                "cached_frame_acceptance_allowed": False,
-            },
+            "ownership_requirements": ownership(rom_bank),
         },
         "irq_anchor": {"status": "UNAVAILABLE", "reason": "No generated IRQ anchor proof in this pack; never substitute Gen 1 DelayFrame offsets or stack words."},
         "physical": {"status": "OPEN", "liveness": "UNMEASURED", "negative_controls": "UNRUN",
