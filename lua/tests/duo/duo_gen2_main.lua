@@ -222,7 +222,8 @@ local ok, ctx = pcall(function()
     local c = SG.context(TR and TR.context_api(api, os.getenv) or api, os.getenv)
     assert(c.qualify ~= nil and c.qualify.stage == "boot", "SLINK_GEN2_QUALIFY stage \"boot\" required")
     -- gen2_ball_gate (S.TOWN) is the one scenario that boots a zero-Ball town fixture, with the errand facts
-    assert(c.case.target == "battle" or (S.TOWN == true and c.case.target == "town" and c.case.ball_gate == true),
+    assert(c.case.target == "battle" or (S.TOWN == true and c.case.target == "town" and c.case.ball_gate == true)
+           or (S.SYNTH ~= nil and type(c.case.synth) == "string"),   -- DUO-WAVE-D: an O-33 setup through its base case
            "the link scenario runs on a battle fixture")
     c.u1 = assert(json.decode(assert(os.getenv("SLINK_GEN2_U1_FACTS"), "SLINK_GEN2_U1_FACTS missing")))
     return c
@@ -230,7 +231,8 @@ end)
 if not ok then finish(false, "bad environment: " .. tostring(ctx)) end
 ctx.log = log
 jlog("DUO_GEN2", {player=D.player, scenario=D.scenario, attempt=D.attempt or 1, case=ctx.case.name,
-                  title=ctx.env.title, rom_sha1=ctx.env.rom_sha1, fixture_sha256=ctx.qualify.stage_fingerprint})
+                  title=ctx.env.title, rom_sha1=ctx.env.rom_sha1, fixture_sha256=ctx.qualify.stage_fingerprint,
+                  synth=ctx.case.synth})
 
 local started, gen2, parts = pcall(TR and function() return TR.start_production(ROOT, SG, json) end or start_production)
 if not started or type(gen2) ~= "table" or type(parts) ~= "table" then
@@ -260,7 +262,8 @@ gen2.on_event = function(self, ev)
         jlog("ENGINE_CAPTURE", {frame=emu.framecount(), site_id=tostring(ev.site_id), acquisition=tostring(ev.acquisition),
             area_id=tostring(ev.area_id), destination=tostring(ev.destination), slot=ev.slot, key=tostring(m.key),
             species_id=m.species_id, level=m.level})
-        if ev.site_id == "capture_party_finalized" and ev.acquisition == "wild" then
+        if (ev.site_id == "capture_party_finalized" or S.SYNTH == "full" and ev.site_id == "capture_box_finalized")
+           and ev.acquisition == "wild" then
             rec.captures = rec.captures + 1
             rec.capture = rec.capture or {key=m.key, species_id=m.species_id, area_id=ev.area_id}
             maybe_caught()
@@ -278,6 +281,9 @@ gen2.on_event = function(self, ev)
                      collection=ev.collection, box_index=ev.box_index, old_box=ev.old_box, new_box=ev.new_box}
         jlog("ENGINE_PC", row)
         rec.pc[#rec.pc + 1] = row
+    elseif type(ev) == "table" and ev.kind == "key_change" and type(ev.mon) == "table" then
+        jlog("ENGINE_KEY_CHANGE", {frame=emu.framecount(), site_id=tostring(ev.site_id), reason=tostring(ev.reason),
+                                   old_key=tostring(ev.old_key), new_key=tostring(ev.mon.key), species_id=ev.mon.species_id})
     elseif type(ev) == "table" and ev.kind == "whiteout" then
         local party = {}
         for _, m in ipairs(type(ev.party) == "table" and ev.party.mons or {}) do
@@ -470,7 +476,7 @@ if TR then
     if not tok then finish(false, "trade facts: " .. tostring(twhy)) end
 end
 local FI
-if S.FAINT_INPUTS then   -- the faint route's UI origins are watched from the first hook on
+if S.FAINT_INPUTS or S.SYNTH == "trade" then   -- the faint route's UI origins (the trade's party menu too)
     FI = dofile(ROOT .. "/lua/tests/duo/gen2_faint_inputs.lua")
     local fok, fwhy = pcall(FI.prepare, ctx, SG, ctx.u1)
     if not fok then finish(false, "faint inputs: " .. tostring(fwhy)) end
@@ -478,7 +484,7 @@ end
 -- The Bill's PC leg (lua/tests/gen2_pc_inputs.lua) watches its UI origins from the first hook on; the poison leg
 -- and the PC walk share lua/tests/gen2_poison_inputs.lua (PI.step_toward).
 local PC, PI
-if S.PC_INPUTS or S.POISON_INPUTS then PI = dofile(ROOT .. "/lua/tests/gen2_poison_inputs.lua") end
+if S.PC_INPUTS or S.POISON_INPUTS or S.TRAINER or S.SYNTH then PI = dofile(ROOT .. "/lua/tests/gen2_poison_inputs.lua") end
 if S.PC_INPUTS then
     PC = dofile(ROOT .. "/lua/tests/gen2_pc_inputs.lua")
     local pok, pwhy = pcall(PC.prepare, ctx, SG, ctx.u1)
@@ -608,6 +614,28 @@ function h.ball_gate_leg(mode)
                          settle_frames=F.BUDGET.settle_frames},
                   driver, SG.observer(ctx), {log=log, frame=api.framecount, screen=function() return SG.screen(ctx) end,
                                              where=function() return "-" end, trace=os.getenv("SLINK_GEN2_TRACE") == "1"})
+end
+-- DUO-WAVE-D O-33 setups (lua/tests/duo/gen2_synth_duo.lua): the U1G route driver (lua/tests/gen2_u1g_inputs.lua
+-- U.driver, SLINK_GEN2_U1_FACTS.u1g) over the scripted gate's point plus party species, the party cursor and the box
+-- count, exactly as U.run observes; terminal at its own done(). mode "hatch" is the one-step hatch leg (S.hatch).
+local UG = S.SYNTH and dofile(ROOT .. "/lua/tests/gen2_u1g_inputs.lua") or nil
+function h.synth_leg(driver)
+    local base = SG.qualify_observer(ctx)
+    local function observe()
+        local point = base()
+        if point.ui and point.ui.kind == "battle_party" and FI then point.party_cursor = FI.party_cursor(SG.screen(ctx)) end
+        local count = ctx.sym("wPartyCount")[1]
+        point.party = {count=count, species={}}
+        for i = 1, math.min(count, 6) do point.party.species[i] = ctx.sym("wPartySpecies", i - 1)[1] end
+        return point
+    end
+    driver = driver or UG.driver(F, PI, ctx.u1.u1g)
+    driver.log = log
+    local left = math.max(1, timeout - api.framecount())
+    return F.play(host, {name="duo-gen2-synth", terminal=driver.terminal, terminal_idle=true, max_frames=left,
+                         max_phase_frames=math.min(D.max_phase_frames or 40000, left), settle_frames=F.BUDGET.settle_frames},
+                  driver, observe, {log=log, frame=api.framecount, screen=function() return SG.screen(ctx) end,
+                                    where=function() return "-" end, trace=os.getenv("SLINK_GEN2_TRACE") == "1"})
 end
 -- The flushed native save: CartRAM digest == the first 0x8000 bytes of the flushed SaveRAM file.
 local function flushed()

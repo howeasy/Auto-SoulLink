@@ -1,0 +1,145 @@
+{
+ "base_fixture": "crystal_town_ot2",
+ "base_sha256": "8b254f04e23cb0a99e50c5170f9d8ba0b55df75015d00d2467193ce75e026c2e",
+ "builder": "tools/gen2_synth_fixtures.py",
+ "checksums": "restored (primary + backup)",
+ "edits": {
+  "last_spawn": "VIOLET_CITY",
+  "party": [
+   {
+    "dvs": 19497,
+    "hp": 1,
+    "level": 5,
+    "moves": [
+     "SCRATCH",
+     "DEFENSE_CURL"
+    ],
+    "species": "SENTRET",
+    "status": 8
+   },
+   {
+    "dvs": 27448,
+    "egg": true,
+    "happiness": 1,
+    "moves": [
+     "VINE_WHIP",
+     "GROWTH"
+    ],
+    "species": "BELLSPROUT"
+   }
+  ],
+  "poison_step": 3,
+  "step_count": 126
+ },
+ "fields": [
+  {
+   "backup": 6757,
+   "new_hex": "02",
+   "offset": 0,
+   "old_hex": "01",
+   "primary": 10341,
+   "size": 1,
+   "symbol": "wPartyCount",
+   "wram": 56535
+  },
+  {
+   "backup": 6758,
+   "new_hex": "a1fdff00000000",
+   "offset": 0,
+   "old_hex": "9eff0000000000",
+   "primary": 10342,
+   "size": 7,
+   "symbol": "wPartySpecies",
+   "wram": 56536
+  },
+  {
+   "backup": 6765,
+   "new_hex": "a1000a6f0000ac2400007d000000000000000000004c29232800004600000005080000010012000a000900070009000a4500164a0000ac24000087000000000000000000006b380a2800000100000005000000000014000d00090009000c0008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "offset": 0,
+   "old_hex": "9ead0a2b0000ac240000870000000000000000000021bc231e00004600850105000000140014000b000b000a000a000b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "primary": 10349,
+   "size": 288,
+   "symbol": "wPartyMon1",
+   "wram": 56543
+  },
+  {
+   "backup": 7053,
+   "new_hex": "8c809350505050505050508c809350505050505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "offset": 0,
+   "old_hex": "8c8093505050505050505000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "primary": 10637,
+   "size": 66,
+   "symbol": "wPartyMonOTs",
+   "wram": 56831
+  },
+  {
+   "backup": 7119,
+   "new_hex": "92848d939184935050505084868650505050505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "offset": 0,
+   "old_hex": "938e938e83888b8450505000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "primary": 10703,
+   "size": 66,
+   "symbol": "wPartyMonNicknames",
+   "wram": 56897
+  },
+  {
+   "backup": 6720,
+   "new_hex": "0a05",
+   "offset": 0,
+   "old_hex": "0000",
+   "primary": 10304,
+   "size": 2,
+   "symbol": "wLastSpawnMapGroup",
+   "wram": 56498
+  },
+  {
+   "backup": 6657,
+   "new_hex": "7e",
+   "offset": 0,
+   "old_hex": "1c",
+   "primary": 10241,
+   "size": 1,
+   "symbol": "wStepCount",
+   "wram": 56435
+  },
+  {
+   "backup": 6658,
+   "new_hex": "03",
+   "offset": 0,
+   "old_hex": "00",
+   "primary": 10242,
+   "size": 1,
+   "symbol": "wPoisonStepCount",
+   "wram": 56436
+  },
+  {
+   "cart": 11533,
+   "new_hex": "80d6",
+   "offset": 0,
+   "old_hex": "55cb",
+   "size": 2,
+   "symbol": "sChecksum",
+   "wram": null
+  },
+  {
+   "cart": 7949,
+   "new_hex": "80d6",
+   "offset": 0,
+   "old_hex": "55cb",
+   "size": 2,
+   "symbol": "sBackupChecksum",
+   "wram": null
+  }
+ ],
+ "schema": "gen2-synth-disclosure-v1",
+ "sha256": "2c0c655dfd250e072a11ace0ea227da5e01f03265ddebf7d02c5cc6911ea10c0",
+ "source_facts": [
+  "constants/charmap.asm names",
+  "data/games/gen2_<title>/moves.json PP",
+  "data/games/gen2_<title>/species_index.json base stats/growth",
+  "data/maps/spawn_points.asm; engine/events/whiteout.asm GetWhiteoutSpawn",
+  "engine/overworld/events.asm CountStep",
+  "macros/ram.asm party_struct"
+ ],
+ "title": "crystal"
+}

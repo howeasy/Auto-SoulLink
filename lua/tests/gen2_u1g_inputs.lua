@@ -127,7 +127,7 @@ function U.driver(F, PI, facts)
         if kind == "grass" then
             for i = 1, p.count do if p.species[i] == facts.egg then return false end end
             return p.species[1] == facts.evolved and p.count == 6 and integer(point.box_count, facts.box_base + 1, 20)
-        elseif kind == "kyle" then return p.species[1] == facts.received
+        elseif kind == "kyle" then return p.species[(facts.give_slot or 0) + 1] == facts.received   -- the traded slot
         else return p.count == 2 and p.species[2] == facts.received end
     end
     local function battle(point, ui)

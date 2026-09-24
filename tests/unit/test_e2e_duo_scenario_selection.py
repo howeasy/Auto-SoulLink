@@ -30,7 +30,8 @@ from e2e_duo import (  # noqa: E402
 )
 
 EXPECTED_GEN2 = ["link", "gen2_faint", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison",
-                 "gen2_whiteout_rebuild", "gen2_ball_gate",
+                 "gen2_whiteout_rebuild", "gen2_boxed_capture", "gen2_gift", "gen2_egg_hatch", "gen2_npc_trade",
+                 "gen2_ball_gate",
                  "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_type_clause",
                  "gen2_gender_clause", "gen2_species_clause", "gen2_soft_reset"]
 EXPECTED_GEN2_TRADE = ["gen2_trade_decline_new", "gen2_trade_evolve", "gen2_trade_new", "gen2_trade_refuse_item",
@@ -300,7 +301,8 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
     assert GAMES[game]["game"] == "gen2_new"
     assert GAMES[game]["fixture"] == fixtures
     trade = EXPECTED_GEN2_TRADE if game != "gen2_crystal_gold" else []   # owner Q10: no C-G native trade
-    expected = [one for one in EXPECTED_GEN2 if one != "gen2_ball_gate" or game != "gen2_crystal_gold"]
+    c_g_only_not = {"gen2_ball_gate", *duo_module.GEN2_SYNTH_SCENARIOS}   # C-C and G-S rows only
+    expected = [one for one in EXPECTED_GEN2 if one not in c_g_only_not or game != "gen2_crystal_gold"]
     assert scenarios_for(game) == trade + expected
     assert duo_module.evidence_contract(game) is duo_module.evidence_contract("gen2_new")
     assert not GAMES[game].get("server_rom_routes")
@@ -311,9 +313,12 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
         f"{scenario}  attempts={3 if scenario in duo_module.GEN2_CLAUSE_SCENARIOS else 1}  targets="
         f"a:{'gold_battle_errand' if scenario == 'gen2_poison' and game == 'gen2_gold_silver' else fixtures['a']}, "
         f"b:{'crystal_battle_ot2' if scenario == 'gen2_admit_wrong_rom' else fixtures['b']}"
-        if scenario != "gen2_ball_gate" else
+        if scenario not in c_g_only_not else
         f"{scenario}  attempts=2  targets=a:{duo_module.GEN2_BALL_GATE_FIXTURES[game]['a']}, "
         f"b:{duo_module.GEN2_BALL_GATE_FIXTURES[game]['b']}"
+        if scenario == "gen2_ball_gate" else
+        f"{scenario}  attempts=1  targets=a:{duo_module.gen2_synth_name(scenario, game, 'a')}, "
+        f"b:{duo_module.gen2_synth_name(scenario, game, 'b')}"
         for scenario in expected]
 
 
@@ -661,7 +666,7 @@ def test_the_pytest_wrappers_agree_with_the_runner():
     mod = __import__("test_duo_gen2_new")
     for game in mod.PAIRINGS:   # the wrapper skips what a pairing does not register (C-G trade, Q10)
         assert set(scenarios_for(game)) <= set(mod.SCENARIOS)
-        assert set(mod.SCENARIOS) - set(scenarios_for(game)) <= set(duo_module.GEN2_TRADE_SCENARIOS) | {"gen2_ball_gate"}
+        assert set(mod.SCENARIOS) - set(scenarios_for(game)) <= set(duo_module.GEN2_TRADE_SCENARIOS) | {"gen2_ball_gate", *duo_module.GEN2_SYNTH_SCENARIOS}
     assert set(mod.SCENARIOS) == set().union(*(scenarios_for(game) for game in mod.PAIRINGS))
 
 

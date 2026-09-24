@@ -90,6 +90,10 @@ SCENARIOS = {
        for name in ("gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild")},
     # DUO-WAVE-D (D-2): zero-Ball town fixtures, the errand played in the duo for the aide's natural Balls
     # (docs/gen2/reviews/DUO_WAVE_D_FACTS_2026-09-24.md section 1); C-C and G-S only (GEN2_BALL_GATE_FIXTURES).
+    # DUO-WAVE-D (O-33): the four duos that start from a synthetic setup (GEN2_SYNTH_SCENARIOS), C-C and G-S only
+    **{name: {"flags": [], "timeout": 1800, "games": ("gen2_new",), "no_setup": True, "frames": 216000,
+              "oracle": "assert_gen2_synth_saved", "oracle_kwargs": {}}
+       for name in ("gen2_boxed_capture", "gen2_gift", "gen2_egg_hatch", "gen2_npc_trade")},
     "gen2_ball_gate": {"flags": [], "timeout": 7200, "games": ("gen2_new",),
                        "no_setup": True, "frames": 600000,
                        "target": {"a": "town", "b": "town_ot2"},
@@ -299,6 +303,8 @@ def scenario_applies(name, game):
     if name in GEN2_TRADE_SCENARIOS and game not in GEN2_TRADE_FIXTURES:
         return False
     if name == "gen2_ball_gate" and game not in GEN2_BALL_GATE_FIXTURES:
+        return False
+    if name in GEN2_SYNTH_SCENARIOS and game not in GEN2_SYNTH_PAIRS:
         return False
     if allowed is None:
         return game not in OPT_IN_GAMES and family not in OPT_IN_GAMES
@@ -998,6 +1004,17 @@ GEN2_BALL_GATE_FIXTURES = {"gen2_new": {"a": "crystal_town", "b": "crystal_town_
 # F.driver's refusal when the Ball pocket is empty (lua/tests/gen2_frame_align.lua): five natural Balls at ~33% a
 # throw miss about 13% of full-HP catches, so the lane may retry once on exactly this reason.
 GEN2_OUT_OF_BALLS = "no Poke Ball left in the pocket"
+# DUO-WAVE-D O-33 setups (tools/gen2_synth_fixtures.py): scenario -> recipe kind. Each side boots
+# <title>_synth_<kind> (C<->C B: crystal_synth_<kind>_ot2) through its BASE fixture's qualified CONTINUE (case.synth).
+GEN2_SYNTH_SCENARIOS = {"gen2_boxed_capture": "full", "gen2_gift": "bill", "gen2_egg_hatch": "hatch",
+                        "gen2_npc_trade": "trade"}
+GEN2_SYNTH_PAIRS = {"gen2_new": {"a": ("crystal", ""), "b": ("crystal", "_ot2")},
+                    "gen2_gold_silver": {"a": ("gold", ""), "b": ("silver", "")}}
+
+
+def gen2_synth_name(scenario, game, inst):
+    title, suffix = GEN2_SYNTH_PAIRS[game][inst]
+    return f"{title}_synth_{GEN2_SYNTH_SCENARIOS[scenario]}{suffix}"
 GEN2_WAVE_C = {"gen2_whiteout": ("whiteout_oracle", "repair"), "gen2_pc_ops": ("pc_ops_oracle", "release"),
                "gen2_changebox": ("changebox_oracle", "box_change"), "gen2_poison": ("poison_oracle", "death"),
                "gen2_whiteout_rebuild": ("whiteout_rebuild_oracle", "rebuild")}
@@ -1034,6 +1051,15 @@ def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
             name = GEN2_POISON_FIXTURES.get(game, {}).get(inst, name)
         if scenario == "gen2_ball_gate":
             name = GEN2_BALL_GATE_FIXTURES[game][inst]
+        synth = None
+        if scenario in GEN2_SYNTH_SCENARIOS:   # O-33: the base fixture's qualification, the synthetic bytes staged
+            from tools import gen2_synth_fixtures
+
+            synth = gen2_synth_name(scenario, game, inst)
+            title, suffix = GEN2_SYNTH_PAIRS[game][inst]
+            kind = GEN2_SYNTH_SCENARIOS[scenario]
+            target = {**gen2_synth_fixtures.SYNTH_RECIPES, **gen2_synth_fixtures.DUO_RECIPES}[kind][0]
+            name = f"{title}_{target}{suffix}"
         if name not in BY_NAME:
             raise FileNotFoundError(f"Gen 2 lane missing played/qualified fixture declaration: {name}")
         title = BY_NAME[name].title
@@ -1045,12 +1071,20 @@ def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
         fixture = root / "tests/fixtures/gen2" / f"{name}.SaveRAM"
         raw = fixture.read_bytes()
         ot_id = qualified_identity(name, raw, repo=root)
+        if synth is not None:
+            fixture = root / "tests/fixtures/gen2" / f"{synth}.SaveRAM"
+            built, _disclosure = gen2_synth_fixtures.build_named(synth, root=root)
+            raw = fixture.read_bytes()
+            if built != raw:
+                raise RuntimeError(f"{inst}: {synth} is not the builder's output of {name}")
         receipt = root / "tests/fixtures/gen2/receipts" / f"{name}.qualification.json"
         report = json.loads(receipt.read_text(encoding="utf-8"))
         result[inst] = {"name": name, "fixture": fixture, "sha256": hashlib.sha256(raw).hexdigest(),
                         "ot_id": ot_id, "qualification": receipt,
                         "qualification_attempt_id": report["attempt_id"],
                         "rom": rom, "rom_sha1": source["rom_sha1"], "title": title}
+        if synth is not None:
+            result[inst]["synth"] = synth
         if refused:
             pin = ctx.lock["outputs"]["pokecrystal11"]
             wrong_rom = ctx.source_dir / pin["filename"]
@@ -1772,8 +1806,19 @@ class DuoRun:
             case["attempt_id"] = f"duo-{self.scenario}-{inst}-{self.attempt}-{uuid.uuid4().hex}"
             if self.scenario == "gen2_ball_gate":
                 case["ball_gate"] = True
+            if row.get("synth"):
+                case["synth"] = row["synth"]   # the shared gate names the case by its base fixture
             env["SLINK_GEN2_FIXTURE_CASE"] = json.dumps(case)
             env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, facts, row["qualification_attempt_id"]))
+            kind = GEN2_SYNTH_SCENARIOS.get(self.scenario)
+            if kind in ("bill", "trade"):   # the U1G route driver (lua/tests/gen2_u1g_inputs.lua) and its facts
+                from tests.live.test_gen2_u1g import run_facts
+
+                u1g = run_facts(ctx, gen2_fixtures.BY_NAME[row["name"]], "kyle" if kind == "trade" else "bill",
+                                row["synth"], row["qualification_attempt_id"])
+                if kind == "trade":
+                    u1g["u1g"]["give_slot"] = 1   # the hatched Bellsprout is slot 2 (DUO_RECIPES trade)
+                env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1g)
             if self.scenario in GEN2_TRADE_SCENARIOS:
                 from tools.gen2_trade_facts import trade_facts
 
@@ -1798,6 +1843,10 @@ class DuoRun:
             driver_files += ["lua/tests/gen2_poison_inputs.lua", "lua/tests/gen2_walk.lua"]
         if self.scenario in GEN2_CLAUSE_SCENARIOS:
             driver_files.append("lua/tests/duo/gen2_clause.lua")
+        if self.scenario in GEN2_SYNTH_SCENARIOS:
+            driver_files += ["lua/tests/duo/gen2_synth_duo.lua", "lua/tests/gen2_u1g_inputs.lua",
+                             "lua/tests/gen2_poison_inputs.lua", "lua/tests/gen2_walk.lua",
+                             "lua/tests/duo/gen2_faint_inputs.lua"]
         if self.scenario == "gen2_ball_gate":
             driver_files += ["lua/tests/duo/gen2_ball_gate_inputs.lua", "lua/tests/gen2_scripted_play.lua",
                              "lua/tests/gen2_walk.lua"]
@@ -1808,6 +1857,7 @@ class DuoRun:
         oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle", "gen2_faint_active": "faint_active_oracle", "gen2_reconnect": "reconnect_oracle",
                        "gen2_admit_wrong_rom": "admit_wrong_rom_oracle", "gen2_soft_reset": "soft_reset_oracle",
                        "gen2_ball_gate": "ball_gate_oracle",
+                       **dict.fromkeys(GEN2_SYNTH_SCENARIOS, "synth_duo_oracle"),
                        **{name: row[0] for name, row in GEN2_WAVE_C.items()},
                        **dict.fromkeys(GEN2_CLAUSE_SCENARIOS, "clause_oracle"),
                        **dict.fromkeys(GEN2_TRADE_SCENARIOS, "trade_oracle")}[self.scenario]
@@ -2134,6 +2184,12 @@ class DuoRun:
         return oracle.faint_oracle(results, data_dir=self.data_dir,
             on_verified=self._record_gen2_facts,
             ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
+
+    def assert_gen2_synth_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.synth_duo_oracle(results, scenario=self.scenario, data_dir=self.data_dir,
+            on_verified=self._record_gen2_facts,
             boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
 
     def assert_gen2_ball_gate_saved(self, results, **kwargs):
@@ -5104,6 +5160,8 @@ def list_lines(game):
             targets = {**targets, **GEN2_POISON_FIXTURES.get(game, {})}
         if name == "gen2_ball_gate":
             targets = GEN2_BALL_GATE_FIXTURES[game]
+        if name in GEN2_SYNTH_SCENARIOS:
+            targets = {inst: gen2_synth_name(name, game, inst) for inst in ("a", "b")}
         shown = (", ".join(f"{inst}:{targets[inst]}" for inst in ("a", "b"))
                  if isinstance(targets, dict) else targets)
         lines.append(f"{name}  attempts={scenario_attempt_limit(name, game)}  targets={shown}")

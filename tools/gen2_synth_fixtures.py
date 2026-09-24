@@ -289,12 +289,47 @@ SYNTH_RECIPES = {
 }
 SYNTH_FIXTURES = tuple(f"{title}_synth_{kind}" for title in ("crystal", "gold", "silver") for kind in SYNTH_RECIPES)
 
+# The DUO-WAVE-D duo setups (docs/gen2/reviews/DUO_WAVE_D_FACTS_2026-09-24.md; O-33). Same builder, same rules; the U1G
+# `bill` recipe serves gen2_gift as is. The duo's B side on C<->C boots the <name>_ot2 copy, built the same way from the
+# other-OT base (crystal_<target>_ot2).
+#   full   Route 29 grass with a FULL party of six (no egg) and Master Balls: the first wild catch is a box catch
+#          (PokeBallEffect .SendToPC, C engine/items/item_effects.asm:609-618), linked as route_29's first encounter.
+#   hatch  Elm's lab (no wild tiles), [Sentret, a Pidgey egg on its last cycle], wStepCount $7F: the first step runs
+#          DoEggStep (C engine/overworld/events.asm:894-898) and HatchEggs publishes the hatchling (gift_daycare, O-15).
+#   trade  the kyle whiteout to VIOLET_CITY with the Bellsprout as an EGG in slot 2 and wStepCount $7E: step 1 in the
+#          lab faints the poisoned Sentret (DoPoisonStep; the egg has HP 0, so CheckPlayerPartyForFitMon whites out),
+#          step 2 in Violet City hatches the Bellsprout (a native gift_daycare link on both sides), and Kyle then trades
+#          that LINKED mon (NPC_TRADE_KYLE wants BELLSPROUT, C/G data/events/npc_trades.asm:15).
+DUO_RECIPES = {
+    "full": ("battle", {"party": [
+        {"species": "PIDGEY", "level": 5, "moves": ["TACKLE"], "dvs": 0x1A2B},
+        {"species": "RATTATA", "level": 5, "moves": ["TACKLE", "TAIL_WHIP"], "dvs": 0x2B3C},
+        {"species": "SENTRET", "level": 5, "moves": ["SCRATCH", "DEFENSE_CURL"], "dvs": 0x3C4D},
+        {"species": "HOOTHOOT", "level": 5, "moves": ["TACKLE", "GROWL"], "dvs": 0x4D5E},
+        {"species": "SPEAROW", "level": 5, "moves": ["PECK", "GROWL"], "dvs": 0x5E6F},
+        {"species": "CATERPIE", "level": 5, "moves": ["TACKLE", "STRING_SHOT"], "dvs": 0x6F70}],
+        "balls": [["MASTER_BALL", 5]]}),
+    "hatch": ("town", {"party": [
+        {"species": "SENTRET", "level": 5, "moves": ["SCRATCH", "DEFENSE_CURL"], "dvs": 0x4C29},
+        {"species": "PIDGEY", "egg": True, "happiness": 1, "moves": ["TACKLE"], "dvs": 0x5B72}],
+        "step_count": 0x7F}),
+    "trade": ("town", {"party": [
+        {"species": "SENTRET", "level": 5, "moves": ["SCRATCH", "DEFENSE_CURL"], "dvs": 0x4C29, "hp": 1, "status": PSN},
+        {"species": "BELLSPROUT", "egg": True, "happiness": 1, "moves": ["VINE_WHIP", "GROWTH"], "dvs": 0x6B38}],
+        "poison_step": 3, "step_count": 0x7E, "last_spawn": "VIOLET_CITY"}),
+}
+# gen2_gift reuses the U1G bill recipe; its C<->C B side needs the ot2 copy too.
+DUO_FIXTURES = tuple(f"{title}_synth_{kind}" for title in ("crystal", "gold", "silver") for kind in DUO_RECIPES) + tuple(
+    f"crystal_synth_{kind}_ot2" for kind in (*DUO_RECIPES, "bill"))
+
 
 def build_named(name, *, root=ROOT):
-    """(bytes, disclosure) for a SYNTH_FIXTURES name, from its committed base fixture."""
+    """(bytes, disclosure) for a SYNTH_FIXTURES or DUO_FIXTURES name, from its committed base fixture."""
     title, _, kind = name.split("_", 2)
-    target, edits = SYNTH_RECIPES[kind]
-    base = f"{title}_{target}"
+    ot2 = kind.endswith("_ot2")
+    kind = kind.removesuffix("_ot2")
+    target, edits = {**SYNTH_RECIPES, **DUO_RECIPES}[kind]
+    base = f"{title}_{target}" + ("_ot2" if ot2 else "")
     raw = (Path(root) / "tests/fixtures/gen2" / f"{base}.SaveRAM").read_bytes()
     return build(title, raw, edits, root=root, base_name=base)
 

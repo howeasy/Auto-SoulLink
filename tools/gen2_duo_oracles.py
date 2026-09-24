@@ -2092,3 +2092,123 @@ def ball_gate_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot
     _ball_need("faint →" not in log, "the server issued a death command for a pre-Ball faint")
     if on_verified is not None:
         on_verified(_verified_facts(decoded, area_id, "alive"))
+
+
+# --- DUO-WAVE-D O-33 synthetic-setup duos: gen2_boxed_capture, gen2_gift, gen2_egg_hatch, gen2_npc_trade ------------
+# (lua/tests/duo/gen2_synth_duo.lua; docs/gen2/reviews/DUO_WAVE_D_FACTS_2026-09-24.md). The boot bytes are a synthetic
+# fixture: they are re-derived from their base fixture by tools/gen2_synth_fixtures.build_named and must equal the
+# committed disclosure's sha256, and every claim is a DELTA from them (the synthetic fields are never evidence, O-33).
+
+SYNTH_KINDS = {"gen2_boxed_capture": "full", "gen2_gift": "bill", "gen2_egg_hatch": "hatch", "gen2_npc_trade": "trade"}
+SYNTH_CAPTURE = {"full": ("capture_box_finalized", "wild", "box"), "bill": ("gift_party_finalized", "gift", "party"),
+                 "hatch": ("hatch_finalized", "egg_hatch", "party"), "trade": ("hatch_finalized", "egg_hatch", "party")}
+EEVEE, PIDGEY, BELLSPROUT, ONIX = 133, 16, 69, 95   # constants/pokemon_constants.asm (national order in Gen 2)
+KYLE_OT = 48926                                      # NPC_TRADE_KYLE OT ID (C/G data/events/npc_trades.asm:15)
+
+
+def _synth_need(condition, reason):
+    if not condition:
+        raise RuntimeError(f"synth duo: {reason}")
+
+
+def _synth_boot(inst, duo, boot_path):
+    """The staged synthetic bytes, proven to be the builder's output of their base fixture (O-33 disclosure)."""
+    from tools import gen2_synth_fixtures as synth
+
+    name = duo.get("synth")
+    _synth_need(isinstance(name, str) and name in synth.DUO_FIXTURES + synth.SYNTH_FIXTURES,
+                f"{inst} booted no registered synthetic setup: {name!r}")
+    raw = Path(boot_path).read_bytes()
+    _synth_need(hashlib.sha256(raw).hexdigest() == duo["fixture_sha256"], f"{inst} boot bytes are not the staged ones")
+    built, disclosure = synth.build_named(name)
+    committed = json.loads((REPO_ROOT / "tests/fixtures/gen2" / f"{name}.synth.json").read_text(encoding="utf-8"))
+    _synth_need(built == raw and committed == disclosure and disclosure["sha256"] == duo["fixture_sha256"],
+                f"{inst} synthetic bytes differ from the builder's disclosed output")
+    return raw[:CARTRAM_BYTES], name
+
+
+def _synth_side(inst, text, kind, boot_path):
+    from server.adapters import gen2_codec as codec
+
+    witness, _client, title = _boot_marker(inst, text)
+    duo = _duo_marker(inst, text)
+    layout = codec.for_foundation(title)
+    boot, name = _synth_boot(inst, duo, boot_path)
+    flushed = witness_save_bytes(witness, layout)[:CARTRAM_BYTES]
+    _synth_need(codec.strict_checksum_witness(flushed, layout)["valid"], f"{inst} flushed save fails the checksum witness")
+    site, acquisition, destination = SYNTH_CAPTURE[kind]
+    captures = [row for _, row in _tag_rows(text, "ENGINE_CAPTURE")
+                if (row.get("site_id"), row.get("acquisition"), row.get("destination")) == (site, acquisition, destination)]
+    _synth_need(len(captures) == 1, f"{inst} expected one {site} capture, got {len(captures)}")
+    capture = captures[0]
+    before = codec.decode_saved_party(boot, layout, copy_name="primary")["mons"]
+    after = codec.decode_saved_party(flushed, layout, copy_name="primary")["mons"]
+    keys_before = [codec.key(m) for m in before if not m["is_egg"]]
+    keys_after = [codec.key(m) for m in after if not m["is_egg"]]
+    final_key = capture["key"]
+    if kind == "full":
+        off, length = layout.active_box
+        box_before = codec.decode_box(boot[off:off + length], layout)["mons"]
+        box_after = codec.decode_box(flushed[off:off + length], layout)["mons"]
+        _synth_need(len(before) == 6 and keys_after == keys_before, f"{inst} the full party changed")
+        _synth_need([codec.key(m) for m in box_after] == [codec.key(m) for m in box_before] + [final_key],
+                    f"{inst} the active box did not gain exactly the captured {final_key}")
+        _synth_need(capture.get("area_id") == "route_29", f"{inst} box catch outside route_29")
+        balls_before, balls_after = _ball_pocket(boot, layout), _ball_pocket(flushed, layout)
+        _synth_need(sum(q for _, q in balls_after) == sum(q for _, q in balls_before) - 1,
+                    f"{inst} Ball pocket {balls_before} -> {balls_after} is not one thrown Ball")
+    elif kind == "bill":
+        _synth_need(keys_after == keys_before + [final_key] and after[-1]["species_id"] == EEVEE,
+                    f"{inst} the party did not gain exactly Bill's EEVEE {final_key}")
+    elif kind == "hatch":
+        _synth_need([m["is_egg"] for m in before] == [False, True] and not any(m["is_egg"] for m in after),
+                    f"{inst} the egg was not the one hatched")
+        _synth_need(keys_after == keys_before + [final_key] and after[1]["species_id"] == PIDGEY,
+                    f"{inst} the hatchling {final_key} is not the party's second slot")
+    else:   # trade: the hatched Bellsprout (linked), then Kyle's ONIX in its slot
+        changes = [row for _, row in _tag_rows(text, "ENGINE_KEY_CHANGE")
+                   if row.get("reason") == "npc_trade" and row.get("site_id") == "npc_trade_finalized"]
+        _synth_need(len(changes) == 1 and changes[0].get("old_key") == capture["key"],
+                    f"{inst} no single npc_trade key_change of the hatched Bellsprout {capture['key']}")
+        _synth_need(capture.get("species_id") == BELLSPROUT, f"{inst} the hatchling is not a Bellsprout")
+        final_key = changes[0]["new_key"]
+        _synth_need(len(after) == 2 and codec.key(after[1]) == final_key and after[1]["species_id"] == ONIX
+                    and after[1]["ot_id"] == KYLE_OT and capture["key"] not in keys_after,
+                    f"{inst} slot 2 is not Kyle's ONIX {final_key}")
+        lines = text.splitlines()
+        tx = [i for i, line in enumerate(lines) if line.startswith("TX ") and '"event":"key_change"' in line]
+        _synth_need(bool(tx) and any(line.startswith("RX key_change_ack") for line in lines[tx[0]:]),
+                    f"{inst} the key_change was not acked")
+    if kind != "full":
+        _synth_need(capture.get("area_id") not in (None, "", "nil"), f"{inst} the capture carries no area")
+    for line in text.splitlines():
+        _synth_need(not line.startswith(("RX force_faint", "RX memorialize")), f"{inst} received a death command: {line}")
+    return {"key": final_key, "capture": capture, "title": title, "synth": name, "area": capture.get("area_id")}
+
+
+def synth_duo_oracle(results, *, scenario, data_dir, boot_saveram, ot_ids=None, on_verified=None):
+    """One of the four O-33 synthetic-setup duos: both sides' native acquisition (box catch, gift, hatch, or hatch then
+    NPC trade) forms one ALIVE server pair with the independently decoded final keys; no death command anywhere.
+    ot_ids is accepted for the runner's common call shape; each side's OT is the synthetic base's own."""
+    from server.adapters.gen2_gsc import Gen2GSCAdapter
+
+    kind = SYNTH_KINDS[scenario]
+    check_save_witness(results)
+    sides = {inst: _synth_side(inst, (results or {}).get(inst) or "", kind, boot_saveram[inst]) for inst in ("a", "b")}
+    _synth_need(sides["a"]["key"] != sides["b"]["key"], "both sides hold the identical key")
+    areas = {Gen2GSCAdapter(side["title"]).gift_link_area(side["area"]) if kind != "full" else side["area"]
+             for side in sides.values()}
+    _synth_need(len(areas) == 1, f"the two captures resolve to different link areas: {sorted(areas)}")
+    area = areas.pop()
+    document = json.loads((Path(data_dir) / "links.json").read_text(encoding="utf-8"))
+    rows = document.get("links") or []
+    _synth_need(len(rows) == 1 and rows[0].get("area_id") == area and rows[0].get("status") == "alive",
+                f"expected one alive {area} link, found {[(r.get('area_id'), r.get('status')) for r in rows]}")
+    for inst in ("a", "b"):
+        _synth_need((rows[0].get(inst) or {}).get("key") == sides[inst]["key"],
+                    f"links.json {inst}.key differs from the flushed save's {sides[inst]['key']}")
+    log = (Path(data_dir) / "slink.log").read_text(encoding="utf-8")
+    _synth_need("faint →" not in log, "the server issued a death command")
+    if on_verified is not None:
+        on_verified({"a": sides["a"]["key"], "b": sides["b"]["key"], "area": area,
+                     "titles": "/".join(sides[inst]["title"] for inst in ("a", "b")), "status": "alive"})
