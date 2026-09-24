@@ -403,3 +403,23 @@ CODE_DIGEST (FINAL-SWEEP, using RELEASE-LANES' tools/gen2_code_digest.py). Runni
 
 Queued before freeze: KEY-SCOPE-3 (scratchpad key_scope_3_card.md) -> INV-SERVER ada59c171d19b1955.
 Also before freeze: BOX-MEMORIAL-2 (INV-CLIENT ab3f54b5bb3d2e92d, running): boxed memorialize durability + Gen 1 exact box twin (OMP cx-7fe36bd8).
+
+## Compaction point 2 (2026-09-24 ~21:00Z): pre-freeze, then FINAL SWEEP -> MAJOR milestone
+
+Landed since the last point: RELEASE-LANES done (5b1274c9 CODE-DIGEST verifier, 4dae3fdb fixtures lane + O-34, bcc9b442
+day_clock v1 + clock-setup-v1 check, 71c40dbb rows, 09765fed PROMOTION-HARDEN verify side); OMP-authored + coordinator-
+validated 6043f467 (admission hardening), b661fcdd (rollover model), 534009db (stack canary); KEY-SCOPE-3 a56ac407
+(ambiguous-key latch); BOX-MEMORIAL-2 d23f4011 (boxed memorialize never loses a mon; Gen 1 exact box twin); FINAL-SWEEP
+a89a71b5 (gate CODE_DIGEST stamps) + 6b3c2edf (frame_align Silver day_clock). GREEN lanes: patch-build, fixtures,
+admission, live-trade-gates (21/21). RED left: W6 Silver re-run, trainer duo receipts, gen2_evolution duo, 91 cells
+lacking CODE_DIGEST (all cleared by the sweep), live-new-gates attestation record, overlays ADMITTED + G4 (owner).
+
+Running (pre-freeze; resume by id with SendMessage):
+- INV-CLIENT ab3f54b5bb3d2e92d: HUD "SAVE TO FINISH BURIAL" + board awaiting-save (OMP cx-03f64ce1 LOW).
+- DUO-WAVE-D abbc4cf2cb77a0b05: gen2_evolution duo from synth grass + npc_trade both-sided (post KEY-SCOPE); one smoke each.
+- FINAL-SWEEP a29f6e1c21f776ce9: live-new-gates attestation writer (gen2-live-new-gates-attestation-v1) + sweep cells
+  (W6 Silver, trainer duo, evolution duo); then WAITS for "freeze".
+When all three land: FREEZE (record the sha) -> `python tools/gen2_final_sweep.py --lanes 4 --sha <frozen>` -> review
+summary, copy receipts, repin (LF) -> Gen 1/pureRGB receipts (stale since 61a693c4/57e292dc/d23f4011) -> release-evidence
+green except overlays ADMITTED + G4 -> STOP, check in with the owner (G4 signature, then --promote-overlays).
+Queued (not blocking): board shows ambiguous-key latches; clean idle Temp lanes trl/tr2/tr3/spd/sp2 (unlink junctions).
