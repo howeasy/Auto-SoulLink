@@ -430,7 +430,10 @@ def read_result(scenario, inst):
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8", errors="replace") as f:
-        return f.read()
+        text = f.read()
+    # complete lines only: the Lua receipt writers end every line with a newline, so a line
+    # without one is mid-write (a torn MYKEY/BALL_* JSON/RESULT line at the 0.2 s poll)
+    return text[:text.rfind("\n") + 1]
 
 
 RNG_OUT_OF_BALLS = "RESULT: FAIL (hunt ended out-of-balls)"
@@ -2226,9 +2229,10 @@ class DuoRun:
         path = self._phase_result_path(inst, phase)
         try:
             with open(path, encoding="utf-8", errors="replace") as handle:
-                return handle.read()
+                text = handle.read()
         except OSError:
             return ""
+        return text[:text.rfind("\n") + 1]  # complete lines only, as read_result
 
     def _process_exited(self, inst) -> bool:
         """True when this instance's emulator is gone — a dead client that never wrote a RESULT."""
@@ -2958,6 +2962,14 @@ class DuoRun:
         path = os.path.join(self.data_dir, "events.json")
         if not os.path.exists(path):
             return []
+        # the server rewrites events.json in place (truncate + dump), so a read can land
+        # mid-write; retry briefly, then let the last attempt raise
+        for _ in range(20):
+            try:
+                with open(path, encoding="utf-8") as handle:
+                    return json.load(handle)
+            except (ValueError, OSError):
+                time.sleep(0.05)
         with open(path, encoding="utf-8") as handle:
             return json.load(handle)
 
