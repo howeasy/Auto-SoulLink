@@ -344,3 +344,72 @@ the three witnesses above (all title-checked by `test_gen3_title_syms.py`).
 `tests/unit/test_gen3_fixture_qualify.py::test_lg_party_fixtures_match_the_fr_contract`
 and `::test_lg_party_b_variant_has_a_distinct_trainer_at_the_same_place` now
 run (no longer skip) and pass against these five committed files.
+
+## rr_battle.sav / rr_battle_b.sav (card G4-LANE-1, 2026-09-24)
+
+The Radical Red analogue of `firered_party_battle{,_b}.sav`: the party standing on Route 1's
+grass origin (map 3.19, tile (12,37)), the tile every Gen 3 duo grass hunt starts from
+(`lua/tests/gen3_scripted_play.lua` `GRASS_ORIGIN`/`GRASS_LOOP`). **Only scripted normal
+inputs**: no memory pokes, no savestate, no save editing; `derive-b --rr` (PLAN §11, OT identity
+only) is the one byte-level derivation, exactly as for `rr_town_b.sav`.
+
+**Geometry from the RR ROM, never a screenshot.** Parsed out of `patch/build/slink_RR.gba`
+(sha1 `b7d1e0756fcc66575878affc8f7b95c45386bb1c`) with `tools/gba_map.py`. RR's code still loads
+`gMapGroups` 0x083526A8 from its single literal-pool word at 0x0805524C (the same word FR US 1.0
+has), and RR's map 3.19 parses byte-identical to FR US 1.0's (collision, metatile behaviours,
+connections), so the FR grass square exists unchanged on RR:
+
+```
+python tools/gba_map.py patch/build/slink_RR.gba --map 3.19 --bfs 7,33 12,37 --find-behaviour 0x02
+# bfs (7,33) -> (12,37): Down Down Right Right Right Right Right Down Down
+# MB_TALL_GRASS (0x02) includes (7,33) (12,37) (13,37) (12,38) (13,38)
+```
+
+Note: `rr_town.sav`'s own tile, (7,33) on map 3.19, is also MB_TALL_GRASS by the same parse
+(it is the battery `tools/mkstates.py` captured `slink_prebattle.State` from), so despite its
+name it is not encounter-free town ground.
+
+Built by `lua/tests/gen3_rr_battle_fixture.lua` (new, this card) in the clean lane checkout at
+`f6d503f4`: seed `rr_town.sav` into a per-run SaveRAM dir → cold boot → CONTINUE → verify the
+start tile (7,33) → `playlib.follow` the pinned BFS path (any wild battle is fled with RUN,
+never fought; none fired on this run) → START/SAVE via `gen3_boot_check.lua` `save_via_menu` →
+re-verify the tile. Launched through `tools/gen3_fixtures.py`'s own `_prepare_run`/`_launch`
+(`rr=True`, title `radical_red`, rewind off via `write_gba_run_config`), then `import_savedata(rr=True)`:
+
+```python
+# from the repo root
+import sys; sys.path[:0] = ["tools", "."]
+import gen3_fixtures as fx
+from server.adapters import gen3_codec as codec
+seed = codec.split_rtc(open("tests/fixtures/gen3/rr_town.sav", "rb").read())[0]
+rom_rel, run_dir, battery = fx._prepare_run("rr_battle_fixture", "patch/build/slink_RR.gba",
+                                             seed=seed, saveram_name_override=None)
+passed, text = fx._launch("lua/tests/gen3_rr_battle_fixture.lua", rom_rel, run_dir, rr=True,
+                          timeout=1800, title="radical_red")
+body = fx.import_savedata(fx._flushed_saveram(run_dir, battery).read_bytes(), rr=True)
+```
+```
+python tools/gen3_fixtures.py derive-b --rr tests/fixtures/gen3/rr_battle.sav tests/fixtures/gen3/rr_battle_b.sav
+python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixture tests/fixtures/gen3/rr_battle.sav --rr
+python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixture tests/fixtures/gen3/rr_battle_b.sav --rr
+```
+
+- `rr_battle.sav`: driver `RESULT: PASS counter 2 -> 3 at map=787 at=(12,37) healed=true
+  party=[1] species=277 level=6 hp=22/22`. sha256
+  `d9fe5eb6a0b3ea3dc778162584b9d7169fc3bdb38555f709f217113b33319c4b`, slot 1, counter 3, trainer
+  `B` #2BDDC8BF, party `[Treecko (277) Lv.6 hp=22/22]` (key `EBEF11DA:2BDDC8BF`), fully healed.
+  Boot-checked (counter 3→4, 14/14 sectors, party unchanged).
+- `rr_battle_b.sav`: `derive-b --rr` over the above (OTID 0x2BDDC8BF → 0xD4223740, name `B` →
+  `BB`; party[0] OTID/OT-name re-keyed; only sectors 17/18 (ids 0/1) checksums recomputed;
+  position bytes untouched). sha256
+  `140ad05c6325180bdc7fae0bb590157310f250fa65c5b8b43b1fb24d6a3ffe2b`, slot 1, counter 3.
+  Boot-checked (counter 3→4, 14/14 sectors, party unchanged).
+- Runtime confirmation (scratch probe, not committed): cold boot of `rr_battle.sav`, pace the
+  `GRASS_LOOP` square → `wild battle after 11 grass steps at (13,38)`.
+- Seeded under the default battery name `gen3 slink RR.SaveRAM`.
+
+**Differences from the FR analogue a scenario author must know.** The party is ONE mon
+(`rr_town.sav`'s), and the CFRU ball pocket is EMPTY (`tools/e2e_duo.py` `gen3_ball_count` → 0;
+FR's battle fixture has 4). Ball-throwing (`ball_hunt`) and two-mon scenarios cannot run from
+these fixtures as they stand; a second mon or balls need an RR scripted-play leg (purchase or
+story) that no card has pinned yet.
