@@ -1840,6 +1840,7 @@
     "b": []
   },
   "trade_problem": null,
+  "trade_held": [],
   "trade_last": null,
   "badge_slugs": [
     [
