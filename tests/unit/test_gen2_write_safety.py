@@ -459,7 +459,7 @@ def _sim_classes():
 
 
 GATE_FILES = ("lua/gen2_write_safety.lua", "lua/gb_checkpoint.lua", "lua/gen2/writes.lua", "lua/gen2/boxes.lua",
-              "lua/tests/gen2_inspect_gate.lua", "lua/tests/gen2_write_windows.lua")
+              "lua/tests/gen2_inspect_gate.lua", "lua/tests/gen2_write_windows.lua", "lua/tests/gen2_walk.lua")
 QUALIFICATION = {"town": "requal-town-sim", "battle": "requal-battle-sim"}
 # The gate as a LIBRARY caller runs it: the same steps as its BizHawk entry, but the api is not that
 # entry's own, so every run record it prints is MODEL.

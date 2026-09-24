@@ -97,7 +97,9 @@ F.TOWARD_BALLS = {pack_items="Right", pack_key="Left", pack_tmhm="Right"}
 F.BUDGET = {max_frames=60000, max_phase_frames=24000, settle_frames=30}
 F.MAX_UP_PRESSES = 3
 F.HIT_LOG = 32
-F.DIRECTIONS = {{"Up", 0, -1}, {"Left", -1, 0}, {"Down", 0, 1}, {"Right", 1, 0}}
+-- the one shared step rule (ledges from the separate map.ledges field), from beside this file
+local W = dofile((debug.getinfo(1, "S").source:match("^@(.-)[^/\\]*$") or "lua/tests/") .. "gen2_walk.lua")
+F.DIRECTIONS = W.DIRECTIONS
 -- Per title: the rgblink .sym (diagnostics) and the title whose production binder must refuse this
 -- title's receipt (Crystal keeps its original Gold refusal; Gold and Silver refuse each other).
 F.SYM = {crystal="pokecrystal", gold="pokegold", silver="pokesilver"}
@@ -119,10 +121,10 @@ function F.walk_direction(map, point, from)
     local blocked = {}
     for _, object in ipairs(point.blocked or {}) do blocked[object.y * map.width + object.x] = true end
     local best
+    local step = W.stepper(map, point.can_step)   -- gen2_walk.lua: off a ledge onto grass is a hop
     for _, d in ipairs(F.DIRECTIONS) do
-        local x, y = point.x + d[2], point.y + d[3]
-        if x >= 0 and x < map.width and y >= 0 and y < map.height and map.grid[y * map.width + x + 1] == 2
-           and point.can_step[d[1]] == true and not blocked[y * map.width + x] then
+        local x, y, tile = step(point.x, point.y, d, true)
+        if tile == 2 and not blocked[y * map.width + x] then
             if from and from.x == x and from.y == y then return d[1] end
             best = best or d[1]
         end

@@ -557,7 +557,8 @@ class Sim:
 # --- harness ---------------------------------------------------------------------------------------
 
 GATE_MODULES = ("lua/json_codec.lua", "lua/write_permit.lua", "lua/scripted_inputs.lua", "lua/gb_hook_binding.lua",
-                "lua/gen2/reads.lua", "lua/tests/gen2_scripted_play.lua", "lua/tests/gen2_qualify.lua")
+                "lua/gen2/reads.lua", "lua/tests/gen2_scripted_play.lua", "lua/tests/gen2_walk.lua",
+                "lua/tests/gen2_qualify.lua")
 
 
 def make_root(tmp_path, title, drop=()):

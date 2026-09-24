@@ -1170,7 +1170,22 @@ def test_run_play_dispatches_the_reviewed_gate_and_names_the_receipt(tmp_path):
     case = json.loads(kwargs["env_overrides"]["SLINK_GEN2_FIXTURE_CASE"])
     assert case["name"] == spec.name and case["attempt_id"] == "model-1"
     assert json.loads(kwargs["env_overrides"]["SLINK_GEN2_ROUTE_FACTS"])["fingerprint"] == facts("crystal")["fingerprint"]
+    # card driver-robust: the ledges ride their own variable, never the fingerprinted facts
+    ledges = json.loads(kwargs["env_overrides"]["SLINK_GEN2_ROUTE_LEDGES"])
+    assert set(ledges) == set(facts("crystal")["maps"]) and ledges["Route29"] and not ledges["ElmsLab"]
+    assert all("ledges" not in m for m in json.loads(kwargs["env_overrides"]["SLINK_GEN2_ROUTE_FACTS"])["maps"].values())
     assert Path(out["receipt_path"]).name == "crystal_battle.played.json"
     assert Path(out["receipt_path"]).parent == Path(out["candidate_path"]).parent
     assert out["qualified"] is False
 
+
+def test_every_committed_fixture_keeps_its_route_facts_fingerprint():
+    """Card driver-robust: the walkers' ledges are a SEPARATE field (tools/gen2_fixtures.map_ledges), so the route
+    facts every committed fixture was qualified on hash exactly as its qualification receipt recorded."""
+    rows = [row for path in sorted((ROOT / "tests/fixtures/gen2/receipts").glob("*.qualification.json"))
+            for row in json.loads(path.read_text(encoding="utf-8"))["fixtures"]]
+    assert {row["name"] for row in rows} >= {spec.name for spec in g.FIXTURES}
+    for row in rows:
+        spec = g.BY_NAME[row["name"]]
+        assert g._facts_sha256(spec_facts(spec)) == row["provenance"]["route_facts_sha256"], spec.name
+        assert all("ledges" not in m for m in spec_facts(spec)["maps"].values()), spec.name

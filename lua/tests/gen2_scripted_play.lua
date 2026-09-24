@@ -1,9 +1,11 @@
 -- Gen 2 source-gated route candidate. Pure point -> buttons/phase/request.
--- No emulator globals, file IO, frame loops, save mutation or party staging.
--- A qualified game observer and lua/scripted_inputs.lua host are injected by
+-- No emulator globals, file IO (beyond loading its sibling step rule), frame loops, save mutation or party
+-- staging. A qualified game observer and lua/scripted_inputs.lua host are injected by
 -- the coordinator's gate. Reaching route-saved is never fixture qualification.
 local P = {}
-local DIRECTIONS = {{"Up",0,-1},{"Left",-1,0},{"Down",0,1},{"Right",1,0}}
+-- the one shared step rule (ledges from the separate map.ledges field), from beside this file
+local W = dofile((debug.getinfo(1, "S").source:match("^@(.-)[^/\\]*$") or "lua/tests/") .. "gen2_walk.lua")
+local DIRECTIONS = W.DIRECTIONS
 
 local function integer(value, low, high)
     return type(value) == "number" and value % 1 == 0 and value >= low and value <= high
@@ -18,8 +20,8 @@ local function warp_to(map, destination)
     error("source warp missing: " .. destination)
 end
 
--- Conservative source collision graph, restricted by current observed blockers.
--- Directional ledges, dynamic decorations and NPC movement still need live proof.
+-- Source collision graph (gen2_walk.lua: ledges hop when the facts carry map.ledges), restricted by current
+-- observed blockers. Dynamic decorations and NPC movement still need live proof.
 local function direction(map, point, goal)
     if not integer(point.x,0,map.width-1) or not integer(point.y,0,map.height-1) then
         return nil, "player coordinate outside source map"
@@ -40,16 +42,16 @@ local function direction(map, point, goal)
             if goal.grass or warp.x ~= goal.x or warp.y ~= goal.y then blocked[key(warp.x,warp.y)] = true end
         end
         for _, tile in ipairs(goal.avoid or {}) do blocked[key(tile.x,tile.y)] = true end
+        local step = W.stepper(map, point.can_step)
         local queue, head, visited = {{point.x,point.y,false}}, 1, {[key(point.x,point.y)] = true}
         while head <= #queue do
             local node = queue[head]; head = head+1
             for _, delta in ipairs(DIRECTIONS) do
-                local x,y = node[1]+delta[2],node[2]+delta[3]
-                if x >= 0 and x < map.width and y >= 0 and y < map.height then
+                local x,y = step(node[1],node[2],delta,not node[3])
+                if x then
                     local index = key(x,y)
                     local first = node[3] or delta[1]
-                    if not visited[index] and map.grid[index] ~= 0 and not blocked[index]
-                       and (node[3] or point.can_step[delta[1]] == true) then
+                    if not visited[index] and not blocked[index] then
                         visited[index] = true
                         if destination(x,y) then return first end
                         queue[#queue+1] = {x,y,first}
@@ -66,6 +68,8 @@ local function direction(map, point, goal)
     return nil, string.format("source route blocked or live collision facts disagree at %d,%d goal %s,%s can_step %s blocked %s",
         point.x, point.y, tostring(goal.x), tostring(goal.y), table.concat(steps, " "), table.concat(objects, " "))
 end
+
+P.direction = direction   -- exposed for tests/unit/test_gen2_walk.py
 
 function P.new(facts, case)
     assert(type(facts) == "table" and facts.schema == "gen2-scripted-route-facts-v1", "source route facts required")

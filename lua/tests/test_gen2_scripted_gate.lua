@@ -216,6 +216,23 @@ function G.inputs(getenv, json)
                           "object", "passable_collision", "pokegear_obtained_bit", "got_starter_event"}) do
         assert(facts.observer[key] ~= nil, "route facts observer missing " .. key)
     end
+    -- Optional SLINK_GEN2_ROUTE_LEDGES {map name -> {{x, y, dirs}}} (tools/gen2_fixtures.route_ledges): the HOP_*
+    -- tiles the shared step rule (lua/tests/gen2_walk.lua) hops. A separate field: the fingerprinted grid keeps
+    -- ledges as walls, so attaching them here never changes facts.fingerprint.
+    local ledges = getenv("SLINK_GEN2_ROUTE_LEDGES")
+    if ledges ~= nil and ledges ~= "" then
+        local HOP = {Up=true, Down=true, Left=true, Right=true}
+        for name, list in pairs(decode("SLINK_GEN2_ROUTE_LEDGES")) do
+            local map = facts.maps[name]
+            assert(json.kind(map) == "object" and json.kind(list) == "array", "route ledges name an unknown map")
+            for _, ledge in ipairs(list) do
+                assert(integer(ledge.x, 0, map.width - 1) and integer(ledge.y, 0, map.height - 1)
+                       and json.kind(ledge.dirs) == "array" and #ledge.dirs >= 1, "malformed route ledge")
+                for _, d in ipairs(ledge.dirs) do assert(HOP[d], "malformed route ledge direction") end
+            end
+            map.ledges = list
+        end
+    end
     if qualify ~= nil and qualify ~= "" then
         local q = decode("SLINK_GEN2_QUALIFY")
         assert(G.QUALIFY_STAGES[q.stage] == true and type(q.stage_fingerprint) == "string"

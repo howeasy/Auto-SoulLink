@@ -28,7 +28,9 @@
     moves {POISON_STING=id}, psn_mask (1 << PSN, constants/battle_constants.asm).
 --]]
 local PI = {}
-PI.DIRECTIONS = {{"Up", 0, -1}, {"Left", -1, 0}, {"Down", 0, 1}, {"Right", 1, 0}}
+-- the one shared step rule (ledges from the separate map.ledges field), from beside this file
+local Walk = dofile((debug.getinfo(1, "S").source:match("^@(.-)[^/\\]*$") or "lua/tests/") .. "gen2_walk.lua")
+PI.DIRECTIONS = Walk.DIRECTIONS
 PI.GRASS_COST = 4   -- ponytail: a weight, not a proof; the hunt only needs FEWER Route 29 encounters
 PI.HOLD = 12
 
@@ -38,12 +40,10 @@ local function integer(value, low, high)
 end
 
 -- Pure: first step of a cheapest path (floor 1, grass GRASS_COST) to any goal tile; "arrived" on a goal.
--- Warps are walls (never entered by accident); the first step must be live-steppable.
--- Ledges (map.ledges, facts from the ROM collision): a HOP_* tile is LAND one stands on (CheckWalkable,
--- engine/overworld/player_movement.asm:735-741), and moving in its hop direction FROM it jumps two tiles
--- (.TryJump reads wPlayerTileCollision, the tile stood on, :354-377). Gold run 4: the Route 30 aisle north
--- runs (5,24) -> the ledge (4,24) -> (4,23) beside Youngster Mikey; the conservative grid (ledges as walls)
--- and the observer's step permissions (HOP_* not in the passable set) both missed it.
+-- Warps are walls (never entered by accident); the first step must be live-steppable. Steps follow the shared
+-- rule (lua/tests/gen2_walk.lua): with map.ledges a HOP_* tile is land and hops from it in its direction.
+-- Gold run 4: the Route 30 aisle north runs (5,24) -> the ledge (4,24) -> (4,23) beside Youngster Mikey; the
+-- conservative grid (ledges as walls) and the observer's step permissions (HOP_* not passable) both missed it.
 function PI.step_toward(map, point, goals, avoid)
     if not integer(point.x, 0, map.width - 1) or not integer(point.y, 0, map.height - 1) then
         return nil, "player coordinate outside the source map"
@@ -60,11 +60,7 @@ function PI.step_toward(map, point, goals, avoid)
         if not goal[key(warp.x, warp.y)] then blocked[key(warp.x, warp.y)] = true end   -- a door only as the goal
     end
     for _, tile in ipairs(avoid or {}) do blocked[key(tile.x, tile.y)] = true end   -- e.g. a trainer's sight line
-    local ledge = {}
-    for _, l in ipairs(map.ledges or {}) do
-        ledge[key(l.x, l.y)] = {}
-        for _, d in ipairs(l.dirs) do ledge[key(l.x, l.y)][d] = true end
-    end
+    local step = Walk.stepper(map, point.can_step)
     -- bucket Dijkstra: costs are small integers
     local best, first, buckets, top = {[key(point.x, point.y)] = 0}, {}, {[0] = {{point.x, point.y}}}, 0
     local cost = 0
@@ -77,14 +73,11 @@ function PI.step_toward(map, point, goals, avoid)
             if best[k] == cost then
                 if goal[k] then return first[k] end
                 for _, d in ipairs(PI.DIRECTIONS) do
-                    local hop = ledge[k] and ledge[k][d[1]] and 2 or 1
-                    local x, y = node[1] + d[2] * hop, node[2] + d[3] * hop
-                    if x >= 0 and x < W and y >= 0 and y < map.height then
+                    local start = node[1] == point.x and node[2] == point.y
+                    local x, y, tile = step(node[1], node[2], d, start)
+                    if x then
                         local n = key(x, y)
-                        local tile = ledge[n] and 1 or map.grid[n]
-                        local start = node[1] == point.x and node[2] == point.y
-                        local live = not start or point.can_step[d[1]] == true or ledge[n] ~= nil or hop == 2
-                        if tile ~= 0 and not blocked[n] and live then
+                        if not blocked[n] then
                             local c = cost + (tile == 2 and PI.GRASS_COST or 1)
                             if best[n] == nil or c < best[n] then
                                 best[n], first[n] = c, start and d[1] or first[k]

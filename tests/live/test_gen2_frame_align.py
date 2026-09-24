@@ -91,57 +91,14 @@ def trainers(ctx, name):
     return out
 
 
-HOPS = {"HOP_RIGHT": ("Right",), "HOP_LEFT": ("Left",), "HOP_UP": ("Up",), "HOP_DOWN": ("Down",),
-        "HOP_DOWN_RIGHT": ("Down", "Right"), "HOP_DOWN_LEFT": ("Down", "Left"), "HOP_UP_RIGHT": ("Up", "Right"),
-        "HOP_UP_LEFT": ("Up", "Left")}
-
-
-def collision_names(ctx, name, facts_map):
-    """Every step tile's collision constant name (COLL_ stripped), from the ROM blocks + tileset collision."""
-    width, height = facts_map["width"] // 2, facts_map["height"] // 2
-    _, blocks = gen2_fixtures.rom_bytes(ctx, name + "_Blocks", width * height)
-    header = next(line for _, line in gen2_fixtures.source_lines(ctx.read_source("data/maps/maps.asm"), ctx.title)
-                  if line.startswith("map " + name + ","))
-    tilesets = gen2_fixtures.constants(ctx.read_source("constants/tileset_constants.asm"), "TILESET_", ctx.title)
-    table = [line.split()[1] for _, line in gen2_fixtures.source_lines(ctx.read_source("data/tilesets.asm"), ctx.title)
-             if line.startswith("tileset ")]
-    symbol = table[tilesets[header.split(",")[1].strip()]] + "Coll"
-    include = re.search(rf"^{symbol}::?\s*\nINCLUDE \"([^\"]+)\"", ctx.read_source("gfx/tilesets.asm"), re.M)
-    names = []
-    for _, line in gen2_fixtures.source_lines(ctx.read_source(include[1]), ctx.title):
-        names.extend(token.strip() for token in line[9:].split(","))
-    return [[names[blocks[(y // 2) * width + x // 2] * 4 + (y % 2) * 2 + x % 2] for x in range(width * 2)]
-            for y in range(height * 2)]
+# The collision decode and the ledges field live in tools/gen2_fixtures (card driver-robust: one source for
+# every scripted walker, lua/tests/gen2_walk.lua).
+collision_names = gen2_fixtures.collision_names
+ledges = gen2_fixtures.map_ledges
 
 
 def collision_name(ctx, name, facts_map, x, y):
     return collision_names(ctx, name, facts_map)[y][x]
-
-
-def ledges(ctx, name, facts_map):
-    """The map's HOP_* tiles and their hop directions, from the same ROM blocks + tileset collision
-    tools/gen2_fixtures._map_facts reads (which keeps ledges out of the walkable grid). A ledge is LAND the
-    player stands on; moving in its hop direction from it jumps two tiles (engine/overworld/player_movement.asm
-    .TryJump reads the stood-on tile, :354-377; .CheckWalkable, :735-741)."""
-    width, height = facts_map["width"] // 2, facts_map["height"] // 2
-    _, blocks = gen2_fixtures.rom_bytes(ctx, name + "_Blocks", width * height)
-    header = next(line for _, line in gen2_fixtures.source_lines(ctx.read_source("data/maps/maps.asm"), ctx.title)
-                  if line.startswith("map " + name + ","))
-    tilesets = gen2_fixtures.constants(ctx.read_source("constants/tileset_constants.asm"), "TILESET_", ctx.title)
-    table = [line.split()[1] for _, line in gen2_fixtures.source_lines(ctx.read_source("data/tilesets.asm"), ctx.title)
-             if line.startswith("tileset ")]
-    symbol = table[tilesets[header.split(",")[1].strip()]] + "Coll"
-    include = re.search(rf"^{symbol}::?\s*\nINCLUDE \"([^\"]+)\"", ctx.read_source("gfx/tilesets.asm"), re.M)
-    names = []
-    for _, line in gen2_fixtures.source_lines(ctx.read_source(include[1]), ctx.title):
-        names.extend(token.strip() for token in line[9:].split(","))
-    out = []
-    for y in range(height * 2):
-        for x in range(width * 2):
-            hop = HOPS.get(names[blocks[(y // 2) * width + x // 2] * 4 + (y % 2) * 2 + x % 2])
-            if hop:
-                out.append({"x": x, "y": y, "dirs": list(hop)})
-    return out
 
 
 def edge_leg(ctx, maps, source, side, target):

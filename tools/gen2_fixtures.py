@@ -345,6 +345,47 @@ def _map_facts(ctx, row, areas):
             "source": f"{ctx.source_commit} maps/{name}.asm; {include[1]}"}
 
 
+# HOP_* collision -> hop directions (engine/overworld/player_movement.asm .ledge_table, :379-387).
+HOPS = {"HOP_RIGHT": ("Right",), "HOP_LEFT": ("Left",), "HOP_UP": ("Up",), "HOP_DOWN": ("Down",),
+        "HOP_DOWN_RIGHT": ("Down", "Right"), "HOP_DOWN_LEFT": ("Down", "Left"), "HOP_UP_RIGHT": ("Up", "Right"),
+        "HOP_UP_LEFT": ("Up", "Left")}
+
+
+def collision_names(ctx, name, facts_map):
+    """Every step tile's collision constant name (COLL_ stripped), rows of the map, from the ROM blocks + tileset
+    collision _map_facts reads."""
+    width, height = facts_map["width"] // 2, facts_map["height"] // 2
+    _, blocks = rom_bytes(ctx, name + "_Blocks", width * height)
+    header = next(line for _, line in source_lines(ctx.read_source("data/maps/maps.asm"), ctx.title)
+                  if line.startswith("map " + name + ","))
+    tilesets = constants(ctx.read_source("constants/tileset_constants.asm"), "TILESET_", ctx.title)
+    table = [line.split()[1] for _, line in source_lines(ctx.read_source("data/tilesets.asm"), ctx.title)
+             if line.startswith("tileset ")]
+    symbol = table[tilesets[header.split(",")[1].strip()]] + "Coll"
+    include = re.search(rf"^{symbol}::?\s*\nINCLUDE \"([^\"]+)\"", ctx.read_source("gfx/tilesets.asm"), re.M)
+    names = []
+    for _, line in source_lines(ctx.read_source(include[1]), ctx.title):
+        names.extend(token.strip() for token in line[9:].split(","))
+    return [[names[blocks[(y // 2) * width + x // 2] * 4 + (y % 2) * 2 + x % 2] for x in range(width * 2)]
+            for y in range(height * 2)]
+
+
+def map_ledges(ctx, name, facts_map):
+    """The map's HOP_* tiles and their hop directions: the SEPARATE `ledges` field every scripted walker plans
+    with (lua/tests/gen2_walk.lua). _map_facts keeps ledges out of the walkable grid and its output is
+    fingerprinted into every fixture qualification receipt, so ledges never join it. A ledge is LAND the player
+    stands on; a press in its hop direction whose plain step bumps jumps two tiles (player_movement.asm .TryStep
+    then .TryJump, which reads the stood-on tile, :354-377; .CheckWalkable, :735-741)."""
+    return [{"x": x, "y": y, "dirs": list(HOPS[code])}
+            for y, row in enumerate(collision_names(ctx, name, facts_map)) for x, code in enumerate(row) if code in HOPS]
+
+
+def route_ledges(title, facts, root=ROOT):
+    """{map name: map_ledges} for the maps of these route facts (SLINK_GEN2_ROUTE_LEDGES)."""
+    ctx = load_context(title, root=root)
+    return {name: map_ledges(ctx, name, facts_map) for name, facts_map in facts["maps"].items()}
+
+
 def _code_site(ctx, symbol, offset=0):
     bank, address = ctx.symbol(symbol)
     flat = rom_offset(bank, address + offset)
@@ -548,7 +589,8 @@ def run_play(spec, binding, *, root=ROOT, runner=None):
     passed, path, text = (runner or run_gb_gate.run_gate)(
         script, rom_key=spec.title + "_cold", target=spec.target, timeout=binding.get("timeout", 1200),
         saveram_dir=str(directory), fixture_path=None, speed_percent=300,
-        env_overrides={"SLINK_GEN2_FIXTURE_CASE": json.dumps(case), "SLINK_GEN2_ROUTE_FACTS": json.dumps(facts)})
+        env_overrides={"SLINK_GEN2_FIXTURE_CASE": json.dumps(case), "SLINK_GEN2_ROUTE_FACTS": json.dumps(facts),
+                       "SLINK_GEN2_ROUTE_LEDGES": json.dumps(route_ledges(spec.title, facts, root))})
     return {"case": spec.name, "route_candidate": bool(passed), "qualified": False,
             "result_path": path, "diagnostic": text,
             "candidate_path": str(directory / descriptor["saveram_name"]),

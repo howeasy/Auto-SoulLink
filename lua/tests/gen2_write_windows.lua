@@ -54,7 +54,9 @@ U.BUDGET = {max_frames=60000, max_phase_frames=15000, settle_frames=4}
 U.TEXT_KINDS = {text=true, prompt_button=true, wait_button=true}
 U.MODES = {town="town", battle="battle", reload="town",   -- mode -> required fixture target
            boxes="battle", boxes_reset="battle", boxes_reload="battle", hello="battle", battle_faint="battle"}
-U.DIRECTIONS = {{"Up", 0, -1}, {"Left", -1, 0}, {"Down", 0, 1}, {"Right", 1, 0}}
+-- the one shared step rule (ledges from the separate map.ledges field), from beside this file
+local W = dofile((debug.getinfo(1, "S").source:match("^@(.-)[^/\\]*$") or "lua/tests/") .. "gen2_walk.lua")
+U.DIRECTIONS = W.DIRECTIONS
 U.REPULSE = 60
 local fmt = string.format
 
@@ -68,7 +70,8 @@ local function hex(bytes)
     return table.concat(out)
 end
 
--- Pure: first step of a BFS over the source grid toward (goal.x, goal.y); "arrived" on the goal.
+-- Pure: first step of a BFS over the source grid (the gen2_walk.lua step rule) toward (goal.x, goal.y);
+-- "arrived" on the goal.
 function U.step_toward(map, point, goal)
     if not integer(point.x, 0, map.width - 1) or not integer(point.y, 0, map.height - 1) then
         return nil, "player coordinate outside the source map"
@@ -81,15 +84,15 @@ function U.step_toward(map, point, goal)
     for _, warp in ipairs(map.warps or {}) do
         if warp.x ~= goal.x or warp.y ~= goal.y then blocked[key(warp.x, warp.y)] = true end
     end
+    local step = W.stepper(map, point.can_step)
     local queue, head, seen = {{point.x, point.y, false}}, 1, {[key(point.x, point.y)] = true}
     while head <= #queue do
         local node = queue[head]; head = head + 1
         for _, d in ipairs(U.DIRECTIONS) do
-            local x, y = node[1] + d[2], node[2] + d[3]
-            if x >= 0 and x < map.width and y >= 0 and y < map.height then
+            local x, y = step(node[1], node[2], d, not node[3])
+            if x then
                 local index, first = key(x, y), node[3] or d[1]
-                if not seen[index] and map.grid[index] ~= 0 and not blocked[index]
-                   and (node[3] or point.can_step[d[1]] == true) then
+                if not seen[index] and not blocked[index] then
                     if x == goal.x and y == goal.y then return first end
                     seen[index] = true
                     queue[#queue + 1] = {x, y, first}
@@ -105,10 +108,10 @@ function U.grass_step(map, point, from)
     if type(point.can_step) ~= "table" then return nil, "live collision observation missing" end
     local blocked, best = {}, nil
     for _, object in ipairs(point.blocked or {}) do blocked[object.y * map.width + object.x] = true end
+    local step = W.stepper(map, point.can_step)
     for _, d in ipairs(U.DIRECTIONS) do
-        local x, y = point.x + d[2], point.y + d[3]
-        if x >= 0 and x < map.width and y >= 0 and y < map.height and map.grid[y * map.width + x + 1] == 2
-           and point.can_step[d[1]] == true and not blocked[y * map.width + x] then
+        local x, y, tile = step(point.x, point.y, d, true)
+        if tile == 2 and not blocked[y * map.width + x] then
             if from and from.x == x and from.y == y then return d[1] end
             best = best or d[1]
         end

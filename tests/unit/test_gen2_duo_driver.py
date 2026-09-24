@@ -39,7 +39,8 @@ MAIN = "lua/tests/duo/duo_gen2_main.lua"
 SCENARIO = ROOT / "lua/tests/duo/scenario_gen2_link.lua"
 DRIVER_FILES = (MAIN, "lua/tests/duo/scenario_gen2_link.lua", "lua/tests/duo/gen2_route29_inputs.lua",
                 "lua/tests/duo/scenario_gen2_faint.lua", "lua/tests/duo/gen2_faint_inputs.lua",
-                "lua/tests/test_gen2_scripted_gate.lua", "lua/tests/gen2_frame_align.lua", "lua/gen2/wire.lua")
+                "lua/tests/test_gen2_scripted_gate.lua", "lua/tests/gen2_frame_align.lua", "lua/tests/gen2_walk.lua",
+                "lua/gen2/wire.lua")
 KEY = "1A2B:B542:10"
 FAKE_CONNECTOR = """local M = {}
 function M.init() end
