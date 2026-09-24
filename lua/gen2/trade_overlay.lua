@@ -163,8 +163,21 @@ function T.new(profile, io, Permit, holdable, charmap)
     local self = Lease.new({lease = lease_span.addr, party_capacity = d.party_capacity,
                             check = check, stage = stage}, io, writes)
     self.writes = writes
+    -- committing: SlinkTradeCommit ran after an APPLY pickup. From then on a visit that ends without
+    -- DONE (a reset, a non-returning interruption) may have mutated or even saved: UNCERTAIN, never
+    -- "nothing changed". Before it, a close after pickup is the asm's precommit refusal.
+    self.committing = false
+    function self:commit_entered()
+        if self.phase == "picked_up" and self.expected and self.expected[6] == T.APPLY then
+            self.committing = true
+        end
+    end
+    -- label -> {bank, addr, on}: the pickups run BEFORE the ACK changes (Lease:picked_up)
     self.hooks = {}
-    for label, site in pairs(ov.trade.rom) do self.hooks[label] = {bank = site.bank, addr = site.addr} end
+    for label, site in pairs(ov.trade.rom) do
+        local on = label == "SlinkTradeCommit" and self.commit_entered or self.picked_up
+        self.hooks[label] = {bank = site.bank, addr = site.addr, on = on}
+    end
 
     local function scoped(fn)
         return function(...)
@@ -176,6 +189,11 @@ function T.new(profile, io, Permit, holdable, charmap)
         end
     end
     for _, k in ipairs({"answer_query", "answer_offer", "arm", "release"}) do self[k] = scoped(self[k]) end
+    local lease_arm = self.arm
+    function self:arm(...)
+        self.committing = false
+        return lease_arm(self, ...)
+    end
 
     --- The running cartridge is a live SLink build advertising the trade capability.
     function self:advertised()
@@ -188,7 +206,7 @@ function T.new(profile, io, Permit, holdable, charmap)
     --- Pull an armed, never-picked-up request so the dispatcher can never run it.
     self.withdraw = scoped(function()
         writes:write_bytes(lease_span.addr + 5, {0})
-        self.expected, self.phase = nil, nil
+        self.expected, self.phase, self.committing = nil, nil, false
     end)
     return self
 end

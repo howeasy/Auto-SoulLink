@@ -56,7 +56,9 @@ OVERLAY_RAM = ("wSlinkMailbox", "wTilemap", "wAttrmap")
 # pickup labels (patch/gen2/src/trade_service.asm) run BEFORE the ACK changes; the OT names are
 # the incoming slot 0 staging (never slot 1: the native preimage). All or none: a build without
 # the P4.3a trade family (the published panel build) gets no trade block, so no trade path.
-OVERLAY_TRADE_ROM = ("SlinkTradePromptEntry", "SlinkTradeApplyPickup")
+# SlinkTradeCommit (exported, trade_commit.asm) latches "the native commit was entered": a visit that
+# ends without DONE after it is UNCERTAIN (a reset may land after the mutation or the save).
+OVERLAY_TRADE_ROM = ("SlinkTradePromptEntry", "SlinkTradeApplyPickup", "SlinkTradeCommit")
 OVERLAY_TRADE_RAM = ("wOTPlayerName", "wOTPartyCount", "wOTPartySpecies", "wOTPartyMon1",
                      "wOTPartyMonOTs", "wOTPartyMonNicknames")
 STAT_STAGE_FIELDS = (

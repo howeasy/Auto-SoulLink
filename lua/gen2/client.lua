@@ -299,7 +299,7 @@ function Client.new(p)
         for _, w in ipairs(self.pending_battle_writes) do defer_held(w) end
         self.pending_battle_writes, self.commanded = {}, {}
         -- P4.3b: Init clears the lease on reset; a reload leaves the Trade Center. The hello resyncs.
-        self.trade_state, self.trade_visit = nil, nil
+        self:trade_forget("the " .. kind .. " boundary")
         drop_held("the " .. kind .. " boundary")
         self.hello_session:invalidate(why or kind)
     end
@@ -315,7 +315,7 @@ function Client.new(p)
         self.faint_latches, self.deferred = {}, {}
         self.battle, self.pending_safe, self.pending_rescan = nil, false, true
         self.pending_battle_writes, self.commanded = {}, {}
-        self.trade_state, self.trade_visit = nil, nil
+        self:trade_forget(why)
         -- A delayed retirement may be lost after rewinding a key change; retaining its alias could faint another record.
         self.key_alias, self.retired_alias = nil, {}
         drop_held(why)
@@ -649,6 +649,18 @@ function Client.new(p)
                              frame = self.frame }
     end
 
+    -- An entered native commit that never published DONE may have mutated or saved: Gen 1's result-2
+    -- handling (no release, no trade_done claim); the server's applying watchdog settles the link.
+    local function trade_uncertain(why)
+        hud.show("TRADE UNCERTAIN - CHECK PARTY", 255, 64, 64, 600)
+        log("[SLink-gen2] apply_trade uncertain: " .. why .. "; no release, no claim")
+    end
+    function self:trade_forget(why)
+        local st = self.trade_state
+        if st and st.kind == "apply" and trade and trade.committing then trade_uncertain(tostring(why)) end
+        self.trade_state, self.trade_visit = nil, nil
+    end
+
     local function trade_end(st, why)
         if st.kind == "prompt" then
             log("[SLink-gen2] trade prompt ended: " .. why)
@@ -666,7 +678,13 @@ function Client.new(p)
         if st and (st.kind == "prompt" or st.kind == "apply") then
             local done = trade:poll_done()
             if not done then
-                if trade:clobbered() or trade:closed() then return trade_end(st, "the cartridge ended the visit") end
+                if trade:clobbered() or trade:closed() then
+                    if st.kind == "apply" and trade.committing then
+                        return self:trade_forget("the visit ended after SlinkTradeCommit was entered")
+                    end
+                    -- before the commit entry the asm refused (precommit checks) or timed out
+                    return trade_end(st, "the cartridge ended the visit")
+                end
                 if trade.phase == "armed" and self.frame - st.frame > Client.TRADE_PICKUP_FRAMES then
                     traded(function() trade:withdraw() return true end, "withdraw")
                     return trade_end(st, "never picked up (timeout)")
@@ -685,8 +703,7 @@ function Client.new(p)
                 -- native append uncertain (T-5 limit): the cartridge keeps the lease; no release, no claim
                 if not st.warned then
                     st.warned = true
-                    hud.show("TRADE UNCERTAIN - CHECK PARTY", 255, 64, 64, 600)
-                    log("[SLink-gen2] apply_trade: native result 2 (uncertain); holding, no release")
+                    trade_uncertain("native result 2; holding")
                 end
                 return
             end
@@ -1146,12 +1163,13 @@ function Client.new(p)
         end
         if trade and not self.trade_hooks then
             -- P4.3b: SlinkTradePromptEntry / SlinkTradeApplyPickup run BEFORE the cartridge writes
-            -- the ACK; from pickup the frame is the cartridge's and clobber checks stop (Lease:picked_up)
+            -- the ACK; from pickup the frame is the cartridge's and clobber checks stop (Lease:picked_up).
+            -- SlinkTradeCommit latches the native commit entry (trade_overlay commit_entered).
             self.trade_hooks = {}
             for label, site in pairs(trade.hooks) do
                 self.trade_hooks[#self.trade_hooks + 1] = io.on_bus_exec(function()
                     if io.read_u8(profile.ram.hROMBank, "System Bus") ~= site.bank then return end
-                    local ok, err = pcall(trade.picked_up, trade)
+                    local ok, err = pcall(site.on, trade)
                     if not ok then log("[SLink-gen2] trade pickup: " .. tostring(err)) end
                 end, site.addr, "SLink-gen2-trade-" .. label, "System Bus")
             end

@@ -1672,17 +1672,25 @@ import gen_gen2_profile  # noqa: E402
 from rgbds_symbols import parse_symbols  # noqa: E402
 
 CAP_TRADE = 0x10
-TRADE_LABELS = {"crystal": (0x75, 0x4154, 0x4237), "gold": (0x13, 0x4154, 0x4237),
-                "silver": (0x13, 0x4154, 0x4237)}
+TRADE_LABELS = {"crystal": (0x75, 0x4154, 0x4237, 0x4413), "gold": (0x13, 0x4154, 0x4237, 0x4413),
+                "silver": (0x13, 0x4154, 0x4237, 0x4413)}
 MAIL = 158  # FLOWER_MAIL: items.json mail_ids, all three packs
+
+
+def base_sym(name):
+    """The pinned overlay .sym without any SlinkTrade* row: a publication that already carries the P4.3a
+    family (or not) gives the same fixture, and the labels below are appended exactly once."""
+    text = (ROOT / "data/gen2" / name).read_text()
+    return "".join(line for line in text.splitlines(keepends=True) if " SlinkTrade" not in line)
 
 
 def trade_profile_text(title):
     wrapper = json.loads((ROOT / f"data/games/gen2_{title}/profile.json").read_text())
     ov = wrapper["titles"][title]["overlay"]
-    bank, prompt, pickup = TRADE_LABELS[title]
-    sym = (ROOT / "data/gen2" / ov["sym"]).read_text() + (
-        f"{bank:02x}:{prompt:04x} SlinkTradePromptEntry\n{bank:02x}:{pickup:04x} SlinkTradeApplyPickup\n")
+    bank, prompt, pickup, commit = TRADE_LABELS[title]
+    sym = base_sym(ov["sym"]) + (
+        f"{bank:02x}:{prompt:04x} SlinkTradePromptEntry\n{bank:02x}:{pickup:04x} SlinkTradeApplyPickup\n"
+        f"{bank:02x}:{commit:04x} SlinkTradeCommit\n")
     ov["trade"] = gen_gen2_profile.trade_block(parse_symbols(sym))
     return json.dumps(wrapper)
 
@@ -1751,7 +1759,8 @@ class TradeCart:
         f = self.frame()
         if self.token is None:
             self.token = f[12:16]                   # the responder captures the PROMPT token
-        f[7] = f[6]
+        if label != "SlinkTradeCommit":
+            f[7] = f[6]
         self.poke(self.lease, f)
 
     def done(self, result, token=None):
@@ -1940,8 +1949,8 @@ def test_trade_holdable_set_equals_the_asm_allowed_items_table(title):
 
 
 def test_trade_block_is_all_or_none():
-    sym = (ROOT / "data/gen2/crystal_slink.sym").read_text()
-    assert gen_gen2_profile.trade_block(parse_symbols(sym)) is None       # the published panel build
+    sym = base_sym("crystal_slink.sym")
+    assert gen_gen2_profile.trade_block(parse_symbols(sym)) is None       # a build without the family
     with pytest.raises(ValueError, match="partial trade family"):
         gen_gen2_profile.trade_block(parse_symbols(sym + "75:4154 SlinkTradePromptEntry\n"))
 
@@ -1965,3 +1974,47 @@ def test_trade_ot_player_name_is_the_partner_trainer_not_the_mon_ot(partner):
     else:
         assert got == [enc[ch] for ch in partner] + [0x50] * (11 - len(partner))
         assert got != list(blob70(PARTNER)[48:59])
+
+
+def committing(cart):
+    """ApplyPickup took the APPLY, then the native commit was entered (SlinkTradeCommit)."""
+    proposer_ready(cart)
+    cart.w.reply(apply_cmd())
+    cart.w.frames(1)
+    cart.pick_up("SlinkTradeApplyPickup")
+    cart.pick_up("SlinkTradeCommit")
+
+
+@pytest.mark.parametrize("how", ["init_clears_the_lease", "reset_boundary"])
+def test_trade_a_reset_after_the_commit_entry_is_uncertain_never_a_refusal(how):
+    cart = TradeCart()
+    committing(cart)
+    before = len(cart.w.written())
+    if how == "init_clears_the_lease":
+        cart.poke(cart.lease, [0] * 16)             # Init after a hardware reset: no DONE ever comes
+    else:
+        cart.w.client.boundary(cart.w.client, "reset", "save_reset")
+    cart.w.frames(2)
+    assert cart.w.sent("trade_done") == [], "an entered commit may have saved: never claim nothing changed"
+    assert cart.w.written()[before:] == [], "no RELEASE and no restage"
+    assert any("UNCERTAIN" in s for s in cart.w.shown())
+    assert cart.w.client.trade_state is None and cart.w.client.trade_visit is None
+
+
+def test_trade_a_validation_close_after_pickup_before_the_commit_is_a_refusal():
+    cart = TradeCart()
+    proposer_ready(cart)
+    cart.w.reply(apply_cmd())
+    cart.w.frames(1)
+    cart.pick_up("SlinkTradeApplyPickup")          # SlinkTradeCheckIncoming etc. refuse -> SlinkTradeExit
+    cart.close()
+    cart.w.frames(2)
+    assert nothing_changed(cart.w)
+    assert not any("UNCERTAIN" in s for s in cart.w.shown())
+
+
+def test_trade_block_requires_the_commit_label():
+    sym = base_sym("crystal_slink.sym")
+    with pytest.raises(ValueError, match="SlinkTradeCommit"):
+        gen_gen2_profile.trade_block(parse_symbols(
+            sym + "75:4154 SlinkTradePromptEntry\n75:4237 SlinkTradeApplyPickup\n"))
