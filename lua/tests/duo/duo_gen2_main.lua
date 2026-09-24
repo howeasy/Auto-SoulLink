@@ -483,9 +483,22 @@ local function flushed()
             saveram_path=(ctx.env.dir .. "/" .. ctx.env.saveram):gsub("\\", "/"), saveram_bytes=#saved,
             flushed_matches=true}, saved
 end
+-- The witnessed bytes, copied once next to the result (<result minus _result.txt>_witness.SaveRAM): the
+-- emulator's SaveRAM stays mutable after a save (G/S window stack and gfx scratch live in SRAM bank 0, and
+-- Crystal's gfx scratch too), so the oracle authenticates this immutable copy against cartram_sha256.
 function h.witness()
     local w, saved = flushed()
     if not w then return false, saved end
+    local result = D.result:gsub("\\", "/")
+    local path = result:gsub("_result%.txt$", "") .. "_witness.SaveRAM"
+    if path == result .. "_witness.SaveRAM" then return false, "result path does not end in _result.txt" end
+    local existing = io.open(path, "rb")
+    if existing then existing:close(); return false, "witness snapshot already exists: " .. path end
+    local f = io.open(path, "wb")
+    if not f then return false, "cannot write " .. path end
+    f:write(saved)
+    f:close()
+    w.snapshot_path = path
     jlog("SAVE_WITNESS", w)
     return true
 end

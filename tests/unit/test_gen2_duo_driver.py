@@ -322,6 +322,28 @@ def test_link_happy_path_catches_reports_saves_and_passes(tmp_path, title):
     assert all(set(row) <= {"Up", "Down", "Left", "Right", "A", "B", "Start", "Select"} for row in sim.inputs)
 
 
+def test_save_witness_archives_its_exact_bytes_next_to_the_result(tmp_path):
+    """G/S (and Crystal gfx) rewrite SRAM bank-0 scratch natively after a save, so the emulator's SaveRAM is
+    mutable: SAVE_WITNESS.snapshot_path is an immutable copy of the witnessed bytes (Codex's H8 transport)."""
+    lines, _, _ = run_driver(tmp_path)
+    save = tag_json(lines, "SAVE_WITNESS")
+    snap = Path(save["snapshot_path"])
+    assert snap.name == "e2e_link_a_witness.SaveRAM" and snap.parent == tmp_path / "root/patch/build"
+    raw = snap.read_bytes()
+    assert len(raw) == save["saveram_bytes"] and hashlib.sha256(raw[:0x8000]).hexdigest() == save["cartram_sha256"]
+    assert save["saveram_path"] != save["snapshot_path"]
+
+
+def test_save_witness_never_overwrites_an_existing_snapshot(tmp_path):
+    def stale(sim, glob):
+        path = tmp_path / "root/patch/build/e2e_link_a_witness.SaveRAM"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"old")
+    lines, _, _ = run_driver(tmp_path, setup=stale)
+    assert lines[-1].startswith("RESULT: FAIL") and "witness snapshot already exists" in lines[-1], lines[-1]
+    assert (tmp_path / "root/patch/build/e2e_link_a_witness.SaveRAM").read_bytes() == b"old"
+
+
 def test_no_engine_capture_prints_no_caught_and_no_pass(tmp_path):
     lines, _, _ = run_driver(tmp_path, emit_capture=False)
     assert lines[-1].startswith("RESULT: FAIL") and "without a catch" in lines[-1], lines[-1]
