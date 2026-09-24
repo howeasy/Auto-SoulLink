@@ -726,6 +726,25 @@ local PATHS = {
     },
 }
 
+-- ── per-title paths (G5-RR-LAST) ─────────────────────────────────────────────────────────────
+-- Radical Red's Viridian City (map 3.1, read from the RR ROM with tools/gba_map.py): the same
+-- 48x40 layout, collision, behaviours and warps as FR along every tile below, but RR adds three
+-- object events, four more coord events, moves object 2 off (11,24) and changes object 6's
+-- movement type -- dynamic state the static BFS cannot see. Live whiteout_gen3 at 6131930f
+-- stalled on the FR way out ((26,28) Down), while the way IN (route1_edge_to_pokecenter_door) is
+-- walked live on RR every run. On RR the way out is therefore that proven path reversed tile for
+-- tile: Left x4 along y=27, Down x4 at x=22, Right x2, Down x8 at x=24 -- it never touches
+-- (26,28)/(26,29), and a unit re-walks it on the RR map's collision.
+if TITLE == "radical_red" then
+    local INVERT = { Up = "Down", Down = "Up", Left = "Right", Right = "Left" }
+    local inbound, out = PATHS.route1_edge_to_pokecenter_door, {}
+    for i = #inbound.dirs, 1, -1 do out[#out + 1] = INVERT[inbound.dirs[i]] end
+    PATHS.pokecenter_door_to_route1_edge = {
+        map = inbound.map, from = { inbound.to[1], inbound.to[2] },
+        to = { inbound.from[1], inbound.from[2] }, dirs = out,
+    }
+end
+
 -- ── the Gen 3 binding ────────────────────────────────────────────────────────────────────────
 -- playlib holds no host call and no game fact: no memory, joypad, client, event, savestate or
 -- dofile appears in it (Codex review cx-67a6e199). Everything it needs arrives here, which is

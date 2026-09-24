@@ -4550,3 +4550,38 @@ def test_the_pc_owner_list_exit_on_rr_rests_on_the_field_terminal():
     exit_wait = text[text.index('"exit_owner_not_canceled"'):text.index('"exit_not_field"')]
     assert "owner_list_closed(" in exit_wait and "saw_cancel" in exit_wait
 
+
+def test_rr_way_out_of_viridian_is_the_proven_way_in_reversed():
+    """G5-RR-LAST (whiteout_gen3 on RR at 6131930f: 'pokecenter_door_to_route1_edge: step Down
+    stalled at (26,28)'). On radical_red the helper walks the live-proven inbound path reversed,
+    and every step of it is walkable on the RR ROM's own map 3.1 collision (tools/gba_map.py)."""
+    from lupa import LuaRuntime
+
+    os.environ.setdefault("SLINK_ROOT", str(REPO).replace("\\", "/"))
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().SLINK_GEN3_TITLE = "radical_red"
+    rr = lua.execute(f'return dofile("{SCRIPTED.as_posix()}")')
+    out, inn = rr.PATHS["pokecenter_door_to_route1_edge"], rr.PATHS["route1_edge_to_pokecenter_door"]
+    dirs = [out.dirs[i] for i in range(1, len(out.dirs) + 1)]
+    flip = {"Up": "Down", "Down": "Up", "Left": "Right", "Right": "Left"}
+    assert dirs == [flip[inn.dirs[i]] for i in range(len(inn.dirs), 0, -1)]
+    assert (out["from"][1], out["from"][2], out["to"][1], out["to"][2]) == (26, 27, 24, 39)
+    fr = LuaRuntime(unpack_returned_tuples=True)
+    fr.globals().SLINK_GEN3_TITLE = "firered"
+    frp = fr.execute(f'return dofile("{SCRIPTED.as_posix()}")').PATHS["pokecenter_door_to_route1_edge"]
+    assert [frp.dirs[i] for i in range(1, 3)] == ["Down", "Down"]          # FR keeps its own path
+    rom = _rom_dump("Pokemon - Radical Red.gba")
+    if rom is None:
+        pytest.skip("the RR dump is not in the repo root or a parent")
+    sys.path.insert(0, str(REPO / "tools"))
+    import gba_map
+
+    m = gba_map.load(str(rom), sym_path=str(REPO / "data/gen3/pret/pokefirered.sym")).map(3, 1)
+    step = {"Up": (0, -1), "Down": (0, 1), "Left": (-1, 0), "Right": (1, 0)}
+    x, y = 26, 27
+    for d in dirs:
+        x, y = x + step[d][0], y + step[d][1]
+        assert m.collision[y][x] == 0, (d, x, y)
+        assert (x, y) not in {(o.x, o.y) for o in m.objects}, (x, y)
+    assert (x, y) == (24, 39)
+

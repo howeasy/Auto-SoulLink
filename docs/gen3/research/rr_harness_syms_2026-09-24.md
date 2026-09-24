@@ -66,6 +66,36 @@ as "candidate RR instrumentation, not fully rebound". The retention census below
 / 45 / 4 / 339 FR code sites that load them are unchanged in RR: the storage UI that reads them is
 FR's. CFRU replaces the box backend (25 compressed boxes), but that is a different set of addresses.
 
+## gSpecialVar_Result on RR (G5-RR-LAST)
+
+The live PC-exit lines read `result=0` at every step, including just after B on the owner list.
+That raised the question of whether the address is wrong. It is not:
+
+- **The write site is FR's, in both RR artifacts.** Task_MultichoiceMenu_HandleInput's cancel
+  path at 0x0809CD18 is `ldr r1,=0x020370D0; movs r0,#0x7f; strh r0,[r1]`. The row path at
+  0x0809CD28 stores through the same literal. The 176-byte body is identical in the clean dump and
+  in the companion.
+- **The exit path is FR's.**
+  - EventScript_PC, PCMainMenu, ChoosePCMenu and TurnOffPC at 0x081A6955.. are byte-identical.
+  - gScriptCmdTable (0x0815F9B4) has the same entries for every opcode they use (goto, goto_if,
+    setvar, switch/case, special, playse, releaseall, end). Only `message` (0x67) differs, and it is
+    not on the cancel path.
+  - The two turn-off specials, gSpecials 0xD7 (AnimatePcTurnOff) and 0x190 (SetHelpContextForMap),
+    point at identical FR bodies.
+- **`result=0` during storage is expected.** That value is the owner-list row the PC was entered
+  through (0 = the storage PC).
+- **After the cancel, 127 is never observed.** The helper latches the variable at every frame end
+  from the B onward, and the first sample already reads 0.
+  - FR runs see 127, with the same code and the same read.
+  - So on RR something writes the variable again within the frame the cancel lands in.
+  - RR carries 92 more code referrers of 0x020370D0 than FR. 75 of them are CFRU store sites,
+    several of which store 0. For example: 0x0907CE16 and 0x090B21AE are one-line `strh 0`
+    returns; 0x090B2382/0x090B23DE clear it before a call.
+  - Which one runs on this frame is **OPEN**. It needs a live write watch on 0x020370D0.
+- **Consequence.** The helper keeps FR/LG's strict 127 witness. On radical_red it accepts "the owner
+  list closed and no PC task took over" (`owner_list_closed` in lua/tests/gen3_scripted_play.lua).
+  The field-terminal wait after it proves the PC turned off.
+
 ## Census
 
 # RR artifact 964f951a0fdaf209e4ea1344883ef0d557bb3a80 (Pokemon - Radical Red.gba); FR 41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc
