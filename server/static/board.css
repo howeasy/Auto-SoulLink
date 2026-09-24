@@ -40,6 +40,14 @@ body.board img.mon-sprite, body.board .mk-spr img { image-rendering: pixelated; 
 .identity-warn { margin-bottom: var(--space-3); padding: var(--space-3); border-left: 3px solid var(--c-dead); background: color-mix(in srgb, var(--c-dead) 12%, transparent); color: var(--c-txt); }
 .mk-tag.stale-warn { display: inline-block; }
 
+/* An uncertain native trade (--c-pend, same amber as a pending capture) escalates to a
+ * conflict (--c-dead) once it's clear it needs a human — same shape as .identity-warn. */
+.trade-problem { margin-bottom: var(--space-3); padding: var(--space-3); border-left: 3px solid var(--c-pend); background: color-mix(in srgb, var(--c-pend) 12%, transparent); color: var(--c-txt); }
+.trade-problem.trade-problem-conflict { border-left-color: var(--c-dead); background: color-mix(in srgb, var(--c-dead) 12%, transparent); }
+.trade-problem b { display: block; margin-bottom: .25em; }
+.trade-problem-mons, .trade-problem-verdict, .trade-problem-text { display: block; font-size: var(--fs-sm); }
+.trade-last-note { margin-bottom: var(--space-3); font-size: var(--fs-sm); opacity: .75; }
+
 :root {
   --density: 1;
   --mk-rail: calc(var(--scale-step) * 8.2);

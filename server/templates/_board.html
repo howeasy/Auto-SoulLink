@@ -88,6 +88,26 @@
   {% if status.run_over %}
     <div class="game-over"><svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> GAME OVER — SOUL LINK <svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg></div>
   {% endif %}
+  {# A native trade the server can't resolve on its own: one side's post-trade party read
+     didn't confirm what was expected. "uncertain" is still gathering evidence; "conflict"
+     means it never will and a human has to sort out the two parties by hand. #}
+  {% set tp = status.trade_problem %}
+  {% if tp %}
+    {% set a_mon = status.players.a.party_details.get(tp.a_key) %}
+    {% set b_mon = status.players.b.party_details.get(tp.b_key) %}
+    {% set a_label = (a_mon.nickname or a_mon.species_name) if a_mon else "Player A's mon" %}
+    {% set b_label = (b_mon.nickname or b_mon.species_name) if b_mon else "Player B's mon" %}
+    <div class="trade-problem trade-problem-{{ tp.phase }}">
+      <b>&#9888; {% if tp.phase == 'conflict' %}Trade conflict — needs admin{% else %}Trade uncertain{% endif %}</b>
+      <span class="trade-problem-mons">{{ a_label }} &harr; {{ b_label }}</span>
+      <span class="trade-problem-verdict">A: {{ tp.verdict.get('a') or 'awaiting' }} &middot; B: {{ tp.verdict.get('b') or 'awaiting' }}</span>
+      {% if tp.problem %}<span class="trade-problem-text">{{ tp.problem }}</span>{% endif %}
+    </div>
+  {% elif status.trade_last %}
+    {# Quiet by design: a settled trade is not a banner-worthy event once trade_problem
+       has cleared, just a small note for "did that actually go through". #}
+    <div class="trade-last-note">Last trade ({{ status.trade_last.outcome }}): {{ status.trade_last.a_key[:8] }}&hellip; &harr; {{ status.trade_last.b_key[:8] }}&hellip;</div>
+  {% endif %}
   {% for pid in ('a', 'b') %}{% set p = status.players[pid] %}
     {% if p.identity_error %}<div class="identity-warn">&#9888; {{ p.identity_error }}</div>{% endif %}
     {% set stalled = (status.faint_repair_stalled or {}).get(pid) %}{% if stalled %}<div class="identity-warn">&#9888; Player {{ pid | upper }}: {{ stalled | length }} linked faint(s) never landed in game and the server stopped retrying &mdash; check that game.</div>{% endif %}
