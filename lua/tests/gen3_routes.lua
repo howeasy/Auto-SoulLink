@@ -225,11 +225,16 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
     end
     local function step(dir, flee)
         local x,y=c.G.pos(c.cp); local d=delta[dir]
+        local from_g,from_n=c.G.map(c.cp)
+        local function changed_map()
+            local g,n=c.G.map(c.cp)
+            return g>=0 and g<255 and n>=0 and n<255 and (g~=from_g or n~=from_n)
+        end
         local moved=false
         for _=1,60 do
             tick(dir)
             local u,v=c.G.pos(c.cp)
-            if u~=x or v~=y then moved=true;break end
+            if changed_map() or u~=x or v~=y then moved=true;break end
         end
         if not moved then
             field_diagnostic("PREP_BLOCKED",dir)
@@ -241,7 +246,9 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
             assert(ok,"incidental flee: "..tostring(why));guard()
         end
         local u,v=c.G.pos(c.cp)
-        assert(u==x+d[1] and v==y+d[2],"unexpected route step destination")
+        -- Warp movement need not change x/y. Callers still enforce their exact segment
+        -- map/end tile; recognizing a transition does not admit an unexpected destination.
+        assert(changed_map() or (u==x+d[1] and v==y+d[2]),"unexpected route step destination")
     end
     local function walk(p)
         assert(at(p[1],p[2],p[3],p[4]),"route segment starts on wrong map/tile")
@@ -253,6 +260,18 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
     end
     local function warp(dir,dest)
         c.SP.warp_to(c.cp,dir,30,dest,label);guard()
+        -- SP verifies coordinates, not control unlock. The LG receipt had already entered
+        -- Forest before the next Up failed at(29,62). Do not spend a step budget during fade
+        -- cleanup: admit the destination only after field/script controls are stably free.
+        local stable=0
+        local ready=await(function()
+            stable=quiet() and stable+1 or 0
+            return stable>=60
+        end,1800)
+        if not ready then
+            field_diagnostic("PREP_BLOCKED_WARP",dir)
+            error("PREPARATION warp controls never settled")
+        end
         assert(at(dest.group,dest.num,dest.x,dest.y),"wrong warp destination")
     end
     local function lead() return (c.party() or {})[1] end
@@ -321,6 +340,11 @@ function R.enter_trainer(c, T, frame, label, expected, prep)
         warp("Up",{group=15,num=0,x=7,y=10})
         walk(R.paths.gate_arrival)
         walk(R.paths.gate)
+        -- Gate(7,1): collision0, MB_CAVE_DOOR0x60 (IsNonAnimDoor) on BOTH ROMs; Up from(7,2)
+        -- steps onto it, then TryStartStepBasedScript -> TryStartWarpEventScript -> DoWarp
+        -- (field_control_avatar.c:618-623,856-898). NOT TryDoorWarp's forward0x69 check,
+        -- and NOT TryArrowWarp (current tile + matching direction, :249-251,825-838).
+        -- Forest(29,62) is SOUTH arrow0x65: north leaves it normally after unlock.
         warp("Up",{group=1,num=0,x=29,y=62})
         walk(R.paths.forest_arrival)
         walk(R.paths.forest)

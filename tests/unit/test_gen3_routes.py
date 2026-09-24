@@ -392,6 +392,79 @@ def test_first_tutorial_leg_waits_for_controls_with_await_policy_loaded(env, blo
         assert g.first_press >= 100
 
 
+def route_motion(lua):
+    """Exercise the driver's real local step/warp functions, with only IO/time faked."""
+    source = SOURCE.read_text()
+    step = source[source.index("    local function step("):source.index("    local function walk(")]
+    warp = source[source.index("    local function warp("):source.index("    local function lead()", source.index("    local function warp("))]
+    return lua.execute(step + warp + "\nreturn {step=step,warp=warp}")
+
+
+@pytest.mark.parametrize("title", ROMS)
+def test_gate_nonanimated_door_then_forest_arrow_landing_waits_for_unlock(env, title):
+    lua, _ = env
+    rom = gba_map.load(ROOT.parents[2] / ROMS[title], sym_path=ROOT / f"data/gen3/pret/poke{title}.sym")
+    gate, forest = rom.map(15, 0), rom.map(1, 0)
+    assert (gate.collision[1][7], gate.behaviour[1][7]) == (0, 0x60)
+    assert (gate.collision[2][7], gate.behaviour[2][7]) == (0, 0)
+    assert (forest.collision[62][29], forest.behaviour[62][29]) == (0, 0x65)
+    assert (forest.collision[61][29], forest.behaviour[61][29]) == (0, 0)
+    events = json.loads((PRET / "data/maps/Route2_ViridianForest_SouthEntrance/map.json").read_text())
+    assert events["warp_events"][3] == {
+        "x": 7, "y": 1, "elevation": 3, "dest_map": "MAP_VIRIDIAN_FOREST", "dest_warp_id": "0"}
+    arrival = json.loads((PRET / "data/maps/ViridianForest/map.json").read_text())["warp_events"][0]
+    assert (arrival["x"], arrival["y"]) == (29, 62)
+    lua.execute("""
+        g=15;n=0;x=7;y=2;f=0;first_press=nil;label='gate';delta={Up={0,-1}}
+        c={cp={},in_battle=function() return false end,G={
+           map=function() return g,n end,pos=function() return x,y end},
+           SP={warp_to=function(_,dir,_,dest)
+               assert(dir=='Up' and g==15 and n==0 and x==7 and y==2)
+               -- Step onto non-animated door7,1; step event warps before returning.
+               g=dest.group;n=dest.num;x=dest.x;y=dest.y
+           end}}
+        guard=function() end;quiet=function() return f>=100 end
+        at=function(a,b,u,v) return g==a and n==b and x==u and y==v end
+        field_diagnostic=function() end
+        tick=function(button)
+            f=f+1
+            if button then first_press=first_press or f;if quiet() then y=y-1 end end
+        end
+        await=function(pred,limit)
+            for i=1,limit do if pred() then return true end;tick() end
+            return false
+        end
+        dest={group=1,num=0,x=29,y=62}
+    """)
+    motion = route_motion(lua)
+    g = lua.globals()
+    motion.warp("Up", g.dest)
+    motion.step("Up", False)
+    assert (g.g, g.n, g.x, g.y) == (1, 0, 29, 61)
+    assert g.first_press >= 100
+
+
+@pytest.mark.parametrize("destination", [1, -1, 255])
+def test_step_accepts_only_valid_map_change_without_coordinate_change(env, destination):
+    lua, _ = env
+    lua.execute("""
+        g=15;n=0;x=7;y=2;presses=0;delta={Up={0,-1}}
+        c={cp={},in_battle=function() return false end,G={
+           map=function() return g,n end,pos=function() return x,y end}}
+        tick=function(button) if button then presses=presses+1;g=DESTINATION;n=0 end end
+        guard=function() end;field_diagnostic=function() end
+    """)
+    lua.globals().DESTINATION = destination
+    motion = route_motion(lua)
+    if destination == 1:
+        motion.step("Up", False)
+        assert lua.globals().presses == 1
+    else:
+        with pytest.raises(Exception, match="route blocked going Up"):
+            motion.step("Up", False)
+        assert lua.globals().presses == 60
+
+
 def test_preparation_wraps_actual_shared_follow_and_logs_nested_frames(env):
     lua, routes = env
     lua.globals().r = routes
