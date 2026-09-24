@@ -218,3 +218,41 @@ def test_gen1_a_quiet_re_zero_revived_before_the_next_battle_lands_at_its_loop_h
     world1.step()
     world1.fire("battle_loop_head")
     assert world1.party()[1]["hp"] == 0 and len(g1_kod(world1)) == 1
+
+
+# ── Coordinator add-on (card gen2-bench-write): a dead key that re-enters the party dies again ─────────
+@pytest.mark.parametrize("where", ["checkpoint", "battle_bench"])
+@pytest.mark.parametrize("how", ["party_mon", "native_withdraw"])
+def test_gen2_a_dead_key_back_in_the_party_is_zeroed_again(how, where):
+    """A dead linked mon comes back into the party: the server's party_mon (the box executor) or the player's
+    own PC withdraw (box records carry no HP, so it returns alive). The server then re-issues force_faint
+    (test_state.py:873/891, test_state_faint_repair.py:154), and the client zeroes it: at the overworld
+    checkpoint, or on receipt in a battle (O-32 battle_bench)."""
+    from tests.unit.test_gen2_bench_write import only
+    from tests.unit.test_gen2_client import box_world, party_count
+    lead, dead = mon(), mon(species=19, dvs=0x7AAA)
+    world = box_world([lead], [dead])
+    if how == "party_mon":
+        world.checkpoint_ok = True
+        world.reply({"cmd": "party_mon", "key": codec_key(dead)})
+        world.frames(2)
+        assert [m["key"] for m in world.sent("sync_retrieve_done")] == [codec_key(dead)]
+        world.checkpoint_ok = False
+    else:
+        world.party([lead, dead])
+        world.box([])
+    assert party_count(world) == 2 and world.hp_of(1)[0] > 0
+    if where == "battle_bench":
+        world.field("wBattleMode", 1)
+        world.field("wCurBattleMon", 0)
+        world.emu.poke("System Bus", hold_ram(world, "wBattleMonSpecies"), world.lua.table_from([lead["species"]]))
+        world.checkpoint_ok = True
+        only(world, "battle_bench")                                  # a battle frame: never the checkpoint
+    world.reply({"cmd": "force_faint", "key": codec_key(dead), "nickname": "RATTA"})
+    world.frames(1)
+    if where == "checkpoint":
+        assert world.hp_of(1)[0] > 0                                 # no checkpoint hold yet
+        world.checkpoint_ok = True
+        world.frames(2)
+    assert world.hp_of(1) == (0, 0) and world.hp_of(0)[0] > 0
+    assert kod(world) == ["show:!! RATTA KO'd"]
