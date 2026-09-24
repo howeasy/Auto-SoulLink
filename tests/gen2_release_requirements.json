@@ -18,57 +18,110 @@
         "pairing": "gen2_new",
         "initiator": "crystal",
         "partner": "crystal",
-        "fixtures": {"a": "crystal_battle", "b": "crystal_battle_ot2"},
-        "trade_fixtures": {"a": "crystal_battle_errand", "b": "crystal_battle_ot2_errand"},
-        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_reconnect", "gen2_soft_reset", "gen2_species_clause", "gen2_type_clause", "gen2_gender_clause", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item", "gen2_trade_refuse_unsaved", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild"]
+        "fixtures": {
+          "a": "crystal_battle",
+          "b": "crystal_battle_ot2"
+        },
+        "trade_fixtures": {
+          "a": "crystal_battle_errand",
+          "b": "crystal_battle_ot2_errand"
+        },
+        "scenarios": [
+          "link",
+          "gen2_faint",
+          "gen2_faint_active",
+          "gen2_admit_wrong_rom",
+          "gen2_reconnect",
+          "gen2_soft_reset",
+          "gen2_species_clause",
+          "gen2_type_clause",
+          "gen2_gender_clause",
+          "gen2_trade_new",
+          "gen2_trade_evolve",
+          "gen2_trade_decline_new",
+          "gen2_trade_timeout",
+          "gen2_trade_reset_wait",
+          "gen2_trade_reset_commit",
+          "gen2_trade_refuse_item",
+          "gen2_trade_refuse_unsaved",
+          "gen2_whiteout",
+          "gen2_pc_ops",
+          "gen2_changebox",
+          "gen2_poison",
+          "gen2_whiteout_rebuild"
+        ]
       },
       "proofs": [
         {
           "scenario": "link",
           "command": "python tools/e2e_duo.py --game gen2_new --scenario link --lane gen2-cc-link --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_link_cc_a_result.txt",
-                  "sha256": "b1cfd2fb6ad7d4eab0310b0be74defe886c6a757ef418350875d91151076a659"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_link_cc_b_result.txt",
-                  "sha256": "f29d80b4f371a4f8b176ebc3d18361aeec981a06362d14d8d72150729498f362"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_link_cc_pydec_result.txt",
-                      "sha256": "deead17de8049281298fdb9b6d24ab1e9921dfe28808fc804e0fbcb0f53dc842"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_link_cc_a_result.txt",
+              "sha256": "b1cfd2fb6ad7d4eab0310b0be74defe886c6a757ef418350875d91151076a659"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_link_cc_b_result.txt",
+              "sha256": "f29d80b4f371a4f8b176ebc3d18361aeec981a06362d14d8d72150729498f362"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_link_cc_pydec_result.txt",
+              "sha256": "deead17de8049281298fdb9b6d24ab1e9921dfe28808fc804e0fbcb0f53dc842"
+            }
           }
         },
         {
           "scenario": "gen2_faint",
           "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_faint --lane live3-cc-faint --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_faint_cc_a_result.txt",
-                  "sha256": "094c36a0c876bd7ced5acbb08312aab44ae0024a2d0d315e018285b100f9f033"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_faint_cc_b_result.txt",
-                  "sha256": "fd6e4524822be6ac74ad458c629bf23fbb81bed826fdf47ab377d3907ab06c03"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_faint_cc_pydec_result.txt",
-                      "sha256": "ebbc7dae899933dcbdf6256ff35274e02bcba47d9c5c8fd704215ae9b384c98c"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_cc_a_result.txt",
+              "sha256": "094c36a0c876bd7ced5acbb08312aab44ae0024a2d0d315e018285b100f9f033"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_cc_b_result.txt",
+              "sha256": "fd6e4524822be6ac74ad458c629bf23fbb81bed826fdf47ab377d3907ab06c03"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_cc_pydec_result.txt",
+              "sha256": "ebbc7dae899933dcbdf6256ff35274e02bcba47d9c5c8fd704215ae9b384c98c"
+            }
           }
         },
         {
           "scenario": "gen2_faint_active",
           "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_faint_active --lane live3-cc-active --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_faint_active_cc_a_result.txt",
-                  "sha256": "0e4fdc5fe3536d6114892ec3c373e5d7aec995087b504102430d7eed777a9ba1"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_faint_active_cc_b_result.txt",
-                  "sha256": "350b462e5b1bf536149989400809652325df8b2ea34e1286464fbd89a956c932"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_faint_active_cc_pydec_result.txt",
-                  "sha256": "35a7089b5bfa13593ea6c3f8b583cd0fc851235d1e0a422a92460dc1bb68da87"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_active_cc_a_result.txt",
+              "sha256": "0e4fdc5fe3536d6114892ec3c373e5d7aec995087b504102430d7eed777a9ba1"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_active_cc_b_result.txt",
+              "sha256": "350b462e5b1bf536149989400809652325df8b2ea34e1286464fbd89a956c932"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_active_cc_pydec_result.txt",
+              "sha256": "35a7089b5bfa13593ea6c3f8b583cd0fc851235d1e0a422a92460dc1bb68da87"
+            }
           }
         },
         {
           "scenario": "gen2_admit_wrong_rom",
           "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_admit_wrong_rom --lane gen2-cc-admit-wrong-rom --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cc_a_result.txt",
-                  "sha256": "7dc09a24259344e994db46756b3b6f95f3790389a6d8b0d785a65e2e5000ada4"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cc_b_result.txt",
-                  "sha256": "43beb8e45654253b8fae1d7a8889b9f8a50c3ea9c5f0f3cca80c72c4f53f866b"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cc_pydec_result.txt",
-                      "sha256": "6a23f01fb941d227692d1716035f6edbe7306df78fa45f01e7b5c06fffea06cf"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cc_a_result.txt",
+              "sha256": "7dc09a24259344e994db46756b3b6f95f3790389a6d8b0d785a65e2e5000ada4"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cc_b_result.txt",
+              "sha256": "43beb8e45654253b8fae1d7a8889b9f8a50c3ea9c5f0f3cca80c72c4f53f866b"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cc_pydec_result.txt",
+              "sha256": "6a23f01fb941d227692d1716035f6edbe7306df78fa45f01e7b5c06fffea06cf"
+            }
           }
         },
         {
@@ -202,84 +255,126 @@
           "scenario": "gen2_trade_new",
           "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_new --lane cc_new --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_new_cc_a_result.txt",
-                  "sha256": "5aacafd488dcff885cf6ba4182a15ba46fb38b84a43c6e9576a2f20ca0a5457a"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_new_cc_b_result.txt",
-                  "sha256": "1605eecdf05db7555202cbad059f02aa95ec8306525800ca533bb9c2c38d926f"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_new_cc_pydec_result.txt",
-                      "sha256": "d8736b70534179083cc16718cbad3ec989e3cc3c519c5d58c590a1969f499d8b"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_new_cc_a_result.txt",
+              "sha256": "5aacafd488dcff885cf6ba4182a15ba46fb38b84a43c6e9576a2f20ca0a5457a"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_new_cc_b_result.txt",
+              "sha256": "1605eecdf05db7555202cbad059f02aa95ec8306525800ca533bb9c2c38d926f"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_new_cc_pydec_result.txt",
+              "sha256": "d8736b70534179083cc16718cbad3ec989e3cc3c519c5d58c590a1969f499d8b"
+            }
           }
         },
         {
           "scenario": "gen2_trade_decline_new",
           "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_decline_new --lane cc_decline_new --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_a_result.txt",
-                  "sha256": "5e6fd54cf0444316dee23b872590ebf142cdcdc6a2a1c3781da11bdc580de636"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_b_result.txt",
-                  "sha256": "42a472337325a668faf014a104430961a1d5b3db5d0ae9a05b185231430e488e"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_pydec_result.txt",
-                      "sha256": "cc238a3451edf93756b4dc03bc0fe441794145b9d66bb91790368da3261f8ffb"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_a_result.txt",
+              "sha256": "5e6fd54cf0444316dee23b872590ebf142cdcdc6a2a1c3781da11bdc580de636"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_b_result.txt",
+              "sha256": "42a472337325a668faf014a104430961a1d5b3db5d0ae9a05b185231430e488e"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_pydec_result.txt",
+              "sha256": "cc238a3451edf93756b4dc03bc0fe441794145b9d66bb91790368da3261f8ffb"
+            }
           }
         },
         {
           "scenario": "gen2_trade_timeout",
           "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_timeout --lane cc_timeout --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cc_a_result.txt",
-                  "sha256": "44e8c08defd82680e602c8d896a5fb6fadddb681ad1b7a256f21b1858980aae1"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cc_b_result.txt",
-                  "sha256": "4415e27ac745d9a32759c8bade8dc563fd0955debdc306758e1cddf01a6a8de9"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cc_pydec_result.txt",
-                      "sha256": "c9d12ae073a8090006ba3c5ff5e0c68bb003ddca68a1a6fe9e7e81deaf9d6536"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cc_a_result.txt",
+              "sha256": "44e8c08defd82680e602c8d896a5fb6fadddb681ad1b7a256f21b1858980aae1"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cc_b_result.txt",
+              "sha256": "4415e27ac745d9a32759c8bade8dc563fd0955debdc306758e1cddf01a6a8de9"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cc_pydec_result.txt",
+              "sha256": "c9d12ae073a8090006ba3c5ff5e0c68bb003ddca68a1a6fe9e7e81deaf9d6536"
+            }
           }
         },
         {
           "scenario": "gen2_trade_reset_wait",
           "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_reset_wait --lane cc_reset_wait --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cc_a_result.txt",
-                  "sha256": "911bc5e6f6b95416dd14f83717df9979e6203e0afe664576c42b0eda218dcafb"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cc_b_result.txt",
-                  "sha256": "9ca20a2adeafaee9dca8a27a397023b6d356156bae25f25c312bdce306680671"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cc_pydec_result.txt",
-                      "sha256": "73ca3b7f9cc25923322ef09995baa4218b908ad3524364a331956ba3bfa84ab2"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cc_a_result.txt",
+              "sha256": "911bc5e6f6b95416dd14f83717df9979e6203e0afe664576c42b0eda218dcafb"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cc_b_result.txt",
+              "sha256": "9ca20a2adeafaee9dca8a27a397023b6d356156bae25f25c312bdce306680671"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cc_pydec_result.txt",
+              "sha256": "73ca3b7f9cc25923322ef09995baa4218b908ad3524364a331956ba3bfa84ab2"
+            }
           }
         },
         {
           "scenario": "gen2_trade_reset_commit",
           "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_reset_commit --lane c4_reset_commit --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cc_a_result.txt",
-                  "sha256": "3f64c6de5783a271bae92490874dcf0c4fbdbf104e6ffa2c8db86b163c17c41c"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cc_b_result.txt",
-                  "sha256": "ed446b301c3eae21d1286ec4d91c24e8839cedf0aedfa3612c8a01b930d8ead2"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cc_pydec_result.txt",
-                      "sha256": "538db9c1a5dcd5a4462943f142c178adae600aa729f52307b00c776f57809781"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cc_a_result.txt",
+              "sha256": "3f64c6de5783a271bae92490874dcf0c4fbdbf104e6ffa2c8db86b163c17c41c"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cc_b_result.txt",
+              "sha256": "ed446b301c3eae21d1286ec4d91c24e8839cedf0aedfa3612c8a01b930d8ead2"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cc_pydec_result.txt",
+              "sha256": "538db9c1a5dcd5a4462943f142c178adae600aa729f52307b00c776f57809781"
+            }
           }
         },
         {
           "scenario": "gen2_trade_refuse_item",
           "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_refuse_item --lane c4_refuse_item --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cc_a_result.txt",
-                  "sha256": "40704267778c3165810fb4788beee14d59787ced110542394405109f4526787b"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cc_b_result.txt",
-                  "sha256": "1d858534cd3ec20b92e8833631890ad320f3a5255294232708964a72e63b7306"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cc_pydec_result.txt",
-                      "sha256": "4f4e7003ffeee1a65785df5ee58e82a41b8ec511f12d02b68a93dd1e1d1022a4"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cc_a_result.txt",
+              "sha256": "40704267778c3165810fb4788beee14d59787ced110542394405109f4526787b"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cc_b_result.txt",
+              "sha256": "1d858534cd3ec20b92e8833631890ad320f3a5255294232708964a72e63b7306"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cc_pydec_result.txt",
+              "sha256": "4f4e7003ffeee1a65785df5ee58e82a41b8ec511f12d02b68a93dd1e1d1022a4"
+            }
           }
         },
         {
           "scenario": "gen2_trade_evolve",
           "command": "python tools/e2e_duo.py --game gen2_new --scenario gen2_trade_evolve --lane c5_evolve --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cc_a_result.txt",
-                  "sha256": "0c3baf4d12084f1c59122b9112e1e13becdcaf3432904633706f82fa7193e7fc"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cc_b_result.txt",
-                  "sha256": "708ecec2c7fa357321a2fb9618a988fa70da66238dc5cb075705ad2c8d388eba"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cc_pydec_result.txt",
-                      "sha256": "b2ffbf4d433175c44c6345425264f63772b80420de0bef282415da794c1d7350"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cc_a_result.txt",
+              "sha256": "0c3baf4d12084f1c59122b9112e1e13becdcaf3432904633706f82fa7193e7fc"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cc_b_result.txt",
+              "sha256": "708ecec2c7fa357321a2fb9618a988fa70da66238dc5cb075705ad2c8d388eba"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cc_pydec_result.txt",
+              "sha256": "b2ffbf4d433175c44c6345425264f63772b80420de0bef282415da794c1d7350"
+            }
           }
         }
       ]
@@ -292,57 +387,110 @@
         "pairing": "gen2_gold_silver",
         "initiator": "gold",
         "partner": "silver",
-        "fixtures": {"a": "gold_battle", "b": "silver_battle"},
-        "trade_fixtures": {"a": "gold_battle_errand", "b": "silver_battle_errand"},
-        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_type_clause", "gen2_gender_clause", "gen2_species_clause", "gen2_reconnect", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item", "gen2_trade_refuse_unsaved", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild"]
+        "fixtures": {
+          "a": "gold_battle",
+          "b": "silver_battle"
+        },
+        "trade_fixtures": {
+          "a": "gold_battle_errand",
+          "b": "silver_battle_errand"
+        },
+        "scenarios": [
+          "link",
+          "gen2_faint",
+          "gen2_faint_active",
+          "gen2_admit_wrong_rom",
+          "gen2_soft_reset",
+          "gen2_type_clause",
+          "gen2_gender_clause",
+          "gen2_species_clause",
+          "gen2_reconnect",
+          "gen2_trade_new",
+          "gen2_trade_evolve",
+          "gen2_trade_decline_new",
+          "gen2_trade_timeout",
+          "gen2_trade_reset_wait",
+          "gen2_trade_reset_commit",
+          "gen2_trade_refuse_item",
+          "gen2_trade_refuse_unsaved",
+          "gen2_whiteout",
+          "gen2_pc_ops",
+          "gen2_changebox",
+          "gen2_poison",
+          "gen2_whiteout_rebuild"
+        ]
       },
       "proofs": [
         {
           "scenario": "link",
           "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario link --lane gen2-gs-link --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_link_gs_a_result.txt",
-                  "sha256": "2cdda8d7018a056cf5034c7b1eb1108e01c7150aa03e3f334c60ff209dd4fb20"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_link_gs_b_result.txt",
-                  "sha256": "a99b5e41ed501336d181bc98fc345420ba67fa8ebfb2c1b7b355610cf86a6b65"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_link_gs_pydec_result.txt",
-                      "sha256": "d8e93a30def222538cf4ba0ff35dc81bae8f0afc790b0d8cbfbc1a4db505ad25"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_link_gs_a_result.txt",
+              "sha256": "2cdda8d7018a056cf5034c7b1eb1108e01c7150aa03e3f334c60ff209dd4fb20"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_link_gs_b_result.txt",
+              "sha256": "a99b5e41ed501336d181bc98fc345420ba67fa8ebfb2c1b7b355610cf86a6b65"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_link_gs_pydec_result.txt",
+              "sha256": "d8e93a30def222538cf4ba0ff35dc81bae8f0afc790b0d8cbfbc1a4db505ad25"
+            }
           }
         },
         {
           "scenario": "gen2_faint",
           "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_faint --lane gen2-gs-faint --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_faint_gs_a_result.txt",
-                  "sha256": "121414543d5cd2342af913fcfd7b90008d249854dded9e5bfb88294f2aa9623f"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_faint_gs_b_result.txt",
-                  "sha256": "d57bc9a9393f5032a2288169fd0f19e86cf07c529bac482c1b01671d47ce33c7"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_faint_gs_pydec_result.txt",
-                      "sha256": "00cda00f6362b710aa186010bad470e0fc53d8886be96249870e7ffa0cde0ada"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_gs_a_result.txt",
+              "sha256": "121414543d5cd2342af913fcfd7b90008d249854dded9e5bfb88294f2aa9623f"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_gs_b_result.txt",
+              "sha256": "d57bc9a9393f5032a2288169fd0f19e86cf07c529bac482c1b01671d47ce33c7"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_gs_pydec_result.txt",
+              "sha256": "00cda00f6362b710aa186010bad470e0fc53d8886be96249870e7ffa0cde0ada"
+            }
           }
         },
         {
           "scenario": "gen2_faint_active",
           "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_faint_active --lane live3-gs-active --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_faint_active_gs_a_result.txt",
-                  "sha256": "a46a4658b60bdbe8cb43256d723185ba7cabca574dd2feefc39f2774eb6c85aa"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_faint_active_gs_b_result.txt",
-                  "sha256": "1901784740b233a064a660df72ba7ccd8c214bf52dc923985420baea4d4c3c35"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_faint_active_gs_pydec_result.txt",
-                  "sha256": "953766b04a59608f99b691cf579e33a108eede3262af5f941737657cd9525798"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_active_gs_a_result.txt",
+              "sha256": "a46a4658b60bdbe8cb43256d723185ba7cabca574dd2feefc39f2774eb6c85aa"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_active_gs_b_result.txt",
+              "sha256": "1901784740b233a064a660df72ba7ccd8c214bf52dc923985420baea4d4c3c35"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_active_gs_pydec_result.txt",
+              "sha256": "953766b04a59608f99b691cf579e33a108eede3262af5f941737657cd9525798"
+            }
           }
         },
         {
           "scenario": "gen2_admit_wrong_rom",
           "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_admit_wrong_rom --lane gen2-gs-admit-wrong-rom --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_gs_a_result.txt",
-                  "sha256": "6c3b1129b31a83dd11983c6c5e364dc407e89af4c907f5a7877f7ac742700b53"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_gs_b_result.txt",
-                  "sha256": "f9aa832d2ca2baec1d3e2bd0c24060a4cf8aea0d3d61f793d9b6f1686306fb99"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_gs_pydec_result.txt",
-                      "sha256": "da37f0245afdbc8018333ae634237c9150a5f8f1134ea73175b3404b2051d928"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_gs_a_result.txt",
+              "sha256": "6c3b1129b31a83dd11983c6c5e364dc407e89af4c907f5a7877f7ac742700b53"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_gs_b_result.txt",
+              "sha256": "f9aa832d2ca2baec1d3e2bd0c24060a4cf8aea0d3d61f793d9b6f1686306fb99"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_gs_pydec_result.txt",
+              "sha256": "da37f0245afdbc8018333ae634237c9150a5f8f1134ea73175b3404b2051d928"
+            }
           }
         },
         {
@@ -458,84 +606,126 @@
           "scenario": "gen2_trade_new",
           "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_new --lane gsn --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_a_result.txt",
-                  "sha256": "25c5eb9dc97560fc30ddb3df75b4eff74a8f063280209b75e94f204b034a06a2"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_b_result.txt",
-                  "sha256": "7524d505cd91f2e9f034f5d5ad3a6a32d59c405deab72feb9ff8daa0d092453a"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_pydec_result.txt",
-                      "sha256": "3de4bb09e9137269cc8a8062b96e110a859bcbf2b88e236861eca7123c3ba414"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_a_result.txt",
+              "sha256": "25c5eb9dc97560fc30ddb3df75b4eff74a8f063280209b75e94f204b034a06a2"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_b_result.txt",
+              "sha256": "7524d505cd91f2e9f034f5d5ad3a6a32d59c405deab72feb9ff8daa0d092453a"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_pydec_result.txt",
+              "sha256": "3de4bb09e9137269cc8a8062b96e110a859bcbf2b88e236861eca7123c3ba414"
+            }
           }
         },
         {
           "scenario": "gen2_trade_decline_new",
           "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_decline_new --lane gs_decline_new --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_gs_a_result.txt",
-                  "sha256": "da44c797fa64b93ef4f7093581f61b86275949e6fc8eb33f0d9ac091070a61ff"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_gs_b_result.txt",
-                  "sha256": "5820f58a8a878879373be70dce8474dad7c4f21e685dddf26092b10cab3a3474"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_gs_pydec_result.txt",
-                      "sha256": "45291a3821d61e4b05e6f76d95d0822eb1184492a126c61f71fc8fbb4d717c83"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_gs_a_result.txt",
+              "sha256": "da44c797fa64b93ef4f7093581f61b86275949e6fc8eb33f0d9ac091070a61ff"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_gs_b_result.txt",
+              "sha256": "5820f58a8a878879373be70dce8474dad7c4f21e685dddf26092b10cab3a3474"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_gs_pydec_result.txt",
+              "sha256": "45291a3821d61e4b05e6f76d95d0822eb1184492a126c61f71fc8fbb4d717c83"
+            }
           }
         },
         {
           "scenario": "gen2_trade_timeout",
           "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_timeout --lane gs_timeout --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_a_result.txt",
-                  "sha256": "985c32f8b689dfea89710a84acbf123a6ea95794a6463d0f76da0f1c13020c18"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_b_result.txt",
-                  "sha256": "60c4cb0ca2b5779c7c0c399400e1d87bb528c8241819001df46e499c88471f1d"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_pydec_result.txt",
-                      "sha256": "e22ef2e50c0b8b998d7b1d29f76e4f843f2dbb1b1da3c01eb80fe4275e8337a0"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_a_result.txt",
+              "sha256": "985c32f8b689dfea89710a84acbf123a6ea95794a6463d0f76da0f1c13020c18"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_b_result.txt",
+              "sha256": "60c4cb0ca2b5779c7c0c399400e1d87bb528c8241819001df46e499c88471f1d"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_pydec_result.txt",
+              "sha256": "e22ef2e50c0b8b998d7b1d29f76e4f843f2dbb1b1da3c01eb80fe4275e8337a0"
+            }
           }
         },
         {
           "scenario": "gen2_trade_refuse_item",
           "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_refuse_item --lane gs_refuse_item --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_gs_a_result.txt",
-                  "sha256": "26a0eb4966b78f36b21bf6671562ddb98d1d6e7c51b5a7ff29ba7adcd89ef87c"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_gs_b_result.txt",
-                  "sha256": "6268a7f8e148710fab6017e32fc0b97fa3709bf9c350db648977d545aa449f64"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_gs_pydec_result.txt",
-                      "sha256": "ca89a310b8191647eff9ffbc64b11105e80188dff36304b494423115fd8dad42"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_gs_a_result.txt",
+              "sha256": "26a0eb4966b78f36b21bf6671562ddb98d1d6e7c51b5a7ff29ba7adcd89ef87c"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_gs_b_result.txt",
+              "sha256": "6268a7f8e148710fab6017e32fc0b97fa3709bf9c350db648977d545aa449f64"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_gs_pydec_result.txt",
+              "sha256": "ca89a310b8191647eff9ffbc64b11105e80188dff36304b494423115fd8dad42"
+            }
           }
         },
         {
           "scenario": "gen2_trade_reset_wait",
           "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_reset_wait --lane gs2_reset_wait --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_gs_a_result.txt",
-                  "sha256": "09756b8125db524f5a728f3005151f753d7117de8141c1372f49501b6805183c"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_gs_b_result.txt",
-                  "sha256": "f8bfb3be449e0b03288d2198ae371af2d88ce90e847b3090e43e70a4e74e48ed"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_gs_pydec_result.txt",
-                      "sha256": "5f9538ac7f1c504e7fde3077626e02ff7291f61bf9956c4a27908cf2060be37f"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_gs_a_result.txt",
+              "sha256": "09756b8125db524f5a728f3005151f753d7117de8141c1372f49501b6805183c"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_gs_b_result.txt",
+              "sha256": "f8bfb3be449e0b03288d2198ae371af2d88ce90e847b3090e43e70a4e74e48ed"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_gs_pydec_result.txt",
+              "sha256": "5f9538ac7f1c504e7fde3077626e02ff7291f61bf9956c4a27908cf2060be37f"
+            }
           }
         },
         {
           "scenario": "gen2_trade_reset_commit",
           "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_reset_commit --lane g3_reset_commit --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_gs_a_result.txt",
-                  "sha256": "6c3a4b22daebe5d2f5215b8388905d03c9500582bcfba35ce1b1495be8a3e92a"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_gs_b_result.txt",
-                  "sha256": "d73e6ba32fe63ced79c8551aca5ba05be5ec72ea5472111b3aec9e63efeb8977"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_gs_pydec_result.txt",
-                      "sha256": "ae4be43830e0dc794d68af594d6edb26433d924050e19d3bb63c18668f22ed7f"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_gs_a_result.txt",
+              "sha256": "6c3a4b22daebe5d2f5215b8388905d03c9500582bcfba35ce1b1495be8a3e92a"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_gs_b_result.txt",
+              "sha256": "d73e6ba32fe63ced79c8551aca5ba05be5ec72ea5472111b3aec9e63efeb8977"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_gs_pydec_result.txt",
+              "sha256": "ae4be43830e0dc794d68af594d6edb26433d924050e19d3bb63c18668f22ed7f"
+            }
           }
         },
         {
           "scenario": "gen2_trade_evolve",
           "command": "python tools/e2e_duo.py --game gen2_gold_silver --scenario gen2_trade_evolve --lane g5_evolve --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_a_result.txt",
-                  "sha256": "3d8dd4ec6da0009a430a786815ae421657a3f8104fb778c6a46f981a7d090253"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_b_result.txt",
-                  "sha256": "de9b9b7506141143f3193f13097f4c5fe411d133ba3cfeaf9d67c263eaa5b1f1"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_pydec_result.txt",
-                      "sha256": "ff26a6011473c239683da963dc904c48dda32431b0e82ca32a80d919bedc719a"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_a_result.txt",
+              "sha256": "3d8dd4ec6da0009a430a786815ae421657a3f8104fb778c6a46f981a7d090253"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_b_result.txt",
+              "sha256": "de9b9b7506141143f3193f13097f4c5fe411d133ba3cfeaf9d67c263eaa5b1f1"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_pydec_result.txt",
+              "sha256": "ff26a6011473c239683da963dc904c48dda32431b0e82ca32a80d919bedc719a"
+            }
           }
         }
       ]
@@ -548,57 +738,110 @@
         "pairing": "gen2_crystal_gold",
         "initiator": "crystal",
         "partner": "gold",
-        "fixtures": {"a": "crystal_battle", "b": "gold_battle"},
-        "trade_fixtures": {"a": "crystal_battle_errand", "b": "gold_battle_errand"},
-        "scenarios": ["link", "gen2_faint", "gen2_faint_active", "gen2_admit_wrong_rom", "gen2_soft_reset", "gen2_reconnect", "gen2_gender_clause", "gen2_type_clause", "gen2_species_clause", "gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild", "gen2_trade_new", "gen2_trade_evolve", "gen2_trade_decline_new", "gen2_trade_timeout", "gen2_trade_reset_wait", "gen2_trade_reset_commit", "gen2_trade_refuse_item", "gen2_trade_refuse_unsaved"]
+        "fixtures": {
+          "a": "crystal_battle",
+          "b": "gold_battle"
+        },
+        "trade_fixtures": {
+          "a": "crystal_battle_errand",
+          "b": "gold_battle_errand"
+        },
+        "scenarios": [
+          "link",
+          "gen2_faint",
+          "gen2_faint_active",
+          "gen2_admit_wrong_rom",
+          "gen2_soft_reset",
+          "gen2_reconnect",
+          "gen2_gender_clause",
+          "gen2_type_clause",
+          "gen2_species_clause",
+          "gen2_whiteout",
+          "gen2_pc_ops",
+          "gen2_changebox",
+          "gen2_poison",
+          "gen2_whiteout_rebuild",
+          "gen2_trade_new",
+          "gen2_trade_evolve",
+          "gen2_trade_decline_new",
+          "gen2_trade_timeout",
+          "gen2_trade_reset_wait",
+          "gen2_trade_reset_commit",
+          "gen2_trade_refuse_item",
+          "gen2_trade_refuse_unsaved"
+        ]
       },
       "proofs": [
         {
           "scenario": "link",
           "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario link --lane gen2-cg-link --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_link_cg_a_result.txt",
-                  "sha256": "90cb57d777a686bd6633e6d4d6715f73140a0a42c64fdae7ea3e287d47e68d83"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_link_cg_b_result.txt",
-                  "sha256": "e181ade5648b2d0c78d0dca5575cd95d2ce1d2e21e72779bb29ee0e69f752fd2"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_link_cg_pydec_result.txt",
-                      "sha256": "23e18ac2b3f2ea5a69887016350abbe76a802c69974c8cf626ad2f8a1b5ea4ac"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_link_cg_a_result.txt",
+              "sha256": "90cb57d777a686bd6633e6d4d6715f73140a0a42c64fdae7ea3e287d47e68d83"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_link_cg_b_result.txt",
+              "sha256": "e181ade5648b2d0c78d0dca5575cd95d2ce1d2e21e72779bb29ee0e69f752fd2"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_link_cg_pydec_result.txt",
+              "sha256": "23e18ac2b3f2ea5a69887016350abbe76a802c69974c8cf626ad2f8a1b5ea4ac"
+            }
           }
         },
         {
           "scenario": "gen2_faint",
           "command": "SLINK_GEN2_TRACE=1 python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_faint --lane gen2-cg-faint --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_faint_cg_a_result.txt",
-                  "sha256": "8efc877799ce4897b092fb6e79ea72f68219affc419da72b25e5f98940ca0628"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_faint_cg_b_result.txt",
-                  "sha256": "45085a1b4c115c9202e03c7ce7b2bb4a4662e27946424fb8e16b9bfdc1d80d41"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_faint_cg_pydec_result.txt",
-                      "sha256": "cc7da2d19609980a7c65b324e98eab73f39f66f43ccafe76b75eb68d29795e44"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_cg_a_result.txt",
+              "sha256": "8efc877799ce4897b092fb6e79ea72f68219affc419da72b25e5f98940ca0628"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_cg_b_result.txt",
+              "sha256": "45085a1b4c115c9202e03c7ce7b2bb4a4662e27946424fb8e16b9bfdc1d80d41"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_cg_pydec_result.txt",
+              "sha256": "cc7da2d19609980a7c65b324e98eab73f39f66f43ccafe76b75eb68d29795e44"
+            }
           }
         },
         {
           "scenario": "gen2_faint_active",
           "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_faint_active --lane live3-cg-active --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_faint_active_cg_a_result.txt",
-                  "sha256": "76ab1a418af000d0bceeba3dc670956b3735f8bb0da1e8d84084f6d4eb8afb1f"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_faint_active_cg_b_result.txt",
-                  "sha256": "fe16525e7743ff37cffb72c99970e15d8e728eb827ecc5ebb774434f3d947a37"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_faint_active_cg_pydec_result.txt",
-                  "sha256": "3f31cfc1aa60b67fcdd81a17b489140bbab9df98023585b9bf8f5fba95fc8863"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_active_cg_a_result.txt",
+              "sha256": "76ab1a418af000d0bceeba3dc670956b3735f8bb0da1e8d84084f6d4eb8afb1f"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_active_cg_b_result.txt",
+              "sha256": "fe16525e7743ff37cffb72c99970e15d8e728eb827ecc5ebb774434f3d947a37"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_active_cg_pydec_result.txt",
+              "sha256": "3f31cfc1aa60b67fcdd81a17b489140bbab9df98023585b9bf8f5fba95fc8863"
+            }
           }
         },
         {
           "scenario": "gen2_admit_wrong_rom",
           "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_admit_wrong_rom --lane gen2-cg-admit-wrong-rom --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cg_a_result.txt",
-                  "sha256": "2da53525dfc698f506e5b3261218a500e060591074db82739fd248a497e36bdb"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cg_b_result.txt",
-                  "sha256": "44ab75730a49173b55dd9998dfc7423db04d1d1bdf331d40fdc2b9c909121b3e"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cg_pydec_result.txt",
-                      "sha256": "6a23f01fb941d227692d1716035f6edbe7306df78fa45f01e7b5c06fffea06cf"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cg_a_result.txt",
+              "sha256": "2da53525dfc698f506e5b3261218a500e060591074db82739fd248a497e36bdb"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cg_b_result.txt",
+              "sha256": "44ab75730a49173b55dd9998dfc7423db04d1d1bdf331d40fdc2b9c909121b3e"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cg_pydec_result.txt",
+              "sha256": "6a23f01fb941d227692d1716035f6edbe7306df78fa45f01e7b5c06fffea06cf"
+            }
           }
         },
         {
@@ -714,84 +957,126 @@
           "scenario": "gen2_trade_new",
           "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_trade_new --lane g1_new --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_new_cg_a_result.txt",
-                  "sha256": "0ec2abf35dc78bad3be5a3b17156d8ac4783aa615800143e5d218efafbafb44c"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_new_cg_b_result.txt",
-                  "sha256": "317bcfa3c9515c17fc22b3f49ddf7e0d31150c921e5e8032a4be2c4f9e56ad34"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_new_cg_pydec_result.txt",
-                      "sha256": "c773d22ad9b621dfc6a1f3750245cc5afd5d8db6f3abdb371e86290d532fabc7"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_new_cg_a_result.txt",
+              "sha256": "0ec2abf35dc78bad3be5a3b17156d8ac4783aa615800143e5d218efafbafb44c"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_new_cg_b_result.txt",
+              "sha256": "317bcfa3c9515c17fc22b3f49ddf7e0d31150c921e5e8032a4be2c4f9e56ad34"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_new_cg_pydec_result.txt",
+              "sha256": "c773d22ad9b621dfc6a1f3750245cc5afd5d8db6f3abdb371e86290d532fabc7"
+            }
           }
         },
         {
           "scenario": "gen2_trade_reset_wait",
           "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_trade_reset_wait --lane g2_reset_wait --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cg_a_result.txt",
-                  "sha256": "2699f5ec6da85e5b9b1ef4970d68752557f496f2ac344253cca084fcf4bf2a1b"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cg_b_result.txt",
-                  "sha256": "8c91d754f67eb4ee134ef6c5a2553cbec1492612336b9e9d2cb2845ca25bc8c3"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cg_pydec_result.txt",
-                      "sha256": "5c3925070275f2c162fa5632920338edbb2e2310bf620cb1ee779dcce0d1eba1"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cg_a_result.txt",
+              "sha256": "2699f5ec6da85e5b9b1ef4970d68752557f496f2ac344253cca084fcf4bf2a1b"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cg_b_result.txt",
+              "sha256": "8c91d754f67eb4ee134ef6c5a2553cbec1492612336b9e9d2cb2845ca25bc8c3"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cg_pydec_result.txt",
+              "sha256": "5c3925070275f2c162fa5632920338edbb2e2310bf620cb1ee779dcce0d1eba1"
+            }
           }
         },
         {
           "scenario": "gen2_trade_decline_new",
           "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_trade_decline_new --lane g1_decline_new --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cg_a_result.txt",
-                  "sha256": "a5f654a62118d90b7ed846092fe5b35fe4579d4c33d242afaaa7a92f7134f74c"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cg_b_result.txt",
-                  "sha256": "4cf9c07be6fdac05ae91c25f6c00239ce927f5867bca38dde77a22b1df058ed1"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cg_pydec_result.txt",
-                      "sha256": "70954600fa467993610bd6c193e866af9efc8924a83b512eaca2e452760c779f"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cg_a_result.txt",
+              "sha256": "a5f654a62118d90b7ed846092fe5b35fe4579d4c33d242afaaa7a92f7134f74c"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cg_b_result.txt",
+              "sha256": "4cf9c07be6fdac05ae91c25f6c00239ce927f5867bca38dde77a22b1df058ed1"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cg_pydec_result.txt",
+              "sha256": "70954600fa467993610bd6c193e866af9efc8924a83b512eaca2e452760c779f"
+            }
           }
         },
         {
           "scenario": "gen2_trade_refuse_item",
           "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_trade_refuse_item --lane g3_refuse_item --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cg_a_result.txt",
-                  "sha256": "9e2b887d4d179c2bb8d706deec65a1b4c241ca57dc6ee2ec61a62b13236b3942"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cg_b_result.txt",
-                  "sha256": "6c8aa0656eef99e930e57ad0d69c354440a2a889cb73b904c3f7d4077a8eb2fe"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cg_pydec_result.txt",
-                      "sha256": "b457c8b53a738b7e57d2c33afb99944ea65762b3a17b84b72f3fbd931fac0bc4"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cg_a_result.txt",
+              "sha256": "9e2b887d4d179c2bb8d706deec65a1b4c241ca57dc6ee2ec61a62b13236b3942"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cg_b_result.txt",
+              "sha256": "6c8aa0656eef99e930e57ad0d69c354440a2a889cb73b904c3f7d4077a8eb2fe"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cg_pydec_result.txt",
+              "sha256": "b457c8b53a738b7e57d2c33afb99944ea65762b3a17b84b72f3fbd931fac0bc4"
+            }
           }
         },
         {
           "scenario": "gen2_trade_reset_commit",
           "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_trade_reset_commit --lane g2_reset_commit --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cg_a_result.txt",
-                  "sha256": "e8ede0301a919a2e6726a03340e394ab9d995e792077f785c3671b7f3ba11b0f"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cg_b_result.txt",
-                  "sha256": "f75d77c18e024dca2b1dcafecf137d954a701199d13e485c7b1bfec31de3db20"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cg_pydec_result.txt",
-                      "sha256": "46b10c90c38192de548812e78ba133cf74354138abd775bd2c8d5d99a855e4c8"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cg_a_result.txt",
+              "sha256": "e8ede0301a919a2e6726a03340e394ab9d995e792077f785c3671b7f3ba11b0f"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cg_b_result.txt",
+              "sha256": "f75d77c18e024dca2b1dcafecf137d954a701199d13e485c7b1bfec31de3db20"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cg_pydec_result.txt",
+              "sha256": "46b10c90c38192de548812e78ba133cf74354138abd775bd2c8d5d99a855e4c8"
+            }
           }
         },
         {
           "scenario": "gen2_trade_timeout",
           "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_trade_timeout --lane g1_timeout --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cg_a_result.txt",
-                  "sha256": "3485b0c19ca6012937a6fef1aa33d153d2da489dcb5ee3e243b743b35d416e92"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cg_b_result.txt",
-                  "sha256": "5b8c902120fd79642e0c18e521d875a084bd5c1557325c259c1fd7ba0c3cf019"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cg_pydec_result.txt",
-                      "sha256": "8babeb0a33ddb722dbfdb865699ab0430b18fe0b07e0f5bb2e5a08defd9b05ac"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cg_a_result.txt",
+              "sha256": "3485b0c19ca6012937a6fef1aa33d153d2da489dcb5ee3e243b743b35d416e92"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cg_b_result.txt",
+              "sha256": "5b8c902120fd79642e0c18e521d875a084bd5c1557325c259c1fd7ba0c3cf019"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cg_pydec_result.txt",
+              "sha256": "8babeb0a33ddb722dbfdb865699ab0430b18fe0b07e0f5bb2e5a08defd9b05ac"
+            }
           }
         },
         {
           "scenario": "gen2_trade_evolve",
           "command": "python tools/e2e_duo.py --game gen2_crystal_gold --scenario gen2_trade_evolve --lane g4_evolve --keep-data",
           "receipts": {
-            "a": {"path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cg_a_result.txt",
-                  "sha256": "434d1bd02740808d68c03e6f1badc2646cd3299e6f7588d678979b2d6b6f755a"},
-            "b": {"path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cg_b_result.txt",
-                  "sha256": "a9d0c075f34ae50867d05e35712278e8955d14ff106c308e37f9409a25abc81c"},
-            "pydec": {"path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cg_pydec_result.txt",
-                      "sha256": "8c008c5a381498158723d7d01b218282f3f3dfec7016a19f2958cc030fda803d"}
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cg_a_result.txt",
+              "sha256": "434d1bd02740808d68c03e6f1badc2646cd3299e6f7588d678979b2d6b6f755a"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cg_b_result.txt",
+              "sha256": "a9d0c075f34ae50867d05e35712278e8955d14ff106c308e37f9409a25abc81c"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cg_pydec_result.txt",
+              "sha256": "8c008c5a381498158723d7d01b218282f3f3dfec7016a19f2958cc030fda803d"
+            }
           }
         }
       ]
