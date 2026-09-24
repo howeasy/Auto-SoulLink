@@ -274,6 +274,11 @@ IN FLIGHT** (`save_then_write_gen3` and `center_controls_gen3`, FR-as-A and LG-a
 
 All five owner scope decisions (a)–(e) are settled and recorded above.
 
+15. **Mechanism P, active faint in battle** (owner, 2026-09-23, "A"): when a linked partner dies while our linked mon is the active battler on FR/LG singles, the mon faints in battle through the engine's own Perish KO (`docs/gen3/research/active_faint_in_battle_scope_2026-09-23.md`; built `1b3943e3`/`39bcc4f8`/`66595498`). Explode Mode is not changed. RR gets the same behaviour (owner: "RR is meant to have parity"; G5, `docs/gen3/research/rr_active_faint_parity_scope_2026-09-23.md`). **S**
+16. **P hands off the battle controller on every title** (owner, 2026-09-24): the plan ends by setting `gBattlerControllerFuncs[0] = PlayerBufferExecCompleted`, so no A press is needed on FR, LG or RR (RR scope §3.2, §5.1). **S**
+17. **The RR lag-frame lost-ball window is a signed limit** (owner, 2026-09-24): about 1e-4 to 1e-3 per commit, and only when L is newly pressed on that exact frame (RR scope §3.5). This is the same class as ruling 14. The companion opcode (§5.6) is not built. **S**
+18. **The DREW edge is accepted** (owner, 2026-09-24): if our last usable mon takes the Perish KO on the same turn that the foe's last mon faints at end of turn, the engine scores a draw and we white out through the normal Center heal and rebuild (active-faint scope §2.1). P is not held on the last mon. **S**
+
 ---
 
 ## 7. How to verify this draft
