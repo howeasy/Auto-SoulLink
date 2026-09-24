@@ -44,3 +44,38 @@ def test_saveram_override_lands_on_bizhawks_actual_filename(tmp_path, monkeypatc
     dest = save_dir / "slink RR.SaveRAM"
     assert dest.exists(), sorted(os.listdir(save_dir))
     assert dest.read_bytes() == src.read_bytes()
+
+
+def test_override_backs_up_the_players_real_save_before_overwriting(tmp_path, monkeypatch):
+    """SAVERAM_DST is the player's own battery save: --saveram must not destroy it."""
+    save_dir = tmp_path / "SaveRAM"
+    save_dir.mkdir()
+    real = save_dir / "slink RR.SaveRAM"
+    real.write_bytes(b"\x11" * 10)
+    src = tmp_path / "fixture.SaveRAM"
+    src.write_bytes(b"\x22" * 10)
+    monkeypatch.setattr(mkstates, "SAVERAM_DIR", str(save_dir))
+    monkeypatch.setattr(mkstates, "SAVERAM_OVERRIDE", str(src))
+    monkeypatch.setattr(mkstates, "_run_mkstate", lambda *a, **k: True)
+
+    assert mkstates.build_battle(timeout=1) is True
+    assert real.read_bytes() == src.read_bytes()
+    baks = [p for p in save_dir.iterdir() if ".mkstates-bak-" in p.name]
+    assert len(baks) == 1 and baks[0].read_bytes() == b"\x11" * 10
+
+
+def test_default_discovery_finds_the_players_own_save(tmp_path, monkeypatch):
+    """With no --saveram, the player's "slink RR.SaveRAM" is a candidate (236ee593 had excluded it
+    once SAVERAM_DST became the real name), and it boots in place with no copy."""
+    save_dir = tmp_path / "SaveRAM"
+    save_dir.mkdir()
+    real = save_dir / "slink RR.SaveRAM"
+    real.write_bytes(b"\x33" * 0x20000)
+    monkeypatch.setattr(mkstates, "SAVERAM_DIR", str(save_dir))
+    monkeypatch.setattr(mkstates, "SAVERAM_OVERRIDE", None)
+    monkeypatch.setattr(mkstates, "_run_mkstate", lambda *a, **k: True)
+
+    assert mkstates.find_saveram() == str(real)
+    assert mkstates.build_town(timeout=1) is True
+    assert real.read_bytes() == b"\x33" * 0x20000
+    assert not [p for p in save_dir.iterdir() if ".mkstates-bak-" in p.name]

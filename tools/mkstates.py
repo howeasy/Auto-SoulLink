@@ -127,14 +127,31 @@ def find_saveram():
     cands = []
     for p in glob.glob(os.path.join(SAVERAM_DIR, "*.SaveRAM")):
         name = os.path.basename(p)
-        if name == SAVERAM_DST or ".AutoSaveRAM." in name:
-            continue                       # our own copy, and BizHawk's autosave shadow
+        if ".AutoSaveRAM." in name:
+            continue                       # BizHawk's autosave shadow (SAVERAM_DST is the player's own save: a candidate)
         if not re.search(r"(?i)(?:^|[^a-z])(rr|radical)(?:[^a-z]|$)", name):
             continue
         if is_blank_save(p):
             continue
         cands.append(p)
     return max(cands, key=os.path.getmtime) if cands else None
+
+
+def seed_saveram(src):
+    """Make src the battery BizHawk boots (SAVERAM_DST). SAVERAM_DST is the player's real save, so a
+    different file there is backed up first (timestamped, never overwritten) instead of lost."""
+    import filecmp
+    import time
+    dst = os.path.join(SAVERAM_DIR, SAVERAM_DST)
+    if os.path.exists(dst) and os.path.abspath(src) == os.path.abspath(dst):
+        print(f"[mkstates] booting {SAVERAM_DST} in place")
+        return
+    if os.path.exists(dst) and not filecmp.cmp(src, dst, shallow=False):
+        bak = f"{dst}.mkstates-bak-{time.strftime('%Y%m%d-%H%M%S')}"
+        shutil.copyfile(dst, bak)
+        print(f"[mkstates] backed up {SAVERAM_DST} -> {os.path.basename(bak)}")
+    shutil.copyfile(src, dst)
+    print(f"[mkstates] seeded {SAVERAM_DST} from {os.path.basename(src)}")
 
 
 NO_SAVE_HELP = """\
@@ -206,8 +223,7 @@ def build_town(timeout=600):
     if not src:
         print(NO_SAVE_HELP.format(emu=emuhawk_version(), saveram=SAVERAM_DST))
         return False
-    shutil.copyfile(src, os.path.join(SAVERAM_DIR, SAVERAM_DST))
-    print(f"[mkstates] seeded {SAVERAM_DST} from {os.path.basename(src)}")
+    seed_saveram(src)
     return _run_mkstate("town", os.path.join(STATE_DIR, "slink_pokecenter.State"), timeout,
                         {"SLINK_STATE_DIR": STATE_DIR.replace("\\", "/")})
 
@@ -223,8 +239,7 @@ def build_battle(timeout=600):
     if not src:
         print(NO_SAVE_HELP.format(emu=emuhawk_version(), saveram=SAVERAM_DST))
         return False
-    shutil.copyfile(src, os.path.join(SAVERAM_DIR, SAVERAM_DST))
-    print(f"[mkstates] seeded {SAVERAM_DST} from {os.path.basename(src)}")
+    seed_saveram(src)
     return _run_mkstate("battle", os.path.join(STATE_DIR, "slink_battle.State"), timeout,
                         {"SLINK_STATE_DIR": STATE_DIR.replace("\\", "/")})
 
