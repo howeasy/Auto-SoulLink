@@ -149,29 +149,45 @@ python tools/e2e_duo.py --game gen3_lgfr  --scenario center_controls_gen3   # LG
 
 ## 5. Item 2b — the in-battle matrix
 
-**A1 (FR active hold) — runnable now**, via LG-as-A so FR is the forced side:
-```
-python tools/e2e_duo.py --game gen3_lgfr --scenario linked_faint_active_gen3
-```
-- **Receipt**: `linked_faint_active_fr_forced_b261d045_2026-09-23.txt` (+ the earlier
-  `duo_frlg_linked_faint_active_gen3_clean_*`).
-- **PASS line**: both `RESULT_LINE` lines PASS (`a: RESULT: PASS (natural faint of the active linked
-  BC73F9B0:1C600D89)`, `b: RESULT: PASS (held while active; HP 0 in battle once switched out)`), then
-  `linked_faint_active_gen3: PASS (attempt 1 of 1)`.
-- **Wall-clock**: budget 1800 s.
+**Mechanism P+H (owner rulings 15-16/19) superseded the T2/A2 hold plan.** There are four scenarios,
+each run both orientations (FR-as-A and LG-as-A) — 8 rows, `tools/gen3_final_cut.py:148-153`, tag
+`§5 item2b`:
 
-**T2 (trainer bench write) and A2 (active hold until battle end) — PENDING 2B-INTEGRATE-DUO.** The
-carriers exist in the runner (`trainer_bench_gen3`, `active_end_gen3`, `tools/e2e_duo.py:61-68`,
-`scenario_attempt_limit` gives trainer_bench two attempts, `tools/e2e_duo.py:517-526`) but were not
-registered in the wrappers when this runbook was written, so the commands are placeholders:
+| Row (id = `<scenario>_<orientation>`) | Scenario | Orientation (`ORIENT`, `:79`) |
+|---|---|---|
+| `linked_faint_active_gen3_fr_as_a` / `_lg_as_a` | **A1**: natural faint of the active linked mon | `--game gen3_frlg` (FR-as-A) / `--game gen3_lgfr` (LG-as-A) |
+| `active_end_gen3_fr_as_a` / `_lg_as_a` | **A2**: engine Perish KO in battle with no input | same |
+| `linked_faint_active_whiteout_gen3_fr_as_a` / `_lg_as_a` | whiteout after the last linked pair dies (ruling 21) | same |
+| `linked_faint_active_trainer_gen3_fr_as_a` / `_lg_as_a` | trainer battle (route to Rick 102) | same |
+
+Command per row (`_duo()`, `tools/gen3_final_cut.py:120-123`):
 ```
-python tools/e2e_duo.py --game gen3_frlg --scenario trainer_bench_gen3   # T2 — PENDING
-python tools/e2e_duo.py --game gen3_frlg --scenario active_end_gen3      # A2 — PENDING
+python tools/e2e_duo.py --game gen3_frlg --scenario linked_faint_active_gen3          # A1, FR-as-A
+python tools/e2e_duo.py --game gen3_lgfr  --scenario linked_faint_active_gen3          # A1, LG-as-A
+python tools/e2e_duo.py --game gen3_frlg --scenario active_end_gen3                    # A2, FR-as-A
+python tools/e2e_duo.py --game gen3_lgfr  --scenario active_end_gen3                   # A2, LG-as-A
+python tools/e2e_duo.py --game gen3_frlg --scenario linked_faint_active_whiteout_gen3  # whiteout, FR-as-A
+python tools/e2e_duo.py --game gen3_lgfr  --scenario linked_faint_active_whiteout_gen3 # whiteout, LG-as-A
+python tools/e2e_duo.py --game gen3_frlg --scenario linked_faint_active_trainer_gen3   # trainer, FR-as-A
+python tools/e2e_duo.py --game gen3_lgfr  --scenario linked_faint_active_trainer_gen3  # trainer, LG-as-A
 ```
-- **Receipt**: to be named by the integration card; expect `duo_frlg_trainer_bench_gen3_*` /
-  `duo_frlg_active_end_gen3_*` by the existing pattern. Add `SLINK_E2E=1 pytest tests/e2e/test_duo_gen3.py`
-  coverage only once the card registers them.
-- **PASS line**: UNKNOWN until the card lands (the carriers' markers are not yet in any receipt).
+- **Receipt (final-cut run)**: `docs/gen3/probes/fc_<row>_<cut8>.txt` (`receipt_path`, `:265-266`).
+  The REHEARSED evidence at the pre-final cuts `b0483efe`/`28e48c9c` is
+  `docs/gen3/probes/ph_<scenario>_<orientation>_<cut8>.txt` (G4-LANE-2, committed at `6d6227c6`):
+  8 PASS files, one per row above, mostly at `b0483efe` — the two exceptions are
+  `linked_faint_active_whiteout_gen3_fr_as_a`, which PASSes at `28e48c9c` (its `b0483efe` attempt is a
+  kept FAIL instrument record, see below), and `linked_faint_active_trainer_gen3_lg_as_a`, which only
+  ran at `28e48c9c` (no `b0483efe` attempt exists for that row).
+- **PASS line**: `RESULT_LINE a`/`b` both `RESULT: PASS (…)` — A1/whiteout/trainer read `natural
+  faint of the active linked <key>`, A2 reads `P+H: engine Perish KO in battle with no input
+  (command)` or `(trainer)` — then the row's own exit 0 / `<scenario>: PASS` summary line and
+  `PYDEC: PASS asserted scenario facts`.
+- **Known FAIL record**: `ph_linked_faint_active_whiteout_gen3_fr_as_a_b0483efe.txt` is a FAIL
+  (`RESULT_LINE b: RESULT: FAIL (scenario error: table: …)`) — an instrument/carrier problem (an
+  incidental wild battle during the post-deposit walk), not a product defect; the fix (W2, flee
+  incidental battles on a one-mon walk) landed in `28e48c9c`, and the re-run at that cut PASSes. Keep
+  both files; do not cite the FAIL as a PASS.
+- **Wall-clock**: budget 1800 s per row (`duo_budget`, `:107-117`).
 - Owner ruling (d) signs D1–D5/N3/U3 as limits, so no doubles/target/Safari invocation is owed.
 
 ## 6. Item 3 — the full FRLG probe, both titles (the bw rows included)

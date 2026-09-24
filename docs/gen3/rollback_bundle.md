@@ -180,6 +180,26 @@ admits the pack, and on `Entry.ROUTED[pack] and admitted.admitted_by ~= "header"
    not the frozen configuration and it is one indirection away from the route the bundle froze.
 3. Delete nothing else: the old client's closure (§2) is unchanged on the branch.
 
+> **Correction, 2026-09-24 (audit F1, `docs/gen3/reviews/F1_G4_AUDIT_2026-09-24.md` @ `40b863bd`,
+> finding H3).** Step 3's claim is false as of this note: three files in the old client's closure
+> changed on the branch since the freeze at `7957c24c` —
+> `lua/memory_gba.lua` (`fa9b677b`: substruct permutation rows 3/4 swapped vs pret's
+> `SUBSTRUCT_CASE`), `lua/games/gen3_frlge.lua` (`8e125fee`, `897fefc3`: RR/vanilla variant detection
+> is now ROM-only, via the CFRU signature word at `0x080001BC`), and `lua/mailbox.lua` (`2dc1b750`:
+> adds `OP_RIVAL_SWAP = 28`) — verified with `git log --oneline 7957c24c..HEAD -- lua/memory_gba.lua
+> lua/games/gen3_frlge.lua lua/mailbox.lua`. `master` itself has not moved on these three files
+> (`git diff 7957c24c master -- <the three paths>` is empty), so a rollback that runs
+> `git checkout master -- lua/memory_gba.lua lua/games/gen3_frlge.lua lua/mailbox.lua` in addition to
+> step 1-2 still lands the frozen blobs; step 3 above is simply wrong that nothing else needs
+> restoring. **A rollback must, in addition to steps 1-2:** (a) also `git checkout master --` these
+> three files (or restore their `7957c24c` blob shas from §2.2) so the running client matches the
+> frozen closure, not a modified one; and (b) revert `server/patcher.py`'s RR `patched_md5` pin to
+> the frozen artifact's `bf8e94a0…` (§3.2), not leave it on the branch's rebuilt-companion pin
+> `6cf77ba4…` (`998666b6`) — a stale pin does not break correctness (the UPS CRC32 is what gates the
+> patch, not the pin), but it misreports what the player's ROM should hash to. §4.5 below checks only
+> `slink.lua` and the companion md5/CRC32 apply; add these three files and the pin revert to that
+> checklist the next time §4.5 itself is revised.
+
 ### 4.2 Rebuild the zip with the frozen manifest
 
 Use master's `tools/make_release.py` (`git checkout master -- tools/make_release.py`). The branch's
