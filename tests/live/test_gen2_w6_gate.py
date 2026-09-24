@@ -160,7 +160,7 @@ def _legs(title: str, u1) -> dict:
         "sfx": (sfx.GATE, "patch/build/gen2_sfx_gate_result.txt", f"{title}_battle", sfx_env,
                 lambda text, staged: sfx.verify(text, sfx.sfx_facts(title), title, staged), 1800),
         "u1": (u1.GATE, "patch/build/gen2_frame_align_result.txt", u1.U1_FIXTURE[title], u1_env,
-               lambda text, staged: u1.verify(text, pack, title), 2400),
+               lambda text, staged: u1.verify(text, pack, title), 3600),   # the U1f gate's own bound
     }
 
 
