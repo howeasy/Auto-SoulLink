@@ -342,10 +342,9 @@ class SoulLinkState:
         if self._hold_for_trade(player_id, msg):
             pass                                        # replayed once the trade settles
         elif event == "hello":
-            self._handle_hello(player_id, msg)
+            self._handle_hello(player_id, msg)           # runs this hello's trade evidence too
             if not msg.get("_rejected"):
                 self.trade_prepare[player_id] = msg.get("trade_prepare") is True
-                self._trade_evidence(player_id, msg.get("party") or [], from_hello=True)
         elif event == "area_enter":
             self._handle_area_enter(player_id, msg)
         elif event == "ghost_pos":
@@ -1484,6 +1483,10 @@ class SoulLinkState:
                 self.queued_commands[player_id].append({"cmd": "box_mon", "key": cap.key})
                 log.info(f"[{player_id}] re-quarantine on hello: {cap.key[:8]} (pending in {area_id})")
 
+        # Invariant review MAJOR-2: a hello that settles a pending trade must do so BEFORE its
+        # own deaths are routed, so they follow the swapped link.
+        self._trade_evidence(player_id, party, from_hello=True)
+
         for m in party:
             key = m.get("key", "")
             hp  = m.get("hp", 1)
@@ -1501,6 +1504,8 @@ class SoulLinkState:
                 log.debug(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=ignored  reason=pre_nuzlocke")
                 continue
             entry = self._key_index.get(key)
+            if self._hold_for_trade(player_id, {"event": "faint", "key": key, "_level": m.get("level", 0)}):
+                continue                                # a trade key: replayed once the trade settles
             if entry and entry.status == LinkStatus.ALIVE:
                 log.info(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=faint_detected  reason=hp=0_in_party")
                 self._propagate_faint(player_id, entry, level=m.get("level", 0))
