@@ -2140,7 +2140,8 @@ def test_g4_packet_red_on_each_missing_piece(tmp_path, mutation):
     assert gate.g4_packet_errors(tmp_path, shipped) != []
 
 
-_PARTS = ("g4_packet_errors", "new_gates_errors", "live_gates_errors", "trade_gates_errors", "duo_pairs_errors")
+_PARTS = ("g4_packet_errors", "stale_errors", "new_gates_errors", "live_gates_errors", "trade_gates_errors",
+          "duo_pairs_errors")
 
 
 @pytest.mark.parametrize("red", [None, *_PARTS])

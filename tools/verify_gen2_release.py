@@ -35,9 +35,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
+import gen2_code_digest as code_digest
 import release_lanes
 from release_lanes import Lane
 
@@ -1077,6 +1079,7 @@ def _duo_matrix_main() -> int:
     errors = duo_matrix_errors()
     for error in errors:
         print(f"RED  {error}")
+    _warn_stale("duo.")
     if errors:
         print(f"duo matrix: {len(errors)} gap(s); a missing pair/scenario/oracle/receipt is not a pass")
         return 1
@@ -1295,6 +1298,7 @@ def _new_gates_main() -> int:
     errors = new_gates_errors()
     for error in errors:
         print(f"RED  {error}")
+    _warn_stale("new-gates.")
     if errors:
         print(f"new gates: {len(errors)} gap(s); a missing/edited/unproven receipt is not a pass")
         return 1
@@ -1406,10 +1410,66 @@ def g4_packet_errors(root: Path | None = None, release_ups=None, require_admitte
     return errors
 
 
+# CODE-DIGEST: gate receipt kinds whose verdict runs through the shipped client or server code. Fixture
+# qualification rows prove save bytes through the codec, not the client, so they are not included.
+CLIENT_PATH_GATE_KINDS = ("engine_sites", "write_window", "panel_gate", "sfx_gate", "w6_gate", "phone_gate")
+
+
+def code_staleness(root: Path | None = None, head: str | None = None) -> list[tuple[str, str]]:
+    """(cell, verdict) for each registered duo proof (the pydec receipt's CODE_DIGEST line) and each
+    client-path gate receipt (its "code_digest" object) that does not bind HEAD's production code.
+    STALE: earned on other code or on a dirty tree. STALE-UNKNOWN: no stamp."""
+    root = ROOT if root is None else root
+    head = code_digest.head_digest(root) if head is None else head
+    out = []
+    for manifest, kinds in ((DUO_MATRIX, None), (NEW_GATES, CLIENT_PATH_GATE_KINDS)):
+        try:
+            rows = json.loads((root / manifest).read_text(encoding="utf-8")).get("requirements") or []
+        except (OSError, ValueError):
+            continue
+        for row in rows:
+            if kinds is not None and (row.get("axes") or {}).get("kind") not in kinds:
+                continue
+            for proof in row.get("proofs") or []:
+                receipts = proof.get("receipts") or {}
+                entry = receipts.get("pydec" if kinds is None else "receipt") or {}
+                try:
+                    text = (root / entry["path"]).read_text(encoding="utf-8")
+                    if kinds is None:
+                        bodies = [line[len("CODE_DIGEST "):] for line in text.splitlines()
+                                  if line.startswith("CODE_DIGEST ")]
+                        stamp = json.loads(bodies[0]) if len(bodies) == 1 else None
+                    else:
+                        stamp = json.loads(text).get("code_digest")
+                except (OSError, KeyError, TypeError, ValueError, AttributeError):
+                    stamp = None
+                verdict = code_digest.stamp_verdict(stamp, head)
+                if verdict:
+                    cell = row.get("id") if kinds is not None else f"{row.get('id')}/{proof.get('scenario')}"
+                    out.append((cell, verdict))
+    return out
+
+
+def stale_errors(root: Path | None = None, head: str | None = None) -> list[str]:
+    try:
+        return [f"{cell}: {verdict}" for cell, verdict in code_staleness(root, head)]
+    except (OSError, subprocess.CalledProcessError) as exc:
+        return [f"cannot compute the HEAD production code digest: {exc}"]
+
+
+def _warn_stale(prefix: str) -> None:
+    """Outside release-evidence, STALE is a distinct warning verdict, never a failure."""
+    for line in stale_errors():
+        if line.startswith(prefix) or line.startswith("cannot compute"):
+            print(f"STALE  {line}")
+
+
 def release_evidence_errors(root: Path | None = None, duo=None, receipt_validate=None,
-                            release_ups=None, require_admitted: bool = True) -> list[str]:
-    """release-evidence: the G4 packet and every receipt lane it rests on, one prefixed line per gap."""
+                            release_ups=None, require_admitted: bool = True, head: str | None = None) -> list[str]:
+    """release-evidence: the G4 packet and every receipt lane it rests on, one prefixed line per gap.
+    A receipt that does not bind HEAD's production code (STALE / STALE-UNKNOWN) is RED here."""
     parts = (("packet", g4_packet_errors(root, release_ups, require_admitted)),
+             ("code", stale_errors(root, head)),
              ("live-new-gates", new_gates_errors(root, receipt_validate)),
              ("live-gates", live_gates_errors(root, receipt_validate)),
              ("live-trade-gates", trade_gates_errors(root, duo)),
@@ -1430,6 +1490,9 @@ def _receipt_cli(flag: str) -> int:
     errors = globals()[check]()
     for error in errors:
         print(f"RED  {error}")
+    prefix = {"--live-gates": "new-gates.", "--trade-gates": "duo.", "--duo-pairs": "duo."}.get(flag)
+    if prefix:
+        _warn_stale(prefix)
     if errors:
         print(f"{label}: {len(errors)} gap(s); a missing, stale or unproven receipt is not a pass")
         return 1
