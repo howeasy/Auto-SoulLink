@@ -1,0 +1,2 @@
+attempt 1 of 1
+PYDEC: PASS a=D34C:B541:A3 b=CE69:AC24:A3 area=route_29 titles=crystal/crystal status=memorial scenario=gen2_changebox box_change=BOX1->BOX14->BOX1
