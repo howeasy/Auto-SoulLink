@@ -1277,3 +1277,67 @@ def test_continue_view_refuses_a_backup_change_beyond_the_clock(tmp_path, source
     _continue_rewrite(case, sources, "a", "wNumItems", delta=1)
     with pytest.raises(RuntimeError, match="beyond the CONTINUE clock rewrite"):
         invoke(case)
+
+
+def _rollover(case, sources, *, advance=1, forced_edits=()):
+    """MODEL of a day rollover between A's baseline and its forced save (HARNESS, unthrottled trgs: wCurDay,
+    wDailyResetTimer+1 and wTimerEventStartDay moved on the forced save). The baseline carries yesterday's
+    bookkeeping and set daily flags; the forced save (and the timeout final, byte-exact to it) carries what
+    CheckDailyResetTimer / CheckSwarmFlag (G) / CheckPokerusTick write (oracle.ROLLOVER_* citations)."""
+    receipt = get(case, "a", "RECEIPT")
+    layout = sources[receipt["title"]]["layout"]
+    symbols = parse_symbols((ROOT / f"data/gen2/{receipt['title']}_slink.sym").read_text())
+    crystal = "wKenjiBreakTimer" in symbols
+    zeroed = oracle.ROLLOVER_ZEROED["c" if crystal else "gs"]
+    forced = bytearray(Path(get(case, "a", "TRADE_FORCED_SAVE")["snapshot_path"]).read_bytes())
+    day = (oracle._saved(bytes(forced), layout, "wCurDay", 1, "primary")[0] + 3) % 140
+    base = bytearray(Path(get(case, "a", "TRADE_BASELINE")["snapshot_path"]).read_bytes())
+    for raw, today, flag, kenji in ((base, (day - advance) % 140, 0x04, 1), (forced, day, 0x00, 5)):
+        for name, data in (("wCurDay", [today]), ("wDailyResetTimer", [1, today]), ("wTimerEventStartDay", [today])):
+            assert save_bytes(raw, layout, symbols, name, bytes(data))
+        for name, size in zeroed:
+            assert save_bytes(raw, layout, symbols, name, bytes([flag] * size))
+        if crystal:
+            assert save_bytes(raw, layout, symbols, "wKenjiBreakTimer", bytes([kenji]))
+    for name, data, delta in forced_edits:
+        assert save_bytes(forced, layout, symbols, name, data, delta)
+    _set_image(case, "a", "TRADE_BASELINE", checksum(base, layout))
+    get(case, "a", "TRADE_READY")["snapshot_sha256"] = get(case, "a", "TRADE_BASELINE")["snapshot_sha256"]
+    _set_image(case, "a", "TRADE_FORCED_SAVE", checksum(forced, layout))
+    _set_image(case, "a", "TRADE_FINAL", bytes(forced))
+
+
+@pytest.mark.parametrize("variant", ["gs", "cc"])
+def test_day_rollover_allows_the_native_day_change_bookkeeping(tmp_path, sources, variant):
+    case = make_case(tmp_path, sources, variant, scenario="gen2_trade_timeout")
+    _rollover(case, sources)
+    assert invoke(case) is None
+
+
+ROLLOVER_FAULTS = {
+    # the same bookkeeping writes with no wCurDay change: no allowance at all
+    "no_day_change": dict(advance=0),
+    "flag_set_not_reset": dict(forced_edits=(("wDailyFlags2", b"\x01", 0),)),
+    "timer_day_not_today": dict(forced_edits=(("wDailyResetTimer", b"\x07", 1),)),
+    "timer_countdown_not_restarted": dict(forced_edits=(("wDailyResetTimer", b"\x02", 0),)),
+    "event_day_not_today": dict(forced_edits=(("wTimerEventStartDay", b"\x09", 0),)),
+    "gameplay_beside_the_rollover": dict(forced_edits=(("wNumItems", b"\x0f", 0),)),
+}
+
+
+@pytest.mark.parametrize("variant", ["gs", "cc"])
+@pytest.mark.parametrize("fault", sorted(ROLLOVER_FAULTS))
+def test_day_rollover_allows_nothing_else(tmp_path, sources, variant, fault):
+    case = make_case(tmp_path, sources, variant, scenario="gen2_trade_timeout")
+    _rollover(case, sources, **ROLLOVER_FAULTS[fault])
+    with pytest.raises(RuntimeError, match="rewrote more than"):
+        invoke(case)
+
+
+@pytest.mark.parametrize("kenji", [0, 2, 7])
+def test_day_rollover_kenji_break_timer_steps_natively(tmp_path, sources, kenji):
+    """C: from 1 the timer decrements to 0 and restarts to Random & 3 + 3 (3..6); 0, 2 and 7 are not that."""
+    case = make_case(tmp_path, sources, "cc", scenario="gen2_trade_timeout")
+    _rollover(case, sources, forced_edits=(("wKenjiBreakTimer", bytes([kenji]), 0),))
+    with pytest.raises(RuntimeError, match="rewrote more than"):
+        invoke(case)

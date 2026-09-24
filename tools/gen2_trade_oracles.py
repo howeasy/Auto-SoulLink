@@ -992,11 +992,32 @@ def trade_oracle(results, *, data_dir, baseline_saves, transaction_evidence,
 # - on a responder, the host's PROMPT staging (lua/gen2/trade_overlay.lua stage()): G/S keep
 #   wOTPlayerName..wOTPartyDataEnd inside the saved wPokemonData (ram/wram.asm G 2755-2916 | C 2859 is
 #   outside it), so Link_SaveGame saves it. Its mon bytes are bound to the partner's TRADE_OFFER;
-#   the current PROMPT has no partner_name and therefore stages the incoming mon's OT as wOTPlayerName.
+#   the current PROMPT has no partner_name and therefore stages the incoming mon's OT as wOTPlayerName;
+# - ONLY when the saved wCurDay differs (a day rolled over between the two saves), the native day-change
+#   bookkeeping (see ROLLOVER_* below). No wCurDay change, no allowance.
 # Every other byte stays byte-exact.
 CLOCK = (("wGameTimeHours", 2), ("wGameTimeMinutes", 1), ("wGameTimeSeconds", 1), ("wGameTimeFrames", 1),
          ("wRTC", 4))
 OBJECT_FACING = 0x0D
+# Day rollover (pokegold | pokecrystal). UpdateTime writes wCurDay := hRTCDayLo + wStartDay (home/time.asm
+# G 161-167 | C 168-174). CheckTimeEvents .do_daily (engine/overworld/events.asm G 450-454 | C 463-466, skipped
+# while wLinkMode != 0) then runs, in engine/overworld/time.asm:
+# - CheckDailyResetTimer (G 89-97 | C 103-134): CheckDayDependentEventHL -> CalcDaysSince writes
+#   wDailyResetTimer+1 := wCurDay (_CalcDaysSince G 354-363 | C 399-408) and UpdateTimeRemaining lowers
+#   wDailyResetTimer (G 243 | C 288); on expiry it zeroes the daily flags and RestartDailyResetTimer ->
+#   InitOneDayCountdown sets wDailyResetTimer := 1, CopyDayToHL wDailyResetTimer+1 := wCurDay.
+#   G zeroes wDailyFlags1, wDailyFlags2 (ram/wram.asm G 2677-2678). C zeroes wDailyFlags1..wUnusedDailyFlag
+#   and wDailyRematchFlags / wDailyPhoneItemFlags / wDailyPhoneTimeOfDayFlags ds 4 (C 3318-3321, 3344-3346),
+#   and steps wKenjiBreakTimer: dec, restarting to Random & 3 + 3 (3..6) at 0 (C 125-141, wram C 3347).
+# - G only: CheckSwarmFlag (engine/events/specials.asm G 299-314), with DAILYFLAGS1_SWARM_F clear (the reset
+#   clears it), zeroes wFishingSwarmFlag, wSwarmMapGroup, wSwarmMapNumber (ram/wram.asm G 2825-2827).
+# - CheckPokerusTick (G 149-159 | C 194): CalcDaysSince writes wTimerEventStartDay := wCurDay (wram G 2680 |
+#   C 3323). Its ApplyPokerusTick party writes are NOT allowed (no fixture carries Pokerus; a party that
+#   does fails loud here).
+ROLLOVER_ZEROED = {"gs": (("wDailyFlags1", 1), ("wDailyFlags2", 1), ("wSwarmMapGroup", 1),
+                          ("wSwarmMapNumber", 1), ("wFishingSwarmFlag", 1)),
+                   "c": (("wDailyFlags1", 1), ("wDailyFlags2", 1), ("wSwarmFlags", 1), ("wUnusedDailyFlag", 1),
+                         ("wDailyRematchFlags", 4), ("wDailyPhoneItemFlags", 4), ("wDailyPhoneTimeOfDayFlags", 4))}
 OBJECT_STRUCTS = ("wPlayer", *(f"wObject{number}" for number in range(1, 13)))
 
 
@@ -1082,9 +1103,36 @@ def _forced_view(raw, old, layout, symbols, staged):
     for name, data in staged:
         for start in _saved_spans(layout, symbols[name].address, len(data)):
             out[start:start + len(data)] = data
+    _rollover(out, raw, old, layout, symbols)
     for copy, offset in layout.checksum_offsets.items():
         out[offset:offset + 2] = codec.sav_checksum(bytes(out[:CART]), layout, copy).to_bytes(2, "little")
     return bytes(out)
+
+
+def _rollover(out, raw, old, layout, symbols):
+    """Take the forced save's day-change bookkeeping into out, value-checked per byte, only when the saved
+    wCurDay moved (ROLLOVER_* above). A byte outside its native value set stays the baseline's and fails the
+    byte-exact comparison."""
+    days = _saved_spans(layout, symbols["wCurDay"].address, 1)
+    _need(len(days) == 2, "unsaved wCurDay")
+    if all(raw[at] == old[at] for at in days):
+        return
+    crystal = "wKenjiBreakTimer" in symbols
+
+    def take(name, offset, allowed):
+        for copy, at in enumerate(_saved_spans(layout, symbols[name].address + offset, 1)):
+            if raw[at] in allowed(old[at], raw[days[copy]]):
+                out[at] = raw[at]
+
+    take("wCurDay", 0, lambda was, day: range(256))
+    take("wDailyResetTimer", 0, lambda was, day: (was, 1))
+    take("wDailyResetTimer", 1, lambda was, day: (was, day))
+    take("wTimerEventStartDay", 0, lambda was, day: (was, day))
+    for name, size in ROLLOVER_ZEROED["c" if crystal else "gs"]:
+        for offset in range(size):
+            take(name, offset, lambda was, day: (was, 0))
+    if crystal:
+        take("wKenjiBreakTimer", 0, lambda was, day: (was, was - 1) if was >= 2 else (was, 3, 4, 5, 6))
 
 
 def _pre_trade(text, receipt, old, layout, symbols, *, partner_text, root=ROOT):
