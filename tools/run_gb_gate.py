@@ -301,8 +301,9 @@ def _gen2_plan(rom_key, saveram_dir, fixture_path, speed_percent):
     roots = (Path(REPO).resolve() / ".cache/gen2-fixtures", Path(BUILD).resolve())
     if directory == Path(SAVERAM_DIR).resolve() or not any(directory.is_relative_to(base) and directory != base for base in roots):
         raise ValueError("Gen 2 SaveRAM directory must be an isolated attempt directory under .cache/gen2-fixtures or BUILD")
-    if type(speed_percent) is not int or speed_percent not in (100, 300):
-        raise ValueError("Gen 2 speed must be explicitly 100 or 300 percent")
+    # O-36: qualification (this module's CLI) stays 100/300; a duo may run faster, 0 = unthrottled
+    if type(speed_percent) is not int or not (speed_percent == 0 or 100 <= speed_percent <= 6400):
+        raise ValueError("Gen 2 speed must be explicitly 100..6400 percent, or 0 (unthrottled)")
     if descriptor["cold"]:
         if fixture_path is not None:
             raise ValueError("cold Gen 2 gate cannot seed a fixture")
@@ -360,8 +361,9 @@ def _gen2_config(plan, path):
     # Existing GB config machinery; its legacy keyword selects only the CGB pins.
     write_run_config(BIZHAWK_CONFIG, str(path), saveram_dir=str(plan["directory"]), purergb=True)
     config = json.loads(path.read_text(encoding="utf-8-sig"))
-    config.update(SpeedPercent=plan["speed_percent"], SpeedPercentAlternate=plan["speed_percent"],
-                  ClockThrottle=True, Unthrottled=False)
+    speed = plan["speed_percent"]
+    config.update(SpeedPercent=speed or 100, SpeedPercentAlternate=speed or 100,
+                  ClockThrottle=True, Unthrottled=speed == 0)
     sync = config["CoreSyncSettings"]["BizHawk.Emulation.Cores.Nintendo.Gameboy.Gameboy"]
     if sync.get("ConsoleMode") != 2 or config.get("GbAsSgb") is not False or sync.get("RealTimeRTC") is not False:
         raise ValueError("Gen 2 generated config did not establish CGB/RTC settings")

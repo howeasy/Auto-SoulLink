@@ -499,8 +499,19 @@ function h.frames(n)
         host.idle(1)
     end
 end
+-- EMU-SPEED (O-36): above the 300% the budgets were sized at, a frame budget can run out before the runner or
+-- the server answers (a go-file token, the chord, a partner receipt). A wait that exhausts its frames then also
+-- waits out the wall time that budget meant at 300% (frames / 180 s, whole seconds) before failing. At 100% and
+-- 300% nothing changes; a true predicate still ends every wait at once. The runner scales timeout_frames to match.
+local SPEED = tonumber(D.speed_percent) or 300
+local FAST = SPEED == 0 or SPEED > 300
 function h.wait(pred, frames)
+    local start = FAST and os.time() or nil
     for _ = 1, frames do
+        if pred() then return true end
+        h.frames(1)
+    end
+    while start and os.time() - start < math.ceil(frames / 180) do
         if pred() then return true end
         h.frames(1)
     end

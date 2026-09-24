@@ -398,3 +398,44 @@ def test_committed_trade_cases_require_every_native_phase(monkeypatch, tmp_path,
 def test_crystal_gold_never_registers_a_native_trade():
     assert not set(SCENARIOS) & set(duo.scenarios_for("gen2_crystal_gold"))
     assert "gen2_crystal_gold" not in duo.GEN2_TRADE_FIXTURES
+
+
+@pytest.mark.parametrize(("speed", "scale"), [(None, 1), (300, 1), (100, 1), (1200, 4), (0, 20)])
+def test_gen2_speed_knob_reaches_the_plan_config_and_driver(monkeypatch, tmp_path, speed, scale):
+    """EMU-SPEED item 4 (O-36): --speed-percent drives the BizHawk config (0 = unthrottled) and SLINK_DUO;
+    above the receipted 300% the scenario's frame cap scales with it."""
+    import run_gb_gate
+
+    run = _run(monkeypatch, tmp_path, "gen2_gold_silver")
+    run.args.speed_percent = speed
+    _real_stages(run)
+    for plan in run._gen2_plans.values():
+        plan["speed_percent"] = run.gen2_speed()
+    run._prepare_gen2_trade_manifest()
+    text = _stub(monkeypatch, run, "a")
+    fields = dict(line.strip().rstrip(",").split(" = ", 1) for line in text.splitlines()
+                  if line.startswith("  ") and " = " in line)
+    assert int(fields["speed_percent"]) == (300 if speed is None else speed)
+    assert int(fields["timeout_frames"]) == min(432000 * scale, 1_000_000)   # scripted_inputs.lua LIMIT
+    config = tmp_path / "cfg.json"
+    run_gb_gate._gen2_config({"speed_percent": run.gen2_speed(), "directory": Path(tmp_path).resolve()},
+                                       config)
+    written = json.loads(config.read_text(encoding="utf-8-sig"))
+    assert written["Unthrottled"] is (speed == 0)
+    assert written["SpeedPercent"] == (300 if speed is None else speed or 100)
+
+
+@pytest.mark.parametrize("speed", [50, 99, 6401, "300", True])
+def test_gen2_plan_refuses_an_undeclared_speed(monkeypatch, tmp_path, speed):
+    import run_gb_gate
+    monkeypatch.setattr(run_gb_gate, "BUILD", str(tmp_path))
+    fixture = tmp_path / "f.SaveRAM"
+    fixture.write_bytes(b"x")
+    with pytest.raises(ValueError, match="speed"):
+        run_gb_gate._gen2_plan("gold", tmp_path / "attempt", fixture, speed)
+
+
+def test_qualification_cli_still_offers_only_100_and_300():
+    import run_gb_gate
+    source = Path(run_gb_gate.__file__).read_text(encoding="utf-8")
+    assert '"--speed-percent", type=int, choices=(100, 300)' in source

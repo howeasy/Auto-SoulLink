@@ -1003,6 +1003,15 @@ GEN2_WAVE_C = {"gen2_whiteout": ("whiteout_oracle", "repair"), "gen2_pc_ops": ("
                "gen2_whiteout_rebuild": ("whiteout_rebuild_oracle", "rebuild")}
 
 
+GEN2_DEFAULT_SPEED = 300
+GEN2_FRAME_CAP = 1_000_000   # lua/scripted_inputs.lua LIMIT: the largest play bound a driver may pass
+
+
+def gen2_frame_scale(speed):
+    """How much faster than the receipted 300% a Gen 2 duo runs (unthrottled counted as 20x)."""
+    return 20 if speed == 0 else max(1, -(-speed // 300))
+
+
 def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
     """Bind each side's fixture to its full qualification report and its title's pinned ROM."""
     root = Path(repo or REPO).resolve()
@@ -1228,7 +1237,7 @@ class DuoRun:
         return lane_ordinal(self.lane)
 
     # ── lifecycle ────────────────────────────────────────────────────────────
-    def wait_for(self, desc, pred, timeout, interval=2.0):
+    def wait_for(self, desc, pred, timeout, interval=0.25):
         """`wait_for`, with the cartridges' terminal RESULT lines as a second exit.
 
         Every orchestrate-time wait goes through this (the module-level `wait_for` stays for
@@ -1607,6 +1616,8 @@ class DuoRun:
             "go_file": self.go_files[inst].replace("\\", "/"),
             "timeout_frames": (lambda f: f[inst] if isinstance(f, dict) else f)(
                 self.cfg.get("frames", self.cfg["timeout"] * 60)),
+            # the driver's frame budgets were sized at 300%: above it, the scenario's frame cap grows by
+            # the same factor (duo_gen2_main.lua h.wait also waits out the 300%-equivalent wall time)
             # The scenario's own wall budget, for the bodies that wait on a partner with a
             # bounded loop (poison_new's A half: `D.timeout_secs or 2400`).
             "timeout_secs": self.cfg["timeout"],
@@ -1614,6 +1625,11 @@ class DuoRun:
         env = None
         if self.gcfg.get("launch_profile") == "gen2":
             duo["mutate_otid"] = False
+            speed = self.gen2_speed()
+            duo["speed_percent"] = speed
+            # lua/scripted_inputs.lua refuses a play bound above 1,000,000 frames (its LIMIT)
+            duo["timeout_frames"] = min(duo["timeout_frames"] * gen2_frame_scale(speed),
+                                        max(duo["timeout_frames"], GEN2_FRAME_CAP))
             if self.scenario in GEN2_TRADE_SCENARIOS:
                 duo["trade_manifest"] = str(self._gen2_trade_manifest_path).replace("\\", "/")
                 duo["trade_manifest_sha256"] = self._gen2_trade_manifest_sha256
@@ -1674,6 +1690,12 @@ class DuoRun:
             p.wait(timeout=15)
         print(f"[duo] terminated {inst} pid={p.pid}; server retained")
 
+    def gen2_speed(self):
+        """O-36: duo speed percent (default 300, the receipted speed; 0 = unthrottled). Qualification runs
+        (run_gb_gate) stay at 100% and never read this."""
+        speed = getattr(getattr(self, "args", None), "speed_percent", None)
+        return GEN2_DEFAULT_SPEED if speed is None else speed
+
     @contextlib.contextmanager
     def _timed(self, phase):
         """EMU-SPEED item 1: one wall-clock line per run phase ('[duo] timing <phase> <s>s')."""
@@ -1711,7 +1733,8 @@ class DuoRun:
         suffix = "_overlay" if self.scenario in GEN2_TRADE_SCENARIOS else ""
         with self._timed("plans"):
             self._gen2_plans = {
-                inst: GENS["gen2"]["plan"](row["title"] + suffix, self._saveram_dir(inst), row["fixture"], 300)
+                inst: GENS["gen2"]["plan"](row["title"] + suffix, self._saveram_dir(inst), row["fixture"],
+                                           self.gen2_speed())
                 for inst, row in self._gen2_inputs.items()}
         if self.scenario in GEN2_TRADE_SCENARIOS:
             with self._timed("trade_manifest"):
@@ -2032,7 +2055,7 @@ class DuoRun:
         seed = Path(BUILD, f"e2e_{self.artifact_name}_a_{phase}_seed.SaveRAM")
         seed.write_bytes(raw)
         directory = Path(self._saveram_dir("a") + "_" + phase)
-        plan = GENS["gen2"]["plan"](self._gen2_inputs["a"]["title"], directory, seed, 300)
+        plan = GENS["gen2"]["plan"](self._gen2_inputs["a"]["title"], directory, seed, self.gen2_speed())
         directory.mkdir(parents=True, exist_ok=True)
         target = directory / plan["saveram_name"]
         target.write_bytes(raw)
@@ -5302,6 +5325,9 @@ def main():
                     help="this run's lane id; keys the generated stub, the BizHawk config copy, "
                          "the SaveRAM directory and the window offset (default: the run's TCP port). "
                          "Two DuoRuns in one process must not share them.")
+    ap.add_argument("--speed-percent", type=int, default=None,
+                    help="Gen 2 duo emulator speed (O-36): 100-6400, or 0 = unthrottled; default 300. "
+                         "Qualification gates are never run through here and stay at 100")
     ap.add_argument("--idle-jitter", type=int, default=0,
                     help="extra idle frames before the first hunt; each RNG retry adds 37 per "
                          "attempt")
