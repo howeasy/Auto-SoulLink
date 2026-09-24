@@ -300,3 +300,20 @@ def test_the_resolve_endpoint_answers_400_to_a_malformed_body(tmp_path, body):
     srv = SLinkServer(data_dir=str(tmp_path))
     resp = asyncio.run(srv.handle_debug_resolve_trade(AsyncMock(json=AsyncMock(return_value=body))))
     assert resp.status == 400
+
+
+# ── a Lua reload loses the owed trade_done: the fresh hello's party decides that side ─────────────
+
+def test_a_fresh_hello_from_a_silent_applying_side_is_its_evidence(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": A_GETS, "new_species": 0x15})
+    assert state.pending_trade["verdict"]["b"] is None
+    _hello(state, "b", _mon(B_GETS, 0x26))                      # reloaded client: no report, no watchdog
+    assert state.pending_trade is None and (entry.a.key, entry.b.key) == (A_GETS, B_GETS)
+
+
+def test_a_fresh_hello_showing_no_trade_rolls_back(tmp_path):
+    state, entry, token = _gen1_applying(tmp_path)
+    state.handle_event("a", {"event": "trade_done", "token": token, "new_key": B_GETS, "new_species": 0x26})
+    _hello(state, "b", _mon(A_GETS, 0x15))
+    assert state.pending_trade is None and state.trade_last["outcome"] == "rolled_back"

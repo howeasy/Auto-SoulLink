@@ -1562,6 +1562,13 @@ class SoulLinkState:
 
         # Invariant review MAJOR-2: a hello that settles a pending trade must do so BEFORE its
         # own deaths are routed, so they follow the swapped link.
+        pt = self.pending_trade
+        if pt and pt.get("phase") == "applying" and pt.get("verdict", {}).get(player_id, "") is None:
+            # A fresh hello while this side never reported: a Lua reload lost its owed trade_done.
+            # The hello is sent only at the checkpoint, never inside the trade scene, so its party
+            # is evidence now rather than after the watchdog.
+            pt["verdict"][player_id] = "await"
+            self._record_trade(pt, "uncertain")
         self._trade_evidence(player_id, party, from_hello=True)
 
         for m in party:
