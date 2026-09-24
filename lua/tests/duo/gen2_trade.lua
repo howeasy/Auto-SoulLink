@@ -697,7 +697,9 @@ function T.attach(e)
         local want = st.plant_species
         if not want or want.done then return end
         local r = tf.ram
-        if u8(r.wOtherTrainerClass.addr) ~= 0 or u8(r.wBattleMode.addr) ~= 1 or u8(r.wBattleType.addr) ~= 0
+        -- a wild battle at StartBattle's entry: no trainer class, BATTLETYPE_NORMAL, and wBattleMode still 0
+        -- (InitEnemyWildmon sets it later, G engine/battle/core.asm:7881-7883; live gs evolve never planted)
+        if u8(r.wOtherTrainerClass.addr) ~= 0 or u8(r.wBattleMode.addr) ~= 0 or u8(r.wBattleType.addr) ~= 0
            or u8(r.wMapGroup.addr) ~= want.map.map_group or u8(r.wMapNumber.addr) ~= want.map.map_number then return end
         want.done = true
         harness_write("wTempWildMonSpecies", r.wTempWildMonSpecies.addr, r.wTempWildMonSpecies.bank,

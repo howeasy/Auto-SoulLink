@@ -2639,12 +2639,19 @@ def test_attach_plants_are_disclosed_wram_writes_that_read_back(tmp_path, monkey
     r = t.ram
     t.trade.arm_species_plant()
     sim.put(r["wOtherTrainerClass"], lua.table_from([0]))
-    sim.put(r["wBattleMode"], lua.table_from([1]))
+    sim.put(r["wBattleMode"], lua.table_from([0]))   # StartBattle's entry: InitEnemyWildmon has not run yet
     sim.put(r["wBattleType"], lua.table_from([0]))
     sim.put(r["wMapGroup"], lua.table_from([99]))
     sim.fire("StartBattle")
     lines = [sim.lines[i] for i in range(1, len(sim.lines) + 1)]
     assert sum(1 for line in lines if line.startswith("HARNESS_WRITE ")) == 1   # wrong map: no write
+    sim.put(r["wMapGroup"], lua.table_from([24]))
+    sim.put(r["wMapNumber"], lua.table_from([3]))
+    sim.put(r["wOtherTrainerClass"], lua.table_from([4]))   # a trainer battle on Route 29: never planted
+    sim.fire("StartBattle")
+    lines = [sim.lines[i] for i in range(1, len(sim.lines) + 1)]
+    assert sum(1 for line in lines if line.startswith("HARNESS_WRITE ")) == 1
+    sim.put(r["wOtherTrainerClass"], lua.table_from([0]))
     sim.put(r["wMapGroup"], lua.table_from([24]))
     sim.put(r["wMapNumber"], lua.table_from([3]))
     sim.fire("StartBattle")
