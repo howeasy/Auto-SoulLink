@@ -27,6 +27,9 @@ PANEL_NAMES = ("GetSGBLayout", "ClearBGPalettes", "ClearTilemap", "ByteFill", "P
                "WaitBGMap2", "WaitBGMap", "SetDefaultBGPAndOBP", "DelayFrame", "JoyTextDelay",
                "hInMenu", "hBGMapMode", "hJoyDown", "hJoyPressed", "wAttrmap", "wTilemap")
 SFX_NAMES = ("CheckSFX", "PlaySFX", "InitSound", "DelayFrames", "wMusicFade", "wAudioEnd")
+PHONE_TARGETS = ("SpecialCallOnlyWhenOutside", "SpecialCallWhereverYouAre", "ElmPhoneCallerScript",
+                 "BikeShopPhoneCallerScript", "MomPhoneLectureScript")
+PHONE_NAMES = ("wScriptRunning", "wLinkMode", "wPokegearFlags", "wSpecialPhoneCallID", *PHONE_TARGETS)
 
 
 def native_symbols(title, path=None):
@@ -40,22 +43,26 @@ def native_symbols(title, path=None):
     return rows
 
 
-def assemble(tmp_path, title, extra="", *, panel=False, panel_dir=None, sfx=False):
+def assemble(tmp_path, title, extra="", *, panel=False, panel_dir=None, sfx=False, phone=False, trade=False):
     crystal = title == "crystal"
     include = tmp_path / "engine/slink"
     include.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(ROOT / "patch/gb/slink_abi.inc", include / "slink_abi.inc")
     panel_source = panel_dir or ROOT / "patch/gen2/src"
-    native = native_symbols(title) if panel or sfx else {}
+    native = native_symbols(title) if panel or sfx or phone else {}
     names = (*PANEL_NAMES,) if panel else ()
     if sfx:
         names += SFX_NAMES
+    if phone:
+        names += PHONE_NAMES
     panel_defs = "".join(
-        (f'SECTION "Native {name}", ROM0[${native[name][1]:04x}]\n{name}::\nret\n'
+        (f'SECTION "Native {name}", ROMX[${native[name][1]:04x}], BANK[${native[name][0]:x}]\n{name}::\nret\n'
+         if name in PHONE_TARGETS else
+         f'SECTION "Native {name}", ROM0[${native[name][1]:04x}]\n{name}::\nret\n'
          if name in ("CheckSFX", "PlaySFX", "InitSound", "DelayFrames")
          else f"DEF {name} EQU ${native[name][1]:04x}\n") for name in names)
     prelude = ""
-    if panel or sfx:
+    if panel or sfx or phone:
         repo = ROOT / ".cache/gen2-build" / ("pokecrystal" if crystal else "pokegold")
         prelude = f'INCLUDE "{repo.as_posix()}/includes.asm"\n'
     source = tmp_path / "probe.asm"
@@ -65,20 +72,25 @@ def assemble(tmp_path, title, extra="", *, panel=False, panel_dir=None, sfx=Fals
         + f"DEF hVBlankCounter EQU ${0xFF9B if crystal else 0xFF9D:04x}\n"
         + f"DEF wVBlankOccurred EQU ${0xCFB3 if crystal else 0xCEEA:04x}\n"
         + f"DEF hROMBank EQU ${0xFF9D if crystal else 0xFF9F:04x}\n"
-        + ("" if panel or sfx else 'DEF rROMB EQU $2000\nCHARMAP "S", $92\nCHARMAP "L", $8b\nCHARMAP "N", $8d\nCHARMAP "K", $8a\n')
+        + ("" if panel or sfx or phone else 'DEF rROMB EQU $2000\nCHARMAP "S", $92\nCHARMAP "L", $8b\nCHARMAP "N", $8d\nCHARMAP "K", $8a\n')
         + 'SECTION "Bankswitch", ROM0[$10]\nBankswitch::\n'
         + "ldh [hROMBank], a\nld [rROMB], a\nret\n"
         + f'INCLUDE "patch/gen2/src/slink_mailbox_{"crystal" if crystal else "goldsilver"}.asm"\n'
         + 'INCLUDE "patch/gb/slink_abi.inc"\n'
         + (f'INCLUDE "{panel_source.as_posix()}/panel_flags.asm"\n' if panel else "")
         + ("DEF SLINK_SFX_ENABLED EQU 1\n" if sfx else "")
+        + ("DEF SLINK_TRADE_ENABLED EQU 1\n" if trade else "")
+        + ('INCLUDE "patch/gen2/src/phone_flags.asm"\n' if phone else "")
         + 'INCLUDE "patch/gen2/src/slink.asm"\n'
         + (f'INCLUDE "{panel_source.as_posix()}/panel.asm"\n' if panel else "")
-        + ('INCLUDE "patch/gen2/src/sfx.asm"\n' if sfx else "") + extra,
+        + ('INCLUDE "patch/gen2/src/sfx.asm"\n' if sfx else "")
+        + ('INCLUDE "patch/gen2/src/phone.asm"\n' if phone else "")
+        + ('SECTION "Trade capability probe", ROMX, BANK[SLINK_SERVICE_BANK]\nSlinkTradeDispatch:: ret\n'
+           if trade else "") + extra,
         encoding="utf-8")
     obj, rom, sym = (tmp_path / name for name in ("probe.o", "probe.gb", "probe.sym"))
     result = subprocess.run([rgbds("rgbasm"), "-I", str(tmp_path) + "/",
-                             *(["-I", str(repo) + "/"] if panel or sfx else []),
+                             *(["-I", str(repo) + "/"] if panel or sfx or phone else []),
                              "-I", str(ROOT) + "/", "-o", str(obj),
                              str(source)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
@@ -111,7 +123,8 @@ def test_real_assembly_preserves_shared_abi(tmp_path):
     checks += ["ASSERT SLINK_ABI_VERSION == 3", "ASSERT SLINK_CORE_SIZE == 14",
                "ASSERT SLINK_TRADE_LEASE_SIZE == 16", "ASSERT SLINK_PUBLIC_SIZE == 30",
                "ASSERT SLINK_CAP_SFX == 1", "ASSERT SLINK_CAP_PANEL == 2",
-               "ASSERT SLINK_CAP_SFX_NOTIFY == 4"]
+               "ASSERT SLINK_CAP_SFX_NOTIFY == 4", "ASSERT SLINK_CAP_PHONE == 8", "ASSERT SLINK_CAP_TRADE == 16",
+               "ASSERT SLINK_OFS_PHONE_REQUEST == 32", "ASSERT SLINK_OFS_PHONE_ARMED == 33"]
     checks += [f"ASSERT SLINK_BEACON_{i} == {value}" for i, value in enumerate(b"SLNK")]
     assemble(tmp_path, "crystal", "\n".join(checks) + "\n")
 
@@ -269,17 +282,24 @@ class Machine:
                     continue
                 self.push(self.pc)
                 self.pc = address
-            elif op == 0xC3:
+            elif op in (0xC3, 0xC2, 0xCA, 0xD2, 0xDA):
                 address = self.word()
-                if self.helper(address):
-                    self.pc = self.pop()  # native tail call returns to this routine's caller
-                else:
-                    self.pc = address
+                take = {0xC3: True, 0xC2: not self.r["f"] & 0x80, 0xCA: bool(self.r["f"] & 0x80),
+                        0xD2: not self.r["f"] & 0x10, 0xDA: bool(self.r["f"] & 0x10)}[op]
+                if take:
+                    if self.helper(address):
+                        self.pc = self.pop()  # native tail call returns to this routine's caller
+                    else:
+                        self.pc = address
             elif op == 0xC9:
                 self.pc = self.pop()
             elif op == 0xC8:
                 if self.r["f"] & 0x80:
                     self.pc = self.pop()
+            elif op == 0xCB:
+                ext = self.fetch()
+                assert ext == 0x57, f"unsupported CB opcode {ext:02x}"  # BIT 2,A
+                self.r["f"] = (self.r["f"] & 0x10) | 0x20 | (0x80 if not self.r["a"] & 4 else 0)
             else:
                 raise AssertionError(f"unsupported opcode {op:02x} at {self.pc - 1:04x}")
         raise AssertionError("companion did not return in bounded instruction budget")
@@ -779,3 +799,286 @@ def test_compiled_reset_keeps_admission_prefix_and_hooks_only_wait(tmp_path, tit
     expected = bytes.fromhex("f3cd4e3b" if title == "crystal" else "cd4f3daf")
     assert clean[start:start + 4] == expected
     assert rom[start:start + 4] == clean[start:start + 4]
+
+
+PHONE_FACTS = ('SECTION "Phone MODEL facts", ROMX, BANK[SLINK_SERVICE_BANK]\n'
+               'SlinkPhoneModelFacts::\n'
+               'db readmem_command, loadmem_command, ifequal_command, ifnotequal_command, '
+               'writetext_command, specialphonecall_command, end_command, SPECIALCALL_ROBBED, SLINK_CAP_PHONE\n')
+
+
+@pytest.fixture(scope="module", params=("crystal", "gold", "silver"))
+def compiled_phone(request, tmp_path_factory):
+    title = request.param
+    return title, *assemble(tmp_path_factory.mktemp("phone-" + title), title, PHONE_FACTS, phone=True, sfx=True)
+
+
+def phone_machine(compiled):
+    machine = SfxMachine(compiled)
+    machine.ram[machine.native["wPokegearFlags"][1]] = 4
+    machine.ram[0xFF70] = 1  # rWBK / rSVBK, physical WRAM bank 1.
+    return machine
+
+
+def phone_word(machine, value=None):
+    address = machine.native["wSpecialPhoneCallID"][1]
+    if value is not None:
+        machine.ram[address:address + 2] = value.to_bytes(2, "little")
+    return int.from_bytes(machine.ram[address:address + 2], "little")
+
+
+def rom_slice(compiled, symbol, count):
+    _, rom, symbols = compiled
+    bank, address = symbols[symbol]
+    offset = bank * 0x4000 + address - 0x4000 if bank else address
+    return rom[offset:offset + count]
+
+
+def test_phone_compiled_native_story_survives_accepted_request(compiled_phone):
+    machine = phone_machine(compiled_phone)
+    robbed = rom_slice(compiled_phone, "SlinkPhoneModelFacts", 9)[7]
+    phone_word(machine, robbed)
+    machine.ram[machine.mailbox + 32] = 1
+    machine.bridge()
+    assert phone_word(machine) == robbed
+    assert machine.ram[machine.mailbox + 32:machine.mailbox + 34] == bytes([0, 1])
+    phone_word(machine, 0)
+    machine.bridge()
+    assert phone_word(machine) == 9
+
+
+@pytest.mark.parametrize("guard", ["wScriptRunning", "wLinkMode", "card"])
+@pytest.mark.parametrize("pending", [9, 1, 0x0109])
+def test_phone_compiled_withdraws_only_owned_word(compiled_phone, guard, pending):
+    machine = phone_machine(compiled_phone)
+    phone_word(machine, pending)
+    machine.ram[machine.mailbox + 33] = 2
+    if guard == "card":
+        machine.ram[machine.native["wPokegearFlags"][1]] = 0
+    else:
+        machine.ram[machine.native[guard][1]] = 1
+    machine.bridge()
+    assert phone_word(machine) == (0 if pending & 255 == 9 else pending)
+    assert machine.ram[machine.mailbox + 33] == 2
+
+
+@pytest.mark.parametrize("pending", [0, 9, 0x0100, 0x0109, 3])
+def test_phone_compiled_invalid_request_ack_and_foreign_padding(compiled_phone, pending):
+    machine = phone_machine(compiled_phone)
+    phone_word(machine, pending)
+    machine.ram[machine.mailbox + 32] = 7
+    machine.bridge()
+    assert machine.ram[machine.mailbox + 32:machine.mailbox + 34] == bytes(2)
+    assert phone_word(machine) == (0 if pending & 255 == 9 else pending)
+
+
+def test_phone_compiled_wrong_wram_bank_has_no_phone_writes(compiled_phone, tmp_path):
+    title = compiled_phone[0]
+    machine = phone_machine((title, *assemble(tmp_path, title, phone=True)))
+    machine.bank = machine.symbols["SlinkPhoneService"][0]
+    machine.ram[0xFF70] = 5
+    machine.ram[machine.mailbox + 32] = 1
+    phone_word(machine, 9)
+    before = bytes(machine.ram)
+    machine.run("SlinkPhoneService")
+    assert machine.ram[:0xDFE0] == before[:0xDFE0]
+    assert machine.ram[0xDFFE:] == before[0xDFFE:]
+    assert set(machine.written) <= {0xDFFC, 0xDFFD}  # only the MODEL call return address
+
+
+@pytest.mark.parametrize("pending", [0x0100, 0x0102])
+def test_phone_compiled_valid_request_preserves_foreign_high_padding(compiled_phone, pending):
+    machine = phone_machine(compiled_phone)
+    phone_word(machine, pending)
+    machine.ram[machine.mailbox + 32] = 2
+    machine.bridge()
+    assert phone_word(machine) == pending
+    assert machine.ram[machine.mailbox + 32:machine.mailbox + 34] == bytes([0, 2])
+
+
+@pytest.mark.parametrize("pending,armed,posted,want,retained", [
+    (9, 0, 0, 0, 0), (10, 0, 0, 0, 0), (255, 0, 0, 0, 0), (9, 7, 0, 0, 0),
+    (9, 1, 0, 9, 1), (0x109, 2, 0, 9, 2), (10, 0, 3, 9, 3), (2, 255, 0, 2, 0)])
+def test_phone_compiled_scrubs_contaminated_reserved_ids(compiled_phone, pending, armed, posted, want, retained):
+    machine = phone_machine(compiled_phone)
+    phone_word(machine, pending)
+    machine.ram[machine.mailbox + 32:machine.mailbox + 34] = bytes([posted, armed])
+    machine.bridge()
+    assert phone_word(machine) == want
+    assert machine.ram[machine.mailbox + 32:machine.mailbox + 34] == bytes([0, retained])
+
+
+def test_phone_compiled_tail_calls_sfx_once_without_stack_growth(compiled_phone, tmp_path):
+    machine = phone_machine(compiled_phone)
+    machine.request(1)
+    machine.ram[machine.mailbox + 32] = 1
+    registers = dict(machine.r)
+    machine.bridge()
+    plain = SfxMachine((machine.title, *assemble(tmp_path, machine.title, sfx=True)))
+    plain.request(1)
+    plain.bridge()
+    assert machine.played == plain.played == [1]
+    assert machine.lowest_sp == plain.lowest_sp
+    assert machine.r == {**registers, "a": 1} and machine.sp == 0xDFFE
+    assert machine.ram[machine.mailbox + 8] == 13
+    assert plain.ram[plain.mailbox + 8] == 5
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+def test_phone_only_build_advertises_only_phone(tmp_path, title):
+    machine = Machine((title, *assemble(tmp_path, title, phone=True)))
+    machine.bridge()
+    assert machine.ram[machine.mailbox + 8] == 8
+
+
+def test_phone_table_preserves_all_native_rows_and_banked_script(compiled_phone):
+    title, _, symbols = compiled_phone
+    row = native_symbols(title, ROOT / "data/gen2" / f"poke{title}.sym")
+    repo = ROOT / ".cache/gen2-build" / ("pokecrystal" if title == "crystal" else "pokegold")
+    native = (repo / f"poke{title}.gbc").read_bytes()
+    bank, address = row["SpecialPhoneCallList"]
+    offset = bank * 0x4000 + address - 0x4000
+    table = rom_slice(compiled_phone, "SlinkSpecialPhoneCallList", 54)
+    assert table[:48] == native[offset:offset + 48]
+    condition = row["SpecialCallWhereverYouAre"][1]
+    script_bank, script = symbols["SlinkPhoneCallScript"]
+    assert table[48:] == condition.to_bytes(2, "little") + bytes([0, script_bank]) + script.to_bytes(2, "little")
+
+
+def execute_phone_script(machine):
+    # Native macro values C/G macros/scripts/events.asm; loadmem does not change
+    # wScriptVar (C scripting.asm:1450-1475, G:1356-1381).
+    special, end = (0x9C, 0x91) if machine.title == "crystal" else (0x9B, 0x90)
+    assert rom_slice((machine.title, machine.rom, machine.symbols), "SlinkPhoneModelFacts", 7) == bytes([0x19, 0x1B, 6, 7, 0x4C, special, end])
+    machine.bank, machine.pc = machine.symbols["SlinkPhoneCallScript"]
+    value, text = 0, None
+    for _ in range(40):
+        op = machine.fetch()
+        if op == 0x19:
+            value = machine.read(machine.word())
+        elif op == 0x1B:
+            address = machine.word()
+            machine.write(address, machine.fetch())
+        elif op in (6, 7):
+            expected, target = machine.fetch(), machine.word()
+            if (value == expected) == (op == 6):
+                machine.pc = target
+        elif op == special:
+            call = machine.word()
+            address = machine.native["wSpecialPhoneCallID"][1]
+            machine.write(address, call & 255)
+            machine.write(address + 1, call >> 8)
+        elif op == 0x4C:
+            assert text is None, "script selected more than one text"
+            text = machine.word()
+        elif op == end:
+            assert text is not None
+            return text
+        else:
+            raise AssertionError(f"unmodeled phone script opcode {op:02x}")
+    raise AssertionError("phone script exceeded instruction bound")
+
+
+@pytest.mark.parametrize("armed", [0, 1, 2, 3, 7])
+@pytest.mark.parametrize("pending", [9, 2, 0x0109])
+def test_phone_script_compiled_delivery_and_native_story_preservation(compiled_phone, armed, pending):
+    machine = phone_machine(compiled_phone)
+    phone_word(machine, pending)
+    machine.ram[machine.mailbox + 32:machine.mailbox + 34] = bytes([3, armed])
+    before = bytes(machine.ram)
+    text = execute_phone_script(machine)
+    expected = {1: "Fallen", 2: "DeadZone", 3: "FirstLink"}.get(armed, "Static")
+    assert text == machine.symbols[f"SlinkPhone{expected}Text"][1]
+    assert machine.ram[machine.mailbox + 32:machine.mailbox + 34] == bytes([3, 0])
+    assert phone_word(machine) == (0 if pending == 9 else pending)
+    allowed = {machine.mailbox + 33}
+    if pending == 9:
+        allowed.update(range(machine.native["wSpecialPhoneCallID"][1], machine.native["wSpecialPhoneCallID"][1] + 2))
+    assert {index for index, (old, new) in enumerate(zip(before, machine.ram, strict=True)) if old != new} <= allowed
+
+
+def phone_text_widths(compiled, name):
+    data = rom_slice(compiled, name, 512)
+    assert data[0] == 0  # TX_START; all four are local native text streams.
+    widths, width = [], 0
+    for byte in data[1:]:
+        if byte in (0x4E, 0x4F, 0x51, 0x55, 0x57):
+            widths.append(width)
+            width = 0
+            if byte == 0x57:
+                return widths
+        elif byte == 0x52:
+            width += 7  # native <PLAYER>, maximum name without its terminator
+        elif byte == 0x54:
+            width += 4  # native # -> POKé
+        else:
+            assert byte >= 0x60, f"unexpected text command/substitution {byte:02x}"
+            width += 1  # every encoded glyph, including apostrophe ligatures, is one tile
+    raise AssertionError("text has no bounded native DONE terminator")
+
+
+def test_phone_compiled_text_widths_fit_native_box(compiled_phone):
+    for name in ("Fallen", "DeadZone", "FirstLink", "Static"):
+        widths = phone_text_widths(compiled_phone, f"SlinkPhone{name}Text")
+        assert widths and all(0 < width <= 18 for width in widths), (name, widths)
+
+
+@pytest.mark.parametrize("mutation", ["native_call", "wram_bank", "invalid_request", "script_armed", "text_width"])
+def test_phone_compiled_mutations_are_detected(compiled_phone, mutation):
+    machine = phone_machine(compiled_phone)
+    rom = bytearray(machine.rom)
+    bank, address = machine.symbols["SlinkPhoneService"]
+    start = bank * 0x4000 + address - 0x4000
+    end = bank * 0x4000 + machine.symbols["SlinkPhoneServiceEnd"][1] - 0x4000
+    if mutation == "native_call":
+        address = machine.native["wSpecialPhoneCallID"][1]
+        pos = rom.index(bytes([0xFA, address & 255, address >> 8, 0xA7, 0x20]), start, end)
+        rom[pos + 4:pos + 6] = bytes(2)
+        phone_word(machine, 1)
+        machine.ram[machine.mailbox + 32] = 1
+    elif mutation in ("wram_bank", "invalid_request"):
+        pos = (rom.index(bytes([0xFE, 2]), start, end) if mutation == "wram_bank"
+               else rom.index(bytes([0x78, 0xFE, 4]), start, end) + 1)
+        rom[pos + 1] = 8
+        machine.ram[machine.mailbox + 32] = 1 if mutation == "wram_bank" else 7
+        if mutation == "wram_bank":
+            machine.ram[0xFF70] = 5
+    elif mutation == "script_armed":
+        bank, address = machine.symbols["SlinkPhoneCallScript"]
+        start = bank * 0x4000 + address - 0x4000
+        target = machine.mailbox + 33
+        pos = rom.index(bytes([0x1B, target & 255, target >> 8, 0]), start)
+        rom[pos + 1:pos + 3] = (target - 1).to_bytes(2, "little")
+        machine.ram[machine.mailbox + 33] = 1
+    else:
+        bank, address = machine.symbols["SlinkPhoneFirstLinkText"]
+        start = bank * 0x4000 + address - 0x4000
+        rom[start + 1] = 0x52  # a second maximum PLAYER substitution overflows the first line
+    machine.rom = bytes(rom)
+    with pytest.raises(AssertionError):
+        if mutation == "script_armed":
+            execute_phone_script(machine)
+            assert machine.ram[machine.mailbox + 33] == 0
+        elif mutation == "text_width":
+            assert max(phone_text_widths((machine.title, machine.rom, machine.symbols), "SlinkPhoneFirstLinkText")) <= 18
+        else:
+            machine.bridge()
+            if mutation == "native_call":
+                assert phone_word(machine) == 1
+            elif mutation == "wram_bank":
+                assert machine.ram[machine.mailbox + 32] == 1
+            else:
+                assert machine.ram[machine.mailbox + 33] == 0
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+@pytest.mark.parametrize("trade", [False, True])
+@pytest.mark.parametrize("other_features", [False, True])
+def test_trade_capability_requires_build_flag(tmp_path, title, trade, other_features):
+    # Only the advertisement is isolated here; the real dispatcher/FSM runs
+    # in test_gen2_trade_service rather than being claimed from this RET spy.
+    compiled = (title, *assemble(tmp_path, title, trade=trade, panel=other_features,
+                                phone=other_features, sfx=other_features))
+    machine = SfxMachine(compiled) if other_features else Machine(compiled)
+    machine.bridge()
+    assert machine.ram[machine.mailbox + 8] == (15 if other_features else 0) | (16 if trade else 0)

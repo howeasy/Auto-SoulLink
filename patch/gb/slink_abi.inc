@@ -24,6 +24,7 @@ DEF SLINK_CAP_SFX        EQU 1 << 0
 DEF SLINK_CAP_PANEL      EQU 1 << 1
 DEF SLINK_CAP_SFX_NOTIFY EQU 1 << 2
 DEF SLINK_CAP_PHONE      EQU 1 << 3
+DEF SLINK_CAP_TRADE      EQU 1 << 4
 ; Optional phone extension; use only when CAP_PHONE and mailbox capacity permit.
 DEF SLINK_OFS_PHONE_REQUEST EQU 32
 DEF SLINK_OFS_PHONE_ARMED EQU 33

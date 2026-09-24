@@ -541,3 +541,76 @@ def test_symbol_scope_refuses_nonlocal_growth(tmp_path, mutation):
 def test_caps_zero_build_cannot_move_bank4_either(tmp_path):
     with pytest.raises(RuntimeError, match="Tail"):
         bc.verify_symbol_scope(*_symbol_pair(tmp_path), panel=False)
+
+
+@pytest.mark.parametrize("present", [("phone.asm",), ("phone_flags.asm",), ("phone.asm", "phone_flags.asm")])
+def test_phone_family_requires_both_parts_and_service(tmp_path, present):
+    for name in present:
+        (tmp_path / name).write_text("; phone fixture\n")
+    with pytest.raises(RuntimeError, match="phone overlay requires"):
+        bc.overlay_plan("pokecrystal", tmp_path)
+
+
+@pytest.mark.parametrize("repo", ["pokecrystal", "pokegold"])
+@pytest.mark.parametrize("copies", [1, 2, 3])
+def test_phone_pointer_hook_requires_exactly_two_loads(tmp_path, repo, copies):
+    checkout = _fake_checkout(tmp_path, repo)
+    _write_real_delay_asm(checkout)
+    path = checkout / "engine/phone/phone.asm"
+    path.parent.mkdir(parents=True)
+    original = "CheckSpecialPhoneCall::\n" + "\tld hl, SpecialPhoneCallList\n" * copies + "\tret\n"
+    path.write_text(original)
+    src = tmp_path / "src"
+    src.mkdir()
+    for name in ("slink.asm", *bc.PHONE_FILES):
+        (src / name).write_text("; fixture\n")
+    if copies != 2:
+        with pytest.raises(RuntimeError, match="exactly two"):
+            bc.apply_overlay(checkout, repo, src)
+        assert path.read_text() == original
+    else:
+        bc.apply_overlay(checkout, repo, src)
+        assert path.read_text() == original.replace("SpecialPhoneCallList", "SlinkSpecialPhoneCallList")
+        main = (checkout / "main.asm").read_text()
+        assert main.index('/phone_flags.asm"') < main.index('/slink.asm"') < main.index('/phone.asm"')
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+@pytest.mark.parametrize("fault", [None, "native_row", "old_table", "contact", "condition", "script", "load", "other_code", "bank", "size"])
+def test_phone_binary_pin_rejects_table_or_dispatch_drift(tmp_path, title, fault):
+    key = "poke" + title
+    repo = "pokecrystal" if title == "crystal" else "pokegold"
+    clean_sym = ROOT / "data/gen2" / f"{key}.sym"
+    old = bc._symbols(clean_sym)
+    base = (ROOT / ".cache/gen2-build" / repo / f"{key}.gbc").read_bytes()
+    overlay = bytearray(base)
+
+    def flat(location):
+        bank, address = location
+        return bank * 0x4000 + address - 0x4000
+
+    source = flat(old["SpecialPhoneCallList"])
+    table = (0x24, 0x7fa0)
+    target = flat(table)
+    script = (0x75 if title == "crystal" else 0x13, 0x6000)
+    overlay[target:target + 48] = base[source:source + 48]
+    overlay[target + 48:target + 54] = (old["SpecialCallWhereverYouAre"][1].to_bytes(2, "little")
+                                      + bytes([0, script[0]]) + script[1].to_bytes(2, "little"))
+    loads = (flat(old["CheckSpecialPhoneCall"]) + 10,
+             flat(old["CheckSpecialPhoneCall.DoSpecialPhoneCall"]) + 7)
+    for at in loads:
+        overlay[at + 1:at + 3] = table[1].to_bytes(2, "little")
+    changes = {"native_row": target, "old_table": source, "contact": target + 50,
+               "condition": target + 48, "script": target + 52, "load": loads[1] + 1,
+               "other_code": flat(old["CheckSpecialPhoneCall"]) + 3}
+    if fault in changes:
+        overlay[changes[fault]] ^= 1
+    new = tmp_path / "overlay.sym"
+    new.write_text(f"{0x25 if fault == 'bank' else table[0]:02x}:{table[1]:04x} SlinkSpecialPhoneCallList\n"
+                   + f"24:{table[1] + (60 if fault == 'size' else 54):04x} SlinkSpecialPhoneCallListEnd\n"
+                   + f"{script[0]:02x}:{script[1]:04x} SlinkPhoneCallScript\n")
+    if fault:
+        with pytest.raises(RuntimeError, match="phone"):
+            bc.verify_phone_hook(base, bytes(overlay), clean_sym, new)
+    else:
+        bc.verify_phone_hook(base, bytes(overlay), clean_sym, new)

@@ -74,6 +74,7 @@ REPO_MAILBOX_STUB = {
 OPTIONAL_SHARED_FILES = ["slink.asm"]
 PANEL_FILES = ("panel_flags.asm", "panel.asm", "panel_start.asm")
 SFX_FILE = "sfx.asm"
+PHONE_FILES = ("phone_flags.asm", "phone.asm")
 TRADE_FILES = ("trade_frame.asm", "trade_items.asm", "trade_snapshot.asm",
                "trade_commit.asm", "trade_service.asm", "trade_receptionist.asm", "trade_dispatch.asm")
 
@@ -104,6 +105,15 @@ def trade_export_text(checkout: pathlib.Path, repo: str) -> list[tuple[pathlib.P
             text = text.rstrip("\n") + "\n\n" + declaration + "\n"
         edits.append((path, text))
     return edits
+
+
+def _phone_table_text(checkout: pathlib.Path) -> tuple[pathlib.Path, str]:
+    path = checkout / "engine/phone/phone.asm"
+    text = path.read_text(encoding="utf-8")
+    anchor = "\tld hl, SpecialPhoneCallList\n"
+    if text.count(anchor) != 2:
+        raise RuntimeError("phone table requires exactly two native pointer loads")
+    return path, text.replace(anchor, "\tld hl, SlinkSpecialPhoneCallList\n")
 
 # The mailbox/panel ABI is shared with Gen 1 (patch/gb/slink_abi.inc), not per-generation source,
 # so it is copied -- never duplicated under patch/gen2 -- from its one committed location. It is
@@ -235,6 +245,9 @@ def overlay_plan(
     trade = [name for name in TRADE_FILES if (src_dir / name).is_file()]
     if trade and (len(trade) != len(TRADE_FILES) or not (src_dir / "slink.asm").is_file()):
         raise RuntimeError("trade overlay requires its complete file family and slink.asm")
+    phone = [name for name in PHONE_FILES if (src_dir / name).is_file()]
+    if phone and (len(phone) != len(PHONE_FILES) or not (src_dir / "slink.asm").is_file()):
+        raise RuntimeError("phone overlay requires phone_flags.asm, phone.asm and slink.asm")
     stub = src_dir / REPO_MAILBOX_STUB[repo]
     if stub.is_file():
         plan.append(("slink_mailbox.asm", stub, True))
@@ -243,6 +256,8 @@ def overlay_plan(
         plan.append((SHARED_ABI_NAME, abi, False))
     if panel:
         plan.append(("panel_flags.asm", src_dir / "panel_flags.asm", True))
+    if phone:
+        plan.append(("phone_flags.asm", src_dir / "phone_flags.asm", True))
     for name in OPTIONAL_SHARED_FILES:
         path = src_dir / name
         if path.is_file():
@@ -254,6 +269,8 @@ def overlay_plan(
         plan.append((SFX_FILE, src_dir / SFX_FILE, True))
     if trade:
         plan += [(name, src_dir / name, True) for name in TRADE_FILES]
+    if phone:
+        plan.append(("phone.asm", src_dir / "phone.asm", True))
     return plan
 
 
@@ -269,6 +286,7 @@ def apply_overlay(
         _start_menu_text(checkout)  # all three anchors validated before any checkout mutation
     reset_edit = _reset_sound_text(checkout, repo) if SFX_FILE in include_names else None
     trade_edit = _trade_receptionist_text(checkout) if "trade_service.asm" in include_names else None
+    phone_edit = _phone_table_text(checkout) if "phone.asm" in include_names else None
     main_path = checkout / "main.asm"
     if include_names:
         anchor = MAIN_ANCHORS[repo]
@@ -305,6 +323,9 @@ def apply_overlay(
         path.write_text(text, encoding="utf-8", newline="\n")
         for path, text in trade_export_text(checkout, repo):
             path.write_text(text, encoding="utf-8", newline="\n")
+    if phone_edit is not None:
+        path, text = phone_edit
+        path.write_text(text, encoding="utf-8", newline="\n")
     return applied
 
 
@@ -383,6 +404,46 @@ def verify_trade_hook(base: bytes, overlay: bytes, overlay_sym: pathlib.Path, re
         raise RuntimeError("trade receptionist changed outside its two-byte script pointer")
 
 
+def verify_phone_hook(base: bytes, overlay: bytes, clean_sym: pathlib.Path, overlay_sym: pathlib.Path) -> None:
+    """Pin native rows and the two same-size loads; never grow the native table."""
+    old, new = _symbols(clean_sym), _symbols(overlay_sym)
+    required = ("SpecialPhoneCallList", "CheckSpecialPhoneCall", "CheckSpecialPhoneCall.DoSpecialPhoneCall",
+                "SpecialCallOnlyWhenOutside", "SpecialCallWhereverYouAre")
+    if any(name not in old for name in required) or any(name not in new for name in
+            ("SlinkSpecialPhoneCallList", "SlinkSpecialPhoneCallListEnd", "SlinkPhoneCallScript")):
+        raise RuntimeError("phone link symbols missing")
+
+    def flat(location):
+        bank, address = location
+        if not 0x4000 <= address < 0x8000 or bank <= 0:
+            raise RuntimeError("phone symbol is not banked ROM")
+        return bank * 0x4000 + address - 0x4000
+
+    table = new["SlinkSpecialPhoneCallList"]
+    if (table[0] != 0x24 or table[1] + 54 > 0x8000
+            or new["SlinkSpecialPhoneCallListEnd"] != (0x24, table[1] + 54)):
+        raise RuntimeError("phone table must have nine rows inside bank24")
+    source, target = flat(old["SpecialPhoneCallList"]), flat(table)
+    if (overlay[target:target + 48] != base[source:source + 48]
+            or overlay[source:source + 48] != base[source:source + 48]):
+        raise RuntimeError("phone native eight-row table changed")
+    script_bank, script_address = new["SlinkPhoneCallScript"]
+    flat((script_bank, script_address))
+    ninth = (old["SpecialCallWhereverYouAre"][1].to_bytes(2, "little") + bytes([0, script_bank])
+             + script_address.to_bytes(2, "little"))
+    if overlay[target + 48:target + 54] != ninth:
+        raise RuntimeError("phone ninth row has wrong condition/contact/script")
+    start, end = flat(old["CheckSpecialPhoneCall"]), flat(old["SpecialCallOnlyWhenOutside"])
+    expected = bytearray(base[start:end])
+    native_load = b"\x21" + old["SpecialPhoneCallList"][1].to_bytes(2, "little")
+    for at in (10, flat(old["CheckSpecialPhoneCall.DoSpecialPhoneCall"]) - start + 7):
+        if expected[at:at + 3] != native_load:
+            raise RuntimeError("phone native pointer-load instruction differs")
+        expected[at + 1:at + 3] = table[1].to_bytes(2, "little")
+    if overlay[start:end] != expected:
+        raise RuntimeError("phone dispatch changed outside two pointer operands")
+
+
 def verify_symbol_scope(clean_sym: pathlib.Path, overlay_sym: pathlib.Path, *, panel: bool) -> None:
     """Gate 6c: panel grows bank 4 only; other existing symbols stay fixed.
 
@@ -446,6 +507,8 @@ def build(*, crystal_repo: pathlib.Path | None = None, gold_repo: pathlib.Path |
                             panel="panel.asm" in overlay_applied[repo])
         if "trade_service.asm" in overlay_applied[repo]:
             verify_trade_hook(base, data, checkout / f"{key}.sym", repo)
+        if "phone.asm" in overlay_applied[repo]:
+            verify_phone_hook(base, data, clean_dir / f"{key}.sym", checkout / f"{key}.sym")
         ups = ups_create(base, data)
         if ups_apply(base, ups) != data:
             raise RuntimeError(f"{key}: UPS round trip failed")

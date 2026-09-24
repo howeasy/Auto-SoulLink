@@ -347,15 +347,57 @@
       "overlay": {
         "artifact": "gold_overlay",
         "base_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
-        "md5": "2adadd41ca2a89f6632b188f2d218b1a",
+        "md5": "faf2b6350bbb9ad653eda44f540ebf45",
         "ram": {
           "wAttrmap": 52441,
           "wSlinkMailbox": 49625,
           "wTilemap": 50080
         },
-        "rom_sha1": "a9f3a26f3ee970eab1e99369bc77e1b2e6db50a2",
+        "rom_sha1": "d563669ec3ac5029be9464d2301aa3be27a5f163",
         "sym": "gold_slink.sym",
-        "sym_sha256": "2fe84d41e1f5caeca5feb20382237e7708f6fb8b698c38510f7b670594b21d51"
+        "sym_sha256": "c44c8dcf73af17e779ed1b8b0eaea2a309ff9856a9b49c2adb92d02bd0c8b035",
+        "trade": {
+          "ram": {
+            "wOTPartyCount": {
+              "addr": 56661,
+              "bank": 1
+            },
+            "wOTPartyMon1": {
+              "addr": 56669,
+              "bank": 1
+            },
+            "wOTPartyMonNicknames": {
+              "addr": 57023,
+              "bank": 1
+            },
+            "wOTPartyMonOTs": {
+              "addr": 56957,
+              "bank": 1
+            },
+            "wOTPartySpecies": {
+              "addr": 56662,
+              "bank": 1
+            },
+            "wOTPlayerName": {
+              "addr": 56640,
+              "bank": 1
+            }
+          },
+          "rom": {
+            "SlinkTradeApplyPickup": {
+              "addr": 16951,
+              "bank": 19
+            },
+            "SlinkTradeCommit": {
+              "addr": 17427,
+              "bank": 19
+            },
+            "SlinkTradePromptEntry": {
+              "addr": 16724,
+              "bank": 19
+            }
+          }
+        }
       },
       "ram": {
         "hBGMapAddress": 65496,
