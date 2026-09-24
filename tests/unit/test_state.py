@@ -361,10 +361,10 @@ def test_trade_watchdog_frees_abandoned_slot(tmp_path, monkeypatch):
     assert state.links[0].a.key == "A:1", "link untouched by an abandoned trade"
 
 
-def test_trade_watchdog_force_completes_applying(tmp_path, monkeypatch):
-    """Once apply_trade is DISPATCHED, the clients will swap RAM (queued commands survive
-    reconnects), so the watchdog must COMMIT a stuck 'applying' trade — silently freeing the
-    slot left the server's keys pointing at mons the players no longer hold."""
+def test_trade_watchdog_makes_applying_uncertain_then_evidence_commits(tmp_path, monkeypatch):
+    """Once apply_trade is DISPATCHED the slot must not simply be freed, but the watchdog must not
+    fabricate the silent side's keys either: that side becomes UNCERTAIN and its next party
+    snapshot settles it (tests/unit/test_state_trade_uncertain.py covers every branch)."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = _with_trade_blobs(make_state_with_link())
     token = _offer_and_pick(state, slot=0)
@@ -373,10 +373,11 @@ def test_trade_watchdog_force_completes_applying(tmp_path, monkeypatch):
     state.handle_event("a", {"event": "trade_done", "slot": 0, "new_key": "B:2", "new_species": 5})
     for _ in range(state.TRADE_WATCHDOG_EVENTS + 5):
         state.handle_event("a", {"event": "tick"})
-    assert state.pending_trade is None
     e = state.links[0]
-    assert e.a.key == "B:2" and e.b.key == "A:1", \
-        "watchdog commits the swap (B falls back to the pre-trade key of the mon it received)"
+    assert state.pending_trade["phase"] == "uncertain" and e.a.key == "A:1", "no fabricated commit"
+    state.handle_event("b", {"event": "tick", "party": [{"key": "A:1", "species_id": 1}]})
+    assert state.pending_trade is None
+    assert e.a.key == "B:2" and e.b.key == "A:1"
     assert "B:2" in state.party_keys["a"] and "A:1" in state.party_keys["b"]
 
 

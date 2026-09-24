@@ -2562,6 +2562,8 @@ class SLinkServer:
                 pid: sorted(s.faint_repair_stalled.get(pid, {}))
                 for pid in ["a", "b"]
             },
+            # An uncertain / conflicted native trade awaiting party evidence or a human (None = none).
+            "trade_problem": s.trade_problem(),
             "badge_slugs": self.adapter.gym_badge_slugs(s.rom_type or ""),
         }
 

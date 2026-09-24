@@ -329,6 +329,8 @@ class SoulLinkState:
 
         if event == "hello":
             self._handle_hello(player_id, msg)
+            if not msg.get("_rejected"):
+                self._trade_evidence(player_id, msg.get("party") or [])
         elif event == "area_enter":
             self._handle_area_enter(player_id, msg)
         elif event == "ghost_pos":
@@ -451,6 +453,7 @@ class SoulLinkState:
                 # Rival Team Swap: refresh the per-player blob cache from the
                 # same snapshot.  See _ingest_party_blobs for the shape.
                 self._ingest_party_blobs(player_id, party)
+                self._trade_evidence(player_id, party)
                 # Reconcile party_keys against Lua's actual party snapshot.  Catches
                 # state drift from spurious party_to_box / missed box_to_party events
                 # in the Lua diff loop — without this, a phantom deposit propagates
@@ -574,16 +577,22 @@ class SoulLinkState:
         pt = self.pending_trade
         if pt is None:
             return
+        if pt.get("phase") in ("uncertain", "conflict"):
+            return                                     # already the watchdog's product: evidence or a human settles it
         pt["age"] = pt.get("age", 0) + 1
         if pt["age"] > self.TRADE_WATCHDOG_EVENTS:
             if pt.get("phase") == "applying":
-                # apply_trade was already dispatched: the clients WILL swap RAM (queued commands
-                # survive reconnects), so silently freeing the slot here would leave the server's
-                # keys pointing at mons the players no longer hold. Commit the swap instead,
-                # falling back to the known pre-trade keys for any side that never reported
-                # (no trade-evolution assumed for that side).
-                log.warning(f"trade watchdog: force-completing stuck 'applying' trade (token {pt.get('token')})")
-                self._commit_trade(pt)
+                # apply_trade was already dispatched, so freeing the slot could strand keys the
+                # players no longer hold -- and guessing an outcome is worse (evolution, a failed
+                # append). Every side that never reported is now UNCERTAIN: its next party
+                # snapshot settles it (_trade_evidence); one that never sends one stays surfaced.
+                log.warning(f"trade watchdog: 'applying' trade {pt.get('token')} is uncertain; "
+                            f"waiting for party evidence ({pt.get('verdict')})")
+                pt["phase"] = "uncertain"
+                pt.setdefault("verdict", {"a": None, "b": None})
+                for pid in ("a", "b"):
+                    if pt["verdict"][pid] is None:
+                        pt["verdict"][pid] = "await"
                 return
             log.info(f"trade watchdog: abandoning stuck trade (phase {pt.get('phase')}, token {pt.get('token')})")
             self.pending_trade = None
@@ -797,6 +806,9 @@ class SoulLinkState:
         pt["phase"] = "applying"
         pt["done"] = {"a": False, "b": False}
         pt["new"]  = {"a": None, "b": None}   # (new_key, new_species) reported by each client post-scene
+        # Per side: None (scene running) | "await" (uncertain: next party snapshot decides) |
+        # "traded" | "none" | a conflict reason. _settle_trade acts once neither is None/"await".
+        pt["verdict"] = {"a": None, "b": None}
         pt["age"]  = 0
         log.info(f"trade applying: A slot {pt['a_slot']} <-> B slot {pt['b_slot']} (link {pt['link'].area_id})")
 
@@ -818,21 +830,97 @@ class SoulLinkState:
             new_species = int(msg.get("new_species", 0) or 0)
         except (TypeError, ValueError):
             new_species = 0
-        pt.setdefault("new", {"a": None, "b": None})[player_id] = (new_key, new_species)
+        pt.setdefault("new", {"a": None, "b": None})
         pt.setdefault("done", {"a": False, "b": False})[player_id] = True
-        if not all(pt["done"].values()):
-            return                                      # wait for the other side before touching the link
-        self._commit_trade(pt)
+        pt.setdefault("verdict", {"a": None, "b": None})
+        if pt["verdict"][player_id] not in (None, "await"):
+            return                                      # already decided (a replayed report)
+        if msg.get("uncertain") or not new_key:
+            pt["verdict"][player_id] = "await"          # the side finished but cannot vouch: party evidence decides
+        elif new_key == pt[f"{player_id}_key"]:
+            pt["verdict"][player_id] = "none"           # the client still holds its own mon: refused / never swapped
+        else:
+            pt["verdict"][player_id] = "traded"
+            pt["new"][player_id] = (new_key, new_species)
+        self._settle_trade(pt)
+
+    def _trade_evidence(self, player_id: str, party: list):
+        """A party snapshot from a side whose trade outcome is uncertain decides that side:
+        outgoing key gone + the incoming key (or ONE unindexed descendant: same OT per the
+        adapter, same evolution family, e.g. a trade evolution) present -> traded; outgoing
+        present + incoming absent -> none; anything else -> a conflict reason. Only the snapshot
+        AFTER the side became uncertain counts, so a mid-scene party is never evidence."""
+        pt = self.pending_trade
+        if not pt or pt.get("verdict", {}).get(player_id) != "await":
+            return
+        keys = {m.get("key") for m in party if m.get("key")}
+        if not keys:
+            return   # ponytail: an unreadable/empty party is no evidence; a real party is never empty
+        partner = _partner(player_id)
+        gives, gets = pt[f"{player_id}_key"], pt[f"{partner}_key"]
+        entry = pt["link"]
+        gets_half = entry.b if player_id == "a" else entry.a    # the link is not swapped yet
+        if gets in keys:
+            got = [(gets, gets_half.species if gets_half else 0)]
+        else:
+            ot, fam = self.adapter.parse_ot_id(gets), self.adapter.evo_family
+            family = fam(gets_half.species) if gets_half and gets_half.species else None
+            got = [(m["key"], int(m.get("species_id") or 0)) for m in party
+                   if m.get("key") and m["key"] not in self._key_index and family is not None
+                   and m.get("species_id") and self.adapter.parse_ot_id(m["key"]) == ot
+                   and fam(int(m["species_id"])) == family]
+        kept = gives in keys
+        if not kept and len(got) == 1:
+            pt["verdict"][player_id] = "traded"
+            pt["new"][player_id] = got[0]
+        elif kept and not got:
+            pt["verdict"][player_id] = "none"
+        elif kept:
+            pt["verdict"][player_id] = f"{player_id}: holds BOTH {gives} and {got[0][0]} (duplicated)"
+        elif not got:
+            pt["verdict"][player_id] = f"{player_id}: holds NEITHER {gives} nor {gets}"
+        else:
+            pt["verdict"][player_id] = f"{player_id}: several candidates for {gets}"
+        log.warning(f"[{player_id}] trade {pt['token']} evidence: {pt['verdict'][player_id]}")
+        self._settle_trade(pt)
+
+    def _settle_trade(self, pt: dict):
+        """Act once BOTH sides have a verdict: both traded -> commit; both none -> roll back
+        (the link was never touched); anything else -> a sticky 'conflict' surfaced through
+        trade_problem(), never guessed."""
+        v = pt["verdict"]
+        if any(x in (None, "await") for x in v.values()):
+            return
+        if v["a"] == v["b"] == "traded":
+            self._commit_trade(pt)
+            return
+        if v["a"] == v["b"] == "none":
+            log.info(f"trade {pt['token']} did not happen on either side — rolled back")
+            self.pending_trade = None
+            for pid in ("a", "b"):
+                self.queued_commands[pid].append({
+                    "cmd": "msgbox", "text": "Trade did not go through.", "fb": "prompt"})
+            return
+        pt["phase"] = "conflict"
+        pt["problem"] = "; ".join(f"{pid}: {v[pid]}" if v[pid] in ("traded", "none") else v[pid]
+                                  for pid in ("a", "b"))
+        log.error(f"trade {pt['token']} CONFLICT — link left as it was, needs a human: {pt['problem']}")
+        for pid in ("a", "b"):
+            self.queued_commands[pid].append({
+                "cmd": "msgbox", "text": "TRADE ERROR - party mismatch.\nSee the status page.",
+                "fb": "prompt"})
+
+    def trade_problem(self) -> dict | None:
+        """The uncertain/conflicted trade for the status page, or None."""
+        pt = self.pending_trade
+        if not pt or pt.get("phase") not in ("uncertain", "conflict"):
+            return None
+        return {"phase": pt["phase"], "token": pt["token"], "a_key": pt["a_key"], "b_key": pt["b_key"],
+                "verdict": dict(pt["verdict"]), "problem": pt.get("problem", "")}
 
     def _commit_trade(self, pt: dict):
-        """Apply the swap atomically. Called with both sides reported (normal path) or by the
-        watchdog force-completing a stuck 'applying' trade (missing sides fall back to the
-        pre-trade key of the mon that side RECEIVED — correct unless it trade-evolved)."""
-        pt.setdefault("new", {"a": None, "b": None})
-        if not (pt["new"].get("a") or [""])[0]:
-            pt["new"]["a"] = (pt["b_key"], 0)           # A received B's old mon
-        if not (pt["new"].get("b") or [""])[0]:
-            pt["new"]["b"] = (pt["a_key"], 0)
+        """Apply the swap atomically, once both sides are known to have traded; pt["new"] holds
+        each side's post-trade (key, species), including any trade-evolution."""
         # ── apply the swap atomically ─────────────────────────────────────────────
         # The mon DATA moves to the other player (entry.a now tracks the mon A holds, entry.b the mon B
         # holds); then each half's key/species is patched from that side's post-scene readback (captures
@@ -2483,11 +2571,15 @@ class SoulLinkState:
         self._repair_lost_faints(player_id, party, in_battle)
 
         actual_keys = {mon.get("key", "") for mon in party if mon.get("key")}
+        # An uncertain/conflicted trade still owns its two keys: until it settles, either key may be
+        # on either side, so drift enforcement on them would issue a spurious Unbox/deposit.
+        frozen = ({self.pending_trade["a_key"], self.pending_trade["b_key"]}
+                  if self.trade_problem() else set())
         tracked_keys = self.party_keys[player_id]
         partner = _partner(player_id)
 
         # Ghost-boxed: Lua reports key in party, server thinks it's deposited.
-        for key in actual_keys - tracked_keys:
+        for key in actual_keys - tracked_keys - frozen:
             if self._has_pending_command(player_id, key,
                                           "box_mon", "party_mon", "memorialize"):
                 continue
@@ -2525,7 +2617,7 @@ class SoulLinkState:
 
         # Ghost-party: server thinks key is in party, Lua doesn't see it.  Rarer,
         # but possible if a real party_to_box's emission was suppressed somewhere.
-        for key in tracked_keys - actual_keys:
+        for key in tracked_keys - actual_keys - frozen:
             if self._has_pending_command(player_id, key,
                                           "box_mon", "party_mon", "memorialize"):
                 continue
