@@ -27,7 +27,7 @@
       "axes": {"kind": "engine_sites", "title": "gold", "requirement_ids": ["F-2", "F-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold.engine_sites.json",
-        "sha256": "ccdeb035c0f6f74481361fb21adf4206680abfd57c311f5c47622594deed49d2"
+        "sha256": "8b63eaf0e084ca153fa616e6fab5407004548cc559bc500e70aa9c64d666c41f"
       }}}]
     },
     {

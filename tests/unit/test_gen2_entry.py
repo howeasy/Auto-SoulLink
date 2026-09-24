@@ -143,7 +143,7 @@ def test_shipped_receipts_are_the_committed_fixture_bytes_and_decode_alike_in_lu
     for pack in world.entry.RECEIPT_FILES.values():
         files = dict(pack.items())
         paths += [files["engine_sites"], files["write_window"], *dict(files["qualifications"].items()).values()]
-    assert len(paths) == 13
+    assert len(paths) == 14  # + gold_battle_errand.qualification.json, the Gold U1 fixture's report
     for rel in paths:
         shipped = ROOT / rel
         assert shipped.read_bytes() == (ROOT / "tests/fixtures/gen2/receipts" / shipped.name).read_bytes(), rel

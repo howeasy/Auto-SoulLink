@@ -86,6 +86,8 @@ Entry.RECEIPT_FILES = {
         write_window="data/games/gen2_gold/receipts/gold.write_window.json",
         qualifications={
             gold_battle="data/games/gen2_gold/receipts/gold_battle.qualification.json",
+            -- the Gold U1 engine-site receipt's fixture (card gen2-u1e-poison; S.U1_FIXTURES)
+            gold_battle_errand="data/games/gen2_gold/receipts/gold_battle_errand.qualification.json",
             gold_town="data/games/gen2_gold/receipts/gold_town.qualification.json",
         },
     },

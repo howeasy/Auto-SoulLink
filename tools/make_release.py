@@ -219,6 +219,7 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "receipts/gold.engine_sites.json",
         "receipts/gold.write_window.json",
         "receipts/gold_battle.qualification.json",
+        "receipts/gold_battle_errand.qualification.json",
         "receipts/gold_town.qualification.json",
     ],
     "gen2_silver": [
