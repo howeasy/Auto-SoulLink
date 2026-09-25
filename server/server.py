@@ -1922,35 +1922,41 @@ class SLinkServer:
             self.adapter = staged_adapter
             self.state.is_rr = staged_is_rr
 
-            # Pick up a contract written after this server started, before deciding.
-            self._refresh_rom_contract()
-            verdict = self._decide_admission(player_id, msg)
-            if self.admission.get(player_id, {}).get("state") != verdict["state"]:
-                (log.info if verdict["state"] == "admitted" else log.warning)(
-                    "[%s] admission: %s — %s", player_id, verdict["state"], verdict["reason"])
-            self.admission[player_id] = verdict
-            if verdict["state"] != "admitted":
-                # STOP HERE. Recording the verdict was not enough: control used to fall
-                # straight into state.handle_event, which permanently locks
-                # player_identity, saves it, rebuilds party_keys from the rejected
-                # cartridge and QUEUES box_mon write commands back to the very client we
-                # just refused -- and then _ingest_rom_content adopted its encounter
-                # tables. Booting the wrong ROM once therefore did not merely fail to
-                # connect, it corrupted the run and wrote into the wrong save file.
+            # Exception-safe (review of 8418c931, P3): anything raising between staging and the
+            # accept/reject decision must not leave the candidate cartridge applied.
+            try:
+                # Pick up a contract written after this server started, before deciding.
+                self._refresh_rom_contract()
+                verdict = self._decide_admission(player_id, msg)
+                if self.admission.get(player_id, {}).get("state") != verdict["state"]:
+                    (log.info if verdict["state"] == "admitted" else log.warning)(
+                        "[%s] admission: %s — %s", player_id, verdict["state"], verdict["reason"])
+                self.admission[player_id] = verdict
+                if verdict["state"] != "admitted":
+                    # STOP HERE. Recording the verdict was not enough: control used to fall
+                    # straight into state.handle_event, which permanently locks
+                    # player_identity, saves it, rebuilds party_keys from the rejected
+                    # cartridge and QUEUES box_mon write commands back to the very client we
+                    # just refused -- and then _ingest_rom_content adopted its encounter
+                    # tables. Booting the wrong ROM once therefore did not merely fail to
+                    # connect, it corrupted the run and wrote into the wrong save file.
+                    _rollback_hello()
+                    self._log_event(player_id, "hello",
+                                    f"REJECTED — {verdict['reason']}",
+                                    msg.get("loc_name", "") or msg.get("area_id", ""))
+                    return [{"cmd": "noop", "refused": "admission"}]
+
+                area    = msg.get("area_id", "")
+                loc     = msg.get("loc_name", "")
+                party_n = len(msg.get("party", []))
+                log.info(f"[{player_id}] hello rom={rom} area='{area or loc}' party={party_n}")
+                self._ingest_box_census(player_id, msg)
+
+                # Run state machine first (handles identity lock check).
+                cmds = self.state.handle_event(player_id, msg)
+            except Exception:
                 _rollback_hello()
-                self._log_event(player_id, "hello",
-                                f"REJECTED — {verdict['reason']}",
-                                msg.get("loc_name", "") or msg.get("area_id", ""))
-                return [{"cmd": "noop", "refused": "admission"}]
-
-            area    = msg.get("area_id", "")
-            loc     = msg.get("loc_name", "")
-            party_n = len(msg.get("party", []))
-            log.info(f"[{player_id}] hello rom={rom} area='{area or loc}' party={party_n}")
-            self._ingest_box_census(player_id, msg)
-
-            # Run state machine first (handles identity lock check).
-            cmds = self.state.handle_event(player_id, msg)
+                raise
 
             if msg.get("_rejected"):
                 # Identity mismatch — log it, surface error, but don't update display data,

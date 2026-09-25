@@ -86,6 +86,23 @@ def test_wrong_save_hello_preserves_the_prior_rom_type_panel_and_sfx(tmp_path):
     assert s.state.rom_type == "Red"
 
 
+def test_a_hello_that_raises_mid_decision_rolls_back_the_staged_cartridge(tmp_path):
+    """Review of 8418c931 (P3): an exception between staging and the accept/reject decision
+    must not leave the candidate cartridge's adapter/capabilities applied."""
+    import pytest
+    s = SLinkServer(data_dir=str(tmp_path))
+    before_conn = dict(s.connected_players.get("a", {}))
+    before_adapter = s.adapter
+
+    def boom(*_a, **_k):
+        raise RuntimeError("boom")
+    s.state.handle_event = boom
+    with pytest.raises(RuntimeError):
+        s._dispatch("a", _hello("a", "Yellow", panel=True, sfx=True))
+    assert s.adapter is before_adapter and s.state.adapter is before_adapter
+    assert dict(s.connected_players.get("a", {})) == before_conn
+
+
 def test_contract_rejected_hello_leaves_connected_players_and_adapter_untouched(tmp_path):
     """Codex cx-2985fe38 F2 contract sequence: a fresh contracted run refuses a hello with
     no rom_content, and must leave connected_players/self.adapter/state.rom_type exactly as

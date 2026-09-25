@@ -99,6 +99,10 @@ STABLE_SERVER_FIELDS = frozenset(("game_id", "rules", "area_states", "pending_ca
 # KEY-SCOPE-3 a56ac407: ambiguous_keys latches a (player, key) after a trade-window clash; a clean trade
 # never creates one, so it must be empty (or absent, pre-a56ac407) in both documents.
 TRADE_SERVER_FIELDS = frozenset(("pending_trade", "trade_token", "ambiguous_keys"))
+# KEY-SCOPE-5 4bd32cec: the key_change replay ledger. A clean native trade carries its new key on
+# trade_done, never key_change, so the ledger must not move across the visit: compared like the
+# stable fields, but not required, since pre-KS5 baselines lack it.
+OPTIONAL_STABLE_SERVER_FIELDS = frozenset(("key_migration_ledger",))
 
 
 class TradeStatus(StrEnum):

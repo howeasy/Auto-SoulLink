@@ -658,6 +658,7 @@ def test_source_save_inventory_requires_explicit_new_field_policy():
     payload = next(node.value for node in ast.walk(save) if isinstance(node, ast.Assign)
                    and any(isinstance(target, ast.Name) and target.id == "payload" for target in node.targets))
     assert {key.value for key in payload.keys} == (oracle.STABLE_SERVER_FIELDS | oracle.TRADE_SERVER_FIELDS
+                                                  | oracle.OPTIONAL_STABLE_SERVER_FIELDS
                                                   | {"links", "mon_stats"})
 
 

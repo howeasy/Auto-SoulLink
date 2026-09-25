@@ -380,9 +380,15 @@ def _without_box_generation(trace):
             assert type(gen) is int and gen >= 1, e[1].get("event")
             e = ("sent", {k: v for k, v in e[1].items() if k != "pc_boxes_generation"})
         if e[0] == "sent" and e[1].get("enemy_party"):
-            # GEN1-ENEMY-MAXHP: the foe may now carry maxHP (wEnemyMonMaxHP, when plausible)
-            assert all(type(f.get("maxHP", 1)) is int for f in e[1]["enemy_party"])
-            e = ("sent", {**e[1], "enemy_party": [{k: v for k, v in f.items() if k != "maxHP"}
+            # GEN1-ENEMY-MAXHP: the foe may now carry maxHP (wEnemyMonMaxHP, when plausible);
+            # the calc lane (de157d7f) adds moves/pp (4 each), status_cond, dvs_raw and, in
+            # trainer battles, blob_hex -- all absent on the 8f6a986 baseline.
+            for f in e[1]["enemy_party"]:
+                assert type(f.get("maxHP", 1)) is int and type(f.get("status_cond", 0)) is int
+                assert type(f.get("dvs_raw", 0)) is int and type(f.get("blob_hex", "")) is str
+                assert all(len(f.get(k, [0] * 4)) == 4 for k in ("moves", "pp"))
+            added = {"maxHP", "moves", "pp", "status_cond", "dvs_raw", "blob_hex"}
+            e = ("sent", {**e[1], "enemy_party": [{k: v for k, v in f.items() if k not in added}
                                                   for f in e[1]["enemy_party"]]})
         out.append(e)
     return out
