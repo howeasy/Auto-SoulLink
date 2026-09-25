@@ -128,11 +128,16 @@ async def test_a_stopped_run_with_no_pairs_offers_no_setup_steps(manager_client,
 
 @pytest.mark.asyncio
 async def test_the_board_fragment_stands_alone(manager_client, manager_dir):
+    """The Manager's poll target: `#content` (what htmx's `hx-select` pulls out) plus the
+    live-announcer markup that must sit outside it (`_board.html`, siblings of `#content` so
+    the 2s poll swap never reaches them) -- never the page shell (rail, `<html>`) that
+    `/runs/{id}` wraps the fragment in for a first load."""
     run = _stopped_run(manager_dir)
     resp = await manager_client.get(f"/runs/{run['run_id']}/board")
     assert resp.status == 200
     body = await resp.text()
-    assert body.lstrip().startswith("<div id=\"content\"")
+    assert '<div id="content"' in body
+    assert "mk-rail" not in body and "<html" not in body.lower(), "the /board route must not carry the page shell"
     assert "SPARKY" in body
 
 

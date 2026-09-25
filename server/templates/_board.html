@@ -71,6 +71,17 @@
   </div>
 {%- endmacro %}
 
+{# ── Live announcements: siblings of #content, so idiomorph's poll swap never
+   touches them. dashboard.js diffs .mk-pair section classes and the phase banner
+   between polls to speak a new link, a pair death or the run ending -- one sentence
+   each, never HP or every poll (docs/public_ui/mobile-a11y.md #4). No server change:
+   the diff reads what the board already renders. #}
+<div class="mk-a11y-bar">
+  <button type="button" id="mk-announce-toggle" class="mk-btn mk-announce-toggle" aria-pressed="false">Pause announcements</button>
+</div>
+<div id="mk-announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+<div id="mk-toast-host" class="mk-toast-host" aria-hidden="true"></div>
+
 <div id="content" hx-ext="morph" hx-get="{{ poll_url }}" hx-trigger="every 2s" hx-swap="morph:outerHTML" hx-target="this" hx-select="#content">
   {# The run's phase lives inside the polled fragment so it moves with the run. #}
   <div class="phase-banner phase-{{ phase_slug }}">
