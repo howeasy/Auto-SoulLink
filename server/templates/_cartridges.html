@@ -10,12 +10,12 @@
 #}
 <div class="mk-optgrid">
   <template x-for="pid in ['a', 'b']" :key="pid">
-    <label class="mk-field"><span x-text="'Player ' + pid.toUpperCase() + ' cartridge'"></span>
+    <div class="mk-field"><label :for="'rom-select-' + pid"><span x-text="'Player ' + pid.toUpperCase() + ' cartridge'"></span></label>
       <span class="mk-filerow">
         {# :selected on each option, not only x-model on the select: the options are
            rendered by nested templates, after the value is set, and a <select> shows its
            placeholder until an option claims the value #}
-        <select x-model="rdraft['rom_' + pid]">
+        <select :id="'rom-select-' + pid" x-model="rdraft['rom_' + pid]">
           <option value="" :selected="!rdraft['rom_' + pid]">— pick a cartridge —</option>
           <template x-for="g in romGroups()" :key="g.label">
             <optgroup :label="g.label">
@@ -25,9 +25,11 @@
             </optgroup>
           </template>
         </select>
-        <label class="mk-btn" :class="uploading === 'rom_' + pid ? 'busy' : ''"><input type="file" accept=".gb,.gbc" @change="upload($event, 'rom_' + pid)"><span x-text="uploading === 'rom_' + pid ? 'Adding…' : 'Add file…'"></span></label>
+        {# the name starts with the visible words and says whose cartridge #}
+        <label class="mk-btn" :for="'rom-file-' + pid" :class="uploading === 'rom_' + pid ? 'busy' : ''"><input type="file" :id="'rom-file-' + pid" accept=".gb,.gbc" @change="upload($event, 'rom_' + pid)"
+               :aria-label="(uploading === 'rom_' + pid ? 'Adding…' : 'Add file…') + ' for the Player ' + pid.toUpperCase() + ' cartridge'"><span x-text="uploading === 'rom_' + pid ? 'Adding…' : 'Add file…'"></span></label>
       </span>
-    </label>
+    </div>
   </template>
 </div>
 <p class="mk-cap" x-show="rform.roms_dir"><span x-text="roms.length ? roms.length + (roms.length === 1 ? ' cartridge' : ' cartridges') + ' found in ' : 'No cartridges found in '"></span><code class="num" x-text="rform.roms_dir"></code><span x-text="family ? ' — this run takes ' + familyLabel(family) + ' ones' : ''"></span><span x-show="!roms.length"> — drop your dumps there or add one above.</span> <button type="button" class="mk-linkbtn" @click="scanRoms()">Rescan</button></p>

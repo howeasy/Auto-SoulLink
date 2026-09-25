@@ -43,7 +43,10 @@
       {# ── New run ─────────────────────────────────────────────────────── #}
       <header class="mk-runhdr"><h1 class="mk-runname">New run</h1></header>
       <div class="mk-page mk-newpage" x-data="newRun()">
-        <div class="mk-form">
+        {# outside the aria-busy form: a live region under aria-busy=true waits for it to clear #}
+        <span role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap"
+              x-text="busy ? (stage || 'Creating…') : (uploading ? 'Adding the file…' : uploadNote)"></span>
+        <div class="mk-form" :aria-busy="busy || !!uploading">
           <label class="mk-field big">
             <span>Name</span>
             <input class="big" type="text" x-model="draft.name" placeholder="Kanto Duo" autofocus @keydown.enter="create()"
