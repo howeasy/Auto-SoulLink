@@ -217,7 +217,19 @@ ALLOWED_TASKS_SOURCE = ("pret c75f3523: src/field_tasks.c:84-94, src/field_weath
 # and BG tilemap) -- no party, storage or save routine.  Without it every Emerald field frame would
 # refuse on "unknown active task".  Task_RunPokemonLeagueLightingEffect does not exist in Emerald
 # (0 in pokeemerald.sym, 0 in src/), so the FR/LG league row is excluded by name with that reason.
-EMERALD_ONLY_TASKS = ("Task_MuddySlope",)
+# E2-CKPT: the map-name popup.  ShowMapNamePopup (src/map_name_popup.c:231-251) creates
+# Task_MapNamePopUpWindow on every warp or connection into a show_map_name map
+# (src/overworld.c:822-824,1698-1702,1946-1947) and on CONTINUE; it lives ~190 frames with the
+# player free (E2 census: 111 settled frames after CONTINUE).  Its whole reach (:254-426) is
+# window/BG/palette work: FlagGet (a read), CurrentBattlePyramidLocation (a gMapHeader read,
+# src/battle_pyramid.c:1423-1431), GetMapName into a stack buffer (src/region_map.c:1568-1598;
+# the secret-base spelling reads gSaveBlock1Ptr, src/secret_base.c:728-738), Add/Remove
+# MapNamePopUpWindow (src/menu.c:521-540, window buffers from gHeap 0x02000000..0x0201C000,
+# disjoint from gPlayerParty/gSaveblock1/2 and storage), LoadBgTiles/LoadPalette/BlitBitmap/
+# AddTextPrinterParameterized/CopyWindowToVram, SetGpuReg and DestroyTask -- no party, storage,
+# flag/var or save write.  FR/LG keep their Task_MapNamePopup OFF (a finite hold, checkpoint
+# predicate audit 2026-09-23); admitting it there is a separate FR decision.
+EMERALD_ONLY_TASKS = ("Task_MuddySlope", "Task_MapNamePopUpWindow")
 # title -> the tasks it adds to ALLOWED_TASKS (RR adds none: see FRLG_ONLY_TASKS)
 TITLE_TASKS = {"firered": FRLG_ONLY_TASKS, "leafgreen": FRLG_ONLY_TASKS, "emerald": EMERALD_ONLY_TASKS}
 # title -> {FR/LG allow-list task left out: why}.  Emitted as tasks.excluded_tasks.
@@ -230,7 +242,9 @@ TASKS_SOURCE = {"emerald": (
     ":138, Task_MuddySlope :880-957, Task_RunTimeBasedEvents :150-177), src/field_weather.c:154-181,"
     "216-227 (StartWeather -> Task_WeatherInit -> Task_WeatherMain); Center 1F Union Room background: "
     "data/scripts/cable_club.inc:1226-1228 (CableClub_OnResume), src/union_room.c:3294-3377,3465-3497, "
-    "src/link_rfu_2.c:510-565,2640-2649; FR/LG league lighting excluded (absent in Emerald)")}
+    "src/link_rfu_2.c:510-565,2640-2649; map-name popup (E2-CKPT): src/map_name_popup.c:231-426, "
+    "src/menu.c:521-540, src/overworld.c:822-824,1698-1702,1946-1947; FR/LG league lighting excluded "
+    "(absent in Emerald)")}
 # E1-CHECKPOINT: the Emerald-only forbidden states (docs/gen3_emerald/write_checkpoint.md s3).  The
 # checkpoint is fail-closed on any task off the allow-list and on callback2 != CB2_Overworld, so
 # these are refused already; the table is documentation + the E2 negative-control targets, and

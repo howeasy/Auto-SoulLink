@@ -106,6 +106,7 @@ The `PlayerBufferExecCompleted` ROM prefix is byte-equal to the FR/LG pret build
 | `Task_MuddySlope` | `0x0809E638` | **Emerald-only**, same `SetUpFieldTasks`; its reach is the map grid and BG tilemap only (`:880-957`) |
 | `Task_WeatherMain` | `0x080AB1B0` | `src/field_weather.c:154-181,216-227` |
 | `Task_InitUnionRoom`, `Task_SearchForChildOrParent`, `Task_UnionRoomListen` | `0x0801697C`, `0x08016CA0`, `0x0800EB44` | Center 1F `CableClub_OnResume` → `special InitUnionRoom` (`data/scripts/cable_club.inc:1226-1228`); `src/union_room.c:3294-3377,3465-3497`; `src/link_rfu_2.c:510-565,2640-2649` |
+| `Task_MapNamePopUpWindow` | `0x080D487C` | **E2-CKPT.** `ShowMapNamePopup` (`src/map_name_popup.c:231-251`) on every warp or connection into a `show_map_name` map (`src/overworld.c:822-824,1698-1702,1946-1947`) and on CONTINUE; ~190 frames with the player free. Its reach (`:254-426`) is window/BG/palette only: see §8 |
 
 `Task_RunPokemonLeagueLightingEffect` is **excluded**. It is absent from Emerald (0 hits in the
 `.sym`, 0 in `src/`), and `tasks.excluded_tasks` records the reason. The allow-list loop now fails
@@ -155,8 +156,8 @@ Oldale frame ends with no input:
 
 Every sampled frame carried the four always-on field tasks, including `Task_MuddySlope`, which
 physically confirms EG1 decision 4. The first 111 frames after CONTINUE also carried
-`Task_MapNamePopUpWindow` (0x080D487D), which is not allowed, so the checkpoint is fail-closed while
-the map-name popup shows (an E2 checkpoint-card question).
+`Task_MapNamePopUpWindow` (0x080D487D). E2-CKPT admitted it (§8); before that the checkpoint was
+fail-closed while the popup showed.
 
 ## 7. Findings for E2 and the coordinator
 
@@ -192,3 +193,68 @@ the map-name popup shows (an E2 checkpoint-card question).
 - **F5:** the RR companion ROM (`patch/build/slink_RR.gba`) is not in this worktree. The RR
   byte-identity run borrowed the sha1-pinned copy from `gen3-lane-clean`, and the new test skips
   RR when the ROM is absent.
+
+## 8. E2-CKPT: the checkpoint on BPEE (PHYSICAL)
+
+Receipt: `docs/gen3_emerald/probes/checkpoint_emerald_2026-09-25.txt` (`lua/tests/probe_gen3_checkpoint.lua`,
+title `emerald`, kind `clean`). States come from `tools/mkstates_gen3.py --title emerald` over the committed
+`emerald_{town,battle,trainer}.sav` fixtures, by scripted normal inputs. The probe constructs no writer, so
+every write log is empty by construction.
+
+| Row | State | Expected | Observed (non-IRQ) | Refusing clauses |
+|---|---|---|---|---|
+| idle | Oldale (6,17) | admit | 281/281 (+19 IRQ) | cpu:19 |
+| walking | Oldale | admit | 118/118 (+2 IRQ) | cpu:2 |
+| start_menu | Oldale, Start | refuse | 0/118 | field_controls_locked:120, task:120 |
+| dialog | save prompt | refuse | 0/115 | field_controls_locked:120, task:120 |
+| save | in-flight slot | refuse | 0/209 | cpu:246, field_controls_locked:246, task:246 |
+| battle | wild, parked action menu | refuse | 0/112 | in_battle:120, callback1:120, callback2:120 |
+| fade | door warp into the Center | refuse | 0/70 | palette_fade_active:74, field_controls_locked:74, task:74 |
+| script_running | nurse dialog | refuse | 0/120 | script_context_status:123, field_controls_locked:123 |
+| center_idle | Center 1F | admit | 290/290 | cpu:10 |
+| map_popup | Center exit into Oldale | admit | 115/115 | cpu:18 |
+| battle_intro_field | wild, first in_battle frame | refuse | 0/168 | in_battle:180, callback2:180 |
+| trainer_battle_field | Calvin, parked action menu | refuse | 0/174 | in_battle:180, callback1:180 |
+
+**The map-name popup is admitted.** Everything `Task_MapNamePopUpWindow` reaches is window, BG or palette
+work:
+
+- `FlagGet` is a read.
+- `CurrentBattlePyramidLocation` reads `gMapHeader` (`src/battle_pyramid.c:1423-1431`).
+- `GetMapName` writes a stack buffer (`src/region_map.c:1568-1598`). The secret-base branch only reads
+  `gSaveBlock1Ptr` (`src/secret_base.c:728-738`).
+- The window buffers come from `gHeap` (`0x02000000..0x0201C000`), which is disjoint from `gPlayerParty`,
+  `gSaveblock1/2` and storage (`src/menu.c:521-540`).
+- The rest is `LoadBgTiles`, `LoadPalette`, `BlitBitmapToWindow`, `AddTextPrinterParameterized`,
+  `CopyWindowToVram`, `SetGpuReg` and `DestroyTask`.
+
+`test_map_name_popup_reaches_only_window_code` pins that callee set against pret. The falsifier is RUN 1 of
+the receipt: with the pre-E2-CKPT pack, `map_popup` is refused by `task` on 133/133 frames. FR/LG have the
+equivalent `Task_MapNamePopup` (`pokefirered src/map_name_popup.c:51`), and it stays off their allow-list,
+where the 2026-09-23 predicate audit rules it a finite hold. Admitting it on FR/LG would be a separate FR
+decision.
+
+**Center 1F admits.** `center_idle` passes with the Union Room background tasks running (F3 is physically
+confirmed at the rate level; the task set itself was not logged).
+
+**F6 (E1 pack defect, PHYSICAL):** at the parked Emerald action menu, `gBattleCommunication[0]` reads **2**
+(`STATE_WAIT_ACTION_CHOSEN`), not 1. Emerald's enum starts with `STATE_TURN_START_RECORD`
+(`src/battle_main.c:4118-4121`), so the pack's `battle_comm_0` expectation of 1 is FR's number, not FR's
+meaning. `mkstates_gen3` could not park on the pack's tuple, and parks on main + controller instead. The
+battle-reason rows (`battle_faint`/`battle_commit`) were not run on Emerald; with the current pack they would
+refuse at the parked menu.
+
+**Emerald-only forbidden states: SOURCE-only limits.** None of these is reachable from the three fixtures.
+The checkpoint refuses each one through the §5 inventory entry named here:
+
+| State | Inventory entry |
+|---|---|
+| Contests | `CB2_StartContest`, `CB2_ContestMain`, `Task_StartContest`, `Task_LinkContest_*` |
+| Secret bases | `Task_EnterSecretBase`, `Task_WarpOutOfSecretBase` |
+| Record mixing | `Task_DoRecordMixing`, `Task_RecordMixing_Main` |
+| Battle Frontier | `CB2_FrontierPass` |
+| Battle Pyramid | `Task_BattlePyramidChooseMonHeldItems` |
+| Trainer Hill | `Task_TrainerHillWaitForPaletteFade` |
+| Multi-partner battle | `CB2_HandleStartMultiPartnerBattle`, `CB2_PreInitMultiBattle`, `CB2_HandleStartMultiBattle` |
+| Union Room battle | `CB2_UnionRoomBattle` |
+| Berry Blender | `CB2_LoadBerryBlender`, `CB2_StartBlenderLink`, `CB2_StartBlenderLocal` |

@@ -37,6 +37,11 @@ REASON_TERMINALS = {
     "sound_driver": "m4a SE1 ident == ID_NUMBER",
     "battle_commit_held_rr": "battle_main_func==HandleTurnActionSelectionState and "
         "gBattleCommunication[0]==1 and BATTLE_TYPE_TRAINER",
+    # E2-CKPT: Emerald-only rows, appended after battle_commit_held_rr (indices 33..36)
+    "center_idle": "center_1f_idle_300",
+    "map_popup": "Task_MapNamePopUpWindow_live_field_settled",
+    "battle_intro_field": "in_battle_mask_nonzero",
+    "trainer_battle_field": "in_battle_mask_nonzero",
 }
 # 2B-INTEGRATE-PROBE: the G4 2b battle-window rows, P.STATES indices 23..31, in run order
 # (N8 last: its bag helper can end the whole run). name -> gen3_battle_window_rows row.
@@ -280,7 +285,10 @@ def test_every_negative_row_declares_expect_clauses(module):
             "battle_over": {"battle_outcome_open", "battle_engine_loaded"},
             "battle_commit_state3": {"battle_commit_guard"},
             "native_absent": {"native_present"},
-            "battle_commit_held_rr": {"battle_commit_hold"}}
+            "battle_commit_held_rr": {"battle_commit_hold"},
+            # E2-CKPT: Emerald battles under the overworld reason
+            "battle_intro_field": {"in_battle", "callback1", "callback2"},
+            "trainer_battle_field": {"in_battle", "callback1", "callback2"}}
     got = {r.name: set(r.expect_clauses.keys()) for r in probe.STATES.values() if r.expectation == "negative"}
     assert got == want
     row = lua.table_from({"expectation": "negative", "samples": 5, "yes": 0, "reached": True})
@@ -386,7 +394,7 @@ def test_artifact_rows_are_negative_and_gated(module):
         assert rows[name].expectation == "negative"
     assert set(rows["pc_menu"].artifacts.keys()) == {"radical_red/companion"}
     assert set(rows["script_running"].artifacts.keys()) == {
-        "firered/clean", "leafgreen/clean", "radical_red/companion"}
+        "firered/clean", "leafgreen/clean", "radical_red/companion", "emerald/clean"}
     assert all(rows[n].artifacts is None for n in TERMINALS if n not in ("pc_menu", "script_running"))
 
 
@@ -902,7 +910,7 @@ def test_b2_a_helper_finish_mid_run_keeps_every_completed_row_line(module):
     assert "PROBE battle_input_wild FAIL not run" in later
     # the run itself: every row end goes through finish(), and the script row precedes the
     # reason rows (the last of which, bw_n8_item, can end the run)
-    assert SOURCE.count("finish(row)") == 12 and SOURCE.count("active = nil") == 3
+    assert SOURCE.count("finish(row)") == 14 and SOURCE.count("active = nil") == 3   # +2 E2-CKPT custom rows
     assert SOURCE.index("if plan[9] then") < SOURCE.index("for i = P.REASON_BASE, #P.STATES do")
     assert "P.summary(rows, plan, title, kind, ok and callback_error == nil, G.log)" in SOURCE
 

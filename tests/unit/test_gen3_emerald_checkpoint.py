@@ -185,7 +185,7 @@ def test_allowed_tasks_are_the_emerald_field_set() -> None:
         "Task_RunPerStepCallback": 0x0809D88C, "Task_RunTimeBasedEvents": 0x0809D908,
         "Task_WeatherMain": 0x080AB1B0, "Task_MuddySlope": 0x0809E638,
         "Task_InitUnionRoom": 0x0801697C, "Task_SearchForChildOrParent": 0x08016CA0,
-        "Task_UnionRoomListen": 0x0800EB44}
+        "Task_UnionRoomListen": 0x0800EB44, "Task_MapNamePopUpWindow": 0x080D487C}
     assert tasks["address"] == 0x03005E00
     assert "pokeemerald c65e93f2" in tasks["source"]
 
@@ -202,6 +202,31 @@ def test_every_task_set_up_field_tasks_creates_is_on_the_allow_list() -> None:
     created = {m.group(1) for m in (re.search(r"CreateTask\(\s*(\w+)", ln) for ln in body) if m}
     assert created == {"Task_RunPerStepCallback", "Task_MuddySlope", "Task_RunTimeBasedEvents"}
     assert created <= set(emitted()["tasks"]["allowed_overworld_tasks"])
+
+
+# E2-CKPT: the popup is admitted because its body reaches only window/BG/palette code.  A new
+# callee in pret's popup file (a party, flag or save call) fails here before it reaches a pack.
+POPUP_CALLEES = {
+    "FlagGet", "FuncIsActiveTask", "CreateTask", "SetGpuReg", "ShowMapNamePopUpWindow",
+    "ClearStdWindowAndFrame", "GetMapNamePopUpWindowId", "HideMapNamePopUpWindow",
+    "RemoveMapNamePopUpWindow", "SetGpuReg_ForcedBlank", "DestroyTask",
+    "CurrentBattlePyramidLocation", "StringCopy", "GetMapName", "AddMapNamePopUpWindow",
+    "LoadMapNamePopUpWindowBg", "GetStringCenterAlignXOffset", "AddTextPrinterParameterized",
+    "CopyWindowToVram", "FillBgTilemapBufferRect", "LoadBgTiles", "GetWindowAttribute",
+    "CallWindowFunction", "PutWindowTilemap", "LoadPalette", "BlitBitmapToWindow"}
+
+
+def test_map_name_popup_reaches_only_window_code() -> None:
+    lines = pret_file("src/map_name_popup.c")
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("void ShowMapNamePopup("))
+    calls = set()
+    for line in lines[start:]:
+        code = line.split("//")[0]
+        calls |= set(re.findall(r"\b([A-Z]\w*)\s*\(", code))
+    defined = {m.group(1) for m in (re.match(r"(?:static )?\w+ \*?(\w+)\(", ln) for ln in lines[start:]) if m}
+    macros = {"BG_PLTT_ID", "UNUSED"}
+    assert calls - defined - macros - {"ShowMapNamePopup"} <= POPUP_CALLEES
+    assert emitted()["tasks"]["allowed_overworld_tasks"]["Task_MapNamePopUpWindow"] == 0x080D487C
 
 
 # ── 5. every resolved symbol is the pokeemerald.sym value ───────────────────────────────────

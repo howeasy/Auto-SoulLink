@@ -20,6 +20,14 @@
 --             slink_prebattle.State  the parked action menu (main==HandleTurnActionSelectionState,
 --                                    comm[0]==1, ctrl==HandleInputChooseAction, held 30 frames)
 --             slink_postbattle.State the first gBattleOutcome ~= 0 frame after RUN
+-- Emerald (card E2-CKPT; title emerald, fixtures tests/fixtures/gen3/emerald_<kind>.sav):
+--   town    Oldale (6,17), the heal tile one step S of the Center door (6,16):
+--             slink_overworld.State = slink_door.State  field idle; Up enters the Center
+--             slink_pokecenter.State Center 1F arrival mat (7,8)
+--             slink_script.State     (7,4), below the nurse (7,2) across the counter
+--   battle  Route 102 grass (21,16): EM_GRASS_LOOP -> slink_preintro/slink_prebattle/slink_postbattle
+--   trainer Route 102 (32,16): one Right onto (33,16), Youngster Calvin's sight line ->
+--             slink_pretrainer.State (parked action menu, BATTLE_TYPE_TRAINER)
 -- States land in SLINK_STATE_DIR (absolute). Addresses come from the pack (cp.battle) and the
 -- title syms gen3_scripted_play.lua already exports; nothing here is a new address.
 local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
@@ -62,6 +70,7 @@ M.DOOR_TO_SCRIPT = { from = { 26, 27 }, to = { 20, 13 }, dirs = {
     "Up","Up","Up","Up","Up","Up","Left","Left" } }
 
 local cp
+local ACTION_CURSOR   -- gActionSelectionCursor: SP's for FR/LG, pokeemerald.sym's for emerald (run())
 local function in_battle() return not G.pred_ok(cp, "in_battle") end
 local function clause(name)
     for _, c in ipairs(cp.battle.clauses) do
@@ -134,12 +143,12 @@ local function run_away()
         if not G.mash(600, function() return outcome() or B.menu_up() end) then break end
         if outcome() then break end
         for _ = 1, 4 do
-            local c = memory.read_u8(SP.ACTION_CURSOR_ADDR)
+            local c = memory.read_u8(ACTION_CURSOR)
             if c == 3 then break end
             if c % 2 == 0 then G.tap("Right", 3, 20) end
             if c < 2 then G.tap("Down", 3, 20) end
         end
-        if memory.read_u8(SP.ACTION_CURSOR_ADDR) ~= 3 then return false end
+        if memory.read_u8(ACTION_CURSOR) ~= 3 then return false end
         joypad.set({ A = true }); G.advance(); G.advance(); G.advance(); joypad.set({})
         for _ = 1, 120 do
             if outcome() then break end
@@ -339,6 +348,82 @@ local function run_trainer()
     G.finish(false, "the lead survived 40 turns: " .. B.vals())
 end
 
+-- ── Emerald (card E2-CKPT) ─────────────────────────────────────────────────────────────────
+-- Tiles: tools/gen3_fixtures.py EMERALD_KINDS (Oldale 0.10 heal tile, Route 102 0.17 grass/trainer)
+-- and pret data/maps/{OldaleTown,OldaleTown_PokemonCenter_1F,Route102}/map.json.
+local EM = {
+    TOWN = { 0, 10, 6, 17 }, ROUTE102 = { 0, 17 },
+    CENTER_MAT = { 7, 8 }, NURSE_FRONT = { 7, 4 },
+    GRASS = { 21, 16 },   -- the 2x2 loop stays inside the (19..25,16..17) MB_TALL_GRASS patch
+    GRASS_LOOP = { ["21,16"] = "Right", ["22,16"] = "Down", ["22,17"] = "Left", ["21,17"] = "Up" },
+    TRAINER_FROM = { 32, 16 }, TRAINER_TRIGGER = { 33, 16 },
+}
+
+local function em_town()
+    local ok, where = at(EM.TOWN[1], EM.TOWN[2], EM.TOWN[3], EM.TOWN[4])
+    if not ok then return G.finish(false, "town start: " .. where) end
+    G.idle(30)
+    save("slink_overworld.State", where)
+    save("slink_door.State", where .. " (Up enters the Center door)")
+    for _ = 1, 3 do if step("Up") then break end end
+    if not wait_field(3000, 60) then return G.finish(false, "Center 1F never settled") end
+    local g, n = G.map(cp)
+    ok, where = at(g, n, EM.CENTER_MAT[1], EM.CENTER_MAT[2])
+    if not ok or (g == EM.TOWN[1] and n == EM.TOWN[2]) then return G.finish(false, "Center entry: " .. where) end
+    save("slink_pokecenter.State", where)
+    ok, where = follow(g, n, { from = EM.CENTER_MAT, to = EM.NURSE_FRONT, dirs = { "Up", "Up", "Up", "Up" } },
+        "nurse walk")
+    if not ok then return G.finish(false, where) end
+    G.idle(20)
+    save("slink_script.State", where)
+    G.finish(true, "emerald town states in " .. DIR)
+end
+
+local function em_battle()
+    local ok, where = at(EM.ROUTE102[1], EM.ROUTE102[2], EM.GRASS[1], EM.GRASS[2])
+    if not ok then return G.finish(false, "battle start: " .. where) end
+    for _ = 1, 240 do
+        if in_battle() then break end
+        local px, py = G.pos(cp)
+        local dir = EM.GRASS_LOOP[px .. "," .. py]
+        if not dir then return G.finish(false, string.format("hunt left the grass square at (%d,%d)", px, py)) end
+        step(dir)
+    end
+    if not in_battle() then return G.finish(false, "no wild encounter in 240 grass steps") end
+    save("slink_preintro.State", B.vals())
+    if not park() then return G.finish(false, "action menu never parked: " .. B.vals()) end
+    save("slink_prebattle.State", B.vals())
+    if not run_away() then return G.finish(false, "gBattleOutcome never set: " .. B.vals()) end
+    save("slink_postbattle.State", B.vals())
+    G.finish(true, "emerald battle states in " .. DIR)
+end
+
+local function em_trainer()
+    local ok, where = at(EM.ROUTE102[1], EM.ROUTE102[2], EM.TRAINER_FROM[1], EM.TRAINER_FROM[2])
+    if not ok then return G.finish(false, "trainer start: " .. where) end
+    for _ = 1, 6 do if step("Right") then break end end
+    ok, where = at(EM.ROUTE102[1], EM.ROUTE102[2], EM.TRAINER_TRIGGER[1], EM.TRAINER_TRIGGER[2])
+    if not ok then return G.finish(false, "trainer trigger: " .. where) end
+    G.mash(3000, in_battle)   -- the sight-line approach and intro text
+    if not in_battle() then return G.finish(false, "the Calvin battle never started") end
+    if not park() then return G.finish(false, "trainer action menu never parked: " .. B.vals()) end
+    if memory.read_u32_le(B.type_a) & M.BATTLE_TYPE_TRAINER == 0 then
+        return G.finish(false, "parked battle is not a trainer battle: " .. B.vals())
+    end
+    save("slink_pretrainer.State", B.vals())
+    G.finish(true, "emerald trainer states in " .. DIR)
+end
+
+--- Emerald CONTINUE: A pulses only (a Start in the field would open the menu), then the settle.
+local function em_boot()
+    for i = 1, 9000 do
+        if G.pred_ok(cp, "callback2") then break end
+        joypad.set(i % 16 == 8 and { A = true } or {}); G.advance()
+    end
+    joypad.set({})
+    return G.pred_ok(cp, "callback2")
+end
+
 local function run()
     G.open("mkstates_gen3")   -- patch/build/mkstates_gen3_result.txt (literal: run_gate.py)
     pcall(client.speedmode, 6399)
@@ -346,17 +431,35 @@ local function run()
     local title
     cp, title = G.checkpoint()
     G.phase("start", string.format("title=%s kind=%s dir=%s", tostring(title), tostring(KIND), DIR))
-    if not G.boot_to_field(cp, 9000) then return G.finish(false, "never reached the field") end
+    local em = title == "emerald"
+    ACTION_CURSOR = SP.ACTION_CURSOR_ADDR
+    if em then
+        local P = dofile(WT .. "/lua/tests/probe_gen3_checkpoint.lua")
+        ACTION_CURSOR = P.load_syms(WT .. "/data/gen3/pret/pokeemerald.sym", { "gActionSelectionCursor" })
+            .gActionSelectionCursor
+    end
+    if not (em and em_boot() or not em and G.boot_to_field(cp, 9000)) then
+        return G.finish(false, "never reached the field")
+    end
     -- boot_to_field returns while FRLG's post-CONTINUE sequence still locks field controls
     -- (first FR probe run: the idle row refused 98 frames on field_controls_locked+task), so
     -- wait for the probe's own field() predicates to hold 180 frames before any state.
     if not wait_field(3000, 180) then return G.finish(false, "field never settled after CONTINUE") end
     G.phase("settled")
     bind_battle()
+    if em then
+        -- PHYSICAL (E2-CKPT, 2026-09-25): the Emerald pack's battle_comm_0 expects 1, which is
+        -- Emerald's STATE_BEFORE_ACTION_CHOSEN (its enum starts with STATE_TURN_START_RECORD, pret
+        -- pokeemerald src/battle_main.c:4118-4121); a mash through two whole battles never saw
+        -- the pack's menu tuple. Park on main + controller only; the state detail logs comm0.
+        B.menu_up = function()
+            return memory.read_u32_le(B.main_a) == B.main_x and memory.read_u32_le(B.ctrl_a) == B.ctrl_x
+        end
+    end
     local ok, err
-    if KIND == "town" then ok, err = pcall(run_town)
-    elseif KIND == "battle" then ok, err = pcall(run_battle)
-    elseif KIND == "trainer" then ok, err = pcall(run_trainer)
+    if KIND == "town" then ok, err = pcall(em and em_town or run_town)
+    elseif KIND == "battle" then ok, err = pcall(em and em_battle or run_battle)
+    elseif KIND == "trainer" then ok, err = pcall(em and em_trainer or run_trainer)
     else return G.finish(false, "SLINK_STATE_KIND must be town|battle|trainer") end
     if not ok then G.shot("stuck"); G.finish(false, "uncaught Lua error: " .. tostring(err)) end
 end

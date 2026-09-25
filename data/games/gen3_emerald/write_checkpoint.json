@@ -377,6 +377,7 @@
       "address": 50355712,
       "allowed_overworld_tasks": {
         "Task_InitUnionRoom": 134310268,
+        "Task_MapNamePopUpWindow": 135088252,
         "Task_MuddySlope": 134866488,
         "Task_RunPerStepCallback": 134862988,
         "Task_RunTimeBasedEvents": 134863112,
@@ -439,7 +440,7 @@
       },
       "func_offset": 0,
       "is_active_offset": 4,
-      "source": "pret pokeemerald c65e93f2: src/field_tasks.c:181-194 (SetUpFieldTasks: Task_RunPerStepCallback :138, Task_MuddySlope :880-957, Task_RunTimeBasedEvents :150-177), src/field_weather.c:154-181,216-227 (StartWeather -> Task_WeatherInit -> Task_WeatherMain); Center 1F Union Room background: data/scripts/cable_club.inc:1226-1228 (CableClub_OnResume), src/union_room.c:3294-3377,3465-3497, src/link_rfu_2.c:510-565,2640-2649; FR/LG league lighting excluded (absent in Emerald)",
+      "source": "pret pokeemerald c65e93f2: src/field_tasks.c:181-194 (SetUpFieldTasks: Task_RunPerStepCallback :138, Task_MuddySlope :880-957, Task_RunTimeBasedEvents :150-177), src/field_weather.c:154-181,216-227 (StartWeather -> Task_WeatherInit -> Task_WeatherMain); Center 1F Union Room background: data/scripts/cable_club.inc:1226-1228 (CableClub_OnResume), src/union_room.c:3294-3377,3465-3497, src/link_rfu_2.c:510-565,2640-2649; map-name popup (E2-CKPT): src/map_name_popup.c:231-426, src/menu.c:521-540, src/overworld.c:822-824,1698-1702,1946-1947; FR/LG league lighting excluded (absent in Emerald)",
       "struct_size": 40,
       "symbol": "gTasks"
     },

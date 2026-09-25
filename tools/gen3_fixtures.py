@@ -444,6 +444,16 @@ PARTY_TITLES: dict[str, dict[str, object]] = {
         # post-intro walk/save (map id, flash sector counter), same as FR.
         "scripted_newgame": True,
     },
+    # E2-CKPT: the checkpoint-probe savestates (tools/mkstates_gen3.py) cold-boot the committed
+    # emerald_<kind>.sav fixtures. Emerald has no scripted new game here: its fixtures are the
+    # make-emerald SYNTH saves, so make-fr/make-fr-party refuse it on scripted_newgame.
+    "emerald": {
+        "rom": "Pokemon - Emerald Version (USA, Europe).gba",
+        "saveram": "Pokemon - Emerald Version (USA, Europe).SaveRAM",
+        "scripted_newgame": False,
+        "fixture": "emerald_{kind}.sav",
+        "checkpoint": "data/games/gen3_emerald/write_checkpoint.json",
+    },
 }
 
 
@@ -482,9 +492,11 @@ def _checked_title(args: argparse.Namespace) -> str:
     """The --title value, validated against PARTY_TITLES with a loud refusal (the party lane is
     vanilla FR/LG only). Absent --title keeps the historical FireRed behaviour byte-for-byte."""
     title = getattr(args, "title", None) or "firered"
-    if title not in PARTY_TITLES:
+    # E2-CKPT: emerald is in PARTY_TITLES for mkstates_gen3 only; the scripted lane stays FR/LG
+    lane = sorted(t for t, meta in PARTY_TITLES.items() if meta["scripted_newgame"])
+    if title not in lane:
         raise ValueError(f"title {title!r} is not drivable by the party lane; "
-                         f"admitted: {', '.join(sorted(PARTY_TITLES))}")
+                         f"admitted: {', '.join(lane)}")
     return title
 
 
