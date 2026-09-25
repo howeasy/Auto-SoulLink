@@ -136,27 +136,37 @@ end
 --- multichoice/waitbuttonpress anywhere in it (a ROM fact, not a screenshot). It always finishes
 --- on its own a few hundred frames after the tap (confirmed live, G5-RR-NURSE: script_context_
 --- status returns idle at frame 285 of the hold with nothing else pressed), so it is never a
---- genuine refusing state on RR. Open the START menu instead: it swings gMain.callback2 off
---- CB2_Overworld (the pack's own `callback2` predicate, already pinned for every title) for as
---- long as it stays up, with no RR-specific symbol pin needed.
+--- genuine refusing state on RR. Open the START menu instead: pret start_menu.c's ShowStartMenu
+--- calls LockPlayerFieldControls (only CloseStartMenu's UnlockPlayerFieldControls clears it), so
+--- the pack's own `field_controls_locked` predicate -- already pinned for every title, and the
+--- exact clause FR/LG's own nurse hold names -- stays locked for as long as the menu is up, no
+--- RR-specific symbol pin needed. (gMain.callback2 does NOT move for this menu: the START menu
+--- runs as a task under CB2_Overworld, unlike the Bag/Party screens -- first tried callback2 here
+--- and it never left CB2_Overworld, live G5-RR-NURSE attempt 1.) A single Start tap can be
+--- swallowed on the frame the field only just freed (save_then_write_gen3's menu_leg hits the
+--- same thing), so retry it.
 local function nurse_control(ctx, linked, dest)
     if not at(ctx, dest) then return false, "control: not at the Center landing" end
     if ctx.rr then
         local G, cp = ctx.G, ctx.cp
-        local function live() return not G.pred_ok(cp, "callback2") end
-        local function field_free() return G.pred_ok(cp, "callback2") and G.pred_ok(cp, "field_controls_locked") end
-        if not ctx.wait_until(field_free, 10, "the field free before START") then
+        local function locked() return not G.pred_ok(cp, "field_controls_locked") end
+        if not ctx.wait_until(function() return not locked() end, 10, "the field free before START") then
             return false, "control: the field was never free to open START"
         end
-        G.tap("Start", 3, 0)
-        if not ctx.wait_until(live, 10, "the START menu") then
-            return false, "control: the START menu never opened"
+        local opened = false
+        for _ = 1, 3 do
+            G.tap("Start", 3, 0)
+            if ctx.wait_until(locked, 10, "field_controls_locked after START") then
+                opened = true
+                break
+            end
         end
+        if not opened then return false, "control: the START menu never opened" end
         ctx.frames(60)
-        local clause, why = ctx.hold_probe("nurse", "box_mon", linked, live, 600)
+        local clause, why = ctx.hold_probe("nurse", "box_mon", linked, locked, 600)
         if not clause then return false, "control: " .. tostring(why) end
         G.tap("B", 3, 13)
-        if not ctx.wait_until(field_free, 10, "the field free after B closed START") then
+        if not ctx.wait_until(function() return not locked() end, 10, "the field free after B closed START") then
             return false, "control: the field never freed after closing START"
         end
         return true
