@@ -123,12 +123,44 @@ end
 --- (4) The negative control, after the save: pret ViridianCity_PokemonCenter_1F/map.json puts
 --- the nurse at (7,2) across the counter (7,3) (MB_COUNTER 0x80: tools/gba_map.py --map 5.4
 --- --find-behaviour 0x80), and CB2_WhiteOut faces the player north, so A at the landing talks
---- to her through it (field_control_avatar.c:412-415). Her script waits on its first message:
---- it stays live, and the runner's box_mon probe must stay held for as long as it is
+--- to her through it (field_control_avatar.c:412-415). On FR/LG her script waits on its first
+--- message: it stays live, and the runner's box_mon probe must stay held for as long as it is
 --- (ctx.hold_probe: fresh keyed RX, the exact queued entry, zero attempted bytes, unchanged
 --- party and PC bytes, a failing clause named).
+---
+--- RR's nurse is a different script (her ObjectEvent.script, local_id=1 on map 5.4, is
+--- 0x0904c64b in patch/build/slink_RR.gba, not FR's shared EventScript_PkmnCenterNurse):
+--- decoding it against gScriptCmdTable (data/gen3/pret/pokefirered.sym) gives lock, faceplayer,
+--- special, compare/call_if into a branch of playse/fadescreen/applymovement/waitmovement,
+--- copyvar, release, end -- a silent quick-heal cutscene with NO message/waitmessage/
+--- multichoice/waitbuttonpress anywhere in it (a ROM fact, not a screenshot). It always finishes
+--- on its own a few hundred frames after the tap (confirmed live, G5-RR-NURSE: script_context_
+--- status returns idle at frame 285 of the hold with nothing else pressed), so it is never a
+--- genuine refusing state on RR. Open the START menu instead: it swings gMain.callback2 off
+--- CB2_Overworld (the pack's own `callback2` predicate, already pinned for every title) for as
+--- long as it stays up, with no RR-specific symbol pin needed.
 local function nurse_control(ctx, linked, dest)
     if not at(ctx, dest) then return false, "control: not at the Center landing" end
+    if ctx.rr then
+        local G, cp = ctx.G, ctx.cp
+        local function live() return not G.pred_ok(cp, "callback2") end
+        local function field_free() return G.pred_ok(cp, "callback2") and G.pred_ok(cp, "field_controls_locked") end
+        if not ctx.wait_until(field_free, 10, "the field free before START") then
+            return false, "control: the field was never free to open START"
+        end
+        G.tap("Start", 3, 0)
+        if not ctx.wait_until(live, 10, "the START menu") then
+            return false, "control: the START menu never opened"
+        end
+        ctx.frames(60)
+        local clause, why = ctx.hold_probe("nurse", "box_mon", linked, live, 600)
+        if not clause then return false, "control: " .. tostring(why) end
+        G.tap("B", 3, 13)
+        if not ctx.wait_until(field_free, 10, "the field free after B closed START") then
+            return false, "control: the field never freed after closing START"
+        end
+        return true
+    end
     ctx.G.tap("A", 3, 13)
     local function live() return not ctx.G.pred_ok(ctx.cp, "script_context_status") end
     if not ctx.wait_until(live, 10, "the nurse's script") then
