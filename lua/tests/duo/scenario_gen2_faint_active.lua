@@ -30,12 +30,15 @@
                    action_before_hex, action_after_hex, log=[the 4 permit spans]}
                                  around the PRODUCTION faint_active_battler call, inside the client's battle
                                  hold; exactly one; after = "0000"/"0000"/"00" and action "01" (USEITEM)
-    BATTLE_TRACE {seq, what=faint|enemy_turn|lost, frame}
+    BATTLE_TRACE {seq, what=faint|enemy_turn|enemy_faint|lost, frame}
                                  observation-only hooks at the pack's battle_hold.oracles (HandlePlayerMonFaint,
                                  EnemyTurn_EndOpponentProtectEndureDestinyBond, LostBattle; in-bank + expected
                                  bytes), from LINKED_ACTIVE to the end of that battle; seq shares one counter
                                  with BATTLE_HOLD_WRITE. The first row after the write is `faint` in the SAME
-                                 frame (no foe move in between); no `lost` row (no whiteout).
+                                 frame (no foe move in between); no `lost` row (no whiteout). `enemy_faint` is a
+                                 wEnemyMonHP-read edge (TRAINER-FAINT-LIVE-TURN, post-RC): a witnessed foe faint,
+                                 the alternative "live turn" witness to `enemy_turn` when the replacement crit-KOs
+                                 the foe before it ever moves.
     ENGINE_FAINT                 allowed (the binder's battle_faint for the key, after the write); FAINT_SENT
                                  never (the commanded death's echo is dropped, O-30)
     NEXT_MON {frame}             the "Use next #MON?" yes/no, after the native faint
@@ -54,7 +57,8 @@
     LINKED_ACTIVE  battle_mode=2, plus other_trainer_class / other_trainer_id (wOtherTrainerClass/wOtherTrainerID)
     NEXT_MON       never printed
     REPLACED       after the native faint (the party pick is forced)
-    BATTLE_TRACE   at least one `enemy_turn` after REPLACED: a live turn with the replacement; still no `lost`
+    BATTLE_TRACE   at least one `enemy_turn` OR `enemy_faint` after REPLACED: a live turn with the replacement
+                   (a crit-KO before the foe ever moves is still a live turn); still no `lost`
     RECEIPT        schema "gen2-duo-faint-active-trainer-v1", receipt.trainer = {class, id}
 --]]
 local S = {}
@@ -102,6 +106,7 @@ local function run_b(h, key, faint)
     local slot, mon = h.slot_of(key)
     if slot == nil then return false, "the linked mon left the party" end
     local active, next_mon, replaced
+    local enemy_dead = false   -- wEnemyMonHP edge, while trace_on (TRAINER-FAINT-LIVE-TURN)
     local mode = S.TRAINER and 2 or 1
     if S.TRAINER then
         local walked, walk_why = h.to_trainer()
@@ -135,6 +140,21 @@ local function run_b(h, key, faint)
         end,
         fainted=function() local row = S.after_write(h.rec) return row ~= nil and row.what == "faint" end,
         observed=function(point)
+            -- TRAINER-FAINT-LIVE-TURN (post-RC): an independent engine read of wEnemyMonHP, not the production
+            -- wire, witnesses a foe faint the same way EnemyTurn_EndOpponentProtectEndureDestinyBond witnesses a
+            -- foe move. A crit-KO can zero it before the foe ever acts, so this is the "or a witnessed enemy
+            -- faint" half of a live turn, independent of NEXT_MON/REPLACED below.
+            if h.rec.trace_on then
+                local hp_bytes = h.sym("wEnemyMonHP", 0, 2)
+                local dead = hp_bytes[1] == 0 and hp_bytes[2] == 0
+                if dead and not enemy_dead then
+                    h.rec.seq = h.rec.seq + 1
+                    local row = {seq=h.rec.seq, what="enemy_faint", frame=h.frame()}
+                    h.rec.trace[#h.rec.trace + 1] = row
+                    h.jlog("BATTLE_TRACE", row)
+                end
+                enemy_dead = dead
+            end
             if not h.rec.battle_write then return end
             if not next_mon and point.ui and point.ui.kind == "yes_no" and point.ui.prompt == "next_mon" then
                 next_mon = {frame=h.frame()}
@@ -325,9 +345,10 @@ function S.verdict(lines, json, link_verdict, faint_verdict)
         next_mon = first
         local live = false
         for _, r in ipairs(rows("BATTLE_TRACE")) do
-            live = live or (replaced ~= nil and r.at > replaced.at and r.value.what == "enemy_turn")
+            live = live or (replaced ~= nil and r.at > replaced.at
+                            and (r.value.what == "enemy_turn" or r.value.what == "enemy_faint"))
         end
-        need(live, "no live enemy turn against the replacement")
+        need(live, "no live enemy turn or witnessed enemy faint against the replacement")
     else
         next_mon, replaced = one("NEXT_MON"), one("REPLACED")
     end

@@ -781,7 +781,8 @@ def _memorial_receipt_errors(lines: list[str], side: str) -> list[str]:
 def _active_faint_cell_errors(legs: dict, axes: dict, trainer: bool = False) -> list[str]:
     """Bind archived active-death receipts; bench-death evidence cannot fill this cell. trainer: the O-30
     MINOR-5 variant (gen2_faint_active_trainer) - a Route 30 youngster battle, ForcePlayerMonChoice, no NEXT_MON,
-    a live enemy turn after REPLACED (the shared validator's trainer=True), and B's receipt names the trainer."""
+    a live enemy turn OR a witnessed enemy faint after REPLACED (TRAINER-FAINT-LIVE-TURN, post-RC: a crit-KO can
+    zero the foe before it ever moves; the shared validator's trainer=True), and B's receipt names the trainer."""
     def need(condition, why):
         if not condition:
             raise ValueError(why)

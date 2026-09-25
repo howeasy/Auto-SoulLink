@@ -69,6 +69,22 @@ def no_live_turn():
     return [x for x in trainer_b() if '"what": "enemy_turn"' not in x]
 
 
+def crit_ko():
+    """TRAINER-FAINT-LIVE-TURN (post-RC): the replacement's crit-KO zeros the foe before it ever moves, so no
+    `enemy_turn` trace exists; the `enemy_faint` wEnemyMonHP-read trace is still a live turn."""
+    out = []
+    for line in trainer_b():
+        if line.startswith("BATTLE_TRACE ") and '"what": "enemy_turn"' in line:
+            line = line.replace('"what": "enemy_turn"', '"what": "enemy_faint"')
+        out.append(line)
+    return out
+
+
+def neither_live_witness():
+    """Neither an enemy_turn nor an enemy_faint trace after REPLACED: still refused."""
+    return [x for x in trainer_b() if '"what": "enemy_turn"' not in x and '"what": "enemy_faint"' not in x]
+
+
 @pytest.mark.parametrize("lines,match", [
     (edit(trainer_b(), "LINKED_ACTIVE", battle_mode=1), "trainer-battle"),
     (edit(trainer_b(), "LINKED_ACTIVE", other_trainer_class=0), "no opposing trainer"),
@@ -76,11 +92,19 @@ def no_live_turn():
     (edit(b_lines(), "LINKED_ACTIVE", battle_mode=2, other_trainer_class=YOUNGSTER, other_trainer_id=JOEY1),
      "NEXT_MON in a trainer battle"),
     (no_live_turn(), "no live enemy turn"),
+    (neither_live_witness(), "no live enemy turn"),
     (without(trainer_b(), "REPLACED"), "missing REPLACED"),
-], ids=["wild-mode", "no-trainer", "wild-lines", "next-mon", "no-live-turn", "no-replacement"])
+], ids=["wild-mode", "no-trainer", "wild-lines", "next-mon", "no-live-turn", "no-live-turn-or-faint", "no-replacement"])
 def test_trainer_verdict_refuses_a_wild_or_incomplete_half(lines, match):
     problems, receipt = trainer_verdict(lines)
     assert receipt is None and any(match in p for p in problems), problems
+
+
+def test_trainer_verdict_passes_a_crit_ko_with_no_enemy_turn():
+    """A crit-KO sequence (no enemy_turn, an enemy faint witnessed instead) still passes."""
+    problems, receipt = trainer_verdict(crit_ko())
+    assert problems == [], problems
+    assert receipt["schema"] == SCHEMA
 
 
 # --- gen2_faint_inputs.lua opts.trainer ------------------------------------------------------------------
@@ -169,7 +193,8 @@ def validate(results):
 
 
 def dead_turn():
-    """A Lua-PASS trainer proof whose enemy_turn trace is removed after the fact (the Python check alone)."""
+    """A Lua-PASS trainer proof whose enemy_turn trace is removed after the fact (the Python check alone); no
+    enemy_faint trace either, so neither live-turn witness is seen."""
     results = oracle_results(trainer_b())
     results["b"] = "\n".join(x for x in results["b"].splitlines() if '"what": "enemy_turn"' not in x)
     return results
@@ -178,6 +203,12 @@ def dead_turn():
 def test_the_python_validator_accepts_a_route30_trainer_proof():
     proof = validate(oracle_results(trainer_b()))
     assert proof["active"]["battle_mode"] == 2 and proof["replaced"]["active_slot"] == 0
+
+
+def test_the_python_validator_accepts_a_crit_ko_trainer_proof():
+    """TRAINER-FAINT-LIVE-TURN: a crit-KO sequence (no enemy_turn, an enemy_faint witnessed instead) passes."""
+    proof = validate(oracle_results(crit_ko()))
+    assert proof["replaced"]["active_slot"] == 0
 
 
 @pytest.mark.parametrize("results,match", [

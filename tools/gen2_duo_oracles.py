@@ -789,7 +789,8 @@ def validate_faint_active_markers(results, *, title_b, key_a, key_b, species_b, 
     after = []
     for pos, trace in traces:
         _faint_need(type(trace.get("seq")) is int and trace["seq"] > previous and trace["seq"] != seq
-                    and trace.get("what") in ("faint", "enemy_turn") and _frame(trace) >= _frame(active), "lost/unknown/unordered battle trace")
+                    and trace.get("what") in ("faint", "enemy_turn", "enemy_faint") and _frame(trace) >= _frame(active),
+                    "lost/unknown/unordered battle trace")
         previous = trace["seq"]
         if trace["seq"] > seq:
             _faint_need(pos > position["BATTLE_HOLD_WRITE"], "post-write trace printed before write")
@@ -800,11 +801,12 @@ def validate_faint_active_markers(results, *, title_b, key_a, key_b, species_b, 
         _faint_need(row.get("key") == key_b and pos > position["BATTLE_HOLD_WRITE"] and _frame(row) >= _frame(write), "B engine faint differs from command")
     replaced = _one_marker(b, "REPLACED")
     replacement_pos = next(i for i, line in enumerate(lines) if line.startswith("REPLACED "))
-    if trainer:   # ForcePlayerMonChoice asks nothing; the replacement then takes a live enemy turn
+    if trainer:   # ForcePlayerMonChoice asks nothing; the replacement then takes a live turn: an enemy_turn, or
+        # a witnessed enemy faint (a crit-KO can zero the foe before it ever moves, TRAINER-FAINT-LIVE-TURN)
         _faint_need(not _tag_rows(b, "NEXT_MON"), "NEXT_MON in a trainer battle")
         next_mon, next_pos = after[0][1], after[0][0]
-        _faint_need(any(trace["what"] == "enemy_turn" and pos > replacement_pos for pos, trace in traces),
-                    "no live enemy turn against the replacement")
+        _faint_need(any(trace["what"] in ("enemy_turn", "enemy_faint") and pos > replacement_pos for pos, trace in traces),
+                    "no live enemy turn or witnessed enemy faint against the replacement")
     else:
         next_mon = _one_marker(b, "NEXT_MON")
         next_pos = next(i for i, line in enumerate(lines) if line.startswith("NEXT_MON "))
