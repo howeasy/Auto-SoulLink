@@ -1,0 +1,84 @@
+# receipt: python tools/e2e_duo.py --game gen3_rr --scenario whiteout_gen3
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2 sha=9598a4e5 tracked_clean=True runner=coordinator 2026-09-25
+
+
+========== scenario: whiteout_gen3 ==========
+[duo] whiteout_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=ad7d396a2ce84a46d1f71adc31cdcc3b992b4d458d13f1b3f47bb845b07f70be profile.json=0817b3b16e235609a92afe8556a8b8d7b037c23b85e193db03bfe28ef7080d9b source=9598a4e58cd0edbfa4b8fe71f625ddd2bfcdcb40
+[duo] server up: tcp=63722 http=63723 data=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_molsrwnw
+[duo] cleared 5 stale artifact(s) for whiteout_gen3: e2e_whiteout_gen3_a_attempt1_result.txt, e2e_whiteout_gen3_a_result.txt, e2e_whiteout_gen3_b_attempt1_result.txt, e2e_whiteout_gen3_b_result.txt, e2e_whiteout_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] BOTH_BOXED appended for both halves; the server's party_keys dropped F56D8C1D:2BDDC8BF and F56D8C1D:D4223740
+[duo] queued for a: {'cmd': 'box_mon', 'key': 'F56D8C1D:2BDDC8BF'}
+[duo] RESULT_LINE a: RESULT: FAIL (control: nurse: the refusing state ended by frame 285)
+[duo] RESULT_LINE b: RESULT: PASS (pair F56D8C1D:D4223740 rebuilt after the whiteout)
+[duo] PYDEC: FAIL client RESULT before saved-state oracle
+[duo] whiteout_gen3: a=FAIL b=PASS
+--- whiteout_gen3 a result ---
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 23373
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 23373
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 23373
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 23373
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 23373
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 23373
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 23373
+WHITED_OUT at map=1284 at=(7,4)
+WRITE_IN_CENTER map=5.4 at=(7,4) frame=23362 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35] storage_state=-1 script_status=2 result=1 menu_cursor=0 cpu=[R15=0x0000001C,CPSR=0x20000092,R14=0x000001C4] ptrs=[gPokemonStoragePtr=0x02029314,gSaveBlock1Ptr=0x0202552C,gSaveBlock2Ptr=0x02024588,pokemon_storage_base=0x02029314] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x0,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0] | keyed F56D8C1D:2BDDC8BF slot=1 record=0x020242E8+100@23362 | ack map=5.4 at=(7,4) frame=23423 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35] storage_state=-1 script_status=2 result=0 menu_cursor=0 cpu=[R15=0x0000001C,CPSR=0x20000092,R14=0x000001C4] ptrs=[gPokemonStoragePtr=0x02029314,gSaveBlock1Ptr=0x0202552C,gSaveBlock2Ptr=0x02024588,pokemon_storage_base=0x02029314] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x0,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+RETURNED_OBSERVED F56D8C1D:2BDDC8BF slot=1
+[client] [gen3] phase save-menu frame=23483 counter=4
+[client] [gen3] phase save-dialog frame=23630 row=4
+[client] [gen3] phase saved frame=23693 counter=4->5
+[client] [gen3] phase slot-complete frame=24575 sectors=14/14
+SAVE_WITNESS_DUMP path=patch/build/e2e_whiteout_gen3_a_1_witness.bin bytes=131072 saves=1 frame=24612 counter=5
+SAVE_WITNESS_EXT path=patch/build/e2e_whiteout_gen3_a_1_witness_ext.bin bytes=8160 saves=1
+SAVE_WITNESS whiteout counter=4->5
+CONTROL_LIVE nurse F56D8C1D:2BDDC8BF map=5.4 at=(7,4) frame=24778 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35] storage_state=-1 script_status=0 result=1 menu_cursor=0 cpu=[R15=0x0000001C,CPSR=0x20000092,R14=0x000001C4] ptrs=[gPokemonStoragePtr=0x02029314,gSaveBlock1Ptr=0x0202552C,gSaveBlock2Ptr=0x02024588,pokemon_storage_base=0x02029314] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x0!,soft_reset_disabled=0x0]
+RX box_mon key=F56D8C1D:2BDDC8BF
+[client] [SLink-gen3] write overworld 0x02029318 +58 frame 25097
+[client] [SLink-gen3] write overworld 0x020242E8 +100 frame 25097
+[client] [SLink-gen3] write overworld 0x02024029 +1 frame 25097
+TX stats_cache F56D8C1D:2BDDC8BF {"event":"stats_cache","key":"F56D8C1D:2BDDC8BF","player":"a","seq":832,"stats":{"attack":9,"defense":9,"level":4,"maxHP":18,"pp1":35,"pp2":20,"pp3":35,"pp4":35,"spAtk":9,"spDef":10,"speed":8}}
+WRITES 82
+RESULT: FAIL (control: nurse: the refusing state ended by frame 285)
+--- whiteout_gen3 b result ---
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 25623
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 25623
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 25623
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 25623
+[client] [gen3] phase save-menu frame=25652 counter=4
+[client] [gen3] phase save-dialog frame=25799 row=4
+[client] [gen3] phase saved frame=25862 counter=4->5
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 25983
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 25983
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 25983
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 25983
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 25983
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 25983
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 25983
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 25983
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 25983
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 25983
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 25983
+[client] [gen3] phase slot-complete frame=26676 sectors=14/14
+SAVE_WITNESS_DUMP path=patch/build/e2e_whiteout_gen3_b_1_witness.bin bytes=131072 saves=1 frame=26715 counter=5
+SAVE_WITNESS_EXT path=patch/build/e2e_whiteout_gen3_b_1_witness_ext.bin bytes=8160 saves=1
+SAVE_WITNESS whiteout counter=4->5
+WRITES 82
+RESULT: PASS (pair F56D8C1D:D4223740 rebuilt after the whiteout)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3_molsrwnw
+
+========== summary ==========
+  whiteout_gen3: FAIL (attempt 1 of 1)
+# exit=1
