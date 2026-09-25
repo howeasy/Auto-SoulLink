@@ -55,6 +55,28 @@ so batch those cards and re-run `tools/gen2_final_sweep.py` once.
 
 **Exit.** Unit tests red→green, a Gen 3 run by the Gen 3 lane, and a full Gen 2 re-sweep (it's a server change, so the digest moves).
 
+**Detailed design (OMP `cx-ee316c45`, checked):**
+1. **Raw party census.** Add `party_key_census[pid]` (key → count) plus a `current` flag, taken from every hello/tick/safe party list BEFORE blob filtering (at the top of `_ingest_party_blobs`, ahead of the `party_blob_size()==0` return).
+   - In-memory only, never persisted: a stale observation must not waive a collision after a restart.
+   - Predicate: `current and raw[new_key]==1 and old_key not in raw`. Drop the extra `party_keys` term.
+2. **Box census completeness.** A census counts as complete only when the message carries `pc_boxes` together with a new `pc_boxes_generation` (monotonic per client session). Missing, stale, repeated or invalidated means incomplete; a box mutation invalidates it.
+   - The collision hook becomes tri-state (`True/False/None`), and `None` rejects with "box census unavailable".
+   - Clients: Gen 1/2 bump the generation after each successful full `rescan_boxes` (never on failure). Gen 3 publishes a full census at hello, reusing its startup box walk.
+   - **Reject only after an atomic client+server cutover**; otherwise implement HOLD first (a persisted pending queue and a `key_change_pending` response). A missing census is uncertainty, not evidence of a collision.
+3. **Memorial indices.** `_presentation_key_in_use` excludes every memorial box index. **Also fix `_memorial_box_indices`** (`server/server.py:4518-4546`, coordinator-verified):
+   - `(dead - per_box) // per_box` misses the first overflow box (21 dead at 20 per box gives 0);
+   - it adds both players' `pending_memorials` to one link count.
+   Count per player (dead/memorial link halves ∪ pending) and use a ceiling. The helper is currently uncalled, so fixing it changes no behaviour today.
+4. **Ambiguity latch.** `_refuse_ambiguous` also checks `new_key` on a `key_change`, before the replay ledger. Refuse; don't retire the pair.
+5. **Replay ledger.** A persisted per-player `deque(maxlen=256)` of accepted `{old_key,new_key}`, checked before the old-key lookup, so a replay acks `migrated:false`.
+   - `_dispatch` migrates presentation only on an internal status of "migrated".
+   - Stale snapshots are canonicalized through the ledger: an old alias resolves to its terminal key; an alias and its terminal key both present in one snapshot latches ambiguity.
+   - A server-owned `connection_generation`: the newest hello supersedes older sockets.
+6. **Tests.** The 9 pytests are named and specified in `cx-ee316c45` §6. Cases 1-7 and 9 are red on the current code; case 8 (both-sided NPC trade) is a green control.
+   - Maintenance: update `_snap` with the blob/generation parameters, and delete the source-text test `test_the_server_migrates_every_structure_on_a_key_change` (`tests/unit/test_gen1_statics_and_trades.py:73-86`).
+7. **Blast radius.** Clients for Gen 1 (generation field), Gen 2 (generation, and a failed rescan must not advance it) and Gen 3 (a full hello census). Adapters with `party_blob_size()==0` gain the fixed raw self-report.
+8. **Size.** Server ~190-300 LOC, clients ~50-100, tests ~260-380, docs/schema ~25-50. Order: census+predicate → box generation → memorial → latch → ledger/fencing.
+
 ---
 
 ## SP-LOWWATER: measure the worst-case stack during battle-text service
