@@ -355,5 +355,10 @@ def test_sprites_use_the_transparent_folder(gsc_adapter):
     assert gsc_adapter.sprite_src(25).endswith(f"/generation-ii/{gsc_adapter.title}/transparent/25.png")
 
 
+def test_sprite_img_is_decorative(gsc_adapter):
+    """The name sits beside every sprite, so the image is alt="" (as Gen 1's and Gen 3's are), not unlabelled."""
+    assert ' alt="" ' in gsc_adapter.sprite_html(25)
+
+
 def test_display_names_keep_acronyms_and_possessives(gsc_adapter):
     assert (gsc_adapter.item_name(82), gsc_adapter.item_name(26), gsc_adapter.item_name(191)) == ("King's Rock", "HP Up", "TM01")

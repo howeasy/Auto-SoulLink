@@ -579,7 +579,7 @@ class Gen2GSCAdapter(GameAdapter):
     def sprite_html(self, species_id, form=0):
         source = self.sprite_src(species_id)
         return (f'<img class="mon-sprite" data-species="{species_id}" src="{source}" '
-                'width="40" height="40" loading="lazy" style="image-rendering:pixelated">') if source else ""
+                'width="40" height="40" loading="lazy" alt="" style="image-rendering:pixelated">') if source else ""
 
     def ability_name(self, ability_id, species_id=0):
         return ""
