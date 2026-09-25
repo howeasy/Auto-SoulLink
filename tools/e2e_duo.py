@@ -203,9 +203,8 @@ SCENARIOS = {
                     "patched_saves": {"a": "red_patched", "b": "blue_patched"},
                     "oracle": "assert_explode_saved"},
     # S-6 / W-5 (Bill's PC listing): the link_new body, then A drives DEPOSIT -> WITHDRAW ->
-    # DEPOSIT -> RELEASE through the native PC menus. The release is the documented
-    # shared-protocol gap: the client logs RELEASE_SEEN and sends nothing, so the pair stays
-    # ALIVE with a phantom boxed half.
+    # DEPOSIT -> RELEASE through the native PC menus. The release sends release{key} and the
+    # server kills the pair with cause "release" (owner ruling O-35, client 149b38e2).
     "pc_ops_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
                    "target": "battle", "no_setup": True, "frames": 2500000,
                    "oracle": "assert_pc_ops_new_saved"},
@@ -3662,14 +3661,15 @@ class DuoRun:
                              f"number may widen the window")
 
     def assert_pc_ops_new_saved(self, results):
-        """S-6 (Bill's PC by play) and the documented release gap.
+        """S-6 (Bill's PC by play) and the O-35 release kill.
 
         A deposits its linked half, withdraws it, deposits it again and RELEASES it from the box.
-        The first three operations are on the wire; the release is NOT — the client logs
-        `RELEASE_SEEN key=… box=…` and sends nothing (lua/gen1/client.lua:571-592) — so the
-        server keeps the pair ALIVE with a phantom boxed half. That is the shared-protocol gap
-        this scenario pins, not a defect of the run, and the status/links assertions below say so
-        explicitly rather than treating it as a failure.
+        All four are on the wire: the release logs `RELEASE_SEEN key=… box=…` and sends
+        release{key} (lua/gen1/client.lua, 149b38e2), and the server kills the pair with cause
+        "release" (owner ruling O-35, state.py _handle_release). B saved and exited before the
+        release by design (the third box_mon must not land on a live B), so B's force_faint +
+        memorialize stay queued and B's saved party still holds its partner; the physical
+        memorial is the Gen 2 pc_ops receipt's claim, not this one's.
 
         The saved box claim is the ACTIVE box (sCurBoxData), not the numbered banks: pc_ops_new
         never changes boxes, so the numbered banks were never written by this route and their
@@ -3741,8 +3741,14 @@ class DuoRun:
             raise RuntimeError("B received a third storage command; the second deposit's sync "
                                "was supposed to land before B finished")
         marker(b_text, r"SAVE_WITNESS pc_ops_new_b", "B save witness")
+        tx_release = [m.start() for m in re.finditer(
+            r'^TX .*"event":"release".*' + re.escape(key), a_text, re.M)]
+        if len(tx_release) != 1 or tx_release[0] < release_at:
+            raise RuntimeError(f"A sent {len(tx_release)} release event(s) for {key} after its "
+                               f"RELEASE_SEEN, expected exactly one (O-35)")
         self._pydec_note("S-6 markers: Box 1 empty->deposit->withdraw->deposit->release; "
-                         "2/1 storage sends, one RELEASE_SEEN after the third send, no wire event")
+                         "2/1 storage sends, one RELEASE_SEEN after the third send, then "
+                         "release{key} on the wire")
 
         a_sram, a_party, a_box, codec = self._saved_gen1_party("a")
         a_keys = [codec.key(mon) for mon in a_party]
@@ -3764,20 +3770,17 @@ class DuoRun:
         self._pydec_note(f"{key} released: A's saved party is the starter alone and its active "
                          f"box (sCurBoxData) decodes empty; B still holds {partner_key}")
 
-        # The documented gap, asserted as such: the release never reached the server, so the
-        # pair is still ALIVE with A's key on the status surface and in links.json. This is the
-        # OBSERVED limit, not a defect -- the receipt says so.
-        live = [entry for entry in (self._status() or {}).get("links", [])
-                if entry.get("area_id") == "route_1"]
-        if len(live) != 1 or live[0].get("a_key") != key:
-            raise RuntimeError(f"/api/status no longer lists A's linked key {key} after the "
-                               f"release: {live}")
+        # O-35: A's release{key} killed the pair; A initiated it and nothing killed it in battle.
         durable = [entry for entry in self._links_json() if entry.get("area_id") == "route_1"]
-        if (len(durable) != 1 or durable[0].get("status") != "alive"
-                or durable[0].get("a", {}).get("key") != key):
-            raise RuntimeError(f"the durable pair did not stay ALIVE with {key}: {durable}")
-        self._pydec_note(f"server bookkeeping UNCHANGED by the release (documented limit): "
-                         f"alive route_1 pair still lists a={key}; the release is invisible")
+        pair = durable[0] if len(durable) == 1 else {}
+        if ((pair.get("status"), pair.get("cause"), pair.get("killer"),
+             pair.get("initiating_player")) != ("dead", "release", None, "a")
+                or pair.get("a", {}).get("key") != key
+                or pair.get("b", {}).get("key") != partner_key):
+            raise RuntimeError(f"the durable pair {key} <-> {partner_key} did not die by the "
+                               f"release (O-35): {durable}")
+        self._pydec_note(f"O-35: route_1 pair a={key} b={partner_key} is dead, cause=release, "
+                         f"initiated by a; B's partner death commands stay queued (B exited first)")
 
     def assert_changebox_new_saved(self, results):
         """W-5's box-change half: the deadzone body, then B CHANGEs BOX to 12 and back to 1.

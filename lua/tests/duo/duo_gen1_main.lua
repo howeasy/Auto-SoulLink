@@ -34,8 +34,8 @@ local function finish(pass, msg)
 end
 -- A6 storage receipts, declared before the tees that fill them. `storage_tx` is every
 -- party_to_box/box_to_party the client SENDS, in order; `storage_rx` every box_mon/party_mon it
--- RECEIVES; `release_seen` every RELEASE_SEEN the client LOGS (lua/gen1/client.lua:571-592: a
--- standalone from_box RemovePokemon has no wire event, so the log line is the only receipt), each
+-- RECEIVES; `release_seen` every RELEASE_SEEN the client LOGS (lua/gen1/client.lua: a standalone
+-- from_box RemovePokemon logs it and then sends release{key}, owner ruling O-35), each
 -- stamped with how many storage sends preceded it — that stamp is what proves no release fired
 -- during the WITHDRAW.
 local storage_tx, storage_rx, release_seen = {}, {}, {}
@@ -2323,14 +2323,14 @@ end
 -- The RELEASE half depends on the client contract in lua/gen1/client.lua:552-592: move_mon keys
 -- from the SIGNAL-TIME snapshot (signals.lua:141-166), and a standalone from_box RemovePokemon
 -- (not preceded by a move_mon in the same frame, so not Bill's WITHDRAW) logs RELEASE_SEEN and
--- sends NOTHING. Releasing a boxed linked mon is therefore invisible to the server -- the pair
--- stays ALIVE with a phantom boxed half. That is the documented shared-protocol gap this
--- scenario pins, not a defect of this run.
+-- sends release{key}. The server kills the pair with cause "release" (owner ruling O-35); the
+-- oracle (e2e_duo.assert_pc_ops_new_saved) checks links.json for it.
 --
 -- A re-enters the PC for the second DEPOSIT only after B has finished, so the second deposit's
 -- partner sync (state.py:2091-2109 would queue another box_mon once B's sync_retrieve_done has
 -- put the key back in party_keys) cannot land on a live B: B's receipt is exactly box_mon then
--- party_mon, in that order, and nothing after.
+-- party_mon, in that order, and nothing after. The release's force_faint + memorialize for B's
+-- partner therefore stay queued on the server; this scenario does not observe B's memorial.
 function scenarios.pc_ops_new()
     local linked, why = scenarios.link_new()
     if not linked then return false, link_prerequisite_failure(why) end

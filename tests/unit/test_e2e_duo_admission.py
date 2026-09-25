@@ -1474,8 +1474,8 @@ def test_explode_oracle_refuses_a_broken_marker(tmp_path, monkeypatch, old, new,
 
 
 # ── A6: the PC scenarios' oracles ────────────────────────────────────────────────────────
-# pc_ops_new drives Bill's PC by play and ends with a RELEASE the server never hears about;
-# changebox_new drives the deadzone half and then a real CHANGE BOX.
+# pc_ops_new drives Bill's PC by play and ends with a RELEASE that sends release{key}, which kills
+# the pair (owner ruling O-35); changebox_new drives the deadzone half and then a real CHANGE BOX.
 
 _PC_LINK_A = "CCCC:3333:03"
 _PC_LINK_B = "DDDD:4444:04"
@@ -1496,6 +1496,7 @@ _PC_A = "\n".join([
     "PC_OP release_box done",
     'TX {"event":"party_to_box","player":"a","key":"' + _PC_LINK_A + '"}',
     "[SLink-gen1] RELEASE_SEEN key=" + _PC_LINK_A + " box=0",
+    'TX {"event":"release","key":"' + _PC_LINK_A + '","player":"a"}',
     "PC_RELEASE_SEEN " + _PC_LINK_A,
     "PC_FINAL party=1 box=1 count=0 init=false",
     "SAVE_WITNESS pc_ops_new_a frames=900",
@@ -1525,7 +1526,7 @@ def _empty_box1(image):
 
 
 def _pc_stub(tmp_path, monkeypatch, box1_stored=None, box_index=0, initialised=False,
-             memorial=False, active_box_holds=None):
+             memorial=False, active_box_holds=None, link_status="dead", link_cause="release"):
     """The pc_ops/changebox stub: real fixture bytes for both cartridges, the box state the
     scenario leaves behind, and the server surfaces the oracle reads."""
     a_sram, _a_rom = _fixture_save("red")
@@ -1556,9 +1557,9 @@ def _pc_stub(tmp_path, monkeypatch, box1_stored=None, box_index=0, initialised=F
     run._boot_keys = {"a": boot_a, "b": codec.key(b_party[0])}
     run._link_keys = {"a": _PC_LINK_A, "b": link_b}
     run._deadzone_b_key = link_b
-    run._status = lambda: {"links": [{"area_id": "route_1", "a_key": _PC_LINK_A,
-                                      "b_key": link_b, "status": "alive"}]}
-    run._links_json = lambda: [{"area_id": "route_1", "status": "alive",
+    # O-35: A's release{key} killed the pair on the server (state.py _handle_release).
+    run._links_json = lambda: [{"area_id": "route_1", "status": link_status, "cause": link_cause,
+                                "killer": None, "initiating_player": "a",
                                 "a": {"key": _PC_LINK_A}, "b": {"key": link_b}}]
 
     def saved(inst, **_kwargs):
@@ -1579,9 +1580,24 @@ def _pc_fixture(tmp_path, monkeypatch, **kwargs):
     return _pc_stub(tmp_path, monkeypatch, **kwargs)[1]
 
 
-def test_pc_ops_oracle_reads_the_cycle_and_the_documented_gap(tmp_path, monkeypatch):
+def test_pc_ops_oracle_reads_the_cycle_and_the_release_kill(tmp_path, monkeypatch):
     run, receipts = _pc_stub(tmp_path, monkeypatch)
     run.assert_pc_ops_new_saved(receipts)
+
+
+@pytest.mark.parametrize(("status", "cause"), [("alive", None), ("dead", "faint")])
+def test_pc_ops_oracle_refuses_a_pair_the_release_did_not_kill(tmp_path, monkeypatch, status, cause):
+    """O-35: the pre-ruling 'pair stays ALIVE' gap is now the failure, and so is any other cause."""
+    run, receipts = _pc_stub(tmp_path, monkeypatch, link_status=status, link_cause=cause)
+    with pytest.raises(RuntimeError, match="did not die by the release"):
+        run.assert_pc_ops_new_saved(receipts)
+
+
+def test_pc_ops_oracle_refuses_a_release_that_never_reached_the_wire(tmp_path, monkeypatch):
+    run, receipts = _pc_stub(tmp_path, monkeypatch)
+    silent = receipts["a"].replace('TX {"event":"release","key":"' + _PC_LINK_A + '","player":"a"}\n', "")
+    with pytest.raises(RuntimeError, match="sent 0 release"):
+        run.assert_pc_ops_new_saved({"a": silent, "b": receipts["b"]})
 
 
 @pytest.mark.parametrize(("old", "new", "message"), [
