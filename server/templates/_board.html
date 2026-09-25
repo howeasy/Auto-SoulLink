@@ -19,7 +19,7 @@
 {% from "_macros.html" import status_pill, stat_stages_row %}
 {# ── macros ────────────────────────────────────────────────────────────── #}
 
-{# No max HP (the Gen 1 client reads none for a foe): the number alone, no bar to fake. #}
+{# No max HP (a client that sends none, or the Gen 1 client on a transition frame): the number alone, no bar to fake. #}
 {% macro hp(mon) -%}
   {% if mon.maxHP and mon.maxHP > 0 -%}
   <span class="mk-hp"><span class="mk-hp-bar"><span class="mk-hp-fill {{ hp_class(mon) }}" style="width:{{ hp_pct(mon) }}%"></span></span><span class="mk-hp-num"><span class="sr-only">HP </span>{{ mon.hp }}/{{ mon.maxHP }}</span></span>

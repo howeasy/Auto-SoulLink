@@ -280,7 +280,13 @@ function Client.new(p)
     local function enemy_party(battle)
         if battle.in_battle == 0 then return arr({}) end
         local foe = { species_id = battle.enemy_species, level = battle.enemy_level,
-                      hp = battle.enemy_hp, maxHP = battle.enemy_max_hp, active = true }
+                      hp = battle.enemy_hp, active = true }
+        -- maxHP only when plausible: LoadEnemyMonData's transition frame can pair a new HP with a
+        -- stale or zero max; without one the board shows the number alone
+        local max_hp = battle.enemy_max_hp
+        if math.type(max_hp) == "integer" and max_hp > 0 and max_hp <= 999 and battle.enemy_hp <= max_hp then
+            foe.maxHP = max_hp
+        end
         local stages = reads.read_stat_stages("enemy")
         if stages then foe.stat_stages = arr(wire_stages(stages)) end
         return arr({ foe })

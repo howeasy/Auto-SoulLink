@@ -3697,9 +3697,14 @@ def test_the_enemy_on_the_wire_carries_its_max_hp(world):
     world.in_battle(opponent=0x24, species=0x24, level=3)       # a wild Pidgey
     r = world.ram
     world.bus[r["wEnemyMonHP"]], world.bus[r["wEnemyMonHP"] + 1] = 0x00, 0x11
-    max_hp = r.get("wEnemyMonMaxHP", 0xCFF4)
+    max_hp = r["wEnemyMonMaxHP"]
     world.bus[max_hp], world.bus[max_hp + 1] = 0x01, 0x02
     world.step(30)
     foe = world.events("tick")[-1]["enemy_party"][0]
     assert (foe["hp"], foe.get("maxHP")) == (0x11, 0x102)
+    # LoadEnemyMonData's transition frame: hp above max (or a max outside 1..999) is no max at all
+    for hi, lo in ((0x00, 0x10), (0x00, 0x00), (0x03, 0xE8)):
+        world.bus[max_hp], world.bus[max_hp + 1] = hi, lo
+        world.step(30)
+        assert "maxHP" not in world.events("tick")[-1]["enemy_party"][0], (hi, lo)
     world.assert_all_conform()

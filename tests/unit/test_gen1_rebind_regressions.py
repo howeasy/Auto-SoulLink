@@ -380,8 +380,8 @@ def _without_box_generation(trace):
             assert type(gen) is int and gen >= 1, e[1].get("event")
             e = ("sent", {k: v for k, v in e[1].items() if k != "pc_boxes_generation"})
         if e[0] == "sent" and e[1].get("enemy_party"):
-            # GEN1-ENEMY-MAXHP: the foe now carries maxHP (wEnemyMonMaxHP), which master lacked
-            assert all(type(f.get("maxHP")) is int for f in e[1]["enemy_party"])
+            # GEN1-ENEMY-MAXHP: the foe may now carry maxHP (wEnemyMonMaxHP, when plausible)
+            assert all(type(f.get("maxHP", 1)) is int for f in e[1]["enemy_party"])
             e = ("sent", {**e[1], "enemy_party": [{k: v for k, v in f.items() if k != "maxHP"}
                                                   for f in e[1]["enemy_party"]]})
         out.append(e)
