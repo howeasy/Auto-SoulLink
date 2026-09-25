@@ -127,3 +127,23 @@ def test_pin_gives_the_reconnect_initial_phase_the_committed_a_name(tmp_path):
     assert (repo / (stem + "a_result.txt")).read_text(encoding="utf-8") == "initial phase\n"
     assert not (repo / (stem + "a_initial_result.txt")).exists()
     assert '"sha256": "' + "2" * 64 + '"' in (repo / sweep.PIN_FILES[0]).read_text(encoding="utf-8")
+
+
+def test_only_the_sweep_attests_a_verification_lane_run_never_does(tmp_path, monkeypatch):
+    from tests.live import conftest
+    from tools import verify_gen2_release as gate
+
+    lane = next(lane for lane in gate.LANES if lane.name == "live-new-gates")
+    assert lane.env.get("SLINK_GEN2_NO_ATTEST") == "1" and lane.env.get("SLINK_LIVE") == "1"
+    monkeypatch.setattr(conftest, "REPO", tmp_path)
+    (tmp_path / sweep.ATTESTATION).parent.mkdir(parents=True)
+    monkeypatch.setitem(conftest._run, "seen", True)
+    monkeypatch.setenv("SLINK_LIVE", "1")
+    monkeypatch.setenv("SLINK_GEN2_NO_ATTEST", "1")
+    conftest.pytest_sessionfinish(None, 0)
+    assert not (tmp_path / sweep.ATTESTATION).exists()   # the lane re-proves, the pin stays
+    seen = {}
+    monkeypatch.setattr(sweep.subprocess, "Popen", lambda cmd, cwd, env, stdout, stderr: seen.update(env) or
+                        type("P", (), {"wait": lambda self, timeout: 0})())
+    sweep.run(["x"], tmp_path, 1, tmp_path / "run.log")
+    assert "SLINK_GEN2_NO_ATTEST" not in seen and seen["SLINK_LIVE"] == "1"   # the sweep's cell attests

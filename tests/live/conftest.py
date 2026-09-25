@@ -7,6 +7,8 @@ one gen2-live-new-gates-attestation-v1 record from this session's own outcome co
 
 verify_gen2_release._inspect_run_row_errors judges it: a PASS for every title and passes only (a skip, deselect,
 xfail or error is not a pass). It is written on FAIL too, so a failed run can never leave an older PASS standing.
+SLINK_GEN2_NO_ATTEST=1 (tools/verify_gen2_release.py's live-new-gates lane) runs the gates without writing it: only the
+final sweep's gate/inspect_run cell attests, so a verification run never unpins the committed record.
 """
 from __future__ import annotations
 
@@ -67,8 +69,8 @@ def attestation(counts, titles, stamp):
 
 
 def pytest_sessionfinish(session, exitstatus):
-    if os.environ.get("SLINK_LIVE") != "1" or not _run["seen"]:
-        return
+    if os.environ.get("SLINK_LIVE") != "1" or not _run["seen"] or os.environ.get("SLINK_GEN2_NO_ATTEST") == "1":
+        return   # SLINK_GEN2_NO_ATTEST: verify_gen2_release's live-new-gates lane re-proves without re-attesting
     from tests.live import test_gen2_new_gates as live
 
     record = attestation(_run["counts"], _run["titles"], live.code_stamp())

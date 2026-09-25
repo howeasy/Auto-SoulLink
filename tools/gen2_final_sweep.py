@@ -151,6 +151,7 @@ def lf_sha256(path):
 
 def run(cmd, cwd, timeout, log):
     env = dict(os.environ, SLINK_LIVE="1", PYTHONUNBUFFERED="1")
+    env.pop("SLINK_GEN2_NO_ATTEST", None)   # the sweep's gate/inspect_run cell is the one that attests
     with open(log, "a", encoding="utf-8") as handle:
         handle.write(f"$ {' '.join(cmd)}\n")
         handle.flush()

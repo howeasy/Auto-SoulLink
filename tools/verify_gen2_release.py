@@ -152,7 +152,9 @@ LANES = [
              " Gold and Silver, each a PASS on the overlay published NOW; runners are"
              " tests/live/test_gen2_{panel,sfx,w6}_gate.py. Phone (P4.5, O-29 flavour) stays in live-new-gates"),
     Lane("live-new-gates", _pytest("tests/live/test_gen2_new_gates.py"),
-         env={"SLINK_LIVE": "1"},
+         # a lane run re-proves; only the final sweep's gate/inspect_run cell writes the pinned attestation
+         # (tests/live/conftest.py), else every lane run would unpin it
+         env={"SLINK_LIVE": "1", "SLINK_GEN2_NO_ATTEST": "1"},
          why="PHYSICAL receipts: the U1 engine-site, U2 write-window (Silver via O-23) and fixture"
              " qualification rows of tests/gen2_live_gate_requirements.json are bound and pinned by"
              " sha256 (new_gates_errors, no emulator); a gap there fails the lane before it spawns"
