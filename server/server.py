@@ -2268,6 +2268,8 @@ class SLinkServer:
             _reason = msg.get("reason", "")
             if msg.get("_rejected"):
                 _what = "key change REJECTED (identity lost)"
+            elif msg.get("_key_change_status") == "rejected":
+                _what = "key change refused"
             elif msg.get("new_species") is not None:
                 _what = "evolved"
             elif _reason == "trade_undo":
@@ -4219,6 +4221,7 @@ class SLinkServer:
         if "event" not in body:
             return aiohttp_web.json_response({"ok": False, "error": "event field required"}, status=400)
         try:
+            self._ingest_box_census(player, body)          # KEY-SCOPE-5: as a real snapshot would
             cmds = self.state.handle_event(player, body)
             self._notify_sse()
             return aiohttp_web.json_response({
@@ -4623,6 +4626,7 @@ class SLinkServer:
         self.player_kanto_badges = {"a": 0, "b": 0}
         self.trainer_name = {"a": "", "b": ""}
         self.pc_boxes = {"a": [], "b": []}
+        self.box_census = {pid: {"capable": False, "gen": -1, "boxes": None} for pid in ("a", "b")}
         self.party_details = {"a": {}, "b": {}}
         self._mon_cache.clear()
         self.battle_state = {
@@ -4675,17 +4679,15 @@ class SLinkServer:
         census by sending `pc_boxes_generation` (monotonic per client session, bumped after each
         successful full box scan). A snapshot carrying a newer generation with `pc_boxes`
         replaces the census; a snapshot without both (or with an older generation) makes it
-        stale until a newer generation arrives. A reported deposit is added, so a census taken
-        before it cannot miss the boxed mon."""
+        stale until a newer generation arrives. A client that never sends a generation is
+        legacy: its (possibly empty) `pc_boxes` stays presence-based, as before. Deposits are
+        not added: no Gen 1/2 client reports their box (cx-8f3a6ce9 F9), and the next complete
+        scan carries them."""
         event, bc = msg.get("event"), self.box_census[player_id]
         if event == "hello":
             bc.update(capable="pc_boxes_generation" in msg, gen=-1, boxes=None)
         elif "pc_boxes_generation" in msg:
             bc["capable"] = True
-        if event in ("party_to_box", "stats_cache"):
-            if bc["boxes"] is not None and msg.get("key"):
-                bc["boxes"].append({"key": msg["key"], "box": msg.get("box")})
-            return
         if event not in ("hello", "tick", "safe") or not bc["capable"]:
             return
         gen, boxes = msg.get("pc_boxes_generation"), msg.get("pc_boxes")

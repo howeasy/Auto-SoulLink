@@ -93,7 +93,7 @@ function Client.new(p)
         seq = 0, frame = 0, hello_sent = false,
         writes_enabled = false, invalid_streak = 0, gate_revoked = false,
         box_cache = {}, resolved_areas = {}, config = {}, deferred = {},
-        box_generation = 0, -- KEY-SCOPE-5: bumped after each successful full rescan_boxes
+        box_generation = 0, box_complete = false, -- KEY-SCOPE-5: bumped per complete rescan_boxes
         battle = nil, has_pokeballs = false, nuzlocke_announced = false, signals = nil,
         -- Gen 2: the binder needs an operation authority (signals.lua header); the client
         -- owns it as a reset epoch, bumped at every reset/reload boundary.
@@ -283,27 +283,30 @@ function Client.new(p)
         return out
     end
 
-    -- KEY-SCOPE-5: pc_boxes is a complete census only alongside a generation; nil before any
-    -- successful scan, so the server never mistakes the initial empty cache for one.
+    -- KEY-SCOPE-5: pc_boxes is a complete census only alongside a generation. Omitted before any
+    -- complete scan and whenever the latest scan was incomplete (box_cache still goes out for
+    -- display), so the server never takes a partial cache for a fresh census.
     local function box_generation()
-        return self.box_generation > 0 and self.box_generation or nil
+        return self.box_complete and self.box_generation or nil
     end
 
     -- Gen 2: fourteen boxes, the current one authoritative in the active sBox shadow and the
     -- rest in their backing SRAM boxes (reads.lua read_box); eggs omitted as in the party.
     function self:rescan_boxes()
         local cur = reads.read_current_box_num()
-        if cur == nil then return self.box_cache end
-        local cache = {}
+        if cur == nil then self.box_complete = false; return self.box_cache end
+        local cache, complete = {}, true
         for box = 0, c.NUM_BOXES - 1 do
-            local mons = box == cur and reads.read_active_box() or reads.read_storage_box(box)
+            local mons
+            if box == cur then mons = reads.read_active_box() else mons = reads.read_storage_box(box) end
+            complete = complete and mons ~= nil -- any failed box read: not a census
             for _, m in ipairs(mons and mons.mons or {}) do
                 local e = (not m.is_egg) and wire.box_entry(m, box) or nil
                 if e then cache[#cache + 1] = e end
             end
         end
-        self.box_cache = cache
-        self.box_generation = self.box_generation + 1
+        self.box_cache, self.box_complete = cache, complete
+        if complete then self.box_generation = self.box_generation + 1 end
         return cache
     end
 

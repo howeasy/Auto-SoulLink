@@ -78,7 +78,7 @@ so batch those cards and re-run `tools/gen2_final_sweep.py` once.
 8. **Size.** Server ~190-300 LOC, clients ~50-100, tests ~260-380, docs/schema ~25-50. Order: census+predicate → box generation → memorial → latch → ledger/fencing.
 
 **Gen 3 follow-up (Gen 3 lane; not done in the KS5 batch).**
-- Owner default, as built: a missing or stale census REJECTS (`box census unavailable`, pair retired), but only for a client that advertises one by sending `pc_boxes_generation`. `lua/clients/gen3_frlge_client.lua` sends none, so Gen 3 keeps the presence-based `pc_boxes` check, which is F3's gap.
+- Owner default, as built: a missing or stale census REJECTS (`box census unavailable`; after `cx-8f3a6ce9` F2 it retires nothing), but only for a client that advertises one by sending `pc_boxes_generation`. `lua/clients/gen3_frlge_client.lua` sends none, so Gen 3 keeps the presence-based `pc_boxes` check, which is F3's gap.
 - Gen 3 gets the raw party census now, with no client change: F1 (a duplicate without a blob) rejects and F2 (a same-mon tick without a blob) accepts.
 - To close F3 for Gen 3: publish a full box census on hello by reusing the startup box walk, send `pc_boxes_generation` only with a complete census, and never send it with the incremental 2-4-box tick cache. Otherwise every key change in the first seconds after connecting would be rejected.
 - Then a Gen 3 live run: a Nature Changer on a linked mon, plus a reconnect replay.

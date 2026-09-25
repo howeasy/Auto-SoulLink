@@ -483,7 +483,7 @@ def test_reconnect_old_key_replay_acks_false_without_rollback(tmp_path):
                "key_change_ack")
     assert ack["migrated"] is False
     assert srv.state.links[0].a.key == NEW and srv.state.entry_for("a", NEW) is srv.state.links[0]
-    assert srv.state.party_keys["a"] == {NEW}
+    assert srv.state.party_keys["a"] == {OLD}, "a fresh hello is the cartridge's own word (cx-8f3a6ce9 F3)"
     assert OLD in srv.party_details["a"], "a replay must not migrate the presentation caches again"
 
 
@@ -537,3 +537,27 @@ async def test_a_mixed_games_refusal_is_recorded_as_an_admission_verdict(tmp_pat
         assert srv.admission["b"]["state"] == "admitted"
     finally:
         await close()
+
+
+def test_a_replay_of_an_older_ledger_record_acks_false(st):
+    """cx-8f3a6ce9 F5: any ledgered {old,new} is a replay, not only the newest record for old."""
+    K1, K2, K3 = OLD, NEW, "EEEE:30B8:10"
+    entry = _link(st, a_key=K3)
+    st.key_migration_ledger["a"].extend([{"old_key": K1, "new_key": K2}, {"old_key": K1, "new_key": K3}])
+    st.party_keys["a"].add(K1)                      # a reconnect hello re-reported K1
+    assert _one(_change(st, old=K1, new=K2), "key_change_ack")["migrated"] is False
+    assert entry.a.key == K3 and st.entry_for("a", K2) is None
+
+
+def test_debug_inject_and_reset_keep_the_box_census_consistent(tmp_path):
+    """cx-8f3a6ce9 F6/F9: an injected snapshot feeds the census like a real one, a deposit without a
+    box index is not counted as a live box, and a reset forgets every census."""
+    from unittest.mock import AsyncMock
+    srv = _server(tmp_path)
+    call = lambda body: asyncio.run(srv.handle_debug_inject_event(AsyncMock(json=AsyncMock(return_value=body))))
+    call({"player": "a", "event": "tick", "party": [], "pc_boxes": [], "pc_boxes_generation": 3})
+    assert srv.box_census["a"] == {"capable": True, "gen": 3, "boxes": []}
+    call({"player": "a", "event": "party_to_box", "key": NEW})
+    assert srv.box_census["a"]["boxes"] == []
+    asyncio.run(srv.handle_reset_api(None))
+    assert srv.box_census["a"] == {"capable": False, "gen": -1, "boxes": None}

@@ -2252,11 +2252,20 @@ def test_a_complete_box_scan_is_stamped_with_a_generation():
         world.field("wCurBox", 99)                    # read_current_box_num refuses: the scan fails
         world.client.pending_rescan = True
         world.frames(30)
-        assert world.sent("tick")[-1].get("pc_boxes_generation") == 1
+        assert world.sent("tick")[-1].get("pc_boxes_generation") is None
         world.field("wCurBox", 0)
         world.client.pending_rescan = True
         world.frames(30)
         assert world.sent("tick")[-1].get("pc_boxes_generation") == 2
+        row = world.profile["storage_boxes"][3]
+        world.emu.poke("CartRAM", row["flat"], world.lua.table_from([0, 0]))   # one box read fails
+        world.client.pending_rescan = True
+        world.frames(30)
+        assert world.sent("tick")[-1].get("pc_boxes_generation") is None
+        world.emu.poke("CartRAM", row["flat"], world.lua.table_from([0, 255]))
+        world.client.pending_rescan = True
+        world.frames(30)
+        assert world.sent("tick")[-1].get("pc_boxes_generation") == 3
 
-    falsify(check, mutant("lua/gen2/client.lua", ("        self.box_cache = cache\n        self.box_generation = self.box_generation + 1\n",
-                                                  "        self.box_cache = cache\n")))
+    falsify(check, mutant("lua/gen2/client.lua", ("            complete = complete and mons ~= nil -- any failed box read: not a census\n",
+                                                  "")))

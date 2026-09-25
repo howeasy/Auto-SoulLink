@@ -357,8 +357,12 @@ def test_box_twin_with_omitted_census_is_rejected(tmp_path):
     srv._dispatch("b", {"event": "tick", "party": _snap5(ONIX, B2)})   # census omitted
     cmds = _change5(srv, "b", B1)
     rej = _named(cmds, "key_change_rejected")
-    assert rej and "box census unavailable" in rej[0]["reason"] and not _named(cmds, "key_change_ack")
+    assert rej and rej[0]["reason"] == "box census unavailable" and not _named(cmds, "key_change_ack")
     assert srv.state.entry_for("b", ONIX) is None
+    # uncertainty is not evidence of a collision: the pair is NOT retired (cx-8f3a6ce9 F2)
+    assert l1.status == LinkStatus.ALIVE and srv.state.entry_for("b", B1) is l1
+    a_cmds = srv.state.handle_event("a", {"event": "noop"})
+    assert not [c for c in cmds + a_cmds if c.get("cmd") in ("force_faint", "force_explode", "memorialize")]
 
 
 def test_a_client_without_a_census_generation_keeps_presence_semantics(tmp_path):
@@ -375,9 +379,9 @@ def test_delayed_old_tick_after_acceptance_does_not_rollback_party(tmp_path):
     assert state.party_keys["b"] == {ONIX, B2}
     a_cmds = state.handle_event("a", {"event": "noop"})
     assert not [c for c in cmds + a_cmds if c.get("cmd") in ("party_mon", "box_mon")]
-    # an alias and its terminal key in ONE snapshot are two mons: latched, never merged
+    # an alias AND its terminal key in one snapshot are two live mons: never aliased, never latched
     state.handle_event("b", {"event": "tick", "party": [_mon(B1, 0x15), _mon(ONIX, 0x5F), _mon(B2, 0x15)]})
-    assert ONIX in state.ambiguous_keys["b"]
+    assert state.party_keys["b"] == {B1, ONIX, B2} and not state.ambiguous_keys["b"]
 
 
 def test_both_players_may_migrate_to_the_same_npc_trade_key_with_fresh_censuses(tmp_path):
@@ -401,3 +405,40 @@ def test_safe_and_tick_self_report_are_identical(tmp_path, event):
     assert ack and ack[0]["migrated"] is True
     assert srv.state.entry_for("b", ONIX) is l1 and srv.state.party_keys["b"] == {ONIX, B2}
     assert srv.state.party_key_census["b"][ONIX] == 1
+
+
+def test_a_fresh_hello_never_aliases_a_retired_key(tmp_path):
+    """cx-8f3a6ce9 F3/F4: a hello is the cartridge's own word; a new mon that happens to carry a
+    retired key is that key, not the migration's terminal key."""
+    state, (l1, l2) = _two_links(tmp_path)
+    assert _named(_npc_trade(state, "b", B1), "key_change_ack")          # ledger {B1 -> ONIX}
+    state.handle_event("b", {"event": "hello", "party": [_mon(B1, 0x15), _mon(B2, 0x15)]})
+    assert state.party_keys["b"] == {B1, B2} and not state.ambiguous_keys["b"]
+
+
+def test_a_stale_tick_aliases_only_where_the_terminal_key_sat(tmp_path):
+    state, (l1, l2) = _two_links(tmp_path)
+    state.handle_event("b", {"event": "tick", "party": [{**_mon(B1, 0x15), "slot": 0}, {**_mon(B2, 0x15), "slot": 1}]})
+    assert _named(_npc_trade(state, "b", B1), "key_change_ack")
+    state.handle_event("b", {"event": "tick", "party": [{**_mon(ONIX, 0x5F), "slot": 0}, {**_mon(B2, 0x15), "slot": 1}]})
+    # B1 back in ONIX's slot, ONIX gone: the stale case, aliased
+    state.handle_event("b", {"event": "tick", "party": [{**_mon(B1, 0x15), "slot": 0}, {**_mon(B2, 0x15), "slot": 1}]})
+    assert state.party_keys["b"] == {ONIX, B2}
+    # B1 in ANOTHER slot is a live mon of its own
+    state.handle_event("b", {"event": "tick", "party": [{**_mon(ONIX, 0x5F), "slot": 0}, {**_mon(B2, 0x15), "slot": 1}]})
+    state.handle_event("b", {"event": "tick", "party": [{**_mon(B2, 0x15), "slot": 0}, {**_mon(B1, 0x15), "slot": 1}]})
+    assert B1 in state.party_keys["b"] and ONIX not in state.party_keys["b"]
+
+
+def test_a_deep_ledger_keeps_a_snapshot_cheap(tmp_path):
+    """cx-8f3a6ce9 F7: a 256-deep ledger, a 6-key party, one hello and one tick well under 5 ms."""
+    import time
+    state, _ = _two_links(tmp_path)
+    keys = [f"{i:04X}:5678:15" for i in range(257)]
+    state.key_migration_ledger["b"].extend({"old_key": o, "new_key": n} for o, n in zip(keys, keys[1:]))
+    party = [_mon(keys[0], 0x15)] + [_mon(f"{i:04X}:9999:15", 0x15) for i in range(5)]
+    state._save = lambda: None
+    t0 = time.perf_counter()
+    state.handle_event("b", {"event": "hello", "party": party})
+    state.handle_event("b", {"event": "tick", "party": party})
+    assert time.perf_counter() - t0 < 0.005

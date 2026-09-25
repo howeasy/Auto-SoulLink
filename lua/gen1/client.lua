@@ -160,7 +160,7 @@ function Client.new(p)
         seq = 0, frame = 0, hello_sent = false,
         writes_enabled = false, invalid_streak = 0, gate_revoked = false,
         known_keys = {}, box_cache = {}, resolved_areas = {}, config = {},
-        box_generation = 0, -- KEY-SCOPE-5: bumped after each successful full rescan_boxes
+        box_generation = 0, box_complete = false, -- KEY-SCOPE-5: bumped per complete rescan_boxes
         -- old_key -> the physical key the cartridge now holds, for a key_change the server
         -- REJECTED: its retirement commands (force_faint / memorialize) name the old key the
         -- server still knows, the mon's bytes carry the new one (review cx-6aacc4f1 #1)
@@ -313,10 +313,11 @@ function Client.new(p)
         return out
     end
 
-    -- KEY-SCOPE-5: pc_boxes is a complete census only alongside a generation; nil before any
-    -- successful scan, so the server never mistakes the initial empty cache for one.
+    -- KEY-SCOPE-5: pc_boxes is a complete census only alongside a generation. Omitted before any
+    -- complete scan and whenever the latest scan was incomplete (box_cache still goes out for
+    -- display), so the server never takes a partial cache for a fresh census.
     local function box_generation()
-        return self.box_generation > 0 and self.box_generation or nil
+        return self.box_complete and self.box_generation or nil
     end
 
     -- Rescan every SRAM box (derived.sram_boxes_per_bank x banks) and the active box (WRAM
@@ -328,6 +329,8 @@ function Client.new(p)
         -- SRAM boxes are garbage until the game's first ChangeBox initialises them (bit 7 of
         -- wCurrentBoxNum; save.asm EmptyAllSRAMBoxes) — only the WRAM mirror is real before that
         local sram = (cur and cur.initialized) and io.read_range(0, sram_size, "CartRAM") or nil
+        -- KEY-SCOPE-5: complete = every box read. Never-initialised SRAM boxes count as read: they
+        -- really are empty (the game has never stored a mon there), so skipping them is not a gap.
         local complete = cur ~= nil and active ~= nil and (sram ~= nil or not cur.initialized)
         for box = 0, box_count - 1 do
             local mons
@@ -340,7 +343,7 @@ function Client.new(p)
                 end
             end
         end
-        self.box_cache = cache
+        self.box_cache, self.box_complete = cache, complete
         if complete then self.box_generation = self.box_generation + 1 end
         return cache
     end

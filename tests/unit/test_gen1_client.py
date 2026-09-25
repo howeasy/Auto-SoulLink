@@ -3681,9 +3681,12 @@ def test_a_complete_box_scan_is_stamped_with_a_generation(world):
     world.step(30)
     assert world.events("tick")[-1].get("pc_boxes_generation") == 1
     world.bus[world.ram["wBoxCount"]] = 0xFF          # the active box reads malformed: the scan fails
-    assert reconnect().get("pc_boxes_generation") == 1
+    hello = reconnect()
+    assert "pc_boxes_generation" not in hello and "pc_boxes" in hello   # still sent for display
     world.bus[world.ram["wBoxCount"]] = 0
     assert reconnect().get("pc_boxes_generation") == 2
+    world.bus[world.ram["wCurrentBoxNum"]] = 0x80     # boxes initialised, but SRAM box 1+ unreadable
+    assert "pc_boxes_generation" not in reconnect()
     world.assert_all_conform()
 
 
