@@ -283,3 +283,31 @@ def test_a_newline_forces_a_line_break():
     w.H.show("** NEW ENCOUNTER **\nRoute 1", 255, 220, 60, 240)
     w.render()
     assert w.drawn == ["** NEW ENCOUNTER **", "Route 1"], w.drawn
+
+
+def test_a_wrapped_prompt_pushes_the_banner_below_it():
+    """160x144: a 2-line prompt spans y=39..61 and the banner starts at 54, so
+    'CHARMANDER' ran under 'Nuzlocke Start!'. The banner now starts below the prompt."""
+    w = World().gbc()
+    w.lua.execute(
+        "local d = gui.drawBox; gui.drawBox = function(x1, y1, x2, y2, ...) BOXES[#BOXES+1] = {y1, y2}; return d(x1, y1, x2, y2, ...) end"
+    )
+    w.lua.globals().BOXES = w.lua.eval("{}")
+    w.H.prompt("Linked: BULBASAUR <-> CHARMANDER", 255, 255, 255, 300)
+    w.H.nuzlocke_start("Nuzlocke Start!", 180)
+    w.render()
+    (p_top, p_bottom), (b_top, _) = [tuple(b.values()) for b in w.lua.globals().BOXES.values()]
+    assert (p_top, p_bottom) == (39, 61)
+    assert b_top > p_bottom, (p_bottom, b_top)
+
+
+def test_with_no_prompt_the_banner_keeps_its_place():
+    w = World().gbc()
+    w.lua.execute(
+        "local d = gui.drawBox; gui.drawBox = function(x1, y1, ...) TOPS[#TOPS+1] = y1; return d(x1, y1, ...) end"
+    )
+    w.lua.globals().TOPS = w.lua.eval("{}")
+    w.H.nuzlocke_start("Nuzlocke Start!", 180)
+    w.render()
+    assert list(w.lua.globals().TOPS.values()) == [54]
+
