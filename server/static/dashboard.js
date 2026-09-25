@@ -392,6 +392,7 @@ if (window._slinkDashInit) {
   function setOpen(open) {
     mk.classList.toggle('mk-rail-open', open);
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
     btn.textContent = open ? '✕' : '☰';
     scrim.hidden = !open;
     var main = document.getElementById('main-content');

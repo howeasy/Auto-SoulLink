@@ -441,9 +441,12 @@ body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
   .mk { grid-template-columns: minmax(0, 1fr); }
   .mk-topbar {
     display: flex; align-items: center; gap: var(--space-3);
-    position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 95;
+    position: fixed; top: 0; left: 0; right: 0; height: 56px; z-index: 101;
     padding: 0 var(--space-3);
-    background: color-mix(in srgb, var(--c-card) 92%, var(--c-bg)); border-bottom: 1px solid var(--c-edge);
+    /* --c-card is a low-alpha overlay meant to sit ON an opaque --c-bg (see .mk-runhdr
+       below) -- mixing it card-dominant here left the bar ~12% opaque and the board
+       showed through underneath a fixed bar. bg-dominant, same as .mk-runhdr. */
+    background: color-mix(in srgb, var(--c-bg) 92%, var(--c-card)); border-bottom: 1px solid var(--c-edge);
   }
   .mk-menu-btn {
     width: 44px; height: 44px; flex: none; display: grid; place-items: center;
@@ -457,6 +460,11 @@ body.mgr .twitch-panel, body.mgr .obs-panel { max-width: 1100px; }
     position: fixed; top: 0; left: 0; height: 100vh; width: min(320px, 85vw);
     transform: translateX(-100%); transition: transform .2s ease-out; z-index: 100;
     box-shadow: 2px 0 24px rgba(0, 0, 0, .45);
+    /* The rail's own background is a translucent color-mix (fine sitting beside the page);
+       as an overlay drawer it must not let the board read through it. Same double-opaque
+       trick as .mgr-rail-theme .theme-pills below, since --c-bg itself is translucent in
+       some themes. */
+    background: linear-gradient(var(--c-card), var(--c-card)), linear-gradient(var(--c-bg), var(--c-bg)), linear-gradient(var(--c-bg), var(--c-bg));
   }
   .mk.mk-rail-open .mk-rail { transform: translateX(0); }
   .mk-scrim {
