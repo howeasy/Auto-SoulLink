@@ -244,7 +244,7 @@
     <div style="display:flex;gap:0.6em;align-items:center;margin-top:0.4em">
       <button class="btn btn-green" onclick="doManualLink()">Link</button>
       <label style="display:inline;font-size:var(--fs-sm);cursor:pointer;color:var(--muted)">
-        <input type="checkbox" id="ml-override" style="width:auto"> Override existing links
+        <input type="checkbox" id="ml-override" style="width:auto" onchange="_mlPopulateMons('a'); _mlPopulateMons('b')"> Override existing links
       </label>
       <span id="ml-warn" style="font-size:var(--fs-sm);color:var(--yellow)"></span>
     </div>
@@ -280,6 +280,12 @@
 <script>
 var API = window.SLINK_API_BASE || '';
 // ── Helpers ──────────────────────────────────────────────────────────────
+// Every server/state string that goes into innerHTML passes through esc():
+// nicknames, trainer names and area ids come from the game clients.
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 function showResult(el, ok, data) {
   el.style.display = 'block';
   el.className = 'result ' + (ok ? 'ok' : 'err');
@@ -288,8 +294,16 @@ function showResult(el, ok, data) {
 async function api(method, path, body) {
   var opts = {method: method, headers: {'Content-Type':'application/json'}};
   if (body !== undefined) opts.body = JSON.stringify(body);
-  var r = await fetch(path, opts);
-  return await r.json();
+  // Every caller renders {ok, error}: a dropped request or a non-JSON error page must
+  // show up as a failure instead of leaving the button with no result.
+  try {
+    var r = await fetch(path, opts);
+    var text = await r.text();
+    try { return JSON.parse(text); }
+    catch (e) { return {ok: false, error: 'HTTP ' + r.status + ': ' + text.slice(0, 200)}; }
+  } catch (e) {
+    return {ok: false, error: 'Request failed: ' + e.message};
+  }
 }
 function flashPanel(el) {
   while (el && !el.classList.contains('panel')) el = el.parentElement;
@@ -425,7 +439,7 @@ function updateDataLists() {
   });
   var dlKeys = document.getElementById('dl-keys');
   var kh = '';
-  Object.keys(keys).forEach(function(k) { kh += '<option value="' + k + '">' + keys[k] + '</option>'; });
+  Object.keys(keys).forEach(function(k) { kh += '<option value="' + esc(k) + '">' + esc(keys[k]) + '</option>'; });
   dlKeys.innerHTML = kh;
 
   // ── Areas (all from area_map + state annotations) ──
@@ -440,7 +454,7 @@ function updateDataLists() {
     seen[aid] = true;
     var pids = Object.keys(pc[aid]).map(function(p){return p.toUpperCase();}).join('+');
     var disp = _allAreas[aid] || aid;
-    ah += '<option value="' + aid + '">\u26a0 ' + disp + ' [PENDING ' + pids + ']</option>';
+    ah += '<option value="' + esc(aid) + '">\u26a0 ' + esc(disp) + ' [PENDING ' + esc(pids) + ']</option>';
   });
   // Then all areas, grouped by state
   var active = [], rest = [];
@@ -453,11 +467,11 @@ function updateDataLists() {
   active.forEach(function(aid) {
     var st = states[aid];
     var disp = _allAreas[aid] || aid;
-    ah += '<option value="' + aid + '">' + disp + ' [' + st + ']</option>';
+    ah += '<option value="' + esc(aid) + '">' + esc(disp) + ' [' + esc(st) + ']</option>';
   });
   rest.forEach(function(aid) {
     var disp = _allAreas[aid] || aid;
-    ah += '<option value="' + aid + '">' + disp + '</option>';
+    ah += '<option value="' + esc(aid) + '">' + esc(disp) + '</option>';
   });
   dlAreas.innerHTML = ah;
 }
@@ -548,8 +562,8 @@ async function loadBackups() {
   var rows = j.backups.map(function(b) {
     window._backupData[b.slot] = b;
     var sum = b.summary;
-    var detail = sum ? '<span style="color:var(--c-alive)">'+sum.links_alive+'&#x2764;</span> <span style="color:var(--c-dead)">'+sum.links_dead+'&#x2620;</span> '+sum.areas_pending+' pending '+sum.areas_dead_zone+' dz' : '<span style="color:var(--c-dim)">?</span>';
-    return '<tr><td class="slot-link" onclick="doRollback('+b.slot+')">#' + b.slot + '</td><td>' + b.modified + '</td><td>' + detail + '</td><td>' + (b.size/1024).toFixed(1) + 'K</td></tr>';
+    var detail = sum ? '<span style="color:var(--c-alive)">'+esc(sum.links_alive)+'&#x2764;</span> <span style="color:var(--c-dead)">'+esc(sum.links_dead)+'&#x2620;</span> '+esc(sum.areas_pending)+' pending '+esc(sum.areas_dead_zone)+' dz' : '<span style="color:var(--c-dim)">?</span>';
+    return '<tr><td class="slot-link" onclick="doRollback('+Number(b.slot)+')">#' + esc(b.slot) + '</td><td>' + esc(b.modified) + '</td><td>' + detail + '</td><td>' + (b.size/1024).toFixed(1) + 'K</td></tr>';
   });
   el.innerHTML = '<table class="backup-table"><tr><th>Slot</th><th>Time</th><th>State</th><th>Size</th></tr>' + rows.join('') + '</table>';
 }
@@ -603,7 +617,7 @@ async function loadLiveState() {
     ['a','b'].forEach(function(pid) {
       var id = ident[pid];
       if (id) {
-        h += '&nbsp;&nbsp;' + pid.toUpperCase() + ': <span style="color:var(--green)">' + (id.trainer_name||'?') + '</span> (OT: ' + (id.ot_id||'?') + ')<br>';
+        h += '&nbsp;&nbsp;' + pid.toUpperCase() + ': <span style="color:var(--green)">' + esc(id.trainer_name||'?') + '</span> (OT: ' + esc(id.ot_id||'?') + ')<br>';
       } else {
         h += '&nbsp;&nbsp;' + pid.toUpperCase() + ': <span style="color:var(--c-dim)">not locked</span><br>';
       }
@@ -614,8 +628,8 @@ async function loadLiveState() {
     var identErr = live.identity_errors || {};
     if (identErr.a || identErr.b) {
       h += '<div style="margin-bottom:0.6em;color:var(--red)"><b>Identity Errors:</b><br>';
-      if (identErr.a) h += '&nbsp;&nbsp;A: ' + identErr.a + '<br>';
-      if (identErr.b) h += '&nbsp;&nbsp;B: ' + identErr.b + '<br>';
+      if (identErr.a) h += '&nbsp;&nbsp;A: ' + esc(identErr.a) + '<br>';
+      if (identErr.b) h += '&nbsp;&nbsp;B: ' + esc(identErr.b) + '<br>';
       h += '</div>';
     }
 
@@ -625,7 +639,7 @@ async function loadLiveState() {
     ['a','b'].forEach(function(pid) {
       var keys = pk[pid] || [];
       h += '&nbsp;&nbsp;' + pid.toUpperCase() + ' (' + keys.length + '): ';
-      h += keys.length ? keys.map(function(k){return '<code style="color:var(--c-link)">'+k.substring(0,8)+'</code>';}).join(', ') : '<span style="color:var(--c-dim)">empty</span>';
+      h += keys.length ? keys.map(function(k){return '<code style="color:var(--c-link)">'+esc(String(k).substring(0,8))+'</code>';}).join(', ') : '<span style="color:var(--c-dim)">empty</span>';
       h += '<br>';
     });
     h += '</div>';
@@ -637,7 +651,7 @@ async function loadLiveState() {
     ['a','b'].forEach(function(pid) {
       var keys = bk[pid] || [];
       h += '&nbsp;&nbsp;' + pid.toUpperCase() + ': ';
-      h += keys.length ? keys.map(function(k){return '<code style="color:var(--c-gold)">'+k.substring(0,8)+'</code>';}).join(', ') : '<span style="color:var(--c-dim)">none</span>';
+      h += keys.length ? keys.map(function(k){return '<code style="color:var(--c-gold)">'+esc(String(k).substring(0,8))+'</code>';}).join(', ') : '<span style="color:var(--c-dim)">none</span>';
       h += '<br>';
     });
     h += '</div>';
@@ -651,7 +665,7 @@ async function loadLiveState() {
         var keys = pb_bonus[pid] || [];
         if (!keys.length) return;
         h += '&nbsp;&nbsp;' + pid.toUpperCase() + ': ';
-        h += keys.map(function(k){return '<code style="color:var(--c-gold)">\u23f3 '+k.substring(0,8)+'</code>';}).join(', ');
+        h += keys.map(function(k){return '<code style="color:var(--c-gold)">\u23f3 '+esc(String(k).substring(0,8))+'</code>';}).join(', ');
         h += '<br>';
       });
       h += '</div>';
@@ -667,7 +681,7 @@ async function loadLiveState() {
     // Party size (physical)
     var ps = live.party_size || {};
     h += '<div style="margin-bottom:0.6em"><b style="color:var(--text)">Party Size (physical):</b> ';
-    h += 'A: ' + (ps.a !== undefined ? ps.a : '?') + ' &nbsp; B: ' + (ps.b !== undefined ? ps.b : '?');
+    h += 'A: ' + esc(ps.a !== undefined ? ps.a : '?') + ' &nbsp; B: ' + esc(ps.b !== undefined ? ps.b : '?');
     h += '</div>';
 
     // Mon stats cache count
@@ -694,7 +708,7 @@ async function loadMemorial() {
 
     // 1. Memorial box info
     if (boxIdx >= 0) {
-      h += '<div style="margin-bottom:0.8em"><b style="color:var(--text)">Memorial Box:</b> Box ' + (boxIdx + 1) + ' (index ' + boxIdx + ')</div>';
+      h += '<div style="margin-bottom:0.8em"><b style="color:var(--text)">Memorial Box:</b> Box ' + esc(boxIdx + 1) + ' (index ' + esc(boxIdx) + ')</div>';
     } else {
       h += '<div style="margin-bottom:0.8em"><b style="color:var(--text)">Memorial Box:</b> <span style="color:var(--c-dim)">No dedicated memorial box for this game</span></div>';
     }
@@ -712,7 +726,7 @@ async function loadMemorial() {
         if (!pkeys.length) return;
         h += '&nbsp;&nbsp;<b>' + pid.toUpperCase() + ':</b> ';
         h += pkeys.map(function(pk) {
-          return '<code style="color:var(--yellow)">' + pk.species_name + '</code> <span style="color:var(--c-dim)">[' + pk.key.substring(0,8) + ']</span>';
+          return '<code style="color:var(--yellow)">' + esc(pk.species_name) + '</code> <span style="color:var(--c-dim)">[' + esc(String(pk.key).substring(0,8)) + ']</span>';
         }).join(', ');
         h += '<br>';
       });
@@ -721,7 +735,7 @@ async function loadMemorial() {
 
     // 3. Memorial box contents (live PC scan)
     if (boxIdx >= 0) {
-      h += '<div style="margin-bottom:0.8em"><b style="color:var(--text)">Box ' + (boxIdx + 1) + ' Contents</b>';
+      h += '<div style="margin-bottom:0.8em"><b style="color:var(--text)">Box ' + esc(boxIdx + 1) + ' Contents</b>';
       var totalSlots = 0;
       ['a','b'].forEach(function(pid) {
         var entries = boxContents[pid] || [];
@@ -747,11 +761,11 @@ async function loadMemorial() {
             else if (e.status === 'quarantined') { statusColor = 'var(--orange)'; statusLabel = '\u26a0 QUARANTINED'; }
             else if (e.status === 'unknown') { statusColor = 'var(--yellow)'; statusLabel = '? unknown'; }
             h += '<tr' + (e.status === 'quarantined' ? ' style="background:color-mix(in srgb, var(--c-pend) 14%, transparent)"' : '') + '>';
-            h += '<td>' + (e.slot + 1) + '</td>';
-            h += '<td>' + (e.species_name || '#' + e.species_id) + '</td>';
-            h += '<td>' + (e.nickname || '<span style="color:var(--c-dim)">—</span>') + '</td>';
-            h += '<td style="font-family:monospace;font-size:var(--fs-md)">' + e.key.substring(0,8) + '</td>';
-            h += '<td style="color:' + statusColor + ';font-weight:600">' + statusLabel + '</td>';
+            h += '<td>' + esc(e.slot + 1) + '</td>';
+            h += '<td>' + esc(e.species_name || '#' + e.species_id) + '</td>';
+            h += '<td>' + (esc(e.nickname) || '<span style="color:var(--c-dim)">—</span>') + '</td>';
+            h += '<td style="font-family:monospace;font-size:var(--fs-md)">' + esc(String(e.key).substring(0,8)) + '</td>';
+            h += '<td style="color:' + statusColor + ';font-weight:600">' + esc(statusLabel) + '</td>';
             h += '</tr>';
           });
           h += '</tbody></table></div>';
@@ -769,10 +783,10 @@ async function loadMemorial() {
         var a = entry.a || {};
         var b = entry.b || {};
         h += '<tr>';
-        h += '<td>' + (entry.area_id || '?') + '</td>';
-        h += '<td style="color:var(--red)">' + (a.nickname || a.species || '?') + '</td>';
-        h += '<td style="color:var(--red)">' + (b.nickname || b.species || '?') + '</td>';
-        h += '<td style="color:var(--muted)">' + (entry.cause || '?') + '</td>';
+        h += '<td>' + esc(entry.area_id || '?') + '</td>';
+        h += '<td style="color:var(--red)">' + esc(a.nickname || a.species || '?') + '</td>';
+        h += '<td style="color:var(--red)">' + esc(b.nickname || b.species || '?') + '</td>';
+        h += '<td style="color:var(--muted)">' + esc(entry.cause || '?') + '</td>';
         h += '</tr>';
       });
       h += '</tbody></table></details>';
@@ -809,9 +823,10 @@ function _mlPopulateMons(pid) {
   var h = '<option value="">-- select --</option>';
   for (var i = 0; i < opts.length; i++) {
     var o = opts[i];
-    var dis = o.linked ? ' disabled' : '';
+    // Linked keys are selectable only when "Override existing links" is on.
+    var dis = (o.linked && !document.getElementById('ml-override').checked) ? ' disabled' : '';
     var lbl = o.label + (o.linked ? ' \u2714' : '');
-    h += '<option value="' + o.key + '" data-area="' + (o.pending_area||'') + '"' + dis + '>' + lbl + '</option>';
+    h += '<option value="' + esc(o.key) + '" data-area="' + esc(o.pending_area||'') + '"' + dis + '>' + esc(lbl) + '</option>';
   }
   sel.innerHTML = h;
   if (cur) { sel.value = cur; }
@@ -835,15 +850,15 @@ function mlFilterAreas() {
   var h = '<option value="">-- select area --</option>';
   function addGroup(label, arr, color) {
     if (!arr.length) return;
-    h += '<option disabled style="color:' + color + ';font-weight:bold">\u2500\u2500\u2500 ' + label + ' \u2500\u2500\u2500</option>';
+    h += '<option disabled style="color:' + esc(color) + ';font-weight:bold">\u2500\u2500\u2500 ' + esc(label) + ' \u2500\u2500\u2500</option>';
     for (var j = 0; j < arr.length; j++) {
       var aid = arr[j];
       var info = areas[aid] || {d:aid, s:'unseen', p:''};
       var suffix = '';
-      if (info.p) suffix = ' [pending: ' + info.p.toUpperCase() + ']';
+      if (info.p) suffix = ' [pending: ' + String(info.p).toUpperCase() + ']';
       else if (info.s === 'linked') suffix = ' [linked]';
       else if (info.s === 'dead_zone') suffix = ' [dead]';
-      h += '<option value="' + aid + '">' + info.d + suffix + '</option>';
+      h += '<option value="' + esc(aid) + '">' + esc(info.d + suffix) + '</option>';
     }
   }
   addGroup('Pending Captures', groups.pending, 'var(--c-pend)');
@@ -871,7 +886,7 @@ function mlMonChanged(player) {
   if (aArea && bArea && aArea !== bArea) {
     var aDisp = (areas[aArea]||{}).d || aArea;
     var bDisp = (areas[bArea]||{}).d || bArea;
-    warnEl.innerHTML = '\u26a0 A pending on ' + aDisp + ', B pending on ' + bDisp;
+    warnEl.innerHTML = '\u26a0 A pending on ' + esc(aDisp) + ', B pending on ' + esc(bDisp);
   }
 }
 
@@ -889,7 +904,7 @@ async function doManualLink() {
     _mlForceLink = false;
     document.getElementById('ml-warn').innerHTML = '';
   } else if (j.requires_force) {
-    document.getElementById('ml-warn').innerHTML = '\u26a0 ' + j.error;
+    document.getElementById('ml-warn').innerHTML = '\u26a0 ' + esc(j.error);
     res.style.display = 'block';
     res.className = 'result err';
     res.innerHTML = '<button class="btn btn-orange" onclick="_mlForceLink=true;doManualLink()">Link anyway</button>';
@@ -912,10 +927,10 @@ function renderLinksTable() {
     var aLbl = lnk.a_nickname ? lnk.a_nickname + ' (' + (lnk.a_species_name||'') + ')' : (lnk.a_key ? lnk.a_key.substring(0,8) : '\u2014');
     var bLbl = lnk.b_nickname ? lnk.b_nickname + ' (' + (lnk.b_species_name||'') + ')' : (lnk.b_key ? lnk.b_key.substring(0,8) : '\u2014');
     h += '<tr>';
-    h += '<td>' + (lnk.area_display || lnk.area_id) + '</td>';
-    h += '<td>' + aLbl + '</td>';
-    h += '<td>' + bLbl + '</td>';
-    h += '<td class="' + stCls + '">' + lnk.status + '</td>';
+    h += '<td>' + esc(lnk.area_display || lnk.area_id) + '</td>';
+    h += '<td>' + esc(aLbl) + '</td>';
+    h += '<td>' + esc(bLbl) + '</td>';
+    h += '<td class="' + stCls + '">' + esc(lnk.status) + '</td>';
     h += '<td>';
     // data-* attributes feed a single delegated click handler on document.body
     // (see init block). Inline onclick="" handlers used to drop the first
@@ -924,9 +939,9 @@ function renderLinksTable() {
     // and the original button had been detached. Delegation moves the
     // listener to a stable node that no refresh ever touches.
     if (lnk.status === 'dead' || lnk.status === 'memorial') {
-      h += '<button class="btn btn-revive" data-action="revive" data-area-id="'+lnk.area_id+'" data-link-idx="'+idx+'" title="Revive this pair">&#x2764;</button> ';
+      h += '<button class="btn btn-revive" data-action="revive" data-area-id="'+esc(lnk.area_id)+'" data-link-idx="'+idx+'" title="Revive this pair">&#x2764;</button> ';
     }
-    h += '<button class="btn btn-red btn-unlink" data-action="unlink" data-area-id="'+lnk.area_id+'" data-link-idx="'+idx+'">\u2716</button>';
+    h += '<button class="btn btn-red btn-unlink" data-action="unlink" data-area-id="'+esc(lnk.area_id)+'" data-link-idx="'+idx+'">\u2716</button>';
     h += '</td>';
     h += '</tr>';
   });
