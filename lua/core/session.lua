@@ -326,17 +326,23 @@ function Session.new(p)
         if f then send("tick", f) end
     end
 
+    -- A refusal reason as a player reads it: Lua 5.4's assert/error prefix "path.lua:N: " goes
+    -- (it put the lane's source path on the HUD, owner 2026-09-25) and identifiers read as words.
+    local function plain(why)
+        return (tostring(why):gsub("^.-%.lua:%d+: ", ""):gsub("_", " "))
+    end
+
     -- PLAN §5.4: a stuck hold is diagnosable from the screen -- what, why, for how long.
     local function report_holds()
         local parts = {}
         local n, why, age, head = deferred:pending(self.frame)
         if n > 0 and why and age >= Session.PENDING_HUD_FRAMES then
-            parts[#parts + 1] = string.format("%s x%d %ds (%s)", tostring(head), n, math.floor(age / 60), why)
+            parts[#parts + 1] = string.format("%s x%d %ds (%s)", tostring(head), n, math.floor(age / 60), plain(why))
         end
         for _, e in ipairs(self.battle_pending) do
             local held = self.frame - (e.since or self.frame)
             if held >= Session.PENDING_HUD_FRAMES then
-                parts[#parts + 1] = string.format("%s %ds (%s)", e.cmd, math.floor(held / 60), tostring(e.why))
+                parts[#parts + 1] = string.format("%s %ds (%s)", e.cmd, math.floor(held / 60), plain(e.why))
                 break
             end
         end

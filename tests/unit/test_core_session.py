@@ -57,7 +57,7 @@ return function(st, sink)
     end
     function d.tick_fields() if st.tick_ok then return { in_battle = st.in_battle } end end
     function d.in_battle() return st.in_battle end
-    function d.checkpoint_ok() return st.checkpoint, "not at the overworld checkpoint" end
+    function d.checkpoint_ok() return st.checkpoint, st.gate_why or "not at the overworld checkpoint" end
     function d.start() sink("start") return st.signals end
     function d.on_signal(sig)
         sink("signal", sig.kind)
@@ -527,6 +527,21 @@ def test_a_gate_hold_is_reported_with_reason_and_age_in_the_tick_hud_line():
     w.step(w.S.PENDING_HUD_FRAMES + 30)
     lines = [h[1] for h in w.hud if h[0] == "show" and "memorialize" in h[1]]
     assert lines and "not at the overworld checkpoint" in lines[-1] and re.search(r"\d+s", lines[-1])
+
+
+def test_a_held_reason_reaches_the_hud_without_lua_source_positions():
+    # owner 2026-09-25: code references on the HUD while a memorial was held -- Lua 5.4's assert
+    # prefixes "path.lua:N: " (ph_linked_faint_active_whiteout_gen3_fr_as_a_b0483efe.txt:60)
+    w = World()
+    w.step()
+    w.st.checkpoint = False
+    w.st.gate_why = ("E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: "
+                     "forbidden state: field_controls_locked")
+    w.command(cmd="memorialize", key=A)
+    w.step(w.S.PENDING_HUD_FRAMES + 30)
+    line = [h[1] for h in w.hud if h[0] == "show" and "memorialize" in h[1]][-1]
+    assert ".lua" not in line and "_" not in line.split("(", 1)[1], line
+    assert "field controls locked" in line
 
 
 # -- signals, safe, hooks, identity observation -------------------------------------------
