@@ -328,12 +328,20 @@ def test_forbidden_inventory_is_in_the_sym_and_off_the_allow_list() -> None:
     assert all(v | 1 != e["predicates"]["callback2"]["expect"] for v in inv.values())
 
 
-# ── 7. census pending ───────────────────────────────────────────────────────────────────────
+# ── 7. the E2 frame-end census ──────────────────────────────────────────────────────────────
 
-def test_census_is_pending_not_invented() -> None:
+def test_cpu_is_the_e2_census() -> None:
     cpu = emitted()["cpu"]
-    assert cpu["census"] == "PENDING E2" and "observed_pc" not in cpu
+    assert cpu["census"] == "docs/gen3_emerald/probes/census_emerald_overworld_2026-09-25.txt"
     assert (cpu["mode"], cpu["thumb"], cpu["symbol"]) == (0x1F, 1, "WaitForVBlank")
+    assert (cpu["pc_min"], cpu["pc_max"]) == (0x080008AC, 0x080008DB)      # pokeemerald.sym:1120
+    final = (G.ROOT / cpu["census"]).read_text(encoding="utf-8").split("final at frame", 1)[1]
+    rows = {int(m[0], 16): int(m[1]) for m in re.findall(r"R15=(0x[0-9A-F]+) x(\d+)", final)}
+    rom_pcs = {pc for pc in rows if pc >= G.ROM_BASE}
+    assert rom_pcs and all(cpu["pc_min"] <= pc <= cpu["pc_max"] for pc in rom_pcs)
+    assert cpu["observed_pc"] == max(rows, key=rows.get) == 0x080008C8     # the modal frame end
+    assert all(pc < 0x4000 for pc in set(rows) - rom_pcs)                  # the BIOS IRQ vector only
+    assert sum(rows[pc] for pc in rom_pcs) > 0.9 * sum(rows.values())
 
 
 # ── byte identity: FR/LG + RR unchanged, Emerald current ────────────────────────────────────

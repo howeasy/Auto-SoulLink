@@ -1,0 +1,36 @@
+# census: lua/tests/probe_gen3_frameend_census.lua title=emerald (card E2-PROBE+CENSUS) worktree=gen3-emerald HEAD=04960989678760ad783095338c0f3c727a95ec85 + uncommitted E2 edits (not a tracked-clean lane)
+# ROM: Pokemon - Emerald Version (USA, Europe).gba sha1 f3ae088181bf583e55daf962a92bb46f4f1d07b7; EmuHawk 2.11.1 (E:/Howard/Bizhawk/EmuHawk.exe)
+# battery: tests/fixtures/gen3/emerald_town.sav sha256=f447ce7aaf87cf81e1cdd0bf13bd81cad615214abaf335fc9d91a4dede38f80a seeded into a per-run SaveRAM dir C:/slink-wt/emerald-e2/census_emerald_town (tools/gen3_fixtures.py _prepare_run/_launch, SLINK_GEN3_CHECKPOINT=data/games/gen3_emerald/write_checkpoint.json, SLINK_GEN3_TITLE=emerald)
+# drive: cold boot -> CONTINUE by A pulses only until gMain.callback2==CB2_Overworld and sLockFieldControls==0 held 60 frames (Oldale, map 0.10 pos 6,17), then NO input for 1800 frame ends (event.onframeend, emu.getregister R15/CPSR). Labels from the checkpoint's own predicates (in_battle, palette_fade_active, callback2, field_controls_locked). RESULT: PASS, 6s wall.
+# finding: 1800/1800 overworld-idle frames; every non-IRQ frame end (1678) inside WaitForVBlank 0x080008C8..0x080008D0, System mode (0x1F), Thumb -- within the pack's cpu range [0x080008AC,0x080008DB] (pokeemerald.sym:1120). Modal PC 0x080008C8 (x801) = WaitForVBlank+0x1C, the same body offset as FR/LG's 0x080008AC (=0x08000890+0x1C). The other 122 ended in the BIOS IRQ vector R15=0x0000001C, mode 0x12, ARM -- refused by the clause on purpose, as on FR (93) and LG (125).
+# finding: the first 111 sampled frames also carry Task_MapNamePopUpWindow (0x080D487D, pokeemerald.sym) on top of the four allowed overworld tasks (Task_RunPerStepCallback, Task_RunTimeBasedEvents, Task_MuddySlope, Task_WeatherMain); it is NOT in the pack's allowed_overworld_tasks, so the checkpoint refuses while the map-name popup is up after CONTINUE/warp (fail-closed).
+phase start frame=1 title=emerald hash=F3AE088181BF583E55DAF962A92BB46F4F1D07B7
+phase field frame=582 map=(0,10) pos=(6,17)
+phase armed frame=582 sampling 1800 frame ends, no input
+---- [probe] interim at frame 600 (bios_seen=true) ----
+  overworld-idle: 600 frames
+    R15=0x080008C8 x266
+    R15=0x080008D0 x89
+    R15=0x080008CC x73
+    R15=0x080008CE x71
+    R15=0x080008CA x62
+    R15=0x0000001C x39
+    CPSR mode/T=31/1 x561
+    CPSR mode/T=18/0 x39
+    tasks={0809D88D,0809D909,0809E639,080AB1B1} x489
+    tasks={0809D88D,0809D909,0809E639,080AB1B1,080D487D} x111
+    (2 distinct task-function sets total)
+---- [probe] final at frame 1800 (bios_seen=true) ----
+  overworld-idle: 1800 frames
+    R15=0x080008C8 x801
+    R15=0x080008D0 x232
+    R15=0x080008CC x231
+    R15=0x080008CA x207
+    R15=0x080008CE x207
+    R15=0x0000001C x122
+    CPSR mode/T=31/1 x1678
+    CPSR mode/T=18/0 x122
+    tasks={0809D88D,0809D909,0809E639,080AB1B1} x1689
+    tasks={0809D88D,0809D909,0809E639,080AB1B1,080D487D} x111
+    (2 distinct task-function sets total)
+RESULT: PASS overworld-idle=1800/1800

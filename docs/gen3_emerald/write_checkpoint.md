@@ -142,13 +142,21 @@ The inventory is documentation and the target list for E2's negative controls.
 
 No name from the brief is missing.
 
-## 6. The parked-CPU clause: census PENDING
+## 6. The parked-CPU clause: census (E2, PHYSICAL)
 
 AgbMain ends every frame in `WaitForVBlank` (`src/main.c:167` for the call, `:410-416` for the
-body). The range is that symbol's body, `0x080008AC..0x080008DB`, in System mode with Thumb. No
-Emerald frame-end census exists yet, so the clause carries `"census": "PENDING E2"` and no
-`observed_pc`. E2 captures the census, then replaces the sentinel with the receipt path and adds
-`observed_pc` to `FRLG_CENSUS`, keyed `emerald`.
+body). The range is that symbol's body, `0x080008AC..0x080008DB`, in System mode with Thumb.
+
+The E2 census (`docs/gen3_emerald/probes/census_emerald_overworld_2026-09-25.txt`) sampled 1800 idle
+Oldale frame ends with no input:
+- 1678 non-IRQ frame ends fell inside `0x080008C8..0x080008D0`, System mode, Thumb. The modal PC,
+  `0x080008C8` (801 frames), is `observed_pc`. It sits at WaitForVBlank+0x1C, the same offset as FR/LG.
+- 122 ended in the BIOS IRQ vector. The clause rejects those by design, as on FR/LG.
+
+Every sampled frame carried the four always-on field tasks, including `Task_MuddySlope`, which
+physically confirms EG1 decision 4. The first 111 frames after CONTINUE also carried
+`Task_MapNamePopUpWindow` (0x080D487D), which is not allowed, so the checkpoint is fail-closed while
+the map-name popup shows (an E2 checkpoint-card question).
 
 ## 7. Findings for E2 and the coordinator
 

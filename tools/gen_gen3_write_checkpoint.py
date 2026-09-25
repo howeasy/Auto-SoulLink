@@ -280,12 +280,14 @@ TASK_COUNT = 16
 # .sym files agree on 0x08000890 + 0x30); the other 125 landed in the same BIOS IRQ vector and are
 # refused on purpose.
 PARKED_SYMBOL = "WaitForVBlank"
-FRLG_CENSUS = {"firered": (0x080008AC, "docs/gen3/probes/census_fr_overworld_2026-09-21.txt"),
-               "leafgreen": (0x080008AC, "docs/gen3/probes/census_lg_overworld_2026-09-23.txt")}
 # Emerald: AgbMain ends every frame in WaitForVBlank too (pokeemerald src/main.c:167 the call,
-# :410-416 the body, the same gMain.intrCheck busy-wait), so the range is SOURCE from the .sym.  No
-# Emerald frame-end census exists yet: E2 captures it; until then no observed_pc is invented.
-CENSUS_PENDING = {"emerald": "PENDING E2"}
+# :410-416 the body, the same gMain.intrCheck busy-wait), so the range is SOURCE from the .sym.  E2
+# census (docs/gen3_emerald/probes/census_emerald_overworld_2026-09-25.txt, Oldale, no input):
+# 1678/1800 frame ends at R15 0x080008C8..0x080008D0, mode 0x1F, T=1 -- modal 0x080008C8, the same
+# WaitForVBlank+0x1C as FR/LG's 0x080008AC; the other 122 in the same BIOS IRQ vector, refused.
+FRLG_CENSUS = {"firered": (0x080008AC, "docs/gen3/probes/census_fr_overworld_2026-09-21.txt"),
+               "leafgreen": (0x080008AC, "docs/gen3/probes/census_lg_overworld_2026-09-23.txt"),
+               "emerald": (0x080008C8, "docs/gen3_emerald/probes/census_emerald_overworld_2026-09-25.txt")}
 # RR (CFRU) parks in the BIOS instead (docs/gen3/probes/census_rr_overworld_2026-09-21.txt):
 # 1800/1800 frames at R15=0x000001C4 with CPSR mode 0x1F (System) and T=0.
 # G5-RR-CPU-IRQ (owner ruling 23, 2026-09-24): with the client's exec hooks registered, every RR frame
@@ -318,8 +320,6 @@ def cpu_clause(title: str, syms, is_rr: bool) -> dict:
         if not addr <= pc < addr + size:
             raise SystemExit(f"{title}: census PC {pc:#010x} is outside {PARKED_SYMBOL}")
         cpu.update(observed_pc=pc, census=census)
-    elif title in CENSUS_PENDING:
-        cpu["census"] = CENSUS_PENDING[title]
     return cpu
 
 # ── the RR save-block pointers, read out of the ROM's own setter (card C3-33) ─────────────────

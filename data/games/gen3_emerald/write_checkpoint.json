@@ -164,8 +164,9 @@
       "version": "gen3-battle-v1"
     },
     "cpu": {
-      "census": "PENDING E2",
+      "census": "docs/gen3_emerald/probes/census_emerald_overworld_2026-09-25.txt",
       "mode": 31,
+      "observed_pc": 134219976,
       "pc_max": 134219995,
       "pc_min": 134219948,
       "symbol": "WaitForVBlank",

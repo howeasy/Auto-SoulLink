@@ -21,6 +21,7 @@ ROW = re.compile(r"^PROBE (\S+) (PASS|FAIL|OPEN)(?: |$)")
 ROMS = [
     ("rr", REPO / "patch/build/slink_RR.gba", "radical_red"),
     ("fr", Path("E:/Google Drive/SLink/Pokemon - FireRed Version (USA).gba"), "vanilla"),
+    ("emerald", Path("E:/Google Drive/SLink/Pokemon - Emerald Version (USA, Europe).gba"), "emerald"),
 ]
 pytestmark = [
     pytest.mark.live,
@@ -29,7 +30,7 @@ pytestmark = [
 ]
 
 
-@pytest.mark.parametrize("name,source,variant", ROMS, ids=["rr", "fr"])
+@pytest.mark.parametrize("name,source,variant", ROMS, ids=["rr", "fr", "emerald"])
 def test_gen3_hook_probe(name, source, variant, monkeypatch):
     for prerequisite in (Path(gate_runner.EMUHAWK), Path(gate_runner.BIZHAWK_CONFIG), source):
         if not prerequisite.is_file():
@@ -38,9 +39,19 @@ def test_gen3_hook_probe(name, source, variant, monkeypatch):
     build.mkdir(parents=True, exist_ok=True)
     # run_gate's EmuHawk argv needs a space-free repo-relative ROM path.
     rom = "patch/build/slink_RR.gba"
-    if name == "fr":
-        rom = "patch/build/probe_gen3_fr.gba"
+    if name in ("fr", "emerald"):
+        rom = f"patch/build/probe_gen3_{name}.gba"
         shutil.copyfile(source, REPO / rom)
+    if name == "emerald":
+        # BizHawk's gamedb knows this dump: redirect its battery to a per-run dir instead of the
+        # developer's GBA SaveRAM folder (tools/gen3_fixtures.py RUN_DIR; SLINK_GEN3_FIXTURE_RUNS).
+        import gen3_fixtures
+        run_dir = gen3_fixtures.RUN_DIR / "probe_hooks_emerald"
+        shutil.rmtree(run_dir, ignore_errors=True)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        cfg = run_dir / "config.ini"
+        gen3_fixtures.write_gba_run_config(gate_runner.BIZHAWK_CONFIG, str(cfg), str(run_dir))
+        monkeypatch.setattr(gate_runner, "BIZHAWK_CONFIG", str(cfg))
     monkeypatch.setenv("SLINK_PROBE_VARIANT", variant)
     archive = build / f"probe_gen3_hooks_{name}.txt"
     archive.unlink(missing_ok=True)
