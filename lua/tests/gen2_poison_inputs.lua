@@ -144,6 +144,25 @@ PI.LOW_HP = 7
 -- quotient is 1: x2 crit=2, +2=4, STAB 4+floor(4/2)=6; a higher Defense only lowers it). A mon kept in the sting
 -- fight while its HP is above this floor can never be dropped to 0 by one more sting.
 PI.STING_LOW_HP = 6
+-- POISON-FLAKE (fsw-postrc 2026-09-25, gate/engine_sites/gold rr4+rr8, 4/4 attempts): Wade (data/trainers/
+-- parties.asm:1428-1433, BUG_CATCHER class id 4, "WADE") fields FOUR mons in one uninterruptible fight (L2
+-- CATERPIE, L2 CATERPIE, L3 WEEDLE, L2 CATERPIE) -- not just the Weedle. STING_LOW_HP only proves a mon
+-- survives ONE MORE STING; it says nothing about the Caterpie that follows it. Both fails: the lead (party
+-- slot 0) rode Wade's first two Caterpies down to 3 HP under the general LOW_HP=7 floor (safe against any
+-- ONE of their hits, but not several in a row) before the sting ever happened. With the lead already below
+-- relief() eligibility, the fresh absorber that survived the proven-safe Weedle hit (15 -> 9, exactly
+-- STING_LOW_HP) had nobody to hand the trailing Caterpie to and was forced to solo it, fainting over ordinary
+-- (non-crit) TACKLE hits: level_factor 2, Atk 6 [BUG_CATCHER DV 7, base 30, L2, engine/battle/
+-- read_trainer_dvs.asm], quotient 1, +2=3, no STAB (Caterpie is Bug, TACKLE is Normal) -- at most 3 HP each,
+-- three of which cover the observed 9 -> 0 (a Caterpie crit tops out at 4: quotient 1, x2=2, +2=4, still no
+-- STAB, lower than Poison Sting's STAB'd 6). A mon that only ever bails out at LOW_HP=7 can absorb an
+-- unbounded number of Wade's mons before switching, spending its whole cushion on the early, low-stakes
+-- Caterpies and leaving none for what comes after. TRAINER_LOW_HP requires enough HP to survive Wade's worst
+-- proven hit (STING_LOW_HP, the higher of his two, since STAB) AND still have margin for one more of his
+-- ordinary Caterpie hits (3) before it is "healthy" -- not just one hit's worth -- so a trainer fight
+-- relief-switches earlier and spreads Wade's four mons across the party instead of running one mon to empty
+-- before the other ever gets a turn.
+PI.TRAINER_LOW_HP = PI.STING_LOW_HP + 3
 PI.PKMN_CELL = 2   -- BattleMenu 2x2 grid FIGHT|PKMN / PACK|RUN (engine/battle/menu.asm:32-45): by position
 function PI.driver(F, facts, opts)
     local self = {terminal="poisoned", phase="travel", battles=0}
@@ -277,7 +296,7 @@ function PI.driver(F, facts, opts)
         -- POISON-FLAKE: while actually facing the sting, ride the tighter proven-safe floor (PI.STING_LOW_HP)
         -- (trainer fights only: Wade's fixed-DV Weedle) instead of the general LOW_HP, so the absorbing mon (the target, or the U1 relief mate) takes more
         -- stings per fight before being benched -- more 30%-per-hit tries without any added faint risk.
-        local low = (sting and trainer) and PI.STING_LOW_HP or PI.LOW_HP
+        local low = (sting and trainer) and PI.STING_LOW_HP or (trainer and PI.TRAINER_LOW_HP or PI.LOW_HP)
         local risk = low + (point.active_psn == true and integer(point.active_max_hp, 1, 999)
                                   and point.active_max_hp // 8 or 0)
         local healthy = integer(point.active_hp, risk + 1, 999)

@@ -495,6 +495,36 @@ def test_a_worn_mon_in_a_trainer_fight_hands_over_to_a_fitter_mate():
     assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **alone)[0] == ["A"]                          # FIGHT on
 
 
+def test_a_trainer_fight_relief_switches_well_before_the_general_low_hp_floor():
+    """fsw-postrc 2026-09-25, gate/engine_sites/gold rr4+rr8 (4/4 fails): Wade fields FOUR mons in one
+    uninterruptible fight (data/trainers/parties.asm:1428-1433 -- Caterpie, Caterpie, Weedle, Caterpie), not just
+    the Weedle STING_LOW_HP already guards. A mon judged "healthy" under the general LOW_HP=7 floor can still be
+    fighting its second or third of Wade's mons on nothing but the cushion below one proven-safe hit -- exactly
+    what let the lead ride down to 3 HP before the sting ever happened. 9 HP is the exact case that broke: it is
+    what the sting absorber was left with after tanking Wade's proven-safe 6-HP Weedle hit (15 -> 9); the general
+    floor calls that "healthy" (9 > 7) with nothing held back for the trailing Caterpie. PI.TRAINER_LOW_HP adds
+    a further margin for one more of Wade's ordinary (non-crit) Caterpie hits (3) on top of his worst proven hit
+    (STING_LOW_HP, 6) before a trainer fight calls a mon "healthy", so this relief-switches earlier -- both for
+    the lead grinding through Wade's first Caterpies, and for the absorber right after the sting."""
+    rt = lua()
+    PI = load(rt)
+    assert PI.TRAINER_LOW_HP == 9
+    d = trainer_driver(rt, PI)
+    d.step(pt(rt, map_number=2, x=1, y=0))
+    # 9 HP: still "healthy" under the old general floor (9 > 7), not under the trainer floor (9 <= 9)
+    still_fighting_old_floor = {"battle_mode": 2, "active_slot": 0, "active_hp": 9, "foe_sting": False,
+                                "overworld_ready": False, "party": {0: {"hp": 9, "status": 0}, 1: {"hp": 15, "status": 0}}}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **still_fighting_old_floor)[0] == ["Right"]    # PKMN, not FIGHT
+    # a party mate at 12 HP (the default fixture value used throughout this file) is still a valid relief target
+    still_relief_eligible = dict(still_fighting_old_floor, party={0: {"hp": 9, "status": 0}, 1: {"hp": 12, "status": 0}})
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **still_relief_eligible)[0] == ["Right"]       # PKMN
+    # the general (non-trainer) wild floor is untouched: the same 9 HP still means "healthy" outside a trainer fight
+    d2 = driver(rt, load(rt))
+    step(rt, d2, map_number=2, x=1, y=1)
+    wild = {"battle_mode": 1, "active_slot": 0, "active_hp": 9, "foe_sting": False, "overworld_ready": False}
+    assert step(rt, d2, ui=ui("battle_menu", MENU, 1, 2), **wild)[0] == ["Right"]                       # RUN, unaffected
+
+
 def test_a_worn_party_on_the_way_north_goes_back_for_another_heal():
     """Gold U1f run 1: Mikey and a spinning Don wore the party down after the first heal."""
     rt = lua()
