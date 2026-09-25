@@ -3685,3 +3685,18 @@ def test_a_complete_box_scan_is_stamped_with_a_generation(world):
     world.bus[world.ram["wBoxCount"]] = 0
     assert reconnect().get("pc_boxes_generation") == 2
     world.assert_all_conform()
+
+
+def test_the_enemy_on_the_wire_carries_its_max_hp(world):
+    """GEN1-ENEMY-MAXHP: the board divides hp by maxHP; without it every Gen 1 foe drew a full
+    bar and "17/". pret wEnemyMonMaxHP is 2 bytes big-endian (ram/wram.asm battle_struct)."""
+    world.connect()
+    world.in_battle(opponent=0x24, species=0x24, level=3)       # a wild Pidgey
+    r = world.ram
+    world.bus[r["wEnemyMonHP"]], world.bus[r["wEnemyMonHP"] + 1] = 0x00, 0x11
+    max_hp = r.get("wEnemyMonMaxHP", 0xCFF4)
+    world.bus[max_hp], world.bus[max_hp + 1] = 0x01, 0x02
+    world.step(30)
+    foe = world.events("tick")[-1]["enemy_party"][0]
+    assert (foe["hp"], foe.get("maxHP")) == (0x11, 0x102)
+    world.assert_all_conform()

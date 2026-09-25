@@ -276,12 +276,14 @@ function R.new(profile, io, Scanner)
         -- trainer_class = opponent >= 200 and opponent - 200 or NULL.
         local opponent = io.read_u8(a.wCurOpponent)
         local enemy_hp = io.read_range(a.wEnemyMonHP, 2)
+        local enemy_max_hp = io.read_range(a.wEnemyMonMaxHP, 2) -- battle_struct MaxHP, big-endian
         local player_hp = io.read_range(a.wBattleMonHP, 2)
         return {in_battle = io.read_u8(a.wIsInBattle), type = io.read_u8(a.wBattleType),
                 cur_opponent = opponent, is_trainer = opponent >= opp_id_offset,
                 trainer_class = opponent >= opp_id_offset and opponent - opp_id_offset or R.NULL,
                 enemy_species = io.read_u8(a.wEnemyMonSpecies),
                 enemy_level = io.read_u8(a.wEnemyMonLevel), enemy_hp = word(enemy_hp, 1),
+                enemy_max_hp = word(enemy_max_hp, 1),
                 battle_mon_hp = word(player_hp, 1),
                 player_mon_number = io.read_u8(a.wPlayerMonNumber),
                 result = io.read_u8(a.wBattleResult), link_state = io.read_u8(a.wLinkState),

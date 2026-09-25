@@ -280,7 +280,7 @@ function Client.new(p)
     local function enemy_party(battle)
         if battle.in_battle == 0 then return arr({}) end
         local foe = { species_id = battle.enemy_species, level = battle.enemy_level,
-                      hp = battle.enemy_hp, active = true }
+                      hp = battle.enemy_hp, maxHP = battle.enemy_max_hp, active = true }
         local stages = reads.read_stat_stages("enemy")
         if stages then foe.stat_stages = arr(wire_stages(stages)) end
         return arr({ foe })
