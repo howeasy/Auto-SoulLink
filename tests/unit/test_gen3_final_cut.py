@@ -96,6 +96,113 @@ def test_rows_selects_by_glob_or_item_keeping_order():
 
 
 # ---------------------------------------------------------------------------
+# --title rr (card G5-RUNNER-RR): the G5 Radical Red plan, opt-in via --title
+# ---------------------------------------------------------------------------
+
+def _rr_scenario_ids():
+    """The expected RR duo row ids, derived from e2e_duo.SCENARIOS itself (never hard-coded
+    twice) -- every scenario whose games names gen3_rr, minus an owner-signed limit."""
+    import e2e_duo
+    return [f"{s}_rr_as_a" for s, cfg in e2e_duo.SCENARIOS.items()
+            if "gen3_rr" in cfg.get("games", ()) and not cfg.get("signed_limit")]
+
+
+def test_title_defaults_to_frlg_and_leaves_the_default_plan_unchanged():
+    # the --title flag's default plan is byte-for-byte the plan build_plan always produced
+    # (EXPECTED_ROWS predates this card): row ids, order and count all unchanged.
+    assert [r.id for r in fc.build_plan("c" * 40, LANE, MASTER)] == EXPECTED_ROWS
+
+
+def test_dry_run_default_title_matches_frlg_plan(capsys):
+    cut = _git(fc.REPO, "rev-parse", "HEAD")
+    assert fc.main(["--cut", cut, "--dry-run", "--lane", LANE, "--master", MASTER]) == 0
+    out = capsys.readouterr().out
+    ids = [ln.split()[1] for ln in out.splitlines() if ln.startswith("[")]
+    assert ids == EXPECTED_ROWS
+
+
+def test_rr_scenarios_excludes_the_signed_mega_limit():
+    ids = fc.rr_scenarios()
+    assert "linked_faint_active_mega_gen3" not in ids
+    assert ids == [s[:-len("_rr_as_a")] for s in _rr_scenario_ids()]
+    assert len(ids) >= 10   # a real plan, not an accidentally-empty filter
+
+
+def test_rr_mega_skip_reason_does_not_match_the_stale_allowed_skips_entry():
+    """The card's instruction: check whether ALLOWED_SKIPS already excuses mega's SKIP before
+    reusing it. It does not -- the entry's reason substring is stale (an older draft's wording),
+    so a live mega SKIP would still FAIL under it. Excluding the row (not launching it) is the
+    only sound choice against the current ALLOWED_SKIPS, and this asserts why."""
+    import e2e_duo
+    mega = e2e_duo.SCENARIOS["linked_faint_active_mega_gen3"]
+    assert mega.get("signed_limit")
+    assert not fc.allowed_skip(
+        "linked_faint_active_mega_gen3_rr_as_a",
+        f"  linked_faint_active_mega_gen3: SKIP (allowed: signed limit) — "
+        f"SIGNED LIMIT: {mega['signed_limit']}")
+
+
+def test_build_plan_rr_row_ids_are_exactly_the_rr_scenarios_plus_gates_and_todo():
+    rows = fc.build_plan_rr("c" * 40, LANE, MASTER)
+    assert [r.id for r in rows] == _rr_scenario_ids() + ["rr_opcode_gates", "zip_boot_radicalred_TODO"]
+
+
+def test_build_plan_rr_duo_rows_use_e2e_duo_with_the_rr_game():
+    rows = fc.build_plan_rr("c" * 40, LANE, MASTER)
+    faint = next(r for r in rows if r.id == "faint_cmd_gen3_rr_as_a")
+    assert faint.command() == "python tools/e2e_duo.py --game gen3_rr --scenario faint_cmd_gen3"
+    assert faint.cwd == LANE
+
+
+def test_build_plan_rr_opcode_gates_row():
+    rows = fc.build_plan_rr("c" * 40, LANE, MASTER)
+    gates = next(r for r in rows if r.id == "rr_opcode_gates")
+    assert gates.command() == \
+        "python -m pytest tests/live/test_lua_gates.py -q -p no:randomly -rs"
+    assert gates.env == {"SLINK_LIVE": "1"}
+
+
+def test_build_plan_rr_zip_boot_todo_row_fails_and_says_not_implemented():
+    rows = fc.build_plan_rr("c" * 40, LANE, MASTER)
+    todo = next(r for r in rows if r.id == "zip_boot_radicalred_TODO")
+    p = subprocess.run(todo.argv, capture_output=True, text=True)
+    assert p.returncode != 0
+    assert "not implemented" in (p.stdout + p.stderr)
+    verdict, ok = fc.judge(todo.id, p.returncode, p.stdout + p.stderr)
+    assert not ok and verdict.startswith("FAIL")
+
+
+def test_rr_row_deps_name_the_rr_pack_and_gates_test():
+    rows = fc.build_plan_rr("c" * 40, LANE, MASTER)
+    duo = next(r for r in rows if r.id == "faint_cmd_gen3_rr_as_a")
+    assert "data/games/gen3_rr/**" in duo.deps
+    assert "server/**" in duo.deps            # inherited from DUO_DEPS's harness globs
+    gates = next(r for r in rows if r.id == "rr_opcode_gates")
+    assert "tests/live/test_lua_gates.py" in gates.deps
+    assert "data/games/gen3_*/**" in gates.deps
+    todo = next(r for r in rows if r.id == "zip_boot_radicalred_TODO")
+    assert todo.deps is None                  # NEVER_CARRIED's zip_* -- never a carry candidate
+
+
+def test_dry_run_title_rr_plan(capsys):
+    cut = _git(fc.REPO, "rev-parse", "HEAD")
+    assert fc.main(["--cut", cut, "--title", "rr", "--dry-run", "--lane", LANE,
+                    "--master", MASTER]) == 0
+    out = capsys.readouterr().out
+    ids = [ln.split()[1] for ln in out.splitlines() if ln.startswith("[")]
+    assert ids == _rr_scenario_ids() + ["rr_opcode_gates", "zip_boot_radicalred_TODO"]
+    assert "$ python tools/e2e_duo.py --game gen3_rr --scenario faint_cmd_gen3" in out
+    assert "$ SLINK_LIVE=1 python -m pytest tests/live/test_lua_gates.py" in out
+    assert "not implemented" in out
+
+
+def test_title_invalid_choice_rejected():
+    with pytest.raises(SystemExit):
+        fc.main(["--cut", "HEAD", "--title", "bogus", "--dry-run", "--lane", LANE,
+                "--master", MASTER])
+
+
+# ---------------------------------------------------------------------------
 # the retry classifier
 # ---------------------------------------------------------------------------
 

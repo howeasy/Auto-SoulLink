@@ -6,8 +6,14 @@
     python tools/gen3_final_cut.py --cut <sha> --resume            # skip rows already PASSed at <sha>
     python tools/gen3_final_cut.py --cut <sha> --rows 'item2b*,checkpoint_*' --stop-at 2026-09-25T06:00Z
     python tools/gen3_final_cut.py --cut <sha> --list              # the row ids
+    python tools/gen3_final_cut.py --cut <sha> --title rr          # the G5 (Radical Red) plan
 
 docs/gen3/G4_final_cut_runbook.md §0-§11 is the source of every row; §12 names the gaps this closes.
+--title rr (card G5-RUNNER-RR) is a separate, opt-in plan: the RR duo rows (every
+tools/e2e_duo.py SCENARIOS entry whose games includes gen3_rr, minus the owner-signed
+linked_faint_active_mega_gen3 limit), the RR opcode gates, and a named TODO row for an
+extracted-zip RR boot (not implemented -- see build_plan_rr's docstring). --title defaults to
+"frlg", so the default plan and its row ids are unchanged.
 Sequential, one emulator lane (docs/gen3/PLAN.md:23). Order: provision the lane at --cut (and the
 master tree when item 6 is selected), then every selected row in runbook order. Each row writes
 docs/gen3/probes/fc_<row>_<cut8>.txt through gen3_probe_receipt.run_receipt_text, and the pass
@@ -98,7 +104,7 @@ ALLOWED_SKIPS = [
      "owner ruling 20 (G4_request_draft.md §6): RR row R5 is a signed G5 limit, kept as a named SKIP"),
 ]
 
-ORIENT = {"gen3_frlg": "fr_as_a", "gen3_lgfr": "lg_as_a"}
+ORIENT = {"gen3_frlg": "fr_as_a", "gen3_lgfr": "lg_as_a", "gen3_rr": "rr_as_a"}
 
 
 @dataclass
@@ -223,6 +229,48 @@ def build_plan(cut, lane, master):
              Row("probe_gates", "§11 gate",
                  [PY, "-m", "pytest", "tests/live/test_gen3_probe_gates.py", "-q", "-p",
                   "no:randomly", "-rs"], lane, 3600, env={"SLINK_LIVE": "1"})]
+    for r in rows:
+        r.deps = row_deps(r)
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# --title rr: the G5 (Radical Red) final-cut plan (card G5-RUNNER-RR). Opt-in and separate from
+# build_plan's FR/LG rows above -- --title defaults to "frlg" so the default plan is untouched.
+# ---------------------------------------------------------------------------
+
+def rr_scenarios():
+    """The RR duo rows: every tools/e2e_duo.py SCENARIOS entry whose `games` includes gen3_rr,
+    minus any owner-signed limit (ruling 20 excludes linked_faint_active_mega_gen3: no Mega Ring
+    or stone holder is reachable by normal inputs early in RR). Derived from e2e_duo's own table
+    -- never duplicated here -- so a new RR scenario there is picked up automatically."""
+    import e2e_duo
+    return [s for s, cfg in e2e_duo.SCENARIOS.items()
+            if "gen3_rr" in cfg.get("games", ()) and not cfg.get("signed_limit")]
+
+
+def build_plan_rr(cut, lane, master):
+    """The G5 final-cut pass: the RR duo rows (docs/gen3/PLAN.md §14 P5), the RR opcode gates
+    (rr_gates_live_06724759_2026-09-24.txt's SLINK_LIVE=1 pytest tests/live/test_lua_gates.py),
+    and a placeholder for an extracted-zip RR boot. `master` is accepted for CLI-signature parity
+    with build_plan but unused (the RR plan has no item6 row).
+
+    The zip-boot row is a named TODO, not a real boot: this runner's own input tables
+    (PINNED_INPUTS/ROOT_DUMPS/STAGED) name no RR clean ROM at all, and zip_boot()'s client-identity
+    regex and "hello rom=" string are FR-only and unverified for radical_red -- guessing at them
+    would fake a boot check, so the row fails outright and says so."""
+    del master
+    rows = [_duo(s, "gen3_rr", "§14 P5 RR duo", lane) for s in rr_scenarios()]
+    rows.append(Row("rr_opcode_gates", "G5-GATES-LIVE",
+                    [PY, "-m", "pytest", "tests/live/test_lua_gates.py", "-q", "-p", "no:randomly",
+                     "-rs"], lane, 3600, env={"SLINK_LIVE": "1"}))
+    rows.append(Row("zip_boot_radicalred_TODO", "§9 item5 RR",
+                    [PY, "-c",
+                     "import sys; sys.stderr.write('not implemented: gen3_final_cut zip-boot has "
+                     "no RR parameterization -- the RR clean ROM is not in PINNED_INPUTS/"
+                     "ROOT_DUMPS/STAGED and the client identity/hello strings for radical_red are "
+                     "unverified, so this row fails rather than guessing (card G5-RUNNER-RR)\\n'); "
+                     "sys.exit(1)"], lane, 30, emulator=False))
     for r in rows:
         r.deps = row_deps(r)
     return rows
@@ -811,6 +859,11 @@ PROBE_DEPS = GEN3_CLIENT + GEN3_HARNESS + FRLG_FIXTURES + [
 PROBE_GATES_DEPS = GEN3_CLIENT + GEN3_HARNESS + [
     "data/games/gen3_*/**", "lua/tests/*gen3*", "lua/tests/duo/**", "tools/e2e_duo.py",
     "tests/live/test_gen3_probe_gates.py", "tests/conftest.py"]
+# --title rr (card G5-RUNNER-RR): the RR profile pack duo_gen3_main.lua/gen3_gatelib.lua read
+# (GAMES["gen3_rr"]["sides"], tools/e2e_duo.py:1975) plus the RR opcode gate test itself.
+RR_DEPS = ["data/games/gen3_rr/**"]
+RR_GATES_DEPS = GEN3_CLIENT + GEN3_HARNESS + [
+    "data/games/gen3_*/**", "lua/tests/*gen3*", "tests/live/test_lua_gates.py", "tests/conftest.py"]
 ITEM6_DEPS = ["lua/*.lua", "lua/gen1/**", "lua/gen2/**", "lua/core/**", "lua/clients/**",
               "lua/games/**", "lua/tests/*gen1*", "lua/tests/*gb*", "lua/tests/duo/**", "server/**",
               "tools/e2e_duo.py", "tools/run_gate.py", "tools/gen1_*.py", "tools/gen3_final_cut.py",
@@ -829,6 +882,10 @@ def row_deps(row):
         return None
     if row.id.endswith(("_fr_as_a", "_lg_as_a")):
         return DUO_DEPS
+    if row.id.endswith("_rr_as_a"):
+        return DUO_DEPS + RR_DEPS
+    if row.id == "rr_opcode_gates":
+        return RR_GATES_DEPS
     if row.id.startswith("checkpoint_"):
         return PROBE_DEPS
     if row.id.startswith("bootcheck_"):
@@ -1440,7 +1497,8 @@ def run_pass(args):
         if not args.dry_run:
             raise
         cut = args.cut
-    rows = select_rows(build_plan(cut, lane, master), args.rows)
+    plan_fn = build_plan_rr if args.title == "rr" else build_plan
+    rows = select_rows(plan_fn(cut, lane, master), args.rows)
     if args.list:
         for r in rows:
             print(f"{r.id:<48} {r.item}")
@@ -1567,6 +1625,10 @@ def main(argv=None):
     ap.add_argument("--lane", default=os.path.join(wt, "gen3-lane-clean"))
     ap.add_argument("--master", default=os.path.join(wt, "gen3-lane-master"),
                     help="item 6's baseline tree, provisioned at `master`")
+    ap.add_argument("--title", default="frlg", choices=("frlg", "rr"),
+                    help="frlg (default): the G4 FR/LG plan, unchanged. rr: the G5 Radical Red "
+                         "plan (card G5-RUNNER-RR) -- the RR duo rows, the RR opcode gates, and a "
+                         "TODO zip-boot placeholder -- in place of it")
     ap.add_argument("--rows", default=None, help="comma list of row-id globs or item tags")
     ap.add_argument("--dry-run", action="store_true", help="print the plan; launch nothing")
     ap.add_argument("--list", action="store_true", help="print the selected row ids")
