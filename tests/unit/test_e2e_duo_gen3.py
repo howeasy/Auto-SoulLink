@@ -4585,3 +4585,36 @@ def test_rr_way_out_of_viridian_is_the_proven_way_in_reversed():
         assert (x, y) not in {(o.x, o.y) for o in m.objects}, (x, y)
     assert (x, y) == (24, 39)
 
+
+def test_traced_follow_is_rr_only_and_never_reads_a_nil_obj_events_addr():
+    """G5-RR-WHITEOUT (whiteout_gen3 on RR at c23a8f46: 'pokecenter_door_to_route1_edge: step
+    Left stalled at (25,27)'). A live trace (docs/gen3/probes/rr_whiteout_gen3_rr_as_a_eb03c21a.txt)
+    caught the cause: an RR-only object (local id 20, absent from FR/LG's map) walks adjacent to
+    the player mid-leg and locks the field for a message box / battle intro, not a silent script.
+    Two regressions this closes, both hit live while building the fix:
+    1. traced_follow must be play.follow VERBATIM for every non-RR title -- the very first thing
+       it does is the title guard, so FR/LG never take the RR-only wait-and-retry loop.
+    2. gen3_title_syms.lua's OBJ_EVENTS_ADDR carries no radical_red value ("no RR citation
+       found"), so OBJ_EVENTS_ADDR is nil on RR -- run 2 crashed inside the (then diagnostic-only)
+       trace on exactly that nil arithmetic. rr_trace_log must fall back to the
+       independently-confirmed RR address (reference_rr_object_events.md) instead of
+       dereferencing OBJ_EVENTS_ADDR directly.
+    """
+    text = SCRIPTED.read_text(encoding="utf-8")
+    start = text.index("local function traced_follow(")
+    fn = text[start:text.index("\nend", start)]
+    assert 'if TITLE ~= "radical_red" then return play.follow(cp, path_name, label) end' in fn
+    # the RR-only retry: waits out a lock (a message box / battle intro), fights a real battle
+    # if the scene turns into one, bounded so a genuinely blocked tile still fails.
+    assert "play.in_battle(cp)" in fn and "play.fight_through(cp" in fn and "play.clear_dialogue(cp)" in fn
+    assert "rounds < 4" in fn
+    trace_start = text.index("local function rr_trace_log(")
+    trace_fn = text[trace_start:text.index("\nend", trace_start)]
+    assert "local base = OBJ_EVENTS_ADDR or RR_OBJ_EVENTS_ADDR" in trace_fn
+    assert "RR_OBJ_EVENTS_ADDR = 0x02036E38" in text
+    # exported for duo_gen3_main.lua, and actually wired into the real stall site (not left
+    # dangling on the dead recover_to_pallet_town call path the first cut of this fix used).
+    assert "traced_follow = traced_follow," in text
+    duo_text = (REPO / "lua" / "tests" / "duo" / "duo_gen3_main.lua").read_text(encoding="utf-8")
+    assert 'SP.traced_follow(cp, "pokecenter_door_to_route1_edge", label)' in duo_text
+
