@@ -17,25 +17,25 @@ MYKEY 3 4D5E:AC24:A3
 MYKEY 4 5E6F:AC24:15
 MYKEY 5 6F70:AC24:0A
   phase walk @3333 xy=53,12
-  phase battle @3692 xy=53,12
-ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"box","frame":5513,"key":"E9D0:AC24:A3","level":3,"site_id":"capture_box_finalized","slot":0,"species_id":163}
-TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"in_box":true,"key":"E9D0:AC24:A3","level":3,"nickname":"HOOTHOOT","player":"b","seq":45,"species_id":163,"stats":{"level":3}}
-CAPTURE_SENT {"frame":5513,"key":"E9D0:AC24:A3","seq":45}
-CAUGHT E9D0:AC24:A3
+  phase battle @3910 xy=53,12
 RX hud_show
-RX_TEXT {"cmd":"hud_show","frame":5515,"text":"Partner caught RATTATA in Route 29"}
+RX_TEXT {"cmd":"hud_show","frame":5462,"text":"Partner caught PIDGEY in Route 29"}
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"box","frame":5715,"key":"A5F1:AC24:A1","level":2,"site_id":"capture_box_finalized","slot":0,"species_id":161}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"in_box":true,"key":"A5F1:AC24:A1","level":2,"nickname":"SENTRET","player":"b","seq":50,"species_id":161,"stats":{"level":2}}
+CAPTURE_SENT {"frame":5715,"key":"A5F1:AC24:A1","seq":50}
+CAUGHT A5F1:AC24:A1
 RX play_sound sound=25
 RX msgbox
-RX_TEXT {"cmd":"msgbox","frame":5515,"text":"RATTATA and HOOTHOOT linked!"}
-TX {"event":"safe","player":"b","seq":47}
-  phase save @5580 xy=53,12
-  phase saved @6245 xy=53,12
+RX_TEXT {"cmd":"msgbox","frame":5717,"text":"PIDGEY and SENTRET linked!"}
+TX {"event":"safe","player":"b","seq":51}
+  phase save @5782 xy=53,12
+  phase saved @6447 xy=53,12
 MYKEY 0 1A2B:AC24:10
 MYKEY 1 2B3C:AC24:13
 MYKEY 2 3C4D:AC24:A1
 MYKEY 3 4D5E:AC24:A3
 MYKEY 4 5E6F:AC24:15
 MYKEY 5 6F70:AC24:0A
-SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"592e35f4db8a9e216733fee10a70c40e401f056ab8fd21777b0e81fa18208559","client_saves":1,"flushed_matches":true,"frame":6275,"gate_saves":1,"save_completed_frame":6245,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/d2/patch/build/saveram_gen2_boxed_capture_bcc_b/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/d2/patch/build/e2e_gen2_boxed_capture_bcc_b_witness.SaveRAM"}
-RECEIPT {"attempt":1,"capture":{"acquisition":"wild","area_id":"route_29","destination":"box","frame":5513,"key":"E9D0:AC24:A3","level":3,"site_id":"capture_box_finalized","slot":0,"species_id":163},"case":"crystal_battle_ot2","client":{"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"},"fixture_sha256":"30b527d2ff084e4242ceaf438345e32c573b34bc942e8103a708f280b2398218","harness_write_scopes":[],"input_mode":"normal_buttons","key":"E9D0:AC24:A3","player":"b","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","save":{"cartram_bytes":32768,"cartram_sha256":"592e35f4db8a9e216733fee10a70c40e401f056ab8fd21777b0e81fa18208559","client_saves":1,"flushed_matches":true,"frame":6275,"gate_saves":1,"save_completed_frame":6245,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/d2/patch/build/saveram_gen2_boxed_capture_bcc_b/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/d2/patch/build/e2e_gen2_boxed_capture_bcc_b_witness.SaveRAM"},"scenario":"gen2_boxed_capture","schema":"gen2-duo-boxed-capture-v1","synth":"crystal_synth_full_ot2","title":"crystal"}
-RESULT: PASS (full linked E9D0:AC24:A3)
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"1a1df98b7e7d53c6f72a3264da91aea1656aa3786542ce2795164cc47f36a37f","client_saves":1,"flushed_matches":true,"frame":6477,"gate_saves":1,"save_completed_frame":6447,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_boxed_capture_s761_b/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_boxed_capture_s761_b_witness.SaveRAM"}
+RECEIPT {"attempt":1,"capture":{"acquisition":"wild","area_id":"route_29","destination":"box","frame":5715,"key":"A5F1:AC24:A1","level":2,"site_id":"capture_box_finalized","slot":0,"species_id":161},"case":"crystal_battle_ot2","client":{"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"},"fixture_sha256":"30b527d2ff084e4242ceaf438345e32c573b34bc942e8103a708f280b2398218","harness_write_scopes":[],"input_mode":"normal_buttons","key":"A5F1:AC24:A1","player":"b","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","save":{"cartram_bytes":32768,"cartram_sha256":"1a1df98b7e7d53c6f72a3264da91aea1656aa3786542ce2795164cc47f36a37f","client_saves":1,"flushed_matches":true,"frame":6477,"gate_saves":1,"save_completed_frame":6447,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_boxed_capture_s761_b/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_boxed_capture_s761_b_witness.SaveRAM"},"scenario":"gen2_boxed_capture","schema":"gen2-duo-boxed-capture-v1","synth":"crystal_synth_full_ot2","title":"crystal"}
+RESULT: PASS (full linked A5F1:AC24:A1)

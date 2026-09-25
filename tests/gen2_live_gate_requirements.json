@@ -17,7 +17,7 @@
       "axes": {"kind": "engine_sites", "title": "crystal", "requirement_ids": ["F-2", "F-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal.engine_sites.json",
-        "sha256": "dc5ef7ddf938d4247df7dd2f7f43318156f1af7797e64bdb0fb78bcd759b4274"
+        "sha256": "7e65849ac171e13c6c08776413a0ba87871509868d21ab139efa4dd40e379dfd"
       }}}]
     },
     {
@@ -27,7 +27,7 @@
       "axes": {"kind": "engine_sites", "title": "gold", "requirement_ids": ["F-2", "F-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold.engine_sites.json",
-        "sha256": "e36991718df69a9e303c41102c7c4b58bfa960b4e8358afa55f316877d8f9ffa"
+        "sha256": "652d5159519c57865059f65691b372ce476d418463677066151818c4fb30fc39"
       }}}]
     },
     {
@@ -37,7 +37,7 @@
       "axes": {"kind": "engine_sites", "title": "silver", "requirement_ids": ["F-2", "F-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver.engine_sites.json",
-        "sha256": "049501cdd5d1680b0dc352158e43b9860290b0ffd1e480fdfcfe4f0242900050"
+        "sha256": "f6b56efab25b83a13c3d41f58d7870445cbe1edb8f08b02f3bf8467ffa68e91c"
       }}}]
     },
     {
@@ -47,7 +47,7 @@
       "axes": {"kind": "write_window", "title": "crystal", "requirement_ids": ["W-1", "W-2", "W-5", "W-6", "W-7"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal.write_window.json",
-        "sha256": "fbe85880c1a056d66c7c1b08319986fb257f5698ac3fd9810ad4883635acdddd"
+        "sha256": "c188cbc17d5054ebc19c430a5d372c4daaec0a3d903105576c5733c05deb3a49"
       }}}]
     },
     {
@@ -57,7 +57,7 @@
       "axes": {"kind": "write_window", "title": "gold", "requirement_ids": ["W-1", "W-2", "W-5", "W-6", "W-7"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold.write_window.json",
-        "sha256": "6ac2d8c737be8b1fba519487d891b73c9dd3adb9411c1bb950e035a8bf0c5637"
+        "sha256": "a126f92c78c877510c5fa3efff074f5f7953ec67ba83c8ce47973f6894fce4ea"
       }}}]
     },
     {
@@ -67,7 +67,7 @@
       "axes": {"kind": "write_window", "title": "silver", "owner_ruling": "O-23", "requirement_ids": ["W-1", "W-2", "W-5", "W-6", "W-7"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold.write_window.json",
-        "sha256": "6ac2d8c737be8b1fba519487d891b73c9dd3adb9411c1bb950e035a8bf0c5637"
+        "sha256": "a126f92c78c877510c5fa3efff074f5f7953ec67ba83c8ce47973f6894fce4ea"
       }}}]
     },
     {
@@ -207,7 +207,7 @@
       "axes": {"kind": "panel_gate", "title": "crystal", "requirement_ids": ["N-1", "C-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.panel_gate.json",
-        "sha256": "30b2f560b24f63053677e90eaa0697493456116ec53a5f1d013ccad5cde7afe2"
+        "sha256": "29a74fc56e4c9d10b4b238ffc54d713f243ce0f6741dd33b624a02e493e280bd"
       }}}]
     },
     {
@@ -217,7 +217,7 @@
       "axes": {"kind": "panel_gate", "title": "gold", "requirement_ids": ["N-1", "C-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.panel_gate.json",
-        "sha256": "a117a908676e5dc3c5c1fee644108a1f14f87dfce26a9dc6c3c690f49f6671d1"
+        "sha256": "009c63824ece8f852523dbd3e09b4b20090445e55401d888542fc34180573062"
       }}}]
     },
     {
@@ -227,7 +227,7 @@
       "axes": {"kind": "panel_gate", "title": "silver", "requirement_ids": ["N-1", "C-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.panel_gate.json",
-        "sha256": "425899ca851b9450f60f05aa2dfa2a1df22921733f913eeef0415386900b7251"
+        "sha256": "ce0a93c79cf2d2c8342961816236e7ac00d2d06e310e202b7d84b2c90b56c0bd"
       }}}]
     },
     {
@@ -237,7 +237,7 @@
       "axes": {"kind": "sfx_gate", "title": "crystal", "requirement_ids": ["N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.sfx_gate.json",
-        "sha256": "b40b15052a2b96e5a83a89e4e53e08dd3b5788737a42fa24bb7303f300ffc0ba"
+        "sha256": "d71cbc0f21919bd0cd81255a25a38734ba0446b3760295542fe35570b048f028"
       }}}]
     },
     {
@@ -247,7 +247,7 @@
       "axes": {"kind": "sfx_gate", "title": "gold", "requirement_ids": ["N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.sfx_gate.json",
-        "sha256": "c04e7593eafb956c8e56c6fcc3438b6e8d2c2a64232c2f9886ffdede7a3bde4a"
+        "sha256": "7e60855f80bc66b9958d1c5e84312152bcc2119aaf7f3c08f41369dad88136b2"
       }}}]
     },
     {
@@ -257,7 +257,7 @@
       "axes": {"kind": "sfx_gate", "title": "silver", "requirement_ids": ["N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.sfx_gate.json",
-        "sha256": "3c4bd1141cca3bb234aa7140abdee5b2090238f60fbad98d1ad15d12d6a8648a"
+        "sha256": "aec10a2e6d7c875d403fe36ef0889fca9799aa94e636411d3bbbd353b23777ad"
       }}}]
     },
     {
@@ -267,7 +267,7 @@
       "axes": {"kind": "w6_gate", "title": "crystal", "requirement_ids": ["O-27"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.w6_gate.json",
-        "sha256": "3360bb71de8471f64be31f369746743e9a4330e73986dde38e4572808fcf3a90"
+        "sha256": "75003a3799b691620b650b0b9f4e977145d8eac006a7da59a12ae22c2dfd608e"
       }}}]
     },
     {
@@ -277,7 +277,7 @@
       "axes": {"kind": "w6_gate", "title": "silver", "requirement_ids": ["O-27"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.w6_gate.json",
-        "sha256": "ddc6c39743064e817ee6e80f313ec0b91ce2818b2d00ee769da24a9737dd9ad4"
+        "sha256": "93574f09c89eaadc6950f8966f8e2410a7de56d0ec3b8f0e951513e3afa74d52"
       }}}]
     },
     {
@@ -287,7 +287,7 @@
       "axes": {"kind": "w6_gate", "title": "gold", "requirement_ids": ["O-27"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.w6_gate.json",
-        "sha256": "a95f684f23966c85ebc0b40edcd3246eb12be09dfade07abc879b65297c39e72"
+        "sha256": "0ec9662f8da3387a9b04db99acf477ceb4db18d8dd0b7d50d3f62421c1c6ea80"
       }}}]
     },
     {
@@ -297,7 +297,7 @@
       "axes": {"kind": "phone_gate", "title": "crystal", "requirement_ids": ["O-29"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.phone_gate.json",
-        "sha256": "36b8543dadb20d4a73c6d6dc36517cc415775c017ee0e082678abbf3131a072b"
+        "sha256": "577018f974badf9866e8cec8c3837299b95ee566a3642e484e79e2c7ed228bb3"
       }}}]
     },
     {
@@ -307,7 +307,7 @@
       "axes": {"kind": "phone_gate", "title": "gold", "requirement_ids": ["O-29"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.phone_gate.json",
-        "sha256": "5f011848efb18e0f68383b04653117f6a6f4b50069a85b29a4ffca6132a9862a"
+        "sha256": "ddef83aa92fb53c665be62a3d20812cfb879a0793eb6ca2240d25a028fb0b82c"
       }}}]
     },
     {
@@ -317,7 +317,17 @@
       "axes": {"kind": "phone_gate", "title": "silver", "requirement_ids": ["O-29"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.phone_gate.json",
-        "sha256": "071b2ed3c52c2693ba88b792c4e52349c6c0a164c842578c64cc45e182975d7b"
+        "sha256": "4e3038b93f6103a43bd14bbef9a80d6eb17b83c1da88ad9147b2ac441b9b3bed"
+      }}}]
+    },
+    {
+      "id": "new-gates.inspect-run",
+      "stage": "physical-live",
+      "description": "R-1/R-2/R-3/R-4/R-5g live-new-gates run attestation (gen2-live-new-gates-attestation-v1): SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py over every fixture, every title PASS, passes only (re-run: tools/gen2_final_sweep.py cell gate/inspect_run)",
+      "axes": {"kind": "inspect_run", "requirement_ids": ["R-1", "R-2", "R-3", "R-4", "R-5g"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/live_new_gates.inspect_run.json",
+        "sha256": "2fc805dc7e83852f035e256551c98c171dafcfbc341cf70f4223b41ed85cca06"
       }}}]
     }
   ]

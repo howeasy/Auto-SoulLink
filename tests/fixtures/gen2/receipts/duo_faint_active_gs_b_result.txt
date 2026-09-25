@@ -1,55 +1,56 @@
 DUO_GEN2 {"attempt":1,"case":"silver_battle","fixture_sha256":"0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd","player":"b","rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","scenario":"gen2_faint_active","title":"silver"}
-CLIENT {"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","poison_faint","save_completed","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"}
+CLIENT {"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"}
 JITTER requested=0 applied=0 attempt=1
   phase title @1
   phase continue @3218
 TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":51084,"panel":false,"
-HELLO {"frame":3338,"ot_id":51084}
+HELLO {"ball_count":10,"frame":3338,"has_pokeballs":true,"ot_id":51084}
   phase loaded @3338
 RX resolved_areas
 RX config
+RX dead_keys
 BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
 MYKEY 0 A4FC:C78C:9E
-  phase walk @3722 xy=53,12
-  phase battle @4026 xy=53,12
-ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":5587,"key":"A5C2:C78C:A1","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":161}
-TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":15,"in_box":false,"key":"A5C2:C78C:A1","level":3,"maxHP":15,"nickname":"SENTRET","player":"b","seq":77,"species_id":161,"stats":{"level":3,"maxHP
-CAPTURE_SENT {"frame":5587,"key":"A5C2:C78C:A1","seq":77}
-CAUGHT A5C2:C78C:A1
-RX box_mon key=A5C2:C78C:A1
-TX {"event":"safe","player":"b","seq":78}
-TX {"event":"stats_cache","key":"A5C2:C78C:A1","player":"b","seq":81,"stats":{"level":3,"maxHP":15}}
+  phase walk @3484 xy=53,12
+  phase battle @3806 xy=52,12
+RX hud_show
+RX_TEXT {"cmd":"hud_show","frame":5492,"text":"Partner caught PIDGEY in Route 29"}
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":6405,"key":"8A62:C78C:A1","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":161}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":15,"in_box":false,"key":"8A62:C78C:A1","level":3,"maxHP":15,"nickname":"SENTRET","player":"b","seq":104,"species_id":161,"stats":{"level":3,"maxH
+CAPTURE_SENT {"frame":6405,"key":"8A62:C78C:A1","seq":104}
+CAUGHT 8A62:C78C:A1
 RX play_sound sound=25
 RX msgbox
-RX_TEXT {"cmd":"msgbox","frame":7082,"text":"PIDGEY and SENTRET linked!"}
-RX party_mon key=A5C2:C78C:A1
-TX {"event":"sync_retrieve_done","key":"A5C2:C78C:A1","player":"b","seq":130}
-  phase save @7083 xy=53,12
-  phase saved @7777 xy=53,12
+RX_TEXT {"cmd":"msgbox","frame":6407,"text":"PIDGEY and SENTRET linked!"}
+RX party_mon key=8A62:C78C:A1
+TX {"event":"safe","player":"b","seq":105}
+TX {"event":"sync_retrieve_done","key":"8A62:C78C:A1","player":"b","seq":108}
+  phase save @6465 xy=52,12
+  phase saved @7159 xy=52,12
 MYKEY 0 A4FC:C78C:9E
-MYKEY 1 A5C2:C78C:A1
-LINK_SAVE {"cartram_bytes":32768,"cartram_sha256":"48ea8b3f0d0352399710003f820577e68bd09b545c27fb1755e2a41419d55149","client_saves":1,"frame":7807,"gate_saves":1,"key":"A5C2:C78C:A1","save_completed_frame":7777,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/e2e_gen2_faint_active_live3-gs-active_b_link_save.SaveRAM"}
-  phase settle @7807 xy=53,12
-  phase walk @7988 xy=53,12
-  phase battle @8579 xy=52,12
-LINKED_ACTIVE {"battle_mode":1,"battle_mon_species":161,"battle_type":0,"cur_battle_mon":1,"frame":9853,"key":"A5C2:C78C:A1","link_mode":0,"slot":1}
-RX force_faint key=A5C2:C78C:A1
+MYKEY 1 8A62:C78C:A1
+LINK_SAVE {"cartram_bytes":32768,"cartram_sha256":"33beaeb2f4785b0f445eaef7c584a2e7d942bf1fe445b637ebe688551e5bf0e6","client_saves":1,"frame":7189,"gate_saves":1,"key":"8A62:C78C:A1","save_completed_frame":7159,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_faint_active_s271_b_link_save.SaveRAM"}
+  phase settle @7189 xy=52,12
+  phase walk @7370 xy=52,12
+  phase battle @7747 xy=51,12
+LINKED_ACTIVE {"battle_mode":1,"battle_mon_species":161,"battle_type":0,"cur_battle_mon":1,"frame":9022,"key":"8A62:C78C:A1","link_mode":0,"slot":1}
+RX force_faint key=8A62:C78C:A1
 RX play_sound sound=26
-RX memorialize key=A5C2:C78C:A1
+RX memorialize key=8A62:C78C:A1
 RX game_over
-BATTLE_HOLD_WRITE {"action_after_hex":"01","action_before_hex":"00","active_slot":1,"battle_hp_after_hex":"0000","battle_hp_before_hex":"000a","frame":13142,"hp_after_hex":"0000","hp_before_hex":"000a","hrom_bank":15,"key":"A5C2:C78C:A1","kind":"battle_faint","log":[{"addr":51996,"artifact":"pokesilver","attempted":2,"batch_index":1,"batch_size":4,"completed":2,"domain":"System Bus","evidence":"U2 PHYSICAL receipt","n":2,"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","site":"lua/gen2/entry.lua production","status":"written","title":"silver","why":"battle_hold"},{"addr":55930,"artifact":"pokesilver","attempted":1,"batch_index":2,"batch_size":4,"completed":1,"domain":"System Bus","evidence":"U2 PHYSICAL receipt","n":1,"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","site":"lua/gen2/entry.lua production","status":"written","title":"silver","why":"battle_hold"},{"addr":55932,"artifact":"pokesilver","attempted":2,"batch_index":3,"batch_size":4,"completed":2,"domain":"System Bus","evidence":"U2 PHYSICAL receipt","n":2,"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","site":"lua/gen2/entry.lua production","status":"written","title":"silver","why":"battle_hold"},{"addr":53220,"artifact":"pokesilver","attempted":1,"batch_index":4,"batch_size":4,"completed":1,"domain":"System Bus","evidence":"U2 PHYSICAL receipt","n":1,"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","site":"lua/gen2/entry.lua production","status":"written","title":"silver","why":"battle_hold"}],"ok":true,"pc":16744,"seq":1,"slot":1,"status_after_hex":"00"}
-BATTLE_TRACE {"frame":13142,"seq":2,"what":"faint"}
-ENGINE_FAINT {"cause":"battle","frame":13248,"key":"A5C2:C78C:A1","site_id":"battle_faint","slot":1}
-NEXT_MON {"frame":13299}
-REPLACED {"active_slot":0,"frame":13394,"hp":20}
-TX {"event":"safe","player":"b","seq":354}
-  phase fainted @13821 xy=52,12
-MEMORIAL_PREIMAGE {"frame":13822,"key":"A5C2:C78C:A1","nickname_raw_hex":"92848d9391849350505050","ot_raw_hex":"92888b9584915000000000","raw_hex":"a10021000000c78c00001b00000000000000000000a5c223000000450000000300000000000f00080007000600070007","slot":1,"species_marker":161}
-TX {"box":13,"event":"memorialize_done","key":"A5C2:C78C:A1","player":"b","seq":356}
-MEMORIAL_ACK {"box":13,"event":"memorialize_done","frame":13822,"key":"A5C2:C78C:A1"}
+BATTLE_HOLD_WRITE {"action_after_hex":"01","action_before_hex":"00","active_slot":1,"battle_hp_after_hex":"0000","battle_hp_before_hex":"000a","frame":12512,"hp_after_hex":"0000","hp_before_hex":"000a","hrom_bank":15,"key":"8A62:C78C:A1","kind":"battle_faint","log":[{"addr":51996,"artifact":"pokesilver","attempted":2,"batch_index":1,"batch_size":4,"completed":2,"domain":"System Bus","evidence":"U2 PHYSICAL receipt","n":2,"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","site":"lua/gen2/entry.lua production","status":"written","title":"silver","why":"battle_hold"},{"addr":55930,"artifact":"pokesilver","attempted":1,"batch_index":2,"batch_size":4,"completed":1,"domain":"System Bus","evidence":"U2 PHYSICAL receipt","n":1,"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","site":"lua/gen2/entry.lua production","status":"written","title":"silver","why":"battle_hold"},{"addr":55932,"artifact":"pokesilver","attempted":2,"batch_index":3,"batch_size":4,"completed":2,"domain":"System Bus","evidence":"U2 PHYSICAL receipt","n":2,"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","site":"lua/gen2/entry.lua production","status":"written","title":"silver","why":"battle_hold"},{"addr":53220,"artifact":"pokesilver","attempted":1,"batch_index":4,"batch_size":4,"completed":1,"domain":"System Bus","evidence":"U2 PHYSICAL receipt","n":1,"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","site":"lua/gen2/entry.lua production","status":"written","title":"silver","why":"battle_hold"}],"ok":true,"pc":16744,"seq":1,"slot":1,"status_after_hex":"00"}
+BATTLE_TRACE {"frame":12512,"seq":2,"what":"faint"}
+ENGINE_FAINT {"cause":"battle","frame":12618,"key":"8A62:C78C:A1","site_id":"battle_faint","slot":1}
+NEXT_MON {"frame":12669}
+REPLACED {"active_slot":0,"frame":12764,"hp":17}
+TX {"event":"safe","player":"b","seq":332}
+  phase fainted @13191 xy=51,12
+MEMORIAL_PREIMAGE {"frame":13192,"key":"8A62:C78C:A1","nickname_raw_hex":"92848d9391849350505050","ot_raw_hex":"92888b9584915000000000","raw_hex":"a10021000000c78c00001b000000000000000000008a6222000000450000000300000000000f00080007000600070007","slot":1,"species_marker":161}
+TX {"box":13,"event":"memorialize_done","key":"8A62:C78C:A1","player":"b","seq":334}
+MEMORIAL_ACK {"box":13,"event":"memorialize_done","frame":13192,"key":"8A62:C78C:A1","ticks":328}
 LINKED_HP_STATUS 0000 00
-  phase save @13851 xy=52,12
-  phase saved @14546 xy=52,12
-SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"f453174b0e40ea2ce8cab49c4d18b4e46bea93cddf8ac8a0d8aa3d142725d6c6","client_saves":2,"flushed_matches":true,"frame":14576,"gate_saves":2,"save_completed_frame":14546,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/saveram_gen2_faint_active_live3-gs-active_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/e2e_gen2_faint_active_live3-gs-active_b_witness.SaveRAM"}
-RECEIPT {"attempt":1,"battle_write":{"action_after_hex":"01","battle_hp_before_hex":"000a","frame":13142,"hrom_bank":15,"pc":16744,"seq":1,"slot":1},"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":5587,"key":"A5C2:C78C:A1","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":161},"case":"silver_battle","client":{"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","poison_faint","save_completed","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"},"fixture_sha256":"0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd","force_faint_key":"A5C2:C78C:A1","harness_write_scopes":[],"hello":{"frame":3338,"ot_id":51084},"input_mode":"normal_buttons","key":"A5C2:C78C:A1","link_save":{"cartram_bytes":32768,"cartram_sha256":"48ea8b3f0d0352399710003f820577e68bd09b545c27fb1755e2a41419d55149","client_saves":1,"frame":7807,"gate_saves":1,"key":"A5C2:C78C:A1","save_completed_frame":7777,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/e2e_gen2_faint_active_live3-gs-active_b_link_save.SaveRAM"},"linked_active":{"battle_mode":1,"battle_mon_species":161,"battle_type":0,"cur_battle_mon":1,"frame":9853,"key":"A5C2:C78C:A1","link_mode":0,"slot":1},"memorial":{"ack":{"box":13,"event":"memorialize_done","frame":13822,"key":"A5C2:C78C:A1"},"preimage_frame":13822},"native_faint":{"frame":13142,"seq":2,"what":"faint"},"player":"b","replaced":{"active_slot":0,"frame":13394,"hp":20},"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","save":{"cartram_bytes":32768,"cartram_sha256":"f453174b0e40ea2ce8cab49c4d18b4e46bea93cddf8ac8a0d8aa3d142725d6c6","client_saves":2,"flushed_matches":true,"frame":14576,"gate_saves":2,"save_completed_frame":14546,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/saveram_gen2_faint_active_live3-gs-active_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/e2e_gen2_faint_active_live3-gs-active_b_witness.SaveRAM"},"scenario":"gen2_faint_active","schema":"gen2-duo-faint-active-v1","title":"silver"}
-RESULT: PASS (killed the active battler A5C2:C78C:A1)
+  phase save @13221 xy=51,12
+  phase saved @13916 xy=51,12
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"26e6d5ea393c771907c3d66879ef7276610bfe7396ef2cf0440b9dbf209ddfe0","client_saves":2,"flushed_matches":true,"frame":13946,"gate_saves":2,"save_completed_frame":13916,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_faint_active_s271_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_faint_active_s271_b_witness.SaveRAM"}
+RECEIPT {"attempt":1,"battle_write":{"action_after_hex":"01","battle_hp_before_hex":"000a","frame":12512,"hrom_bank":15,"pc":16744,"seq":1,"slot":1},"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":6405,"key":"8A62:C78C:A1","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":161},"case":"silver_battle","client":{"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"},"fixture_sha256":"0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd","force_faint_key":"8A62:C78C:A1","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3338,"has_pokeballs":true,"ot_id":51084},"input_mode":"normal_buttons","key":"8A62:C78C:A1","link_save":{"cartram_bytes":32768,"cartram_sha256":"33beaeb2f4785b0f445eaef7c584a2e7d942bf1fe445b637ebe688551e5bf0e6","client_saves":1,"frame":7189,"gate_saves":1,"key":"8A62:C78C:A1","save_completed_frame":7159,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_faint_active_s271_b_link_save.SaveRAM"},"linked_active":{"battle_mode":1,"battle_mon_species":161,"battle_type":0,"cur_battle_mon":1,"frame":9022,"key":"8A62:C78C:A1","link_mode":0,"slot":1},"memorial":{"ack":{"box":13,"event":"memorialize_done","frame":13192,"key":"8A62:C78C:A1","ticks":328},"preimage_frame":13192},"native_faint":{"frame":12512,"seq":2,"what":"faint"},"player":"b","replaced":{"active_slot":0,"frame":12764,"hp":17},"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","save":{"cartram_bytes":32768,"cartram_sha256":"26e6d5ea393c771907c3d66879ef7276610bfe7396ef2cf0440b9dbf209ddfe0","client_saves":2,"flushed_matches":true,"frame":13946,"gate_saves":2,"save_completed_frame":13916,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_faint_active_s271_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_faint_active_s271_b_witness.SaveRAM"},"scenario":"gen2_faint_active","schema":"gen2-duo-faint-active-v1","title":"silver"}
+RESULT: PASS (killed the active battler 8A62:C78C:A1)

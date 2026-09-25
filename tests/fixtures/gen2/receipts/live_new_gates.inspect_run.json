@@ -1,0 +1,42 @@
+{
+ "code_digest": {
+  "commit": "df04e06517d68aadc92b9c375708ff9a704bb7ec",
+  "digest": "ccd6242131ad11308441a4835d8ab50b5f4a2e4ebaf8c523a5bd919b5e2cd635",
+  "dirty": [],
+  "schema": "gen2-code-digest-v1",
+  "scope": [
+   "lua/*.lua",
+   "lua/gen2/**",
+   "lua/core/**",
+   "server/**/*.py",
+   "data/games/gen2_crystal/**",
+   "data/games/gen2_gold/**",
+   "data/games/gen2_silver/**"
+  ]
+ },
+ "evidence_level": "PHYSICAL",
+ "pytest": {
+  "deselected": 0,
+  "errors": 0,
+  "failed": 0,
+  "passed": 13,
+  "skipped": 0,
+  "xfailed": 0,
+  "xpassed": 0
+ },
+ "requirement_ids": [
+  "R-1",
+  "R-2",
+  "R-3",
+  "R-4",
+  "R-5g"
+ ],
+ "result": "PASS",
+ "schema": "gen2-live-new-gates-attestation-v1",
+ "test": "tests/live/test_gen2_new_gates.py",
+ "titles": {
+  "crystal": "PASS",
+  "gold": "PASS",
+  "silver": "PASS"
+ }
+}

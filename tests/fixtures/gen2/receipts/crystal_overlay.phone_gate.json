@@ -3,8 +3,8 @@
  "cases": {
   "battle": {
    "extra": {
-    "battle_from": 3768,
-    "battle_to": 4740,
+    "battle_from": 3610,
+    "battle_to": 4591,
     "rings_in_battle": 0
    },
    "id": 2,
@@ -12,10 +12,10 @@
    "ring": {
     "armed": 2,
     "caller": 0,
-    "frame": 5058,
+    "frame": 4909,
     "id": 0
    },
-   "step_at": 4974,
+   "step_at": 4825,
    "via": "permit"
   },
   "native": {
@@ -23,7 +23,7 @@
     "native_ring": {
      "armed": 1,
      "caller": 4,
-     "frame": 10943,
+     "frame": 10851,
      "id": 2
     }
    },
@@ -32,18 +32,18 @@
    "ring": {
     "armed": 1,
     "caller": 0,
-    "frame": 12086,
+    "frame": 11994,
     "id": 0
    },
-   "step_at": 12002,
+   "step_at": 11910,
    "via": "permit"
   },
   "save": {
    "extra": {
     "armed_at_save": 2,
-    "save_site_frame": 9330,
+    "save_site_frame": 9238,
     "sram_backup": 0,
-    "sram_changed_bytes": 250,
+    "sram_changed_bytes": 252,
     "sram_primary": 0
    },
    "id": 2,
@@ -51,10 +51,10 @@
    "ring": {
     "armed": 2,
     "caller": 0,
-    "frame": 9812,
+    "frame": 9720,
     "id": 0
    },
-   "step_at": 9728,
+   "step_at": 9636,
    "via": "permit"
   },
   "start_menu": {
@@ -67,10 +67,10 @@
    "ring": {
     "armed": 3,
     "caller": 0,
-    "frame": 7851,
+    "frame": 7759,
     "id": 0
    },
-   "step_at": 7767,
+   "step_at": 7675,
    "via": "permit"
   },
   "town": {
@@ -84,21 +84,36 @@
    "ring": {
     "armed": 1,
     "caller": 0,
-    "frame": 6416,
+    "frame": 6324,
     "id": 0
    },
-   "step_at": 6332,
+   "step_at": 6240,
    "via": "binder"
   }
  },
  "client_write_scope": "phone (lua/gen2/panel.lua permit reason phone, mailbox +32)",
+ "code_digest": {
+  "commit": "df04e06517d68aadc92b9c375708ff9a704bb7ec",
+  "digest": "ccd6242131ad11308441a4835d8ab50b5f4a2e4ebaf8c523a5bd919b5e2cd635",
+  "dirty": [],
+  "schema": "gen2-code-digest-v1",
+  "scope": [
+   "lua/*.lua",
+   "lua/gen2/**",
+   "lua/core/**",
+   "server/**/*.py",
+   "data/games/gen2_crystal/**",
+   "data/games/gen2_gold/**",
+   "data/games/gen2_silver/**"
+  ]
+ },
  "core_mode": "CGB",
  "evidence_level": "PHYSICAL",
  "fixture": "crystal_battle",
  "fixture_sha256": "f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6",
  "harness_write_scopes": [
   {
-   "frame": 10655,
+   "frame": 10563,
    "value": 2,
    "what": "wSpecialPhoneCallID = SPECIALCALL_ROBBED"
   }

@@ -7,6 +7,21 @@
   "panel": true
  },
  "client_write_scope": "panel (lua/gen2/panel.lua permit, WRAM0 tilemap/attrmap/mailbox)",
+ "code_digest": {
+  "commit": "df04e06517d68aadc92b9c375708ff9a704bb7ec",
+  "digest": "ccd6242131ad11308441a4835d8ab50b5f4a2e4ebaf8c523a5bd919b5e2cd635",
+  "dirty": [],
+  "schema": "gen2-code-digest-v1",
+  "scope": [
+   "lua/*.lua",
+   "lua/gen2/**",
+   "lua/core/**",
+   "server/**/*.py",
+   "data/games/gen2_crystal/**",
+   "data/games/gen2_gold/**",
+   "data/games/gen2_silver/**"
+  ]
+ },
  "core_mode": "CGB",
  "evidence_level": "PHYSICAL",
  "fixture": "crystal_battle",
@@ -19,11 +34,11 @@
   "bottom": 49152,
   "early_hits": 40,
   "low_water_addr": 49285,
-  "low_water_frame": 12201,
+  "low_water_frame": 12376,
   "low_water_sp": 49285,
   "margin_bytes": 133,
   "pushes_seen": 102,
-  "span_frames": 9140,
+  "span_frames": 9314,
   "top": 49407
  },
  "overlay_sha1": "100f98da9bbc369c9b5f461959c9d09ada613f0a",

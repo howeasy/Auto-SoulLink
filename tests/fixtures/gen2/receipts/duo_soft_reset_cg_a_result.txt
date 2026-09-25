@@ -1,35 +1,37 @@
 DUO_GEN2 {"attempt":1,"case":"crystal_battle","fixture_sha256":"f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6","player":"a","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","scenario":"gen2_soft_reset","title":"crystal"}
-CLIENT {"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","save_completed","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"}
+CLIENT {"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"}
 JITTER requested=0 applied=0 attempt=1
   phase title @1
   phase continue @3180
 TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"
-HELLO {"frame":3303,"ot_id":46401}
+HELLO {"ball_count":10,"frame":3303,"has_pokeballs":true,"ot_id":46401}
   phase loaded @3303
 RX resolved_areas
 RX config
+RX dead_keys
 BOOTED {"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
 MYKEY 0 F794:B541:9E
-HELLO_AT_CHECKPOINT {"frame":3363,"hellos":1,"ot_id":46401,"writes_enabled":true}
-CHORD_GATE {"frame":3725}
-CHORD {"frame":3725,"frames":4}
-RESET_SEEN {"delta":38,"frame":3763}
-HELLO_CLEARED {"delta":0,"frame":3763}
-WRITES_PAUSED {"delta":317,"frame":4080}
-  phase title @4080
-  phase continue @6938
+HELLO_AT_CHECKPOINT {"frame":3589,"hellos":1,"ot_id":46401,"writes_enabled":true}
+CHORD_GATE {"frame":3635}
+CHORD {"frame":3635,"frames":4}
+RESET_SEEN {"delta":38,"frame":3673}
+HELLO_CLEARED {"delta":0,"frame":3673}
+WRITES_PAUSED {"delta":287,"frame":3960}
+  phase title @3960
+  phase continue @6849
 TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"
-HELLO_AGAIN {"frame":7061,"n":2,"ot_id":46401}
-  phase loaded @7061
+HELLO_AGAIN {"frame":6972,"n":2,"ot_id":46401}
+  phase loaded @6972
 RX resolved_areas
 RX config
-REBOOTED {"frame":7091,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
-WRITES_RESUMED {"delta":3328,"frame":7091}
-REHELLO {"frame":7091,"hellos":2,"ot_id":46401}
+RX dead_keys
+REBOOTED {"frame":7002,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+WRITES_RESUMED {"delta":3329,"frame":7002}
+REHELLO {"frame":7002,"hellos":2,"ot_id":46401}
 NO_WRITES_IN_WINDOW {"writes":0}
 MYKEY 0 F794:B541:9E
-  phase save @7091 xy=53,12
-  phase saved @7756 xy=53,12
-SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"7b38c509080ad91d55d5283a551d577422f0699df4d3d674713f3aa56e80488f","client_saves":1,"flushed_matches":true,"frame":7786,"gate_saves":1,"save_completed_frame":7756,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/saveram_gen2_soft_reset_gen2-cg-soft-reset_a/Pokemon - Crystal Version (USA, Europe).SaveRAM"}
-RECEIPT {"attempt":1,"booted":{"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"case":"crystal_battle","client":{"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","save_completed","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"},"fixture_sha256":"f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6","harness_write_scopes":[],"hello":{"frame":3303,"ot_id":46401},"input_mode":"normal_buttons","paused":{"delta":317,"frame":4080},"player":"a","rehello":{"frame":7091,"hellos":2,"ot_id":46401},"reset":{"delta":38,"frame":3763},"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","save":{"cartram_bytes":32768,"cartram_sha256":"7b38c509080ad91d55d5283a551d577422f0699df4d3d674713f3aa56e80488f","client_saves":1,"flushed_matches":true,"frame":7786,"gate_saves":1,"save_completed_frame":7756,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-lane/patch/build/saveram_gen2_soft_reset_gen2-cg-soft-reset_a/Pokemon - Crystal Version (USA, Europe).SaveRAM"},"scenario":"gen2_soft_reset","schema":"gen2-duo-soft-reset-v1","title":"crystal"}
+  phase save @7002 xy=53,12
+  phase saved @7667 xy=53,12
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"917be2182c709c6a18db09017da727010b43c19d4c47df6cd46bbd0c265fc15c","client_saves":1,"flushed_matches":true,"frame":7697,"gate_saves":1,"save_completed_frame":7667,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/saveram_gen2_soft_reset_s941_a/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/e2e_gen2_soft_reset_s941_a_witness.SaveRAM"}
+RECEIPT {"attempt":1,"booted":{"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"case":"crystal_battle","client":{"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"},"fixture_sha256":"f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3303,"has_pokeballs":true,"ot_id":46401},"input_mode":"normal_buttons","paused":{"delta":287,"frame":3960},"player":"a","rehello":{"frame":7002,"hellos":2,"ot_id":46401},"reset":{"delta":38,"frame":3673},"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","save":{"cartram_bytes":32768,"cartram_sha256":"917be2182c709c6a18db09017da727010b43c19d4c47df6cd46bbd0c265fc15c","client_saves":1,"flushed_matches":true,"frame":7697,"gate_saves":1,"save_completed_frame":7667,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/saveram_gen2_soft_reset_s941_a/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/e2e_gen2_soft_reset_s941_a_witness.SaveRAM"},"scenario":"gen2_soft_reset","schema":"gen2-duo-soft-reset-v1","title":"crystal"}
 RESULT: PASS (same-save soft reset: one re-hello, no writes in the cleared window)

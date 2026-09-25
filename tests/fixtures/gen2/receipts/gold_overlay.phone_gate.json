@@ -3,8 +3,8 @@
  "cases": {
   "battle": {
    "extra": {
-    "battle_from": 3667,
-    "battle_to": 4591,
+    "battle_from": 3793,
+    "battle_to": 4688,
     "rings_in_battle": 0
    },
    "id": 2,
@@ -12,10 +12,10 @@
    "ring": {
     "armed": 2,
     "caller": 0,
-    "frame": 4921,
+    "frame": 5018,
     "id": 0
    },
-   "step_at": 4825,
+   "step_at": 4922,
    "via": "permit"
   },
   "native": {
@@ -23,7 +23,7 @@
     "native_ring": {
      "armed": 1,
      "caller": 4,
-     "frame": 11016,
+     "frame": 11059,
      "id": 2
     }
    },
@@ -32,16 +32,16 @@
    "ring": {
     "armed": 1,
     "caller": 0,
-    "frame": 12176,
+    "frame": 12219,
     "id": 0
    },
-   "step_at": 12081,
+   "step_at": 12124,
    "via": "permit"
   },
   "save": {
    "extra": {
     "armed_at_save": 2,
-    "save_site_frame": 9312,
+    "save_site_frame": 9409,
     "sram_backup": 0,
     "sram_changed_bytes": 937,
     "sram_primary": 0
@@ -51,10 +51,10 @@
    "ring": {
     "armed": 2,
     "caller": 0,
-    "frame": 9816,
+    "frame": 9913,
     "id": 0
    },
-   "step_at": 9721,
+   "step_at": 9818,
    "via": "permit"
   },
   "start_menu": {
@@ -67,10 +67,10 @@
    "ring": {
     "armed": 3,
     "caller": 0,
-    "frame": 7801,
+    "frame": 7898,
     "id": 0
    },
-   "step_at": 7707,
+   "step_at": 7804,
    "via": "permit"
   },
   "town": {
@@ -84,21 +84,36 @@
    "ring": {
     "armed": 1,
     "caller": 0,
-    "frame": 6329,
+    "frame": 6426,
     "id": 0
    },
-   "step_at": 6234,
+   "step_at": 6331,
    "via": "binder"
   }
  },
  "client_write_scope": "phone (lua/gen2/panel.lua permit reason phone, mailbox +32)",
+ "code_digest": {
+  "commit": "df04e06517d68aadc92b9c375708ff9a704bb7ec",
+  "digest": "ccd6242131ad11308441a4835d8ab50b5f4a2e4ebaf8c523a5bd919b5e2cd635",
+  "dirty": [],
+  "schema": "gen2-code-digest-v1",
+  "scope": [
+   "lua/*.lua",
+   "lua/gen2/**",
+   "lua/core/**",
+   "server/**/*.py",
+   "data/games/gen2_crystal/**",
+   "data/games/gen2_gold/**",
+   "data/games/gen2_silver/**"
+  ]
+ },
  "core_mode": "CGB",
  "evidence_level": "PHYSICAL",
  "fixture": "gold_battle",
  "fixture_sha256": "6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6",
  "harness_write_scopes": [
   {
-   "frame": 10717,
+   "frame": 10760,
    "value": 2,
    "what": "wSpecialPhoneCallID = SPECIALCALL_ROBBED"
   }

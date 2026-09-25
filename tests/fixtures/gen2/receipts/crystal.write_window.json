@@ -918,6 +918,21 @@
    }
   ]
  },
+ "code_digest": {
+  "commit": "df04e06517d68aadc92b9c375708ff9a704bb7ec",
+  "digest": "ccd6242131ad11308441a4835d8ab50b5f4a2e4ebaf8c523a5bd919b5e2cd635",
+  "dirty": [],
+  "schema": "gen2-code-digest-v1",
+  "scope": [
+   "lua/*.lua",
+   "lua/gen2/**",
+   "lua/core/**",
+   "server/**/*.py",
+   "data/games/gen2_crystal/**",
+   "data/games/gen2_gold/**",
+   "data/games/gen2_silver/**"
+  ]
+ },
  "covered_controls": [
   "idle reacquisition",
   "warp/Continue"
@@ -941,7 +956,7 @@
    "harness_write_scopes": [],
    "input_mode": "normal_buttons",
    "liveness": {
-    "accepted": 22,
+    "accepted": 13,
     "hits": [
      {
       "bank": 37,
@@ -985,7 +1000,7 @@
      }
     ],
     "other_bank": 1,
-    "raw": 22,
+    "raw": 13,
     "refusals": {},
     "refused": 0
    },
@@ -1004,18 +1019,18 @@
      "phase": "walk"
     },
     {
-     "accepted": 18,
-     "frame": 3684,
+     "accepted": 9,
+     "frame": 3600,
      "phase": "battle"
     },
     {
-     "accepted": 19,
-     "frame": 4476,
+     "accepted": 10,
+     "frame": 4398,
      "phase": "post_battle"
     },
     {
-     "accepted": 20,
-     "frame": 4478,
+     "accepted": 11,
+     "frame": 4400,
      "phase": "done"
     }
    ],
@@ -1028,11 +1043,11 @@
    "windows": {
     "battle": {
      "accepted": 0,
-     "both_edges": 734,
+     "both_edges": 740,
      "edge_raw": 0,
      "failing_sets": [
       {
-       "frames": 735,
+       "frames": 741,
        "symbols": [
         "wScriptRunning",
         "wScriptMode",
@@ -1041,15 +1056,15 @@
        ]
       }
      ],
-     "frames": 735,
+     "frames": 741,
      "raw": 0,
      "refusals": {},
      "write": {
       "after_hex": "0015",
       "before_hex": "0015",
-      "faint_reason": "...nk/.claude/worktrees/gen2-foundation/lua/gen2/writes.lua:119: active faint timing is not qualified",
+      "faint_reason": "C:/Users/howar/AppData/Local/Temp/fs1/lua/gen2/writes.lua:150: active faint timing is not qualified",
       "faint_refused": true,
-      "reason": "...nk/.claude/worktrees/gen2-foundation/lua/gen2/writes.lua:95: write ownership refused",
+      "reason": "C:/Users/howar/AppData/Local/Temp/fs1/lua/gen2/writes.lua:122: write ownership refused",
       "refused": true,
       "slot": 0
      }
@@ -1068,13 +1083,13 @@
     "action_after_hex": "00",
     "action_before_hex": "00",
     "active_slot": 0,
-    "battle_hp_after_hex": "000b",
-    "battle_hp_before_hex": "000b",
+    "battle_hp_after_hex": "0013",
+    "battle_hp_before_hex": "0013",
     "battle_mode": 1,
     "battle_type": 0,
-    "frame": 12652,
+    "frame": 12923,
     "hp_after_hex": "0000",
-    "hp_before_hex": "000d",
+    "hp_before_hex": "000f",
     "ok": true,
     "pc": 64,
     "reason": "battle frame",
@@ -1096,7 +1111,7 @@
    ],
    "input_mode": "normal_buttons",
    "liveness": {
-    "accepted": 66,
+    "accepted": 48,
     "hits": [
      {
       "bank": 37,
@@ -1140,7 +1155,7 @@
      }
     ],
     "other_bank": 8,
-    "raw": 66,
+    "raw": 48,
     "refusals": {},
     "refused": 0
    },
@@ -1175,38 +1190,38 @@
      "phase": "catch"
     },
     {
-     "accepted": 35,
-     "frame": 11561,
+     "accepted": 11,
+     "frame": 11784,
      "phase": "hunt"
     },
     {
-     "accepted": 49,
-     "frame": 12065,
+     "accepted": 31,
+     "frame": 12344,
      "phase": "battle"
     },
     {
-     "accepted": 50,
-     "frame": 13125,
+     "accepted": 32,
+     "frame": 13396,
      "phase": "post_battle"
     },
     {
-     "accepted": 51,
-     "frame": 13127,
+     "accepted": 33,
+     "frame": 13398,
      "phase": "done"
     }
    ],
    "qualification_attempt_id": "requal-crystal-battle-n14b",
    "refusals": {
     "active": {
-     "after_hex": "00000b",
-     "before_hex": "00000b",
-     "reason": "...nk/.claude/worktrees/gen2-foundation/lua/gen2/writes.lua:150: active faint timing is not qualified",
+     "after_hex": "000013",
+     "before_hex": "000013",
+     "reason": "C:/Users/howar/AppData/Local/Temp/fs1/lua/gen2/writes.lua:150: active faint timing is not qualified",
      "refused": true,
      "slot": 0
     },
     "overworld": {
-     "after_hex": "00000d",
-     "before_hex": "00000d",
+     "after_hex": "00000f",
+     "before_hex": "00000f",
      "reason": "not in a battle",
      "refused": true,
      "slot": 1
@@ -1218,25 +1233,25 @@
    "title": "crystal",
    "trace": [
     {
-     "frame": 12431,
+     "frame": 12703,
      "party_mon": 0,
      "seq": 1,
      "what": "fit_check"
     },
     {
-     "frame": 12671,
+     "frame": 12942,
      "party_mon": 0,
      "seq": 3,
      "what": "pkmn_loop"
     },
     {
-     "frame": 12763,
+     "frame": 13034,
      "party_mon": 1,
      "seq": 4,
      "what": "fit_check"
     },
     {
-     "frame": 12835,
+     "frame": 13106,
      "party_mon": 1,
      "seq": 5,
      "what": "pkmn_loop"
@@ -1667,14 +1682,14 @@
    ],
    "qualification_attempt_id": "requal-crystal-battle-n14b",
    "reset": {
-    "cartram_sha256": "3a91724ef0bc2fca6d5c626fc79881866e5b5c2ef0a06137b50440ad108ef884",
+    "cartram_sha256": "d82eb8b2c42256b6a55130664ff3d3f5ebd4c112e588c2f949b904881953e02d",
     "flushed": true,
     "frame": 15996
    },
    "result": "PASS",
    "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
    "save": {
-    "cartram_sha256": "b600a4faf427e7843c6bef43c0952319d078499c310a05e6851ea866ea373cb1",
+    "cartram_sha256": "bd334c27026576379c1d03c420354655ab82a8fc07a0caf54a2ffca0eb9e8eb3",
     "flushed": true,
     "frame": 15796
    },
@@ -1685,13 +1700,13 @@
   },
   "boxes_reload": {
    "attempt_id": "u2-crystal_boxes_reload",
-   "boot_cartram_sha256": "0db41629f559bc16ab537d87fea16cb2bf07ede6d0d908eba249d3721d1a1cc9",
+   "boot_cartram_sha256": "213c0cbc2a813235d86c6e79e5854475e360ecf1f05a4f9d3357fea8cac4c8ae",
    "catch": null,
    "control": null,
    "core_mode": "CGB",
    "evidence_level": "PHYSICAL",
    "fixture": "crystal_battle",
-   "fixture_sha256": "5f1162755c3ca2bccd1310f1f666025ec67a70c5d980fa6170fc6843207f0031",
+   "fixture_sha256": "cb0669a535c501b37eb9046997c725289bb7cfca3c4d82e1232cbf61bc105f5a",
    "harness_write_scopes": [],
    "input_mode": "normal_buttons",
    "layout": {
@@ -1781,7 +1796,7 @@
   },
   "boxes_reset": {
    "attempt_id": "u2-crystal_boxes_reset",
-   "boot_cartram_sha256": "3a91724ef0bc2fca6d5c626fc79881866e5b5c2ef0a06137b50440ad108ef884",
+   "boot_cartram_sha256": "d82eb8b2c42256b6a55130664ff3d3f5ebd4c112e588c2f949b904881953e02d",
    "catch": null,
    "control": {
     "active_hex": "00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
@@ -1792,7 +1807,7 @@
    "core_mode": "CGB",
    "evidence_level": "PHYSICAL",
    "fixture": "crystal_battle",
-   "fixture_sha256": "f4bb3096b12b2556feb23f56ba3c416c6ea09dc7f84b0b6f97026b09909d301c",
+   "fixture_sha256": "85d097ab8ec5c0dfd9a43526314b86f7d59ee3820c68e5632a7b884058787d9f",
    "harness_write_scopes": [
     "u2-box-ops"
    ],
@@ -2025,19 +2040,19 @@
    ],
    "qualification_attempt_id": "requal-crystal-battle-n14b",
    "reset": {
-    "cartram_sha256": "0db41629f559bc16ab537d87fea16cb2bf07ede6d0d908eba249d3721d1a1cc9",
+    "cartram_sha256": "213c0cbc2a813235d86c6e79e5854475e360ecf1f05a4f9d3357fea8cac4c8ae",
     "flushed": true,
     "frame": 4903
    },
    "result": "PASS",
    "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
    "save": {
-    "cartram_sha256": "5c26dd2a4ab3b3564ed7ebfa11bafc9ac6e9c94749c82c3b61be8bb192f136c8",
+    "cartram_sha256": "6f7aa69d5419c6c8957f459cac26b1e0bd88cb2361fa4244cd4eb6deab1073e2",
     "flushed": true,
     "frame": 4010
    },
    "save2": {
-    "cartram_sha256": "0db41629f559bc16ab537d87fea16cb2bf07ede6d0d908eba249d3721d1a1cc9",
+    "cartram_sha256": "213c0cbc2a813235d86c6e79e5854475e360ecf1f05a4f9d3357fea8cac4c8ae",
     "flushed": true,
     "frame": 4707
    },
@@ -2048,11 +2063,11 @@
   "reload": {
    "attempt_id": "u2-crystal_town_reload",
    "battle_model": null,
-   "boot_cartram_sha256": "ea9862d3671fb66cd19542aff92ccc0dd7f671c48a801b8478d423a5d8446721",
+   "boot_cartram_sha256": "128aafe3419b2f96d5e3464f7d9e65afb6672022730c637f83b93a6def4db798",
    "core_mode": "CGB",
    "evidence_level": "PHYSICAL",
    "fixture": "crystal_town",
-   "fixture_sha256": "1331b2c42a5b450b8f9c94a39d7ee015ed53c574f0f6b6a4902294b6f527c076",
+   "fixture_sha256": "f5fcd088e61828bb33cf79af8523ead2059edf15f362923af8672c8c2783c142",
    "harness_write_scopes": [],
    "input_mode": "normal_buttons",
    "liveness": {
@@ -2244,7 +2259,7 @@
    "result": "PASS",
    "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
    "save": {
-    "cartram_sha256": "ea9862d3671fb66cd19542aff92ccc0dd7f671c48a801b8478d423a5d8446721",
+    "cartram_sha256": "128aafe3419b2f96d5e3464f7d9e65afb6672022730c637f83b93a6def4db798",
     "flushed": true,
     "frame": 4487,
     "mon_hp": 34,
@@ -2275,7 +2290,7 @@
      "write": {
       "after_hex": "0014",
       "before_hex": "0014",
-      "reason": "...nk/.claude/worktrees/gen2-foundation/lua/gen2/writes.lua:95: write ownership refused",
+      "reason": "C:/Users/howar/AppData/Local/Temp/fs1/lua/gen2/writes.lua:122: write ownership refused",
       "refused": true,
       "slot": 0
      }
@@ -2301,7 +2316,7 @@
      "write": {
       "after_hex": "0014",
       "before_hex": "0014",
-      "reason": "...nk/.claude/worktrees/gen2-foundation/lua/gen2/writes.lua:95: write ownership refused",
+      "reason": "C:/Users/howar/AppData/Local/Temp/fs1/lua/gen2/writes.lua:122: write ownership refused",
       "refused": true,
       "slot": 0
      }
@@ -2326,7 +2341,7 @@
      "write": {
       "after_hex": "0014",
       "before_hex": "0014",
-      "reason": "...nk/.claude/worktrees/gen2-foundation/lua/gen2/writes.lua:95: write ownership refused",
+      "reason": "C:/Users/howar/AppData/Local/Temp/fs1/lua/gen2/writes.lua:122: write ownership refused",
       "refused": true,
       "slot": 0
      }
@@ -2351,7 +2366,7 @@
      "write": {
       "after_hex": "0014",
       "before_hex": "0014",
-      "reason": "...nk/.claude/worktrees/gen2-foundation/lua/gen2/writes.lua:95: write ownership refused",
+      "reason": "C:/Users/howar/AppData/Local/Temp/fs1/lua/gen2/writes.lua:122: write ownership refused",
       "refused": true,
       "slot": 0
      }

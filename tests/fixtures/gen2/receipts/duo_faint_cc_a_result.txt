@@ -1,52 +1,50 @@
 DUO_GEN2 {"attempt":1,"case":"crystal_battle","fixture_sha256":"f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6","player":"a","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","scenario":"gen2_faint","title":"crystal"}
-CLIENT {"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","poison_faint","save_completed","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"}
+CLIENT {"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"}
 JITTER requested=0 applied=0 attempt=1
   phase title @1
   phase continue @3180
 TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":46401,"panel":false,"
-HELLO {"frame":3303,"ot_id":46401}
+HELLO {"ball_count":10,"frame":3303,"has_pokeballs":true,"ot_id":46401}
   phase loaded @3303
 RX resolved_areas
 RX config
+RX dead_keys
 BOOTED {"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
 MYKEY 0 F794:B541:9E
-  phase walk @3469 xy=53,12
-  phase battle @3762 xy=53,12
-ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":5405,"key":"9289:B541:10","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":16}
-TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":13,"in_box":false,"key":"9289:B541:10","level":2,"maxHP":13,"nickname":"PIDGEY","player":"a","seq":43,"species_id":16,"stats":{"level":2,"maxHP":
-CAPTURE_SENT {"frame":5405,"key":"9289:B541:10","seq":43}
-CAUGHT 9289:B541:10
-RX box_mon key=9289:B541:10
-TX {"event":"safe","player":"a","seq":44}
-TX {"event":"stats_cache","key":"9289:B541:10","player":"a","seq":47,"stats":{"level":2,"maxHP":13}}
+  phase walk @3346 xy=53,12
+  phase battle @3593 xy=53,12
+RX hud_show
+RX_TEXT {"cmd":"hud_show","frame":6542,"text":"Partner caught SENTRET in Route 29"}
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":8546,"key":"7872:B541:A1","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":161}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":15,"in_box":false,"key":"7872:B541:A1","level":3,"maxHP":15,"nickname":"SENTRET","player":"a","seq":88,"species_id":161,"stats":{"level":3,"maxHP
+CAPTURE_SENT {"frame":8546,"key":"7872:B541:A1","seq":88}
+CAUGHT 7872:B541:A1
 RX play_sound sound=25
 RX msgbox
-RX_TEXT {"cmd":"msgbox","frame":10472,"text":"PIDGEY and PIDGEY linked!"}
-RX party_mon key=9289:B541:10
-TX {"event":"sync_retrieve_done","key":"9289:B541:10","player":"a","seq":215}
-  phase save @10473 xy=53,12
-  phase saved @11138 xy=53,12
+RX_TEXT {"cmd":"msgbox","frame":8548,"text":"SENTRET and SENTRET linked!"}
+RX party_mon key=7872:B541:A1
+TX {"event":"safe","player":"a","seq":90}
+TX {"event":"sync_retrieve_done","key":"7872:B541:A1","player":"a","seq":93}
+  phase save @8613 xy=53,12
+  phase saved @9278 xy=53,12
 MYKEY 0 F794:B541:9E
-MYKEY 1 9289:B541:10
-LINK_SAVE {"cartram_bytes":32768,"cartram_sha256":"23cd1d8bb8c4dae18a754d32eca48145b9f51e6950a6a4a02db4bbfacfb604e1","client_saves":1,"frame":11168,"gate_saves":1,"key":"9289:B541:10","save_completed_frame":11138,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/e2e_gen2_faint_live3-cc-faint_a_link_save.SaveRAM"}
-  phase settle @11196 xy=53,12
-  phase walk @11332 xy=53,12
-  phase battle @11578 xy=53,12
-TX {"event":"safe","player":"a","seq":265}
-  phase walk @12374 xy=53,12
-  phase battle @12825 xy=53,12
-ENGINE_FAINT {"cause":"battle","frame":22135,"key":"9289:B541:10","site_id":"battle_faint","slot":1}
-TX {"area_id":"route_29","event":"faint","key":"9289:B541:10","player":"a","seq":492}
-FAINT_SENT {"frame":22135,"key":"9289:B541:10","seq":492}
-RX memorialize key=9289:B541:10
+MYKEY 1 7872:B541:A1
+LINK_SAVE {"cartram_bytes":32768,"cartram_sha256":"d6a307cbf733ec9a52e460faadd988deb2301839d082b73df6079bc911002cc3","client_saves":1,"frame":9308,"gate_saves":1,"key":"7872:B541:A1","save_completed_frame":9278,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_faint_s491_a_link_save.SaveRAM"}
+  phase settle @9308 xy=53,12
+  phase walk @9471 xy=53,12
+  phase battle @9791 xy=52,12
+ENGINE_FAINT {"cause":"battle","frame":17569,"key":"7872:B541:A1","site_id":"battle_faint","slot":1}
+TX {"area_id":"route_29","event":"faint","key":"7872:B541:A1","player":"a","seq":309}
+FAINT_SENT {"frame":17569,"key":"7872:B541:A1","seq":309}
+RX memorialize key=7872:B541:A1
 RX game_over
-TX {"event":"safe","player":"a","seq":510}
-MEMORIAL_PREIMAGE {"frame":22722,"key":"9289:B541:10","nickname_raw_hex":"8f88838684985050505050","ot_raw_hex":"8287918892505050505050","raw_hex":"100021000000b54100000900000000000000000000928923000000450042020200000000000d00070006000700060006","slot":1,"species_marker":16}
-TX {"box":13,"event":"memorialize_done","key":"9289:B541:10","player":"a","seq":513}
-MEMORIAL_ACK {"box":13,"event":"memorialize_done","frame":22722,"key":"9289:B541:10"}
-  phase fainted @22723 xy=53,12
-  phase save @22753 xy=53,12
-  phase saved @23419 xy=53,12
-SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"a73a24bad85b93d99ef22b3325fd71300faa95059afd34d191342f459abc04a7","client_saves":2,"flushed_matches":true,"frame":23449,"gate_saves":2,"save_completed_frame":23419,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/saveram_gen2_faint_live3-cc-faint_a/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/e2e_gen2_faint_live3-cc-faint_a_witness.SaveRAM"}
-RECEIPT {"attempt":1,"booted":{"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":5405,"key":"9289:B541:10","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":16},"case":"crystal_battle","client":{"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_party","capture_party_finalized","poison_faint","save_completed","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"},"faint":{"cause":"battle","frame":22135,"key":"9289:B541:10","site_id":"battle_faint","slot":1},"faint_sent":{"frame":22135,"key":"9289:B541:10","seq":492},"fixture_sha256":"f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6","harness_write_scopes":[],"hello":{"frame":3303,"ot_id":46401},"input_mode":"normal_buttons","key":"9289:B541:10","link_save":{"cartram_bytes":32768,"cartram_sha256":"23cd1d8bb8c4dae18a754d32eca48145b9f51e6950a6a4a02db4bbfacfb604e1","client_saves":1,"frame":11168,"gate_saves":1,"key":"9289:B541:10","save_completed_frame":11138,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/e2e_gen2_faint_live3-cc-faint_a_link_save.SaveRAM"},"memorial":{"ack":{"box":13,"event":"memorialize_done","frame":22722,"key":"9289:B541:10"},"preimage_frame":22722},"player":"a","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","save":{"cartram_bytes":32768,"cartram_sha256":"a73a24bad85b93d99ef22b3325fd71300faa95059afd34d191342f459abc04a7","client_saves":2,"flushed_matches":true,"frame":23449,"gate_saves":2,"save_completed_frame":23419,"saveram_bytes":32790,"saveram_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/saveram_gen2_faint_live3-cc-faint_a/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"E:/Google Drive/SLink/.claude/worktrees/gen2-live3/patch/build/e2e_gen2_faint_live3-cc-faint_a_witness.SaveRAM"},"scenario":"gen2_faint","schema":"gen2-duo-faint-v1","title":"crystal"}
-RESULT: PASS (fainted 9289:B541:10)
+TX {"event":"safe","player":"a","seq":326}
+MEMORIAL_PREIMAGE {"frame":18156,"key":"7872:B541:A1","nickname_raw_hex":"92848d9391849350505050","ot_raw_hex":"8287918892505050505050","raw_hex":"a10021000000b54100001b00000000000000000000787220000000450043020300000000000f00080007000600070007","slot":1,"species_marker":161}
+TX {"box":13,"event":"memorialize_done","key":"7872:B541:A1","player":"a","seq":329}
+MEMORIAL_ACK {"box":13,"event":"memorialize_done","frame":18156,"key":"7872:B541:A1","ticks":322}
+  phase fainted @18157 xy=52,12
+  phase save @18187 xy=52,12
+  phase saved @18853 xy=52,12
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"aed9a81563020c6ad6d3ef50f53b8e251750c66d108ed6ea0eefaf2132747065","client_saves":2,"flushed_matches":true,"frame":18883,"gate_saves":2,"save_completed_frame":18853,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_faint_s491_a/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_faint_s491_a_witness.SaveRAM"}
+RECEIPT {"attempt":1,"booted":{"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":8546,"key":"7872:B541:A1","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":161},"case":"crystal_battle","client":{"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"},"faint":{"cause":"battle","frame":17569,"key":"7872:B541:A1","site_id":"battle_faint","slot":1},"faint_sent":{"frame":17569,"key":"7872:B541:A1","seq":309},"fixture_sha256":"f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3303,"has_pokeballs":true,"ot_id":46401},"input_mode":"normal_buttons","key":"7872:B541:A1","link_save":{"cartram_bytes":32768,"cartram_sha256":"d6a307cbf733ec9a52e460faadd988deb2301839d082b73df6079bc911002cc3","client_saves":1,"frame":9308,"gate_saves":1,"key":"7872:B541:A1","save_completed_frame":9278,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_faint_s491_a_link_save.SaveRAM"},"memorial":{"ack":{"box":13,"event":"memorialize_done","frame":18156,"key":"7872:B541:A1","ticks":322},"preimage_frame":18156},"player":"a","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","save":{"cartram_bytes":32768,"cartram_sha256":"aed9a81563020c6ad6d3ef50f53b8e251750c66d108ed6ea0eefaf2132747065","client_saves":2,"flushed_matches":true,"frame":18883,"gate_saves":2,"save_completed_frame":18853,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_faint_s491_a/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_faint_s491_a_witness.SaveRAM"},"scenario":"gen2_faint","schema":"gen2-duo-faint-v1","title":"crystal"}
+RESULT: PASS (fainted 7872:B541:A1)

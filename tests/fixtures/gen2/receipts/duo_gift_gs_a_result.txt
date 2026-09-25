@@ -11,28 +11,28 @@ RX config
 RX dead_keys
 BOOTED {"frame":3369,"map_group":24,"map_number":5,"party_count":1,"x":5,"y":3}
 MYKEY 0 4C29:C4A6:A1
-  phase poison @3369 xy=5,3
-ENGINE_FAINT {"cause":"poison","frame":3397,"key":"4C29:C4A6:A1","site_id":"poison_faint","slot":0}
-TX {"area_id":"new_bark_town","event":"faint","key":"4C29:C4A6:A1","player":"a","seq":4}
-FAINT_SENT {"frame":3397,"key":"4C29:C4A6:A1","seq":4}
-ENGINE_WHITEOUT {"frame":3830,"party":[{"hp":0,"key":"4C29:C4A6:A1"}],"site_id":"whiteout_before_heal"}
-TX {"event":"whiteout","player":"a","seq":19}
-TX {"area_id":"goldenrod_city","event":"area_enter","loc_name":"GOLDENROD CITY","player":"a","seq":20}
-  phase to-house @3855 xy=15,28
-  phase talk @4396 xy=2,7
-ENGINE_CAPTURE {"acquisition":"gift","area_id":"goldenrod_city","destination":"party","frame":6110,"key":"ABF0:C4A6:85","level":20,"site_id":"gift_party_finalized","slot":1,"species_id":133}
-TX {"area_id":"goldenrod_city","event":"capture","gift":true,"held_item_id":0,"hp":54,"in_box":false,"key":"ABF0:C4A6:85","level":20,"maxHP":54,"nickname":"EEVEE","player":"a","seq":97,"species_id":133,"stats":{"level":20,"
-CAPTURE_SENT {"frame":6110,"key":"ABF0:C4A6:85","seq":97}
+  phase poison @3400 xy=5,3
+ENGINE_FAINT {"cause":"poison","frame":3428,"key":"4C29:C4A6:A1","site_id":"poison_faint","slot":0}
+TX {"area_id":"new_bark_town","event":"faint","key":"4C29:C4A6:A1","player":"a","seq":5}
+FAINT_SENT {"frame":3428,"key":"4C29:C4A6:A1","seq":5}
+ENGINE_WHITEOUT {"frame":3861,"party":[{"hp":0,"key":"4C29:C4A6:A1"}],"site_id":"whiteout_before_heal"}
+TX {"event":"whiteout","player":"a","seq":20}
+TX {"area_id":"goldenrod_city","event":"area_enter","loc_name":"GOLDENROD CITY","player":"a","seq":21}
+  phase to-house @3886 xy=15,28
+  phase talk @4426 xy=2,7
+ENGINE_CAPTURE {"acquisition":"gift","area_id":"goldenrod_city","destination":"party","frame":6139,"key":"7FB1:C4A6:85","level":20,"site_id":"gift_party_finalized","slot":1,"species_id":133}
+TX {"area_id":"goldenrod_city","event":"capture","gift":true,"held_item_id":0,"hp":58,"in_box":false,"key":"7FB1:C4A6:85","level":20,"maxHP":58,"nickname":"EEVEE","player":"a","seq":98,"species_id":133,"stats":{"level":20,"
+CAPTURE_SENT {"frame":6139,"key":"7FB1:C4A6:85","seq":98}
 RX play_sound sound=25
 RX msgbox
-RX_TEXT {"cmd":"msgbox","frame":6152,"text":"EEVEE and EEVEE linked!"}
-RX party_mon key=ABF0:C4A6:85
-TX {"event":"sync_retrieve_done","key":"ABF0:C4A6:85","player":"a","seq":106}
-  phase done @6360 xy=1,3
-  phase save @6390 xy=1,3
-  phase saved @7084 xy=1,3
+RX_TEXT {"cmd":"msgbox","frame":6242,"text":"EEVEE and EEVEE linked!"}
+RX party_mon key=7FB1:C4A6:85
+TX {"event":"sync_retrieve_done","key":"7FB1:C4A6:85","player":"a","seq":107}
+  phase done @6389 xy=1,3
+  phase save @6419 xy=1,3
+  phase saved @7113 xy=1,3
 MYKEY 0 4C29:C4A6:A1
-MYKEY 1 ABF0:C4A6:85
-SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"7a6217afa65125553e0eff3fae84a2d956562efdccca30e9e4d5f1ab1cd0eaf5","client_saves":1,"flushed_matches":true,"frame":7114,"gate_saves":1,"save_completed_frame":7084,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/d2/patch/build/saveram_gen2_gift_ggs_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/d2/patch/build/e2e_gen2_gift_ggs_a_witness.SaveRAM"}
-RECEIPT {"attempt":1,"capture":{"acquisition":"gift","area_id":"goldenrod_city","destination":"party","frame":6110,"key":"ABF0:C4A6:85","level":20,"site_id":"gift_party_finalized","slot":1,"species_id":133},"case":"gold_town","client":{"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"},"fixture_sha256":"eccb431195e1c9071b7459910727f4430bf174594970a720f0902920b28ae185","harness_write_scopes":[],"input_mode":"normal_buttons","key":"ABF0:C4A6:85","player":"a","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","save":{"cartram_bytes":32768,"cartram_sha256":"7a6217afa65125553e0eff3fae84a2d956562efdccca30e9e4d5f1ab1cd0eaf5","client_saves":1,"flushed_matches":true,"frame":7114,"gate_saves":1,"save_completed_frame":7084,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/d2/patch/build/saveram_gen2_gift_ggs_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/d2/patch/build/e2e_gen2_gift_ggs_a_witness.SaveRAM"},"scenario":"gen2_gift","schema":"gen2-duo-gift-v1","synth":"gold_synth_bill","title":"gold"}
-RESULT: PASS (bill linked ABF0:C4A6:85)
+MYKEY 1 7FB1:C4A6:85
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"e25aff30f5364c05843275f1a0bfb603bc8b85ad7b6980bb639825ab2d658ab7","client_saves":1,"flushed_matches":true,"frame":7143,"gate_saves":1,"save_completed_frame":7113,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_gift_s821_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_gift_s821_a_witness.SaveRAM"}
+RECEIPT {"attempt":1,"capture":{"acquisition":"gift","area_id":"goldenrod_city","destination":"party","frame":6139,"key":"7FB1:C4A6:85","level":20,"site_id":"gift_party_finalized","slot":1,"species_id":133},"case":"gold_town","client":{"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"},"fixture_sha256":"eccb431195e1c9071b7459910727f4430bf174594970a720f0902920b28ae185","harness_write_scopes":[],"input_mode":"normal_buttons","key":"7FB1:C4A6:85","player":"a","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","save":{"cartram_bytes":32768,"cartram_sha256":"e25aff30f5364c05843275f1a0bfb603bc8b85ad7b6980bb639825ab2d658ab7","client_saves":1,"flushed_matches":true,"frame":7143,"gate_saves":1,"save_completed_frame":7113,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_gift_s821_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_gift_s821_a_witness.SaveRAM"},"scenario":"gen2_gift","schema":"gen2-duo-gift-v1","synth":"gold_synth_bill","title":"gold"}
+RESULT: PASS (bill linked 7FB1:C4A6:85)
