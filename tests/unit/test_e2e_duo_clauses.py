@@ -759,3 +759,16 @@ def test_the_explode_ko_phrase_is_cross_checked_against_the_body():
     if f'return false, "{duo.EXPLODE_KO_MISS}"' not in body:
         pytest.skip("the Lua explode-KO phrase has not landed yet (Lua card EX-2)")
     assert duo.GEN1_RNG_REASON_CLASS[duo.EXPLODE_KO_MISS] == "CAUSE_RNG"
+
+
+def test_a_type_clause_partner_gone_is_the_consequence_of_the_ball_miss():
+    """type_clause_new (gen1_pure lane, 2026-09-25): A's only ball missed, so A ended
+    out-of-balls and B's verdict wait saw its partner finish. B's phrase is the EFFECT of A's
+    miss, so the pair earns the ball-miss retry instead of a FINAL fail on attempt 1."""
+    gone = "RESULT: FAIL (no type-clause verdict (partner-gone))"
+    assert duo.classify_gen1_result(gone) == "CONSEQUENCE"
+    limit = duo.scenario_attempt_limit("type_clause_new", "gen1_pure")
+    assert duo.retryable_gen1_rng("gen1_pure", {"a": duo.RNG_OUT_OF_BALLS, "b": gone}, 1,
+                                  limit=limit)
+    # a verdict wait that simply ran out is not the partner's miss
+    assert duo.classify_gen1_result("RESULT: FAIL (no type-clause verdict (false))") == "FINAL"

@@ -399,6 +399,9 @@ GEN1_RNG_REASON_CLASS = {
     # B died before parking (duo_gen1_main.lua:1608-1612). CONSEQUENCE, not FINAL, or B's
     # explode-KO phrase could never earn the pair a retry.
     "B did not park in the required faint window": "CONSEQUENCE",
+    # type_clause_new: the verdict wait saw the partner finish first -- its only ball missed
+    # (duo_gen1_main.lua type-clause body). Only a retry when the partner's miss is CAUSE_RNG.
+    "no type-clause verdict (partner-gone)": "CONSEQUENCE",
     # species_clause_new's own budget phrase: B's battle cap (8) exhausted by duplicates. The
     # reroll observation and the hunt's RNG budget are the same attempts, so this one is
     # retryable on ANY attempt (see retryable_gen1_rng), unlike the ball miss.
@@ -1802,9 +1805,17 @@ class DuoRun:
             for key in self.gcfg["fixture"].values():
                 play.staged_rom(key)  # space-free relative ROM paths for BizHawk
         self._clear_attempt_artifacts()
-        for inst in ("a", "b"):
+        # F-4 tests B's CONTRACT verdict. A's randomized hello commits the run's artifact kind,
+        # after which a pure clean B is refused earlier by the mixed-kinds gate, which records
+        # no admission verdict (server.py _mixed_games_error), so B must hello alone first.
+        b_first = self.scenario == "admit_randomized_new"
+        for inst in (("b", "a") if b_first else ("a", "b")):
             with self._timed(f"launch_{inst}"):
                 self.launch_instance(inst, seed=not self.cfg.get("cold_boot"))
+            if b_first and inst == "b":
+                self.wait_for("clean B's contract verdict before A launches", lambda: (
+                    ((self._status() or {}).get("players") or {}).get("b", {})
+                    .get("admission") == "rejected"), 120)
         print("[duo] two EmuHawk instances launched")
 
     def _check_bizhawk_paths(self):

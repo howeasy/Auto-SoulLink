@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -1777,3 +1778,29 @@ def test_soft_reset_oracle_refuses_a_stat_for_a_mon_that_was_never_booted(tmp_pa
         b'{"links": [], "mon_stats": {"CCCC:3333:03": {"level": 7}}}')
     with pytest.raises(RuntimeError, match=r"mon_stats gained \['CCCC:3333:03'\]"):
         run.assert_soft_reset_saved({"a": _SOFT_RESET_A, "b": _SOFT_RESET_B})
+
+
+def test_admit_randomized_launches_b_first_and_waits_for_its_contract_verdict():
+    """F-4 is B's CONTRACT verdict. If A's randomized hello commits the run's artifact kind
+    first, a pure clean B is refused earlier by the mixed-kinds gate (server.py
+    _mixed_games_error), which records no admission verdict, and the live wait times out
+    (gen1_pure lane, 2026-09-25). B hellos alone first; A launches only after B's verdict."""
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.scenario = "admit_randomized_new"
+    run.cfg = dict(duo.SCENARIOS["admit_randomized_new"])
+    run.battery_boot = False
+    run._clear_attempt_artifacts = lambda: None
+    run._timed = lambda phase: contextlib.nullcontext()
+    order = []
+    run.launch_instance = lambda inst, **_kw: order.append(inst)
+
+    def status():
+        order.append("status")
+        verdict = "rejected" if order.count("b") and order.count("status") > 1 else "admitted"
+        return {"players": {"b": {"admission": verdict, "admission_reason": "x"}}}
+
+    run._status = status
+    run.wait_for = lambda desc, pred, timeout, **_kw: duo.wait_for(desc, pred, timeout, interval=0)
+    run.start_instances()
+    assert order[0] == "b" and order[-1] == "a" and order.index("a") > order.index("status")
+    assert order.count("a") == order.count("b") == 1
