@@ -15,6 +15,7 @@ Run dirs:  data/runs/<run_id>/links.json
 
 import argparse
 import asyncio
+import contextlib
 import hashlib
 import html
 import json
@@ -24,6 +25,7 @@ import re
 import shutil
 import signal
 import sys
+from collections import defaultdict
 from datetime import UTC, datetime
 
 try:
@@ -266,8 +268,10 @@ ROM_EXTS = (".gb", ".gbc")
 UPLOAD_MAX = 64 << 20
 REGISTRY_PATH = os.path.join(MANAGER_DIR, "registry.json")
 
-# How long a freshly spawned server gets to die on startup (a taken port) before it counts as up.
-SPAWN_GRACE_S = 1.5
+# A freshly spawned server counts as up only once its HTTP port answers /api/status; imports
+# alone can take seconds on a slow (Google Drive) disk, so being alive is not being ready.
+SPAWN_READY_S = 20.0
+SPAWN_POLL_S = 0.25
 # Reserved port for the manager itself
 MANAGER_HTTP_PORT = 8090
 # Port ranges for spawned runs
@@ -489,11 +493,28 @@ def _build_launcher(run: dict, player: str, host: str) -> str:
 
 # ── Subprocess management ───────────────────────────────────────────────────
 
-def _is_alive(pid: int | None) -> bool:
+def _create_time(pid: int) -> float | None:
+    """The process's start time, recorded beside its pid so a reused pid is never trusted."""
+    if not PSUTIL_AVAILABLE:
+        return None
+    try:
+        return psutil.Process(pid).create_time()
+    except psutil.Error:
+        return None
+
+
+def _is_alive(pid: int | None, created: float | None = None) -> bool:
+    """Whether `pid` is still OUR process. With a recorded create time, a pid now held by
+    another process counts as dead. Without psutil (or for runs recorded before create
+    times were kept) the bare pid is all there is to go on."""
     if pid is None:
         return False
     if PSUTIL_AVAILABLE:
-        return psutil.pid_exists(pid)
+        try:
+            started = psutil.Process(pid).create_time()
+        except psutil.Error:
+            return False
+        return created is None or abs(started - created) < 0.01
     # Fallback: send signal 0 (works on Unix; on Windows psutil is strongly preferred)
     try:
         os.kill(pid, 0)
@@ -539,13 +560,33 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
         if _errf != asyncio.subprocess.DEVNULL:
             _errf.close()
     log.info(f"Spawned run {run['run_id']} (PID {proc.pid}) TCP={run['tcp_port']} HTTP={run['http_port']}")
-    # A server that cannot bind its ports exits within the first second. Catch that here,
-    # with its own words, rather than recording a "running" run whose page would then show
-    # whatever else answers on that HTTP port.
+    # Ready means answering: poll the child's HTTP port until it answers or the child exits
+    # (a taken port, a bad ROM path, a stack trace), within SPAWN_READY_S. The answer must come
+    # while OUR child is still alive -- a server that cannot bind exits, and whatever else holds
+    # that port must not be read as this run. /api/status does not name its run, so alive plus
+    # answering is the ownership check.
+    probe_host = "127.0.0.1" if host in ("", "0.0.0.0", "::") else host
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + SPAWN_READY_S
+    exited = asyncio.ensure_future(proc.wait())
     try:
-        await asyncio.wait_for(proc.wait(), timeout=SPAWN_GRACE_S)
-    except TimeoutError:
-        return proc.pid
+        while True:
+            try:
+                await asyncio.wait_for(asyncio.shield(exited), timeout=SPAWN_POLL_S)
+                why = f"the run's server exited on startup (code {proc.returncode})"
+                break
+            except TimeoutError:
+                pass
+            if await _http_ready(probe_host, run["http_port"]) and not exited.done():
+                return proc.pid
+            if loop.time() >= deadline:
+                why = f"the run's server did not answer on HTTP {run['http_port']} within {SPAWN_READY_S:g} s"
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()         # our own child, hung: never leave it holding the ports
+                break
+    finally:
+        if not exited.done():
+            exited.cancel()
     reason = ""
     try:
         with open(_spawn_log, encoding="utf-8", errors="replace") as f:
@@ -553,14 +594,24 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
         reason = next((ln for ln in reversed(lines) if ln.startswith("Cannot ")), lines[-1] if lines else "")
     except OSError:
         pass
-    raise RuntimeError(f"the run's server exited on startup (code {proc.returncode})"
-                       + (f": {reason}" if reason else "") + f" — see {_spawn_log}")
+    raise RuntimeError(why + (f": {reason}" if reason else "") + f" — see {_spawn_log}")
 
 
-def _kill_run(pid: int):
-    """Kill a server.py subprocess by PID."""
-    if not _is_alive(pid):
-        return
+async def _http_ready(host: str, port: int) -> bool:
+    try:
+        async with aiohttp.ClientSession() as session, session.get(
+            f"http://{host}:{port}/api/status", timeout=aiohttp.ClientTimeout(total=2)
+        ) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def _kill_run(pid: int, created: float | None = None) -> bool:
+    """Kill a server.py subprocess by PID. Returns whether our process is gone. A pid whose
+    create time does not match is some other process: it counts as gone and is never killed."""
+    if not _is_alive(pid, created):
+        return True
     try:
         if PSUTIL_AVAILABLE:
             p = psutil.Process(pid)
@@ -569,10 +620,12 @@ def _kill_run(pid: int):
                 p.wait(timeout=5)
             except psutil.TimeoutExpired:
                 p.kill()
+                p.wait(timeout=5)
         else:
             os.kill(pid, signal.SIGTERM if hasattr(signal, "SIGTERM") else signal.CTRL_C_EVENT)
     except Exception as e:
         log.warning(f"Could not kill PID {pid}: {e}")
+    return not _is_alive(pid, created)
 
 
 # ── Health check — reconcile registry with actual process table ─────────────
@@ -687,9 +740,10 @@ def _reconcile(runs: list[dict]) -> bool:
     """Check live processes; update status for dead ones. Adopt orphan dirs. Returns True if any changed."""
     changed = False
     for run in runs:
-        if run["status"] == "running" and not _is_alive(run.get("pid")):
+        if run["status"] == "running" and not _is_alive(run.get("pid"), run.get("pid_created")):
             run["status"] = "stopped"
             run["pid"] = None
+            run["pid_created"] = None
             changed = True
     if _adopt_orphans(runs):
         changed = True
@@ -710,6 +764,11 @@ class RunManager:
         self.bind_host = bind_host
         self.manager_port = manager_port
         self._stream_pin_id: str | None = None  # run_id pinned for stream overlays
+        # One lock per run: a start (spawn + readiness wait) and a stop serialize, so two
+        # clicks cannot spawn twice and a stop mid-start is not overwritten by the start.
+        # ponytail: in-process only. Two Managers sharing one registry are not locked
+        # against each other (documented limitation: run one Manager per data dir).
+        self._run_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
     def _get(self) -> list[dict]:
         runs = _load_registry()
@@ -728,7 +787,7 @@ class RunManager:
         # A plain read. _get() reconciles and can rewrite registry.json, and this is
         # called on every 2 s overlay poll from every browser source.
         runs = _load_registry()
-        running = [r for r in runs if r.get("status") == "running" and _is_alive(r.get("pid"))]
+        running = [r for r in runs if r.get("status") == "running" and _is_alive(r.get("pid"), r.get("pid_created"))]
         if not running:
             return None
         if self._stream_pin_id:
@@ -813,7 +872,8 @@ class RunManager:
 
     async def handle_run_board(self, request: web.Request) -> web.Response:
         """GET /runs/{run_id}/board — the `#content` fragment the shell polls."""
-        run = _find_run(_load_registry(), request.match_info["run_id"])
+        # _get reconciles: a server that died reads as stopped on the next poll, not "running".
+        run = _find_run(self._get(), request.match_info["run_id"])
         if run is None:
             raise web.HTTPNotFound(text="Run not found")
         ctx = self._board_context(run, await self._run_status(request, run))
@@ -943,82 +1003,91 @@ class RunManager:
         # Auto-start. The run exists either way; a start that fails is reported with its
         # reason so the creator can show it, rather than landing on a "running" run.
         start_error = ""
-        try:
-            pid = await _spawn_run(run, self.bind_host if self.bind_host != "0.0.0.0" else "0.0.0.0",
-                                   manager_port=self.manager_port)
-            run = _update_run(run_id, status="running", pid=pid) or run
-        except Exception as e:
-            start_error = str(e)
-            log.error(f"Failed to auto-start run {run_id}: {e}")
+        async with self._run_locks[run_id]:
+            try:
+                pid = await _spawn_run(run, self.bind_host, manager_port=self.manager_port)
+                run = _update_run(run_id, status="running", pid=pid, pid_created=_create_time(pid)) or run
+            except Exception as e:
+                start_error = str(e)
+                log.error(f"Failed to auto-start run {run_id}: {e}")
 
         return web.json_response({"ok": True, "run": run, "start_error": start_error})
 
     async def handle_start(self, request: web.Request) -> web.Response:
         run_id = request.match_info["run_id"]
-        runs = _load_registry()
-        run = _find_run(runs, run_id)
-        if run is None:
-            return web.json_response({"ok": False, "error": "Run not found"}, status=404)
-        if run["status"] == "archived":
-            return web.json_response({"ok": False, "error": "Archived runs cannot be started"}, status=400)
-        if run["status"] == "running" and _is_alive(run.get("pid")):
-            return web.json_response({"ok": True, "message": "Already running"})
-        try:
-            pid = await _spawn_run(run, self.bind_host if self.bind_host != "0.0.0.0" else "0.0.0.0",
-                                   manager_port=self.manager_port)
-        except Exception as e:
-            return web.json_response({"ok": False, "error": str(e)}, status=500)
-        _update_run(run_id, status="running", pid=pid)
-        return web.json_response({"ok": True, "pid": pid})
+        async with self._run_locks[run_id]:
+            runs = _load_registry()          # re-read inside the lock: a start may just have finished
+            run = _find_run(runs, run_id)
+            if run is None:
+                return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+            if run["status"] == "archived":
+                return web.json_response({"ok": False, "error": "Archived runs cannot be started"}, status=400)
+            if run["status"] == "running" and _is_alive(run.get("pid"), run.get("pid_created")):
+                return web.json_response({"ok": True, "message": "Already running"})
+            try:
+                pid = await _spawn_run(run, self.bind_host, manager_port=self.manager_port)
+            except Exception as e:
+                return web.json_response({"ok": False, "error": str(e)}, status=500)
+            _update_run(run_id, status="running", pid=pid, pid_created=_create_time(pid))
+            return web.json_response({"ok": True, "pid": pid})
 
     async def handle_stop(self, request: web.Request) -> web.Response:
         run_id = request.match_info["run_id"]
-        runs = _load_registry()
-        run = _find_run(runs, run_id)
-        if run is None:
-            return web.json_response({"ok": False, "error": "Run not found"}, status=404)
-        pid = run.get("pid")
-        if pid:
-            _kill_run(pid)
-        run["status"] = "stopped"
-        run["pid"] = None
-        _save_registry(runs)
-        return web.json_response({"ok": True})
+        async with self._run_locks[run_id]:
+            runs = _load_registry()
+            run = _find_run(runs, run_id)
+            if run is None:
+                return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+            pid = run.get("pid")
+            if pid and not _kill_run(pid, run.get("pid_created")):
+                # Keep the pid: the server is still up, and a later stop must be able to retry.
+                return web.json_response({"ok": False, "error": f"Could not stop the run's server (PID {pid})"},
+                                         status=500)
+            run["status"] = "stopped"
+            run["pid"] = None
+            run["pid_created"] = None
+            _save_registry(runs)
+            return web.json_response({"ok": True})
 
     async def handle_archive(self, request: web.Request) -> web.Response:
         run_id = request.match_info["run_id"]
-        runs = _load_registry()
-        run = _find_run(runs, run_id)
-        if run is None:
-            return web.json_response({"ok": False, "error": "Run not found"}, status=404)
-        pid = run.get("pid")
-        if pid and _is_alive(pid):
-            _kill_run(pid)
-        run["status"] = "archived"
-        run["pid"] = None
-        _save_registry(runs)
-        return web.json_response({"ok": True})
+        async with self._run_locks[run_id]:
+            runs = _load_registry()
+            run = _find_run(runs, run_id)
+            if run is None:
+                return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+            pid = run.get("pid")
+            if pid and not _kill_run(pid, run.get("pid_created")):
+                return web.json_response({"ok": False, "error": f"Could not stop the run's server (PID {pid})"},
+                                         status=500)
+            run["status"] = "archived"
+            run["pid"] = None
+            run["pid_created"] = None
+            _save_registry(runs)
+            return web.json_response({"ok": True})
 
     async def handle_delete(self, request: web.Request) -> web.Response:
         run_id = request.match_info["run_id"]
-        runs = _load_registry()
-        run = _find_run(runs, run_id)
-        if run is None:
-            return web.json_response({"ok": False, "error": "Run not found"}, status=404)
-        # Stop the process if running
-        pid = run.get("pid")
-        if pid and _is_alive(pid):
-            _kill_run(pid)
-        # Remove data directory
-        data_dir = os.path.join(MANAGER_DIR, run_id)
-        if os.path.isdir(data_dir):
-            shutil.rmtree(data_dir, ignore_errors=True)
-            log.info(f"Deleted data directory for run {run_id}")
-        # Remove from registry
-        runs = [r for r in runs if r["run_id"] != run_id]
-        _save_registry(runs)
-        log.info(f"Deleted run {run_id}")
-        return web.json_response({"ok": True})
+        async with self._run_locks[run_id]:
+            runs = _load_registry()
+            run = _find_run(runs, run_id)
+            if run is None:
+                return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+            # Stop the process if running; never delete the data out from under a live server
+            pid = run.get("pid")
+            if pid and not _kill_run(pid, run.get("pid_created")):
+                return web.json_response({"ok": False, "error": f"Could not stop the run's server (PID {pid})"},
+                                         status=500)
+            # Remove data directory
+            data_dir = os.path.join(MANAGER_DIR, run_id)
+            if os.path.isdir(data_dir):
+                shutil.rmtree(data_dir, ignore_errors=True)
+                log.info(f"Deleted data directory for run {run_id}")
+            # Remove from registry
+            runs = [r for r in runs if r["run_id"] != run_id]
+            _save_registry(runs)
+            log.info(f"Deleted run {run_id}")
+            return web.json_response({"ok": True})
 
     async def handle_launcher(self, request: web.Request) -> web.Response:
         """Serve a launcher .lua file with the connect host derived from the request."""

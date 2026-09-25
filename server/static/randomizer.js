@@ -12,6 +12,21 @@
  * answer. Every refusal names the setting or the file to fix, so the reason is surfaced
  * verbatim.
  */
+// Arrow / Home / End on a role="radiogroup" of chip buttons: move to the next enabled chip and
+// select it (the chips carry a roving tabindex, so Tab enters the group at the checked one).
+function radioKeys(e) {
+  var step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1, Home: 'first', End: 'last' }[e.key];
+  if (!step) return;
+  var radios = Array.prototype.filter.call(e.currentTarget.querySelectorAll('[role="radio"]'), function (r) { return !r.disabled; });
+  if (!radios.length) return;
+  e.preventDefault();
+  var i = radios.indexOf(document.activeElement);
+  var next = step === 'first' ? radios[0] : step === 'last' ? radios[radios.length - 1]
+    : radios[(Math.max(i, 0) + step + radios.length) % radios.length];
+  next.focus();
+  next.click();
+}
+
 function defaultSpec(form) {
   return Object.fromEntries(form.options.map(function (o) { return [o.key, o.default]; }));
 }

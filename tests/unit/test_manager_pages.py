@@ -59,7 +59,7 @@ async def test_home_lists_runs_running_first_with_live_counts(manager_client, mo
         {"run_id": "gone", "name": "Archived Run", "created_at": "2026-09-21T00:00:00", "tcp_port": 54324,
          "http_port": 8084, "status": "archived", "pid": None, "game": "gen1"},
     ])
-    monkeypatch.setattr(manager, "_is_alive", lambda pid: pid == 4242)
+    monkeypatch.setattr(manager, "_is_alive", lambda pid, created=None: pid == 4242)
 
     async def fake_live(self, request, run):
         return {"live": run["run_id"]}

@@ -46,14 +46,16 @@
         <div class="mk-form">
           <label class="mk-field big">
             <span>Name</span>
-            <input class="big" type="text" x-model="draft.name" placeholder="Kanto Duo" autofocus @keydown.enter="create()">
+            <input class="big" type="text" x-model="draft.name" placeholder="Kanto Duo" autofocus @keydown.enter="create()"
+                   :aria-describedby="draft.name.trim() ? null : 'run-name-hint'" :aria-invalid="tried && !draft.name.trim()">
           </label>
 
           <section class="mk-zone">
-            <h2 class="mk-h2"><span>Game</span><i></i><em>any two cartridges of a family can link</em></h2>
-            <div class="mk-games">
+            <h2 class="mk-h2"><span id="game-label">Game</span><i></i><em>any two cartridges of a family can link</em></h2>
+            <div class="mk-games" role="radiogroup" aria-labelledby="game-label" @keydown="radioKeys($event)">
               <template x-for="g in form.games" :key="g.key">
-                <button type="button" class="mk-gchip" :class="[draft.game === g.key ? 'active' : '', g.key === '' ? 'detect' : '']" @click="draft.game = g.key" x-text="g.label"></button>
+                <button type="button" class="mk-gchip" role="radio" :aria-checked="draft.game === g.key" :tabindex="draft.game === g.key ? 0 : -1"
+                        :class="[draft.game === g.key ? 'active' : '', g.key === '' ? 'detect' : '']" @click="draft.game = g.key" x-text="g.label"></button>
               </template>
             </div>
           </section>
@@ -65,11 +67,12 @@
                 <template x-for="key in group.keys" :key="key">
                   <label class="mk-opt described" :class="!support(key).ok ? 'off-unavailable' : (draft.opts[key] ? 'on' : '')">
                     {# a greyed row that is ALWAYS on for this game shows as checked #}
-                    <input type="checkbox" :checked="support(key).always || draft.opts[key]" @change="draft.opts[key] = $event.target.checked" :disabled="!support(key).ok">
+                    <input type="checkbox" :checked="support(key).always || draft.opts[key]" @change="draft.opts[key] = $event.target.checked" :disabled="!support(key).ok"
+                           :aria-labelledby="'opt-' + key + '-name'" :aria-describedby="'opt-' + key + '-desc' + (support(key).ok ? '' : ' opt-' + key + '-why')">
                     <span class="mk-opt-txt">
-                      <span class="mk-opt-name" x-text="form.options[key].label"></span>
-                      <span class="mk-opt-desc" x-text="form.options[key].desc"></span>
-                      <span class="mk-opt-why" x-show="!support(key).ok" x-text="support(key).why"></span>
+                      <span class="mk-opt-name" :id="'opt-' + key + '-name'" x-text="form.options[key].label"></span>
+                      <span class="mk-opt-desc" :id="'opt-' + key + '-desc'" x-text="form.options[key].desc"></span>
+                      <span class="mk-opt-why" :id="'opt-' + key + '-why'" x-show="!support(key).ok" x-text="support(key).why"></span>
                     </span>
                   </label>
                 </template>
@@ -89,9 +92,9 @@
 
           <div class="mk-form-actions">
             <button class="mk-btn primary big" :disabled="!draft.name.trim() || busy || (gen1() && !cartsReady())" @click="create()" x-text="busy ? (stage || 'Creating…') : createLabel()"></button>
-            <span class="mk-sub" x-show="!draft.name.trim()">Give it a name.</span>
+            <span class="mk-sub" id="run-name-hint" x-show="!draft.name.trim()">Give it a name.</span>
             <span class="mk-sub" x-show="draft.name.trim() && gen1() && !cartsReady()" x-text="cartsWhy()"></span>
-            <span class="mk-sub" x-show="error" x-text="error" style="color:var(--c-dead)"></span>
+            <span class="mk-sub" role="alert" x-text="error" style="color:var(--c-dead)"></span>
           </div>
         </div>
 
@@ -262,7 +265,7 @@
       form: form,
       ports: window.SLINK_NEXT_PORTS,
       draft: { name: '', game: '', opts: { battle_calc: true, pc_trade_npc: true } },
-      busy: false, error: '', stage: '',
+      busy: false, error: '', stage: '', tried: false,
       init() {
         var self = this;
         this.watchRandomizer();
@@ -281,6 +284,7 @@
       on() { var self = this; return Object.keys(form.options).filter(function (k) { return self.draft.opts[k] && self.support(k).ok; }); },
       async create() {
         var name = this.draft.name.trim();
+        this.tried = true;
         if (!name || this.busy) return;
         this.busy = true; this.error = ''; this.stage = 'Creating…';
         try {
