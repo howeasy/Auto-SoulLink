@@ -2289,11 +2289,13 @@ class SLinkServer:
             """Add sprite_html, species_name, and move_details to each enemy_party entry."""
             bs = dict(self.battle_state.get(pid, {"in_battle": False, "enemy_party": []}))
             enriched = []
-            for em in bs.get("enemy_party", []):
+            for em in bs.get("enemy_party") or []:
                 em2 = dict(em)
                 sid = em2.get("species_id", 0)
                 form = em2.get("form", 0)
-                if sid and not em2.get("sprite_html"):
+                # Rendered |safe, so it is always ours: a client-sent sprite_html is dropped.
+                em2.pop("sprite_html", None)
+                if sid:
                     em2["sprite_html"] = self._get_sprite_html(sid, form)
                 if sid and not em2.get("species_name"):
                     em2["species_name"] = self.adapter.species_name(sid)
