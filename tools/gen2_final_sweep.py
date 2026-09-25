@@ -198,8 +198,15 @@ def pin(out, root=REPO):
     """Install the PASS cells' receipts from a sweep's `out` and repin them; returns the receipts no row names."""
     summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
     pins = {rel: sha for cell in summary["cells"] if cell["ok"] for rel, sha in cell.get("receipts", {}).items()}
-    for rel in pins:
-        shutil.copyfile(out / "receipts" / rel, root / rel)
+    # gen2_reconnect: the runner's final <a>_result.txt is the last relaunch; the proof's "a" is the initial phase
+    # (e2e_duo _archive_gen2_witnesses keeps it as a_initial), so that file takes the committed "a" name
+    sources = {rel: rel for rel in pins}
+    for rel in [r for r in pins if r.endswith("_a_initial_result.txt")]:
+        target = rel.replace("_a_initial_result.txt", "_a_result.txt")
+        sources[target], pins[target] = rel, pins.pop(rel)
+        del sources[rel]
+    for rel, src in sources.items():
+        shutil.copyfile(out / "receipts" / src, root / rel)
     named = set()
     for name in PIN_FILES:
         path = root / name

@@ -108,3 +108,22 @@ def test_only_rng_stalls_earn_the_one_retry():
     for text in ("trade: stack canary is not a real push", "no memorialize ack for the released partner X",
                  "wave-c: b: a rebuilt mon is not at full HP", "LostBattle ran (a whiteout)"):
         assert not sweep.RNG_STALL.search(text), text
+
+
+def test_pin_gives_the_reconnect_initial_phase_the_committed_a_name(tmp_path):
+    repo, out = tmp_path / "repo", tmp_path / "out"
+    stem = "tests/fixtures/gen2/receipts/duo_reconnect_cc_"
+    for suffix, text in (("a_result.txt", "wrong_save relaunch\n"), ("a_initial_result.txt", "initial phase\n")):
+        (out / "receipts" / (stem + suffix)).parent.mkdir(parents=True, exist_ok=True)
+        (out / "receipts" / (stem + suffix)).write_text(text, encoding="utf-8")
+    (repo / stem).parent.mkdir(parents=True)
+    (repo / sweep.PIN_FILES[0]).parent.mkdir(parents=True, exist_ok=True)
+    (repo / sweep.PIN_FILES[0]).write_text(
+        '{"a": {"path": "' + stem + 'a_result.txt", "sha256": "' + "0" * 64 + '"}}\n', encoding="utf-8")
+    (repo / sweep.PIN_FILES[1]).write_text('{\n  "requirements": [\n  ]\n}\n', encoding="utf-8")
+    cells = [{"ok": True, "receipts": {stem + "a_result.txt": "1" * 64, stem + "a_initial_result.txt": "2" * 64}}]
+    (out / "summary.json").write_text(json.dumps({"cells": cells}), encoding="utf-8")
+    assert sweep.pin(out, root=repo) == []
+    assert (repo / (stem + "a_result.txt")).read_text(encoding="utf-8") == "initial phase\n"
+    assert not (repo / (stem + "a_initial_result.txt")).exists()
+    assert '"sha256": "' + "2" * 64 + '"' in (repo / sweep.PIN_FILES[0]).read_text(encoding="utf-8")
