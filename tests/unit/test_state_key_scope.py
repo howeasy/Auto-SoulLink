@@ -285,6 +285,9 @@ def _srv_two_links(tmp_path):
     srv.state, links = _two_links(tmp_path)
     srv.state.adapter = srv.adapter = Gen1Adapter(variant="red")
     srv.state.presentation_key_in_use = srv._presentation_key_in_use
+    # the snapshot before the test's own: the self-report proof needs old_key in it (cx-06ec4e8e F3)
+    srv.state._ingest_party_blobs("a", _snap(A1, A2))
+    srv.state._ingest_party_blobs("b", _snap(B1, B2))
     return srv, links
 
 
@@ -295,7 +298,8 @@ def _snap(*keys):
 
 def test_a_tick_reporting_the_new_key_before_the_key_change_is_the_same_mon(tmp_path):
     srv, (l1, l2) = _srv_two_links(tmp_path)
-    srv._dispatch("b", {"event": "tick", "party": _snap(ONIX, B2)})     # the tick wins the race
+    srv._dispatch("b", {"event": "tick", "party": _snap(ONIX, B2), "pc_boxes": [],
+                        "pc_boxes_generation": 1})                         # the tick wins the race
     cmds = srv._dispatch("b", {"event": "key_change", "old_key": B1, "new_key": ONIX,
                                "new_species": 0x5F, "reason": "npc_trade"})
     assert _named(cmds, "key_change_ack") and not _named(cmds, "key_change_rejected")
@@ -304,15 +308,16 @@ def test_a_tick_reporting_the_new_key_before_the_key_change_is_the_same_mon(tmp_
 
 def test_a_tick_first_true_duplicate_in_the_party_still_rejects(tmp_path):
     srv, (l1, l2) = _srv_two_links(tmp_path)
-    srv._dispatch("b", {"event": "tick", "party": _snap(ONIX, ONIX, B2)})   # B already had an Onix
+    srv._dispatch("b", {"event": "tick", "party": _snap(ONIX, ONIX, B2), "pc_boxes": [],
+                        "pc_boxes_generation": 1})                         # B already had an Onix
     cmds = srv._dispatch("b", {"event": "key_change", "old_key": B1, "new_key": ONIX, "reason": "npc_trade"})
     assert _named(cmds, "key_change_rejected") and l1.cause == "identity_lost"
 
 
 def test_a_tick_first_change_onto_a_boxed_twin_still_rejects(tmp_path):
     srv, (l1, l2) = _srv_two_links(tmp_path)
-    srv.pc_boxes["b"] = [{"box": 0, "slot": 0, "key": ONIX, "species_id": 0x5F}]
-    srv._dispatch("b", {"event": "tick", "party": _snap(ONIX, B2)})
+    srv._dispatch("b", {"event": "tick", "party": _snap(ONIX, B2), "pc_boxes_generation": 1,
+                        "pc_boxes": [{"box": 0, "slot": 0, "key": ONIX, "species_id": 0x5F}]})
     cmds = srv._dispatch("b", {"event": "key_change", "old_key": B1, "new_key": ONIX, "reason": "npc_trade"})
     assert _named(cmds, "key_change_rejected") and l1.cause == "identity_lost"
 
@@ -366,8 +371,11 @@ def test_box_twin_with_omitted_census_is_rejected(tmp_path):
 
 
 def test_a_client_without_a_census_generation_keeps_presence_semantics(tmp_path):
-    """Gen 3 today: no `pc_boxes_generation`, so an omitted census is not a rejection."""
+    """Gen 3 today: its foundation implements no `pc_boxes_generation`, so an omitted census is
+    not a rejection."""
+    from server.adapters.gen3_frlge import Gen3Adapter
     srv, (l1, l2) = _srv_two_links(tmp_path)
+    srv.state.adapter = srv.adapter = Gen3Adapter()
     srv._dispatch("b", {"event": "tick", "party": _snap5(ONIX, B2)})
     assert _named(_change5(srv, "b", B1), "key_change_ack")
 
@@ -442,3 +450,36 @@ def test_a_deep_ledger_keeps_a_snapshot_cheap(tmp_path):
     state.handle_event("b", {"event": "hello", "party": party})
     state.handle_event("b", {"event": "tick", "party": party})
     assert time.perf_counter() - t0 < 0.005
+
+
+
+# ── KEY-SCOPE-5 final round (OMP cx-06ec4e8e) ─────────────────────────────────────────────
+
+def test_a_census_foundation_without_a_generation_is_census_unavailable(tmp_path):
+    """F1: Gen 1/2 implement the generation, so a snapshot without one is no census at all --
+    never the legacy presence check, and never a death."""
+    srv, (l1, l2) = _srv_two_links(tmp_path)
+    srv._dispatch("b", {"event": "tick", "party": _snap5(ONIX, B2),
+                        "pc_boxes": [{"box": 0, "slot": 0, "key": ONIX, "species_id": 0x5F}]})
+    cmds = _change5(srv, "b", B1)
+    assert [c["reason"] for c in _named(cmds, "key_change_rejected")] == ["box census unavailable"]
+    assert l1.status == LinkStatus.ALIVE and l1.b.key == B1
+
+
+def test_a_box_mutation_makes_the_census_stale(tmp_path):
+    """F2: a deposit after the census may have boxed the twin: refuse until a newer generation."""
+    srv, (l1, l2) = _srv_two_links(tmp_path)
+    _tick5(srv, "b", _snap5(B1, B2, ONIX, no_blob=(2,)))
+    srv._dispatch("b", {"event": "party_to_box", "key": ONIX})
+    cmds = _change5(srv, "b", B1)
+    assert [c["reason"] for c in _named(cmds, "key_change_rejected")] == ["box census unavailable"]
+    assert l1.status == LinkStatus.ALIVE
+
+
+def test_self_report_needs_old_key_in_the_previous_snapshot(tmp_path):
+    """F3: a new key already in the PREVIOUS snapshot is another mon, not the changing one."""
+    srv, (l1, l2) = _srv_two_links(tmp_path)
+    _tick5(srv, "b", _snap5(B1, ONIX, B2))
+    _tick5(srv, "b", _snap5(ONIX, B2))
+    rej = _named(_change5(srv, "b", B1), "key_change_rejected")
+    assert rej and rej[0]["reason"].startswith("key collision") and l1.cause == "identity_lost"

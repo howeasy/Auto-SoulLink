@@ -136,6 +136,10 @@ local function wire_stages(raw)
     return { s(raw.attack), s(raw.defense), s(raw.speed), s(raw.special), 6, s(raw.accuracy), s(raw.evasion) }
 end
 
+-- KEY-SCOPE-5: key_change refusals that retire nothing. The alias stays, and the change goes out
+-- again after the next complete box census (send_tick). Every other reason is terminal (U5).
+Client.RETRYABLE_REJECTIONS = { ["box census unavailable"] = true, ["ambiguous key (trade clash)"] = true }
+
 function Client.new(p)
     local HelloSession = assert(p.hello_session, "shared hello_session factory required")
     local ReplyDispatch = assert(p.reply_dispatch, "shared reply_dispatch factory required")
@@ -352,6 +356,16 @@ function Client.new(p)
         self.box_cache, self.box_complete = cache, complete
         if complete then self.box_generation = self.box_generation + 1 end
         return cache
+    end
+
+    -- KEY-SCOPE-5: a change refused for a non-terminal reason goes out again once a complete box
+    -- census NEWER than the refusal has gone out (this tick carried it)
+    local function resend_refused_change()
+        local a = self.key_alias
+        if a and a.retry_gen and self.box_complete and self.box_generation > a.retry_gen then
+            a.retry_gen = nil
+            send("key_change", a.msg)
+        end
     end
 
     -- ── the writes gate (R-4, W-6) ───────────────────────────────────────────────────
@@ -656,9 +670,19 @@ function Client.new(p)
                 self.known_keys[a.old_key] = nil
                 self.key_alias = nil
             end
+            self.retired_alias[cmd.old_key] = nil
+        elseif c == "key_change_rejected" and Client.RETRYABLE_REJECTIONS[cmd.reason] then
+            -- KEY-SCOPE-5: nothing was retired; the alias stays and the change is re-sent after the
+            -- next complete box census (a census refusal asks for that census now)
+            local a = self.key_alias
+            if a and a.old_key == cmd.old_key then
+                a.retry_gen = self.box_generation
+                if cmd.reason == "box census unavailable" then self:rescan_boxes() end
+            end
+            log("[SLink-gen1] key_change refused (will retry): " .. tostring(cmd.reason) .. " " .. tostring(cmd.old_key))
         elseif c == "key_change_rejected" then
-            -- U5: the server kills the pair itself (force_faint/memorialize follow); here the
-            -- alias is dropped and the player is told why
+            -- U5 (a key collision): the server kills the pair itself (force_faint/memorialize
+            -- follow); here the alias is dropped and the player is told why
             local a = self.key_alias
             if a and a.old_key == cmd.old_key then
                 -- the cartridge cannot be rolled back (the DVs / species are already written), so
@@ -1411,8 +1435,9 @@ function Client.new(p)
                     self.key_alias = { old_key = old, new_key = key, evidence = record_evidence(mon), since = sig.frame }
                     observe_alias(self.key_alias, party)
                     -- snapshot records carry name BYTES only (party_from_snapshot), so decode here
-                    send("key_change", { old_key = old, new_key = key, new_species = mon.species,
-                                         reason = "evolution", new_nickname = reads.decode_name(mon.nickname_bytes) })
+                    self.key_alias.msg = { old_key = old, new_key = key, new_species = mon.species,
+                                           reason = "evolution", new_nickname = reads.decode_name(mon.nickname_bytes) }
+                    send("key_change", self.key_alias.msg)
                 else
                     log("[SLink-gen1] evolution of slot " .. tostring(pt.which) .. " (" .. key .. "): " .. why)
                 end
@@ -1457,8 +1482,9 @@ function Client.new(p)
             self.known_keys[key] = true
             self.key_alias = { old_key = pc.old_key, new_key = key, evidence = record_evidence(mon), since = sig.frame }
             observe_alias(self.key_alias, party)
-            send("key_change", { old_key = pc.old_key, new_key = key, new_species = mon.species,
-                                 reason = "npc_trade", new_nickname = reads.decode_name(mon.nickname_bytes) })
+            self.key_alias.msg = { old_key = pc.old_key, new_key = key, new_species = mon.species,
+                                   reason = "npc_trade", new_nickname = reads.decode_name(mon.nickname_bytes) }
+            send("key_change", self.key_alias.msg)
             self.pending_change = { kind = "rescan", frame = sig.frame }
         elseif k == "transform" then
             -- A2: recorded synchronously by on_transform; the key change settles after the
@@ -1569,8 +1595,9 @@ function Client.new(p)
                 self.known_keys[key] = true
                 self.key_alias = { old_key = pc.old_key, new_key = key, evidence = record_evidence(mon), since = self.frame }
                 observe_alias(self.key_alias, party)   -- a twin present now latches ambiguity for good
-                send("key_change", { old_key = pc.old_key, new_key = key, new_species = mon.species,
-                                     reason = KEY_CHANGE_REASON[pc.kind], new_nickname = mon.nickname })
+                self.key_alias.msg = { old_key = pc.old_key, new_key = key, new_species = mon.species,
+                                       reason = KEY_CHANGE_REASON[pc.kind], new_nickname = mon.nickname }
+                send("key_change", self.key_alias.msg)
                 if pc.kind == "transform" and pc.old_hp == 0 then
                     -- A2 backstop: the in-hook zero is unproven (T2 gate); the checkpoint
                     -- re-zero through the ordinary deferred path never revives a dead mon
@@ -1942,6 +1969,7 @@ function Client.new(p)
             safari_type = battle.safari_type, -- pureRGB only (PLAN §3.5); nil elsewhere
             awaiting_save = awaiting_save_field(), -- BURIAL-VISIBLE: the pair board's "awaiting save"
         })
+        resend_refused_change()
     end
 
     -- ── in-game SLINK TRADE (companion patch receptionist; T-rows) ───────────────────
@@ -2263,10 +2291,19 @@ function Client.new(p)
                 for _, r in pairs(self.retired_alias) do observe_alias(r, party) end
             end
         end
-        if connected and self.frame % Client.TICK_INTERVAL == 0 then self:send_tick("tick") end
+        if connected and self.frame % Client.TICK_INTERVAL == 0 then
+            -- KEY-SCOPE-5: an incomplete box scan is retried, at most once per tick
+            if self.hello_sent and not self.box_complete then self:rescan_boxes() end
+            self:send_tick("tick")
+        end
         if self.pending_safe and connected then
             local battle = reads.read_battle()
-            if battle.in_battle == 0 then self.pending_safe = false; send("safe", {}) end
+            if battle.in_battle == 0 then
+                -- the battle may have boxed a catch: a fresh census rides the safe (KEY-SCOPE-5)
+                self.pending_safe = false
+                self:rescan_boxes()
+                send("safe", { pc_boxes = pc_boxes_wire(), pc_boxes_generation = box_generation() })
+            end
         end
         if self.frame % Client.BURIAL_NAG_FRAMES == 0 and burial_waiting() then show_burial() end
         self.replies:step()

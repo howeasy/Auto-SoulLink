@@ -542,6 +542,9 @@ class Gen2GSCAdapter(GameAdapter):
     def supports_abilities(self):
         return False
 
+    def reports_box_census(self):
+        return True   # lua/gen2/client.lua pc_boxes_generation
+
     def supports_info_panel(self):
         # The native panel ships in the SLink companion overlay (P4.1e/f), not a clean build.
         return self._artifact_kind == "overlay"

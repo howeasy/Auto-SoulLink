@@ -263,6 +263,12 @@ class GameRulesAdapter(ABC):
         """
         return 0
 
+    def reports_box_census(self) -> bool:
+        """KEY-SCOPE-5: whether this foundation's Lua client stamps each complete PC-box scan
+        with `pc_boxes_generation`. When True, a snapshot without one is NO census (a key_change
+        is refused, retiring nothing); when False the server keeps the legacy presence check."""
+        return False
+
     def supports_info_panel(self) -> bool:
         """Whether this game's Lua client can render the native in-game info panel.
 

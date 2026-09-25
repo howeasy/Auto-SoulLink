@@ -3708,3 +3708,37 @@ def test_the_enemy_on_the_wire_carries_its_max_hp(world):
         world.step(30)
         assert "maxHP" not in world.events("tick")[-1]["enemy_party"][0], (hi, lo)
     world.assert_all_conform()
+
+
+def test_a_refused_change_is_resent_after_a_newer_census_and_a_failed_scan_retries(world):
+    """KEY-SCOPE-5 (cx-06ec4e8e F5/F6), the Gen 1 client: a non-terminal refusal keeps the alias
+    and re-sends after a newer complete census; a collision retires; an incomplete scan retries."""
+    world.connect()
+    world.step(30)
+    msg = {"old_key": "0001:0002:03", "new_key": "0004:0005:06", "new_species": 25, "reason": "evolution"}
+    alias = {"old_key": msg["old_key"], "new_key": msg["new_key"], "msg": world.lua.table_from(msg)}
+    world.client.key_alias = world.lua.table_from(alias)
+    world.reply({"cmd": "key_change_rejected", "old_key": msg["old_key"], "new_key": msg["new_key"],
+                 "reason": "box census unavailable"})
+    world.step(30)
+    assert world.client.key_alias is not None and world.client.retired_alias[msg["old_key"]] is None
+    assert [{k: m[k] for k in msg} for m in world.events("key_change")] == [msg]
+    world.reply({"cmd": "key_change_ack", "old_key": msg["old_key"], "new_key": msg["new_key"], "migrated": True})
+    world.step(30)
+    assert world.client.key_alias is None
+    # a collision is terminal: retired, never re-sent
+    world.client.key_alias = world.lua.table_from(alias)
+    world.reply({"cmd": "key_change_rejected", "old_key": msg["old_key"], "new_key": msg["new_key"],
+                 "reason": "key collision: party_keys"})
+    world.step(60)
+    assert world.client.key_alias is None and world.client.retired_alias[msg["old_key"]] is not None
+    assert len(world.events("key_change")) == 1
+    # an incomplete scan retries by itself on the next tick
+    world.bus[world.ram["wBoxCount"]] = 0xFF
+    world.client.rescan_boxes(world.client)
+    world.step(30)
+    assert "pc_boxes_generation" not in world.events("tick")[-1]
+    world.bus[world.ram["wBoxCount"]] = 0
+    world.step(30)
+    assert world.events("tick")[-1].get("pc_boxes_generation", 0) >= 1
+    world.assert_all_conform()

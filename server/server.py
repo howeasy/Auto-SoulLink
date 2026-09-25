@@ -4678,15 +4678,18 @@ class SLinkServer:
         successful full box scan). A snapshot carrying a newer generation with `pc_boxes`
         replaces the census; a snapshot without both (or with an older generation) makes it
         stale until a newer generation arrives. A client that never sends a generation is
-        legacy: its (possibly empty) `pc_boxes` stays presence-based, as before. Deposits are
-        not added: no Gen 1/2 client reports their box (cx-8f3a6ce9 F9), and the next complete
-        scan carries them."""
+        legacy: its (possibly empty) `pc_boxes` stays presence-based, as before -- unless its
+        foundation implements the generation (`reports_box_census`), where a missing one is no
+        census. Any box mutation makes the census stale until the next complete scan."""
         event, bc = msg.get("event"), self.box_census[player_id]
         if event == "hello":
             bc.update(capable="pc_boxes_generation" in msg, gen=-1, boxes=None)
         elif "pc_boxes_generation" in msg:
             bc["capable"] = True
-        if event not in ("hello", "tick", "safe") or not bc["capable"]:
+        if event in ("party_to_box", "box_to_party", "stats_cache", "release", "memorialize_done"):
+            bc["boxes"] = None                    # a box mutation: stale until a newer generation
+            return
+        if event not in ("hello", "tick", "safe") or not self._census_capable(player_id):
             return
         gen, boxes = msg.get("pc_boxes_generation"), msg.get("pc_boxes")
         complete = type(gen) is int and gen >= 0 and isinstance(boxes, list)
@@ -4694,8 +4697,13 @@ class SLinkServer:
             bc.update(gen=gen, boxes=[dict(e) for e in boxes if isinstance(e, dict)])
         elif complete and gen == bc["gen"] and bc["boxes"] is not None:
             pass                                  # the census we hold, resent
-        elif "party" in msg:                      # a snapshot without a usable census
+        elif "party" in msg or event == "safe":   # a snapshot (or a post-battle safe) without one
             bc["boxes"] = None
+
+    def _census_capable(self, player_id: str) -> bool:
+        """KEY-SCOPE-5: this player's census is generation-stamped -- by foundation (the client
+        implements it), or because this client session sent a generation."""
+        return self.box_census[player_id]["capable"] or self.adapter_for(player_id).reports_box_census()
 
     def _journal_trade(self, rec: dict) -> None:
         """events.json: one trade_<outcome> entry per native-trade outcome; key = the trade token."""
@@ -4718,8 +4726,7 @@ class SLinkServer:
             return True
         unavailable = False
         for pid in pids:
-            bc = self.box_census[pid]
-            boxes = bc["boxes"] if bc["capable"] else self.pc_boxes.get(pid, [])
+            boxes = self.box_census[pid]["boxes"] if self._census_capable(pid) else self.pc_boxes.get(pid, [])
             if boxes is None:
                 unavailable = True
                 continue

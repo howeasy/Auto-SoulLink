@@ -34,7 +34,7 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
                   "is_doubles": "bool", "pc_boxes": "list", "pc_boxes_generation": "int",
                   "ball_count": "int", "badges": "int",
                   "kanto_badges": "int", "trainer_name": "str"}),
-    "safe": ({}, {}),  # same optional set as tick; Gen 3 sends none
+    "safe": ({}, {"pc_boxes": "list", "pc_boxes_generation": "int"}),  # Gen 1/2: the battle-end census; Gen 3 sends none
     "area_enter": ({"area_id": "str"}, {"loc_name": "str"}),
     "capture": ({"key": "key", "area_id": "str"},
                 {"species_id": "int", "level": "int", "hp": "int", "maxHP": "int", "nickname": "str",

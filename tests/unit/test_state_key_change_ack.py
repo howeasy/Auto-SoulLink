@@ -263,6 +263,8 @@ def test_a_change_on_a_live_link_queues_no_death(st):
 def _server(tmp_path) -> SLinkServer:
     srv = SLinkServer(data_dir=str(tmp_path))
     srv.state.adapter = srv.adapter = Gen1Adapter(variant="red")
+    # Gen 1 stamps its box scans (KEY-SCOPE-5): start from a complete, empty census
+    srv.box_census = {pid: {"capable": True, "gen": 1, "boxes": []} for pid in ("a", "b")}
     return srv
 
 
@@ -294,11 +296,11 @@ def test_presentation_caches_stay_put_on_rejection(tmp_path):
 def test_a_live_presentation_key_is_a_collision_but_the_memorial_box_is_not(tmp_path):
     srv = _server(tmp_path)
     mem = srv.adapter.memorial_box_index
-    srv.pc_boxes["b"] = [{"box": mem, "slot": 0, "key": NEW}]
+    srv.box_census["b"]["boxes"] = [{"box": mem, "slot": 0, "key": NEW}]
     assert srv._presentation_key_in_use(NEW) is False, "a buried key in the memorial box is reusable"
-    srv.pc_boxes["b"] = [{"box": 0, "slot": 0, "key": NEW}]
+    srv.box_census["b"]["boxes"] = [{"box": 0, "slot": 0, "key": NEW}]
     assert srv._presentation_key_in_use(NEW) is True
-    srv.pc_boxes["b"] = []
+    srv.box_census["b"]["boxes"] = []
     srv._mon_cache[NEW] = {"level": 1}
     assert srv._presentation_key_in_use(NEW) is False, "_mon_cache is never pruned; a cache hit is not a collision"
     srv.party_details["b"][NEW] = {"level": 1}
@@ -504,9 +506,9 @@ def test_overflow_memorial_box_key_is_reusable(tmp_path):
     assert srv._memorial_box_indices() == {mem}, "one full memorial box needs no overflow"
     _link(srv.state, a_key="DEAD:30B8:10", b_key="DEAD:7B0B:10", status=LinkStatus.DEAD, area="r_x")
     assert srv._memorial_box_indices() == {mem, mem - 1}
-    srv.pc_boxes["a"] = [{"box": mem - 1, "slot": 0, "key": NEW}]
+    srv.box_census["a"]["boxes"] = [{"box": mem - 1, "slot": 0, "key": NEW}]
     assert srv._presentation_key_in_use(NEW, "a") is False
-    srv.pc_boxes["a"] = [{"box": mem - 2, "slot": 0, "key": NEW}]
+    srv.box_census["a"]["boxes"] = [{"box": mem - 2, "slot": 0, "key": NEW}]
     assert srv._presentation_key_in_use(NEW, "a") is True
 
 
@@ -558,7 +560,7 @@ def test_debug_inject_and_reset_keep_the_box_census_consistent(tmp_path):
     call({"player": "a", "event": "tick", "party": [], "pc_boxes": [], "pc_boxes_generation": 3})
     assert srv.box_census["a"] == {"capable": True, "gen": 3, "boxes": []}
     call({"player": "a", "event": "party_to_box", "key": NEW})
-    assert srv.box_census["a"]["boxes"] == []
+    assert srv.box_census["a"]["boxes"] is None, "a deposit makes the census stale (cx-06ec4e8e F2)"
     asyncio.run(srv.handle_reset_api(None))
     assert srv.box_census["a"] == {"capable": False, "gen": -1, "boxes": None}
 
@@ -616,3 +618,15 @@ async def test_a_refused_hello_does_not_record_its_rom_type(tmp_path):
         assert srv.connected_players["b"]["rom_type"] != "firered"
     finally:
         await close()
+
+
+
+def test_a_ledgered_change_on_a_new_live_mon_is_not_a_replay(st):
+    """cx-06ec4e8e F4: O->N was accepted and that pair is buried; a new live mon now holds O."""
+    first = _link(st)
+    assert _one(_change(st), "key_change_ack")["migrated"] is True
+    first.status = LinkStatus.DEAD
+    st.party_keys["a"].discard(NEW)
+    second = _link(st, b_key="CCDD:7B0B:11", area="route_2")
+    assert _one(_change(st), "key_change_ack")["migrated"] is True
+    assert second.a.key == NEW and st.entry_for("a", NEW) is second

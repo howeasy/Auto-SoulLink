@@ -2269,3 +2269,40 @@ def test_a_complete_box_scan_is_stamped_with_a_generation():
 
     falsify(check, mutant("lua/gen2/client.lua", ("            complete = complete and mons ~= nil -- any failed box read: not a census\n",
                                                   "")))
+
+
+def test_a_refused_change_is_resent_after_a_newer_census_and_a_failed_scan_retries():
+    """KEY-SCOPE-5 (cx-06ec4e8e F5/F6): "box census unavailable" and the ambiguity latch retire
+    nothing, so the alias stays and the change goes out again after a complete census newer than
+    the refusal; a collision is terminal. A failed scan retries on the next tick by itself."""
+    def check(world):
+        world.hello()
+        world.frames(30)
+        msg = {"old_key": "0001:0002:03", "new_key": "0004:0005:06", "new_species": 25, "reason": "evolution"}
+        world.client.key_alias = world.lua.table_from({"old_key": msg["old_key"], "new_key": msg["new_key"],
+                                                       "msg": world.lua.table_from(msg)})
+        world.reply({"cmd": "key_change_rejected", "old_key": msg["old_key"], "new_key": msg["new_key"],
+                     "reason": "box census unavailable"})
+        world.frames(30)
+        assert world.client.key_alias is not None and world.client.retired_alias[msg["old_key"]] is None
+        resent = world.sent("key_change")
+        assert [{k: m[k] for k in msg} for m in resent] == [msg], "re-sent once, after the fresh census"
+        lines = world.sent()
+        i = max(j for j, m in enumerate(lines) if m["event"] == "key_change")
+        assert lines[i - 1]["event"] == "tick" and lines[i - 1].get("pc_boxes_generation") == 2
+        world.reply({"cmd": "key_change_ack", "old_key": msg["old_key"], "new_key": msg["new_key"], "migrated": True})
+        world.frames(30)
+        assert world.client.key_alias is None
+        # a failed scan is retried by itself on the next tick
+        world.field("wCurBox", 99)
+        world.client.pending_rescan = True
+        world.frames(30)
+        assert world.sent("tick")[-1].get("pc_boxes_generation") is None
+        world.field("wCurBox", 0)
+        world.frames(30)
+        assert world.sent("tick")[-1].get("pc_boxes_generation") == 3
+
+    falsify(check, mutant("lua/gen2/client.lua", ("        resend_refused_change()\n", "")))
+    falsify(check, mutant("lua/gen2/client.lua", (
+        "        if self.pending_rescan or (not self.box_complete and self.frame % Client.TICK_INTERVAL == 0) then\n",
+        "        if self.pending_rescan then\n")))

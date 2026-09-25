@@ -281,6 +281,11 @@ class SoulLinkState:
         # KEY-SCOPE-5: {player: {key: slot}} of the latest and the previous party snapshot (in-memory)
         self.party_slots: dict[str, dict[str, int]] = {}
         self.prev_party_slots: dict[str, dict[str, int]] = {}
+        # KEY-SCOPE-5 (cx-06ec4e8e F3): per player, snapshot number, and per key the snapshot its
+        # current presence began in and the last snapshot it was seen in (in-memory)
+        self.snapshot_no: dict[str, int] = {}
+        self.key_streak: dict[str, dict[str, int]] = {}
+        self.key_last_seen: dict[str, dict[str, int]] = {}
         # KEY-SCOPE-5: accepted {old_key, new_key} migrations per player, newest last. Persisted.
         self.key_migration_ledger: dict[str, deque] = {
             pid: deque(maxlen=KEY_MIGRATION_LEDGER_LIMIT) for pid in ("a", "b")}
@@ -3388,7 +3393,9 @@ class SoulLinkState:
                  "migrated": migrated})
 
         # KEY-SCOPE-5: the ledger answers a replay even after a reconnect re-reported old_key.
-        if {"old_key": old_key, "new_key": new_key} in self.key_migration_ledger[player_id]:
+        live_old = self.entry_for(player_id, old_key)
+        if ((live_old is None or live_old.status != LinkStatus.ALIVE)       # F4: a new live mon on old_key
+                and {"old_key": old_key, "new_key": new_key} in self.key_migration_ledger[player_id]):
             log.info(f"[{player_id}] key_change replay for {new_key[:8]} (ledger) — already migrated")
             msg["_key_change_status"] = "replayed"
             _ack(False)
@@ -3419,8 +3426,13 @@ class SoulLinkState:
             # party snapshot holds new_key exactly once and old_key nowhere, that party hit IS the
             # changing mon; a real twin shows as a second copy, or old_key still in the party.
             # KEY-SCOPE-5: counted on the RAW snapshot, before blob filtering drops entries.
+            # cx-06ec4e8e F3: and new_key first appeared only after old_key was last seen -- a
+            # new_key already present beside old_key is another mon.
             raw = self.party_key_census.get(player_id)
-            self_report = raw is not None and raw.get(new_key, 0) == 1 and old_key not in raw
+            last = self.key_last_seen.get(player_id, {})
+            self_report = (raw is not None and raw.get(new_key, 0) == 1 and old_key not in raw
+                           and old_key in last
+                           and self.key_streak[player_id].get(new_key, 0) > last[old_key])
             if self_report:
                 refs -= {"party_keys", "partner_blobs"}
             hook = self.presentation_key_in_use
@@ -3936,6 +3948,13 @@ class SoulLinkState:
         self.party_key_census[player_id] = dict(Counter(
             m["key"] for m in party if isinstance(m, dict) and isinstance(m.get("key"), str) and m["key"]))
         self.prev_party_slots[player_id] = self.party_slots.get(player_id) or {}
+        n = self.snapshot_no[player_id] = self.snapshot_no.get(player_id, 0) + 1
+        streak = self.key_streak.setdefault(player_id, {})
+        last = self.key_last_seen.setdefault(player_id, {})
+        for k in self.party_key_census[player_id]:
+            if last.get(k) != n - 1:
+                streak[k] = n
+            last[k] = n
         self.party_slots[player_id] = {m["key"]: m.get("slot") for m in party
                                        if isinstance(m, dict) and isinstance(m.get("key"), str)}
         # Per-game blob size — see GameRulesAdapter.party_blob_size. 0 means this game

@@ -65,6 +65,10 @@ local function nick_label(key, nickname)
     return key and key:sub(1, 8) or "?"
 end
 
+-- KEY-SCOPE-5: key_change refusals that retire nothing. The alias stays, and the change goes out
+-- again after the next complete box census (send_tick). Every other reason is terminal (U5).
+Client.RETRYABLE_REJECTIONS = { ["box census unavailable"] = true, ["ambiguous key (trade clash)"] = true }
+
 function Client.new(p)
     local HelloSession = assert(p.hello_session, "shared hello_session factory required")
     local ReplyDispatch = assert(p.reply_dispatch, "shared reply_dispatch factory required")
@@ -310,6 +314,16 @@ function Client.new(p)
         return cache
     end
 
+    -- KEY-SCOPE-5: a change refused for a non-terminal reason goes out again once a complete box
+    -- census NEWER than the refusal has gone out (this tick carried it)
+    local function resend_refused_change()
+        local a = self.key_alias
+        if a and a.retry_gen and self.box_complete and self.box_generation > a.retry_gen then
+            a.retry_gen = nil
+            send("key_change", a.msg)
+        end
+    end
+
     -- ── the writes gate (R-4, W-6) ───────────────────────────────────────────────────
     local function game_is_live()
         local party, why = current_party()
@@ -552,7 +566,18 @@ function Client.new(p)
         elseif c_ == "key_change_ack" then
             local a = self.key_alias
             if a and a.old_key == cmd.old_key then self.key_alias = nil end
+            self.retired_alias[cmd.old_key] = nil
+        elseif c_ == "key_change_rejected" and Client.RETRYABLE_REJECTIONS[cmd.reason] then
+            -- KEY-SCOPE-5: nothing was retired; the alias stays and the change is re-sent after the
+            -- next complete box census (a census refusal asks for that census now)
+            local a = self.key_alias
+            if a and a.old_key == cmd.old_key then
+                a.retry_gen = self.box_generation
+                if cmd.reason == "box census unavailable" then self.pending_rescan = true end
+            end
+            log("[SLink-gen2] key_change refused (will retry): " .. tostring(cmd.reason) .. " " .. tostring(cmd.old_key))
         elseif c_ == "key_change_rejected" then
+            -- U5 (a key collision): terminal
             -- the cartridge cannot roll back; the retirement the server queues under the old
             -- key must find the mon by the key it physically holds now
             local a = self.key_alias
@@ -1191,9 +1216,10 @@ function Client.new(p)
             self.pending_rescan = true
         elseif k == "key_change" then
             local new_key = mon_key(m)
-            self.key_alias = { old_key = ev.old_key, new_key = new_key }
-            send("key_change", { old_key = ev.old_key, new_key = new_key, new_species = m.species_id,
-                                 reason = ev.reason, new_nickname = m.nickname })
+            self.key_alias = { old_key = ev.old_key, new_key = new_key,
+                               msg = { old_key = ev.old_key, new_key = new_key, new_species = m.species_id,
+                                       reason = ev.reason, new_nickname = m.nickname } }
+            send("key_change", self.key_alias.msg)
             self.pending_rescan = true
         elseif k == "box_change" then
             self.pending_rescan = true
@@ -1342,6 +1368,7 @@ function Client.new(p)
             trade_blocked = contest_masked(),
             awaiting_save = awaiting_save_field(), -- BURIAL-VISIBLE: the pair board's "awaiting save"
         })
+        resend_refused_change()
     end
 
     -- ── per-frame driver ─────────────────────────────────────────────────────────────
@@ -1614,11 +1641,18 @@ function Client.new(p)
             hud.show("SLINK SIGNALS STOPPED - SEE LOG", 255, 64, 64, 600)
         end
         self:settle_faints()
-        if self.pending_rescan then self.pending_rescan = false; self:rescan_boxes() end
+        -- KEY-SCOPE-5: an incomplete scan is retried, at most once per tick
+        if self.pending_rescan or (not self.box_complete and self.frame % Client.TICK_INTERVAL == 0) then
+            self.pending_rescan = false; self:rescan_boxes()
+        end
         if connected and self.frame % Client.TICK_INTERVAL == 0 then self:send_tick("tick") end
         if self.pending_safe and connected then
             local battle = reads.read_battle()
-            if battle and battle.mode == 0 then self.pending_safe = false; send("safe", {}) end
+            if battle and battle.mode == 0 then
+                -- the battle-end rescan ran above this frame: its census rides the safe (KEY-SCOPE-5)
+                self.pending_safe = false
+                send("safe", { pc_boxes = pc_boxes_wire(), pc_boxes_generation = box_generation() })
+            end
         end
         if trade then
             local tok, terr = pcall(self.trade_tick, self)

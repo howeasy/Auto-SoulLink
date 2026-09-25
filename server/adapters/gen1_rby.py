@@ -359,6 +359,9 @@ class Gen1Adapter(GameAdapter):
         # constants/status_constants.asm: SLP low three bits, PSN/BRN/FRZ/PAR.
         return gb_status_token(status_cond)
 
+    def reports_box_census(self) -> bool:
+        return True   # lua/gen1/client.lua pc_boxes_generation
+
     def supports_info_panel(self) -> bool:
         # The companion patch's native panel exists for Red/Blue, not Yellow.
         return self._variant != "yellow"
