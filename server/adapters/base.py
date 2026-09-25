@@ -484,6 +484,21 @@ class GamePresentationAdapter(ABC):
         """
         return name
 
+    def calc_species(self, species_id: int) -> str:
+        """Return the damage calc's species name for an internal species id.
+
+        Default is `calc_name("species", species_name(species_id))` -- the same expression
+        every caller used inline before this existed, so behaviour is unchanged for every
+        adapter that doesn't override it. An adapter overrides this instead of `species_name`
+        when the two need to diverge: pureRGB's 7 alternate forms (Hardened Onix, Volcanic
+        Magmar, ...) all display in-game with their BASE species' name (species_name(172) ==
+        species_name(34) == "Onix" -- that's the whole trick behind an alternate form), which
+        `species_name` must keep returning for HUD/log text, but the calc needs a name unique
+        per species (both a JS object key and a toID() lookup key in species.ts), so it can't
+        use that colliding text -- see docs/calc_multigen/PURERGB_MECHANICS.md §2.
+        """
+        return self.calc_name("species", self.species_name(species_id))
+
     def calc_profile(self) -> dict | None:
         """Return {"gen": int, "dex": str} for the bundled Smogon calc, or None.
 

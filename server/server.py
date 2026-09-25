@@ -144,8 +144,11 @@ def _build_mon_entry(key, detail, adapter):
     sid = detail.get("species_id", 0)
     if not sid:
         return None
-    # Every name leaves in the calc's spelling (adapter.calc_name) — the calc matches exactly.
-    species = adapter.calc_name("species", adapter.species_name(sid))
+    # Every name leaves in the calc's spelling. calc_species (not the species_name+calc_name
+    # pair directly) so an adapter whose display name and calc name diverge for the same id
+    # (pureRGB's 7 alternate forms, which display in-game with their base species' name) can
+    # override just the calc-facing lookup — see base.GamePresentationAdapter.calc_species.
+    species = adapter.calc_species(sid)
     # Nature/ability are adapter facts: Gen 1/2 have no personality-value nature
     # (calc_nature() returns None) and no abilities at all (supports_abilities() False).
     nature = adapter.calc_nature(key)
