@@ -59,6 +59,9 @@ body.density-compact { --density: .7; }
 
 /* ── Shell ─────────────────────────────────────────────────────────────── */
 
+/* Text for screen readers only: what a glyph means, the "HP" before a fraction. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
 
 /* ── Shell: the Manager's rail + main ──────────────────────────────────── */
 

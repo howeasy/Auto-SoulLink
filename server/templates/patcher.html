@@ -13,7 +13,7 @@
 {% block content %}
   <div class="mk">
     {{ sidebar_html | safe }}
-    <main class="mk-main mk-body-root">
+    <main class="mk-main mk-body-root" id="main-content" tabindex="-1">
       <header class="mk-runhdr"><h1 class="mk-runname">Companion ROM patcher</h1></header>
       <div class="mk-page">{% include "_patcher_panel.html" %}</div>
     </main>

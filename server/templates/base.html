@@ -14,8 +14,16 @@
   {% endif %}
   <script src="/static/vendor/alpine.min.js" defer></script>
   {% block head_extra %}{% endblock %}
+  <style>
+    .skip-link { position: absolute; left: 8px; top: -100px; z-index: 1000; padding: 8px 12px; border-radius: 6px;
+      background: var(--c-bg, #070910); color: var(--c-txt, #e6e6e6); outline: 2px solid var(--c-brand, #f8d030); }
+    .skip-link:focus { top: 8px; }
+  </style>
 </head>
 <body class="theme-{{ theme }}{% if body_class %} {{ body_class }}{% endif %}">
+  {# WCAG 2.4.1: the first stop in the tab order skips the rail. Every page that extends
+     this one puts id="main-content" tabindex="-1" on its single <main>. #}
+  <a class="skip-link" href="#main-content">Skip to main content</a>
   {# FOUC fix — apply persisted sidebar-collapsed class BEFORE any body
      content paints. Runs synchronously, blocks the parser briefly so the
      sidebar renders at its final width on first paint. Without this, the

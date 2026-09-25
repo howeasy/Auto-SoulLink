@@ -19,8 +19,13 @@
 {% from "_macros.html" import status_pill, stat_stages_row %}
 {# ── macros ────────────────────────────────────────────────────────────── #}
 
+{# No max HP (the Gen 1 client reads none for a foe): the number alone, no bar to fake. #}
 {% macro hp(mon) -%}
-  <span class="mk-hp"><span class="mk-hp-bar"><span class="mk-hp-fill {{ hp_class(mon) }}" style="width:{{ hp_pct(mon) }}%"></span></span><span class="mk-hp-num">{{ mon.hp }}/{{ mon.maxHP }}</span></span>
+  {% if mon.maxHP and mon.maxHP > 0 -%}
+  <span class="mk-hp"><span class="mk-hp-bar"><span class="mk-hp-fill {{ hp_class(mon) }}" style="width:{{ hp_pct(mon) }}%"></span></span><span class="mk-hp-num"><span class="sr-only">HP </span>{{ mon.hp }}/{{ mon.maxHP }}</span></span>
+  {%- else -%}
+  <span class="mk-hp"><span class="mk-hp-num">HP {{ mon.hp }}</span></span>
+  {%- endif %}
 {%- endmacro %}
 
 {# A mon as it stands in a battle (or the party lead when there is none): sprite, name,
@@ -46,7 +51,7 @@
       <div class="mk-half-in">
         {% if h.sprite %}<span class="mk-spr big">{{ h.sprite | safe }}</span>{% else %}<span class="mk-slot"></span>{% endif %}
         <span class="mk-half-txt">
-          <span class="mk-half-nick">{% if h.active %}<span class="mk-active" title="out in battle">⚔</span>{% endif %}{{ h.nickname or h.species_name }}{% if h.shiny %} <span class="shiny-star">✦</span>{% endif %}</span>
+          <span class="mk-half-nick">{% if h.active %}<span class="mk-active" title="out in battle"><span aria-hidden="true">⚔</span><span class="sr-only">Out in battle</span></span>{% endif %}{{ h.nickname or h.species_name }}{% if h.shiny %} <span class="shiny-star"><span aria-hidden="true">✦</span><span class="sr-only">Shiny</span></span>{% endif %}</span>
           <span class="mk-sub">{{ h.species_name }} · Lv {{ h.level }}</span>
           {% if h.hp is not none and row.section != 'fallen' %}{{ hp(h) }}{% endif %}
           {# Fallen rows keep the held item (what to take back out of the memorial box), not the ability. #}
@@ -111,7 +116,7 @@
               <div class="mk-now-head">
                 <span class="mk-side">{{ pid | upper }}</span>
                 <span class="mk-now-name">
-                  <b>{{ p.trainer_name or 'not connected' }}</b>
+                  <b>{{ p.trainer_name or ('Player ' ~ pid | upper) }}</b>
                   {% if p.rom_type and p.rom_type != '?' %}<span class="mk-pchip-game">{{ rom_label(p.rom_type) }}</span>{% endif %}
                 </span>
                 {% if board.has_data[pid] %}
