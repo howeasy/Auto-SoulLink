@@ -5389,6 +5389,7 @@ def run_scenario_with_rng_retry(name, args):
     """
     limit = scenario_attempt_limit(name, args.game)
     reroll_retry = name == "species_clause_new" and args.game.startswith("gen1")
+    unobserved_pass = None  # the last attempt that PASSED without the reroll branch
     for attempt in range(1, limit + 1):
         print(f"[duo] {name}: attempt {attempt} of {limit}")
         print(f"[duo] JITTER requested={jitter_for_attempt(args.idle_jitter, attempt)} "
@@ -5420,6 +5421,7 @@ def run_scenario_with_rng_retry(name, args):
                 print(f"[duo] species_clause_new: reroll branch observed on attempt {attempt}")
                 return ok, attempt
             if attempt < limit:
+                unobserved_pass = attempt
                 _archive_attempt(name, attempt, receipts)
                 print("[duo] species_clause_new: reroll branch not observed on attempt "
                       f"{attempt}; re-running the whole scenario with fresh state")
@@ -5446,6 +5448,19 @@ def run_scenario_with_rng_retry(name, args):
             print(f"[duo] {name}: a side ran out of the aide's natural Balls; retrying fresh lane")
             continue
         if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt, limit):
+            # A re-run that only went looking for the reroll branch and then lost the game's
+            # RNG (a ball miss past its retries) does not undo the PASS it re-ran; a real
+            # (FINAL) failure still fails. The attempt-1 rule is the "RNG-shaped" test.
+            if (not ok and unobserved_pass
+                    and retryable_gen1_rng(args.game, receipts, 1, limit=2)):
+                line = (f"[duo] species_clause_new: attempt {attempt} ended on the game's RNG; "
+                        f"the unobserved PASS of attempt {unobserved_pass} stands "
+                        f"(D-4 stays partial)")
+                print(line)
+                with open(os.path.join(BUILD, f"e2e_{name}_pydec_result.txt"), "a",
+                          encoding="utf-8") as handle:
+                    handle.write(line + "\n")
+                return True, unobserved_pass
             return ok, attempt
         print(f"[duo] {name}: the cartridge's only ball missed; restarting attempt "
               f"{attempt + 1} of {limit} with a fresh server, run directory and SaveRAM seeds")
