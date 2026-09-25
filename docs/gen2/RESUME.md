@@ -523,3 +523,25 @@ Update (~06:00Z): the Gen 1 gate has converged. Every lane PASSED except unit's 
   2. Restore the UPR fork source checkout (.cache/slink-upr/src).
   3. The decisions in POST_RC_CARDS: the logo art source and 1 vs 2 rows; the PHONE-NAMES name policy and wording; KEY-SCOPE-5 hold vs reject; whether the Gen 2 release waits for KEY-SCOPE-5.
 - Nothing is pushed or merged. Post-RC work is batched in docs/gen2/POST_RC_CARDS.md, including the UI lane's BOARD-AMBIGUOUS 95f2c629 and the master d3486463 merge, all held for the freeze.
+
+## Post-RC batch (2026-09-25, owner: "bang out the post-RC cards")
+
+- Base: RC evidence is tagged locally as gen2-rc-evidence-2026-09-25 (2813a48c). Merged master d3486463 (9afb3485) and BOARD-AMBIGUOUS (a2ea8ea6).
+- Owner-default decisions:
+  - phone names: the caller's mon by nickname, the receiver's by species;
+  - logo: deferred (part B skipped; Crystal's tile IDs run past $FF, so it needs a live boot);
+  - KEY-SCOPE-5: reject on a stale census ONLY for census-capable clients, and a missing census NEVER retires a pair.
+- Landed:
+  - KS5: 4bd32cec KEY-SCOPE-5, f0565960 admission verdict, 0fbbeaca Gen 1 enemy maxHP, dc7736e8.
+  - HARNESS: ccd84166 + a22ce925 (enemy_faint), 592a3f0c + 54db2b95 (Gen 1 receipt capture), 4d647dd5 (sprite alt), 6850da91, 710ad462.
+  - OVERLAY: e6d7761d, PHONE-NAMES + TITLE-VERSION A. Overlay sha1s: C ae7205d2, G 188391e1, S 54416bf5, v0.0.0-dev.
+  - Coordinator: 822d4352, 83bd6c15.
+- In flight:
+  - KS5 (ac684e942b96d868c): the KEY-SCOPE-5 follow-up from OMP cx-8f3a6ce9 (never retire on census uncertainty, census provenance, canonicalization only in the drift reconciler, the any() replay predicate, the census cleared on reset); then the reset-lifecycle fix for my merge error (restore connected_players.clear(), drop master's preservation block), the per-player status adapter, and the Gen 1 maxHP guard.
+  - SPLW (a6eda9493297ddf01): the SP-LOWWATER gate; smoke runs only, the final pins come from the re-sweep.
+  - OMP cx-c87c15b0: adversarial review of e6d7761d.
+- Before the re-sweep:
+  1. Merge master again (now 77cf5090: the board/static/manager rework). Port our per-pid _board.html warning lines by hand: master removed `.identity-warn`, and the loop was rewritten (Gen1-Collab2's collision list).
+  2. GEN2-CALC once the calc lane's P1 lands on master.
+- Then: the full re-sweep (the overlay changed, so the 12 overlay gate receipts and 21 trade cells, plus SP-LOWWATER cells), refresh the shipped data/games/gen2_*/receipts copies, run the Gen 1 gate, and check in with the owner.
+- Merge ORDER agreed with Gen1-Collab2 (Gen 1 master lane): Gen 1 is in, Gen 2 next (after this batch + re-sweep + owner G4), Gen 3 last.
