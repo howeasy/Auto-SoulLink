@@ -160,6 +160,11 @@ of four fixed `writetext` blocks (`patch/gen2/src/phone.asm:113-141`). The calle
   - For the RC: up to 3 attempts per cell.
   - Post-RC fix, recommended: an O-33 SYNTH A seed with the builder's existing `balls` edit (`[["MASTER_BALL", 5]]`), so the catch is certain while the plant and the evolution stay native. This changes the trade oracle's `expected_case` boot fixture sha256 and the release row.
   - Alternative: the plant also lowers the planted mon's HP or level, which changes the plant disclosure.
+- **TRAINER-FAINT-LIVE-TURN.** `gen2_faint_active_trainer` requires an `enemy_turn` after `REPLACED`.
+  - With B's L10 seed (`5a7b04c8`), the replacement's first Scratch can crit-KO Joey's only mon (the L4 Rattata, ~17 HP) before it moves: ~7% a turn. That happened in the RC run on C-C `fsw-rerun2`, after every behaviour under test had proved physically.
+  - Fix, verdict/oracle only: "a live turn" = an `enemy_turn` after `REPLACED`, OR a witnessed enemy faint after `REPLACED` (a `FaintEnemyPokemon` exec hook from the pack's battle_hold oracles, or a `wEnemyMonHP` read).
+  - Rules to change: `tools/gen2_duo_oracles.validate_faint_active_markers(trainer=True)` and RELEASE-LANES' `_active_faint_cell_errors`. That's a release-row binding change.
+  - For the RC: re-run as is (~93%).
 - **CLAUSE-BENCH-LIMITS.** OMP `cx-43b52a71` F2/F3/F5 were kept by design: the oracle cross-references the U2 receipt, and the full qualification lives in the release verifier's write-window lane; `PC == 0x0040` is a stricter harness invariant. Revisit only if that lane's coverage changes.
 - **BOARD-AMBIGUOUS: BUILT, held for the freeze.** The UI lane's commit `95f2c629` is on branch `claude/ui-board-ambiguous` (worktree `Temp/uiamb`), cut from `0800da84`. Design from OMP `cx-8a2f08c6`:
   - add a top-level `ambiguous_keys` to the status and to `status_payload.py`;
