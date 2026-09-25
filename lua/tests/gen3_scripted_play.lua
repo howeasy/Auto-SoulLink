@@ -1230,11 +1230,26 @@ end
 --- waiting for A, exactly what playlib's own P.clear_dialogue exists for, and P.step's 6 short
 --- attempts (each already calling clear_dialogue once) simply ran out too early against a
 --- longer scene. So this re-implements P.follow's loop using only P's PUBLIC calls
---- (play.step/play.clear_dialogue/play.in_battle/play.fight_through/play.map/play.wait_at/
---- play.at, same primitives playlib itself uses), and on a stall taps A through the lock
---- (fighting an incidental battle for real if the scene turns into one), then retries the SAME
---- step -- bounded at 4 rounds, and it stops waiting the moment the field is neither locked nor
---- in a battle, so a genuinely blocked tile still fails fast.
+--- (play.step/play.clear_dialogue/play.in_battle/play.handle_encounter/play.map/play.wait_at/
+--- play.at/play.on_field, same primitives playlib itself uses), and on a stall taps A through
+--- the lock (fighting an incidental battle for real, through the SAME P.handle_encounter
+--- accounting play.follow uses -- the encounter budget and the whiteout/displacement check both
+--- apply, not just the mash), then retries the SAME step -- bounded at 4 rounds.
+---
+--- WITNESSED, not blind (OMP cx-84088887): after each recovery round this checks the map is
+--- still the one the step started on (a change here is a warp the recovery itself caused -- a
+--- wrong dialogue choice, a menu selection, a trainer battle's own after-effect -- and FAILS
+--- loud rather than letting P.step's own "a map change is a warp, and a warp is success" rule
+--- wave it through), and only retries the directional step once the field is actually idle
+--- (play.on_field + scene_quiet: no script running, no multichoice or menu still reading the
+--- very button this loop is about to press again). A round that ends still locked simply loops
+--- again, bounded at 4; a genuinely blocked tile still fails fast the moment neither a battle
+--- nor a lock is left to wait out.
+---
+--- `p.battles == false` (a leg that owns its own battle after this call) is honoured exactly as
+--- play.follow honours it: play.step already refuses to absorb the encounter and reports
+--- "in_battle", and this loop must not then go fight it anyway -- that would silently override
+--- the leg's own policy.
 local function traced_follow(cp, path_name, label)
     if TITLE ~= "radical_red" then return play.follow(cp, path_name, label) end
     local p = assert(PATHS[path_name], "no PATHS entry " .. tostring(path_name))
@@ -1244,21 +1259,28 @@ local function traced_follow(cp, path_name, label)
             label, path_name, p.from[1], p.from[2]))
         return
     end
-    local enc = { n = 0, max = p.max_encounters or 12 }
+    local enc = { n = 0, max = p.max_encounters or (play.opts and play.opts.max_encounters) or 12 }
+    if p.battles == false then enc = false end
     for i, dir in ipairs(p.dirs) do
         if RR_TRACE then rr_trace_log(cp, path_name, i, dir) end
-        local ok = play.step(cp, dir, start_map, nil, enc)
+        local ok, why = play.step(cp, dir, start_map, nil, enc)
         local rounds = 0
         while not ok and rounds < 4 and (play.in_battle(cp) or not H.scene_quiet(cp)) do
             rounds = rounds + 1
             if play.in_battle(cp) then
-                if not play.fight_through(cp, 1200) then
+                if enc == false then
                     G.shot("stuck")
                     G.finish(false, string.format(
-                        "%s (%s): step %s: an incidental battle mid-step never ended",
-                        label, path_name, dir))
+                        "%s (%s): step %s: an encounter started but this path refuses battles "
+                        .. "(battles=false) -- at %s", label, path_name, dir, play.at(cp)))
                     return
                 end
+                -- Route through the SAME accounting play.follow uses: the encounter budget
+                -- (P.handle_encounter counts and caps it) and the displacement/whiteout check
+                -- (a battle that moves the player, or lands them anywhere but the heal map, is
+                -- fatal, not absorbed) -- a direct play.fight_through call skipped both.
+                local bx, by = H.pos(cp)
+                play.handle_encounter(cp, enc, dir, { map = play.map(cp), x = bx, y = by })
             else
                 for _ = 1, 20 do
                     play.clear_dialogue(cp)
@@ -1271,13 +1293,34 @@ local function traced_follow(cp, path_name, label)
                     path_name, i, tostring(dir), rounds, tostring(not H.scene_quiet(cp)),
                     tostring(play.in_battle(cp))))
             end
-            ok = play.step(cp, dir, start_map, nil, enc)
+            -- Postcondition 1: still the same map. A warp here is not the lock clearing.
+            local now_map = play.map(cp)
+            if now_map ~= nil and now_map ~= start_map then
+                G.shot("stuck")
+                G.finish(false, string.format(
+                    "%s (%s): step %s: recovery round %d warped from map %s to %s instead of "
+                    .. "clearing the lock -- a wrong dialogue choice, menu selection or battle, "
+                    .. "not the message box this loop exists to tap through",
+                    label, path_name, dir, rounds, tostring(start_map), tostring(now_map)))
+                return
+            end
+            -- Postcondition 2: no multichoice/menu left reading input. Only once the field is
+            -- genuinely idle (same predicate the PC-exit wait above uses) is it safe to press
+            -- `dir` again -- pressing it into a still-open menu could move its cursor instead of
+            -- the player. Postcondition 3 (the step lands on the expected tile) is play.step's
+            -- own job, called right here.
+            if play.on_field(cp) and H.scene_quiet(cp) then
+                ok, why = play.step(cp, dir, start_map, nil, enc)
+            end
         end
         if not ok then
             if RR_TRACE then rr_trace_log(cp, path_name, i, tostring(dir) .. "-STALLED") end
             G.shot("stuck")
-            G.finish(false, string.format("%s (%s): step %s stalled at %s",
-                label, path_name, dir, play.at(cp)))
+            local locked = rounds > 0 and string.format(
+                " -- the field stayed locked through %d recovery round%s",
+                rounds, rounds == 1 and "" or "s") or ""
+            G.finish(false, string.format("%s (%s): step %s stalled at %s%s",
+                label, path_name, dir, play.at(cp), locked))
             return
         end
         local now = play.map(cp)

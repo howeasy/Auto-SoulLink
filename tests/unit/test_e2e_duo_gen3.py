@@ -2658,6 +2658,50 @@ def test_the_center_predicates_read_the_pack_union_room_set():
     assert list(missing.values()) == ["Task_UnionRoomListen"]
 
 
+def test_the_center_predicates_read_the_rr_pack_pointers_literally_and_by_reference():
+    """Finding 5 (G5-RR-FOLLOW-HARDEN): mirrors test_the_center_predicates_read_the_pack_
+    union_room_set, over the REAL Radical Red pack. RR's write_checkpoint.json adds
+    pokemon_storage_base = 0x02029314, the storage address itself (profile.ram.
+    POKEMON_STORAGE_BASE) -- not a pointer TO the storage like gPokemonStoragePtr/
+    gSaveBlock1Ptr/gSaveBlock2Ptr are. center_predicates must take it literally (the same rule
+    lua/gen3/safety.lua's own pointers() applies) while still dereferencing every other pointer
+    through the bus."""
+    from lupa import LuaRuntime
+
+    cp = json.loads((REPO / "data" / "games" / "gen3_rr" / "write_checkpoint.json").read_text(
+        encoding="utf-8"))["radical_red"]
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.execute(_lua_defs(DRIVER, ["center_predicates"]) + "\nCENTER_PREDICATES = center_predicates")
+    tasks = cp["tasks"]["address"]
+    live_tasks = cp["tasks"]["allowed_overworld_tasks"]
+    mem = {}
+    for i, name in enumerate(("Task_InitUnionRoom", "Task_SearchForChildOrParent", "Task_UnionRoomListen")):
+        mem[tasks + i * 40] = live_tasks[name] | 1
+        mem[tasks + i * 40 + 4] = 1
+    for pred in cp["predicates"].values():
+        mem[pred["address"] + pred.get("offset", 0)] = pred["expect"]
+    storage_addr = cp["pointers"]["pokemon_storage_base"]["address"]
+    assert storage_addr == 0x02029314
+    for i, name in enumerate(sorted(cp["pointers"])):
+        # A DECOY at pokemon_storage_base's own "address" slot: if center_predicates ever read
+        # the bus there instead of taking the address literally, this decoy surfaces in
+        # ptrs["pokemon_storage_base"] below and the assertion catches it.
+        mem[cp["pointers"][name]["address"]] = (
+            0x02039DE0 + i if name == "pokemon_storage_base" else 0x02025000 + 0x100 * i)
+    cp_lua = lua.table_from(cp, recursive=True)
+    read = lua.eval("function(m) return function(a) return m[a] or 0 end end")(lua.table_from(mem))
+    cpu = cp["cpu"]
+    parked = lua.table_from({"R15": cpu["pc_min"], "CPSR": cpu["mode"] | (cpu["thumb"] << 5)})
+    _, missing, bad, ptrs = lua.globals().CENTER_PREDICATES(cp_lua, read, parked, True)
+    assert list(missing.values()) == []
+    assert list(bad.values()) == [], list(bad.values())
+    # taken literally: the address itself, never the decoy sitting at that address on the bus
+    assert ptrs["pokemon_storage_base"] == storage_addr
+    for name in ("gPokemonStoragePtr", "gSaveBlock1Ptr", "gSaveBlock2Ptr"):
+        assert ptrs[name] == mem[cp["pointers"][name]["address"]]
+        assert ptrs[name] != cp["pointers"][name]["address"]
+
+
 def test_whiteout_oracle_requires_the_center_receipt(monkeypatch, tmp_path):
     fixture = _fixture([STARTER, PIDGEY])
     saved = _saved(fixture, 3, [STARTER, PIDGEY])
@@ -4588,26 +4632,14 @@ def test_rr_way_out_of_viridian_is_the_proven_way_in_reversed():
 
 def test_traced_follow_is_rr_only_and_never_reads_a_nil_obj_events_addr():
     """G5-RR-WHITEOUT (whiteout_gen3 on RR at c23a8f46: 'pokecenter_door_to_route1_edge: step
-    Left stalled at (25,27)'). A live trace (docs/gen3/probes/rr_whiteout_gen3_rr_as_a_eb03c21a.txt)
-    caught the cause: an RR-only object (local id 20, absent from FR/LG's map) walks adjacent to
-    the player mid-leg and locks the field for a message box / battle intro, not a silent script.
-    Two regressions this closes, both hit live while building the fix:
-    1. traced_follow must be play.follow VERBATIM for every non-RR title -- the very first thing
-       it does is the title guard, so FR/LG never take the RR-only wait-and-retry loop.
-    2. gen3_title_syms.lua's OBJ_EVENTS_ADDR carries no radical_red value ("no RR citation
-       found"), so OBJ_EVENTS_ADDR is nil on RR -- run 2 crashed inside the (then diagnostic-only)
-       trace on exactly that nil arithmetic. rr_trace_log must fall back to the
-       independently-confirmed RR address (reference_rr_object_events.md) instead of
-       dereferencing OBJ_EVENTS_ADDR directly.
+    Left stalled at (25,27)'). gen3_title_syms.lua's OBJ_EVENTS_ADDR carries no radical_red
+    value ("no RR citation found"), so it is nil on RR -- run 2 crashed inside the (then
+    diagnostic-only) trace on exactly that nil arithmetic. rr_trace_log must fall back to the
+    independently-confirmed RR address (reference_rr_object_events.md) instead of dereferencing
+    OBJ_EVENTS_ADDR directly. (The behavioural half of this -- FR/LG never taking the RR loop,
+    the loop itself -- is covered executably below, not by grepping source text.)
     """
     text = SCRIPTED.read_text(encoding="utf-8")
-    start = text.index("local function traced_follow(")
-    fn = text[start:text.index("\nend", start)]
-    assert 'if TITLE ~= "radical_red" then return play.follow(cp, path_name, label) end' in fn
-    # the RR-only retry: waits out a lock (a message box / battle intro), fights a real battle
-    # if the scene turns into one, bounded so a genuinely blocked tile still fails.
-    assert "play.in_battle(cp)" in fn and "play.fight_through(cp" in fn and "play.clear_dialogue(cp)" in fn
-    assert "rounds < 4" in fn
     trace_start = text.index("local function rr_trace_log(")
     trace_fn = text[trace_start:text.index("\nend", trace_start)]
     assert "local base = OBJ_EVENTS_ADDR or RR_OBJ_EVENTS_ADDR" in trace_fn
@@ -4617,4 +4649,184 @@ def test_traced_follow_is_rr_only_and_never_reads_a_nil_obj_events_addr():
     assert "traced_follow = traced_follow," in text
     duo_text = (REPO / "lua" / "tests" / "duo" / "duo_gen3_main.lua").read_text(encoding="utf-8")
     assert 'SP.traced_follow(cp, "pokecenter_door_to_route1_edge", label)' in duo_text
+
+
+# ── G5-RR-FOLLOW-HARDEN: traced_follow's RR recovery, executable over a fake play/H/G (OMP
+# cx-84088887 -- the old version of this test only grepped traced_follow's source text, which
+# cannot tell a witnessed recovery from a blind one). rr_trace_log is spliced in alongside
+# traced_follow in the SAME lua.execute() chunk so the "local function" it is written as stays a
+# real Lua upvalue traced_follow can call, exactly as the two sit in gen3_scripted_play.lua.
+_TF_WORLD = r"""
+W = { map = 100, x = 5, y = 5, in_battle = false, on_field = true, quiet = true,
+      step_calls = 0, follow_calls = 0, wait_at_calls = 0, dialogue_calls = 0,
+      battle_calls = 0, enc_seen = {}, round_effects = {}, step_queue = {}, log = {} }
+
+local function pop_effect()
+    local fx = table.remove(W.round_effects, 1)
+    if fx then fx() end
+end
+
+G = {
+    shot = function() end,
+    finish = function(ok, msg)
+        W.log[#W.log + 1] = "RESULT: " .. (ok and "PASS" or "FAIL") .. " " .. tostring(msg)
+        error("FINISH:" .. tostring(msg), 0)
+    end,
+}
+H = {
+    pos = function() return W.x, W.y end,
+    scene_quiet = function() return W.quiet end,
+}
+console = { log = function(s) W.log[#W.log + 1] = s end }
+PATHS = { test_path = { from = { 1, 1 }, dirs = { "Right" } } }
+-- rr_trace_log's fallback (nil OBJ_EVENTS_ADDR on RR) and its bus reads, stubbed inert: every
+-- test here runs with RR_TRACE off, so this only needs to exist, never to answer usefully.
+RR_OBJ_EVENTS_ADDR = 0x02036E38
+OBJ_EVENTS_ADDR = nil
+memory = { read_u8 = function() return 0 end, read_s16_le = function() return 0 end }
+
+play = { opts = { max_encounters = 12 } }
+function play.follow(cp, path_name, label) W.follow_calls = W.follow_calls + 1 end
+function play.map(cp) return W.map end
+function play.at(cp) return string.format("(%d,%d)", W.x, W.y) end
+function play.wait_at(cp, x, y, budget) W.wait_at_calls = W.wait_at_calls + 1; return true end
+function play.in_battle(cp) return W.in_battle end
+function play.on_field(cp) return W.on_field end
+--- Stands in for playlib's real P.clear_dialogue: a mashed A. The per-test `round_effects`
+--- queue is how a test scripts what that mashing eventually achieves (the lock clearing, an
+--- unwanted warp, ...), one effect consumed per recovery round.
+function play.clear_dialogue(cp)
+    W.dialogue_calls = W.dialogue_calls + 1
+    pop_effect()
+end
+--- Stands in for playlib's real P.handle_encounter: bumps the SAME `enc` budget object
+--- traced_follow owns (the accounting finding 2 requires it route through), and records every
+--- value enc.n took so a test can see the budget was actually charged.
+function play.handle_encounter(cp, enc, dir, before)
+    enc.n = enc.n + 1
+    W.battle_calls = W.battle_calls + 1
+    W.enc_seen[#W.enc_seen + 1] = enc.n
+    pop_effect()
+end
+function play.step(cp, dir, start_map, want, enc)
+    W.step_calls = W.step_calls + 1
+    local r = W.step_queue[W.step_calls]
+    if r == nil then r = W.step_queue[#W.step_queue] end
+    return r
+end
+"""
+
+
+def _traced_follow_env(title, rr_trace=False):
+    from lupa import LuaRuntime
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.execute(_TF_WORLD)
+    lua.globals().TITLE = title
+    lua.globals().RR_TRACE = rr_trace
+    lua.execute(_lua_defs(SCRIPTED, ["rr_trace_log", "traced_follow"])
+                + "\nTRACED_FOLLOW = traced_follow\n"
+                  "function W.run(cp, path_name, label)\n"
+                  "    local ok, err = pcall(TRACED_FOLLOW, cp, path_name, label)\n"
+                  "    return ok, err\n"
+                  "end\n")
+    return lua
+
+
+def test_traced_follow_fr_lg_calls_play_follow_once_and_skips_rr_recovery():
+    """Finding: the title guard is traced_follow's very first line -- FR/LG must never touch
+    play.step/play.handle_encounter/play.clear_dialogue, only play.follow, exactly once."""
+    lua = _traced_follow_env("firered")
+    w = lua.globals().W
+    ok, err = w.run(None, "test_path", "lbl")
+    assert ok is True, err
+    assert w.follow_calls == 1
+    assert w.step_calls == 0 and w.battle_calls == 0 and w.dialogue_calls == 0
+
+
+def test_traced_follow_rr_recovers_when_the_lock_clears():
+    """A lock (message box / battle intro) that clears on the first recovery round: one
+    clear_dialogue, then the retried step lands -- the walk finishes without error."""
+    lua = _traced_follow_env("radical_red")
+    w = lua.globals().W
+    w.quiet, w.on_field = False, False
+    lua.execute("W.step_queue = { false, true }")
+    lua.execute("W.round_effects = { function() W.quiet = true; W.on_field = true end }")
+    ok, err = w.run(None, "test_path", "lbl")
+    assert ok is True, err
+    assert w.step_calls == 2
+    assert w.dialogue_calls == 1
+    assert w.battle_calls == 0
+
+
+def test_traced_follow_rr_a_persistent_lock_fails_naming_locked_and_the_round_count():
+    """Finding 6: the stalled failure must say the field stayed locked and how many recovery
+    rounds ran, not just "stalled at (x,y)" -- a lock that never clears runs all 4 rounds."""
+    lua = _traced_follow_env("radical_red")
+    w = lua.globals().W
+    w.quiet, w.on_field = False, False
+    lua.execute("W.step_queue = { false }")          # play.step never succeeds
+    ok, err = w.run(None, "test_path", "lbl")
+    assert ok is False
+    assert "locked" in err and "4" in err, err
+
+
+def test_traced_follow_rr_a_warp_during_recovery_fails_not_succeeds():
+    """Finding 1: the old code accepted ANY map change during recovery as success. A warp
+    caused by the recovery mash itself (a wrong dialogue choice, not the lock clearing) must
+    fail loud, and must never let the retried play.step wave it through as a legitimate warp."""
+    lua = _traced_follow_env("radical_red")
+    w = lua.globals().W
+    w.quiet, w.on_field = False, False
+    lua.execute("W.step_queue = { false }")
+    lua.execute("W.round_effects = { function() W.map = 999 end }")
+    ok, err = w.run(None, "test_path", "lbl")
+    assert ok is False
+    assert "warp" in err.lower() and "999" in err, err
+    assert w.step_calls == 1                          # never retried the step past the warp
+
+
+def test_traced_follow_rr_a_battle_during_recovery_uses_the_shared_encounter_budget():
+    """Finding 2: a battle hit during recovery must route through the same P.handle_encounter
+    accounting play.follow uses (the enc.n budget it owns), not a bare play.fight_through that
+    skips it."""
+    lua = _traced_follow_env("radical_red")
+    w = lua.globals().W
+    w.in_battle, w.quiet, w.on_field = True, False, False
+    lua.execute("W.step_queue = { false, true }")
+    lua.execute("W.round_effects = { function()"
+                " W.in_battle = false; W.quiet = true; W.on_field = true end }")
+    ok, err = w.run(None, "test_path", "lbl")
+    assert ok is True, err
+    assert w.battle_calls == 1
+    assert list(w.enc_seen.values()) == [1]
+    assert w.step_calls == 2
+
+
+def test_traced_follow_rr_battles_false_refuses_to_auto_fight():
+    """Finding 3: play.follow refuses to absorb an encounter when p.battles == false; traced_follow
+    must refuse the same way instead of fighting it through RR recovery regardless."""
+    lua = _traced_follow_env("radical_red")
+    w = lua.globals().W
+    w.in_battle = True
+    lua.execute("PATHS.test_path.battles = false")
+    lua.execute("W.step_queue = { false }")
+    ok, err = w.run(None, "test_path", "lbl")
+    assert ok is False
+    assert "battles=false" in err or "refuses battles" in err, err
+    assert w.battle_calls == 0                         # never routed through handle_encounter
+
+
+def test_traced_follow_rr_trace_is_silent_without_the_env_flag():
+    """RR_TRACE off (the SLINK_GEN3_RR_TRACE-gated default) must never touch console.log, even
+    across a full recovery round -- one console table shared by both rr_trace_log call sites and
+    the per-round trace line."""
+    lua = _traced_follow_env("radical_red", rr_trace=False)
+    w = lua.globals().W
+    w.quiet, w.on_field = False, False
+    lua.execute("W.step_queue = { false, true }")
+    lua.execute("W.round_effects = { function() W.quiet = true; W.on_field = true end }")
+    ok, err = w.run(None, "test_path", "lbl")
+    assert ok is True, err
+    assert list(w.log.values()) == []
 
