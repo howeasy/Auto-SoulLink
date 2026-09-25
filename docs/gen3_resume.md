@@ -55,8 +55,8 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
     - Client-only product fix: the RR companion pre-announces when gTrainerBattleOpponent_A turns nonzero on the field, stages the swap, and posts it in the patch's W1 window. Success requires the readback to reach the enemy battler.
     - Reviews: Opus (4) + OMP cx-3a69802a (9) folded in. OMP F1 (level-guarded rematch announce) was declined because it would re-announce the last trainer after every battle; RR rival ids are distinct.
   - Integration: faint_cmd_clean_gen3 pinned in the RR lists (a2985d5a). Gen 3 unit suites: 3708 passed.
-- **FROZEN CUT a2985d5a:** FR/LG sharded over both lanes, then `--title rr`.
-- **Gen 1 quick gate on this branch:** FAILED on environment only. The worktree lacks .cache/pret/pokered plus the pure/yellow ROM builds (NO-ROM). Run it in a provisioned lane, or provision per Gen1-Collab2's recipes, before claiming a Gen 1 result.
+- **FROZEN CUT a2985d5a: FR/LG (G4) 43/43 PASS** (`fc_SUMMARY_a2985d5a.txt`) **and RR (G5) 19/19 PASS** (`fc_SUMMARY_a2985d5a_rr.txt`), receipts 622aa7f5. Lane 2's first release_gate_quick FAIL was stale CRLF on LF-pinned files (a lane defect; kept as `fc_release_gate_quick_a2985d5a_LANE2_CRLF.txt`). QUEUE: make the runner's lane provisioning rewrite eol-pinned files whose working copy is `w/crlf`.
+- **Gen 1 non-regression: PASS** (accepted by Gen1-Collab2). `verify_gen1_release.py --quick` at a2985d5a in gen3-lane-clean reported 0 test failures (7177 passed). The pure/overlay/yellow artifacts copied from root are sha1-identical to the pins. Every remaining skip is a missing local input: clean Blue/Yellow dumps, arm-gcc, pokegold, .cache/purergb{,-overlay} poke*.gbc, and test_gen1_trade_patch, which master already fixed. After the Gen 3 merge to master, ping Gen1-Collab2 to re-run the gate on master.
 - **Cross-lane merge plan** (settled with Gen1-Collab2 and Gen 2 Boogaloo, 2026-09-25):
   - Order: Gen 1 → Gen 2 → Gen 3. Gen 3 merges only after G4+G5 are signed (ruling 22).
   - pairing_kind (Gen 2 644b3b8f = Gen 3 80261f39) is identical on both sides.
