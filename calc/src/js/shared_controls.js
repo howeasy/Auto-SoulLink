@@ -677,7 +677,9 @@ $(".set-selector").change(function () {
 					(set.ivs && set.ivs[LEGACY_STATS[gen][i]] !== undefined) ? set.ivs[LEGACY_STATS[gen][i]] : 31);
 				pokeObj.find("." + LEGACY_STATS[gen][i] + " .dvs").val(
 					(set.dvs && set.dvs[LEGACY_STATS[gen][i]] !== undefined) ? set.dvs[LEGACY_STATS[gen][i]] : 15);
+				pokeObj.find("." + LEGACY_STATS[gen][i] + " .statexp").val(setStatExp(set, LEGACY_STATS[gen][i]));
 			}
+			pokeObj.find(".hp .statexp").val(setStatExp(set, "hp"));
 			setSelectValueIfValid(pokeObj.find(".nature"), set.nature, "Hardy");
 			var abilityFallback = (typeof pokemon.abilities !== "undefined") ? pokemon.abilities[0] : "";
 			if ($("#randoms").prop("checked")) {
@@ -722,7 +724,9 @@ $(".set-selector").change(function () {
 				pokeObj.find("." + LEGACY_STATS[gen][i] + " .evs").val(0);
 				pokeObj.find("." + LEGACY_STATS[gen][i] + " .ivs").val(31);
 				pokeObj.find("." + LEGACY_STATS[gen][i] + " .dvs").val(15);
+				pokeObj.find("." + LEGACY_STATS[gen][i] + " .statexp").val(65535);
 			}
+			pokeObj.find(".hp .statexp").val(65535);
 			pokeObj.find(".nature").val("Hardy");
 			setSelectValueIfValid(abilityObj, pokemon.abilities ? pokemon.abilities[0] : "", ""); // Gen 1/2 species have no abilities
 			if (startsWith(pokemonName, "Ogerpon-") && !startsWith(pokemonName, "Ogerpon-Teal")) {
@@ -965,6 +969,12 @@ function correctHiddenPower(pokemon) {
 
 // Gen 1/2 raw stat exp (0-65535) from the row's .statexp input; max (65535) when a row has
 // none, which reproduces the engine's old always-max-stat-exp output (calc/calc/src/stats.ts).
+// A set's raw Gen 1/2 stat exp for a legacy stat row (hp/at/df/sa/sd/sl/sp), else max.
+function setStatExp(set, legacyStat) {
+	var key = {hp: "hp", at: "atk", df: "def", sp: "spe", sa: "spc", sd: "spc", sl: "spc"}[legacyStat];
+	return (set.stat_exp && set.stat_exp[key] !== undefined) ? set.stat_exp[key] : 65535;
+}
+
 function getStatExpOrMax(container) {
 	var $statExp = container.find(".statexp");
 	return $statExp.length ? ~~$statExp.val() : 65535;

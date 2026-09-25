@@ -299,6 +299,9 @@ class Gen3Adapter(GameAdapter):
             is_rr: True for Radical Red / CFRU ROMs, False for vanilla/AP/Emerald.
         """
         self._is_rr = is_rr
+        # The server passes the connecting client's rom_type (server.py get_adapter calls);
+        # only calc_profile reads it, to pick Emerald's trainer sets over FR/LG's.
+        self._rom_type = kwargs.get("rom_type") or ""
         profile = "Radical Red / CFRU" if is_rr else "vanilla / AP / Emerald"
         log.debug(f"[ADAPTER] Gen3Adapter initialized: profile={profile!r}")
 
@@ -577,18 +580,23 @@ class Gen3Adapter(GameAdapter):
         return table.get(kind, {}).get(name, name)
 
     def calc_profile(self) -> dict | None:
-        """RR's numbers are verified; vanilla FRLG/Emerald calc support is a later phase."""
+        """RR runs the calc at gen 9 with its own sets; vanilla FR/LG and Emerald at gen 3
+        with their vendored, pret-checked trainer sets (calc/src/js/data/sets/games)."""
         if self._is_rr:
             return {"gen": 9, "dex": "rr"}
-        return None
+        sets = ({"file": "Emerald.js", "var": "CUSTOMSETDEX_E"} if self._rom_type == "emerald"
+                else {"file": "FRLG.js", "var": "CUSTOMSETDEX_FRLG"})
+        return {"gen": 3, "dex": "vanilla", "sets": sets}
 
     def calc_nature(self, key: str) -> str | None:
         """Derive nature name from a monKey ('PERS_HEX:OTID_HEX...'). Same logic for RR
         and vanilla -- both use the personality value here (unlike Gen 1/2's DVs)."""
         try:
             return _NATURE_NAMES[int(key.split(":")[0], 16) % 25]
-        except Exception:
-            return "Hardy"
+        except (ValueError, AttributeError):
+            # No personality in the key (a "foe-N" enemy entry): unknown, not Hardy, so the
+            # calc's trainer-set nature isn't masked by a made-up one.
+            return None
 
     def calc_stats(self, detail: dict) -> dict | None:
         """Decode IVs/EVs/computed stats from the 100-byte party blob (gen3_codec,

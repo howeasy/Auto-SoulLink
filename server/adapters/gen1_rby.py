@@ -428,6 +428,17 @@ class Gen1Adapter(GameAdapter):
             return name
         return _CALC_NAMES.get(kind, {}).get(name, name)
 
+    def calc_profile(self) -> dict | None:
+        """Vanilla Gen 1 calc numbers are verified. Red/Blue share one vendored,
+        pret-verified trainer setdex; Yellow has its own (docs/calc_multigen/HANDOFF.md
+        task 5/8). Gen1PureRGBAdapter overrides this back to None -- its custom types
+        and moves aren't in the calc's tables yet."""
+        if self._variant == "yellow":
+            return {"gen": 1, "dex": "vanilla",
+                    "sets": {"file": "Yellow.js", "var": "CUSTOMSETDEX_Y"}}
+        return {"gen": 1, "dex": "vanilla",
+                "sets": {"file": "RedBlue.js", "var": "CUSTOMSETDEX_RB"}}
+
     def calc_stats(self, detail: dict) -> dict | None:
         """Decode DVs/stat exp/computed stats from a party blob (the 44-byte party
         struct alone, or the 66-byte transfer blob with the OT/nick tail -- either

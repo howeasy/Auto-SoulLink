@@ -1015,6 +1015,11 @@ class SLinkServer:
                     out[stat] = raw - 6
             return out
 
+        # Same shape /api/calc/mons sends (base.calc_stats contract): None when the adapter
+        # can't decode it. The enemy's raw dvs_raw/blob_hex ride along on dfn already --
+        # _enrich_battle_state's enemy_party is a shallow copy of the client's own dict --
+        # so this is the same call handle_calc_mons makes, no reconstruction needed.
+        enemy_calc_stats = adapter.calc_stats(dfn)
         return {
             "gen": profile.get("gen"),
             "dex": profile.get("dex"),
@@ -1030,11 +1035,14 @@ class SLinkServer:
             "player_hp_pct": atk["hp_pct"],
             "player_status": status(atk),
             "player_boosts": boosts(atk["stat_stages"]),
+            "player_calc_stats": atk["calc_stats"],
             "enemy_species": dfn.get("species_name") or "",
             "enemy_level": dfn.get("level", 0),
-            "enemy_hp_pct": max(0, min(100, int(dfn.get("hp", 0) / max(dfn.get("maxHP", 1), 1) * 100))),
+            "enemy_hp_pct": (max(0, min(100, int(dfn.get("hp", 0) / dfn["maxHP"] * 100)))
+                              if dfn.get("maxHP") else None),
             "enemy_status": status(dfn),
             "enemy_boosts": boosts(dfn.get("stat_stages")),
+            "enemy_calc_stats": enemy_calc_stats,
         }
 
     def _enc_table_for_status(self, area_id: str, player_id: str = "") -> dict | None:

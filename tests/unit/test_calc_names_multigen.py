@@ -137,4 +137,9 @@ def test_rr_mon_entry_keeps_nature_and_ability_unchanged():
     assert entry["nature"]
     assert entry["ability_name"] == "Overgrow"
     assert f"{entry['nature']} Nature" in entry["showdown_paste"]
-    assert "Ability: Overgrow" in entry["showdown_paste"]
+    assert "Ability: Overgrow" in entry["showdown_paste"]
+
+
+def test_gen3_enemy_without_personality_has_no_nature():
+    """A foe-N enemy key carries no personality, so no made-up Hardy masks the set nature."""
+    assert RR.calc_nature("foe-0") is None

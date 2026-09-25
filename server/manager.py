@@ -264,7 +264,7 @@ def _calc_profile_for_run(run: dict, status: dict) -> dict | None:
         if not gid:
             return None
         try:
-            p = get_adapter(gid, is_rr=rom_type.endswith("_rr")).calc_profile()
+            p = get_adapter(gid, is_rr=rom_type.endswith("_rr"), rom_type=rom_type).calc_profile()
         except KeyError:  # a mapped family whose adapter failed to register (e.g. Gen 5 import)
             return None
         if p is None:
