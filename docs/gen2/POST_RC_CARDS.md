@@ -83,6 +83,8 @@ so batch those cards and re-run `tools/gen2_final_sweep.py` once.
 - To close F3 for Gen 3: publish a full box census on hello by reusing the startup box walk, send `pc_boxes_generation` only with a complete census, and never send it with the incremental 2-4-box tick cache. Otherwise every key change in the first seconds after connecting would be rejected.
 - Then a Gen 3 live run: a Nature Changer on a linked mon, plus a reconnect replay.
 
+**Residual (not taken, `cx-06ec4e8e`).** After a non-terminal refusal (`box census unavailable`, or the ambiguity latch), the server still indexes the pair under `old_key` while the cartridge holds `new_key`. Until the client's re-send is accepted, a faint or release that the client reports under `new_key` is an unlinked key and does not reach the partner. The Gen 1/2 clients re-send after the next complete census, normally within a tick, so this window is short. Latching those delayed events was judged not worth the machinery.
+
 ---
 
 ## SP-LOWWATER: measure the worst-case stack during battle-text service
@@ -188,7 +190,10 @@ of four fixed `writetext` blocks (`patch/gen2/src/phone.asm:113-141`). The calle
 - **ADMISSION-MIXED-KINDS-VERDICT** (server, found by GEN1-PCOPS). When the mixed-artifact-kinds check refuses a hello (`server/server.py:1386-1398`, `_mixed_games_error` ~:580), it sets `identity_error` but records no admission verdict. `/api/status` and the board keep showing the refused player as "admitted" with an empty reason.
   - Fix: also set `self.admission[pid] = {"state": "rejected", "reason": ...}` and journal a durable "REJECTED —" event, matching the other refusal paths. Red test first.
   - The harness no longer depends on hello order (`c8b7fc96`, pureRGB admit_randomized launches B first).
-- **GEN1-UPR-FORK-SOURCE** (environment, OWNER). `tests/unit/test_upr_gen1_ini.py::test_handler_key_list_matches_the_fork_source` skips because the UPR fork source (`.cache/slink-upr/src/...Gen1RomHandler.java`) isn't on this machine: only the jars are. The Gen 1 gate treats that skip as unexplained, so its unit lane can't go green here. Restore the fork source checkout; don't add an ALLOWED_SKIPS excuse.
+- **GEN1-UPR-FORK-SOURCE: DONE** (`9e7a8d5c`, owner 2026-09-25 "you can fix the randomizer").
+  - The source was restored with `tools/build_upr_fork.py --bootstrap` semantics: upstream UPR ZX 7f00eb86 (v4.6.1), plus `patch/upr/0001-0010`, into `.cache/slink-upr/src`. The pinned jar (sha256 28292b59…) was kept untouched.
+  - The bootstrap itself was broken on Windows (core.autocrlf=true): upstream commits 24 files CRLF, while the patch series is stored LF. The tool now clones byte-exact, normalises CRLF->LF in one local commit, then applies the patches. A fresh bootstrap reproduces the restored tree exactly.
+  - `tests/unit/test_upr_gen1_ini.py`: 10 passed, 0 skipped.
 - **GEN1-GATE-REWRITES-RECEIPTS.** Running `verify_gen1_release.py` (live-gates lane) overwrites the committed `tests/fixtures/gen1/receipts/test_gen1_sfx_gate_*_result.txt`, dropping their `# lane HEAD=… git-status=clean` and `# cmd:` provenance header. This is the same trap as the Gen 2 attestation (`44f6fb97`). The coordinator restored the committed copies after the 2026-09-25 gate (the rewritten copies are in the scratchpad `gen1_sfx_rewritten/`). Fix: the gate writes to `patch/build` only, and a separate receipt-capture step stamps the header.
 - **GEN2-CALC** (calc multi-gen lane contract, 2026-09-25). After that lane's P1 lands inert `calc_profile / calc_name / calc_nature / calc_stats` in `server/adapters/base.py` on master, merge master and implement them in `server/adapters/gen2_gsc.py`, NOT `gen2_crystal.py` (gone on this branch):
   - `calc_profile` → `{"gen": 2, "dex": "vanilla"}`, only once the numbers are right; None hides the Calc tab.
