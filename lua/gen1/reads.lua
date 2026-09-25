@@ -305,7 +305,7 @@ function R.new(profile, io)
         local b = io.read_range(a.wEnemyMon, 29)
         local pp = {}
         for i = 1, 4 do pp[i] = b[25 + i] % 64 end -- pokemon_data_constants.asm:100-102
-        return {species = b[1], hp = word(b, 2), party_pos = b[4], status = b[5],
+        return {species = b[1], party_pos = b[4], status = b[5],
                 moves = take(b, 9, 4), dvs = dvs_from_raw(word(b, 13)), level = b[15],
                 max_hp = word(b, 16), pp = pp}
     end
