@@ -37,7 +37,6 @@ body.board img.mon-sprite, body.board .mk-spr img { image-rendering: pixelated; 
 
 /* Banners the old dashboard drew with inline styles. */
 .game-over { background: var(--c-dead); color: #fff; text-align: center; padding: 1em .5em; font-size: 1.8rem; font-weight: bold; letter-spacing: .15em; border-radius: 8px; margin-bottom: 1em; }
-.identity-warn { margin-bottom: var(--space-3); padding: var(--space-3); border-left: 3px solid var(--c-dead); background: color-mix(in srgb, var(--c-dead) 12%, transparent); color: var(--c-txt); }
 .mk-tag.stale-warn { display: inline-block; }
 
 :root {
