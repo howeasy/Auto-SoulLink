@@ -23,8 +23,15 @@ carry those rows now.
 
 Each gate is skipped, never hung, when a prerequisite is missing: no EmuHawk, no cartridge
 dump (they are gitignored), or no fixture.
+
+SLINK_GEN1_CAPTURE_RECEIPTS=1 makes test_gen1_sfx_matrix stamp a fresh, provenance-headed copy of its result over
+the committed tests/fixtures/gen1/receipts/test_gen1_sfx_gate_*_result.txt (GEN1-GATE-REWRITES-RECEIPTS,
+post-RC). Without it, an ordinary `SLINK_LIVE=1` run never touches those files, so a ROM/route change under
+review can be gated without clobbering the committed receipts' `# lane HEAD=.../# cmd:` header.
 """
+import datetime
 import os
+import subprocess
 import sys
 
 import pytest
@@ -49,6 +56,27 @@ pytestmark = [
 PATCH_ROMS = ("red_patched", "blue_patched")
 OVERLAY_ROMS = ("purered_overlay",)
 GATE_ROMS = PATCH_ROMS + OVERLAY_ROMS
+
+
+def _git(*args):
+    return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True, check=True).stdout.strip()
+
+
+def receipt_header(cmd):
+    """`# lane HEAD=<sha> git-status=clean|dirty at=<iso>` + `# cmd: <cmd>`: the provenance header the committed
+    tests/fixtures/gen1/receipts/*_result.txt copies carry (GEN1-GATE-REWRITES-RECEIPTS, post-RC)."""
+    head = _git("rev-parse", "HEAD")
+    status = "clean" if not _git("status", "--porcelain") else "dirty"
+    stamp = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+    return f"# lane HEAD={head} git-status={status} at={stamp}\n# cmd: {cmd}\n"
+
+
+def capture_receipt(kept, cmd, text):
+    """Stamp and write a fresh committed receipt copy. A live-gates lane run must never do this on its own — an
+    ordinary run's `text` carries no provenance header, and would silently drop the committed one (the same trap
+    as the Gen 2 attestation, 44f6fb97/SLINK_GEN2_NO_ATTEST). Capture is a separate, explicit opt-in step."""
+    with open(kept, "w", encoding="utf-8") as f:
+        f.write(receipt_header(cmd) + text)
 
 
 @pytest.fixture(scope="session")
@@ -125,10 +153,15 @@ def test_gen1_sfx_matrix(rom, target, emuhawk):
     passed, result_path, text = run_gate("lua/tests/test_gen1_sfx_gate.lua",
                                          rom_key=rom, target=target,
                                          timeout=600, quiet=True)
-    kept = os.path.join(REPO, "tests", "fixtures", "gen1", "receipts",
-                        f"test_gen1_sfx_gate_{rom}_{target}_result.txt")
-    with open(kept, "w", encoding="utf-8") as f:
-        f.write(text)
+    # GEN1-GATE-REWRITES-RECEIPTS (post-RC): run_gate already left the plain result under patch/build
+    # (result_path); the committed tests/fixtures/gen1/receipts/*_result.txt copy carries its own provenance
+    # header and must not be silently overwritten by an ordinary lane run. Capturing a fresh receipt is a
+    # separate, explicit step.
+    if os.environ.get("SLINK_GEN1_CAPTURE_RECEIPTS") == "1":
+        kept = os.path.join(REPO, "tests", "fixtures", "gen1", "receipts",
+                            f"test_gen1_sfx_gate_{rom}_{target}_result.txt")
+        cmd = f"tools/run_gb_gate.py lua/tests/test_gen1_sfx_gate.lua --rom {rom} --target {target} --timeout 600"
+        capture_receipt(kept, cmd, text)
     assert passed, (f"SFX matrix gate on {rom}/{target} did not PASS\n"
                     f"result: {result_path}\n{text[-3000:]}")
 
@@ -170,8 +203,6 @@ def test_gen1_panel_on_a_randomized_cartridge(emuhawk):
 
     The artifact is rebuilt rather than committed, because a randomized ROM is a ROM.
     """
-    import subprocess
-
     from run_gb_gate import PATCHED
     _base, rom_rel, _sav = PATCHED["red_rand_patched"]
     rom_path = os.path.join(REPO, rom_rel)
