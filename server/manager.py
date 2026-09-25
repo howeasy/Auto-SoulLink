@@ -1829,7 +1829,7 @@ if __name__ == "__main__":
     parser.add_argument("--data-dir", default=None,
                         help="Where runs live (default: data/runs). A fresh directory is a fresh Manager")
     parser.add_argument("--allow-host", action="append", default=[], metavar="NAME",
-                        help="Extra Host name the web UI answers to, e.g. a tunnel name or '*.ts.net' "
+                        help="Extra Host name the web UI answers to, e.g. a tunnel name or '*.<tailnet>.ts.net' "
                              "(repeatable; also SLINK_ALLOWED_HOSTS, comma-separated). Runs inherit it")
     args = parser.parse_args()
     allow_hosts(args.allow_host)

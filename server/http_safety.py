@@ -19,7 +19,7 @@ ALLOWED_HOSTS_ENV = "SLINK_ALLOWED_HOSTS"
 
 
 def allow_hosts(names) -> None:
-    """Add ``--allow-host`` names (globs like ``*.ts.net`` work) to the Host allow list.
+    """Add ``--allow-host`` names (globs like ``*.<tailnet>.ts.net`` work) to the Host allow list.
 
     They go into the environment so run servers the Manager spawns inherit them.
     """
@@ -27,6 +27,9 @@ def allow_hosts(names) -> None:
     if names:
         current = os.environ.get(ALLOWED_HOSTS_ENV, "")
         os.environ[ALLOWED_HOSTS_ENV] = ",".join(filter(None, [current, *names]))
+
+
+_LOCAL_SUFFIXES = ("", ".local", ".lan", ".home", ".home.arpa", ".localdomain", ".internal")
 
 
 def _host_allowed(host: str) -> bool:
@@ -41,14 +44,16 @@ def _host_allowed(host: str) -> bool:
     if name == "localhost":
         return True
     try:
-        ip = ipaddress.ip_address(name)
-        if ip.is_loopback or ip.is_private or ip.is_link_local:
-            return True
+        ipaddress.ip_address(name)
+        # Any IP literal: rebinding needs a DNS name, and a browser only sends an IP Host
+        # to the IP it is already talking to. Covers LAN, Tailscale 100.x, port-forwards.
+        return True
     except ValueError:
         pass
-    # ponytail: first-label match ("mypc" == "mypc.lan"); an attacker would have to
-    # know the machine name to abuse it. Tighten to exact names if that ever matters.
-    if name.split(".")[0] == socket.gethostname().lower().split(".")[0]:
+    # The machine's own name, bare or under a suffix nobody can register publicly.
+    # Not "<name>.anything": <name>.evil.com rebinds to 127.0.0.1 just as well.
+    me = socket.gethostname().lower().split(".")[0]
+    if name in {me + suffix for suffix in _LOCAL_SUFFIXES}:
         return True
     allowed = os.environ.get(ALLOWED_HOSTS_ENV, "")
     return any(fnmatchcase(name, pattern.strip().lower())

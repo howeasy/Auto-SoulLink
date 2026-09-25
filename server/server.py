@@ -3478,13 +3478,16 @@ class SLinkServer:
         password = body.get("password")  # None = not provided; "" = explicitly cleared
         if host or port is not None or password:
             conns = {k: dict(v) for k, v in self.obs._config.get("connections", {}).items()}
-            conn = dict(conns.get(player, {}))
+            old = dict(conns.get(player, {}))
+            conn = dict(old)
             if host:
                 conn["host"] = host
             if port is not None:
                 conn["port"] = port
             if password:  # only update if non-empty; blank = keep existing
                 conn["password"] = password
+            elif (str(conn.get("host", "")), str(conn.get("port", ""))) !=                     (str(old.get("host", "")), str(old.get("port", ""))):
+                conn["password"] = ""   # never replay a saved password to a new host
             conns[player] = conn
             self.obs._config = {**self.obs._config, "connections": conns}
             self.obs.save_config()
@@ -4913,7 +4916,7 @@ if __name__ == "__main__":
     parser.add_argument("--manager-port", type=int, default=0,   help="Manager HTTP port (enables 'Run Manager' link on status page)")
     parser.add_argument("--verbose",      action="store_true",   help="Enable DEBUG-level logging to file and console (default: INFO only)")
     parser.add_argument("--allow-host",   action="append", default=[], metavar="NAME",
-        help="Extra Host name the web UI answers to, e.g. a tunnel name or '*.ts.net' (repeatable; also SLINK_ALLOWED_HOSTS)")
+        help="Extra Host name the web UI answers to, e.g. a tunnel name or '*.<tailnet>.ts.net' (repeatable; also SLINK_ALLOWED_HOSTS)")
     args = parser.parse_args()
     allow_hosts(args.allow_host)
     asyncio.run(main(args.host, args.port, args.http_port, args.reset, args.data_dir, args.run_id,

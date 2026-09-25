@@ -166,7 +166,7 @@ async def _status(host, method="GET", headers=None):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("method", ["GET", "POST"])
 @pytest.mark.parametrize("host", [
-    "evil.example:8090", "evil.example", "8.8.8.8:8090", "localhost.evil.example:8090",
+    "evil.example:8090", "evil.example", "localhost.evil.example:8090",
     "127.0.0.1.nip.io:8090", "slink.local.evil.example:8090",
 ])
 async def test_rebinding_host_is_rejected_for_every_method(host, method):
@@ -180,6 +180,8 @@ async def test_rebinding_host_is_rejected_for_every_method(host, method):
     "localhost:8090", "LOCALHOST", "127.0.0.1:8090", "127.5.5.5", "[::1]:8090",
     "192.168.1.20:8090", "10.0.0.5", "172.16.3.4:80", "169.254.1.1:8090", "[fe80::1]:8090",
     "slink.local:8090",
+    # Any IP literal: rebinding needs a DNS name (Tailscale 100.x, port-forwarded public IPs).
+    "100.100.1.1:8090", "8.8.8.8:8090",
 ])
 async def test_local_and_lan_hosts_pass(host):
     assert await _status(host, "POST", {"Origin": f"http://{host}"}) == (200, ["POST"])
@@ -188,8 +190,16 @@ async def test_local_and_lan_hosts_pass(host):
 @pytest.mark.asyncio
 async def test_own_hostname_passes_with_or_without_a_domain():
     name = socket.gethostname().split(".")[0]
-    for host in (name, f"{name.upper()}:8090", f"{name}.lan:8090"):
+    for host in (name, f"{name.upper()}:8090", f"{name}.lan:8090", f"{name}.home.arpa"):
         assert (await _status(host))[0] == 200, host
+
+
+@pytest.mark.asyncio
+async def test_own_hostname_under_a_public_domain_is_rejected():
+    """<machine>.evil.com rebinds to 127.0.0.1 just as well; only unregistrable suffixes pass."""
+    name = socket.gethostname().split(".")[0]
+    for host in (f"{name}.evil.com", f"{name.upper()}.attacker.net:8090"):
+        assert (await _status(host, "POST", {"Origin": f"http://{host}"}))[0] == 403, host
 
 
 @pytest.mark.asyncio
@@ -282,3 +292,28 @@ async def test_obs_new_target_drops_the_saved_password(tmp_path, host, port):
 @pytest.mark.asyncio
 async def test_obs_new_password_is_used_for_a_new_host(tmp_path):
     assert await _obs_save(tmp_path, "10.0.0.9", 4455, "newpw") == "newpw"
+
+
+@pytest.mark.asyncio
+async def test_obs_connect_to_a_new_host_drops_the_saved_password(tmp_path):
+    """/api/obs/connect re-targets a player too; it must not replay the saved password."""
+    from server.server import SLinkServer
+    srv = SLinkServer(data_dir=str(tmp_path))
+    srv.obs._config = {"connections": {"a": {"host": "192.168.1.5", "port": 4455, "password": "hunter2"}}}
+    srv.obs.save_config = lambda: None
+
+    async def connect(player):
+        return None
+    srv.obs.connect_player = connect
+
+    async def body_new():
+        return {"player": "a", "host": "attacker.example", "port": 4455}
+    await srv.handle_obs_connect(SimpleNamespace(json=body_new))
+    assert srv.obs._config["connections"]["a"]["password"] == ""
+
+    srv.obs._config["connections"]["a"].update(host="192.168.1.5", password="hunter2")
+
+    async def body_same():
+        return {"player": "a", "host": "192.168.1.5", "port": 4455}
+    await srv.handle_obs_connect(SimpleNamespace(json=body_same))
+    assert srv.obs._config["connections"]["a"]["password"] == "hunter2"
