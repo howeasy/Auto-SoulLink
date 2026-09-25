@@ -6,7 +6,9 @@ Boots the qualified <title>_battle fixture warm on the overlay (tools/run_gb_gat
 lua/tests/gen2_phone_gate.lua: a request posted in battle, standing in town, with START open, before a native save
 and behind a pending native story call must ring only on the next counted step, with the SLink call screen
 (PHONE_00 "----------" and the id's first text row), clear ARMED/the id afterwards, never overwrite the native id,
-and never reach SRAM. This file re-checks the printed facts and, on PASS, writes
+and never reach SRAM. v2 (PHONE-NAMES) adds named_map_change (max-length names survive a map change between arming
+and ringing: ClearUnusedMapBuffer is hooked, the binder re-stages, the header names the trainer) and named_fallback
+(a trainer without mons: named header, fixed body). This file re-checks the printed facts and, on PASS, writes
 
     tests/fixtures/gen2/receipts/<title>_overlay.phone_gate.json
 
@@ -42,9 +44,9 @@ pytestmark = [
 GATE = "lua/tests/gen2_phone_gate.lua"
 TITLES = ("crystal", "gold", "silver")
 PHONE_ASM = REPO / "patch/gen2/src/phone.asm"
-SITES = ("RingTwice_StartCall",)
+SITES = ("RingTwice_StartCall", "ClearUnusedMapBuffer")
 RAM = ("wSpecialPhoneCallID", "wCurCaller", "wPokegearFlags")
-CASES = ("battle", "town", "start_menu", "save", "native")
+CASES = ("battle", "town", "start_menu", "save", "native", "named_map_change", "named_fallback")
 # docs/gen2/reviews/P45_PHONE_SAVE_CENSUS_2026-09-23.md "Exact sinks": CartRAM offsets of the saved phone byte.
 SRAM = {"crystal": {"primary": 0x27BF, "backup": 0x19BF},
         "gold": {"primary": 0x27E3, "backup": 0x1075}, "silver": {"primary": 0x27E3, "backup": 0x1075}}
@@ -103,7 +105,11 @@ def verify(text: str, facts: dict, title: str, staged: bytes) -> dict:
     assert save["save_site_frame"] is not None and save["sram_changed_bytes"] > 0, save   # the save really ran
     native = cases["native"]["extra"]["native_ring"]
     assert native["caller"] != 0 and native["frame"] < cases["native"]["slink_ring"]["frame"], cases["native"]
+    moved = cases["named_map_change"]["extra"]
+    assert moved["staged_before_crossing"] and moved["wipes"] > 0 and moved["restaged"], moved
+    assert cases["named_fallback"]["extra"]["species"] == [0, 0], cases["named_fallback"]
     receipt = live.tag_json(text, "RECEIPT")
+    assert receipt["schema"] == "gen2-phone-gate-v2", receipt
     assert receipt["title"] == title and receipt["fixture"] == f"{title}_battle", receipt
     assert receipt["overlay_sha1"] == facts["overlay_sha1"] and receipt["evidence_level"] == "PHYSICAL", receipt
     assert receipt["fixture_sha256"] == hashlib.sha256(staged).hexdigest(), "receipt names other fixture bytes"

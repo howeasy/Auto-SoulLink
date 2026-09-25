@@ -94,16 +94,16 @@ KEY_CHANGE_REASONS = ("nature_change", "evolution", "npc_trade", "trade_undo", "
 
 # cmd -> (required fields, optional fields); docs/protocol.md §5
 COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
-    "noop": ({}, {"refused": "str"}),   # refused: the line was not processed (identity|admission|no_hello|duplicate)
+    "noop": ({}, {"refused": "str"}),   # refused: the line was not processed (identity|admission|no_hello|duplicate|superseded)
     # "phone": the O-29 tag (docs/protocol.md §5); only the Gen 2 client acts on it
-    "force_faint": ({"key": "key"}, {"nickname": "str", "phone": "str"}),
-    "force_explode": ({"key": "key"}, {"nickname": "str", "phone": "str"}),
+    "force_faint": ({"key": "key"}, {"nickname": "str", "phone": "str", "phone_data": "dict"}),
+    "force_explode": ({"key": "key"}, {"nickname": "str", "phone": "str", "phone_data": "dict"}),
     "box_mon": ({"key": "key"}, {}),
     "party_mon": ({"key": "key"}, {"nickname": "str", "stats": "dict"}),
     "memorialize": ({"key": "key"}, {}),
     "game_over": ({}, {}),
     "msgbox": ({"text": "str"}, {"fb": "str", "r": "int", "g": "int", "b": "int", "frames": "int",
-                                 "phone": "str"}),
+                                 "phone": "str", "phone_data": "dict"}),
     "gui_prompt": ({"text": "str"}, {"r": "int", "g": "int", "b": "int", "frames": "int"}),
     "hud_show": ({"text": "str"}, {"r": "int", "g": "int", "b": "int", "frames": "int",
                                    "color": "list", "duration": "int"}),
@@ -225,11 +225,29 @@ def _hello_pairing(msg: dict) -> list[str]:
     return problems
 
 
+# PHONE-NAMES: the optional phone_data object, relative to the receiver (docs/protocol.md section 5)
+PHONE_DATA = {"phone_data": ({"trainer_name": "str"}, {"caller_mon": "dict", "receiver_mon": "dict"})}
+PHONE_MON = {"mon": ({"species_id": "int"}, {"nickname": "str"})}
+
+
+def _phone_data(cmd: dict, strict: bool) -> list[str]:
+    data = cmd.get("phone_data")
+    if not isinstance(data, dict):
+        return []
+    problems = [] if "phone" in cmd else [f"{cmd['cmd']}: phone_data without a phone tag"]
+    problems += _validate("phone_data", "phone_data", PHONE_DATA, data, extra_ok=not strict)
+    for field in ("caller_mon", "receiver_mon"):
+        if isinstance(data.get(field), dict):
+            problems += [f"{field}: {p}" for p in _validate("phone mon", "mon", PHONE_MON, data[field],
+                                                            extra_ok=not strict)]
+    return problems
+
+
 def validate_command(cmd: dict, *, strict: bool = False) -> list[str]:
     """Problems with one server->client command object (empty list = conforms)."""
     if not isinstance(cmd, dict) or "cmd" not in cmd or not isinstance(cmd["cmd"], str):
         return ["command: not an object with a string 'cmd'"]
-    return _validate("command", cmd["cmd"], COMMANDS, cmd, extra_ok=not strict)
+    return _validate("command", cmd["cmd"], COMMANDS, cmd, extra_ok=not strict) + _phone_data(cmd, strict)
 
 
 def validate_reply(line: dict) -> list[str]:

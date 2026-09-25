@@ -126,3 +126,69 @@ def test_a_gen1_client_behaves_identically_with_the_tag():
 
     plain, with_tag = run(False), run(True)
     assert plain[-1] == 0 and with_tag == plain
+
+
+# -- PHONE-NAMES: phone_data, relative to each receiver ---------------------------------------
+
+def phone_data(state, player, replied=()):
+    return [c.get("phone_data") for c in [*replied, *state.queued_commands[player]] if "phone" in c]
+
+
+def named(state):
+    state.trainer_names = {"a": "ALICE", "b": "BOB"}
+    return state
+
+
+def test_fallen_names_the_caller_and_both_mons_for_the_receiver():
+    state = named(make_state_with_link())
+    state.links[0].a.species, state.links[0].a.nickname = 16, "PIDGE"
+    state.links[0].b.species, state.links[0].b.nickname = 19, "RATTY"
+    state.handle_event("a", {"event": "faint", "key": "A:1"})
+    [cmd] = [c for c in state.queued_commands["b"] if "phone" in c]
+    assert cmd["phone_data"] == {"trainer_name": "ALICE",
+                                 "caller_mon": {"species_id": 16, "nickname": "PIDGE"},
+                                 "receiver_mon": {"species_id": 19, "nickname": "RATTY"}}
+    assert ps.validate_command({**cmd, "key": "ABCD:1234:99"}, strict=True) == []
+
+
+def test_first_link_gives_each_receiver_its_own_object():
+    state = named(SoulLinkState())
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.handle_event("a", {"event": "capture", "key": "A:1", "area_id": "route_1", "level": 5,
+                             "species_id": 16, "nickname": "PIDGE"})
+    replied = state.handle_event("b", {"event": "capture", "key": "B:1", "area_id": "route_1", "level": 5,
+                                       "species_id": 19, "nickname": "RATTY"})
+    [to_a], [to_b] = phone_data(state, "a"), phone_data(state, "b", replied)
+    assert to_a == {"trainer_name": "BOB", "caller_mon": {"species_id": 19, "nickname": "RATTY"},
+                    "receiver_mon": {"species_id": 16, "nickname": "PIDGE"}}
+    assert to_b["trainer_name"] == "ALICE" and to_b["caller_mon"]["species_id"] == 16
+    assert to_a is not to_b
+
+
+def test_dead_zone_names_only_the_other_trainer():
+    state = named(SoulLinkState())
+    replied = state.handle_event("b", {"event": "no_catch", "area_id": "route_1"})
+    assert phone_data(state, "a") == [{"trainer_name": "BOB"}]
+    assert phone_data(state, "b", replied) == [{"trainer_name": "ALICE"}]
+
+
+def test_no_trainer_name_keeps_the_tag_and_omits_phone_data():
+    state = make_state_with_link()
+    state.player_identity = {"a": {"ot_id": "1", "trainer_name": "A"}}   # the identity placeholder
+    state.handle_event("a", {"event": "faint", "key": "A:1"})
+    assert phone_data(state, "b") == [None] and tagged(state, "b") == [("force_faint", "fallen")]
+
+
+@pytest.mark.parametrize("data", [
+    {"caller_mon": {"species_id": 1}},                               # no trainer_name
+    {"trainer_name": "BOB", "caller_mon": {"nickname": "X"}},       # a mon without species
+    {"trainer_name": "BOB", "extra": 1},
+    {"trainer_name": "BOB", "receiver_mon": {"species_id": "1"}},
+])
+def test_the_schema_validates_phone_data_strictly(data):
+    assert ps.validate_command({"cmd": "msgbox", "text": "x", "phone": "dead_zone", "phone_data": data},
+                               strict=True)
+
+
+def test_phone_data_without_a_tag_is_rejected():
+    assert ps.validate_command({"cmd": "msgbox", "text": "x", "phone_data": {"trainer_name": "BOB"}})

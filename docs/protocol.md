@@ -363,6 +363,13 @@ partner's `force_faint`/`force_explode` from a battle death carries `"fallen"` (
 (`lua/gen2/phone.lua`, a Pokégear call on a cartridge advertising `SLINK_CAP_PHONE`); every other
 client ignores the key.
 
+Optional `phone_data:dict` (PHONE-NAMES), only beside a `phone` tag and relative to the receiver:
+`{trainer_name:str, caller_mon?:{species_id:int, nickname?:str}, receiver_mon?:{species_id:int, nickname?:str}}`.
+The caller is the other player. `fallen` carries the caller's fainted mon and the receiver's linked
+mon, `first_link` the two newly linked mons, `dead_zone` the trainer name only. Each recipient gets
+its own object. When the caller has no trainer name the server omits `phone_data`, and the Gen 2
+client then rings the fixed-text call.
+
 ### 5.0 Gen 1 LINK PANEL mailbox (Red/Blue companion patch)
 
 `link_panel{rows}` is a server payload, not permission to write whenever it arrives. The client holds sanitized, pre-rendered pages; the cartridge owns the screen, whites it out, draws a fallback and requests staging (`lua/gen1/panel.lua:1-10`, `:100-131`). This is separate from the native SLINK TRADE overlay ABI.

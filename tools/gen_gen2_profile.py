@@ -550,7 +550,25 @@ def overlay_block(ctx, title: str, root: Path) -> dict | None:
     trade = trade_block(symbols, name)
     if trade is not None:
         block["trade"] = trade
+    if "SlinkPhoneCallScript" in symbols:
+        block["phone"] = phone_block(symbols, name)
     return block
+
+
+PHONE_STAGE_SIZE = 24  # patch/gen2/src/phone.asm SLINK_STAGE_COOKIE + 1; lua/gen2/phone.lua STAGE_SIZE
+
+
+def phone_block(symbols: dict, name: str = "overlay sym") -> dict:
+    """PHONE-NAMES: where lua/gen2/phone.lua stages the named-call record (wUnusedMapBuffer)."""
+    for sym in ("wUnusedMapBuffer", "wUnusedMapBufferEnd"):
+        if sym not in symbols:
+            raise ValueError(f"{name}: phone build without {sym}")
+    bank, stage = symbols["wUnusedMapBuffer"]
+    if bank != 0 or not 0xC000 <= stage < 0xD000:
+        raise ValueError(f"{name}: wUnusedMapBuffer outside WRAM0")
+    if symbols["wUnusedMapBufferEnd"] != (0, stage + PHONE_STAGE_SIZE):
+        raise ValueError(f"{name}: wUnusedMapBuffer is not {PHONE_STAGE_SIZE} bytes")
+    return {"stage": stage, "stage_size": PHONE_STAGE_SIZE}
 
 
 def trade_block(symbols: dict, name: str = "overlay sym") -> dict | None:

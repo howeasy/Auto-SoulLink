@@ -558,7 +558,8 @@ def test_phone_pointer_hook_requires_exactly_two_loads(tmp_path, repo, copies):
     _write_real_delay_asm(checkout)
     path = checkout / "engine/phone/phone.asm"
     path.parent.mkdir(parents=True)
-    original = "CheckSpecialPhoneCall::\n" + "\tld hl, SpecialPhoneCallList\n" * copies + "\tret\n"
+    original = ("CheckSpecialPhoneCall::\n" + "\tld hl, SpecialPhoneCallList\n" * copies + "\tret\n"
+                + bc.CALLER_NAME_ANCHOR)
     path.write_text(original)
     src = tmp_path / "src"
     src.mkdir()
@@ -570,13 +571,15 @@ def test_phone_pointer_hook_requires_exactly_two_loads(tmp_path, repo, copies):
         assert path.read_text() == original
     else:
         bc.apply_overlay(checkout, repo, src)
-        assert path.read_text() == original.replace("SpecialPhoneCallList", "SlinkSpecialPhoneCallList")
+        assert path.read_text() == original.replace("SpecialPhoneCallList", "SlinkSpecialPhoneCallList").replace(
+            bc.CALLER_NAME_ANCHOR, bc.CALLER_NAME_REPLACEMENT)
         main = (checkout / "main.asm").read_text()
         assert main.index('/phone_flags.asm"') < main.index('/slink.asm"') < main.index('/phone.asm"')
 
 
 @pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
-@pytest.mark.parametrize("fault", [None, "native_row", "old_table", "contact", "condition", "script", "load", "other_code", "bank", "size"])
+@pytest.mark.parametrize("fault", [None, "native_row", "old_table", "contact", "condition", "script", "load",
+                                   "other_code", "bank", "size", "caller_entry", "caller_body", "caller_bank"])
 def test_phone_binary_pin_rejects_table_or_dispatch_drift(tmp_path, title, fault):
     key = "poke" + title
     repo = "pokecrystal" if title == "crystal" else "pokegold"
@@ -603,10 +606,15 @@ def test_phone_binary_pin_rejects_table_or_dispatch_drift(tmp_path, title, fault
     changes = {"native_row": target, "old_table": source, "contact": target + 50,
                "condition": target + 48, "script": target + 52, "load": loads[1] + 1,
                "other_code": flat(old["CheckSpecialPhoneCall"]) + 3}
+    hook = 0x7ff0
+    caller = flat(old["GetCallerName"])
+    overlay[caller:caller + 4] = b"\xc3" + hook.to_bytes(2, "little") + b"\x00"   # PHONE-NAMES entry
+    changes.update(caller_entry=caller + 3, caller_body=caller + 4)
     if fault in changes:
         overlay[changes[fault]] ^= 1
     new = tmp_path / "overlay.sym"
-    new.write_text(f"{0x25 if fault == 'bank' else table[0]:02x}:{table[1]:04x} SlinkSpecialPhoneCallList\n"
+    new.write_text(f"{0x25 if fault == 'caller_bank' else 0x24:02x}:{hook:04x} SlinkPhoneCallerName\n"
+                   + f"{0x25 if fault == 'bank' else table[0]:02x}:{table[1]:04x} SlinkSpecialPhoneCallList\n"
                    + f"24:{table[1] + (60 if fault == 'size' else 54):04x} SlinkSpecialPhoneCallListEnd\n"
                    + f"{script[0]:02x}:{script[1]:04x} SlinkPhoneCallScript\n")
     if fault:
@@ -614,3 +622,101 @@ def test_phone_binary_pin_rejects_table_or_dispatch_drift(tmp_path, title, fault
             bc.verify_phone_hook(base, bytes(overlay), clean_sym, new)
     else:
         bc.verify_phone_hook(base, bytes(overlay), clean_sym, new)
+
+
+# ---------------------------------------------------------------- TITLE-VERSION part A
+
+@pytest.mark.parametrize("version", ["v0.0.0-dev", "v1.2.3", "v10.20.30", "v1.2.3-rc.1"])
+def test_version_accepts_a_release_tag_that_fits_the_row(version):
+    assert bc.check_version(version) == version
+
+
+@pytest.mark.parametrize("version", [None, "", "1.2.3", "v1.2", "v1.2.3 ", "V1.2.3", "v1.2.3-RC",
+                                     "v1.2.3-toolongsuffix", 'v1.2.3"'])
+def test_version_rejects_anything_else(version):
+    with pytest.raises(RuntimeError, match="--version"):
+        bc.check_version(version)
+
+
+def test_build_refuses_before_any_work_without_a_version():
+    with pytest.raises(RuntimeError, match="--version"):
+        bc.build(version="")
+
+
+def test_cli_requires_version(monkeypatch):
+    monkeypatch.setattr(bc.sys, "argv", ["build_gen2_companion.py", "--check"])
+    with pytest.raises(SystemExit):
+        bc.main()
+
+
+def _menu_checkout(tmp_path, repo, body):
+    checkout = _fake_checkout(tmp_path, repo)
+    _write_real_delay_asm(checkout)
+    path = checkout / "engine/menus/main_menu.asm"
+    path.parent.mkdir(parents=True)
+    path.write_text(body)
+    src = tmp_path / "src"
+    src.mkdir()
+    for name in ("slink.asm", bc.VERSION_FILE):
+        (src / name).write_text("; fixture\n")
+    return checkout, path, src
+
+
+@pytest.mark.parametrize("repo", ["pokecrystal", "pokegold"])
+def test_version_hook_rewrites_the_one_setupmenu_call_and_defines_the_version(tmp_path, repo):
+    native = (ROOT / ".cache/gen2-build" / repo / "engine/menus/main_menu.asm").read_text()
+    checkout, path, src = _menu_checkout(tmp_path, repo, native)
+    bc.apply_overlay(checkout, repo, src, version="v1.2.3")
+    assert path.read_text().replace(" ; SLink overlay: same size as call SetUpMenu", "").replace(
+        "call SlinkMainMenuBridge", "call SetUpMenu") == native
+    main = (checkout / "main.asm").read_text()
+    assert 'DEF SLINK_BUILD_VERSION EQUS "v1.2.3"' in main and main.index("SLINK_BUILD_VERSION") < main.index(
+        '/version.asm"')
+
+
+@pytest.mark.parametrize("body", ["MainMenuJoypadLoop:\n\tret\n",
+                                  "MainMenuJoypadLoop:\n\tcall SetUpMenu\nOther:\n\tcall SetUpMenu\n"])
+def test_version_hook_refuses_a_missing_or_second_setupmenu(tmp_path, body):
+    checkout, path, src = _menu_checkout(tmp_path, "pokecrystal", body)
+    with pytest.raises(RuntimeError, match="SetUpMenu"):
+        bc.apply_overlay(checkout, "pokecrystal", src, version="v1.2.3")
+    assert path.read_text() == body and "SLINK_BUILD_VERSION" not in (checkout / "main.asm").read_text()
+
+
+def test_version_hook_refuses_a_bad_version_before_mutating(tmp_path):
+    native = (ROOT / ".cache/gen2-build/pokecrystal/engine/menus/main_menu.asm").read_text()
+    checkout, path, src = _menu_checkout(tmp_path, "pokecrystal", native)
+    with pytest.raises(RuntimeError, match="--version"):
+        bc.apply_overlay(checkout, "pokecrystal", src, version=None)
+    assert path.read_text() == native
+
+
+@pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
+@pytest.mark.parametrize("fault", [None, "operand", "opcode", "loop", "bank"])
+def test_version_binary_pin_allows_only_the_call_operand(tmp_path, title, fault):
+    key = "poke" + title
+    repo = "pokecrystal" if title == "crystal" else "pokegold"
+    clean_sym = ROOT / "data/gen2" / f"{key}.sym"
+    old = bc._symbols(clean_sym)
+    base = (ROOT / ".cache/gen2-build" / repo / f"{key}.gbc").read_bytes()
+    overlay = bytearray(base)
+    bank, address = old["MainMenuJoypadLoop"]
+    at = bank * 0x4000 + address - 0x4000
+    bridge = 0x00a0
+    overlay[at + 1:at + 3] = bridge.to_bytes(2, "little")
+    if fault in ("operand", "opcode", "loop"):
+        overlay[at + {"operand": 1, "opcode": 0, "loop": 3}[fault]] ^= 1
+    new = tmp_path / "overlay.sym"
+    new.write_text(f"{1 if fault == 'bank' else 0:02x}:{bridge:04x} SlinkMainMenuBridge\n")
+    if fault:
+        with pytest.raises(RuntimeError, match="main menu"):
+            bc.verify_version_hook(base, bytes(overlay), clean_sym, new)
+    else:
+        bc.verify_version_hook(base, bytes(overlay), clean_sym, new)
+
+
+def test_published_provenance_records_the_version():
+    overlay = json.loads(bc.PROVENANCE_PATH.read_text())["overlay"]
+    assert bc.check_version(overlay["version"])
+    assert overlay["version_sha256"] == hashlib.sha256(overlay["version"].encode()).hexdigest()
+    assert "version.asm" in overlay["sources_sha256"]

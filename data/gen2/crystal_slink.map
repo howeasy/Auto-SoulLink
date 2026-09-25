@@ -1,6 +1,6 @@
 SUMMARY:
-	ROM0: 16135 bytes used / 249 free
-	ROMX: 1629369 bytes used / 451399 free in 127 banks
+	ROM0: 16144 bytes used / 240 free
+	ROMX: 1629724 bytes used / 451044 free in 127 banks
 	SRAM: 48188 bytes used / 17348 free in 8 banks
 	WRAM0: 4083 bytes used / 13 free
 	WRAMX: 22978 bytes used / 5694 free in 7 banks
@@ -42,7 +42,9 @@ ROM0 bank #0:
 	SECTION: $0080-$0090 ($0011 bytes) ["SLink Sound Reset"]
 	         $0080 = SlinkResetSoundBridge
 	         $0091 = SlinkResetSoundBridgeEnd
-	EMPTY: $0091-$00ff ($006f bytes)
+	SECTION: $0091-$0099 ($0009 bytes) ["SLink Main Menu Bridge"]
+	         $0091 = SlinkMainMenuBridge
+	EMPTY: $009a-$00ff ($0066 bytes)
 	SECTION: $0100-$014f ($0050 bytes) ["Header"]
 	         $0100 = Start
 	SECTION: $0150-$3fb4 ($3e65 bytes) ["Home"]
@@ -1265,7 +1267,7 @@ ROM0 bank #0:
 	         $3fa2 = Function3f9f.row
 	         $3fa5 = Function3f9f.col
 	EMPTY: $3fb5-$3fff ($004b bytes)
-	TOTAL EMPTY: $00f9 bytes
+	TOTAL EMPTY: $00f0 bytes
 
 ROMX bank #1:
 	SECTION: $4000-$747a ($347b bytes) ["bank1"]
@@ -17995,6 +17997,7 @@ ROMX bank #36:
 	         $438a = CheckCanDeletePhoneNumber
 	         $439a = GetCallerTrainerClass
 	         $43a9 = GetCallerName
+	         $43ad = GetCallerName.SlinkTrainer
 	         $43c5 = GetCallerName.NotTrainer
 	         $43d6 = NonTrainerCallerNames
 	         $43e2 = NonTrainerCallerNames.none
@@ -18672,8 +18675,11 @@ ROMX bank #36:
 	SECTION: $7a3d-$7a72 ($0036 bytes) ["SLink Special Calls"]
 	         $7a3d = SlinkSpecialPhoneCallList
 	         $7a73 = SlinkSpecialPhoneCallListEnd
-	EMPTY: $7a73-$7fff ($058d bytes)
-	TOTAL EMPTY: $058d bytes
+	SECTION: $7a73-$7a8b ($0019 bytes) ["SLink Caller Name"]
+	         $7a73 = SlinkPhoneCallerName
+	         $7a84 = SlinkPhoneCallerName.native
+	EMPTY: $7a8c-$7fff ($0574 bytes)
+	TOTAL EMPTY: $0574 bytes
 
 ROMX bank #37:
 	SECTION: $4000-$66af ($26b0 bytes) ["Maps"]
@@ -21691,8 +21697,8 @@ ROMX bank #46:
 	         $57f8 = MailGFX_GenerateMonochromeTilesColor2.loop
 	         $5803 = MailGFX_PlaceMessage
 	         $584b = MailGFX_PlaceMessage.place_author
-	         $584e = InvertBytes.loop
 	         $584e = InvertBytes
+	         $584e = InvertBytes.loop
 	         $5858 = DrawMailBorder
 	         $587b = DrawMailBorder2
 	         $589e = Mail_Place14TileAlternatingRow
@@ -31466,8 +31472,8 @@ ROMX bank #65:
 	         $426f = PadMapForHDMATransfer.loop2
 	         $4279 = PadMapForHDMATransfer.loop3
 	         $4284 = HDMATransfer2bpp
-	         $42b2 = HDMATransfer1bpp.loop
 	         $42b2 = HDMATransfer1bpp
+	         $42b2 = HDMATransfer1bpp.loop
 	         $42d6 = HDMATransfer1bpp.bankswitch
 	         $4303 = HDMATransfer_OnlyTopFourRows
 	         $4309 = HDMATransfer_OnlyTopFourRows.Function
@@ -43363,88 +43369,105 @@ ROMX bank #117:
 	         $44c6 = SlinkTradeWaitText
 	         $44e6 = SlinkTradeSavedText
 	         $4517 = SlinkTradeErrorText
-	SECTION: $4533-$4769 ($0237 bytes) ["SLink Trade Commit"]
-	         $4533 = SlinkTradeCommit
-	         $4554 = SlinkTradeCommit.bad_entry
-	         $455a = SlinkTradeCommit.entry
-	         $45d4 = SlinkTradeCommit.responder
-	         $45d9 = SlinkTradeCommit.append
-	         $4649 = SlinkTradeCommit.uncertain
-	         $464b = SlinkTradeCommit.cleanup
-	         $468c = SlinkTradeCommit.ShiftMail
-	         $46c1 = SlinkTradeCommit.PrepareAnimation
-	         $476a = SlinkTradeCommitEnd
-	SECTION: $476a-$48f3 ($018a bytes) ["SLink Phone Script"]
-	         $476a = SlinkPhoneCallScript
-	         $477b = SlinkPhoneCallScript.delivered
-	         $4792 = SlinkPhoneCallScript.fallen
-	         $4796 = SlinkPhoneCallScript.dead_zone
-	         $479a = SlinkPhoneCallScript.first_link
-	         $479e = SlinkPhoneFallenText
-	         $480a = SlinkPhoneDeadZoneText
-	         $486a = SlinkPhoneFirstLinkText
-	         $48d6 = SlinkPhoneStaticText
-	SECTION: $48f4-$4a02 ($010f bytes) ["SLink Trade Item Predicate"]
-	         $48f4 = SlinkTradeItemAllowed
-	         $4903 = SlinkTradeAllowedItems
-	         $4903 = SlinkTradeItemAllowedEnd
-	         $4a03 = SlinkTradeAllowedItemsEnd
-	SECTION: $4a03-$4ac4 ($00c2 bytes) ["SLink Panel"]
-	         $4a03 = SlinkPanel
-	         $4a19 = SlinkPanel.page
-	         $4a4e = SlinkPanel.ready
-	         $4a7b = SlinkPanel.close
-	         $4a89 = SlinkPanel.WaitForStage
-	         $4a8b = SlinkPanel.poll
-	         $4a98 = SlinkPanel.WaitForButton
-	         $4a98 = SlinkPanel.release
-	         $4aa4 = SlinkPanel.press
-	         $4ab1 = SlinkPanel.title
-	         $4abb = SlinkPanel.fallback
-	         $4ac5 = SlinkPanelEnd
-	SECTION: $4ac5-$4b82 ($00be bytes) ["SLink Trade Snapshot"]
-	         $4ac5 = SlinkTradeSnapshot
-	         $4af8 = SlinkTradeSnapshot.done
-	         $4afc = SlinkTradeValidateSnapshot
-	         $4b32 = SlinkTradeValidateSnapshot.done
-	         $4b36 = SlinkTradeReleaseSnapshot
-	         $4b37 = SlinkTradeSnapshotPartyPointer
-	         $4b63 = SlinkTradeSnapshotPartyPointer.valid
-	         $4b65 = SlinkTradeSnapshotPartyPointer.refuse
-	         $4b67 = SlinkTradeSnapshotOffset
-	         $4b6a = SlinkTradeSnapshotOffset.next
-	         $4b6f = SlinkTradeSnapshotCopy
-	         $4b76 = SlinkTradeSnapshotCompare
-	         $4b81 = SlinkTradeSnapshotCompare.refuse
-	SECTION: $4b83-$4c0b ($0089 bytes) ["SLink Phone Service"]
-	         $4b83 = SlinkPhoneService
-	         $4ba5 = SlinkPhoneService.scrub_reserved
-	         $4bac = SlinkPhoneService.mailbox
-	         $4bb7 = SlinkPhoneService.armed_valid
-	         $4bcd = SlinkPhoneService.pending
-	         $4bf6 = SlinkPhoneService.withdraw
-	         $4c09 = SlinkPhoneService.tail
-	         $4c0c = SlinkPhoneServiceEnd
-	SECTION: $4c0c-$4c7a ($006f bytes) ["SLink Trade Dispatch"]
-	         $4c0c = SlinkTradeDispatch
-	SECTION: $4c7b-$4cdd ($0063 bytes) ["SLink Sound Service"]
-	         $4c7b = SlinkSfxService
-	         $4c98 = SlinkSfxService.play
-	         $4cb2 = SlinkSfxService.hold
-	         $4cc2 = SlinkSfxService.count
-	         $4cce = SlinkSfxService.clear
-	         $4cd2 = SlinkSfxService.reset_blocked
-	         $4cda = SlinkSfxService.sounds
-	         $4cde = SlinkSfxServiceEnd
-	SECTION: $4cde-$4d31 ($0054 bytes) ["SLink Trade Frame"]
-	         $4cde = SlinkTradeCheckHeader
-	         $4d03 = SlinkTradeCheckHeader.refuse
-	         $4d05 = SlinkTradeCheckToken
-	         $4d0f = SlinkTradeCheckToken.byte
-	         $4d22 = SlinkTradeCheckToken.refuse
-	         $4d27 = SlinkTradeClose
-	EMPTY: $4d32-$7fff ($32ce bytes)
-	TOTAL EMPTY: $32ce bytes
+	SECTION: $4533-$47ec ($02ba bytes) ["SLink Phone Script"]
+	         $4533 = SlinkPhoneCallScript
+	         $4544 = SlinkPhoneCallScript.delivered
+	         $4564 = SlinkPhoneCallScript.named_fallen
+	         $4568 = SlinkPhoneCallScript.named_first_link
+	         $456c = SlinkPhoneCallScript.fallen
+	         $4570 = SlinkPhoneCallScript.dead_zone
+	         $4574 = SlinkPhoneCallScript.first_link
+	         $4578 = SlinkPhoneFallenText
+	         $45e4 = SlinkPhoneDeadZoneText
+	         $4644 = SlinkPhoneFirstLinkText
+	         $46b0 = SlinkPhoneStaticText
+	         $46ce = SlinkPhoneNamedFallenText
+	         $46fb = SlinkPhoneNamedFirstLinkText
+	         $472e = SlinkPhonePrepareCall
+	         $4766 = SlinkPhonePrepareCall.caller
+	         $477e = SlinkPhonePrepareCall.species
+	         $4785 = SlinkPhonePrepareCall.copy
+	         $478d = SlinkPhoneCheckRecord
+	         $47bc = SlinkPhoneCheckRecord.name
+	         $47c6 = SlinkPhoneCheckRecord.bad
+	         $47c8 = SlinkPhoneCallerNameService
+	         $47eb = SlinkPhoneCallerNameService.native
+	SECTION: $47ed-$4a23 ($0237 bytes) ["SLink Trade Commit"]
+	         $47ed = SlinkTradeCommit
+	         $480e = SlinkTradeCommit.bad_entry
+	         $4814 = SlinkTradeCommit.entry
+	         $488e = SlinkTradeCommit.responder
+	         $4893 = SlinkTradeCommit.append
+	         $4903 = SlinkTradeCommit.uncertain
+	         $4905 = SlinkTradeCommit.cleanup
+	         $4946 = SlinkTradeCommit.ShiftMail
+	         $497b = SlinkTradeCommit.PrepareAnimation
+	         $4a24 = SlinkTradeCommitEnd
+	SECTION: $4a24-$4b32 ($010f bytes) ["SLink Trade Item Predicate"]
+	         $4a24 = SlinkTradeItemAllowed
+	         $4a33 = SlinkTradeAllowedItems
+	         $4a33 = SlinkTradeItemAllowedEnd
+	         $4b33 = SlinkTradeAllowedItemsEnd
+	SECTION: $4b33-$4bf4 ($00c2 bytes) ["SLink Panel"]
+	         $4b33 = SlinkPanel
+	         $4b49 = SlinkPanel.page
+	         $4b7e = SlinkPanel.ready
+	         $4bab = SlinkPanel.close
+	         $4bb9 = SlinkPanel.WaitForStage
+	         $4bbb = SlinkPanel.poll
+	         $4bc8 = SlinkPanel.WaitForButton
+	         $4bc8 = SlinkPanel.release
+	         $4bd4 = SlinkPanel.press
+	         $4be1 = SlinkPanel.title
+	         $4beb = SlinkPanel.fallback
+	         $4bf5 = SlinkPanelEnd
+	SECTION: $4bf5-$4cb2 ($00be bytes) ["SLink Trade Snapshot"]
+	         $4bf5 = SlinkTradeSnapshot
+	         $4c28 = SlinkTradeSnapshot.done
+	         $4c2c = SlinkTradeValidateSnapshot
+	         $4c62 = SlinkTradeValidateSnapshot.done
+	         $4c66 = SlinkTradeReleaseSnapshot
+	         $4c67 = SlinkTradeSnapshotPartyPointer
+	         $4c93 = SlinkTradeSnapshotPartyPointer.valid
+	         $4c95 = SlinkTradeSnapshotPartyPointer.refuse
+	         $4c97 = SlinkTradeSnapshotOffset
+	         $4c9a = SlinkTradeSnapshotOffset.next
+	         $4c9f = SlinkTradeSnapshotCopy
+	         $4ca6 = SlinkTradeSnapshotCompare
+	         $4cb1 = SlinkTradeSnapshotCompare.refuse
+	SECTION: $4cb3-$4d3b ($0089 bytes) ["SLink Phone Service"]
+	         $4cb3 = SlinkPhoneService
+	         $4cd5 = SlinkPhoneService.scrub_reserved
+	         $4cdc = SlinkPhoneService.mailbox
+	         $4ce7 = SlinkPhoneService.armed_valid
+	         $4cfd = SlinkPhoneService.pending
+	         $4d26 = SlinkPhoneService.withdraw
+	         $4d39 = SlinkPhoneService.tail
+	         $4d3c = SlinkPhoneServiceEnd
+	SECTION: $4d3c-$4daa ($006f bytes) ["SLink Trade Dispatch"]
+	         $4d3c = SlinkTradeDispatch
+	SECTION: $4dab-$4e0d ($0063 bytes) ["SLink Sound Service"]
+	         $4dab = SlinkSfxService
+	         $4dc8 = SlinkSfxService.play
+	         $4de2 = SlinkSfxService.hold
+	         $4df2 = SlinkSfxService.count
+	         $4dfe = SlinkSfxService.clear
+	         $4e02 = SlinkSfxService.reset_blocked
+	         $4e0a = SlinkSfxService.sounds
+	         $4e0e = SlinkSfxServiceEnd
+	SECTION: $4e0e-$4e61 ($0054 bytes) ["SLink Trade Frame"]
+	         $4e0e = SlinkTradeCheckHeader
+	         $4e33 = SlinkTradeCheckHeader.refuse
+	         $4e35 = SlinkTradeCheckToken
+	         $4e3f = SlinkTradeCheckToken.byte
+	         $4e52 = SlinkTradeCheckToken.refuse
+	         $4e57 = SlinkTradeClose
+	SECTION: $4e62-$4e7b ($001a bytes) ["SLink Version"]
+	         $4e62 = SlinkPrintVersion
+	         $4e6b = SlinkPrintVersion.text
+	         $4e7c = SlinkPrintVersion.end
+	EMPTY: $4e7c-$7fff ($3184 bytes)
+	TOTAL EMPTY: $3184 bytes
 
 ROMX bank #118:
 	EMPTY

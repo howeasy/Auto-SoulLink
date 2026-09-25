@@ -383,7 +383,11 @@ local function compose(deps, title, production)
                 panel = Panel.new(profile, data.charmap, io_, Panel.writes(io_, Permit),
                                   assert(deps.hud, "explicit hud required").sanitize or function(s) return s end)
                 -- P4.5c: the phone calls post +32 through their own one-byte "phone" window
-                phone = panel and load("lua/gen2/phone.lua").new(panel, io_, Panel.writes(io_, Permit), deps.log)
+                -- PHONE-NAMES: the profile's overlay.phone.stage (wUnusedMapBuffer) carries the names
+                local ph = profile.overlay and profile.overlay.phone
+                phone = panel and load("lua/gen2/phone.lua").new(panel, io_, Panel.writes(io_, Permit), deps.log,
+                    ph and {stage=ph.stage, charmap=data.charmap,
+                            encode=load("lua/gen2/trade_overlay.lua").encode_name} or nil)
             end
             -- P4.3b native trade: only a profile whose overlay .sym carries the P4.3a trade family
             -- (gen_gen2_profile trade_block); the client still gates on the kind and the cap bit.

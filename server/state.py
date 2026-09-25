@@ -2370,12 +2370,18 @@ class SoulLinkState:
             linked_box = {"cmd": "msgbox", "text": box_text, "r": 100, "g": 255, "b": 160, "frames": 300}
             # O-29 tag: the run's first two-sided link (dead-zone entries have a missing or
             # key="" side). Derived from the persisted links, so it fires once per run.
-            if sum(1 for e in self.links if e.a and e.a.key and e.b and e.b.key) == 1:
+            first_link = sum(1 for e in self.links if e.a and e.a.key and e.b and e.b.key) == 1
+            if first_link:
                 linked_box["phone"] = "first_link"
             self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 25})   # SE_SUCCESS
             self.queued_commands[partner].append({"cmd": "play_sound", "sound": 25})
-            self.queued_commands[player_id].append(dict(linked_box))
-            self.queued_commands[partner].append(dict(linked_box))
+            for pid in (player_id, partner):
+                box = dict(linked_box)   # PHONE-NAMES: a per-recipient phone_data, never shared
+                own, other = (a_mon, b_mon) if pid == "a" else (b_mon, a_mon)
+                data = self._phone_data(_partner(pid), other, own) if first_link else None
+                if data:
+                    box["phone_data"] = data
+                self.queued_commands[pid].append(box)
             # Un-quarantine: both mons were boxed while pending — retrieve to party
             # ONLY if both players have room. Both must stay in sync.
             a_has_room = self.party_size.get("a", 6) < 6
@@ -2687,15 +2693,17 @@ class SoulLinkState:
         area_disp = self.adapter.area_display_name(area_id) or area_id
         dz_text = f"{area_disp} is a dead zone!"
         self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 26})   # SE_FAILURE
+        partner     = _partner(player_id)
         self.queued_commands[player_id].append({
             "cmd": "msgbox", "text": dz_text,
             "r": 255, "g": 80, "b": 80, "frames": 480, "phone": "dead_zone",   # O-29 tag
+            **self._phone_extra(partner, None, None),
         })
-        partner     = _partner(player_id)
         self.queued_commands[partner].append({"cmd": "play_sound", "sound": 26})
         self.queued_commands[partner].append({
             "cmd": "msgbox", "text": dz_text,
             "r": 255, "g": 80, "b": 80, "frames": 480, "phone": "dead_zone",
+            **self._phone_extra(player_id, None, None),
         })
         partner_cap = self.pending_captures.get(area_id, {}).get(partner)
 
@@ -3713,6 +3721,24 @@ class SoulLinkState:
                 return c["cmd"]
         return None
 
+    def _phone_data(self, caller: str, caller_mon: MonInfo | None,
+                    receiver_mon: MonInfo | None) -> dict | None:
+        """PHONE-NAMES (docs/protocol.md section 5): an O-29 call as its receiver hears it. None
+        when the caller has no real trainer name, so the client keeps the fixed text."""
+        name = (self.trainer_names.get(caller)
+                or (self.player_identity.get(caller) or {}).get("trainer_name") or "")
+        if not name or name == caller.upper():   # the identity lock's "A"/"B" placeholder
+            return None
+        data: dict = {"trainer_name": name}
+        for field, mon in (("caller_mon", caller_mon), ("receiver_mon", receiver_mon)):
+            if mon is not None and mon.species:
+                data[field] = {"species_id": mon.species, "nickname": mon.nickname or ""}
+        return data
+
+    def _phone_extra(self, caller: str, caller_mon: MonInfo | None, receiver_mon: MonInfo | None) -> dict:
+        data = self._phone_data(caller, caller_mon, receiver_mon)
+        return {"phone_data": data} if data else {}
+
     def _propagate_faint(self, player_id: str, entry: LinkEntry, killer: dict | None = None,
                          level: int = 0, cause: str = "battle"):
         """Mark entry dead, queue force_faint (or force_explode if Explode Mode is on)
@@ -3738,6 +3764,7 @@ class SoulLinkState:
                 # O-29: an optional, generation-neutral tag; a client that can ring a phone
                 # call for it does (Gen 2 phone.lua), every other client ignores the key.
                 death["phone"] = "fallen"
+                death.update(self._phone_extra(player_id, player_mon, partner_mon))
             self.queued_commands[partner].append(death)
             self.queued_commands[partner].append({"cmd": "play_sound", "sound": 26})   # SE_FAILURE — the KO notification's noise (HUD convention)
             self.party_keys[partner].discard(partner_mon.key)

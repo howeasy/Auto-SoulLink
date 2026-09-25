@@ -28,8 +28,8 @@ class PhoneCart(Cart):
     def __init__(self, title="crystal", caps=CAP_PANEL | CAP_PHONE, **kw):
         super().__init__(title, caps=caps, **kw)
         self.logs: list[str] = []
-        io = self.lua.table(read_u8=lambda a, d=None: self.mem[int(a)], framecount=lambda: self.frame,
-                            write_u8=self._write_u8)
+        io = self.io = self.lua.table(read_u8=lambda a, d=None: self.mem[int(a)], framecount=lambda: self.frame,
+                                      write_u8=self._write_u8)
         self.pw = self.P.writes(io, self.lua.eval(f'dofile("{PERMIT}")'))
         self.phone = self.lua.eval(f'dofile("{PHONE}")').new(self.panel, io, self.pw,
                                                              lambda s: self.logs.append(str(s)))
@@ -232,3 +232,128 @@ def test_the_client_forwards_a_tagged_command_only_to_a_phone_build(caps, posted
     world.reply({"cmd": "msgbox", "text": "A and B linked!", "phone": "fallen"})
     world.frames(5)
     assert [(v, d) for a, v, d in world.written() if a == mb + REQ] == posted
+
+
+# -- PHONE-NAMES: the staged record (docs/gen2/POST_RC_CARDS.md) --------------------------------
+
+TRADE = (REPO / "lua" / "gen2" / "trade_overlay.lua").as_posix()
+DATA = {"trainer_name": "BOB", "caller_mon": {"species_id": 16, "nickname": "PIDGE"},
+        "receiver_mon": {"species_id": 19, "nickname": "RATTY"}}
+
+
+class NamedCart(PhoneCart):
+    """PhoneCart built the way entry.lua builds it: the profile stage + T.encode_name + the charmap."""
+
+    def __init__(self, title="crystal", **kw):
+        super().__init__(title, **kw)
+        self.stage = self.prof["overlay"]["phone"]["stage"]
+        charmap = self.lua.eval(f'dofile("{(REPO / f"data/games/gen2_{title}/charmap.lua").as_posix()}")')
+        names = self.lua.table(stage=self.stage, charmap=charmap,
+                               encode=self.lua.eval(f'dofile("{TRADE}")').encode_name)
+        self.phone = self.lua.eval(f'dofile("{PHONE}")').new(self.panel, self.io, self.pw,
+                                                             lambda s: self.logs.append(str(s)), names)
+
+    def request(self, name, data=None):
+        return self.phone.request(self.phone, name, self.lua.table_from(data, recursive=True) if data else None)
+
+    def staged(self):
+        return bytes(self.mem[self.stage:self.stage + 24])
+
+
+def named(**kw):
+    c = NamedCart(**kw)
+    c.step(3)
+    c.writes.clear()
+    return c
+
+
+def encode(c, text):
+    charmap = c.lua.eval(f'dofile("{(REPO / "data/games/gen2_crystal/charmap.lua").as_posix()}")')
+    return bytes(charmap.encoding[ch] for ch in text)
+
+
+def test_the_record_layout_and_its_order_before_the_request():
+    c = named()
+    c.request("fallen", DATA)
+    c.step(2)
+    staged = c.staged()
+    assert staged[:3] == bytes([FALLEN, 16, 19])
+    assert staged[3:11] == encode(c, "BOB") + b"\x50" * 5
+    assert staged[11:22] == encode(c, "PIDGE") + b"\x50" * 6
+    assert staged[22:] == bytes([0, 0xA6])
+    assert [a for a, _ in c.writes] == [c.stage, c.mb + REQ]      # the whole record, then the request
+    assert [len(bs) for _, bs in c.writes] == [24, 1]
+
+
+@pytest.mark.parametrize("data, want", [
+    (None, bytes(24)), ({"caller_mon": {"species_id": 16}}, bytes(24)),     # no trainer: zeros
+    ({"trainer_name": "\u2603"}, bytes(24)),                                  # nothing encodes
+])
+def test_no_usable_name_stages_zeros_over_a_stale_cookie(data, want):
+    c = named()
+    c.mem[c.stage:c.stage + 24] = bytes([1] * 23 + [0xA6])
+    c.request("fallen", data)
+    c.step(2)
+    assert c.staged() == want and c.posts() == [FALLEN]
+
+
+def test_missing_mons_and_nickname_stage_zero_species_and_an_empty_nickname():
+    c = named()
+    c.request("first_link", {"trainer_name": "BOB", "caller_mon": {"species_id": 300}})
+    c.step(2)
+    staged = c.staged()
+    assert staged[:3] == bytes([FIRST_LINK, 0, 0]) and staged[11:22] == b"\x50" * 11 and staged[23] == 0xA6
+
+
+def test_the_higher_priority_call_keeps_its_own_record():
+    c = named()
+    c.mem[c.mb + ARMED] = 9
+    c.request("first_link", {**DATA, "trainer_name": "EVE"})
+    c.request("fallen", DATA)
+    c.request("dead_zone", {"trainer_name": "ZED"})
+    c.mem[c.mb + ARMED] = 0
+    c.step(2)
+    assert c.staged()[:1] == bytes([FALLEN]) and c.staged()[3:6] == encode(c, "BOB")
+
+
+def test_a_map_change_while_armed_is_restaged_exactly_once():
+    c = named()
+    c.request("fallen", DATA)
+    c.step(2)
+    record = c.staged()
+    assert c.mem[c.mb + ARMED] == FALLEN
+    c.mem[c.stage:c.stage + 24] = bytes(24)          # HandleNewMap -> ClearUnusedMapBuffer
+    c.step()
+    assert c.staged() == record and any("re-staged" in line for line in c.logs)
+    c.mem[c.stage:c.stage + 24] = bytes(24)          # a second map change: no second re-stage
+    c.writes.clear()
+    c.step(3)
+    assert c.staged() == bytes(24) and c.writes == []
+
+
+def test_no_restage_for_a_fixed_text_call_or_after_delivery():
+    c = named()
+    c.request("fallen")                              # no phone_data: zeros, nothing to put back
+    c.step(2)
+    c.writes.clear()
+    c.step(3)
+    assert c.writes == []
+    c.deliver()
+    c.mem[c.stage:c.stage + 24] = bytes(24)
+    c.step(3)
+    assert c.writes == []
+
+
+def test_a_failed_stage_write_never_posts_the_request():
+    c = named()
+    stage = c.stage
+
+    def refuse(addr, value, domain=None):
+        if int(addr) == stage + 5:
+            raise RuntimeError("bus refused")
+        c._write_u8(addr, value, domain)
+    c.io.write_u8 = refuse
+    c.request("fallen", DATA)
+    with pytest.raises(Exception, match="bus refused"):
+        c.step()
+    assert c.posts() == [] and c.mem[c.mb + REQ] == 0 and c.staged()[23] == 0

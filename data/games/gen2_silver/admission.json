@@ -77,12 +77,12 @@
       "revision": "US",
       "selection": "FUTURE",
       "status": "BUILT",
-      "sha1": "0c92158a7360d539ad0243288b6e7cf2ca26310e",
-      "md5": "f7565b9745c37cc208405f17fd47f63b",
+      "sha1": "54416bf599f207b3b01753f8903720240ea86122",
+      "md5": "704e07a3ca02b94ccf7f16d580f2b267",
       "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
       "ups": {
         "file": "patch/dist/SLink-Silver.ups",
-        "sha256": "e7363f4fdaf1650407d9979de9fb6a75710f67d93a14e8381091a2912f487187"
+        "sha256": "d534cb357f76c3e8bfaf2a71a898313ab29e5ff7ffb60a36b818d65f89191846"
       }
     },
     {

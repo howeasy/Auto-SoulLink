@@ -483,7 +483,7 @@ function Client.new(p)
         local c_ = cmd.cmd
         if c_ == "noop" then return end
         -- P4.5c: an optional "phone" tag rides force_faint/msgbox; phone.lua drops it off a phone build
-        if phone and cmd.phone ~= nil then phone:request(cmd.phone) end
+        if phone and cmd.phone ~= nil then phone:request(cmd.phone, cmd.phone_data) end -- + PHONE-NAMES
         self.arrivals = self.arrivals + 1 -- Gen 1 parity: every command's arrival order (defer_held)
         if c_ == "force_faint" or c_ == "force_explode" then
             -- Gen 2: supports_explode_mode() is False; a stray explode is the bench faint.

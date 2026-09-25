@@ -312,3 +312,27 @@ def test_scripted_route_symbols_match_the_pinned_sym_file(title, artifact):
         bank, address = by_name[name]
         assert selected["ram_bank"][name] == bank
         assert selected["ram"][name] == address
+
+
+@pytest.mark.parametrize("title,stage", [("crystal", 0xC7E8), ("gold", 0xC6E8), ("silver", 0xC6E8)])
+def test_phone_build_profile_names_the_stage(title, stage):
+    """PHONE-NAMES: lua/gen2/phone.lua stages in wUnusedMapBuffer, from the overlay .sym."""
+    from tools.gen_gen2_profile import build
+
+    phone = build(title)["titles"][title]["overlay"]["phone"]
+    assert phone == {"stage": stage, "stage_size": 24}
+
+
+@pytest.mark.parametrize("fault", ["missing", "bank", "size"])
+def test_phone_block_refuses_a_bad_stage(fault):
+    from tools.gen_gen2_profile import phone_block
+
+    symbols = {"wUnusedMapBuffer": (0, 0xC7E8), "wUnusedMapBufferEnd": (0, 0xC800)}
+    if fault == "missing":
+        del symbols["wUnusedMapBufferEnd"]
+    elif fault == "bank":
+        symbols["wUnusedMapBuffer"] = (1, 0xD7E8)
+    else:
+        symbols["wUnusedMapBufferEnd"] = (0, 0xC801)
+    with pytest.raises(ValueError):
+        phone_block(symbols)

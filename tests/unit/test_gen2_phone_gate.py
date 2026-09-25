@@ -53,3 +53,16 @@ def test_phone_facts():
             pytest.skip(f"pinned build unavailable: {exc}")
         assert f["robbed"] == 2 and set(f["texts"]) == {"1", "2", "3"}
         assert f["ram"]["wSpecialPhoneCallID"]["bank"] == 1
+        assert f["sites"]["ClearUnusedMapBuffer"]["bank"] == 0   # PHONE-NAMES v2: the wipe hook, ROM0
+
+
+def test_v2_named_record_is_the_shipped_binder_record():
+    """The gate compares the ring-time stage with Phone.record over its own P.NAMED (max-length names)."""
+    lua, P = gate()
+    assert P.SCHEMA == "gen2-phone-gate-v2"
+    phone = lua.eval(f'dofile("{(REPO / "lua/gen2/phone.lua").as_posix()}")')
+    encode = lua.eval(f'dofile("{(REPO / "lua/gen2/trade_overlay.lua").as_posix()}")').encode_name
+    charmap = lua.eval(f'dofile("{(REPO / "data/games/gen2_crystal/charmap.lua").as_posix()}")')
+    rec = [phone.record(1, P.NAMED, encode, charmap)[i] for i in range(1, 25)]
+    assert rec[0:3] == [1, 16, 19] and rec[10] == 0x50 and rec[21] == 0x50 and rec[23] == 0xA6
+    assert 0x50 not in rec[3:10] and 0x50 not in rec[11:21]   # 7 and 10 glyphs: the maxima

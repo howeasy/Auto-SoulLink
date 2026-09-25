@@ -730,6 +730,7 @@ _NEW_GATE_GAPS = {
     "phone_gate_save_unproven": "phone gate save did not prove a real save left the SRAM phone id 0",
     "phone_gate_native_late": "phone gate native call did not keep precedence",
     "phone_gate_stale_overlay": "phone gate receipt proves another overlay build",
+    "phone_gate_named_not_restaged": "phone gate named call did not survive a map change",
 }
 
 
@@ -843,6 +844,8 @@ def test_every_new_gate_gap_is_red(tmp_path, mutation):
             cases["town"]["ring"]["frame"] = cases["town"]["step_at"] - 1
         elif mutation == "phone_gate_save_unproven":
             cases["save"]["extra"]["sram_changed_bytes"] = 0
+        elif mutation == "phone_gate_named_not_restaged":   # PHONE-NAMES v2
+            cases.setdefault("named_map_change", {}).setdefault("extra", {})["restaged"] = False
         else:
             cases["native"]["extra"]["native_ring"]["frame"] = cases["native"]["ring"]["frame"] + 1
         path.write_text(json.dumps(receipt), encoding="utf-8")
@@ -1836,7 +1839,8 @@ def test_placeholder_lanes_are_bound_to_real_checks():
     assert gate.UNIMPLEMENTED == {}
     assert _lane("fixtures").argv[1:] == ["tools/verify_gen2_release.py", "--fixtures"]
     assert "fixtures" in gate._SLOW and "P3b" in _lane("fixtures").why
-    assert _lane("patch-build").argv[1:] == ["tools/build_gen2_companion.py", "--check"]
+    assert _lane("patch-build").argv[1:] == ["tools/build_gen2_companion.py", "--check", "--version",
+                                             gate._overlay_version()]
     for name, flag in _RECEIPT_LANES.items():
         assert _lane(name).argv[1:] == ["tools/verify_gen2_release.py", flag]
         assert name in gate._SLOW
@@ -1865,7 +1869,7 @@ def test_patch_build_verdict_is_the_builders_check(monkeypatch, returncode, ok):
 
     monkeypatch.setattr(gate.release_lanes.subprocess, "run", run)
     assert gate.run_lane(_lane("patch-build"), quiet=True)[0] is ok
-    assert seen[0][1:] == ["tools/build_gen2_companion.py", "--check"]
+    assert seen[0][1:4] == ["tools/build_gen2_companion.py", "--check", "--version"]
 
 
 @pytest.mark.parametrize(("flag", "func"), [("--fixtures", "fixtures_errors"),

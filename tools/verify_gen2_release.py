@@ -95,6 +95,15 @@ _GENERATOR_ARGS = {"admission": ("--provenance", "data/gen2/build_provenance.jso
                                  "--overlay-provenance", "data/gen2/overlay_provenance.json")}
 
 
+def _overlay_version() -> str:
+    """The version the committed overlay provenance records (the builder refuses a malformed one)."""
+    try:
+        path = ROOT / "data/gen2/overlay_provenance.json"
+        return str(json.loads(path.read_text(encoding="utf-8"))["overlay"]["version"])
+    except (OSError, ValueError, KeyError):
+        return "unrecorded"
+
+
 def _pytest(path: str) -> list[str]:
     return [_PY, "-m", "pytest", path, "-q", "-p", "no:randomly", "-rs"]
 
@@ -142,7 +151,8 @@ LANES = [
          why="PHYSICAL receipts (BINDING P3b.2; F-6, S-7): every referenced fixture passes the checksum"
              " witness and is PLAYED (pinned full-chain GAME/PYDEC boot/re-save/reload receipt over these"
              " bytes) or SYNTH (O-33 disclosure that rebuilds the bytes from a PLAYED base)"),
-    Lane("patch-build", [_PY, "tools/build_gen2_companion.py", "--check"],
+    # TITLE-VERSION: --check rebuilds with the version the published provenance records
+    Lane("patch-build", [_PY, "tools/build_gen2_companion.py", "--check", "--version", _overlay_version()],
          why="SOURCE (PLAN §6 P4 'UPS byte-reproducible'; BINDING P4.1): rebuild the three overlays from"
              " the pinned checkouts and compare UPS, sym, map and data/gen2/overlay_provenance.json"
              " byte-for-byte; any drift is red"),
@@ -1344,14 +1354,15 @@ def _w6_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
     return errors
 
 
-# P4.5d (tests/live/test_gen2_phone_gate.py): every phone case the plan names, each ringing only after its step.
-PHONE_GATE_CASES = ("battle", "town", "start_menu", "save", "native")
+# P4.5d (tests/live/test_gen2_phone_gate.py): every phone case the plan names, each ringing only after its step;
+# v2 adds the PHONE-NAMES cases (docs/gen2/POST_RC_CARDS.md).
+PHONE_GATE_CASES = ("battle", "town", "start_menu", "save", "native", "named_map_change", "named_fallback")
 
 
 def _phone_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
     """P4.5d: the overlay gate binding; every case rang SLink after its counted step; the save really ran with
     ARMED != 0 and left 0 in both SRAM copies; a pending native call rang first."""
-    errors = _overlay_gate_errors(root, title, receipt, "gen2-phone-gate-v1", "phone gate")
+    errors = _overlay_gate_errors(root, title, receipt, "gen2-phone-gate-v2", "phone gate")
     cases = receipt.get("cases") or {}
     for name in PHONE_GATE_CASES:
         c = cases.get(name) or {}
@@ -1368,6 +1379,10 @@ def _phone_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
     if (native.get("caller") in (None, 0) or type(native.get("frame")) is not int
             or type(slink.get("frame")) is not int or native["frame"] >= slink["frame"]):
         errors.append("phone gate native call did not keep precedence")
+    moved = (cases.get("named_map_change") or {}).get("extra") or {}
+    if not (moved.get("staged_before_crossing") is True and type(moved.get("wipes")) is int and moved["wipes"] > 0
+            and moved.get("restaged") is True):
+        errors.append("phone gate named call did not survive a map change (stage, wipe, re-stage)")
     return errors
 
 

@@ -25,6 +25,14 @@
     native      harness seeds wSpecialPhoneCallID = SPECIALCALL_ROBBED (the only harness write, recorded), then
                 posts: the id stays ROBBED (never overwritten) while ARMED holds; the first step rings Elm
                 (wCurCaller != 0), and after his script clears the id a later step rings SLink (row 4)
+    PHONE-NAMES (v2, docs/gen2/POST_RC_CARDS.md), each through a fresh shipped binder built as entry.lua builds it
+    (the profile's overlay.phone stage, T.encode_name, the pack charmap), so its MIN_GAP never gates the case:
+    named_map_change  at New Bark Town's west edge, post "fallen" with max-length names (a 7-glyph trainer, a
+                10-glyph nickname); the crossing into Route 29 runs ClearUnusedMapBuffer (hooked: the wipe) and
+                the binder re-stages; the call header shows the trainer name (no "----------") and the body the
+                nickname, and the record read at the ring equals the posted one (the re-stage)
+    named_fallback  post "first_link" naming only the trainer (no mons): the header names the trainer, the body
+                is the fixed first-link text (the ROM's species check falls back)
 
   Environment: the panel gate's, plus SLINK_GEN2_PHONE_FACTS from tests/live/test_gen2_phone_gate.py.
   Result file: patch/build/gen2_phone_gate_result.txt. Printed: CASE (one per case), RECEIPT; RESULT last.
@@ -33,7 +41,10 @@ local P = {}
 P.RESULT = "patch/build/gen2_phone_gate_result.txt"
 P.SCRIPTED_GATE = "lua/tests/test_gen2_scripted_gate.lua"
 P.FRAME_ALIGN = "lua/tests/gen2_frame_align.lua"
-P.SCHEMA = "gen2-phone-gate-v1"
+P.SCHEMA = "gen2-phone-gate-v2"
+-- PHONE-NAMES max-length names (7 and 10 glyphs, lua/gen2/phone.lua), and two in-range species
+P.NAMED = {trainer_name="PARTNER", caller_mon={species_id=16, nickname="LONGNAMEXY"}, receiver_mon={species_id=19}}
+P.COOKIE = 0xA6
 P.CAP_PHONE = 0x08                 -- patch/gb/slink_abi.inc SLINK_CAP_PHONE
 P.OFF_REQ, P.OFF_ARMED = 32, 33    -- SLINK_OFS_PHONE_REQUEST / _ARMED
 P.SPECIALCALL_SLINK = 9            -- patch/gen2/src/phone.asm
@@ -164,7 +175,13 @@ function P.main(real, getenv, SG, F)
         framecount=api.framecount, on_bus_exec=api.on_bus_exec, unregister=api.unregister},
         {bus_domain="System Bus", rom_domain="ROM", bank_domain="System Bus", pc_register="PC", sp_register="SP",
          bank_address=ctx.profile.hram.hROMBank})
-    local rings, saves, handles, hook_errors = {}, {}, {}, {}
+    local rings, saves, wipes, handles, hook_errors = {}, {}, {}, {}, {}
+    local STAGE = assert(ov.phone and ov.phone.stage, "profile overlay.phone.stage missing (PHONE-NAMES build)")
+    local function stage_bytes()
+        local out = {}
+        for i = 0, 23 do out[#out + 1] = u8(STAGE + i) end
+        return out
+    end
     local function watch(id, fn)
         local site = assert(pf.sites[id], "phone facts lack site " .. id)
         local valid = binding:validate({id=id, bank=site.bank, address=site.addr, expected_hex=site.hex,
@@ -182,9 +199,11 @@ function P.main(real, getenv, SG, F)
     end
     local hooked, hook_why = pcall(function()
         watch("RingTwice_StartCall", function(f)
-            rings[#rings + 1] = {frame=f, caller=wram(pf.ram.wCurCaller), id=phone_id(), armed=u8(ARMED)}
+            rings[#rings + 1] = {frame=f, caller=wram(pf.ram.wCurCaller), id=phone_id(), armed=u8(ARMED),
+                                 stage=stage_bytes()}
         end)
         watch("save_completed", function(f) saves[#saves + 1] = f end)
+        watch("ClearUnusedMapBuffer", function(f) wipes[#wipes + 1] = f end)
     end)
     local function release()
         for _, h in ipairs(handles) do pcall(api.unregister, h) end
@@ -219,7 +238,12 @@ function P.main(real, getenv, SG, F)
                  write_u8=function(addr, value, domain) api.write_u8(addr, value, domain) end}
     local writes = Panel.writes(io_, Permit)
     local panel = assert(Panel.new(ctx.profile, ctx.charmap, io_, writes, HUD.sanitize))
-    local phone = Phone.new(panel, io_, writes, log)
+    -- PHONE-NAMES: built as lua/gen2/entry.lua builds it
+    local T = dofile(root .. "/lua/gen2/trade_overlay.lua")
+    local function new_phone()
+        return Phone.new(panel, io_, writes, log, {stage=STAGE, charmap=ctx.charmap, encode=T.encode_name})
+    end
+    local phone = new_phone()
     local cases, cur = {}, nil
     local obs = SG.qualify_observer(ctx)
     local last_xy
@@ -341,7 +365,7 @@ function P.main(real, getenv, SG, F)
     local function post(c, via, no_wait)   -- no_wait: inside a scripted_inputs driver, which owns the frames
         c.via = via
         if via == "binder" then
-            c.accepted = phone:request(c.name_id)
+            c.accepted = phone:request(c.name_id, c.data)
         else   -- the binder's own one-byte post through the same permit
             writes:arm("phone", function(addr, n) return addr == REQ and n == 1 end)
             local okw, why = pcall(function() writes:write_bytes(REQ, {c.id}) end)
@@ -367,10 +391,18 @@ function P.main(real, getenv, SG, F)
     local function take_call(c, ring)
         local needle = pf.texts[tostring(c.id)]
         wait(function()
-            if on_screen("----------") then c.screen_caller = true end
-            if on_screen(needle) then c.screen_text = true end
+            if c.named then   -- PHONE-NAMES: the header row names the trainer; "----------" never shows
+                local header = rows()[2] and table.concat(rows()[2]) or ""
+                if on_screen("----------") then c.saw_dashes = true end
+                if header:find(c.named.header, 1, true) then c.screen_caller = true end
+                if on_screen(c.named.body) then c.screen_text = true end
+            else
+                if on_screen("----------") then c.screen_caller = true end
+                if on_screen(needle) then c.screen_text = true end
+            end
             return c.screen_caller and c.screen_text
         end, P.OPEN_BOUND)
+        if c.saw_dashes then c.screen_caller = false end
         if not (c.screen_caller and c.screen_text) then dump("call-" .. c.name) end
         to_overworld("A")
         idle(10)
@@ -623,6 +655,76 @@ function P.main(real, getenv, SG, F)
         nc.extra = {native_ring=elm or json.null}
         step_and_ring(nc)
         close(nc)
+
+        -- PHONE-NAMES named_map_change: the record survives a map change between arming and ringing
+        to_overworld()
+        local NBT = maps.NewBarkTown
+        for _ = 1, P.WALK_BUDGET do
+            local point = obs()
+            if map_is(point, "NewBarkTown") and point.overworld_ready and point.x == 0 then break end
+            if type(point.battle_mode) == "number" and point.battle_mode > 0 then error("a battle started on the walk") end
+            local buttons = {}
+            if point.overworld_ready and map_is(point, "NewBarkTown") then
+                local dir = P.first_step(NBT, point.x, point.y, function(x) return x == 0 end)
+                if not dir then error(fmt("no path to the west edge from %d,%d", point.x, point.y)) end
+                buttons = {[dir]=true}
+            end
+            step(buttons)
+        end
+        check("at New Bark Town's west edge", map_is(obs(), "NewBarkTown") and obs().x == 0)
+        to_overworld()
+        idle(60)
+        phone = new_phone()
+        local xc = arm("named_map_change", 1, "fallen")
+        xc.data, xc.named = P.NAMED, {header=P.NAMED.trainer_name, body=P.NAMED.caller_mon.nickname}
+        local posted_record = Phone.record(1, P.NAMED, T.encode_name, ctx.charmap)
+        local wipes_from = #wipes
+        post(xc, "binder")
+        idle(30)
+        local staged_ok = table.concat(stage_bytes(), ",") == table.concat(posted_record, ",")
+        xc.stepping = true
+        local crossed
+        for _ = 1, 96 do
+            local point = obs()
+            if map_is(point, "Route29") then crossed = frame() break end
+            step({Left=true})
+        end
+        idle(2)
+        check("the crossing into Route 29 ran ClearUnusedMapBuffer", crossed ~= nil and #wipes > wipes_from,
+              fmt("crossed %s wipes %d", tostring(crossed), #wipes - wipes_from))
+        wait(function() return #rings_since(xc, xc.step_at or math.huge) > 0 end, P.RING_BOUND)
+        if #rings_since(xc, xc.step_at or math.huge) == 0 then   -- the crossing is not a ringing step here
+            xc.step_at = nil
+            one_step()
+            wait(function() return #rings_since(xc, xc.step_at or math.huge) > 0 end, P.RING_BOUND)
+        end
+        xc.stepping = false
+        for _, r in ipairs(rings_since(xc, xc.step_at or math.huge)) do
+            if r.caller == 0 and not xc.slink_ring then xc.slink_ring = r end
+        end
+        local at_ring = xc.slink_ring and table.concat(xc.slink_ring.stage, ",")
+        xc.extra = {staged_before_crossing=staged_ok, wipes=#wipes - wipes_from, crossed=crossed or json.null,
+                    restaged=at_ring == table.concat(posted_record, ",")}
+        if xc.slink_ring then take_call(xc, xc.slink_ring) end
+        check("named_map_change: staged, wiped by the crossing, re-staged by the ring",
+              staged_ok and #wipes > wipes_from and xc.extra.restaged, J(xc.extra))
+        close(xc)
+
+        -- PHONE-NAMES named_fallback: a trainer without mons -> named header, fixed body
+        to_overworld()
+        idle(60)
+        phone = new_phone()
+        local fc = arm("named_fallback", 3, "first_link")
+        fc.data = {trainer_name=P.NAMED.trainer_name}
+        fc.named = {header=P.NAMED.trainer_name, body=pf.texts["3"]}
+        post(fc, "binder")
+        idle(30)
+        local fstage = stage_bytes()
+        fc.extra = {species={fstage[2], fstage[3]}, cookie=fstage[24]}
+        check("named_fallback staged a valid record with no species", fstage[1] == 3 and fstage[2] == 0
+              and fstage[3] == 0 and fstage[24] == P.COOKIE, J(fc.extra))
+        step_and_ring(fc)
+        close(fc)
     end)
     check("scripted play completed", play_ok, not play_ok and play_why or nil)
     if cur and not cur.done then close(cur) end
@@ -631,15 +733,16 @@ function P.main(real, getenv, SG, F)
 
     local out = {}
     for _, c in ipairs(cases) do
+        local ring = c.slink_ring and {frame=c.slink_ring.frame, caller=c.slink_ring.caller} or json.null
         out[c.name] = {id=c.id, via=c.via or json.null, result=c.result or "FAIL", step_at=c.step_at or json.null,
-                       ring=c.slink_ring or json.null, extra=c.extra or json.null}
+                       ring=ring, extra=c.extra or json.null}
     end
     if failures == 0 then
         log("RECEIPT " .. J({schema=P.SCHEMA, title=title, evidence_level=evidence, result="PASS",
             overlay_sha1=ctx.overlay_sha1, base_sha1=ov.base_sha1, fixture=case.name, fixture_sha256=q.stage_fingerprint,
             qualification_attempt_id=getenv("SLINK_GEN2_QUALIFICATION_ATTEMPT") or json.null, core_mode="CGB",
             input_mode="normal_buttons", harness_write_scopes=json.array(harness_writes),
-            client_write_scope="phone (lua/gen2/panel.lua permit reason phone, mailbox +32)",
+            client_write_scope="phone (lua/gen2/panel.lua permit reason phone, mailbox +32, the wUnusedMapBuffer stage)",
             cases=out, sram=pf.sram}))
     end
     return finish()

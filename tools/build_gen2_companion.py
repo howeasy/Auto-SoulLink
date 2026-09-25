@@ -24,8 +24,11 @@ D1): SECTION "SLink Mailbox" at a fixed WRAM0 address per title, sized to the fu
 verified EMPTY gap, emitting zero ROM bytes. Card P4.1c (Codex) adds patch/gen2/src/slink.asm
 next; this tool includes it automatically when present -- see `overlay_plan()`.
 
-    python tools/build_gen2_companion.py                 # build + publish
-    python tools/build_gen2_companion.py --check          # build, compare, publish nothing
+    python tools/build_gen2_companion.py --version vX.Y.Z           # build + publish
+    python tools/build_gen2_companion.py --version vX.Y.Z --check   # build, compare, publish nothing
+
+--version is required (TITLE-VERSION): it is printed on the main menu, so it is part of the ROM
+bytes and is recorded as overlay.version + overlay.version_sha256 in the provenance.
     python tools/build_gen2_companion.py --src-dir DIR    # override patch/gen2/src (falsifiers)
     python tools/build_gen2_companion.py --rgbds-bin DIR --w64devkit-bin DIR
     python tools/build_gen2_companion.py --crystal-repo PATH --gold-repo PATH
@@ -75,6 +78,9 @@ OPTIONAL_SHARED_FILES = ["slink.asm"]
 PANEL_FILES = ("panel_flags.asm", "panel.asm", "panel_start.asm")
 SFX_FILE = "sfx.asm"
 PHONE_FILES = ("phone_flags.asm", "phone.asm")
+VERSION_FILE = "version.asm"
+# vX.Y.Z plus an optional lowercase pre-release suffix; "SLINK " + it must fit 18 tiles
+VERSION_RE = re.compile(r"v\d+\.\d+\.\d+(?:-[a-z0-9.]+)?")
 TRADE_FILES = ("trade_frame.asm", "trade_items.asm", "trade_snapshot.asm",
                "trade_commit.asm", "trade_service.asm", "trade_receptionist.asm", "trade_dispatch.asm")
 
@@ -111,13 +117,42 @@ def trade_export_text(checkout: pathlib.Path, repo: str) -> list[tuple[pathlib.P
     return edits
 
 
+# PHONE-NAMES: GetCallerName's first four bytes (ld a,c / and a / jr z,.NotTrainer) become a jump
+# to the bank-$24 SlinkPhoneCallerName + nop; the label adds no byte (verify_phone_hook pins it).
+CALLER_NAME_ANCHOR = "GetCallerName:\n\tld a, c\n\tand a\n\tjr z, .NotTrainer\n\n\tcall Phone_GetTrainerName\n"
+CALLER_NAME_REPLACEMENT = ("GetCallerName:\n\tjp SlinkPhoneCallerName ; SLink overlay: same size as "
+                           "ld a,c / and a / jr z\n\tnop\n.SlinkTrainer:\n\tcall Phone_GetTrainerName\n")
+
+
 def _phone_table_text(checkout: pathlib.Path) -> tuple[pathlib.Path, str]:
     path = checkout / "engine/phone/phone.asm"
     text = path.read_text(encoding="utf-8")
     anchor = "\tld hl, SpecialPhoneCallList\n"
     if text.count(anchor) != 2:
         raise RuntimeError("phone table requires exactly two native pointer loads")
+    if text.count(CALLER_NAME_ANCHOR) != 1:
+        raise RuntimeError("phone caller-name hook requires exactly one native GetCallerName entry")
+    text = text.replace(CALLER_NAME_ANCHOR, CALLER_NAME_REPLACEMENT, 1)
     return path, text.replace(anchor, "\tld hl, SlinkSpecialPhoneCallList\n")
+
+
+MAIN_MENU_ANCHOR = "MainMenuJoypadLoop:\n\tcall SetUpMenu\n"
+
+
+def _main_menu_text(checkout: pathlib.Path) -> tuple[pathlib.Path, str]:
+    """TITLE-VERSION: the one `call SetUpMenu` per title, same size, to the ROM0 bridge."""
+    path = checkout / "engine/menus/main_menu.asm"
+    text = path.read_text(encoding="utf-8")
+    if text.count(MAIN_MENU_ANCHOR) != 1 or text.count("call SetUpMenu") != 1:
+        raise RuntimeError("main menu requires exactly one `call SetUpMenu`, in MainMenuJoypadLoop")
+    return path, text.replace(MAIN_MENU_ANCHOR, "MainMenuJoypadLoop:\n\tcall SlinkMainMenuBridge "
+                              "; SLink overlay: same size as call SetUpMenu\n", 1)
+
+
+def check_version(version: str | None) -> str:
+    if not isinstance(version, str) or not VERSION_RE.fullmatch(version) or len("SLINK " + version) > 18:
+        raise RuntimeError(f"--version must be vX.Y.Z[-suffix] and fit 12 characters, got {version!r}")
+    return version
 
 # The mailbox/panel ABI is shared with Gen 1 (patch/gb/slink_abi.inc), not per-generation source,
 # so it is copied -- never duplicated under patch/gen2 -- from its one committed location. It is
@@ -252,6 +287,9 @@ def overlay_plan(
     phone = [name for name in PHONE_FILES if (src_dir / name).is_file()]
     if phone and (len(phone) != len(PHONE_FILES) or not (src_dir / "slink.asm").is_file()):
         raise RuntimeError("phone overlay requires phone_flags.asm, phone.asm and slink.asm")
+    version = (src_dir / VERSION_FILE).is_file()
+    if version and not (src_dir / "slink.asm").is_file():
+        raise RuntimeError("version overlay requires slink.asm")
     stub = src_dir / REPO_MAILBOX_STUB[repo]
     if stub.is_file():
         plan.append(("slink_mailbox.asm", stub, True))
@@ -275,11 +313,14 @@ def overlay_plan(
         plan += [(name, src_dir / name, True) for name in TRADE_FILES]
     if phone:
         plan.append(("phone.asm", src_dir / "phone.asm", True))
+    if version:
+        plan.append((VERSION_FILE, src_dir / VERSION_FILE, True))
     return plan
 
 
 def apply_overlay(
-    checkout: pathlib.Path, repo: str, src_dir: pathlib.Path, gb_dir: pathlib.Path = GB_DIR
+    checkout: pathlib.Path, repo: str, src_dir: pathlib.Path, gb_dir: pathlib.Path = GB_DIR,
+    version: str | None = None,
 ) -> list[str]:
     """Copy the overlay plan into `checkout` and hook main.asm. Returns the files applied."""
     plan = overlay_plan(repo, src_dir, gb_dir)
@@ -291,6 +332,9 @@ def apply_overlay(
     reset_edit = _reset_sound_text(checkout, repo) if SFX_FILE in include_names else None
     trade_edit = _trade_receptionist_text(checkout) if "trade_service.asm" in include_names else None
     phone_edit = _phone_table_text(checkout) if "phone.asm" in include_names else None
+    menu_edit = _main_menu_text(checkout) if VERSION_FILE in include_names else None
+    if menu_edit is not None:
+        check_version(version)
     main_path = checkout / "main.asm"
     if include_names:
         anchor = MAIN_ANCHORS[repo]
@@ -311,6 +355,7 @@ def apply_overlay(
             ['; SLink companion overlay (tools/build_gen2_companion.py)']
             + (["DEF SLINK_SFX_ENABLED EQU 1"] if SFX_FILE in include_names else [])
             + (["DEF SLINK_TRADE_ENABLED EQU 1"] if trade_edit is not None else [])
+            + ([f'DEF SLINK_BUILD_VERSION EQUS "{version}"'] if menu_edit is not None else [])
             + [f'INCLUDE "{OVERLAY_DST}/{name}"' for name in include_names]
         )
         new_anchor = anchor.replace('\n\n\nSECTION', f'\n\n{block}\n\n\nSECTION', 1)
@@ -327,9 +372,10 @@ def apply_overlay(
         path.write_text(text, encoding="utf-8", newline="\n")
         for path, text in trade_export_text(checkout, repo):
             path.write_text(text, encoding="utf-8", newline="\n")
-    if phone_edit is not None:
-        path, text = phone_edit
-        path.write_text(text, encoding="utf-8", newline="\n")
+    for edit in (phone_edit, menu_edit):
+        if edit is not None:
+            path, text = edit
+            path.write_text(text, encoding="utf-8", newline="\n")
     return applied
 
 
@@ -446,6 +492,34 @@ def verify_phone_hook(base: bytes, overlay: bytes, clean_sym: pathlib.Path, over
         expected[at + 1:at + 3] = table[1].to_bytes(2, "little")
     if overlay[start:end] != expected:
         raise RuntimeError("phone dispatch changed outside two pointer operands")
+    # PHONE-NAMES: GetCallerName .. Phone_GetTrainerName changes only its 4-byte entry
+    hook_bank, hook = new.get("SlinkPhoneCallerName", (-1, -1))
+    if hook_bank != 0x24 or not 0x4000 <= hook < 0x8000:
+        raise RuntimeError("phone caller-name hook must link in bank24")
+    start, end = flat(old["GetCallerName"]), flat(old["Phone_GetTrainerName"])
+    expected = bytearray(base[start:end])
+    if expected[:3] != b"\x79\xa7\x28":
+        raise RuntimeError("phone native GetCallerName entry differs")
+    expected[:4] = b"\xc3" + hook.to_bytes(2, "little") + b"\x00"
+    if overlay[start:end] != expected:
+        raise RuntimeError("phone caller-name hook changed more than GetCallerName's 4-byte entry")
+
+
+def verify_version_hook(base: bytes, overlay: bytes, clean_sym: pathlib.Path, overlay_sym: pathlib.Path) -> None:
+    """TITLE-VERSION: MainMenuJoypadLoop's `call SetUpMenu` changes only its operand, to ROM0."""
+    old, new = _symbols(clean_sym), _symbols(overlay_sym)
+    bank, address = old["MainMenuJoypadLoop"]
+    bridge_bank, bridge = new.get("SlinkMainMenuBridge", (-1, -1))
+    if bridge_bank != 0 or not 0 <= bridge < 0x4000:
+        raise RuntimeError("main menu bridge must link in ROM0")
+    at = bank * 0x4000 + address - 0x4000
+    end = at + old["MainMenuJoypadLoop.b_button"][1] - address
+    expected = bytearray(base[at:end])
+    if expected[:3] != b"\xcd" + old["SetUpMenu"][1].to_bytes(2, "little"):
+        raise RuntimeError("main menu native call SetUpMenu differs")
+    expected[1:3] = bridge.to_bytes(2, "little")
+    if overlay[at:end] != expected:
+        raise RuntimeError("main menu changed more than the call SetUpMenu operand")
 
 
 def verify_symbol_scope(clean_sym: pathlib.Path, overlay_sym: pathlib.Path, *, panel: bool) -> None:
@@ -469,9 +543,10 @@ def verify_symbol_scope(clean_sym: pathlib.Path, overlay_sym: pathlib.Path, *, p
                 raise RuntimeError(f"{name}: panel START binding must link inside bank 4")
 
 
-def build(*, crystal_repo: pathlib.Path | None = None, gold_repo: pathlib.Path | None = None,
+def build(*, version: str, crystal_repo: pathlib.Path | None = None, gold_repo: pathlib.Path | None = None,
           src_dir: pathlib.Path | None = None, rgbds_bin: pathlib.Path | None = None,
           w64devkit_bin: pathlib.Path | None = None, check: bool = False) -> int:
+    check_version(version)
     lock, _raw = _load_lock(LOCK_PATH, record=False)
     src_dir = src_dir or SRC_DIR
     clean_repos = {
@@ -496,7 +571,7 @@ def build(*, crystal_repo: pathlib.Path | None = None, gold_repo: pathlib.Path |
     commands: dict[str, list[str]] = {}
     for repo, commit_spec in ((name, lock["sources"][name]) for name in clean_repos):
         checkout = fresh_copy(clean_repos[repo], commit_spec["commit"], OVERLAY_CACHE / repo)
-        overlay_applied[repo] = apply_overlay(checkout, repo, src_dir)
+        overlay_applied[repo] = apply_overlay(checkout, repo, src_dir, version=version)
         commands[repo] = make(checkout, targets_by_repo[repo], env)
 
     for key, (title, ups_name, repo) in TITLES.items():
@@ -513,6 +588,8 @@ def build(*, crystal_repo: pathlib.Path | None = None, gold_repo: pathlib.Path |
             verify_trade_hook(base, data, checkout / f"{key}.sym", repo)
         if "phone.asm" in overlay_applied[repo]:
             verify_phone_hook(base, data, clean_dir / f"{key}.sym", checkout / f"{key}.sym")
+        if VERSION_FILE in overlay_applied[repo]:
+            verify_version_hook(base, data, clean_dir / f"{key}.sym", checkout / f"{key}.sym")
         ups = ups_create(base, data)
         if ups_apply(base, ups) != data:
             raise RuntimeError(f"{key}: UPS round trip failed")
@@ -545,6 +622,8 @@ def build(*, crystal_repo: pathlib.Path | None = None, gold_repo: pathlib.Path |
                         else src_dir.as_posix()),
             "applied": overlay_applied,
             "sources_sha256": sources_sha256,
+            "version": version,
+            "version_sha256": _sha256(version.encode("utf-8")),
         },
         "toolchain": toolchain_record,
         "commands": {repo: " ".join(cmd) for repo, cmd in commands.items()},
@@ -590,9 +669,11 @@ def main() -> int:
     ap.add_argument("--rgbds-bin", type=pathlib.Path, default=None)
     ap.add_argument("--w64devkit-bin", type=pathlib.Path, default=None)
     ap.add_argument("--check", action="store_true", help="build and compare, publish nothing")
+    ap.add_argument("--version", required=True,
+                    help="the release version shown on the main menu, vX.Y.Z (the exact release tag)")
     args = ap.parse_args()
     try:
-        return build(crystal_repo=args.crystal_repo, gold_repo=args.gold_repo, src_dir=args.src_dir,
+        return build(version=args.version, crystal_repo=args.crystal_repo, gold_repo=args.gold_repo, src_dir=args.src_dir,
                      rgbds_bin=args.rgbds_bin, w64devkit_bin=args.w64devkit_bin, check=args.check)
     except (RuntimeError, SystemExit) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
