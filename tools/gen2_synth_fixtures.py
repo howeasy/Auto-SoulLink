@@ -21,11 +21,11 @@ edits (all optional):
   events       {"set": [EVENT_*], "clear": [EVENT_*]}: bits of wEventFlags (constants/event_flags.asm; an
                object_event's flag hides the object while set, e.g. EVENT_MET_BILL, set at new game by
                engine/events/std_scripts.asm InitializeEventsScript, cleared when Bill leaves Ecruteak).
-  party_add   [{species, level, moves, ...}]: appends 1..(6 - the current party size) new mons after the saved
-               party (same per-mon schema as `party`, including status/hp), touching no existing slot. A benched
-               added mon only ever takes overworld poison damage (DoPoisonStep/CountStep); a wild or trainer
-               battle's ResidualDamage hits only the active (slot 0) battler (C engine/battle/core.asm), so this
-               is how a party is given a poisoned mon without putting the leg's own lead battle at risk.
+  party_status {slot, status, hp}: rewrites ONE existing party slot's MON_STATUS/MON_HP bytes in place
+               (constants/pokemon_data_constants.asm; macros/ram.asm party_struct), decoding/re-encoding the
+               record through the same codec as `party` so every other field (species, moves, DVs, stat exp,
+               nickname, OT) is carried over verbatim. Every other party slot is untouched. hp must be 1..the
+               record's own MON_MAXHP (a synthetic faint is never handed to the game pre-fainted).
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ SCHEMA = "gen2-synth-disclosure-v1"
 BUILDER = "tools/gen2_synth_fixtures.py"
 CART = 0x8000
 SAVERAM = CART + 22   # the BizHawk 2.11.1 gambatte RTC trailer (tools/gen2_fixtures.SAVERAM_BYTES)
-EDIT_KEYS = frozenset({"party", "balls", "last_spawn", "step_count", "poison_step", "events", "party_add"})
+EDIT_KEYS = frozenset({"party", "balls", "last_spawn", "step_count", "poison_step", "events", "party_status"})
 MAX_ITEM_STACK = 99   # MAX_ITEM_STACK, constants/item_constants.asm
 EGG_LEVEL = 5   # constants/pokemon_data_constants.asm EGG_LEVEL
 DEFAULT_HAPPINESS = 70   # BASE_HAPPINESS, constants/pokemon_data_constants.asm
@@ -256,38 +256,23 @@ def build(title, base_bytes, edits, *, root=ROOT, base_name=None):
         if key in edits:
             save.write(symbol, bytes([edits[key]]))
             facts.append("engine/overworld/events.asm CountStep")
-    if "party_add" in edits:
-        # A wild/trainer battle only ever puts the ACTIVE (slot 0) mon at risk of in-battle poison ResidualDamage
-        # (C engine/battle/core.asm HandleBattleEndScript/end-of-turn effects: only the active battler takes it);
-        # a benched mon added here ticks down ONLY on real overworld steps (DoPoisonStep, CountStep), so it never
-        # interferes with a leg's own lead battle. Appends after the saved party (never touches an existing slot).
-        index = _pack(root, title, "species_index")["species"]
-        species = {row["const"]: dict(row, index=int(i)) for i, row in index.items()}
-        moves = {m["constant"]: m for m in _pack(root, title, "moves")["moves"]}
-        charmap = parse_charmap(ctx.read_source("constants/charmap.asm"))["encoding"]
-        add = edits["party_add"]
+    if "party_status" in edits:
+        spec = edits["party_status"]
+        unknown = set(spec) - {"slot", "status", "hp"}
+        if unknown:
+            raise ValueError(f"unsupported party_status keys: {sorted(unknown)}")
         count = save.read("wPartyCount", 1)[0]
-        if not 1 <= len(add) <= 6 - count:
-            raise ValueError("party_add must add 1..(6 - the current party size) mons")
-        ot_id = int.from_bytes(save.read("wPlayerID", 2), "big")
-        ot_name = save.read("wPlayerName", layout.name_size)
-        existing_markers = save.read("wPartySpecies", count)
-        records, markers, nicks = b"", [], b""
-        for spec in add:
-            record, marker = party_mon(spec, layout=layout, species=species, moves=moves, ot_id=ot_id)
-            records += record
-            markers.append(marker)
-            text = "EGG" if spec.get("egg") else spec.get("nickname", species[spec["species"]]["name"])
-            nicks += _name(text, charmap, layout.nickname_size)
-        new_count = count + len(add)
-        save.write("wPartyCount", bytes([new_count]))
-        save.write("wPartySpecies", existing_markers + bytes(markers) + b"\xff" + b"\x00" * (6 - new_count))
-        save.write("wPartyMon1", records, offset=count * layout.party_size)
-        save.write("wPartyMonOTs", ot_name * len(add), offset=count * layout.name_size)
-        save.write("wPartyMonNicknames", nicks, offset=count * layout.nickname_size)
-        facts += ["data/games/gen2_<title>/species_index.json base stats/growth", "data/games/gen2_<title>/moves.json PP",
-                  "constants/charmap.asm names", "macros/ram.asm party_struct",
-                  "C engine/battle/core.asm: only the active battler takes ResidualDamage"]
+        slot = spec["slot"]
+        if not isinstance(slot, int) or not 0 <= slot < count:
+            raise ValueError("party_status slot outside the saved party")
+        marker = save.read("wPartySpecies", 1, offset=slot)[0]
+        record = save.read("wPartyMon1", layout.party_size, offset=slot * layout.party_size)
+        mon = codec.decode_party_mon(record, layout, species_marker=marker)
+        if not isinstance(spec["hp"], int) or not 0 < spec["hp"] <= mon["max_hp"]:
+            raise ValueError("party_status hp must be 1..the slot's own MON_MAXHP")
+        mon["status"], mon["hp"] = spec["status"], spec["hp"]
+        save.write("wPartyMon1", codec.encode_party_mon(mon, layout), offset=slot * layout.party_size)
+        facts.append("constants/pokemon_data_constants.asm MON_STATUS/MON_HP; macros/ram.asm party_struct")
     save.restore_checksums()
     raw = bytes(save.raw) + bytes(base_bytes[CART:])
     if not codec.strict_checksum_witness(raw[:CART], layout)["valid"]:
@@ -401,18 +386,25 @@ TRADE_FIXTURES = ("crystal_synth_trade_evolve", "gold_synth_trade_evolve")
 # walking to Route 31 and fighting Bug Catcher Wade (4 mons) until Poison Sting poisons a party mon -- is a
 # proven, deterministic LOSS with today's driver (fsw-postrc-rr9/rr10: both party mons end up PSN and the
 # second faints mid-walk, stalling on its own "fainted!" text box; getting poisoned is SETUP, not the behaviour
-# under test). fsw-postrc-psn1 (this card's own first live attempt) tried pinning PSN onto the errand's existing
-# lone Totodile in place: it fought the leg's own Route 29 catch battle poisoned and fainted IN BATTLE at frame
-# 7906 (ResidualDamage on the active battler every turn, C engine/battle/core.asm) well before save_completed --
-# an existing party slot can never be poisoned this way if it is also the mon that battles. party_add instead
-# appends a BENCHED Sentret (never the active battler, so no in-battle poison risk) at PSN + 12/18 HP: it only
-# ever loses HP to the real overworld DoPoisonStep tick (engine/overworld/events.asm CountStep), comfortably
-# above the ~5-8 ticks the fsw-postrc-rr9 log shows elapse (276 frames) before the leg's own Route 29 catch
-# reaches "save_completed", so it faints a handful of ticks into the dedicated tick phase. Totodile (the lead)
-# and the later catch are both untouched and healthy.
+# under test). Two live attempts narrowed this down:
+#   fsw-postrc-psn1  pinning PSN onto the errand's existing lone Totodile with its stock 15 POKE_BALLs (O-10)
+#                    left it fighting a long, multi-throw catch battle poisoned; ResidualDamage on the active
+#                    battler every turn (C engine/battle/core.asm) fainted it IN BATTLE at frame 7906, well
+#                    before save_completed.
+#   fsw-postrc-psn2  a BENCHED third mon (never the active battler, so no in-battle poison risk) proved
+#                    poison_faint, battle_faint and the evolution leg all clean -- but a THIRD party member
+#                    breaks the u1f leg's "closing whiteout" (F.whiteout_problem requires EVERY party slot at 0
+#                    HP; crystal/silver reach that because poison_faint + battle_faint between them empty their
+#                    2-mon party). A benched extra mon is never the one FI.new's battle_faint brings down (it
+#                    switches to, and preserves, any OTHER living mon), so the party never fully empties.
+# The fix keeps exactly the errand's 2 total party members (Totodile + the one Route 29 catch, same as
+# crystal/silver) and pins PSN onto Totodile as psn1 did, but ALSO swaps its stock Balls for 5 MASTER_BALLs (the
+# same synthetic swap the trade_evolve recipe already makes, for the same reason: PokeBallEffect skips the catch
+# roll for MASTER_BALL, engine/items/item_effects.asm), so the catch battle is a single, first-throw turn instead
+# of psn1's long multi-throw ordeal -- Totodile absorbs at most one hit's worth of ResidualDamage before it ends.
 PSN_RECIPES = {
-    "psn": ("battle_errand", {"party_add": [{"species": "SENTRET", "level": 5, "moves": ["SCRATCH", "DEFENSE_CURL"],
-                                             "dvs": 0x4C29, "hp": 12, "status": PSN}]}),
+    "psn": ("battle_errand", {"party_status": {"slot": 0, "status": PSN, "hp": 8},
+                              "balls": [["MASTER_BALL", 5]]}),
 }
 PSN_FIXTURES = ("gold_synth_psn",)
 

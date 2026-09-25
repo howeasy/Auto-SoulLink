@@ -1,11 +1,17 @@
 """Card gen2-u1e-poison, O-33 fallback (owner-approved 2026-09-25): Gold's Route 31 Bug Catcher Wade leg is a
 proven, deterministic LOSS with the driver as written (fsw-postrc-rr9/rr10, identical stall @51461 both
-attempts, both party mons end up PSN). gold_synth_psn (tools/gen2_synth_fixtures.py PSN_RECIPES) appends a
-BENCHED Sentret at PSN + 12/18 HP instead of touching the errand's own lead (fsw-postrc-psn1: pinning PSN onto
-the lead in place fainted it IN the leg's own Route 29 catch battle -- ResidualDamage hits only the active
-battler, C engine/battle/core.asm), so Gold's poison leg boots already poisoned and skips straight to the
-"tick" phase (lua/tests/gen2_poison_inputs.lua PI.driver facts.start_phase) on its own Route 29 catch map -- no
-travel, no hunt, no Wade. Crystal and Silver are untouched (still the natural wild-Weedle legs).
+attempts, both party mons end up PSN). gold_synth_psn (tools/gen2_synth_fixtures.py PSN_RECIPES) pins PSN + 8 HP
+onto the errand's existing lead (Totodile) AND swaps its 15 POKE_BALLs for 5 MASTER_BALLs (the same swap
+trade_evolve already makes): a first attempt that poisoned the lead with its stock Balls left it fighting a
+long, multi-throw catch battle poisoned and fainting IN BATTLE (fsw-postrc-psn1, ResidualDamage on the active
+battler every turn); a second attempt appended a benched third mon instead, which proved the poison/battle_faint
+sites clean but broke the u1f leg's "closing whiteout" -- it needs the WHOLE (2-mon) party at 0 HP, and a
+benched extra mon is never the one battle_faint's own driver brings down (fsw-postrc-psn2). MASTER_BALLs make
+the catch a single first-throw turn, so the poisoned lead absorbs at most one hit's worth of damage before it
+ends, and the party stays at exactly 2 members (Totodile + the one Route 29 catch, same as crystal/silver) all
+the way to the closing whiteout. Gold's poison leg boots already poisoned and skips straight to the "tick" phase
+(lua/tests/gen2_poison_inputs.lua PI.driver facts.start_phase) on its own Route 29 catch map -- no travel, no
+hunt, no Wade. Crystal and Silver are untouched (still the natural wild-Weedle legs).
 
 No emulator: fixture-build reproducibility, the disclosure's exact delta and Gold's leg selection are all
 offline/pure checks."""
@@ -25,7 +31,7 @@ from tests.live.test_gen2_frame_align import (
     POISON_TRAINER,
     poison_facts,
 )
-from tools import gen2_source_data, gen2_synth_fixtures as synth
+from tools import gen2_duo_oracles as oracles, gen2_source_data, gen2_synth_fixtures as synth
 
 ROOT = Path(__file__).resolve().parents[2]
 FIX = ROOT / "tests/fixtures/gen2"
@@ -47,39 +53,58 @@ def test_build_named_is_reproducible():
     assert a == b
 
 
-def test_disclosure_lists_exactly_the_party_add_delta():
+def test_disclosure_lists_exactly_the_party_status_and_balls_delta():
     _, disclosure = synth.build_named(NAME)
     fields = disclosure["fields"]
     non_checksum = {f["symbol"] for f in fields if f["symbol"] not in ("sChecksum", "sBackupChecksum")}
-    assert non_checksum == {"wPartyCount", "wPartySpecies", "wPartyMon1", "wPartyMonOTs", "wPartyMonNicknames"}
-    assert disclosure["edits"] == {"party_add": [{"species": "SENTRET", "level": 5,
-                                                  "moves": ["SCRATCH", "DEFENSE_CURL"], "dvs": 0x4C29,
-                                                  "hp": 12, "status": synth.PSN}]}
-    # the base's own lead (slot 0) is never touched: its wPartyMon1 bytes do not appear among the changed fields
+    assert non_checksum == {"wBalls", "wPartyMon1"}   # wNumBalls stays 1 (one pocket entry either way)
+    assert disclosure["edits"] == {"party_status": {"slot": 0, "status": synth.PSN, "hp": 8},
+                                   "balls": [["MASTER_BALL", 5]]}
+    # exactly the party struct's own MON_STATUS/MON_HP bytes differ inside that one 48-byte record: nothing
+    # else (species, moves, DVs, stat exp, level, OT id, exp) moved.
+    layout = codec.for_foundation("gold")
     mon1 = next(f for f in fields if f["symbol"] == "wPartyMon1")
-    assert mon1["offset"] > 0, "the added mon must land after the existing party, never overwrite slot 0"
+    before = codec.decode_party_mon(bytes.fromhex(mon1["old_hex"]), layout, species_marker=bytes.fromhex(mon1["old_hex"])[0])
+    after = codec.decode_party_mon(bytes.fromhex(mon1["new_hex"]), layout, species_marker=bytes.fromhex(mon1["new_hex"])[0])
+    changed = {k for k in before if k != "raw_hex" and before[k] != after[k]}
+    assert changed == {"status", "hp"}
+    assert after["status"] == synth.PSN and after["hp"] == 8 and after["max_hp"] == before["max_hp"]
 
 
-def test_added_mon_is_the_only_psn_and_the_lead_is_untouched():
+def test_party_stays_at_two_members_lead_plus_one_catch_for_the_closing_whiteout():
+    """F.whiteout_problem (lua/tests/gen2_frame_align.lua) requires EVERY party slot at 0 HP; crystal/silver
+    reach that because poison_faint + battle_faint together empty their 2-mon party. fsw-postrc-psn2's benched
+    third mon broke this (a benched mon is never battle_faint's own target, so the party never fully empties):
+    the fixture must add no party member, only touch the existing lone Totodile."""
+    raw, _ = synth.build_named(NAME)
+    layout = codec.for_foundation("gold")
+    party = codec.decode_saved_party(raw[:0x8000], layout, copy_name="primary")["mons"]
+    assert len(party) == 1   # the errand's own lone Totodile; the live catch adds the 2nd member
+    assert party[0]["species_id"] == 158 and party[0]["status"] == synth.PSN and party[0]["hp"] == 8
+    assert party[0]["max_hp"] == 20
+
+
+def test_party_status_edit_rejects_a_slot_outside_the_party():
+    raw = (FIX / "gold_battle_errand.SaveRAM").read_bytes()
+    with pytest.raises(ValueError, match="slot outside"):
+        synth.build("gold", raw, {"party_status": {"slot": 1, "status": synth.PSN, "hp": 1}})
+
+
+def test_party_status_edit_rejects_hp_above_max():
+    raw = (FIX / "gold_battle_errand.SaveRAM").read_bytes()
+    with pytest.raises(ValueError, match="1..the slot's own MON_MAXHP"):
+        synth.build("gold", raw, {"party_status": {"slot": 0, "status": synth.PSN, "hp": 99}})
+
+
+def test_master_balls_replace_the_stock_poke_balls():
     raw, _ = synth.build_named(NAME)
     base_raw = (FIX / "gold_battle_errand.SaveRAM").read_bytes()
     layout = codec.for_foundation("gold")
-    base_party = codec.decode_saved_party(base_raw[:0x8000], layout, copy_name="primary")["mons"]
-    party = codec.decode_saved_party(raw[:0x8000], layout, copy_name="primary")["mons"]
-    assert len(party) == len(base_party) + 1
-    psn = [i for i, mon in enumerate(party) if mon["status"] & synth.PSN]
-    assert psn == [len(base_party)]   # only the appended mon
-    for i, mon in enumerate(base_party):
-        assert party[i] == mon, f"slot {i} (the played party) changed"
-    added = party[-1]
-    assert added["species_id"] == 161 and added["hp"] == 12 and added["max_hp"] == 18   # SENTRET
-
-
-def test_party_add_rejects_overflowing_the_six_slot_party():
-    raw = (FIX / "gold_battle_errand.SaveRAM").read_bytes()
-    six = [{"species": "SENTRET", "level": 5, "moves": ["SCRATCH"], "dvs": 0x4C29}] * 6
-    with pytest.raises(ValueError, match="1..\\(6 - the current party size\\)"):
-        synth.build("gold", raw, {"party_add": six})
+    items = json.loads((ROOT / "data/games/gen2_gold/items.json").read_text(encoding="utf-8"))["items"]
+    master_ball_id = next(int(i) for i, row in items.items() if row["constant"] == "MASTER_BALL")
+    poke_ball_id = next(int(i) for i, row in items.items() if row["constant"] == "POKE_BALL")
+    assert oracles._ball_pocket(base_raw[:0x8000], layout) == [(poke_ball_id, 15)]   # x15 (O-10), untouched base
+    assert oracles._ball_pocket(raw[:0x8000], layout) == [(master_ball_id, 5)]
 
 
 # --- Gold's leg selection ----------------------------------------------------------------------------------------

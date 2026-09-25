@@ -4,74 +4,42 @@
  "builder": "tools/gen2_synth_fixtures.py",
  "checksums": "restored (primary + backup)",
  "edits": {
-  "party_add": [
-   {
-    "dvs": 19497,
-    "hp": 12,
-    "level": 5,
-    "moves": [
-     "SCRATCH",
-     "DEFENSE_CURL"
-    ],
-    "species": "SENTRET",
-    "status": 8
-   }
-  ]
+  "balls": [
+   [
+    "MASTER_BALL",
+    5
+   ]
+  ],
+  "party_status": {
+   "hp": 8,
+   "slot": 0,
+   "status": 8
+  }
  },
  "fields": [
   {
-   "backup": 4328,
-   "new_hex": "02",
+   "backup": 3319,
+   "new_hex": "0105ff00000000000000000000000000000000000000000000",
    "offset": 0,
-   "old_hex": "01",
-   "primary": 10378,
-   "size": 1,
-   "symbol": "wPartyCount",
-   "wram": 55842
+   "old_hex": "050fff00000000000000000000000000000000000000000000",
+   "primary": 9317,
+   "size": 25,
+   "symbol": "wBalls",
+   "wram": 54781
   },
   {
-   "backup": 4329,
-   "new_hex": "9ea1ff00000000",
+   "backup": 4336,
+   "new_hex": "9e000a2b0000c4a600008700000000000000000000ec63231e00004500000005080000080014000c000c00090009000a",
    "offset": 0,
-   "old_hex": "9eff0000000000",
-   "primary": 10379,
-   "size": 7,
-   "symbol": "wPartySpecies",
-   "wram": 55843
-  },
-  {
-   "backup": 4384,
-   "new_hex": "a1000a6f0000c4a600007d000000000000000000004c292328000046000000050800000c0012000a000900070009000a",
-   "offset": 48,
-   "old_hex": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-   "primary": 10434,
+   "old_hex": "9e000a2b0000c4a600008700000000000000000000ec63231e00004500000005000000140014000c000c00090009000a",
+   "primary": 10386,
    "size": 48,
    "symbol": "wPartyMon1",
-   "wram": 55898
-  },
-  {
-   "backup": 4635,
-   "new_hex": "868e8b8350000000000000",
-   "offset": 11,
-   "old_hex": "0000000000000000000000",
-   "primary": 10685,
-   "size": 11,
-   "symbol": "wPartyMonOTs",
-   "wram": 56149
-  },
-  {
-   "backup": 4701,
-   "new_hex": "92848d9391849350505050",
-   "offset": 11,
-   "old_hex": "0000000000000000000000",
-   "primary": 10751,
-   "size": 11,
-   "symbol": "wPartyMonNicknames",
-   "wram": 56215
+   "wram": 55850
   },
   {
    "cart": 11625,
-   "new_hex": "92f5",
+   "new_hex": "efe8",
    "offset": 0,
    "old_hex": "01e9",
    "size": 2,
@@ -80,7 +48,7 @@
   },
   {
    "cart": 32365,
-   "new_hex": "92f5",
+   "new_hex": "efe8",
    "offset": 0,
    "old_hex": "01e9",
    "size": 2,
@@ -89,13 +57,10 @@
   }
  ],
  "schema": "gen2-synth-disclosure-v1",
- "sha256": "d2ab69d061ea0ba35e6c608ddf58fb4d7375f4344e38c224cba32a2977b8e05b",
+ "sha256": "84ecf8e7d885bbd1231678efb79a6dfbcb17603d5788603efa38ce758f4ba26b",
  "source_facts": [
-  "C engine/battle/core.asm: only the active battler takes ResidualDamage",
-  "constants/charmap.asm names",
-  "data/games/gen2_<title>/moves.json PP",
-  "data/games/gen2_<title>/species_index.json base stats/growth",
-  "macros/ram.asm party_struct"
+  "constants/pokemon_data_constants.asm MON_STATUS/MON_HP; macros/ram.asm party_struct",
+  "data/games/gen2_<title>/items.json ids; engine/items/items.asm pocket layout"
  ],
  "title": "gold"
 }
