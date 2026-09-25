@@ -240,8 +240,6 @@ def board_context(status: dict, *, run_name: str = "", poll_url: str = "/", live
         # the download labels name the file as handed out (.gbc for Yellow and pureRGB)
         "rom_ext": rom_ext or dict.fromkeys(PIDS, ".gb"),
         "concise_title": title or "Soul Link",
-        # The damage calculator is pinned to modern mechanics: Radical Red only.
-        "calc_preview": any(rt.endswith("_rr") for rt in rom_types),
         "poll_url": poll_url,
         # False for a stopped run on the Manager: the board is what it persisted, and
         # "waiting for hello" would be a lie about a server that is not listening.

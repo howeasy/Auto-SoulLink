@@ -1,160 +1,166 @@
 // calc-preview.js — the in-battle damage preview for Radical Red runs.
-// Reads #calc-preview-{pid}[data-in-battle] on the board and lazy-loads the calc engine
-// served at /calc/. Silent no-op if the calc is not built. Formerly _CALC_PREVIEW_JS in
-// server.py, where 163 lines of JavaScript lived inside a Python string.
-// ── RR Damage Calculator Preview ────────────────────────────────────────────
+// Reads #calc-preview-{pid}[data-in-battle] (its data-calc JSON is _calc_preview in server.py)
+// and lazy-loads the damage engine exactly as the full calc page does: the same CommonJS shim
+// and the same compiled files in the same order (calc/src/normal.template.html). Those files
+// come from calc/dist, a local build (`cd calc && npm run build`, docs/REFERENCE.md); without it
+// the preview stays hidden and tries again later. Loaded on every board: a no-op out of battle.
 window.SLinkCalc = (function () {
-  var _calcLoaded = false, _dataLoaded = false;
+  // The full page's engine scripts, in its order. tests/unit/test_calc_preview.py holds this
+  // list to the template, so the two cannot drift apart.
+  var ENGINE = [
+    'calc/util.js', 'calc/stats.js', 'calc/data/species.js',
+    'calc/data/types.js', 'calc/data/natures.js', 'calc/data/abilities.js',
+    'calc/data/moves.js', 'calc/data/items.js', 'calc/data/index.js',
+    'calc/move.js', 'calc/pokemon.js', 'calc/field.js', 'calc/items.js',
+    'calc/mechanics/util.js', 'calc/mechanics/gen789.js', 'calc/mechanics/gen56.js',
+    'calc/mechanics/gen4.js', 'calc/mechanics/gen3.js', 'calc/mechanics/gen12.js',
+    'calc/calc.js', 'calc/desc.js', 'calc/result.js', 'calc/adaptable.js', 'calc/index.js',
+  ];
+  // Each page's setdex is its base sets plus the priority trainers merged into SETDEX_SV.
+  var NORMAL_SETS   = ['js/data/sets/normal.js',   'js/data/sets/slink_priority.js'];
+  var HARDCORE_SETS = ['js/data/sets/hardcore.js', 'js/data/sets/slink_priority.js'];
+  var RETRY_MS = 30000;  // an unbuilt calc 404s; don't re-ask on every 2 s board refresh
+  var _state = 'idle', _failedAt = 0;  // idle | loading | ready
 
-  function _loadSeq(srcs, cb) {
+  function _load(srcs, ok, fail) {
     var i = 0;
     (function next() {
-      if (i >= srcs.length) { cb(); return; }
+      if (i >= srcs.length) { ok(); return; }
       var s = document.createElement('script');
-      s.src = srcs[i++];
+      s.src = '/calc/' + srcs[i++];
       s.onload = next;
-      s.onerror = next;  // skip on 404 — calc might not be built yet
+      s.onerror = fail;
       document.head.appendChild(s);
     })();
   }
 
   function _init() {
-    if (_calcLoaded) return;
-    _calcLoaded = true;
-    _loadSeq(['/calc/calc/calc.js'], function () {
-      if (typeof window.calc === 'undefined') return;  // calc not built
-      var s1 = document.createElement('script');
-      s1.src = '/calc/js/data/sets/normal.js';
-      s1.onload = function () {
-        window.SETDEX_NORMAL = window.SETDEX_SV || {};
-        var s2 = document.createElement('script');
-        s2.src = '/calc/js/data/sets/hardcore.js';
-        s2.onload = function () {
-          window.SETDEX_HC  = window.SETDEX_SV || {};
-          window.SETDEX_SV  = window.SETDEX_NORMAL;  // restore
-          _dataLoaded = true;
-          _renderAll();
-        };
-        s2.onerror = function () { _dataLoaded = true; _renderAll(); };
-        document.head.appendChild(s2);
-      };
-      s1.onerror = function () { _dataLoaded = true; _renderAll(); };
-      document.head.appendChild(s1);
-    });
+    if (_state !== 'idle' || Date.now() - _failedAt < RETRY_MS) return;
+    _state = 'loading';
+    // The full page's inline shim: every compiled module writes onto one shared exports
+    // object, and require() hands that object back.
+    window.__createBinding = function (o, m, k) { o[k] = m[k]; };
+    window.calc = window.exports = {};
+    window.require = function () { return window.exports; };
+    function fail() { _state = 'idle'; _failedAt = Date.now(); }
+    _load(ENGINE.concat(NORMAL_SETS), function () {
+      window.SETDEX_NORMAL = window.SETDEX_SV || {};
+      _load(HARDCORE_SETS, function () {
+        window.SETDEX_HC = window.SETDEX_SV || {};
+        window.SETDEX_SV = window.SETDEX_NORMAL;
+        if (!window.calc.Pokemon || !window.calc.Generations) { fail(); return; }
+        _state = 'ready';
+        _renderAll();
+      }, fail);
+    }, fail);
   }
 
-  function _buildPokemon(gen, species, opts) {
-    try { return new window.calc.Pokemon(gen, species, opts); }
-    catch (e) {
-      try { return new window.calc.Pokemon(gen, species.replace(/[♂♀]/g, '').trim(), opts); }
-      catch (e2) { return null; }
+  // Trainer sets use the calc UI's stat keys; the engine wants its own.
+  var STAT_KEYS = { hp: 'hp', at: 'atk', df: 'def', sa: 'spa', sd: 'spd', sp: 'spe' };
+  function _stats(t) {
+    var out = {};
+    for (var k in (t || {})) out[STAT_KEYS[k] || k] = t[k];
+    return out;
+  }
+
+  function _esc(s) {
+    return String(s).replace(/[&<>"']/g, function (ch) { return '&#' + ch.charCodeAt(0) + ';'; });
+  }
+
+  function _buildPokemon(gen, species, opts, hpPct) {
+    var names = [species, species.replace(/[♂♀]/g, '').trim()];
+    for (var i = 0; i < names.length; i++) {
+      try {
+        var p = new window.calc.Pokemon(gen, names[i], opts);
+        if (!p.species || !p.species.baseStats) continue;
+        // Live HP is a percentage; the stats behind it are the engine's, so scale to them.
+        if (hpPct > 0 && hpPct < 100) p.originalCurHP = Math.max(1, Math.round(p.rawStats.hp * hpPct / 100));
+        return p;
+      } catch (e) { /* try the next spelling */ }
     }
+    return null;
   }
 
-  function _calcMove(gen, atk, def, moveName) {
+  function _sum(a) { return a.reduce(function (x, y) { return x + y; }, 0); }
+
+  function _calcMove(gen, atk, def, moveName, field) {
     try {
-      var result = window.calc.calculate(gen, atk, def,
-        new window.calc.Move(gen, moveName), new window.calc.Field());
-      var dmg = result.damage;
-      if (!dmg || !dmg.length) return null;
-      var flat = Array.isArray(dmg[0]) ? [].concat.apply([], dmg) : dmg;
-      var lo = flat[0], hi = flat[flat.length - 1];
-      var mhp = def.originalCurHP || def.stats.hp || 1;
+      var move = new window.calc.Move(gen, moveName, { ability: atk.ability, item: atk.item, species: atk.name });
+      var dmg = window.calc.calculate(gen, atk, def, move, field).damage;
+      var lo, hi;
+      if (typeof dmg === 'number') { lo = hi = dmg; }
+      else if (Array.isArray(dmg[0])) {  // one roll list per hit (Parental Bond and the like)
+        lo = _sum(dmg.map(function (h) { return h[0]; }));
+        hi = _sum(dmg.map(function (h) { return h[h.length - 1]; }));
+      } else { lo = dmg[0]; hi = dmg[dmg.length - 1]; }
+      if (!hi) return null;  // status moves and immunities
+      var max = def.maxHP() || 1, cur = def.curHP() || max;
       return {
-        lo:     Math.round(lo / mhp * 1000) / 10,
-        hi:     Math.round(hi / mhp * 1000) / 10,
-        ohko:   lo >= mhp,
-        twoHko: lo * 2 >= mhp && lo < mhp,
+        lo: Math.round(lo / max * 1000) / 10,
+        hi: Math.round(hi / max * 1000) / 10,
+        ohko: lo >= cur,
+        twoHko: lo * 2 >= cur && lo < cur,
       };
     } catch (e) { return null; }
   }
 
   function _renderPreview(pid) {
     var div = document.getElementById('calc-preview-' + pid);
-    if (!div || !div.getAttribute('data-in-battle')) {
-      if (div) div.style.display = 'none';
-      return;
-    }
-    if (!window.calc || !_dataLoaded) { div.style.display = 'none'; return; }
+    if (!div) return;
+    div.style.display = 'none';
+    if (!div.getAttribute('data-in-battle') || _state !== 'ready') return;
     try {
-      var pMoves = JSON.parse(div.getAttribute('data-player-moves') || '[]');
-      var tKey   = div.getAttribute('data-trainer-key') || '';
-      var isTr   = div.getAttribute('data-is-trainer') === '1';
-      var eSp    = div.getAttribute('data-enemy-species') || '';
-      var eLv    = parseInt(div.getAttribute('data-enemy-level')  || '0', 10);
-      var pSp    = div.getAttribute('data-player-species') || '';
-      var pLv    = parseInt(div.getAttribute('data-player-level')  || '0', 10);
-      var pNat   = div.getAttribute('data-player-nature')  || 'Hardy';
-      var pAbl   = div.getAttribute('data-player-ability') || undefined;
-      var pItm   = div.getAttribute('data-player-item')    || undefined;
-      if (!pSp || !eSp) { div.style.display = 'none'; return; }
-
+      var c = JSON.parse(div.getAttribute('data-calc') || '{}');
+      var moves = (c.player_moves || []).filter(Boolean);
+      if (!c.player_species || !c.enemy_species || !moves.length) return;
       var gen = window.calc.Generations.get(9);
 
-      // Auto-detect difficulty by level-matching the active enemy
-      var difficulty = 'normal';
-      var trainerSet = null;
-      if (isTr && tKey && window.SETDEX_NORMAL) {
-        var nEntry = window.SETDEX_NORMAL[eSp] && window.SETDEX_NORMAL[eSp][tKey];
-        var hEntry = window.SETDEX_HC     && window.SETDEX_HC[eSp] && window.SETDEX_HC[eSp][tKey];
-        if (hEntry && hEntry.level == eLv && !(nEntry && nEntry.level == eLv))
-          difficulty = 'hardcore';
-        trainerSet = difficulty === 'hardcore' ? hEntry : nEntry;
+      // Trainer battles: pick the difficulty whose set matches the active enemy's level.
+      var difficulty = 'normal', set = null;
+      if (c.is_trainer && c.trainer_key) {
+        var n = (window.SETDEX_NORMAL[c.enemy_species] || {})[c.trainer_key];
+        var h = (window.SETDEX_HC[c.enemy_species] || {})[c.trainer_key];
+        if (h && h.level == c.enemy_level && !(n && n.level == c.enemy_level)) difficulty = 'hardcore';
+        set = difficulty === 'hardcore' ? h : n;
       }
+      set = set || {};
+      var defender = _buildPokemon(gen, c.enemy_species, {
+        level: c.enemy_level, nature: set.nature, ability: set.ability, item: set.item,
+        ivs: _stats(set.ivs), evs: _stats(set.evs),
+        status: c.enemy_status || '', boosts: c.enemy_boosts || {},
+      }, c.enemy_hp_pct);
+      var attacker = _buildPokemon(gen, c.player_species, {
+        level: c.player_level, nature: c.player_nature || 'Hardy',
+        ability: c.player_ability || undefined, item: c.player_item || undefined, moves: moves,
+        status: c.player_status || '', boosts: c.player_boosts || {},
+      }, c.player_hp_pct);
+      if (!defender || !attacker) return;
+      var field = new window.calc.Field({ gameType: c.is_doubles ? 'Doubles' : 'Singles' });
 
-      var defOpts = { level: eLv, evs: {}, ivs: {hp:31,at:31,df:31,sa:31,sd:31,sp:31} };
-      if (trainerSet) {
-        if (trainerSet.nature)  defOpts.nature  = trainerSet.nature;
-        if (trainerSet.ability) defOpts.ability = trainerSet.ability;
-        if (trainerSet.item)    defOpts.item    = trainerSet.item;
-        if (trainerSet.ivs)     defOpts.ivs     = trainerSet.ivs;
-        if (trainerSet.evs)     defOpts.evs     = trainerSet.evs;
-      }
-      var defender = _buildPokemon(gen, eSp, defOpts);
-      if (!defender) { div.style.display = 'none'; return; }
-
-      var atkOpts = {
-        level: pLv, nature: pNat,
-        ability: pAbl || undefined, item: pItm || undefined,
-        moves: pMoves, evs: {}, ivs: {hp:31,at:31,df:31,sa:31,sd:31,sp:31},
-      };
-      var attacker = _buildPokemon(gen, pSp, atkOpts);
-      if (!attacker) { div.style.display = 'none'; return; }
-
-      var rows = [];
-      pMoves.forEach(function (m) {
-        if (!m) return;
-        var r = _calcMove(gen, attacker, defender, m);
-        if (r) rows.push({ move: m, lo: r.lo, hi: r.hi, ohko: r.ohko, twoHko: r.twoHko });
+      var rows = '';
+      moves.forEach(function (m) {
+        var r = _calcMove(gen, attacker, defender, m, field);
+        if (!r) return;
+        var cls = r.ohko ? 'ohko' : (r.twoHko ? 'twohko' : '');
+        rows += '<tr><td>' + _esc(m) + '</td>'
+          + '<td class="' + cls + '">' + r.lo + '–' + r.hi + '%</td>'
+          + '<td class="' + cls + '">' + (r.ohko ? 'OHKO' : (r.twoHko ? '2HKO' : '')) + '</td></tr>';
       });
-      if (!rows.length) { div.style.display = 'none'; return; }
-
-      var diffBadge = difficulty === 'hardcore'
-        ? ' <span style="color:#f80;font-size:0.78em">HC</span>' : '';
-      var h = '<h5>\u2694 vs ' + eSp + diffBadge + '</h5>';
-      h += '<table class="calc-preview-table"><thead>'
-        +  '<tr><th>Move</th><th>Dmg\u202f%</th><th></th></tr>'
-        +  '</thead><tbody>';
-      rows.forEach(function (r) {
-        var c   = r.ohko ? 'ohko' : (r.twoHko ? 'twohko' : '');
-        var lbl = r.ohko ? 'OHKO' : (r.twoHko ? '2HKO'   : '');
-        h += '<tr><td>' + r.move + '</td>'
-          +  '<td class="' + c + '">' + r.lo + '\u2013' + r.hi + '%</td>'
-          +  '<td class="' + c + '">' + lbl + '</td></tr>';
-      });
-      h += '</tbody></table>';
-      var page = difficulty === 'hardcore' ? '/calc/hardcore.html' : '/calc/normal.html';
-      h += '<a class="calc-open-btn" href="' + page + '" target="_blank">'
-        +  '\u2694\ufe0f Open in RR Calc</a>';
-      div.innerHTML    = h;
+      if (!rows) return;
+      var badge = difficulty === 'hardcore' ? ' <span style="color:#f80;font-size:0.78em">HC</span>' : '';
+      div.innerHTML = '<h5>⚔ vs ' + _esc(c.enemy_species) + badge + '</h5>'
+        + '<table class="calc-preview-table"><thead><tr><th>Move</th><th>Dmg %</th><th></th></tr></thead>'
+        + '<tbody>' + rows + '</tbody></table>'
+        + '<a class="calc-open-btn" href="/calc/' + difficulty + '.html" target="_blank">'
+        + '⚔️ Open in RR Calc</a>';
       div.style.display = '';
-    } catch (e) { div.style.display = 'none'; }
+    } catch (e) { /* a matchup the engine cannot model stays hidden */ }
   }
 
   function _renderAll() { _renderPreview('a'); _renderPreview('b'); }
 
   function checkAndInit() {
-    if (!_calcLoaded && document.querySelector('[data-in-battle]')) _init();
+    if (document.querySelector('[data-in-battle]')) _init();
   }
 
   // Called by dashboard.js refreshClientUI() after each HTMX swap.
