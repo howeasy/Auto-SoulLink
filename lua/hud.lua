@@ -181,11 +181,13 @@ function H.init(opts)
     -- take the 8/5 font so the bottom bar fits; the bar's top is derived from the
     -- screen height so it never lands below the screen (the GBA default 146 sat
     -- two pixels under a 144-px screen: LANE-BOOT2 found the Gen 1 HUD invisible).
+    -- GB (144) and GBA (160) both draw the fceux pixel font at the GB metrics (owner
+    -- 2026-09-24: Gen 3 notices look like Gen 1/2's); NDS keeps GDI+ Courier.
     if opts.pixel_font == nil then
-        cfg.pixel_font = (cfg.screen_h <= 144) and "fceux" or false
+        cfg.pixel_font = (cfg.screen_h <= 160) and "fceux" or false
     end
     if not opts.font_size then
-        cfg.font_size = (cfg.screen_h <= 144) and 8 or 10
+        cfg.font_size = (cfg.pixel_font or cfg.screen_h <= 144) and 8 or 10
     end
     if not opts.char_width then
         -- fceux advances 6px; 8pt Courier Bold ~5px

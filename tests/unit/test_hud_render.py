@@ -240,9 +240,10 @@ def test_clear_empties_both_queues():
     assert "drawText" not in w.render()
 
 
-def test_gb_screen_draws_the_fceux_pixel_font_and_gba_keeps_courier():
+def test_gb_and_gba_screens_draw_the_fceux_pixel_font_and_nds_keeps_courier():
     """8pt Courier drawn at 160x144 and scaled up is a smear; a 144px screen takes the bitmap
-    font (one font pixel per screen pixel). Bigger screens keep GDI+ Courier."""
+    font (one font pixel per screen pixel). The GBA's 160px screen matches it (owner: Gen 3
+    notices look like Gen 1/2's); the NDS keeps GDI+ Courier."""
     gb = World().gbc()
     gb.H.show("PIDGEY KO'd", 255, 80, 80, 240)
     gb.H.set_game_over()
@@ -253,6 +254,12 @@ def test_gb_screen_draws_the_fceux_pixel_font_and_gba_keeps_courier():
     gba.H.init(gba.lua.eval("{screen_w = 240, screen_h = 160}"))
     gba.H.show("PIDGEY KO'd", 255, 80, 80, 240)
     frame = gba.render()
+    assert "drawText" not in frame and frame.count("pixelText") == 1, frame
+    assert gba.state.pixel_font == "fceux"
+    nds = World()
+    nds.H.init(nds.lua.eval("{screen_w = 256, screen_h = 192}"))
+    nds.H.show("PIDGEY KO'd", 255, 80, 80, 240)
+    frame = nds.render()
     assert "pixelText" not in frame and "drawText" in frame, frame
 
 
