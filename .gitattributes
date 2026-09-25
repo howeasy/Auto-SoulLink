@@ -26,3 +26,8 @@ data/games/gen2_*/charmap.lua text eol=lf
 docs/gen2/gen2_requirements.md text eol=lf
 docs/protocol.md text eol=lf
 docs/gen2/gen2_coverage_map.md text eol=lf
+
+# Written LF by tools/gen_gen1_write_checkpoint.py --kind overlay (write_text newline="
+"); index is LF too.
+# Without this, core.autocrlf=true reports the LF working copy as modified with no content diff.
+data/games/gen1_purergb/write_checkpoint_overlay.json text eol=lf
