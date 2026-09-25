@@ -5967,6 +5967,8 @@ class DuoRun:
         self._gen3_raise(problems, f"faint_cmd: {ka} and {kb} saved once each in box {box + 1}; "
                                    f"B's HP 0 came from an overworld-armed write")
 
+    assert_faint_cmd_clean_gen3_saved = assert_faint_cmd_gen3_saved
+
     def assert_linked_faint_active_gen3_saved(self, results):
         """W-2 on FRLG/RR, the in-battle path under mechanism P+H. A: the engine's faint site
         fired, THEN the client sent faint for the linked key. Server: DEAD by battle, force_faint
