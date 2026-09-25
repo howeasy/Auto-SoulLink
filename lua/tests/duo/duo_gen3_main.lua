@@ -966,7 +966,10 @@ local function center_predicates(cp, read, regs, parked_verdict)
     for name in pairs(cp.pointers) do pnames[#pnames + 1] = name end
     table.sort(pnames)
     for _, name in ipairs(pnames) do
-        local v = read(cp.pointers[name].address | 0, 4)
+        -- pokemon_storage_base (RR) is the storage address itself, not a pointer to it: the
+        -- same rule as lua/gen3/safety.lua pointers()
+        local v = name == "pokemon_storage_base" and (cp.pointers[name].address | 0)
+            or read(cp.pointers[name].address | 0, 4)
         ptrs[name] = v
         pparts[#pparts + 1] = string.format("%s=0x%08X", name, v)
         if v < 0x02000000 or v >= 0x02040000 or v % 4 ~= 0 then bad[#bad + 1] = "pointer:" .. name end
