@@ -102,7 +102,7 @@ def test_committed_fixtures_qualify(path):
     assert len(data) == codec.FLASH_SIZE == 131072
     name = os.path.basename(path)
     if name.startswith("emerald_"):  # Emerald's own layout (SB1 0x3D88), not FR/LG's
-        result = fx.qualify_one(data, title="emerald")
+        result = fx.qualify_one(data, rr=False, title="emerald")
     else:
         result = fx.qualify_one(data, rr="rr_" in name)
     assert result["ok"], result["message"]
