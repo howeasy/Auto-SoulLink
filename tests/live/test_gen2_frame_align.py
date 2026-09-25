@@ -60,7 +60,11 @@ U1_FIXTURE = {"crystal": "crystal_battle", "gold": "gold_battle_errand", "silver
 # (tests/live/test_gen2_w6_gate.py U1_CLOCK): the fixture RTC runs on with the host clock, and Silver's POISON_STING and
 # evolution hunts need Route 30 Weedle, morning/day only (pokegold data/wild/johto_grass.asm ROUTE_30, _SILVER nite:
 # Hoothoot/Rattata). Only the emulator RTC trailer changes; the CartRAM is the committed fixture's.
-U1_CLOCK = {"silver": 11}
+# Crystal and Gold hunt Route 30's CATERPIE the same way (data/wild/johto_grass.asm ROUTE_30 day/nite: night is
+# SPINARAK/HOOTHOOT/POLIWAG/ZUBAT, no Caterpie at all) for the u1-evolution leg (EVOLUTION_TITLES below), so an
+# un-pinned RTC leaves them exposed to the exact same real-clock coin-flip: fsw-postrc 2026-09-25,
+# gate/engine_sites/crystal ran its whole ~880-battle Route 30 hunt at hour 23/0/1/2 and never saw a Caterpie.
+U1_CLOCK = {"crystal": 11, "gold": 11, "silver": 11}
 # Route 29 -> Cherrygrove -> Route 30 (C/G data/maps/attributes.asm `connection`). Crystal/Silver hunt a wild
 # Weedle in the Route 30 south grass; Gold goes on to Route 31 and Bug Catcher Wade (pokegold data/trainers/
 # parties.asm BUG_CATCHER 4: Caterpie 2, Caterpie 2, WEEDLE 3, Caterpie 2; maps/Route31.asm:361).
