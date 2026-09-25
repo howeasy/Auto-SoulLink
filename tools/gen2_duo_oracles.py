@@ -713,7 +713,9 @@ ROUTE30_TRAINERS = ("YOUNGSTER", ("JOEY1", "MIKEY"))
 
 def validate_faint_active_markers(results, *, title_b, key_a, key_b, species_b, trainer=False):
     """Source-bound active-hold evidence, shared with the receipt matrix; no save normalization. trainer: B's
-    battle is a Route 30 trainer battle (ForcePlayerMonChoice, no NEXT_MON, a live enemy turn after REPLACED)."""
+    battle is a Route 30 trainer battle (ForcePlayerMonChoice, no NEXT_MON, a live turn against the replacement
+    after REPLACED -- an enemy_turn, OR a witnessed enemy_faint: an independent wEnemyMonHP read, trainer-only,
+    a positive-HP baseline for the SAME species zeroing out strictly after the replacement, TRAINER-FAINT-LIVE-TURN)."""
     from server.adapters import gen2_codec as codec
 
     scenario = "gen2_faint_active_trainer" if trainer else "gen2_faint_active"
@@ -784,6 +786,8 @@ def validate_faint_active_markers(results, *, title_b, key_a, key_b, species_b, 
                     and not row.get("error"), "active battle permit span/provenance differs")
     seq = write.get("seq")
     _faint_need(type(seq) is int and seq > 0 and _frame(active) <= _frame(write), "active write sequence/frame invalid")
+    replaced = _one_marker(b, "REPLACED")
+    replacement_pos = next(i for i, line in enumerate(lines) if line.startswith("REPLACED "))
     traces = _tag_rows(b, "BATTLE_TRACE")
     previous = 0
     after = []
@@ -791,6 +795,19 @@ def validate_faint_active_markers(results, *, title_b, key_a, key_b, species_b, 
         _faint_need(type(trace.get("seq")) is int and trace["seq"] > previous and trace["seq"] != seq
                     and trace.get("what") in ("faint", "enemy_turn", "enemy_faint") and _frame(trace) >= _frame(active),
                     "lost/unknown/unordered battle trace")
+        if trace.get("what") == "enemy_faint":
+            # TRAINER-FAINT-LIVE-TURN (post-RC, OMP cx-4ece9985): an independent wEnemyMonHP witness. Valid
+            # only in a trainer battle, strictly after the replacement (by FRAME, not line position), with a
+            # positive-HP baseline for the SAME species zeroing out -- not a switch, not a stale pre-battle read.
+            _faint_need(trainer, "enemy_faint row in a wild scenario")
+            _faint_need(trace.get("battle_mode") == 2, "enemy_faint row outside a trainer battle")
+            _faint_need(type(trace.get("species")) is int and 1 <= trace["species"] <= 251,
+                        "enemy_faint row names no valid species")
+            _faint_need(type(trace.get("hp_before")) is int and trace["hp_before"] > 0,
+                        "enemy_faint row has no positive HP baseline")
+            _faint_need(trace.get("hp_after") == 0, "enemy_faint row did not zero the foe")
+            _faint_need(trace.get("title") == title_b, "enemy_faint row names another title")
+            _faint_need(_frame(trace) > _frame(replaced), "enemy_faint row is not strictly after the replacement")
         previous = trace["seq"]
         if trace["seq"] > seq:
             _faint_need(pos > position["BATTLE_HOLD_WRITE"], "post-write trace printed before write")
@@ -799,13 +816,13 @@ def validate_faint_active_markers(results, *, title_b, key_a, key_b, species_b, 
     _faint_need(not _tag_rows(b, "FAINT_SENT"), "B echoed the commanded faint")
     for pos, row in _tag_rows(b, "ENGINE_FAINT"):
         _faint_need(row.get("key") == key_b and pos > position["BATTLE_HOLD_WRITE"] and _frame(row) >= _frame(write), "B engine faint differs from command")
-    replaced = _one_marker(b, "REPLACED")
-    replacement_pos = next(i for i, line in enumerate(lines) if line.startswith("REPLACED "))
     if trainer:   # ForcePlayerMonChoice asks nothing; the replacement then takes a live turn: an enemy_turn, or
-        # a witnessed enemy faint (a crit-KO can zero the foe before it ever moves, TRAINER-FAINT-LIVE-TURN)
+        # a witnessed enemy faint (a crit-KO can zero the foe before it ever moves, TRAINER-FAINT-LIVE-TURN).
+        # Chronology is by FRAME, not line position: every enemy_faint field was already schema-checked above.
         _faint_need(not _tag_rows(b, "NEXT_MON"), "NEXT_MON in a trainer battle")
         next_mon, next_pos = after[0][1], after[0][0]
-        _faint_need(any(trace["what"] in ("enemy_turn", "enemy_faint") and pos > replacement_pos for pos, trace in traces),
+        _faint_need(any((trace["what"] == "enemy_turn" or trace["what"] == "enemy_faint")
+                        and _frame(trace) > _frame(replaced) for _pos, trace in traces),
                     "no live enemy turn or witnessed enemy faint against the replacement")
     else:
         next_mon = _one_marker(b, "NEXT_MON")

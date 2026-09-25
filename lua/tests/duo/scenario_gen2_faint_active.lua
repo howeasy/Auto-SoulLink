@@ -30,15 +30,23 @@
                    action_before_hex, action_after_hex, log=[the 4 permit spans]}
                                  around the PRODUCTION faint_active_battler call, inside the client's battle
                                  hold; exactly one; after = "0000"/"0000"/"00" and action "01" (USEITEM)
-    BATTLE_TRACE {seq, what=faint|enemy_turn|enemy_faint|lost, frame}
+    BATTLE_TRACE {seq, what=faint|enemy_turn|lost, frame}
                                  observation-only hooks at the pack's battle_hold.oracles (HandlePlayerMonFaint,
                                  EnemyTurn_EndOpponentProtectEndureDestinyBond, LostBattle; in-bank + expected
                                  bytes), from LINKED_ACTIVE to the end of that battle; seq shares one counter
                                  with BATTLE_HOLD_WRITE. The first row after the write is `faint` in the SAME
-                                 frame (no foe move in between); no `lost` row (no whiteout). `enemy_faint` is a
-                                 wEnemyMonHP-read edge (TRAINER-FAINT-LIVE-TURN, post-RC): a witnessed foe faint,
-                                 the alternative "live turn" witness to `enemy_turn` when the replacement crit-KOs
-                                 the foe before it ever moves.
+                                 frame (no foe move in between); no `lost` row (no whiteout).
+    BATTLE_TRACE {seq, what="enemy_faint", frame, battle_mode, species, hp_before, hp_after, title}
+                                 TRAINER-FAINT-LIVE-TURN (post-RC, OMP cx-4ece9985): an independent engine read
+                                 of wEnemyMonHP/wEnemyMonSpecies (never the production wire), S.TRAINER only,
+                                 sampled only after BATTLE_HOLD_WRITE while battle_mode == 2. hp_before is the
+                                 latest positive-HP reading for the SAME species (a fresh baseline on every
+                                 species change, so a switch is never a witness); hp_after == 0 is the very next
+                                 reading of that species at zero (no baseline, i.e. a first read already 0, is
+                                 never a witness either). The alternative "live turn" witness to `enemy_turn`
+                                 when the replacement crit-KOs the foe before it ever moves; S.verdict/the Python
+                                 oracle require it strictly after REPLACED by frame, never by line position, and
+                                 the wild scenario (not S.TRAINER) must never emit one.
     ENGINE_FAINT                 allowed (the binder's battle_faint for the key, after the write); FAINT_SENT
                                  never (the commanded death's echo is dropped, O-30)
     NEXT_MON {frame}             the "Use next #MON?" yes/no, after the native faint
@@ -102,11 +110,40 @@ function S.after_write(rec)
     for _, row in ipairs(rec.trace or {}) do if row.seq > w.seq then return row end end
 end
 
+-- TRAINER-FAINT-LIVE-TURN (post-RC, OMP cx-4ece9985): pure per-frame sampler for the "enemy_faint" witness --
+-- `h.sym` is its only IO, so this drives directly under a stubbed h.sym (Crystal's or Gold's real symbol
+-- table), independent of the driving loop below. `gate` is the caller's S.TRAINER and h.rec.battle_write ~= nil
+-- (never sampled in the wild scenario, never before the battle hold has written). `baseline` is the caller's
+-- {species=, hp=} table or nil ("no witnessable baseline yet": a first read already at 0 is never a witness).
+-- Returns the next baseline and, on a witnessed positive-to-zero transition of the SAME species (a switch
+-- replaces the baseline instead of firing), a BATTLE_TRACE row -- never both: a witness always clears the
+-- baseline it fired from, so a later switch has to arm a fresh one before it can witness again.
+function S.sample_enemy_faint(h, gate, baseline, battle_mode, seq)
+    if not (gate and battle_mode == 2) then return baseline, nil end
+    local species = h.sym("wEnemyMonSpecies")[1]
+    if species < 1 or species > 251 then return baseline, nil end
+    local hp_bytes = h.sym("wEnemyMonHP", 0, 2)
+    local hp = hp_bytes[1] * 256 + hp_bytes[2]
+    if hp > 0 then
+        if baseline and baseline.species == species then
+            baseline.hp = hp
+            return baseline, nil
+        end
+        return {species=species, hp=hp}, nil
+    end
+    if baseline and baseline.species == species then
+        return nil, {seq=seq, what="enemy_faint", frame=h.frame(), battle_mode=battle_mode, species=species,
+                      hp_before=baseline.hp, hp_after=hp, title=h.parts.title}
+    end
+    return baseline, nil
+end
+
 local function run_b(h, key, faint)
     local slot, mon = h.slot_of(key)
     if slot == nil then return false, "the linked mon left the party" end
     local active, next_mon, replaced
-    local enemy_dead = false   -- wEnemyMonHP edge, while trace_on (TRAINER-FAINT-LIVE-TURN)
+    local enemy_baseline   -- {species=, hp=}: the latest positive-HP reading for the currently tracked foe
+                           -- (TRAINER-FAINT-LIVE-TURN); nil means "no witnessable baseline yet"
     local mode = S.TRAINER and 2 or 1
     if S.TRAINER then
         local walked, walk_why = h.to_trainer()
@@ -140,20 +177,15 @@ local function run_b(h, key, faint)
         end,
         fainted=function() local row = S.after_write(h.rec) return row ~= nil and row.what == "faint" end,
         observed=function(point)
-            -- TRAINER-FAINT-LIVE-TURN (post-RC): an independent engine read of wEnemyMonHP, not the production
-            -- wire, witnesses a foe faint the same way EnemyTurn_EndOpponentProtectEndureDestinyBond witnesses a
-            -- foe move. A crit-KO can zero it before the foe ever acts, so this is the "or a witnessed enemy
-            -- faint" half of a live turn, independent of NEXT_MON/REPLACED below.
-            if h.rec.trace_on then
-                local hp_bytes = h.sym("wEnemyMonHP", 0, 2)
-                local dead = hp_bytes[1] == 0 and hp_bytes[2] == 0
-                if dead and not enemy_dead then
-                    h.rec.seq = h.rec.seq + 1
-                    local row = {seq=h.rec.seq, what="enemy_faint", frame=h.frame()}
+            if h.rec.trace_on then   -- TRAINER-FAINT-LIVE-TURN: S.sample_enemy_faint gates TRAINER/battle_write/mode
+                local row
+                enemy_baseline, row = S.sample_enemy_faint(h, S.TRAINER and h.rec.battle_write ~= nil, enemy_baseline,
+                                                            point.battle_mode, h.rec.seq + 1)
+                if row then
+                    h.rec.seq = row.seq
                     h.rec.trace[#h.rec.trace + 1] = row
                     h.jlog("BATTLE_TRACE", row)
                 end
-                enemy_dead = dead
             end
             if not h.rec.battle_write then return end
             if not next_mon and point.ui and point.ui.kind == "yes_no" and point.ui.prompt == "next_mon" then
@@ -321,10 +353,25 @@ function S.verdict(lines, json, link_verdict, faint_verdict)
         need(type(w.log) == "table" and #w.log == 4, "the write left no four-span permit receipt")
         need(got ~= nil and write.at > got.at, "the battle write precedes force_faint")
     end
+    local replaced = one("REPLACED")
     -- the engine order: the first oracle hit after the write is HandlePlayerMonFaint, same frame; no whiteout
     local first
     for _, r in ipairs(rows("BATTLE_TRACE")) do
         need(r.value.what ~= "lost", "LostBattle ran (a whiteout)")
+        if r.value.what == "enemy_faint" then
+            -- TRAINER-FAINT-LIVE-TURN (post-RC, OMP cx-4ece9985): the SAME schema and chronology the Python
+            -- oracle enforces, checked once here so the trainer branch below only tests "any row survived".
+            need(S.TRAINER, "enemy_faint row in a wild scenario")
+            need(r.value.battle_mode == 2, "enemy_faint row outside a trainer battle")
+            need(type(r.value.species) == "number" and r.value.species >= 1 and r.value.species <= 251,
+                 "enemy_faint row names no valid species")
+            need(type(r.value.hp_before) == "number" and r.value.hp_before > 0, "enemy_faint row has no positive HP baseline")
+            need(r.value.hp_after == 0, "enemy_faint row did not zero the foe")
+            need(head ~= nil and r.value.title == head.value.title, "enemy_faint row names another title")
+            need(type(r.value.frame) == "number" and type(r.value.seq) == "number", "enemy_faint row has a malformed seq/frame")
+            need(replaced ~= nil and type(replaced.value.frame) == "number" and type(r.value.frame) == "number"
+                 and r.value.frame > replaced.value.frame, "enemy_faint row is not strictly after the replacement")
+        end
         if w and first == nil and type(r.value.seq) == "number" and r.value.seq > w.seq then first = r end
     end
     need(first ~= nil and first.value.what == "faint", "the first engine event after the write is not HandlePlayerMonFaint")
@@ -338,19 +385,21 @@ function S.verdict(lines, json, link_verdict, faint_verdict)
     for _, r in ipairs(rows("PARTY_HP_WRITE")) do
         need(r.value.ok == true and r.value.before_party_hex == r.value.after_party_hex, "a checkpoint write changed B's party")
     end
-    local next_mon, replaced
-    if S.TRAINER then   -- ForcePlayerMonChoice with no prompt; then a live enemy turn against the replacement
+    local next_mon
+    if S.TRAINER then   -- ForcePlayerMonChoice with no prompt; then a live turn against the replacement: an
+        -- enemy_turn, or a witnessed enemy_faint (both already schema/chronology-checked above).
         need(#rows("NEXT_MON") == 0, "NEXT_MON in a trainer battle")
-        replaced = one("REPLACED")
         next_mon = first
         local live = false
-        for _, r in ipairs(rows("BATTLE_TRACE")) do
-            live = live or (replaced ~= nil and r.at > replaced.at
-                            and (r.value.what == "enemy_turn" or r.value.what == "enemy_faint"))
+        if replaced and type(replaced.value.frame) == "number" then
+            for _, r in ipairs(rows("BATTLE_TRACE")) do
+                live = live or ((r.value.what == "enemy_turn" or r.value.what == "enemy_faint")
+                                and type(r.value.frame) == "number" and r.value.frame > replaced.value.frame)
+            end
         end
         need(live, "no live enemy turn or witnessed enemy faint against the replacement")
     else
-        next_mon, replaced = one("NEXT_MON"), one("REPLACED")
+        next_mon = one("NEXT_MON")
     end
     if next_mon then need(first ~= nil and next_mon.at >= first.at, "NEXT_MON before the native faint") end
     if replaced then
