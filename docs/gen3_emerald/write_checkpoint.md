@@ -237,12 +237,22 @@ decision.
 **Center 1F admits.** `center_idle` passes with the Union Room background tasks running (F3 is physically
 confirmed at the rate level; the task set itself was not logged).
 
-**F6 (E1 pack defect, PHYSICAL):** at the parked Emerald action menu, `gBattleCommunication[0]` reads **2**
-(`STATE_WAIT_ACTION_CHOSEN`), not 1. Emerald's enum starts with `STATE_TURN_START_RECORD`
-(`src/battle_main.c:4118-4121`), so the pack's `battle_comm_0` expectation of 1 is FR's number, not FR's
-meaning. `mkstates_gen3` could not park on the pack's tuple, and parks on main + controller instead. The
-battle-reason rows (`battle_faint`/`battle_commit`) were not run on Emerald; with the current pack they would
-refuse at the parked menu.
+**F6 (E1 pack defect, PHYSICAL) -- FIXED by card E2-FIX-AB (F-B):** at the parked Emerald action menu,
+`gBattleCommunication[0]` reads **2** (`STATE_WAIT_ACTION_CHOSEN`), not 1. Emerald's enum starts with
+`STATE_TURN_START_RECORD` (`src/battle_main.c:4118-4121`), so the pack's `battle_comm_0` expectation of 1 was
+FR's number, not FR's meaning: FR/LG's enum starts at `STATE_BEFORE_ACTION_CHOSEN` (index 0), so
+`STATE_WAIT_ACTION_CHOSEN` is index 1 there, but Emerald's extra leading member shifts every later state's
+index by one, making it 2. `tools/gen_gen3_write_checkpoint.py` now derives `battle_comm_0`'s expect BY NAME
+per title (`BATTLE_COMM_STATES`), not from the FR/LG literal in `BATTLE_CLAUSES_FRLG`: FR/LG stay 1 (byte-
+identical output, `git diff --quiet data/games/gen3_frlg`), Emerald emits 2. `commit_guard.value` is the same
+by-name state, `STATE_WAIT_ACTION_CONFIRMED_STANDBY`, shifted the same way: FR/LG stay 3, Emerald emits 4
+(`docs/gen3/research/battle_write_predicate.md:237` names `commit_guard`'s FR/LG value as that state). Both
+are per-title constants, not a live re-derive from the pret checkout: FR/LG's build provenance
+(`data/gen3/pret/provenance.json`) and Emerald's (`pokeemerald_provenance.json`) don't share a JSON shape,
+and the enum is fixed source text that only changes together with a title's own `.sym`.
+`mkstates_gen3`/the battle-reason rows (`battle_faint`/`battle_commit`) have not been re-run on Emerald since
+this fix (CODE ONLY, no emulator per the card); the note above about them being unrun against the old,
+wrong tuple is historical.
 
 **Emerald-only forbidden states: SOURCE-only limits.** None of these is reachable from the three fixtures.
 The checkpoint refuses each one through the §5 inventory entry named here:

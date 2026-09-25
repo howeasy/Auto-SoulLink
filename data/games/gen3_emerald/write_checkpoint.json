@@ -63,7 +63,7 @@
         {
           "address": 33702706,
           "compare": "eq",
-          "expect": 1,
+          "expect": 2,
           "name": "battle_comm_0",
           "offset": 0,
           "source": "pokeemerald.sym (data address); pret pokeemerald c65e93f2 src/battle_main.c:4129-4168, src/battle_util.c:856-862, src/battle_controller_player.c:200-214,2565-2571, include/constants/battle.h:60, include/pokemon.h:260-295; src/battle_controller_player.o .text [0x08057458, 0x0805D116) sym-derived (no .map): the 123 functions pret c65e93f2 src/battle_controller_player.c defines, one contiguous .sym run, no foreign symbol, .gcc2_compiled. at both ends",
@@ -129,7 +129,7 @@
         "offset": 0,
         "source": "pokeemerald.sym (data address); pret pokeemerald c65e93f2 src/battle_main.c:4129-4168, src/battle_util.c:856-862, src/battle_controller_player.c:200-214,2565-2571, include/constants/battle.h:60, include/pokemon.h:260-295; src/battle_controller_player.o .text [0x08057458, 0x0805D116) sym-derived (no .map): the 123 functions pret c65e93f2 src/battle_controller_player.c defines, one contiguous .sym run, no foreign symbol, .gcc2_compiled. at both ends",
         "symbol": "gBattleCommunication",
-        "value": 3,
+        "value": 4,
         "width": 1
       },
       "handoff": {

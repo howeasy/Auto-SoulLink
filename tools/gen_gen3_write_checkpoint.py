@@ -796,6 +796,25 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
 # battler 0's controller is the PLAYER's HandleInputChooseAction. That pin also refuses the
 # HandleChooseActionAfterDma3 draw frames, the move/target submenus, the bag and party menus, and
 # the Safari / Oak-old-man / Pokedude controllers (Teachy TV swaps gPlayerParty: teachy_tv.c:1178).
+# F-B (card E2-FIX-AB): STATE_WAIT_ACTION_CHOSEN and STATE_WAIT_ACTION_CONFIRMED_STANDBY, BY
+# NAME, in each vanilla title's own src/battle_main.c enum -- battle_comm_0's expect and
+# commit_guard's value are that enum's indices, not a bare literal that happens to be right for
+# one title. FR/LG's enum starts at STATE_BEFORE_ACTION_CHOSEN (index 0): WAIT_ACTION_CHOSEN = 1,
+# WAIT_ACTION_CONFIRMED_STANDBY = 3 (pret pokefirered c75f3523 src/battle_main.c:3086-3092; also
+# docs/gen3/research/battle_write_predicate.md:61-63,237). Emerald's enum has one extra leading
+# member, STATE_TURN_START_RECORD, so every later state's index is +1: WAIT_ACTION_CHOSEN = 2,
+# WAIT_ACTION_CONFIRMED_STANDBY = 4 (pret pokeemerald c65e93f2 src/battle_main.c:4116-4124).
+# Physically, gBattleCommunication[0] reads 2 at Emerald's parked action menu, not FR/LG's 1.
+#
+# A per-title constant, not a live re-derive from the pret checkout at generation time: FR/LG's
+# own build provenance (data/gen3/pret/provenance.json: {"source": {"commit": ...}}) and
+# Emerald's (pokeemerald_provenance.json: {"origin": {"source_commit": ...}}) don't share a JSON
+# shape, and the enum is fixed source text that only changes together with a title's own .sym --
+# re-deriving it live at generation time would not catch anything the citation above doesn't
+# already pin. RR is untouched: it has no pret and keeps its own ROM-pinned expect
+# (BATTLE_CLAUSES_RR / BATTLE_COMMIT_GUARD_RR), never routed through this table.
+BATTLE_COMM_STATES_FRLG = {"WAIT_ACTION_CHOSEN": 1, "WAIT_ACTION_CONFIRMED_STANDBY": 3}
+BATTLE_COMM_STATES = {"emerald": {"WAIT_ACTION_CHOSEN": 2, "WAIT_ACTION_CONFIRMED_STANDBY": 4}}
 BATTLE_CLAUSES_FRLG = (
     ("battle_main_func", "gBattleMainFunc", 0, 4, None, "eq_symbol", "HandleTurnActionSelectionState"),
     ("battle_comm_0", "gBattleCommunication", 0, 1, None, "eq", 1),
@@ -973,6 +992,7 @@ def battle_block(title: str, syms, is_rr: bool, profile: dict | None,
         hold = {"commit_hold": RR_COMMIT_HOLD}
     else:
         source = TITLE_SOURCES[title]["battle"] + span if title in TITLE_SOURCES else BATTLE_SOURCE_FRLG
+        comm_states = BATTLE_COMM_STATES.get(title, BATTLE_COMM_STATES_FRLG)
         for name, symbol, offset, width, mask, compare, expect in BATTLE_CLAUSES_FRLG:
             entry = {"name": name, "symbol": symbol, "address": syms[symbol][0], "offset": offset,
                      "width": width, "compare": compare, "source": source}
@@ -981,11 +1001,15 @@ def battle_block(title: str, syms, is_rr: bool, profile: dict | None,
             if compare == "eq_symbol":
                 entry["expect_symbol"] = expect
                 entry["expect"] = syms[expect][0] | 1
+            elif name == "battle_comm_0":
+                # F-B: the index of STATE_WAIT_ACTION_CHOSEN in *this title's* enum, not FR/LG's.
+                entry["expect"] = comm_states["WAIT_ACTION_CHOSEN"]
             elif expect is not None:
                 entry["expect"] = expect
             clauses.append(entry)
         guard = dict(BATTLE_COMMIT_GUARD)
         guard["address"] = syms["gBattleCommunication"][0]
+        guard["value"] = comm_states["WAIT_ACTION_CONFIRMED_STANDBY"]  # F-B: same by-name shift
         guard["source"] = source
         hold = {}
     return {"version": "gen3-battle-v1", "clauses": clauses, "commit_guard": guard, **hold}, dropped

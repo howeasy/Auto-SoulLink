@@ -291,9 +291,18 @@ def test_offsets_are_the_pret_emerald_headers(rel: str, pattern: str) -> None:
     assert any(re.search(pattern, line) for line in pret_file(rel)), (rel, pattern)
 
 
-def test_battle_comm_0_is_the_second_battle_state_enum_value() -> None:
+def test_battle_comm_0_is_state_wait_action_chosen_not_before_action_chosen() -> None:
+    """F-B (card E2-FIX-AB): battle_comm_0's expect is the index of STATE_WAIT_ACTION_CHOSEN in
+    pokeemerald's own src/battle_main.c enum -- the parked action-menu state, the same state
+    FR/LG's battle_comm_0 names (docs/gen3/research/battle_write_predicate.md:61-63) -- not
+    STATE_BEFORE_ACTION_CHOSEN. The old version of this test asserted
+    `STATE_BEFORE_ACTION_CHOSEN == 1`: the right NUMBER (Emerald's enum has one extra leading
+    member, STATE_TURN_START_RECORD, so everything downstream shifts by one) attached to the
+    wrong MEANING (STATE_BEFORE_ACTION_CHOSEN is index 1 in Emerald, but the state
+    battle_comm_0 actually demands, STATE_WAIT_ACTION_CHOSEN, is index 2). commit_guard.value is
+    the same by-name shift applied to STATE_WAIT_ACTION_CONFIRMED_STANDBY."""
     lines = pret_file("src/battle_main.c")
-    i = next(i for i, ln in enumerate(lines) if ln.strip() == "STATE_BEFORE_ACTION_CHOSEN,")
+    i = next(i for i, ln in enumerate(lines) if ln.strip() == "STATE_WAIT_ACTION_CHOSEN,")
     start = max((j for j in range(i) if lines[j].strip() == "enum"), default=-1)
     assert start >= 0
     body = []
@@ -303,10 +312,13 @@ def test_battle_comm_0_is_the_second_battle_state_enum_value() -> None:
             break
         if text not in ("", "{"):
             body.append(text.rstrip(","))
-    assert body[:2] == ["STATE_TURN_START_RECORD", "STATE_BEFORE_ACTION_CHOSEN"]
-    assert body.index("STATE_BEFORE_ACTION_CHOSEN") == 1           # the value battle_comm_0 demands
+    assert body[:3] == ["STATE_TURN_START_RECORD", "STATE_BEFORE_ACTION_CHOSEN", "STATE_WAIT_ACTION_CHOSEN"]
+    assert body.index("STATE_WAIT_ACTION_CHOSEN") == 2              # the value battle_comm_0 demands
     clause = next(c for c in emitted()["battle"]["clauses"] if c["name"] == "battle_comm_0")
-    assert clause["expect"] == 1
+    assert clause["expect"] == 2
+    # the commit guard's value is the same by-name state, shifted the same way (F-B)
+    assert body.index("STATE_WAIT_ACTION_CONFIRMED_STANDBY") == 4
+    assert emitted()["battle"]["commit_guard"]["value"] == 4
 
 
 def test_in_battle_is_bit_1_of_byte_0x439() -> None:

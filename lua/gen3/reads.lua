@@ -440,11 +440,17 @@ function R.new(profile, io, pointers)
     -- leaves SB1_BADGE_BYTE_OFFSET null; each bit is then read from its own flags byte. The
     -- Python twin is tools/gen3_reads_pydec.py's decode_badges_straddle.
     function r.read_badges()
-        if d.BADGE_FIRST_FLAG ~= nil then
+        -- json_codec.lua decodes a JSON null to the sentinel M.null = {} (json_codec.lua:4,174),
+        -- not Lua nil, and the real Emerald profile carries SB1_BADGE_BYTE_OFFSET: null. A plain
+        -- `~= nil` check treats that sentinel table as "set" and misfires the refusal below on
+        -- every real Emerald load; only a number means the field is actually set (F-A).
+        local first_flag_set = type(d.BADGE_FIRST_FLAG) == "number"
+        local byte_offset_set = type(d.SB1_BADGE_BYTE_OFFSET) == "number"
+        if first_flag_set then
             -- A profile that carries both fields is self-contradictory (one says "straddled,
             -- read per-bit", the other says "shares one byte"): refuse by name rather than
             -- picking a side (F10).
-            if d.SB1_BADGE_BYTE_OFFSET ~= nil then
+            if byte_offset_set then
                 return nil, "profile derived sets both BADGE_FIRST_FLAG and SB1_BADGE_BYTE_OFFSET"
             end
             if not d.SB1_FLAGS_OFFSET then
@@ -460,7 +466,7 @@ function R.new(profile, io, pointers)
             end
             return out
         end
-        if not d.SB1_FLAGS_OFFSET or not d.SB1_BADGE_BYTE_OFFSET then
+        if not d.SB1_FLAGS_OFFSET or not byte_offset_set then
             return nil, "profile has no derived.SB1_FLAGS_OFFSET/SB1_BADGE_BYTE_OFFSET"
         end
         local sb1, why = r.read_sb1()

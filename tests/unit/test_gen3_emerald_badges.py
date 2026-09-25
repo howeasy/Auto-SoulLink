@@ -130,6 +130,53 @@ def test_badge_first_flag_is_absent_from_every_frlg_rr_title(pack, title):
     assert derived["SB1_BADGE_BYTE_OFFSET"] is not None
 
 
+def test_read_badges_accepts_the_real_profile_decoded_through_json_codec():
+    """FIRST FALSIFIER (F-A, coordinator-verified): decodes the shipped profile.json through
+    `lua/json_codec.lua` in lupa, the same way `lua/gen3/entry.lua`'s `load_json` loads it for
+    the real client -- NOT the plain `json.loads` the fakes above use, which hides the bug.
+    `json_codec.lua` decodes a JSON null to the sentinel `M.null = {}` (json_codec.lua:4,174),
+    not Lua `nil`; the real Emerald profile's `SB1_BADGE_BYTE_OFFSET` is JSON null, so it comes
+    through as that sentinel table, not nil. Red before the fix: `read_badges`'s old
+    `d.SB1_BADGE_BYTE_OFFSET ~= nil` guard saw the non-nil sentinel and refused with "profile
+    derived sets both BADGE_FIRST_FLAG and SB1_BADGE_BYTE_OFFSET" even though only
+    BADGE_FIRST_FLAG is really set. Physically seen in
+    docs/gen3_emerald/probes/reads_pydec_emerald_2026-09-25.txt (RUN B)."""
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    json_codec = lua.eval(f'dofile("{(REPO / "lua" / "json_codec.lua").as_posix()}")')
+    profile_text = (REPO / "data" / "games" / "gen3_emerald" / "profile.json").read_text(
+        encoding="utf-8")
+    decoded = json_codec.decode(profile_text)
+    profile = decoded["titles"]["emerald"]
+    # Control: the sentinel, not nil, is really what SB1_BADGE_BYTE_OFFSET decodes to (M.kind
+    # tells null from nil by Lua-side identity, since a cross-language `==` on two proxy
+    # wrappers of the same table is not reliable from Python) -- if this assertion itself ever
+    # goes red, the bug this test targets no longer exists to catch.
+    assert json_codec.kind(profile["derived"]["SB1_BADGE_BYTE_OFFSET"]) == "null"
+    assert profile["derived"]["SB1_BADGE_BYTE_OFFSET"] is not None
+
+    bus: dict[int, int] = {}
+
+    def poke(addr: int, data: bytes) -> None:
+        for i, b in enumerate(data):
+            bus[addr + i] = b
+
+    io_ = lua.table(
+        read_u8=lambda a: bus.get(int(a), 0),
+        read_u16=lambda a: sum(bus.get(int(a) + i, 0) << (8 * i) for i in range(2)),
+        read_u32=lambda a: sum(bus.get(int(a) + i, 0) << (8 * i) for i in range(4)),
+        read_bytes=lambda a, n: lua.table(*[bus.get(int(a) + i, 0) for i in range(int(n))]),
+    )
+    Reads = lua.eval(f'dofile("{(REPO / "lua" / "gen3" / "reads.lua").as_posix()}")')
+    reads = Reads.new(profile, io_)
+
+    poke(int(profile["ram"]["SB1_PTR_ADDR"]), SB1_ADDR.to_bytes(4, "little"))
+    # synthetic SB1.flags: badge index 3 set (flag BADGE_FIRST_FLAG+3, byte 0x10D bit 2)
+    poke(SB1_ADDR + SB1_FLAGS_OFFSET + 0x10C, bytes([0x00, 0b0000_0100]))
+
+    result = reads.read_badges()
+    assert result == 0b0000_1000, f"expected a badge mask (0b1000), got a refusal: {result!r}"
+
+
 def test_read_badges_refuses_a_profile_that_sets_both_derived_fields():
     """F10: a profile carrying both BADGE_FIRST_FLAG and a non-null SB1_BADGE_BYTE_OFFSET is
     self-contradictory (one says "straddled, read per-bit", the other "shares one byte") --
