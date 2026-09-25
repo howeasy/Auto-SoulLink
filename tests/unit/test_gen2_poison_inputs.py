@@ -301,12 +301,16 @@ def test_park_hands_over_on_a_grass_tile_or_in_a_battle():
 
 @pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
 def test_a_committed_receipt_that_proves_poison_faint_carries_a_passing_poison_record(title):
-    """The committed PHYSICAL receipt re-checked through the gate's own pure rules (and the shipped copy is
-    byte-identical)."""
+    """The committed PHYSICAL receipt re-checked through the gate's own pure rules, and the shipped copy proves
+    the same sites. Not byte-identical: the final sweep re-stamped the evidence copy with CODE_DIGEST, while the
+    shipped copy is production data inside that digest (refreshing it would move the digest it is stamped with;
+    POST_RC_CARDS MASTER-MERGE refreshes it in the post-RC re-sweep)."""
     import json
     path = ROOT / f"tests/fixtures/gen2/receipts/{title}.engine_sites.json"
     receipt = json.loads(path.read_text(encoding="utf-8"))
-    assert path.read_bytes() == (ROOT / f"data/games/gen2_{title}/receipts/{title}.engine_sites.json").read_bytes()
+    shipped = json.loads((ROOT / f"data/games/gen2_{title}/receipts/{title}.engine_sites.json").read_text(encoding="utf-8"))
+    proven = lambda r: sorted({s for run in r.get("runs", [r]) for s in run.get("proven", [])})
+    assert proven(shipped) == proven(receipt)
     receipt = receipt.get("runs", [receipt])[0]   # card U1G: the v2 receipt's non-synthetic chain run
     if "poison_faint" not in receipt["proven"]:
         pytest.skip(f"{title} does not prove poison_faint yet")
