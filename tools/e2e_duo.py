@@ -5647,10 +5647,13 @@ class DuoRun:
         self.go(self._gen3_linked_lines())
         self.assert_whiteout_both_boxed()
         # G4 item 2a's negative control: after its save A parks in the Center nurse's script, and
-        # a queued SLink write must stay HELD there (scenario_gen3_whiteout.lua nurse_control)
+        # a queued SLink write must stay HELD there (scenario_gen3_whiteout.lua nurse_control).
+        # G5-RR-NURSE-2: RR's nurse never refuses, so the control there is the START menu instead,
+        # named start_menu (assert_whiteout_gen3_saved's control_name, same rule).
         ka = self._link_keys["a"]
-        self._gen3_mark("a", rf"^CONTROL_LIVE nurse {re.escape(ka)} ",
-                        "A parked in the nurse's script (negative control)")
+        control_name = "start_menu" if self._gen3_rr else "nurse"
+        self._gen3_mark("a", rf"^CONTROL_LIVE {control_name} {re.escape(ka)} ",
+                        f"A parked in the {control_name} negative control")
         self.queue_command("a", {"cmd": "box_mon", "key": ka})
 
     def orchestrate_link_gen3(self):
