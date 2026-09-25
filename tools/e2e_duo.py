@@ -1878,7 +1878,8 @@ def rival_swap_real_problems(text, source_party, rival_ids, native_lo, native_hi
                             f"server's auto swap for trainer {trainer}")
         if (cmd[2], cmd[3]) != (str(tbs.get("session")), str(tbs.get("battle_id"))):
             problems.append("a: the command's session/battle_id is not the announcement's")
-    blobs = dict(re.findall(r"(?m)^RIVAL_BLOB (\d+) ([0-9A-F]{200})$", text))
+    # the server hex-encodes lower case (state.py blobs_hex), the driver dumps upper case
+    blobs = dict(re.findall(r"(?m)^RIVAL_BLOB (\d+) ([0-9A-Fa-f]{200})$", text))
     staged = [ident(mon(blobs[str(i)])) for i in range(len(blobs)) if str(i) in blobs]
     if not staged or staged != [ident(m) for m in source_party]:
         problems.append(f"a: the staged blobs {staged} are not B's party "
@@ -1897,7 +1898,7 @@ def rival_swap_real_problems(text, source_party, rival_ids, native_lo, native_hi
     count = one(r"^ENEMY_COUNT (\d+)$", "ENEMY_COUNT")
     if count != str(len(staged)):
         problems.append(f"a: ENEMY_COUNT {count}, the staged team has {len(staged)}")
-    enemy = dict(re.findall(r"(?m)^ENEMY_SLOT (\d+) ([0-9A-F]{200})$", text))
+    enemy = dict(re.findall(r"(?m)^ENEMY_SLOT (\d+) ([0-9A-Fa-f]{200})$", text))
     for i, want in enumerate(staged):
         got = ident(mon(enemy.get(str(i), "")))
         if got != want:

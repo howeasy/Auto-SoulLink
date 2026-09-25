@@ -12,7 +12,9 @@ import e2e_duo as duo  # noqa: E402
 from server.adapters import gen3_codec as codec  # noqa: E402
 
 FIX = os.path.join(REPO, "tests", "fixtures", "gen3")
-NATIVE_LO, NATIVE_HI = 0x02040000, 0x02040800
+with open(os.path.join(REPO, "data", "games", "gen3_rr", "profile.json"), encoding="utf-8") as _h:
+    NATIVE_LO = json.load(_h)["native"]["BASE"]          # 0x0203F800, the live receipt's arena
+NATIVE_HI = NATIVE_LO + 0x800
 RIVAL = 331
 
 
@@ -40,7 +42,7 @@ def _receipt(blobs, enemy=None, reply=None, writes=None, tbs_id=RIVAL, cmd_id=RI
                       "session": "s1"})
     lines = [f"RIVAL_PRE {pre}", f"TX trainer_battle_start - {tbs}",
              f"RIVAL_CMD trainer_id={cmd_id} n={len(blobs)} session=s1 battle_id=1 source=auto frame=9",
-             *[f"RIVAL_BLOB {i} {b.hex().upper()}" for i, b in enumerate(blobs)],
+             *[f"RIVAL_BLOB {i} {b.hex()}" for i, b in enumerate(blobs)],   # server: lower case
              "RX replace_rival_team", *writes,
              f"TX rival_team_replaced - {json.dumps(reply)}",
              f"ENEMY_COUNT {len(enemy)}",
