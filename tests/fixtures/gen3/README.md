@@ -540,16 +540,17 @@ build, both RUN), saves in-game and re-verifies the tile. Built by the same `_pr
 - The rival it meets: coord script 0x081682AB -> `trainerbattle 9` with gTrainers 0x149/0x14A/0x14B
   by `VAR_STARTER_MON` (0x4031 == 0 here -> 0x14B = 331, an `_RR_RIVAL_TRAINER_IDS` member).
 
-## emerald_{town,battle,trainer}{,_b}.sav (card E1-FIX, EF-10) — SYNTH seed, native re-save, built live 2026-09-25
+## emerald_{town,battle,trainer}{,_b}.sav (cards E1-FIX, E1-FIX-2) — SYNTH seed, native re-save, built live 2026-09-25
 
 **Provenance: O-33 SYNTH setup, disclosed.** `tools/gen3_fixtures.py make-emerald` builds a flash
 save from pret facts (pokeemerald c65e93f2), cold-boots it on vanilla Emerald (sha1 `f3ae0881…`)
 → CONTINUE → in-game SAVE, and keeps **the game's own re-save** as the fixture. The seed sets
 `SaveBlock2.specialSaveWarpFlags = CONTINUE_GAME_WARP`, so CONTINUE runs pret's warp-in
 (`CB2_ContinueSavedGame` → `WarpIntoMap` → `CB2_LoadMap`, `src/overworld.c:1739-1746`); the game
-clears the flag and writes SaveBlock1 itself (map view, object events, player avatar). The build
-refuses a re-save that still carries the flag, stands anywhere but the kind's tile, or changed
-the party (`emerald_fixture_problems`). The `_b` file is `derive-b --title emerald` over the `a`
+clears the flag and writes SaveBlock1 itself (map view, object-event table). The build refuses a
+re-save that still carries the flag, stands anywhere but the kind's tile, changed the party, or
+lost the Poké Balls (`emerald_fixture_problems`; `boot-check --title emerald` runs the same check
+on its flushed save). The `_b` file is `derive-b --title emerald` over the `a`
 file (OT identity only), exactly as for FR/LG.
 
 What the seed carries (everything else is zero, as `ClearSav1`/`NewGameInitData` leave it):
@@ -560,38 +561,65 @@ What the seed carries (everything else is zero, as `ClearSav1`/`NewGameInitData`
   `FLAG_SYS_POKEMON_GET`, `FLAG_ADVENTURE_STARTED` (unblocks Oldale's west exit),
   `FLAG_RECEIVED_POTION_OLDALE`, `FLAG_VISITED_OLDALE_TOWN`, `FLAG_HIDE_OLDALE_TOWN_RIVAL`,
   `FLAG_HIDE_ROUTE_103_RIVAL`.
+- Bag (card E1-FIX-2): **5 Poké Balls** (`ITEM_POKE_BALL` 4) in `bagPocket_PokeBalls[0]`
+  (SaveBlock1 +0x650), the same count for town, battle and trainer, so the client's
+  `has_pokeballs` latches and faint / party-sync scenarios can run (FR's battle fixture has 4).
+  The quantity is stored XOR the low 16 bits of `SaveBlock2.encryptionKey` (`src/item.c:26-34`);
+  the seed's key is 0, CONTINUE re-keys it (`MoveSaveBlocks_ResetHeap`, `src/load_save.c:127-131`),
+  and `emerald_ball_pocket` reads it back through the saved key.
 - Party: Mudkip Lv5 (species 283), Hardy, male, IVs 15, EVs 0, Tackle/Growl, 20/20 HP, OT
   `EMER`, met Route 101 at Lv5 in a Poké Ball, personality `0x4D55444B`.
 - Storage: box names `BOX1`..`BOX14`, default wallpapers, no mons.
 
 **Not in the seed (story state is NOT coherent beyond Oldale/Route 102):** no Pokédex
-(`FLAG_SYS_POKEDEX_GET` unset, dex empty), empty bag and PC items, all story vars 0 (Littleroot,
-Route 101 and Route 103 scenes may fire if a run walks there), berry trees empty, RTC/clock not set.
+(`FLAG_SYS_POKEDEX_GET` unset, dex empty), no bag items besides the Poké Balls, no PC items, all
+story vars 0 (Littleroot, Route 101 and Route 103 scenes may fire if a run walks there), berry
+trees empty, RTC/clock not set.
+
+**Still SYNTH after the game's re-save.** The re-save rewrites these through the game's own
+code, but every value is the seed's, not one a played game produced:
+- SaveBlock2: player name, gender, trainer id, options (text speed) — the `encryptionKey` is the
+  one exception the game changes (it re-rolls it on CONTINUE and re-encrypts money and the bag);
+- the Pokédex (empty);
+- money (3000);
+- flags and vars;
+- gameStats (seeded zero; only the counters the boot and save themselves bump move);
+- the bag (the 5 Poké Balls, nothing else);
+- the Mudkip's OT, met location/level/game, ball, friendship and ability bit.
+
+Seed sha256 (`build_emerald_seed`, pinned by the unit test): town
+`816d33b8e856ccb8fcf84b45f799495a6cfb00d77677ce7ce152cfbe21e7aca5`, battle
+`6ad42abbfd481978b237a4f2d3bc92eb4fb1dfdf97eba74572e7b4b0dfcc35a9`, trainer
+`f6f301bc99c778e35aebef796093465d178397893430ae99063e4c07326f596e`.
 
 | Fixture | Map (group.num) | Tile | Why this tile | sha256 |
 |---|---|---|---|---|
-| `emerald_town.sav` | Oldale Town (0.10) | (6,17) | heal location, one Up step into the Pokémon Center door (6,16); towns have no wild encounters | `d43420f23a3ddd09e2525bcd18ede8de8883278b66a2c78b49dc5856add2e5b5` |
-| `emerald_town_b.sav` | same | same | `derive-b` | `d93795395b9438fbcd771de08806a9798127cac46de2cd42f13f422ec959fe53` |
-| `emerald_battle.sav` | Route 102 (0.17) | (21,16) | `MB_TALL_GRASS` in the (19..25,16..17) patch; no trainer faces it | `7f70a815a09ea2c02c20ee3493416516ff34b402a06cc38abe8f330733fd71ba` |
-| `emerald_battle_b.sav` | same | same | `derive-b` | `8fc35e013a31e14489493ae49ba47d89b95e0738befdf6f19a32b4870b75db26` |
-| `emerald_trainer.sav` | Route 102 (0.17) | (32,16) | one Right step onto (33,16), inside Youngster Calvin's sight line (he stands at (33,14) facing down, sight 3) | `8865372111d1ceb7cfd03739627f87f04ead231b10893d349190916b2cb7afbe` |
-| `emerald_trainer_b.sav` | same | same | `derive-b` | `91fc8c969c344884e0322dad9bd2753c6efd43b5b2c5923d481c469a775922b7` |
+| `emerald_town.sav` | Oldale Town (0.10) | (6,17) | heal location, one Up step into the Pokémon Center door (6,16); towns have no wild encounters | `f447ce7aaf87cf81e1cdd0bf13bd81cad615214abaf335fc9d91a4dede38f80a` |
+| `emerald_town_b.sav` | same | same | `derive-b` | `17a34da61d32eb9c9e4fb5f8b6bd881245b5afa3213b369ebb71ac808f1043ec` |
+| `emerald_battle.sav` | Route 102 (0.17) | (21,16) | `MB_TALL_GRASS` in the (19..25,16..17) patch; no trainer faces it | `4080d499a0ca51a6c593be5062f5a8aa74014acffadee33541985bfa617c1b5f` |
+| `emerald_battle_b.sav` | same | same | `derive-b` | `61cefb43740759b677d886752a0ab46c67e25798f2666f5dde5c615fc4fc4b50` |
+| `emerald_trainer.sav` | Route 102 (0.17) | (32,16) | one Right step onto (33,16), inside Youngster Calvin's sight line (he stands at (33,14) facing down, sight 3) | `1fe754336ddba75b2a1cb77b7864d2eae7137e8d7412bf55724f7db4cb1593e6` |
+| `emerald_trainer_b.sav` | same | same | `derive-b` | `ca108972081f3c01000d34822adccdbb02cec9e436a8fc31091ab8c450b40fb6` |
 
 All six: slot 0, counter 2, one Mudkip Lv5; `a` side `EMER` #20250925, `_b` side `EMERB`
-#DFDAF6DA. Each passed `qualify --title emerald` and a physical `boot-check --title emerald`
-(counter 2→3, party unchanged, tile unchanged). Receipt: `docs/gen3_emerald/probes/fixtures_2026-09-25.txt`.
-Every tile, map id, layout id and starter fact is re-derived from pret by
-`tests/unit/test_gen3_fixture_qualify_emerald.py`.
+#DFDAF6DA; 5 Poké Balls. Each passed `qualify --title emerald` and a physical `boot-check --title
+emerald` (counter 2→3, party unchanged, tile unchanged, `emerald_fixture_problems` empty). Receipt:
+`docs/gen3_emerald/probes/fixtures_2026-09-25b.txt` (the pre-ball build:
+`fixtures_2026-09-25.txt`). Every tile, map id, layout id, starter fact, story flag id and
+bag offset is re-derived from pret by `tests/unit/test_gen3_fixture_qualify_emerald.py`, which
+also pins the seed and fixture sha256s above.
 
 ```
 SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix python tools/gen3_fixtures.py make-emerald --kind town --out tests/fixtures/gen3/emerald_town.sav
 python tools/gen3_fixtures.py derive-b --title emerald tests/fixtures/gen3/emerald_town.sav tests/fixtures/gen3/emerald_town_b.sav
 python tools/gen3_fixtures.py qualify --title emerald tests/fixtures/gen3/emerald_*.sav
-SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix python tools/gen3_fixtures.py boot-check --title emerald --rom "<Emerald.gba>" --fixture tests/fixtures/gen3/emerald_town.sav
+SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix python tools/gen3_fixtures.py boot-check --title emerald --rom "<path to Emerald.gba>" --fixture tests/fixtures/gen3/emerald_town.sav
 ```
 
 `--title emerald` on `boot-check` runs `lua/tests/gen3_emerald_boot_check.lua` (Emerald's
 `gMenuCallback` START menu, every address read from `data/gen3/pret/pokeemerald.sym`) and seeds the
-battery under the gamedb name `Pokemon - Emerald Version (USA, Europe).SaveRAM`.
+battery under the gamedb name `Pokemon - Emerald Version (USA, Europe).SaveRAM`; it refuses `--rr`,
+and it runs `emerald_fixture_problems` for the kind the fixture's filename names
+(`emerald_<kind>[_b].sav`), or prints that it did not.
 `SLINK_GEN3_FIXTURE_RUNS` moves the per-run SaveRAM directories off Drive (MAX_PATH).
 `make-emerald` needs the pret checkout (`.cache/pret/pokeemerald`, or `$SLINK_PRET_EMERALD`).

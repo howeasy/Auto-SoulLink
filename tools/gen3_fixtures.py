@@ -627,8 +627,12 @@ def _prepare_run(name: str, rom: str, *, seed: bytes | None, saveram_name_overri
 
 def cmd_boot_check(args: argparse.Namespace) -> int:
     fixture = Path(args.fixture)
-    data = fixture.read_bytes()
     emerald = getattr(args, "title", None) == "emerald"
+    if emerald and args.rr:
+        print("BOOT-CHECK FAIL: --title emerald with --rr: Emerald is a vanilla title, not CFRU",
+              file=sys.stderr)
+        return 2
+    data = fixture.read_bytes()
     layout = codec.TITLE_EMERALD if emerald else codec.TITLE_FRLG
     before = qualify_one(data, rr=args.rr, title=layout)
     if not before["ok"]:
@@ -656,8 +660,18 @@ def cmd_boot_check(args: argparse.Namespace) -> int:
     if flushed.name != battery:
         print(f"note: BizHawk filed the battery as {flushed.name!r}, not the seeded "
               f"{battery!r} — pass --saveram-name {flushed.name!r} to seed it next time")
-    after = qualify_one(codec.split_rtc(flushed.read_bytes())[0], rr=args.rr, title=layout)
+    body = codec.split_rtc(flushed.read_bytes())[0]
+    after = qualify_one(body, rr=args.rr, title=layout)
     ok, problems = boot_check_verdict(before, after)
+    if emerald:
+        kind = emerald_kind_of(fixture)
+        if kind is None:
+            print(f"note: emerald_fixture_problems NOT run: {fixture.name!r} names no "
+                  f"emerald_<{'|'.join(sorted(EMERALD_KINDS))}>[_b] kind")
+        else:
+            problems += emerald_fixture_problems(body, kind)
+            ok = not problems
+            print(f"emerald_fixture_problems({kind}): {len(problems)} problem(s)")
     for problem in problems:
         print(f"  {problem}", file=sys.stderr)
     print(f"BOOT-CHECK {'PASS' if ok else 'FAIL'} {fixture} counter={before['counter']}"
@@ -923,6 +937,14 @@ MUDKIP = {"species": 283, "name": "MUDKIP", "gender_ratio": 31, "friendship": 70
 STARTER_LEVEL, STARTER_IV = 5, 15
 MAPSEC_ROUTE_101 = 16      # src/data/region_map/region_map_sections.json, index of MAPSEC_ROUTE_101
 VERSION_EMERALD, LANGUAGE_ENGLISH, ITEM_POKE_BALL = 3, 2, 4   # constants/global.h:10,21; items.h:10
+EMERALD_MONEY = 3000       # NewGameInitData: SetMoney(&gSaveBlock1Ptr->money, 3000), src/new_game.c:172
+# SYNTH (card E1-FIX-2): Poke Balls in the ball pocket, so the client's has_pokeballs latches and a
+# faint / party-sync scenario can run (FR's battle fixture carries 4). bagPocket_PokeBalls is
+# SaveBlock1 +0x650, BAG_POKEBALLS_COUNT (16) x struct ItemSlot {u16 itemId, u16 quantity}
+# (include/global.h:590-594,1008; include/constants/global.h:53).
+EMERALD_BALLS = 5
+SB1_BALL_POCKET_EMERALD, BALL_POCKET_SLOTS = 0x650, 16
+SB2_ENCRYPTION_KEY = 0xAC  # u32 encryptionKey, include/global.h:532
 # Flags a player holds once Birch has handed over the Pokedex (FLAG_ADVENTURE_STARTED: its comment
 # in constants/flags.h:136 is "RECEIVED Pokedex") -- it is what unblocks Oldale's west exit to
 # Route 102 (data/maps/OldaleTown/scripts.inc OnTransition). Everything else a new game sets comes
@@ -1012,7 +1034,9 @@ def build_emerald_seed(kind: str, flags: list[int]) -> bytes:
     sb2[0x09] = 1                                 # specialSaveWarpFlags CONTINUE_GAME_WARP (save_location.h:5), :512
     sb2[0x0A:0x0E] = tid.to_bytes(4, "little")    # playerTrainerId, :513
     sb2[0x14] = 1                                 # optionsTextSpeed MID, :519; SetDefaultOptions new_game.c:91-99
-    # encryptionKey (+0xAC, :532) stays 0 as NewGameInitData leaves it (new_game.c:155): money is plain
+    # encryptionKey (+0xAC, :532) stays 0 as NewGameInitData leaves it (new_game.c:155): money and
+    # bag quantities are plain (x ^ 0). The game re-keys every one of them on CONTINUE
+    # (MoveSaveBlocks_ResetHeap, src/load_save.c:127-131), so a re-save reads back through the key.
 
     sb1 = bytearray(codec.SAVEBLOCK1_SIZE_EMERALD)
     sb1[0x00:0x04] = struct.pack("<hh", x, y)     # pos, global.h:986
@@ -1023,7 +1047,9 @@ def build_emerald_seed(kind: str, flags: list[int]) -> bytes:
     sb1[codec.SB1_PARTY_COUNT_OFFSET_EMERALD] = 1
     start = codec.SB1_PARTY_OFFSET_EMERALD
     sb1[start:start + codec.PARTY_MON_SIZE] = codec.encode_party_mon(emerald_starter(name, tid))
-    sb1[0x490:0x494] = (3000).to_bytes(4, "little")    # money, :1002; SetMoney(3000), new_game.c:172
+    sb1[0x490:0x494] = EMERALD_MONEY.to_bytes(4, "little")   # money, :1002
+    # bagPocket_PokeBalls[0]; SetBagItemQuantity stores `quantity ^ encryptionKey` (src/item.c:31-34)
+    struct.pack_into("<HH", sb1, SB1_BALL_POCKET_EMERALD, ITEM_POKE_BALL, EMERALD_BALLS)
     for flag in flags:                                 # flags[NUM_FLAG_BYTES], :1020
         sb1[0x1270 + flag // 8] |= 1 << (flag % 8)
 
@@ -1045,10 +1071,21 @@ def build_emerald_seed(kind: str, flags: list[int]) -> bytes:
     return bytes(image)
 
 
+def emerald_ball_pocket(body: bytes) -> list[tuple[int, int]]:
+    """The non-empty (itemId, quantity) slots of bagPocket_PokeBalls. The quantity is decrypted
+    the way GetBagItemQuantity does it: `encryptionKey ^ *quantity` returned as u16, i.e. the low
+    16 bits of SaveBlock2.encryptionKey (pret src/item.c:26-29)."""
+    parsed = codec.parse_flash(body, title=codec.TITLE_EMERALD)
+    key = struct.unpack_from("<I", parsed["sb2"], SB2_ENCRYPTION_KEY)[0] & 0xFFFF
+    pocket = parsed["sb1"][SB1_BALL_POCKET_EMERALD:SB1_BALL_POCKET_EMERALD + 4 * BALL_POCKET_SLOTS]
+    return [(item, qty ^ key) for item, qty in struct.iter_unpack("<HH", pocket) if item]
+
+
 def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
     """What a NATIVE re-save of a `kind` seed must show: it qualifies, the game cleared the
     continue-game warp (so it ran the warp-in and wrote SaveBlock1 itself), the player stands on
-    the kind's tile of the kind's map, and the party is the one Mudkip."""
+    the kind's tile of the kind's map, the party is the one Mudkip, and the ball pocket still
+    holds the seeded Poke Balls once decrypted with the game's re-rolled key."""
     ok, msg = codec.qualify_flash(body, title=codec.TITLE_EMERALD)
     if not ok:
         return [f"does not qualify as Emerald: {msg}"]
@@ -1067,7 +1104,16 @@ def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
     if [(m["species"], m["level"], m["checksum_ok"]) for m in party] != [(MUDKIP["species"],
                                                                           STARTER_LEVEL, True)]:
         problems.append(f"party is not one Lv{STARTER_LEVEL} Mudkip: {party}")
+    balls = emerald_ball_pocket(body)
+    if balls != [(ITEM_POKE_BALL, EMERALD_BALLS)]:
+        problems.append(f"ball pocket {balls} != [(ITEM_POKE_BALL, {EMERALD_BALLS})]")
     return problems
+
+
+def emerald_kind_of(fixture: Path) -> str | None:
+    """The EMERALD_KINDS key a fixture's filename names (emerald_<kind>[_b].sav), else None."""
+    m = re.fullmatch(r"emerald_(\w+?)(?:_b)?", fixture.stem)
+    return m.group(1) if m and m.group(1) in EMERALD_KINDS else None
 
 
 def cmd_make_emerald(args: argparse.Namespace) -> int:
@@ -1148,9 +1194,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_boot.add_argument("--rom", required=True, help="the .gba to boot (staged space-free)")
     p_boot.add_argument("--fixture", required=True)
     p_boot.add_argument("--rr", action="store_true")
+    # the write_checkpoint.json title keys (gen3_final_cut passes firered/leafgreen)
     p_boot.add_argument("--title", default=None,
+                        choices=("firered", "leafgreen", "radical_red", "emerald"),
                         help="profile title for the run (default: firered, or radical_red with "
-                             "--rr); emerald boots lua/tests/gen3_emerald_boot_check.lua")
+                             "--rr); emerald boots lua/tests/gen3_emerald_boot_check.lua and "
+                             "refuses --rr")
     p_boot.add_argument("--saveram-name", default=None,
                         help="battery filename to seed, when BizHawk's gamedb names it")
     p_boot.add_argument("--timeout", type=int, default=600)

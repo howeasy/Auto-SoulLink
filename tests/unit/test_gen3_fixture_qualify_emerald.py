@@ -5,9 +5,13 @@
 (b) the SYNTH seed itself (built from pret at test time) is a one-slot Emerald save that asks
     for the continue-game warp -- and emerald_fixture_problems refuses it for exactly that;
 (c) every tile, map id, layout id and starter fact the tool hardcodes is re-derived from the
-    pret pokeemerald checkout (skipped when the cache is absent).
+    pret pokeemerald checkout (skipped when the cache is absent);
+(d) card E1-FIX-2: the seed and the six fixtures are pinned by sha256, the ball pocket holds
+    the SYNTH Poke Balls through the game's re-key, and boot-check --title emerald refuses --rr
+    and runs emerald_fixture_problems on the flushed save.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -25,6 +29,23 @@ import gen3_fixtures as fx  # noqa: E402  (tools/ is not a package)
 
 FIXTURES_DIR = os.path.join(REPO, "tests", "fixtures", "gen3")
 EM = codec.TITLE_EMERALD
+
+# build_emerald_seed(kind, emerald_new_game_flags(pret)) at pokeemerald c65e93f2 (card E1-FIX-2,
+# with the ball pocket); make-emerald prints the same digest as "SYNTH seed <kind>: ... sha256=".
+SEED_SHA256 = {
+    "battle": "6ad42abbfd481978b237a4f2d3bc92eb4fb1dfdf97eba74572e7b4b0dfcc35a9",
+    "town": "816d33b8e856ccb8fcf84b45f799495a6cfb00d77677ce7ce152cfbe21e7aca5",
+    "trainer": "f6f301bc99c778e35aebef796093465d178397893430ae99063e4c07326f596e",
+}
+# The committed fixtures, as tests/fixtures/gen3/README.md publishes them.
+FIXTURE_SHA256 = {
+    "emerald_town.sav": "f447ce7aaf87cf81e1cdd0bf13bd81cad615214abaf335fc9d91a4dede38f80a",
+    "emerald_town_b.sav": "17a34da61d32eb9c9e4fb5f8b6bd881245b5afa3213b369ebb71ac808f1043ec",
+    "emerald_battle.sav": "4080d499a0ca51a6c593be5062f5a8aa74014acffadee33541985bfa617c1b5f",
+    "emerald_battle_b.sav": "61cefb43740759b677d886752a0ab46c67e25798f2666f5dde5c615fc4fc4b50",
+    "emerald_trainer.sav": "1fe754336ddba75b2a1cb77b7864d2eae7137e8d7412bf55724f7db4cb1593e6",
+    "emerald_trainer_b.sav": "ca108972081f3c01000d34822adccdbb02cec9e436a8fc31091ab8c450b40fb6",
+}
 
 
 def _pret():
@@ -89,14 +110,19 @@ def test_derive_b_emerald_rekeys_the_party_at_the_emerald_offset():
 def test_seed_is_one_slot_asking_for_the_continue_warp(kind):
     seed = fx.build_emerald_seed(kind, fx.emerald_new_game_flags(_pret()))
     r = fx.qualify_one(seed, rr=False, title=EM)
-    assert r["ok"] and (r["slot"], r["counter"]) == (1, fx.EMERALD_SEED_COUNTER)
+    assert fx.EMERALD_SEED_COUNTER == 1
+    assert r["ok"] and (r["slot"], r["counter"]) == (1, 1)
     assert seed[:codec.NUM_SECTORS_PER_SLOT * codec.SECTOR_SIZE] == \
         b"\xFF" * (codec.NUM_SECTORS_PER_SLOT * codec.SECTOR_SIZE)     # slot 0 erased
     # the one thing that separates the seed from a game re-save
     assert fx.emerald_fixture_problems(seed, kind) == [
         "specialSaveWarpFlags still has CONTINUE_GAME_WARP: not a game re-save"]
     sb1 = codec.parse_flash(seed, title=EM)["sb1"]
-    assert struct.unpack_from("<bbbxhh", sb1, 0x0C) == struct.unpack_from("<bbbxhh", sb1, 0x04)
+    _m, group, num, _l, x, y = fx.EMERALD_KINDS[kind]       # pret-checked by section (c)
+    warp_id_none = _define(_pret(), "include/constants/maps.h", "WARP_ID_NONE")
+    assert struct.unpack_from("<hh", sb1, 0x00) == (x, y)                              # pos
+    for at in (0x04, 0x0C):                                  # location, continueGameWarp
+        assert struct.unpack_from("<bbbxhh", sb1, at) == (group, num, warp_id_none, x, y)
     (mon,) = codec.party_from_save(seed, title=EM)
     assert (mon["hp"], mon["max_hp"], mon["attack"], mon["defense"], mon["speed"],
             mon["sp_attack"], mon["sp_defense"], mon["experience"]) == (20, 20, 12, 10, 9, 10, 10, 135)
@@ -198,3 +224,156 @@ def test_mudkip_facts_come_from_pret():
     moves = (pret / "src/data/battle_moves.h").read_text()
     for move, pp in (("MOVE_TACKLE", 35), ("MOVE_GROWL", 40)):
         assert f".pp = {pp}," in moves.split(f"[{move}] =", 1)[1].split("},", 1)[0]
+
+
+# --- (d) card E1-FIX-2 ------------------------------------------------------------
+
+def _define(pret, rel, name):
+    """The integer a `#define NAME value` line in pret `rel` gives (parenthesised or not)."""
+    text = (pret / rel).read_text(encoding="utf-8")
+    return int(re.search(rf"^#define {name}\s+\(?(-?\w+)\)?", text, re.M).group(1), 0)
+
+
+@pytest.mark.parametrize("kind", sorted(fx.EMERALD_KINDS))
+def test_seed_reproduces_its_recorded_sha256(kind):
+    seed = fx.build_emerald_seed(kind, fx.emerald_new_game_flags(_pret()))
+    assert hashlib.sha256(seed).hexdigest() == SEED_SHA256[kind]
+
+
+def test_committed_fixture_sha256s_are_the_ones_the_readme_publishes():
+    with open(os.path.join(FIXTURES_DIR, "README.md"), encoding="utf-8") as f:
+        readme = f.read()
+    published = dict(re.findall(r"^\| `(emerald_\w+\.sav)` \|.*`([0-9a-f]{64})` \|$", readme, re.M))
+    assert published == FIXTURE_SHA256
+    for name, digest in FIXTURE_SHA256.items():
+        assert hashlib.sha256(_read(name)).hexdigest() == digest, name
+
+
+def test_starter_and_seed_constants_come_from_pret():
+    pret = _pret()
+    moves = [_define(pret, "include/constants/moves.h", m) for m in ("MOVE_TACKLE", "MOVE_GROWL")]
+    assert fx.MUDKIP["moves"] == [*moves, 0, 0]
+    table = (pret / "src/data/battle_moves.h").read_text(encoding="utf-8")
+    pp = [int(re.search(r"\.pp = (\d+),", table.split(f"[{m}] =", 1)[1]).group(1))
+          for m in ("MOVE_TACKLE", "MOVE_GROWL")]
+    assert fx.MUDKIP["pp"] == [*pp, 0, 0]
+    assert fx.MUDKIP["friendship"] == _define(pret, "include/constants/pokemon.h",
+                                               "STANDARD_FRIENDSHIP")
+    # species_info.h:3 PERCENT_FEMALE(percent) min(254, ((percent * 255) / 100)), stored in a u8
+    assert fx.MUDKIP["gender_ratio"] == min(254, int(12.5 * 255 / 100))
+    sections = json.loads((pret / "src/data/region_map/region_map_sections.json").read_text())
+    assert [m["id"] for m in sections["map_sections"]].index("MAPSEC_ROUTE_101") == \
+        fx.MAPSEC_ROUTE_101
+    assert _define(pret, "include/constants/global.h", "VERSION_EMERALD") == fx.VERSION_EMERALD
+    assert _define(pret, "include/constants/global.h", "LANGUAGE_ENGLISH") == fx.LANGUAGE_ENGLISH
+    assert _define(pret, "include/constants/items.h", "ITEM_POKE_BALL") == fx.ITEM_POKE_BALL
+    name, tid = fx.EMERALD_OT          # SYNTH identity: only its shape is pret's
+    assert len(name) <= _define(pret, "include/constants/global.h", "PLAYER_NAME_LENGTH")
+    assert 0 <= tid <= 0xFFFFFFFF
+    new_game = (pret / "src/new_game.c").read_text(encoding="utf-8")
+    assert int(re.search(r"SetMoney\(&gSaveBlock1Ptr->money, (\d+)\)", new_game).group(1)) == \
+        fx.EMERALD_MONEY
+    global_h = (pret / "include/global.h").read_text(encoding="utf-8")
+    assert re.search(r"/\*0x(\w+)\*/ struct ItemSlot bagPocket_PokeBalls\[BAG_POKEBALLS_COUNT\];",
+                     global_h).group(1) == f"{fx.SB1_BALL_POCKET_EMERALD:X}"
+    assert re.search(r"/\*0x(\w+)\*/ u32 encryptionKey;", global_h).group(1) == \
+        f"{fx.SB2_ENCRYPTION_KEY:X}"
+    assert _define(pret, "include/constants/global.h",
+                                           "BAG_POKEBALLS_COUNT") == fx.BALL_POCKET_SLOTS
+    # the quantity rule emerald_ball_pocket applies (src/item.c:26-29)
+    assert "return gSaveBlock2Ptr->encryptionKey ^ *quantity;" in \
+        (pret / "src/item.c").read_text(encoding="utf-8")
+
+
+def test_the_seed_carries_the_pret_facts():
+    pret = _pret()
+    seed = fx.build_emerald_seed("town", fx.emerald_new_game_flags(pret))
+    (mon,) = codec.party_from_save(seed, title=EM)
+    assert (mon["moves"], mon["pp"], mon["friendship"], mon["met_location"], mon["met_game"],
+            mon["language"], mon["pokeball"]) == \
+        ([33, 45, 0, 0], [35, 40, 0, 0], 70, 16, 3, 2, 4)
+    sb1 = codec.parse_flash(seed, title=EM)["sb1"]
+    assert struct.unpack_from("<I", sb1, 0x490)[0] == 3000
+    assert fx.emerald_ball_pocket(seed) == [(4, 5)]          # ITEM_POKE_BALL x EMERALD_BALLS
+
+
+def test_story_flag_ids_come_from_pret_and_are_set_in_the_seed():
+    pret = _pret()
+    flags_h = (pret / "include/constants/flags.h").read_text(encoding="utf-8")
+    for name in fx.EMERALD_STORY_FLAGS:
+        assert re.search(rf"^#define {name}\s", flags_h, re.M), name
+    ids = fx.pret_flag_ids(pret, fx.EMERALD_STORY_FLAGS)
+    # flags.h:1350 (0x860), :136, :154, :1371 (SYSTEM_FLAGS + 0x10), :1030, :772
+    assert ids == [0x860, 0x74, 0x84, 0x870, 0x3D3, 0x2D3]
+    sb1 = codec.parse_flash(fx.build_emerald_seed("town", fx.emerald_new_game_flags(pret)),
+                            title=EM)["sb1"]
+    assert all(sb1[0x1270 + f // 8] >> (f % 8) & 1 for f in ids)
+
+
+@pytest.mark.parametrize("kind", sorted(fx.EMERALD_KINDS))
+def test_committed_fixture_ball_pocket_survives_the_games_rekey(kind):
+    body = _read(f"emerald_{kind}.sav")
+    key = struct.unpack_from("<I", codec.parse_flash(body, title=EM)["sb2"], 0xAC)[0]
+    assert key & 0xFFFF   # the re-save carries the key CONTINUE rolled (load_save.c:127-131)
+    assert fx.emerald_ball_pocket(body) == [(fx.ITEM_POKE_BALL, fx.EMERALD_BALLS)]
+
+
+def test_emerald_fixture_problems_refuses_an_empty_ball_pocket():
+    seed = bytearray(fx.build_emerald_seed("town", fx.emerald_new_game_flags(_pret())))
+    layout = codec.slot_layout(title=EM)
+    sb1 = bytearray(codec.parse_flash(bytes(seed), title=EM)["sb1"])
+    sb1[fx.SB1_BALL_POCKET_EMERALD:fx.SB1_BALL_POCKET_EMERALD + 4] = bytes(4)
+    for entry in (e for e in layout if e["object"] == "sb1"):
+        at = (codec.NUM_SECTORS_PER_SLOT + entry["id"]) * codec.SECTOR_SIZE
+        seed[at:at + codec.SECTOR_SIZE] = codec.write_sector(
+            bytes(sb1[entry["offset"]:entry["offset"] + entry["size"]]), entry["id"], 1, layout)
+    problems = fx.emerald_fixture_problems(bytes(seed), "town")
+    assert "ball pocket [] != [(ITEM_POKE_BALL, 5)]" in problems
+
+
+def test_boot_check_title_choices_and_emerald_refuses_rr(capsys):
+    parse = fx.build_parser().parse_args
+    base = ["boot-check", "--rom", "r.gba", "--fixture", "does/not/exist.sav"]
+    for title in ("firered", "leafgreen", "radical_red", "emerald"):
+        assert parse([*base, "--title", title]).title == title
+    with pytest.raises(SystemExit):
+        parse([*base, "--title", "sapphire"])
+    args = parse([*base, "--title", "emerald", "--rr"])
+    assert args.func(args) == 2          # refused before the fixture is even read
+    assert "--title emerald with --rr" in capsys.readouterr().err
+
+
+def test_emerald_kind_of_names():
+    kind_of = fx.emerald_kind_of
+    assert [kind_of(fx.Path(f"x/emerald_{n}.sav")) for n in ("town", "battle_b", "trainer")] == \
+        ["town", "battle", "trainer"]
+    assert kind_of(fx.Path("emerald_route.sav")) is None
+    assert kind_of(fx.Path("firered_town.sav")) is None
+
+
+def _boot_check_on(monkeypatch, tmp_path, fixture_name, flushed_body):
+    """cmd_boot_check with the emulator stubbed: the run 'flushes' `flushed_body`."""
+    fixture = tmp_path / fixture_name
+    fixture.write_bytes(_read("emerald_town.sav"))
+    flushed = tmp_path / "flushed.SaveRAM"
+    flushed.write_bytes(flushed_body)
+    monkeypatch.setattr(fx, "_prepare_run", lambda *a, **k: ("r.gba", tmp_path, flushed.name))
+    monkeypatch.setattr(fx, "_launch", lambda *a, **k: (True, "stub"))
+    monkeypatch.setattr(fx, "boot_check_verdict", lambda before, after: (True, []))
+    args = fx.build_parser().parse_args(["boot-check", "--rom", "r.gba", "--fixture",
+                                         str(fixture), "--title", "emerald"])
+    return args.func(args)
+
+
+def test_boot_check_emerald_runs_the_fixture_problems(monkeypatch, tmp_path, capsys):
+    seed = fx.build_emerald_seed("town", fx.emerald_new_game_flags(_pret()))
+    assert _boot_check_on(monkeypatch, tmp_path, "emerald_town.sav", seed) == 1
+    out = capsys.readouterr()
+    assert "emerald_fixture_problems(town): 1 problem(s)" in out.out
+    assert "CONTINUE_GAME_WARP" in out.err
+
+
+def test_boot_check_emerald_says_when_it_could_not_run_them(monkeypatch, tmp_path, capsys):
+    seed = fx.build_emerald_seed("town", fx.emerald_new_game_flags(_pret()))
+    assert _boot_check_on(monkeypatch, tmp_path, "mystery.sav", seed) == 0
+    assert "emerald_fixture_problems NOT run" in capsys.readouterr().out

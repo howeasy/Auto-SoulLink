@@ -1,0 +1,366 @@
+E1-FIX-2 receipt: Emerald fixtures with a seeded ball pocket, 2026-09-25
+=====================================================================
+
+Card E1-FIX-2 (review cx-ba59a7fa). Supersedes fixtures_2026-09-25.txt (kept: the pre-ball build).
+Approach unchanged: (b) disclosed O-33 SYNTH setup, re-saved natively; the seed now also carries
+5 Poke Balls (ITEM_POKE_BALL 4, include/constants/items.h:10) in bagPocket_PokeBalls[0]
+(SaveBlock1 +0x650, include/global.h:1008; 16 slots, include/constants/global.h:53).
+Quantity rule: GetBagItemQuantity returns `encryptionKey ^ *quantity` as u16 (src/item.c:26-29),
+i.e. XOR the low 16 bits of SaveBlock2.encryptionKey (+0xAC, include/global.h:532). The seed key is
+0 (NewGameInitData, src/new_game.c:155); CONTINUE re-rolls it (MoveSaveBlocks_ResetHeap,
+src/load_save.c:127-131), so each re-save below stores a different raw quantity that decodes to 5.
+ROM: Pokemon - Emerald Version (USA, Europe).gba sha1 f3ae088181bf583e55daf962a92bb46f4f1d07b7
+EmuHawk 2.11.1 (E:/Howard/Bizhawk/EmuHawk.exe), SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix
+Worktree: .claude/worktrees/gen3-emerald, branch claude/gen3-emerald, HEAD bd62bf93 + uncommitted
+card edits (tools/gen3_fixtures.py = working tree). pret: pokeemerald c65e93f2.
+Emulator lane: only the EmuHawk PIDs run_gate started (killed by PID); the Gen 2 lane's EmuHawk
+(PID 32840) was never touched.
+
+1. make-emerald (SYNTH seed -> cold boot -> CONTINUE -> in-game SAVE)
+---------------------------------------------------------------------
+$ SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix python tools/gen3_fixtures.py make-emerald --kind <k> --out tests/fixtures/gen3/emerald_<k>.sav
+(make-emerald also requires emerald_fixture_problems(...) == [], which now includes the ball pocket.)
+The three seed sha256s equal SEED_SHA256 in tests/unit/test_gen3_fixture_qualify_emerald.py.
+
+== town
+SYNTH seed town: C:\slink-wt\emerald-fix\make_emerald_town\Pokemon - Emerald Version (USA, Europe).SaveRAM sha256=816d33b8e856ccb8fcf84b45f799495a6cfb00d77677ce7ce152cfbe21e7aca5 counter=1 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_emerald_boot_check.ini --lua=lua/tests/gen3_emerald_boot_check.lua patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 1 -> 2 map=0.10 pos=(6,17)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=1
+phase overworld-cb2 frame=499 map=0.10 pos=(6,17)
+phase field frame=582 map=0.10 pos=(6,17) saveFileStatus=1
+phase save-menu frame=582 counter=1
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=1->2
+phase flushed frame=1605 map=0.10 pos=(6,17)
+RESULT: PASS counter 1 -> 2 map=0.10 pos=(6,17)
+wrote tests\fixtures\gen3\emerald_town.sav (131072 bytes) sha256=f447ce7aaf87cf81e1cdd0bf13bd81cad615214abaf335fc9d91a4dede38f80a slot=0 counter=2 trainer='EMER'#20250925 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+exit=0
+== battle
+SYNTH seed battle: C:\slink-wt\emerald-fix\make_emerald_battle\Pokemon - Emerald Version (USA, Europe).SaveRAM sha256=6ad42abbfd481978b237a4f2d3bc92eb4fb1dfdf97eba74572e7b4b0dfcc35a9 counter=1 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_emerald_boot_check.ini --lua=lua/tests/gen3_emerald_boot_check.lua patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 1 -> 2 map=0.17 pos=(21,16)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=1
+phase overworld-cb2 frame=499 map=0.17 pos=(21,16)
+phase field frame=582 map=0.17 pos=(21,16) saveFileStatus=1
+phase save-menu frame=582 counter=1
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=1->2
+phase flushed frame=1589 map=0.17 pos=(21,16)
+RESULT: PASS counter 1 -> 2 map=0.17 pos=(21,16)
+wrote tests\fixtures\gen3\emerald_battle.sav (131072 bytes) sha256=4080d499a0ca51a6c593be5062f5a8aa74014acffadee33541985bfa617c1b5f slot=0 counter=2 trainer='EMER'#20250925 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+exit=0
+== trainer
+SYNTH seed trainer: C:\slink-wt\emerald-fix\make_emerald_trainer\Pokemon - Emerald Version (USA, Europe).SaveRAM sha256=f6f301bc99c778e35aebef796093465d178397893430ae99063e4c07326f596e counter=1 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_emerald_boot_check.ini --lua=lua/tests/gen3_emerald_boot_check.lua patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 1 -> 2 map=0.17 pos=(32,16)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=1
+phase overworld-cb2 frame=499 map=0.17 pos=(32,16)
+phase field frame=582 map=0.17 pos=(32,16) saveFileStatus=1
+phase save-menu frame=582 counter=1
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=1->2
+phase flushed frame=1589 map=0.17 pos=(32,16)
+RESULT: PASS counter 1 -> 2 map=0.17 pos=(32,16)
+wrote tests\fixtures\gen3\emerald_trainer.sav (131072 bytes) sha256=1fe754336ddba75b2a1cb77b7864d2eae7137e8d7412bf55724f7db4cb1593e6 slot=0 counter=2 trainer='EMER'#20250925 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+exit=0
+
+2. derive-b --title emerald (OT identity only)
+----------------------------------------------
+$ python tools/gen3_fixtures.py derive-b --title emerald tests/fixtures/gen3/emerald_<k>.sav tests/fixtures/gen3/emerald_<k>_b.sav
+
+wrote tests\fixtures\gen3\emerald_town_b.sav (131072 bytes) sha256=17a34da61d32eb9c9e4fb5f8b6bd881245b5afa3213b369ebb71ac808f1043ec
+manifest:
+  sb2+0x0A..0x0E playerTrainerId 0x20250925 -> 0xdfdaf6da
+  sb2+0x00..0x07 playerName 'EMER' -> 'EMERB'
+  sb1+0x0238..0x029c party[0] OTID/OT-name re-keyed, secure re-encrypted+checksummed
+exit=0
+wrote tests\fixtures\gen3\emerald_battle_b.sav (131072 bytes) sha256=61cefb43740759b677d886752a0ab46c67e25798f2666f5dde5c615fc4fc4b50
+manifest:
+  sb2+0x0A..0x0E playerTrainerId 0x20250925 -> 0xdfdaf6da
+  sb2+0x00..0x07 playerName 'EMER' -> 'EMERB'
+  sb1+0x0238..0x029c party[0] OTID/OT-name re-keyed, secure re-encrypted+checksummed
+exit=0
+wrote tests\fixtures\gen3\emerald_trainer_b.sav (131072 bytes) sha256=ca108972081f3c01000d34822adccdbb02cec9e436a8fc31091ab8c450b40fb6
+manifest:
+  sb2+0x0A..0x0E playerTrainerId 0x20250925 -> 0xdfdaf6da
+  sb2+0x00..0x07 playerName 'EMER' -> 'EMERB'
+  sb1+0x0238..0x029c party[0] OTID/OT-name re-keyed, secure re-encrypted+checksummed
+exit=0
+
+3. qualify --title emerald (codec, no emulator)
+-----------------------------------------------
+$ python tools/gen3_fixtures.py qualify --title emerald tests/fixtures/gen3/emerald_*.sav
+
+tests/fixtures/gen3/emerald_battle.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMER'#20250925 rtc_suffix=False
+  party: [{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+  boxes: 0 occupied slots
+tests/fixtures/gen3/emerald_battle_b.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMERB'#DFDAF6DA rtc_suffix=False
+  party: [{'key': '4D55444B:DFDAF6DA', 'species': 283, 'level': 5}]
+  boxes: 0 occupied slots
+tests/fixtures/gen3/emerald_town.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMER'#20250925 rtc_suffix=False
+  party: [{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+  boxes: 0 occupied slots
+tests/fixtures/gen3/emerald_town_b.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMERB'#DFDAF6DA rtc_suffix=False
+  party: [{'key': '4D55444B:DFDAF6DA', 'species': 283, 'level': 5}]
+  boxes: 0 occupied slots
+tests/fixtures/gen3/emerald_trainer.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMER'#20250925 rtc_suffix=False
+  party: [{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+  boxes: 0 occupied slots
+tests/fixtures/gen3/emerald_trainer_b.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMERB'#DFDAF6DA rtc_suffix=False
+  party: [{'key': '4D55444B:DFDAF6DA', 'species': 283, 'level': 5}]
+  boxes: 0 occupied slots
+exit=0
+
+4. boot-check --title emerald (PHYSICAL: cold boot -> CONTINUE -> re-save -> reload), all six
+---------------------------------------------------------------------------------------------
+$ SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix python tools/gen3_fixtures.py boot-check --title emerald --rom "E:/Google Drive/SLink/Pokemon - Emerald Version (USA, Europe).gba" --fixture tests/fixtures/gen3/emerald_<f>.sav
+(boot-check --title emerald now also runs emerald_fixture_problems(<kind from filename>) on the flushed save.)
+(A first attempt passed the bare ROM filename; stage_rom refused it before any launch -- FileNotFoundError, no emulator started.)
+
+== emerald_town
+seeded C:\slink-wt\emerald-fix\bootcheck_emerald_town\Pokemon - Emerald Version (USA, Europe).SaveRAM from tests\fixtures\gen3\emerald_town.sav (counter=2)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_emerald_boot_check.ini --lua=lua/tests/gen3_emerald_boot_check.lua patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=499 map=0.10 pos=(6,17)
+phase field frame=582 map=0.10 pos=(6,17) saveFileStatus=1
+phase save-menu frame=582 counter=2
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=2->3
+phase flushed frame=1605 map=0.10 pos=(6,17)
+RESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)
+emerald_fixture_problems(town): 0 problem(s)
+BOOT-CHECK PASS tests\fixtures\gen3\emerald_town.sav counter=2->3 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+exit=0
+== emerald_town_b
+seeded C:\slink-wt\emerald-fix\bootcheck_emerald_town_b\Pokemon - Emerald Version (USA, Europe).SaveRAM from tests\fixtures\gen3\emerald_town_b.sav (counter=2)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_emerald_boot_check.ini --lua=lua/tests/gen3_emerald_boot_check.lua patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=499 map=0.10 pos=(6,17)
+phase field frame=582 map=0.10 pos=(6,17) saveFileStatus=1
+phase save-menu frame=582 counter=2
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=2->3
+phase flushed frame=1605 map=0.10 pos=(6,17)
+RESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)
+emerald_fixture_problems(town): 0 problem(s)
+BOOT-CHECK PASS tests\fixtures\gen3\emerald_town_b.sav counter=2->3 party=[{'key': '4D55444B:DFDAF6DA', 'species': 283, 'level': 5}]
+exit=0
+== emerald_battle
+seeded C:\slink-wt\emerald-fix\bootcheck_emerald_battle\Pokemon - Emerald Version (USA, Europe).SaveRAM from tests\fixtures\gen3\emerald_battle.sav (counter=2)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_emerald_boot_check.ini --lua=lua/tests/gen3_emerald_boot_check.lua patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.17 pos=(21,16)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=499 map=0.17 pos=(21,16)
+phase field frame=582 map=0.17 pos=(21,16) saveFileStatus=1
+phase save-menu frame=582 counter=2
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=2->3
+phase flushed frame=1589 map=0.17 pos=(21,16)
+RESULT: PASS counter 2 -> 3 map=0.17 pos=(21,16)
+emerald_fixture_problems(battle): 0 problem(s)
+BOOT-CHECK PASS tests\fixtures\gen3\emerald_battle.sav counter=2->3 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+exit=0
+== emerald_battle_b
+seeded C:\slink-wt\emerald-fix\bootcheck_emerald_battle_b\Pokemon - Emerald Version (USA, Europe).SaveRAM from tests\fixtures\gen3\emerald_battle_b.sav (counter=2)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_emerald_boot_check.ini --lua=lua/tests/gen3_emerald_boot_check.lua patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.17 pos=(21,16)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=499 map=0.17 pos=(21,16)
+phase field frame=582 map=0.17 pos=(21,16) saveFileStatus=1
+phase save-menu frame=582 counter=2
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=2->3
+phase flushed frame=1605 map=0.17 pos=(21,16)
+RESULT: PASS counter 2 -> 3 map=0.17 pos=(21,16)
+emerald_fixture_problems(battle): 0 problem(s)
+BOOT-CHECK PASS tests\fixtures\gen3\emerald_battle_b.sav counter=2->3 party=[{'key': '4D55444B:DFDAF6DA', 'species': 283, 'level': 5}]
+exit=0
+== emerald_trainer
+seeded C:\slink-wt\emerald-fix\bootcheck_emerald_trainer\Pokemon - Emerald Version (USA, Europe).SaveRAM from tests\fixtures\gen3\emerald_trainer.sav (counter=2)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_emerald_boot_check.ini --lua=lua/tests/gen3_emerald_boot_check.lua patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.17 pos=(32,16)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=499 map=0.17 pos=(32,16)
+phase field frame=582 map=0.17 pos=(32,16) saveFileStatus=1
+phase save-menu frame=582 counter=2
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=2->3
+phase flushed frame=1589 map=0.17 pos=(32,16)
+RESULT: PASS counter 2 -> 3 map=0.17 pos=(32,16)
+emerald_fixture_problems(trainer): 0 problem(s)
+BOOT-CHECK PASS tests\fixtures\gen3\emerald_trainer.sav counter=2->3 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+exit=0
+== emerald_trainer_b
+seeded C:\slink-wt\emerald-fix\bootcheck_emerald_trainer_b\Pokemon - Emerald Version (USA, Europe).SaveRAM from tests\fixtures\gen3\emerald_trainer_b.sav (counter=2)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_emerald_boot_check.ini --lua=lua/tests/gen3_emerald_boot_check.lua patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.17 pos=(32,16)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=499 map=0.17 pos=(32,16)
+phase field frame=582 map=0.17 pos=(32,16) saveFileStatus=1
+phase save-menu frame=582 counter=2
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=2->3
+phase flushed frame=1605 map=0.17 pos=(32,16)
+RESULT: PASS counter 2 -> 3 map=0.17 pos=(32,16)
+emerald_fixture_problems(trainer): 0 problem(s)
+BOOT-CHECK PASS tests\fixtures\gen3\emerald_trainer_b.sav counter=2->3 party=[{'key': '4D55444B:DFDAF6DA', 'species': 283, 'level': 5}]
+exit=0
+
+5. Ball-pocket readback (codec, emerald_ball_pocket) -- seed, committed fixtures, boot-check flushes
+----------------------------------------------------------------------------------------------------
+seed town                          counter=1 encryptionKey=0x00000000 slot0 itemId=4 raw_qty=0x0005 -> 5 money=3000 emerald_ball_pocket=[(4, 5)]
+fixture emerald_town.sav           counter=2 encryptionKey=0x5AA00471 slot0 itemId=4 raw_qty=0x0474 -> 5 money=3000 emerald_ball_pocket=[(4, 5)]
+fixture emerald_town_b.sav         counter=2 encryptionKey=0x5AA00471 slot0 itemId=4 raw_qty=0x0474 -> 5 money=3000 emerald_ball_pocket=[(4, 5)]
+fixture emerald_battle.sav         counter=2 encryptionKey=0x8AF699E3 slot0 itemId=4 raw_qty=0x99E6 -> 5 money=3000 emerald_ball_pocket=[(4, 5)]
+fixture emerald_battle_b.sav       counter=2 encryptionKey=0x8AF699E3 slot0 itemId=4 raw_qty=0x99E6 -> 5 money=3000 emerald_ball_pocket=[(4, 5)]
+fixture emerald_trainer.sav        counter=2 encryptionKey=0x8AF699E3 slot0 itemId=4 raw_qty=0x99E6 -> 5 money=3000 emerald_ball_pocket=[(4, 5)]
+fixture emerald_trainer_b.sav      counter=2 encryptionKey=0x8AF699E3 slot0 itemId=4 raw_qty=0x99E6 -> 5 money=3000 emerald_ball_pocket=[(4, 5)]
+boot-check flush emerald_town      counter=3 encryptionKey=0x6E6FFCED slot0 itemId=4 raw_qty=0xFCE8 -> 5 money=3000 emerald_ball_pocket=[(4, 5)]
+boot-check flush emerald_town_b    counter=3 encryptionKey=0x6E6FFCED slot0 itemId=4 raw_qty=0xFCE8 -> 5 money=3000 emerald_ball_pocket=[(4, 5)]
+boot-check flush emerald_battle    counter=3 encryptionKey=0x5AA00471 slot0 itemId=4 raw_qty=0x0474 -> 5 money=3000 emerald_ball_pocket=[(4, 5)]
+boot-check flush emerald_battle_b  counter=3 encryptionKey=0x5AA00471 slot0 itemId=4 raw_qty=0x0474 -> 5 money=3000 emerald_ball_pocket=[(4, 5)]
+boot-check flush emerald_trainer   counter=3 encryptionKey=0x5AA00471 slot0 itemId=4 raw_qty=0x0474 -> 5 money=3000 emerald_ball_pocket=[(4, 5)]
+boot-check flush emerald_trainer_b counter=3 encryptionKey=0x5AA00471 slot0 itemId=4 raw_qty=0x0474 -> 5 money=3000 emerald_ball_pocket=[(4, 5)]
+
+6. Checks
+---------
+$ pytest tests/unit/test_gen3_fixture_qualify_emerald.py tests/unit/test_gen3_fixture_qualify.py -v
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.0.3, pluggy-1.6.0 -- C:\Users\howar\AppData\Local\Programs\Python\Python312\python.exe
+cachedir: .pytest_cache
+rootdir: E:\Google Drive\SLink\.claude\worktrees\gen3-emerald
+configfile: pytest.ini
+plugins: anyio-4.13.0, Faker-40.18.0, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 102 items
+
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_committed_emerald_fixture_is_a_game_resave_on_its_tile[-battle] PASSED [  0%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_committed_emerald_fixture_is_a_game_resave_on_its_tile[-town] PASSED [  1%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_committed_emerald_fixture_is_a_game_resave_on_its_tile[-trainer] PASSED [  2%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_committed_emerald_fixture_is_a_game_resave_on_its_tile[_b-battle] PASSED [  3%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_committed_emerald_fixture_is_a_game_resave_on_its_tile[_b-town] PASSED [  4%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_committed_emerald_fixture_is_a_game_resave_on_its_tile[_b-trainer] PASSED [  5%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_emerald_b_side_has_a_distinct_trainer_at_the_same_place[battle] PASSED [  6%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_emerald_b_side_has_a_distinct_trainer_at_the_same_place[town] PASSED [  7%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_emerald_b_side_has_a_distinct_trainer_at_the_same_place[trainer] PASSED [  8%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_emerald_party_is_invisible_to_the_frlg_layout PASSED [  9%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_derive_b_emerald_rekeys_the_party_at_the_emerald_offset PASSED [ 10%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_seed_is_one_slot_asking_for_the_continue_warp[battle] PASSED [ 11%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_seed_is_one_slot_asking_for_the_continue_warp[town] PASSED [ 12%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_seed_is_one_slot_asking_for_the_continue_warp[trainer] PASSED [ 13%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_seed_flags_include_the_story_flags_and_the_new_game_map_flags PASSED [ 14%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_kind_map_ids_come_from_pret[battle] PASSED [ 15%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_kind_map_ids_come_from_pret[town] PASSED [ 16%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_kind_map_ids_come_from_pret[trainer] PASSED [ 17%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_town_tile_is_oldales_heal_location_below_the_center_door PASSED [ 18%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_battle_tile_is_tall_grass PASSED [ 19%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_trainer_tile_is_one_right_step_from_calvins_sight_line PASSED [ 20%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_mudkip_facts_come_from_pret PASSED [ 21%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_seed_reproduces_its_recorded_sha256[battle] PASSED [ 22%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_seed_reproduces_its_recorded_sha256[town] PASSED [ 23%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_seed_reproduces_its_recorded_sha256[trainer] PASSED [ 24%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_committed_fixture_sha256s_are_the_ones_the_readme_publishes PASSED [ 25%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_starter_and_seed_constants_come_from_pret PASSED [ 26%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_the_seed_carries_the_pret_facts PASSED [ 27%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_story_flag_ids_come_from_pret_and_are_set_in_the_seed PASSED [ 28%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_committed_fixture_ball_pocket_survives_the_games_rekey[battle] PASSED [ 29%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_committed_fixture_ball_pocket_survives_the_games_rekey[town] PASSED [ 30%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_committed_fixture_ball_pocket_survives_the_games_rekey[trainer] PASSED [ 31%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_emerald_fixture_problems_refuses_an_empty_ball_pocket PASSED [ 32%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_boot_check_title_choices_and_emerald_refuses_rr PASSED [ 33%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_emerald_kind_of_names PASSED [ 34%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_boot_check_emerald_runs_the_fixture_problems PASSED [ 35%]
+tests/unit/test_gen3_fixture_qualify_emerald.py::test_boot_check_emerald_says_when_it_could_not_run_them PASSED [ 36%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\emerald_battle.sav] PASSED [ 37%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\emerald_battle_b.sav] PASSED [ 38%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\emerald_town.sav] PASSED [ 39%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\emerald_town_b.sav] PASSED [ 40%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\emerald_trainer.sav] PASSED [ 41%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\emerald_trainer_b.sav] PASSED [ 42%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\firered_party_battle.sav] PASSED [ 43%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\firered_party_battle_b.sav] PASSED [ 44%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\firered_party_town.sav] PASSED [ 45%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\firered_party_town_b.sav] PASSED [ 46%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\firered_party_trainer.sav] PASSED [ 47%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\firered_party_trainer_b.sav] PASSED [ 48%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\firered_town.sav] PASSED [ 49%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\leafgreen_party_battle.sav] PASSED [ 50%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\leafgreen_party_battle_b.sav] PASSED [ 50%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\leafgreen_party_town.sav] PASSED [ 51%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\leafgreen_party_town_b.sav] PASSED [ 52%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\leafgreen_party_trainer.sav] PASSED [ 53%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\leafgreen_party_trainer_b.sav] PASSED [ 54%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\leafgreen_town.sav] PASSED [ 55%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\rr_battle.sav] PASSED [ 56%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\rr_battle2.sav] PASSED [ 57%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\rr_battle2_b.sav] PASSED [ 58%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\rr_battle_b.sav] PASSED [ 59%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\rr_rival.sav] PASSED [ 60%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\rr_town.sav] PASSED [ 61%]
+tests/unit/test_gen3_fixture_qualify.py::test_committed_fixtures_qualify[E:\\Google Drive\\SLink\\.claude\\worktrees\\gen3-emerald\\tests\\fixtures\\gen3\\rr_town_b.sav] PASSED [ 62%]
+tests/unit/test_gen3_fixture_qualify.py::test_fr_party_fixtures_have_a_fully_healed_two_mon_party[firered_party_battle.sav] PASSED [ 63%]
+tests/unit/test_gen3_fixture_qualify.py::test_fr_party_fixtures_have_a_fully_healed_two_mon_party[firered_party_battle_b.sav] PASSED [ 64%]
+tests/unit/test_gen3_fixture_qualify.py::test_fr_party_fixtures_have_a_fully_healed_two_mon_party[firered_party_town.sav] PASSED [ 65%]
+tests/unit/test_gen3_fixture_qualify.py::test_fr_party_fixtures_have_a_fully_healed_two_mon_party[firered_party_town_b.sav] PASSED [ 66%]
+tests/unit/test_gen3_fixture_qualify.py::test_fr_party_b_variant_matches_species_and_position_with_a_distinct_trainer[firered_party_battle.sav-firered_party_battle_b.sav] PASSED [ 67%]
+tests/unit/test_gen3_fixture_qualify.py::test_fr_party_b_variant_matches_species_and_position_with_a_distinct_trainer[firered_party_town.sav-firered_party_town_b.sav] PASSED [ 68%]
+tests/unit/test_gen3_fixture_qualify.py::test_fr_party_battle_and_town_share_trainer_and_party_at_different_positions PASSED [ 69%]
+tests/unit/test_gen3_fixture_qualify.py::test_party_lane_admits_only_vanilla_titles PASSED [ 70%]
+tests/unit/test_gen3_fixture_qualify.py::test_leafgreen_rom_default_is_the_checkout_root_dump PASSED [ 71%]
+tests/unit/test_gen3_fixture_qualify.py::test_make_fr_now_drives_leafgreen_through_the_shared_fr_intro PASSED [ 72%]
+tests/unit/test_gen3_fixture_qualify.py::test_make_party_wires_the_leafgreen_title_saveram_and_run_dir PASSED [ 73%]
+tests/unit/test_gen3_fixture_qualify.py::test_make_party_refuses_an_unknown_title_before_the_seed_is_read PASSED [ 74%]
+tests/unit/test_gen3_fixture_qualify.py::test_the_party_driver_reads_the_title_and_keeps_a_literal_result_name PASSED [ 75%]
+tests/unit/test_gen3_fixture_qualify.py::test_lg_party_fixtures_match_the_fr_contract[battle-tile0] PASSED [ 76%]
+tests/unit/test_gen3_fixture_qualify.py::test_lg_party_fixtures_match_the_fr_contract[town-tile1] PASSED [ 77%]
+tests/unit/test_gen3_fixture_qualify.py::test_lg_party_b_variant_has_a_distinct_trainer_at_the_same_place[battle] PASSED [ 78%]
+tests/unit/test_gen3_fixture_qualify.py::test_lg_party_b_variant_has_a_distinct_trainer_at_the_same_place[town] PASSED [ 79%]
+tests/unit/test_gen3_fixture_qualify.py::test_import_strips_optional_rtc_suffix PASSED [ 80%]
+tests/unit/test_gen3_fixture_qualify.py::test_import_refuses_blank_save PASSED [ 81%]
+tests/unit/test_gen3_fixture_qualify.py::test_import_refuses_torn_save PASSED [ 82%]
+tests/unit/test_gen3_fixture_qualify.py::test_derive_b_changes_exactly_the_manifested_fields PASSED [ 83%]
+tests/unit/test_gen3_fixture_qualify.py::test_derive_b_rr_real_fixture_rekeys_and_preserves_every_other_byte PASSED [ 84%]
+tests/unit/test_gen3_fixture_qualify.py::test_derive_b_rr_all_box_regions_and_foreign_party_are_preserved PASSED [ 85%]
+tests/unit/test_gen3_fixture_qualify.py::test_derive_b_rr_preserves_optional_rtc_suffix PASSED [ 86%]
+tests/unit/test_gen3_fixture_qualify.py::test_derive_b_rr_rejects_corrupted_chunk_checksum PASSED [ 87%]
+tests/unit/test_gen3_fixture_qualify.py::test_derive_b_rr_cli_routes_to_rr_qualification PASSED [ 88%]
+tests/unit/test_gen3_fixture_qualify.py::test_boot_check_argument_handling PASSED [ 89%]
+tests/unit/test_gen3_fixture_qualify.py::test_make_fr_argument_handling PASSED [ 90%]
+tests/unit/test_gen3_fixture_qualify.py::test_saveram_name_matches_observed_gba_underscore_normalization PASSED [ 91%]
+tests/unit/test_gen3_fixture_qualify.py::test_our_emuhawk_pids_scopes_to_our_own_lua_driver_never_a_blanket_match PASSED [ 92%]
+tests/unit/test_gen3_fixture_qualify.py::test_boot_check_verdict_accepts_one_save_with_an_unchanged_party PASSED [ 93%]
+tests/unit/test_gen3_fixture_qualify.py::test_boot_check_verdict_refuses_a_counter_that_did_not_move PASSED [ 94%]
+tests/unit/test_gen3_fixture_qualify.py::test_boot_check_verdict_refuses_more_than_one_save PASSED [ 95%]
+tests/unit/test_gen3_fixture_qualify.py::test_boot_check_verdict_refuses_a_changed_party PASSED [ 96%]
+tests/unit/test_gen3_fixture_qualify.py::test_boot_check_verdict_refuses_a_flushed_save_that_does_not_qualify PASSED [ 97%]
+tests/unit/test_gen3_fixture_qualify.py::test_boot_check_verdict_over_real_images PASSED [ 98%]
+tests/unit/test_gen3_fixture_qualify.py::test_boot_check_verdict_compares_identity_keys_not_just_species_and_level PASSED [ 99%]
+tests/unit/test_gen3_fixture_qualify.py::test_qualify_prints_the_clients_key_for_each_party_mon PASSED [100%]
+
+============================= 102 passed in 2.70s =============================
+
+$ pytest tests/unit -q -k "fixture or gen3_codec"
+.................ssssssssssssss.sssssss................................. [ 25%]
+........................................................................ [ 51%]
+........................................................................ [ 77%]
+.............................................................s.          [100%]
+257 passed, 23 skipped, 7291 deselected in 5.38s
+
+$ ruff check tools/gen3_fixtures.py tests/unit/test_gen3_fixture_qualify_emerald.py
+All checks passed!
+
+$ python tools/lua_syntax_check.py
+OK: 238 Lua files parsed cleanly
+
