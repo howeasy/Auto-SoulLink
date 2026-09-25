@@ -11,9 +11,10 @@
 docs/gen3/G4_final_cut_runbook.md §0-§11 is the source of every row; §12 names the gaps this closes.
 --title rr (card G5-RUNNER-RR) is a separate, opt-in plan: the RR duo rows (every
 tools/e2e_duo.py SCENARIOS entry whose games includes gen3_rr, minus the owner-signed
-linked_faint_active_mega_gen3 limit), the RR opcode gates, and a named TODO row for an
-extracted-zip RR boot (not implemented -- see build_plan_rr's docstring). --title defaults to
-"frlg", so the default plan and its row ids are unchanged.
+linked_faint_active_mega_gen3 limit), the RR opcode gates, and the release zip built, checked
+and booted on the RR companion (rr_zip_build, rr_zip_check, zip_boot_radicalred); its summary is
+fc_SUMMARY_<cut8>_rr.txt. --title defaults to "frlg", so the default plan and its row ids are
+unchanged.
 Sequential, one emulator lane (docs/gen3/PLAN.md:23). Order: provision the lane at --cut (and the
 master tree when item 6 is selected), then every selected row in runbook order. Each row writes
 docs/gen3/probes/fc_<row>_<cut8>.txt through gen3_probe_receipt.run_receipt_text, and the pass
@@ -255,10 +256,11 @@ def zip_rows(cut, lane, title):
     boot = [PY, "tools/gen3_final_cut.py", "zip-boot", "--zip", zip_path, "--lane", lane]
     if title != "firered":
         boot += ["--title", title]
-    return [Row("zip_build", tag,
+    pre = "" if title == "firered" else "rr_"   # RR receipts never share FR's names (OMP cx-f570e611)
+    return [Row(f"{pre}zip_build", tag,
                 [PY, "tools/make_release.py", "--version", f"g4-{cut8}", "--out", f"{lane}/dist",
                  "--skip-generators"], lane, 600, emulator=False),
-            Row("zip_check", tag,
+            Row(f"{pre}zip_check", tag,
                 [PY, "tools/check_release_zip.py", zip_path, "--rev", cut], lane, 300,
                 emulator=False),
             Row(f"zip_boot_{title.replace('_', '')}", tag, boot, REPO, 600)]
@@ -710,10 +712,11 @@ ZIP_BOOT = {
 
 
 def zip_boot(zip_path, lane, timeout=300, title="firered"):
-    """Extract the zip to a space-free temp dir, run the cut's server from the lane, boot the
-    FR dump on the extracted lua/slink.lua with the FR town fixture seeded, and PASS on the
-    client's `(clean by hash) player a` + `TCP connected` and the server's `hello rom=firered`
-    (release_zip_boot_fr_rehearsal_2026-09-23.txt). Kills only the two PIDs it launched."""
+    """Extract the zip to a space-free temp dir, run the cut's server from the lane, boot
+    `title`'s ROM (ZIP_BOOT) on the extracted lua/slink.lua with its town fixture seeded, and PASS
+    on the client's identity line + `TCP connected` and the server's hello
+    (release_zip_boot_fr_rehearsal_2026-09-23.txt; RR: fc_zip_boot_radicalred_58a8951f.txt).
+    Kills only the two PIDs it launched."""
     import gen3_fixtures
     import run_gate
     tmp = tempfile.mkdtemp(prefix="slink_zipboot_")
@@ -896,7 +899,7 @@ ITEM6_DEPS = ["lua/*.lua", "lua/gen1/**", "lua/gen2/**", "lua/core/**", "lua/cli
 # builds are content-addressed instead (the §1 build cache), the zip is built from the cut and
 # the source gate IS the cut, so none of these is ever carried. The checkpoint probe carries once
 # its states come from the cache with known hashes (predicted_checkpoint_inputs).
-NEVER_CARRIED = ("states_*", "tutorials_*", "zip_*", "release_gate_quick",
+NEVER_CARRIED = ("states_*", "tutorials_*", "zip_*", "rr_zip_*", "release_gate_quick",
                  # ponytail: RR rows always RUN -- row_inputs() hashes no RR companion/clean ROM,
                  # RR fixture or gate savestate yet, so a carry could cite a PASS on other
                  # artifacts (OMP cx-42592031 F2-F4); carry them once those inputs are hashed
@@ -1492,7 +1495,7 @@ def _mins(s):
     return f"{s / 60:.0f}m"
 
 
-def merge_summary(cut, rows):
+def merge_summary(cut, rows, suffix=""):
     """--merge-summary: one fc_SUMMARY_<cut8>.txt from every row's receipt at `cut`, whichever
     shard (or lane) wrote it; a row with no receipt is NOT RUN, i.e. a failure."""
     results = []
@@ -1508,7 +1511,7 @@ def merge_summary(cut, rows):
             results.append((row, f"FAIL invalid receipt ({why or 'wrong row/cut'})", 0, name))
         else:
             results.append((row, hdr["verdict"], text.count("\n--- attempt "), name))
-    path, ok = write_summary(cut, results)
+    path, ok = write_summary(cut, results, suffix)
     print(_read(path))
     return 0 if ok else 1
 
@@ -1530,17 +1533,18 @@ def run_pass(args):
         for r in rows:
             print(f"{r.id:<48} {r.item}")
         return 0
+    title_sfx = "_rr" if args.title == "rr" else ""   # fc_SUMMARY_<cut8>_rr.txt: FR's stays put
     if args.merge_summary:
-        return merge_summary(cut, rows)
+        return merge_summary(cut, rows, title_sfx)
     decisions, est = plan_decisions(rows, cut, args.carry, lane)
-    suffix, plan, mine = "", None, {r.id for r in rows}
+    suffix, plan, mine = title_sfx, None, {r.id for r in rows}
     if args.shard:
         # cut over ALL selected rows (budget where no history), so two instances agree even when
         # one sees a warmer cache or newer receipts; each shard writes its own rows' receipts
         i, n = parse_shard(args.shard)
         plan = shard_rows(rows, n, {r.id: est[r.id] or r.budget for r in rows})
         mine = {r.id for r in plan[i - 1]}
-        suffix = f"_shard{i}of{n}"
+        suffix = f"{title_sfx}_shard{i}of{n}"
     rows_here = [r for r in rows if r.id in mine]
     run_rows = [r for r in rows_here if decisions[r.id].kind == "RUN"]
     carry_rows = [r for r in rows_here if decisions[r.id].kind == "CARRY"]

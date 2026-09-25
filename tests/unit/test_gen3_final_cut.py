@@ -142,9 +142,9 @@ def test_rr_mega_skip_reason_does_not_match_the_stale_allowed_skips_entry():
         f"SIGNED LIMIT: {mega['signed_limit']}")
 
 
-def test_build_plan_rr_row_ids_are_exactly_the_rr_scenarios_plus_gates_and_todo():
+def test_build_plan_rr_row_ids_are_exactly_the_rr_scenarios_plus_gates_and_zip():
     rows = fc.build_plan_rr("c" * 40, LANE, MASTER)
-    assert [r.id for r in rows] == _rr_scenario_ids() + ["rr_opcode_gates", "zip_build", "zip_check", "zip_boot_radicalred"]
+    assert [r.id for r in rows] == _rr_scenario_ids() + ["rr_opcode_gates", "rr_zip_build", "rr_zip_check", "zip_boot_radicalred"]
 
 
 def test_build_plan_rr_duo_rows_use_e2e_duo_with_the_rr_game():
@@ -174,10 +174,20 @@ def test_build_plan_rr_boots_the_zip_on_the_rr_companion():
     assert re.search(client, line) and hello == "hello rom=firered_rr "
 
 
-def test_the_fr_zip_boot_row_is_unchanged():
-    rows = fc.build_plan("c" * 40, LANE, MASTER)
-    boot = next(r for r in rows if r.id == "zip_boot_firered")
-    assert "--title" not in boot.argv and boot.item == "§9 item5"
+def test_the_fr_zip_rows_are_unchanged_and_disjoint_from_rr():
+    import dataclasses
+    fr = {r.id: dataclasses.asdict(r) for r in fc.build_plan("c" * 40, LANE, MASTER) if "zip" in r.id}
+    cut8, z = "cccccccc", f"{LANE}/dist/SLink-player-g4-cccccccc.zip"
+    assert {k: (v["item"], v["argv"], v["cwd"], v["budget"], v["emulator"], v["own_verdict"], v["env"])
+            for k, v in fr.items()} == {
+        "zip_build": ("§9 item5", [fc.PY, "tools/make_release.py", "--version", f"g4-{cut8}", "--out",
+                                   f"{LANE}/dist", "--skip-generators"], LANE, 600, False, False, {}),
+        "zip_check": ("§9 item5", [fc.PY, "tools/check_release_zip.py", z, "--rev", "c" * 40], LANE, 300,
+                      False, False, {}),
+        "zip_boot_firered": ("§9 item5", [fc.PY, "tools/gen3_final_cut.py", "zip-boot", "--zip", z,
+                                          "--lane", LANE], fc.REPO, 600, True, False, {})}
+    rr = {r.id for r in fc.build_plan_rr("c" * 40, LANE, MASTER)}
+    assert not (set(fr) & rr)   # receipts fc_<row>_<cut8>.txt never collide (OMP cx-f570e611)
 
 
 def test_rr_rows_are_never_carried_until_their_rom_and_state_inputs_are_hashed():
@@ -204,10 +214,11 @@ def test_dry_run_title_rr_plan(capsys):
                     "--master", MASTER]) == 0
     out = capsys.readouterr().out
     ids = [ln.split()[1] for ln in out.splitlines() if ln.startswith("[")]
-    assert ids == _rr_scenario_ids() + ["rr_opcode_gates", "zip_build", "zip_check", "zip_boot_radicalred"]
+    assert ids == _rr_scenario_ids() + ["rr_opcode_gates", "rr_zip_build", "rr_zip_check", "zip_boot_radicalred"]
     assert "$ python tools/e2e_duo.py --game gen3_rr --scenario faint_cmd_gen3" in out
     assert "$ SLINK_LIVE=1 python -m pytest tests/live/test_lua_gates.py" in out
     assert "zip-boot --zip" in out and "--title radical_red" in out
+    assert "_rr.txt" in out.split("summary ")[-1]   # RR summary never overwrites FR's
 
 
 def test_title_invalid_choice_rejected():
