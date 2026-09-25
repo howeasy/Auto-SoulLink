@@ -160,20 +160,19 @@ def _build_mon_entry(key, detail, adapter):
     sid = detail.get("species_id", 0)
     if not sid:
         return None
-    species = adapter.species_name(sid)
+    # Every name leaves in the calc's spelling (adapter.calc_name) — the calc matches exactly.
+    species = adapter.calc_name("species", adapter.species_name(sid))
     nature   = _nature_from_key(key)
-    abl_name = detail.get("ability_name", "") or adapter.ability_name(detail.get("ability_id", 0), sid)
+    abl_name = adapter.calc_name("ability", detail.get("ability_name", "")
+                                 or adapter.ability_name(detail.get("ability_id", 0), sid))
     item_id  = detail.get("held_item_id", 0)
-    item     = adapter.item_name(item_id) if item_id else ""
+    item     = adapter.calc_name("item", adapter.item_name(item_id)) if item_id else ""
     raw_moves = [m for m in (detail.get("moves") or []) if m][:4]
     moves = []
     for m in raw_moves:
-        if isinstance(m, int):
-            name = adapter.move_name(m)
-            if name:
-                moves.append(name)
-        elif isinstance(m, str) and m:
-            moves.append(m)
+        name = adapter.move_name(m) if isinstance(m, int) else m
+        if isinstance(name, str) and name:
+            moves.append(adapter.calc_name("move", name))
     level    = detail.get("level", 0)
     nick     = detail.get("nickname", "")
     hp       = detail.get("hp", 0)
@@ -203,6 +202,20 @@ def _build_mon_entry(key, detail, adapter):
         "active":        detail.get("active", False),
         "showdown_paste": "\n".join(lines),
     }
+
+
+def _calc_trainer_label(brief, enemy):
+    """The calc setdex trainer key for a roster trainer ("*Rival Blue Set 2" -> "Rival Blue",
+    the key the bridge's trainer index uses), or "" when there is no roster calc_label or
+    its party doesn't match at least half the live enemy species. On "" the bridge falls
+    back to matching the party by species + level."""
+    label = (brief or {}).get("calc_label") or ""
+    if not label or not enemy:
+        return ""
+    roster = {m.get("species") for m in brief.get("party") or []}
+    if 2 * sum(e["species_name"] in roster for e in enemy) < len(enemy):
+        return ""
+    return re.sub(r"\s+Set\s+\d+$", "", label.lstrip("*"))
 
 
 
@@ -2571,6 +2584,7 @@ class SLinkServer:
                 opp_name  = bs.get("opponent_name", "")
                 opp_class = bs.get("opponent_class", "")
                 trainer_label = " ".join(filter(None, [opp_class, opp_name])) if is_trainer else "Wild"
+                tid = bs.get("trainer_id") or 0
                 for ei, em in enumerate(bs.get("enemy_party", [])):
                     esid  = em.get("species_id", 0)
                     if not esid:
@@ -2596,6 +2610,10 @@ class SLinkServer:
                             em.get("hp", 0) / max(em.get("maxHP", 1), 1) * 100)))
                         entry["trainer_label"] = trainer_label
                         enemy.append(entry)
+                calc_label = _calc_trainer_label(
+                    self.adapter.trainer_brief(tid) if (is_trainer and tid) else None, enemy)
+                for entry in enemy if calc_label else ():
+                    entry["trainer_label"] = calc_label
             result[pid] = {
                 "trainer_name": p.get("trainer_name", pid.upper()),
                 "party":  party,

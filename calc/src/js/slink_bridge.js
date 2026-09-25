@@ -83,17 +83,6 @@
   var _sseSource      = null;
   var _retryTimer     = null;
 
-  // RR set names that differ from the calc engine's move name table.
-  // Funnotbun uses its own names for some moves; two RR customs don't exist in
-  // the calc at all (Soupercell Slam, Forbidden Spell) and are added to moves.ts.
-  var MOVE_ALIASES = {
-    'Drain Kiss': 'Draining Kiss',    // funnotbun canonical → calc name
-    'Disarm Cry': 'Disarming Voice',  // funnotbun canonical → calc name
-  };
-  function _normalizeMoveName(name) {
-    return MOVE_ALIASES[name] || name;
-  }
-
   // Prep tab state — mode is fixed to the current page (no cross-mode toggle)
   var _pageIsHC      = /hardcore/i.test(window.location.href);
   var _prepMode      = _pageIsHC ? 'hardcore' : 'normal';
@@ -794,7 +783,7 @@
         ability : mon.ability_name || '',
         item    : mon.item_name    || '',
         level   : mon.level        || 50,
-        moves   : (mon.moves || []).map(_normalizeMoveName),
+        moves   : (mon.moves || []).slice(),
       };
       var namedId = species + ' (' + setName + ')';
       ss.select2('data', { id: namedId, text: namedId, pokemon: species, set: setName })
@@ -853,7 +842,7 @@
     var moves = mon.moves || [];
     for (var i = 0; i < 4; i++) {
       var moveObj = pokeObj.find('.move' + (i + 1) + ' select.move-selector');
-      var moveName = _normalizeMoveName(moves[i] || '(No Move)');
+      var moveName = moves[i] || '(No Move)';
       moveObj.attr('data-prev', moveObj.val());
       moveObj.val(moveName);
       if (!moveObj.val()) moveObj.val('(No Move)'); // fallback if not found
