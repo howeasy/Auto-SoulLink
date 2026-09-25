@@ -165,10 +165,9 @@ local function nurse_control(ctx, linked, dest)
         ctx.frames(60)
         local clause, why = ctx.hold_probe("nurse", "box_mon", linked, locked, 600)
         if not clause then return false, "control: " .. tostring(why) end
-        G.tap("B", 3, 13)
-        if not ctx.wait_until(function() return not locked() end, 10, "the field free after B closed START") then
-            return false, "control: the field never freed after closing START"
-        end
+        -- leave the menu open (FR/LG's nurse leg leaves HER dialogue open too): closing it here
+        -- would release the held box_mon write, and the runner's own oracle forbids that key's
+        -- stats_cache ever landing in this scenario (live G5-RR-NURSE attempt 2, PYDEC caught it).
         return true
     end
     ctx.G.tap("A", 3, 13)
