@@ -387,15 +387,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cc_a_result.txt",
-              "sha256": "0c3baf4d12084f1c59122b9112e1e13becdcaf3432904633706f82fa7193e7fc"
+              "sha256": "1c2589c84f10d04869f64321695d005dcb926e9af3315c10385dd8609701a792"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cc_b_result.txt",
-              "sha256": "708ecec2c7fa357321a2fb9618a988fa70da66238dc5cb075705ad2c8d388eba"
+              "sha256": "0bca06202212a0e325f3540c0bf8ea56fce1972551bbd33149af9283d5f36d00"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cc_pydec_result.txt",
-              "sha256": "b2ffbf4d433175c44c6345425264f63772b80420de0bef282415da794c1d7350"
+              "sha256": "3d647dcb73ba138d37357f8468cb833f7bb7261fa3d5eb59eabcc9b33a7d65fb"
             }
           }
         },
@@ -594,6 +594,24 @@
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_evolution_cc_pydec_result.txt",
               "sha256": "51a48c94aad2e11797eeb6a3cffbbb5e196a092674697c296301bb898ccfa9d3"
+            }
+          }
+        },
+        {
+          "scenario": "gen2_faint_active_trainer",
+          "command": "python tools/gen2_final_sweep.py --only gen2_new/gen2_faint_active_trainer  (tools/e2e_duo.py --game gen2_new --scenario gen2_faint_active_trainer --keep-data)",
+          "receipts": {
+            "a": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_active_trainer_cc_a_result.txt",
+              "sha256": "ff80d2e44ff7c368a0f36f6b9920d015a92df2d4a23c39aabdd2ccb8bf7d7005"
+            },
+            "b": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_active_trainer_cc_b_result.txt",
+              "sha256": "4ff24e6e8fd1e127035224292a79a2d4124010d59f883d49bb0bcef8a08e4a32"
+            },
+            "pydec": {
+              "path": "tests/fixtures/gen2/receipts/duo_faint_active_trainer_cc_pydec_result.txt",
+              "sha256": "95289c29879b1d3a2791b1daa89491c13d7ab7dc09403773bf470684c5437861"
             }
           }
         }
@@ -980,15 +998,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_a_result.txt",
-              "sha256": "3d8dd4ec6da0009a430a786815ae421657a3f8104fb778c6a46f981a7d090253"
+              "sha256": "d11b1f9f519f3d1907249d2e0ee8c673d61e771b3a5e2c47aa9d9f855171f01b"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_b_result.txt",
-              "sha256": "de9b9b7506141143f3193f13097f4c5fe411d133ba3cfeaf9d67c263eaa5b1f1"
+              "sha256": "f5a4217e43320b029c2e16f04598efd6beaeff183d27f0846362b25c8fd882eb"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_pydec_result.txt",
-              "sha256": "ff26a6011473c239683da963dc904c48dda32431b0e82ca32a80d919bedc719a"
+              "sha256": "a9e57a723c2570e315e1ec830cd13d5a5efab951b01f707d26559e36463365bf"
             }
           }
         },
@@ -1552,15 +1570,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cg_a_result.txt",
-              "sha256": "a8432c5dbf6ca518861f73cae945ca390ca0781bb23236e164eea2f79cb75989"
+              "sha256": "dd0174f74fbec1a19aeb8d6872afc23089a03211f3ac3704c3f736132d061221"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cg_b_result.txt",
-              "sha256": "234a79d5d110a9188a77e0a2ea23acc2914d9e795b4ac465df9a98bdf9885f91"
+              "sha256": "4ad63f615b5c84189afd2133a296550de5bf2a6476465ab830ad61b848028216"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cg_pydec_result.txt",
-              "sha256": "6178341c639d7e7b1e886300f9d1b1305e744d5dc6e1c29d71f3d7339ccc3690"
+              "sha256": "231c6d0f66aafebd3fae90a9133e94e3361047060026fc52d142e59399fc057b"
             }
           }
         },
