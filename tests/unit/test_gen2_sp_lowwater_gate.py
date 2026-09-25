@@ -1,0 +1,230 @@
+"""SP-LOWWATER (docs/gen2/POST_RC_CARDS.md): the pure verdicts, no emulator.
+
+The Lua half (lua/tests/gen2_sfx_gate.lua P.lowwater_verdict / P.lowwater_margin, under lupa) and the release
+verifier's re-judgement (tools/verify_gen2_release._sp_lowwater_gate_row_errors) each see one known-good run and the
+design's falsifiers; plus the design's static bound against the stack capacities in the overlay .sym files.
+"""
+from __future__ import annotations
+
+import copy
+import hashlib
+import json
+import re
+import sys
+from pathlib import Path
+
+import lupa
+import pytest
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "tools"))
+import verify_gen2_release as gate  # noqa: E402
+
+GATE = (REPO / "lua/tests/gen2_sfx_gate.lua").as_posix()
+STACK = {"crystal": (0xC000, 0xC0FF), "gold": (0xDF03, 0xDFFF), "silver": (0xDF03, 0xDFFF)}
+
+
+def _lua():
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().SLINK_GEN2_GATE_LIBRARY = True
+    return lua, lua.eval(f'dofile("{GATE}")')
+
+
+def _row(site, sp, frame=100):
+    return {"site": site, "frame": frame, "sp": sp, "pc": 0x320A, "rom_bank": 0x0F, "hvblank": 0, "rie": 0x1F,
+            "text_delay": 1, "vblank_occurred": 1, "mailbox": {"sfx": 0, "phone_req": 0, "phone_armed": 2}}
+
+
+def good_run(mode="A_held", title="gold"):
+    bottom, top = STACK[title]
+    trigger = dict(_row("PrintLetterDelay.checkjoypad", top - 20), battle_mode=1,
+                   joy_down=gate.SP_LOWWATER_MODES[mode])
+    return {
+        "mode": mode, "verdict": "PASS", "trigger": trigger,
+        "service_irq": _row("SlinkDelayFrameBridge", top - 30),
+        "delay_path": None if mode == "released" else 100, "resumed": 101,
+        "sfx": {"code": 1, "id": 1, "accepted": True, "pre_playing": False, "posted": 100, "consumed": 100, "played": 101},
+        "phone": {"id": 2, "accepted": True, "posted": 100, "acked": 101, "armed_id": 2, "rings_in_battle": 0},
+        "stack": {"bottom": bottom, "top": top, "floor": bottom + 32, "hook_failures": 0, "pushes": 0,
+                  "armed_start": bottom, "armed_end": min(top, bottom + 95),
+                  "armed_count": min(top, bottom + 95) - bottom + 1,
+                  "canary": {"address": top - 10, "sp": top - 9, "hit": True, "frame": 90},
+                  "low_water_state": ">floor+64"},
+        "guards": {site: {"hits": 5, "low": _row(site, top - 60)} for site in gate.SP_LOWWATER_GUARDS},
+        "excursions": [],
+        "nested_vblank": {"count": 1, "windows": 40, "with_sfx": 1, "deepest": _row("VBlank", top - 70)},
+        "battle": {"from": 50, "to": 900},
+    }
+
+
+def good_receipt(bind):
+    """A per-title receipt as tests/live/test_gen2_sp_lowwater_gate.combine writes it, over `bind` (the overlay
+    binding: result/evidence_level/title/overlay_sha1/fixture/fixture_sha256)."""
+    title = bind["title"]
+    return {**bind, "schema": "gen2-sp-lowwater-v1", "bounds": dict(gate.SP_LOWWATER_BOUNDS),
+            "static_bound": {"print_letter_delay": 12, "service_chain": 38, "vblank": 36},
+            "runs": {mode: good_run(mode, title) for mode in gate.SP_LOWWATER_MODES}, "harness_write_scopes": []}
+
+
+def _set(run, path, value):
+    *keys, last = path.split(".")
+    node = run
+    for key in keys:
+        node = node[key]
+    if value is _DEL:
+        del node[last]
+    else:
+        node[last] = value
+
+
+_DEL = object()
+BOTTOM, TOP = STACK["gold"]
+# (name, [(path, value)], Lua problem substring, verifier error substring)
+FALSIFIERS = [
+    ("margin_below_N", [("stack.low_water_state", "exact"),
+                        ("stack.low_water", {"stack_addr": BOTTOM + 20, "sp": BOTTOM + 21})],
+     "stack margin 20", "within 32 bytes"),
+    ("canary_never_hit", [("stack.canary.hit", False)], "no canary hit", "canary/coverage"),
+    ("canary_off_stack", [("stack.canary.address", 0xCE58)], "off the stack", "canary/coverage"),
+    ("coverage_gap", [("stack.armed_count", 95)], "coverage incomplete", "canary/coverage"),
+    ("hook_failure", [("stack.hook_failures", 1)], "coverage incomplete", "canary/coverage"),
+    ("low_water_unknown", [("stack.low_water_state", "exact")], "neither exact", "neither exact"),
+    ("guard_below_floor", [("guards._PlaySFX.low.sp", BOTTOM + 10)], "SP guard _PlaySFX", "SP guard _PlaySFX"),
+    ("guard_off_stack", [("guards.VBlank.low.sp", 0xE010)], "SP guard VBlank", "SP guard VBlank"),
+    ("guard_unhooked", [("guards.SlinkPhoneService", _DEL)], "SP guard SlinkPhoneService", "SP guard SlinkPhoneService"),
+    ("excursion", [("excursions", [_row("_PlaySFX", BOTTOM + 4)])], "below the floor", "below the floor"),
+    ("not_battle", [("trigger.battle_mode", 0)], "wBattleMode 1", "wBattleMode 1"),
+    ("no_text_delay", [("trigger.text_delay", 0)], "wTextDelayFrames > 0", "wTextDelayFrames > 0"),
+    ("joy_not_the_mode", [("trigger.joy_down", 0)], "hJoyDown", "hJoyDown"),
+    ("hvblank_not_normal", [("trigger.hvblank", 2)], "at the trigger", "at the trigger"),
+    ("rie_no_vblank", [("service_irq.rie", 0x1E)], "first service", "first service"),
+    ("no_service_after_trigger", [("service_irq", None)], "first service", "first service"),
+    ("held_without_delayframe", [("delay_path", None)], ".delay", ".delay"),
+    ("text_not_resumed", [("resumed", 401)], "did not resume", "did not resume"),
+    ("sfx_refused", [("sfx.accepted", False)], "not posted by the binding", "SFX"),
+    ("sfx_pre_playing", [("sfx.pre_playing", True)], "already on a channel", "SFX"),
+    ("sfx_never_consumed", [("sfx.consumed", None)], "consumed and played", "SFX"),
+    ("sfx_never_played", [("sfx.played", None)], "consumed and played", "SFX"),
+    ("sfx_late", [("sfx.played", 401)], "consumed and played", "SFX"),
+    ("phone_refused", [("phone.accepted", False)], "not posted by the binder", "phone"),
+    ("phone_unacked", [("phone.acked", None)], "acked and ARMED", "phone"),
+    ("phone_wrong_armed", [("phone.armed_id", 1)], "acked and ARMED", "phone"),
+    ("phone_rang_in_battle", [("phone.rings_in_battle", 1)], "rang in battle", "rang in battle"),
+]
+
+
+def _mutated(mode, edits):
+    run = good_run(mode)
+    for path, value in edits:
+        _set(run, path, copy.deepcopy(value) if value is not _DEL else _DEL)
+    return run
+
+
+def _lua_verdict(run):
+    lua, P = _lua()
+    verdict, problems = P.lowwater_verdict(lua.table_from(run, recursive=True))
+    return verdict, [problems[i] for i in range(1, len(problems) + 1)]
+
+
+@pytest.mark.parametrize("mode", list(gate.SP_LOWWATER_MODES))
+def test_the_known_good_run_passes_both_halves(mode):
+    assert _lua_verdict(good_run(mode)) == ("PASS", [])
+    assert gate._sp_lowwater_run_errors(mode, good_run(mode)) == []
+
+
+@pytest.mark.parametrize("name,edits,lua_why,py_why", FALSIFIERS, ids=[f[0] for f in FALSIFIERS])
+def test_each_falsifier_fails_both_halves(name, edits, lua_why, py_why):
+    verdict, problems = _lua_verdict(_mutated("A_held", edits))
+    assert verdict == "FAIL" and any(lua_why in p for p in problems), (verdict, problems)
+    errors = gate._sp_lowwater_run_errors("A_held", _mutated("A_held", edits))
+    assert any(py_why in e for e in errors), errors
+
+
+def test_no_trigger_fails():
+    run = _mutated("B_held", [("trigger", None)])
+    assert _lua_verdict(run) == ("FAIL", ["never triggered at PrintLetterDelay.checkjoypad in battle text"])
+    assert any("trigger" in e for e in gate._sp_lowwater_run_errors("B_held", run))
+
+
+def test_no_nested_vblank_is_inconclusive_never_pass():
+    run = _mutated("released", [("nested_vblank.count", 0)])
+    verdict, problems = _lua_verdict(run)
+    assert verdict == "INCONCLUSIVE" and "no VBlank landed inside a service window" in problems[0]
+    assert gate._sp_lowwater_run_errors("released", run) == ["INCONCLUSIVE: no VBlank landed inside a service window"]
+    # a real failure outranks INCONCLUSIVE
+    assert _lua_verdict(_mutated("released", [("nested_vblank.count", 0), ("phone.rings_in_battle", 1)]))[0] == "FAIL"
+
+
+def test_the_released_mode_needs_no_delayframe_but_the_held_modes_do():
+    assert _lua_verdict(good_run("released"))[0] == "PASS"
+    assert _lua_verdict(_mutated("A_held", [("delay_path", None)]))[0] == "FAIL"
+
+
+def test_an_exact_low_water_at_the_floor_passes_and_one_byte_lower_fails():
+    lua, P = _lua()
+    stack = good_run()["stack"]
+    for addr, ok in ((BOTTOM + 32, True), (BOTTOM + 31, False)):
+        stack.update(low_water_state="exact", low_water={"stack_addr": addr, "sp": addr + 1})
+        margin, kind = P.lowwater_margin(lua.table_from(stack, recursive=True))
+        assert (margin, kind) == (addr - BOTTOM, "exact")
+        run = _mutated("A_held", [("stack", stack)])
+        assert (_lua_verdict(run)[0] == "PASS") is ok
+        assert (gate._sp_lowwater_run_errors("A_held", run) == []) is ok
+    stack.update(low_water_state=">floor+64", low_water=None)
+    assert P.lowwater_margin(lua.table_from(stack, recursive=True)) == (96, "lower_bound")
+
+
+def test_the_verifier_rejudges_the_facts_not_the_verdict_string():
+    run = _mutated("A_held", [("phone.rings_in_battle", 1)])   # verdict still says "PASS"
+    assert run["verdict"] == "PASS" and gate._sp_lowwater_run_errors("A_held", run)
+    assert any("verdict" in e for e in gate._sp_lowwater_run_errors("A_held", dict(good_run(), verdict="INCONCLUSIVE")))
+
+
+def _receipt_tree(tmp_path, title="gold"):
+    (tmp_path / "data/gen2").mkdir(parents=True)
+    provenance = (REPO / "data/gen2/overlay_provenance.json").read_bytes()
+    (tmp_path / "data/gen2/overlay_provenance.json").write_bytes(provenance)
+    sha1 = next(r["sha1"] for r in json.loads(provenance)["outputs"].values() if r["slink_title"] == title)
+    raw = (REPO / "tests/fixtures/gen2" / f"{title}_battle.SaveRAM").read_bytes()
+    (tmp_path / "tests/fixtures/gen2").mkdir(parents=True)
+    (tmp_path / "tests/fixtures/gen2" / f"{title}_battle.SaveRAM").write_bytes(raw)
+    return good_receipt({"result": "PASS", "evidence_level": "PHYSICAL", "title": title, "overlay_sha1": sha1,
+                         "fixture": f"{title}_battle", "fixture_sha256": hashlib.sha256(raw).hexdigest()})
+
+
+def test_the_release_row_is_green_only_on_the_whole_receipt(tmp_path):
+    receipt = _receipt_tree(tmp_path)
+    assert gate._sp_lowwater_gate_row_errors(tmp_path, "gold", receipt) == []
+    bad = copy.deepcopy(receipt)
+    del bad["runs"]["released"]
+    assert any("A_held, B_held and released" in e for e in gate._sp_lowwater_gate_row_errors(tmp_path, "gold", bad))
+    bad = dict(copy.deepcopy(receipt), bounds=dict(gate.SP_LOWWATER_BOUNDS, margin_floor=16))
+    assert any("bounds" in e for e in gate._sp_lowwater_gate_row_errors(tmp_path, "gold", bad))
+    bad = dict(copy.deepcopy(receipt), overlay_sha1="0" * 40)
+    assert any("another overlay" in e for e in gate._sp_lowwater_gate_row_errors(tmp_path, "gold", bad))
+    bad = dict(copy.deepcopy(receipt), schema="gen2-sfx-gate-v1")
+    assert any("PHYSICAL PASS" in e for e in gate._sp_lowwater_gate_row_errors(tmp_path, "gold", bad))
+    bad = copy.deepcopy(receipt)
+    bad["runs"]["B_held"]["nested_vblank"]["count"] = 0
+    assert gate._sp_lowwater_gate_row_errors(tmp_path, "gold", bad) == [
+        "sp-lowwater gate B_held: INCONCLUSIVE: no VBlank landed inside a service window"]
+
+
+def test_the_static_bound_fits_the_stack_capacities_with_the_margin():
+    """The design's static bound (86 B = PrintLetterDelay 12 + bridge/service/SFX/_PlaySFX leaf 38 + normal VBlank 36)
+    against the capacities wStackTop - wStackBottom in the overlay .sym (Crystal 255, Gold/Silver 252)."""
+    _, P = _lua()
+    static = dict(P.LW_STATIC.items())
+    assert static == {"print_letter_delay": 12, "service_chain": 38, "vblank": 36} and sum(static.values()) == 86
+    capacities = {}
+    for title in STACK:
+        sym = (REPO / "data/gen2" / f"{title}_slink.sym").read_text(encoding="utf-8")
+        addr = {name: int(a, 16) for a, name in re.findall(r"^[0-9a-f]{2}:([0-9a-f]{4}) (wStack(?:Bottom|Top))$", sym, re.M)}
+        assert (addr["wStackBottom"], addr["wStackTop"]) == STACK[title]
+        capacities[title] = addr["wStackTop"] - addr["wStackBottom"]
+    assert capacities == {"crystal": 255, "gold": 252, "silver": 252}
+    assert all(cap >= 86 + P.LW_MARGIN for cap in capacities.values())
+    assert P.LW_MARGIN == gate.SP_LOWWATER_BOUNDS["margin_floor"] == 32
+    assert P.LW_EXACT == gate.SP_LOWWATER_BOUNDS["exact_window"] == 64
+    assert [P.LW_GUARDS[i] for i in range(1, len(P.LW_GUARDS) + 1)] == list(gate.SP_LOWWATER_GUARDS)
+    assert dict(P.LW_MODES.items()) == gate.SP_LOWWATER_MODES

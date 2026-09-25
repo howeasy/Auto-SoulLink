@@ -11,7 +11,8 @@ from tests.live import test_gen2_new_gates as live
 from tools import gen2_code_digest
 
 LIVE = Path(__file__).resolve().parents[2] / "tests/live"
-RUNNERS = ("frame_align", "write_windows", "panel_gate", "sfx_gate", "w6_gate", "phone_gate", "u1g")
+RUNNERS = ("frame_align", "write_windows", "panel_gate", "sfx_gate", "w6_gate", "phone_gate", "sp_lowwater_gate",
+           "u1g")
 
 
 def _is_stamped(node):

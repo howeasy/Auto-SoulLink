@@ -33,6 +33,22 @@
   from data/gen2/<title>_slink.sym, native ids from the decomp's constants/sfx_constants.asm).
   Result file: patch/build/gen2_sfx_gate_result.txt. Printed: CASE (one per context), RESET, RECEIPT (json after
   the tag); RESULT: PASS|FAIL last.
+
+  SP-LOWWATER, the sibling mode (docs/gen2/POST_RC_CARDS.md "SP-LOWWATER detailed design", OMP cx-947d9423),
+  selected by SLINK_GEN2_SP_LOWWATER = A_held | B_held | released and launched by lua/tests/gen2_sp_lowwater_gate.lua
+  (its own result file). Same arrival, panel binding and Route 29 battle driver; ONE fresh boot per mode (phone
+  ARMED is single-slot). The trigger is the first PrintLetterDelay.checkjoypad with wBattleMode == 1,
+  wTextDelayFrames > 0 and hJoyDown's A/B bits equal to the mode; there the shipped binders post (panel:request_sfx
+  and Phone:request("dead_zone"), serviced on the spot, never a direct write). A_held/B_held take .delay, so the
+  DelayFrame bridge services both requests INSIDE the letter delay. `released` takes .wait, which never calls
+  DelayFrame: the requests are posted while released and serviced only after the text resumes (the driver's
+  normal A press at the prompt); it can never mean "serviced while released".
+  Witness: the trade stack witness v2 (lua/tests/duo/gen2_trade.lua): write hooks on [wStackBottom, floor + 64),
+  floor = wStackBottom + 32, and one self-disarming canary at SP-1 (armed from hSPBuffer when SP is off the stack,
+  902cf7c8), plus SP guards at the service/audio exec hooks so an excursion below the window cannot pass. Every
+  row carries hROMBank/hVBlank/rIE/wTextDelayFrames/wVBlankOccurred and the mailbox bytes. Verdict
+  (P.lowwater_verdict): PASS, FAIL, or INCONCLUSIVE when everything held but no VBlank landed inside a service
+  window. Printed: RECEIPT (schema gen2-sp-lowwater-v1, part "run"); RESULT last (PASS only on a PASS verdict).
 --]]
 local P = {}
 P.RESULT = "patch/build/gen2_sfx_gate_result.txt"
@@ -55,6 +71,23 @@ P.OPEN_BOUND = 600
 P.CODES = {SUCCESS=1, FAILURE=2, BOO=3, NOTIFY=4}
 P.WALK_BUDGET = 6000
 P.BATTLE_BUDGET = {max_frames=40000, max_phase_frames=20000, settle_frames=30}
+
+-- SP-LOWWATER (the header): mode -> the hJoyDown A/B bits at the trigger (A_BUTTON_F 0, B_BUTTON_F 1).
+P.LW_SCHEMA = "gen2-sp-lowwater-v1"
+P.LW_MODES = {A_held=1, B_held=2, released=0}
+P.LW_BUTTON = {A_held="A", B_held="B"}
+P.LW_MARGIN, P.LW_EXACT = 32, 64   -- N above wStackBottom; the exact window above the floor (trade witness v2)
+P.LW_RESUME = 300
+P.LW_PHONE = 2                     -- lua/gen2/phone.lua IDS.dead_zone
+P.OFF_PHONE_REQ, P.OFF_PHONE_ARMED = 32, 33
+P.RIE, P.VBLANK_NORMAL = 0xFFFF, 0
+-- The design's static bound from the asm, bytes: PrintLetterDelay 12 + bridge/service/SFX/_PlaySFX leaf 38 +
+-- a normal VBlank 36 = 86 (tests/unit/test_gen2_sp_lowwater_gate.py holds it against the stack capacities).
+P.LW_STATIC = {print_letter_delay=12, service_chain=38, vblank=36}
+P.LW_GUARDS = {"SlinkDelayFrameBridge", "SlinkService", "SlinkSfxService", "SlinkPhoneService", "PlaySFX", "_PlaySFX",
+               "VBlank"}
+P.LW_SITES = {"PrintLetterDelay.delay", "PrintLetterDelay.end", "RingTwice_StartCall"}
+for _, id in ipairs(P.LW_GUARDS) do P.LW_SITES[#P.LW_SITES + 1] = id end
 
 local fmt = string.format
 P.DIRS = {{"Up", 0, -1}, {"Left", -1, 0}, {"Down", 0, 1}, {"Right", 1, 0}}
@@ -110,6 +143,78 @@ function P.problem(c, deadline)
     if c.played - c.posted > deadline then return fmt("latency %d > %d frames", c.played - c.posted, deadline) end
 end
 
+-- Pure (SP-LOWWATER): the stack witness's margin above wStackBottom and its kind ("exact" from the deepest push
+-- in the window; "lower_bound" = MARGIN + EXACT when no push came that low), or nil and why.
+function P.lowwater_margin(s)
+    if type(s) ~= "table" or type(s.bottom) ~= "number" or type(s.top) ~= "number" then return nil, "no stack witness" end
+    local c = s.canary
+    if type(c) ~= "table" or c.hit ~= true or type(c.address) ~= "number" then
+        return nil, "the stack write hooks never proved live (no canary hit)"
+    end
+    if c.address < s.bottom or c.address > s.top then return nil, "the canary was armed off the stack (a harness fault)" end
+    if s.hook_failures ~= 0 or s.armed_start ~= s.bottom
+       or s.armed_end ~= math.min(s.top, s.bottom + P.LW_MARGIN + P.LW_EXACT - 1)
+       or s.armed_count ~= s.armed_end - s.armed_start + 1 then
+        return nil, "stack witness coverage incomplete"
+    end
+    local low = s.low_water
+    if s.low_water_state == "exact" and type(low) == "table" and type(low.stack_addr) == "number"
+       and type(low.sp) == "number" then
+        return math.min(low.stack_addr, low.sp) - s.bottom, "exact"
+    end
+    if s.low_water_state == ">floor+" .. P.LW_EXACT and low == nil then return P.LW_MARGIN + P.LW_EXACT, "lower_bound" end
+    return nil, "stack low water is neither exact nor above the armed window"
+end
+
+-- Pure (SP-LOWWATER): the verdict of one run record (the RECEIPT's "run", nil = absent): "PASS" | "FAIL" |
+-- "INCONCLUSIVE", and the problems. A FAIL outranks INCONCLUSIVE.
+function P.lowwater_verdict(r)
+    local problems = {}
+    local function need(ok, why) if not ok then problems[#problems + 1] = why end end
+    local function int(v) return type(v) == "number" end
+    local t = r.trigger
+    if type(t) ~= "table" then return "FAIL", {"never triggered at PrintLetterDelay.checkjoypad in battle text"} end
+    need(t.battle_mode == 1 and int(t.text_delay) and t.text_delay > 0,
+         "the trigger is not wBattleMode 1 with wTextDelayFrames > 0")
+    need(P.LW_MODES[r.mode] ~= nil and t.joy_down == P.LW_MODES[r.mode],
+         fmt("hJoyDown A/B %s at the trigger is not mode %s's", tostring(t.joy_down), tostring(r.mode)))
+    local function irq(row) return type(row) == "table" and row.hvblank == P.VBLANK_NORMAL and int(row.rie) and row.rie & 1 == 1 end
+    need(irq(t), "hVBlank is not VBLANK_NORMAL or rIE lacks VBlank at the trigger")
+    need(irq(r.service_irq), "hVBlank is not VBLANK_NORMAL or rIE lacks VBlank at the first service after the trigger")
+    need(r.mode == "released" or (int(r.delay_path) and r.delay_path >= t.frame),
+         "held mode never took PrintLetterDelay.delay (DelayFrame) after the trigger")
+    need(int(r.resumed) and r.resumed >= t.frame and r.resumed - t.frame <= P.LW_RESUME,
+         fmt("the text did not resume within %d frames", P.LW_RESUME))
+    local s = r.sfx or {}
+    need(s.accepted == true and int(s.posted), "the SFX request was not posted by the binding")
+    need(not s.pre_playing, "the SFX id was already on a channel when posted")
+    need(int(s.posted) and int(s.consumed) and int(s.played) and s.consumed >= s.posted and s.played >= s.consumed
+         and s.played - s.posted <= P.DEADLINE, fmt("the SFX was not consumed and played within %d frames", P.DEADLINE))
+    local p = r.phone or {}
+    need(p.accepted == true and int(p.posted), "the phone request was not posted by the binder")
+    need(int(p.acked) and p.armed_id == P.LW_PHONE, "the phone request was not acked and ARMED")
+    need(p.rings_in_battle == 0, "the phone rang in battle")
+    local st = r.stack or {}
+    local margin, kind = P.lowwater_margin(st)
+    need(margin ~= nil, kind)
+    need(margin == nil or margin >= P.LW_MARGIN, fmt("stack margin %s < %d above wStackBottom", tostring(margin), P.LW_MARGIN))
+    local guards = r.guards or {}
+    for _, site in ipairs(P.LW_GUARDS) do
+        local g = guards[site]
+        local low = type(g) == "table" and g.low
+        need(type(low) == "table" and int(g.hits) and g.hits > 0 and int(low.sp) and int(st.bottom) and int(st.top)
+             and low.sp - st.bottom >= P.LW_MARGIN and low.sp <= st.top + 1,
+             fmt("SP guard %s: no hit, or SP outside [wStackBottom + %d, wStackTop + 1]", site, P.LW_MARGIN))
+    end
+    need(#(r.excursions or {}) == 0, "an SP guard saw SP below the floor or off the stack")
+    if #problems > 0 then return "FAIL", problems end
+    local nested = r.nested_vblank
+    if type(nested) ~= "table" or not int(nested.count) or nested.count < 1 then
+        return "INCONCLUSIVE", {"no VBlank landed inside a service window: the nested worst case was not exercised"}
+    end
+    return "PASS", problems
+end
+
 function P.scripted_gate(root)
     local previous = SLINK_GEN2_GATE_LIBRARY
     SLINK_GEN2_GATE_LIBRARY = true
@@ -139,7 +244,15 @@ function P.main(real, getenv, SG, F)
         log(fmt("RESULT: %s %s (%d checks failed)", failures == 0 and "PASS" or "FAIL", extra or "sfx", failures))
         return failures == 0
     end
-    log(fmt("[gen2_sfx_gate] P4.2c %s overlay native sound", tostring(getenv("SLINK_GEN2_TITLE"))))
+    local mode = getenv("SLINK_GEN2_SP_LOWWATER")
+    if mode ~= nil then
+        log(fmt("[gen2_sp_lowwater_gate] SP-LOWWATER %s overlay, mode %s", tostring(getenv("SLINK_GEN2_TITLE")), mode))
+        if not check("SLINK_GEN2_SP_LOWWATER is A_held, B_held or released", P.LW_MODES[mode] ~= nil, mode) then
+            return finish("bad mode")
+        end
+    else
+        log(fmt("[gen2_sfx_gate] P4.2c %s overlay native sound", tostring(getenv("SLINK_GEN2_TITLE"))))
+    end
 
     local on_frame = function() end
     local api = setmetatable({advance=function() real.advance(); on_frame() end}, {__index=real})
@@ -204,16 +317,19 @@ function P.main(real, getenv, SG, F)
                 if list[#list] ~= hit.frame then list[#list + 1] = hit.frame end
                 if #list > 4000 then table.remove(list, 1) end
                 if on_hit[id] then
-                    local okh, why = pcall(on_hit[id], hit.frame)
+                    local okh, why = pcall(on_hit[id], hit.frame, hit)
                     if not okh then hook_errors[#hook_errors + 1] = id .. ": " .. tostring(why) end
                 end
             end
         end, "SLink-p42c-" .. id)
         assert(binding:valid_handle(handle), id .. ": hook registration failed")
         handles[#handles + 1] = handle
+        return handle
     end
     local hooked, hook_why = pcall(function()
-        for _, id in ipairs({"BattleAnimDelayFrame", "PlaySFX", "Reset", "SlinkSfxService"}) do watch(id) end
+        for _, id in ipairs(mode and P.LW_SITES or {"BattleAnimDelayFrame", "PlaySFX", "Reset", "SlinkSfxService"}) do
+            watch(id)
+        end
     end)
     local function release()
         for _, h in ipairs(handles) do pcall(api.unregister, h) end
@@ -266,11 +382,17 @@ function P.main(real, getenv, SG, F)
     local panel = assert(Panel.new(ctx.profile, ctx.charmap, io_, writes, HUD.sanitize))
     local cases, cur = {}, nil
     local client = true
+    -- SP-LOWWATER: the shipped phone binder (fixed text, as entry.lua builds it without a stage) and its monitor
+    local phone = mode and dofile(root .. "/lua/gen2/phone.lua").new(panel, io_, writes, log) or nil
+    local lw_frame
     on_frame = function()
         if client then
             local served, why = panel:service()
             if not served then hook_errors[#hook_errors + 1] = "panel service: " .. tostring(why) end
+            local okp, whyp = pcall(function() if phone then phone:service() end end)
+            if not okp then hook_errors[#hook_errors + 1] = "phone service: " .. tostring(whyp) end
         end
+        if lw_frame then lw_frame() end
         local c = cur
         if not c or c.done then return end
         local f, req, fade = frame(), u8(MB + P.OFF_SFX), u8(FADE)
@@ -400,6 +522,293 @@ function P.main(real, getenv, SG, F)
     end
     local function walking() return wram1(sf.ram.wWalkingDirection) ~= P.STANDING end
 
+    -- The Route 29 wild-battle driver (west into Route 29, onto the grass, a wild battle, RUN), shared by the sfx
+    -- battle contexts and SP-LOWWATER. hooks.tick() runs first every frame; hooks.menu(ui) returns the buttons that
+    -- keep the battle menu waiting, or nil to RUN now; hooks.idle() returns the buttons to hold in battle where the
+    -- driver would otherwise idle (nil = none); hooks.sent(buttons) sees what each step hands the host. Returns
+    -- battled, outcome, driver (ran, battle_from, battle_to).
+    local function play_battle(name, hooks)
+        local R29 = maps.Route29
+        local here, from_tile = nil, nil
+        local HOLDF, held, hold_left, release_next = 12, nil, 0, false
+        local driver = {phase="west", terminal="done", ran=false}
+        local function tap(b) release_next, held, hold_left = true, b, HOLDF - 1 return {[b]=true}, driver.phase end
+        local function rest() return driver.phase == "battle" and hooks.idle and hooks.idle() or {}, driver.phase end
+        local decide
+        function driver.step(point)
+            local b, phase = decide(point)
+            if hooks.sent then hooks.sent(b) end
+            return b, phase
+        end
+        decide = function(point)
+            if hooks.tick then hooks.tick(driver) end
+            if hold_left > 0 then hold_left = hold_left - 1 return {[held]=true}, driver.phase end
+            if release_next then release_next = false return {}, driver.phase end
+            if driver.phase == "done" then return {}, "done" end
+            if driver.phase ~= "battle" and type(point.battle_mode) == "number" and point.battle_mode > 0 then
+                driver.phase, driver.battle_from = "battle", frame()
+            end
+            local ui = point.ui
+            if ui ~= nil then
+                if point.input_ready ~= true then return rest() end
+                if driver.phase ~= "battle" then return nil, "UI outside the battle: " .. tostring(ui.kind) end
+                if ui.kind == "battle_menu" then
+                    if type(ui.items) ~= "table" then return {}, driver.phase end
+                    local waiting = hooks.menu and hooks.menu(ui)
+                    if waiting then return waiting, driver.phase end
+                    local run
+                    for i, l in ipairs(ui.items) do if l == "RUN" then run = i end end
+                    if not run then return nil, "no RUN on the battle menu" end
+                    driver.ran = true
+                    if run == ui.cursor then return tap("A") end
+                    local tx, cx = (run - 1) % 2, (ui.cursor - 1) % 2
+                    if tx ~= cx then return tap(tx > cx and "Right" or "Left") end
+                    return tap(run > ui.cursor and "Down" or "Up")
+                end
+                if ui.kind == "text" or ui.kind == "prompt_button" or ui.kind == "wait_button" then return tap("A") end
+                return nil, "UI is not valid in battle: " .. tostring(ui.kind)
+            end
+            if point.overworld_ready ~= true then return rest() end
+            if driver.phase == "battle" then driver.phase, driver.battle_to = "done", frame() return {}, "done" end
+            if driver.phase == "west" then
+                if map_is(point, "Route29") then driver.phase = "approach" else return {Left=true}, driver.phase end
+            end
+            local grid = R29.grid
+            if driver.phase == "approach" then
+                if grid[point.y * R29.width + point.x + 1] == 2 then driver.phase = "walk"
+                else
+                    local dir = P.first_step(R29, point.x, point.y, function(x, y) return grid[y * R29.width + x + 1] == 2 end, true)
+                    if not dir then return nil, "no path to the Route 29 grass" end
+                    if point.can_step[dir] ~= true then return nil, "approach step " .. dir .. " not steppable live" end
+                    return {[dir]=true}, driver.phase
+                end
+            end
+            if here and (here.x ~= point.x or here.y ~= point.y) then from_tile = here end
+            here = {x=point.x, y=point.y}
+            local b, w = F.walk_direction(R29, point, from_tile)
+            if not b then return nil, w end
+            return {[b]=true}, driver.phase
+        end
+        local base_obs = SG.qualify_observer(ctx)
+        local function observe()
+            local point = base_obs()
+            if point.ui and point.ui.kind == "battle_menu" then
+                local bm = SG.parse_menu(SG.screen(ctx), ctx.obs.screen.width, ctx.obs.screen.height, SG.BATTLE_MENU_GRID)
+                if bm then point.ui.items, point.ui.cursor, point.ui.columns = bm.items, bm.cursor, bm.columns
+                else point.input_ready = false end
+            end
+            return point
+        end
+        local diag = {log=log, frame=api.framecount, screen=rows, where=function() return fmt("PC %04X", api.register("PC")) end,
+                      trace=getenv("SLINK_GEN2_TRACE") == "1"}
+        local battled, outcome = F.play(host, {name=name, terminal="done",
+            max_frames=P.BATTLE_BUDGET.max_frames, max_phase_frames=P.BATTLE_BUDGET.max_phase_frames,
+            settle_frames=P.BATTLE_BUDGET.settle_frames, terminal_idle=true}, driver, observe, diag)
+        return battled, outcome, driver
+    end
+
+    -- ── SP-LOWWATER: the sibling mode (the header), one mode per fresh boot ─────────────────────────
+    if mode then
+        local R, hram = sf.ram, ctx.profile.hram
+        local bottom, top = R.wStackBottom.addr, R.wStackTop.addr
+        local REQ, ARMED = MB + P.OFF_PHONE_REQ, MB + P.OFF_PHONE_ARMED
+        local run = {mode=mode, guards={}, excursions={}, nested_vblank={count=0, windows=0, with_sfx=0}}
+        local stack = {bottom=bottom, top=top, floor=bottom + P.LW_MARGIN, hook_failures=0, armed_count=0, pushes=0}
+        run.stack = stack
+        local wh, window, cj_handle, ret_handle, canary_handle = {}, nil, nil, nil, nil
+        local buttons, battle_over = {}, false
+        local function snap(site)
+            return {site=site, frame=frame(), sp=api.register("SP"), pc=api.register("PC"), rom_bank=u8(hram.hROMBank),
+                    hvblank=u8(hram.hVBlank), rie=u8(P.RIE), text_delay=u8(R.wTextDelayFrames.addr),
+                    vblank_occurred=u8(R.wVBlankOccurred.addr),
+                    mailbox={sfx=u8(MB + P.OFF_SFX), phone_req=u8(REQ), phone_armed=u8(ARMED)}}
+        end
+        local function battle_mode() return wram1(R.wBattleMode) end
+        local write = api.on_bus_write or function(fn, addr, name, domain) return event.onmemorywrite(fn, addr, name, domain) end
+        local function valid(h) return h ~= nil and h ~= "" end
+
+        -- the trade stack witness v2 (lua/tests/duo/gen2_trade.lua arm_all), with the 902cf7c8 canary arming
+        local function arm_witness()
+            local sp = api.register("SP")
+            if sp < bottom or sp > top + 1 then sp = u8(hram.hSPBuffer) + 256 * u8(hram.hSPBuffer + 1) end
+            assert(sp >= bottom and sp <= top + 1, fmt("stack canary: no on-stack SP to arm at ($%04X)", sp))
+            stack.canary = {address=sp - 1, hit=false}
+            local okc, hc = pcall(write, function()
+                if stack.canary.hit then return end
+                stack.canary.sp, stack.canary.hit, stack.canary.frame = api.register("SP"), true, frame()
+            end, sp - 1, "SLink-splw-canary", "System Bus")
+            if okc and valid(hc) then canary_handle = hc else stack.hook_failures = stack.hook_failures + 1 end
+            stack.armed_start, stack.armed_end = bottom, math.min(top, bottom + P.LW_MARGIN + P.LW_EXACT - 1)
+            for a = stack.armed_start, stack.armed_end do
+                local ok, h = pcall(write, function()
+                    local s = api.register("SP")
+                    if a < s - 2 or a > s + 1 then return end   -- not a push at SP
+                    stack.pushes = stack.pushes + 1
+                    local low = stack.low_water
+                    if not low or math.min(a, s) < math.min(low.stack_addr, low.sp) then
+                        low = snap("push")
+                        low.stack_addr, low.sp = a, s
+                        stack.low_water = low
+                    end
+                end, a, "SLink-splw-sp-" .. a, "System Bus")
+                if ok and valid(h) then wh[a], stack.armed_count = h, stack.armed_count + 1
+                else stack.hook_failures = stack.hook_failures + 1 end
+            end
+        end
+        local function disarm_witness()
+            for a, h in pairs(wh) do pcall(api.unregister, h); wh[a] = nil end
+            for _, h in ipairs({canary_handle or false, ret_handle or false, cj_handle or false}) do
+                if h then pcall(api.unregister, h) end
+            end
+            canary_handle, ret_handle, cj_handle = nil, nil, nil
+        end
+
+        -- SP guards at the service/audio exec hooks; a service window runs from the bridge's entry to its RET
+        local function guard(id)
+            local sp = api.register("SP")
+            local g = run.guards[id] or {hits=0}
+            run.guards[id] = g
+            g.hits = g.hits + 1
+            if not g.low or sp < g.low.sp then g.low = snap(id) end
+            if (sp < bottom + P.LW_MARGIN or sp > top + 1) and #run.excursions < 8 then
+                run.excursions[#run.excursions + 1] = snap(id)
+            end
+        end
+        for _, id in ipairs(P.LW_GUARDS) do on_hit[id] = function() guard(id) end end
+        on_hit.SlinkDelayFrameBridge = function()
+            guard("SlinkDelayFrameBridge")
+            window = {sfx=false, nested=false}
+            if run.trigger and not run.service_irq then run.service_irq = snap("SlinkDelayFrameBridge") end
+        end
+        on_hit.PlaySFX = function()
+            guard("PlaySFX")
+            if window then window.sfx = true end
+        end
+        on_hit.VBlank = function()
+            guard("VBlank")
+            if window and run.trigger and not battle_over then
+                local nv, row = run.nested_vblank, snap("VBlank")
+                nv.count = nv.count + 1
+                if not nv.deepest or row.sp < nv.deepest.sp then nv.deepest = row end
+                window.nested = true
+            end
+        end
+        on_hit["PrintLetterDelay.delay"] = function(f) if run.trigger and not run.delay_path then run.delay_path = f end end
+        on_hit["PrintLetterDelay.end"] = function(f) if run.trigger and not run.resumed then run.resumed = f end end
+        on_hit.RingTwice_StartCall = function()
+            if run.trigger and battle_mode() ~= 0 then run.phone.rings_in_battle = run.phone.rings_in_battle + 1 end
+        end
+        local ret_pc = sf.sites.SlinkDelayFrameBridgeEnd.addr - 1   -- the bridge's final RET (bank 0)
+
+        -- the trigger: PrintLetterDelay.checkjoypad, wBattleMode 1, wTextDelayFrames > 0, the mode's A/B bits
+        local want = P.LW_MODES[mode]
+        local function held_ok()
+            local a, b = buttons.A == true, buttons.B == true
+            if mode == "A_held" then return a and not b elseif mode == "B_held" then return b and not a end
+            return not a and not b
+        end
+        on_hit["PrintLetterDelay.checkjoypad"] = function(f)
+            if run.trigger or battle_over then return end
+            if battle_mode() ~= 1 or u8(R.wTextDelayFrames.addr) == 0 then return end
+            local joy = u8(hram.hJoyDown) & 3
+            if joy ~= want or not held_ok() then return end
+            local t = snap("PrintLetterDelay.checkjoypad")
+            t.battle_mode, t.joy_down = 1, joy
+            run.trigger = t
+            local s = {code=P.CODES.SUCCESS, id=SOUND[P.CODES.SUCCESS]}
+            s.pre_playing = on_channel(s.id) ~= nil
+            s.accepted = panel:request_sfx(s.code)
+            run.sfx = s
+            run.phone = {id=P.LW_PHONE, accepted=phone:request("dead_zone"), rings_in_battle=0}
+            -- the client's own service, on the spot: the binders write while PC is at .checkjoypad
+            local served, why = panel:service()
+            if not served then hook_errors[#hook_errors + 1] = "panel service at the trigger: " .. tostring(why) end
+            phone:service()
+            if u8(MB + P.OFF_SFX) == s.code then s.posted = f end
+            if u8(REQ) == P.LW_PHONE then run.phone.posted = f end
+        end
+        lw_frame = function()
+            if not run.trigger then return end
+            local f, s, p = frame(), run.sfx, run.phone
+            if s.posted and not s.consumed and u8(MB + P.OFF_SFX) ~= s.code then s.consumed = f end
+            if s.posted and not s.played and on_channel(s.id) then s.played = f end
+            if not p.posted and u8(REQ) == P.LW_PHONE then p.posted = f end
+            if p.posted and not p.acked and u8(REQ) == 0 then p.acked, p.armed_id = f, u8(ARMED) end
+        end
+
+        local lw_ok, lw_why = pcall(function()
+            local caps = u8(MB + 8)
+            check("mailbox beacon SLNK, ABI 3, caps has SFX, SFX_NOTIFY and PHONE, cookie $A5",
+                  u8(MB) == 0x53 and u8(MB + 1) == 0x4C and u8(MB + 2) == 0x4E and u8(MB + 3) == 0x4B
+                  and u8(MB + 4) == 3 and caps ~= 0xFF and caps & (P.CAPS_REQUIRED | 0x08) == (P.CAPS_REQUIRED | 0x08)
+                  and u8(MB + 31) == 0xA5, fmt("abi=%d caps=%02X cookie=%02X", u8(MB + 4), caps, u8(MB + 31)))
+            idle(2)
+            check("the shipped binding reads the cartridge SFX-live", panel:sfx_present() == true and panel:fresh() == true)
+            check("phone idle: REQ and ARMED 0", u8(REQ) == 0 and u8(ARMED) == 0)
+            assert(api.read_u8(ret_pc, "ROM") == 0xC9, fmt("no RET at SlinkDelayFrameBridgeEnd - 1 ($%04X)", ret_pc))
+            ret_handle = api.on_bus_exec(function()
+                if window then
+                    local nv = run.nested_vblank
+                    if run.trigger and not battle_over then
+                        nv.windows = nv.windows + 1
+                        if window.nested and window.sfx then nv.with_sfx = nv.with_sfx + 1 end
+                    end
+                    window = nil
+                end
+            end, ret_pc, "SLink-splw-bridge-ret", "System Bus")
+            assert(valid(ret_handle), "bridge RET hook registration failed")
+            arm_witness()
+            local battled, outcome, driver = play_battle("splw-battle-" .. title, {
+                tick = function(d)
+                    if d.phase == "battle" and not cj_handle and not run.trigger then
+                        cj_handle = watch("PrintLetterDelay.checkjoypad")
+                    elseif run.trigger and cj_handle then   -- never unregister inside its own callback
+                        pcall(api.unregister, cj_handle)
+                        cj_handle = nil
+                    end
+                end,
+                -- held modes hold their button through the battle text until the post has played and the
+                -- text resumed (or the deadline passed); released holds nothing
+                idle = function()
+                    local button = P.LW_BUTTON[mode]
+                    if not button then return nil end
+                    local t, s = run.trigger, run.sfx
+                    if t and ((s.played and run.resumed) or frame() - t.frame > P.DEADLINE) then return nil end
+                    return {[button]=true}
+                end,
+                sent = function(b) buttons = b or {} end,
+                menu = function() return nil end})
+            battle_over = true
+            run.battle = {from=driver.battle_from, to=driver.battle_to}
+            check("a real wild battle (walk the grass, RUN) back to the overworld", battled and driver.ran,
+                  not battled and outcome or nil)
+        end)
+        battle_over = true
+        disarm_witness()
+        check("sp-lowwater play completed", lw_ok, not lw_ok and lw_why or nil)
+        check("no hook or binding-service fault", #hook_errors == 0, hook_errors[1])
+        release()
+        stack.low_water_state = stack.low_water and "exact" or ">floor+" .. P.LW_EXACT
+        local verdict, problems = P.lowwater_verdict(run)
+        local margin, kind = P.lowwater_margin(stack)
+        for _, g in pairs(run.guards) do
+            if margin and g.low and g.low.sp - bottom < margin then margin, kind = g.low.sp - bottom, "guard" end
+        end
+        run.verdict, run.problems, run.margin_bytes, run.margin_kind = verdict, json.array(problems), margin, kind
+        run.excursions = json.array(run.excursions)
+        check("sp-lowwater verdict PASS", verdict == "PASS", verdict .. ": " .. table.concat(problems, "; "))
+        log("RECEIPT " .. J({schema=P.LW_SCHEMA, part="run", mode=mode, title=title, evidence_level=evidence,
+            verdict=verdict, overlay_sha1=ctx.overlay_sha1, base_sha1=ov.base_sha1, fixture=case.name,
+            fixture_sha256=q.stage_fingerprint,
+            qualification_attempt_id=getenv("SLINK_GEN2_QUALIFICATION_ATTEMPT") or json.null, core_mode="CGB",
+            input_mode="normal_buttons", harness_write_scopes=json.array({}),
+            client_write_scope="sfx + phone (lua/gen2/panel.lua permit, mailbox +7 and +32)",
+            bounds={margin_floor=P.LW_MARGIN, exact_window=P.LW_EXACT, resume_frames=P.LW_RESUME,
+                    deadline_frames=P.DEADLINE},
+            static_bound=P.LW_STATIC, run=run}))
+        return finish("sp-lowwater " .. verdict)
+    end
+
     local play_ok, play_why = pcall(function()
         local caps = u8(MB + 8)
         check("mailbox beacon SLNK, ABI 3, caps has SFX and SFX_NOTIFY, cookie $A5",
@@ -492,93 +901,35 @@ function P.main(real, getenv, SG, F)
         check("back to the overworld after declining the save", to_overworld())
 
         -- battle: back west into Route 29, onto the grass, a wild battle
-        local anim_case, menu_case, ran = nil, nil, false
+        local anim_case, menu_case, driver = nil, nil, nil
         on_hit.BattleAnimDelayFrame = function()
-            if not anim_case and ran == false and cur == nil then anim_case = "arm" end
+            if not anim_case and not (driver and driver.ran) and cur == nil then anim_case = "arm" end
         end
-        local here, from_tile = nil, nil
-        local HOLDF, held, hold_left, release_next = 12, nil, 0, false
-        local driver = {phase="west", terminal="done"}
-        local function tap(b) release_next, held, hold_left = true, b, HOLDF - 1 return {[b]=true}, driver.phase end
-        function driver.step(point)
-            if anim_case == "arm" then anim_case = arm("battle_anim", P.CODES.SUCCESS) end
-            if type(anim_case) == "table" and not anim_case.done and (anim_case.played or frame() - anim_case.armed > P.DEADLINE + 30) then
-                close(anim_case)
-            end
-            if type(menu_case) == "table" and not menu_case.done and (menu_case.played or frame() - menu_case.armed > P.DEADLINE + 30) then
-                close(menu_case)
-            end
-            if hold_left > 0 then hold_left = hold_left - 1 return {[held]=true}, driver.phase end
-            if release_next then release_next = false return {}, driver.phase end
-            if driver.phase == "done" then return {}, "done" end
-            if driver.phase ~= "battle" and type(point.battle_mode) == "number" and point.battle_mode > 0 then
-                driver.phase, driver.battle_from = "battle", frame()
-            end
-            local ui = point.ui
-            if ui ~= nil then
-                if point.input_ready ~= true then return {}, driver.phase end
-                if driver.phase ~= "battle" then return nil, "UI outside the battle: " .. tostring(ui.kind) end
-                if ui.kind == "battle_menu" then
-                    if type(ui.items) ~= "table" then return {}, driver.phase end
-                    if (type(anim_case) == "table" and not anim_case.done) then return {}, driver.phase end
-                    if menu_case == nil then
-                        menu_case = {waiting=frame()}
-                    end
-                    if menu_case.waiting then
-                        if quiet() or frame() - menu_case.waiting > P.QUIET_BOUND then menu_case = arm("battle_menu", P.CODES.NOTIFY) end
-                        return {}, driver.phase
-                    end
-                    if not menu_case.done then return {}, driver.phase end
-                    local run
-                    for i, l in ipairs(ui.items) do if l == "RUN" then run = i end end
-                    if not run then return nil, "no RUN on the battle menu" end
-                    ran = true
-                    if run == ui.cursor then return tap("A") end
-                    local tx, cx = (run - 1) % 2, (ui.cursor - 1) % 2
-                    if tx ~= cx then return tap(tx > cx and "Right" or "Left") end
-                    return tap(run > ui.cursor and "Down" or "Up")
+        local battled, outcome
+        battled, outcome, driver = play_battle("p42c-battle-" .. title, {
+            tick = function(d)
+                driver = d
+                if anim_case == "arm" then anim_case = arm("battle_anim", P.CODES.SUCCESS) end
+                if type(anim_case) == "table" and not anim_case.done and (anim_case.played or frame() - anim_case.armed > P.DEADLINE + 30) then
+                    close(anim_case)
                 end
-                if ui.kind == "text" or ui.kind == "prompt_button" or ui.kind == "wait_button" then return tap("A") end
-                return nil, "UI is not valid in battle: " .. tostring(ui.kind)
-            end
-            if point.overworld_ready ~= true then return {}, driver.phase end
-            if driver.phase == "battle" then driver.phase, driver.battle_to = "done", frame() return {}, "done" end
-            if driver.phase == "west" then
-                if map_is(point, "Route29") then driver.phase = "approach" else return {Left=true}, driver.phase end
-            end
-            local grid = R29.grid
-            if driver.phase == "approach" then
-                if grid[point.y * R29.width + point.x + 1] == 2 then driver.phase = "walk"
-                else
-                    local dir = P.first_step(R29, point.x, point.y, function(x, y) return grid[y * R29.width + x + 1] == 2 end, true)
-                    if not dir then return nil, "no path to the Route 29 grass" end
-                    if point.can_step[dir] ~= true then return nil, "approach step " .. dir .. " not steppable live" end
-                    return {[dir]=true}, driver.phase
+                if type(menu_case) == "table" and not menu_case.done and (menu_case.played or frame() - menu_case.armed > P.DEADLINE + 30) then
+                    close(menu_case)
                 end
-            end
-            if here and (here.x ~= point.x or here.y ~= point.y) then from_tile = here end
-            here = {x=point.x, y=point.y}
-            local b, w = F.walk_direction(R29, point, from_tile)
-            if not b then return nil, w end
-            return {[b]=true}, driver.phase
-        end
-        local base_obs = SG.qualify_observer(ctx)
-        local function observe()
-            local point = base_obs()
-            if point.ui and point.ui.kind == "battle_menu" then
-                local bm = SG.parse_menu(SG.screen(ctx), ctx.obs.screen.width, ctx.obs.screen.height, SG.BATTLE_MENU_GRID)
-                if bm then point.ui.items, point.ui.cursor, point.ui.columns = bm.items, bm.cursor, bm.columns
-                else point.input_ready = false end
-            end
-            return point
-        end
-        local diag = {log=log, frame=api.framecount, screen=rows, where=function() return fmt("PC %04X", api.register("PC")) end,
-                      trace=getenv("SLINK_GEN2_TRACE") == "1"}
-        local battled, outcome = F.play(host, {name="p42c-battle-" .. title, terminal="done",
-            max_frames=P.BATTLE_BUDGET.max_frames, max_phase_frames=P.BATTLE_BUDGET.max_phase_frames,
-            settle_frames=P.BATTLE_BUDGET.settle_frames, terminal_idle=true}, driver, observe, diag)
+            end,
+            menu = function()
+                if (type(anim_case) == "table" and not anim_case.done) then return {} end
+                if menu_case == nil then
+                    menu_case = {waiting=frame()}
+                end
+                if menu_case.waiting then
+                    if quiet() or frame() - menu_case.waiting > P.QUIET_BOUND then menu_case = arm("battle_menu", P.CODES.NOTIFY) end
+                    return {}
+                end
+                if not menu_case.done then return {} end
+            end})
         on_hit.BattleAnimDelayFrame = nil
-        check("a real wild battle (walk the grass, RUN) back to the overworld", battled and ran, not battled and outcome or nil)
+        check("a real wild battle (walk the grass, RUN) back to the overworld", battled and driver.ran, not battled and outcome or nil)
         check("battle animation wait observed and a request posted inside it", type(anim_case) == "table")
         check("battle menu context exercised", type(menu_case) == "table" and menu_case.name == "battle_menu")
         if driver.battle_from and driver.battle_to and type(anim_case) == "table" then

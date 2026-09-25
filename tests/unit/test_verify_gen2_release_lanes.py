@@ -16,6 +16,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
 import verify_gen2_release as gate  # noqa: E402
 from coverage_map import main as coverage_main  # noqa: E402
 
+from tests.unit.test_gen2_sp_lowwater_gate import (
+    good_receipt as good_lowwater_receipt,  # noqa: E402
+)
+
 
 def _lane(name):
     return next(lane for lane in gate.LANES if lane.name == name)
@@ -636,13 +640,15 @@ def _copy_new_gates_tree(tmp_path):
     for row in doc["requirements"]:
         entry = row["proofs"][0]["receipts"]["receipt"]
         src, dst = REPO / entry["path"], tmp_path / entry["path"]
+        if not src.is_file():   # a registered row still pending its first receipt (e.g. SP-LOWWATER): stays red
+            continue
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_bytes(src.read_bytes())
         if row["axes"]["kind"] == "qualification":
             fixture = row["axes"]["fixture"] + ".SaveRAM"
             (tmp_path / "tests/fixtures/gen2" / fixture).write_bytes(
                 (REPO / "tests/fixtures/gen2" / fixture).read_bytes())
-        if row["axes"]["kind"] in ("panel_gate", "sfx_gate", "phone_gate"):
+        if row["axes"]["kind"] in ("panel_gate", "sfx_gate", "phone_gate", "sp_lowwater_gate"):
             fixture = json.loads(src.read_text(encoding="utf-8"))["fixture"] + ".SaveRAM"
             for rel in ("tests/fixtures/gen2/" + fixture, "data/gen2/overlay_provenance.json"):
                 (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -1918,6 +1924,7 @@ def _live_gates_tree(tmp_path):
             "w6_gate": {**bind, "schema": "gen2-w6-gate-v1", "violation_count": 0,
                         "legs": {name: {**leg, "clock_setup": _clock(raw, title) if (title, name) in
                                         gate.W6_CLOCK_LEGS else None} for name in gate.W6_GATE_LEGS}},
+            "sp_lowwater_gate": good_lowwater_receipt(bind),
         }
         for kind, receipt in receipts.items():
             path = tmp_path / "tests/fixtures/gen2/receipts" / f"{title}_overlay.{kind}.json"

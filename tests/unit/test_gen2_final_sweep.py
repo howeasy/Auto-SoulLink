@@ -15,7 +15,7 @@ def test_every_release_cell_is_listed_once():
     ids = [c["id"] for c in sweep.cells()]
     assert len(ids) == len(set(ids))
     assert sum("/gen2_trade_" in i for i in ids) == 21
-    assert sum(i.startswith("gate/") for i in ids) == 3 + 2 + 12 + 1
+    assert sum(i.startswith("gate/") for i in ids) == 3 + 2 + 15 + 1
     assert {"gen2_new/gen2_faint_active_trainer", "gen2_gold_silver/gen2_faint_active_trainer", "gate/w6/silver",
             "gate/inspect_run"} <= set(ids)
     assert "gen2_crystal_gold/gen2_faint_active_trainer" not in ids

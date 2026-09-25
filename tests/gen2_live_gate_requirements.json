@@ -321,6 +321,36 @@
       }}}]
     },
     {
+      "id": "new-gates.sp-lowwater.crystal",
+      "stage": "physical-live",
+      "description": "SP-LOWWATER Crystal overlay stack low-water gate (docs/gen2/POST_RC_CARDS.md): three fresh boots (A_held, B_held, released) post SFX and phone through the shipped binders at PrintLetterDelay.checkjoypad in wild-battle text; the trade stack witness v2 plus SP guards at the service/audio hooks keep >= 32 bytes above wStackBottom, the text resumes within 300 frames, the SFX plays, the phone is ARMED without ringing in battle, hVBlank normal and rIE VBlank on, and a VBlank nested inside a service window was observed (none = INCONCLUSIVE). (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sp_lowwater_gate.py -k crystal)",
+      "axes": {"kind": "sp_lowwater_gate", "title": "crystal", "requirement_ids": ["N-1", "N-2"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_overlay.sp_lowwater_gate.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }}}]
+    },
+    {
+      "id": "new-gates.sp-lowwater.gold",
+      "stage": "physical-live",
+      "description": "SP-LOWWATER Gold overlay stack low-water gate (docs/gen2/POST_RC_CARDS.md): three fresh boots (A_held, B_held, released) post SFX and phone through the shipped binders at PrintLetterDelay.checkjoypad in wild-battle text; the trade stack witness v2 plus SP guards at the service/audio hooks keep >= 32 bytes above wStackBottom, the text resumes within 300 frames, the SFX plays, the phone is ARMED without ringing in battle, hVBlank normal and rIE VBlank on, and a VBlank nested inside a service window was observed (none = INCONCLUSIVE). (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sp_lowwater_gate.py -k gold)",
+      "axes": {"kind": "sp_lowwater_gate", "title": "gold", "requirement_ids": ["N-1", "N-2"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_overlay.sp_lowwater_gate.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }}}]
+    },
+    {
+      "id": "new-gates.sp-lowwater.silver",
+      "stage": "physical-live",
+      "description": "SP-LOWWATER Silver overlay stack low-water gate (docs/gen2/POST_RC_CARDS.md): three fresh boots (A_held, B_held, released) post SFX and phone through the shipped binders at PrintLetterDelay.checkjoypad in wild-battle text; the trade stack witness v2 plus SP guards at the service/audio hooks keep >= 32 bytes above wStackBottom, the text resumes within 300 frames, the SFX plays, the phone is ARMED without ringing in battle, hVBlank normal and rIE VBlank on, and a VBlank nested inside a service window was observed (none = INCONCLUSIVE). (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sp_lowwater_gate.py -k silver)",
+      "axes": {"kind": "sp_lowwater_gate", "title": "silver", "requirement_ids": ["N-1", "N-2"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_overlay.sp_lowwater_gate.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }}}]
+    },
+    {
       "id": "new-gates.inspect-run",
       "stage": "physical-live",
       "description": "R-1/R-2/R-3/R-4/R-5g live-new-gates run attestation (gen2-live-new-gates-attestation-v1): SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py over every fixture, every title PASS, passes only (re-run: tools/gen2_final_sweep.py cell gate/inspect_run)",

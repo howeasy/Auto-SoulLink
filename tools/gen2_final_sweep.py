@@ -7,8 +7,8 @@
 
 Cells: every scenario tools/e2e_duo.py registers for C-C (gen2_new), G-S (gen2_gold_silver) and C-G
 (gen2_crystal_gold): the duo matrix, the wave-C/D duos and the native trades. Then the client-path live gates:
-engine_sites (frame_align, then U1G) and write_window per title, panel/sfx/w6/phone per title, and the live-new-gates
-run attestation (tests/live/test_gen2_new_gates.py over every fixture; tests/live/conftest.py writes it). The
+engine_sites (frame_align, then U1G) and write_window per title, panel/sfx/w6/phone/sp_lowwater per title, and the
+live-new-gates run attestation (tests/live/test_gen2_new_gates.py over every fixture; tests/live/conftest.py writes it). The
 qualification receipts bind fixture bytes, not code, so they are not rerun (tools/gen2_code_digest.py: not client-path).
 A scenario newly registered in tools/e2e_duo.py (e.g. gen2_evolution) is a cell automatically.
 
@@ -88,7 +88,7 @@ def cells():
         if title != "silver":   # Silver's write window is Gold's receipt (O-23)
             out.append({"id": f"gate/write_window/{title}", "kind": "gate", "timeout": GATE_TIMEOUT,
                         "commands": [live("test_gen2_write_windows.py", title)]})
-        for kind in ("panel", "sfx", "w6", "phone"):
+        for kind in ("panel", "sfx", "w6", "phone", "sp_lowwater"):
             out.append({"id": f"gate/{kind}/{title}", "kind": "gate", "timeout": GATE_TIMEOUT,
                         "commands": [live(f"test_gen2_{kind}_gate.py", title)]})
     out.append({"id": "gate/inspect_run", "kind": "gate", "timeout": 13 * 900,   # every fixture, one inspect gate each

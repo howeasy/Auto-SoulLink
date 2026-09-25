@@ -1386,6 +1386,88 @@ def _phone_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
     return errors
 
 
+# SP-LOWWATER (tests/live/test_gen2_sp_lowwater_gate.py, docs/gen2/POST_RC_CARDS.md): three fresh boots per title,
+# each re-judged here from its recorded facts, not from its own verdict string.
+SP_LOWWATER_MODES = {"A_held": 1, "B_held": 2, "released": 0}   # the hJoyDown A/B bits at the trigger
+SP_LOWWATER_GUARDS = ("SlinkDelayFrameBridge", "SlinkService", "SlinkSfxService", "SlinkPhoneService", "PlaySFX",
+                      "_PlaySFX", "VBlank")
+SP_LOWWATER_BOUNDS = {"margin_floor": 32, "exact_window": 64, "resume_frames": 300, "deadline_frames": 300}
+
+
+def _sp_lowwater_run_errors(mode: str, run: dict) -> list[str]:
+    """One run against the design's pass criteria; an unexercised nested VBlank is its own (INCONCLUSIVE) error."""
+    def num(v):
+        return type(v) is int
+
+    def rows(v):
+        return v if isinstance(v, dict) else {}
+    floor, exact = SP_LOWWATER_BOUNDS["margin_floor"], SP_LOWWATER_BOUNDS["exact_window"]
+    errors = []
+    t, s, p, st = rows(run.get("trigger")), rows(run.get("sfx")), rows(run.get("phone")), rows(run.get("stack"))
+    if run.get("verdict") != "PASS":
+        errors.append(f"verdict {run.get('verdict')!r}, not PASS")
+    if t.get("battle_mode") != 1 or not num(t.get("text_delay")) or t["text_delay"] <= 0 or not num(t.get("frame")):
+        errors.append("the trigger is not wBattleMode 1 with wTextDelayFrames > 0")
+    if t.get("joy_down") != SP_LOWWATER_MODES[mode]:
+        errors.append("hJoyDown A/B at the trigger is not the mode's")
+    for where, row in (("the trigger", t), ("the first service", rows(run.get("service_irq")))):
+        if row.get("hvblank") != 0 or not num(row.get("rie")) or not row["rie"] & 1:
+            errors.append(f"hVBlank is not VBLANK_NORMAL or rIE lacks VBlank at {where}")
+    start = t.get("frame") if num(t.get("frame")) else None
+    if mode != "released" and not (start is not None and num(run.get("delay_path")) and run["delay_path"] >= start):
+        errors.append("the held mode never took PrintLetterDelay.delay after the trigger")
+    resumed = run.get("resumed")
+    if start is None or not num(resumed) or not 0 <= resumed - start <= SP_LOWWATER_BOUNDS["resume_frames"]:
+        errors.append("the text did not resume within the bound")
+    posted, consumed, played = s.get("posted"), s.get("consumed"), s.get("played")
+    if (s.get("accepted") is not True or s.get("pre_playing") or not all(map(num, (posted, consumed, played)))
+            or not posted <= consumed <= played or played - posted > SP_LOWWATER_BOUNDS["deadline_frames"]):
+        errors.append("the SFX was not posted, consumed and played within the deadline")
+    if (p.get("accepted") is not True or not num(p.get("posted")) or not num(p.get("acked"))
+            or p.get("armed_id") != 2 or p.get("rings_in_battle") != 0):
+        errors.append("the phone was not posted, acked and ARMED, or it rang in battle")
+    bottom, top, canary, low = st.get("bottom"), st.get("top"), rows(st.get("canary")), st.get("low_water")
+    covered = (num(bottom) and num(top) and canary.get("hit") is True and num(canary.get("address"))
+               and bottom <= canary["address"] <= top and st.get("hook_failures") == 0
+               and st.get("armed_start") == bottom and st.get("armed_end") == min(top, bottom + floor + exact - 1)
+               and st.get("armed_count") == st["armed_end"] - bottom + 1)
+    if not covered:
+        errors.append("the stack witness is not live over [wStackBottom, floor + 64) (canary/coverage)")
+    elif st.get("low_water_state") == "exact" and isinstance(low, dict):
+        if not (num(low.get("stack_addr")) and num(low.get("sp"))
+                and min(low["stack_addr"], low["sp"]) - bottom >= floor):
+            errors.append(f"the stack low water is within {floor} bytes of wStackBottom")
+    elif not (st.get("low_water_state") == f">floor+{exact}" and low is None):
+        errors.append("the stack low water is neither exact nor above the armed window")
+    guards = rows(run.get("guards"))
+    for site in SP_LOWWATER_GUARDS:
+        g = rows(guards.get(site))
+        sp = rows(g.get("low")).get("sp")
+        if not (num(g.get("hits")) and g["hits"] > 0 and num(sp) and num(bottom) and num(top)
+                and bottom + floor <= sp <= top + 1):
+            errors.append(f"SP guard {site} has no hit or saw SP outside the floor")
+    if run.get("excursions"):
+        errors.append("an SP guard saw SP below the floor or off the stack")
+    nested = rows(run.get("nested_vblank"))
+    if not num(nested.get("count")) or nested["count"] < 1:
+        errors.append("INCONCLUSIVE: no VBlank landed inside a service window")
+    return errors
+
+
+def _sp_lowwater_gate_row_errors(root: Path, title: str, receipt: dict) -> list[str]:
+    """SP-LOWWATER: the overlay gate binding, the design's bounds, and all three modes PASS on their facts."""
+    errors = _overlay_gate_errors(root, title, receipt, "gen2-sp-lowwater-v1", "sp-lowwater gate")
+    if receipt.get("bounds") != SP_LOWWATER_BOUNDS:
+        errors.append("sp-lowwater gate bounds are not the design's (N=32, window 64, 300/300 frames)")
+    runs = receipt.get("runs") if isinstance(receipt.get("runs"), dict) else {}
+    if set(runs) != set(SP_LOWWATER_MODES):
+        errors.append("sp-lowwater gate receipt does not cover A_held, B_held and released")
+    for mode in SP_LOWWATER_MODES:
+        run = runs.get(mode) if isinstance(runs.get(mode), dict) else {}
+        errors.extend(f"sp-lowwater gate {mode}: {e}" for e in _sp_lowwater_run_errors(mode, run))
+    return errors
+
+
 def new_gates_errors(root: Path | None = None, receipt_validate=None, kinds=None) -> list[str]:
     """Every gap in the live-new-gates lane's non-emulator evidence: U1 engine-site, U2 write-window
     (Silver via O-23) and fixture-qualification receipts, each pinned by sha256. An empty proof is a
@@ -1436,6 +1518,8 @@ def new_gates_errors(root: Path | None = None, receipt_validate=None, kinds=None
                 errors.extend(f"{rid}: {e}" for e in _w6_gate_row_errors(root, axes["title"], receipt))
             elif kind == "phone_gate":
                 errors.extend(f"{rid}: {e}" for e in _phone_gate_row_errors(root, axes["title"], receipt))
+            elif kind == "sp_lowwater_gate":
+                errors.extend(f"{rid}: {e}" for e in _sp_lowwater_gate_row_errors(root, axes["title"], receipt))
             elif kind == "inspect_run":
                 errors.extend(f"{rid}: {e}" for e in _inspect_run_row_errors(receipt))
             else:
@@ -1455,9 +1539,9 @@ def _new_gates_main() -> int:
     return 0
 
 
-# live-gates (BINDING P4.1 panel/fade, P4.2 sound, W-6 writer exclusion): one PHYSICAL row per kind x title,
-# pinned here so deleting a row from tests/gen2_live_gate_requirements.json cannot shrink the lane.
-LIVE_GATE_KINDS = ("panel_gate", "sfx_gate", "w6_gate")
+# live-gates (BINDING P4.1 panel/fade, P4.2 sound, W-6 writer exclusion, SP-LOWWATER): one PHYSICAL row per
+# kind x title, pinned here so deleting a row from tests/gen2_live_gate_requirements.json cannot shrink the lane.
+LIVE_GATE_KINDS = ("panel_gate", "sfx_gate", "w6_gate", "sp_lowwater_gate")
 
 
 def live_gates_errors(root: Path | None = None, receipt_validate=None) -> list[str]:
@@ -1630,7 +1714,7 @@ def inspect_run_errors(root: Path | None = None) -> list[str]:
 # CODE-DIGEST: gate receipt kinds whose verdict runs through the shipped client or server code. Fixture
 # qualification rows prove save bytes through the codec, not the client, so they are not included.
 CLIENT_PATH_GATE_KINDS = ("engine_sites", "write_window", "panel_gate", "sfx_gate", "w6_gate", "phone_gate",
-                          "inspect_run")
+                          "sp_lowwater_gate", "inspect_run")
 
 
 def code_staleness(root: Path | None = None, head: str | None = None) -> list[tuple[str, str]]:
