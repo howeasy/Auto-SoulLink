@@ -53,12 +53,20 @@ def _sha256(path: Path) -> str:
 
 # --- FRLG must stay byte-identical (this file's own edits touched a shared tool) ---
 
-def test_frlg_output_is_byte_identical_after_the_emerald_edit(monkeypatch):
-    before = {p: _sha256(p) for p in FRLG_FILES}
-    monkeypatch.chdir(_REPO)
+def _lf(path):
+    return path.read_bytes().replace(b"\r\n", b"\n")
+
+
+def test_frlg_output_is_byte_identical_after_the_emerald_edit(tmp_path, monkeypatch):
+    # Regenerate into a scratch dir (never over the committed files) and compare content;
+    # line endings are the checkout's business, not the generator's.
+    (tmp_path / "data" / "games" / "gen3_frlge").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
     gam.generate_frlg()
-    after = {p: _sha256(p) for p in FRLG_FILES}
-    assert before == after, "generate_frlg() output changed -- Emerald mode must be additive only"
+    for committed in FRLG_FILES:
+        fresh = tmp_path / committed.relative_to(_REPO)
+        assert _lf(fresh) == _lf(committed), (
+            f"generate_frlg() changed {committed.name} -- Emerald mode must be additive only")
 
 
 # --- First falsifier: Hoenn names, never Kanto ---
