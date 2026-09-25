@@ -1389,7 +1389,6 @@ class SLinkServer:
                     if carried in prev_conn:
                         self.connected_players[player_id][carried] = prev_conn[carried]
                 if msg.get("event") == "hello":
-                    self.connected_players[player_id]["rom_type"] = msg.get("rom_type", "?")
                     # A rom_type the router does not know used to leave the server on
                     # whichever adapter it already had -- silently -- and the run carried on
                     # under the wrong generation (Gen 3 genders and abilities on Red/Blue
@@ -1446,6 +1445,8 @@ class SLinkServer:
                         }])
                         self._notify_sse()
                         continue
+                    # recorded only once the hello routes and pairs: a refused one leaves it as it was
+                    self.connected_players[player_id]["rom_type"] = _rt
                     if player_id in self._rom_type_rejected:
                         # The identity gate in state.py only clears its own errors; this one
                         # is ours to clear, and only a routable hello gets this far.
@@ -4588,13 +4589,11 @@ class SLinkServer:
         links_path = self.state._links_path
         if os.path.exists(links_path):
             os.remove(links_path)
-        # The cartridges are unchanged and their sockets stay open, and a client does not
-        # re-hello on an open socket -- so the run keeps its adapter (a fresh state would
-        # default to Gen 3 and render a live Gen 1 run with Gen 3 names and sprites), and
-        # connected_players keeps each client's rom_type and cartridge facts. While a client is
-        # connected the committed rom_type/artifact_kind carry over too, or its partner's next
-        # hello would skip the Mixed-games check.
-        old = self.state
+        # Reset = a new run. Every socket was just closed, so each client reconnects and
+        # re-hellos; its cartridge facts (rom_type, panel/panel_abi/sfx) come back with that
+        # hello and nothing of the old cartridge carries over. The adapter is kept only so the
+        # page renders the right generation until the first hello re-resolves it.
+        self.connected_players.clear()
         self.state = SoulLinkState(data_dir=self._data_dir,
                                    adapter=self.state.adapter,
                                    is_rr=self.state.is_rr,
@@ -4608,9 +4607,6 @@ class SLinkServer:
                                    native_sounds=self.state.native_sounds,
                                    battle_calc=self.state.battle_calc,
                                    pc_trade_npc=self.state.pc_trade_npc)
-        # With nobody connected a reset is how a run switches games, so nothing is kept.
-        if any(p.get("connected") for p in self.connected_players.values()):
-            self.state.rom_type, self.state.artifact_kind = old.rom_type, old.artifact_kind
         self.state.presentation_key_in_use = self._presentation_key_in_use
         self.state.on_trade_outcome = self._journal_trade
         self.adapter = self.state.adapter

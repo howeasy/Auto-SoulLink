@@ -561,3 +561,58 @@ def test_debug_inject_and_reset_keep_the_box_census_consistent(tmp_path):
     assert srv.box_census["a"]["boxes"] == []
     asyncio.run(srv.handle_reset_api(None))
     assert srv.box_census["a"] == {"capable": False, "gen": -1, "boxes": None}
+
+
+# ── reset lifecycle (OMP cx-7cb7a18b on merge 9afb3485) ────────────────────────────────────
+
+HELLO_RED_A = {"event": "hello", "player": "a", "rom_type": "red", "trainer_name": "Alice",
+               "ot_id": "30B8", "has_pokeballs": True, "party": []}
+
+
+@pytest.mark.asyncio
+async def test_a_reset_while_connected_starts_a_new_run_for_any_game(tmp_path):
+    """Reset = a new run: every client re-hellos, so nothing of the old game is kept."""
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    await send(HELLO_RED_A)
+    assert srv.state.rom_type == "red" and srv.connected_players["a"]["connected"]
+    await srv.handle_reset_api(None)
+    await close()
+    send, close = await _session(srv)
+    try:
+        reply = await send({"event": "hello", "player": "a", "rom_type": "firered", "trainer_name": "Al",
+                            "ot_id": "1", "has_pokeballs": True, "party": []})
+        assert not _mixed(reply) and srv.state.rom_type == "firered"
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
+async def test_a_reset_forgets_the_old_cartridge_capabilities(tmp_path):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    await send({**HELLO_RED_A, "panel": True, "panel_abi": 1, "sfx": True})
+    assert srv._player_has_panel("a")
+    await srv.handle_reset_api(None)
+    await close()
+    send, close = await _session(srv)
+    try:
+        reply = await send({**HELLO_RED_A, "rom_type": "yellow"})      # a clean Yellow: no panel
+        assert not any(c.get("cmd") == "link_panel" for c in reply["commands"])
+        assert "panel" not in srv.connected_players["a"] and "sfx" not in srv.connected_players["a"]
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
+async def test_a_refused_hello_does_not_record_its_rom_type(tmp_path):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        await send(HELLO_RED_A)
+        reply = await send({"event": "hello", "player": "b", "rom_type": "firered", "trainer_name": "Bob",
+                            "ot_id": "7B0B", "has_pokeballs": True, "party": []})
+        assert _mixed(reply)
+        assert srv.connected_players["b"]["rom_type"] != "firered"
+    finally:
+        await close()

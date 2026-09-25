@@ -127,17 +127,20 @@ def test_a_reset_keeps_a_gen1_run_on_the_gen1_adapter(srv):
     assert srv.adapter.game_id == "gen1_rby"
     assert srv.state.adapter is srv.adapter
     assert srv.adapter_for("a").game_id == "gen1_rby"
-    assert srv.connected_players["a"]["rom_type"] == "red", "the client will not re-hello"
+    # reset = a new run: the sockets were closed and every client re-hellos (cx-7cb7a18b)
+    assert "a" not in srv.connected_players
     assert srv._get_sprite_html(25) == sprite_before
 
 
-def test_a_reset_keeps_the_committed_rom_type(srv):
-    """A blank rom_type after reset would disarm the Mixed-games check on the next hello."""
-    srv.connected_players["a"] = {"connected": True, "rom_type": "red"}
+def test_a_reset_starts_a_new_run_with_nothing_committed(srv):
+    """Reset closes every socket and each client re-hellos, so the new run commits whichever
+    game says hello first and the Mixed-games check re-arms from it (cx-7cb7a18b). Keeping the
+    old rom_type while a socket looked connected locked the new run to the old game."""
+    srv.connected_players["a"] = {"connected": True, "rom_type": "red", "panel": True}
     srv.state.rom_type, srv.state.artifact_kind = "red", "clean"
     asyncio.run(srv.handle_reset_api(None))
-    assert srv.state.rom_type == "red"
-    assert srv.state.artifact_kind == "clean"
+    assert srv.state.rom_type == "" and srv.state.artifact_kind == ""
+    assert not srv.connected_players
 
 
 # ── 5. the memorial wall ─────────────────────────────────────────────────────
