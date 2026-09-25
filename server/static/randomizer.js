@@ -12,6 +12,21 @@
  * answer. Every refusal names the setting or the file to fix, so the reason is surfaced
  * verbatim.
  */
+// Arrow / Home / End on a role="radiogroup" of chip buttons: move to the next enabled chip and
+// select it (the chips carry a roving tabindex, so Tab enters the group at the checked one).
+function radioKeys(e) {
+  var step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1, Home: 'first', End: 'last' }[e.key];
+  if (!step) return;
+  var radios = Array.prototype.filter.call(e.currentTarget.querySelectorAll('[role="radio"]'), function (r) { return !r.disabled; });
+  if (!radios.length) return;
+  e.preventDefault();
+  var i = radios.indexOf(document.activeElement);
+  var next = step === 'first' ? radios[0] : step === 'last' ? radios[radios.length - 1]
+    : radios[(Math.max(i, 0) + step + radios.length) % radios.length];
+  next.focus();
+  next.click();
+}
+
 function defaultSpec(form) {
   return Object.fromEntries(form.options.map(function (o) { return [o.key, o.default]; }));
 }
@@ -20,6 +35,9 @@ function randomizerFields(form) {
   return {
     rform: form,
     pre: null,
+    // Bumped on every preflight() call so a slow, stale response can recognize it is no
+    // longer the latest and not overwrite `pre` out of order.
+    _preSeq: 0,
     rdraft: {
       jar: form.jar || '', rom_a: '', rom_b: '',
       // Start from what the run last made, so "prepare again" means the same unless
@@ -34,10 +52,13 @@ function randomizerFields(form) {
     // `presetName` what Save writes.
     presets: form.presets || [],
     preset: '', presetName: '', presetNote: '',
+    // Set while a same-named preset exists and Save is waiting for a second click to
+    // confirm the overwrite (see savePreset) — cleared by editing the name.
+    presetPendingOverwrite: null,
     // The family this run takes (upr_settings.FAMILY_*): fixed on a run's page, follows the
     // game chip in the creator (setFamily). null = any Gen 1 cartridge.
     family: form.family || null,
-    uploading: '',
+    uploading: '', uploadNote: '',
     groups() {
       var out = [], by = {};
       form.options.forEach(function (o) {
@@ -79,6 +100,19 @@ function randomizerFields(form) {
       return '';
     },
     choiceOk(o, c) { return !this.choiceWhy(o, c); },
+    // Roving tabindex for a choice's radio chips: the checked chip if it is enabled, else the
+    // first enabled one, is the group's single Tab stop (radioKeys moves within it).
+    chipTab(o, c) {
+      var self = this, on = o.choices.filter(function (x) { return self.choiceOk(o, x); });
+      var stop = on.find(function (x) { return x.value === self.rdraft.spec[o.key]; }) || on[0];
+      return stop === c ? 0 : -1;
+    },
+    // The preflight in words: the tags and the status region say the same thing.
+    jarWords() {
+      var p = this.pre;
+      return !p ? '' : p.jar_found ? (p.jar_fork ? 'SLink fork jar (vanilla + pureRGB)' : 'stock jar (vanilla only)') : 'jar not found';
+    },
+    javaWords() { return !this.pre ? '' : this.pre.java_found ? 'java on PATH' : 'java not on PATH'; },
     setChoice(o, c) { this.rdraft.spec[o.key] = c.value; this.settleSpecForFamily(); },
     // what the chosen chip means, written out under the row (the tooltip needs a hover)
     chosenHelp(o) {
@@ -114,22 +148,48 @@ function randomizerFields(form) {
     async savePreset() {
       var name = this.presetName.trim();
       if (!name) { this.presetNote = 'Give the preset a name.'; return; }
-      var res = await fetch('/api/presets', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                             body: JSON.stringify({ name: name, spec: this.rdraft.spec }) });
-      var j = await res.json();
-      if (!j.ok) { this.presetNote = j.error || 'Save failed'; return; }
-      this.presets = this.presets.filter(function (x) { return x.name.toLowerCase() !== name.toLowerCase(); }).concat([j.preset])
-        .sort(function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1; });
-      this.preset = j.preset.name; this.presetNote = 'Saved "' + j.preset.name + '"';
+      var existing = this.presets.find(function (x) { return x.name.toLowerCase() === name.toLowerCase(); });
+      // the pending flag alone decides: the server may know a same-named preset this page doesn't
+      var overwrite = this.presetPendingOverwrite === name.toLowerCase();
+      // A same-named preset exists and this isn't the confirming click yet: ask inline
+      // (window.confirm doesn't work in every context this page can run in) rather than
+      // silently replacing it. Clicking Save again with the same name confirms; editing
+      // the name (see the presetName $watch in watchRandomizer) cancels.
+      if (existing && !overwrite) {
+        this.presetPendingOverwrite = name.toLowerCase();
+        this.presetNote = 'A preset named "' + existing.name + '" already exists. '
+          + 'Replace: click Save again. Cancel: change the name.';
+        return;
+      }
+      this.presetPendingOverwrite = null;
+      try {
+        var res = await fetch('/api/presets', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                               body: JSON.stringify({ name: name, spec: this.rdraft.spec, overwrite: overwrite }) });
+        var j = null;
+        try { j = await res.json(); } catch (_) { /* not JSON */ }
+        if (res.status === 409 && !overwrite) {
+          this.presetPendingOverwrite = name.toLowerCase();
+          this.presetNote = 'A preset named "' + name + '" already exists. Replace: click Save again. Cancel: change the name.';
+          return;
+        }
+        if (!res.ok || !j || !j.ok) { this.presetNote = (j && j.error) || ('Save failed (' + res.status + ')'); return; }
+        this.presets = this.presets.filter(function (x) { return x.name.toLowerCase() !== name.toLowerCase(); }).concat([j.preset])
+          .sort(function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1; });
+        this.preset = j.preset.name; this.presetNote = 'Saved "' + j.preset.name + '"';
+      } catch (e) { this.presetNote = 'Save failed: ' + e.message; }
     },
     async deletePreset() {
       var name = this.preset;
       if (!name || !confirm('Delete preset "' + name + '"?')) return;
-      var j = await (await fetch('/api/presets/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                                          body: JSON.stringify({ name: name }) })).json();
-      if (!j.ok) { this.presetNote = j.error || 'Delete failed'; return; }
-      this.presets = this.presets.filter(function (x) { return x.name !== name; });
-      this.preset = ''; this.presetNote = 'Deleted "' + name + '"';
+      try {
+        var res = await fetch('/api/presets/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ name: name }) });
+        var j = null;
+        try { j = await res.json(); } catch (_) { /* not JSON */ }
+        if (!res.ok || !j || !j.ok) { this.presetNote = (j && j.error) || ('Delete failed (' + res.status + ')'); return; }
+        this.presets = this.presets.filter(function (x) { return x.name !== name; });
+        this.preset = ''; this.presetNote = 'Deleted "' + name + '"';
+      } catch (e) { this.presetNote = 'Delete failed: ' + e.message; }
     },
     // The file that leaves this machine is UPR's own: a .rnqs, which UPR's GUI opens and
     // which is what a run keeps. Export builds it from the form; import admits one through
@@ -151,6 +211,9 @@ function randomizerFields(form) {
       if (!file) return;
       try {
         var body = new FormData(); body.append('file', file, file.name);
+        // Which allowlist admits the file: pureRGB's is stricter. null (no run yet, or a
+        // run not tied to a family) sends nothing and the server defaults to vanilla.
+        if (this.family) body.append('family', this.family);
         var j = await (await fetch('/api/randomizer/settings/import', { method: 'POST', body: body })).json();
         if (!j.ok) { this.presetNote = file.name + ': ' + (j.error || 'not admitted'); return; }
         this.applySpec(j.spec);
@@ -167,10 +230,22 @@ function randomizerFields(form) {
       });
       // A different jar changes which pure ROMs are usable.
       this.$watch('rdraft.jar', function () { self.scanRoms(); });
+      // Editing the name cancels a pending overwrite confirmation (see savePreset).
+      this.$watch('presetName', function () { self.presetPendingOverwrite = null; });
     },
     async preflight() {
+      // watchRandomizer fires this on every jar/rom_a/rom_b change with no ordering: a
+      // slow response to an earlier pick could otherwise land after, and overwrite, a
+      // newer one's answer.
+      var seq = ++this._preSeq;
       var q = new URLSearchParams({ jar: this.rdraft.jar, rom_a: this.rdraft.rom_a, rom_b: this.rdraft.rom_b });
-      try { this.pre = await (await fetch('/api/randomizer/status?' + q)).json(); } catch (_) { this.pre = null; }
+      var result = null;
+      try {
+        var res = await fetch('/api/randomizer/status?' + q);
+        if (res.ok) result = await res.json();
+      } catch (_) { result = null; }
+      if (seq !== this._preSeq) return;   // superseded by a later call; drop this answer
+      this.pre = result;
     },
     async scanRoms() {
       try {
@@ -224,7 +299,9 @@ function randomizerFields(form) {
         var ok = self.roms.filter(function (r) { return self.usable(r); });
         if (!ok.length || self.rdraft.rom_a || self.rdraft.rom_b) return;
         self.rdraft.rom_a = ok[0].path;
-        self.rdraft.rom_b = (ok[1] || ok[0]).path;
+        // Only a SECOND distinct cartridge fills B; one usable ROM must not hand both
+        // players the same file.
+        if (ok.length > 1) self.rdraft.rom_b = ok[1].path;
       });
     },
     // The browser's own file dialog; the file lands in the SLink folder and is selected.
@@ -232,11 +309,12 @@ function randomizerFields(form) {
       var file = ev.target.files && ev.target.files[0];
       ev.target.value = '';
       if (!file) return;
-      this.uploading = field; this.error = '';
+      this.uploading = field; this.error = ''; this.uploadNote = '';
       try {
         var body = new FormData(); body.append('file', file, file.name);
         var j = await (await fetch('/api/roms', { method: 'POST', body: body })).json();
         if (!j.ok) { this.error = j.error || 'Upload failed'; return; }
+        this.uploadNote = 'Added ' + file.name + '.';
         if (j.kind === 'jar') { this.rdraft.jar = j.path; }
         else {
           if (!this.roms.some(function (r) { return r.path === j.path; })) this.roms.push(j.rom);
@@ -268,6 +346,9 @@ function randomizerFields(form) {
       var ra = this.pick('a'), rb = this.pick('b');
       if ((ra && !this.usable(ra)) || (rb && !this.usable(rb))) return 'That cartridge cannot be used here.';
       if (this.rdraft.randomize && this.pre && !this.pre.jar_found) return 'Randomizing needs PokeRandoZX.jar.';
+      if (this.rdraft.randomize && this.pre && this.pre.jar_found && this.pre.jar_trusted === false) {
+        return this.pre.jar_error || 'This PokeRandoZX.jar is not a known build; SLink will not run it.';
+      }
       if (this.rdraft.randomize && this.pre && !this.pre.java_found) return 'Randomizing needs Java on PATH.';
       // pinned is pinned whatever the jar; the FORK is the randomizer's requirement for pure
       if (this.rdraft.randomize && this.family === 'gen1_purergb' && this.pre && this.pre.jar_found && !this.pre.jar_fork) {

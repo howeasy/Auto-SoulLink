@@ -12,12 +12,13 @@
    Context shape: {
        player_id: 'a' | 'b',
        trainer_name: str,
+       connected: bool (False = last known state, tagged DISCONNECTED),
        mons: list of mon_card-shaped dicts (see _macros.html mon_card
              docstring for the field set)
    } #}
 
 <div id="root">
-  <div class="wtitle">PARTY · {{ trainer_name or (player_id | upper) }}</div>
+  <div class="wtitle">PARTY · {{ trainer_name or (player_id | upper) }}{% if not connected %} <span class="dc-tag">DISCONNECTED</span>{% endif %}</div>
   {% if mons %}
     <div class="p-list">
       {% for mon in mons %}

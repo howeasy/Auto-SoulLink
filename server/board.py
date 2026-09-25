@@ -151,8 +151,9 @@ def pending_rows(status: dict) -> list[dict]:
     return out
 
 
-def sections(status: dict) -> list[tuple[str, list[dict]]]:
-    rows = pending_rows(status) + pairs(status)
+def sections(status: dict, rows: list[dict] | None = None) -> list[tuple[str, list[dict]]]:
+    if rows is None:
+        rows = pending_rows(status) + pairs(status)
     out = []
     for key in SECTION_ORDER:
         group = [r for r in rows if r["section"] == key]
@@ -164,9 +165,9 @@ def sections(status: dict) -> list[tuple[str, list[dict]]]:
 def build_board(status: dict) -> dict:
     """Everything `dashboard.html` draws, derived once."""
     players = status.get("players") or {}
-    rows = pairs(status)
+    rows = pairs(status)   # built once: sections() would otherwise build every pair again
     return {
-        "sections": sections(status),
+        "sections": sections(status, pending_rows(status) + rows),
         "section_labels": SECTION_LABELS,
         "counts": {
             "alive": sum(1 for r in rows if r["section"] != "fallen"),
@@ -239,8 +240,6 @@ def board_context(status: dict, *, run_name: str = "", poll_url: str = "/", live
         # the download labels name the file as handed out (.gbc for Yellow and pureRGB)
         "rom_ext": rom_ext or dict.fromkeys(PIDS, ".gb"),
         "concise_title": title or "Soul Link",
-        # The damage calculator is pinned to modern mechanics: Radical Red only.
-        "calc_preview": any(rt.endswith("_rr") for rt in rom_types),
         "poll_url": poll_url,
         # False for a stopped run on the Manager: the board is what it persisted, and
         # "waiting for hello" would be a lie about a server that is not listening.

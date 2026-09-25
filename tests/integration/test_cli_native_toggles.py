@@ -156,13 +156,17 @@ def _captured_spawn_cmd(run: dict) -> list:
 
     real = asyncio.create_subprocess_exec
     asyncio.create_subprocess_exec = fake_exec
-    grace = manager.SPAWN_GRACE_S
-    manager.SPAWN_GRACE_S = 0.01
+    ready, poll = manager._http_ready, manager.SPAWN_POLL_S
+    manager.SPAWN_POLL_S = 0.01
+
+    async def _answers(*_args):        # the child's HTTP port answers /api/status, once it exists
+        return "cmd" in captured
+    manager._http_ready = _answers
     try:
         asyncio.run(manager._spawn_run(run, "127.0.0.1"))
     finally:
         asyncio.create_subprocess_exec = real
-        manager.SPAWN_GRACE_S = grace
+        manager._http_ready, manager.SPAWN_POLL_S = ready, poll
     return captured["cmd"]
 
 

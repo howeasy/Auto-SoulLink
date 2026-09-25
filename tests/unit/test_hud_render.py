@@ -311,3 +311,13 @@ def test_with_no_prompt_the_banner_keeps_its_place():
     w.render()
     assert list(w.lua.globals().TOPS.values()) == [54]
 
+
+def test_the_rebuild_banner_wraps_instead_of_running_off_screen():
+    """Three 10-letter names make a 46-char banner (276px); 160px must show it on 2 lines."""
+    w = World().gbc()
+    w.H.set_rebuilding("REBUILDING: CHARMANDER, BULBASAUR1, SQUIRTLE12 +3")
+    w.render()
+    assert len(w.drawn) == 2, w.drawn
+    assert all(len(line) <= 25 for line in w.drawn), w.drawn
+    assert "".join(w.drawn).replace(" ", "") == "REBUILDING:CHARMANDER,BULBASAUR1,SQUIRTLE12+3"
+

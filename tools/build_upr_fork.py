@@ -8,13 +8,20 @@ are inert — the GUI classes build their components in Java). So the build is
 non-Java resource, jarred with that Main-Class. ``--release 8`` keeps the jar
 runnable on the Java 8 JRE SLink shells out to.
 
+The Manager runs only jars pinned by SHA-256 in data/upr_jars.json, and a build is NOT
+reproducible: `jar` stamps every entry with its file time, so two builds of the same
+sources hash differently. --pin records this build's hash there, labelled, so a rebuild
+does not lock the Manager out of its own randomizer.
+
 Usage:
-    python tools/build_upr_fork.py [--src .cache/slink-upr] [--out .cache/slink-upr/PokeRandoZX.jar]
+    python tools/build_upr_fork.py [--src .cache/slink-upr] [--out .cache/slink-upr/PokeRandoZX.jar] [--pin]
 """
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
+import json
 import pathlib
 import shutil
 import subprocess
@@ -64,6 +71,20 @@ def build(src_root: pathlib.Path, out_jar: pathlib.Path) -> pathlib.Path:
 UPR_ZX_URL = "https://github.com/Ajarmar/universal-pokemon-randomizer-zx"
 UPR_ZX_COMMIT = "7f00eb866ed35c8fe3963f078b6a2e0979dc2b8c"  # v4.6.1
 PATCHES = REPO_ROOT / "patch" / "upr"  # the fork as a durable patch series over v4.6.1
+ALLOWLIST = REPO_ROOT / "data" / "upr_jars.json"  # server/upr_pipeline.UPR_JAR_ALLOWLIST
+
+
+def pin(jar: pathlib.Path, digest: str) -> str:
+    """Add the jar's sha256 to the allowlist under a dated label; returns the label."""
+    pins = json.loads(ALLOWLIST.read_text(encoding="utf-8")) if ALLOWLIST.exists() else {}
+    label = next((k for k, v in pins.items() if v == digest), None)
+    if label is None:
+        patches = sorted(p.name[:4] for p in PATCHES.glob("*.patch"))
+        span = f"patches {patches[0]}-{patches[-1]}" if patches else "no patch series"
+        label = f"SLink fork, built {datetime.date.today()} ({span}; {jar.name})"
+        pins[label] = digest
+        ALLOWLIST.write_text(json.dumps(pins, indent=2) + "\n", encoding="utf-8")
+    return label
 
 
 def bootstrap(src_root: pathlib.Path) -> None:
@@ -88,13 +109,21 @@ def main() -> int:
     ap.add_argument("--out", default=None)
     ap.add_argument("--bootstrap", action="store_true",
                     help="clone UPR ZX v4.6.1 and apply patch/upr/*.patch when --src has no sources")
+    ap.add_argument("--pin", action="store_true",
+                    help="add the built jar's sha256 to data/upr_jars.json so the Manager will run it")
     args = ap.parse_args()
     src_root = pathlib.Path(args.src)
     if args.bootstrap:
         bootstrap(src_root)
     out = pathlib.Path(args.out) if args.out else src_root / "PokeRandoZX.jar"
     jar = build(src_root, out)
-    print(f"{jar} sha256={hashlib.sha256(jar.read_bytes()).hexdigest()}")
+    digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+    print(f"{jar} sha256={digest}")
+    if args.pin:
+        print(f"pinned in {ALLOWLIST.relative_to(REPO_ROOT)} as: {pin(jar, digest)}")
+    else:
+        print("not pinned: the Manager refuses this jar until its sha256 is in "
+              "data/upr_jars.json (rebuild with --pin, or add it by hand)")
     return 0
 
 

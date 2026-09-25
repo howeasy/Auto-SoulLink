@@ -94,6 +94,8 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
         jar = jar or upr_pipeline.find_upr_jar()
         if not jar:
             raise CartridgeError("UPR jar not found; choose PokeRandoZX.jar or set SLINK_UPR_JAR")
+        if not upr_pipeline.jar_is_trusted(jar):   # before any patching or Java
+            raise CartridgeError(upr_pipeline.untrusted_jar_message(jar))
         if family == FAMILY_PURE and not upr_pipeline.jar_is_fork(jar):
             raise CartridgeError(upr_pipeline.PUREGB_RANDOMIZER_REFUSAL)
     if companion and (family == FAMILY_PURE or randomize is None):

@@ -21,13 +21,13 @@
 {% block content %}
 <div class="mk">
   {% include "_rail.html" %}
-  <main class="mk-main mk-body-root">
+  <main class="mk-main mk-body-root" id="main-content" tabindex="-1">
     <header class="mk-runhdr">
       <h1 class="mk-runname">{{ title }}</h1>
       <span class="mk-meta">· {{ meta }}</span>
       <span class="mk-hdr-spacer"></span>
       <nav class="mk-tabs" aria-label="{{ title }}">
-        {% for label, href, on in tabs %}<a class="mk-tab{% if on %} active{% endif %}" href="{{ href }}">{{ label }}</a>{% endfor %}
+        {% for label, href, on in tabs %}<a class="mk-tab{% if on %} active{% endif %}" href="{{ href }}"{% if on %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
       </nav>
     </header>
     <div class="mk-page">

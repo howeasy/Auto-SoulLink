@@ -9,6 +9,12 @@ All ratios are foreground-on-background per
 
 * **Body text (`--c-txt` on `--c-bg` and `--c-card`)**: must be ≥ 4.5
 * **Large / secondary text and graphical UI (`--c-dim`, status accents, brand)**: must be ≥ 3.0
+* **Control borders (`--c-edge-ui` on `--c-bg` and `--c-card`, WCAG 1.4.11)**: must be ≥ 3.0
+
+`--c-bg` is opaque on every page but the OBS overlays (`body.stream`), whose `#root`
+panel stays translucent so the game shows through; the ratios below are against the
+opaque page. `tests/unit/test_theme_contrast.py` recomputes default, light and smoke
+from the CSS (text and brand 4.5:1, control borders 3:1).
 
 | theme                  | txt/bg | txt/card | dim/bg | alive/bg | dead/bg | pend/bg | gold/bg | brand/bg |
 |------------------------|-------:|---------:|-------:|---------:|--------:|--------:|--------:|---------:|
@@ -19,26 +25,32 @@ All ratios are foreground-on-background per
 | funtastic-fire         |  16.2  |   14.7   |  7.6   |   12.4   |   5.6   |  10.1   |  13.3   |    6.6   |
 | funtastic-ice          |  15.6  |   13.4   |  5.9   |   14.0   |   6.5   |  10.6   |  16.5   |   10.6   |
 | funtastic-watermelon   |  14.2  |   13.2   |  6.7   |   13.1   |   3.6   |  12.8   |  16.9   |    5.5   |
-| funtastic-smoke        |  16.2  |   14.2   |  7.6   |   13.1   |   6.7   |  12.1   |  10.9   | *1.6 ⚠* |
+| funtastic-smoke        |  16.2  |   14.2   |  7.6   |   13.1   |   6.7   |  12.1   |  10.9   |   10.9   |
 
 All themes pass WCAG AA for body text, secondary text, and every status
 accent.
 
-## Known exception
+## Borders: `--c-edge` vs `--c-edge-ui`
 
-**`funtastic-smoke` — `--c-brand` (#333333) on `--c-bg` (#0a0a0a) = 1.57.**
-The Smoke palette is deliberately monochromatic — the N64 Smoke shell was a
-nearly-opaque translucent gray that read as flat black, with no warm cast.
-The brand token is therefore set to the canonical retro-reference hex
-(`#333333`) and is used *decoratively only* (SLink wordmark glow, theme
-switcher swatch, calc header accent). It is **never** used as text colour
-or as a UI control that needs to be perceived — every interactive surface
-in Smoke uses `--c-txt`, `--c-alive` / `--c-dead` / `--c-pend` / `--c-gold`,
-which all pass.
+`--c-edge` is the hairline divider on every card, rule and header, and stays faint on
+purpose. Controls (`.mk-btn`, `.mk-gchip`, the form inputs in board.css) draw their border
+from `--c-edge-ui`, falling back to `--c-edge` in a theme that does not define it.
 
-If you introduce a new component that needs the brand as a perceivable
-control colour, gate it on `:not(.theme-funtastic-smoke)` or use `--c-gold`
-(silver, contrast 10.9 against bg) instead.
+| theme           | `--c-edge-ui`            | on bg | on card |
+|-----------------|--------------------------|------:|--------:|
+| default         | `rgba(255,255,255,.38)`  |  3.8  |   3.6   |
+| light           | `rgba(0,0,0,.48)`        |  3.8  |   3.6   |
+| funtastic-smoke | `#808080`                |  5.0  |   4.4   |
+
+**Open:** grape (2.0), fire (2.3), ice (2.9) and watermelon (1.9) define no
+`--c-edge-ui`, so their control borders still use a `--c-edge` under 3:1 on bg. Jungle's
+edge (3.5) passes.
+
+## Smoke's brand
+
+The N64 Smoke shell colour, `#333333`, stays as the theme picker's swatch. `--c-brand` is
+silver `#c0c0c0` (10.9 on bg): it was `#333333` at 1.6:1, and it is drawn as text (the
+wordmark, the active tab, the active theme pill).
 
 ## How to regenerate
 
