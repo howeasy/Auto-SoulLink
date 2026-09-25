@@ -669,6 +669,53 @@ def test_native_absent_oracle_needs_a_native_stage_and_a_clean_refusal():
         run.assert_native_absent_gen3_saved(panel_only)
 
 
+# ── G5-RR-CLEAN-2: faint_cmd_clean_gen3's registration and its ROM-provenance oracle wrapper ──
+def _clean_gen3_receipts(a_kind="companion", b_kind="clean", a_hash="AAAAAAAA", b_hash="BBBBBBBB"):
+    return {
+        "a": (f"[client] [SLink-gen3] gen3_rr/radical_red ({a_kind} by hash) player a -> "
+             f"127.0.0.1:1 (rom {a_hash})\n"),
+        "b": (f"[client] [SLink-gen3] gen3_rr/radical_red ({b_kind} by hash) player b -> "
+             f"127.0.0.1:1 (rom {b_hash})\n"),
+    }
+
+
+def test_faint_cmd_clean_gen3_is_registered_with_rom_kind_and_aliases():
+    assert duo.SCENARIOS["faint_cmd_clean_gen3"]["rom_kind"] == {"a": "companion", "b": "clean"}
+    assert duo.DuoRun.orchestrate_faint_cmd_clean_gen3 is duo.DuoRun.orchestrate_faint_cmd_gen3
+    assert callable(duo.DuoRun.assert_faint_cmd_clean_gen3_saved)
+    # the oracle "alias" now wraps the reused faint_cmd_gen3 oracle rather than literally being it
+    # (the provenance check runs first) -- prove it still delegates through, exactly once
+    run = _oracle_run("faint_cmd_clean_gen3", game="gen3_rr")
+    calls = []
+    run.assert_faint_cmd_gen3_saved = lambda results: calls.append(results)
+    receipts = _clean_gen3_receipts()
+    run.assert_faint_cmd_clean_gen3_saved(receipts)
+    assert calls == [receipts]
+
+
+def test_faint_cmd_clean_gen3_provenance_needs_hash_admitted_companion_a_clean_b():
+    run = _oracle_run("faint_cmd_clean_gen3", game="gen3_rr")
+    assert run._gen3_rom_provenance_problems({"a": "companion", "b": "clean"},
+                                             _clean_gen3_receipts()) == []
+    kind_swapped = run._gen3_rom_provenance_problems(
+        {"a": "companion", "b": "clean"}, _clean_gen3_receipts(b_kind="companion", b_hash="AAAAAAAA"))
+    assert any("clean by hash" in p for p in kind_swapped), kind_swapped
+    same_dump = run._gen3_rom_provenance_problems(
+        {"a": "companion", "b": "clean"}, _clean_gen3_receipts(b_hash="AAAAAAAA"))
+    assert any("same ROM hash" in p for p in same_dump), same_dump
+    no_line = run._gen3_rom_provenance_problems({"a": "companion", "b": "clean"}, {"a": "", "b": ""})
+    assert len(no_line) == 2, no_line
+
+
+def test_the_clean_oracle_rejects_a_receipt_whose_b_side_is_companion():
+    """The whole point of the provenance wrap: a receipt claiming B ran the companion ROM must
+    never reach (or pass) faint_cmd_gen3's own memorial checks."""
+    run = _oracle_run("faint_cmd_clean_gen3", game="gen3_rr")
+    receipts = _clean_gen3_receipts(b_kind="companion", b_hash="AAAAAAAA")   # A and B: same ROM
+    with pytest.raises(RuntimeError, match="clean by hash"):
+        run.assert_faint_cmd_clean_gen3_saved(receipts)
+
+
 def test_rival_swap_is_only_a_negative_characterization():
     """Finding 6: rival_swap is a BLOCKED NEGATIVE CONTROL (a dummy team refused), labelled so in
     the registry, the oracle's PYDEC line and the run summary -- never a qualification pass."""
@@ -2318,10 +2365,11 @@ _BATTLE_MODEL = r"""
 S = { gBattlerControllerFuncs = 0x100, HandleInputChooseAction = 0x1000, HandleInputChooseMove = 0x2000,
       gActionSelectionCursor = 0x200, gMoveSelectionCursor = 0x201, gBattleMons = 0x300, gBattleMoves = 0x8000 }
 local ACT, MOVE = S.HandleInputChooseAction | 1, S.HandleInputChooseMove | 1
-POWER = { [33] = 40, [39] = 0, [145] = 20 }                 -- Tackle, Tail Whip, Bubble
+POWER = { [33] = 40, [39] = 0, [145] = 20, [2] = 90 }       -- Tackle, Tail Whip, Bubble, (a recoil move)
+EFFECT = { [33] = 0, [39] = 0, [145] = 0, [2] = 48 }        -- 0 = EFFECT_HIT, 48 = EFFECT_RECOIL (CFRU)
 M = { ctrl = 0, pending = {}, prev = {}, cursor = 0, lead_hp = 27, over = false, filled = false,
       moves = { 33, 39, 145, 0 }, pp = { 35, 30, 30, 0 }, after = nil, used = {},
-      frame = 0, read_every = 1, held = 0 }
+      frame = 0, read_every = 1, held = 0, outcome = nil }
 GMAIN = 0x03003000
 BITS = { A = 1, Right = 0x10, Left = 0x20, Up = 0x40, Down = 0x80 }
 -- the PACK's move table (G5-RR-MOVEPICK); with M.rr the pret-FR gBattleMoves address holds
@@ -2346,8 +2394,17 @@ memory = {
     read_u8 = function(a)
         if a == S.gActionSelectionCursor then return 0 end
         if a == S.gMoveSelectionCursor then return M.cursor end
-        if a >= RR_MOVES then return POWER[(a - RR_MOVES - 1) // 12] or 0 end
-        if a >= S.gBattleMoves then return M.rr and 99 or POWER[(a - S.gBattleMoves - 1) // 12] or 0 end
+        -- entry+0 = effect (SELF_DAMAGE_EFFECTS' own read), entry+1 = power (status_move_slot's)
+        if a >= RR_MOVES then
+            local off = (a - RR_MOVES) % 12
+            return off == 0 and (EFFECT[(a - RR_MOVES - off) // 12] or 0) or (POWER[(a - RR_MOVES - 1) // 12] or 0)
+        end
+        if a >= S.gBattleMoves then
+            if M.rr then return 99 end
+            local off = (a - S.gBattleMoves) % 12
+            return off == 0 and (EFFECT[(a - S.gBattleMoves - off) // 12] or 0)
+                             or (POWER[(a - S.gBattleMoves - 1) // 12] or 0)
+        end
         return M.filled and M.pp[a - S.gBattleMons - 0x24 + 1] or 0
     end,
 }
@@ -2374,9 +2431,19 @@ emu = { frameadvance = function()                           -- one frame: ReadKe
         M.pp[M.cursor + 1] = M.pp[M.cursor + 1] - 1
         if POWER[move] > 0 then M.foe_hp = M.foe_hp - POWER[move] end
         if POWER[move] > 0 and M.foe_hp <= 0 then
-            M.over = true                                  -- the foe goes down first: no counter
+            M.over, M.outcome = true, 1                    -- B_OUTCOME_WON: the foe goes down first, no counter
+        elseif M.foe_hits then
+            M.lead_hp = math.max(0, M.lead_hp - 9)
+            if M.lead_hp <= 0 then
+                M.over = true
+                M.outcome = M.outcome_on_ko or 2            -- B_OUTCOME_LOST by default; a test may force DREW
+                -- a test-only race: the whiteout heal can land before the watcher's hp0 record
+                -- does, so a genuinely fainted lead can read back alive (G5-RR-CLEAN-2)
+                if M.heal_on_faint then M.lead_hp = M.revive_hp or 27 end
+            else
+                M.after = { n = 41, to = ACT }
+            end
         else
-            if M.foe_hits then M.lead_hp = math.max(0, M.lead_hp - 9) end
             M.after = { n = 41, to = ACT }
         end
     elseif M.ctrl == MOVE then                              -- HandleInputChooseMove's bit toggles
@@ -2400,7 +2467,8 @@ function party_menu_up() return false end
 function action_cursor() return 0 end
 ACTION_FIGHT = 0
 log, fmt, cp = function(s) LOGS[#LOGS + 1] = s end, string.format, {}
-ctx = { find = function() return { hp = M.lead_hp } end, hp0 = function() return nil end }
+ctx = { find = function() return { hp = M.lead_hp } end, hp0 = function() return nil end,
+        battle_outcome = function() return M.outcome end }
 function ctx.run_away() M.ctrl = 0; M.escaped = (M.escaped or 0) + 1; return true end
 function ctx.hunt()                          -- a fresh foe that does attack, full HP, back in battle
     M.hunts, M.foe_hits, M.foe_hp, M.over = M.hunts + 1, true, 100, false
@@ -2427,14 +2495,18 @@ def battle_model():
                     + "\nSP = { verify_fight_cursor = verify_fight_cursor }")
     text = DRIVER.read_text(encoding="utf-8")
     consts = re.search(r"^local ACTION_FIGHT, ACTION_BAG, ACTION_SWITCH, ACTION_RUN = .*$", text, re.M)
+    outcome = re.search(r"^local B_OUTCOME_WON = .*$", text, re.M)
+    self_damage = re.search(r"^local SELF_DAMAGE_EFFECTS = \{.*?^\}$", text, re.M | re.S)
     menus = re.findall(r"^local function (?:ctrl0|action_menu_up|move_menu_up)\(\).*$", text, re.M)
-    assert consts and len(menus) == 3
-    runtime.execute("\n".join([consts.group(0), *menus,
+    assert consts and outcome and self_damage and len(menus) == 3
+    runtime.execute("\n".join([consts.group(0), outcome.group(0), *menus,
                                _lua_defs(DRIVER, ["game_press"]),
                                "local function press(btn, gap) return game_press(btn, joypad.set, G.advance,"
                                " function() return memory.read_u16_le(GMAIN + 0x2C) end, gap, 30) end",
-                               _lua_defs(DRIVER, ["steer", "ctx.choose_action", "ctx.status_move_slot",
-                                                  "any_move_slot", "ctx.use_move", "ctx.lose_active"]),
+                               self_damage.group(0),
+                               _lua_defs(DRIVER, ["move_effect", "steer", "ctx.choose_action",
+                                                  "ctx.status_move_slot", "any_move_slot", "ctx.use_move",
+                                                  "ctx.lose_active"]),
                                "GAME_PRESS = game_press",
                                "function LOSE() local ok, why = ctx.lose_active('K0', 'test')"
                                " return ok, tostring(why) end"]))
@@ -2552,6 +2624,55 @@ def test_lose_active_rehunts_when_the_fallback_wins_the_battle(battle_model):
     assert any(line.startswith("LOSE_REHUNT_WIN K0 turn=") for line in logs), logs
     assert m.lead_hp == 0
     assert list(m.used.values())[:2] == [39, 33], "Tail Whip once, then the fallback wins the battle"
+
+
+# ── G5-RR-CLEAN-2: self-KO exclusion, WON-gated re-hunt, and the shared budget's failure ──────
+def test_lose_active_refuses_a_self_damaging_fallback(battle_model):
+    """any_move_slot must never hand the fallback a move that can faint the lead itself (recoil,
+    Explosion, ...). Model: Tail Whip's 1 PP is spent turn 1, and the only move left with PP is a
+    recoil move (id 2, effect 48 = EFFECT_RECOIL) that would otherwise win the fight for free --
+    lose_active must refuse it outright, never press it hoping it "happens" not to self-KO."""
+    lua = battle_model
+    lua.execute("M.moves = { 39, 2, 0, 0 }; M.pp = { 1, 30, 0, 0 }")
+    lua.globals().start(40)
+    ok, why = lua.globals().LOSE()
+    m = lua.globals().M
+    assert ok is False and "no no-damage move with PP" in why, why
+    assert 2 not in set(m.used.values()), "the recoil move must never be pressed"
+
+
+@pytest.mark.parametrize("outcome_on_ko, label", [(2, "LOST"), (3, "DREW")])
+def test_lose_active_does_not_rehunt_a_lost_or_drawn_battle(battle_model, outcome_on_ko, label):
+    """turn==nil looks the same whether the fallback just won (re-hunt wanted) or the lead itself
+    just fainted for a LOST/DREW (the point of this function, already achieved) -- and fainted()
+    can read false right then anyway, if the whiteout heal lands before the watcher's hp0 record
+    does. Only ctx.battle_outcome() == WON may start a re-hunt; LOST/DREW must never re-hunt, even
+    while fainted() is masked this way."""
+    lua = battle_model
+    lua.execute("M.pp[2] = 1; M.foe_hp = 999")                  # the fallback alone never wins here
+    lua.execute(f"M.heal_on_faint = true; M.outcome_on_ko = {outcome_on_ko}")
+    lua.globals().start(40)
+    ok, why = lua.globals().LOSE()
+    m, logs = lua.globals().M, list(lua.globals().LOGS.values())
+    assert ok is False, (label, why, logs)
+    assert m.hunts == 0, f"a {label} battle must never re-hunt"
+    assert not any(line.startswith("LOSE_REHUNT_WIN") for line in logs), (label, logs)
+
+
+def test_lose_active_fails_by_name_when_the_fallback_keeps_winning(battle_model):
+    """The WON re-hunt shares its 6-hunt budget with the STALL re-hunt above; running it out must
+    fail with an explicit name, not the generic "battle left the action menu" a bare turn==nil
+    would otherwise print. Model: a lead with effectively unlimited HP (foe counters never matter)
+    and a foe that dies to 3 Tackles every single re-hunt, so the fallback wins six times running."""
+    lua = battle_model
+    lua.execute("M.pp[2] = 1; M.foe_hp = 100; M.lead_hp = 100000")
+    lua.globals().start(40)
+    ok, why = lua.globals().LOSE()
+    m, logs = lua.globals().M, list(lua.globals().LOGS.values())
+    assert ok is False, (why, logs)
+    assert "the fallback keeps winning" in why, why
+    assert m.hunts == 5, "5 re-hunts spent the budget; the 6th win must not spend a 6th"
+    assert sum(1 for line in logs if line.startswith("LOSE_REHUNT_WIN")) == 5, logs
 
 
 # ── C4-6j: Codex review of 43b9ccb4 / ad9669b1 ──────────────────────────────────────────────

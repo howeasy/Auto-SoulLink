@@ -5940,6 +5940,30 @@ class DuoRun:
         for process in getattr(self, "emus", []):
             process.wait(timeout=30)
 
+    def _gen3_rom_provenance_problems(self, want_kind, results) -> list:
+        """Each side's own admission line -- lua/gen3/run.lua "[SLink-gen3] pack/title (kind by
+        admitted_by) player X -> host:port (rom HASH)" -- is what the CLIENT independently found
+        on its own cartridge, checked against the rom_sha1/rom_md5 pins in engine_signals.json
+        (Entry.admit, lua/gen3/entry.lua): admitted_by=="hash" is a pin hit, "anchors"/"header"
+        are the weaker fallbacks. A scenario's rom_kind config (self._gen3_rom_kind) is only what
+        the harness INTENDED to stage; this is the independent proof it actually happened
+        (G5-RR-CLEAN-2, OMP review cx-39175521) -- also catches a same-dump mislabel, where both
+        sides admit the identical hash under two different kind claims."""
+        problems, hashes = [], {}
+        for inst, kind in want_kind.items():
+            text = results.get(inst) or ""
+            problems += gen3_receipt_problems(
+                inst, text,
+                required=[rf"(?m)^\[client\] \[SLink-gen3\] \S+/\S+ \({re.escape(kind)} by hash\) "
+                          rf"player {inst} "])
+            m = re.search(rf"(?m)^\[client\] \[SLink-gen3\] .*player {inst} .* \(rom ([0-9A-Fa-f]+)\)$", text)
+            if m:
+                hashes[inst] = m.group(1)
+        if len(hashes) > 1 and len(set(hashes.values())) < len(hashes):
+            problems.append(f"the sides admitted the same ROM hash {hashes}: the companion/clean "
+                            f"split did not actually run two different dumps")
+        return problems
+
     def assert_faint_cmd_gen3_saved(self, results):
         """Both memorials saved: the linked key left each party for the memorial box and nothing
         else moved; B's key went to HP 0 through an armed OVERWORLD write (the checkpoint), after
@@ -5967,7 +5991,13 @@ class DuoRun:
         self._gen3_raise(problems, f"faint_cmd: {ka} and {kb} saved once each in box {box + 1}; "
                                    f"B's HP 0 came from an overworld-armed write")
 
-    assert_faint_cmd_clean_gen3_saved = assert_faint_cmd_gen3_saved
+    def assert_faint_cmd_clean_gen3_saved(self, results):
+        """faint_cmd_gen3's own oracle wholesale (the link+faint mechanics are identical) -- plus
+        proof the clean-side split actually ran: A admitted as the companion build and B as the
+        raw CLEAN dump, both by HASH against the pins, on two different cartridges."""
+        self._gen3_raise(self._gen3_rom_provenance_problems({"a": "companion", "b": "clean"}, results),
+                         "faint_cmd_clean_gen3: ROM provenance confirmed (a=companion, b=clean, both by hash)")
+        self.assert_faint_cmd_gen3_saved(results)
 
     def assert_linked_faint_active_gen3_saved(self, results):
         """W-2 on FRLG/RR, the in-battle path under mechanism P+H. A: the engine's faint site

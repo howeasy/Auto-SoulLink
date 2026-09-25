@@ -800,6 +800,7 @@ end
 
 -- ── battle input (pret battle_controller_player.c / party_menu.c, symbols above) ─────────
 local B_OUTCOME_CAUGHT = 7        -- pret include/constants/battle.h
+local B_OUTCOME_WON = 1           -- pret include/constants/battle.h
 local ACTION_FIGHT, ACTION_BAG, ACTION_SWITCH, ACTION_RUN = 0, 1, 2, 3
 local function ctrl0() return memory.read_u32_le(S.gBattlerControllerFuncs) end
 local function action_menu_up() return ctrl0() == (S.HandleInputChooseAction | 1) end
@@ -1179,19 +1180,45 @@ function ctx.status_move_slot()
     end
 end
 
---- The first move of battler 0 with PP left, of ANY power: lose_active's once-only fallback,
---- reached only once a no-damage move has genuinely been used (never as a workaround for a lead
---- that never had one, or for a mispointed move table -- G5-RR-MOVEPICK's own negative control).
---- Live RR clean_gen3 870e5e5d: Leer's 30 PP spent by turn 31 (lead hp 1, the foe still up), so
---- status_move_slot goes permanently nil for the rest of the fight (PP does not regenerate mid-
---- battle) though the lead still has Pound (slot 0, ahead of the draining Absorb in slot 2 --
---- healing us would only fight lose_active's whole point).
+--- Effect ids that damage the USER, not (only) the foe -- CFRU's include/constants/
+--- battle_move_effects.h (RR is CFRU-based; the effect byte VALUE still comes from RR's own
+--- move table via profile.rom, but this behaviour enum is CFRU's unmoved one -- verified against
+--- patch/vendor/cfru/include/constants/battle_move_effects.h). any_move_slot must never hand
+--- lose_active a move that can faint OUR OWN lead; that is status_move_slot's failure mode to
+--- report, not a side effect of the fallback (G5-RR-CLEAN-2).
+local SELF_DAMAGE_EFFECTS = {
+    [7] = true,    -- EFFECT_EXPLOSION (Explosion / Self-Destruct: user faints outright)
+    [45] = true,   -- EFFECT_RECOIL_IF_MISS (Jump Kick / Hi Jump Kick crash damage)
+    [48] = true,   -- EFFECT_RECOIL (Take Down / Double-Edge / Submission / ...)
+    [168] = true,  -- EFFECT_MEMENTO (+ Healing Wish / Lunar Dance / Final Gambit: user faints)
+}
+
+--- `move`'s effect byte (entry+0 of the PACK's move table, same table/size as status_move_slot),
+--- or nil if the table isn't known -- never pret FR's gBattleMoves on RR (G5-RR-MOVEPICK).
+local function move_effect(move)
+    local table_at, size = profile.rom.BATTLE_MOVES_ADDR, profile.derived.BATTLE_MOVE_ENTRY_SIZE
+    if not (table_at and size and move and move ~= 0) then return nil end
+    return memory.read_u8(table_at + move * size)
+end
+
+--- The first move of battler 0 with PP left AND a known, non-self-damaging effect: lose_active's
+--- once-only fallback, reached only once a no-damage move has genuinely been used (never as a
+--- workaround for a lead that never had one, or for a mispointed move table -- G5-RR-MOVEPICK's
+--- own negative control). Live RR clean_gen3 870e5e5d: Leer's 30 PP spent by turn 31 (lead hp 1,
+--- the foe still up), so status_move_slot goes permanently nil for the rest of the fight (PP does
+--- not regenerate mid-battle) though the lead still has Pound (slot 0, ahead of the draining
+--- Absorb in slot 2 -- healing us would only fight lose_active's whole point). A move whose
+--- effect is unreadable is treated the same as a self-damaging one and skipped: the fallback only
+--- ever picks a move it can PROVE won't KO its own lead.
 local function any_move_slot()
     local base = S.gBattleMons                            -- battler 0
     for slot = 0, 3 do
         local move = memory.read_u16_le(base + 0x0C + slot * 2)
         local pp = memory.read_u8(base + 0x24 + slot)
-        if move ~= 0 and pp > 0 then return slot end
+        if move ~= 0 and pp > 0 then
+            local effect = move_effect(move)
+            if effect and not SELF_DAMAGE_EFFECTS[effect] then return slot, effect end
+        end
     end
 end
 
@@ -1332,22 +1359,48 @@ function ctx.lose_active(key, label)
     -- PP". After STALL_TURNS turns with no HP lost, RUN and hunt a fresh foe (G5-RR-MOVEPICK).
     local STALL_TURNS = 6
     local function lead_hp() return memory.read_u16_le(S.gBattleMons + 0x28) end
-    local last_hp, stalled, hunts, used_status = nil, 0, 1, false
+    local last_hp, stalled, hunts, used_status, fallback_effect = nil, 0, 1, false, nil
+    -- Attribution guard (G5-RR-CLEAN-2): any_move_slot already excludes self-damaging/unknown-
+    -- effect moves, so this should never fire on real data -- it exists so a faint that DOES
+    -- follow a fallback pick is named explicitly rather than folded into a silent "natural
+    -- faint" pass, in case the exclusion above is ever wrong or incomplete.
+    local function fainted_or_self_ko()
+        if not fainted() then return nil end
+        if fallback_effect ~= nil and (fallback_effect == "unknown" or SELF_DAMAGE_EFFECTS[fallback_effect]) then
+            return false, fmt("%s: the fallback move self-damaged the lead (effect %s)",
+                              label, tostring(fallback_effect))
+        end
+        return true
+    end
     for turn_no = 1, 120 do
-        if fainted() then return true end
+        local done, why = fainted_or_self_ko()
+        if done ~= nil then return done, why end
         local turn = SP.verify_fight_cursor(cp, "incidental_battle")
         if turn ~= "fight" then
+            -- Re-check right after the cursor moves: "party"/nil follow a real faint just as
+            -- readily as a win (the watcher's hp0 survives the whiteout heal a fresh read would
+            -- miss, per fainted() above).
+            done, why = fainted_or_self_ko()
+            if done ~= nil then return done, why end
             -- A no-damage move's PP is finite: once it is genuinely spent (used_status), the
             -- fallback below can defeat the foe instead of our own mon fainting (live RR
             -- clean_gen3 870e5e5d). That is a bad matchup, not a failure -- hunt a fresh foe,
-            -- same budget as the stall rehunt below.
-            if turn == nil and used_status and hunts < 6 then
+            -- same budget as the stall rehunt below. Gated on gBattleOutcome == WON: turn==nil
+            -- is ALSO how a LOST or DREW battle looks once the battle is gone (play.in_battle
+            -- goes false the same way for either), and those must never re-hunt -- they are
+            -- already the natural faint this function exists to produce, just not provably so
+            -- from fainted() alone (G5-RR-CLEAN-2).
+            if turn == nil and used_status and ctx.battle_outcome() == B_OUTCOME_WON then
+                if hunts >= 6 then
+                    return false, fmt("%s: the fallback keeps winning instead of the lead fainting (hunts=%d)",
+                                      label, hunts)
+                end
                 log(fmt("LOSE_REHUNT_WIN %s turn=%d hunts=%d", key, turn_no, hunts))
                 play.wait_scene_settled(cp, 1800)
                 if not ctx.hunt(label .. " rehunt") then return false, label .. ": re-hunt found no encounter" end
-                hunts, stalled, last_hp = hunts + 1, 0, nil
+                hunts, stalled, last_hp, fallback_effect = hunts + 1, 0, nil, nil
             else
-                return fainted(), "battle left the action menu (" .. tostring(turn) .. ")"
+                return false, label .. ": battle left the action menu (" .. tostring(turn) .. ")"
             end
         else
             -- Only now: gBattleMons is copied in at BattleIntroDrawTrainersOrMonsSprites (pret
@@ -1362,22 +1415,23 @@ function ctx.lose_active(key, label)
                 local ran, rwhy = ctx.run_away(label .. " rehunt")
                 if not ran then return false, label .. ": re-hunt escape: " .. tostring(rwhy) end
                 if not ctx.hunt(label .. " rehunt") then return false, label .. ": re-hunt found no encounter" end
-                hunts, stalled, last_hp = hunts + 1, 0, nil
+                hunts, stalled, last_hp, fallback_effect = hunts + 1, 0, nil, nil
             else
-                local slot = ctx.status_move_slot()
+                local slot, effect = ctx.status_move_slot()
                 if turn_no == 1 then log(fmt("LOSE %s status_move_slot=%s", key, tostring(slot))) end
                 if slot then
-                    used_status = true
+                    used_status, fallback_effect = true, nil
                 elseif used_status then
-                    slot = any_move_slot()                 -- the no-damage move's PP is spent
+                    slot, effect = any_move_slot()          -- the no-damage move's PP is spent
+                    fallback_effect = slot and (effect or "unknown") or nil
                     if slot then log(fmt("LOSE_FALLBACK %s turn=%d slot=%d hp=%d", key, turn_no, slot, hp)) end
                 end
                 if not slot then
                     return false, fmt("%s: battler 0 has no no-damage move with PP (turn %d, hp %d, hunts %d)",
                                       label, turn_no, hp, hunts)
                 end
-                local ok, why = ctx.use_move(slot)
-                if not ok then return false, label .. ": " .. why end
+                local ok, why2 = ctx.use_move(slot)
+                if not ok then return false, label .. ": " .. why2 end
             end
         end
     end
