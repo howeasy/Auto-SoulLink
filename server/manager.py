@@ -324,6 +324,10 @@ def _cache_rom_dirs() -> list[str]:
 ROM_DIRS = (PROJECT_ROOT, ROM_UPLOAD_DIR, os.path.join(PROJECT_ROOT, "patch", "build"), *_cache_rom_dirs())
 ROM_EXTS = (".gb", ".gbc")
 UPLOAD_MAX = 64 << 20
+# path -> ((size, mtime_ns), describe_rom result): the ROM scan runs on every page load and
+# /api/roms call, over Google Drive; an unchanged file is not read again.
+# ponytail: never evicted -- a handful of ROM files; a deleted path just goes unreferenced.
+_ROM_INFO_CACHE: dict[str, tuple[tuple[int, int], dict]] = {}
 REGISTRY_PATH = os.path.join(MANAGER_DIR, "registry.json")
 
 # A freshly spawned server counts as up only once its HTTP port answers /api/status; imports
@@ -596,43 +600,6 @@ def _load_settings() -> dict:
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
-
-
-# ── Per-player connection state (the run page's waiting screen) ─────────────
-# server.py's identity_error texts that mean "this is not this run's game" rather than
-# "this is not this slot's save" (test_player_pack pins them to server.py).
-_WRONG_GAME_ERRORS = ("Mixed games", "Mixed artifact kinds", "Unknown rom_type")
-
-
-def connection_state(p: dict, live: bool) -> dict:
-    """One player's state from the status payload alone: {slug, label, line}. Errors come
-    before connectivity: a rejected player stays rejected after they disconnect."""
-    def state(slug, label, line):
-        return {"slug": slug, "label": label, "line": line}
-    if not live:
-        return state("stopped", "Not started", "The run is stopped. Start it, then load the launcher in BizHawk.")
-    err = p.get("identity_error") or ""
-    if err.startswith(_WRONG_GAME_ERRORS):
-        return state("wrong_game", "Wrong game", f"{err}. Load the game this run is for, then reload the launcher.")
-    if p.get("admission", "admitted") != "admitted":
-        return state("wrong_game", "Wrong cartridge", f"Not admitted: {p.get('admission_reason') or 'unknown reason'}. "
-                     "Load the cartridge this run made for this player, then reload the launcher.")
-    if err:
-        return state("identity", "Wrong save", f"{err}. Load this slot's own save: SLink will not "
-                     "adopt a different trainer.")
-    seen = p.get("last_seen_age") is not None
-    if p.get("connected") and p.get("stale"):
-        return state("disconnected", "No data", f"Connected, but silent since {p.get('last_seen_label')}: "
-                     "BizHawk may be paused, closed or frozen.")
-    if p.get("connected") and (p.get("rom_type") or "?") != "?":
-        return state("ready", "Connected", "Connected and recording.")
-    if p.get("connected"):
-        return state("waiting", "Connecting", "BizHawk connected; waiting for the game to say hello.")
-    if seen:
-        return state("disconnected", "Disconnected", f"Last heard {p.get('last_seen_label')}. Reload the "
-                     "launcher in BizHawk's Lua Console to reconnect.")
-    return state("waiting", "Waiting for BizHawk", "Load the game in BizHawk, then this player's launcher "
-                 "in Tools → Lua Console.")
 
 
 # ── Subprocess management ───────────────────────────────────────────────────
@@ -1063,7 +1030,8 @@ class RunManager:
             "form_json":    _json_for_script(new_run_form()),
             # The creator randomizes as part of creating a Gen 1 run; it needs the same
             # categories / labels / jar the standalone page does, with no current pair.
-            "randomizer_json": _json_for_script(self._randomizer_form(None)),
+            # Off the event loop: the form scans (and may hash) every ROM file.
+            "randomizer_json": _json_for_script(await asyncio.to_thread(self._randomizer_form, None)),
             "next_ports":   _next_ports(runs),
             "manager_port": self.manager_port,
             # Links to a run's own port (calc, debug) use the host the browser used for us.
@@ -1081,7 +1049,7 @@ class RunManager:
         """board_context for a Manager run: it polls its own board route, its launchers and
         (once it has made them) its cartridges download from the Manager. On top of the
         shared board: each player's setup ZIP, the address players connect to, the BizHawk
-        minimum and each player's connection state."""
+        minimum."""
         from server.board import PIDS, board_context
         rid = run["run_id"]
         live = run.get("status") == "running"
@@ -1092,12 +1060,10 @@ class RunManager:
                             roms_pinned=bool(run.get("randomizer")),
                             rom_ext=_rom_ext(run))
         host, source = self._connect_host()
-        players = status.get("players") or {}
         ctx.update({
             "packs": {pid: f"/api/runs/{rid}/player-pack/{pid}" for pid in PIDS},
             "connect": {"host": host, "port": run["tcp_port"], "source": source},
             "bizhawk_min": make_release.bizhawk_requirement(),
-            "conn": {pid: connection_state(players.get(pid) or {}, live) for pid in PIDS},
         })
         return ctx
 
@@ -1179,16 +1145,24 @@ class RunManager:
                     continue
                 seen_paths.add(path)
                 try:
-                    if os.path.getsize(path) == 0:
-                        continue
-                    with open(path, "rb") as f:
-                        digest = hashlib.sha1(f.read()).hexdigest()
+                    st = os.stat(path)
                 except OSError:
                     continue
+                if st.st_size == 0:
+                    continue
+                key = (st.st_size, st.st_mtime_ns)
+                hit = _ROM_INFO_CACHE.get(path)
+                if hit and hit[0] == key:
+                    info = hit[1]
+                else:
+                    info = describe_rom(path, True)
+                    if info.get("sha1"):        # a failed read is retried next scan, not kept
+                        _ROM_INFO_CACHE[path] = (key, info)
+                digest = info.get("sha1") or path
                 if digest in seen_content:
                     continue
                 seen_content.add(digest)
-                roms.append({"name": name, **describe_rom(path, True)})
+                roms.append({"name": name, **info})
         return roms
 
     def _augment_for_template(self, run: dict) -> dict:
@@ -1692,7 +1666,8 @@ class RunManager:
         Nothing is uploaded to anywhere: the Manager and the ROMs share a machine."""
         from server.upr_pipeline import find_upr_jar
         jar = request.query.get("jar", "").strip() or find_upr_jar() or ""
-        return web.json_response({"ok": True, "roms": self._scan_roms(jar), "dir": PROJECT_ROOT})
+        roms = await asyncio.to_thread(self._scan_roms, jar)
+        return web.json_response({"ok": True, "roms": roms, "dir": PROJECT_ROOT})
 
     async def handle_rom_upload(self, request: web.Request) -> web.Response:
         """POST /api/roms (multipart `file`) — a ROM chosen with the browser's own file
@@ -1750,6 +1725,14 @@ class RunManager:
                     f"unknown randomizer build (sha256 {h256.hexdigest()}): only the SLink UPR "
                     f"jars in data/upr_jars.json are accepted. Build the fork with "
                     f"`python tools/build_upr_fork.py --pin`.")}, status=400)
+            if ext != ".jar":
+                # Bytes already in a ROM folder: answer with THAT file. A kept copy in roms/
+                # is deduped out of the next scan, and the picker's selection with it.
+                roms = await asyncio.to_thread(self._scan_roms, "")
+                same = next((r for r in roms if r.get("sha1") == h.hexdigest()), None)
+                if same is not None:
+                    return web.json_response({"ok": True, "path": same["path"], "kind": "rom",
+                                              "rom": same, "existing": True})
             stem, n = os.path.splitext(name)[0], 1
             dest = os.path.join(dest_dir, name)
             while os.path.exists(dest) and _sha1(dest) != h.hexdigest():
@@ -1860,7 +1843,7 @@ class RunManager:
         run = _find_run(runs, request.match_info["run_id"])
         if run is None:
             raise web.HTTPNotFound(text="Run not found")
-        form = self._randomizer_form(run)
+        form = await asyncio.to_thread(self._randomizer_form, run)
         if form is None:
             raise web.HTTPNotFound(text="Cartridges are prepared for Gen 1 runs only")
         ctx = self._rail_ctx(request, runs, page="run")
