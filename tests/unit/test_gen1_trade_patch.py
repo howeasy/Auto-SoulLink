@@ -17,7 +17,11 @@ from tools._build_tools_bootstrap import ensure_rgbds
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "patch/gen1/build"
 SOURCE = ROOT / "patch/gen1/src"
-RC_SOURCE = ROOT.parent / "gen1-rby-code-sweep-8d06e2/patch/gen1/src"
+# The RC provenance lives in the archived tag, not on disk: the gen1-rby-code-sweep worktree
+# it used to point at is gone, so this comparison skipped on every box forever — and the Gen 1
+# release gate counts an unexplained skip as a lane failure (tools/verify_gen1_release.py:2).
+RC_TAG = "archive/gen1/rc"
+RC_TAG_SRC = "patch/gen1/src"
 TARGETS = ("red", "blue")
 SPAN_SYMBOLS = (
     ("SlinkForeground", "SlinkTradeServiceEnd", 0x4500, 319),
@@ -79,12 +83,15 @@ def test_four_asm_files_are_byte_identical_to_rc_sources():
     # trade_service.asm left the RC text on purpose: the DelayFrame bridge now farcalls
     # SlinkForeground (SFX dispatch + the trade predicate moved into bank $3F), so it is
     # covered by the byte pins below and the live gates instead of RC provenance.
-    if not RC_SOURCE.is_dir():
-        pytest.skip(f"RC source checkout absent: {RC_SOURCE}")
+    if subprocess.run(["git", "rev-parse", "--verify", RC_TAG], cwd=ROOT,
+                      capture_output=True, check=False).returncode != 0:
+        pytest.skip(f"RC provenance tag absent (a clone without tags): {RC_TAG}")
     for name in ("native_trade.asm", "trade_receptionist.asm",
                  "trade_ui.asm", "trade_prompt.asm"):
+        rc = subprocess.run(["git", "show", f"{RC_TAG}:{RC_TAG_SRC}/{name}"], cwd=ROOT,
+                            capture_output=True, check=True).stdout
         # git's autocrlf rewrites the checkout's line endings; the assembler does not care
-        assert (SOURCE / name).read_bytes().splitlines() == (RC_SOURCE / name).read_bytes().splitlines(), name
+        assert (SOURCE / name).read_bytes().splitlines() == rc.splitlines(), name
 
 
 @pytest.mark.parametrize("key", TARGETS)
