@@ -969,23 +969,49 @@ class SLinkServer:
                        next((k for k, d in details.items() if d.get("hp", 0) > 0), None))
         dfn = next((em for em in enemy_party if em.get("active")),
                    next((em for em in enemy_party if em.get("hp", 0) > 0), None))
-        if not atk_key or not dfn:
+        adapter = self.adapter_for(pid)
+        # The same names /api/calc/mons hands the full calc: the engine looks moves,
+        # abilities and items up by name, never by the cartridge's numeric id.
+        atk = _build_mon_entry(atk_key, details[atk_key], adapter) if atk_key else None
+        if not atk or not dfn:
             return None
-        atk = details[atk_key]
         bs = self.battle_state.get(pid, {})
         is_trainer = bool(bs.get("is_trainer_battle") and bs.get("opponent_class") and bs.get("opponent_name"))
+
+        def status(mon):
+            # The adapter decodes its own generation's bitfield; SLP/PSN/... lowercase is
+            # the engine's StatusName.
+            return adapter.status_token(int(mon.get("status_cond", 0) or 0)).lower()
+
+        def boosts(stages):
+            # Raw battle stages (6 = neutral) in ATK, DEF, SPE, SPA, SPD order, as the full
+            # bridge reads them (slink_bridge.js _applyBattleState).
+            if not isinstance(stages, list):
+                return {}
+            out = {}
+            for stat, raw in zip(("atk", "def", "spe", "spa", "spd"), stages, strict=False):
+                if isinstance(raw, int) and 0 <= raw <= 12 and raw != 6:
+                    out[stat] = raw - 6
+            return out
+
         return {
             "trainer_key": f"{bs['opponent_class']} {bs['opponent_name']}" if is_trainer else "",
             "is_trainer": is_trainer,
-            "player_species": self.adapter.species_name(atk.get("species_id", 0)) if atk.get("species_id") else "",
-            "player_level": atk.get("level", 0),
-            "player_nature": _nature_from_key(atk_key),
-            "player_ability": self.adapter.ability_name(atk.get("ability_id", 0), atk.get("species_id", 0)) if atk.get("ability_id") else "",
-            "player_item": self.adapter.item_name(atk.get("held_item_id", 0)) if atk.get("held_item_id") else "",
-            "player_moves": [m for m in (atk.get("moves") or []) if m][:4],
+            "is_doubles": bool(bs.get("is_doubles")),
+            "player_species": atk["species_name"],
+            "player_level": atk["level"],
+            "player_nature": atk["nature"],
+            "player_ability": atk["ability_name"],
+            "player_item": atk["item_name"],
+            "player_moves": atk["moves"],
+            "player_hp_pct": atk["hp_pct"],
+            "player_status": status(atk),
+            "player_boosts": boosts(atk["stat_stages"]),
             "enemy_species": dfn.get("species_name") or "",
             "enemy_level": dfn.get("level", 0),
             "enemy_hp_pct": max(0, min(100, int(dfn.get("hp", 0) / max(dfn.get("maxHP", 1), 1) * 100))),
+            "enemy_status": status(dfn),
+            "enemy_boosts": boosts(dfn.get("stat_stages")),
         }
 
     def _enc_table_for_status(self, area_id: str, player_id: str = "") -> dict | None:
@@ -1248,7 +1274,7 @@ class SLinkServer:
                         self._rom_type_rejected.add(player_id)
                         await self._respond(writer, [{
                             "cmd": "hud_show", "text": f"[x] UNKNOWN ROM: {_rt}",
-                            "color": [255, 0, 0], "duration": 600,
+                            "r": 255, "g": 0, "b": 0, "frames": 600,
                         }])
                         self._notify_sse()
                         continue
@@ -1308,7 +1334,7 @@ class SLinkServer:
                         self._rom_type_rejected.add(player_id)
                         await self._respond(writer, [{
                             "cmd": "hud_show", "text": "[x] MIXED GAMES",
-                            "color": [255, 0, 0], "duration": 600,
+                            "r": 255, "g": 0, "b": 0, "frames": 600,
                         }])
                         self._notify_sse()
                         continue
@@ -1350,8 +1376,11 @@ class SLinkServer:
                         for c in _real_cmds
                     )
                     log.debug(f"[CMD FLUSH] player={player_id}  {len(_real_cmds)} cmd(s): {_summary}")
-                # Notify SSE clients after TCP response (no game-client latency impact)
-                self._notify_sse()
+                # Notify SSE clients after TCP response (no game-client latency impact).
+                # Not for ghost_pos: the RR client sends it 20-30x a second and it changes
+                # nothing a page draws, but every ping makes the calc refetch full status.
+                if msg.get("event") != "ghost_pos":
+                    self._notify_sse()
 
         except (asyncio.IncompleteReadError, ConnectionResetError):
             pass

@@ -159,13 +159,9 @@
                   {% endif %}
                   {% if p.trainer_panel_html %}{{ p.trainer_panel_html | safe }}{% endif %}
                   {% if p.battle_state.calc_preview %}{% set c = p.battle_state.calc_preview %}
+                    {# forceescape: tojson leaves " alone, which would end the attribute #}
                     <div id="calc-preview-{{ pid }}" class="calc-preview" data-in-battle="1"
-                         data-trainer-key="{{ c.trainer_key }}" data-is-trainer="{{ '1' if c.is_trainer else '0' }}"
-                         data-player-species="{{ c.player_species }}" data-player-level="{{ c.player_level }}"
-                         data-player-nature="{{ c.player_nature }}" data-player-ability="{{ c.player_ability }}"
-                         data-player-item="{{ c.player_item }}" data-player-moves="{{ c.player_moves | tojson }}"
-                         data-enemy-species="{{ c.enemy_species }}" data-enemy-level="{{ c.enemy_level }}"
-                         data-enemy-hp-pct="{{ c.enemy_hp_pct }}" style="display:none"></div>
+                         data-calc="{{ c | tojson | forceescape }}" style="display:none"></div>
                   {% endif %}
                 </div>
               {% else %}
@@ -208,7 +204,7 @@
           </h2>
           <div class="mk-pairs{% if sect in ('boxed', 'pending') %} compact{% endif %}">
             {% for row in rows %}
-              <article class="mk-pair {{ row.section }}" id="pair-{{ sect }}-{{ row.area }}">
+              <article class="mk-pair {{ row.section }}" id="pair-{{ row.area }}">
                 {{ half(row, 'a', status.players.a, 'b') }}
                 <div class="mk-bond {{ row.status }}" style="grid-column:2">
                   <span class="mk-bond-area">{{ row.area_name }}</span>
