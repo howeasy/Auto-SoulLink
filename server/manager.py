@@ -561,43 +561,6 @@ def _load_settings() -> dict:
         return {}
 
 
-# ── Per-player connection state (the run page's waiting screen) ─────────────
-# server.py's identity_error texts that mean "this is not this run's game" rather than
-# "this is not this slot's save" (test_player_pack pins them to server.py).
-_WRONG_GAME_ERRORS = ("Mixed games", "Mixed artifact kinds", "Unknown rom_type")
-
-
-def connection_state(p: dict, live: bool) -> dict:
-    """One player's state from the status payload alone: {slug, label, line}. Errors come
-    before connectivity: a rejected player stays rejected after they disconnect."""
-    def state(slug, label, line):
-        return {"slug": slug, "label": label, "line": line}
-    if not live:
-        return state("stopped", "Not started", "The run is stopped. Start it, then load the launcher in BizHawk.")
-    err = p.get("identity_error") or ""
-    if err.startswith(_WRONG_GAME_ERRORS):
-        return state("wrong_game", "Wrong game", f"{err}. Load the game this run is for, then reload the launcher.")
-    if p.get("admission", "admitted") != "admitted":
-        return state("wrong_game", "Wrong cartridge", f"Not admitted: {p.get('admission_reason') or 'unknown reason'}. "
-                     "Load the cartridge this run made for this player, then reload the launcher.")
-    if err:
-        return state("identity", "Wrong save", f"{err}. Load this slot's own save: SLink will not "
-                     "adopt a different trainer.")
-    seen = p.get("last_seen_age") is not None
-    if p.get("connected") and p.get("stale"):
-        return state("disconnected", "No data", f"Connected, but silent since {p.get('last_seen_label')}: "
-                     "BizHawk may be paused, closed or frozen.")
-    if p.get("connected") and (p.get("rom_type") or "?") != "?":
-        return state("ready", "Connected", "Connected and recording.")
-    if p.get("connected"):
-        return state("waiting", "Connecting", "BizHawk connected; waiting for the game to say hello.")
-    if seen:
-        return state("disconnected", "Disconnected", f"Last heard {p.get('last_seen_label')}. Reload the "
-                     "launcher in BizHawk's Lua Console to reconnect.")
-    return state("waiting", "Waiting for BizHawk", "Load the game in BizHawk, then this player's launcher "
-                 "in Tools → Lua Console.")
-
-
 # ── Subprocess management ───────────────────────────────────────────────────
 
 def _create_time(pid: int) -> float | None:
@@ -1042,7 +1005,7 @@ class RunManager:
         """board_context for a Manager run: it polls its own board route, its launchers and
         (once it has made them) its cartridges download from the Manager. On top of the
         shared board: each player's setup ZIP, the address players connect to, the BizHawk
-        minimum and each player's connection state."""
+        minimum."""
         from server.board import PIDS, board_context
         rid = run["run_id"]
         live = run.get("status") == "running"
@@ -1053,12 +1016,10 @@ class RunManager:
                             roms_pinned=bool(run.get("randomizer")),
                             rom_ext=_rom_ext(run))
         host, source = self._connect_host()
-        players = status.get("players") or {}
         ctx.update({
             "packs": {pid: f"/api/runs/{rid}/player-pack/{pid}" for pid in PIDS},
             "connect": {"host": host, "port": run["tcp_port"], "source": source},
             "bizhawk_min": make_release.bizhawk_requirement(),
-            "conn": {pid: connection_state(players.get(pid) or {}, live) for pid in PIDS},
         })
         return ctx
 
