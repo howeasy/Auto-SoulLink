@@ -572,7 +572,7 @@ def test_c511a_the_rival_opcode_is_in_the_native_block() -> None:
     """C5-11a: the profile's native opcode keys are generated from patch/src/handlers.c (C5-6:
     the old archive/gen3-old-client:lua/mailbox.lua scrape target is deleted), so the new rival opcode must appear there
     with its ABI number and its own source citation -- the Lua side (native.lua's
-    transfer("rival")) reads it from this block, and handlers.c owns the number."""
+    replace_rival_team) reads it from this block, and handlers.c owns the number."""
     title = _title("radical_red")
     native = _load("gen3_rr")["native"]
     assert native["OP_RIVAL_SWAP"] == 28

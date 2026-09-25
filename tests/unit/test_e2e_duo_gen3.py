@@ -687,9 +687,9 @@ def test_rival_swap_is_only_a_negative_characterization():
                  'TX rival_team_replaced - {"error":"stale_battle_id","species_ids":[],"trainer_id":0}\n')
     run.assert_rival_swap_gen3_saved({"a": "", "b": b_receipt})
     assert notes and "NEGATIVE CONTROL (not qualification)" in notes[-1]
-    # the C5-10 identity gate answers first (live 3fa789da); refresh_failed would mean an
+    # the C5-10 identity gate answers first (live 3fa789da); window_closed would mean an
     # identity-less command got past it
-    for other in ("refresh_failed", "ok"):
+    for other in ("window_closed", "ok"):
         with pytest.raises(RuntimeError, match="expected 'stale_battle_id'"):
             run.assert_rival_swap_gen3_saved({"a": "", "b": b_receipt.replace("stale_battle_id", other)})
     with pytest.raises(RuntimeError, match="READY_IN_BATTLE"):
@@ -1592,7 +1592,7 @@ def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spe
     ("reconnect", "a", "wrong_save", {"bytes_change": "lua:true"}, "live party/PC RAM changed"),
     ("reconnect", "a", "initial", {}, "the runner never killed A"),
     ("rival_swap", "b", "initial", {"turn": "party"}, "never reached the action menu"),
-    ("rival_swap", "b", "initial", {"rival_reply": "lua:{error='refresh_failed'}"}, "expected error=stale_battle_id"),
+    ("rival_swap", "b", "initial", {"rival_reply": "lua:{error='window_closed'}"}, "expected error=stale_battle_id"),
     ("native_absent", "b", "initial", {"received": "lua:false"}, "apply_trade never arrived"),
     ("native_absent", "b", "initial", {"writes": 1}, "the clean cartridge wrote 1 time(s)"),
     ("native_absent", "a", "initial", {"trade_phase": "fallback"}, "the native stage failed"),

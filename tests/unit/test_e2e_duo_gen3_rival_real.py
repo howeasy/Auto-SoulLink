@@ -69,10 +69,10 @@ def test_a_real_swap_of_bs_party_passes(source):
 
 def test_the_ack_error_fails(source):
     text = _receipt(source, reply={"event": "rival_team_replaced", "trainer_id": RIVAL,
-                                   "species_ids": [], "error": "refresh_failed",
+                                   "species_ids": [], "error": "window_closed",
                                    "reason": "window_closed"})
     problems, _ = _check(text, source)
-    assert any("refresh_failed" in p for p in problems), problems
+    assert any("window_closed" in p for p in problems), problems
 
 
 def test_an_enemy_party_that_is_not_the_staged_team_fails(source):

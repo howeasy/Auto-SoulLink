@@ -475,6 +475,9 @@ function Client.new(p)
                 if m.species and m.species ~= 0 then bt.foe = { species = m.species, level = m.level }; break end
             end
         end
+        -- one announcement per battle id (OMP F5): a battle a pre-battle announcement already named
+        -- is never announced again, even when its battle_begin refused the carry
+        if bt.battle_id and bt.battle_id == st.pre_announced_id then bt.trainer_sent = true end
         if b.is_trainer and num(b.trainer_id) and b.trainer_id ~= 0 and not bt.trainer_sent then
             bt.trainer_sent = true
             bt.trainer_id = b.trainer_id
@@ -911,6 +914,7 @@ function Client.new(p)
         st.known, st.alive, st.commanded, st.party_prev, st.carried = {}, {}, {}, {}, {}
         st.box_cache, st.boxes_ok, st.battle, st.frozen, st.flags = {}, false, nil, false, {}
         st.last_area, st.trade = nil, nil
+        st.opp_seen, st.pre_announced_id = nil, nil
         st.baselined, st.seen_count, st.observe_at = false, nil, nil
         st.trade_apply, st.trade_settle_until, st.trade_unresolved = nil, 0, {}   -- the save is gone
         -- C5-11d MAJOR 3: the battle the authority named is gone with the save, whatever the
@@ -1116,6 +1120,7 @@ function Client.new(p)
         rival_authority = {session = session_nonce, battle_id = id, trainer_id = opp,
                            rejected = sig_src and sig_src.rejected, pre = true,
                            opened = io.framecount()}
+        st.pre_announced_id = id
         log("trainer " .. opp .. " announced before battle " .. id
             .. (old and (" (replaces trainer " .. tostring(old.trainer_id) .. ")") or ""))
     end
@@ -1223,13 +1228,10 @@ function Client.new(p)
            and cmd.session == ra.session and cmd.battle_id == ra.battle_id
            and type(trainer) == "number" and trainer == ra.trainer_id then
             -- G5-RR-RIVAL: the swap for a PRE-announced battle (usually still on the field). It is
-            -- STAGED in native.lua and posted in the W1 window; selectability is re-checked at
-            -- dispatch with the battle's own type flags (doubles are set by then).
-            local ok, why = selectable_team(cmd)
-            if not ok then
-                log("replace_rival_team refused: " .. why)
-                refuse(why)
-            elseif not eligible() then
+            -- STAGED in native.lua and posted in the W1 window. Selectability is checked ONLY at
+            -- dispatch (OMP F6): on the field gBattleTypeFlags still holds the LAST battle's bits,
+            -- so a stale doubles bit would refuse a singles swap here.
+            if not eligible() then
                 log("replace_rival_team: session not eligible (writes paused); nothing staged")
             elseif native and native.replace_rival_team then
                 log("replace_rival_team staged for the window (battle " .. tostring(ra.battle_id) .. ")")

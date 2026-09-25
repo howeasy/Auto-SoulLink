@@ -195,7 +195,7 @@ def test_a_stage_only_job_publishes_nothing_and_so_receipts_nothing():
 def test_the_codex_counterexample_a_completion_write_does_not_receipt_a_refused_trade_arm():
     """REV7's counterexample, with the writer real: one service() call runs a completion callback
     that writes through the sink (G5-RR-RIVAL: the rival swap no longer refreshes gBattleMons, so
-    the vehicle is a rival transfer's own `done`), and then refuses our guarded trade arm -- so a
+    the vehicle is a transfer's own `done`), and then refuses our guarded trade arm -- so a
     sink byte moved and a guard ran, the two inputs the byte-count inference read, while our own
     op was never published."""
     holder = {}
@@ -211,8 +211,8 @@ def test_the_codex_counterexample_a_completion_write_does_not_receipt_a_refused_
     # an explicit self when called from Python -- go through Lua.
     holder["allow"] = w.lua.eval("function(addr, n) return true end")
     holder["write"] = w.lua.eval("function(w) w:write_bytes(0x0203F900, {0x5A}) end")
-    swap = w.native.transfer(w.native, "rival",
-                             w.lua.table(trainer_id=5, blobs_hex=w.lua.table("AB" * 100)), writing_done)
+    swap = w.native.transfer(w.native, "enemy",
+                             w.lua.table(blobs_hex=w.lua.table("AB" * 100)), writing_done)
     w.service()
     assert swap["posted"] is True
     seen = []
@@ -230,11 +230,10 @@ def test_the_codex_counterexample_a_completion_write_does_not_receipt_a_refused_
 
 # ── C5-11a: the rival swap's own opcode, and the two uses kept apart ─────────────────────────
 
-def test_c511a_transfer_rival_posts_opcode_28_with_the_trainer_as_u16_le():
+def test_c511a_the_rival_swap_posts_opcode_28_with_the_trainer_as_u16_le():
     w = World()
-    handle = w.native.transfer(w.native, "rival",
-                               w.lua.table(trainer_id=0x1234, blobs_hex=w.lua.table("AB" * 100)),
-                               lambda *_: None)
+    handle = w.native.replace_rival_team(
+        w.native, w.lua.table(trainer_id=0x1234, blobs_hex=w.lua.table("AB" * 100)))
     w.service()
     assert handle["posted"] is True
     assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_RIVAL_SWAP"] == 28
@@ -254,25 +253,25 @@ def test_c511a_transfer_enemy_still_posts_the_trade_opcode_16():
     assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_SET_ENEMY_PARTY"] == 16
 
 
-def test_c511a_transfer_rival_refuses_a_zero_trainer():
+def test_omp_f8_there_is_no_second_ungated_rival_opcode_path():
+    """OP_RIVAL_SWAP is posted ONLY by replace_rival_team (hold/ready/guard); transfer() refuses."""
     w = World()
     assert w.native.transfer(w.native, "rival",
-                             w.lua.table(trainer_id=0, blobs_hex=w.lua.table("AB" * 100)),
-                             lambda *_: None) == (None, "invalid trainer")
+                             w.lua.table(trainer_id=5, blobs_hex=w.lua.table("AB" * 100)),
+                             lambda *_: None) == (None, "unsupported transfer step")
 
 
-def test_c511a_a_fail_ack_carries_the_patchs_reason_word_into_the_job():
-    """The patch's reason word (handlers.c owns the numbering) is surfaced to the job's done as a
-    NAME: 8 -> window_closed."""
+def test_c511a_a_fail_ack_carries_the_patchs_reason_word_into_the_reply():
+    """The patch's reason word (handlers.c owns the numbering) is the reply's error AND reason:
+    8 -> window_closed (review F3; was the misleading refresh_failed)."""
     w = World()
-    seen = []
-    w.native.transfer(w.native, "rival", w.lua.table(trainer_id=5, blobs_hex=w.lua.table("AB" * 100)),
-                      lambda why, _r, reason: seen.append((why, reason)))
+    w.native.replace_rival_team(w.native, w.lua.table(trainer_id=5, blobs_hex=w.lua.table("AB" * 100)))
     w.service()
     w.put(w.n["BASE"] + 14, 8, 2)                            # reason = REASON_WINDOW_CLOSED
     w.ack(status=3)                                          # ST_FAIL
     w.service()
-    assert seen == [("native refused", "window_closed")], seen
+    (event, fields), = w.events
+    assert fields.error == "window_closed" and fields.reason == "window_closed"
 
 
 def test_c511a_the_patch_handler_keeps_the_two_uses_apart():
@@ -495,6 +494,7 @@ def test_rival_ack_requires_actual_enemy_party_readback():
 def test_rival_success_reports_readback_species_with_no_refresh_step():
     w = World()
     raw = bytearray(100)
+    raw[0:4] = (0x0BADCAFE).to_bytes(4, "little")          # a PID gBattleMons[1] does not hold yet
     raw[0x20] = 25
     raw[0x58] = 20
     w.native.replace_rival_team(w.native, w.lua.table(
@@ -504,6 +504,9 @@ def test_rival_success_reports_readback_species_with_no_refresh_step():
         w.put(w.ram["ENEMY_BASE"] + i, byte)
     w.put(w.ram["ENEMY_COUNT_ADDR"], 1)
     w.ack()
+    w.service()
+    assert w.events == [], "no reply before the engine snapshot shows a staged mon"
+    _snapshot(w, raw)
     w.service()
     assert w.events[0][0] == "rival_team_replaced"
     assert w.events[0][1].error is None
@@ -578,7 +581,7 @@ def test_per_op_timeouts_outlast_the_patch_own_deadline(op, frames):
     native = module.new(L.table_from(w.profile, recursive=True), L.table(
         io=w.native_io, writes=w.writes, reads=w.reads, artifact_kind="companion",
         send=lambda e, f: w.events.append((e, f)), in_battle=lambda: True,
-        refresh_enemy=lambda *_: True, panel_closed=lambda: (True, 127)))
+        panel_closed=lambda: (True, 127)))
     if op == "OP_PLAY_SE":
         native.play_sound(native, 25)
     elif op == "OP_SHOW_MENU":
@@ -597,6 +600,11 @@ def test_per_op_timeouts_outlast_the_patch_own_deadline(op, frames):
 
 
 # ── G5-RR-RIVAL: a pre-announced swap is STAGED and posted in the W1 window ─────────────────
+
+def _snapshot(w, raw):
+    """BattleIntroDrawTrainersOrMonsSprites: gBattleMons[1] now holds the lead's personality."""
+    w.put(w.ram["BATTLE_MONS_ADDR"] + 0x58 + 0x48, int.from_bytes(bytes(raw[:4]), "little"), 4)
+
 
 def _window(w, open_=True):
     rr = w.profile["titles"]["radical_red"]
@@ -638,6 +646,8 @@ def test_a_held_swap_is_staged_off_battle_and_posts_only_when_the_window_opens()
     w.put(w.ram["ENEMY_COUNT_ADDR"], 1)
     w.ack()
     w.service()
+    _snapshot(w, raw)
+    w.service()
     (event, fields), = [e for e in w.events if e[0] == "rival_team_replaced"]
     assert fields.error is None and fields.species_ids[1] == 25
 
@@ -663,3 +673,49 @@ def test_a_hold_that_ends_without_the_window_dispatches_to_a_clean_refusal():
     w.service()
     assert handle["posted"] is None and w.output == []
     assert [e[1].error for e in w.events] == ["not_in_battle"]
+
+
+def test_omp_f2_a_readback_whose_engine_snapshot_never_shows_a_staged_mon_is_stale():
+    w = World()
+    raw = bytearray(100)
+    raw[0:4] = (0x1234ABCD).to_bytes(4, "little")
+    raw[0x20] = 25
+    raw[0x58] = 20
+    w.native.replace_rival_team(w.native, w.lua.table(trainer_id=5, blobs_hex=w.lua.table(raw.hex())))
+    w.service()
+    for i, byte in enumerate(raw):
+        w.put(w.ram["ENEMY_BASE"] + i, byte)
+    w.put(w.ram["ENEMY_COUNT_ADDR"], 1)
+    w.ack()
+    w.service()
+    w.frame += 600
+    w.service()
+    (event, fields), = w.events
+    assert fields.error == "enemy_snapshot_stale"
+
+
+def test_omp_f3_a_failed_read_while_the_hold_lasts_keeps_the_job_queued():
+    w = World()
+    w.battle = False
+    holding, guard_ok = [True], [False]
+    raw = bytearray(100)
+    raw[0x20] = 25
+    raw[0x58] = 20
+    handle = w.native.replace_rival_team(w.native, w.lua.table(
+        trainer_id=331, session="S", battle_id=1, blobs_hex=w.lua.table(raw.hex())),
+        lambda _e: (True, None) if guard_ok[0] else (False, "stale_battle_id"),
+        lambda _e: holding[0])
+    _window(w)
+    w.service()                                              # window open, first read not ready
+    assert handle["posted"] is None and w.events == [], "not refused while the hold lasts"
+    guard_ok[0] = True
+    w.service()
+    assert handle["posted"] is True
+
+
+def test_omp_f4_a_link_battle_is_never_the_window():
+    w = World()
+    _window(w)
+    rr = w.profile["titles"]["radical_red"]
+    w.put(w.ram["BATTLE_TYPE_ADDR"], rr["derived"]["BATTLE_TYPE_LINK_MASK"], 4)
+    assert w.native.rival_window_open(w.native) is False

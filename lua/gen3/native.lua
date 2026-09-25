@@ -39,6 +39,8 @@ function N.new(profile, deps)
     local array = deps.array or function(t) return t end
     local reads = assert(deps.reads, "Gen 3 read facade required")
     local queue, pending, poisoned, posting = {}, nil, nil, false
+    -- post-conditions awaited after an ACK (the rival swap's engine snapshot)
+    local watches, SNAPSHOT_FRAMES = {}, 600
     local seq = deps.initial_seq or 0
     assert(integer(seq, 65535), "invalid initial sequence")
     local last_frame, was_present, npc_count, panel_drawn
@@ -228,23 +230,6 @@ function N.new(profile, deps)
             args = {cmd.slot}
         end
         if step == "scene" then op = assert(p.OP_TRADE_SCENE)
-        elseif step == "rival" then
-            -- C5-11a: the rival swap's OWN opcode (28). OP_SET_ENEMY_PARTY (16) stays the field
-            -- trade's transport, so the patch's window/trainer check can never reject a trade.
-            local trainer = cmd.trainer_id
-            if not integer(trainer, 65535) or trainer == 0 then return nil, "invalid trainer" end
-            local rows = cmd.blobs_hex
-            if type(rows) ~= "table" or #rows < 1 or #rows > 6 then return nil, "invalid blobs" end
-            local bytes = {}
-            for _, hex in ipairs(rows) do
-                if type(hex) ~= "string" or #hex ~= 200 or hex:find("[^%x]") then
-                    return nil, "invalid blobs"
-                end
-                for i = 1, 200, 2 do bytes[#bytes + 1] = tonumber(hex:sub(i, i + 1), 16) end
-            end
-            op = assert(p.OP_RIVAL_SWAP)
-            args = {#rows, trainer & 255, trainer >> 8}
-            stages = {{p.BLOB_BUF, bytes}}
         elseif step == "party" or step == "enemy" then
             local rows = step == "party" and {cmd.blob_hex} or cmd.blobs_hex
             if type(rows) ~= "table" or #rows < 1 or #rows > 6 then
@@ -265,18 +250,23 @@ function N.new(profile, deps)
         return enqueue({op=op, args=args, stages=stages, done=done, valid=valid})
     end
     -- G5-RR-RIVAL: the patch's rival-swap window W1 (docs/gen3/research/rival_swap_refresh_window.md
-    -- §5): gBattleMainFunc == BeginBattleIntroDummy and gBattleCommunication[0] < 15, i.e. after
-    -- CreateNPCTrainerParty and before InitBattleControllers' selection. A post read open at this
-    -- frame end is consumed by the next frame's slink_hook, before the callbacks run (§5.2). The
-    -- patch re-checks all five parts; this read only decides WHEN a staged swap is posted.
+    -- §5), mirrored from patch/src/handlers.c's OP_RIVAL_SWAP check (OMP F4): gBattleCommunication[0]
+    -- < 15, gBattleMainFunc == BeginBattleIntroDummy and not a LINK battle here; the trainer id in
+    -- the caller's guard (gTrainerBattleOpponent_A == the epoch's). The fifth clause, callback2 ==
+    -- CB2_HandleStartBattle (RV_CB2_START_BATTLE), has no pack word, so it stays the patch's alone
+    -- (a refusal there is REASON_WINDOW_CLOSED, never a write). A post read open at this frame end
+    -- is consumed by the next frame's slink_hook, before the callbacks run (§5.2).
     local rr = profile.titles and profile.titles.radical_red
     function self:rival_window_open()
-        if not (rr and rr.ram and rr.rom and rr.ram.BATTLE_MAIN_FUNC_ADDR and rr.ram.BATTLE_COMM_ADDR
-                and rr.rom.BEGIN_BATTLE_INTRO_DUMMY_ADDR) then
+        local ram, rom, der = rr and rr.ram, rr and rr.rom, rr and rr.derived
+        if not (ram and rom and der and ram.BATTLE_MAIN_FUNC_ADDR and ram.BATTLE_COMM_ADDR
+                and ram.BATTLE_TYPE_ADDR and der.BATTLE_TYPE_LINK_MASK
+                and rom.BEGIN_BATTLE_INTRO_DUMMY_ADDR) then
             return false
         end
-        return io.read_u32(rr.ram.BATTLE_MAIN_FUNC_ADDR) == rr.rom.BEGIN_BATTLE_INTRO_DUMMY_ADDR
-               and io.read_u8(rr.ram.BATTLE_COMM_ADDR) < 15
+        return io.read_u8(ram.BATTLE_COMM_ADDR) < 15
+               and io.read_u32(ram.BATTLE_MAIN_FUNC_ADDR) == rom.BEGIN_BATTLE_INTRO_DUMMY_ADDR
+               and (io.read_u32(ram.BATTLE_TYPE_ADDR) & der.BATTLE_TYPE_LINK_MASK) == 0
     end
     -- guard(epoch): the caller's live epoch check, run at dispatch. hold(epoch) (optional): true
     -- while a PRE-announced swap should wait in the queue for the window -- the job is STAGED, not
@@ -309,12 +299,13 @@ function N.new(profile, deps)
                 -- C5-11a: the guard runs at DISPATCH, immediately before posting, and every part
                 -- is re-evaluated there -- never at enqueue. `guard` is the caller's live epoch
                 -- check (client.lua), which owns the identity; this file adds its own in-battle
-                -- and interval checks so a job can never post outside them.
-                if not in_battle() and not self:rival_window_open() then return false, "not_in_battle" end
-                if guard then
-                    local ok, why = guard(epoch)
-                    if not ok then return false, why end
-                end
+                -- and interval checks so a job can never post outside them. OMP F3: while the
+                -- caller's hold still lasts, a failed check is a read that is NOT READY yet (the
+                -- third return keeps the job queued); only an ended hold makes it a refusal.
+                local ok, why = true, nil
+                if not in_battle() and not self:rival_window_open() then ok, why = false, "not_in_battle"
+                elseif guard then ok, why = guard(epoch) end
+                if not ok then return false, why, holding() end
                 return true
             end,
             stages={{p.BLOB_BUF, bytes}}, done=function(why, _result, reason)
@@ -344,7 +335,21 @@ function N.new(profile, deps)
                     if not mon then reply("enemy_readback_failed"); return end
                     species[#species + 1] = mon.species
                 end
-                reply(nil, species)
+                -- OMP F2 post-condition: the engine builds gBattleMons[1] from the swapped party
+                -- (BattleIntroDrawTrainersOrMonsSprites); success waits, bounded, for its
+                -- personality to be one of the staged mons', else enemy_snapshot_stale.
+                -- ponytail: a value that is ALREADY a staged PID at the ack (a rematch against the
+                -- same team) cannot be told from the new write, so it is accepted at once.
+                local pids = {}
+                for i = 0, count - 1 do
+                    local o = i * 100
+                    pids[actual[o + 1] | actual[o + 2] << 8 | actual[o + 3] << 16 | actual[o + 4] << 24] = true
+                end
+                local lead_pid = ram.BATTLE_MONS_ADDR + 0x58 + 0x48   -- gBattleMons[1].personality
+                watches[#watches + 1] = {deadline = io.framecount() + SNAPSHOT_FRAMES,
+                    check = function() return pids[io.read_u32(lead_pid)] == true end,
+                    ok = function() reply(nil, species) end,
+                    fail = function() reply("enemy_snapshot_stale") end}
             end})
     end
 
@@ -430,6 +435,11 @@ function N.new(profile, deps)
             end
         end
         if poisoned then return nil, poisoned end
+        for i = #watches, 1, -1 do
+            local wt = watches[i]
+            if wt.check() then table.remove(watches, i); wt.ok()
+            elseif io.framecount() >= wt.deadline then table.remove(watches, i); wt.fail() end
+        end
         local counter = io.read_u8(p.PI_COUNT)
         if npc_count ~= nil and counter > npc_count and npc_enabled and not pending then
             send("trade_request", {})
@@ -458,7 +468,8 @@ function N.new(profile, deps)
         local job = queue[at]
         if not job then return true end
         if job.valid then
-            local valid, why = job.valid()
+            local valid, why, retry = job.valid()
+            if not valid and retry then return true end         -- not ready yet: stays queued
             if not valid then table.remove(queue, at); finish(job, why); return nil, why end
         end
         local ok, why = dispatch(job)
