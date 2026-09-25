@@ -545,3 +545,12 @@ Update (~06:00Z): the Gen 1 gate has converged. Every lane PASSED except unit's 
   2. GEN2-CALC once the calc lane's P1 lands on master.
 - Then: the full re-sweep (the overlay changed, so the 12 overlay gate receipts and 21 trade cells, plus SP-LOWWATER cells), refresh the shipped data/games/gen2_*/receipts copies, run the Gen 1 gate, and check in with the owner.
 - Merge ORDER agreed with Gen1-Collab2 (Gen 1 master lane): Gen 1 is in, Gen 2 next (after this batch + re-sweep + owner G4), Gen 3 last.
+
+Update (post-RC batch, later):
+- Landed:
+  - OVERLAY 0857cbe7, the PHONE-NAMES review follow-up. Overlays: C b405446e, G 69067c4b, S 583d8df4.
+  - SPLW db93e52c + 42f63152 + fa9b9626: SP-LOWWATER, composed-bound PASS on C/G/S, margins 101/116/116-118 B.
+  - KS5 ad1290fa, 3a37c33f, aa27a793, b86b5942.
+- KS5 still running: the KEY-SCOPE-5 FINAL round (OMP cx-06ec4e8e F1-F6), then the hello/reset/per-player queue (OMP cx-2985fe38 F1-F5).
+- Master is now 2092d75c (with the calc lane's d97c8a3b and the UI lane's fd6f97f2 .mk-warn/board.css rules). AFTER KS5: merge master; port our 3 per-pid _board.html warning lines onto `.mk-warn`; take master's gen1 sfx gate pair on conflict; then GEN2-CALC in gen2_gsc.py (calc_name_sets(gen=2), model test tests/unit/test_calc_names_multigen.py).
+- Then one CLEAN full unit run (nothing else running), the full Gen 2 re-sweep including the gate/sp_lowwater cells, the shipped receipt refresh, and the Gen 1 gate. After that, capture the Gen 1 receipts with SLINK_GEN1_CAPTURE_RECEIPTS=1: the purered_overlay and battle sfx receipts are stale.
