@@ -5,6 +5,8 @@ Every child here is a fake: no server.py, no emulator."""
 import asyncio
 import os
 import stat
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -261,3 +263,36 @@ async def test_deleting_a_missing_run_is_a_404_json_the_page_handles(manager_cli
     response = await manager_client.post("/api/runs/nope/delete")
     assert response.status == 404
     assert await response.json() == {"ok": False, "error": "Run not found"}
+
+
+# -- without psutil: liveness must not kill (on Windows os.kill(pid, 0) is TerminateProcess) --
+def _no_psutil(monkeypatch):
+    monkeypatch.delattr(manager, "psutil", raising=False)
+    monkeypatch.setattr(manager, "PSUTIL_AVAILABLE", False)
+    if os.name == "nt":
+        def never(*_args):
+            raise AssertionError("os.kill on Windows terminates the process")
+        monkeypatch.setattr(manager.os, "kill", never)
+
+
+def test_liveness_without_psutil_probes_without_killing(monkeypatch):
+    finished = subprocess.Popen([sys.executable, "-c", "pass"])
+    finished.wait()
+    _no_psutil(monkeypatch)
+    assert manager._is_alive(os.getpid()) is True
+    assert manager._is_alive(os.getpid(), None) is True, "pid_created is None on this path"
+    assert manager._is_alive(finished.pid) is False
+    assert manager._create_time(os.getpid()) is None
+
+
+def test_stop_without_psutil_kills_and_waits_for_the_child(monkeypatch):
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        monkeypatch.delattr(manager, "psutil", raising=False)
+        monkeypatch.setattr(manager, "PSUTIL_AVAILABLE", False)
+        assert manager._is_alive(child.pid)
+        assert manager._kill_run(child.pid) is True
+        assert child.wait(timeout=5) is not None
+    finally:
+        if child.poll() is None:
+            child.kill()

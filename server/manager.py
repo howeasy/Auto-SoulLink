@@ -26,6 +26,7 @@ import shutil
 import signal
 import stat
 import sys
+import time
 from collections import defaultdict
 from datetime import UTC, datetime
 
@@ -516,12 +517,35 @@ def _is_alive(pid: int | None, created: float | None = None) -> bool:
         except psutil.Error:
             return False
         return created is None or abs(started - created) < 0.01
-    # Fallback: send signal 0 (works on Unix; on Windows psutil is strongly preferred)
+    # Without psutil there is no create time to check (pid_created stays None), so the bare pid.
+    if os.name == "nt":
+        return _win_pid_alive(pid)
     try:
-        os.kill(pid, 0)
+        os.kill(pid, 0)         # POSIX: signal 0 only probes
         return True
     except (ProcessLookupError, PermissionError, OSError):
         return False
+
+
+def _win_pid_alive(pid: int) -> bool:
+    """Windows liveness without psutil. Never os.kill(pid, 0) here: on Windows any signal but
+    CTRL_C/CTRL_BREAK is TerminateProcess, so the probe would kill the run's server.
+    ponytail: a process that exited with code 259 (STILL_ACTIVE) reads as alive."""
+    import ctypes
+    from ctypes import wintypes
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    handle = kernel32.OpenProcess(0x1000, False, pid)       # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return False
+    try:
+        code = wintypes.DWORD()
+        return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
@@ -624,6 +648,10 @@ def _kill_run(pid: int, created: float | None = None) -> bool:
                 p.wait(timeout=5)
         else:
             os.kill(pid, signal.SIGTERM if hasattr(signal, "SIGTERM") else signal.CTRL_C_EVENT)
+            # Termination is asynchronous (TerminateProcess, SIGTERM): give it the same 5 s.
+            deadline = time.monotonic() + 5
+            while _is_alive(pid, created) and time.monotonic() < deadline:
+                time.sleep(0.05)
     except Exception as e:
         log.warning(f"Could not kill PID {pid}: {e}")
     return not _is_alive(pid, created)
