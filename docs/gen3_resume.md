@@ -1,6 +1,36 @@
-# Gen 3 migration — resume note (updated 2026-09-25, checkpoint 18: 1-hour block — FR/LG dress rehearsal 41/41, RR whiteout past the door, Gen 3 HUD in the Gen 1/2 pixel font; freeze + final pass next)
+# Gen 3 migration — resume note (updated 2026-09-25, checkpoint 19: FROZEN CUT c0f6101b, FR/LG final pass running sharded; RR 13/13; master merged)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in the sweep worktree's `docs/gen1_reference/RC_MASTER_GUIDE.md` (`E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`). Requirements ledger: `docs/gen3_requirements.md`.
+
+## CHECKPOINT 19 (2026-09-25, 1.5-hour block): resume here
+
+Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); headless OMP for reviews, tests and small code the coordinator reviews.
+- **FROZEN CUT `c0f6101b`.**
+  - The FR/LG final pass is running sharded: `--carry --shard 1/2` on gen3-lane-clean and `--shard 2/2` on gen3-lane-2, both with `--stop-at 2026-09-25T12:50Z`.
+  - To finish it: re-run the same two commands with `--resume` at the same cut; they skip rows that already PASSed. Then run `python tools/gen3_final_cut.py --cut c0f6101b --merge-summary`, which writes `fc_SUMMARY_c0f6101b.txt`.
+  - Then run the RR pass: `--cut c0f6101b --title rr`, which writes `fc_SUMMARY_c0f6101b_rr.txt`.
+  - Any code change after c0f6101b means a new cut, so docs-only commits only.
+- **Master merged:** local master 96ae536d, via the scratch branch claude/gen3-master-sync 597c52d2, merged as e33b03b1 (Opus G4-MASTER-SYNC).
+  - 9 conflicts were resolved by intent; the full list is in the merge message.
+  - test_protocol_citations was repaired, and one drift was re-anchored in c0f6101b.
+  - Full unit suite: 7074 passed. test_gen1_trade_patch fails only in the worktree, which has no .cache/pret/pokered; lanes provision it.
+  - OMP REVIEW cx-cd3f4189 of the resolution is pending. If it finds a dropped hunk, the fix needs a new cut.
+  - The scratch dir C:/slink-wt/g3sync is unregistered but was locked by a process; delete it once free.
+- **RR whiteout:** the START-menu control now requires sStartMenuWindowId (0x0203ABE0, verified byte-identical on both RR ROMs) plus field_controls_locked. RR's marker is `start_menu`, and e2e_duo queues the probe by the per-title marker. PASS at fca70bb2 (01e50258, fca70bb2, a30e15b3).
+- **Rival Team Swap:** it was off by one. It matched the trainer BEFORE each rival: gTrainers[325] Daisuke, [738] Lance, per the RR ROM. Fixed with `tid + 1` in e729abdb; OMP cx-5e891395 found nothing. The UI lane confirmed the calc already uses runtime ids.
+- **RR zip boot:** real now. `zip_boot --title radical_red` boots the companion as slink_RR.gba with rr_town.sav; the client line reads `gen3_rr/radical_red (companion by hash)`, and the server logs `hello rom=firered_rr`. PASS at 58a8951f.
+  - RR rows are named rr_zip_build / rr_zip_check / zip_boot_radicalred, with summary `_rr` (c0e1e98e, OMP cx-f570e611).
+- **G5 gaps** (OMP cx-6827201a, verified): owner decisions for G5.
+  1. Full RR clean coverage: only the two mixed clean-side rows exist.
+  2. A qualifying rival swap with enemy-party readback: rival_swap is only a negative control.
+  3. Opcode gates: 26 live + 12 deferred vs PLAN's 39.
+  4. No explicit anchor/md5/grep/write-guard/control receipts in the RR plan.
+  The G5 draft status text is stale: it still says "no RR runner rows / no zip receipt".
+- **NEXT:**
+  1. Finish the FR/LG pass and merge the summary.
+  2. Run `--title rr`.
+  3. Settle cx-cd3f4189.
+  4. Fill in `<<FINAL_CUT_SHA>>` = c0f6101b and the tables, refresh the G5 status, and put the G4 request plus the G5 gap decisions to the owner.
 
 ## CHECKPOINT 18 (2026-09-25, 1-hour block): resume here
 
