@@ -116,22 +116,6 @@ def _configure_logging(data_dir: str | None, verbose: bool) -> None:
 
 # The calc's files (dist / src resolution) live in server/calc_files.py, shared with the Manager.
 
-_NATURE_NAMES = (
-    "Hardy","Lonely","Brave","Adamant","Naughty",
-    "Bold","Docile","Relaxed","Impish","Lax",
-    "Timid","Hasty","Serious","Jolly","Naive",
-    "Modest","Mild","Quiet","Bashful","Rash",
-    "Calm","Gentle","Sassy","Careful","Quirky",
-)
-
-def _nature_from_key(key: str) -> str:
-    """Derive nature name from a monKey ('PERS_HEX:OTID_HEX...')."""
-    try:
-        return _NATURE_NAMES[int(key.split(":")[0], 16) % 25]
-    except Exception:
-        return "Hardy"
-
-
 def _format_killed_at(raw: str | None) -> str:
     """Render an ISO-8601 killed_at timestamp via the browser-locale format
     (matches ``new Date(raw).toLocaleString()``). Falls back to the raw
@@ -162,9 +146,13 @@ def _build_mon_entry(key, detail, adapter):
         return None
     # Every name leaves in the calc's spelling (adapter.calc_name) — the calc matches exactly.
     species = adapter.calc_name("species", adapter.species_name(sid))
-    nature   = _nature_from_key(key)
+    # Nature/ability are adapter facts: Gen 1/2 have no personality-value nature
+    # (calc_nature() returns None) and no abilities at all (supports_abilities() False).
+    nature = adapter.calc_nature(key)
+    has_ability = adapter.supports_abilities()
     abl_name = adapter.calc_name("ability", detail.get("ability_name", "")
-                                 or adapter.ability_name(detail.get("ability_id", 0), sid))
+                                 or adapter.ability_name(detail.get("ability_id", 0), sid)
+                                 ) if has_ability else ""
     item_id  = detail.get("held_item_id", 0)
     item     = adapter.calc_name("item", adapter.item_name(item_id)) if item_id else ""
     raw_moves = [m for m in (detail.get("moves") or []) if m][:4]
@@ -180,8 +168,11 @@ def _build_mon_entry(key, detail, adapter):
     hp_pct   = max(0, min(100, int(hp / maxhp * 100)))
     disp     = f"{species} ({nick})" if nick and nick != species else species
     lines    = [disp + (f" @ {item}" if item else "")]
-    lines   += [f"Ability: {abl_name}" if abl_name else "Ability: None"]
-    lines   += [f"Level: {level}", f"{nature} Nature"]
+    if has_ability:
+        lines += [f"Ability: {abl_name}" if abl_name else "Ability: None"]
+    lines += [f"Level: {level}"]
+    if nature:
+        lines += [f"{nature} Nature"]
     for m in moves:
         lines.append(f"- {m}")
     return {

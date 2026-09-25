@@ -134,6 +134,14 @@
   // the second setdex file) key off this rather than sniffing species/gen.
   function _isRR() { return _dex === 'rr'; }
 
+  // The Normal/Hardcore toggle in the calc's own top bar (normal.template.html /
+  // hardcore.template.html .modeSelection) picks RR's two difficulty-mode trainer
+  // setdexes -- meaningless (and confusing) outside RR.
+  function _updateModeToggleVisibility() {
+    var modeSel = document.querySelector('.modeSelection');
+    if (modeSel) modeSel.style.display = _isRR() ? '' : 'none';
+  }
+
   // Called at the top of every successful /api/calc/mons fetch, before the
   // species-name normalization / enemy enrichment that depend on the right
   // gen's pokedex being loaded.
@@ -141,9 +149,11 @@
     if (!calcInfo) {
       console.warn('[SLink bridge] Payload has no "calc" info — staying on Gen 9.');
       _dex = null;
+      _updateModeToggleVisibility();
       return;
     }
     _dex = calcInfo.dex || null;
+    _updateModeToggleVisibility();
     var wantGen = calcInfo.gen;
     if (!wantGen || window.gen === wantGen) return;
     var $radio = window.$ && window.$('#gen' + wantGen);
