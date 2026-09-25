@@ -32,6 +32,7 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus only if need
 - **Queue:**
   - UI-lane old-client survey: the RR panel's Badges row read a count only the deleted client set (0/8), fixed in 17608b51. Remove the now-unfed `status` handler (state.py :339-340, :520-528, SoulLinkState.player_badges :288). Keep the ghost_pos relay for the post-RC ghost;
   - HUD: the UI lane's banner-below-wrapped-prompt fix is here as bc1ca258 (master a9bdce38). The GBA pixel font is on local master as 66981144 (not pushed);
+  - MERGE NOTE: the UI lane is landing an RR-to-calc name table on master (owner-approved; OMP cx-6cc640f2): data/games/gen3_frlge/calc_names.json, `calc_name()` in server/adapters/base.py plus gen3_frlge.py, server calc DTO, and gen_rr_priority_trainers.py. At merge, decide whether it moves to data/games/gen3_rr/. Rival sets are keyed from trainer_battle_start's trainer_id;
   - the inject_link lost-response retry (independent of the poll rate);
   - the stale RR-only block comment in tools/e2e_duo.py (explode is no longer a control);
   - gSpecialVar_Result: OMP cx-72da0fae (verified) found the cancel latch samples only after the 16-frame `G.tap`, so "overwritten the same frame" is unproven. Next: sample during the tap, or arm a write watchpoint on 0x020370D0 before B;
