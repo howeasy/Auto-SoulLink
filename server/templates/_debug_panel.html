@@ -244,7 +244,7 @@
     <div style="display:flex;gap:0.6em;align-items:center;margin-top:0.4em">
       <button class="btn btn-green" onclick="doManualLink()">Link</button>
       <label style="display:inline;font-size:var(--fs-sm);cursor:pointer;color:var(--muted)">
-        <input type="checkbox" id="ml-override" style="width:auto"> Override existing links
+        <input type="checkbox" id="ml-override" style="width:auto" onchange="_mlPopulateMons('a'); _mlPopulateMons('b')"> Override existing links
       </label>
       <span id="ml-warn" style="font-size:var(--fs-sm);color:var(--yellow)"></span>
     </div>
@@ -294,8 +294,16 @@ function showResult(el, ok, data) {
 async function api(method, path, body) {
   var opts = {method: method, headers: {'Content-Type':'application/json'}};
   if (body !== undefined) opts.body = JSON.stringify(body);
-  var r = await fetch(path, opts);
-  return await r.json();
+  // Every caller renders {ok, error}: a dropped request or a non-JSON error page must
+  // show up as a failure instead of leaving the button with no result.
+  try {
+    var r = await fetch(path, opts);
+    var text = await r.text();
+    try { return JSON.parse(text); }
+    catch (e) { return {ok: false, error: 'HTTP ' + r.status + ': ' + text.slice(0, 200)}; }
+  } catch (e) {
+    return {ok: false, error: 'Request failed: ' + e.message};
+  }
 }
 function flashPanel(el) {
   while (el && !el.classList.contains('panel')) el = el.parentElement;
@@ -815,7 +823,8 @@ function _mlPopulateMons(pid) {
   var h = '<option value="">-- select --</option>';
   for (var i = 0; i < opts.length; i++) {
     var o = opts[i];
-    var dis = o.linked ? ' disabled' : '';
+    // Linked keys are selectable only when "Override existing links" is on.
+    var dis = (o.linked && !document.getElementById('ml-override').checked) ? ' disabled' : '';
     var lbl = o.label + (o.linked ? ' \u2714' : '');
     h += '<option value="' + esc(o.key) + '" data-area="' + esc(o.pending_area||'') + '"' + dis + '>' + esc(lbl) + '</option>';
   }

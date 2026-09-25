@@ -3881,7 +3881,9 @@ class SLinkServer:
         if os.path.exists(mem_path):
             try:
                 with open(mem_path) as mf:
-                    memorial_log = json.load(mf)
+                    mem_doc = json.load(mf)
+                # memorial.json is {"retired_pairs": [...]}; the panel wants the list.
+                memorial_log = mem_doc.get("retired_pairs", []) if isinstance(mem_doc, dict) else []
             except Exception:
                 pass
         # Build memorial box contents from pc_boxes (mons in the memorial box)
