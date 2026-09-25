@@ -36,8 +36,48 @@ def _stopped_run(run_root, run_id="run_1", name="Kanto Duo", game="gen1"):
 
 
 @pytest.mark.asyncio
-async def test_no_runs_lands_on_the_new_run_form(manager_client):
+async def test_home_with_no_runs_says_how_to_start(manager_client):
+    """/ is the home page. With nothing to open it walks through starting a run."""
     resp = await manager_client.get("/")
+    assert resp.status == 200
+    body = await resp.text()
+    assert "mk-home-hero" in body and "Getting started" in body and 'href="/new"' in body
+    assert "mk-home-runs" not in body
+
+
+@pytest.mark.asyncio
+async def test_home_lists_runs_running_first_with_live_counts(manager_client, monkeypatch):
+    """Running runs lead with their alive/fallen counts; stopped ones say so, newest first;
+    archived ones stay in the rail's fold. The primary action opens the running run."""
+    manager._save_registry([
+        {"run_id": "old", "name": "Old Stopped", "created_at": "2026-09-01T00:00:00", "tcp_port": 54321,
+         "http_port": 8081, "status": "stopped", "pid": None, "game": "gen1"},
+        {"run_id": "new", "name": "New Stopped", "created_at": "2026-09-20T00:00:00", "tcp_port": 54322,
+         "http_port": 8082, "status": "stopped", "pid": None, "game": "gen1"},
+        {"run_id": "live", "name": "Live Run", "created_at": "2026-09-10T00:00:00", "tcp_port": 54323,
+         "http_port": 8083, "status": "running", "pid": 4242, "game": "gen3_rr"},
+        {"run_id": "gone", "name": "Archived Run", "created_at": "2026-09-21T00:00:00", "tcp_port": 54324,
+         "http_port": 8084, "status": "archived", "pid": None, "game": "gen1"},
+    ])
+    monkeypatch.setattr(manager, "_is_alive", lambda pid: pid == 4242)
+
+    async def fake_live(self, request, run):
+        return {"live": run["run_id"]}
+    monkeypatch.setattr(manager.RunManager, "_fetch_live", fake_live)
+    import server.board
+    monkeypatch.setattr(server.board, "build_board", lambda status: {"counts": {"alive": 4, "fallen": 1}})
+
+    body = await (await manager_client.get("/")).text()
+    home = body[body.index("mk-home-runs"):]
+    assert home.index("Live Run") < home.index("New Stopped") < home.index("Old Stopped")
+    assert "Archived Run" not in home
+    assert "4</b> alive" in home and "1</b> fallen" in home
+    assert 'href="/runs/live">Open Live Run' in body
+
+
+@pytest.mark.asyncio
+async def test_new_run_form_is_at_new(manager_client):
+    resp = await manager_client.get("/new")
     assert resp.status == 200
     body = await resp.text()
     assert "window.SLINK_FORM" in body and "Create run" in body

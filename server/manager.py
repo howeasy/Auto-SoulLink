@@ -740,10 +740,25 @@ class RunManager:
         return max(running, key=lambda r: r.get("created_at", ""))
 
     async def handle_index(self, request: web.Request) -> web.Response:
-        """GET / — the shell with the first running run (or the first run) selected."""
+        """GET / — the home page: what Soul Link is, the runs, and the way in."""
         runs = self._get()
-        first = next((r for r in runs if r.get("status") == "running"), runs[0] if runs else None)
-        return await self._render_shell(request, runs, first, page="run" if first else "new")
+        return await self._render_shell(request, runs, None, page="home",
+                                        extra={"home_runs": await self._home_runs(request, runs)})
+
+    async def _home_runs(self, request: web.Request, runs: list[dict]) -> list[dict]:
+        """Unarchived runs, running first then newest; alive/fallen only where a server answers."""
+        from server.board import build_board
+        shown = sorted((r for r in runs if r.get("status") != "archived"),
+                       key=lambda r: r.get("created_at") or "", reverse=True)
+        shown.sort(key=lambda r: r.get("status") != "running")
+
+        async def one(run: dict) -> dict:
+            r = self._augment_for_template(run)
+            live = (await self._fetch_live(request, run)
+                    if run.get("status") == "running" and run.get("http_port") else None)
+            r["counts"] = build_board(live)["counts"] if live else None
+            return r
+        return list(await asyncio.gather(*(one(r) for r in shown)))
 
     async def handle_run_page(self, request: web.Request) -> web.Response:
         """GET /runs/{run_id} — the shell with that run's board."""
@@ -757,7 +772,7 @@ class RunManager:
         """GET /new — the shell with the New-run form."""
         return await self._render_shell(request, self._get(), None, page="new")
 
-    async def _render_shell(self, request, runs, run, *, page):
+    async def _render_shell(self, request, runs, run, *, page, extra=None):
         status = await self._run_status(request, run) if run else None
         ctx = {
             "page_title":   "Soul Link",
@@ -780,6 +795,7 @@ class RunManager:
         }
         if run:
             ctx.update(self._board_context(run, status))
+        ctx.update(extra or {})
         return aiohttp_jinja2.render_template("manager.html", request, ctx)
 
     @staticmethod

@@ -167,6 +167,56 @@
         {% include "_board.html" %}
       </div>
 
+    {% elif page == 'home' %}
+      {# ── Home ─────────────────────────────────────────────────────────── #}
+      {% set live = home_runs | selectattr('status', 'equalto', 'running') | first %}
+      <div class="mk-page mk-home">
+        <section class="mk-home-hero">
+          <div class="mk-home-link" aria-hidden="true">
+            <svg class="mk-home-ball a" viewBox="0 0 595.3 594.1" aria-hidden="true"><path fill="currentColor" opacity=".85" d="M297.6,380.9c-40.4,0-74.1-28.6-82.1-66.6H81.1c9.5,110.5,102.2,197.2,215.1,197.2s205.7-86.7,215.1-197.2H379.7C371.7,352.4,338,380.9,297.6,380.9z"/><path fill="currentColor" d="M297.6,41.3C156.4,41.3,41.9,155.8,41.9,297s114.5,255.7,255.7,255.7S553.4,438.3,553.4,297S438.9,41.3,297.6,41.3z M297.6,511.6c-113,0-205.7-86.7-215.1-197.2h134.4c8,38,41.7,66.6,82.1,66.6s74.1-28.6,82.1-66.6h131.7C503.3,424.8,410.6,511.6,297.6,511.6z"/><path fill="#FF1C1C" d="M297.7,213.2c40.4,0,74.1,28.6,82.1,66.6h134.4C504.7,169.2,412,82.5,299,82.5S93.4,169.2,83.9,279.7h131.7C223.6,241.7,257.3,213.2,297.7,213.2z"/></svg>
+            <span class="mk-home-bond">&lt;&gt;</span>
+            <svg class="mk-home-ball b" viewBox="0 0 595.3 594.1" aria-hidden="true"><path fill="currentColor" opacity=".85" d="M297.6,380.9c-40.4,0-74.1-28.6-82.1-66.6H81.1c9.5,110.5,102.2,197.2,215.1,197.2s205.7-86.7,215.1-197.2H379.7C371.7,352.4,338,380.9,297.6,380.9z"/><path fill="currentColor" d="M297.6,41.3C156.4,41.3,41.9,155.8,41.9,297s114.5,255.7,255.7,255.7S553.4,438.3,553.4,297S438.9,41.3,297.6,41.3z M297.6,511.6c-113,0-205.7-86.7-215.1-197.2h134.4c8,38,41.7,66.6,82.1,66.6s74.1-28.6,82.1-66.6h131.7C503.3,424.8,410.6,511.6,297.6,511.6z"/><path fill="#FF1C1C" d="M297.7,213.2c40.4,0,74.1,28.6,82.1,66.6h134.4C504.7,169.2,412,82.5,299,82.5S93.4,169.2,83.9,279.7h131.7C223.6,241.7,257.3,213.2,297.7,213.2z"/></svg>
+          </div>
+          <h1 class="mk-home-title">Soul Link</h1>
+          <p class="mk-home-lede">Two players, two games. Every catch is paired with your partner's catch from the same area, and when one falls, so does the other.</p>
+          <div class="mk-home-actions">
+            {% if live %}
+              <a class="mk-btn primary big" href="/runs/{{ live.run_id }}">Open {{ live.name }}</a>
+              <a class="mk-btn big" href="/new">New run</a>
+            {% else %}
+              <a class="mk-btn primary big" href="/new">New run</a>
+            {% endif %}
+          </div>
+        </section>
+
+        {% if home_runs %}
+          <section class="mk-zone">
+            <h2 class="mk-h2"><span>Runs</span><i></i></h2>
+            <ul class="mk-home-runs">
+              {% for r in home_runs %}
+                <li><a class="mk-home-run" href="/runs/{{ r.run_id }}">
+                  <span class="mk-dot {{ r.status }}"></span>
+                  <span class="mk-home-runname">{{ r.name }}</span>
+                  <span class="mk-sub">{{ r.game_label or 'Game detected when players connect' }}</span>
+                  <span class="mk-home-runstate">{% if r.counts %}<b class="alive">{{ r.counts.alive }}</b> alive, <b class="fallen">{{ r.counts.fallen }}</b> fallen{% elif r.status == 'running' %}Running{% else %}Stopped{% endif %}</span>
+                </a></li>
+              {% endfor %}
+            </ul>
+          </section>
+        {% else %}
+          <section class="mk-zone">
+            <h2 class="mk-h2"><span>Getting started</span><i></i></h2>
+            <ol class="mk-home-steps">
+              <li><b>Create a run.</b> Choose the game family and the rules both players share.</li>
+              <li><b>Load a launcher in each BizHawk.</b> The run page gives each player their own script: load the game first, then the script.</li>
+              <li><b>Play.</b> Catches pair up by area, and a faint on one side faints the partner on the other.</li>
+            </ol>
+          </section>
+        {% endif %}
+
+        <p class="mk-sub mk-home-more">Put the run on stream with the <a href="/broadcast">OBS overlays</a>, or patch a cartridge in <a href="/tools">Tools</a>.</p>
+      </div>
+
     {% else %}
       <div class="mk-page"><div class="mk-empty">No runs. <a href="/new">Create one.</a></div></div>
     {% endif %}
