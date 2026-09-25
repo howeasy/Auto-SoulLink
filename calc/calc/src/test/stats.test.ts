@@ -32,7 +32,7 @@ describe('Stats', () => {
           stat,
           100,
           31,
-          252,
+          gen < 3 ? 65535 : 252, // SLink: Gen 1/2 `ev` is raw stat exp; max = the old +63
           100,
           'Adamant'
         );

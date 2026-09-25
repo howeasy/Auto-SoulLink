@@ -175,6 +175,22 @@ $(".sl .dvs").keyup(function () {
 	poke.find(".hp .dvs").val(getHPDVs(poke));
 	calcHP(poke);
 });
+// SLink: Gen 1/2 stat exp inputs. Gen 2 Special stat exp is one value, so Sp. Def mirrors
+// Sp. Atk (the engine rejects unequal SpA/SpD before Gen 3), as the DVs above do.
+$(".hp .statexp").bind("keyup change", function () {
+	calcHP($(this).closest(".poke-info"));
+});
+["at", "df", "sp", "sl"].forEach(function (stat) {
+	$("." + stat + " .statexp").bind("keyup change", function () {
+		calcStat($(this).closest(".poke-info"), stat);
+	});
+});
+$(".sa .statexp").bind("keyup change", function () {
+	var poke = $(this).closest(".poke-info");
+	poke.find(".sd .statexp").val($(this).val());
+	calcStat(poke, 'sa');
+	calcStat(poke, 'sd');
+});
 
 function getForcedTeraType(pokemonName) {
 	if (startsWith(pokemonName, "Ogerpon-Cornerstone")) {
@@ -947,10 +963,8 @@ function correctHiddenPower(pokemon) {
 	return pokemon;
 }
 
-// Gen 1/2 don't yet have a dedicated per-stat "stat exp" input (the generic .evs field is a
-// 0-252 modern-EV control that has no effect on Gen 1/2 stats today). Use a ".statexp" input if
-// a later template phase adds one, else default to max stat exp (65535) so behavior stays
-// identical to today, where every mon implicitly had max stat exp (see calc/calc/src/stats.ts).
+// Gen 1/2 raw stat exp (0-65535) from the row's .statexp input; max (65535) when a row has
+// none, which reproduces the engine's old always-max-stat-exp output (calc/calc/src/stats.ts).
 function getStatExpOrMax(container) {
 	var $statExp = container.find(".statexp");
 	return $statExp.length ? ~~$statExp.val() : 65535;

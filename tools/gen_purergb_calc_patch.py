@@ -7,6 +7,9 @@ Inputs (never hand-typed, per data/games/gen1_purergb/README.md):
   - data/games/gen1_purergb/types.json    (type_names, species_types)
   - data/games/gen1_purergb/species_index.json (per-species types/stats/classification)
   - data/games/gen1_purergb/moves.json    (per-move type/power/split)
+  - data/games/gen1_rby/calc_names.json   (ROM display name -> damage-calc Gen 1 name; the same
+      table server/adapters/gen1_rby.py's Gen1Adapter.calc_name() applies, inherited unchanged by
+      Gen1PureRGBAdapter - see server/adapters/gen1_purergb.py's move_name()/species_name())
   - the pinned purergb-src checkout (via tools/gen1_foundation.py), for:
       data/types/type_matchups.asm      - full type effectiveness table
       data/pokemon/names.asm            - MonsterNames, in-game display name per internal index
@@ -23,7 +26,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -32,12 +37,24 @@ sys.path.insert(0, str(REPO / "tools"))
 import gen1_foundation as gf  # noqa: E402
 
 DATA_DIR = REPO / "data" / "games" / "gen1_purergb"
+CALC_NAMES_PATH = REPO / "data" / "games" / "gen1_rby" / "calc_names.json"
 OUT_PATH = REPO / "calc" / "calc" / "src" / "data" / "purergb.ts"
 
 # Species classifications worth exposing to the damage calc: ordinary dex mons, alternate forms,
 # and spirits (battle-only bosses; not catchable, but a player can still face one). "unused",
 # "missingno" and "picture_only" slots are dead ROM space / glitch-only, not worth modelling.
 INCLUDED_CLASSIFICATIONS = {"ordinary", "form", "spirit"}
+
+# A handful of custom pureRGB moves whose in-game effect includes an HP drain the calc's generic
+# `move.drain` field already knows how to render (calc/calc/src/desc.ts) - moves.json carries no
+# `drain` field at all (see docs/calc_multigen/PURERGB_MECHANICS.md §2), so this is hand-pinned
+# against the source: engine/battle/move_effects/siphon_snag.asm (`_SiphonSnagEffect`) drains the
+# target for half the damage dealt back to the user, exactly like vanilla Absorb/Mega Drain/Dream
+# Eater/Leech Life (all `drain: [1, 2]` in calc/calc/src/data/moves.ts's RBY table).
+MOVE_DRAIN: dict[str, tuple[int, int]] = {
+    "Siphon Snag": (1, 2),
+}
+
 
 # Same [a-z0-9]-only, lowercased id scheme as calc/calc/src/util.ts toID().
 def to_id(name: str) -> str:
@@ -58,6 +75,20 @@ def title_case_word(word: str) -> str:
     return word[:1].upper() + word[1:].lower() if word else word
 
 
+def load_calc_move_names() -> dict[str, str]:
+    """ROM move display name -> damage-calc Gen 1 name (data/games/gen1_rby/calc_names.json's
+    "move" table). Applied by server/adapters/gen1_rby.py's Gen1Adapter.calc_name("move", ...),
+    which server/adapters/gen1_purergb.py's Gen1PureRGBAdapter inherits unchanged (it never
+    overrides calc_name) - so this is the exact table the server applies to a pureRGB move name
+    before it ever reaches the frontend/calc bridge. purergb.ts must use these same calc names (not
+    moves.json's raw ROM spelling) for every move this table renames, or the calc's move lookup
+    (keyed by toID(name)) silently misses and falls back to vanilla Gen 1 data for that move -
+    see docs/calc_multigen/PURERGB_MECHANICS.md's naming-policy section for the worked example
+    (Vicegrip vs Vise Grip) and the more serious Night Shade/Sonic Boom collision it uncovered."""
+    data = json.loads(CALC_NAMES_PATH.read_text(encoding="utf-8"))
+    return dict(data.get("move", {}))
+
+
 def build_ordinary_names(purergb_root: Path) -> list[str]:
     """MonsterNames, 1-indexed by internal species index (index 0 = NO_MON, unused here)."""
     text = (purergb_root / "data" / "pokemon" / "names.asm").read_text(encoding="utf-8")
@@ -76,7 +107,16 @@ def build_form_names(purergb_root: Path) -> dict[int, str]:
     for the handful of alternate-form species that reuse their base species' MonsterNames text
     in-game (e.g. internal index 172 displays as "ONIX" just like index 34, so the ROM's own
     display name can't disambiguate them - constants/pokemon_constants.asm's compile-time symbol
-    can: HARDENED_ONIX, VOLCANIC_MAGMAR, etc)."""
+    can: HARDENED_ONIX, VOLCANIC_MAGMAR, etc).
+
+    NOTE: server/adapters/gen1_purergb.py's species_name() does NOT do this - for a "form" species
+    it returns `_display_case(species_index.json's own "name" field)`, which (verified directly:
+    species_index.json's entry 172 has "name": "ONIX") is the SAME text as the base species, not
+    this disambiguated one. The calc needs a unique name per species (it's both the dict key and
+    the toID() lookup key), so this generator keeps the disambiguated pokemon_constants.asm name
+    regardless - see docs/calc_multigen/PURERGB_MECHANICS.md's naming-policy section: the
+    coordinator needs a pureRGB-only calc_names entry for each of these 7 forms once the server
+    side sends the literal (colliding) adapter name."""
     text = (purergb_root / "constants" / "pokemon_constants.asm").read_text(encoding="utf-8")
     out: dict[int, str] = {}
     for m in re.finditer(r"const\s+([A-Z0-9_]+)\s*;\s*\$([0-9A-Fa-f]+)", text):
@@ -121,11 +161,12 @@ def ts_str(s: str) -> str:
     return json.dumps(s, ensure_ascii=False)
 
 
-def build_species_ts(species_index: dict, ordinary_names: list[str], form_names: dict[int, str],
-                      type_names: dict[str, str]) -> tuple[list[str], list[str]]:
-    lines: list[str] = []
+def build_species_data(species_index: dict, ordinary_names: list[str], form_names: dict[int, str],
+                        type_names: dict[str, str]) -> tuple[dict, list[str]]:
+    """{display name: {types, bs, weightkg}} - the same SpeciesData shape (calc/calc/src/data/
+    species.ts) every other gen's hand-written table uses, keyed by name like RBY/GSC/etc. are."""
+    out: dict[str, dict] = {}
     warnings: list[str] = []
-    seen_ids: set[str] = set()
     for idx_str in sorted(species_index["species"], key=int):
         entry = species_index["species"][idx_str]
         classification = entry["classification"]
@@ -142,141 +183,115 @@ def build_species_ts(species_index: dict, ordinary_names: list[str], form_names:
                 warnings.append(f"internal index {idx} ({entry['name']}) form has no "
                                  "pokemon_constants.asm match; skipped")
                 continue
-        sid = to_id(name)
-        if sid in seen_ids:
-            warnings.append(f"duplicate species id {sid!r} (internal index {idx}); skipped")
+        if name in out:
+            warnings.append(f"duplicate species name {name!r} (internal index {idx}); skipped")
             continue
-        seen_ids.add(sid)
 
         t1, t2 = entry["types"]
-        types_ts = f"[{ts_str(type_names[str(t1)])}]" if t1 == t2 else \
-            f"[{ts_str(type_names[str(t1)])}, {ts_str(type_names[str(t2)])}]"
+        types = [type_names[str(t1)]] if t1 == t2 else [type_names[str(t1)], type_names[str(t2)]]
         stats = entry["stats"]
-        # Gen 1 has one Special stat; the calc's Specie.baseStats always wants both spa and spd
-        # (see data/species.ts Specie constructor's `gen >= 2 ? sa : sl` branch, which this
-        # object bypasses since it's built directly rather than going through that class).
-        base_stats = (f"{{hp: {stats['hp']}, atk: {stats['atk']}, def: {stats['def']}, "
-                       f"spa: {stats['spc']}, spd: {stats['spc']}, spe: {stats['spd']}}}")
+        # Gen 1 has one Special stat; SpeciesData.bs's sa/sd default to bs.sl (species.ts's Specie
+        # constructor: `gen >= 2 ? data.bs.sa : data.bs.sl`), so gen 1 only ever needs `sl` - unlike
+        # the old prototype, which built a calc-internal Specie object directly and had to fill in
+        # both spa/spd by hand.
+        bs = {"hp": stats["hp"], "at": stats["atk"], "df": stats["def"], "sl": stats["spc"],
+              "sp": stats["spd"]}
         # weightkg is unused by calculateRBYGSC (mechanics/gen12.ts) - see PURERGB_MECHANICS.md
-        lines.append(
-            f"  {ts_str(sid)}: {{kind: 'Species', id: {ts_str(sid)}, "
-            f"name: {ts_str(name)}, types: {types_ts}, "
-            f"baseStats: {base_stats}, weightkg: 0}},"
-        )
-    return lines, warnings
+        out[name] = {"types": types, "bs": bs, "weightkg": 0}
+    return out, warnings
 
 
-def build_moves_ts(moves: list[dict]) -> list[str]:
-    lines: list[str] = []
+def build_moves_data(moves: list[dict], calc_names: dict[str, str]) -> tuple[dict, list[str]]:
+    """{display name: {bp, type, category, drain?}} - the same MoveData shape every other gen's
+    hand-written table uses. `name` is renamed through calc_names first (see load_calc_move_names)
+    so the id the calc looks moves up by (toID(name)) matches what the server actually sends."""
+    out: dict[str, dict] = {}
+    warnings: list[str] = []
     for m in moves:
-        mid = to_id(m["name"])
-        lines.append(
-            f"  {ts_str(mid)}: {{kind: 'Move', id: {ts_str(mid)}, "
-            f"name: {ts_str(m['name'])}, basePower: {m['power']}, "
-            f"type: {ts_str(m['type'])}, category: {ts_str(m['split'])}, flags: {{}}}},"
-        )
-    return lines
+        name = calc_names.get(m["name"], m["name"])
+        if name in out:
+            warnings.append(f"duplicate move name {name!r} (id {m['id']}); skipped")
+            continue
+        data: dict = {"bp": m["power"], "type": m["type"], "category": m["split"]}
+        if name in MOVE_DRAIN:
+            data["drain"] = list(MOVE_DRAIN[name])
+        out[name] = data
+    return out, warnings
 
 
-def build_type_chart_ts(chart: dict[str, dict[str, float]]) -> list[str]:
-    lines: list[str] = []
-    for atk in chart:
-        row = ", ".join(f"{ts_str(d)}: {v}" for d, v in chart[atk].items())
-        lines.append(f"  {ts_str(atk)}: {{{row}}},")
-    return lines
+def ts_value(v) -> str:
+    """A Python value (from build_species_data/build_moves_data/build_type_chart) as a TS object
+    literal - just enough of a serializer for the plain dict/list/str/int/float shapes those
+    produce (no need for a general-purpose one)."""
+    if isinstance(v, str):
+        return ts_str(v)
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    if isinstance(v, list):
+        return "[" + ", ".join(ts_value(x) for x in v) + "]"
+    if isinstance(v, dict):
+        # Always quote keys (never bare identifiers) - needed for "???", not just cosmetic: an
+        # unquoted `???:` is a syntax error.
+        return "{" + ", ".join(f"{ts_str(k)}: {ts_value(val)}" for k, val in v.items()) + "}"
+    raise TypeError(f"unhandled value {v!r}")
+
+
+def build_table_ts(table: dict[str, dict]) -> list[str]:
+    return [f"  {ts_str(name)}: {ts_value(data)}," for name, data in table.items()]
 
 
 HEADER = """\
 // AUTO-GENERATED by tools/gen_purergb_calc_patch.py --check. Do not hand-edit.
-// Source: data/games/gen1_purergb/{types,species_index,moves}.json plus the pureRGB source
-// checkout pinned at data/purergb_sources.lock.json (v2.7.6, commit 7e7a4653...).
-// Mechanics and naming policy: docs/calc_multigen/PURERGB_MECHANICS.md.
+// Source: data/games/gen1_purergb/{types,species_index,moves}.json, data/games/gen1_rby/
+// calc_names.json, plus the pureRGB source checkout pinned at data/purergb_sources.lock.json
+// (v2.7.6, commit 7e7a4653...). Mechanics and naming policy: docs/calc_multigen/
+// PURERGB_MECHANICS.md.
 //
 // Swaps calc/calc/src/data/{species,moves,types}.ts's Gen 1 slot for pureRGB's own species,
-// moves and type chart at runtime. Species/Moves are exported classes (calc/calc/src/data/
-// species.ts, moves.ts) whose per-item lookup tables (SPECIES_BY_ID, MOVES_BY_ID) are private and
-// built once at module load, so mutating the exported SPECIES/MOVES arrays after that point does
-// nothing - this patches Species.prototype.get/[Symbol.iterator] and Moves.prototype's instead,
-// falling through to the original implementation for every gen but 1 (or once useDex('vanilla')
-// restores it). Types works differently: calc/calc/src/data/types.ts is this branch's own file
-// (not shared with the RR/vanilla generators), so it exports setGen1TypeChart() directly instead
-// of needing a prototype patch.
-import * as I from './interface';
-import {Species} from './species';
-import {Moves} from './moves';
-import {setGen1TypeChart} from './types';
+// moves and type chart at runtime, and back again. Built as plain SpeciesData/MoveData/TypeChart
+// tables (the same shapes species.ts/moves.ts/types.ts's own hand-written RBY/GSC/... tables use,
+// keyed by display name) so they go through the exact same Specie/Move/Type construction path as
+// every other gen - no separate object-literal-plus-cast path to keep in sync.
+import {MoveData, setGen1Moves} from './moves';
+import {SpeciesData, setGen1Species} from './species';
+import {TypeChart, setGen1TypeChart} from './types';
 
-// Built as untyped object literals (types inferred from the literals themselves, e.g. a species's
-// `types` tuple infers fine even for a pureRGB-only name like "Magma") and cast once at export,
-// rather than annotating {[id: string]: I.Specie} directly here - I.TypeName is a closed union
-// that deliberately excludes pureRGB's 6 extra types (see interface.ts), so a direct annotation
-// would need an `as unknown as I.TypeName` on every single species/move's type field instead of
-// once here.
-const SPECIES_DATA = {
+const SPECIES_DATA: {[name: string]: SpeciesData} = {
 """
 
 MIDDLE_MOVES = """\
 };
-export const PURERGB_SPECIES = SPECIES_DATA as unknown as {[id: string]: I.Specie};
+export const PURERGB_SPECIES = SPECIES_DATA;
 
-const MOVES_DATA = {
+const MOVES_DATA: {[name: string]: MoveData} = {
 """
 
 MIDDLE_TYPES = """\
 };
-export const PURERGB_MOVES = MOVES_DATA as unknown as {[id: string]: I.Move};
+export const PURERGB_MOVES = MOVES_DATA;
 
-export const PURERGB_TYPE_CHART: {[atk: string]: {[def: string]: I.TypeEffectiveness}} = {
+export const PURERGB_TYPE_CHART: TypeChart = {
 """
 
 FOOTER = """\
-};
-
-let active = false;
-
-// `as any` throughout: Species.prototype.get's inferred return type is species.ts's private
-// `Specie` class (not the I.Specie interface), which is stricter than I.Specie in a couple of
-// fields (e.g. abilities.0 excludes ''); duck-typed I.Specie/I.Move objects are all callers
-// outside species.ts/moves.ts can construct without those files' cooperation.
-const speciesProto = Species.prototype as any;
-const movesProto = Moves.prototype as any;
-const speciesGet = speciesProto.get;
-const speciesIter = speciesProto[Symbol.iterator];
-const movesGet = movesProto.get;
-const movesIter = movesProto[Symbol.iterator];
-
-speciesProto.get = function (this: any, id: I.ID) {
-  if (active && this.gen === 1 && id in PURERGB_SPECIES) return PURERGB_SPECIES[id];
-  return speciesGet.call(this, id);
-};
-speciesProto[Symbol.iterator] = function *(this: any) {
-  if (active && this.gen === 1) {
-    for (const id in PURERGB_SPECIES) yield PURERGB_SPECIES[id];
-    return;
-  }
-  yield* speciesIter.call(this);
-};
-
-movesProto.get = function (this: any, id: I.ID) {
-  if (active && this.gen === 1 && id in PURERGB_MOVES) return PURERGB_MOVES[id];
-  return movesGet.call(this, id);
-};
-movesProto[Symbol.iterator] = function *(this: any) {
-  if (active && this.gen === 1) {
-    for (const id in PURERGB_MOVES) yield PURERGB_MOVES[id];
-    return;
-  }
-  yield* movesIter.call(this);
 };
 
 /**
  * Swap the damage calc's Gen 1 species/moves/type chart between vanilla RBY and pureRGB. Affects
  * every Generation(1) instance (there's no per-instance opt-out) and every other generation is
  * untouched. Call once before a pureRGB Gen 1 calculation; call useDex('vanilla') to restore.
+ *
+ * Whether pureRGB is active is read back from the data itself (mechanics/util.ts's isPureRGB()
+ * checks gen.types for pureRGB's Crystal type) rather than a flag here, so mechanics/ - compiled
+ * into a separate bundle with no shared module scope - never needs to import this module.
  */
 export function useDex(target: 'vanilla' | 'purergb'): void {
-  active = target === 'purergb';
-  setGen1TypeChart(active ? PURERGB_TYPE_CHART as any : null);
+  const active = target === 'purergb';
+  setGen1Species(active ? PURERGB_SPECIES : null);
+  setGen1Moves(active ? PURERGB_MOVES : null);
+  setGen1TypeChart(active ? PURERGB_TYPE_CHART : null);
 }
 """
 
@@ -286,29 +301,56 @@ def generate() -> str:
     species_index = load_json("species_index.json")
     moves_json = load_json("moves.json")
     type_names = types_json["type_names"]
+    calc_move_names = load_calc_move_names()
 
     purergb_root = gf.source_root("purergb")
     ordinary_names = build_ordinary_names(purergb_root)
     form_names = build_form_names(purergb_root)
     type_chart = build_type_chart(purergb_root, type_names)
 
-    species_lines, warnings = build_species_ts(species_index, ordinary_names, form_names, type_names)
+    species_data, warnings = build_species_data(species_index, ordinary_names, form_names, type_names)
     for w in warnings:
         print(f"warning: {w}", file=sys.stderr)
-    moves_lines = build_moves_ts(moves_json["moves"])
-    type_lines = build_type_chart_ts(type_chart)
+    moves_data, warnings = build_moves_data(moves_json["moves"], calc_move_names)
+    for w in warnings:
+        print(f"warning: {w}", file=sys.stderr)
 
     parts = [
         HEADER,
-        "\n".join(species_lines), "\n",
+        "\n".join(build_table_ts(species_data)), "\n",
         MIDDLE_MOVES,
-        "\n".join(moves_lines), "\n",
+        "\n".join(build_table_ts(moves_data)), "\n",
         MIDDLE_TYPES,
-        "\n".join(type_lines), "\n",
+        "\n".join(build_table_ts(type_chart)), "\n",
         FOOTER,
     ]
     text = "".join(parts)
     return text.replace("\n", "\r\n")  # match the CRLF line endings of the other data/*.ts files
+
+
+def _resolve_purergb_src_env() -> None:
+    """Point SLINK_PURERGB_SRC at the pureRGB source checkout even when this tool runs from a git
+    worktree. tools/gen1_foundation.py's REPO is `Path(__file__).resolve().parent.parent` - that
+    file's OWN location, which in a worktree checkout is the worktree's copy of tools/, not the
+    main checkout - so its default source path (`<REPO>/.cache/purergb`) resolves to a directory
+    that only exists in the main checkout. `git rev-parse --git-common-dir` always names the main
+    repo's .git dir regardless of which worktree runs it, so it finds the main checkout root from
+    anywhere. Never overrides an SLINK_PURERGB_SRC the caller already set.
+    """
+    if os.environ.get("SLINK_PURERGB_SRC"):
+        return
+    try:
+        common_dir = subprocess.run(
+            ["git", "-C", str(REPO), "rev-parse", "--git-common-dir"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return
+    main_root = (REPO / common_dir).resolve().parent
+    for candidate in (main_root / ".cache" / "purergb", main_root / ".cache" / "purergb-src"):
+        if candidate.is_dir():
+            os.environ["SLINK_PURERGB_SRC"] = str(candidate)
+            return
 
 
 def main() -> int:
@@ -316,6 +358,7 @@ def main() -> int:
     ap.add_argument("--check", action="store_true", help="exit 1 if the output would change")
     args = ap.parse_args()
 
+    _resolve_purergb_src_env()
     generated = generate()
     if args.check:
         current = None

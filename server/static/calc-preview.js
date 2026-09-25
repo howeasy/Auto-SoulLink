@@ -10,7 +10,7 @@ window.SLinkCalc = (function () {
   var ENGINE = [
     'calc/util.js', 'calc/stats.js', 'calc/data/species.js',
     'calc/data/types.js', 'calc/data/natures.js', 'calc/data/abilities.js',
-    'calc/data/moves.js', 'calc/data/items.js', 'calc/data/index.js',
+    'calc/data/moves.js', 'calc/data/items.js', 'calc/data/index.js', 'calc/data/purergb.js',
     'calc/move.js', 'calc/pokemon.js', 'calc/field.js', 'calc/items.js',
     'calc/mechanics/util.js', 'calc/mechanics/gen789.js', 'calc/mechanics/gen56.js',
     'calc/mechanics/gen4.js', 'calc/mechanics/gen3.js', 'calc/mechanics/gen12.js',
