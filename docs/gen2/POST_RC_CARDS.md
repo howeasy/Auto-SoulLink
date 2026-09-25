@@ -148,6 +148,12 @@ of four fixed `writetext` blocks (`patch/gen2/src/phone.asm:113-141`). The calle
 - **POISON-DUO-CAP.**
   - G-S `gen2_poison` fights Route 31 Wade once per save. Even with `PI.STING_LOW_HP=6` in trainer sting fights (`7f20ecc2`, derived from the decomp: Wade's fixed-DV Weedle deals at most 6), the 15-HP target caps the success rate at ~83%/fight. The sweep allows 2 attempts (`89b33356`).
   - Option: an O-33 disclosed seed where the linked mon starts poisoned, so only the overworld poison faint runs natively. That needs an owner check that it still tests what S-4 intends.
+  - **Evaluated (OMP `cx-67178e9a`, coordinator-reviewed):**
+    - The verdict checks only the `poison_faint` engine event and the following `faint` send (`scenario_gen2_poison.lua:2-15,37-55`; S-4 names `DoPoisonStep`).
+    - A PSN seed can't target the linked mon, because it is created by the in-run capture.
+    - OMP proposed planting a poison move in the capture battle plus pinning the battle RNG. **Rejected:** in its own capture battle the linked mon is the *wild* side, so the plant would poison the player's lead, not the catch. Pinning the RNG would also rig the game behaviour the scenario exercises.
+  - **Decision: keep the native Wade fight.** It's ~83%/fight with `STING_LOW_HP=6`, and 2 attempts give ~97%.
+  - Revisit only if a disclosed post-capture plant is designed: a second wild battle with the linked mon active against a planted POISON STING/POISONPOWDER foe, with no RNG pin. That's still probabilistic but gives more rolls.
 - **TRAINER-SEED-A.** In the RC re-run pass, C-C `gen2_faint_active_trainer`'s A side (the native L5 errand save) lost its Route 29 link-capture battle (catch RNG). If the retry also fails, give A the same O-33 L10 seed B got (`5a7b04c8`). That changes one release row.
 - **TRADE-EVOLVE-CATCH.** `gen2_trade_evolve` ran out of balls in 3 of 5 link captures during the RC sweep; the other trade cases on the same errand fixtures never did.
   - Cause: O-31's disclosed plant (`lua/tests/duo/gen2_trade.lua:90`, `tools/gen2_trade_facts` `plants.evolve_species`) makes the first Route 29 wild mon a HAUNTER. Catch rate 90 gives ~12%/Poké Ball at full HP. A's Totodile only knows SCRATCH/LEER, which can't touch a Ghost, and Lick paralysis and Mean Look drag the fight out. One G-S run spent all 15 balls in a single battle.
