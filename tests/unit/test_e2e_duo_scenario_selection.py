@@ -72,7 +72,7 @@ def test_gen3_rr_selection_is_exactly_the_radical_red_set():
         "faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
         "link_gen3", "deadzone_gen3", "reconnect_gen3", "linked_faint_active_whiteout_gen3",
         "explode_gen3", "rival_swap_gen3", "rival_swap_real_gen3", "native_absent_gen3",
-        "linked_faint_active_clean_gen3", "linked_faint_active_lhammer_gen3",
+        "linked_faint_active_clean_gen3", "faint_cmd_clean_gen3", "linked_faint_active_lhammer_gen3",
         "linked_faint_active_mega_gen3"])
 
 
@@ -264,8 +264,8 @@ GEN3_FRLG_SCENARIOS = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_ge
 # client's trade/ghost/infopanel rows and trade_abort, a later card).
 GEN3_RR_ONLY_SCENARIOS = ("explode_gen3", "rival_swap_gen3", "rival_swap_real_gen3", "native_absent_gen3",
                           # G4-PH: RR rows R2/R3/R5 (rr_active_faint_parity_scope §5.5)
-                          "linked_faint_active_clean_gen3", "linked_faint_active_lhammer_gen3",
-                          "linked_faint_active_mega_gen3")
+                          "linked_faint_active_clean_gen3", "faint_cmd_clean_gen3",
+                          "linked_faint_active_lhammer_gen3", "linked_faint_active_mega_gen3")
 GEN3_RR_SCENARIOS = GEN3_FRLG_SCENARIOS + GEN3_RR_ONLY_SCENARIOS
 # C4-6m: G4 item 2a's Center 2F controls run on FR/LG only; gen3_lgfr is the same family with
 # LeafGreen as A, so it selects exactly what gen3_frlg does.
