@@ -266,4 +266,17 @@ If G4 is already signed, the overlay grant fingerprint changes and needs re-sign
 - **Release:** a new `sp_lowwater_gate` kind in `LIVE_GATE_KINDS`/`CLIENT_PATH_GATE_KINDS`, a `_sp_lowwater_gate_row_errors` through `_overlay_gate_errors`, 3 rows `new-gates.sp-lowwater.<title>` (N-1/N-2) in `tests/gen2_live_gate_requirements.json`, and the suffix added in `test_gen2_physical_receipts.py`.
 - **Size:** ~700-1,000 LOC, harness/tests/verifier only, so no digest change.
 
-(TITLE-VERSION's detailed design, from `cx-26133223`, goes here when it lands. The design-only OMP cards also in flight: KEY-SCOPE-5 `cx-ee316c45`, SP-LOWWATER `cx-947d9423`, POISON-DUO-CAP `cx-2ea3c763`, BOARD-AMBIGUOUS `cx-8a2f08c6`, PURERGB-OVERLAY-EOL `cx-a84b761e`, TEMP-LANES `cx-1b2b86fe`.)
+### TITLE-VERSION part A: version text on the main menu (OMP `cx-ee46a1ba`, checked)
+
+- **Hook.** Each title's only `call SetUpMenu` (`MainMenuJoypadLoop`; Crystal `engine/menus/main_menu.asm:241`, G/S `:143`, one occurrence each, verified). A same-size 3-byte `call` goes to a small ROM0/same-bank bridge, which far-calls a service-bank routine. That routine far-calls `SetUpMenu`, then prints the version. A direct cross-bank `call` can't work: `call`/`jp` don't switch banks. ROM0 has 194 B (G/S) and 249 B (Crystal) free for the bridge.
+- **Position.** Tile `(1,10)`: clear of the menu (rows 0-6), Crystal's time box (rows 14-15), G/S's time box (rows 12-15) and the G/S debug menu. The string is `SLINK vX.Y.Z`; glyphs `v`=181, `.`=232, `0-9`=246-255 (`charmap.lua:150,175,189-198`, verified).
+- **Build.**
+  - Add an explicit required `--version vX.Y.Z`, taken from the release tag rather than trusting `git describe`. It's injected as `DEF SLINK_BUILD_VERSION EQUS` and emitted with `db` through the title charmap.
+  - Add `overlay.version` and `overlay.version_sha256` to provenance: today the CLI string isn't hashed (`tools/build_gen2_companion.py:535-548`).
+  - Validate the anchor exactly once before mutating, following `_start_menu_text` (`:178-212,230-279`).
+  - Assert the new labels link in the service bank. `verify_symbol_scope` is satisfied, since the call replacement is equal-size.
+- **Release flow.** Build once from the tag, run the gates, then ONE promotion step regenerates provenance, profiles, admission and receipts from the same bytes, in one commit, with no hand-edited sha1s.
+- **Size.** M: ~60-80 production + ~40-60 test LOC.
+- **Risks.** Bridge space; `--check` must receive `--version`; any missed pin.
+
+(TITLE-VERSION part B, the logo, from `cx-face49ff`, goes here when it lands. The design-only OMP cards also in flight: KEY-SCOPE-5 `cx-ee316c45`, SP-LOWWATER `cx-947d9423`, POISON-DUO-CAP `cx-2ea3c763`, BOARD-AMBIGUOUS `cx-8a2f08c6`, PURERGB-OVERLAY-EOL `cx-a84b761e`, TEMP-LANES `cx-1b2b86fe`.)
