@@ -1188,7 +1188,9 @@ def build_emerald() -> dict:
     def one(symbol: str, lo: int = 0, hi: int = 1 << 32) -> tuple[int, int, int]:
         hits = [r for r in rows.get(symbol, []) if lo <= r[0] < hi]
         if len(hits) != 1:
-            sys.exit(f"gen_gen3_profile: {EMERALD_SYM} names {len(hits)} {symbol} (need exactly one)")
+            # raise, not sys.exit: build_emerald() must be catchable by main() so a failure here
+            # cannot leave the FR/RR profile.json files it already rendered half-written.
+            raise ValueError(f"gen_gen3_profile: {EMERALD_SYM} names {len(hits)} {symbol} (need exactly one)")
         return hits[0]
 
     sections: dict[str, dict] = {"ram": {}, "rom": {}, "derived": {}}
@@ -1219,7 +1221,7 @@ def build_emerald() -> dict:
     for key, (symbol, count, where, ident) in EMERALD_SYM_SIZED.items():
         _, size, line = one(symbol)
         if size % count:
-            sys.exit(f"gen_gen3_profile: {symbol} size 0x{size:X} is not {count} equal entries")
+            raise ValueError(f"gen_gen3_profile: {symbol} size 0x{size:X} is not {count} equal entries")
         derived[key] = size // count
         src[f"derived.{key}"] = (f"{EMERALD_SYM}:{line} {symbol} 0x{size:X} bytes / {count}; "
                                  f"{EMERALD_PIN}:{where} ({ident})")
@@ -1273,20 +1275,29 @@ def main() -> int:
     text = (REPO / SRC).read_text(encoding="utf-8", errors="replace")
     profiles = parse_profiles(text)
     source = source_block(text)
-    stale = []
     makers = [(pack, lambda pack=pack: build(pack, profiles, source)) for pack in PACKS]
     makers.append(("gen3_emerald", build_emerald))
-    for pack, make in makers:
+
+    # Build every pack fully before writing any of them. A maker that fails (raises, e.g.
+    # build_emerald() on a bad .sym) must not leave a partial set of profile.json files on disk;
+    # nothing below this point writes until every maker above has already succeeded.
+    try:
+        rendered = {pack: render(make()) for pack, make in makers}
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    stale = []
+    for pack, text_out in rendered.items():
         out = REPO / "data" / "games" / pack / "profile.json"
-        rendered = render(make())
         if args.check:
             current = out.read_text(encoding="utf-8") if out.exists() else ""
-            if current != rendered:
+            if current != text_out:
                 stale.append(str(out.relative_to(REPO)).replace("\\", "/"))
             continue
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(rendered, encoding="utf-8", newline="\n")
-        titles = json.loads(rendered)["titles"]
+        out.write_text(text_out, encoding="utf-8", newline="\n")
+        titles = json.loads(text_out)["titles"]
         print(f"wrote data/games/{pack}/profile.json: " + ", ".join(
             f"{t} ram={len(v['ram'])} rom={len(v['rom'])} derived={len(v['derived'])}"
             for t, v in titles.items()))

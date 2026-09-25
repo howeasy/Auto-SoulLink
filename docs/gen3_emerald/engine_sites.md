@@ -46,7 +46,7 @@ Schema: data/games/gen3_emerald/engine_signals.json titles.emerald.artifacts.cle
 
 ### frame_control — CallCallbacks
 
-[pret src/main.c#L188-L195](https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/main.c#L188-L195). Emerald CallCallbacks has no save-failed/help-screen gate (FR 0800051A sits after one); it only runs gMain.callback1 then callback2. Capture the ENTRY: once per main-loop frame, before either callback. Frame control, not a game event. Point: R15, CPSR.
+[pret src/main.c#L188-L195](https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/main.c#L188-L195). Emerald CallCallbacks has no save-failed/help-screen gate (FR 0800051A sits after one); it only runs gMain.callback1 then callback2. Capture the ENTRY: once per main-loop frame, before either callback. Frame control, not a game event. E2 CLIENT PRECONDITION: pret src/main.c#L171-L174 (UpdateLinkAndCallCallbacks) calls CallCallbacks only when !HandleLinkConnection(); during an active link exchange this site does not fire every frame. A client must not assume FR's help/save-failed gate, and must not assume this capture has FR's fixed one-hit-per-frame cadence. Point: R15, CPSR.
 
 | Status | Function address / size | Anchor address / capture offset / flat | Expected bytes | Entry bytes |
 |---|---|---|---|---|

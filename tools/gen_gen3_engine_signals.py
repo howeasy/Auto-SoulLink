@@ -1074,7 +1074,11 @@ EMERALD_BINDINGS = {
         "10B5074C2068002801D0E6F2D3FD6068", "src/main.c#L188-L195", ["R15", "CPSR"],
         "Emerald CallCallbacks has no save-failed/help-screen gate (FR 0800051A sits after one); "
         "it only runs gMain.callback1 then callback2. Capture the ENTRY: once per main-loop frame, "
-        "before either callback. Frame control, not a game event."),
+        "before either callback. Frame control, not a game event. E2 CLIENT PRECONDITION: pret "
+        "src/main.c#L171-L174 (UpdateLinkAndCallCallbacks) calls CallCallbacks only when "
+        "!HandleLinkConnection(); during an active link exchange this site does not fire every "
+        "frame. A client must not assume FR's help/save-failed gate, and must not assume this "
+        "capture has FR's fixed one-hit-per-frame cadence."),
     "battle_begin": ("CB2_InitBattle", 0x0, 0, "00B540F063FA20F0DFFB26F0D5FC",
         "00B540F063FA20F0DFFB26F0D5FC28F0", "src/battle_main.c#L588-L617", ["R15", "CPSR"],
         "Entry, before MoveSaveBlocks_ResetHeap relocates the save blocks (first BL, 08076C2C). "
@@ -1302,31 +1306,54 @@ def main() -> int:
     args = parser.parse_args()
     try:
         packs, inventory = build({name: load_rom(name) for name in ROM_SPECS})
-        outputs = {output_path(p): json.dumps(v, indent=2, sort_keys=True) + "\n" for p, v in packs.items()}
-        outputs[DOC] = document(inventory)
-        e_pack, e_inventory = build_emerald(load_rom("e"))
-        outputs[output_path("gen3_emerald")] = json.dumps(e_pack, indent=2, sort_keys=True) + "\n"
-        outputs[EMERALD_DOC] = document_emerald(e_inventory)
-        inventory = dict(inventory, e=e_inventory)
-        stale = []
-        for path, text in outputs.items():
-            if args.check:
-                if not path.is_file() or path.read_text(encoding="utf-8") != text:
-                    stale.append(str(path.relative_to(ROOT)))
-            else:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(text, encoding="utf-8", newline="\n")
-        for name, rows in inventory.items():
-            count = sum(r["status"] == "PINNED" for r in rows.values())
-            print(f"{name}: {count} PINNED, {len(rows) - count} UNVERIFIED")
-        if stale:
-            print("STALE: " + ", ".join(stale))
-            return 1
-        print("CHECK PASSED (SOURCE only)" if args.check
-              else "WROTE three packs + two inventories (SOURCE only)")
-        return 0
     except (OSError, ValueError) as exc:
         parser.exit(1, f"{exc}\n")
+
+    outputs = {output_path(p): json.dumps(v, indent=2, sort_keys=True) + "\n" for p, v in packs.items()}
+    outputs[DOC] = document(inventory)
+
+    # Emerald is a separate, copyrighted ROM the FR/LG/RR verdict must not depend on: guard it in
+    # its own step so a machine without it still gets a full --check of the three packs above.
+    # Absence is not a defect (exit 0, printed and excluded from `outputs`/`stale`); a present but
+    # wrong-identity ROM, or a pinned pack that no longer regenerates byte-identical, is a real
+    # defect and is treated exactly like an FR/LG/RR mismatch (exit 1).
+    emerald_failed = False
+    try:
+        e_rom = load_rom("e")
+    except OSError:
+        print("Emerald ROM absent: gen3_emerald not checked")
+    except ValueError as exc:
+        print(f"Emerald ROM error: {exc}")
+        emerald_failed = True
+    else:
+        try:
+            e_pack, e_inventory = build_emerald(e_rom)
+        except ValueError as exc:
+            print(f"Emerald ROM error: {exc}")
+            emerald_failed = True
+        else:
+            outputs[output_path("gen3_emerald")] = json.dumps(e_pack, indent=2, sort_keys=True) + "\n"
+            outputs[EMERALD_DOC] = document_emerald(e_inventory)
+            inventory = dict(inventory, e=e_inventory)
+
+    stale = []
+    for path, text in outputs.items():
+        if args.check:
+            if not path.is_file() or path.read_text(encoding="utf-8") != text:
+                stale.append(str(path.relative_to(ROOT)))
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8", newline="\n")
+    for name, rows in inventory.items():
+        count = sum(r["status"] == "PINNED" for r in rows.values())
+        print(f"{name}: {count} PINNED, {len(rows) - count} UNVERIFIED")
+    if stale or emerald_failed:
+        if stale:
+            print("STALE: " + ", ".join(stale))
+        return 1
+    print("CHECK PASSED (SOURCE only)" if args.check
+          else "WROTE outputs (SOURCE only)")
+    return 0
 
 
 if __name__ == "__main__":
