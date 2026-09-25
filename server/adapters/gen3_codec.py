@@ -395,20 +395,51 @@ CHUNK_SIZE_VANILLA = SECTOR_DATA_SIZE   # 0xF80, src/save.c#L43-L48
 # physical sectors 30/31; neither is modelled here.
 CHUNK_SIZE_CFRU = 0x0FF0
 
-_OBJECTS = (
-    ("sb2", SAVEBLOCK2_SIZE, 0, 0),
-    ("sb1", SAVEBLOCK1_SIZE, 1, 4),
-    ("storage", STORAGE_SIZE, 5, 13),
-)
+# ---------------------------------------------------------------------------
+# Emerald flash layout -- pokeemerald@c65e93f2, same skeleton as FR/LG (32 x
+# 0x1000 sectors, 14 sections/slot, signature 0x08012025, sectors 30/31
+# Trainer Hill / Recorded Battle: include/save.h), but SaveBlock1/2 are
+# bigger and the party moved.  Values are the GF ROM header fields read
+# straight from the pinned ROM at file offset 0x100 (struct GFRomHeader,
+# src/rom_header_gf.c#L18-L90); test_gen3_codec_emerald.py re-derives the
+# struct's byte offsets independently and reads the same ROM as a control.
+#   saveBlock2Size = sizeof(struct SaveBlock2)                 -- ROM +0x88
+#   saveBlock1Size = sizeof(struct SaveBlock1)                 -- ROM +0x8C
+#   partyCountOffset = offsetof(SaveBlock1, playerPartyCount)  -- ROM +0x90
+#   partyOffset = offsetof(SaveBlock1, playerParty)            -- ROM +0x94
+# (all relative to the header base 0x08000100).  include/global.h#L999-L1001
+# independently confirms the same two SaveBlock1 offsets.
+# ---------------------------------------------------------------------------
+TITLE_FRLG = "frlg"
+TITLE_EMERALD = "emerald"
+
+SAVEBLOCK2_SIZE_EMERALD = 0x0F2C
+SAVEBLOCK1_SIZE_EMERALD = 0x3D88
+SB1_PARTY_COUNT_OFFSET_EMERALD = 0x234
+SB1_PARTY_OFFSET_EMERALD = 0x238
+
+_TITLE_SAVE_SIZES = {
+    TITLE_FRLG: (SAVEBLOCK2_SIZE, SAVEBLOCK1_SIZE),
+    TITLE_EMERALD: (SAVEBLOCK2_SIZE_EMERALD, SAVEBLOCK1_SIZE_EMERALD),
+}
 
 
-def slot_layout(chunk_size: int = CHUNK_SIZE_VANILLA) -> list[dict]:
+def slot_layout(chunk_size: int = CHUNK_SIZE_VANILLA,
+                title: str = TITLE_FRLG) -> list[dict]:
     """The 14 logical sections, via the SAVEBLOCK_CHUNK macro
     (src/save.c#L43-L72): offset = chunkNum * chunk_size, size =
     min(sizeof(object) - offset, chunk_size).  The same macro with
-    chunk_size=0xFF0 reproduces CFRU's literal table (flash_save.md §3)."""
+    chunk_size=0xFF0 reproduces CFRU's literal table (flash_save.md §3).
+    ``title`` only changes the SaveBlock1/2 object sizes -- Storage is
+    identical across titles (pokemon_storage_system.h)."""
+    sb2_size, sb1_size = _TITLE_SAVE_SIZES[title]
+    objects = (
+        ("sb2", sb2_size, 0, 0),
+        ("sb1", sb1_size, 1, 4),
+        ("storage", STORAGE_SIZE, 5, 13),
+    )
     layout = []
-    for name, total, first_id, last_id in _OBJECTS:
+    for name, total, first_id, last_id in objects:
         for chunk in range(last_id - first_id + 1):
             offset = chunk * chunk_size
             size = min(total - offset, chunk_size) if total >= offset else 0
@@ -518,13 +549,14 @@ def _select_slot(s1: int, c1: int, s2: int, c2: int) -> tuple[int, int]:
     return _STATUS_INVALID, 0
 
 
-def parse_flash(image: bytes, cfru: bool = False) -> dict:
+def parse_flash(image: bytes, cfru: bool = False, title: str = TITLE_FRLG) -> dict:
     """Loader-style recovery: mirrors GetSaveValidStatus + CopySaveSlotData.
 
     Like the game, this accepts a partially valid image and copies whatever
     sections check out.  Use :func:`qualify_flash` for the strict witness
-    test."""
-    layout = slot_layout(CHUNK_SIZE_CFRU if cfru else CHUNK_SIZE_VANILLA)
+    test.  ``title`` selects the SaveBlock1/2 sizes (default: FR/LG/RR)."""
+    layout = slot_layout(CHUNK_SIZE_CFRU if cfru else CHUNK_SIZE_VANILLA, title=title)
+    sb2_size, sb1_size = _TITLE_SAVE_SIZES[title]
     body, rtc = split_rtc(image)
     sectors = [read_sector(body, i, layout) for i in range(SECTORS_COUNT)]
     s1, c1 = _scan_slot(sectors[:NUM_SECTORS_PER_SLOT])
@@ -533,8 +565,8 @@ def parse_flash(image: bytes, cfru: bool = False) -> dict:
 
     slot = counter % NUM_SAVE_SLOTS
     base = NUM_SECTORS_PER_SLOT * slot
-    blocks = {"sb2": bytearray(SAVEBLOCK2_SIZE),
-              "sb1": bytearray(SAVEBLOCK1_SIZE),
+    blocks = {"sb2": bytearray(sb2_size),
+              "sb1": bytearray(sb1_size),
               "storage": bytearray(STORAGE_SIZE)}
     rotation = None
     for i in range(NUM_SECTORS_PER_SLOT):   # src/save.c#L440-L464
@@ -562,14 +594,14 @@ def parse_flash(image: bytes, cfru: bool = False) -> dict:
     }
 
 
-def qualify_flash(image: bytes, cfru: bool = False) -> tuple[bool, str]:
+def qualify_flash(image: bytes, cfru: bool = False, title: str = TITLE_FRLG) -> tuple[bool, str]:
     """STRICT qualification, deliberately stronger than the game's loader
     (flash_save.md §1 [RECOMMENDATION]): the selected slot must carry exactly
     one copy of each of the 14 ids, with valid signature and checksum, all at
     the SAME counter.  A recovered older slot is playable but is not a witness
     that the intended save completed."""
     try:
-        parsed = parse_flash(image, cfru=cfru)
+        parsed = parse_flash(image, cfru=cfru, title=title)
     except ValueError as exc:
         return False, str(exc)
     base = NUM_SECTORS_PER_SLOT * parsed["slot"]
@@ -607,24 +639,31 @@ SB1_PARTY_COUNT_OFFSET = 0x34
 SB1_PARTY_OFFSET = 0x38
 PARTY_CAPACITY = 6
 
-def party_from_save(image: bytes, rr: bool = False) -> list[dict]:
+_TITLE_PARTY_OFFSETS = {
+    TITLE_FRLG: (SB1_PARTY_COUNT_OFFSET, SB1_PARTY_OFFSET),
+    TITLE_EMERALD: (SB1_PARTY_COUNT_OFFSET_EMERALD, SB1_PARTY_OFFSET_EMERALD),
+}
+
+
+def party_from_save(image: bytes, rr: bool = False, title: str = TITLE_FRLG) -> list[dict]:
     """Decode party using the title's disk layout; qualify_flash is a separate gate."""
     if rr:
         return rr_party_from_save(image)
-    sb1 = parse_flash(image)["sb1"]
-    count = min(sb1[SB1_PARTY_COUNT_OFFSET], PARTY_CAPACITY)
+    sb1 = parse_flash(image, title=title)["sb1"]
+    count_off, party_off = _TITLE_PARTY_OFFSETS[title]
+    count = min(sb1[count_off], PARTY_CAPACITY)
     out = []
     for slot in range(count):
-        start = SB1_PARTY_OFFSET + slot * PARTY_MON_SIZE
+        start = party_off + slot * PARTY_MON_SIZE
         out.append(decode_party_mon(sb1[start:start + PARTY_MON_SIZE]))
     return out
 
 
-def boxes_from_save(image: bytes, rr: bool = False) -> list[list[dict]]:
+def boxes_from_save(image: bytes, rr: bool = False, title: str = TITLE_FRLG) -> list[list[dict]]:
     """Decode vanilla's 14 boxes or RR's 25 scattered compressed boxes."""
     if rr:
         return rr_boxes_from_save(image)
-    storage = parse_flash(image)["storage"]
+    storage = parse_flash(image, title=title)["storage"]
     boxes = []
     for box in range(BOXES_PER_STORE):
         slots = []
