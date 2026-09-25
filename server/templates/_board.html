@@ -208,7 +208,7 @@
           </h2>
           <div class="mk-pairs{% if sect in ('boxed', 'pending') %} compact{% endif %}">
             {% for row in rows %}
-              <article class="mk-pair {{ row.section }}" id="pair-{{ sect }}-{{ row.area }}">
+              <article class="mk-pair {{ row.section }}" id="pair-{{ row.area }}">
                 {{ half(row, 'a', status.players.a, 'b') }}
                 <div class="mk-bond {{ row.status }}" style="grid-column:2">
                   <span class="mk-bond-area">{{ row.area_name }}</span>

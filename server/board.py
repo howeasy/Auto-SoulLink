@@ -151,8 +151,9 @@ def pending_rows(status: dict) -> list[dict]:
     return out
 
 
-def sections(status: dict) -> list[tuple[str, list[dict]]]:
-    rows = pending_rows(status) + pairs(status)
+def sections(status: dict, rows: list[dict] | None = None) -> list[tuple[str, list[dict]]]:
+    if rows is None:
+        rows = pending_rows(status) + pairs(status)
     out = []
     for key in SECTION_ORDER:
         group = [r for r in rows if r["section"] == key]
@@ -164,9 +165,9 @@ def sections(status: dict) -> list[tuple[str, list[dict]]]:
 def build_board(status: dict) -> dict:
     """Everything `dashboard.html` draws, derived once."""
     players = status.get("players") or {}
-    rows = pairs(status)
+    rows = pairs(status)   # built once: sections() would otherwise build every pair again
     return {
-        "sections": sections(status),
+        "sections": sections(status, pending_rows(status) + rows),
         "section_labels": SECTION_LABELS,
         "counts": {
             "alive": sum(1 for r in rows if r["section"] != "fallen"),

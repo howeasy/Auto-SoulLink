@@ -2125,7 +2125,10 @@
   // ---------------------------------------------------------------------------
 
   /** Fetch latest mon data; update _data and _connected; re-render. */
+  // One request at a time: pings that land mid-request queue a single trailing refresh.
+  var _refetch = false;
   function fetchMons() {
+    if (_fetching) { _refetch = true; return Promise.resolve(); }
     _fetching = true;
     return fetch(SLINK_BASE + '/api/calc/mons')
       .then(function (r) {
@@ -2134,6 +2137,7 @@
       })
       .then(function (json) {
         _fetching  = false;
+        if (_refetch) { _refetch = false; fetchMons(); }
         _data      = json;
         _connected = true;
         _normalizeAllSpeciesNames();
@@ -2144,6 +2148,7 @@
       })
       .catch(function (err) {
         _fetching  = false;
+        _refetch   = false;
         _connected = false;
         if (!_isPanelInputFocused()) refreshPanel();
         return Promise.reject(err);

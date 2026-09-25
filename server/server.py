@@ -1350,8 +1350,11 @@ class SLinkServer:
                         for c in _real_cmds
                     )
                     log.debug(f"[CMD FLUSH] player={player_id}  {len(_real_cmds)} cmd(s): {_summary}")
-                # Notify SSE clients after TCP response (no game-client latency impact)
-                self._notify_sse()
+                # Notify SSE clients after TCP response (no game-client latency impact).
+                # Not for ghost_pos: the RR client sends it 20-30x a second and it changes
+                # nothing a page draws, but every ping makes the calc refetch full status.
+                if msg.get("event") != "ghost_pos":
+                    self._notify_sse()
 
         except (asyncio.IncompleteReadError, ConnectionResetError):
             pass
