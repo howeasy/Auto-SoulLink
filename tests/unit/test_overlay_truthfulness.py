@@ -131,6 +131,14 @@ def test_a_reset_keeps_a_gen1_run_on_the_gen1_adapter(srv):
     assert srv._get_sprite_html(25) == sprite_before
 
 
+def test_a_reset_keeps_the_committed_rom_type(srv):
+    """A blank rom_type after reset would disarm the Mixed-games check on the next hello."""
+    srv.state.rom_type, srv.state.artifact_kind = "red", "clean"
+    asyncio.run(srv.handle_reset_api(None))
+    assert srv.state.rom_type == "red"
+    assert srv.state.artifact_kind == "clean"
+
+
 # ── 5. the memorial wall ─────────────────────────────────────────────────────
 
 def _ts(minutes):
