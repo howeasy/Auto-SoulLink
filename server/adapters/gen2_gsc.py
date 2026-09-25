@@ -364,8 +364,9 @@ class Gen2GSCAdapter(GameAdapter):
             species_id = int(detail.get("species_id", 0))
             mon = gen2_codec.decode_party_blob(bytes.fromhex(blob_hex), self._layout,
                                                species_marker=species_id)
-            base_stats = self._species[mon["species_id"]]["base_stats"]
-            stats = gen2_codec.calc_stats(base_stats, mon["dvs"], mon["stat_exp"], mon["level"])
+            # "stats" are the party struct's STORED stats, not a recompute: the calc bridge warns
+            # when its own result differs, and a recompute here would make that check vacuous.
+            stats = dict(mon["stats"], hp=mon["max_hp"])
             dvs, exp = mon["dvs"], mon["stat_exp"]
             return {
                 "dvs": {"atk": dvs["attack"], "def": dvs["defense"],

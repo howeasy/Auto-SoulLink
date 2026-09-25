@@ -4,9 +4,9 @@ Gen 2 (Crystal/Gold/Silver) damage-calc stat decoding.
 Gen2GSCAdapter.calc_stats(detail) decodes detail["blob_hex"] (the 70-byte party
 transfer blob docs/protocol.md S4.1 defines, gen2_codec.decode_party_blob shape)
 into calc-ready DVs/stat-exp/computed-stats. The mon's own stored stats (part of
-the party struct) are the in-game ground truth: calc_stats() must recompute the
-identical numbers via gen2_codec.calc_stats(), or the Calc tab silently shows the
-wrong numbers. This suite decodes real captured blobs (tests/fixtures/gen2
+the party struct) are the in-game ground truth: calc_stats() returns them as
+"stats" (never a recompute), so the calc bridge's "computed stat differs" warning
+can fire; on the real blobs the codec's recompute also matches them. This suite decodes real captured blobs (tests/fixtures/gen2
 receipts) rather than hand-built bytes, so the fixture and the assertion can't
 share the same authoring mistake.
 """
@@ -67,21 +67,21 @@ def test_spa_and_spd_use_their_own_base_stats():
     assert result["stats"]["spd"] == expected_spd
 
 
-def test_nonzero_stat_exp_round_trips_through_the_codec():
-    """Re-encode the Pikachu blob with nonzero stat exp (via gen2_codec, never
-    hand-built bytes) and check calc_stats recomputes the same stats gen2_codec.calc_stats
-    does directly -- an independent path from whatever calc_stats() does internally."""
+def test_stats_are_the_stored_stats_not_a_recompute():
+    """Re-encode the Pikachu blob with nonzero stat exp (via gen2_codec, never hand-built
+    bytes) but leave its stored stats alone: stat_exp decodes, and "stats" stay the stored
+    in-game numbers, so a struct whose stats disagree with its DVs/stat exp reaches the calc
+    bridge as a disagreement instead of being papered over."""
     mon = CRYSTAL.decode_party_blob(_BLOB_PIKACHU, species_marker=158)
     mon["stat_exp"] = {"hp": 5000, "attack": 10000, "defense": 2000, "speed": 300, "special": 65535}
     new_party = gen2_codec.encode_party_mon(mon, CRYSTAL._layout)
     blob_hex = (new_party + bytes.fromhex(mon["ot_raw_hex"]) + bytes.fromhex(mon["nickname_raw_hex"])).hex()
     result = CRYSTAL.calc_stats({"blob_hex": blob_hex, "species_id": 158, "level": 5})
-    base = CRYSTAL._species[158]["base_stats"]
-    expected = gen2_codec.calc_stats(base, mon["dvs"], mon["stat_exp"], 5)
     assert result["stat_exp"] == {"hp": 5000, "atk": 10000, "def": 2000, "spe": 300, "spc": 65535}
-    assert result["stats"] == {"hp": expected["hp"], "atk": expected["attack"], "def": expected["defense"],
-                               "spa": expected["special_attack"], "spd": expected["special_defense"],
-                               "spe": expected["speed"]}
+    assert result["stats"] == {"hp": 21, "atk": 13, "def": 12, "spa": 9, "spd": 10, "spe": 10}
+    base = CRYSTAL._species[158]["base_stats"]
+    recompute = gen2_codec.calc_stats(base, mon["dvs"], mon["stat_exp"], 5)
+    assert recompute["attack"] != result["stats"]["atk"]  # the fixture really does disagree
 
 
 def test_missing_blob_hex_returns_none():
