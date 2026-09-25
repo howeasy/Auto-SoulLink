@@ -1,0 +1,26 @@
+# G4 final cut 870e5e5dd59bcfb26a17e50ea77103b0a7118cd1 -- tools/gen3_final_cut.py summary (written 2026-09-25T12:45:53Z)
+# RUN 11 / CARRIED 0 / CACHED 8 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | states_firered_town | §1.1 build | CACHED key=c321f7896b6d76b0dfffe36114acc13692b4ea04bce6cd82e9e21c20fd0771c1 from fc_states_firered_town_c0f6101b.txt @c0f6101bc5e34ebdef33b633741bc796e769f6fe | 0 | fc_states_firered_town_870e5e5d.txt |
+| 2 | states_firered_battle | §1.1 build | CACHED key=b1bc9004953ae3700711817d187513d0f4429a75c8017bcf351b9642ee4243af from fc_states_firered_battle_c0f6101b.txt @c0f6101bc5e34ebdef33b633741bc796e769f6fe | 0 | fc_states_firered_battle_870e5e5d.txt |
+| 3 | states_firered_trainer | §1.1 build | CACHED key=041a37148956e5a0c32754217cdfcf65179dc11f18b3e6e48346cba6e6f3a343 from fc_states_firered_trainer_382703b3.txt @382703b319c3d0cece05f880e72ea055fc7ea138 | 0 | fc_states_firered_trainer_870e5e5d.txt |
+| 4 | states_leafgreen_town | §1.1 build | CACHED key=a0c333eae197c3d7e471e29004967ff6b7a077e318c9be547ceb59146be7fd57 from fc_states_leafgreen_town_c0f6101b.txt @c0f6101bc5e34ebdef33b633741bc796e769f6fe | 0 | fc_states_leafgreen_town_870e5e5d.txt |
+| 5 | states_leafgreen_battle | §1.1 build | CACHED key=29864b4fc628efa46e3bce13a5a173e1ff502daeca7eba96c3491ff0394daf96 from fc_states_leafgreen_battle_c0f6101b.txt @c0f6101bc5e34ebdef33b633741bc796e769f6fe | 0 | fc_states_leafgreen_battle_870e5e5d.txt |
+| 6 | states_leafgreen_trainer | §1.1 build | CACHED key=f20690d66ed92aaac8b7f5e921baf08145abfe059f8f5d3d62765563c1038d21 from fc_states_leafgreen_trainer_382703b3.txt @382703b319c3d0cece05f880e72ea055fc7ea138 | 0 | fc_states_leafgreen_trainer_870e5e5d.txt |
+| 7 | tutorials_firered | §1.2 build | CACHED key=68818f5dfadfea242d70aa4a2b8bc2d029a59359a94ffed392e569e67d4eedc8 from fc_tutorials_firered_c0f6101b.txt @c0f6101bc5e34ebdef33b633741bc796e769f6fe | 0 | fc_tutorials_firered_870e5e5d.txt |
+| 8 | tutorials_leafgreen | §1.2 build | CACHED key=92b4a4ce2af73529bffbb924eb928d3fa6be05e7f60e01e214a6c93c66869276 from fc_tutorials_leafgreen_c0f6101b.txt @c0f6101bc5e34ebdef33b633741bc796e769f6fe | 0 | fc_tutorials_leafgreen_870e5e5d.txt |
+| 9 | boxsync_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_boxsync_gen3_fr_as_a_870e5e5d.txt |
+| 10 | reconnect_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_reconnect_gen3_fr_as_a_870e5e5d.txt |
+| 11 | whiteout_gen3_fr_as_a | §4 item2a | PASS | 1 | fc_whiteout_gen3_fr_as_a_870e5e5d.txt |
+| 12 | whiteout_gen3_lg_as_a | §4 item2a | PASS | 1 | fc_whiteout_gen3_lg_as_a_870e5e5d.txt |
+| 13 | center_controls_gen3_lg_as_a | §4 item2a | PASS | 1 | fc_center_controls_gen3_lg_as_a_870e5e5d.txt |
+| 14 | linked_faint_active_gen3_fr_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_gen3_fr_as_a_870e5e5d.txt |
+| 15 | active_end_gen3_lg_as_a | §5 item2b | PASS | 1 | fc_active_end_gen3_lg_as_a_870e5e5d.txt |
+| 16 | linked_faint_active_whiteout_gen3_fr_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_whiteout_gen3_fr_as_a_870e5e5d.txt |
+| 17 | linked_faint_active_whiteout_gen3_lg_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_whiteout_gen3_lg_as_a_870e5e5d.txt |
+| 18 | linked_faint_active_trainer_gen3_lg_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_trainer_gen3_lg_as_a_870e5e5d.txt |
+| 19 | checkpoint_firered | §6 item3 | PASS | 1 | fc_checkpoint_firered_870e5e5d.txt |
+
+OVERALL: PASS (19/19 rows)

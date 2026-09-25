@@ -1,0 +1,24 @@
+# G4 final cut 870e5e5dd59bcfb26a17e50ea77103b0a7118cd1 -- tools/gen3_final_cut.py summary (written 2026-09-25T12:47:08Z)
+# RUN 16 / CARRIED 0 / CACHED 0 / FAIL 1
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | faint_cmd_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_faint_cmd_gen3_rr_as_a_870e5e5d.txt |
+| 2 | linked_faint_active_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_gen3_rr_as_a_870e5e5d.txt |
+| 3 | linked_faint_active_whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_whiteout_gen3_rr_as_a_870e5e5d.txt |
+| 4 | boxsync_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_boxsync_gen3_rr_as_a_870e5e5d.txt |
+| 5 | whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_whiteout_gen3_rr_as_a_870e5e5d.txt |
+| 6 | link_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_link_gen3_rr_as_a_870e5e5d.txt |
+| 7 | deadzone_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_deadzone_gen3_rr_as_a_870e5e5d.txt |
+| 8 | reconnect_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_reconnect_gen3_rr_as_a_870e5e5d.txt |
+| 9 | explode_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_explode_gen3_rr_as_a_870e5e5d.txt |
+| 10 | rival_swap_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_rival_swap_gen3_rr_as_a_870e5e5d.txt |
+| 11 | native_absent_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_native_absent_gen3_rr_as_a_870e5e5d.txt |
+| 12 | linked_faint_active_clean_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 1 | fc_linked_faint_active_clean_gen3_rr_as_a_870e5e5d.txt |
+| 13 | linked_faint_active_lhammer_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_lhammer_gen3_rr_as_a_870e5e5d.txt |
+| 14 | rr_opcode_gates | G5-GATES-LIVE | PASS | 1 | fc_rr_opcode_gates_870e5e5d.txt |
+| 15 | rr_zip_build | §9 item5 RR | PASS | 1 | fc_rr_zip_build_870e5e5d.txt |
+| 16 | rr_zip_check | §9 item5 RR | PASS | 1 | fc_rr_zip_check_870e5e5d.txt |
+| 17 | zip_boot_radicalred | §9 item5 RR | PASS | 1 | fc_zip_boot_radicalred_870e5e5d.txt |
+
+OVERALL: FAIL (16/17 rows)

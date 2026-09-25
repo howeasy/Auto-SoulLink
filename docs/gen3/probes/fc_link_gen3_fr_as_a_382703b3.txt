@@ -1,0 +1,38 @@
+# gen3_final_cut row=link_gen3_fr_as_a item=§2-3_item1-2 cut=382703b319c3d0cece05f880e72ea055fc7ea138
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario link_gen3   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T08:23:28 cpu=56% emuhawk=2 python=8
+start_utc=2026-09-25T12:23:26Z tracked_clean_before=True
+
+========== scenario: link_gen3 ==========
+[duo] link_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=3922d561ff671b86f3f82e84be6068a2ce1f6a4a60df942831dadd9ebe6a01ae write_checkpoint.json=d36fe6badf2bf3864811741c6bb41011f0f3dbf81063d10e4e7ef08e473c9bf3 profile.json=001955b24da2be48824e359f9cbe84eb603e6b969eef2be2a71b048a28c3de65 source=382703b319c3d0cece05f880e72ea055fc7ea138
+[duo] server up: tcp=53920 http=53922 data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_076frc4n
+[duo] cleared 9 stale artifact(s) for link_gen3: e2e_link_gen3_a_1_witness.bin, e2e_link_gen3_a_1_witness_ext.bin, e2e_link_gen3_a_attempt1_result.txt, e2e_link_gen3_a_result.txt, e2e_link_gen3_b_1_witness.bin, e2e_link_gen3_b_1_witness_ext.bin, e2e_link_gen3_b_attempt1_result.txt, e2e_link_gen3_b_result.txt, e2e_link_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=0D3FEA28:99DE0D8A b=E788976A:1C600D89
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): 0D3FEA28:99DE0D8A <-> E788976A:1C600D89 on route_1, alive
+[duo] RESULT_LINE a: RESULT: PASS (caught 0D3FEA28:99DE0D8A)
+[duo] RESULT_LINE b: RESULT: PASS (caught E788976A:1C600D89)
+[duo] SAVE_WITNESS_SHA256 inst=a site=2315f479783a288f90f6dfefff069989db416a2d88a043a2ac55d4496fe21f51 file=2315f479783a288f90f6dfefff069989db416a2d88a043a2ac55d4496fe21f51 match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=73521cbcb9418aa01bd70cfba7a6b68ea2d5fc623f90a1a76c4b9a8e87feed39 file=73521cbcb9418aa01bd70cfba7a6b68ea2d5fc623f90a1a76c4b9a8e87feed39 match=true saves=1 counter=4->5 rtc=normalized
+[duo] BAG_BALLS baseline=4 final=1 throws=3 inst=a
+[duo] BAG_BALLS baseline=2 final=0 throws=2 inst=b
+[duo] link: 0D3FEA28:99DE0D8A <-> E788976A:1C600D89 alive on route_1 and saved once in each party
+[duo] PYDEC: PASS asserted scenario facts
+[duo] link_gen3: a=PASS b=PASS
+
+========== summary ==========
+  link_gen3: PASS (attempt 1 of 3)
+exit=0 end_utc=2026-09-25T12:24:00Z tracked_clean_after=True classification=pass

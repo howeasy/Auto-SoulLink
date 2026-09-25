@@ -31,7 +31,16 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
   3. Opcode gates: 26 live + 12 deferred vs PLAN's 39.
   4. No explicit anchor/md5/grep/write-guard/control receipts in the RR plan.
   The G5 draft status text is stale: it still says "no RR runner rows / no zip receipt".
-- **Cross-lane merge plan** (settled with Gen1-Collab2 and Gen 2 Boogaloo, 2026-09-25):
+- **Results at the frozen cut 870e5e5d:**
+  - FR/LG shard 1: 13/13 PASS (probe_gates included). Shard 2 was still running at session end (stop-at 12:53Z); resume it with `--resume`.
+  - RR `--title rr`: 16/17 (`fc_SUMMARY_870e5e5d_rr.txt`). rr_opcode_gates PASS and the RR zip build/check/boot PASS.
+  - The one RR FAIL, `linked_faint_active_clean_gen3_rr_as_a`, failed IDENTICALLY at c0f6101b and at 870e5e5d: "no no-damage move with PP (turn 31, hp 1, hunts 1)". The battle replays deterministically from the fixture, so this is a real driver defect, not chance.
+  - FIX NEXT (red first: the receipt is the red): in `ctx.lose_active` (lua/tests/duo/duo_gen3_main.lua about 1307-1350), when the status moves are out of PP and the lead is at low HP, the foe needs only one more hit. Options, in the order to try them:
+    1. keep the lead in with a no-op action, e.g. switch-in-place or struggle via the pack's move table, if one exists;
+    2. choose FIGHT with the weakest damaging move only when the foe's HP exceeds that move's maximum damage;
+    3. rebuild the clean-side fixture with more status PP.
+    Check the clean-side fixture's lead first: which moves and PP (rr_battle*.sav clean side).
+ (settled with Gen1-Collab2 and Gen 2 Boogaloo, 2026-09-25):
   - Order: Gen 1 → Gen 2 → Gen 3. Gen 3 merges only after G4+G5 are signed (ruling 22).
   - pairing_kind (Gen 2 644b3b8f = Gen 3 80261f39) is identical on both sides.
   - server/adapters/__init__.py: Gen 2's side is additive (unrouted_rom_type_reason, persisted_migration_refusal, foundation_for_rom_type, adapter_class_for_rom_type, plus the Gen 2 entries); keep both sets.

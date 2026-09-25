@@ -1,0 +1,15 @@
+# gen3_final_cut row=checkpoint_firered item=§6_item3 cut=870e5e5dd59bcfb26a17e50ea77103b0a7118cd1
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2
+# command: python tools/gen3_probe_receipt.py --title firered --lane 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2' --out checkpoint_fr_clean_870e5e5d.txt   (cwd=E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac state:gen3_probe_states/slink_oldman.State=f00d8c122ac5b4add3573602234b7ef780764f8521fcfa4f03aa3939de84ec40 state:gen3_probe_states/slink_pokedude.State=2b748cc5943c0cb9c1e11c96fe3b9ce3ea6a5b425138d9f1c705bd6419fe18ac state:gen3_probe_states_c4p2/slink_door.State=79179dd7950692e8e2d24a01ffadffb236a7d9f791f03cfc65475ba7d3163412 state:gen3_probe_states_c4p2/slink_overworld.State=8dc790b1921c2c1843a7f40015b0b2647abeb9c548a4314ffd7a065324d637ae state:gen3_probe_states_c4p2/slink_postbattle.State=c31f9fd206dd3bc42c9907a1c517bda242268e0839be60b89a34aa92f1c8962d state:gen3_probe_states_c4p2/slink_prebattle.State=99745791402fa01d3f871395c4a3baadde78a23e8bd987ad44ba071f9986f864 state:gen3_probe_states_c4p2/slink_prefaint.State=0df9dee1b25866894e9196736eedfa0e6042cb0dabac06070afa554e976257aa state:gen3_probe_states_c4p2/slink_preintro.State=9410918b6cd9f975e6986a383312244be234b9d3de07551a9872a1c6239b4edf state:gen3_probe_states_c4p2/slink_pretrainer.State=cc67500042a23fc1624dccfa6d5aab98445f332b7a0c23298637a3c23bfbf087 state:gen3_probe_states_c4p2/slink_script.State=e354b0d2bdeccdd86fd7e3bcf4b8c28ea175a8edb0c93645ff09c459c5f8fb39
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T08:42:09 cpu=57% emuhawk=2 python=7
+start_utc=2026-09-25T12:42:07Z tracked_clean_before=True
+E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/bw_hashes_firered.json
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_probe_gen3_checkpoint.ini --lua=lua/tests/probe_gen3_checkpoint.lua patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba
+[gate] probe_gen3_checkpoint: RESULT: PASS all checkpoint controls  (223s)
+--- patch\build\probe_gen3_checkpoint_result.txt ---
+E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45\docs\gen3\probes\checkpoint_fr_clean_870e5e5d.txt
+exit=0 end_utc=2026-09-25T12:45:53Z tracked_clean_after=True classification=pass

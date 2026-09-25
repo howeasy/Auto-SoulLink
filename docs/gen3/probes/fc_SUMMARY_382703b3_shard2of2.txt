@@ -1,0 +1,20 @@
+# G4 final cut 382703b319c3d0cece05f880e72ea055fc7ea138 -- tools/gen3_final_cut.py summary (written 2026-09-25T12:28:33Z)
+# RUN 7 / CARRIED 0 / CACHED 6 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | states_firered_town | §1.1 build | CACHED key=c321f7896b6d76b0dfffe36114acc13692b4ea04bce6cd82e9e21c20fd0771c1 from fc_states_firered_town_c0f6101b.txt @c0f6101bc5e34ebdef33b633741bc796e769f6fe | 0 | fc_states_firered_town_382703b3.txt |
+| 2 | states_firered_battle | §1.1 build | CACHED key=b1bc9004953ae3700711817d187513d0f4429a75c8017bcf351b9642ee4243af from fc_states_firered_battle_c0f6101b.txt @c0f6101bc5e34ebdef33b633741bc796e769f6fe | 0 | fc_states_firered_battle_382703b3.txt |
+| 3 | states_firered_trainer | §1.1 build | PASS | 1 | fc_states_firered_trainer_382703b3.txt |
+| 4 | states_leafgreen_town | §1.1 build | CACHED key=a0c333eae197c3d7e471e29004967ff6b7a077e318c9be547ceb59146be7fd57 from fc_states_leafgreen_town_c0f6101b.txt @c0f6101bc5e34ebdef33b633741bc796e769f6fe | 0 | fc_states_leafgreen_town_382703b3.txt |
+| 5 | states_leafgreen_battle | §1.1 build | CACHED key=29864b4fc628efa46e3bce13a5a173e1ff502daeca7eba96c3491ff0394daf96 from fc_states_leafgreen_battle_c0f6101b.txt @c0f6101bc5e34ebdef33b633741bc796e769f6fe | 0 | fc_states_leafgreen_battle_382703b3.txt |
+| 6 | states_leafgreen_trainer | §1.1 build | PASS | 1 | fc_states_leafgreen_trainer_382703b3.txt |
+| 7 | tutorials_firered | §1.2 build | CACHED key=68818f5dfadfea242d70aa4a2b8bc2d029a59359a94ffed392e569e67d4eedc8 from fc_tutorials_firered_c0f6101b.txt @c0f6101bc5e34ebdef33b633741bc796e769f6fe | 0 | fc_tutorials_firered_382703b3.txt |
+| 8 | tutorials_leafgreen | §1.2 build | CACHED key=92b4a4ce2af73529bffbb924eb928d3fa6be05e7f60e01e214a6c93c66869276 from fc_tutorials_leafgreen_c0f6101b.txt @c0f6101bc5e34ebdef33b633741bc796e769f6fe | 0 | fc_tutorials_leafgreen_382703b3.txt |
+| 9 | faint_cmd_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_faint_cmd_gen3_fr_as_a_382703b3.txt |
+| 10 | boxsync_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_boxsync_gen3_fr_as_a_382703b3.txt |
+| 11 | reconnect_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_reconnect_gen3_fr_as_a_382703b3.txt |
+| 12 | deadzone_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_deadzone_gen3_fr_as_a_382703b3.txt |
+| 13 | whiteout_gen3_fr_as_a | §4 item2a | PASS | 1 | fc_whiteout_gen3_fr_as_a_382703b3.txt |
+
+OVERALL: PASS (13/13 rows)
