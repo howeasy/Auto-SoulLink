@@ -370,6 +370,19 @@ def _with_added_hello_fields(trace):
             for e in trace]
 
 
+# KEY-SCOPE-5: every snapshot carrying pc_boxes now also carries the census generation master lacks;
+# its value counts the scenario's successful box scans, so it is checked for shape and then dropped.
+def _without_box_generation(trace):
+    out = []
+    for e in trace:
+        if e[0] == "sent" and "pc_boxes" in e[1]:
+            gen = e[1].get("pc_boxes_generation")
+            assert type(gen) is int and gen >= 1, e[1].get("event")
+            e = ("sent", {k: v for k, v in e[1].items() if k != "pc_boxes_generation"})
+        out.append(e)
+    return out
+
+
 @pytest.mark.parametrize("name", sorted(SCENARIOS))
 def test_master_equivalence_differential(name, master_root, monkeypatch):
     traces = []
@@ -378,7 +391,7 @@ def test_master_equivalence_differential(name, master_root, monkeypatch):
         t = _trace(w)
         SCENARIOS[name](w, t)
         traces.append(KEEP.get(name, list)(t))
-    master, head = _with_added_hello_fields(traces[0]), traces[1]
+    master, head = _with_added_hello_fields(traces[0]), _without_box_generation(traces[1])
     assert not any(k in e[1] for e in traces[0] if e[0] == "sent" for k in HELLO_ADDED), "master grew it"
     assert any(entry[0] == "sent" for entry in master), "the scenario must be observable"
     assert head == master
