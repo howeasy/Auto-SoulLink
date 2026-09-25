@@ -15,7 +15,7 @@ import zipfile
 
 import pytest
 
-from server import manager
+from server import board, manager
 
 pytest_plugins = ["tests.unit.manager_harness"]
 
@@ -198,19 +198,19 @@ def _p(**kw):
               last_seen_label="40s ago"), "disconnected"),
 ])
 def test_connection_state_mapping(live, player, slug):
-    got = manager.connection_state(player, live)
+    got = board.connection_state(player, live)
     assert got["slug"] == slug
     assert got["label"] and got["line"]
 
 
 def test_disconnected_says_how_long_ago():
-    got = manager.connection_state(_p(last_seen_age=130, last_seen_label="2m ago"), True)
+    got = board.connection_state(_p(last_seen_age=130, last_seen_label="2m ago"), True)
     assert "2m ago" in got["line"]
 
 
 def test_wrong_game_carries_the_servers_reason():
     reason = "this is not the cartridge built for player a"
-    got = manager.connection_state(_p(connected=True, admission="rejected", admission_reason=reason), True)
+    got = board.connection_state(_p(connected=True, admission="rejected", admission_reason=reason), True)
     assert reason in got["line"]
 
 
@@ -218,7 +218,7 @@ def test_the_error_prefixes_the_mapping_reads_are_the_servers():
     """connection_state tells wrong-game from wrong-save by the server's own message text."""
     with open(os.path.join(_REPO, "server", "server.py"), encoding="utf-8") as f:
         src = f.read()
-    for prefix in manager._WRONG_GAME_ERRORS:
+    for prefix in board._WRONG_GAME_ERRORS:
         assert f'f"{prefix}' in src or f'"{prefix}' in src, prefix
 
 

@@ -104,12 +104,6 @@
   {% if status.run_over %}
     <div class="game-over"><svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> GAME OVER — SOUL LINK <svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg></div>
   {% endif %}
-  {# The Manager says these on each player's card instead (conn: manager.connection_state). #}
-  {% for pid in ('a', 'b') if not conn %}{% set p = status.players[pid] %}
-    {% if p.identity_error %}<div class="identity-warn">&#9888; {{ p.identity_error }}</div>{% endif %}
-    {% if p.admission != 'admitted' %}<div class="identity-warn">&#9888; Player {{ pid | upper }} not admitted: {{ p.admission_reason }}</div>{% endif %}
-  {% endfor %}
-
   {% if rules %}
     <div class="lock-rules">Rules:
       {% for icon, label in rules %}<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-{{ icon }}"/></svg> {{ label }}</span>{% endfor %}
@@ -125,7 +119,7 @@
         <div class="mk-now">
           {% for pid in ('a', 'b') %}{% set p = status.players[pid] %}
             {# Green only once the player is admitted and heard from, not on a bare socket. #}
-            <div class="mk-card mk-nowcard {{ 'online' if (conn[pid].slug == 'ready' if conn else p.connected) else 'offline' }}" style="grid-column:{{ 3 if pid == 'b' else 1 }}">
+            <div class="mk-card mk-nowcard {{ 'online' if conn and conn[pid].slug == 'ready' else 'offline' }}" style="grid-column:{{ 3 if pid == 'b' else 1 }}">
               <div class="mk-now-head">
                 <span class="mk-side">{{ pid | upper }}</span>
                 <span class="mk-now-name">
@@ -151,8 +145,6 @@
                     <b>{{ p.current_area_display or 'unknown' }}</b>
                     <span><span class="num">{{ p.ball_count }}</span> balls</span>
                     <span class="mk-sub">last: {{ p.last_event }} <span class="num">{{ p.last_seen_label }}</span></span>
-                    {% if not p.connected and live and not conn %}<span class="mk-tag off">disconnected</span>{% endif %}
-                    {% if p.stale and not conn %}<span class="mk-tag off stale-warn" title="connected, but nothing heard since">No data · last {{ p.last_seen_label }}</span>{% endif %}
                   </div>
                   {% set bs = p.battle_state %}
                   {% set mine = p.party_details[board.active[pid]] if board.active[pid] else none %}
@@ -188,8 +180,6 @@
                          data-calc="{{ c | tojson | forceescape }}" style="display:none"></div>
                   {% endif %}
                 </div>
-              {% elif not conn %}
-                <div class="mk-now-body"><span class="mk-sub">{{ 'waiting for hello' if live else 'run not running' }}</span></div>
               {% endif %}
             </div>
           {% endfor %}
