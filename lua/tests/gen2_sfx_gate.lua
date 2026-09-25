@@ -46,9 +46,12 @@
   Witness: the trade stack witness v2 (lua/tests/duo/gen2_trade.lua): write hooks on [wStackBottom, floor + 64),
   floor = wStackBottom + 32, and one self-disarming canary at SP-1 (armed from hSPBuffer when SP is off the stack,
   902cf7c8), plus SP guards at the service/audio exec hooks so an excursion below the window cannot pass. Every
-  row carries hROMBank/hVBlank/rIE/wTextDelayFrames/wVBlankOccurred and the mailbox bytes. Verdict
-  (P.lowwater_verdict): PASS, FAIL, or INCONCLUSIVE when everything held but no VBlank landed inside a service
-  window. Printed: RECEIPT (schema gen2-sp-lowwater-v1, part "run"); RESULT last (PASS only on a PASS verdict).
+  row carries hROMBank/hVBlank/rIE/wTextDelayFrames/wVBlankOccurred and the mailbox bytes. The nested case is
+  bounded by composition (coordinator ruling): per-byte stack write hooks through the battle measure the deepest
+  service-chain SP and the deepest VBlank-handler depth, and their difference from wStackBottom must stay >= 32;
+  an observed nested VBlank must too, but it is not required. Verdict (P.lowwater_verdict): PASS, FAIL, or
+  INCONCLUSIVE when either composition component was never measured. Printed: RECEIPT (schema
+  gen2-sp-lowwater-v1, part "run"); RESULT last (PASS only on a PASS verdict).
 --]]
 local P = {}
 P.RESULT = "patch/build/gen2_sfx_gate_result.txt"
@@ -210,16 +213,30 @@ function P.lowwater_verdict(r)
     need(#(r.excursions or {}) == 0, "an SP guard saw SP below the floor or off the stack")
     -- the composed bound (coordinator ruling, option 2): the deepest service-chain SP less the deepest VBlank-handler
     -- depth (any VBlank of the run) must leave N bytes; a nested VBlank is bounded, not required to be observed
+    -- every composition fact is bounded (OMP cx-cd30c22b F2): an absent component is INCONCLUSIVE, an
+    -- out-of-range one is a FAIL, never a margin
+    local function integer(v) return math.type(v) == "integer" end
     local c = type(r.composition) == "table" and r.composition or {}
-    local service = int(c.service_windows) and c.service_windows >= 1 and int(c.service_min_sp)
-    local handler = int(c.vblank_samples) and c.vblank_samples >= 1 and int(c.vblank_max_depth)
-    local composed = service and handler and int(st.bottom) and P.lowwater_composed(c, st.bottom) or nil
+    local stack_ok = integer(st.bottom) and integer(st.top) and st.top > st.bottom
+    local service = int(c.service_windows) and c.service_windows >= 1 and c.service_min_sp ~= nil
+    local handler = int(c.vblank_samples) and c.vblank_samples >= 1 and c.vblank_max_depth ~= nil
+    local service_ok = service and stack_ok and integer(c.service_min_sp) and c.service_min_sp >= st.bottom
+                       and c.service_min_sp <= st.top + 1
+    local handler_ok = handler and stack_ok and integer(c.vblank_max_depth) and c.vblank_max_depth >= 0
+                       and c.vblank_max_depth <= st.top - st.bottom
+    need(not service or service_ok, "the deepest service-chain SP is outside [wStackBottom, wStackTop + 1]")
+    need(not handler or handler_ok, "the VBlank handler depth is outside [0, the stack capacity]")
+    local composed = service_ok and handler_ok and P.lowwater_composed(c, st.bottom) or nil
     need(composed == nil or composed >= P.LW_MARGIN,
          fmt("composed margin %s (service depth + VBlank handler depth) < %d", tostring(composed), P.LW_MARGIN))
     local nested = type(r.nested_vblank) == "table" and r.nested_vblank or {}
-    need(not int(nested.count) or nested.count == 0
-         or (int(nested.min_sp) and int(st.bottom) and nested.min_sp - st.bottom >= P.LW_MARGIN),
-         fmt("an observed nested VBlank came within %d bytes of wStackBottom", P.LW_MARGIN))
+    need(integer(nested.count) and nested.count >= 0, "nested_vblank.count is not an integer >= 0")
+    local deepest = type(nested.deepest) == "table" and nested.deepest or {}
+    need(not (integer(nested.count) and nested.count > 0)
+         or (stack_ok and integer(nested.min_sp) and nested.min_sp - st.bottom >= P.LW_MARGIN
+             and nested.min_sp <= st.top + 1 and deepest.sp == nested.min_sp),
+         fmt("an observed nested VBlank came within %d bytes of wStackBottom, left the stack, or its deepest record "
+             .. "is not the deepest SP sampled in the handler", P.LW_MARGIN))
     if #problems > 0 then return "FAIL", problems end
     if not service then return "INCONCLUSIVE", {"no service window was measured: the composed bound has no service depth"} end
     if not handler then return "INCONCLUSIVE", {"no VBlank handler was measured: the composed bound has no handler depth"} end
@@ -709,12 +726,13 @@ function P.main(real, getenv, SG, F)
             guard("VBlank")
             local nested = window ~= nil and run.trigger ~= nil and not battle_over
             if nested then
-                local nv, row = run.nested_vblank, snap("VBlank")
-                nv.count = nv.count + 1
-                if not nv.deepest or row.sp < nv.deepest.sp then nv.deepest = row end
+                run.nested_vblank.count = run.nested_vblank.count + 1
                 window.nested = true
             end
-            if sampling then vb = {entry=api.register("SP"), nested=nested, frame=frame()} vb.min = vb.entry end
+            if sampling or nested then
+                vb = {entry=api.register("SP"), nested=nested, frame=frame(), row=nested and snap("VBlank") or nil}
+                vb.min = vb.entry
+            end
         end
         -- VBlank ends pop hl/de/bc/af + reti (C/G home/vblank.asm): found in the running ROM after the label
         local reti_pc
@@ -727,15 +745,20 @@ function P.main(real, getenv, SG, F)
         end
         local function vblank_done()
             if not vb then return end
-            -- the depth counts the interrupt PC push (2 bytes above the entry SP)
+            -- +2: the SM83 interrupt dispatch pushes PC (2 bytes) before it jumps to $0040, so the handler starts
+            -- 2 bytes below the interrupted SP (Pan Docs "Interrupts": ISR dispatch = 2 wait states, push PC, jump)
             local depth = vb.entry + 2 - vb.min
             comp.vblank_samples = comp.vblank_samples + 1
             if not comp.vblank_max_depth or depth > comp.vblank_max_depth then
                 comp.vblank_max_depth, comp.vblank_deepest = depth, {frame=vb.frame, entry_sp=vb.entry, min_sp=vb.min}
             end
-            if vb.nested then
+            if vb.nested then   -- the record is the deepest SP sampled during the handler, not its entry SP
                 local nv = run.nested_vblank
-                if not nv.min_sp or vb.min < nv.min_sp then nv.min_sp = vb.min end
+                if not nv.min_sp or vb.min < nv.min_sp then
+                    local row = vb.row
+                    row.entry_sp, row.sp, row.min_sp = vb.entry, vb.min, vb.min
+                    nv.min_sp, nv.deepest = vb.min, row
+                end
             end
             vb = nil
         end

@@ -1392,6 +1392,7 @@ SP_LOWWATER_MODES = {"A_held": 1, "B_held": 2, "released": 0}   # the hJoyDown A
 SP_LOWWATER_GUARDS = ("SlinkDelayFrameBridge", "SlinkService", "SlinkSfxService", "SlinkPhoneService", "PlaySFX",
                       "_PlaySFX", "VBlank")
 SP_LOWWATER_BOUNDS = {"margin_floor": 32, "exact_window": 64, "resume_frames": 300, "deadline_frames": 300}
+SP_LOWWATER_STATIC = {"print_letter_delay": 12, "service_chain": 38, "vblank": 36}   # 86 B, the design's bound
 SP_LOWWATER_NESTED_POLICY = ("nested VBlank bounded by composition (service depth + handler depth), "
                              "not required to be observed")
 
@@ -1453,15 +1454,28 @@ def _sp_lowwater_run_errors(mode: str, run: dict) -> list[str]:
         errors.append("an SP guard saw SP below the floor or off the stack")
     # the composed bound (option 2): deepest service-chain SP - wStackBottom - deepest VBlank-handler depth >= N;
     # an observed nested VBlank must keep N too, but it is not required
+    # (OMP cx-cd30c22b F2) every composition fact is bounded: absent = INCONCLUSIVE, out of range = an error
     c = rows(run.get("composition"))
-    service = num(c.get("service_windows")) and c["service_windows"] >= 1 and num(c.get("service_min_sp"))
-    handler = num(c.get("vblank_samples")) and c["vblank_samples"] >= 1 and num(c.get("vblank_max_depth"))
-    if service and handler and num(bottom) and c["service_min_sp"] - bottom - c["vblank_max_depth"] < floor:
+    stack_ok = num(bottom) and num(top) and top > bottom
+    service = num(c.get("service_windows")) and c["service_windows"] >= 1 and c.get("service_min_sp") is not None
+    handler = num(c.get("vblank_samples")) and c["vblank_samples"] >= 1 and c.get("vblank_max_depth") is not None
+    service_ok = service and stack_ok and num(c["service_min_sp"]) and bottom <= c["service_min_sp"] <= top + 1
+    handler_ok = handler and stack_ok and num(c["vblank_max_depth"]) and 0 <= c["vblank_max_depth"] <= top - bottom
+    if service and not service_ok:
+        errors.append("the deepest service-chain SP is outside [wStackBottom, wStackTop + 1]")
+    if handler and not handler_ok:
+        errors.append("the VBlank handler depth is outside [0, the stack capacity]")
+    if service_ok and handler_ok and c["service_min_sp"] - bottom - c["vblank_max_depth"] < floor:
         errors.append(f"the composed margin (service depth + VBlank handler depth) is under {floor} bytes")
     nested = rows(run.get("nested_vblank"))
-    if num(nested.get("count")) and nested["count"] > 0 and not (
-            num(nested.get("min_sp")) and num(bottom) and nested["min_sp"] - bottom >= floor):
-        errors.append(f"an observed nested VBlank came within {floor} bytes of wStackBottom")
+    count = nested.get("count")
+    if not num(count) or count < 0:
+        errors.append("nested_vblank.count is not an integer >= 0")
+    elif count > 0:
+        low, deepest = nested.get("min_sp"), rows(nested.get("deepest"))
+        if not (stack_ok and num(low) and bottom + floor <= low <= top + 1 and deepest.get("sp") == low):
+            errors.append(f"an observed nested VBlank came within {floor} bytes of wStackBottom, left the stack, "
+                          "or its deepest record is not the deepest SP sampled in the handler")
     if not service:
         errors.append("INCONCLUSIVE: no service window was measured")
     if not handler:
@@ -1479,10 +1493,42 @@ def _sp_lowwater_gate_row_errors(root: Path, title: str, receipt: dict) -> list[
     runs = receipt.get("runs") if isinstance(receipt.get("runs"), dict) else {}
     if set(runs) != set(SP_LOWWATER_MODES):
         errors.append("sp-lowwater gate receipt does not cover A_held, B_held and released")
+    # (OMP cx-cd30c22b F3) the values the producer asserts: normal buttons, no harness writes, the design's static
+    # bound, and each run's stack bounds equal to the title's own (the provenance-bound overlay .sym, as
+    # tests/live/test_gen2_panel_gate.panel_facts reads it)
+    if (receipt.get("static_bound") != SP_LOWWATER_STATIC or receipt.get("core_mode") != "CGB"
+            or receipt.get("input_mode") != "normal_buttons" or receipt.get("harness_write_scopes") != []):
+        errors.append("sp-lowwater gate receipt lacks static_bound, core_mode CGB, input_mode normal_buttons or an "
+                      "empty harness_write_scopes")
+    bounds, why = _stack_bounds(root, title)
+    if why:
+        errors.append(f"sp-lowwater gate: {why}")
     for mode in SP_LOWWATER_MODES:
         run = runs.get(mode) if isinstance(runs.get(mode), dict) else {}
+        if run.get("mode") != mode:
+            errors.append(f"sp-lowwater gate {mode}: the run's mode is {run.get('mode')!r}")
+        stack = run.get("stack") if isinstance(run.get("stack"), dict) else {}
+        if bounds and (stack.get("bottom"), stack.get("top")) != bounds:
+            errors.append(f"sp-lowwater gate {mode}: stack bounds differ from the title's wStackBottom/wStackTop")
         errors.extend(f"sp-lowwater gate {mode}: {e}" for e in _sp_lowwater_run_errors(mode, run))
     return errors
+
+
+def _stack_bounds(root: Path, title: str) -> tuple[tuple[int, int] | None, str | None]:
+    """(wStackBottom, wStackTop) from data/gen2/<title>_slink.sym, once its sha256 matches the overlay provenance."""
+    sym = root / "data/gen2" / f"{title}_slink.sym"
+    try:
+        raw = sym.read_bytes()
+        pinned = json.loads((root / "data/gen2/overlay_provenance.json").read_text(encoding="utf-8"))["symbols"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None, f"{sym.name} or its provenance pin is missing"
+    if hashlib.sha256(raw).hexdigest() != pinned.get(sym.name):
+        return None, f"{sym.name} differs from its overlay provenance pin"
+    found = {name: int(addr, 16) for addr, name in
+             re.findall(r"^[0-9a-f]{2}:([0-9a-f]{4}) (wStackBottom|wStackTop)$", raw.decode("utf-8"), re.M)}
+    if set(found) != {"wStackBottom", "wStackTop"}:
+        return None, f"{sym.name} lacks wStackBottom/wStackTop"
+    return (found["wStackBottom"], found["wStackTop"]), None
 
 
 def new_gates_errors(root: Path | None = None, receipt_validate=None, kinds=None) -> list[str]:

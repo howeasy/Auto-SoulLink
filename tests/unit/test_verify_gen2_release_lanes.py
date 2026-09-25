@@ -1902,6 +1902,9 @@ def _live_gates_tree(tmp_path):
     (tmp_path / "data/gen2").mkdir(parents=True, exist_ok=True)
     provenance = (REPO / "data/gen2/overlay_provenance.json").read_bytes()
     (tmp_path / "data/gen2/overlay_provenance.json").write_bytes(provenance)
+    for title in gate.TITLES:   # the SP-LOWWATER row reads the stack bounds from the provenance-bound .sym
+        sym = f"data/gen2/{title}_slink.sym"
+        (tmp_path / sym).write_bytes((REPO / sym).read_bytes())
     pins = {row["slink_title"]: row["sha1"] for row in json.loads(provenance)["outputs"].values()}
     (tmp_path / "tests/fixtures/gen2/receipts").mkdir(parents=True, exist_ok=True)
     rows = []

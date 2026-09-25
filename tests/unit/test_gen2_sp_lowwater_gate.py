@@ -52,8 +52,8 @@ def good_run(mode="A_held", title="gold"):
                   "low_water_state": ">floor+64"},
         "guards": {site: {"hits": 5, "low": _row(site, top - 60)} for site in gate.SP_LOWWATER_GUARDS},
         "excursions": [],
-        "nested_vblank": {"count": 1, "windows": 40, "with_sfx": 1, "deepest": _row("VBlank", top - 70),
-                          "min_sp": top - 90},
+        "nested_vblank": {"count": 1, "windows": 40, "with_sfx": 1, "min_sp": top - 90,
+                          "deepest": dict(_row("VBlank", top - 90), entry_sp=top - 70, min_sp=top - 90)},
         # service-chain SP floor top-60 less a 40-byte handler: composed margin (top - bottom) - 100
         "composition": {"note": gate.SP_LOWWATER_NESTED_POLICY, "service_windows": 40, "service_min_sp": top - 60,
                         "vblank_samples": 500, "vblank_max_depth": 40},
@@ -68,7 +68,8 @@ def good_receipt(bind):
     return {**bind, "schema": "gen2-sp-lowwater-v1", "bounds": dict(gate.SP_LOWWATER_BOUNDS),
             "nested_vblank_policy": gate.SP_LOWWATER_NESTED_POLICY,
             "static_bound": {"print_letter_delay": 12, "service_chain": 38, "vblank": 36},
-            "runs": {mode: good_run(mode, title) for mode in gate.SP_LOWWATER_MODES}, "harness_write_scopes": []}
+            "runs": {mode: good_run(mode, title) for mode in gate.SP_LOWWATER_MODES}, "harness_write_scopes": [],
+            "core_mode": "CGB", "input_mode": "normal_buttons"}
 
 
 def _set(run, path, value):
@@ -188,12 +189,13 @@ def test_a_missing_composition_component_is_inconclusive(edits, why):
 
 
 def test_an_observed_nested_vblank_under_N_fails_even_when_the_composition_passes():
-    run = _mutated("A_held", [("nested_vblank.min_sp", BOTTOM + 31)])
+    run = _mutated("A_held", [("nested_vblank.min_sp", BOTTOM + 31), ("nested_vblank.deepest.sp", BOTTOM + 31)])
     assert gate._sp_lowwater_run_errors("A_held", _mutated("A_held", [])) == []   # composition alone passes
     verdict, problems = _lua_verdict(run)
     assert verdict == "FAIL" and any("nested VBlank came within 32" in p for p in problems), problems
     assert any("nested VBlank came within 32" in e for e in gate._sp_lowwater_run_errors("A_held", run))
-    assert _lua_verdict(_mutated("A_held", [("nested_vblank.min_sp", BOTTOM + 32)]))[0] == "PASS"
+    at_n = _mutated("A_held", [("nested_vblank.min_sp", BOTTOM + 32), ("nested_vblank.deepest.sp", BOTTOM + 32)])
+    assert _lua_verdict(at_n)[0] == "PASS" and gate._sp_lowwater_run_errors("A_held", at_n) == []
     assert _lua_verdict(_mutated("A_held", [("nested_vblank.min_sp", None)]))[0] == "FAIL"   # count 1, no depth
 
 
@@ -227,6 +229,8 @@ def _receipt_tree(tmp_path, title="gold"):
     provenance = (REPO / "data/gen2/overlay_provenance.json").read_bytes()
     (tmp_path / "data/gen2/overlay_provenance.json").write_bytes(provenance)
     sha1 = next(r["sha1"] for r in json.loads(provenance)["outputs"].values() if r["slink_title"] == title)
+    sym = f"data/gen2/{title}_slink.sym"
+    (tmp_path / sym).write_bytes((REPO / sym).read_bytes())
     raw = (REPO / "tests/fixtures/gen2" / f"{title}_battle.SaveRAM").read_bytes()
     (tmp_path / "tests/fixtures/gen2").mkdir(parents=True)
     (tmp_path / "tests/fixtures/gen2" / f"{title}_battle.SaveRAM").write_bytes(raw)
@@ -273,3 +277,78 @@ def test_the_static_bound_fits_the_stack_capacities_with_the_margin():
     assert [P.LW_GUARDS[i] for i in range(1, len(P.LW_GUARDS) + 1)] == list(gate.SP_LOWWATER_GUARDS)
     assert dict(P.LW_MODES.items()) == gate.SP_LOWWATER_MODES
     assert P.LW_NESTED_POLICY == gate.SP_LOWWATER_NESTED_POLICY
+
+
+# OMP cx-cd30c22b F2/F4: the composition facts are bounded, and the nested record is the handler's deepest SP
+CAPACITY = TOP - BOTTOM
+REFUSED = [
+    ("depth_negative", [("composition.vblank_max_depth", -1_000_000)]),
+    ("depth_past_capacity", [("composition.vblank_max_depth", CAPACITY + 1)]),
+    ("service_sp_above_the_stack", [("composition.service_min_sp", TOP + 50)]),
+    ("service_sp_below_the_stack", [("composition.service_min_sp", BOTTOM - 1)]),
+    ("nested_count_negative", [("nested_vblank.count", -1), ("nested_vblank.min_sp", BOTTOM + 1)]),
+    ("nested_count_missing", [("nested_vblank.count", None)]),
+    ("nested_count_fractional", [("nested_vblank.count", 0.5)]),
+    ("nested_without_min_sp", [("nested_vblank.min_sp", None)]),
+    ("nested_min_sp_off_stack", [("nested_vblank.min_sp", TOP + 2), ("nested_vblank.deepest.sp", TOP + 2)]),
+    ("nested_deepest_is_the_entry_sp", [("nested_vblank.deepest.sp", TOP - 70)]),
+    ("nested_without_deepest", [("nested_vblank.deepest", None)]),
+]
+
+
+@pytest.mark.parametrize("name,edits", REFUSED, ids=[r[0] for r in REFUSED])
+def test_unbounded_composition_facts_are_refused_by_both_halves(name, edits):
+    run = _mutated("A_held", edits)
+    verdict, problems = _lua_verdict(run)
+    assert verdict == "FAIL", (verdict, problems)
+    errors = gate._sp_lowwater_run_errors("A_held", run)
+    assert errors and not all(e.startswith("INCONCLUSIVE") for e in errors), errors
+
+
+def test_the_capacity_bounds_are_inclusive():
+    for edits in ([("composition.vblank_max_depth", 0)], [("composition.service_min_sp", TOP + 1)]):
+        run = _mutated("A_held", edits)
+        assert _lua_verdict(run) == ("PASS", []) and gate._sp_lowwater_run_errors("A_held", run) == []
+
+
+# OMP cx-cd30c22b F3: the per-title binding the producer asserts, re-checked by the verifier
+def _mode_swapped(r):
+    r["runs"]["A_held"]["mode"] = "B_held"
+
+
+def _bottom_moved(r):
+    for run in r["runs"].values():   # consistent inside the receipt, but not the title's own wStackBottom
+        run["stack"]["bottom"] -= 0x100
+        run["stack"]["armed_start"] -= 0x100
+
+
+def _top_moved(r):
+    r["runs"]["released"]["stack"]["top"] += 1
+
+
+F3 = [
+    ("mode_differs_from_its_key", _mode_swapped, "mode"),
+    ("bottom_not_the_titles", _bottom_moved, "wStackBottom"),
+    ("top_not_the_titles", _top_moved, "wStackTop"),
+    ("no_static_bound", lambda r: r.pop("static_bound"), "static_bound"),
+    ("static_bound_edited", lambda r: r["static_bound"].update(vblank=20), "static_bound"),
+    ("core_mode", lambda r: r.update(core_mode="DMG"), "core_mode"),
+    ("input_mode", lambda r: r.update(input_mode="harness_writes"), "input_mode"),
+    ("harness_writes", lambda r: r.update(harness_write_scopes=["wSpecialPhoneCallID"]), "harness_write_scopes"),
+]
+
+
+@pytest.mark.parametrize("name,mutate,why", F3, ids=[f[0] for f in F3])
+def test_the_row_rechecks_the_producer_binding(tmp_path, name, mutate, why):
+    receipt = _receipt_tree(tmp_path)
+    assert gate._sp_lowwater_gate_row_errors(tmp_path, "gold", receipt) == []
+    mutate(receipt)
+    errors = gate._sp_lowwater_gate_row_errors(tmp_path, "gold", receipt)
+    assert any(why in e for e in errors), errors
+
+
+def test_the_row_needs_the_provenance_bound_sym(tmp_path):
+    receipt = _receipt_tree(tmp_path)
+    sym = tmp_path / "data/gen2/gold_slink.sym"
+    sym.write_bytes(sym.read_bytes() + b"\n")
+    assert any("sym" in e for e in gate._sp_lowwater_gate_row_errors(tmp_path, "gold", receipt))

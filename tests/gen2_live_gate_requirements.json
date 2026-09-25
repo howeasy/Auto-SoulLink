@@ -323,7 +323,7 @@
     {
       "id": "new-gates.sp-lowwater.crystal",
       "stage": "physical-live",
-      "description": "SP-LOWWATER Crystal overlay stack low-water gate (docs/gen2/POST_RC_CARDS.md): three fresh boots (A_held, B_held, released) post SFX and phone through the shipped binders at PrintLetterDelay.checkjoypad in wild-battle text; the trade stack witness v2 plus SP guards at the service/audio hooks keep >= 32 bytes above wStackBottom, the text resumes within 300 frames, the SFX plays, the phone is ARMED without ringing in battle, hVBlank normal and rIE VBlank on, and a VBlank nested inside a service window was observed (none = INCONCLUSIVE). (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sp_lowwater_gate.py -k crystal)",
+      "description": "SP-LOWWATER Crystal overlay stack low-water gate (docs/gen2/POST_RC_CARDS.md): three fresh boots (A_held, B_held, released) post SFX and phone through the shipped binders at PrintLetterDelay.checkjoypad in wild-battle text; the trade stack witness v2 plus SP guards at the service/audio hooks keep >= 32 bytes above wStackBottom, the text resumes within 300 frames, the SFX plays, the phone is ARMED without ringing in battle, hVBlank normal and rIE VBlank on, and the deepest service-chain SP less the deepest measured VBlank-handler depth stays >= 32 bytes above wStackBottom (a nested VBlank is bounded by that composition, not required to be observed; an unmeasured component = INCONCLUSIVE). (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sp_lowwater_gate.py -k crystal)",
       "axes": {"kind": "sp_lowwater_gate", "title": "crystal", "requirement_ids": ["N-1", "N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.sp_lowwater_gate.json",
@@ -333,7 +333,7 @@
     {
       "id": "new-gates.sp-lowwater.gold",
       "stage": "physical-live",
-      "description": "SP-LOWWATER Gold overlay stack low-water gate (docs/gen2/POST_RC_CARDS.md): three fresh boots (A_held, B_held, released) post SFX and phone through the shipped binders at PrintLetterDelay.checkjoypad in wild-battle text; the trade stack witness v2 plus SP guards at the service/audio hooks keep >= 32 bytes above wStackBottom, the text resumes within 300 frames, the SFX plays, the phone is ARMED without ringing in battle, hVBlank normal and rIE VBlank on, and a VBlank nested inside a service window was observed (none = INCONCLUSIVE). (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sp_lowwater_gate.py -k gold)",
+      "description": "SP-LOWWATER Gold overlay stack low-water gate (docs/gen2/POST_RC_CARDS.md): three fresh boots (A_held, B_held, released) post SFX and phone through the shipped binders at PrintLetterDelay.checkjoypad in wild-battle text; the trade stack witness v2 plus SP guards at the service/audio hooks keep >= 32 bytes above wStackBottom, the text resumes within 300 frames, the SFX plays, the phone is ARMED without ringing in battle, hVBlank normal and rIE VBlank on, and the deepest service-chain SP less the deepest measured VBlank-handler depth stays >= 32 bytes above wStackBottom (a nested VBlank is bounded by that composition, not required to be observed; an unmeasured component = INCONCLUSIVE). (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sp_lowwater_gate.py -k gold)",
       "axes": {"kind": "sp_lowwater_gate", "title": "gold", "requirement_ids": ["N-1", "N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.sp_lowwater_gate.json",
@@ -343,7 +343,7 @@
     {
       "id": "new-gates.sp-lowwater.silver",
       "stage": "physical-live",
-      "description": "SP-LOWWATER Silver overlay stack low-water gate (docs/gen2/POST_RC_CARDS.md): three fresh boots (A_held, B_held, released) post SFX and phone through the shipped binders at PrintLetterDelay.checkjoypad in wild-battle text; the trade stack witness v2 plus SP guards at the service/audio hooks keep >= 32 bytes above wStackBottom, the text resumes within 300 frames, the SFX plays, the phone is ARMED without ringing in battle, hVBlank normal and rIE VBlank on, and a VBlank nested inside a service window was observed (none = INCONCLUSIVE). (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sp_lowwater_gate.py -k silver)",
+      "description": "SP-LOWWATER Silver overlay stack low-water gate (docs/gen2/POST_RC_CARDS.md): three fresh boots (A_held, B_held, released) post SFX and phone through the shipped binders at PrintLetterDelay.checkjoypad in wild-battle text; the trade stack witness v2 plus SP guards at the service/audio hooks keep >= 32 bytes above wStackBottom, the text resumes within 300 frames, the SFX plays, the phone is ARMED without ringing in battle, hVBlank normal and rIE VBlank on, and the deepest service-chain SP less the deepest measured VBlank-handler depth stays >= 32 bytes above wStackBottom (a nested VBlank is bounded by that composition, not required to be observed; an unmeasured component = INCONCLUSIVE). (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sp_lowwater_gate.py -k silver)",
       "axes": {"kind": "sp_lowwater_gate", "title": "silver", "requirement_ids": ["N-1", "N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.sp_lowwater_gate.json",
