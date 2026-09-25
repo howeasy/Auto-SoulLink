@@ -27,20 +27,27 @@
 ] -%}
 
 <div class="theme-switcher" x-data="themeSwitcher()" x-init="setup('{{ theme }}')">
-  <details>
+  {# Keyboard: Tab reaches the checked pill only (roving tabindex), arrows move the choice
+     and apply it, Enter/click chooses and closes, Escape closes; closing returns focus to
+     the summary. #}
+  <details @keydown.escape="close()">
     <summary>
       <span class="theme-swatch" :style="`background:${swatchFor(active)}`"></span>
       <span class="theme-name" x-text="labelFor(active)"></span>
       <span class="theme-caret">▾</span>
     </summary>
-    <div class="theme-pills" role="radiogroup" aria-label="Theme">
+    <div class="theme-pills" role="radiogroup" aria-label="Theme"
+         @keydown.down.prevent="move(1)" @keydown.right.prevent="move(1)"
+         @keydown.up.prevent="move(-1)" @keydown.left.prevent="move(-1)">
       {% for slug, label, swatch in themes %}
         <button type="button"
                 class="theme-pill"
+                data-theme="{{ slug }}"
                 :class="active === '{{ slug }}' ? 'active' : ''"
                 @click="select('{{ slug }}')"
                 role="radio"
                 :aria-checked="active === '{{ slug }}'"
+                :tabindex="active === '{{ slug }}' ? 0 : -1"
                 title="{{ label }}">
           <span class="theme-swatch" style="background:{{ swatch }}"></span>
           <span class="theme-label">{{ label }}</span>
@@ -146,7 +153,7 @@
           }
         });
       },
-      select(name) {
+      select(name, keepOpen) {
         if (!THEMES[name]) return;
         this.active = name;
         this.apply(name, /*persist=*/true);
@@ -162,9 +169,21 @@
             window.history.replaceState(null, '', u.toString());
           }
         } catch (_) {}
-        // Close the popover on selection.
+        // Close the popover on selection (arrow keys keep it open: they move the choice).
+        if (!keepOpen) this.close();
+      },
+      close() {
         var details = this.$root.querySelector('details');
-        if (details) details.open = false;
+        if (!details || !details.open) return;
+        details.open = false;
+        details.querySelector('summary').focus();
+      },
+      move(step) {
+        var pills = Array.prototype.slice.call(this.$root.querySelectorAll('.theme-pill'));
+        var i = pills.findIndex(function(p) { return p.dataset.theme === this.active; }, this);
+        var next = pills[(i + step + pills.length) % pills.length];
+        this.select(next.dataset.theme, true);
+        next.focus();
       },
       apply(name, persist) {
         // Short-circuit if nothing actually needs changing. The htmx:afterSettle

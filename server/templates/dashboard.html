@@ -21,13 +21,13 @@
 {% block content %}
 <div class="mk">
   {{ sidebar_html | safe }}
-  <main class="mk-main mk-body-root">
+  <main class="mk-main mk-body-root" id="main-content" tabindex="-1">
     <header class="mk-runhdr">
       <h1 class="mk-runname">{{ run_name or concise_title }}</h1>
       <span class="mk-meta">tcp <b class="num">{{ tcp_port }}</b>{% if game_label %} · {{ game_label }}{% endif %}</span>
       <span class="mk-hdr-spacer"></span>
       <nav class="mk-tabs" aria-label="Run">
-        <a class="mk-tab active" href="/">Board</a>
+        <a class="mk-tab active" href="/" aria-current="page">Board</a>
         <a class="mk-tab" href="/calc/normal.html">Calc</a>
         <a class="mk-tab" href="/debug">Debug</a>
       </nav>

@@ -62,7 +62,8 @@
    blank label (Gen 1 has one Special, not a SATK/SDEF split) drops that
    slot's chip outright rather than rendering it unlabelled.              #}
 {% macro stat_stages_row(stages, labels=None) -%}
-  {%- if stages -%}
+  {#- a client can send anything here: only a list of stages draws -#}
+  {%- if stages is sequence and stages is not string and stages is not mapping and stages -%}
     {%- set labels = labels or ['ATK', 'DEF', 'SPD', 'SATK', 'SDEF', 'ACC', 'EVA'] -%}
     {%- set ns = namespace(any=false) -%}
     {%- for raw in stages[:7] -%}

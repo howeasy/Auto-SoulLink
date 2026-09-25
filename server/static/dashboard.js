@@ -42,10 +42,12 @@ if (window._slinkDashInit) {
   // The old recovery path re-fired an 'sse:ping' event, which nothing listens for (#content is
   // hx-trigger="every 2s"); it is deleted rather than kept as decoration. The next poll is at
   // most 2s away, so there is nothing to re-fire.
-  var userInteracting = false;
-  function endInteraction() { userInteracting = false; }
-  document.addEventListener('mousedown', function() { userInteracting = true; });
-  document.addEventListener('mouseup', function() { setTimeout(endInteraction, 250); });
+  // The mouseup grace timer is kept so a new mousedown can cancel it: otherwise a stale
+  // timer from the previous click ends the interaction that is in progress now.
+  var userInteracting = false, endTimer = null;
+  function endInteraction() { userInteracting = false; clearTimeout(endTimer); endTimer = null; }
+  document.addEventListener('mousedown', function() { clearTimeout(endTimer); endTimer = null; userInteracting = true; });
+  document.addEventListener('mouseup', function() { clearTimeout(endTimer); endTimer = setTimeout(endInteraction, 250); });
   document.addEventListener('dragend', endInteraction);
   document.addEventListener('mouseleave', endInteraction);   // pointer left the document
   window.addEventListener('blur', endInteraction);           // Alt-Tab away mid-click
@@ -127,7 +129,9 @@ if (window._slinkDashInit) {
     if (swatch) swatch.style.background = def.swatch;
     if (nameEl) nameEl.textContent = def.label;
     Array.prototype.forEach.call(root.querySelectorAll('.theme-pill'), function(btn) {
-      btn.classList.toggle('active', btn.getAttribute('data-theme') === active);
+      var on = btn.getAttribute('data-theme') === active;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-checked', on ? 'true' : 'false');
     });
   }
 
@@ -143,7 +147,7 @@ if (window._slinkDashInit) {
       + '</summary>'
       + '<div class="theme-pills" role="radiogroup" aria-label="Theme">';
     THEMES.forEach(function(t) {
-      html += '<button type="button" class="theme-pill" data-theme="' + t.slug + '" title="' + t.label + '">'
+      html += '<button type="button" class="theme-pill" role="radio" data-theme="' + t.slug + '" title="' + t.label + '">'
             +   '<span class="theme-swatch" style="background:' + t.swatch + '"></span>'
             +   '<span class="theme-label">' + t.label + '</span>'
             + '</button>';
@@ -164,7 +168,7 @@ if (window._slinkDashInit) {
           }
         } catch (_) {}
         var details = d.querySelector('details');
-        if (details) details.open = false;
+        if (details) { details.open = false; details.querySelector('summary').focus(); }
       });
     });
     refreshVanillaWidget(d);
@@ -273,6 +277,9 @@ if (window._slinkDashInit) {
   document.body.addEventListener('click', function(ev) {
     var summary = ev.target && ev.target.closest && ev.target.closest('summary');
     if (!summary) return;
+    // The Calc button sits inside a trainer row's summary and cancels the toggle, but its
+    // handler is on document, which hears the click after this one: skip it here.
+    if (ev.target.closest('.tr-calc-btn')) return;
     var details = summary.parentElement;
     if (!details || details.tagName !== 'DETAILS') return;
     var k = keyFor(details);
@@ -312,8 +319,10 @@ if (window._slinkDashInit) {
 // ── Upcoming Trainers Calc button (delegated) ─────────────────────
 // Click on a trainer row's ⚔ Calc button pushes the trainer's calc set
 // name into localStorage under `slink_prep_trainer` — the key the calc's
-// SLink bridge panel watches for its Prep tab. Then we open the calc with
-// window.open(url, 'rrCalc'). The named target reuses any existing calc
+// SLink bridge panel watches for its Prep tab — and into the URL as ?prep=,
+// because a freshly opened calc never hears the storage event. Then we open
+// the calc with window.open(url, 'rrCalc'). On a Manager run page the calc
+// is the run's own (/runs/<id>/calc/…), not the Manager's bare /calc/. The named target reuses any existing calc
 // tab instead of spawning duplicates; the calc's storage-event listener
 // (slink_bridge.js) refreshes its Prep tab when the key changes, so an
 // already-open calc tab updates without a manual reload.
@@ -333,7 +342,10 @@ if (window._slinkDashInit) {
         localStorage.setItem('slink_prep_encounter', '');
       } catch (_) { /* private mode, etc. */ }
     }
-    var calcWin = window.open('/calc/normal.html', 'rrCalc');
+    var run = /^\/runs\/[^\/]+/.exec(location.pathname);
+    var url = (run ? run[0] : '') + '/calc/normal.html'
+      + (calcLabel ? '?prep=' + encodeURIComponent(calcLabel) : '');
+    var calcWin = window.open(url, 'rrCalc');
     if (calcWin && !calcWin.closed) {
       try { calcWin.focus(); } catch (_) { /* cross-origin focus blocked */ }
     }

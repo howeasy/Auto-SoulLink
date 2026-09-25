@@ -5,4 +5,9 @@
  * design tokens they override. This file exists so the theme switcher's
  * <link> swap has a real target (no 404), matching the default.css
  * pattern.
+ *
+ * Two contrast fixes live here (CONTRAST.md): a 3:1 border for controls, and an opaque
+ * page background everywhere but the OBS overlays, whose #root panel stays translucent.
  */
+body.theme-light { --c-edge-ui: rgba(0, 0, 0, .48); }
+body.theme-light:not(.stream) { --c-bg: #eef2fc; }
