@@ -5840,11 +5840,11 @@ class DuoRun:
         self._go_one("a", lines["a"])
 
     def orchestrate_rival_swap_gen3(self):
-        """PLAN P5's native rival-swap control (RR only): B fights, A idles. Once B logs
-        READY_IN_BATTLE the runner queues replace_rival_team with a well-formed but dummy blob --
-        lua/gen3/native.lua stages and reads it back, then always answers refresh_failed (no
-        write window in the battle's first frames yet, commit 9505648b), so the exact bytes
-        never reach the oracle."""
+        """PLAN P5's native rival-swap NEGATIVE control (RR only): B fights, A idles. Once B logs
+        READY_IN_BATTLE the runner queues replace_rival_team with a dummy blob and NO session /
+        battle_id; the client's C5-10 identity gate refuses it stale_battle_id before anything is
+        staged (lua/gen3/client.lua C.replace_rival_team). The real swap is
+        rival_swap_real_gen3."""
         self._gen3_prelude()
         self.go()
         self._gen3_mark("b", r"^READY_IN_BATTLE\b", "B at the battle action menu")

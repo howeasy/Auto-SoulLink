@@ -987,9 +987,13 @@ function Client.new(p)
             -- G5-RR-RIVAL: a PRE-battle announcement names the battle about to begin (battle_seq
             -- + 1). Its own battle_begin -- the first one, for the same trainer -- CARRIES it
             -- into that battle instead of closing it; any later boundary closes it as before.
+            -- a WILD battle never carries it (review F2): the trainer type bit is set by
+            -- BattleSetup_StartTrainerBattle before CB2_InitBattle, i.e. at this fire
             if had and had.pre and not had.begun and sig and sig.kind == "battle_begin"
                and had.battle_id == battle_seq + 1
-               and io.read_u16(a.TRAINER_OPPONENT_ADDR) == had.trainer_id then
+               and io.read_u16(a.TRAINER_OPPONENT_ADDR) == had.trainer_id
+               and num(d.BATTLE_TYPE_TRAINER_MASK)
+               and (io.read_u32(a.BATTLE_TYPE_ADDR) & d.BATTLE_TYPE_TRAINER_MASK) ~= 0 then
                 rival_authority = {session = had.session, battle_id = had.battle_id,
                                    trainer_id = had.trainer_id, rejected = had.rejected,
                                    pre = true, opened = had.opened, begun = io.framecount()}
@@ -1094,13 +1098,26 @@ function Client.new(p)
         local seen = st.opp_seen
         st.opp_seen = opp
         if opp == 0 or seen == nil or opp == seen then return end   -- the first read only latches
-        if st.battle or rival_authority or in_battle() then return end
+        if st.battle or in_battle() then return end
+        -- a NOT-YET-BEGUN pre-authority is replaced, never a wall (review F1): the opponent id is
+        -- loaded before the script's defeated-trainer check (pret FR ScrCmd_trainerbattle ->
+        -- TrainerBattleLoadArgs, then the flag test), so talking to a beaten trainer announces a
+        -- battle that never begins; the next trainer's edge must still be announced. A job staged
+        -- for the replaced authority fails its guard (trainer mismatch) and is refused.
+        local old = rival_authority
+        if old and not (old.pre and not old.begun) then return end
         local id = battle_seq + 1
-        send("trainer_battle_start", { trainer_id = opp, battle_id = id, session = session_nonce })
+        -- only an announcement that left (or is held for hello) opens the authority (review F4):
+        -- a dropped one would stage nothing the server ever answers
+        if not send("trainer_battle_start", { trainer_id = opp, battle_id = id, session = session_nonce }) then
+            log("trainer " .. opp .. " pre-battle announcement dropped (not connected)")
+            return
+        end
         rival_authority = {session = session_nonce, battle_id = id, trainer_id = opp,
                            rejected = sig_src and sig_src.rejected, pre = true,
                            opened = io.framecount()}
-        log("trainer " .. opp .. " announced before battle " .. id)
+        log("trainer " .. opp .. " announced before battle " .. id
+            .. (old and (" (replaces trainer " .. tostring(old.trainer_id) .. ")") or ""))
     end
     drv.frame_hooks = { observe_known, settle, pre_announce }
 

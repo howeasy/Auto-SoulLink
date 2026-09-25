@@ -318,8 +318,12 @@ function N.new(profile, deps)
                 return true
             end,
             stages={{p.BLOB_BUF, bytes}}, done=function(why, _result, reason)
-                if why then reply(why == "native refused" and "refresh_failed" or why, nil, reason)
-                    return end
+                -- the patch's own ST_FAIL reason is the error (review F3): window_closed,
+                -- bad_args, ...; an unnamed word stays "native_refused", never a guess
+                if why then
+                    reply(why == "native refused" and (reason or "native_refused") or why, nil, reason)
+                    return
+                end
                 local ram = assert(profile.titles.radical_red.ram)
                 local actual = io.read_bytes(ram.ENEMY_BASE, #bytes)
                 for i, b in ipairs(bytes) do
