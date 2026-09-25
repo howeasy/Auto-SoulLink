@@ -1,0 +1,15 @@
+# gen3_final_cut row=checkpoint_leafgreen item=§6_item3 cut=a2985d5ad068c1afcaa9ef8eb8ebf402c52c4e28
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2
+# command: python tools/gen3_probe_receipt.py --title leafgreen --lane 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2' --out checkpoint_lg_clean_a2985d5a.txt   (cwd=E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45)
+# env: (none)
+# verdict: PASS
+# inputs: rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc state:gen3_probe_states/slink_oldman.State=7c59bd0df41086293e4ca2f8bb80b956d3b7b91aa80dbe9e634238d8d14fa76d state:gen3_probe_states/slink_pokedude.State=875287b6fa00e35f7122e1352f38f1842c08ac02170137f801089c2b250c087d state:gen3_probe_states_c4p2/slink_door.State=d59c5e0ed8086f49252e4ae3aeeb7ebcc3d46ba86ba69ce5e0eada101dcda2ba state:gen3_probe_states_c4p2/slink_overworld.State=9ec84c1583cf5eac23ebfd158e452cbb1c04e32c5da5ee26492a3b69ccc13e4f state:gen3_probe_states_c4p2/slink_postbattle.State=e497163108689a0073df515b9279e305446c9c6d05802cc68ded7b3d8344cf96 state:gen3_probe_states_c4p2/slink_prebattle.State=5f02cfd93108c69e9fc3b353b78d276b3199c4723af3771285894dcbc2dc6717 state:gen3_probe_states_c4p2/slink_prefaint.State=1bc908936f282fa137b3f9a3c2ab7e6c69f4ae123e6289dab2e0ef0411492af4 state:gen3_probe_states_c4p2/slink_preintro.State=46a2889dd1e091271436df043a5ea54b10aa198fc32e78250d38a7a549a2d4b0 state:gen3_probe_states_c4p2/slink_pretrainer.State=cc50cbe77e10bd8034ee591510ad2b8d91595afa05d57c8bb3b4ba61d840a6f0 state:gen3_probe_states_c4p2/slink_script.State=297127be0dd081c550a9f1e77698660056e760ede724af779539e0a8c0972791
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T10:24:12 cpu=48% emuhawk=0 python=7
+start_utc=2026-09-25T14:24:11Z tracked_clean_before=True
+E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/bw_hashes_leafgreen.json
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_probe_gen3_checkpoint.ini --lua=lua/tests/probe_gen3_checkpoint.lua patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba
+[gate] probe_gen3_checkpoint: RESULT: PASS all checkpoint controls  (219s)
+--- patch\build\probe_gen3_checkpoint_result.txt ---
+E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45\docs\gen3\probes\checkpoint_lg_clean_a2985d5a.txt
+exit=0 end_utc=2026-09-25T14:27:52Z tracked_clean_after=True classification=pass

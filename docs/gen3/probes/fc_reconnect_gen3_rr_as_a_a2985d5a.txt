@@ -1,0 +1,44 @@
+# gen3_final_cut row=reconnect_gen3_rr_as_a item=§14_P5_RR_duo cut=a2985d5ad068c1afcaa9ef8eb8ebf402c52c4e28
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_rr --scenario reconnect_gen3   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T10:19:42 cpu=59% emuhawk=2 python=5
+start_utc=2026-09-25T14:19:41Z tracked_clean_before=True
+
+========== scenario: reconnect_gen3 ==========
+[duo] reconnect_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=78d947a4ffd1174ed1b86ad7911613f54a63018ed3a74914e9d4ab9e7008b8f8 profile.json=9b7b9d029d5253ab5f883a1f0c33c8bc21f6ca4c3e3892dde7f5716d8727317c source=a2985d5ad068c1afcaa9ef8eb8ebf402c52c4e28
+[duo] server up: tcp=52025 http=52026 data=C:\Users\howar\AppData\Local\Temp\slink_duo_reconnect_gen3__f7ica1m
+[duo] cleared 10 stale artifact(s) for reconnect_gen3: e2e_reconnect_gen3_a_attempt1_result.txt, e2e_reconnect_gen3_a_result.txt, e2e_reconnect_gen3_a_same.SaveRAM, e2e_reconnect_gen3_a_same_save_result.txt, e2e_reconnect_gen3_a_wrong_save_result.txt, e2e_reconnect_gen3_b_1_witness.bin, e2e_reconnect_gen3_b_1_witness_ext.bin, e2e_reconnect_gen3_b_attempt1_result.txt, e2e_reconnect_gen3_b_result.txt, e2e_reconnect_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] terminated a pid=34544; server retained
+[duo] launched a phase=same_save seed=False
+[duo] C-2 same OT accepted; alive link F56D8C1D:2BDDC8BF / F56D8C1D:D4223740; zero duplicate gameplay events
+[duo] terminated a pid=34276; server retained
+[duo] launched a phase=wrong_save seed=False
+[duo] C-1 wrong OT 3559012160 rejected; links.json byte-identical, no gameplay events
+[duo] RESULT_LINE a: RESULT: PASS (wrong save refused; nothing attempted, party and PC RAM unchanged)
+[duo] RESULT_LINE b: RESULT: PASS (B online through both relaunches)
+[duo] SAVE_WITNESS_SHA256 inst=a site=- file=- match=- saves=0 skipped (no_save)
+[duo] SAVE_WITNESS_SHA256 inst=b site=d2c9a3c087a14b919d85c725ab03a0584ddd69b485b4702febe06348410e9278 file=d2c9a3c087a14b919d85c725ab03a0584ddd69b485b4702febe06348410e9278 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] reconnect: A's batteries untouched across both relaunches (zero client writes on the wrong save); B saved its half
+[duo] MARKER a: WRITES 0
+[duo] MARKER a: WRONG_SAVE_ZERO attempted=0 writes=0 party=unchanged box=unchanged
+[duo] PYDEC: PASS asserted scenario facts
+[duo] reconnect_gen3: a=PASS b=PASS
+
+========== summary ==========
+  reconnect_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-09-25T14:20:04Z tracked_clean_after=True classification=pass

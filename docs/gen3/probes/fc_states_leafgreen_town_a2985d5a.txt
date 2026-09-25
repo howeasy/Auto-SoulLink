@@ -1,0 +1,20 @@
+# gen3_final_cut row=states_leafgreen_town item=§1.1_build cut=a2985d5ad068c1afcaa9ef8eb8ebf402c52c4e28
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2
+# command: python tools/mkstates_gen3.py --title leafgreen --kind town --out-dir 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states_c4p2/leafgreen' --rom 'patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba'   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2)
+# env: (none)
+# verdict: PASS
+# inputs: rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T10:09:55 cpu=82% emuhawk=2 python=6
+start_utc=2026-09-25T14:09:54Z tracked_clean_before=True
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-2\patch\build\gen3_fixture_runs\mkstates_leafgreen_town\Pokemon - LeafGreen Version (USA).SaveRAM from E:\Google Drive\SLink\.claude\worktrees\gen3-lane-2\tests\fixtures\gen3\leafgreen_party_town.sav; states -> E:\Google Drive\SLink\.claude\worktrees\gen3-lane-2\patch\build\gen3_probe_states_c4p2\leafgreen
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_mkstates_gen3.ini --lua=lua/tests/mkstates_gen3.lua patch/build/gen3_gen3_Pokemon_-_LeafGreen_Version_(USA).gba
+[gate] mkstates_gen3: RESULT: PASS town states in E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states_c4p2/leafgreen  (6s)
+phase start frame=1 title=leafgreen kind=town dir=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states_c4p2/leafgreen
+phase field frame=778 map=(3,1)
+phase settled frame=1087
+phase state-saved frame=1117 slink_overworld.State at 3.1 (24,39), want 3.1 (24,39)
+phase state-saved frame=1619 slink_door.State at 3.1 (26,27), want 3.1 (26,27)
+phase state-saved frame=2179 slink_script.State at 3.1 (20,13), want 3.1 (20,13)
+RESULT: PASS town states in E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states_c4p2/leafgreen
+exit=0 end_utc=2026-09-25T14:10:02Z tracked_clean_after=True classification=pass
