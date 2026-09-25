@@ -347,6 +347,17 @@ SCENARIOS = {
                                        "rom_kind": {"a": "companion", "b": "clean"},
                                        "scenario_module": "linked_faint_active",
                                        "oracle": "assert_linked_faint_active_clean_gen3_saved"},
+    # G5-RR-CLEAN, owner ruling 25(a) (docs/gen3/G4_request_draft.md §6): the second and last
+    # clean-side row ("a decent amount", not full S-1..S-11 coverage) -- a basic link+faint on
+    # the clean ROM. Reuses faint_cmd_gen3's own module/oracle: link the slot-1 mons, then the
+    # server injects A's faint through the debug API. Nothing here pokes either cartridge but
+    # the clients (faint_cmd_gen3's own orchestrate docstring), so it needs no companion-only
+    # mechanism and runs on the clean dump exactly as native_absent_gen3's B half already does.
+    "faint_cmd_clean_gen3": {"flags": [], "timeout": 900, "games": ("gen3_rr",),
+                             "target": "battle2", "frames": 2000000,
+                             "rom_kind": {"a": "companion", "b": "clean"},
+                             "scenario_module": "faint_cmd",
+                             "oracle": "assert_faint_cmd_clean_gen3_saved"},
     "linked_faint_active_lhammer_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",),
                                          "target": "battle2", "frames": 2500000,
                                          "scenario_module": "linked_faint_active",
@@ -5610,6 +5621,8 @@ class DuoRun:
         print(f"[duo] injected A faint {self._link_keys['a']} -> force_faint B "
               f"{self._link_keys['b']}; re-queued to A: "
               f"{[c.get('cmd') for c in reply.get('commands_returned') or []]}")
+
+    orchestrate_faint_cmd_clean_gen3 = orchestrate_faint_cmd_gen3
 
     def orchestrate_linked_faint_active_gen3(self):
         """The in-battle path, mechanism P+H (owner rulings 15-18). Link the two ACTIVE leads; B
