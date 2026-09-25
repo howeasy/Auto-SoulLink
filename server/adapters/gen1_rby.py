@@ -431,8 +431,9 @@ class Gen1Adapter(GameAdapter):
     def calc_profile(self) -> dict | None:
         """Vanilla Gen 1 calc numbers are verified. Red/Blue share one vendored,
         pret-verified trainer setdex; Yellow has its own (docs/calc_multigen/HANDOFF.md
-        task 5/8). Gen1PureRGBAdapter overrides this back to None -- its custom types
-        and moves aren't in the calc's tables yet."""
+        task 5/8). Gen1PureRGBAdapter overrides this with its OWN dex ("purergb") and
+        setdex rather than disabling the calc; its known limits are in
+        docs/calc_multigen/PURERGB_MECHANICS.md."""
         if self._variant == "yellow":
             return {"gen": 1, "dex": "vanilla",
                     "sets": {"file": "Yellow.js", "var": "CUSTOMSETDEX_Y"}}
