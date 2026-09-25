@@ -1,0 +1,31 @@
+{
+ "base_fixture": "gold_battle_errand",
+ "base_sha256": "9ddbf7d9b3261805860a8116bfa3d7a3165f60c0d1fa47a5ab25e5ac822a7c70",
+ "builder": "tools/gen2_synth_fixtures.py",
+ "checksums": "restored (primary + backup)",
+ "edits": {
+  "party_status": {
+   "hp": 12,
+   "slot": 0,
+   "status": 8
+  }
+ },
+ "fields": [
+  {
+   "backup": 4336,
+   "new_hex": "9e000a2b0000c4a600008700000000000000000000ec63231e000045000000050800000c0014000c000c00090009000a",
+   "offset": 0,
+   "old_hex": "9e000a2b0000c4a600008700000000000000000000ec63231e00004500000005000000140014000c000c00090009000a",
+   "primary": 10386,
+   "size": 48,
+   "symbol": "wPartyMon1",
+   "wram": 55850
+  }
+ ],
+ "schema": "gen2-synth-disclosure-v1",
+ "sha256": "c0093824f303c356e90e02c648719d0c21726a019ee21f291844eb757fbdf608",
+ "source_facts": [
+  "constants/pokemon_data_constants.asm MON_STATUS/MON_HP; macros/ram.asm party_struct"
+ ],
+ "title": "gold"
+}

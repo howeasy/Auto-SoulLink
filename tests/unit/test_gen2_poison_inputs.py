@@ -192,6 +192,25 @@ def test_poisoned_lead_ticks_on_the_park_tiles_then_parks_after_the_faint():
     assert phase == "poisoned" and not any(buttons.values())
 
 
+def test_facts_start_phase_skips_travel_and_hunt_straight_into_tick():
+    """card gen2-u1e-poison O-33 fallback: a synthetic fixture that boots already poisoned (gold_synth_psn)
+    sets facts.start_phase="tick" so the driver never enters "travel"/"hunt" (Wade's fight) at all."""
+    rt = lua()
+    PI = load(rt)
+    d = PI.driver(rt.eval("{walk_direction=function() return 'Left' end}"),
+                  table(rt, dict(FACTS, start_phase="tick")), table(rt, {"moves": lua_list(["GROWL", "LEER"])}))
+    poisoned = {"party": {0: {"hp": 9, "status": PSN}, 1: {"hp": 12, "status": 0}}}
+    buttons, phase = d.step(pt(rt, map_number=2, x=1, y=1, **poisoned))
+    assert phase == "tick" and buttons["Down"]                  # straight to the park walk, no travel/hunt
+
+
+def test_facts_without_start_phase_still_default_to_travel():
+    rt = lua()
+    d = driver(rt, load(rt))
+    buttons, phase = d.step(pt(rt, map_number=1, x=1, y=0))
+    assert phase == "travel"
+
+
 def test_the_lead_fainting_in_battle_is_a_failure_not_a_poison_proof():
     rt = lua()
     d = driver(rt, load(rt))

@@ -21,6 +21,11 @@ edits (all optional):
   events       {"set": [EVENT_*], "clear": [EVENT_*]}: bits of wEventFlags (constants/event_flags.asm; an
                object_event's flag hides the object while set, e.g. EVENT_MET_BILL, set at new game by
                engine/events/std_scripts.asm InitializeEventsScript, cleared when Bill leaves Ecruteak).
+  party_status {slot, status, hp}: rewrites ONE existing party slot's MON_STATUS/MON_HP bytes in place
+               (constants/pokemon_data_constants.asm; macros/ram.asm party_struct), decoding/re-encoding the
+               record through the same codec as `party` so every other field (species, moves, DVs, stat exp,
+               nickname, OT) is carried over verbatim. Every other party slot is untouched. hp must be 1..the
+               record's own MON_MAXHP (a synthetic faint is never handed to the game pre-fainted).
 """
 from __future__ import annotations
 
@@ -41,7 +46,7 @@ SCHEMA = "gen2-synth-disclosure-v1"
 BUILDER = "tools/gen2_synth_fixtures.py"
 CART = 0x8000
 SAVERAM = CART + 22   # the BizHawk 2.11.1 gambatte RTC trailer (tools/gen2_fixtures.SAVERAM_BYTES)
-EDIT_KEYS = frozenset({"party", "balls", "last_spawn", "step_count", "poison_step", "events"})
+EDIT_KEYS = frozenset({"party", "balls", "last_spawn", "step_count", "poison_step", "events", "party_status"})
 MAX_ITEM_STACK = 99   # MAX_ITEM_STACK, constants/item_constants.asm
 EGG_LEVEL = 5   # constants/pokemon_data_constants.asm EGG_LEVEL
 DEFAULT_HAPPINESS = 70   # BASE_HAPPINESS, constants/pokemon_data_constants.asm
@@ -251,6 +256,23 @@ def build(title, base_bytes, edits, *, root=ROOT, base_name=None):
         if key in edits:
             save.write(symbol, bytes([edits[key]]))
             facts.append("engine/overworld/events.asm CountStep")
+    if "party_status" in edits:
+        spec = edits["party_status"]
+        unknown = set(spec) - {"slot", "status", "hp"}
+        if unknown:
+            raise ValueError(f"unsupported party_status keys: {sorted(unknown)}")
+        count = save.read("wPartyCount", 1)[0]
+        slot = spec["slot"]
+        if not isinstance(slot, int) or not 0 <= slot < count:
+            raise ValueError("party_status slot outside the saved party")
+        marker = save.read("wPartySpecies", 1, offset=slot)[0]
+        record = save.read("wPartyMon1", layout.party_size, offset=slot * layout.party_size)
+        mon = codec.decode_party_mon(record, layout, species_marker=marker)
+        if not isinstance(spec["hp"], int) or not 0 < spec["hp"] <= mon["max_hp"]:
+            raise ValueError("party_status hp must be 1..the slot's own MON_MAXHP")
+        mon["status"], mon["hp"] = spec["status"], spec["hp"]
+        save.write("wPartyMon1", codec.encode_party_mon(mon, layout), offset=slot * layout.party_size)
+        facts.append("constants/pokemon_data_constants.asm MON_STATUS/MON_HP; macros/ram.asm party_struct")
     save.restore_checksums()
     raw = bytes(save.raw) + bytes(base_bytes[CART:])
     if not codec.strict_checksum_witness(raw[:CART], layout)["valid"]:
@@ -360,6 +382,22 @@ TRADE_RECIPES = {
 }
 TRADE_FIXTURES = ("crystal_synth_trade_evolve", "gold_synth_trade_evolve")
 
+# card gen2-u1e-poison (O-33 fallback, owner-approved 2026-09-25): the Gold engine_sites U1 leg's own dice --
+# walking to Route 31 and fighting Bug Catcher Wade (4 mons) until Poison Sting poisons a party mon -- is a
+# proven, deterministic LOSS with today's driver (fsw-postrc-rr9/rr10: both party mons end up PSN and the
+# second faints mid-walk, stalling on its own "fainted!" text box; getting poisoned is SETUP, not the behaviour
+# under test). The errand base's own party is a lone Totodile (20/20 HP, unpoisoned, wPoisonStepCount already 3
+# per the committed save -- DoPoisonStep ticks on the very first overworld step, engine/overworld/events.asm
+# CountStep): party_status pins its MON_STATUS to PSN and its MON_HP to 12 (safely above the ~5-8 ticks the
+# fsw-postrc-rr9 log shows elapse -- 276 frames -- before the leg's own Route 29 catch reaches "save_completed";
+# far below its own 20 MON_MAXHP, so it faints a handful of ticks into the dedicated tick phase). The lead still
+# fights the Route29 catch battle unpoisoned in effect (no overworld steps tick during a battle), and the
+# caught second mon is never touched, so the later battle_faint leg still has a healthy, unpoisoned survivor.
+PSN_RECIPES = {
+    "psn": ("battle_errand", {"party_status": {"slot": 0, "status": PSN, "hp": 12}}),
+}
+PSN_FIXTURES = ("gold_synth_psn",)
+
 
 CLOCK_SCHEMA = "gen2-clock-setup-v1"
 
@@ -414,7 +452,7 @@ def build_named(name, *, root=ROOT):
     title, _, kind = name.split("_", 2)
     ot2 = kind.endswith("_ot2")
     kind = kind.removesuffix("_ot2")
-    target, edits = {**SYNTH_RECIPES, **DUO_RECIPES, **TRAINER_RECIPES, **TRADE_RECIPES}[kind]
+    target, edits = {**SYNTH_RECIPES, **DUO_RECIPES, **TRAINER_RECIPES, **TRADE_RECIPES, **PSN_RECIPES}[kind]
     marker = "_ot2" if ot2 else ""
     base = f"{title}_{target.format(ot2=marker)}" if "{ot2}" in target else f"{title}_{target}{marker}"
     raw = (Path(root) / "tests/fixtures/gen2" / f"{base}.SaveRAM").read_bytes()

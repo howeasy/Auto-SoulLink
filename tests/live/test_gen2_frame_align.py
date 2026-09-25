@@ -66,21 +66,30 @@ U1_FIXTURE = {"crystal": "crystal_battle", "gold": "gold_battle_errand", "silver
 # gate/engine_sites/crystal ran its whole ~880-battle Route 30 hunt at hour 23/0/1/2 and never saw a Caterpie.
 U1_CLOCK = {"crystal": 11, "gold": 11, "silver": 11}
 # Route 29 -> Cherrygrove -> Route 30 (C/G data/maps/attributes.asm `connection`). Crystal/Silver hunt a wild
-# Weedle in the Route 30 south grass; Gold goes on to Route 31 and Bug Catcher Wade (pokegold data/trainers/
-# parties.asm BUG_CATCHER 4: Caterpie 2, Caterpie 2, WEEDLE 3, Caterpie 2; maps/Route31.asm:361).
+# Weedle in the Route 30 south grass.
+# Gold no longer travels to Route 31 for Bug Catcher Wade (pokegold data/trainers/parties.asm BUG_CATCHER 4:
+# Caterpie 2, Caterpie 2, WEEDLE 3, Caterpie 2; maps/Route31.asm:361): that fight is a proven, deterministic
+# LOSS with the driver as written (fsw-postrc-rr9/rr10, identical stall @51461 both attempts, "both mons PSN"),
+# and getting poisoned there was always SETUP, not the behaviour under test (DoPoisonStep.DamageMonIfPoisoned's
+# faint branch, engine/events/poisonstep.asm:88-94). card gen2-u1e-poison O-33 fallback (owner-approved
+# 2026-09-25): gold_synth_psn (tools/gen2_synth_fixtures.py PSN_RECIPES) pins the errand's own lone Totodile to
+# PSN+12HP in the boot fixture, so Gold's tick+park legs run on the SAME Route 29 map the errand's own catch
+# already happened on -- no travel, no hunt, no Wade.
 POISON_ROUTE = {"crystal": (("Route29", "west", "CherrygroveCity"), ("CherrygroveCity", "north", "Route30")),
                 "silver": (("Route29", "west", "CherrygroveCity"), ("CherrygroveCity", "north", "Route30")),
-                "gold": (("Route29", "west", "CherrygroveCity"), ("CherrygroveCity", "north", "Route30"),
-                         ("Route30", "north", "Route31"))}
-POISON_HUNT = {"crystal": "Route30", "silver": "Route30", "gold": "Route31"}
-# Two floor tiles off the hunt grass: Route 30's south exit (the first next to the south grass) / Route 31 (20,12)-(21,12).
+                "gold": ()}
+POISON_HUNT = {"crystal": "Route30", "silver": "Route30", "gold": "Route29"}
+# Two floor tiles off the hunt grass: Route 30's south exit (the first next to the south grass) for Crystal/
+# Silver. Gold's pair is on its own Route 29 catch map instead: (4,9) is the first floor tile bordering the
+# grass patch found by a plain neighbour scan of the map's own collision grid (gen2_fixtures._map_facts), (5,9)
+# its own floor neighbour; both re-asserted floor at runtime below like every other title's pair.
 POISON_PARK = {"crystal": ({"x": 7, "y": 49}, {"x": 7, "y": 50}), "silver": ({"x": 7, "y": 49}, {"x": 7, "y": 50}),
-               "gold": ({"x": 20, "y": 12}, {"x": 21, "y": 12})}
-POISON_TRAINER = {"gold": "TrainerBugCatcherWade1"}
-# Gold heals at the Cherrygrove #MON CENTER before Mikey/Don/Wade (Gold run 5 wore the party down). Crystal and
-# Silver heal there too: a worn Route 30 hunt goes back through Route 30's south connection and retries (card
-# driver-robust; lua/tests/gen2_poison_inputs.lua worn()).
-POISON_HEAL = dict.fromkeys(("crystal", "gold", "silver"), ("CherrygroveCity", "CherrygrovePokecenter1F"))
+               "gold": ({"x": 4, "y": 9}, {"x": 5, "y": 9})}
+POISON_TRAINER = {}
+# Gold no longer travels north to heal before a trainer fight (see POISON_ROUTE above). Crystal and Silver
+# still heal at the Cherrygrove #MON CENTER: a worn Route 30 hunt goes back through Route 30's south connection
+# and retries (card driver-robust; lua/tests/gen2_poison_inputs.lua worn()).
+POISON_HEAL = dict.fromkeys(("crystal", "silver"), ("CherrygroveCity", "CherrygrovePokecenter1F"))
 SIDE = {"north": "Up", "south": "Down", "west": "Left", "east": "Right"}
 FACING = {"UP": (0, -1), "DOWN": (0, 1), "LEFT": (-1, 0), "RIGHT": (1, 0)}
 
@@ -310,7 +319,7 @@ def poison_facts(ctx) -> dict:
     route, hunt_name, park = POISON_ROUTE[title], POISON_HUNT[title], POISON_PARK[title]
     areas = {row["map_const"]: row for row in gen2_fixtures.build_area_map(ctx).values()}
     by_name = {row["map_name"]: row for row in areas.values()}
-    names = {name for leg in route for name in (leg[0], leg[2])} | set(POISON_HEAL.get(title, ()))
+    names = {name for leg in route for name in (leg[0], leg[2])} | set(POISON_HEAL.get(title, ())) | {hunt_name}
     maps = {name: gen2_fixtures._map_facts(ctx, by_name[name], areas) for name in sorted(names)}
     for name, facts_map in maps.items():
         facts_map["ledges"] = ledges(ctx, name, facts_map)
@@ -342,6 +351,10 @@ def poison_facts(ctx) -> dict:
     status = gen2_fixtures.const_block(ctx.read_source("constants/battle_constants.asm"), "PSN")
     out = {"maps": maps, "legs": legs, "hunt_map": hunt_name, "hunt_grass": grass, "park": list(park),
            "moves": {"POISON_STING": moves["POISON_STING"]}, "psn_mask": 1 << status["PSN"]}
+    if not route:
+        # no travel/hunt legs: the boot fixture is already poisoned (gold_synth_psn); start the driver
+        # straight in "tick" (lua/tests/gen2_poison_inputs.lua PI.driver facts.start_phase).
+        out["start_phase"] = "tick"
     if title in POISON_HEAL:
         city_name, center_name = POISON_HEAL[title]
         city, center = maps[city_name], maps[center_name]
@@ -550,12 +563,19 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     qualification = json.loads((REPO / live.RECEIPTS / f"{spec.name}.qualification.json").read_text(encoding="utf-8"))
     env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, gen2_fixtures.spec_route_facts(spec, REPO),
                                                      qualification["attempt_id"]))
-    source_path, clock = fixture, None
+    source_path, clock, psn_setup = fixture, None, None
+    boot = staged
+    if title == "gold":
+        # card gen2-u1e-poison O-33 fallback: boot the disclosed SYNTH fixture (the errand base's lone Totodile
+        # pinned PSN+12HP) instead of the played gold_battle_errand bytes; `staged`/`fixture` above stay the
+        # PLAYED base for qualification/identity, unmodified (same split as the U1_CLOCK trailer swap below).
+        boot, psn_setup = gen2_synth_fixtures.build_named("gold_synth_psn", root=REPO)
     if title in U1_CLOCK:   # set right before the launch: the RTC runs on from here
-        raw, clock = gen2_synth_fixtures.day_clock(staged, hour=U1_CLOCK[title], now=int(time.time()), title=title)
-        source_path = REPO / ".cache/gen2-fixtures/u1-hook-proof" / f"{spec.name}-clock.SaveRAM"
+        boot, clock = gen2_synth_fixtures.day_clock(boot, hour=U1_CLOCK[title], now=int(time.time()), title=title)
+    if boot != staged:
+        source_path = REPO / ".cache/gen2-fixtures/u1-hook-proof" / f"{spec.name}-boot.SaveRAM"
         source_path.parent.mkdir(parents=True, exist_ok=True)
-        source_path.write_bytes(raw)
+        source_path.write_bytes(boot)
     passed, path, text = run_gate(GATE, rom_key=spec.title, target=spec.target,
                                   timeout=7200 if title in EVOLUTION_TITLES else 3600 if title in POISON_TITLES else 1200,
                                   saveram_dir=str(REPO / ".cache/gen2-fixtures/u1-hook-proof" / spec.name),
@@ -569,4 +589,6 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     assert receipt["qualification_attempt_id"] == qualification["attempt_id"]
     if clock is not None:
         receipt["clock_setup"] = clock
+    if psn_setup is not None:
+        receipt["poison_setup"] = psn_setup
     (REPO / f"tests/fixtures/gen2/receipts/{title}.engine_sites.json").write_text(json.dumps(live.stamped(receipt), indent=1, sort_keys=True) + "\n", encoding="utf-8")

@@ -164,8 +164,11 @@ PI.STING_LOW_HP = 6
 -- before the other ever gets a turn.
 PI.TRAINER_LOW_HP = PI.STING_LOW_HP + 3
 PI.PKMN_CELL = 2   -- BattleMenu 2x2 grid FIGHT|PKMN / PACK|RUN (engine/battle/menu.asm:32-45): by position
+-- facts.start_phase (O-33 fallback, card gen2-u1e-poison): a synthetic fixture that boots already poisoned
+-- (gold_synth_psn, tools/gen2_synth_fixtures.py) skips straight to "tick" -- travel and hunt are SETUP the
+-- fixture already did; the tick/park/downstream phases run exactly as they do for a natively-poisoned party.
 function PI.driver(F, facts, opts)
-    local self = {terminal="poisoned", phase="travel", battles=0}
+    local self = {terminal="poisoned", phase=facts.start_phase or "travel", battles=0}
     local target = opts.target
     local held, hold_left, release = nil, 0, false
     local here, from = nil, nil
