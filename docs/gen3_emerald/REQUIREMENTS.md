@@ -11,8 +11,8 @@ the pokeemerald-expansion reference build on pack `gen3_exp`. It uses the same r
 MODEL evidence is recorded but never closes a row on its own. The runner is
 `python tools/verify_gen3_release.py`; a lane that did not run did not pass. Nothing in the
 archived old client (`archive/gen3-old-client`) or in the stale `emerald` stub
-(`data/games/gen3_frlg/profile.json:12-48`) counts as evidence. That stub carries a wrong
-`BATTLE_TYPE_ADDR`: see `research/facts_2026-09-25.md` §A2.
+(`data/games/gen3_frlg/profile.json:12-48`) counts as evidence. That stub is not a source;
+The stub's addresses are correct but it is incomplete and unprovenanced: see `research/facts_2026-09-25.md` §A2.
 
 Rows stay `·` until their phase in `PLAN.md` §3 lands a receipt.
 
@@ -50,7 +50,7 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 |---|---|---|---|---|---|---|
 | EF-1 | `pokeemerald.{sym,map}` built from the pinned commit; the build ROM sha1 == the owner's BPEE | `tools/build_pret_gba_syms.py --lock data/gen3_emerald_sources.lock.json` | CONTROL (sha1) | · | — | — |
 | EF-2 | FRLG and RR generator outputs are byte-identical after every shared-tool edit (Gen 3 grant condition) | `--check` on each generator | CONTROL | · | · | — |
-| EF-3 | Every `gen3_emerald` profile address names a `pokeemerald.sym` symbol; generated-vs-sym diff 0; stub value `0x02023FEC` rejected | `tools/gen_gen3_profile.py` Emerald row | HEADER | · | · | — |
+| EF-3 | Every `gen3_emerald` profile address names a `pokeemerald.sym` symbol; generated-vs-sym diff 0; generated profile agrees with every stub address (cross-check) | `tools/gen_gen3_profile.py` Emerald row | HEADER | · | · | — |
 | EF-4 | Each engine site's `expected_hex` is at its `rom_offset` in BPEE (21 kinds; `CopyMonToPC` rename; re-derived `battle_begin`/`faint`/`capture_wild`/`whiteout`/`map_load`/evolution) | `tools/pin_gen3_site.py` + `gen_gen3_engine_signals.py` | ENGINE (at E2) | · | · | · |
 | EF-5 | Writer inventory + `allowed_overworld_tasks` (FR set minus `Task_RunPokemonLeagueLightingEffect`) + Emerald forbidden-task census (contests, secret bases, record mixing, blender/crush, Frontier/Pyramid/Trainer Hill, multi-partner battle, Union Room battle) | `tools/gen_gen3_write_checkpoint.py` | frame-end census | · | · | · |
 | EF-6 | Save layout: SB2 0xF2C, SB1 0x3D88, party SB1+0x234/+0x238, 14 sections/slot chunk table, sectors 30/31 Trainer Hill/Recorded Battle | `server/adapters/gen3_codec.py` Emerald constants | HEADER + CONTROL | · | · | — |
