@@ -128,9 +128,19 @@ of four fixed `writetext` blocks (`patch/gen2/src/phone.asm:113-141`). The calle
   - Option: an O-33 disclosed seed where the linked mon starts poisoned, so only the overworld poison faint runs natively. That needs an owner check that it still tests what S-4 intends.
 - **TRAINER-SEED-A.** In the RC re-run pass, C-C `gen2_faint_active_trainer`'s A side (the native L5 errand save) lost its Route 29 link-capture battle (catch RNG). If the retry also fails, give A the same O-33 L10 seed B got (`5a7b04c8`). That changes one release row.
 - **CLAUSE-BENCH-LIMITS.** OMP `cx-43b52a71` F2/F3/F5 were kept by design: the oracle cross-references the U2 receipt, and the full qualification lives in the release verifier's write-window lane; `PC == 0x0040` is a stricter harness invariant. Revisit only if that lane's coverage changes.
-- **BOARD-AMBIGUOUS.** Show the KEY-SCOPE-3 ambiguous-key latches on the pair board, with a link to `/api/debug/resolve_ambiguous_key`.
-- **TEMP-LANES.** Remove idle Temp lanes (`trl`, `tr2`, `tr3`, `spd`, `sp2`, and the sweep's `fs1..fs4` once receipts are pinned). Unlink junctions FIRST, then delete. Leave any `.git/worktrees/*` admin dir that isn't ours (e.g. `ui-sprite-size`) alone.
-- **PURERGB-OVERLAY-EOL.** `data/games/gen1_purergb/write_checkpoint_overlay.json` shows as modified with line-ending-only changes, from an unknown writer. Find out which tool rewrites it with LF, and fix the writer or `.gitattributes`.
+- **BOARD-AMBIGUOUS: BUILT, held for the freeze.** The UI lane's commit `95f2c629` is on branch `claude/ui-board-ambiguous` (worktree `Temp/uiamb`), cut from `0800da84`. Design from OMP `cx-8a2f08c6`:
+  - add a top-level `ambiguous_keys` to the status and to `status_payload.py`;
+  - render one `identity-warn` line per latched key in the per-player warning loop, showing the POST endpoint as a text hint (no link or button: resolving erases a safety assertion);
+  - no `board.py` change and no new zone.
+  It touches `server/**/*.py`, so cherry-pick it in the post-RC batch. The UI lane's `lua/hud.lua` commits `66981144` (GBA pixel font) and `a9bdce38` (the banner drops below a wrapped prompt on 160x144) are also CODE_SCOPE: pick them in the same batch.
+- **TEMP-LANES.** Inventory from OMP `cx-1b2b86fe`:
+  - Remove after the milestone: `trl`, `tr2`, `tr3` (all `5e6d5382`) and `sp2` (`67fd29ea`), plus the sweep's `fs1..fs4` once receipts are pinned and no sweep process remains.
+  - `spd` (`70439d4f`) has an uncommitted `tools/e2e_duo.py` change: save the diff first.
+  - `g1rc` (`ff4df383`) and `g2omp` (`9c015785`) need an ownership check. Their `.cache` junctions point into this worktree's `.cache` and the root `.cache/purergb*`.
+  - `c47head`, `c4b2head`, `c338`, `c338h` and `c340-review-…` are not worktrees.
+  - `.git/worktrees/ui-sprite-size` is another session's residue: never touch it.
+  - Procedure: `git status --porcelain` per lane; unlink every junction with `os.rmdir` on the junction itself; `git worktree remove --force`, falling back to `shutil.rmtree` with a chmod `onerror`; then `git worktree list --porcelain`, and check the shared cache targets still exist.
+- **PURERGB-OVERLAY-EOL: DONE (`65b3c4b1`).** The writer (`tools/gen_gen1_write_checkpoint.py --kind overlay`) emits LF, and the index blob is LF and byte-identical. `core.autocrlf=true` made git report the file as modified anyway. Fixed with an exact-file `text eol=lf` rule; the sibling Gen 1 packs were left alone. OMP `cx-a84b761e` guessed the stored copy had CRLF endings, and `git ls-files --eol` disproved that.
 - **OMP-TIMEOUTS.** Headless OMP runs must be told their kill limit in the task text. Two 30-minute studies died silently (`cx-e179bf94`, `cx-a496d30a`); runs told "budget N minutes, reply PARTIAL if long" returned on time.
 
 ## Appended results
@@ -203,5 +213,24 @@ If G4 is already signed, the overlay grant fingerprint changes and needs re-sign
 - the asymmetric nickname policy;
 - the wording;
 - whether dead-zone calls name the caller only.
+
+### SP-LOWWATER detailed design (OMP `cx-947d9423`)
+
+- **Gate:** a sibling mode of `lua/tests/gen2_sfx_gate.lua`, reusing its qualified `<title>_battle` arrival, panel binding and Route 29 battle driver. It emits a separate `gen2-sp-lowwater-v1` receipt; `gen2-sfx-gate-v1` is unchanged.
+- **Runs:** 3 fresh boots per title: `A_held`, `B_held`, `released`. Fresh boots are needed because phone ARMED is single-slot.
+- **Trigger:** `PrintLetterDelay.checkjoypad`, with `wBattleMode == 1` and `wTextDelayFrames > 0`.
+- **Requests:** post SFX via `panel:request_sfx`, and phone via `Phone:request("dead_zone")` (the shipped binders, never a direct write).
+- **Caveat:** `.wait` never calls `DelayFrame`, so the `released` case means "posted while released, then resumed by a normal A press". It cannot mean "serviced while released".
+- **Witness:** trade witness v2 (window `[wStackBottom, floor+64)`, canary with `address == SP`, plus the `hSPBuffer` arming fix `902cf7c8`). Every row also records hROMBank/hVBlank/rIE/wTextDelayFrames/wVBlankOccurred/the mailbox. Add SP guards at the service/audio exec hooks, so an excursion below the window can't pass.
+- **Pass criteria:**
+  - margin ≥ **N = 32** above `wStackBottom`;
+  - text resumes within 300 frames;
+  - the SFX is consumed and played;
+  - the phone is acked and armed, and doesn't ring in battle;
+  - `hVBlank == VBLANK_NORMAL` and `rIE & 1`.
+  - If no VBlank overlapping the service window is observed, the result is **INCONCLUSIVE**, not PASS.
+- **Static bound** (from the asm): PrintLetterDelay 12 + bridge/service/SFX/`_PlaySFX` leaf 38 + normal VBlank 36 = **86 B**, against a capacity of 255 B (Crystal) and 252 B (G/S).
+- **Release:** a new `sp_lowwater_gate` kind in `LIVE_GATE_KINDS`/`CLIENT_PATH_GATE_KINDS`, a `_sp_lowwater_gate_row_errors` through `_overlay_gate_errors`, 3 rows `new-gates.sp-lowwater.<title>` (N-1/N-2) in `tests/gen2_live_gate_requirements.json`, and the suffix added in `test_gen2_physical_receipts.py`.
+- **Size:** ~700-1,000 LOC, harness/tests/verifier only, so no digest change.
 
 (TITLE-VERSION's detailed design, from `cx-26133223`, goes here when it lands. The design-only OMP cards also in flight: KEY-SCOPE-5 `cx-ee316c45`, SP-LOWWATER `cx-947d9423`, POISON-DUO-CAP `cx-2ea3c763`, BOARD-AMBIGUOUS `cx-8a2f08c6`, PURERGB-OVERLAY-EOL `cx-a84b761e`, TEMP-LANES `cx-1b2b86fe`.)
