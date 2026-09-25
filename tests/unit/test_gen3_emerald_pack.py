@@ -41,10 +41,19 @@ def rom() -> bytes:
     return data
 
 
+# E2-ENTRY+BADGE: Emerald's badges straddle a SaveBlock1.flags byte (FLAG_BADGE01_GET =
+# SYSTEM_FLAGS+7 = 0x867, pret include/constants/flags.h:1359), which FR/LG's shared
+# SB1_BADGE_BYTE_OFFSET byte cannot express; BADGE_FIRST_FLAG is the one derived field that
+# is genuinely Emerald-only, carrying the flag id lua/gen3/reads.lua and
+# tools/gen3_reads_pydec.py derive each badge bit from (SB1_BADGE_BYTE_OFFSET stays null).
+EMERALD_ONLY_DERIVED = {"BADGE_FIRST_FLAG"}
+
+
 def test_profile_has_the_firered_key_set_and_provenance(emerald):
     firered = _json(ROOT / "data/games/gen3_frlg/profile.json")["titles"]["firered"]
     for section in ("ram", "rom", "derived"):
-        assert set(emerald[section]) == set(firered[section]), section
+        only = EMERALD_ONLY_DERIVED if section == "derived" else set()
+        assert set(emerald[section]) - only == set(firered[section]), section
         for key in emerald[section]:
             field = f"{section}.{key}"  # SE_SONG_HEADERS cites per id: rom.SE_SONG_HEADERS.<id>
             assert any(s == field or s.startswith(field + ".") for s in emerald["_src"]), field

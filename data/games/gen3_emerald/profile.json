@@ -10,6 +10,7 @@
   "titles": {
     "emerald": {
       "_src": {
+        "derived.BADGE_FIRST_FLAG": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/flags.h:1359 (FLAG_BADGE01_GET; SYSTEM_FLAGS 0x860 + 7 (flags.h:1348); the E2-ENTRY+BADGE derived flag id lua/gen3/reads.lua and tools/gen3_reads_pydec.py derive per-bit from, since the badges straddle a byte (see SB1_BADGE_BYTE_OFFSET below))",
         "derived.BASESTATS_ADDR_BY_GAME_CODE": "rom.BASESTATS_ADDR under game code BPEE",
         "derived.BASESTATS_ENTRY_SIZE": "data/gen3/pret/pokeemerald.sym:40500 gSpeciesInfo 0x2D10 bytes / 412; pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/species.h:418-420 (NUM_SPECIES)",
         "derived.BASESTATS_GROWTH_RATE_OFFSET": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/pokemon.h:319 (growthRate; struct SpeciesInfo)",
@@ -41,7 +42,7 @@
         "derived.OUTCOME_WON": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/battle.h:100 (B_OUTCOME_WON)",
         "derived.OVERWORLD_MODE": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/main.h:39 (inBattle; client mode name: the in-battle test is this gMain flag bit, as on FR/LG)",
         "derived.PARTY_CAPACITY": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/global.h:33 (PARTY_SIZE)",
-        "derived.SB1_BADGE_BYTE_OFFSET": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/flags.h:1348-1366 (FLAG_BADGE01_GET; OPEN: SYSTEM_FLAGS 0x860, FLAG_BADGE01_GET = +0x7 = 0x867 .. FLAG_BADGE08_GET = 0x86E -- flags byte 0x10C bit 7 .. byte 0x10D bit 6, which a single badge byte cannot express)",
+        "derived.SB1_BADGE_BYTE_OFFSET": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/flags.h:1348-1366 (FLAG_BADGE01_GET; resolved via BADGE_FIRST_FLAG: SYSTEM_FLAGS 0x860, FLAG_BADGE01_GET = +0x7 = 0x867 .. FLAG_BADGE08_GET = 0x86E -- flags byte 0x10C bit 7 .. byte 0x10D bit 6, which a single badge byte cannot express)",
         "derived.SB1_BALL_POCKET_COUNT": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/global.h:53 (BAG_POKEBALLS_COUNT)",
         "derived.SB1_BALL_POCKET_OFFSET": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/global.h:1008 (bagPocket_PokeBalls; struct SaveBlock1)",
         "derived.SB1_FLAGS_OFFSET": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/global.h:1020 (flags; struct SaveBlock1)",
@@ -101,6 +102,7 @@
       },
       "admitted": false,
       "derived": {
+        "BADGE_FIRST_FLAG": 2151,
         "BASESTATS_ADDR_BY_GAME_CODE": {
           "BPEE": 137495500
         },

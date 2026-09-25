@@ -433,7 +433,27 @@ function R.new(profile, io, pointers)
 
     -- SaveBlock1.flags[]: the 8 FLAG_BADGE0x_GET bits sit consecutively inside one byte
     -- (pret include/constants/flags.h:1324,1364-1371) -- bit i (0-based) is badge i+1.
+    --
+    -- Emerald's badges (FLAG_BADGE01_GET = SYSTEM_FLAGS+7 = 0x867, flags.h:1359) straddle a
+    -- byte instead (0x867..0x86E = byte 0x10C bit 7, then byte 0x10D bits 0-6), so a pack that
+    -- cannot say it with one byte carries profile.derived.BADGE_FIRST_FLAG (the flag id) and
+    -- leaves SB1_BADGE_BYTE_OFFSET null; each bit is then read from its own flags byte. The
+    -- Python twin is tools/gen3_reads_pydec.py's decode_badges_straddle.
     function r.read_badges()
+        if d.BADGE_FIRST_FLAG then
+            if not d.SB1_FLAGS_OFFSET then
+                return nil, "profile has no derived.SB1_FLAGS_OFFSET"
+            end
+            local sb1, why = r.read_sb1()
+            if not sb1 then return nil, why end
+            local out = 0
+            for i = 0, 7 do
+                local bit_index = d.BADGE_FIRST_FLAG + i
+                local byte = io.read_u8(sb1 + d.SB1_FLAGS_OFFSET + (bit_index >> 3))
+                if (byte >> (bit_index & 7)) & 1 == 1 then out = out | (1 << i) end
+            end
+            return out
+        end
         if not d.SB1_FLAGS_OFFSET or not d.SB1_BADGE_BYTE_OFFSET then
             return nil, "profile has no derived.SB1_FLAGS_OFFSET/SB1_BADGE_BYTE_OFFSET"
         end

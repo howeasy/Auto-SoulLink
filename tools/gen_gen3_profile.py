@@ -1106,6 +1106,11 @@ EMERALD_SE_SONGS = {16: ("se_faint", 22, "SE_FAINT"), 17: ("se_flee", 23, "SE_FL
                     32: ("se_failure", 38, "SE_FAILURE"), 102: ("se_shiny", 108, "SE_SHINY")}
 # key -> (value, pret path:lines, identifier the cited lines carry, note)
 EMERALD_DERIVED = {
+    "BADGE_FIRST_FLAG": (0x867, "include/constants/flags.h:1359", "FLAG_BADGE01_GET",
+                         "SYSTEM_FLAGS 0x860 + 7 (flags.h:1348); the E2-ENTRY+BADGE derived "
+                         "flag id lua/gen3/reads.lua and tools/gen3_reads_pydec.py derive "
+                         "per-bit from, since the badges straddle a byte (see "
+                         "SB1_BADGE_BYTE_OFFSET below)"),
     "BASESTATS_GROWTH_RATE_OFFSET": (0x13, "include/pokemon.h:319", "growthRate", "struct SpeciesInfo"),
     "BATTLE_MON_OT_ID_OFF": (0x54, "include/pokemon.h:294", "otId", "struct BattlePokemon"),
     "BATTLE_MON_PERSONALITY_OFF": (0x48, "include/pokemon.h:291", "personality", "struct BattlePokemon"),
@@ -1144,14 +1149,15 @@ EMERALD_DERIVED = {
     "OVERWORLD_MODE": ("gmain_flags", "include/main.h:39", "inBattle",
                        "client mode name: the in-battle test is this gMain flag bit, as on FR/LG"),
     "PARTY_CAPACITY": (6, "include/constants/global.h:33", "PARTY_SIZE", ""),
-    # OPEN, not a number: the FR badges are flags 0x820..0x827 = SaveBlock1.flags byte 0x104 bits
+    # Not a number: the FR badges are flags 0x820..0x827 = SaveBlock1.flags byte 0x104 bits
     # 0-7, but the Emerald ones are 0x867..0x86E = byte 0x10C bit 7 + byte 0x10D bits 0-6.  One u8
     # whose bit i is badge i+1 (lua/gen3/reads.lua:437-442) cannot describe that, so the key stays
-    # null and the reader refuses rather than report shifted badges.
+    # null; BADGE_FIRST_FLAG above (E2-ENTRY+BADGE) carries the per-bit path instead.
     "SB1_BADGE_BYTE_OFFSET": (None, "include/constants/flags.h:1348-1366", "FLAG_BADGE01_GET",
-                              "OPEN: SYSTEM_FLAGS 0x860, FLAG_BADGE01_GET = +0x7 = 0x867 .. "
-                              "FLAG_BADGE08_GET = 0x86E -- flags byte 0x10C bit 7 .. byte 0x10D bit 6, "
-                              "which a single badge byte cannot express"),
+                              "resolved via BADGE_FIRST_FLAG: SYSTEM_FLAGS 0x860, "
+                              "FLAG_BADGE01_GET = +0x7 = 0x867 .. FLAG_BADGE08_GET = 0x86E -- "
+                              "flags byte 0x10C bit 7 .. byte 0x10D bit 6, which a single badge "
+                              "byte cannot express"),
     "SB1_BALL_POCKET_COUNT": (16, "include/constants/global.h:53", "BAG_POKEBALLS_COUNT", ""),
     "SB1_BALL_POCKET_OFFSET": (0x650, "include/global.h:1008", "bagPocket_PokeBalls", "struct SaveBlock1"),
     "SB1_FLAGS_OFFSET": (0x1270, "include/global.h:1020", "flags", "struct SaveBlock1"),

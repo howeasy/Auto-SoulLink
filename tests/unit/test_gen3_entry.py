@@ -208,6 +208,9 @@ def test_admission_table_refuses_a_duplicate_digest(tmp_path):
     unspecified, so the row that silently won would be nondeterministic)."""
     for pack, source in PACKS.items():
         shutil.copytree(source, tmp_path / "data" / "games" / pack)
+    # gen3_emerald (E2-ENTRY+BADGE) is a registered pack too: Entry.artifacts() opens every
+    # pack in Entry.PACKS unconditionally, so a doctored tmp_path tree needs it as well.
+    shutil.copytree(REPO / "data" / "games" / "gen3_emerald", tmp_path / "data" / "games" / "gen3_emerald")
     doctored = tmp_path / "data" / "games" / "gen3_frlg" / "engine_signals.json"
     blob = json.loads(doctored.read_text(encoding="utf-8"))
     dupe = blob["titles"]["firered"]["artifacts"]["clean"]["rom_sha1"]
@@ -242,6 +245,9 @@ def test_admission_refuses_an_ambiguous_rom(tmp_path):
     the branch is exercised against a doctored copy of the pack tree."""
     for pack, source in PACKS.items():
         shutil.copytree(source, tmp_path / "data" / "games" / pack)
+    # gen3_emerald (E2-ENTRY+BADGE) is a registered pack too: Entry.artifacts() opens every
+    # pack in Entry.PACKS unconditionally, so a doctored tmp_path tree needs it as well.
+    shutil.copytree(REPO / "data" / "games" / "gen3_emerald", tmp_path / "data" / "games" / "gen3_emerald")
     doctored = tmp_path / "data" / "games" / "gen3_frlg" / "engine_signals.json"
     blob = json.loads(doctored.read_text(encoding="utf-8"))
     blob["titles"]["leafgreen"]["artifacts"]["clean"]["sites"] = \
@@ -525,7 +531,7 @@ def test_build_refuses_an_unadmitted_title():
 def test_build_refuses_an_unknown_pack_and_title():
     world = World(build=False)
     with pytest.raises(lupa.LuaError, match="unknown pack"):
-        world.Entry.build(world.deps(pack="gen3_emerald"))
+        world.Entry.build(world.deps(pack="gen3_bogus"))
     with pytest.raises(lupa.LuaError, match="unknown title"):
         world.Entry.build(world.deps(title="quartz"))
 
@@ -534,7 +540,7 @@ def test_pack_files_exist_and_are_the_only_named_foundation():
     """Every path in Entry.PACK_FILES ships; the release manifest derives from them."""
     world = World(build=False)
     files = lua_to_py(world.Entry.PACK_FILES)
-    assert set(files) == set(PACKS)
+    assert set(files) == set(PACKS) | {"gen3_emerald"}
     for pack, entries in files.items():
         for key, rel in entries.items():
             assert (REPO / rel).exists(), f"{pack}.{key} -> missing {rel}"

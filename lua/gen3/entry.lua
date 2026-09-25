@@ -65,6 +65,13 @@ Entry.PACKS = {
     gen3_rr = {
         rom_type = { radical_red = "firered_rr" },
     },
+    -- Registered so the packs/admission tables build and the hash is recognized (E2-ENTRY);
+    -- NOT in Entry.ROUTED -- an admitted Emerald cartridge still falls through to the BPEE
+    -- refusal in lua/slink.lua until EG4 (docs/gen3_emerald/PLAN.md §5 E3 row).
+    gen3_emerald = {
+        rom_type = { emerald = "emerald" },
+        header_code = { BPEE = "emerald" },
+    },
 }
 -- Every pack file Entry.build/Entry.admit reads, as literal repo-relative paths: the release
 -- manifest derives what to ship from these literals, so a pack file must be named here or a
@@ -85,6 +92,14 @@ Entry.PACK_FILES = {
         checkpoint = "data/games/gen3_rr/write_checkpoint.json",
         area_map = "data/games/gen3_frlge/area_map.json",
         locations = "data/games/gen3_frlge/gen3_frlge_locations.lua",
+    },
+    -- Emerald keeps its own area map/locations (E1-PACK): it is not a FRLG map hack.
+    gen3_emerald = {
+        profile = "data/games/gen3_emerald/profile.json",
+        sites = "data/games/gen3_emerald/engine_signals.json",
+        checkpoint = "data/games/gen3_emerald/write_checkpoint.json",
+        area_map = "data/games/gen3_emerald/area_map.json",
+        locations = "data/games/gen3_emerald/gen3_emerald_locations.lua",
     },
 }
 -- Which packs lua/slink.lua's Gen 3 route sends to the rewritten client. The route reads this
