@@ -984,6 +984,18 @@ function Client.new(p)
         local function close_authority(sig)
             local had = rival_authority
             rival_authority = nil                 -- first: a throwing log must not keep it open
+            -- G5-RR-RIVAL: a PRE-battle announcement names the battle about to begin (battle_seq
+            -- + 1). Its own battle_begin -- the first one, for the same trainer -- CARRIES it
+            -- into that battle instead of closing it; any later boundary closes it as before.
+            if had and had.pre and not had.begun and sig and sig.kind == "battle_begin"
+               and had.battle_id == battle_seq + 1
+               and io.read_u16(a.TRAINER_OPPONENT_ADDR) == had.trainer_id then
+                rival_authority = {session = had.session, battle_id = had.battle_id,
+                                   trainer_id = had.trainer_id, rejected = had.rejected,
+                                   pre = true, opened = had.opened, begun = io.framecount()}
+                log("rival authority carried into battle " .. tostring(had.battle_id))
+                return
+            end
             if had then log("rival authority closed by " .. tostring(sig and sig.kind)) end
         end
         sig_src = p.Signals.new(profile, p.sites, io, p.ev,
@@ -1003,6 +1015,12 @@ function Client.new(p)
             -- the harness read them from here, never from a second copy
             st.battle = { caught = false, base_keys = base, battle_id = battle_seq,
                           session = session_nonce }
+            -- the battle a pre-battle announcement already named: never announce it twice (the
+            -- server queues one swap per trainer_battle_start)
+            local ra = rival_authority
+            if ra and ra.pre and ra.begun and ra.battle_id == battle_seq then
+                st.battle.trainer_sent, st.battle.trainer_id = true, ra.trainer_id
+            end
         elseif k == "battle_end" then f.battle_end = true
         elseif k == "faint" then f.faint = true
         elseif k == "poison_faint" then f.faint = true          -- OPEN kind (FR only), not PHYSICAL
@@ -1056,7 +1074,35 @@ function Client.new(p)
         seed_known(party)
         st.seen_count = count
     end
-    drv.frame_hooks = { observe_known, settle }
+    -- G5-RR-RIVAL: the PRE-BATTLE announcement. The patch's rival-swap window (W1,
+    -- gBattleMainFunc == BeginBattleIntroDummy) is ~5 frames long and opens in the battle_begin
+    -- frame itself, while the in_battle read (gBattleMons[0].maxHP) first holds ~30 frames AFTER
+    -- it closes (live receipt rr_rival_swap_real_gen3_gen3_rr_as_a_4202b5d8: window 1012-1016,
+    -- announcement 1043). The trainerbattle script sets gTrainerBattleOpponent_A ~120 frames
+    -- before the battle (891 there), so a trainer battle is announced on that value's EDGE on the
+    -- field, with the id of the battle about to begin (battle_seq + 1); its battle_begin carries
+    -- the authority in (drv.start) and the staged swap posts in the window (native.lua).
+    -- RR companion only (native.rival_window_open); every other artifact keeps note_battle's
+    -- in-battle announcement. The value stays set after a battle, so only a CHANGE counts: a
+    -- rematch against the SAME id is not pre-announced and falls back to note_battle (the value
+    -- is tracked every frame, so a stale post-battle id is never an edge).
+    local function pre_announce()
+        if not (native and native.rival_window_open and session_nonce and num(a.TRAINER_OPPONENT_ADDR)) then
+            return
+        end
+        local opp = io.read_u16(a.TRAINER_OPPONENT_ADDR)
+        local seen = st.opp_seen
+        st.opp_seen = opp
+        if opp == 0 or seen == nil or opp == seen then return end   -- the first read only latches
+        if st.battle or rival_authority or in_battle() then return end
+        local id = battle_seq + 1
+        send("trainer_battle_start", { trainer_id = opp, battle_id = id, session = session_nonce })
+        rival_authority = {session = session_nonce, battle_id = id, trainer_id = opp,
+                           rejected = sig_src and sig_src.rejected, pre = true,
+                           opened = io.framecount()}
+        log("trainer " .. opp .. " announced before battle " .. id)
+    end
+    drv.frame_hooks = { observe_known, settle, pre_announce }
 
     -- ── command seams ──────────────────────────────────────────────────────────────
     local C = drv.commands
@@ -1119,13 +1165,31 @@ function Client.new(p)
            or now.trainer_id ~= epoch.trainer_id then
             return false, "stale_battle_id"
         end
-        if not in_battle() then return false, "not_in_battle" end
+        -- a pre-announced battle (G5-RR-RIVAL) posts in the W1 window, before the in_battle read
+        -- holds: its own battle_begin must have carried the authority (`begun`); the patch's
+        -- five-part check stays the authority for the window itself
+        if not in_battle() and not (now.pre and now.begun) then return false, "not_in_battle" end
         local live = battle_now()
         if not (live and live.is_trainer and num(live.trainer_id)
                 and live.trainer_id == epoch.trainer_id) then
             return false, "stale_battle_id"
         end
         return true
+    end
+    -- G5-RR-RIVAL: how long a pre-announced swap may wait in native.lua's queue for the W1 window
+    -- (native job `ready`): true = keep holding. Only a pre-battle authority holds; the battle must
+    -- begin within RIVAL_HOLD frames of the announcement and the window open within RIVAL_WINDOW
+    -- frames of battle_begin. When the hold ends the job is dispatched anyway and its guard (or the
+    -- patch's REASON_WINDOW_CLOSED) refuses it cleanly -- a hold never becomes a silent drop.
+    local RIVAL_HOLD, RIVAL_WINDOW = 3600, 30
+    local function rival_hold(epoch)
+        local now = live_authority()
+        if not (now and now.pre and now.session == epoch.session and now.battle_id == epoch.battle_id
+                and now.trainer_id == epoch.trainer_id) then
+            return false
+        end
+        if not now.begun then return io.framecount() - now.opened < RIVAL_HOLD end
+        return io.framecount() - now.begun < RIVAL_WINDOW
     end
 
     -- rival swap is a companion-mailbox feature (OP_RIVAL_SWAP 28, C5-11a; 16 stays the trade's).
@@ -1137,7 +1201,30 @@ function Client.new(p)
         end
         local trainer = cmd.trainer_id
         local current = st.battle
-        if not in_battle() then
+        local ra = live_authority()
+        if ra and ra.pre and session_nonce ~= nil and type(cmd.session) == "string"
+           and cmd.session == ra.session and cmd.battle_id == ra.battle_id
+           and type(trainer) == "number" and trainer == ra.trainer_id then
+            -- G5-RR-RIVAL: the swap for a PRE-announced battle (usually still on the field). It is
+            -- STAGED in native.lua and posted in the W1 window; selectability is re-checked at
+            -- dispatch with the battle's own type flags (doubles are set by then).
+            local ok, why = selectable_team(cmd)
+            if not ok then
+                log("replace_rival_team refused: " .. why)
+                refuse(why)
+            elseif not eligible() then
+                log("replace_rival_team: session not eligible (writes paused); nothing staged")
+            elseif native and native.replace_rival_team then
+                log("replace_rival_team staged for the window (battle " .. tostring(ra.battle_id) .. ")")
+                native:replace_rival_team(cmd, function(epoch)
+                    local gok, gwhy = rival_epoch_guard(epoch)
+                    if not gok then return gok, gwhy end
+                    return selectable_team(cmd)
+                end, rival_hold)
+            else
+                refuse("patch_required")
+            end
+        elseif not in_battle() then
             refuse("not_in_battle")
         -- MAJOR 1 (Codex C5-10 review): the no-epoch case FIRST -- a client attached mid-battle
         -- has no identity to compare against and must refuse by name, never index a nil record.
@@ -1532,7 +1619,7 @@ function Client.new(p)
         native:service()
         -- the trade's first actual post is the posting job's OWN dispatch receipt (native.lua sets
         -- `posted` when it publishes that job's opcode). Never infer it from sink bytes: a
-        -- completion callback (the rival swap's refresh_enemy) or a panel/NPC callback can write
+        -- completion callback (e.g. a panel page job) or a panel/NPC callback can write
         -- through the same sink in this very call while our job is refused at its guard.
         local t = st.trade_apply
         if t and t.posts then

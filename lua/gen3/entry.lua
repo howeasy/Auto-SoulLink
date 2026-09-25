@@ -317,22 +317,6 @@ local function build_production(deps, c)
             if status.mask then value = value & status.mask end
             return value == status.expect, 1
         end
-        -- refresh_enemy: after OP_SET_ENEMY_PARTY copies gEnemyParty, the active foe's
-        -- gBattleMons[1]/[3] cache is stale -- the patch's comment assigns that refresh to Lua
-        -- (patch/src/handlers.c:1867-1888), the job the old client does in
-        -- M.refreshEnemyPartyNative (archive/gen3-old-client:lua/memory_gba.lua:1699-1729). That write lands in the
-        -- battle's FIRST frames, and NO write reason covers that window: battle_faint's clause
-        -- set is the action-selection input wait (battle_main_func ==
-        -- HandleTurnActionSelectionState), which the intro is not, so an arm there is refused by
-        -- name. This binding therefore refuses by name and the native op replies refresh_failed,
-        -- instead of writing through a window the design has not established.
-        -- TODO(C4-7/C4-B follow-up): give it a window -- an intro-phase clause set (plus its probe
-        -- row and the pret evidence for who reads gBattleMons[1] during the intro), or a patch
-        -- opcode that refreshes natively.
-        local function refresh_enemy(_count)
-            return nil, "refresh_enemy_window_missing: the battle's first frames carry no "
-                .. "battle write reason (battle_faint is the action-selection input wait)"
-        end
         native = L("lua/gen3/native.lua").new(full_profile, {
             -- The exact io surface native.lua reads.
             io = {
@@ -348,7 +332,7 @@ local function build_production(deps, c)
             end,
             in_battle = function() return session and session.driver.in_battle() or false end,
             artifact_kind = c.artifact_kind, log = log,
-            refresh_enemy = refresh_enemy, panel_closed = panel_closed,
+            panel_closed = panel_closed,
         })
     end
     session = L("lua/gen3/client.lua").new({

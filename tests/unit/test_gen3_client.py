@@ -1504,10 +1504,11 @@ def trade_writes_are_native_only(w):
     assert all(lo <= a < hi for a, _v, _f in w.writes), "a trade byte landed outside the mailbox arena"
 
 
-def test_rival_swap_posts_through_the_real_native_path_and_reports_the_refresh_refusal():
-    """The rival swap's OP_SET_ENEMY_PARTY posts through writes:arm("native") and the real native
-    clauses; Entry refuses refresh_enemy by name (no write reason covers the battle's first
-    frames), so the reply names that refusal instead of claiming a swap."""
+def test_rival_swap_posts_through_the_real_native_path_and_reports_the_readback_as_success():
+    """G5-RR-RIVAL (was ..._reports_the_refresh_refusal): OP_RIVAL_SWAP posts through
+    writes:arm("native") and the real native clauses, and a gEnemyParty readback that matches the
+    staged team IS the success -- the patch consumes the op only inside W1, before the engine's
+    selection, so no gBattleMons refresh exists to refuse."""
     w, _blob = trade_world()
     ready_battle(w, 5)
     session, bid = battle_identity(w)
@@ -1521,8 +1522,140 @@ def test_rival_swap_posts_through_the_real_native_path_and_reports_the_refresh_r
     mb_ack(w)
     w.step()
     (reply,) = w.events("rival_team_replaced")
-    assert reply["error"] == "refresh_failed"
+    assert reply.get("error") is None and reply["species_ids"] == [25], reply
     trade_writes_are_native_only(w)
+
+
+def test_rival_swap_whose_readback_does_not_match_still_reports_failure():
+    """The success claim is the readback: an OK ack over a gEnemyParty that is NOT the staged team
+    is enemy_readback_failed, never a swap."""
+    w, _blob = trade_world()
+    ready_battle(w, 5)
+    session, bid = battle_identity(w)
+    w.command(cmd="replace_rival_team", trainer_id=5, n=1,
+              blobs_hex=[w.encode(PARTNER).hex().upper()], session=session, battle_id=bid)
+    w.step(2)
+    assert mb_op(w) == NATIVE["OP_RIVAL_SWAP"]
+    w.poke_int(w.ram["ENEMY_COUNT_ADDR"], 1, 1)                 # count right, bytes still the FOE's
+    mb_ack(w)
+    w.step()
+    (reply,) = w.events("rival_team_replaced")
+    assert reply["error"] == "enemy_readback_failed" and reply["species_ids"] == [], reply
+
+
+# ── G5-RR-RIVAL: announce before the battle, stage the swap, post it in W1 ──────────────────
+RR_ROM = RR_PACK["titles"]["radical_red"]["rom"]
+RR_RAM = RR_PACK["titles"]["radical_red"]["ram"]
+
+
+def rival_script(w, trainer_id=331):
+    """The trainerbattle script on the field: gTrainerBattleOpponent_A set, no battle yet."""
+    w.poke_int(w.ram["TRAINER_OPPONENT_ADDR"], trainer_id, 2)
+    w.step()
+
+
+def rival_window(w, open_=True):
+    """CB2_InitBattle -> SetUpBattleVars: battle_begin fires and gBattleMainFunc is the Dummy
+    phase, while gBattleMons[0].maxHP is still 0 (in_battle reads false)."""
+    w.poke_int(w.ram["BATTLE_TYPE_ADDR"], w.d["BATTLE_TYPE_TRAINER_MASK"], 4)   # StartTrainerBattle
+    w.poke_int(RR_RAM["BATTLE_MAIN_FUNC_ADDR"], RR_ROM["BEGIN_BATTLE_INTRO_DUMMY_ADDR"] if open_ else 0x0801333D, 4)
+    w.poke_int(RR_RAM["BATTLE_COMM_ADDR"], 0 if open_ else 16, 1)
+
+
+def pre_announced(w, trainer_id=331):
+    w.step(3)                                                   # the opponent's first read latches 0
+    rival_script(w, trainer_id)
+    (tbs,) = w.events("trainer_battle_start")
+    return tbs
+
+
+def test_rr_announces_a_trainer_battle_on_the_opponent_edge_before_the_battle():
+    w, _blob = trade_world()
+    tbs = pre_announced(w)
+    assert tbs["trainer_id"] == 331 and tbs["session"] == "0000BEEF" and tbs["battle_id"] == 1
+    assert w.client.state.battle is None                        # nothing began yet
+    w.step(30)
+    assert len(w.events("trainer_battle_start")) == 1           # an edge, not a level
+
+
+def test_a_stale_opponent_after_a_battle_is_not_announced_again():
+    w, _blob = trade_world()
+    w.set_balls(3)
+    w.step(3)
+    w.enter_battle([FOE], trainer_id=331)                        # announced in battle (no edge seen)
+    w.step(61)
+    w.leave_battle()
+    w.step(30)                                                   # opponent still reads 331
+    assert [e["trainer_id"] for e in w.events("trainer_battle_start")] == [331]
+
+
+def test_frlg_keeps_the_in_battle_announcement():
+    w = live()
+    w.step(3)
+    w.poke_int(w.ram["TRAINER_OPPONENT_ADDR"], 5, 2)
+    w.step(10)
+    assert w.events("trainer_battle_start") == []
+
+
+def test_a_pre_announced_swap_is_staged_and_posts_in_the_w1_window():
+    w, _blob = trade_world()
+    tbs = pre_announced(w)
+    w.command(cmd="replace_rival_team", trainer_id=331, n=1, source="auto",
+              blobs_hex=[w.encode(PARTNER).hex().upper()], session=tbs["session"],
+              battle_id=tbs["battle_id"])
+    w.step(20)
+    assert w.events("rival_team_replaced") == [] and mb_op(w) == 0, "staged, not posted, not refused"
+    w.fire("battle_begin")                                       # the battle this id named
+    w.step()
+    assert mb_op(w) == 0, "battle_begin alone is not the window"
+    rival_window(w)
+    w.step()
+    assert mb_op(w) == NATIVE["OP_RIVAL_SWAP"]
+    assert w._read(NATIVE["BASE"] + 17, 2) == 331
+    w.poke(w.ram["ENEMY_BASE"], w.encode(PARTNER))
+    w.poke_int(w.ram["ENEMY_COUNT_ADDR"], 1, 1)
+    mb_ack(w)
+    w.step()
+    (reply,) = w.events("rival_team_replaced")
+    assert reply.get("error") is None and reply["species_ids"] == [25], reply
+    assert w.client.state.battle["battle_id"] == tbs["battle_id"]
+    assert len(w.events("trainer_battle_start")) == 1, "the battle is never announced twice"
+    trade_writes_are_native_only(w)
+
+
+def test_a_swap_that_misses_the_window_is_refused_cleanly():
+    """Late arrival: the battle began and the window passed without the swap -> the hold ends,
+    and the patch's REASON_WINDOW_CLOSED (or the guard) refuses; nothing lands in gEnemyParty."""
+    w, _blob = trade_world()
+    tbs = pre_announced(w)
+    w.fire("battle_begin")
+    rival_window(w, open_=False)
+    w.step(40)                                                  # past RIVAL_WINDOW with no window
+    w.command(cmd="replace_rival_team", trainer_id=331, n=1, source="auto",
+              blobs_hex=[w.encode(PARTNER).hex().upper()], session=tbs["session"],
+              battle_id=tbs["battle_id"])
+    enemy_before = w._read(w.ram["ENEMY_BASE"], 4)
+    w.step(3)
+    if mb_op(w) == NATIVE["OP_RIVAL_SWAP"]:                     # posted: the patch is the authority
+        mb_ack(w, status=3)
+        w.poke_int(NATIVE["BASE"] + 14, 8, 2)
+        w.step()
+    (reply,) = w.events("rival_team_replaced")
+    assert reply["error"] in ("refresh_failed", "not_in_battle"), reply
+    assert w._read(w.ram["ENEMY_BASE"], 4) == enemy_before
+
+
+def test_a_pre_announcement_whose_battle_never_begins_holds_nothing_after_a_battle_end():
+    w, _blob = trade_world()
+    tbs = pre_announced(w)
+    w.command(cmd="replace_rival_team", trainer_id=331, n=1, source="auto",
+              blobs_hex=[w.encode(PARTNER).hex().upper()], session=tbs["session"],
+              battle_id=tbs["battle_id"])
+    w.step(2)
+    w.fire("whiteout")                                          # any boundary closes the authority
+    w.step(2)
+    (reply,) = w.events("rival_team_replaced")
+    assert reply["error"] in ("stale_battle_id", "not_in_battle") and mb_op(w) == 0, reply
 
 
 def test_trade_happy_path_stages_runs_the_scene_and_reports_the_received_mon():

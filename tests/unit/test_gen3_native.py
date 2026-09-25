@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class World:
-    def __init__(self, present=True, initial_seq=0, kind="companion", refresh_enemy=None):
+    def __init__(self, present=True, initial_seq=0, kind="companion"):
         self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
         self.profile = json.loads((ROOT / "data/games/gen3_rr/profile.json").read_text())
         self.n = self.profile["native"]
@@ -50,7 +50,6 @@ class World:
             artifact_kind=kind,
             timeout_frames=5, send=lambda event, fields: self.events.append((event, fields)),
             in_battle=lambda: self.battle,
-            refresh_enemy=refresh_enemy or (lambda *_: True),
             panel_closed=lambda: (True, self.panel_result)))
 
     def put(self, address, value, size=1):
@@ -194,30 +193,26 @@ def test_a_stage_only_job_publishes_nothing_and_so_receipts_nothing():
 
 
 def test_the_codex_counterexample_a_completion_write_does_not_receipt_a_refused_trade_arm():
-    """REV7's counterexample, with the writer real: one service() call runs the rival swap's
-    completion, whose refresh_enemy writes through the sink, and then refuses our guarded trade
-    arm -- so a sink byte moved and a guard ran, the two inputs the byte-count inference read,
-    while our own op was never published."""
+    """REV7's counterexample, with the writer real: one service() call runs a completion callback
+    that writes through the sink (G5-RR-RIVAL: the rival swap no longer refreshes gBattleMons, so
+    the vehicle is a rival transfer's own `done`), and then refuses our guarded trade arm -- so a
+    sink byte moved and a guard ran, the two inputs the byte-count inference read, while our own
+    op was never published."""
     holder = {}
 
-    def writing_refresh(*_args):
+    def writing_done(*_args):
         w.writes.arm(w.writes, "native", holder["allow"])
         holder["write"](w.writes)
         w.writes.disarm(w.writes)
-        return True
 
-    w = World(refresh_enemy=writing_refresh)
+    w = World()
     # writes.lua type-checks the allow predicate, and lupa hands a Python callable over as
     # userdata (not "function"), so the writer's predicate -- and the write itself, which needs
     # an explicit self when called from Python -- go through Lua.
     holder["allow"] = w.lua.eval("function(addr, n) return true end")
     holder["write"] = w.lua.eval("function(w) w:write_bytes(0x0203F900, {0x5A}) end")
-    for i in range(100):
-        w.bus[w.ram["ENEMY_BASE"] + i] = 0xAB                    # the readback the ack will check
-        w.bus[w.n["BLOB_BUF"] + i] = 0xAB                        # the staged copy it must match
-    w.put(w.ram["ENEMY_COUNT_ADDR"], 1)
-    swap = w.native.replace_rival_team(w.native, w.lua.table(
-        trainer_id=5, blobs_hex=w.lua.table("AB" * 100)))
+    swap = w.native.transfer(w.native, "rival",
+                             w.lua.table(trainer_id=5, blobs_hex=w.lua.table("AB" * 100)), writing_done)
     w.service()
     assert swap["posted"] is True
     seen = []
@@ -497,7 +492,7 @@ def test_rival_ack_requires_actual_enemy_party_readback():
     assert w.events[0][1].error == "enemy_readback_failed"
 
 
-def test_rival_success_reports_readback_species_after_refresh():
+def test_rival_success_reports_readback_species_with_no_refresh_step():
     w = World()
     raw = bytearray(100)
     raw[0x20] = 25
@@ -599,3 +594,72 @@ def test_per_op_timeouts_outlast_the_patch_own_deadline(op, frames):
     assert native.idle(native) is False and native.service(native) is True
     w.frame += 1
     assert native.service(native) == (None, "native timeout")
+
+
+# ── G5-RR-RIVAL: a pre-announced swap is STAGED and posted in the W1 window ─────────────────
+
+def _window(w, open_=True):
+    rr = w.profile["titles"]["radical_red"]
+    w.put(rr["ram"]["BATTLE_MAIN_FUNC_ADDR"], rr["rom"]["BEGIN_BATTLE_INTRO_DUMMY_ADDR"] if open_ else 0, 4)
+    w.put(rr["ram"]["BATTLE_COMM_ADDR"], 0)
+
+
+def _staged_swap(w, holding):
+    raw = bytearray(100)
+    raw[0x20] = 25
+    raw[0x58] = 20
+    guard = lambda _epoch: (True, None)                             # noqa: E731
+    hold = lambda _epoch: holding[0]                                # noqa: E731
+    handle = w.native.replace_rival_team(w.native, w.lua.table(
+        trainer_id=331, session="S", battle_id=1, blobs_hex=w.lua.table(raw.hex())), guard, hold)
+    return handle, raw
+
+
+def test_a_held_swap_is_staged_off_battle_and_posts_only_when_the_window_opens():
+    w = World()
+    w.battle = False                                              # still on the field
+    holding = [True]
+    handle, raw = _staged_swap(w, holding)
+    assert w.events == [], "held: no not_in_battle refusal"
+    for _ in range(5):
+        w.frame += 1
+        w.service()
+    assert handle["posted"] is None and w.read(w.n["BASE"] + 6, 2) == 0, "nothing posted before W1"
+    w.native.play_sound(w.native, 25)                             # a held swap blocks nobody
+    w.service()
+    assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_PLAY_SE"]
+    w.ack()
+    w.service()
+    _window(w)                                                    # BeginBattleIntroDummy, comm0 0
+    w.service()
+    assert handle["posted"] is True and w.read(w.n["BASE"] + 6, 2) == w.n["OP_RIVAL_SWAP"]
+    for i, byte in enumerate(raw):
+        w.put(w.ram["ENEMY_BASE"] + i, byte)
+    w.put(w.ram["ENEMY_COUNT_ADDR"], 1)
+    w.ack()
+    w.service()
+    (event, fields), = [e for e in w.events if e[0] == "rival_team_replaced"]
+    assert fields.error is None and fields.species_ids[1] == 25
+
+
+def test_the_window_is_the_dummy_phase_with_comm0_below_15():
+    w = World()
+    assert w.native.rival_window_open(w.native) is False
+    _window(w)
+    assert w.native.rival_window_open(w.native) is True
+    w.put(w.ram["BATTLE_COMM_ADDR"], 15)                          # InitBattleControllers' case
+    assert w.native.rival_window_open(w.native) is False
+
+
+def test_a_hold_that_ends_without_the_window_dispatches_to_a_clean_refusal():
+    """The late case: the hold ends (window missed / battle never began) off battle -> the
+    dispatch guard refuses not_in_battle and nothing is posted."""
+    w = World()
+    w.battle = False
+    holding = [True]
+    handle, _raw = _staged_swap(w, holding)
+    w.service()
+    holding[0] = False
+    w.service()
+    assert handle["posted"] is None and w.output == []
+    assert [e[1].error for e in w.events] == ["not_in_battle"]

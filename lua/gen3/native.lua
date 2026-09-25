@@ -2,10 +2,9 @@
 -- ABI offsets/statuses: patch/src/ADDRESSES.md:366ff; handlers.c Mailbox/ack.
 -- Absolute addresses/opcodes come only from the full pack's profile.native.
 -- N.new(pack, {io, writes, reads, send(event, fields), in_battle,
---             artifact_kind, refresh_enemy(count), panel_closed(),
+--             artifact_kind, panel_closed(),
 --             array(table)?, timeout_frames?, initial_seq?}).
--- refresh_enemy must refresh active gBattleMons through a qualified write window;
--- OP_SET_ENEMY_PARTY only copies gEnemyParty (handlers.c:1867-1888).
+-- The rival swap needs no gBattleMons refresh: OP_RIVAL_SWAP lands before the engine's selection.
 -- panel_closed returns (closed, result) for the start-menu-driven panel. Its
 -- caller binds field/script/result facts; no legacy literal address is imported.
 --
@@ -15,7 +14,7 @@
 -- merely queued job never carries the flag, and a stage-only job (config) has no opcode to
 -- publish, so it carries no receipt either. Callers must read "did my op reach the mailbox"
 -- from this flag, never from a sink byte count: a completion callback (e.g. the rival swap's
--- refresh_enemy) or a panel/NPC callback can write through the same sink in the same
+-- readback) or a panel/NPC callback can write through the same sink in the same
 -- service() call while the caller's own job is refused at its guard.
 local N = {}
 local O = {abi=4, opcode=6, seq=8, status=10, ack=12, reason=14, args=16, result=48}
@@ -265,15 +264,36 @@ function N.new(profile, deps)
         else return nil, "unsupported transfer step" end
         return enqueue({op=op, args=args, stages=stages, done=done, valid=valid})
     end
-    function self:replace_rival_team(cmd, guard)
+    -- G5-RR-RIVAL: the patch's rival-swap window W1 (docs/gen3/research/rival_swap_refresh_window.md
+    -- §5): gBattleMainFunc == BeginBattleIntroDummy and gBattleCommunication[0] < 15, i.e. after
+    -- CreateNPCTrainerParty and before InitBattleControllers' selection. A post read open at this
+    -- frame end is consumed by the next frame's slink_hook, before the callbacks run (§5.2). The
+    -- patch re-checks all five parts; this read only decides WHEN a staged swap is posted.
+    local rr = profile.titles and profile.titles.radical_red
+    function self:rival_window_open()
+        if not (rr and rr.ram and rr.rom and rr.ram.BATTLE_MAIN_FUNC_ADDR and rr.ram.BATTLE_COMM_ADDR
+                and rr.rom.BEGIN_BATTLE_INTRO_DUMMY_ADDR) then
+            return false
+        end
+        return io.read_u32(rr.ram.BATTLE_MAIN_FUNC_ADDR) == rr.rom.BEGIN_BATTLE_INTRO_DUMMY_ADDR
+               and io.read_u8(rr.ram.BATTLE_COMM_ADDR) < 15
+    end
+    -- guard(epoch): the caller's live epoch check, run at dispatch. hold(epoch) (optional): true
+    -- while a PRE-announced swap should wait in the queue for the window -- the job is STAGED, not
+    -- posted, and other jobs pass it; once the window opens (or the hold ends) it dispatches.
+    function self:replace_rival_team(cmd, guard, hold)
         local trainer = cmd.trainer_id or 0
         local function reply(why, species, reason)
             local fields = {trainer_id=trainer, species_ids=array(species or {}), error=why}
             if reason then fields.reason = reason end
             send("rival_team_replaced", fields)
         end
-        if not deps.in_battle or not deps.in_battle() then reply("not_in_battle"); return true end
-        if not deps.refresh_enemy then reply("refresh_required"); return true end
+        local epoch = {session = cmd.session, battle_id = cmd.battle_id, trainer_id = cmd.trainer_id}
+        local function in_battle() return deps.in_battle and deps.in_battle() or false end
+        local function holding() return hold ~= nil and hold(epoch) == true end
+        if not in_battle() and not holding() and not self:rival_window_open() then
+            reply("not_in_battle"); return true
+        end
         local rows, bytes = cmd.blobs_hex or {}, {}
         if #rows < 1 or #rows > 6 then reply("invalid_blobs"); return true end
         for _, hex in ipairs(rows) do
@@ -283,14 +303,14 @@ function N.new(profile, deps)
             for i = 1, 200, 2 do bytes[#bytes + 1] = tonumber(hex:sub(i, i + 1), 16) end
         end
         local count = #rows
-        local epoch = {session = cmd.session, battle_id = cmd.battle_id, trainer_id = cmd.trainer_id}
         return enqueue({op=assert(p.OP_RIVAL_SWAP), args={count, trainer & 255, trainer >> 8},
+            ready=function() return self:rival_window_open() or not holding() end,
             valid=function()
                 -- C5-11a: the guard runs at DISPATCH, immediately before posting, and every part
                 -- is re-evaluated there -- never at enqueue. `guard` is the caller's live epoch
                 -- check (client.lua), which owns the identity; this file adds its own in-battle
                 -- and interval checks so a job can never post outside them.
-                if not deps.in_battle or not deps.in_battle() then return false, "not_in_battle" end
+                if not in_battle() and not self:rival_window_open() then return false, "not_in_battle" end
                 if guard then
                     local ok, why = guard(epoch)
                     if not ok then return false, why end
@@ -308,8 +328,10 @@ function N.new(profile, deps)
                 if io.read_u8(ram.ENEMY_COUNT_ADDR) ~= count then
                     reply("enemy_readback_failed"); return
                 end
-                local refreshed, refresh_ok = pcall(deps.refresh_enemy, count)
-                if not refreshed or refresh_ok ~= true then reply("refresh_failed"); return end
+                -- No gBattleMons refresh (G5-RR-RIVAL): OP_RIVAL_SWAP is consumed only inside W1,
+                -- BEFORE the engine selects and snapshots the enemy lead, so the engine's own
+                -- converter builds gBattleMons from the swapped party (window doc §5 "What ends up
+                -- correct"). The readback above is the whole success condition.
                 local species = {}
                 for i = 0, count - 1 do
                     local raw = {}
@@ -425,13 +447,18 @@ function N.new(profile, deps)
             end
         end
         if not self:idle() or #queue == 0 then return true end
-        local job = queue[1]
+        -- a job whose `ready` says "not yet" (a staged rival swap waiting for its window) stays
+        -- queued and does not block the jobs behind it
+        local at = 1
+        while queue[at] and queue[at].ready and not queue[at].ready() do at = at + 1 end
+        local job = queue[at]
+        if not job then return true end
         if job.valid then
             local valid, why = job.valid()
-            if not valid then table.remove(queue, 1); finish(job, why); return nil, why end
+            if not valid then table.remove(queue, at); finish(job, why); return nil, why end
         end
         local ok, why = dispatch(job)
-        if ok ~= nil then table.remove(queue, 1) end
+        if ok ~= nil then table.remove(queue, at) end
         if ok == false then abort(poisoned) end
         return ok, why
     end
