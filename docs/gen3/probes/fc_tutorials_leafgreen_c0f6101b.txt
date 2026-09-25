@@ -1,0 +1,23 @@
+# gen3_final_cut row=tutorials_leafgreen item=§1.2_build cut=c0f6101bc5e34ebdef33b633741bc796e769f6fe
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2
+# command: python tools/mkstates_gen3_tutorials.py --title leafgreen --out-dir 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states/leafgreen'   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2)
+# env: (none)
+# verdict: PASS
+# inputs: rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T08:01:50 cpu=88% emuhawk=1 python=10
+start_utc=2026-09-25T12:01:49Z tracked_clean_before=True
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-2\patch\build\gen3_fixture_runs\mkstates_tutorials_leafgreen\Pokemon - LeafGreen Version (USA).SaveRAM from E:\Google Drive\SLink\.claude\worktrees\gen3-lane-2\tests\fixtures\gen3\leafgreen_party_town.sav; states -> E:\Google Drive\SLink\.claude\worktrees\gen3-lane-2\patch\build\gen3_probe_states\leafgreen
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_mkstates_gen3_tutorials.ini --lua=lua/tests/mkstates_gen3_tutorials.lua patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba
+[gate] mkstates_gen3_tutorials: RESULT: PASS tutorial states in E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states/leafgreen  (20s)
+phase start frame=1 title=leafgreen dir=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states/leafgreen
+phase field frame=778 map=(3,1)
+phase segment frame=1068 at 3.1 (24,31), want 3.1 (24,31)
+phase segment frame=1103 at 3.1 (22,31), want 3.1 (22,31)
+phase segment frame=1458 at 3.1 (22,9), want 3.1 (22,9)
+phase state-saved frame=2990 slink_oldman.State in_battle=true flags=00000204 ctrl0=080E78B9
+phase teachy-tv frame=6212 var 0x4051=2 key slot 0
+phase ttv-battle frame=6435 row 0 chosen
+phase state-saved frame=9218 slink_pokedude.State in_battle=true flags=00010004 ctrl0=08156129
+RESULT: PASS tutorial states in E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states/leafgreen
+exit=0 end_utc=2026-09-25T12:02:11Z tracked_clean_after=True classification=pass

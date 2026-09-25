@@ -1,0 +1,32 @@
+# G4 final cut c0f6101bc5e34ebdef33b633741bc796e769f6fe -- tools/gen3_final_cut.py summary (written 2026-09-25T12:22:32Z)
+# RUN 23 / CARRIED 0 / CACHED 0 / FAIL 2
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | states_firered_town | §1.1 build | PASS | 1 | fc_states_firered_town_c0f6101b.txt |
+| 2 | states_firered_battle | §1.1 build | PASS | 1 | fc_states_firered_battle_c0f6101b.txt |
+| 3 | states_leafgreen_town | §1.1 build | PASS | 1 | fc_states_leafgreen_town_c0f6101b.txt |
+| 4 | states_leafgreen_battle | §1.1 build | PASS | 1 | fc_states_leafgreen_battle_c0f6101b.txt |
+| 5 | tutorials_firered | §1.2 build | PASS | 1 | fc_tutorials_firered_c0f6101b.txt |
+| 6 | tutorials_leafgreen | §1.2 build | PASS | 1 | fc_tutorials_leafgreen_c0f6101b.txt |
+| 7 | link_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_link_gen3_fr_as_a_c0f6101b.txt |
+| 8 | boxsync_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_boxsync_gen3_fr_as_a_c0f6101b.txt |
+| 9 | whiteout_gen3_fr_as_a | §4 item2a | PASS | 1 | fc_whiteout_gen3_fr_as_a_c0f6101b.txt |
+| 10 | whiteout_gen3_lg_as_a | §4 item2a | PASS | 1 | fc_whiteout_gen3_lg_as_a_c0f6101b.txt |
+| 11 | center_controls_gen3_fr_as_a | §4 item2a | PASS | 1 | fc_center_controls_gen3_fr_as_a_c0f6101b.txt |
+| 12 | center_controls_gen3_lg_as_a | §4 item2a | PASS | 1 | fc_center_controls_gen3_lg_as_a_c0f6101b.txt |
+| 13 | linked_faint_active_gen3_lg_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_gen3_lg_as_a_c0f6101b.txt |
+| 14 | active_end_gen3_lg_as_a | §5 item2b | PASS | 1 | fc_active_end_gen3_lg_as_a_c0f6101b.txt |
+| 15 | linked_faint_active_whiteout_gen3_fr_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_whiteout_gen3_fr_as_a_c0f6101b.txt |
+| 16 | linked_faint_active_whiteout_gen3_lg_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_whiteout_gen3_lg_as_a_c0f6101b.txt |
+| 17 | linked_faint_active_trainer_gen3_lg_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_trainer_gen3_lg_as_a_c0f6101b.txt |
+| 18 | checkpoint_firered | §6 item3 | FAIL exit=1 | 1 | fc_checkpoint_firered_c0f6101b.txt |
+| 19 | checkpoint_leafgreen | §6 item3 | FAIL exit=1 | 1 | fc_checkpoint_leafgreen_c0f6101b.txt |
+| 20 | save_then_write_gen3_fr_as_a | §7 save-rows | PASS | 1 | fc_save_then_write_gen3_fr_as_a_c0f6101b.txt |
+| 21 | bootcheck_firered_party_town | §8 item4 | PASS | 1 | fc_bootcheck_firered_party_town_c0f6101b.txt |
+| 22 | bootcheck_firered_party_town_b | §8 item4 | PASS | 1 | fc_bootcheck_firered_party_town_b_c0f6101b.txt |
+| 23 | bootcheck_leafgreen_party_town | §8 item4 | PASS | 1 | fc_bootcheck_leafgreen_party_town_c0f6101b.txt |
+| 24 | bootcheck_leafgreen_party_town_b | §8 item4 | PASS | 1 | fc_bootcheck_leafgreen_party_town_b_c0f6101b.txt |
+| 25 | bootcheck_leafgreen_party_battle_b | §8 item4 | PASS | 1 | fc_bootcheck_leafgreen_party_battle_b_c0f6101b.txt |
+
+OVERALL: FAIL (23/25 rows)

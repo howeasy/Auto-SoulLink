@@ -1,0 +1,21 @@
+# G4 final cut c0f6101bc5e34ebdef33b633741bc796e769f6fe -- tools/gen3_final_cut.py summary (written 2026-09-25T12:08:20Z)
+# RUN 14 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | faint_cmd_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_faint_cmd_gen3_fr_as_a_c0f6101b.txt |
+| 2 | reconnect_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_reconnect_gen3_fr_as_a_c0f6101b.txt |
+| 3 | deadzone_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_deadzone_gen3_fr_as_a_c0f6101b.txt |
+| 4 | linked_faint_active_gen3_fr_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_gen3_fr_as_a_c0f6101b.txt |
+| 5 | active_end_gen3_fr_as_a | §5 item2b | PASS | 1 | fc_active_end_gen3_fr_as_a_c0f6101b.txt |
+| 6 | linked_faint_active_trainer_gen3_fr_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_trainer_gen3_fr_as_a_c0f6101b.txt |
+| 7 | save_then_write_gen3_lg_as_a | §7 save-rows | PASS | 1 | fc_save_then_write_gen3_lg_as_a_c0f6101b.txt |
+| 8 | bootcheck_firered_party_battle | §8 item4 | PASS | 1 | fc_bootcheck_firered_party_battle_c0f6101b.txt |
+| 9 | bootcheck_firered_party_battle_b | §8 item4 | PASS | 1 | fc_bootcheck_firered_party_battle_b_c0f6101b.txt |
+| 10 | bootcheck_leafgreen_party_battle | §8 item4 | PASS | 1 | fc_bootcheck_leafgreen_party_battle_c0f6101b.txt |
+| 11 | zip_build | §9 item5 | PASS | 1 | fc_zip_build_c0f6101b.txt |
+| 12 | zip_check | §9 item5 | PASS | 1 | fc_zip_check_c0f6101b.txt |
+| 13 | zip_boot_firered | §9 item5 | PASS | 1 | fc_zip_boot_firered_c0f6101b.txt |
+| 14 | item6_route_diff | §10 item6 | PASS | 1 | fc_item6_route_diff_c0f6101b.txt |
+
+OVERALL: PASS (14/14 rows)

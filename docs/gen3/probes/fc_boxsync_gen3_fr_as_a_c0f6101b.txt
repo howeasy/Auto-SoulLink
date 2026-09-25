@@ -1,0 +1,46 @@
+# gen3_final_cut row=boxsync_gen3_fr_as_a item=§2-3_item1-2 cut=c0f6101bc5e34ebdef33b633741bc796e769f6fe
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario boxsync_gen3   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T08:02:43 cpu=82% emuhawk=2 python=9
+start_utc=2026-09-25T12:02:42Z tracked_clean_before=True
+
+========== scenario: boxsync_gen3 ==========
+[duo] boxsync_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=c6d5ff869daa0babd8d5e7a62b98c4250bab3ecad59549f691954b0fdc48448d profile.json=bb00b6ce72c74fe32d5fc7f7b9f630bf860d532c4ff47b61b202f0b19a5697c5 source=c0f6101bc5e34ebdef33b633741bc796e769f6fe
+[duo] server up: tcp=54671 http=54672 data=C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_gen3_9t9x3icr
+[duo] cleared 9 stale artifact(s) for boxsync_gen3: e2e_boxsync_gen3_a_1_witness.bin, e2e_boxsync_gen3_a_1_witness_ext.bin, e2e_boxsync_gen3_a_attempt1_result.txt, e2e_boxsync_gen3_a_result.txt, e2e_boxsync_gen3_b_1_witness.bin, e2e_boxsync_gen3_b_1_witness_ext.bin, e2e_boxsync_gen3_b_attempt1_result.txt, e2e_boxsync_gen3_b_result.txt, e2e_boxsync_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 263620B6:99DE0D8A <-> F6B6A64D:1C600D89
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] RESULT_LINE a: RESULT: PASS (round trip of 263620B6:99DE0D8A)
+[duo] RESULT_LINE b: RESULT: PASS (round trip of F6B6A64D:1C600D89)
+[duo] SAVE_WITNESS_SHA256 inst=a site=6c989d6f331d4ec00f0f7a2e0fc8d754f249cdae43b8764661c8e0ee32f4c86b file=6c989d6f331d4ec00f0f7a2e0fc8d754f249cdae43b8764661c8e0ee32f4c86b match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=119049c7995b38c96fd17a5b1321ef01ddd34c8b233210a2de9779d171045910 file=119049c7995b38c96fd17a5b1321ef01ddd34c8b233210a2de9779d171045910 match=true saves=1 counter=3->4 rtc=normalized
+[duo] boxsync: 263620B6:99DE0D8A / F6B6A64D:1C600D89 deposited and withdrawn, saved once in party with the fixture record
+[duo] MARKER a: TX party_to_box 263620B6:99DE0D8A {"event":"party_to_box","key":"263620B6:99DE0D8A","player":"a","seq":239,"stats":{"attack":8,"defense":7,"level":4,"maxHP":17,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":8,"spDef":8,"speed":9}}
+[duo] MARKER a: BOXED_OBSERVED 263620B6:99DE0D8A box=0:0
+[duo] MARKER a: TX box_to_party 263620B6:99DE0D8A {"area_id":"","event":"box_to_party","key":"263620B6:99DE0D8A","player":"a","seq":272}
+[duo] MARKER a: RETURNED_OBSERVED 263620B6:99DE0D8A slot=1
+[duo] MARKER b: RX box_mon key=F6B6A64D:1C600D89
+[duo] MARKER b: TX stats_cache F6B6A64D:1C600D89 {"event":"stats_cache","key":"F6B6A64D:1C600D89","player":"b","seq":250,"stats":{"attack":8,"defense":6,"level":3,"maxHP":15,"pp1":35,"pp2":30,"pp3":0,"pp4":0,"spAtk":6,"spDef":7,"speed":9}}
+[duo] MARKER b: BOXED_OBSERVED F6B6A64D:1C600D89 box=0:0
+[duo] MARKER b: RX party_mon key=F6B6A64D:1C600D89
+[duo] MARKER b: TX sync_retrieve_done F6B6A64D:1C600D89 {"event":"sync_retrieve_done","key":"F6B6A64D:1C600D89","player":"b","seq":284}
+[duo] MARKER b: RETURNED_OBSERVED F6B6A64D:1C600D89 slot=1
+[duo] PYDEC: PASS asserted scenario facts
+[duo] boxsync_gen3: a=PASS b=PASS
+
+========== summary ==========
+  boxsync_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-09-25T12:03:41Z tracked_clean_after=True classification=pass
