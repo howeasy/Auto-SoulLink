@@ -37,7 +37,19 @@ body.board img.mon-sprite, body.board .mk-spr img { image-rendering: pixelated; 
 
 /* Banners the old dashboard drew with inline styles. */
 .game-over { background: var(--c-dead); color: #fff; text-align: center; padding: 1em .5em; font-size: 1.8rem; font-weight: bold; letter-spacing: .15em; border-radius: 8px; margin-bottom: 1em; }
-.mk-tag.stale-warn { display: inline-block; }
+/* One warning surface for anything the operator must act on. .mk-warn is the general
+   per-player warning (usable as "mk-now-body mk-warn" in a Now card or standalone);
+   the save banner and the bad connection states share it. */
+.save-warn, .mk-warn, .mk-conn.wrong_game, .mk-conn.identity {
+  border-left: 3px solid var(--c-dead); background: color-mix(in srgb, var(--c-dead) 12%, transparent);
+  color: var(--c-txt); padding: var(--space-3); border-radius: 4px; }
+.save-warn { margin-bottom: var(--space-3); }
+/* Not an error, just not playing: waiting, connecting, stopped, disconnected. */
+.mk-conn { border-left: 3px solid var(--c-edge-ui, var(--c-edge)); padding: var(--space-3); border-radius: 4px; }
+.mk-conn.disconnected { border-left-color: var(--c-dim); }
+/* Active rule clauses above the board. */
+.lock-rules { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: var(--space-3); color: var(--c-dim); font-size: var(--fs-sm); }
+.badge-lock { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--c-edge-ui, var(--c-edge)); color: var(--c-txt); white-space: nowrap; }
 
 :root {
   --density: 1;

@@ -5,9 +5,14 @@ target-version = "py311"
 line-length = 100
 
 # Generated move tables — never hand-edit; regenerate via tools/gen_move_data.py.
+# docs/purergb/{research,probes}: one-off scripts kept as primary sources for the pureRGB
+# research trail, not shipped code. They are committed evidence of how a fact was derived,
+# so they are read, not maintained — linting them only hid real findings in 62 lines of noise.
 extend-exclude = [
     "server/data/moves/gen3_vanilla.py",
     "server/data/moves/gen3_rr.py",
+    "docs/purergb/research",
+    "docs/purergb/probes",
 ]
 
 [lint]
