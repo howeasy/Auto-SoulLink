@@ -3,6 +3,8 @@ server answers, and a pid is trusted (or killed) only while its create time stil
 Every child here is a fake: no server.py, no emulator."""
 
 import asyncio
+import os
+import stat
 from types import SimpleNamespace
 
 import pytest
@@ -191,3 +193,49 @@ async def test_new_run_form_is_accessible(manager_client):
     assert 'id="run-name-hint"' in body and ':aria-invalid="tried && !draft.name.trim()"' in body
     assert ":aria-describedby=\"'opt-' + key + '-desc'" in body
     assert ":id=\"'opt-' + key + '-desc'\"" in body and ":id=\"'opt-' + key + '-why'\"" in body
+
+
+# -- archive / delete: never orphan a live server, never report a partial delete as done --
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["archive", "delete"])
+async def test_a_kill_failure_leaves_the_run_untouched(manager_client, manager_dir, monkeypatch, action):
+    _stopped_run(status="running", pid=4242, pid_created=100.0)
+    (manager_dir / "r1").mkdir()
+    (manager_dir / "r1" / "links.json").write_text("{}")
+    _fake_psutil(monkeypatch, started=100.0, terminate_fails=True)
+    response = await manager_client.post(f"/api/runs/r1/{action}")
+    assert response.status == 500 and not (await response.json())["ok"]
+    assert _registry_run()["status"] == "running" and _registry_run()["pid"] == 4242
+    assert (manager_dir / "r1" / "links.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_a_locked_file_makes_delete_fail_and_keep_the_entry(manager_client, manager_dir, monkeypatch):
+    _stopped_run()
+    (manager_dir / "r1").mkdir()
+    (manager_dir / "r1" / "links.json").write_text("{}")
+    real_unlink = os.unlink
+
+    def locked(path, *args, **kwargs):          # another process holds links.json open
+        if str(path).endswith("links.json"):
+            raise PermissionError(13, "in use", str(path))
+        return real_unlink(path, *args, **kwargs)
+    monkeypatch.setattr(os, "unlink", locked)
+    response = await manager_client.post("/api/runs/r1/delete")
+    body = await response.json()
+    assert response.status == 500 and not body["ok"] and "links.json" in body["error"]
+    assert _registry_run() is not None
+
+
+@pytest.mark.asyncio
+async def test_a_clean_delete_removes_the_data_and_the_entry(manager_client, manager_dir):
+    """A read-only file (Drive, git objects) is cleared and removed, not left behind."""
+    _stopped_run()
+    (manager_dir / "r1").mkdir()
+    readonly = manager_dir / "r1" / "links.json"
+    readonly.write_text("{}")
+    os.chmod(readonly, stat.S_IREAD)
+    response = await manager_client.post("/api/runs/r1/delete")
+    assert (await response.json())["ok"]
+    assert not (manager_dir / "r1").exists()
+    assert manager._load_registry() == []

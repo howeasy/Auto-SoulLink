@@ -24,6 +24,7 @@ import os
 import re
 import shutil
 import signal
+import stat
 import sys
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -628,6 +629,22 @@ def _kill_run(pid: int, created: float | None = None) -> bool:
     return not _is_alive(pid, created)
 
 
+def _rmtree(path: str) -> list[str]:
+    """Remove a tree, clearing read-only bits (Drive, git objects) and retrying once.
+    Returns the paths that still could not be removed."""
+    failed: list[str] = []
+
+    def retry(fn, p, _exc):
+        try:
+            os.chmod(p, stat.S_IWRITE)
+            fn(p)
+        except OSError:
+            failed.append(p)
+    # onerror is deprecated from 3.12 (onexc); the project still targets 3.11
+    shutil.rmtree(path, **({"onexc": retry} if sys.version_info >= (3, 12) else {"onerror": retry}))
+    return failed
+
+
 # ── Health check — reconcile registry with actual process table ─────────────
 
 def _write_run_meta(run: dict):
@@ -1078,14 +1095,22 @@ class RunManager:
             if pid and not _kill_run(pid, run.get("pid_created")):
                 return web.json_response({"ok": False, "error": f"Could not stop the run's server (PID {pid})"},
                                          status=500)
-            # Remove data directory
+            # Remove the data directory. A partial delete keeps the registry entry and says what
+            # is left: a leftover links.json would otherwise be re-adopted as a stopped run.
             data_dir = os.path.join(MANAGER_DIR, run_id)
             if os.path.isdir(data_dir):
-                shutil.rmtree(data_dir, ignore_errors=True)
+                failed = _rmtree(data_dir)
+                if os.path.exists(data_dir):
+                    left = failed[0] if failed else data_dir
+                    return web.json_response({"ok": False, "error": f"Could not delete the run's data: {left} is still there"},
+                                             status=500)
                 log.info(f"Deleted data directory for run {run_id}")
-            # Remove from registry
             runs = [r for r in runs if r["run_id"] != run_id]
-            _save_registry(runs)
+            try:
+                _save_registry(runs)
+            except OSError as e:
+                return web.json_response({"ok": False, "error": f"Run data deleted, but the registry could not be saved: {e}"},
+                                         status=500)
             log.info(f"Deleted run {run_id}")
             return web.json_response({"ok": True})
 
