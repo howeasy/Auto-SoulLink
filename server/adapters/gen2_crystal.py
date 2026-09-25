@@ -325,7 +325,7 @@ class Gen2CrystalAdapter(GameAdapter):
             # Without them the swap silently no-ops and the rules never match -- Gen 1 had
             # the identical defect.
             f'<img class="mon-sprite" data-species="{species_id}" src="{url}" '
-            f'width="52" height="52" loading="lazy" '
+            f'width="52" height="52" loading="lazy" alt="" '
             f'style="image-rendering:pixelated;margin:-6px">'
             f'</span>'
         )

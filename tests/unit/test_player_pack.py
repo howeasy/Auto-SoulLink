@@ -141,9 +141,10 @@ async def test_run_page_shows_the_address_and_the_pack(manager_client):
 
 # ── 3. the BizHawk minimum, from one place ───────────────────────────────────
 
-def test_gen1_bizhawk_minimum_matches_the_lua_refusal():
-    """lua/slink.lua refuses Gen 1 below a version; the setup text states the same one."""
-    with open(os.path.join(_REPO, "lua", "slink.lua"), encoding="utf-8") as f:
+@pytest.mark.parametrize("launcher", ["slink.lua", "slink_gen1.lua"])
+def test_gen1_bizhawk_minimum_matches_the_lua_refusal(launcher):
+    """Both Gen 1 entry points refuse below a version; the setup text states the same one."""
+    with open(os.path.join(_REPO, "lua", launcher), encoding="utf-8") as f:
         src = f.read()
     floor = int(re.search(r"tonumber\(min\)\s*<\s*(\d+)", src).group(1))
     stated = make_release.BIZHAWK_MIN["Gen 1"]
