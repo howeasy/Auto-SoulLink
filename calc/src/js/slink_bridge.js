@@ -2353,9 +2353,10 @@
     buildPanel();
     // initSetdex() (RR-only) is kicked off by _maybeInitSetdex() once the first fetch
     // tells us this run's dex — see fetchMons().
-    processHashPrefill();
-    // Initial fetch; start SSE regardless of whether it succeeds
-    fetchMons().then(startSSE).catch(startSSE);
+    // Initial fetch; start SSE regardless of whether it succeeds. The hash prefill waits
+    // for it: the first payload switches the calc's generation, which resets both panels.
+    fetchMons().then(function () { processHashPrefill(); startSSE(); })
+      .catch(function () { processHashPrefill(); startSSE(); });
   }
 
   // Run after DOM is ready (handles both inline <script> and deferred loading)

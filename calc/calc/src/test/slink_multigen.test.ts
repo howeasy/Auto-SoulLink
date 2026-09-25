@@ -33,6 +33,21 @@ describe('SLink multi-gen', () => {
     });
   });
 
+  describe('Gen 1/2 zero Special stat exp is kept (trainer mons have none)', () => {
+    // Tauros base Special 70, DV 15 (default), level 100, stat exp 0:
+    //   floor(((70 + 15) * 2 + 0) * 100 / 100) + 5 = 175   (max stat exp would give 238)
+    // Gen 2 splits Special: Tauros SpA base 40 -> floor((40 + 15) * 2) + 5 = 115.
+    for (const [gen, spa] of [[1, 175], [2, 115]] as const) {
+      inGen(gen, ({Pokemon}) => {
+        test(`gen ${gen}: evs {spc: 0}`, () => {
+          const p = Pokemon('Tauros', {level: 100, evs: {spc: 0}});
+          expect(p.evs.spa).toBe(0);
+          expect(p.stats.spa).toBe(spa);
+        });
+      });
+    }
+  });
+
   describe('Gen 1 critical hit (doubles level, ignores stat stages)', () => {
     // pret/pokered engine/battle/core.asm: GetDamageVarsForPlayerAttack resets the attacker's
     // attack/defender's defense to their unmodified (unboosted) values on a crit (~line 4056-4070

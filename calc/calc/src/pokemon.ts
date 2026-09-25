@@ -244,7 +244,7 @@ export class Pokemon implements State.Pokemon {
     const cur: Partial<I.StatsTable> = {};
     if (current) {
       assignWithout(cur, current, SPC);
-      if (current.spc) {
+      if (current.spc !== undefined) { // SLink: 0 is a real Gen 1/2 value (no stat exp / DV 0)
         cur.spa = current.spc;
         cur.spd = current.spc;
       }

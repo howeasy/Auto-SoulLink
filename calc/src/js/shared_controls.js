@@ -970,9 +970,11 @@ function createPokemon(pokeInfo) {
 			var stat = legacyStatToStat(legacyStat);
 
 			ivs[stat] = (gen >= 3 && set.ivs && typeof set.ivs[legacyStat] !== "undefined") ? set.ivs[legacyStat] : 31;
-			// Gen 1/2 sets never declare stat exp (it didn't exist as a settable concept pre-Gen-3
-			// EVs); default to max (65535) so this matches today's "always max stat exp" output.
-			evs[stat] = (set.evs && typeof set.evs[legacyStat] !== "undefined") ? set.evs[legacyStat] : (gen < 3 ? 65535 : 0);
+			// Gen 1/2: upstream sets carry modern EVs, not stat exp, so only an explicit raw
+			// `stat_exp` (SLink trainer sets) counts; otherwise max (65535), today's output.
+			evs[stat] = gen < 3
+				? ((set.stat_exp && typeof set.stat_exp[legacyStat] !== "undefined") ? set.stat_exp[legacyStat] : 65535)
+				: ((set.evs && typeof set.evs[legacyStat] !== "undefined") ? set.evs[legacyStat] : 0);
 		}
 		var moveNames = set.moves;
 		if (isRandoms && (gen >= 9 || gen === 7 || gen === 6 || gen === 5 || gen === 4 || gen === 3)) {
