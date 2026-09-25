@@ -1,16 +1,17 @@
-# Gen 3 migration — resume note (updated 2026-09-25, checkpoint 19: FROZEN CUT 382703b3, final passes running; RR 13/13; master merged; HUD code-reference fix)
+# Gen 3 migration — resume note (updated 2026-09-25, checkpoint 19: FROZEN CUT 870e5e5d, final passes running; RR 13/13; master merged; HUD code-reference fix)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in the sweep worktree's `docs/gen1_reference/RC_MASTER_GUIDE.md` (`E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`). Requirements ledger: `docs/gen3_requirements.md`.
 
 ## CHECKPOINT 19 (2026-09-25, 1.5-hour block): resume here
 
 Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); headless OMP for reviews, tests and small code the coordinator reviews.
-- **FROZEN CUT `382703b3`** (supersedes c0f6101b):
-  - FR/LG pass: `--carry --shard 1/2` on gen3-lane-clean and `--shard 2/2` on gen3-lane-2, both with `--stop-at 2026-09-25T12:52Z`.
-  - To finish: re-run the same commands with `--resume` at 382703b3; they skip rows that already PASSed. Then `--merge-summary` writes `fc_SUMMARY_382703b3.txt`.
-  - RR pass: `--cut 382703b3 --title rr` writes `fc_SUMMARY_382703b3_rr.txt`.
+- **FROZEN CUT `870e5e5d`** (supersedes 382703b3 and c0f6101b):
+  - FR/LG pass: `--carry --shard 1/2` on gen3-lane-clean and `--shard 2/2` on gen3-lane-2, both with `--stop-at 2026-09-25T12:53Z`.
+  - To finish: re-run the same commands with `--resume` at 870e5e5d; they skip rows that already PASSed. Then `--merge-summary` writes `fc_SUMMARY_870e5e5d.txt`.
+  - RR pass: `--cut 870e5e5d --title rr` writes `fc_SUMMARY_870e5e5d_rr.txt`.
   - Any code change means a new cut, so docs-only commits only.
 - **Why the cut moved** (the c0f6101b receipts are kept as evidence in ef36ef8c):
+  - **(a0) No pending counter on the HUD** (870e5e5d, owner: "None of that needs to be there. Look at how Gen1 does it. Player doesnt need a pend counter"): holds are logged to the console once per hold, never drawn.
   - **(a) HUD code references** (owner report: code on the HUD while memorials are held). Lua 5.4's assert put "…/lua/gen3/safety.lua:105:" into `SLink held: memorialize … (reason)`. `lua/core/session.lua` report_holds now strips the source position and reads identifiers as words (fca17782, red test).
   - **(b) Trainer probe states.** The runner never built them (`slink_pretrainer`/`slink_prefaint`), so checkpoint_firered failed in lane 2 with "state missing". The 157e1ef7 rehearsal had passed those probes only on stale copies in lane 1. `states_<title>_trainer` rows were added (382703b3).
   - c0f6101b results: FR/LG shard 1 14/14 (item6 and the zip chain included); shard 2 17/18 before it was stopped; RR 16/17. The RR failure, linked_faint_active_clean, was the driver running out of no-damage PP at turn 31 with the lead at 1 HP (RNG). If it fails again at 382703b3, fix `ctx.lose_active` in lua/tests/duo/duo_gen3_main.lua: for example re-hunt when status PP runs low, or prefer the highest-PP status move.
@@ -31,10 +32,10 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
   4. No explicit anchor/md5/grep/write-guard/control receipts in the RR plan.
   The G5 draft status text is stale: it still says "no RR runner rows / no zip receipt".
 - **NEXT:**
-  1. Finish the FR/LG pass at 382703b3 (`--resume`) and merge the summary.
-  2. Run `--cut 382703b3 --title rr`.
+  1. Finish the FR/LG pass at 870e5e5d (`--resume`) and merge the summary.
+  2. Run `--cut 870e5e5d --title rr`.
   3. Settle cx-cd3f4189.
-  4. Fill in `<<FINAL_CUT_SHA>>` = 382703b3 and the tables, refresh the G5 status, and put the G4 request plus the G5 gap decisions to the owner.
+  4. Fill in `<<FINAL_CUT_SHA>>` = 870e5e5d and the tables, refresh the G5 status, and put the G4 request plus the G5 gap decisions to the owner.
 
 ## CHECKPOINT 18 (2026-09-25, 1-hour block): resume here
 
