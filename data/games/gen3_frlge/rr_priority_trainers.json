@@ -425,7 +425,7 @@
           "species": "Sceptile-Mega",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Overgrow\nTechnician",
+          "ability": "Technician",
           "item": "Sceptilite",
           "moves": [
             "Swords Dance",
@@ -453,7 +453,7 @@
           "species": "Blaziken-Mega",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Striker\nSpeed Boost",
+          "ability": "Speed Boost",
           "item": "Blazikenite",
           "moves": [
             "Close Combat",
@@ -521,7 +521,7 @@
           "species": "Venusaur-Mega",
           "level": 100,
           "nature": "Modest",
-          "ability": "Overgrow\nThick Fat",
+          "ability": "Thick Fat",
           "item": "Venusaurite",
           "moves": [
             "Giga Drain",
@@ -535,7 +535,7 @@
           "species": "Blastoise-Mega",
           "level": 100,
           "nature": "Modest",
-          "ability": "Torrent\nMega Launcher",
+          "ability": "Mega Launcher",
           "item": "Blastoisinite",
           "moves": [
             "Shell Smash",
@@ -546,10 +546,10 @@
           "level_offset": 0
         },
         {
-          "species": "Charizard-MegaX",
+          "species": "Charizard-Mega-X",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Blaze\nTough Claws",
+          "ability": "Tough Claws",
           "item": "Charizardite X",
           "moves": [
             "Dragon Dance",
@@ -574,10 +574,10 @@
           "level_offset": 0
         },
         {
-          "species": "Mewtwo-MegaX",
+          "species": "Mewtwo-Mega-X",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Pressure\nSteadfast",
+          "ability": "Steadfast",
           "item": "Mewtwonite X",
           "moves": [
             "Bulk Up",
@@ -608,8 +608,7 @@
           "moves": [
             "Low Sweep",
             "Tackle",
-            "Aerial Ace",
-            "-"
+            "Aerial Ace"
           ],
           "level_offset": -3
         },
@@ -620,10 +619,7 @@
           "ability": "Magic Guard",
           "item": "Life Orb",
           "moves": [
-            "Metronome",
-            "-",
-            "-",
-            "-"
+            "Metronome"
           ],
           "level_offset": -5
         },
@@ -632,7 +628,7 @@
           "level": 50,
           "nature": "Bashful",
           "ability": "Regenerator",
-          "item": "No Item",
+          "item": "",
           "moves": [
             "Swagger",
             "Protect",
@@ -785,7 +781,7 @@
           "level_offset": 0
         },
         {
-          "species": "Clawitzer-S",
+          "species": "Clawitzer-Sevii",
           "level": 100,
           "nature": "Modest",
           "ability": "Mega Launcher",
@@ -844,7 +840,7 @@
           "species": "Pinsir-Mega",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Hyper Cutter\nAerilate",
+          "ability": "Aerilate",
           "item": "Pinsirite",
           "moves": [
             "Megahorn",
@@ -978,7 +974,7 @@
           "species": "Magmortar",
           "level": 50,
           "nature": "Timid",
-          "ability": "Flame Body\nor Quick Draw",
+          "ability": "Flame Body",
           "item": "Power Herb",
           "moves": [
             "Meteor Beam",
@@ -1020,7 +1016,7 @@
           "species": "Sandaconda-Mega",
           "level": 50,
           "nature": "Careful",
-          "ability": "Shed Skin\nAerilate",
+          "ability": "Aerilate",
           "item": "Sandacondite",
           "moves": [
             "Body Slam",
@@ -1059,8 +1055,8 @@
           "species": "Flapple-Mega",
           "level": 50,
           "nature": "Naive",
-          "ability": "Hustle\nDragon's Maw",
-          "item": "Applite",
+          "ability": "Dragon's Maw",
+          "item": "Flapplite",
           "moves": [
             "Scale Shot",
             "Grav Apple",
@@ -1070,7 +1066,7 @@
           "level_offset": -2
         },
         {
-          "species": "Farfetch'd",
+          "species": "Farfetch’d",
           "level": 50,
           "nature": "Jolly",
           "ability": "Sharpness",
@@ -1126,8 +1122,8 @@
           "species": "Appletun-Mega",
           "level": 50,
           "nature": "Modest",
-          "ability": "Thick Fat\nContrary",
-          "item": "Applite",
+          "ability": "Contrary",
+          "item": "Appletunite",
           "moves": [
             "Draco Meteor",
             "Superpower",
@@ -1193,7 +1189,7 @@
           "species": "Weezing-Galar",
           "level": 50,
           "nature": "Bold",
-          "ability": "Neutralizing Gas\nor Levitate",
+          "ability": "Neutralizing Gas",
           "item": "Rocky Helmet",
           "moves": [
             "Flamethrower",
@@ -1235,7 +1231,7 @@
           "species": "Centiskorch-Mega",
           "level": 50,
           "nature": "Adamant",
-          "ability": "Flash Fire or White Smoke\nMountaineer",
+          "ability": "Mountaineer",
           "item": "Centiskite",
           "moves": [
             "Fire Lash",
@@ -1301,7 +1297,7 @@
           "species": "Aggron-Mega",
           "level": 50,
           "nature": "Careful",
-          "ability": "Sturdy\nFilter",
+          "ability": "Filter",
           "item": "Aggronite",
           "moves": [
             "Curse",
@@ -1312,7 +1308,7 @@
           "level_offset": -2
         },
         {
-          "species": "Urshifu-S",
+          "species": "Urshifu",
           "level": 50,
           "nature": "Jolly",
           "ability": "Unseen Fist",
@@ -1326,7 +1322,7 @@
           "level_offset": -2
         },
         {
-          "species": "Urshifu-R",
+          "species": "Urshifu-Rapid-Strike",
           "level": 50,
           "nature": "Jolly",
           "ability": "Unseen Fist",
@@ -1382,7 +1378,7 @@
           "species": "Ampharos-Mega",
           "level": 50,
           "nature": "Modest",
-          "ability": "Static\nThick Fat",
+          "ability": "Thick Fat",
           "item": "Ampharosite",
           "moves": [
             "Parabolic Charge",
@@ -1407,7 +1403,7 @@
           "level_offset": -2
         },
         {
-          "species": "Urshifu-S",
+          "species": "Urshifu",
           "level": 50,
           "nature": "Jolly",
           "ability": "Unseen Fist",
@@ -1421,7 +1417,7 @@
           "level_offset": -2
         },
         {
-          "species": "Urshifu-R",
+          "species": "Urshifu-Rapid-Strike",
           "level": 50,
           "nature": "Jolly",
           "ability": "Unseen Fist",
@@ -1588,8 +1584,7 @@
           "moves": [
             "Fishious Rend",
             "Megahorn",
-            "Flip Turn",
-            "-"
+            "Flip Turn"
           ],
           "level_offset": -2
         },
@@ -1597,7 +1592,7 @@
           "species": "Swampert-Mega",
           "level": 50,
           "nature": "Adamant",
-          "ability": "Torrent\nSwift Swim",
+          "ability": "Swift Swim",
           "item": "Swampertite",
           "moves": [
             "Liquidation",
@@ -1692,7 +1687,7 @@
           "species": "Sceptile-Mega",
           "level": 66,
           "nature": "Jolly",
-          "ability": "Overgrow\nTechnician",
+          "ability": "Technician",
           "item": "Sceptilite",
           "moves": [
             "Swords Dance",
@@ -1774,7 +1769,7 @@
           "species": "Gengar-Mega",
           "level": 32,
           "nature": "Timid",
-          "ability": "Levitate\nShadow Tag",
+          "ability": "Shadow Tag",
           "item": "Gengarite",
           "moves": [
             "Sludge Wave",
@@ -1884,7 +1879,7 @@
           "species": "Aggron-Mega",
           "level": 71,
           "nature": "Adamant",
-          "ability": "Rock Head\nFilter",
+          "ability": "Filter",
           "item": "Aggronite",
           "moves": [
             "Heavy Slam",
@@ -1966,7 +1961,7 @@
           "species": "Drednaw-Mega",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Shell Armor\nStrong Jaw",
+          "ability": "Strong Jaw",
           "item": "Drednawite",
           "moves": [
             "Jaw Lock",
@@ -2002,7 +1997,7 @@
       "source": "Postgame!R129",
       "party": [
         {
-          "species": "Magearna-O",
+          "species": "Magearna-Original",
           "level": 100,
           "nature": "Calm",
           "ability": "Soul-Heart",
@@ -2019,7 +2014,7 @@
           "species": "Swampert-Mega",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Damp\nSwift Swim",
+          "ability": "Swift Swim",
           "item": "Swampertite",
           "moves": [
             "High Horsepower",
@@ -2030,7 +2025,7 @@
           "level_offset": 0
         },
         {
-          "species": "Necrozma-DM",
+          "species": "Necrozma-Dusk-Mane",
           "level": 100,
           "nature": "Adamant",
           "ability": "Prism Armor",
@@ -2058,7 +2053,7 @@
           "level_offset": 0
         },
         {
-          "species": "Palkia-O",
+          "species": "Palkia-Origin",
           "level": 100,
           "nature": "Timid",
           "ability": "Pressure",
@@ -2072,7 +2067,7 @@
           "level_offset": 0
         },
         {
-          "species": "Shaymin-S",
+          "species": "Shaymin-Sky",
           "level": 100,
           "nature": "Timid",
           "ability": "Serene Grace",
@@ -2130,7 +2125,7 @@
           "level": 100,
           "nature": "Lonely",
           "ability": "Multiscale",
-          "item": "Weakness Pol.",
+          "item": "Weakness Policy",
           "moves": [
             "Dual Wingbeat",
             "Fire Blast",
@@ -2143,8 +2138,8 @@
           "species": "Flapple-Mega",
           "level": 100,
           "nature": "Naive",
-          "ability": "Ripen\nDragon's Maw",
-          "item": "Applite",
+          "ability": "Dragon's Maw",
+          "item": "Flapplite",
           "moves": [
             "Dragon Energy",
             "Energy Ball",
@@ -2154,7 +2149,7 @@
           "level_offset": 0
         },
         {
-          "species": "Kyurem-B",
+          "species": "Kyurem-Black",
           "level": 100,
           "nature": "Jolly",
           "ability": "Teravolt",
@@ -2222,7 +2217,7 @@
           "species": "Salamence-Mega",
           "level": 82,
           "nature": "Hasty",
-          "ability": "Intimidate\nAerilate",
+          "ability": "Aerilate",
           "item": "Salamencite",
           "moves": [
             "Double-Edge",
@@ -2243,7 +2238,7 @@
       "source": "Optional Bosses!R123",
       "party": [
         {
-          "species": "Hoopa-U",
+          "species": "Hoopa-Unbound",
           "level": 50,
           "nature": "Jolly",
           "ability": "Magician",
@@ -2257,7 +2252,7 @@
           "level_offset": -2
         },
         {
-          "species": "Aegislash",
+          "species": "Aegislash-Shield",
           "level": 50,
           "nature": "Quiet",
           "ability": "Stance Change",
@@ -2271,11 +2266,11 @@
           "level_offset": -2
         },
         {
-          "species": "Ogerpon-C",
+          "species": "Ogerpon-Cornerstone",
           "level": 50,
           "nature": "Jolly",
           "ability": "Sturdy",
-          "item": "Corner. Mask",
+          "item": "Cornerstone Mask",
           "moves": [
             "Ivy Cudgel",
             "U-turn",
@@ -2316,7 +2311,7 @@
           "species": "Machamp-Mega",
           "level": 50,
           "nature": "Adamant",
-          "ability": "Guts\nORAORAORAORA!",
+          "ability": "ORAORAORAORA",
           "item": "Machampite",
           "moves": [
             "Power-Up Punch",
@@ -2397,7 +2392,7 @@
           "species": "Mawile-Mega",
           "level": 100,
           "nature": "Adamant",
-          "ability": "Hyper Cutter or Intimidate\nHuge Power",
+          "ability": "Huge Power",
           "item": "Mawilite",
           "moves": [
             "Iron Head",
@@ -2415,7 +2410,7 @@
           "item": "Power Herb",
           "moves": [
             "Geomancy",
-            "Drain Kiss",
+            "Draining Kiss",
             "Thunderbolt",
             "Moonblast"
           ],
@@ -2463,7 +2458,7 @@
           "species": "Mawile-Mega",
           "level": 55,
           "nature": "Adamant",
-          "ability": "Intimidate\nHuge Power",
+          "ability": "Huge Power",
           "item": "Mawilite",
           "moves": [
             "Play Rough",
@@ -2489,7 +2484,7 @@
           "species": "Gholdengo",
           "level": 55,
           "nature": "Timid",
-          "ability": "Good As Gold",
+          "ability": "Good as Gold",
           "item": "Sitrus Berry",
           "moves": [
             "Shadow Ball",
@@ -2502,7 +2497,7 @@
           "species": "Houndoom-Mega",
           "level": 55,
           "nature": "Naive",
-          "ability": "Early Bird\nDark Aura",
+          "ability": "Dark Aura",
           "item": "Houndoominite",
           "moves": [
             "Heat Wave",
@@ -2526,7 +2521,7 @@
           "species": "Pidgeot-Mega",
           "level": 100,
           "nature": "Timid",
-          "ability": "Frisk\nNo Guard",
+          "ability": "No Guard",
           "item": "Pidgeotite",
           "moves": [
             "Hurricane",
@@ -2551,7 +2546,7 @@
           "level_offset": 0
         },
         {
-          "species": "Shaymin-S",
+          "species": "Shaymin-Sky",
           "level": 100,
           "nature": "Timid",
           "ability": "Serene Grace",
@@ -2565,7 +2560,7 @@
           "level_offset": 0
         },
         {
-          "species": "Enamorus-I",
+          "species": "Enamorus",
           "level": 100,
           "nature": "Jolly",
           "ability": "Contrary",
@@ -2623,7 +2618,7 @@
           "level": 7,
           "nature": "Rash",
           "ability": "Battle Armor",
-          "item": "No Item",
+          "item": "",
           "moves": [
             "Bubble",
             "Harden",
@@ -2636,12 +2631,11 @@
           "level": 8,
           "nature": "Hardy",
           "ability": "Overgrow",
-          "item": "No Item",
+          "item": "",
           "moves": [
             "Pound",
             "Leer",
-            "Absorb",
-            "-"
+            "Absorb"
           ]
         }
       ],
@@ -2829,7 +2823,7 @@
           "species": "Palafin-Hero",
           "level": 25,
           "nature": "Jolly",
-          "ability": "Zero To Hero",
+          "ability": "Zero to Hero",
           "item": "Mystic Water",
           "moves": [
             "Flip Turn",
@@ -2871,7 +2865,7 @@
           "species": "Gyarados-Mega",
           "level": 25,
           "nature": "Jolly",
-          "ability": "Intimidate\nMold Breaker",
+          "ability": "Mold Breaker",
           "item": "Gyaradosite",
           "moves": [
             "Dragon Dance",
@@ -3099,7 +3093,7 @@
           "level_offset": -2
         },
         {
-          "species": "Rotom-W",
+          "species": "Rotom-Wash",
           "level": 32,
           "nature": "Timid",
           "ability": "Levitate",
@@ -3130,7 +3124,7 @@
           "species": "Manectric-Mega",
           "level": 32,
           "nature": "Timid",
-          "ability": "Intimidate (Both)",
+          "ability": "Intimidate",
           "item": "Manectite",
           "moves": [
             "Volt Switch",
@@ -3208,7 +3202,7 @@
           "level_offset": 0
         },
         {
-          "species": "Urshifu-S",
+          "species": "Urshifu",
           "level": 100,
           "nature": "Jolly",
           "ability": "Unseen Fist",
@@ -3225,7 +3219,7 @@
           "species": "Gengar-Mega",
           "level": 100,
           "nature": "Timid",
-          "ability": "Levitate\nShadow Tag",
+          "ability": "Shadow Tag",
           "item": "Gengarite",
           "moves": [
             "Shadow Ball",
@@ -3265,7 +3259,7 @@
           "species": "Aerodactyl",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Pressure\nor Rock Head",
+          "ability": "Pressure",
           "item": "Sharp Beak",
           "moves": [
             "Brave Bird",
@@ -3293,7 +3287,7 @@
           "species": "Latias-Mega",
           "level": 100,
           "nature": "Timid",
-          "ability": "Levitate (Both)",
+          "ability": "Levitate",
           "item": "Latiasite",
           "moves": [
             "Thunderbolt",
@@ -3307,7 +3301,7 @@
           "species": "Houndoom-Mega",
           "level": 100,
           "nature": "Timid",
-          "ability": "Flash Fire\nSolar Power",
+          "ability": "Solar Power",
           "item": "Houndoominite",
           "moves": [
             "Fiery Wrath",
@@ -3491,7 +3485,7 @@
           "species": "Sceptile-Mega",
           "level": 55,
           "nature": "Timid",
-          "ability": "Unburden\nTechnician",
+          "ability": "Technician",
           "item": "Sceptilite",
           "moves": [
             "Mega Drain",
@@ -3539,7 +3533,7 @@
           "level_offset": -2
         },
         {
-          "species": "Ursaluna-BM",
+          "species": "Ursaluna-Bloodmoon",
           "level": 13,
           "nature": "Modest",
           "ability": "Scrappy",
@@ -3557,7 +3551,7 @@
           "level": 13,
           "nature": "Jolly",
           "ability": "Sand Stream",
-          "item": "Weakness Pol.",
+          "item": "Weakness Policy",
           "moves": [
             "Dragon Dance",
             "Stone Edge",
@@ -3584,7 +3578,7 @@
           "species": "Aerodactyl-Mega",
           "level": 13,
           "nature": "Jolly",
-          "ability": "Pressure\nTough Claws",
+          "ability": "Tough Claws",
           "item": "Aerodactylite",
           "moves": [
             "Dragon Dance",
@@ -3605,7 +3599,7 @@
       "source": "Rivals!R393",
       "party": [
         {
-          "species": "Deoxys-Alola",
+          "species": "Deoxys-Attack",
           "level": 81,
           "nature": "Naive",
           "ability": "Pressure",
@@ -3631,7 +3625,7 @@
           ]
         },
         {
-          "species": "Landorus-I",
+          "species": "Landorus",
           "level": 82,
           "nature": "Timid",
           "ability": "Sand Force",
@@ -3673,7 +3667,7 @@
           "species": "Sceptile-Mega",
           "level": 82,
           "nature": "Jolly",
-          "ability": "Overgrow\nTechnician",
+          "ability": "Technician",
           "item": "Sceptilite",
           "moves": [
             "Swords Dance",
@@ -3768,7 +3762,7 @@
           "species": "Glalie-Mega",
           "level": 71,
           "nature": "Jolly",
-          "ability": "Ice Body\nRefrigerate",
+          "ability": "Refrigerate",
           "item": "Glalitite",
           "moves": [
             "Fake Out",
@@ -3794,8 +3788,8 @@
           "species": "Abomasnow-Mega",
           "level": 100,
           "nature": "Quiet",
-          "ability": "Soundproof\nSnow Warning",
-          "item": "Abomasnite",
+          "ability": "Snow Warning",
+          "item": "Abomasite",
           "moves": [
             "Earth Power",
             "Blizzard",
@@ -3805,10 +3799,10 @@
           "level_offset": 0
         },
         {
-          "species": "Calyrex-I",
+          "species": "Calyrex-Ice",
           "level": 100,
           "nature": "Brave",
-          "ability": "As One",
+          "ability": "As One (Glastrier)",
           "item": "Mental Herb",
           "moves": [
             "Trick Room",
@@ -3819,10 +3813,10 @@
           "level_offset": 0
         },
         {
-          "species": "Kyurem-W",
+          "species": "Kyurem-White",
           "level": 100,
           "nature": "Quiet",
-          "ability": "Pressure\nTurboblaze",
+          "ability": "Turboblaze",
           "item": "Icium Z",
           "moves": [
             "Blizzard",
@@ -3833,7 +3827,7 @@
           "level_offset": 0
         },
         {
-          "species": "Wishiwashi-S-Sch",
+          "species": "Wishiwashi-Sevii-School",
           "level": 100,
           "nature": "Quiet",
           "ability": "Schooling",
@@ -3864,7 +3858,7 @@
           "species": "Heracross-Mega",
           "level": 100,
           "nature": "Brave",
-          "ability": "Moxie\nSkill Link",
+          "ability": "Skill Link",
           "item": "Heracronite",
           "moves": [
             "Arm Thrust",
@@ -3955,7 +3949,7 @@
           "species": "Blaziken-Mega",
           "level": 73,
           "nature": "Adamant",
-          "ability": "Speed Boost (Both)",
+          "ability": "Speed Boost",
           "item": "Blazikenite",
           "moves": [
             "Swords Dance",
@@ -4050,7 +4044,7 @@
           "species": "Aggron-Mega",
           "level": 71,
           "nature": "Adamant",
-          "ability": "Rock Head\nFilter",
+          "ability": "Filter",
           "item": "Aggronite",
           "moves": [
             "Heavy Slam",
@@ -4146,7 +4140,7 @@
           "species": "Aggron-Mega",
           "level": 71,
           "nature": "Adamant",
-          "ability": "Rock Head\nFilter",
+          "ability": "Filter",
           "item": "Aggronite",
           "moves": [
             "Heavy Slam",
@@ -4199,11 +4193,11 @@
       "source": "Kanto Rematch!R80",
       "party": [
         {
-          "species": "Ogerpon-C",
+          "species": "Ogerpon-Cornerstone",
           "level": 42,
           "nature": "Jolly",
           "ability": "Sturdy",
-          "item": "Corner. Mask",
+          "item": "Cornerstone Mask",
           "moves": [
             "Horn Leech",
             "Ivy Cudgel",
@@ -4272,7 +4266,7 @@
           "species": "Venusaur-Mega",
           "level": 42,
           "nature": "Modest",
-          "ability": "Overgrow\nThick Fat (Mega)",
+          "ability": "Thick Fat",
           "item": "Venusaurite",
           "moves": [
             "Giga Drain",
@@ -4311,7 +4305,7 @@
           "species": "Garchomp-Mega",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Rough Skin\nSand Force",
+          "ability": "Sand Force",
           "item": "Garchompite",
           "moves": [
             "Swords Dance",
@@ -4336,11 +4330,11 @@
           "level_offset": 0
         },
         {
-          "species": "Necrozma-DM",
+          "species": "Necrozma-Dusk-Mane",
           "level": 100,
           "nature": "Adamant",
           "ability": "Prism Armor",
-          "item": "Weakness Pol.",
+          "item": "Weakness Policy",
           "moves": [
             "Dragon Dance",
             "Photon Geyser",
@@ -4353,7 +4347,7 @@
           "species": "Machamp-Mega",
           "level": 100,
           "nature": "Adamant",
-          "ability": "Guts or No Guard\nORAORAORAORA!",
+          "ability": "ORAORAORAORA",
           "item": "Machampite",
           "moves": [
             "Power-Up Punch",
@@ -4364,7 +4358,7 @@
           "level_offset": 0
         },
         {
-          "species": "Hoopa-U",
+          "species": "Hoopa-Unbound",
           "level": 100,
           "nature": "Timid",
           "ability": "Magician",
@@ -4432,7 +4426,7 @@
           "species": "Houndoom-Mega",
           "level": 79,
           "nature": "Timid",
-          "ability": "Unnerve\nDark Aura",
+          "ability": "Dark Aura",
           "item": "Houndoominite",
           "moves": [
             "Fiery Wrath",
@@ -4471,7 +4465,7 @@
           "level": 78,
           "nature": "Adamant",
           "ability": "Solid Rock",
-          "item": "Weakness Pol.",
+          "item": "Weakness Policy",
           "moves": [
             "Earthquake",
             "Rock Blast",
@@ -4496,7 +4490,7 @@
           "species": "Mawile-Mega",
           "level": 79,
           "nature": "Adamant",
-          "ability": "Intimidate\nHuge Power",
+          "ability": "Huge Power",
           "item": "Mawilite",
           "moves": [
             "Sucker Punch",
@@ -4559,7 +4553,7 @@
           "species": "Kangaskhan-Mega",
           "level": 46,
           "nature": "Jolly",
-          "ability": "Inner Focus\nParental Bond",
+          "ability": "Parental Bond",
           "item": "Kangaskhanite",
           "moves": [
             "Fake Out",
@@ -4789,7 +4783,7 @@
           "level": 80,
           "nature": "Adamant",
           "ability": "Multiscale",
-          "item": "Weakness Pol.",
+          "item": "Weakness Policy",
           "moves": [
             "Extreme Speed",
             "Dragon Dance",
@@ -4864,7 +4858,7 @@
           "species": "Scizor-Mega",
           "level": 25,
           "nature": "Careful",
-          "ability": "Technician (Both)",
+          "ability": "Technician",
           "item": "Scizorite",
           "moves": [
             "Bullet Punch",
@@ -4977,10 +4971,7 @@
           "ability": "Punk Rock",
           "item": "Choice Scarf",
           "moves": [
-            "Boomburst",
-            "-",
-            "-",
-            "-"
+            "Boomburst"
           ],
           "level_offset": 0
         },
@@ -5052,11 +5043,11 @@
           ]
         },
         {
-          "species": "Ogerpon-W",
+          "species": "Ogerpon-Wellspring",
           "level": 85,
           "nature": "Jolly",
           "ability": "Water Absorb",
-          "item": "Well. Mask",
+          "item": "Wellspring Mask",
           "moves": [
             "Ivy Cudgel",
             "Horn Leech",
@@ -5068,7 +5059,7 @@
           "species": "Swampert-Mega",
           "level": 85,
           "nature": "Adamant",
-          "ability": "Torrent\nSwift Swim",
+          "ability": "Swift Swim",
           "item": "Swampertite",
           "moves": [
             "Power-Up Punch",
@@ -5091,7 +5082,7 @@
           ]
         },
         {
-          "species": "Kyogre-Paldea",
+          "species": "Kyogre-Primal",
           "level": 85,
           "nature": "Timid",
           "ability": "Primordial Sea",
@@ -5154,7 +5145,7 @@
           ]
         },
         {
-          "species": "Rotom-W",
+          "species": "Rotom-Wash",
           "level": 85,
           "nature": "Timid",
           "ability": "Levitate",
@@ -5167,10 +5158,10 @@
           ]
         },
         {
-          "species": "Calyrex-I",
+          "species": "Calyrex-Ice",
           "level": 85,
           "nature": "Adamant",
-          "ability": "As One",
+          "ability": "As One (Glastrier)",
           "item": "Assault Vest",
           "moves": [
             "Glacial Lance",
@@ -5183,7 +5174,7 @@
           "species": "Abomasnow-Mega",
           "level": 85,
           "nature": "Timid",
-          "ability": "Snow Warning\nSlush Rush",
+          "ability": "Slush Rush",
           "item": "Abomasite",
           "moves": [
             "Blizzard",
@@ -5230,7 +5221,7 @@
           ]
         },
         {
-          "species": "Urshifu-R",
+          "species": "Urshifu-Rapid-Strike",
           "level": 85,
           "nature": "Jolly",
           "ability": "Unseen Fist",
@@ -5269,7 +5260,7 @@
           ]
         },
         {
-          "species": "Zacian-C",
+          "species": "Zacian-Crowned",
           "level": 85,
           "nature": "Jolly",
           "ability": "Intrepid Sword",
@@ -5285,7 +5276,7 @@
           "species": "Lucario-Mega",
           "level": 85,
           "nature": "Timid",
-          "ability": "Inner Focus\nAdaptability",
+          "ability": "Adaptability",
           "item": "Lucarionite",
           "moves": [
             "Nasty Plot",
@@ -5319,7 +5310,7 @@
           ]
         },
         {
-          "species": "Urshifu-S",
+          "species": "Urshifu",
           "level": 85,
           "nature": "Jolly",
           "ability": "Unseen Fist",
@@ -5358,7 +5349,7 @@
           ]
         },
         {
-          "species": "Zacian-C",
+          "species": "Zacian-Crowned",
           "level": 85,
           "nature": "Jolly",
           "ability": "Intrepid Sword",
@@ -5374,7 +5365,7 @@
           "species": "Lucario-Mega",
           "level": 85,
           "nature": "Jolly",
-          "ability": "Inner Focus\nAdaptability",
+          "ability": "Adaptability",
           "item": "Lucarionite",
           "moves": [
             "Bullet Punch",
@@ -5437,7 +5428,7 @@
           "level_offset": 0
         },
         {
-          "species": "Dodrio-S",
+          "species": "Dodrio-Sevii",
           "level": 100,
           "nature": "Jolly",
           "ability": "Rock Head",
@@ -5468,7 +5459,7 @@
           "species": "Garchomp-Mega",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Rough Skin\nSand Force",
+          "ability": "Sand Force",
           "item": "Garchompite",
           "moves": [
             "Swords Dance",
@@ -5507,7 +5498,7 @@
           "species": "Gholdengo",
           "level": 85,
           "nature": "Timid",
-          "ability": "Good As Gold",
+          "ability": "Good as Gold",
           "item": "Air Balloon",
           "moves": [
             "Make It Rain",
@@ -5560,7 +5551,7 @@
           "species": "Gengar-Mega",
           "level": 83,
           "nature": "Timid",
-          "ability": "Levitate\nShadow Tag",
+          "ability": "Shadow Tag",
           "item": "Gengarite",
           "moves": [
             "Shadow Ball",
@@ -5598,7 +5589,7 @@
           "species": "Gholdengo",
           "level": 85,
           "nature": "Timid",
-          "ability": "Good As Gold",
+          "ability": "Good as Gold",
           "item": "Air Balloon",
           "moves": [
             "Make It Rain",
@@ -5637,7 +5628,7 @@
           "species": "Chien-Pao",
           "level": 83,
           "nature": "Jolly",
-          "ability": "Swords of Ruin",
+          "ability": "Sword of Ruin",
           "item": "Black Glasses",
           "moves": [
             "Sacred Sword",
@@ -5651,7 +5642,7 @@
           "species": "Gengar-Mega",
           "level": 83,
           "nature": "Timid",
-          "ability": "Levitate\nShadow Tag",
+          "ability": "Shadow Tag",
           "item": "Gengarite",
           "moves": [
             "Shadow Ball",
@@ -5690,7 +5681,7 @@
           "species": "Garchomp-Mega",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Sand Veil\nSand Force",
+          "ability": "Sand Force",
           "item": "Garchompite",
           "moves": [
             "Swords Dance",
@@ -5705,7 +5696,7 @@
           "level": 100,
           "nature": "Jolly",
           "ability": "Clear Body",
-          "item": "Weakness Pol.",
+          "item": "Weakness Policy",
           "moves": [
             "Dragon Dance",
             "Phantom Force",
@@ -5812,7 +5803,7 @@
           "level": 85,
           "nature": "Jolly",
           "ability": "Multiscale",
-          "item": "Weakness Pol.",
+          "item": "Weakness Policy",
           "moves": [
             "Extreme Speed",
             "Dragon Dance",
@@ -5837,7 +5828,7 @@
           "species": "Salamence-Mega",
           "level": 85,
           "nature": "Jolly",
-          "ability": "Intimidate\nAerilate",
+          "ability": "Aerilate",
           "item": "Salamencite",
           "moves": [
             "Dragon Dance",
@@ -5926,7 +5917,7 @@
           "species": "Salamence-Mega",
           "level": 85,
           "nature": "Jolly",
-          "ability": "Intimidate\nAerilate",
+          "ability": "Aerilate",
           "item": "Salamencite",
           "moves": [
             "Dragon Dance",
@@ -7073,7 +7064,7 @@
           "level_offset": -4
         },
         {
-          "species": "Wormadam-Sa",
+          "species": "Wormadam-Sandy",
           "level": 50,
           "nature": "Careful",
           "ability": "Overcoat",
@@ -7206,7 +7197,7 @@
           "level": 100,
           "nature": "Jolly",
           "ability": "Grassy Surge",
-          "item": "Terrain Extend.",
+          "item": "Terrain Extender",
           "moves": [
             "Grassy Glide",
             "U-turn",
@@ -7230,7 +7221,7 @@
           "level_offset": 0
         },
         {
-          "species": "Zebstrika-S",
+          "species": "Zebstrika-Sevii",
           "level": 100,
           "nature": "Timid",
           "ability": "Illuminate",
@@ -7247,7 +7238,7 @@
           "species": "Alcremie-Mega",
           "level": 100,
           "nature": "Bold",
-          "ability": "Sweet Veil\nSelf Sufficient",
+          "ability": "Self Sufficient",
           "item": "Alcremite",
           "moves": [
             "Calm Mind",
@@ -7498,7 +7489,7 @@
           }
         },
         {
-          "species": "Flabébé",
+          "species": "Flabébé",
           "level": 13,
           "nature": "Rash",
           "ability": "Natural Cure",
@@ -7834,7 +7825,7 @@
           "level_offset": 0
         },
         {
-          "species": "Enamorus-I",
+          "species": "Enamorus",
           "level": 100,
           "nature": "Hasty",
           "ability": "Contrary",
@@ -7851,7 +7842,7 @@
           "species": "Salamence-Mega",
           "level": 100,
           "nature": "Naive",
-          "ability": "Intimidate\nAerilate",
+          "ability": "Aerilate",
           "item": "Salamencite",
           "moves": [
             "Double-Edge",
@@ -7862,7 +7853,7 @@
           "level_offset": 0
         },
         {
-          "species": "Aegislash",
+          "species": "Aegislash-Shield",
           "level": 100,
           "nature": "Quiet",
           "ability": "Stance Change",
@@ -8587,7 +8578,7 @@
           "level": 50,
           "nature": "Timid",
           "ability": "Storm Drain",
-          "item": "No Item",
+          "item": "",
           "moves": [
             "Scald",
             "Ice Beam",
@@ -8629,7 +8620,7 @@
           "level": 50,
           "nature": "Timid",
           "ability": "Sheer Force",
-          "item": "No Item",
+          "item": "",
           "moves": [
             "Surf",
             "Scorching Sands",
@@ -9244,7 +9235,7 @@
           "species": "Absol-Mega",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Super Luck\nSharpness",
+          "ability": "Sharpness",
           "item": "Absolite",
           "moves": [
             "Night Slash",
@@ -9751,12 +9742,9 @@
           "level": 50,
           "nature": "Jolly",
           "ability": "Contrary",
-          "item": "No Item",
+          "item": "",
           "moves": [
-            "Assist",
-            "-",
-            "-",
-            "-"
+            "Assist"
           ],
           "level_offset": -2
         },
@@ -9767,10 +9755,7 @@
           "ability": "Inner Focus",
           "item": "Eviolite",
           "moves": [
-            "Assist",
-            "-",
-            "-",
-            "-"
+            "Assist"
           ],
           "level_offset": -4
         },
@@ -9781,10 +9766,7 @@
           "ability": "Prankster",
           "item": "Focus Sash",
           "moves": [
-            "Assist",
-            "-",
-            "-",
-            "-"
+            "Assist"
           ],
           "level_offset": -4
         }
@@ -10380,7 +10362,7 @@
           "species": "Arctibax",
           "level": 32,
           "nature": "Jolly",
-          "ability": "ThermalExchange",
+          "ability": "Thermal Exchange",
           "item": "",
           "moves": [
             "Crunch",
@@ -10543,7 +10525,7 @@
           "species": "Koffing",
           "level": 35,
           "nature": "Hardy",
-          "ability": "Neutralize Gas",
+          "ability": "Neutralizing Gas",
           "item": "",
           "moves": [
             "Self-Destruct",
@@ -10753,7 +10735,7 @@
           "species": "Gallade-Mega",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Steadfast\nSharpness",
+          "ability": "Sharpness",
           "item": "Galladite",
           "moves": [
             "Psycho Cut",
@@ -10764,7 +10746,7 @@
           "level_offset": 0
         },
         {
-          "species": "Darmanitan-GZ",
+          "species": "Darmanitan-Galar-Zen",
           "level": 100,
           "nature": "Jolly",
           "ability": "Zen Mode",
@@ -10850,7 +10832,7 @@
           "level": 100,
           "nature": "Timid",
           "ability": "Competitive",
-          "item": "Weakness Pol.",
+          "item": "Weakness Policy",
           "moves": [
             "Hurricane",
             "Freezing Glare",
@@ -11238,7 +11220,7 @@
           "species": "Centiskorch-Mega",
           "level": 50,
           "nature": "Adamant",
-          "ability": "Flash Fire\nMountaineer",
+          "ability": "Mountaineer",
           "item": "Centiskite",
           "moves": [
             "Flare Blitz",
@@ -12263,7 +12245,7 @@
           "species": "Camerupt-Mega",
           "level": 50,
           "nature": "Modest",
-          "ability": "Solid Rock\nSheer Force",
+          "ability": "Sheer Force",
           "item": "Cameruptite",
           "moves": [
             "Fire Blast",
@@ -12511,7 +12493,7 @@
           "species": "Pidgeot-Mega",
           "level": 100,
           "nature": "Timid",
-          "ability": "Frisk\nNo Guard",
+          "ability": "No Guard",
           "item": "Pidgeotite",
           "moves": [
             "Hurricane",
@@ -12525,7 +12507,7 @@
           "species": "Blastoise-Mega",
           "level": 100,
           "nature": "Timid",
-          "ability": "Torrent\nMega Launcher",
+          "ability": "Mega Launcher",
           "item": "Blastoisinite",
           "moves": [
             "Shell Smash",
@@ -12635,7 +12617,7 @@
           "species": "Beedrill-Mega",
           "level": 50,
           "nature": "Jolly",
-          "ability": "Swarm\nAdaptability",
+          "ability": "Adaptability",
           "item": "Beedrillite",
           "moves": [
             "U-turn",
@@ -12666,10 +12648,7 @@
           "ability": "Sturdy",
           "item": "Shell Bell",
           "moves": [
-            "Endeavor",
-            "-",
-            "-",
-            "-"
+            "Endeavor"
           ]
         }
       ],
@@ -13019,7 +12998,7 @@
           "species": "Weezing",
           "level": 57,
           "nature": "Naughty",
-          "ability": "Neutralize Gas",
+          "ability": "Neutralizing Gas",
           "item": "",
           "moves": [
             "Explosion",
@@ -13197,10 +13176,10 @@
           "level_offset": 0
         },
         {
-          "species": "Charizard-MegaX",
+          "species": "Charizard-Mega-X",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Blaze\nTough Claws",
+          "ability": "Tough Claws",
           "item": "Charizardite X",
           "moves": [
             "Dragon Dance",
@@ -13382,7 +13361,7 @@
           "level_offset": -5
         },
         {
-          "species": "Darmanitan-GZ",
+          "species": "Darmanitan-Galar-Zen",
           "level": 50,
           "nature": "Jolly",
           "ability": "Zen Mode",
@@ -15130,7 +15109,7 @@
       "source": "Postgame!R1078",
       "party": [
         {
-          "species": "Landorus-T",
+          "species": "Landorus-Therian",
           "level": 100,
           "nature": "Jolly",
           "ability": "Intimidate",
@@ -15190,7 +15169,7 @@
           "level": 100,
           "nature": "Timid",
           "ability": "Levitate",
-          "item": "Weakness Pol.",
+          "item": "Weakness Policy",
           "moves": [
             "Draco Barrage",
             "Psyshock",
@@ -15203,7 +15182,7 @@
           "species": "Toxtricity-Mega",
           "level": 100,
           "nature": "Timid",
-          "ability": "Punk Rock (Both)",
+          "ability": "Punk Rock",
           "item": "Toxtricitite",
           "moves": [
             "Boomburst",
@@ -15611,7 +15590,7 @@
           "species": "Scizor-Mega",
           "level": 50,
           "nature": "Adamant",
-          "ability": "Swarm\nTechnician",
+          "ability": "Technician",
           "item": "Scizorite",
           "moves": [
             "U-turn",
@@ -18145,10 +18124,10 @@
           "level_offset": -4
         },
         {
-          "species": "Charizard-MegaX",
+          "species": "Charizard-Mega-X",
           "level": 50,
           "nature": "Jolly",
-          "ability": "Blaze\nTough Claws",
+          "ability": "Tough Claws",
           "item": "Charizardite X",
           "moves": [
             "Dragon Dance",
@@ -18615,7 +18594,7 @@
           "species": "Pinsir-Mega",
           "level": 50,
           "nature": "Jolly",
-          "ability": "Hyper Cutter\nAerilate",
+          "ability": "Aerilate",
           "item": "Pinsirite",
           "moves": [
             "X-Scissor",
@@ -18682,7 +18661,7 @@
           "species": "Lapras-Mega",
           "level": 50,
           "nature": "Modest",
-          "ability": "Water Absorb\nLiquid Voice",
+          "ability": "Liquid Voice",
           "item": "Laprasite",
           "moves": [
             "Boomburst",
@@ -19272,7 +19251,7 @@
           "species": "Gallade-Mega",
           "level": 32,
           "nature": "Jolly",
-          "ability": "Steadfast\nSharpness",
+          "ability": "Sharpness",
           "item": "Galladite",
           "moves": [
             "Bulk Up",
@@ -19683,7 +19662,7 @@
           "level": 9,
           "nature": "Mild",
           "ability": "Frisk",
-          "item": "No Item",
+          "item": "",
           "moves": [
             "Tackle",
             "Growl",
@@ -19696,7 +19675,7 @@
           "level": 9,
           "nature": "Relaxed",
           "ability": "Torrent",
-          "item": "No Item",
+          "item": "",
           "moves": [
             "Tackle",
             "False Swipe",
@@ -19721,7 +19700,7 @@
           "level": 9,
           "nature": "Mild",
           "ability": "Frisk",
-          "item": "No Item",
+          "item": "",
           "moves": [
             "Tackle",
             "Growl",
@@ -19734,7 +19713,7 @@
           "level": 9,
           "nature": "Timid",
           "ability": "Blaze",
-          "item": "No Item",
+          "item": "",
           "moves": [
             "Growl",
             "False Swipe",
@@ -19759,7 +19738,7 @@
           "level": 9,
           "nature": "Mild",
           "ability": "Frisk",
-          "item": "No Item",
+          "item": "",
           "moves": [
             "Tackle",
             "Growl",
@@ -19772,7 +19751,7 @@
           "level": 9,
           "nature": "Timid",
           "ability": "Overgrow",
-          "item": "No Item",
+          "item": "",
           "moves": [
             "Tackle",
             "Growl",
@@ -19801,8 +19780,7 @@
           "moves": [
             "Psybeam",
             "Draining Kiss",
-            "Magical Leaf",
-            "-"
+            "Magical Leaf"
           ],
           "level_offset": -3
         },
@@ -19869,8 +19847,7 @@
           "moves": [
             "Psybeam",
             "Draining Kiss",
-            "Magical Leaf",
-            "-"
+            "Magical Leaf"
           ],
           "level_offset": -3
         },
@@ -19937,8 +19914,7 @@
           "moves": [
             "Psybeam",
             "Draining Kiss",
-            "Magical Leaf",
-            "-"
+            "Magical Leaf"
           ],
           "level_offset": -3
         },
@@ -20436,7 +20412,7 @@
           "level": 45,
           "nature": "Adamant",
           "ability": "Levitate",
-          "item": "Stardust",
+          "item": "",
           "moves": [
             "Explosion"
           ],
@@ -20602,7 +20578,7 @@
           "level": 45,
           "nature": "Modest",
           "ability": "Dry Skin",
-          "item": "Stardust",
+          "item": "",
           "moves": [
             "Grass Knot",
             "Hyper Voice",
@@ -20724,7 +20700,7 @@
           "species": "Bellibolt",
           "level": 70,
           "nature": "Docile",
-          "ability": "Electromrphosis",
+          "ability": "Electromorphosis",
           "item": "",
           "moves": [
             "Muddy Water",
@@ -20832,7 +20808,7 @@
           "species": "Kangaskhan-Mega",
           "level": 57,
           "nature": "Jolly",
-          "ability": "Scrappy\nParental Bond",
+          "ability": "Parental Bond",
           "item": "Kangaskhanite",
           "moves": [
             "Power-Up Punch",
@@ -20897,7 +20873,7 @@
           "level": 80,
           "nature": "Timid",
           "ability": "Psychic Surge",
-          "item": "Terrain Extend.",
+          "item": "Terrain Extender",
           "moves": [
             "Moonblast",
             "Psychic",
@@ -20958,11 +20934,11 @@
           ]
         },
         {
-          "species": "Mewtwo-MegaY",
+          "species": "Mewtwo-Mega-Y",
           "level": 80,
           "nature": "Timid",
-          "ability": "Unnerve\nInsomnia",
-          "item": "No Item",
+          "ability": "Insomnia",
+          "item": "",
           "moves": [
             "Expanding Force",
             "Soul Robbery",
@@ -20987,7 +20963,7 @@
           "level": 46,
           "nature": "Jolly",
           "ability": "Parental Bond",
-          "item": "Kangaskanite",
+          "item": "Kangaskhanite",
           "moves": [
             "Body Slam",
             "Crunch",
@@ -21076,13 +21052,11 @@
           "species": "Komala",
           "level": 23,
           "nature": "Adamant",
-          "ability": "Comotose",
+          "ability": "Comatose",
           "item": "Silk Scarf",
           "moves": [
             "Protect",
-            "Last Resort",
-            "-",
-            "-"
+            "Last Resort"
           ],
           "level_offset": -4
         }
@@ -21452,7 +21426,7 @@
           "species": "Pinsir-Mega",
           "level": 84,
           "nature": "Jolly",
-          "ability": "Mold Breaker\nAerilate",
+          "ability": "Aerilate",
           "item": "Pinsirite",
           "moves": [
             "Quick Attack",
@@ -21494,8 +21468,7 @@
           "moves": [
             "Hurricane",
             "Hydro Pump",
-            "Ice Beam",
-            "-"
+            "Ice Beam"
           ]
         },
         {
@@ -21515,7 +21488,7 @@
           "species": "Sharpedo-Mega",
           "level": 84,
           "nature": "Jolly",
-          "ability": "Speed Boost\nStrong Jaw",
+          "ability": "Strong Jaw",
           "item": "Sharpedonite",
           "moves": [
             "Crunch",
@@ -21594,7 +21567,7 @@
           "species": "Kingler-Mega",
           "level": 50,
           "nature": "Jolly",
-          "ability": "Hyper Cutter\nTough Claws",
+          "ability": "Tough Claws",
           "item": "Kinglerite",
           "moves": [
             "Crabhammer",
@@ -21661,7 +21634,7 @@
           "species": "Kingler-Mega",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Hyper Cutter\nTough Claws",
+          "ability": "Tough Claws",
           "item": "Kinglerite",
           "moves": [
             "Crabhammer",
@@ -21672,7 +21645,7 @@
           "level_offset": 0
         },
         {
-          "species": "Giratina-O",
+          "species": "Giratina-Origin",
           "level": 100,
           "nature": "Quiet",
           "ability": "Levitate",
@@ -21686,7 +21659,7 @@
           "level_offset": 0
         },
         {
-          "species": "Enamorus-T",
+          "species": "Enamorus-Therian",
           "level": 100,
           "nature": "Modest",
           "ability": "Overcoat",
@@ -21700,7 +21673,7 @@
           "level_offset": 0
         },
         {
-          "species": "Zebstrika-S",
+          "species": "Zebstrika-Sevii",
           "level": 100,
           "nature": "Timid",
           "ability": "Illuminate",
@@ -21884,7 +21857,7 @@
           "species": "Lopunny-Mega",
           "level": 84,
           "nature": "Jolly",
-          "ability": "Cute Charm\nScrappy",
+          "ability": "Scrappy",
           "item": "Lopunnite",
           "moves": [
             "Close Combat",
@@ -21960,7 +21933,7 @@
           "species": "Audino-Mega",
           "level": 84,
           "nature": "Bold",
-          "ability": "Regenerator (Both)",
+          "ability": "Regenerator",
           "item": "Audinite",
           "moves": [
             "Moonblast",
@@ -22026,7 +21999,7 @@
           "species": "Absol-Mega",
           "level": 50,
           "nature": "Naive",
-          "ability": "Super Luck\nSharpness",
+          "ability": "Sharpness",
           "item": "Absolite",
           "moves": [
             "Night Slash",
@@ -22135,7 +22108,7 @@
           "species": "Chien-Pao",
           "level": 83,
           "nature": "Jolly",
-          "ability": "Sword Of Ruin",
+          "ability": "Sword of Ruin",
           "item": "Black Glasses",
           "moves": [
             "Crunch",
@@ -22376,8 +22349,7 @@
           "moves": [
             "Rock Tomb",
             "Bulldoze",
-            "Sleep Talk",
-            "-"
+            "Sleep Talk"
           ]
         },
         {
@@ -22470,7 +22442,7 @@
           "level": 32,
           "nature": "Bold",
           "ability": "Electric Surge",
-          "item": "Terrain Extend.",
+          "item": "Terrain Extender",
           "moves": [
             "Volt Switch",
             "Scald",
@@ -22521,7 +22493,7 @@
           "species": "Manectric-Mega",
           "level": 34,
           "nature": "Timid",
-          "ability": "Intimidate (Both)",
+          "ability": "Intimidate",
           "item": "Manectite",
           "moves": [
             "Charge Beam",
@@ -22545,7 +22517,7 @@
           "level": 43,
           "nature": "Jolly",
           "ability": "Grassy Surge",
-          "item": "Terrain Exten.",
+          "item": "Terrain Extender",
           "moves": [
             "Grassy Glide",
             "U-turn",
@@ -22570,7 +22542,7 @@
           "species": "Venusaur-Mega",
           "level": 44,
           "nature": "Modest",
-          "ability": "Overgrow\nThick Fat",
+          "ability": "Thick Fat",
           "item": "Venusaurite",
           "moves": [
             "Giga Drain",
@@ -22623,9 +22595,7 @@
           "item": "Choice Specs",
           "moves": [
             "Boomburst",
-            "U-turn",
-            "-",
-            "-"
+            "U-turn"
           ]
         },
         {
@@ -22662,9 +22632,7 @@
           "item": "Choice Scarf",
           "moves": [
             "Wicked Blow",
-            "Cross Poison",
-            "-",
-            "-"
+            "Cross Poison"
           ]
         },
         {
@@ -22684,7 +22652,7 @@
           "species": "Toxtricity-Mega",
           "level": 68,
           "nature": "Timid",
-          "ability": "Punk Rock (Both)",
+          "ability": "Punk Rock",
           "item": "Toxtricitite",
           "moves": [
             "Boomburst",
@@ -22747,7 +22715,7 @@
           "level": 76,
           "nature": "Modest",
           "ability": "Blazing Soul",
-          "item": "HeavyD. Boots",
+          "item": "Heavy-Duty Boots",
           "moves": [
             "Eruption",
             "Flamethrower",
@@ -22756,11 +22724,11 @@
           ]
         },
         {
-          "species": "Ogerpon-Hisui",
+          "species": "Ogerpon-Hearthflame",
           "level": 76,
           "nature": "Jolly",
           "ability": "Mold Breaker",
-          "item": "Hearth. Mask",
+          "item": "Hearthflame Mask",
           "moves": [
             "Ivy Cudgel",
             "Horn Leech",
@@ -22769,10 +22737,10 @@
           ]
         },
         {
-          "species": "Charizard-MegaY",
+          "species": "Charizard-Mega-Y",
           "level": 76,
           "nature": "Timid",
-          "ability": "Solar Power\nDrought",
+          "ability": "Drought",
           "item": "Charizardite Y",
           "moves": [
             "Flamethrower",
@@ -22809,7 +22777,7 @@
           "level": 57,
           "nature": "Quiet",
           "ability": "Psychic Surge",
-          "item": "Terrain Exten.",
+          "item": "Terrain Extender",
           "moves": [
             "Expanding Force",
             "Hyper Voice",
@@ -22860,7 +22828,7 @@
           "species": "Gardevoir-Mega",
           "level": 59,
           "nature": "Quiet",
-          "ability": "Trace\nPixilate",
+          "ability": "Pixilate",
           "item": "Gardevoirite",
           "moves": [
             "Hyper Voice",
@@ -23271,7 +23239,7 @@
           "species": "Blastoise-Mega",
           "level": 54,
           "nature": "Modest",
-          "ability": "Torrent\nMega Launcher",
+          "ability": "Mega Launcher",
           "item": "Blastoisinite",
           "moves": [
             "Shell Smash",
@@ -23350,10 +23318,10 @@
           "level_offset": -3
         },
         {
-          "species": "Charizard-MegaY",
+          "species": "Charizard-Mega-Y",
           "level": 54,
           "nature": "Timid",
-          "ability": "Blaze\nDrought",
+          "ability": "Drought",
           "item": "Charizardite Y",
           "moves": [
             "Flamethrower",
@@ -23435,7 +23403,7 @@
           "species": "Venusaur-Mega",
           "level": 54,
           "nature": "Timid",
-          "ability": "Overgrow\nThick Fat",
+          "ability": "Thick Fat",
           "item": "Venusaurite",
           "moves": [
             "Sleep Powder",
@@ -23496,7 +23464,7 @@
           "species": "Koraidon",
           "level": 85,
           "nature": "Jolly",
-          "ability": "OrichalcumPulse",
+          "ability": "Orichalcum Pulse",
           "item": "Lum Berry",
           "moves": [
             "Collision Course",
@@ -23574,7 +23542,7 @@
           "species": "Metagross-Mega",
           "level": 85,
           "nature": "Jolly",
-          "ability": "Tough Claws (Both)",
+          "ability": "Tough Claws",
           "item": "Metagrossite",
           "moves": [
             "Bullet Punch",
@@ -23629,10 +23597,7 @@
           "ability": "Imposter",
           "item": "Choice Scarf",
           "moves": [
-            "Transform",
-            "-",
-            "-",
-            "-"
+            "Transform"
           ]
         }
       ],
@@ -23663,7 +23628,7 @@
           "species": "Metagross-Mega",
           "level": 85,
           "nature": "Jolly",
-          "ability": "Tough Claws (Both)",
+          "ability": "Tough Claws",
           "item": "Metagrossite",
           "moves": [
             "Bullet Punch",
@@ -23718,10 +23683,7 @@
           "ability": "Imposter",
           "item": "Choice Scarf",
           "moves": [
-            "Transform",
-            "-",
-            "-",
-            "-"
+            "Transform"
           ]
         }
       ],
@@ -23752,7 +23714,7 @@
           "species": "Metagross-Mega",
           "level": 85,
           "nature": "Jolly",
-          "ability": "Tough Claws (Both)",
+          "ability": "Tough Claws",
           "item": "Metagrossite",
           "moves": [
             "Bullet Punch",
@@ -23807,10 +23769,7 @@
           "ability": "Imposter",
           "item": "Choice Scarf",
           "moves": [
-            "Transform",
-            "-",
-            "-",
-            "-"
+            "Transform"
           ]
         }
       ],
@@ -23898,7 +23857,7 @@
           "species": "Blastoise-Mega",
           "level": 80,
           "nature": "Timid",
-          "ability": "Rain Dish\nMega Launcher",
+          "ability": "Mega Launcher",
           "item": "Blastoisinite",
           "moves": [
             "Shell Smash",
@@ -23991,10 +23950,10 @@
           "level_offset": -2
         },
         {
-          "species": "Charizard-MegaX",
+          "species": "Charizard-Mega-X",
           "level": 80,
           "nature": "Jolly",
-          "ability": "Blaze\nTough Claws",
+          "ability": "Tough Claws",
           "item": "Charizardite X",
           "moves": [
             "Dragon Dance",
@@ -24090,7 +24049,7 @@
           "species": "Venusaur-Mega",
           "level": 80,
           "nature": "Timid",
-          "ability": "Overgrow\nThick Fat",
+          "ability": "Thick Fat",
           "item": "Venusaurite",
           "moves": [
             "Chloroblast",
@@ -24631,7 +24590,7 @@
           "ability": "Technician",
           "item": "Life Orb",
           "moves": [
-            "Drain Kiss",
+            "Draining Kiss",
             "Heat Wave",
             "Sludge Bomb",
             "U-turn"
@@ -24984,7 +24943,7 @@
           "species": "Altaria-Mega",
           "level": 50,
           "nature": "Bold",
-          "ability": "Natural Cure\nPixilate",
+          "ability": "Pixilate",
           "item": "Altarianite",
           "moves": [
             "Fire Blast",
@@ -25065,7 +25024,7 @@
           "species": "Alcremie-Mega",
           "level": 50,
           "nature": "Bold",
-          "ability": "Sweet Veil\nSelf Sufficient",
+          "ability": "Self Sufficient",
           "item": "Alcremite",
           "moves": [
             "Moonblast",
@@ -26132,7 +26091,7 @@
           "item": "Sitrus Berry",
           "moves": [
             "Air Slash",
-            "Drain Kiss",
+            "Draining Kiss",
             "Magical Leaf",
             "Thunder Wave"
           ],
@@ -26447,7 +26406,7 @@
           "level": 100,
           "nature": "Modest",
           "ability": "Mega Launcher",
-          "item": "Blastoisnite",
+          "item": "Blastoisinite",
           "moves": [
             "Aura Sphere",
             "Dark Pulse",
@@ -26466,7 +26425,7 @@
           "level": 100,
           "nature": "Jolly",
           "ability": "Tough Claws",
-          "item": "Charzardite X",
+          "item": "Charizardite X",
           "moves": [
             "Dragon Claw",
             "Dragon Dance",
@@ -26629,7 +26588,7 @@
           "species": "Absol-Mega",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Super Luck\nSharpness",
+          "ability": "Sharpness",
           "item": "Absolite",
           "moves": [
             "Night Slash",
@@ -26640,7 +26599,7 @@
           "level_offset": 0
         },
         {
-          "species": "Mantine-S",
+          "species": "Mantine-Sevii",
           "level": 100,
           "nature": "Timid",
           "ability": "Storm Drain",
@@ -26694,7 +26653,7 @@
           "level_offset": 0
         },
         {
-          "species": "Mantine-S",
+          "species": "Mantine-Sevii",
           "level": 100,
           "nature": "Timid",
           "ability": "Hydration",
@@ -26751,7 +26710,7 @@
           "species": "Sableye-Mega",
           "level": 100,
           "nature": "Calm",
-          "ability": "Prankster\nMagic Bounce",
+          "ability": "Magic Bounce",
           "item": "Sablenite",
           "moves": [
             "Recover",
@@ -27063,7 +27022,7 @@
           "species": "Weezing-Galar",
           "level": 34,
           "nature": "Rash",
-          "ability": "Neutralize Gas",
+          "ability": "Neutralizing Gas",
           "item": "",
           "moves": [
             "Explosion",
@@ -27184,7 +27143,7 @@
           "ability": "Wind Rider",
           "item": "Focus Sash",
           "moves": [
-            "Cease. Edge",
+            "Ceaseless Edge",
             "Leaf Blade",
             "Low Kick",
             "X-Scissor"
@@ -27246,7 +27205,7 @@
           "level_offset": 0
         },
         {
-          "species": "Milotic-S",
+          "species": "Milotic-Sevii",
           "level": 99,
           "nature": "Modest",
           "ability": "Serene Grace",
@@ -27396,7 +27355,7 @@
           "level_offset": 0
         },
         {
-          "species": "Wishiwashi-Sch",
+          "species": "Wishiwashi-School",
           "level": 100,
           "nature": "Modest",
           "ability": "Schooling",
@@ -27467,7 +27426,7 @@
           "species": "Drednaw-Mega",
           "level": 100,
           "nature": "Adamant",
-          "ability": "Strong Jaw (Both)",
+          "ability": "Strong Jaw",
           "item": "Drednawite",
           "moves": [
             "Aqua Fang",
@@ -27490,7 +27449,7 @@
       "source": "Postgame!R436",
       "party": [
         {
-          "species": "Mantine-S",
+          "species": "Mantine-Sevii",
           "level": 100,
           "nature": "Timid",
           "ability": "Storm Drain",
@@ -27510,10 +27469,7 @@
           "ability": "Competitive",
           "item": "Choice Scarf",
           "moves": [
-            "Surf",
-            "-",
-            "-",
-            "-"
+            "Surf"
           ],
           "level_offset": -2
         },
@@ -27535,7 +27491,7 @@
           "species": "Lapras-Mega",
           "level": 100,
           "nature": "Modest",
-          "ability": "Water Absorb\nLiquid Voice",
+          "ability": "Liquid Voice",
           "item": "Laprasite",
           "moves": [
             "Boomburst",
@@ -27589,7 +27545,7 @@
           "species": "Slowbro-Mega",
           "level": 100,
           "nature": "Bold",
-          "ability": "Regenerator\nShell Armor",
+          "ability": "Shell Armor",
           "item": "Slowbronite",
           "moves": [
             "Scald",
@@ -27654,7 +27610,7 @@
           "level_offset": 0
         },
         {
-          "species": "Ursaring-S",
+          "species": "Ursaring-Sevii",
           "level": 100,
           "nature": "Adamant",
           "ability": "Guts",
@@ -27736,7 +27692,7 @@
           "level_offset": 0
         },
         {
-          "species": "Dodrio-S",
+          "species": "Dodrio-Sevii",
           "level": 100,
           "nature": "Jolly",
           "ability": "Rock Head",
@@ -27779,7 +27735,7 @@
           "species": "Medicham-Mega",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Pure Power (Both)",
+          "ability": "Pure Power",
           "item": "Medichamite",
           "moves": [
             "Close Combat",
@@ -27847,7 +27803,7 @@
           "species": "Butterfree-Mega",
           "level": 100,
           "nature": "Timid",
-          "ability": "Compound Eyes (Both)",
+          "ability": "Compound Eyes",
           "item": "Butterfrite",
           "moves": [
             "Bug Buzz",
@@ -27901,7 +27857,7 @@
           "species": "Alakazam-Mega",
           "level": 99,
           "nature": "Timid",
-          "ability": "Synchronize\nTrace",
+          "ability": "Trace",
           "item": "Alakazite",
           "moves": [
             "Expanding Force",
@@ -27912,7 +27868,7 @@
           "level_offset": -1
         },
         {
-          "species": "Indeedee-M",
+          "species": "Indeedee",
           "level": 98,
           "nature": "Timid",
           "ability": "Psychic Surge",
@@ -27969,13 +27925,12 @@
           "species": "Flapple-Mega",
           "level": 100,
           "nature": "Naive",
-          "ability": "Gluttony\nDragon's Maw",
-          "item": "Applite",
+          "ability": "Dragon's Maw",
+          "item": "Flapplite",
           "moves": [
             "Draco Meteor",
             "Grav Apple",
-            "Sucker Punch",
-            "-"
+            "Sucker Punch"
           ],
           "level_offset": 0
         },
@@ -28079,7 +28034,7 @@
           "species": "Slowbro-Mega",
           "level": 100,
           "nature": "Bold",
-          "ability": "Regenerator\nShell Armor",
+          "ability": "Shell Armor",
           "item": "Slowbronite",
           "moves": [
             "Iron Defense",
@@ -28311,7 +28266,7 @@
           "species": "Altaria-Mega",
           "level": 100,
           "nature": "Jolly",
-          "ability": "Natural Cure\nPixilate",
+          "ability": "Pixilate",
           "item": "Altarianite",
           "moves": [
             "Dragon Dance",
@@ -28393,7 +28348,7 @@
           "species": "Manectric-Mega",
           "level": 100,
           "nature": "Timid",
-          "ability": "Intimidate (Both)",
+          "ability": "Intimidate",
           "item": "Manectite",
           "moves": [
             "Volt Switch",
@@ -29668,7 +29623,7 @@
           "species": "Palossand",
           "level": 100,
           "nature": "Bold",
-          "ability": "WaterCompaction",
+          "ability": "Water Compaction",
           "item": "Leftovers",
           "moves": [
             "Scorching Sands",
@@ -29977,7 +29932,7 @@
           "species": "Kingambit",
           "level": 53,
           "nature": "Jolly",
-          "ability": "SupremeOverlord",
+          "ability": "Supreme Overlord",
           "item": "Chople Berry",
           "moves": [
             "Iron Head",
@@ -29997,7 +29952,7 @@
           "level": 54,
           "nature": "Modest",
           "ability": "Mega Launcher",
-          "item": "Blastoisnite",
+          "item": "Blastoisinite",
           "moves": [
             "Aura Sphere",
             "Dark Pulse",
@@ -30042,7 +29997,7 @@
           "species": "Kingambit",
           "level": 78,
           "nature": "Adamant",
-          "ability": "SupremeOverlord",
+          "ability": "Supreme Overlord",
           "item": "Chople Berry",
           "moves": [
             "Iron Head",
@@ -30081,7 +30036,7 @@
           "level": 80,
           "nature": "Timid",
           "ability": "Mega Launcher",
-          "item": "Blastoisnite",
+          "item": "Blastoisinite",
           "moves": [
             "Dark Pulse",
             "Hydro Pump",

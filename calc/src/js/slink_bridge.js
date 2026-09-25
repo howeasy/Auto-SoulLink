@@ -84,6 +84,8 @@
   var _retryTimer     = null;
 
   // RR set names that differ from the calc engine's move name table.
+  // Only the setdex (normal.js / hardcore.js) still needs these: the server
+  // already sends calc names (data/games/gen3_frlge/calc_names.json).
   // Funnotbun uses its own names for some moves; two RR customs don't exist in
   // the calc at all (Soupercell Slam, Forbidden Spell) and are added to moves.ts.
   var MOVE_ALIASES = {
