@@ -11,23 +11,23 @@ RX config
 RX dead_keys
 BOOTED {"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
 MYKEY 0 F794:B541:9E
-  phase walk @3452 xy=53,12
-  phase battle @3839 xy=52,12
-RX hud_show
-RX_TEXT {"cmd":"hud_show","frame":5162,"text":"Partner caught PIDGEY in Route 29"}
-ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":5481,"key":"DB4E:B541:10","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":16}
-TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":16,"in_box":false,"key":"DB4E:B541:10","level":3,"maxHP":16,"nickname":"PIDGEY","player":"a","seq":49,"species_id":16,"stats":{"level":3,"maxHP":
-CAPTURE_SENT {"frame":5481,"key":"DB4E:B541:10","seq":49}
-CAUGHT DB4E:B541:10
+  phase walk @3484 xy=53,12
+  phase battle @3748 xy=52,12
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":6472,"key":"7B61:B541:A3","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":163}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":14,"in_box":false,"key":"7B61:B541:A3","level":2,"maxHP":14,"nickname":"HOOTHOOT","player":"a","seq":61,"species_id":163,"stats":{"level":2,"maxH
+CAPTURE_SENT {"frame":6472,"key":"7B61:B541:A3","seq":61}
+CAUGHT 7B61:B541:A3
+RX box_mon key=7B61:B541:A3
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"a","seq":63}
+TX {"event":"stats_cache","key":"7B61:B541:A3","player":"a","seq":65,"stats":{"level":2,"maxHP":14}}
 RX play_sound sound=25
 RX msgbox
-RX_TEXT {"cmd":"msgbox","frame":5483,"text":"PIDGEY and PIDGEY linked!"}
-RX party_mon key=DB4E:B541:10
-TX {"event":"safe","player":"a","seq":51}
-TX {"event":"sync_retrieve_done","key":"DB4E:B541:10","player":"a","seq":53}
-  phase save @5548 xy=52,12
-  phase saved @6213 xy=52,12
+RX_TEXT {"cmd":"msgbox","frame":6540,"text":"HOOTHOOT and HOOTHOOT linked!"}
+RX party_mon key=7B61:B541:A3
+TX {"event":"sync_retrieve_done","key":"7B61:B541:A3","player":"a","seq":67}
+  phase save @6541 xy=52,12
+  phase saved @7206 xy=52,12
 MYKEY 0 F794:B541:9E
-MYKEY 1 DB4E:B541:10
-SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"ca2d097a49bca4a0659a4c2079e74a1fb034211f2c17f5c6f8a16baf526e68b1","client_saves":1,"flushed_matches":true,"frame":6243,"gate_saves":1,"save_completed_frame":6213,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/saveram_gen2_reconnect_s721_a/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/e2e_gen2_reconnect_s721_a_witness.SaveRAM"}
-RECONNECT_READY {"frame":6243,"key":"DB4E:B541:10","phase":"initial","player":"a"}
+MYKEY 1 7B61:B541:A3
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"519b88e0134961ad9f89c80919bfcbd800647273a012c15fbc34945e26135fcc","client_saves":1,"flushed_matches":true,"frame":7236,"gate_saves":1,"save_completed_frame":7206,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/saveram_gen2_reconnect_s751_a/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/e2e_gen2_reconnect_s751_a_witness.SaveRAM"}
+RECONNECT_READY {"frame":7236,"key":"7B61:B541:A3","phase":"initial","player":"a"}

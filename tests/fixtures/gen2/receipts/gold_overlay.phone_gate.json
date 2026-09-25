@@ -3,45 +3,100 @@
  "cases": {
   "battle": {
    "extra": {
-    "battle_from": 3793,
-    "battle_to": 4688,
+    "battle_from": 3667,
+    "battle_to": 4591,
     "rings_in_battle": 0
    },
    "id": 2,
    "result": "PASS",
    "ring": {
-    "armed": 2,
     "caller": 0,
-    "frame": 5018,
-    "id": 0
+    "frame": 4921
    },
-   "step_at": 4922,
+   "step_at": 4825,
    "via": "permit"
+  },
+  "named_fallback": {
+   "extra": {
+    "cookie": 166,
+    "species": [
+     0,
+     0
+    ]
+   },
+   "id": 3,
+   "result": "PASS",
+   "ring": {
+    "caller": 0,
+    "frame": 14207
+   },
+   "step_at": 14111,
+   "via": "binder"
+  },
+  "named_map_change": {
+   "extra": {
+    "crossed": 13063,
+    "restaged": true,
+    "staged_before_crossing": true,
+    "wipes": 1
+   },
+   "id": 1,
+   "result": "PASS",
+   "ring": {
+    "caller": 0,
+    "frame": 13161
+   },
+   "step_at": 13061,
+   "via": "binder"
   },
   "native": {
    "extra": {
     "native_ring": {
      "armed": 1,
      "caller": 4,
-     "frame": 11059,
-     "id": 2
+     "frame": 10962,
+     "id": 2,
+     "stage": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
     }
    },
    "id": 1,
    "result": "PASS",
    "ring": {
-    "armed": 1,
     "caller": 0,
-    "frame": 12219,
-    "id": 0
+    "frame": 12122
    },
-   "step_at": 12124,
+   "step_at": 12027,
    "via": "permit"
   },
   "save": {
    "extra": {
     "armed_at_save": 2,
-    "save_site_frame": 9409,
+    "save_site_frame": 9312,
     "sram_backup": 0,
     "sram_changed_bytes": 937,
     "sram_primary": 0
@@ -49,12 +104,10 @@
    "id": 2,
    "result": "PASS",
    "ring": {
-    "armed": 2,
     "caller": 0,
-    "frame": 9913,
-    "id": 0
+    "frame": 9816
    },
-   "step_at": 9818,
+   "step_at": 9721,
    "via": "permit"
   },
   "start_menu": {
@@ -65,12 +118,10 @@
    "id": 3,
    "result": "PASS",
    "ring": {
-    "armed": 3,
     "caller": 0,
-    "frame": 7898,
-    "id": 0
+    "frame": 7801
    },
-   "step_at": 7804,
+   "step_at": 7707,
    "via": "permit"
   },
   "town": {
@@ -82,19 +133,17 @@
    "id": 1,
    "result": "PASS",
    "ring": {
-    "armed": 1,
     "caller": 0,
-    "frame": 6426,
-    "id": 0
+    "frame": 6329
    },
-   "step_at": 6331,
+   "step_at": 6234,
    "via": "binder"
   }
  },
- "client_write_scope": "phone (lua/gen2/panel.lua permit reason phone, mailbox +32)",
+ "client_write_scope": "phone (lua/gen2/panel.lua permit reason phone, mailbox +32, the wUnusedMapBuffer stage)",
  "code_digest": {
-  "commit": "df04e06517d68aadc92b9c375708ff9a704bb7ec",
-  "digest": "ccd6242131ad11308441a4835d8ab50b5f4a2e4ebaf8c523a5bd919b5e2cd635",
+  "commit": "543cd1dcb1543aa168f8be43414ddc3edf24a34d",
+  "digest": "593616e6e91647e3640a97675f6e114a5e1caa2f7d75d4f2547fae3586bf6dd1",
   "dirty": [],
   "schema": "gen2-code-digest-v1",
   "scope": [
@@ -113,16 +162,16 @@
  "fixture_sha256": "6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6",
  "harness_write_scopes": [
   {
-   "frame": 10760,
+   "frame": 10663,
    "value": 2,
    "what": "wSpecialPhoneCallID = SPECIALCALL_ROBBED"
   }
  ],
  "input_mode": "normal_buttons",
- "overlay_sha1": "15fc821327a22224925a6adaaa483525222883c2",
+ "overlay_sha1": "69067c4bcd74b2c567a02164896948f3a14e6d4a",
  "qualification_attempt_id": "requal-gold-battle-n14b",
  "result": "PASS",
- "schema": "gen2-phone-gate-v1",
+ "schema": "gen2-phone-gate-v2",
  "sram": {
   "backup": 4213,
   "primary": 10211

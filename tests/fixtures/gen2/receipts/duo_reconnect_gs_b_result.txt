@@ -11,26 +11,26 @@ RX config
 RX dead_keys
 BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
 MYKEY 0 A4FC:C78C:9E
-  phase walk @3496 xy=53,12
-  phase battle @3762 xy=52,12
-RX hud_show
-RX_TEXT {"cmd":"hud_show","frame":5462,"text":"Partner caught PIDGEY in Route 29"}
-ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":8641,"key":"A1B3:C78C:10","level":4,"site_id":"capture_party_finalized","slot":1,"species_id":16}
-TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":17,"in_box":false,"key":"A1B3:C78C:10","level":4,"maxHP":17,"nickname":"PIDGEY","player":"b","seq":179,"species_id":16,"stats":{"level":4,"maxHP"
-CAPTURE_SENT {"frame":8641,"key":"A1B3:C78C:10","seq":179}
-CAUGHT A1B3:C78C:10
+  phase walk @3416 xy=53,12
+  phase battle @3719 xy=53,12
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":7483,"key":"BACF:C78C:A3","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":163}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":17,"in_box":false,"key":"BACF:C78C:A3","level":3,"maxHP":17,"nickname":"HOOTHOOT","player":"b","seq":140,"species_id":163,"stats":{"level":3,"max
+CAPTURE_SENT {"frame":7483,"key":"BACF:C78C:A3","seq":140}
+CAUGHT BACF:C78C:A3
+RX box_mon key=BACF:C78C:A3
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":141}
+TX {"event":"stats_cache","key":"BACF:C78C:A3","player":"b","seq":144,"stats":{"level":3,"maxHP":17}}
 RX play_sound sound=25
 RX msgbox
-RX_TEXT {"cmd":"msgbox","frame":8644,"text":"PIDGEY and PIDGEY linked!"}
-RX party_mon key=A1B3:C78C:10
-TX {"event":"safe","player":"b","seq":180}
-TX {"event":"sync_retrieve_done","key":"A1B3:C78C:10","player":"b","seq":183}
-  phase save @8701 xy=52,12
-  phase saved @9395 xy=52,12
+RX_TEXT {"cmd":"msgbox","frame":9122,"text":"HOOTHOOT and HOOTHOOT linked!"}
+RX party_mon key=BACF:C78C:A3
+TX {"event":"sync_retrieve_done","key":"BACF:C78C:A3","player":"b","seq":198}
+  phase save @9123 xy=53,12
+  phase saved @9818 xy=53,12
 MYKEY 0 A4FC:C78C:9E
-MYKEY 1 A1B3:C78C:10
-SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"b8139e666739dac93ce4cf5a5153fcb18e2dcdd660cf4d983d6005f0207141bf","client_saves":1,"flushed_matches":true,"frame":9425,"gate_saves":1,"save_completed_frame":9395,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/saveram_gen2_reconnect_s611_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/e2e_gen2_reconnect_s611_b_witness.SaveRAM"}
-RECONNECT_READY {"frame":9425,"key":"A1B3:C78C:10","phase":"initial","player":"b"}
-B_STAYED {"box_mon":0,"force_faint":0,"frame":23767,"hellos":1}
-RECEIPT {"attempt":1,"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":8641,"key":"A1B3:C78C:10","level":4,"site_id":"capture_party_finalized","slot":1,"species_id":16},"case":"silver_battle","client":{"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"},"fixture_sha256":"0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3338,"has_pokeballs":true,"ot_id":51084},"input_mode":"normal_buttons","key":"A1B3:C78C:10","phase":"initial","player":"b","ready":{"frame":9425,"key":"A1B3:C78C:10","phase":"initial","player":"b"},"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","save":{"cartram_bytes":32768,"cartram_sha256":"b8139e666739dac93ce4cf5a5153fcb18e2dcdd660cf4d983d6005f0207141bf","client_saves":1,"flushed_matches":true,"frame":9425,"gate_saves":1,"save_completed_frame":9395,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/saveram_gen2_reconnect_s611_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/e2e_gen2_reconnect_s611_b_witness.SaveRAM"},"scenario":"gen2_reconnect","schema":"gen2-duo-reconnect-v1","title":"silver"}
+MYKEY 1 BACF:C78C:A3
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"aaea06579cc9fa0db34b279996086bbdacb4885ae76d032b5c714e343090d8ea","client_saves":1,"flushed_matches":true,"frame":9848,"gate_saves":1,"save_completed_frame":9818,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_reconnect_s641_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_reconnect_s641_b_witness.SaveRAM"}
+RECONNECT_READY {"frame":9848,"key":"BACF:C78C:A3","phase":"initial","player":"b"}
+B_STAYED {"box_mon":0,"force_faint":0,"frame":22496,"hellos":1}
+RECEIPT {"attempt":1,"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":7483,"key":"BACF:C78C:A3","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":163},"case":"silver_battle","client":{"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"},"fixture_sha256":"0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3338,"has_pokeballs":true,"ot_id":51084},"input_mode":"normal_buttons","key":"BACF:C78C:A3","phase":"initial","player":"b","ready":{"frame":9848,"key":"BACF:C78C:A3","phase":"initial","player":"b"},"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","save":{"cartram_bytes":32768,"cartram_sha256":"aaea06579cc9fa0db34b279996086bbdacb4885ae76d032b5c714e343090d8ea","client_saves":1,"flushed_matches":true,"frame":9848,"gate_saves":1,"save_completed_frame":9818,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_reconnect_s641_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_reconnect_s641_b_witness.SaveRAM"},"scenario":"gen2_reconnect","schema":"gen2-duo-reconnect-v1","title":"silver"}
 RESULT: PASS (B remained online through both A relaunches)

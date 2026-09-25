@@ -1,7 +1,7 @@
 {
  "code_digest": {
-  "commit": "df04e06517d68aadc92b9c375708ff9a704bb7ec",
-  "digest": "ccd6242131ad11308441a4835d8ab50b5f4a2e4ebaf8c523a5bd919b5e2cd635",
+  "commit": "543cd1dcb1543aa168f8be43414ddc3edf24a34d",
+  "digest": "593616e6e91647e3640a97675f6e114a5e1caa2f7d75d4f2547fae3586bf6dd1",
   "dirty": [],
   "schema": "gen2-code-digest-v1",
   "scope": [
@@ -27,11 +27,11 @@
     "cartram_sha256": "463d6b35dcd3ae97078386c7337a4c890bfb30ed05198a7fabc250abfec9926e",
     "field": "BizHawk gambatte RTC trailer",
     "game_hour": 11,
-    "host_time": 1790288851,
-    "new_hex": "000000006ab5a3d30002010105001cdf600002010105",
+    "host_time": 1790351158,
+    "new_hex": "000000006ab697360003010105001cdf600003010105",
     "old_hex": "000000006ab345eb000000042c001cdf60000000042c",
     "schema": "gen2-clock-setup-v1",
-    "sha256": "24c35cd09ed5e45d380b7c64f55263fa34f74aac1c6728fe4c1bfe33757af656",
+    "sha256": "5c8039984357babb8dc6bcdf34ab7f5967f8ce8e503312eff77b90250761da32",
     "source_facts": [
      "home/time.asm FixTime: game time = wStartHour/Minute/Second + RTC",
      "libgambatte cartridge.cpp:504-580: the 22-byte RTC trailer"
@@ -48,26 +48,26 @@
     "accepted": 0,
     "addr": 26791,
     "bank": 127,
-    "bank_rejects": 3269,
-    "raw": 3269
+    "bank_rejects": 3381,
+    "raw": 3381
    },
    "evidence_level": "PHYSICAL",
    "evolution_alignment": {
     "a": 14,
-    "armed": 212308,
+    "armed": 215378,
     "battle_mode": 1,
-    "callback": 212308,
+    "callback": 215378,
     "capture_party_hits": 3,
-    "dvs": 14856,
+    "dvs": 47166,
     "hl": 55844,
     "link_mode": 0,
     "list_addr": 55844,
     "list_species": 14,
     "model_event": {
-     "dvs": 14856,
+     "dvs": 47166,
      "kind": "key_change",
-     "new_key": "3A08:C78C:0E",
-     "old_key": "3A08:C78C:0D",
+     "new_key": "B83E:C78C:0E",
+     "old_key": "B83E:C78C:0D",
      "reason": "evolution",
      "site_id": "evolution_species_published",
      "slot": 1,
@@ -102,7 +102,7 @@
    "fixture": "silver_battle",
    "fixture_sha256": "0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd",
    "frame_alignment": {
-    "aligned_hits": 273,
+    "aligned_hits": 260,
     "armed": 5238,
     "battle_party": 1,
     "callback": 5238,
@@ -195,20 +195,20 @@
      "bank_rejects": 0,
      "expected_hex": "cd307d2005",
      "first_frame": 5356,
-     "hits": 48,
+     "hits": 43,
      "pc": 29782,
-     "raw": 48,
+     "raw": 43,
      "symbol": "ExitBattle"
     },
     "battle_faint": {
      "addr": 20724,
      "bank": 15,
-     "bank_rejects": 173,
+     "bank_rejects": 188,
      "expected_hex": "fac6cf4f2142cb",
      "first_frame": 45844,
      "hits": 1,
      "pc": 20724,
-     "raw": 174,
+     "raw": 189,
      "symbol": "UpdateFaintedPlayerMon"
     },
     "capture_box": {
@@ -216,7 +216,7 @@
      "bank": 3,
      "expected_hex": "3e01",
      "hits": 0,
-     "raw": 133,
+     "raw": 119,
      "symbol": "PokeBallEffect.SendToPC"
     },
     "capture_party": {
@@ -236,9 +236,9 @@
      "bank_rejects": 4,
      "expected_hex": "fa19d1",
      "first_frame": 5346,
-     "hits": 3,
+     "hits": 5,
      "pc": 27721,
-     "raw": 7,
+     "raw": 9,
      "symbol": "PokeBallEffect.return_from_capture"
     },
     "change_box_begin": {
@@ -268,7 +268,7 @@
      "bank": 16,
      "bank_rejects": 0,
      "expected_hex": "e5",
-     "first_frame": 212308,
+     "first_frame": 215378,
      "hits": 1,
      "pc": 25582,
      "raw": 1,
@@ -299,45 +299,45 @@
     "pc_release_box_begin": {
      "addr": 28407,
      "bank": 56,
-     "bank_rejects": 30,
+     "bank_rejects": 28,
      "expected_hex": "3e03213d60cf",
      "first_frame": 52964,
      "hits": 1,
      "pc": 28407,
-     "raw": 31,
+     "raw": 29,
      "symbol": "BillsPC_Withdraw.release"
     },
     "pc_release_box_complete": {
      "addr": 28413,
      "bank": 56,
-     "bank_rejects": 30,
+     "bank_rejects": 28,
      "expected_hex": "cd5f79",
      "first_frame": 52965,
      "hits": 1,
      "pc": 28413,
-     "raw": 31,
+     "raw": 29,
      "symbol": "BillsPC_Withdraw.release"
     },
     "pc_release_party_begin": {
      "addr": 27938,
      "bank": 56,
-     "bank_rejects": 56,
+     "bank_rejects": 52,
      "expected_hex": "3e03213d60cf",
      "first_frame": 53299,
      "hits": 1,
      "pc": 27938,
-     "raw": 57,
+     "raw": 53,
      "symbol": "BillsPCDepositFuncRelease"
     },
     "pc_release_party_complete": {
      "addr": 27944,
      "bank": 56,
-     "bank_rejects": 6521,
+     "bank_rejects": 6711,
      "expected_hex": "cd5f79",
      "first_frame": 53299,
      "hits": 1,
      "pc": 27944,
-     "raw": 6522,
+     "raw": 6712,
      "symbol": "BillsPCDepositFuncRelease"
     },
     "pc_withdraw_begin": {
@@ -365,12 +365,12 @@
     "poison_faint": {
      "addr": 18047,
      "bank": 20,
-     "bank_rejects": 1399,
+     "bank_rejects": 1421,
      "expected_hex": "3e20cd3a3b3600",
      "first_frame": 22498,
      "hits": 1,
      "pc": 18047,
-     "raw": 1400,
+     "raw": 1422,
      "symbol": "DoPoisonStep.DamageMonIfPoisoned"
     },
     "save_completed": {
@@ -387,12 +387,12 @@
     "whiteout_before_heal": {
      "addr": 16939,
      "bank": 3,
-     "bank_rejects": 300,
+     "bank_rejects": 336,
      "expected_hex": "213942191919",
      "first_frame": 13749,
      "hits": 52,
      "pc": 16939,
-     "raw": 352,
+     "raw": 388,
      "symbol": "Special"
     },
     "wild_ready": {
@@ -401,9 +401,9 @@
      "bank_rejects": 15,
      "expected_hex": "110090",
      "first_frame": 3788,
-     "hits": 48,
+     "hits": 43,
      "pc": 29696,
-     "raw": 63,
+     "raw": 58,
      "symbol": "InitEnemyWildmon.skip_unown"
     }
    },
@@ -432,8 +432,8 @@
     "accepted": 0,
     "addr": 26791,
     "bank": 127,
-    "bank_rejects": 71,
-    "raw": 71
+    "bank_rejects": 119,
+    "raw": 119
    },
    "effects": [
     {
@@ -465,8 +465,8 @@
      "arming_frame": 3368,
      "arming_hex": "0afd13a1a3ff",
      "before_hex": "0afd13a1a3ff",
-     "callback": 8600,
-     "hit_frame": 8600,
+     "callback": 10005,
+     "hit_frame": 10005,
      "site": "evolution_species_published",
      "size": 6,
      "symbol": "wPartySpecies",
@@ -477,8 +477,8 @@
      "arming_frame": 3368,
      "arming_hex": "00",
      "before_hex": "00",
-     "callback": 12459,
-     "hit_frame": 12459,
+     "callback": 14321,
+     "hit_frame": 14321,
      "site": "capture_box",
      "size": 1,
      "symbol": "sBoxCount",
@@ -489,8 +489,8 @@
      "arming_frame": 3368,
      "arming_hex": "00",
      "before_hex": "00",
-     "callback": 12702,
-     "hit_frame": 12702,
+     "callback": 14576,
+     "hit_frame": 14576,
      "site": "capture_box_finalized",
      "size": 1,
      "symbol": "sBoxCount",
@@ -536,12 +536,12 @@
     "capture_box": {
      "addr": 27569,
      "bank": 3,
-     "bank_rejects": 4,
+     "bank_rejects": 6,
      "expected_hex": "3e01",
-     "first_frame": 12459,
+     "first_frame": 14321,
      "hits": 1,
      "pc": 27569,
-     "raw": 5,
+     "raw": 7,
      "symbol": "PokeBallEffect.SendToPC"
     },
     "capture_box_finalized": {
@@ -549,7 +549,7 @@
      "bank": 3,
      "bank_rejects": 0,
      "expected_hex": "fa19d1",
-     "first_frame": 10572,
+     "first_frame": 12142,
      "hits": 2,
      "pc": 27721,
      "raw": 2,
@@ -560,7 +560,7 @@
      "bank": 16,
      "bank_rejects": 0,
      "expected_hex": "e5",
-     "first_frame": 8600,
+     "first_frame": 10005,
      "hits": 1,
      "pc": 25582,
      "raw": 1,
@@ -580,12 +580,12 @@
     "hatch_species": {
      "addr": 29549,
      "bank": 5,
-     "bank_rejects": 13,
+     "bank_rejects": 25,
      "expected_hex": "ea51d1",
      "first_frame": 3430,
      "hits": 1,
      "pc": 29549,
-     "raw": 14,
+     "raw": 26,
      "symbol": "HatchEggs.nottogepi"
     }
    },
@@ -765,8 +765,8 @@
     "accepted": 0,
     "addr": 26791,
     "bank": 127,
-    "bank_rejects": 81,
-    "raw": 81
+    "bank_rejects": 83,
+    "raw": 83
    },
    "effects": [
     {
@@ -774,8 +774,8 @@
      "arming_frame": 3369,
      "arming_hex": "45ff00000000",
      "before_hex": "45ff00000000",
-     "callback": 4836,
-     "hit_frame": 4836,
+     "callback": 4855,
+     "hit_frame": 4855,
      "site": "npc_trade_finalized",
      "size": 6,
      "symbol": "wPartySpecies",
@@ -817,7 +817,7 @@
      "bank": 63,
      "bank_rejects": 0,
      "expected_hex": "1e01",
-     "first_frame": 4831,
+     "first_frame": 4850,
      "hits": 1,
      "pc": 19049,
      "raw": 1,
@@ -828,7 +828,7 @@
      "bank": 63,
      "bank_rejects": 2,
      "expected_hex": "c9",
-     "first_frame": 4836,
+     "first_frame": 4855,
      "hits": 1,
      "pc": 19341,
      "raw": 3,
@@ -960,8 +960,8 @@
      "arming_frame": 3369,
      "arming_hex": "01",
      "before_hex": "01",
-     "callback": 6137,
-     "hit_frame": 6137,
+     "callback": 6138,
+     "hit_frame": 6138,
      "site": "gift_party_finalized",
      "size": 1,
      "symbol": "wPartyCount",
@@ -1003,7 +1003,7 @@
      "bank": 3,
      "bank_rejects": 0,
      "expected_hex": "d5",
-     "first_frame": 5960,
+     "first_frame": 5961,
      "hits": 1,
      "pc": 25230,
      "raw": 1,
@@ -1014,7 +1014,7 @@
      "bank": 3,
      "bank_rejects": 0,
      "expected_hex": "c8",
-     "first_frame": 6137,
+     "first_frame": 6138,
      "hits": 1,
      "pc": 25487,
      "raw": 1,

@@ -98,15 +98,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_link_cc_a_result.txt",
-              "sha256": "c822929a0d6e666ff24920fd4194bc7f20b34e886560b8f7eb582793ace995a6"
+              "sha256": "596b8a1a4a75fc880e9cc7bd2f197b36424195d69252eee8d6aa69dd672d2876"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_link_cc_b_result.txt",
-              "sha256": "dda2d826c045d2a5b58a1a992dfd65b3d1eb1b3818eb391bf9ee29eb3f082a1f"
+              "sha256": "d3567096423c7e9785a9204ef9babbb20baeca0b922b91ecad6d95ec66b3a1e6"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_link_cc_pydec_result.txt",
-              "sha256": "109d068bb745784f078a649d326841958f59b59356fd333889ffa4ae65911787"
+              "sha256": "edb6578aca6cc0b5a55094cf22473f04dbdd484a989f2d86e46982dc8e341561"
             }
           }
         },
@@ -116,15 +116,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_cc_a_result.txt",
-              "sha256": "6c0ec6f6bcda7d12c85340b70c35ab1b834e42500ce586202bf582233df2c9b6"
+              "sha256": "1f74862b3f2d03d07166b892a458a370724ed813921aa2b3e8f3e83f85b858e0"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_cc_b_result.txt",
-              "sha256": "1c782f87a92a32dafbe5bab881127160c3a9589c44add440db71ec7a9cc25e06"
+              "sha256": "bff56b3f174deab302afc23e2038b49bfa248b8bbaebe68d18a446fbe649249d"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_cc_pydec_result.txt",
-              "sha256": "660a0e5ffa1ff9b778231f93da8552fd5c8687696e0aca06dc6ed0ea90f18bae"
+              "sha256": "f685aaaba9baf67a090ca864809dd878573d964b69debbbd6878fb084e12ee28"
             }
           }
         },
@@ -134,15 +134,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_active_cc_a_result.txt",
-              "sha256": "bd1a45ad3effd07a42eb3eab9bfac5a69e33d811fb5641ccb151f77f30ba3e19"
+              "sha256": "a99dcb149a62bb0e9650e967c388683e0592ea41f6ce23fe05da9d89153e3b08"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_active_cc_b_result.txt",
-              "sha256": "839f0a9b5509a5bcc565cc3ca69d6cdb942a32460f2cd8473669b837f4eece87"
+              "sha256": "5b7d4c8a925fc72e00db0872eb89f87bda79099a1a2670cdeda31914b659aba5"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_active_cc_pydec_result.txt",
-              "sha256": "4f4eb44291b8eb9c5539c7d39b89a270d8b245990b5de03862fd6972a2abc6b8"
+              "sha256": "aa5409765baae212e57acf91d0ae9bcc7ed15cce4dc039e2e6b0f31ae0440b6a"
             }
           }
         },
@@ -152,15 +152,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cc_a_result.txt",
-              "sha256": "b90a08dbde056c0e173a31121326d1a53bab78ce71e66ca01f07c9d7de4f1483"
+              "sha256": "0dfdacebd2bf6bd8e8782dc4a8fa9181c61718b9bad10cf534c8a500aca768a3"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cc_b_result.txt",
-              "sha256": "60b171478d2587aa118fc86fcc0c1ded166e90896b166abeb6b107902404725a"
+              "sha256": "31b4a9fc7b656eae452dfeb98e6435ae9e3d61ccdb143c6c8f242dc33a1bda5e"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cc_pydec_result.txt",
-              "sha256": "aecfe250bb6e2ab0f8e4f6f554b1ae13650c86efe21d919ebddc05d9978ae5e3"
+              "sha256": "a9f270e485574e2be1680e04694fae4ec62bbcb4993389d813511c6f44b03561"
             }
           }
         },
@@ -170,29 +170,29 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_cc_a_result.txt",
-              "sha256": "b1790134b0cb78f10c5cc4c75bd91ea05a6256a105ca326df056908b26fbcd21"
+              "sha256": "6378cf24ffc0e90a2cd947799a74247ac63f0d1689cf3345a3a186d93c1e4593"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_cc_b_result.txt",
-              "sha256": "3336ce847b8c629f0b0eac4c25d48073e3e40cc6125c3439aec01f78528761d3"
+              "sha256": "ac4a0167105611ce7ffea87e91c236bfd1332f4493c3c6705808dc259b431a3e"
             },
             "a_same_save": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_cc_a_same_save_result.txt",
-              "sha256": "ea3cf5ac90e052ec8ea0fb04ab96aed8e0b495da57396d85f532c9d62c30e1c5"
+              "sha256": "a842331e33386f8d6823dae2403c0370b87ab58544e7d803893f541bbedb9850"
             },
             "a_wrong_save": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_cc_a_wrong_save_result.txt",
-              "sha256": "a632346fcc48bde8b8c285d8b6370aa67ee07f79c27b4d75813670fee7fec5cc"
+              "sha256": "1a2537896559608724abc46edc71d6e9f98f26557c6bdbd3eeb48ea88da39521"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_cc_pydec_result.txt",
-              "sha256": "59cddd806a14675d9c3d96c59dc8709f9aaa577ab01de7e4704e1fa0eaf6f91f"
+              "sha256": "a1d5476fbf6b8baf77b846d6d2cd3bb8d64af2d41aef62f0d80b60fe8d294253"
             }
           },
           "staged_saves": {
             "same_save": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_cc_a_same_save_seed.SaveRAM",
-              "sha256": "0093371ca982f56426626f5349315173b95cf08ec9189c084df7e200cb96d859"
+              "sha256": "9e278634aa6187b46a04c9a109bd9711430111d9b5080984752e9065e9dc27cf"
             },
             "wrong_save": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_cc_a_wrong_save_seed.SaveRAM",
@@ -207,15 +207,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_soft_reset_cc_a_result.txt",
-              "sha256": "bf2c1f18cebb6dd9ff30ccb470d282b6db5e2d699c1ddac6b965e208469fdf68"
+              "sha256": "5b1d2e72b09df23005750816cb6166c9d6753f152cf51252d2bfe81ed9e27462"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_soft_reset_cc_b_result.txt",
-              "sha256": "a36e35514511cde214809ed4df17f8b61644782f27470a7b032e93a28944c192"
+              "sha256": "178df3494d002aec0660564292606c602a626d08b40836440f69aff528f7d4a4"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_soft_reset_cc_pydec_result.txt",
-              "sha256": "64232d9cd124d13da21795fa7b8284791a5604d826e80eb322742577cb307c43"
+              "sha256": "d4b5a8c4c4e8756ce74f0ad1638247fb12bf02dcf5290d3b39daccaf9184d7fc"
             }
           }
         },
@@ -225,15 +225,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_species_clause_cc_a_result.txt",
-              "sha256": "0d07222dd9fbf21b54012e951bac361bdb8527d3483129f3e4bd0bdcf1625e0a"
+              "sha256": "21bb3a3a4352c667b4011ac70f2afd897d38b308cdc446132096d9b59d207283"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_species_clause_cc_b_result.txt",
-              "sha256": "5df79c4901d925243080a7a1486c3e64b93ebe05f6e2ee17444c22b5f733ab55"
+              "sha256": "40e1c9e62de74d77f414fc4dddd84bc61d3708e611c41572fdc908d49b672ecb"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_species_clause_cc_pydec_result.txt",
-              "sha256": "486c18b7129bd4f4d0828eab475d7677b5933980435f750aeedab001a23c9583"
+              "sha256": "81063e7afca628fc640fdce645d02ce8b5e62aa1225539cc8060454efdfc28f2"
             }
           }
         },
@@ -243,15 +243,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_type_clause_cc_a_result.txt",
-              "sha256": "b3988b213b2b71db8223be28e4ee9ebeaec0f2db52e9428a111dffc1d66c7aa2"
+              "sha256": "70f5580f08c37acdf03e67bc2754fd0aea88acaa0383a5eb57f9fb4d0d24399b"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_type_clause_cc_b_result.txt",
-              "sha256": "e902ae885a8a8dd34c53196987fb1fd18a9520277ce5a8dcf7b107f3bced240a"
+              "sha256": "7f260620bdcbc96f1f18ca92faa703e3b200d41f3bf5a8504e246967f5771234"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_type_clause_cc_pydec_result.txt",
-              "sha256": "012dc27ae9246bdea4eabbc2f7a5c7a8192706563b4b72143e9a44428fa3f9b2"
+              "sha256": "f78fa02a1223f33efe81a190643b63a9eccdfcb61701ec5eb248d4d5935f4571"
             }
           }
         },
@@ -261,15 +261,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_gender_clause_cc_a_result.txt",
-              "sha256": "924696fe084b6194a62515112b80be316b3e95a5caf4a35daf49fcd4efd0ffc8"
+              "sha256": "ab7816ad6f624b5bb0b49e6552915a187534ab53c037119f2b560fd9674bbfff"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_gender_clause_cc_b_result.txt",
-              "sha256": "5e44a56f6513c2b24505d2537ebf07ed7d9378b7aa95ad816aa2a2613ae21793"
+              "sha256": "4fe6acbb4a632e4846ec63d83c68870b21a6331b0bb7689a896bc2e2c2c21c50"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_gender_clause_cc_pydec_result.txt",
-              "sha256": "f02d8e87ff6437b75f9057f90a967c09db14411f834c89b38357ab2d2b13404b"
+              "sha256": "2fc7aef13b875c8cb4c6b8bf2b9978ce43085baa24d82ac44a84b71cd2b45164"
             }
           }
         },
@@ -279,15 +279,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_new_cc_a_result.txt",
-              "sha256": "45e2346c0886fef13b2782d2a990ed62ba8f948b4541b85df4fd00c8b3f3e43a"
+              "sha256": "6b14ecc418da0d238d61f7ee102f175947a7fb33fbd86c215bc0db2415c6ebab"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_new_cc_b_result.txt",
-              "sha256": "b6383d58e736a54a91e7e6fa5380162535acd7bdf22d570fe758645ba5128f63"
+              "sha256": "218d3b47b019a625cf66bdc5993461a2f8b3737fcca7ba26af04c192e8e12f05"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_new_cc_pydec_result.txt",
-              "sha256": "a56b3dd99bb38c146f3e2c8a52b0fc394863bddbb39455202ecd287180196499"
+              "sha256": "df0b5778a9fdbac2747f8900a1d2466fa734d165189bf9ccd080f268accf9339"
             }
           }
         },
@@ -297,15 +297,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_a_result.txt",
-              "sha256": "3bd9127118702cb5faec7079dba92d4b2a0081e4631b4611fb041ac8f1fe16d4"
+              "sha256": "e48840c4ae2cd837a31a82c6d98a39e5fc9f68153678db6539e1357f9e73fd4d"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_b_result.txt",
-              "sha256": "44c5dbf71b9083a3c6512e6a4c62a36a8009f226b3339b284ab357b068a300db"
+              "sha256": "4dd5481913c0a0d0e91673edafe7f223c209a99a52a13a245715eb056f84f49d"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cc_pydec_result.txt",
-              "sha256": "93b8897733d9bf051e5d1148ee177ff645afd55d6e9484367d24e199c459296f"
+              "sha256": "f019f968e33c4f9c53651d696a9a499e88bcc52e57879b358f43770f4ebb7360"
             }
           }
         },
@@ -315,15 +315,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cc_a_result.txt",
-              "sha256": "1a6fcb1dc16bff70f6f839465489190f75eac91507082cba7f23fedf542b1843"
+              "sha256": "db2200c93dc0a8a41407f721deb96fe96122a4b2fcd373f3680af1cd2619ab8e"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cc_b_result.txt",
-              "sha256": "1dfd84218d7aa7a4f1f6ed324c2a6c252bc4ad1ef60bf27a669139dc17a22e92"
+              "sha256": "37b837ecbe1813cacff1435982e1a786b9217c57225da960e2317d00b43227d5"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cc_pydec_result.txt",
-              "sha256": "85cd7cdbb9442c864ce4f2ba975b12b786fd602a7edddfab10b0055ff1986610"
+              "sha256": "91937f267a683fd87401c459d46cac575d4e391800b7af8c0654245cc0a5b033"
             }
           }
         },
@@ -333,15 +333,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cc_a_result.txt",
-              "sha256": "1f34e771ddf335e921d49984c25c2b12021d4b802dc33ca502c60ca113928584"
+              "sha256": "5fb70a9da85e178a02f6d5d2297d4af61b9eaaa6f433fe36f1111ed23bc0a5b9"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cc_b_result.txt",
-              "sha256": "64cea2a7c0a9398f9550805ebb08132be14b63c3099d2d81786be63fd8a659ee"
+              "sha256": "253b6cb496cdd41e44de668ee3488dce9047992df05ba25946e1ae1fa9e90a7f"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cc_pydec_result.txt",
-              "sha256": "d379cdc74687b78856678b4159af6bc873191bae9caaaae2d76fb34d87ba84e4"
+              "sha256": "6da8c38181cb45194145511256061338fb938b787c5999f8b21640cae3230c16"
             }
           }
         },
@@ -351,15 +351,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cc_a_result.txt",
-              "sha256": "5fa5d1ccec4979d07281d882bb30902ad3de1393b1a848b7655418352162fcb8"
+              "sha256": "942c73b6b66ea839a8aed051c5a119dd9e524be00341eabbef80519a972133fc"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cc_b_result.txt",
-              "sha256": "9c12a42b85fe638edcd93fe5c5158e0f0941e0adddcd4c0a4bcb25e00f4aceae"
+              "sha256": "5548d1c0a1995654e09c1af9dd196905558e5d59044f68f8982559872179fb01"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cc_pydec_result.txt",
-              "sha256": "789c80c472a8720467b3eecb27d0fe8b091f2d3fb276889f5679854cb436eeac"
+              "sha256": "ccf806cdfa1bb3c4707bb0e59682b6b69a9f92207f5b5e1f54acd4a3b2101e0d"
             }
           }
         },
@@ -369,15 +369,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cc_a_result.txt",
-              "sha256": "e2083ff56a10992a5b5cffc39d07a6f1bd8b7058ec37dc6babde2265999bbc80"
+              "sha256": "a389122bd1c33aa76ae8762d90a242186bdbe243f81c66540e71eace16db5b99"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cc_b_result.txt",
-              "sha256": "0d52abe51f1c7f2e9328ad856ce84545c0715bae6220cef9321fdecce5e784f2"
+              "sha256": "52d3fdfad55d32252677e03b3e0a161ef4cbe8ce342b021365534ddda9bf4c24"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cc_pydec_result.txt",
-              "sha256": "7b803353de3f27c47adbe73bd15910d21f658834670d321d16568729bc5ba671"
+              "sha256": "d8c2a690768fd42b8b9c40ead518fc4ade0435730d2d24bcc8b409438134e0e6"
             }
           }
         },
@@ -387,15 +387,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cc_a_result.txt",
-              "sha256": "1c2589c84f10d04869f64321695d005dcb926e9af3315c10385dd8609701a792"
+              "sha256": "77f4c6e377cc85226dfed1c67ad5f094bf9d8f20c40e60e561377336fa6f281f"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cc_b_result.txt",
-              "sha256": "0bca06202212a0e325f3540c0bf8ea56fce1972551bbd33149af9283d5f36d00"
+              "sha256": "546c6895894a19cbb16a7cbb73c10199a974cbe86d060b829702a44c2988e8ff"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cc_pydec_result.txt",
-              "sha256": "3d647dcb73ba138d37357f8468cb833f7bb7261fa3d5eb59eabcc9b33a7d65fb"
+              "sha256": "8c1b7ebab95ebc12e1330f94feb9413e8e5fe83ff2fa1232151a8365c2bb7ce3"
             }
           }
         },
@@ -405,15 +405,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_pc_ops_cc_a_result.txt",
-              "sha256": "8fc364c5c1416d5546aae824c32c44e32404978f3ddbc72f62632245ce79789b"
+              "sha256": "6c4ffd4bf3f5cbf05370d6026ef2551e339090b61296656baa2bc4d52439a1b6"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_pc_ops_cc_b_result.txt",
-              "sha256": "5fce8a8609792128561941860ac254fcf3e26ed0bc4d2075d1d7464d0ad0dbb7"
+              "sha256": "6105ba3a6bee7777120a03781882510f8a242f9330e07bdb5ba1d21ed563eae3"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_pc_ops_cc_pydec_result.txt",
-              "sha256": "2a8a98a68ff7ca9c35744c8e236ea4409e120f4816d05e54084886062c254fe9"
+              "sha256": "4cf7cec82b69df26048244df46015fbe0a3cb1c49fce62041d4cef38675d746b"
             }
           }
         },
@@ -423,15 +423,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_changebox_cc_a_result.txt",
-              "sha256": "784f7cd7eab8f0868b05c3dc0eb8e30bc91ac0a255496418f4700b36a4becfb2"
+              "sha256": "2fede86e7abbdbffc0487a9e854c6bee660ff4bafcde7837da1b335adb2e5027"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_changebox_cc_b_result.txt",
-              "sha256": "ce3c6a9cd15f6f0570acbb9316618290fb7eb7e37d1aaff49fb030dae7a5e441"
+              "sha256": "cc4c49aa479a442d89c2ab8b0c2fbcbaecffce6a682644fb89a2a6ae9de647a3"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_changebox_cc_pydec_result.txt",
-              "sha256": "5797ae39cc9ee78917884cb9f402e0c789dd8ed740f2a2e16288fae8318f007d"
+              "sha256": "7e782485744333c598f3bc05f343daa25166db6e69b584625d98eb0dea1614a4"
             }
           }
         },
@@ -441,15 +441,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_cc_a_result.txt",
-              "sha256": "aa1be3785601207c3670dbc4555fd0812867e3d2110bfd041ef9fdbad2c1d090"
+              "sha256": "f5287275ad6fc0b589110c7e689bbd836e2af8bbc1574f57e545d88e77030997"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_cc_b_result.txt",
-              "sha256": "b388cfec99bf8b5fce29810359a8a0c16da0b0456d234995719f6c1d8ff36774"
+              "sha256": "8451201bc356846aeeefac9232a0c03be6572858ebf8aafebc1c73791b2e2f39"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_cc_pydec_result.txt",
-              "sha256": "4fe602a82d1b2866d91c587281218a516cc93a363858c35e68de429cfabb6a60"
+              "sha256": "b3f3a8a1ad158c38dc0a3c948cde10102faed1f59773d63670f2f167230e44a5"
             }
           }
         },
@@ -459,15 +459,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_rebuild_cc_a_result.txt",
-              "sha256": "ca58ea0174552af75f5e5804c99bcce44b4194fd8ec36480b2be7dc9b9f898e2"
+              "sha256": "acbfdd74b147c470bfa926fce89b06c6a61186d7a3ea5c70cd1503af32367306"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_rebuild_cc_b_result.txt",
-              "sha256": "2eae33fd893c139ab3edd49b8292a48349292f0efed87c99d0b6c9353eb60c39"
+              "sha256": "bbb42d9130ffedb920ea4f0f5549c40def4227115838e8e0d57b32a7e2fd96ee"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_rebuild_cc_pydec_result.txt",
-              "sha256": "a8f64d5da705e703edcbe31f9dee7180df8f418b1d1961c39d2f59cbacab9ed6"
+              "sha256": "9151d9069fa2dc20f938dc44f2d860d89fcf08f209cf8d36d00573d594e854e6"
             }
           }
         },
@@ -477,15 +477,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_poison_cc_a_result.txt",
-              "sha256": "d11dc9798b299e73be1109097e34fac01c931b6f04ebb81b03d690cbf4e02741"
+              "sha256": "b64cdf4d3301a54af60781b06f50a5bd3e3e7225d32a2732bf8344677fb771fb"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_poison_cc_b_result.txt",
-              "sha256": "2b41d4eebd94c9aa1519039d0acdea6889ed2866881a538452912da79eb3ff08"
+              "sha256": "1d4e76ee810b88917bc47d91ffbb118080bbf1c59976c36e21ef8e0436544f80"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_poison_cc_pydec_result.txt",
-              "sha256": "478db9c38d57124805dec333be271a0b7d9033d142401e5199a6bc4ab8c33188"
+              "sha256": "d33f7af03cf244d87508cb16f74db2e86c5fcd0cc9cc421d12618a0eb02ee43b"
             }
           }
         },
@@ -513,15 +513,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_egg_hatch_cc_a_result.txt",
-              "sha256": "1daa99927c8dfdddb22dccbae385d3e42a47d576bedd93a2ac5ab12e75ab7030"
+              "sha256": "ca91b6f990c9ba9bd2582ce5a94aeae14da7c9c06bf07157401b66fa0a81e744"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_egg_hatch_cc_b_result.txt",
-              "sha256": "708637a9193d3ea64180b5362dd6f14771814c91e1bf7644b177175fe2134d04"
+              "sha256": "efc89ca248242096bdcba0e38d0671be9d832e12bf1c2c070c8b9021e898310b"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_egg_hatch_cc_pydec_result.txt",
-              "sha256": "2214b9aa6219e85c3535150d0aa1fc428fbdb6e1a597ea5c1ed23ee13e6271f4"
+              "sha256": "e26cbb9117a14f36854d8d15cf0a795b29be4fbd8a0fa488e4c9940a7483293e"
             }
           }
         },
@@ -531,15 +531,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_gift_cc_a_result.txt",
-              "sha256": "21280d53a5e9f4724472dd04e6743f47a1be5985e313d6f7de5ff144092fb360"
+              "sha256": "2c77f22986e94ec506015f5ad713de6f330ffef120dfc226e35c7584ee18d659"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_gift_cc_b_result.txt",
-              "sha256": "655da88c7037dc385f74478c6c170785e669d7c5d705d8b7a6e63b64971381c5"
+              "sha256": "79855679873bd719911f8cb8274826fad3a3f75e0f8b384ef5ae8e2ae2029640"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_gift_cc_pydec_result.txt",
-              "sha256": "808f17dc11db38004f0f1f66b15d6c8cfd6502445a77f3337d6f0864872adefc"
+              "sha256": "fab5d39d8b86fac3378eef798cdd62591e670411a8ae69761f2db04216470b87"
             }
           }
         },
@@ -549,15 +549,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_boxed_capture_cc_a_result.txt",
-              "sha256": "4cd98f396523dd9f83aa170edd2f4cbe4df02a3c99f4d81ccc1e62916c5ac5bb"
+              "sha256": "0b99381bceb8e9efbacca52a79790c4a43942de20f289538bb87c965a4ab2905"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_boxed_capture_cc_b_result.txt",
-              "sha256": "a75569d9b48becefebc31ef8217bbf1987a0df07ed5ea8cd3fc9f84c707f24cb"
+              "sha256": "453d8b604a527fc4f3447b1aaf3af070436fa2badd1b022a5bc3e742207ef9be"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_boxed_capture_cc_pydec_result.txt",
-              "sha256": "173f2a68cc9e537bece38236e317e1b6f059f1a278abf3acd70fed2a6c7a937a"
+              "sha256": "bc3ba737be912de6f1b6f06a60a4d954ecd9aea5ed5e353c1cd12ff61dc02e67"
             }
           }
         },
@@ -567,15 +567,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_npc_trade_cc_a_result.txt",
-              "sha256": "1871b77e88e6b4be496d90b164b5e98d4d2f5cf8629968d44c2a823edd39b0fb"
+              "sha256": "50e3306444514e947cad7b14b0a86667972717d034b736053206f48e2632b945"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_npc_trade_cc_b_result.txt",
-              "sha256": "a8defc8bb82670c9e8d613b77fe98844cef38d07ab541c27fa9aba8b3cc2d1d0"
+              "sha256": "0e724617054fc184bbd1daba521f21a73102da2f7bea6fe774752cc52ae4560b"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_npc_trade_cc_pydec_result.txt",
-              "sha256": "51bebff365a0d5c5ed2ea41422b116bd05634ff66cbb757d43b8bf5716ea9f0b"
+              "sha256": "418fae2b2f5a1904da70824af303fb02c30824154fb5366b049578ef5f7cff1f"
             }
           }
         },
@@ -585,15 +585,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_evolution_cc_a_result.txt",
-              "sha256": "8973d3962efaa25a947d5de7683153f0c9d4d2df27082df67290620acf1da6b0"
+              "sha256": "e9c8013662138965104f8cf4f059169668b91f605519b1882adc7734c2090174"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_evolution_cc_b_result.txt",
-              "sha256": "6c1ec474790a9d563eeff26c76949f75b895b9ced5ef7a795b8248576d9f6d9d"
+              "sha256": "acf5bf8619dff3a2ea52c25e98ac12074d39493cb2a63fc256219636769529e9"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_evolution_cc_pydec_result.txt",
-              "sha256": "51a48c94aad2e11797eeb6a3cffbbb5e196a092674697c296301bb898ccfa9d3"
+              "sha256": "1d056fb65b103e3a3a933ed2e9afcb828a6cc94060eaae8720a5e030197fc941"
             }
           }
         },
@@ -709,15 +709,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_link_gs_a_result.txt",
-              "sha256": "bd5259038d10919b10ab27d9eadb453b68b489427872f63dcd1589e8e063586d"
+              "sha256": "5b3731dbeefa105b505ac19b3367cdac1eedc2845c9fdecb151e382d3957334b"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_link_gs_b_result.txt",
-              "sha256": "92753b0cfaa6a1e4e644d960d2cf71de44e77604fd003a84c5e5d75606d080aa"
+              "sha256": "cdc3a9e6ee52180f5162c393e8d5277bc95c5c054f2c4c767d7c31899c4f44cc"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_link_gs_pydec_result.txt",
-              "sha256": "65cd9b45adae6a771f19c1164fb759652671dfdaf7c4717ed4e79a0cd17a19a9"
+              "sha256": "87e71d0781f3b20033ff171c9f58d7f847ef4c76566c9557cfaf4d9441ff528c"
             }
           }
         },
@@ -727,15 +727,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_gs_a_result.txt",
-              "sha256": "9e19f7beb8d433e8c59be464981d8d2a45a1e27186e208881fdfbd9f7a1bde23"
+              "sha256": "0798cbb02ae95df761767cd5436366c5bba0a46bf218027c7e75c436f1ca23bb"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_gs_b_result.txt",
-              "sha256": "c61b5d1cda33a85bb563036efd20f0f3fa955356a526bbb0f40ad1c7e61e6b66"
+              "sha256": "26cf5f46635ba84b1922427ef70784eed1771d73de9d138d40f59c307bfa4410"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_gs_pydec_result.txt",
-              "sha256": "8947afc793342f60c2412782a3924b513b139f5f33a8dd9340664ee1e7f006d7"
+              "sha256": "d5042a5095fbe89a0d1d68e9e287b81df8ca5e5ef995599da62b1d7f2c4631f1"
             }
           }
         },
@@ -745,15 +745,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_active_gs_a_result.txt",
-              "sha256": "dca5b6b780da9d9035e4dffdeaad8e19e6ecb68cf7756216397b0994dbf849e6"
+              "sha256": "a1f558733c3e4338919d284bb3302ed6efc79239aa69d808ae30d9b79c7675b7"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_active_gs_b_result.txt",
-              "sha256": "7cf1d0e7ebb62a41be6c1ab11d55b23ace893d45299f11d225983bf33fd471b6"
+              "sha256": "c23ccfdef4e678f411b5575a552838baa322dec4a3a12cab2fea0b0ef64d938d"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_active_gs_pydec_result.txt",
-              "sha256": "6f3bca1d4b218ee08b6aa6bff1396f20c1c173d455ac13c5103b0bc2c45e5898"
+              "sha256": "030c50ce7d2336dd148848b956baafe202c23147ac253f5b4798724506ffcf36"
             }
           }
         },
@@ -763,15 +763,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_gs_a_result.txt",
-              "sha256": "952c22b6f53ebd3ec38dd87257ecbb5d7be89deaf0216028c83ee2fbdc1e1ddf"
+              "sha256": "86487dfcb279cf7d690ab576dfab5b46c212465e1ce2950fb24c6cbb92b353f2"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_gs_b_result.txt",
-              "sha256": "54d3f49c0885c4e04301921f3d2bf2f63dd5b753ae0a2be084606ea3bed79e75"
+              "sha256": "de6dce7741bd8c3e4d5f091d5f79224bc1d40a53c89efaaaf7819117a4a04908"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_gs_pydec_result.txt",
-              "sha256": "dea4baaf2ddeecff1cfa052337d7a98558883731f5b958875c9c64c6bfc51e10"
+              "sha256": "b527a186235918486b99457f4472611eea33a9d4b8ff22ec0851c3c27fa7d5be"
             }
           }
         },
@@ -781,15 +781,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_soft_reset_gs_a_result.txt",
-              "sha256": "0150da044c2f9bac8a9999b6a675471f837c46cec7dbd3fed3e82022bee5c4d2"
+              "sha256": "c7c1b7937ef63b53d796b1afe2021f8d5919f2183d537238d2d4348c261f33b4"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_soft_reset_gs_b_result.txt",
-              "sha256": "027166957e2d8bde99daa2ce961702196567c5402dbaf7291952cb289de26ce2"
+              "sha256": "66645740ff75289f5923816891211203b654c0307a7ff92a2f0e0e67ad710f11"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_soft_reset_gs_pydec_result.txt",
-              "sha256": "b41ce24d4ae775c175c89aa5d9fdac2dee6916f0190c367b2edab27dad8957a7"
+              "sha256": "36653e90f9a0b304a03eb7939bad5888b40923e44e4d9b1ef35b9c5e6afe46ad"
             }
           }
         },
@@ -799,15 +799,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_type_clause_gs_a_result.txt",
-              "sha256": "e036cd5e949af58ebb4db4856ce7fc6d9878baef5e915c7f54d10cc8f15ae8f4"
+              "sha256": "fad6813a7da5dc9953a862c257f3344bd407563b5fb94ac5ef4cd73b215c62b5"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_type_clause_gs_b_result.txt",
-              "sha256": "36e880a35347768a5686d6a353d1b77f74fcb86cf00b099b4286e7fdcc7a2775"
+              "sha256": "40ae2b8a2d3d692e59756ba631c8185244cff525487c9a9edf7ce873ece5d1b6"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_type_clause_gs_pydec_result.txt",
-              "sha256": "31153f1d8a456dd99341efa7071293986d15efc5814cabbfea0e38277600f771"
+              "sha256": "7e9f4f014b989e30b81996d0d0219ee645d849274dae43412baa39bc8dde477a"
             }
           }
         },
@@ -817,15 +817,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_gender_clause_gs_a_result.txt",
-              "sha256": "f676a9f3411551baf94edd70cbda52a129fdc6a505b8372623dd5a3f32dccea8"
+              "sha256": "f65ed3f17d167dbd7e03e40d9c84d4a81cfb4a80673b2d9c45bb0e2df0b92d95"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_gender_clause_gs_b_result.txt",
-              "sha256": "0604f51caaab81b21d382ccc2d70c05d4b29c514e6c04dae0b877617b3d6b483"
+              "sha256": "850579655791e3d3ea66391db020994859046fcb8ed65e40d4b8531e1dc01499"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_gender_clause_gs_pydec_result.txt",
-              "sha256": "92fd29e0c72e2643bc363b942796440c665fca7cdd4f8af5040b03f40454f7d1"
+              "sha256": "43598a4bddd34fd30d07fe143ddad9ede57c87c67ba147a16d0aa8ba6b7210cd"
             }
           }
         },
@@ -835,15 +835,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_species_clause_gs_a_result.txt",
-              "sha256": "bac572dc031cad1c899f6250f38812f09cd7f6aecfba9fb28628dfbbfecfc8c7"
+              "sha256": "b2f62eb03066bd311861bef72a38a5d11c84915251e4b85529463050fb87028d"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_species_clause_gs_b_result.txt",
-              "sha256": "cbbbba47443e8ed4b1572824c748a555e731582a8fb092d4c46b2cda83070555"
+              "sha256": "5f96b793bc136d666a08821b90ddbef82bd76bf7f1989dca294973857f1c94bc"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_species_clause_gs_pydec_result.txt",
-              "sha256": "04bab4536aee717f48f2a61992600f1d19c323caf3bf160ca53e7fa4aa1d35d0"
+              "sha256": "16368c5a35febb745a0f11537c3590fb99ae3c58183b0c61d02c7c9aaef63ba9"
             }
           }
         },
@@ -853,29 +853,29 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_gs_a_result.txt",
-              "sha256": "ea878f31369549e0e55649bfa5d107461e2eec0f11ffaa6fc9a539dc3a57db43"
+              "sha256": "b37739b9e5b2b846be140e98c41295f3651262f1251736e4876644fa86078f05"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_gs_b_result.txt",
-              "sha256": "e63f2ef6f72badc5127f0fc4386e820dbfe69d3ca1ce92bc3a44e56debe8d52d"
+              "sha256": "75b5af2a3ad279f4f07cf68c30fd21c8e284825bbc68d1e89d9c56361df09e10"
             },
             "a_same_save": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_gs_a_same_save_result.txt",
-              "sha256": "1668d0f97d25ac2b116a0f42ffcee7e716f7053d7c2abade8cf05ab8b49ed80c"
+              "sha256": "f6a5afc79382e299d8b85d6b9c1dba9080a94307ed96759dcaf3311659617ca5"
             },
             "a_wrong_save": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_gs_a_wrong_save_result.txt",
-              "sha256": "1c5a640bef7b34786e79cd3e65910e17db1de837cf065d3491945c9b3c263f23"
+              "sha256": "e52c20673772735607e9cab02ab3c446aaf510cfd2840ed8584e6a339abe96af"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_gs_pydec_result.txt",
-              "sha256": "116176f871c897f1dc32e92f467d1394a9d36482387b7c8dc8a696186f8e93c0"
+              "sha256": "51dc6ccbc6fad23fac3e09b395e30129944ac07c274125877006b571da76a8bd"
             }
           },
           "staged_saves": {
             "same_save": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_gs_a_same_save_seed.SaveRAM",
-              "sha256": "1a49e68ec9bd02cfa0f262b3108a94b2e88d9794ca0e52429963a1bcfcdf27f2"
+              "sha256": "160efd9332696587d31670e4e2882d382a72c27a278b998cf3f6b0e23c3a50b9"
             },
             "wrong_save": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_gs_a_wrong_save_seed.SaveRAM",
@@ -890,15 +890,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_a_result.txt",
-              "sha256": "4802fe7efe52fa31e8d92c15f50c19a4c8f6498c5a476bd97969f2b3d14acb69"
+              "sha256": "73474f9a2ec9d67cb7bdd906d2c9e73cd84f2fa3895367dbebe866542749287f"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_b_result.txt",
-              "sha256": "d5275585b428b5c9dc52de38c0fa3a611cdfd98fbe35e94d4b566f8b4bb6145c"
+              "sha256": "57d2d3eed9d7cd844561daa7c6fee45418f35c6ff995425610e1cdd1e6726ca9"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_new_gs_pydec_result.txt",
-              "sha256": "c166dc9cb6c3e402ef389387ef8fac90fdff961abe03702e98527b7a102645dc"
+              "sha256": "121d1be05bf3af213962469ae2a23b13f2deaa9293828127c88cfd48447bc1fc"
             }
           }
         },
@@ -908,15 +908,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_gs_a_result.txt",
-              "sha256": "59dd384ff411b9834d1354ce9fb70cc7c6b360116fcf1b0b4804d1293c0d0448"
+              "sha256": "46f23435200da0c7e1a796c5b1356454740f4ff2160eee1736c258f79b15f753"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_gs_b_result.txt",
-              "sha256": "edef6abe25be2894c35ce683f9a823d438cfc231683a00728031993755e44df5"
+              "sha256": "676e2bd0d2fc120ac1ea778fcb45b2f32016c8734b7a0cb693694d98a068b9ef"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_gs_pydec_result.txt",
-              "sha256": "ce3a664d5a69bf0dc5f4b79285f3e812b04286c67f2e47f16f556c6066446f99"
+              "sha256": "dd87d1e111c4ee32a74cd2d513d505ef866abdfb931808bb1d7a816af0caffcf"
             }
           }
         },
@@ -926,15 +926,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_a_result.txt",
-              "sha256": "bc1755089f6f6f0f280e1d5c6caef3ea34670e6402e6d1661bef31ab5c8b01e8"
+              "sha256": "4db2468dad6b76eb49c27444cc142af74cd13449b0da5243fb78f8e758d01f4d"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_b_result.txt",
-              "sha256": "059d3e3f05d2ea2d00a6cc0bed9edc2b5c73133bdb26efdf9b312db71cef4fec"
+              "sha256": "11f898a8fa81678c8f4b4c2627ef8dbb38e2d54b42714465fdfe76bc29aae5bc"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_gs_pydec_result.txt",
-              "sha256": "111293080ebd2e7b17392295cb45ca88a313417737d498da11763f24321e0216"
+              "sha256": "daf698a7e2c42a088c9b87432a7565d7927e1285196d48d16215dafb4a816d7c"
             }
           }
         },
@@ -944,15 +944,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_gs_a_result.txt",
-              "sha256": "88b05d2f59ea1c231020b78df729badea18ea89cf1500b6d44e3387826248f1a"
+              "sha256": "f689f08ee14c1b1e47c0422d2b8125509ea58bf62410ab331be6cdfc073c2e43"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_gs_b_result.txt",
-              "sha256": "8b179e6e27cdc11f6396ea2404323d96ac7bfb68e978fc77247ee803da3e2506"
+              "sha256": "d0a91935d3c593a9c24b5dba16d049136248de018ae6aa0fde7b348b44ad6f80"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_gs_pydec_result.txt",
-              "sha256": "d5dff4cad64ee945ae64d41a366ad8c6b7ece07a5fcb15e0c4fe167db2ad8205"
+              "sha256": "0a9087026442bfe499afa086232e421dc6ba3abd30f3380df39bbb4f3d9832dc"
             }
           }
         },
@@ -962,15 +962,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_gs_a_result.txt",
-              "sha256": "28d372ab6b9bed947b5db7ee1b1d7198d324e6e2f17e14e4fa7113e85f5c5a51"
+              "sha256": "c9fb998d121340701edf5eb6863ca48378798e2b5bf1f4f9b6828d1d1d6319e1"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_gs_b_result.txt",
-              "sha256": "d5d066e10857d765c82a8306be8fa9dc9eb0a33ea638b43acbf2f04d8be495ff"
+              "sha256": "53c219b1cf02635f86efbfa17c43ee9c5d9c975beaea241614138d66bf6ad568"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_gs_pydec_result.txt",
-              "sha256": "9ec5e63949e75c2d11eeb3eec6c1051b04717b47f7656ff15c946427a9adb66e"
+              "sha256": "0d7f0ad7f26757c281e6b43e7690f5786d2d526bb6a94d76fd3903595047ffd6"
             }
           }
         },
@@ -980,15 +980,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_gs_a_result.txt",
-              "sha256": "cb532da406e88980686674163e7758021da82cfbcff062db6e58bb23b78997b4"
+              "sha256": "3832b1e59dd87c2c8c5f1bd2505cddc9114edaca05aec30db839acbd3e67f6ab"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_gs_b_result.txt",
-              "sha256": "07155ea9937f0cc44712e3a5cf9d04fc61d120555d2fd3dbc8c444de03c4798f"
+              "sha256": "646373883b67ffa1978b1dd90f7f44f820100d6065ecdba4033c5cfd9229fe41"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_gs_pydec_result.txt",
-              "sha256": "b12c0c79d476547004ed5f34d554230ab4e9496ace2dc5bda9dd4f143054375d"
+              "sha256": "59ccf55640e91275d116613c42d0eee185c9ae37e0f12bfc3e21d5bcbda10fb3"
             }
           }
         },
@@ -998,15 +998,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_a_result.txt",
-              "sha256": "d11b1f9f519f3d1907249d2e0ee8c673d61e771b3a5e2c47aa9d9f855171f01b"
+              "sha256": "6e420c84e5517511bba9959202863307b989b7f5d8adcdffaa89ca6868ebb691"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_b_result.txt",
-              "sha256": "f5a4217e43320b029c2e16f04598efd6beaeff183d27f0846362b25c8fd882eb"
+              "sha256": "ed01f43bd730e7e171866946e891475dada492757667c9e7a4daa7b12a8aac5c"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_gs_pydec_result.txt",
-              "sha256": "a9e57a723c2570e315e1ec830cd13d5a5efab951b01f707d26559e36463365bf"
+              "sha256": "419ad052bd5205c5900edbbaa1661a0b8053266c610971625d931325e3daaddf"
             }
           }
         },
@@ -1016,15 +1016,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_pc_ops_gs_a_result.txt",
-              "sha256": "13a3f5019e47389910596272bfe7e848b2dc2f17b5c66ea6e32ede362c155866"
+              "sha256": "5260a85918566cb5ecc9744344e80abf13771c72e256701bf102d6248ad85b15"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_pc_ops_gs_b_result.txt",
-              "sha256": "5b54b6ff2fb8eba5ad0cb7219548c974a4ee65c11db4223fe1e355886ce14101"
+              "sha256": "1a72ae62847d34ebba57c972060ac95cac42e8e2124d570b8a0dee313d243bdf"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_pc_ops_gs_pydec_result.txt",
-              "sha256": "2ec051ab1ddc2410443976ae74fdb498377a0ae773933d9189ab1fb9f65851d6"
+              "sha256": "82ed713ea3aa049eb8c376be4b9222475fbe9be9d7dbb71e7e4fca1dd7192551"
             }
           }
         },
@@ -1034,15 +1034,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_changebox_gs_a_result.txt",
-              "sha256": "8dcd0cf96e2eca55379fa8b5ccd4a6a6f2f825c2219f4b43795fee7e01fae3b3"
+              "sha256": "4af33b59c9c0e68a10de0fa171a27447850565f99db22a3d8664e276ce845da5"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_changebox_gs_b_result.txt",
-              "sha256": "56081590c0346fbef358d4420445df953f2aa718e9895cf7056f86684c22748e"
+              "sha256": "23c67fb36defe898a1e33f3c37d66b7b7c0b7f91891981e1638e4d98ea753925"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_changebox_gs_pydec_result.txt",
-              "sha256": "a6a794c0e88a3106c35ba3b21a2b3012890053f389f652521e14e507e2d95733"
+              "sha256": "7ca31fbeb01d979f48d7ff7911e5f8117d12466f42c1924af78866a43318d3cd"
             }
           }
         },
@@ -1070,15 +1070,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_rebuild_gs_a_result.txt",
-              "sha256": "be893cdf704818bdc39eeb73d46d8efefd38ff13c872cdb45abbe9e812176bc5"
+              "sha256": "872264087713ba9772058c7d71216756fc4842a4a1bc4de7b57414e2b88c2b28"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_rebuild_gs_b_result.txt",
-              "sha256": "b3127d9481366e7cb4bb8bba058eb4b91c7ea64f45adb31782ce9dbe5501b699"
+              "sha256": "da2949dec38d092b80debe969d6b72c81b37697189cb78300b63d05c07d04fac"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_rebuild_gs_pydec_result.txt",
-              "sha256": "e6ee17d719df5e5ac4167c893292015898ed540fad99cc3a3fe2929a606a5e32"
+              "sha256": "c08ea304cbdeecbbb345a3228bc10eed7481d912038a023cb610c7d6a27ff000"
             }
           }
         },
@@ -1088,15 +1088,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_poison_gs_a_result.txt",
-              "sha256": "3460ebeadb943dba217aae68e2a0122e49dae4b7c613d8d250a491ff93e3cdee"
+              "sha256": "fdd6959de98718dce35f9ed36d87c5577f91ff4c8a4b4edffeea768690927aa8"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_poison_gs_b_result.txt",
-              "sha256": "0b3259922b80f505c54697d52693ed69b78d5a73b9940f3f3bfb3360a39c5b83"
+              "sha256": "22d19bd62e684d8a73088d99e45de64f3999f2dda01942f0b3a7b2514601d091"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_poison_gs_pydec_result.txt",
-              "sha256": "5d37efc815ee62301d3b20238453655829cf2f95ebd819ad4b8421c4a20dc7c4"
+              "sha256": "b2c9bf5cb15795615294b64a959aa0adc00a9f8bbc0f46bff8f479f5e63536ef"
             }
           }
         },
@@ -1124,15 +1124,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_egg_hatch_gs_a_result.txt",
-              "sha256": "a06630a63f4e932b8d3a016c3e98984896aa25d7408a9fc0e0e73c4b24f08211"
+              "sha256": "332d90e54474edfaeff255298c61afdaaebab451835db85af19ed1f0d2ddf7fe"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_egg_hatch_gs_b_result.txt",
-              "sha256": "fd7d561f0e0f858dc100275a3b6e4369bd766ea1ee02f03ec84f9478ddea1931"
+              "sha256": "ceac5e4495a9c097cade315b7d211c6842df09586ad081f599631db9648aace1"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_egg_hatch_gs_pydec_result.txt",
-              "sha256": "eb8c6af42ceb522b13a68f13ad1b85edc55485972c504a54a405b3e825e7645b"
+              "sha256": "e0153f7caf90370054b8d0f7f9c3adc442dc5c4a372446fdf0ae284ae463bef4"
             }
           }
         },
@@ -1142,15 +1142,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_gift_gs_a_result.txt",
-              "sha256": "f3c03b0b8631610a842ce304952f9158af8b5a2dcab7ddb7402bd036f34b468e"
+              "sha256": "c8c957b7129f6d2991685072c54b15ecefd68e037b930347e5a29c61c8a48b89"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_gift_gs_b_result.txt",
-              "sha256": "01b622d1a6f33a758c1d4d56e547e8b017b49e49de8cb02d6e6d5e2d7ddbbc8d"
+              "sha256": "8f9a049fa59e77c483be575c35cf253f3c0109bc3ab899f8a68c5792563c9d90"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_gift_gs_pydec_result.txt",
-              "sha256": "119ded1fbcd87b9fd7f1b7bb0b4f787a502c626d5610f1f417e6da699a916fe4"
+              "sha256": "7579457b6709bdb7c2cc8478137a2c8a094e8053978db9f5f1c1095197b64958"
             }
           }
         },
@@ -1160,15 +1160,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_boxed_capture_gs_a_result.txt",
-              "sha256": "e21ee2bfece309bc8b2db376dd0d6d00a0a9d8da55564bfa2f59193bb1d677b0"
+              "sha256": "4ff7073886bedc31369c9f2f54248d9e93e88719b8ebeb03e49def700d1e3735"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_boxed_capture_gs_b_result.txt",
-              "sha256": "97c5225921b4f4acea71d4b4622446d06d20d369ec9a307a0b6464a5c75a7629"
+              "sha256": "60b98edefb7e205ab22d365156e3596e6058ecfabf36398bf14f3b35a5959de9"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_boxed_capture_gs_pydec_result.txt",
-              "sha256": "a37e83ff132a1986e991b3c44934c38fc2fa2ce9fca89608c410eb31ddd13e44"
+              "sha256": "3a02d925acd2e15a78da52b933b6ac5fe63ebae383a373a3ec9e990206f857ea"
             }
           }
         },
@@ -1178,15 +1178,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_npc_trade_gs_a_result.txt",
-              "sha256": "df2b6bf3717724d8f306adcc9a7e56e5398ac62b2fae1f95738314f1679648d2"
+              "sha256": "33b996761673d1cd3721f48cb2ab825a076e8e3c76685c3357a1cc4760c2d549"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_npc_trade_gs_b_result.txt",
-              "sha256": "3048f29607112d7ab3efe8a8d84cf0f21562e02500f0da2bdda4e31ef07f6766"
+              "sha256": "3d8e94eff05b2090d48f78b2df18ac5b9c4f2224cd597b7e4e1253de39e5d5db"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_npc_trade_gs_pydec_result.txt",
-              "sha256": "540bfce12adaec826959a57b255c0e83748436a289ae1a583b47be7529449a98"
+              "sha256": "91c8d6e07781cfd84dfd214610a07e1e9e6affdcae3e1bd191d4d68e8245106b"
             }
           }
         },
@@ -1196,15 +1196,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_evolution_gs_a_result.txt",
-              "sha256": "d9098b51f722ef80a5cfa8552f10f4881f312d15f278f7e94f800f32ff02a248"
+              "sha256": "86086d196380d496e2f26d28a264ed017b3a8e9944c02b71c55ff0191e6d7ccf"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_evolution_gs_b_result.txt",
-              "sha256": "8a1130c3ae3b0519587464acebe1fae7acce45b168e2ef5880def438c6cc787b"
+              "sha256": "3210aaffc38b403bd2b59c63e735c6ccf38481742fbe8773a37cbc94d1e48295"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_evolution_gs_pydec_result.txt",
-              "sha256": "82509b13e69aa43ace6b798ae2e131b86aaa4423fbe3b1ae447fdfab2d98946d"
+              "sha256": "4cf416223d132f1b7ed95770b4c5b661111d1da4e9afe28d1963569ef955aa18"
             }
           }
         },
@@ -1214,15 +1214,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_active_trainer_gs_a_result.txt",
-              "sha256": "79dfada19da3f14ff58d12381b744dd6f5f0bb9a0a1d47b4cdc1b8d77473d149"
+              "sha256": "9405103e3ce292ab5f87d046e55c47172177c2bca5ac47b514fd7a8b36d6dc0a"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_active_trainer_gs_b_result.txt",
-              "sha256": "e4b317f1d71b02e96e083534062569901de14fdd83946647034be9d378017da8"
+              "sha256": "c36679f7695267062be882b762963a353cd77413d2c134f813cf23b9e8b18b19"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_active_trainer_gs_pydec_result.txt",
-              "sha256": "6baf46c9dabea6e1b58208951c57c8ef9b321f673116b63c9bc4c286ca6cb7a2"
+              "sha256": "70eda460c751ebc94678a1d5a084697ec09e75bba8c335e882af2e188ae6beca"
             }
           }
         }
@@ -1281,15 +1281,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_link_cg_a_result.txt",
-              "sha256": "7783469ae0f3043abe8ad5386cdad216b3ea5161914ae2e637813d183939d5fb"
+              "sha256": "7f897fe75063489a48d4c8937d2caaed3fa116b92c406d159a28451bc34ec8ca"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_link_cg_b_result.txt",
-              "sha256": "3373c1534426b8fd28e0d7ed9e033738af6c87a15ef3bf857d31d69a5bed66c4"
+              "sha256": "d95010d50d473645d2a6897b0cd06d6c31a78e382802407abd246eebc56a1bdc"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_link_cg_pydec_result.txt",
-              "sha256": "a8340a03f7b471be0d74d100b7328ffc8a36a773353ee509fe29db5ebdbe863e"
+              "sha256": "a6eda3625c1af73795a7b9f538802b6b2ef5fc523339a16327fe1f60de3cdf82"
             }
           }
         },
@@ -1299,15 +1299,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_cg_a_result.txt",
-              "sha256": "813c187803f42057d6f90bd7f7d5186d99bf13d231f915504f0804c987af9a8d"
+              "sha256": "2aa2305bafd3b25c099dfc7e70480a0b91a55272232aa9beb5f2446fab00bbdb"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_cg_b_result.txt",
-              "sha256": "483897d32ea01e09784293363f919bee5de22e9a1c4603e57c9165dded3d18c6"
+              "sha256": "f461efde40e704c0bcb66223d61d79414d39e39cd7757726c68550585bdff832"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_cg_pydec_result.txt",
-              "sha256": "b2ab3583264c7a19d07b1fa37727d209404b17f019ab4c38738613b89a958aeb"
+              "sha256": "b6db5d505d467e4e9c67e7d39c5a7c24fe83399cd518c1c98d0188a95c433b0b"
             }
           }
         },
@@ -1317,15 +1317,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_active_cg_a_result.txt",
-              "sha256": "99087c3e40e20a0a6f82c9e143b16e65c606484623ec01d391268336ed0636bb"
+              "sha256": "fa1212da4b5c90dcfd8f02c8af33ffd6f289454ff3342b1ef3f94d43616d38bd"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_active_cg_b_result.txt",
-              "sha256": "0593893a03cae69da1435618572a85bf714868f57d32778c944d0e78f566f9b2"
+              "sha256": "e44d72cc9e104d44dd3139538a88808dd27c6cc0edf99c8736ff723517388d0d"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_active_cg_pydec_result.txt",
-              "sha256": "2d83adeb16205a821ea13b5d53a444a8a4216f5b201017fca267261083c5b219"
+              "sha256": "1b766ac8c19a7b3cb7daa2570e5845aaa03ed9d1b3886a51f26bbe3b9150c791"
             }
           }
         },
@@ -1335,15 +1335,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cg_a_result.txt",
-              "sha256": "f6bc8d7b73c184b4cf957fcc5c3205765b6d0723cd754f9bee25e104b8ffb7da"
+              "sha256": "a26b46782e11ee7a94f2c1923eafbe28961e873bce69189e8dace2a9fa525207"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cg_b_result.txt",
-              "sha256": "48161eaa23cc9823da2b947b549f3ec64d2e37076d8ca6ff2fb793daacf73628"
+              "sha256": "da99de0e84a20af43df7d56c913cf61ab72540ffad16463c1883d0a23670b168"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_admit_wrong_rom_cg_pydec_result.txt",
-              "sha256": "aecfe250bb6e2ab0f8e4f6f554b1ae13650c86efe21d919ebddc05d9978ae5e3"
+              "sha256": "a9f270e485574e2be1680e04694fae4ec62bbcb4993389d813511c6f44b03561"
             }
           }
         },
@@ -1353,15 +1353,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_soft_reset_cg_a_result.txt",
-              "sha256": "faa14a182fade8638d83e6be08fecffae12fc1407edb397c7b0b437b8c652e42"
+              "sha256": "17b3ce17c1c45e80d92970310f9ed03dcff6ab251cc2acb4efc398068c0f9611"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_soft_reset_cg_b_result.txt",
-              "sha256": "0b00773f9a96b79e0d8e4158c7ce66cd0ec0e4efeda3f3cb5be77f9c4e3a481c"
+              "sha256": "d8798ee853f95b8335eff1afc8da755e80e9671b1c18f90a708723a3a5a0f454"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_soft_reset_cg_pydec_result.txt",
-              "sha256": "3a1576395ac5f64e580a709c4fb3b9387635910121cc55ec60706c6f92666172"
+              "sha256": "213bf38c3d8ebeabac13069897620bef33547d85ce3633e7730c802dc63040e2"
             }
           }
         },
@@ -1371,29 +1371,29 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_cg_a_result.txt",
-              "sha256": "67a6bcf378be9528c8167b6cfa51d6a72d46b4b2099afbdc3817840c3618c2ac"
+              "sha256": "b57b62032698a068784ab1ebcb6c036c150eec5adeed53c28bc5f32db2b58612"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_cg_b_result.txt",
-              "sha256": "13f1415e89e7536e1fa1ad26ef60e49c8476b586ab22bfcb00ce80a450cffce8"
+              "sha256": "4b41cfc9233ac95c5240408b98e93b93ccf03f483e50bee173ce261a8fed3336"
             },
             "a_same_save": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_cg_a_same_save_result.txt",
-              "sha256": "6f039c4ff1631e2591f30896b02eeb414b0ff8ecda3d317f9d4cebb81de8e1dd"
+              "sha256": "7552c7e4f25c7384de1ab42c3393175f951627d793ac3edf7ab420e0a069ad00"
             },
             "a_wrong_save": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_cg_a_wrong_save_result.txt",
-              "sha256": "9fe0f247dbed7acee39947f2de020996c6228c1b233dc520737f6337ee3d5652"
+              "sha256": "7f20d19b7e8dec5d3c73798f1f400a28acaff315e13c43890ef8ef9bce0a719a"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_cg_pydec_result.txt",
-              "sha256": "c29d4a2a04cd81da1d9dec357c377e7a9b1a1038b4cb8033ed9d9b0eae7f8277"
+              "sha256": "6fc27a8147ef05508796cdf79202797da6645d659323f64ae972f909a20c8e58"
             }
           },
           "staged_saves": {
             "same_save": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_cg_a_same_save_seed.SaveRAM",
-              "sha256": "fb5942ff6f48d413f00e0946871b677b55a5b2d6b31f32bfad50f637a9ba7ccc"
+              "sha256": "b92a5f9ee2645896033c9bf4b1655a4db3b85fd778e938a44e3441f42d81db8b"
             },
             "wrong_save": {
               "path": "tests/fixtures/gen2/receipts/duo_reconnect_cg_a_wrong_save_seed.SaveRAM",
@@ -1408,15 +1408,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_gender_clause_cg_a_result.txt",
-              "sha256": "411bf30ba475b80c960f5342e152f465fa8897745ee5a9bf56fdf571e4d059a9"
+              "sha256": "fcad5e5c2094c47f2abbd9c406f0556b79d24f63a59d63e1ea6a3ed6765250f4"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_gender_clause_cg_b_result.txt",
-              "sha256": "370efc32e32fdc3cfb9094f3bbe5cea316aeb3f11110268e0124f4f8fcd38313"
+              "sha256": "2b107c791440ee3fdda621c5393c6ba93ca8530c2ba3e754b35ddcd1a67e3e56"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_gender_clause_cg_pydec_result.txt",
-              "sha256": "e1f7aa5fc17a3df8e1a48a3e2218793bcbf494d61a1a79b57a26d260598f7f70"
+              "sha256": "f23b95555fb549227a94ae11c065c4aef9a936616b24baeaf240a13af09bdc8f"
             }
           }
         },
@@ -1426,15 +1426,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_type_clause_cg_a_result.txt",
-              "sha256": "d086397933d1fcfac474b6b328f72eabcb6a87ed10f0fa0dfde8347b588c47c7"
+              "sha256": "4b4dc6550a09bf2477251c062ff22d14144c7ef40262a67ab881b1437f847d8c"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_type_clause_cg_b_result.txt",
-              "sha256": "82aefceda14d93b3f21f58b36f1cabd2cf336f0ba6ffe612e28621f433e6b2ac"
+              "sha256": "d0e73b580c2be3e9ab763506e3f610792c64129627d12436f7f6f08ff824ec5b"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_type_clause_cg_pydec_result.txt",
-              "sha256": "24904ccb70eb1ee471b4489aadb314ba87156c616c196aef2afd2f12d26bf165"
+              "sha256": "1e278b41d402b05a90951ff8db781e82b4eb5aed84b71750423ea5783fc5246f"
             }
           }
         },
@@ -1444,15 +1444,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_species_clause_cg_a_result.txt",
-              "sha256": "2c07febff2edbc8ae37e84a02ac6511ee0da5bc3654c91bcca1bca8b0e673931"
+              "sha256": "ee3443c3a1f7687b65b850bd034cfa44b5fbd4bef67bd78b0229fe2a07e5893e"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_species_clause_cg_b_result.txt",
-              "sha256": "75a7e74b2dbdd83c5deb9ab66910419c32f8e69c3d50172d2e4e76a4f8475107"
+              "sha256": "f12be71c6196c0edb2d9675f7de5510764f6b0944681d638ab19fd0667e95ad7"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_species_clause_cg_pydec_result.txt",
-              "sha256": "7fbf2b54ed0f148fe1632f27663c28c13817d5cc24c12637c555bd920ab713d1"
+              "sha256": "d6705a15eb533d65e4be36fb1942a9c31baa654f4b733d631591b7ad0e75a47b"
             }
           }
         },
@@ -1462,15 +1462,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_new_cg_a_result.txt",
-              "sha256": "f4c3bf242e9867df0de3e6e6a68008e7948a69ffc36517a2f1ad75eaa8d6db6a"
+              "sha256": "fe4a2dfcd6639e56647df0d4b4a0e16179f4093d0f7bd4de06fe05b51a914262"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_new_cg_b_result.txt",
-              "sha256": "d09a26f29b7b1d1d4accaf7bb72775508e03239f9f5411a4e7287803b0a091f5"
+              "sha256": "432e9dae680a8b7327becff29685bf73de07df7466679f7870d52d57bb63f189"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_new_cg_pydec_result.txt",
-              "sha256": "b021554aca099096f44040590a22a6b9eca4a4598297846138b4551419936f48"
+              "sha256": "76e5c77f9fc8411c68b2863c4e411afcbf257767ca396d314d6e00e6402f7f69"
             }
           }
         },
@@ -1480,15 +1480,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cg_a_result.txt",
-              "sha256": "f0e2ac4a45c65923a3ef2ce0c39075ca3e5b6e0be74bfcab211d122082c01065"
+              "sha256": "4b61e7384fad855327429d6b8e753291bac8ec7696f264327015716c69ffb25d"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cg_b_result.txt",
-              "sha256": "fca3c2053f7f9619603bc97c378d708437f5625cb309f8bdd7e8d61c6182fe2b"
+              "sha256": "900b7be22fc73aa361d75706d9dd0f386b37f78fa8c6c30e209312cb1a2d5370"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_wait_cg_pydec_result.txt",
-              "sha256": "3d94c7bd4bf98a2785168124faf1b88e9d42692d6261a480e57b879ce8697900"
+              "sha256": "a764118cce6d35d2ecd19d4a0628672c5f3966024aa6bc16680fb48306d579ff"
             }
           }
         },
@@ -1498,15 +1498,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cg_a_result.txt",
-              "sha256": "84154b6dcf915a612fa086aee8b999c48f72f154a110c096699aedd71bec7fcc"
+              "sha256": "6f1eb2ecacdd48873d274c65105e27c6f4e632296f214484ccee98a6b8e78025"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cg_b_result.txt",
-              "sha256": "591403fc95410648d8727ad686fc1f9d4bbd3cfdd130df3493369b59680a647a"
+              "sha256": "5346ac3c449e0ce1a6474bafb0096496d9e75fef3f7cb805f2a604bf0210bc13"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_decline_new_cg_pydec_result.txt",
-              "sha256": "84ff5045c0cef19b3a5f0c2aa596c8326d4677d78d91ef2c6d348b8af2b5d0b9"
+              "sha256": "4d54b28a9eae55a24205bfcd10b47ebb0a28aaee4512a04e2ae7409db54a88d2"
             }
           }
         },
@@ -1516,15 +1516,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cg_a_result.txt",
-              "sha256": "37b54bfb2e87124595892241209ef5c9074274324803bd9833bb64ebe0875ccb"
+              "sha256": "1035fd9205505eabe96cca49f9f53393cc8589a692d2b243b21ac9d003d94c91"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cg_b_result.txt",
-              "sha256": "7686f0f473d2e50989c5d5fb4f58070843cd8fe12f2a4d45a749156ea1c58145"
+              "sha256": "1ec6c2b8e3910ca5c8302a52ed847967d77d4eeb5163b63777f608feb33dede5"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_refuse_item_cg_pydec_result.txt",
-              "sha256": "d83ad8084a0c2c8d1c4699adbecaa2a69949997184bbfd17051c9a592388219d"
+              "sha256": "9eed52faf8d479367324fe4857e1f71dd0445aadb4f7638ded25651466bf764c"
             }
           }
         },
@@ -1534,15 +1534,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cg_a_result.txt",
-              "sha256": "ca3bc28053d7c377fe8a88d23d75f13d6a3427d2db2be8d2cd773df46fba206d"
+              "sha256": "89c02aa4426e784b9d582c9bd897b42a0b80736daa7a2e87861d36553cc8ec27"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cg_b_result.txt",
-              "sha256": "9440e25555dfb550651e62345c5a75121851876de1ae7f6720a850fe2228e0a4"
+              "sha256": "239d603e5e588a6c5e1a1c7420321fc511840d97e63ec3201409506c8ce894d0"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_reset_commit_cg_pydec_result.txt",
-              "sha256": "36b6fc6d4370e3e7111127f4c8eafcc835804757ef090cf41f7ccbcecd209a8f"
+              "sha256": "4ef067fe4b70ddf06430851edada7d6f483c5e90789a7e437a06262428c7a909"
             }
           }
         },
@@ -1552,15 +1552,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cg_a_result.txt",
-              "sha256": "0184f50c7f6c57472fffc89383f8a782f863df77fdeef1ad85f3bdcf1eba0654"
+              "sha256": "744deeb4993ddf31e4c5e54359ecb200abf32cbf54d7bd065b0a56aaa6263857"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cg_b_result.txt",
-              "sha256": "d04cffdce9849c8108b32ee7d88e979237a126c1d58598d240cab476c6bd1fd7"
+              "sha256": "a0a4f026fa126b0402ea051fc90a61c3d3f0c6776258654f8ae6c44ef9379cf1"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_timeout_cg_pydec_result.txt",
-              "sha256": "7c6371c27803e3f819904122fe1fa57763364366b23836da89c7b5b6fa2269e3"
+              "sha256": "83d27601a2972b127bd14f0b337c66f8aae7494c8acc0a3fb453d29fdcbf2dbb"
             }
           }
         },
@@ -1570,15 +1570,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cg_a_result.txt",
-              "sha256": "dd0174f74fbec1a19aeb8d6872afc23089a03211f3ac3704c3f736132d061221"
+              "sha256": "1ba8e759ba4e5bf6c1e56283a9d446415e1d7c816117b09241a82195d1fe524e"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cg_b_result.txt",
-              "sha256": "4ad63f615b5c84189afd2133a296550de5bf2a6476465ab830ad61b848028216"
+              "sha256": "fe6d208ddedee43de44ab0401da26a4d32f84fd82a538c893dcc6e29c9a81c29"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_trade_evolve_cg_pydec_result.txt",
-              "sha256": "231c6d0f66aafebd3fae90a9133e94e3361047060026fc52d142e59399fc057b"
+              "sha256": "33776c2534b7c75e7f88e3b62c9e56f8eaef4457ac60c9c1b09b083ef14a3275"
             }
           }
         },
@@ -1588,15 +1588,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_pc_ops_cg_a_result.txt",
-              "sha256": "a95e0d3c667539fb36304deb3277fa71b22dcf3428c580e4e397e62b6eef6bdd"
+              "sha256": "215e616806f5b0cb6eba4a7da22e7a8f5105d54b076d1489f8e30c1b8d110d08"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_pc_ops_cg_b_result.txt",
-              "sha256": "7f7025fcbcb5598f8103fcc3d0d6ed397b26426ae3dfec644fe2a70e4c3fd6d1"
+              "sha256": "94d1f1b2aca9e187b52768159307892057657d2da6d1dd9114de308da0874744"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_pc_ops_cg_pydec_result.txt",
-              "sha256": "713a8197c77f3ea8c1c7a8598cf72e2959443fa9df6019337f038509a0539bc4"
+              "sha256": "090f32297e701343766a434911eb3ab54fbbdcaeeab94a7a6935b43b0fd6b9d1"
             }
           }
         },
@@ -1606,15 +1606,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_changebox_cg_a_result.txt",
-              "sha256": "a03d454d472e146196c532ec20298ed92e2758e8447fc94dceb6818ed2f79576"
+              "sha256": "c12941b16f574c4c196067c4a2023965c531ce228dba4603d78f7ecedf9ab286"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_changebox_cg_b_result.txt",
-              "sha256": "a6902724bfd507450d850056c1de3973997ecc3be477d17a7909b0bb3bf7827f"
+              "sha256": "10acab78ddaf109f538d2c8559c06fd00093e787f4a77747a4092fa6f2c346c3"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_changebox_cg_pydec_result.txt",
-              "sha256": "680a3a8bc4e5a02dad79b7ee7c6b5aeaefe0ea56983b110a151d5078158a6910"
+              "sha256": "28ca0d6018bcfe49dc6ec7fbcf9f2fbab289ac3c3de045c4d996bb8402f0de9a"
             }
           }
         },
@@ -1624,15 +1624,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_cg_a_result.txt",
-              "sha256": "45a59f8cee02ac4b01a0a5a9476ce1f2564a81735c42c0ad551d0f0b19363886"
+              "sha256": "a1abbfdc107212dd70c3ce6c4fd36dce258d6f0f6b3e7cecda4f9827bf8b3189"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_cg_b_result.txt",
-              "sha256": "3e8b3137c78505702a725766721e80c0f23fa16920456e2d045da0989998a7fb"
+              "sha256": "b44d8a0e23231ae1aacf68c4b0be4188a61a4aadbc13622fe201c102390ed7bd"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_cg_pydec_result.txt",
-              "sha256": "ed3b3e28920ee8a3987ced42896fdce6bc7d9e6d686969e027bbfa085a1aada4"
+              "sha256": "33312c5aa223a4c7fda54860e4d996cb045dfacbbb4716b854256d6e11808f83"
             }
           }
         },
@@ -1642,15 +1642,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_rebuild_cg_a_result.txt",
-              "sha256": "5af9de65d3cf282ade3fd746714e544eacc9580b3ae95f8eae8a7e77b41d80b6"
+              "sha256": "2b9b2428faba9ad57cdf2315dd8926665c5f2c1399e51ed7f3dae735788be9d8"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_rebuild_cg_b_result.txt",
-              "sha256": "23591409580ee0cd30e179cee284b120d2b29a17a67ce132fa6dcb858da04601"
+              "sha256": "02ffb4d884b8d9c903e9d5a05123d4e1fbae26415c049de19b509a69fb93a201"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_rebuild_cg_pydec_result.txt",
-              "sha256": "32ccc7f749b959252828305c3febb7ab7cd11550d61346ba31b3d382d37a26f3"
+              "sha256": "8f873fc2d0d50cb89ec16ec70bf32081f0e13d434c0d99f3c74eab896879392f"
             }
           }
         },
@@ -1660,15 +1660,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_poison_cg_a_result.txt",
-              "sha256": "594592ce6a7e7db714a329f63b0f4ed7299e7362a7fb0812f9f3b5d5f1d5f6fe"
+              "sha256": "f48c7398ad90a77f4662e958c5a4829d43bbd84adc7c55e3e308509ec4456942"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_poison_cg_b_result.txt",
-              "sha256": "91d6d52c6a534b9f327010b6d83a0e7f51b4c6916184d028a19daa9de74e39bd"
+              "sha256": "255bea464fb0374e35f44da471fa03b66b174904865b28a2cced15d067f9fcbc"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_poison_cg_pydec_result.txt",
-              "sha256": "67709a1d7692a43a84e310cc2cbf0f3edc4d70090d658df94cc357b7174c7c17"
+              "sha256": "a69126612b4f8d650c36f93fd2475c6394895ae335572815078b25148c768761"
             }
           }
         }

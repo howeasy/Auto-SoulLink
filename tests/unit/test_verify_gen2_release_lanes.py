@@ -650,7 +650,10 @@ def _copy_new_gates_tree(tmp_path):
                 (REPO / "tests/fixtures/gen2" / fixture).read_bytes())
         if row["axes"]["kind"] in ("panel_gate", "sfx_gate", "phone_gate", "sp_lowwater_gate"):
             fixture = json.loads(src.read_text(encoding="utf-8"))["fixture"] + ".SaveRAM"
-            for rel in ("tests/fixtures/gen2/" + fixture, "data/gen2/overlay_provenance.json"):
+            rels = ["tests/fixtures/gen2/" + fixture, "data/gen2/overlay_provenance.json"]
+            if row["axes"]["kind"] == "sp_lowwater_gate":   # the stack bounds come from the pinned .sym
+                rels.append(f"data/gen2/{row['axes']['title']}_slink.sym")
+            for rel in rels:
                 (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
                 (tmp_path / rel).write_bytes((REPO / rel).read_bytes())
         if row["axes"]["kind"] == "w6_gate":
