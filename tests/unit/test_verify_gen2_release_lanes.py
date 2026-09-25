@@ -1706,10 +1706,15 @@ def _trade_proof(tmp_path, axes, scenario, tag="trade"):
     variant = gate.TRADE_VARIANTS[(titles["a"], titles["b"])]
     status = gate.TRADE_END_STATUS[scenario]
     text = {}
+    fixtures = (axes.get("scenario_fixtures") or {}).get(scenario) or axes["trade_fixtures"]
     for side in ("a", "b"):
-        fixture = axes["trade_fixtures"][side]
-        raw = (REPO / "tests/fixtures/gen2" / f"{fixture}.SaveRAM").read_bytes()
-        (tmp_path / "tests/fixtures/gen2" / f"{fixture}.SaveRAM").write_bytes(raw)
+        fixture = fixtures[side]
+        for name in {fixture, axes["trade_fixtures"][side]}:   # trade_evolve A: the O-33 seed and its errand base
+            for ext in (".SaveRAM", ".synth.json"):
+                src = REPO / "tests/fixtures/gen2" / f"{name}{ext}"
+                if src.is_file():
+                    (tmp_path / "tests/fixtures/gen2" / f"{name}{ext}").write_bytes(src.read_bytes())
+        raw = (tmp_path / "tests/fixtures/gen2" / f"{fixture}.SaveRAM").read_bytes()
         receipt = {"schema": "gen2-duo-trade-v1", "case": scenario, "player": side, "title": titles[side],
                    "variant": variant, "outcome": status, "admission_scope": "HARNESS_ONLY_OVERLAY",
                    "rom_sha1": pins[titles[side]], "fixture_sha256": hashlib.sha256(raw).hexdigest(),
@@ -1760,6 +1765,35 @@ def test_trade_matrix_refuses_unbound_receipts(tmp_path, gap):
     assert gate._receipt_errors(tmp_path, proof, "gen2_trade_new", axes, {}) != []
 
 
+@pytest.mark.parametrize("gap", ["undisclosed", "modified", "played_base", "other_case"])
+@pytest.mark.parametrize("pair", ["duo.crystal.crystal", "duo.gold.silver", "duo.crystal.gold"])
+def test_trade_evolve_seed_must_be_disclosed_over_its_bytes_on_the_errand_base(tmp_path, gap, pair):
+    """TRADE-EVOLVE-CATCH: gen2_trade_evolve's A boots an O-33 seed; the proof binds its bytes and disclosure."""
+    scenario = "gen2_trade_evolve"
+    _doc, proof, axes = _trade_cell(tmp_path, scenario, pair)
+    seed = axes["scenario_fixtures"][scenario]["a"]
+    assert "_synth_" in seed and axes["scenario_fixtures"][scenario]["b"] == axes["trade_fixtures"]["b"]
+    fix = tmp_path / "tests/fixtures/gen2"
+    if gap == "undisclosed":
+        (fix / f"{seed}.synth.json").unlink()
+    elif gap == "modified":   # the receipt names the modified bytes, the disclosure does not
+        raw = bytearray((fix / f"{seed}.SaveRAM").read_bytes())
+        old = hashlib.sha256(raw).hexdigest()
+        raw[0x2000] ^= 1
+        (fix / f"{seed}.SaveRAM").write_bytes(bytes(raw))
+        _retext(tmp_path, proof, "a", old, hashlib.sha256(raw).hexdigest())
+    elif gap == "played_base":
+        path = fix / f"{seed}.synth.json"
+        path.write_text(json.dumps({**json.loads(path.read_text(encoding="utf-8")),
+                                    "base_fixture": axes["fixtures"]["a"]}), encoding="utf-8")
+    else:   # the seed staged for another trade case
+        axes = {**axes, "scenario_fixtures": {"gen2_trade_new": axes["scenario_fixtures"][scenario]}}
+        proof = _trade_proof(tmp_path, axes, "gen2_trade_new", "other")
+        scenario = "gen2_trade_new"
+    errors = gate._receipt_errors(tmp_path, proof, scenario, axes, {})
+    assert any("seed" in error for error in errors), errors
+
+
 def test_trade_matrix_refuses_a_republished_overlay(tmp_path):
     _doc, proof, axes = _trade_cell(tmp_path)
     path = tmp_path / "data/gen2/overlay_provenance.json"
@@ -1779,6 +1813,10 @@ def test_every_cell_declares_all_trade_cases_with_the_runner_fixtures():
         assert axes["trade_fixtures"] == _TRADE_FIXTURES[axes["pairing"]]
         if axes["pairing"] in duo.GEN2_TRADE_FIXTURES:   # the runner re-adds C-G after O-34 in its own card
             assert axes["trade_fixtures"] == duo.GEN2_TRADE_FIXTURES[axes["pairing"]]
+        # TRADE-EVOLVE-CATCH: only gen2_trade_evolve overrides the errand pair (A boots the O-33 seed)
+        overridden = set(axes.get("scenario_fixtures") or {}) & set(gate.TRADE_END_STATUS)
+        assert overridden == {"gen2_trade_evolve"}
+        assert axes["scenario_fixtures"]["gen2_trade_evolve"] == duo.GEN2_TRADE_EVOLVE_FIXTURES[axes["pairing"]]
     # Every runner case is a release cell; the lane may demand more (refusal rows awaiting a driver).
     assert set(duo.GEN2_TRADE_SCENARIOS) <= set(gate.TRADE_END_STATUS)
     assert {"gen2_trade_refuse_unsaved", "gen2_trade_refuse_contest"} <= set(gate.TRADE_MODEL_ONLY)

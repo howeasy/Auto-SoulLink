@@ -145,18 +145,23 @@ function F.walk_direction(map, point, from)
     return nil, fmt("no steppable grass tile next to %d,%d", point.x, point.y)
 end
 
--- Pure: the Ball-pocket cursor row (the ▶ followed by an item name) -> "ball" | "cancel" | nil.
+-- Pure: the Ball-pocket cursor row (the ▶ followed by an item name) -> "ball" | "cancel" | nil, then, when the
+-- cursor is on another Ball and a MASTER BALL row is on screen, the press toward it ("Up" | "Down"): a Master Ball
+-- never misses (PokeBallEffect, engine/items/item_effects.asm; gen2_trade_evolve's A seed, TRADE-EVOLVE-CATCH).
 function F.ball_cursor(rows)
-    for _, row in ipairs(rows) do
+    local kind, at, master
+    for y, row in ipairs(rows) do
+        if not master and table.concat(row, ""):find("MASTER BALL", 1, true) then master = y end
         for x = 1, #row do
-            if row[x] == "▶" then
+            if not kind and row[x] == "▶" then
                 local rest = table.concat(row, "", x + 1)
-                if rest:find("BALL", 1, true) then return "ball" end
-                if rest:find("CANCEL", 1, true) then return "cancel" end
+                if rest:find("BALL", 1, true) then kind, at = "ball", y
+                elseif rest:find("CANCEL", 1, true) then kind, at = "cancel", y end
             end
         end
     end
-    return nil
+    if kind == "ball" and master and master ~= at then return kind, master < at and "Up" or "Down" end
+    return kind
 end
 
 -- Pure: nearest ROM label at or below addr (bank 0 for home), from rgblink .sym text; diagnostics only.
@@ -293,7 +298,10 @@ function F.driver(map, opts)
                 end
                 if F.TOWARD_BALLS[ui.kind] then return press(F.TOWARD_BALLS[ui.kind]) end
                 if ui.kind == "pack_balls" then
-                    if point.ball_cursor == "ball" then ups = 0; return press("A") end
+                    if point.ball_cursor == "ball" then
+                        if point.ball_toward then return press(point.ball_toward) end   -- a Master Ball first
+                        ups = 0; return press("A")
+                    end
                     if point.ball_cursor == "cancel" then
                         ups = ups + 1
                         if ups > F.MAX_UP_PRESSES then return nil, "no Poke Ball left in the pocket" end
@@ -978,7 +986,7 @@ function F.main(api, getenv, SG)
     local function observe()
         local point = base()
         point.probe_hits = {capture_party=probe.record.sites.capture_party.hits}
-        if point.ui and point.ui.kind == "pack_balls" then point.ball_cursor = F.ball_cursor(SG.screen(ctx)) end
+        if point.ui and point.ui.kind == "pack_balls" then point.ball_cursor, point.ball_toward = F.ball_cursor(SG.screen(ctx)) end
         if point.ui and point.ui.kind == "battle_menu" then
             local menu = SG.parse_menu(SG.screen(ctx), ctx.obs.screen.width, ctx.obs.screen.height,
                                        SG.BATTLE_MENU_GRID)

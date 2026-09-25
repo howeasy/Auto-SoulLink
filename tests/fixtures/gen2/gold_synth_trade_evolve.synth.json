@@ -1,0 +1,50 @@
+{
+ "base_fixture": "gold_battle_errand",
+ "base_sha256": "9ddbf7d9b3261805860a8116bfa3d7a3165f60c0d1fa47a5ab25e5ac822a7c70",
+ "builder": "tools/gen2_synth_fixtures.py",
+ "checksums": "restored (primary + backup)",
+ "edits": {
+  "balls": [
+   [
+    "MASTER_BALL",
+    5
+   ]
+  ]
+ },
+ "fields": [
+  {
+   "backup": 3319,
+   "new_hex": "0105ff00000000000000000000000000000000000000000000",
+   "offset": 0,
+   "old_hex": "050fff00000000000000000000000000000000000000000000",
+   "primary": 9317,
+   "size": 25,
+   "symbol": "wBalls",
+   "wram": 54781
+  },
+  {
+   "cart": 11625,
+   "new_hex": "f3e8",
+   "offset": 0,
+   "old_hex": "01e9",
+   "size": 2,
+   "symbol": "sChecksum",
+   "wram": null
+  },
+  {
+   "cart": 32365,
+   "new_hex": "f3e8",
+   "offset": 0,
+   "old_hex": "01e9",
+   "size": 2,
+   "symbol": "sBackupChecksum",
+   "wram": null
+  }
+ ],
+ "schema": "gen2-synth-disclosure-v1",
+ "sha256": "5f97b8d623f102720bf9a38bcdbb1cc24f26488b26c9687b96549ecc174303f1",
+ "source_facts": [
+  "data/games/gen2_<title>/items.json ids; engine/items/items.asm pocket layout"
+ ],
+ "title": "gold"
+}

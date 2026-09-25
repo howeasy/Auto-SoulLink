@@ -57,6 +57,10 @@
           "gen2_evolution"
         ],
         "scenario_fixtures": {
+          "gen2_trade_evolve": {
+            "a": "crystal_synth_trade_evolve",
+            "b": "crystal_battle_ot2_errand"
+          },
           "gen2_ball_gate": {
             "a": "crystal_town",
             "b": "crystal_town_ot2"
@@ -624,6 +628,10 @@
           "gen2_evolution"
         ],
         "scenario_fixtures": {
+          "gen2_trade_evolve": {
+            "a": "gold_synth_trade_evolve",
+            "b": "silver_battle_errand"
+          },
           "gen2_ball_gate": {
             "a": "gold_town",
             "b": "silver_town"
@@ -1186,7 +1194,13 @@
           "gen2_trade_reset_wait",
           "gen2_trade_reset_commit",
           "gen2_trade_refuse_item"
-        ]
+        ],
+        "scenario_fixtures": {
+          "gen2_trade_evolve": {
+            "a": "crystal_synth_trade_evolve",
+            "b": "gold_battle_errand"
+          }
+        }
       },
       "proofs": [
         {

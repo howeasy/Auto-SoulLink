@@ -1011,6 +1011,10 @@ GEN2_TRADE_FIXTURES = {
     "gen2_gold_silver": {"a": "gold_battle_errand", "b": "silver_battle_errand"},
     "gen2_crystal_gold": {"a": "crystal_battle_errand", "b": "gold_battle_errand"},   # O-34
 }
+# gen2_trade_evolve: A boots an O-33 seed, its errand base with Master Balls (tools/gen2_synth_fixtures.TRADE_RECIPES;
+# post-RC card TRADE-EVOLVE-CATCH: the planted HAUNTER outlasted the Poke Balls in 4 of 6 RC link catches).
+GEN2_TRADE_EVOLVE_FIXTURES = {game: {**fixtures, "a": fixtures["a"].split("_", 1)[0] + "_synth_trade_evolve"}
+                              for game, fixtures in GEN2_TRADE_FIXTURES.items()}
 # gen2_faint_active_trainer: B needs an errand seed (on Crystal the pre-errand Route 30 battle demo blocks the aisle,
 # C maps/Route30.asm:424-430, ElmsLab.asm:344-345); the trade seeds are the qualified errand pairs.
 # B boots an O-33 seed: its errand base with the starter at L10 (tools/gen2_synth_fixtures.TRAINER_RECIPES), so the
@@ -1086,6 +1090,8 @@ def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
         name = "crystal_battle_ot2" if refused else pairing["fixture"][inst]
         if scenario in GEN2_TRADE_SCENARIOS:
             name = GEN2_TRADE_FIXTURES[game][inst]
+        if scenario == "gen2_trade_evolve":
+            name = GEN2_TRADE_EVOLVE_FIXTURES[game][inst]
         if scenario == "gen2_poison":
             name = GEN2_POISON_FIXTURES.get(game, {}).get(inst, name)
         if scenario == "gen2_ball_gate":
@@ -1101,7 +1107,7 @@ def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
             kind = GEN2_SYNTH_SCENARIOS[scenario]
             target = {**gen2_synth_fixtures.SYNTH_RECIPES, **gen2_synth_fixtures.DUO_RECIPES}[kind][0]
             name = f"{title}_{target}{suffix}"
-        elif "_synth_" in name:   # an O-33 seed named directly (gen2_faint_active_trainer B): boot its PLAYED base
+        elif "_synth_" in name:   # an O-33 seed named directly (trainer B, trade_evolve A): boot its PLAYED base
             from tools import gen2_synth_fixtures
 
             synth = name
@@ -1993,11 +1999,16 @@ class DuoRun:
                             for side, row in self._gen2_inputs.items()}}
 
     def _gen2_trade_expected_case(self):
-        return {"scenario": self.scenario,
+        case = {"scenario": self.scenario,
                 "variant": {"gen2_new": "cc", "gen2_gold_silver": "gs", "gen2_crystal_gold": "cg"}[self.game],
                 "fixture_sha256": {side: row["sha256"] for side, row in self._gen2_inputs.items()},
                 "required_phases": ["wait", "trade_animation", "native_save"]
                     if self.scenario in ("gen2_trade_new", "gen2_trade_evolve") else ["wait"]}
+        synth = {side: {"name": row["synth"], "base": row["name"]}
+                 for side, row in self._gen2_inputs.items() if row.get("synth")}
+        if synth:   # O-33: the oracle binds the seed's disclosure (gen2_trade_oracles.SEEDED)
+            case["synth"] = synth
+        return case
 
     def _release_gen2_trade(self):
         oracle = importlib.import_module("gen2_trade_oracles")
@@ -5233,6 +5244,8 @@ def list_lines(game):
             targets = {**targets, "b": "crystal_battle_ot2"}
         if name in GEN2_TRADE_SCENARIOS:
             targets = GEN2_TRADE_FIXTURES[game]
+        if name == "gen2_trade_evolve":
+            targets = GEN2_TRADE_EVOLVE_FIXTURES[game]
         if name == "gen2_poison":
             targets = {**targets, **GEN2_POISON_FIXTURES.get(game, {})}
         if name == "gen2_ball_gate":

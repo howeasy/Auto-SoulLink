@@ -307,9 +307,11 @@ def test_gen2_pairing_rows_share_link_contract(game, fixtures):
     assert scenarios_for(game) == trade + expected
     assert duo_module.evidence_contract(game) is duo_module.evidence_contract("gen2_new")
     assert not GAMES[game].get("server_rom_routes")
-    trade_fixtures = duo_module.GEN2_TRADE_FIXTURES.get(game)
+    trade_fixtures = {scenario: duo_module.GEN2_TRADE_FIXTURES.get(game) for scenario in trade}
+    trade_fixtures["gen2_trade_evolve"] = duo_module.GEN2_TRADE_EVOLVE_FIXTURES[game]   # A boots the O-33 seed
     assert duo_list_lines(game) == [
-        f"{scenario}  attempts=1  targets=a:{trade_fixtures['a']}, b:{trade_fixtures['b']} artifact=overlay admission=HARNESS_ONLY_OVERLAY"
+        f"{scenario}  attempts=1  targets=a:{trade_fixtures[scenario]['a']}, b:{trade_fixtures[scenario]['b']} "
+        "artifact=overlay admission=HARNESS_ONLY_OVERLAY"
         for scenario in trade] + [
         f"{scenario}  attempts={3 if scenario in duo_module.GEN2_CLAUSE_SCENARIOS else 1}  targets="
         f"a:{'gold_battle_errand' if scenario == 'gen2_poison' and game == 'gen2_gold_silver' else fixtures['a']}, "

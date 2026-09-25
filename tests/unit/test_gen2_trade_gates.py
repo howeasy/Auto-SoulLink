@@ -144,6 +144,11 @@ def make_case(tmp_path, sources, variant="cc", scenario="gen2_trade_new", mail_s
     committed = scenario in oracle.COMMITTED
     # O-31: gen2_trade_evolve's a catches the planted HAUNTER; b's cartridge evolves it natively
     offered_species = {side: 93 if scenario == "gen2_trade_evolve" and side == "a" else 16 for side in ("a", "b")}
+    # TRADE-EVOLVE-CATCH: gen2_trade_evolve's a boots the O-33 Master Ball seed on its errand base
+    seed = f"{titles['a']}_synth_trade_evolve" if scenario == "gen2_trade_evolve" else None
+    boot = dict.fromkeys(("a", "b"), "a" * 64)
+    if seed:
+        boot["a"] = digest((ROOT / f"tests/fixtures/gen2/{seed}.SaveRAM").read_bytes())
     pub = (ROOT / "data/gen2/overlay_provenance.json").read_bytes()
     manifest = {"schema": "gen2-trade-lane-v1", "run_id": "MODEL-trade", "scenario": scenario,
                 "evidence_class": "HARNESS_ONLY_OVERLAY", "provenance_sha256": digest(pub), "players": {}}
@@ -184,7 +189,7 @@ def make_case(tmp_path, sources, variant="cc", scenario="gen2_trade_new", mail_s
             "artifact_kind": "overlay", "rom_sha1": pin["sha1"], "base_sha1": pin["base_sha1"],
             "ups_sha256": pin["ups"]["sha256"], "sym_sha256": digest(sym_path.read_bytes())}
         receipt = {"schema": "gen2-duo-trade-v1", "player": side, "title": title, "case": scenario,
-                   "rom_sha1": pin["sha1"], "run_id": manifest["run_id"], "fixture_sha256": "a" * 64,
+                   "rom_sha1": pin["sha1"], "run_id": manifest["run_id"], "fixture_sha256": boot[side],
                    "admission_scope": "HARNESS_ONLY_OVERLAY", "token": tokens[side],
                    "generation": generations[side], "role": number,
                    "harness_write_scopes": [], "harness_exception": None}
@@ -357,8 +362,9 @@ def make_case(tmp_path, sources, variant="cc", scenario="gen2_trade_new", mail_s
     return {"markers": markers, "kwargs": {"data_dir": tmp_path, "baseline_saves": baseline_paths,
         "overlay_provenance": {"manifest_path": str(manifest_path), "manifest_sha256": digest(manifest_path.read_bytes()),
                                "players": refs},
-        "expected_case": {"scenario": scenario, "variant": variant, "fixture_sha256": {"a": "a" * 64, "b": "a" * 64},
-                          "required_phases": ["wait", "trade_animation", "native_save"] if committed else ["wait"]},
+        "expected_case": {"scenario": scenario, "variant": variant, "fixture_sha256": boot,
+                          "required_phases": ["wait", "trade_animation", "native_save"] if committed else ["wait"],
+                          **({"synth": {"a": {"name": seed, "base": f"{titles['a']}_battle_errand"}}} if seed else {})},
         "transaction_evidence": {"schema": "gen2-duo-trade-transaction-v1", "tokens": tokens, "server_token": "t1",
             "baseline_links": {"path": str(baseline_links), "sha256": digest(baseline_links.read_bytes())},
             "events": {"path": str(event_path), "sha256": digest(event_path.read_bytes())}}}}
@@ -905,6 +911,38 @@ def test_evolve_case_commits_the_disclosed_plant_and_b_evolves_natively(tmp_path
     assert players["a"]["stack"]["evolution_animation"]["visited"] is False
 
 
+SEED_FAULTS = {
+    "undisclosed": lambda case: case["kwargs"]["expected_case"].pop("synth"),
+    "unknown_seed": lambda case: case["kwargs"]["expected_case"]["synth"]["a"].update(name="crystal_synth_nope"),
+    "played_base": lambda case: case["kwargs"]["expected_case"]["synth"]["a"].update(base="crystal_battle"),
+    "b_seeded": lambda case: case["kwargs"]["expected_case"]["synth"].update(b=case["kwargs"]["expected_case"]["synth"]["a"]),
+}
+
+
+def _modified_seed(case):   # the booted bytes are not the disclosed seed: receipt and expectation both say so
+    get(case, "a", "RECEIPT")["fixture_sha256"] = "b" * 64
+    case["kwargs"]["expected_case"]["fixture_sha256"]["a"] = "b" * 64
+
+
+SEED_FAULTS["modified"] = _modified_seed
+
+
+@pytest.mark.parametrize("fault", sorted(SEED_FAULTS))
+def test_evolve_seed_must_be_the_disclosed_bytes_on_the_errand_base(tmp_path, sources, fault):
+    case = make_case(tmp_path, sources, "cc", scenario="gen2_trade_evolve")
+    SEED_FAULTS[fault](case)
+    with pytest.raises(RuntimeError, match="seed"):
+        invoke(case)
+
+
+def test_only_trade_evolve_a_may_boot_a_seed(tmp_path, sources):
+    case = make_case(tmp_path, sources, "cc")
+    case["kwargs"]["expected_case"]["synth"] = {"a": {"name": "crystal_synth_trade_evolve",
+                                                      "base": "crystal_battle_errand"}}
+    with pytest.raises(RuntimeError, match="seed"):
+        invoke(case)
+
+
 def _write(case):
     return get(case, "a", "HARNESS_WRITE")
 
@@ -962,6 +1000,7 @@ def test_o31_planted_state_is_exactly_the_disclosed_writes(tmp_path, sources, fa
 def test_undisclosed_trade_evolution_is_refused_outside_the_evolve_case(tmp_path, sources):
     case = make_case(tmp_path, sources, scenario="gen2_trade_evolve")
     case["kwargs"]["expected_case"]["scenario"] = "gen2_trade_new"
+    case["kwargs"]["expected_case"].pop("synth")   # trade_new boots no seed (SEEDED)
     for side in ("a", "b"):
         get(case, side, "RECEIPT")["case"] = "gen2_trade_new"
     _drop_plant(case)

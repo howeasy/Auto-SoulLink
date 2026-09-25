@@ -78,6 +78,9 @@ CASES = frozenset(("gen2_trade_new", "gen2_trade_decline_new", "gen2_trade_timeo
 COMMITTED = frozenset(("gen2_trade_new", "gen2_trade_evolve"))
 # O-31 (docs/gen2/REVIEW_RECORD.md): the ONLY disclosed harness writes, proposer side a only.
 PLANTS = {"gen2_trade_refuse_item": "d3_mail_item", "gen2_trade_evolve": "trade_evolve_species"}
+# O-33 (post-RC card TRADE-EVOLVE-CATCH): the ONLY synthetic boot seed, gen2_trade_evolve's a, its errand base with
+# Master Balls (tools/gen2_synth_fixtures.TRADE_RECIPES). Every other side boots its qualified errand fixture.
+SEEDED = {"gen2_trade_evolve": frozenset("a")}
 SIDES = ("a", "b")
 WAIT_END = frozenset(("SlinkTradeApplyPickup", "SlinkTradeCommit"))   # same frame: pickup, then the commit entry
 PHASES = ("wait", "trade_animation", "evolution_animation", "native_save")
@@ -840,6 +843,28 @@ def _server(transaction, data_dir, manifest, receipts, before_mons, after_mons, 
     return {"area_id": rows[index].get("area_id"), "server_token": token}
 
 
+def _seeds(expected, case, root):
+    """expected_case.synth = {side: {name, base}}: exactly the SEEDED sides, each booting the bytes its
+    gen2-synth-disclosure-v1 covers, built on that side's errand base as committed."""
+    synth = expected.get("synth") or {}
+    _need(isinstance(synth, dict) and set(synth) == SEEDED.get(case, frozenset()),
+          "boot seed differs from the case plan (only gen2_trade_evolve's a boots an O-33 seed)")
+    fixtures = Path(root) / "tests/fixtures/gen2"
+    for side, row in synth.items():
+        row = _object(row, "boot seed")
+        name, base = row.get("name"), row.get("base")
+        _need(isinstance(name, str) and "_synth_" in name and isinstance(base, str) and base.endswith("_errand"),
+              "boot seed must name an O-33 seed on an errand base")
+        disclosure = _json(_read(fixtures / f"{name}.synth.json", "boot seed disclosure"), "boot seed disclosure")
+        _need(disclosure.get("schema") == "gen2-synth-disclosure-v1"
+              and disclosure.get("builder") == "tools/gen2_synth_fixtures.py"
+              and disclosure.get("sha256") == expected.get("fixture_sha256", {}).get(side)
+              and disclosure.get("base_fixture") == base
+              and disclosure.get("base_sha256") == hashlib.sha256(
+                  _read(fixtures / f"{base}.SaveRAM", "boot seed base")).hexdigest(),
+              "boot seed is not the disclosed O-33 bytes on its errand base")
+
+
 @_refusals
 def trade_oracle(results, *, data_dir, baseline_saves, transaction_evidence,
                  overlay_provenance, expected_case, move_decisions=None, on_verified=None, root=ROOT):
@@ -854,6 +879,7 @@ def trade_oracle(results, *, data_dir, baseline_saves, transaction_evidence,
     expected = _object(expected_case, "expected case")
     case = expected.get("scenario")
     _need(case in CASES, "unknown expected trade scenario")
+    _seeds(expected, case, root)
     if case == "gen2_trade_reset_commit":
         return _reset_commit_oracle(results, data_dir=data_dir, baseline_saves=baseline_saves,
             transaction_evidence=transaction_evidence, overlay_provenance=overlay_provenance,

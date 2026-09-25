@@ -350,6 +350,16 @@ TRAINER_RECIPES = {
 }
 TRAINER_FIXTURES = ("crystal_synth_trainer_ot2", "silver_synth_trainer")
 
+# gen2_trade_evolve's A seed (post-RC card TRADE-EVOLVE-CATCH; the RC sweep failed 4 of 6 link catches: the O-31 plant
+# makes the first Route 29 wild mon a HAUNTER, catch rate 90, and the L5 Totodile's SCRATCH/LEER cannot touch a Ghost).
+# The errand base with its Ball pocket replaced by Master Balls (PokeBallEffect skips the catch roll for MASTER_BALL,
+# engine/items/item_effects.asm). Only the Ball pocket is synthetic; the plant, the catch, the link, the trade and B's
+# evolution stay native. A is crystal_battle_errand on C-C and C-G, gold_battle_errand on G-S.
+TRADE_RECIPES = {
+    "trade_evolve": ("battle_errand", {"balls": [["MASTER_BALL", 5]]}),
+}
+TRADE_FIXTURES = ("crystal_synth_trade_evolve", "gold_synth_trade_evolve")
+
 
 CLOCK_SCHEMA = "gen2-clock-setup-v1"
 
@@ -399,12 +409,12 @@ def day_clock(raw, *, hour, now, title):
 
 
 def build_named(name, *, root=ROOT):
-    """(bytes, disclosure) for a SYNTH_FIXTURES, DUO_FIXTURES or TRAINER_FIXTURES name, from its committed base
-    fixture. A target with an {ot2} slot places the other-OT marker inside the base name (battle_ot2_errand)."""
+    """(bytes, disclosure) for a SYNTH_FIXTURES, DUO_FIXTURES, TRAINER_FIXTURES or TRADE_FIXTURES name, from its base
+    committed fixture. A target with an {ot2} slot places the other-OT marker inside the base name (battle_ot2_errand)."""
     title, _, kind = name.split("_", 2)
     ot2 = kind.endswith("_ot2")
     kind = kind.removesuffix("_ot2")
-    target, edits = {**SYNTH_RECIPES, **DUO_RECIPES, **TRAINER_RECIPES}[kind]
+    target, edits = {**SYNTH_RECIPES, **DUO_RECIPES, **TRAINER_RECIPES, **TRADE_RECIPES}[kind]
     marker = "_ot2" if ot2 else ""
     base = f"{title}_{target.format(ot2=marker)}" if "{ot2}" in target else f"{title}_{target}{marker}"
     raw = (Path(root) / "tests/fixtures/gen2" / f"{base}.SaveRAM").read_bytes()

@@ -61,7 +61,9 @@ function R.new(ctx, SG, F, opts)
     local function observe()
         local point = base()
         point.probe_hits = {capture_party=opts.captures()}
-        if point.ui and point.ui.kind == "pack_balls" then point.ball_cursor = F.ball_cursor(SG.screen(ctx)) end
+        if point.ui and point.ui.kind == "pack_balls" then
+            point.ball_cursor, point.ball_toward = F.ball_cursor(SG.screen(ctx))   -- a Master Ball first
+        end
         -- The report gate: a finished catch stays in phase "battle" (F.driver idles while the overworld
         -- is not ready) until the capture went out on the wire.
         if driver.phase == "battle" and point.overworld_ready and opts.captures() >= 1

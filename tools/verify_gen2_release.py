@@ -878,6 +878,9 @@ TRADE_MODEL_ONLY = {
     ),
 }
 TRADE_PLANTED = {"gen2_trade_refuse_item", "gen2_trade_evolve"}   # O-31: a's disclosed HARNESS_WRITE
+# O-33 (post-RC card TRADE-EVOLVE-CATCH): the only synthetic trade boot seed, gen2_trade_evolve's a (its errand base
+# with Master Balls, tools/gen2_synth_fixtures.TRADE_RECIPES; gen2_trade_oracles.SEEDED). axes.scenario_fixtures names it.
+TRADE_SEEDED = {"gen2_trade_evolve": frozenset("a")}
 TRADE_VARIANTS = {("crystal", "crystal"): "cc", ("gold", "silver"): "gs", ("crystal", "gold"): "cg"}
 # Owner ruling O-34 (8a42b7f7) supersedes the Q10 reading: native trades are allowed and tested on every
 # release pair, C-G included, so each pair owes every TRADE_END_STATUS case.
@@ -889,7 +892,22 @@ def _trade_receipt_errors(root: Path, proof: dict, scenario: str, axes: dict) ->
     errors = []
     want_status = TRADE_END_STATUS[scenario]
     titles = {"a": axes["initiator"], "b": axes["partner"]}
-    fixtures = axes.get("trade_fixtures") or {}
+    errands = axes.get("trade_fixtures") or {}
+    fixtures = (axes.get("scenario_fixtures") or {}).get(scenario) or errands
+    for side in ("a", "b"):
+        name = fixtures.get(side, "")
+        if "_synth_" not in name:
+            continue
+        try:
+            disclosure = json.loads((root / "tests/fixtures/gen2" / f"{name}.synth.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            disclosure = None
+        base = disclosure.get("base_fixture") if isinstance(disclosure, dict) else None
+        if (side not in TRADE_SEEDED.get(scenario, ()) or base is None or base != errands.get(side)
+                or disclosure.get("sha256") != _fixture_sha256(root, name)
+                or disclosure.get("base_sha256") != _fixture_sha256(root, base)):
+            errors.append(f"{side}: boot seed {name} is not an O-33 disclosure over its bytes on the errand "
+                          f"base {errands.get(side)} (only {sorted(TRADE_SEEDED)} a boots a seed)")
     try:
         outputs = json.loads((root / "data/gen2/overlay_provenance.json").read_text(encoding="utf-8"))["outputs"]
     except (OSError, ValueError, KeyError):
@@ -954,8 +972,11 @@ def _cell_fixture(root: Path, axes: dict, scenario: str, side: str) -> tuple[str
 
 
 def _runner_cell_fixtures(duo, game: str, scenario: str) -> dict | None:
-    """What tools/e2e_duo.py stages for this cell (gen2_preflight's rules), or None for trade cells (trade_fixtures).
+    """What tools/e2e_duo.py stages for this cell (gen2_preflight's rules), or None for trade cells (trade_fixtures)
+    other than gen2_trade_evolve (its A seed, GEN2_TRADE_EVOLVE_FIXTURES).
     ponytail: mirrors the runner's staging maps; a new runner override must be added here too."""
+    if scenario == "gen2_trade_evolve":
+        return (getattr(duo, "GEN2_TRADE_EVOLVE_FIXTURES", {}) or {}).get(game)
     if scenario in TRADE_END_STATUS:
         return None
     if scenario == "gen2_ball_gate":
