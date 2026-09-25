@@ -507,6 +507,34 @@ class GamePresentationAdapter(ABC):
         """
         return name
 
+    def calc_profile(self) -> dict | None:
+        """Return {"gen": int, "dex": str} for the bundled Smogon calc, or None.
+
+        gen is the calc generation to run (1/2/3/9). dex is which data set to use:
+        "rr" | "vanilla" | "purergb". None means this game's calc numbers are not
+        verified yet, so the Calc tab and dashboard calc preview are hidden.
+        """
+        return None
+
+    def calc_nature(self, key: str) -> str | None:
+        """Nature name for the calc, or None when the game has no natures (Gen 1/2).
+
+        Default None.
+        """
+        return None
+
+    def calc_stats(self, detail: dict) -> dict | None:
+        """Calc-ready stat inputs decoded from the party snapshot `detail` (keys include
+        "key", "level", "blob_hex" when the client sent one). Default None = unknown
+        (the calc keeps its defaults). Shape, stat ids as the calc uses them:
+          Gen 3+: {"ivs": {hp,atk,def,spa,spd,spe}, "evs": {hp,atk,def,spa,spd,spe},
+                   "stats": {hp,atk,def,spa,spd,spe}}
+          Gen 1/2: {"dvs": {atk,def,spe,spc}, "stat_exp": {hp,atk,def,spe,spc} (raw 0-65535),
+                    "stats": {hp,atk,def,spa,spd,spe}}  (Gen 1 spa == spd == Special)
+        "stats" are the in-game computed stats; the calc warns when its own result differs.
+        """
+        return None
+
     def sprite_src(self, species_id: int) -> str:
         """Return just the sprite image URL for a species (no HTML wrapping).
 

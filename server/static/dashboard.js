@@ -352,4 +352,185 @@ if (window._slinkDashInit) {
   });
 })();
 
+
+// ── Phone nav: rail -> top app bar + overlay drawer below 900px ──────────
+// board.css repositions .mk-rail as a fixed off-canvas drawer under that breakpoint;
+// this builds the always-visible bar (menu button + run identity) and wires the
+// toggle. No template change — same trick as the theme-switcher relocation above,
+// so every page carrying the rail gets it for free. .mk-rail-open on .mk is the
+// only state kept; board.css does the rest.
+(function() {
+  var mk = document.querySelector('.mk');
+  var rail = document.querySelector('.mk-rail');
+  if (!mk || !rail) return;
+  if (!rail.id) rail.id = 'mk-rail';
+
+  var bar = document.createElement('div');
+  bar.className = 'mk-topbar';
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'mk-menu-btn';
+  btn.setAttribute('aria-expanded', 'false');
+  btn.setAttribute('aria-controls', rail.id);
+  btn.setAttribute('aria-label', 'Open menu');
+  btn.textContent = '☰';
+  var title = document.createElement('span');
+  title.className = 'mk-topbar-title';
+  var runName = document.querySelector('.mk-runname');
+  title.textContent = (runName && runName.textContent.trim()) || 'SLink';
+  bar.appendChild(btn);
+  bar.appendChild(title);
+  mk.insertBefore(bar, rail);
+
+  var scrim = document.createElement('button');
+  scrim.type = 'button';
+  scrim.className = 'mk-scrim';
+  scrim.setAttribute('aria-label', 'Close menu');
+  scrim.hidden = true;
+  mk.insertBefore(scrim, rail);
+
+  function setOpen(open) {
+    mk.classList.toggle('mk-rail-open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    btn.textContent = open ? '✕' : '☰';
+    scrim.hidden = !open;
+    var main = document.getElementById('main-content');
+    if (main) {
+      if (open) main.setAttribute('inert', ''); else main.removeAttribute('inert');
+    }
+    if (open) {
+      var first = rail.querySelector('a, button, [tabindex]');
+      if (first && first.focus) first.focus();
+    }
+  }
+  btn.addEventListener('click', function() { setOpen(!mk.classList.contains('mk-rail-open')); });
+  scrim.addEventListener('click', function() { setOpen(false); btn.focus(); });
+  document.addEventListener('keydown', function(ev) {
+    if (ev.key === 'Escape' && mk.classList.contains('mk-rail-open')) { setOpen(false); btn.focus(); }
+  });
+  // A rail link navigates away (or, on the Manager, swaps the run panel) — either
+  // way the drawer should not still be open on the next screen.
+  rail.addEventListener('click', function(ev) {
+    if (ev.target.closest && ev.target.closest('a')) setOpen(false);
+  });
+  // Resizing past the breakpoint (devtools, tablet rotation) with the drawer open
+  // would otherwise leave .mk-rail-open set and main inert on the desktop layout.
+  var mq = window.matchMedia('(min-width: 900px)');
+  function onMq(e) { if (e.matches) setOpen(false); }
+  if (mq.addEventListener) mq.addEventListener('change', onMq);
+  else if (mq.addListener) mq.addListener(onMq);   // Safari < 14
+})();
+
+
+// ── Board live announcements + toasts ─────────────────────────────────────
+// One sr-only region and one toast host, both siblings of #content in _board.html
+// (outside the 2s poll's morph target). Diffs .mk-pair section classes and the
+// phase banner between polls — no event IDs, no server change. Speaks/toasts three
+// things only: a new link, a pair death, the run ending. See
+// docs/public_ui/mobile-a11y.md #4 for what NOT to announce (HP, dead zones, every
+// poll, memorialize-after-death).
+(function() {
+  var announcer = document.getElementById('mk-announcer');
+  var toastHost = document.getElementById('mk-toast-host');
+  var toggle = document.getElementById('mk-announce-toggle');
+  if (!announcer) return;
+
+  var PAUSE_KEY = 'slink-announce-paused';
+  function isPaused() {
+    try { return localStorage.getItem(PAUSE_KEY) === '1'; } catch (_) { return false; }
+  }
+  function setPaused(p) {
+    try { localStorage.setItem(PAUSE_KEY, p ? '1' : '0'); } catch (_) {}
+    if (toggle) {
+      toggle.setAttribute('aria-pressed', p ? 'true' : 'false');
+      toggle.textContent = p ? 'Resume announcements' : 'Pause announcements';
+    }
+  }
+  if (toggle) {
+    setPaused(isPaused());
+    toggle.addEventListener('click', function() { setPaused(!isPaused()); });
+  }
+
+  var SECTIONS = ['party', 'pending', 'split', 'boxed', 'linked', 'fallen'];
+  function sectionOf(article) {
+    for (var i = 0; i < SECTIONS.length; i++) {
+      if (article.classList.contains(SECTIONS[i])) return SECTIONS[i];
+    }
+    return '';
+  }
+  // A dead-zone row is also section=fallen but both halves are `.empty` (nobody
+  // caught anything) — that is an area lock, not a pair dying. Never announce it.
+  function isRealPair(article) {
+    var a = article.querySelector('.mk-half.a'), b = article.querySelector('.mk-half.b');
+    return !!(a && b && !a.classList.contains('empty') && !b.classList.contains('empty'));
+  }
+  function nickOf(article, side) {
+    var el = article.querySelector('.mk-half.' + side + ' .mk-half-nick');
+    if (!el) return '';
+    var clone = el.cloneNode(true);
+    Array.prototype.forEach.call(clone.querySelectorAll('.mk-active, .shiny-star'), function(n) { n.remove(); });
+    return (clone.textContent || '').trim();
+  }
+  function areaOf(article) {
+    var el = article.querySelector('.mk-bond-area');
+    return el ? el.textContent.trim() : '';
+  }
+  function snapshot() {
+    var content = document.getElementById('content');
+    var map = {};
+    if (content) {
+      Array.prototype.forEach.call(content.querySelectorAll('.mk-pair[id]'), function(article) {
+        map[article.id] = sectionOf(article);
+      });
+    }
+    var banner = content && content.querySelector('.phase-banner');
+    return { pairs: map, runOver: !!(banner && banner.classList.contains('phase-game_over')) };
+  }
+
+  function speak(text) {
+    // Two writes so a repeated string still gets announced — aria-live only fires
+    // on a text change.
+    announcer.textContent = '';
+    window.setTimeout(function() { announcer.textContent = text; }, 50);
+  }
+  function toast(text, kind) {
+    if (!toastHost) return;
+    var el = document.createElement('div');
+    el.className = 'mk-toast' + (kind ? ' mk-toast-' + kind : '');
+    el.textContent = text;
+    toastHost.appendChild(el);
+    requestAnimationFrame(function() { el.classList.add('show'); });
+    window.setTimeout(function() {
+      el.classList.remove('show');
+      window.setTimeout(function() { el.remove(); }, 250);
+    }, 5000);
+  }
+  function announce(text, kind) {
+    if (isPaused()) return;
+    speak(text);
+    toast(text, kind);
+  }
+
+  var prev = snapshot();   // baseline at load — never announce what was already true
+
+  function diffAndAnnounce() {
+    var content = document.getElementById('content');
+    if (!content) return;
+    var next = snapshot();
+    Array.prototype.forEach.call(content.querySelectorAll('.mk-pair[id]'), function(article) {
+      var id = article.id, was = prev.pairs[id], now = next.pairs[id];
+      if (was === now || !isRealPair(article)) return;
+      if (now && now !== 'pending' && now !== 'fallen' && (was === undefined || was === 'pending')) {
+        announce('New link at ' + areaOf(article) + ': ' + nickOf(article, 'a') + ' & ' + nickOf(article, 'b') + '.', 'link');
+      } else if (now === 'fallen' && was !== 'fallen') {
+        announce(areaOf(article) + ' pair has fallen: ' + nickOf(article, 'a') + ' & ' + nickOf(article, 'b') + '.', 'death');
+      }
+    });
+    if (next.runOver && !prev.runOver) announce('The run is over.', 'over');
+    prev = next;
+  }
+  document.body.addEventListener('htmx:afterSettle', diffAndAnnounce);
+})();
+
 }  // close `if (window._slinkDashInit)` sentinel

@@ -345,6 +345,8 @@ def describe_rom(path: str, jar_fork: bool) -> dict:
     try:
         with open(path, "rb") as f:
             rom = f.read()
+        # the Manager's ROM scan dedups on this, so it reads each file once, not twice
+        info["sha1"] = hashlib.sha1(rom).hexdigest()
         if len(rom) != GEN1_ROM_SIZE:
             info["clean"], info["title"] = False, "not a Gen 1 cartridge"
             return info

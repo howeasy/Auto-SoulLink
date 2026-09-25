@@ -1,14 +1,18 @@
 """WCAG contrast of the theme tokens, computed from the CSS itself so a palette edit that
 breaks it fails here: body text 4.5:1 (1.4.3), control borders 3:1 (1.4.11).
 
-Only the themes fixed in the 2026-09 audit are pinned; server/static/themes/CONTRAST.md has
-the full table."""
+Parametrized from ``server.templating.VALID_THEMES`` (minus ``transparent``, the OBS
+overlay theme — never offered in the picker) so every theme the picker actually offers is
+covered automatically; a new theme needs no edit here. server/static/themes/CONTRAST.md has
+the full ratio table."""
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
 import pytest
+
+from server.templating import VALID_THEMES
 
 STATIC = Path(__file__).resolve().parents[2] / "server" / "static"
 
@@ -54,13 +58,24 @@ def _default():
             **_block("themes/default.css", ":root:not(:has(body.stream))")}
 
 
-THEMES = {
-    "default": _default,
-    "light": lambda: {**_default(), **_block("slink.css", "body.theme-light"),
-                      **_block("themes/light.css", "body.theme-light"),
-                      **_block("themes/light.css", "body.theme-light:not(.stream)")},
-    "funtastic-smoke": lambda: _block("themes/funtastic-smoke.css", ":root"),
-}
+def _light():
+    return {**_default(), **_block("slink.css", "body.theme-light"),
+            **_block("themes/light.css", "body.theme-light"),
+            **_block("themes/light.css", "body.theme-light:not(.stream)")}
+
+
+def _funtastic(theme: str):
+    # Each funtastic-*.css fully defines its own :root palette (no slink.css
+    # merge needed) — see server/static/themes/_funtastic-base.css.
+    return lambda: _block(f"themes/{theme}.css", ":root")
+
+
+THEMES = {"default": _default, "light": _light}
+THEMES.update({
+    theme: _funtastic(theme)
+    for theme in sorted(VALID_THEMES)
+    if theme not in ("default", "light", "transparent")
+})
 
 
 @pytest.mark.parametrize("theme", THEMES)
@@ -69,7 +84,10 @@ def test_theme_contrast(theme):
     bg = _rgba(t["--c-bg"])
     assert bg[3] == 1.0, "the page background is opaque, so contrast does not depend on the backdrop"
     card = _over(_rgba(t["--c-card"]), bg)
-    edge_ui = _over(_rgba(t["--c-edge-ui"]), card)
+    # board.css draws control borders from var(--c-edge-ui, var(--c-edge)) — mirror that
+    # fallback here so a theme that clears 3:1 on --c-edge alone (e.g. jungle) needn't
+    # define --c-edge-ui too.
+    edge_ui = _over(_rgba(t.get("--c-edge-ui", t["--c-edge"])), card)
     for surface in (bg, card):
         assert _ratio(edge_ui, surface) >= 3.0, "control border"
         for tok in ("--c-txt", "--c-dim", "--c-brand"):

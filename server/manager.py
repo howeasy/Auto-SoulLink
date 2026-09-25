@@ -21,6 +21,7 @@ import html
 import json
 import logging
 import os
+import pathlib
 import re
 import shutil
 import signal
@@ -55,6 +56,7 @@ from server.lua_literals import lua_comment, lua_string
 from server.overlay_catalog import build_index_context as _build_stream_index_context
 from server.status_payload import empty_status_payload
 from server.templating import resolve_theme, setup_templating
+from tools import make_release
 
 # ── Game families ─────────────────────────────────────────────────────────────
 # The unit of link compatibility is the FAMILY, not the cartridge: Red, Blue and Yellow
@@ -232,6 +234,48 @@ def option_support(key: str, rom_types: list[str]) -> dict:
     return {"ok": ok, "why": why}
 
 
+def _calc_profile_for_run(run: dict, status: dict) -> dict | None:
+    """The web calc's profile for a run, or None when it should stay hidden.
+
+    The Manager has no live adapter instance of its own (each run is a separate process),
+    so this instantiates the same adapters `server.py` would and asks calc_profile(), the
+    way `SLinkServer._calc_profile` compares the two players' adapters. Prefers each
+    connected player's own rom_type (a status payload's `players[pid]['rom_type']`); a
+    player who has not said hello yet falls back to the run's declared game family
+    (`GAMES`/`GAME_MEMBERS` above) — a soul link only ever pairs cartridges from the same
+    family, so one representative rom_type stands for both. None when nothing is known
+    yet, either side's game is unverified, or the two disagree.
+    """
+    from server.adapters import game_id_for_rom_type, get_adapter
+    # A live server can answer anything; a bad status must hide the calc, not 500 the board.
+    players = (status.get("players") if isinstance(status, dict) else None) or {}
+    # Unrecognized rom_types ("" or a persisted "?") count as not-yet-known.
+    rom_types = [rt for rt in ((players.get(pid) or {}).get("rom_type") or "" for pid in ("a", "b"))
+                 if game_id_for_rom_type(rt)]
+    if not rom_types:
+        members = GAME_MEMBERS.get(run.get("game") or "", [])
+        if not members:
+            return None
+        rom_types = [members[0]]
+    profile = None
+    for rom_type in rom_types:
+        gid = game_id_for_rom_type(rom_type)
+        if not gid:
+            return None
+        try:
+            # rom_type picks the title for the per-title packs (Gen 2 refuses to guess one).
+            p = get_adapter(gid, is_rr=rom_type.endswith("_rr"), rom_type=rom_type).calc_profile()
+        except (KeyError, ValueError):  # an unregistered family (e.g. Gen 5 import) or a refused title
+            return None
+        if p is None:
+            return None
+        if profile is None:
+            profile = p
+        elif p != profile:
+            return None
+    return profile
+
+
 def new_run_form() -> dict:
     """Everything the New-run form needs, computed here so the reasons and the greying
     come from one table: per game family, per option, (ok, why)."""
@@ -284,6 +328,10 @@ def _cache_rom_dirs() -> list[str]:
 ROM_DIRS = (PROJECT_ROOT, ROM_UPLOAD_DIR, os.path.join(PROJECT_ROOT, "patch", "build"), *_cache_rom_dirs())
 ROM_EXTS = (".gb", ".gbc")
 UPLOAD_MAX = 64 << 20
+# path -> ((size, mtime_ns), describe_rom result): the ROM scan runs on every page load and
+# /api/roms call, over Google Drive; an unchanged file is not read again.
+# ponytail: never evicted -- a handful of ROM files; a deleted path just goes unreferenced.
+_ROM_INFO_CACHE: dict[str, tuple[tuple[int, int], dict]] = {}
 REGISTRY_PATH = os.path.join(MANAGER_DIR, "registry.json")
 
 # A freshly spawned server counts as up only once its HTTP port answers /api/status; imports
@@ -507,6 +555,55 @@ def _build_launcher(run: dict, player: str, host: str) -> str:
         tcp_port=run["tcp_port"],
         player=player,
     )
+
+
+# ── The address players connect to ──────────────────────────────────────────
+# The browser's Host header is the wrong source: a page opened as localhost, or through a
+# tunnel/proxy, handed player B a launcher pointing at 127.0.0.1 or at a name that only
+# forwards HTTP. The game TCP port is on this machine, so the answer is this machine's.
+_HOST_RE = re.compile(r"[A-Za-z0-9.:\-\[\]]{1,253}")
+_LOOPBACK = ("127.", "localhost", "::1")
+
+
+def _lan_address() -> str | None:
+    """The address of the interface that holds the default route, or None offline. A UDP
+    connect only picks a route; no packet is sent (192.0.2.1 is TEST-NET-1)."""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 9))
+            ip = s.getsockname()[0]
+    except OSError:
+        return None
+    return None if ip.startswith(_LOOPBACK) or ip == "0.0.0.0" else ip
+
+
+def advertised_host(setting: str, bind_host: str, lan=_lan_address) -> tuple[str, str]:
+    """(address, source) players connect to. In order: what the host set (even loopback:
+    it is their call); the one address a Manager bound to a specific interface listens on;
+    127.0.0.1 for a loopback-bound Manager (nobody else can connect); the LAN address;
+    127.0.0.1 when there is no network at all."""
+    if setting:
+        return setting, "set"
+    if bind_host.startswith(_LOOPBACK):
+        return "127.0.0.1", "loopback"
+    if bind_host not in ("", "0.0.0.0", "::"):
+        return bind_host, "bind"
+    ip = lan()
+    return (ip, "lan") if ip else ("127.0.0.1", "none")
+
+
+def _settings_path() -> str:
+    return os.path.join(MANAGER_DIR, "settings.json")
+
+
+def _load_settings() -> dict:
+    try:
+        with open(_settings_path(), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
 
 
 # ── Subprocess management ───────────────────────────────────────────────────
@@ -831,9 +928,12 @@ _STATUS_BADGE = {
 
 
 class RunManager:
-    def __init__(self, bind_host: str, manager_port: int = MANAGER_HTTP_PORT):
+    def __init__(self, bind_host: str, manager_port: int = MANAGER_HTTP_PORT, public_host: str = ""):
         self.bind_host = bind_host
         self.manager_port = manager_port
+        # The address players connect to, when the host names one: --public-host, else what
+        # was last set on a run page. "" = work it out (advertised_host).
+        self.public_host = public_host or str(_load_settings().get("public_host") or "")
         self._stream_pin_id: str | None = None  # run_id pinned for stream overlays
         # One lock per run: a start (spawn + readiness wait) and a stop serialize, so two
         # clicks cannot spawn twice and a stop mid-start is not overwritten by the start.
@@ -919,6 +1019,7 @@ class RunManager:
 
     async def _render_shell(self, request, runs, run, *, page, extra=None):
         status = await self._run_status(request, run) if run else None
+        show_calc = bool(_calc_profile_for_run(run, status)) if run else False
         ctx = {
             "page_title":   "Soul Link",
             "theme":        resolve_theme(request),
@@ -928,11 +1029,13 @@ class RunManager:
             "page":         page,
             "runs":         [self._augment_for_template(r) for r in runs],
             "run":          self._augment_for_template(run) if run else None,
+            "show_calc":    show_calc,
             "pinned_run_id": self._stream_pin_id,
             "form_json":    _json_for_script(new_run_form()),
             # The creator randomizes as part of creating a Gen 1 run; it needs the same
             # categories / labels / jar the standalone page does, with no current pair.
-            "randomizer_json": _json_for_script(self._randomizer_form(None)),
+            # Off the event loop: the form scans (and may hash) every ROM file.
+            "randomizer_json": _json_for_script(await asyncio.to_thread(self._randomizer_form, None)),
             "next_ports":   _next_ports(runs),
             "manager_port": self.manager_port,
             # Links to a run's own port (calc, debug) use the host the browser used for us.
@@ -943,18 +1046,30 @@ class RunManager:
         ctx.update(extra or {})
         return aiohttp_jinja2.render_template("manager.html", request, ctx)
 
-    @staticmethod
-    def _board_context(run: dict, status: dict) -> dict:
+    def _connect_host(self) -> tuple[str, str]:
+        return advertised_host(self.public_host, self.bind_host)
+
+    def _board_context(self, run: dict, status: dict) -> dict:
         """board_context for a Manager run: it polls its own board route, its launchers and
-        (once it has made them) its cartridges download from the Manager."""
-        from server.board import board_context
+        (once it has made them) its cartridges download from the Manager. On top of the
+        shared board: each player's setup ZIP, the address players connect to, the BizHawk
+        minimum."""
+        from server.board import PIDS, board_context
         rid = run["run_id"]
-        return board_context(status, run_name=run.get("name", ""), poll_url=f"/runs/{rid}/board",
-                             live=run.get("status") == "running",
-                             launcher_url=f"/api/runs/{rid}/launcher/{{player}}",
-                             rom_url=f"/api/runs/{rid}/rom/{{player}}" if run.get("cartridges") or run.get("randomizer") else "",
-                             roms_pinned=bool(run.get("randomizer")),
-                             rom_ext=_rom_ext(run))
+        live = run.get("status") == "running"
+        ctx = board_context(status, run_name=run.get("name", ""), poll_url=f"/runs/{rid}/board",
+                            live=live,
+                            launcher_url=f"/api/runs/{rid}/launcher/{{player}}",
+                            rom_url=f"/api/runs/{rid}/rom/{{player}}" if run.get("cartridges") or run.get("randomizer") else "",
+                            roms_pinned=bool(run.get("randomizer")),
+                            rom_ext=_rom_ext(run))
+        host, source = self._connect_host()
+        ctx.update({
+            "packs": {pid: f"/api/runs/{rid}/player-pack/{pid}" for pid in PIDS},
+            "connect": {"host": host, "port": run["tcp_port"], "source": source},
+            "bizhawk_min": make_release.bizhawk_requirement(),
+        })
+        return ctx
 
     async def handle_run_board(self, request: web.Request) -> web.Response:
         """GET /runs/{run_id}/board — the `#content` fragment the shell polls."""
@@ -1034,16 +1149,29 @@ class RunManager:
                     continue
                 seen_paths.add(path)
                 try:
-                    if os.path.getsize(path) == 0:
-                        continue
-                    with open(path, "rb") as f:
-                        digest = hashlib.sha1(f.read()).hexdigest()
+                    st = os.stat(path)
                 except OSError:
                     continue
+                if st.st_size == 0:
+                    continue
+                # ponytail: size+mtime+ctime, not a re-hash. A cartridge swapped in place that
+                # keeps ALL THREE stamps still returns the cached sha1, so the picker would
+                # label it as the old ROM; ctime catches the replace-the-file case (the common
+                # one: a restore or a Drive sync writes a new file), mtime the ordinary
+                # overwrite. Re-hash every scan if a stale label ever actually bites.
+                key = (st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+                hit = _ROM_INFO_CACHE.get(path)
+                if hit and hit[0] == key:
+                    info = hit[1]
+                else:
+                    info = describe_rom(path, True)
+                    if info.get("sha1"):        # a failed read is retried next scan, not kept
+                        _ROM_INFO_CACHE[path] = (key, info)
+                digest = info.get("sha1") or path
                 if digest in seen_content:
                     continue
                 seen_content.add(digest)
-                roms.append({"name": name, **describe_rom(path, True)})
+                roms.append({"name": name, **info})
         return roms
 
     def _augment_for_template(self, run: dict) -> dict:
@@ -1202,17 +1330,66 @@ class RunManager:
         run = _find_run(runs, run_id)
         if run is None:
             return web.json_response({"ok": False, "error": "Run not found"}, status=404)
-        # Derive connect host from the Host header (strip port)
-        host_header = request.host or "127.0.0.1"
-        connect_host = host_header.split(":")[0] or "127.0.0.1"
-        content = _build_launcher(run, player, connect_host)
-        safe_name = re.sub(r'[^\w-]', '_', run.get("name") or run_id).strip('_') or run_id
+        content = _build_launcher(run, player, self._connect_host()[0])
+        safe_name = self._augment_for_template(run)["safe_name"]
         filename = f"slink_{safe_name}_{player}.lua"
         return web.Response(
             text=content,
             content_type="application/octet-stream",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+
+    async def handle_player_pack(self, request: web.Request) -> web.Response:
+        """GET /api/runs/{run_id}/player-pack/{player} — the whole player package (the
+        release ZIP from tools/make_release.py) with this run's launcher at its root and the
+        run's host, game TCP port and slot baked into every launcher inside."""
+        player = request.match_info["player"]
+        if player not in ("a", "b"):
+            return web.json_response({"ok": False, "error": "player must be 'a' or 'b'"}, status=400)
+        run = _find_run(_load_registry(), request.match_info["run_id"])
+        if run is None:
+            return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+        host = self._connect_host()[0]
+        name = f"{self._augment_for_template(run)['safe_name']}_{player}"
+        launcher = f"slink_{name}.lua"
+        guide = make_release.player_setup_md(launcher, f"{host}:{run['tcp_port']}", player)
+
+        # ponytail: built per request (~60 ms, ~0.5 MB) and held in memory; cache the base
+        # package if a slow disk ever makes this noticeable.
+        def build() -> bytes:
+            with tempfile.TemporaryDirectory() as out:
+                path = make_release.build_release(
+                    version=name, out_dir=pathlib.Path(out), host=host, port=run["tcp_port"],
+                    player=player, skip_generators=True, quiet=True,
+                    launcher=(launcher, _build_launcher(run, player, host)), guide=guide)
+                return path.read_bytes()
+        try:
+            data = await asyncio.to_thread(build)
+        except (SystemExit, OSError) as e:          # make_release exits on a missing file
+            log.error(f"player pack for {run['run_id']}/{player} failed: {e!r}")
+            return web.json_response({"ok": False, "error": "could not build the player package; "
+                                      "see the Manager log"}, status=500)
+        return web.Response(body=data, content_type="application/zip",
+                            headers={"Content-Disposition": _content_disposition(f"slink_{name}.zip")})
+
+    async def handle_public_host(self, request: web.Request) -> web.Response:
+        """POST /api/settings/public-host {"host": "..."} — the address players connect to.
+        "" goes back to working it out. Persisted beside the registry."""
+        try:
+            host = str((await request.json()).get("host") or "").strip()
+        except Exception:
+            return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+        if host and not _HOST_RE.fullmatch(host):
+            return web.json_response({"ok": False, "error": "not a host name or IP address"}, status=400)
+        settings = _load_settings()
+        settings["public_host"] = host
+        try:
+            atomic_write_json(_settings_path(), settings)
+        except OSError as e:
+            return web.json_response({"ok": False, "error": f"could not save: {e}"}, status=500)
+        self.public_host = host
+        resolved, source = self._connect_host()
+        return web.json_response({"ok": True, "host": resolved, "source": source})
 
     # ── Cartridges: what each player plays ────────────────────────────────────
 
@@ -1498,7 +1675,8 @@ class RunManager:
         Nothing is uploaded to anywhere: the Manager and the ROMs share a machine."""
         from server.upr_pipeline import find_upr_jar
         jar = request.query.get("jar", "").strip() or find_upr_jar() or ""
-        return web.json_response({"ok": True, "roms": self._scan_roms(jar), "dir": PROJECT_ROOT})
+        roms = await asyncio.to_thread(self._scan_roms, jar)
+        return web.json_response({"ok": True, "roms": roms, "dir": PROJECT_ROOT})
 
     async def handle_rom_upload(self, request: web.Request) -> web.Response:
         """POST /api/roms (multipart `file`) — a ROM chosen with the browser's own file
@@ -1556,6 +1734,14 @@ class RunManager:
                     f"unknown randomizer build (sha256 {h256.hexdigest()}): only the SLink UPR "
                     f"jars in data/upr_jars.json are accepted. Build the fork with "
                     f"`python tools/build_upr_fork.py --pin`.")}, status=400)
+            if ext != ".jar":
+                # Bytes already in a ROM folder: answer with THAT file. A kept copy in roms/
+                # is deduped out of the next scan, and the picker's selection with it.
+                roms = await asyncio.to_thread(self._scan_roms, "")
+                same = next((r for r in roms if r.get("sha1") == h.hexdigest()), None)
+                if same is not None:
+                    return web.json_response({"ok": True, "path": same["path"], "kind": "rom",
+                                              "rom": same, "existing": True})
             stem, n = os.path.splitext(name)[0], 1
             dest = os.path.join(dest_dir, name)
             while os.path.exists(dest) and _sha1(dest) != h.hexdigest():
@@ -1666,7 +1852,7 @@ class RunManager:
         run = _find_run(runs, request.match_info["run_id"])
         if run is None:
             raise web.HTTPNotFound(text="Run not found")
-        form = self._randomizer_form(run)
+        form = await asyncio.to_thread(self._randomizer_form, run)
         if form is None:
             raise web.HTTPNotFound(text="Cartridges are prepared for Gen 1 runs only")
         ctx = self._rail_ctx(request, runs, page="run")
@@ -1687,10 +1873,15 @@ class RunManager:
             raise web.HTTPNotFound(text="Run not found")
         return runs, run
 
-    def _run_panel_ctx(self, request: web.Request, runs, run, *, panel: str, label: str) -> dict:
+    async def _run_panel_ctx(self, request: web.Request, runs, run, *, panel: str, label: str) -> dict:
         ctx = self._rail_ctx(request, runs, page="run")
         base = f"/runs/{run['run_id']}"
         running = run.get("status") == "running"
+        show_calc = bool(_calc_profile_for_run(run, await self._run_status(request, run)))
+        tabs = [("Board", base, False)]
+        if show_calc:
+            tabs.append(("Calc", f"{base}/calc/normal.html", panel == "calc"))
+        tabs.append(("Debug", f"{base}/debug", panel == "debug"))
         ctx.update({
             "page_title": f"{label} — {run.get('name', '')}",
             "theme": resolve_theme(request),
@@ -1699,8 +1890,8 @@ class RunManager:
             "run": self._augment_for_template(run),
             "panel": panel, "panel_label": label, "base": base, "api_base": base,
             "title": run.get("name", ""), "meta": label,
-            "tabs": [("Board", base, False), ("Calc", f"{base}/calc/normal.html", panel == "calc"),
-                     ("Debug", f"{base}/debug", panel == "debug")],
+            "tabs": tabs,
+            "show_calc": show_calc,
             "available": running,
             "unavailable_html": (f"This run is not running; {label.lower()} needs its server. "
                                  f"<a href=\"{base}\">Start it from the board</a>."),
@@ -1712,7 +1903,7 @@ class RunManager:
         panel is the run server's own (templates/_debug_panel.html); its calls go through
         handle_run_api, SSE included."""
         runs, run = self._run_or_404(request)
-        ctx = self._run_panel_ctx(request, runs, run, panel="debug", label="Debug")
+        ctx = await self._run_panel_ctx(request, runs, run, panel="debug", label="Debug")
         return aiohttp_jinja2.render_template("panel_page.html", request, ctx)
 
     async def handle_run_calc(self, request: web.Request) -> web.Response:
@@ -1724,7 +1915,7 @@ class RunManager:
         if not path.endswith(".html"):
             return calc_files.file_response(calc_files.resolve(path))
         runs, run = self._run_or_404(request)
-        ctx = self._run_panel_ctx(request, runs, run, panel="calc", label="Calc")
+        ctx = await self._run_panel_ctx(request, runs, run, panel="calc", label="Calc")
         try:
             abs_path = calc_files.resolve(path)
         except web.HTTPNotFound:
@@ -1944,8 +2135,8 @@ class RunManager:
 
 # ── Entry point ─────────────────────────────────────────────────────────────
 
-async def main(host: str, port: int):
-    manager = RunManager(bind_host=host, manager_port=port)
+async def main(host: str, port: int, public_host: str = ""):
+    manager = RunManager(bind_host=host, manager_port=port, public_host=public_host)
     app = web.Application(middlewares=[csrf_protection, theme_cache, registry_errors])
     setup_templating(app)
 
@@ -1963,6 +2154,8 @@ async def main(host: str, port: int):
     app.router.add_post("/api/runs/{run_id}/archive", manager.handle_archive)
     app.router.add_post("/api/runs/{run_id}/delete",  manager.handle_delete)
     app.router.add_get("/api/runs/{run_id}/launcher/{player}", manager.handle_launcher)
+    app.router.add_get("/api/runs/{run_id}/player-pack/{player}", manager.handle_player_pack)
+    app.router.add_post("/api/settings/public-host", manager.handle_public_host)
     app.router.add_post("/api/runs/{run_id}/cartridges", manager.handle_cartridges)
     app.router.add_post("/api/runs/{run_id}/randomize", manager.handle_randomize)
     app.router.add_get("/api/runs/{run_id}/rom/{player}", manager.handle_rom_download)
@@ -2064,10 +2257,15 @@ if __name__ == "__main__":
     parser.add_argument("--allow-host", action="append", default=[], metavar="NAME",
                         help="Extra Host name the web UI answers to, e.g. a tunnel name or '*.<tailnet>.ts.net' "
                              "(repeatable; also SLINK_ALLOWED_HOSTS, comma-separated). Runs inherit it")
+    parser.add_argument("--public-host", default="", metavar="ADDRESS",
+                        help="Address players' launchers connect to (default: this machine's LAN address; "
+                             "also settable on a run page)")
     args = parser.parse_args()
+    if args.public_host and not _HOST_RE.fullmatch(args.public_host):
+        parser.error(f"--public-host {args.public_host!r} is not a host name or IP address")
     allow_hosts(args.allow_host)
     if args.data_dir:
         MANAGER_DIR = os.path.abspath(args.data_dir)
         REGISTRY_PATH = os.path.join(MANAGER_DIR, "registry.json")
         os.makedirs(MANAGER_DIR, exist_ok=True)
-    asyncio.run(main(args.host, args.port))
+    asyncio.run(main(args.host, args.port, args.public_host))

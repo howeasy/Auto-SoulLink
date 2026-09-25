@@ -106,7 +106,8 @@ async def test_a_stopped_run_renders_its_persisted_board(manager_client, manager
     body = await resp.text()
     assert "SPARKY" in body and "EMBO" in body
     assert "zone-linked" in body, "nothing is located on a stopped run, so the pair is Linked"
-    assert "run not running" in body and "waiting for hello" not in body
+    # the per-player connection state (manager.connection_state), not the live "waiting" copy
+    assert "mk-conn stopped" in body and "waiting for hello" not in body
     assert 'hx-get="/runs/run_1/board"' in body, "the fragment must poll the Manager, not /"
     assert "Kanto Duo" in body and "Red · Blue · Yellow" in body
 
@@ -127,11 +128,16 @@ async def test_a_stopped_run_with_no_pairs_offers_no_setup_steps(manager_client,
 
 @pytest.mark.asyncio
 async def test_the_board_fragment_stands_alone(manager_client, manager_dir):
+    """The Manager's poll target: `#content` (what htmx's `hx-select` pulls out) plus the
+    live-announcer markup that must sit outside it (`_board.html`, siblings of `#content` so
+    the 2s poll swap never reaches them) -- never the page shell (rail, `<html>`) that
+    `/runs/{id}` wraps the fragment in for a first load."""
     run = _stopped_run(manager_dir)
     resp = await manager_client.get(f"/runs/{run['run_id']}/board")
     assert resp.status == 200
     body = await resp.text()
-    assert body.lstrip().startswith("<div id=\"content\"")
+    assert '<div id="content"' in body
+    assert "mk-rail" not in body and "<html" not in body.lower(), "the /board route must not carry the page shell"
     assert "SPARKY" in body
 
 
@@ -410,8 +416,9 @@ def test_run_flags_follow_one_table():
 @pytest.mark.parametrize("path,panel", [("/runs/run_1/debug", "debug"), ("/runs/run_1/calc/normal.html", "calc")])
 async def test_debug_and_calc_are_manager_pages(manager_client, manager_dir, path, panel):
     """Both wear the rail and the run header; a stopped run gets the empty state instead of
-    a panel whose JS would fail against a dead server."""
-    _stopped_run(manager_dir)
+    a panel whose JS would fail against a dead server. The Calc tab only shows for a game
+    whose adapter has a calc profile (RR), so the calc case runs on a Radical Red run."""
+    _stopped_run(manager_dir, game="gen3_rr" if panel == "calc" else "gen1")
     resp = await manager_client.get(path)
     assert resp.status == 200
     body = await resp.text()
@@ -419,6 +426,8 @@ async def test_debug_and_calc_are_manager_pages(manager_client, manager_dir, pat
     assert f"/runs/run_1/{'calc/normal.html' if panel == 'calc' else 'debug'}" in body
     assert "window.SLINK_API_BASE = \"/runs/run_1\"" in body
     assert "not running" in body
+    if panel == "debug":
+        assert "/runs/run_1/calc/normal.html" not in body, "Gen 1 has no verified calc yet"
 
 
 @pytest.mark.asyncio

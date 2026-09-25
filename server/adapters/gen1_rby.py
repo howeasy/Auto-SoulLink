@@ -44,6 +44,15 @@ _ENCOUNTERS = _json("encounter_tables.json")
 _MOVES = {int(row["id"]): row for row in _json("moves.json")["moves"]}
 _TRAINERS = _json("trainers.json")
 
+# Gen 1 (RBY, and pureRGB which inherits this via Gen1Adapter.calc_name) display name →
+# damage-calc Gen 1 name, per kind. Pinned by tests/unit/test_calc_names_multigen.py
+# against calc/calc/src/data/*.ts's RBY block.
+_CALC_NAMES: dict[str, dict[str, str]] = {}
+_calc_names_path = _DATA / "calc_names.json"
+if _calc_names_path.exists():
+    with _calc_names_path.open(encoding="utf-8") as _f:
+        _CALC_NAMES = {k: v for k, v in json.load(_f).items() if isinstance(v, dict)}
+
 # constants/type_constants.asm:5-26, data/types/names.asm:1-29.
 _TYPE_NAMES = {
     0x00: "Normal", 0x01: "Fighting", 0x02: "Flying", 0x03: "Poison",
@@ -416,6 +425,11 @@ class Gen1Adapter(GameAdapter):
 
     def item_name(self, item_id: int) -> str:
         return ITEM_NAMES.get(item_id, f"Item #{item_id}") if item_id else ""
+
+    def calc_name(self, kind: str, name: str) -> str:
+        if not name:
+            return name
+        return _CALC_NAMES.get(kind, {}).get(name, name)
 
     def area_display_name(self, area_id: str) -> str:
         if area_id in _AREA_NAMES:
