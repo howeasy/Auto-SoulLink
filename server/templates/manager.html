@@ -152,10 +152,21 @@
             <a class="mk-btn" href="/api/runs/{{ run.run_id }}/rom/a">Player A · slink_{{ run.safe_name }}_a{{ run.rom_ext.a }}</a>
             <a class="mk-btn" href="/api/runs/{{ run.run_id }}/rom/b">Player B · slink_{{ run.safe_name }}_b{{ run.rom_ext.b }}</a>
             {% endif %}
-            <span class="mk-cap">BizHawk Lua launchers</span>
+            <span class="mk-cap">Player setup — SLink's Lua runtime with the launcher inside (BizHawk {{ bizhawk_min }})</span>
+            <a class="mk-btn" href="{{ packs.a }}">Player A · slink_{{ run.safe_name }}_a.zip</a>
+            <a class="mk-btn" href="{{ packs.b }}">Player B · slink_{{ run.safe_name }}_b.zip</a>
+            <span class="mk-cap">Just the launcher, for a player who already has the runtime</span>
             <a class="mk-btn" href="/api/runs/{{ run.run_id }}/launcher/a">Player A · slink_{{ run.safe_name }}_a.lua</a>
             <a class="mk-btn" href="/api/runs/{{ run.run_id }}/launcher/b">Player B · slink_{{ run.safe_name }}_b.lua</a>
-            <span class="mk-cap">Load the {% if run.cartridges or run.randomizer %}cartridge{% else %}save{% endif %} first, then the script. It connects to <code class="num">tcp {{ run.tcp_port }}</code>.</span>
+            <span class="mk-cap">Load the {% if run.cartridges or run.randomizer %}cartridge{% else %}save{% endif %} first, then the script. It connects to <code class="num">{{ connect.host }}:{{ connect.port }}</code>
+              ({% if connect.source == 'set' %}set by you{% elif connect.source == 'lan' %}this machine's LAN address{% elif connect.source == 'bind' %}the address the Manager listens on{% elif connect.source == 'loopback' %}the Manager listens on this machine only: start it with <code>--host 0.0.0.0</code> for remote players{% else %}no network found: only this machine can connect{% endif %}).</span>
+            {# /api/settings/public-host: the address baked into every launcher and setup ZIP #}
+            <form class="mk-hostform" data-host="{{ connect.host if connect.source == 'set' else '' }}" x-data="publicHost($el.dataset.host)" @submit.prevent="save()">
+              <label class="mk-cap">Players connect to <input type="text" x-model="host" placeholder="{{ connect.host }}" aria-describedby="host-help-{{ run.run_id }}" maxlength="253" spellcheck="false"></label>
+              <button class="mk-btn" type="submit" :disabled="busy">Save</button>
+              <span class="mk-sub" id="host-help-{{ run.run_id }}">Empty = work it out. Download the files again after a change.</span>
+              <span class="mk-sub" role="alert" x-text="err" style="color:var(--c-dead)"></span>
+            </form>
           </div>
         </span>
         {% if run.status != 'archived' %}<button class="mk-btn" :disabled="busy" @click="act('archive', 'Archive run ' + {{ run.name | tojson | forceescape }} + '? The server stops; the data is kept.')">Archive</button>{% endif %}
@@ -233,6 +244,26 @@
 <style>[x-cloak] { display: none !important; }</style>
 <script>
   function manager() { return {}; }
+
+  // The address baked into every launcher and setup ZIP; "" goes back to working it out.
+  function publicHost(initial) {
+    return {
+      host: initial || '', err: '', busy: false,
+      async save() {
+        this.busy = true; this.err = '';
+        try {
+          var res = await fetch('/api/settings/public-host', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ host: this.host.trim() }), signal: AbortSignal.timeout(10000) });
+          var j = {};
+          try { j = await res.json(); } catch (e) { j = {}; }
+          if (res.ok && j.ok) { window.location.reload(); return; }
+          this.err = j.error || ('Could not save (HTTP ' + res.status + ')');
+        } catch (e) { this.err = 'Could not save: ' + e; }
+        this.busy = false;
+      },
+    };
+  }
 
   function runNotice() {
     return { title: 'Could not start.', notice: new URLSearchParams(window.location.search).get('error') || '' };

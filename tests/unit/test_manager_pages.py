@@ -106,7 +106,8 @@ async def test_a_stopped_run_renders_its_persisted_board(manager_client, manager
     body = await resp.text()
     assert "SPARKY" in body and "EMBO" in body
     assert "zone-linked" in body, "nothing is located on a stopped run, so the pair is Linked"
-    assert "run not running" in body and "waiting for hello" not in body
+    # the per-player connection state (manager.connection_state), not the live "waiting" copy
+    assert "mk-conn stopped" in body and "waiting for hello" not in body
     assert 'hx-get="/runs/run_1/board"' in body, "the fragment must poll the Manager, not /"
     assert "Kanto Duo" in body and "Red · Blue · Yellow" in body
 
