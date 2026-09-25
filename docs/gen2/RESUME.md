@@ -588,3 +588,5 @@ Cross-lane contacts (cross-session, by name):
 - "Gen3 migration planning": gen3_frlge.py is theirs; pairing_kind is identical on both sides; our __init__.py changes are additive.
 - "Damage calculator multi-game support": the calc lane; GEN2-CALC contract.
 - "GUI notifications": the UI lane; it owns board.css and the templates.
+
+- 2026-09-25 post-compaction: Opus reviewer a81d1d6af35d53886 on 0857cbe7 (PHONE-NAMES follow-up ASM): NO DEFECTS in (a) native phone behaviour, (b) regs/stack/bank \$24 space (G/S ends \$7FE8, 23 B free), (c) mailbox +34..+36 collisions, (d) named path end to end. Only KS5 is still running.
