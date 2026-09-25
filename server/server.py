@@ -164,8 +164,11 @@ def _build_mon_entry(key, detail, adapter):
     level    = detail.get("level", 0)
     nick     = detail.get("nickname", "")
     hp       = detail.get("hp", 0)
-    maxhp    = max(detail.get("maxHP", 1), 1)
-    hp_pct   = max(0, min(100, int(hp / maxhp * 100)))
+    # maxHP is only absent for a Gen 1 enemy the client hasn't decoded yet (docs/protocol.md
+    # §4.3 maxHP); null it through rather than the old max(..., 1) that forced hp_pct to 100.
+    raw_maxhp = detail.get("maxHP")
+    maxhp    = max(raw_maxhp, 1) if raw_maxhp else None
+    hp_pct   = max(0, min(100, int(hp / maxhp * 100))) if maxhp else None
     disp     = f"{species} ({nick})" if nick and nick != species else species
     lines    = [disp + (f" @ {item}" if item else "")]
     if has_ability:
@@ -2622,20 +2625,31 @@ class SLinkServer:
                         "level":        em.get("level", 0),
                         "nickname":     "",
                         "hp":           em.get("hp", 0),
-                        "maxHP":        em.get("maxHP", 1),
+                        # No default: an enemy the client hasn't decoded a battle struct for
+                        # yet (or a generation that doesn't send one) stays maxHP=None, not a
+                        # fake maxHP=1 that used to force hp_pct to 100.
+                        "maxHP":        em.get("maxHP"),
                         "held_item_id": em.get("held_item_id", 0),
                         "ability_id":   em.get("ability_id", 0),
                         "ability_name": "",
                         "moves":        em.get("moves", []),
                         "status_cond":  em.get("status_cond", 0),
                         "stat_stages":  em.get("stat_stages"),
+                        # Gen 1 only (lua/gen1/client.lua enemy_party): dvs_raw from the live
+                        # wEnemyMon struct always; blob_hex (trainer battles only) additionally
+                        # carries stat exp. adapter.calc_stats() ignores both when absent.
+                        "dvs_raw":      em.get("dvs_raw"),
+                        "blob_hex":     em.get("blob_hex"),
+                        "pp":           em.get("pp"),
                     }
+                    detail["calc_stats"] = adapter.calc_stats(detail)
                     entry = _build_mon_entry(f"foe-{ei}", detail, adapter)
                     if entry:
                         entry["loc"]    = "enemy"
                         entry["active"] = em.get("active", False)
-                        entry["hp_pct"] = max(0, min(100, int(
-                            em.get("hp", 0) / max(em.get("maxHP", 1), 1) * 100)))
+                        entry["hp_pct"] = (
+                            max(0, min(100, int(em.get("hp", 0) / em["maxHP"] * 100)))
+                            if em.get("maxHP") else None)
                         entry["trainer_label"] = trainer_label
                         enemy.append(entry)
                 calc_label = _calc_trainer_label(

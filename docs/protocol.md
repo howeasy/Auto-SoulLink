@@ -272,11 +272,13 @@ Gen 3 builds it from `M.readEnemyParty()` (`memory_gba.lua:1541-1577`) overlaid 
 
 | Field | Type | Consumer | Cite |
 |---|---|---|---|
-| `species_id` | int | name, sprite, types, killer species, dupes | `server.py:3962`, `2959`, `3079` |
-| `level` | int | display, killer level | `server.py:3963`, `2960` |
-| `hp`, `maxHP` | int | HP bar; "active foe" for killer = first with `hp > 0` | `server.py:3964-3965`, `2957` |
-| `active` | bool | active marker, stat stages, doubles inference | `server.py:3966`, `3071` |
-| `ability_id`, `held_item_id`, `status_cond`, `stat_stages`, `moves`, `pp`, `pp_bonuses`/`pp_ups`, `form`, `key` | as §4.1 | battle panel | `server.py:3967-3969`, `3436-3473`, `3977` |
+| `species_id` | int | name, sprite, killer species, `/api/calc/mons` entry | `server.py:1859`, `2326-2333`, `2620`, `2624` |
+| `level` | int | display, killer level, calc entry | `server.py:1860`, `2625` |
+| `hp`, `maxHP` | int | HP bar; "active foe" for killer/calc preview = first with `hp > 0` | `server.py:989-990`, `2627`, `2631` |
+| `active` | bool | active marker, doubles inference, calc preview | `server.py:989`, `1962-1964`, `2649` |
+| `ability_id`, `held_item_id`, `status_cond`, `stat_stages`, `moves`, `pp`, `form`, `key` | as §4.1 | battle panel enrichment, calc entry | `server.py:2320-2337`, `2632-2637` |
+| `dvs_raw` | int, raw 16-bit DV word | Gen 1 only (`lua/gen1/client.lua` `enemy_party`); every battle, wild included. `Gen1Adapter.calc_stats` decodes DVs from it when no `blob_hex` is present (a wild mon has no party record) | `lua/gen1/client.lua` `enemy_party`, `server/adapters/gen1_rby.py:461-467` |
+| `blob_hex` | hex, 44 bytes | Gen 1 only, **trainer battles only**: the active mon's party record (`wEnemyMons + PartyPos*44`), carrying stat exp `Gen1Adapter.calc_stats` needs that the live battle struct doesn't have | `lua/gen1/client.lua` `enemy_party`, `server/adapters/gen1_rby.py:446-460` |
 
 ### 4.4 Box entry (element of `pc_boxes`)
 

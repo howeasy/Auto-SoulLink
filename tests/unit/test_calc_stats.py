@@ -197,3 +197,17 @@ def test_build_mon_entry_carries_calc_stats():
 
     entry_none = _build_mon_entry("k2", {"species_id": 4, "level": 50}, VANILLA)
     assert entry_none["calc_stats"] is None
+
+
+def test_gen1_enemy_without_blob_uses_raw_dvs_and_no_stat_exp():
+    """A wild Gen 1 foe sends only its raw DV word: 0 stat exp, stats unknown."""
+    cs = Gen1Adapter().calc_stats({"key": "", "level": 5, "dvs_raw": 0x9888})
+    assert cs["dvs"] == {"atk": 9, "def": 8, "spe": 8, "spc": 8}
+    assert cs["stat_exp"] == {"hp": 0, "atk": 0, "def": 0, "spe": 0, "spc": 0}
+    assert "stats" not in cs
+
+
+def test_enemy_without_max_hp_is_unknown_not_full():
+    """No maxHP from the client means unknown HP, not the old forced 100%."""
+    entry = _build_mon_entry("foe-0", {"species_id": 4, "level": 5, "hp": 12}, VANILLA)
+    assert entry["maxHP"] is None and entry["hp_pct"] is None
