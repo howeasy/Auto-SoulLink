@@ -1248,7 +1248,7 @@ class SLinkServer:
                         self._rom_type_rejected.add(player_id)
                         await self._respond(writer, [{
                             "cmd": "hud_show", "text": f"[x] UNKNOWN ROM: {_rt}",
-                            "color": [255, 0, 0], "duration": 600,
+                            "r": 255, "g": 0, "b": 0, "frames": 600,
                         }])
                         self._notify_sse()
                         continue
@@ -1308,7 +1308,7 @@ class SLinkServer:
                         self._rom_type_rejected.add(player_id)
                         await self._respond(writer, [{
                             "cmd": "hud_show", "text": "[x] MIXED GAMES",
-                            "color": [255, 0, 0], "duration": 600,
+                            "r": 255, "g": 0, "b": 0, "frames": 600,
                         }])
                         self._notify_sse()
                         continue
