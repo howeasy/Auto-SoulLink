@@ -82,11 +82,14 @@ POISON_ROUTE = {"crystal": (("Route29", "west", "CherrygroveCity"), ("Cherrygrov
                 "gold": ()}
 POISON_HUNT = {"crystal": "Route30", "silver": "Route30", "gold": "Route29"}
 # Two floor tiles off the hunt grass: Route 30's south exit (the first next to the south grass) for Crystal/
-# Silver. Gold's pair is on its own Route 29 catch map instead: (4,9) is the first floor tile bordering the
-# grass patch found by a plain neighbour scan of the map's own collision grid (gen2_fixtures._map_facts), (5,9)
-# its own floor neighbour; both re-asserted floor at runtime below like every other title's pair.
+# Silver. Gold's pair is on its own Route 29 catch map instead, right off the O-10 grass patch the errand's own
+# catch battle ends in (xy 52-53,12 both live runs, fsw-postrc-psn1/psn2): (53,11) is the floor tile directly
+# north of it, (52,11) its own floor neighbour (gen2_fixtures._map_facts collision grid); a first attempt used a
+# floor-adjacent-to-grass pair on the FAR side of the 60-wide map (x=4) and the long walk back there crossed
+# enough Route 29 grass to trigger a wild encounter mid-tick (fsw-postrc-psn2: "a battle started on the park
+# tiles"). Both re-asserted floor at runtime below like every other title's pair.
 POISON_PARK = {"crystal": ({"x": 7, "y": 49}, {"x": 7, "y": 50}), "silver": ({"x": 7, "y": 49}, {"x": 7, "y": 50}),
-               "gold": ({"x": 4, "y": 9}, {"x": 5, "y": 9})}
+               "gold": ({"x": 53, "y": 11}, {"x": 52, "y": 11})}
 POISON_TRAINER = {}
 # Gold no longer travels north to heal before a trainer fight (see POISON_ROUTE above). Crystal and Silver
 # still heal at the Cherrygrove #MON CENTER: a worn Route 30 hunt goes back through Route 30's south connection

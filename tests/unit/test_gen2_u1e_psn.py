@@ -88,7 +88,7 @@ def test_gold_no_longer_travels_or_hunts_or_fights_a_trainer():
     assert POISON_ROUTE["gold"] == ()
     assert "gold" not in POISON_TRAINER
     assert "gold" not in POISON_HEAL
-    assert POISON_HUNT["gold"] == "Route29" and POISON_PARK["gold"] == ({"x": 4, "y": 9}, {"x": 5, "y": 9})
+    assert POISON_HUNT["gold"] == "Route29" and POISON_PARK["gold"] == ({"x": 53, "y": 11}, {"x": 52, "y": 11})
 
 
 def test_crystal_and_silver_keep_their_natural_route30_leg():
