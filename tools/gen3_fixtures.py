@@ -27,10 +27,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import itertools
 import json
 import os
+import re
 import shutil
 import stat
+import struct
 import subprocess
 import sys
 import time
@@ -53,13 +56,13 @@ def sha256_hex(data: bytes) -> str:
 # import
 # ---------------------------------------------------------------------------
 
-def import_savedata(src: bytes, *, rr: bool) -> bytes:
+def import_savedata(src: bytes, *, rr: bool, title: str = codec.TITLE_FRLG) -> bytes:
     """Strip the optional RTC suffix, refuse a blank or unqualified save,
     return the 128 KiB flash body to write as a fixture."""
     body, _rtc = codec.split_rtc(src)
     if all(b == 0xFF for b in body):
         raise ValueError("blank/erased save (flash body is all 0xFF)")
-    ok, msg = codec.qualify_flash(body, cfru=rr)
+    ok, msg = codec.qualify_flash(body, cfru=rr, title=title)
     if not ok:
         raise ValueError(f"qualify_flash refused: {msg}")
     return body
@@ -101,12 +104,13 @@ def _party_entry(mon: dict) -> dict:
             "level": mon["level"]}
 
 
-def qualify_one(data: bytes, *, rr: bool) -> dict:
+def qualify_one(data: bytes, *, rr: bool, title: str = codec.TITLE_FRLG) -> dict:
     """Everything `qualify` prints, as a dict, so the test suite can assert
-    on it directly instead of parsing stdout."""
+    on it directly instead of parsing stdout. ``title`` is the codec's save-layout
+    title (frlg | emerald); RR ignores it."""
     body, rtc = codec.split_rtc(data)
-    ok, msg = codec.qualify_flash(body, cfru=rr)
-    parsed = codec.parse_flash(body, cfru=rr)
+    ok, msg = codec.qualify_flash(body, cfru=rr, title=title)
+    parsed = codec.parse_flash(body, cfru=rr, title=title)
     name, trainer_id = _trainer_identity(parsed["sb2"])
     result: dict = {
         "ok": ok, "message": msg, "slot": parsed["slot"],
@@ -127,9 +131,9 @@ def qualify_one(data: bytes, *, rr: bool) -> dict:
         result["boxes_note"] = ("RR layout pinned; extension sectors 30/31 have no checksum "
                                 "or generation counter (rr_save_layout.md §5, §7)")
     else:
-        party = codec.party_from_save(body, rr=False)
+        party = codec.party_from_save(body, rr=False, title=title)
         result["party"] = [_party_entry(m) for m in party]
-        boxes = codec.boxes_from_save(body, rr=False)
+        boxes = codec.boxes_from_save(body, rr=False, title=title)
         result["boxes"] = sum(1 for box in boxes for mon in box
                               if mon["personality"] or mon["ot_id"])
     return result
@@ -140,7 +144,7 @@ def cmd_qualify(args: argparse.Namespace) -> int:
     for path in args.files:
         data = Path(path).read_bytes()
         try:
-            r = qualify_one(data, rr=args.rr)
+            r = qualify_one(data, rr=args.rr, title=args.title)
         except ValueError as exc:
             print(f"{path}: REFUSED {exc}")
             exit_code = 1
@@ -185,16 +189,19 @@ def _rekey_mon(raw: bytes, *, party: bool, old_tid: int, new_tid: int,
     return new_raw, new_raw != raw
 
 
-def derive_b(a_body: bytes, *, rr: bool = False) -> tuple[bytes, list[str]]:
+def derive_b(a_body: bytes, *, rr: bool = False,
+             title: str = codec.TITLE_FRLG) -> tuple[bytes, list[str]]:
     """Variant-specific distinct-OT derivation (flash_save.md §5). Returns
     (new_flash_body, manifest_lines); raises ValueError if the source does
-    not qualify."""
+    not qualify. ``title`` (frlg | emerald) picks the vanilla save layout: Emerald's
+    SaveBlocks are bigger and its party sits at SB1+0x234/+0x238 (gen3_codec)."""
     if rr:
         return _derive_b_rr(a_body)
-    ok, msg = codec.qualify_flash(a_body)
+    ok, msg = codec.qualify_flash(a_body, title=title)
     if not ok:
         raise ValueError(f"source fixture does not qualify: {msg}")
-    parsed = codec.parse_flash(a_body)
+    parsed = codec.parse_flash(a_body, title=title)
+    party_count_off, party_off = codec._TITLE_PARTY_OFFSETS[title]
     sb2 = bytearray(parsed["sb2"])
     sb1 = bytearray(parsed["sb1"])
     storage = bytearray(parsed["storage"])
@@ -212,9 +219,9 @@ def derive_b(a_body: bytes, *, rr: bool = False) -> tuple[bytes, list[str]]:
     # SaveBlock2.encryptionKey (+0xF20) is deliberately untouched: an OT-only
     # transformation does not need a bag/stats rekey (flash_save.md §5.5).
 
-    count = min(sb1[codec.SB1_PARTY_COUNT_OFFSET], codec.PARTY_CAPACITY)
+    count = min(sb1[party_count_off], codec.PARTY_CAPACITY)
     for i in range(count):
-        start = codec.SB1_PARTY_OFFSET + i * codec.PARTY_MON_SIZE
+        start = party_off + i * codec.PARTY_MON_SIZE
         raw = bytes(sb1[start:start + codec.PARTY_MON_SIZE])
         new_raw, changed = _rekey_mon(raw, party=True, old_tid=old_tid,
                                        new_tid=new_tid, new_name=new_name)
@@ -241,7 +248,7 @@ def derive_b(a_body: bytes, *, rr: bool = False) -> tuple[bytes, list[str]]:
     # UNVERIFIED to enumerate exhaustively -- flash_save.md §5.3 restricts
     # simple fixtures to leaving them untouched rather than guessing.
 
-    layout = codec.slot_layout()
+    layout = codec.slot_layout(title=title)
     objects = {"sb2": bytes(sb2), "sb1": bytes(sb1), "storage": bytes(storage)}
     base = codec.NUM_SECTORS_PER_SLOT * parsed["slot"]
     new_body = bytearray(a_body)
@@ -357,11 +364,11 @@ def _derive_b_rr(a_body: bytes) -> tuple[bytes, list[str]]:
 def cmd_derive_b(args: argparse.Namespace) -> int:
     try:
         a_body = codec.split_rtc(Path(args.a).read_bytes())[0]
-        b_body, manifest = derive_b(a_body, rr=args.rr)
+        b_body, manifest = derive_b(a_body, rr=args.rr, title=args.title)
     except (ValueError, OSError) as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 1
-    ok, msg = codec.qualify_flash(b_body, cfru=args.rr)
+    ok, msg = codec.qualify_flash(b_body, cfru=args.rr, title=args.title)
     if not ok:
         print(f"refused: derived save does not re-qualify: {msg}", file=sys.stderr)
         return 1
@@ -387,7 +394,10 @@ def cmd_derive_b(args: argparse.Namespace) -> int:
 BOOT_CHECK_LUA = "lua/tests/gen3_boot_check.lua"
 FR_NEWGAME_LUA = "lua/tests/gen3_fr_newgame_inputs.lua"
 FR_PARTY_LUA = "lua/tests/gen3_fixture_from_state.lua"
-RUN_DIR = Path(REPO) / "patch" / "build" / "gen3_fixture_runs"
+# SLINK_GEN3_FIXTURE_RUNS moves the per-run SaveRAM dirs off Drive to a short lane path
+# (reference_bizhawk_maxpath_saveram: SaveRAM writes fail silently near 260 chars).
+RUN_DIR = Path(os.environ.get("SLINK_GEN3_FIXTURE_RUNS")
+               or Path(REPO) / "patch" / "build" / "gen3_fixture_runs")
 CHECKPOINTS = {False: Path(REPO) / "data/games/gen3_frlg/write_checkpoint.json",
                True: Path(REPO) / "data/games/gen3_rr/write_checkpoint.json"}
 
@@ -618,18 +628,20 @@ def _prepare_run(name: str, rom: str, *, seed: bytes | None, saveram_name_overri
 def cmd_boot_check(args: argparse.Namespace) -> int:
     fixture = Path(args.fixture)
     data = fixture.read_bytes()
-    before = qualify_one(data, rr=args.rr)
+    emerald = getattr(args, "title", None) == "emerald"
+    layout = codec.TITLE_EMERALD if emerald else codec.TITLE_FRLG
+    before = qualify_one(data, rr=args.rr, title=layout)
     if not before["ok"]:
         print(f"BOOT-CHECK FAIL {fixture}: the fixture itself does not qualify: "
               f"{before['message']}", file=sys.stderr)
         return 1
     rom_rel, run_dir, battery = _prepare_run(
-        f"bootcheck_{fixture.stem}", args.rom,
-        seed=codec.split_rtc(data)[0], saveram_name_override=args.saveram_name)
+        f"bootcheck_{fixture.stem}", args.rom, seed=codec.split_rtc(data)[0],
+        saveram_name_override=args.saveram_name or (EMERALD_SAVERAM if emerald else None))
     print(f"seeded {run_dir / battery} from {fixture} (counter={before['counter']})")
 
-    passed, text = _launch(BOOT_CHECK_LUA, rom_rel, run_dir, rr=args.rr, timeout=args.timeout,
-                           title=getattr(args, "title", None))
+    passed, text = _launch(EMERALD_BOOT_LUA if emerald else BOOT_CHECK_LUA, rom_rel, run_dir,
+                           rr=args.rr, timeout=args.timeout, title=getattr(args, "title", None))
     print(text.rstrip())
     if not passed:
         print(f"BOOT-CHECK FAIL {fixture}: the emulator driver did not report PASS",
@@ -644,7 +656,7 @@ def cmd_boot_check(args: argparse.Namespace) -> int:
     if flushed.name != battery:
         print(f"note: BizHawk filed the battery as {flushed.name!r}, not the seeded "
               f"{battery!r} — pass --saveram-name {flushed.name!r} to seed it next time")
-    after = qualify_one(codec.split_rtc(flushed.read_bytes())[0], rr=args.rr)
+    after = qualify_one(codec.split_rtc(flushed.read_bytes())[0], rr=args.rr, title=layout)
     ok, problems = boot_check_verdict(before, after)
     for problem in problems:
         print(f"  {problem}", file=sys.stderr)
@@ -861,6 +873,249 @@ def cmd_make_fr_party(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Emerald (card E1-FIX, EF-10): a DISCLOSED O-33 SYNTH seed, re-saved natively by the game
+#
+# `make-emerald` writes a bootable Emerald flash save from pret facts (the SYNTH setup), cold-boots
+# it on the real ROM -> CONTINUE -> in-game SAVE, and keeps the GAME's own re-save as the fixture.
+# The seed sets SaveBlock2.specialSaveWarpFlags = CONTINUE_GAME_WARP, so CONTINUE runs pret's own
+# warp-in (CB2_ContinueSavedGame -> WarpIntoMap -> CB2_LoadMap, pret src/overworld.c:1739-1746)
+# instead of restoring a saved map view / object-event table the seed does not carry. The game
+# clears that flag (ClearContinueGameWarpStatus) and then writes a complete SaveBlock1 of its own;
+# `emerald_fixture_problems` refuses a result where it is still set. Only the boot, the warp-in
+# and the save run natively; everything in the seed is listed in tests/fixtures/gen3/README.md.
+# Struct offsets are pret's own annotations (pokeemerald c65e93f2 include/global.h).
+# ---------------------------------------------------------------------------
+
+EMERALD_ROM = "Pokemon - Emerald Version (USA, Europe).gba"
+# BizHawk gamedb_gba.txt:1979 knows the clean dump (sha1 F3AE0881...), so EmuHawk files the battery
+# under the gamedb title, not under the staged ROM's filename.
+EMERALD_SAVERAM = "Pokemon - Emerald Version (USA, Europe).SaveRAM"
+EMERALD_BOOT_LUA = "lua/tests/gen3_emerald_boot_check.lua"
+
+# kind -> (pret map dir, mapGroup, mapNum, LAYOUT_* id, x, y). Group/num are the map's position in
+# data/maps/map_groups.json; the layout id is its 1-based index in data/layouts/layouts.json
+# (gMapLayouts[mapLayoutId - 1], src/overworld.c:532-538). Tiles come from data/layouts/*/map.bin +
+# metatile attributes; tests/unit/test_gen3_fixture_qualify_emerald.py re-derives every claim.
+EMERALD_KINDS = {
+    # HEAL_LOCATION_OLDALE_TOWN (src/data/heal_locations.json), one step S of the Pokemon Center
+    # door warp (6,16) (data/maps/OldaleTown/map.json); towns carry no wild encounters
+    "town": ("OldaleTown", 0, 10, 11, 6, 17),
+    # MB_TALL_GRASS inside the (19..25, 16..17) patch; no trainer faces it
+    "battle": ("Route102", 0, 17, 18, 21, 16),
+    # one step W of Youngster Calvin's sight line: he stands at (33,14) facing down with sight 3
+    # (data/maps/Route102/map.json), so one Right step onto (33,16) starts his battle
+    "trainer": ("Route102", 0, 17, 18, 32, 16),
+}
+EMERALD_HEAL = (0, 10, 6, 17)          # HEAL_LOCATION_OLDALE_TOWN: MAP_OLDALE_TOWN (6,17)
+EMERALD_OT = ("EMER", 0x20250925)      # SYNTH identity; `derive-b --title emerald` makes the _b side
+EMERALD_SEED_COUNTER = 1               # the seed's slot is 1; the game's save writes counter 2, slot 0
+
+# The party: one starter as ScriptGiveMon would build it at Lv5 on Route 101 (pret src/pokemon.c
+# CreateBoxMon/CalculateMonStats). Species facts, pokeemerald c65e93f2:
+#   SPECIES_MUDKIP 283 (include/constants/species.h:289); base 50/70/50/40/50/50, genderRatio
+#   PERCENT_FEMALE(12.5) = 31, STANDARD_FRIENDSHIP 70, GROWTH_MEDIUM_SLOW
+#   (src/data/pokemon/species_info.h:7799-7821); Lv1 moves TACKLE 33 (pp 35) and GROWL 45 (pp 40)
+#   (level_up_learnsets.h:3676-3678, battle_moves.h:432-438/588-594).
+MUDKIP = {"species": 283, "name": "MUDKIP", "gender_ratio": 31, "friendship": 70,
+          "base": {"hp": 50, "attack": 70, "defense": 50, "speed": 40,
+                   "sp_attack": 50, "sp_defense": 50},
+          "moves": [33, 45, 0, 0], "pp": [35, 40, 0, 0]}
+STARTER_LEVEL, STARTER_IV = 5, 15
+MAPSEC_ROUTE_101 = 16      # src/data/region_map/region_map_sections.json, index of MAPSEC_ROUTE_101
+VERSION_EMERALD, LANGUAGE_ENGLISH, ITEM_POKE_BALL = 3, 2, 4   # constants/global.h:10,21; items.h:10
+# Flags a player holds once Birch has handed over the Pokedex (FLAG_ADVENTURE_STARTED: its comment
+# in constants/flags.h:136 is "RECEIVED Pokedex") -- it is what unblocks Oldale's west exit to
+# Route 102 (data/maps/OldaleTown/scripts.inc OnTransition). Everything else a new game sets comes
+# from EventScript_ResetAllMapFlags (data/scripts/new_game.inc:115), read from pret at build time.
+EMERALD_STORY_FLAGS = ("FLAG_SYS_POKEMON_GET", "FLAG_ADVENTURE_STARTED",
+                       "FLAG_RECEIVED_POTION_OLDALE", "FLAG_VISITED_OLDALE_TOWN",
+                       "FLAG_HIDE_OLDALE_TOWN_RIVAL", "FLAG_HIDE_ROUTE_103_RIVAL")
+
+
+def pret_emerald() -> Path:
+    """The pokeemerald checkout: $SLINK_PRET_EMERALD, else <root>/.cache/pret/pokeemerald for this
+    repo root and the checkout a worktree belongs to (the _rom_candidates search)."""
+    env = os.environ.get("SLINK_PRET_EMERALD")
+    roots = [Path(env)] if env else [c.parent for c in _rom_candidates(".cache/pret/pokeemerald/x")]
+    for root in roots:
+        if (root / "include" / "global.h").exists():
+            return root
+    raise FileNotFoundError("pret pokeemerald not found in " + ", ".join(map(str, roots))
+                            + " -- set SLINK_PRET_EMERALD")
+
+
+def pret_flag_ids(pret: Path, names) -> list[int]:
+    """Evaluate FLAG_* names from include/constants/flags.h (+ opponents.h for MAX_TRAINERS_COUNT,
+    which TRAINER_FLAGS_END and so every SYSTEM_FLAGS flag hangs off)."""
+    defs = {}
+    for rel in ("include/constants/flags.h", "include/constants/opponents.h"):
+        text = (pret / rel).read_text(encoding="utf-8")
+        for m in re.finditer(r"^#define\s+(\w+)\s+(.+)$", text, re.M):
+            defs[m.group(1)] = m.group(2).split("//")[0].strip()
+
+    def value(name: str) -> int:
+        expr = re.sub(r"(?<!\w)[A-Za-z_]\w*", lambda m: str(value(m.group(0))), defs[name])
+        if not re.fullmatch(r"[\s0-9a-fA-FxX+\-()]+", expr):
+            raise ValueError(f"{name}: unsupported expression {defs[name]!r}")
+        return int(eval(expr, {"__builtins__": {}}))   # digits/+/-/() only, checked above
+    return [value(n) for n in names]
+
+
+def emerald_new_game_flags(pret: Path) -> list[int]:
+    """EventScript_ResetAllMapFlags's setflag list (new_game.inc:115-...) plus EMERALD_STORY_FLAGS."""
+    text = (pret / "data/scripts/new_game.inc").read_text(encoding="utf-8")
+    block = re.split(r"^\s*end\s*$", text.split("EventScript_ResetAllMapFlags::", 1)[1],
+                     maxsplit=1, flags=re.M)[0]
+    names = re.findall(r"^\s*setflag (\w+)", block, re.M)
+    return pret_flag_ids(pret, [*names, *EMERALD_STORY_FLAGS])
+
+
+def emerald_starter(ot_name: str, tid: int) -> dict:
+    """The codec dict for a Lv5 Mudkip. Personality: the first value from 'MUDK' that is Hardy
+    (neutral nature, pid % 25 == 0), male (pid & 0xFF >= genderRatio) and not shiny for `tid`."""
+    pid = next(p for p in itertools.count(0x4D55444B)
+               if p % 25 == 0 and (p & 0xFF) >= MUDKIP["gender_ratio"]
+               and ((tid & 0xFFFF) ^ (tid >> 16) ^ (p & 0xFFFF) ^ (p >> 16)) >= 8)
+    lv = STARTER_LEVEL
+    stats = {k: (2 * b + STARTER_IV) * lv // 100 + 5 for k, b in MUDKIP["base"].items()}
+    stats["hp"] = (2 * MUDKIP["base"]["hp"] + STARTER_IV) * lv // 100 + lv + 10
+    return {
+        "personality": pid, "ot_id": tid, "nickname": MUDKIP["name"], "language": LANGUAGE_ENGLISH,
+        "is_bad_egg": 0, "has_species": 1, "is_egg_flag": 0, "block_box_rs": 0, "flags_unused": 0,
+        "ot_name": ot_name, "markings": 0, "unknown": 0,
+        "species": MUDKIP["species"], "held_item": 0,
+        "experience": 6 * lv ** 3 // 5 - 15 * lv ** 2 + 100 * lv - 140,   # EXP_MEDIUM_SLOW
+        "pp_bonuses": 0, "friendship": MUDKIP["friendship"], "growth_filler": 0,
+        "moves": list(MUDKIP["moves"]), "pp": list(MUDKIP["pp"]),
+        "evs": dict.fromkeys(MUDKIP["base"], 0), "contest": [0] * 6,
+        "pokerus": 0, "met_location": MAPSEC_ROUTE_101, "met_level": lv,
+        "met_game": VERSION_EMERALD, "pokeball": ITEM_POKE_BALL, "ot_gender": 0,
+        "ivs": dict.fromkeys(MUDKIP["base"], STARTER_IV),
+        "is_egg": 0, "ability_num": pid & 1, "ribbons": 0,
+        "status": 0, "level": lv, "mail": 0xFF, "max_hp": stats["hp"], **stats,
+    }
+
+
+def _warp(group: int, num: int, x: int, y: int) -> bytes:
+    """struct WarpData (global.h:581-588): s8 mapGroup, mapNum, warpId, pad, s16 x, y. warpId is
+    WARP_ID_NONE (-1) so SetPlayerCoordsFromWarp uses x/y (overworld.c:603-615)."""
+    return struct.pack("<bbbxhh", group, num, -1, x, y)
+
+
+def build_emerald_seed(kind: str, flags: list[int]) -> bytes:
+    """The SYNTH flash image for `kind` (see the section header). `flags` = emerald_new_game_flags."""
+    _map, group, num, layout_id, x, y = EMERALD_KINDS[kind]
+    name, tid = EMERALD_OT
+    sb2 = bytearray(codec.SAVEBLOCK2_SIZE_EMERALD)
+    sb2[0x00:0x08] = codec.encode_name(name, 8)   # playerName[PLAYER_NAME_LENGTH + 1], global.h:510
+    sb2[0x08] = 0                                 # playerGender MALE, :511
+    sb2[0x09] = 1                                 # specialSaveWarpFlags CONTINUE_GAME_WARP (save_location.h:5), :512
+    sb2[0x0A:0x0E] = tid.to_bytes(4, "little")    # playerTrainerId, :513
+    sb2[0x14] = 1                                 # optionsTextSpeed MID, :519; SetDefaultOptions new_game.c:91-99
+    # encryptionKey (+0xAC, :532) stays 0 as NewGameInitData leaves it (new_game.c:155): money is plain
+
+    sb1 = bytearray(codec.SAVEBLOCK1_SIZE_EMERALD)
+    sb1[0x00:0x04] = struct.pack("<hh", x, y)     # pos, global.h:986
+    sb1[0x04:0x0C] = _warp(group, num, x, y)      # location, :987
+    sb1[0x0C:0x14] = _warp(group, num, x, y)      # continueGameWarp, :988
+    sb1[0x1C:0x24] = _warp(*EMERALD_HEAL)         # lastHealLocation, :990 (SetLastHealLocationWarp)
+    sb1[0x32:0x34] = layout_id.to_bytes(2, "little")   # mapLayoutId, :997 (0 = a NULL layout)
+    sb1[codec.SB1_PARTY_COUNT_OFFSET_EMERALD] = 1
+    start = codec.SB1_PARTY_OFFSET_EMERALD
+    sb1[start:start + codec.PARTY_MON_SIZE] = codec.encode_party_mon(emerald_starter(name, tid))
+    sb1[0x490:0x494] = (3000).to_bytes(4, "little")    # money, :1002; SetMoney(3000), new_game.c:172
+    for flag in flags:                                 # flags[NUM_FLAG_BYTES], :1020
+        sb1[0x1270 + flag // 8] |= 1 << (flag % 8)
+
+    storage = bytearray(codec.STORAGE_SIZE)            # ResetPokemonStorageSystem, pokemon_storage_system.c:1729-1749
+    for box in range(codec.BOXES_PER_STORE):
+        at = codec.BOX_NAMES_OFFSET + box * 9          # boxNames[14][BOX_NAME_LENGTH + 1], pokemon_storage_system.h:23
+        storage[at:at + 9] = codec.encode_name(f"BOX{box + 1}", 9)
+        storage[0x83C2 + box] = box % 4                # boxWallpapers, :24; % (MAX_DEFAULT_WALLPAPER + 1), wallpapers.h:21
+
+    layout = codec.slot_layout(title=codec.TITLE_EMERALD)
+    blocks = {"sb2": bytes(sb2), "sb1": bytes(sb1), "storage": bytes(storage)}
+    image = bytearray(b"\xFF" * codec.FLASH_SIZE)      # erased flash: the other slot reads EMPTY
+    half = codec.NUM_SECTORS_PER_SLOT * (EMERALD_SEED_COUNTER % codec.NUM_SAVE_SLOTS)
+    for entry in layout:
+        chunk = blocks[entry["object"]][entry["offset"]:entry["offset"] + entry["size"]]
+        at = (half + entry["id"]) * codec.SECTOR_SIZE
+        image[at:at + codec.SECTOR_SIZE] = codec.write_sector(chunk, entry["id"],
+                                                              EMERALD_SEED_COUNTER, layout)
+    return bytes(image)
+
+
+def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
+    """What a NATIVE re-save of a `kind` seed must show: it qualifies, the game cleared the
+    continue-game warp (so it ran the warp-in and wrote SaveBlock1 itself), the player stands on
+    the kind's tile of the kind's map, and the party is the one Mudkip."""
+    ok, msg = codec.qualify_flash(body, title=codec.TITLE_EMERALD)
+    if not ok:
+        return [f"does not qualify as Emerald: {msg}"]
+    parsed = codec.parse_flash(body, title=codec.TITLE_EMERALD)
+    sb1, sb2 = parsed["sb1"], parsed["sb2"]
+    _map, group, num, layout_id, x, y = EMERALD_KINDS[kind]
+    problems = []
+    if sb2[0x09] & 1:
+        problems.append("specialSaveWarpFlags still has CONTINUE_GAME_WARP: not a game re-save")
+    where = struct.unpack_from("<hhbb", sb1, 0)
+    if where != (x, y, group, num):
+        problems.append(f"player at (x,y,group,num)={where}, expected {(x, y, group, num)}")
+    if int.from_bytes(sb1[0x32:0x34], "little") != layout_id:
+        problems.append(f"mapLayoutId {int.from_bytes(sb1[0x32:0x34], 'little')} != {layout_id}")
+    party = codec.party_from_save(body, title=codec.TITLE_EMERALD)
+    if [(m["species"], m["level"], m["checksum_ok"]) for m in party] != [(MUDKIP["species"],
+                                                                          STARTER_LEVEL, True)]:
+        problems.append(f"party is not one Lv{STARTER_LEVEL} Mudkip: {party}")
+    return problems
+
+
+def cmd_make_emerald(args: argparse.Namespace) -> int:
+    rom = args.rom or next((str(c) for c in _rom_candidates(EMERALD_ROM) if c.exists()), None)
+    if not rom:
+        print(f"make-emerald FAIL: {EMERALD_ROM!r} not found -- pass --rom", file=sys.stderr)
+        return 1
+    try:
+        seed = build_emerald_seed(args.kind, emerald_new_game_flags(pret_emerald()))
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"make-emerald FAIL: cannot build the SYNTH seed: {exc}", file=sys.stderr)
+        return 1
+    before = qualify_one(seed, rr=False, title=codec.TITLE_EMERALD)
+    rom_rel, run_dir, battery = _prepare_run(
+        f"make_emerald_{args.kind}", rom, seed=seed,
+        saveram_name_override=args.saveram_name or EMERALD_SAVERAM)
+    print(f"SYNTH seed {args.kind}: {run_dir / battery} sha256={sha256_hex(seed)} "
+          f"counter={before['counter']} party={before['party']}")
+    passed, text = _launch(EMERALD_BOOT_LUA, rom_rel, run_dir, rr=False, timeout=args.timeout,
+                           title="emerald")
+    print(text.rstrip())
+    flushed = _flushed_saveram(run_dir, battery)
+    if not passed or flushed is None:
+        print("make-emerald FAIL: the driver did not report PASS or left no *.SaveRAM",
+              file=sys.stderr)
+        return 1
+    try:
+        body = import_savedata(flushed.read_bytes(), rr=False, title=codec.TITLE_EMERALD)
+    except (ValueError, OSError) as exc:
+        print(f"make-emerald FAIL: candidate refused: {exc}", file=sys.stderr)
+        return 1
+    after = qualify_one(body, rr=False, title=codec.TITLE_EMERALD)
+    problems = boot_check_verdict(before, after)[1] + emerald_fixture_problems(body, args.kind)
+    if problems:
+        for problem in problems:
+            print(f"  {problem}", file=sys.stderr)
+        print("make-emerald FAIL: the re-save is not the fixture asked for", file=sys.stderr)
+        return 1
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(body)
+    print(f"wrote {out} ({len(body)} bytes) sha256={sha256_hex(body)} slot={after['slot']} "
+          f"counter={after['counter']} trainer={after['trainer_name']!r}"
+          f"#{after['trainer_id']:08X} party={after['party']}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__,
@@ -876,12 +1131,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_qualify = sub.add_parser("qualify", help="check fixtures with no emulator")
     p_qualify.add_argument("files", nargs="+")
     p_qualify.add_argument("--rr", action="store_true")
+    p_qualify.add_argument("--title", choices=[codec.TITLE_FRLG, codec.TITLE_EMERALD],
+                           default=codec.TITLE_FRLG, help="vanilla save layout (default frlg)")
     p_qualify.set_defaults(func=cmd_qualify)
 
     p_derive = sub.add_parser("derive-b", help="distinct-OT fixture derivation")
     p_derive.add_argument("a")
     p_derive.add_argument("b")
     p_derive.add_argument("--rr", action="store_true")
+    p_derive.add_argument("--title", choices=[codec.TITLE_FRLG, codec.TITLE_EMERALD],
+                          default=codec.TITLE_FRLG, help="vanilla save layout (default frlg)")
     p_derive.set_defaults(func=cmd_derive_b)
 
     p_boot = sub.add_parser("boot-check",
@@ -890,7 +1149,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_boot.add_argument("--fixture", required=True)
     p_boot.add_argument("--rr", action="store_true")
     p_boot.add_argument("--title", default=None,
-                        help="profile title for the run (default: firered, or radical_red with --rr)")
+                        help="profile title for the run (default: firered, or radical_red with "
+                             "--rr); emerald boots lua/tests/gen3_emerald_boot_check.lua")
     p_boot.add_argument("--saveram-name", default=None,
                         help="battery filename to seed, when BizHawk's gamedb names it")
     p_boot.add_argument("--timeout", type=int, default=600)
@@ -926,6 +1186,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_frp.add_argument("--saveram-name", default=None)
     p_frp.add_argument("--timeout", type=int, default=1800)
     p_frp.set_defaults(func=cmd_make_fr_party)
+
+    p_em = sub.add_parser("make-emerald", help="EMULATOR: SYNTH Emerald seed -> CONTINUE -> "
+                                              "in-game SAVE; the re-save is the fixture")
+    p_em.add_argument("--kind", choices=sorted(EMERALD_KINDS), required=True)
+    p_em.add_argument("--out", required=True)
+    p_em.add_argument("--rom", default=None, help=f"default: {EMERALD_ROM} at the checkout root")
+    p_em.add_argument("--saveram-name", default=None)
+    p_em.add_argument("--timeout", type=int, default=600)
+    p_em.set_defaults(func=cmd_make_emerald)
 
     return ap
 

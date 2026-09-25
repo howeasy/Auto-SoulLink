@@ -539,3 +539,59 @@ build, both RUN), saves in-game and re-verifies the tile. Built by the same `_pr
 - No `_b`: B boots `rr_battle2_b.sav` (its party is the swap source).
 - The rival it meets: coord script 0x081682AB -> `trainerbattle 9` with gTrainers 0x149/0x14A/0x14B
   by `VAR_STARTER_MON` (0x4031 == 0 here -> 0x14B = 331, an `_RR_RIVAL_TRAINER_IDS` member).
+
+## emerald_{town,battle,trainer}{,_b}.sav (card E1-FIX, EF-10) — SYNTH seed, native re-save, built live 2026-09-25
+
+**Provenance: O-33 SYNTH setup, disclosed.** `tools/gen3_fixtures.py make-emerald` builds a flash
+save from pret facts (pokeemerald c65e93f2), cold-boots it on vanilla Emerald (sha1 `f3ae0881…`)
+→ CONTINUE → in-game SAVE, and keeps **the game's own re-save** as the fixture. The seed sets
+`SaveBlock2.specialSaveWarpFlags = CONTINUE_GAME_WARP`, so CONTINUE runs pret's warp-in
+(`CB2_ContinueSavedGame` → `WarpIntoMap` → `CB2_LoadMap`, `src/overworld.c:1739-1746`); the game
+clears the flag and writes SaveBlock1 itself (map view, object events, player avatar). The build
+refuses a re-save that still carries the flag, stands anywhere but the kind's tile, or changed
+the party (`emerald_fixture_problems`). The `_b` file is `derive-b --title emerald` over the `a`
+file (OT identity only), exactly as for FR/LG.
+
+What the seed carries (everything else is zero, as `ClearSav1`/`NewGameInitData` leave it):
+- SaveBlock2: name `EMER`, male, trainer id `0x20250925`, text speed MID, encryption key 0.
+- SaveBlock1: `pos`/`location`/`continueGameWarp` = the kind's tile (warp id -1), `mapLayoutId`,
+  `lastHealLocation` = Oldale (6,17), money 3000, one party mon, and the flags
+  `EventScript_ResetAllMapFlags` sets (`data/scripts/new_game.inc:115`) plus
+  `FLAG_SYS_POKEMON_GET`, `FLAG_ADVENTURE_STARTED` (unblocks Oldale's west exit),
+  `FLAG_RECEIVED_POTION_OLDALE`, `FLAG_VISITED_OLDALE_TOWN`, `FLAG_HIDE_OLDALE_TOWN_RIVAL`,
+  `FLAG_HIDE_ROUTE_103_RIVAL`.
+- Party: Mudkip Lv5 (species 283), Hardy, male, IVs 15, EVs 0, Tackle/Growl, 20/20 HP, OT
+  `EMER`, met Route 101 at Lv5 in a Poké Ball, personality `0x4D55444B`.
+- Storage: box names `BOX1`..`BOX14`, default wallpapers, no mons.
+
+**Not in the seed (story state is NOT coherent beyond Oldale/Route 102):** no Pokédex
+(`FLAG_SYS_POKEDEX_GET` unset, dex empty), empty bag and PC items, all story vars 0 (Littleroot,
+Route 101 and Route 103 scenes may fire if a run walks there), berry trees empty, RTC/clock not set.
+
+| Fixture | Map (group.num) | Tile | Why this tile | sha256 |
+|---|---|---|---|---|
+| `emerald_town.sav` | Oldale Town (0.10) | (6,17) | heal location, one Up step into the Pokémon Center door (6,16); towns have no wild encounters | `d43420f23a3ddd09e2525bcd18ede8de8883278b66a2c78b49dc5856add2e5b5` |
+| `emerald_town_b.sav` | same | same | `derive-b` | `d93795395b9438fbcd771de08806a9798127cac46de2cd42f13f422ec959fe53` |
+| `emerald_battle.sav` | Route 102 (0.17) | (21,16) | `MB_TALL_GRASS` in the (19..25,16..17) patch; no trainer faces it | `7f70a815a09ea2c02c20ee3493416516ff34b402a06cc38abe8f330733fd71ba` |
+| `emerald_battle_b.sav` | same | same | `derive-b` | `8fc35e013a31e14489493ae49ba47d89b95e0738befdf6f19a32b4870b75db26` |
+| `emerald_trainer.sav` | Route 102 (0.17) | (32,16) | one Right step onto (33,16), inside Youngster Calvin's sight line (he stands at (33,14) facing down, sight 3) | `8865372111d1ceb7cfd03739627f87f04ead231b10893d349190916b2cb7afbe` |
+| `emerald_trainer_b.sav` | same | same | `derive-b` | `91fc8c969c344884e0322dad9bd2753c6efd43b5b2c5923d481c469a775922b7` |
+
+All six: slot 0, counter 2, one Mudkip Lv5; `a` side `EMER` #20250925, `_b` side `EMERB`
+#DFDAF6DA. Each passed `qualify --title emerald` and a physical `boot-check --title emerald`
+(counter 2→3, party unchanged, tile unchanged). Receipt: `docs/gen3_emerald/probes/fixtures_2026-09-25.txt`.
+Every tile, map id, layout id and starter fact is re-derived from pret by
+`tests/unit/test_gen3_fixture_qualify_emerald.py`.
+
+```
+SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix python tools/gen3_fixtures.py make-emerald --kind town --out tests/fixtures/gen3/emerald_town.sav
+python tools/gen3_fixtures.py derive-b --title emerald tests/fixtures/gen3/emerald_town.sav tests/fixtures/gen3/emerald_town_b.sav
+python tools/gen3_fixtures.py qualify --title emerald tests/fixtures/gen3/emerald_*.sav
+SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix python tools/gen3_fixtures.py boot-check --title emerald --rom "<Emerald.gba>" --fixture tests/fixtures/gen3/emerald_town.sav
+```
+
+`--title emerald` on `boot-check` runs `lua/tests/gen3_emerald_boot_check.lua` (Emerald's
+`gMenuCallback` START menu, every address read from `data/gen3/pret/pokeemerald.sym`) and seeds the
+battery under the gamedb name `Pokemon - Emerald Version (USA, Europe).SaveRAM`.
+`SLINK_GEN3_FIXTURE_RUNS` moves the per-run SaveRAM directories off Drive (MAX_PATH).
+`make-emerald` needs the pret checkout (`.cache/pret/pokeemerald`, or `$SLINK_PRET_EMERALD`).
