@@ -20,8 +20,8 @@ Rows stay `·` until their phase in `PLAN.md` §3 lands a receipt.
 
 | What | Value |
 |---|---|
-| Emerald ROM | `Pokemon - Emerald Version (USA, Europe).gba` (project root), header `POKEMON EMER`/`BPEE`, version byte 0, 16 MiB, sha1 `f3ae088181bf583e55daf962a92bb46f4f1d07b7` (= pret `rom.sha1`), md5 `605b89b67018abcea91e693a4dd25be3` (coordinator hash 2026-09-25) — **proposed for EG0** |
-| pret/pokeemerald source | master `5eff78649e7170a877b961ef0b3da13b81a16038` (2026-09-01); the `symbols` branch is `dba968c67d85caf9595abe12a51ff739d4dc5937` (2026-08-26, reference only; the pinned `.sym/.map` come from our own build, E1-SYM) — **commit to pin at EG0** |
+| Emerald ROM | `Pokemon - Emerald Version (USA, Europe).gba` (project root), header `POKEMON EMER`/`BPEE`, version byte 0, 16 MiB, sha1 `f3ae088181bf583e55daf962a92bb46f4f1d07b7` (= pret `rom.sha1`), md5 `605b89b67018abcea91e693a4dd25be3` (coordinator hash 2026-09-25) — **SIGNED EG0 2026-09-25** |
+| pret/pokeemerald source | master `5eff78649e7170a877b961ef0b3da13b81a16038` (2026-09-01); the `symbols` branch is `dba968c67d85caf9595abe12a51ff739d4dc5937` (2026-08-26, reference only; the pinned `.sym/.map` come from our own build, E1-SYM) — **SIGNED EG0: `c65e93f2`** |
 | agbcc | pret/agbcc `da598c1d918402c42c0c0d7128ba14567f3175e9` (the FRLG pin, `data/gen3_sources.lock.json`); reuse for pokeemerald is to be proven by the E1-SYM build sha1 |
 | BizHawk | 2.11.1 + installed hashes as `docs/gen3_requirements.md` Pins (unchanged) |
 | pokeemerald-expansion | tag `expansion/1.17.0` (published 2026-08-31T18:12:55Z); commit sha to record at XG0 |

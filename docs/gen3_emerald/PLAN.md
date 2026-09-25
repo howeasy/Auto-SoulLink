@@ -14,6 +14,7 @@ Gen 1, Gen 2 and Gen 3 FRLG/RR are closing their RCs. The owner wants Pokémon E
 | Timing | **SOURCE now, runtime later**: E0–E2 (pins, symbol builds, packs, codec, fixtures) start now on a branch off the Gen 3 frozen cut; live client/duo phases start after Gen 3 merges to master (Gen1→Gen2→Gen3 after G4+G5, ruling 22). |
 | Pairing | **Refuse Emerald ↔ FRLG/RR**: Emerald gets foundation `gen3_emerald`; expansion builds get `gen3_exp` (per-build pairing kind). |
 | Scope (Emerald RC) | **Core** (encounters, faints incl. in-battle, whiteout, PC, box sync, evolution, save, doubles incl. Steven multi-battle hold) **+ vanilla trade + battle calc**. Frontier/Pyramid/Trainer Hill/Contests/Secret Bases: writes refused, negative controls only. |
+| EG0/EG1 rulings (2026-09-25, delegated) | Pins ROM f3ae0881 + pret c65e93f2; pret's published `.sym` accepted as the symbol source (no own CI build); disclosed O-33 SYNTH fixtures accepted; `Task_MuddySlope` on the Emerald overworld allow-list. owner 2026-09-25: "Do what you think is best. Lets go to the next major checkpoint" (delegated; coordinator took the recommended option on each). |
 | Defaults taken (mirror FRLG, reopen on request) | One encounter slot per route/area (grass, surf, fishing, rock smash merged, as FRLG's `area_map` does); multi-floor dungeons/dive merged; Safari Zone per sub-area; gifts never consume the host area; fixed single-species gifts (Beldum, Wynaut egg, Castform, Mew, Deoxys) bypass clauses; choice gifts (starter, fossil, Eon) do not. |
 | ROM | Owner dropped `Pokemon - Emerald Version (USA, Europe).gba` in project root: header `BPEE`, rev 0, sha1 `f3ae088181bf583e55daf962a92bb46f4f1d07b7` (= pret `rom.sha1`), md5 `605b89b67018abcea91e693a4dd25be3` (coordinator hash, 2026-09-25). |
 
@@ -165,8 +166,8 @@ Battle Frontier/Pyramid/Trainer Hill/Contests/Secret Bases rule support (writes 
 
 | Gate | Signed | Evidence |
 |---|---|---|
-| EG0 | REQUESTED 2026-09-25 | `docs/gen3_emerald/EG1_request.md` §6.1-6.2 |
-| EG1 | REQUESTED 2026-09-25 | `docs/gen3_emerald/EG1_request.md` (E1 complete at `8ee5869f`) |
+| EG0 | SIGNED 2026-09-25 (delegated) | `docs/gen3_emerald/EG1_request.md` §6.1-6.2 |
+| EG1 | SIGNED 2026-09-25 (delegated) | `docs/gen3_emerald/EG1_request.md` (E1 complete at `8ee5869f`) |
 | EG2 | · | |
 | EG3 | · | |
 | EG4 | · | |

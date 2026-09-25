@@ -1,4 +1,4 @@
-# EG0 + EG1 request: Emerald pins and SOURCE facts (REQUESTED 2026-09-25; awaiting owner signature)
+# EG0 + EG1 request: Emerald pins and SOURCE facts (SIGNED 2026-09-25 by owner delegation)
 
 Branch `claude/gen3-emerald` (worktree `.claude/worktrees/gen3-emerald`), base Gen 3 `5f050857`
 (frozen cut `a2985d5a` + the item-table fix). Local only: not pushed, not merged. Plan:
@@ -104,7 +104,10 @@ OMP cannot execute code here. The coordinator ran every OMP-written change befor
 **Not a gate item:**
 - **Workstation state, not a code defect:** the main checkout's RR companion ROM hash differs from the pin, and this worktree has no pokered/pret cache for Gen 1.
 
-## 6 Owner decisions requested
+## 6 Owner decisions
+
+All five ACCEPTED as recommended: owner 2026-09-25: "Do what you think is best. Lets go to the next major checkpoint" (delegated; coordinator took the recommended option on each).
+
 
 1. **EG0 pins:**
    - ROM `Pokemon - Emerald Version (USA, Europe).gba`, sha1 `f3ae088181bf583e55daf962a92bb46f4f1d07b7` (= pret `rom.sha1`);
