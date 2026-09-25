@@ -1,10 +1,10 @@
 # Gen 3 (P5) Radical Red RC cutover gate request — G5 evidence assembly
 
-**Status: G5 is not yet signable.** RR is live on the new client (lane 2): **11 qualification rows
-PASS + 1 negative-control row PASS (`rival_swap_gen3`) + 1 pending** (`whiteout_gen3`, the general
-Center-writes scenario), of the 13 rows in §2 (a fourteenth, the R5 mega row, is a named SKIP under
-a signed limit and is not part of that count). The pending row is being live-diagnosed by
-another worker right now (checkpoint 17, `docs/gen3_resume.md`). The RR opcode gate port is
+**Status: G5 is not yet signable.** RR is live on the new client (lane 2): **12 qualification rows
+PASS + 1 negative-control row PASS (`rival_swap_gen3`)**, all 13 rows in §2 (a fourteenth, the R5
+mega row, is a named SKIP under a signed limit and is not part of that count). Still OPEN before
+signing: RR clean coverage rows, the extracted-zip boot on RR, and the frozen-cut RR pass
+(`gen3_final_cut.py --title rr`, checkpoint 18, `docs/gen3_resume.md`). The RR opcode gate port is
 **26/26 PASS**. The rebuilt companion is pinned. Nothing here authorizes a release: ruling 22
 (§8) holds G5 back until G4 is also done, and G4 is itself not yet signable
 (`docs/gen3/G4_request_draft.md`).
@@ -69,7 +69,7 @@ not counted in the 13.
 | 3 | `boxsync_gen3` | **PASS** | `rr_boxsync_gen3_rr_as_a_6131930f.txt` | `6131930f` |
 | 4 | `reconnect_gen3` (its `b` leg exercises the wrong-save refusal internally — the scenario has no separate `--wrong-save` CLI flag) | **PASS** | `rr_reconnect_gen3_rr_as_a_e99c3760.txt` | `e99c3760` |
 | 5 | `deadzone_gen3` | **PASS** | `rr_deadzone_gen3_rr_as_a_e99c3760.txt` | `e99c3760` |
-| 6 | `whiteout_gen3` (Center writes) | **PENDING** | `<<PENDING: whiteout_gen3>>` | — |
+| 6 | `whiteout_gen3` (Center writes) | **PASS** | `rr_whiteout_gen3_rr_as_a_1321bbdb.txt` | `1321bbdb` |
 | 7 | `native_absent_gen3` | **PASS** | `rr_native_absent_gen3_rr_as_a_e99c3760.txt` | `e99c3760` |
 | 8 | `rival_swap_gen3` (negative control) | **PASS** | `rr_rival_swap_gen3_rr_as_a_156a521f.txt` | `156a521f` |
 | 9 | `linked_faint_active_gen3` (P+H, wild) | **PASS** | `ph_linked_faint_active_gen3_rr_as_a_cc6ec42a.txt` | `cc6ec42a` |
@@ -79,13 +79,15 @@ not counted in the 13.
 | 13 | `explode_gen3` (Explode+H) | **PASS** | `ph_explode_gen3_rr_as_a_410d9578.txt` (also PASS at `cc6ec42a`) | `410d9578` |
 | — | `linked_faint_active_mega_gen3` (R5, mega) | **SKIP — signed limit** (ruling 20) | `ph_linked_faint_active_mega_gen3_rr_as_a_6d6227c6.txt`: `SIGNED LIMIT: owner ruling 20` | `6d6227c6` |
 
-**11 qualification rows PASS + 1 negative-control row PASS (row 8, `rival_swap_gen3`) + 1
-pending** (row 6). Row 6 (`whiteout_gen3`) is the one open row: it stalls leaving the Viridian
-Pokémon Center — `"step Left stalled at (25,27)"` — first observed at commit `c23a8f46` ("RR's way
-out of Viridian, and the gSpecialVar_Result finding"). Two static path fixes did not explain it;
-it needs a live trace of player/object events at the door exit on RR. Until it lands, its receipt
-slot above stays `<<PENDING: whiteout_gen3>>`; the coordinator fills it in when the fix's PASS
-receipt exists. **P**
+**12 qualification rows PASS + 1 negative-control row PASS (row 8, `rival_swap_gen3`).** Row 6
+(`whiteout_gen3`) PASSed at `1321bbdb` after three fixes: an RR-only follower object locking the
+field at the Center door (`eb03c21a`, live trace in `rr_whiteout_gen3_rr_as_a_eb03c21a.txt`); the
+harness dereferencing RR's literal `pokemon_storage_base` (`9598a4e5`); and the negative control,
+because RR's nurse (map 5.4 local 1, script `0x0904C64B`) is a silent quick-heal with no
+multichoice, so on RR the hold is on the START menu (`field_controls_locked`, 600 frames,
+attempted=0, bytes unchanged; `89caeb0e`/`74589e3f`/`1321bbdb`). OMP review cx-84088887 found the
+`eb03c21a` recovery fail-open on transitions; its hardening lands before the frozen pass, and the
+RR final pass re-runs the row. **P**
 
 Earlier attempts at rows 9-13 (P+H/Explode+H) failed at cut `6d6227c6` on timeouts and carrier
 bugs before the hand-off's dependencies landed — see `ph_linked_faint_active_whiteout_gen3_rr_as_a_{e9193bb2,64ad170a}.txt`
