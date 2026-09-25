@@ -111,7 +111,13 @@ LANES = [
     Lane("live-gates",
          [_PY, "-m", "pytest", "tests/live/test_gen1_gates.py", "-q", "-p", "no:randomly",
           "-rs"],
-         env={"SLINK_LIVE": "1"},
+         # GEN1-GATE-REWRITES-RECEIPTS (post-RC): explicitly clears SLINK_GEN1_CAPTURE_RECEIPTS so an inherited
+         # "1" from the caller's shell can never turn this verify run into a capture over the committed
+         # receipts (the same trap as the Gen 2 attestation, 44f6fb97/SLINK_GEN2_NO_ATTEST). run_lane's
+         # env.update() only overlays keys onto the inherited environment, never deletes one, so "removing" the
+         # flag here means overwriting it to "": test_gen1_gates.py's capture gate checks `== "1"`, which
+         # treats "" identically to absent.
+         env={"SLINK_LIVE": "1", "SLINK_GEN1_CAPTURE_RECEIPTS": ""},
          why="the companion patch on real cartridges: VBlank hook, mailbox, START-menu row, "
              "and the panel on a randomized+injected ROM"),
     Lane("live-new-gates",

@@ -66,6 +66,14 @@ def test_slow_lanes_are_exactly_the_emulator_lanes():
             "live-trade-gates-purergb", "apex-refusal-purergb", "duo-pairs-purergb"} == gate._SLOW
 
 
+def test_the_live_gates_lane_clears_the_receipt_capture_flag():
+    """GEN1-GATE-REWRITES-RECEIPTS: an inherited SLINK_GEN1_CAPTURE_RECEIPTS=1 from the caller's shell must
+    never silently turn a verify run into a capture over the committed receipts. run_lane's env.update() can
+    only overlay a key, never delete one, so this lane clears it by overwriting it to ""."""
+    live_gates = next(lane for lane in gate.LANES if lane.name == "live-gates")
+    assert live_gates.env.get("SLINK_GEN1_CAPTURE_RECEIPTS") == ""
+
+
 def test_the_pure_lanes_are_fail_closed():
     """A pure lane's inputs are the staged .gbc files and the per-title fixtures, and a skip is a
     lane failure: no ALLOWED_SKIPS fragment may excuse one, or a machine without the builds would

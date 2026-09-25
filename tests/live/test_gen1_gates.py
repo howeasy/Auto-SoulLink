@@ -24,10 +24,13 @@ carry those rows now.
 Each gate is skipped, never hung, when a prerequisite is missing: no EmuHawk, no cartridge
 dump (they are gitignored), or no fixture.
 
-SLINK_GEN1_CAPTURE_RECEIPTS=1 makes test_gen1_sfx_matrix stamp a fresh, provenance-headed copy of its result over
-the committed tests/fixtures/gen1/receipts/test_gen1_sfx_gate_*_result.txt (GEN1-GATE-REWRITES-RECEIPTS,
-post-RC). Without it, an ordinary `SLINK_LIVE=1` run never touches those files, so a ROM/route change under
-review can be gated without clobbering the committed receipts' `# lane HEAD=.../# cmd:` header.
+SLINK_GEN1_CAPTURE_RECEIPTS=1 makes test_gen1_sfx_matrix atomically stamp a fresh, provenance-headed copy of
+its result over the committed tests/fixtures/gen1/receipts/test_gen1_sfx_gate_*_result.txt
+(GEN1-GATE-REWRITES-RECEIPTS, post-RC) -- but only for a case that PASSED, and only while HEAD matches the
+snapshot `sfx_lane_snapshot` took before the first case ran (a HEAD that moved mid-matrix means the snapshot's
+provenance is stale). Without the flag, an ordinary `SLINK_LIVE=1` run never touches those files, so a ROM/route
+change under review can be gated without clobbering the committed receipts' header. tools/verify_gen1_release.py's
+live-gates lane explicitly clears the flag, so an inherited "1" can never turn a verify run into a capture.
 """
 import datetime
 import os
@@ -62,21 +65,41 @@ def _git(*args):
     return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True, check=True).stdout.strip()
 
 
-def receipt_header(cmd):
+def _status_excluding(prefix):
+    """`git status --porcelain`, ignoring any line naming a path under `prefix`: a capture written earlier in
+    the SAME session (into tests/fixtures/gen1/receipts/) must not make a later case in the same matrix see a
+    dirty tree and refuse to capture its own receipt."""
+    lines = [line for line in _git("status", "--porcelain").splitlines() if prefix not in line]
+    return "clean" if not lines else "dirty"
+
+
+def receipt_header(head, status, cmd):
     """`# lane HEAD=<sha> git-status=clean|dirty at=<iso>` + `# cmd: <cmd>`: the provenance header the committed
-    tests/fixtures/gen1/receipts/*_result.txt copies carry (GEN1-GATE-REWRITES-RECEIPTS, post-RC)."""
-    head = _git("rev-parse", "HEAD")
-    status = "clean" if not _git("status", "--porcelain") else "dirty"
+    tests/fixtures/gen1/receipts/*_result.txt copies carry (GEN1-GATE-REWRITES-RECEIPTS, post-RC). `head`/
+    `status` are the lane-wide snapshot the caller took before any case ran, not a fresh read here -- a fresh
+    read would itself be dirtied by this call's own write."""
     stamp = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
     return f"# lane HEAD={head} git-status={status} at={stamp}\n# cmd: {cmd}\n"
 
 
-def capture_receipt(kept, cmd, text):
-    """Stamp and write a fresh committed receipt copy. A live-gates lane run must never do this on its own — an
-    ordinary run's `text` carries no provenance header, and would silently drop the committed one (the same trap
-    as the Gen 2 attestation, 44f6fb97/SLINK_GEN2_NO_ATTEST). Capture is a separate, explicit opt-in step."""
-    with open(kept, "w", encoding="utf-8") as f:
-        f.write(receipt_header(cmd) + text)
+def _atomic_write(path, text):
+    tmp = f"{path}.tmp{os.getpid()}"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
+def maybe_capture_receipt(kept, cmd, text, *, passed, head_now, head_before, status_before):
+    """Stamp and atomically write a fresh committed receipt copy over `kept` -- but ONLY when every guard
+    holds: the opt-in env var is set, the gate PASSED, and HEAD has not moved since the lane-wide snapshot (a
+    moved HEAD means `head_before` is no longer this run's provenance). A live-gates lane run must never do
+    this unconditionally -- the same trap as the Gen 2 attestation, 44f6fb97/SLINK_GEN2_NO_ATTEST -- so capture
+    stays a separate, narrowly-gated, explicit step. Returns True if it wrote.
+    """
+    if os.environ.get("SLINK_GEN1_CAPTURE_RECEIPTS") != "1" or not passed or head_now != head_before:
+        return False
+    _atomic_write(kept, receipt_header(head_before, status_before, cmd) + text)
+    return True
 
 
 @pytest.fixture(scope="session")
@@ -84,6 +107,13 @@ def emuhawk():
     if not os.path.exists(play.EMUHAWK):
         pytest.skip(f"EmuHawk not found at {play.EMUHAWK}")
     return play.EMUHAWK
+
+
+@pytest.fixture(scope="module")
+def sfx_lane_snapshot():
+    """ONE HEAD + git-status snapshot for the whole SFX matrix (every rom/target case), taken before any of
+    them runs -- not a fresh read per case, which a capture written by an earlier case would itself dirty."""
+    return _git("rev-parse", "HEAD"), _status_excluding("tests/fixtures/gen1/receipts/")
 
 
 def _skip_unless_ready(rom):
@@ -130,9 +160,9 @@ def test_gen1_companion_patch(rom, emuhawk):
                     f"result: {result_path}\n{text[-3000:]}")
 
 
-@pytest.mark.parametrize("rom", PATCH_ROMS)
+@pytest.mark.parametrize("rom", PATCH_ROMS)   # not GATE_ROMS: purered_overlay is out of this matrix's scope
 @pytest.mark.parametrize("target", ("town", "battle"))
-def test_gen1_sfx_matrix(rom, target, emuhawk):
+def test_gen1_sfx_matrix(rom, target, emuhawk, sfx_lane_snapshot):
     """The native-sound state matrix (lua/tests/test_gen1_sfx_gate.lua): the cases the ABI-2
     VBlank build got wrong, each asserting the exact id that lands on CHAN5.
 
@@ -142,7 +172,8 @@ def test_gen1_sfx_matrix(rom, target, emuhawk):
     battle fixture (Route 1 grass): a real wild battle in bank $08 (LEVEL_UP / TINK rows),
     RUN, and a request held through the battle-end fade that plays in $02 as GET_ITEM_2 --
     the id it would not have been in $08. Overlay cartridges join once their overlay carries
-    the service.
+    the service: parametrized only over PATCH_ROMS, so purered_overlay's SFX receipts are not
+    captured here -- a separate test if/when that overlay row joins this matrix.
     """
     _skip_unless_ready(rom)
     if target == "battle":
@@ -155,13 +186,14 @@ def test_gen1_sfx_matrix(rom, target, emuhawk):
                                          timeout=600, quiet=True)
     # GEN1-GATE-REWRITES-RECEIPTS (post-RC): run_gate already left the plain result under patch/build
     # (result_path); the committed tests/fixtures/gen1/receipts/*_result.txt copy carries its own provenance
-    # header and must not be silently overwritten by an ordinary lane run. Capturing a fresh receipt is a
-    # separate, explicit step.
-    if os.environ.get("SLINK_GEN1_CAPTURE_RECEIPTS") == "1":
-        kept = os.path.join(REPO, "tests", "fixtures", "gen1", "receipts",
-                            f"test_gen1_sfx_gate_{rom}_{target}_result.txt")
-        cmd = f"tools/run_gb_gate.py lua/tests/test_gen1_sfx_gate.lua --rom {rom} --target {target} --timeout 600"
-        capture_receipt(kept, cmd, text)
+    # header and must not be silently overwritten by an ordinary lane run. maybe_capture_receipt only writes
+    # when SLINK_GEN1_CAPTURE_RECEIPTS=1, this case PASSED, and HEAD hasn't moved since sfx_lane_snapshot.
+    kept = os.path.join(REPO, "tests", "fixtures", "gen1", "receipts",
+                        f"test_gen1_sfx_gate_{rom}_{target}_result.txt")
+    cmd = f"tools/run_gb_gate.py lua/tests/test_gen1_sfx_gate.lua --rom {rom} --target {target} --timeout 600"
+    head_before, status_before = sfx_lane_snapshot
+    maybe_capture_receipt(kept, cmd, text, passed=passed, head_now=_git("rev-parse", "HEAD"),
+                          head_before=head_before, status_before=status_before)
     assert passed, (f"SFX matrix gate on {rom}/{target} did not PASS\n"
                     f"result: {result_path}\n{text[-3000:]}")
 
