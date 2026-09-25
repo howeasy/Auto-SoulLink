@@ -1410,6 +1410,7 @@ class SLinkServer:
                         log.warning(f"[{player_id}] REJECTED: {err}")
                         self.state.identity_error[player_id] = err
                         self._rom_type_rejected.add(player_id)
+                        self._record_hello_refusal(player_id, err, msg)
                         await self._respond(writer, [{
                             "cmd": "hud_show", "text": f"[x] UNKNOWN ROM: {_rt}",
                             "r": 255, "g": 0, "b": 0, "frames": 600,
@@ -1438,6 +1439,7 @@ class SLinkServer:
                         log.warning(f"[{player_id}] REJECTED: {_mixed}")
                         self.state.identity_error[player_id] = _mixed
                         self._rom_type_rejected.add(player_id)
+                        self._record_hello_refusal(player_id, _mixed, msg)
                         await self._respond(writer, [{
                             "cmd": "hud_show", "text": "[x] MIXED GAMES",
                             "color": [255, 0, 0], "duration": 600,
@@ -1557,6 +1559,14 @@ class SLinkServer:
                 await writer.wait_closed()
             except Exception:
                 pass
+
+    def _record_hello_refusal(self, player_id: str, reason: str, msg: dict) -> None:
+        """A hello refused before admission (unknown rom_type, mixed games or kinds) is an
+        admission verdict like any other: /api/status and the board show it, and the event
+        journal keeps a durable "REJECTED —" line (ADMISSION-MIXED-KINDS-VERDICT)."""
+        self.admission[player_id] = {"state": "rejected", "reason": reason}
+        self._log_event(player_id, "hello", f"REJECTED — {reason}",
+                        msg.get("loc_name", "") or msg.get("area_id", ""))
 
     @staticmethod
     async def _respond(writer: asyncio.StreamWriter, commands: list):

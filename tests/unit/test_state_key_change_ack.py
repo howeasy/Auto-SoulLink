@@ -508,3 +508,32 @@ def test_overflow_memorial_box_key_is_reusable(tmp_path):
     assert srv._presentation_key_in_use(NEW, "a") is False
     srv.pc_boxes["a"] = [{"box": mem - 2, "slot": 0, "key": NEW}]
     assert srv._presentation_key_in_use(NEW, "a") is True
+
+
+@pytest.mark.asyncio
+async def test_a_mixed_games_refusal_is_recorded_as_an_admission_verdict(tmp_path):
+    """ADMISSION-MIXED-KINDS-VERDICT: /api/status and the board read `admission`; a refused
+    mixed-games hello used to leave the player showing "admitted" with an empty reason."""
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        await send({"event": "hello", "player": "a", "rom_type": "red", "trainer_name": "Alice",
+                    "ot_id": "30B8", "has_pokeballs": True, "party": [], "artifact_kind": "overlay"})
+        reply = await send({"event": "hello", "player": "b", "rom_type": "blue", "trainer_name": "Bob",
+                            "ot_id": "7B0B", "has_pokeballs": True, "party": []})
+        assert _mixed(reply)
+        verdict = srv.admission["b"]
+        assert verdict["state"] == "rejected" and "artifact kinds" in verdict["reason"]
+        assert not srv.is_admitted("b")
+        assert any(e["player"] == "b" and e["type"] == "hello" and e["text"].startswith("REJECTED —")
+                   and "artifact kinds" in e["text"] for e in srv._recent_events)
+        # an unknown rom_type is the sibling refusal: same verdict and event
+        await send({"event": "hello", "player": "b", "rom_type": "nope", "party": []})
+        assert srv.admission["b"]["state"] == "rejected" and "nope" in srv.admission["b"]["reason"]
+        assert sum(e["text"].startswith("REJECTED —") for e in srv._recent_events if e["player"] == "b") == 2
+        # a conforming hello is admitted again
+        await send({"event": "hello", "player": "b", "rom_type": "blue", "trainer_name": "Bob",
+                    "ot_id": "7B0B", "has_pokeballs": True, "party": [], "artifact_kind": "overlay"})
+        assert srv.admission["b"]["state"] == "admitted"
+    finally:
+        await close()
