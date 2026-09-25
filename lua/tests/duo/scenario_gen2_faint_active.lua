@@ -177,16 +177,6 @@ local function run_b(h, key, faint)
         end,
         fainted=function() local row = S.after_write(h.rec) return row ~= nil and row.what == "faint" end,
         observed=function(point)
-            if h.rec.trace_on then   -- TRAINER-FAINT-LIVE-TURN: S.sample_enemy_faint gates TRAINER/battle_write/mode
-                local row
-                enemy_baseline, row = S.sample_enemy_faint(h, S.TRAINER and h.rec.battle_write ~= nil, enemy_baseline,
-                                                            point.battle_mode, h.rec.seq + 1)
-                if row then
-                    h.rec.seq = row.seq
-                    h.rec.trace[#h.rec.trace + 1] = row
-                    h.jlog("BATTLE_TRACE", row)
-                end
-            end
             if not h.rec.battle_write then return end
             if not next_mon and point.ui and point.ui.kind == "yes_no" and point.ui.prompt == "next_mon" then
                 next_mon = {frame=h.frame()}
@@ -198,6 +188,18 @@ local function run_b(h, key, faint)
                and hp > 0 then
                 replaced = {frame=h.frame(), active_slot=point.active_slot, hp=hp}
                 h.jlog("REPLACED", replaced)
+            end
+            -- TRAINER-FAINT-LIVE-TURN: sampled only AFTER REPLACED (OMP cx-6387febc F2), so the witness is the
+            -- replacement's KO of its foe; a pre-replacement enemy zero never arms a row both verdicts would refuse
+            if h.rec.trace_on then
+                local row
+                enemy_baseline, row = S.sample_enemy_faint(h, S.TRAINER and replaced ~= nil, enemy_baseline,
+                                                            point.battle_mode, h.rec.seq + 1)
+                if row then
+                    h.rec.seq = row.seq
+                    h.rec.trace[#h.rec.trace + 1] = row
+                    h.jlog("BATTLE_TRACE", row)
+                end
             end
         end})
     h.rec.trace_on = false

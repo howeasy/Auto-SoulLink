@@ -251,6 +251,21 @@ def test_faint_active_checkpoint_repeat_must_be_idempotent(active_faint_case, re
             oracles.faint_active_oracle(results, data_dir=data_dir)
 
 
+def test_a_wild_active_faint_refuses_an_enemy_faint_witness(active_faint_case):
+    """OMP cx-6387febc F1: the trainer-only enemy_faint witness is refused in the WILD active faint (the Python
+    rule had only a Lua-side test). A schema-valid row after the last trace, in an otherwise passing wild proof."""
+    results, data_dir = active_faint_case
+    lines = results["b"].splitlines()
+    at = max(i for i, l in enumerate(lines) if l.startswith("BATTLE_TRACE "))
+    last = json.loads(lines[at][len("BATTLE_TRACE "):])
+    row = {"seq": last["seq"] + 1, "what": "enemy_faint", "frame": last["frame"] + 100, "battle_mode": 2,
+           "species": 16, "hp_before": 9, "hp_after": 0, "title": "crystal"}
+    lines.insert(at + 1, "BATTLE_TRACE " + json.dumps(row))
+    results["b"] = chr(10).join(lines)
+    with pytest.raises(RuntimeError, match="enemy_faint row in a wild scenario"):
+        oracles.faint_active_oracle(results, data_dir=data_dir)
+
+
 def test_faint_active_allows_survivor_battle_changes_not_reward_quantified(active_faint_case):
     results, data_dir = active_faint_case
     layout = codec.for_foundation("crystal")
