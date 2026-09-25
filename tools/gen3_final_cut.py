@@ -159,11 +159,15 @@ def build_plan(cut, lane, master):
     # §1.1 probe states, §1.2 tutorial states (the bw rows' SLINK_BW_HASHES is hashed from these
     # by gen3_bw_hashes.py, which gen3_probe_receipt.py runs before each probe row)
     for title in ("firered", "leafgreen"):
-        for kind in ("town", "battle"):
+        # trainer = slink_pretrainer/slink_prefaint, which the checkpoint probe's battle_input_trainer
+        # and battle_faint_prompt rows read; the dress rehearsal at 157e1ef7 only passed on stale
+        # copies left in lane 1, and lane 2 at c0f6101b had none ("state missing")
+        for kind in ("town", "battle", "trainer"):
             out = f"{lane}/patch/build/gen3_probe_states_c4p2/{title}"
             rows.append(Row(f"states_{title}_{kind}", "§1.1 build",
                             [PY, "tools/mkstates_gen3.py", "--title", title, "--kind", kind,
-                             "--out-dir", out, "--rom", STAGED[title]], lane, 600,
+                             "--out-dir", out, "--rom", STAGED[title]], lane,
+                            1200 if kind == "trainer" else 600,
                             outputs_dir=out))
     for title in ("firered", "leafgreen"):
         out = f"{lane}/patch/build/gen3_probe_states/{title}"
@@ -1127,7 +1131,7 @@ def receipt_evidence(name, text, probes=None, depth=0):
             scen, o = scen_of(m)
             return Evidence(f"{scen}_{o}_as_a", name, _one_sha(text, ("source",)),
                             duo_verdict_ok(text, scen, o), inputs=_identity_roms(text))
-    m = re.fullmatch(r"mkstates_gen3_(firered|leafgreen)_(town|battle)_.*\.txt", name)
+    m = re.fullmatch(r"mkstates_gen3_(firered|leafgreen)_(town|battle|trainer)_.*\.txt", name)
     if m:
         g = re.search(r"\[gate\] \S+: RESULT: PASS.*\((\d+)s\)", text)
         return Evidence(f"states_{m[1]}_{m[2]}", name, None, False, int(g[1]) if g else None)
@@ -1249,10 +1253,12 @@ def carried_receipt(row, cut, lane, d):
 BUILD_OUTPUTS = {"town": ["slink_overworld.State", "slink_door.State", "slink_script.State"],
                  "battle": ["slink_preintro.State", "slink_prebattle.State",
                             "slink_postbattle.State"],
+                 "trainer": ["slink_pretrainer.State", "slink_prefaint.State"],
                  "tutorials": ["slink_oldman.State", "slink_pokedude.State"]}
 BUILD_DIRS = {"town": "gen3_probe_states_c4p2", "battle": "gen3_probe_states_c4p2",
+              "trainer": "gen3_probe_states_c4p2",
               "tutorials": "gen3_probe_states"}
-BUILD_FIXTURE = {"town": "town", "battle": "battle", "tutorials": "town"}
+BUILD_FIXTURE = {"town": "town", "battle": "battle", "trainer": "town", "tutorials": "town"}
 # what the builders read (mkstates_gen3*.lua -> gen3_boot_check / gen3_scripted_play / playlib /
 # gen3_title_syms / lua/gen3/reads.lua / json_codec, the title's profile.json via PROFILE_PACK;
 # gen3_fixtures.py / run_gate.py / gen1_playthrough.py launch and configure the run)
@@ -1266,7 +1272,7 @@ _MGBA = "BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk"
 
 def build_kind(row_id):
     """(kind, title) of a §1 build row -- kind town / battle / tutorials -- else None."""
-    m = re.fullmatch(r"states_(firered|leafgreen)_(town|battle)", row_id)
+    m = re.fullmatch(r"states_(firered|leafgreen)_(town|battle|trainer)", row_id)
     if m:
         return m[2], m[1]
     m = re.fullmatch(r"tutorials_(firered|leafgreen)", row_id)
@@ -1428,7 +1434,7 @@ def chain_of(row_id):
     m = re.match(r"(?:states|tutorials|checkpoint)_(firered|leafgreen)", row_id)
     if m:
         return f"probe_{m[1]}"
-    return "zip" if row_id.startswith("zip_") else row_id
+    return "zip" if row_id.startswith(("zip_", "rr_zip_")) else row_id
 
 
 def shard_rows(rows, n, est):

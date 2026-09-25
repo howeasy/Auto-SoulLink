@@ -18,8 +18,8 @@ LANE, MASTER = "L:/lane", "L:/master"
 
 # Runbook §1-§11 in order (G4_final_cut_runbook.md); §5 is mechanism P+H on both orientations.
 EXPECTED_ROWS = [
-    "states_firered_town", "states_firered_battle", "states_leafgreen_town",
-    "states_leafgreen_battle", "tutorials_firered", "tutorials_leafgreen",
+    "states_firered_town", "states_firered_battle", "states_firered_trainer", "states_leafgreen_town",
+    "states_leafgreen_battle", "states_leafgreen_trainer", "tutorials_firered", "tutorials_leafgreen",
     "faint_cmd_gen3_fr_as_a", "link_gen3_fr_as_a", "boxsync_gen3_fr_as_a",
     "reconnect_gen3_fr_as_a", "deadzone_gen3_fr_as_a",
     "whiteout_gen3_fr_as_a", "whiteout_gen3_lg_as_a",
@@ -90,7 +90,7 @@ def test_dry_run_launches_nothing(monkeypatch):
 def test_rows_selects_by_glob_or_item_keeping_order():
     rows = fc.build_plan("c" * 40, LANE, MASTER)
     got = [r.id for r in fc.select_rows(rows, "zip_*,item2b")]
-    assert got == EXPECTED_ROWS[15:23] + ["zip_build", "zip_check", "zip_boot_firered"]
+    assert got == EXPECTED_ROWS[17:25] + ["zip_build", "zip_check", "zip_boot_firered"]
     with pytest.raises(SystemExit):
         fc.select_rows(rows, "no_such_row")
 
@@ -388,7 +388,7 @@ def pass_env(monkeypatch, tmp_path):
 
 def _run(cut, *extra):
     return fc.main(["--cut", cut, "--lane", LANE, "--master", MASTER,
-                    "--rows", "states_firered_*", *extra])
+                    "--rows", "states_firered_town,states_firered_battle", *extra])
 
 
 def test_resume_skips_a_pass_at_the_same_cut_only(pass_env):
@@ -942,7 +942,7 @@ def test_two_shards_run_disjoint_rows_and_their_union_is_the_plan(pass_env):
     assert fc.main(base + ["--shard", "2/2"]) == 0
     second = ran[len(first):]
     assert first and second and not set(first) & set(second)
-    assert sorted(first + second) == sorted(EXPECTED_ROWS[:8])
+    assert sorted(first + second) == sorted(EXPECTED_ROWS[:10])
     for i in (1, 2):
         assert (probes / f"fc_SUMMARY_{cut[:8]}_shard{i}of2.txt").exists()
 
@@ -1170,7 +1170,7 @@ def test_checkpoint_inputs_are_exactly_its_builds_outputs(tmp_path):
     got = fc.row_inputs(_row("checkpoint_leafgreen"), str(tmp_path), root=str(tmp_path))
     assert set(got) == {"rom:leafgreen"} | {
         f"state:gen3_probe_states_c4p2/{n}" for n in
-        fc.BUILD_OUTPUTS["town"] + fc.BUILD_OUTPUTS["battle"]} | {
+        fc.BUILD_OUTPUTS["town"] + fc.BUILD_OUTPUTS["battle"] + fc.BUILD_OUTPUTS["trainer"]} | {
         f"state:gen3_probe_states/{n}" for n in fc.BUILD_OUTPUTS["tutorials"]}
 
 
