@@ -92,16 +92,26 @@ local function main()
     local variant = os.getenv("SLINK_PROBE_VARIANT") or game.detect_variant()
     assert(variant == "vanilla" or variant == "radical_red" or variant == "emerald", "unsupported probe profile")
     local p = assert(game.profiles[variant])
-    local anchor, ret
+    local anchor, ret, base
     if variant == "emerald" then
         local f = assert(io.open(WT .. "/data/games/gen3_emerald/engine_signals.json", "rb"))
         local sites = dofile(WT .. "/lua/json_codec.lua").decode(f:read("a")).titles.emerald.artifacts.clean.sites
         f:close()
-        anchor, ret = math.floor(sites.frame_control.address), math.floor(sites.battle_end["function"].address)
+        -- Anchor = site.address + capture_offset, mirroring lua/gen3/signals.lua:94's own
+        -- hook_address computation, not a bare site.address.
+        anchor = math.floor(sites.frame_control.address + (sites.frame_control.capture_offset or 0))
+        ret = math.floor(sites.battle_end.address + (sites.battle_end.capture_offset or 0))
+        -- The watch base is write_checkpoint.json's own gMain.callback2 predicate (address +
+        -- offset), not a literal "+4" beside a profile constant that happens to agree with it.
+        local cf = assert(io.open(WT .. "/data/games/gen3_emerald/write_checkpoint.json", "rb"))
+        local cp = dofile(WT .. "/lua/json_codec.lua").decode(cf:read("a")).emerald
+        cf:close()
+        local cb2 = assert(cp.predicates.callback2, "no callback2 predicate in write_checkpoint")
+        base = math.floor(cb2.address + (cb2.offset or 0))
     else
         anchor, ret = 0x0800051A, assert(p.RETURN_FROM_BATTLE_ADDR) & ~1
+        base = variant == "radical_red" and 0x0203F800 or p.GMAIN_ADDR + 4
     end
-    local base = variant == "radical_red" and 0x0203F800 or p.GMAIN_ADDR + 4
     log("BIND variant=" .. variant .. " return=" .. hex(ret) .. " watch=" .. hex(base))
     local primary = {}
     local a, af = observer("frame_control", anchor, true)
