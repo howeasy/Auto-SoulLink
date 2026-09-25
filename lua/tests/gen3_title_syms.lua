@@ -222,6 +222,40 @@ M.entries = {
     TASK_ANIMATE_WIN0V = { symbol = "Task_AnimateWin0v", thumb = true,
                             firered = 0x08108CFD, leafgreen = 0x08108CD5,
                             radical_red = 0x08108CFD, rr_source = RR_HARNESS, emerald = nil },
+    -- card E2-CATCH-LEG: Emerald's own battle-bag ball throw. The mirror image of
+    -- BAG_MENU_STATE_ADDR/TASK_BAG_MENU_HANDLE_INPUT's `emerald = nil` above -- these three are
+    -- genuinely Emerald-only (firered = leafgreen = nil), a real architecture split, not a rename.
+    -- docs/gen3_emerald/research/battle_bag_ball_throw_2026-09-25.md is the spot-checked research
+    -- note; every address here was independently re-verified against pokeemerald.sym for this card.
+    -- firered/leafgreen = nil: pret pokefirered/pokeleafgreen have no `gBagPosition` global at all
+    -- (grep of both .sym files: zero hits) -- FR/LG's bag position is gBagMenuState
+    -- (BAG_MENU_STATE_ADDR above), a differently-typed static struct, not this one renamed.
+    BAG_POSITION_ADDR = { symbol = "gBagPosition", firered = nil, leafgreen = nil,
+                           emerald = 0x0203CE58 },
+    -- struct BagMenu *gBagMenu (include/item_menu.h:61-86): a heap pointer, unlike FR/LG's own
+    -- gBagMenuState (a static struct instance, not a pointer) -- see BAG_MENU_STATE_ADDR's own
+    -- comment. firered/leafgreen = nil: no symbol of this name in either .sym file.
+    BAG_MENU_PTR_ADDR = { symbol = "gBagMenu", firered = nil, leafgreen = nil,
+                          emerald = 0x0203CE54 },
+    -- src/item_menu.c:1679-1688 (Task_ItemContext_Normal picks Task_ItemContext_SingleRow when
+    -- contextMenuNumItems <= 2 -- the in-battle USE/CANCEL popup, sContextMenuItems_BattleUse,
+    -- always has exactly 2). One hit in pokeemerald.sym. firered/leafgreen = nil: grep of both
+    -- .sym files finds no symbol of this name -- FR/LG's context-menu task, if any, is not chased
+    -- down by this card (out of lease scope; the FR ball-throw precedent, throw_pokeball_from_bag,
+    -- never asserts a task func before its confirm A, only Emerald's helper does).
+    TASK_ITEM_CONTEXT_SINGLE_ROW = { symbol = "Task_ItemContext_SingleRow", thumb = true,
+                                     firered = nil, leafgreen = nil, emerald = 0x081ACC05 },
+    -- BattleMainCB2 (src/battle_main.c:4413): the in-battle main callback2, resumed once the bag
+    -- closes and the chosen action (the ball throw) commits. Exists identically in all three pret
+    -- trees (verified against every .sym file, not a title-only concept like the three above).
+    BATTLE_MAIN_CB2 = { symbol = "BattleMainCB2", thumb = true,
+                        firered = 0x08011101, leafgreen = 0x08011101,
+                        emerald = 0x08038421 },
+    -- gLastUsedItem (src/battle_util.c:318-322 HandleAction_UseItem): set from the battle buffer
+    -- before dispatching to gBattlescriptsForBallThrow -- the throw-committed witness, paired with
+    -- "no bag task left" (BATTLE_MAIN_CB2 above) per the research note's step 8.
+    LAST_USED_ITEM_ADDR = { symbol = "gLastUsedItem", firered = 0x02023D68, leafgreen = 0x02023D68,
+                            emerald = 0x02024208 },
     ACTIVE_BATTLER_ADDR = { symbol = "gActiveBattler", firered = 0x02023BC4, leafgreen = 0x02023BC4,
                             radical_red = 0x02023BC4, rr_source = RR_HARNESS,
                              emerald = 0x02024064 },

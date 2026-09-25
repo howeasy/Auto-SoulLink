@@ -3317,22 +3317,264 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
     end,
 }
 
+-- ── Emerald's own battle-bag ball throw (card E2-CATCH-LEG) ───────────────────────────────────────────────────
+-- Predicate sequence pinned by docs/gen3_emerald/research/battle_bag_ball_throw_2026-09-25.md
+-- (a spot-checked research note; every address below was independently re-verified against
+-- pokeemerald.sym and pret sources for this card, see gen3_title_syms.lua's own citations).
+-- Emerald's bag is architecturally different from FR/LG's throw_pokeball_from_bag above:
+-- `struct BagMenu *gBagMenu` is a heap POINTER (include/item_menu.h:61-86), not FR/LG's static
+-- `struct BagStruct gBagMenuState`, and the pocket switch WRAPS (src/item_menu.c:1300-1310
+-- ChangeBagPocketId) instead of clamping at the last pocket -- so this steers the pocket BY
+-- VALUE (gBagPosition.pocket == BALLS_POCKET), bounded, never by counting presses (a fixed
+-- press count would be wrong for whatever pocket OPEN_BAG_LAST remembered).
+local BAG_POSITION_ADDR = S.BAG_POSITION_ADDR                     -- gBagPosition (Emerald only)
+local BAG_MENU_PTR_ADDR = S.BAG_MENU_PTR_ADDR                     -- gBagMenu (heap pointer)
+local TASK_ITEM_CONTEXT_SINGLE_ROW = S.TASK_ITEM_CONTEXT_SINGLE_ROW
+local BATTLE_MAIN_CB2 = S.BATTLE_MAIN_CB2
+local LAST_USED_ITEM_ADDR = S.LAST_USED_ITEM_ADDR
+-- struct BagPosition (include/item_menu.h:49-59): MainCallback exitCallback (u32 @0x00);
+-- u8 location @0x04; u8 pocket @0x05; u16 pocketSwitchArrowPos @0x06;
+-- u16 cursorPosition[POCKETS_COUNT] @0x08; u16 scrollPosition[POCKETS_COUNT] @0x08+2*5=0x12
+-- (POCKETS_COUNT=5, include/constants/item.h:17 -- matches gBagPosition's own 0x1C symbol size:
+-- 0x08 + 2*5 + 2*5 == 0x1C).
+local EM_BAG_POS_POCKET_OFF, EM_BAG_POS_CURSOR_OFF, EM_BAG_POS_SCROLL_OFF = 0x05, 0x08, 0x12
+-- struct BagMenu (include/item_menu.h:61-86): contextMenuNumItems lands at +0x828 -- computed
+-- field-by-field (newScreenCallback u32 0x00; tilemapBuffer[BG_SCREEN_SIZE=0x800] 0x04..0x804;
+-- spriteIds[ITEMMENUSPRITE_COUNT=12] 0x804..0x810; windowIds[ITEMWIN_COUNT=10] 0x810..0x81A;
+-- toSwapPos u8 0x81A; the bitfield byte 0x81B; unused1[2] 0x81C..0x81E; pocketScrollArrowsTask
+-- 0x81E; pocketSwitchArrowsTask 0x81F; contextMenuItemsPtr u32 (4-aligned) 0x820..0x824;
+-- contextMenuItemsBuffer[4] 0x824..0x828; contextMenuNumItems u8 @0x828) -- spot-checked by the
+-- research note as the "cursor on USE" predicate's own byte offset.
+local EM_BAG_MENU_CTX_NUM_ITEMS_OFF = 0x828
+local BALLS_POCKET = 1        -- include/constants/item.h:13 (0-based gBagPosition.pocket index)
+local POCKETS_COUNT_EM = 5    -- include/constants/item.h:17
+
+local function em_bag_pocket() return memory.read_u8(BAG_POSITION_ADDR + EM_BAG_POS_POCKET_OFF) end
+--- The highlighted slot in the current pocket's own row: scrollPosition[p] + cursorPosition[p]
+--- (mirrors FR's bag_cursor_slot above). Only used to confirm the cursor sits on row 0 -- the
+--- fixture's only bag item (tests/fixtures/gen3/README.md: "no bag items besides the Poke
+--- Balls"), so row 0 IS the Poke Ball slot without needing a plaintext item-id read.
+local function em_bag_row0()
+    local p = em_bag_pocket()
+    local cursor = memory.read_u16_le(BAG_POSITION_ADDR + EM_BAG_POS_CURSOR_OFF + p * 2)
+    local scroll = memory.read_u16_le(BAG_POSITION_ADDR + EM_BAG_POS_SCROLL_OFF + p * 2)
+    return cursor + scroll
+end
+local function em_context_menu_num_items()
+    local ptr = memory.read_u32_le(BAG_MENU_PTR_ADDR)
+    if ptr == 0 then return -1 end
+    return memory.read_u8(ptr + EM_BAG_MENU_CTX_NUM_ITEMS_OFF)
+end
+--- Is the bag reading input right now? (item_menu.c:1044-1049 Task_BagMenu_HandleInput returns
+--- without reading a press while the palette fade runs.) Reuses bag_menu_up() (generic
+--- gMain.callback2 == CB2_BagMenuRun, S-resolved for every title) and task_active() (generic
+--- gTasks[] scan) -- neither is FR-specific, both already resolve for Emerald.
+local function em_bag_input_ready(cp)
+    return bag_menu_up() and G.pred_ok(cp, "palette_fade_active")
+       and task_active(TASK_BAG_MENU_HANDLE_INPUT)
+end
+
+--- Throw a Poke Ball from an already-open battle bag (the caller's action-menu Right+A already
+--- fired CB2_BagMenuFromBattle). Hard rules (card E2-CATCH-LEG): never SELECT (it swaps items in
+--- battle, research note's own warning -- this function never sends it); steer the pocket BY
+--- VALUE, never by counting presses; assert the exact task func before every A; pair "bag gone"
+--- with "no bag task" on the throw-committed check; every wait below is bounded and a timeout
+--- returns a named failure (via G.finish(false, ...), the same fail-loud shape every leg here
+--- uses).
+local function emerald_throw_ball(cp, label)
+    if not play.in_battle(cp) then return end
+
+    -- step 2 (bag input-ready): item_menu.c:746-747,774-779,1217.
+    local ready = false
+    for _ = 1, BAG_INPUT_WAIT_FRAMES do
+        if em_bag_input_ready(cp) then ready = true; break end
+        G.advance()
+    end
+    if not ready then
+        G.shot("stuck")
+        G.finish(false, string.format(
+            "%s: the bag never took input in %d frames (callback2 CB2_BagMenuRun, palette fade "
+            .. "clear, Task_BagMenu_HandleInput active)", label, BAG_INPUT_WAIT_FRAMES))
+        return
+    end
+
+    -- step 3 (pocket, BY VALUE): press, wait (bounded) for gBagPosition.pocket to change, wait
+    -- for the bag to settle back to input-ready, and only then press again -- back-to-back
+    -- presses land mid pocket-switch-animation and are swallowed (item_menu.c:1284-1310 Switch
+    -- BagPocket/Task_SwitchBagPocket).
+    for _ = 1, POCKETS_COUNT_EM do
+        local before = em_bag_pocket()
+        if before == BALLS_POCKET then break end
+        G.tap("Right", 3, 0)
+        for _ = 1, 60 do
+            if em_bag_pocket() ~= before then break end
+            G.advance()
+        end
+        local settled = false
+        for _ = 1, 240 do
+            if em_bag_input_ready(cp) then settled = true; break end
+            G.advance()
+        end
+        if not settled then
+            G.shot("stuck")
+            G.finish(false, label .. ": the bag never settled back to input after a pocket switch")
+            return
+        end
+    end
+    if em_bag_pocket() ~= BALLS_POCKET then
+        G.shot("stuck")
+        G.finish(false, string.format(
+            "%s: could not steer gBagPosition.pocket to BALLS_POCKET(%d) (reads %d)",
+            label, BALLS_POCKET, em_bag_pocket()))
+        return
+    end
+
+    -- step 4 (row 0): the value is live every frame (item_menu.c:1213-1214,1245).
+    if em_bag_row0() ~= 0 then
+        G.shot("stuck")
+        G.finish(false, string.format(
+            "%s: the BALLS pocket's cursor is not on row 0 (reads %d)", label, em_bag_row0()))
+        return
+    end
+
+    -- Select it (item_menu.c:1245-1267 Task_BagMenu_HandleInput -> OpenContextMenu on A). The
+    -- task-func assertion for THIS A is em_bag_input_ready's own task_active(TASK_BAG_MENU_
+    -- HANDLE_INPUT) check just above (no frame advanced since, on the "already correct pocket"
+    -- path; the settle check on the "steered" path).
+    G.tap("A", 3, 20)
+
+    -- step 6 (context menu): Task_ItemContext_SingleRow (asserted before this A, hard rule)
+    -- showing exactly the 2-item {USE, CANCEL} BattleUse set (item_menu.c:312-314,1536-1538,
+    -- 1679-1688). Menu_InitCursor defaults the cursor to row 0 (USE) on open (item_menu.c:1420-
+    -- 1431's own FR-precedent shape) -- not re-verified by address here, same assumption FR's
+    -- throw_pokeball_from_bag makes for its own USE/CANCEL popup.
+    local ctx_ready = false
+    for _ = 1, 240 do
+        if task_active(TASK_ITEM_CONTEXT_SINGLE_ROW) and em_context_menu_num_items() == 2 then
+            ctx_ready = true; break
+        end
+        G.advance()
+    end
+    if not ctx_ready then
+        G.shot("stuck")
+        G.finish(false, string.format(
+            "%s: the USE/CANCEL context menu never came up (Task_ItemContext_SingleRow active, "
+            .. "contextMenuNumItems==2; reads %d)", label, em_context_menu_num_items()))
+        return
+    end
+
+    -- step 7 (USE): only pressed once ctx_ready confirmed the exact task func above (hard rule).
+    -- ItemMenu_UseInBattle -> ItemUseInBattle_PokeBall -> RemoveBagItem (item_use.c:938-947)
+    -- decrements the pocket's quantity; the throw-committed witnesses below are the verdict.
+    G.tap("A", 3, 30)
+
+    -- step 8 (throw committed): pair "bag gone" with "no bag task" (hard rule) -- callback2 back
+    -- to BattleMainCB2, no bag input/context task left active, and gLastUsedItem is the ball just
+    -- thrown (battle_main.c:4413; battle_util.c:318-322).
+    local committed = false
+    for _ = 1, 600 do
+        if memory.read_u32_le(GMAIN_CALLBACK2_ADDR) == BATTLE_MAIN_CB2
+           and not task_active(TASK_BAG_MENU_HANDLE_INPUT)
+           and not task_active(TASK_ITEM_CONTEXT_SINGLE_ROW)
+           and memory.read_u16_le(LAST_USED_ITEM_ADDR) == ITEM_POKE_BALL then
+            committed = true; break
+        end
+        G.advance()
+    end
+    if not committed then
+        G.shot("stuck")
+        G.finish(false, string.format(
+            "%s: the throw never committed (callback2 BattleMainCB2, no bag task, "
+            .. "gLastUsedItem==ITEM_POKE_BALL) within 600 frames", label))
+        return
+    end
+end
+
+-- ── leg: emerald_route102_catch (capture_wild) ──────────────────────────────────────────────────
+-- Same "throw on the first action-menu turn, retry across ENCOUNTERS (bounded), never across
+-- turns of one losing fight" design choice as FR's route1_catch above (that leg's own header
+-- has the root-cause story for why). verify_fight_cursor (generic, already resolves for Emerald
+-- via S) both clears the "Wild X appeared!" intro text and steers the action cursor to FIGHT(0)
+-- before this loop toggles it to BAG(1) -- reused as-is, not re-derived.
+local function emerald_route102_catch_loop(cp)
+    local caught = false
+    for encounter = 1, 6 do
+        if not emerald_hunt_grass(cp, 40) then
+            G.shot("stuck")
+            G.finish(false, string.format(
+                "emerald_route102_catch: 40 cycles of the grass loop produced no wild encounter "
+                .. "(attempt %d, at %s)", encounter, play.at(cp)))
+            return
+        end
+        if play.in_battle(cp) then
+            local menu = verify_fight_cursor(cp, "emerald_route102_catch")
+            if menu == "fight" then
+                G.tap("Right", 3, 20)  -- FIGHT(0) -> BAG(1), pinned bit toggle
+                if action_cursor() ~= ACTION_BAG then
+                    G.shot("stuck")
+                    G.finish(false, string.format(
+                        "emerald_route102_catch: Right did not move the cursor to BAG (read %d)",
+                        action_cursor()))
+                    return
+                end
+                G.tap("A", 3, 30)  -- opens the battle bag (CB2_BagMenuFromBattle)
+                emerald_throw_ball(cp, "emerald_route102_catch")
+            end
+            -- Whatever the throw did (caught, missed, or the wild mon fled), mash through to the
+            -- battle's end -- catching is retried across encounters, not across turns.
+            local ended = play.mash_a(1200, function() return not play.in_battle(cp) end)
+            if not ended then
+                G.shot("stuck")
+                G.finish(false, "emerald_route102_catch: in_battle never cleared within budget")
+                return
+            end
+        end
+        if battle_outcome() == B_OUTCOME_CAUGHT then
+            caught = true
+            break
+        end
+    end
+    if not caught then
+        G.shot("stuck")
+        G.finish(false, string.format(
+            "emerald_route102_catch: never reached B_OUTCOME_CAUGHT (last outcome=%d) after 6 "
+            .. "encounters", battle_outcome()))
+        return
+    end
+    G.phase("caught", "outcome=" .. battle_outcome())
+end
+
 EMERALD_LEGS[#EMERALD_LEGS + 1] = {
     name = "emerald_route102_catch",
     exercises = { "capture_wild" },
+    check = emerald_at(0, 17, 21, 16),
     source = {
-        "src/item_menu.c (pret pokeemerald): the bag UI is a dynamically-allocated `struct "
-        .. "BagMenu *gBagMenu` (heap pointer), a real redesign from FR/LG's static "
-        .. "`struct BagStruct gBagMenuState` this driver's FR ball-throw (throw_pokeball_from_bag "
-        .. "above) reads pocket/cursor from -- gen3_title_syms.lua already documents this: "
-        .. "BAG_MENU_STATE_ADDR's `emerald = nil` entry cites the same struct-identity change.",
+        "docs/gen3_emerald/research/battle_bag_ball_throw_2026-09-25.md (spot-checked predicate "
+        .. "sequence this leg implements steps 0-9 of)",
+        "include/item_menu.h:49-86 (struct BagPosition gBagPosition -- a real redesign from FR/"
+        .. "LG's static struct BagStruct gBagMenuState -- and struct BagMenu *gBagMenu, a heap "
+        .. "pointer); gen3_title_syms.lua's BAG_POSITION_ADDR/BAG_MENU_PTR_ADDR entries",
+        "include/constants/item.h:12-17 (ITEMS_POCKET..KEYITEMS_POCKET 0-4, POCKETS_COUNT=5, "
+        .. "BALLS_POCKET=1 -- the 0-based gBagPosition.pocket scale, distinct from gItems' own "
+        .. "1-based POCKET_POKE_BALLS=2)",
+        "src/item_menu.c:1300-1310 (ChangeBagPocketId: the pocket switch WRAPS, no clamp) and "
+        .. ":1284-1400 (SwitchBagPocket/Task_SwitchBagPocket: back-to-back presses are swallowed "
+        .. "mid-animation)",
+        "src/item_menu.c:312-314,1536-1538,1679-1688 (ITEMMENULOCATION_BATTLE routes to "
+        .. "sContextMenuItems_BattleUse {ACTION_BATTLE_USE, ACTION_CANCEL}, always 2 items -> "
+        .. "Task_ItemContext_Normal picks Task_ItemContext_SingleRow)",
+        "src/item_use.c:938-947 (ItemUseInBattle_PokeBall -> RemoveBagItem, the quantity "
+        .. "decrement); src/battle_main.c:4413 (BattleMainCB2); src/battle_util.c:318-322 "
+        .. "(HandleAction_UseItem sets gLastUsedItem before gBattlescriptsForBallThrow)",
+        "include/constants/battle.h:106 (B_OUTCOME_CAUGHT=7)",
+        "tests/fixtures/gen3/README.md (emerald_battle.sav: 5 Poke Balls, no bag items besides "
+        .. "the Poke Balls -- the fixture fact em_bag_row0's ==0 check relies on)",
     },
-    open = true,
-    open_reason = "Emerald's bag pocket/cursor struct (gBagMenu) has not been reverse-engineered "
-               .. "(BAG_MENU_STATE_ADDR is absent for emerald in gen3_title_syms.lua on purpose); "
-               .. "steering an unverified struct layout risks a wrong press landing on a real menu "
-               .. "action instead of failing loudly -- needs its own research card before a retry "
-               .. "leg can be written, not a blind port of the FR bag-throw sequence",
+    run = function(cp)
+        local x, y = G.pos(cp)
+        G.phase("emerald_route102_catch-start", string.format("hunting from (%d,%d)", x, y))
+        emerald_route102_catch_loop(cp)
+    end,
 }
 
 EMERALD_LEGS[#EMERALD_LEGS + 1] = {

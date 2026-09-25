@@ -38,6 +38,7 @@ _ROM = os.path.join(_REPO, "patch", "build",
                      "gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba")
 _EMERALD_GROUPS_ADDR = 0x08486578  # pokeemerald.sym gMapGroups (test_gen3_title_syms.py pins the .sym-derived value)
 
+_SYMS_SCRIPT = os.path.join(_REPO, "lua", "tests", "gen3_title_syms.lua")
 sys.path.insert(0, os.path.join(_REPO, "tools"))
 import gba_map  # noqa: E402
 
@@ -162,10 +163,11 @@ def test_open_legs_carry_a_reason(legs):
 
 
 def test_pinned_legs_are_not_open(legs):
-    """The 4 legs with a real run(): entering the PC, saving, and the two battles."""
+    """The 5 legs with a real run(): entering the PC, saving, the two battles, and the catch
+    (card E2-CATCH-LEG turned emerald_route102_catch from OPEN into a real leg)."""
     pinned = {
         "emerald_enter_pc", "emerald_save_town", "emerald_route102_wild_battle",
-        "emerald_calvin_trainer_battle",
+        "emerald_calvin_trainer_battle", "emerald_route102_catch",
     }
     seen_not_open = set()
     for i in range(1, len(legs) + 1):
@@ -238,3 +240,114 @@ def test_oldale_pc_door_and_landing_tile_are_where_this_driver_expects():
         f"PC landing tile is ({landing.x},{landing.y}), not the (7,8) this driver's "
         f"emerald_enter_pc leg verifies"
     )
+
+
+# -- 5. card E2-CATCH-LEG: the catch leg is real, and the throw helper obeys its hard rules ------
+
+
+def test_route102_catch_is_no_longer_open_and_exercises_capture_wild(legs):
+    """The card's own target: emerald_route102_catch used to be OPEN (no bag pocket/cursor
+    struct); E2-CATCH-LEG resolved gBagPosition/gBagMenu and this must now be a real leg."""
+    found = None
+    for i in range(1, len(legs) + 1):
+        leg = legs[i]
+        if leg["name"] == "emerald_route102_catch":
+            found = leg
+            break
+    assert found is not None, "emerald_route102_catch leg not found"
+    assert not found["open"], "emerald_route102_catch: still OPEN"
+    assert "capture_wild" in _py_list(found["exercises"])
+
+
+def _function_body(name):
+    """Slice out one `local function NAME(...) ... end` block, from the definition line to the
+    matching UNINDENTED `end` (this file's own convention: a top-level function's closing `end`
+    is flush left, every nested block's `end` is indented) -- robust against the function's own
+    body containing nested `if`/`for` blocks that also close with `end`."""
+    start = re.search(rf'local function {re.escape(name)}\(', _SCRIPT_SRC)
+    assert start, f"function {name} not found"
+    close = re.search(r'^end$', _SCRIPT_SRC[start.start():], re.M)
+    assert close, f"function {name}: no flush-left closing end found"
+    return _SCRIPT_SRC[start.start():start.start() + close.end()]
+
+
+def test_emerald_throw_ball_never_sends_select():
+    """Hard rule (card E2-CATCH-LEG, research note): SELECT swaps items in battle -- the helper
+    must never send it. A source-level assertion, not an emulator run."""
+    body = _function_body("emerald_throw_ball")
+    assert not re.search(r'"Select"', body, re.I), (
+        "emerald_throw_ball sends a Select press -- forbidden (it swaps items in battle)"
+    )
+    assert not re.search(r'Select\s*=\s*true', body, re.I), (
+        "emerald_throw_ball sets Select=true directly -- forbidden"
+    )
+
+
+def test_emerald_throw_ball_steers_the_pocket_by_value_not_by_counting():
+    """Hard rule: steer by reading gBagPosition.pocket until it equals BALLS_POCKET, never by
+    counting presses (the pocket switch WRAPS, so a fixed press count can silently land on the
+    wrong pocket). Source-level evidence: the pocket-switch loop reads the live value both before
+    and after each press, and the final check re-reads it rather than trusting the loop counter."""
+    body = _function_body("emerald_throw_ball")
+    assert body.count("em_bag_pocket()") >= 3, (
+        "emerald_throw_ball reads em_bag_pocket() fewer than 3 times -- looks like it stopped "
+        "reading the live pocket value somewhere in the steering loop"
+    )
+    assert "local before = em_bag_pocket()" in body
+    assert "em_bag_pocket() ~= before" in body, (
+        "the pocket-switch wait does not re-read em_bag_pocket() against its own prior value"
+    )
+    assert "if em_bag_pocket() ~= BALLS_POCKET then" in body, (
+        "the final pocket check does not re-read the live value"
+    )
+
+
+def test_emerald_throw_ball_asserts_task_func_before_each_a():
+    """Hard rule: assert the exact task func before every A (compare against sym|1). Both
+    presses this helper ever sends A on are gated by a task_active(...) check immediately
+    before, or (for the pocket-select A) an em_bag_input_ready(cp) check whose own body calls
+    task_active(TASK_BAG_MENU_HANDLE_INPUT)."""
+    body = _function_body("emerald_throw_ball")
+    a_taps = [m.start() for m in re.finditer(r'G\.tap\("A"', body)]
+    assert len(a_taps) == 2, f"expected exactly 2 A presses in emerald_throw_ball, found {len(a_taps)}"
+    for pos in a_taps:
+        before = body[:pos]
+        assert "task_active(" in before, (
+            "an A press in emerald_throw_ball has no task_active(...) check anywhere before it"
+        )
+
+
+def test_emerald_throw_ball_pairs_bag_gone_with_no_bag_task():
+    """Hard rule: pair "bag gone" with "no bag task" on the throw-committed check."""
+    body = _function_body("emerald_throw_ball")
+    m = re.search(r'local committed = false(?P<tail>.*?)if not committed then', body, re.S)
+    assert m, "no throw-committed check block found"
+    tail = m.group("tail")
+    assert "BATTLE_MAIN_CB2" in tail, "throw-committed check does not test callback2 (bag gone)"
+    assert "not task_active(TASK_BAG_MENU_HANDLE_INPUT)" in tail, (
+        "throw-committed check does not test for no bag input task"
+    )
+    assert "not task_active(TASK_ITEM_CONTEXT_SINGLE_ROW)" in tail, (
+        "throw-committed check does not test for no bag context-menu task"
+    )
+
+
+def test_emerald_route102_catch_loop_calls_the_throw_helper():
+    body = _function_body("emerald_route102_catch_loop")
+    assert "emerald_throw_ball(cp," in body
+
+
+def test_every_new_title_syms_entry_resolves_for_emerald():
+    """Card E2-CATCH-LEG's own new symbols -- already covered generically by
+    test_gen3_title_syms.py's test_every_entry_matches_its_symbol, re-asserted here by name so
+    this card's own falsifier does not depend on that other file staying in sync."""
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    mod = lua.execute(f'return dofile("{_SYMS_SCRIPT.replace(chr(92), "/")}")')
+    out = mod.for_title("emerald")
+    got = {k: out[k] for k in out}
+    for name in (
+        "BAG_POSITION_ADDR", "BAG_MENU_PTR_ADDR", "TASK_ITEM_CONTEXT_SINGLE_ROW",
+        "BATTLE_MAIN_CB2", "LAST_USED_ITEM_ADDR",
+    ):
+        assert name in got, f"{name}: missing from for_title('emerald')"
+        assert isinstance(got[name], int) and got[name] > 0

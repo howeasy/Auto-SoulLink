@@ -64,13 +64,28 @@ def entries():
 
 FR_LG_TITLES = ("firered", "leafgreen")
 
+# card E2-CATCH-LEG: the FIRST entries in this table with a deliberate FR/LG nil -- the mirror
+# image of EXPECTED_EMERALD_NILS below. Emerald's battle-bag redesign (struct BagPosition/BagMenu,
+# a real heap pointer) has no 1:1 global in pokefirered/pokeleafgreen at all (grep of both .sym
+# files: zero hits for gBagPosition/gBagMenu/Task_ItemContext_SingleRow), so these three are
+# genuinely Emerald-only, not an oversight.
+EXPECTED_FR_LG_NILS = {
+    "BAG_POSITION_ADDR",             # struct BagPosition gBagPosition: no FR/LG equivalent global
+    "BAG_MENU_PTR_ADDR",             # struct BagMenu *gBagMenu: no FR/LG equivalent global
+    "TASK_ITEM_CONTEXT_SINGLE_ROW",  # no symbol of this name in either FR/LG .sym file
+}
+
 
 def test_every_entry_present_for_firered_and_leafgreen(entries):
-    """Unlike emerald, FR/LG never carries a deliberate nil -- both are the same pret source
-    tree, so a title-invariant name difference should not happen."""
+    """Unlike emerald, FR/LG never carries a deliberate nil for an ORDINARY entry -- both are the
+    same pret source tree, so a title-invariant name difference should not happen there. The
+    EXPECTED_FR_LG_NILS set above is the sole, pinned exception (Emerald-only concepts)."""
     for name, e in entries.items():
         for title in FR_LG_TITLES:
-            assert e.get(title) is not None, f"{name}: no {title} address"
+            if name in EXPECTED_FR_LG_NILS:
+                assert e.get(title) is None, f"{name}: expected no {title} address (FR/LG nil)"
+            else:
+                assert e.get(title) is not None, f"{name}: no {title} address"
 
 
 @pytest.mark.parametrize("title", sorted(SYM_PATHS))
