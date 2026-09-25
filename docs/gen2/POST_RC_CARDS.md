@@ -1,0 +1,138 @@
+# Gen 2 post-RC cards
+
+Work found or requested during the RC final sweep (freeze `df04e065`, 2026-09-24) and deliberately held out of
+the RC so the production code digest (`ccd62421…`) and its receipts stay valid. Each card states the problem, its
+evidence, the proposed shape, the first falsifier, the exit evidence and what it costs in re-proof. Nothing here
+ships without the owner's authority. Rows marked **GATE** must land before the named event.
+
+Evidence ids: `cx-…` are OMP (magi) task ids; reviews are read-only and every finding was checked against the
+source before it was accepted here.
+
+## Ordering
+
+1. KEY-SCOPE-5: **GATE before Gen 3 rides this server**. It is also an owner decision whether Gen 2's release waits for it.
+2. SP-LOWWATER, REVIEW-P4-HASH: evidence hygiene, cheap.
+3. PHONE-NAMES, TITLE-VERSION: owner-requested features.
+4. The rest: driver/fixture robustness, housekeeping.
+
+Every card that touches CODE_SCOPE (`tools/gen2_code_digest.py`: `lua/*.lua`, `lua/gen2/**`, `lua/core/**`,
+`server/**/*.py`, `data/games/gen2_*/**`) changes the production digest. Every stamped receipt then goes STALE,
+so batch those cards and re-run `tools/gen2_final_sweep.py` once.
+
+---
+
+## KEY-SCOPE-5: harden the key_change collision check (server)
+
+**Why.** KEY-SCOPE-4 (`1dc9dfc8`) accepts a `key_change` that its own tick beat, instead of killing the pair. OMP review
+`cx-96f94b31` found gaps around it. The coordinator checked each one against the source:
+
+| # | Finding | Status | Reachable in Gen 2? |
+|---|---|---|---|
+| F1 | The self-report proof counts `partner_blobs`, a filtered cache: entries with a missing/malformed `blob_hex` are dropped (`server/state.py` `_ingest_party_blobs`), so a genuine duplicate with no blob is invisible and the collision is waived | regression from 1dc9dfc8 | No. The Gen 2 client fails the whole snapshot closed on any missing blob (`lua/gen2/client.lua:211-223`). **Gen 3 is reachable**: it sends `blob_hex=""` on a failed read (`lua/clients/gen3_frlge_client.lua:1304-1306`) |
+| F2 | A same-mon tick whose entry has no blob (or an adapter with `party_blob_size()==0`) still rejects and kills `identity_lost` | pre-existing behaviour (before 1dc9dfc8 every tick-first case rejected) | No (Gen 2 always has blobs) |
+| F3 | The boxed-twin check trusts `srv.pc_boxes`; if the box census is absent or stale (`pc_boxes` is optional on the wire, `docs/protocol.md`), a boxed twin is missed once the party refs are waived | regression from 1dc9dfc8 | Low: Gen 2 sends `pc_boxes` from `box_cache` on every tick/hello |
+| F4 | A reconnect replay where the hello re-reports the old key is rejected, not acked `migrated:false`; a delayed old tick can roll `party_keys` back | pre-existing | Only via a soft reset or reload onto a pre-change save; unconfirmed |
+| F5 | The `ambiguous_keys` latch is checked on `old_key` only; a latch on `new_key` doesn't veto the waiver | pre-existing | Needs an earlier KEY-SCOPE-3 clash plus a dead index; improbable |
+| F6 | `_presentation_key_in_use` excludes only the primary memorial box, not overflow memorial boxes (`_memorial_box_indices`), so a buried key reads as live | pre-existing | Needs an evolution into a key equal to a buried mon's key; improbable |
+
+**Shape.**
+1. Keep a raw per-player party key list, including entries with no blob, at every hello/tick/safe ingest. Prove "self-report" from that multiset (`count(new_key)==1 and old_key not in raw`), never from `partner_blobs`.
+2. An absent or stale box census fails closed. Either keep a server-side box-key index updated only from complete box snapshots, or hold the key change until a fresh census arrives.
+3. `_presentation_key_in_use`: use `_memorial_box_indices()`.
+4. The ambiguity latch is checked on both `old_key` and `new_key`.
+5. A bounded accepted-migration ledger (`old→new`), so a replay acks `migrated:false` and a stale snapshot can't re-add the old key.
+
+**Files.** `server/state.py` (the `_handle_key_change` collision block, ingest, reconcile), `server/server.py`
+(`_presentation_key_in_use`), `tests/unit/test_state_key_scope.py`, `tests/unit/test_state_key_change_ack.py`.
+
+**First falsifiers.** OMP's 9 listed cases (`cx-96f94b31` "TESTS"). At minimum:
+- two same-key party entries, one without a blob → reject;
+- a same-mon tick without a blob → accept;
+- a boxed twin with `pc_boxes` omitted → reject;
+- accept, then a reconnect hello with the old key, then a replay → ack `migrated:false`;
+- `ambiguous_keys[new_key]` → reject;
+- an overflow memorial key → reusable.
+
+**Exit.** Unit tests red→green, a Gen 3 run by the Gen 3 lane, and a full Gen 2 re-sweep (it's a server change, so the digest moves).
+
+---
+
+## SP-LOWWATER: measure the worst-case stack during battle-text service
+
+**Why.** OMP hook census `cx-f10d0dca` §7: `patch/gen2/src/slink.asm:50-52` says the live minimum SP in battle/link is
+unmeasured. The `DelayFrame` bridge → `SlinkService` → `PlaySFX` → VBlank chain is statically balanced, but no receipt
+records its low-water mark. Gold's stack is `$DF03-$DFFF`. No overflow has ever been observed. This is an evidence gap,
+not a known defect.
+
+**Shape.** Reuse the trade stack witness v2 (the bus-write hooks over `[wStackBottom, floor+64)` plus the SP-1 canary; the
+canary geometry is `address == SP` under gambatte, `e57b9954`). Run it in a live gate that posts SFX and phone requests
+while the PC is in `PrintLetterDelay` with `wTextDelayFrames != 0`, with A/B held and not held. Record the SP low-water,
+`hVBlank`, `wTextDelayFrames` and `wVBlankOccurred`.
+
+**Exit.** A PHYSICAL receipt per title, with a margin to `wStackBottom` ≥ an agreed floor. Harness only, so no digest change.
+
+## REVIEW-P4-HASH: refresh a stale review artifact
+
+`docs/gen2/reviews/REVIEW_P4_OVERLAY_ASM_2026-09-24.md:6-10` names overlay hash `d563669e`; the current Gold overlay is
+`15fc8213…` (`data/gen2/overlay_provenance.json:144-150`). Mark it superseded, or re-point it at the current artifact.
+Docs only.
+
+---
+
+## PHONE-NAMES: phone calls name the partner trainer and the Pokemon (owner request 2026-09-24)
+
+**Why.** Today every SLink call is fixed text. The server adds only `"phone":"fallen"|"dead_zone"|"first_link"`
+(`server/state.py:2355,2673,3679`). `lua/gen2/phone.lua` maps that to ID 1-3 at mailbox +32. `SlinkPhoneCallScript` picks one
+of four fixed `writetext` blocks (`patch/gen2/src/phone.asm:113-141`). The caller header shows `PHONE_00` "----------".
+
+**Feasibility (OMP `cx-db0c2158`, spot-checked): M.**
+- The data exists: the fallen command already carries the nickname (`server/state.py:3675`); the trainer names are in `player_identity`/`trainer_names`.
+- The mailbox is too small (39 B G/S, 40 B Crystal, `patch/gen2/src/slink.asm`; about 5 bytes free, two names need 22).
+- Stage in `wUnusedMapBuffer`: 24 B, Crystal `$C7E8`, G/S `$C6E8`. `HandleNewMap` clears it (`engine/overworld/warp_connection.asm:1-4`), so it needs a cookie byte, and an invalid payload falls back to the fixed text.
+- The call script copies the names into `wStringBuffer3/4` (19 B each) and prints them with `text_ram`.
+- The caller name needs a `GetCallerName` hook gated on `wSpecialPhoneCallID == SPECIALCALL_SLINK`, because the header renders before the script (`engine/phone/phone.asm:424-428`).
+- Encoding: reuse `T.encode_name` (`lua/gen2/trade_overlay.lua:95-105`) plus `data/games/gen2_*/charmap.lua`. There is no Python-side encoder. Lines are 18 tiles, so the example needs two lines.
+- Cheapest first version: send the species ID and use the native `getmonname`; add nickname transport later.
+
+**Top risk.** Scratch lifetime: the staged bytes must survive from arming until the delayed ring, across map changes.
+
+**Detailed design.** OMP `cx-ee02eac7` (in flight at the time of writing; its result is appended below when it lands).
+
+**Exit.**
+- unit tests: client staging, the ABI linked-byte tests, the protocol schema;
+- the phone live gate extended to a map change between arming and ringing, max-length names, and all three titles;
+- the overlay sha1s re-pinned;
+- a re-sweep. This touches CODE_SCOPE, so batch it with KEY-SCOPE-5.
+
+**Owner questions.** Nicknames or species names? The wording?
+
+## TITLE-VERSION: SLink version on screen, then an SLink logo (owner request 2026-09-24)
+
+**Feasibility (OMP `cx-b41bfa58`, spot-checked): text S, logo banner M.**
+- The main menu is the easy spot for text: the font is already loaded (`engine/menus/main_menu.asm`). On the title screen, `LoadStandardFont` would overwrite logo tiles in `vTiles1`, so title-screen text needs a tiny custom tile strip.
+- The Gold/Silver subtitle is baked into `gfx/title/logo_bottom_{gold,silver}.png` (`gfx/misc.asm:9-23`). Crystal's is in `gfx/title/logo.png` (`engine/movie/title.asm:75-79`).
+- `rgbgfx` v1.0.3 is in the pinned toolchain (`.cache/build-tools/rgbds-v1.0.3/bin`).
+- `verify_symbol_scope` (`tools/build_gen2_companion.py:451-469`) forbids moving native symbols. The hook must be a same-size trampoline at a fixed address, or get a narrow exemption.
+- A visible stamp changes every overlay sha1 pin (`data/gen2/overlay_provenance.json:129-174`) on every release. The version must come from an explicit release version or a clean exact tag, recorded in provenance. The builder hashes only `.asm/.inc` today (`:535-552`), so it must add the version and the PNG inputs.
+
+**Detailed design.** OMP `cx-26133223` (in flight at the time of writing; its result is appended below when it lands).
+
+**Owner questions.** Who draws the logo? A clean pixel "SLINK" placeholder is proposed. The wording? Main menu only, or the title screen too?
+
+---
+
+## Robustness and housekeeping
+
+- **POISON-DUO-CAP.**
+  - G-S `gen2_poison` fights Route 31 Wade once per save. Even with `PI.STING_LOW_HP=6` in trainer sting fights (`7f20ecc2`, derived from the decomp: Wade's fixed-DV Weedle deals at most 6), the 15-HP target caps the success rate at ~83%/fight. The sweep allows 2 attempts (`89b33356`).
+  - Option: an O-33 disclosed seed where the linked mon starts poisoned, so only the overworld poison faint runs natively. That needs an owner check that it still tests what S-4 intends.
+- **TRAINER-SEED-A.** In the RC re-run pass, C-C `gen2_faint_active_trainer`'s A side (the native L5 errand save) lost its Route 29 link-capture battle (catch RNG). If the retry also fails, give A the same O-33 L10 seed B got (`5a7b04c8`). That changes one release row.
+- **CLAUSE-BENCH-LIMITS.** OMP `cx-43b52a71` F2/F3/F5 were kept by design: the oracle cross-references the U2 receipt, and the full qualification lives in the release verifier's write-window lane; `PC == 0x0040` is a stricter harness invariant. Revisit only if that lane's coverage changes.
+- **BOARD-AMBIGUOUS.** Show the KEY-SCOPE-3 ambiguous-key latches on the pair board, with a link to `/api/debug/resolve_ambiguous_key`.
+- **TEMP-LANES.** Remove idle Temp lanes (`trl`, `tr2`, `tr3`, `spd`, `sp2`, and the sweep's `fs1..fs4` once receipts are pinned). Unlink junctions FIRST, then delete. Leave any `.git/worktrees/*` admin dir that isn't ours (e.g. `ui-sprite-size`) alone.
+- **PURERGB-OVERLAY-EOL.** `data/games/gen1_purergb/write_checkpoint_overlay.json` shows as modified with line-ending-only changes, from an unknown writer. Find out which tool rewrites it with LF, and fix the writer or `.gitattributes`.
+- **OMP-TIMEOUTS.** Headless OMP runs must be told their kill limit in the task text. Two 30-minute studies died silently (`cx-e179bf94`, `cx-a496d30a`); runs told "budget N minutes, reply PARTIAL if long" returned on time.
+
+## Appended results
+
+(Detailed designs from `cx-ee02eac7` and `cx-26133223` go here when they land.)
