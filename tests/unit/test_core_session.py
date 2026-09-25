@@ -434,8 +434,9 @@ def test_an_active_battler_is_held_across_frames_and_reported_then_lands_on_swit
     w.step(w.S.PENDING_HUD_FRAMES + 60)
     assert w.s.battle_pending_count(w.s) == 1 and w.q.size(w.q) == 0
     assert len(w.battle_writes()) > w.S.PENDING_HUD_FRAMES  # retried every frame
-    lines = [h[1] for h in w.hud if h[0] == "show" and "force_faint" in h[1]]
-    assert lines and "target active" in lines[-1] and re.search(r"\d+s", lines[-1])
+    held = [ln for ln in w.logs if "held: force_faint" in ln]
+    assert len(held) == 1 and "target active" in held[0]              # one console line, no HUD
+    assert not [h for h in w.hud if h[0] == "show" and "held" in str(h[1])]
     w.st.battle_result = "done"                             # switched out
     w.step()
     assert w.s.battle_pending_count(w.s) == 0 and w.q.size(w.q) == 0
@@ -525,23 +526,22 @@ def test_a_gate_hold_is_reported_with_reason_and_age_in_the_tick_hud_line():
     w.st.checkpoint = False
     w.command(cmd="memorialize", key=A)
     w.step(w.S.PENDING_HUD_FRAMES + 30)
-    lines = [h[1] for h in w.hud if h[0] == "show" and "memorialize" in h[1]]
-    assert lines and "not at the overworld checkpoint" in lines[-1] and re.search(r"\d+s", lines[-1])
+    held = [ln for ln in w.logs if "held: memorialize" in ln]
+    assert len(held) == 1 and "not at the overworld checkpoint" in held[0]
+    assert not [h for h in w.hud if h[0] == "show" and "held" in str(h[1])]
 
 
-def test_a_held_reason_reaches_the_hud_without_lua_source_positions():
-    # owner 2026-09-25: code references on the HUD while a memorial was held -- Lua 5.4's assert
-    # prefixes "path.lua:N: " (ph_linked_faint_active_whiteout_gen3_fr_as_a_b0483efe.txt:60)
+def test_a_held_memorial_never_reaches_the_hud():
+    # owner 2026-09-25: "SLink held: memorialize x1 58s (forbidden state: callback1)" on the HUD in
+    # battle -- the player needs no pending counter (Gen 1 shows holds nowhere); console only
     w = World()
     w.step()
     w.st.checkpoint = False
-    w.st.gate_why = ("E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: "
-                     "forbidden state: field_controls_locked")
+    w.st.gate_why = "forbidden state: callback1"
     w.command(cmd="memorialize", key=A)
-    w.step(w.S.PENDING_HUD_FRAMES + 30)
-    line = [h[1] for h in w.hud if h[0] == "show" and "memorialize" in h[1]][-1]
-    assert ".lua" not in line and "_" not in line.split("(", 1)[1], line
-    assert "field controls locked" in line
+    w.step(w.S.PENDING_HUD_FRAMES * 3)
+    assert not [h for h in w.hud if h[0] == "show" and "held" in str(h[1])], w.hud
+    assert len([ln for ln in w.logs if "held: memorialize" in ln]) == 1
 
 
 # -- signals, safe, hooks, identity observation -------------------------------------------
