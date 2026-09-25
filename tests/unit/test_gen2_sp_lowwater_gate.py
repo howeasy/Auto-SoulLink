@@ -52,7 +52,11 @@ def good_run(mode="A_held", title="gold"):
                   "low_water_state": ">floor+64"},
         "guards": {site: {"hits": 5, "low": _row(site, top - 60)} for site in gate.SP_LOWWATER_GUARDS},
         "excursions": [],
-        "nested_vblank": {"count": 1, "windows": 40, "with_sfx": 1, "deepest": _row("VBlank", top - 70)},
+        "nested_vblank": {"count": 1, "windows": 40, "with_sfx": 1, "deepest": _row("VBlank", top - 70),
+                          "min_sp": top - 90},
+        # service-chain SP floor top-60 less a 40-byte handler: composed margin (top - bottom) - 100
+        "composition": {"note": gate.SP_LOWWATER_NESTED_POLICY, "service_windows": 40, "service_min_sp": top - 60,
+                        "vblank_samples": 500, "vblank_max_depth": 40},
         "battle": {"from": 50, "to": 900},
     }
 
@@ -62,6 +66,7 @@ def good_receipt(bind):
     binding: result/evidence_level/title/overlay_sha1/fixture/fixture_sha256)."""
     title = bind["title"]
     return {**bind, "schema": "gen2-sp-lowwater-v1", "bounds": dict(gate.SP_LOWWATER_BOUNDS),
+            "nested_vblank_policy": gate.SP_LOWWATER_NESTED_POLICY,
             "static_bound": {"print_letter_delay": 12, "service_chain": 38, "vblank": 36},
             "runs": {mode: good_run(mode, title) for mode in gate.SP_LOWWATER_MODES}, "harness_write_scopes": []}
 
@@ -146,13 +151,50 @@ def test_no_trigger_fails():
     assert any("trigger" in e for e in gate._sp_lowwater_run_errors("B_held", run))
 
 
-def test_no_nested_vblank_is_inconclusive_never_pass():
-    run = _mutated("released", [("nested_vblank.count", 0)])
+def test_a_nested_vblank_is_bounded_by_composition_not_required():
+    run = _mutated("released", [("nested_vblank.count", 0), ("nested_vblank.min_sp", None)])
+    assert _lua_verdict(run) == ("PASS", [])
+    assert gate._sp_lowwater_run_errors("released", run) == []
+
+
+@pytest.mark.parametrize("margin,verdict", [(32, "PASS"), (31, "FAIL")])
+def test_the_composed_margin_passes_at_exactly_N(margin, verdict):
+    # service_min_sp - bottom - vblank_max_depth == margin
+    run = _mutated("A_held", [("composition.service_min_sp", BOTTOM + 80), ("composition.vblank_max_depth", 80 - margin)])
+    lua_verdict, problems = _lua_verdict(run)
+    assert lua_verdict == verdict, problems
+    assert (gate._sp_lowwater_run_errors("A_held", run) == []) is (verdict == "PASS")
+    if verdict == "FAIL":
+        assert any("composed margin 31" in p for p in problems)
+        assert any("composed margin" in e for e in gate._sp_lowwater_run_errors("A_held", run))
+    lua, P = _lua()
+    assert P.lowwater_composed(lua.table_from(run["composition"]), BOTTOM) == margin
+
+
+@pytest.mark.parametrize("edits,why", [
+    ([("composition.vblank_samples", 0)], "no VBlank handler was measured"),
+    ([("composition.vblank_max_depth", None)], "no VBlank handler was measured"),
+    ([("composition.service_windows", 0)], "no service window was measured"),
+    ([("composition", None)], "no service window was measured"),
+])
+def test_a_missing_composition_component_is_inconclusive(edits, why):
+    run = _mutated("B_held", edits)
     verdict, problems = _lua_verdict(run)
-    assert verdict == "INCONCLUSIVE" and "no VBlank landed inside a service window" in problems[0]
-    assert gate._sp_lowwater_run_errors("released", run) == ["INCONCLUSIVE: no VBlank landed inside a service window"]
+    assert verdict == "INCONCLUSIVE" and why in problems[0], problems
+    errors = gate._sp_lowwater_run_errors("B_held", run)
+    assert f"INCONCLUSIVE: {why}" in errors and all(e.startswith("INCONCLUSIVE: ") for e in errors), errors
     # a real failure outranks INCONCLUSIVE
-    assert _lua_verdict(_mutated("released", [("nested_vblank.count", 0), ("phone.rings_in_battle", 1)]))[0] == "FAIL"
+    assert _lua_verdict(_mutated("B_held", edits + [("phone.rings_in_battle", 1)]))[0] == "FAIL"
+
+
+def test_an_observed_nested_vblank_under_N_fails_even_when_the_composition_passes():
+    run = _mutated("A_held", [("nested_vblank.min_sp", BOTTOM + 31)])
+    assert gate._sp_lowwater_run_errors("A_held", _mutated("A_held", [])) == []   # composition alone passes
+    verdict, problems = _lua_verdict(run)
+    assert verdict == "FAIL" and any("nested VBlank came within 32" in p for p in problems), problems
+    assert any("nested VBlank came within 32" in e for e in gate._sp_lowwater_run_errors("A_held", run))
+    assert _lua_verdict(_mutated("A_held", [("nested_vblank.min_sp", BOTTOM + 32)]))[0] == "PASS"
+    assert _lua_verdict(_mutated("A_held", [("nested_vblank.min_sp", None)]))[0] == "FAIL"   # count 1, no depth
 
 
 def test_the_released_mode_needs_no_delayframe_but_the_held_modes_do():
@@ -205,9 +247,11 @@ def test_the_release_row_is_green_only_on_the_whole_receipt(tmp_path):
     bad = dict(copy.deepcopy(receipt), schema="gen2-sfx-gate-v1")
     assert any("PHYSICAL PASS" in e for e in gate._sp_lowwater_gate_row_errors(tmp_path, "gold", bad))
     bad = copy.deepcopy(receipt)
-    bad["runs"]["B_held"]["nested_vblank"]["count"] = 0
+    bad["runs"]["B_held"]["composition"]["vblank_samples"] = 0
     assert gate._sp_lowwater_gate_row_errors(tmp_path, "gold", bad) == [
-        "sp-lowwater gate B_held: INCONCLUSIVE: no VBlank landed inside a service window"]
+        "sp-lowwater gate B_held: INCONCLUSIVE: no VBlank handler was measured"]
+    bad = dict(copy.deepcopy(receipt), nested_vblank_policy=None)
+    assert any("nested-VBlank policy" in e for e in gate._sp_lowwater_gate_row_errors(tmp_path, "gold", bad))
 
 
 def test_the_static_bound_fits_the_stack_capacities_with_the_margin():
@@ -228,3 +272,4 @@ def test_the_static_bound_fits_the_stack_capacities_with_the_margin():
     assert P.LW_EXACT == gate.SP_LOWWATER_BOUNDS["exact_window"] == 64
     assert [P.LW_GUARDS[i] for i in range(1, len(P.LW_GUARDS) + 1)] == list(gate.SP_LOWWATER_GUARDS)
     assert dict(P.LW_MODES.items()) == gate.SP_LOWWATER_MODES
+    assert P.LW_NESTED_POLICY == gate.SP_LOWWATER_NESTED_POLICY

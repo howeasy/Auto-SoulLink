@@ -297,7 +297,8 @@ If G4 is already signed, the overlay grant fingerprint changes and needs re-sign
   - the SFX is consumed and played;
   - the phone is acked and armed, and doesn't ring in battle;
   - `hVBlank == VBLANK_NORMAL` and `rIE & 1`.
-  - If no VBlank overlapping the service window is observed, the result is **INCONCLUSIVE**, not PASS.
+  - ~~If no VBlank overlapping the service window is observed, the result is INCONCLUSIVE.~~ **Revised (coordinator, after the smoke run: Gold/Silver never nested a VBlank in about 210 windows).** The nested case is bounded by composition: (deepest measured service-chain SP − `wStackBottom`) − (deepest measured VBlank-handler depth, over any VBlank in the battle) must be ≥ N. Both components must be measured, or the result is **INCONCLUSIVE**.
+  - A nested VBlank that is actually observed is recorded and must keep N too, but it isn't required. The receipt states the policy: "nested VBlank bounded by composition (service depth + handler depth), not required to be observed".
 - **Static bound** (from the asm): PrintLetterDelay 12 + bridge/service/SFX/`_PlaySFX` leaf 38 + normal VBlank 36 = **86 B**, against a capacity of 255 B (Crystal) and 252 B (G/S).
 - **Release:** a new `sp_lowwater_gate` kind in `LIVE_GATE_KINDS`/`CLIENT_PATH_GATE_KINDS`, a `_sp_lowwater_gate_row_errors` through `_overlay_gate_errors`, 3 rows `new-gates.sp-lowwater.<title>` (N-1/N-2) in `tests/gen2_live_gate_requirements.json`, and the suffix added in `test_gen2_physical_receipts.py`.
 - **Size:** ~700-1,000 LOC, harness/tests/verifier only, so no digest change.

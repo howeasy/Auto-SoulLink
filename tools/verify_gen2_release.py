@@ -1392,10 +1392,13 @@ SP_LOWWATER_MODES = {"A_held": 1, "B_held": 2, "released": 0}   # the hJoyDown A
 SP_LOWWATER_GUARDS = ("SlinkDelayFrameBridge", "SlinkService", "SlinkSfxService", "SlinkPhoneService", "PlaySFX",
                       "_PlaySFX", "VBlank")
 SP_LOWWATER_BOUNDS = {"margin_floor": 32, "exact_window": 64, "resume_frames": 300, "deadline_frames": 300}
+SP_LOWWATER_NESTED_POLICY = ("nested VBlank bounded by composition (service depth + handler depth), "
+                             "not required to be observed")
 
 
 def _sp_lowwater_run_errors(mode: str, run: dict) -> list[str]:
-    """One run against the design's pass criteria; an unexercised nested VBlank is its own (INCONCLUSIVE) error."""
+    """One run against the design's pass criteria (lua/tests/gen2_sfx_gate.lua P.lowwater_verdict); a missing
+    composition component is its own INCONCLUSIVE error."""
     def num(v):
         return type(v) is int
 
@@ -1448,9 +1451,21 @@ def _sp_lowwater_run_errors(mode: str, run: dict) -> list[str]:
             errors.append(f"SP guard {site} has no hit or saw SP outside the floor")
     if run.get("excursions"):
         errors.append("an SP guard saw SP below the floor or off the stack")
+    # the composed bound (option 2): deepest service-chain SP - wStackBottom - deepest VBlank-handler depth >= N;
+    # an observed nested VBlank must keep N too, but it is not required
+    c = rows(run.get("composition"))
+    service = num(c.get("service_windows")) and c["service_windows"] >= 1 and num(c.get("service_min_sp"))
+    handler = num(c.get("vblank_samples")) and c["vblank_samples"] >= 1 and num(c.get("vblank_max_depth"))
+    if service and handler and num(bottom) and c["service_min_sp"] - bottom - c["vblank_max_depth"] < floor:
+        errors.append(f"the composed margin (service depth + VBlank handler depth) is under {floor} bytes")
     nested = rows(run.get("nested_vblank"))
-    if not num(nested.get("count")) or nested["count"] < 1:
-        errors.append("INCONCLUSIVE: no VBlank landed inside a service window")
+    if num(nested.get("count")) and nested["count"] > 0 and not (
+            num(nested.get("min_sp")) and num(bottom) and nested["min_sp"] - bottom >= floor):
+        errors.append(f"an observed nested VBlank came within {floor} bytes of wStackBottom")
+    if not service:
+        errors.append("INCONCLUSIVE: no service window was measured")
+    if not handler:
+        errors.append("INCONCLUSIVE: no VBlank handler was measured")
     return errors
 
 
@@ -1459,6 +1474,8 @@ def _sp_lowwater_gate_row_errors(root: Path, title: str, receipt: dict) -> list[
     errors = _overlay_gate_errors(root, title, receipt, "gen2-sp-lowwater-v1", "sp-lowwater gate")
     if receipt.get("bounds") != SP_LOWWATER_BOUNDS:
         errors.append("sp-lowwater gate bounds are not the design's (N=32, window 64, 300/300 frames)")
+    if receipt.get("nested_vblank_policy") != SP_LOWWATER_NESTED_POLICY:
+        errors.append("sp-lowwater gate receipt does not state the composed nested-VBlank policy")
     runs = receipt.get("runs") if isinstance(receipt.get("runs"), dict) else {}
     if set(runs) != set(SP_LOWWATER_MODES):
         errors.append("sp-lowwater gate receipt does not cover A_held, B_held and released")

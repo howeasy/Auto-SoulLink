@@ -84,6 +84,7 @@ P.RIE, P.VBLANK_NORMAL = 0xFFFF, 0
 -- The design's static bound from the asm, bytes: PrintLetterDelay 12 + bridge/service/SFX/_PlaySFX leaf 38 +
 -- a normal VBlank 36 = 86 (tests/unit/test_gen2_sp_lowwater_gate.py holds it against the stack capacities).
 P.LW_STATIC = {print_letter_delay=12, service_chain=38, vblank=36}
+P.LW_NESTED_POLICY = "nested VBlank bounded by composition (service depth + handler depth), not required to be observed"
 P.LW_GUARDS = {"SlinkDelayFrameBridge", "SlinkService", "SlinkSfxService", "SlinkPhoneService", "PlaySFX", "_PlaySFX",
                "VBlank"}
 P.LW_SITES = {"PrintLetterDelay.delay", "PrintLetterDelay.end", "RingTwice_StartCall"}
@@ -207,13 +208,26 @@ function P.lowwater_verdict(r)
              fmt("SP guard %s: no hit, or SP outside [wStackBottom + %d, wStackTop + 1]", site, P.LW_MARGIN))
     end
     need(#(r.excursions or {}) == 0, "an SP guard saw SP below the floor or off the stack")
+    -- the composed bound (coordinator ruling, option 2): the deepest service-chain SP less the deepest VBlank-handler
+    -- depth (any VBlank of the run) must leave N bytes; a nested VBlank is bounded, not required to be observed
+    local c = type(r.composition) == "table" and r.composition or {}
+    local service = int(c.service_windows) and c.service_windows >= 1 and int(c.service_min_sp)
+    local handler = int(c.vblank_samples) and c.vblank_samples >= 1 and int(c.vblank_max_depth)
+    local composed = service and handler and int(st.bottom) and P.lowwater_composed(c, st.bottom) or nil
+    need(composed == nil or composed >= P.LW_MARGIN,
+         fmt("composed margin %s (service depth + VBlank handler depth) < %d", tostring(composed), P.LW_MARGIN))
+    local nested = type(r.nested_vblank) == "table" and r.nested_vblank or {}
+    need(not int(nested.count) or nested.count == 0
+         or (int(nested.min_sp) and int(st.bottom) and nested.min_sp - st.bottom >= P.LW_MARGIN),
+         fmt("an observed nested VBlank came within %d bytes of wStackBottom", P.LW_MARGIN))
     if #problems > 0 then return "FAIL", problems end
-    local nested = r.nested_vblank
-    if type(nested) ~= "table" or not int(nested.count) or nested.count < 1 then
-        return "INCONCLUSIVE", {"no VBlank landed inside a service window: the nested worst case was not exercised"}
-    end
+    if not service then return "INCONCLUSIVE", {"no service window was measured: the composed bound has no service depth"} end
+    if not handler then return "INCONCLUSIVE", {"no VBlank handler was measured: the composed bound has no handler depth"} end
     return "PASS", problems
 end
+
+-- Pure (SP-LOWWATER): the composed margin, service_min_sp - wStackBottom - vblank_max_depth.
+function P.lowwater_composed(c, bottom) return c.service_min_sp - bottom - c.vblank_max_depth end
 
 function P.scripted_gate(root)
     local previous = SLINK_GEN2_GATE_LIBRARY
@@ -613,6 +627,10 @@ function P.main(real, getenv, SG, F)
         local bottom, top = R.wStackBottom.addr, R.wStackTop.addr
         local REQ, ARMED = MB + P.OFF_PHONE_REQ, MB + P.OFF_PHONE_ARMED
         local run = {mode=mode, guards={}, excursions={}, nested_vblank={count=0, windows=0, with_sfx=0}}
+        -- the composition's two measured components (the depth hooks run through the whole battle)
+        local comp = {note=P.LW_NESTED_POLICY, service_windows=0, vblank_samples=0}
+        run.composition = comp
+        local vb, sampling, depth_handles, reti_handle = nil, false, {}, nil
         local stack = {bottom=bottom, top=top, floor=bottom + P.LW_MARGIN, hook_failures=0, armed_count=0, pushes=0}
         run.stack = stack
         local wh, window, cj_handle, ret_handle, canary_handle = {}, nil, nil, nil, nil
@@ -657,6 +675,9 @@ function P.main(real, getenv, SG, F)
         end
         local function disarm_witness()
             for a, h in pairs(wh) do pcall(api.unregister, h); wh[a] = nil end
+            for _, h in ipairs(depth_handles) do pcall(api.unregister, h) end
+            depth_handles, sampling = {}, false
+            if reti_handle then pcall(api.unregister, reti_handle); reti_handle = nil end
             for _, h in ipairs({canary_handle or false, ret_handle or false, cj_handle or false}) do
                 if h then pcall(api.unregister, h) end
             end
@@ -677,7 +698,7 @@ function P.main(real, getenv, SG, F)
         for _, id in ipairs(P.LW_GUARDS) do on_hit[id] = function() guard(id) end end
         on_hit.SlinkDelayFrameBridge = function()
             guard("SlinkDelayFrameBridge")
-            window = {sfx=false, nested=false}
+            window = {sfx=false, nested=false, min=api.register("SP")}
             if run.trigger and not run.service_irq then run.service_irq = snap("SlinkDelayFrameBridge") end
         end
         on_hit.PlaySFX = function()
@@ -686,11 +707,60 @@ function P.main(real, getenv, SG, F)
         end
         on_hit.VBlank = function()
             guard("VBlank")
-            if window and run.trigger and not battle_over then
+            local nested = window ~= nil and run.trigger ~= nil and not battle_over
+            if nested then
                 local nv, row = run.nested_vblank, snap("VBlank")
                 nv.count = nv.count + 1
                 if not nv.deepest or row.sp < nv.deepest.sp then nv.deepest = row end
                 window.nested = true
+            end
+            if sampling then vb = {entry=api.register("SP"), nested=nested, frame=frame()} vb.min = vb.entry end
+        end
+        -- VBlank ends pop hl/de/bc/af + reti (C/G home/vblank.asm): found in the running ROM after the label
+        local reti_pc
+        do
+            local at = sf.sites.VBlank.addr
+            for a = at, at + 0xFF do
+                if api.read_u8(a, "ROM") == 0xE1 and api.read_u8(a + 1, "ROM") == 0xD1 and api.read_u8(a + 2, "ROM") == 0xC1
+                   and api.read_u8(a + 3, "ROM") == 0xF1 and api.read_u8(a + 4, "ROM") == 0xD9 then reti_pc = a + 4 break end
+            end
+        end
+        local function vblank_done()
+            if not vb then return end
+            -- the depth counts the interrupt PC push (2 bytes above the entry SP)
+            local depth = vb.entry + 2 - vb.min
+            comp.vblank_samples = comp.vblank_samples + 1
+            if not comp.vblank_max_depth or depth > comp.vblank_max_depth then
+                comp.vblank_max_depth, comp.vblank_deepest = depth, {frame=vb.frame, entry_sp=vb.entry, min_sp=vb.min}
+            end
+            if vb.nested then
+                local nv = run.nested_vblank
+                if not nv.min_sp or vb.min < nv.min_sp then nv.min_sp = vb.min end
+            end
+            vb = nil
+        end
+        local function service_done()
+            if not (sampling and window) then return end
+            comp.service_windows = comp.service_windows + 1
+            if not comp.service_min_sp or window.min < comp.service_min_sp then
+                comp.service_min_sp, comp.service_deepest_frame = window.min, frame()
+            end
+        end
+        -- one write hook per stack byte, armed at the start of the battle: a push inside a VBlank handler deepens
+        -- that handler sample, otherwise one inside a service window deepens the window
+        local function arm_depth()
+            sampling = true
+            for a = bottom, top do
+                local ok, h = pcall(write, function()
+                    if not (vb or window) then return end
+                    local s = api.register("SP")
+                    if a < s - 2 or a > s + 1 then return end
+                    local m = math.min(a, s)
+                    if vb then if m < vb.min then vb.min = m end
+                    elseif m < window.min then window.min = m end
+                end, a, "SLink-splw-depth-" .. a, "System Bus")
+                if ok and valid(h) then depth_handles[#depth_handles + 1] = h
+                else stack.hook_failures = stack.hook_failures + 1 end
             end
         end
         on_hit["PrintLetterDelay.delay"] = function(f) if run.trigger and not run.delay_path then run.delay_path = f end end
@@ -746,8 +816,12 @@ function P.main(real, getenv, SG, F)
             check("the shipped binding reads the cartridge SFX-live", panel:sfx_present() == true and panel:fresh() == true)
             check("phone idle: REQ and ARMED 0", u8(REQ) == 0 and u8(ARMED) == 0)
             assert(api.read_u8(ret_pc, "ROM") == 0xC9, fmt("no RET at SlinkDelayFrameBridgeEnd - 1 ($%04X)", ret_pc))
+            assert(reti_pc, "no pop hl/de/bc/af; reti after VBlank in the running ROM")
+            reti_handle = api.on_bus_exec(vblank_done, reti_pc, "SLink-splw-vblank-reti", "System Bus")
+            assert(valid(reti_handle), "VBlank RETI hook registration failed")
             ret_handle = api.on_bus_exec(function()
                 if window then
+                    service_done()
                     local nv = run.nested_vblank
                     if run.trigger and not battle_over then
                         nv.windows = nv.windows + 1
@@ -760,6 +834,7 @@ function P.main(real, getenv, SG, F)
             arm_witness()
             local battled, outcome, driver = play_battle("splw-battle-" .. title, {
                 tick = function(d)
+                    if d.phase == "battle" and not sampling and not battle_over then arm_depth() end
                     if d.phase == "battle" and not cj_handle and not run.trigger then
                         cj_handle = watch("PrintLetterDelay.checkjoypad")
                     elseif run.trigger and cj_handle then   -- never unregister inside its own callback
@@ -794,6 +869,11 @@ function P.main(real, getenv, SG, F)
         for _, g in pairs(run.guards) do
             if margin and g.low and g.low.sp - bottom < margin then margin, kind = g.low.sp - bottom, "guard" end
         end
+        if comp.service_min_sp and comp.vblank_max_depth then
+            comp.service_min_margin = comp.service_min_sp - bottom
+            comp.composed_margin = P.lowwater_composed(comp, bottom)
+            if margin and comp.composed_margin < margin then margin, kind = comp.composed_margin, "composed" end
+        end
         run.verdict, run.problems, run.margin_bytes, run.margin_kind = verdict, json.array(problems), margin, kind
         run.excursions = json.array(run.excursions)
         check("sp-lowwater verdict PASS", verdict == "PASS", verdict .. ": " .. table.concat(problems, "; "))
@@ -805,7 +885,7 @@ function P.main(real, getenv, SG, F)
             client_write_scope="sfx + phone (lua/gen2/panel.lua permit, mailbox +7 and +32)",
             bounds={margin_floor=P.LW_MARGIN, exact_window=P.LW_EXACT, resume_frames=P.LW_RESUME,
                     deadline_frames=P.DEADLINE},
-            static_bound=P.LW_STATIC, run=run}))
+            static_bound=P.LW_STATIC, nested_vblank_policy=P.LW_NESTED_POLICY, run=run}))
         return finish("sp-lowwater " .. verdict)
     end
 

@@ -54,7 +54,7 @@ RAM = SFX_RAM + ("wStackBottom", "wStackTop", "wTextDelayFrames", "wVBlankOccurr
 # the binding every run shares; `runs` and the verdicts are the per-run parts
 BINDING = ("title", "evidence_level", "overlay_sha1", "base_sha1", "fixture", "fixture_sha256",
            "qualification_attempt_id", "core_mode", "input_mode", "harness_write_scopes", "client_write_scope",
-           "bounds", "static_bound")
+           "bounds", "static_bound", "nested_vblank_policy")
 
 
 def lowwater_facts(title: str, *, repo: Path = REPO) -> dict:
@@ -86,6 +86,7 @@ def summary(parts: dict) -> str:
         run = (part or {}).get("run") or {}
         nested = run.get("nested_vblank") or {}
         rows.append(f"{mode}: {run.get('verdict')} margin {run.get('margin_bytes')} ({run.get('margin_kind')}) "
+                    f"composed {(run.get('composition') or {}).get('composed_margin')} "
                     f"nested {nested.get('count')} problems {run.get('problems')}")
     return "; ".join(rows)
 
