@@ -19,8 +19,13 @@
 {% from "_macros.html" import status_pill, stat_stages_row %}
 {# ── macros ────────────────────────────────────────────────────────────── #}
 
+{# No max HP (the Gen 1 client reads none for a foe): the number alone, no bar to fake. #}
 {% macro hp(mon) -%}
-  <span class="mk-hp"><span class="mk-hp-bar"><span class="mk-hp-fill {{ hp_class(mon) }}" style="width:{{ hp_pct(mon) }}%"></span></span><span class="mk-hp-num">{{ mon.hp }}/{{ mon.maxHP }}</span></span>
+  {% if mon.maxHP and mon.maxHP > 0 -%}
+  <span class="mk-hp"><span class="mk-hp-bar"><span class="mk-hp-fill {{ hp_class(mon) }}" style="width:{{ hp_pct(mon) }}%"></span></span><span class="mk-hp-num"><span class="sr-only">HP </span>{{ mon.hp }}/{{ mon.maxHP }}</span></span>
+  {%- else -%}
+  <span class="mk-hp"><span class="mk-hp-num">HP {{ mon.hp }}</span></span>
+  {%- endif %}
 {%- endmacro %}
 
 {# A mon as it stands in a battle (or the party lead when there is none): sprite, name,
@@ -46,7 +51,7 @@
       <div class="mk-half-in">
         {% if h.sprite %}<span class="mk-spr big">{{ h.sprite | safe }}</span>{% else %}<span class="mk-slot"></span>{% endif %}
         <span class="mk-half-txt">
-          <span class="mk-half-nick">{% if h.active %}<span class="mk-active" title="out in battle">⚔</span>{% endif %}{{ h.nickname or h.species_name }}{% if h.shiny %} <span class="shiny-star">✦</span>{% endif %}</span>
+          <span class="mk-half-nick">{% if h.active %}<span class="mk-active" title="out in battle"><span aria-hidden="true">⚔</span><span class="sr-only">Out in battle</span></span>{% endif %}{{ h.nickname or h.species_name }}{% if h.shiny %} <span class="shiny-star"><span aria-hidden="true">✦</span><span class="sr-only">Shiny</span></span>{% endif %}</span>
           <span class="mk-sub">{{ h.species_name }} · Lv {{ h.level }}</span>
           {% if h.hp is not none and row.section != 'fallen' %}{{ hp(h) }}{% endif %}
           {# Fallen rows keep the held item (what to take back out of the memorial box), not the ability. #}
@@ -135,7 +140,7 @@
               <div class="mk-now-head">
                 <span class="mk-side">{{ pid | upper }}</span>
                 <span class="mk-now-name">
-                  <b>{{ p.trainer_name or 'not connected' }}</b>
+                  <b>{{ p.trainer_name or ('Player ' ~ pid | upper) }}</b>
                   {% if p.rom_type and p.rom_type != '?' %}<span class="mk-pchip-game">{{ rom_label(p.rom_type) }}</span>{% endif %}
                 </span>
                 {% if board.has_data[pid] %}
@@ -160,10 +165,10 @@
                     <div class="mk-battle">
                       <div class="mk-battle-head">
                         <span class="mk-tag fight">in battle</span>
-                        <span class="mk-sub">{% if bs.is_trainer_battle %}vs {{ bs.opponent_class }} {{ bs.opponent_name or 'Trainer' }}{% else %}wild encounter{% endif %}{% if bs.is_doubles %} · doubles{% endif %}</span>
+                        <span class="mk-sub">{% if bs.is_trainer_battle %}vs {% if bs.opponent_class %}{{ bs.opponent_class }} {% endif %}{{ bs.opponent_name or 'Trainer' }}{% else %}wild encounter{% endif %}{% if bs.is_doubles %} · doubles{% endif %}</span>
                       </div>
                       {% if mine %}{{ combatant(mine, 'mine', labels=p.capabilities.stat_stage_labels) }}{% endif %}
-                      {% for foe in bs.enemy_party %}{{ combatant(foe, 'foe', 'vs', labels=p.capabilities.stat_stage_labels) }}{% endfor %}
+                      {% for foe in bs.enemy_party or [] %}{{ combatant(foe, 'foe', 'vs', labels=p.capabilities.stat_stage_labels) }}{% endfor %}
                     </div>
                   {% elif p.party_keys and p.party_details[p.party_keys[0]] %}
                     <div class="mk-lead">
@@ -183,13 +188,9 @@
                   {% endif %}
                   {% if p.trainer_panel_html %}{{ p.trainer_panel_html | safe }}{% endif %}
                   {% if p.battle_state.calc_preview %}{% set c = p.battle_state.calc_preview %}
+                    {# forceescape: tojson leaves " alone, which would end the attribute #}
                     <div id="calc-preview-{{ pid }}" class="calc-preview" data-in-battle="1"
-                         data-trainer-key="{{ c.trainer_key }}" data-is-trainer="{{ '1' if c.is_trainer else '0' }}"
-                         data-player-species="{{ c.player_species }}" data-player-level="{{ c.player_level }}"
-                         data-player-nature="{{ c.player_nature }}" data-player-ability="{{ c.player_ability }}"
-                         data-player-item="{{ c.player_item }}" data-player-moves="{{ c.player_moves | tojson }}"
-                         data-enemy-species="{{ c.enemy_species }}" data-enemy-level="{{ c.enemy_level }}"
-                         data-enemy-hp-pct="{{ c.enemy_hp_pct }}" style="display:none"></div>
+                         data-calc="{{ c | tojson | forceescape }}" style="display:none"></div>
                   {% endif %}
                 </div>
               {% else %}
@@ -200,7 +201,12 @@
         </div>
       </section>
 
-      {% if not board.sections %}
+      {# The setup steps are for a run that is listening; a stopped one has nothing to connect to. #}
+      {% if not board.sections and not live %}
+        <section class="mk-zone">
+          <div class="mk-card mk-firstrun"><b>No pairs yet.</b> Start the run to play.</div>
+        </section>
+      {% elif not board.sections %}
         <section class="mk-zone">
           <div class="mk-card mk-firstrun">
             <b>Nothing on the board yet.</b>
@@ -221,7 +227,7 @@
       {% endif %}
 
       {# ── one zone per section, same geometry as the Now cards ──────── #}
-      {% for sect, rows in board.sections %}
+      {% for sect, rows in board.sections or [] %}
         <section class="mk-zone zone-{{ sect }}">
           <h2 class="mk-h2 split">
             <span class="mk-h2-side"><span class="mk-side small">A</span><span>{{ status.players.a.trainer_name or '—' }}</span></span>
@@ -232,7 +238,7 @@
           </h2>
           <div class="mk-pairs{% if sect in ('boxed', 'pending') %} compact{% endif %}">
             {% for row in rows %}
-              <article class="mk-pair {{ row.section }}" id="pair-{{ sect }}-{{ row.area }}">
+              <article class="mk-pair {{ row.section }}" id="pair-{{ row.area }}">
                 {{ half(row, 'a', status.players.a, 'b') }}
                 <div class="mk-bond {{ row.status }}" style="grid-column:2">
                   <span class="mk-bond-area">{{ row.area_name }}</span>

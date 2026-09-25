@@ -7,11 +7,16 @@ Run:
     pytest tests/unit/test_adapters.py -v
 """
 
+import os
+import struct
+
 import pytest
 
 from server.adapters import available_game_ids, get_adapter
 from server.adapters.base import GameAdapter
-from server.adapters.gen3_frlge import _RR_SPRITE_FILE, Gen3Adapter
+from server.adapters.gen3_frlge import _RR_SPRITE_DIR, _RR_SPRITE_IDS, Gen3Adapter
+
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
 # ── Registry tests ────────────────────────────────────────────────────────────
 
@@ -1220,12 +1225,9 @@ class TestSpriteHtmlVariants:
         assert html  # must produce something
         assert "firered-leafgreen" not in html
 
-    def test_tiled_sprite_blocklist_castform_skips_funnotbun(self, rr):
-        # Species 385 (Castform) is in _TILED_SPRITE_BLOCKLIST; RR skips funnotbun
-        html = rr.sprite_html(385)
-        # Should fall through to PokeAPI path, not funnotbun
-        if html:
-            assert "funnotbun" not in html
+    def test_rr_castform_uses_its_single_vendored_sprite(self, rr):
+        # funnotbun's Castform was a 4-form sheet and was skipped; the vendored one is 64x64.
+        assert 'src="/static/sprites/rr/385.png"' in rr.sprite_html(385)
 
     def test_vanilla_gen1_has_pokeapi_fallback(self, vanilla):
         # FRLG URL is primary, PokeAPI generic is in onerror attribute
@@ -1238,13 +1240,11 @@ class TestSpriteOutputPinned:
 
     Pins the full <img> string — including the onerror fallback chain — and the
     sprite_src() URL, so any drift in the (refactored) URL builders is caught.
-    Funnotbun filenames are derived from _RR_SPRITE_FILE so these track the data,
-    not a hardcoded sprite name.
+    RR sprites are the vendored files under server/static/sprites/rr/<CFRU id>.png.
     """
 
     PA = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon"
-    FB = ("https://raw.githubusercontent.com/funnotbun/funnotbun.github.io"
-          "/main/data/species/frontspr")
+    RR = "/static/sprites/rr"
 
     @pytest.fixture
     def vanilla(self):
@@ -1280,29 +1280,29 @@ class TestSpriteOutputPinned:
             f'onerror="this.style.display=\'none\';" alt="">'
         )
 
-    def test_rr_sprite_src_funnotbun(self, rr):
-        fname = _RR_SPRITE_FILE[1]
-        assert rr.sprite_src(1) == f"{self.FB}/{fname}.png"
+    def test_rr_sprite_src_vendored(self, rr):
+        assert rr.sprite_src(1) == f"{self.RR}/1.png"
 
-    def test_rr_sprite_html_funnotbun_with_national_fallback(self, rr):
-        fname = _RR_SPRITE_FILE[1]
+    def test_rr_sprite_html_vendored_with_national_fallback(self, rr):
         nat = f"{self.PA}/1.png"
         assert rr.sprite_html(1) == (
-            f'<img class="mon-sprite" crossorigin="anonymous" data-species="1" src="{self.FB}/{fname}.png" '
+            f'<img class="mon-sprite" data-species="1" src="{self.RR}/1.png" '
             f'onerror="if(this.src!==\'{nat}\'){{this.src=\'{nat}\';}}else{{this.style.display=\'none\';}}" '
             f'alt="">'
         )
 
-    def test_rr_tiled_blocklist_falls_back_to_frlg(self, rr):
-        # 385 Castform is tiled → skip funnotbun; CFRU 385 → NatDex 351 ≤ 386 → FRLG primary
-        nat = f"{self.PA}/351.png"
-        frlg = f"{self.PA}/versions/generation-iii/firered-leafgreen/351.png"
-        assert rr.sprite_html(385) == (
-            f'<img class="mon-sprite" data-species="351" src="{frlg}" '
-            f'onerror="if(this.src!==\'{nat}\'){{this.src=\'{nat}\';}}else{{this.style.display=\'none\';}}" '
-            f'alt="">'
-        )
-        assert rr.sprite_src(385) == nat
+    def test_rr_sprites_are_keyed_by_cfru_id_not_national_dex(self, rr):
+        # RR's non-standard dex: CFRU 440 is Turtwig (NatDex 387), 900 is Camerupt-Mega.
+        assert rr.sprite_src(440) == f"{self.RR}/440.png"
+        assert rr.sprite_src(900) == f"{self.RR}/900.png"
+
+    def test_every_vendored_rr_sprite_is_a_single_64px_png(self):
+        assert len(_RR_SPRITE_IDS) >= 1300
+        for sid in _RR_SPRITE_IDS:
+            with open(os.path.join(_RR_SPRITE_DIR, f"{sid}.png"), "rb") as f:
+                head = f.read(24)
+            assert head[:8] == PNG_MAGIC, sid
+            assert struct.unpack(">II", head[16:24]) == (64, 64), sid
 
     def test_out_of_range_returns_empty(self, vanilla, rr):
         assert vanilla.sprite_html(99999) == ""

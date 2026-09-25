@@ -36,8 +36,48 @@ def _stopped_run(run_root, run_id="run_1", name="Kanto Duo", game="gen1"):
 
 
 @pytest.mark.asyncio
-async def test_no_runs_lands_on_the_new_run_form(manager_client):
+async def test_home_with_no_runs_says_how_to_start(manager_client):
+    """/ is the home page. With nothing to open it walks through starting a run."""
     resp = await manager_client.get("/")
+    assert resp.status == 200
+    body = await resp.text()
+    assert "mk-home-hero" in body and "Getting started" in body and 'href="/new"' in body
+    assert "mk-home-runs" not in body
+
+
+@pytest.mark.asyncio
+async def test_home_lists_runs_running_first_with_live_counts(manager_client, monkeypatch):
+    """Running runs lead with their alive/fallen counts; stopped ones say so, newest first;
+    archived ones stay in the rail's fold. The primary action opens the running run."""
+    manager._save_registry([
+        {"run_id": "old", "name": "Old Stopped", "created_at": "2026-09-01T00:00:00", "tcp_port": 54321,
+         "http_port": 8081, "status": "stopped", "pid": None, "game": "gen1"},
+        {"run_id": "new", "name": "New Stopped", "created_at": "2026-09-20T00:00:00", "tcp_port": 54322,
+         "http_port": 8082, "status": "stopped", "pid": None, "game": "gen1"},
+        {"run_id": "live", "name": "Live Run", "created_at": "2026-09-10T00:00:00", "tcp_port": 54323,
+         "http_port": 8083, "status": "running", "pid": 4242, "game": "gen3_rr"},
+        {"run_id": "gone", "name": "Archived Run", "created_at": "2026-09-21T00:00:00", "tcp_port": 54324,
+         "http_port": 8084, "status": "archived", "pid": None, "game": "gen1"},
+    ])
+    monkeypatch.setattr(manager, "_is_alive", lambda pid, created=None: pid == 4242)
+
+    async def fake_live(self, request, run):
+        return {"live": run["run_id"]}
+    monkeypatch.setattr(manager.RunManager, "_fetch_live", fake_live)
+    import server.board
+    monkeypatch.setattr(server.board, "build_board", lambda status: {"counts": {"alive": 4, "fallen": 1}})
+
+    body = await (await manager_client.get("/")).text()
+    home = body[body.index("mk-home-runs"):]
+    assert home.index("Live Run") < home.index("New Stopped") < home.index("Old Stopped")
+    assert "Archived Run" not in home
+    assert "4</b> alive" in home and "1</b> fallen" in home
+    assert 'href="/runs/live">Open Live Run' in body
+
+
+@pytest.mark.asyncio
+async def test_new_run_form_is_at_new(manager_client):
+    resp = await manager_client.get("/new")
     assert resp.status == 200
     body = await resp.text()
     assert "window.SLINK_FORM" in body and "Create run" in body
@@ -69,6 +109,20 @@ async def test_a_stopped_run_renders_its_persisted_board(manager_client, manager
     assert "run not running" in body and "waiting for hello" not in body
     assert 'hx-get="/runs/run_1/board"' in body, "the fragment must poll the Manager, not /"
     assert "Kanto Duo" in body and "Red · Blue · Yellow" in body
+
+
+@pytest.mark.asyncio
+async def test_a_stopped_run_with_no_pairs_offers_no_setup_steps(manager_client, manager_dir):
+    """The onboarding says the launcher "finds the game and connects": a stopped run has
+    nothing to connect to, so it says to start the run instead."""
+    run = {"run_id": "run_1", "name": "Fresh", "created_at": "2026-09-14T12:00:00", "tcp_port": 54321,
+           "http_port": 8081, "status": "stopped", "pid": None, "game": "gen1"}
+    manager._save_registry([run])
+    (manager_dir / "run_1").mkdir()
+    SLinkServer(data_dir=str(manager_dir / "run_1")).state._save()
+    body = await (await manager_client.get("/runs/run_1")).text()
+    assert "No pairs yet." in body and "Start the run to play." in body
+    assert "finds the game and connects" not in body and "Download a launcher" not in body
 
 
 @pytest.mark.asyncio
@@ -159,7 +213,11 @@ async def test_presets_are_named_specs_the_randomizer_would_accept(manager_clien
     bad = await manager_client.post("/api/presets", json={"name": "Bad", "spec": {"types": "random"}})
     assert bad.status == 400 and "types" in (await bad.json())["error"]
     assert (await manager_client.post("/api/presets", json={"name": "", "spec": {}})).status == 400
-    await manager_client.post("/api/presets", json={"name": "chaos", "spec": {"wild": "area"}})
+    # Replacing a same-named preset needs explicit consent (test_manager_roms_presets.py
+    # covers the 409/overwrite gate itself); this one just needs the replace to land.
+    conflict = await manager_client.post("/api/presets", json={"name": "chaos", "spec": {"wild": "area"}})
+    assert conflict.status == 409
+    await manager_client.post("/api/presets", json={"name": "chaos", "spec": {"wild": "area"}, "overwrite": True})
     j = await (await manager_client.get("/api/presets")).json()
     assert [(p["name"], p["spec"]["wild"]) for p in j["presets"]] == [("chaos", "area")]
     assert (manager_dir / "presets.json").exists()

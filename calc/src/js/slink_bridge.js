@@ -83,22 +83,15 @@
   var _sseSource      = null;
   var _retryTimer     = null;
 
-  // RR set names that differ from the calc engine's move name table.
-  // Funnotbun uses its own names for some moves; two RR customs don't exist in
-  // the calc at all (Soupercell Slam, Forbidden Spell) and are added to moves.ts.
-  var MOVE_ALIASES = {
-    'Drain Kiss': 'Draining Kiss',    // funnotbun canonical → calc name
-    'Disarm Cry': 'Disarming Voice',  // funnotbun canonical → calc name
-  };
-  function _normalizeMoveName(name) {
-    return MOVE_ALIASES[name] || name;
-  }
-
   // Prep tab state — mode is fixed to the current page (no cross-mode toggle)
   var _pageIsHC      = /hardcore/i.test(window.location.href);
   var _prepMode      = _pageIsHC ? 'hardcore' : 'normal';
   var _prepTrainer   = localStorage.getItem('slink_prep_trainer')   || '';
   var _prepEncounter = localStorage.getItem('slink_prep_encounter') || '';       // '' = first enc
+  // The dashboard's Calc button also puts the trainer in the URL: a freshly opened calc never
+  // hears the storage event, so read it here and land on the Prep tab.
+  var _prepParam = new URLSearchParams(window.location.search).get('prep');
+  if (_prepParam) { _prepTrainer = _prepParam; _prepEncounter = ''; _activeTab = 'prep'; }
   var _trainerIndex  = { nm: {}, hc: {} };  // baseName → { encounters, encounterOrder }
   var _trainerNames  = [];                  // sorted union of trainer names for datalist
 
@@ -794,7 +787,7 @@
         ability : mon.ability_name || '',
         item    : mon.item_name    || '',
         level   : mon.level        || 50,
-        moves   : (mon.moves || []).map(_normalizeMoveName),
+        moves   : (mon.moves || []).slice(),
       };
       var namedId = species + ' (' + setName + ')';
       ss.select2('data', { id: namedId, text: namedId, pokemon: species, set: setName })
@@ -853,7 +846,7 @@
     var moves = mon.moves || [];
     for (var i = 0; i < 4; i++) {
       var moveObj = pokeObj.find('.move' + (i + 1) + ' select.move-selector');
-      var moveName = _normalizeMoveName(moves[i] || '(No Move)');
+      var moveName = moves[i] || '(No Move)';
       moveObj.attr('data-prev', moveObj.val());
       moveObj.val(moveName);
       if (!moveObj.val()) moveObj.val('(No Move)'); // fallback if not found
@@ -2125,7 +2118,10 @@
   // ---------------------------------------------------------------------------
 
   /** Fetch latest mon data; update _data and _connected; re-render. */
+  // One request at a time: pings that land mid-request queue a single trailing refresh.
+  var _refetch = false;
   function fetchMons() {
+    if (_fetching) { _refetch = true; return Promise.resolve(); }
     _fetching = true;
     return fetch(SLINK_BASE + '/api/calc/mons')
       .then(function (r) {
@@ -2134,6 +2130,7 @@
       })
       .then(function (json) {
         _fetching  = false;
+        if (_refetch) { _refetch = false; fetchMons(); }
         _data      = json;
         _connected = true;
         _normalizeAllSpeciesNames();
@@ -2144,6 +2141,7 @@
       })
       .catch(function (err) {
         _fetching  = false;
+        _refetch   = false;
         _connected = false;
         if (!_isPanelInputFocused()) refreshPanel();
         return Promise.reject(err);

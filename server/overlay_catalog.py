@@ -79,14 +79,14 @@ OVERLAYS: list[dict[str, Any]] = [
         "title": "Linked Pairs",
         "desc": "Alive pairs as full cards (area + sprites). Dead pairs as a dimmed list below.",
         "sizes": ["Vertical: 420×340", "Horizontal: 900×200", "Strip: 1400×180"],
-        "layouts": ["", "h", "thin-h", "thin-v"],
+        "layouts": [""],   # the layout CSS targets .p-list only (party overlays)
     },
     {
         "slug": "linked-party", "family": "links",
         "title": "Linked Party ★",
         "desc": "Linked pairs where both mons are currently in party — HP bars, levels, area. Primary overlay for active streaming.",
         "sizes": ["Standard: 500×320", "Bottom strip: 1400×150", "Sidebar: 160×500"],
-        "layouts": ["", "thin-h", "thin-v"],
+        "layouts": [""],
     },
     {
         "slug": "boxed-links", "family": "links",
@@ -193,7 +193,7 @@ OVERLAYS: list[dict[str, Any]] = [
         "title": "Area Tracker",
         "desc": "Linked / dead zone / pending area counts at a glance.",
         "sizes": ["Vertical: 220×160", "Horizontal: 380×80"],
-        "layouts": ["", "h"],
+        "layouts": [""],
     },
     {
         "slug": "events", "family": "misc",

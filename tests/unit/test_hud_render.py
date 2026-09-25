@@ -240,9 +240,10 @@ def test_clear_empties_both_queues():
     assert "drawText" not in w.render()
 
 
-def test_gb_screen_draws_the_fceux_pixel_font_and_gba_keeps_courier():
+def test_gb_and_gba_screens_draw_the_fceux_pixel_font_and_nds_keeps_courier():
     """8pt Courier drawn at 160x144 and scaled up is a smear; a 144px screen takes the bitmap
-    font (one font pixel per screen pixel). Bigger screens keep GDI+ Courier."""
+    font (one font pixel per screen pixel). The GBA's 160px screen matches it (owner: Gen 3
+    notices look like Gen 1/2's); the NDS keeps GDI+ Courier."""
     gb = World().gbc()
     gb.H.show("PIDGEY KO'd", 255, 80, 80, 240)
     gb.H.set_game_over()
@@ -253,6 +254,12 @@ def test_gb_screen_draws_the_fceux_pixel_font_and_gba_keeps_courier():
     gba.H.init(gba.lua.eval("{screen_w = 240, screen_h = 160}"))
     gba.H.show("PIDGEY KO'd", 255, 80, 80, 240)
     frame = gba.render()
+    assert "drawText" not in frame and frame.count("pixelText") == 1, frame
+    assert gba.state.pixel_font == "fceux"
+    nds = World()
+    nds.H.init(nds.lua.eval("{screen_w = 256, screen_h = 192}"))
+    nds.H.show("PIDGEY KO'd", 255, 80, 80, 240)
+    frame = nds.render()
     assert "pixelText" not in frame and "drawText" in frame, frame
 
 
@@ -276,3 +283,41 @@ def test_a_newline_forces_a_line_break():
     w.H.show("** NEW ENCOUNTER **\nRoute 1", 255, 220, 60, 240)
     w.render()
     assert w.drawn == ["** NEW ENCOUNTER **", "Route 1"], w.drawn
+
+
+def test_a_wrapped_prompt_pushes_the_banner_below_it():
+    """160x144: a 2-line prompt spans y=39..61 and the banner starts at 54, so
+    'CHARMANDER' ran under 'Nuzlocke Start!'. The banner now starts below the prompt."""
+    w = World().gbc()
+    w.lua.execute(
+        "local d = gui.drawBox; gui.drawBox = function(x1, y1, x2, y2, ...) BOXES[#BOXES+1] = {y1, y2}; return d(x1, y1, x2, y2, ...) end"
+    )
+    w.lua.globals().BOXES = w.lua.eval("{}")
+    w.H.prompt("Linked: BULBASAUR <-> CHARMANDER", 255, 255, 255, 300)
+    w.H.nuzlocke_start("Nuzlocke Start!", 180)
+    w.render()
+    (p_top, p_bottom), (b_top, _) = [tuple(b.values()) for b in w.lua.globals().BOXES.values()]
+    assert (p_top, p_bottom) == (39, 61)
+    assert b_top > p_bottom, (p_bottom, b_top)
+
+
+def test_with_no_prompt_the_banner_keeps_its_place():
+    w = World().gbc()
+    w.lua.execute(
+        "local d = gui.drawBox; gui.drawBox = function(x1, y1, ...) TOPS[#TOPS+1] = y1; return d(x1, y1, ...) end"
+    )
+    w.lua.globals().TOPS = w.lua.eval("{}")
+    w.H.nuzlocke_start("Nuzlocke Start!", 180)
+    w.render()
+    assert list(w.lua.globals().TOPS.values()) == [54]
+
+
+def test_the_rebuild_banner_wraps_instead_of_running_off_screen():
+    """Three 10-letter names make a 46-char banner (276px); 160px must show it on 2 lines."""
+    w = World().gbc()
+    w.H.set_rebuilding("REBUILDING: CHARMANDER, BULBASAUR1, SQUIRTLE12 +3")
+    w.render()
+    assert len(w.drawn) == 2, w.drawn
+    assert all(len(line) <= 25 for line in w.drawn), w.drawn
+    assert "".join(w.drawn).replace(" ", "") == "REBUILDING:CHARMANDER,BULBASAUR1,SQUIRTLE12+3"
+

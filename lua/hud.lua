@@ -174,6 +174,10 @@ local function wrap_prompt(text)
     return wrap(text, math.floor((cfg.screen_w - 8) / cfg.char_width), MAX_PROMPT_LINES)
 end
 
+local function wrap_prompt_n(text, max_lines)
+    return wrap(text, math.floor((cfg.screen_w - 8) / cfg.char_width), max_lines)
+end
+
 function H.init(opts)
     if not opts then return end
     for k, v in pairs(opts) do cfg[k] = v end
@@ -181,11 +185,13 @@ function H.init(opts)
     -- take the 8/5 font so the bottom bar fits; the bar's top is derived from the
     -- screen height so it never lands below the screen (the GBA default 146 sat
     -- two pixels under a 144-px screen: LANE-BOOT2 found the Gen 1 HUD invisible).
+    -- GB (144) and GBA (160) both draw the fceux pixel font at the GB metrics (owner
+    -- 2026-09-24: Gen 3 notices look like Gen 1/2's); NDS keeps GDI+ Courier.
     if opts.pixel_font == nil then
-        cfg.pixel_font = (cfg.screen_h <= 144) and "fceux" or false
+        cfg.pixel_font = (cfg.screen_h <= 160) and "fceux" or false
     end
     if not opts.font_size then
-        cfg.font_size = (cfg.screen_h <= 144) and 8 or 10
+        cfg.font_size = (cfg.pixel_font or cfg.screen_h <= 144) and 8 or 10
     end
     if not opts.char_width then
         -- fceux advances 6px; 8pt Courier Bold ~5px
@@ -335,6 +341,16 @@ local function render_prompt()
     age(prompt_queue)
 end
 
+-- A banner sits at gameover_y, unless a live prompt has wrapped far enough to reach it
+-- (two lines on a 144px screen end at y=61, the banner starts at 54): then it drops to
+-- just below the prompt, so neither text runs under the other.
+local function banner_y()
+    local p = prompt_queue[1]
+    if not p then return cfg.gameover_y end
+    local bottom = cfg.prompt_y + cfg.prompt_h + (#p.lines - 1) * (cfg.font_size + 2)
+    return math.max(cfg.gameover_y, bottom + 2)
+end
+
 -- ── Game-over persistent overlay ────────────────────────────────────────────
 local game_over = false
 
@@ -348,7 +364,7 @@ end
 
 local function render_game_over()
     if not game_over then return end
-    local gy = cfg.gameover_y
+    local gy = banner_y()
     gui.drawBox(0, gy, cfg.screen_w, gy + 24, 0xFFBB0000, 0xDD990000)
     draw_text(centre_x("GAME OVER!", 0, cfg.screen_w, cfg.font_size + 2), gy + 4, "GAME OVER!", "#FFFFFF",
               cfg.font_size + 2)
@@ -374,9 +390,13 @@ end
 
 local function render_rebuilding()
     if not rebuild_text or game_over then return end
-    local ry = cfg.gameover_y
-    gui.drawBox(0, ry, cfg.screen_w, ry + 14, 0xFF0066AA, 0xDD003388)
-    draw_text(centre_x(rebuild_text, 0, cfg.screen_w), ry + 2, rebuild_text, "#FFFFFF")
+    local ry = banner_y()
+    -- "REBUILDING: A, B, C +N" runs to ~46 chars (276px): wrap it like the prompt, 2 lines max.
+    local lines, line_h = wrap_prompt_n(rebuild_text, 2), cfg.font_size + 2
+    gui.drawBox(0, ry, cfg.screen_w, ry + 4 + #lines * line_h, 0xFF0066AA, 0xDD003388)
+    for i, line in ipairs(lines) do
+        draw_text(centre_x(line, 0, cfg.screen_w), ry + 2 + (i - 1) * line_h, line, "#FFFFFF")
+    end
 end
 
 -- ── Nuzlocke-start transient banner ─────────────────────────────────────────
@@ -396,7 +416,7 @@ end
 
 local function render_nuzlocke_start()
     if not nuzlocke_start_text or game_over then return end
-    local ny = cfg.gameover_y
+    local ny = banner_y()
     gui.drawBox(0, ny, cfg.screen_w, ny + 24, 0xFF0066AA, 0xDD003388)
     draw_text(centre_x(nuzlocke_start_text, 0, cfg.screen_w, cfg.font_size + 2), ny + 4, nuzlocke_start_text,
               "#FFFFFF", cfg.font_size + 2)

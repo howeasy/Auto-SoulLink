@@ -38,6 +38,11 @@ def test_the_encounter_icon_swap_is_no_longer_a_noop(a):
         "in a list sized for 20")
 
 
+def test_sprite_img_is_decorative(a):
+    """The name sits beside every sprite, so the image is alt="" (as Gen 3's is), not unlabelled."""
+    assert ' alt="" ' in a.sprite_html(PIKACHU)
+
+
 def test_sprite_html_is_empty_for_no_species(a):
     assert a.sprite_html(0) == ""
 

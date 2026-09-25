@@ -371,13 +371,13 @@
 
 <div class="mk">
 {{ sidebar_html | safe }}
-<main class="mk-main mk-body-root">
+<main class="mk-main mk-body-root" id="main-content" tabindex="-1">
   <header class="mk-runhdr">
     <h1 class="mk-runname">Broadcast</h1>
     <span class="mk-meta">· Overlays{% if active_run_name %} · {{ active_run_name }}{% endif %}</span>
     <span class="mk-hdr-spacer"></span>
     <nav class="mk-tabs" aria-label="Broadcast">
-      {% for label, href, on in tabs %}<a class="mk-tab{% if on %} active{% endif %}" href="{{ href }}">{{ label }}</a>{% endfor %}
+      {% for label, href, on in tabs %}<a class="mk-tab{% if on %} active{% endif %}" href="{{ href }}"{% if on %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
     </nav>
   </header>
 <div class="launcher"
@@ -385,7 +385,7 @@
      x-init="setup(window.SLINK_OVERLAY_CATALOG)">
 
   {# ── Left rail: families + items ────────────────────────────────── #}
-  <nav class="rail" :class="railCollapsed ? 'rail-collapsed' : ''">
+  <nav class="rail" aria-label="Overlays" :class="railCollapsed ? 'rail-collapsed' : ''">
     <div class="rail-head">
       <h1>◆ SLink Overlays</h1>
       <button type="button" class="rail-toggle"
@@ -415,7 +415,7 @@
   </nav>
 
   {# ── Right pane: selected overlay's config ──────────────────────── #}
-  <main class="pane">
+  <section class="pane" aria-label="Overlay settings">
     <div class="obs-tip">
       <b>OBS setup:</b> Add a Browser Source → paste the URL → set width/height per the recommended size.
       OBS's default Browser Source Custom CSS already handles transparent backgrounds.
@@ -546,7 +546,7 @@
         </div>
       </template>
     </div>
-  </main>
+  </section>
 </div>
 </main></div>
 
@@ -639,10 +639,9 @@ function overlayLauncher() {
       if (cur.pauses && this.params.pause !== '2') q.push('pause=' + this.params.pause);
       if (cur.event_filters) {
         var enabled = Array.from(this.activeFilters);
-        // Only emit if the user has diverged from the all-on default
-        if (enabled.length < this.allFilters.length) {
-          q.push('filter=' + enabled.join(','));
-        }
+        // No ?filter= means the server's default-on set, not every type: say `all` when
+        // every pill is on, else the explicit list.
+        q.push('filter=' + (enabled.length >= this.allFilters.length ? 'all' : enabled.join(',')));
       }
       return '/stream/' + cur.slug + (q.length ? '?' + q.join('&') : '');
     },

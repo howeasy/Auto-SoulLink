@@ -1629,8 +1629,7 @@ class SoulLinkState:
                     self.queued_commands[player_id].append({
                         "cmd": "hud_show",
                         "text": f"[x] WRONG SAVE: slot {player_id.upper()}",
-                        "color": [255, 0, 0],
-                        "duration": 600,
+                        "r": 255, "g": 0, "b": 0, "frames": 600,
                     })
                     # Signal the hello was rejected — caller checks this flag
                     msg["_rejected"] = True

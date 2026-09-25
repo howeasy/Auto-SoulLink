@@ -1,5 +1,6 @@
 {# _links_root.html — Linked Pairs overlay (#root subtree).
-   Context: { alive: [LinkInfo], dead: [LinkInfo] }
+   Context: { alive: [LinkInfo], dead: [LinkInfo], dead_shown: newest few of dead,
+              dead_more: how many dead rows were not shown }
    LinkInfo: { area_display, a: {nickname, species_name, sprite_html}, b: {...} } #}
 
 <div id="root">
@@ -31,7 +32,7 @@
       {% endfor %}
       {% if dead %}
         <div class="lk-dead-hdr">―― {{ dead | length }} DEAD ――</div>
-        {% for lnk in dead %}
+        {% for lnk in dead_shown %}
           <div class="lk-dead-row">
             <svg class="lk-dead-x inline-ico" aria-hidden="true"><use href="#i-x"/></svg>
             <span class="lk-dead-nm">{{ lnk.a.nickname or lnk.a.species_name or '—' }}</span>
@@ -39,6 +40,7 @@
             <span class="lk-dead-nm r">{{ lnk.b.nickname or lnk.b.species_name or '—' }}</span>
           </div>
         {% endfor %}
+        {% if dead_more %}<div class="lk-dead-hdr">+{{ dead_more }} more</div>{% endif %}
       {% endif %}
     </div>
   {% endif %}
