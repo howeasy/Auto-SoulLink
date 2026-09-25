@@ -249,7 +249,7 @@ class Gen1PureRGBAdapter(Gen1Adapter):
             '<span style="display:inline-block;width:40px;height:40px;'
             'overflow:hidden;vertical-align:middle">'
             f'<img class="mon-sprite" data-species="{dex}" src="{url}" '
-            'width="52" height="52" loading="lazy" '
+            'width="52" height="52" loading="lazy" alt="" '
             'onerror="this.style.visibility=&#39;hidden&#39;" '
             'style="image-rendering:pixelated;margin:-6px"></span>'
         )
