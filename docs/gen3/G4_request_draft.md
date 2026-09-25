@@ -151,7 +151,12 @@ These are recorded limits, not blockers, and the receipts behind them are cited 
    127 check FR/LG gets. This is a *scripted-play driver* limitation, not a checkpoint predicate or
    a write-safety gate — nothing in `lua/gen3/safety.lua` or either pack's `write_checkpoint.json`
    reads `gSpecialVar_Result`. Carried here because it is an FR/LG-vs-RR asymmetry in how PC-exit is
-   proven, even though it costs nothing at G4 (FR/LG use the strict check). **S**
+   proven, even though it costs nothing at G4 (FR/LG use the strict check). Correction
+   (OMP cx-72da0fae, verified 2026-09-25): the latch starts sampling only after `G.tap("B")`'s
+   3 + 13 frames (`lua/tests/gen3_boot_check.lua:329-331`, `lua/tests/gen3_scripted_play.lua:1998-2002`),
+   so "RR overwrites 127 in the same frame" is unproven. On RR the value may simply be gone
+   within those 16 frames. OPEN: sample during the tap, or arm a write watchpoint on `0x020370D0`
+   before B, then decide whether RR can take the strict check. **S**
 2. **An AP build with every pinned anchor intact would be admitted.** This is by design — the
    admission check is anchor-based so a randomizer that reshuffles content but keeps the pinned
    bytes still boots — not a gap found late. Archipelago FRLG is refused today because no
