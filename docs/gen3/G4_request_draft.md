@@ -1,6 +1,12 @@
 # Gen 3 (P4) FRLG RC cutover gate request — G4 evidence assembly
 
-**Status: G4 is not yet signable.** §2 is the current per-item state: items 1, 2, 3 and 4 carry
+**Status: G4 is ready for the owner's signature.** The frozen-cut final pass ran at `a2985d5a`
+and PASSed all 43 rows (`docs/gen3/probes/fc_SUMMARY_a2985d5a.txt`, §1a) — every item this draft
+tracked as REHEARSED (2b's P+H rows, item 3's probe rows, item 4's cold boots, item 5's zip boot)
+is now a DONE final-gate row taken on the frozen cut itself. **Nothing is released until G5 is
+also signed** (ruling 22, §6 item 22); G5's own frozen-cut RR pass PASSed 19/19 at the same cut
+(`docs/gen3/probes/fc_SUMMARY_a2985d5a_rr.txt`, `docs/gen3/G5_request_draft.md`). §2 below is the
+per-item state as tracked through the rehearsal passes; §1a has the final-cut table of record. §2 is the current per-item state: items 1, 2, 3 and 4 carry
 citable receipts, item 2a is **PASS on both titles** (the 1F write and the 2F
 controls on FR-as-A and LG-as-A, both archived; LG 2F at clean cut `10e4a702`), and 2b's nine probe rows are
 **DONE live on FR+LG**; what remains open or rehearsal-only is 2b's P+H carriers (mechanism P+H, rulings 15-16/19,
@@ -103,8 +109,8 @@ Since the last full pass through this draft, four things changed:
   message, not a timed receipt line — no wall-clock field in the receipts themselves was checked
   against them. **S**
 
-**The final-cut runner (`tools/gen3_final_cut.py`) is rehearsed, not yet run for the record.**
-Three rehearsal passes are committed: `docs/gen3/probes/fc_zip_*` / `fc_probe_gates_*` /
+**The final-cut runner (`tools/gen3_final_cut.py`) went through three rehearsal passes before the
+frozen cut.** Three rehearsal passes are committed: `docs/gen3/probes/fc_zip_*` / `fc_probe_gates_*` /
 `fc_bootcheck_*` @ `6e85ddfc` (zip chain + probe_gates PASS), `fc_bootcheck_*` @ `d0a4bba5`
 (cold-boot 8/8 PASS). `fc_release_gate_quick_*` is **not** a clean three-for-three: only
 `fc_release_gate_quick_2b926be1.txt` PASSes (`2629 passed, 0 skipped (0 unexplained), 0 failed`);
@@ -128,12 +134,94 @@ lead, not a bare substring match); on the fixed scorer those 5 rows rejudge as P
 `22/22` at that dress rehearsal. Not re-run post-fix; the coordinator's real final pass supersedes
 it regardless. **S**/**P**
 
-**When the coordinator freezes a cut and runs the real final pass**, it fills in:
+**The coordinator has since frozen a cut and run the real final pass** — the three rehearsals
+above are kept as the record of what the runner itself needed fixing before that pass, not as the
+gate's own evidence:
 
-- Final cut sha: `<<FINAL_CUT_SHA>>`
-- Final-cut result table (paste from `docs/gen3/probes/fc_SUMMARY_<cut8>.txt`):
+- Final cut sha: `a2985d5a` (`a2985d5ad068c1afcaa9ef8eb8ebf402c52c4e28`, committed `622aa7f5`)
+- Final-cut result table (`docs/gen3/probes/fc_SUMMARY_a2985d5a.txt`, written 2026-09-25T14:35:06Z, RUN 43 / CARRIED 0 / CACHED 0 / FAIL 0 — **OVERALL: PASS (43/43 rows)**):
 
-`<<FINAL_CUT_TABLE>>`
+| # | row | runbook | verdict | receipt |
+|---|---|---|---|---|
+| 1 | states_firered_town | §1.1 build | PASS | fc_states_firered_town_a2985d5a.txt |
+| 2 | states_firered_battle | §1.1 build | PASS | fc_states_firered_battle_a2985d5a.txt |
+| 3 | states_firered_trainer | §1.1 build | PASS | fc_states_firered_trainer_a2985d5a.txt |
+| 4 | states_leafgreen_town | §1.1 build | PASS | fc_states_leafgreen_town_a2985d5a.txt |
+| 5 | states_leafgreen_battle | §1.1 build | PASS | fc_states_leafgreen_battle_a2985d5a.txt |
+| 6 | states_leafgreen_trainer | §1.1 build | PASS | fc_states_leafgreen_trainer_a2985d5a.txt |
+| 7 | tutorials_firered | §1.2 build | PASS | fc_tutorials_firered_a2985d5a.txt |
+| 8 | tutorials_leafgreen | §1.2 build | PASS | fc_tutorials_leafgreen_a2985d5a.txt |
+| 9 | faint_cmd_gen3_fr_as_a | §2-3 item1-2 | PASS | fc_faint_cmd_gen3_fr_as_a_a2985d5a.txt |
+| 10 | link_gen3_fr_as_a | §2-3 item1-2 | PASS | fc_link_gen3_fr_as_a_a2985d5a.txt |
+| 11 | boxsync_gen3_fr_as_a | §2-3 item1-2 | PASS | fc_boxsync_gen3_fr_as_a_a2985d5a.txt |
+| 12 | reconnect_gen3_fr_as_a | §2-3 item1-2 | PASS | fc_reconnect_gen3_fr_as_a_a2985d5a.txt |
+| 13 | deadzone_gen3_fr_as_a | §2-3 item1-2 | PASS | fc_deadzone_gen3_fr_as_a_a2985d5a.txt |
+| 14 | whiteout_gen3_fr_as_a | §4 item2a | PASS | fc_whiteout_gen3_fr_as_a_a2985d5a.txt |
+| 15 | whiteout_gen3_lg_as_a | §4 item2a | PASS | fc_whiteout_gen3_lg_as_a_a2985d5a.txt |
+| 16 | center_controls_gen3_fr_as_a | §4 item2a | PASS | fc_center_controls_gen3_fr_as_a_a2985d5a.txt |
+| 17 | center_controls_gen3_lg_as_a | §4 item2a | PASS | fc_center_controls_gen3_lg_as_a_a2985d5a.txt |
+| 18 | linked_faint_active_gen3_fr_as_a | §5 item2b | PASS | fc_linked_faint_active_gen3_fr_as_a_a2985d5a.txt |
+| 19 | linked_faint_active_gen3_lg_as_a | §5 item2b | PASS | fc_linked_faint_active_gen3_lg_as_a_a2985d5a.txt |
+| 20 | active_end_gen3_fr_as_a | §5 item2b | PASS | fc_active_end_gen3_fr_as_a_a2985d5a.txt |
+| 21 | active_end_gen3_lg_as_a | §5 item2b | PASS | fc_active_end_gen3_lg_as_a_a2985d5a.txt |
+| 22 | linked_faint_active_whiteout_gen3_fr_as_a | §5 item2b | PASS | fc_linked_faint_active_whiteout_gen3_fr_as_a_a2985d5a.txt |
+| 23 | linked_faint_active_whiteout_gen3_lg_as_a | §5 item2b | PASS | fc_linked_faint_active_whiteout_gen3_lg_as_a_a2985d5a.txt |
+| 24 | linked_faint_active_trainer_gen3_fr_as_a | §5 item2b | PASS | fc_linked_faint_active_trainer_gen3_fr_as_a_a2985d5a.txt |
+| 25 | linked_faint_active_trainer_gen3_lg_as_a | §5 item2b | PASS | fc_linked_faint_active_trainer_gen3_lg_as_a_a2985d5a.txt |
+| 26 | checkpoint_firered | §6 item3 | PASS | fc_checkpoint_firered_a2985d5a.txt |
+| 27 | checkpoint_leafgreen | §6 item3 | PASS | fc_checkpoint_leafgreen_a2985d5a.txt |
+| 28 | save_then_write_gen3_fr_as_a | §7 save-rows | PASS | fc_save_then_write_gen3_fr_as_a_a2985d5a.txt |
+| 29 | save_then_write_gen3_lg_as_a | §7 save-rows | PASS | fc_save_then_write_gen3_lg_as_a_a2985d5a.txt |
+| 30 | bootcheck_firered_party_town | §8 item4 | PASS | fc_bootcheck_firered_party_town_a2985d5a.txt |
+| 31 | bootcheck_firered_party_town_b | §8 item4 | PASS | fc_bootcheck_firered_party_town_b_a2985d5a.txt |
+| 32 | bootcheck_firered_party_battle | §8 item4 | PASS | fc_bootcheck_firered_party_battle_a2985d5a.txt |
+| 33 | bootcheck_firered_party_battle_b | §8 item4 | PASS | fc_bootcheck_firered_party_battle_b_a2985d5a.txt |
+| 34 | bootcheck_leafgreen_party_town | §8 item4 | PASS | fc_bootcheck_leafgreen_party_town_a2985d5a.txt |
+| 35 | bootcheck_leafgreen_party_town_b | §8 item4 | PASS | fc_bootcheck_leafgreen_party_town_b_a2985d5a.txt |
+| 36 | bootcheck_leafgreen_party_battle | §8 item4 | PASS | fc_bootcheck_leafgreen_party_battle_a2985d5a.txt |
+| 37 | bootcheck_leafgreen_party_battle_b | §8 item4 | PASS | fc_bootcheck_leafgreen_party_battle_b_a2985d5a.txt |
+| 38 | zip_build | §9 item5 | PASS | fc_zip_build_a2985d5a.txt |
+| 39 | zip_check | §9 item5 | PASS | fc_zip_check_a2985d5a.txt |
+| 40 | zip_boot_firered | §9 item5 | PASS | fc_zip_boot_firered_a2985d5a.txt |
+| 41 | item6_route_diff | §10 item6 | PASS | fc_item6_route_diff_a2985d5a.txt |
+| 42 | release_gate_quick | §11 gate | PASS | fc_release_gate_quick_a2985d5a.txt |
+| 43 | probe_gates | §11 gate | PASS | fc_probe_gates_a2985d5a.txt |
+
+`release_gate_quick` (row 42) FAILed on its first attempt in lane 2 — 11 unit failures, all a lane
+defect, not a code defect: 21 `.gitattributes`-pinned LF files were still CRLF on disk from before
+the `eol=lf` attribute was added (git does not rewrite an unchanged-blob file's line endings on
+its own), which fed a stale `pokefirered.sym` provenance hash and CRLF-content assertions in
+`test_gen3_profile.py`/`test_gen3_syms_build.py`. Fixed by rewriting the 21 files from their index
+blobs and refreshing the index; the lane was tracked-clean at `a2985d5a` before the re-run PASSed
+(43/43 above). The FAILing attempt is kept as its own receipt, not discarded:
+`docs/gen3/probes/fc_release_gate_quick_a2985d5a_LANE2_CRLF.txt`. **P**/**S** (commit `622aa7f5`)
+
+### Other changes since the previous checkpoint
+
+- **Master merged into the Gen 3 branch**: local master `96ae536d`, via scratch branch
+  `claude/gen3-master-sync` (`597c52d2`), merged as `e33b03b1` (G4-MASTER-SYNC) — 9 conflicts
+  resolved by intent (`hud.lua`, `server.py`, the Manager's name-limit/game-refusal order,
+  `manager.html` radio a11y, `make_release`'s `BIZHAWK_MIN`); `test_protocol_citations` repaired
+  (289 citations re-anchored). The merge commit's own message records the adversarial pass as
+  **pending, not yet closed**: "OMP REVIEW `cx-cd3f4189` of the resolution pending"
+  (`docs/gen3_resume.md:22`, "pending. If it finds a dropped hunk, the fix needs a new cut."). No
+  later commit in this tree closes that review — this draft does not assert it came back clean. **S**
+- **HUD: the GBA screen draws notices in the fceux pixel font too** (`f1cc6038`) — Gen 3 now
+  matches the Gen 1/2 HUD font instead of BizHawk's default. **S**
+- **HUD: held commands never reach the HUD** (`870e5e5d`) — console log only, once per hold; owner
+  ruling was no pending counter on the HUD. **S**
+- **RR rival-id off-by-one fixed** (`e729abdb`) — `rival_trainer_ids()` matched the trainer
+  *before* each rival instead of the rival itself; see §5 of `docs/gen3/G5_request_draft.md` for
+  the full fix and its `gTrainers[k+1]` derivation. **S**
+- **The in-game panel's Badges row fix** (`17608b51`) — it was popcounting the hello/tick bitmask
+  (showing 0/8) after the old client's deletion instead of the badge flags. **S**
+- **RR zip boot wired into the final-cut runner** (`58a8951f`, `c0e1e98e`) — the RR plan now
+  builds, checks and boots the release zip on the RR companion (`rr_zip_build`, `rr_zip_check`,
+  `zip_boot_radicalred`), replacing the earlier TODO row; the rows get their own summary
+  (`fc_SUMMARY_<cut8>_rr.txt`). This is what let the frozen-cut RR pass run to 19/19 (§1a above,
+  `docs/gen3/G5_request_draft.md`). **S**
+
+---
 
 ### Open qualifiers carried into this gate
 

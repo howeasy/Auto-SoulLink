@@ -1,21 +1,18 @@
 # Gen 3 (P5) Radical Red RC cutover gate request — G5 evidence assembly
 
-**Status: G5 is not yet signable.** RR is live on the new client: **13/13 rows PASS** in §2 (12
-qualification rows + 1 negative-control row, `rival_swap_gen3`; a fourteenth, the R5 mega row, is
-a named SKIP under a signed limit and is not part of that count) — `whiteout_gen3` (row 6) now
-PASSes too, at `fca70bb2`. `tools/gen3_final_cut.py` now has a `--title rr` plan
-(`build_plan_rr`, card G5-RUNNER-RR): the same 13 duo rows, `rr_opcode_gates` (own-verdict), and
-the release zip built/checked/booted on the RR companion (`rr_zip_build`, `rr_zip_check`,
-`zip_boot_radicalred`), summarized to `fc_SUMMARY_<cut8>_rr.txt`. The RR zip chain has PASSed as a
-rehearsal at `58a8951f` (`docs/gen3/probes/fc_SUMMARY_58a8951f_rr.txt`,
-`fc_zip_boot_radicalred_58a8951f.txt`), but **the frozen-cut RR pass at `870e5e5d` has not run
-yet** — `<<PENDING: RR final pass at 870e5e5d>>`; the FR/LG frozen-cut pass at that cut is itself
-still in flight, sharded (`docs/gen3_resume.md` checkpoint 19). The RR opcode gate port is
-**26/26 PASS** live (12 further cases deferred by design, §3). The rebuilt companion is pinned.
-Section 11 also lists owner decisions G5 needs before it can be signed even once the frozen-cut RR
-pass lands (RR clean coverage, the rival-swap readback shape, the opcode-gate count, and a set of
-per-item receipts PLAN.md asks for but does not name explicitly). Nothing here authorizes a
-release: ruling 22 (§9) holds G5 back until G4 is also done, and G4 is itself not yet signable
+**Status: G5 is ready for the owner's signature.** RR is live on the new client, and the frozen-cut
+RR final pass has now run: `tools/gen3_final_cut.py --title rr` PASSed **19/19 rows** at cut
+`a2985d5a` (`docs/gen3/probes/fc_SUMMARY_a2985d5a_rr.txt`, committed `622aa7f5`; §1a) — the 15 RR
+duo rows (§2, including the two ruling-25 additions, `rival_swap_real_gen3` and
+`faint_cmd_clean_gen3`, and excluding the signed-limit mega row), `rr_opcode_gates`, and the RR
+release zip build/check/boot (`rr_zip_build`, `rr_zip_check`, `zip_boot_radicalred`).
+`whiteout_gen3` (row 6) PASSes at `fca70bb2` and again at the frozen cut. **Owner ruling 25**
+(2026-09-25, `docs/gen3/G4_request_draft.md` §6 item 25) resolves every item §11 used to carry as
+an open decision — clean RR coverage, the qualifying rival-swap row, the opcode-gate count, and
+the per-item receipts PLAN.md doesn't name explicitly (§11, "Resolved by ruling 25"). The RR
+opcode gate port is **26/26 PASS** live (12 further cases deferred by design, §3). The rebuilt
+companion is pinned (§8). Nothing here authorizes a release: ruling 22 (§9) holds G5 back until G4
+is also signed; G4 is itself now ready for signature at the same frozen cut
 (`docs/gen3/G4_request_draft.md`).
 
 This draft follows the shape of `docs/gen3/G3_request_draft.md` and
@@ -39,22 +36,25 @@ rows**, the write-sink guard over `native.lua`/`ghost.lua`, the md5 pins, and th
 boot on RR**. **The peer ghost is deferred post-RC** (owner ruling, `docs/gen3_resume.md` checkpoint
 6; `docs/gen3/PLAN.md` §0/§10), so the ghost-walk row and `ghost.lua`'s write-sink guard are out of
 scope for this cut — the gate-check cell predates that ruling. RR native text is likewise removed
-from the RC (`docs/gen3/G4_request_draft.md` §6 ruling 6). What is unaffected by either deferral —
-and this draft found no ruling dropping them — stays required and **OPEN**, with no receipt in
-this tree:
+from the RC (`docs/gen3/G4_request_draft.md` §6 ruling 6). What is unaffected by either deferral
+stays required; both items below are now resolved (ruling 25 and the frozen-cut pass), not open:
 
-- **RR clean-artifact coverage rows.** §2's 13 rows all run against the `gen3_rr`/`rr_battle2`
-  companion fixture; none of them is a clean (no companion) RR artifact run. `docs/gen3/PLAN.md:207`'s
-  P5 evidence cell lists this as its own item, distinct from the companion rows. `<<EVIDENCE?>>` —
-  no clean-artifact RR receipt was found under `docs/gen3/probes/`.
-- **The extracted release zip boots RR on the new client.** This now has a receipt, but only as a
-  rehearsal, not on the frozen cut: `docs/gen3/probes/fc_zip_boot_radicalred_58a8951f.txt` (row
-  `zip_boot_radicalred`, cut `58a8951f`) — client line `gen3_rr/radical_red (companion by hash)
-  player a`, server line `hello rom=firered_rr`, `RESULT: PASS the extracted zip booted
-  radical_red on the new client`. `tools/gen3_final_cut.py`'s `zip_rows(cut, lane, "radical_red")`
-  runs this as three rows (`rr_zip_build`, `rr_zip_check`, `zip_boot_radicalred`) whenever
-  `--title rr` runs; the frozen-cut RR pass at `870e5e5d` re-takes it — `<<PENDING: RR final pass
-  at 870e5e5d>>`.
+- **RR clean-artifact coverage rows.** §2's 13 hand-run rows all run against the
+  `gen3_rr`/`rr_battle2` companion fixture; none of them was a clean (no companion) RR artifact
+  run. `docs/gen3/PLAN.md:207`'s P5 evidence cell lists this as its own item, distinct from the
+  companion rows. **Resolved by ruling 25(a)** (2026-09-25, "a decent amount" of RR coverage):
+  ONE more clean-side row is sufficient, not the full `S-1..S-11` sweep FR clean got. That row is
+  `faint_cmd_clean_gen3` (`e6bd678e`, fixed `3c9d429c`), alongside the pre-existing
+  `linked_faint_active_clean_gen3` (fixed for a self-KO/re-hunt bug in `77115d02`/`bc733fd0`); both
+  PASS in the frozen-cut pass (§1a rows 13-14, `fc_SUMMARY_a2985d5a_rr.txt`). See §11 for the full
+  resolution.
+- **The extracted release zip boots RR on the new client.** `docs/gen3/probes/fc_zip_boot_radicalred_58a8951f.txt`
+  (row `zip_boot_radicalred`, rehearsal cut `58a8951f`) PASSed first; the frozen-cut RR pass
+  re-took it and PASSed again at `a2985d5a` (§1a row 19, `fc_zip_boot_radicalred_a2985d5a.txt`) —
+  client line `gen3_rr/radical_red (companion by hash) player a`, server line
+  `hello rom=firered_rr`. `tools/gen3_final_cut.py`'s `zip_rows(cut, lane, "radical_red")` runs
+  this as three rows (`rr_zip_build`, `rr_zip_check`, `zip_boot_radicalred`) whenever `--title rr`
+  runs. Not open.
 
 What remains from the gate-check list that *is* evidenced for this release is: the RR duo
 scenario set (§2), the opcode gates (§3), the companion md5 (§8), and the write-sink guard over
@@ -68,14 +68,74 @@ any release (§9). **S**
 
 ---
 
+## 1a. The frozen-cut RR final pass
+
+**The frozen cut is `a2985d5a`** (`a2985d5ad068c1afcaa9ef8eb8ebf402c52c4e28`, committed `622aa7f5`
+— the same cut G4 signs, `docs/gen3/G4_request_draft.md` §1a). `tools/gen3_final_cut.py --title rr`
+ran against it and PASSed every row:
+
+`docs/gen3/probes/fc_SUMMARY_a2985d5a_rr.txt` (written 2026-09-25T14:25:24Z, RUN 19 / CARRIED 0 /
+CACHED 0 / FAIL 0 — **OVERALL: PASS (19/19 rows)**):
+
+| # | row | runbook | verdict | receipt |
+|---|---|---|---|---|
+| 1 | faint_cmd_gen3_rr_as_a | §14 P5 RR duo | PASS | fc_faint_cmd_gen3_rr_as_a_a2985d5a.txt |
+| 2 | linked_faint_active_gen3_rr_as_a | §14 P5 RR duo | PASS | fc_linked_faint_active_gen3_rr_as_a_a2985d5a.txt |
+| 3 | linked_faint_active_whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS | fc_linked_faint_active_whiteout_gen3_rr_as_a_a2985d5a.txt |
+| 4 | boxsync_gen3_rr_as_a | §14 P5 RR duo | PASS | fc_boxsync_gen3_rr_as_a_a2985d5a.txt |
+| 5 | whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS | fc_whiteout_gen3_rr_as_a_a2985d5a.txt |
+| 6 | link_gen3_rr_as_a | §14 P5 RR duo | PASS | fc_link_gen3_rr_as_a_a2985d5a.txt |
+| 7 | deadzone_gen3_rr_as_a | §14 P5 RR duo | PASS | fc_deadzone_gen3_rr_as_a_a2985d5a.txt |
+| 8 | reconnect_gen3_rr_as_a | §14 P5 RR duo | PASS | fc_reconnect_gen3_rr_as_a_a2985d5a.txt |
+| 9 | explode_gen3_rr_as_a | §14 P5 RR duo | PASS | fc_explode_gen3_rr_as_a_a2985d5a.txt |
+| 10 | rival_swap_gen3_rr_as_a | §14 P5 RR duo | PASS | fc_rival_swap_gen3_rr_as_a_a2985d5a.txt |
+| 11 | rival_swap_real_gen3_rr_as_a | §14 P5 RR duo | PASS | fc_rival_swap_real_gen3_rr_as_a_a2985d5a.txt |
+| 12 | native_absent_gen3_rr_as_a | §14 P5 RR duo | PASS | fc_native_absent_gen3_rr_as_a_a2985d5a.txt |
+| 13 | linked_faint_active_clean_gen3_rr_as_a | §14 P5 RR duo | PASS | fc_linked_faint_active_clean_gen3_rr_as_a_a2985d5a.txt |
+| 14 | faint_cmd_clean_gen3_rr_as_a | §14 P5 RR duo | PASS | fc_faint_cmd_clean_gen3_rr_as_a_a2985d5a.txt |
+| 15 | linked_faint_active_lhammer_gen3_rr_as_a | §14 P5 RR duo | PASS | fc_linked_faint_active_lhammer_gen3_rr_as_a_a2985d5a.txt |
+| 16 | rr_opcode_gates | G5-GATES-LIVE | PASS | fc_rr_opcode_gates_a2985d5a.txt |
+| 17 | rr_zip_build | §9 item5 RR | PASS | fc_rr_zip_build_a2985d5a.txt |
+| 18 | rr_zip_check | §9 item5 RR | PASS | fc_rr_zip_check_a2985d5a.txt |
+| 19 | zip_boot_radicalred | §9 item5 RR | PASS | fc_zip_boot_radicalred_a2985d5a.txt |
+
+Rows 11 and 14 (`rival_swap_real_gen3`, `faint_cmd_clean_gen3`) are the ruling-25 additions (§5,
+§11) — not present in this draft's original 13-row §2 table, folded into the scenario list by
+`a2985d5a` itself ("pin `faint_cmd_clean_gen3` in the RR scenario lists (merge integration of
+G5-RR-CLEAN with G5-RR-RIVAL)"). The `linked_faint_active_mega_gen3` (R5) row stays a named SKIP
+under the ruling-20 signed limit and is not part of the 19 (§7). This supersedes the FR/LG frozen
+cut's rehearsal history at `870e5e5d`/`382703b3`/`c0f6101b` (below) — those were earlier, since-
+superseded frozen-cut attempts, not this one. **P**/**S**
+
+The cut moved three times before landing on `a2985d5a`, each time for a concrete reason, not a
+retake-for-luck:
+
+- `c0f6101b` (checkpoint 19, resume note) → moved after the HUD code-reference fix (`fca17782`,
+  "'SLink held' shows the reason in plain words, not a Lua source path") landed, and because its
+  own pass FAILed `checkpoint_firered` — the trainer probe states the plan needed were never built
+  at that cut.
+- `382703b3` → the fix for that: it *is* the commit that builds the trainer probe states at the
+  cut (`states_<title>_trainer`) and puts the RR zip rows on one shard chain.
+- `870e5e5d` → moved after the HUD no-pending-counter change (`870e5e5d` itself: "held commands
+  never reach the HUD... console log only, once per hold (owner: no pending counter)") landed; its
+  own RR pass was incomplete (16/17, `linked_faint_active_clean_gen3` failing on a deterministic
+  driver defect — out of no-damage PP at turn 31 — since fixed, see §5/§11a).
+- `a2985d5a` → moved after ruling 25's rows merged in (`c566e808`, `68e6191f`; commit message:
+  "pin `faint_cmd_clean_gen3` in the RR scenario lists (merge integration of G5-RR-CLEAN with
+  G5-RR-RIVAL)"). This is the cut both G4 and G5 sign.
+
+---
+
 ## 2. RR duo scenario table
 
-Thirteen rows: the six scenarios FRLG also runs, plus `native_absent_gen3` (RR-only, native trade
-staging) and `rival_swap_gen3` (negative control), plus the five P+H/Explode+H rows — the same
-mechanism as FR/LG's G4 rows, run here **on RR** for G5 parity (rulings 15-16, 19; not an
-RR-exclusive mechanism, just RR's own qualification of it). `linked_faint_active_mega_gen3` (R5)
-is a fourteenth row in the harness but is a **named SKIP, signed limit** (ruling 20, §7) — it is
-not counted in the 13.
+Fifteen rows (originally thirteen; rows 14-15 are owner ruling 25's additions, §11): the six
+scenarios FRLG also runs, plus `native_absent_gen3` (RR-only, native trade staging) and
+`rival_swap_gen3` (negative control), plus the five P+H/Explode+H rows — the same mechanism as
+FR/LG's G4 rows, run here **on RR** for G5 parity (rulings 15-16, 19; not an RR-exclusive
+mechanism, just RR's own qualification of it) — plus `rival_swap_real_gen3` (ruling 25b, the
+qualifying rival-swap row) and `faint_cmd_clean_gen3` (ruling 25a, the second clean-side row).
+`linked_faint_active_mega_gen3` (R5) is a sixteenth row in the harness but is a **named SKIP,
+signed limit** (ruling 20, §7) — it is not counted in the 15.
 
 | # | Row | Verdict | Receipt | Cut |
 |---|---|---|---|---|
@@ -92,9 +152,12 @@ not counted in the 13.
 | 11 | `linked_faint_active_lhammer_gen3` (P+H, L-hammer edge) | **PASS** | `ph_linked_faint_active_lhammer_gen3_rr_as_a_cc6ec42a.txt` | `cc6ec42a` |
 | 12 | `linked_faint_active_whiteout_gen3` (P+H, whiteout variant) | **PASS** | `ph_linked_faint_active_whiteout_gen3_rr_as_a_410d9578.txt` (also PASS at `cc6ec42a`) | `410d9578` |
 | 13 | `explode_gen3` (Explode+H) | **PASS** | `ph_explode_gen3_rr_as_a_410d9578.txt` (also PASS at `cc6ec42a`) | `410d9578` |
+| 14 | `rival_swap_real_gen3` (ruling 25b, the qualifying Rival Team Swap row) | **PASS** | `rr_rival_swap_real_gen3_gen3_rr_as_a_7fddd3eb.txt` | `7fddd3eb` |
+| 15 | `faint_cmd_clean_gen3` (ruling 25a, the second clean-side row) | **PASS** | `rr_faint_cmd_clean_gen3_rr_as_a_bc733fd0.txt` | `bc733fd0` |
 | — | `linked_faint_active_mega_gen3` (R5, mega) | **SKIP — signed limit** (ruling 20) | `ph_linked_faint_active_mega_gen3_rr_as_a_6d6227c6.txt`: `SIGNED LIMIT: owner ruling 20` | `6d6227c6` |
 
-**12 qualification rows PASS + 1 negative-control row PASS (row 8, `rival_swap_gen3`).** Row 6
+All 15 rows now PASS at the frozen cut too (§1a, `fc_SUMMARY_a2985d5a_rr.txt`). **14 qualification
+rows PASS + 1 negative-control row PASS (row 8, `rival_swap_gen3`).** Row 6
 (`whiteout_gen3`) PASSed at `1321bbdb` after three fixes: an RR-only follower object locking the
 field at the Center door (`eb03c21a`, live trace in `rr_whiteout_gen3_rr_as_a_eb03c21a.txt`); the
 harness dereferencing RR's literal `pokemon_storage_base` (`9598a4e5`); and the negative control,
@@ -108,8 +171,8 @@ and the row was re-taken and PASSed at `fca70bb2`
 `field_controls_locked=0x1` after the START press, then `CONTROL_REFUSED start_menu box_mon ...
 clause=field_controls_locked held_frames=600 attempted=0 writes=0 bytes=unchanged`, plus the save
 witnesses (`SAVE_WITNESS_SHA256 ... match=true`) on both sides. This is the current PASS of record
-for row 6; the frozen-cut RR pass at `870e5e5d` re-runs it again — `<<PENDING: RR final pass at
-870e5e5d>>`. **P**
+for row 6; the frozen-cut RR pass re-ran it and PASSed again at `a2985d5a`
+(`fc_whiteout_gen3_rr_as_a_a2985d5a.txt`, §1a row 5). **P**
 
 Earlier attempts at rows 9-13 (P+H/Explode+H) failed at cut `6d6227c6` on timeouts and carrier
 bugs before the hand-off's dependencies landed — see `ph_linked_faint_active_whiteout_gen3_rr_as_a_{e9193bb2,64ad170a}.txt`
@@ -166,6 +229,37 @@ non-rivals the old set would have caught); the fix moves the pinned test anchors
 in `e729abdb`). Flagged by the UI lane (G5-RR-RIVAL-IDS research); **OMP cx-5e891395 found no
 issues** in the fix (`docs/gen3_resume.md` checkpoint 18). The UI lane separately confirmed the
 in-battle enemy-party calc already reads runtime trainer ids, not the stale set. **S**/**M**
+
+### The qualifying row: `rival_swap_real_gen3` (ruling 25b)
+
+`rival_swap_gen3` (§2 row 8) only proves the engine refuses an unauthorized swap
+(`stale_battle_id`); it never reads back a genuinely swapped enemy party mid-battle. Owner ruling
+25(b) (2026-09-25) asked for ONE row that does — `rival_swap_real_gen3` now does, and PASSes live
+(§2 row 14, `rr_rival_swap_real_gen3_gen3_rr_as_a_7fddd3eb.txt`; frozen-cut re-take PASS at
+`a2985d5a`, §1a row 11): the Route 22 early rival (trainer 331) fights B's staged party, and the
+oracle requires the fight's lead battler to be the swapped slot-0 mon with `gEnemyParty` matching
+species/level/moves/count, not just an ack.
+
+**The client-only product fix** (merge `c566e808`, "the qualifying RR Rival Team Swap row, ruling
+25b"): the first live attempt (`6880e120`) found the swap could never land — the patch's W1 window
+(`gBattleMainFunc == BeginBattleIntroDummy`) is open for only ~5 frames right at battle start, but
+the client's old in-battle announcement fired ~26 frames after that window had already closed. The
+fix (`c24c0e9f`) is client-only, no patch change, no ROM rebuild, no md5 re-pin: the RR companion
+client now **pre-announces** `trainer_battle_start` on the edge of `gTrainerBattleOpponent_A`
+going nonzero on the field (~120 frames before battle start, carrying the id of the battle about
+to begin), the server's auto-swap command is **staged** in `native.lua` (held ready), and it is
+**posted** on the first frame the W1 window reads open — landing inside the window instead of
+missing it. It also dropped a stale unconditional `refresh_enemy` call that made even a real swap
+report failure.
+
+**Two reviews, both folded in before the qualifying PASS**: an Opus review (`e74413a6`, 4 findings
+— a not-yet-begun pre-authority getting replaced instead of blocking, trainer-only battle-type
+carry, the patch's real ST_FAIL reason surfacing instead of a misleading one, no authority opening
+on a dropped announcement) and an OMP review (`7fddd3eb`, `cx-3a69802a`, 9 findings — an engine
+snapshot post-condition on the readback instead of trusting the ack, "not ready" vs. refused
+during the hold, mirroring the patch's window clauses, one announcement per battle id, removing a
+second ungated swap-posting path). `rival_swap_real_gen3` PASSed after both fix rounds
+(`14f151f8`), and again at the frozen cut (§1a row 11). **S**/**M**/**P**
 
 ---
 
@@ -266,24 +360,42 @@ on that basis — it is an internal gate request, not a release request. **S**
 
 ---
 
-## 10. What is still open before G5 can be signed
+## 9a. Other changes since the previous checkpoint
 
-1. **`whiteout_gen3` on RR** (§2 row 6) is no longer open — it PASSed at `fca70bb2` (§2). All 13
-   rows are PASS.
-2. **The final-cut runner now has an RR plan, but has not yet run it on the frozen cut.**
-   `tools/gen3_final_cut.py`'s `ORIENT` map (`:108`) now reads `{"gen3_frlg": "fr_as_a",
+- **Master merged into the Gen 3 branch**: local master `96ae536d`, via scratch branch
+  `claude/gen3-master-sync` (`597c52d2`), merged as `e33b03b1` (G4-MASTER-SYNC) — 9 conflicts
+  resolved by intent. The merge commit's own message records the adversarial pass as **pending,
+  not yet closed**: "OMP REVIEW `cx-cd3f4189` of the resolution pending" (`docs/gen3_resume.md:22`,
+  "If it finds a dropped hunk, the fix needs a new cut."). No later commit in this tree closes that
+  review; this draft does not assert it came back clean. **S**
+- **HUD: the GBA screen draws notices in the fceux pixel font too** (`f1cc6038`), and **held
+  commands never reach the HUD, console log only, once per hold** (`870e5e5d`, owner: no pending
+  counter) — full details in `docs/gen3/G4_request_draft.md` (Other changes). **S**
+- **RR rival-id off-by-one fixed** (`e729abdb`) — `rival_trainer_ids()` matched the trainer
+  *before* each rival; see §5 above for the fix and its `gTrainers[k+1]` derivation. **S**
+- **The in-game panel's Badges row fix** (`17608b51`) — was popcounting the hello/tick bitmask
+  (0/8) after the old client's deletion. **S**
+- **RR zip boot wired into the final-cut runner** (`58a8951f`, `c0e1e98e`) — the RR plan now
+  builds, checks and boots the release zip on the RR companion; this is what let the frozen-cut RR
+  pass run to 19/19 (§1a). **S**
+
+---
+
+## 10. What was open before G5 could be signed, now closed
+
+1. **`whiteout_gen3` on RR** (§2 row 6) is not open — it PASSed at `fca70bb2` (§2) and again at the
+   frozen cut. All 15 rows (§2) are PASS.
+2. **The final-cut runner has an RR plan, and it has now run on the frozen cut.**
+   `tools/gen3_final_cut.py`'s `ORIENT` map (`:108`) reads `{"gen3_frlg": "fr_as_a",
    "gen3_lgfr": "lg_as_a", "gen3_rr": "rr_as_a"}`, and `--title rr` (choices `frlg`/`rr`, default
-   `frlg`) dispatches `build_plan_rr`: the 13 duo rows from `rr_scenarios()` (`e2e_duo.scenarios_for
+   `frlg`) dispatches `build_plan_rr`: the 15 duo rows from `rr_scenarios()` (`e2e_duo.scenarios_for
    ("gen3_rr")` minus the signed `linked_faint_active_mega_gen3` limit), `rr_opcode_gates`
    (own-verdict pytest run), and `zip_rows(cut, lane, "radical_red")` (`rr_zip_build`,
    `rr_zip_check`, `zip_boot_radicalred`), summarized to a `_rr`-suffixed
    `fc_SUMMARY_<cut8>_rr.txt` (card G5-RUNNER-RR, commits `68f5e3f6`/`769a4251`, OMP
-   cx-42592031). This closes the gap the previous draft flagged: every row in §2 can now be
-   re-taken by the runner, not just by hand. What is still open is running it: the RR zip chain
-   has only a rehearsal PASS at `58a8951f` (`fc_SUMMARY_58a8951f_rr.txt`), and **the frozen-cut RR
-   pass at `870e5e5d` has not been run** — `<<PENDING: RR final pass at 870e5e5d>>`. The FR/LG
-   frozen-cut pass at `870e5e5d` is itself still running sharded as of this draft
-   (`docs/gen3_resume.md` checkpoint 19); the RR pass is queued to follow it.
+   cx-42592031). The RR zip chain PASSed as a rehearsal at `58a8951f`
+   (`fc_SUMMARY_58a8951f_rr.txt`) and then for the record: **the frozen-cut RR pass at `a2985d5a`
+   ran and PASSed 19/19** (§1a, `fc_SUMMARY_a2985d5a_rr.txt`, committed `622aa7f5`). Not open.
 3. **The RR save-extension freshness is proven live, not OPEN.** `docs/gen3/G4_request_draft.md`
    §5's "RR extension evidence... OPEN" describes the harness's *capability* (`check_gen3_witness`
    in `tools/e2e_duo.py:1184-1276`: without a live-RAM copy, `facts["extension"]` stays the string
@@ -304,62 +416,52 @@ on that basis — it is an internal gate request, not a release request. **S**
    the downstream witness the earlier NON-QUALIFYING label asked for. The block comment above
    the RR-only scenarios in tools/e2e_duo.py still describes the old control status; it is
    stale and is queued for correction after the final cut (editing it now would void carry).
+   `rival_swap_real_gen3` (§2 row 14, ruling 25b, §5) is the qualification row this gap asked
+   for — a real swap with an enemy-party readback, not the ack — and it PASSes.
 
 ---
 
-## 11. Owner decisions needed for G5
+## 11. Resolved by ruling 25
 
-From OMP cx-6827201a, verified by the coordinator against the cited sources. None of these block
-the frozen-cut RR pass from running — they are gaps between what PLAN.md asks G5 to show and what
-this tree currently has receipts for, and each needs an owner call: produce the missing evidence,
-or sign the gap as a limit.
+The gaps below were raised from OMP cx-6827201a, between what PLAN.md asks G5 to show and what
+this tree had receipts for at the time. **Owner ruling 25** (2026-09-25 — "We don't need full test
+coverage for RR but we need a decent amount", then "Do it then" on the proposal;
+`docs/gen3/G4_request_draft.md` §6 item 25) answers all four:
 
-- **a. Full RR clean coverage.** `docs/gen3_requirements.md:141-175`'s per-artifact table lists "RR
-clean" needing `S-1..S-11` (vanilla kinds, no native/mailbox rows) at the same liveness bound as FR
-clean, via `native_absent` (clean RR beside companion RR) plus "the `gen3_rr` base run on the clean
-side of that pair" — status `·` (not done). The X.1 coverage-by-kind table two sections down only
-has `FR clean` / `RR companion` columns; there is no `RR clean` column at all. What exists: two of
-§2's rows touch a clean side — `native_absent_gen3` (row 7, clean RR beside the companion, native
-refused cleanly) and `linked_faint_active_clean_gen3` (row 10, "P+H, clean artifact") — but neither
-is the systematic `S-1..S-11` natural-play sweep FR clean got (`docs/gen3/G3_request_draft.md`'s
-shadow-observer runs). **Options:** (1) build the RR clean-artifact natural-play coverage rows
-(a scripted-play or shadow-observer pass on a clean RR ROM, the same shape as FR's `run25`/`run28`
-receipts) before G5; or (2) sign RR-clean `S-1..S-11` as a limit — every shipped RR play path goes
-through the companion, so a bare-clean RR run only needs `native_absent`'s refusal proof, not the
-full per-kind sweep FR clean got. **S**
-- **b. A qualifying rival-swap enemy-party readback.** `docs/gen3/PLAN.md:207` (P5 exit evidence)
-  asks for "rival enemy-party readback"; `docs/gen3_requirements.md` N-6 asks for "readback of the
-  enemy party species/moves during the fight, not the ack" — status `·`. What exists:
-  `rival_swap_gen3` (§2 row 8, §7 "doubles as a negative control") only asserts
-  `stale_battle_id` refusal on a dummy team; it never reads back a genuinely swapped enemy party's
-  species/moves mid-battle. The design that would carry that readback is reviewed
-  (`docs/gen3/research/rival_swap_refresh_window.md`, OMP C5-8b) but not exercised by a scenario.
-  **Options:** (1) extend `rival_swap_gen3` (or add a row) that reads `gBattleMons`/the enemy party
-  buffer after a real swap and asserts species/moves match the swapped team, not just the ack; or
-  (2) sign the negative control as sufficient for G5 — it proves the engine gates on identity, and
-  the intro-copy design that would produce a wrong readback was already closed by review, so a live
-  readback would be confirmatory, not falsifying. **S**
-- **c. Opcode gate count: 26 ported live + 12 deferred vs PLAN's "39 opcode gates green".**
-  `docs/gen3/PLAN.md`'s P5 exit evidence literally says "39 opcode gates green via `gen3_gatelib`".
-  §3 of this draft shows the live run collects 39 cases total (26 PASS, 12 skipped by design —
-  8 ghost-opcode gates the peer-ghost deferral drops, 3 native-text gates the native-text-removal
-  ruling drops — plus one empty `GAP` parameter case), all at
-  `docs/gen3/probes/rr_gates_live_06724759_2026-09-24.txt`. 26 + 12 + 1 = 39 matches PLAN's count
-  of *collected* cases, but only 26 are live PASS assertions; the other 13 never run an assertion
-  at all. **Options:** (1) read PLAN's "39 green" as "39 collected, none failing" — the 13 skips
-  are by-design consequences of rulings the owner already made (ghost deferral, native-text
-  removal), so 26 PASS + 13 by-design SKIP is the correct G5 reading; or (2) require PLAN's count
-  to mean 39 live PASS, which would mean un-deferring the 8 ghost and 3 native-text gates — in
-  direct tension with those two rulings, so this option effectively asks to revisit them. **S**/**P**
-- **d. Per-item receipts PLAN.md's RR plan does not name explicitly.** Checked against
-  `docs/gen3/probes` and `git log` for each:
+- **a. Full RR clean coverage — resolved, sufficient as shipped.** `docs/gen3_requirements.md:141-175`
+  asks for the systematic `S-1..S-11` sweep FR clean got (`docs/gen3/G3_request_draft.md`'s
+  shadow-observer runs). Ruling 25(a): **ONE more clean-side row** beside `native_absent_gen3`
+  (row 7) and `linked_faint_active_clean_gen3` (row 10) is sufficient; the full sweep is not
+  required. That row is `faint_cmd_clean_gen3` (§2 row 15) — "a basic link+faint on the clean
+  ROM", built by reusing `faint_cmd_gen3`'s own module/oracle with `rom_kind {a: companion, b:
+  clean}` (`e6bd678e`, missing-oracle-alias fixed `3c9d429c`) — and it PASSes live
+  (`rr_faint_cmd_clean_gen3_rr_as_a_bc733fd0.txt`) and at the frozen cut (§1a row 14).
+  `linked_faint_active_clean_gen3` itself needed a fix along the way: its `lose_active` fallback
+  could pick a self-damaging move (`77115d02`), hardened against a wider set of self-KO effect
+  codes and a WON-gated re-hunt guard (`bc733fd0`) — both after-fix rows PASS live
+  (`rr_linked_faint_active_clean_gen3_rr_as_a_{77115d02,bc733fd0}.txt`) and at the frozen cut
+  (§1a row 13). **S**/**P**
+- **b. A qualifying rival-swap enemy-party readback — resolved, PASS.** Ruling 25(b): **ONE
+  qualifying row**, a real swap with enemy-party readback. `rival_swap_real_gen3` (§2 row 14, full
+  account in §5) is that row: it PASSes live (`rr_rival_swap_real_gen3_gen3_rr_as_a_7fddd3eb.txt`)
+  and at the frozen cut (§1a row 11), reading back `gEnemyParty` against the swapped team rather
+  than trusting the ack. `rival_swap_gen3` (§2 row 8) stays the separate negative control (§7). **S**/**P**
+- **c. Opcode gate count — resolved, 26 live + 12 deferred is the signed limit.** PLAN.md's "39
+  opcode gates green" is 26 live PASS assertions plus 12 skipped by design (8 ghost-opcode gates
+  under the peer-ghost deferral, 3 native-text gates under the native-text-removal ruling) plus one
+  empty `GAP` parameter case (§3, `rr_gates_live_06724759_2026-09-24.txt`, 26/26 PASS). Ruling
+  25(c): the 12 deferred gates are a **signed limit**; the 26 ported live gates cover the opcodes
+  in use. Not reopened by un-deferring ghost/native-text. **S**/**P**
+- **d. Per-item receipts PLAN.md's RR plan does not name explicitly — resolved, unit/model
+  evidence is sufficient.** Ruling 25(d): the P2 anchor / md5-pin / deleted-file / write-guard /
+  native-control items are satisfied by the existing unit/model evidence; no separate live
+  receipts are needed. Checked against `docs/gen3/probes` and `git log` for each:
   - **P2 anchors re-verified on the rebuilt companion.** No standalone anchor-re-verification
-    receipt was found. The closest evidence is the opcode-gates live run itself
-    (`rr_gates_live_06724759_2026-09-24.txt` @ `0995a82e`, 26/26 PASS on the rebuilt companion md5
-    `6cf77ba4…`), which exercises the pinned anchors the gates depend on but does not name itself
-    as an anchor check. `<<EVIDENCE?>>` for a dedicated receipt.
-  - **The md5-pin receipt.** This one exists and is thorough: §8 "Companion rebuild hashes" checks
-    the pin against `server/patcher.py:72`, `patch/README.md:27`, the live gates receipt's measured
+    receipt exists; the opcode-gates live run (`rr_gates_live_06724759_2026-09-24.txt` @
+    `0995a82e`, 26/26 PASS on the rebuilt companion md5 `6cf77ba4…`) exercises the pinned anchors
+    the gates depend on. Ruling 25(d) signs this as sufficient — no dedicated receipt is owed. **S**/**M**
+  - **The md5-pin receipt.** Exists and is thorough: §8 "Companion rebuild hashes" checks the pin
+    against `server/patcher.py:72`, `patch/README.md:27`, the live gates receipt's measured
     checksum line, and `data/games/gen3_rr/engine_signals.json:576` — all four match. **P**
   - **The deleted-file grep.** Done as part of C5-6, not saved as a standalone probe receipt: commit
     `0866f406` ("tag-qualify every citation of the deleted modules") and `addc9225` ("delete the old
@@ -372,19 +474,15 @@ full per-kind sweep FR clean got. **S**
     (`test_no_raw_write_sink_outside_writes_lua_and_runs_one_allowed_bootstrap_pattern`) plus
     intercepted-sink round trips for real trade/battle/PC writes, and `native.lua` was ACCEPTed in
     the Codex REV6 review (`docs/gen3/G4_request_draft.md` §4). `ghost.lua` does not exist — it is
-    deferred (§1, item e below) — so a guard run "over `native.lua`/`ghost.lua`" as PLAN.md's P5
-    row literally asks cannot exist for the ghost half. **Options:** (1) accept the generic scanner
-    plus native.lua's ACCEPT review as satisfying the native half, and mark the ghost half N/A under
-    the deferral; or (2) require a `native.lua`-scoped guard run distinct from the generic suite
-    before G5. **M**
+    deferred (§1, item e below), so ruling 25(d) marks the ghost half N/A under that deferral and
+    accepts the generic scanner plus `native.lua`'s ACCEPT review for the native half. **M**
   - **Native controls: timeout, lost ack, overwritten staging, reset mid-op.**
     `tests/unit/test_gen3_native.py` has unit-level coverage for exactly these:
     `test_timeout_and_lost_ack_never_reuse_uncertain_mailbox` (:303),
     `test_overwritten_staging_is_refused_before_ack_success` (:319),
-    `test_reset_mid_operation_cancels_stale_queue_without_writes` (:350). This is **M** (unit),
-    not **P** (live) — no live-hardware receipt under `docs/gen3/probes/` was found exercising
-    these four controls the way `native_absent_gen3` (row 7) exercises the "absent/refused" pair
-    live. `<<EVIDENCE?>>` for the live half.
+    `test_reset_mid_operation_cancels_stale_queue_without_writes` (:350). Ruling 25(d) signs this
+    unit-level (**M**) coverage as sufficient; no live-hardware receipt is owed beyond
+    `native_absent_gen3` (row 7), which already exercises the absent/refused pair live.
 - **e. Ghost walk/stutter.** `docs/gen3/PLAN.md` still names the ghost scenario and stutter metric
   in its P5 exit-evidence row, but it is deferred post-RC: `docs/gen3/TODO.md:23-25` — "Owner
   ruling 2026-09-22 (PLAN §0/§10). No `ghost.lua` and no `ghost` duo scenario in the RC, and N-2 is
