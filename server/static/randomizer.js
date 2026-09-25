@@ -149,7 +149,8 @@ function randomizerFields(form) {
       var name = this.presetName.trim();
       if (!name) { this.presetNote = 'Give the preset a name.'; return; }
       var existing = this.presets.find(function (x) { return x.name.toLowerCase() === name.toLowerCase(); });
-      var overwrite = !!existing && this.presetPendingOverwrite === name.toLowerCase();
+      // the pending flag alone decides: the server may know a same-named preset this page doesn't
+      var overwrite = this.presetPendingOverwrite === name.toLowerCase();
       // A same-named preset exists and this isn't the confirming click yet: ask inline
       // (window.confirm doesn't work in every context this page can run in) rather than
       // silently replacing it. Clicking Save again with the same name confirms; editing
@@ -166,6 +167,11 @@ function randomizerFields(form) {
                                                body: JSON.stringify({ name: name, spec: this.rdraft.spec, overwrite: overwrite }) });
         var j = null;
         try { j = await res.json(); } catch (_) { /* not JSON */ }
+        if (res.status === 409 && !overwrite) {
+          this.presetPendingOverwrite = name.toLowerCase();
+          this.presetNote = 'A preset named "' + name + '" already exists. Replace: click Save again. Cancel: change the name.';
+          return;
+        }
         if (!res.ok || !j || !j.ok) { this.presetNote = (j && j.error) || ('Save failed (' + res.status + ')'); return; }
         this.presets = this.presets.filter(function (x) { return x.name.toLowerCase() !== name.toLowerCase(); }).concat([j.preset])
           .sort(function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1; });

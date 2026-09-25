@@ -95,3 +95,27 @@ global.fetch = function (url) {
     assert out["afterSecond"] == {"tag": "second-response"}
     # The stale first response must be DROPPED, not overwrite the newer one.
     assert out["afterFirst"] == {"tag": "second-response"}
+
+
+def test_save_preset_recovers_from_a_conflict_the_page_did_not_know_about(tmp_path):
+    """Another tab saved the name: the server's 409 arms the confirm, the next click replaces."""
+    out = _run_node(tmp_path, """
+const sent = [];
+globalThis.fetch = async (url, opts) => {
+  const body = JSON.parse(opts.body); sent.push(body.overwrite);
+  if (!body.overwrite) return { ok: false, status: 409, json: async () => ({ ok: false, error: 'exists' }) };
+  return { ok: true, status: 200, json: async () => ({ ok: true, preset: { name: body.name, spec: {} } }) };
+};
+(async () => {
+  const rf = mod.randomizerFields(form);
+  rf.rdraft.spec = {};
+  rf.presetName = 'Hard';
+  await rf.savePreset();
+  const first = rf.presetNote;
+  await rf.savePreset();
+  console.log(JSON.stringify({ sent, first, second: rf.presetNote }));
+})();
+""")
+    assert out["sent"] == [False, True]
+    assert "already exists" in out["first"]
+    assert out["second"] == 'Saved "Hard"'
