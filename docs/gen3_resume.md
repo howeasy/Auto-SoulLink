@@ -53,6 +53,7 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
   - server/adapters/__init__.py: Gen 2's side is additive (unrouted_rom_type_reason, persisted_migration_refusal, foundation_for_rom_type, adapter_class_for_rom_type, plus the Gen 2 entries); keep both sets.
   - gen3_frlge.py is Gen 3's.
   - Re-run `git merge-tree HEAD master` after Gen 2 lands.
+  - Against master d97c8a3b (calc lane: calc_profile/calc_nature/calc_name in gen3_frlge.py, calc_names_vanilla.json; gen3_codec.py arrives byte-identical from c0f6101b), the only conflict is docs/protocol.md citation line numbers. Re-anchor them and run test_protocol_citations.
   - Gen 1 took 48709f39 (the sfx gate case-A fix plus receipts).
   - Master since 96ae536d also has: the ruff exclude, the purergb .sym LF fix, the ROM-scan ctime key, test_gen1_trade_patch reading archive/gen1/rc, and the board/connection_state/CSS work.
 - **Merge review:** two Sonnet reviews found no dropped hunks (server.py + gen3_frlge.py; manager/html/make_release/REFERENCE/gen1 client). The three OMP reviews of the merge timed out on the diff size.
