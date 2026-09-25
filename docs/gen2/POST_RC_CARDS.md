@@ -279,4 +279,15 @@ If G4 is already signed, the overlay grant fingerprint changes and needs re-sign
 - **Size.** M: ~60-80 production + ~40-60 test LOC.
 - **Risks.** Bridge space; `--check` must receive `--version`; any missed pin.
 
-(TITLE-VERSION part B, the logo, from `cx-face49ff`, goes here when it lands. The design-only OMP cards also in flight: KEY-SCOPE-5 `cx-ee316c45`, SP-LOWWATER `cx-947d9423`, POISON-DUO-CAP `cx-2ea3c763`, BOARD-AMBIGUOUS `cx-8a2f08c6`, PURERGB-OVERLAY-EOL `cx-a84b761e`, TEMP-LANES `cx-1b2b86fe`.)
+### TITLE-VERSION part B: the SLink logo banner (OMP `cx-face49ff`, checked)
+
+- **The native subtitle is ONE row.**
+  - Gold/Silver: 10 tiles at `(5,6)`, BG palette 3 (`engine/movie/title.asm:157-160`, verified). The art is baked into `logo_bottom_{gold,silver}.png` (`TitleScreenGFX1`), decompressed to `vTiles2`.
+  - Crystal: 11 tiles at `(5,9)`, BG palette 1 (`title.asm:75-79`, verified). It's part of `TitleLogoGFX` in `vTiles1`.
+- **Recommended: a same-size, one-row wordmark overwrite.** An `SLINK` wordmark of 10 tiles (160 B) on G/S and 11 tiles (176 B) on Crystal. The tile bytes are copied after the native decompression and before the LCD is enabled.
+  - No new tile IDs, no tilemap edits, and no new CGB palette: reuse G/S palette 3 and Crystal palette 1. Crystal uses every BG palette slot 0-7.
+  - On DMG it goes two-tone through `rBGP`; the silhouette survives.
+- **If a 2-row banner is required:** 10×2 = 320 B in the free tile window G/S `$5C-$77` (28 tiles) or Crystal `$3C-$7F` (68 tiles), with both rows remapped. That's ~35-55 asm LOC, against ~20-30 for the single row. The Pokémon logo cells stay untouched either way.
+- **Pipeline:** `rgbgfx --colors dmg -o x.2bpp x.png` (the generic Makefile rule; the Crystal logo also uses `--trim-end 4`), then a raw `INCBIN` in the service bank. Add the PNG to the builder's hashed inputs (see part A).
+- **Unverified until implementation:** G/S's exact subtitle tile IDs (open `logo.tilemap`), the safest pre-LCD hook point, service-bank space, and SGB border overlap. All of these need a boot check on Gold/Silver/Crystal in DMG/SGB/CGB.
+- **Owner questions:** who draws the logo; one row (fits natively) or two; the placeholder is a pixel "SLINK" wordmark. The design-only OMP cards also in flight: KEY-SCOPE-5 `cx-ee316c45`, SP-LOWWATER `cx-947d9423`, POISON-DUO-CAP `cx-2ea3c763`, BOARD-AMBIGUOUS `cx-8a2f08c6`, PURERGB-OVERLAY-EOL `cx-a84b761e`, TEMP-LANES `cx-1b2b86fe`.)
