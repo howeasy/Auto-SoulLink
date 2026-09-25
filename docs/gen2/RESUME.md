@@ -479,3 +479,12 @@ into ONE post-RC re-sweep.
 
 OMP rule (owner): every headless OMP task states its kill limit, a reply-by budget AND a narrow file list in the task
 text. Broad studies time out silently, and a headless run can't be messaged mid-run.
+
+Update (2026-09-25 ~01:50Z): GEN 2 EVIDENCE COMPLETE.
+- Pins are committed: c62345e4 (356 receipts) and eb1bb6ac (the final pass: trade_evolve C-C/G-S/C-G on the seed, trainer-faint C-C, all PASS on the first attempt).
+- Also 44f6fb97 (SLINK_GEN2_NO_ATTEST: a lane run no longer re-attests) and a7d414a2 (the reconnect pin mapping).
+- verify_gen2_release at eb1bb6ac, digest ccd62421: every receipt lane PASSES (duo-link, duo-pairs, live-trade-gates, live-gates, live-new-gates 13/13, fixtures).
+- release-evidence is RED on exactly 4 owner items: crystal/gold/silver_overlay BUILT (not ADMITTED) and the G4 signature in PLAN §6.1. The coordinator re-ran it and confirmed.
+- Running now: the Gen 1/pureRGB gate, `SLINK_PURERGB_ROMS=... python tools/verify_gen1_release.py`, log C:/Users/howar/AppData/Local/Temp/gen1-verify.log.
+- When it's green: STOP and check in with the owner (G4 signature, then --promote-overlays), plus the 4 owner decisions above.
+- The FINAL-SWEEP worker is done; every lane and monitor is torn down.
