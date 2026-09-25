@@ -97,12 +97,16 @@ if os.path.exists(_rr_priority_path):
 # Built at import time by scanning _RR_TRAINERS for entries whose name is
 # "Terry" (RR's default rival name) and whose class is one of the rival
 # classes (81/89/90 — Rival Early/Mid/Late).  Spot-check: 27 entries in
-# RR4.1 spanning IDs 325-440 and 738-740 (post-game).  Class 98 (also
+# RR4.1 spanning IDs 326-440 and 739-741 (post-game).  Class 98 (also
 # labeled "Rival" in _RR_TRAINER_CLASS) is NOT used by Terry in the
 # canonical table; filtering on Terry-by-name avoids false positives.
+# The ids are WIRE ids (gTrainerBattleOpponent_A = the gTrainers index). rr_trainers.json's key k is
+# gTrainers[k + 1] (its base 0x0823EAF0 is gTrainers 0x0823EAC8 + one 40-byte entry), the same
+# offset trainer_info() applies; read from the RR ROM 2026-09-25: gTrainers[326..328] are Terry
+# (class 81), [325] is Daisuke.
 _RR_RIVAL_CLASSES = frozenset({81, 89, 90})
 _RR_RIVAL_TRAINER_IDS: frozenset[int] = frozenset(
-    tid for tid, tr in _RR_TRAINERS.items()
+    tid + 1 for tid, tr in _RR_TRAINERS.items()
     if (tr.get("name") or "").strip() == "Terry"
     and tr.get("class") in _RR_RIVAL_CLASSES
 )

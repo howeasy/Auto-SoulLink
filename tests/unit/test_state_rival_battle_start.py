@@ -48,11 +48,11 @@ def test_trainer_battle_start_auto_fires_when_rival_and_enabled():
     """Default state has rival_team_swap=True → rival fight auto-injects."""
     state = _state_with_rr_adapter()
     _cache_partner_blob(state, "b", count=3)
-    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325})
+    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326})
     rt = _replace_cmds(cmds)
     assert len(rt) == 1
     cmd = rt[0]
-    assert cmd["trainer_id"] == 325
+    assert cmd["trainer_id"] == 326
     assert cmd["source"] == "auto"
     assert cmd["n"] == 3
 
@@ -70,7 +70,7 @@ def test_trainer_battle_start_respects_global_disable():
     state = _state_with_rr_adapter()
     state.rival_team_swap = False
     _cache_partner_blob(state, "b", count=3)
-    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325})
+    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326})
     assert _replace_cmds(cmds) == []
 
 
@@ -78,7 +78,7 @@ def test_trainer_battle_start_skips_when_partner_offline():
     """Rival ID + toggle on, but partner has no blobs → no command."""
     state = _state_with_rr_adapter()
     # Note: no _cache_partner_blob call — partner cache stays empty.
-    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325})
+    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326})
     assert _replace_cmds(cmds) == []
 
 
@@ -88,7 +88,7 @@ def test_trainer_battle_start_vanilla_adapter_no_op():
     vanilla = Gen3Adapter(is_rr=False)
     state = SoulLinkState(adapter=vanilla, is_rr=False)
     _cache_partner_blob(state, "b", count=3)
-    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325})
+    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326})
     assert _replace_cmds(cmds) == []
 
 
@@ -106,7 +106,7 @@ def test_trainer_battle_start_ignores_missing_id():
 
 def test_trainer_battle_start_ignores_non_int_id():
     state = _state_with_rr_adapter()
-    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": "325"})
+    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": "326"})
     assert _replace_cmds(cmds) == []
 
 
@@ -136,7 +136,7 @@ def test_queue_helper_succeeds_when_partner_has_blobs():
 
 def test_queue_helper_fails_when_partner_blobs_empty():
     state = _state_with_rr_adapter()
-    ok, reason = state.queue_rival_team_swap("a", trainer_id=325, source="manual")
+    ok, reason = state.queue_rival_team_swap("a", trainer_id=326, source="manual")
     assert ok is False
     assert "no cached party blobs" in reason
     assert state.queued_commands["a"] == []
@@ -154,11 +154,11 @@ def test_queue_helper_uses_correct_partner():
         "blob": bytes([0xBB] * 100),
     }]
     # Player a's rival fight → uses b's blobs.
-    ok_a, _ = state.queue_rival_team_swap("a", trainer_id=325)
+    ok_a, _ = state.queue_rival_team_swap("a", trainer_id=326)
     assert ok_a is True
     assert state.queued_commands["a"][0]["blobs_hex"][0] == "bb" * 100
     # Player b's rival fight → uses a's blobs.
-    ok_b, _ = state.queue_rival_team_swap("b", trainer_id=325)
+    ok_b, _ = state.queue_rival_team_swap("b", trainer_id=326)
     assert ok_b is True
     assert state.queued_commands["b"][0]["blobs_hex"][0] == "aa" * 100
 
@@ -166,7 +166,7 @@ def test_queue_helper_uses_correct_partner():
 def test_queue_helper_default_source_is_auto():
     state = _state_with_rr_adapter()
     _cache_partner_blob(state, "b", count=1)
-    state.queue_rival_team_swap("a", trainer_id=325)
+    state.queue_rival_team_swap("a", trainer_id=326)
     assert state.queued_commands["a"][0]["source"] == "auto"
 
 
@@ -178,7 +178,7 @@ def test_queue_helper_blob_hex_round_trip():
         "slot": 0, "species_id": 25, "level": 30, "key": "K0",
         "blob": payload,
     }]
-    state.queue_rival_team_swap("a", trainer_id=325)
+    state.queue_rival_team_swap("a", trainer_id=326)
     hex_str = state.queued_commands["a"][0]["blobs_hex"][0]
     assert bytes.fromhex(hex_str) == payload
 
@@ -189,7 +189,7 @@ def test_rival_team_replaced_ack_accepts_valid_payload():
     state = _state_with_rr_adapter()
     state.handle_event("a", {
         "event": "rival_team_replaced",
-        "trainer_id": 325,
+        "trainer_id": 326,
         "species_ids": [25, 6, 9],
     })
     # No state mutation expected — handler is pure logging for Phase 2.
@@ -201,7 +201,7 @@ def test_rival_team_replaced_ack_tolerates_bad_payload():
     state = _state_with_rr_adapter()
     state.handle_event("a", {
         "event": "rival_team_replaced",
-        "trainer_id": 325,
+        "trainer_id": 326,
         "species_ids": "not a list",
     })
     assert state.queued_commands["a"] == []
@@ -218,20 +218,20 @@ def test_c510_the_identity_is_stored_per_player_and_echoed_on_the_command():
     that battle; the other player is untouched."""
     state = _state_with_rr_adapter()
     _cache_partner_blob(state, "b", count=2)
-    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325,
+    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326,
                                     "session": SESSION_A, "battle_id": 1})
     (cmd,) = _replace_cmds(cmds)
     assert (cmd["session"], cmd["battle_id"]) == (SESSION_A, 1)
-    assert state.latest_battle_requests["a"] == (SESSION_A, 1, 325)
+    assert state.latest_battle_requests["a"] == (SESSION_A, 1, 326)
     assert "b" not in state.latest_battle_requests
 
 
 def test_c510_the_counter_advances_and_the_session_survives_a_re_battle():
     state = _state_with_rr_adapter()
     _cache_partner_blob(state, "b", count=1)
-    state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325,
+    state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326,
                              "session": SESSION_A, "battle_id": 1})
-    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325,
+    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326,
                                     "session": SESSION_A, "battle_id": 2})
     (cmd,) = _replace_cmds(cmds)
     assert (cmd["session"], cmd["battle_id"]) == (SESSION_A, 2)
@@ -242,7 +242,7 @@ def test_c510_an_old_client_gets_no_identity_fields_at_all():
     what it was before this card (no session, no battle_id keys), and nothing is stored."""
     state = _state_with_rr_adapter()
     _cache_partner_blob(state, "b", count=2)
-    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325})
+    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326})
     (cmd,) = _replace_cmds(cmds)
     assert "session" not in cmd and "battle_id" not in cmd
     assert state.latest_battle_requests == {}
@@ -262,7 +262,7 @@ def test_c510_a_malformed_identity_is_not_stored_and_not_echoed():
                 {"session": "A" * 17, "battle_id": 1},
                 {"session": SESSION_A}):
         state.latest_battle_requests.clear()
-        cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325, **bad})
+        cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326, **bad})
         (cmd,) = _replace_cmds(cmds)
         assert "session" not in cmd and "battle_id" not in cmd, bad
         assert state.latest_battle_requests == {}, bad
@@ -271,9 +271,9 @@ def test_c510_a_malformed_identity_is_not_stored_and_not_echoed():
 def test_c510_the_manual_path_inherits_the_latest_identity():
     state = _state_with_rr_adapter()
     _cache_partner_blob(state, "b", count=1)
-    state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325,
+    state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326,
                              "session": SESSION_A, "battle_id": 4})
-    ok, reason = state.queue_rival_team_swap("a", trainer_id=325, source="manual")
+    ok, reason = state.queue_rival_team_swap("a", trainer_id=326, source="manual")
     assert ok, reason
     cmd = state.queued_commands["a"][-1]
     assert (cmd["session"], cmd["battle_id"]) == (SESSION_A, 4)
@@ -286,7 +286,7 @@ def test_c510_a_manual_inject_without_stored_identity_is_refused():
     state = _state_with_rr_adapter()
     _cache_partner_blob(state, "b", count=1)
     _declare_battle_identity(state, "a")
-    ok, reason = state.queue_rival_team_swap("a", trainer_id=325, source="manual")
+    ok, reason = state.queue_rival_team_swap("a", trainer_id=326, source="manual")
     assert not ok and "battle request identity" in reason
     assert state.queued_commands["a"] == []
 
@@ -343,28 +343,28 @@ def test_c510_a_manual_inject_after_a_session_change_is_refused_by_the_client_gu
     state = _state_with_rr_adapter()
     _cache_partner_blob(state, "b", count=1)
     first = _replace_cmds(state.handle_event("a", {"event": "trainer_battle_start",
-                                                  "trainer_id": 325,
+                                                  "trainer_id": 326,
                                                   "session": SESSION_A, "battle_id": 7}))
     # a restarted client announces a NEW session; the old command keeps its own identity
     second = _replace_cmds(state.handle_event("a", {"event": "trainer_battle_start",
-                                                   "trainer_id": 325,
+                                                   "trainer_id": 326,
                                                    "session": SESSION_B, "battle_id": 1}))
     queued = first + second
     assert (queued[0]["session"], queued[0]["battle_id"]) == (SESSION_A, 7)
     assert (queued[1]["session"], queued[1]["battle_id"]) == (SESSION_B, 1)
-    assert state.latest_battle_requests["a"] == (SESSION_B, 1, 325)
+    assert state.latest_battle_requests["a"] == (SESSION_B, 1, 326)
 
 
 def test_c510_an_already_queued_command_is_never_retagged():
     state = _state_with_rr_adapter()
     _cache_partner_blob(state, "b", count=1)
-    state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325,
+    state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326,
                              "session": SESSION_A, "battle_id": 3})
     before = _replace_cmds(state.handle_event("a", {"event": "trainer_battle_start",
-                                                   "trainer_id": 325,
+                                                   "trainer_id": 326,
                                                    "session": SESSION_A, "battle_id": 3}))
     after = _replace_cmds(state.handle_event("a", {"event": "trainer_battle_start",
-                                                  "trainer_id": 325,
+                                                  "trainer_id": 326,
                                                   "session": SESSION_B, "battle_id": 9}))
     assert len(before) == len(after) == 1
     assert before[0] != after[0]
@@ -376,9 +376,9 @@ def test_c510b_auto_never_inherits_a_stored_identity():
     triggered it; and a legacy announcement (no identity at all) CLEARS the stored one."""
     state = _state_with_rr_adapter()
     _cache_partner_blob(state, "b", count=1)
-    state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325,
+    state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326,
                              "session": SESSION_A, "battle_id": 4})
-    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325})
+    cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326})
     (cmd,) = _replace_cmds(cmds)
     assert "session" not in cmd and "battle_id" not in cmd
     assert "a" not in state.latest_battle_requests, "a legacy announcement clears"
@@ -387,14 +387,14 @@ def test_c510b_auto_never_inherits_a_stored_identity():
 def test_c510b_a_malformed_announcement_is_rejected_and_never_treated_as_legacy():
     state = _state_with_rr_adapter()
     _cache_partner_blob(state, "b", count=1)
-    state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325,
+    state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326,
                              "session": SESSION_A, "battle_id": 4})
     for bad in ({"session": "zz", "battle_id": 4}, {"session": SESSION_A, "battle_id": True},
                 {"session": SESSION_A, "battle_id": 0}, {"session": "A" * 17, "battle_id": 4}):
-        cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325, **bad})
+        cmds = state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326, **bad})
         (cmd,) = _replace_cmds(cmds)
         assert "session" not in cmd and "battle_id" not in cmd, bad
-        assert state.latest_battle_requests["a"] == (SESSION_A, 4, 325), bad
+        assert state.latest_battle_requests["a"] == (SESSION_A, 4, 326), bad
 
 
 def _lock_slot(state: SoulLinkState, player: str, ot: str) -> None:
@@ -434,12 +434,12 @@ def test_c511c_an_accepted_legacy_hello_clears_the_stored_identity():
     """MAJOR 7: a client that stops speaking the protocol must not leave a stale pair behind."""
     state = _state_with_rr_adapter()
     _cache_partner_blob(state, "b", count=1)
-    state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325,
+    state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326,
                              "session": SESSION_A, "battle_id": 7})
-    assert state.latest_battle_requests["a"] == (SESSION_A, 7, 325)
+    assert state.latest_battle_requests["a"] == (SESSION_A, 7, 326)
     state.handle_event("a", {"event": "hello", "party": []})          # accepted, legacy
     assert "a" not in state.latest_battle_requests
-    ok, reason = state.queue_rival_team_swap("a", trainer_id=325, source="manual")
+    ok, reason = state.queue_rival_team_swap("a", trainer_id=326, source="manual")
     assert ok and reason == "queued"
     cmd = state.queued_commands["a"][-1]
     assert "session" not in cmd and "battle_id" not in cmd
@@ -450,15 +450,15 @@ def test_c511c_an_explicitly_invalid_pair_is_rejected_not_inherited():
     invalid one is refused outright."""
     state = _state_with_rr_adapter()
     _cache_partner_blob(state, "b", count=1)
-    state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 325,
+    state.handle_event("a", {"event": "trainer_battle_start", "trainer_id": 326,
                              "session": SESSION_A, "battle_id": 7})
     for bad in ({"session": "zz", "battle_id": 7}, {"session": SESSION_A, "battle_id": True},
                 {"session": SESSION_A, "battle_id": 0}, {"session": SESSION_A, "battle_id": 2 ** 32}):
-        ok, reason = state.queue_rival_team_swap("a", trainer_id=325, source="manual", **bad)
+        ok, reason = state.queue_rival_team_swap("a", trainer_id=326, source="manual", **bad)
         assert not ok and "invalid battle identity" in reason, bad
     assert state.queued_commands["a"] == []
     # both fields omitted (None is the parameter default) is the INHERIT case, not an invalid one
-    ok, reason = state.queue_rival_team_swap("a", trainer_id=325, source="manual",
+    ok, reason = state.queue_rival_team_swap("a", trainer_id=326, source="manual",
                                              session=None, battle_id=None)
     assert ok, reason
     cmd = state.queued_commands["a"][-1]
