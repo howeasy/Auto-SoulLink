@@ -20,6 +20,11 @@ import gen_gen3_write_checkpoint as G  # noqa: E402
 SYM = "pokeemerald.sym"
 LO, HI = 0x08057458, 0x0805D116
 NEXT_OBJ = 0x0805D118
+# battle.handoff.head rows -> (.sym symbol, offset inside that symbol).  The pack's profile carries
+# the numbers; this is the independent proof that they are the Emerald .sym's, not literals.
+HEAD_ROWS = {"perish_status": ("gStatuses3", 0x00),
+             "perish_timer": ("gDisableStructs", 0x0F),      # DisableStruct.perishSongTimer:4
+             "no_op_action": ("gChosenActionByBattler", 0x00)}
 
 
 def rom_or_skip(pack: str = "gen3_emerald", title: str = "emerald") -> None:
@@ -54,6 +59,12 @@ def sym_rows() -> list[tuple[int, int, str]]:
     return rows
 
 
+def span_gaps(names: set[str]) -> list[int]:
+    """The .sym padding between consecutive functions of the player-controller run, in address order."""
+    rows = sorted((a, s) for a, s, n in sym_rows() if n in names and LO <= a < HI)
+    return [nxt - (a + size) for (a, size), (nxt, _) in zip(rows, rows[1:], strict=False)]
+
+
 # ── 1. the .sym-derived player-controller span ──────────────────────────────────────────────
 
 def test_player_span_is_the_c_files_functions_contiguous() -> None:
@@ -64,6 +75,10 @@ def test_player_span_is_the_c_files_functions_contiguous() -> None:
     assert G.player_span(SYM) == (LO, HI)
     inside = {n for a, s, n in sym_rows() if LO <= a < NEXT_OBJ and n != ".gcc2_compiled."}
     assert inside == set(names)                                   # set equality, no foreign symbol
+    gaps = span_gaps(set(names))
+    assert len(gaps) == len(names) - 1 == 122
+    assert all(0 <= g < 4 for g in gaps)                            # the generator's < 4 rule, re-proved
+    assert max(gaps) == 2 and gaps.count(2) == 13                    # 13 alignment gaps of 2, rest 0
 
 
 def test_player_span_bounds_are_independent_facts() -> None:
@@ -175,6 +190,20 @@ def test_allowed_tasks_are_the_emerald_field_set() -> None:
     assert "pokeemerald c65e93f2" in tasks["source"]
 
 
+def test_every_task_set_up_field_tasks_creates_is_on_the_allow_list() -> None:
+    """A new field task must fail here: SetUpFieldTasks' CreateTask targets are the allow-list floor."""
+    lines = pret_file("src/field_tasks.c")
+    start = next(i for i, ln in enumerate(lines) if ln.startswith("void SetUpFieldTasks("))
+    body = []
+    for line in lines[start + 1:]:
+        if line == "}":                                             # column-0 brace ends the function
+            break
+        body.append(line)
+    created = {m.group(1) for m in (re.search(r"CreateTask\(\s*(\w+)", ln) for ln in body) if m}
+    assert created == {"Task_RunPerStepCallback", "Task_MuddySlope", "Task_RunTimeBasedEvents"}
+    assert created <= set(emitted()["tasks"]["allowed_overworld_tasks"])
+
+
 # ── 5. every resolved symbol is the pokeemerald.sym value ───────────────────────────────────
 
 def test_resolved_addresses() -> None:
@@ -205,6 +234,10 @@ def test_every_symbol_address_equals_the_sym() -> None:
         assert syms[c["symbol"]][0] == c["address"], c
         if "expect_symbol" in c:
             assert syms[c["expect_symbol"]][0] | 1 == c["expect"]
+    head = {row["name"]: row for row in e["battle"]["handoff"]["head"]}
+    for name, (symbol, off) in HEAD_ROWS.items():
+        assert syms[symbol][0] + off == head[name]["address"], head[name]
+        assert off < syms[symbol][1], head[name]                    # the row lands inside that symbol
 
 
 def test_anchor_bytes_are_in_the_rom() -> None:
@@ -223,6 +256,7 @@ def test_anchor_bytes_are_in_the_rom() -> None:
     ("include/main.h", r"/\*0x439\*/ u8 inBattle:1;"),
     ("include/pokemon.h", r"/\*0x2C\*/ u16 maxHP;"),
     ("include/constants/battle.h", r"#define BATTLE_TYPE_LINK\s+\(1 << 1\)"),
+    ("src/battle_main.c", r"^\s*STATE_TURN_START_RECORD,\s*$"),   # enum 0, so the next is 1
     ("include/constants/battle.h", r"#define STATUS3_PERISH_SONG\s+\(1 << 5\)"),
     ("include/battle.h", r"#define B_ACTION_NOTHING_FAINTED\s+13"),
     ("include/task.h", r"#define NUM_TASKS 16"),
@@ -230,6 +264,33 @@ def test_anchor_bytes_are_in_the_rom() -> None:
 ])
 def test_offsets_are_the_pret_emerald_headers(rel: str, pattern: str) -> None:
     assert any(re.search(pattern, line) for line in pret_file(rel)), (rel, pattern)
+
+
+def test_battle_comm_0_is_the_second_battle_state_enum_value() -> None:
+    lines = pret_file("src/battle_main.c")
+    i = next(i for i, ln in enumerate(lines) if ln.strip() == "STATE_BEFORE_ACTION_CHOSEN,")
+    start = max((j for j in range(i) if lines[j].strip() == "enum"), default=-1)
+    assert start >= 0
+    body = []
+    for line in lines[start + 1:]:
+        text = line.strip()
+        if text == "};":
+            break
+        if text not in ("", "{"):
+            body.append(text.rstrip(","))
+    assert body[:2] == ["STATE_TURN_START_RECORD", "STATE_BEFORE_ACTION_CHOSEN"]
+    assert body.index("STATE_BEFORE_ACTION_CHOSEN") == 1           # the value battle_comm_0 demands
+    clause = next(c for c in emitted()["battle"]["clauses"] if c["name"] == "battle_comm_0")
+    assert clause["expect"] == 1
+
+
+def test_in_battle_is_bit_1_of_byte_0x439() -> None:
+    bits = [m.group(1) for m in (re.search(r"/\*0x439\*/ u8 (\w+):1;", line)
+                                 for line in pret_file("include/main.h")) if m]
+    assert bits == ["oamLoadDisabled", "inBattle", "anyLinkBattlerHasFrontierPass"]
+    in_battle = emitted()["predicates"]["in_battle"]
+    assert in_battle["offset"] == 0x439
+    assert in_battle["mask"] == 1 << bits.index("inBattle") == 0x02
 
 
 def test_emitted_offsets_and_handoff_head() -> None:

@@ -157,11 +157,24 @@ Emerald frame-end census exists yet, so the clause carries `"census": "PENDING E
   field frame would refuse on "unknown active task". Its reach is write-free for party, storage
   and save (§4). Revert by removing `EMERALD_ONLY_TASKS` if EG1 disagrees.
 - **F2: Emerald's `Task_RunTimeBasedEvents` writes the party.** It is not FR's no-op.
-  `DoTimeBasedEvents` → `UpdatePerDay` → `UpdatePartyPokerusTime` (`src/clock.c:26-56`) rewrites
-  party Pokérus through `SetMonData` once per RTC day rollover. The write is synchronous inside one
-  frame, so it is never in progress at a parked frame end, and the checkpoint's model still holds.
-  However, a host party write can be followed by a game-side Pokérus update on the next day
-  rollover. E2 should record that this is benign, or refuse it on a day-rollover frame.
+  `Task_RunTimeBasedEvents` → `RunTimeBasedEvents` (`src/field_tasks.c:150-177`) calls
+  `DoTimeBasedEvents` once per `gMain.vblankCounter1 & (1 << 12)` window, and only when
+  `!ArePlayerFieldControlsLocked()`. `DoTimeBasedEvents` (`src/clock.c:26-34`) reaches two writers:
+  - `UpdatePerDay` (`src/clock.c:36-57`), once per RTC day rollover (`VAR_DAYS` moves, the
+    `*days <= localTime->days` guard): daily flags cleared, Dewford trends, TV shows, weather,
+    **party Pokérus** (`UpdatePartyPokerusTime`, the only party write, through `SetMonData`),
+    Mirage RNG, Prof. Birch's state, both Frontier NPCs, the shoal item flag, the lottery number,
+    and `VAR_DAYS` itself.
+  - `UpdatePerMinute` (`src/clock.c:59-74`), on any whole-minute change: `BerryTreeTimeUpdate` and
+    `gSaveBlock2Ptr->lastBerryTreeUpdate`.
+
+  All of it is synchronous and in-RAM inside that one task step: `clock.c` issues no save or flash
+  call of its own (its only `Save*` tokens are `gSaveBlock2Ptr`), and the game flushes the save
+  block later, on its own path. The parked frame-end checkpoint therefore never observes one of
+  these writes in progress, and the checkpoint's model still holds. What a static read cannot settle
+  is the sequencing: a host party write can be followed by a game-side Pokérus update on the next
+  day rollover. **E2 decides whether a day-rollover frame needs a guard**, and the signal for that
+  decision is `VAR_DAYS` changing, not a CPU census.
 - **F3: the Union Room background reach is carried by structure.** The Emerald task bodies name no
   party or save routine, and every step out creates an off-list task (`Task_PlayerExchange`/`Chat`,
   `link_rfu_2.c:540-560`). The full callee re-audit that FR's C4-UR did is †UNVERIFIED for
