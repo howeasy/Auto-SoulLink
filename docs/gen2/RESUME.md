@@ -488,3 +488,9 @@ Update (2026-09-25 ~01:50Z): GEN 2 EVIDENCE COMPLETE.
 - Running now: the Gen 1/pureRGB gate, `SLINK_PURERGB_ROMS=... python tools/verify_gen1_release.py`, log C:/Users/howar/AppData/Local/Temp/gen1-verify.log.
 - When it's green: STOP and check in with the owner (G4 signature, then --promote-overlays), plus the 4 owner decisions above.
 - The FINAL-SWEEP worker is done; every lane and monitor is torn down.
+
+Update (~02:55Z): the Gen 1 gate (log Temp/gen1-verify.log) is still running.
+- 13 lanes passed so far, including live-gates, live-new-gates, inspect-purergb, apex-purergb, live-trade-gates and the overlay lanes.
+- unit FAILED on 10 stale post-sweep test assumptions. 9 are fixed in dd783f2e (shipped engine_sites proves the same sites; the inspect_run attestation is a gate receipt). The 10th is still unidentified: re-run tests/unit AFTER the gate, never alongside it.
+- There are also 2 unexplained skips in tests/unit/test_upr_gen1_ini.py: "fork source not present", and "the .cache/purergb-overlay/pokered.gbc ROM is not the admitted build". That's an environment question.
+- duo-pairs FAILED: Gen 1 pc_ops_new, "durable pair did not stay ALIVE ... cause release". GEN1-PCOPS (a05ac76dc6fa18aec) is diagnosing it. Suspects: O-35 release-kills-partner, BOX-MEMORIAL-2 and a4f8e6d6. No live runs until the gate ends.

@@ -177,6 +177,7 @@ of four fixed `writetext` blocks (`patch/gen2/src/phone.asm:113-141`). The calle
   - Also `lua/hud.lua` `66981144` and `a9bdce38`.
   - Merge or cherry-pick ONCE, together with BOARD-AMBIGUOUS (`95f2c629`) and the other CODE_SCOPE cards, then re-sweep once.
   - Our side: the `server/adapters/gen2_crystal.py` sprite `<img>` needs `alt=""` (the Gen 1 adapter already sets it).
+  - **Refresh the shipped receipt copies** `data/games/gen2_{crystal,gold,silver}/receipts/*.engine_sites.json` and `*.write_window.json` from the CODE_DIGEST-stamped evidence copies in `tests/fixtures/gen2/receipts/`. They prove the same sites (27/27, checked). They're production data inside the digest, so the refresh has to ride the post-RC re-sweep; `dd783f2e` relaxed the byte-equality test until then. Longer term, consider moving shipped receipts out of CODE_SCOPE, or stamping their digest over the code only, so re-proving doesn't move the digest it binds.
 - **CLAUSE-BENCH-LIMITS.** OMP `cx-43b52a71` F2/F3/F5 were kept by design: the oracle cross-references the U2 receipt, and the full qualification lives in the release verifier's write-window lane; `PC == 0x0040` is a stricter harness invariant. Revisit only if that lane's coverage changes.
 - **BOARD-AMBIGUOUS: BUILT, held for the freeze.** The UI lane's commit `95f2c629` is on branch `claude/ui-board-ambiguous` (worktree `Temp/uiamb`), cut from `0800da84`. Design from OMP `cx-8a2f08c6`:
   - add a top-level `ambiguous_keys` to the status and to `status_payload.py`;
