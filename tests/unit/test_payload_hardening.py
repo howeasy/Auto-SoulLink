@@ -41,3 +41,11 @@ def test_stat_stages_row_ignores_a_non_list(stages):
 def test_stat_stages_row_still_draws_a_list():
     env = jinja2.Environment(loader=jinja2.FileSystemLoader(TEMPLATES), autoescape=True)
     assert "ATK" in str(env.get_template("_macros.html").module.stat_stages_row([8, 6, 6, 6, 6, 6, 6]))
+
+
+@pytest.mark.parametrize("party", [[5, "x", None], {"0": {}}, 7])
+def test_an_enemy_party_that_is_not_a_list_of_objects_is_dropped(tmp_path, party):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    srv._dispatch("a", {"event": "tick", "in_battle": True, "enemy_party": party})
+    assert srv.battle_state["a"]["enemy_party"] == []
+    srv._build_status_dict()

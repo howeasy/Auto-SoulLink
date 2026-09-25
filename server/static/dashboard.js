@@ -131,7 +131,7 @@ if (window._slinkDashInit) {
     Array.prototype.forEach.call(root.querySelectorAll('.theme-pill'), function(btn) {
       var on = btn.getAttribute('data-theme') === active;
       btn.classList.toggle('active', on);
-      btn.setAttribute('aria-checked', on ? 'true' : 'false');
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
   }
 
@@ -145,9 +145,9 @@ if (window._slinkDashInit) {
       +   '<span class="theme-name"></span>'
       +   '<span class="theme-caret">▾</span>'
       + '</summary>'
-      + '<div class="theme-pills" role="radiogroup" aria-label="Theme">';
+      + '<div class="theme-pills" role="group" aria-label="Theme">';
     THEMES.forEach(function(t) {
-      html += '<button type="button" class="theme-pill" role="radio" data-theme="' + t.slug + '" title="' + t.label + '">'
+      html += '<button type="button" class="theme-pill" data-theme="' + t.slug + '" title="' + t.label + '">'
             +   '<span class="theme-swatch" style="background:' + t.swatch + '"></span>'
             +   '<span class="theme-label">' + t.label + '</span>'
             + '</button>';

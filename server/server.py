@@ -1671,6 +1671,10 @@ class SLinkServer:
 
     def _dispatch(self, player_id: str, msg: dict) -> list:
         event = msg.get("event", "unknown")
+        # enemy_party is client JSON read by every battle view: keep only a list of objects.
+        if "enemy_party" in msg:
+            ep = msg["enemy_party"]
+            msg["enemy_party"] = [e for e in ep if isinstance(e, dict)] if isinstance(ep, list) else []
         # Snapshot area state before the event so we can detect outcome transitions.
         _pre_area_state = self.state.area_states.get(msg.get("area_id", ""))
         _pre_battle = self.battle_state[player_id]["in_battle"]
