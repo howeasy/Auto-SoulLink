@@ -513,3 +513,13 @@ Update (~06:00Z): the Gen 1 gate has converged. Every lane PASSED except unit's 
 - Production item found: ADMISSION-MIXED-KINDS-VERDICT (post-RC).
 - The Gen 1 gate rewrote 4 sfx receipts and dropped their provenance header. The committed copies are restored; card GEN1-GATE-REWRITES-RECEIPTS.
 - Final confirmation is running: duo-pairs + duo-pairs-purergb at HEAD (log Temp/gen1-verify4.log). Then STOP and check in with the owner.
+
+## MAJOR MILESTONE REACHED (2026-09-25 ~07:00Z): stopped for the owner check-in
+
+- Gen 2, at HEAD 833bb06a (production digest ccd62421, unchanged since the freeze df04e065): every receipt lane PASSES. release-evidence is RED on exactly 4 owner items: crystal/gold/silver_overlay BUILT (not ADMITTED) and the G4 signature (PLAN §6.1).
+- Gen 1/pureRGB: every lane PASSES; duo-pairs 20/20 and duo-pairs-purergb 37/37 at HEAD. The one exception is unit (10300 pass, 0 fail), which fails on a single unexplained skip: the UPR fork source is absent (GEN1-UPR-FORK-SOURCE, environment).
+- Waiting on the OWNER:
+  1. The G4 signature, then `--promote-overlays`.
+  2. Restore the UPR fork source checkout (.cache/slink-upr/src).
+  3. The decisions in POST_RC_CARDS: the logo art source and 1 vs 2 rows; the PHONE-NAMES name policy and wording; KEY-SCOPE-5 hold vs reject; whether the Gen 2 release waits for KEY-SCOPE-5.
+- Nothing is pushed or merged. Post-RC work is batched in docs/gen2/POST_RC_CARDS.md, including the UI lane's BOARD-AMBIGUOUS 95f2c629 and the master d3486463 merge, all held for the freeze.
