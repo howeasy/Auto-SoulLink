@@ -364,10 +364,11 @@ on that basis — it is an internal gate request, not a release request. **S**
 
 - **Master merged into the Gen 3 branch**: local master `96ae536d`, via scratch branch
   `claude/gen3-master-sync` (`597c52d2`), merged as `e33b03b1` (G4-MASTER-SYNC) — 9 conflicts
-  resolved by intent. The merge commit's own message records the adversarial pass as **pending,
-  not yet closed**: "OMP REVIEW `cx-cd3f4189` of the resolution pending" (`docs/gen3_resume.md:22`,
-  "If it finds a dropped hunk, the fix needs a new cut."). No later commit in this tree closes that
-  review; this draft does not assert it came back clean. **S**
+  resolved by intent. The merge was independently reviewed and found clean. Two Sonnet reviewers checked every conflicted file
+  against both parents: server.py and gen3_frlge.py across 28 commits, then manager.py, manager.html,
+  make_release.py, REFERENCE.md and lua/gen1/client.lua across 33 commits. Both reported no dropped or
+  garbled hunk (recorded in `docs/gen3_resume.md`, "Merge review"). The OMP attempts (`cx-cd3f4189`,
+  `cx-4334eae0`, `cx-c36d9987`) timed out on the diff size and produced no verdict. **S**
 - **HUD: the GBA screen draws notices in the fceux pixel font too** (`f1cc6038`), and **held
   commands never reach the HUD, console log only, once per hold** (`870e5e5d`, owner: no pending
   counter) — full details in `docs/gen3/G4_request_draft.md` (Other changes). **S**

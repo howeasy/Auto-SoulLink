@@ -19,7 +19,7 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
   - 9 conflicts were resolved by intent; the full list is in the merge message.
   - test_protocol_citations was repaired, and one drift was re-anchored in c0f6101b.
   - Full unit suite: 7074 passed. test_gen1_trade_patch fails only in the worktree, which has no .cache/pret/pokered; lanes provision it.
-  - OMP REVIEW cx-cd3f4189 of the resolution is pending. If it finds a dropped hunk, the fix needs a new cut.
+  - Merge resolution reviewed CLEAN by 2 Sonnet reviewers (no dropped hunks). The OMP cx-cd3f4189/cx-4334eae0/cx-c36d9987 runs timed out.
   - The scratch dir C:/slink-wt/g3sync is unregistered but was locked by a process; delete it once free.
 - **RR whiteout:** the START-menu control now requires sStartMenuWindowId (0x0203ABE0, verified byte-identical on both RR ROMs) plus field_controls_locked. RR's marker is `start_menu`, and e2e_duo queues the probe by the per-title marker. PASS at fca70bb2 (01e50258, fca70bb2, a30e15b3).
 - **Rival Team Swap:** it was off by one. It matched the trainer BEFORE each rival: gTrainers[325] Daisuke, [738] Lance, per the RR ROM. Fixed with `tid + 1` in e729abdb; OMP cx-5e891395 found nothing. The UI lane confirmed the calc already uses runtime ids.

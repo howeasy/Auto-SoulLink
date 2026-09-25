@@ -202,10 +202,11 @@ blobs and refreshing the index; the lane was tracked-clean at `a2985d5a` before 
   `claude/gen3-master-sync` (`597c52d2`), merged as `e33b03b1` (G4-MASTER-SYNC) — 9 conflicts
   resolved by intent (`hud.lua`, `server.py`, the Manager's name-limit/game-refusal order,
   `manager.html` radio a11y, `make_release`'s `BIZHAWK_MIN`); `test_protocol_citations` repaired
-  (289 citations re-anchored). The merge commit's own message records the adversarial pass as
-  **pending, not yet closed**: "OMP REVIEW `cx-cd3f4189` of the resolution pending"
-  (`docs/gen3_resume.md:22`, "pending. If it finds a dropped hunk, the fix needs a new cut."). No
-  later commit in this tree closes that review — this draft does not assert it came back clean. **S**
+  (289 citations re-anchored). The merge was independently reviewed and found clean. Two Sonnet reviewers checked every conflicted file
+  against both parents: server.py and gen3_frlge.py across 28 commits, then manager.py, manager.html,
+  make_release.py, REFERENCE.md and lua/gen1/client.lua across 33 commits. Both reported no dropped or
+  garbled hunk (recorded in `docs/gen3_resume.md`, "Merge review"). The OMP attempts (`cx-cd3f4189`,
+  `cx-4334eae0`, `cx-c36d9987`) timed out on the diff size and produced no verdict. **S**
 - **HUD: the GBA screen draws notices in the fceux pixel font too** (`f1cc6038`) — Gen 3 now
   matches the Gen 1/2 HUD font instead of BizHawk's default. **S**
 - **HUD: held commands never reach the HUD** (`870e5e5d`) — console log only, once per hold; owner
