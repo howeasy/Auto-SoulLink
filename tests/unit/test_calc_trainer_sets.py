@@ -387,104 +387,160 @@ def _pret_frlg_moves_multiset(path: str) -> Counter:
 # XOR the vendor side of the diff (see _assert_allowed), so allowed_count is just "how many of
 # this exact mismatch are OK" regardless of which side reported it.
 #
-# This pass hand-verified several concrete misses against pret and fixed our copy where the
-# vendor was simply wrong (see the header comments in calc/src/js/data/sets/games/Crystal.js
-# for the Cooltrainer Cybil DV fix and the Younger Mikey / Boarder Ronald level fixes). The
-# residual below is the same *shape* of bug -- a vendored level that's off by a few from a
-# pret line for a same-route/same-class mon (RB/Yellow's pret_only and vendor_only lists pair
-# up almost one-for-one by species: onix 19/20/21, nidoran-f 14/16/18/19, slowpoke 23/25,
-# machop 20/28, etc.) -- but with ~40 keys per game, tracing each to its exact parties.asm line
-# the way Cybil/Mikey/Ronald were traced wasn't done for all of them individually.
-_LIKELY_LEVEL_TRANSCRIPTION = "vendor level differs from pret's parties.asm by a few for this species/route; same class of bug as the Crystal fixes made in this pass, not individually re-traced given volume"
+# This pass hand-verified every RB/Yellow entry against pret's parties.asm and fixed our copy
+# wherever the vendor was simply wrong (see the header comments in
+# calc/src/js/data/sets/games/RedBlue.js and Yellow.js, and Crystal.js for the Cooltrainer
+# Cybil DV fix and the Younger Mikey / Boarder Ronald level fixes). Every remaining RB/Yellow
+# allowlist entry below is traced to its exact parties.asm line and is one of two real, not
+# individually-fixable shapes: a whole trainer pret has that the vendor dump omits entirely, or
+# one pret data row that pret's own comment says is reused at two map locations (so the vendor
+# legitimately records it as two encounters against pret's one data row).
+
+_RB_ROCKET_SILPH_8F_MISSING = (
+    "pret Rocket at Silph Co. 8F (pokered parties.asm line 596: RATICATE, ZUBAT, GOLBAT, "
+    "RATTATA @26) has no vendored counterpart at all -- whole trainer missing from the vendor "
+    "dump, not a level slip"
+)
+_RB_JRTRAINERF_R13_MISSING = (
+    "pret JrTrainerF at Route 13 (pokered parties.asm line 189: GOLDEEN, POLIWAG, HORSEA @28) "
+    "has no vendored counterpart at all -- whole trainer missing from the vendor dump"
+)
+_RB_FISHER_R21_MISSING = (
+    "pret Fisher at Route 21 (pokered parties.asm line 330: SEAKING, GOLDEEN @33) has no "
+    "vendored counterpart at all -- whole trainer missing from the vendor dump"
+)
+_RB_GAMBLER_R11_MISSING = (
+    "pret Gambler at Route 11 (pokered parties.asm line 374: GROWLITHE, VULPIX @18) has no "
+    "vendored counterpart at all -- whole trainer missing from the vendor dump"
+)
+_RB_FIGHTING_DOJO_MISSING = (
+    "pret Blackbelt at the Fighting Dojo (pokered parties.asm line 475: HITMONLEE, HITMONCHAN "
+    "@37) has no vendored counterpart at all -- whole trainer missing from the vendor dump"
+)
+_RB_CUEBALL_R17_MISSING = (
+    "pret CueBall at Route 17 (pokered parties.asm line 365: PRIMEAPE, MACHOKE @29) has no "
+    "vendored counterpart at all -- whole trainer missing from the vendor dump"
+)
+_RB_BIKER_R17_GLITCH_MISSING = (
+    "pret Biker at Route 17, inside the MissingNo-glitch trainer block (pokered parties.asm "
+    "line 283: WEEZING, MUK @29) has no vendored counterpart at all -- whole trainer missing "
+    "from the vendor dump"
+)
+_RB_SCIENTIST_SILPH_8F_MISSING = (
+    "pret Scientist at Silph Co. 8F (pokered parties.asm line 526: GRIMER, ELECTRODE @29) has "
+    "no vendored counterpart at all; this was masked until this pass fixed the vendor's "
+    "'Scientist 6 | Silph Co 7F' entry, which had been wrongly filed as Grimer instead of Muk "
+    "(see RedBlue.js header) -- fixing that species swap unmasked this separate, real omission"
+)
+_RB_R24_R25_SHARED_BLOCK = (
+    "pret JrTrainerM 'Route 24/Route 25' (pokered parties.asm line 152: RATTATA, EKANS @14) is "
+    "one data row that pret's own comment says is reused at two map locations; the vendor "
+    "correctly models it as two separate encounters, so it legitimately outnumbers pret's "
+    "single data row by one"
+)
+_RB_R9_ROCKTUNNEL_SHARED_BLOCK = (
+    "pret Hiker 'Route 9/Rock Tunnel B1F' (pokered parties.asm line 253: MACHOP, ONIX @20) is "
+    "one data row that pret's own comment says is reused at two map locations; the vendor "
+    "correctly models it as two separate encounters, so it legitimately outnumbers pret's "
+    "single data row by one"
+)
+_RB_SSANNE_VERMILION_SHARED_BLOCK = (
+    "pret Gentleman 'SS Anne 2F Rooms/Vermilion Gym' (pokered parties.asm line 669: PIKACHU "
+    "@23) is one data row that pret's own comment says is reused at two map locations; the "
+    "vendor correctly models it as two separate encounters, so it legitimately outnumbers "
+    "pret's single data row by one"
+)
 
 REDBLUE_SL_ALLOWLIST = {
-    ('ekans', 14): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('gastly', 23): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('golbat', 26): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('goldeen', 28): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('goldeen', 33): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('graveler', 19): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('graveler', 21): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('grimer', 28): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('growlithe', 18): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('haunter', 23): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('hitmonchan', 37): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('hitmonlee', 37): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('horsea', 28): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('koffing', 28): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('machoke', 29): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('machop', 20): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('machop', 28): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('magneton', 28): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('muk', 29): (2, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('nidoranf', 14): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('nidoranf', 16): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('nidoranf', 18): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('nidoranf', 19): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('nidoranm', 18): (2, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('nidoranm', 19): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('nidoranm', 21): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('onix', 19): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('onix', 20): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('onix', 21): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('pidgey', 14): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('pidgey', 16): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('pikachu', 23): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('poliwag', 28): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('primeape', 29): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('raticate', 26): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('rattata', 14): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('rattata', 26): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('seaking', 33): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('slowpoke', 23): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('slowpoke', 25): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('vulpix', 18): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('zubat', 26): (1, _LIKELY_LEVEL_TRANSCRIPTION),
+    ('golbat', 26): (1, _RB_ROCKET_SILPH_8F_MISSING),
+    ('raticate', 26): (1, _RB_ROCKET_SILPH_8F_MISSING),
+    ('rattata', 26): (1, _RB_ROCKET_SILPH_8F_MISSING),
+    ('zubat', 26): (1, _RB_ROCKET_SILPH_8F_MISSING),
+    ('goldeen', 28): (1, _RB_JRTRAINERF_R13_MISSING),
+    ('horsea', 28): (1, _RB_JRTRAINERF_R13_MISSING),
+    ('poliwag', 28): (1, _RB_JRTRAINERF_R13_MISSING),
+    ('goldeen', 33): (1, _RB_FISHER_R21_MISSING),
+    ('seaking', 33): (1, _RB_FISHER_R21_MISSING),
+    ('growlithe', 18): (1, _RB_GAMBLER_R11_MISSING),
+    ('vulpix', 18): (1, _RB_GAMBLER_R11_MISSING),
+    ('hitmonchan', 37): (1, _RB_FIGHTING_DOJO_MISSING),
+    ('hitmonlee', 37): (1, _RB_FIGHTING_DOJO_MISSING),
+    ('machoke', 29): (1, _RB_CUEBALL_R17_MISSING),
+    ('primeape', 29): (1, _RB_CUEBALL_R17_MISSING),
+    ('muk', 29): (1, _RB_BIKER_R17_GLITCH_MISSING),
+    ('grimer', 29): (1, _RB_SCIENTIST_SILPH_8F_MISSING),
+    ('ekans', 14): (1, _RB_R24_R25_SHARED_BLOCK),
+    ('rattata', 14): (1, _RB_R24_R25_SHARED_BLOCK),
+    ('machop', 20): (1, _RB_R9_ROCKTUNNEL_SHARED_BLOCK),
+    ('onix', 20): (1, _RB_R9_ROCKTUNNEL_SHARED_BLOCK),
+    ('pikachu', 23): (1, _RB_SSANNE_VERMILION_SHARED_BLOCK),
 }
 
+_YW_ROCKET_SILPH_8F_MISSING = (
+    "pret Rocket at Silph Co. 8F (pokeyellow parties.asm line 596: RATICATE, ZUBAT, GOLBAT, "
+    "RATTATA @26) has no vendored counterpart at all -- whole trainer missing from the vendor "
+    "dump, not a level slip"
+)
+_YW_FISHER_R21_MISSING = (
+    "pret Fisher at Route 21 (pokeyellow parties.asm line 334: SEAKING, GOLDEEN @33) has no "
+    "vendored counterpart at all -- whole trainer missing from the vendor dump"
+)
+_YW_GAMBLER_R11_MISSING = (
+    "pret Gambler at Route 11 (pokeyellow parties.asm line 378: GROWLITHE, VULPIX @18) has no "
+    "vendored counterpart at all -- whole trainer missing from the vendor dump"
+)
+_YW_CUEBALL_R17_MISSING = (
+    "pret CueBall at Route 17 (pokeyellow parties.asm line 369: PRIMEAPE, MACHOKE @29) has no "
+    "vendored counterpart at all -- whole trainer missing from the vendor dump"
+)
+_YW_BIKER_R17_MISSING = (
+    "pret Biker at Route 17 (pokeyellow parties.asm line 287: WEEZING, MUK @29) has no "
+    "vendored counterpart at all -- whole trainer missing from the vendor dump"
+)
+_YW_SCIENTIST_SILPH_8F_MISSING = (
+    "pret Scientist at Silph Co. 8F (pokeyellow parties.asm line 525: GRIMER, ELECTRODE @29) "
+    "has no vendored counterpart at all; this was masked until this pass fixed the vendor's "
+    "'Scientist 6 | Silph Co 7F' entry, which had been wrongly filed as Grimer instead of Muk "
+    "(see Yellow.js header) -- fixing that species swap unmasked this separate, real omission"
+)
+_YW_R24_R25_SHARED_BLOCK = (
+    "pret JrTrainerM 'Route 24/Route 25' (pokeyellow parties.asm line 158: RATTATA, EKANS @14) "
+    "is one data row that pret's own comment says is reused at two map locations; the vendor "
+    "correctly models it as two separate encounters, so it legitimately outnumbers pret's "
+    "single data row by one"
+)
+_YW_R9_ROCKTUNNEL_SHARED_BLOCK = (
+    "pret Hiker 'Route 9/Rock Tunnel B1F' (pokeyellow parties.asm line 265: MACHOP, ONIX @20) "
+    "is one data row that pret's own comment says is reused at two map locations; the vendor "
+    "correctly models it as two separate encounters, so it legitimately outnumbers pret's "
+    "single data row by one"
+)
+_YW_SSANNE_VERMILION_SHARED_BLOCK = (
+    "pret Gentleman 'SS Anne 2F Rooms/Vermilion Gym' (pokeyellow parties.asm line 680: "
+    "VOLTORB, MAGNEMITE @22) is one data row that pret's own comment says is reused at two "
+    "map locations; the vendor correctly models it as two separate encounters, so it "
+    "legitimately outnumbers pret's single data row by one"
+)
+
 YELLOW_SL_ALLOWLIST = {
-    ('ekans', 14): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('gastly', 23): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('golbat', 26): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('goldeen', 33): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('graveler', 19): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('graveler', 21): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('grimer', 28): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('growlithe', 18): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('haunter', 23): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('koffing', 28): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('machoke', 29): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('machop', 20): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('machop', 28): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('magnemite', 22): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('magneton', 28): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('muk', 29): (2, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('nidoranf', 14): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('nidoranf', 16): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('nidoranf', 18): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('nidoranf', 19): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('nidoranm', 18): (2, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('nidoranm', 19): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('nidoranm', 21): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('onix', 19): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('onix', 20): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('onix', 21): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('pidgey', 14): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('pidgey', 16): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('primeape', 29): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('raticate', 26): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('rattata', 14): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('rattata', 26): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('seaking', 33): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('slowpoke', 23): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('slowpoke', 25): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('tangela', 30): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('tangela', 32): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('voltorb', 22): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('vulpix', 18): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('weepinbell', 30): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('weepinbell', 32): (1, _LIKELY_LEVEL_TRANSCRIPTION),
-    ('zubat', 26): (1, _LIKELY_LEVEL_TRANSCRIPTION),
+    ('golbat', 26): (1, _YW_ROCKET_SILPH_8F_MISSING),
+    ('raticate', 26): (1, _YW_ROCKET_SILPH_8F_MISSING),
+    ('rattata', 26): (1, _YW_ROCKET_SILPH_8F_MISSING),
+    ('zubat', 26): (1, _YW_ROCKET_SILPH_8F_MISSING),
+    ('goldeen', 33): (1, _YW_FISHER_R21_MISSING),
+    ('seaking', 33): (1, _YW_FISHER_R21_MISSING),
+    ('growlithe', 18): (1, _YW_GAMBLER_R11_MISSING),
+    ('vulpix', 18): (1, _YW_GAMBLER_R11_MISSING),
+    ('machoke', 29): (1, _YW_CUEBALL_R17_MISSING),
+    ('primeape', 29): (1, _YW_CUEBALL_R17_MISSING),
+    ('muk', 29): (1, _YW_BIKER_R17_MISSING),
+    ('grimer', 29): (1, _YW_SCIENTIST_SILPH_8F_MISSING),
+    ('ekans', 14): (1, _YW_R24_R25_SHARED_BLOCK),
+    ('rattata', 14): (1, _YW_R24_R25_SHARED_BLOCK),
+    ('machop', 20): (1, _YW_R9_ROCKTUNNEL_SHARED_BLOCK),
+    ('onix', 20): (1, _YW_R9_ROCKTUNNEL_SHARED_BLOCK),
+    ('magnemite', 22): (1, _YW_SSANNE_VERMILION_SHARED_BLOCK),
+    ('voltorb', 22): (1, _YW_SSANNE_VERMILION_SHARED_BLOCK),
 }
 
 # Crystal and FRLG both have a "rematch" mechanic (Crystal: Pokégear phone calls; FRLG: Vs

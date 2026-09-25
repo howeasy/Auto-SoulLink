@@ -3,9 +3,22 @@
 // MIT licensed (see upstream repo's LICENSE).
 // Species/level checked against pret's pokeyellow data/trainers/parties.asm, and Elite
 // Four special_moves.asm overlay moves checked for presence, by
-// tests/unit/test_calc_trainer_sets.py. Residual differences (mostly vendor levels off
-// by a few from pret for a handful of trainers) are recorded in that test's
-// YELLOW_SL_ALLOWLIST, not fixed here.
+// tests/unit/test_calc_trainer_sets.py. Residual differences (whole trainers pret has that
+// this vendor dump omits, or one pret data row legitimately reused at two map locations) are
+// recorded in that test's YELLOW_SL_ALLOWLIST with a specific reason each, not fixed here.
+//
+// Fixes made in this pass (trainer, old -> new, pret pokeyellow/data/trainers/parties.asm
+// cite):
+//   - Channeler 8 | Pokemon Tower 5F: Gastly -> Haunter @23 (line 734)
+//   - Hiker 2 | R10 (Graveler + Onix): level 21 -> 19 (line 260)
+//   - Lass 1 | R24 (Nidoran-F + Pidgey): level 14 -> 16 (line 121)
+//   - Youngster | SS Anne 1F (Nidoran-M): level 18 -> 21 (line 74)
+//   - Gentleman 1 | SS Anne 1F (Nidoran-M + Nidoran-F): level 18 -> 19 (line 678)
+//   - PokeManiac 2 | Mt Moon B1F (Slowpoke): level 23 -> 25 (line 223)
+//   - Scientist 6 | Silph Co 7F: Grimer -> Muk @29 (line 523)
+//   - Scientist 7 | Silph Co 9F (mon 2): Grimer -> Koffing @28 (line 527)
+//   - Scientist 7 | Silph Co 9F (mon 3): Machop -> Magneton @28 (line 527)
+//   - Erika | Celadon Gym: Tangela 32 -> 30, Weepinbell 30 -> 32 (line 664)
 var CUSTOMSETDEX_Y = {"Abra":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000000642","level":50,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Flash","No Move","No Move","No Move"]}},
 "Aerodactyl":{"Lance 1 | E4 | Yellow (1) ":{"index":"110000000840","level":60,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Fly","Wing Attack","Swift","Hyper Beam"]}},
 "Alakazam":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000000644","level":50,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Reflect","Recover","Psychic","Psywave"]},
@@ -178,7 +191,6 @@ var CUSTOMSETDEX_Y = {"Abra":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000
 "Channeler 5 | Pokemon Tower 4F | Yellow ":{"index":"110000000345","level":22,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Lick","Confuse Ray","Night Shade","No Move"]},
 "Channeler 6 | Pokemon Tower 4F | Yellow ":{"index":"110000000346","level":24,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Lick","Confuse Ray","Night Shade","No Move"]},
 "Channeler 7 | Pokemon Tower 5F | Yellow ":{"index":"110000000347","level":22,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Lick","Confuse Ray","Night Shade","No Move"]},
-"Channeler 8 | Pokemon Tower 5F | Yellow ":{"index":"110000000348","level":23,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Lick","Confuse Ray","Night Shade","No Move"]},
 "Channeler 9 | Pokemon Tower 5F | Yellow ":{"index":"110000000349","level":24,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Lick","Confuse Ray","Night Shade","No Move"]},
 "Channeler 11 | Pokemon Tower 6F | Yellow (1) ":{"index":"110000000351","level":22,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Lick","Confuse Ray","Night Shade","No Move"]},
 "Channeler 11 | Pokemon Tower 6F | Yellow (2) ":{"index":"110000000352","level":22,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Lick","Confuse Ray","Night Shade","No Move"]},
@@ -239,7 +251,7 @@ var CUSTOMSETDEX_Y = {"Abra":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000
 "Golduck":{"Tamer 1 | VR 2F | Yellow ":{"index":"110000000805","level":44,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Confusion","Scratch","Tail Whip"]}},
 "Graveler":{"Hiker 5 | Mt Moon 1F | Yellow ":{"index":"110000000221","level":21,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Defense Curl","Tackle","Rock Throw","Self-Destruct"]},
 "Hiker 6 | Mt Moon B1F | Yellow (1) ":{"index":"110000000227","level":21,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Defense Curl","Tackle","Rock Throw","Self-Destruct"]},
-"Hiker 2 | R10 | Yellow ":{"index":"110000000245","level":21,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Defense Curl","Tackle","Rock Throw","No Move"]}},
+"Hiker 2 | R10 | Yellow ":{"index":"110000000245","level":19,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Defense Curl","Tackle","Rock Throw","No Move"]}},
 "Grimer":{"Super Nerd 2 | Mt Moon 1F | Yellow ":{"index":"110000000057","level":12,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Pound","No Move","No Move"]},
 "Super Nerd 1 | R8 | Yellow (1) ":{"index":"110000000252","level":22,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Pound","No Move","No Move"]},
 "Super Nerd 1 | R8 | Yellow (2) ":{"index":"110000000254","level":22,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Pound","No Move","No Move"]},
@@ -258,9 +270,7 @@ var CUSTOMSETDEX_Y = {"Abra":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000
 "Biker 5 | R16 | Yellow (3) ":{"index":"110000000473","level":26,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Pound","No Move","No Move"]},
 "Biker 5 | R16 | Yellow (4) ":{"index":"110000000474","level":26,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Pound","No Move","No Move"]},
 "Scientist 2 | Silph Co 2F | Yellow (1) ":{"index":"110000000542","level":26,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Pound","No Move","No Move"]},
-"Scientist 6 | Silph Co 7F | Yellow ":{"index":"110000000585","level":29,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Pound","No Move","No Move"]},
-"Rocket 14 | Siph Co 9F | Yellow ":{"index":"110000000591","level":28,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Pound","No Move","No Move"]},
-"Scientist 7 | Silph Co 9F | Yellow ":{"index":"110000000594","level":28,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Smog","No Move"]}},
+"Rocket 14 | Siph Co 9F | Yellow ":{"index":"110000000591","level":28,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Pound","No Move","No Move"]}},
 "Growlithe":{"Gentleman 2 | SS Anne 1F | Yellow (1) ":{"index":"110000000123","level":18,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Bite","Ember","Roar","No Move"]},
 "Gentleman 2 | SS Anne 1F | Yellow (2) ":{"index":"110000000124","level":18,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Bite","Ember","Roar","No Move"]},
 "Gentleman 4 | SS Anne 2F | Yellow ":{"index":"110000000147","level":17,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Bite","Roar","No Move","No Move"]},
@@ -271,7 +281,8 @@ var CUSTOMSETDEX_Y = {"Abra":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000
 "Burglar 3 | Cinnabar Gym | Yellow ":{"index":"110000000748","level":37,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Ember","Quick Attack","Tail Whip","Roar"]},
 "Super Nerd 4 | Cinnabar Gym | Yellow ":{"index":"110000000749","level":37,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Ember","Quick Attack","Tail Whip","Roar"]}},
 "Gyarados":{"Lance 1 | E4 | Yellow (1) ":{"index":"110000000837","level":58,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Dragon Rage","Leer","Hydro Pump","Hyper Beam"]}},
-"Haunter":{"Channeler 10 | Pokemon Tower 5F | Yellow ":{"index":"110000000350","level":22,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Lick","Confuse Ray","Night Shade","No Move"]},
+"Haunter":{"Channeler 8 | Pokemon Tower 5F | Yellow ":{"index":"110000000348","level":23,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Lick","Confuse Ray","Night Shade","No Move"]},
+"Channeler 10 | Pokemon Tower 5F | Yellow ":{"index":"110000000350","level":22,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Lick","Confuse Ray","Night Shade","No Move"]},
 "Channeler SW | Saffron Gym | Yellow (1) ":{"index":"110000000637","level":33,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Lick","Confuse Ray","Hypnosis","Night Shade"]},
 "Channeler W | Saffron Gym | Yellow ":{"index":"110000000638","level":38,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Dream Eater","Confuse Ray","Hypnosis","Night Shade"]},
 "Channeler N | Saffron Gym | Yellow ":{"index":"110000000640","level":34,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Lick","Confuse Ray","Hypnosis","Night Shade"]},
@@ -334,7 +345,8 @@ var CUSTOMSETDEX_Y = {"Abra":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000
 "Kakuna":{"Bug Catcher 2 | R3 | Yellow ":{"index":"110000000025","level":9,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Harden","No Move","No Move","No Move"]},
 "Bug Catcher 1 | Mt Moon 1F | Yellow ":{"index":"110000000035","level":11,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Harden","No Move","No Move","No Move"]}},
 "Kingler":{"Cooltrainer 5 | VR 3F | Yellow ":{"index":"110000000816","level":43,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Guillotine","Crabhammer","Stomp","Vise Grip"]}},
-"Koffing":{"Super Nerd 2 | Mt Moon 1F | Yellow ":{"index":"110000000059","level":12,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Smog","No Move"]},
+"Koffing":{"Scientist 7 | Silph Co 9F | Yellow ":{"index":"110000000594","level":28,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Smog","No Move"]},
+"Super Nerd 2 | Mt Moon 1F | Yellow ":{"index":"110000000059","level":12,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Smog","No Move"]},
 "Rocket J&J | Mt Moon B2F | Yellow ":{"index":"110000000062","level":14,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Smog","No Move"]},
 "Super Nerd 2 | R8 | Yellow ":{"index":"110000000257","level":26,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Smog","No Move"]},
 "Super Nerd 3 | R8 | Yellow (1) ":{"index":"110000000270","level":20,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Smog","No Move"]},
@@ -410,7 +422,6 @@ var CUSTOMSETDEX_Y = {"Abra":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000
 "Rocket 5 | Siph Co 4F | Yellow ":{"index":"110000000554","level":29,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Karate Chop","Low Kick","Leer","No Move"]},
 "Rocket 7 | Siph Co 6F | Yellow ":{"index":"110000000564","level":29,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Karate Chop","Low Kick","Leer","No Move"]},
 "Rocket 14 | Siph Co 9F | Yellow ":{"index":"110000000592","level":28,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Karate Chop","Low Kick","Leer","No Move"]},
-"Scientist 7 | Silph Co 9F | Yellow ":{"index":"110000000595","level":28,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Sonic Boom","Thunder Shock"]},
 "Blackbelt 2 | Viridian Gym | Yellow ":{"index":"110000000761","level":40,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Low Kick","Leer","Focus Energy","Seismic Toss"]},
 "Blackbelt 3 | Viridian Gym | Yellow (1) ":{"index":"110000000766","level":38,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Low Kick","Leer","Focus Energy","Karate Chop"]},
 "Blackbelt 1 | VR 2F | Yellow (1) ":{"index":"110000000798","level":43,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Low Kick","Leer","Focus Energy","Seismic Toss"]}},
@@ -439,7 +450,8 @@ var CUSTOMSETDEX_Y = {"Abra":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000
 "Scientist 8 | Silph Co 10F | Yellow ":{"index":"110000000596","level":29,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Tackle","Thunder Shock","Sonic Boom","Self-Destruct"]},
 "Scientist 1 | Pokemon Mansion 3F | Yellow ":{"index":"110000000726","level":33,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Tackle","Sonic Boom","Thunder Shock","Supersonic"]},
 "Scientist 3 | Pokemon Mansion B1F | Yellow ":{"index":"110000000733","level":34,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Tackle","Sonic Boom","Thunder Shock","Supersonic"]}},
-"Magneton":{"Engineer 2 | R11 | Yellow (1) ":{"index":"110000000171","level":18,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Sonic Boom","Thunder Shock"]},
+"Magneton":{"Scientist 7 | Silph Co 9F | Yellow ":{"index":"110000000595","level":28,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Sonic Boom","Thunder Shock"]},
+"Engineer 2 | R11 | Yellow (1) ":{"index":"110000000171","level":18,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Sonic Boom","Thunder Shock"]},
 "Scientist 1 | Silph Co 2F | Yellow ":{"index":"110000000539","level":28,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Sonic Boom","Thunder Shock"]},
 "Scientist 4 | Silph Co 5F | Yellow ":{"index":"110000000560","level":26,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Sonic Boom","Thunder Shock"]},
 "Scientist 5 | Silph Co 6F | Yellow (1) ":{"index":"110000000568","level":25,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Sonic Boom","Thunder Shock"]},
@@ -484,7 +496,8 @@ var CUSTOMSETDEX_Y = {"Abra":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000
 "Psychic E | Saffron Gym | Yellow ":{"index":"110000000629","level":34,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Confusion","Barrier","Light Screen","Double Slap"]},
 "Psychic NE | Saffron Gym | Yellow (1) ":{"index":"110000000633","level":31,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Confusion","Barrier","Light Screen","Double Slap"]},
 "Juggler 2 | VR 2F | Yellow ":{"index":"110000000806","level":48,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Light Screen","Double Slap","Meditate","Substitute"]}},
-"Muk":{"Super Nerd 1 | R8 | Yellow (1) ":{"index":"110000000253","level":22,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Pound","Poison Gas","No Move"]},
+"Muk":{"Scientist 6 | Silph Co 7F | Yellow ":{"index":"110000000585","level":29,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Pound","No Move","No Move"]},
+"Super Nerd 1 | R8 | Yellow (1) ":{"index":"110000000253","level":22,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Pound","Poison Gas","No Move"]},
 "Biker 1 | R14 | Yellow ":{"index":"110000000421","level":29,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Pound","Poison Gas","No Move"]},
 "Biker 2 | R17 | Yellow ":{"index":"110000000482","level":33,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Pound","Poison Gas","Minimize"]}},
 "Nidoking":{"Cooltrainer 1 | Viridian Gym | Yellow ":{"index":"110000000758","level":39,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Horn Attack","Double Kick","Poison Sting","Thrash"]},
@@ -492,18 +505,18 @@ var CUSTOMSETDEX_Y = {"Abra":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000
 "Nidoqueen":{"Giovanni 2 | Silph Co | Yellow ":{"index":"110000000625","level":41,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Body Slam","Scratch","Tail Whip","Double Kick"]},
 "Giovanni 3 | Viridian Gym | Yellow ":{"index":"110000000770","level":53,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Earthquake","Double Kick","Tail Whip","Thunder"]}},
 "Nidoran-F":{"Lass | Viridian Forest | Yellow ":{"index":"110000000003","level":6,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Growl","Tackle","No Move","No Move"]},
-"Lass 1 | R24 | Yellow ":{"index":"110000000070","level":14,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Growl","Double Kick","Tackle","Scratch"]},
+"Lass 1 | R24 | Yellow ":{"index":"110000000070","level":16,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Growl","Double Kick","Tackle","Scratch"]},
 "Lass 2 | R24 | Yellow ":{"index":"110000000075","level":14,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Growl","Double Kick","Tackle","Scratch"]},
 "Lass 1 | R25 | Yellow ":{"index":"110000000088","level":15,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Growl","Double Kick","Tackle","Scratch"]},
 "Lass 1 | SS Anne 1F | Yellow ":{"index":"110000000119","level":18,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Double Kick","Poison Sting","Tackle","Scratch"]},
-"Gentleman 1 | SS Anne 1F | Yellow ":{"index":"110000000121","level":18,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Double Kick","Poison Sting","Tackle","Scratch"]},
+"Gentleman 1 | SS Anne 1F | Yellow ":{"index":"110000000121","level":19,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Double Kick","Poison Sting","Tackle","Scratch"]},
 "Lass 2 | R8 | Yellow ":{"index":"110000000255","level":23,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Double Kick","Scratch","Poison Sting","Tail Whip"]},
 "Lass 4 | R8 | Yellow ":{"index":"110000000263","level":19,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Double Kick","Tackle","Scratch","Poison Sting"]}},
 "Nidoran-M":{"Lass | Viridian Forest | Yellow ":{"index":"110000000004","level":6,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Leer","Tackle","No Move","No Move"]},
 "Lass 2 | R3 | Yellow ":{"index":"110000000030","level":10,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Leer","Horn Attack","Tackle","No Move"]},
 "Lass 1 | R25 | Yellow ":{"index":"110000000087","level":15,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Leer","Horn Attack","Double Kick","Tackle"]},
-"Youngster | SS Anne 1F | Yellow ":{"index":"110000000120","level":18,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Double Kick","Horn Attack","Tackle","Poison Sting"]},
-"Gentleman 1 | SS Anne 1F | Yellow ":{"index":"110000000122","level":18,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Double Kick","Horn Attack","Tackle","Poison Sting"]},
+"Youngster | SS Anne 1F | Yellow ":{"index":"110000000120","level":21,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Double Kick","Horn Attack","Tackle","Poison Sting"]},
+"Gentleman 1 | SS Anne 1F | Yellow ":{"index":"110000000122","level":19,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Double Kick","Horn Attack","Tackle","Poison Sting"]},
 "Youngster 2 | R11 | Yellow ":{"index":"110000000157","level":18,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Double Kick","Horn Attack","Tackle","Poison Sting"]},
 "Lass 4 | R8 | Yellow ":{"index":"110000000265","level":19,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Double Kick","Horn Attack","Tackle","Poison Sting"]},
 "Jr Traimer | R12 | Yellow ":{"index":"110000000373","level":29,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Horn Attack","Focus Energy","Double Kick","Poison Sting"]}},
@@ -546,7 +559,7 @@ var CUSTOMSETDEX_Y = {"Abra":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000
 "Hiker 4 | Mt Moon 1F | Yellow (1) ":{"index":"110000000217","level":20,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Bind","Tackle","Screech","Rock Throw"]},
 "Hiker 4 | Mt Moon 1F | Yellow (2) ":{"index":"110000000218","level":20,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Bind","Tackle","Screech","Rock Throw"]},
 "Hiker 1 | R10 | Yellow ":{"index":"110000000243","level":21,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Bind","Tackle","Screech","Rock Throw"]},
-"Hiker 2 | R10 | Yellow ":{"index":"110000000244","level":21,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Bind","Tackle","Screech","Rock Throw"]},
+"Hiker 2 | R10 | Yellow ":{"index":"110000000244","level":19,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Bind","Tackle","Screech","Rock Throw"]},
 "Giovanni 1 | RH B4F | Yellow ":{"index":"110000000301","level":25,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Bind","Rage","Screech","Rock Throw"]},
 "Bruno 1 | E4 | Yellow (1) ":{"index":"110000000827","level":53,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Dig","Rock Slide","Screech","Slam"]},
 "Bruno 1 | E4 | Yellow (2) ":{"index":"110000000830","level":56,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Earthquake","Rock Slide","Screech","Slam"]}},
@@ -571,7 +584,7 @@ var CUSTOMSETDEX_Y = {"Abra":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000
 "Bird Keeper 1 | R20 | Yellow (1) ":{"index":"110000000692","level":30,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Gust","Sand Attack","Quick Attack","Whirlwind"]}},
 "Pidgey":{"Lass 1 | R3 | Yellow (1) ":{"index":"110000000017","level":9,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Gust","Sand Attack","No Move","No Move"]},
 "Lass 1 | R3 | Yellow (2) ":{"index":"110000000018","level":9,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Gust","Sand Attack","No Move","No Move"]},
-"Lass 1 | R24 | Yellow ":{"index":"110000000069","level":14,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Gust","Sand Attack","Quick Attack","No Move"]},
+"Lass 1 | R24 | Yellow ":{"index":"110000000069","level":16,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Gust","Sand Attack","Quick Attack","No Move"]},
 "Lass 2 | R24 | Yellow ":{"index":"110000000074","level":14,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Gust","Sand Attack","Quick Attack","No Move"]},
 "Lass 2 | R25 | Yellow (1) ":{"index":"110000000098","level":13,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Gust","Sand Attack","Quick Attack","No Move"]},
 "Jr Trainer 3 | R6 | Yellow (1) ":{"index":"110000000113","level":16,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Gust","Sand Attack","Quick Attack","No Move"]},
@@ -727,7 +740,7 @@ var CUSTOMSETDEX_Y = {"Abra":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000
 "Lorelei 1 | E4 | Yellow ":{"index":"110000000824","level":54,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Surf","Amnesia","Psychic","Withdraw"]}},
 "Slowpoke":{"Youngster 2 | R25 | Yellow ":{"index":"110000000086","level":17,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Confusion","No Move","No Move","No Move"]},
 "PokeManiac 1 | Mt Moon 1F | Yellow ":{"index":"110000000204","level":23,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Confusion","Headbutt","No Move"]},
-"PokeManiac 2 | Mt Moon B1F | Yellow ":{"index":"110000000205","level":23,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Confusion","Headbutt","No Move"]},
+"PokeManiac 2 | Mt Moon B1F | Yellow ":{"index":"110000000205","level":25,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Confusion","Headbutt","No Move"]},
 "PokeManiac 4 | Mt Moon B1F | Yellow (1) ":{"index":"110000000228","level":20,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Confusion","No Move","No Move"]},
 "PokeManiac 4 | Mt Moon B1F | Yellow (2) ":{"index":"110000000229","level":20,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Confusion","No Move","No Move"]},
 "PokeManiac 4 | Mt Moon B1F | Yellow (3) ":{"index":"110000000230","level":20,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Disable","Confusion","No Move","No Move"]},
@@ -764,7 +777,7 @@ var CUSTOMSETDEX_Y = {"Abra":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000
 "Beauty 2 | R19 | Yellow (3) ":{"index":"110000000670","level":29,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Harden","Tackle","Water Gun","Recover"]},
 "Swimmer 3 | R20 | Yellow ":{"index":"110000000689","level":35,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Harden","Water Gun","Recover","Swift"]},
 "Swimmer 4 | R21 | Yellow ":{"index":"110000000721","level":33,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Harden","Recover","Swift","Water Gun"]}},
-"Tangela":{"Erika | Celadon Gym | Yellow ":{"index":"110000000322","level":32,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Acid","Sleep Powder","Razor Leaf","Stun Spore"]},
+"Tangela":{"Erika | Celadon Gym | Yellow ":{"index":"110000000322","level":30,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Acid","Sleep Powder","Razor Leaf","Stun Spore"]},
 "Jr Trainer 4 | R15 | Yellow ":{"index":"110000000461","level":29,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Constrict","Bind","Absorb","Vine Whip"]}},
 "Tauros":{"Tamer 1 | Viridian Gym | Yellow ":{"index":"110000000755","level":39,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Leer","Tail Whip","Stomp","Tackle"]}},
 "Tentacool":{"Sailor 2 | SS Anne B1F | Yellow ":{"index":"110000000128","level":17,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Acid","Supersonic","Wrap","No Move"]},
@@ -834,7 +847,7 @@ var CUSTOMSETDEX_Y = {"Abra":{"Sabrina | Saffron Gym | Yellow ":{"index":"110000
 "Weepinbell":{"Jr Trainer 1 | R6 | Yellow ":{"index":"110000000110","level":16,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Growth","Vine Whip","Wrap","Poison Powder"]},
 "Lass 1 | Celadon Gym | Yellow ":{"index":"110000000307","level":23,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Wrap","Poison Powder","Sleep Powder","Stun Spore"]},
 "Cooltrainer 1 | Celadon Gym | Yellow ":{"index":"110000000317","level":24,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Wrap","Poison Powder","Sleep Powder","Stun Spore"]},
-"Erika | Celadon Gym | Yellow ":{"index":"110000000323","level":30,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Constrict","Bind","Mega Drain","Vine Whip"]},
+"Erika | Celadon Gym | Yellow ":{"index":"110000000323","level":32,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Constrict","Bind","Mega Drain","Vine Whip"]},
 "Cooltrainer 6 | VR 3F | Yellow ":{"index":"110000000820","level":43,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["Acid","Stun Spore","Sleep Powder","Razor Leaf"]}},
 "Weezing":{"Rocket J&J 3 | Pokemon Tower 7F | Yellow ":{"index":"110000000358","level":27,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Smog","Sludge"]},
 "Biker 1 | R15 | Yellow (1) ":{"index":"110000000441","level":25,"dvs":{"hp":8,"at":9,"df":8,"sa":8,"sd":8,"sp":8},"moves":["No Move","Tackle","Smog","Sludge"]},
