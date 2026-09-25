@@ -172,16 +172,22 @@ def test_build_plan_rr_zip_boot_todo_row_fails_and_says_not_implemented():
     assert not ok and verdict.startswith("FAIL")
 
 
-def test_rr_row_deps_name_the_rr_pack_and_gates_test():
-    rows = fc.build_plan_rr("c" * 40, LANE, MASTER)
-    duo = next(r for r in rows if r.id == "faint_cmd_gen3_rr_as_a")
-    assert "data/games/gen3_rr/**" in duo.deps
-    assert "server/**" in duo.deps            # inherited from DUO_DEPS's harness globs
-    gates = next(r for r in rows if r.id == "rr_opcode_gates")
-    assert "tests/live/test_lua_gates.py" in gates.deps
-    assert "data/games/gen3_*/**" in gates.deps
-    todo = next(r for r in rows if r.id == "zip_boot_radicalred_TODO")
-    assert todo.deps is None                  # NEVER_CARRIED's zip_* -- never a carry candidate
+def test_rr_rows_are_never_carried_until_their_rom_and_state_inputs_are_hashed():
+    # OMP cx-42592031 F2-F4: row_inputs() hashes no RR ROM/fixture/gate state yet
+    for r in fc.build_plan_rr("c" * 40, LANE, MASTER):
+        assert r.deps is None, r.id
+
+
+def test_rr_opcode_gates_owns_its_skip_policy():
+    gates = next(r for r in fc.build_plan_rr("c" * 40, LANE, MASTER) if r.id == "rr_opcode_gates")
+    assert fc.judge(gates.id, 0, "26 passed, 12 skipped in 900s", own_verdict=gates.own_verdict) == ("PASS", True)
+
+
+def test_a_new_rr_signed_limit_fails_loudly(monkeypatch):
+    import e2e_duo
+    monkeypatch.setitem(e2e_duo.SCENARIOS["faint_cmd_gen3"], "signed_limit", "x")
+    with pytest.raises(RuntimeError, match="new RR signed limit"):
+        fc.rr_scenarios()
 
 
 def test_dry_run_title_rr_plan(capsys):

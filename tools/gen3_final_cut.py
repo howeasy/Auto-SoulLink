@@ -245,8 +245,15 @@ def rr_scenarios():
     or stone holder is reachable by normal inputs early in RR). Derived from e2e_duo's own table
     -- never duplicated here -- so a new RR scenario there is picked up automatically."""
     import e2e_duo
-    return [s for s, cfg in e2e_duo.SCENARIOS.items()
-            if "gen3_rr" in cfg.get("games", ()) and not cfg.get("signed_limit")]
+    names = e2e_duo.scenarios_for("gen3_rr")   # the canonical selector (honours not_yet)
+    limited = {s for s in names if e2e_duo.SCENARIOS[s].get("signed_limit")}
+    if limited - RR_SIGNED_LIMITS:
+        raise RuntimeError(f"new RR signed limit(s) {sorted(limited - RR_SIGNED_LIMITS)}: "
+                           "add the owner ruling to RR_SIGNED_LIMITS or run the row")
+    return [s for s in names if s not in limited]
+
+
+RR_SIGNED_LIMITS = {"linked_faint_active_mega_gen3"}   # ruling 20 (R5)
 
 
 def build_plan_rr(cut, lane, master):
@@ -263,7 +270,10 @@ def build_plan_rr(cut, lane, master):
     rows = [_duo(s, "gen3_rr", "§14 P5 RR duo", lane) for s in rr_scenarios()]
     rows.append(Row("rr_opcode_gates", "G5-GATES-LIVE",
                     [PY, "-m", "pytest", "tests/live/test_lua_gates.py", "-q", "-p", "no:randomly",
-                     "-rs"], lane, 3600, env={"SLINK_LIVE": "1"}))
+                     "-rs"], lane, 3600, env={"SLINK_LIVE": "1"},
+                    # the suite owns its skip policy (12 deferred gates skip by design; ported
+                    # gates never skip): 26 passed / 12 skipped is its PASS (OMP cx-42592031)
+                    own_verdict=True))
     rows.append(Row("zip_boot_radicalred_TODO", "§9 item5 RR",
                     [PY, "-c",
                      "import sys; sys.stderr.write('not implemented: gen3_final_cut zip-boot has "
@@ -873,7 +883,11 @@ ITEM6_DEPS = ["lua/*.lua", "lua/gen1/**", "lua/gen2/**", "lua/core/**", "lua/cli
 # builds are content-addressed instead (the §1 build cache), the zip is built from the cut and
 # the source gate IS the cut, so none of these is ever carried. The checkpoint probe carries once
 # its states come from the cache with known hashes (predicted_checkpoint_inputs).
-NEVER_CARRIED = ("states_*", "tutorials_*", "zip_*", "release_gate_quick")
+NEVER_CARRIED = ("states_*", "tutorials_*", "zip_*", "release_gate_quick",
+                 # ponytail: RR rows always RUN -- row_inputs() hashes no RR companion/clean ROM,
+                 # RR fixture or gate savestate yet, so a carry could cite a PASS on other
+                 # artifacts (OMP cx-42592031 F2-F4); carry them once those inputs are hashed
+                 "*_rr_as_a", "rr_opcode_gates")
 
 
 def row_deps(row):
