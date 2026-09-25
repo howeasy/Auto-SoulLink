@@ -49,6 +49,22 @@ def test_calc_profile_for_run_falls_back_to_declared_family():
     run's declared game family stands in for a live rom_type."""
     assert _calc_profile_for_run({"game": "gen3_rr"}, {"players": {}}) == {"gen": 9, "dex": "rr"}
     assert _calc_profile_for_run({"game": "gen1"}, {"players": {}}) is None
+
+
+def test_calc_profile_for_run_never_raises():
+    """Every declared family, a malformed live status, and an unregistered adapter all
+    hide the calc instead of failing the board page."""
+    from server import manager
+    for game in manager.GAME_MEMBERS:
+        for status in ({"players": {}}, None, [], "x"):
+            _calc_profile_for_run({"game": game}, status)
+    import server.adapters as adapters
+    saved = adapters._REGISTRY.pop("gen5_bw", None)
+    try:
+        assert _calc_profile_for_run({"game": "gen5_bw"}, {"players": {"a": {"rom_type": "pokemon_black"}}}) is None
+    finally:
+        if saved is not None:
+            adapters._REGISTRY["gen5_bw"] = saved
     assert _calc_profile_for_run({"game": ""}, {"players": {}}) is None
 
 

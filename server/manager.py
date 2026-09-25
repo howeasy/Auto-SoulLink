@@ -248,7 +248,8 @@ def _calc_profile_for_run(run: dict, status: dict) -> dict | None:
     yet, either side's game is unverified, or the two disagree.
     """
     from server.adapters import game_id_for_rom_type, get_adapter
-    players = status.get("players") or {}
+    # A live server can answer anything; a bad status must hide the calc, not 500 the board.
+    players = (status.get("players") if isinstance(status, dict) else None) or {}
     # Unrecognized rom_types ("" or a persisted "?") count as not-yet-known.
     rom_types = [rt for rt in ((players.get(pid) or {}).get("rom_type") or "" for pid in ("a", "b"))
                  if game_id_for_rom_type(rt)]
@@ -262,7 +263,10 @@ def _calc_profile_for_run(run: dict, status: dict) -> dict | None:
         gid = game_id_for_rom_type(rom_type)
         if not gid:
             return None
-        p = get_adapter(gid, is_rr=rom_type.endswith("_rr")).calc_profile()
+        try:
+            p = get_adapter(gid, is_rr=rom_type.endswith("_rr")).calc_profile()
+        except KeyError:  # a mapped family whose adapter failed to register (e.g. Gen 5 import)
+            return None
         if p is None:
             return None
         if profile is None:
