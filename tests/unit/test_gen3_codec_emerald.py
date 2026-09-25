@@ -6,11 +6,12 @@ the frozen damage-calc contract:
 
 (a) HEADER control: struct GFRomHeader (pret/pokeemerald src/rom_header_gf.c
     #L18-L90 at c65e93f2) is read straight out of the owner's ROM at file
-    offset 0x100.  This test computes the struct's byte offsets ITSELF
-    (ARM EABI alignment: u32/pointer fields need 4-byte alignment, u8
-    fields don't) rather than importing them from gen3_codec.py, so a
-    codec constant that silently drifted from the real struct would not
-    also make this control pass.
+    offset 0x100.  The struct's field offsets are transcribed by hand in
+    the test (u32/pointer fields need 4-byte ARM EABI alignment, u8 fields
+    do not); they are not derived by a runtime cursor walk, and they are
+    not imported from gen3_codec.py.  What makes this a control is the
+    source of the bytes: a codec constant that drifted from the real
+    struct cannot also make a read of the ROM pass.
 (b) A synthetic Emerald flash image (this file's own encoder, mirroring
     tests/unit/test_gen3_flash_layout.py's FR/LG pattern) round-trips
     through the codec's title="emerald" party/box decoders.
@@ -19,6 +20,7 @@ the frozen damage-calc contract:
     any FR/LG/RR call site).
 """
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -32,12 +34,21 @@ ROM_SHA1 = "f3ae088181bf583e55daf962a92bb46f4f1d07b7"   # pret rom.sha1, PLAN.md
 
 
 def _load_rom() -> bytes:
+    """The pinned Emerald cartridge -- absent is a skip, wrong is a failure.
+
+    An ABSENT ROM means the control simply does not run on this machine.
+    A PRESENT ROM whose sha1 differs is a different situation: the bytes
+    under test are not the cartridge the codec constants were read from,
+    so every assertion in this file would be measuring someone else's
+    data.  Skipping there would hide exactly the drift the control
+    exists to catch.
+    """
     if not ROM_PATH.exists():
-        pytest.skip("local Emerald ROM absent")
+        pytest.skip(f"local Emerald ROM absent: {ROM_PATH}")
     data = ROM_PATH.read_bytes()
-    import hashlib
-    if hashlib.sha1(data).hexdigest() != ROM_SHA1:
-        pytest.skip("ROM present but sha1 does not match the pinned Emerald ROM")
+    actual = hashlib.sha1(data).hexdigest()
+    if actual != ROM_SHA1:
+        pytest.fail(f"{ROM_PATH}: sha1 {actual} != pinned {ROM_SHA1}")
     return data
 
 
@@ -58,8 +69,8 @@ def test_gf_header_matches_the_codecs_emerald_save_constants():
     u32 partyCountOffset              +0x90
     u32 partyOffset                   +0x94
 
-    This offset walk is independent of gen3_codec.py; only the final
-    asserted values are compared against it.
+    Offsets transcribed from that struct by hand, per the field list
+    above -- not walked at runtime, not imported from gen3_codec.py.
     """
     rom = _load_rom()
     base = 0x100
@@ -90,6 +101,38 @@ def test_emerald_save_sizes_differ_from_frlg_as_the_plan_predicts():
 
 
 # --- (b) Synthetic Emerald flash round-trip ----------------------------------
+
+def test_emerald_slot_layout_pins_all_fourteen_section_triples():
+    """ROM-free: the exact 14 (id, object, offset, size) triples that
+    slot_layout(title="emerald") emits, per the SAVEBLOCK_CHUNK macro
+    (src/save.c#L43-L72) -- offset = chunkNum * 0xF80, size =
+    min(sizeof(object) - offset, 0xF80) -- at Emerald's sizes
+    (SaveBlock2 0x0F2C, SaveBlock1 0x3D88, Storage 0x83D0).
+
+    Spelled as literals rather than recomputed from those sizes: the pin
+    is that the emitted table equals THIS table, so a size constant that
+    moved without the layout moving cannot quietly re-derive the same
+    wrong answer here.
+    """
+    assert C.CHUNK_SIZE_VANILLA == 0xF80          # SECTOR_DATA_SIZE, save.h#L8
+    assert [(e["id"], e["object"], e["offset"], e["size"])
+            for e in C.slot_layout(title="emerald")] == [
+        (0, "sb2", 0, 3884),                     # 0x0F2C: fits in one chunk
+        (1, "sb1", 0, 3968),
+        (2, "sb1", 3968, 3968),
+        (3, "sb1", 7936, 3968),
+        (4, "sb1", 11904, 3848),                 # 0x3D88 - 3 * 0xF80
+        (5, "storage", 0, 3968),
+        (6, "storage", 3968, 3968),
+        (7, "storage", 7936, 3968),
+        (8, "storage", 11904, 3968),
+        (9, "storage", 15872, 3968),
+        (10, "storage", 19840, 3968),
+        (11, "storage", 23808, 3968),
+        (12, "storage", 27776, 3968),
+        (13, "storage", 31744, 2000),            # 0x83D0 - 8 * 0xF80
+    ]
+
 
 def _write_half(image: bytearray, counter: int, blocks: dict[str, bytes],
                 layout: list[dict]) -> None:
@@ -174,10 +217,15 @@ def test_sector_rotation_control_matches_frlg_pattern_at_emerald_sizes():
     test_gen3_flash_layout.test_rotation_is_learned_from_section_zero, at
     Emerald's SaveBlock sizes -- the rotation math is size-independent."""
     layout = C.slot_layout(title="emerald")
-    sb1 = bytearray(codec.SAVEBLOCK1_SIZE_EMERALD)
-    sb1[codec.SB1_PARTY_COUNT_OFFSET_EMERALD] = 0
-    blocks = {"sb2": bytes(codec.SAVEBLOCK2_SIZE_EMERALD), "sb1": bytes(sb1),
-              "storage": bytes(C.STORAGE_SIZE)}
+    # Every byte depends on its position (the pattern of
+    # test_gen3_flash_layout._blocks): a zero fill would make any
+    # permutation of zeros compare equal, so this control could not tell
+    # a correctly reassembled sb1 from three wrong chunks.
+    blocks = {
+        "sb2": bytes((0x37 + i) & 0xFF for i in range(codec.SAVEBLOCK2_SIZE_EMERALD)),
+        "sb1": bytes((0x37 + 2 * i) & 0xFF for i in range(codec.SAVEBLOCK1_SIZE_EMERALD)),
+        "storage": bytes((0x37 + 3 * i) & 0xFF for i in range(C.STORAGE_SIZE)),
+    }
     image = bytearray(C.FLASH_SIZE)
     rotation = 5
     half = 0
@@ -191,6 +239,8 @@ def test_sector_rotation_control_matches_frlg_pattern_at_emerald_sizes():
     assert parsed["rotation"] == rotation
     assert parsed["status_name"] == "OK"
     assert parsed["sb1"] == blocks["sb1"]
+    assert parsed["sb2"] == blocks["sb2"]
+    assert parsed["storage"] == blocks["storage"]
 
 
 # --- Damage-calc lane contract: frozen, pinned here per coordinator note ----
