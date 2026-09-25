@@ -207,6 +207,7 @@ blobs and refreshing the index; the lane was tracked-clean at `a2985d5a` before 
   make_release.py, REFERENCE.md and lua/gen1/client.lua across 33 commits. Both reported no dropped or
   garbled hunk (recorded in `docs/gen3_resume.md`, "Merge review"). The OMP attempts (`cx-cd3f4189`,
   `cx-4334eae0`, `cx-c36d9987`) timed out on the diff size and produced no verdict. **S**
+- **FR/LG item names fixed after the frozen cut** (`5f050857`, owner: "Just fix it. No re run."): the vanilla item table dropped 15 non-Gen-3 ids and gained the 55 FRLG key items, from pret pokefirered `c75f3523`. It is display-only (board held-item names) and is not covered by the a2985d5a pass; it has unit tests only. **S**
 - **HUD: the GBA screen draws notices in the fceux pixel font too** (`f1cc6038`) — Gen 3 now
   matches the Gen 1/2 HUD font instead of BizHawk's default. **S**
 - **HUD: held commands never reach the HUD** (`870e5e5d`) — console log only, once per hold; owner
