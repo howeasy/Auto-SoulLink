@@ -111,6 +111,25 @@ def test_a_connected_player_with_no_name_yet_is_not_called_not_connected(env):
     assert "<b>Player A</b>" in html and "<b>Player B</b>" in html
 
 
+def _battle_card(env, **bs):
+    players = {pid: {"connected": True, "admission": "admitted", "trainer_name": "RED"} for pid in "ab"}
+    players["a"]["battle_state"] = {"in_battle": True, **bs}
+    players["a"]["party_details"] = {}
+    brd = {"has_data": {"a": True, "b": False}, "active": {}, "sections": None,
+           "badges": {pid: {"slots": 8, "count": 0} for pid in "ab"}}
+    return env.get_template("_board.html").render(status={"players": players}, board=brd, live=True)
+
+
+def test_a_client_sending_null_collections_does_not_break_the_board(env):
+    html = _battle_card(env, is_trainer_battle=False, enemy_party=None)
+    assert "wild encounter" in html
+
+
+def test_a_trainer_with_no_class_is_just_vs_the_name(env):
+    html = _battle_card(env, is_trainer_battle=True, opponent_class=None, opponent_name="GARY", enemy_party=[])
+    assert "vs GARY" in html and "None" not in html
+
+
 # ── theme picker ────────────────────────────────────────────────────────────────────────
 
 def test_theme_pills_are_radios_with_roving_focus_and_escape(env):

@@ -112,6 +112,20 @@ async def test_a_stopped_run_renders_its_persisted_board(manager_client, manager
 
 
 @pytest.mark.asyncio
+async def test_a_stopped_run_with_no_pairs_offers_no_setup_steps(manager_client, manager_dir):
+    """The onboarding says the launcher "finds the game and connects": a stopped run has
+    nothing to connect to, so it says to start the run instead."""
+    run = {"run_id": "run_1", "name": "Fresh", "created_at": "2026-09-14T12:00:00", "tcp_port": 54321,
+           "http_port": 8081, "status": "stopped", "pid": None, "game": "gen1"}
+    manager._save_registry([run])
+    (manager_dir / "run_1").mkdir()
+    SLinkServer(data_dir=str(manager_dir / "run_1")).state._save()
+    body = await (await manager_client.get("/runs/run_1")).text()
+    assert "No pairs yet." in body and "Start the run to play." in body
+    assert "finds the game and connects" not in body and "Download a launcher" not in body
+
+
+@pytest.mark.asyncio
 async def test_the_board_fragment_stands_alone(manager_client, manager_dir):
     run = _stopped_run(manager_dir)
     resp = await manager_client.get(f"/runs/{run['run_id']}/board")

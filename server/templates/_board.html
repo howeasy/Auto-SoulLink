@@ -141,10 +141,10 @@
                     <div class="mk-battle">
                       <div class="mk-battle-head">
                         <span class="mk-tag fight">in battle</span>
-                        <span class="mk-sub">{% if bs.is_trainer_battle %}vs {{ bs.opponent_class }} {{ bs.opponent_name or 'Trainer' }}{% else %}wild encounter{% endif %}{% if bs.is_doubles %} · doubles{% endif %}</span>
+                        <span class="mk-sub">{% if bs.is_trainer_battle %}vs {% if bs.opponent_class %}{{ bs.opponent_class }} {% endif %}{{ bs.opponent_name or 'Trainer' }}{% else %}wild encounter{% endif %}{% if bs.is_doubles %} · doubles{% endif %}</span>
                       </div>
                       {% if mine %}{{ combatant(mine, 'mine', labels=p.capabilities.stat_stage_labels) }}{% endif %}
-                      {% for foe in bs.enemy_party %}{{ combatant(foe, 'foe', 'vs', labels=p.capabilities.stat_stage_labels) }}{% endfor %}
+                      {% for foe in bs.enemy_party or [] %}{{ combatant(foe, 'foe', 'vs', labels=p.capabilities.stat_stage_labels) }}{% endfor %}
                     </div>
                   {% elif p.party_keys and p.party_details[p.party_keys[0]] %}
                     <div class="mk-lead">
@@ -177,7 +177,12 @@
         </div>
       </section>
 
-      {% if not board.sections %}
+      {# The setup steps are for a run that is listening; a stopped one has nothing to connect to. #}
+      {% if not board.sections and not live %}
+        <section class="mk-zone">
+          <div class="mk-card mk-firstrun"><b>No pairs yet.</b> Start the run to play.</div>
+        </section>
+      {% elif not board.sections %}
         <section class="mk-zone">
           <div class="mk-card mk-firstrun">
             <b>Nothing on the board yet.</b>
@@ -198,7 +203,7 @@
       {% endif %}
 
       {# ── one zone per section, same geometry as the Now cards ──────── #}
-      {% for sect, rows in board.sections %}
+      {% for sect, rows in board.sections or [] %}
         <section class="mk-zone zone-{{ sect }}">
           <h2 class="mk-h2 split">
             <span class="mk-h2-side"><span class="mk-side small">A</span><span>{{ status.players.a.trainer_name or '—' }}</span></span>
