@@ -2385,6 +2385,7 @@ class SLinkServer:
                     "b_enc_species": e.encounter_b.species if e.encounter_b else 0,
                     "b_enc_level":   e.encounter_b.level   if e.encounter_b else 0,
                     "status":     e.status.value,
+                    "killed_at":  e.killed_at,
                 }
                 for e in s.links
             ],
@@ -2435,6 +2436,13 @@ class SLinkServer:
                         "b_species_name": self.adapter.species_name(e.b.species) if e.b and e.b.species else "",
                         "b_sprite_html": self._get_sprite_html(e.b.species) if e.b and e.b.species else "",
                         "b_level":    self._resolve_level("b", e.b),
+                        # The wild mon a side met but did not catch (dead zones only).
+                        "a_enc_species_name": self.adapter.species_name(e.encounter_a.species)
+                                              if e.encounter_a and e.encounter_a.species else "",
+                        "a_enc_level": e.encounter_a.level if e.encounter_a else 0,
+                        "b_enc_species_name": self.adapter.species_name(e.encounter_b.species)
+                                              if e.encounter_b and e.encounter_b.species else "",
+                        "b_enc_level": e.encounter_b.level if e.encounter_b else 0,
                         "status":     e.status.value,
                     }
                     for e in s.links if e.killed_at
@@ -2624,8 +2632,11 @@ class SLinkServer:
 
         # Build the killfeed slice of the status dict and reverse it so the
         # memorial wall renders oldest-first (chronological order).
+        # A dead zone where neither player caught anything lost no pair: it stays on the
+        # board and in the killfeed, but it is not a fallen pair on the wall.
         d = self._build_status_dict()
-        killfeed = list(reversed(d.get("killfeed", [])))
+        killfeed = [k for k in reversed(d.get("killfeed", []))
+                    if k.get("cause") != "dead_zone" or k.get("a_key") or k.get("b_key")]
         for entry in killfeed:
             entry["killed_at_display"] = _format_killed_at(entry.get("killed_at"))
 
@@ -2701,6 +2712,8 @@ class SLinkServer:
             "player_id":    player_id,
             "trainer_name": p.get("trainer_name", ""),
             "mons":         mons,
+            # A dropped client keeps its last party on screen, tagged, not passed off as live.
+            "connected":    bool(p.get("connected")),
         }
 
     # ── Battle overlay dispatch ──────────────────────────
@@ -2720,8 +2733,11 @@ class SLinkServer:
         Dispatches on template_base to assemble the right slice."""
         d = self._build_status_dict()
         p  = d.get("players", {}).get(player_id, {}) or {}
+        connected = bool(p.get("connected"))
+        if not connected:
+            p = {}  # a dropped client's last battle is not live: hide the panels
         bs = p.get("battle_state", {}) or {}
-        ctx = {"player_id": player_id, "in_battle": bool(bs.get("in_battle"))}
+        ctx = {"player_id": player_id, "connected": connected, "in_battle": bool(bs.get("in_battle"))}
 
         if template_base == "enemy_focus":
             return {**ctx, **self._enemy_focus_ctx(bs)}
@@ -2754,8 +2770,10 @@ class SLinkServer:
         }
 
     def _enemy_trainer_ctx(self, bs: dict) -> dict:
+        # is_trainer gates the template: a wild battle keeps in_battle True, and without this
+        # the overlay sat on "TRAINER / Loading..." for the whole encounter.
         if not bs.get("in_battle") or not bs.get("is_trainer_battle"):
-            return {"mons": [], "trainer_label": ""}
+            return {"mons": [], "trainer_label": "", "is_trainer": False}
         team = bs.get("enemy_party", []) or []
         label = (bs.get("opponent_class") or "Trainer")
         if bs.get("opponent_name"):
@@ -2763,6 +2781,7 @@ class SLinkServer:
         return {
             "mons": [self._battle_mon_card(m) for m in team],
             "trainer_label": label,
+            "is_trainer": True,
         }
 
     def _focus_ctx(self, p: dict, bs: dict) -> dict:
@@ -2864,9 +2883,16 @@ class SLinkServer:
                     "species_name": lnk.get("b_species_name") or "",
                     "sprite_html":  lnk.get("b_sprite_html") or "",
                 },
+                "killed_at": lnk.get("killed_at") or "",
             }
             (alive if lnk.get("status") == "alive" else dead).append(item)
-        return {"alive": alive, "dead": dead}
+        # .lk-list is overflow:hidden and OBS cannot scroll, so a long dead list clipped
+        # silently. Show the newest few and say how many more there are.
+        dead_shown = sorted(dead, key=lambda x: x["killed_at"], reverse=True)[:self._LINKS_DEAD_SHOWN]
+        return {"alive": alive, "dead": dead, "dead_shown": dead_shown,
+                "dead_more": len(dead) - len(dead_shown)}
+
+    _LINKS_DEAD_SHOWN = 5  # rows that fit under the alive cards at the catalog's sizes
 
     def _build_linked_party_overlay_context(self) -> dict:
         """Linked pairs where BOTH mons are currently in party — full
@@ -3090,6 +3116,7 @@ class SLinkServer:
             "player_id":    player_id,
             "trainer_name": trainer_name,
             "badges":       badges,
+            "connected":    bool(p.get("connected")),
         }
 
     def _build_encounters_overlay_context(self) -> dict:
@@ -3177,10 +3204,12 @@ class SLinkServer:
     def _build_event_feed_context(self, request, top_n: int, list_mode: str) -> dict:
         d = self._build_status_dict()
         events = (d.get("recent_events", []) or [])[:top_n]
-        # Filter by ?filter=type1,type2 if provided
+        # ?filter=type1,type2 picks the types; ?filter=all shows everything. No param means
+        # the catalog's default-on set, so party_to_box / box_to_party stay off a bare URL.
+        from server.overlay_catalog import EVENT_FILTERS_DEFAULT_ON
         flt = request.query.get("filter", "").strip()
-        if flt:
-            allow = {t for t in flt.split(",") if t}
+        if flt != "all":
+            allow = {t for t in flt.split(",") if t} if flt else set(EVENT_FILTERS_DEFAULT_ON)
             events = [e for e in events if e.get("type") in allow]
         pa = d.get("players", {}).get("a", {}) or {}
         pb = d.get("players", {}).get("b", {}) or {}
@@ -4307,7 +4336,13 @@ class SLinkServer:
         links_path = self.state._links_path
         if os.path.exists(links_path):
             os.remove(links_path)
+        # The cartridges are unchanged and their sockets stay open, and a client does not
+        # re-hello on an open socket -- so the run keeps its adapter (a fresh state would
+        # default to Gen 3 and render a live Gen 1 run with Gen 3 names and sprites), and
+        # connected_players keeps each client's rom_type and cartridge facts.
         self.state = SoulLinkState(data_dir=self._data_dir,
+                                   adapter=self.state.adapter,
+                                   is_rr=self.state.is_rr,
                                    species_lock=self.state.species_lock,
                                    gender_lock=self.state.gender_lock,
                                    type_lock=self.state.type_lock,
@@ -4320,7 +4355,6 @@ class SLinkServer:
                                    pc_trade_npc=self.state.pc_trade_npc)
         self.state.presentation_key_in_use = self._presentation_key_in_use
         self.adapter = self.state.adapter
-        self.connected_players.clear()
         # Clear derived display caches so SSE doesn't broadcast stale data.
         self.player_area = {"a": "", "b": ""}
         self.player_area_id = {"a": "", "b": ""}
