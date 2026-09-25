@@ -23,6 +23,12 @@ ROM_SPECS = {
                      ROOT / "patch/build/slink_RR.gba",
                      "ea5352f8a3b9073f8ae20870ad12857925d442cd"),
 }
+# E1-PACK: kept OUT of ROM_SPECS so the FRLG/RR generator and its tests never iterate it.
+EMERALD_SPECS = {
+    "e": ("gen3_emerald", "emerald", "clean",
+          Path("E:/Google Drive/SLink/Pokemon - Emerald Version (USA, Europe).gba"),
+          "f3ae088181bf583e55daf962a92bb46f4f1d07b7"),
+}
 
 
 def parse_symbols(text: str) -> dict[str, dict]:
@@ -119,7 +125,7 @@ def make_site(rom: bytes, offset: int, pattern: bytes, *, capture_offset: int = 
 
 
 def load_rom(name: str, path: Path | None = None) -> bytes:
-    spec = ROM_SPECS[name]
+    spec = ROM_SPECS.get(name) or EMERALD_SPECS[name]
     rom = (path or spec[3]).read_bytes()
     if hashlib.sha1(rom).hexdigest() != spec[4]:
         raise ValueError(f"{name}: ROM SHA-1 differs from admitted research pin")
@@ -129,7 +135,7 @@ def load_rom(name: str, path: Path | None = None) -> bytes:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("pattern", help="8..16 bytes of exact hex")
-    parser.add_argument("--rom", action="append", help="fr/lg/rr/rr_companion or a ROM path; default all four")
+    parser.add_argument("--rom", action="append", help="fr/lg/rr/rr_companion/e or a ROM path; default the first four")
     parser.add_argument("--capture-offset", type=lambda x: int(x, 0), default=0)
     parser.add_argument("--mode", choices=("thumb", "arm"), default="thumb")
     parser.add_argument("--symbol", default="candidate")
@@ -139,7 +145,8 @@ def main() -> int:
         pattern = pattern_bytes(args.pattern)
         rows = {}
         for item in args.rom or list(ROM_SPECS):
-            rom = load_rom(item) if item in ROM_SPECS else Path(item).read_bytes()
+            known = item in ROM_SPECS or item in EMERALD_SPECS
+            rom = load_rom(item) if known else Path(item).read_bytes()
             offsets = find_offsets(rom, pattern)
             row = {"offsets": offsets, "offsets_hex": [hex(x) for x in offsets],
                    "rom_sha1": hashlib.sha1(rom).hexdigest(), "status": "UNVERIFIED",

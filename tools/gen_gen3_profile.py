@@ -25,7 +25,11 @@ Packs (PLAN §4, §5.1):
                                         scrape targets), each with its source file:line in the
                                         sibling `_src` map
 
-    python tools/gen_gen3_profile.py            # rewrite both profiles
+    data/games/gen3_emerald/profile.json  title emerald (unadmitted), NOT Lua-sourced: addresses
+                                        by name from data/gen3/pret/pokeemerald.sym, constants
+                                        from pinned pret/pokeemerald (build_emerald)
+
+    python tools/gen_gen3_profile.py            # rewrite all three profiles
     python tools/gen_gen3_profile.py --check    # exit 1 if either committed file is stale
                                                 # (the P2 exit condition "profile diff = 0")
 """
@@ -1039,6 +1043,207 @@ def build(pack: str, profiles: dict, source: dict) -> dict:
     return out
 
 
+# ── E1-PACK: the vanilla Emerald pack (data/games/gen3_emerald/profile.json) ──────────────
+# Not Lua-sourced: every address is read out of pret's published pokeemerald.sym by symbol NAME,
+# and every derived constant is re-derived from the pinned pret source (file:line + the identifier
+# that line must carry; tests/unit/test_gen3_emerald_pack.py re-reads each cited line).  The old
+# GEN3.profiles.emerald stub is never copied -- the test only uses it as an independent cross-check.
+EMERALD_SYM = "data/gen3/pret/pokeemerald.sym"
+EMERALD_PIN = "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd"
+EMERALD_ROM_SHA1 = "f3ae088181bf583e55daf962a92bb46f4f1d07b7"
+
+# (section, key) -> (unique .sym symbol, stored Thumb (|1))
+EMERALD_SYM_ADDR = {
+    ("ram", "BATTLERS_COUNT_ADDR"): ("gBattlersCount", False),
+    ("ram", "BATTLER_PARTY_INDEXES_ADDR"): ("gBattlerPartyIndexes", False),
+    ("ram", "BATTLE_COMM_ADDR"): ("gBattleCommunication", False),
+    ("ram", "BATTLE_MAIN_FUNC_ADDR"): ("gBattleMainFunc", False),
+    ("ram", "BATTLE_MONS_ADDR"): ("gBattleMons", False),
+    ("ram", "BATTLE_OUTCOME_ADDR"): ("gBattleOutcome", False),
+    ("ram", "BATTLE_RESULTS_ADDR"): ("gBattleResults", False),
+    ("ram", "BATTLE_TYPE_ADDR"): ("gBattleTypeFlags", False),
+    ("ram", "CHOSEN_ACTION_ADDR"): ("gChosenActionByBattler", False),
+    ("ram", "DISABLE_STRUCTS_ADDR"): ("gDisableStructs", False),
+    ("ram", "ENEMY_BASE"): ("gEnemyParty", False),
+    ("ram", "ENEMY_COUNT_ADDR"): ("gEnemyPartyCount", False),
+    ("ram", "GMAIN_ADDR"): ("gMain", False),
+    ("ram", "LOCKED_MOVES_ADDR"): ("gLockedMoves", False),
+    ("ram", "PARTY_BASE"): ("gPlayerParty", False),
+    ("ram", "PARTY_COUNT_ADDR"): ("gPlayerPartyCount", False),
+    # the ASLR window base (struct PokemonStorageASLR, include/load_save.h:23-30); the live
+    # address is gPokemonStoragePtr, exactly as for the FR/LG gPokemonStorage
+    ("ram", "POKEMON_STORAGE_BASE"): ("gPokemonStorage", False),
+    ("ram", "PSP_PTR_ADDR"): ("gPokemonStoragePtr", False),
+    ("ram", "SB1_PTR_ADDR"): ("gSaveBlock1Ptr", False),
+    ("ram", "SB2_PTR_ADDR"): ("gSaveBlock2Ptr", False),
+    ("ram", "SPECIAL_VAR_BOX_ID_ADDR"): ("gSpecialVar_MonBoxId", False),
+    ("ram", "SPECIAL_VAR_BOX_POS_ADDR"): ("gSpecialVar_MonBoxPos", False),
+    ("ram", "STATUS3_ADDR"): ("gStatuses3", False),
+    ("ram", "TASKS_BASE_ADDR"): ("gTasks", False),
+    ("ram", "TRAINER_OPPONENT_ADDR"): ("gTrainerBattleOpponent_A", False),
+    ("rom", "BASESTATS_ADDR"): ("gSpeciesInfo", False),
+    ("rom", "BATTLE_MOVES_ADDR"): ("gBattleMoves", False),
+    ("rom", "EXPERIENCE_TABLES_ADDR"): ("gExperienceTables", False),
+    ("rom", "PP_UP_GET_MASK_ADDR"): ("gPPUpGetMask", False),
+    ("rom", "RETURN_FROM_BATTLE_ADDR"): ("ReturnFromBattleToOverworld", True),
+    ("rom", "BEGIN_BATTLE_INTRO_ADDR"): ("BeginBattleIntro", True),
+    ("rom", "BEGIN_BATTLE_INTRO_DUMMY_ADDR"): ("BeginBattleIntroDummy", True),
+    ("rom", "BATTLE_INTRO_GET_MONS_DATA_ADDR"): ("BattleIntroGetMonsData", True),
+    ("rom", "CB2_EVOLUTION_BEGIN_ADDR"): ("CB2_BeginEvolutionScene", True),
+    ("rom", "CB2_EVOLUTION_LOAD_ADDR"): ("CB2_EvolutionSceneLoadGraphics", True),
+    ("rom", "CB2_EVOLUTION_UPDATE_ADDR"): ("CB2_EvolutionSceneUpdate", True),
+    ("rom", "CB2_TRADE_EVOLUTION_UPDATE_ADDR"): ("CB2_TradeEvolutionSceneUpdate", True),
+}
+# pokeemerald has two static Task_LaunchLvlUpAnim (battle_controller_player.c:1271 and
+# battle_controller_player_partner.c:429); the FR POST_BATTLE_WRITER_TASKS entry is the player one,
+# so take the occurrence inside the battle_controller_player.o link span [SetControllerToPlayer,
+# SetControllerToOpponent) -- the same bracket names 0x08030238 in pokefirered.sym.
+EMERALD_LVLUP_TASK = ("Task_LaunchLvlUpAnim", "SetControllerToPlayer", "SetControllerToOpponent")
+# SE song id (the pokeemerald numbering, include/constants/songs.h line) -> song header symbol.
+# SUCCESS/FAILURE/SHINY are 31/32/102 here, not the FR 25/26/95.
+EMERALD_SE_SONGS = {16: ("se_faint", 22, "SE_FAINT"), 17: ("se_flee", 23, "SE_FLEE"),
+                    22: ("se_boo", 28, "SE_BOO"), 31: ("se_success", 37, "SE_SUCCESS"),
+                    32: ("se_failure", 38, "SE_FAILURE"), 102: ("se_shiny", 108, "SE_SHINY")}
+# key -> (value, pret path:lines, identifier the cited lines carry, note)
+EMERALD_DERIVED = {
+    "BASESTATS_GROWTH_RATE_OFFSET": (0x13, "include/pokemon.h:319", "growthRate", "struct SpeciesInfo"),
+    "BATTLE_MON_OT_ID_OFF": (0x54, "include/pokemon.h:294", "otId", "struct BattlePokemon"),
+    "BATTLE_MON_PERSONALITY_OFF": (0x48, "include/pokemon.h:291", "personality", "struct BattlePokemon"),
+    "BATTLE_MON_STAT_STAGES_OFF": (0x19, "include/pokemon.h:277", "statStages",
+                                   "statStages at 0x18 + STAT_ATK 1, include/constants/pokemon.h:75-76"),
+    "BATTLE_MOVE_PP_OFFSET": (4, "include/pokemon.h:327-333", "pp",
+                              "struct BattleMove: effect, power, type, accuracy, then pp"),
+    "BATTLE_RESULTS_FOE_FAINTS_OFF": (1, "include/battle.h:237", "opponentFaintCounter", ""),
+    "BATTLE_RESULTS_PLAYER_FAINTS_OFF": (0, "include/battle.h:236", "playerFaintCounter", ""),
+    "BATTLE_TYPE_DOUBLE_MASK": (0x01, "include/constants/battle.h:59", "BATTLE_TYPE_DOUBLE", ""),
+    "BATTLE_TYPE_LINK_MASK": (0x02, "include/constants/battle.h:60", "BATTLE_TYPE_LINK", ""),
+    "BATTLE_TYPE_TRAINER_MASK": (0x08, "include/constants/battle.h:62", "BATTLE_TYPE_TRAINER", ""),
+    "BOXES_PER_STORE": (14, "include/pokemon_storage_system.h:4", "TOTAL_BOXES_COUNT", ""),
+    "BOX_DATA_OFFSET": (4, "include/pokemon_storage_system.h:21-23", "boxNames",
+                        "boxes follows u8 currentBox but BoxPokemon opens with u32 personality "
+                        "(include/pokemon.h:196-198): 3 pad bytes; boxNames at 0x8344 = 4 + 14*30*80 "
+                        "confirms it (the 0x0001 comment is wrong)"),
+    "B_ACTION_NOTHING_FAINTED": (13, "include/battle.h:41", "B_ACTION_NOTHING_FAINTED", ""),
+    "DISABLE_STRUCT_PERISH_TIMER_OFF": (0x0F, "include/battle.h:70-85", "perishSongTimer",
+                                        "u32, u16, u16, then 7 u8 fields put the perishSongTimer:4 "
+                                        "byte at 0x0F (low nibble)"),
+    "EXPERIENCE_TABLE_ENTRY_COUNT": (101, "src/data/pokemon/experience_tables.h:18", "MAX_LEVEL + 1",
+                                     "gExperienceTables[][MAX_LEVEL + 1]"),
+    "GMAIN_CB2_OFFSET": (0x04, "include/main.h:11", "callback2", "struct Main"),
+    "GMAIN_INBATTLE_MASK": (0x02, "include/main.h:38-39", "inBattle",
+                            "second bitfield bit of the 0x439 byte, after oamLoadDisabled:1"),
+    "GMAIN_INBATTLE_OFFSET": (0x439, "include/main.h:39", "inBattle", "struct Main"),
+    "MAX_LEVEL": (100, "include/constants/pokemon.h:146", "MAX_LEVEL", ""),
+    "MONS_PER_BOX": (5 * 6, "include/pokemon_storage_system.h:5-7", "IN_BOX_COUNT",
+                     "IN_BOX_ROWS * IN_BOX_COLUMNS"),
+    "OUTCOME_WON": (1, "include/constants/battle.h:100", "B_OUTCOME_WON", ""),
+    "OUTCOME_LOST": (2, "include/constants/battle.h:101", "B_OUTCOME_LOST", ""),
+    "OUTCOME_DREW": (3, "include/constants/battle.h:102", "B_OUTCOME_DREW", ""),
+    "OUTCOME_RAN": (4, "include/constants/battle.h:103", "B_OUTCOME_RAN", ""),
+    "OUTCOME_CAUGHT": (7, "include/constants/battle.h:106", "B_OUTCOME_CAUGHT", ""),
+    "OVERWORLD_MODE": ("gmain_flags", "include/main.h:39", "inBattle",
+                       "client mode name: the in-battle test is this gMain flag bit, as on FR/LG"),
+    "PARTY_CAPACITY": (6, "include/constants/global.h:33", "PARTY_SIZE", ""),
+    # OPEN, not a number: the FR badges are flags 0x820..0x827 = SaveBlock1.flags byte 0x104 bits
+    # 0-7, but the Emerald ones are 0x867..0x86E = byte 0x10C bit 7 + byte 0x10D bits 0-6.  One u8
+    # whose bit i is badge i+1 (lua/gen3/reads.lua:437-442) cannot describe that, so the key stays
+    # null and the reader refuses rather than report shifted badges.
+    "SB1_BADGE_BYTE_OFFSET": (None, "include/constants/flags.h:1348-1366", "FLAG_BADGE01_GET",
+                              "OPEN: SYSTEM_FLAGS 0x860, FLAG_BADGE01_GET = +0x7 = 0x867 .. "
+                              "FLAG_BADGE08_GET = 0x86E -- flags byte 0x10C bit 7 .. byte 0x10D bit 6, "
+                              "which a single badge byte cannot express"),
+    "SB1_BALL_POCKET_COUNT": (16, "include/constants/global.h:53", "BAG_POKEBALLS_COUNT", ""),
+    "SB1_BALL_POCKET_OFFSET": (0x650, "include/global.h:1008", "bagPocket_PokeBalls", "struct SaveBlock1"),
+    "SB1_FLAGS_OFFSET": (0x1270, "include/global.h:1020", "flags", "struct SaveBlock1"),
+    "SB1_LOCATION_MAP_GROUP_OFFSET": (0x04, "include/global.h:987", "location",
+                                      "struct WarpData.mapGroup at +0, include/global.h:581-584"),
+    "SB1_LOCATION_MAP_NUM_OFFSET": (0x05, "include/global.h:987", "location",
+                                    "struct WarpData.mapNum at +1, include/global.h:581-584"),
+    "SB1_VARS_OFFSET": (0x139C, "include/global.h:1021", "vars", "struct SaveBlock1"),
+    "SB2_ENC_KEY_OFFSET": (0xAC, "include/global.h:532", "encryptionKey", "struct SaveBlock2"),
+    "SB2_NAME_OFFSET": (0, "include/global.h:510", "playerName", "struct SaveBlock2"),
+    "SB2_OT_ID_OFFSET": (0x0A, "include/global.h:513", "playerTrainerId", "struct SaveBlock2"),
+    "SHEDINJA_SPECIES_ID": (303, "include/constants/species.h:309", "SPECIES_SHEDINJA", ""),
+    "STATUS3_PERISH_SONG": (0x20, "include/constants/battle.h:162", "STATUS3_PERISH_SONG", ""),
+}
+# key -> (.sym array symbol, element count, pret path:line of the count, identifier): value =
+# symbol size / count, and the division must be exact.
+EMERALD_SYM_SIZED = {
+    "BASESTATS_ENTRY_SIZE": ("gSpeciesInfo", 412, "include/constants/species.h:418-420", "NUM_SPECIES"),
+    "BATTLE_MOVE_ENTRY_SIZE": ("gBattleMoves", 355, "include/constants/moves.h:360", "MOVES_COUNT"),
+    "DISABLE_STRUCT_SIZE": ("gDisableStructs", 4, "include/constants/battle.h:41", "MAX_BATTLERS_COUNT"),
+    "TASK_STRUCT_SIZE": ("gTasks", 16, "include/task.h:8", "NUM_TASKS"),
+}
+
+
+def build_emerald() -> dict:
+    """The gen3_emerald pack: every address by name from pokeemerald.sym, every constant cited."""
+    text = (REPO / EMERALD_SYM).read_text(encoding="utf-8")
+    rows: dict[str, list[tuple[int, int, int]]] = {}
+    for line_no, line in enumerate(text.splitlines(), 1):
+        m = re.fullmatch(r"([0-9a-f]{8}) [lg] ([0-9a-f]{8}) (\S+)", line)
+        if m:
+            rows.setdefault(m[3], []).append((int(m[1], 16), int(m[2], 16), line_no))
+
+    def one(symbol: str, lo: int = 0, hi: int = 1 << 32) -> tuple[int, int, int]:
+        hits = [r for r in rows.get(symbol, []) if lo <= r[0] < hi]
+        if len(hits) != 1:
+            sys.exit(f"gen_gen3_profile: {EMERALD_SYM} names {len(hits)} {symbol} (need exactly one)")
+        return hits[0]
+
+    sections: dict[str, dict] = {"ram": {}, "rom": {}, "derived": {}}
+    src: dict[str, str] = {}
+    for (section, key), (symbol, thumb) in EMERALD_SYM_ADDR.items():
+        addr, _, line = one(symbol)
+        sections[section][key] = addr | 1 if thumb else addr
+        src[f"{section}.{key}"] = (f"{EMERALD_SYM}:{line} ({symbol}{'|1, Thumb' if thumb else ''}; "
+                                   f"{EMERALD_PIN})")
+    task, lo_sym, hi_sym = EMERALD_LVLUP_TASK
+    addr, _, line = one(task, one(lo_sym)[0], one(hi_sym)[0])
+    sections["rom"]["POST_BATTLE_WRITER_TASKS"] = [addr | 1]
+    src["rom.POST_BATTLE_WRITER_TASKS"] = (
+        f"{EMERALD_SYM}:{line} ({task}|1, the one inside [{lo_sym}, {hi_sym}) = "
+        f"battle_controller_player.o); {EMERALD_PIN}:src/battle_controller_player.c:1271 ({task})")
+    headers = {}
+    for sid, (symbol, songs_line, const) in EMERALD_SE_SONGS.items():
+        addr, _, line = one(symbol)
+        headers[str(sid)] = addr
+        src[f"rom.SE_SONG_HEADERS.{sid}"] = (f"{EMERALD_SYM}:{line} ({symbol}); "
+                                             f"{EMERALD_PIN}:include/constants/songs.h:{songs_line} "
+                                             f"({const}; SE id {sid})")
+    sections["rom"]["SE_SONG_HEADERS"] = headers
+    derived = sections["derived"]
+    for key, (value, where, ident, note) in EMERALD_DERIVED.items():
+        derived[key] = value
+        src[f"derived.{key}"] = f"{EMERALD_PIN}:{where} ({ident}{'; ' + note if note else ''})"
+    for key, (symbol, count, where, ident) in EMERALD_SYM_SIZED.items():
+        _, size, line = one(symbol)
+        if size % count:
+            sys.exit(f"gen_gen3_profile: {symbol} size 0x{size:X} is not {count} equal entries")
+        derived[key] = size // count
+        src[f"derived.{key}"] = (f"{EMERALD_SYM}:{line} {symbol} 0x{size:X} bytes / {count}; "
+                                 f"{EMERALD_PIN}:{where} ({ident})")
+    derived["BASESTATS_ADDR_BY_GAME_CODE"] = {"BPEE": sections["rom"]["BASESTATS_ADDR"]}
+    src["derived.BASESTATS_ADDR_BY_GAME_CODE"] = "rom.BASESTATS_ADDR under game code BPEE"
+    head = subprocess.run(["git", "log", "-1", "--format=%H", "--", EMERALD_SYM],
+                          cwd=REPO, capture_output=True, text=True).stdout.strip()
+    return {
+        "schema": SCHEMA,
+        "generator": "tools/gen_gen3_profile.py",
+        "pack": "gen3_emerald",
+        "source": {"file": EMERALD_SYM, "git_head": head or "unknown",
+                   "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()},
+        "titles": {"emerald": {
+            "_src": src,
+            "admitted": False,  # ruling 24: admission flips at EG4
+            "variant": "emerald",
+            "rom_sha1": EMERALD_ROM_SHA1,
+            "rom_thumb": _thumb_keys(sections["rom"]),
+            **sections,
+        }},
+    }
+
+
 def source_block(text: str) -> dict:
     head = subprocess.run(["git", "log", "-1", "--format=%H", "--", SRC],
                           cwd=REPO, capture_output=True, text=True).stdout.strip()
@@ -1069,9 +1274,11 @@ def main() -> int:
     profiles = parse_profiles(text)
     source = source_block(text)
     stale = []
-    for pack in PACKS:
+    makers = [(pack, lambda pack=pack: build(pack, profiles, source)) for pack in PACKS]
+    makers.append(("gen3_emerald", build_emerald))
+    for pack, make in makers:
         out = REPO / "data" / "games" / pack / "profile.json"
-        rendered = render(build(pack, profiles, source))
+        rendered = render(make())
         if args.check:
             current = out.read_text(encoding="utf-8") if out.exists() else ""
             if current != rendered:
@@ -1087,7 +1294,7 @@ def main() -> int:
         print("stale (run tools/gen_gen3_profile.py): " + ", ".join(stale), file=sys.stderr)
         return 1
     if args.check:
-        print("data/games/gen3_{frlg,rr}/profile.json are current")
+        print("data/games/gen3_{frlg,rr,emerald}/profile.json are current")
     return 0
 
 

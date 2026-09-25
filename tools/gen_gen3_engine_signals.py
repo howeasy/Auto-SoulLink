@@ -15,6 +15,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tools.pin_gen3_site import (  # noqa: E402
+    EMERALD_SPECS,
+    ROM_BASE,
     ROM_SPECS,
     decode_thumb_detour,
     find_offsets,
@@ -1052,6 +1054,248 @@ def document(inventory: dict) -> str:
     return "\n".join(lines)
 
 
+# ── E1-PACK: vanilla Emerald (BPEE rev 0), a separate pack + inventory ─────────────────────
+# Kept apart from ROM_SPECS/CANDIDATES so the FR/LG/RR outputs above stay byte-identical. Every
+# capture offset below was RE-DERIVED on the Emerald bytes (Capstone 5.0.7 Thumb disassembly of
+# each function out of pokeemerald.sym, read against the pinned pret source), never carried over
+# from FR: faint/pc_move/mon_given/battle_end/save/poison/trade/PC-release keep the FR
+# function-relative offset because the disassembled instruction streams match; capture_wild
+# (+0x2A vs +0x28), whiteout (+0x54 vs +0x5A), map_load (+0x14 vs +0x2C), pc_deposit (+0x7E vs
+# +0x80), both evolution stores (+0x462/+0x370 vs +0x492/+0x3A0) and frame_control (entry, no
+# help-screen gate) moved.
+EMERALD_PRET = "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/"
+EMERALD_SYMBOLS = "data/gen3/pret/pokeemerald.sym"
+EMERALD_PROVENANCE = "data/gen3/pret/pokeemerald_provenance.json"
+EMERALD_DOC = ROOT / "docs/gen3_emerald/engine_sites.md"
+# kind -> (function, anchor_offset, capture, anchor hex @function+anchor_offset,
+#          entry hex @function+0, pret source, point, capture contract)
+EMERALD_BINDINGS = {
+    "frame_control": ("CallCallbacks", 0x0, 0, "10B5074C2068002801D0E6F2D3FD6068",
+        "10B5074C2068002801D0E6F2D3FD6068", "src/main.c#L188-L195", ["R15", "CPSR"],
+        "Emerald CallCallbacks has no save-failed/help-screen gate (FR 0800051A sits after one); "
+        "it only runs gMain.callback1 then callback2. Capture the ENTRY: once per main-loop frame, "
+        "before either callback. Frame control, not a game event."),
+    "battle_begin": ("CB2_InitBattle", 0x0, 0, "00B540F063FA20F0DFFB26F0D5FC",
+        "00B540F063FA20F0DFFB26F0D5FC28F0", "src/battle_main.c#L588-L617", ["R15", "CPSR"],
+        "Entry, before MoveSaveBlocks_ResetHeap relocates the save blocks (first BL, 08076C2C). "
+        "Emerald splits multi/recorded setup into CB2_InitBattleInternal and "
+        "CB2_HandleStartMultiPartnerBattle, all reached from this one callback invocation; "
+        "battle-type qualification and dedupe stay the consumer's duty."),
+    "battle_end": ("ReturnFromBattleToOverworld", 0x74, 4, "08488068C2F7AAFA70BC01BC",
+        "70B5204E306802252840002806D11E4C", "src/battle_main.c#L5217-L5249", ["R0", "R15", "CPSR"],
+        "+0x78 is BL SetMainCallback2(gMain.savedCallback) on the completion branch, after "
+        "inBattle is cleared (+0x44) and callback1 restored; the link-wait early return (+0x2C) "
+        "bypasses it. R0 = the saved callback. Not an exp/evolution-settled checkpoint."),
+    "faint": ("Cmd_tryfaintmon", 0x118, 4, "0130087038780DF03BFA26E064400202",
+        "F0B54F464646C0B481B0184802689178", "src/battle_script_commands.c#L2965-L3050",
+        ["R7", "R8", "R13"],
+        "Battle opcode 0x19. +0x11C follows the PLAYER faint-counter increment/store (+0x118..+0x11A, "
+        "battle_script_commands.c:3010-3011); a saturated counter skips the store but reaches the "
+        "same point. R7/R8 point at gActiveBattler (02024064). Snapshot battler/party identity "
+        "now; consumer dedupes; not every entry is a faint."),
+    "capture_wild": ("Cmd_givecaughtmon", 0x26, 4, "14F0A1FE000600285CD0E4F0A0FD0006",
+        "F0B557464E464546E0B419488146194D", "src/battle_script_commands.c#L10055-L10083",
+        ["R0", "R5", "R8", "R9"],
+        "Battle opcode 0xF0; +0x2A is immediately AFTER BL GiveMonToPlayer (+0x26; FR +0x24/+0x28, "
+        "the Emerald prologue also saves R10). R0 = party/PC/failure result before the shift; "
+        "R5 = &gBattlerAttacker, R8 = gEnemyParty, R9 = gBattlerPartyIndexes. Do not count "
+        "failure as acquisition or emit twice with mon_given."),
+    "mon_given": ("GiveMonToPlayer", 0x6C, 10, "301C00F005F80006000E70BC02BC0847",
+        "70B5061C094C22680721FFF745FC2268", "src/pokemon.c#L4425-L4445", ["R0", "R6", "R13"],
+        "Common POP at +0x76, after the party copy (R0=MON_GIVEN_TO_PARTY 0) or the CopyMonToPC "
+        "return (R0=1 PC / 2 can't give). R6 = source mon. Callers: Cmd_givecaughtmon and "
+        "ScriptGiveMon; caller context is required before classifying gift versus catch."),
+    "pc_move": ("CopyMonToPC", 0x9C, 4, "BFD1022008BC9846F0BC02BC0847",
+        "F0B5474680B480461A4832F0FBF80006", "src/pokemon.c#L4447-L4479", ["R0", "R5", "R6", "R8"],
+        "CopyMonToPC (the FR SendMonToPC, renamed and static) called by GiveMonToPlayer; +0xA0 is "
+        "the common return before register restoration. R0=MON_GIVEN_TO_PC(1) or MON_CANT_GIVE(2); "
+        "R5/R6 destination box/slot only on success; R8 source mon. Acquisition-to-storage, not "
+        "every PC menu operation."),
+    "whiteout": ("CB2_WhiteOut", 0x48, 12, "00F0EEF90748FFF76FFF07487AF7C8FA",
+        "00B581B016498720C000091808780130", "src/overworld.c#L1550-L1570", ["R0", "R15"],
+        "+0x54 is BL SetMainCallback2(CB2_Overworld) on the ++gMain.state >= 120 completion branch "
+        "(FR +0x5A). The party is already healed by DoWhiteOut "
+        "(+0x26); a completion marker, not an HP-at-faint witness."),
+    "map_load": ("CB2_LoadMap2", 0x08, 12, "00F0BCF90448FFF73DFF04487AF796FA",
+        "00B5064800F0D6FB00F0BCF90448FFF7", "src/overworld.c#L1582-L1588", ["R0", "R15"],
+        "+0x14 is BL SetMainCallback2(CB2_Overworld) after DoMapLoadLoop (+0x04) finished the load. "
+        "Emerald has no Quest Log branch, so this is the only path through CB2_LoadMap2 (FR +0x2C "
+        "on its normal branch). CB2_LoadMap only schedules; other loaders stay uncovered."),
+    "evolve_species_store": ("Task_EvolutionScene", 0x45A, 8, "48460B212CF76DF948462AF79AF96189",
+        "F0B54F464646C0B486B00006070E184A", "src/evolution_scene.c#L757-L771", ["R9", "R4"],
+        "EVOSTATE_SET_MON_EVOLVED: +0x462 immediately after SetMonData(mon, MON_DATA_SPECIES) whose "
+        "BL is +0x45E (evolution_scene.c:764). R9 = mon, R4 = task. Stats/re-nickname/dex follow; "
+        "cancellation bypasses this state."),
+    "trade_evolve_species_store": ("Task_TradeEvolutionScene", 0x368, 8,
+        "48460B212BF7C2FB484629F7EFFB6189", "F0B54F464646C0B486B00006070E0C4B",
+        "src/evolution_scene.c#L1176-L1190", ["R9", "R4"],
+        "T_EVOSTATE_SET_MON_EVOLVED: +0x370 after the SetMonData species BL at +0x36C "
+        "(evolution_scene.c:1183). R9 = mon (FR used R8), R4 = task. Correlate the trade lease to "
+        "suppress an ordinary key_change during SLink apply."),
+    "trade_begin": ("TradeMons", 0x0, 0, "F0B54F464646C0B481B00C1C0006000E",
+        "F0B54F464646C0B481B00C1C0006000E", "src/trade.c#L3102-L3130", ["R0", "R1", "R14"],
+        "TradeMons entry: R0 player slot, R1 partner slot, pre-swap identities. Callers: the "
+        "in-game cable/wireless animations (trade.c:3874, :4371) and the link path (:4633)."),
+    "trade_done": ("TradeMons", 0xBA, 4, "FFF79BFF01B018BC9846A146F0BC01BC",
+        "F0B54F464646C0B481B00C1C0006000E", "src/trade.c#L3102-L3130", ["R7", "R9", "R5"],
+        "TradeMons +0xBE before stack restoration: both party/enemy copies and mail/dex updates are "
+        "done. RECORD-SWAP completion, NOT scene/evolution completion; use trade_begin for the "
+        "old key."),
+    "save": ("TrySavingData", 0x38, 6, "02480480012030BC02BC084794620003",
+        "30B50006050E09480468012C09D1281C", "src/save.c#L765-L785", ["R0", "R5", "R13"],
+        "Common POP at +0x3E before R5 is restored: require R0==1 (SAVE_STATUS_OK) AND "
+        "R5==SAVE_NORMAL(0). One observation per invocation; not every call is a full save."),
+    "poison_hp_before": ("DoPoisonFieldEffect", 0x30, 4, "70F7D0FE0090002803D00138",
+        "F0B581B0194C002700260525201C0521", "src/field_poison.c#L120-L154", ["R0", "R4", "R5"],
+        "+0x34 after GetMonData(MON_DATA_HP) (field_poison.c:133), before the stack store/"
+        "decrement. R0 = old HP, R4 = mon. Pair with poison_faint by pointer and iteration."),
+    "poison_faint": ("DoPoisonFieldEffect", 0x46, 8, "39216A4671F78DFA01376434013D002D",
+        "F0B581B0194C002700260525201C0521", "src/field_poison.c#L120-L154", ["R4", "R13", "R5"],
+        "+0x4E immediately after SetMonData(MON_DATA_HP) (field_poison.c:137). R4 = mon, [R13] = "
+        "new HP. REQUIRE new HP==0 AND paired old HP>0; one edge per newly fainted mon."),
+    "pc_deposit": ("TryStorePartyMonInBox", 0x76, 8, "012139F7C8FF012070BC02BC0847",
+        "70B50006060E301CF8F716FF0004040C", "src/pokemon_storage_system.c#L6400-L6424",
+        ["R0", "R4", "R6"],
+        "Called by the deposit menu (pokemon_storage_system.c:2872). +0x7E is the common POP (FR "
+        "+0x80: the Emerald sStorage load is one instruction shorter) with R0 bool, R6 box and R4 "
+        "slot<<24 on success. Requires R0==1."),
+    "pc_withdraw": ("SetPlacedMonData", 0x1E, 6, "64221BF292F912E0",
+        "F0B50006060E09060F0E0E2E12D10649", "src/pokemon_storage_system.c#L6365-L6376", ["R6", "R7"],
+        "Party branch: +0x24 after memcpy(gPlayerParty[position], movingMon, 100), before the branch "
+        "to the epilogue. R6=14, R7=party destination. Correlate moving-mon origin before emitting "
+        "box_to_party."),
+    "pc_box_place": ("SetPlacedMonData", 0x44, 8, "301C391C03F020FFF0BC01BC0047",
+        "F0B50006060E09060F0E0E2E12D10649", "src/pokemon_storage_system.c#L6365-L6376", ["R6", "R7"],
+        "Common epilogue +0x4C after the SetBoxMonAt call on the box path. The party path joins "
+        "here too: REQUIRE R6<14 and R7<30. Do not duplicate pc_deposit."),
+    "pc_release_begin": ("ReleaseMon", 0x0, 0, "00B5FDF7A1FE03490878002804D00020",
+        "00B5FDF7A1FE03490878002804D00020", "src/pokemon_storage_system.c#L6460-L6479",
+        ["R13", "R14"],
+        "ReleaseMon entry, called after confirmation (pokemon_storage_system.c:2958). Capture the "
+        "pre-removal identity before the purge; pairs with pc_release."),
+    "pc_release": ("ReleaseMon", 0x38, 6, "101CFFF7E9FE00F013FC01BC0047",
+        "00B5FDF7A1FE03490878002804D00020", "src/pokemon_storage_system.c#L6460-L6479", ["R13"],
+        "+0x3E after PurgeMonOrBoxMon (BL +0x3A), before the display refresh. One confirmed "
+        "release; resolve the key from the pc_release_begin snapshot."),
+}
+
+
+@lru_cache(maxsize=1)
+def emerald_symbols() -> tuple[dict, str]:
+    raw = (ROOT / EMERALD_SYMBOLS).read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    provenance = json.loads((ROOT / EMERALD_PROVENANCE).read_text(encoding="utf-8"))
+    if (digest != provenance["sha256"]
+            or provenance["rom"]["sha1"] != EMERALD_SPECS["e"][4]
+            or provenance["origin"]["source_commit"] != EMERALD_PRET.split("/")[-2]):
+        raise ValueError("emerald: symbol/build provenance mismatch")
+    return parse_symbols(raw.decode("utf-8")), digest
+
+
+def emerald_resolve(kind: str, rom: bytes) -> dict:
+    """One Emerald site: unique anchor, inside its .sym function, entry bytes checked."""
+    function, anchor_offset, capture, anchor, entry, source, point, contract = EMERALD_BINDINGS[kind]
+    symbols, digest = emerald_symbols()
+    fn = symbols.get(function)
+    if fn is None:
+        return {"status": "UNVERIFIED", "reason": f"{function} is absent or ambiguous in the .sym"}
+    data = pattern_bytes(anchor)
+    offsets = find_offsets(rom, data)
+    base = fn["address"] - ROM_BASE
+    if offsets != [base + anchor_offset]:
+        return {"status": "UNVERIFIED", "matches": offsets,
+                "reason": f"exact pattern has {len(offsets)} matches or sits outside {function}"}
+    if anchor_offset + max(capture + 2, len(data)) > fn["size"]:
+        return {"status": "UNVERIFIED", "reason": "capture or anchor exceeds symbol size"}
+    if rom[base:base + len(entry) // 2].hex().upper() != entry:
+        return {"status": "UNVERIFIED", "reason": "enclosing entry context differs"}
+    try:
+        site = make_site(rom, offsets[0], data, capture_offset=capture, symbol=function, point=point)
+    except ValueError as exc:
+        return {"status": "UNVERIFIED", "reason": str(exc), "matches": offsets}
+    site.update(source=EMERALD_PRET + source, capture_contract=contract,
+                context={"rom_offset": base, "expected_hex": entry},
+                function={"symbol": function, "address": fn["address"],
+                          "anchor_offset": anchor_offset, "capture_offset": anchor_offset + capture,
+                          "size": fn["size"], "size_evidence": "verified_vanilla_symbol",
+                          "symbol_source": f"{EMERALD_SYMBOLS}:{fn['line']}",
+                          "symbols_sha256": digest})
+    return {"status": "PINNED", "site": site, "matches": offsets}
+
+
+def build_emerald(rom: bytes) -> tuple[dict, dict]:
+    sha1 = EMERALD_SPECS["e"][4]
+    if hashlib.sha1(rom).hexdigest() != sha1:
+        raise ValueError("e: ROM identity changed")
+    inventory = {kind: emerald_resolve(kind, rom) for kind in EMERALD_BINDINGS}
+    artifact = {"rom_sha1": sha1, "rom_md5": hashlib.md5(rom).hexdigest(),
+                "sites": {k: r["site"] for k, r in inventory.items() if r["status"] == "PINNED"}}
+    pack = {"schema": "gen3-engine-signals-v1", "pack": "gen3_emerald",
+            "evidence": "SOURCE_BYTE_PIN", "live_verified": False,
+            "titles": {"emerald": {"artifacts": {"clean": artifact}}}}
+    pack["sha256"] = hashlib.sha256(json.dumps(pack, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return pack, inventory
+
+
+def document_emerald(inventory: dict) -> str:
+    fr = {kind: b["anchor_offset"] + b["capture"] for kind, b in BINDINGS.items()}
+    lines = [
+        "# Emerald engine-site inventory (SOURCE only)", "",
+        "Generated by tools/gen_gen3_engine_signals.py (EMERALD_BINDINGS); edit that table, never "
+        "this file. Same schema and meaning as docs/gen3_engine_sites.md: PINNED is a unique exact "
+        "byte anchor at its pokeemerald.sym function offset with the function entry bytes checked. "
+        "It is NOT physical hook delivery, caller coverage or a release verdict. live_verified "
+        "stays false until E2.", "",
+        "Schema: data/games/gen3_emerald/engine_signals.json titles.emerald.artifacts.clean.sites[kind] "
+        "= {address, capture_offset, expected_hex, rom_offset, point, mode=thumb, context, function}. "
+        "address=08000000+rom_offset; hook address=address+capture_offset.", "",
+        "## Sources", "",
+        f"- [pret/pokeemerald @ c65e93f2]({EMERALD_PRET}); function addresses/sizes from "
+        f"{EMERALD_SYMBOLS} (pret symbols branch dba968c6), sha256 checked against "
+        f"{EMERALD_PROVENANCE}.",
+        "- Capture offsets were re-derived per kind by read-only Capstone 5.0.7 Thumb disassembly of "
+        "the Emerald function, read against the pret source; no FR offset is assumed to transfer. "
+        "The FR column below is for comparison only.",
+        "- OPEN kinds: none. Every FR site kind has an Emerald counterpart that pins cleanly; an "
+        "UNVERIFIED row below would mean a resolver refusal and the kind is absent from the JSON.",
+        "", "## ROM identity", "",
+        "| Artifact | SHA-1 (required) |", "|---|---|",
+        f"| e (Pokemon - Emerald Version (USA, Europe), BPEE rev 0) | {EMERALD_SPECS['e'][4]} |",
+        "", "## PINNED / UNVERIFIED matrix", "",
+        "| Kind | Emerald | Function | FR capture | Emerald capture |", "|---|---|---|---|---|",
+    ]
+    for kind, b in EMERALD_BINDINGS.items():
+        r = inventory[kind]
+        lines.append(f"| {kind} | {r['status']} | {b[0]} | +{fr[kind]:X} | +{b[1] + b[2]:X} |")
+    lines += ["", "## Capture inventory", ""]
+    for kind, (function, _, _, _, entry, source, point, contract) in EMERALD_BINDINGS.items():
+        r = inventory[kind]
+        lines += [f"### {kind} — {function}", "",
+                  f"[pret {source}]({EMERALD_PRET}{source}). {contract} Point: {', '.join(point)}.", "",
+                  "| Status | Function address / size | Anchor address / capture offset / flat "
+                  "| Expected bytes | Entry bytes |", "|---|---|---|---|---|"]
+        if r["status"] == "PINNED":
+            s, fn = r["site"], r["site"]["function"]
+            lines.append(f"| PINNED | {fn['address']:08X} / {fn['size']:X} ({fn['symbol_source']}) "
+                         f"| {s['address']:08X} / +{s['capture_offset']:X} / {s['rom_offset']:X} "
+                         f"| {s['expected_hex']} | {entry} |")
+        else:
+            lines.append(f"| UNVERIFIED | — | — | — | {r['reason']} |")
+        lines.append("")
+    lines += ["## Reproduce and falsify", "",
+              "- python tools/gen_gen3_engine_signals.py --check (offline; needs the pinned ROMs).",
+              "- python tools/pin_gen3_site.py HEX --rom e --symbol-file data/gen3/pret/pokeemerald.sym "
+              "--symbol NAME prints every match and a candidate record only.",
+              "- pytest tests/unit/test_gen3_emerald_pack.py -q: every expected_hex at its rom_offset, "
+              "uniqueness, function bounds, entry context, a corrupted-entry refusal, plus the profile "
+              "HEADER / literal-pool controls.", "",
+              "## NOT VERIFIED", "",
+              "No emulator was run. Natural-play positive/negative receipts, caller coverage "
+              "(ScriptGiveMon gifts, Battle Frontier/contest/secret-base paths, multi-move, Shedinja, "
+              "trade scene completion) and flash persistence remain open for E2.", ""]
+    return "\n".join(lines)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
@@ -1060,6 +1304,10 @@ def main() -> int:
         packs, inventory = build({name: load_rom(name) for name in ROM_SPECS})
         outputs = {output_path(p): json.dumps(v, indent=2, sort_keys=True) + "\n" for p, v in packs.items()}
         outputs[DOC] = document(inventory)
+        e_pack, e_inventory = build_emerald(load_rom("e"))
+        outputs[output_path("gen3_emerald")] = json.dumps(e_pack, indent=2, sort_keys=True) + "\n"
+        outputs[EMERALD_DOC] = document_emerald(e_inventory)
+        inventory = dict(inventory, e=e_inventory)
         stale = []
         for path, text in outputs.items():
             if args.check:
@@ -1074,7 +1322,8 @@ def main() -> int:
         if stale:
             print("STALE: " + ", ".join(stale))
             return 1
-        print("CHECK PASSED (SOURCE only)" if args.check else "WROTE two packs + inventory (SOURCE only)")
+        print("CHECK PASSED (SOURCE only)" if args.check
+              else "WROTE three packs + two inventories (SOURCE only)")
         return 0
     except (OSError, ValueError) as exc:
         parser.exit(1, f"{exc}\n")
