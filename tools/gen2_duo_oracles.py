@@ -2196,8 +2196,13 @@ def ball_gate_oracle(results, *, data_dir, area_id="route_29", ot_ids=None, boot
                                          codec.for_foundation(title))
 
     def natural(inst, before, after):
-        _ball_need(before == [] and len(after) == 1 and after[0][0] == POKE_BALL
-                   and 1 <= after[0][1] < AIDE_BALLS,
+        # A zero-quantity bag slot is removed (pack.asm), so an empty `after` is what "every one of the
+        # aide's AIDE_BALLS Balls got thrown" looks like -- the Gen 2 shake-check catch algorithm can
+        # legitimately fail AIDE_BALLS - 1 times before succeeding on the last Ball (fsw-postrc 2026-09-25,
+        # duo_ball_gate_cc_b: a level-2 full-HP RATTATA, catch rate 255, needed all 5).
+        used_some = len(after) == 1 and after[0][0] == POKE_BALL and 1 <= after[0][1] < AIDE_BALLS
+        used_all = after == []
+        _ball_need(before == [] and (used_some or used_all),
                    f"{inst} Ball pocket {before} -> {after} is not the aide's natural stack minus the thrown Balls")
 
     decoded, _row, document = _pair_oracle(results, data_dir=data_dir, area_id=area_id, ot_ids=ot_ids,

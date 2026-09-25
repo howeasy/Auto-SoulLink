@@ -392,6 +392,34 @@ def test_ball_gate_oracle_passes(ball_case):
     assert facts and facts[0]["area"] == "route_29" and facts[0]["status"] == "alive"
 
 
+def test_ball_gate_oracle_passes_when_a_side_burns_the_whole_aide_stack(tmp_path):
+    """natural(): the Gen 2 shake-check catch algorithm can legitimately fail 4 times before succeeding
+    on the 5th and last Poke Ball (fsw-postrc 2026-09-25, duo_ball_gate_cc_b: a level-2 full-HP RATTATA,
+    catch rate 255, needed all 5 of the aide's Balls). Once every Ball is thrown, its bag slot is removed
+    like any other zero-quantity item (pack.asm), so the flushed pocket is genuinely `[]`, exactly like the
+    zero-Ball boot fixture -- not a sign that the aide's Balls never reached the bag."""
+    layout = codec.for_foundation("crystal")
+    results, decoded, starters = {}, {}, {}
+    for inst, species, balls in (("a", 16, 4), ("b", 19, None)):   # b: every aide Ball thrown, none left
+        case, title = TOWN[inst]
+        ot_id = hello_ot(case)
+        save, mon = natural_capture(layout, case, species=species, balls=balls, ot_id=ot_id)
+        path = tmp_path / f"{inst}.SaveRAM"
+        path.write_bytes(save)
+        starters[inst] = starter_key(layout, case)
+        results[inst] = marker_text(path, save[:oracles.CARTRAM_BYTES], case=case, title=title, key=codec.key(mon),
+                                    species=species, level=mon["level"], ot_id=ot_id, starter=starters[inst])
+        decoded[inst] = {"key": codec.key(mon), "species": species, "level": mon["level"]}
+    data = tmp_path / "data"
+    data.mkdir(exist_ok=True)
+    (data / "links.json").write_text(json.dumps({
+        "links": [{"area_id": "route_29", "status": "alive", "a": decoded["a"], "b": decoded["b"]}],
+        "area_states": {"route_29": "linked"}, "pokeballs_obtained": {"a": True, "b": True}}), encoding="utf-8")
+    log = "".join(f"INFO [{inst}] faint key={starters[inst]} area='cherrygrove_city'\n" for inst in ("a", "b"))
+    (data / "slink.log").write_text(log, encoding="utf-8")
+    assert oracles.ball_gate_oracle(results, data_dir=str(data)) is None
+
+
 def _rewrite_links(data, **changes):
     doc = json.loads((data / "links.json").read_text(encoding="utf-8"))
     doc.update(changes)
