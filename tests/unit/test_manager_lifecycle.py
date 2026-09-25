@@ -7,6 +7,7 @@ import os
 import stat
 import subprocess
 import sys
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -296,3 +297,130 @@ def test_stop_without_psutil_kills_and_waits_for_the_child(monkeypatch):
     finally:
         if child.poll() is None:
             child.kill()
+
+
+# -- review round: probe host, a foreign server, lock growth, async kills, cancellation --
+def _run_manager(client):
+    return next(r.handler.__self__ for r in client.server.app.router.routes()
+                if isinstance(getattr(r.handler, "__self__", None), manager.RunManager))
+
+
+def _live_child(monkeypatch, answers):
+    """A child that stays up; `answers(host)` decides what its HTTP port says."""
+    spawned, probed = [], []
+
+    async def create(*_cmd, **_kw):
+        spawned.append(4242)
+
+        async def wait():
+            await asyncio.Event().wait()
+        return SimpleNamespace(pid=4242, returncode=None, wait=wait, kill=lambda: None)
+
+    async def ready(host, _port):
+        probed.append(host)
+        return answers(bool(spawned))
+    monkeypatch.setattr(manager.asyncio, "create_subprocess_exec", create)
+    monkeypatch.setattr(manager, "_http_ready", ready)
+    monkeypatch.setattr(manager, "SPAWN_POLL_S", 0.01)
+    return spawned, probed
+
+
+@pytest.mark.asyncio
+async def test_an_ipv6_wildcard_is_probed_on_ipv6_loopback(manager_dir, monkeypatch):
+    _spawned, probed = _live_child(monkeypatch, lambda up: up)
+    assert await manager._spawn_run({"run_id": "r1", "tcp_port": 1, "http_port": 2}, "::") == 4242
+    assert probed and set(probed) == {"::1"}
+
+
+@pytest.mark.asyncio
+async def test_the_probe_brackets_an_ipv6_literal():
+    from aiohttp import web
+    from aiohttp.test_utils import TestServer
+    async def status(_request):
+        return web.json_response({})
+    app = web.Application()
+    app.router.add_get("/api/status", status)
+    server = TestServer(app, host="::1")
+    try:
+        await server.start_server()
+    except OSError:
+        pytest.skip("no IPv6 loopback here")
+    try:
+        assert await manager._http_ready("::1", server.port) is True
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_a_foreign_server_on_the_http_port_refuses_the_start(manager_dir, monkeypatch):
+    spawned, _probed = _live_child(monkeypatch, lambda up: True)
+    with pytest.raises(RuntimeError, match="HTTP port 2 is in use"):
+        await manager._spawn_run({"run_id": "r1", "tcp_port": 1, "http_port": 2}, "127.0.0.1")
+    assert spawned == []
+
+
+@pytest.mark.asyncio
+async def test_run_locks_do_not_accumulate(manager_client, monkeypatch):
+    _stopped_run()
+    monkeypatch.setattr(manager, "_kill_run", lambda pid, created=None: True)
+    for path in ("/api/runs/nope/start", "/api/runs/nope/stop", "/api/runs/nope/delete",
+                 "/api/runs/r1/stop", "/api/runs/r1/delete"):
+        await manager_client.post(path)
+    assert _run_manager(manager_client)._run_locks == {}
+
+
+@pytest.mark.asyncio
+async def test_a_waiter_keeps_the_lock_alive_until_it_is_done(manager_client, monkeypatch):
+    _stopped_run()
+    spawns, release = _blocking_spawn(monkeypatch)
+    first = asyncio.ensure_future(manager_client.post("/api/runs/r1/start"))
+    second = asyncio.ensure_future(manager_client.post("/api/runs/r1/start"))
+    await asyncio.sleep(0.1)
+    assert _run_manager(manager_client)._run_locks["r1"][1] == 2
+    release.set()
+    await first
+    await second
+    assert spawns == ["r1"] and _run_manager(manager_client)._run_locks == {}
+
+
+def test_a_kill_without_psutil_waits_for_the_process_to_go(monkeypatch):
+    """SIGTERM (and TerminateProcess) return before the process is gone."""
+    monkeypatch.setattr(manager, "PSUTIL_AVAILABLE", False)
+    signalled, checks = [], iter([True, True, True, True, False])
+    monkeypatch.setattr(manager.os, "kill", lambda pid, sig: signalled.append(pid))
+    monkeypatch.setattr(manager, "_is_alive", lambda pid, created=None: next(checks, False))
+    assert manager._kill_run(4242) is True
+    assert signalled == [4242]
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_start_kills_its_child(manager_dir, monkeypatch):
+    killed = _fake_child(monkeypatch, exits_after=None)
+    start = asyncio.ensure_future(manager._spawn_run({"run_id": "r1", "tcp_port": 1, "http_port": 2}, "127.0.0.1"))
+    await asyncio.sleep(0.1)
+    start.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await start
+    assert killed == [4242]
+
+
+@pytest.mark.asyncio
+async def test_stop_kills_off_the_event_loop_and_keeps_a_concurrent_reconcile(manager_client, monkeypatch):
+    manager._save_registry([
+        {"run_id": "r1", "name": "Duo", "tcp_port": 1, "http_port": 2, "status": "running", "pid": 4242},
+        {"run_id": "r2", "name": "Other", "tcp_port": 3, "http_port": 4, "status": "running", "pid": 99},
+    ])
+    released, blocked_loop = threading.Event(), []
+
+    def slow_kill(pid, created=None):
+        blocked_loop.append(not released.wait(timeout=2))   # the loop must be free to release us
+        manager._update_run("r2", status="stopped", pid=None)  # a board poll reconciled r2 meanwhile
+        return True
+    monkeypatch.setattr(manager, "_kill_run", slow_kill)
+    stop = asyncio.ensure_future(manager_client.post("/api/runs/r1/stop"))
+    await asyncio.sleep(0.1)
+    released.set()
+    assert (await (await stop).json())["ok"]
+    assert blocked_loop == [False]
+    runs = {r["run_id"]: r for r in manager._load_registry()}
+    assert runs["r1"]["status"] == "stopped" and runs["r2"]["status"] == "stopped"

@@ -27,7 +27,6 @@ import signal
 import stat
 import sys
 import time
-from collections import defaultdict
 from datetime import UTC, datetime
 
 try:
@@ -550,6 +549,11 @@ def _win_pid_alive(pid: int) -> bool:
 
 async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
     """Start a server.py subprocess for the given run. Returns the new PID."""
+    # Wildcards are probed on loopback of the same family (asyncio's IPv6 listeners are V6ONLY).
+    probe_host = {"": "127.0.0.1", "0.0.0.0": "127.0.0.1", "::": "::1"}.get(host, host)
+    # Something already answering on the HTTP port would pass the readiness poll as this run.
+    if await _http_ready(probe_host, run["http_port"]):
+        raise RuntimeError(f"HTTP port {run['http_port']} is in use: another server already answers there")
     data_dir = os.path.join(MANAGER_DIR, run["run_id"])
     os.makedirs(data_dir, exist_ok=True)
     cmd = [
@@ -590,10 +594,10 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
     # while OUR child is still alive -- a server that cannot bind exits, and whatever else holds
     # that port must not be read as this run. /api/status does not name its run, so alive plus
     # answering is the ownership check.
-    probe_host = "127.0.0.1" if host in ("", "0.0.0.0", "::") else host
     loop = asyncio.get_running_loop()
     deadline = loop.time() + SPAWN_READY_S
     exited = asyncio.ensure_future(proc.wait())
+    ready = False
     try:
         while True:
             try:
@@ -603,13 +607,16 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
             except TimeoutError:
                 pass
             if await _http_ready(probe_host, run["http_port"]) and not exited.done():
+                ready = True
                 return proc.pid
             if loop.time() >= deadline:
                 why = f"the run's server did not answer on HTTP {run['http_port']} within {SPAWN_READY_S:g} s"
-                with contextlib.suppress(ProcessLookupError):
-                    proc.kill()         # our own child, hung: never leave it holding the ports
                 break
     finally:
+        # Not ready (hung, or this start was cancelled): our own child must not keep the ports.
+        if not ready and proc.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
         if not exited.done():
             exited.cancel()
     reason = ""
@@ -623,9 +630,11 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
 
 
 async def _http_ready(host: str, port: int) -> bool:
+    netloc = f"[{host}]" if ":" in host else host          # an IPv6 literal needs brackets
     try:
+        # sock_connect: a refused connect on Windows retries for ~2 s; a listener accepts at once
         async with aiohttp.ClientSession() as session, session.get(
-            f"http://{host}:{port}/api/status", timeout=aiohttp.ClientTimeout(total=2)
+            f"http://{netloc}:{port}/api/status", timeout=aiohttp.ClientTimeout(total=2, sock_connect=0.3)
         ) as resp:
             return resp.status == 200
     except Exception:
@@ -813,7 +822,22 @@ class RunManager:
         # clicks cannot spawn twice and a stop mid-start is not overwritten by the start.
         # ponytail: in-process only. Two Managers sharing one registry are not locked
         # against each other (documented limitation: run one Manager per data dir).
-        self._run_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self._run_locks: dict[str, list] = {}      # run_id -> [lock, holders + waiters]
+
+    @contextlib.asynccontextmanager
+    async def _run_lock(self, run_id: str):
+        """The run's lock, dropped once nobody holds or waits on it, so ids that 404 or were
+        deleted do not accumulate. Counted by hand: after a release, lock.locked() is False
+        while a woken waiter has yet to take it."""
+        entry = self._run_locks.setdefault(run_id, [asyncio.Lock(), 0])
+        entry[1] += 1
+        try:
+            async with entry[0]:
+                yield
+        finally:
+            entry[1] -= 1
+            if not entry[1]:
+                del self._run_locks[run_id]
 
     def _get(self) -> list[dict]:
         runs = _load_registry()
@@ -1048,7 +1072,7 @@ class RunManager:
         # Auto-start. The run exists either way; a start that fails is reported with its
         # reason so the creator can show it, rather than landing on a "running" run.
         start_error = ""
-        async with self._run_locks[run_id]:
+        async with self._run_lock(run_id):
             try:
                 pid = await _spawn_run(run, self.bind_host, manager_port=self.manager_port)
                 run = _update_run(run_id, status="running", pid=pid, pid_created=_create_time(pid)) or run
@@ -1060,7 +1084,7 @@ class RunManager:
 
     async def handle_start(self, request: web.Request) -> web.Response:
         run_id = request.match_info["run_id"]
-        async with self._run_locks[run_id]:
+        async with self._run_lock(run_id):
             runs = _load_registry()          # re-read inside the lock: a start may just have finished
             run = _find_run(runs, run_id)
             if run is None:
@@ -1078,62 +1102,57 @@ class RunManager:
 
     async def handle_stop(self, request: web.Request) -> web.Response:
         run_id = request.match_info["run_id"]
-        async with self._run_locks[run_id]:
+        async with self._run_lock(run_id):
             runs = _load_registry()
             run = _find_run(runs, run_id)
             if run is None:
                 return web.json_response({"ok": False, "error": "Run not found"}, status=404)
             pid = run.get("pid")
-            if pid and not _kill_run(pid, run.get("pid_created")):
+            if pid and not await asyncio.to_thread(_kill_run, pid, run.get("pid_created")):
                 # Keep the pid: the server is still up, and a later stop must be able to retry.
                 return web.json_response({"ok": False, "error": f"Could not stop the run's server (PID {pid})"},
                                          status=500)
-            run["status"] = "stopped"
-            run["pid"] = None
-            run["pid_created"] = None
-            _save_registry(runs)
+            _update_run(run_id, status="stopped", pid=None, pid_created=None)
             return web.json_response({"ok": True})
 
     async def handle_archive(self, request: web.Request) -> web.Response:
         run_id = request.match_info["run_id"]
-        async with self._run_locks[run_id]:
+        async with self._run_lock(run_id):
             runs = _load_registry()
             run = _find_run(runs, run_id)
             if run is None:
                 return web.json_response({"ok": False, "error": "Run not found"}, status=404)
             pid = run.get("pid")
-            if pid and not _kill_run(pid, run.get("pid_created")):
+            if pid and not await asyncio.to_thread(_kill_run, pid, run.get("pid_created")):
                 return web.json_response({"ok": False, "error": f"Could not stop the run's server (PID {pid})"},
                                          status=500)
-            run["status"] = "archived"
-            run["pid"] = None
-            run["pid_created"] = None
-            _save_registry(runs)
+            _update_run(run_id, status="archived", pid=None, pid_created=None)
             return web.json_response({"ok": True})
 
     async def handle_delete(self, request: web.Request) -> web.Response:
         run_id = request.match_info["run_id"]
-        async with self._run_locks[run_id]:
+        async with self._run_lock(run_id):
             runs = _load_registry()
             run = _find_run(runs, run_id)
             if run is None:
                 return web.json_response({"ok": False, "error": "Run not found"}, status=404)
             # Stop the process if running; never delete the data out from under a live server
             pid = run.get("pid")
-            if pid and not _kill_run(pid, run.get("pid_created")):
+            if pid and not await asyncio.to_thread(_kill_run, pid, run.get("pid_created")):
                 return web.json_response({"ok": False, "error": f"Could not stop the run's server (PID {pid})"},
                                          status=500)
             # Remove the data directory. A partial delete keeps the registry entry and says what
             # is left: a leftover links.json would otherwise be re-adopted as a stopped run.
             data_dir = os.path.join(MANAGER_DIR, run_id)
             if os.path.isdir(data_dir):
-                failed = _rmtree(data_dir)
+                failed = await asyncio.to_thread(_rmtree, data_dir)
                 if os.path.exists(data_dir):
                     left = failed[0] if failed else data_dir
                     return web.json_response({"ok": False, "error": f"Could not delete the run's data: {left} is still there"},
                                              status=500)
                 log.info(f"Deleted data directory for run {run_id}")
-            runs = [r for r in runs if r["run_id"] != run_id]
+            # re-read: a board poll may have reconciled other runs during the awaits
+            runs = [r for r in _load_registry() if r["run_id"] != run_id]
             try:
                 _save_registry(runs)
             except OSError as e:

@@ -159,8 +159,8 @@ def _captured_spawn_cmd(run: dict) -> list:
     ready, poll = manager._http_ready, manager.SPAWN_POLL_S
     manager.SPAWN_POLL_S = 0.01
 
-    async def _answers(*_args):        # the child's HTTP port answers /api/status
-        return True
+    async def _answers(*_args):        # the child's HTTP port answers /api/status, once it exists
+        return "cmd" in captured
     manager._http_ready = _answers
     try:
         asyncio.run(manager._spawn_run(run, "127.0.0.1"))
