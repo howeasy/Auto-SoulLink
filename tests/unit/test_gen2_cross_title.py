@@ -447,3 +447,44 @@ async def test_replaced_state_rebinds_title_sensitive_capture_rules(tmp_path, cu
                    for players in srv.state.pending_captures.values())
     finally:
         await close()
+
+
+# ── per-player status (OMP cx-7cb7a18b): every per-player field reads that player's pack ─────
+
+@pytest.mark.asyncio
+async def test_a_gold_silver_status_draws_each_player_from_their_own_pack(tmp_path, cutover):
+    from server.state import LinkEntry, LinkStatus, MonInfo
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        assert not _refused(await send(_hello("a", _cart("Gold"))))
+        assert not _refused(await send(_hello("b", _cart("Silver"))))
+        assert srv.adapter_for("b").title == "silver"
+        s = srv.state
+        s.links.append(LinkEntry(area_id="route_29", status=LinkStatus.ALIVE,
+                                 a=MonInfo(key="A1", species=25, level=5), b=MonInfo(key="B1", species=25, level=5)))
+        s.links.append(LinkEntry(area_id="route_30", status=LinkStatus.DEAD, killed_at="2026-09-25T00:00:00",
+                                 a=MonInfo(key="A2", species=16, level=5), b=MonInfo(key="B2", species=16, level=5)))
+        s.pending_captures["route_31"] = {"b": MonInfo(key="B3", species=19, level=3)}
+        srv.party_details["b"] = {"B1": {"species_id": 25, "level": 5, "hp": 20, "maxHP": 20, "held_item_id": 70}}
+        srv.party_details["a"] = {"A1": {"species_id": 25, "level": 5, "hp": 20, "maxHP": 20}}
+        srv.battle_state["b"].update(in_battle=True, enemy_party=[{"species_id": 16, "level": 3, "hp": 5, "maxHP": 9}])
+        d = srv._build_status_dict()
+
+        def silver(html):
+            return "/silver/" in html and "/gold/" not in html
+        link = d["links"][0]
+        assert silver(link["b_sprite_html"]) and "/gold/" in link["a_sprite_html"]
+        dead = next(k for k in d["killfeed"] if k["b_key"] == "B2")
+        assert silver(dead["b_sprite_html"]) and "/gold/" in dead["a_sprite_html"]
+        assert silver(d["pending_captures"]["route_31"]["b"]["sprite_html"])
+        pb = d["players"]["b"]
+        assert silver(pb["party_details"]["B1"]["sprite_html"])
+        assert silver(pb["battle_state"]["enemy_party"][0]["sprite_html"])
+        # the calc names B's items from B's pack
+        srv.adapter_for("b").item_name = lambda iid: "SILVER-ONLY"
+        import json as _json
+        calc = _json.loads((await srv.handle_calc_mons(None)).text)
+        assert calc["b"]["party"][0]["item_name"] == "SILVER-ONLY"
+    finally:
+        await close()

@@ -440,13 +440,14 @@ class SLinkServer:
         _obs_cfg = obs_config_path(data_dir)
         self.obs = OBSController(_obs_cfg)
 
-    def _get_sprite_html(self, species_id: int, form: int = 0) -> str:
-        """Get sprite HTML by delegating to the game adapter.
+    def _get_sprite_html(self, species_id: int, form: int = 0, player_id: str = "") -> str:
+        """Get sprite HTML by delegating to the game adapter -- `player_id`'s own when given
+        (Gen 2 titles draw from their own pack), else the run's.
 
         Optional `form` byte (default 0) is the alt-form discriminator from Block B
         (Gen 4+). Adapters that ignore it still produce correct base-form sprites.
         """
-        return self.adapter.sprite_html(species_id, form)
+        return (self.adapter_for(player_id) if player_id else self.adapter).sprite_html(species_id, form)
 
     _METHOD_ICON: dict[str, str] = {
         "Day":        "☀",
@@ -2452,7 +2453,7 @@ class SLinkServer:
                 sid = d.get("species_id", 0)
                 form = d.get("form", 0)
                 d["species_name"] = adapter.species_name(sid) if sid else ""
-                d["sprite_html"] = self._get_sprite_html(sid, form) if sid else ""
+                d["sprite_html"] = self._get_sprite_html(sid, form, pid) if sid else ""
                 aid = d.get("ability_id", 0)
                 d["ability_name"] = adapter.ability_name(aid, sid) if aid else ""
                 iid = d.get("held_item_id", 0)
@@ -2484,9 +2485,9 @@ class SLinkServer:
                 # Rendered |safe, so it is always ours: a client-sent sprite_html is dropped.
                 em2.pop("sprite_html", None)
                 if sid:
-                    em2["sprite_html"] = self._get_sprite_html(sid, form)
+                    em2["sprite_html"] = self._get_sprite_html(sid, form, pid)
                 if sid and not em2.get("species_name"):
-                    em2["species_name"] = self.adapter.species_name(sid)
+                    em2["species_name"] = self.adapter_for(pid).species_name(sid)
                 em2["move_details"] = _move_details(em2)
                 enriched.append(em2)
             bs["enemy_party"] = enriched
@@ -2511,7 +2512,7 @@ class SLinkServer:
                     "nuzlocke_active": s.pokeballs_obtained.get(pid, False),
                     "current_area":   self.player_area.get(pid, ""),
                     "current_area_id": self.player_area_id.get(pid, ""),
-                    "current_area_display": self.adapter.area_display_name(
+                    "current_area_display": self.adapter_for(pid).area_display_name(
                         self.player_area_id.get(pid, "") or self.player_area.get(pid, "")
                     ),
                     "ball_count":     self.player_ball_count.get(pid, 0),
@@ -2560,15 +2561,15 @@ class SLinkServer:
                     "a_key":      e.a.key if e.a else None,
                     "a_nickname": e.a.nickname if e.a else "",
                     "a_species":  e.a.species if e.a else 0,
-                    "a_species_name": self.adapter.species_name(e.a.species) if e.a and e.a.species else "",
-                    "a_sprite_html": self._get_sprite_html(e.a.species) if e.a and e.a.species else "",
+                    "a_species_name": self.adapter_for("a").species_name(e.a.species) if e.a and e.a.species else "",
+                    "a_sprite_html": self._get_sprite_html(e.a.species, 0, "a") if e.a and e.a.species else "",
                     "a_level":    self._resolve_level("a", e.a),
                     "a_shiny":    e.a.is_shiny if e.a else False,
                     "b_key":      e.b.key if e.b else None,
                     "b_nickname": e.b.nickname if e.b else "",
                     "b_species":  e.b.species if e.b else 0,
-                    "b_species_name": self.adapter.species_name(e.b.species) if e.b and e.b.species else "",
-                    "b_sprite_html": self._get_sprite_html(e.b.species) if e.b and e.b.species else "",
+                    "b_species_name": self.adapter_for("b").species_name(e.b.species) if e.b and e.b.species else "",
+                    "b_sprite_html": self._get_sprite_html(e.b.species, 0, "b") if e.b and e.b.species else "",
                     "b_level":    self._resolve_level("b", e.b),
                     "b_shiny":    e.b.is_shiny if e.b else False,
                     "a_enc_species": e.encounter_a.species if e.encounter_a else 0,
@@ -2586,8 +2587,8 @@ class SLinkServer:
                     pid: {
                         "key": mon.key, "nickname": mon.nickname,
                         "species": mon.species, "level": mon.level,
-                        "species_name": self.adapter.species_name(mon.species) if mon.species else "",
-                        "sprite_html": self._get_sprite_html(mon.species) if mon.species else "",
+                        "species_name": self.adapter_for(pid).species_name(mon.species) if mon.species else "",
+                        "sprite_html": self._get_sprite_html(mon.species, 0, pid) if mon.species else "",
                     }
                     for pid, mon in players.items()
                 }
@@ -2618,20 +2619,20 @@ class SLinkServer:
                         "a_key":      e.a.key      if e.a else None,
                         "a_nickname": e.a.nickname if e.a else "",
                         "a_species":  e.a.species  if e.a else 0,
-                        "a_species_name": self.adapter.species_name(e.a.species) if e.a and e.a.species else "",
-                        "a_sprite_html": self._get_sprite_html(e.a.species) if e.a and e.a.species else "",
+                        "a_species_name": self.adapter_for("a").species_name(e.a.species) if e.a and e.a.species else "",
+                        "a_sprite_html": self._get_sprite_html(e.a.species, 0, "a") if e.a and e.a.species else "",
                         "a_level":    self._resolve_level("a", e.a),
                         "b_key":      e.b.key      if e.b else None,
                         "b_nickname": e.b.nickname if e.b else "",
                         "b_species":  e.b.species  if e.b else 0,
-                        "b_species_name": self.adapter.species_name(e.b.species) if e.b and e.b.species else "",
-                        "b_sprite_html": self._get_sprite_html(e.b.species) if e.b and e.b.species else "",
+                        "b_species_name": self.adapter_for("b").species_name(e.b.species) if e.b and e.b.species else "",
+                        "b_sprite_html": self._get_sprite_html(e.b.species, 0, "b") if e.b and e.b.species else "",
                         "b_level":    self._resolve_level("b", e.b),
                         # The wild mon a side met but did not catch (dead zones only).
-                        "a_enc_species_name": self.adapter.species_name(e.encounter_a.species)
+                        "a_enc_species_name": self.adapter_for("a").species_name(e.encounter_a.species)
                                               if e.encounter_a and e.encounter_a.species else "",
                         "a_enc_level": e.encounter_a.level if e.encounter_a else 0,
-                        "b_enc_species_name": self.adapter.species_name(e.encounter_b.species)
+                        "b_enc_species_name": self.adapter_for("b").species_name(e.encounter_b.species)
                                               if e.encounter_b and e.encounter_b.species else "",
                         "b_enc_level": e.encounter_b.level if e.encounter_b else 0,
                         "status":     e.status.value,
@@ -2742,11 +2743,12 @@ class SLinkServer:
         result = {}
         for pid in ("a", "b"):
             p = d["players"][pid]
+            adapter = self.adapter_for(pid)
             party, linked = [], []
             # Party mons
             for key in p.get("party_keys", []):
                 detail = p["party_details"].get(key, {})
-                entry = _build_mon_entry(key, detail, self.adapter)
+                entry = _build_mon_entry(key, detail, adapter)
                 if entry:
                     entry["loc"] = "party"
                     entry["hp_pct"] = (
@@ -2773,7 +2775,7 @@ class SLinkServer:
                     "ability_name": "",
                     "moves":        stats.get("moves", []),
                 }
-                entry = _build_mon_entry(mi.key, detail, self.adapter)
+                entry = _build_mon_entry(mi.key, detail, adapter)
                 if entry:
                     entry["loc"] = "box"
                     linked.append(entry)
@@ -2802,7 +2804,7 @@ class SLinkServer:
                         "status_cond":  em.get("status_cond", 0),
                         "stat_stages":  em.get("stat_stages"),
                     }
-                    entry = _build_mon_entry(f"foe-{ei}", detail, self.adapter)
+                    entry = _build_mon_entry(f"foe-{ei}", detail, adapter)
                     if entry:
                         entry["loc"]    = "enemy"
                         entry["active"] = em.get("active", False)
@@ -2811,7 +2813,7 @@ class SLinkServer:
                         entry["trainer_label"] = trainer_label
                         enemy.append(entry)
                 calc_label = _calc_trainer_label(
-                    self.adapter.trainer_brief(tid) if (is_trainer and tid) else None, enemy)
+                    adapter.trainer_brief(tid) if (is_trainer and tid) else None, enemy)
                 for entry in enemy if calc_label else ():
                     entry["trainer_label"] = calc_label
             result[pid] = {
