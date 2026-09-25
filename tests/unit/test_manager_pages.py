@@ -213,7 +213,11 @@ async def test_presets_are_named_specs_the_randomizer_would_accept(manager_clien
     bad = await manager_client.post("/api/presets", json={"name": "Bad", "spec": {"types": "random"}})
     assert bad.status == 400 and "types" in (await bad.json())["error"]
     assert (await manager_client.post("/api/presets", json={"name": "", "spec": {}})).status == 400
-    await manager_client.post("/api/presets", json={"name": "chaos", "spec": {"wild": "area"}})
+    # Replacing a same-named preset needs explicit consent (test_manager_roms_presets.py
+    # covers the 409/overwrite gate itself); this one just needs the replace to land.
+    conflict = await manager_client.post("/api/presets", json={"name": "chaos", "spec": {"wild": "area"}})
+    assert conflict.status == 409
+    await manager_client.post("/api/presets", json={"name": "chaos", "spec": {"wild": "area"}, "overwrite": True})
     j = await (await manager_client.get("/api/presets")).json()
     assert [(p["name"], p["spec"]["wild"]) for p in j["presets"]] == [("chaos", "area")]
     assert (manager_dir / "presets.json").exists()

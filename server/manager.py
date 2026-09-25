@@ -26,8 +26,10 @@ import shutil
 import signal
 import stat
 import sys
+import tempfile
 import time
 from datetime import UTC, datetime
+from urllib.parse import quote
 
 try:
     import psutil
@@ -93,6 +95,22 @@ def _rom_ext(run: dict) -> dict:
     labels name the file the player will load, and BizHawk picks the system by it."""
     players = (run.get("cartridges") or {}).get("players") or {}
     return {p: (os.path.splitext(players.get(p, {}).get("output", ""))[1].lower() or ".gb") for p in ("a", "b")}
+
+
+def _content_disposition(filename: str) -> str:
+    """A Content-Disposition header value that survives a non-ASCII run name.
+
+    `safe_name` sanitizes with `\\w`, which is Unicode by default -- a name like "日本語"
+    keeps its letters and would otherwise be written straight into a header and either
+    crash the encoder or arrive mangled. Add the RFC 8187 UTF-8 form only when the plain
+    ASCII form is not already exact, so an ordinary name's header is unchanged.
+    """
+    try:
+        filename.encode("ascii")
+        return f'attachment; filename="{filename}"'
+    except UnicodeEncodeError:
+        ascii_name = filename.encode("ascii", "replace").decode("ascii").replace("?", "_")
+        return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename, safe='')}"
 
 
 def _legacy_cartridges(run: dict) -> dict | None:
@@ -1002,17 +1020,31 @@ class RunManager:
 
     @staticmethod
     def _scan_roms(jar: str) -> list[dict]:
-        """Every .gb/.gbc in ROM_DIRS with the scanner's verdict (describe_rom)."""
+        """Every .gb/.gbc in ROM_DIRS with the scanner's verdict (describe_rom). A zero-byte
+        file (an interrupted download, a placeholder) is not a cartridge and is skipped. Two
+        paths with identical bytes are the same cartridge picked up twice (a copy in roms/ of
+        one already in the repo root, say) and are deduped, first ROM_DIRS folder wins."""
         from server.upr_pipeline import describe_rom
-        roms, seen = [], set()
+        roms, seen_paths, seen_content = [], set(), set()
         for d in ROM_DIRS:
             if not os.path.isdir(d):
                 continue
             for name in sorted(os.listdir(d), key=str.lower):
                 path = os.path.join(d, name)
-                if name.lower().endswith(ROM_EXTS) and os.path.isfile(path) and path not in seen:
-                    seen.add(path)
-                    roms.append({"name": name, **describe_rom(path, True)})
+                if not (name.lower().endswith(ROM_EXTS) and os.path.isfile(path) and path not in seen_paths):
+                    continue
+                seen_paths.add(path)
+                try:
+                    if os.path.getsize(path) == 0:
+                        continue
+                    with open(path, "rb") as f:
+                        digest = hashlib.sha1(f.read()).hexdigest()
+                except OSError:
+                    continue
+                if digest in seen_content:
+                    continue
+                seen_content.add(digest)
+                roms.append({"name": name, **describe_rom(path, True)})
         return roms
 
     def _augment_for_template(self, run: dict) -> dict:
@@ -1345,25 +1377,35 @@ class RunManager:
         })
 
     async def handle_settings_import(self, request: web.Request) -> web.Response:
-        """POST /api/randomizer/settings/import (multipart `file`) — a .rnqs from UPR's GUI
-        or from another run, admitted by the pipeline's own gates (version, the named
-        dangers, the allowlist) and read back as the form's spec. A refusal names what the
-        file changes, because spec_from_parsed alone would drop it silently."""
+        """POST /api/randomizer/settings/import (multipart `file`, optional `family`) — a
+        .rnqs from UPR's GUI or from another run, admitted by the pipeline's own gates
+        (version, the named dangers, the allowlist) and read back as the form's spec. A
+        refusal names what the file changes, because spec_from_parsed alone would drop it
+        silently. `family` picks which allowlist applies (pureRGB's is stricter); the form
+        knows its own family and sends it, defaulting to vanilla when it does not (a run
+        not yet tied to a family, or an older caller)."""
         from server.upr_pipeline import UprPipelineError, admit_settings
-        from server.upr_settings import spec_from_parsed, summarize
+        from server.upr_settings import FAMILY_PURE, FAMILY_VANILLA, spec_from_parsed, summarize
         if request.content_type != "multipart/form-data":
             return web.json_response({"ok": False, "error": "multipart/form-data expected"}, status=400)
         reader = await request.multipart()
+        raw, family_raw = None, ""
         field = await reader.next()
-        while field is not None and field.name != "file":
+        while field is not None:
+            if field.name == "file":
+                raw = await field.read(decode=False)
+            elif field.name == "family":
+                family_raw = (await field.read()).decode("utf-8", "replace").strip()
             field = await reader.next()
-        if field is None:
+        if raw is None:
             return web.json_response({"ok": False, "error": "send the .rnqs as `file`"}, status=400)
-        raw = await field.read(decode=False)
         if len(raw) > 64 << 10:
             return web.json_response({"ok": False, "error": "not a settings file (too large)"}, status=400)
+        family = family_raw or FAMILY_VANILLA
+        if family not in (FAMILY_VANILLA, FAMILY_PURE):
+            return web.json_response({"ok": False, "error": f"unknown family: {family_raw!r}"}, status=400)
         try:
-            parsed = admit_settings(raw)
+            parsed = admit_settings(raw, family)
         except UprPipelineError as exc:
             return web.json_response({"ok": False, "error": str(exc)}, status=400)
         spec = spec_from_parsed(parsed)
@@ -1389,24 +1431,40 @@ class RunManager:
         return web.json_response({"ok": True, "presets": _load_presets()})
 
     async def handle_preset_save(self, request: web.Request) -> web.Response:
-        """POST /api/presets {name, spec} — save (or replace) a preset. The spec goes through
-        the same builder the randomizer uses, so a saved preset is one it will accept."""
+        """POST /api/presets {name, spec, overwrite?} — save a new preset, or replace an
+        existing one only with `overwrite: true` (409 otherwise, so the page can ask first
+        rather than silently clobbering someone's saved spec). The spec goes through the
+        same builder the randomizer uses, so a saved preset is one it will accept."""
         from server.upr_settings import UprSettingsError, build_spec
         try:
             body = await request.json()
         except Exception:
             return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
-        name = str(body.get("name", "")).strip()[:60]
+        name = body.get("name")
+        if not isinstance(name, str):
+            return web.json_response({"ok": False, "error": "name must be a string"}, status=400)
+        name = name.strip()
+        if not name or len(name) > 60:
+            return web.json_response({"ok": False, "error": "name must be 1-60 characters"}, status=400)
         spec = body.get("spec")
-        if not name or not isinstance(spec, dict):
-            return web.json_response({"ok": False, "error": "name and spec are required"}, status=400)
+        if not isinstance(spec, dict):
+            return web.json_response({"ok": False, "error": "spec is required"}, status=400)
         try:
             build_spec(spec)
         except UprSettingsError as exc:
             return web.json_response({"ok": False, "error": str(exc)}, status=400)
-        presets = [p for p in _load_presets() if p["name"].lower() != name.lower()]
+        presets = _load_presets()
+        existing = next((p for p in presets if p["name"].lower() == name.lower()), None)
+        if existing is not None and not body.get("overwrite"):
+            return web.json_response(
+                {"ok": False, "error": f'a preset named "{existing["name"]}" already exists',
+                 "conflict": True}, status=409)
         preset = {"name": name, "spec": spec, "updated_at": datetime.now(UTC).isoformat()}
-        _save_presets(presets + [preset])
+        kept = [p for p in presets if p["name"].lower() != name.lower()]
+        try:
+            _save_presets(kept + [preset])
+        except OSError as exc:
+            return web.json_response({"ok": False, "error": f"could not save preset: {exc}"}, status=500)
         return web.json_response({"ok": True, "preset": preset})
 
     async def handle_preset_delete(self, request: web.Request) -> web.Response:
@@ -1420,7 +1478,10 @@ class RunManager:
         kept = [p for p in presets if p["name"].lower() != name.lower()]
         if len(kept) == len(presets):
             return web.json_response({"ok": False, "error": "no such preset"}, status=404)
-        _save_presets(kept)
+        try:
+            _save_presets(kept)
+        except OSError as exc:
+            return web.json_response({"ok": False, "error": f"could not delete preset: {exc}"}, status=500)
         return web.json_response({"ok": True})
 
     async def handle_randomizer_status(self, request: web.Request) -> web.Response:
@@ -1447,7 +1508,13 @@ class RunManager:
         same-named file that differs is kept: the upload gets a numbered name. A jar whose
         sha256 is not in data/upr_jars.json is refused and never lands: dropped where
         find_upr_jar looks first, it would shadow the pinned fork."""
-        from server.upr_pipeline import _sha1, describe_rom, jar_is_fork, trusted_jars
+        from server.upr_pipeline import (
+            _sha1,
+            describe_rom,
+            jar_is_fork,
+            jar_is_trusted,
+            trusted_jars,
+        )
         if request.content_type != "multipart/form-data":
             return web.json_response({"ok": False, "error": "multipart/form-data expected"}, status=400)
         reader = await request.multipart()
@@ -1464,17 +1531,27 @@ class RunManager:
         else:
             dest_dir = ROM_UPLOAD_DIR
         os.makedirs(dest_dir, exist_ok=True)
-        tmp = os.path.join(dest_dir, f".upload-{os.getpid()}.part")
-        size, h, h256 = 0, hashlib.sha1(), hashlib.sha256()
+        # A unique name per REQUEST, not per process: os.getpid() is the same for every
+        # upload this Manager handles, so two concurrent uploads wrote the same .part file
+        # and one clobbered the other's bytes (or its os.replace lost the race).
+        fd, tmp = tempfile.mkstemp(dir=dest_dir, prefix=".upload-", suffix=".part")
+        size, h, h256, too_large = 0, hashlib.sha1(), hashlib.sha256(), False
         try:
-            with open(tmp, "wb") as f:
+            with os.fdopen(fd, "wb") as f:
                 while chunk := await field.read_chunk(1 << 20):
                     size += len(chunk)
                     if size > UPLOAD_MAX:
-                        raise web.HTTPRequestEntityTooLarge(max_size=UPLOAD_MAX, actual_size=size)
+                        too_large = True
+                        break
                     h.update(chunk)
                     h256.update(chunk)
                     f.write(chunk)
+            if too_large:
+                # A plain web.HTTPRequestEntityTooLarge answers 413 with a text body; the
+                # page's fetch always parses JSON, so the user saw a parse error instead of
+                # the limit.
+                return web.json_response({"ok": False, "error": (
+                    f"too large: the limit is {UPLOAD_MAX // (1 << 20)} MB")}, status=413)
             if ext == ".jar" and h256.hexdigest() not in trusted_jars():
                 return web.json_response({"ok": False, "error": (
                     f"unknown randomizer build (sha256 {h256.hexdigest()}): only the SLink UPR "
@@ -1490,8 +1567,8 @@ class RunManager:
             if os.path.exists(tmp):
                 os.remove(tmp)
         if ext == ".jar":
-            return web.json_response({"ok": True, "path": dest, "kind": "jar", "jar_trusted": True,
-                                      "jar_fork": jar_is_fork(dest)})
+            return web.json_response({"ok": True, "path": dest, "kind": "jar",
+                                      "jar_trusted": jar_is_trusted(dest), "jar_fork": jar_is_fork(dest)})
         return web.json_response({"ok": True, "path": dest, "kind": "rom",
                                   "rom": {"name": os.path.basename(dest), **describe_rom(dest, True)}})
 
@@ -1503,20 +1580,25 @@ class RunManager:
         if player not in ("a", "b"):
             return web.json_response({"ok": False, "error": "player must be 'a' or 'b'"}, status=400)
         run = _find_run(_load_registry(), run_id)
-        recorded = ((run or {}).get("cartridges") or {}).get("players", {}).get(player, {}).get("output")
-        if run is None or not (recorded or run.get("randomizer")):
+        if run is None:
             return web.json_response({"ok": False, "error": "no cartridges for this run"}, status=404)
-        # Runs from before the cartridges step recorded only the randomizer's own output.
-        path = recorded or os.path.join(MANAGER_DIR, run_id, "roms", f"{player}_randomized.gbc")
+        # Strictly THIS player's own recorded output: cartridges (today's shape), then
+        # randomizer.players (runs from before the Cartridges step recorded only that). A
+        # run-level `randomizer` being truthy says nothing about whether THIS player is in
+        # it -- it used to be read as a green light to guess a path for any player.
+        path = ((run.get("cartridges") or {}).get("players", {}).get(player, {}).get("output")
+                or (run.get("randomizer") or {}).get("players", {}).get(player, {}).get("output"))
+        if not path:
+            return web.json_response({"ok": False, "error": "no cartridge recorded for this player"}, status=404)
         if not os.path.isfile(path):
             return web.json_response({"ok": False, "error": "ROM file is missing on disk"}, status=404)
         safe_name = re.sub(r"[^\w-]", "_", run.get("name") or run_id).strip("_") or run_id
         # The cartridge keeps its own extension: BizHawk picks the system by it for a ROM
         # its database does not know, and a pure cartridge named .gb runs in mono.
-        ext = os.path.splitext(recorded)[1].lower() if recorded else ".gb"
+        ext = os.path.splitext(path)[1].lower() or ".gb"
         return web.FileResponse(path, headers={
             "Content-Type": "application/octet-stream",
-            "Content-Disposition": f'attachment; filename="slink_{safe_name}_{player}{ext}"',
+            "Content-Disposition": _content_disposition(f"slink_{safe_name}_{player}{ext}"),
         })
 
     # ── Stream pin ─────────────────────────────────────────────────────────────
