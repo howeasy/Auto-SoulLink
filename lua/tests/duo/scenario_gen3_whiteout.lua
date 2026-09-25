@@ -145,25 +145,44 @@ end
 --- and it never left CB2_Overworld, live G5-RR-NURSE attempt 1.) A single Start tap can be
 --- swallowed on the frame the field only just freed (save_then_write_gen3's menu_leg hits the
 --- same thing), so retry it.
+---
+--- OMP cx-6c92f636 F1: `field_controls_locked` alone is any persistent field lock, not
+--- specifically the START menu -- so "opened" and the hold's `live()` also require the menu's
+--- own positive witness, sStartMenuWindowId (WINDOW_NONE=0xFF until ShowStartMenu's
+--- CreateStartMenuWindow, cleared back by RemoveStartMenuWindow on close; gen3_boot_check.lua:55-
+--- 67 names it start_menu_open, read here via ctx.peek_u8 -- title-agnostic, no per-title SYMS
+--- entry, the same mechanism scenario_gen3_linked_faint_active.lua already uses for RR's ball
+--- pocket). Verified kept on RR, not assumed: all 4 FR ROM sites that load the literal
+--- 0x0203ABE0 (pokefirered.sym sStartMenuWindowId; 3 of the 4 are CreateStartMenuWindow,
+--- GetStartMenuWindowId, RemoveStartMenuWindow by pokefirered.sym's own ranges) are byte-identical
+--- in both the clean RR 4.1 dump (sha1 964f951a) and the companion build patch/build/slink_RR.gba
+--- (sha1 ea5352f8) -- `python -c` one-liner over tools/research/rr_harness_syms.py's own
+--- load()/refs(), G5-RR-NURSE-2. A field lock from something else entirely (a stray script,
+--- window id still 0xFF) must NOT be mistaken for the menu.
+local START_MENU_WINDOW_ID_ADDR = 0x0203ABE0
+local WINDOW_NONE = 0xFF
+local function start_menu_open(ctx) return ctx.peek_u8(START_MENU_WINDOW_ID_ADDR) ~= WINDOW_NONE end
+
 local function nurse_control(ctx, linked, dest)
     if not at(ctx, dest) then return false, "control: not at the Center landing" end
     if ctx.rr then
         local G, cp = ctx.G, ctx.cp
         local function locked() return not G.pred_ok(cp, "field_controls_locked") end
+        local function menu_open() return locked() and start_menu_open(ctx) end
         if not ctx.wait_until(function() return not locked() end, 10, "the field free before START") then
             return false, "control: the field was never free to open START"
         end
         local opened = false
         for _ = 1, 3 do
             G.tap("Start", 3, 0)
-            if ctx.wait_until(locked, 10, "field_controls_locked after START") then
+            if ctx.wait_until(menu_open, 10, "the START menu window after START") then
                 opened = true
                 break
             end
         end
         if not opened then return false, "control: the START menu never opened" end
         ctx.frames(60)
-        local clause, why = ctx.hold_probe("nurse", "box_mon", linked, locked, 600)
+        local clause, why = ctx.hold_probe("start_menu", "box_mon", linked, menu_open, 600)
         if not clause then return false, "control: " .. tostring(why) end
         -- leave the menu open (FR/LG's nurse leg leaves HER dialogue open too): closing it here
         -- would release the held box_mon write, and the runner's own oracle forbids that key's

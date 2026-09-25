@@ -6076,8 +6076,13 @@ class DuoRun:
         # queued box_mon held with zero writes while the nurse's script is live. A never ACKs
         # that box_mon (TX stats_cache would be the held write landing).
         center, landed = r"(?m)^CENTER_STATE ", r"(?m)^WRITE_IN_CENTER "
-        control = [gen3_returned(ka), rf"(?m)^CONTROL_LIVE nurse {re.escape(ka)} ", gen3_rx("box_mon", ka),
-                   rf"(?m)^CONTROL_REFUSED nurse box_mon {re.escape(ka)} clause=\S+ "]
+        # G5-RR-NURSE-2: RR's nurse cutscene never refuses (no message/waitmessage anywhere in
+        # her script -- scenario_gen3_whiteout.lua's own comment), so the RR control is the START
+        # menu instead, named start_menu; FR/LG keep nurse. Same clause vocabulary either way.
+        control_name = "start_menu" if self._gen3_rr else "nurse"
+        control = [gen3_returned(ka), rf"(?m)^CONTROL_LIVE {control_name} {re.escape(ka)} ",
+                   gen3_rx("box_mon", ka),
+                   rf"(?m)^CONTROL_REFUSED {control_name} box_mon {re.escape(ka)} clause=\S+ "]
         problems += gen3_receipt_problems(
             "a", results["a"], required=chain_a + [start,r"(?m)^WHITED_OUT\b", center, landed] + control,
             ordered=list(zip(chain_a, chain_a[1:], strict=False))

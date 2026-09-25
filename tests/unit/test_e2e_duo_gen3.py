@@ -1139,7 +1139,7 @@ function FAKE(scenario, player, phase, spec)
                     { slot = 1, key = "K1", hp = 5, max_hp = 17, species = 16, level = 4 },
                     { slot = 2, key = "K9", hp = 9, max_hp = 9, species = 19, level = 3 } }
     local ctx = { player = player, phase = phase, fmt = string.format, cp = {}, finished = "done",
-                  D = {}, hp0_tag = "FORCED_HP0", title = "firered" }
+                  D = {}, hp0_tag = "FORCED_HP0", title = "firered", rr = spec.rr and true or false }
     -- C4-SAVE-ROWS: the pret statics a scenario reads through ctx.peek (SYMS addresses; the
     -- callbacks compare with the Thumb bit, as the real S table does)
     ctx.sym = { SaveDialogCB_AskSaveHandleInput = 0x0806F7F8, SaveDialogCB_ReturnSuccess = 0x0806F9E0,
@@ -1154,12 +1154,18 @@ function FAKE(scenario, player, phase, spec)
     local menu_tap
     -- released: a talk's script closed (mash_until); save_then_write starts on an idle field
     local probes, released = 0, scenario == "save_then_write"
+    -- G5-RR-NURSE-2: the RR START menu model (whiteout's nurse_control RR branch) -- rr_menu_open
+    -- is sStartMenuWindowId's witness (peek_u8 0x0203ABE0 ~= 0xFF); spec.swallow_start taps are
+    -- dropped before it opens (default 0: the first tap opens it); spec.other_lock models a
+    -- field lock from something else entirely, window id still 0xFF, once Start has been tapped
+    local rr_menu_open, start_taps = false, 0
     ctx.log = function(s)
         logs[#logs + 1] = tostring(s)
         local live = tostring(s):match("^CONTROL_LIVE (%S+)")
         if live then
             probes = probes + 1
-            local probe = ({ cable_welcome_message = "box_mon", nurse = "box_mon", union_room_attendant = "party_mon" })[live]
+            local probe = ({ cable_welcome_message = "box_mon", nurse = "box_mon",
+                             union_room_attendant = "party_mon", start_menu = "box_mon" })[live]
             if probe then logs[#logs + 1] = "RX " .. probe .. " key=" .. (spec.linked or "K1") end
         end
         if live == "dialog_witness" then logs[#logs + 1] = "RX party_mon key=" .. (spec.linked or "K1") end
@@ -1311,8 +1317,15 @@ function FAKE(scenario, player, phase, spec)
     ctx.SP = { verify_fight_cursor = function() return "fight" end,
                whiteout_destination = function() return CENTER end, warp_to = function() end }
     -- a script is live from a talk (A tap) until A mashes it closed (mash_until)
+    ctx.peek_u8 = function(addr)
+        if addr == 0x0203ABE0 then return rr_menu_open and 1 or 0xFF end
+        error("fake ctx.peek_u8: no address " .. tostring(addr))
+    end
     ctx.G = { map = function() return here.group, here.num end, pos = function() return here.x, here.y end,
               pred_ok = function(_, name)
+                  if ctx.rr and name == "field_controls_locked" then
+                      return not (rr_menu_open or (spec.other_lock and start_taps > 0))
+                  end
                   if name == "field_controls_locked" and (menu.open or menu.stuck) then return false end
                   return released
               end,
@@ -1328,6 +1341,12 @@ function FAKE(scenario, player, phase, spec)
               end,
               tap = function(btn)
                   if scenario == "save_then_write" then return menu_tap(btn) end
+                  if btn == "Start" and ctx.rr then
+                      if rr_menu_open then error("test: Start tapped again after the START menu already opened", 0) end
+                      start_taps = start_taps + 1
+                      if start_taps > (spec.swallow_start or 0) then rr_menu_open = true end
+                      return
+                  end
                   if btn == "A" then
                       -- an A that faces no attendant talks to nobody (center_controls' counters)
                       if scenario == "center_controls" and facing ~= 2 then return end
@@ -1524,6 +1543,15 @@ def _run_module(lua, scenario, player, phase, spec):
                                       "WRITE_IN_CENTER map=5.4 at=(7,4)",
                                       "CONTROL_LIVE nurse K1 map=5.4",
                                       "CONTROL_REFUSED nurse box_mon K1 clause=field_controls_locked"]),
+    # G5-RR-NURSE-2 (OMP cx-6c92f636 F1/F2): RR's nurse never refuses, so the control is the
+    # START menu, named start_menu; the menu opens on the first tap by default (swallow_start=0)
+    ("whiteout", "a", "initial", {"rr": "lua:true"},
+     ["CONTROL_LIVE start_menu K1 map=5.4",
+      "CONTROL_REFUSED start_menu box_mon K1 clause=field_controls_locked"]),
+    # the first two Start taps swallowed (the field only just freed), the menu opens on the third
+    ("whiteout", "a", "initial", {"rr": "lua:true", "swallow_start": 2},
+     ["CONTROL_LIVE start_menu K1 map=5.4",
+      "CONTROL_REFUSED start_menu box_mon K1 clause=field_controls_locked"]),
     ("center_controls", "a", "initial", {}, ["CONTROL_LIVE cable_welcome_message K1 ",
                                              "CONTROL_REFUSED cable_welcome_message box_mon K1 clause=",
                                              "CONTROL_REFUSED cable_link box_mon K1 clause=",
@@ -1571,6 +1599,11 @@ def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spe
     # finding 2's falsifier: the mirrored deposit ACKed (stats_cache) but moved nothing
     ("whiteout", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
     ("boxsync", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
+    # G5-RR-NURSE-2 F1's falsifier: a field lock from something else (window id stays 0xFF) must
+    # not be mistaken for the START menu opening -- pre-fix (locked() alone) this wrongly passed
+    ("whiteout", "a", "initial",
+     {"rr": "lua:true", "other_lock": "lua:true", "swallow_start": 99},
+     "the START menu never opened"),
 ])
 def test_scenario_modules_fail_with_a_named_reason(lua, scenario, player, phase, spec, reason):
     ok, passed, msg, _ = _run_module(lua, scenario, player, phase, spec)
