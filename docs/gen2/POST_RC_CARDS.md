@@ -165,6 +165,11 @@ of four fixed `writetext` blocks (`patch/gen2/src/phone.asm:113-141`). The calle
   - Fix, verdict/oracle only: "a live turn" = an `enemy_turn` after `REPLACED`, OR a witnessed enemy faint after `REPLACED` (a `FaintEnemyPokemon` exec hook from the pack's battle_hold oracles, or a `wEnemyMonHP` read).
   - Rules to change: `tools/gen2_duo_oracles.validate_faint_active_markers(trainer=True)` and RELEASE-LANES' `_active_faint_cell_errors`. That's a release-row binding change.
   - For the RC: re-run as is (~93%).
+- **GEN1-ENEMY-MAXHP** (reported by the UI lane). `lua/gen1/client.lua:279-285` `enemy_party` builds the foe as `{species_id, level, hp, active}` with no `maxHP`, so `server/board.py` `hp_pct` divides by `maxHP or 1`: every Gen 1 enemy shows a full bar and "17/".
+  - Fix: read pret `wEnemyMonMaxHP` (2 bytes big-endian, next to `wEnemyMonHP`) through the reads' symbol resolution, and send `maxHP`.
+  - Gen 2 is unaffected: `lua/gen2/wire.lua` `foe_entry` already emits `maxHP` and refuses a foe without it.
+  - `lua/gen1/**` is outside the Gen 2 CODE_SCOPE, but it makes the Gen 1 receipts stale. Land it AFTER the Gen 1 release gate, then re-run the affected Gen 1 lanes.
+  - The UI lane is adding a template guard (no bar when `maxHP` is missing), held for the post-freeze batch.
 - **CLAUSE-BENCH-LIMITS.** OMP `cx-43b52a71` F2/F3/F5 were kept by design: the oracle cross-references the U2 receipt, and the full qualification lives in the release verifier's write-window lane; `PC == 0x0040` is a stricter harness invariant. Revisit only if that lane's coverage changes.
 - **BOARD-AMBIGUOUS: BUILT, held for the freeze.** The UI lane's commit `95f2c629` is on branch `claude/ui-board-ambiguous` (worktree `Temp/uiamb`), cut from `0800da84`. Design from OMP `cx-8a2f08c6`:
   - add a top-level `ambiguous_keys` to the status and to `status_payload.py`;
