@@ -397,6 +397,12 @@ All five owner scope decisions (a)–(e) are settled and recorded above.
 22. **Nothing is released until G4 and G5 are both done** (owner, 2026-09-24: "None of this is getting released until it's all done."). G4 is an internal gate. No build ever ships RR the rebuilt companion (`6cf77ba4`) with the old client, so audit F1's blocker B1 (`docs/gen3/reviews/F1_G4_AUDIT_2026-09-24.md`, `40b863bd`) is moot. The RR cutover and the old-client deletion (C5-6) land before any release. **S**
 23. **RR's CPU checkpoint also accepts the BIOS IRQ entry taken from the halt** (owner, 2026-09-24): with the client's per-frame hooks active, RR's frame ends at the BIOS interrupt vector (IRQ mode, R15 = 0x1C), and the signed System-mode halt clause refuses every frame, so hello never fires (`docs/gen3/probes/rr_rows_hello_cpu_park_6d6227c6_2026-09-24.txt`, `7d730a89`). The clause also admits IRQ-vector entry only when the banked return address (R14_irq) lies inside the BIOS halt loop. An interrupt taken from game code stays refused. G5. **S**
 24. **C5-6 archives the old Gen 3 client and drops Emerald and Archipelago FireRed support** (owner, 2026-09-24): the old client is their only code path. Its last version is tagged `archive/gen3-old-client` before deletion, so they can be ported onto the new client later. Until then they are unsupported (C5-6 plan `6ed149b0`, risk 1). **S**
+25. **RR (G5) needs "a decent amount" of coverage, not full coverage** (owner, 2026-09-25: "We don't need full test coverage for RR but we need a decent amount", then "Do it then" on the proposal):
+    - **(a) Clean RR:** ONE more clean-side row (a basic link+faint on the clean ROM) beside `native_absent_gen3` and `linked_faint_active_clean_gen3`, once that row's driver is fixed, is sufficient. Full clean S-1..S-11 coverage is not required.
+    - **(b) Rival Team Swap:** needs ONE qualifying row, a real swap with enemy-party readback.
+    - **(c) Opcode gates:** the 12 deferred gates are a signed limit; the 26 ported live gates cover the opcodes in use.
+    - **(d) Per-item evidence:** the P2 anchor/md5/deleted-file/write-guard/native-control items are satisfied by the existing unit/model evidence (the pin tests, test_gen3_write_ownership, the test_gen3_native control tests). No separate live receipts are needed.
+    G5. **S**
 
 ---
 
