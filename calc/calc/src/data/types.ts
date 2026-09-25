@@ -476,3 +476,18 @@ for (const typeChart of TYPE_CHART) {
   }
   TYPES_BY_ID.push(map);
 }
+
+// Gen 1's slot only - used by calc/calc/src/data/purergb.ts's useDex() to swap in pureRGB's type
+// chart (6 extra types; see docs/calc_multigen/PURERGB_MECHANICS.md) at runtime, and back out
+// again. TYPE_CHART[1]/TYPES_BY_ID[1] can't just be reassigned from outside this module: the
+// Types class reads from the private TYPES_BY_ID cache below, which is only ever built here.
+export function setGen1TypeChart(chart: TypeChart | null): void {
+  const next = chart ?? RBY;
+  TYPE_CHART[1] = next;
+  const map: {[id: string]: Type} = {};
+  for (const type in next) {
+    const t = new Type(type, {...next[type as I.TypeName]!});
+    map[t.id] = t;
+  }
+  TYPES_BY_ID[1] = map;
+}

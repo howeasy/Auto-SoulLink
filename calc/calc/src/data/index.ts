@@ -13,6 +13,10 @@ export const Generations: I.Generations = new (class {
   }
 })();
 
+// pureRGB (Gen 1 fork, data/games/gen1_purergb) support: swaps SPECIES/MOVES/TYPE_CHART's Gen 1
+// slot in place. See calc/calc/src/data/purergb.ts and docs/calc_multigen/PURERGB_MECHANICS.md.
+export {useDex} from './purergb';
+
 class Generation implements I.Generation {
   num: I.GenerationNum;
 
