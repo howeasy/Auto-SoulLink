@@ -503,14 +503,6 @@ kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2p
 .mk-steps b { color: var(--c-txt); font-weight: 500; }
 .mk-steps em { color: var(--c-txt); font-style: normal; text-decoration: underline; text-decoration-color: var(--c-pend); }
 
-/* ── Debug drawer ──────────────────────────────────────────────────────── */
-
-.mk-drawer { position: fixed; inset: 0 0 0 auto; z-index: 40; width: min(520px, 92vw); display: flex; flex-direction: column; background: color-mix(in srgb, var(--c-card) 92%, var(--c-bg)); border-left: 1px solid var(--c-edge); box-shadow: -12px 0 40px rgba(0,0,0,.5); }
-.mk-drawer-hdr { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--c-sep); }
-.mk-drawer-body { padding: var(--space-4); overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-3); }
-.mk-drawer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-2); }
-.mk-scrim { position: fixed; inset: 0; z-index: 39; background: rgba(0,0,0,.45); }
-
 /* ── Rail switcher slots (from the retired manager.css) ────────────────
  * dashboard.js relocates the theme switcher into this. */
 /* Theme switcher slot — dashboard.js relocates the floating switcher here,
@@ -560,22 +552,11 @@ kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2p
   z-index: 60;
 }
 
-/* Pin the new run input + create button to the top so the rail-theme slot
- * can use margin-top:auto to stick to the bottom (above the natural rail
- * scrollable area). Already in flex flow via .mgr-rail. */
-.mgr-rail { display: flex; flex-direction: column; }
-
-/* Stack rail on top at very narrow widths (rare for desktop). */
-@media (max-width: 900px) {
-  .mgr-launcher { grid-template-columns: 1fr; max-height: none; min-height: auto; }
-  .mgr-rail { border-right: 0; border-bottom: 1px solid var(--c-edge); max-height: 360px; }
-}
-
 /* ── Feel ──────────────────────────────────────────────────────────────
  * The details that compound: interruptible colour transitions on hover (never
  * `transition: all`), a 0.96 press on anything that is a button, hit areas that reach
  * 40px on a desktop, nested corners that stay concentric, and prose that does not orphan. */
-.mk-btn, .mk-gchip, .mk-tab, .mk-rail-item, .mk-opt, .mk-chip {
+.mk-btn, .mk-gchip, .mk-tab, .mk-rail-item, .mk-opt {
   transition-property: background-color, border-color, color, scale;
   transition-duration: .12s;
   transition-timing-function: ease-out;
@@ -592,7 +573,7 @@ kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2p
 .mk-opt-desc, .mk-opt-why, .mk-empty, .mk-steps li, .mk-cap, .mk-note, .mk-sub { text-wrap: pretty; }
 .mk-h2, .mk-runname { text-wrap: balance; }
 @media (prefers-reduced-motion: reduce) {
-  .mk-btn, .mk-gchip, .mk-tab, .mk-rail-item, .mk-opt, .mk-chip, .mk-hp-fill { transition-duration: 0s; }
+  .mk-btn, .mk-gchip, .mk-tab, .mk-rail-item, .mk-opt, .mk-hp-fill { transition-duration: 0s; }
   .mk-btn:active, .mk-gchip:active, .mk-tab:active { scale: 1; }
 }
 

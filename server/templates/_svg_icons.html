@@ -22,23 +22,7 @@
 #}
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
-    {# Linking + flow icons #}
-    <symbol id="i-link"     viewBox="0 0 16 16"><path fill="currentColor" d="M3 5h4v2H5v2h2v2H3a3 3 0 010-6zm6 0h4a3 3 0 010 6H9V9h2V7H9zM5 7h6v2H5z"/></symbol>
-    <symbol id="i-plus"     viewBox="0 0 16 16"><path fill="currentColor" d="M7 2h2v5h5v2H9v5H7V9H2V7h5z"/></symbol>
-    <symbol id="i-arrow-down" viewBox="0 0 16 16"><path fill="currentColor" d="M7 1h2v8h3l-4 4-4-4h3z"/></symbol>
-
-    {# Run-management buttons #}
-    <symbol id="i-play"     viewBox="0 0 16 16"><path fill="currentColor" d="M4 2v12l9-6z"/></symbol>
-    <symbol id="i-stop"     viewBox="0 0 16 16"><path fill="currentColor" d="M3 3h10v10H3z"/></symbol>
-    <symbol id="i-pin"      viewBox="0 0 16 16"><path fill="currentColor" d="M9 1l5 5-2 1-2 4 2 2-3 1-3-3-3 3v-3l3-3-3-2 1-3 4-2z"/></symbol>
-    <symbol id="i-extlink"  viewBox="0 0 16 16"><path fill="currentColor" d="M9 1h6v6h-2V4l-7 7-1-1 7-7H9zM2 4h5v2H4v6h6V9h2v5H2z"/></symbol>
-    <symbol id="i-archive"  viewBox="0 0 16 16"><path fill="currentColor" d="M1 2h14v3H1zm1 4h12v8H2zm4 2v1h4V8z"/></symbol>
-    <symbol id="i-trash"    viewBox="0 0 16 16"><path fill="currentColor" d="M6 1h4v1h4v2H2V2h4zm-3 4h10l-1 10H4zm3 2v6h1V7zm3 0v6h1V7z"/></symbol>
-
     {# Run metadata #}
-    <symbol id="i-script"   viewBox="0 0 16 16"><path fill="currentColor" d="M3 1h10v2H3zm-1 3h12v9H4l-2-2zm3 2v1h6V6zm0 2v1h6V8zm0 2v1h4v-1z"/></symbol>
-    <symbol id="i-broadcast" viewBox="0 0 16 16"><path fill="currentColor" d="M7 7h2v8H7zm-3-3l1 1-1 1-1-1zm8 0l1 1-1 1-1-1zM2 2l1 1-1 1-1-1zm12 0l1 1-1 1-1-1zM6 5h4l-2 2z"/></symbol>
-    <symbol id="i-game"     viewBox="0 0 16 16"><path fill="currentColor" d="M2 4h12v8H2zm2 2v1H3v1h1v1h1V8h1V7H5V6zm6 0v1h1v1h-1v1H9v1h1V9h1V8h1V7h-1V6zm-3 4v1h2v-1z"/></symbol>
     <symbol id="i-dna"      viewBox="0 0 16 16"><path fill="currentColor" d="M3 1l2 2v3l2 2-2 2v3L3 15v-1l2-2v-3l2-2-2-2V3L3 2zm10 0v1l-2 2v3L9 9l2 2v3l2 2v-1l-2-2v-3l-2-2 2-2V3z"/></symbol>
     <symbol id="i-gender"   viewBox="0 0 16 16"><path fill="currentColor" d="M5 8a3 3 0 116 0 3 3 0 01-6 0zm3-5a5 5 0 100 10A5 5 0 008 3zm0-2v2zm0 12v2zM3 7H1v2h2zm12 0h-2v2h2z"/></symbol>
     <symbol id="i-type"     viewBox="0 0 16 16"><path fill="currentColor" d="M8 1l2 5 5 1-4 3 1 5-4-3-4 3 1-5L1 7l5-1z"/></symbol>
@@ -50,14 +34,6 @@
     {# i-presence: a standing trainer figure (head + body) — the peer ghost walking
        your overworld.  Used by the Overworld Presence badge/checkbox. #}
     <symbol id="i-presence" viewBox="0 0 16 16"><path fill="currentColor" d="M8 1a2.4 2.4 0 110 4.8A2.4 2.4 0 018 1zM4.5 15v-3.5C4.5 9 6 7.5 8 7.5s3.5 1.5 3.5 4V15h-2v-3.2a1.5 1.5 0 00-3 0V15z"/></symbol>
-    {# i-msgbox: a speech-bubble message box.  Used by the Native Messages badge/checkbox. #}
-    <symbol id="i-msgbox" viewBox="0 0 16 16"><path fill="currentColor" d="M1 2h14v9H9l-3 3v-3H1zm2 2v1h10V4zm0 3v1h7V7z"/></symbol>
-    {# i-sound: a speaker with sound waves.  Used by the Native Sounds badge/checkbox. #}
-    <symbol id="i-sound" viewBox="0 0 16 16"><path fill="currentColor" d="M2 6h2l4-3v10L4 10H2zm9 .5a2.5 2.5 0 010 3l-1-1a1 1 0 000-1zm1.5-2.5a5.5 5.5 0 010 8l-1-1a4 4 0 000-6z"/></symbol>
-    {# i-calc: a calculator face.  Used by the Battle Calc badge/checkbox. #}
-    <symbol id="i-calc" viewBox="0 0 16 16"><path fill="currentColor" d="M3 1h10v14H3zm2 2v2h6V3zm0 4v2h2V7zm4 0v2h2V7zM5 11v2h2v-2zm4 0v2h2v-2z"/></symbol>
-    {# i-pcnpc: a Pokémon-Center style building.  Used by the PC Trade NPC badge/checkbox. #}
-    <symbol id="i-pcnpc" viewBox="0 0 16 16"><path fill="currentColor" d="M8 1l7 5h-2v9H3V6H1zm-2 8v5h2v-3h2v3h2V9z"/></symbol>
 
     {# Combat / lifecycle status — replaces ⚔ ☠ 💀 🚫 🎯 ✓ ✗ ⚠ ✨ ⚡ ⚰ etc. #}
     {# i-swords: two crossed sword shapes. Used by battle markers (kf-battle
@@ -68,8 +44,6 @@
     <symbol id="i-skull"    viewBox="0 0 16 16"><path fill="currentColor" d="M3 2h10v9h-1v3h-2v-2H6v2H4v-3H3zm2 3v3h2V5zm4 0v3h2V5zm-2 5h2v1H7z"/></symbol>
     {# i-ban: circle with diagonal slash. Used by missed-catch cause. #}
     <symbol id="i-ban"      viewBox="0 0 16 16"><path fill="currentColor" d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2c1.3 0 2.5.4 3.5 1.1L4.1 11.5A5 5 0 018 3zm3.9 1.5A5 5 0 014.5 11.9z"/></symbol>
-    {# i-target: concentric squares (pixel bullseye). Used by Encounters summary. #}
-    <symbol id="i-target"   viewBox="0 0 16 16"><path fill="currentColor" d="M2 2h12v12H2zm2 2v8h8V4zm2 2h4v4H6zm1 1v2h2V7z"/></symbol>
     {# i-check: pixel-art checkmark. Used by linked, caught, token-set. #}
     <symbol id="i-check"    viewBox="0 0 16 16"><path fill="currentColor" d="M14 4l-2-2-6 6-2-2-2 2 4 4z"/></symbol>
     {# i-x: pixel-art X. Used by token-missing, lk-dead-x, captured-none. #}
@@ -80,9 +54,5 @@
     <symbol id="i-pin-loc"  viewBox="0 0 16 16"><path fill="currentColor" d="M8 1a5 5 0 015 5c0 4-5 9-5 9S3 10 3 6a5 5 0 015-5zm0 3a2 2 0 100 4 2 2 0 000-4z"/></symbol>
     {# i-cross: latin cross. Used by stream memorial divider. #}
     <symbol id="i-cross"    viewBox="0 0 16 16"><path fill="currentColor" d="M7 1h2v4h4v2H9v8H7V7H3V5h4z"/></symbol>
-    {# i-hourglass: pending hourglass. Used by encounter-state filter pills. #}
-    <symbol id="i-hourglass" viewBox="0 0 16 16"><path fill="currentColor" d="M3 1h10v3l-3 4 3 4v3H3v-3l3-4-3-4zm2 2v1l3 4 3-4V3z"/></symbol>
-    {# i-info: info bubble. Used by the manager new-run section headers (data-tip tooltips). #}
-    <symbol id="i-info" viewBox="0 0 16 16"><path fill="currentColor" fill-rule="evenodd" d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 2a6 6 0 110 12A6 6 0 018 2zM7 7h2v5H7zM7 4h2v2H7z"/></symbol>
   </defs>
 </svg>

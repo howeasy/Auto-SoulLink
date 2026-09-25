@@ -4,9 +4,8 @@
  * to morph in fresh #root content from the server. Three pieces of
  * post-swap behaviour run here:
  *
- *   1. processSprites — funnotbun custom sprites ship with a solid
- *      background pixel; canvas chroma-key it to transparent and cache the
- *      resulting data URL so subsequent renders don't re-process.
+ *   1. refitOnSpriteLoad — re-run autoFit and the marquees once a sprite
+ *      that was still loading at paint time lands.
  *   2. processBadges — PokeAPI badge PNGs have anti-aliased fringe against
  *      a light bg; snap semi-transparent pixels to fully transparent so
  *      badges look clean on any theme.
@@ -15,76 +14,24 @@
  *
  * All three run on `htmx:afterSettle` (after the morph completes) and on
  * `DOMContentLoaded` (so the initial server-rendered HTML gets the same
- * treatment). Idiomorph preserves <img> identity across morphs, so once
- * a sprite is chroma-keyed it stays keyed.
- *
- * NOT loaded by the dashboard — the dashboard has its own copy of the
- * sprite background-removal pipeline inline at server.py:610–665.
+ * treatment).
  */
 
 (function () {
   'use strict';
 
-  // ── Sprite chroma-key (funnotbun-style solid-bg PNGs) ─────────────────
-  var spriteCache = {};
-
-  function removeSpriteBackground(img) {
-    if (img.dataset.bgRemoved || !img.naturalWidth) return;
-    var src = img.src;
-    if (src.indexOf('funnotbun') === -1) return;
-    if (spriteCache[src]) {
-      img.src = spriteCache[src];
-      img.dataset.bgRemoved = '1';
-      return;
-    }
-    var c = document.createElement('canvas');
-    c.width = img.naturalWidth;
-    c.height = img.naturalHeight;
-    var ctx = c.getContext('2d');
-    ctx.drawImage(img, 0, 0);
-    try {
-      var data = ctx.getImageData(0, 0, c.width, c.height);
-      var px = data.data;
-      var bgR = px[0], bgG = px[1], bgB = px[2];
-      for (var i = 0; i < px.length; i += 4) {
-        if (px[i] === bgR && px[i + 1] === bgG && px[i + 2] === bgB) {
-          px[i + 3] = 0;
-        }
-      }
-      ctx.putImageData(data, 0, 0);
-      var dataUrl = c.toDataURL();
-      spriteCache[src] = dataUrl;
-      img.src = dataUrl;
-    } catch (e) {
-      // CORS / SecurityError — leave original sprite alone.
-    }
-    img.dataset.bgRemoved = '1';
-  }
-
-  function processSprites() {
+  // ── Sprite load → refit ─────────────────────────────────────────────
+  // Re-fit + re-measure marquees once a sprite finishes loading — the
+  // encounter-table marquee in particular needs its scrollHeight recomputed
+  // after the sprites land, otherwise the initial-paint measure happens
+  // against an empty grid and the overflow check fails.
+  function refitOnSpriteLoad() {
     document.querySelectorAll('img.mon-sprite, img.enc-sprite').forEach(function (img) {
-      if (img.dataset.bgRemoved) return;
-      var cached = img.getAttribute('src');
-      if (cached && spriteCache[cached]) {
-        img.src = spriteCache[cached];
-        img.dataset.bgRemoved = '1';
-        return;
-      }
-      if (img.complete && img.naturalWidth) {
-        removeSpriteBackground(img);
-      } else {
-        img.crossOrigin = 'anonymous';
-        // Re-fit + re-measure marquees once a sprite finishes loading —
-        // the encounter-table marquee in particular needs its scrollHeight
-        // recomputed after the funnotbun sprites land, otherwise the
-        // initial-paint measure happens against an empty grid and the
-        // overflow check fails.
-        img.addEventListener('load', function () {
-          removeSpriteBackground(img);
-          autoFit();
-          applyMarquees();
-        }, { once: true });
-      }
+      if (img.complete && img.naturalWidth) return;
+      img.addEventListener('load', function () {
+        autoFit();
+        applyMarquees();
+      }, { once: true });
     });
   }
 
@@ -200,7 +147,7 @@
   }
 
   function runAll() {
-    processSprites();
+    refitOnSpriteLoad();
     processBadges();
     autoFit();
     applyMarquees();
@@ -245,47 +192,13 @@
 
   // Subsequent renders — HTMX morphs new content into #root every 2 s.
   // afterSettle fires once the swap is complete (sprites may not yet have
-  // load events fired, but the listeners we attach inside processSprites
+  // load events fired, but the listeners we attach inside refitOnSpriteLoad
   // handle that case).
   document.body.addEventListener('htmx:afterSettle', runAll);
   // Window resize — refit existing content, no re-fetch needed.
   window.addEventListener('resize', autoFit);
 
-  // ── Pre-swap funnotbun src rewrite — prevents the 2-second sprite flash
-  // (parallel to the dashboard.js:104 handler).
-  //
-  // The polling fragment carries every <img>'s ORIGINAL funnotbun URL
-  // (green/blue background). Idiomorph dutifully syncs the incoming `src`
-  // back onto the existing DOM, even though processSprites already replaced
-  // it with a transparent data URL. The CSS `visibility:hidden` rule then
-  // hides the funnotbun src for a frame until the load+chroma-key cycle
-  // completes — that's the flicker every 2 s.
-  //
-  // Rewrite each funnotbun src in the incoming HTML to the cached
-  // transparent data URL we computed on initial paint, and tag the element
-  // `data-bg-removed="1"`. By the time idiomorph applies the morph the
-  // src already matches the post-processed value, so morph sees nothing to
-  // change and the browser never re-fetches. HTMX exposes the modifiable
-  // response body on `event.detail.serverResponse`.
-  document.body.addEventListener('htmx:beforeSwap', function (ev) {
-    try {
-      var html = ev.detail && ev.detail.serverResponse;
-      if (!html || html.indexOf('funnotbun') === -1) return;
-      var changed = false;
-      var rewritten = html.replace(
-        /<img\b([^>]*?)\bsrc=(["'])([^"']*funnotbun[^"']*)\2([^>]*)>/g,
-        function (match, before, q, src, after) {
-          if (!spriteCache[src]) return match;
-          changed = true;
-          var clean = (before + after).replace(/\s*data-bg-removed=(["'])[^"']*\1/g, '');
-          return '<img' + clean + ' src=' + q + spriteCache[src] + q + ' data-bg-removed="1">';
-        }
-      );
-      if (changed) ev.detail.serverResponse = rewritten;
-    } catch (_) { /* fall through to post-swap chroma-key */ }
-  });
-
   // Expose for debugging / future stream pages that want to call helpers
-  // directly (e.g., one-shot sprite re-processing after a manual mutation).
-  window.SLinkOverlay = { processSprites: processSprites, processBadges: processBadges, autoFit: autoFit };
+  // directly.
+  window.SLinkOverlay = { processBadges: processBadges, autoFit: autoFit };
 })();

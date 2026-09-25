@@ -184,8 +184,7 @@
  * Anything that is a number wears this. A page font is a voice; digits are data, and
  * they line up only when every one is the same width. */
 .num, .enc-lv, .tomb-mon .level, .phase-stats,
-.mk-hp-num, .mk-ev-ts, .mk-badges, .mk-bond-state, .mk-meta, .mk-tag, .mk-sub,
-.mgr-rail-family-count, .mgr-live-mon-lv {
+.mk-hp-num, .mk-ev-ts, .mk-badges, .mk-bond-state, .mk-meta, .mk-tag, .mk-sub {
   font-family: var(--font-num);
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
@@ -393,19 +392,6 @@ body.theme-transparent #root { border: none; }
   vertical-align: -0.15em;
   flex-shrink: 0;
   fill: currentColor;
-}
-
-/* Hide funnotbun sprites until dashboard.js / overlay-helpers.js
- * chroma-keys their solid green/blue background away. Without this rule
- * the raw PNG paints with its background for a frame on initial load —
- * a visible flash on every page navigation and HTMX swap. Once the JS
- * sets `data-bg-removed="1"` the selector no longer matches, and the
- * sprite becomes visible (now transparent). PokeAPI sprites (no
- * "funnotbun" in src) are already transparent and paint immediately. */
-img.mon-sprite[src*="funnotbun"]:not([data-bg-removed]),
-img.enc-sprite[src*="funnotbun"]:not([data-bg-removed]),
-img.bdg-img[src*="funnotbun"]:not([data-bg-removed]) {
-  visibility: hidden;
 }
 
 /* ── HP bar (dashboard-style, used by hp_bar macro) ────────────────── */

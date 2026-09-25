@@ -45,10 +45,6 @@
           // because we're working with our own rendered output; HTMX morphs
           // will reset us back to the single copy on the next swap.
           list.innerHTML = list.innerHTML + list.innerHTML;
-          // Re-process funnotbun sprites on the duplicated nodes.
-          if (window.SLinkOverlay && window.SLinkOverlay.processSprites) {
-            window.SLinkOverlay.processSprites();
-          }
           var scrollDur = Math.max(6, {{ mons | length }} * 2.5) / speed;
           var totalDur  = scrollDur + pauseSec;
           var scrollPct = Math.round((scrollDur / totalDur) * 100);
