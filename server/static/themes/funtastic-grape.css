@@ -9,6 +9,7 @@
   --c-bg:    #0d0518;
   --c-card:  #1f1535;
   --c-edge:  #5a2a85;
+  --c-edge-ui: #8d4dc7;  /* control borders: 3.3:1 on card (the hairline stays #5a2a85) */
   --c-sep:   color-mix(in srgb, #5a2a85 50%, transparent);
   --c-txt:   #ede0ff;
   --c-dim:   #a090c8;
@@ -21,7 +22,7 @@
   --c-link:  #b07cff;
   --c-info:  #d0a4ff;
 
-  --c-brand: #9933cc;
+  --c-brand: #b162d8;   /* was #9933cc: 3.0:1 on card, brand text needs 4.5:1 */
   
 
   /* Calc-preview accent recoloured into the Grape palette. */
