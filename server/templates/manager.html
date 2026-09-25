@@ -43,17 +43,22 @@
       {# ── New run ─────────────────────────────────────────────────────── #}
       <header class="mk-runhdr"><h1 class="mk-runname">New run</h1></header>
       <div class="mk-page mk-newpage" x-data="newRun()">
-        <div class="mk-form">
+        {# outside the aria-busy form: a live region under aria-busy=true waits for it to clear #}
+        <span role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap"
+              x-text="busy ? (stage || 'Creating…') : (uploading ? 'Adding the file…' : uploadNote)"></span>
+        <div class="mk-form" :aria-busy="busy || !!uploading">
           <label class="mk-field big">
             <span>Name</span>
-            <input class="big" type="text" x-model="draft.name" placeholder="Kanto Duo" autofocus @keydown.enter="create()">
+            <input class="big" type="text" x-model="draft.name" placeholder="Kanto Duo" autofocus @keydown.enter="create()"
+                   :aria-describedby="draft.name.trim() ? null : 'run-name-hint'" :aria-invalid="tried && !draft.name.trim()">
           </label>
 
           <section class="mk-zone">
-            <h2 class="mk-h2"><span>Game</span><i></i><em>any two cartridges of a family can link</em></h2>
-            <div class="mk-games">
+            <h2 class="mk-h2"><span id="game-label">Game</span><i></i><em>any two cartridges of a family can link</em></h2>
+            <div class="mk-games" role="radiogroup" aria-labelledby="game-label" @keydown="radioKeys($event)">
               <template x-for="g in form.games" :key="g.key">
-                <button type="button" class="mk-gchip" :class="[draft.game === g.key ? 'active' : '', g.key === '' ? 'detect' : '']" @click="draft.game = g.key" x-text="g.label"></button>
+                <button type="button" class="mk-gchip" role="radio" :aria-checked="draft.game === g.key" :tabindex="draft.game === g.key ? 0 : -1"
+                        :class="[draft.game === g.key ? 'active' : '', g.key === '' ? 'detect' : '']" @click="draft.game = g.key" x-text="g.label"></button>
               </template>
             </div>
           </section>
@@ -65,11 +70,12 @@
                 <template x-for="key in group.keys" :key="key">
                   <label class="mk-opt described" :class="!support(key).ok ? 'off-unavailable' : (draft.opts[key] ? 'on' : '')">
                     {# a greyed row that is ALWAYS on for this game shows as checked #}
-                    <input type="checkbox" :checked="support(key).always || draft.opts[key]" @change="draft.opts[key] = $event.target.checked" :disabled="!support(key).ok">
+                    <input type="checkbox" :checked="support(key).always || draft.opts[key]" @change="draft.opts[key] = $event.target.checked" :disabled="!support(key).ok"
+                           :aria-labelledby="'opt-' + key + '-name'" :aria-describedby="'opt-' + key + '-desc' + (support(key).ok ? '' : ' opt-' + key + '-why')">
                     <span class="mk-opt-txt">
-                      <span class="mk-opt-name" x-text="form.options[key].label"></span>
-                      <span class="mk-opt-desc" x-text="form.options[key].desc"></span>
-                      <span class="mk-opt-why" x-show="!support(key).ok" x-text="support(key).why"></span>
+                      <span class="mk-opt-name" :id="'opt-' + key + '-name'" x-text="form.options[key].label"></span>
+                      <span class="mk-opt-desc" :id="'opt-' + key + '-desc'" x-text="form.options[key].desc"></span>
+                      <span class="mk-opt-why" :id="'opt-' + key + '-why'" x-show="!support(key).ok" x-text="support(key).why"></span>
                     </span>
                   </label>
                 </template>
@@ -89,9 +95,9 @@
 
           <div class="mk-form-actions">
             <button class="mk-btn primary big" :disabled="!draft.name.trim() || busy || (gen1() && !cartsReady())" @click="create()" x-text="busy ? (stage || 'Creating…') : createLabel()"></button>
-            <span class="mk-sub" x-show="!draft.name.trim()">Give it a name.</span>
+            <span class="mk-sub" id="run-name-hint" x-show="!draft.name.trim()">Give it a name.</span>
             <span class="mk-sub" x-show="draft.name.trim() && gen1() && !cartsReady()" x-text="cartsWhy()"></span>
-            <span class="mk-sub" x-show="error" x-text="error" style="color:var(--c-dead)"></span>
+            <span class="mk-sub" role="alert" x-text="error" style="color:var(--c-dead)"></span>
           </div>
         </div>
 
@@ -159,9 +165,11 @@
       <div class="mk-page">
         {# What the last action said when it failed — a start that could not bind its ports,
            mostly. Outside #content so the 2 s morph does not wipe it. #}
-        <div class="mk-banner error" x-data="runNotice()" x-show="notice" x-cloak>
-          <b>Could not start.</b> <span x-text="notice"></span>
-          <button type="button" class="mk-linkbtn" @click="notice = ''">dismiss</button>
+        <div role="alert" x-data="runNotice()" @run-error.window="title = $event.detail.title; notice = $event.detail.message">
+          <div class="mk-banner error" x-show="notice" x-cloak>
+            <b x-text="title"></b> <span x-text="notice"></span>
+            <button type="button" class="mk-linkbtn" @click="notice = ''">dismiss</button>
+          </div>
         </div>
         {% include "_board.html" %}
       </div>
@@ -227,21 +235,38 @@
   function manager() { return {}; }
 
   function runNotice() {
-    return { notice: new URLSearchParams(window.location.search).get('error') || '' };
+    return { title: 'Could not start.', notice: new URLSearchParams(window.location.search).get('error') || '' };
   }
 
   function runActions(runId) {
     return {
       busy: false, launchers: false,
+      // Single-flight; on success the controls stay disabled until the page unloads. A failure
+      // is shown in place (the run page may 404 once a delete went through).
       async act(what, confirmText) {
+        if (this.busy) return;
         if (confirmText && !confirm(confirmText)) return;
         this.busy = true;
+        var navigating = false, error = '';
         try {
-          var res = await fetch('/api/runs/' + runId + '/' + what, { method: 'POST' });
-          var j = await res.json();
-          if (!j.ok) { window.location.href = '/runs/' + runId + '?error=' + encodeURIComponent(j.error || 'Action failed'); return; }
-          window.location.href = what === 'delete' ? '/' : '/runs/' + runId;
-        } finally { this.busy = false; }
+          var res = await fetch('/api/runs/' + runId + '/' + what, { method: 'POST', signal: AbortSignal.timeout(30000) });
+          var text = await res.text(), j = {};
+          try { j = JSON.parse(text); } catch (e) { j = {}; }
+          if (res.ok && j.ok) {
+            navigating = true;
+            window.location.href = what === 'delete' ? '/' : '/runs/' + runId;
+          } else if (what === 'delete' && res.status === 404) {
+            navigating = true;                  // already gone: that is what delete wanted
+            window.location.href = '/';
+          } else {
+            error = j.error || ('The Manager answered HTTP ' + res.status);
+          }
+        } catch (e) {
+          error = e && e.name === 'TimeoutError' ? 'The Manager did not answer within 30 s.' : 'The Manager could not be reached: ' + e;
+        } finally {
+          if (!navigating) this.busy = false;
+        }
+        if (error) window.dispatchEvent(new CustomEvent('run-error', { detail: { title: 'Could not ' + what + '.', message: error } }));
       },
       async pin() {
         this.busy = true;
@@ -262,7 +287,7 @@
       form: form,
       ports: window.SLINK_NEXT_PORTS,
       draft: { name: '', game: '', opts: { battle_calc: true, pc_trade_npc: true } },
-      busy: false, error: '', stage: '',
+      busy: false, error: '', stage: '', tried: false,
       init() {
         var self = this;
         this.watchRandomizer();
@@ -281,6 +306,7 @@
       on() { var self = this; return Object.keys(form.options).filter(function (k) { return self.draft.opts[k] && self.support(k).ok; }); },
       async create() {
         var name = this.draft.name.trim();
+        this.tried = true;
         if (!name || this.busy) return;
         this.busy = true; this.error = ''; this.stage = 'Creating…';
         try {

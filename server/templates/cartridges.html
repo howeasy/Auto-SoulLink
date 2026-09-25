@@ -24,7 +24,7 @@
       <a class="mk-btn" href="/runs/{{ run.run_id }}">Back to the board</a>
     </header>
     <div class="mk-page" id="randomizer" x-data='randomizerPage({{ run.run_id | tojson }})'>
-      <section class="mk-zone">
+      <section class="mk-zone" :aria-busy="busy || !!uploading">
         <h2 class="mk-h2"><span>Cartridges</span><i></i><em>what each player plays — the run hands them out</em></h2>
         <div class="mk-card mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
           <template x-if="rform.cartridges">
@@ -54,7 +54,7 @@
         </div>
       </section>
 
-      <section class="mk-zone">
+      <section class="mk-zone" :aria-busy="busy || !!uploading">
         <h2 class="mk-h2"><span>Randomizer</span><i></i><em>same settings, different seeds</em></h2>
         <div class="mk-card mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-4)">
           {% include "_randomize.html" %}
@@ -65,6 +65,9 @@
       <div class="mk-form-actions">
         <button class="mk-btn primary big" :disabled="busy || !cartsReady() || !rdraft.rom_a" @click="build()" x-text="busy ? (rdraft.randomize ? 'Building (a few seconds per ROM)' : 'Preparing…') : (rform.cartridges ? 'Prepare again' : 'Prepare the cartridges')"></button>
         <span class="mk-sub" x-show="error" x-text="error" style="color:var(--c-dead)"></span>
+        <span role="alert" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap" x-text="error"></span>
+        <span role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap"
+              x-text="busy ? (rdraft.randomize ? 'Randomizing (a few seconds per ROM)…' : 'Preparing…') : (uploading ? 'Adding the file…' : (uploadNote || note))"></span>
         <span class="mk-sub" x-show="!busy && !error && !cartsReady()" x-text="cartsWhy()"></span>
         <span class="mk-cap">Your randomizer, your ROMs. Nothing leaves this machine.</span>
       </div>
@@ -75,14 +78,15 @@
 <script>
   function randomizerPage(runId) {
     return Object.assign(randomizerFields(window.SLINK_RANDOMIZER), {
-      runId: runId, busy: false, error: new URLSearchParams(window.location.search).get('error') || '',
+      runId: runId, busy: false, note: '', error: new URLSearchParams(window.location.search).get('error') || '',
       init() { this.settleSpecForFamily(); this.watchRandomizer(); },
       async build() {
-        this.busy = true; this.error = '';
+        this.busy = true; this.error = ''; this.note = ''; this.uploadNote = '';
         try {
           var j = await this.prepareCartridges(runId);
           if (!j.ok) { this.error = j.error || 'Preparing failed'; return; }
           this.rform.cartridges = j.cartridges; this.rform.current = j.randomizer;
+          this.note = 'The cartridges are ready.';
         } catch (e) { this.error = String(e); }
         finally { this.busy = false; }
       },

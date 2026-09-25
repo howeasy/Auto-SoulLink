@@ -17,6 +17,10 @@ from server.status_payload import empty_status_payload
 pytest_plugins = ["tests.unit.manager_harness"]
 
 
+async def _answers(*_args):                  # the child's HTTP port answers /api/status
+    return True
+
+
 def test_missing_registry_is_empty_and_can_be_created(manager_dir):
     assert manager._load_registry() == []
     manager._save_registry([])
@@ -184,7 +188,8 @@ async def test_spawn_closes_parent_stderr_after_creation(manager_dir, monkeypatc
             raise asyncio.CancelledError
         async def _wait():                       # a healthy child: still running after the check
             await asyncio.sleep(10)
-        monkeypatch.setattr(manager, "SPAWN_GRACE_S", 0.01)
+        monkeypatch.setattr(manager, "SPAWN_POLL_S", 0.01)
+        monkeypatch.setattr(manager, "_http_ready", _answers)
         return SimpleNamespace(pid=4242, wait=_wait, returncode=None)
 
     monkeypatch.setattr(manager.asyncio, "create_subprocess_exec", create)
@@ -208,7 +213,8 @@ async def test_spawn_keeps_devnull_fallback_when_log_cannot_open(monkeypatch):
         assert kwargs["stderr"] == asyncio.subprocess.DEVNULL
         async def _wait():                       # a healthy child: still running after the check
             await asyncio.sleep(10)
-        monkeypatch.setattr(manager, "SPAWN_GRACE_S", 0.01)
+        monkeypatch.setattr(manager, "SPAWN_POLL_S", 0.01)
+        monkeypatch.setattr(manager, "_http_ready", _answers)
         return SimpleNamespace(pid=4242, wait=_wait, returncode=None)
 
     monkeypatch.setattr(manager, "open", denied, raising=False)

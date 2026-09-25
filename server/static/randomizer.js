@@ -12,6 +12,21 @@
  * answer. Every refusal names the setting or the file to fix, so the reason is surfaced
  * verbatim.
  */
+// Arrow / Home / End on a role="radiogroup" of chip buttons: move to the next enabled chip and
+// select it (the chips carry a roving tabindex, so Tab enters the group at the checked one).
+function radioKeys(e) {
+  var step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1, Home: 'first', End: 'last' }[e.key];
+  if (!step) return;
+  var radios = Array.prototype.filter.call(e.currentTarget.querySelectorAll('[role="radio"]'), function (r) { return !r.disabled; });
+  if (!radios.length) return;
+  e.preventDefault();
+  var i = radios.indexOf(document.activeElement);
+  var next = step === 'first' ? radios[0] : step === 'last' ? radios[radios.length - 1]
+    : radios[(Math.max(i, 0) + step + radios.length) % radios.length];
+  next.focus();
+  next.click();
+}
+
 function defaultSpec(form) {
   return Object.fromEntries(form.options.map(function (o) { return [o.key, o.default]; }));
 }
@@ -37,7 +52,7 @@ function randomizerFields(form) {
     // The family this run takes (upr_settings.FAMILY_*): fixed on a run's page, follows the
     // game chip in the creator (setFamily). null = any Gen 1 cartridge.
     family: form.family || null,
-    uploading: '',
+    uploading: '', uploadNote: '',
     groups() {
       var out = [], by = {};
       form.options.forEach(function (o) {
@@ -79,6 +94,19 @@ function randomizerFields(form) {
       return '';
     },
     choiceOk(o, c) { return !this.choiceWhy(o, c); },
+    // Roving tabindex for a choice's radio chips: the checked chip if it is enabled, else the
+    // first enabled one, is the group's single Tab stop (radioKeys moves within it).
+    chipTab(o, c) {
+      var self = this, on = o.choices.filter(function (x) { return self.choiceOk(o, x); });
+      var stop = on.find(function (x) { return x.value === self.rdraft.spec[o.key]; }) || on[0];
+      return stop === c ? 0 : -1;
+    },
+    // The preflight in words: the tags and the status region say the same thing.
+    jarWords() {
+      var p = this.pre;
+      return !p ? '' : p.jar_found ? (p.jar_fork ? 'SLink fork jar (vanilla + pureRGB)' : 'stock jar (vanilla only)') : 'jar not found';
+    },
+    javaWords() { return !this.pre ? '' : this.pre.java_found ? 'java on PATH' : 'java not on PATH'; },
     setChoice(o, c) { this.rdraft.spec[o.key] = c.value; this.settleSpecForFamily(); },
     // what the chosen chip means, written out under the row (the tooltip needs a hover)
     chosenHelp(o) {
@@ -232,11 +260,12 @@ function randomizerFields(form) {
       var file = ev.target.files && ev.target.files[0];
       ev.target.value = '';
       if (!file) return;
-      this.uploading = field; this.error = '';
+      this.uploading = field; this.error = ''; this.uploadNote = '';
       try {
         var body = new FormData(); body.append('file', file, file.name);
         var j = await (await fetch('/api/roms', { method: 'POST', body: body })).json();
         if (!j.ok) { this.error = j.error || 'Upload failed'; return; }
+        this.uploadNote = 'Added ' + file.name + '.';
         if (j.kind === 'jar') { this.rdraft.jar = j.path; }
         else {
           if (!this.roms.some(function (r) { return r.path === j.path; })) this.roms.push(j.rom);
