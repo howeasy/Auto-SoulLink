@@ -133,6 +133,7 @@ def test_a_reset_keeps_a_gen1_run_on_the_gen1_adapter(srv):
 
 def test_a_reset_keeps_the_committed_rom_type(srv):
     """A blank rom_type after reset would disarm the Mixed-games check on the next hello."""
+    srv.connected_players["a"] = {"connected": True, "rom_type": "red"}
     srv.state.rom_type, srv.state.artifact_kind = "red", "clean"
     asyncio.run(srv.handle_reset_api(None))
     assert srv.state.rom_type == "red"
@@ -240,3 +241,12 @@ def test_link_row_status_is_not_colour_only(status, word):
     html = _render('{% from "_macros.html" import link_row %}{{ link_row(link) }}',
                    link={"a": mon, "b": mon, "status": status})
     assert f'<span class="sr-only">{word}</span>' in html
+
+
+def test_a_reset_with_nobody_connected_frees_the_game(srv):
+    """With no cartridge connected a reset is how a run switches games: nothing to keep."""
+    srv.connected_players["a"] = {"connected": False, "rom_type": "red"}
+    srv.state.rom_type, srv.state.artifact_kind = "red", "clean"
+    asyncio.run(srv.handle_reset_api(None))
+    assert srv.state.rom_type == ""
+    assert srv.state.artifact_kind == ""

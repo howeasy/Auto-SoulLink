@@ -4339,8 +4339,9 @@ class SLinkServer:
         # The cartridges are unchanged and their sockets stay open, and a client does not
         # re-hello on an open socket -- so the run keeps its adapter (a fresh state would
         # default to Gen 3 and render a live Gen 1 run with Gen 3 names and sprites), and
-        # connected_players keeps each client's rom_type and cartridge facts. The committed
-        # rom_type/artifact_kind carry over too, or the next hello skips the Mixed-games check.
+        # connected_players keeps each client's rom_type and cartridge facts. While a client is
+        # connected the committed rom_type/artifact_kind carry over too, or its partner's next
+        # hello would skip the Mixed-games check.
         old = self.state
         self.state = SoulLinkState(data_dir=self._data_dir,
                                    adapter=self.state.adapter,
@@ -4355,7 +4356,9 @@ class SLinkServer:
                                    native_sounds=self.state.native_sounds,
                                    battle_calc=self.state.battle_calc,
                                    pc_trade_npc=self.state.pc_trade_npc)
-        self.state.rom_type, self.state.artifact_kind = old.rom_type, old.artifact_kind
+        # With nobody connected a reset is how a run switches games, so nothing is kept.
+        if any(p.get("connected") for p in self.connected_players.values()):
+            self.state.rom_type, self.state.artifact_kind = old.rom_type, old.artifact_kind
         self.state.presentation_key_in_use = self._presentation_key_in_use
         self.adapter = self.state.adapter
         # Clear derived display caches so SSE doesn't broadcast stale data.
