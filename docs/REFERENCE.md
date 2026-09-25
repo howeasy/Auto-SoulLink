@@ -135,7 +135,7 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 
 | Requirement | Detail |
 |---|---|
-| BizHawk 2.9+ | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core); pureRGB needs Console Mode **GBC**. **Gen 3:** Two instances with US 1.0 FireRed/LeafGreen or Radical Red ROMs. **Gen 4:** Two instances with US HGSS ROMs |
+| BizHawk 2.11+ (Gen 1, Gen 3), 2.9+ (Gen 2) | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core); pureRGB needs Console Mode **GBC**. **Gen 3:** Two instances with US 1.0 FireRed/LeafGreen or Radical Red ROMs. **Gen 4:** Two instances with US HGSS ROMs |
 | ROMs | **Gen 1:** Red/Blue/Yellow (US), or the pinned pureRGB v2.7.6 builds (PureRed/PureBlue/PureGreen; `tools/build_purergb_syms.py`). **Gen 3:** Vanilla, randomized (UPR), or Radical Red 4.1. **Gen 4:** HeartGold/SoulSilver US |
 | Python 3.11+ | `pip install -r requirements.txt` (CI runs 3.12; `ruff.toml` targets py311) |
 | Scripts in `lua/` | `slink.lua` (universal entry point), `gen3/`, `connector.lua`, `socket.lua` |
@@ -467,6 +467,8 @@ curl http://localhost:8080/launcher/b -o slink_b.lua
 | `/api/runs/new` | POST | `{name, game?, ...options}` — creates and auto-starts; `game` is a family key from `manager.GAMES`. Ports are the first pair unused by the registry **and bindable on this machine**; a server that dies on startup is reported in `start_error` (the run exists, stopped) rather than recorded as running |
 | `/api/runs/{id}/start` · `/stop` · `/archive` · `/delete` | POST | Lifecycle |
 | `/api/runs/{id}/launcher/{player}` | GET | The player's launcher `.lua` |
+| `/api/runs/{id}/player-pack/{player}` | GET | The player's whole setup: the release ZIP (`tools/make_release.py`) with the run's launcher at its root and the run's host, game TCP port and slot baked into every launcher inside |
+| `/api/settings/public-host` | POST | `{host}` — the address launchers and setup ZIPs connect to (`data/runs/settings.json`; `--public-host` at start). `""` = work it out: the bound address, else this machine's LAN address (`manager.advertised_host`) — never the browser's `Host` header |
 | `/api/runs/{id}/live` | GET | The run's `/api/status`, same-origin |
 | `/api/runs/{id}/cartridges` | POST | `{rom_a, rom_b, companion?, randomize?, jar?, spec? \| categories? \| settings?}` — makes each player's cartridge (`server/cartridges.py`): a copy, the SLink companion on it (vanilla: the UPS on a clean dump, or the structural injector after randomizing; pureRGB: the companion overlay, which the fork then randomizes as an overlay), randomized when asked. Outputs `roms/{a,b}.<ext>` with the source's extension (`.gb` Red/Blue, `.gbc` Yellow and pureRGB); `rom_contract.json` only when randomized (the run then admits no other). Records `run.cartridges` (and `run.randomizer` when randomized) |
 | `/api/runs/{id}/randomize` | POST | `{jar?, rom_a, rom_b, spec? | categories? | settings?, fastest_text?}` — `spec` is any subset of `upr_settings.OPTIONS` (modes, level curves, difficulty, tweaks); builds the pair, records seeds/hashes/spec/summary, writes `rom_contract.json`. A run whose game names a family refuses a pair from the other (400, by name) |
@@ -1549,6 +1551,7 @@ python -m server.manager --host 0.0.0.0
 | `POST /api/runs/<id>/archive` | Archive a run |
 | `POST /api/runs/<id>/delete` | Delete a run |
 | `GET /api/runs/<id>/launcher/<player>` | Download launcher script (`player` = `"a"` or `"b"`) |
+| `GET /api/runs/<id>/player-pack/<player>` | Download the player's setup ZIP (runtime + launcher) |
 | `GET /api/runs/<id>/live` | Same-origin proxy of a run's `/api/status` |
 | `GET\|POST /api/stream/pin` | Read / set which run the manager's stream overlays are pinned to |
 | `GET /stream` / `GET /stream/{name}` | Overlay gallery + per-overlay proxy relaying to the pinned/active run's HTTP port (stable OBS browser-source URLs; `/stream/{name}/fragment` serves the HTMX poll) |

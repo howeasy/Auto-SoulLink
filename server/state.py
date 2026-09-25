@@ -1043,8 +1043,7 @@ class SoulLinkState:
                     self.queued_commands[player_id].append({
                         "cmd": "hud_show",
                         "text": f"[x] WRONG SAVE: slot {player_id.upper()}",
-                        "color": [255, 0, 0],
-                        "duration": 600,
+                        "r": 255, "g": 0, "b": 0, "frames": 600,
                     })
                     # Signal the hello was rejected — caller checks this flag
                     msg["_rejected"] = True
@@ -1769,12 +1768,11 @@ class SoulLinkState:
                 AreaStatus.PENDING_B if player_id == "a" else AreaStatus.PENDING_A,
                 player=player_id, reason="first_capture")
             # Notify partner that a new link opportunity is available.
-            disp = humanize_area_id(area_id)
-            nick = mon.nickname or self.adapter.species_name(mon.species)
-            label = nick or disp
+            disp = self.adapter.area_display_name(area_id) or humanize_area_id(area_id)
+            nick = mon.nickname or self.adapter.species_name(mon.species) or "a mon"
             self.queued_commands[partner].append({
                 "cmd": "hud_show",
-                "text": f">> Got {label}",
+                "text": f"Partner caught {nick} in {disp}",
                 "r": 100, "g": 180, "b": 255,
                 "frames": 300,
             })

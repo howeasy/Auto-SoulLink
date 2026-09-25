@@ -4,4 +4,10 @@
  * slink.css :root; this file exists so the theme switcher's <link> swap has
  * a real target to point at for the default case. Adding overrides here
  * would change the look of every page that doesn't request a theme — don't.
+ *
+ * The two exceptions are contrast fixes (CONTRAST.md): a 3:1 border for controls, and an
+ * opaque page background everywhere but the OBS overlays, whose translucent #root panel
+ * lets the game show through.
  */
+:root { --c-edge-ui: rgba(255, 255, 255, .38); }
+:root:not(:has(body.stream)) { --c-bg: #070910; }

@@ -221,7 +221,11 @@ gclient.handle_command = function(self, cmd)
         storage_rx[#storage_rx + 1] = { cmd = c, key = cmd.key }
     end
     if c ~= "noop" then
-        log("RX " .. c .. (cmd.key and (" key=" .. tostring(cmd.key)) or "") .. (cmd.text and (" text=" .. tostring(cmd.text)) or ""))
+        -- in_battle rides on the two death commands: the bench-in-battle lanes have to prove the
+        -- command reached B WHILE a battle was running, not just that it arrived
+        local where = (c == "force_faint" or c == "force_explode")
+            and fmt(" in_battle=%d", rd(parts.profile.ram.wIsInBattle)) or ""
+        log("RX " .. c .. (cmd.key and (" key=" .. tostring(cmd.key)) or "") .. where .. (cmd.text and (" text=" .. tostring(cmd.text)) or ""))
     end
     if c == "game_over" then log("GAME_OVER RX game_over") end
     if c == "hud_show" and cmd.text and cmd.text:find("WRONG SAVE", 1, true) then
@@ -1675,7 +1679,121 @@ local function explode_free_reentry(driver, key)
     return true
 end
 
-local function linked_faint_scenario(active, explode)
+-- The bench half of a linked faint that lands WHILE B IS IN A BATTLE (commit 6a8958fb): B meets a
+-- wild foe with its starter out and the linked mon benched in slot 1, holds the battle menu until
+-- the server's force_faint/force_explode arrives. The client zeroes the bench slot the frame the
+-- command arrives (BENCH_ZERO_ON_RX, with no loop head run since the hold began), so the battle
+-- menu can never switch it in. B then takes the free MOVE-menu cancel (see explode_free_reentry)
+-- back to the loop head, where the queued backstop finds the slot already dead and moves no byte
+-- (LOOP_HEAD_BENCH_SETTLED). The 6a8958fb client waited for that loop head (a switch from the
+-- held menu got the doomed mon a turn); the one before it waited for the overworld checkpoint.
+local function bench_battle_half(key, explode)
+    local size = parts.profile.derived.party_struct_size
+    local function slot_hp(slot)
+        local base = ram.wPartyMons + slot * size
+        return rd(base + 1) * 256 + rd(base + 2), rd(base + 4)
+    end
+    local function battle_hp() return rd(ram.wBattleMonHP) * 256 + rd(ram.wBattleMonHP + 1) end
+    local phase, driver = hunt("switch-hold", {start_active=true, keep_driver=true})
+    if phase ~= "linked-active-menu" then
+        return false, "B could not hold a wild battle with its linked mon benched: " .. tostring(phase)
+    end
+    local party = reads.read_party()
+    if rd(ram.wIsInBattle) ~= 1 or rd(ram.wPlayerMonNumber) ~= 0 or not party or not party[2]
+       or reads.key(party[2]) ~= key or slot_hp(1) == 0 then
+        driver.close();return false, "B's linked mon is not a living bench slot 1 in a wild battle"
+    end
+    local moves_before, active_before = hex4(ram.wBattleMonMoves), battle_hp()
+    local starter_before = slot_hp(0)
+    log(fmt("READY_BENCH_BATTLE linked_slot=1 active_slot=0 in_battle=%d bench_hp=%04X "
+            .. "active_hp=%04X moves=%s", rd(ram.wIsInBattle), slot_hp(1), active_before, moves_before))
+    local settled, heads = false, 0
+    local old = gclient.on_battle_loop_head
+    gclient.on_battle_loop_head = function(self, sig)
+        heads = heads + 1
+        local pending = self.pending_battle_writes[1]
+        local hp_before = slot_hp(1)
+        local moved = old(self, sig)
+        if settled or not (pending and pending.key == key and #self.pending_battle_writes == 0) then return moved end
+        local hp, status = slot_hp(1)
+        if hp == 0 and rd(ram.wIsInBattle) ~= 0 then
+            settled = true
+            log(fmt("LOOP_HEAD_BENCH_SETTLED key=%s cmd=%s in_battle=%d bench_hp=%04X status=%02X "
+                    .. "hp_before=%d landed=%s moved=%s active_slot=%d active_hp=%04X moves=%s", key, pending.cmd,
+                    rd(ram.wIsInBattle), hp, status, hp_before, tostring(pending.landed == true), tostring(moved == true),
+                    rd(ram.wPlayerMonNumber), battle_hp(), hex4(ram.wBattleMonMoves)))
+        end
+        return moved
+    end
+    local want = explode and "force_explode" or "force_faint"
+    local forced = false
+    for _ = 1, 60000 do
+        if received_commands[want] and received_commands[want].key == key then forced = true;break end
+        yield_frame()
+    end
+    if not forced then driver.close();return false, want .. " never arrived" end
+    if explode then
+        log(fmt("EXPLODE_CMDS force_explode=%d force_faint=%d", seen.force_explode or 0, seen.force_faint or 0))
+    end
+    -- The write lands on receipt: the slot reads 0 within a few frames of RX, and no loop head
+    -- has run since B began holding the battle menu (a loop-head-only client fails here).
+    local f0, zeroed = emu.framecount(), false
+    for _ = 1, 5 do
+        if slot_hp(1) == 0 then zeroed = true break end
+        yield_frame()
+    end
+    local rx_hp, rx_status = slot_hp(1)
+    log(fmt("BENCH_ZERO_ON_RX key=%s cmd=%s in_battle=%d bench_hp=%04X status=%02X frames=%d loop_heads=%d "
+            .. "active_slot=%d", key, want, rd(ram.wIsInBattle), rx_hp, rx_status, emu.framecount() - f0, heads,
+            rd(ram.wPlayerMonNumber)))
+    if not zeroed or rx_status ~= 0 then driver.close();return false, "the bench slot was not zeroed on receipt" end
+    if heads ~= 0 then driver.close();return false, "a loop head ran before the receipt readback" end
+    if not driver.choose("FIGHT").ok then driver.close();return false, "B could not choose FIGHT for the free cancel" end
+    local opened = false
+    for _ = 1, 900 do
+        if rd(symbols.wTopMenuItemX) == MOVE_MENU_X and rd(symbols.wTopMenuItemY) == MOVE_MENU_Y then opened = true break end
+        yield_frame()
+    end
+    if not opened then driver.close();return false, "B's move menu never opened for the free cancel" end
+    local cancelled = false
+    for _ = 1, 900 do
+        if rd(symbols.wTopMenuItemX) ~= MOVE_MENU_X then cancelled = true end
+        if settled then break end
+        yield_frame((not cancelled) and pulse_at_frame("B") or nil)
+    end
+    if not settled then
+        local hp, status = slot_hp(1)
+        driver.close()
+        return false, fmt("the loop head never settled the queued bench entry (in_battle=%d bench=%04X/%02X)",
+                          rd(ram.wIsInBattle), hp, status)
+    end
+    -- Still in the same battle: the bench is dead, the active battler untouched.
+    local menu = driver.wait_menu(900)
+    if not menu.ok then driver.close();return false, "the battle menu did not return after the bench write: " .. tostring(menu.why) end
+    local hp, status = slot_hp(1)
+    local moves_after, active_after, starter_after = hex4(ram.wBattleMonMoves), battle_hp(), slot_hp(0)
+    log(fmt("BENCH_HP_STATUS_IN_BATTLE %04X %02X in_battle=%d active_slot=%d active_hp=%04X->%04X "
+            .. "starter_hp=%04X->%04X moves=%s->%s", hp, status, rd(ram.wIsInBattle),
+            rd(ram.wPlayerMonNumber), active_before, active_after, starter_before, starter_after,
+            moves_before, moves_after))
+    driver.close()
+    if rd(ram.wIsInBattle) == 0 then return false, "the battle ended before the in-battle bench readback" end
+    if hp ~= 0 or status ~= 0 then return false, "B bench write did not clear HP/status in battle" end
+    if rd(ram.wPlayerMonNumber) ~= 0 or moves_after ~= moves_before or active_after ~= active_before
+       or starter_after ~= starter_before then
+        return false, "the bench write touched the active battler"
+    end
+    for i = 0, 3 do
+        if rd(ram.wBattleMonMoves + i) == 0x99 then return false, "EXPLOSION was stamped on the active battler" end
+    end
+    local escaped, error_text = escape_after_faint("b", 0)
+    if not escaped then return false, error_text end
+    local after_hp, after_status = slot_hp(1)
+    log(fmt("BENCH_HP_STATUS_AFTER_BATTLE %04X %02X", after_hp, after_status))
+    return true
+end
+
+local function linked_faint_scenario(active, explode, bench_battle)
     local linked, why = scenarios.link_new() -- real catch, server link, withdrawal, game SAVE
     if not linked then return false, link_prerequisite_failure(why) end
     if (seen.sync_retrieve_done or 0) < 1 then return false, "linked capture was not returned" end
@@ -1683,7 +1801,7 @@ local function linked_faint_scenario(active, explode)
     if not key then return false, mon end
     local first_faint = seen.faint or 0
     if D.player == "a" then
-        local ready = active and "READY_ACTIVE" or "READY_BENCH"
+        local ready = active and "READY_ACTIVE" or (bench_battle and "READY_BENCH_BATTLE" or "READY_BENCH")
         if not wait_until(function() return partner_has_mark(ready) end, 180, "B " .. ready) then
             return false, "B did not park in the required faint window"
         end
@@ -1697,6 +1815,9 @@ local function linked_faint_scenario(active, explode)
         log("A_ENGINE_FAINT " .. key)
         local escaped, error_text = escape_after_faint("a")
         if not escaped then return false, error_text end
+    elseif bench_battle then
+        local held, hold_why = bench_battle_half(key, explode)
+        if not held then return false, hold_why end
     elseif active then
         if explode then -- see heal_linked_in_overworld: the EXPLOSION turn is a real turn
             local healed, heal_why = heal_linked_in_overworld(key)
@@ -1878,6 +1999,7 @@ local function linked_faint_scenario(active, explode)
     log_party("POST_LINKED_FAINT")
     local saved, save_why = game_save(D.scenario) -- same tag as before for the two faint scenarios
     if not saved then return false, save_why end
+    if bench_battle then return true, "bench-in-battle linked faint and memorial saved" end
     if explode then return true, "explode self-KO and memorial saved" end
     return true, "engine linked faint and memorial saved"
 end
@@ -1888,6 +2010,11 @@ function scenarios.linked_faint_active_new() return linked_faint_scenario(true) 
 -- byte-for-byte the same sacrifice hunt; only B's half changes, because state.py:2678-2680 sends
 -- `force_explode` instead of `force_faint` on exactly that path.
 function scenarios.explode_new() return linked_faint_scenario(true, true) end
+-- The bench-in-battle halves (commit 6a8958fb): the partner's linked mon is on the BENCH of a wild
+-- battle when the command lands. Under --explode-mode the server sends force_explode, which off
+-- the field degrades to a faint (EXPLOSION needs the field).
+function scenarios.linked_faint_bench_battle_new() return linked_faint_scenario(false, false, true) end
+function scenarios.explode_bench_battle_new() return linked_faint_scenario(false, true, true) end
 
 -- F-4: admission itself is decided by the server. Both cartridges only boot their town
 -- battery save, send the production hello, and hold the ordinary overworld for 600 frames.

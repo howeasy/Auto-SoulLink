@@ -228,7 +228,20 @@ _LAUNCHER_SCRIPTS: set[str] = {
 
 # ── Player setup guide ────────────────────────────────────────────────────────
 
-_PLAYER_SETUP_MD = """\
+# The oldest BizHawk each game family runs on -- the one place setup text (this guide, the
+# Manager's run page) takes it from. Gen 1's is enforced at load by lua/slink.lua, which
+# refuses anything older (tests/unit/test_player_pack.py pins the two together), and so is
+# Gen 3's (the same lua/slink.lua guard on the Gen 3 route); Gen 2's is the Lua 5.4 LuaSocket
+# floor (lua/connector.lua). Gen 4/5 stay unlisted (experimental).
+BIZHAWK_MIN = {"Gen 1": "2.11", "Gen 2": "2.9", "Gen 3": "2.11"}
+
+
+def bizhawk_requirement() -> str:
+    """'2.11+ for Gen 1, 2.9+ for Gen 2, 2.11+ for Gen 3'"""
+    return ", ".join(f"{v}+ for {k}" for k, v in BIZHAWK_MIN.items())
+
+
+_GUIDE_HEAD = """\
 # SLink — Player Setup Guide
 
 This package contains everything you need to play a Soul Link Nuzlocke with
@@ -240,28 +253,45 @@ SLink in BizHawk. You do **not** need Python — the host handles the server.
 
 | Requirement | Detail |
 |---|---|
-| BizHawk 2.11+ | https://github.com/TASEmulators/BizHawk/releases (Gen 1 and Gen 3 refuse to start on older versions) |
+| BizHawk | BIZHAWK_REQ (older versions refuse to start). https://github.com/TASEmulators/BizHawk/releases |
 | A writable folder | Unzip somewhere you can write (not Program Files): Gen 3 keeps a small session file next to `lua/`. |
-| Your ROM | Gen 1 (Red/Blue/Yellow), Gen 2 (Crystal), Gen 3 (FireRed/LeafGreen/Radical Red), Gen 4 (HeartGold/SoulSilver/Platinum), Gen 5 (Black/White/Black 2/White 2) |
+| Your ROM | Gen 1 (Red/Blue/Yellow), Gen 2 (Crystal), Gen 3 (FireRed/LeafGreen/Radical Red) |
 | LuaSocket DLL | Already in `lua/x64/`. If missing, see the note below. |
-| Launcher script | Download from your host's status page (one click — see Step 1). |
+"""
+
+# A pack the Manager built already holds the player's launcher.
+_GUIDE_STEP1_PACKED = """\
+| Launcher script | `LAUNCHER`, already in this folder. |
+
+---
+
+## Step 1 — Your launcher is already here
+
+`LAUNCHER` sits next to `lua/` and `data/` in this folder. It connects to
+`CONNECT` as Player PLAYER. Keep it in this folder: it finds the rest of
+SLink next to itself. If your host's address changes, download a fresh pack.
+
+---
+
+"""
+
+_GUIDE_STEP1_DOWNLOAD = """\
+| Launcher script | Download from your host's SLink Manager (see Step 1). |
 
 ---
 
 ## Step 1 — Download your launcher from the host
 
-Your host will share their **status page URL**, which looks like:
+Your host will share their **SLink Manager** page, which looks like:
 
 ```
-http://<host-ip>:8080/
+http://<host-ip>:8090/
 ```
 
-> **Note:** The URL must use the host's actual LAN/WAN IP address, not
-> `127.0.0.1` or `localhost` — those only work on the host's own machine.
-
-On the status page, click the **download button** for your player slot
-(Player A or Player B). This gives you a `.lua` file pre-configured with
-the correct server address, port, and player ID.
+On the run's page, open **Launchers** and download the `.lua` for your
+player slot (Player A or Player B). It is pre-configured with the address,
+game TCP port and slot the run expects. The **setup .zip** in the same menu
+is this whole package with the launcher already inside.
 
 **Save that file into this folder** — the same folder that contains `lua/`
 and `data/`. For example:
@@ -275,11 +305,14 @@ SLink-player-v1.0.0/
 
 ---
 
+"""
+
+_GUIDE_REST = """\
 ## Step 2 — Load in BizHawk
 
 1. Open BizHawk and load your save file.
 2. Open **Tools → Lua Console**.
-3. Click **Open Script** and select the launcher `.lua` file you downloaded.
+3. Choose **Script → Open Script…** and select your launcher `.lua` (Step 1).
 4. The console will print:
 
    ```
@@ -311,6 +344,7 @@ installation:
 
 | Symptom | Fix |
 |---|---|
+| `BizHawk … is too old for Gen 1` | Install BizHawk GEN1_MIN or newer. |
 | `module 'socket' not found` | `socket-windows-5-4.dll` is missing from `lua/x64/`. See above. |
 | `TCP connect failed` / retrying | Server is not running, or IP/port is wrong. Ask host to verify. |
 | Connected but nothing happens | Check with host that your player slot (A or B) is not already taken. |
@@ -351,6 +385,17 @@ def run_generators() -> None:
     print()
 
 
+def player_setup_md(launcher: str | None = None, connect: str = "", player: str = "") -> str:
+    """PLAYER_SETUP.md. With `launcher` (a pack the Manager built), Step 1 names the launcher
+    already in the folder and the host:port it connects to, instead of sending the player
+    off to download one."""
+    step1 = (_GUIDE_STEP1_PACKED.replace("LAUNCHER", launcher).replace("CONNECT", connect)
+             .replace("PLAYER", player.upper()) if launcher else _GUIDE_STEP1_DOWNLOAD)
+    return ((_GUIDE_HEAD + step1 + _GUIDE_REST)
+            .replace("BIZHAWK_REQ", bizhawk_requirement())
+            .replace("GEN1_MIN", BIZHAWK_MIN["Gen 1"]))
+
+
 def patch_launcher(content: str, host: str | None, port: int | None, player: str | None) -> str:
     """Rewrite SLINK_HOST / SLINK_PORT / SLINK_PLAYER assignments in a launcher."""
     if host is not None:
@@ -374,7 +419,14 @@ def build_release(
     skip_generators: bool = False,
     with_patch: bool = False,
     rom: Path | None = None,
+    launcher: tuple[str, str] | None = None,
+    guide: str | None = None,
+    quiet: bool = False,
 ) -> Path:
+    """`launcher` is (filename, source) for a launcher placed at the package root, beside
+    lua/ -- the Manager's player pack. `guide` replaces the generic PLAYER_SETUP.md.
+    `quiet` drops the per-file progress lines (errors still go to stderr)."""
+    say = (lambda *a, **k: None) if quiet else print
     zip_name = f"SLink-player-{version}.zip"
     zip_path = out_dir / zip_name
     prefix   = f"SLink-player-{version}/"
@@ -432,44 +484,47 @@ def build_release(
 
     # ── Build zip ─────────────────────────────────────────────────────────────
     out_dir.mkdir(parents=True, exist_ok=True)
-    print(f"Building {zip_path} ...")
+    say(f"Building {zip_path} ...")
 
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(prefix + "PLAYER_SETUP.md", _PLAYER_SETUP_MD)
+        zf.writestr(prefix + "PLAYER_SETUP.md", guide or player_setup_md())
+        if launcher:
+            zf.writestr(prefix + launcher[0], launcher[1])
+            say(f"  [added]   {prefix}{launcher[0]}")
 
         for fname in _LUA_ROOT:
             src = REPO_ROOT / "lua" / fname
             arc = prefix + f"lua/{fname}"
             if do_patch and fname in _LAUNCHER_SCRIPTS:
                 zf.writestr(arc, patch_launcher(src.read_text("utf-8"), host, port, player))
-                print(f"  [patched] {arc}")
+                say(f"  [patched] {arc}")
             else:
                 zf.write(src, arc)
-                print(f"  [added]   {arc}")
+                say(f"  [added]   {arc}")
 
         for fname in _LUA_GEN1:
             zf.write(REPO_ROOT / "lua" / "gen1" / fname, prefix + f"lua/gen1/{fname}")
-            print(f"  [added]   {prefix}lua/gen1/{fname}")
+            say(f"  [added]   {prefix}lua/gen1/{fname}")
 
         for fname in _LUA_GEN3:
             zf.write(REPO_ROOT / "lua" / "gen3" / fname, prefix + f"lua/gen3/{fname}")
-            print(f"  [added]   {prefix}lua/gen3/{fname}")
+            say(f"  [added]   {prefix}lua/gen3/{fname}")
 
         for fname in _LUA_CORE:
             zf.write(REPO_ROOT / "lua" / "core" / fname, prefix + f"lua/core/{fname}")
-            print(f"  [added]   {prefix}lua/core/{fname}")
+            say(f"  [added]   {prefix}lua/core/{fname}")
 
         for fname in _LUA_CLIENTS:
             zf.write(REPO_ROOT / "lua" / "clients" / fname, prefix + f"lua/clients/{fname}")
-            print(f"  [added]   {prefix}lua/clients/{fname}")
+            say(f"  [added]   {prefix}lua/clients/{fname}")
 
         for fname in _LUA_GAMES:
             zf.write(REPO_ROOT / "lua" / "games" / fname, prefix + f"lua/games/{fname}")
-            print(f"  [added]   {prefix}lua/games/{fname}")
+            say(f"  [added]   {prefix}lua/games/{fname}")
 
         for p in dll_files:
             zf.write(p, prefix + f"lua/x64/{p.name}")
-            print(f"  [added]   {prefix}lua/x64/{p.name}")
+            say(f"  [added]   {prefix}lua/x64/{p.name}")
 
         for gen, files in _DATA_GAME_LUA.items():
             for fname in files:
@@ -477,12 +532,12 @@ def build_release(
                     REPO_ROOT / "data" / "games" / gen / fname,
                     prefix + f"data/games/{gen}/{fname}",
                 )
-                print(f"  [added]   {prefix}data/games/{gen}/{fname}")
+                say(f"  [added]   {prefix}data/games/{gen}/{fname}")
 
         # ── Companion patches — optional ──────────────────────────────────────
         if include_companion:
             zf.write(REPO_ROOT / _COMPANION_UPS, prefix + "companion/SLink-RR.ups")
-            print(f"  [added]   {prefix}companion/SLink-RR.ups")
+            say(f"  [added]   {prefix}companion/SLink-RR.ups")
             # The Game Boy pair. Red and Blue each get their own, because a UPS embeds
             # the CRC32 of the exact dump it was diffed against. There is deliberately NO
             # Yellow patch: its WRAM has no free bytes for the mailbox, so no build
@@ -493,25 +548,25 @@ def build_release(
                 src = REPO_ROOT / "patch" / "dist" / gb_ups
                 if src.exists():
                     zf.write(src, prefix + f"companion/{gb_ups}")
-                    print(f"  [added]   {prefix}companion/{gb_ups}")
+                    say(f"  [added]   {prefix}companion/{gb_ups}")
                 else:
-                    print(f"  [SKIP]    {gb_ups} not built — run patch/tools/make_ups.py")
+                    say(f"  [SKIP]    {gb_ups} not built — run patch/tools/make_ups.py")
             readme = REPO_ROOT / _COMPANION_README
             if readme.exists():
                 zf.write(readme, prefix + "companion/COMPANION_PATCH.md")
-                print(f"  [added]   {prefix}companion/COMPANION_PATCH.md")
+                say(f"  [added]   {prefix}companion/COMPANION_PATCH.md")
             if rom is not None:
                 rom_mb = rom.stat().st_size // (1024 * 1024)
                 zf.write(rom, prefix + f"companion/{_COMPANION_ROM_ARCNAME}")
-                print(f"  [added]   {prefix}companion/{_COMPANION_ROM_ARCNAME}  ({rom_mb} MB)")
+                say(f"  [added]   {prefix}companion/{_COMPANION_ROM_ARCNAME}  ({rom_mb} MB)")
 
     size_kb = zip_path.stat().st_size // 1024
-    print(f"\nDone — {zip_path.name}  ({size_kb} KB)")
+    say(f"\nDone — {zip_path.name}  ({size_kb} KB)")
 
     if dll_warnings:
-        print("\nWarnings (non-fatal):")
+        say("\nWarnings (non-fatal):")
         for w in dll_warnings:
-            print(w)
+            say(w)
 
     return zip_path
 

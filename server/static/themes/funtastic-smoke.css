@@ -1,5 +1,6 @@
 /* funtastic-smoke.css — Smoke / Clear Black (N64, 1999 — rarest variant).
- * Brand: #333333. Industrial monochrome: charcoal field, silver accents in
+ * Shell #333333 (the picker swatch); --c-brand is silver, since it is
+ * drawn as text (wordmark, active tab). Industrial monochrome: charcoal field, silver accents in
  * place of gold (the translucent shell had no warm cast). Sparkle layer
  * dimmed so the look stays flat and serious.
  */
@@ -10,6 +11,7 @@
   --c-bg:    #0a0a0a;
   --c-card:  #1a1a1a;
   --c-edge:  #404040;
+  --c-edge-ui: #808080;   /* control borders: 3:1 on card (the hairline stays #404040) */
   --c-sep:   color-mix(in srgb, #404040 50%, transparent);
   --c-txt:   #e8e8e8;
   --c-dim:   #a0a0a0;
@@ -22,8 +24,7 @@
   --c-link:  #80b0d0;
   --c-info:  #b0c8d8;
 
-  --c-brand: #333333;
-  
+  --c-brand: #c0c0c0;   /* the wordmark and active tabs are text: #333333 was 1.6:1 */
 
   --c-calc-bg:           #0e0e0e;
   --c-calc-edge:         #404040;

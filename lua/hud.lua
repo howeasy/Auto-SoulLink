@@ -174,6 +174,10 @@ local function wrap_prompt(text)
     return wrap(text, math.floor((cfg.screen_w - 8) / cfg.char_width), MAX_PROMPT_LINES)
 end
 
+local function wrap_prompt_n(text, max_lines)
+    return wrap(text, math.floor((cfg.screen_w - 8) / cfg.char_width), max_lines)
+end
+
 function H.init(opts)
     if not opts then return end
     for k, v in pairs(opts) do cfg[k] = v end
@@ -387,8 +391,12 @@ end
 local function render_rebuilding()
     if not rebuild_text or game_over then return end
     local ry = banner_y()
-    gui.drawBox(0, ry, cfg.screen_w, ry + 14, 0xFF0066AA, 0xDD003388)
-    draw_text(centre_x(rebuild_text, 0, cfg.screen_w), ry + 2, rebuild_text, "#FFFFFF")
+    -- "REBUILDING: A, B, C +N" runs to ~46 chars (276px): wrap it like the prompt, 2 lines max.
+    local lines, line_h = wrap_prompt_n(rebuild_text, 2), cfg.font_size + 2
+    gui.drawBox(0, ry, cfg.screen_w, ry + 4 + #lines * line_h, 0xFF0066AA, 0xDD003388)
+    for i, line in ipairs(lines) do
+        draw_text(centre_x(line, 0, cfg.screen_w), ry + 2 + (i - 1) * line_h, line, "#FFFFFF")
+    end
 end
 
 -- ── Nuzlocke-start transient banner ─────────────────────────────────────────

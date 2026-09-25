@@ -222,6 +222,14 @@ if os.path.exists(_rr_encounters_path):
     with open(_rr_encounters_path, encoding="utf-8") as _f:
         _RR_ENCOUNTERS = json.load(_f)
 
+# RR display name → damage-calc name, per kind (species/ability/item/move).
+# Pinned by tests/unit/test_rr_calc_names.py against calc/calc/src/data/*.ts.
+_RR_CALC_NAMES: dict[str, dict[str, str]] = {}
+_calc_names_path = os.path.join(_DATA_DIR, "calc_names.json")
+if os.path.exists(_calc_names_path):
+    with open(_calc_names_path, encoding="utf-8") as _f:
+        _RR_CALC_NAMES = {k: v for k, v in json.load(_f).items() if isinstance(v, dict)}
+
 # RR front sprites, vendored by tools/gen_rr_sprites.py as server/static/sprites/rr/<id>.png
 # and served same-origin. Keyed by RR's own (CFRU) species ids, not the national dex.
 _RR_SPRITE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -548,6 +556,12 @@ class Gen3Adapter(GameAdapter):
         if self._is_rr and item_id in _RR_ITEMS:
             return _RR_ITEMS[item_id]
         return _FRLG_ITEM_NAMES.get(item_id, f"Item #{item_id}")
+
+    def calc_name(self, kind: str, name: str) -> str:
+        # ponytail: RR only; vanilla FRLG names go to the calc unchanged (the calc is RR's).
+        if not self._is_rr or not name:
+            return name
+        return _RR_CALC_NAMES.get(kind, {}).get(name, name)
 
     def area_display_name(self, area_id: str) -> str:
         if not area_id:

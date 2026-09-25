@@ -5,7 +5,6 @@
  * <img> identity; the idiomorph hook below keeps a resolved sprite's src and <details open>
  * across swaps. This file handles:
  *
- *   • Sprite background removal (funnotbun chroma-key)
  *   • Mouse-interaction pause via htmx:beforeSwap
  *   • Theme + font switchers, sidebar collapse
  *   • <details> open-state persistence across morph swaps
@@ -26,68 +25,8 @@ if (window._slinkDashInit) {
   window._slinkDashInit = true;
 
 (function() {
-  // Cache processed sprite data URLs by original src to avoid re-processing.
-  var spriteCache = {};
-
-  // Remove solid background from GBA-style sprite PNGs.
-  // Reads top-left pixel as bg color and sets all matching pixels transparent.
-  function removeSpriteBackground(img) {
-    if (img.dataset.bgRemoved || !img.naturalWidth) return;
-    var src = img.src;
-    // Only process funnotbun sprites (they have solid bg; PokeAPI are already transparent).
-    if (src.indexOf('funnotbun') === -1) return;
-    if (spriteCache[src]) {
-      img.src = spriteCache[src];
-      img.dataset.bgRemoved = '1';
-      return;
-    }
-    var c = document.createElement('canvas');
-    c.width = img.naturalWidth;
-    c.height = img.naturalHeight;
-    var ctx = c.getContext('2d');
-    ctx.drawImage(img, 0, 0);
-    try {
-      var data = ctx.getImageData(0, 0, c.width, c.height);
-      var px = data.data;
-      var bgR = px[0], bgG = px[1], bgB = px[2];
-      for (var i = 0; i < px.length; i += 4) {
-        if (px[i] === bgR && px[i + 1] === bgG && px[i + 2] === bgB) {
-          px[i + 3] = 0;
-        }
-      }
-      ctx.putImageData(data, 0, 0);
-      var dataUrl = c.toDataURL();
-      spriteCache[src] = dataUrl;
-      img.src = dataUrl;
-    } catch (e) {
-      // CORS or security error — leave original.
-    }
-    img.dataset.bgRemoved = '1';
-  }
-
-  function processAllSprites() {
-    document.querySelectorAll('img.mon-sprite, img.enc-sprite').forEach(function(img) {
-      if (img.dataset.bgRemoved) return;
-      var origSrc = img.getAttribute('src');
-      if (origSrc && spriteCache[origSrc]) {
-        img.src = spriteCache[origSrc];
-        img.dataset.bgRemoved = '1';
-        return;
-      }
-      if (img.complete && img.naturalWidth) {
-        removeSpriteBackground(img);
-      } else {
-        img.crossOrigin = 'anonymous';
-        img.addEventListener('load', function() { removeSpriteBackground(img); }, { once: true });
-      }
-    });
-  }
-
-  // After HTMX swaps in new content, re-run the sprite chroma-key and the
-  // calc-preview pipeline. (DOMContentLoaded covers the initial paint;
-  // htmx:afterSettle covers every refresh.)
+  // After HTMX swaps in new content, re-run the calc-preview pipeline.
   function refreshClientUI() {
-    processAllSprites();
     if (window._slinkCalcRender) window._slinkCalcRender();
   }
   document.body.addEventListener('htmx:afterSettle', refreshClientUI);
@@ -103,10 +42,12 @@ if (window._slinkDashInit) {
   // The old recovery path re-fired an 'sse:ping' event, which nothing listens for (#content is
   // hx-trigger="every 2s"); it is deleted rather than kept as decoration. The next poll is at
   // most 2s away, so there is nothing to re-fire.
-  var userInteracting = false;
-  function endInteraction() { userInteracting = false; }
-  document.addEventListener('mousedown', function() { userInteracting = true; });
-  document.addEventListener('mouseup', function() { setTimeout(endInteraction, 250); });
+  // The mouseup grace timer is kept so a new mousedown can cancel it: otherwise a stale
+  // timer from the previous click ends the interaction that is in progress now.
+  var userInteracting = false, endTimer = null;
+  function endInteraction() { userInteracting = false; clearTimeout(endTimer); endTimer = null; }
+  document.addEventListener('mousedown', function() { clearTimeout(endTimer); endTimer = null; userInteracting = true; });
+  document.addEventListener('mouseup', function() { clearTimeout(endTimer); endTimer = setTimeout(endInteraction, 250); });
   document.addEventListener('dragend', endInteraction);
   document.addEventListener('mouseleave', endInteraction);   // pointer left the document
   window.addEventListener('blur', endInteraction);           // Alt-Tab away mid-click
@@ -117,41 +58,7 @@ if (window._slinkDashInit) {
     if (userInteracting) ev.preventDefault();
   });
 
-  // Initial paint.
-  processAllSprites();
-
   // Attempts +/- adjustor; posts the new count then asks HTMX to refresh.
-})();
-
-
-// ── Theme bootstrap for non-templated pages ───────────────────────────────
-// The Jinja-rendered pages (status via dashboard.html, manager, memorial)
-// already set `<body class="theme-X">` server-side via resolve_theme. The
-// raw-string pages (_DEBUG_HTML, _TWITCH_PAGE_HTML, _OBS_PAGE_HTML) don't,
-// so this block reads ?theme= → localStorage → default and applies the
-// matching body class + <link rel="stylesheet"> on first paint. Skipped if
-// the body already carries a theme class (don't fight the server).
-(function() {
-  var body = document.body;
-  if (!body) return;
-  var existing = (body.className || '').split(/\s+/).find(function(c) {
-    return c.indexOf('theme-') === 0;
-  });
-  if (existing) return;  // server already themed this page
-  var theme = 'default';
-  try {
-    theme = (new URLSearchParams(location.search)).get('theme')
-            || localStorage.getItem('slink-theme')
-            || 'default';
-  } catch (_) {}
-  body.className = (body.className || '').trim() + ' theme-' + theme;
-  if (!document.getElementById('slink-theme')) {
-    var link = document.createElement('link');
-    link.rel  = 'stylesheet';
-    link.id   = 'slink-theme';
-    link.href = '/static/themes/' + theme + '.css';
-    document.head.appendChild(link);
-  }
 })();
 
 
@@ -168,7 +75,7 @@ if (window._slinkDashInit) {
 //      Alpine version close enough that the same in-sidebar CSS styles it.
 //
 // Either way the active theme persists via localStorage["slink-theme"] and
-// syncs across tabs via the `storage` event (set by the bootstrap above).
+// syncs across tabs via the `storage` event.
 (function() {
   var THEMES = [
     { slug: 'default',              label: 'Default',     swatch: '#070910' },
@@ -222,7 +129,9 @@ if (window._slinkDashInit) {
     if (swatch) swatch.style.background = def.swatch;
     if (nameEl) nameEl.textContent = def.label;
     Array.prototype.forEach.call(root.querySelectorAll('.theme-pill'), function(btn) {
-      btn.classList.toggle('active', btn.getAttribute('data-theme') === active);
+      var on = btn.getAttribute('data-theme') === active;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
   }
 
@@ -236,7 +145,7 @@ if (window._slinkDashInit) {
       +   '<span class="theme-name"></span>'
       +   '<span class="theme-caret">▾</span>'
       + '</summary>'
-      + '<div class="theme-pills" role="radiogroup" aria-label="Theme">';
+      + '<div class="theme-pills" role="group" aria-label="Theme">';
     THEMES.forEach(function(t) {
       html += '<button type="button" class="theme-pill" data-theme="' + t.slug + '" title="' + t.label + '">'
             +   '<span class="theme-swatch" style="background:' + t.swatch + '"></span>'
@@ -259,7 +168,7 @@ if (window._slinkDashInit) {
           }
         } catch (_) {}
         var details = d.querySelector('details');
-        if (details) details.open = false;
+        if (details) { details.open = false; details.querySelector('summary').focus(); }
       });
     });
     refreshVanillaWidget(d);
@@ -322,11 +231,11 @@ if (window._slinkDashInit) {
         return false;
       }
       // A sprite's src belongs to the client once the image has resolved: the onerror chain
-      // may have moved it to a fallback URL and the chroma-key to a data URL. The server
+      // may have moved it to a fallback URL. The server
       // re-sends the original every poll, and re-setting src reloads the image -- the blank
       // frame between the two is the flicker. Attributes sync in the server's order and
       // every adapter writes data-species before src, so when the species is unchanged
-      // the src (and the onerror-set style, and the chroma-key marker) stay put; a real
+      // the src (and the onerror-set style) stay put; a real
       // species change still lands.
       if (SPRITE_OWNED[attrName] && node && node.tagName === 'IMG' && node.dataset.species
           && node.dataset.species === node._spriteFor) {
@@ -334,7 +243,7 @@ if (window._slinkDashInit) {
       }
     };
   }
-  var SPRITE_OWNED = { src: 1, style: 1, 'data-bg-removed': 1 };
+  var SPRITE_OWNED = { src: 1, style: 1 };
   function stampSprites() {
     document.querySelectorAll('img[data-species]').forEach(function(img) { img._spriteFor = img.dataset.species; });
   }
@@ -368,6 +277,9 @@ if (window._slinkDashInit) {
   document.body.addEventListener('click', function(ev) {
     var summary = ev.target && ev.target.closest && ev.target.closest('summary');
     if (!summary) return;
+    // The Calc button sits inside a trainer row's summary and cancels the toggle, but its
+    // handler is on document, which hears the click after this one: skip it here.
+    if (ev.target.closest('.tr-calc-btn')) return;
     var details = summary.parentElement;
     if (!details || details.tagName !== 'DETAILS') return;
     var k = keyFor(details);
@@ -407,8 +319,10 @@ if (window._slinkDashInit) {
 // ── Upcoming Trainers Calc button (delegated) ─────────────────────
 // Click on a trainer row's ⚔ Calc button pushes the trainer's calc set
 // name into localStorage under `slink_prep_trainer` — the key the calc's
-// SLink bridge panel watches for its Prep tab. Then we open the calc with
-// window.open(url, 'rrCalc'). The named target reuses any existing calc
+// SLink bridge panel watches for its Prep tab — and into the URL as ?prep=,
+// because a freshly opened calc never hears the storage event. Then we open
+// the calc with window.open(url, 'rrCalc'). On a Manager run page the calc
+// is the run's own (/runs/<id>/calc/…), not the Manager's bare /calc/. The named target reuses any existing calc
 // tab instead of spawning duplicates; the calc's storage-event listener
 // (slink_bridge.js) refreshes its Prep tab when the key changes, so an
 // already-open calc tab updates without a manual reload.
@@ -428,7 +342,10 @@ if (window._slinkDashInit) {
         localStorage.setItem('slink_prep_encounter', '');
       } catch (_) { /* private mode, etc. */ }
     }
-    var calcWin = window.open('/calc/normal.html', 'rrCalc');
+    var run = /^\/runs\/[^\/]+/.exec(location.pathname);
+    var url = (run ? run[0] : '') + '/calc/normal.html'
+      + (calcLabel ? '?prep=' + encodeURIComponent(calcLabel) : '');
+    var calcWin = window.open(url, 'rrCalc');
     if (calcWin && !calcWin.closed) {
       try { calcWin.focus(); } catch (_) { /* cross-origin focus blocked */ }
     }

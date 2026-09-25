@@ -66,9 +66,11 @@ TOLERANCE = 3
 # every entry is a row where the event name is mentioned in passing rather than being the row's
 # subject, so no range could satisfy the rule.
 _INCIDENTAL: dict[tuple[str, str], str] = {
-    ("hello", "server.py:1098-1101"):
+    ("hello", "server.py:1597-1604"):
         "the RETIRED seq-heuristic row; `hello` appears inside the narrative about the dropped "
         "first events, and the citation is the dup guard in handle_client",
+    ("hello", "server.py:1098-1101"):  # the same row before the G4 master sync re-anchored it
+        "the RETIRED seq-heuristic row, as pinned revisions spell it",
 }
 
 # The revisions this test is written against, pinned by sha (never HEAD~n).
@@ -100,8 +102,13 @@ def _symbol_spans(path: Path) -> tuple[dict[str, list[tuple[int, int]]],
     tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
     plain: dict[str, list[tuple[int, int]]] = {}
     attrs: dict[str, list[tuple[int, int]]] = {}
+    # A def nested inside a function is a local helper, not a name a row can cite: the calc
+    # preview's `def status(mon)` must not turn every `status`-event row into a symbol row.
+    funcs = (ast.FunctionDef, ast.AsyncFunctionDef)
+    nested = {id(n) for f in ast.walk(tree) if isinstance(f, funcs)
+              for n in ast.walk(f) if n is not f and isinstance(n, (*funcs, ast.ClassDef))}
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and id(node) not in nested:
             plain.setdefault(node.name, []).append((node.lineno, node.end_lineno or node.lineno))
         elif isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
@@ -334,7 +341,23 @@ def test_the_field_rule_catches_the_pre_field_sweep_document():
     assert any("server.py:3944" in p and "`species_id`" in p for p in problems), problems
 
 
-def test_the_field_rule_judges_the_first_citation_of_multi_citation_rows():
+def _sources_at(rev: str, dest: Path) -> bool:
+    """Write server/ at `rev` under `dest`, so a pinned doc is judged against its own sources."""
+    ls = subprocess.run(["git", "ls-tree", "-r", "--name-only", rev, "server"], cwd=_REPO,
+                        capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if ls.returncode != 0:
+        return False
+    for name in ls.stdout.split():
+        if name.endswith(".py"):
+            blob = subprocess.run(["git", "show", f"{rev}:{name}"], cwd=_REPO, capture_output=True)
+            if blob.returncode != 0:
+                return False
+            (dest / name).parent.mkdir(parents=True, exist_ok=True)
+            (dest / name).write_bytes(blob.stdout)
+    return True
+
+
+def test_the_field_rule_judges_the_first_citation_of_multi_citation_rows(tmp_path, monkeypatch):
     """Falsifier for the widening, pinned to the revision before C4-CITE5.
 
     At that revision the single-citation §4 rows were already re-anchored (C4-CITE4), so the only
@@ -349,11 +372,14 @@ def test_the_field_rule_judges_the_first_citation_of_multi_citation_rows():
     text = _doc_at(PRE_FIELD_MULTI_REV)
     if text is None or "`state.py:952`" not in text:
         pytest.skip(f"{PRE_FIELD_MULTI_REV}:docs/protocol.md unavailable or already re-anchored")
+    # Judged against that revision's own sources: against today's, every later code move shifts
+    # the single-citation rows too and the count stops meaning anything (it read 28 by 2026-09-25).
+    if not _sources_at(PRE_FIELD_MULTI_REV, tmp_path):
+        pytest.skip(f"{PRE_FIELD_MULTI_REV}:server/ unavailable")
+    monkeypatch.setattr(sys.modules[__name__], "_REPO", tmp_path)
     problems = check_citations(text)
     field_problems = [p for p in problems if "field the row documents" in p]
     assert len(field_problems) == 7, problems
-    # The pinned doc is judged against TODAY's sources, so a later code move can add symbol-span
-    # findings for that old text (e.g. 3235ddf3 moved gen3_frlge.py:581-582); only field findings count.
     assert all("field the row documents" in p or "outside the span" in p for p in problems), problems
     assert any("state.py:952" in p and "`maxHP`" in p for p in problems), problems
     assert any("server.py:3779" in p and "`active`" in p for p in problems), problems

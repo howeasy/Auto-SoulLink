@@ -493,9 +493,33 @@ function Client.new(p)
             if not slot then log("[SLink-gen1] " .. c .. ": key not in party " .. tostring(cmd.key)) return end
             local battle = reads.read_battle()
             if battle.in_battle ~= 0 then
-                -- in battle: only the loop head may write (W-2) -- the active battler AND the
-                -- bench, or a bench mon whose partner died stays switchable all battle
-                self.pending_battle_writes[#self.pending_battle_writes + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname }
+                -- in battle. The ACTIVE battler waits for the loop head (W-2: its HP lives in
+                -- wBattleMon). A BENCHED mon in a normal battle dies the frame the command
+                -- arrives, so it can never be switched in from the battle menu (owner
+                -- 2026-09-22): its party struct has no battle shadow, HasMonFainted refuses it
+                -- (core.asm:1473-1482, .notAlreadyOut :2402-2404) and GainExperience skips HP 0
+                -- (experience.asm:10-13). Explode = faint on the bench (EXPLOSION needs the field).
+                local w = { cmd = c, key = cmd.key, nickname = cmd.nickname }
+                if self.writes_enabled and (battle.in_battle == 1 or battle.in_battle == 2)
+                   and battle.type == 0 and battle.link_state ~= 4 and slot ~= battle.player_mon_number then
+                    local ok, err = pcall(function()
+                        writes:arm("battle_bench")
+                        writes:faint_party_slot(slot)
+                    end)
+                    writes:disarm()
+                    if ok then
+                        w.landed = true
+                        log("[SLink-gen1] bench write landed on receipt: slot " .. slot .. " " .. tostring(cmd.key))
+                        hud.show("!! " .. nick_label(cmd.key, cmd.nickname) .. " KO'd", 255, 80, 80, 360)
+                    else
+                        log("[SLink-gen1] bench write refused on receipt, the loop head retries: " .. tostring(err))
+                    end
+                end
+                -- still queued when landed: the race where the player already picked this mon
+                -- (wWhichPokemon passed HasMonFainted, core.asm:2402) but SwitchPlayerMon has not
+                -- yet set wPlayerMonNumber / run LoadBattleMonFromParty (:2425, :2433) is settled
+                -- at the loop head by the active-battler path
+                self.pending_battle_writes[#self.pending_battle_writes + 1] = w
             else
                 self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname }
             end
@@ -748,7 +772,7 @@ function Client.new(p)
                     -- at all -- the whiteout case gets its own local cue from announce_whiteout
                     -- above instead, and the dead-key requeue is silent by design (a link
                     -- already resolved, not a new event). One banner rule covers all three.
-                    hud.show("!! " .. nick_label(cmd.key, cmd.nickname) .. " KO'd", 255, 80, 80, 360)
+                    if not cmd.quiet then hud.show("!! " .. nick_label(cmd.key, cmd.nickname) .. " KO'd", 255, 80, 80, 360) end
                 else
                     -- the mon left the party before the checkpoint (PC deposit), or a duplicate
                     -- arrived and the key no longer names one mon: no byte moves. The protocol
@@ -957,7 +981,7 @@ function Client.new(p)
                        and not self.battle.static and not self.battle.demo
                        and not (TOWER_MAPS[self.battle.map] and reads.has_item(SILPH_SCOPE) ~= true)
                        and not self.resolved_areas[self.battle.area_id] then
-                        hud.show("** NEW ENCOUNTER **  " .. area_disp_name, 255, 220, 60, 360)
+                        hud.show("** NEW ENCOUNTER **\n" .. area_disp_name, 255, 220, 60, 360)
                         self:request_sfx_local(25) -- SE_SUCCESS
                     end
                 end
@@ -1002,7 +1026,8 @@ function Client.new(p)
             -- a battle write that never reached a loop head (the battle ended first) is still
             -- owed: the checkpoint zeroes it, instead of it waiting for some later battle
             for _, w in ipairs(self.pending_battle_writes) do
-                self.deferred[#self.deferred + 1] = { cmd = "force_faint", key = w.key, nickname = w.nickname }
+                -- a bench write that landed on receipt is re-zeroed as a backstop, silently
+                self.deferred[#self.deferred + 1] = { cmd = "force_faint", key = w.key, nickname = w.nickname, quiet = w.landed }
             end
             self.pending_battle_writes = {}
             self.battle = nil
@@ -1372,13 +1397,14 @@ function Client.new(p)
     end
 
     -- Inside the MainInBattleLoop hook: apply the queued in-battle faints/explodes now (W-2).
+    -- Returns true when a byte moved (the pureRGB no-move re-entry moves PC only then).
     function self:on_battle_loop_head(sig)
-        if #self.pending_battle_writes == 0 or not self.writes_enabled then return end
+        if #self.pending_battle_writes == 0 or not self.writes_enabled then return false end
         local pt = sig.point
         -- an unreadable party keeps the queue: find_party_slot could not tell "gone" from
         -- "not readable yet", and a dropped in-battle write never comes back
-        if not current_party() then return end
-        local keep = {}
+        if not current_party() then return false end
+        local keep, wrote = {}, false
         for _, w in ipairs(self.pending_battle_writes) do
             -- the same ambiguity-aware resolver the checkpoint uses: this one used to take the
             -- LAST match where find_party_slot took the first, so one duplicate made the two
@@ -1393,27 +1419,35 @@ function Client.new(p)
                 local ok = writes.active_faint_guard(battle, slot, mon)
                 if ok then
                     writes:arm("battle_loop_head")
-                    if w.cmd == "force_explode" then writes:explode_active_battler(slot) else writes:faint_active_battler(slot) end
+                    -- a landed bench write that got switched in anyway is already dead: it
+                    -- does not get to explode
+                    if w.cmd == "force_explode" and not w.landed then writes:explode_active_battler(slot) else writes:faint_active_battler(slot) end
                     writes:disarm()
+                    wrote = true
                     -- Gen 3 parity (archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:760-800): same text-only banner as
                     -- the bench-mon write in run_deferred above.
-                    hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360)
+                    if not w.landed then hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360) end
                 else
                     keep[#keep + 1] = w
                 end
             elseif slot and pt.battle_type == 0 and pt.link_state ~= 4 then
                 -- a bench mon (EXPLOSION needs the field, so explode = faint): the loop head is
-                -- between turns, nothing in the engine holds its party struct
-                writes:arm("battle_loop_head")
-                writes:faint_party_slot(slot)
-                writes:disarm()
-                hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360)
+                -- between turns, nothing in the engine holds its party struct. One landed on
+                -- receipt and still at HP 0 needs nothing more.
+                if not (w.landed and mon.hp == 0) then
+                    writes:arm("battle_loop_head")
+                    writes:faint_party_slot(slot)
+                    writes:disarm()
+                    wrote = true
+                    if not w.landed then hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360) end
+                end
             elseif slot then
                 -- special/link battle: leave the bench alone until the checkpoint
                 self.deferred[#self.deferred + 1] = { cmd = "force_faint", key = w.key, nickname = w.nickname }
             end
         end
         self.pending_battle_writes = keep
+        return wrote
     end
 
     -- pureRGB (site battle_loop_no_move): the MOVE menu's cancel path re-enters the loop below
@@ -1425,9 +1459,7 @@ function Client.new(p)
         if #self.pending_battle_writes == 0 or not self.writes_enabled or not io.set_register then return end
         local head = sites.battle_loop_head
         if not head then return end
-        local before = #self.pending_battle_writes
-        self:on_battle_loop_head(sig)
-        if #self.pending_battle_writes < before then
+        if self:on_battle_loop_head(sig) then
             io.set_register("PC", head.address + (head.capture_offset or 0))
             log("[SLink-gen1] battle write landed at the no-move re-entry; PC moved to the loop head")
         end
@@ -1572,7 +1604,7 @@ function Client.new(p)
             if self.has_pokeballs and self.seeded and not in_battle and area_id ~= ""
                and self.wild_maps and self.wild_maps[tostring(map.map)]
                and not self.resolved_areas[area_id] then
-                hud.show("** NEW ENCOUNTER **  " .. loc, 255, 220, 60, 240)
+                hud.show("** NEW ENCOUNTER **\n" .. loc, 255, 220, 60, 240)
                 self:request_sfx_local(25) -- SE_SUCCESS
             end
         end

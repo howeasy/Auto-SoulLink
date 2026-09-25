@@ -50,7 +50,7 @@
 {% block content %}
 <div class="mk">
   {{ sidebar_html | safe }}
-  <main class="mk-main mk-body-root">
+  <main class="mk-main mk-body-root" id="main-content" tabindex="-1">
     <header class="mk-runhdr">
       <h1 class="mk-runname">{{ run_name or concise_title or 'Memorial' }}</h1>
       <span class="mk-meta">· Memorial</span>
@@ -84,48 +84,4 @@
   </section>
   </main>
 </div>
-{% endblock %}
-
-{% block scripts %}
-  <script>
-    // Funnotbun RR sprites have a solid background pixel that needs to be
-    // chroma-keyed out at render time. Same algorithm as the dashboard at
-    // server.py:610–645 but inline here because the memorial page doesn't
-    // import that helper yet. HTMX morph-swaps preserve image src across
-    // refreshes, so this only runs once per <img> per session.
-    (function() {
-      var cache = {};
-      function removeBg(img) {
-        var src = img.src;
-        if (!src || src.indexOf('funnotbun') === -1) return;
-        if (cache[src]) { img.src = cache[src]; return; }
-        try {
-          var c = document.createElement('canvas');
-          c.width = img.naturalWidth; c.height = img.naturalHeight;
-          var ctx = c.getContext('2d');
-          ctx.drawImage(img, 0, 0);
-          var d = ctx.getImageData(0, 0, c.width, c.height);
-          var bg = [d.data[0], d.data[1], d.data[2]];
-          for (var i = 0; i < d.data.length; i += 4) {
-            if (Math.abs(d.data[i]-bg[0]) < 8 &&
-                Math.abs(d.data[i+1]-bg[1]) < 8 &&
-                Math.abs(d.data[i+2]-bg[2]) < 8) {
-              d.data[i+3] = 0;
-            }
-          }
-          ctx.putImageData(d, 0, 0);
-          var url = c.toDataURL();
-          cache[src] = url;
-          img.src = url;
-        } catch (e) {}
-      }
-      function processAll() {
-        document.querySelectorAll('.tomb-mon img').forEach(function(img) {
-          if (img.complete && img.naturalWidth) removeBg(img);
-          else img.addEventListener('load', function() { removeBg(img); }, {once: true});
-        });
-      }
-      processAll();
-    })();
-  </script>
 {% endblock %}

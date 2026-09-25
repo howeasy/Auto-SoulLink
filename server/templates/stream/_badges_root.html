@@ -1,8 +1,8 @@
 {# Badges overlay (#root subtree) — earned/unearned badges per player.
-   Context: { player_id, trainer_name, badges: [{slug, name, earned}] } #}
+   Context: { player_id, trainer_name, connected, badges: [{slug, name, earned}] } #}
 
 <div id="root">
-  <div class="wtitle">{{ trainer_name }} BADGES</div>
+  <div class="wtitle">{{ trainer_name }} BADGES{% if not connected %} <span class="dc-tag">DISCONNECTED</span>{% endif %}</div>
   {% if not badges %}
     <span class="dim">No badge data</span>
   {% else %}

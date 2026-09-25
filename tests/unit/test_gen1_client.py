@@ -567,23 +567,121 @@ def test_active_force_faint_waits_for_the_battle_loop_head(world):
     assert world.party()[0]["hp"] == 0
 
 
+def _kod(world):
+    return [h for h in world.hud if h[0] == "show" and "KO'd" in h[1]]
+
+
 @pytest.mark.parametrize("cmd", ["force_faint", "force_explode"])
-def test_benched_partner_faints_at_the_next_battle_loop_head(world, cmd):
+def test_benched_partner_faints_the_frame_the_command_arrives(world, cmd):
     """Live run 2026-09-22: a benched mon whose partner died stayed alive (and switchable)
-    for the rest of the battle -- the write waited for the overworld checkpoint."""
+    for the rest of the battle; then (owner 2026-09-22) even the loop-head write left the
+    battle menu open to switching it in. The bench write lands on receipt."""
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    world.fire("wild_begin")
+    world.step()
+    active_hp = world.party()[0]["hp"]
+    key = codec.key(world.party()[1])
+    world.reply({"cmd": cmd, "key": key, "nickname": "PIDGEY"})
+    world.step()
+    m = world.party()[1]
+    assert m["hp"] == 0 and m["status"] == 0, "the bench mon dies before any loop head"
+    assert world.party()[0]["hp"] == active_hp, "the active battler is untouched"
+    assert world.bus[world.ram["wBattleMonMoves"]] != 0x99, "no EXPLOSION stamped on the wrong mon"
+    assert len(_kod(world)) == 1
+    n = len(world.writes)
+    world.fire("battle_loop_head")
+    assert len(world.writes) == n, "still dead on the bench: the loop head moves no byte"
+    assert world.party()[1]["hp"] == 0 and world.party()[0]["hp"] == active_hp
+    assert [h[1] for h in _kod(world)] == ["!! PIDGEY KO'd"], "one banner, not one per path"
+    assert len(world.client.pending_battle_writes) == 0
+
+
+def test_a_landed_bench_write_revived_before_the_loop_head_is_zeroed_again(world):
+    """REVIVE works on a bench mon mid-battle (item_effects.asm:926-960): the queued entry
+    re-zeroes it at the loop head, without a second banner."""
     world.connect()
     world.step(60)
     world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
     world.fire("wild_begin")
     world.step()
     key = codec.key(world.party()[1])
-    world.reply({"cmd": cmd, "key": key, "nickname": "PIDGEY"})
-    world.step(3)
+    world.reply({"cmd": "force_faint", "key": key, "nickname": "PIDGEY"})
+    world.step()
+    hp = world.ram["wPartyMons"] + 44 + 1
+    world.bus[hp], world.bus[hp + 1] = 0, 7
     world.fire("battle_loop_head")
-    m = world.party()[1]
-    assert m["hp"] == 0 and m["status"] == 0, "the bench mon dies inside the battle"
-    assert world.party()[0]["hp"] > 0, "the active battler is untouched"
-    assert world.bus[world.ram["wBattleMonMoves"]] != 0x99, "no EXPLOSION stamped on the wrong mon"
+    assert world.party()[1]["hp"] == 0
+    assert len(_kod(world)) == 1
+
+
+def test_a_landed_bench_write_whose_battle_ends_is_rezeroed_silently_at_the_checkpoint(world):
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    world.fire("wild_begin")
+    world.step()
+    key = codec.key(world.party()[1])
+    world.reply({"cmd": "force_faint", "key": key, "nickname": "PIDGEY"})
+    world.step()
+    world.bus[world.ram["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.overworld_safe()
+    world.step(2)
+    assert world.party()[1]["hp"] == 0
+    assert len(world.client.pending_battle_writes) == 0 and len(world.client.deferred) == 0
+    assert len(_kod(world)) == 1
+
+
+def test_a_landed_bench_write_switched_in_is_settled_by_the_active_path(world):
+    """The race: the player picked the mon (HasMonFainted passed) before the write, and
+    SwitchPlayerMon loaded it into wBattleMon afterwards -- the battle copy is live."""
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    world.fire("wild_begin")
+    world.step()
+    mon = world.party()[1]
+    key = codec.key(mon)
+    world.reply({"cmd": "force_explode", "key": key, "nickname": "PIDGEY"})
+    world.step()
+    assert world.party()[1]["hp"] == 0
+    r = world.ram
+    world.bus[r["wPlayerMonNumber"]] = 1
+    world.bus[r["wBattleMonSpecies"]] = mon["species"]
+    world.bus[r["wBattleMonHP"]], world.bus[r["wBattleMonHP"] + 1] = 0, 9  # a live battle copy
+    world.fire("battle_loop_head")
+    assert world.bus[r["wBattleMonHP"]] == 0 and world.bus[r["wBattleMonHP"] + 1] == 0
+    assert world.bus[r["wPlayerSelectedMove"]] == 0xFF
+    assert world.bus[r["wBattleMonMoves"]] != 0x99, "already dead: it does not get to explode"
+    assert len(_kod(world)) == 1
+    assert len(world.client.pending_battle_writes) == 0
+
+
+@pytest.mark.parametrize("setup", ["special", "link"])
+def test_bench_write_in_a_special_or_link_battle_still_waits_for_the_checkpoint(world, setup):
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    if setup == "special":
+        world.bus[world.ram["wBattleType"]] = 1  # BATTLE_TYPE_OLD_MAN
+    else:
+        world.bus[world.ram["wLinkState"]] = 4  # LINK_STATE_BATTLING
+    world.fire("wild_begin")
+    world.step()
+    key = codec.key(world.party()[1])
+    world.reply({"cmd": "force_faint", "key": key})
+    world.step()
+    assert world.party()[1]["hp"] > 0, "no write on receipt"
+    world.fire("battle_loop_head")
+    assert world.party()[1]["hp"] > 0, "nor at the loop head"
+    world.bus[world.ram["wLinkState"]] = 0
+    world.bus[world.ram["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.overworld_safe()
+    world.step(2)
+    assert world.party()[1]["hp"] == 0, "the checkpoint lands it"
 
 
 def test_a_battle_write_that_never_landed_is_applied_after_the_battle(world):
@@ -1255,7 +1353,7 @@ def test_new_encounter_banner_on_wild_begin_in_an_unresolved_area(world):
     world.step()
     shows = [h for h in world.hud if h[0] == "show" and "NEW ENCOUNTER" in h[1]]
     assert len(shows) == 1
-    assert shows[0][1] == "** NEW ENCOUNTER **  Route 1"
+    assert shows[0][1] == "** NEW ENCOUNTER **\nRoute 1"
     assert shows[0][2:] == (255, 220, 60, 360)
     world.assert_all_conform()
 
@@ -1304,7 +1402,7 @@ def test_new_encounter_banner_on_area_enter_via_tick(world):
     world.step(30)
     shows = [h for h in world.hud if h[0] == "show" and "NEW ENCOUNTER" in h[1]]
     assert len(shows) == 1
-    assert shows[0][1] == "** NEW ENCOUNTER **  Route 2"
+    assert shows[0][1] == "** NEW ENCOUNTER **\nRoute 2"
     assert shows[0][2:] == (255, 220, 60, 240)
     assert [e["area_id"] for e in world.events("area_enter") if e["area_id"] == "route_2"] == ["route_2"]
     world.assert_all_conform()
@@ -1527,7 +1625,7 @@ def test_new_encounter_banner_on_area_enter_fires_once_not_again_while_staying(w
     world.step(30)
     shows = [h for h in world.hud if h[0] == "show" and "NEW ENCOUNTER" in h[1]]
     assert len(shows) == 1
-    assert shows[0][1] == "** NEW ENCOUNTER **  Route 2"
+    assert shows[0][1] == "** NEW ENCOUNTER **\nRoute 2"
     assert shows[0][2:] == (255, 220, 60, 240)
     world.step(60)  # staying put: no repeat
     assert len([h for h in world.hud if h[0] == "show" and "NEW ENCOUNTER" in h[1]]) == 1

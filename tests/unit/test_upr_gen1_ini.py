@@ -169,10 +169,13 @@ def test_every_handler_key_is_present_or_deliberately_absent():
         assert not leaked, f"{name}: keys marked deliberately absent are present: {sorted(leaked)}"
 
 
-@pytest.mark.skipif(not os.path.isdir(_FORK), reason="fork checkout not present")
+# .cache/slink-upr also holds the staged PokeRandoZX.jar without any source, so key on the file.
+_HANDLER = pathlib.Path(_FORK, "src", "com", "dabomstew", "pkrandom", "romhandlers", "Gen1RomHandler.java")
+
+
+@pytest.mark.skipif(not _HANDLER.is_file(), reason="fork source not present")
 def test_handler_key_list_matches_the_fork_source():
-    src = pathlib.Path(_FORK, "src", "com", "dabomstew", "pkrandom", "romhandlers",
-                       "Gen1RomHandler.java").read_text(encoding="utf-8")
+    src = _HANDLER.read_text(encoding="utf-8")
     found = set(re.findall(
         r'(?:getValue|hasValue|arrayEntries\.(?:get|containsKey)|tweakFiles\.get)\("([A-Za-z0-9]+)"', src))
     assert found == HANDLER_KEYS, {"only_in_fork": sorted(found - HANDLER_KEYS),
@@ -227,7 +230,15 @@ def test_non_dex_species_are_the_thirteen_opaque_ids():
                             for d in (_ROMS, _OVERLAY_ROMS) for t in TITLES),
                     reason="pinned pure / overlay ROMs not present")
 def test_the_committed_ini_is_what_the_generator_produces():
-    assert gen.generate(pathlib.Path(_ROMS), pathlib.Path(_OVERLAY_ROMS)) == _INI.read_text(encoding="utf-8")
+    # A local ROM that is not the admitted build is a stale artefact, not a regression:
+    # skip like gen1_foundation's callers do. Any other generator SystemExit still fails.
+    try:
+        fresh = gen.generate(pathlib.Path(_ROMS), pathlib.Path(_OVERLAY_ROMS))
+    except SystemExit as e:
+        if "is not the admitted" not in str(e):
+            raise
+        pytest.skip(f"local ROM is not the admitted build: {e}")
+    assert fresh == _INI.read_text(encoding="utf-8")
 
 
 def test_every_pure_section_declares_fork_revision_3():

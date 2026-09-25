@@ -493,6 +493,14 @@ class GamePresentationAdapter(ABC):
         name, cls = self.trainer_info(trainer_id)
         return {"name": name, "class": cls, "party": party, "area": ""}
 
+    def calc_name(self, kind: str, name: str) -> str:
+        """Return the damage calc's name for a display name.
+
+        kind is "species", "ability", "item" or "move". Default is identity;
+        adapters whose ROM text differs from the calc's names override it.
+        """
+        return name
+
     def sprite_src(self, species_id: int) -> str:
         """Return just the sprite image URL for a species (no HTML wrapping).
 
