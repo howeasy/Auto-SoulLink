@@ -59,6 +59,7 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
   - server/adapters/__init__.py: Gen 2's side is additive (unrouted_rom_type_reason, persisted_migration_refusal, foundation_for_rom_type, adapter_class_for_rom_type, plus the Gen 2 entries); keep both sets.
   - gen3_frlge.py is Gen 3's.
   - Re-run `git merge-tree HEAD master` after Gen 2 lands.
+  - Gen 1 fast gate: run `python tools/verify_gen1_release.py --quick` on this branch BEFORE and AFTER the master merge (9/9 lanes green on master 1b26082f). Artifact recipes are in Gen1-Collab2's note: PureGreen = clean BLUE + the pinned bps (tools/apply_bps.py --expect-sha1 fe4c63a6...), the pure overlays via patch/tools/make_ups.py ups_apply, and the UPR fork via `tools/build_upr_fork.py --bootstrap`. Report any Gen 1 red to Gen1-Collab2; it's theirs to fix. Don't run it while live lanes are busy.
   - Against master d97c8a3b (calc lane: calc_profile/calc_nature/calc_name in gen3_frlge.py, calc_names_vanilla.json; gen3_codec.py arrives byte-identical from c0f6101b), the only conflict is docs/protocol.md citation line numbers. Re-anchor them and run test_protocol_citations.
   - Gen 1 took 48709f39 (the sfx gate case-A fix plus receipts).
   - Master since 96ae536d also has: the ruff exclude, the purergb .sym LF fix, the ROM-scan ctime key, test_gen1_trade_patch reading archive/gen1/rc, and the board/connection_state/CSS work.
