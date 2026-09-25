@@ -104,7 +104,8 @@
   {% if status.run_over %}
     <div class="game-over"><svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> GAME OVER — SOUL LINK <svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg></div>
   {% endif %}
-  {% for pid in ('a', 'b') %}{% set p = status.players[pid] %}
+  {# The Manager says these on each player's card instead (conn: manager.connection_state). #}
+  {% for pid in ('a', 'b') if not conn %}{% set p = status.players[pid] %}
     {% if p.identity_error %}<div class="identity-warn">&#9888; {{ p.identity_error }}</div>{% endif %}
     {% if p.admission != 'admitted' %}<div class="identity-warn">&#9888; Player {{ pid | upper }} not admitted: {{ p.admission_reason }}</div>{% endif %}
   {% endfor %}
@@ -123,7 +124,8 @@
         <h2 class="mk-h2"><span>Now</span><i></i></h2>
         <div class="mk-now">
           {% for pid in ('a', 'b') %}{% set p = status.players[pid] %}
-            <div class="mk-card mk-nowcard {{ 'online' if p.connected else 'offline' }}" style="grid-column:{{ 3 if pid == 'b' else 1 }}">
+            {# Green only once the player is admitted and heard from, not on a bare socket. #}
+            <div class="mk-card mk-nowcard {{ 'online' if (conn[pid].slug == 'ready' if conn else p.connected) else 'offline' }}" style="grid-column:{{ 3 if pid == 'b' else 1 }}">
               <div class="mk-now-head">
                 <span class="mk-side">{{ pid | upper }}</span>
                 <span class="mk-now-name">
@@ -137,14 +139,20 @@
                   </span>
                 {% endif %}
               </div>
+              {% if conn and conn[pid].slug != 'ready' %}{% set c = conn[pid] %}
+                <div class="mk-now-body mk-conn {{ c.slug }}" role="status">
+                  <span class="mk-tag{% if c.slug in ('wrong_game', 'identity', 'disconnected') %} off{% endif %}">{{ c.label }}</span>
+                  <span class="mk-sub">{{ c.line }}</span>
+                </div>
+              {% endif %}
               {% if board.has_data[pid] %}
                 <div class="mk-now-body">
                   <div class="mk-now-line">
                     <b>{{ p.current_area_display or 'unknown' }}</b>
                     <span><span class="num">{{ p.ball_count }}</span> balls</span>
                     <span class="mk-sub">last: {{ p.last_event }} <span class="num">{{ p.last_seen_label }}</span></span>
-                    {% if not p.connected and live %}<span class="mk-tag off">disconnected</span>{% endif %}
-                    {% if p.stale %}<span class="mk-tag off stale-warn" title="connected, but nothing heard since">No data · last {{ p.last_seen_label }}</span>{% endif %}
+                    {% if not p.connected and live and not conn %}<span class="mk-tag off">disconnected</span>{% endif %}
+                    {% if p.stale and not conn %}<span class="mk-tag off stale-warn" title="connected, but nothing heard since">No data · last {{ p.last_seen_label }}</span>{% endif %}
                   </div>
                   {% set bs = p.battle_state %}
                   {% set mine = p.party_details[board.active[pid]] if board.active[pid] else none %}
@@ -180,7 +188,7 @@
                          data-calc="{{ c | tojson | forceescape }}" style="display:none"></div>
                   {% endif %}
                 </div>
-              {% else %}
+              {% elif not conn %}
                 <div class="mk-now-body"><span class="mk-sub">{{ 'waiting for hello' if live else 'run not running' }}</span></div>
               {% endif %}
             </div>
@@ -203,9 +211,16 @@
                 <a class="mk-btn" href="{{ roms.a }}">Player A · {{ rom_ext.a }}</a>
                 <a class="mk-btn" href="{{ roms.b }}">Player B · {{ rom_ext.b }}</a></li>
               {% endif %}
+              {% if packs %}
+              <li>Each player downloads their setup — SLink's Lua runtime with their launcher inside, set to <code class="num">{{ connect.host }}:{{ connect.port }}</code> — and extracts it anywhere:
+                <a class="mk-btn" href="{{ packs.a }}">Player A · setup .zip</a>
+                <a class="mk-btn" href="{{ packs.b }}">Player B · setup .zip</a>
+                <span class="mk-sub">Needs BizHawk {{ bizhawk_min }}. Already have the runtime? Just the launcher: <a href="{{ launchers.a }}">A .lua</a> · <a href="{{ launchers.b }}">B .lua</a></span></li>
+              {% else %}
               <li>Download a launcher per player:
                 <a class="mk-btn" href="{{ launchers.a }}">Player A · .lua</a>
                 <a class="mk-btn" href="{{ launchers.b }}">Player B · .lua</a></li>
+              {% endif %}
               <li>Each player loads their {% if roms %}cartridge{% else %}save{% endif %} in BizHawk, <b>then</b> the launcher in the Lua console. It finds the game and connects — the card above turns green.</li>
               <li>The first catch both of you make in the same area starts the board.</li>
             </ol>

@@ -21,6 +21,7 @@ import html
 import json
 import logging
 import os
+import pathlib
 import re
 import shutil
 import signal
@@ -55,6 +56,7 @@ from server.lua_literals import lua_comment, lua_string
 from server.overlay_catalog import build_index_context as _build_stream_index_context
 from server.status_payload import empty_status_payload
 from server.templating import resolve_theme, setup_templating
+from tools import make_release
 
 # ── Game families ─────────────────────────────────────────────────────────────
 # The unit of link compatibility is the FAMILY, not the cartridge: Red, Blue and Yellow
@@ -510,6 +512,92 @@ def _build_launcher(run: dict, player: str, host: str) -> str:
     )
 
 
+# ── The address players connect to ──────────────────────────────────────────
+# The browser's Host header is the wrong source: a page opened as localhost, or through a
+# tunnel/proxy, handed player B a launcher pointing at 127.0.0.1 or at a name that only
+# forwards HTTP. The game TCP port is on this machine, so the answer is this machine's.
+_HOST_RE = re.compile(r"[A-Za-z0-9.:\-\[\]]{1,253}")
+_LOOPBACK = ("127.", "localhost", "::1")
+
+
+def _lan_address() -> str | None:
+    """The address of the interface that holds the default route, or None offline. A UDP
+    connect only picks a route; no packet is sent (192.0.2.1 is TEST-NET-1)."""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("192.0.2.1", 9))
+            ip = s.getsockname()[0]
+    except OSError:
+        return None
+    return None if ip.startswith(_LOOPBACK) or ip == "0.0.0.0" else ip
+
+
+def advertised_host(setting: str, bind_host: str, lan=_lan_address) -> tuple[str, str]:
+    """(address, source) players connect to. In order: what the host set (even loopback:
+    it is their call); the one address a Manager bound to a specific interface listens on;
+    127.0.0.1 for a loopback-bound Manager (nobody else can connect); the LAN address;
+    127.0.0.1 when there is no network at all."""
+    if setting:
+        return setting, "set"
+    if bind_host.startswith(_LOOPBACK):
+        return "127.0.0.1", "loopback"
+    if bind_host not in ("", "0.0.0.0", "::"):
+        return bind_host, "bind"
+    ip = lan()
+    return (ip, "lan") if ip else ("127.0.0.1", "none")
+
+
+def _settings_path() -> str:
+    return os.path.join(MANAGER_DIR, "settings.json")
+
+
+def _load_settings() -> dict:
+    try:
+        with open(_settings_path(), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+# ── Per-player connection state (the run page's waiting screen) ─────────────
+# server.py's identity_error texts that mean "this is not this run's game" rather than
+# "this is not this slot's save" (test_player_pack pins them to server.py).
+_WRONG_GAME_ERRORS = ("Mixed games", "Mixed artifact kinds", "Unknown rom_type")
+
+
+def connection_state(p: dict, live: bool) -> dict:
+    """One player's state from the status payload alone: {slug, label, line}. Errors come
+    before connectivity: a rejected player stays rejected after they disconnect."""
+    def state(slug, label, line):
+        return {"slug": slug, "label": label, "line": line}
+    if not live:
+        return state("stopped", "Not started", "The run is stopped. Start it, then load the launcher in BizHawk.")
+    err = p.get("identity_error") or ""
+    if err.startswith(_WRONG_GAME_ERRORS):
+        return state("wrong_game", "Wrong game", f"{err}. Load the game this run is for, then reload the launcher.")
+    if p.get("admission", "admitted") != "admitted":
+        return state("wrong_game", "Wrong cartridge", f"Not admitted: {p.get('admission_reason') or 'unknown reason'}. "
+                     "Load the cartridge this run made for this player, then reload the launcher.")
+    if err:
+        return state("identity", "Wrong save", f"{err}. Load this slot's own save: SLink will not "
+                     "adopt a different trainer.")
+    seen = p.get("last_seen_age") is not None
+    if p.get("connected") and p.get("stale"):
+        return state("disconnected", "No data", f"Connected, but silent since {p.get('last_seen_label')}: "
+                     "BizHawk may be paused, closed or frozen.")
+    if p.get("connected") and (p.get("rom_type") or "?") != "?":
+        return state("ready", "Connected", "Connected and recording.")
+    if p.get("connected"):
+        return state("waiting", "Connecting", "BizHawk connected; waiting for the game to say hello.")
+    if seen:
+        return state("disconnected", "Disconnected", f"Last heard {p.get('last_seen_label')}. Reload the "
+                     "launcher in BizHawk's Lua Console to reconnect.")
+    return state("waiting", "Waiting for BizHawk", "Load the game in BizHawk, then this player's launcher "
+                 "in Tools → Lua Console.")
+
+
 # ── Subprocess management ───────────────────────────────────────────────────
 
 def _create_time(pid: int) -> float | None:
@@ -832,9 +920,12 @@ _STATUS_BADGE = {
 
 
 class RunManager:
-    def __init__(self, bind_host: str, manager_port: int = MANAGER_HTTP_PORT):
+    def __init__(self, bind_host: str, manager_port: int = MANAGER_HTTP_PORT, public_host: str = ""):
         self.bind_host = bind_host
         self.manager_port = manager_port
+        # The address players connect to, when the host names one: --public-host, else what
+        # was last set on a run page. "" = work it out (advertised_host).
+        self.public_host = public_host or str(_load_settings().get("public_host") or "")
         self._stream_pin_id: str | None = None  # run_id pinned for stream overlays
         # One lock per run: a start (spawn + readiness wait) and a stop serialize, so two
         # clicks cannot spawn twice and a stop mid-start is not overwritten by the start.
@@ -944,18 +1035,32 @@ class RunManager:
         ctx.update(extra or {})
         return aiohttp_jinja2.render_template("manager.html", request, ctx)
 
-    @staticmethod
-    def _board_context(run: dict, status: dict) -> dict:
+    def _connect_host(self) -> tuple[str, str]:
+        return advertised_host(self.public_host, self.bind_host)
+
+    def _board_context(self, run: dict, status: dict) -> dict:
         """board_context for a Manager run: it polls its own board route, its launchers and
-        (once it has made them) its cartridges download from the Manager."""
-        from server.board import board_context
+        (once it has made them) its cartridges download from the Manager. On top of the
+        shared board: each player's setup ZIP, the address players connect to, the BizHawk
+        minimum and each player's connection state."""
+        from server.board import PIDS, board_context
         rid = run["run_id"]
-        return board_context(status, run_name=run.get("name", ""), poll_url=f"/runs/{rid}/board",
-                             live=run.get("status") == "running",
-                             launcher_url=f"/api/runs/{rid}/launcher/{{player}}",
-                             rom_url=f"/api/runs/{rid}/rom/{{player}}" if run.get("cartridges") or run.get("randomizer") else "",
-                             roms_pinned=bool(run.get("randomizer")),
-                             rom_ext=_rom_ext(run))
+        live = run.get("status") == "running"
+        ctx = board_context(status, run_name=run.get("name", ""), poll_url=f"/runs/{rid}/board",
+                            live=live,
+                            launcher_url=f"/api/runs/{rid}/launcher/{{player}}",
+                            rom_url=f"/api/runs/{rid}/rom/{{player}}" if run.get("cartridges") or run.get("randomizer") else "",
+                            roms_pinned=bool(run.get("randomizer")),
+                            rom_ext=_rom_ext(run))
+        host, source = self._connect_host()
+        players = status.get("players") or {}
+        ctx.update({
+            "packs": {pid: f"/api/runs/{rid}/player-pack/{pid}" for pid in PIDS},
+            "connect": {"host": host, "port": run["tcp_port"], "source": source},
+            "bizhawk_min": make_release.bizhawk_requirement(),
+            "conn": {pid: connection_state(players.get(pid) or {}, live) for pid in PIDS},
+        })
+        return ctx
 
     async def handle_run_board(self, request: web.Request) -> web.Response:
         """GET /runs/{run_id}/board — the `#content` fragment the shell polls."""
@@ -1203,17 +1308,66 @@ class RunManager:
         run = _find_run(runs, run_id)
         if run is None:
             return web.json_response({"ok": False, "error": "Run not found"}, status=404)
-        # Derive connect host from the Host header (strip port)
-        host_header = request.host or "127.0.0.1"
-        connect_host = host_header.split(":")[0] or "127.0.0.1"
-        content = _build_launcher(run, player, connect_host)
-        safe_name = re.sub(r'[^\w-]', '_', run.get("name") or run_id).strip('_') or run_id
+        content = _build_launcher(run, player, self._connect_host()[0])
+        safe_name = self._augment_for_template(run)["safe_name"]
         filename = f"slink_{safe_name}_{player}.lua"
         return web.Response(
             text=content,
             content_type="application/octet-stream",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+
+    async def handle_player_pack(self, request: web.Request) -> web.Response:
+        """GET /api/runs/{run_id}/player-pack/{player} — the whole player package (the
+        release ZIP from tools/make_release.py) with this run's launcher at its root and the
+        run's host, game TCP port and slot baked into every launcher inside."""
+        player = request.match_info["player"]
+        if player not in ("a", "b"):
+            return web.json_response({"ok": False, "error": "player must be 'a' or 'b'"}, status=400)
+        run = _find_run(_load_registry(), request.match_info["run_id"])
+        if run is None:
+            return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+        host = self._connect_host()[0]
+        name = f"{self._augment_for_template(run)['safe_name']}_{player}"
+        launcher = f"slink_{name}.lua"
+        guide = make_release.player_setup_md(launcher, f"{host}:{run['tcp_port']}", player)
+
+        # ponytail: built per request (~60 ms, ~0.5 MB) and held in memory; cache the base
+        # package if a slow disk ever makes this noticeable.
+        def build() -> bytes:
+            with tempfile.TemporaryDirectory() as out:
+                path = make_release.build_release(
+                    version=name, out_dir=pathlib.Path(out), host=host, port=run["tcp_port"],
+                    player=player, skip_generators=True, quiet=True,
+                    launcher=(launcher, _build_launcher(run, player, host)), guide=guide)
+                return path.read_bytes()
+        try:
+            data = await asyncio.to_thread(build)
+        except (SystemExit, OSError) as e:          # make_release exits on a missing file
+            log.error(f"player pack for {run['run_id']}/{player} failed: {e!r}")
+            return web.json_response({"ok": False, "error": "could not build the player package; "
+                                      "see the Manager log"}, status=500)
+        return web.Response(body=data, content_type="application/zip",
+                            headers={"Content-Disposition": _content_disposition(f"slink_{name}.zip")})
+
+    async def handle_public_host(self, request: web.Request) -> web.Response:
+        """POST /api/settings/public-host {"host": "..."} — the address players connect to.
+        "" goes back to working it out. Persisted beside the registry."""
+        try:
+            host = str((await request.json()).get("host") or "").strip()
+        except Exception:
+            return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+        if host and not _HOST_RE.fullmatch(host):
+            return web.json_response({"ok": False, "error": "not a host name or IP address"}, status=400)
+        settings = _load_settings()
+        settings["public_host"] = host
+        try:
+            atomic_write_json(_settings_path(), settings)
+        except OSError as e:
+            return web.json_response({"ok": False, "error": f"could not save: {e}"}, status=500)
+        self.public_host = host
+        resolved, source = self._connect_host()
+        return web.json_response({"ok": True, "host": resolved, "source": source})
 
     # ── Cartridges: what each player plays ────────────────────────────────────
 
@@ -1945,8 +2099,8 @@ class RunManager:
 
 # ── Entry point ─────────────────────────────────────────────────────────────
 
-async def main(host: str, port: int):
-    manager = RunManager(bind_host=host, manager_port=port)
+async def main(host: str, port: int, public_host: str = ""):
+    manager = RunManager(bind_host=host, manager_port=port, public_host=public_host)
     app = web.Application(middlewares=[csrf_protection, theme_cache, registry_errors])
     setup_templating(app)
 
@@ -1964,6 +2118,8 @@ async def main(host: str, port: int):
     app.router.add_post("/api/runs/{run_id}/archive", manager.handle_archive)
     app.router.add_post("/api/runs/{run_id}/delete",  manager.handle_delete)
     app.router.add_get("/api/runs/{run_id}/launcher/{player}", manager.handle_launcher)
+    app.router.add_get("/api/runs/{run_id}/player-pack/{player}", manager.handle_player_pack)
+    app.router.add_post("/api/settings/public-host", manager.handle_public_host)
     app.router.add_post("/api/runs/{run_id}/cartridges", manager.handle_cartridges)
     app.router.add_post("/api/runs/{run_id}/randomize", manager.handle_randomize)
     app.router.add_get("/api/runs/{run_id}/rom/{player}", manager.handle_rom_download)
@@ -2065,10 +2221,15 @@ if __name__ == "__main__":
     parser.add_argument("--allow-host", action="append", default=[], metavar="NAME",
                         help="Extra Host name the web UI answers to, e.g. a tunnel name or '*.<tailnet>.ts.net' "
                              "(repeatable; also SLINK_ALLOWED_HOSTS, comma-separated). Runs inherit it")
+    parser.add_argument("--public-host", default="", metavar="ADDRESS",
+                        help="Address players' launchers connect to (default: this machine's LAN address; "
+                             "also settable on a run page)")
     args = parser.parse_args()
+    if args.public_host and not _HOST_RE.fullmatch(args.public_host):
+        parser.error(f"--public-host {args.public_host!r} is not a host name or IP address")
     allow_hosts(args.allow_host)
     if args.data_dir:
         MANAGER_DIR = os.path.abspath(args.data_dir)
         REGISTRY_PATH = os.path.join(MANAGER_DIR, "registry.json")
         os.makedirs(MANAGER_DIR, exist_ok=True)
-    asyncio.run(main(args.host, args.port))
+    asyncio.run(main(args.host, args.port, args.public_host))
