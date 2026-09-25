@@ -554,3 +554,37 @@ Update (post-RC batch, later):
 - KS5 still running: the KEY-SCOPE-5 FINAL round (OMP cx-06ec4e8e F1-F6), then the hello/reset/per-player queue (OMP cx-2985fe38 F1-F5).
 - Master is now 2092d75c (with the calc lane's d97c8a3b and the UI lane's fd6f97f2 .mk-warn/board.css rules). AFTER KS5: merge master; port our 3 per-pid _board.html warning lines onto `.mk-warn`; take master's gen1 sfx gate pair on conflict; then GEN2-CALC in gen2_gsc.py (calc_name_sets(gen=2), model test tests/unit/test_calc_names_multigen.py).
 - Then one CLEAN full unit run (nothing else running), the full Gen 2 re-sweep including the gate/sp_lowwater cells, the shipped receipt refresh, and the Gen 1 gate. After that, capture the Gen 1 receipts with SLINK_GEN1_CAPTURE_RECEIPTS=1: the purered_overlay and battle sfx receipts are stale.
+
+## Compaction point 4 (2026-09-25): POST-RC BATCH in progress
+
+State: RC evidence tagged gen2-rc-evidence-2026-09-25 (2813a48c, digest ccd62421). The post-RC batch is built on top of it. HEAD ~c35ddb01+. Nothing pushed, nothing merged to master.
+
+DONE this batch (committed, tests green, reviewed):
+- merge master d3486463 (9afb3485); BOARD-AMBIGUOUS (a2ea8ea6).
+- KS5: KEY-SCOPE-5 (4bd32cec, ad1290fa), the admission verdict (f0565960), the Gen 1 enemy maxHP (0fbbeaca, b86b5942), the reset lifecycle (3a37c33f), per-player status (aa27a793).
+- PHONE-NAMES + TITLE-VERSION A: e6d7761d, 0857cbe7. Overlays: C b405446e, G 69067c4b, S 583d8df4, v0.0.0-dev. The logo is PARKED (owner: "logo can wait").
+- SP-LOWWATER gate: db93e52c, 42f63152, fa9b9626. Composed-bound PASS on C/G/S, margins 101/116/116-118 B; not yet pinned.
+- HARNESS: trainer-faint live turn (ccd84166, a22ce925, 822d4352), Gen 1 receipt capture (592a3f0c, 54db2b95), sprite alt (4d647dd5), REVIEW-P4 (6850da91), the Gen 1 UI fixture (710ad462).
+- The UPR fork source is restored and the bootstrap tool fixed (9e7a8d5c): test_upr_gen1_ini 10/0. Owner: "you can fix the randomizer".
+- TEMP-LANES cleaned (trl, tr2, tr3, sp2, spd plus their admin dirs); g1rc and g2omp kept.
+
+RUNNING (resume by id with SendMessage):
+- KS5 ac684e942b96d868c: the KEY-SCOPE-5 FINAL round (OMP cx-06ec4e8e F1-F6), then the hello/reset/per-player queue (OMP cx-2985fe38 F1-F5). After that, a regression-only check; no new hole-hunting.
+- Opus reviewer a81d1d6af35d53886: a READ-ONLY regression review of 0857cbe7 (the PHONE-NAMES follow-up ASM).
+- OMP is PAUSED: its last 3 headless reviews timed out at 15-20 min. Use Opus reviewers until it's responsive again.
+
+NEXT, in order:
+1. After KS5: merge master. Local master reads d97c8a3b (calc base); Gen1-Collab2 reported 2092d75c (its fixes plus the gen1 sfx gate). Check `git log master` and merge the newest.
+   - Port our 3 per-pid _board.html warning lines (burial awaiting SAVE, ambiguous-key latch, faint-repair stalled) onto master's `.mk-warn` (class="mk-now-body mk-warn"). `.identity-warn` and `.stale-warn` are gone on master.
+   - Take master's gen1 sfx gate pair on conflict (it's byte-identical to our 44bf25d6).
+2. GEN2-CALC: calc_profile/calc_name/calc_nature(None)/calc_stats in server/adapters/gen2_gsc.py (NOT gen2_crystal.py). Use calc_name_sets(gen=2) (tools/gen_rr_priority_trainers.py); model test tests/unit/test_calc_names_multigen.py. Stat stages order: Atk, Def, Spe, SpA, SpD, Acc, Eva.
+3. One CLEAN full unit run, with nothing else running.
+4. The full Gen 2 re-sweep: `python tools/gen2_final_sweep.py --lanes 4 --sha <frozen>`, including the gate/sp_lowwater cells, the 12 overlay gate receipts (phone v2) and the 21 trade cells. Pin with LF hashes. Refresh the shipped data/games/gen2_*/receipts copies from the evidence copies.
+5. Gen 1 gate (verify_gen1_release, needs the whole machine). Then capture the Gen 1 receipts with SLINK_GEN1_CAPTURE_RECEIPTS=1 (the purered_overlay and battle sfx receipts are stale).
+6. STOP and check in with the owner: a NEW G4 signature is needed (the overlay fingerprints changed), then --promote-overlays.
+
+Cross-lane contacts (cross-session, by name):
+- "Gen1-Collab2": the Gen 1 master lane. It cleared our gen1_write_safety refactor. Agreed merge ORDER: Gen 1 → Gen 2 → Gen 3.
+- "Gen3 migration planning": gen3_frlge.py is theirs; pairing_kind is identical on both sides; our __init__.py changes are additive.
+- "Damage calculator multi-game support": the calc lane; GEN2-CALC contract.
+- "GUI notifications": the UI lane; it owns board.css and the templates.
