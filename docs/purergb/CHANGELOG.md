@@ -26,7 +26,7 @@ Three deliverables sit on top of the rules:
 |---|---|---|
 | Rules on pureRGB | encounter linking, dead zones, faint propagation, party/PC sync, memorials, whiteout, evolution/transform/APEX identity, Explode Mode, rival swap | `lua/gen1/*`, `server/adapters/gen1_purergb.py`, `data/games/gen1_purergb/` |
 | Companion overlay | native Cable Club trade, START-menu SLINK panel, ROM-level APEX collision guard — as **source sections** linked into the pureRGB build | `patch/gen1/purergb/`, `patch/dist/SLink-Pure{Red,Blue,Green}.ups` |
-| Randomized pairs | a lossless fork of Universal Pokémon Randomizer ZX 4.6.1 with pure INI entries, wired into the Manager | `patch/upr/*.patch`, `.cache/slink-upr/PokeRandoZX.jar` (`4.6.1-slink3`, patches 0001–0008) |
+| Randomized pairs | a lossless fork of Universal Pokémon Randomizer ZX 4.6.1 with pure INI entries, wired into the Manager | `patch/upr/*.patch`, `.cache/slink-upr/PokeRandoZX.jar` (`4.6.1-slink3`, patches 0001–0009 as of `data/upr_jars.json`) |
 
 ---
 
@@ -37,7 +37,8 @@ Three deliverables sit on top of the rules:
   either way the sha1 must be `2e94d09c…` (PureRed), `d419fe24…` (PureBlue), `fe4c63a6…`
   (PureGreen) or the client refuses it. Built ROMs are never committed.
 - **Overlay patches.** `patch/dist/SLink-PureRed.ups`, `SLink-PureBlue.ups`, `SLink-PureGreen.ups`
-  over the corresponding pinned ROM (overlay sha1s `09ddffda…`, `5528ac1f…`, `87e11687…`); shipped in
+  over the corresponding pinned ROM (overlay sha1s `47cb0f81…`, `666d22ea…`, `e403edaa…`, as pinned in
+  `data/games/gen1_purergb/admission_overlay.json` — that file is the authority, not this line); shipped in
   the `--with-patch` release bundle (`tools/make_release.py`, `e933380`).
 - **Data pack.** `data/games/gen1_purergb/` — 23 files: `profile.json`, `engine_signals.json`
   (41 sites × 3 titles), `write_checkpoint.json`, `admission.json`, `area_map.json` (248 map ids →
