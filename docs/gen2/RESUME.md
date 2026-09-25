@@ -423,3 +423,59 @@ When all three land: FREEZE (record the sha) -> `python tools/gen2_final_sweep.p
 summary, copy receipts, repin (LF) -> Gen 1/pureRGB receipts (stale since 61a693c4/57e292dc/d23f4011) -> release-evidence
 green except overlays ADMITTED + G4 -> STOP, check in with the owner (G4 signature, then --promote-overlays).
 Queued (not blocking): board shows ambiguous-key latches; clean idle Temp lanes trl/tr2/tr3/spd/sp2 (unlink junctions).
+
+## Compaction point 3 (2026-09-25 ~01:10Z): FINAL SWEEP nearly done -> Gen 1 check -> MAJOR milestone check-in
+
+FREEZE was declared at `df04e065`. The production digest has been `ccd6242131ad…` ever since. Every commit after the
+freeze is harness, verifier, fixture or docs only; check with `python -c "import sys; sys.path.insert(0,'tools'); import
+gen2_code_digest as g; print(g.head_digest())"`. Anything that touches CODE_SCOPE (lua/*.lua, lua/gen2/**, lua/core/**,
+server/**/*.py, data/games/gen2_*/**) unfreezes and makes EVERY receipt stale. Hold such changes for the post-RC batch.
+
+Landed after the freeze. Every item was a harness/verifier/fixture defect; the sweep found NO production defect:
+- Trade canary: `e57b9954` (canary == SP under gambatte; OMP 534009db had SP-1); `902cf7c8` (arm from hSPBuffer when a
+  VBlank fast copy has SP on a buffer).
+- Drivers: `5d6b23e9` (pc_ops saves before its active-box burial ack, BOX-MEMORIAL-2); `7f20ecc2` (Wade STING_LOW_HP=6,
+  trainer fights only); `dc904df4` (flee a HARDEN-only foe; the W6 Gold "freeze" was a no-damage standoff, confirmed by
+  OVERLAY-STALL and 2 OMP reads).
+- Oracles: `efb815b7` + `05db7e16` (whiteout_rebuild HP: A all, B the rebuilt mon plus the rest as LINK_SAVE);
+  `b85906d8` + `cfeefe4c` (clause oracle accepts the O-32 battle_bench kill, with active_slot evidence in PARTY_HP_WRITE).
+- Synthetic seeds: `5a7b04c8` (trainer-faint B at L10); `8702d2c6` (trade_evolve A with Master Balls, EVOLVE-SEED).
+- Sweep tool: `352efaf8`, `89b33356`, `11251cdf`.
+- Pre-freeze server fix: `1dc9dfc8` (KEY-SCOPE-4: a key_change beaten by its own tick is the same mon).
+- Housekeeping: `65b3c4b1` (gen1_purergb overlay pack LF rule).
+
+Sweep state (outputs under C:/Users/howar/AppData/Local/Temp/fsw-final, fsw-rerun, fsw-rerun2):
+- main sweep: 60/95 pass;
+- re-run pass: 32/36 pass;
+- rerun2: trade_timeout C-C pass.
+Everything that passed is PINNED but NOT yet committed; the FINAL-SWEEP worker is running the full verify lanes first.
+Remaining: one final small pass at 8702d2c6 (or HEAD, if the pin commit lands on top), one attempt each:
+- trade_evolve C-C, G-S and C-G, on the Master Ball seed;
+- trainer-faint C-C (a retry: the L10 crit-KO pre-empted the enemy turn, ~7%).
+Then re-pin those four and report the lane verdicts.
+
+Workers (resume by id with SendMessage):
+- FINAL-SWEEP / DUO-MATRIX-REPROOF `a29f6e1c21f776ce9`: pins, the final pass, lane verdicts. It is the only emulator user.
+- UI lane (another session, GUI notifications): BOARD-AMBIGUOUS is built at `95f2c629` on branch
+  claude/ui-board-ambiguous, plus the lua/hud.lua commits 66981144 and a9bdce38 on master. ALL of these are held until the
+  freeze lifts, because they are CODE_SCOPE.
+
+After the final pass:
+1. `SLINK_PURERGB_ROMS="E:/Google Drive/SLink/.cache/purergb" python tools/verify_gen1_release.py` needs the WHOLE
+   machine. It is stale since 57e292dc, d23f4011 and a4f8e6d6 touched Gen 1 client code.
+2. `python tools/verify_gen2_release.py` must be green except the overlays ADMITTED row and the G4 signature.
+3. STOP and check in with the owner: G4 signature, then `--promote-overlays`.
+
+Owner decisions to raise at the check-in (details in docs/gen2/POST_RC_CARDS.md):
+1. The logo art source, and 1 row vs 2.
+2. The PHONE-NAMES name policy (the caller by nickname, the receiver by species) and the wording.
+3. KEY-SCOPE-5: hold vs reject when the box census is missing.
+4. Whether the Gen 2 release waits for KEY-SCOPE-5 (it's required before Gen 3 rides this server).
+
+Post-RC cards are fully documented in `docs/gen2/POST_RC_CARDS.md`: KEY-SCOPE-5, SP-LOWWATER, REVIEW-P4-HASH,
+PHONE-NAMES, TITLE-VERSION A+B, TRADE-EVOLVE-CATCH (seed done), TRAINER-FAINT-LIVE-TURN, POISON-DUO-CAP (decided: keep the
+native Wade fight), BOARD-AMBIGUOUS (built, held), TEMP-LANES (inventory) and CLAUSE-BENCH-LIMITS. Batch every CODE_SCOPE card
+into ONE post-RC re-sweep.
+
+OMP rule (owner): every headless OMP task states its kill limit, a reply-by budget AND a narrow file list in the task
+text. Broad studies time out silently, and a headless run can't be messaged mid-run.
