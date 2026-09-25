@@ -170,6 +170,13 @@ of four fixed `writetext` blocks (`patch/gen2/src/phone.asm:113-141`). The calle
   - Gen 2 is unaffected: `lua/gen2/wire.lua` `foe_entry` already emits `maxHP` and refuses a foe without it.
   - `lua/gen1/**` is outside the Gen 2 CODE_SCOPE, but it makes the Gen 1 receipts stale. Land it AFTER the Gen 1 release gate, then re-run the affected Gen 1 lanes.
   - The UI lane is adding a template guard (no bar when `maxHP` is missing), held for the post-freeze batch.
+- **MASTER-MERGE** (post-freeze). Local master moved to `d3486463` (UI lane, not pushed; 3416 pass):
+  - `server/server.py`: `enemy_party` sanitized at intake; sprite_html regenerated; `/api/reset` keeps the adapter; `?filter=all` on the event stream; calc_name passthrough.
+  - `server/manager.py`: lifecycle locks and a readiness probe; the Windows liveness check no longer uses `os.kill(pid, 0)`, which killed runs.
+  - Templates: a11y changes and the "HP 17" guard.
+  - Also `lua/hud.lua` `66981144` and `a9bdce38`.
+  - Merge or cherry-pick ONCE, together with BOARD-AMBIGUOUS (`95f2c629`) and the other CODE_SCOPE cards, then re-sweep once.
+  - Our side: the `server/adapters/gen2_crystal.py` sprite `<img>` needs `alt=""` (the Gen 1 adapter already sets it).
 - **CLAUSE-BENCH-LIMITS.** OMP `cx-43b52a71` F2/F3/F5 were kept by design: the oracle cross-references the U2 receipt, and the full qualification lives in the release verifier's write-window lane; `PC == 0x0040` is a stricter harness invariant. Revisit only if that lane's coverage changes.
 - **BOARD-AMBIGUOUS: BUILT, held for the freeze.** The UI lane's commit `95f2c629` is on branch `claude/ui-board-ambiguous` (worktree `Temp/uiamb`), cut from `0800da84`. Design from OMP `cx-8a2f08c6`:
   - add a top-level `ambiguous_keys` to the status and to `status_payload.py`;
