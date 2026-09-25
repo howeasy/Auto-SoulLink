@@ -495,15 +495,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_ball_gate_cc_a_result.txt",
-              "sha256": "87cae0b99fefba2f38b2026c0b11ae63d3a7347100287b2fe7dea5584035d0b5"
+              "sha256": "2786523c76adf55e1516e26cb44eb722042cc393384f240059d60f3258c3ba81"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_ball_gate_cc_b_result.txt",
-              "sha256": "faa62d151409ba0780677613884c72a374aaff34ccab46c991698ff1fcbe8ff2"
+              "sha256": "0b393a83e68f9b8ec746ba4c52db77df792a9552d7c7e91ef4fcccf65f4ea146"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_ball_gate_cc_pydec_result.txt",
-              "sha256": "dc4d9b0a62b704ceeb272e1e95a58e8d7f6740f1894a29329300ec1f5dc9ad8a"
+              "sha256": "0880d69811d77ce977014cb51a44913e7ab5c8d50ea907884f2a6e60dbd39c1b"
             }
           }
         },
@@ -603,15 +603,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_active_trainer_cc_a_result.txt",
-              "sha256": "ff80d2e44ff7c368a0f36f6b9920d015a92df2d4a23c39aabdd2ccb8bf7d7005"
+              "sha256": "c9570d0305f55d6feef27b71b24865be5a589c06c2932f4e89ecca3121852ec0"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_active_trainer_cc_b_result.txt",
-              "sha256": "4ff24e6e8fd1e127035224292a79a2d4124010d59f883d49bb0bcef8a08e4a32"
+              "sha256": "7e59c7962a1ee68c694317d28cd37ab51a0878ec075cb273f377c6c28efc6145"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_faint_active_trainer_cc_pydec_result.txt",
-              "sha256": "95289c29879b1d3a2791b1daa89491c13d7ab7dc09403773bf470684c5437861"
+              "sha256": "a29928c30016bfe576d68e55246695ef09cd18b8e9cc3492492633e0dffe95a2"
             }
           }
         }
@@ -1052,15 +1052,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_gs_a_result.txt",
-              "sha256": "0fe06f1a7b4468710344454dd7b87e285fd6b703ad9bf63afa08f4b780a6ad8a"
+              "sha256": "dc0775306d61da245590db7cbcbe2095e169127d51d63bc6e05b96129218ca1e"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_gs_b_result.txt",
-              "sha256": "c5981dc02e245e38ed6f56fec9e290919809f44e6dd73655358296be89bd936f"
+              "sha256": "5fd7737bd99faf64913c0a63abbb11da0eb8e9515b23d5ab8371c430c5a9e71c"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_gs_pydec_result.txt",
-              "sha256": "84b133ebae0aca8aa29ee1e3c27956505a6cbdd4ca6c6ae80c2ebcf927c336d0"
+              "sha256": "5d7ec5cc847290bff2077617c5078760833ef94d4f813012e42708d76a40fffa"
             }
           }
         },
@@ -1106,15 +1106,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_ball_gate_gs_a_result.txt",
-              "sha256": "f0b6253112e25a50c2d90a53ba63ed704f3e7d45b3275b2ad54c13a538606929"
+              "sha256": "1cfe2882888df9cfe3a46db27e008842d951ee1a926f3ca6cb4a57bfe32da998"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_ball_gate_gs_b_result.txt",
-              "sha256": "7f0bc9fdebf1105764c331374a3de91f4eb3e88719533aff50b67ca16d61e247"
+              "sha256": "4f5fd19ec17d2cbc3f5eb16135b72061b9818a12c371b22b9dbbf20fdb5c1e48"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_ball_gate_gs_pydec_result.txt",
-              "sha256": "8bd9d1e4347c72b9e55da7d441583155453579b3665efff9cbbf85c43fb88d46"
+              "sha256": "faa35196896bab98fd95255cb9c7d725b1a2496c2714cddd9581e67344a3bb74"
             }
           }
         },
