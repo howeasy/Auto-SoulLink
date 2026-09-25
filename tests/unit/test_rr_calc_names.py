@@ -23,7 +23,11 @@ from server import pokemon_data as pd  # noqa: E402
 from server.adapters.gen3_frlge import _RR_ITEMS, Gen3Adapter  # noqa: E402
 from server.data.moves.gen3_rr import MOVE_NAMES  # noqa: E402
 from server.server import _build_mon_entry, _calc_trainer_label  # noqa: E402
-from tools.gen_rr_priority_trainers import calc_name_sets, canonicalise_parties  # noqa: E402
+from tools.gen_rr_priority_trainers import (  # noqa: E402
+    CALC_UNKNOWN_OK,
+    calc_name_sets,
+    canonicalise_parties,
+)
 
 _DATA = ROOT / "data" / "games" / "gen3_frlge"
 CALC = calc_name_sets()
@@ -158,6 +162,10 @@ def test_adapter_maps_rr_and_leaves_vanilla_alone():
     assert RR.calc_name("item", "WeaknessPol.") == "Weakness Policy"
     assert RR.calc_name("move", "Crafty Guard") == "Crafty Shield"
     assert RR.calc_name("move", "Tackle") == "Tackle"
+    # Table keys that are also calc names: the server must still map them.
+    assert RR.calc_name("species", "Pumpkaboo") == "Pumpkaboo-Small"
+    assert RR.calc_name("species", "Gourgeist") == "Gourgeist-Small"
+    assert RR.calc_name("species", "Wishiwashi-Sevii") == "Wishiwashi-School"
     assert Gen3Adapter(is_rr=False).calc_name("species", "Silvally (Fight)") == "Silvally (Fight)"
 
 
@@ -185,18 +193,30 @@ def test_rival_trainer_id_resolves_to_calc_set_key():
     assert _calc_trainer_label(None, enemy) == ""
 
 
-def test_roster_and_setdex_supplement_are_canonical():
-    """The generated roster + calc supplement only hold calc names."""
+def _setdex(name):
+    """{species: {label: set}} from a calc set file."""
+    js = (ROOT / "calc/src/js/data/sets" / name).read_text(encoding="utf-8")
+    if name == "slink_priority.js":
+        return json.loads(re.search(r"var ADD = (.*?);\s*\n\s*if \(typeof window", js, re.S).group(1))
+    return json.loads(js[js.index("{"):js.rindex("}") + 1])
+
+
+def test_roster_and_setdex_files_are_canonical():
+    """The generated roster and every calc set file only hold calc names — the bridge
+    looks sets up by exact species key and copies their ability/item/moves onto the
+    live enemy. Rerun `tools/gen_rr_priority_trainers.py --setdex` after a set refresh."""
     roster = json.loads((_DATA / "rr_priority_trainers.json").read_text(encoding="utf-8"))
-    js = (ROOT / "calc/src/js/data/sets/slink_priority.js").read_text(encoding="utf-8")
-    supp = json.loads(re.search(r"var ADD = (.*?);\s*\n\s*if \(typeof window", js, re.S).group(1))
+    sources = {"rr_priority_trainers.json": [m for p in roster["parties"].values() for m in p["party"]]}
+    for name in ("slink_priority.js", "normal.js", "hardcore.js"):
+        sources[name] = [dict(s, species=sp) for sp, by in _setdex(name).items() for s in by.values()]
     bad = []
-    for sets in [[m for p in roster["parties"].values() for m in p["party"]],
-                 [dict(s, species=sp) for sp, by in supp.items() for s in by.values()]]:
+    for name, sets in sources.items():
+        assert len(sets) > 100, name
         for m in sets:
             for kind, vals in (("species", [m["species"]]), ("ability", [m.get("ability")]),
                                ("item", [m.get("item")]), ("move", m.get("moves") or [])):
-                bad += [(kind, v) for v in vals if v and v not in CALC[kind]]
+                bad += [(name, kind, v) for v in vals
+                        if v and v not in CALC[kind] and v not in CALC_UNKNOWN_OK.get(kind, {})]
     assert not bad, sorted(set(bad))
 
 

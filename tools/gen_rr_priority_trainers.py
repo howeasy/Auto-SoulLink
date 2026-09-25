@@ -17,6 +17,8 @@ Usage:
     # Without the sheet, re-canonicalise the committed roster (after editing
     # data/games/gen3_frlge/calc_names.json or the sheet maps below):
     python tools/gen_rr_priority_trainers.py --from-json
+    # Canonicalise the calc's own set files (normal.js / hardcore.js) in place:
+    python tools/gen_rr_priority_trainers.py --setdex
 
 Every species/ability/item/move written must be a damage-calc name
 (calc/calc/src/data/*.ts); the run fails listing any that isn't.
@@ -51,7 +53,8 @@ _DATA_DIR   = _REPO_ROOT / "data" / "games" / "gen3_frlge"
 _OUT_PATH   = _DATA_DIR / "rr_priority_trainers.json"
 _RR_TRAINERS_PATH = _DATA_DIR / "rr_trainers.json"
 _CALC_NORMAL_PATH    = _REPO_ROOT / "calc" / "src" / "js" / "data" / "sets" / "normal.js"
-_CALC_SUPP_SRC_PATH  = _REPO_ROOT / "calc" / "src"  / "js" / "data" / "sets" / "slink_priority.js"
+_CALC_SETDEX_PATHS   = [_CALC_NORMAL_PATH.with_name(n) for n in ("normal.js", "hardcore.js")]
+_CALC_SUPP_SRC_PATH  =_REPO_ROOT / "calc" / "src"  / "js" / "data" / "sets" / "slink_priority.js"
 _CALC_SUPP_DIST_PATH = _REPO_ROOT / "calc" / "dist" / "js" / "data" / "sets" / "slink_priority.js"
 
 # Species name normalisation: sheet uses some abbreviated forms (e.g.
@@ -142,6 +145,7 @@ _SHEET_CALC_NAMES: dict[str, dict[str, str]] = {
     },
     "item": {
         "Abomasnite": "Abomasite", "Charzardite X": "Charizardite X",
+        "Charzardite Y": "Charizardite Y",
         "HeavyD. Boots": "Heavy-Duty Boots", "Terrain Exten.": "Terrain Extender",
         "Terrain Extend.": "Terrain Extender", "Weakness Pol.": "Weakness Policy",
         "Stardust": "",   # no battle effect; the calc has no such item
@@ -168,34 +172,87 @@ def _sheet_ability(raw: str) -> str:
     return re.sub(r"\s*\((?:Both|Mega)\)$", "", pick.split(" or ")[0]).strip()
 
 
-def canonicalise_parties(parties: dict) -> list[str]:
-    """Rewrite every party mon's names to calc names in place; return one error
-    line per value that still isn't a calc name (the caller must fail on any)."""
-    calc = calc_name_sets()
-    table = json.loads(_CALC_NAMES_PATH.read_text(encoding="utf-8"))
+# Names the calc set files use that the calc can't know; accepted, with the reason.
+CALC_UNKNOWN_OK: dict[str, dict[str, str]] = {
+    "item": {"Eternamax Orb": "RR-custom form item the calc doesn't model"},
+}
 
+
+def _canon_mon(mon: dict, calc: dict[str, set[str]], table: dict) -> list[tuple[str, str]]:
+    """Rewrite one mon's species/ability/item/moves to calc names in place;
+    return the (kind, value) pairs that still aren't calc names."""
     def canon(kind: str, name: str) -> str:
         if not name or name in calc[kind]:
             return name
         name = _SHEET_CALC_NAMES[kind].get(name, name)
         return table[kind].get(name, name)
 
+    sp = mon["species"] = canon("species", (mon.get("species") or "").strip())
+    ab = _sheet_ability(mon.get("ability") or "")
+    mon["ability"] = canon("ability", _BY_SPECIES.get(("ability", ab), {}).get(sp, ab))
+    it = (mon.get("item") or "").strip()
+    it = "" if it.lower() in ("none", "no item", "-") else it
+    mon["item"] = canon("item", _BY_SPECIES.get(("item", it), {}).get(sp, it))
+    mon["moves"] = [canon("move", _normalize_move(m))
+                    for m in mon.get("moves") or [] if m and m.strip() != "-"]
+    return [(kind, v) for kind, vals in (("species", [sp]), ("ability", [mon["ability"]]),
+                                         ("item", [mon["item"]]), ("move", mon["moves"]))
+            for v in vals if v and v not in calc[kind] and v not in CALC_UNKNOWN_OK.get(kind, {})]
+
+
+def canonicalise_parties(parties: dict) -> list[str]:
+    """Rewrite every party mon's names to calc names in place; return one error
+    line per value that still isn't a calc name (the caller must fail on any)."""
+    calc = calc_name_sets()
+    table = json.loads(_CALC_NAMES_PATH.read_text(encoding="utf-8"))
+    return [f"trainer {tid} ({info.get('name', '')}): {kind} {v!r}"
+            for tid, info in parties.items() for mon in info.get("party") or []
+            for kind, v in _canon_mon(mon, calc, table)]
+
+
+_SETDEX_LINE = re.compile(r'^(\s*)("(?:[^"\\]|\\.)*"): (\{.*\})(,?)(\s*)$')
+
+
+def canonicalise_setdex(path: Path) -> tuple[int, int, list[str]]:
+    """Rewrite a calc set file (normal.js / hardcore.js: one species key or one
+    set per line) so species keys and ability/item/move values are calc names.
+    Only changed lines are touched. Returns (renamed keys, rewritten values, errors)."""
+    calc = calc_name_sets()
+    table = json.loads(_CALC_NAMES_PATH.read_text(encoding="utf-8"))
+    keys = values = 0
     errors: list[str] = []
-    for tid, info in parties.items():
-        for mon in info.get("party") or []:
-            sp = mon["species"] = canon("species", (mon.get("species") or "").strip())
-            ab = _sheet_ability(mon.get("ability") or "")
-            mon["ability"] = canon("ability", _BY_SPECIES.get(("ability", ab), {}).get(sp, ab))
-            it = (mon.get("item") or "").strip()
-            it = "" if it.lower() in ("none", "no item", "-") else it
-            mon["item"] = canon("item", _BY_SPECIES.get(("item", it), {}).get(sp, it))
-            mon["moves"] = [canon("move", _normalize_move(m))
-                            for m in mon.get("moves") or [] if m and m.strip() != "-"]
-            for kind, vals in (("species", [sp]), ("ability", [mon["ability"]]),
-                               ("item", [mon["item"]]), ("move", mon["moves"])):
-                errors += [f"trainer {tid} ({info.get('name', '')}): {kind} {v!r}"
-                           for v in vals if v and v not in calc[kind]]
-    return errors
+    out: list[str] = []
+    species = ""
+    seen: set[str] = set()
+    with path.open(encoding="utf-8", newline="") as f:   # keep the file's line endings
+        lines = f.readlines()
+    for line in lines:
+        m = re.match(r'^  "(.+)": \{(\s*)$', line)
+        if m:
+            mon = {"species": m.group(1)}
+            _canon_mon(mon, calc, table)
+            species = mon["species"]
+            if species in seen:   # a rename onto an existing key would drop sets
+                errors.append(f"{path.name}: species key {m.group(1)!r} -> duplicate {species!r}")
+            seen.add(species)
+            keys += species != m.group(1)
+            line = f'  {json.dumps(species, ensure_ascii=False)}: {{{m.group(2)}'
+        elif (m := _SETDEX_LINE.match(line)):
+            s = json.loads(m.group(3))
+            mon = dict(s, species=species)
+            errors += [f"{path.name} {species} {m.group(2)}: {k} {v!r}"
+                       for k, v in _canon_mon(mon, calc, table)]
+            new = {k: mon.get(k, s[k]) for k in s if k != "item" or mon["item"]}
+            values += (sum(new.get(k) != s[k] for k in ("ability", "item") if k in s)
+                       + sum(mv not in new.get("moves", []) for mv in s.get("moves", [])))
+            if new != s:
+                line = (f"{m.group(1)}{m.group(2)}: "
+                        f"{json.dumps(new, ensure_ascii=False, separators=(',', ':'))}"
+                        f"{m.group(4)}{m.group(5)}")
+        out.append(line)
+    if not errors:
+        path.write_text("".join(out), encoding="utf-8", newline="")
+    return keys, values, errors
 
 
 def _synthesise_calc_label(cls: str, name: str, fight_label: str) -> str:
@@ -1010,7 +1067,21 @@ def main() -> int:
                         help="No spreadsheet: re-canonicalise the committed roster "
                              "(--out) through the calc-name table and re-emit it "
                              "plus slink_priority.js")
+    parser.add_argument("--setdex", action="store_true",
+                        help="Canonicalise the calc's own set files (normal.js, "
+                             "hardcore.js) in place through the calc-name table")
     args = parser.parse_args()
+
+    if args.setdex:
+        errors = []
+        for path in _CALC_SETDEX_PATHS:
+            keys, values, errs = canonicalise_setdex(path)
+            errors += errs
+            print(f"{path.name}: {keys} species keys renamed, {values} values rewritten")
+        if errors:
+            print("Unresolved:\n  " + "\n  ".join(errors), file=sys.stderr)
+            return 1
+        return 0
 
     if args.from_json:
         out = Path(args.out)

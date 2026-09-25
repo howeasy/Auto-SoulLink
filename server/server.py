@@ -2583,7 +2583,6 @@ class SLinkServer:
                         entry["hp_pct"] = max(0, min(100, int(
                             em.get("hp", 0) / max(em.get("maxHP", 1), 1) * 100)))
                         entry["trainer_label"] = trainer_label
-                        entry["trainer_id"] = tid
                         enemy.append(entry)
                 calc_label = _calc_trainer_label(
                     self.adapter.trainer_brief(tid) if (is_trainer and tid) else None, enemy)
