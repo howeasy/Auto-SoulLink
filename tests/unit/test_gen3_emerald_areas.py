@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -42,7 +43,9 @@ def _pret_available() -> bool:
     return True
 
 
-pytestmark = pytest.mark.skipif(
+# Applied per-test below (not module-wide): the FRLG byte-identity guard needs no
+# pret checkout and must still run when pret isn't present locally.
+needs_pret = pytest.mark.skipif(
     not _pret_available(), reason="pret/pokeemerald checkout not present locally"
 )
 
@@ -71,6 +74,7 @@ def test_frlg_output_is_byte_identical_after_the_emerald_edit(tmp_path, monkeypa
 
 # --- First falsifier: Hoenn names, never Kanto ---
 
+@needs_pret
 def test_littleroot_oldale_route101_resolve_to_hoenn_never_kanto():
     pret = gam._find_pret_checkout("pokeemerald")
     with open(Path(pret) / "data/maps/map_groups.json", encoding="utf-8") as f:
@@ -98,6 +102,7 @@ def test_littleroot_oldale_route101_resolve_to_hoenn_never_kanto():
 
 # --- Every wild_encounters.json map resolves to an area ---
 
+@needs_pret
 def test_every_wild_encounter_map_has_an_area():
     pret = gam._find_pret_checkout("pokeemerald")
     with open(Path(pret) / "src/data/wild_encounters.json", encoding="utf-8") as f:
@@ -154,6 +159,7 @@ def test_safari_zone_stays_per_sub_area_not_merged():
     }
 
 
+@needs_pret
 def test_dive_spots_merge_into_their_host_route():
     pret = gam._find_pret_checkout("pokeemerald")
     with open(Path(pret) / "data/maps/map_groups.json", encoding="utf-8") as f:
@@ -201,6 +207,7 @@ def test_statics_bypass_clauses_match_the_plan_defaults():
         assert by_id[static_id]["bypass_clauses"] is False, static_id
 
 
+@needs_pret
 def test_statics_generator_is_reproducible(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     gstatics.generate_statics()
@@ -218,3 +225,175 @@ def _lua_table(path: Path) -> dict[str, str]:
         if m:
             table[m.group(1)] = m.group(2)
     return table
+
+
+# --- statics.json (task 3): every map key is real, every species citation checks out ---
+
+def test_statics_every_map_key_is_a_known_location():
+    """Every non-null statics.json 'map' is a real mapGroup:mapNum -- typo-proofing the
+    hand-curated table against gen3_emerald_locations.lua, the same key space the
+    server actually indexes into."""
+    data = json.loads((_REPO / "data/games/gen3_emerald/statics.json").read_text())
+    loc = _lua_table(_REPO / "data/games/gen3_emerald/gen3_emerald_locations.lua")
+    for e in data["entries"]:
+        if e["map"] is None:
+            continue  # roamer: no fixed map, documented as a RECORDED LIMIT
+        assert e["map"] in loc, f"{e['id']}: map {e['map']!r} is not in gen3_emerald_locations.lua"
+
+
+_STATICS_SOURCE_PATTERN = re.compile(r"([A-Za-z0-9_./-]+\.(?:inc|json|c)):([0-9][0-9,\-]*)")
+
+
+def _expand_line_range(rangespec: str) -> set[int]:
+    lines: set[int] = set()
+    for part in rangespec.split(","):
+        if "-" in part:
+            a, b = part.split("-")
+            lines.update(range(int(a), int(b) + 1))
+        else:
+            lines.add(int(part))
+    return lines
+
+
+@needs_pret
+def test_statics_sources_cite_the_species_on_the_stated_pret_lines():
+    """Every 'path:a-b' citation in a statics.json 'source' string must be a real pret
+    file, and the entry's species token(s) must actually appear on one of the exact
+    cited lines -- not merely somewhere in the file. Mutation check: swap any entry's
+    species for one that appears nowhere in its cited lines (e.g. SPECIES_ZUBAT) and
+    this test goes red."""
+    pret = Path(gam._find_pret_checkout("pokeemerald"))
+    data = json.loads((_REPO / "data/games/gen3_emerald/statics.json").read_text())
+    for e in data["entries"]:
+        species = e["species"]
+        if species is None:
+            continue
+        if isinstance(species, str):
+            species = [species]
+        segments = _STATICS_SOURCE_PATTERN.findall(e["source"])
+        assert segments, f"{e['id']}: source has no parseable path:line-range citation"
+        file_lines: dict[str, set[int]] = {}
+        for path, rangespec in segments:
+            fp = pret / path
+            assert fp.is_file(), f"{e['id']}: cited file does not exist in pret: {path}"
+            file_lines.setdefault(path, set()).update(_expand_line_range(rangespec))
+        for sp in species:
+            found = False
+            for path, lines in file_lines.items():
+                text_lines = (pret / path).read_text(encoding="utf-8").splitlines()
+                if any(1 <= ln <= len(text_lines) and sp in text_lines[ln - 1] for ln in lines):
+                    found = True
+                    break
+            assert found, f"{e['id']}: {sp} does not appear on any cited line ({segments})"
+
+
+_STATICS_BATTLE_OR_GIVE_VERBS = (
+    "givemon", "giveegg", "setwildbattle", "dowildbattle", "seteventmon",
+    "scriptgivemon", "choosestarter", "initroamer", "giveeggfromdaycare",
+)
+
+
+@needs_pret
+def test_statics_cited_lines_show_a_real_battle_or_give_not_just_a_cry():
+    """A cited species reference is not enough on its own -- an NPC that only
+    `playmoncry`s or flees (Fortree City / Lilycove House1 / Sootopolis House1 Kecleon,
+    removed by this card) is not an encounter. Every entry's cited lines must also show
+    one of the real battle/give script commands. First falsifier for card E1-AREA-2
+    finding 1: this goes red on the three removed rows (species present via playmoncry,
+    no setwildbattle/dowildbattle/givemon/giveegg/seteventmon/special anywhere cited)."""
+    pret = Path(gam._find_pret_checkout("pokeemerald"))
+    data = json.loads((_REPO / "data/games/gen3_emerald/statics.json").read_text())
+    for e in data["entries"]:
+        if e["species"] is None:
+            continue
+        segments = _STATICS_SOURCE_PATTERN.findall(e["source"])
+        text_blob = []
+        for path, rangespec in segments:
+            fp = pret / path
+            if not fp.is_file():
+                continue
+            text_lines = fp.read_text(encoding="utf-8").splitlines()
+            for ln in _expand_line_range(rangespec):
+                if 1 <= ln <= len(text_lines):
+                    text_blob.append(text_lines[ln - 1].lower())
+        blob = "\n".join(text_blob)
+        assert any(v in blob for v in _STATICS_BATTLE_OR_GIVE_VERBS), (
+            f"{e['id']}: cited lines show no battle/give verb "
+            f"({_STATICS_BATTLE_OR_GIVE_VERBS}) -- not a real encounter"
+        )
+
+
+# --- full-table consistency (task 4) ---
+
+def test_areas_lua_matches_area_map_json():
+    """gen_area_map.py writes the same table twice (JSON for Python/tests, Lua for the
+    client) -- they must describe the exact same mapping, or a generator change that
+    only touches one output would go unnoticed."""
+    area_json = json.loads((_REPO / "data/games/gen3_emerald/area_map.json").read_text())
+    area_lua = _lua_table(_REPO / "data/games/gen3_emerald/gen3_emerald_areas.lua")
+    assert area_lua == area_json
+
+
+# --- area-id collisions (task 5) ---
+
+@needs_pret
+def test_multi_key_area_id_groups_share_one_mapsec_or_a_documented_override():
+    """Every area_id spanning more than one mapGroup:mapNum key must be a documented
+    merge: all its maps share one pret MAPSEC (multi-floor dungeon), or the extra key is
+    one of the explicit dive-to-host overrides in gen_area_map._EMERALD_DIVE_HOST. This
+    is the generator's own collision guard, re-checked here against the committed
+    output -- pret reuses MAPSEC display names across unrelated ids (11 different
+    MAPSEC_UNDERWATER_* all display 'UNDERWATER'; MAPSEC_AQUA_HIDEOUT and
+    MAPSEC_AQUA_HIDEOUT_OLD both display 'AQUA HIDEOUT'), so a merge that isn't one of
+    these two documented cases is a real bug, not a coincidence."""
+    pret = Path(gam._find_pret_checkout("pokeemerald"))
+    with open(pret / "data/maps/map_groups.json", encoding="utf-8") as f:
+        groups_data = json.load(f)
+    folder_of_key: dict[str, str] = {}
+    mapsec_of_folder: dict[str, str] = {}
+    id_of_folder: dict[str, int] = {}
+    for group_idx, group_name in enumerate(groups_data["group_order"]):
+        for map_idx, folder in enumerate(groups_data[group_name]):
+            folder_of_key[f"{group_idx}:{map_idx}"] = folder
+            with open(pret / "data/maps" / folder / "map.json", encoding="utf-8") as mf:
+                map_data = json.load(mf)
+            mapsec_of_folder[folder] = map_data.get("region_map_section")
+            id_of_folder[folder] = map_data["id"]
+    folder_of_id = {v: k for k, v in id_of_folder.items()}
+
+    dive_host_of_dive_folder = {
+        folder_of_id[dive_id]: folder_of_id[host_id]
+        for dive_id, host_id in gam._EMERALD_DIVE_HOST.items()
+    }
+
+    area = json.loads((_REPO / "data/games/gen3_emerald/area_map.json").read_text())
+    groups: dict[str, list[str]] = {}
+    for key, area_id in area.items():
+        groups.setdefault(area_id, []).append(key)
+
+    checked_multi_key_groups = 0
+    for area_id, keys in groups.items():
+        if len(keys) < 2:
+            continue
+        checked_multi_key_groups += 1
+        folders = [folder_of_key[k] for k in keys]
+        identities = {mapsec_of_folder[dive_host_of_dive_folder.get(f, f)] for f in folders}
+        assert len(identities) == 1, (
+            f"area_id {area_id!r} groups keys {keys} (folders {folders}) across MAPSECs "
+            f"{identities} -- not a single shared MAPSEC and not a documented dive-host override"
+        )
+    assert checked_multi_key_groups > 0, "expected at least one multi-key area_id group to check"
+
+
+# --- pret tripwire (task 6) ---
+
+@needs_pret
+def test_pret_map_groups_has_the_shape_this_generator_assumes():
+    """Tripwire on pret/pokeemerald's own map_groups.json: if a future pret bump ever
+    reshuffles the group table, this is the first thing to go red, before a silently
+    wrong area_id does."""
+    pret = Path(gam._find_pret_checkout("pokeemerald"))
+    with open(pret / "data/maps/map_groups.json", encoding="utf-8") as f:
+        groups_data = json.load(f)
+    assert len(groups_data["group_order"]) == 34
+    assert groups_data["group_order"][24] == "gMapGroup_Dungeons"

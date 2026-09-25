@@ -620,11 +620,33 @@ def generate_emerald():
             raise ValueError(f"{map_id} ({folder}): MAPSEC {mapsec} has no display name")
         return _mapsec_to_snake(display_name)
 
+    # Guard: pret's region_map_sections.json reuses the same display name for several
+    # distinct MAPSEC ids (11 different MAPSEC_UNDERWATER_* all display "UNDERWATER";
+    # MAPSEC_AQUA_HIDEOUT and MAPSEC_AQUA_HIDEOUT_OLD both display as "AQUA HIDEOUT" once
+    # the "{AQUA}" substitution token is stripped). area_id_for() merges purely on that
+    # display name, so two wild maps with different MAPSECs but the same display name
+    # would silently collapse into one area_id -- a merge nobody asked for. The dive-host
+    # remap above and the Safari per-sub-area branch in area_id_for() are the only
+    # documented exceptions; anything else that collides is a real bug, not a merge.
     area_map = {}
+    _area_identity = {}  # area_id -> the (folder-or-MAPSEC) identity that first claimed it
     for map_id in wild_map_ids:
-        key = key_of_folder[folder_of_id[map_id]]
+        folder = folder_of_id[map_id]
+        key = key_of_folder[folder]
         host_id = _EMERALD_DIVE_HOST.get(map_id, map_id)
-        area_map[key] = area_id_for(host_id)
+        host_folder = folder_of_id[host_id]
+        area_id = area_id_for(host_id)
+        identity = host_folder if host_folder.startswith("SafariZone_") else mapsec_of_folder[host_folder]
+        prior = _area_identity.setdefault(area_id, identity)
+        if prior != identity:
+            raise ValueError(
+                f"area_id {area_id!r} would merge {host_folder!r} (MAPSEC "
+                f"{mapsec_of_folder[host_folder]!r}) with an unrelated map already assigned "
+                f"there (identity {prior!r}) -- pret gives them the same MAPSEC display name "
+                f"but they are not the documented dive-host or Safari-sub-area case; add an "
+                f"explicit override instead of letting them collide"
+            )
+        area_map[key] = area_id
 
     os.makedirs(os.path.join("data", "games", "gen3_emerald"), exist_ok=True)
 

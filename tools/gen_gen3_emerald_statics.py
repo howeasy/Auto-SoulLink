@@ -65,7 +65,8 @@ def generate_statics():
             "bypass_clauses": False,
             "level": 5,
             "source": "data/maps/Route101/scripts.inc:218-241 (Route101_EventScript_BirchsBag, "
-                      "`special ChooseStarter`); species list src/starter_choose.c:113-119",
+                      "`special ChooseStarter`); species list src/starter_choose.c:113-119; level 5 "
+                      "at src/battle_setup.c:922 (CB2_GiveStarter: ScriptGiveMon(starterMon, 5, ...))",
         },
         {
             "id": "fossil",
@@ -271,43 +272,43 @@ def generate_statics():
             "kind": "static",
             "bypass_clauses": False,
             "level": 30,
-            "source": "data/maps/Route120/scripts.inc:175-197 (setwildbattle SPECIES_KECLEON, 30); "
-                      "object event flag data/maps/Route120/map.json object_events "
-                      "LOCALID_BRIDGE_KECLEON = FLAG_HIDE_ROUTE_120_KECLEON_BRIDGE",
+            "source": "data/maps/Route120/scripts.inc:175-197 (setwildbattle SPECIES_KECLEON, 30 at "
+                      ":193; dowildbattle at :196); object event flag data/maps/Route120/map.json "
+                      "object_events LOCALID_BRIDGE_KECLEON = FLAG_HIDE_ROUTE_120_KECLEON_BRIDGE; "
+                      "this is the one-time Steven/Devon-Scope bridge Kecleon, distinct from the "
+                      "5 roaming Devon-Scope Kecleon on this route (not individually catalogued -- "
+                      "see kecleon_route_119_* below, same shared script)",
         },
         {
-            "id": "kecleon_fortree_city",
+            "id": "kecleon_route_119_1",
             "species": "SPECIES_KECLEON",
-            "map": m("FortreeCity"),
-            "flag": "FLAG_HIDE_FORTREE_CITY_KECLEON",
+            "map": m("Route119"),
+            "flag": "FLAG_HIDE_ROUTE_119_KECLEON_1",
             "kind": "static",
             "bypass_clauses": False,
-            "level": "†UNVERIFIED",
-            "source": "data/maps/FortreeCity/scripts.inc:76 (SPECIES_KECLEON cry); object event flag "
-                      "data/maps/FortreeCity/map.json FLAG_HIDE_FORTREE_CITY_KECLEON; level not traced "
-                      "in this pass (no local setwildbattle call found -- shared/common script)",
+            "level": 30,
+            "source": "data/maps/Route119/map.json object_events (graphics_id OBJ_EVENT_GFX_KECLEON, "
+                      "script Route119_EventScript_Kecleon1, flag FLAG_HIDE_ROUTE_119_KECLEON_1) -> "
+                      "data/scripts/kecleon.inc:36-83 (Route119_EventScript_Kecleon1 at :36-41 sets "
+                      "VAR_0x8009=6 then falls through the shared EventScript_Kecleon/"
+                      "EventScript_BattleKecleon at :50-83: setwildbattle SPECIES_KECLEON, 30 at :74, "
+                      "dowildbattle at :76); a real Devon-Scope battle, same shared script as the "
+                      "Route 120 roaming Kecleon",
         },
         {
-            "id": "kecleon_lilycove_house1",
+            "id": "kecleon_route_119_2",
             "species": "SPECIES_KECLEON",
-            "map": m("LilycoveCity_House1"),
-            "flag": None,
+            "map": m("Route119"),
+            "flag": "FLAG_HIDE_ROUTE_119_KECLEON_2",
             "kind": "static",
             "bypass_clauses": False,
-            "level": "†UNVERIFIED",
-            "source": "data/maps/LilycoveCity_House1/scripts.inc:12 (SPECIES_KECLEON cry); object "
-                      "event flag not traced in this pass (no local setwildbattle call found)",
-        },
-        {
-            "id": "kecleon_sootopolis_house1",
-            "species": "SPECIES_KECLEON",
-            "map": m("SootopolisCity_House1"),
-            "flag": None,
-            "kind": "static",
-            "bypass_clauses": False,
-            "level": "†UNVERIFIED",
-            "source": "data/maps/SootopolisCity_House1/scripts.inc:25 (SPECIES_KECLEON cry); object "
-                      "event flag not traced in this pass (no local setwildbattle call found)",
+            "level": 30,
+            "source": "data/maps/Route119/map.json object_events (graphics_id OBJ_EVENT_GFX_KECLEON, "
+                      "script Route119_EventScript_Kecleon2, flag FLAG_HIDE_ROUTE_119_KECLEON_2) -> "
+                      "data/scripts/kecleon.inc:43-83 (Route119_EventScript_Kecleon2 at :43-48 sets "
+                      "VAR_0x8009=7 then falls through the shared EventScript_Kecleon/"
+                      "EventScript_BattleKecleon at :50-83: setwildbattle SPECIES_KECLEON, 30 at :74, "
+                      "dowildbattle at :76)",
         },
 
         # -- Roaming (no fixed map -- recorded as a limit, not a normal static) --
@@ -320,11 +321,17 @@ def generate_statics():
             "bypass_clauses": False,
             "level": 40,
             "source": "src/roamer.c:39-58 (sRoamerLocations, roams Route 104-134 and connecting "
-                      "towns), :64-97 (CreateInitialRoamerMon: Latias if player is male, Latios if "
-                      "female -- src/roamer.c:84-92 with gSpecialVar_0x8004 from the player-gender "
-                      "check at data/scripts/players_house.inc:472 `special InitRoamer`); tracked in "
-                      "the ROAMER save-block struct, not a FLAG_*; RECORDED LIMIT: no single "
-                      "mapGroup:mapNum -- a roaming encounter cannot be expressed as one static row",
+                      "towns); species is a player CHOICE, not gender-derived: "
+                      "data/scripts/players_house.inc:468-470 (`multichoice 22, 8, MULTI_TV_LATI, "
+                      "TRUE` -- guess the color from the TV news flash; `copyvar VAR_0x8004, "
+                      "VAR_RESULT`; `special InitRoamer`) -> src/roamer.c:105-112 (InitRoamer: "
+                      "CreateInitialRoamerMon(gSpecialVar_0x8004)) -> src/roamer.c:84-92 "
+                      "(CreateInitialRoamerMon: SPECIES_LATIAS if the multichoice result is 0 "
+                      "('Red'), SPECIES_LATIOS if 1 ('Blue'); level 40 at :92); the VAR_0x8008 "
+                      "MALE/FEMALE branches in players_house.inc gate only which parent-sprite "
+                      "dialogue plays, not the roamer species; tracked in the ROAMER save-block "
+                      "struct, not a FLAG_*; RECORDED LIMIT: no single mapGroup:mapNum -- a roaming "
+                      "encounter cannot be expressed as one static row",
         },
     ]
 
@@ -335,6 +342,26 @@ def generate_statics():
     #     out of scope for the Emerald RC (PLAN.md section 0 "Scope (Emerald RC)").
     #   - Eon Ticket / Southern Island (Latias-or-Latios *choice* gift, as opposed to the roamer
     #     above): event-distribution only in vanilla Emerald, no in-game trigger; not a card here.
+    #   - Fortree City / Lilycove City House1 / Sootopolis City House1 "Kecleon": none of the three
+    #     is an encounter -- each is just an NPC that plays the Kecleon cry and a message, then
+    #     either flees (Fortree) or does nothing else (the two House1 NPCs). No setwildbattle /
+    #     dowildbattle / givemon / seteventmon anywhere on any of the three maps.
+    #       * data/maps/FortreeCity/scripts.inc:55-84 (FortreeCity_EventScript_Kecleon ->
+    #         ...AskUseDevonScope -> ...UseDevonScope: playmoncry SPECIES_KECLEON, CRY_MODE_ENCOUNTER
+    #         at :76, applymovement .../FortreeCity_Movement_KecleonFlee, removeobject, then
+    #         `setflag FLAG_KECLEON_FLED_FORTREE` at :82 -- a one-way flee, not a catch); the
+    #         object's own hide flag is FLAG_HIDE_FORTREE_CITY_KECLEON (map.json:117).
+    #       * data/maps/LilycoveCity_House1/scripts.inc:8-16 (LilycoveCity_House1_EventScript_
+    #         Kecleon: playmoncry SPECIES_KECLEON, CRY_MODE_NORMAL at :12, msgbox, release -- no
+    #         battle, no flag at all).
+    #       * data/maps/SootopolisCity_House1/scripts.inc:21-29 (SootopolisCity_House1_EventScript_
+    #         Kecleon: playmoncry SPECIES_KECLEON, CRY_MODE_NORMAL at :25, msgbox, release -- same
+    #         shape as Lilycove, no battle, no flag).
+    #     Not statics, removed (previously miscatalogued as kecleon_fortree_city /
+    #     kecleon_lilycove_house1 / kecleon_sootopolis_house1 with an unverified level). The real
+    #     catchable Kecleon are the Devon-Scope roamers on Route 119 and Route 120
+    #     (data/scripts/kecleon.inc) plus the scripted Route 120 bridge Kecleon with Steven -- see
+    #     the kecleon_* rows above.
 
     out = {
         "_source": f"pret/pokeemerald @ {PRET_COMMIT}",
