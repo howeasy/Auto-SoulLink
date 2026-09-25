@@ -30,10 +30,17 @@ only) and SLink's fork of it, ``4.6.1-slink3`` (built by tools/build_upr_fork.py
 .cache/slink-upr, docs/purergb/PLAN.md §6 M5), which is the only jar that may randomize the
 pureRGB family: its entries are lossless and field-scoped, the stock jar has no entry for
 those cartridges at all. The fork is recognised by the entries it carries, not by its name.
+
+WHICH JAR MAY RUN AT ALL. ``java -jar`` runs whatever code the jar holds, and the jar path
+can come from a browser, so a jar runs only when its SHA-256 is in data/upr_jars.json (the
+SLink builds, labelled; tools/build_upr_fork.py --pin adds a new build). jar_is_trusted is
+checked by randomize() before Java starts and reported by preflight(); jar_is_fork is a
+separate capability check and says nothing about trust -- its INI marker is forgeable.
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -116,6 +123,56 @@ def jar_fork_revision(jar: str) -> int:
         return 0
     revs = [int(m) for m in re.findall(r"^SlinkForkRevision=(\d+)", text, flags=re.MULTILINE)]
     return min(revs) if revs else 0
+
+
+_REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+UPR_JAR_ALLOWLIST = os.path.join(_REPO, "data", "upr_jars.json")
+
+
+def trusted_jars() -> dict[str, str]:
+    """sha256 -> label of every jar allowed to run (data/upr_jars.json holds label ->
+    sha256). Read on every call: a `build_upr_fork.py --pin` build is admitted without a
+    Manager restart, and the file is a few hundred bytes."""
+    try:
+        with open(UPR_JAR_ALLOWLIST, encoding="utf-8") as f:
+            return {str(h).lower(): label for label, h in json.load(f).items()}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def jar_sha256(jar: str) -> str | None:
+    """SHA-256 of the file the path really names (symlinks resolved), or None when it is
+    not a readable regular file. A UNC path is refused before any I/O: a share the
+    requester controls could serve one file to the hash and another to Java.
+    ponytail: no (path, mtime, size) cache -- hashing the 1.1 MB jar takes ~1 ms."""
+    if not jar or str(jar).replace("/", "\\").startswith("\\\\"):
+        return None
+    real = os.path.realpath(jar)
+    if not os.path.isfile(real):
+        return None
+    h = hashlib.sha256()
+    try:
+        with open(real, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+    except OSError:
+        return None
+    return h.hexdigest()
+
+
+def jar_is_trusted(jar: str) -> bool:
+    """True only for a jar whose SHA-256 is in data/upr_jars.json."""
+    digest = jar_sha256(jar)
+    return digest is not None and digest in trusted_jars()
+
+
+def untrusted_jar_message(jar: str) -> str:
+    digest = jar_sha256(jar)
+    what = f"sha256 {digest}" if digest else "not a readable local file"
+    return (f"unknown randomizer build: {jar} ({what}) is not one of the SLink UPR jars in "
+            f"data/upr_jars.json, so Java was not started. Build the fork with "
+            f"`python tools/build_upr_fork.py --pin`, or add the hash to data/upr_jars.json "
+            f"if you trust this jar.")
 
 
 def jar_is_fork(jar: str) -> bool:
@@ -301,6 +358,11 @@ def preflight(jar: str, sources: dict[str, str], java: str = "java") -> dict:
     randomize() checks the same things, but 600 s deep inside a worker."""
     out = {"jar": jar, "jar_found": bool(jar) and os.path.exists(jar),
            "java_found": bool(shutil.which(java)), "roms": {}, "ok": True}
+    # trust (the jar's hash is pinned) is not the fork capability below: an unknown jar is
+    # refused whatever it claims to be, and the page can say so before the button
+    out["jar_trusted"] = out["jar_found"] and jar_is_trusted(jar)
+    if out["jar_found"] and not out["jar_trusted"]:
+        out["jar_error"] = untrusted_jar_message(jar)
     out["jar_fork"] = out["jar_found"] and jar_is_fork(jar)
     # the sections the jar can randomize under -- the Cartridges form checks a pure pick's
     # "<Variant> overlay (U)" entry here, before the button, instead of after a Java failure
@@ -309,7 +371,7 @@ def preflight(jar: str, sources: dict[str, str], java: str = "java") -> dict:
         info = describe_rom(path, out["jar_fork"])
         out["roms"][pid] = info
         out["ok"] = out["ok"] and info["exists"] and bool(info["clean"])
-    out["ok"] = out["ok"] and out["jar_found"] and out["java_found"]
+    out["ok"] = out["ok"] and out["jar_trusted"] and out["java_found"]
     return out
 
 
@@ -366,6 +428,11 @@ def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,
             f"(tools/build_upr_fork.py, patch/upr) -- UPR would otherwise fail reading "
             f"base stats, or fall back to the vanilla entry")
 
+    # the one gate in front of every `java -jar`, last so nothing else can come between the
+    # hash and the launch; Java is handed the real path that was hashed
+    jar = os.path.realpath(jar)
+    if not jar_is_trusted(jar):
+        raise UprPipelineError(untrusted_jar_message(jar))
     before = set(os.listdir(os.path.dirname(os.path.abspath(output_rom)) or "."))
     proc = _run_bounded(
         [java, "-jar", jar, "cli", "-s", settings_path, "-i", source_rom,
