@@ -144,8 +144,11 @@ def _build_mon_entry(key, detail, adapter):
     sid = detail.get("species_id", 0)
     if not sid:
         return None
-    # Every name leaves in the calc's spelling (adapter.calc_name) — the calc matches exactly.
-    species = adapter.calc_name("species", adapter.species_name(sid))
+    # Every name leaves in the calc's spelling. calc_species (not the species_name+calc_name
+    # pair directly) so an adapter whose display name and calc name diverge for the same id
+    # (pureRGB's 7 alternate forms, which display in-game with their base species' name) can
+    # override just the calc-facing lookup — see base.GamePresentationAdapter.calc_species.
+    species = adapter.calc_species(sid)
     # Nature/ability are adapter facts: Gen 1/2 have no personality-value nature
     # (calc_nature() returns None) and no abilities at all (supports_abilities() False).
     nature = adapter.calc_nature(key)
@@ -164,8 +167,11 @@ def _build_mon_entry(key, detail, adapter):
     level    = detail.get("level", 0)
     nick     = detail.get("nickname", "")
     hp       = detail.get("hp", 0)
-    maxhp    = max(detail.get("maxHP", 1), 1)
-    hp_pct   = max(0, min(100, int(hp / maxhp * 100)))
+    # maxHP is only absent for a Gen 1 enemy the client hasn't decoded yet (docs/protocol.md
+    # §4.3 maxHP); null it through rather than the old max(..., 1) that forced hp_pct to 100.
+    raw_maxhp = detail.get("maxHP")
+    maxhp    = max(raw_maxhp, 1) if raw_maxhp else None
+    hp_pct   = max(0, min(100, int(hp / maxhp * 100))) if maxhp else None
     disp     = f"{species} ({nick})" if nick and nick != species else species
     lines    = [disp + (f" @ {item}" if item else "")]
     if has_ability:
@@ -192,6 +198,7 @@ def _build_mon_entry(key, detail, adapter):
         "slot":          detail.get("slot", 999),
         "active":        detail.get("active", False),
         "showdown_paste": "\n".join(lines),
+        "calc_stats":    detail.get("calc_stats"),
     }
 
 
@@ -1124,6 +1131,11 @@ class SLinkServer:
                     out[stat] = raw - 6
             return out
 
+        # Same shape /api/calc/mons sends (base.calc_stats contract): None when the adapter
+        # can't decode it. The enemy's raw dvs_raw/blob_hex ride along on dfn already --
+        # _enrich_battle_state's enemy_party is a shallow copy of the client's own dict --
+        # so this is the same call handle_calc_mons makes, no reconstruction needed.
+        enemy_calc_stats = adapter.calc_stats(dfn)
         return {
             "gen": profile.get("gen"),
             "dex": profile.get("dex"),
@@ -1139,11 +1151,14 @@ class SLinkServer:
             "player_hp_pct": atk["hp_pct"],
             "player_status": status(atk),
             "player_boosts": boosts(atk["stat_stages"]),
+            "player_calc_stats": atk["calc_stats"],
             "enemy_species": dfn.get("species_name") or "",
             "enemy_level": dfn.get("level", 0),
-            "enemy_hp_pct": max(0, min(100, int(dfn.get("hp", 0) / max(dfn.get("maxHP", 1), 1) * 100))),
+            "enemy_hp_pct": (max(0, min(100, int(dfn.get("hp", 0) / dfn["maxHP"] * 100)))
+                              if dfn.get("maxHP") else None),
             "enemy_status": status(dfn),
             "enemy_boosts": boosts(dfn.get("stat_stages")),
+            "enemy_calc_stats": enemy_calc_stats,
         }
 
     def _enc_table_for_status(self, area_id: str, player_id: str = "") -> dict | None:
@@ -1811,6 +1826,10 @@ class SLinkServer:
                 "active": mon.get("active", False),
                 "status_cond": mon.get("status_cond", 0),
                 "stat_stages": mon.get("stat_stages"),
+                # Small decoded dict (DVs/IVs/EVs/stat exp/computed stats), NOT the blob
+                # itself -- party_details goes out on every status push. None when the
+                # adapter can't decode it (box/linked mons, missing/bad blob_hex).
+                "calc_stats": adapter.calc_stats(mon),
             }
             for index, mon in enumerate(party) if mon.get("key")
         }
@@ -2868,20 +2887,31 @@ class SLinkServer:
                         "level":        em.get("level", 0),
                         "nickname":     "",
                         "hp":           em.get("hp", 0),
-                        "maxHP":        em.get("maxHP", 1),
+                        # No default: an enemy the client hasn't decoded a battle struct for
+                        # yet (or a generation that doesn't send one) stays maxHP=None, not a
+                        # fake maxHP=1 that used to force hp_pct to 100.
+                        "maxHP":        em.get("maxHP"),
                         "held_item_id": em.get("held_item_id", 0),
                         "ability_id":   em.get("ability_id", 0),
                         "ability_name": "",
                         "moves":        em.get("moves", []),
                         "status_cond":  em.get("status_cond", 0),
                         "stat_stages":  em.get("stat_stages"),
+                        # Gen 1 only (lua/gen1/client.lua enemy_party): dvs_raw from the live
+                        # wEnemyMon struct always; blob_hex (trainer battles only) additionally
+                        # carries stat exp. adapter.calc_stats() ignores both when absent.
+                        "dvs_raw":      em.get("dvs_raw"),
+                        "blob_hex":     em.get("blob_hex"),
+                        "pp":           em.get("pp"),
                     }
+                    detail["calc_stats"] = adapter.calc_stats(detail)
                     entry = _build_mon_entry(f"foe-{ei}", detail, adapter)
                     if entry:
                         entry["loc"]    = "enemy"
                         entry["active"] = em.get("active", False)
-                        entry["hp_pct"] = max(0, min(100, int(
-                            em.get("hp", 0) / max(em.get("maxHP", 1), 1) * 100)))
+                        entry["hp_pct"] = (
+                            max(0, min(100, int(em.get("hp", 0) / em["maxHP"] * 100)))
+                            if em.get("maxHP") else None)
                         entry["trainer_label"] = trainer_label
                         enemy.append(entry)
                 calc_label = _calc_trainer_label(

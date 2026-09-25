@@ -797,6 +797,13 @@ const RBY: {[name: string]: SpeciesData} = {
   },
 };
 
+// Captured immediately under a name unique across every compiled module sharing this page's
+// global scope (see setGen1Species below and calc/src/normal.template.html's <script> list):
+// `RBY` itself is a top-level `var` once compiled, and moves.ts/types.ts/abilities.ts/items.ts
+// each declare their OWN top-level `var RBY` too - in that shared scope the last one loaded wins,
+// so a lazy `data ?? RBY` read from setGen1Species would silently restore the wrong table.
+const VANILLA_GEN1_SPECIES = RBY;
+
 const GSC_PATCH: {[name: string]: DeepPartial<SpeciesData>} = {
   // gen 1 pokemon changes
   Abra: {bs: {sa: 105, sd: 55}},
@@ -10722,4 +10729,29 @@ for (const species of SPECIES) {
   }
   SPECIES_BY_ID.push(map);
   gen++;
+}
+
+// Gen 1's slot only - used by calc/calc/src/data/purergb.ts's useDex() to swap in pureRGB's own
+// species table (see docs/calc_multigen/PURERGB_MECHANICS.md) at runtime, and back out again.
+// SPECIES[1] alone can't just be reassigned from outside this module: Species#get/[Symbol.iterator]
+// read from the private SPECIES_BY_ID cache below, which is only ever (re)built here - and
+// SPECIES[1] itself needs to change too, since callers like calc/calc/src/index.ts's exported
+// SPECIES array (read directly by the frontend to populate species dropdowns) expect the swap to
+// show up there as well, not just through Species#get.
+export function setGen1Species(data: {[name: string]: SpeciesData} | null): void {
+  const next = data ?? VANILLA_GEN1_SPECIES;
+  SPECIES[1] = next;
+  // Specie's constructor reads the module-level `gen` loop variable above (not a constructor
+  // parameter!) to decide bs.sl vs bs.sa/bs.sd. By now that variable has settled at its final
+  // post-loop value (10), so without this save/restore every Gen 1 species built here would
+  // silently take the `gen >= 2` branch and read undefined bs.sa/bs.sd instead of bs.sl.
+  const savedGen = gen;
+  gen = 1;
+  const map: {[id: string]: Specie} = {};
+  for (const specie in next) {
+    const m = new Specie(specie, next[specie]);
+    map[m.id] = m;
+  }
+  gen = savedGen;
+  SPECIES_BY_ID[1] = map;
 }

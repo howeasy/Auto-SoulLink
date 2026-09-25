@@ -67,6 +67,14 @@ local function take(b, start, length)
     for i = 1, length do out[i] = b[start + i - 1] end
     return out
 end
+-- home/move_mon.asm:109-153: A/D/S/S nibbles, HP DV from their low bits. Shared by
+-- decode_party_mon (party/box records) and read_enemy_battle_mon (the live struct).
+local function dvs_from_raw(raw)
+    local atk, def = math.floor(raw / 4096) % 16, math.floor(raw / 256) % 16
+    local spd, spc = math.floor(raw / 16) % 16, raw % 16
+    return {raw = raw, atk = atk, def = def, spd = spd, spc = spc,
+            hp = (atk % 2) * 8 + (def % 2) * 4 + (spd % 2) * 2 + spc % 2}
+end
 
 function R.new(profile, io, Scanner)
     assert(type(profile) == "table" and type(profile.ram) == "table" and
@@ -91,12 +99,7 @@ function R.new(profile, io, Scanner)
         if #b ~= size then return nil, "record length disagrees with profile" end
         -- All word/three-byte fields are most-significant-byte first:
         -- home/move_mon.asm:39-43; engine/pokemon/experience.asm:11-24.
-        local raw = word(b, 28) -- pokemon_data_constants.asm:45
-        local atk, def = math.floor(raw / 4096) % 16, math.floor(raw / 256) % 16
-        local spd, spc = math.floor(raw / 16) % 16, raw % 16
-        local dvs = {raw = raw, atk = atk, def = def, spd = spd, spc = spc,
-                     hp = (atk % 2) * 8 + (def % 2) * 4 + (spd % 2) * 2 + spc % 2}
-        -- HP DV bit selection: home/move_mon.asm:109-153.
+        local dvs = dvs_from_raw(word(b, 28)) -- pokemon_data_constants.asm:45
         local mon = {
             box = not not box, species = b[1], hp = word(b, 2), box_level = b[4],
             level = box and b[4] or b[34], status = b[5], types = take(b, 6, 2),
@@ -291,6 +294,20 @@ function R.new(profile, io, Scanner)
                 -- from the vanilla profile, so absent from the vanilla table too
                 safari_type = a.wSafariType and io.read_u8(a.wSafariType) or nil,
                 functional_flags = a.wBattleFunctionalFlags and io.read_u8(a.wBattleFunctionalFlags) or nil}
+    end
+    -- The active wEnemyMon battle struct: 29 bytes, big-endian words, identical geometry in
+    -- pureRGB (macros/ram.asm:39-59; profile.ram.wEnemyMon == wEnemyMonSpecies, its first
+    -- byte). No profile aliases exist for DVs/MaxHP/PP -- only fixed offsets from wEnemyMon,
+    -- unlike decode_party_mon's named struct. party_pos is wEnemyMonPartyPos (offset +3):
+    -- valid only once EnemySendOutFirstMon has settled it (see client.lua's RIVAL_* comment);
+    -- callers must range-check it before indexing wEnemyMons with it.
+    function r.read_enemy_battle_mon()
+        local b = io.read_range(a.wEnemyMon, 29)
+        local pp = {}
+        for i = 1, 4 do pp[i] = b[25 + i] % 64 end -- pokemon_data_constants.asm:100-102
+        return {species = b[1], party_pos = b[4], status = b[5],
+                moves = take(b, 9, 4), dvs = dvs_from_raw(word(b, 13)), level = b[15],
+                max_hp = word(b, 16), pp = pp}
     end
     -- Daycare: one full party-mon record at wDayCareMon (PLAN §4 row 24 / A7); nil when the
     -- profile has no symbol. The struct is the party shape, so decode_party_mon is the decoder.

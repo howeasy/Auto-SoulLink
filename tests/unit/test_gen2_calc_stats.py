@@ -104,4 +104,6 @@ def test_calc_stats_never_raises_on_malformed_detail():
 
 def test_calc_profile_all_titles():
     for title in ("crystal", "gold", "silver"):
-        assert Gen2GSCAdapter(title=title).calc_profile() == {"gen": 2, "dex": "vanilla"}
+        profile = Gen2GSCAdapter(title=title).calc_profile()
+        sets = {"sets": {"file": "Crystal.js", "var": "CUSTOMSETDEX_C"}} if title == "crystal" else {}
+        assert profile == {"gen": 2, "dex": "vanilla", **sets}

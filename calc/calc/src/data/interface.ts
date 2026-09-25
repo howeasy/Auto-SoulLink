@@ -25,17 +25,16 @@ export type NatureName =
   'Modest' | 'Naive' | 'Naughty' | 'Quiet' | 'Quirky' |
   'Rash' | 'Relaxed' | 'Sassy' | 'Serious' | 'Timid';
 
-// pureRGB's 6 extra Gen 1 types (Crystal, Bonemerang, Tri, Floating, Magma, Typeless -
-// docs/calc_multigen/PURERGB_MECHANICS.md) are deliberately NOT added here. TypeName is closed
-// and used in several *exhaustive* (non-optional) per-type mappings outside this branch's files
-// (e.g. stats.ts's Hidden-Power-type IV/DV table), so widening it here breaks type-checking there
-// too - out of scope for this branch (see PURERGB_MECHANICS.md's "engine surgery" finding).
-// calc/calc/src/data/purergb.ts carries the 6 names as plain strings, cast at its boundary with
-// `as unknown as TypeName` instead.
+// pureRGB's 6 extra Gen 1 types (docs/calc_multigen/PURERGB_MECHANICS.md). TypeName is used in a
+// couple of *exhaustive* (non-optional) per-type mappings elsewhere (e.g. stats.ts's
+// Hidden-Power-type IV/DV table); those explicitly Exclude<> these 6 (Hidden Power doesn't exist
+// in Gen 1, so they can never apply anyway). Every other per-type mapping in the engine is already
+// optional (`[type in TypeName]?`), so widening here doesn't force new entries anywhere else.
 export type TypeName =
   'Normal' | 'Fighting' | 'Flying' | 'Poison' | 'Ground' | 'Rock' | 'Bug' | 'Ghost' | 'Steel' |
   'Fire' | 'Water' | 'Grass' | 'Electric' | 'Psychic' | 'Ice' | 'Dragon' | 'Dark' | 'Fairy' |
-  'Stellar' | '???';
+  'Stellar' | '???' |
+  'Crystal' | 'Bonemerang' | 'Tri' | 'Floating' | 'Magma' | 'Typeless';
 
 export type MoveCategory = 'Physical' | 'Special' | 'Status';
 

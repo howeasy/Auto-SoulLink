@@ -431,6 +431,59 @@ class Gen1Adapter(GameAdapter):
             return name
         return _CALC_NAMES.get(kind, {}).get(name, name)
 
+    def calc_profile(self) -> dict | None:
+        """Vanilla Gen 1 calc numbers are verified. Red/Blue share one vendored,
+        pret-verified trainer setdex; Yellow has its own (docs/calc_multigen/HANDOFF.md
+        task 5/8). Gen1PureRGBAdapter overrides this with its OWN dex ("purergb") and
+        setdex rather than disabling the calc; its known limits are in
+        docs/calc_multigen/PURERGB_MECHANICS.md."""
+        if self._variant == "yellow":
+            return {"gen": 1, "dex": "vanilla",
+                    "sets": {"file": "Yellow.js", "var": "CUSTOMSETDEX_Y"}}
+        return {"gen": 1, "dex": "vanilla",
+                "sets": {"file": "RedBlue.js", "var": "CUSTOMSETDEX_RB"}}
+
+    def calc_stats(self, detail: dict) -> dict | None:
+        """Decode DVs/stat exp/computed stats from a party blob (the 44-byte party
+        struct alone, or the 66-byte transfer blob with the OT/nick tail -- either
+        way only the first 44 bytes are read). Shared by pureRGB, whose blob layout
+        is identical (Gen1PureRGBAdapter.validate_party_blob decodes the same 44
+        bytes via the same gen1_codec).
+
+        gen1_codec's DV/stat_exp/stat dicts key the Speed field "spd" (home/move_mon.asm
+        nibble order); the calc_stats contract keys it "spe" -- map on the way out.
+
+        With no blob_hex but a `dvs_raw` word (a Gen 1 enemy's live wEnemyMon struct,
+        lua/gen1/client.lua enemy_party -- wild mons have no party record to read stat
+        exp from), return DVs decoded from the raw word and stat_exp all 0. No "stats"
+        key: the in-game computed stats are unknown without the party record.
+        """
+        blob_hex = detail.get("blob_hex")
+        if blob_hex:
+            try:
+                blob = bytes.fromhex(blob_hex) if isinstance(blob_hex, str) else blob_hex
+                mon = gen1_codec.decode_party_mon(bytes(blob[:gen1_codec.PARTY_MON_SIZE]))
+            except (ValueError, TypeError):
+                return None
+            dvs, exp = mon["dvs"], mon["stat_exp"]
+            return {
+                "dvs": {"atk": dvs["atk"], "def": dvs["def"], "spe": dvs["spd"], "spc": dvs["spc"]},
+                "stat_exp": {"hp": exp["hp"], "atk": exp["atk"], "def": exp["def"],
+                             "spe": exp["spd"], "spc": exp["spc"]},
+                "stats": {"hp": mon["max_hp"], "atk": mon["atk"], "def": mon["def"],
+                          "spa": mon["spc"], "spd": mon["spc"], "spe": mon["spd"]},
+            }
+        dvs_raw = detail.get("dvs_raw")
+        if not isinstance(dvs_raw, int) or isinstance(dvs_raw, bool) or not 0 <= dvs_raw < 1 << 16:
+            return None
+        # home/move_mon.asm:109-153 nibble order, same as gen1_codec._dv_parts.
+        atk, def_ = (dvs_raw >> 12) & 0xF, (dvs_raw >> 8) & 0xF
+        spd, spc = (dvs_raw >> 4) & 0xF, dvs_raw & 0xF
+        return {
+            "dvs": {"atk": atk, "def": def_, "spe": spd, "spc": spc},
+            "stat_exp": {"hp": 0, "atk": 0, "def": 0, "spe": 0, "spc": 0},
+        }
+
     def area_display_name(self, area_id: str) -> str:
         if area_id in _AREA_NAMES:
             return _AREA_NAMES[area_id]

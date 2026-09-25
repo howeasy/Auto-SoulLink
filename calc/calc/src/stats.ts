@@ -14,7 +14,11 @@ const SV: StatID[] = GSC;
 export const STATS: Array<Array<StatID | 'spc'> | StatID[]> =
   [[], RBY, GSC, ADV, DPP, BW, XY, SM, SS, SV];
 
-type HPTypeName = Exclude<TypeName, 'Normal' | 'Fairy' | 'Stellar' | '???'>;
+// pureRGB's 6 extra Gen 1 types (docs/calc_multigen/PURERGB_MECHANICS.md) are excluded here too -
+// Hidden Power doesn't exist until Gen 2, and none of pureRGB's types apply there.
+type HPTypeName = Exclude<TypeName,
+  'Normal' | 'Fairy' | 'Stellar' | '???' |
+  'Crystal' | 'Bonemerang' | 'Tri' | 'Floating' | 'Magma' | 'Typeless'>;
 
 const HP_TYPES = [
   'Fighting', 'Flying', 'Poison', 'Ground', 'Rock', 'Bug', 'Ghost', 'Steel',
@@ -117,12 +121,9 @@ export const Stats = new (class {
     nature?: string
   ) {
     if (gen.num < 1 || gen.num > 9) throw new Error(`Invalid generation ${gen.num}`);
-    // NB: this entry point keeps treating `ev` as a no-op for gen < 3, same as before (existing
-    // callers, e.g. test/stats.test.ts, pass modern 0-252 EVs here for every gen and expect gen
-    // 1/2 to ignore them). Real Gen 1/2 stat experience (0-65535) is threaded through
-    // calcStatRBY/calcStatRBYFromDV directly - see pokemon.ts calcStat, which calls those instead
-    // of this method for gen < 3.
-    if (gen.num < 3) return this.calcStatRBY(stat, base, iv, level);
+    // SLink: in Gen 1/2 `ev` is raw stat experience (0-65535), the same meaning Pokemon uses, so
+    // the UI's stat totals (shared_controls calcStat) match the damage calc.
+    if (gen.num < 3) return this.calcStatRBY(stat, base, iv, level, ev);
     return this.calcStatADV(gen.natures, stat, base, iv, ev, level, nature);
   }
 

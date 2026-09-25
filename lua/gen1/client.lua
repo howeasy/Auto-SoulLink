@@ -293,6 +293,19 @@ function Client.new(p)
         end
         local stages = reads.read_stat_stages("enemy")
         if stages then foe.stat_stages = arr(wire_stages(stages)) end
+        -- The live wEnemyMon struct is populated in wild AND trainer battles: moves, status
+        -- and DVs always (maxHP stays the plausibility-gated read above). Only trainer battles have a party record to read stat exp
+        -- from (wild wEnemyMons is a union with wild-encounter data -- HANDOFF task 6/
+        -- reads.lua's read_enemy_battle_mon comment), so blob_hex is gated on is_trainer AND
+        -- a party_pos the send-out has actually settled (see RIVAL_* window comment above).
+        local bm = reads.read_enemy_battle_mon()
+        foe.moves = arr(bm.moves)
+        foe.status_cond, foe.dvs_raw, foe.pp = bm.status, bm.dvs.raw, arr(bm.pp)
+        if battle.is_trainer and bm.party_pos >= 0 and bm.party_pos < d.party_capacity then
+            local blob = io.read_range(profile.ram.wEnemyMons + bm.party_pos * d.party_struct_size,
+                                        d.party_struct_size, "System Bus")
+            foe.blob_hex = hex_of(blob)
+        end
         return arr({ foe })
     end
 

@@ -119,3 +119,11 @@ The following were present in the upstream fork but have been removed from this 
 - Base: [RadicalRedShowdown/damage-calc](https://github.com/RadicalRedShowdown/damage-calc)
 - Original: [smogon/damage-calc](https://github.com/smogon/damage-calc) by Honko, maintained by Austin and Kris
 
+---
+
+## Vendored Trainer Sets
+
+`src/js/data/sets/games/{RedBlue,Yellow,Crystal,FRLG,Emerald}.js` are trainer-set dumps vendored from [KinglerChamp/VanillaNuzlockeCalc](https://github.com/KinglerChamp/VanillaNuzlockeCalc) @ `54ed9713ca0fed4d92fb50ee153e9e9c5f4bb4a8` (MIT licensed). Gold/Silver and Ruby/Sapphire were not carried over since SLink's calc doesn't support those games.
+
+We don't trust vendored data blindly: `tests/unit/test_calc_trainer_sets.py` parses each file independently and checks species, level, and (where pret encodes them) movesets and trainer-class DVs against the [pret](https://github.com/pret) decompilations (`pokered`, `pokeyellow`, `pokecrystal`, `pokefirered`) in `.cache/pret`. A handful of confirmed vendor mistakes (wrong DVs, wrong levels) were fixed directly in these files — see each file's own header comment for the specifics. Emerald has no local `pokeemerald` checkout to verify against, so it's vendored as-is and unchecked.
+

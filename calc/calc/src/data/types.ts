@@ -295,6 +295,11 @@ const RBY: TypeChart = {
   },
 };
 
+// See species.ts's VANILLA_GEN1_SPECIES for why this is captured under a unique name instead of
+// letting setGen1TypeChart fall back to the bare (compiled-to-global, cross-module-colliding)
+// `RBY`.
+const VANILLA_GEN1_TYPES = RBY;
+
 const GSC: TypeChart = extend(true, {}, RBY, {
   '???': {Dark: 1, Steel: 1},
   Normal: {Dark: 1, Steel: 0.5},
@@ -482,7 +487,7 @@ for (const typeChart of TYPE_CHART) {
 // again. TYPE_CHART[1]/TYPES_BY_ID[1] can't just be reassigned from outside this module: the
 // Types class reads from the private TYPES_BY_ID cache below, which is only ever built here.
 export function setGen1TypeChart(chart: TypeChart | null): void {
-  const next = chart ?? RBY;
+  const next = chart ?? VANILLA_GEN1_TYPES;
   TYPE_CHART[1] = next;
   const map: {[id: string]: Type} = {};
   for (const type in next) {

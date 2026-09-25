@@ -9,6 +9,7 @@ import pytest
 
 from server.adapters.gen1_rby import Gen1Adapter
 from server.adapters.gen3_frlge import Gen3Adapter
+from server.adapters.gen4_hgsspt import Gen4Adapter
 from server.manager import _calc_profile_for_run
 from server.server import SLinkServer
 
@@ -17,13 +18,38 @@ def test_rr_adapter_calc_profile():
     assert Gen3Adapter(is_rr=True).calc_profile() == {"gen": 9, "dex": "rr"}
 
 
-def test_vanilla_frlg_adapter_calc_profile_is_none():
-    assert Gen3Adapter(is_rr=False).calc_profile() is None
+def test_vanilla_frlg_adapter_calc_profile_has_sets():
+    assert Gen3Adapter(is_rr=False).calc_profile() == {
+        "gen": 3, "dex": "vanilla",
+        "sets": {"file": "FRLG.js", "var": "CUSTOMSETDEX_FRLG"},
+    }
+
+
+def test_gen1_adapter_calc_profile_has_sets_per_variant():
+    assert Gen1Adapter(rom_type="red").calc_profile() == {
+        "gen": 1, "dex": "vanilla",
+        "sets": {"file": "RedBlue.js", "var": "CUSTOMSETDEX_RB"},
+    }
+    assert Gen1Adapter(rom_type="blue").calc_profile() == {
+        "gen": 1, "dex": "vanilla",
+        "sets": {"file": "RedBlue.js", "var": "CUSTOMSETDEX_RB"},
+    }
+    assert Gen1Adapter(rom_type="yellow").calc_profile() == {
+        "gen": 1, "dex": "vanilla",
+        "sets": {"file": "Yellow.js", "var": "CUSTOMSETDEX_Y"},
+    }
+
+
+def test_purergb_adapter_calc_profile_is_its_own_dex():
+    # Gen1PureRGBAdapter subclasses Gen1Adapter; it must not inherit the vanilla dex/sets.
+    from server.adapters.gen1_purergb import Gen1PureRGBAdapter
+    assert Gen1PureRGBAdapter().calc_profile() == {
+        "gen": 1, "dex": "purergb", "sets": {"file": "PureRGB.js", "var": "CUSTOMSETDEX_PURERGB"}}
 
 
 def test_base_default_calc_profile_is_none():
-    # Gen1Adapter does not override calc_profile; this exercises the base inert default.
-    assert Gen1Adapter().calc_profile() is None
+    # Gen4Adapter does not override calc_profile; this exercises the base inert default.
+    assert Gen4Adapter().calc_profile() is None
 
 
 def test_calc_profile_for_run_rr_live_rom_type():
@@ -32,10 +58,13 @@ def test_calc_profile_for_run_rr_live_rom_type():
     assert _calc_profile_for_run(run, status) == {"gen": 9, "dex": "rr"}
 
 
-def test_calc_profile_for_run_vanilla_is_none():
+def test_calc_profile_for_run_vanilla_has_sets():
     run = {"game": ""}
     status = {"players": {"a": {"rom_type": "firered"}, "b": {"rom_type": "firered"}}}
-    assert _calc_profile_for_run(run, status) is None
+    assert _calc_profile_for_run(run, status) == {
+        "gen": 3, "dex": "vanilla",
+        "sets": {"file": "FRLG.js", "var": "CUSTOMSETDEX_FRLG"},
+    }
 
 
 def test_calc_profile_for_run_disagreement_is_none():
@@ -48,7 +77,12 @@ def test_calc_profile_for_run_falls_back_to_declared_family():
     """Before either player says hello (a stopped run, or one that just started), the
     run's declared game family stands in for a live rom_type."""
     assert _calc_profile_for_run({"game": "gen3_rr"}, {"players": {}}) == {"gen": 9, "dex": "rr"}
-    assert _calc_profile_for_run({"game": "gen1"}, {"players": {}}) is None
+    # "gen1"'s declared-family fallback picks members[0]; get_adapter only forwards
+    # is_rr (not rom_type), so Gen1Adapter always builds as its "red" default here.
+    assert _calc_profile_for_run({"game": "gen1"}, {"players": {}}) == {
+        "gen": 1, "dex": "vanilla",
+        "sets": {"file": "RedBlue.js", "var": "CUSTOMSETDEX_RB"},
+    }
 
 
 def test_calc_profile_for_run_never_raises():
@@ -85,10 +119,14 @@ async def test_calc_mons_includes_calc_key_for_rr(tmp_path):
 
 @pytest.mark.asyncio
 async def test_calc_mons_calc_key_is_none_for_unverified_game(tmp_path):
+    """Gen 1 is now verified (task 1/5), so this needs an adapter that genuinely stays
+    unverified: force both players onto Gen4Adapter (never flipped on) after populating."""
     from tests.unit.populated_server import populate
 
     srv = SLinkServer(data_dir=str(tmp_path))
-    close = await populate(srv, "gen1")  # Gen 1: calc_profile() not verified, stays None
+    close = await populate(srv, "gen1")
+    srv.adapter = Gen4Adapter()
+    srv._player_adapters.clear()
     try:
         resp = await srv.handle_calc_mons(None)
         body = json.loads(resp.text)
@@ -119,9 +157,11 @@ async def test_calc_mons_uses_per_player_adapter(tmp_path):
 
 
 def test_calc_tab_hidden_when_profile_is_none(tmp_path):
-    """A fresh standalone server defaults to vanilla FRLG (is_rr=False): calc_profile()
-    is None, so the rail hides the Calc link."""
+    """A game with no verified calc numbers (Gen 4, never flipped on) hides the rail's
+    Calc link. Vanilla FRLG is no longer a stand-in for "unverified" -- its numbers are
+    verified as of task 1/5 -- so this sets an adapter whose calc_profile() stays None."""
     srv = SLinkServer(data_dir=str(tmp_path))
+    srv.adapter = Gen4Adapter()
     assert srv._calc_profile() is None
     assert srv._rail_ctx()["show_calc"] is False
 
@@ -137,3 +177,8 @@ async def test_calc_tab_shown_for_rr(tmp_path):
         assert srv._rail_ctx()["show_calc"] is True
     finally:
         await close()
+
+def test_emerald_adapter_uses_emerald_sets():
+    from server.adapters.gen3_frlge import Gen3Adapter
+    assert Gen3Adapter(rom_type="emerald").calc_profile()["sets"] == {"file": "Emerald.js", "var": "CUSTOMSETDEX_E"}
+    assert _calc_profile_for_run({"game": "gen3_e"}, {"players": {}})["sets"]["file"] == "Emerald.js"

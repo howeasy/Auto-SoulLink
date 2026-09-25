@@ -350,7 +350,11 @@ class Gen2GSCAdapter(GameAdapter):
     def calc_profile(self):
         # Crystal/Gold/Silver all decode through the same verified party-struct codec
         # (gen2_codec) and share one GSC calc name table -- the numbers are trustworthy
-        # for all three titles this adapter serves.
+        # for all three titles this adapter serves. Trainer sets: only Crystal's are vendored
+        # and pret-checked (calc/src/js/data/sets/games/Crystal.js, test_calc_trainer_sets.py);
+        # Gold/Silver rosters differ, so they get none rather than Crystal's.
+        if self.title == "crystal":
+            return {"gen": 2, "dex": "vanilla", "sets": {"file": "Crystal.js", "var": "CUSTOMSETDEX_C"}}
         return {"gen": 2, "dex": "vanilla"}
 
     def calc_stats(self, detail):

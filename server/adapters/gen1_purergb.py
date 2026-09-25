@@ -50,6 +50,19 @@ _ROM_VARIANT = {
 }
 _STATIC_ID = re.compile(r"static_(\d+)_(\d+)\Z")
 
+# internal species id -> the exact disambiguated calc species name calc/calc/src/data/purergb.ts
+# uses for pureRGB's 7 alternate forms (tools/gen_purergb_calc_patch.py's build_form_names, from
+# constants/pokemon_constants.asm's compile-time symbol per form, Title Cased). species_name()
+# below can't return these directly -- it must keep returning the SAME text as the form's base
+# species (e.g. species_name(172) == species_name(34) == "Onix"), because that's what the ROM
+# itself displays in-game for a form; only the calc-facing name needs to be unique. See
+# docs/calc_multigen/PURERGB_MECHANICS.md §2 for the full trace (species_index.json's own "name"
+# field for every one of these 7 is literally the base species' all-caps name too).
+_FORM_CALC_NAMES = {
+    52: "Volcanic Magmar", 56: "Floating Magneton", 94: "Winter Dragonair",
+    146: "Floating Weezing", 172: "Hardened Onix", 174: "Armored Mewtwo", 175: "Powered Haunter",
+}
+
 
 def _display_case(name: str) -> str:
     """Title-case an all-caps pack string (trainer classes, non-dex species names).
@@ -203,6 +216,12 @@ class Gen1PureRGBAdapter(Gen1Adapter):
             return national_species_name(entry["dex"], False)
         return _display_case(entry["name"])
 
+    def calc_species(self, species_id: int) -> str:
+        """The damage calc's species name -- diverges from species_name() only for the 7 forms
+        (base.GamePresentationAdapter.calc_species; _FORM_CALC_NAMES above has the full citation)."""
+        name = _FORM_CALC_NAMES.get(species_id)
+        return name if name else self.calc_name("species", self.species_name(species_id))
+
     def type_name(self, type_id: int) -> str:
         return self._type_names.get(type_id, f"Type #{type_id}")
 
@@ -311,6 +330,14 @@ class Gen1PureRGBAdapter(Gen1Adapter):
     def move_name(self, move_id: int) -> str:
         row = self._moves.get(move_id)
         return row["name"] if row else ""
+
+    def calc_profile(self) -> dict | None:
+        # Gen 1 rules on pureRGB's own dex (calc.useDex('purergb'): its types, moves, species
+        # and forms) with its generated trainer sets. Known limits (Defense Curl's
+        # super-effective block, the optional type-chart toggles, move side effects) are in
+        # docs/calc_multigen/PURERGB_MECHANICS.md.
+        return {"gen": 1, "dex": "purergb",
+                "sets": {"file": "PureRGB.js", "var": "CUSTOMSETDEX_PURERGB"}}
 
     def move_data(self, move_id: int) -> dict | None:
         row = self._moves.get(move_id)

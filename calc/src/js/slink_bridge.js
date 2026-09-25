@@ -86,6 +86,13 @@
   var _dex            = null;   // 'rr' | 'vanilla' | 'purergb' | null — from payload's calc.dex
   var _warnedMoves    = {};     // dedupe key -> true, for the unknown-move console.warn
 
+  // Non-RR trainer sets (task 5/8): the vendored, pret-verified setdex named by the
+  // payload's calc.sets = {file, var}. One flat setdex (no Normal/Hardcore split like RR).
+  var _gameSetdex        = null;  // window[calc.sets.var] once loaded
+  var _gameIndex         = {};    // _buildTrainerIndex(_gameSetdex), for the Prep tab
+  var _gameSetsLoadStarted = false;
+  var _gameSetsFile      = null;  // the file currently loaded/loading; a dex switch reloads
+
   // Prep tab state — mode is fixed to the current page (no cross-mode toggle)
   var _pageIsHC      = /hardcore/i.test(window.location.href);
   var _prepMode      = _pageIsHC ? 'hardcore' : 'normal';
@@ -154,6 +161,14 @@
     }
     _dex = calcInfo.dex || null;
     _updateModeToggleVisibility();
+    // pureRGB's engine export must be selected BEFORE the gen-1 radio switch below loads
+    // its pokedex; vanilla gen-1 needs the vanilla export back if a prior payload left
+    // 'purergb' selected. Guarded: a no-op until that worker wires calc.useDex onto the
+    // page. Only gen 1 has more than one dex flavour, so nothing to do for other gens.
+    if (typeof calc !== 'undefined' && calc && typeof calc.useDex === 'function') {
+      if (_dex === 'purergb') calc.useDex('purergb');
+      else if (calcInfo.gen === 1) calc.useDex('vanilla');
+    }
     var wantGen = calcInfo.gen;
     if (!wantGen || window.gen === wantGen) return;
     var $radio = window.$ && window.$('#gen' + wantGen);
@@ -171,6 +186,45 @@
     if (_setdexInitStarted || !_isRR()) return;
     _setdexInitStarted = true;
     initSetdex();
+  }
+
+  // Non-RR trainer sets (task 5/8): dynamically load the game's vendored setdex file the
+  // same way initSetdex loads normal.js/hardcore.js, once per calc.sets.file. RR keeps its
+  // own dual-file loader above; this only ever runs for the vanilla/purergb dex.
+  function _maybeLoadGameSets(calcInfo) {
+    if (_isRR()) return;
+    var sets = calcInfo && calcInfo.sets;
+    if (!sets || !sets.file || !sets.var) {
+      _setdexReady = true; // nothing to load: Prep tab / enrichment just has no sets
+      return;
+    }
+    if (_gameSetsLoadStarted && _gameSetsFile === sets.file) return;
+    _gameSetsLoadStarted = true;
+    _gameSetsFile = sets.file;
+
+    var s = document.createElement('script');
+    s.src = './js/data/sets/games/' + sets.file;
+    s.onload = function () {
+      _gameSetdex = window[sets.var] || {};
+      // Vendored Gen 1/2 trainer sets carry DVs but no stat exp; trainer mons have none
+      // (pret add_mon.asm / move_mon.asm zero it), so say so rather than default to max.
+      Object.keys(_gameSetdex).forEach(function (sp) {
+        Object.keys(_gameSetdex[sp]).forEach(function (k) {
+          var st = _gameSetdex[sp][k];
+          if (st.dvs && !st.stat_exp) st.stat_exp = { hp: 0, atk: 0, def: 0, spe: 0, spc: 0 };
+        });
+      });
+      _gameIndex  = _buildTrainerIndex(_gameSetdex, true); // skipSplit: vendored keys are per-fight already
+      _setdexReady = true;
+      _enrichEnemyMons();
+      refreshPanel();
+    };
+    s.onerror = function () {
+      console.warn('[SLink bridge] Failed to load trainer sets file: ' + sets.file);
+      _gameSetdex = null;
+      _setdexReady = true;
+    };
+    document.head.appendChild(s);
   }
 
   // ---------------------------------------------------------------------------
@@ -229,6 +283,17 @@
   // Difficulty badge detection + trainer party-composition matching
   // ---------------------------------------------------------------------------
 
+  // Bare trainer-set key: strips RR's "*Boss" prefix / " Set N" suffix (normal.js /
+  // hardcore.js convention), or, for the non-RR vendored "<Trainer label> | <place> |
+  // <game>" format (task 5/8), everything from the first " | " onward. RR keys never
+  // contain " | ", so this is a no-op change of shape for RR callers.
+  function _bareSetKey(setKey) {
+    var pipeIdx = setKey.indexOf(' | ');
+    if (pipeIdx !== -1) return setKey.slice(0, pipeIdx).trim();
+    var bare = setKey.charAt(0) === '*' ? setKey.slice(1) : setKey;
+    return bare.replace(/\s+Set\s+\d+$/i, '');
+  }
+
   /**
    * Given an enemy party array and a setdex, find the bare trainer set-key
    * (e.g. "Lass Anne") whose mons best match the enemy party by species+level.
@@ -236,13 +301,17 @@
    * Algorithm:
    *   For every species in the setdex, for every set key, tally how many
    *   enemy mons match that (setKey, level) pair.  The set key with the most
-   *   matches wins.  Ties are broken by fewest misses.
+   *   matches wins.  Ties are broken by fewest misses. A `preferredLabel` (the
+   *   payload's trainer_label, non-RR games only) short-circuits the tally when it
+   *   actually has at least one matching mon, so a trusted label wins over a
+   *   coincidental higher tally elsewhere.
    *
    * @param {Array}  enemyParty  [{species_name, level}, ...]
-   * @param {Object} setdex      SETDEX_SV or SETDEX_HC
+   * @param {Object} setdex      SETDEX_SV, SETDEX_HC, or a non-RR game setdex
+   * @param {string} [preferredLabel]
    * @returns {string|null}      Bare set key ("Lass Anne") or null
    */
-  function _findTrainerKeyByParty(enemyParty, setdex) {
+  function _findTrainerKeyByParty(enemyParty, setdex, preferredLabel) {
     if (!enemyParty || !enemyParty.length || !setdex) return null;
 
     // tally[bareKey] = number of enemy mons that match a set entry under that key
@@ -254,13 +323,13 @@
       if (!sets) return;
       Object.keys(sets).forEach(function (setKey) {
         if (sets[setKey].level === em.level) {
-          var bare = setKey.charAt(0) === '*' ? setKey.slice(1) : setKey;
-          // Strip trailing " Set N" for multi-set trainers ("Rival Blue Set 1" → "Rival Blue")
-          var baseBare = bare.replace(/\s+Set\s+\d+$/i, '');
+          var baseBare = _bareSetKey(setKey);
           tally[baseBare] = (tally[baseBare] || 0) + 1;
         }
       });
     });
+
+    if (preferredLabel && tally[preferredLabel]) return preferredLabel;
 
     // Pick the key with the highest match count
     var bestKey = null, bestScore = 0;
@@ -294,9 +363,7 @@
         var sets = em.species_name && db[em.species_name];
         if (!sets) return;
         Object.keys(sets).forEach(function (sk) {
-          var bare = (sk.charAt(0) === '*' ? sk.slice(1) : sk)
-                      .replace(/\s+Set\s+\d+$/i, '');
-          if (bare === trainerKey && sets[sk].level === em.level) score++;
+          if (_bareSetKey(sk) === trainerKey && sets[sk].level === em.level) score++;
         });
       });
       return score;
@@ -373,8 +440,23 @@
    * For each enemy mon in _data, find the matching trainer set by party
    * composition and populate moves + rebuild the showdown paste.
    */
+  // Rebuild a mon's showdown_paste from its (possibly just-enriched) fields. Also what
+  // makes a party/enemy row clickable in _monRow (cursor + onclick both gate on it).
+  function _rebuildShowdownPaste(mon) {
+    var dispName = (mon.nickname && mon.nickname !== mon.species_name)
+      ? mon.species_name + ' (' + mon.nickname + ')'
+      : mon.species_name;
+    var lines = [dispName + (mon.item_name ? ' @ ' + mon.item_name : '')];
+    if (mon.ability_name) lines.push('Ability: ' + mon.ability_name);
+    lines.push('Level: ' + mon.level);
+    lines.push((mon.nature || 'Hardy') + ' Nature');
+    (mon.moves || []).forEach(function (m) { lines.push('- ' + m); });
+    mon.showdown_paste = lines.join('\n');
+  }
+
   function _enrichEnemyMons() {
-    if (!_data || !_isRR()) return; // RR trainer-set matching only; other games keep live data
+    if (!_data) return;
+    if (!_isRR()) { _enrichEnemyMonsGeneric(); return; }
 
     ['a', 'b'].forEach(function (side) {
       var pd = _data[side];
@@ -450,9 +532,7 @@
 
           var candidates = [];
           Object.keys(sets).forEach(function (setKey) {
-            var bare     = (setKey.charAt(0) === '*' ? setKey.slice(1) : setKey);
-            var baseBare = bare.replace(/\s+Set\s+\d+$/i, '');
-            if (baseBare === matchedKey) candidates.push({ key: setKey, set: sets[setKey] });
+            if (_bareSetKey(setKey) === matchedKey) candidates.push({ key: setKey, set: sets[setKey] });
           });
           if (!candidates.length) return;
 
@@ -471,17 +551,65 @@
         mon.item_name    = best.item    || mon.item_name    || '';
         mon._diff_mode   = mode;
         mon._matched_key = matchedKey;
+        _rebuildShowdownPaste(mon);
+      });
+    });
+  }
 
-        // Rebuild showdown paste
-        var dispName = (mon.nickname && mon.nickname !== mon.species_name)
-          ? mon.species_name + ' (' + mon.nickname + ')'
-          : mon.species_name;
-        var lines = [dispName + (mon.item_name ? ' @ ' + mon.item_name : '')];
-        if (mon.ability_name) lines.push('Ability: ' + mon.ability_name);
-        lines.push('Level: ' + mon.level);
-        lines.push((mon.nature || 'Hardy') + ' Nature');
-        mon.moves.forEach(function (m) { lines.push('- ' + m); });
-        mon.showdown_paste = lines.join('\n');
+  // Non-RR trainer-set matching (task 5/8): one flat setdex, no HC/Normal split, and
+  // trainer_label is tried before falling back to species+level party matching (same
+  // shape as RR's Method 1/2, minus the dual-difficulty machinery). Live data always
+  // wins: a mon that already carries moves or calc_stats (the Gen 1 active foe, task 6)
+  // keeps them; the set only fills in what the payload didn't send.
+  function _enrichEnemyMonsGeneric() {
+    if (!_gameSetdex) return;
+
+    ['a', 'b'].forEach(function (side) {
+      var pd = _data[side];
+      if (!pd || !pd.enemy || !pd.enemy.length) return;
+
+      var trainerLabel = (pd.enemy[0] && pd.enemy[0].trainer_label) || '';
+      if (!trainerLabel || trainerLabel === 'Wild') return;
+
+      var matchedKey = _findTrainerKeyByParty(pd.enemy, _gameSetdex, trainerLabel);
+      if (!matchedKey) return;
+
+      pd.enemy.forEach(function (mon) {
+        if (!mon.species_name) return;
+        var sets = _gameSetdex[mon.species_name];
+        if (!sets) return;
+
+        var candidates = [];
+        Object.keys(sets).forEach(function (setKey) {
+          if (_bareSetKey(setKey) === matchedKey) candidates.push({ key: setKey, set: sets[setKey] });
+        });
+        if (!candidates.length) return;
+        candidates.sort(function (a, b) {
+          return Math.abs((a.set.level || 0) - mon.level) - Math.abs((b.set.level || 0) - mon.level);
+        });
+        var best = candidates[0].set;
+
+        if (!mon.moves || !mon.moves.length) mon.moves = (best.moves || []).slice();
+        if (!mon.calc_stats) {
+          if (best.dvs) {
+            // Gen 1/2 vendored sets carry DVs, no stat exp (trainers have 0; HANDOFF task 5/8).
+            mon.calc_stats = {
+              dvs: { atk: best.dvs.at, def: best.dvs.df, spe: best.dvs.sp, spc: best.dvs.sa },
+              stat_exp: { hp: 0, atk: 0, def: 0, spe: 0, spc: 0 },
+            };
+          } else if (best.ivs) {
+            mon.calc_stats = {
+              ivs: { hp: best.ivs.hp, atk: best.ivs.at, def: best.ivs.df,
+                     spa: best.ivs.sa, spd: best.ivs.sd, spe: best.ivs.sp },
+            };
+          }
+        }
+        mon.nature       = mon.nature       || best.nature  || 'Hardy';
+        mon.ability_name = mon.ability_name || best.ability || '';
+        mon.item_name    = mon.item_name    || best.item    || '';
+        mon._diff_mode   = null; // no HC/Normal distinction outside RR
+        mon._matched_key = matchedKey;
+        _rebuildShowdownPaste(mon);
       });
     });
   }
@@ -583,24 +711,36 @@
    *   starred     + no Set N  → 'Boss'
    *   non-starred + Set N     → 'Set N'
    *   starred     + Set N     → 'Boss Set N'
+   *
+   * Non-RR vendored keys (task 5/8) have a different shape entirely — "<Trainer label> |
+   * <place> | <game>", one key per specific fight, no ace/Set-N convention — so each is
+   * its own '__base__' encounter under the label alone; skipSplit=true then skips the
+   * level-gap clustering below, which exists only to undo RR's flat multi-fight keys and
+   * would otherwise misfire on a single already-specific vendored team.
    */
-  function _buildTrainerIndex(setdex) {
+  function _buildTrainerIndex(setdex, skipSplit) {
     var index = {};
 
     Object.keys(setdex).forEach(function (species) {
       var sets = setdex[species];
       Object.keys(sets).forEach(function (setKey) {
-        var isAce   = setKey.charAt(0) === '*';
-        var bare    = isAce ? setKey.slice(1) : setKey;
-        var setNm   = bare.match(/\s+Set\s+(\d+)$/i);
-        var setNum  = setNm ? 'Set ' + setNm[1] : null;
-        var base    = setNm ? bare.slice(0, bare.length - setNm[0].length) : bare;
+        var pipeIdx = setKey.indexOf(' | ');
+        var base, encLabel;
+        if (pipeIdx !== -1) {
+          base     = setKey.slice(0, pipeIdx).trim();
+          encLabel = '__base__';
+        } else {
+          var isAce  = setKey.charAt(0) === '*';
+          var bare   = isAce ? setKey.slice(1) : setKey;
+          var setNm  = bare.match(/\s+Set\s+(\d+)$/i);
+          var setNum = setNm ? 'Set ' + setNm[1] : null;
+          base       = setNm ? bare.slice(0, bare.length - setNm[0].length) : bare;
 
-        var encLabel;
-        if (isAce && setNum)       encLabel = 'Boss ' + setNum;
-        else if (isAce)            encLabel = 'Boss';
-        else if (setNum)           encLabel = setNum;
-        else                       encLabel = '__base__';   // single / base encounter
+          if (isAce && setNum)       encLabel = 'Boss ' + setNum;
+          else if (isAce)            encLabel = 'Boss';
+          else if (setNum)           encLabel = setNum;
+          else                       encLabel = '__base__';   // single / base encounter
+        }
 
         if (!index[base]) index[base] = { encounters: {}, encounterOrder: [] };
         var tr = index[base];
@@ -615,10 +755,12 @@
       var tr  = index[base];
       var enc = tr.encounters;
 
-      // Split '__base__' mons by level-gap clusters (multi-fight trainers like Archer)
-      _splitEncounterGroup(tr, '__base__', /^Set\s+\d+$/i,       'Encounter ');
-      // Split 'Boss' mons similarly (starred multi-fight aces)
-      _splitEncounterGroup(tr, 'Boss',     /^Boss\s+Set\s+\d+$/i, 'Boss Encounter ');
+      if (!skipSplit) {
+        // Split '__base__' mons by level-gap clusters (multi-fight trainers like Archer)
+        _splitEncounterGroup(tr, '__base__', /^Set\s+\d+$/i,       'Encounter ');
+        // Split 'Boss' mons similarly (starred multi-fight aces)
+        _splitEncounterGroup(tr, 'Boss',     /^Boss\s+Set\s+\d+$/i, 'Boss Encounter ');
+      }
 
       // Sort mons within each encounter by level desc
       Object.keys(enc).forEach(function (lbl) {
@@ -645,6 +787,20 @@
     });
 
     return index;
+  }
+
+  // Whether the Prep tab has anything to show: RR's dual-difficulty index, or a non-RR
+  // game's loaded trainer sets (task 5/8). The HC/Normal mode toggle stays RR-only
+  // regardless (_updateModeToggleVisibility) — this only gates the tab's existence.
+  function _supportsPrepTab() {
+    if (_isRR()) return true;
+    return !!(_gameSetdex && Object.keys(_gameIndex).length);
+  }
+
+  // The trainer index driving the Prep tab for whichever game is active.
+  function _prepIndex() {
+    if (_isRR()) return _pageIsHC ? _trainerIndex.hc : _trainerIndex.nm;
+    return _gameIndex;
   }
 
   /**
@@ -796,6 +952,82 @@
     return name;
   }
 
+  // ---------------------------------------------------------------------------
+  // Real stat inputs (task 4): IVs/EVs (gen >= 3) or DVs/stat exp (gen 1/2), decoded
+  // by the adapter's calc_stats() from the live blob_hex. mon.calc_stats is null for
+  // box/linked/enemy mons or an unrecognised blob -- _loadMonIntoPanel then leaves the
+  // calc's Blank-Set defaults (31 IV / 0 EV, or 15 DV / max stat exp) alone, same as
+  // before this existed.
+  // ---------------------------------------------------------------------------
+
+  var STAT_ROW = { hp: 'hp', atk: 'at', def: 'df', spa: 'sa', spd: 'sd', spe: 'sp' };
+
+  function _applyCalcStats(pokeObj, mon) {
+    var cs = mon.calc_stats;
+    if (!cs) return;
+    var g = window.gen;
+    if (g >= 3) {
+      if (cs.ivs) {
+        for (var stat in cs.ivs) {
+          if (STAT_ROW[stat]) pokeObj.find('.' + STAT_ROW[stat] + ' .ivs').val(cs.ivs[stat]);
+        }
+      }
+      if (cs.evs) {
+        for (var stat2 in cs.evs) {
+          if (STAT_ROW[stat2]) pokeObj.find('.' + STAT_ROW[stat2] + ' .evs').val(cs.evs[stat2]);
+        }
+      }
+    } else if (cs.dvs) {
+      // Gen 1/2 DVs/stat exp: atk/def/spe map straight to their rows; Special (spc)
+      // goes to .sl in Gen 1 or both .sa/.sd in Gen 2 (one DV/stat-exp value covers
+      // both, same as the template's disabled .sd inputs). HP's DV derives from the
+      // other three's low bit (getHPDVs); its stat exp is independent, set directly.
+      var specRow = g === 1 ? '.sl' : '.sa';
+      pokeObj.find('.at .dvs').val(cs.dvs.atk);
+      pokeObj.find('.df .dvs').val(cs.dvs.def);
+      pokeObj.find('.sp .dvs').val(cs.dvs.spe);
+      pokeObj.find(specRow + ' .dvs').val(cs.dvs.spc);
+      if (g === 2) pokeObj.find('.sd .dvs').val(cs.dvs.spc);
+      pokeObj.find('.hp .dvs').val(getHPDVs(pokeObj));
+      if (cs.stat_exp) {
+        pokeObj.find('.hp .statexp').val(cs.stat_exp.hp);
+        pokeObj.find('.at .statexp').val(cs.stat_exp.atk);
+        pokeObj.find('.df .statexp').val(cs.stat_exp.def);
+        pokeObj.find('.sp .statexp').val(cs.stat_exp.spe);
+        pokeObj.find(specRow + ' .statexp').val(cs.stat_exp.spc);
+        if (g === 2) pokeObj.find('.sd .statexp').val(cs.stat_exp.spc);
+      }
+    } else {
+      return;
+    }
+    // Recompute this panel's stats the same way the template's own DV/IV/EV keyup
+    // handlers do, then compare against the game's own computed stats.
+    calcHP(pokeObj);
+    calcStats(pokeObj);
+    _warnStatMismatch(pokeObj, mon);
+  }
+
+  // Per-game "the numbers are right" signal: the calc's own computed total should
+  // match what the ROM actually stored for that stat. Gen 1 has no Sp. Atk/Sp. Def
+  // rows -- both map to .sl's total.
+  function _warnStatMismatch(pokeObj, mon) {
+    var cs = mon.calc_stats;
+    if (!cs || !cs.stats) return;
+    var g = window.gen;
+    var rows = g === 1
+      ? { hp: 'hp', atk: 'at', def: 'df', spa: 'sl', spd: 'sl', spe: 'sp' }
+      : STAT_ROW;
+    for (var stat in cs.stats) {
+      var row = rows[stat];
+      if (!row) continue;
+      var calc = parseInt(pokeObj.find('.' + row + ' .total').text(), 10);
+      var game = cs.stats[stat];
+      if (calc !== game) {
+        console.warn('[SLink bridge] stat mismatch', mon.species_name, stat, calc, game);
+      }
+    }
+  }
+
   /**
    * Directly populate a calc panel (#p1 or #p2) from a mon object.
    *
@@ -851,6 +1083,9 @@
       setTimeout(function () {
         try { ss.select2('container').find('.select2-chosen').text(namedId); } catch (e) {}
       }, 0);
+      // RR's own matched sets never carry calc_stats (task 4 only decodes it for the
+      // live party), so this is a no-op there; non-RR trainer sets do (task 5/8's DVs/IVs).
+      _applyCalcStats(pokeObj, mon);
       setTimeout(function () { _applyBattleState(pokeObj, mon); }, 0);
       showToast('✓ ' + species + ' (' + setName + ') → ' + (side === 'p1' ? 'Attacker' : 'Defender'), 'ok');
       return;
@@ -913,6 +1148,8 @@
       }
       moveObj.trigger('change');
     }
+
+    _applyCalcStats(pokeObj, mon);
 
     setTimeout(function () { _applyBattleState(pokeObj, mon); }, 0);
 
@@ -1183,8 +1420,9 @@
     body.innerHTML = '';
     if (_isCollapsed()) return;
 
-    // Prep tab is RR-only (trainer setdex); bounce off it once we know the game isn't RR.
-    if (_activeTab === 'prep' && !_isRR()) _activeTab = 'a';
+    // Prep tab needs a trainer setdex (RR's dual index, or a non-RR game's loaded sets);
+    // bounce off it once we know none is available for this game.
+    if (_activeTab === 'prep' && !_supportsPrepTab()) _activeTab = 'a';
 
     // Prep tab is available even without SLink data (it only needs the SETDEX)
     if (!_data && _activeTab !== 'prep') {
@@ -1193,8 +1431,8 @@
       msg.textContent = _fetching ? '⟳ Connecting to SLink...' : '⚠ No data';
       body.appendChild(msg);
 
-      // Still render tab row so user can switch to Prep (RR only)
-      if (_isRR()) {
+      // Still render tab row so user can switch to Prep, when this game has one
+      if (_supportsPrepTab()) {
         var tabRowFallback = ce('div');
         css(tabRowFallback, { display: 'flex', borderBottom: '1px solid ' + C.border, marginBottom: '4px' });
         var prepTabFb = ce('button');
@@ -1216,8 +1454,8 @@
     var tabRow = ce('div');
     css(tabRow, { display: 'flex', borderBottom: '1px solid ' + C.border });
 
-    // Prep tab (trainer prep) is RR-only.
-    var tabSides = _isRR() ? ['a', 'b', 'prep'] : ['a', 'b'];
+    // Prep tab (trainer prep) needs a loaded trainer setdex for this game.
+    var tabSides = _supportsPrepTab() ? ['a', 'b', 'prep'] : ['a', 'b'];
     tabSides.forEach(function (side, sideIdx) {
       var isPrep = side === 'prep';
       var pd     = (!isPrep && _data) ? _data[side] : null;
@@ -1365,12 +1603,10 @@
    *   Trainer party display with encounter sub-toggle
    */
   function _renderPrepTab(container) {
-    var activeIndex = _pageIsHC ? _trainerIndex.hc : _trainerIndex.nm;
+    var activeIndex = _prepIndex();
 
     // ── Custom search input with dropdown ───────────────────────────────────
-    var listNames = _pageIsHC
-      ? Object.keys(_trainerIndex.hc).sort()
-      : Object.keys(_trainerIndex.nm).sort();
+    var listNames = Object.keys(activeIndex).sort();
 
     var searchWrap = ce('div');
     css(searchWrap, { position: 'relative', marginBottom: '6px' });
@@ -2224,6 +2460,7 @@
         // both depend on the right gen's pokedex/setdex being loaded.
         _applyCalcGen(json.calc);
         _maybeInitSetdex();
+        _maybeLoadGameSets(json.calc);
         _normalizeAllSpeciesNames();
         _enrichEnemyMons();
         // Don't repaint while the user is typing inside the panel.

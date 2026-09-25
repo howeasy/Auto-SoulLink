@@ -150,21 +150,23 @@ async def test_sprites_carry_the_class_and_species_the_chroma_key_reads(dashboar
 
 @pytest.mark.asyncio
 async def test_calc_preview_is_one_element_per_battling_player(dashboard):
-    """`#calc-preview-{pid}[data-in-battle]` is read by calc-preview.js. Capability gated: a
-    generation without battle calc renders none, and rendering one there would be a lie
-    the script happily animates."""
+    """`#calc-preview-{pid}[data-in-battle]` is read by calc-preview.js. Capability gated on
+    `adapter.calc_profile()` (server.py `_calc_preview`): a generation without a verified
+    calc profile renders none, and rendering one there would be a lie the script happily
+    animates. Both fixture games (RR, and Gen 1 as of docs/calc_multigen/HANDOFF.md task
+    1/5) are verified, so both put player B's wild-Caterpie battle on the board."""
     srv, dom = dashboard
     previews = [n for n in dom.walk() if (n.get("id") or "").startswith("calc-preview-")]
     ids = [n.get("id") for n in previews]
     assert len(ids) == len(set(ids)), f"duplicate calc previews: {ids}"
-    if srv.state.is_rr:
-        assert ids == ["calc-preview-b"], "player B is mid-battle on the Radical Red cast"
+    if srv.adapter_for("b").calc_profile():
+        assert ids == ["calc-preview-b"], "player B is mid-battle against the wild Caterpie"
         for n in previews:
             assert "data-in-battle" in n.attrs
             moves = json.loads(n.get("data-calc"))["player_moves"]
             assert moves and all(isinstance(m, str) for m in moves), f"engine needs move names: {moves}"
     else:
-        assert not previews, "calc preview rendered for a generation without battle calc"
+        assert not previews, "calc preview rendered for a generation without a verified calc profile"
     # always loaded: an HTMX swap cannot add it later, and it is a no-op out of battle
     assert dom.find("script", src="/static/calc-preview.js"), "the preview script is not loaded"
 
