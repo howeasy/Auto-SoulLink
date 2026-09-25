@@ -707,8 +707,14 @@ class SLinkServer:
         if player_key is None or player_key == own_key():
             self._player_adapters.pop(player_id, None)
             return
+        # F5 (Codex cx-2985fe38): pass the run's COMMITTED artifact kind, not a bare
+        # constructor default -- an overlay-committed run must build its partner's adapter
+        # with overlay capabilities too, not the "clean" a bare get_adapter() call defaults
+        # to. Called only after the artifact_kind commit point in `_dispatch`, so on the
+        # very first hello that commits it, this already sees the just-committed value.
         self._player_adapters[player_id] = get_adapter(
-            game_id_for_rom_type(rom_type), is_rr=rom_type.endswith("_rr"), rom_type=rom_type)
+            game_id_for_rom_type(rom_type), is_rr=rom_type.endswith("_rr"), rom_type=rom_type,
+            artifact_kind=self.state.artifact_kind or "clean")
         log.info(f"[{player_id}] per-player adapter bound to {player_key!r} "
                  f"(run adapter is {own_key()!r})")
 
@@ -796,8 +802,8 @@ class SLinkServer:
             nm_key = brief.get("name", "").title() or f"#{rt_id}"
             cap = None
             fl = brief.get("fight_label") or ""
-            if hasattr(self.adapter, "milestone_cap_for_fight_label"):
-                cap = self.adapter.milestone_cap_for_fight_label(fl)
+            if hasattr(adapter, "milestone_cap_for_fight_label"):
+                cap = adapter.milestone_cap_for_fight_label(fl)
             if cap is None:
                 cap = brief.get("level_cap") or 0
             cap_bucket = (cap or 0) // _CAP_BUCKET
@@ -835,8 +841,8 @@ class SLinkServer:
             _, b = group_list[0]
             fl = b.get("fight_label") or ""
             c = None
-            if hasattr(self.adapter, "milestone_cap_for_fight_label"):
-                c = self.adapter.milestone_cap_for_fight_label(fl)
+            if hasattr(adapter, "milestone_cap_for_fight_label"):
+                c = adapter.milestone_cap_for_fight_label(fl)
             return c if c is not None else (b.get("level_cap") or 0)
 
         if highest_party_level > 0:
@@ -887,8 +893,8 @@ class SLinkServer:
         _CURRENT_WINDOW = 10
         def _classify_fight(fight_brief: dict) -> tuple[str, int | None]:
             fl = fight_brief.get("fight_label") or ""
-            cap = self.adapter.milestone_cap_for_fight_label(fl) \
-                  if hasattr(self.adapter, "milestone_cap_for_fight_label") else None
+            cap = adapter.milestone_cap_for_fight_label(fl) \
+                  if hasattr(adapter, "milestone_cap_for_fight_label") else None
             if cap is None or highest_party_level <= 0:
                 return ("unknown", cap)
             if highest_party_level >= cap + _CURRENT_WINDOW:
@@ -1453,51 +1459,19 @@ class SLinkServer:
                         }])
                         self._notify_sse()
                         continue
-                    # recorded only once the hello routes and pairs: a refused one leaves it as it was
-                    self.connected_players[player_id]["rom_type"] = _rt
+                    # A hello that routes and pairs still has not been ADMITTED (ROM contract)
+                    # or ACCEPTED (save identity) — both are decided inside `_dispatch`, on the
+                    # committed run state, not on a candidate ROM report. Only the routing-level
+                    # rejection marker is ours to clear here (Codex cx-2985fe38 F2): the
+                    # rom_type/panel/panel_abi/sfx facts and the adapter are STAGED by
+                    # `_dispatch`'s "hello" branch and committed only on acceptance, so a
+                    # contract- or identity-rejected hello leaves connected_players and the
+                    # adapter exactly as they were.
                     if player_id in self._rom_type_rejected:
                         # The identity gate in state.py only clears its own errors; this one
                         # is ours to clear, and only a routable hello gets this far.
                         self._rom_type_rejected.discard(player_id)
                         self.state.identity_error.pop(player_id, None)
-                    # Panel capability is per CARTRIDGE: on Gen 1 it comes from the
-                    # companion ROM patch, so a patched and an unpatched cartridge can
-                    # sit in one run and the generation alone cannot answer.
-                    if "panel" in msg:
-                        self.connected_players[player_id]["panel"] = bool(msg.get("panel"))
-                        self.connected_players[player_id]["panel_abi"] = msg.get("panel_abi", 0)
-                    # Native SFX likewise: the caps bit of the same companion mailbox.
-                    if "sfx" in msg:
-                        self.connected_players[player_id]["sfx"] = bool(msg.get("sfx"))
-                    # A relaunched client holds no rows, so "unchanged since last time" would
-                    # leave its panel empty until the run's contents happened to move.
-                    self._last_panel_sig[player_id] = None
-                    # Resolve correct adapter from rom_type.
-                    # Once rom_type is committed (set-once), the adapter is locked — ignore
-                    # any later hello that carries a different rom_type (e.g. early-boot
-                    # detect_variant returning 'vanilla' before IWRAM is initialised).
-                    rom_type = msg.get("rom_type", "")
-                    if not self.state.rom_type:
-                        from server.adapters import game_id_for_rom_type, get_adapter
-                        new_game_id = game_id_for_rom_type(rom_type)
-                        new_is_rr = rom_type.endswith("_rr")
-                        if new_game_id and new_game_id != self.state.adapter.game_id:
-                            self.state.adapter = get_adapter(new_game_id, is_rr=new_is_rr, rom_type=rom_type)
-                            self.state.is_rr = new_is_rr
-                            self.adapter = self.state.adapter
-                            log.info(f"Adapter switched to {new_game_id} (rom_type={rom_type})")
-                            log.debug(f"[ADAPTER] player={player_id}  game_id={new_game_id}  is_rr={new_is_rr}  rom_type={rom_type!r}  reason=game_id_changed")
-                        elif new_is_rr != self.state.is_rr:
-                            self.state.is_rr = new_is_rr
-                            from server.adapters import get_adapter
-                            self.state.adapter = get_adapter(
-                                self.state.adapter.game_id, is_rr=new_is_rr, rom_type=rom_type)
-                            self.adapter = self.state.adapter
-                            log.info(f"Adapter updated: is_rr={new_is_rr}")
-                            log.debug(f"[ADAPTER] player={player_id}  game_id={self.state.adapter.game_id}  is_rr={new_is_rr}  rom_type={rom_type!r}  reason=is_rr_changed")
-                    elif rom_type and rom_type != self.state.rom_type:
-                        log.warning(f"[{player_id}] hello rom_type={rom_type!r} ignored — "
-                                    f"run already locked to {self.state.rom_type!r}")
                 # Hello-first. A connection has proved nothing until it has said hello, so
                 # nothing else on it is listened to. Without this a cartridge whose hello was
                 # lost still had its ticks reconciled into whichever slot it named, and a
@@ -1872,6 +1846,63 @@ class SLinkServer:
             return [{"cmd": "noop", "refused": "admission"}]
 
         if event == "hello":
+            # ── Transactional hello (Codex cx-2985fe38 F1/F2) ──────────────────────────
+            # Stage the candidate rom_type/panel/panel_abi/sfx facts and the adapter they
+            # imply; commit them only once admission (_decide_admission) AND save-identity
+            # (state.handle_event) accept this hello. A rejected hello must leave
+            # connected_players and the adapter EXACTLY as they were (docs/protocol.md
+            # §2.2 steps 1/1': "rejected ⇒ state untouched") -- this used to be true only up
+            # to the point mixed_games_error passed, after which the capability fields and
+            # a same-generation-variant adapter swap were written unconditionally, before
+            # admission or identity had a say.
+            prev_conn = dict(self.connected_players.get(player_id, {}))
+            prev_adapter = self.state.adapter
+            prev_is_rr = self.state.is_rr
+
+            rom = msg.get("rom_type", "") or "unknown"
+            staged_conn = dict(prev_conn)
+            staged_conn["rom_type"] = msg.get("rom_type", "")
+            # Panel capability is per CARTRIDGE: on Gen 1 it comes from the companion ROM
+            # patch, so a patched and an unpatched cartridge can sit in one run and the
+            # generation alone cannot answer.
+            if "panel" in msg:
+                staged_conn["panel"] = bool(msg.get("panel"))
+                staged_conn["panel_abi"] = msg.get("panel_abi", 0)
+            # Native SFX likewise: the caps bit of the same companion mailbox.
+            if "sfx" in msg:
+                staged_conn["sfx"] = bool(msg.get("sfx"))
+
+            # Resolve the adapter from the FULL rom_type, not only game_id/is_rr (F1): before
+            # the run commits a rom_type, every hello rebuilds a fresh adapter from its own
+            # cartridge string, so a same-generation variant swap (Red -> reset -> Yellow, or
+            # the reverse) gets ITS OWN adapter instead of silently keeping the last one,
+            # whose panel/trade/encounter-table capabilities are bound to the wrong variant.
+            staged_adapter, staged_is_rr = prev_adapter, prev_is_rr
+            if not self.state.rom_type:
+                from server.adapters import game_id_for_rom_type, get_adapter
+                _rt = msg.get("rom_type", "")
+                new_game_id = game_id_for_rom_type(_rt)
+                if new_game_id:
+                    staged_is_rr = _rt.endswith("_rr")
+                    staged_adapter = get_adapter(new_game_id, is_rr=staged_is_rr, rom_type=_rt)
+            elif rom != "unknown" and rom != self.state.rom_type:
+                log.warning(f"[{player_id}] hello rom_type={rom!r} ignored — "
+                            f"run already locked to {self.state.rom_type!r}")
+
+            def _rollback_hello():
+                self.connected_players[player_id] = prev_conn
+                self.state.adapter = prev_adapter
+                self.adapter = prev_adapter
+                self.state.is_rr = prev_is_rr
+
+            # Admission and identity are decided against the CANDIDATE adapter (a randomized
+            # cartridge's fingerprint check and an OT parse are both generation-specific), so
+            # the staged values are applied now and rolled back on any refusal below.
+            self.connected_players[player_id] = staged_conn
+            self.state.adapter = staged_adapter
+            self.adapter = staged_adapter
+            self.state.is_rr = staged_is_rr
+
             # Pick up a contract written after this server started, before deciding.
             self._refresh_rom_contract()
             verdict = self._decide_admission(player_id, msg)
@@ -1887,6 +1918,7 @@ class SLinkServer:
                 # just refused -- and then _ingest_rom_content adopted its encounter
                 # tables. Booting the wrong ROM once therefore did not merely fail to
                 # connect, it corrupted the run and wrote into the wrong save file.
+                _rollback_hello()
                 self._log_event(player_id, "hello",
                                 f"REJECTED — {verdict['reason']}",
                                 msg.get("loc_name", "") or msg.get("area_id", ""))
@@ -1895,7 +1927,6 @@ class SLinkServer:
             area    = msg.get("area_id", "")
             loc     = msg.get("loc_name", "")
             party_n = len(msg.get("party", []))
-            rom     = msg.get("rom_type", "unknown")
             log.info(f"[{player_id}] hello rom={rom} area='{area or loc}' party={party_n}")
             self._ingest_box_census(player_id, msg)
 
@@ -1903,14 +1934,21 @@ class SLinkServer:
             cmds = self.state.handle_event(player_id, msg)
 
             if msg.get("_rejected"):
-                # Identity mismatch — log it, surface error, but don't update display data.
+                # Identity mismatch — log it, surface error, but don't update display data,
+                # and roll back the staged capabilities/adapter: a wrong-save hello must not
+                # leave the run's connected_players or adapter describing the wrong cartridge.
+                _rollback_hello()
                 self._log_event(player_id, "hello",
                                 "REJECTED — wrong save/slot", area or loc)
                 return cmds
 
-            # Publish only after admission and save identity accepted this hello. A refused
-            # cartridge must not replace the last accepted player's acquisition/display data.
-            self._bind_player_adapter(player_id, msg.get("rom_type", ""))
+            # ACCEPTED. The staged rom_type/panel/panel_abi/sfx/adapter are already applied
+            # above; only the presentation follow-ups (panel re-send, adapter-switch log)
+            # remain.
+            self._last_panel_sig[player_id] = None
+            if staged_adapter is not prev_adapter:
+                log.info(f"Adapter switched to {staged_adapter.game_id} (rom_type={rom})")
+
             self._log_event(player_id, "hello",
                             f"Connected ({rom}, {party_n} mons)", loc or area)
             self.player_area[player_id] = loc or area
@@ -1927,8 +1965,21 @@ class SLinkServer:
                     msg.get("artifact_kind", "clean"), msg.get("artifact_kind", "clean"))
                 _dirty = True
                 # Per-run capability: the adapter's native_trade_ui()/supports_info_panel()
-                # follow the committed kind from here on (base adapter: no-op).
+                # follow the committed kind from here on (base adapter: no-op). Every
+                # per-player adapter already bound (F5: an earlier hello from the OTHER
+                # player, on the same still-uncommitted run) is stale at the default kind
+                # until now, so it is refreshed here too rather than only on its own next
+                # hello.
                 self.state.adapter.set_artifact_kind(self.state.artifact_kind)
+                for _pa in self._player_adapters.values():
+                    _pa.set_artifact_kind(self.state.artifact_kind)
+
+            # Publish only after admission and save identity accepted this hello. A refused
+            # cartridge must not replace the last accepted player's acquisition/display data.
+            # Bound AFTER the artifact_kind commit above (F5): the committed kind, not the
+            # per-player adapter's constructor default, is what a Gen 2 partner's own
+            # adapter must carry, including on the very first hello that commits it.
+            self._bind_player_adapter(player_id, msg.get("rom_type", ""))
             if "ball_count" in msg:
                 self.player_ball_count[player_id] = msg["ball_count"]
             if "badges" in msg:
@@ -1979,7 +2030,7 @@ class SLinkServer:
             if disp:
                 self.player_area[player_id] = disp
                 # Use area_id for display name resolution (has underscores for proper formatting)
-                disp_name = self.adapter.area_display_name(area or disp)
+                disp_name = self.adapter_for(player_id).area_display_name(area or disp)
                 self._log_event(player_id, "area_enter",
                                 f"Entered {disp_name}", disp)
             if area:
@@ -1989,7 +2040,7 @@ class SLinkServer:
             log.info(f"[{player_id}] capture key={key} lv={msg.get('level','?')} area='{msg.get('area_id','')}'")
             if key:
                 sid = msg.get("species_id", 0)
-                sp_name = self.adapter.species_name(sid) if sid else "?"
+                sp_name = self.adapter_for(player_id).species_name(sid) if sid else "?"
                 self._log_event(player_id, "capture",
                                 f"Caught {sp_name} Lv{msg.get('level','?')}",
                                 msg.get("area_id", ""), key)
@@ -2032,7 +2083,7 @@ class SLinkServer:
         elif event == "no_catch":
             log.info(f"[{player_id}] no_catch area='{msg.get('area_id','')}'")
             self._log_event(player_id, "no_catch",
-                            f"Missed catch at {self.adapter.area_display_name(msg.get('area_id',''))}",
+                            f"Missed catch at {self.adapter_for(player_id).area_display_name(msg.get('area_id',''))}",
                             msg.get("area_id", ""))
         elif event == "whiteout":
             log.info(f"[{player_id}] whiteout")
@@ -2104,7 +2155,7 @@ class SLinkServer:
                 tid = msg["trainer_id"]
                 self.battle_state[player_id]["trainer_id"] = tid
                 # Resolve trainer name/class via adapter
-                tr_name, tr_class = self.adapter.trainer_info(tid)
+                tr_name, tr_class = self.adapter_for(player_id).trainer_info(tid)
                 if tr_class:
                     self.battle_state[player_id]["opponent_name"] = tr_name
                     self.battle_state[player_id]["opponent_class"] = tr_class
@@ -2408,22 +2459,33 @@ class SLinkServer:
         """Serialize current server state to a JSON-safe dict."""
         s = self.state
 
-        def _enrich_killer(killer):
-            """Add species_name to a killer dict for the memorial/killfeed."""
+        def _enrich_killer(killer, initiating_player=""):
+            """Add species_name to a killer dict for the memorial/killfeed.
+
+            The killer belongs to the INITIATING player's cartridge (Codex cx-2985fe38 F4):
+            on a randomized/Gen 2 pairing the run adapter may not be the side that fainted
+            this link's mon.
+            """
             if not killer:
                 return killer
             k = dict(killer)
             sp = k.get("species", 0)
             if sp:
-                k["species_name"] = self.adapter.species_name(sp)
+                k["species_name"] = self.adapter_for(initiating_player).species_name(sp)
             return k
 
-        def _move_details(mon: dict, *, boxed: bool = False) -> list[dict]:
+        def _move_details(mon: dict, *, boxed: bool = False, adapter=None) -> list[dict]:
             """Resolve a mon's raw move ids into full move dicts with PP applied.
 
             Gen 3 sends pp_bonuses as a packed bitfield (2 bits per move); Gen 4 sends
             pp_ups as a list[4]. Box mons carry no current PP, so they show the maximum.
+
+            `adapter` is the OWNING player's adapter (Codex cx-2985fe38 F4): move data is
+            cross-title content on a randomized/Gen 2 pairing, so a partner's move names
+            must come from their own cartridge, not the run's. Defaults to the run adapter
+            for the few call sites (none left) that have no player to ask.
             """
+            adapter = adapter or self.adapter
             raw_pp = mon.get("pp", [])
             pp_bonuses = mon.get("pp_bonuses", 0)
             pp_ups_list = mon.get("pp_ups") or []
@@ -2431,7 +2493,7 @@ class SLinkServer:
             for idx, mid in enumerate(mon.get("moves", [])):
                 if not mid or mid <= 0:
                     continue
-                md = self.adapter.move_data(mid)
+                md = adapter.move_data(mid)
                 if not md:
                     continue
                 md = dict(md)
@@ -2465,7 +2527,7 @@ class SLinkServer:
                 d["ability_name"] = adapter.ability_name(aid, sid) if aid else ""
                 iid = d.get("held_item_id", 0)
                 d["item_name"] = adapter.item_name(iid) if iid else ""
-                d["move_details"] = _move_details(d)
+                d["move_details"] = _move_details(d, adapter=adapter)
                 enriched[key] = d
             return enriched
 
@@ -2477,12 +2539,13 @@ class SLinkServer:
                 b = dict(bentry)
                 iid = b.get("held_item_id", 0)
                 b["item_name"] = adapter.item_name(iid) if iid else ""
-                b["move_details"] = _move_details(b, boxed=True)
+                b["move_details"] = _move_details(b, boxed=True, adapter=adapter)
                 enriched.append(b)
             return enriched
 
         def _enrich_battle_state(pid):
             """Add sprite_html, species_name, and move_details to each enemy_party entry."""
+            adapter = self.adapter_for(pid)
             bs = dict(self.battle_state.get(pid, {"in_battle": False, "enemy_party": []}))
             enriched = []
             for em in bs.get("enemy_party") or []:
@@ -2494,8 +2557,8 @@ class SLinkServer:
                 if sid:
                     em2["sprite_html"] = self._get_sprite_html(sid, form, pid)
                 if sid and not em2.get("species_name"):
-                    em2["species_name"] = self.adapter_for(pid).species_name(sid)
-                em2["move_details"] = _move_details(em2)
+                    em2["species_name"] = adapter.species_name(sid)
+                em2["move_details"] = _move_details(em2, adapter=adapter)
                 enriched.append(em2)
             bs["enemy_party"] = enriched
             bs["calc_preview"] = self._calc_preview(pid, enriched) if bs.get("in_battle") else None
@@ -2621,7 +2684,7 @@ class SLinkServer:
                         "area_id":          e.area_id,
                         "area_display":     self._area_display(e.area_id),
                         "cause":            e.cause,
-                        "killer":           _enrich_killer(e.killer),
+                        "killer":           _enrich_killer(e.killer, e.initiating_player),
                         "initiating_player": e.initiating_player,
                         "a_key":      e.a.key      if e.a else None,
                         "a_nickname": e.a.nickname if e.a else "",
@@ -3531,7 +3594,7 @@ class SLinkServer:
                     "species_name": e.get("name") or e.get("species_name") or "?",
                     "rate":         e.get("rate", 0),
                     "level_range":  lv_range if lo or hi else "",
-                    "sprite_html":  self._get_sprite_html(sid) if sid else "",
+                    "sprite_html":  self._get_sprite_html(sid, 0, player_id) if sid else "",
                 })
             if mlist:
                 methods.append({"name": method_name, "entries": mlist})
@@ -4529,6 +4592,34 @@ class SLinkServer:
                     backups.append(entry)
         return aiohttp_web.json_response({"ok": True, "backups": backups})
 
+    def _reset_connection_and_display_state(self) -> None:
+        """Clear connected_players and every derived party/box/battle/display cache.
+
+        Shared by `/api/reset` and `/api/debug/rollback` (Codex cx-2985fe38 F3): both
+        replace `self.state` with a run the connected clients have not said hello to yet,
+        so both must leave the SAME blank slate behind -- a stale `connected_players` entry
+        (rom_type, panel/sfx caps) or a stale party/box/battle snapshot from the run just
+        replaced must not survive into the new one and be shown until the next hello.
+        """
+        self.connected_players.clear()
+        self.player_area = {"a": "", "b": ""}
+        self.player_area_id = {"a": "", "b": ""}
+        self.player_ball_count = {"a": 0, "b": 0}
+        self.player_badges = {"a": 0, "b": 0}
+        self.player_kanto_badges = {"a": 0, "b": 0}
+        self.trainer_name = {"a": "", "b": ""}
+        self.pc_boxes = {"a": [], "b": []}
+        self.box_census = {pid: {"capable": False, "gen": -1, "boxes": None} for pid in ("a", "b")}
+        self.party_details = {"a": {}, "b": {}}
+        self._mon_cache.clear()
+        self.battle_state = {
+            p: {"in_battle": False, "is_trainer_battle": False, "enemy_party": [],
+                "trainer_id": 0, "opponent_name": "", "opponent_class": "",
+                "is_doubles": False}
+            for p in ("a", "b")
+        }
+        self._last_panel_sig = {"a": None, "b": None}
+
     async def handle_debug_rollback(self, request):
         """POST /api/debug/rollback — restore links.json (and events.json) from a backup slot."""
         try:
@@ -4577,6 +4668,10 @@ class SLinkServer:
         # behind this pending admission gate.
         self.admission = {pid: {"state": "contract_pending", "reason": "run restored; awaiting hello"}
                           for pid in VALID_PLAYERS}
+        # F3: rollback must leave the same blank connection/display slate as /api/reset —
+        # a patched client's stale panel/sfx caps, party/box snapshot or battle state must
+        # not survive into the restored run.
+        self._reset_connection_and_display_state()
         if self.state.artifact_kind:
             self.adapter.set_artifact_kind(self.state.artifact_kind)
         # Restore events.json and reload ring buffer
@@ -4625,23 +4720,9 @@ class SLinkServer:
         self.state.player_adapter_for = self.adapter_for
         self.admission = {pid: {"state": "contract_pending", "reason": "run reset; awaiting hello"}
                           for pid in VALID_PLAYERS}
-        # Clear derived display caches so SSE doesn't broadcast stale data.
-        self.player_area = {"a": "", "b": ""}
-        self.player_area_id = {"a": "", "b": ""}
-        self.player_ball_count = {"a": 0, "b": 0}
-        self.player_badges = {"a": 0, "b": 0}
-        self.player_kanto_badges = {"a": 0, "b": 0}
-        self.trainer_name = {"a": "", "b": ""}
-        self.pc_boxes = {"a": [], "b": []}
-        self.box_census = {pid: {"capable": False, "gen": -1, "boxes": None} for pid in ("a", "b")}
-        self.party_details = {"a": {}, "b": {}}
-        self._mon_cache.clear()
-        self.battle_state = {
-            p: {"in_battle": False, "is_trainer_battle": False, "enemy_party": [],
-                "trainer_id": 0, "opponent_name": "", "opponent_class": "",
-                "is_doubles": False}
-            for p in ("a", "b")
-        }
+        # Clear derived display caches so SSE doesn't broadcast stale data. Shared with
+        # /api/debug/rollback (F3) so both leave the same blank slate.
+        self._reset_connection_and_display_state()
         self._recent_events.clear()
         self._save_events()
         log.warning("⚠  State reset via API — all links, area states, and captures cleared.")
