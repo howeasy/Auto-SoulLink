@@ -123,6 +123,32 @@ local PATHS = {
         map = "PalletTown_ProfessorOaksLab (4.3)", from = { 6, 4 }, to = { 6, 12 },
         dirs = { "Down", "Down", "Down", "Down", "Down", "Down", "Down", "Down" },
     },
+
+    -- ── card G5-RR-RIVAL: grass origin -> Viridian -> Route 22, one step east of the rival ──
+    -- BFS over patch/build/slink_RR.gba (sha1 b7d1e075...), identical to mkstates_gen3.lua's FR
+    -- VIRIDIAN_TO_ROUTE22 / ROUTE22_TO_RIVAL:
+    --   python tools/gba_map.py patch/build/slink_RR.gba --map 3.1  --bfs 24,39 0,19
+    --   python tools/gba_map.py patch/build/slink_RR.gba --map 3.41 --bfs 47,9 34,6
+    -- Viridian 3.1's left connection is Route 22 3.41 at offset 10, so (0,19) crosses to (47,9).
+    -- RR's Viridian coord events on this walk: (22,30) [var 0x507E==0] runs setflag 2 / setvar
+    -- 0x507E,1 / release / end; (0,19) [var 0x5056==0] ends at `release; end` without badge 8
+    -- (checkflag 0x827 -> 0x0905B507). Neither locks the walk. Route 22's early-rival coord
+    -- events are (33,4..6) [VAR_MAP_SCENE_ROUTE22 0x4054 == 1] -> 0x0816828C/98/AB, which call
+    -- trainerbattle 9 (EARLY_RIVAL) with gTrainers 0x149/0x14A/0x14B by VAR_STARTER_MON 0x4031
+    -- (0x0816836D/7C/8B). (34,6) is not tall grass (Route 22 grass is x 15..18 / 34..39, y 9..13).
+    viridian_arrival_to_route22_edge = {
+        map = "ViridianCity (3.1)", from = { 24, 39 }, to = { 0, 19 },
+        dirs = { "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Left", "Left",
+                 "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up", "Up",
+                 "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left",
+                 "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left", "Left" },
+    },
+    route22_arrival_to_rival_step = {
+        map = "Route22 (3.41)", from = { 47, 9 }, to = { 34, 6 },
+        dirs = { "Left", "Left", "Down", "Down", "Down", "Down", "Down", "Left", "Left", "Left", "Left",
+                 "Left", "Left", "Up", "Up", "Up", "Up", "Up", "Left", "Left", "Up", "Up", "Up",
+                 "Left", "Left", "Left" },
+    },
 }
 
 local CTRL_ADDR = 0x03004FE0
@@ -573,13 +599,78 @@ local function run_route2()
         before9, after9, play.where(cp), line_after, select(2, ball_slot0())))
 end
 
+-- ── card G5-RR-RIVAL: rr_battle2.sav -> Route 22 (34,6), one step east of the early rival ──────
+-- Produces tests/fixtures/gen3/rr_rival.sav (CACHED-NATIVE, like FR/LG *_party_trainer.sav):
+-- seeded from rr_battle2.sav (parcel delivered, so RR's ReceiveDexScene set VAR 0x4054 = 1 --
+-- docs/gen3/research/rr_fixture_route_2026-09-24.md), walked with normal inputs, incidental
+-- wild battles fled, saved in-game on a non-grass tile the rival's coord event is one Left from.
+local RIVAL_STEP = { group = 3, num = 41, x = 34, y = 6 }
+local VAR_ROUTE22 = 0x4054
+local function run_rival()
+    G.open("gen3_rr_battle_fixture")
+    pcall(client.speedmode, 6399)
+    G.budget = 200000
+    local cp, title = G.checkpoint()
+    G.phase("start", "title=" .. tostring(title))
+    if title ~= "radical_red" then G.finish(false, "title must be radical_red"); return end
+    local domain, seen = G.flash_domain()
+    if not domain then G.finish(false, "no flash domain; domains: " .. tostring(seen)); return end
+    local seeded = G.save_counter(domain)
+    if seeded < 0 then G.finish(false, "battery erased at boot: seed not found"); return end
+    if not G.boot_to_field(cp, 9000) then
+        G.shot("stuck"); G.finish(false, "never reached the field"); return
+    end
+    if not at_target(cp) then
+        G.finish(false, "not at the grass origin (seed rr_battle2.sav): " .. play.where(cp)); return
+    end
+    local var = read_var(VAR_ROUTE22)
+    if var ~= 1 then
+        G.finish(false, "VAR_MAP_SCENE_ROUTE22 reads " .. tostring(var) .. ", not 1: the early "
+                     .. "rival is not armed (seed rr_battle2.sav)"); return
+    end
+    local line = party_line()
+    G.phase("party", tostring(line))
+
+    play.follow(cp, "route1_grass_to_north_edge", "rival")
+    local ok1, why1 = play.enter_warp(cp, "Up", 30)
+    if not ok1 or H.map(cp) ~= 3 * 256 + 1 then
+        G.shot("stuck"); G.finish(false, "rival: Route1->Viridian: " .. tostring(why1) .. " " .. play.where(cp)); return
+    end
+    play.follow(cp, "viridian_arrival_to_route22_edge", "rival")
+    local ok2, why2 = play.enter_warp(cp, "Left", 30)
+    if not ok2 or H.map(cp) ~= 3 * 256 + 41 then
+        G.shot("stuck"); G.finish(false, "rival: Viridian->Route22: " .. tostring(why2) .. " " .. play.where(cp)); return
+    end
+    play.follow(cp, "route22_arrival_to_rival_step", "rival")
+    local function at_step()
+        local g, n = G.map(cp)
+        local x, y = G.pos(cp)
+        return g == RIVAL_STEP.group and n == RIVAL_STEP.num and x == RIVAL_STEP.x and y == RIVAL_STEP.y
+    end
+    if not play.wait_at(cp, RIVAL_STEP.x, RIVAL_STEP.y, 120) or not at_step() then
+        G.shot("stuck"); G.finish(false, "rival: not at (34,6) on Route 22: " .. play.where(cp)); return
+    end
+    local ok, before, after, why = G.save_via_menu(cp, domain)
+    if not ok then
+        G.finish(false, string.format("rival: in-game save failed (%d -> %d): %s", before, after, tostring(why)))
+        return
+    end
+    if not play.wait_at(cp, RIVAL_STEP.x, RIVAL_STEP.y, 120) or not at_step() or H.in_battle(cp) then
+        G.shot("stuck"); G.finish(false, "rival: moved during the save: " .. play.where(cp)); return
+    end
+    G.idle(60)
+    G.finish(true, string.format("counter %d -> %d at %s var4054=%d party=%s", before, after,
+                                 play.where(cp), read_var(VAR_ROUTE22), tostring(party_line())))
+end
+
 -- SLINK_GEN3_RR_FIXTURE_LEG selects which driver runs; unset (the default) is `run` exactly as
 -- it always was, so rr_battle.sav's own build (W3's, untouched by this card) is byte-for-byte
 -- unaffected. "route2" runs the new grass->Mart->Lab->grass->catch->save leg above, seeded from
 -- rr_battle.sav, producing rr_battle2.sav via the same tools/gen3_fixtures.py import pipeline.
+-- "rival" (G5-RR-RIVAL) walks rr_battle2.sav to Route 22 (34,6) -> rr_rival.sav.
 if (debug.getinfo(1, "S").source or "") == "main" then
     local leg = os.getenv("SLINK_GEN3_RR_FIXTURE_LEG")
-    local target = (leg == "route2") and run_route2 or run
+    local target = (leg == "route2") and run_route2 or (leg == "rival") and run_rival or run
     local ok, err = pcall(target)
     if not ok then G.shot("stuck"); G.finish(false, "uncaught Lua error: " .. tostring(err)) end
 end

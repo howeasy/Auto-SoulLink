@@ -413,7 +413,7 @@ against `BPRE.ld` and disassembled (capstone):
 | 1 | `REASON_SCRIPT_CONTEXT` | `sScriptContext2Enabled` (a script owns the field) |
 | 2 | `REASON_BAD_ARGS` | out-of-range args |
 | 3 | `REASON_NOT_ON_FIELD` | `on_field()` false |
-| 8 | `REASON_WINDOW_CLOSED` | **C5-11a** — `OP_RIVAL_SWAP` consumed outside the rival-swap window. `lua/gen3/native.lua` mirrors this table (`FAIL_REASONS`) and surfaces the NAME to the job, which replies `rival_team_replaced{error="refresh_failed", reason="window_closed"}` |
+| 8 | `REASON_WINDOW_CLOSED` | **C5-11a** — `OP_RIVAL_SWAP` consumed outside the rival-swap window. `lua/gen3/native.lua` mirrors this table (`FAIL_REASONS`) and surfaces the NAME to the job, which replies `rival_team_replaced{error="window_closed", reason="window_closed"}` (G5-RR-RIVAL review F3; was error="refresh_failed") |
 
 ### Rival-swap window constants (`OP_RIVAL_SWAP`, C5-11a)
 

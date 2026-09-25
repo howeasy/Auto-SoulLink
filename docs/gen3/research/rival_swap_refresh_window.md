@@ -210,6 +210,9 @@ predicate.
 
 ## 5. The window (with the C5-9 pin names), and the patch as authority
 
+> **G5-RR-RIVAL update (2026-09-25).** The shipped reply for a patch refusal is now `rival_team_replaced{error = <the patch's reason>, reason = <same>}` (e.g. `window_closed`; an unnamed word is `native_refused`), not `error = "refresh_failed"` as written below, and there is no Lua gBattleMons refresh at all: W1 lands before the selection. The client announces a trainer battle before it begins and stages the swap until W1 (lua/gen3/client.lua `pre_announce`, lua/gen3/native.lua `rival_window_open`); live receipt docs/gen3/probes/rr_rival_swap_real_gen3_gen3_rr_as_a_*.txt.
+
+
 | clause | field / source | test | why it is in the set |
 |---|---|---|---|
 | `intro_entry_dummy` | `rom.BEGIN_BATTLE_INTRO_DUMMY_ADDR` (0x080123BD) | `gBattleMainFunc == 0x080123BD` | **W1**: set by `SetUpBattleVars` (PRET `src/battle_controllers.c:44`, called at `src/battle_main.c:699`) and live until case 15 sets `BeginBattleIntro`; the op's blob write lands at the next `CallCallbacks`, i.e. after `CreateNPCTrainerParty` (`:707`) and at least one frame before `InitBattleControllers`/`SetBattlePartyIds` |
@@ -341,6 +344,9 @@ production success must not be used as evidence for any timing claim. Settle it 
 nothing about the new design.
 
 ## 8. Probe rows and negative controls
+
+> **G5-RR-RIVAL update (2026-09-25).** The shipped reply for a patch refusal is now `rival_team_replaced{error = <the patch's reason>, reason = <same>}` (e.g. `window_closed`; an unnamed word is `native_refused`), not `error = "refresh_failed"` as written below, and there is no Lua gBattleMons refresh at all: W1 lands before the selection. The client announces a trainer battle before it begins and stages the swap until W1 (lua/gen3/client.lua `pre_announce`, lua/gen3/native.lua `rival_window_open`); live receipt docs/gen3/probes/rr_rival_swap_real_gen3_gen3_rr_as_a_*.txt.
+
 
 Witnesses (read directly, never through `safety`):
 

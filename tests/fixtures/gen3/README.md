@@ -520,3 +520,22 @@ python tools/gen3_fixtures.py boot-check --title firered --rom "<FireRed.gba>" -
 
 Rick 102 is still undefeated in all four files. The lead gets to Rick with full HP only if
 the save kept it that way, and the producer refuses a hurt lead.
+
+## rr_rival.sav (card G5-RR-RIVAL) — CACHED-NATIVE, built live 2026-09-25
+
+The rival_swap_real_gen3 A-side fixture: standing on Route 22 (map 3.41) at (34,6), one Left from
+the early-rival coord event (33,6), with `VAR_MAP_SCENE_ROUTE22` (0x4054) == 1. **Only scripted
+normal inputs**: seeded from `rr_battle2.sav` (whose parcel delivery ran RR's `ReceiveDexScene`,
+`setvar 0x4054, 1`), `lua/tests/gen3_rr_battle_fixture.lua` `run_rival()`
+(`SLINK_GEN3_RR_FIXTURE_LEG=rival`) walks grass origin -> Viridian -> Route 22 (paths are
+`tools/gba_map.py` BFS over the RR companion ROM), flees incidental wild battles (two on this
+build, both RUN), saves in-game and re-verifies the tile. Built by the same `_prepare_run` /
+`_launch(rr=True, title="radical_red", extra_env={"SLINK_GEN3_RR_FIXTURE_LEG": "rival"})` /
+`import_savedata(rr=True)` pipeline as `rr_battle2.sav`, lane `gen3-lane-clean` at `657a86ad`.
+
+- driver `RESULT: PASS counter 4 -> 5 at map=809 at=(34,6) var4054=1 party=[1] species=277
+  level=6 hp=22/22 [2] species=1324 level=4 hp=18/18`. sha256
+  `4ba7200839f4eee4f21022e0df11f3ea959752e9ab8cc932469f1dd48c8cff6a`, trainer `B` #2BDDC8BF.
+- No `_b`: B boots `rr_battle2_b.sav` (its party is the swap source).
+- The rival it meets: coord script 0x081682AB -> `trainerbattle 9` with gTrainers 0x149/0x14A/0x14B
+  by `VAR_STARTER_MON` (0x4031 == 0 here -> 0x14B = 331, an `_RR_RIVAL_TRAINER_IDS` member).

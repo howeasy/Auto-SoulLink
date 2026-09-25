@@ -331,6 +331,12 @@ SCENARIOS = {
                                    "gate; no valid swap is proven here",
                         "target": "battle", "frames": 900000, "no_save": ("a", "b"),
                         "oracle": "assert_rival_swap_gen3_saved"},
+    # G5-RR-RIVAL (owner ruling 25): the QUALIFYING rival row. A boots rr_rival.sav (CACHED-NATIVE,
+    # the fixture driver's `rival` leg: Route 22 (34,6), early rival armed) and steps onto the
+    # coord event; the server's auto swap (--rival-team-swap) stages B's rr_battle2_b party.
+    "rival_swap_real_gen3": {"flags": ["--rival-team-swap"], "timeout": 900, "games": ("gen3_rr",),
+                             "target": {"a": "rival", "b": "battle2"}, "frames": 900000,
+                             "no_save": ("a", "b"), "oracle": "assert_rival_swap_real_gen3_saved"},
     "native_absent_gen3": {"flags": [], "timeout": 300, "games": ("gen3_rr",),
                            "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 300000,
                            "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("a", "b"),
@@ -1841,6 +1847,88 @@ def gen3_receipt_problems(label, text, required=(), forbidden=(), ordered=()):
         if not a or not b or b.start() <= a.start():
             problems.append(f"{label}: /{first}/ must precede /{second}/")
     return problems
+
+
+def rival_swap_real_problems(text, source_party, rival_ids, native_lo, native_hi):
+    """rival_swap_real_gen3's receipt oracle (card G5-RR-RIVAL) over A's receipt
+    (lua/tests/duo/scenario_gen3_rival_swap_real.lua). `source_party` is B's decoded party (the
+    swap source), `rival_ids` the RR adapter's rival set, [native_lo, native_hi) the companion
+    mailbox arena. Returns (problems, fact)."""
+    codec = gen3_codec()
+    text = text or ""
+    problems = []
+
+    def one(pattern, label):
+        found = re.findall(pattern, text, re.M)
+        if len(found) != 1:
+            problems.append(f"a: {len(found)} {label} line(s), expected exactly one")
+            return None
+        return found[0]
+
+    def mon(hexed):
+        try:
+            return codec.decode_party_mon(bytes.fromhex(hexed), rr=True)
+        except ValueError:
+            return None
+
+    def ident(m):
+        return (m["species"], m["level"], gen3_key(m)) if m else None
+
+    if not re.search(r"(?m)^RIVAL_PRE map=3\.41 at=\(34,6\) var4054=1$", text):
+        problems.append("a: RIVAL_PRE is not Route 22 (34,6) with VAR_MAP_SCENE_ROUTE22 == 1")
+    tbs = one(r"^TX trainer_battle_start - (\{.*\})$", "TX trainer_battle_start")
+    tbs = json.loads(tbs) if tbs else {}
+    trainer = tbs.get("trainer_id")
+    if trainer not in rival_ids:
+        problems.append(f"a: trainer_battle_start named {trainer!r}, not an RR rival id")
+    cmd = one(r"^RIVAL_CMD trainer_id=(\S+) n=(\S+) session=(\S+) battle_id=(\S+) source=(\S+)",
+              "RIVAL_CMD")
+    if cmd:
+        if cmd[0] != str(trainer) or cmd[4] != "auto":
+            problems.append(f"a: the command is trainer {cmd[0]} source {cmd[4]}, expected the "
+                            f"server's auto swap for trainer {trainer}")
+        if (cmd[2], cmd[3]) != (str(tbs.get("session")), str(tbs.get("battle_id"))):
+            problems.append("a: the command's session/battle_id is not the announcement's")
+    # the server hex-encodes lower case (state.py blobs_hex), the driver dumps upper case
+    blobs = dict(re.findall(r"(?m)^RIVAL_BLOB (\d+) ([0-9A-Fa-f]{200})$", text))
+    staged = [ident(mon(blobs[str(i)])) for i in range(len(blobs)) if str(i) in blobs]
+    if not staged or staged != [ident(m) for m in source_party]:
+        problems.append(f"a: the staged blobs {staged} are not B's party "
+                        f"{[ident(m) for m in source_party]}")
+    if cmd and cmd[1] != str(len(blobs)):
+        problems.append(f"a: RIVAL_CMD n={cmd[1]} but {len(blobs)} RIVAL_BLOB line(s)")
+    if not re.search(r"(?m)^RX replace_rival_team\b", text):
+        problems.append("a: missing RX replace_rival_team")
+    reply = one(r"^TX rival_team_replaced - (\{.*\})$", "TX rival_team_replaced")
+    reply = json.loads(reply) if reply else {}
+    if reply.get("error"):
+        problems.append(f"a: rival_team_replaced error={reply.get('error')} "
+                        f"reason={reply.get('reason')}")
+    if reply.get("trainer_id") != trainer or reply.get("species_ids") != [s[0] for s in staged if s]:
+        problems.append(f"a: the ack {reply} is not trainer {trainer} with the staged species")
+    count = one(r"^ENEMY_COUNT (\d+)$", "ENEMY_COUNT")
+    if count != str(len(staged)):
+        problems.append(f"a: ENEMY_COUNT {count}, the staged team has {len(staged)}")
+    enemy = dict(re.findall(r"(?m)^ENEMY_SLOT (\d+) ([0-9A-Fa-f]{200})$", text))
+    for i, want in enumerate(staged):
+        got = ident(mon(enemy.get(str(i), "")))
+        if got != want:
+            problems.append(f"a: ENEMY_SLOT {i} reads {got}, staged {want}")
+    lead = mon(enemy.get("0", ""))
+    mon1 = re.search(r"(?m)^BATTLE_MON1 species=(\d+) pid=([0-9A-F]{8})$", text)
+    if not (lead and mon1 and int(mon1.group(1)) == lead["species"]
+            and int(mon1.group(2), 16) == lead["personality"]):
+        problems.append(f"a: BATTLE_MON1 {mon1.group(0) if mon1 else None} is not the swapped lead")
+    if one(r"^TRAINER_OPPONENT_A (\d+)$", "TRAINER_OPPONENT_A") != str(trainer):
+        problems.append(f"a: gTrainerBattleOpponent_A is not {trainer}")
+    writes = re.findall(r"(?m)^\[client\] \[SLink-gen3\] write (\S+) 0x([0-9A-Fa-f]+) \+(\d+)", text)
+    for reason, addr, size in writes:
+        lo = int(addr, 16)
+        if reason != "native" or lo < native_lo or lo + int(size) > native_hi:
+            problems.append(f"a: client write {reason} 0x{lo:08X} +{size} outside the native mailbox")
+    fact = (f"rival_swap_real: rival {trainer} fought B's {len(staged)} mon(s) {staged}; "
+            f"{len(writes)} client write(s), all native mailbox")
+    return problems, fact
 
 
 def gen3_tx(event, key):
@@ -5765,16 +5853,35 @@ class DuoRun:
         self._go_one("a", lines["a"])
 
     def orchestrate_rival_swap_gen3(self):
-        """PLAN P5's native rival-swap control (RR only): B fights, A idles. Once B logs
-        READY_IN_BATTLE the runner queues replace_rival_team with a well-formed but dummy blob --
-        lua/gen3/native.lua stages and reads it back, then always answers refresh_failed (no
-        write window in the battle's first frames yet, commit 9505648b), so the exact bytes
-        never reach the oracle."""
+        """PLAN P5's native rival-swap NEGATIVE control (RR only): B fights, A idles. Once B logs
+        READY_IN_BATTLE the runner queues replace_rival_team with a dummy blob and NO session /
+        battle_id; the client's C5-10 identity gate refuses it stale_battle_id before anything is
+        staged (lua/gen3/client.lua C.replace_rival_team). The real swap is
+        rival_swap_real_gen3."""
         self._gen3_prelude()
         self.go()
         self._gen3_mark("b", r"^READY_IN_BATTLE\b", "B at the battle action menu")
         self.queue_command("b", {"cmd": "replace_rival_team", "trainer_id": 0,
                                  "blobs_hex": ["00" * 100]})
+
+    def orchestrate_rival_swap_real_gen3(self):
+        """G5-RR-RIVAL: nothing staged by the runner -- the server's own trainer_battle_start
+        handler queues the swap (--rival-team-swap)."""
+        self._gen3_prelude()
+        self.go()
+
+    def assert_rival_swap_real_gen3_saved(self, results):
+        """G5-RR-RIVAL, a QUALIFICATION row: a real RR rival battle fought B's party.
+        rival_swap_real_problems holds the checks; B's party is its fixture's (B only idles)."""
+        from server.adapters.gen3_frlge import _RR_RIVAL_TRAINER_IDS
+
+        codec = gen3_codec()
+        with open(GEN3_RR_PROFILE, encoding="utf-8") as handle:
+            base = json.load(handle)["native"]["BASE"]
+        source = codec.rr_party_from_save(codec.split_rtc(self._gen3_fixture_bytes("b"))[0])
+        problems, fact = rival_swap_real_problems(results["a"], source, _RR_RIVAL_TRAINER_IDS,
+                                                  base, base + 0x800)
+        self._gen3_raise(problems, fact)
 
     def _gen3_party_record_hex(self, inst, slot):
         """The raw 100-byte party record at `slot` of this instance's fixture, as hex -- a real,
