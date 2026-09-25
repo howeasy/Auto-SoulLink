@@ -17,12 +17,11 @@
   <link rel="stylesheet" href="/static/board.css">
   <script src="/static/vendor/htmx.min.js" defer></script>
   <script src="/static/vendor/idiomorph-ext.min.js" defer></script>
-  <script src="/static/vendor/overlay-helpers.js" defer></script>
-  {# dashboard.js: the <details> morph veto, the sprite chroma-key, the theme + font
+  {# dashboard.js: the <details> morph veto, the theme + font
      switchers relocated into the rail slots. Without dashboard.css: the rail is .mk-rail. #}
   <script src="/static/dashboard.js" defer></script>
   {% if page == 'new' %}<script src="/static/randomizer.js"></script>{% endif %}
-  {% if calc_preview %}<script src="/static/calc-preview.js" defer></script>{% endif %}
+  <script src="/static/calc-preview.js" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -38,23 +37,28 @@
   {% include "_rail.html" %}
 
   {# ══ Main ═══════════════════════════════════════════════════════════════ #}
-  <main class="mk-main mk-body-root">
+  <main class="mk-main mk-body-root" id="main-content" tabindex="-1">
 
     {% if page == 'new' %}
       {# ── New run ─────────────────────────────────────────────────────── #}
       <header class="mk-runhdr"><h1 class="mk-runname">New run</h1></header>
       <div class="mk-page mk-newpage" x-data="newRun()">
-        <div class="mk-form">
+        {# outside the aria-busy form: a live region under aria-busy=true waits for it to clear #}
+        <span role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap"
+              x-text="busy ? (stage || 'Creating…') : (uploading ? 'Adding the file…' : uploadNote)"></span>
+        <div class="mk-form" :aria-busy="busy || !!uploading">
           <label class="mk-field big">
             <span>Name</span>
-            <input class="big" type="text" x-model="draft.name" placeholder="Kanto Duo" autofocus @keydown.enter="create()">
+            <input class="big" type="text" x-model="draft.name" placeholder="Kanto Duo" autofocus @keydown.enter="create()"
+                   :aria-describedby="draft.name.trim() ? null : 'run-name-hint'" :aria-invalid="tried && !draft.name.trim()">
           </label>
 
           <section class="mk-zone">
-            <h2 class="mk-h2"><span>Game</span><i></i><em>any two cartridges of a family can link</em></h2>
-            <div class="mk-games">
+            <h2 class="mk-h2"><span id="game-label">Game</span><i></i><em>any two cartridges of a family can link</em></h2>
+            <div class="mk-games" role="radiogroup" aria-labelledby="game-label" @keydown="radioKeys($event)">
               <template x-for="g in form.games" :key="g.key">
-                <button type="button" class="mk-gchip" :disabled="g.unadmitted" :class="[draft.game === g.key ? 'active' : '', g.key === '' ? 'detect' : '']" @click="draft.game = g.key" x-text="g.label"></button>
+                <button type="button" class="mk-gchip" role="radio" :aria-checked="draft.game === g.key" :tabindex="draft.game === g.key ? 0 : -1" :disabled="g.unadmitted"
+                        :class="[draft.game === g.key ? 'active' : '', g.key === '' ? 'detect' : '']" @click="draft.game = g.key" x-text="g.label"></button>
               </template>
             </div>
           </section>
@@ -66,11 +70,12 @@
                 <template x-for="key in group.keys" :key="key">
                   <label class="mk-opt described" :class="!support(key).ok ? 'off-unavailable' : (draft.opts[key] ? 'on' : '')">
                     {# a greyed row that is ALWAYS on for this game shows as checked #}
-                    <input type="checkbox" :checked="support(key).always || draft.opts[key]" @change="draft.opts[key] = $event.target.checked" :disabled="!support(key).ok">
+                    <input type="checkbox" :checked="support(key).always || draft.opts[key]" @change="draft.opts[key] = $event.target.checked" :disabled="!support(key).ok"
+                           :aria-labelledby="'opt-' + key + '-name'" :aria-describedby="'opt-' + key + '-desc' + (support(key).ok ? '' : ' opt-' + key + '-why')">
                     <span class="mk-opt-txt">
-                      <span class="mk-opt-name" x-text="form.options[key].label"></span>
-                      <span class="mk-opt-desc" x-text="form.options[key].desc"></span>
-                      <span class="mk-opt-why" x-show="!support(key).ok" x-text="support(key).why"></span>
+                      <span class="mk-opt-name" :id="'opt-' + key + '-name'" x-text="form.options[key].label"></span>
+                      <span class="mk-opt-desc" :id="'opt-' + key + '-desc'" x-text="form.options[key].desc"></span>
+                      <span class="mk-opt-why" :id="'opt-' + key + '-why'" x-show="!support(key).ok" x-text="support(key).why"></span>
                     </span>
                   </label>
                 </template>
@@ -90,9 +95,9 @@
 
           <div class="mk-form-actions">
             <button class="mk-btn primary big" :disabled="!draft.name.trim() || busy || (gen1() && !cartsReady())" @click="create()" x-text="busy ? (stage || 'Creating…') : createLabel()"></button>
-            <span class="mk-sub" x-show="!draft.name.trim()">Give it a name.</span>
+            <span class="mk-sub" id="run-name-hint" x-show="!draft.name.trim()">Give it a name.</span>
             <span class="mk-sub" x-show="draft.name.trim() && gen1() && !cartsReady()" x-text="cartsWhy()"></span>
-            <span class="mk-sub" x-show="error" x-text="error" style="color:var(--c-dead)"></span>
+            <span class="mk-sub" role="alert" x-text="error" style="color:var(--c-dead)"></span>
           </div>
         </div>
 
@@ -147,24 +152,87 @@
             <a class="mk-btn" href="/api/runs/{{ run.run_id }}/rom/a">Player A · slink_{{ run.safe_name }}_a{{ run.rom_ext.a }}</a>
             <a class="mk-btn" href="/api/runs/{{ run.run_id }}/rom/b">Player B · slink_{{ run.safe_name }}_b{{ run.rom_ext.b }}</a>
             {% endif %}
-            <span class="mk-cap">BizHawk Lua launchers</span>
+            <span class="mk-cap">Player setup — SLink's Lua runtime with the launcher inside (BizHawk {{ bizhawk_min }})</span>
+            <a class="mk-btn" href="{{ packs.a }}">Player A · slink_{{ run.safe_name }}_a.zip</a>
+            <a class="mk-btn" href="{{ packs.b }}">Player B · slink_{{ run.safe_name }}_b.zip</a>
+            <span class="mk-cap">Just the launcher, for a player who already has the runtime</span>
             <a class="mk-btn" href="/api/runs/{{ run.run_id }}/launcher/a">Player A · slink_{{ run.safe_name }}_a.lua</a>
             <a class="mk-btn" href="/api/runs/{{ run.run_id }}/launcher/b">Player B · slink_{{ run.safe_name }}_b.lua</a>
-            <span class="mk-cap">Load the {% if run.cartridges or run.randomizer %}cartridge{% else %}save{% endif %} first, then the script. It connects to <code class="num">tcp {{ run.tcp_port }}</code>.</span>
+            <span class="mk-cap">Load the {% if run.cartridges or run.randomizer %}cartridge{% else %}save{% endif %} first, then the script. It connects to <code class="num">{{ connect.host }}:{{ connect.port }}</code>
+              ({% if connect.source == 'set' %}set by you{% elif connect.source == 'lan' %}this machine's LAN address{% elif connect.source == 'bind' %}the address the Manager listens on{% elif connect.source == 'loopback' %}the Manager listens on this machine only: start it with <code>--host 0.0.0.0</code> for remote players{% else %}no network found: only this machine can connect{% endif %}).</span>
+            {# /api/settings/public-host: the address baked into every launcher and setup ZIP #}
+            <form class="mk-hostform" data-host="{{ connect.host if connect.source == 'set' else '' }}" x-data="publicHost($el.dataset.host)" @submit.prevent="save()">
+              <label class="mk-cap">Players connect to <input type="text" x-model="host" placeholder="{{ connect.host }}" aria-describedby="host-help-{{ run.run_id }}" maxlength="253" spellcheck="false"></label>
+              <button class="mk-btn" type="submit" :disabled="busy">Save</button>
+              <span class="mk-sub" id="host-help-{{ run.run_id }}">Empty = work it out. Download the files again after a change.</span>
+              <span class="mk-sub" role="alert" x-text="err" style="color:var(--c-dead)"></span>
+            </form>
           </div>
         </span>
-        {% if run.status != 'archived' %}<button class="mk-btn" :disabled="busy" @click="act('archive', 'Archive run {{ run.name | e }}? The server stops; the data is kept.')">Archive</button>{% endif %}
-        <button class="mk-btn danger" :disabled="busy" @click="act('delete', 'Delete run {{ run.name | e }}? This permanently deletes all run data.')">Delete</button>
+        {% if run.status != 'archived' %}<button class="mk-btn" :disabled="busy" @click="act('archive', 'Archive run ' + {{ run.name | tojson | forceescape }} + '? The server stops; the data is kept.')">Archive</button>{% endif %}
+        <button class="mk-btn danger" :disabled="busy" @click="act('delete', 'Delete run ' + {{ run.name | tojson | forceescape }} + '? This permanently deletes all run data.')">Delete</button>
       </header>
 
       <div class="mk-page">
         {# What the last action said when it failed — a start that could not bind its ports,
            mostly. Outside #content so the 2 s morph does not wipe it. #}
-        <div class="mk-banner error" x-data="runNotice()" x-show="notice" x-cloak>
-          <b>Could not start.</b> <span x-text="notice"></span>
-          <button type="button" class="mk-linkbtn" @click="notice = ''">dismiss</button>
+        <div role="alert" x-data="runNotice()" @run-error.window="title = $event.detail.title; notice = $event.detail.message">
+          <div class="mk-banner error" x-show="notice" x-cloak>
+            <b x-text="title"></b> <span x-text="notice"></span>
+            <button type="button" class="mk-linkbtn" @click="notice = ''">dismiss</button>
+          </div>
         </div>
         {% include "_board.html" %}
+      </div>
+
+    {% elif page == 'home' %}
+      {# ── Home ─────────────────────────────────────────────────────────── #}
+      {% set live = home_runs | selectattr('status', 'equalto', 'running') | first %}
+      <div class="mk-page mk-home">
+        <section class="mk-home-hero">
+          <div class="mk-home-link" aria-hidden="true">
+            <svg class="mk-home-ball a" viewBox="0 0 595.3 594.1" aria-hidden="true"><path fill="currentColor" opacity=".85" d="M297.6,380.9c-40.4,0-74.1-28.6-82.1-66.6H81.1c9.5,110.5,102.2,197.2,215.1,197.2s205.7-86.7,215.1-197.2H379.7C371.7,352.4,338,380.9,297.6,380.9z"/><path fill="currentColor" d="M297.6,41.3C156.4,41.3,41.9,155.8,41.9,297s114.5,255.7,255.7,255.7S553.4,438.3,553.4,297S438.9,41.3,297.6,41.3z M297.6,511.6c-113,0-205.7-86.7-215.1-197.2h134.4c8,38,41.7,66.6,82.1,66.6s74.1-28.6,82.1-66.6h131.7C503.3,424.8,410.6,511.6,297.6,511.6z"/><path fill="#FF1C1C" d="M297.7,213.2c40.4,0,74.1,28.6,82.1,66.6h134.4C504.7,169.2,412,82.5,299,82.5S93.4,169.2,83.9,279.7h131.7C223.6,241.7,257.3,213.2,297.7,213.2z"/></svg>
+            <span class="mk-home-bond">&lt;&gt;</span>
+            <svg class="mk-home-ball b" viewBox="0 0 595.3 594.1" aria-hidden="true"><path fill="currentColor" opacity=".85" d="M297.6,380.9c-40.4,0-74.1-28.6-82.1-66.6H81.1c9.5,110.5,102.2,197.2,215.1,197.2s205.7-86.7,215.1-197.2H379.7C371.7,352.4,338,380.9,297.6,380.9z"/><path fill="currentColor" d="M297.6,41.3C156.4,41.3,41.9,155.8,41.9,297s114.5,255.7,255.7,255.7S553.4,438.3,553.4,297S438.9,41.3,297.6,41.3z M297.6,511.6c-113,0-205.7-86.7-215.1-197.2h134.4c8,38,41.7,66.6,82.1,66.6s74.1-28.6,82.1-66.6h131.7C503.3,424.8,410.6,511.6,297.6,511.6z"/><path fill="#FF1C1C" d="M297.7,213.2c40.4,0,74.1,28.6,82.1,66.6h134.4C504.7,169.2,412,82.5,299,82.5S93.4,169.2,83.9,279.7h131.7C223.6,241.7,257.3,213.2,297.7,213.2z"/></svg>
+          </div>
+          <h1 class="mk-home-title">Soul Link</h1>
+          <p class="mk-home-lede">Two players, two games. Every catch is paired with your partner's catch from the same area, and when one falls, so does the other.</p>
+          <div class="mk-home-actions">
+            {% if live %}
+              <a class="mk-btn primary big" href="/runs/{{ live.run_id }}">Open {{ live.name }}</a>
+              <a class="mk-btn big" href="/new">New run</a>
+            {% else %}
+              <a class="mk-btn primary big" href="/new">New run</a>
+            {% endif %}
+          </div>
+        </section>
+
+        {% if home_runs %}
+          <section class="mk-zone">
+            <h2 class="mk-h2"><span>Runs</span><i></i></h2>
+            <ul class="mk-home-runs">
+              {% for r in home_runs %}
+                <li><a class="mk-home-run" href="/runs/{{ r.run_id }}">
+                  <span class="mk-dot {{ r.status }}"></span>
+                  <span class="mk-home-runname">{{ r.name }}</span>
+                  <span class="mk-sub">{{ r.game_label or 'Game detected when players connect' }}</span>
+                  <span class="mk-home-runstate">{% if r.counts %}<b class="alive">{{ r.counts.alive }}</b> alive, <b class="fallen">{{ r.counts.fallen }}</b> fallen{% elif r.status == 'running' %}Running{% else %}Stopped{% endif %}</span>
+                </a></li>
+              {% endfor %}
+            </ul>
+          </section>
+        {% else %}
+          <section class="mk-zone">
+            <h2 class="mk-h2"><span>Getting started</span><i></i></h2>
+            <ol class="mk-home-steps">
+              <li><b>Create a run.</b> Choose the game family and the rules both players share.</li>
+              <li><b>Load a launcher in each BizHawk.</b> The run page gives each player their own script: load the game first, then the script.</li>
+              <li><b>Play.</b> Catches pair up by area, and a faint on one side faints the partner on the other.</li>
+            </ol>
+          </section>
+        {% endif %}
+
+        <p class="mk-sub mk-home-more">Put the run on stream with the <a href="/broadcast">OBS overlays</a>, or patch a cartridge in <a href="/tools">Tools</a>.</p>
       </div>
 
     {% else %}
@@ -177,22 +245,59 @@
 <script>
   function manager() { return {}; }
 
+  // The address baked into every launcher and setup ZIP; "" goes back to working it out.
+  function publicHost(initial) {
+    return {
+      host: initial || '', err: '', busy: false,
+      async save() {
+        this.busy = true; this.err = '';
+        try {
+          var res = await fetch('/api/settings/public-host', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ host: this.host.trim() }), signal: AbortSignal.timeout(10000) });
+          var j = {};
+          try { j = await res.json(); } catch (e) { j = {}; }
+          if (res.ok && j.ok) { window.location.reload(); return; }
+          this.err = j.error || ('Could not save (HTTP ' + res.status + ')');
+        } catch (e) { this.err = 'Could not save: ' + e; }
+        this.busy = false;
+      },
+    };
+  }
+
   function runNotice() {
-    return { notice: new URLSearchParams(window.location.search).get('error') || '' };
+    return { title: 'Could not start.', notice: new URLSearchParams(window.location.search).get('error') || '' };
   }
 
   function runActions(runId) {
     return {
       busy: false, launchers: false,
+      // Single-flight; on success the controls stay disabled until the page unloads. A failure
+      // is shown in place (the run page may 404 once a delete went through).
       async act(what, confirmText) {
+        if (this.busy) return;
         if (confirmText && !confirm(confirmText)) return;
         this.busy = true;
+        var navigating = false, error = '';
         try {
-          var res = await fetch('/api/runs/' + runId + '/' + what, { method: 'POST' });
-          var j = await res.json();
-          if (!j.ok) { window.location.href = '/runs/' + runId + '?error=' + encodeURIComponent(j.error || 'Action failed'); return; }
-          window.location.href = what === 'delete' ? '/' : '/runs/' + runId;
-        } finally { this.busy = false; }
+          var res = await fetch('/api/runs/' + runId + '/' + what, { method: 'POST', signal: AbortSignal.timeout(30000) });
+          var text = await res.text(), j = {};
+          try { j = JSON.parse(text); } catch (e) { j = {}; }
+          if (res.ok && j.ok) {
+            navigating = true;
+            window.location.href = what === 'delete' ? '/' : '/runs/' + runId;
+          } else if (what === 'delete' && res.status === 404) {
+            navigating = true;                  // already gone: that is what delete wanted
+            window.location.href = '/';
+          } else {
+            error = j.error || ('The Manager answered HTTP ' + res.status);
+          }
+        } catch (e) {
+          error = e && e.name === 'TimeoutError' ? 'The Manager did not answer within 30 s.' : 'The Manager could not be reached: ' + e;
+        } finally {
+          if (!navigating) this.busy = false;
+        }
+        if (error) window.dispatchEvent(new CustomEvent('run-error', { detail: { title: 'Could not ' + what + '.', message: error } }));
       },
       async pin() {
         this.busy = true;
@@ -213,7 +318,7 @@
       form: form,
       ports: window.SLINK_NEXT_PORTS,
       draft: { name: '', game: '', opts: { battle_calc: true, pc_trade_npc: true } },
-      busy: false, error: '', stage: '',
+      busy: false, error: '', stage: '', tried: false,
       init() {
         var self = this;
         this.watchRandomizer();
@@ -232,6 +337,7 @@
       on() { var self = this; return Object.keys(form.options).filter(function (k) { return self.draft.opts[k] && self.support(k).ok; }); },
       async create() {
         var name = this.draft.name.trim();
+        this.tried = true;
         if (!name || this.busy) return;
         this.busy = true; this.error = ''; this.stage = 'Creating…';
         try {

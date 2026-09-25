@@ -22,6 +22,7 @@
   <label class="mk-btn" title="A .rnqs from UPR's GUI or from another run"><input type="file" accept=".rnqs" @change="importSettings($event)"><span>Import .rnqs…</span></label>
 </div>
 <p class="mk-cap" x-show="presetNote" x-text="presetNote"></p>
+<span role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap" x-text="presetNote"></span>
 
 <div class="mk-rgroups">
   <template x-for="g in groups()" :key="g.name">
@@ -32,9 +33,9 @@
           <template x-if="o.kind === 'choice'">
             <div class="mk-rchoice">
               <span class="mk-rlabel"><span x-text="o.label"></span><em class="mk-sub" x-show="o.help" x-text="o.help"></em></span>
-              <div class="mk-rchips" role="radiogroup" :aria-label="o.label">
+              <div class="mk-rchips" role="radiogroup" :aria-label="o.label" @keydown="radioKeys($event)">
                 <template x-for="c in o.choices" :key="c.value">
-                  <button type="button" class="mk-gchip" role="radio" :aria-checked="rdraft.spec[o.key] === c.value"
+                  <button type="button" class="mk-gchip" role="radio" :aria-checked="rdraft.spec[o.key] === c.value" :tabindex="chipTab(o, c)"
                           :class="rdraft.spec[o.key] === c.value ? 'active' : ''" :disabled="!choiceOk(o, c)"
                           :title="choiceWhy(o, c) || c.help"
                           @click="setChoice(o, c)" x-text="c.label"></button>
@@ -72,10 +73,10 @@
 
 {# The jar is found by the pipeline (find_upr_jar); it can be replaced the same way. #}
 <div class="mk-optgrid">
-  <label class="mk-field"><span>Randomizer jar</span>
+  <div class="mk-field"><label for="upr-jar"><span>Randomizer jar</span></label>
     <span class="mk-filerow">
-      <input type="text" x-model="rdraft.jar" placeholder="PokeRandoZX.jar — put it in the SLink folder, or pick it">
-      <label class="mk-btn" :class="uploading === 'jar' ? 'busy' : ''"><input type="file" accept=".jar" @change="upload($event, 'jar')"><span x-text="uploading === 'jar' ? 'Adding…' : 'Pick…'"></span></label>
+      <input type="text" id="upr-jar" x-model="rdraft.jar" placeholder="PokeRandoZX.jar — put it in the SLink folder, or pick it">
+      <label class="mk-btn" for="upr-jar-file" :class="uploading === 'jar' ? 'busy' : ''"><input type="file" id="upr-jar-file" accept=".jar" @change="upload($event, 'jar')"><span x-text="uploading === 'jar' ? 'Adding…' : 'Choose randomizer jar…'"></span></label>
     </span>
-  </label>
+  </div>
 </div>

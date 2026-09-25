@@ -120,3 +120,20 @@ async def test_a_repeated_seq_on_one_connection_is_still_a_duplicate(srv, port):
         assert (await c.send(_tick(1)))["commands"] == [{"cmd": "noop"}]
 
     assert [d[2] for d in srv.dispatched] == [1, 2], srv.dispatched
+
+
+@pytest.mark.asyncio
+async def test_ghost_positions_do_not_wake_sse_listeners(srv, port):
+    """The RR client streams ghost_pos at 20-30 Hz; each SSE ping made the calc refetch the
+    full status. A position changes nothing a page draws, so it must not ping."""
+    pings = []
+    srv._notify_sse = lambda: pings.append(1)
+    async with _Conn(port) as c:
+        await c.send(dict(HELLO_A, seq=1))
+        after_hello = len(pings)
+        for n in range(2, 7):
+            await c.send({"event": "ghost_pos", "player": "a", "seq": n, "x": n, "y": 1, "map": 0})
+        assert len(pings) == after_hello, "ghost_pos must not notify SSE"
+        await c.send(_tick(7))
+    assert len(pings) > after_hello, "a tick still notifies"
+

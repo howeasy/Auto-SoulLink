@@ -9,6 +9,7 @@
   --c-bg:    #04101a;
   --c-card:  #0e2030;
   --c-edge:  #2a6090;
+  --c-edge-ui: #3273ac;  /* control borders: 3.3:1 on card (the hairline stays #2a6090) */
   --c-sep:   color-mix(in srgb, #2a6090 50%, transparent);
   --c-txt:   #d8eaf8;
   --c-dim:   #8090a8;

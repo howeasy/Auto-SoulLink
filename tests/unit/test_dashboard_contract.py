@@ -12,6 +12,7 @@ contracts need; a real HTML5 parser would be a dependency for nothing.
 """
 from __future__ import annotations
 
+import json
 from html.parser import HTMLParser
 
 import pytest
@@ -158,11 +159,14 @@ async def test_calc_preview_is_one_element_per_battling_player(dashboard):
     assert len(ids) == len(set(ids)), f"duplicate calc previews: {ids}"
     if srv.state.is_rr:
         assert ids == ["calc-preview-b"], "player B is mid-battle on the Radical Red cast"
-        assert all("data-in-battle" in n.attrs and n.get("data-player-moves") for n in previews)
-        assert dom.find("script", src="/static/calc-preview.js"), "the preview script is not loaded"
+        for n in previews:
+            assert "data-in-battle" in n.attrs
+            moves = json.loads(n.get("data-calc"))["player_moves"]
+            assert moves and all(isinstance(m, str) for m in moves), f"engine needs move names: {moves}"
     else:
         assert not previews, "calc preview rendered for a generation without battle calc"
-        assert not dom.find("script", src="/static/calc-preview.js")
+    # always loaded: an HTMX swap cannot add it later, and it is a no-op out of battle
+    assert dom.find("script", src="/static/calc-preview.js"), "the preview script is not loaded"
 
 
 @pytest.mark.asyncio
@@ -240,8 +244,12 @@ async def test_the_now_cards_sit_in_the_player_columns(dashboard):
 
 @pytest.mark.asyncio
 async def test_fallen_rows_carry_no_live_numbers(dashboard):
-    """A memorialized pair is a memorial: no HP bar, no ability, no item. The injector's
-    party tick still lists the fainted mon, which is exactly the trap."""
+    """A memorialized pair is a memorial: no HP bar and no ability. The injector's party
+    tick still lists the fainted mon, which is exactly the trap. The held item stays
+    (owner 2026-09-23): it is what gets taken back out of the memorial box."""
     _, dom = dashboard
-    for row in (n for n in dom.find_all("article") if {"mk-pair", "fallen"} <= _classes(n)):
+    fallen = [n for n in dom.find_all("article") if {"mk-pair", "fallen"} <= _classes(n)]
+    for row in fallen:
         assert not [n for n in row.walk() if "mk-hp" in _classes(n)], row.get("id")
+    if any("mk-item" in _classes(n) for n in dom.walk()):  # Gen 1 has no held items
+        assert any("mk-item" in _classes(n) for row in fallen for n in row.walk())

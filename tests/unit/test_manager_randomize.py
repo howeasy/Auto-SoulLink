@@ -91,13 +91,15 @@ async def test_missing_arguments_are_named(manager_dir):
 
 
 @pytest.mark.asyncio
-async def test_a_pipeline_refusal_is_a_400_with_its_reason(manager_dir, tmp_path):
+async def test_a_pipeline_refusal_is_a_400_with_its_reason(manager_dir, tmp_path, monkeypatch):
     """A refusal is the feature. It must not surface as a 500 or, worse, as ok:true.
 
     Types decide the type clause, so settings that randomize them cannot be used -- and the
     caller has to be told which setting was the problem to be able to fix it.
     """
     _roms()
+    from server import upr_pipeline
+    monkeypatch.setattr(upr_pipeline, "jar_is_trusted", lambda _jar: True)  # test_upr_jar_pinning
     bad = tmp_path / "bad.rnqs"
     bad.write_bytes(build({"types_UNCHANGED": False}))
     status, body = await _post({
@@ -141,6 +143,7 @@ async def test_a_spec_body_writes_the_settings_file_the_form_asked_for(manager_d
         raise upr_pipeline.UprPipelineError("stop here")
 
     monkeypatch.setattr(upr_pipeline, "prepare_pair", fake_prepare_pair)
+    monkeypatch.setattr(upr_pipeline, "jar_is_trusted", lambda _jar: True)  # test_upr_jar_pinning
     status, body = await _post({"jar": "x", "rom_a": _RED, "rom_b": _BLUE,
                                 "spec": {"trainers_levels": 30, "trainers_force_evolved": 36,
                                          "wild": "area", "starters": "unchanged"}})

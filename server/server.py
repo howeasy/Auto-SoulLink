@@ -32,7 +32,7 @@ from collections import deque
 from datetime import datetime
 
 from server import calc_files
-from server.http_safety import csrf_protection, theme_cache
+from server.http_safety import allow_hosts, csrf_protection, theme_cache
 from server.lua_literals import lua_comment, lua_string
 from server.overlay_catalog import build_index_context as _build_stream_index_context
 from server.ui_capabilities import ui_capabilities
@@ -160,20 +160,19 @@ def _build_mon_entry(key, detail, adapter):
     sid = detail.get("species_id", 0)
     if not sid:
         return None
-    species = adapter.species_name(sid)
+    # Every name leaves in the calc's spelling (adapter.calc_name) — the calc matches exactly.
+    species = adapter.calc_name("species", adapter.species_name(sid))
     nature   = _nature_from_key(key)
-    abl_name = detail.get("ability_name", "") or adapter.ability_name(detail.get("ability_id", 0), sid)
+    abl_name = adapter.calc_name("ability", detail.get("ability_name", "")
+                                 or adapter.ability_name(detail.get("ability_id", 0), sid))
     item_id  = detail.get("held_item_id", 0)
-    item     = adapter.item_name(item_id) if item_id else ""
+    item     = adapter.calc_name("item", adapter.item_name(item_id)) if item_id else ""
     raw_moves = [m for m in (detail.get("moves") or []) if m][:4]
     moves = []
     for m in raw_moves:
-        if isinstance(m, int):
-            name = adapter.move_name(m)
-            if name:
-                moves.append(name)
-        elif isinstance(m, str) and m:
-            moves.append(m)
+        name = adapter.move_name(m) if isinstance(m, int) else m
+        if isinstance(name, str) and name:
+            moves.append(adapter.calc_name("move", name))
     level    = detail.get("level", 0)
     nick     = detail.get("nickname", "")
     hp       = detail.get("hp", 0)
@@ -203,6 +202,20 @@ def _build_mon_entry(key, detail, adapter):
         "active":        detail.get("active", False),
         "showdown_paste": "\n".join(lines),
     }
+
+
+def _calc_trainer_label(brief, enemy):
+    """The calc setdex trainer key for a roster trainer ("*Rival Blue Set 2" -> "Rival Blue",
+    the key the bridge's trainer index uses), or "" when there is no roster calc_label or
+    its party doesn't match at least half the live enemy species. On "" the bridge falls
+    back to matching the party by species + level."""
+    label = (brief or {}).get("calc_label") or ""
+    if not label or not enemy:
+        return ""
+    roster = {m.get("species") for m in brief.get("party") or []}
+    if 2 * sum(e["species_name"] in roster for e in enemy) < len(enemy):
+        return ""
+    return re.sub(r"\s+Set\s+\d+$", "", label.lstrip("*"))
 
 
 
@@ -1168,23 +1181,49 @@ class SLinkServer:
                        next((k for k, d in details.items() if d.get("hp", 0) > 0), None))
         dfn = next((em for em in enemy_party if em.get("active")),
                    next((em for em in enemy_party if em.get("hp", 0) > 0), None))
-        if not atk_key or not dfn:
+        adapter = self.adapter_for(pid)
+        # The same names /api/calc/mons hands the full calc: the engine looks moves,
+        # abilities and items up by name, never by the cartridge's numeric id.
+        atk = _build_mon_entry(atk_key, details[atk_key], adapter) if atk_key else None
+        if not atk or not dfn:
             return None
-        atk = details[atk_key]
         bs = self.battle_state.get(pid, {})
         is_trainer = bool(bs.get("is_trainer_battle") and bs.get("opponent_class") and bs.get("opponent_name"))
+
+        def status(mon):
+            # The adapter decodes its own generation's bitfield; SLP/PSN/... lowercase is
+            # the engine's StatusName.
+            return adapter.status_token(int(mon.get("status_cond", 0) or 0)).lower()
+
+        def boosts(stages):
+            # Raw battle stages (6 = neutral) in ATK, DEF, SPE, SPA, SPD order, as the full
+            # bridge reads them (slink_bridge.js _applyBattleState).
+            if not isinstance(stages, list):
+                return {}
+            out = {}
+            for stat, raw in zip(("atk", "def", "spe", "spa", "spd"), stages, strict=False):
+                if isinstance(raw, int) and 0 <= raw <= 12 and raw != 6:
+                    out[stat] = raw - 6
+            return out
+
         return {
             "trainer_key": f"{bs['opponent_class']} {bs['opponent_name']}" if is_trainer else "",
             "is_trainer": is_trainer,
-            "player_species": self.adapter.species_name(atk.get("species_id", 0)) if atk.get("species_id") else "",
-            "player_level": atk.get("level", 0),
-            "player_nature": _nature_from_key(atk_key),
-            "player_ability": self.adapter.ability_name(atk.get("ability_id", 0), atk.get("species_id", 0)) if atk.get("ability_id") else "",
-            "player_item": self.adapter.item_name(atk.get("held_item_id", 0)) if atk.get("held_item_id") else "",
-            "player_moves": [m for m in (atk.get("moves") or []) if m][:4],
+            "is_doubles": bool(bs.get("is_doubles")),
+            "player_species": atk["species_name"],
+            "player_level": atk["level"],
+            "player_nature": atk["nature"],
+            "player_ability": atk["ability_name"],
+            "player_item": atk["item_name"],
+            "player_moves": atk["moves"],
+            "player_hp_pct": atk["hp_pct"],
+            "player_status": status(atk),
+            "player_boosts": boosts(atk["stat_stages"]),
             "enemy_species": dfn.get("species_name") or "",
             "enemy_level": dfn.get("level", 0),
             "enemy_hp_pct": max(0, min(100, int(dfn.get("hp", 0) / max(dfn.get("maxHP", 1), 1) * 100))),
+            "enemy_status": status(dfn),
+            "enemy_boosts": boosts(dfn.get("stat_stages")),
         }
 
     def _enc_table_for_status(self, area_id: str, player_id: str = "") -> dict | None:
@@ -1462,7 +1501,7 @@ class SLinkServer:
                         self._rom_type_rejected.add(player_id)
                         await self._respond(writer, [{
                             "cmd": "hud_show", "text": f"[x] UNKNOWN ROM: {_rt}",
-                            "color": [255, 0, 0], "duration": 600,
+                            "r": 255, "g": 0, "b": 0, "frames": 600,
                         }])
                         self._notify_sse()
                         continue
@@ -1490,7 +1529,7 @@ class SLinkServer:
                         self._rom_type_rejected.add(player_id)
                         await self._respond(writer, [{
                             "cmd": "hud_show", "text": "[x] MIXED GAMES",
-                            "color": [255, 0, 0], "duration": 600,
+                            "r": 255, "g": 0, "b": 0, "frames": 600,
                         }])
                         self._notify_sse()
                         continue
@@ -1575,8 +1614,11 @@ class SLinkServer:
                         for c in _real_cmds
                     )
                     log.debug(f"[CMD FLUSH] player={player_id}  {len(_real_cmds)} cmd(s): {_summary}")
-                # Notify SSE clients after TCP response (no game-client latency impact)
-                self._notify_sse()
+                # Notify SSE clients after TCP response (no game-client latency impact).
+                # Not for ghost_pos: the RR client sends it 20-30x a second and it changes
+                # nothing a page draws, but every ping makes the calc refetch full status.
+                if msg.get("event") != "ghost_pos":
+                    self._notify_sse()
 
         except (asyncio.IncompleteReadError, ConnectionResetError):
             pass
@@ -1846,6 +1888,10 @@ class SLinkServer:
 
     def _dispatch(self, player_id: str, msg: dict) -> list:
         event = msg.get("event", "unknown")
+        # enemy_party is client JSON read by every battle view: keep only a list of objects.
+        if "enemy_party" in msg:
+            ep = msg["enemy_party"]
+            msg["enemy_party"] = [e for e in ep if isinstance(e, dict)] if isinstance(ep, list) else []
         # Snapshot area state before the event so we can detect outcome transitions.
         _pre_area_state = self.state.area_states.get(msg.get("area_id", ""))
         _pre_battle = self.battle_state[player_id]["in_battle"]
@@ -2477,11 +2523,13 @@ class SLinkServer:
             """Add sprite_html, species_name, and move_details to each enemy_party entry."""
             bs = dict(self.battle_state.get(pid, {"in_battle": False, "enemy_party": []}))
             enriched = []
-            for em in bs.get("enemy_party", []):
+            for em in bs.get("enemy_party") or []:
                 em2 = dict(em)
                 sid = em2.get("species_id", 0)
                 form = em2.get("form", 0)
-                if sid and not em2.get("sprite_html"):
+                # Rendered |safe, so it is always ours: a client-sent sprite_html is dropped.
+                em2.pop("sprite_html", None)
+                if sid:
                     em2["sprite_html"] = self._get_sprite_html(sid, form)
                 if sid and not em2.get("species_name"):
                     em2["species_name"] = self.adapter.species_name(sid)
@@ -2573,6 +2621,7 @@ class SLinkServer:
                     "b_enc_species": e.encounter_b.species if e.encounter_b else 0,
                     "b_enc_level":   e.encounter_b.level   if e.encounter_b else 0,
                     "status":     e.status.value,
+                    "killed_at":  e.killed_at,
                 }
                 for e in s.links
             ],
@@ -2623,6 +2672,13 @@ class SLinkServer:
                         "b_species_name": self.adapter.species_name(e.b.species) if e.b and e.b.species else "",
                         "b_sprite_html": self._get_sprite_html(e.b.species) if e.b and e.b.species else "",
                         "b_level":    self._resolve_level("b", e.b),
+                        # The wild mon a side met but did not catch (dead zones only).
+                        "a_enc_species_name": self.adapter.species_name(e.encounter_a.species)
+                                              if e.encounter_a and e.encounter_a.species else "",
+                        "a_enc_level": e.encounter_a.level if e.encounter_a else 0,
+                        "b_enc_species_name": self.adapter.species_name(e.encounter_b.species)
+                                              if e.encounter_b and e.encounter_b.species else "",
+                        "b_enc_level": e.encounter_b.level if e.encounter_b else 0,
                         "status":     e.status.value,
                     }
                     for e in s.links if e.killed_at
@@ -2759,6 +2815,7 @@ class SLinkServer:
                 opp_name  = bs.get("opponent_name", "")
                 opp_class = bs.get("opponent_class", "")
                 trainer_label = " ".join(filter(None, [opp_class, opp_name])) if is_trainer else "Wild"
+                tid = bs.get("trainer_id") or 0
                 for ei, em in enumerate(bs.get("enemy_party", [])):
                     esid  = em.get("species_id", 0)
                     if not esid:
@@ -2784,6 +2841,10 @@ class SLinkServer:
                             em.get("hp", 0) / max(em.get("maxHP", 1), 1) * 100)))
                         entry["trainer_label"] = trainer_label
                         enemy.append(entry)
+                calc_label = _calc_trainer_label(
+                    self.adapter.trainer_brief(tid) if (is_trainer and tid) else None, enemy)
+                for entry in enemy if calc_label else ():
+                    entry["trainer_label"] = calc_label
             result[pid] = {
                 "trainer_name": p.get("trainer_name", pid.upper()),
                 "party":  party,
@@ -2812,8 +2873,11 @@ class SLinkServer:
 
         # Build the killfeed slice of the status dict and reverse it so the
         # memorial wall renders oldest-first (chronological order).
+        # A dead zone where neither player caught anything lost no pair: it stays on the
+        # board and in the killfeed, but it is not a fallen pair on the wall.
         d = self._build_status_dict()
-        killfeed = list(reversed(d.get("killfeed", [])))
+        killfeed = [k for k in reversed(d.get("killfeed", []))
+                    if k.get("cause") != "dead_zone" or k.get("a_key") or k.get("b_key")]
         for entry in killfeed:
             entry["killed_at_display"] = _format_killed_at(entry.get("killed_at"))
 
@@ -2889,6 +2953,8 @@ class SLinkServer:
             "player_id":    player_id,
             "trainer_name": p.get("trainer_name", ""),
             "mons":         mons,
+            # A dropped client keeps its last party on screen, tagged, not passed off as live.
+            "connected":    bool(p.get("connected")),
         }
 
     # ── Battle overlay dispatch ──────────────────────────
@@ -2908,8 +2974,11 @@ class SLinkServer:
         Dispatches on template_base to assemble the right slice."""
         d = self._build_status_dict()
         p  = d.get("players", {}).get(player_id, {}) or {}
+        connected = bool(p.get("connected"))
+        if not connected:
+            p = {}  # a dropped client's last battle is not live: hide the panels
         bs = p.get("battle_state", {}) or {}
-        ctx = {"player_id": player_id, "in_battle": bool(bs.get("in_battle"))}
+        ctx = {"player_id": player_id, "connected": connected, "in_battle": bool(bs.get("in_battle"))}
 
         if template_base == "enemy_focus":
             return {**ctx, **self._enemy_focus_ctx(bs)}
@@ -2942,8 +3011,10 @@ class SLinkServer:
         }
 
     def _enemy_trainer_ctx(self, bs: dict) -> dict:
+        # is_trainer gates the template: a wild battle keeps in_battle True, and without this
+        # the overlay sat on "TRAINER / Loading..." for the whole encounter.
         if not bs.get("in_battle") or not bs.get("is_trainer_battle"):
-            return {"mons": [], "trainer_label": ""}
+            return {"mons": [], "trainer_label": "", "is_trainer": False}
         team = bs.get("enemy_party", []) or []
         label = (bs.get("opponent_class") or "Trainer")
         if bs.get("opponent_name"):
@@ -2951,6 +3022,7 @@ class SLinkServer:
         return {
             "mons": [self._battle_mon_card(m) for m in team],
             "trainer_label": label,
+            "is_trainer": True,
         }
 
     def _focus_ctx(self, p: dict, bs: dict) -> dict:
@@ -3052,9 +3124,16 @@ class SLinkServer:
                     "species_name": lnk.get("b_species_name") or "",
                     "sprite_html":  lnk.get("b_sprite_html") or "",
                 },
+                "killed_at": lnk.get("killed_at") or "",
             }
             (alive if lnk.get("status") == "alive" else dead).append(item)
-        return {"alive": alive, "dead": dead}
+        # .lk-list is overflow:hidden and OBS cannot scroll, so a long dead list clipped
+        # silently. Show the newest few and say how many more there are.
+        dead_shown = sorted(dead, key=lambda x: x["killed_at"], reverse=True)[:self._LINKS_DEAD_SHOWN]
+        return {"alive": alive, "dead": dead, "dead_shown": dead_shown,
+                "dead_more": len(dead) - len(dead_shown)}
+
+    _LINKS_DEAD_SHOWN = 5  # rows that fit under the alive cards at the catalog's sizes
 
     def _build_linked_party_overlay_context(self) -> dict:
         """Linked pairs where BOTH mons are currently in party — full
@@ -3278,6 +3357,7 @@ class SLinkServer:
             "player_id":    player_id,
             "trainer_name": trainer_name,
             "badges":       badges,
+            "connected":    bool(p.get("connected")),
         }
 
     def _build_encounters_overlay_context(self) -> dict:
@@ -3365,10 +3445,12 @@ class SLinkServer:
     def _build_event_feed_context(self, request, top_n: int, list_mode: str) -> dict:
         d = self._build_status_dict()
         events = (d.get("recent_events", []) or [])[:top_n]
-        # Filter by ?filter=type1,type2 if provided
+        # ?filter=type1,type2 picks the types; ?filter=all shows everything. No param means
+        # the catalog's default-on set, so party_to_box / box_to_party stay off a bare URL.
+        from server.overlay_catalog import EVENT_FILTERS_DEFAULT_ON
         flt = request.query.get("filter", "").strip()
-        if flt:
-            allow = {t for t in flt.split(",") if t}
+        if flt != "all":
+            allow = {t for t in flt.split(",") if t} if flt else set(EVENT_FILTERS_DEFAULT_ON)
             events = [e for e in events if e.get("type") in allow]
         pa = d.get("players", {}).get("a", {}) or {}
         pb = d.get("players", {}).get("b", {}) or {}
@@ -3620,12 +3702,17 @@ class SLinkServer:
         }
         for pid in ("a", "b"):
             conn_in = body.get("connections", {}).get(pid, {})
-            existing_pw = self.obs._config.get("connections", {}).get(pid, {}).get("password", "")
+            existing = self.obs._config.get("connections", {}).get(pid, {})
+            host = str(conn_in.get("host", ""))
+            port = int(conn_in.get("port", 4455))
+            # Empty password = keep the saved one, but only for the same host:port;
+            # otherwise a page could relay the saved password to a host of its choosing.
+            same_target = (host == str(existing.get("host", ""))
+                           and port == int(existing.get("port", 4455)))
             new_cfg["connections"][pid] = {
-                "host": str(conn_in.get("host", "")),
-                "port": int(conn_in.get("port", 4455)),
-                # Empty password = keep existing; non-empty = update
-                "password": conn_in.get("password") or existing_pw,
+                "host": host,
+                "port": port,
+                "password": conn_in.get("password") or (existing.get("password", "") if same_target else ""),
             }
         # Ensure each trigger has an id
         import uuid as _uuid
@@ -3690,13 +3777,16 @@ class SLinkServer:
         password = body.get("password")  # None = not provided; "" = explicitly cleared
         if host or port is not None or password:
             conns = {k: dict(v) for k, v in self.obs._config.get("connections", {}).items()}
-            conn = dict(conns.get(player, {}))
+            old = dict(conns.get(player, {}))
+            conn = dict(old)
             if host:
                 conn["host"] = host
             if port is not None:
                 conn["port"] = port
             if password:  # only update if non-empty; blank = keep existing
                 conn["password"] = password
+            elif (str(conn.get("host", "")), str(conn.get("port", ""))) !=                     (str(old.get("host", "")), str(old.get("port", ""))):
+                conn["password"] = ""   # never replay a saved password to a new host
             conns[player] = conn
             self.obs._config = {**self.obs._config, "connections": conns}
             self.obs.save_config()
@@ -4090,7 +4180,9 @@ class SLinkServer:
         if os.path.exists(mem_path):
             try:
                 with open(mem_path) as mf:
-                    memorial_log = json.load(mf)
+                    mem_doc = json.load(mf)
+                # memorial.json is {"retired_pairs": [...]}; the panel wants the list.
+                memorial_log = mem_doc.get("retired_pairs", []) if isinstance(mem_doc, dict) else []
             except Exception:
                 pass
         # Build memorial box contents from pc_boxes (mons in the memorial box)
@@ -4485,7 +4577,16 @@ class SLinkServer:
         links_path = self.state._links_path
         if os.path.exists(links_path):
             os.remove(links_path)
+        # The cartridges are unchanged and their sockets stay open, and a client does not
+        # re-hello on an open socket -- so the run keeps its adapter (a fresh state would
+        # default to Gen 3 and render a live Gen 1 run with Gen 3 names and sprites), and
+        # connected_players keeps each client's rom_type and cartridge facts. While a client is
+        # connected the committed rom_type/artifact_kind carry over too, or its partner's next
+        # hello would skip the Mixed-games check.
+        old = self.state
         self.state = SoulLinkState(data_dir=self._data_dir,
+                                   adapter=self.state.adapter,
+                                   is_rr=self.state.is_rr,
                                    species_lock=self.state.species_lock,
                                    gender_lock=self.state.gender_lock,
                                    type_lock=self.state.type_lock,
@@ -4496,9 +4597,11 @@ class SLinkServer:
                                    native_sounds=self.state.native_sounds,
                                    battle_calc=self.state.battle_calc,
                                    pc_trade_npc=self.state.pc_trade_npc)
+        # With nobody connected a reset is how a run switches games, so nothing is kept.
+        if any(p.get("connected") for p in self.connected_players.values()):
+            self.state.rom_type, self.state.artifact_kind = old.rom_type, old.artifact_kind
         self.state.presentation_key_in_use = self._presentation_key_in_use
         self.adapter = self.state.adapter
-        self.connected_players.clear()
         # Clear derived display caches so SSE doesn't broadcast stale data.
         self.player_area = {"a": "", "b": ""}
         self.player_area_id = {"a": "", "b": ""}
@@ -5128,7 +5231,10 @@ if __name__ == "__main__":
     parser.add_argument("--verbose",      action="store_true",   help="Enable DEBUG-level logging to file and console (default: INFO only)")
     parser.add_argument("--wire-log",     default=None, metavar="DIR",
                         help="Capture every TCP line to DIR/wire_<player>.jsonl (debug/characterization)")
+    parser.add_argument("--allow-host",   action="append", default=[], metavar="NAME",
+        help="Extra Host name the web UI answers to, e.g. a tunnel name or '*.<tailnet>.ts.net' (repeatable; also SLINK_ALLOWED_HOSTS)")
     args = parser.parse_args()
+    allow_hosts(args.allow_host)
     asyncio.run(main(args.host, args.port, args.http_port, args.reset, args.data_dir, args.run_id,
                      run_name=args.run_name,
                      species_lock=args.species_lock, gender_lock=args.gender_lock,

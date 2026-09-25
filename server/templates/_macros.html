@@ -21,13 +21,18 @@
    `cur` and `max_` are integers; colour bucket follows the same thresholds
    the dashboard JS uses (≥50 = high, ≥20 = mid, else low).               #}
 {% macro hp_bar(cur, max_) %}
-  {%- set ratio = (cur / max_) if max_ else 0 -%}
-  {%- set pct = ((ratio * 100) | round | int) -%}
+  {%- if not max_ or max_ <= 0 -%}
+  <span class="hp-bar-na">HP unavailable</span>
+  {%- else -%}
+  {%- set pct = ((cur / max_ * 100) | round | int) -%}
   {%- if pct >= 50 -%}{%- set tone = 'hp-high' -%}
   {%- elif pct >= 20 -%}{%- set tone = 'hp-mid' -%}
   {%- else -%}{%- set tone = 'hp-low' -%}
   {%- endif -%}
-  <span class="hp-bar-bg"><span class="hp-bar {{ tone }}" style="width:{{ pct }}%"></span></span>
+  <span class="hp-bar-bg" role="progressbar" aria-label="HP" aria-valuemin="0"
+        aria-valuemax="{{ max_ }}" aria-valuenow="{{ cur }}"
+        aria-valuetext="{{ cur }} of {{ max_ }} HP"><span class="hp-bar {{ tone }}" style="width:{{ pct }}%"></span></span>
+  {%- endif -%}
 {%- endmacro %}
 
 
@@ -57,7 +62,8 @@
    blank label (Gen 1 has one Special, not a SATK/SDEF split) drops that
    slot's chip outright rather than rendering it unlabelled.              #}
 {% macro stat_stages_row(stages, labels=None) -%}
-  {%- if stages -%}
+  {#- a client can send anything here: only a list of stages draws -#}
+  {%- if stages is sequence and stages is not string and stages is not mapping and stages -%}
     {%- set labels = labels or ['ATK', 'DEF', 'SPD', 'SATK', 'SDEF', 'ACC', 'EVA'] -%}
     {%- set ns = namespace(any=false) -%}
     {%- for raw in stages[:7] -%}
@@ -138,6 +144,7 @@
   {%- set is_dead = link.status in ('dead', 'memorial') -%}
   {%- set tone = 'ld' if is_dead else 'la' -%}
   <div class="lk-row {{ tone }}">
+    <span class="sr-only">{{ 'Memorial' if link.status == 'memorial' else ('Dead' if is_dead else 'Alive') }}</span>
     <div class="lk-half">
       {{ (link.a.sprite_html or '') | safe }}
       <span class="lk-nm">{{ link.a.nickname or link.a.species_name or '???' }}</span>
@@ -195,6 +202,7 @@
       </div>
     {% endif %}
     {% if entry.killed_at %}<div class="tomb-time">{{ entry.killed_at_display or entry.killed_at }}</div>{% endif %}
+    {% if entry.status == 'dead' %}<div class="tomb-time">burial pending</div>{% endif %}
   </div>
 {%- endmacro %}
 
@@ -203,13 +211,20 @@
    Private helper for the tombstone macro — renders one side's mon-card
    the way the old JS did.                                                #}
 {% macro _tomb_mon(entry, side) -%}
+  {%- set nick = entry[side ~ '_nickname'] -%}
+  {%- set sp_name = entry[side ~ '_species_name'] -%}
+  {%- set enc = entry[side ~ '_enc_species_name'] -%}
   <div class="tomb-mon">
     <div class="player-tag">{{ side | upper }}</div>
+    {%- if not entry[side ~ '_key'] and enc %}
+    {#- A dead-zone side that caught nothing: show what got away, not ???. #}
+    <div class="species">missed: {{ enc }}{% if entry[side ~ '_enc_level'] %} Lv {{ entry[side ~ '_enc_level'] }}{% endif %}</div>
+    {%- else %}
     {{ entry[side ~ '_sprite_html'] | safe }}
-    <div class="nick">{{ entry[side ~ '_nickname'] or '???' }}</div>
-    {%- set sp_name = entry[side ~ '_species_name'] -%}
-    {%- if sp_name %}<div class="species">{{ sp_name }}</div>{%- endif -%}
+    <div class="nick">{{ nick or sp_name or '???' }}</div>
+    {%- if sp_name and nick %}<div class="species">{{ sp_name }}</div>{%- endif -%}
     {%- set lv = entry[side ~ '_level'] -%}
     {%- if lv %}<div class="level">Lv {{ lv }}</div>{%- endif -%}
+    {%- endif %}
   </div>
 {%- endmacro %}

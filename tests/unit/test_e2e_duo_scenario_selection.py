@@ -33,7 +33,8 @@ GEN1_NEW_SCENARIOS = ("link_new", "deadzone_new", "linked_faint_bench_new",
                       "linked_faint_active_new", "trade_new", "reconnect_new", "ball_gate_new",
                       "admit_randomized_new", "soft_reset_new", "trade_decline_new",
                       "explode_new", "pc_ops_new", "changebox_new", "whiteout_new",
-                      "type_clause_new", "species_clause_new", "poison_new", "rival_swap_new")
+                      "type_clause_new", "species_clause_new", "poison_new", "rival_swap_new",
+                      "linked_faint_bench_battle_new", "explode_bench_battle_new")
 
 
 @pytest.mark.parametrize("game", sorted(GAMES))

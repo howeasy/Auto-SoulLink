@@ -14,6 +14,12 @@ from server.adapters.gen1_rom_scan import fingerprint_rom
 REPO = Path(__file__).resolve().parents[2]
 
 
+@pytest.fixture(autouse=True)
+def _any_jar_is_trusted(monkeypatch):
+    """These tests pass placeholder jar names; the hash pin is test_upr_jar_pinning's."""
+    monkeypatch.setattr(upr_pipeline, "jar_is_trusted", lambda _jar: True)
+
+
 def _vanilla():
     sources = {p: str(REPO / "patch" / "build" / f"gen1_{title}.gb")
                for p, title in (("a", "red"), ("b", "blue"))}

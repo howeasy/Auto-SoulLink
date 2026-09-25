@@ -12,12 +12,13 @@
 </label>
 <div class="mk-preview-rules" x-show="rdraft.randomize && pre">
   <template x-if="pre">
-    <span class="mk-tag" :class="pre.jar_found && (pre.jar_fork || family !== 'gen1_purergb') ? 'on' : 'off'" x-text="pre.jar_found ? (pre.jar_fork ? 'SLink fork jar (vanilla + pureRGB)' : 'stock jar (vanilla only)') : 'jar not found'"></span>
+    <span class="mk-tag" :class="pre.jar_found && (pre.jar_fork || family !== 'gen1_purergb') ? 'on' : 'off'" x-text="jarWords()"></span>
   </template>
   <template x-if="pre">
-    <span class="mk-tag" :class="pre.java_found ? 'on' : 'off'" x-text="pre.java_found ? 'java on PATH' : 'java not on PATH'"></span>
+    <span class="mk-tag" :class="pre.java_found ? 'on' : 'off'" x-text="javaWords()"></span>
   </template>
 </div>
+<span role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap" x-text="rdraft.randomize && pre ? jarWords() + ', ' + javaWords() : ''"></span>
 <div x-show="rdraft.randomize" style="display:flex;flex-direction:column;gap:var(--space-4)">
   {% include "_randomizer_fields.html" %}
 </div>

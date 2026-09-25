@@ -197,11 +197,11 @@ def test_the_overlay_pairing_row_reuses_the_clean_pure_fixture_and_overrides_the
         assert g1.is_purergb_overlay(key)
 
 
-def test_the_overlay_row_runs_all_18_scenarios_including_the_three_trade_ones():
+def test_the_overlay_row_runs_all_20_scenarios_including_the_three_trade_ones():
     all_ = duo.scenarios_for("gen1_pure_overlay")
     clean = duo.scenarios_for("gen1_pure")
     assert set(all_) - set(clean) == {"trade_new", "trade_decline_new", "explode_new"}
-    assert len(all_) == 18
+    assert len(all_) == 20   # +2 bench-in-battle lanes, live PASS on gen1_pure and gen1_pure_overlay
 
 
 def test_a_trade_scenario_on_the_overlay_row_stages_the_overlay_cartridge_not_the_vanilla_one(monkeypatch):

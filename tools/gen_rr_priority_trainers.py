@@ -14,6 +14,14 @@ Usage:
         -o rr_trainers_dump.xlsx
     # 2) Run the parser. Output lands in data/games/gen3_frlge/.
     python tools/gen_rr_priority_trainers.py [--src rr_trainers_dump.xlsx]
+    # Without the sheet, re-canonicalise the committed roster (after editing
+    # data/games/gen3_frlge/calc_names.json or the sheet maps below):
+    python tools/gen_rr_priority_trainers.py --from-json
+    # Canonicalise the calc's own set files (normal.js / hardcore.js) in place:
+    python tools/gen_rr_priority_trainers.py --setdex
+
+Every species/ability/item/move written must be a damage-calc name
+(calc/calc/src/data/*.ts); the run fails listing any that isn't.
 
 Each trainer entry on the "boss" sheets is a vertically-stacked block:
   +0  : Pokémon nickname/species (Geodude-A, Kleavor, etc.)
@@ -39,19 +47,14 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-try:
-    from openpyxl import load_workbook
-except ImportError:
-    print("openpyxl required: pip install openpyxl", file=sys.stderr)
-    sys.exit(1)
-
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _REPO_ROOT  = _SCRIPT_DIR.parent
 _DATA_DIR   = _REPO_ROOT / "data" / "games" / "gen3_frlge"
 _OUT_PATH   = _DATA_DIR / "rr_priority_trainers.json"
 _RR_TRAINERS_PATH = _DATA_DIR / "rr_trainers.json"
 _CALC_NORMAL_PATH    = _REPO_ROOT / "calc" / "src" / "js" / "data" / "sets" / "normal.js"
-_CALC_SUPP_SRC_PATH  = _REPO_ROOT / "calc" / "src"  / "js" / "data" / "sets" / "slink_priority.js"
+_CALC_SETDEX_PATHS   = [_CALC_NORMAL_PATH.with_name(n) for n in ("normal.js", "hardcore.js")]
+_CALC_SUPP_SRC_PATH  =_REPO_ROOT / "calc" / "src"  / "js" / "data" / "sets" / "slink_priority.js"
 _CALC_SUPP_DIST_PATH = _REPO_ROOT / "calc" / "dist" / "js" / "data" / "sets" / "slink_priority.js"
 
 # Species name normalisation: sheet uses some abbreviated forms (e.g.
@@ -75,6 +78,181 @@ def _normalize_species(s: str) -> str:
         if s.endswith(short):
             return s[: -len(short)] + long
     return s
+
+
+# ── Calc-name canonicalisation ─────────────────────────────────────────────
+# Every species/ability/item/move written to the roster and the calc setdex must
+# be a name the damage calc knows (calc/calc/src/data/*.ts) — the calc matches
+# names exactly. canonicalise_parties() maps sheet spellings, then RR ROM
+# spellings (data/games/gen3_frlge/calc_names.json, the table the server's
+# Gen3Adapter.calc_name uses), and reports anything still unknown.
+_CALC_TS_DIR     = _REPO_ROOT / "calc" / "calc" / "src" / "data"
+_CALC_NAMES_PATH = _DATA_DIR / "calc_names.json"
+_TS_LIT = r"'((?:[^'\\\n]|\\.)*)'"
+
+
+def _ts_unquote(s: str) -> str:
+    return re.sub(r"\\u([0-9a-fA-F]{4})|\\(.)",
+                  lambda m: chr(int(m.group(1), 16)) if m.group(1) else m.group(2), s)
+
+
+def calc_name_sets() -> dict[str, set[str]]:
+    """Names the calc knows, per kind: top-level object keys (species, moves, mega
+    stones, berries) and string-array / .push() entries (abilities, items)."""
+    def read(f: str) -> str:
+        return (_CALC_TS_DIR / f).read_text(encoding="utf-8")
+
+    def keys(t: str) -> set[str]:
+        pat = r"^  (?:" + _TS_LIT + r"""|([^\s'":{}]+)):"""
+        return {_ts_unquote(a) if a else b for a, b in re.findall(pat, t, re.M)}
+
+    def strs(t: str) -> set[str]:
+        s = {_ts_unquote(a) for a in re.findall(r"^\s+" + _TS_LIT + r",?$", t, re.M)}
+        for args in re.findall(r"\.push\(([^)]*)\)", t):
+            s |= {_ts_unquote(a) for a in re.findall(_TS_LIT, args)}
+        return s
+
+    items = read("items.ts")
+    return {"species": keys(read("species.ts")), "move": keys(read("moves.ts")),
+            "ability": strs(read("abilities.ts")), "item": strs(items) | keys(items)}
+
+
+# Sheet spellings the calc doesn't know (after _normalize_species' suffix
+# expansion, which reads Deoxys-A as Alola and Kyogre-P as Paldea).
+_SHEET_CALC_NAMES: dict[str, dict[str, str]] = {
+    "species": {
+        "Calyrex-I": "Calyrex-Ice", "Charizard-MegaX": "Charizard-Mega-X",
+        "Charizard-MegaY": "Charizard-Mega-Y", "Clawitzer-S": "Clawitzer-Sevii",
+        "Darmanitan-GZ": "Darmanitan-Galar-Zen", "Deoxys-Alola": "Deoxys-Attack",
+        "Dodrio-S": "Dodrio-Sevii", "Enamorus-I": "Enamorus", "Enamorus-T": "Enamorus-Therian",
+        "Flabébé": "Flabébé", "Giratina-O": "Giratina-Origin",
+        "Hoopa-U": "Hoopa-Unbound", "Indeedee-M": "Indeedee", "Kyogre-Paldea": "Kyogre-Primal",
+        "Kyurem-B": "Kyurem-Black", "Kyurem-W": "Kyurem-White", "Landorus-I": "Landorus",
+        "Landorus-T": "Landorus-Therian", "Magearna-O": "Magearna-Original",
+        "Mantine-S": "Mantine-Sevii", "Mewtwo-MegaX": "Mewtwo-Mega-X",
+        "Mewtwo-MegaY": "Mewtwo-Mega-Y", "Milotic-S": "Milotic-Sevii",
+        "Necrozma-DM": "Necrozma-Dusk-Mane", "Ogerpon-C": "Ogerpon-Cornerstone",
+        "Ogerpon-Hisui": "Ogerpon-Hearthflame", "Ogerpon-W": "Ogerpon-Wellspring",
+        "Palkia-O": "Palkia-Origin", "Rotom-W": "Rotom-Wash", "Shaymin-S": "Shaymin-Sky",
+        "Ursaluna-BM": "Ursaluna-Bloodmoon", "Ursaring-S": "Ursaring-Sevii",
+        "Urshifu-R": "Urshifu-Rapid-Strike", "Urshifu-S": "Urshifu",
+        "Wishiwashi-S-Sch": "Wishiwashi-Sevii-School", "Wishiwashi-Sch": "Wishiwashi-School",
+        "Wormadam-Sa": "Wormadam-Sandy", "Zacian-C": "Zacian-Crowned",
+        "Zebstrika-S": "Zebstrika-Sevii",
+    },
+    "ability": {
+        "Comotose": "Comatose", "Good As Gold": "Good as Gold", "Swords of Ruin": "Sword of Ruin",
+    },
+    "item": {
+        "Abomasnite": "Abomasite", "Charzardite X": "Charizardite X",
+        "Charzardite Y": "Charizardite Y",
+        "HeavyD. Boots": "Heavy-Duty Boots", "Terrain Exten.": "Terrain Extender",
+        "Terrain Extend.": "Terrain Extender", "Weakness Pol.": "Weakness Policy",
+        "Stardust": "",   # no battle effect; the calc has no such item
+    },
+    "move": {},
+}
+# One sheet/ROM name, two calc names: resolved by the (canonical) species.
+_BY_SPECIES: dict[tuple[str, str], dict[str, str]] = {
+    ("ability", "As One"): {"Calyrex-Ice": "As One (Glastrier)",
+                            "Calyrex-Shadow": "As One (Spectrier)"},
+    ("item", "Applite"): {"Appletun-Mega": "Appletunite", "Flapple-Mega": "Flapplite"},
+}
+
+
+def _sheet_ability(raw: str) -> str:
+    """One ability from a sheet cell. "Base\\nMega" lists the ability before and
+    after the set's transformation — the set is the transformed species, so the
+    last line applies; "A\\nor B" and "A or B" list alternatives — take A.
+    "(Both)" / "(Mega)" suffixes are annotations."""
+    lines = [ln.strip() for ln in (raw or "").split("\n") if ln.strip()]
+    if not lines:
+        return ""
+    pick = lines[0] if len(lines) > 1 and lines[1].startswith("or ") else lines[-1]
+    return re.sub(r"\s*\((?:Both|Mega)\)$", "", pick.split(" or ")[0]).strip()
+
+
+# Names the calc set files use that the calc can't know; accepted, with the reason.
+CALC_UNKNOWN_OK: dict[str, dict[str, str]] = {
+    "item": {"Eternamax Orb": "RR-custom form item the calc doesn't model"},
+}
+
+
+def _canon_mon(mon: dict, calc: dict[str, set[str]], table: dict) -> list[tuple[str, str]]:
+    """Rewrite one mon's species/ability/item/moves to calc names in place;
+    return the (kind, value) pairs that still aren't calc names."""
+    def canon(kind: str, name: str) -> str:
+        if not name or name in calc[kind]:
+            return name
+        name = _SHEET_CALC_NAMES[kind].get(name, name)
+        return table[kind].get(name, name)
+
+    sp = mon["species"] = canon("species", (mon.get("species") or "").strip())
+    ab = _sheet_ability(mon.get("ability") or "")
+    mon["ability"] = canon("ability", _BY_SPECIES.get(("ability", ab), {}).get(sp, ab))
+    it = (mon.get("item") or "").strip()
+    it = "" if it.lower() in ("none", "no item", "-") else it
+    mon["item"] = canon("item", _BY_SPECIES.get(("item", it), {}).get(sp, it))
+    mon["moves"] = [canon("move", _normalize_move(m))
+                    for m in mon.get("moves") or [] if m and m.strip() != "-"]
+    return [(kind, v) for kind, vals in (("species", [sp]), ("ability", [mon["ability"]]),
+                                         ("item", [mon["item"]]), ("move", mon["moves"]))
+            for v in vals if v and v not in calc[kind] and v not in CALC_UNKNOWN_OK.get(kind, {})]
+
+
+def canonicalise_parties(parties: dict) -> list[str]:
+    """Rewrite every party mon's names to calc names in place; return one error
+    line per value that still isn't a calc name (the caller must fail on any)."""
+    calc = calc_name_sets()
+    table = json.loads(_CALC_NAMES_PATH.read_text(encoding="utf-8"))
+    return [f"trainer {tid} ({info.get('name', '')}): {kind} {v!r}"
+            for tid, info in parties.items() for mon in info.get("party") or []
+            for kind, v in _canon_mon(mon, calc, table)]
+
+
+_SETDEX_LINE = re.compile(r'^(\s*)("(?:[^"\\]|\\.)*"): (\{.*\})(,?)(\s*)$')
+
+
+def canonicalise_setdex(path: Path) -> tuple[int, int, list[str]]:
+    """Rewrite a calc set file (normal.js / hardcore.js: one species key or one
+    set per line) so species keys and ability/item/move values are calc names.
+    Only changed lines are touched. Returns (renamed keys, rewritten values, errors)."""
+    calc = calc_name_sets()
+    table = json.loads(_CALC_NAMES_PATH.read_text(encoding="utf-8"))
+    keys = values = 0
+    errors: list[str] = []
+    out: list[str] = []
+    species = ""
+    seen: set[str] = set()
+    with path.open(encoding="utf-8", newline="") as f:   # keep the file's line endings
+        lines = f.readlines()
+    for line in lines:
+        m = re.match(r'^  "(.+)": \{(\s*)$', line)
+        if m:
+            mon = {"species": m.group(1)}
+            _canon_mon(mon, calc, table)
+            species = mon["species"]
+            if species in seen:   # a rename onto an existing key would drop sets
+                errors.append(f"{path.name}: species key {m.group(1)!r} -> duplicate {species!r}")
+            seen.add(species)
+            keys += species != m.group(1)
+            line = f'  {json.dumps(species, ensure_ascii=False)}: {{{m.group(2)}'
+        elif (m := _SETDEX_LINE.match(line)):
+            s = json.loads(m.group(3))
+            mon = dict(s, species=species)
+            errors += [f"{path.name} {species} {m.group(2)}: {k} {v!r}"
+                       for k, v in _canon_mon(mon, calc, table)]
+            new = {k: mon.get(k, s[k]) for k in s if k != "item" or mon["item"]}
+            values += (sum(new.get(k) != s[k] for k in ("ability", "item") if k in s)
+                       + sum(mv not in new.get("moves", []) for mv in s.get("moves", [])))
+            if new != s:
+                line = (f"{m.group(1)}{m.group(2)}: "
+                        f"{json.dumps(new, ensure_ascii=False, separators=(',', ':'))}"
+                        f"{m.group(4)}{m.group(5)}")
+        out.append(line)
+    if not errors:
+        path.write_text("".join(out), encoding="utf-8", newline="")
+    return keys, values, errors
 
 
 def _synthesise_calc_label(cls: str, name: str, fight_label: str) -> str:
@@ -377,6 +555,7 @@ _MOVE_NAME_MAP: dict[str, str] = {
     "Water Shurik.":   "Water Shuriken",
     "Vacuum W.":       "Vacuum Wave",
     "Crush Grip":      "Crush Grip",
+    "Cease. Edge":     "Ceaseless Edge",
     # Case / hyphenation differences that the calc is picky about.
     "Roar Of Time":    "Roar of Time",
     "Soft Boiled":     "Soft-Boiled",
@@ -884,7 +1063,42 @@ def main() -> int:
                         help="Path to the downloaded xlsx (default: repo root)")
     parser.add_argument("--out", default=str(_OUT_PATH),
                         help=f"Output path (default: {_OUT_PATH})")
+    parser.add_argument("--from-json", action="store_true",
+                        help="No spreadsheet: re-canonicalise the committed roster "
+                             "(--out) through the calc-name table and re-emit it "
+                             "plus slink_priority.js")
+    parser.add_argument("--setdex", action="store_true",
+                        help="Canonicalise the calc's own set files (normal.js, "
+                             "hardcore.js) in place through the calc-name table")
     args = parser.parse_args()
+
+    if args.setdex:
+        errors = []
+        for path in _CALC_SETDEX_PATHS:
+            keys, values, errs = canonicalise_setdex(path)
+            errors += errs
+            print(f"{path.name}: {keys} species keys renamed, {values} values rewritten")
+        if errors:
+            print("Unresolved:\n  " + "\n  ".join(errors), file=sys.stderr)
+            return 1
+        return 0
+
+    if args.from_json:
+        out = Path(args.out)
+        out_doc = json.loads(out.read_text(encoding="utf-8"))
+        errors = canonicalise_parties(out_doc["parties"])
+        if errors:
+            print("Names the calc doesn't know (map them in _SHEET_CALC_NAMES or "
+                  "calc_names.json):\n  " + "\n  ".join(errors), file=sys.stderr)
+            return 1
+        _write_outputs(out_doc, out)
+        return 0
+
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        print("openpyxl required: pip install openpyxl", file=sys.stderr)
+        return 1
 
     src = Path(args.src)
     if not src.exists():
@@ -1283,7 +1497,23 @@ def main() -> int:
         "parties":          dict(sorted(parties.items(), key=lambda kv: int(kv[0]))),
     }
 
-    out = Path(args.out)
+    errors = canonicalise_parties(parties)
+    if errors:
+        print("Names the calc doesn't know (map them in _SHEET_CALC_NAMES or "
+              "calc_names.json):\n  " + "\n  ".join(errors), file=sys.stderr)
+        return 1
+    _write_outputs(out_doc, Path(args.out))
+    print(f"  trainers_by_area : {len(trainers_by_area)} areas")
+    print(f"  unmatched        : {len(unmatched)}")
+    if unmatched[:10]:
+        print("  first 10 unmatched:")
+        for u in unmatched[:10]:
+            print(f"    - {u}")
+    return 0
+
+
+def _write_outputs(out_doc: dict, out: Path) -> None:
+    """Write the roster JSON and slink_priority.js (src + dist)."""
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8") as f:
         json.dump(out_doc, f, indent=2, ensure_ascii=False)
@@ -1294,6 +1524,7 @@ def main() -> int:
     # /calc/normal.html and /calc/hardcore.html immediately after the
     # vanilla normal.js / hardcore.js, so the new entries merge into
     # window.SETDEX_SV without overwriting existing keys.
+    parties = out_doc["parties"]
     supp = _build_supplement_setdex(parties)
     supp_js = _render_supplement_js(supp)
     for path in (_CALC_SUPP_SRC_PATH, _CALC_SUPP_DIST_PATH):
@@ -1302,17 +1533,10 @@ def main() -> int:
 
     print()
     print(f"Wrote {out}")
-    print(f"  trainers_by_area : {len(trainers_by_area)} areas")
     print(f"  parties          : {len(parties)} trainers")
-    print(f"  unmatched        : {len(unmatched)}")
     print(f"Wrote {_CALC_SUPP_SRC_PATH} ({len(supp)} species, "
           f"{sum(len(v) for v in supp.values())} sets)")
     print(f"Wrote {_CALC_SUPP_DIST_PATH}")
-    if unmatched[:10]:
-        print("  first 10 unmatched:")
-        for u in unmatched[:10]:
-            print(f"    - {u}")
-    return 0
 
 
 def _build_supplement_setdex(parties: dict[str, dict]) -> dict[str, dict]:
