@@ -1,0 +1,51 @@
+# receipt: python tools/e2e_duo.py --game gen3_rr --scenario faint_cmd_clean_gen3
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2 sha=bc733fd002ad9e9f05327a356b469a0eb5dab1c1 tracked_clean=True runner=subagent G5-RR-CLEAN-2 2026-09-25
+# card: G5-RR-CLEAN-2 task -- fixes over faint_cmd_clean_gen3s prior PASS receipt (3c9d429c):
+#   1) any_move_slot now excludes self-damaging move effects (recoil/Explosion/Memento) via
+#      the packs own move-effect byte, with a defense-in-depth attribution guard in lose_active;
+#   2) this scenario does not exercise lose_active, but shares the driver file with one that does
+#      (linked_faint_active_clean_gen3), so the LOSE_REHUNT_WIN outcome gate is re-verified there;
+#   3) assert_faint_cmd_clean_gen3_saved is no longer a bare alias: it now proves side a ran the
+#      companion build and side b the raw CLEAN dump (both admitted by HASH against the
+#      engine_signals.json pins), before delegating to the reused faint_cmd_gen3 memorial oracle.
+#   OMP review cx-39175521 verified by the coordinator.
+--- attempt 1 of 1 (live) ---
+
+========== scenario: faint_cmd_clean_gen3 ==========
+[duo] faint_cmd_clean_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=679d112cdfe699c2793d82c7e7999ac9dfca9e222ad5a85d4f8f1e457cd0283f:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=ad7d396a2ce84a46d1f71adc31cdcc3b992b4d458d13f1b3f47bb845b07f70be profile.json=0817b3b16e235609a92afe8556a8b8d7b037c23b85e193db03bfe28ef7080d9b source=bc733fd002ad9e9f05327a356b469a0eb5dab1c1
+[duo] server up: tcp=59989 http=59990 data=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_clean_gen3_urlfgcvy
+[duo] cleared 9 stale artifact(s) for faint_cmd_clean_gen3: e2e_faint_cmd_clean_gen3_a_1_witness.bin, e2e_faint_cmd_clean_gen3_a_1_witness_ext.bin, e2e_faint_cmd_clean_gen3_a_attempt1_result.txt, e2e_faint_cmd_clean_gen3_a_result.txt, e2e_faint_cmd_clean_gen3_b_1_witness.bin, e2e_faint_cmd_clean_gen3_b_1_witness_ext.bin, e2e_faint_cmd_clean_gen3_b_attempt1_result.txt, e2e_faint_cmd_clean_gen3_b_result.txt, e2e_faint_cmd_clean_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'memorialize', 'key': 'F56D8C1D:2BDDC8BF'}
+[duo] queued for a: {'cmd': 'game_over'}
+[duo] injected A faint F56D8C1D:2BDDC8BF -> force_faint B F56D8C1D:D4223740; re-queued to A: ['memorialize', 'game_over']
+[duo] RESULT_LINE a: RESULT: PASS (memorialized F56D8C1D:2BDDC8BF)
+[duo] RESULT_LINE b: RESULT: PASS (memorialized F56D8C1D:D4223740)
+[duo] SAVE_WITNESS_SHA256 inst=a site=25c86b771f4b6fab306e36c8bc1aab3036a2e12d93db527ceaad3e54c4f8bc6f file=25c86b771f4b6fab306e36c8bc1aab3036a2e12d93db527ceaad3e54c4f8bc6f match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=ed310c68499c3b87fc47f7c2ded0120901ddcb42f148e4a7b4c9c6befef67dd4 file=ed310c68499c3b87fc47f7c2ded0120901ddcb42f148e4a7b4c9c6befef67dd4 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] faint_cmd_clean_gen3: ROM provenance confirmed (a=companion, b=clean, both by hash)
+[duo] faint_cmd: F56D8C1D:2BDDC8BF and F56D8C1D:D4223740 saved once each in box 25; B's HP 0 came from an overworld-armed write
+[duo] MARKER a: [client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player a -> 127.0.0.1:59989 (rom ea5352f8)
+[duo] MARKER b: [client] [SLink-gen3] gen3_rr/radical_red (clean by hash) player b -> 127.0.0.1:59989 (rom 964f951a)
+[duo] MARKER a: RX memorialize key=F56D8C1D:2BDDC8BF
+[duo] MARKER a: TX memorialize_done F56D8C1D:2BDDC8BF {"box":24,"event":"memorialize_done","key":"F56D8C1D:2BDDC8BF","player":"a","seq":7}
+[duo] MARKER b: RX force_faint key=F56D8C1D:D4223740
+[duo] MARKER b: FORCED_HP0 F56D8C1D:D4223740 frame=782 in_battle=0 battler=0
+[duo] MARKER b: RX memorialize key=F56D8C1D:D4223740
+[duo] MARKER b: TX memorialize_done F56D8C1D:D4223740 {"box":24,"event":"memorialize_done","key":"F56D8C1D:D4223740","player":"b","seq":8}
+[duo] MARKER b: [client] [SLink-gen3] write overworld 0x0202433E +2 frame 782
+[duo] PYDEC: PASS asserted scenario facts
+[duo] faint_cmd_clean_gen3: a=PASS b=PASS
+
+========== summary ==========
+  faint_cmd_clean_gen3: PASS (attempt 1 of 1)
