@@ -332,10 +332,12 @@ class Gen1PureRGBAdapter(Gen1Adapter):
         return row["name"] if row else ""
 
     def calc_profile(self) -> dict | None:
-        # pureRGB's calc is enabled separately once its dex is verified in the browser; see
-        # docs/calc_multigen/PURERGB_MECHANICS.md. Overridden rather than inherited: Gen1Adapter
-        # now returns a vanilla profile, which would be wrong data for a pureRGB run.
-        return None
+        # Gen 1 rules on pureRGB's own dex (calc.useDex('purergb'): its types, moves, species
+        # and forms) with its generated trainer sets. Known limits (Defense Curl's
+        # super-effective block, the optional type-chart toggles, move side effects) are in
+        # docs/calc_multigen/PURERGB_MECHANICS.md.
+        return {"gen": 1, "dex": "purergb",
+                "sets": {"file": "PureRGB.js", "var": "CUSTOMSETDEX_PURERGB"}}
 
     def move_data(self, move_id: int) -> dict | None:
         row = self._moves.get(move_id)

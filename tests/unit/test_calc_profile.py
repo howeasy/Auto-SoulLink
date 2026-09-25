@@ -40,12 +40,11 @@ def test_gen1_adapter_calc_profile_has_sets_per_variant():
     }
 
 
-def test_purergb_adapter_calc_profile_is_none():
-    # Gen1PureRGBAdapter subclasses Gen1Adapter, which now returns a real profile;
-    # pureRGB's custom types/moves aren't in the calc's tables yet, so it must override
-    # back to None rather than silently inheriting Gen1Adapter's vanilla profile.
+def test_purergb_adapter_calc_profile_is_its_own_dex():
+    # Gen1PureRGBAdapter subclasses Gen1Adapter; it must not inherit the vanilla dex/sets.
     from server.adapters.gen1_purergb import Gen1PureRGBAdapter
-    assert Gen1PureRGBAdapter().calc_profile() is None
+    assert Gen1PureRGBAdapter().calc_profile() == {
+        "gen": 1, "dex": "purergb", "sets": {"file": "PureRGB.js", "var": "CUSTOMSETDEX_PURERGB"}}
 
 
 def test_base_default_calc_profile_is_none():

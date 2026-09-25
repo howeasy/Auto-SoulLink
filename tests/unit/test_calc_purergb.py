@@ -124,8 +124,8 @@ def test_purergb_calc_moves_resolve_for_every_move(purergb):
     assert len(purergb._moves) == len(PURERGB_MOVE_KEYS) == 165
 
 
-def test_purergb_calc_profile_is_none_pending_verification():
-    assert Gen1PureRGBAdapter(rom_type="PureRed").calc_profile() is None
+def test_purergb_calc_profile_uses_the_purergb_dex():
+    assert Gen1PureRGBAdapter(rom_type="PureRed").calc_profile()["dex"] == "purergb"
 
 
 # ── 3. tools/gen_purergb_setdex.py output ────────────────────────────────────────────────────
