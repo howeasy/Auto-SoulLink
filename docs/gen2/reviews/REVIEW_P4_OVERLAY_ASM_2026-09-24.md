@@ -9,6 +9,14 @@ Published overlays at d09e76c1: C 651dc6bf, G d563669e, S 76c6c112, caps 31. The
 `trade_service.asm` edit that the brief mentions landed during the review as **67143736**
 (C 265401fa / G 4a3d1977 / S 942060ee). Section 4 covers it.
 
+> **REVIEW-P4-HASH (post-RC, evidence hygiene).** The Gold overlay hash above, `d563669e`, is
+> superseded: the current Gold overlay is `15fc8213…` (`data/gen2/overlay_provenance.json`,
+> `outputs.pokegold.sha1`). The Gold build moved between this review and the RC (a rebuild of
+> the same source, or a later source edit rebuilding it); the review's findings are about the
+> `patch/gen2/src/*.asm` source, not this build byte-for-byte, so they still stand. Anyone
+> re-verifying a finding against a live Gold ROM should pin to the current provenance hash, not
+> the one recorded here.
+
 **Vanilla references.** `.cache/gen2-build/pokecrystal` @7a7881d (cited as `C`) and
 `.cache/gen2-build/pokegold` @656583c (cited as `G`). Symbols come from the clean `.sym`/`.map`
 files and from the overlay `data/gen2/{crystal,gold}_slink.{sym,map}`.
