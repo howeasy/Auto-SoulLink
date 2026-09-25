@@ -206,16 +206,7 @@ def build_plan(cut, lane, master):
                                  "--saveram-name", ROOT_DUMPS[title][:-len(".gba")] + ".SaveRAM"],
                                 lane, 600))
     # §9 item 5: the zip built FROM the cut, checked AT the cut, then booted
-    zip_path = f"{lane}/dist/SLink-player-g4-{cut8}.zip"
-    rows += [Row("zip_build", "§9 item5",
-                 [PY, "tools/make_release.py", "--version", f"g4-{cut8}", "--out", f"{lane}/dist",
-                  "--skip-generators"], lane, 600, emulator=False),
-             Row("zip_check", "§9 item5",
-                 [PY, "tools/check_release_zip.py", zip_path, "--rev", cut], lane, 300,
-                 emulator=False),
-             Row("zip_boot_firered", "§9 item5",
-                 [PY, "tools/gen3_final_cut.py", "zip-boot", "--zip", zip_path, "--lane", lane],
-                 REPO, 600)]
+    rows += zip_rows(cut, lane, "firered")
     # §10 item 6: route-differential against master
     rows.append(Row("item6_route_diff", "§10 item6",
                     [PY, "tools/gen3_final_cut.py", "item6", "--branch", lane, "--master", master],
@@ -256,16 +247,28 @@ def rr_scenarios():
 RR_SIGNED_LIMITS = {"linked_faint_active_mega_gen3"}   # ruling 20 (R5)
 
 
+def zip_rows(cut, lane, title):
+    """§9 item 5: the zip built FROM the cut, checked AT the cut, then booted on `title`."""
+    cut8 = cut[:8]
+    zip_path = f"{lane}/dist/SLink-player-g4-{cut8}.zip"
+    tag = "§9 item5" if title == "firered" else "§9 item5 RR"
+    boot = [PY, "tools/gen3_final_cut.py", "zip-boot", "--zip", zip_path, "--lane", lane]
+    if title != "firered":
+        boot += ["--title", title]
+    return [Row("zip_build", tag,
+                [PY, "tools/make_release.py", "--version", f"g4-{cut8}", "--out", f"{lane}/dist",
+                 "--skip-generators"], lane, 600, emulator=False),
+            Row("zip_check", tag,
+                [PY, "tools/check_release_zip.py", zip_path, "--rev", cut], lane, 300,
+                emulator=False),
+            Row(f"zip_boot_{title.replace('_', '')}", tag, boot, REPO, 600)]
+
+
 def build_plan_rr(cut, lane, master):
     """The G5 final-cut pass: the RR duo rows (docs/gen3/PLAN.md §14 P5), the RR opcode gates
     (rr_gates_live_06724759_2026-09-24.txt's SLINK_LIVE=1 pytest tests/live/test_lua_gates.py),
-    and a placeholder for an extracted-zip RR boot. `master` is accepted for CLI-signature parity
-    with build_plan but unused (the RR plan has no item6 row).
-
-    The zip-boot row is a named TODO, not a real boot: this runner's own input tables
-    (PINNED_INPUTS/ROOT_DUMPS/STAGED) name no RR clean ROM at all, and zip_boot()'s client-identity
-    regex and "hello rom=" string are FR-only and unverified for radical_red -- guessing at them
-    would fake a boot check, so the row fails outright and says so."""
+    and the release zip built, checked and booted on the RR companion build (zip_rows, ZIP_BOOT).
+    `master` is accepted for CLI-signature parity with build_plan but unused (no item6 row)."""
     del master
     rows = [_duo(s, "gen3_rr", "§14 P5 RR duo", lane) for s in rr_scenarios()]
     rows.append(Row("rr_opcode_gates", "G5-GATES-LIVE",
@@ -274,13 +277,7 @@ def build_plan_rr(cut, lane, master):
                     # the suite owns its skip policy (12 deferred gates skip by design; ported
                     # gates never skip): 26 passed / 12 skipped is its PASS (OMP cx-42592031)
                     own_verdict=True))
-    rows.append(Row("zip_boot_radicalred_TODO", "§9 item5 RR",
-                    [PY, "-c",
-                     "import sys; sys.stderr.write('not implemented: gen3_final_cut zip-boot has "
-                     "no RR parameterization -- the RR clean ROM is not in PINNED_INPUTS/"
-                     "ROOT_DUMPS/STAGED and the client identity/hello strings for radical_red are "
-                     "unverified, so this row fails rather than guessing (card G5-RUNNER-RR)\\n'); "
-                     "sys.exit(1)"], lane, 30, emulator=False))
+    rows += zip_rows(cut, lane, "radical_red")
     for r in rows:
         r.deps = row_deps(r)
     return rows
@@ -697,7 +694,22 @@ def _free_port():
         return s.getsockname()[1]
 
 
-def zip_boot(zip_path, lane, timeout=300):
+# zip-boot per title: (ROM in the lane, launched filename, fixture, battery name, client identity
+# line, server hello). RR boots the companion build players get from SLink-RR.ups; BizHawk has no
+# gamedb entry for it and names the battery from the launched filename ("slink_RR.gba" ->
+# "slink RR.SaveRAM", tools/e2e_duo.py GEN3_TITLES); its hello says rom_type firered_rr
+# (lua/gen3/entry.lua) and its identity line is gen3_rr/radical_red (companion by hash).
+ZIP_BOOT = {
+    "firered": (STAGED["firered"], "fr.gba", "firered_party_town.sav",
+                "Pokemon - FireRed Version (USA).SaveRAM",
+                r"\[SLink-gen3\] gen3_frlg/firered \(clean by hash\) player a ", "hello rom=firered "),
+    "radical_red": ("patch/build/slink_RR.gba", "slink_RR.gba", "rr_town.sav", "slink RR.SaveRAM",
+                    r"\[SLink-gen3\] gen3_rr/radical_red \(companion by hash\) player a ",
+                    "hello rom=firered_rr "),
+}
+
+
+def zip_boot(zip_path, lane, timeout=300, title="firered"):
     """Extract the zip to a space-free temp dir, run the cut's server from the lane, boot the
     FR dump on the extracted lua/slink.lua with the FR town fixture seeded, and PASS on the
     client's `(clean by hash) player a` + `TCP connected` and the server's `hello rom=firered`
@@ -715,10 +727,11 @@ def zip_boot(zip_path, lane, timeout=300):
     lua_log = os.path.join(os.path.dirname(os.path.dirname(entry)), "slink_lua.log")
     saveram = os.path.join(tmp, "saveram")
     os.makedirs(saveram)
-    fixture = os.path.join(lane, "tests", "fixtures", "gen3", "firered_party_town.sav")
+    rom_rel, rom_name, fixture_name, saveram_name, client_pat, hello = ZIP_BOOT[title]
+    fixture = os.path.join(lane, "tests", "fixtures", "gen3", fixture_name)
     with open(fixture, "rb") as f:
         body = gen3_fixtures.codec.split_rtc(f.read())[0]
-    with open(os.path.join(saveram, gen3_fixtures.PARTY_TITLES["firered"]["saveram"]), "wb") as f:
+    with open(os.path.join(saveram, saveram_name), "wb") as f:
         f.write(body)
     cfg = os.path.join(tmp, "config.ini")
     gen3_fixtures.write_gba_run_config(run_gate.BIZHAWK_CONFIG, cfg, saveram)
@@ -726,7 +739,7 @@ def zip_boot(zip_path, lane, timeout=300):
         if (json.load(f).get("Rewind") or {}).get("Enabled") is not False:
             print("RESULT: FAIL the generated config does not have rewind off")
             return 1
-    shutil.copyfile(os.path.join(lane, STAGED["firered"]), os.path.join(tmp, "fr.gba"))
+    shutil.copyfile(os.path.join(lane, rom_rel), os.path.join(tmp, rom_name))
     with open(os.path.join(tmp, "boot.lua"), "w", encoding="utf-8") as f:
         f.write(_BOOT_LUA)
     tcp, http = _free_port(), _free_port()
@@ -743,23 +756,23 @@ def zip_boot(zip_path, lane, timeout=300):
         time.sleep(3)
         env = dict(os.environ, SLINK_HOST="127.0.0.1", SLINK_PORT=str(tcp), SLINK_PLAYER="a",
                    SLINK_ZIPBOOT_ENTRY=entry.replace("\\", "/"))
-        cmd = [run_gate.EMUHAWK, "--config=config.ini", "--lua=boot.lua", "fr.gba"]
+        cmd = [run_gate.EMUHAWK, "--config=config.ini", "--lua=boot.lua", rom_name]
         print(f"[zip-boot] {' '.join(cmd)}  (cwd={tmp})")
         procs.append(subprocess.Popen(cmd, cwd=tmp, env=env, stdout=subprocess.DEVNULL,
                                       stderr=subprocess.DEVNULL))
-        client_re = re.compile(r"\[SLink-gen3\] gen3_frlg/firered \(clean by hash\) player a ")
+        client_re = re.compile(client_pat)
         end, ok = time.time() + timeout, False
         while time.time() < end and not ok:
             time.sleep(2)
             ltxt = _read(lua_log)
             ok = bool(client_re.search(ltxt)) and "TCP connected" in ltxt and \
-                "hello rom=firered" in _read(server_log)
+                hello in _read(server_log)
     finally:
         for p in reversed(procs):
             if p.poll() is None:
                 kill_tree(p.pid)
     print(f"--- {lua_log} ---\n{_read(lua_log)}\n--- server log ---\n{_read(server_log)}")
-    print("RESULT: PASS the extracted zip booted FireRed on the new client" if ok else
+    print(f"RESULT: PASS the extracted zip booted {title} on the new client" if ok else
           f"RESULT: FAIL no client/server boot evidence within {timeout}s")
     return 0 if ok else 1
 
@@ -1625,8 +1638,9 @@ def main(argv=None):
         ap.add_argument("--zip", required=True)
         ap.add_argument("--lane", required=True)
         ap.add_argument("--timeout", type=int, default=300)
+        ap.add_argument("--title", default="firered", choices=sorted(ZIP_BOOT))
         a = ap.parse_args(argv[1:])
-        return zip_boot(a.zip, a.lane, a.timeout)
+        return zip_boot(a.zip, a.lane, a.timeout, a.title)
     if argv[:1] == ["item6"]:
         ap = argparse.ArgumentParser(prog="gen3_final_cut.py item6")
         ap.add_argument("--branch", required=True)
@@ -1641,8 +1655,8 @@ def main(argv=None):
                     help="item 6's baseline tree, provisioned at `master`")
     ap.add_argument("--title", default="frlg", choices=("frlg", "rr"),
                     help="frlg (default): the G4 FR/LG plan, unchanged. rr: the G5 Radical Red "
-                         "plan (card G5-RUNNER-RR) -- the RR duo rows, the RR opcode gates, and a "
-                         "TODO zip-boot placeholder -- in place of it")
+                         "plan (card G5-RUNNER-RR) -- the RR duo rows, the RR opcode gates, and the "
+                         "zip build/check/boot on RR -- in place of it")
     ap.add_argument("--rows", default=None, help="comma list of row-id globs or item tags")
     ap.add_argument("--dry-run", action="store_true", help="print the plan; launch nothing")
     ap.add_argument("--list", action="store_true", help="print the selected row ids")

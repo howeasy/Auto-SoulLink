@@ -144,7 +144,7 @@ def test_rr_mega_skip_reason_does_not_match_the_stale_allowed_skips_entry():
 
 def test_build_plan_rr_row_ids_are_exactly_the_rr_scenarios_plus_gates_and_todo():
     rows = fc.build_plan_rr("c" * 40, LANE, MASTER)
-    assert [r.id for r in rows] == _rr_scenario_ids() + ["rr_opcode_gates", "zip_boot_radicalred_TODO"]
+    assert [r.id for r in rows] == _rr_scenario_ids() + ["rr_opcode_gates", "zip_build", "zip_check", "zip_boot_radicalred"]
 
 
 def test_build_plan_rr_duo_rows_use_e2e_duo_with_the_rr_game():
@@ -162,14 +162,22 @@ def test_build_plan_rr_opcode_gates_row():
     assert gates.env == {"SLINK_LIVE": "1"}
 
 
-def test_build_plan_rr_zip_boot_todo_row_fails_and_says_not_implemented():
+def test_build_plan_rr_boots_the_zip_on_the_rr_companion():
     rows = fc.build_plan_rr("c" * 40, LANE, MASTER)
-    todo = next(r for r in rows if r.id == "zip_boot_radicalred_TODO")
-    p = subprocess.run(todo.argv, capture_output=True, text=True)
-    assert p.returncode != 0
-    assert "not implemented" in (p.stdout + p.stderr)
-    verdict, ok = fc.judge(todo.id, p.returncode, p.stdout + p.stderr)
-    assert not ok and verdict.startswith("FAIL")
+    boot = next(r for r in rows if r.id == "zip_boot_radicalred")
+    assert boot.argv[-2:] == ["--title", "radical_red"]
+    rom, name, fixture, saveram, client, hello = fc.ZIP_BOOT["radical_red"]
+    assert (rom, name, fixture, saveram) == ("patch/build/slink_RR.gba", "slink_RR.gba",
+                                             "rr_town.sav", "slink RR.SaveRAM")
+    import re
+    line = "[SLink-gen3] gen3_rr/radical_red (companion by hash) player a -> 127.0.0.1:1 (rom ea5352f8)"
+    assert re.search(client, line) and hello == "hello rom=firered_rr "
+
+
+def test_the_fr_zip_boot_row_is_unchanged():
+    rows = fc.build_plan("c" * 40, LANE, MASTER)
+    boot = next(r for r in rows if r.id == "zip_boot_firered")
+    assert "--title" not in boot.argv and boot.item == "§9 item5"
 
 
 def test_rr_rows_are_never_carried_until_their_rom_and_state_inputs_are_hashed():
@@ -196,10 +204,10 @@ def test_dry_run_title_rr_plan(capsys):
                     "--master", MASTER]) == 0
     out = capsys.readouterr().out
     ids = [ln.split()[1] for ln in out.splitlines() if ln.startswith("[")]
-    assert ids == _rr_scenario_ids() + ["rr_opcode_gates", "zip_boot_radicalred_TODO"]
+    assert ids == _rr_scenario_ids() + ["rr_opcode_gates", "zip_build", "zip_check", "zip_boot_radicalred"]
     assert "$ python tools/e2e_duo.py --game gen3_rr --scenario faint_cmd_gen3" in out
     assert "$ SLINK_LIVE=1 python -m pytest tests/live/test_lua_gates.py" in out
-    assert "not implemented" in out
+    assert "zip-boot --zip" in out and "--title radical_red" in out
 
 
 def test_title_invalid_choice_rejected():
