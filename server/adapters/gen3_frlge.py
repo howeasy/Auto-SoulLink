@@ -227,6 +227,20 @@ if os.path.exists(_calc_names_path):
     with open(_calc_names_path, encoding="utf-8") as _f:
         _RR_CALC_NAMES = {k: v for k, v in json.load(_f).items() if isinstance(v, dict)}
 
+# RR reuses ability id "As One" for two distinct Calyrex Rider combos; the raw name
+# alone can't tell them apart, so calc_name("ability", "As One") is ambiguous by the
+# time it sees a string. Disambiguate by ability id instead, straight to the calc's
+# own spelling (calc/calc/src/data/abilities.ts: 'As One (Glastrier)'/'As One (Spectrier)').
+# Source: server/pokemon_data.py ABILITY_DESCRIPTIONS — id 73 "Both Unnerve and Grim
+# Neigh" (Grim Neigh is Spectrier's own ability), id 77 "Both Unnerve and Moxie" (CFRU's
+# reused stat-boost-on-KO ability id, overridden to display "Chilling Neigh" for natdex
+# 896 Glastrier). Cross-checked against tools/gen_rr_priority_trainers.py's per-species
+# table (Calyrex-Ice -> "As One (Glastrier)", Calyrex-Shadow -> "As One (Spectrier)").
+_RR_AS_ONE_CALC_NAME: dict[int, str] = {
+    73: "As One (Spectrier)",
+    77: "As One (Glastrier)",
+}
+
 # Vanilla FRLG/Emerald display name → damage-calc Gen 3 name, per kind. Separate table
 # (and separate calc generation -- RR runs the calc at gen 9, vanilla at gen 3): a vanilla
 # ROM spelling can need a different calc name than RR's own patched dex uses for the same
@@ -460,6 +474,8 @@ class Gen3Adapter(GameAdapter):
         return ""
 
     def ability_name(self, ability_id: int, species_id: int = 0) -> str:
+        if self._is_rr and ability_id in _RR_AS_ONE_CALC_NAME:
+            return _RR_AS_ONE_CALC_NAME[ability_id]
         return _ability_name(ability_id, self._is_rr, species_id)
 
     def ability_description(self, ability_id: int) -> str:

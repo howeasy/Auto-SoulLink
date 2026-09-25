@@ -38,18 +38,27 @@ _NO_BATTLE_EFFECT = ("no in-battle damage effect (key item, medicine, mail, vita
 # kind -> {name: reason}. Every entry must be emitted by the server AND still unresolvable.
 UNRESOLVABLE: dict[str, dict[str, str]] = {
     "species": {
-        "Palkia (Primal)": "RR-custom form; the calc has no Palkia-Primal",
+        "Palkia (Primal)": "RR-custom form (species id 920, rr_species.json); the calc has "
+                           "no Palkia-Primal. Unlike Dialga-Primal (id 919, rr_types.json "
+                           "[8,16] -> Steel/Dragon, already in RR_PATCH), id 920 has no "
+                           "entry in rr_types.json, and no repo data source gives RR base "
+                           "stats or abilities for any species (rr_species.json is name-only) "
+                           "-- Dialga-Primal's own stat block isn't reproducible from repo "
+                           "data either, so it can't be used as a template with real numbers",
     },
-    "ability": {
-        "As One": "two RR ability ids share this name; the calc splits it by rider "
-                  "(As One (Glastrier)/(Spectrier)), which the name alone can't pick "
-                  "(the roster tool resolves it per species)",
-    },
+    "ability": {},
     "move": {
         "-": "empty move slot",
         "Placeholder": "unused ROM move slot",
-        "Leech Fang": "RR-custom move the calc doesn't implement",
-        "Metal Bash": "RR-custom move the calc doesn't implement",
+        "Leech Fang": "RR-custom move (id 355); server/data/moves/gen3_rr.py MOVE_DATA has "
+                      "type=Bug/power=80/accuracy=100/pp=10/split=Physical (from the real "
+                      "funnotbun battle_moves.c disassembly), but that generator table has no "
+                      "effect/flag field for ANY move -- confirmed against known drain moves "
+                      "Absorb/Giga Drain/Leech Life/Dream Eater, which show the same 5 fields "
+                      "and nothing more -- so whether it drains or bites isn't in the repo",
+        "Metal Bash": "RR-custom move (id 499); server/data/moves/gen3_rr.py MOVE_DATA has "
+                      "type=Steel/power=40/accuracy=100/pp=35/split=Physical, but (as with "
+                      "Leech Fang) no secondary-effect/flag data exists anywhere in the repo",
         **{f"Z-Move {i}": "generic ROM label for a Z-Move slot; never in a moveset"
            for i in range(1, 54)},
     },
@@ -109,9 +118,14 @@ UNRESOLVABLE: dict[str, dict[str, str]] = {
 def _emitted() -> dict[str, set[str]]:
     """Every name the RR server can put in the calc DTO, per kind."""
     species = json.loads((_DATA / "rr_species.json").read_text(encoding="utf-8"))
+    # Ability names go through RR.ability_name(id), not the raw RR_ABILITY_NAMES table
+    # directly: it resolves the "As One" id clash (server/adapters/gen3_frlge.py
+    # _RR_AS_ONE_CALC_NAME) before a bare "As One" string would ever reach calc_name().
+    abilities = {RR.ability_name(aid) for aid in pd.RR_ABILITY_NAMES} | \
+        set(pd.CFRU_ABILITY_NAME_OVERRIDES.values())
     return {
         "species": {RR.species_name(int(k)) for k in species if k.isdigit()} | set(species.values()),
-        "ability": set(pd.RR_ABILITY_NAMES.values()) | set(pd.CFRU_ABILITY_NAME_OVERRIDES.values()),
+        "ability": abilities,
         "item": set(_RR_ITEMS.values()),
         "move": set(MOVE_NAMES.values()),
     }
