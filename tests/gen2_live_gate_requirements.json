@@ -17,7 +17,7 @@
       "axes": {"kind": "engine_sites", "title": "crystal", "requirement_ids": ["F-2", "F-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal.engine_sites.json",
-        "sha256": "7e65849ac171e13c6c08776413a0ba87871509868d21ab139efa4dd40e379dfd"
+        "sha256": "5d6f1990d550122ab04108ea89d7264eb8ec7b1eb2e39bca8b91c56d656a419d"
       }}}]
     },
     {
