@@ -37,7 +37,10 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus only if need
   - gSpecialVar_Result: OMP cx-72da0fae (verified) found the cancel latch samples only after the 16-frame `G.tap`, so "overwritten the same frame" is unproven. Next: sample during the tap, or arm a write watchpoint on 0x020370D0 before B;
   - fill the ALLOWED_SKIPS mega reason, or leave it (mega is excluded from `--title rr`).
 - **NEXT:**
-  1. Read OMP cx-6c92f636 (nurse control review) and settle its findings.
+  1. OMP cx-6c92f636 (verified; no product blocker). Two follow-ups:
+     - F1: the RR hold treats any `field_controls_locked` as "START opened". Also require `start_menu_open()` (sStartMenuWindowId, gen3_boot_check.lua:55-67), after verifying that 0x0203ABE0 holds on RR. Add a Lua unit case: swallowed Start taps, a non-menu lock rejected.
+     - F2: the RR marker still reads `CONTROL_LIVE/REFUSED nurse`. Rename it to `start_menu` on RR, with the e2e_duo oracle.
+     Re-run RR whiteout live after both.
   2. Freeze a cut and run `gen3_final_cut.py --cut <sha> --carry` (FR/LG, sharded over both lanes), then `--title rr`.
   3. Fill in the G4/G5 placeholders and put the requests to the owner.
 
