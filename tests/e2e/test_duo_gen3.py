@@ -103,7 +103,7 @@ def _run_duo(game, scenario):
 GAME_RR = "gen3_rr"
 SCENARIOS_RR = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
                 "link_gen3", "deadzone_gen3", "reconnect_gen3",
-                "explode_gen3", "rival_swap_gen3", "native_absent_gen3",
+                "explode_gen3", "rival_swap_gen3", "rival_swap_real_gen3", "native_absent_gen3",
                 "linked_faint_active_whiteout_gen3", "linked_faint_active_clean_gen3",
                 "linked_faint_active_lhammer_gen3", "linked_faint_active_mega_gen3")
 
