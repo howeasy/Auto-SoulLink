@@ -47,6 +47,12 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
   3. Opcode gates: sign the 12 deferred gates as a limit (26 live).
   4. Per-item receipts: accept the existing unit/model evidence (pins, write ownership, native control unit tests).
   Work: the clean-row driver fix, 1 clean row, 1 rival row, then re-freeze and run both passes.
+- **Ruling 25 (68e6191f) work in flight:**
+  - G5-RR-CLEAN (Sonnet, lane 2): the clean-row driver fix plus a new clean link/faint row.
+  - G5-RR-RIVAL (Opus, branch claude/g5-rr-rival, lane 1): the qualifying rival swap `rival_swap_real_gen3` with fixture `rr_rival.sav` (cached-native at Route 22 (34,6), trainer 331). The first live run FAILED on 2 PRODUCT DEFECTS (receipt rr_rival_swap_real_gen3_gen3_rr_as_a_4202b5d8.txt):
+    1. The client announces trainer_battle_start after the patch's 5-frame swap window (BeginBattleIntroDummy, frames 1012-1016) has closed. The client announced at 1043 because RR "in battle" waits on battle slot 0's maxHP, so the patch refused with window_closed.
+    2. entry.lua always refuses the post-copy refresh, so a good swap would report refresh_failed anyway.
+    The fix in progress is client-only: announce when gTrainerBattleOpponent_A is set, stage the swap, post it when the window opens, and report a good readback as success. If the patch must change instead, the companion ROM needs rebuilding and its md5 re-pinned, which is the owner's call.
 - **Cross-lane merge plan** (settled with Gen1-Collab2 and Gen 2 Boogaloo, 2026-09-25):
   - Order: Gen 1 → Gen 2 → Gen 3. Gen 3 merges only after G4+G5 are signed (ruling 22).
   - pairing_kind (Gen 2 644b3b8f = Gen 3 80261f39) is identical on both sides.
